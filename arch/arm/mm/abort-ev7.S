@@ -30,4 +30,3 @@ ENTRY(v7_early_abort)
 	 * New designs should not need to patch up faults.
 	 */
 	mov	pc, lr
-ENDPROC(v7_early_abort)

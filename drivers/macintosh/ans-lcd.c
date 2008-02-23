@@ -3,7 +3,6 @@
  */
 
 #include <linux/types.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
@@ -120,7 +119,6 @@ anslcd_ioctl( struct inode * inode, struct file * file,
 static int
 anslcd_open( struct inode * inode, struct file * file )
 {
-	cycle_kernel_lock();
 	return 0;
 }
 

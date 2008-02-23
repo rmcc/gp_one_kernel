@@ -16,6 +16,7 @@
 #include <linux/init.h>
 #include <linux/moduleparam.h>
 #include <asm/hardware/uengine.h>
+#include <asm/mach-types.h>
 #include <asm/io.h>
 #include "ixp2400_rx.ucode"
 #include "ixp2400_tx.ucode"
@@ -107,12 +108,14 @@ static int ixpdev_rx(struct net_device *dev, int processed, int budget)
 		if (unlikely(!netif_running(nds[desc->channel])))
 			goto err;
 
-		skb = netdev_alloc_skb(dev, desc->pkt_length + 2);
+		skb = dev_alloc_skb(desc->pkt_length + 2);
 		if (likely(skb != NULL)) {
 			skb_reserve(skb, 2);
 			skb_copy_to_linear_data(skb, buf, desc->pkt_length);
 			skb_put(skb, desc->pkt_length);
 			skb->protocol = eth_type_trans(skb, nds[desc->channel]);
+
+			skb->dev->last_rx = jiffies;
 
 			netif_receive_skb(skb);
 		}
@@ -141,7 +144,7 @@ static int ixpdev_poll(struct napi_struct *napi, int budget)
 			break;
 	} while (ixp2000_reg_read(IXP2000_IRQ_THD_RAW_STATUS_A_0) & 0x00ff);
 
-	netif_rx_complete(napi);
+	netif_rx_complete(dev, napi);
 	ixp2000_reg_write(IXP2000_IRQ_THD_ENABLE_SET_A_0, 0x00ff);
 
 	return rx;
@@ -204,7 +207,7 @@ static irqreturn_t ixpdev_interrupt(int irq, void *dev_id)
 
 		ixp2000_reg_wrb(IXP2000_IRQ_THD_ENABLE_CLEAR_A_0, 0x00ff);
 		if (likely(napi_schedule_prep(&ip->napi))) {
-			__netif_rx_schedule(&ip->napi);
+			__netif_rx_schedule(dev, &ip->napi);
 		} else {
 			printk(KERN_CRIT "ixp2000: irq while polling!!\n");
 		}

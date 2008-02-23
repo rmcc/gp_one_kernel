@@ -5,10 +5,12 @@
  *
  *		The Internet Protocol (IP) module.
  *
+ * Version:	$Id: ip_input.c,v 1.55 2002/01/12 07:39:45 davem Exp $
+ *
  * Authors:	Ross Biro
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Donald Becker, <becker@super.org>
- *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
+ *		Alan Cox, <Alan.Cox@linux.org>
  *		Richard Underwood
  *		Stefan Becker, <stefanb@yello.ping.de>
  *		Jorge Cwik, <jorge@laser.satlink.net>
@@ -145,6 +147,12 @@
 #include <linux/netlink.h>
 
 /*
+ *	SNMP management statistics
+ */
+
+DEFINE_SNMP_STAT(struct ipstats_mib, ip_statistics) __read_mostly;
+
+/*
  *	Process Router Attention IP option
  */
 int ip_call_ra_chain(struct sk_buff *skb)
@@ -209,16 +217,8 @@ static int ip_local_deliver_finish(struct sk_buff *skb)
 
 		hash = protocol & (MAX_INET_PROTOS - 1);
 		ipprot = rcu_dereference(inet_protos[hash]);
-		if (ipprot != NULL) {
+		if (ipprot != NULL && (net == &init_net || ipprot->netns_ok)) {
 			int ret;
-
-			if (!net_eq(net, &init_net) && !ipprot->netns_ok) {
-				if (net_ratelimit())
-					printk("%s: proto %d isn't netns-ready\n",
-						__func__, protocol);
-				kfree_skb(skb);
-				goto out;
-			}
 
 			if (!ipprot->no_policy) {
 				if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
@@ -232,16 +232,16 @@ static int ip_local_deliver_finish(struct sk_buff *skb)
 				protocol = -ret;
 				goto resubmit;
 			}
-			IP_INC_STATS_BH(net, IPSTATS_MIB_INDELIVERS);
+			IP_INC_STATS_BH(IPSTATS_MIB_INDELIVERS);
 		} else {
 			if (!raw) {
 				if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
-					IP_INC_STATS_BH(net, IPSTATS_MIB_INUNKNOWNPROTOS);
+					IP_INC_STATS_BH(IPSTATS_MIB_INUNKNOWNPROTOS);
 					icmp_send(skb, ICMP_DEST_UNREACH,
 						  ICMP_PROT_UNREACH, 0);
 				}
 			} else
-				IP_INC_STATS_BH(net, IPSTATS_MIB_INDELIVERS);
+				IP_INC_STATS_BH(IPSTATS_MIB_INDELIVERS);
 			kfree_skb(skb);
 		}
 	}
@@ -283,7 +283,7 @@ static inline int ip_rcv_options(struct sk_buff *skb)
 					      --ANK (980813)
 	*/
 	if (skb_cow(skb, skb_headroom(skb))) {
-		IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INDISCARDS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INDISCARDS);
 		goto drop;
 	}
 
@@ -292,7 +292,7 @@ static inline int ip_rcv_options(struct sk_buff *skb)
 	opt->optlen = iph->ihl*4 - sizeof(struct iphdr);
 
 	if (ip_options_compile(dev_net(dev), opt, skb)) {
-		IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INHDRERRORS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INHDRERRORS);
 		goto drop;
 	}
 
@@ -302,8 +302,10 @@ static inline int ip_rcv_options(struct sk_buff *skb)
 			if (!IN_DEV_SOURCE_ROUTE(in_dev)) {
 				if (IN_DEV_LOG_MARTIANS(in_dev) &&
 				    net_ratelimit())
-					printk(KERN_INFO "source route option %pI4 -> %pI4\n",
-					       &iph->saddr, &iph->daddr);
+					printk(KERN_INFO "source route option "
+					       NIPQUAD_FMT " -> " NIPQUAD_FMT "\n",
+					       NIPQUAD(iph->saddr),
+					       NIPQUAD(iph->daddr));
 				in_dev_put(in_dev);
 				goto drop;
 			}
@@ -334,11 +336,9 @@ static int ip_rcv_finish(struct sk_buff *skb)
 					 skb->dev);
 		if (unlikely(err)) {
 			if (err == -EHOSTUNREACH)
-				IP_INC_STATS_BH(dev_net(skb->dev),
-						IPSTATS_MIB_INADDRERRORS);
+				IP_INC_STATS_BH(IPSTATS_MIB_INADDRERRORS);
 			else if (err == -ENETUNREACH)
-				IP_INC_STATS_BH(dev_net(skb->dev),
-						IPSTATS_MIB_INNOROUTES);
+				IP_INC_STATS_BH(IPSTATS_MIB_INNOROUTES);
 			goto drop;
 		}
 	}
@@ -348,9 +348,9 @@ static int ip_rcv_finish(struct sk_buff *skb)
 		struct ip_rt_acct *st = per_cpu_ptr(ip_rt_acct, smp_processor_id());
 		u32 idx = skb->dst->tclassid;
 		st[idx&0xFF].o_packets++;
-		st[idx&0xFF].o_bytes += skb->len;
+		st[idx&0xFF].o_bytes+=skb->len;
 		st[(idx>>16)&0xFF].i_packets++;
-		st[(idx>>16)&0xFF].i_bytes += skb->len;
+		st[(idx>>16)&0xFF].i_bytes+=skb->len;
 	}
 #endif
 
@@ -359,9 +359,9 @@ static int ip_rcv_finish(struct sk_buff *skb)
 
 	rt = skb->rtable;
 	if (rt->rt_type == RTN_MULTICAST)
-		IP_INC_STATS_BH(dev_net(rt->u.dst.dev), IPSTATS_MIB_INMCASTPKTS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INMCASTPKTS);
 	else if (rt->rt_type == RTN_BROADCAST)
-		IP_INC_STATS_BH(dev_net(rt->u.dst.dev), IPSTATS_MIB_INBCASTPKTS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INBCASTPKTS);
 
 	return dst_input(skb);
 
@@ -384,10 +384,10 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 	if (skb->pkt_type == PACKET_OTHERHOST)
 		goto drop;
 
-	IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INRECEIVES);
+	IP_INC_STATS_BH(IPSTATS_MIB_INRECEIVES);
 
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL) {
-		IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INDISCARDS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INDISCARDS);
 		goto out;
 	}
 
@@ -420,7 +420,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 
 	len = ntohs(iph->tot_len);
 	if (skb->len < len) {
-		IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INTRUNCATEDPKTS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INTRUNCATEDPKTS);
 		goto drop;
 	} else if (len < (iph->ihl*4))
 		goto inhdr_error;
@@ -430,7 +430,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 	 * Note this now means skb->len holds ntohs(iph->tot_len).
 	 */
 	if (pskb_trim_rcsum(skb, len)) {
-		IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INDISCARDS);
+		IP_INC_STATS_BH(IPSTATS_MIB_INDISCARDS);
 		goto drop;
 	}
 
@@ -441,9 +441,11 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 		       ip_rcv_finish);
 
 inhdr_error:
-	IP_INC_STATS_BH(dev_net(dev), IPSTATS_MIB_INHDRERRORS);
+	IP_INC_STATS_BH(IPSTATS_MIB_INHDRERRORS);
 drop:
 	kfree_skb(skb);
 out:
 	return NET_RX_DROP;
 }
+
+EXPORT_SYMBOL(ip_statistics);

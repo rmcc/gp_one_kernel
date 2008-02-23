@@ -42,7 +42,7 @@
 #include <sound/info.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <mach/sysasic.h>
+#include <asm/dreamcast/sysasic.h>
 #include "aica.h"
 
 MODULE_AUTHOR("Adrian McMenamin <adrian@mcmen.demon.co.uk>");
@@ -106,8 +106,7 @@ static void spu_memset(u32 toi, u32 what, int length)
 {
 	int i;
 	unsigned long flags;
-	if (snd_BUG_ON(length % 4))
-		return;
+	snd_assert(length % 4 == 0, return);
 	for (i = 0; i < length; i++) {
 		if (!(i % 8))
 			spu_write_wait();
@@ -590,7 +589,7 @@ static int __devinit add_aicamixer_controls(struct snd_card_aica
 	return 0;
 }
 
-static int __devexit snd_aica_remove(struct platform_device *devptr)
+static int snd_aica_remove(struct platform_device *devptr)
 {
 	struct snd_card_aica *dreamcastcard;
 	dreamcastcard = platform_get_drvdata(devptr);
@@ -602,7 +601,7 @@ static int __devexit snd_aica_remove(struct platform_device *devptr)
 	return 0;
 }
 
-static int __devinit snd_aica_probe(struct platform_device *devptr)
+static int __init snd_aica_probe(struct platform_device *devptr)
 {
 	int err;
 	struct snd_card_aica *dreamcastcard;
@@ -651,7 +650,7 @@ static int __devinit snd_aica_probe(struct platform_device *devptr)
 
 static struct platform_driver snd_aica_driver = {
 	.probe = snd_aica_probe,
-	.remove = __devexit_p(snd_aica_remove),
+	.remove = snd_aica_remove,
 	.driver = {
 		   .name = SND_AICA_DRIVER},
 };

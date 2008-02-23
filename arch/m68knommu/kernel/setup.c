@@ -22,7 +22,6 @@
 #include <linux/interrupt.h>
 #include <linux/fb.h>
 #include <linux/module.h>
-#include <linux/mm.h>
 #include <linux/console.h>
 #include <linux/errno.h>
 #include <linux/string.h>

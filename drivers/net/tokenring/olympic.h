@@ -254,7 +254,7 @@ struct olympic_private {
 	u8 __iomem *olympic_mmio;
 	u8 __iomem *olympic_lap;
 	struct pci_dev *pdev ; 
-	const char *olympic_card_name;
+	char *olympic_card_name ; 
 
 	spinlock_t olympic_lock ; 
 

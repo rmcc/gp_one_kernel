@@ -1,7 +1,7 @@
 /*
  * ASoC driver for TI DAVINCI EVM platform
  *
- * Author:      Vladimir Barinov, <vbarinov@embeddedalley.com>
+ * Author:      Vladimir Barinov, <vbarinov@ru.mvista.com>
  * Copyright:   (C) 2007 MontaVista Software, Inc., <source@mvista.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,51 +19,39 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
+#include <asm/mach-types.h>
 #include <asm/dma.h>
-#include <mach/hardware.h>
+#include <asm/arch/hardware.h>
 
 #include "../codecs/tlv320aic3x.h"
 #include "davinci-pcm.h"
 #include "davinci-i2s.h"
 
+#define EVM_CODEC_CLOCK 22579200
 
-#define AUDIO_FORMAT (SND_SOC_DAIFMT_DSP_B | \
-		SND_SOC_DAIFMT_CBM_CFM | SND_SOC_DAIFMT_IB_NF)
 static int evm_hw_params(struct snd_pcm_substream *substream,
 			 struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
+	struct snd_soc_codec_dai *codec_dai = rtd->dai->codec_dai;
+	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
 	int ret = 0;
-	unsigned sysclk;
-
-	/* ASP1 on DM355 EVM is clocked by an external oscillator */
-	if (machine_is_davinci_dm355_evm())
-		sysclk = 27000000;
-
-	/* ASP0 in DM6446 EVM is clocked by U55, as configured by
-	 * board-dm644x-evm.c using GPIOs from U18.  There are six
-	 * options; here we "know" we use a 48 KHz sample rate.
-	 */
-	else if (machine_is_davinci_evm())
-		sysclk = 12288000;
-
-	else
-		return -EINVAL;
 
 	/* set codec DAI configuration */
-	ret = snd_soc_dai_set_fmt(codec_dai, AUDIO_FORMAT);
+	ret = codec_dai->dai_ops.set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
+					 SND_SOC_DAIFMT_CBM_CFM);
 	if (ret < 0)
 		return ret;
 
 	/* set cpu DAI configuration */
-	ret = snd_soc_dai_set_fmt(cpu_dai, AUDIO_FORMAT);
+	ret = cpu_dai->dai_ops.set_fmt(cpu_dai, SND_SOC_DAIFMT_CBM_CFM |
+				       SND_SOC_DAIFMT_IB_NF);
 	if (ret < 0)
 		return ret;
 
 	/* set the codec system clock */
-	ret = snd_soc_dai_set_sysclk(codec_dai, 0, sysclk, SND_SOC_CLOCK_OUT);
+	ret = codec_dai->dai_ops.set_sysclk(codec_dai, 0, EVM_CODEC_CLOCK,
+					    SND_SOC_CLOCK_OUT);
 	if (ret < 0)
 		return ret;
 
@@ -83,7 +71,7 @@ static const struct snd_soc_dapm_widget aic3x_dapm_widgets[] = {
 };
 
 /* davinci-evm machine audio_mapnections to the codec pins */
-static const struct snd_soc_dapm_route audio_map[] = {
+static const char *audio_map[][3] = {
 	/* Headphone connected to HPLOUT, HPROUT */
 	{"Headphone Jack", NULL, "HPLOUT"},
 	{"Headphone Jack", NULL, "HPROUT"},
@@ -102,30 +90,36 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"LINE2L", NULL, "Line In"},
 	{"LINE1R", NULL, "Line In"},
 	{"LINE2R", NULL, "Line In"},
+
+	{NULL, NULL, NULL},
 };
 
 /* Logic for a aic3x as connected on a davinci-evm */
 static int evm_aic3x_init(struct snd_soc_codec *codec)
 {
+	int i;
+
 	/* Add davinci-evm specific widgets */
-	snd_soc_dapm_new_controls(codec, aic3x_dapm_widgets,
-				  ARRAY_SIZE(aic3x_dapm_widgets));
+	for (i = 0; i < ARRAY_SIZE(aic3x_dapm_widgets); i++)
+		snd_soc_dapm_new_control(codec, &aic3x_dapm_widgets[i]);
 
 	/* Set up davinci-evm specific audio path audio_map */
-	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
+	for (i = 0; audio_map[i][0] != NULL; i++)
+		snd_soc_dapm_connect_input(codec, audio_map[i][0],
+					   audio_map[i][1], audio_map[i][2]);
 
 	/* not connected */
-	snd_soc_dapm_disable_pin(codec, "MONO_LOUT");
-	snd_soc_dapm_disable_pin(codec, "HPLCOM");
-	snd_soc_dapm_disable_pin(codec, "HPRCOM");
+	snd_soc_dapm_set_endpoint(codec, "MONO_LOUT", 0);
+	snd_soc_dapm_set_endpoint(codec, "HPLCOM", 0);
+	snd_soc_dapm_set_endpoint(codec, "HPRCOM", 0);
 
 	/* always connected */
-	snd_soc_dapm_enable_pin(codec, "Headphone Jack");
-	snd_soc_dapm_enable_pin(codec, "Line Out");
-	snd_soc_dapm_enable_pin(codec, "Mic Jack");
-	snd_soc_dapm_enable_pin(codec, "Line In");
+	snd_soc_dapm_set_endpoint(codec, "Headphone Jack", 1);
+	snd_soc_dapm_set_endpoint(codec, "Line Out", 1);
+	snd_soc_dapm_set_endpoint(codec, "Mic Jack", 1);
+	snd_soc_dapm_set_endpoint(codec, "Line In", 1);
 
-	snd_soc_dapm_sync(codec);
+	snd_soc_dapm_sync_endpoints(codec);
 
 	return 0;
 }
@@ -141,22 +135,21 @@ static struct snd_soc_dai_link evm_dai = {
 };
 
 /* davinci-evm audio machine driver */
-static struct snd_soc_card snd_soc_card_evm = {
+static struct snd_soc_machine snd_soc_machine_evm = {
 	.name = "DaVinci EVM",
-	.platform = &davinci_soc_platform,
 	.dai_link = &evm_dai,
 	.num_links = 1,
 };
 
 /* evm audio private data */
 static struct aic3x_setup_data evm_aic3x_setup = {
-	.i2c_bus = 0,
 	.i2c_address = 0x1b,
 };
 
 /* evm audio subsystem */
 static struct snd_soc_device evm_snd_devdata = {
-	.card = &snd_soc_card_evm,
+	.machine = &snd_soc_machine_evm,
+	.platform = &davinci_soc_platform,
 	.codec_dev = &soc_codec_dev_aic3x,
 	.codec_data = &evm_aic3x_setup,
 };

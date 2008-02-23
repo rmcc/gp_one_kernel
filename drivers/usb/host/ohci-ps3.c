@@ -128,7 +128,7 @@ static int ps3_ohci_probe(struct ps3_system_bus_device *dev)
 
 	dev->core.dma_mask = &dummy_mask; /* FIXME: for improper usb code */
 
-	hcd = usb_create_hcd(&ps3_ohci_hc_driver, &dev->core, dev_name(&dev->core));
+	hcd = usb_create_hcd(&ps3_ohci_hc_driver, &dev->core, dev->core.bus_id);
 
 	if (!hcd) {
 		dev_dbg(&dev->core, "%s:%d: usb_create_hcd failed\n", __func__,
@@ -192,7 +192,7 @@ fail_start:
 	return result;
 }
 
-static int ps3_ohci_remove(struct ps3_system_bus_device *dev)
+static int ps3_ohci_remove (struct ps3_system_bus_device *dev)
 {
 	unsigned int tmp;
 	struct usb_hcd *hcd =
@@ -205,7 +205,6 @@ static int ps3_ohci_remove(struct ps3_system_bus_device *dev)
 
 	tmp = hcd->irq;
 
-	ohci_shutdown(hcd);
 	usb_remove_hcd(hcd);
 
 	ps3_system_bus_set_driver_data(dev, NULL);

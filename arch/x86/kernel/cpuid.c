@@ -33,16 +33,16 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/major.h>
 #include <linux/fs.h>
+#include <linux/smp_lock.h>
 #include <linux/device.h>
 #include <linux/cpu.h>
 #include <linux/notifier.h>
-#include <linux/uaccess.h>
 
 #include <asm/processor.h>
 #include <asm/msr.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static struct class *cpuid_class;
@@ -82,14 +82,12 @@ static loff_t cpuid_seek(struct file *file, loff_t offset, int orig)
 }
 
 static ssize_t cpuid_read(struct file *file, char __user *buf,
-			  size_t count, loff_t *ppos)
+			  size_t count, loff_t * ppos)
 {
 	char __user *tmp = buf;
 	struct cpuid_regs cmd;
 	int cpu = iminor(file->f_path.dentry->d_inode);
 	u64 pos = *ppos;
-	ssize_t bytes = 0;
-	int err = 0;
 
 	if (count % 16)
 		return -EINVAL;	/* Invalid chunk size */
@@ -97,40 +95,27 @@ static ssize_t cpuid_read(struct file *file, char __user *buf,
 	for (; count; count -= 16) {
 		cmd.eax = pos;
 		cmd.ecx = pos >> 32;
-		err = smp_call_function_single(cpu, cpuid_smp_cpuid, &cmd, 1);
-		if (err)
-			break;
-		if (copy_to_user(tmp, &cmd, 16)) {
-			err = -EFAULT;
-			break;
-		}
+		smp_call_function_single(cpu, cpuid_smp_cpuid, &cmd, 1, 1);
+		if (copy_to_user(tmp, &cmd, 16))
+			return -EFAULT;
 		tmp += 16;
-		bytes += 16;
 		*ppos = ++pos;
 	}
 
-	return bytes ? bytes : err;
+	return tmp - buf;
 }
 
 static int cpuid_open(struct inode *inode, struct file *file)
 {
-	unsigned int cpu;
-	struct cpuinfo_x86 *c;
-	int ret = 0;
+	unsigned int cpu = iminor(file->f_path.dentry->d_inode);
+	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
-	lock_kernel();
-
-	cpu = iminor(file->f_path.dentry->d_inode);
-	if (cpu >= nr_cpu_ids || !cpu_online(cpu)) {
-		ret = -ENXIO;	/* No such CPU */
-		goto out;
-	}
-	c = &cpu_data(cpu);
+	if (cpu >= NR_CPUS || !cpu_online(cpu))
+		return -ENXIO;	/* No such CPU */
 	if (c->cpuid_level < 0)
-		ret = -EIO;	/* CPUID not supported */
-out:
-	unlock_kernel();
-	return ret;
+		return -EIO;	/* CPUID not supported */
+
+	return 0;
 }
 
 /*
@@ -147,7 +132,7 @@ static __cpuinit int cpuid_device_create(int cpu)
 {
 	struct device *dev;
 
-	dev = device_create(cpuid_class, NULL, MKDEV(CPUID_MAJOR, cpu), NULL,
+	dev = device_create(cpuid_class, NULL, MKDEV(CPUID_MAJOR, cpu),
 			    "cpu%d", cpu);
 	return IS_ERR(dev) ? PTR_ERR(dev) : 0;
 }

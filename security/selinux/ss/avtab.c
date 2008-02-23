@@ -98,7 +98,7 @@ struct avtab_node *
 avtab_insert_nonunique(struct avtab *h, struct avtab_key *key, struct avtab_datum *datum)
 {
 	int hvalue;
-	struct avtab_node *prev, *cur;
+	struct avtab_node *prev, *cur, *newnode;
 	u16 specified = key->specified & ~(AVTAB_ENABLED|AVTAB_ENABLED_OLD);
 
 	if (!h || !h->htable)
@@ -122,7 +122,9 @@ avtab_insert_nonunique(struct avtab *h, struct avtab_key *key, struct avtab_datu
 		    key->target_class < cur->key.target_class)
 			break;
 	}
-	return avtab_insert_node(h, hvalue, prev, cur, key, datum);
+	newnode = avtab_insert_node(h, hvalue, prev, cur, key, datum);
+
+	return newnode;
 }
 
 struct avtab_datum *avtab_search(struct avtab *h, struct avtab_key *key)
@@ -229,7 +231,7 @@ void avtab_destroy(struct avtab *h)
 
 	for (i = 0; i < h->nslot; i++) {
 		cur = h->htable[i];
-		while (cur) {
+		while (cur != NULL) {
 			temp = cur;
 			cur = cur->next;
 			kmem_cache_free(avtab_node_cachep, temp);
@@ -309,7 +311,7 @@ void avtab_hash_eval(struct avtab *h, char *tag)
 	}
 
 	printk(KERN_DEBUG "SELinux: %s:  %d entries and %d/%d buckets used, "
-	       "longest chain length %d sum of chain length^2 %llu\n",
+	       "longest chain length %d sum of chain length^2 %Lu\n",
 	       tag, h->nel, slots_used, h->nslot, max_chain_len,
 	       chain2_len_sum);
 }

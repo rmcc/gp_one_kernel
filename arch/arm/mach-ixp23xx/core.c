@@ -32,7 +32,8 @@
 #include <asm/types.h>
 #include <asm/setup.h>
 #include <asm/memory.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
+#include <asm/mach-types.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/tlbflush.h>
@@ -125,23 +126,23 @@ static int ixp23xx_irq_set_type(unsigned int irq, unsigned int type)
 		return -EINVAL;
 
 	switch (type) {
-	case IRQ_TYPE_EDGE_BOTH:
+	case IRQT_BOTHEDGE:
 		int_style = IXP23XX_GPIO_STYLE_TRANSITIONAL;
 		irq_type = IXP23XX_IRQ_EDGE;
 		break;
-	case IRQ_TYPE_EDGE_RISING:
+	case IRQT_RISING:
 		int_style = IXP23XX_GPIO_STYLE_RISING_EDGE;
 		irq_type = IXP23XX_IRQ_EDGE;
 		break;
-	case IRQ_TYPE_EDGE_FALLING:
+	case IRQT_FALLING:
 		int_style = IXP23XX_GPIO_STYLE_FALLING_EDGE;
 		irq_type = IXP23XX_IRQ_EDGE;
 		break;
-	case IRQ_TYPE_LEVEL_HIGH:
+	case IRQT_HIGH:
 		int_style = IXP23XX_GPIO_STYLE_ACTIVE_HIGH;
 		irq_type = IXP23XX_IRQ_LEVEL;
 		break;
-	case IRQ_TYPE_LEVEL_LOW:
+	case IRQT_LOW:
 		int_style = IXP23XX_GPIO_STYLE_ACTIVE_LOW;
 		irq_type = IXP23XX_IRQ_LEVEL;
 		break;
@@ -253,6 +254,7 @@ static void pci_handler(unsigned int irq, struct irq_desc *desc)
 {
 	u32 pci_interrupt;
 	unsigned int irqno;
+	struct irq_desc *int_desc;
 
 	pci_interrupt = *IXP23XX_PCI_XSCALE_INT_STATUS;
 
@@ -267,7 +269,8 @@ static void pci_handler(unsigned int irq, struct irq_desc *desc)
 		BUG();
 	}
 
-	generic_handle_irq(irqno);
+	int_desc = irq_desc + irqno;
+	desc_handle_irq(irqno, int_desc);
 
 	desc->chip->unmask(irq);
 }

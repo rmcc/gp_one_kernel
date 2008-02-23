@@ -1,7 +1,6 @@
 /* ld script to make m68k Linux kernel */
 
 #include <asm-generic/vmlinux.lds.h>
-#include <asm/page.h>
 
 OUTPUT_FORMAT("elf32-m68k", "elf32-m68k", "elf32-m68k")
 OUTPUT_ARCH(m68k)
@@ -34,21 +33,21 @@ SECTIONS
 	CONSTRUCTORS
 	}
 
-  . = ALIGN(16);
-  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
-
   .bss : { *(.bss) }		/* BSS */
+
+  . = ALIGN(16);
+  .data.cacheline_aligned : { *(.data.cacheline_aligned) } :data
 
   _edata = .;			/* End of data section */
 
   /* will be freed after init */
-  . = ALIGN(PAGE_SIZE);		/* Init code and data */
+  . = ALIGN(4096);		/* Init code and data */
   __init_begin = .;
   .init.text : {
 	_sinittext = .;
 	INIT_TEXT
 	_einittext = .;
-  } :data
+  }
   .init.data : { INIT_DATA }
   . = ALIGN(16);
   __setup_start = .;
@@ -74,7 +73,6 @@ SECTIONS
   .init.ramfs : { *(.init.ramfs) }
   __initramfs_end = .;
 #endif
-  NOTES
   . = ALIGN(8192);
   __init_end = .;
 

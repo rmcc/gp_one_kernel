@@ -19,8 +19,6 @@
 #include <asm/ccwdev.h>
 #include <asm/ccwgroup.h>
 
-#define CCW_BUS_ID_SIZE		20
-
 /* In Linux 2.4, we had a channel device layer called "chandev"
  * that did all sorts of obscure stuff for networking devices.
  * This is another driver that serves as a replacement for just
@@ -91,23 +89,15 @@ ccwgroup_ungroup_store(struct device *dev, struct device_attribute *attr, const 
 
 	gdev = to_ccwgroupdev(dev);
 
-	/* Prevent concurrent online/offline processing and ungrouping. */
-	if (atomic_cmpxchg(&gdev->onoff, 0, 1) != 0)
-		return -EAGAIN;
-	if (gdev->state != CCWGROUP_OFFLINE) {
-		rc = -EINVAL;
-		goto out;
-	}
+	if (gdev->state != CCWGROUP_OFFLINE)
+		return -EINVAL;
+
 	/* Note that we cannot unregister the device from one of its
 	 * attribute methods, so we have to use this roundabout approach.
 	 */
 	rc = device_schedule_callback(dev, ccwgroup_ungroup_callback);
-out:
-	if (rc) {
-		/* Release onoff "lock" when ungrouping failed. */
-		atomic_set(&gdev->onoff, 0);
-		return rc;
-	}
+	if (rc)
+		count = rc;
 	return count;
 }
 
@@ -122,11 +112,8 @@ ccwgroup_release (struct device *dev)
 	gdev = to_ccwgroupdev(dev);
 
 	for (i = 0; i < gdev->count; i++) {
-		if (gdev->cdev[i]) {
-			if (dev_get_drvdata(&gdev->cdev[i]->dev) == gdev)
-				dev_set_drvdata(&gdev->cdev[i]->dev, NULL);
-			put_device(&gdev->cdev[i]->dev);
-		}
+		dev_set_drvdata(&gdev->cdev[i]->dev, NULL);
+		put_device(&gdev->cdev[i]->dev);
 	}
 	kfree(gdev);
 }
@@ -182,7 +169,7 @@ static int __get_next_bus_id(const char **buf, char *bus_id)
 		len = end - start + 1;
 		end++;
 	}
-	if (len < CCW_BUS_ID_SIZE) {
+	if (len < BUS_ID_SIZE) {
 		strlcpy(bus_id, start, len);
 		rc = 0;
 	} else
@@ -191,7 +178,7 @@ static int __get_next_bus_id(const char **buf, char *bus_id)
 	return rc;
 }
 
-static int __is_valid_bus_id(char bus_id[CCW_BUS_ID_SIZE])
+static int __is_valid_bus_id(char bus_id[BUS_ID_SIZE])
 {
 	int cssid, ssid, devno;
 
@@ -223,7 +210,7 @@ int ccwgroup_create_from_string(struct device *root, unsigned int creator_id,
 {
 	struct ccwgroup_device *gdev;
 	int rc, i;
-	char tmp_bus_id[CCW_BUS_ID_SIZE];
+	char tmp_bus_id[BUS_ID_SIZE];
 	const char *curr_buf;
 
 	gdev = kzalloc(sizeof(*gdev) + num_devices * sizeof(gdev->cdev[0]),
@@ -234,13 +221,6 @@ int ccwgroup_create_from_string(struct device *root, unsigned int creator_id,
 	atomic_set(&gdev->onoff, 0);
 	mutex_init(&gdev->reg_mutex);
 	mutex_lock(&gdev->reg_mutex);
-	gdev->creator_id = creator_id;
-	gdev->count = num_devices;
-	gdev->dev.bus = &ccwgroup_bus_type;
-	gdev->dev.parent = root;
-	gdev->dev.release = ccwgroup_release;
-	device_initialize(&gdev->dev);
-
 	curr_buf = buf;
 	for (i = 0; i < num_devices && curr_buf; i++) {
 		rc = __get_next_bus_id(&curr_buf, tmp_bus_id);
@@ -278,10 +258,16 @@ int ccwgroup_create_from_string(struct device *root, unsigned int creator_id,
 		rc = -EINVAL;
 		goto error;
 	}
+	gdev->creator_id = creator_id;
+	gdev->count = num_devices;
+	gdev->dev.bus = &ccwgroup_bus_type;
+	gdev->dev.parent = root;
+	gdev->dev.release = ccwgroup_release;
 
-	dev_set_name(&gdev->dev, "%s", dev_name(&gdev->cdev[0]->dev));
+	snprintf (gdev->dev.bus_id, BUS_ID_SIZE, "%s",
+			gdev->cdev[0]->dev.bus_id);
 
-	rc = device_add(&gdev->dev);
+	rc = device_register(&gdev->dev);
 	if (rc)
 		goto error;
 	get_device(&gdev->dev);
@@ -306,7 +292,6 @@ error:
 			if (dev_get_drvdata(&gdev->cdev[i]->dev) == gdev)
 				dev_set_drvdata(&gdev->cdev[i]->dev, NULL);
 			put_device(&gdev->cdev[i]->dev);
-			gdev->cdev[i] = NULL;
 		}
 	mutex_unlock(&gdev->reg_mutex);
 	put_device(&gdev->dev);

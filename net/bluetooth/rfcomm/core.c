@@ -23,6 +23,8 @@
 
 /*
  * Bluetooth RFCOMM core.
+ *
+ * $Id: core.c,v 1.42 2002/10/01 23:26:25 maxk Exp $
  */
 
 #include <linux/module.h>
@@ -46,7 +48,12 @@
 #include <net/bluetooth/l2cap.h>
 #include <net/bluetooth/rfcomm.h>
 
-#define VERSION "1.10"
+#ifndef CONFIG_BT_RFCOMM_DEBUG
+#undef  BT_DBG
+#define BT_DBG(D...)
+#endif
+
+#define VERSION "1.8"
 
 static int disable_cfc = 0;
 static int channel_mtu = -1;
@@ -223,21 +230,6 @@ static int rfcomm_l2sock_create(struct socket **sock)
 	return err;
 }
 
-static inline int rfcomm_check_link_mode(struct rfcomm_dlc *d)
-{
-	struct sock *sk = d->session->sock->sk;
-
-	if (d->link_mode & (RFCOMM_LM_ENCRYPT | RFCOMM_LM_SECURE)) {
-		if (!hci_conn_encrypt(l2cap_pi(sk)->conn->hcon))
-			return 1;
-	} else if (d->link_mode & RFCOMM_LM_AUTH) {
-		if (!hci_conn_auth(l2cap_pi(sk)->conn->hcon))
-			return 1;
-	}
-
-	return 0;
-}
-
 /* ---- RFCOMM DLCs ---- */
 static void rfcomm_dlc_timeout(unsigned long arg)
 {
@@ -379,23 +371,15 @@ static int __rfcomm_dlc_open(struct rfcomm_dlc *d, bdaddr_t *src, bdaddr_t *dst,
 	d->addr     = __addr(s->initiator, dlci);
 	d->priority = 7;
 
-	d->state = BT_CONFIG;
+	d->state    = BT_CONFIG;
 	rfcomm_dlc_link(s, d);
-
-	d->out = 1;
 
 	d->mtu = s->mtu;
 	d->cfc = (s->cfc == RFCOMM_CFC_UNKNOWN) ? 0 : s->cfc;
 
-	if (s->state == BT_CONNECTED) {
-		if (rfcomm_check_link_mode(d))
-			set_bit(RFCOMM_AUTH_PENDING, &d->flags);
-		else
-			rfcomm_send_pn(s, 1, d);
-	}
-
+	if (s->state == BT_CONNECTED)
+		rfcomm_send_pn(s, 1, d);
 	rfcomm_dlc_set_timer(d, RFCOMM_CONN_TIMEOUT);
-
 	return 0;
 }
 
@@ -439,8 +423,8 @@ static int __rfcomm_dlc_close(struct rfcomm_dlc *d, int err)
 
 		rfcomm_dlc_lock(d);
 		d->state = BT_CLOSED;
-		d->state_change(d, err);
 		rfcomm_dlc_unlock(d);
+		d->state_change(d, err);
 
 		skb_queue_purge(&d->tx_queue);
 		rfcomm_dlc_unlink(d);
@@ -1162,6 +1146,21 @@ static int rfcomm_recv_disc(struct rfcomm_session *s, u8 dlci)
 	return 0;
 }
 
+static inline int rfcomm_check_link_mode(struct rfcomm_dlc *d)
+{
+	struct sock *sk = d->session->sock->sk;
+
+	if (d->link_mode & (RFCOMM_LM_ENCRYPT | RFCOMM_LM_SECURE)) {
+		if (!hci_conn_encrypt(l2cap_pi(sk)->conn->hcon))
+			return 1;
+	} else if (d->link_mode & RFCOMM_LM_AUTH) {
+		if (!hci_conn_auth(l2cap_pi(sk)->conn->hcon))
+			return 1;
+	}
+
+	return 0;
+}
+
 static void rfcomm_dlc_accept(struct rfcomm_dlc *d)
 {
 	struct sock *sk = d->session->sock->sk;
@@ -1206,8 +1205,10 @@ static int rfcomm_recv_sabm(struct rfcomm_session *s, u8 dlci)
 			if (rfcomm_check_link_mode(d)) {
 				set_bit(RFCOMM_AUTH_PENDING, &d->flags);
 				rfcomm_dlc_set_timer(d, RFCOMM_AUTH_TIMEOUT);
-			} else
-				rfcomm_dlc_accept(d);
+				return 0;
+			}
+
+			rfcomm_dlc_accept(d);
 		}
 		return 0;
 	}
@@ -1222,8 +1223,10 @@ static int rfcomm_recv_sabm(struct rfcomm_session *s, u8 dlci)
 		if (rfcomm_check_link_mode(d)) {
 			set_bit(RFCOMM_AUTH_PENDING, &d->flags);
 			rfcomm_dlc_set_timer(d, RFCOMM_AUTH_TIMEOUT);
-		} else
-			rfcomm_dlc_accept(d);
+			return 0;
+		}
+
+		rfcomm_dlc_accept(d);
 	} else {
 		rfcomm_send_dm(s, dlci);
 	}
@@ -1456,12 +1459,8 @@ static int rfcomm_recv_msc(struct rfcomm_session *s, int cr, struct sk_buff *skb
 			clear_bit(RFCOMM_TX_THROTTLED, &d->flags);
 
 		rfcomm_dlc_lock(d);
-
-		d->remote_v24_sig = msc->v24_sig;
-
 		if (d->modem_status)
 			d->modem_status(d, msc->v24_sig);
-
 		rfcomm_dlc_unlock(d);
 
 		rfcomm_send_msc(s, 0, dlci, msc->v24_sig);
@@ -1637,11 +1636,7 @@ static void rfcomm_process_connect(struct rfcomm_session *s)
 		d = list_entry(p, struct rfcomm_dlc, list);
 		if (d->state == BT_CONFIG) {
 			d->mtu = s->mtu;
-			if (rfcomm_check_link_mode(d)) {
-				set_bit(RFCOMM_AUTH_PENDING, &d->flags);
-				rfcomm_dlc_set_timer(d, RFCOMM_AUTH_TIMEOUT);
-			} else
-				rfcomm_send_pn(s, 1, d);
+			rfcomm_send_pn(s, 1, d);
 		}
 	}
 }
@@ -1714,11 +1709,7 @@ static inline void rfcomm_process_dlcs(struct rfcomm_session *s)
 
 		if (test_and_clear_bit(RFCOMM_AUTH_ACCEPT, &d->flags)) {
 			rfcomm_dlc_clear_timer(d);
-			if (d->out) {
-				rfcomm_send_pn(s, 1, d);
-				rfcomm_dlc_set_timer(d, RFCOMM_CONN_TIMEOUT);
-			} else
-				rfcomm_dlc_accept(d);
+			rfcomm_dlc_accept(d);
 			if (d->link_mode & RFCOMM_LM_SECURE) {
 				struct sock *sk = s->sock->sk;
 				hci_conn_change_link_key(l2cap_pi(sk)->conn->hcon);
@@ -1726,10 +1717,7 @@ static inline void rfcomm_process_dlcs(struct rfcomm_session *s)
 			continue;
 		} else if (test_and_clear_bit(RFCOMM_AUTH_REJECT, &d->flags)) {
 			rfcomm_dlc_clear_timer(d);
-			if (!d->out)
-				rfcomm_send_dm(s, d->dlci);
-			else
-				d->state = BT_CLOSED;
+			rfcomm_send_dm(s, d->dlci);
 			__rfcomm_dlc_close(d, ECONNREFUSED);
 			continue;
 		}
@@ -1738,7 +1726,7 @@ static inline void rfcomm_process_dlcs(struct rfcomm_session *s)
 			continue;
 
 		if ((d->state == BT_CONNECTED || d->state == BT_DISCONN) &&
-						d->mscex == RFCOMM_MSCEX_OK)
+				d->mscex == RFCOMM_MSCEX_OK)
 			rfcomm_process_tx(d);
 	}
 }
@@ -1780,6 +1768,8 @@ static inline void rfcomm_accept_connection(struct rfcomm_session *s)
 	err = kernel_accept(sock, &nsock, O_NONBLOCK);
 	if (err < 0)
 		return;
+
+	__module_get(nsock->ops->owner);
 
 	/* Set our callbacks */
 	nsock->sk->sk_data_ready   = rfcomm_l2data_ready;
@@ -1964,8 +1954,7 @@ static void rfcomm_auth_cfm(struct hci_conn *conn, u8 status)
 	list_for_each_safe(p, n, &s->dlcs) {
 		d = list_entry(p, struct rfcomm_dlc, list);
 
-		if ((d->link_mode & (RFCOMM_LM_ENCRYPT | RFCOMM_LM_SECURE)) &&
-				!(conn->link_mode & HCI_LM_ENCRYPT) && !status)
+		if (d->link_mode & (RFCOMM_LM_ENCRYPT | RFCOMM_LM_SECURE))
 			continue;
 
 		if (!test_and_clear_bit(RFCOMM_AUTH_PENDING, &d->flags))
@@ -1998,14 +1987,6 @@ static void rfcomm_encrypt_cfm(struct hci_conn *conn, u8 status, u8 encrypt)
 
 	list_for_each_safe(p, n, &s->dlcs) {
 		d = list_entry(p, struct rfcomm_dlc, list);
-
-		if ((d->link_mode & (RFCOMM_LM_ENCRYPT | RFCOMM_LM_SECURE)) &&
-					(d->state == BT_CONNECTED ||
-						d->state == BT_CONFIG) &&
-						!status && encrypt == 0x00) {
-			__rfcomm_dlc_close(d, ECONNREFUSED);
-			continue;
-		}
 
 		if (!test_and_clear_bit(RFCOMM_AUTH_PENDING, &d->flags))
 			continue;
@@ -2108,7 +2089,7 @@ MODULE_PARM_DESC(channel_mtu, "Default MTU for the RFCOMM channel");
 module_param(l2cap_mtu, uint, 0644);
 MODULE_PARM_DESC(l2cap_mtu, "Default MTU for the L2CAP connection");
 
-MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
+MODULE_AUTHOR("Maxim Krasnyansky <maxk@qualcomm.com>, Marcel Holtmann <marcel@holtmann.org>");
 MODULE_DESCRIPTION("Bluetooth RFCOMM ver " VERSION);
 MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");

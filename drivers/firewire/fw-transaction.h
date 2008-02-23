@@ -19,16 +19,14 @@
 #ifndef __fw_transaction_h
 #define __fw_transaction_h
 
-#include <linux/completion.h>
 #include <linux/device.h>
+#include <linux/timer.h>
+#include <linux/interrupt.h>
+#include <linux/list.h>
+#include <linux/fs.h>
 #include <linux/dma-mapping.h>
 #include <linux/firewire-constants.h>
-#include <linux/kref.h>
-#include <linux/list.h>
-#include <linux/spinlock_types.h>
-#include <linux/timer.h>
-#include <linux/types.h>
-#include <linux/workqueue.h>
+#include <asm/atomic.h>
 
 #define TCODE_IS_READ_REQUEST(tcode)	(((tcode) & ~1) == 4)
 #define TCODE_IS_BLOCK_PACKET(tcode)	(((tcode) &  1) != 0)
@@ -81,9 +79,6 @@
 #define CSR_TOPOLOGY_MAP_END		0x1400
 #define CSR_SPEED_MAP			0x2000
 #define CSR_SPEED_MAP_END		0x3000
-
-#define BROADCAST_CHANNEL_INITIAL	(1 << 31 | 31)
-#define BROADCAST_CHANNEL_VALID		(1 << 30)
 
 #define fw_notify(s, args...) printk(KERN_NOTICE KBUILD_MODNAME ": " s, ## args)
 #define fw_error(s, args...) printk(KERN_ERR KBUILD_MODNAME ": " s, ## args)
@@ -154,7 +149,6 @@ struct fw_packet {
 	size_t header_length;
 	void *payload;
 	size_t payload_length;
-	dma_addr_t payload_bus;
 	u32 timestamp;
 
 	/*
@@ -222,8 +216,7 @@ extern struct bus_type fw_bus_type;
 struct fw_card {
 	const struct fw_card_driver *driver;
 	struct device *device;
-	struct kref kref;
-	struct completion done;
+	atomic_t device_count;
 
 	int node_id;
 	int generation;
@@ -237,12 +230,19 @@ struct fw_card {
 	int link_speed;
 	int config_rom_generation;
 
+	/*
+	 * We need to store up to 4 self ID for a maximum of 63
+	 * devices plus 3 words for the topology map header.
+	 */
+	int self_id_count;
+	u32 topology_map[252 + 3];
+
 	spinlock_t lock; /* Take this lock when handling the lists in
 			  * this struct. */
 	struct fw_node *local_node;
 	struct fw_node *root_node;
 	struct fw_node *irm_node;
-	u8 color; /* must be u8 to match the definition in struct fw_node */
+	int color;
 	int gap_count;
 	bool beta_repeaters_present;
 
@@ -254,26 +254,7 @@ struct fw_card {
 	struct delayed_work work;
 	int bm_retries;
 	int bm_generation;
-
-	u32 broadcast_channel;
-	u32 topology_map[(CSR_TOPOLOGY_MAP_END - CSR_TOPOLOGY_MAP) / 4];
 };
-
-static inline struct fw_card *fw_card_get(struct fw_card *card)
-{
-	kref_get(&card->kref);
-
-	return card;
-}
-
-void fw_card_release(struct kref *kref);
-
-static inline void fw_card_put(struct fw_card *card)
-{
-	kref_put(&card->kref, fw_card_release);
-}
-
-extern void fw_schedule_bm_work(struct fw_card *card, unsigned long delay);
 
 /*
  * The iso packet format allows for an immediate header/payload part
@@ -367,6 +348,8 @@ int
 fw_iso_context_stop(struct fw_iso_context *ctx);
 
 struct fw_card_driver {
+	const char *name;
+
 	/*
 	 * Enable the given card with the given initial config rom.
 	 * This function is expected to activate the card, and either
@@ -425,13 +408,10 @@ fw_core_initiate_bus_reset(struct fw_card *card, int short_reset);
 
 void
 fw_send_request(struct fw_card *card, struct fw_transaction *t,
-		int tcode, int destination_id, int generation, int speed,
-		unsigned long long offset, void *data, size_t length,
+		int tcode, int node_id, int generation, int speed,
+		unsigned long long offset,
+		void *data, size_t length,
 		fw_transaction_callback_t callback, void *callback_data);
-
-int fw_run_transaction(struct fw_card *card, int tcode, int destination_id,
-		       int generation, int speed, unsigned long long offset,
-		       void *data, size_t length);
 
 int fw_cancel_transaction(struct fw_card *card,
 			  struct fw_transaction *transaction);

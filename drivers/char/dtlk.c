@@ -56,7 +56,6 @@
 #include <linux/errno.h>	/* for -EBUSY */
 #include <linux/ioport.h>	/* for request_region */
 #include <linux/delay.h>	/* for loops_per_jiffy */
-#include <linux/smp_lock.h>	/* cycle_kernel_lock() */
 #include <asm/io.h>		/* for inb_p, outb_p, inb, outb, etc. */
 #include <asm/uaccess.h>	/* for get_user, etc. */
 #include <linux/wait.h>		/* for wait_queue */
@@ -289,12 +288,10 @@ static int dtlk_ioctl(struct inode *inode,
 	}
 }
 
-/* Note that nobody ever sets dtlk_busy... */
 static int dtlk_open(struct inode *inode, struct file *file)
 {
 	TRACE_TEXT("(dtlk_open");
 
-	cycle_kernel_lock();
 	nonseekable_open(inode, file);
 	switch (iminor(inode)) {
 	case DTLK_MINOR:

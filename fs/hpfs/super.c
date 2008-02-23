@@ -173,7 +173,7 @@ static void hpfs_destroy_inode(struct inode *inode)
 	kmem_cache_free(hpfs_inode_cachep, hpfs_i(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct hpfs_inode_info *ei = (struct hpfs_inode_info *) foo;
 
@@ -215,7 +215,7 @@ enum {
 	Opt_timeshift, Opt_err,
 };
 
-static const match_table_t tokens = {
+static match_table_t tokens = {
 	{Opt_help, "help"},
 	{Opt_uid, "uid=%u"},
 	{Opt_gid, "gid=%u"},
@@ -475,8 +475,8 @@ static int hpfs_fill_super(struct super_block *s, void *options, int silent)
 
 	init_MUTEX(&sbi->hpfs_creation_de);
 
-	uid = current_uid();
-	gid = current_gid();
+	uid = current->uid;
+	gid = current->gid;
 	umask = current->fs->umask;
 	lowercase = 0;
 	conv = CONV_BINARY;

@@ -191,7 +191,7 @@ static int x25_device_event(struct notifier_block *this, unsigned long event,
 	struct net_device *dev = ptr;
 	struct x25_neigh *nb;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	if (dev->type == ARPHRD_X25
@@ -555,11 +555,13 @@ static struct sock *x25_make_new(struct sock *osk)
 	x25 = x25_sk(sk);
 
 	sk->sk_type        = osk->sk_type;
+	sk->sk_socket      = osk->sk_socket;
 	sk->sk_priority    = osk->sk_priority;
 	sk->sk_protocol    = osk->sk_protocol;
 	sk->sk_rcvbuf      = osk->sk_rcvbuf;
 	sk->sk_sndbuf      = osk->sk_sndbuf;
 	sk->sk_state       = TCP_ESTABLISHED;
+	sk->sk_sleep       = osk->sk_sleep;
 	sk->sk_backlog_rcv = osk->sk_backlog_rcv;
 	sock_copy_flags(sk, osk);
 
@@ -612,7 +614,8 @@ static int x25_release(struct socket *sock)
 			break;
 	}
 
-	sock_orphan(sk);
+	sock->sk	= NULL;
+	sk->sk_socket	= NULL;	/* Not used, but we should do this */
 out:
 	return 0;
 }
@@ -805,12 +808,14 @@ static int x25_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (!skb->sk)
 		goto out2;
 	newsk		 = skb->sk;
-	sock_graft(newsk, newsock);
+	newsk->sk_socket = newsock;
+	newsk->sk_sleep  = &newsock->wait;
 
 	/* Now attach up the new socket */
 	skb->sk = NULL;
 	kfree_skb(skb);
 	sk->sk_ack_backlog--;
+	newsock->sk    = newsk;
 	newsock->state = SS_CONNECTED;
 	rc = 0;
 out2:

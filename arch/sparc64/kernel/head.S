@@ -10,7 +10,6 @@
 #include <linux/errno.h>
 #include <linux/threads.h>
 #include <linux/init.h>
-#include <linux/linkage.h>
 #include <asm/thread_info.h>
 #include <asm/asi.h>
 #include <asm/pstate.h>

@@ -22,7 +22,6 @@
 #include <linux/parser.h>
 #include <linux/completion.h>
 #include <linux/vfs.h>
-#include <linux/quotaops.h>
 #include <linux/mount.h>
 #include <linux/moduleparam.h>
 #include <linux/kthread.h>
@@ -199,7 +198,7 @@ enum {
 	Opt_usrquota, Opt_grpquota, Opt_uid, Opt_gid, Opt_umask
 };
 
-static const match_table_t tokens = {
+static match_table_t tokens = {
 	{Opt_integrity, "integrity"},
 	{Opt_nointegrity, "nointegrity"},
 	{Opt_iocharset, "iocharset=%s"},
@@ -500,7 +499,7 @@ static int jfs_fill_super(struct super_block *sb, void *data, int silent)
 	inode = jfs_iget(sb, ROOT_I);
 	if (IS_ERR(inode)) {
 		ret = PTR_ERR(inode);
-		goto out_no_rw;
+		goto out_no_root;
 	}
 	sb->s_root = d_alloc_root(inode);
 	if (!sb->s_root)
@@ -522,8 +521,9 @@ static int jfs_fill_super(struct super_block *sb, void *data, int silent)
 	return 0;
 
 out_no_root:
-	jfs_err("jfs_read_super: get root dentry failed");
-	iput(inode);
+	jfs_err("jfs_read_super: get root inode failed");
+	if (inode)
+		iput(inode);
 
 out_no_rw:
 	rc = jfs_umount(sb);
@@ -543,7 +543,7 @@ out_kfree:
 	return ret;
 }
 
-static int jfs_freeze(struct super_block *sb)
+static void jfs_write_super_lockfs(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 	struct jfs_log *log = sbi->log;
@@ -553,10 +553,9 @@ static int jfs_freeze(struct super_block *sb)
 		lmLogShutdown(log);
 		updateSuper(sb, FM_CLEAN);
 	}
-	return 0;
 }
 
-static int jfs_unfreeze(struct super_block *sb)
+static void jfs_unlockfs(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 	struct jfs_log *log = sbi->log;
@@ -569,7 +568,6 @@ static int jfs_unfreeze(struct super_block *sb)
 		else
 			txResume(sb);
 	}
-	return 0;
 }
 
 static int jfs_get_sb(struct file_system_type *fs_type,
@@ -737,8 +735,8 @@ static const struct super_operations jfs_super_operations = {
 	.delete_inode	= jfs_delete_inode,
 	.put_super	= jfs_put_super,
 	.sync_fs	= jfs_sync_fs,
-	.freeze_fs	= jfs_freeze,
-	.unfreeze_fs	= jfs_unfreeze,
+	.write_super_lockfs = jfs_write_super_lockfs,
+	.unlockfs       = jfs_unlockfs,
 	.statfs		= jfs_statfs,
 	.remount_fs	= jfs_remount,
 	.show_options	= jfs_show_options,
@@ -762,7 +760,7 @@ static struct file_system_type jfs_fs_type = {
 	.fs_flags	= FS_REQUIRES_DEV,
 };
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct jfs_inode_info *jfs_ip = (struct jfs_inode_info *) foo;
 

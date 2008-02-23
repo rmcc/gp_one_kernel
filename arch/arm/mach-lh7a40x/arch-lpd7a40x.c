@@ -14,7 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/setup.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -214,11 +214,11 @@ static void lpd7a40x_cpld_handler (unsigned int irq, struct irq_desc *desc)
 	desc->chip->ack (irq);
 
 	if ((mask & (1<<0)) == 0)	/* WLAN */
-		generic_handle_irq(IRQ_LPD7A40X_ETH_INT);
+		IRQ_DISPATCH (IRQ_LPD7A40X_ETH_INT);
 
 #if defined (IRQ_TOUCH)
 	if ((mask & (1<<1)) == 0)	/* Touch */
-		generic_handle_irq(IRQ_TOUCH);
+		IRQ_DISPATCH (IRQ_TOUCH);
 #endif
 
 	desc->chip->unmask (irq); /* Level-triggered need this */

@@ -5,6 +5,8 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
+ *	$Id: mcast.c,v 1.40 2002/02/08 03:57:19 davem Exp $
+ *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c
  *
  *	This program is free software; you can redistribute it and/or
@@ -151,7 +153,7 @@ static int ip6_mc_leave_src(struct sock *sk, struct ipv6_mc_socklist *iml,
 #define IGMP6_UNSOLICITED_IVAL	(10*HZ)
 #define MLD_QRV_DEFAULT		2
 
-#define MLD_V1_SEEN(idev) (dev_net((idev)->dev)->ipv6.devconf_all->force_mld_version == 1 || \
+#define MLD_V1_SEEN(idev) (ipv6_devconf.force_mld_version == 1 || \
 		(idev)->cnf.force_mld_version == 1 || \
 		((idev)->mc_v1_seen && \
 		time_before(jiffies, (idev)->mc_v1_seen)))
@@ -162,6 +164,7 @@ static int ip6_mc_leave_src(struct sock *sk, struct ipv6_mc_socklist *iml,
 	((MLDV2_MASK(value, nbmant) | (1<<(nbmant))) << \
 	(MLDV2_MASK((value) >> (nbmant), nbexp) + (nbexp))))
 
+#define MLDV2_QQIC(value) MLDV2_EXP(0x80, 4, 3, value)
 #define MLDV2_MRC(value) MLDV2_EXP(0x8000, 12, 3, value)
 
 #define IPV6_MLD_MAX_MSF	64
@@ -303,23 +306,20 @@ static struct inet6_dev *ip6_mc_find_dev(struct net *net,
 		dev = dev_get_by_index(net, ifindex);
 
 	if (!dev)
-		goto nodev;
+		return NULL;
 	idev = in6_dev_get(dev);
-	if (!idev)
-		goto release;
+	if (!idev) {
+		dev_put(dev);
+		return NULL;
+	}
 	read_lock_bh(&idev->lock);
-	if (idev->dead)
-		goto unlock_release;
-
+	if (idev->dead) {
+		read_unlock_bh(&idev->lock);
+		in6_dev_put(idev);
+		dev_put(dev);
+		return NULL;
+	}
 	return idev;
-
-unlock_release:
-	read_unlock_bh(&idev->lock);
-	in6_dev_put(idev);
-release:
-	dev_put(dev);
-nodev:
-	return NULL;
 }
 
 void ipv6_sock_mc_close(struct sock *sk)
@@ -369,6 +369,10 @@ int ip6_mc_source(int add, int omode, struct sock *sk,
 	int leavegroup = 0;
 	int pmclocked = 0;
 	int err;
+
+	if (pgsr->gsr_group.ss_family != AF_INET6 ||
+	    pgsr->gsr_source.ss_family != AF_INET6)
+		return -EINVAL;
 
 	source = &((struct sockaddr_in6 *)&pgsr->gsr_source)->sin6_addr;
 	group = &((struct sockaddr_in6 *)&pgsr->gsr_group)->sin6_addr;
@@ -1449,7 +1453,7 @@ static void mld_sendpack(struct sk_buff *skb)
 	int err;
 	struct flowi fl;
 
-	IP6_INC_STATS(net, idev, IPSTATS_MIB_OUTREQUESTS);
+	IP6_INC_STATS(idev, IPSTATS_MIB_OUTREQUESTS);
 	payload_len = (skb->tail - skb->network_header) - sizeof(*pip6);
 	mldlen = skb->tail - skb->transport_header;
 	pip6->payload_len = htons(payload_len);
@@ -1469,7 +1473,7 @@ static void mld_sendpack(struct sk_buff *skb)
 			 &ipv6_hdr(skb)->saddr, &ipv6_hdr(skb)->daddr,
 			 skb->dev->ifindex);
 
-	err = xfrm_lookup(net, &skb->dst, &fl, NULL, 0);
+	err = xfrm_lookup(&skb->dst, &fl, NULL, 0);
 	if (err)
 		goto err_out;
 
@@ -1477,11 +1481,11 @@ static void mld_sendpack(struct sk_buff *skb)
 		      dst_output);
 out:
 	if (!err) {
-		ICMP6MSGOUT_INC_STATS_BH(net, idev, ICMPV6_MLD2_REPORT);
-		ICMP6_INC_STATS_BH(net, idev, ICMP6_MIB_OUTMSGS);
-		IP6_INC_STATS_BH(net, idev, IPSTATS_MIB_OUTMCASTPKTS);
+		ICMP6MSGOUT_INC_STATS_BH(idev, ICMPV6_MLD2_REPORT);
+		ICMP6_INC_STATS_BH(idev, ICMP6_MIB_OUTMSGS);
+		IP6_INC_STATS_BH(idev, IPSTATS_MIB_OUTMCASTPKTS);
 	} else
-		IP6_INC_STATS_BH(net, idev, IPSTATS_MIB_OUTDISCARDS);
+		IP6_INC_STATS_BH(idev, IPSTATS_MIB_OUTDISCARDS);
 
 	if (likely(idev != NULL))
 		in6_dev_put(idev);
@@ -1774,7 +1778,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 	struct flowi fl;
 
 	rcu_read_lock();
-	IP6_INC_STATS(net, __in6_dev_get(dev),
+	IP6_INC_STATS(__in6_dev_get(dev),
 		      IPSTATS_MIB_OUTREQUESTS);
 	rcu_read_unlock();
 	if (type == ICMPV6_MGM_REDUCTION)
@@ -1790,7 +1794,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 
 	if (skb == NULL) {
 		rcu_read_lock();
-		IP6_INC_STATS(net, __in6_dev_get(dev),
+		IP6_INC_STATS(__in6_dev_get(dev),
 			      IPSTATS_MIB_OUTDISCARDS);
 		rcu_read_unlock();
 		return;
@@ -1820,7 +1824,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 
 	hdr->icmp6_cksum = csum_ipv6_magic(saddr, snd_addr, len,
 					   IPPROTO_ICMPV6,
-					   csum_partial(hdr, len, 0));
+					   csum_partial((__u8 *) hdr, len, 0));
 
 	idev = in6_dev_get(skb->dev);
 
@@ -1834,7 +1838,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 			 &ipv6_hdr(skb)->saddr, &ipv6_hdr(skb)->daddr,
 			 skb->dev->ifindex);
 
-	err = xfrm_lookup(net, &skb->dst, &fl, NULL, 0);
+	err = xfrm_lookup(&skb->dst, &fl, NULL, 0);
 	if (err)
 		goto err_out;
 
@@ -1842,11 +1846,11 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 		      dst_output);
 out:
 	if (!err) {
-		ICMP6MSGOUT_INC_STATS(net, idev, type);
-		ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTMSGS);
-		IP6_INC_STATS(net, idev, IPSTATS_MIB_OUTMCASTPKTS);
+		ICMP6MSGOUT_INC_STATS(idev, type);
+		ICMP6_INC_STATS(idev, ICMP6_MIB_OUTMSGS);
+		IP6_INC_STATS(idev, IPSTATS_MIB_OUTMCASTPKTS);
 	} else
-		IP6_INC_STATS(net, idev, IPSTATS_MIB_OUTDISCARDS);
+		IP6_INC_STATS(idev, IPSTATS_MIB_OUTDISCARDS);
 
 	if (likely(idev != NULL))
 		in6_dev_put(idev);
@@ -2433,9 +2437,9 @@ static int igmp6_mc_seq_show(struct seq_file *seq, void *v)
 	struct igmp6_mc_iter_state *state = igmp6_mc_seq_private(seq);
 
 	seq_printf(seq,
-		   "%-4d %-15s %pi6 %5d %08X %ld\n",
+		   "%-4d %-15s " NIP6_SEQFMT " %5d %08X %ld\n",
 		   state->dev->ifindex, state->dev->name,
-		   &im->mca_addr,
+		   NIP6(im->mca_addr),
 		   im->mca_users, im->mca_flags,
 		   (im->mca_flags&MAF_TIMER_RUNNING) ?
 		   jiffies_to_clock_t(im->mca_timer.expires-jiffies) : 0);
@@ -2594,10 +2598,10 @@ static int igmp6_mcf_seq_show(struct seq_file *seq, void *v)
 			   "Source Address", "INC", "EXC");
 	} else {
 		seq_printf(seq,
-			   "%3d %6.6s %pi6 %pi6 %6lu %6lu\n",
+			   "%3d %6.6s " NIP6_SEQFMT " " NIP6_SEQFMT " %6lu %6lu\n",
 			   state->dev->ifindex, state->dev->name,
-			   &state->im->mca_addr,
-			   &psf->sf_addr,
+			   NIP6(state->im->mca_addr),
+			   NIP6(psf->sf_addr),
 			   psf->sf_count[MCAST_INCLUDE],
 			   psf->sf_count[MCAST_EXCLUDE]);
 	}

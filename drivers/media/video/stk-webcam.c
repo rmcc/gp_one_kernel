@@ -27,13 +27,13 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
+#include <linux/kref.h>
 
 #include <linux/usb.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #include "stk-webcam.h"
 
@@ -63,6 +63,22 @@ static struct usb_device_id stkwebcam_table[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, stkwebcam_table);
+
+static void stk_camera_cleanup(struct kref *kref)
+{
+	struct stk_camera *dev = to_stk_camera(kref);
+
+	STK_INFO("Syntek USB2.0 Camera release resources"
+		" video device /dev/video%d\n", dev->vdev.minor);
+	video_unregister_device(&dev->vdev);
+	dev->vdev.priv = NULL;
+
+	if (dev->sio_bufs != NULL || dev->isobufs != NULL)
+		STK_ERROR("We are leaking memory\n");
+	usb_put_intf(dev->interface);
+	kfree(dev);
+}
+
 
 /*
  * Basic stuff
@@ -324,19 +340,17 @@ static int stk_create_sysfs_files(struct video_device *vdev)
 {
 	int ret;
 
-	ret = device_create_file(&vdev->dev, &dev_attr_brightness);
-	ret += device_create_file(&vdev->dev, &dev_attr_hflip);
-	ret += device_create_file(&vdev->dev, &dev_attr_vflip);
-	if (ret)
-		STK_WARNING("Could not create sysfs files\n");
+	ret = video_device_create_file(vdev, &dev_attr_brightness);
+	ret += video_device_create_file(vdev, &dev_attr_hflip);
+	ret += video_device_create_file(vdev, &dev_attr_vflip);
 	return ret;
 }
 
 static void stk_remove_sysfs_files(struct video_device *vdev)
 {
-	device_remove_file(&vdev->dev, &dev_attr_brightness);
-	device_remove_file(&vdev->dev, &dev_attr_hflip);
-	device_remove_file(&vdev->dev, &dev_attr_vflip);
+	video_device_remove_file(vdev, &dev_attr_brightness);
+	video_device_remove_file(vdev, &dev_attr_hflip);
+	video_device_remove_file(vdev, &dev_attr_vflip);
 }
 
 #else
@@ -428,19 +442,18 @@ static void stk_isoc_handler(struct urb *urb)
 				fb->v4lbuf.bytesused = 0;
 				fill = fb->buffer;
 			} else if (fb->v4lbuf.bytesused == dev->frame_size) {
-				if (list_is_singular(&dev->sio_avail)) {
-					/* Always reuse the last buffer */
-					fb->v4lbuf.bytesused = 0;
-					fill = fb->buffer;
-				} else {
-					list_move_tail(dev->sio_avail.next,
-						&dev->sio_full);
-					wake_up(&dev->wait_frame);
-					fb = list_first_entry(&dev->sio_avail,
-						struct stk_sio_buffer, list);
-					fb->v4lbuf.bytesused = 0;
-					fill = fb->buffer;
+				list_move_tail(dev->sio_avail.next,
+					&dev->sio_full);
+				wake_up(&dev->wait_frame);
+				if (list_empty(&dev->sio_avail)) {
+					(void) (printk_ratelimit() &&
+					STK_ERROR("No buffer available\n"));
+					goto resubmit;
 				}
+				fb = list_first_entry(&dev->sio_avail,
+					struct stk_sio_buffer, list);
+				fb->v4lbuf.bytesused = 0;
+				fill = fb->buffer;
 			}
 		} else {
 			framelen -= 4;
@@ -559,7 +572,7 @@ static void stk_clean_iso(struct stk_camera *dev)
 
 		urb = dev->isobufs[i].urb;
 		if (urb) {
-			if (atomic_read(&dev->urbs_used) && is_present(dev))
+			if (atomic_read(&dev->urbs_used))
 				usb_kill_urb(urb);
 			usb_free_urb(urb);
 		}
@@ -664,7 +677,7 @@ static void stk_free_buffers(struct stk_camera *dev)
 
 /* v4l file operations */
 
-static int v4l_stk_open(struct file *fp)
+static int v4l_stk_open(struct inode *inode, struct file *fp)
 {
 	struct stk_camera *dev;
 	struct video_device *vdev;
@@ -672,30 +685,45 @@ static int v4l_stk_open(struct file *fp)
 	vdev = video_devdata(fp);
 	dev = vdev_to_camera(vdev);
 
-	lock_kernel();
-	if (dev == NULL || !is_present(dev)) {
-		unlock_kernel();
+	if (dev == NULL || !is_present(dev))
 		return -ENXIO;
-	}
-	fp->private_data = dev;
+	fp->private_data = vdev;
+	kref_get(&dev->kref);
 	usb_autopm_get_interface(dev->interface);
-	unlock_kernel();
 
 	return 0;
 }
 
-static int v4l_stk_release(struct file *fp)
+static int v4l_stk_release(struct inode *inode, struct file *fp)
 {
-	struct stk_camera *dev = fp->private_data;
+	struct stk_camera *dev;
+	struct video_device *vdev;
 
-	if (dev->owner == fp) {
-		stk_stop_stream(dev);
-		stk_free_buffers(dev);
-		dev->owner = NULL;
+	vdev = video_devdata(fp);
+	if (vdev == NULL) {
+		STK_ERROR("v4l_release called w/o video devdata\n");
+		return -EFAULT;
+	}
+	dev = vdev_to_camera(vdev);
+	if (dev == NULL) {
+		STK_ERROR("v4l_release called on removed device\n");
+		return -ENODEV;
 	}
 
-	if(is_present(dev))
+	if (dev->owner != fp) {
 		usb_autopm_put_interface(dev->interface);
+		kref_put(&dev->kref, stk_camera_cleanup);
+		return 0;
+	}
+
+	stk_stop_stream(dev);
+
+	stk_free_buffers(dev);
+
+	dev->owner = NULL;
+
+	usb_autopm_put_interface(dev->interface);
+	kref_put(&dev->kref, stk_camera_cleanup);
 
 	return 0;
 }
@@ -706,8 +734,17 @@ static ssize_t v4l_stk_read(struct file *fp, char __user *buf,
 	int i;
 	int ret;
 	unsigned long flags;
+	struct stk_camera *dev;
+	struct video_device *vdev;
 	struct stk_sio_buffer *sbuf;
-	struct stk_camera *dev = fp->private_data;
+
+	vdev = video_devdata(fp);
+	if (vdev == NULL)
+		return -EFAULT;
+	dev = vdev_to_camera(vdev);
+
+	if (dev == NULL)
+		return -EIO;
 
 	if (!is_present(dev))
 		return -EIO;
@@ -763,7 +800,17 @@ static ssize_t v4l_stk_read(struct file *fp, char __user *buf,
 
 static unsigned int v4l_stk_poll(struct file *fp, poll_table *wait)
 {
-	struct stk_camera *dev = fp->private_data;
+	struct stk_camera *dev;
+	struct video_device *vdev;
+
+	vdev = video_devdata(fp);
+
+	if (vdev == NULL)
+		return -EFAULT;
+
+	dev = vdev_to_camera(vdev);
+	if (dev == NULL)
+		return -ENODEV;
 
 	poll_wait(fp, &dev->wait_frame, wait);
 
@@ -799,11 +846,15 @@ static int v4l_stk_mmap(struct file *fp, struct vm_area_struct *vma)
 	unsigned int i;
 	int ret;
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
-	struct stk_camera *dev = fp->private_data;
+	struct stk_camera *dev;
+	struct video_device *vdev;
 	struct stk_sio_buffer *sbuf = NULL;
 
 	if (!(vma->vm_flags & VM_WRITE) || !(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
+
+	vdev = video_devdata(fp);
+	dev = vdev_to_camera(vdev);
 
 	for (i = 0; i < dev->n_sbufs; i++) {
 		if (dev->sio_bufs[i].v4lbuf.m.offset == offset) {
@@ -930,7 +981,7 @@ static int stk_vidioc_s_ctrl(struct file *filp,
 }
 
 
-static int stk_vidioc_enum_fmt_vid_cap(struct file *filp,
+static int stk_vidioc_enum_fmt_cap(struct file *filp,
 		void *priv, struct v4l2_fmtdesc *fmtd)
 {
 	fmtd->flags = 0;
@@ -974,7 +1025,7 @@ static struct stk_size {
 	{ .w = 176,  .h = 144,  .m = MODE_QCIF, },
 };
 
-static int stk_vidioc_g_fmt_vid_cap(struct file *filp,
+static int stk_vidioc_g_fmt_cap(struct file *filp,
 		void *priv, struct v4l2_format *f)
 {
 	struct v4l2_pix_format *pix_format = &f->fmt.pix;
@@ -1003,7 +1054,7 @@ static int stk_vidioc_g_fmt_vid_cap(struct file *filp,
 	return 0;
 }
 
-static int stk_vidioc_try_fmt_vid_cap(struct file *filp,
+static int stk_vidioc_try_fmt_cap(struct file *filp,
 		void *priv, struct v4l2_format *fmtd)
 {
 	int i;
@@ -1080,7 +1131,7 @@ static int stk_setup_format(struct stk_camera *dev)
 	return stk_sensor_configure(dev);
 }
 
-static int stk_vidioc_s_fmt_vid_cap(struct file *filp,
+static int stk_vidioc_s_fmt_cap(struct file *filp,
 		void *priv, struct v4l2_format *fmtd)
 {
 	int ret;
@@ -1094,7 +1145,7 @@ static int stk_vidioc_s_fmt_vid_cap(struct file *filp,
 		return -EBUSY;
 	if (dev->owner && dev->owner != filp)
 		return -EBUSY;
-	ret = stk_vidioc_try_fmt_vid_cap(filp, priv, fmtd);
+	ret = stk_vidioc_try_fmt_cap(filp, priv, fmtd);
 	if (ret)
 		return ret;
 	dev->owner = filp;
@@ -1262,26 +1313,7 @@ static int stk_vidioc_g_parm(struct file *filp,
 	return 0;
 }
 
-static int stk_vidioc_enum_framesizes(struct file *filp,
-		void *priv, struct v4l2_frmsizeenum *frms)
-{
-	if (frms->index >= ARRAY_SIZE(stk_sizes))
-		return -EINVAL;
-	switch (frms->pixel_format) {
-	case V4L2_PIX_FMT_RGB565:
-	case V4L2_PIX_FMT_RGB565X:
-	case V4L2_PIX_FMT_UYVY:
-	case V4L2_PIX_FMT_YUYV:
-	case V4L2_PIX_FMT_SBGGR8:
-		frms->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-		frms->discrete.width = stk_sizes[frms->index].w;
-		frms->discrete.height = stk_sizes[frms->index].h;
-		return 0;
-	default: return -EINVAL;
-	}
-}
-
-static struct v4l2_file_operations v4l_stk_fops = {
+static struct file_operations v4l_stk_fops = {
 	.owner = THIS_MODULE,
 	.open = v4l_stk_open,
 	.release = v4l_stk_release,
@@ -1289,14 +1321,31 @@ static struct v4l2_file_operations v4l_stk_fops = {
 	.poll = v4l_stk_poll,
 	.mmap = v4l_stk_mmap,
 	.ioctl = video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = v4l_compat_ioctl32,
+#endif
+	.llseek = no_llseek
 };
 
-static const struct v4l2_ioctl_ops v4l_stk_ioctl_ops = {
+static void stk_v4l_dev_release(struct video_device *vd)
+{
+}
+
+static struct video_device stk_v4l_data = {
+	.name = "stkwebcam",
+	.type = VFL_TYPE_GRABBER,
+	.type2 = VID_TYPE_CAPTURE,
+	.minor = -1,
+	.tvnorms = V4L2_STD_UNKNOWN,
+	.current_norm = V4L2_STD_UNKNOWN,
+	.fops = &v4l_stk_fops,
+	.release = stk_v4l_dev_release,
+
 	.vidioc_querycap = stk_vidioc_querycap,
-	.vidioc_enum_fmt_vid_cap = stk_vidioc_enum_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap = stk_vidioc_try_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap = stk_vidioc_s_fmt_vid_cap,
-	.vidioc_g_fmt_vid_cap = stk_vidioc_g_fmt_vid_cap,
+	.vidioc_enum_fmt_cap = stk_vidioc_enum_fmt_cap,
+	.vidioc_try_fmt_cap = stk_vidioc_try_fmt_cap,
+	.vidioc_s_fmt_cap = stk_vidioc_s_fmt_cap,
+	.vidioc_g_fmt_cap = stk_vidioc_g_fmt_cap,
 	.vidioc_enum_input = stk_vidioc_enum_input,
 	.vidioc_s_input = stk_vidioc_s_input,
 	.vidioc_g_input = stk_vidioc_g_input,
@@ -1311,27 +1360,6 @@ static const struct v4l2_ioctl_ops v4l_stk_ioctl_ops = {
 	.vidioc_g_ctrl = stk_vidioc_g_ctrl,
 	.vidioc_s_ctrl = stk_vidioc_s_ctrl,
 	.vidioc_g_parm = stk_vidioc_g_parm,
-	.vidioc_enum_framesizes = stk_vidioc_enum_framesizes,
-};
-
-static void stk_v4l_dev_release(struct video_device *vd)
-{
-	struct stk_camera *dev = vdev_to_camera(vd);
-
-	if (dev->sio_bufs != NULL || dev->isobufs != NULL)
-		STK_ERROR("We are leaking memory\n");
-	usb_put_intf(dev->interface);
-	kfree(dev);
-}
-
-static struct video_device stk_v4l_data = {
-	.name = "stkwebcam",
-	.minor = -1,
-	.tvnorms = V4L2_STD_UNKNOWN,
-	.current_norm = V4L2_STD_UNKNOWN,
-	.fops = &v4l_stk_fops,
-	.ioctl_ops = &v4l_stk_ioctl_ops,
-	.release = stk_v4l_dev_release,
 };
 
 
@@ -1341,13 +1369,14 @@ static int stk_register_video_device(struct stk_camera *dev)
 
 	dev->vdev = stk_v4l_data;
 	dev->vdev.debug = debug;
-	dev->vdev.parent = &dev->interface->dev;
+	dev->vdev.dev = &dev->interface->dev;
+	dev->vdev.priv = dev;
 	err = video_register_device(&dev->vdev, VFL_TYPE_GRABBER, -1);
 	if (err)
 		STK_ERROR("v4l registration failed\n");
 	else
 		STK_INFO("Syntek USB2.0 Camera is now controlling video device"
-			" /dev/video%d\n", dev->vdev.num);
+			" /dev/video%d\n", dev->vdev.minor);
 	return err;
 }
 
@@ -1358,7 +1387,7 @@ static int stk_camera_probe(struct usb_interface *interface,
 		const struct usb_device_id *id)
 {
 	int i;
-	int err = 0;
+	int err;
 
 	struct stk_camera *dev = NULL;
 	struct usb_device *udev = interface_to_usbdev(interface);
@@ -1371,6 +1400,7 @@ static int stk_camera_probe(struct usb_interface *interface,
 		return -ENOMEM;
 	}
 
+	kref_init(&dev->kref);
 	spin_lock_init(&dev->spinlock);
 	init_waitqueue_head(&dev->wait_frame);
 
@@ -1392,16 +1422,19 @@ static int stk_camera_probe(struct usb_interface *interface,
 		endpoint = &iface_desc->endpoint[i].desc;
 
 		if (!dev->isoc_ep
-			&& usb_endpoint_is_isoc_in(endpoint)) {
+			&& ((endpoint->bEndpointAddress
+				& USB_ENDPOINT_DIR_MASK) == USB_DIR_IN)
+			&& ((endpoint->bmAttributes
+				& USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_ISOC)) {
 			/* we found an isoc in endpoint */
-			dev->isoc_ep = usb_endpoint_num(endpoint);
+			dev->isoc_ep = (endpoint->bEndpointAddress & 0xF);
 			break;
 		}
 	}
 	if (!dev->isoc_ep) {
 		STK_ERROR("Could not find isoc-in endpoint");
-		err = -ENODEV;
-		goto error;
+		kref_put(&dev->kref, stk_camera_cleanup);
+		return -ENODEV;
 	}
 	dev->vsettings.brightness = 0x7fff;
 	dev->vsettings.palette = V4L2_PIX_FMT_RGB565;
@@ -1415,17 +1448,14 @@ static int stk_camera_probe(struct usb_interface *interface,
 
 	err = stk_register_video_device(dev);
 	if (err) {
-		goto error;
+		kref_put(&dev->kref, stk_camera_cleanup);
+		return err;
 	}
 
 	stk_create_sysfs_files(&dev->vdev);
 	usb_autopm_enable(dev->interface);
 
 	return 0;
-
-error:
-	kfree(dev);
-	return err;
 }
 
 static void stk_camera_disconnect(struct usb_interface *interface)
@@ -1438,10 +1468,7 @@ static void stk_camera_disconnect(struct usb_interface *interface)
 	wake_up_interruptible(&dev->wait_frame);
 	stk_remove_sysfs_files(&dev->vdev);
 
-	STK_INFO("Syntek USB2.0 Camera release resources "
-		"video device /dev/video%d\n", dev->vdev.num);
-
-	video_unregister_device(&dev->vdev);
+	kref_put(&dev->kref, stk_camera_cleanup);
 }
 
 #ifdef CONFIG_PM

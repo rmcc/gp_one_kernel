@@ -66,7 +66,6 @@ static struct kmem_cache *befs_inode_cachep;
 static const struct file_operations befs_dir_operations = {
 	.read		= generic_read_dir,
 	.readdir	= befs_readdir,
-	.llseek		= generic_file_llseek,
 };
 
 static const struct inode_operations befs_dir_inode_operations = {
@@ -290,7 +289,7 @@ befs_destroy_inode(struct inode *inode)
         kmem_cache_free(befs_inode_cachep, BEFS_I(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
         struct befs_inode_info *bi = (struct befs_inode_info *) foo;
 
@@ -378,8 +377,7 @@ static struct inode *befs_iget(struct super_block *sb, unsigned long ino)
 		inode->i_size = 0;
 		inode->i_blocks = befs_sb->block_size / VFS_BLOCK_SIZE;
 		strncpy(befs_ino->i_data.symlink, raw_inode->data.symlink,
-			BEFS_SYMLINK_LEN - 1);
-		befs_ino->i_data.symlink[BEFS_SYMLINK_LEN - 1] = '\0';
+			BEFS_SYMLINK_LEN);
 	} else {
 		int num_blks;
 
@@ -478,8 +476,6 @@ befs_follow_link(struct dentry *dentry, struct nameidata *nd)
 			kfree(link);
 			befs_error(sb, "Failed to read entire long symlink");
 			link = ERR_PTR(-EIO);
-		} else {
-			link[len - 1] = '\0';
 		}
 	} else {
 		link = befs_ino->i_data.symlink;
@@ -653,7 +649,7 @@ enum {
 	Opt_uid, Opt_gid, Opt_charset, Opt_debug, Opt_err,
 };
 
-static const match_table_t befs_tokens = {
+static match_table_t befs_tokens = {
 	{Opt_uid, "uid=%d"},
 	{Opt_gid, "gid=%d"},
 	{Opt_charset, "iocharset=%s"},
@@ -812,8 +808,8 @@ befs_fill_super(struct super_block *sb, void *data, int silent)
 
 	/* account for offset of super block on x86 */
 	disk_sb = (befs_super_block *) bh->b_data;
-	if ((disk_sb->magic1 == BEFS_SUPER_MAGIC1_LE) ||
-	    (disk_sb->magic1 == BEFS_SUPER_MAGIC1_BE)) {
+	if ((le32_to_cpu(disk_sb->magic1) == BEFS_SUPER_MAGIC1) ||
+	    (be32_to_cpu(disk_sb->magic1) == BEFS_SUPER_MAGIC1)) {
 		befs_debug(sb, "Using PPC superblock location");
 	} else {
 		befs_debug(sb, "Using x86 superblock location");

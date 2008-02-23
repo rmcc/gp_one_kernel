@@ -47,7 +47,7 @@ comma = ,
 # Note that GCC does not numerically define an architecture version
 # macro, but instead defines a whole series of macros which makes
 # testing for a specific architecture or later rather impossible.
-arch-$(CONFIG_CPU_32v7)		:=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-march=armv7-a,-march=armv5t -Wa$(comma)-march=armv7-a)
+arch-$(CONFIG_CPU_32v7)		:=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-march=armv7a,-march=armv5t -Wa$(comma)-march=armv7a)
 arch-$(CONFIG_CPU_32v6)		:=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,-march=armv5t -Wa$(comma)-march=armv6)
 # Only override the compiler option if ARMv6. The ARMv6K extensions are
 # always available in ARMv7
@@ -67,7 +67,7 @@ tune-$(CONFIG_CPU_ARM720T)	:=-mtune=arm7tdmi
 tune-$(CONFIG_CPU_ARM740T)	:=-mtune=arm7tdmi
 tune-$(CONFIG_CPU_ARM9TDMI)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM940T)	:=-mtune=arm9tdmi
-tune-$(CONFIG_CPU_ARM946E)	:=$(call cc-option,-mtune=arm9e,-mtune=arm9tdmi)
+tune-$(CONFIG_CPU_ARM946T)	:=$(call cc-option,-mtune=arm9e,-mtune=arm9tdmi)
 tune-$(CONFIG_CPU_ARM920T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM922T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM925T)	:=-mtune=arm9tdmi
@@ -76,7 +76,6 @@ tune-$(CONFIG_CPU_SA110)	:=-mtune=strongarm110
 tune-$(CONFIG_CPU_SA1100)	:=-mtune=strongarm1100
 tune-$(CONFIG_CPU_XSCALE)	:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -Wa,-mcpu=xscale
 tune-$(CONFIG_CPU_XSC3)		:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -Wa,-mcpu=xscale
-tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f,-mtune=xscale)
 tune-$(CONFIG_CPU_V6)		:=$(call cc-option,-mtune=arm1136j-s,-mtune=strongarm)
 
 ifeq ($(CONFIG_AEABI),y)
@@ -97,7 +96,12 @@ textofs-y	:= 0x00008000
 
  machine-$(CONFIG_ARCH_RPC)	   := rpc
  machine-$(CONFIG_ARCH_EBSA110)	   := ebsa110
+ machine-$(CONFIG_ARCH_CLPS7500)   := clps7500
+  incdir-$(CONFIG_ARCH_CLPS7500)   := cl7500
  machine-$(CONFIG_FOOTBRIDGE)	   := footbridge
+  incdir-$(CONFIG_FOOTBRIDGE)	   := ebsa285
+ machine-$(CONFIG_ARCH_CO285)	   := footbridge
+  incdir-$(CONFIG_ARCH_CO285)	   := ebsa285
  machine-$(CONFIG_ARCH_SHARK)	   := shark
  machine-$(CONFIG_ARCH_SA1100)	   := sa1100
 ifeq ($(CONFIG_ARCH_SA1100),y)
@@ -112,19 +116,13 @@ endif
  machine-$(CONFIG_ARCH_IOP32X)	   := iop32x
  machine-$(CONFIG_ARCH_IOP33X)	   := iop33x
  machine-$(CONFIG_ARCH_IOP13XX)	   := iop13xx
-    plat-$(CONFIG_PLAT_IOP)	   := iop
  machine-$(CONFIG_ARCH_IXP4XX)	   := ixp4xx
  machine-$(CONFIG_ARCH_IXP2000)    := ixp2000
  machine-$(CONFIG_ARCH_IXP23XX)    := ixp23xx
  machine-$(CONFIG_ARCH_OMAP1)	   := omap1
  machine-$(CONFIG_ARCH_OMAP2)	   := omap2
- machine-$(CONFIG_ARCH_OMAP3)	   := omap2
-    plat-$(CONFIG_ARCH_OMAP)	   := omap
- machine-$(CONFIG_ARCH_S3C2410)	   := s3c2410 s3c2400 s3c2412 s3c2440 s3c2442 s3c2443
- machine-$(CONFIG_ARCH_S3C24A0)	   := s3c24a0
-    plat-$(CONFIG_PLAT_S3C24XX)	   := s3c24xx s3c
- machine-$(CONFIG_ARCH_S3C64XX)	   := s3c6400 s3c6410
-    plat-$(CONFIG_PLAT_S3C64XX)	   := s3c64xx s3c
+  incdir-$(CONFIG_ARCH_OMAP)	   := omap
+ machine-$(CONFIG_ARCH_S3C2410)	   := s3c2410
  machine-$(CONFIG_ARCH_LH7A40X)	   := lh7a40x
  machine-$(CONFIG_ARCH_VERSATILE)  := versatile
  machine-$(CONFIG_ARCH_IMX)	   := imx
@@ -137,18 +135,11 @@ endif
  machine-$(CONFIG_ARCH_NETX)	   := netx
  machine-$(CONFIG_ARCH_NS9XXX)	   := ns9xxx
  machine-$(CONFIG_ARCH_DAVINCI)	   := davinci
- machine-$(CONFIG_ARCH_KIRKWOOD)   := kirkwood
  machine-$(CONFIG_ARCH_KS8695)     := ks8695
-    plat-$(CONFIG_ARCH_MXC)	   := mxc
- machine-$(CONFIG_ARCH_MX2)	   := mx2
+  incdir-$(CONFIG_ARCH_MXC)	   := mxc
  machine-$(CONFIG_ARCH_MX3)	   := mx3
- machine-$(CONFIG_ARCH_MX1)	   := mx1
  machine-$(CONFIG_ARCH_ORION5X)	   := orion5x
-    plat-$(CONFIG_PLAT_ORION)	   := orion
- machine-$(CONFIG_ARCH_MSM)	   := msm
- machine-$(CONFIG_ARCH_LOKI)       := loki
- machine-$(CONFIG_ARCH_MV78XX0)    := mv78xx0
- machine-$(CONFIG_ARCH_W90X900)    := w90x900
+ machine-$(CONFIG_ARCH_MSM7X00A)   := msm
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 # This is what happens if you forget the IOCS16 line.
@@ -160,20 +151,15 @@ endif
 # The byte offset of the kernel image in RAM from the start of RAM.
 TEXT_OFFSET := $(textofs-y)
 
-# The first directory contains additional information for the boot setup code
+ifeq ($(incdir-y),)
+incdir-y := $(machine-y)
+endif
+INCDIR   := arch-$(incdir-y)
+
 ifneq ($(machine-y),)
-MACHINE  := arch/arm/mach-$(word 1,$(machine-y))/
+MACHINE  := arch/arm/mach-$(machine-y)/
 else
 MACHINE  :=
-endif
-
-machdirs := $(patsubst %,arch/arm/mach-%/,$(machine-y))
-platdirs := $(patsubst %,arch/arm/plat-%/,$(plat-y))
-
-ifeq ($(KBUILD_SRC),)
-KBUILD_CPPFLAGS += $(patsubst %,-I%include,$(machdirs) $(platdirs))
-else
-KBUILD_CPPFLAGS += $(patsubst %,-I$(srctree)/%include,$(machdirs) $(platdirs))
 endif
 
 export	TEXT_OFFSET GZFLAGS MMUEXT
@@ -186,12 +172,26 @@ endif
 
 # If we have a machine-specific directory, then include it in the build.
 core-y				+= arch/arm/kernel/ arch/arm/mm/ arch/arm/common/
-core-y				+= $(machdirs) $(platdirs)
+core-y				+= $(MACHINE)
+core-$(CONFIG_ARCH_S3C2410)	+= arch/arm/mach-s3c2400/
+core-$(CONFIG_ARCH_S3C2410)	+= arch/arm/mach-s3c2412/
+core-$(CONFIG_ARCH_S3C2410)	+= arch/arm/mach-s3c2440/
+core-$(CONFIG_ARCH_S3C2410)	+= arch/arm/mach-s3c2442/
+core-$(CONFIG_ARCH_S3C2410)	+= arch/arm/mach-s3c2443/
 core-$(CONFIG_FPE_NWFPE)	+= arch/arm/nwfpe/
 core-$(CONFIG_FPE_FASTFPE)	+= $(FASTFPE_OBJ)
 core-$(CONFIG_VFP)		+= arch/arm/vfp/
 
+# If we have a common platform directory, then include it in the build.
+core-$(CONFIG_PLAT_IOP)		+= arch/arm/plat-iop/
+core-$(CONFIG_PLAT_ORION)		+= arch/arm/plat-orion/
+core-$(CONFIG_ARCH_OMAP)	+= arch/arm/plat-omap/
+core-$(CONFIG_PLAT_S3C24XX)		+= arch/arm/plat-s3c24xx/
+core-$(CONFIG_ARCH_MXC)		+= arch/arm/plat-mxc/
+
 drivers-$(CONFIG_OPROFILE)      += arch/arm/oprofile/
+drivers-$(CONFIG_ARCH_CLPS7500)	+= drivers/acorn/char/
+drivers-$(CONFIG_ARCH_L7200)	+= drivers/acorn/char/
 
 libs-y				:= arch/arm/lib/ $(libs-y)
 
@@ -210,10 +210,20 @@ boot := arch/arm/boot
 #	them changed.  We use .arch to indicate when they were updated
 #	last, otherwise make uses the target directory mtime.
 
+include/asm-arm/.arch: $(wildcard include/config/arch/*.h) include/config/auto.conf
+	@echo '  SYMLINK include/asm-arm/arch -> include/asm-arm/$(INCDIR)'
+ifneq ($(KBUILD_SRC),)
+	$(Q)mkdir -p include/asm-arm
+	$(Q)ln -fsn $(srctree)/include/asm-arm/$(INCDIR) include/asm-arm/arch
+else
+	$(Q)ln -fsn $(INCDIR) include/asm-arm/arch
+endif
+	@touch $@
+
 archprepare: maketools
 
 PHONY += maketools FORCE
-maketools: include/linux/version.h FORCE
+maketools: include/linux/version.h include/asm-arm/.arch FORCE
 	$(Q)$(MAKE) $(build)=arch/arm/tools include/asm-arm/mach-types.h
 
 # Convert bzImage to zImage

@@ -2,6 +2,8 @@
  * Flash memory access on Hynix GMS30C7201/HMS30C7202 based
  * evaluation boards
  *
+ * $Id: h720x-flash.c,v 1.12 2005/11/07 11:14:27 gleixner Exp $
+ *
  * (C) 2002 Jungjun Kim <jungjun.kim@hynix.com>
  *     2003 Thomas Gleixner <tglx@linutronix.de>
  */
@@ -16,7 +18,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/map.h>
 #include <linux/mtd/partitions.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/io.h>
 
 static struct mtd_info *mymtd;
@@ -24,8 +26,8 @@ static struct mtd_info *mymtd;
 static struct map_info h720x_map = {
 	.name =		"H720X",
 	.bankwidth =	4,
-	.size =		H720X_FLASH_SIZE,
-	.phys =		H720X_FLASH_PHYS,
+	.size =		FLASH_SIZE,
+	.phys =		FLASH_PHYS,
 };
 
 static struct mtd_partition h720x_partitions[] = {
@@ -65,12 +67,12 @@ static const char *probes[] = { "cmdlinepart", NULL };
 /*
  * Initialize FLASH support
  */
-static int __init h720x_mtd_init(void)
+int __init h720x_mtd_init(void)
 {
 
 	char	*part_type = NULL;
 
-	h720x_map.virt = ioremap(h720x_map.phys, h720x_map.size);
+	h720x_map.virt = ioremap(FLASH_PHYS, FLASH_SIZE);
 
 	if (!h720x_map.virt) {
 		printk(KERN_ERR "H720x-MTD: ioremap failed\n");

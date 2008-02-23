@@ -29,7 +29,6 @@
  */
 
 #include <linux/blkdev.h>
-#include <linux/bug.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
@@ -87,11 +86,6 @@ MODULE_PARM_DESC(exclusive_login, "Exclusive login to sbp2 device "
  * - delay inquiry
  *   Wait extra SBP2_INQUIRY_DELAY seconds after login before SCSI inquiry.
  *
- * - power condition
- *   Set the power condition field in the START STOP UNIT commands sent by
- *   sd_mod on suspend, resume, and shutdown (if manage_start_stop is on).
- *   Some disks need this to spin down or to resume properly.
- *
  * - override internal blacklist
  *   Instead of adding to the built-in blacklist, use only the workarounds
  *   specified in the module load parameter.
@@ -103,7 +97,6 @@ MODULE_PARM_DESC(exclusive_login, "Exclusive login to sbp2 device "
 #define SBP2_WORKAROUND_FIX_CAPACITY	0x8
 #define SBP2_WORKAROUND_DELAY_INQUIRY	0x10
 #define SBP2_INQUIRY_DELAY		12
-#define SBP2_WORKAROUND_POWER_CONDITION	0x20
 #define SBP2_WORKAROUND_OVERRIDE	0x100
 
 static int sbp2_param_workarounds;
@@ -114,8 +107,6 @@ MODULE_PARM_DESC(workarounds, "Work around device bugs (default = 0"
 	", skip mode page 8 = "   __stringify(SBP2_WORKAROUND_MODE_SENSE_8)
 	", fix capacity = "       __stringify(SBP2_WORKAROUND_FIX_CAPACITY)
 	", delay inquiry = "      __stringify(SBP2_WORKAROUND_DELAY_INQUIRY)
-	", set power condition in start stop unit = "
-				  __stringify(SBP2_WORKAROUND_POWER_CONDITION)
 	", override internal blacklist = " __stringify(SBP2_WORKAROUND_OVERRIDE)
 	", or a combination)");
 
@@ -173,9 +164,6 @@ struct sbp2_target {
 	int blocked;	/* ditto */
 };
 
-/* Impossible login_id, to detect logout attempt before successful login */
-#define INVALID_LOGIN_ID 0x10000
-
 /*
  * Per section 7.4.8 of the SBP-2 spec, a mgt_ORB_timeout value can be
  * provided in the config rom. Most devices do provide a value, which
@@ -185,15 +173,9 @@ struct sbp2_target {
 #define SBP2_MAX_LOGIN_ORB_TIMEOUT	40000U	/* Timeout in ms */
 #define SBP2_ORB_TIMEOUT		2000U	/* Timeout in ms */
 #define SBP2_ORB_NULL			0x80000000
+#define SBP2_MAX_SG_ELEMENT_LENGTH	0xf000
 #define SBP2_RETRY_LIMIT		0xf		/* 15 retries */
 #define SBP2_CYCLE_LIMIT		(0xc8 << 12)	/* 200 125us cycles */
-
-/*
- * The default maximum s/g segment size of a FireWire controller is
- * usually 0x10000, but SBP-2 only allows 0xffff. Since buffers have to
- * be quadlet-aligned, we set the length limit to 0xffff & ~3.
- */
-#define SBP2_MAX_SEG_SIZE		0xfffc
 
 /* Unit directory keys */
 #define SBP2_CSR_UNIT_CHARACTERISTICS	0x3a
@@ -328,24 +310,17 @@ static const struct {
 		.firmware_revision	= 0x002800,
 		.model			= 0x001010,
 		.workarounds		= SBP2_WORKAROUND_INQUIRY_36 |
-					  SBP2_WORKAROUND_MODE_SENSE_8 |
-					  SBP2_WORKAROUND_POWER_CONDITION,
+					  SBP2_WORKAROUND_MODE_SENSE_8,
 	},
 	/* DViCO Momobay FX-3A with TSB42AA9A bridge */ {
 		.firmware_revision	= 0x002800,
 		.model			= 0x000000,
-		.workarounds		= SBP2_WORKAROUND_DELAY_INQUIRY |
-					  SBP2_WORKAROUND_POWER_CONDITION,
+		.workarounds		= SBP2_WORKAROUND_DELAY_INQUIRY,
 	},
 	/* Initio bridges, actually only needed for some older ones */ {
 		.firmware_revision	= 0x000200,
 		.model			= ~0,
 		.workarounds		= SBP2_WORKAROUND_INQUIRY_36,
-	},
-	/* PL-3507 bridge with Prolific firmware */ {
-		.firmware_revision	= 0x012800,
-		.model			= ~0,
-		.workarounds		= SBP2_WORKAROUND_POWER_CONDITION,
 	},
 	/* Symbios bridge */ {
 		.firmware_revision	= 0xa0b800,
@@ -368,11 +343,6 @@ static const struct {
 	/* iPod 4th generation. */ {
 		.firmware_revision	= 0x0a2700,
 		.model			= 0x000021,
-		.workarounds		= SBP2_WORKAROUND_FIX_CAPACITY,
-	},
-	/* iPod mini */ {
-		.firmware_revision	= 0x0a2700,
-		.model			= 0x000022,
 		.workarounds		= SBP2_WORKAROUND_FIX_CAPACITY,
 	},
 	/* iPod mini */ {
@@ -558,7 +528,7 @@ sbp2_send_management_orb(struct sbp2_logical_unit *lu, int node_id,
 	orb->response_bus =
 		dma_map_single(device->card->device, &orb->response,
 			       sizeof(orb->response), DMA_FROM_DEVICE);
-	if (dma_mapping_error(device->card->device, orb->response_bus))
+	if (dma_mapping_error(orb->response_bus))
 		goto fail_mapping_response;
 
 	orb->request.response.high = 0;
@@ -592,7 +562,7 @@ sbp2_send_management_orb(struct sbp2_logical_unit *lu, int node_id,
 	orb->base.request_bus =
 		dma_map_single(device->card->device, &orb->request,
 			       sizeof(orb->request), DMA_TO_DEVICE);
-	if (dma_mapping_error(device->card->device, orb->base.request_bus))
+	if (dma_mapping_error(orb->base.request_bus))
 		goto fail_mapping_request;
 
 	sbp2_send_orb(&orb->base, lu, node_id, generation,
@@ -636,15 +606,25 @@ sbp2_send_management_orb(struct sbp2_logical_unit *lu, int node_id,
 	return retval;
 }
 
+static void
+complete_agent_reset_write(struct fw_card *card, int rcode,
+			   void *payload, size_t length, void *done)
+{
+	complete(done);
+}
+
 static void sbp2_agent_reset(struct sbp2_logical_unit *lu)
 {
 	struct fw_device *device = fw_device(lu->tgt->unit->device.parent);
-	__be32 d = 0;
+	DECLARE_COMPLETION_ONSTACK(done);
+	struct fw_transaction t;
+	static u32 z;
 
-	fw_run_transaction(device->card, TCODE_WRITE_QUADLET_REQUEST,
-			   lu->tgt->node_id, lu->generation, device->max_speed,
-			   lu->command_block_agent_address + SBP2_AGENT_RESET,
-			   &d, sizeof(d));
+	fw_send_request(device->card, &t, TCODE_WRITE_QUADLET_REQUEST,
+			lu->tgt->node_id, lu->generation, device->max_speed,
+			lu->command_block_agent_address + SBP2_AGENT_RESET,
+			&z, sizeof(z), complete_agent_reset_write, &done);
+	wait_for_completion(&done);
 }
 
 static void
@@ -658,7 +638,7 @@ static void sbp2_agent_reset_no_wait(struct sbp2_logical_unit *lu)
 {
 	struct fw_device *device = fw_device(lu->tgt->unit->device.parent);
 	struct fw_transaction *t;
-	static __be32 d;
+	static u32 z;
 
 	t = kmalloc(sizeof(*t), GFP_ATOMIC);
 	if (t == NULL)
@@ -667,7 +647,18 @@ static void sbp2_agent_reset_no_wait(struct sbp2_logical_unit *lu)
 	fw_send_request(device->card, t, TCODE_WRITE_QUADLET_REQUEST,
 			lu->tgt->node_id, lu->generation, device->max_speed,
 			lu->command_block_agent_address + SBP2_AGENT_RESET,
-			&d, sizeof(d), complete_agent_reset_write_no_wait, t);
+			&z, sizeof(z), complete_agent_reset_write_no_wait, t);
+}
+
+static void sbp2_set_generation(struct sbp2_logical_unit *lu, int generation)
+{
+	struct fw_card *card = fw_device(lu->tgt->unit->device.parent)->card;
+	unsigned long flags;
+
+	/* serialize with comparisons of lu->generation and card->generation */
+	spin_lock_irqsave(&card->lock, flags);
+	lu->generation = generation;
+	spin_unlock_irqrestore(&card->lock, flags);
 }
 
 static inline void sbp2_allow_block(struct sbp2_logical_unit *lu)
@@ -785,20 +776,9 @@ static void sbp2_release_target(struct kref *kref)
 			scsi_remove_device(sdev);
 			scsi_device_put(sdev);
 		}
-		if (lu->login_id != INVALID_LOGIN_ID) {
-			int generation, node_id;
-			/*
-			 * tgt->node_id may be obsolete here if we failed
-			 * during initial login or after a bus reset where
-			 * the topology changed.
-			 */
-			generation = device->generation;
-			smp_rmb(); /* node_id vs. generation */
-			node_id    = device->node_id;
-			sbp2_send_management_orb(lu, node_id, generation,
-						 SBP2_LOGOUT_REQUEST,
-						 lu->login_id, NULL);
-		}
+		sbp2_send_management_orb(lu, tgt->node_id, lu->generation,
+				SBP2_LOGOUT_REQUEST, lu->login_id, NULL);
+
 		fw_core_remove_address_handler(&lu->address_handler);
 		list_del(&lu->link);
 		kfree(lu);
@@ -813,20 +793,26 @@ static void sbp2_release_target(struct kref *kref)
 
 static struct workqueue_struct *sbp2_wq;
 
-static void sbp2_target_put(struct sbp2_target *tgt)
-{
-	kref_put(&tgt->kref, sbp2_release_target);
-}
-
 /*
  * Always get the target's kref when scheduling work on one its units.
  * Each workqueue job is responsible to call sbp2_target_put() upon return.
  */
 static void sbp2_queue_work(struct sbp2_logical_unit *lu, unsigned long delay)
 {
-	kref_get(&lu->tgt->kref);
-	if (!queue_delayed_work(sbp2_wq, &lu->work, delay))
-		sbp2_target_put(lu->tgt);
+	if (queue_delayed_work(sbp2_wq, &lu->work, delay))
+		kref_get(&lu->tgt->kref);
+}
+
+static void sbp2_target_put(struct sbp2_target *tgt)
+{
+	kref_put(&tgt->kref, sbp2_release_target);
+}
+
+static void
+complete_set_busy_timeout(struct fw_card *card, int rcode,
+			  void *payload, size_t length, void *done)
+{
+	complete(done);
 }
 
 /*
@@ -848,12 +834,17 @@ static void sbp2_queue_work(struct sbp2_logical_unit *lu, unsigned long delay)
 static void sbp2_set_busy_timeout(struct sbp2_logical_unit *lu)
 {
 	struct fw_device *device = fw_device(lu->tgt->unit->device.parent);
-	__be32 d = cpu_to_be32(SBP2_CYCLE_LIMIT | SBP2_RETRY_LIMIT);
+	DECLARE_COMPLETION_ONSTACK(done);
+	struct fw_transaction t;
+	static __be32 busy_timeout;
 
-	fw_run_transaction(device->card, TCODE_WRITE_QUADLET_REQUEST,
-			   lu->tgt->node_id, lu->generation, device->max_speed,
-			   CSR_REGISTER_BASE + CSR_BUSY_TIMEOUT,
-			   &d, sizeof(d));
+	busy_timeout = cpu_to_be32(SBP2_CYCLE_LIMIT | SBP2_RETRY_LIMIT);
+
+	fw_send_request(device->card, &t, TCODE_WRITE_QUADLET_REQUEST,
+			lu->tgt->node_id, lu->generation, device->max_speed,
+			CSR_REGISTER_BASE + CSR_BUSY_TIMEOUT, &busy_timeout,
+			sizeof(busy_timeout), complete_set_busy_timeout, &done);
+	wait_for_completion(&done);
 }
 
 static void sbp2_reconnect(struct work_struct *work);
@@ -873,7 +864,7 @@ static void sbp2_login(struct work_struct *work)
 		goto out;
 
 	generation    = device->generation;
-	smp_rmb();    /* node IDs must not be older than generation */
+	smp_rmb();    /* node_id must not be older than generation */
 	node_id       = device->node_id;
 	local_node_id = device->card->node_id;
 
@@ -897,8 +888,7 @@ static void sbp2_login(struct work_struct *work)
 
 	tgt->node_id	  = node_id;
 	tgt->address_high = local_node_id << 16;
-	smp_wmb();	  /* node IDs must not be older than generation */
-	lu->generation	  = generation;
+	sbp2_set_generation(lu, generation);
 
 	lu->command_block_agent_address =
 		((u64)(be32_to_cpu(response.command_block_agent.high) & 0xffff)
@@ -988,7 +978,6 @@ static int sbp2_add_logical_unit(struct sbp2_target *tgt, int lun_entry)
 
 	lu->tgt      = tgt;
 	lu->lun      = lun_entry & 0xffff;
-	lu->login_id = INVALID_LOGIN_ID;
 	lu->retries  = 0;
 	lu->has_sdev = false;
 	lu->blocked  = false;
@@ -1062,8 +1051,7 @@ static int sbp2_scan_unit_dir(struct sbp2_target *tgt, u32 *directory,
 			break;
 
 		case SBP2_CSR_LOGICAL_UNIT_DIRECTORY:
-			/* Adjust for the increment in the iterator */
-			if (sbp2_scan_logical_unit_dir(tgt, ci.p - 1 + value) < 0)
+			if (sbp2_scan_logical_unit_dir(tgt, ci.p + value) < 0)
 				return -ENOMEM;
 			break;
 		}
@@ -1117,10 +1105,6 @@ static int sbp2_probe(struct device *dev)
 	struct Scsi_Host *shost;
 	u32 model, firmware_revision;
 
-	if (dma_get_max_seg_size(device->card->device) > SBP2_MAX_SEG_SIZE)
-		BUG_ON(dma_set_max_seg_size(device->card->device,
-					    SBP2_MAX_SEG_SIZE));
-
 	shost = scsi_host_alloc(&scsi_driver_template, sizeof(*tgt));
 	if (shost == NULL)
 		return -ENOMEM;
@@ -1130,7 +1114,7 @@ static int sbp2_probe(struct device *dev)
 	tgt->unit = unit;
 	kref_init(&tgt->kref);
 	INIT_LIST_HEAD(&tgt->lu_list);
-	tgt->bus_id = dev_name(&unit->device);
+	tgt->bus_id = unit->device.bus_id;
 	tgt->guid = (u64)device->config_rom[3] << 32 | device->config_rom[4];
 
 	if (fw_device_enable_phys_dma(device) < 0)
@@ -1158,7 +1142,7 @@ static int sbp2_probe(struct device *dev)
 
 	/* Do the login in a workqueue so we can easily reschedule retries. */
 	list_for_each_entry(lu, &tgt->lu_list, link)
-		sbp2_queue_work(lu, DIV_ROUND_UP(HZ, 5));
+		sbp2_queue_work(lu, 0);
 	return 0;
 
  fail_tgt_put:
@@ -1191,7 +1175,7 @@ static void sbp2_reconnect(struct work_struct *work)
 		goto out;
 
 	generation    = device->generation;
-	smp_rmb();    /* node IDs must not be older than generation */
+	smp_rmb();    /* node_id must not be older than generation */
 	node_id       = device->node_id;
 	local_node_id = device->card->node_id;
 
@@ -1218,8 +1202,7 @@ static void sbp2_reconnect(struct work_struct *work)
 
 	tgt->node_id      = node_id;
 	tgt->address_high = local_node_id << 16;
-	smp_wmb();	  /* node IDs must not be older than generation */
-	lu->generation	  = generation;
+	sbp2_set_generation(lu, generation);
 
 	fw_notify("%s: reconnected to LUN %04x (%d retries)\n",
 		  tgt->bus_id, lu->lun, lu->retries);
@@ -1370,12 +1353,14 @@ static int
 sbp2_map_scatterlist(struct sbp2_command_orb *orb, struct fw_device *device,
 		     struct sbp2_logical_unit *lu)
 {
-	struct scatterlist *sg = scsi_sglist(orb->cmd);
-	int i, n;
+	struct scatterlist *sg;
+	int sg_len, l, i, j, count;
+	dma_addr_t sg_addr;
 
-	n = dma_map_sg(device->card->device, sg, scsi_sg_count(orb->cmd),
-		       orb->cmd->sc_data_direction);
-	if (n == 0)
+	sg = scsi_sglist(orb->cmd);
+	count = dma_map_sg(device->card->device, sg, scsi_sg_count(orb->cmd),
+			   orb->cmd->sc_data_direction);
+	if (count == 0)
 		goto fail;
 
 	/*
@@ -1385,7 +1370,7 @@ sbp2_map_scatterlist(struct sbp2_command_orb *orb, struct fw_device *device,
 	 * as the second generation iPod which doesn't support page
 	 * tables.
 	 */
-	if (n == 1) {
+	if (count == 1 && sg_dma_len(sg) < SBP2_MAX_SG_ELEMENT_LENGTH) {
 		orb->request.data_descriptor.high =
 			cpu_to_be32(lu->tgt->address_high);
 		orb->request.data_descriptor.low  =
@@ -1395,15 +1380,35 @@ sbp2_map_scatterlist(struct sbp2_command_orb *orb, struct fw_device *device,
 		return 0;
 	}
 
-	for_each_sg(sg, sg, n, i) {
-		orb->page_table[i].high = cpu_to_be32(sg_dma_len(sg) << 16);
-		orb->page_table[i].low = cpu_to_be32(sg_dma_address(sg));
+	/*
+	 * Convert the scatterlist to an sbp2 page table.  If any
+	 * scatterlist entries are too big for sbp2, we split them as we
+	 * go.  Even if we ask the block I/O layer to not give us sg
+	 * elements larger than 65535 bytes, some IOMMUs may merge sg elements
+	 * during DMA mapping, and Linux currently doesn't prevent this.
+	 */
+	for (i = 0, j = 0; i < count; i++, sg = sg_next(sg)) {
+		sg_len = sg_dma_len(sg);
+		sg_addr = sg_dma_address(sg);
+		while (sg_len) {
+			/* FIXME: This won't get us out of the pinch. */
+			if (unlikely(j >= ARRAY_SIZE(orb->page_table))) {
+				fw_error("page table overflow\n");
+				goto fail_page_table;
+			}
+			l = min(sg_len, SBP2_MAX_SG_ELEMENT_LENGTH);
+			orb->page_table[j].low = cpu_to_be32(sg_addr);
+			orb->page_table[j].high = cpu_to_be32(l << 16);
+			sg_addr += l;
+			sg_len -= l;
+			j++;
+		}
 	}
 
 	orb->page_table_bus =
 		dma_map_single(device->card->device, orb->page_table,
 			       sizeof(orb->page_table), DMA_TO_DEVICE);
-	if (dma_mapping_error(device->card->device, orb->page_table_bus))
+	if (dma_mapping_error(orb->page_table_bus))
 		goto fail_page_table;
 
 	/*
@@ -1416,13 +1421,13 @@ sbp2_map_scatterlist(struct sbp2_command_orb *orb, struct fw_device *device,
 	orb->request.data_descriptor.high = cpu_to_be32(lu->tgt->address_high);
 	orb->request.data_descriptor.low  = cpu_to_be32(orb->page_table_bus);
 	orb->request.misc |= cpu_to_be32(COMMAND_ORB_PAGE_TABLE_PRESENT |
-					 COMMAND_ORB_DATA_SIZE(n));
+					 COMMAND_ORB_DATA_SIZE(j));
 
 	return 0;
 
  fail_page_table:
-	dma_unmap_sg(device->card->device, scsi_sglist(orb->cmd),
-		     scsi_sg_count(orb->cmd), orb->cmd->sc_data_direction);
+	dma_unmap_sg(device->card->device, sg, scsi_sg_count(orb->cmd),
+		     orb->cmd->sc_data_direction);
  fail:
 	return -ENOMEM;
 }
@@ -1435,7 +1440,7 @@ static int sbp2_scsi_queuecommand(struct scsi_cmnd *cmd, scsi_done_fn_t done)
 	struct fw_device *device = fw_device(lu->tgt->unit->device.parent);
 	struct sbp2_command_orb *orb;
 	unsigned int max_payload;
-	int generation, retval = SCSI_MLQUEUE_HOST_BUSY;
+	int retval = SCSI_MLQUEUE_HOST_BUSY;
 
 	/*
 	 * Bidirectional commands are not yet implemented, and unknown
@@ -1479,9 +1484,6 @@ static int sbp2_scsi_queuecommand(struct scsi_cmnd *cmd, scsi_done_fn_t done)
 	if (cmd->sc_data_direction == DMA_FROM_DEVICE)
 		orb->request.misc |= cpu_to_be32(COMMAND_ORB_DIRECTION);
 
-	generation = device->generation;
-	smp_rmb();    /* sbp2_map_scatterlist looks at tgt->address_high */
-
 	if (scsi_sg_count(cmd) && sbp2_map_scatterlist(orb, device, lu) < 0)
 		goto out;
 
@@ -1491,10 +1493,10 @@ static int sbp2_scsi_queuecommand(struct scsi_cmnd *cmd, scsi_done_fn_t done)
 	orb->base.request_bus =
 		dma_map_single(device->card->device, &orb->request,
 			       sizeof(orb->request), DMA_TO_DEVICE);
-	if (dma_mapping_error(device->card->device, orb->base.request_bus))
+	if (dma_mapping_error(orb->base.request_bus))
 		goto out;
 
-	sbp2_send_orb(&orb->base, lu, lu->tgt->node_id, generation,
+	sbp2_send_orb(&orb->base, lu, lu->tgt->node_id, lu->generation,
 		      lu->command_block_agent_address + SBP2_ORB_POINTER);
 	retval = 0;
  out:
@@ -1527,9 +1529,6 @@ static int sbp2_scsi_slave_configure(struct scsi_device *sdev)
 
 	sdev->use_10_for_rw = 1;
 
-	if (sbp2_param_exclusive_login)
-		sdev->manage_start_stop = 1;
-
 	if (sdev->type == TYPE_ROM)
 		sdev->use_10_for_ms = 1;
 
@@ -1540,13 +1539,8 @@ static int sbp2_scsi_slave_configure(struct scsi_device *sdev)
 	if (lu->tgt->workarounds & SBP2_WORKAROUND_FIX_CAPACITY)
 		sdev->fix_capacity = 1;
 
-	if (lu->tgt->workarounds & SBP2_WORKAROUND_POWER_CONDITION)
-		sdev->start_stop_pwr_cond = 1;
-
 	if (lu->tgt->workarounds & SBP2_WORKAROUND_128K_MAX_TRANS)
 		blk_queue_max_sectors(sdev->request_queue, 128 * 1024 / 512);
-
-	blk_queue_max_segment_size(sdev->request_queue, SBP2_MAX_SEG_SIZE);
 
 	return 0;
 }

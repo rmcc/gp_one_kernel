@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/serial_8250.h>
 
+#include <asm/bootinfo.h>
 #include <asm/lasat/lasat.h>
 #include <asm/lasat/serial.h>
 
@@ -46,7 +47,7 @@ static __init int lasat_uart_add(void)
 	if (!pdev)
 		return -ENOMEM;
 
-	if (!IS_LASAT_200()) {
+	if (mips_machtype == MACH_LASAT_100) {
 		lasat_serial_res[0].start = KSEG1ADDR(LASAT_UART_REGS_BASE_100);
 		lasat_serial_res[0].end = lasat_serial_res[0].start + LASAT_UART_REGS_SHIFT_100 * 8 - 1;
 		lasat_serial_res[0].flags = IORESOURCE_MEM;

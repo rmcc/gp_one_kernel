@@ -134,7 +134,6 @@ typedef struct xfs_log_callback {
 #ifdef __KERNEL__
 /* Log manager interfaces */
 struct xfs_mount;
-struct xlog_ticket;
 xfs_lsn_t xfs_log_done(struct xfs_mount *mp,
 		       xfs_log_ticket_t ticket,
 		       void		**iclog,
@@ -150,7 +149,7 @@ int	  xfs_log_mount(struct xfs_mount	*mp,
 			struct xfs_buftarg	*log_target,
 			xfs_daddr_t		start_block,
 			int		 	num_bblocks);
-int	  xfs_log_mount_finish(struct xfs_mount *mp);
+int	  xfs_log_mount_finish(struct xfs_mount *mp, int);
 void	  xfs_log_move_tail(struct xfs_mount	*mp,
 			    xfs_lsn_t		tail_lsn);
 int	  xfs_log_notify(struct xfs_mount	*mp,
@@ -177,9 +176,6 @@ int	  xfs_log_force_umount(struct xfs_mount *mp, int logerror);
 int	  xfs_log_need_covered(struct xfs_mount *mp);
 
 void	  xlog_iodone(struct xfs_buf *);
-
-struct xlog_ticket * xfs_log_ticket_get(struct xlog_ticket *ticket);
-void	  xfs_log_ticket_put(struct xlog_ticket *ticket);
 
 #endif
 

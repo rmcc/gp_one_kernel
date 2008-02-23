@@ -109,7 +109,7 @@ int ebitmap_netlbl_export(struct ebitmap *ebmap,
 	*catmap = c_iter;
 	c_iter->startbit = e_iter->startbit & ~(NETLBL_CATMAP_SIZE - 1);
 
-	while (e_iter) {
+	while (e_iter != NULL) {
 		for (i = 0; i < EBITMAP_UNIT_NUMS; i++) {
 			unsigned int delta, e_startbit, c_endbit;
 
@@ -197,7 +197,7 @@ int ebitmap_netlbl_import(struct ebitmap *ebmap,
 			}
 		}
 		c_iter = c_iter->next;
-	} while (c_iter);
+	} while (c_iter != NULL);
 	if (e_iter != NULL)
 		ebmap->highbit = e_iter->startbit + EBITMAP_SIZE;
 	else

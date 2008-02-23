@@ -35,6 +35,7 @@
 #include <linux/sunrpc/svcsock.h>
 #include <net/ip.h>
 #include <linux/lockd/lockd.h>
+#include <linux/lockd/sm_inter.h>
 #include <linux/nfs.h>
 
 #define NLMDBG_FACILITY		NLMDBG_SVC
@@ -44,24 +45,14 @@
 static struct svc_program	nlmsvc_program;
 
 struct nlmsvc_binding *		nlmsvc_ops;
-EXPORT_SYMBOL_GPL(nlmsvc_ops);
+EXPORT_SYMBOL(nlmsvc_ops);
 
 static DEFINE_MUTEX(nlmsvc_mutex);
 static unsigned int		nlmsvc_users;
 static struct task_struct	*nlmsvc_task;
-static struct svc_rqst		*nlmsvc_rqst;
+static struct svc_serv		*nlmsvc_serv;
+int				nlmsvc_grace_period;
 unsigned long			nlmsvc_timeout;
-
-/*
- * If the kernel has IPv6 support available, always listen for
- * both AF_INET and AF_INET6 requests.
- */
-#if (defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)) && \
-	defined(CONFIG_SUNRPC_REGISTER_V4)
-static const sa_family_t	nlmsvc_family = AF_INET6;
-#else	/* (CONFIG_IPV6 || CONFIG_IPV6_MODULE) && CONFIG_SUNRPC_REGISTER_V4 */
-static const sa_family_t	nlmsvc_family = AF_INET;
-#endif	/* (CONFIG_IPV6 || CONFIG_IPV6_MODULE) && CONFIG_SUNRPC_REGISTER_V4 */
 
 /*
  * These can be set at insmod time (useful for NFS as root filesystem),
@@ -70,9 +61,7 @@ static const sa_family_t	nlmsvc_family = AF_INET;
 static unsigned long		nlm_grace_period;
 static unsigned long		nlm_timeout = LOCKD_DFLT_TIMEO;
 static int			nlm_udpport, nlm_tcpport;
-
-/* RLIM_NOFILE defaults to 1024. That seems like a reasonable default here. */
-static unsigned int		nlm_max_connections = 1024;
+int				nsm_use_hostnames = 0;
 
 /*
  * Constants needed for the sysctl interface.
@@ -96,23 +85,27 @@ static unsigned long get_lockd_grace_period(void)
 		return nlm_timeout * 5 * HZ;
 }
 
-static struct lock_manager lockd_manager = {
-};
-
-static void grace_ender(struct work_struct *not_used)
+unsigned long get_nfs_grace_period(void)
 {
-	locks_end_grace(&lockd_manager);
+	unsigned long lockdgrace = get_lockd_grace_period();
+	unsigned long nfsdgrace = 0;
+
+	if (nlmsvc_ops)
+		nfsdgrace = nlmsvc_ops->get_grace_period();
+
+	return max(lockdgrace, nfsdgrace);
+}
+EXPORT_SYMBOL(get_nfs_grace_period);
+
+static unsigned long set_grace_period(void)
+{
+	nlmsvc_grace_period = 1;
+	return get_nfs_grace_period() + jiffies;
 }
 
-static DECLARE_DELAYED_WORK(grace_period_end, grace_ender);
-
-static void set_grace_period(void)
+static inline void clear_grace_period(void)
 {
-	unsigned long grace_period = get_lockd_grace_period();
-
-	locks_start_grace(&lockd_manager);
-	cancel_delayed_work_sync(&grace_period_end);
-	schedule_delayed_work(&grace_period_end, grace_period);
+	nlmsvc_grace_period = 0;
 }
 
 /*
@@ -123,6 +116,7 @@ lockd(void *vrqstp)
 {
 	int		err = 0, preverr = 0;
 	struct svc_rqst *rqstp = vrqstp;
+	unsigned long grace_period_expire;
 
 	/* try_to_freeze() is called from svc_recv() */
 	set_freezable();
@@ -145,7 +139,7 @@ lockd(void *vrqstp)
 		nlm_timeout = LOCKD_DFLT_TIMEO;
 	nlmsvc_timeout = nlm_timeout * HZ;
 
-	set_grace_period();
+	grace_period_expire = set_grace_period();
 
 	/*
 	 * The main request loop. We don't terminate until the last
@@ -155,19 +149,25 @@ lockd(void *vrqstp)
 		long timeout = MAX_SCHEDULE_TIMEOUT;
 		RPC_IFDEBUG(char buf[RPC_MAX_ADDRBUFLEN]);
 
-		/* update sv_maxconn if it has changed */
-		rqstp->rq_server->sv_maxconn = nlm_max_connections;
-
 		if (signalled()) {
 			flush_signals(current);
 			if (nlmsvc_ops) {
 				nlmsvc_invalidate_all();
-				set_grace_period();
+				grace_period_expire = set_grace_period();
 			}
 			continue;
 		}
 
-		timeout = nlmsvc_retry_blocked();
+		/*
+		 * Retry any blocked locks that have been notified by
+		 * the VFS. Don't do this during grace period.
+		 * (Theoretically, there shouldn't even be blocked locks
+		 * during grace period).
+		 */
+		if (!nlmsvc_grace_period) {
+			timeout = nlmsvc_retry_blocked();
+		} else if (time_before(grace_period_expire, jiffies))
+			clear_grace_period();
 
 		/*
 		 * Find a socket with data available and call its
@@ -194,76 +194,78 @@ lockd(void *vrqstp)
 
 		svc_process(rqstp);
 	}
+
 	flush_signals(current);
-	cancel_delayed_work_sync(&grace_period_end);
-	locks_end_grace(&lockd_manager);
 	if (nlmsvc_ops)
 		nlmsvc_invalidate_all();
 	nlm_shutdown_hosts();
+
 	unlock_kernel();
-	return 0;
-}
 
-static int create_lockd_listener(struct svc_serv *serv, char *name,
-				 unsigned short port)
-{
-	struct svc_xprt *xprt;
+	nlmsvc_task = NULL;
+	nlmsvc_serv = NULL;
 
-	xprt = svc_find_xprt(serv, name, 0, 0);
-	if (xprt == NULL)
-		return svc_create_xprt(serv, name, port, SVC_SOCK_DEFAULTS);
+	/* Exit the RPC thread */
+	svc_exit_thread(rqstp);
 
-	svc_xprt_put(xprt);
 	return 0;
 }
 
 /*
- * Ensure there are active UDP and TCP listeners for lockd.
- *
- * Even if we have only TCP NFS mounts and/or TCP NFSDs, some
- * local services (such as rpc.statd) still require UDP, and
- * some NFS servers do not yet support NLM over TCP.
- *
- * Returns zero if all listeners are available; otherwise a
- * negative errno value is returned.
+ * Make any sockets that are needed but not present.
+ * If nlm_udpport or nlm_tcpport were set as module
+ * options, make those sockets unconditionally
  */
-static int make_socks(struct svc_serv *serv)
+static int make_socks(struct svc_serv *serv, int proto)
 {
 	static int warned;
-	int err;
+	struct svc_xprt *xprt;
+	int err = 0;
 
-	err = create_lockd_listener(serv, "udp", nlm_udpport);
-	if (err < 0)
-		goto out_err;
-
-	err = create_lockd_listener(serv, "tcp", nlm_tcpport);
-	if (err < 0)
-		goto out_err;
-
-	warned = 0;
-	return 0;
-
-out_err:
-	if (warned++ == 0)
+	if (proto == IPPROTO_UDP || nlm_udpport) {
+		xprt = svc_find_xprt(serv, "udp", 0, 0);
+		if (!xprt)
+			err = svc_create_xprt(serv, "udp", nlm_udpport,
+					      SVC_SOCK_DEFAULTS);
+		else
+			svc_xprt_put(xprt);
+	}
+	if (err >= 0 && (proto == IPPROTO_TCP || nlm_tcpport)) {
+		xprt = svc_find_xprt(serv, "tcp", 0, 0);
+		if (!xprt)
+			err = svc_create_xprt(serv, "tcp", nlm_tcpport,
+					      SVC_SOCK_DEFAULTS);
+		else
+			svc_xprt_put(xprt);
+	}
+	if (err >= 0) {
+		warned = 0;
+		err = 0;
+	} else if (warned++ == 0)
 		printk(KERN_WARNING
-			"lockd_up: makesock failed, error=%d\n", err);
+		       "lockd_up: makesock failed, error=%d\n", err);
 	return err;
 }
 
 /*
  * Bring up the lockd process if it's not already up.
  */
-int lockd_up(void)
+int
+lockd_up(int proto) /* Maybe add a 'family' option when IPv6 is supported ?? */
 {
 	struct svc_serv *serv;
+	struct svc_rqst *rqstp;
 	int		error = 0;
 
 	mutex_lock(&nlmsvc_mutex);
 	/*
 	 * Check whether we're already up and running.
 	 */
-	if (nlmsvc_rqst)
+	if (nlmsvc_serv) {
+		if (proto)
+			error = make_socks(nlmsvc_serv, proto);
 		goto out;
+	}
 
 	/*
 	 * Sanity check: if there's no pid,
@@ -274,23 +276,21 @@ int lockd_up(void)
 			"lockd_up: no pid, %d users??\n", nlmsvc_users);
 
 	error = -ENOMEM;
-	serv = svc_create(&nlmsvc_program, LOCKD_BUFSIZE, nlmsvc_family, NULL);
+	serv = svc_create(&nlmsvc_program, LOCKD_BUFSIZE, NULL);
 	if (!serv) {
 		printk(KERN_WARNING "lockd_up: create service failed\n");
 		goto out;
 	}
 
-	error = make_socks(serv);
-	if (error < 0)
+	if ((error = make_socks(serv, proto)) < 0)
 		goto destroy_and_out;
 
 	/*
 	 * Create the kernel thread and wait for it to start.
 	 */
-	nlmsvc_rqst = svc_prepare_thread(serv, &serv->sv_pools[0]);
-	if (IS_ERR(nlmsvc_rqst)) {
-		error = PTR_ERR(nlmsvc_rqst);
-		nlmsvc_rqst = NULL;
+	rqstp = svc_prepare_thread(serv, &serv->sv_pools[0]);
+	if (IS_ERR(rqstp)) {
+		error = PTR_ERR(rqstp);
 		printk(KERN_WARNING
 			"lockd_up: svc_rqst allocation failed, error=%d\n",
 			error);
@@ -298,16 +298,16 @@ int lockd_up(void)
 	}
 
 	svc_sock_update_bufs(serv);
-	serv->sv_maxconn = nlm_max_connections;
+	nlmsvc_serv = rqstp->rq_server;
 
-	nlmsvc_task = kthread_run(lockd, nlmsvc_rqst, serv->sv_name);
+	nlmsvc_task = kthread_run(lockd, rqstp, serv->sv_name);
 	if (IS_ERR(nlmsvc_task)) {
 		error = PTR_ERR(nlmsvc_task);
-		svc_exit_thread(nlmsvc_rqst);
 		nlmsvc_task = NULL;
-		nlmsvc_rqst = NULL;
+		nlmsvc_serv = NULL;
 		printk(KERN_WARNING
 			"lockd_up: kthread_run failed, error=%d\n", error);
+		svc_exit_thread(rqstp);
 		goto destroy_and_out;
 	}
 
@@ -323,7 +323,7 @@ out:
 	mutex_unlock(&nlmsvc_mutex);
 	return error;
 }
-EXPORT_SYMBOL_GPL(lockd_up);
+EXPORT_SYMBOL(lockd_up);
 
 /*
  * Decrement the user count and bring down lockd if we're the last.
@@ -346,13 +346,10 @@ lockd_down(void)
 		BUG();
 	}
 	kthread_stop(nlmsvc_task);
-	svc_exit_thread(nlmsvc_rqst);
-	nlmsvc_task = NULL;
-	nlmsvc_rqst = NULL;
 out:
 	mutex_unlock(&nlmsvc_mutex);
 }
-EXPORT_SYMBOL_GPL(lockd_down);
+EXPORT_SYMBOL(lockd_down);
 
 #ifdef CONFIG_SYSCTL
 
@@ -508,7 +505,6 @@ module_param_call(nlm_udpport, param_set_port, param_get_int,
 module_param_call(nlm_tcpport, param_set_port, param_get_int,
 		  &nlm_tcpport, 0644);
 module_param(nsm_use_hostnames, bool, 0644);
-module_param(nlm_max_connections, uint, 0644);
 
 /*
  * Initialising and terminating the module.

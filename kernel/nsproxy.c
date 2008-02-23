@@ -14,6 +14,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/nsproxy.h>
 #include <linux/init_task.h>
 #include <linux/mnt_namespace.h>
@@ -80,6 +81,12 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 		goto out_pid;
 	}
 
+	new_nsp->user_ns = copy_user_ns(flags, tsk->nsproxy->user_ns);
+	if (IS_ERR(new_nsp->user_ns)) {
+		err = PTR_ERR(new_nsp->user_ns);
+		goto out_user;
+	}
+
 	new_nsp->net_ns = copy_net_ns(flags, tsk->nsproxy->net_ns);
 	if (IS_ERR(new_nsp->net_ns)) {
 		err = PTR_ERR(new_nsp->net_ns);
@@ -89,6 +96,9 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 	return new_nsp;
 
 out_net:
+	if (new_nsp->user_ns)
+		put_user_ns(new_nsp->user_ns);
+out_user:
 	if (new_nsp->pid_ns)
 		put_pid_ns(new_nsp->pid_ns);
 out_pid:
@@ -121,7 +131,7 @@ int copy_namespaces(unsigned long flags, struct task_struct *tsk)
 	get_nsproxy(old_ns);
 
 	if (!(flags & (CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC |
-				CLONE_NEWPID | CLONE_NEWNET)))
+				CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET)))
 		return 0;
 
 	if (!capable(CAP_SYS_ADMIN)) {
@@ -147,6 +157,12 @@ int copy_namespaces(unsigned long flags, struct task_struct *tsk)
 		goto out;
 	}
 
+	err = ns_cgroup_clone(tsk);
+	if (err) {
+		put_nsproxy(new_ns);
+		goto out;
+	}
+
 	tsk->nsproxy = new_ns;
 
 out:
@@ -164,6 +180,8 @@ void free_nsproxy(struct nsproxy *ns)
 		put_ipc_ns(ns->ipc_ns);
 	if (ns->pid_ns)
 		put_pid_ns(ns->pid_ns);
+	if (ns->user_ns)
+		put_user_ns(ns->user_ns);
 	put_net(ns->net_ns);
 	kmem_cache_free(nsproxy_cachep, ns);
 }
@@ -178,7 +196,7 @@ int unshare_nsproxy_namespaces(unsigned long unshare_flags,
 	int err = 0;
 
 	if (!(unshare_flags & (CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC |
-			       CLONE_NEWNET)))
+			       CLONE_NEWUSER | CLONE_NEWNET)))
 		return 0;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -191,7 +209,7 @@ int unshare_nsproxy_namespaces(unsigned long unshare_flags,
 		goto out;
 	}
 
-	err = ns_cgroup_clone(current, task_pid(current));
+	err = ns_cgroup_clone(current);
 	if (err)
 		put_nsproxy(*new_nsp);
 

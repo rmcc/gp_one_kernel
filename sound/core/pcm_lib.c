@@ -85,8 +85,7 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 		}
 		frames = runtime->buffer_size - runtime->silence_filled;
 	}
-	if (snd_BUG_ON(frames > runtime->buffer_size))
-		return;
+	snd_assert(frames <= runtime->buffer_size, return);
 	if (frames == 0)
 		return;
 	ofs = runtime->silence_start % runtime->buffer_size;
@@ -97,7 +96,7 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 			if (substream->ops->silence) {
 				int err;
 				err = substream->ops->silence(substream, -1, ofs, transfer);
-				snd_BUG_ON(err < 0);
+				snd_assert(err >= 0, );
 			} else {
 				char *hwbuf = runtime->dma_area + frames_to_bytes(runtime, ofs);
 				snd_pcm_format_set_silence(runtime->format, hwbuf, transfer * runtime->channels);
@@ -109,7 +108,7 @@ void snd_pcm_playback_silence(struct snd_pcm_substream *substream, snd_pcm_ufram
 				for (c = 0; c < channels; ++c) {
 					int err;
 					err = substream->ops->silence(substream, c, ofs, transfer);
-					snd_BUG_ON(err < 0);
+					snd_assert(err >= 0, );
 				}
 			} else {
 				size_t dma_csize = runtime->dma_bytes / channels;
@@ -355,7 +354,7 @@ static inline unsigned int muldiv32(unsigned int a, unsigned int b,
 {
 	u_int64_t n = (u_int64_t) a * b;
 	if (c == 0) {
-		snd_BUG_ON(!n);
+		snd_assert(n > 0, );
 		*r = 0;
 		return UINT_MAX;
 	}
@@ -381,8 +380,7 @@ static inline unsigned int muldiv32(unsigned int a, unsigned int b,
 int snd_interval_refine(struct snd_interval *i, const struct snd_interval *v)
 {
 	int changed = 0;
-	if (snd_BUG_ON(snd_interval_empty(i)))
-		return -EINVAL;
+	snd_assert(!snd_interval_empty(i), return -EINVAL);
 	if (i->min < v->min) {
 		i->min = v->min;
 		i->openmin = v->openmin;
@@ -425,8 +423,7 @@ EXPORT_SYMBOL(snd_interval_refine);
 
 static int snd_interval_refine_first(struct snd_interval *i)
 {
-	if (snd_BUG_ON(snd_interval_empty(i)))
-		return -EINVAL;
+	snd_assert(!snd_interval_empty(i), return -EINVAL);
 	if (snd_interval_single(i))
 		return 0;
 	i->max = i->min;
@@ -438,8 +435,7 @@ static int snd_interval_refine_first(struct snd_interval *i)
 
 static int snd_interval_refine_last(struct snd_interval *i)
 {
-	if (snd_BUG_ON(snd_interval_empty(i)))
-		return -EINVAL;
+	snd_assert(!snd_interval_empty(i), return -EINVAL);
 	if (snd_interval_single(i))
 		return 0;
 	i->min = i->max;
@@ -893,8 +889,7 @@ int snd_pcm_hw_rule_add(struct snd_pcm_runtime *runtime, unsigned int cond,
 	c->private = private;
 	k = 0;
 	while (1) {
-		if (snd_BUG_ON(k >= ARRAY_SIZE(c->deps)))
-			return -EINVAL;
+		snd_assert(k < ARRAY_SIZE(c->deps), return -EINVAL);
 		c->deps[k++] = dep;
 		if (dep < 0)
 			break;
@@ -908,12 +903,12 @@ int snd_pcm_hw_rule_add(struct snd_pcm_runtime *runtime, unsigned int cond,
 EXPORT_SYMBOL(snd_pcm_hw_rule_add);
 
 /**
- * snd_pcm_hw_constraint_mask - apply the given bitmap mask constraint
+ * snd_pcm_hw_constraint_mask
  * @runtime: PCM runtime instance
  * @var: hw_params variable to apply the mask
  * @mask: the bitmap mask
  *
- * Apply the constraint of the given bitmap mask to a 32-bit mask parameter.
+ * Apply the constraint of the given bitmap mask to a mask parameter.
  */
 int snd_pcm_hw_constraint_mask(struct snd_pcm_runtime *runtime, snd_pcm_hw_param_t var,
 			       u_int32_t mask)
@@ -928,12 +923,12 @@ int snd_pcm_hw_constraint_mask(struct snd_pcm_runtime *runtime, snd_pcm_hw_param
 }
 
 /**
- * snd_pcm_hw_constraint_mask64 - apply the given bitmap mask constraint
+ * snd_pcm_hw_constraint_mask64
  * @runtime: PCM runtime instance
  * @var: hw_params variable to apply the mask
  * @mask: the 64bit bitmap mask
  *
- * Apply the constraint of the given bitmap mask to a 64-bit mask parameter.
+ * Apply the constraint of the given bitmap mask to a mask parameter.
  */
 int snd_pcm_hw_constraint_mask64(struct snd_pcm_runtime *runtime, snd_pcm_hw_param_t var,
 				 u_int64_t mask)
@@ -949,7 +944,7 @@ int snd_pcm_hw_constraint_mask64(struct snd_pcm_runtime *runtime, snd_pcm_hw_par
 }
 
 /**
- * snd_pcm_hw_constraint_integer - apply an integer constraint to an interval
+ * snd_pcm_hw_constraint_integer
  * @runtime: PCM runtime instance
  * @var: hw_params variable to apply the integer constraint
  *
@@ -964,7 +959,7 @@ int snd_pcm_hw_constraint_integer(struct snd_pcm_runtime *runtime, snd_pcm_hw_pa
 EXPORT_SYMBOL(snd_pcm_hw_constraint_integer);
 
 /**
- * snd_pcm_hw_constraint_minmax - apply a min/max range constraint to an interval
+ * snd_pcm_hw_constraint_minmax
  * @runtime: PCM runtime instance
  * @var: hw_params variable to apply the range
  * @min: the minimal value
@@ -995,7 +990,7 @@ static int snd_pcm_hw_rule_list(struct snd_pcm_hw_params *params,
 
 
 /**
- * snd_pcm_hw_constraint_list - apply a list of constraints to a parameter
+ * snd_pcm_hw_constraint_list
  * @runtime: PCM runtime instance
  * @cond: condition bits
  * @var: hw_params variable to apply the list constraint
@@ -1031,7 +1026,7 @@ static int snd_pcm_hw_rule_ratnums(struct snd_pcm_hw_params *params,
 }
 
 /**
- * snd_pcm_hw_constraint_ratnums - apply ratnums constraint to a parameter
+ * snd_pcm_hw_constraint_ratnums
  * @runtime: PCM runtime instance
  * @cond: condition bits
  * @var: hw_params variable to apply the ratnums constraint
@@ -1064,7 +1059,7 @@ static int snd_pcm_hw_rule_ratdens(struct snd_pcm_hw_params *params,
 }
 
 /**
- * snd_pcm_hw_constraint_ratdens - apply ratdens constraint to a parameter
+ * snd_pcm_hw_constraint_ratdens
  * @runtime: PCM runtime instance
  * @cond: condition bits
  * @var: hw_params variable to apply the ratdens constraint
@@ -1095,7 +1090,7 @@ static int snd_pcm_hw_rule_msbits(struct snd_pcm_hw_params *params,
 }
 
 /**
- * snd_pcm_hw_constraint_msbits - add a hw constraint msbits rule
+ * snd_pcm_hw_constraint_msbits
  * @runtime: PCM runtime instance
  * @cond: condition bits
  * @width: sample bits width
@@ -1123,7 +1118,7 @@ static int snd_pcm_hw_rule_step(struct snd_pcm_hw_params *params,
 }
 
 /**
- * snd_pcm_hw_constraint_step - add a hw constraint step rule
+ * snd_pcm_hw_constraint_step
  * @runtime: PCM runtime instance
  * @cond: condition bits
  * @var: hw_params variable to apply the step constraint
@@ -1154,7 +1149,7 @@ static int snd_pcm_hw_rule_pow2(struct snd_pcm_hw_params *params, struct snd_pcm
 }		
 
 /**
- * snd_pcm_hw_constraint_pow2 - add a hw constraint power-of-2 rule
+ * snd_pcm_hw_constraint_pow2
  * @runtime: PCM runtime instance
  * @cond: condition bits
  * @var: hw_params variable to apply the power-of-2 constraint
@@ -1202,13 +1197,13 @@ void _snd_pcm_hw_params_any(struct snd_pcm_hw_params *params)
 EXPORT_SYMBOL(_snd_pcm_hw_params_any);
 
 /**
- * snd_pcm_hw_param_value - return @params field @var value
+ * snd_pcm_hw_param_value
  * @params: the hw_params instance
  * @var: parameter to retrieve
- * @dir: pointer to the direction (-1,0,1) or %NULL
+ * @dir: pointer to the direction (-1,0,1) or NULL
  *
- * Return the value for field @var if it's fixed in configuration space
- * defined by @params. Return -%EINVAL otherwise.
+ * Return the value for field PAR if it's fixed in configuration space 
+ *  defined by PARAMS. Return -EINVAL otherwise
  */
 int snd_pcm_hw_param_value(const struct snd_pcm_hw_params *params,
 			   snd_pcm_hw_param_t var, int *dir)
@@ -1271,13 +1266,13 @@ static int _snd_pcm_hw_param_first(struct snd_pcm_hw_params *params,
 
 
 /**
- * snd_pcm_hw_param_first - refine config space and return minimum value
+ * snd_pcm_hw_param_first
  * @pcm: PCM instance
  * @params: the hw_params instance
  * @var: parameter to retrieve
- * @dir: pointer to the direction (-1,0,1) or %NULL
+ * @dir: pointer to the direction (-1,0,1) or NULL
  *
- * Inside configuration space defined by @params remove from @var all
+ * Inside configuration space defined by PARAMS remove from PAR all 
  * values > minimum. Reduce configuration space accordingly.
  * Return the minimum.
  */
@@ -1290,8 +1285,7 @@ int snd_pcm_hw_param_first(struct snd_pcm_substream *pcm,
 		return changed;
 	if (params->rmask) {
 		int err = snd_pcm_hw_refine(pcm, params);
-		if (snd_BUG_ON(err < 0))
-			return err;
+		snd_assert(err >= 0, return err);
 	}
 	return snd_pcm_hw_param_value(params, var, dir);
 }
@@ -1317,13 +1311,13 @@ static int _snd_pcm_hw_param_last(struct snd_pcm_hw_params *params,
 
 
 /**
- * snd_pcm_hw_param_last - refine config space and return maximum value
+ * snd_pcm_hw_param_last
  * @pcm: PCM instance
  * @params: the hw_params instance
  * @var: parameter to retrieve
- * @dir: pointer to the direction (-1,0,1) or %NULL
+ * @dir: pointer to the direction (-1,0,1) or NULL
  *
- * Inside configuration space defined by @params remove from @var all
+ * Inside configuration space defined by PARAMS remove from PAR all 
  * values < maximum. Reduce configuration space accordingly.
  * Return the maximum.
  */
@@ -1336,8 +1330,7 @@ int snd_pcm_hw_param_last(struct snd_pcm_substream *pcm,
 		return changed;
 	if (params->rmask) {
 		int err = snd_pcm_hw_refine(pcm, params);
-		if (snd_BUG_ON(err < 0))
-			return err;
+		snd_assert(err >= 0, return err);
 	}
 	return snd_pcm_hw_param_value(params, var, dir);
 }
@@ -1345,11 +1338,11 @@ int snd_pcm_hw_param_last(struct snd_pcm_substream *pcm,
 EXPORT_SYMBOL(snd_pcm_hw_param_last);
 
 /**
- * snd_pcm_hw_param_choose - choose a configuration defined by @params
+ * snd_pcm_hw_param_choose
  * @pcm: PCM instance
  * @params: the hw_params instance
  *
- * Choose one configuration from configuration space defined by @params.
+ * Choose one configuration from configuration space defined by PARAMS
  * The configuration chosen is that obtained fixing in this order:
  * first access, first format, first subformat, min channels,
  * min rate, min period time, max buffer size, min tick time
@@ -1375,8 +1368,7 @@ int snd_pcm_hw_params_choose(struct snd_pcm_substream *pcm,
 			err = snd_pcm_hw_param_first(pcm, params, *v, NULL);
 		else
 			err = snd_pcm_hw_param_last(pcm, params, *v, NULL);
-		if (snd_BUG_ON(err < 0))
-			return err;
+		snd_assert(err >= 0, return err);
 	}
 	return 0;
 }
@@ -1474,9 +1466,9 @@ void snd_pcm_period_elapsed(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime;
 	unsigned long flags;
 
-	if (PCM_RUNTIME_CHECK(substream))
-		return;
+	snd_assert(substream != NULL, return);
 	runtime = substream->runtime;
+	snd_assert(runtime != NULL, return);
 
 	if (runtime->transfer_ack_begin)
 		runtime->transfer_ack_begin(substream);
@@ -1575,6 +1567,7 @@ static int snd_pcm_lib_write_transfer(struct snd_pcm_substream *substream,
 			return err;
 	} else {
 		char *hwbuf = runtime->dma_area + frames_to_bytes(runtime, hwoff);
+		snd_assert(runtime->dma_area, return -EFAULT);
 		if (copy_from_user(hwbuf, buf, frames_to_bytes(runtime, frames)))
 			return -EFAULT;
 	}
@@ -1636,10 +1629,7 @@ static snd_pcm_sframes_t snd_pcm_lib_write1(struct snd_pcm_substream *substream,
 		cont = runtime->buffer_size - runtime->control->appl_ptr % runtime->buffer_size;
 		if (frames > cont)
 			frames = cont;
-		if (snd_BUG_ON(!frames)) {
-			snd_pcm_stream_unlock_irq(substream);
-			return -EINVAL;
-		}
+		snd_assert(frames != 0, snd_pcm_stream_unlock_irq(substream); return -EINVAL);
 		appl_ptr = runtime->control->appl_ptr;
 		appl_ofs = appl_ptr % runtime->buffer_size;
 		snd_pcm_stream_unlock_irq(substream);
@@ -1679,30 +1669,18 @@ static snd_pcm_sframes_t snd_pcm_lib_write1(struct snd_pcm_substream *substream,
 	return xfer > 0 ? (snd_pcm_sframes_t)xfer : err;
 }
 
-/* sanity-check for read/write methods */
-static int pcm_sanity_check(struct snd_pcm_substream *substream)
-{
-	struct snd_pcm_runtime *runtime;
-	if (PCM_RUNTIME_CHECK(substream))
-		return -ENXIO;
-	runtime = substream->runtime;
-	if (snd_BUG_ON(!substream->ops->copy && !runtime->dma_area))
-		return -EINVAL;
-	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
-		return -EBADFD;
-	return 0;
-}
-
 snd_pcm_sframes_t snd_pcm_lib_write(struct snd_pcm_substream *substream, const void __user *buf, snd_pcm_uframes_t size)
 {
 	struct snd_pcm_runtime *runtime;
 	int nonblock;
-	int err;
 
-	err = pcm_sanity_check(substream);
-	if (err < 0)
-		return err;
+	snd_assert(substream != NULL, return -ENXIO);
 	runtime = substream->runtime;
+	snd_assert(runtime != NULL, return -ENXIO);
+	snd_assert(substream->ops->copy != NULL || runtime->dma_area != NULL, return -EINVAL);
+	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
+		return -EBADFD;
+
 	nonblock = !!(substream->f_flags & O_NONBLOCK);
 
 	if (runtime->access != SNDRV_PCM_ACCESS_RW_INTERLEAVED &&
@@ -1725,8 +1703,7 @@ static int snd_pcm_lib_writev_transfer(struct snd_pcm_substream *substream,
 	int channels = runtime->channels;
 	int c;
 	if (substream->ops->copy) {
-		if (snd_BUG_ON(!substream->ops->silence))
-			return -EINVAL;
+		snd_assert(substream->ops->silence != NULL, return -EINVAL);
 		for (c = 0; c < channels; ++c, ++bufs) {
 			if (*bufs == NULL) {
 				if ((err = substream->ops->silence(substream, c, hwoff, frames)) < 0)
@@ -1740,6 +1717,7 @@ static int snd_pcm_lib_writev_transfer(struct snd_pcm_substream *substream,
 	} else {
 		/* default transfer behaviour */
 		size_t dma_csize = runtime->dma_bytes / channels;
+		snd_assert(runtime->dma_area, return -EFAULT);
 		for (c = 0; c < channels; ++c, ++bufs) {
 			char *hwbuf = runtime->dma_area + (c * dma_csize) + samples_to_bytes(runtime, hwoff);
 			if (*bufs == NULL) {
@@ -1760,12 +1738,14 @@ snd_pcm_sframes_t snd_pcm_lib_writev(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime;
 	int nonblock;
-	int err;
 
-	err = pcm_sanity_check(substream);
-	if (err < 0)
-		return err;
+	snd_assert(substream != NULL, return -ENXIO);
 	runtime = substream->runtime;
+	snd_assert(runtime != NULL, return -ENXIO);
+	snd_assert(substream->ops->copy != NULL || runtime->dma_area != NULL, return -EINVAL);
+	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
+		return -EBADFD;
+
 	nonblock = !!(substream->f_flags & O_NONBLOCK);
 
 	if (runtime->access != SNDRV_PCM_ACCESS_RW_NONINTERLEAVED)
@@ -1789,6 +1769,7 @@ static int snd_pcm_lib_read_transfer(struct snd_pcm_substream *substream,
 			return err;
 	} else {
 		char *hwbuf = runtime->dma_area + frames_to_bytes(runtime, hwoff);
+		snd_assert(runtime->dma_area, return -EFAULT);
 		if (copy_to_user(buf, hwbuf, frames_to_bytes(runtime, frames)))
 			return -EFAULT;
 	}
@@ -1860,10 +1841,7 @@ static snd_pcm_sframes_t snd_pcm_lib_read1(struct snd_pcm_substream *substream,
 		cont = runtime->buffer_size - runtime->control->appl_ptr % runtime->buffer_size;
 		if (frames > cont)
 			frames = cont;
-		if (snd_BUG_ON(!frames)) {
-			snd_pcm_stream_unlock_irq(substream);
-			return -EINVAL;
-		}
+		snd_assert(frames != 0, snd_pcm_stream_unlock_irq(substream); return -EINVAL);
 		appl_ptr = runtime->control->appl_ptr;
 		appl_ofs = appl_ptr % runtime->buffer_size;
 		snd_pcm_stream_unlock_irq(substream);
@@ -1901,12 +1879,14 @@ snd_pcm_sframes_t snd_pcm_lib_read(struct snd_pcm_substream *substream, void __u
 {
 	struct snd_pcm_runtime *runtime;
 	int nonblock;
-	int err;
 	
-	err = pcm_sanity_check(substream);
-	if (err < 0)
-		return err;
+	snd_assert(substream != NULL, return -ENXIO);
 	runtime = substream->runtime;
+	snd_assert(runtime != NULL, return -ENXIO);
+	snd_assert(substream->ops->copy != NULL || runtime->dma_area != NULL, return -EINVAL);
+	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
+		return -EBADFD;
+
 	nonblock = !!(substream->f_flags & O_NONBLOCK);
 	if (runtime->access != SNDRV_PCM_ACCESS_RW_INTERLEAVED)
 		return -EINVAL;
@@ -1936,6 +1916,7 @@ static int snd_pcm_lib_readv_transfer(struct snd_pcm_substream *substream,
 		}
 	} else {
 		snd_pcm_uframes_t dma_csize = runtime->dma_bytes / channels;
+		snd_assert(runtime->dma_area, return -EFAULT);
 		for (c = 0; c < channels; ++c, ++bufs) {
 			char *hwbuf;
 			char __user *buf;
@@ -1957,12 +1938,11 @@ snd_pcm_sframes_t snd_pcm_lib_readv(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime;
 	int nonblock;
-	int err;
 
-	err = pcm_sanity_check(substream);
-	if (err < 0)
-		return err;
+	snd_assert(substream != NULL, return -ENXIO);
 	runtime = substream->runtime;
+	snd_assert(runtime != NULL, return -ENXIO);
+	snd_assert(substream->ops->copy != NULL || runtime->dma_area != NULL, return -EINVAL);
 	if (runtime->status->state == SNDRV_PCM_STATE_OPEN)
 		return -EBADFD;
 

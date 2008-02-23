@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <asm/irq.h>
 #include <linux/in6.h>
+#include <linux/ide.h>
 
 #include <asm/uaccess.h>
 #include <asm/checksum.h>

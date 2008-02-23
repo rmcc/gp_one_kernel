@@ -30,9 +30,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define KMSG_COMPONENT "iucv"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
@@ -50,6 +47,7 @@
 #include <asm/ebcdic.h>
 #include <asm/io.h>
 #include <asm/s390_ext.h>
+#include <asm/s390_rdev.h>
 #include <asm/smp.h>
 
 /*
@@ -426,8 +424,8 @@ static void iucv_declare_cpu(void *data)
 			err = "Paging or storage error";
 			break;
 		}
-		pr_warning("Defining an interrupt buffer on CPU %i"
-			   " failed with 0x%02x (%s)\n", cpu, rc, err);
+		printk(KERN_WARNING "iucv_register: iucv_declare_buffer "
+		       "on cpu %i returned error 0x%02x (%s)\n", cpu, rc, err);
 		return;
 	}
 
@@ -476,14 +474,14 @@ static void iucv_setmask_mp(void)
 {
 	int cpu;
 
-	get_online_cpus();
+	preempt_disable();
 	for_each_online_cpu(cpu)
 		/* Enable all cpus with a declared buffer. */
 		if (cpu_isset(cpu, iucv_buffer_cpumask) &&
 		    !cpu_isset(cpu, iucv_irq_cpumask))
 			smp_call_function_single(cpu, iucv_allow_cpu,
-						 NULL, 1);
-	put_online_cpus();
+						 NULL, 0, 1);
+	preempt_enable();
 }
 
 /**
@@ -499,8 +497,8 @@ static void iucv_setmask_up(void)
 	/* Disable all cpu but the first in cpu_irq_cpumask. */
 	cpumask = iucv_irq_cpumask;
 	cpu_clear(first_cpu(iucv_irq_cpumask), cpumask);
-	for_each_cpu_mask_nr(cpu, cpumask)
-		smp_call_function_single(cpu, iucv_block_cpu, NULL, 1);
+	for_each_cpu_mask(cpu, cpumask)
+		smp_call_function_single(cpu, iucv_block_cpu, NULL, 0, 1);
 }
 
 /**
@@ -516,7 +514,6 @@ static int iucv_enable(void)
 	size_t alloc_size;
 	int cpu, rc;
 
-	get_online_cpus();
 	rc = -ENOMEM;
 	alloc_size = iucv_max_pathid * sizeof(struct iucv_path);
 	iucv_path_table = kzalloc(alloc_size, GFP_KERNEL);
@@ -524,17 +521,18 @@ static int iucv_enable(void)
 		goto out;
 	/* Declare per cpu buffers. */
 	rc = -EIO;
+	preempt_disable();
 	for_each_online_cpu(cpu)
-		smp_call_function_single(cpu, iucv_declare_cpu, NULL, 1);
+		smp_call_function_single(cpu, iucv_declare_cpu, NULL, 0, 1);
+	preempt_enable();
 	if (cpus_empty(iucv_buffer_cpumask))
 		/* No cpu could declare an iucv buffer. */
-		goto out;
-	put_online_cpus();
+		goto out_path;
 	return 0;
-out:
+
+out_path:
 	kfree(iucv_path_table);
-	iucv_path_table = NULL;
-	put_online_cpus();
+out:
 	return rc;
 }
 
@@ -547,11 +545,8 @@ out:
  */
 static void iucv_disable(void)
 {
-	get_online_cpus();
-	on_each_cpu(iucv_retrieve_cpu, NULL, 1);
+	on_each_cpu(iucv_retrieve_cpu, NULL, 0, 1);
 	kfree(iucv_path_table);
-	iucv_path_table = NULL;
-	put_online_cpus();
 }
 
 static int __cpuinit iucv_cpu_notify(struct notifier_block *self,
@@ -569,11 +564,8 @@ static int __cpuinit iucv_cpu_notify(struct notifier_block *self,
 			return NOTIFY_BAD;
 		iucv_param[cpu] = kmalloc_node(sizeof(union iucv_param),
 				     GFP_KERNEL|GFP_DMA, cpu_to_node(cpu));
-		if (!iucv_param[cpu]) {
-			kfree(iucv_irq_data[cpu]);
-			iucv_irq_data[cpu] = NULL;
+		if (!iucv_param[cpu])
 			return NOTIFY_BAD;
-		}
 		break;
 	case CPU_UP_CANCELED:
 	case CPU_UP_CANCELED_FROZEN:
@@ -588,29 +580,25 @@ static int __cpuinit iucv_cpu_notify(struct notifier_block *self,
 	case CPU_ONLINE_FROZEN:
 	case CPU_DOWN_FAILED:
 	case CPU_DOWN_FAILED_FROZEN:
-		if (!iucv_path_table)
-			break;
-		smp_call_function_single(cpu, iucv_declare_cpu, NULL, 1);
+		smp_call_function_single(cpu, iucv_declare_cpu, NULL, 0, 1);
 		break;
 	case CPU_DOWN_PREPARE:
 	case CPU_DOWN_PREPARE_FROZEN:
-		if (!iucv_path_table)
-			break;
 		cpumask = iucv_buffer_cpumask;
 		cpu_clear(cpu, cpumask);
 		if (cpus_empty(cpumask))
 			/* Can't offline last IUCV enabled cpu. */
 			return NOTIFY_BAD;
-		smp_call_function_single(cpu, iucv_retrieve_cpu, NULL, 1);
+		smp_call_function_single(cpu, iucv_retrieve_cpu, NULL, 0, 1);
 		if (cpus_empty(iucv_irq_cpumask))
 			smp_call_function_single(first_cpu(iucv_buffer_cpumask),
-						 iucv_allow_cpu, NULL, 1);
+						 iucv_allow_cpu, NULL, 0, 1);
 		break;
 	}
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __refdata iucv_cpu_notifier = {
+static struct notifier_block __cpuinitdata iucv_cpu_notifier = {
 	.notifier_call = iucv_cpu_notify,
 };
 
@@ -664,7 +652,7 @@ static void iucv_cleanup_queue(void)
 	 * pending interrupts force them to the work queue by calling
 	 * an empty function on all cpus.
 	 */
-	smp_call_function(__iucv_cleanup_queue, NULL, 1);
+	smp_call_function(__iucv_cleanup_queue, NULL, 0, 1);
 	spin_lock_irq(&iucv_queue_lock);
 	list_for_each_entry_safe(p, n, &iucv_task_queue, list) {
 		/* Remove stale work items from the task queue. */
@@ -963,52 +951,7 @@ int iucv_message_purge(struct iucv_path *path, struct iucv_message *msg,
 EXPORT_SYMBOL(iucv_message_purge);
 
 /**
- * iucv_message_receive_iprmdata
- * @path: address of iucv path structure
- * @msg: address of iucv msg structure
- * @flags: how the message is received (IUCV_IPBUFLST)
- * @buffer: address of data buffer or address of struct iucv_array
- * @size: length of data buffer
- * @residual:
- *
- * Internal function used by iucv_message_receive and __iucv_message_receive
- * to receive RMDATA data stored in struct iucv_message.
- */
-static int iucv_message_receive_iprmdata(struct iucv_path *path,
-					 struct iucv_message *msg,
-					 u8 flags, void *buffer,
-					 size_t size, size_t *residual)
-{
-	struct iucv_array *array;
-	u8 *rmmsg;
-	size_t copy;
-
-	/*
-	 * Message is 8 bytes long and has been stored to the
-	 * message descriptor itself.
-	 */
-	if (residual)
-		*residual = abs(size - 8);
-	rmmsg = msg->rmmsg;
-	if (flags & IUCV_IPBUFLST) {
-		/* Copy to struct iucv_array. */
-		size = (size < 8) ? size : 8;
-		for (array = buffer; size > 0; array++) {
-			copy = min_t(size_t, size, array->length);
-			memcpy((u8 *)(addr_t) array->address,
-				rmmsg, copy);
-			rmmsg += copy;
-			size -= copy;
-		}
-	} else {
-		/* Copy to direct buffer. */
-		memcpy(buffer, rmmsg, min_t(size_t, size, 8));
-	}
-	return 0;
-}
-
-/**
- * __iucv_message_receive
+ * iucv_message_receive
  * @path: address of iucv path structure
  * @msg: address of iucv msg structure
  * @flags: how the message is received (IUCV_IPBUFLST)
@@ -1020,19 +963,44 @@ static int iucv_message_receive_iprmdata(struct iucv_path *path,
  * established paths. This function will deal with RMDATA messages
  * embedded in struct iucv_message as well.
  *
- * Locking:	no locking
- *
  * Returns the result from the CP IUCV call.
  */
-int __iucv_message_receive(struct iucv_path *path, struct iucv_message *msg,
-			   u8 flags, void *buffer, size_t size, size_t *residual)
+int iucv_message_receive(struct iucv_path *path, struct iucv_message *msg,
+			 u8 flags, void *buffer, size_t size, size_t *residual)
 {
 	union iucv_param *parm;
+	struct iucv_array *array;
+	u8 *rmmsg;
+	size_t copy;
 	int rc;
 
-	if (msg->flags & IUCV_IPRMDATA)
-		return iucv_message_receive_iprmdata(path, msg, flags,
-						     buffer, size, residual);
+	if (msg->flags & IUCV_IPRMDATA) {
+		/*
+		 * Message is 8 bytes long and has been stored to the
+		 * message descriptor itself.
+		 */
+		rc = (size < 8) ? 5 : 0;
+		if (residual)
+			*residual = abs(size - 8);
+		rmmsg = msg->rmmsg;
+		if (flags & IUCV_IPBUFLST) {
+			/* Copy to struct iucv_array. */
+			size = (size < 8) ? size : 8;
+			for (array = buffer; size > 0; array++) {
+				copy = min_t(size_t, size, array->length);
+				memcpy((u8 *)(addr_t) array->address,
+				       rmmsg, copy);
+				rmmsg += copy;
+				size -= copy;
+			}
+		} else {
+			/* Copy to direct buffer. */
+			memcpy(buffer, rmmsg, min_t(size_t, size, 8));
+		}
+		return 0;
+	}
+
+	local_bh_disable();
 	parm = iucv_param[smp_processor_id()];
 	memset(parm, 0, sizeof(union iucv_param));
 	parm->db.ipbfadr1 = (u32)(addr_t) buffer;
@@ -1048,37 +1016,6 @@ int __iucv_message_receive(struct iucv_path *path, struct iucv_message *msg,
 		if (residual)
 			*residual = parm->db.ipbfln1f;
 	}
-	return rc;
-}
-EXPORT_SYMBOL(__iucv_message_receive);
-
-/**
- * iucv_message_receive
- * @path: address of iucv path structure
- * @msg: address of iucv msg structure
- * @flags: how the message is received (IUCV_IPBUFLST)
- * @buffer: address of data buffer or address of struct iucv_array
- * @size: length of data buffer
- * @residual:
- *
- * This function receives messages that are being sent to you over
- * established paths. This function will deal with RMDATA messages
- * embedded in struct iucv_message as well.
- *
- * Locking:	local_bh_enable/local_bh_disable
- *
- * Returns the result from the CP IUCV call.
- */
-int iucv_message_receive(struct iucv_path *path, struct iucv_message *msg,
-			 u8 flags, void *buffer, size_t size, size_t *residual)
-{
-	int rc;
-
-	if (msg->flags & IUCV_IPRMDATA)
-		return iucv_message_receive_iprmdata(path, msg, flags,
-						     buffer, size, residual);
-	local_bh_disable();
-	rc = __iucv_message_receive(path, msg, flags, buffer, size, residual);
 	local_bh_enable();
 	return rc;
 }
@@ -1158,7 +1095,7 @@ int iucv_message_reply(struct iucv_path *path, struct iucv_message *msg,
 EXPORT_SYMBOL(iucv_message_reply);
 
 /**
- * __iucv_message_send
+ * iucv_message_send
  * @path: address of iucv path structure
  * @msg: address of iucv msg structure
  * @flags: how the message is sent (IUCV_IPRMDATA, IUCV_IPPRTY, IUCV_IPBUFLST)
@@ -1170,16 +1107,15 @@ EXPORT_SYMBOL(iucv_message_reply);
  * transmitted is in a buffer and this is a one-way message and the
  * receiver will not reply to the message.
  *
- * Locking:	no locking
- *
  * Returns the result from the CP IUCV call.
  */
-int __iucv_message_send(struct iucv_path *path, struct iucv_message *msg,
+int iucv_message_send(struct iucv_path *path, struct iucv_message *msg,
 		      u8 flags, u32 srccls, void *buffer, size_t size)
 {
 	union iucv_param *parm;
 	int rc;
 
+	local_bh_disable();
 	parm = iucv_param[smp_processor_id()];
 	memset(parm, 0, sizeof(union iucv_param));
 	if (flags & IUCV_IPRMDATA) {
@@ -1202,34 +1138,6 @@ int __iucv_message_send(struct iucv_path *path, struct iucv_message *msg,
 	rc = iucv_call_b2f0(IUCV_SEND, parm);
 	if (!rc)
 		msg->id = parm->db.ipmsgid;
-	return rc;
-}
-EXPORT_SYMBOL(__iucv_message_send);
-
-/**
- * iucv_message_send
- * @path: address of iucv path structure
- * @msg: address of iucv msg structure
- * @flags: how the message is sent (IUCV_IPRMDATA, IUCV_IPPRTY, IUCV_IPBUFLST)
- * @srccls: source class of message
- * @buffer: address of send buffer or address of struct iucv_array
- * @size: length of send buffer
- *
- * This function transmits data to another application. Data to be
- * transmitted is in a buffer and this is a one-way message and the
- * receiver will not reply to the message.
- *
- * Locking:	local_bh_enable/local_bh_disable
- *
- * Returns the result from the CP IUCV call.
- */
-int iucv_message_send(struct iucv_path *path, struct iucv_message *msg,
-		      u8 flags, u32 srccls, void *buffer, size_t size)
-{
-	int rc;
-
-	local_bh_disable();
-	rc = __iucv_message_send(path, msg, flags, srccls, buffer, size);
 	local_bh_enable();
 	return rc;
 }
@@ -1651,14 +1559,19 @@ static void iucv_external_interrupt(u16 code)
 
 	p = iucv_irq_data[smp_processor_id()];
 	if (p->ippathid >= iucv_max_pathid) {
-		WARN_ON(p->ippathid >= iucv_max_pathid);
+		printk(KERN_WARNING "iucv_do_int: Got interrupt with "
+		       "pathid %d > max_connections (%ld)\n",
+		       p->ippathid, iucv_max_pathid - 1);
 		iucv_sever_pathid(p->ippathid, iucv_error_no_listener);
 		return;
 	}
-	BUG_ON(p->iptype  < 0x01 || p->iptype > 0x09);
+	if (p->iptype  < 0x01 || p->iptype > 0x09) {
+		printk(KERN_ERR "iucv_do_int: unknown iucv interrupt\n");
+		return;
+	}
 	work = kmalloc(sizeof(struct iucv_irq_list), GFP_ATOMIC);
 	if (!work) {
-		pr_warning("iucv_external_interrupt: out of memory\n");
+		printk(KERN_WARNING "iucv_external_interrupt: out of memory\n");
 		return;
 	}
 	memcpy(&work->data, p, sizeof(work->data));
@@ -1695,7 +1608,7 @@ static int __init iucv_init(void)
 	rc = register_external_interrupt(0x4000, iucv_external_interrupt);
 	if (rc)
 		goto out;
-	iucv_root = root_device_register("iucv");
+	iucv_root = s390_root_dev_register("iucv");
 	if (IS_ERR(iucv_root)) {
 		rc = PTR_ERR(iucv_root);
 		goto out_int;
@@ -1739,7 +1652,7 @@ out_free:
 		kfree(iucv_irq_data[cpu]);
 		iucv_irq_data[cpu] = NULL;
 	}
-	root_device_unregister(iucv_root);
+	s390_root_dev_unregister(iucv_root);
 out_int:
 	unregister_external_interrupt(0x4000, iucv_external_interrupt);
 out:
@@ -1769,7 +1682,7 @@ static void __exit iucv_exit(void)
 		kfree(iucv_irq_data[cpu]);
 		iucv_irq_data[cpu] = NULL;
 	}
-	root_device_unregister(iucv_root);
+	s390_root_dev_unregister(iucv_root);
 	bus_unregister(&iucv_bus);
 	unregister_external_interrupt(0x4000, iucv_external_interrupt);
 }

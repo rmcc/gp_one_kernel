@@ -20,10 +20,12 @@ MODULE_DESCRIPTION("Xtables: IPv4 TTL field modification target");
 MODULE_LICENSE("GPL");
 
 static unsigned int
-ttl_tg(struct sk_buff *skb, const struct xt_target_param *par)
+ttl_tg(struct sk_buff *skb, const struct net_device *in,
+       const struct net_device *out, unsigned int hooknum,
+       const struct xt_target *target, const void *targinfo)
 {
 	struct iphdr *iph;
-	const struct ipt_TTL_info *info = par->targinfo;
+	const struct ipt_TTL_info *info = targinfo;
 	int new_ttl;
 
 	if (!skb_make_writable(skb, skb->len))
@@ -59,9 +61,12 @@ ttl_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	return XT_CONTINUE;
 }
 
-static bool ttl_tg_check(const struct xt_tgchk_param *par)
+static bool
+ttl_tg_check(const char *tablename, const void *e,
+             const struct xt_target *target, void *targinfo,
+             unsigned int hook_mask)
 {
-	const struct ipt_TTL_info *info = par->targinfo;
+	const struct ipt_TTL_info *info = targinfo;
 
 	if (info->mode > IPT_TTL_MAXMODE) {
 		printk(KERN_WARNING "ipt_TTL: invalid or unknown Mode %u\n",
@@ -75,7 +80,7 @@ static bool ttl_tg_check(const struct xt_tgchk_param *par)
 
 static struct xt_target ttl_tg_reg __read_mostly = {
 	.name 		= "TTL",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.target 	= ttl_tg,
 	.targetsize	= sizeof(struct ipt_TTL_info),
 	.table		= "mangle",

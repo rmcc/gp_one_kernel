@@ -11,7 +11,6 @@
 #define USB_PID_KORECONTROLLER2	0x4712
 #define USB_PID_AK1		0x0815
 #define USB_PID_AUDIO8DJ	0x1978
-#define USB_PID_SESSIONIO	0x1915
 
 #define EP1_BUFSIZE 64
 #define CAIAQ_USB_STR_LEN 0xff
@@ -75,7 +74,6 @@ struct snd_usb_caiaqdev {
 	wait_queue_head_t ep1_wait_queue;
 	wait_queue_head_t prepare_wait_queue;
 	int spec_received, audio_parm_answer;
-	int midi_out_active;
 
 	char vendor_name[CAIAQ_USB_STR_LEN];
 	char product_name[CAIAQ_USB_STR_LEN];

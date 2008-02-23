@@ -1,6 +1,6 @@
 /*
  *    pata_qdi.c - QDI VLB ATA controllers
- *	(C) 2006 Red Hat
+ *	(C) 2006 Red Hat <alan@redhat.com>
  *
  * This driver mostly exists as a proof of concept for non PCI devices under
  * libata. While the QDI6580 was 'neat' in 1993 it is no longer terribly
@@ -137,7 +137,7 @@ static unsigned int qdi_data_xfer(struct ata_device *dev, unsigned char *buf,
 			iowrite32_rep(ap->ioaddr.data_addr, buf, buflen >> 2);
 
 		if (unlikely(slop)) {
-			__le32 pad;
+			u32 pad;
 			if (rw == READ) {
 				pad = cpu_to_le32(ioread32(ap->ioaddr.data_addr));
 				memcpy(buf + buflen - slop, &pad, slop);

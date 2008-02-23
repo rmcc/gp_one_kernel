@@ -20,8 +20,8 @@
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
-#include <mach/ep93xx-regs.h>
-#include <mach/platform.h>
+#include <asm/arch/ep93xx-regs.h>
+#include <asm/arch/platform.h>
 #include <asm/io.h>
 
 #define DRV_MODULE_NAME		"ep93xx-eth"
@@ -259,6 +259,8 @@ static int ep93xx_rx(struct net_device *dev, int processed, int budget)
 			skb_put(skb, length);
 			skb->protocol = eth_type_trans(skb, dev);
 
+			dev->last_rx = jiffies;
+
 			netif_receive_skb(skb);
 
 			ep->stats.rx_packets++;
@@ -298,7 +300,7 @@ poll_some_more:
 		int more = 0;
 
 		spin_lock_irq(&ep->rx_lock);
-		__netif_rx_complete(napi);
+		__netif_rx_complete(dev, napi);
 		wrl(ep, REG_INTEN, REG_INTEN_TX | REG_INTEN_RX);
 		if (ep93xx_have_more_rx(ep)) {
 			wrl(ep, REG_INTEN, REG_INTEN_TX);
@@ -307,7 +309,7 @@ poll_some_more:
 		}
 		spin_unlock_irq(&ep->rx_lock);
 
-		if (more && netif_rx_reschedule(napi))
+		if (more && netif_rx_reschedule(dev, napi))
 			goto poll_some_more;
 	}
 
@@ -415,9 +417,9 @@ static irqreturn_t ep93xx_irq(int irq, void *dev_id)
 
 	if (status & REG_INTSTS_RX) {
 		spin_lock(&ep->rx_lock);
-		if (likely(netif_rx_schedule_prep(&ep->napi))) {
+		if (likely(netif_rx_schedule_prep(dev, &ep->napi))) {
 			wrl(ep, REG_INTEN, REG_INTEN_TX);
-			__netif_rx_schedule(&ep->napi);
+			__netif_rx_schedule(dev, &ep->napi);
 		}
 		spin_unlock(&ep->rx_lock);
 	}
@@ -480,7 +482,7 @@ static int ep93xx_alloc_buffers(struct ep93xx_priv *ep)
 			goto err;
 
 		d = dma_map_single(NULL, page, PAGE_SIZE, DMA_FROM_DEVICE);
-		if (dma_mapping_error(NULL, d)) {
+		if (dma_mapping_error(d)) {
 			free_page((unsigned long)page);
 			goto err;
 		}
@@ -503,7 +505,7 @@ static int ep93xx_alloc_buffers(struct ep93xx_priv *ep)
 			goto err;
 
 		d = dma_map_single(NULL, page, PAGE_SIZE, DMA_TO_DEVICE);
-		if (dma_mapping_error(NULL, d)) {
+		if (dma_mapping_error(d)) {
 			free_page((unsigned long)page);
 			goto err;
 		}
@@ -846,7 +848,7 @@ static int ep93xx_eth_probe(struct platform_device *pdev)
 
 	ep->res = request_mem_region(pdev->resource[0].start,
 			pdev->resource[0].end - pdev->resource[0].start + 1,
-			dev_name(&pdev->dev));
+			pdev->dev.bus_id);
 	if (ep->res == NULL) {
 		dev_err(&pdev->dev, "Could not reserve memory region\n");
 		err = -ENOMEM;

@@ -692,8 +692,7 @@ static void apu_data_set(struct es1968 *chip, u16 data)
 /* no spinlock */
 static void __apu_set_register(struct es1968 *chip, u16 channel, u8 reg, u16 data)
 {
-	if (snd_BUG_ON(channel >= NR_APUS))
-		return;
+	snd_assert(channel < NR_APUS, return);
 #ifdef CONFIG_PM
 	chip->apu_map[channel][reg] = data;
 #endif
@@ -712,8 +711,7 @@ static void apu_set_register(struct es1968 *chip, u16 channel, u8 reg, u16 data)
 
 static u16 __apu_get_register(struct es1968 *chip, u16 channel, u8 reg)
 {
-	if (snd_BUG_ON(channel >= NR_APUS))
-		return 0;
+	snd_assert(channel < NR_APUS, return 0);
 	reg |= (channel << 4);
 	apu_index_set(chip, reg);
 	return __maestro_read(chip, IDR0_DATA_PORT);
@@ -1953,7 +1951,7 @@ static irqreturn_t snd_es1968_interrupt(int irq, void *dev_id)
 	outw(inw(chip->io_port + 4) & 1, chip->io_port + 4);
 
 	if (event & ESM_HWVOL_IRQ)
-		tasklet_schedule(&chip->hwvol_tq); /* we'll do this later */
+		tasklet_hi_schedule(&chip->hwvol_tq); /* we'll do this later */
 
 	/* else ack 'em all, i imagine */
 	outb(0xFF, chip->io_port + 0x1A);

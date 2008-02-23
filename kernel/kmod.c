@@ -42,7 +42,7 @@ extern int max_threads;
 
 static struct workqueue_struct *khelper_wq;
 
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 
 /*
 	modprobe_path is set via /proc/sys.
@@ -51,8 +51,8 @@ char modprobe_path[KMOD_PATH_LEN] = "/sbin/modprobe";
 
 /**
  * request_module - try to load a kernel module
- * @fmt: printf style format string for the name of the module
- * @...: arguments as specified in the format string
+ * @fmt:     printf style format string for the name of the module
+ * @varargs: arguements as specified in the format string
  *
  * Load a module using the user mode module loader. The function returns
  * zero on success or a negative errno code on failure. Note that a
@@ -113,15 +113,15 @@ int request_module(const char *fmt, ...)
 	return ret;
 }
 EXPORT_SYMBOL(request_module);
-#endif /* CONFIG_MODULES */
+#endif /* CONFIG_KMOD */
 
 struct subprocess_info {
 	struct work_struct work;
 	struct completion *complete;
-	struct cred *cred;
 	char *path;
 	char **argv;
 	char **envp;
+	struct key *ring;
 	enum umh_wait wait;
 	int retval;
 	struct file *stdin;
@@ -134,20 +134,19 @@ struct subprocess_info {
 static int ____call_usermodehelper(void *data)
 {
 	struct subprocess_info *sub_info = data;
+	struct key *new_session, *old_session;
 	int retval;
 
-	BUG_ON(atomic_read(&sub_info->cred->usage) != 1);
-
-	/* Unblock all signals */
+	/* Unblock all signals and set the session keyring. */
+	new_session = key_get(sub_info->ring);
 	spin_lock_irq(&current->sighand->siglock);
+	old_session = __install_session_keyring(current, new_session);
 	flush_signal_handlers(current, 1);
 	sigemptyset(&current->blocked);
 	recalc_sigpending();
 	spin_unlock_irq(&current->sighand->siglock);
 
-	/* Install the credentials */
-	commit_creds(sub_info->cred);
-	sub_info->cred = NULL;
+	key_put(old_session);
 
 	/* Install input pipe when needed */
 	if (sub_info->stdin) {
@@ -186,8 +185,6 @@ void call_usermodehelper_freeinfo(struct subprocess_info *info)
 {
 	if (info->cleanup)
 		(*info->cleanup)(info->argv, info->envp);
-	if (info->cred)
-		put_cred(info->cred);
 	kfree(info);
 }
 EXPORT_SYMBOL(call_usermodehelper_freeinfo);
@@ -243,8 +240,6 @@ static void __call_usermodehelper(struct work_struct *work)
 	pid_t pid;
 	enum umh_wait wait = sub_info->wait;
 
-	BUG_ON(atomic_read(&sub_info->cred->usage) != 1);
-
 	/* CLONE_VFORK: wait until the usermode helper has execve'd
 	 * successfully We need the data structures to stay around
 	 * until that is done.  */
@@ -270,7 +265,7 @@ static void __call_usermodehelper(struct work_struct *work)
 	}
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_PM
 /*
  * If set, call_usermodehelper_exec() will exit immediately returning -EBUSY
  * (used for preventing user land processes from being created after the user
@@ -293,37 +288,39 @@ static DECLARE_WAIT_QUEUE_HEAD(running_helpers_waitq);
  */
 #define RUNNING_HELPERS_TIMEOUT	(5 * HZ)
 
-/**
- * usermodehelper_disable - prevent new helpers from being started
- */
-int usermodehelper_disable(void)
+static int usermodehelper_pm_callback(struct notifier_block *nfb,
+					unsigned long action,
+					void *ignored)
 {
 	long retval;
 
-	usermodehelper_disabled = 1;
-	smp_mb();
-	/*
-	 * From now on call_usermodehelper_exec() won't start any new
-	 * helpers, so it is sufficient if running_helpers turns out to
-	 * be zero at one point (it may be increased later, but that
-	 * doesn't matter).
-	 */
-	retval = wait_event_timeout(running_helpers_waitq,
+	switch (action) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		usermodehelper_disabled = 1;
+		smp_mb();
+		/*
+		 * From now on call_usermodehelper_exec() won't start any new
+		 * helpers, so it is sufficient if running_helpers turns out to
+		 * be zero at one point (it may be increased later, but that
+		 * doesn't matter).
+		 */
+		retval = wait_event_timeout(running_helpers_waitq,
 					atomic_read(&running_helpers) == 0,
 					RUNNING_HELPERS_TIMEOUT);
-	if (retval)
-		return 0;
+		if (retval) {
+			return NOTIFY_OK;
+		} else {
+			usermodehelper_disabled = 0;
+			return NOTIFY_BAD;
+		}
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		usermodehelper_disabled = 0;
+		return NOTIFY_OK;
+	}
 
-	usermodehelper_disabled = 0;
-	return -EAGAIN;
-}
-
-/**
- * usermodehelper_enable - allow new helpers to be started again
- */
-void usermodehelper_enable(void)
-{
-	usermodehelper_disabled = 0;
+	return NOTIFY_DONE;
 }
 
 static void helper_lock(void)
@@ -337,29 +334,34 @@ static void helper_unlock(void)
 	if (atomic_dec_and_test(&running_helpers))
 		wake_up(&running_helpers_waitq);
 }
-#else /* CONFIG_PM_SLEEP */
+
+static void register_pm_notifier_callback(void)
+{
+	pm_notifier(usermodehelper_pm_callback, 0);
+}
+#else /* CONFIG_PM */
 #define usermodehelper_disabled	0
 
 static inline void helper_lock(void) {}
 static inline void helper_unlock(void) {}
-#endif /* CONFIG_PM_SLEEP */
+static inline void register_pm_notifier_callback(void) {}
+#endif /* CONFIG_PM */
 
 /**
  * call_usermodehelper_setup - prepare to call a usermode helper
  * @path: path to usermode executable
  * @argv: arg vector for process
  * @envp: environment for process
- * @gfp_mask: gfp mask for memory allocation
  *
  * Returns either %NULL on allocation failure, or a subprocess_info
  * structure.  This should be passed to call_usermodehelper_exec to
  * exec the process and free the structure.
  */
-struct subprocess_info *call_usermodehelper_setup(char *path, char **argv,
-						  char **envp, gfp_t gfp_mask)
+struct subprocess_info *call_usermodehelper_setup(char *path,
+						  char **argv, char **envp)
 {
 	struct subprocess_info *sub_info;
-	sub_info = kzalloc(sizeof(struct subprocess_info), gfp_mask);
+	sub_info = kzalloc(sizeof(struct subprocess_info),  GFP_ATOMIC);
 	if (!sub_info)
 		goto out;
 
@@ -367,9 +369,6 @@ struct subprocess_info *call_usermodehelper_setup(char *path, char **argv,
 	sub_info->path = path;
 	sub_info->argv = argv;
 	sub_info->envp = envp;
-	sub_info->cred = prepare_usermodehelper_creds();
-	if (!sub_info->cred)
-		return NULL;
 
   out:
 	return sub_info;
@@ -384,13 +383,7 @@ EXPORT_SYMBOL(call_usermodehelper_setup);
 void call_usermodehelper_setkeys(struct subprocess_info *info,
 				 struct key *session_keyring)
 {
-#ifdef CONFIG_KEYS
-	struct thread_group_cred *tgcred = info->cred->tgcred;
-	key_put(tgcred->session_keyring);
-	tgcred->session_keyring = key_get(session_keyring);
-#else
-	BUG();
-#endif
+	info->ring = session_keyring;
 }
 EXPORT_SYMBOL(call_usermodehelper_setkeys);
 
@@ -424,12 +417,12 @@ int call_usermodehelper_stdinpipe(struct subprocess_info *sub_info,
 {
 	struct file *f;
 
-	f = create_write_pipe(0);
+	f = create_write_pipe();
 	if (IS_ERR(f))
 		return PTR_ERR(f);
 	*filp = f;
 
-	f = create_read_pipe(f, 0);
+	f = create_read_pipe(f);
 	if (IS_ERR(f)) {
 		free_write_pipe(*filp);
 		return PTR_ERR(f);
@@ -457,8 +450,6 @@ int call_usermodehelper_exec(struct subprocess_info *sub_info,
 {
 	DECLARE_COMPLETION_ONSTACK(done);
 	int retval = 0;
-
-	BUG_ON(atomic_read(&sub_info->cred->usage) != 1);
 
 	helper_lock();
 	if (sub_info->path[0] == '\0')
@@ -503,7 +494,7 @@ int call_usermodehelper_pipe(char *path, char **argv, char **envp,
 	struct subprocess_info *sub_info;
 	int ret;
 
-	sub_info = call_usermodehelper_setup(path, argv, envp, GFP_KERNEL);
+	sub_info = call_usermodehelper_setup(path, argv, envp);
 	if (sub_info == NULL)
 		return -ENOMEM;
 
@@ -523,4 +514,5 @@ void __init usermodehelper_init(void)
 {
 	khelper_wq = create_singlethread_workqueue("khelper");
 	BUG_ON(!khelper_wq);
+	register_pm_notifier_callback();
 }

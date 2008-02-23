@@ -356,6 +356,7 @@ static void bfin_set_piomode(struct ata_port *ap, struct ata_device *adev)
  *	bfin_set_dmamode - Initialize host controller PATA DMA timings
  *	@ap: Port whose timings we are configuring
  *	@adev: um
+ *	@udma: udma mode, 0 - 6
  *
  *	Set UDMA mode for device.
  *
@@ -1010,7 +1011,7 @@ static void bfin_bus_post_reset(struct ata_port *ap, unsigned int devmask)
 	void __iomem *base = (void __iomem *)ap->ioaddr.ctl_addr;
 	unsigned int dev0 = devmask & (1 << 0);
 	unsigned int dev1 = devmask & (1 << 1);
-	unsigned long deadline;
+	unsigned long timeout;
 
 	/* if device 0 was found in ata_devchk, wait for its
 	 * BSY bit to clear
@@ -1021,7 +1022,7 @@ static void bfin_bus_post_reset(struct ata_port *ap, unsigned int devmask)
 	/* if device 1 was found in ata_devchk, wait for
 	 * register access, then wait for BSY to clear
 	 */
-	deadline = ata_deadline(jiffies, ATA_TMOUT_BOOT);
+	timeout = jiffies + ATA_TMOUT_BOOT;
 	while (dev1) {
 		u8 nsect, lbal;
 
@@ -1030,7 +1031,7 @@ static void bfin_bus_post_reset(struct ata_port *ap, unsigned int devmask)
 		lbal = read_atapi_register(base, ATA_REG_LBAL);
 		if ((nsect == 1) && (lbal == 1))
 			break;
-		if (time_after(jiffies, deadline)) {
+		if (time_after(jiffies, timeout)) {
 			dev1 = 0;
 			break;
 		}
@@ -1631,8 +1632,6 @@ static int __devinit bfin_atapi_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	dev_set_drvdata(&pdev->dev, host);
-
 	return 0;
 }
 
@@ -1649,7 +1648,6 @@ static int __devexit bfin_atapi_remove(struct platform_device *pdev)
 	struct ata_host *host = dev_get_drvdata(dev);
 
 	ata_host_detach(host);
-	dev_set_drvdata(&pdev->dev, NULL);
 
 	peripheral_free_list(atapi_io_port);
 
@@ -1657,44 +1655,27 @@ static int __devexit bfin_atapi_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int bfin_atapi_suspend(struct platform_device *pdev, pm_message_t state)
+int bfin_atapi_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct ata_host *host = dev_get_drvdata(&pdev->dev);
-	if (host)
-		return ata_host_suspend(host, state);
-	else
-		return 0;
-}
-
-static int bfin_atapi_resume(struct platform_device *pdev)
-{
-	struct ata_host *host = dev_get_drvdata(&pdev->dev);
-	int ret;
-
-	if (host) {
-		ret = bfin_reset_controller(host);
-		if (ret) {
-			printk(KERN_ERR DRV_NAME ": Error during HW init\n");
-			return ret;
-		}
-		ata_host_resume(host);
-	}
-
 	return 0;
 }
-#else
-#define bfin_atapi_suspend NULL
-#define bfin_atapi_resume NULL
+
+int bfin_atapi_resume(struct platform_device *pdev)
+{
+	return 0;
+}
 #endif
 
 static struct platform_driver bfin_atapi_driver = {
 	.probe			= bfin_atapi_probe,
 	.remove			= __devexit_p(bfin_atapi_remove),
-	.suspend		= bfin_atapi_suspend,
-	.resume			= bfin_atapi_resume,
 	.driver = {
 		.name		= DRV_NAME,
 		.owner		= THIS_MODULE,
+#ifdef CONFIG_PM
+		.suspend	= bfin_atapi_suspend,
+		.resume		= bfin_atapi_resume,
+#endif
 	},
 };
 

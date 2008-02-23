@@ -4,6 +4,8 @@
  * Author: Fabrice Bellard (fabrice.bellard@netgem.com)
  * Copyright (C) 2000 Netgem S.A.
  *
+ * $Id: nftlmount.c,v 1.41 2005/11/07 11:14:21 gleixner Exp $
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -29,6 +31,8 @@
 
 #define SECTORSIZE 512
 
+char nftlmountrev[]="$Revision: 1.41 $";
+
 /* find_boot_record: Find the NFTL Media Header and its Spare copy which contains the
  *	various device information of the NFTL partition and Bad Unit Table. Update
  *	the ReplUnitTable[] table accroding to the Bad Unit Table. ReplUnitTable[]
@@ -51,7 +55,7 @@ static int find_boot_record(struct NFTLrecord *nftl)
 	   the mtd device accordingly.  We could even get rid of
 	   nftl->EraseSize if there were any point in doing so. */
 	nftl->EraseSize = nftl->mbd.mtd->erasesize;
-        nftl->nb_blocks = (u32)nftl->mbd.mtd->size / nftl->EraseSize;
+        nftl->nb_blocks = nftl->mbd.mtd->size / nftl->EraseSize;
 
 	nftl->MediaUnit = BLOCK_NIL;
 	nftl->SpareMediaUnit = BLOCK_NIL;
@@ -168,7 +172,7 @@ device is already correct.
 			printk(KERN_NOTICE "WARNING: Support for NFTL with UnitSizeFactor 0x%02x is experimental\n",
 			       mh->UnitSizeFactor);
 			nftl->EraseSize = nftl->mbd.mtd->erasesize << (0xff - mh->UnitSizeFactor);
-			nftl->nb_blocks = (u32)nftl->mbd.mtd->size / nftl->EraseSize;
+			nftl->nb_blocks = nftl->mbd.mtd->size / nftl->EraseSize;
 		}
 #endif
 		nftl->nb_boot_blocks = le16_to_cpu(mh->FirstPhysicalEUN);

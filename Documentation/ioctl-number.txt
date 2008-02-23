@@ -92,7 +92,6 @@ Code	Seq#	Include File		Comments
 'J'	00-1F	drivers/scsi/gdth_ioctl.h
 'K'	all	linux/kd.h
 'L'	00-1F	linux/loop.h
-'L'	20-2F	driver/usb/misc/vstusb.h
 'L'	E0-FF	linux/ppdd.h		encrypted disk device driver
 					<http://linux01.gwdg.de/~alatham/ppdd.html>
 'M'	all	linux/soundcard.h
@@ -106,20 +105,18 @@ Code	Seq#	Include File		Comments
 'T'	all	linux/soundcard.h	conflict!
 'T'	all	asm-i386/ioctls.h	conflict!
 'U'	00-EF	linux/drivers/usb/usb.h
+'U'	F0-FF	drivers/usb/auerswald.c
 'V'	all	linux/vt.h
 'W'	00-1F	linux/watchdog.h	conflict!
 'W'	00-1F	linux/wanrouter.h	conflict!
 'X'	all	linux/xfs_fs.h
 'Y'	all	linux/cyclades.h
-'['	00-07	linux/usb/usbtmc.h	USB Test and Measurement Devices
-					<mailto:gregkh@suse.de>
 'a'	all				ATM on linux
 					<http://lrcwww.epfl.ch/linux-atm/magic.html>
 'b'	00-FF				bit3 vme host bridge
 					<mailto:natalia@nikhefk.nikhef.nl>
 'c'	00-7F	linux/comstats.h	conflict!
 'c'	00-7F	linux/coda.h		conflict!
-'c'	80-9F	asm-s390/chsc.h
 'd'	00-FF	linux/char/drm/drm/h	conflict!
 'd'	00-DF	linux/video_decoder.h	conflict!
 'd'	F0-FF	linux/digi1.h

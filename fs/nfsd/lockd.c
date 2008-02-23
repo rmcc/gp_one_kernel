@@ -19,13 +19,6 @@
 
 #define NFSDDBG_FACILITY		NFSDDBG_LOCKD
 
-#ifdef CONFIG_LOCKD_V4
-#define nlm_stale_fh	nlm4_stale_fh
-#define nlm_failed	nlm4_failed
-#else
-#define nlm_stale_fh	nlm_lck_denied_nolocks
-#define nlm_failed	nlm_lck_denied_nolocks
-#endif
 /*
  * Note: we hold the dentry use count while the file is open.
  */
@@ -42,7 +35,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file **filp)
 	fh.fh_export = NULL;
 
 	exp_readlock();
-	nfserr = nfsd_open(rqstp, &fh, S_IFREG, NFSD_MAY_LOCK, filp);
+	nfserr = nfsd_open(rqstp, &fh, S_IFREG, MAY_LOCK, filp);
 	fh_put(&fh);
 	rqstp->rq_client = NULL;
 	exp_readunlock();
@@ -54,10 +47,12 @@ nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file **filp)
 		return 0;
 	case nfserr_dropit:
 		return nlm_drop_reply;
+#ifdef CONFIG_LOCKD_V4
 	case nfserr_stale:
-		return nlm_stale_fh;
+		return nlm4_stale_fh;
+#endif
 	default:
-		return nlm_failed;
+		return nlm_lck_denied;
 	}
 }
 
@@ -70,6 +65,7 @@ nlm_fclose(struct file *filp)
 static struct nlmsvc_binding	nfsd_nlm_ops = {
 	.fopen		= nlm_fopen,		/* open file for locking */
 	.fclose		= nlm_fclose,		/* close file */
+	.get_grace_period = get_nfs4_grace_period,
 };
 
 void

@@ -26,6 +26,18 @@
 #include <asm/io.h>
 #include <video/vga.h>
 
+#define GRAPHICS_ADDR_REG VGA_GFX_I	/* Graphics address register. */
+#define GRAPHICS_DATA_REG VGA_GFX_D	/* Graphics data register. */
+
+#define SET_RESET_INDEX 	VGA_GFX_SR_VALUE	/* Set/Reset Register index. */
+#define ENABLE_SET_RESET_INDEX	VGA_GFX_SR_ENABLE	/* Enable Set/Reset Register index. */
+#define DATA_ROTATE_INDEX	VGA_GFX_DATA_ROTATE	/* Data Rotate Register index. */
+#define GRAPHICS_MODE_INDEX	VGA_GFX_MODE		/* Graphics Mode Register index. */
+#define BIT_MASK_INDEX		VGA_GFX_BIT_MASK	/* Bit Mask Register index. */
+
+#define dac_reg	(VGA_PEL_IW)
+#define dac_val	(VGA_PEL_D)
+
 #define VGA_FB_PHYS 0xA0000
 #define VGA_FB_PHYS_LEN 65536
 
@@ -58,6 +70,7 @@ struct vga16fb_par {
 		unsigned char	ClockingMode;	  /* Seq-Controller:01h */
 	} vga_state;
 	struct vgastate state;
+	struct mutex open_lock;
 	unsigned int ref_count;
 	int palette_blanked, vesa_blanked, mode, isVGA;
 	u8 misc, pel_msk, vss, clkdiv;
@@ -95,7 +108,7 @@ static struct fb_fix_screeninfo vga16fb_fix __initdata = {
 	.visual		= FB_VISUAL_PSEUDOCOLOR,
 	.xpanstep	= 8,
 	.ypanstep	= 1,
-	.line_length	= 640 / 8,
+	.line_length	= 640/8,
 	.accel		= FB_ACCEL_NONE
 };
 
@@ -122,22 +135,23 @@ static inline int setmode(int mode)
 {
 	int oldmode;
 	
-	oldmode = vga_io_rgfx(VGA_GFX_MODE);
-	vga_io_w(VGA_GFX_D, mode);
+	vga_io_w(GRAPHICS_ADDR_REG, GRAPHICS_MODE_INDEX);
+	oldmode = vga_io_r(GRAPHICS_DATA_REG);
+	vga_io_w(GRAPHICS_DATA_REG, mode);
 	return oldmode;
 }
 
 /* Select the Bit Mask Register and return its value. */
 static inline int selectmask(void)
 {
-	return vga_io_rgfx(VGA_GFX_BIT_MASK);
+	return vga_io_rgfx(BIT_MASK_INDEX);
 }
 
 /* Set the value of the Bit Mask Register.  It must already have been
    selected with selectmask(). */
 static inline void setmask(int mask)
 {
-	vga_io_w(VGA_GFX_D, mask);
+	vga_io_w(GRAPHICS_DATA_REG, mask);
 }
 
 /* Set the Data Rotate Register and return its old value. 
@@ -147,8 +161,9 @@ static inline int setop(int op)
 {
 	int oldop;
 	
-	oldop = vga_io_rgfx(VGA_GFX_DATA_ROTATE);
-	vga_io_w(VGA_GFX_D, op);
+	vga_io_w(GRAPHICS_ADDR_REG, DATA_ROTATE_INDEX);
+	oldop = vga_io_r(GRAPHICS_DATA_REG);
+	vga_io_w(GRAPHICS_DATA_REG, op);
 	return oldop;
 }
 
@@ -158,8 +173,9 @@ static inline int setsr(int sr)
 {
 	int oldsr;
 
-	oldsr = vga_io_rgfx(VGA_GFX_SR_ENABLE);
-	vga_io_w(VGA_GFX_D, sr);
+	vga_io_w(GRAPHICS_ADDR_REG, ENABLE_SET_RESET_INDEX);
+	oldsr = vga_io_r(GRAPHICS_DATA_REG);
+	vga_io_w(GRAPHICS_DATA_REG, sr);
 	return oldsr;
 }
 
@@ -168,21 +184,22 @@ static inline int setcolor(int color)
 {
 	int oldcolor;
 
-	oldcolor = vga_io_rgfx(VGA_GFX_SR_VALUE);
-	vga_io_w(VGA_GFX_D, color);
+	vga_io_w(GRAPHICS_ADDR_REG, SET_RESET_INDEX);
+	oldcolor = vga_io_r(GRAPHICS_DATA_REG);
+	vga_io_w(GRAPHICS_DATA_REG, color);
 	return oldcolor;
 }
 
 /* Return the value in the Graphics Address Register. */
 static inline int getindex(void)
 {
-	return vga_io_r(VGA_GFX_I);
+	return vga_io_r(GRAPHICS_ADDR_REG);
 }
 
 /* Set the value in the Graphics Address Register. */
 static inline void setindex(int index)
 {
-	vga_io_w(VGA_GFX_I, index);
+	vga_io_w(GRAPHICS_ADDR_REG, index);
 }
 
 static void vga16fb_pan_var(struct fb_info *info, 
@@ -285,6 +302,7 @@ static int vga16fb_open(struct fb_info *info, int user)
 {
 	struct vga16fb_par *par = info->par;
 
+	mutex_lock(&par->open_lock);
 	if (!par->ref_count) {
 		memset(&par->state, 0, sizeof(struct vgastate));
 		par->state.flags = VGA_SAVE_FONTS | VGA_SAVE_MODE |
@@ -292,6 +310,7 @@ static int vga16fb_open(struct fb_info *info, int user)
 		save_vga(&par->state);
 	}
 	par->ref_count++;
+	mutex_unlock(&par->open_lock);
 
 	return 0;
 }
@@ -300,12 +319,15 @@ static int vga16fb_release(struct fb_info *info, int user)
 {
 	struct vga16fb_par *par = info->par;
 
-	if (!par->ref_count)
+	mutex_lock(&par->open_lock);
+	if (!par->ref_count) {
+		mutex_unlock(&par->open_lock);
 		return -EINVAL;
-
+	}
 	if (par->ref_count == 1)
 		restore_vga(&par->state);
 	par->ref_count--;
+	mutex_unlock(&par->open_lock);
 
 	return 0;
 }
@@ -650,10 +672,10 @@ static void ega16_setpalette(int regno, unsigned red, unsigned green, unsigned b
 
 static void vga16_setpalette(int regno, unsigned red, unsigned green, unsigned blue)
 {
-	outb(regno,       VGA_PEL_IW);
-	outb(red   >> 10, VGA_PEL_D);
-	outb(green >> 10, VGA_PEL_D);
-	outb(blue  >> 10, VGA_PEL_D);
+	outb(regno,       dac_reg);
+	outb(red   >> 10, dac_val);
+	outb(green >> 10, dac_val);
+	outb(blue  >> 10, dac_val);
 }
 
 static int vga16fb_setcolreg(unsigned regno, unsigned red, unsigned green,
@@ -697,15 +719,28 @@ static int vga16fb_pan_display(struct fb_var_screeninfo *var,
    blanking code was originally by Huang shi chao, and modified by
    Christoph Rimek (chrimek@toppoint.de) and todd j. derr
    (tjd@barefoot.org) for Linux. */
+#define attrib_port		VGA_ATC_IW
+#define seq_port_reg		VGA_SEQ_I
+#define seq_port_val		VGA_SEQ_D
+#define gr_port_reg		VGA_GFX_I
+#define gr_port_val		VGA_GFX_D
+#define video_misc_rd		VGA_MIS_R
+#define video_misc_wr		VGA_MIS_W
+#define vga_video_port_reg	VGA_CRT_IC
+#define vga_video_port_val	VGA_CRT_DC
 
 static void vga_vesa_blank(struct vga16fb_par *par, int mode)
 {
-	unsigned char SeqCtrlIndex = vga_io_r(VGA_SEQ_I);
-	unsigned char CrtCtrlIndex = vga_io_r(VGA_CRT_IC);
+	unsigned char SeqCtrlIndex;
+	unsigned char CrtCtrlIndex;
 	
+	//cli();
+	SeqCtrlIndex = vga_io_r(seq_port_reg);
+	CrtCtrlIndex = vga_io_r(vga_video_port_reg);
+
 	/* save original values of VGA controller registers */
 	if(!par->vesa_blanked) {
-		par->vga_state.CrtMiscIO = vga_io_r(VGA_MIS_R);
+		par->vga_state.CrtMiscIO = vga_io_r(video_misc_rd);
 		//sti();
 
 		par->vga_state.HorizontalTotal = vga_io_rcrt(0x00);	/* HorizontalTotal */
@@ -721,11 +756,12 @@ static void vga_vesa_blank(struct vga16fb_par *par, int mode)
 
 	/* assure that video is enabled */
 	/* "0x20" is VIDEO_ENABLE_bit in register 01 of sequencer */
+	//cli();
 	vga_io_wseq(0x01, par->vga_state.ClockingMode | 0x20);
 
 	/* test for vertical retrace in process.... */
 	if ((par->vga_state.CrtMiscIO & 0x80) == 0x80)
-		vga_io_w(VGA_MIS_W, par->vga_state.CrtMiscIO & 0xef);
+		vga_io_w(video_misc_wr, par->vga_state.CrtMiscIO & 0xef);
 
 	/*
 	 * Set <End of vertical retrace> to minimum (0) and
@@ -733,10 +769,12 @@ static void vga_vesa_blank(struct vga16fb_par *par, int mode)
 	 * Result: turn off vertical sync (VSync) pulse.
 	 */
 	if (mode & FB_BLANK_VSYNC_SUSPEND) {
-		vga_io_wcrt(VGA_CRTC_V_SYNC_START, 0xff);
-		vga_io_wcrt(VGA_CRTC_V_SYNC_END, 0x40);
-		/* bits 9,10 of vert. retrace */
-		vga_io_wcrt(VGA_CRTC_OVERFLOW, par->vga_state.Overflow | 0x84);
+		outb_p(0x10,vga_video_port_reg);	/* StartVertRetrace */
+		outb_p(0xff,vga_video_port_val); 	/* maximum value */
+		outb_p(0x11,vga_video_port_reg);	/* EndVertRetrace */
+		outb_p(0x40,vga_video_port_val);	/* minimum (bits 0..3)  */
+		outb_p(0x07,vga_video_port_reg);	/* Overflow */
+		outb_p(par->vga_state.Overflow | 0x84,vga_video_port_val); /* bits 9,10 of vert. retrace */
 	}
 
 	if (mode & FB_BLANK_HSYNC_SUSPEND) {
@@ -745,22 +783,29 @@ static void vga_vesa_blank(struct vga16fb_par *par, int mode)
 		 *  <Start of horizontal Retrace> to maximum
 		 * Result: turn off horizontal sync (HSync) pulse.
 		 */
-		vga_io_wcrt(VGA_CRTC_H_SYNC_START, 0xff);
-		vga_io_wcrt(VGA_CRTC_H_SYNC_END, 0x00);
+		outb_p(0x04,vga_video_port_reg);	/* StartHorizRetrace */
+		outb_p(0xff,vga_video_port_val);	/* maximum */
+		outb_p(0x05,vga_video_port_reg);	/* EndHorizRetrace */
+		outb_p(0x00,vga_video_port_val);	/* minimum (0) */
 	}
 
 	/* restore both index registers */
-	outb_p(SeqCtrlIndex, VGA_SEQ_I);
-	outb_p(CrtCtrlIndex, VGA_CRT_IC);
+	outb_p(SeqCtrlIndex,seq_port_reg);
+	outb_p(CrtCtrlIndex,vga_video_port_reg);
+	//sti();
 }
 
 static void vga_vesa_unblank(struct vga16fb_par *par)
 {
-	unsigned char SeqCtrlIndex = vga_io_r(VGA_SEQ_I);
-	unsigned char CrtCtrlIndex = vga_io_r(VGA_CRT_IC);
+	unsigned char SeqCtrlIndex;
+	unsigned char CrtCtrlIndex;
 	
+	//cli();
+	SeqCtrlIndex = vga_io_r(seq_port_reg);
+	CrtCtrlIndex = vga_io_r(vga_video_port_reg);
+
 	/* restore original values of VGA controller registers */
-	vga_io_w(VGA_MIS_W, par->vga_state.CrtMiscIO);
+	vga_io_w(video_misc_wr, par->vga_state.CrtMiscIO);
 
 	/* HorizontalTotal */
 	vga_io_wcrt(0x00, par->vga_state.HorizontalTotal);
@@ -782,8 +827,9 @@ static void vga_vesa_unblank(struct vga16fb_par *par)
 	vga_io_wseq(0x01, par->vga_state.ClockingMode);
 
 	/* restore index/control registers */
-	vga_io_w(VGA_SEQ_I, SeqCtrlIndex);
-	vga_io_w(VGA_CRT_IC, CrtCtrlIndex);
+	vga_io_w(seq_port_reg, SeqCtrlIndex);
+	vga_io_w(vga_video_port_reg, CrtCtrlIndex);
+	//sti();
 }
 
 static void vga_pal_blank(void)
@@ -791,10 +837,10 @@ static void vga_pal_blank(void)
 	int i;
 
 	for (i=0; i<16; i++) {
-		outb_p(i, VGA_PEL_IW);
-		outb_p(0, VGA_PEL_D);
-		outb_p(0, VGA_PEL_D);
-		outb_p(0, VGA_PEL_D);
+		outb_p (i, dac_reg) ;
+		outb_p (0, dac_val) ;
+		outb_p (0, dac_val) ;
+		outb_p (0, dac_val) ;
 	}
 }
 
@@ -1041,15 +1087,12 @@ static void vga16fb_copyarea(struct fb_info *info, const struct fb_copyarea *are
 	width = x2 - dx;
 	height = y2 - dy;
 
-	if (sx + dx < old_dx || sy + dy < old_dy)
-		return;
-
 	/* update sx1,sy1 */
 	sx += (dx - old_dx);
 	sy += (dy - old_dy);
 
 	/* the source must be completely inside the virtual screen */
-	if (sx + width > vxres || sy + height > vyres)
+	if (sx < 0 || sy < 0 || (sx + width) > vxres || (sy + height) > vyres)
 		return;
 
 	switch (info->fix.type) {
@@ -1320,6 +1363,7 @@ static int __init vga16fb_probe(struct platform_device *dev)
 	printk(KERN_INFO "vga16fb: mapped to 0x%p\n", info->screen_base);
 	par = info->par;
 
+	mutex_init(&par->open_lock);
 	par->isVGA = screen_info.orig_video_isVGA;
 	par->palette_blanked = 0;
 	par->vesa_blanked = 0;
@@ -1438,7 +1482,6 @@ static void __exit vga16fb_exit(void)
 	platform_driver_unregister(&vga16fb_driver);
 }
 
-MODULE_DESCRIPTION("Legacy VGA framebuffer device driver");
 MODULE_LICENSE("GPL");
 module_init(vga16fb_init);
 module_exit(vga16fb_exit);

@@ -17,6 +17,7 @@ static const char serial_revdate[] = "2007-11-06";
 #define SUPPORT_SYSRQ
 #endif
 
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/serial.h>
 #include <linux/circ_buf.h>
@@ -391,7 +392,7 @@ static int mask_test_and_clear(volatile u8 *ptr, u8 mask)
 static void mn10300_serial_receive_interrupt(struct mn10300_serial_port *port)
 {
 	struct uart_icount *icount = &port->uart.icount;
-	struct tty_struct *tty = port->uart.info->port.tty;
+	struct tty_struct *tty = port->uart.info->tty;
 	unsigned ix;
 	int count;
 	u8 st, ch, push, status, overrun;
@@ -565,11 +566,6 @@ not_break:
 static void mn10300_serial_transmit_interrupt(struct mn10300_serial_port *port)
 {
 	_enter("%s", port->name);
-
-	if (!port->uart.info || !port->uart.info->port.tty) {
-		mn10300_serial_dis_tx_intr(port);
-		return;
-	}
 
 	if (uart_tx_stopped(&port->uart) ||
 	    uart_circ_empty(&port->uart.info->xmit))

@@ -41,8 +41,10 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 	if (is_prohibited_opcode((kprobe_opcode_t *) p->addr))
 		return -EINVAL;
 
-	if ((unsigned long)p->addr & 0x01)
+	if ((unsigned long)p->addr & 0x01) {
+		printk("Attempt to register kprobe at an unaligned address\n");
 		return -EINVAL;
+		}
 
 	/* Use the get_insn_slot() facility for correctness */
 	if (!(p->ainsn.insn = get_insn_slot()))
@@ -197,7 +199,7 @@ void __kprobes arch_arm_kprobe(struct kprobe *p)
 	args.new = BREAKPOINT_INSTRUCTION;
 
 	kcb->kprobe_status = KPROBE_SWAP_INST;
-	stop_machine(swap_instruction, &args, NULL);
+	stop_machine_run(swap_instruction, &args, NR_CPUS);
 	kcb->kprobe_status = status;
 }
 
@@ -212,16 +214,15 @@ void __kprobes arch_disarm_kprobe(struct kprobe *p)
 	args.new = p->opcode;
 
 	kcb->kprobe_status = KPROBE_SWAP_INST;
-	stop_machine(swap_instruction, &args, NULL);
+	stop_machine_run(swap_instruction, &args, NR_CPUS);
 	kcb->kprobe_status = status;
 }
 
 void __kprobes arch_remove_kprobe(struct kprobe *p)
 {
-	if (p->ainsn.insn) {
-		free_insn_slot(p->ainsn.insn, 0);
-		p->ainsn.insn = NULL;
-	}
+	mutex_lock(&kprobe_mutex);
+	free_insn_slot(p->ainsn.insn, 0);
+	mutex_unlock(&kprobe_mutex);
 }
 
 static void __kprobes prepare_singlestep(struct kprobe *p, struct pt_regs *regs)
@@ -271,6 +272,7 @@ static void __kprobes set_current_kprobe(struct kprobe *p, struct pt_regs *regs,
 	__ctl_store(kcb->kprobe_saved_ctl, 9, 11);
 }
 
+/* Called with kretprobe_lock held */
 void __kprobes arch_prepare_kretprobe(struct kretprobe_instance *ri,
 					struct pt_regs *regs)
 {
@@ -332,7 +334,7 @@ static int __kprobes kprobe_handler(struct pt_regs *regs)
 		 * No kprobe at this address. The fault has not been
 		 * caused by a kprobe breakpoint. The race of breakpoint
 		 * vs. kprobe remove does not exist because on s390 we
-		 * use stop_machine to arm/disarm the breakpoints.
+		 * use stop_machine_run to arm/disarm the breakpoints.
 		 */
 		goto no_kprobe;
 
@@ -377,12 +379,13 @@ static int __kprobes trampoline_probe_handler(struct kprobe *p,
 	unsigned long trampoline_address = (unsigned long)&kretprobe_trampoline;
 
 	INIT_HLIST_HEAD(&empty_rp);
-	kretprobe_hash_lock(current, &head, &flags);
+	spin_lock_irqsave(&kretprobe_lock, flags);
+	head = kretprobe_inst_table_head(current);
 
 	/*
 	 * It is possible to have multiple instances associated with a given
 	 * task either because an multiple functions in the call path
-	 * have a return probe installed on them, and/or more than one return
+	 * have a return probe installed on them, and/or more then one return
 	 * return probe was registered for a target function.
 	 *
 	 * We can handle this because:
@@ -416,7 +419,7 @@ static int __kprobes trampoline_probe_handler(struct kprobe *p,
 	regs->psw.addr = orig_ret_address | PSW_ADDR_AMODE;
 
 	reset_current_kprobe();
-	kretprobe_hash_unlock(current, &flags);
+	spin_unlock_irqrestore(&kretprobe_lock, flags);
 	preempt_enable_no_resched();
 
 	hlist_for_each_entry_safe(ri, node, tmp, &empty_rp, hlist) {

@@ -118,12 +118,12 @@ static const u8 *get_mac_for_key(struct ieee80211_key *key)
 	 * address to indicate a transmit-only key.
 	 */
 	if (key->conf.alg != ALG_WEP &&
-	    (key->sdata->vif.type == NL80211_IFTYPE_AP ||
-	     key->sdata->vif.type == NL80211_IFTYPE_AP_VLAN))
+	    (key->sdata->vif.type == IEEE80211_IF_TYPE_AP ||
+	     key->sdata->vif.type == IEEE80211_IF_TYPE_VLAN))
 		addr = zero_addr;
 
 	if (key->sta)
-		addr = key->sta->sta.addr;
+		addr = key->sta->addr;
 
 	return addr;
 }
@@ -132,6 +132,7 @@ static void ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 {
 	const u8 *addr;
 	int ret;
+	DECLARE_MAC_BUF(mac);
 
 	assert_key_lock();
 	might_sleep();
@@ -153,15 +154,16 @@ static void ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 
 	if (ret && ret != -ENOSPC && ret != -EOPNOTSUPP)
 		printk(KERN_ERR "mac80211-%s: failed to set key "
-		       "(%d, %pM) to hardware (%d)\n",
+		       "(%d, %s) to hardware (%d)\n",
 		       wiphy_name(key->local->hw.wiphy),
-		       key->conf.keyidx, addr, ret);
+		       key->conf.keyidx, print_mac(mac, addr), ret);
 }
 
 static void ieee80211_key_disable_hw_accel(struct ieee80211_key *key)
 {
 	const u8 *addr;
 	int ret;
+	DECLARE_MAC_BUF(mac);
 
 	assert_key_lock();
 	might_sleep();
@@ -184,9 +186,9 @@ static void ieee80211_key_disable_hw_accel(struct ieee80211_key *key)
 
 	if (ret)
 		printk(KERN_ERR "mac80211-%s: failed to remove key "
-		       "(%d, %pM) from hardware (%d)\n",
+		       "(%d, %s) from hardware (%d)\n",
 		       wiphy_name(key->local->hw.wiphy),
-		       key->conf.keyidx, addr, ret);
+		       key->conf.keyidx, print_mac(mac, addr), ret);
 
 	spin_lock(&todo_lock);
 	key->flags &= ~KEY_FLAG_UPLOADED_TO_HARDWARE;
@@ -279,20 +281,6 @@ struct ieee80211_key *ieee80211_key_alloc(enum ieee80211_key_alg alg,
 	key->conf.alg = alg;
 	key->conf.keyidx = idx;
 	key->conf.keylen = key_len;
-	switch (alg) {
-	case ALG_WEP:
-		key->conf.iv_len = WEP_IV_LEN;
-		key->conf.icv_len = WEP_ICV_LEN;
-		break;
-	case ALG_TKIP:
-		key->conf.iv_len = TKIP_IV_LEN;
-		key->conf.icv_len = TKIP_ICV_LEN;
-		break;
-	case ALG_CCMP:
-		key->conf.iv_len = CCMP_HDR_LEN;
-		key->conf.icv_len = CCMP_MIC_LEN;
-		break;
-	}
 	memcpy(key->conf.key, key_data, key_len);
 	INIT_LIST_HEAD(&key->list);
 	INIT_LIST_HEAD(&key->todo);
@@ -333,17 +321,10 @@ void ieee80211_key_link(struct ieee80211_key *key,
 		 * some hardware cannot handle TKIP with QoS, so
 		 * we indicate whether QoS could be in use.
 		 */
-		if (test_sta_flags(sta, WLAN_STA_WME))
+		if (sta->flags & WLAN_STA_WME)
 			key->conf.flags |= IEEE80211_KEY_FLAG_WMM_STA;
-
-		/*
-		 * This key is for a specific sta interface,
-		 * inform the driver that it should try to store
-		 * this key as pairwise key.
-		 */
-		key->conf.flags |= IEEE80211_KEY_FLAG_PAIRWISE;
 	} else {
-		if (sdata->vif.type == NL80211_IFTYPE_STATION) {
+		if (sdata->vif.type == IEEE80211_IF_TYPE_STA) {
 			struct sta_info *ap;
 
 			/*
@@ -354,7 +335,7 @@ void ieee80211_key_link(struct ieee80211_key *key,
 			/* same here, the AP could be using QoS */
 			ap = sta_info_get(key->local, key->sdata->u.sta.bssid);
 			if (ap) {
-				if (test_sta_flags(ap, WLAN_STA_WME))
+				if (ap->flags & WLAN_STA_WME)
 					key->conf.flags |=
 						IEEE80211_KEY_FLAG_WMM_STA;
 			}
@@ -398,15 +379,6 @@ void ieee80211_key_free(struct ieee80211_key *key)
 
 	if (!key)
 		return;
-
-	if (!key->sdata) {
-		/* The key has not been linked yet, simply free it
-		 * and don't Oops */
-		if (key->conf.alg == ALG_CCMP)
-			ieee80211_aes_key_free(key->u.ccmp.tfm);
-		kfree(key);
-		return;
-	}
 
 	spin_lock_irqsave(&key->sdata->local->key_lock, flags);
 	__ieee80211_key_free(key);

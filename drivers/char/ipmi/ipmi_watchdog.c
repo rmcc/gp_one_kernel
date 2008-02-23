@@ -35,7 +35,6 @@
 #include <linux/moduleparam.h>
 #include <linux/ipmi.h>
 #include <linux/ipmi_smi.h>
-#include <linux/smp_lock.h>
 #include <linux/watchdog.h>
 #include <linux/miscdevice.h>
 #include <linux/init.h>
@@ -756,8 +755,9 @@ static ssize_t ipmi_write(struct file *file,
 		rv = ipmi_heartbeat();
 		if (rv)
 			return rv;
+		return 1;
 	}
-	return len;
+	return 0;
 }
 
 static ssize_t ipmi_read(struct file *file,
@@ -819,8 +819,6 @@ static int ipmi_open(struct inode *ino, struct file *filep)
 		if (test_and_set_bit(0, &ipmi_wdog_open))
 			return -EBUSY;
 
-		cycle_kernel_lock();
-
 		/*
 		 * Don't start the timer now, let it start on the
 		 * first heartbeat.
@@ -870,6 +868,7 @@ static int ipmi_close(struct inode *ino, struct file *filep)
 		clear_bit(0, &ipmi_wdog_open);
 	}
 
+	ipmi_fasync(-1, filep, 0);
 	expect_close = 0;
 
 	return 0;

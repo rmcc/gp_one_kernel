@@ -535,8 +535,7 @@ static inline void snd_hdspm_initialize_midi_flush(struct hdspm * hdspm);
 static int hdspm_update_simple_mixer_controls(struct hdspm * hdspm);
 static int hdspm_autosync_ref(struct hdspm * hdspm);
 static int snd_hdspm_set_defaults(struct hdspm * hdspm);
-static void hdspm_set_sgbuf(struct hdspm * hdspm,
-			    struct snd_pcm_substream *substream,
+static void hdspm_set_sgbuf(struct hdspm * hdspm, struct snd_sg_buf *sgbuf,
 			     unsigned int reg, int channels);
 
 static inline int HDSPM_bit2freq(int n)
@@ -846,7 +845,7 @@ static void hdspm_set_dds_value(struct hdspm *hdspm, int rate)
 	n = 110100480000000ULL;    /* Value checked for AES32 and MADI */
 	div64_32(&n, rate, &r);
 	/* n should be less than 2^32 for being written to FREQ register */
-	snd_BUG_ON(n >> 32);
+	snd_assert((n >> 32) == 0);
 	hdspm_write(hdspm, HDSPM_freqReg, (u32)n);
 }
 
@@ -1293,7 +1292,7 @@ static int __devinit snd_hdspm_create_midi (struct snd_card *card,
 	if (err < 0)
 		return err;
 
-	sprintf(hdspm->midi[id].rmidi->name, "HDSPM MIDI %d", id+1);
+	sprintf (hdspm->midi[id].rmidi->name, "%s MIDI %d", card->id, id+1);
 	hdspm->midi[id].rmidi->private_data = &hdspm->midi[id];
 
 	snd_rawmidi_set_ops(hdspm->midi[id].rmidi, SNDRV_RAWMIDI_STREAM_OUTPUT,
@@ -2618,8 +2617,8 @@ static int snd_hdspm_get_playback_mixer(struct snd_kcontrol *kcontrol,
 
 	channel = ucontrol->id.index - 1;
 
-	if (snd_BUG_ON(channel < 0 || channel >= HDSPM_MAX_CHANNELS))
-		return -EINVAL;
+	snd_assert(channel >= 0
+		   || channel < HDSPM_MAX_CHANNELS, return -EINVAL);
 
 	mapped_channel = hdspm->channel_map[channel];
 	if (mapped_channel < 0)
@@ -2653,8 +2652,8 @@ static int snd_hdspm_put_playback_mixer(struct snd_kcontrol *kcontrol,
 
 	channel = ucontrol->id.index - 1;
 
-	if (snd_BUG_ON(channel < 0 || channel >= HDSPM_MAX_CHANNELS))
-		return -EINVAL;
+	snd_assert(channel >= 0
+		   || channel < HDSPM_MAX_CHANNELS, return -EINVAL);
 
 	mapped_channel = hdspm->channel_map[channel];
 	if (mapped_channel < 0)
@@ -3476,7 +3475,7 @@ static irqreturn_t snd_hdspm_interrupt(int irq, void *dev_id)
 		schedule = 1;
 	}
 	if (schedule)
-		tasklet_schedule(&hdspm->midi_tasklet);
+		tasklet_hi_schedule(&hdspm->midi_tasklet);
 	return IRQ_HANDLED;
 }
 
@@ -3497,8 +3496,8 @@ static char *hdspm_channel_buffer_location(struct hdspm * hdspm,
 {
 	int mapped_channel;
 
-	if (snd_BUG_ON(channel < 0 || channel >= HDSPM_MAX_CHANNELS))
-		return NULL;
+	snd_assert(channel >= 0
+		   || channel < HDSPM_MAX_CHANNELS, return NULL);
 
 	mapped_channel = hdspm->channel_map[channel];
 	if (mapped_channel < 0)
@@ -3521,15 +3520,14 @@ static int snd_hdspm_playback_copy(struct snd_pcm_substream *substream,
 	struct hdspm *hdspm = snd_pcm_substream_chip(substream);
 	char *channel_buf;
 
-	if (snd_BUG_ON(pos + count > HDSPM_CHANNEL_BUFFER_BYTES / 4))
-		return -EINVAL;
+	snd_assert(pos + count <= HDSPM_CHANNEL_BUFFER_BYTES / 4,
+		   return -EINVAL);
 
 	channel_buf =
 		hdspm_channel_buffer_location(hdspm, substream->pstr->stream,
 					      channel);
 
-	if (snd_BUG_ON(!channel_buf))
-		return -EIO;
+	snd_assert(channel_buf != NULL, return -EIO);
 
 	return copy_from_user(channel_buf + pos * 4, src, count * 4);
 }
@@ -3541,14 +3539,13 @@ static int snd_hdspm_capture_copy(struct snd_pcm_substream *substream,
 	struct hdspm *hdspm = snd_pcm_substream_chip(substream);
 	char *channel_buf;
 
-	if (snd_BUG_ON(pos + count > HDSPM_CHANNEL_BUFFER_BYTES / 4))
-		return -EINVAL;
+	snd_assert(pos + count <= HDSPM_CHANNEL_BUFFER_BYTES / 4,
+		   return -EINVAL);
 
 	channel_buf =
 		hdspm_channel_buffer_location(hdspm, substream->pstr->stream,
 					      channel);
-	if (snd_BUG_ON(!channel_buf))
-		return -EIO;
+	snd_assert(channel_buf != NULL, return -EIO);
 	return copy_to_user(dst, channel_buf + pos * 4, count * 4);
 }
 
@@ -3562,8 +3559,7 @@ static int snd_hdspm_hw_silence(struct snd_pcm_substream *substream,
 	channel_buf =
 		hdspm_channel_buffer_location(hdspm, substream->pstr->stream,
 					      channel);
-	if (snd_BUG_ON(!channel_buf))
-		return -EIO;
+	snd_assert(channel_buf != NULL, return -EIO);
 	memset(channel_buf + pos * 4, 0, count * 4);
 	return 0;
 }
@@ -3605,6 +3601,8 @@ static int snd_hdspm_hw_params(struct snd_pcm_substream *substream,
 	int i;
 	pid_t this_pid;
 	pid_t other_pid;
+	struct snd_sg_buf *sgbuf;
+
 
 	spin_lock_irq(&hdspm->lock);
 
@@ -3672,9 +3670,11 @@ static int snd_hdspm_hw_params(struct snd_pcm_substream *substream,
 	if (err < 0)
 		return err;
 
+	sgbuf = snd_pcm_substream_sgbuf(substream);
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 
-		hdspm_set_sgbuf(hdspm, substream, HDSPM_pageAddressBufferOut,
+		hdspm_set_sgbuf(hdspm, sgbuf, HDSPM_pageAddressBufferOut,
 				params_channels(params));
 
 		for (i = 0; i < params_channels(params); ++i)
@@ -3685,7 +3685,7 @@ static int snd_hdspm_hw_params(struct snd_pcm_substream *substream,
 		snd_printdd("Allocated sample buffer for playback at %p\n",
 				hdspm->playback_buffer);
 	} else {
-		hdspm_set_sgbuf(hdspm, substream, HDSPM_pageAddressBufferIn,
+		hdspm_set_sgbuf(hdspm, sgbuf, HDSPM_pageAddressBufferIn,
 				params_channels(params));
 
 		for (i = 0; i < params_channels(params); ++i)
@@ -3700,7 +3700,7 @@ static int snd_hdspm_hw_params(struct snd_pcm_substream *substream,
 	   snd_printdd("Allocated sample buffer for %s at 0x%08X\n",
 	   substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
 	   "playback" : "capture",
-	   snd_pcm_sgbuf_get_addr(substream, 0));
+	   snd_pcm_sgbuf_get_addr(sgbuf, 0));
 	 */
 	/*
 	snd_printdd("set_hwparams: %s %d Hz, %d channels, bs = %d\n",
@@ -3744,8 +3744,7 @@ static int snd_hdspm_channel_info(struct snd_pcm_substream *substream,
 	struct hdspm *hdspm = snd_pcm_substream_chip(substream);
 	int mapped_channel;
 
-	if (snd_BUG_ON(info->channel >= HDSPM_MAX_CHANNELS))
-		return -EINVAL;
+	snd_assert(info->channel < HDSPM_MAX_CHANNELS, return -EINVAL);
 
 	mapped_channel = hdspm->channel_map[info->channel];
 	if (mapped_channel < 0)
@@ -4250,14 +4249,13 @@ static int __devinit snd_hdspm_preallocate_memory(struct hdspm * hdspm)
 	return 0;
 }
 
-static void hdspm_set_sgbuf(struct hdspm * hdspm,
-			    struct snd_pcm_substream *substream,
+static void hdspm_set_sgbuf(struct hdspm * hdspm, struct snd_sg_buf *sgbuf,
 			     unsigned int reg, int channels)
 {
 	int i;
 	for (i = 0; i < (channels * 16); i++)
 		hdspm_write(hdspm, reg + 4 * i,
-			    snd_pcm_sgbuf_get_addr(substream, 4096 * i));
+			    snd_pcm_sgbuf_get_addr(sgbuf, (size_t) 4096 * i));
 }
 
 /* ------------- ALSA Devices ---------------------------- */

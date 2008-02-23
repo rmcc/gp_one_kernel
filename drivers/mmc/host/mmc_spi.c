@@ -95,6 +95,8 @@
  * reads which takes nowhere near that long.  Older cards may be able to use
  * shorter timeouts ... but why bother?
  */
+#define readblock_timeout	ktime_set(0, 100 * 1000 * 1000)
+#define writeblock_timeout	ktime_set(0, 250 * 1000 * 1000)
 #define r1b_timeout		ktime_set(3, 0)
 
 
@@ -218,9 +220,9 @@ mmc_spi_wait_unbusy(struct mmc_spi_host *host, ktime_t timeout)
 	return mmc_spi_skip(host, timeout, sizeof(host->data->status), 0);
 }
 
-static int mmc_spi_readtoken(struct mmc_spi_host *host, ktime_t timeout)
+static int mmc_spi_readtoken(struct mmc_spi_host *host)
 {
-	return mmc_spi_skip(host, timeout, 1, 0xff);
+	return mmc_spi_skip(host, readblock_timeout, 1, 0xff);
 }
 
 
@@ -603,8 +605,7 @@ mmc_spi_setup_data_message(
  * Return negative errno, else success.
  */
 static int
-mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
-	ktime_t timeout)
+mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t)
 {
 	struct spi_device	*spi = host->spi;
 	int			status, i;
@@ -672,7 +673,7 @@ mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
 		if (scratch->status[i] != 0)
 			return 0;
 	}
-	return mmc_spi_wait_unbusy(host, timeout);
+	return mmc_spi_wait_unbusy(host, writeblock_timeout);
 }
 
 /*
@@ -692,8 +693,7 @@ mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
  * STOP_TRANSMISSION command.
  */
 static int
-mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
-	ktime_t timeout)
+mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t)
 {
 	struct spi_device	*spi = host->spi;
 	int			status;
@@ -707,7 +707,7 @@ mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
 		return status;
 	status = scratch->status[0];
 	if (status == 0xff || status == 0)
-		status = mmc_spi_readtoken(host, timeout);
+		status = mmc_spi_readtoken(host);
 
 	if (status == SPI_TOKEN_SINGLE) {
 		if (host->dma_dev) {
@@ -778,8 +778,6 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 	struct scatterlist	*sg;
 	unsigned		n_sg;
 	int			multiple = (data->blocks > 1);
-	u32			clock_rate;
-	ktime_t			timeout;
 
 	if (data->flags & MMC_DATA_READ)
 		direction = DMA_FROM_DEVICE;
@@ -787,14 +785,6 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 		direction = DMA_TO_DEVICE;
 	mmc_spi_setup_data_message(host, multiple, direction);
 	t = &host->t;
-
-	if (t->speed_hz)
-		clock_rate = t->speed_hz;
-	else
-		clock_rate = spi->max_speed_hz;
-
-	timeout = ktime_add_ns(ktime_set(0, 0), data->timeout_ns +
-			data->timeout_clks * 1000000 / clock_rate);
 
 	/* Handle scatterlist segments one at a time, with synch for
 	 * each 512-byte block
@@ -842,9 +832,9 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 				t->len);
 
 			if (direction == DMA_TO_DEVICE)
-				status = mmc_spi_writeblock(host, t, timeout);
+				status = mmc_spi_writeblock(host, t);
 			else
-				status = mmc_spi_readblock(host, t, timeout);
+				status = mmc_spi_readblock(host, t);
 			if (status < 0)
 				break;
 
@@ -927,7 +917,7 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 			if (scratch->status[tmp] != 0)
 				return;
 		}
-		tmp = mmc_spi_wait_unbusy(host, timeout);
+		tmp = mmc_spi_wait_unbusy(host, writeblock_timeout);
 		if (tmp < 0 && !data->error)
 			data->error = tmp;
 	}
@@ -1086,7 +1076,6 @@ static void mmc_spi_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		 */
 		if (canpower && ios->power_mode == MMC_POWER_OFF) {
 			int mres;
-			u8 nullbyte = 0;
 
 			host->spi->mode &= ~(SPI_CPOL|SPI_CPHA);
 			mres = spi_setup(host->spi);
@@ -1094,7 +1083,7 @@ static void mmc_spi_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				dev_dbg(&host->spi->dev,
 					"switch to SPI mode 0 failed\n");
 
-			if (spi_write(host->spi, &nullbyte, 1) < 0)
+			if (spi_w8r8(host->spi, 0x00) < 0)
 				dev_dbg(&host->spi->dev,
 					"put spi signals to low failed\n");
 
@@ -1137,28 +1126,16 @@ static int mmc_spi_get_ro(struct mmc_host *mmc)
 	struct mmc_spi_host *host = mmc_priv(mmc);
 
 	if (host->pdata && host->pdata->get_ro)
-		return !!host->pdata->get_ro(mmc->parent);
-	/*
-	 * Board doesn't support read only detection; let the mmc core
-	 * decide what to do.
-	 */
-	return -ENOSYS;
+		return host->pdata->get_ro(mmc->parent);
+	/* board doesn't support read only detection; assume writeable */
+	return 0;
 }
 
-static int mmc_spi_get_cd(struct mmc_host *mmc)
-{
-	struct mmc_spi_host *host = mmc_priv(mmc);
-
-	if (host->pdata && host->pdata->get_cd)
-		return !!host->pdata->get_cd(mmc->parent);
-	return -ENOSYS;
-}
 
 static const struct mmc_host_ops mmc_spi_ops = {
 	.request	= mmc_spi_request,
 	.set_ios	= mmc_spi_set_ios,
 	.get_ro		= mmc_spi_get_ro,
-	.get_cd		= mmc_spi_get_cd,
 };
 
 
@@ -1263,7 +1240,10 @@ static int mmc_spi_probe(struct spi_device *spi)
 	mmc->ops = &mmc_spi_ops;
 	mmc->max_blk_size = MMC_SPI_BLOCKSIZE;
 
-	mmc->caps = MMC_CAP_SPI;
+	/* As long as we keep track of the number of successfully
+	 * transmitted blocks, we're good for multiwrite.
+	 */
+	mmc->caps = MMC_CAP_SPI | MMC_CAP_MULTIWRITE;
 
 	/* SPI doesn't need the lowspeed device identification thing for
 	 * MMC or SD cards, since it never comes up in open drain mode.
@@ -1285,7 +1265,7 @@ static int mmc_spi_probe(struct spi_device *spi)
 	/* Platform data is used to hook up things like card sensing
 	 * and power switching gpios.
 	 */
-	host->pdata = mmc_spi_get_pdata(spi);
+	host->pdata = spi->dev.platform_data;
 	if (host->pdata)
 		mmc->ocr_avail = host->pdata->ocr_mask;
 	if (!mmc->ocr_avail) {
@@ -1339,23 +1319,17 @@ static int mmc_spi_probe(struct spi_device *spi)
 			goto fail_glue_init;
 	}
 
-	/* pass platform capabilities, if any */
-	if (host->pdata)
-		mmc->caps |= host->pdata->caps;
-
 	status = mmc_add_host(mmc);
 	if (status != 0)
 		goto fail_add_host;
 
-	dev_info(&spi->dev, "SD/MMC host %s%s%s%s%s\n",
-			dev_name(&mmc->class_dev),
+	dev_info(&spi->dev, "SD/MMC host %s%s%s%s\n",
+			mmc->class_dev.bus_id,
 			host->dma_dev ? "" : ", no DMA",
 			(host->pdata && host->pdata->get_ro)
 				? "" : ", no WP",
 			(host->pdata && host->pdata->setpower)
-				? "" : ", no poweroff",
-			(mmc->caps & MMC_CAP_NEEDS_POLL)
-				? ", cd polling" : "");
+				? "" : ", no poweroff");
 	return 0;
 
 fail_add_host:
@@ -1368,7 +1342,6 @@ fail_glue_init:
 
 fail_nobuf1:
 	mmc_free_host(mmc);
-	mmc_spi_put_pdata(spi);
 	dev_set_drvdata(&spi->dev, NULL);
 
 nomem:
@@ -1403,7 +1376,6 @@ static int __devexit mmc_spi_remove(struct spi_device *spi)
 
 		spi->max_speed_hz = mmc->f_max;
 		mmc_free_host(mmc);
-		mmc_spi_put_pdata(spi);
 		dev_set_drvdata(&spi->dev, NULL);
 	}
 	return 0;

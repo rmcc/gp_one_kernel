@@ -7,6 +7,8 @@
 #include <linux/reiserfs_xattr.h>
 #include <asm/uaccess.h>
 
+#define XATTR_TRUSTED_PREFIX "trusted."
+
 static int
 trusted_get(struct inode *inode, const char *name, void *buffer, size_t size)
 {

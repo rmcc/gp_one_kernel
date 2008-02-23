@@ -21,8 +21,6 @@
 #include <linux/memory_hotplug.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
-#include <linux/stat.h>
-
 #include <asm/atomic.h>
 #include <asm/uaccess.h>
 
@@ -94,8 +92,7 @@ unregister_memory(struct memory_block *memory, struct mem_section *section)
  * uses.
  */
 
-static ssize_t show_mem_phys_index(struct sys_device *dev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t show_mem_phys_index(struct sys_device *dev, char *buf)
 {
 	struct memory_block *mem =
 		container_of(dev, struct memory_block, sysdev);
@@ -103,26 +100,9 @@ static ssize_t show_mem_phys_index(struct sys_device *dev,
 }
 
 /*
- * Show whether the section of memory is likely to be hot-removable
- */
-static ssize_t show_mem_removable(struct sys_device *dev,
-			struct sysdev_attribute *attr, char *buf)
-{
-	unsigned long start_pfn;
-	int ret;
-	struct memory_block *mem =
-		container_of(dev, struct memory_block, sysdev);
-
-	start_pfn = section_nr_to_pfn(mem->phys_index);
-	ret = is_mem_section_removable(start_pfn, PAGES_PER_SECTION);
-	return sprintf(buf, "%d\n", ret);
-}
-
-/*
  * online, offline, going offline, etc.
  */
-static ssize_t show_mem_state(struct sys_device *dev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t show_mem_state(struct sys_device *dev, char *buf)
 {
 	struct memory_block *mem =
 		container_of(dev, struct memory_block, sysdev);
@@ -207,8 +187,9 @@ memory_block_action(struct memory_block *mem, unsigned long action)
 			}
 			break;
 		default:
-			WARN(1, KERN_WARNING "%s(%p, %ld) unknown action: %ld\n",
+			printk(KERN_WARNING "%s(%p, %ld) unknown action: %ld\n",
 					__func__, mem, action, action);
+			WARN_ON(1);
 			ret = -EINVAL;
 	}
 
@@ -236,8 +217,7 @@ out:
 }
 
 static ssize_t
-store_mem_state(struct sys_device *dev,
-		struct sysdev_attribute *attr, const char *buf, size_t count)
+store_mem_state(struct sys_device *dev, const char *buf, size_t count)
 {
 	struct memory_block *mem;
 	unsigned int phys_section_nr;
@@ -268,8 +248,7 @@ out:
  * s.t. if I offline all of these sections I can then
  * remove the physical device?
  */
-static ssize_t show_phys_device(struct sys_device *dev,
-				struct sysdev_attribute *attr, char *buf)
+static ssize_t show_phys_device(struct sys_device *dev, char *buf)
 {
 	struct memory_block *mem =
 		container_of(dev, struct memory_block, sysdev);
@@ -279,7 +258,6 @@ static ssize_t show_phys_device(struct sys_device *dev,
 static SYSDEV_ATTR(phys_index, 0444, show_mem_phys_index, NULL);
 static SYSDEV_ATTR(state, 0644, show_mem_state, store_mem_state);
 static SYSDEV_ATTR(phys_device, 0444, show_phys_device, NULL);
-static SYSDEV_ATTR(removable, 0444, show_mem_removable, NULL);
 
 #define mem_create_simple_file(mem, attr_name)	\
 	sysdev_create_file(&mem->sysdev, &attr_##attr_name)
@@ -327,7 +305,7 @@ memory_probe_store(struct class *class, const char *buf, size_t count)
 
 	return count;
 }
-static CLASS_ATTR(probe, S_IWUSR, NULL, memory_probe_store);
+static CLASS_ATTR(probe, 0700, NULL, memory_probe_store);
 
 static int memory_probe_init(void)
 {
@@ -347,9 +325,8 @@ static inline int memory_probe_init(void)
  * section belongs to...
  */
 
-static int add_memory_block(int nid, struct mem_section *section,
-			unsigned long state, int phys_device,
-			enum mem_add_context context)
+static int add_memory_block(unsigned long node_id, struct mem_section *section,
+		     unsigned long state, int phys_device)
 {
 	struct memory_block *mem = kzalloc(sizeof(*mem), GFP_KERNEL);
 	int ret = 0;
@@ -369,12 +346,6 @@ static int add_memory_block(int nid, struct mem_section *section,
 		ret = mem_create_simple_file(mem, state);
 	if (!ret)
 		ret = mem_create_simple_file(mem, phys_device);
-	if (!ret)
-		ret = mem_create_simple_file(mem, removable);
-	if (!ret) {
-		if (context == HOTPLUG)
-			ret = register_mem_sect_under_node(mem, nid);
-	}
 
 	return ret;
 }
@@ -387,7 +358,7 @@ static int add_memory_block(int nid, struct mem_section *section,
  *
  * This could be made generic for all sysdev classes.
  */
-struct memory_block *find_memory_block(struct mem_section *section)
+static struct memory_block *find_memory_block(struct mem_section *section)
 {
 	struct kobject *kobj;
 	struct sys_device *sysdev;
@@ -416,11 +387,9 @@ int remove_memory_block(unsigned long node_id, struct mem_section *section,
 	struct memory_block *mem;
 
 	mem = find_memory_block(section);
-	unregister_mem_sect_under_nodes(mem);
 	mem_remove_simple_file(mem, phys_index);
 	mem_remove_simple_file(mem, state);
 	mem_remove_simple_file(mem, phys_device);
-	mem_remove_simple_file(mem, removable);
 	unregister_memory(mem, section);
 
 	return 0;
@@ -430,9 +399,9 @@ int remove_memory_block(unsigned long node_id, struct mem_section *section,
  * need an interface for the VM to add new memory regions,
  * but without onlining it.
  */
-int register_new_memory(int nid, struct mem_section *section)
+int register_new_memory(struct mem_section *section)
 {
-	return add_memory_block(nid, section, MEM_OFFLINE, 0, HOTPLUG);
+	return add_memory_block(0, section, MEM_OFFLINE, 0);
 }
 
 int unregister_memory_section(struct mem_section *section)
@@ -464,8 +433,7 @@ int __init memory_dev_init(void)
 	for (i = 0; i < NR_MEM_SECTIONS; i++) {
 		if (!present_section_nr(i))
 			continue;
-		err = add_memory_block(0, __nr_to_section(i), MEM_ONLINE,
-					0, BOOT);
+		err = add_memory_block(0, __nr_to_section(i), MEM_ONLINE, 0);
 		if (!ret)
 			ret = err;
 	}

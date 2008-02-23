@@ -452,8 +452,7 @@ static int snd_pcm_hw_param_near(struct snd_pcm_substream *pcm,
 	} else {
 		*params = *save;
 		max = snd_pcm_hw_param_max(pcm, params, var, max, &maxdir);
-		if (max < 0)
-			return max;
+		snd_assert(max >= 0, return -EINVAL);
 		last = 1;
 	}
  _end:
@@ -462,7 +461,7 @@ static int snd_pcm_hw_param_near(struct snd_pcm_substream *pcm,
 		v = snd_pcm_hw_param_last(pcm, params, var, dir);
 	else
 		v = snd_pcm_hw_param_first(pcm, params, var, dir);
-	snd_BUG_ON(v < 0);
+	snd_assert(v >= 0, return -EINVAL);
 	return v;
 }
 
@@ -779,8 +778,7 @@ static int snd_pcm_oss_period_size(struct snd_pcm_substream *substream,
 	while (oss_period_size * oss_periods > oss_buffer_size)
 		oss_period_size /= 2;
 
-	if (oss_period_size < 16)
-		return -EINVAL;
+	snd_assert(oss_period_size >= 16, return -EINVAL);
 	runtime->oss.period_bytes = oss_period_size;
 	runtime->oss.period_frames = 1;
 	runtime->oss.periods = oss_periods;
@@ -897,8 +895,7 @@ static int snd_pcm_oss_change_params(struct snd_pcm_substream *substream)
 		}
 	}
 	err = _snd_pcm_hw_param_set(sparams, SNDRV_PCM_HW_PARAM_FORMAT, sformat, 0);
-	if (err < 0)
-		goto failure;
+	snd_assert(err >= 0, goto failure);
 
 	if (direct) {
 		memcpy(params, sparams, sizeof(*params));
@@ -961,13 +958,11 @@ static int snd_pcm_oss_change_params(struct snd_pcm_substream *substream)
 
 	n = snd_pcm_plug_slave_size(substream, runtime->oss.period_bytes / oss_frame_size);
 	err = snd_pcm_hw_param_near(substream, sparams, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, n, NULL);
-	if (err < 0)
-		goto failure;
+	snd_assert(err >= 0, goto failure);
 
 	err = snd_pcm_hw_param_near(substream, sparams, SNDRV_PCM_HW_PARAM_PERIODS,
 				     runtime->oss.periods, NULL);
-	if (err < 0)
-		goto failure;
+	snd_assert(err >= 0, goto failure);
 
 	snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DROP, NULL);
 
@@ -1011,10 +1006,7 @@ static int snd_pcm_oss_change_params(struct snd_pcm_substream *substream)
 
 	runtime->oss.periods = params_periods(sparams);
 	oss_period_size = snd_pcm_plug_client_size(substream, params_period_size(sparams));
-	if (oss_period_size < 0) {
-		err = -EINVAL;
-		goto failure;
-	}
+	snd_assert(oss_period_size >= 0, err = -EINVAL; goto failure);
 #ifdef CONFIG_SND_PCM_OSS_PLUGINS
 	if (runtime->oss.plugin_first) {
 		err = snd_pcm_plug_alloc(substream, oss_period_size);
@@ -1025,10 +1017,7 @@ static int snd_pcm_oss_change_params(struct snd_pcm_substream *substream)
 	oss_period_size *= oss_frame_size;
 
 	oss_buffer_size = oss_period_size * runtime->oss.periods;
-	if (oss_buffer_size < 0) {
-		err = -EINVAL;
-		goto failure;
-	}
+	snd_assert(oss_buffer_size >= 0, err = -EINVAL; goto failure);
 
 	runtime->oss.period_bytes = oss_period_size;
 	runtime->oss.buffer_bytes = oss_buffer_size;
@@ -1080,8 +1069,7 @@ static int snd_pcm_oss_get_active_substream(struct snd_pcm_oss_file *pcm_oss_fil
 				return err;
 		}
 	}
-	if (!asubstream)
-		return -EIO;
+	snd_assert(asubstream != NULL, return -EIO);
 	if (r_substream)
 		*r_substream = asubstream;
 	return 0;
@@ -1776,8 +1764,7 @@ static int snd_pcm_oss_get_formats(struct snd_pcm_oss_file *pcm_oss_file)
 	err = snd_pcm_hw_refine(substream, params);
 	format_mask = *hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT); 
 	kfree(params);
-	if (err < 0)
-		return err;
+	snd_assert(err >= 0, return err);
 	for (fmt = 0; fmt < 32; ++fmt) {
 		if (snd_mask_test(&format_mask, fmt)) {
 			int f = snd_pcm_oss_format_to(fmt);
@@ -2263,8 +2250,7 @@ static void snd_pcm_oss_init_substream(struct snd_pcm_substream *substream,
 static int snd_pcm_oss_release_file(struct snd_pcm_oss_file *pcm_oss_file)
 {
 	int cidx;
-	if (!pcm_oss_file)
-		return 0;
+	snd_assert(pcm_oss_file != NULL, return -ENXIO);
 	for (cidx = 0; cidx < 2; ++cidx) {
 		struct snd_pcm_substream *substream = pcm_oss_file->streams[cidx];
 		if (substream)
@@ -2283,10 +2269,10 @@ static int snd_pcm_oss_open_file(struct file *file,
 	int idx, err;
 	struct snd_pcm_oss_file *pcm_oss_file;
 	struct snd_pcm_substream *substream;
-	fmode_t f_mode = file->f_mode;
+	unsigned int f_mode = file->f_mode;
 
-	if (rpcm_oss_file)
-		*rpcm_oss_file = NULL;
+	snd_assert(rpcm_oss_file != NULL, return -EINVAL);
+	*rpcm_oss_file = NULL;
 
 	pcm_oss_file = kzalloc(sizeof(*pcm_oss_file), GFP_KERNEL);
 	if (pcm_oss_file == NULL)
@@ -2326,8 +2312,7 @@ static int snd_pcm_oss_open_file(struct file *file,
 	}
 
 	file->private_data = pcm_oss_file;
-	if (rpcm_oss_file)
-		*rpcm_oss_file = pcm_oss_file;
+	*rpcm_oss_file = pcm_oss_file;
 	return 0;
 }
 
@@ -2336,8 +2321,7 @@ static int snd_task_name(struct task_struct *task, char *name, size_t size)
 {
 	unsigned int idx;
 
-	if (snd_BUG_ON(!task || !name || size < 2))
-		return -EINVAL;
+	snd_assert(task != NULL && name != NULL && size >= 2, return -EINVAL);
 	for (idx = 0; idx < sizeof(task->comm) && idx + 1 < size; idx++)
 		name[idx] = task->comm[idx];
 	name[idx] = '\0';
@@ -2431,8 +2415,7 @@ static int snd_pcm_oss_release(struct inode *inode, struct file *file)
 	substream = pcm_oss_file->streams[SNDRV_PCM_STREAM_PLAYBACK];
 	if (substream == NULL)
 		substream = pcm_oss_file->streams[SNDRV_PCM_STREAM_CAPTURE];
-	if (snd_BUG_ON(!substream))
-		return -ENXIO;
+	snd_assert(substream != NULL, return -ENXIO);
 	pcm = substream->pcm;
 	if (!pcm->card->shutdown)
 		snd_pcm_oss_sync(pcm_oss_file);
@@ -2465,8 +2448,7 @@ static long snd_pcm_oss_ioctl(struct file *file, unsigned int cmd, unsigned long
 			if (substream != NULL)
 				break;
 		}
-		if (snd_BUG_ON(idx >= 2))
-			return -ENXIO;
+		snd_assert(substream != NULL, return -ENXIO);
 		return snd_mixer_oss_ioctl_card(substream->pcm->card, cmd, arg);
 	}
 #endif

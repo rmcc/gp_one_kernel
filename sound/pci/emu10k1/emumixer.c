@@ -1578,10 +1578,6 @@ static int snd_emu10k1_shared_spdif_get(struct snd_kcontrol *kcontrol,
 		ucontrol->value.integer.value[0] = inl(emu->port + A_IOCFG) & A_IOCFG_GPOUT0 ? 1 : 0;
 	else
 		ucontrol->value.integer.value[0] = inl(emu->port + HCFG) & HCFG_GPOUT0 ? 1 : 0;
-	if (emu->card_capabilities->invert_shared_spdif)
-		ucontrol->value.integer.value[0] =
-			!ucontrol->value.integer.value[0];
-		
 	return 0;
 }
 
@@ -1590,18 +1586,15 @@ static int snd_emu10k1_shared_spdif_put(struct snd_kcontrol *kcontrol,
 {
 	unsigned long flags;
 	struct snd_emu10k1 *emu = snd_kcontrol_chip(kcontrol);
-	unsigned int reg, val, sw;
+	unsigned int reg, val;
 	int change = 0;
 
-	sw = ucontrol->value.integer.value[0];
-	if (emu->card_capabilities->invert_shared_spdif)
-		sw = !sw;
 	spin_lock_irqsave(&emu->reg_lock, flags);
 	if ( emu->card_capabilities->i2c_adc) {
 		/* Do nothing for Audigy 2 ZS Notebook */
 	} else if (emu->audigy) {
 		reg = inl(emu->port + A_IOCFG);
-		val = sw ? A_IOCFG_GPOUT0 : 0;
+		val = ucontrol->value.integer.value[0] ? A_IOCFG_GPOUT0 : 0;
 		change = (reg & A_IOCFG_GPOUT0) != val;
 		if (change) {
 			reg &= ~A_IOCFG_GPOUT0;
@@ -1610,7 +1603,7 @@ static int snd_emu10k1_shared_spdif_put(struct snd_kcontrol *kcontrol,
 		}
 	}
 	reg = inl(emu->port + HCFG);
-	val = sw ? HCFG_GPOUT0 : 0;
+	val = ucontrol->value.integer.value[0] ? HCFG_GPOUT0 : 0;
 	change |= (reg & HCFG_GPOUT0) != val;
 	if (change) {
 		reg &= ~HCFG_GPOUT0;
@@ -1638,45 +1631,6 @@ static struct snd_kcontrol_new snd_audigy_shared_spdif __devinitdata =
 	.get =		snd_emu10k1_shared_spdif_get,
 	.put =		snd_emu10k1_shared_spdif_put
 };
-
-/* workaround for too low volume on Audigy due to 16bit/24bit conversion */
-
-#define snd_audigy_capture_boost_info	snd_ctl_boolean_mono_info
-
-static int snd_audigy_capture_boost_get(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_emu10k1 *emu = snd_kcontrol_chip(kcontrol);
-	unsigned int val;
-
-	/* FIXME: better to use a cached version */
-	val = snd_ac97_read(emu->ac97, AC97_REC_GAIN);
-	ucontrol->value.integer.value[0] = !!val;
-	return 0;
-}
-
-static int snd_audigy_capture_boost_put(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_emu10k1 *emu = snd_kcontrol_chip(kcontrol);
-	unsigned int val;
-
-	if (ucontrol->value.integer.value[0])
-		val = 0x0f0f;
-	else
-		val = 0;
-	return snd_ac97_update(emu->ac97, AC97_REC_GAIN, val);
-}
-
-static struct snd_kcontrol_new snd_audigy_capture_boost __devinitdata =
-{
-	.iface =	SNDRV_CTL_ELEM_IFACE_MIXER,
-	.name =		"Analog Capture Boost",
-	.info =		snd_audigy_capture_boost_info,
-	.get =		snd_audigy_capture_boost_get,
-	.put =		snd_audigy_capture_boost_put
-};
-
 
 /*
  */
@@ -2126,12 +2080,5 @@ int __devinit snd_emu10k1_mixer(struct snd_emu10k1 *emu,
 		}
 	}
 		
-	if (emu->card_capabilities->ac97_chip && emu->audigy) {
-		err = snd_ctl_add(card, snd_ctl_new1(&snd_audigy_capture_boost,
-						     emu));
-		if (err < 0)
-			return err;
-	}
-
 	return 0;
 }

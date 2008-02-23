@@ -20,7 +20,7 @@ static int __diag_time_slice_end(struct kvm_vcpu *vcpu)
 	VCPU_EVENT(vcpu, 5, "%s", "diag time slice end");
 	vcpu->stat.diagnose_44++;
 	vcpu_put(vcpu);
-	yield();
+	schedule();
 	vcpu_load(vcpu);
 	return 0;
 }
@@ -47,7 +47,7 @@ static int __diag_ipl_functions(struct kvm_vcpu *vcpu)
 	vcpu->run->s390_reset_flags |= KVM_S390_RESET_IPL;
 	vcpu->run->s390_reset_flags |= KVM_S390_RESET_CPU_INIT;
 	vcpu->run->exit_reason = KVM_EXIT_S390_RESET;
-	VCPU_EVENT(vcpu, 3, "requesting userspace resets %llx",
+	VCPU_EVENT(vcpu, 3, "requesting userspace resets %lx",
 	  vcpu->run->s390_reset_flags);
 	return -EREMOTE;
 }

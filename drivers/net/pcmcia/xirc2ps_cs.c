@@ -353,7 +353,7 @@ typedef struct local_info_t {
  * Some more prototypes
  */
 static int do_start_xmit(struct sk_buff *skb, struct net_device *dev);
-static void xirc_tx_timeout(struct net_device *dev);
+static void do_tx_timeout(struct net_device *dev);
 static void xirc2ps_tx_timeout_task(struct work_struct *work);
 static struct net_device_stats *do_get_stats(struct net_device *dev);
 static void set_addresses(struct net_device *dev);
@@ -377,7 +377,7 @@ first_tuple(struct pcmcia_device *handle, tuple_t *tuple, cisparse_t *parse)
 
 	if ((err = pcmcia_get_first_tuple(handle, tuple)) == 0 &&
 			(err = pcmcia_get_tuple_data(handle, tuple)) == 0)
-		err = pcmcia_parse_tuple(tuple, parse);
+		err = pcmcia_parse_tuple(handle, tuple, parse);
 	return err;
 }
 
@@ -388,7 +388,7 @@ next_tuple(struct pcmcia_device *handle, tuple_t *tuple, cisparse_t *parse)
 
 	if ((err = pcmcia_get_next_tuple(handle, tuple)) == 0 &&
 			(err = pcmcia_get_tuple_data(handle, tuple)) == 0)
-		err = pcmcia_parse_tuple(tuple, parse);
+		err = pcmcia_parse_tuple(handle, tuple, parse);
 	return err;
 }
 
@@ -590,7 +590,7 @@ xirc2ps_probe(struct pcmcia_device *link)
     dev->open = &do_open;
     dev->stop = &do_stop;
 #ifdef HAVE_TX_TIMEOUT
-    dev->tx_timeout = xirc_tx_timeout;
+    dev->tx_timeout = do_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
     INIT_WORK(&local->tx_timeout_task, xirc2ps_tx_timeout_task);
 #endif
@@ -715,47 +715,6 @@ has_ce2_string(struct pcmcia_device * p_dev)
 	return 0;
 }
 
-static int
-xirc2ps_config_modem(struct pcmcia_device *p_dev,
-		     cistpl_cftable_entry_t *cf,
-		     cistpl_cftable_entry_t *dflt,
-		     unsigned int vcc,
-		     void *priv_data)
-{
-	unsigned int ioaddr;
-
-	if (cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8) {
-		for (ioaddr = 0x300; ioaddr < 0x400; ioaddr += 0x10) {
-			p_dev->io.BasePort2 = cf->io.win[0].base;
-			p_dev->io.BasePort1 = ioaddr;
-			if (!pcmcia_request_io(p_dev, &p_dev->io))
-				return 0;
-		}
-	}
-	return -ENODEV;
-}
-
-static int
-xirc2ps_config_check(struct pcmcia_device *p_dev,
-		     cistpl_cftable_entry_t *cf,
-		     cistpl_cftable_entry_t *dflt,
-		     unsigned int vcc,
-		     void *priv_data)
-{
-	int *pass = priv_data;
-
-	if (cf->io.nwin > 0 && (cf->io.win[0].base & 0xf) == 8) {
-		p_dev->io.BasePort2 = cf->io.win[0].base;
-		p_dev->io.BasePort1 = p_dev->io.BasePort2
-			+ (*pass ? (cf->index & 0x20 ? -24:8)
-			   : (cf->index & 0x20 ?   8:-24));
-		if (!pcmcia_request_io(p_dev, &p_dev->io))
-			return 0;
-	}
-	return -ENODEV;
-
-}
-
 /****************
  * xirc2ps_config() is scheduled to run after a CARD_INSERTION event
  * is received, to configure the PCMCIA socket, and to make the
@@ -766,12 +725,14 @@ xirc2ps_config(struct pcmcia_device * link)
 {
     struct net_device *dev = link->priv;
     local_info_t *local = netdev_priv(dev);
-    unsigned int ioaddr;
     tuple_t tuple;
     cisparse_t parse;
+    unsigned int ioaddr;
     int err, i;
     u_char buf[64];
     cistpl_lan_node_id_t *node_id = (cistpl_lan_node_id_t*)parse.funce.data;
+    cistpl_cftable_entry_t *cf = &parse.cftable_entry;
+    DECLARE_MAC_BUF(mac);
 
     local->dingo_ccr = NULL;
 
@@ -885,8 +846,19 @@ xirc2ps_config(struct pcmcia_device * link)
 	    /* Take the Modem IO port from the CIS and scan for a free
 	     * Ethernet port */
 	    link->io.NumPorts1 = 16; /* no Mako stuff anymore */
-	    if (!pcmcia_loop_config(link, xirc2ps_config_modem, NULL))
-		    goto port_found;
+	    tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
+	    for (err = first_tuple(link, &tuple, &parse); !err;
+				 err = next_tuple(link, &tuple, &parse)) {
+		if (cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8) {
+		    for (ioaddr = 0x300; ioaddr < 0x400; ioaddr += 0x10) {
+			link->conf.ConfigIndex = cf->index ;
+			link->io.BasePort2 = cf->io.win[0].base;
+			link->io.BasePort1 = ioaddr;
+			if (!(err=pcmcia_request_io(link, &link->io)))
+			    goto port_found;
+		    }
+		}
+	    }
 	} else {
 	    link->io.NumPorts1 = 18;
 	    /* We do 2 passes here: The first one uses the regular mapping and
@@ -894,9 +866,21 @@ xirc2ps_config(struct pcmcia_device * link)
 	     * mirrored every 32 bytes. Actually we use a mirrored port for
 	     * the Mako if (on the first pass) the COR bit 5 is set.
 	     */
-	    for (pass=0; pass < 2; pass++)
-		    if (!pcmcia_loop_config(link, xirc2ps_config_check, &pass))
+	    for (pass=0; pass < 2; pass++) {
+		tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
+		for (err = first_tuple(link, &tuple, &parse); !err;
+				     err = next_tuple(link, &tuple, &parse)){
+		    if (cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8){
+			link->conf.ConfigIndex = cf->index ;
+			link->io.BasePort2 = cf->io.win[0].base;
+			link->io.BasePort1 = link->io.BasePort2
+				    + (pass ? (cf->index & 0x20 ? -24:8)
+					    : (cf->index & 0x20 ?   8:-24));
+			if (!(err=pcmcia_request_io(link, &link->io)))
 			    goto port_found;
+		    }
+		}
+	    }
 	    /* if special option:
 	     * try to configure as Ethernet only.
 	     * .... */
@@ -1050,9 +1034,9 @@ xirc2ps_config(struct pcmcia_device * link)
     strcpy(local->node.dev_name, dev->name);
 
     /* give some infos about the hardware */
-    printk(KERN_INFO "%s: %s: port %#3lx, irq %d, hwaddr %pM\n",
+    printk(KERN_INFO "%s: %s: port %#3lx, irq %d, hwaddr %s\n",
 	   dev->name, local->manf_str,(u_long)dev->base_addr, (int)dev->irq,
-	   dev->dev_addr);
+	   print_mac(mac, dev->dev_addr));
 
     return 0;
 
@@ -1242,6 +1226,7 @@ xirc2ps_interrupt(int irq, void *dev_id)
 		}
 		skb->protocol = eth_type_trans(skb, dev);
 		netif_rx(skb);
+		dev->last_rx = jiffies;
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += pktlen;
 		if (!(rsr & PhyPkt))
@@ -1350,7 +1335,7 @@ xirc2ps_tx_timeout_task(struct work_struct *work)
 }
 
 static void
-xirc_tx_timeout(struct net_device *dev)
+do_tx_timeout(struct net_device *dev)
 {
     local_info_t *lp = netdev_priv(dev);
     lp->stats.tx_errors++;
@@ -1476,25 +1461,22 @@ static void
 set_multicast_list(struct net_device *dev)
 {
     unsigned int ioaddr = dev->base_addr;
-    unsigned value;
 
     SelectPage(0x42);
-    value = GetByte(XIRCREG42_SWC1) & 0xC0;
-
     if (dev->flags & IFF_PROMISC) { /* snoop */
-	PutByte(XIRCREG42_SWC1, value | 0x06); /* set MPE and PME */
+	PutByte(XIRCREG42_SWC1, 0x06); /* set MPE and PME */
     } else if (dev->mc_count > 9 || (dev->flags & IFF_ALLMULTI)) {
-	PutByte(XIRCREG42_SWC1, value | 0x02); /* set MPE */
+	PutByte(XIRCREG42_SWC1, 0x02); /* set MPE */
     } else if (dev->mc_count) {
 	/* the chip can filter 9 addresses perfectly */
-	PutByte(XIRCREG42_SWC1, value | 0x01);
+	PutByte(XIRCREG42_SWC1, 0x01);
 	SelectPage(0x40);
 	PutByte(XIRCREG40_CMD0, Offline);
 	set_addresses(dev);
 	SelectPage(0x40);
 	PutByte(XIRCREG40_CMD0, EnableRecv | Online);
     } else { /* standard usage */
-	PutByte(XIRCREG42_SWC1, value | 0x00);
+	PutByte(XIRCREG42_SWC1, 0x00);
     }
     SelectPage(0);
 }
@@ -1740,7 +1722,6 @@ do_reset(struct net_device *dev, int full)
 
     /* enable receiver and put the mac online */
     if (full) {
-	set_multicast_list(dev);
 	SelectPage(0x40);
 	PutByte(XIRCREG40_CMD0, EnableRecv | Online);
     }

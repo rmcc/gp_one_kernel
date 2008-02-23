@@ -35,14 +35,12 @@ struct mcp_gen_header {
 	unsigned char mcp_index;
 	unsigned char disable_rabbit;
 	unsigned char unaligned_tlp;
-	unsigned char pcie_link_algo;
+	unsigned char pad1;
 	unsigned counters_addr;
 	unsigned copy_block_info;	/* for small mcps loaded with "lload -d" */
 	unsigned short handoff_id_major;	/* must be equal */
 	unsigned short handoff_id_caps;	/* bitfield: new mcp must have superset */
 	unsigned msix_table_addr;	/* start address of msix table in firmware */
-	unsigned bss_addr;	/* start of bss */
-	unsigned features;
 	/* 8 */
 };
 

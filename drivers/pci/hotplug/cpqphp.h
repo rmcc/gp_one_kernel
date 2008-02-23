@@ -449,11 +449,6 @@ extern u8 cpqhp_disk_irq;
 
 /* inline functions */
 
-static inline char *slot_name(struct slot *slot)
-{
-	return hotplug_slot_name(slot->hotplug_slot);
-}
-
 /*
  * return_resource
  *
@@ -700,6 +695,14 @@ static inline int get_presence_status(struct controller *ctrl, struct slot *slot
 
 	return presence_save;
 }
+
+#define SLOT_NAME_SIZE 10
+
+static inline void make_slot_name(char *buffer, int buffer_size, struct slot *slot)
+{
+	snprintf(buffer, buffer_size, "%d", slot->number);
+}
+
 
 static inline int wait_for_ctrl_irq(struct controller *ctrl)
 {

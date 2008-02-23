@@ -2,7 +2,7 @@
  * arch/sh/kernel/cpu/sh5/entry.S
  *
  * Copyright (C) 2000, 2001  Paolo Alberelli
- * Copyright (C) 2004 - 2008  Paul Mundt
+ * Copyright (C) 2004 - 2007  Paul Mundt
  * Copyright (C) 2003, 2004  Richard Curnow
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -11,7 +11,7 @@
  */
 #include <linux/errno.h>
 #include <linux/sys.h>
-#include <cpu/registers.h>
+#include <asm/cpu/registers.h>
 #include <asm/processor.h>
 #include <asm/unistd.h>
 #include <asm/thread_info.h>
@@ -923,8 +923,6 @@ ret_from_exception:
 	blink   tr0, ZERO
 
 resume_kernel:
-	CLI()
-
 	pta	restore_all, tr0
 
 	getcon	KCR0, r6
@@ -941,10 +939,18 @@ need_resched:
 	andi	r7, 0xf0, r7
 	bne	r7, ZERO, tr0
 
-	movi	preempt_schedule_irq, r7
+	movi	((PREEMPT_ACTIVE >> 16) & 65535), r8
+	shori	(PREEMPT_ACTIVE & 65535), r8
+	st.l	r6, TI_PRE_COUNT, r8
+
+	STI()
+	movi	schedule, r7
 	ori	r7, 1, r7
 	ptabs	r7, tr1
 	blink	tr1, LINK
+
+	st.l	r6, TI_PRE_COUNT, ZERO
+	CLI()
 
 	pta	need_resched, tr1
 	blink	tr1, ZERO
@@ -981,11 +987,11 @@ work_resched:
 work_notifysig:
 	gettr	tr1, LINK
 
-	movi	do_notify_resume, r6
+	movi	do_signal, r6
 	ptabs	r6, tr0
 	or	SP, ZERO, r2
-	or	r7, ZERO, r3
-	blink	tr0, LINK	    /* Call do_notify_resume(regs, current_thread_info->flags), return here */
+	or	ZERO, ZERO, r3
+	blink	tr0, LINK	    /* Call do_signal(regs, 0), return here */
 
 restore_all:
 	/* Do prefetches */
@@ -1294,20 +1300,18 @@ syscall_allowed:
 
 	getcon	KCR0, r2
 	ld.l	r2, TI_FLAGS, r4
-	movi	_TIF_WORK_SYSCALL_MASK, r6
+	movi	(_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP | _TIF_SYSCALL_AUDIT), r6
 	and	r6, r4, r6
 	beq/l	r6, ZERO, tr0
 
 	/* Trace it by calling syscall_trace before and after */
-	movi	do_syscall_trace_enter, r4
+	movi	syscall_trace, r4
 	or	SP, ZERO, r2
+	or	ZERO, ZERO, r3
 	ptabs	r4, tr0
 	blink	tr0, LINK
 
-	/* Save the retval */
-	st.q	SP, FRAME_R(2), r2
-
-	/* Reload syscall number as r5 is trashed by do_syscall_trace_enter */
+	/* Reload syscall number as r5 is trashed by syscall_trace */
 	ld.q	SP, FRAME_S(FSYSCALL_ID), r5
 	andi	r5, 0x1ff, r5
 
@@ -1339,8 +1343,9 @@ syscall_ret_trace:
 	/* We get back here only if under trace */
 	st.q	SP, FRAME_R(9), r2	/* Save return value */
 
-	movi	do_syscall_trace_leave, LINK
+	movi	syscall_trace, LINK
 	or	SP, ZERO, r2
+	movi	1, r3
 	ptabs	LINK, tr0
 	blink	tr0, LINK
 

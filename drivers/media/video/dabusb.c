@@ -38,10 +38,9 @@
 #include <linux/delay.h>
 #include <linux/usb.h>
 #include <linux/mutex.h>
-#include <linux/firmware.h>
-#include <linux/ihex.h>
 
 #include "dabusb.h"
+#include "dabfirmware.h"
 
 /*
  * Version Information
@@ -192,7 +191,7 @@ static void dabusb_iso_complete (struct urb *purb)
 					err("dabusb_iso_complete: invalid len %d", len);
 			}
 			else
-				dev_warn(&purb->dev->dev, "dabusb_iso_complete: corrupted packet status: %d\n", purb->iso_frame_desc[i].status);
+				warn("dabusb_iso_complete: corrupted packet status: %d", purb->iso_frame_desc[i].status);
 		if (dst != purb->actual_length)
 			err("dst!=purb->actual_length:%d!=%d", dst, purb->actual_length);
 	}
@@ -289,7 +288,7 @@ static int dabusb_bulk (pdabusb_t s, pbulk_transfer_t pb)
 	}
 
 	if( ret == -EPIPE ) {
-		dev_warn(&s->usbdev->dev, "CLEAR_FEATURE request to remove STALL condition.\n");
+		warn("CLEAR_FEATURE request to remove STALL condition.");
 		if(usb_clear_halt(s->usbdev, usb_pipeendpoint(pipe)))
 			err("request failed");
 	}
@@ -298,8 +297,7 @@ static int dabusb_bulk (pdabusb_t s, pbulk_transfer_t pb)
 	return ret;
 }
 /* --------------------------------------------------------------------- */
-static int dabusb_writemem (pdabusb_t s, int pos, const unsigned char *data,
-			    int len)
+static int dabusb_writemem (pdabusb_t s, int pos, unsigned char *data, int len)
 {
 	int ret;
 	unsigned char *transfer_buffer =  kmalloc (len, GFP_KERNEL);
@@ -326,35 +324,24 @@ static int dabusb_8051_reset (pdabusb_t s, unsigned char reset_bit)
 static int dabusb_loadmem (pdabusb_t s, const char *fname)
 {
 	int ret;
-	const struct ihex_binrec *rec;
-	const struct firmware *fw;
+	PINTEL_HEX_RECORD ptr = firmware;
 
 	dbg("Enter dabusb_loadmem (internal)");
 
-	ret = request_ihex_firmware(&fw, "dabusb/firmware.fw", &s->usbdev->dev);
-	if (ret) {
-		err("Failed to load \"dabusb/firmware.fw\": %d\n", ret);
-		goto out;
-	}
 	ret = dabusb_8051_reset (s, 1);
+	while (ptr->Type == 0) {
 
-	for (rec = (const struct ihex_binrec *)fw->data; rec;
-	     rec = ihex_next_binrec(rec)) {
-		dbg("dabusb_writemem: %04X %p %d)", be32_to_cpu(rec->addr),
-		    rec->data, be16_to_cpu(rec->len));
+		dbg("dabusb_writemem: %04X %p %d)", ptr->Address, ptr->Data, ptr->Length);
 
-		ret = dabusb_writemem(s, be32_to_cpu(rec->addr), rec->data,
-				       be16_to_cpu(rec->len));
+		ret = dabusb_writemem (s, ptr->Address, ptr->Data, ptr->Length);
 		if (ret < 0) {
-			err("dabusb_writemem failed (%d %04X %p %d)", ret,
-			    be32_to_cpu(rec->addr), rec->data,
-			    be16_to_cpu(rec->len));
+			err("dabusb_writemem failed (%d %04X %p %d)", ret, ptr->Address, ptr->Data, ptr->Length);
 			break;
 		}
+		ptr++;
 	}
 	ret = dabusb_8051_reset (s, 0);
-	release_firmware(fw);
- out:
+
 	dbg("dabusb_loadmem: exit");
 
 	return ret;
@@ -389,9 +376,9 @@ static int dabusb_fpga_init (pdabusb_t s, pbulk_transfer_t b)
 static int dabusb_fpga_download (pdabusb_t s, const char *fname)
 {
 	pbulk_transfer_t b = kmalloc (sizeof (bulk_transfer_t), GFP_KERNEL);
-	const struct firmware *fw;
 	unsigned int blen, n;
 	int ret;
+	unsigned char *buf = bitstream;
 
 	dbg("Enter dabusb_fpga_download (internal)");
 
@@ -400,17 +387,10 @@ static int dabusb_fpga_download (pdabusb_t s, const char *fname)
 		return -ENOMEM;
 	}
 
-	ret = request_firmware(&fw, "dabusb/bitstream.bin", &s->usbdev->dev);
-	if (ret) {
-		err("Failed to load \"dabusb/bitstream.bin\": %d\n", ret);
-		kfree(b);
-		return ret;
-	}
-
 	b->pipe = 1;
 	ret = dabusb_fpga_clear (s, b);
 	mdelay (10);
-	blen = fw->data[73] + (fw->data[72] << 8);
+	blen = buf[73] + (buf[72] << 8);
 
 	dbg("Bitstream len: %i", blen);
 
@@ -422,7 +402,7 @@ static int dabusb_fpga_download (pdabusb_t s, const char *fname)
 	for (n = 0; n <= blen + 60; n += 60) {
 		// some cclks for startup
 		b->size = 64;
-		memcpy (b->data + 4, fw->data + 74 + n, 60);
+		memcpy (b->data + 4, buf + 74 + n, 60);
 		ret = dabusb_bulk (s, b);
 		if (ret < 0) {
 			err("dabusb_bulk failed.");
@@ -433,7 +413,6 @@ static int dabusb_fpga_download (pdabusb_t s, const char *fname)
 
 	ret = dabusb_fpga_init (s, b);
 	kfree (b);
-	release_firmware(fw);
 
 	dbg("exit dabusb_fpga_download");
 
@@ -866,8 +845,7 @@ static int __init dabusb_init (void)
 
 	dbg("dabusb_init: driver registered");
 
-	printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-	       DRIVER_DESC "\n");
+	info(DRIVER_VERSION ":" DRIVER_DESC);
 
 out:
 	return retval;

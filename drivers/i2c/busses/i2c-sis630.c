@@ -1,4 +1,7 @@
 /*
+    i2c-sis630.c - Part of lm_sensors, Linux kernel modules for hardware
+              monitoring
+
     Copyright (c) 2002,2003 Alexander Malysh <amalysh@web.de>
 
     This program is free software; you can redistribute it and/or modify
@@ -52,7 +55,6 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
-#include <linux/acpi.h>
 #include <asm/io.h>
 
 /* SIS630 SMBus registers */
@@ -132,7 +134,7 @@ static int sis630_transaction_start(struct i2c_adapter *adap, int size, u8 *oldc
 
 		if ((temp = sis630_read(SMB_CNT) & 0x03) != 0x00) {
 			dev_dbg(&adap->dev, "Failed! (%02x)\n", temp);
-			return -EBUSY;
+			return -1;
                 } else {
 			dev_dbg(&adap->dev, "Successful!\n");
 		}
@@ -175,17 +177,17 @@ static int sis630_transaction_wait(struct i2c_adapter *adap, int size)
 	/* If the SMBus is still busy, we give up */
 	if (timeout >= MAX_TIMEOUT) {
 		dev_dbg(&adap->dev, "SMBus Timeout!\n");
-		result = -ETIMEDOUT;
+		result = -1;
 	}
 
 	if (temp & 0x02) {
 		dev_dbg(&adap->dev, "Error: Failed bus transaction\n");
-		result = -ENXIO;
+		result = -1;
 	}
 
 	if (temp & 0x04) {
 		dev_err(&adap->dev, "Bus collision!\n");
-		result = -EIO;
+		result = -1;
 		/*
 		  TBD: Datasheet say:
 		  the software should clear this bit and restart SMBUS operation.
@@ -248,10 +250,8 @@ static int sis630_block_data(struct i2c_adapter *adap, union i2c_smbus_data *dat
 			if (i==8 || (len<8 && i==len)) {
 				dev_dbg(&adap->dev, "start trans len=%d i=%d\n",len ,i);
 				/* first transaction */
-				rc = sis630_transaction_start(adap,
-						SIS630_BLOCK_DATA, &oldclock);
-				if (rc)
-					return rc;
+				if (sis630_transaction_start(adap, SIS630_BLOCK_DATA, &oldclock))
+					return -1;
 			}
 			else if ((i-1)%8 == 7 || i==len) {
 				dev_dbg(&adap->dev, "trans_wait len=%d i=%d\n",len,i);
@@ -264,10 +264,9 @@ static int sis630_block_data(struct i2c_adapter *adap, union i2c_smbus_data *dat
 					*/
 					sis630_write(SMB_STS,0x10);
 				}
-				rc = sis630_transaction_wait(adap,
-						SIS630_BLOCK_DATA);
-				if (rc) {
+				if (sis630_transaction_wait(adap, SIS630_BLOCK_DATA)) {
 					dev_dbg(&adap->dev, "trans_wait failed\n");
+					rc = -1;
 					break;
 				}
 			}
@@ -276,14 +275,13 @@ static int sis630_block_data(struct i2c_adapter *adap, union i2c_smbus_data *dat
 	else {
 		/* read request */
 		data->block[0] = len = 0;
-		rc = sis630_transaction_start(adap,
-				SIS630_BLOCK_DATA, &oldclock);
-		if (rc)
-			return rc;
+		if (sis630_transaction_start(adap, SIS630_BLOCK_DATA, &oldclock)) {
+			return -1;
+		}
 		do {
-			rc = sis630_transaction_wait(adap, SIS630_BLOCK_DATA);
-			if (rc) {
+			if (sis630_transaction_wait(adap, SIS630_BLOCK_DATA)) {
 				dev_dbg(&adap->dev, "trans_wait failed\n");
+				rc = -1;
 				break;
 			}
 			/* if this first transaction then read byte count */
@@ -313,13 +311,11 @@ static int sis630_block_data(struct i2c_adapter *adap, union i2c_smbus_data *dat
 	return rc;
 }
 
-/* Return negative errno on error. */
+/* Return -1 on error. */
 static s32 sis630_access(struct i2c_adapter *adap, u16 addr,
 			 unsigned short flags, char read_write,
 			 u8 command, int size, union i2c_smbus_data *data)
 {
-	int status;
-
 	switch (size) {
 		case I2C_SMBUS_QUICK:
 			sis630_write(SMB_ADDR, ((addr & 0x7f) << 1) | (read_write & 0x01));
@@ -354,14 +350,13 @@ static s32 sis630_access(struct i2c_adapter *adap, u16 addr,
 			size = SIS630_BLOCK_DATA;
 			return sis630_block_data(adap, data, read_write);
 		default:
-			dev_warn(&adap->dev, "Unsupported transaction %d\n",
-				 size);
-			return -EOPNOTSUPP;
+			printk("Unsupported I2C size\n");
+			return -1;
+			break;
 	}
 
-	status = sis630_transaction(adap, size);
-	if (status)
-		return status;
+	if (sis630_transaction(adap, size))
+		return -1;
 
 	if ((size != SIS630_PCALL) &&
 		((read_write == I2C_SMBUS_WRITE) || (size == SIS630_QUICK))) {
@@ -376,6 +371,9 @@ static s32 sis630_access(struct i2c_adapter *adap, u16 addr,
 		case SIS630_PCALL:
 		case SIS630_WORD_DATA:
 			data->word = sis630_read(SMB_BYTE) + (sis630_read(SMB_BYTE + 1) << 8);
+			break;
+		default:
+			return -1;
 			break;
 	}
 
@@ -435,11 +433,6 @@ static int sis630_setup(struct pci_dev *sis630_dev)
 
 	dev_dbg(&sis630_dev->dev, "ACPI base at 0x%04x\n", acpi_base);
 
-	retval = acpi_check_region(acpi_base + SMB_STS, SIS630_SMB_IOREGION,
-				   sis630_driver.name);
-	if (retval)
-		goto exit;
-
 	/* Everything is happy, let's grab the memory and set things up. */
 	if (!request_region(acpi_base + SMB_STS, SIS630_SMB_IOREGION,
 			    sis630_driver.name)) {
@@ -465,7 +458,7 @@ static const struct i2c_algorithm smbus_algorithm = {
 static struct i2c_adapter sis630_adapter = {
 	.owner		= THIS_MODULE,
 	.id		= I2C_HW_SMBUS_SIS630,
-	.class		= I2C_CLASS_HWMON | I2C_CLASS_SPD,
+	.class		= I2C_CLASS_HWMON,
 	.algo		= &smbus_algorithm,
 };
 
@@ -487,8 +480,8 @@ static int __devinit sis630_probe(struct pci_dev *dev, const struct pci_device_i
 	/* set up the sysfs linkage to our parent device */
 	sis630_adapter.dev.parent = &dev->dev;
 
-	snprintf(sis630_adapter.name, sizeof(sis630_adapter.name),
-		 "SMBus SIS630 adapter at %04x", acpi_base + SMB_STS);
+	sprintf(sis630_adapter.name, "SMBus SIS630 adapter at %04x",
+		acpi_base + SMB_STS);
 
 	return i2c_add_adapter(&sis630_adapter);
 }

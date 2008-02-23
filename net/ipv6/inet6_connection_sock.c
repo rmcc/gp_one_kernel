@@ -98,7 +98,7 @@ struct request_sock *inet6_csk_search_req(const struct sock *sk,
 		    ipv6_addr_equal(&treq->rmt_addr, raddr) &&
 		    ipv6_addr_equal(&treq->loc_addr, laddr) &&
 		    (!treq->iif || treq->iif == iif)) {
-			WARN_ON(req->sk != NULL);
+			BUG_TRAP(req->sk == NULL);
 			*prevp = prev;
 			return req;
 		}
@@ -219,7 +219,7 @@ int inet6_csk_xmit(struct sk_buff *skb, int ipfragok)
 		if (final_p)
 			ipv6_addr_copy(&fl.fl6_dst, final_p);
 
-		if ((err = xfrm_lookup(sock_net(sk), &dst, &fl, sk, 0)) < 0) {
+		if ((err = xfrm_lookup(&dst, &fl, sk, 0)) < 0) {
 			sk->sk_route_caps = 0;
 			kfree_skb(skb);
 			return err;

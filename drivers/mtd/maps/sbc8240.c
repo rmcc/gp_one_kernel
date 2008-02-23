@@ -4,6 +4,9 @@
  * Carolyn Smith, Tektronix, Inc.
  *
  * This code is GPLed
+ *
+ * $Id: sbc8240.c,v 1.5 2005/11/07 11:14:28 gleixner Exp $
+ *
  */
 
 /*
@@ -136,7 +139,7 @@ static struct mtd_part_def sbc8240_part_banks[NUM_FLASH_BANKS];
 #endif	/* CONFIG_MTD_PARTITIONS */
 
 
-static int __init init_sbc8240_mtd (void)
+int __init init_sbc8240_mtd (void)
 {
 	static struct _cjs {
 		u_long addr;

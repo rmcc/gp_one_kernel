@@ -1,7 +1,7 @@
 /*
  * NETLINK      Kernel-user communication protocol.
  *
- * 		Authors:	Alan Cox <alan@lxorguk.ukuu.org.uk>
+ * 		Authors:	Alan Cox <alan@redhat.com>
  * 				Alexey Kuznetsov <kuznet@ms2.inr.ac.ru>
  *
  *		This program is free software; you can redistribute it and/or
@@ -158,10 +158,9 @@ static void netlink_sock_destruct(struct sock *sk)
 		printk(KERN_ERR "Freeing alive netlink socket %p\n", sk);
 		return;
 	}
-
-	WARN_ON(atomic_read(&sk->sk_rmem_alloc));
-	WARN_ON(atomic_read(&sk->sk_wmem_alloc));
-	WARN_ON(nlk_sk(sk)->groups);
+	BUG_TRAP(!atomic_read(&sk->sk_rmem_alloc));
+	BUG_TRAP(!atomic_read(&sk->sk_wmem_alloc));
+	BUG_TRAP(!nlk_sk(sk)->groups);
 }
 
 /* This lock without WQ_FLAG_EXCLUSIVE is good on UP and it is _very_ bad on
@@ -435,7 +434,7 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol)
 		return -EPROTONOSUPPORT;
 
 	netlink_lock_table();
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 	if (!nl_table[protocol].registered) {
 		netlink_unlock_table();
 		request_module("net-pf-%d-proto-%d", PF_NETLINK, protocol);
@@ -451,10 +450,6 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol)
 	err = __netlink_create(net, sock, cb_mutex, protocol);
 	if (err < 0)
 		goto out_module;
-
-	local_bh_disable();
-	sock_prot_inuse_add(net, &netlink_proto, 1);
-	local_bh_enable();
 
 	nlk = nlk_sk(sock->sk);
 	nlk->module = module;
@@ -515,9 +510,6 @@ static int netlink_release(struct socket *sock)
 	kfree(nlk->groups);
 	nlk->groups = NULL;
 
-	local_bh_disable();
-	sock_prot_inuse_add(sock_net(sk), &netlink_proto, -1);
-	local_bh_enable();
 	sock_put(sk);
 	return 0;
 }
@@ -767,7 +759,7 @@ struct sock *netlink_getsockbyfilp(struct file *filp)
  * 0: continue
  * 1: repeat lookup - reference dropped while waiting for socket memory.
  */
-int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
+int netlink_attachskb(struct sock *sk, struct sk_buff *skb, int nonblock,
 		      long *timeo, struct sock *ssk)
 {
 	struct netlink_sock *nlk;
@@ -894,13 +886,13 @@ retry:
 		return netlink_unicast_kernel(sk, skb);
 
 	if (sk_filter(sk, skb)) {
-		err = skb->len;
+		int err = skb->len;
 		kfree_skb(skb);
 		sock_put(sk);
 		return err;
 	}
 
-	err = netlink_attachskb(sk, skb, &timeo, ssk);
+	err = netlink_attachskb(sk, skb, nonblock, &timeo, ssk);
 	if (err == 1)
 		goto retry;
 	if (err)

@@ -43,6 +43,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/workqueue.h>
 #include <linux/slab.h>
+#include <linux/version.h>
 #include <asm/io.h>
 #include <linux/crc32c.h>
 
@@ -93,6 +94,9 @@
 
 #define MAX_DPC_ITERATIONS               128
 
+#define NES_CQP_REQUEST_NO_DOORBELL_RING 0
+#define NES_CQP_REQUEST_RING_DOORBELL    1
+
 #define NES_DRV_OPT_ENABLE_MPA_VER_0     0x00000001
 #define NES_DRV_OPT_DISABLE_MPA_CRC      0x00000002
 #define NES_DRV_OPT_DISABLE_FIRST_WRITE  0x00000004
@@ -137,18 +141,14 @@
 
 #ifdef CONFIG_INFINIBAND_NES_DEBUG
 #define nes_debug(level, fmt, args...) \
-do { \
 	if (level & nes_debug_level) \
-		printk(KERN_ERR PFX "%s[%u]: " fmt, __func__, __LINE__, ##args); \
-} while (0)
+		printk(KERN_ERR PFX "%s[%u]: " fmt, __func__, __LINE__, ##args)
 
-#define assert(expr) \
-do { \
-	if (!(expr)) { \
-		printk(KERN_ERR PFX "Assertion failed! %s, %s, %s, line %d\n", \
-			   #expr, __FILE__, __func__, __LINE__); \
-	} \
-} while (0)
+#define assert(expr)                                                \
+if (!(expr)) {                                                       \
+	printk(KERN_ERR PFX "Assertion failed! %s, %s, %s, line %d\n",  \
+		   #expr, __FILE__, __func__, __LINE__);                \
+}
 
 #define NES_EVENT_TIMEOUT   1200000
 #else
@@ -173,7 +173,7 @@ extern int disable_mpa_crc;
 extern unsigned int send_first;
 extern unsigned int nes_drv_opt;
 extern unsigned int nes_debug_level;
-extern unsigned int wqm_quanta;
+
 extern struct list_head nes_adapter_list;
 
 extern atomic_t cm_connects;
@@ -538,11 +538,7 @@ void nes_read_1G_phy_reg(struct nes_device *, u8, u8, u16 *);
 void nes_write_10G_phy_reg(struct nes_device *, u16, u8, u16, u16);
 void nes_read_10G_phy_reg(struct nes_device *, u8, u8, u16);
 struct nes_cqp_request *nes_get_cqp_request(struct nes_device *);
-void nes_free_cqp_request(struct nes_device *nesdev,
-			  struct nes_cqp_request *cqp_request);
-void nes_put_cqp_request(struct nes_device *nesdev,
-			 struct nes_cqp_request *cqp_request);
-void nes_post_cqp_request(struct nes_device *, struct nes_cqp_request *);
+void nes_post_cqp_request(struct nes_device *, struct nes_cqp_request *, int);
 int nes_arp_table(struct nes_device *, u32, u8 *, u32);
 void nes_mh_fix(unsigned long);
 void nes_clc(unsigned long);

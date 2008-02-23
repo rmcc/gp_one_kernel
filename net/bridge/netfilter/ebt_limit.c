@@ -10,12 +10,13 @@
  *  September, 2003
  *
  */
-#include <linux/module.h>
-#include <linux/netdevice.h>
-#include <linux/spinlock.h>
-#include <linux/netfilter/x_tables.h>
+
 #include <linux/netfilter_bridge/ebtables.h>
 #include <linux/netfilter_bridge/ebt_limit.h>
+#include <linux/module.h>
+
+#include <linux/netdevice.h>
+#include <linux/spinlock.h>
 
 static DEFINE_SPINLOCK(limit_lock);
 
@@ -30,10 +31,11 @@ static DEFINE_SPINLOCK(limit_lock);
 
 #define CREDITS_PER_JIFFY POW2_BELOW32(MAX_CPJ)
 
-static bool
-ebt_limit_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+static int ebt_limit_match(const struct sk_buff *skb,
+   const struct net_device *in, const struct net_device *out,
+   const void *data, unsigned int datalen)
 {
-	struct ebt_limit_info *info = (void *)par->matchinfo;
+	struct ebt_limit_info *info = (struct ebt_limit_info *)data;
 	unsigned long now = jiffies;
 
 	spin_lock_bh(&limit_lock);
@@ -45,11 +47,11 @@ ebt_limit_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		/* We're not limited. */
 		info->credit -= info->cost;
 		spin_unlock_bh(&limit_lock);
-		return true;
+		return EBT_MATCH;
 	}
 
 	spin_unlock_bh(&limit_lock);
-	return false;
+	return EBT_NOMATCH;
 }
 
 /* Precision saver. */
@@ -64,16 +66,20 @@ user2credits(u_int32_t user)
 	return (user * HZ * CREDITS_PER_JIFFY) / EBT_LIMIT_SCALE;
 }
 
-static bool ebt_limit_mt_check(const struct xt_mtchk_param *par)
+static int ebt_limit_check(const char *tablename, unsigned int hookmask,
+   const struct ebt_entry *e, void *data, unsigned int datalen)
 {
-	struct ebt_limit_info *info = par->matchinfo;
+	struct ebt_limit_info *info = data;
+
+	if (datalen != EBT_ALIGN(sizeof(struct ebt_limit_info)))
+		return -EINVAL;
 
 	/* Check for overflow. */
 	if (info->burst == 0 ||
 	    user2credits(info->avg * info->burst) < user2credits(info->avg)) {
 		printk("Overflow in ebt_limit, try lower: %u/%u\n",
 			info->avg, info->burst);
-		return false;
+		return -EINVAL;
 	}
 
 	/* User avg in seconds * EBT_LIMIT_SCALE: convert to jiffies * 128. */
@@ -81,27 +87,24 @@ static bool ebt_limit_mt_check(const struct xt_mtchk_param *par)
 	info->credit = user2credits(info->avg * info->burst);
 	info->credit_cap = user2credits(info->avg * info->burst);
 	info->cost = user2credits(info->avg);
-	return true;
+	return 0;
 }
 
-static struct xt_match ebt_limit_mt_reg __read_mostly = {
-	.name		= "limit",
-	.revision	= 0,
-	.family		= NFPROTO_BRIDGE,
-	.match		= ebt_limit_mt,
-	.checkentry	= ebt_limit_mt_check,
-	.matchsize	= XT_ALIGN(sizeof(struct ebt_limit_info)),
+static struct ebt_match ebt_limit_reg __read_mostly = {
+	.name		= EBT_LIMIT_MATCH,
+	.match		= ebt_limit_match,
+	.check		= ebt_limit_check,
 	.me		= THIS_MODULE,
 };
 
 static int __init ebt_limit_init(void)
 {
-	return xt_register_match(&ebt_limit_mt_reg);
+	return ebt_register_match(&ebt_limit_reg);
 }
 
 static void __exit ebt_limit_fini(void)
 {
-	xt_unregister_match(&ebt_limit_mt_reg);
+	ebt_unregister_match(&ebt_limit_reg);
 }
 
 module_init(ebt_limit_init);

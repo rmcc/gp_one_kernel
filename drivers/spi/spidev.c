@@ -25,12 +25,10 @@
 #include <linux/ioctl.h>
 #include <linux/fs.h>
 #include <linux/device.h>
-#include <linux/err.h>
 #include <linux/list.h>
 #include <linux/errno.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/spidev.h>
@@ -69,12 +67,11 @@ static unsigned long	minors[N_SPI_MINORS / BITS_PER_LONG];
 				| SPI_LSB_FIRST | SPI_3WIRE | SPI_LOOP)
 
 struct spidev_data {
-	dev_t			devt;
+	struct device		dev;
 	spinlock_t		spi_lock;
 	struct spi_device	*spi;
 	struct list_head	device_entry;
 
-	/* buffer is NULL unless this device is open (users > 0) */
 	struct mutex		buf_lock;
 	unsigned		users;
 	u8			*buffer;
@@ -168,14 +165,14 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 
 	mutex_lock(&spidev->buf_lock);
 	status = spidev_sync_read(spidev, count);
-	if (status > 0) {
+	if (status == 0) {
 		unsigned long	missing;
 
-		missing = copy_to_user(buf, spidev->buffer, status);
-		if (missing == status)
+		missing = copy_to_user(buf, spidev->buffer, count);
+		if (count && missing == count)
 			status = -EFAULT;
 		else
-			status = status - missing;
+			status = count - missing;
 	}
 	mutex_unlock(&spidev->buf_lock);
 
@@ -201,6 +198,8 @@ spidev_write(struct file *filp, const char __user *buf,
 	missing = copy_from_user(spidev->buffer, buf, count);
 	if (missing == 0) {
 		status = spidev_sync_write(spidev, count);
+		if (status == 0)
+			status = count;
 	} else
 		status = -EFAULT;
 	mutex_unlock(&spidev->buf_lock);
@@ -228,6 +227,7 @@ static int spidev_message(struct spidev_data *spidev,
 	 * We walk the array of user-provided transfers, using each one
 	 * to initialize a kernel version of the same transfer.
 	 */
+	mutex_lock(&spidev->buf_lock);
 	buf = spidev->buffer;
 	total = 0;
 	for (n = n_xfers, k_tmp = k_xfers, u_tmp = u_xfers;
@@ -295,12 +295,14 @@ static int spidev_message(struct spidev_data *spidev,
 	status = total;
 
 done:
+	mutex_unlock(&spidev->buf_lock);
 	kfree(k_xfers);
 	return status;
 }
 
-static long
-spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static int
+spidev_ioctl(struct inode *inode, struct file *filp,
+		unsigned int cmd, unsigned long arg)
 {
 	int			err = 0;
 	int			retval = 0;
@@ -337,14 +339,6 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	if (spi == NULL)
 		return -ESHUTDOWN;
-
-	/* use the buffer lock here for triple duty:
-	 *  - prevent I/O (from us) so calling spi_setup() is safe;
-	 *  - prevent concurrent SPI_IOC_WR_* from morphing
-	 *    data fields while SPI_IOC_RD_* reads them;
-	 *  - SPI_IOC_MESSAGE needs the buffer locked "normally".
-	 */
-	mutex_lock(&spidev->buf_lock);
 
 	switch (cmd) {
 	/* read requests */
@@ -461,8 +455,6 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		kfree(ioc);
 		break;
 	}
-
-	mutex_unlock(&spidev->buf_lock);
 	spi_dev_put(spi);
 	return retval;
 }
@@ -472,11 +464,10 @@ static int spidev_open(struct inode *inode, struct file *filp)
 	struct spidev_data	*spidev;
 	int			status = -ENXIO;
 
-	lock_kernel();
 	mutex_lock(&device_list_lock);
 
 	list_for_each_entry(spidev, &device_list, device_entry) {
-		if (spidev->devt == inode->i_rdev) {
+		if (spidev->dev.devt == inode->i_rdev) {
 			status = 0;
 			break;
 		}
@@ -498,7 +489,6 @@ static int spidev_open(struct inode *inode, struct file *filp)
 		pr_debug("spidev: nothing for minor %d\n", iminor(inode));
 
 	mutex_unlock(&device_list_lock);
-	unlock_kernel();
 	return status;
 }
 
@@ -510,22 +500,10 @@ static int spidev_release(struct inode *inode, struct file *filp)
 	mutex_lock(&device_list_lock);
 	spidev = filp->private_data;
 	filp->private_data = NULL;
-
-	/* last close? */
 	spidev->users--;
 	if (!spidev->users) {
-		int		dofree;
-
 		kfree(spidev->buffer);
 		spidev->buffer = NULL;
-
-		/* ... after we unbound from the underlying device? */
-		spin_lock_irq(&spidev->spi_lock);
-		dofree = (spidev->spi == NULL);
-		spin_unlock_irq(&spidev->spi_lock);
-
-		if (dofree)
-			kfree(spidev);
 	}
 	mutex_unlock(&device_list_lock);
 
@@ -540,7 +518,7 @@ static struct file_operations spidev_fops = {
 	 */
 	.write =	spidev_write,
 	.read =		spidev_read,
-	.unlocked_ioctl = spidev_ioctl,
+	.ioctl =	spidev_ioctl,
 	.open =		spidev_open,
 	.release =	spidev_release,
 };
@@ -552,7 +530,19 @@ static struct file_operations spidev_fops = {
  * It also simplifies memory management.
  */
 
-static struct class *spidev_class;
+static void spidev_classdev_release(struct device *dev)
+{
+	struct spidev_data	*spidev;
+
+	spidev = container_of(dev, struct spidev_data, dev);
+	kfree(spidev);
+}
+
+static struct class spidev_class = {
+	.name		= "spidev",
+	.owner		= THIS_MODULE,
+	.dev_release	= spidev_classdev_release,
+};
 
 /*-------------------------------------------------------------------------*/
 
@@ -580,26 +570,25 @@ static int spidev_probe(struct spi_device *spi)
 	mutex_lock(&device_list_lock);
 	minor = find_first_zero_bit(minors, N_SPI_MINORS);
 	if (minor < N_SPI_MINORS) {
-		struct device *dev;
-
-		spidev->devt = MKDEV(SPIDEV_MAJOR, minor);
-		dev = device_create(spidev_class, &spi->dev, spidev->devt,
-				    spidev, "spidev%d.%d",
-				    spi->master->bus_num, spi->chip_select);
-		status = IS_ERR(dev) ? PTR_ERR(dev) : 0;
+		spidev->dev.parent = &spi->dev;
+		spidev->dev.class = &spidev_class;
+		spidev->dev.devt = MKDEV(SPIDEV_MAJOR, minor);
+		snprintf(spidev->dev.bus_id, sizeof spidev->dev.bus_id,
+				"spidev%d.%d",
+				spi->master->bus_num, spi->chip_select);
+		status = device_register(&spidev->dev);
 	} else {
 		dev_dbg(&spi->dev, "no minor number available!\n");
 		status = -ENODEV;
 	}
 	if (status == 0) {
 		set_bit(minor, minors);
+		dev_set_drvdata(&spi->dev, spidev);
 		list_add(&spidev->device_entry, &device_list);
 	}
 	mutex_unlock(&device_list_lock);
 
-	if (status == 0)
-		spi_set_drvdata(spi, spidev);
-	else
+	if (status != 0)
 		kfree(spidev);
 
 	return status;
@@ -607,21 +596,19 @@ static int spidev_probe(struct spi_device *spi)
 
 static int spidev_remove(struct spi_device *spi)
 {
-	struct spidev_data	*spidev = spi_get_drvdata(spi);
+	struct spidev_data	*spidev = dev_get_drvdata(&spi->dev);
 
 	/* make sure ops on existing fds can abort cleanly */
 	spin_lock_irq(&spidev->spi_lock);
 	spidev->spi = NULL;
-	spi_set_drvdata(spi, NULL);
 	spin_unlock_irq(&spidev->spi_lock);
 
 	/* prevent new opens */
 	mutex_lock(&device_list_lock);
 	list_del(&spidev->device_entry);
-	device_destroy(spidev_class, spidev->devt);
-	clear_bit(MINOR(spidev->devt), minors);
-	if (spidev->users == 0)
-		kfree(spidev);
+	dev_set_drvdata(&spi->dev, NULL);
+	clear_bit(MINOR(spidev->dev.devt), minors);
+	device_unregister(&spidev->dev);
 	mutex_unlock(&device_list_lock);
 
 	return 0;
@@ -657,15 +644,15 @@ static int __init spidev_init(void)
 	if (status < 0)
 		return status;
 
-	spidev_class = class_create(THIS_MODULE, "spidev");
-	if (IS_ERR(spidev_class)) {
+	status = class_register(&spidev_class);
+	if (status < 0) {
 		unregister_chrdev(SPIDEV_MAJOR, spidev_spi.driver.name);
-		return PTR_ERR(spidev_class);
+		return status;
 	}
 
 	status = spi_register_driver(&spidev_spi);
 	if (status < 0) {
-		class_destroy(spidev_class);
+		class_unregister(&spidev_class);
 		unregister_chrdev(SPIDEV_MAJOR, spidev_spi.driver.name);
 	}
 	return status;
@@ -675,7 +662,7 @@ module_init(spidev_init);
 static void __exit spidev_exit(void)
 {
 	spi_unregister_driver(&spidev_spi);
-	class_destroy(spidev_class);
+	class_unregister(&spidev_class);
 	unregister_chrdev(SPIDEV_MAJOR, spidev_spi.driver.name);
 }
 module_exit(spidev_exit);

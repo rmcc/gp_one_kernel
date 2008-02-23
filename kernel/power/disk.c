@@ -14,7 +14,6 @@
 #include <linux/reboot.h>
 #include <linux/string.h>
 #include <linux/device.h>
-#include <linux/kmod.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
@@ -181,17 +180,6 @@ static void platform_restore_cleanup(int platform_mode)
 }
 
 /**
- *	platform_recover - recover the platform from a failure to suspend
- *	devices.
- */
-
-static void platform_recover(int platform_mode)
-{
-	if (platform_mode && hibernation_ops && hibernation_ops->recover)
-		hibernation_ops->recover();
-}
-
-/**
  *	create_image - freeze devices that need to be frozen with interrupts
  *	off, create the hibernation image and thaw those devices.  Control
  *	reappears in this routine after a restore.
@@ -205,7 +193,6 @@ static int create_image(int platform_mode)
 	if (error)
 		return error;
 
-	device_pm_lock();
 	local_irq_disable();
 	/* At this point, device_suspend() has been called, but *not*
 	 * device_power_down(). We *must* call device_power_down() now.
@@ -237,11 +224,9 @@ static int create_image(int platform_mode)
 	/* NOTE:  device_power_up() is just a resume() for devices
 	 * that suspended with irqs off ... no overall powerup.
 	 */
-	device_power_up(in_suspend ?
-		(error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE);
+	device_power_up();
  Enable_irqs:
 	local_irq_enable();
-	device_pm_unlock();
 	return error;
 }
 
@@ -258,22 +243,22 @@ int hibernation_snapshot(int platform_mode)
 {
 	int error;
 
-	error = platform_begin(platform_mode);
+	/* Free memory before shutting down devices. */
+	error = swsusp_shrink_memory();
 	if (error)
 		return error;
 
-	/* Free memory before shutting down devices. */
-	error = swsusp_shrink_memory();
+	error = platform_begin(platform_mode);
 	if (error)
 		goto Close;
 
 	suspend_console();
 	error = device_suspend(PMSG_FREEZE);
 	if (error)
-		goto Recover_platform;
+		goto Resume_console;
 
 	if (hibernation_test(TEST_DEVICES))
-		goto Recover_platform;
+		goto Resume_devices;
 
 	error = platform_pre_snapshot(platform_mode);
 	if (error || hibernation_test(TEST_PLATFORM))
@@ -295,16 +280,12 @@ int hibernation_snapshot(int platform_mode)
  Finish:
 	platform_finish(platform_mode);
  Resume_devices:
-	device_resume(in_suspend ?
-		(error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE);
+	device_resume();
+ Resume_console:
 	resume_console();
  Close:
 	platform_end(platform_mode);
 	return error;
-
- Recover_platform:
-	platform_recover(platform_mode);
-	goto Resume_devices;
 }
 
 /**
@@ -319,9 +300,8 @@ static int resume_target_kernel(void)
 {
 	int error;
 
-	device_pm_lock();
 	local_irq_disable();
-	error = device_power_down(PMSG_QUIESCE);
+	error = device_power_down(PMSG_PRETHAW);
 	if (error) {
 		printk(KERN_ERR "PM: Some devices failed to power down, "
 			"aborting resume\n");
@@ -349,10 +329,9 @@ static int resume_target_kernel(void)
 	swsusp_free();
 	restore_processor_state();
 	touch_softlockup_watchdog();
-	device_power_up(PMSG_RECOVER);
+	device_power_up();
  Enable_irqs:
 	local_irq_enable();
-	device_pm_unlock();
 	return error;
 }
 
@@ -371,7 +350,7 @@ int hibernation_restore(int platform_mode)
 
 	pm_prepare_console();
 	suspend_console();
-	error = device_suspend(PMSG_QUIESCE);
+	error = device_suspend(PMSG_PRETHAW);
 	if (error)
 		goto Finish;
 
@@ -383,7 +362,7 @@ int hibernation_restore(int platform_mode)
 		enable_nonboot_cpus();
 	}
 	platform_restore_cleanup(platform_mode);
-	device_resume(PMSG_RECOVER);
+	device_resume();
  Finish:
 	resume_console();
 	pm_restore_console();
@@ -413,11 +392,8 @@ int hibernation_platform_enter(void)
 
 	suspend_console();
 	error = device_suspend(PMSG_HIBERNATE);
-	if (error) {
-		if (hibernation_ops->recover)
-			hibernation_ops->recover();
-		goto Resume_devices;
-	}
+	if (error)
+		goto Resume_console;
 
 	error = hibernation_ops->prepare();
 	if (error)
@@ -427,7 +403,6 @@ int hibernation_platform_enter(void)
 	if (error)
 		goto Finish;
 
-	device_pm_lock();
 	local_irq_disable();
 	error = device_power_down(PMSG_HIBERNATE);
 	if (!error) {
@@ -436,7 +411,6 @@ int hibernation_platform_enter(void)
 		while (1);
 	}
 	local_irq_enable();
-	device_pm_unlock();
 
 	/*
 	 * We don't need to reenable the nonboot CPUs or resume consoles, since
@@ -445,7 +419,8 @@ int hibernation_platform_enter(void)
  Finish:
 	hibernation_ops->finish();
  Resume_devices:
-	device_resume(PMSG_RESTORE);
+	device_resume();
+ Resume_console:
 	resume_console();
  Close:
 	hibernation_ops->end();
@@ -514,10 +489,6 @@ int hibernate(void)
 	if (error)
 		goto Exit;
 
-	error = usermodehelper_disable();
-	if (error)
-		goto Exit;
-
 	/* Allocate memory management structures */
 	error = create_basic_memory_bitmaps();
 	if (error)
@@ -556,7 +527,6 @@ int hibernate(void)
 	thaw_processes();
  Finish:
 	free_basic_memory_bitmaps();
-	usermodehelper_enable();
  Exit:
 	pm_notifier_call_chain(PM_POST_HIBERNATION);
 	pm_restore_console();
@@ -633,10 +603,6 @@ static int software_resume(void)
 	if (error)
 		goto Finish;
 
-	error = usermodehelper_disable();
-	if (error)
-		goto Finish;
-
 	error = create_basic_memory_bitmaps();
 	if (error)
 		goto Finish;
@@ -644,7 +610,7 @@ static int software_resume(void)
 	pr_debug("PM: Preparing processes for restore.\n");
 	error = prepare_processes();
 	if (error) {
-		swsusp_close(FMODE_READ);
+		swsusp_close();
 		goto Done;
 	}
 
@@ -659,7 +625,6 @@ static int software_resume(void)
 	thaw_processes();
  Done:
 	free_basic_memory_bitmaps();
-	usermodehelper_enable();
  Finish:
 	pm_notifier_call_chain(PM_POST_RESTORE);
 	pm_restore_console();

@@ -49,7 +49,7 @@
 	for_each_online_node(node)			\
 		if (nr_cpus_node(node))
 
-int arch_update_cpu_topology(void);
+void arch_update_cpu_topology(void);
 
 /* Conform to ACPI 2.0 SLIT distance definitions */
 #define LOCAL_DISTANCE		10
@@ -99,7 +99,7 @@ int arch_update_cpu_topology(void);
 				| SD_BALANCE_FORK	\
 				| SD_BALANCE_EXEC	\
 				| SD_WAKE_AFFINE	\
-				| SD_WAKE_BALANCE	\
+				| SD_WAKE_IDLE		\
 				| SD_SHARE_CPUPOWER,	\
 	.last_balance		= jiffies,		\
 	.balance_interval	= 1,			\
@@ -120,13 +120,12 @@ int arch_update_cpu_topology(void);
 	.wake_idx		= 1,			\
 	.forkexec_idx		= 1,			\
 	.flags			= SD_LOAD_BALANCE	\
+				| SD_BALANCE_NEWIDLE	\
 				| SD_BALANCE_FORK	\
 				| SD_BALANCE_EXEC	\
 				| SD_WAKE_AFFINE	\
-				| SD_WAKE_BALANCE	\
 				| SD_SHARE_PKG_RESOURCES\
-				| sd_balance_for_mc_power()\
-				| sd_power_saving_flags(),\
+				| BALANCE_FOR_MC_POWER,	\
 	.last_balance		= jiffies,		\
 	.balance_interval	= 1,			\
 }
@@ -147,12 +146,11 @@ int arch_update_cpu_topology(void);
 	.wake_idx		= 1,			\
 	.forkexec_idx		= 1,			\
 	.flags			= SD_LOAD_BALANCE	\
-				| SD_BALANCE_EXEC	\
+				| SD_BALANCE_NEWIDLE	\
 				| SD_BALANCE_FORK	\
+				| SD_BALANCE_EXEC	\
 				| SD_WAKE_AFFINE	\
-				| SD_WAKE_BALANCE	\
-				| sd_balance_for_package_power()\
-				| sd_power_saving_flags(),\
+				| BALANCE_FOR_PKG_POWER,\
 	.last_balance		= jiffies,		\
 	.balance_interval	= 1,			\
 }
@@ -168,9 +166,7 @@ int arch_update_cpu_topology(void);
 	.busy_idx		= 3,			\
 	.idle_idx		= 3,			\
 	.flags			= SD_LOAD_BALANCE	\
-				| SD_BALANCE_NEWIDLE	\
-				| SD_WAKE_AFFINE	\
-				| SD_SERIALIZE,		\
+				| SD_SERIALIZE,	\
 	.last_balance		= jiffies,		\
 	.balance_interval	= 64,			\
 }
@@ -180,24 +176,5 @@ int arch_update_cpu_topology(void);
 #error Please define an appropriate SD_NODE_INIT in include/asm/topology.h!!!
 #endif
 #endif /* CONFIG_NUMA */
-
-#ifndef topology_physical_package_id
-#define topology_physical_package_id(cpu)	((void)(cpu), -1)
-#endif
-#ifndef topology_core_id
-#define topology_core_id(cpu)			((void)(cpu), 0)
-#endif
-#ifndef topology_thread_siblings
-#define topology_thread_siblings(cpu)		cpumask_of_cpu(cpu)
-#endif
-#ifndef topology_core_siblings
-#define topology_core_siblings(cpu)		cpumask_of_cpu(cpu)
-#endif
-#ifndef topology_thread_cpumask
-#define topology_thread_cpumask(cpu)		cpumask_of(cpu)
-#endif
-#ifndef topology_core_cpumask
-#define topology_core_cpumask(cpu)		cpumask_of(cpu)
-#endif
 
 #endif /* _LINUX_TOPOLOGY_H */

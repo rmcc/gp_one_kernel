@@ -7,15 +7,15 @@
  */
 
 #if defined(CONFIG_M68020) || defined(CONFIG_M68030)
-#define FPSTATESIZE (216)
+#define FPSTATESIZE (216/sizeof(unsigned char))
 #elif defined(CONFIG_M68040)
-#define FPSTATESIZE (96)
+#define FPSTATESIZE (96/sizeof(unsigned char))
 #elif defined(CONFIG_M68KFPU_EMU)
-#define FPSTATESIZE (28)
+#define FPSTATESIZE (28/sizeof(unsigned char))
 #elif defined(CONFIG_M68060)
-#define FPSTATESIZE (12)
+#define FPSTATESIZE (12/sizeof(unsigned char))
 #else
-#define FPSTATESIZE (0)
+#define FPSTATESIZE error no_cpu_type_configured
 #endif
 
 #endif /* __M68K_FPU_H */

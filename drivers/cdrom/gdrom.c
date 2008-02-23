@@ -39,8 +39,8 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/delay.h>
-#include <mach/dma.h>
-#include <mach/sysasic.h>
+#include <asm/mach/dma.h>
+#include <asm/mach/sysasic.h>
 
 #define GDROM_DEV_NAME "gdrom"
 #define GD_SESSION_OFFSET 150
@@ -471,12 +471,6 @@ cleanup_sense_final:
 	return err;
 }
 
-static int gdrom_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
-			     void *arg)
-{
-	return -EINVAL;
-}
-
 static struct cdrom_device_ops gdrom_ops = {
 	.open			= gdrom_open,
 	.release		= gdrom_release,
@@ -484,21 +478,19 @@ static struct cdrom_device_ops gdrom_ops = {
 	.media_changed		= gdrom_mediachanged,
 	.get_last_session	= gdrom_get_last_session,
 	.reset			= gdrom_hardreset,
-	.audio_ioctl		= gdrom_audio_ioctl,
 	.capability		= CDC_MULTI_SESSION | CDC_MEDIA_CHANGED |
 				  CDC_RESET | CDC_DRIVE_STATUS | CDC_CD_R,
 	.n_minors		= 1,
 };
 
-static int gdrom_bdops_open(struct block_device *bdev, fmode_t mode)
+static int gdrom_bdops_open(struct inode *inode, struct file *file)
 {
-	return cdrom_open(gd.cd_info, bdev, mode);
+	return cdrom_open(gd.cd_info, inode, file);
 }
 
-static int gdrom_bdops_release(struct gendisk *disk, fmode_t mode)
+static int gdrom_bdops_release(struct inode *inode, struct file *file)
 {
-	cdrom_release(gd.cd_info, mode);
-	return 0;
+	return cdrom_release(gd.cd_info, file);
 }
 
 static int gdrom_bdops_mediachanged(struct gendisk *disk)
@@ -506,10 +498,10 @@ static int gdrom_bdops_mediachanged(struct gendisk *disk)
 	return cdrom_media_changed(gd.cd_info);
 }
 
-static int gdrom_bdops_ioctl(struct block_device *bdev, fmode_t mode,
+static int gdrom_bdops_ioctl(struct inode *inode, struct file *file,
 	unsigned cmd, unsigned long arg)
 {
-	return cdrom_ioctl(gd.cd_info, bdev, mode, cmd, arg);
+	return cdrom_ioctl(file, gd.cd_info, inode, cmd, arg);
 }
 
 static struct block_device_operations gdrom_bdops = {
@@ -517,7 +509,7 @@ static struct block_device_operations gdrom_bdops = {
 	.open			= gdrom_bdops_open,
 	.release		= gdrom_bdops_release,
 	.media_changed		= gdrom_bdops_mediachanged,
-	.locked_ioctl		= gdrom_bdops_ioctl,
+	.ioctl			= gdrom_bdops_ioctl,
 };
 
 static irqreturn_t gdrom_command_interrupt(int irq, void *dev_id)
@@ -625,14 +617,14 @@ static void gdrom_readdisk_dma(struct work_struct *work)
 		ctrl_outb(1, GDROM_DMA_STATUS_REG);
 		wait_event_interruptible_timeout(request_queue,
 			gd.transfer == 0, GDROM_DEFAULT_TIMEOUT);
-		err = gd.transfer ? -EIO : 0;
+		err = gd.transfer;
 		gd.transfer = 0;
 		gd.pending = 0;
 		/* now seek to take the request spinlock
 		* before handling ending the request */
 		spin_lock(&gdrom_lock);
 		list_del_init(&req->queuelist);
-		__blk_end_request(req, err, blk_rq_bytes(req));
+		end_dequeued_request(req, 1 - err);
 	}
 	spin_unlock(&gdrom_lock);
 	kfree(read_command);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006-2008 Chelsio Communications.  All rights reserved.
+ * Copyright (C) 2006-2007 Chelsio Communications.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -45,8 +45,7 @@ struct cxgb3_client;
 
 enum t3ctype {
 	T3A = 0,
-	T3B,
-	T3C,
+	T3B
 };
 
 struct t3cdev {
@@ -64,7 +63,6 @@ struct t3cdev {
 	void *l3opt;		/* optional layer 3 data */
 	void *l4opt;		/* optional layer 4 data */
 	void *ulp;		/* ulp stuff */
-	void *ulp_iscsi;	/* ulp iscsi */
 };
 
 #endif				/* _T3CDEV_H_ */

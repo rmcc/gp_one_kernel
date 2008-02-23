@@ -142,73 +142,53 @@ static void o2net_idle_timer(unsigned long data);
 static void o2net_sc_postpone_idle(struct o2net_sock_container *sc);
 static void o2net_sc_reset_idle_timer(struct o2net_sock_container *sc);
 
-#ifdef CONFIG_DEBUG_FS
 static void o2net_init_nst(struct o2net_send_tracking *nst, u32 msgtype,
 			   u32 msgkey, struct task_struct *task, u8 node)
 {
+#ifdef CONFIG_DEBUG_FS
 	INIT_LIST_HEAD(&nst->st_net_debug_item);
 	nst->st_task = task;
 	nst->st_msg_type = msgtype;
 	nst->st_msg_key = msgkey;
 	nst->st_node = node;
+#endif
 }
 
 static void o2net_set_nst_sock_time(struct o2net_send_tracking *nst)
 {
+#ifdef CONFIG_DEBUG_FS
 	do_gettimeofday(&nst->st_sock_time);
+#endif
 }
 
 static void o2net_set_nst_send_time(struct o2net_send_tracking *nst)
 {
+#ifdef CONFIG_DEBUG_FS
 	do_gettimeofday(&nst->st_send_time);
+#endif
 }
 
 static void o2net_set_nst_status_time(struct o2net_send_tracking *nst)
 {
+#ifdef CONFIG_DEBUG_FS
 	do_gettimeofday(&nst->st_status_time);
+#endif
 }
 
 static void o2net_set_nst_sock_container(struct o2net_send_tracking *nst,
 					 struct o2net_sock_container *sc)
 {
+#ifdef CONFIG_DEBUG_FS
 	nst->st_sc = sc;
+#endif
 }
 
 static void o2net_set_nst_msg_id(struct o2net_send_tracking *nst, u32 msg_id)
 {
+#ifdef CONFIG_DEBUG_FS
 	nst->st_id = msg_id;
+#endif
 }
-
-#else  /* CONFIG_DEBUG_FS */
-
-static inline void o2net_init_nst(struct o2net_send_tracking *nst, u32 msgtype,
-				  u32 msgkey, struct task_struct *task, u8 node)
-{
-}
-
-static inline void o2net_set_nst_sock_time(struct o2net_send_tracking *nst)
-{
-}
-
-static inline void o2net_set_nst_send_time(struct o2net_send_tracking *nst)
-{
-}
-
-static inline void o2net_set_nst_status_time(struct o2net_send_tracking *nst)
-{
-}
-
-static inline void o2net_set_nst_sock_container(struct o2net_send_tracking *nst,
-						struct o2net_sock_container *sc)
-{
-}
-
-static inline void o2net_set_nst_msg_id(struct o2net_send_tracking *nst,
-					u32 msg_id)
-{
-}
-
-#endif /* CONFIG_DEBUG_FS */
 
 static inline int o2net_reconnect_delay(void)
 {
@@ -1597,8 +1577,8 @@ static void o2net_start_connect(struct work_struct *work)
 	ret = sock->ops->bind(sock, (struct sockaddr *)&myaddr,
 			      sizeof(myaddr));
 	if (ret) {
-		mlog(ML_ERROR, "bind failed with %d at address %pI4\n",
-		     ret, &mynode->nd_ipv4_address);
+		mlog(ML_ERROR, "bind failed with %d at address %u.%u.%u.%u\n",
+		     ret, NIPQUAD(mynode->nd_ipv4_address));
 		goto out;
 	}
 
@@ -1790,16 +1770,17 @@ static int o2net_accept_one(struct socket *sock)
 
 	node = o2nm_get_node_by_ip(sin.sin_addr.s_addr);
 	if (node == NULL) {
-		mlog(ML_NOTICE, "attempt to connect from unknown node at %pI4:%d\n",
-		     &sin.sin_addr.s_addr, ntohs(sin.sin_port));
+		mlog(ML_NOTICE, "attempt to connect from unknown node at "
+		     "%u.%u.%u.%u:%d\n", NIPQUAD(sin.sin_addr.s_addr),
+		     ntohs(sin.sin_port));
 		ret = -EINVAL;
 		goto out;
 	}
 
 	if (o2nm_this_node() > node->nd_num) {
 		mlog(ML_NOTICE, "unexpected connect attempted from a lower "
-		     "numbered node '%s' at " "%pI4:%d with num %u\n",
-		     node->nd_name, &sin.sin_addr.s_addr,
+		     "numbered node '%s' at " "%u.%u.%u.%u:%d with num %u\n",
+		     node->nd_name, NIPQUAD(sin.sin_addr.s_addr),
 		     ntohs(sin.sin_port), node->nd_num);
 		ret = -EINVAL;
 		goto out;
@@ -1809,8 +1790,8 @@ static int o2net_accept_one(struct socket *sock)
 	 * and tries to connect before we see their heartbeat */
 	if (!o2hb_check_node_heartbeating_from_callback(node->nd_num)) {
 		mlog(ML_CONN, "attempt to connect from node '%s' at "
-		     "%pI4:%d but it isn't heartbeating\n",
-		     node->nd_name, &sin.sin_addr.s_addr,
+		     "%u.%u.%u.%u:%d but it isn't heartbeating\n",
+		     node->nd_name, NIPQUAD(sin.sin_addr.s_addr),
 		     ntohs(sin.sin_port));
 		ret = -EINVAL;
 		goto out;
@@ -1826,8 +1807,8 @@ static int o2net_accept_one(struct socket *sock)
 	spin_unlock(&nn->nn_lock);
 	if (ret) {
 		mlog(ML_NOTICE, "attempt to connect from node '%s' at "
-		     "%pI4:%d but it already has an open connection\n",
-		     node->nd_name, &sin.sin_addr.s_addr,
+		     "%u.%u.%u.%u:%d but it already has an open connection\n",
+		     node->nd_name, NIPQUAD(sin.sin_addr.s_addr),
 		     ntohs(sin.sin_port));
 		goto out;
 	}
@@ -1923,15 +1904,15 @@ static int o2net_open_listening_sock(__be32 addr, __be16 port)
 	sock->sk->sk_reuse = 1;
 	ret = sock->ops->bind(sock, (struct sockaddr *)&sin, sizeof(sin));
 	if (ret < 0) {
-		mlog(ML_ERROR, "unable to bind socket at %pI4:%u, "
-		     "ret=%d\n", &addr, ntohs(port), ret);
+		mlog(ML_ERROR, "unable to bind socket at %u.%u.%u.%u:%u, "
+		     "ret=%d\n", NIPQUAD(addr), ntohs(port), ret);
 		goto out;
 	}
 
 	ret = sock->ops->listen(sock, 64);
 	if (ret < 0) {
-		mlog(ML_ERROR, "unable to listen on %pI4:%u, ret=%d\n",
-		     &addr, ntohs(port), ret);
+		mlog(ML_ERROR, "unable to listen on %u.%u.%u.%u:%u, ret=%d\n",
+		     NIPQUAD(addr), ntohs(port), ret);
 	}
 
 out:

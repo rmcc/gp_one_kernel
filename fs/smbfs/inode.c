@@ -67,7 +67,7 @@ static void smb_destroy_inode(struct inode *inode)
 	kmem_cache_free(smb_inode_cachep, SMB_I(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct smb_inode_info *ei = (struct smb_inode_info *) foo;
 
@@ -586,7 +586,7 @@ static int smb_fill_super(struct super_block *sb, void *raw_data, int silent)
 		if (parse_options(mnt, raw_data))
 			goto out_bad_option;
 	}
-	mnt->mounted_uid = current_uid();
+	mnt->mounted_uid = current->uid;
 	smb_setcodepage(server, &mnt->codepage);
 
 	/*

@@ -30,11 +30,11 @@
 
 struct scsi_transport_template;
 struct iscsi_transport;
-struct iscsi_endpoint;
 struct Scsi_Host;
 struct iscsi_cls_conn;
 struct iscsi_conn;
-struct iscsi_task;
+struct iscsi_cmd_task;
+struct iscsi_mgmt_task;
 struct sockaddr;
 
 /**
@@ -58,22 +58,19 @@ struct sockaddr;
  * @stop_conn:		suspend/recover/terminate connection
  * @send_pdu:		send iSCSI PDU, Login, Logout, NOP-Out, Reject, Text.
  * @session_recovery_timedout: notify LLD a block during recovery timed out
- * @init_task:		Initialize a iscsi_task and any internal structs.
- *			When offloading the data path, this is called from
- *			queuecommand with the session lock, or from the
- *			iscsi_conn_send_pdu context with the session lock.
- *			When not offloading the data path, this is called
- *			from the scsi work queue without the session lock.
- * @xmit_task		Requests LLD to transfer cmd task. Returns 0 or the
+ * @init_cmd_task:	Initialize a iscsi_cmd_task and any internal structs.
+ *			Called from queuecommand with session lock held.
+ * @init_mgmt_task:	Initialize a iscsi_mgmt_task and any internal structs.
+ *			Called from iscsi_conn_send_generic with xmitmutex.
+ * @xmit_cmd_task:	Requests LLD to transfer cmd task. Returns 0 or the
  *			the number of bytes transferred on success, and -Exyz
- *			value on error. When offloading the data path, this
- *			is called from queuecommand with the session lock, or
- *			from the iscsi_conn_send_pdu context with the session
- *			lock. When not offloading the data path, this is called
- *			from the scsi work queue without the session lock.
- * @cleanup_task:	requests LLD to fail task. Called with session lock
- *			and after the connection has been suspended and
- *			terminated during recovery. If called
+ *			value on error.
+ * @xmit_mgmt_task:	Requests LLD to transfer mgmt task. Returns 0 or the
+ *			the number of bytes transferred on success, and -Exyz
+ *			value on error.
+ * @cleanup_cmd_task:	requests LLD to fail cmd task. Called with xmitmutex
+ *			and session->lock after the connection has been
+ *			suspended and terminated during recovery. If called
  *			from abort task then connection is not suspended
  *			or terminated but sk_callback_lock is held
  *
@@ -86,9 +83,17 @@ struct iscsi_transport {
 	/* LLD sets this to indicate what values it can export to sysfs */
 	uint64_t param_mask;
 	uint64_t host_param_mask;
-	struct iscsi_cls_session *(*create_session) (struct iscsi_endpoint *ep,
-					uint16_t cmds_max, uint16_t qdepth,
-					uint32_t sn, uint32_t *hn);
+	struct scsi_host_template *host_template;
+	/* LLD connection data size */
+	int conndata_size;
+	/* LLD session data size */
+	int sessiondata_size;
+	int max_lun;
+	unsigned int max_conn;
+	unsigned int max_cmd_len;
+	struct iscsi_cls_session *(*create_session) (struct iscsi_transport *it,
+		struct scsi_transport_template *t, uint16_t, uint16_t,
+		uint32_t sn, uint32_t *hn);
 	void (*destroy_session) (struct iscsi_cls_session *session);
 	struct iscsi_cls_conn *(*create_conn) (struct iscsi_cls_session *sess,
 				uint32_t cid);
@@ -113,23 +118,20 @@ struct iscsi_transport {
 			 char *data, uint32_t data_size);
 	void (*get_stats) (struct iscsi_cls_conn *conn,
 			   struct iscsi_stats *stats);
-
-	int (*init_task) (struct iscsi_task *task);
-	int (*xmit_task) (struct iscsi_task *task);
-	void (*cleanup_task) (struct iscsi_task *task);
-
-	int (*alloc_pdu) (struct iscsi_task *task, uint8_t opcode);
-	int (*xmit_pdu) (struct iscsi_task *task);
-	int (*init_pdu) (struct iscsi_task *task, unsigned int offset,
-			 unsigned int count);
-	void (*parse_pdu_itt) (struct iscsi_conn *conn, itt_t itt,
-			       int *index, int *age);
-
+	int (*init_cmd_task) (struct iscsi_cmd_task *ctask);
+	void (*init_mgmt_task) (struct iscsi_conn *conn,
+				struct iscsi_mgmt_task *mtask);
+	int (*xmit_cmd_task) (struct iscsi_conn *conn,
+			      struct iscsi_cmd_task *ctask);
+	void (*cleanup_cmd_task) (struct iscsi_conn *conn,
+				  struct iscsi_cmd_task *ctask);
+	int (*xmit_mgmt_task) (struct iscsi_conn *conn,
+			       struct iscsi_mgmt_task *mtask);
 	void (*session_recovery_timedout) (struct iscsi_cls_session *session);
-	struct iscsi_endpoint *(*ep_connect) (struct sockaddr *dst_addr,
-					      int non_blocking);
-	int (*ep_poll) (struct iscsi_endpoint *ep, int timeout_ms);
-	void (*ep_disconnect) (struct iscsi_endpoint *ep);
+	int (*ep_connect) (struct sockaddr *dst_addr, int non_blocking,
+			   uint64_t *ep_handle);
+	int (*ep_poll) (uint64_t ep_handle, int timeout_ms);
+	void (*ep_disconnect) (uint64_t ep_handle);
 	int (*tgt_dscvr) (struct Scsi_Host *shost, enum iscsi_tgt_dscvr type,
 			  uint32_t enable, struct sockaddr *dst_addr);
 };
@@ -143,8 +145,7 @@ extern int iscsi_unregister_transport(struct iscsi_transport *tt);
 /*
  * control plane upcalls
  */
-extern void iscsi_conn_error_event(struct iscsi_cls_conn *conn,
-				   enum iscsi_err error);
+extern void iscsi_conn_error(struct iscsi_cls_conn *conn, enum iscsi_err error);
 extern int iscsi_recv_pdu(struct iscsi_cls_conn *conn, struct iscsi_hdr *hdr,
 			  char *data, uint32_t data_size);
 
@@ -171,10 +172,9 @@ enum {
 	ISCSI_SESSION_FREE,
 };
 
-#define ISCSI_MAX_TARGET -1
-
 struct iscsi_cls_session {
 	struct list_head sess_list;		/* item in session_list */
+	struct list_head host_list;
 	struct iscsi_transport *transport;
 	spinlock_t lock;
 	struct work_struct block_work;
@@ -186,7 +186,7 @@ struct iscsi_cls_session {
 	int recovery_tmo;
 	struct delayed_work recovery_work;
 
-	unsigned int target_id;
+	int target_id;
 
 	int state;
 	int sid;				/* session id */
@@ -203,20 +203,12 @@ struct iscsi_cls_session {
 #define starget_to_session(_stgt) \
 	iscsi_dev_to_session(_stgt->dev.parent)
 
-struct iscsi_cls_host {
+struct iscsi_host {
+	struct list_head sessions;
 	atomic_t nr_scans;
 	struct mutex mutex;
 	struct workqueue_struct *scan_workq;
-	char scan_workq_name[20];
-};
-
-extern void iscsi_host_for_each_session(struct Scsi_Host *shost,
-				void (*fn)(struct iscsi_cls_session *));
-
-struct iscsi_endpoint {
-	void *dd_data;			/* LLD private data */
-	struct device dev;
-	uint64_t id;
+	char scan_workq_name[KOBJ_NAME_LEN];
 };
 
 /*
@@ -230,26 +222,22 @@ struct iscsi_endpoint {
 
 extern int iscsi_session_chkready(struct iscsi_cls_session *session);
 extern struct iscsi_cls_session *iscsi_alloc_session(struct Scsi_Host *shost,
-				struct iscsi_transport *transport, int dd_size);
+					struct iscsi_transport *transport);
 extern int iscsi_add_session(struct iscsi_cls_session *session,
 			     unsigned int target_id);
 extern int iscsi_session_event(struct iscsi_cls_session *session,
 			       enum iscsi_uevent_e event);
 extern struct iscsi_cls_session *iscsi_create_session(struct Scsi_Host *shost,
 						struct iscsi_transport *t,
-						int dd_size,
 						unsigned int target_id);
 extern void iscsi_remove_session(struct iscsi_cls_session *session);
 extern void iscsi_free_session(struct iscsi_cls_session *session);
 extern int iscsi_destroy_session(struct iscsi_cls_session *session);
 extern struct iscsi_cls_conn *iscsi_create_conn(struct iscsi_cls_session *sess,
-						int dd_size, uint32_t cid);
+					    uint32_t cid);
 extern int iscsi_destroy_conn(struct iscsi_cls_conn *conn);
 extern void iscsi_unblock_session(struct iscsi_cls_session *session);
 extern void iscsi_block_session(struct iscsi_cls_session *session);
 extern int iscsi_scan_finished(struct Scsi_Host *shost, unsigned long time);
-extern struct iscsi_endpoint *iscsi_create_endpoint(int dd_size);
-extern void iscsi_destroy_endpoint(struct iscsi_endpoint *ep);
-extern struct iscsi_endpoint *iscsi_lookup_endpoint(u64 handle);
 
 #endif

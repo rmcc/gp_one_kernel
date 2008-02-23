@@ -55,6 +55,7 @@ struct dma_pinned_list *dma_pin_iovec_pages(struct iovec *iov, size_t len)
 	int nr_iovecs = 0;
 	int iovec_len_used = 0;
 	int iovec_pages_used = 0;
+	long err;
 
 	/* don't pin down non-user-based iovecs */
 	if (segment_eq(get_fs(), KERNEL_DS))
@@ -71,21 +72,23 @@ struct dma_pinned_list *dma_pin_iovec_pages(struct iovec *iov, size_t len)
 	local_list = kmalloc(sizeof(*local_list)
 		+ (nr_iovecs * sizeof (struct dma_page_list))
 		+ (iovec_pages_used * sizeof (struct page*)), GFP_KERNEL);
-	if (!local_list)
+	if (!local_list) {
+		err = -ENOMEM;
 		goto out;
+	}
 
 	/* list of pages starts right after the page list array */
 	pages = (struct page **) &local_list->page_list[nr_iovecs];
-
-	local_list->nr_iovecs = 0;
 
 	for (i = 0; i < nr_iovecs; i++) {
 		struct dma_page_list *page_list = &local_list->page_list[i];
 
 		len -= iov[i].iov_len;
 
-		if (!access_ok(VERIFY_WRITE, iov[i].iov_base, iov[i].iov_len))
+		if (!access_ok(VERIFY_WRITE, iov[i].iov_base, iov[i].iov_len)) {
+			err = -EFAULT;
 			goto unpin;
+		}
 
 		page_list->nr_pages = num_pages_spanned(&iov[i]);
 		page_list->base_address = iov[i].iov_base;
@@ -106,8 +109,10 @@ struct dma_pinned_list *dma_pin_iovec_pages(struct iovec *iov, size_t len)
 			NULL);
 		up_read(&current->mm->mmap_sem);
 
-		if (ret != page_list->nr_pages)
+		if (ret != page_list->nr_pages) {
+			err = -ENOMEM;
 			goto unpin;
+		}
 
 		local_list->nr_iovecs = i + 1;
 	}
@@ -117,7 +122,7 @@ struct dma_pinned_list *dma_pin_iovec_pages(struct iovec *iov, size_t len)
 unpin:
 	dma_unpin_iovec_pages(local_list);
 out:
-	return NULL;
+	return ERR_PTR(err);
 }
 
 void dma_unpin_iovec_pages(struct dma_pinned_list *pinned_list)

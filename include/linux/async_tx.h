@@ -59,7 +59,9 @@ enum async_tx_flags {
 };
 
 #ifdef CONFIG_DMA_ENGINE
-#define async_tx_issue_pending_all dma_issue_pending_all
+void async_tx_issue_pending_all(void);
+enum dma_status dma_wait_for_async_tx(struct dma_async_tx_descriptor *tx);
+void async_tx_run_dependencies(struct dma_async_tx_descriptor *tx);
 #ifdef CONFIG_ARCH_HAS_ASYNC_TX_FIND_CHANNEL
 #include <asm/async_tx.h>
 #else
@@ -75,6 +77,19 @@ static inline void async_tx_issue_pending_all(void)
 	do { } while (0);
 }
 
+static inline enum dma_status
+dma_wait_for_async_tx(struct dma_async_tx_descriptor *tx)
+{
+	return DMA_SUCCESS;
+}
+
+static inline void
+async_tx_run_dependencies(struct dma_async_tx_descriptor *tx,
+	struct dma_chan *host_chan)
+{
+	do { } while (0);
+}
+
 static inline struct dma_chan *
 async_tx_find_channel(struct dma_async_tx_descriptor *depend_tx,
 	enum dma_transaction_type tx_type, struct page **dst, int dst_count,
@@ -86,14 +101,21 @@ async_tx_find_channel(struct dma_async_tx_descriptor *depend_tx,
 
 /**
  * async_tx_sync_epilog - actions to take if an operation is run synchronously
+ * @flags: async_tx flags
+ * @depend_tx: transaction depends on depend_tx
  * @cb_fn: function to call when the transaction completes
  * @cb_fn_param: parameter to pass to the callback routine
  */
 static inline void
-async_tx_sync_epilog(dma_async_tx_callback cb_fn, void *cb_fn_param)
+async_tx_sync_epilog(unsigned long flags,
+	struct dma_async_tx_descriptor *depend_tx,
+	dma_async_tx_callback cb_fn, void *cb_fn_param)
 {
 	if (cb_fn)
 		cb_fn(cb_fn_param);
+
+	if (depend_tx && (flags & ASYNC_TX_DEP_ACK))
+		async_tx_ack(depend_tx);
 }
 
 void
@@ -130,6 +152,4 @@ struct dma_async_tx_descriptor *
 async_trigger_callback(enum async_tx_flags flags,
 	struct dma_async_tx_descriptor *depend_tx,
 	dma_async_tx_callback cb_fn, void *cb_fn_param);
-
-void async_tx_quiesce(struct dma_async_tx_descriptor **tx);
 #endif /* _ASYNC_TX_H_ */

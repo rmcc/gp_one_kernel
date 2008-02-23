@@ -25,7 +25,7 @@
  *  To do:
  *    1. Multicast support.
  *
- *  Initial 2.5 cleanup Alan Cox <alan@lxorguk.ukuu.org.uk>  2002/10/28
+ *  Initial 2.5 cleanup Alan Cox <alan@redhat.com>  2002/10/28
  */
 
 #include <linux/module.h>
@@ -48,7 +48,6 @@
 #include <linux/skbuff.h>
 #include <linux/trdevice.h>
 #include <linux/bitops.h>
-#include <linux/firmware.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -60,6 +59,7 @@
 #endif
 
 #include "smctr.h"               /* Our Stuff */
+#include "smctr_firmware.h"      /* SMC adapter firmware */
 
 static char version[] __initdata = KERN_INFO "smctr.c: v1.4 7/12/00 by jschlst@samba.org\n";
 static const char cardname[] = "smctr";
@@ -103,8 +103,7 @@ static int smctr_clear_trc_reset(int ioaddr);
 static int smctr_close(struct net_device *dev);
 
 /* D */
-static int smctr_decode_firmware(struct net_device *dev,
-				 const struct firmware *fw);
+static int smctr_decode_firmware(struct net_device *dev);
 static int smctr_disable_16bit(struct net_device *dev);
 static int smctr_disable_adapter_ctrl_store(struct net_device *dev);
 static int smctr_disable_bic_int(struct net_device *dev);
@@ -749,8 +748,7 @@ static int smctr_close(struct net_device *dev)
         return (0);
 }
 
-static int smctr_decode_firmware(struct net_device *dev,
-				 const struct firmware *fw)
+static int smctr_decode_firmware(struct net_device *dev)
 {
         struct net_local *tp = netdev_priv(dev);
         short bit = 0x80, shift = 12;
@@ -764,10 +762,10 @@ static int smctr_decode_firmware(struct net_device *dev,
         if(smctr_debug > 10)
                 printk(KERN_DEBUG "%s: smctr_decode_firmware\n", dev->name);
 
-        weight  = *(long *)(fw->data + WEIGHT_OFFSET);
-        tsize   = *(__u8 *)(fw->data + TREE_SIZE_OFFSET);
-        tree    = (DECODE_TREE_NODE *)(fw->data + TREE_OFFSET);
-        ucode   = (__u8 *)(fw->data + TREE_OFFSET
+        weight  = *(long *)(tp->ptr_ucode + WEIGHT_OFFSET);
+        tsize   = *(__u8 *)(tp->ptr_ucode + TREE_SIZE_OFFSET);
+        tree    = (DECODE_TREE_NODE *)(tp->ptr_ucode + TREE_OFFSET);
+        ucode   = (__u8 *)(tp->ptr_ucode + TREE_OFFSET
                         + (tsize * sizeof(DECODE_TREE_NODE)));
         mem     = (__u16 *)(tp->ram_access);
 
@@ -2965,44 +2963,34 @@ static int smctr_link_tx_fcbs_to_bdbs(struct net_device *dev)
 static int smctr_load_firmware(struct net_device *dev)
 {
         struct net_local *tp = netdev_priv(dev);
-	const struct firmware *fw;
         __u16 i, checksum = 0;
         int err = 0;
 
         if(smctr_debug > 10)
                 printk(KERN_DEBUG "%s: smctr_load_firmware\n", dev->name);
 
-	if (request_firmware(&fw, "tr_smctr.bin", &dev->dev)) {
-		printk(KERN_ERR "%s: firmware not found\n", dev->name);
-		return (UCODE_NOT_PRESENT);
-	}
-
+        tp->ptr_ucode           = smctr_code;
         tp->num_of_tx_buffs     = 4;
         tp->mode_bits          |= UMAC;
         tp->receive_mask        = 0;
         tp->max_packet_size     = 4177;
 
         /* Can only upload the firmware once per adapter reset. */
-        if (tp->microcode_version != 0) {
-		err = (UCODE_PRESENT);
-		goto out;
-	}
+        if(tp->microcode_version != 0)
+                return (UCODE_PRESENT);
 
         /* Verify the firmware exists and is there in the right amount. */
-        if (!fw->data
-                || (*(fw->data + UCODE_VERSION_OFFSET) < UCODE_VERSION))
+        if (!tp->ptr_ucode
+                || (*(tp->ptr_ucode + UCODE_VERSION_OFFSET) < UCODE_VERSION))
         {
-                err = (UCODE_NOT_PRESENT);
-		goto out;
+                return (UCODE_NOT_PRESENT);
         }
 
         /* UCODE_SIZE is not included in Checksum. */
-        for(i = 0; i < *((__u16 *)(fw->data + UCODE_SIZE_OFFSET)); i += 2)
-                checksum += *((__u16 *)(fw->data + 2 + i));
-        if (checksum) {
-		err = (UCODE_NOT_PRESENT);
-		goto out;
-	}
+        for(i = 0; i < *((__u16 *)(tp->ptr_ucode + UCODE_SIZE_OFFSET)); i += 2)
+                checksum += *((__u16 *)(tp->ptr_ucode + 2 + i));
+        if(checksum)
+                return (UCODE_NOT_PRESENT);
 
         /* At this point we have a valid firmware image, lets kick it on up. */
         smctr_enable_adapter_ram(dev);
@@ -3010,7 +2998,7 @@ static int smctr_load_firmware(struct net_device *dev)
         smctr_set_page(dev, (__u8 *)tp->ram_access);
 
         if((smctr_checksum_firmware(dev))
-                || (*(fw->data + UCODE_VERSION_OFFSET)
+                || (*(tp->ptr_ucode + UCODE_VERSION_OFFSET)
                 > tp->microcode_version))
         {
                 smctr_enable_adapter_ctrl_store(dev);
@@ -3019,9 +3007,9 @@ static int smctr_load_firmware(struct net_device *dev)
                 for(i = 0; i < CS_RAM_SIZE; i += 2)
                         *((__u16 *)(tp->ram_access + i)) = 0;
 
-                smctr_decode_firmware(dev, fw);
+                smctr_decode_firmware(dev);
 
-                tp->microcode_version = *(fw->data + UCODE_VERSION_OFFSET);                *((__u16 *)(tp->ram_access + CS_RAM_VERSION_OFFSET))
+                tp->microcode_version = *(tp->ptr_ucode + UCODE_VERSION_OFFSET);                *((__u16 *)(tp->ram_access + CS_RAM_VERSION_OFFSET))
                         = (tp->microcode_version << 8);
                 *((__u16 *)(tp->ram_access + CS_RAM_CHECKSUM_OFFSET))
                         = ~(tp->microcode_version << 8) + 1;
@@ -3035,8 +3023,7 @@ static int smctr_load_firmware(struct net_device *dev)
                 err = UCODE_PRESENT;
 
         smctr_disable_16bit(dev);
- out:
-	release_firmware(fw);
+
         return (err);
 }
 
@@ -3064,7 +3051,7 @@ static int smctr_load_node_addr(struct net_device *dev)
  * will consequently cause a timeout.
  *
  * NOTE 1: If the monitor_state is MS_BEACON_TEST_STATE, all transmit
- * queues other than the one used for the lobe_media_test should be
+ * queues other then the one used for the lobe_media_test should be
  * disabled.!?
  *
  * NOTE 2: If the monitor_state is MS_BEACON_TEST_STATE and the receive_mask
@@ -3910,6 +3897,7 @@ static int smctr_process_rx_packet(MAC_HEADER *rmf, __u16 size,
                 /* Kick the packet on up. */
                 skb->protocol = tr_type_trans(skb, dev);
                 netif_rx(skb);
+		dev->last_rx = jiffies;
                 err = 0;
         }
 
@@ -4495,6 +4483,7 @@ static int smctr_rx_frame(struct net_device *dev)
                                 	/* Kick the packet on up. */
                                 	skb->protocol = tr_type_trans(skb, dev);
                                 	netif_rx(skb);
+					dev->last_rx = jiffies;
 				} else {
 				}
                         }
@@ -5662,7 +5651,6 @@ static int io[SMCTR_MAX_ADAPTERS];
 static int irq[SMCTR_MAX_ADAPTERS];
 
 MODULE_LICENSE("GPL");
-MODULE_FIRMWARE("tr_smctr.bin");
 
 module_param_array(io, int, NULL, 0);
 module_param_array(irq, int, NULL, 0);

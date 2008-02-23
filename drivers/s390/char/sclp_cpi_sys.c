@@ -7,9 +7,6 @@
  *		 Michael Ernst <mernst@de.ibm.com>
  */
 
-#define KMSG_COMPONENT "sclp_cpi"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/stat.h>
@@ -23,15 +20,12 @@
 #include <linux/completion.h>
 #include <asm/ebcdic.h>
 #include <asm/sclp.h>
-
 #include "sclp.h"
 #include "sclp_rw.h"
 #include "sclp_cpi_sys.h"
 
 #define CPI_LENGTH_NAME 8
 #define CPI_LENGTH_LEVEL 16
-
-static DEFINE_MUTEX(sclp_cpi_mutex);
 
 struct cpi_evbuf {
 	struct evbuf_header header;
@@ -130,15 +124,21 @@ static int cpi_req(void)
 	int response;
 
 	rc = sclp_register(&sclp_cpi_event);
-	if (rc)
+	if (rc) {
+		printk(KERN_WARNING "cpi: could not register "
+			"to hardware console.\n");
 		goto out;
+	}
 	if (!(sclp_cpi_event.sclp_receive_mask & EVTYP_CTLPROGIDENT_MASK)) {
+		printk(KERN_WARNING "cpi: no control program "
+			"identification support\n");
 		rc = -EOPNOTSUPP;
 		goto out_unregister;
 	}
 
 	req = cpi_prepare_req();
 	if (IS_ERR(req)) {
+		printk(KERN_WARNING "cpi: could not allocate request\n");
 		rc = PTR_ERR(req);
 		goto out_unregister;
 	}
@@ -148,22 +148,24 @@ static int cpi_req(void)
 
 	/* Add request to sclp queue */
 	rc = sclp_add_request(req);
-	if (rc)
+	if (rc) {
+		printk(KERN_WARNING "cpi: could not start request\n");
 		goto out_free_req;
+	}
 
 	wait_for_completion(&completion);
 
 	if (req->status != SCLP_REQ_DONE) {
-		pr_warning("request failed (status=0x%02x)\n",
-			   req->status);
+		printk(KERN_WARNING "cpi: request failed (status=0x%02x)\n",
+			req->status);
 		rc = -EIO;
 		goto out_free_req;
 	}
 
 	response = ((struct cpi_sccb *) req->sccb)->header.response_code;
 	if (response != 0x0020) {
-		pr_warning("request failed with response code 0x%x\n",
-			   response);
+		printk(KERN_WARNING "cpi: failed with "
+			"response code 0x%x\n", response);
 		rc = -EIO;
 	}
 
@@ -221,12 +223,7 @@ static void set_string(char *attr, const char *value)
 static ssize_t system_name_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *page)
 {
-	int rc;
-
-	mutex_lock(&sclp_cpi_mutex);
-	rc = snprintf(page, PAGE_SIZE, "%s\n", system_name);
-	mutex_unlock(&sclp_cpi_mutex);
-	return rc;
+	return snprintf(page, PAGE_SIZE, "%s\n", system_name);
 }
 
 static ssize_t system_name_store(struct kobject *kobj,
@@ -240,9 +237,7 @@ static ssize_t system_name_store(struct kobject *kobj,
 	if (rc)
 		return rc;
 
-	mutex_lock(&sclp_cpi_mutex);
 	set_string(system_name, buf);
-	mutex_unlock(&sclp_cpi_mutex);
 
 	return len;
 }
@@ -253,12 +248,7 @@ static struct kobj_attribute system_name_attr =
 static ssize_t sysplex_name_show(struct kobject *kobj,
 				 struct kobj_attribute *attr, char *page)
 {
-	int rc;
-
-	mutex_lock(&sclp_cpi_mutex);
-	rc = snprintf(page, PAGE_SIZE, "%s\n", sysplex_name);
-	mutex_unlock(&sclp_cpi_mutex);
-	return rc;
+	return snprintf(page, PAGE_SIZE, "%s\n", sysplex_name);
 }
 
 static ssize_t sysplex_name_store(struct kobject *kobj,
@@ -272,9 +262,7 @@ static ssize_t sysplex_name_store(struct kobject *kobj,
 	if (rc)
 		return rc;
 
-	mutex_lock(&sclp_cpi_mutex);
 	set_string(sysplex_name, buf);
-	mutex_unlock(&sclp_cpi_mutex);
 
 	return len;
 }
@@ -285,12 +273,7 @@ static struct kobj_attribute sysplex_name_attr =
 static ssize_t system_type_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *page)
 {
-	int rc;
-
-	mutex_lock(&sclp_cpi_mutex);
-	rc = snprintf(page, PAGE_SIZE, "%s\n", system_type);
-	mutex_unlock(&sclp_cpi_mutex);
-	return rc;
+	return snprintf(page, PAGE_SIZE, "%s\n", system_type);
 }
 
 static ssize_t system_type_store(struct kobject *kobj,
@@ -304,9 +287,7 @@ static ssize_t system_type_store(struct kobject *kobj,
 	if (rc)
 		return rc;
 
-	mutex_lock(&sclp_cpi_mutex);
 	set_string(system_type, buf);
-	mutex_unlock(&sclp_cpi_mutex);
 
 	return len;
 }
@@ -317,11 +298,8 @@ static struct kobj_attribute system_type_attr =
 static ssize_t system_level_show(struct kobject *kobj,
 				 struct kobj_attribute *attr, char *page)
 {
-	unsigned long long level;
+	unsigned long long level = system_level;
 
-	mutex_lock(&sclp_cpi_mutex);
-	level = system_level;
-	mutex_unlock(&sclp_cpi_mutex);
 	return snprintf(page, PAGE_SIZE, "%#018llx\n", level);
 }
 
@@ -342,9 +320,8 @@ static ssize_t system_level_store(struct kobject *kobj,
 	if (*endp)
 		return -EINVAL;
 
-	mutex_lock(&sclp_cpi_mutex);
 	system_level = level;
-	mutex_unlock(&sclp_cpi_mutex);
+
 	return len;
 }
 
@@ -357,9 +334,7 @@ static ssize_t set_store(struct kobject *kobj,
 {
 	int rc;
 
-	mutex_lock(&sclp_cpi_mutex);
 	rc = cpi_req();
-	mutex_unlock(&sclp_cpi_mutex);
 	if (rc)
 		return rc;
 
@@ -398,16 +373,12 @@ int sclp_cpi_set_data(const char *system, const char *sysplex, const char *type,
 	if (rc)
 		return rc;
 
-	mutex_lock(&sclp_cpi_mutex);
 	set_string(system_name, system);
 	set_string(sysplex_name, sysplex);
 	set_string(system_type, type);
 	system_level = level;
 
-	rc = cpi_req();
-	mutex_unlock(&sclp_cpi_mutex);
-
-	return rc;
+	return cpi_req();
 }
 EXPORT_SYMBOL(sclp_cpi_set_data);
 

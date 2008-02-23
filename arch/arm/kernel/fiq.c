@@ -45,6 +45,7 @@
 #include <asm/fiq.h>
 #include <asm/irq.h>
 #include <asm/system.h>
+#include <asm/uaccess.h>
 
 static unsigned long no_fiq_insn;
 

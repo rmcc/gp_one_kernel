@@ -1,4 +1,6 @@
 /*
+ * $Id: interact.c,v 1.16 2002/01/22 20:28:25 vojtech Exp $
+ *
  *  Copyright (c) 2001 Vojtech Pavlik
  *
  *  Based on the work of:
@@ -317,7 +319,8 @@ static struct gameport_driver interact_drv = {
 
 static int __init interact_init(void)
 {
-	return gameport_register_driver(&interact_drv);
+	gameport_register_driver(&interact_drv);
+	return 0;
 }
 
 static void __exit interact_exit(void)

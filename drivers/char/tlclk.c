@@ -36,7 +36,6 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
-#include <linux/smp_lock.h>
 #include <linux/timer.h>
 #include <linux/sysfs.h>
 #include <linux/device.h>
@@ -205,14 +204,11 @@ static int tlclk_open(struct inode *inode, struct file *filp)
 {
 	int result;
 
-	lock_kernel();
-	if (test_and_set_bit(0, &useflags)) {
-		result = -EBUSY;
+	if (test_and_set_bit(0, &useflags))
+		return -EBUSY;
 		/* this legacy device is always one per system and it doesn't
 		 * know how to handle multiple concurrent clients.
 		 */
-		goto out;
-	}
 
 	/* Make sure there is no interrupt pending while
 	 * initialising interrupt handler */
@@ -222,14 +218,13 @@ static int tlclk_open(struct inode *inode, struct file *filp)
 	 * we can't share this IRQ */
 	result = request_irq(telclk_interrupt, &tlclk_interrupt,
 			     IRQF_DISABLED, "telco_clock", tlclk_interrupt);
-	if (result == -EBUSY)
+	if (result == -EBUSY) {
 		printk(KERN_ERR "tlclk: Interrupt can't be reserved.\n");
-	else
-		inb(TLCLK_REG6);	/* Clear interrupt events */
+		return -EBUSY;
+	}
+	inb(TLCLK_REG6);	/* Clear interrupt events */
 
-out:
-	unlock_kernel();
-	return result;
+	return 0;
 }
 
 static int tlclk_release(struct inode *inode, struct file *filp)

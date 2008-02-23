@@ -1026,7 +1026,7 @@ sl811h_endpoint_disable(struct usb_hcd *hcd, struct usb_host_endpoint *hep)
 	if (!list_empty(&hep->urb_list))
 		msleep(3);
 	if (!list_empty(&hep->urb_list))
-		WARNING("ep %p not empty?\n", ep);
+		WARN("ep %p not empty?\n", ep);
 
 	kfree(ep);
 	hep->hcpriv = NULL;
@@ -1620,25 +1620,21 @@ sl811h_probe(struct platform_device *dev)
 {
 	struct usb_hcd		*hcd;
 	struct sl811		*sl811;
-	struct resource		*addr, *data, *ires;
+	struct resource		*addr, *data;
 	int			irq;
 	void __iomem		*addr_reg;
 	void __iomem		*data_reg;
 	int			retval;
 	u8			tmp, ioaddr = 0;
-	unsigned long		irqflags;
 
 	/* basic sanity checks first.  board-specific init logic should
 	 * have initialized these three resources and probably board
 	 * specific platform_data.  we don't probe for IRQs, and do only
 	 * minimal sanity checking.
 	 */
-	ires = platform_get_resource(dev, IORESOURCE_IRQ, 0);
-	if (dev->num_resources < 3 || !ires)
+	irq = platform_get_irq(dev, 0);
+	if (dev->num_resources < 3 || irq < 0)
 		return -ENODEV;
-
-	irq = ires->start;
-	irqflags = ires->flags & IRQF_TRIGGER_MASK;
 
 	/* refuse to confuse usbcore */
 	if (dev->dev.dma_mask) {
@@ -1678,7 +1674,7 @@ sl811h_probe(struct platform_device *dev)
 	}
 
 	/* allocate and initialize hcd */
-	hcd = usb_create_hcd(&sl811h_hc_driver, &dev->dev, dev_name(&dev->dev));
+	hcd = usb_create_hcd(&sl811h_hc_driver, &dev->dev, dev->dev.bus_id);
 	if (!hcd) {
 		retval = -ENOMEM;
 		goto err5;
@@ -1721,11 +1717,8 @@ sl811h_probe(struct platform_device *dev)
 	 * triggers (e.g. most ARM CPUs).  Initial driver stress testing
 	 * was on a system with single edge triggering, so most sorts of
 	 * triggering arrangement should work.
-	 *
-	 * Use resource IRQ flags if set by platform device setup.
 	 */
-	irqflags |= IRQF_SHARED;
-	retval = usb_add_hcd(hcd, irq, IRQF_DISABLED | irqflags);
+	retval = usb_add_hcd(hcd, irq, IRQF_DISABLED | IRQF_SHARED);
 	if (retval != 0)
 		goto err6;
 

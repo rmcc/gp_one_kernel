@@ -13,7 +13,7 @@
  * Fixed SMP synchronization, 08/08/99, Manfred Spraul
  *     manfred@colorfullife.com
  * Rewrote bits to get rid of console_lock
- *	01Mar01 Andrew Morton
+ *	01Mar01 Andrew Morton <andrewm@uow.edu.au>
  */
 
 #include <linux/kernel.h>
@@ -38,7 +38,7 @@
 /*
  * Architectures can override it:
  */
-void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
+void __attribute__((weak)) early_printk(const char *fmt, ...)
 {
 }
 
@@ -75,8 +75,6 @@ EXPORT_SYMBOL(oops_in_progress);
 static DECLARE_MUTEX(console_sem);
 static DECLARE_MUTEX(secondary_console_sem);
 struct console *console_drivers;
-EXPORT_SYMBOL_GPL(console_drivers);
-
 /*
  * This is used for debugging the mess that is the VT code by
  * keeping track if we have the console semaphore held. It's
@@ -123,8 +121,6 @@ struct console_cmdline
 static struct console_cmdline console_cmdline[MAX_CMDLINECONSOLES];
 static int selected_console = -1;
 static int preferred_console = -1;
-int console_set_on_cmdline;
-EXPORT_SYMBOL(console_set_on_cmdline);
 
 /* Flag: console code may call schedule() */
 static int console_may_schedule;
@@ -231,6 +227,58 @@ static inline void boot_delay_msec(void)
 {
 }
 #endif
+
+/*
+ * Return the number of unread characters in the log buffer.
+ */
+int log_buf_get_len(void)
+{
+	return logged_chars;
+}
+
+/*
+ * Copy a range of characters from the log buffer.
+ */
+int log_buf_copy(char *dest, int idx, int len)
+{
+	int ret, max;
+	bool took_lock = false;
+
+	if (!oops_in_progress) {
+		spin_lock_irq(&logbuf_lock);
+		took_lock = true;
+	}
+
+	max = log_buf_get_len();
+	if (idx < 0 || idx >= max) {
+		ret = -1;
+	} else {
+		if (len > max)
+			len = max;
+		ret = len;
+		idx += (log_end - max);
+		while (len-- > 0)
+			dest[len] = LOG_BUF(idx + len);
+	}
+
+	if (took_lock)
+		spin_unlock_irq(&logbuf_lock);
+
+	return ret;
+}
+
+/*
+ * Extract a single character from the log buffer.
+ */
+int log_buf_read(int idx)
+{
+	char ret;
+
+	if (log_buf_copy(&ret, idx, 1) == 1)
+		return ret;
+	else
+		return -1;
+}
 
 /*
  * Commands to do_syslog:
@@ -538,6 +586,9 @@ static int have_callable_console(void)
  * @fmt: format string
  *
  * This is printk().  It can be called from any context.  We want it to work.
+ * Be aware of the fact that if oops_in_progress is not set, we might try to
+ * wake klogd up which could deadlock on runqueue lock if printk() is called
+ * from scheduler code.
  *
  * We try to grab the console_sem.  If we succeed, it's easy - we log the output and
  * call the console drivers.  If we fail to get the semaphore we place the output
@@ -551,8 +602,6 @@ static int have_callable_console(void)
  *
  * See also:
  * printf(3)
- *
- * See the vsnprintf() documentation for format string extensions over C99.
  */
 
 asmlinkage int printk(const char *fmt, ...)
@@ -616,17 +665,18 @@ static int acquire_console_semaphore_for_printk(unsigned int cpu)
 	spin_unlock(&logbuf_lock);
 	return retval;
 }
-static const char recursion_bug_msg [] =
-		KERN_CRIT "BUG: recent printk recursion!\n";
-static int recursion_bug;
-static int new_text_line = 1;
-static char printk_buf[1024];
+
+const char printk_recursion_bug_msg [] =
+			KERN_CRIT "BUG: recent printk recursion!\n";
+static int printk_recursion_bug;
 
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
-	int printed_len = 0;
-	int current_log_level = default_message_loglevel;
+	static int log_level_unknown = 1;
+	static char printk_buf[1024];
+
 	unsigned long flags;
+	int printed_len = 0;
 	int this_cpu;
 	char *p;
 
@@ -649,7 +699,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 		 * it can be printed at the next appropriate moment:
 		 */
 		if (!oops_in_progress) {
-			recursion_bug = 1;
+			printk_recursion_bug = 1;
 			goto out_restore_irqs;
 		}
 		zap_locks();
@@ -659,62 +709,70 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	spin_lock(&logbuf_lock);
 	printk_cpu = this_cpu;
 
-	if (recursion_bug) {
-		recursion_bug = 0;
-		strcpy(printk_buf, recursion_bug_msg);
-		printed_len = strlen(recursion_bug_msg);
+	if (printk_recursion_bug) {
+		printk_recursion_bug = 0;
+		strcpy(printk_buf, printk_recursion_bug_msg);
+		printed_len = sizeof(printk_recursion_bug_msg);
 	}
 	/* Emit the output into the temporary buffer */
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
-
 
 	/*
 	 * Copy the output into log_buf.  If the caller didn't provide
 	 * appropriate log level tags, we insert them here
 	 */
 	for (p = printk_buf; *p; p++) {
-		if (new_text_line) {
-			/* If a token, set current_log_level and skip over */
-			if (p[0] == '<' && p[1] >= '0' && p[1] <= '7' &&
-			    p[2] == '>') {
-				current_log_level = p[1] - '0';
-				p += 3;
-				printed_len -= 3;
-			}
-
-			/* Always output the token */
-			emit_log_char('<');
-			emit_log_char(current_log_level + '0');
-			emit_log_char('>');
-			printed_len += 3;
-			new_text_line = 0;
-
+		if (log_level_unknown) {
+                        /* log_level_unknown signals the start of a new line */
 			if (printk_time) {
-				/* Follow the token with the time */
+				int loglev_char;
 				char tbuf[50], *tp;
 				unsigned tlen;
 				unsigned long long t;
 				unsigned long nanosec_rem;
 
+				/*
+				 * force the log level token to be
+				 * before the time output.
+				 */
+				if (p[0] == '<' && p[1] >='0' &&
+				   p[1] <= '7' && p[2] == '>') {
+					loglev_char = p[1];
+					p += 3;
+					printed_len -= 3;
+				} else {
+					loglev_char = default_message_loglevel
+						+ '0';
+				}
 				t = cpu_clock(printk_cpu);
 				nanosec_rem = do_div(t, 1000000000);
-				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
-						(unsigned long) t,
-						nanosec_rem / 1000);
+				tlen = sprintf(tbuf,
+						"<%c>[%5lu.%06lu] ",
+						loglev_char,
+						(unsigned long)t,
+						nanosec_rem/1000);
 
 				for (tp = tbuf; tp < tbuf + tlen; tp++)
 					emit_log_char(*tp);
 				printed_len += tlen;
+			} else {
+				if (p[0] != '<' || p[1] < '0' ||
+				   p[1] > '7' || p[2] != '>') {
+					emit_log_char('<');
+					emit_log_char(default_message_loglevel
+						+ '0');
+					emit_log_char('>');
+					printed_len += 3;
+				}
 			}
-
+			log_level_unknown = 0;
 			if (!*p)
 				break;
 		}
-
 		emit_log_char(*p);
 		if (*p == '\n')
-			new_text_line = 1;
+			log_level_unknown = 1;
 	}
 
 	/*
@@ -832,7 +890,6 @@ static int __init console_setup(char *str)
 	*s = 0;
 
 	__add_preferred_console(buf, idx, options, brl_options);
-	console_set_on_cmdline = 1;
 	return 1;
 }
 __setup("console=", console_setup);
@@ -893,7 +950,7 @@ void suspend_console(void)
 {
 	if (!console_suspend_enabled)
 		return;
-	printk("Suspending console(s) (use no_console_suspend to debug)\n");
+	printk("Suspending console(s)\n");
 	acquire_console_sem();
 	console_suspended = 1;
 }
@@ -942,25 +999,10 @@ int is_console_locked(void)
 	return console_locked;
 }
 
-static DEFINE_PER_CPU(int, printk_pending);
-
-void printk_tick(void)
-{
-	if (__get_cpu_var(printk_pending)) {
-		__get_cpu_var(printk_pending) = 0;
-		wake_up_interruptible(&log_wait);
-	}
-}
-
-int printk_needs_cpu(int cpu)
-{
-	return per_cpu(printk_pending, cpu);
-}
-
 void wake_up_klogd(void)
 {
-	if (waitqueue_active(&log_wait))
-		__raw_get_cpu_var(printk_pending) = 1;
+	if (!oops_in_progress && waitqueue_active(&log_wait))
+		wake_up_interruptible(&log_wait);
 }
 
 /**
@@ -999,9 +1041,7 @@ void release_console_sem(void)
 		_log_end = log_end;
 		con_start = log_end;		/* Flush */
 		spin_unlock(&logbuf_lock);
-		stop_critical_timings();	/* don't trace print latency */
 		call_console_drivers(_con_start, _log_end);
-		start_critical_timings();
 		local_irq_restore(flags);
 	}
 	console_locked = 0;
@@ -1132,11 +1172,8 @@ void register_console(struct console *console)
 			console->index = 0;
 		if (console->setup == NULL ||
 		    console->setup(console, NULL) == 0) {
-			console->flags |= CON_ENABLED;
-			if (console->device) {
-				console->flags |= CON_CONSDEV;
-				preferred_console = 0;
-			}
+			console->flags |= CON_ENABLED | CON_CONSDEV;
+			preferred_console = 0;
 		}
 	}
 
@@ -1266,19 +1303,46 @@ static int __init disable_boot_consoles(void)
 }
 late_initcall(disable_boot_consoles);
 
-#if defined CONFIG_PRINTK
+/**
+ * tty_write_message - write a message to a certain tty, not just the console.
+ * @tty: the destination tty_struct
+ * @msg: the message to write
+ *
+ * This is used for messages that need to be redirected to a specific tty.
+ * We don't put it into the syslog queue right now maybe in the future if
+ * really needed.
+ */
+void tty_write_message(struct tty_struct *tty, char *msg)
+{
+	if (tty && tty->ops->write)
+		tty->ops->write(tty, msg, strlen(msg));
+	return;
+}
 
+#if defined CONFIG_PRINTK
 /*
  * printk rate limiting, lifted from the networking subsystem.
  *
- * This enforces a rate limit: not more than 10 kernel messages
- * every 5s to make a denial-of-service attack impossible.
+ * This enforces a rate limit: not more than one kernel message
+ * every printk_ratelimit_jiffies to make a denial-of-service
+ * attack impossible.
  */
-DEFINE_RATELIMIT_STATE(printk_ratelimit_state, 5 * HZ, 10);
+int __printk_ratelimit(int ratelimit_jiffies, int ratelimit_burst)
+{
+	return __ratelimit(ratelimit_jiffies, ratelimit_burst);
+}
+EXPORT_SYMBOL(__printk_ratelimit);
+
+/* minimum time in jiffies between messages */
+int printk_ratelimit_jiffies = 5 * HZ;
+
+/* number of messages we send before ratelimiting */
+int printk_ratelimit_burst = 10;
 
 int printk_ratelimit(void)
 {
-	return __ratelimit(&printk_ratelimit_state);
+	return __printk_ratelimit(printk_ratelimit_jiffies,
+				printk_ratelimit_burst);
 }
 EXPORT_SYMBOL(printk_ratelimit);
 

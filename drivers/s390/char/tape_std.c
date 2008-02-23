@@ -47,7 +47,7 @@ tape_std_assign_timeout(unsigned long data)
 	rc = tape_cancel_io(device, request);
 	if(rc)
 		PRINT_ERR("(%s): Assign timeout: Cancel failed with rc = %i\n",
-			dev_name(&device->cdev->dev), rc);
+			device->cdev->dev.bus_id, rc);
 
 }
 
@@ -83,7 +83,7 @@ tape_std_assign(struct tape_device *device)
 
 	if (rc != 0) {
 		PRINT_WARN("%s: assign failed - device might be busy\n",
-			dev_name(&device->cdev->dev));
+			device->cdev->dev.bus_id);
 		DBF_EVENT(3, "%08x: assign failed - device might be busy\n",
 			device->cdev_id);
 	} else {
@@ -106,7 +106,7 @@ tape_std_unassign (struct tape_device *device)
 		DBF_EVENT(3, "(%08x): Can't unassign device\n",
 			device->cdev_id);
 		PRINT_WARN("(%s): Can't unassign device - device gone\n",
-			dev_name(&device->cdev->dev));
+			device->cdev->dev.bus_id);
 		return -EIO;
 	}
 
@@ -120,8 +120,7 @@ tape_std_unassign (struct tape_device *device)
 
 	if ((rc = tape_do_io(device, request)) != 0) {
 		DBF_EVENT(3, "%08x: Unassign failed\n", device->cdev_id);
-		PRINT_WARN("%s: Unassign failed\n",
-			   dev_name(&device->cdev->dev));
+		PRINT_WARN("%s: Unassign failed\n", device->cdev->dev.bus_id);
 	} else {
 		DBF_EVENT(3, "%08x: Tape unassigned\n", device->cdev_id);
 	}
@@ -249,7 +248,7 @@ tape_std_mtsetblk(struct tape_device *device, int count)
 
 	/* Allocate a new idal buffer. */
 	new = idal_buffer_alloc(count, 0);
-	if (IS_ERR(new))
+	if (new == NULL)
 		return -ENOMEM;
 	if (device->char_data.idal_buf != NULL)
 		idal_buffer_free(device->char_data.idal_buf);
@@ -635,10 +634,10 @@ tape_std_mtcompression(struct tape_device *device, int mt_count)
 		DBF_EXCEPTION(6, "xcom parm\n");
 		if (*device->modeset_byte & 0x08)
 			PRINT_INFO("(%s) Compression is currently on\n",
-				   dev_name(&device->cdev->dev));
+				   device->cdev->dev.bus_id);
 		else
 			PRINT_INFO("(%s) Compression is currently off\n",
-				   dev_name(&device->cdev->dev));
+				   device->cdev->dev.bus_id);
 		PRINT_INFO("Use 1 to switch compression on, 0 to "
 			   "switch it off\n");
 		return -EINVAL;

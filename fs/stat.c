@@ -57,13 +57,13 @@ EXPORT_SYMBOL(vfs_getattr);
 
 int vfs_stat_fd(int dfd, char __user *name, struct kstat *stat)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
-	error = user_path_at(dfd, name, LOOKUP_FOLLOW, &path);
+	error = __user_walk_fd(dfd, name, LOOKUP_FOLLOW, &nd);
 	if (!error) {
-		error = vfs_getattr(path.mnt, path.dentry, stat);
-		path_put(&path);
+		error = vfs_getattr(nd.path.mnt, nd.path.dentry, stat);
+		path_put(&nd.path);
 	}
 	return error;
 }
@@ -77,13 +77,13 @@ EXPORT_SYMBOL(vfs_stat);
 
 int vfs_lstat_fd(int dfd, char __user *name, struct kstat *stat)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
-	error = user_path_at(dfd, name, 0, &path);
+	error = __user_walk_fd(dfd, name, 0, &nd);
 	if (!error) {
-		error = vfs_getattr(path.mnt, path.dentry, stat);
-		path_put(&path);
+		error = vfs_getattr(nd.path.mnt, nd.path.dentry, stat);
+		path_put(&nd.path);
 	}
 	return error;
 }
@@ -291,29 +291,29 @@ asmlinkage long sys_newfstat(unsigned int fd, struct stat __user *statbuf)
 	return error;
 }
 
-asmlinkage long sys_readlinkat(int dfd, const char __user *pathname,
+asmlinkage long sys_readlinkat(int dfd, const char __user *path,
 				char __user *buf, int bufsiz)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
 	if (bufsiz <= 0)
 		return -EINVAL;
 
-	error = user_path_at(dfd, pathname, 0, &path);
+	error = __user_walk_fd(dfd, path, 0, &nd);
 	if (!error) {
-		struct inode *inode = path.dentry->d_inode;
+		struct inode *inode = nd.path.dentry->d_inode;
 
 		error = -EINVAL;
-		if (inode->i_op->readlink) {
-			error = security_inode_readlink(path.dentry);
+		if (inode->i_op && inode->i_op->readlink) {
+			error = security_inode_readlink(nd.path.dentry);
 			if (!error) {
-				touch_atime(path.mnt, path.dentry);
-				error = inode->i_op->readlink(path.dentry,
+				touch_atime(nd.path.mnt, nd.path.dentry);
+				error = inode->i_op->readlink(nd.path.dentry,
 							      buf, bufsiz);
 			}
 		}
-		path_put(&path);
+		path_put(&nd.path);
 	}
 	return error;
 }

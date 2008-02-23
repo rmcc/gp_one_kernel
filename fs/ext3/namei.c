@@ -74,6 +74,10 @@ static struct buffer_head *ext3_append(handle_t *handle,
 #define assert(test) J_ASSERT(test)
 #endif
 
+#ifndef swap
+#define swap(x, y) do { typeof(x) z = x; x = y; y = z; } while (0)
+#endif
+
 #ifdef DX_DEBUG
 #define dxtrace(command) command
 #else
@@ -155,7 +159,7 @@ static void dx_set_count (struct dx_entry *entries, unsigned value);
 static void dx_set_limit (struct dx_entry *entries, unsigned value);
 static unsigned dx_root_limit (struct inode *dir, unsigned infosize);
 static unsigned dx_node_limit (struct inode *dir);
-static struct dx_frame *dx_probe(struct qstr *entry,
+static struct dx_frame *dx_probe(struct dentry *dentry,
 				 struct inode *dir,
 				 struct dx_hash_info *hinfo,
 				 struct dx_frame *frame,
@@ -172,9 +176,8 @@ static int ext3_htree_next_block(struct inode *dir, __u32 hash,
 				 struct dx_frame *frame,
 				 struct dx_frame *frames,
 				 __u32 *start_hash);
-static struct buffer_head * ext3_dx_find_entry(struct inode *dir,
-			struct qstr *entry, struct ext3_dir_entry_2 **res_dir,
-			int *err);
+static struct buffer_head * ext3_dx_find_entry(struct dentry *dentry,
+		       struct ext3_dir_entry_2 **res_dir, int *err);
 static int ext3_dx_add_entry(handle_t *handle, struct dentry *dentry,
 			     struct inode *inode);
 
@@ -237,13 +240,13 @@ static inline unsigned dx_root_limit (struct inode *dir, unsigned infosize)
 {
 	unsigned entry_space = dir->i_sb->s_blocksize - EXT3_DIR_REC_LEN(1) -
 		EXT3_DIR_REC_LEN(2) - infosize;
-	return entry_space / sizeof(struct dx_entry);
+	return 0? 20: entry_space / sizeof(struct dx_entry);
 }
 
 static inline unsigned dx_node_limit (struct inode *dir)
 {
 	unsigned entry_space = dir->i_sb->s_blocksize - EXT3_DIR_REC_LEN(0);
-	return entry_space / sizeof(struct dx_entry);
+	return 0? 22: entry_space / sizeof(struct dx_entry);
 }
 
 /*
@@ -339,7 +342,7 @@ struct stats dx_show_entries(struct dx_hash_info *hinfo, struct inode *dir,
  * back to userspace.
  */
 static struct dx_frame *
-dx_probe(struct qstr *entry, struct inode *dir,
+dx_probe(struct dentry *dentry, struct inode *dir,
 	 struct dx_hash_info *hinfo, struct dx_frame *frame_in, int *err)
 {
 	unsigned count, indirect;
@@ -350,6 +353,8 @@ dx_probe(struct qstr *entry, struct inode *dir,
 	u32 hash;
 
 	frame->bh = NULL;
+	if (dentry)
+		dir = dentry->d_parent->d_inode;
 	if (!(bh = ext3_bread (NULL,dir, 0, 0, err)))
 		goto fail;
 	root = (struct dx_root *) bh->b_data;
@@ -364,11 +369,9 @@ dx_probe(struct qstr *entry, struct inode *dir,
 		goto fail;
 	}
 	hinfo->hash_version = root->info.hash_version;
-	if (hinfo->hash_version <= DX_HASH_TEA)
-		hinfo->hash_version += EXT3_SB(dir->i_sb)->s_hash_unsigned;
 	hinfo->seed = EXT3_SB(dir->i_sb)->s_hash_seed;
-	if (entry)
-		ext3fs_dirhash(entry->name, entry->len, hinfo);
+	if (dentry)
+		ext3fs_dirhash(dentry->d_name.name, dentry->d_name.len, hinfo);
 	hash = hinfo->hash;
 
 	if (root->info.unused_flags & 1) {
@@ -634,9 +637,6 @@ int ext3_htree_fill_tree(struct file *dir_file, __u32 start_hash,
 	dir = dir_file->f_path.dentry->d_inode;
 	if (!(EXT3_I(dir)->i_flags & EXT3_INDEX_FL)) {
 		hinfo.hash_version = EXT3_SB(dir->i_sb)->s_def_hash_version;
-		if (hinfo.hash_version <= DX_HASH_TEA)
-			hinfo.hash_version +=
-				EXT3_SB(dir->i_sb)->s_hash_unsigned;
 		hinfo.seed = EXT3_SB(dir->i_sb)->s_hash_seed;
 		count = htree_dirblock_to_tree(dir_file, dir, 0, &hinfo,
 					       start_hash, start_minor_hash);
@@ -803,15 +803,15 @@ static inline int ext3_match (int len, const char * const name,
  */
 static inline int search_dirblock(struct buffer_head * bh,
 				  struct inode *dir,
-				  struct qstr *child,
+				  struct dentry *dentry,
 				  unsigned long offset,
 				  struct ext3_dir_entry_2 ** res_dir)
 {
 	struct ext3_dir_entry_2 * de;
 	char * dlimit;
 	int de_len;
-	const char *name = child->name;
-	int namelen = child->len;
+	const char *name = dentry->d_name.name;
+	int namelen = dentry->d_name.len;
 
 	de = (struct ext3_dir_entry_2 *) bh->b_data;
 	dlimit = bh->b_data + dir->i_sb->s_blocksize;
@@ -850,9 +850,8 @@ static inline int search_dirblock(struct buffer_head * bh,
  * The returned buffer_head has ->b_count elevated.  The caller is expected
  * to brelse() it when appropriate.
  */
-static struct buffer_head *ext3_find_entry(struct inode *dir,
-					struct qstr *entry,
-					struct ext3_dir_entry_2 **res_dir)
+static struct buffer_head * ext3_find_entry (struct dentry *dentry,
+					struct ext3_dir_entry_2 ** res_dir)
 {
 	struct super_block * sb;
 	struct buffer_head * bh_use[NAMEI_RA_SIZE];
@@ -864,15 +863,16 @@ static struct buffer_head *ext3_find_entry(struct inode *dir,
 				   buffer */
 	int num = 0;
 	int nblocks, i, err;
+	struct inode *dir = dentry->d_parent->d_inode;
 	int namelen;
 
 	*res_dir = NULL;
 	sb = dir->i_sb;
-	namelen = entry->len;
+	namelen = dentry->d_name.len;
 	if (namelen > EXT3_NAME_LEN)
 		return NULL;
 	if (is_dx(dir)) {
-		bh = ext3_dx_find_entry(dir, entry, res_dir, &err);
+		bh = ext3_dx_find_entry(dentry, res_dir, &err);
 		/*
 		 * On success, or if the error was file not found,
 		 * return.  Otherwise, fall back to doing a search the
@@ -923,7 +923,7 @@ restart:
 			brelse(bh);
 			goto next;
 		}
-		i = search_dirblock(bh, dir, entry,
+		i = search_dirblock(bh, dir, dentry,
 			    block << EXT3_BLOCK_SIZE_BITS(sb), res_dir);
 		if (i == 1) {
 			EXT3_I(dir)->i_dir_start_lookup = block;
@@ -957,9 +957,8 @@ cleanup_and_exit:
 	return ret;
 }
 
-static struct buffer_head * ext3_dx_find_entry(struct inode *dir,
-			struct qstr *entry, struct ext3_dir_entry_2 **res_dir,
-			int *err)
+static struct buffer_head * ext3_dx_find_entry(struct dentry *dentry,
+		       struct ext3_dir_entry_2 **res_dir, int *err)
 {
 	struct super_block * sb;
 	struct dx_hash_info	hinfo;
@@ -969,13 +968,14 @@ static struct buffer_head * ext3_dx_find_entry(struct inode *dir,
 	struct buffer_head *bh;
 	unsigned long block;
 	int retval;
-	int namelen = entry->len;
-	const u8 *name = entry->name;
+	int namelen = dentry->d_name.len;
+	const u8 *name = dentry->d_name.name;
+	struct inode *dir = dentry->d_parent->d_inode;
 
 	sb = dir->i_sb;
 	/* NFS may look up ".." - look at dx_root directory block */
-	if (namelen > 2 || name[0] != '.'|| (namelen == 2 && name[1] != '.')) {
-		if (!(frame = dx_probe(entry, dir, &hinfo, frames, err)))
+	if (namelen > 2 || name[0] != '.'||(name[1] != '.' && name[1] != '\0')){
+		if (!(frame = dx_probe(dentry, NULL, &hinfo, frames, err)))
 			return NULL;
 	} else {
 		frame = frames;
@@ -991,21 +991,19 @@ static struct buffer_head * ext3_dx_find_entry(struct inode *dir,
 		de = (struct ext3_dir_entry_2 *) bh->b_data;
 		top = (struct ext3_dir_entry_2 *) ((char *) de + sb->s_blocksize -
 				       EXT3_DIR_REC_LEN(0));
-		for (; de < top; de = ext3_next_entry(de)) {
-			int off = (block << EXT3_BLOCK_SIZE_BITS(sb))
-				  + ((char *) de - bh->b_data);
-
-			if (!ext3_check_dir_entry(__func__, dir, de, bh, off)) {
-				brelse(bh);
+		for (; de < top; de = ext3_next_entry(de))
+		if (ext3_match (namelen, name, de)) {
+			if (!ext3_check_dir_entry("ext3_find_entry",
+						  dir, de, bh,
+				  (block<<EXT3_BLOCK_SIZE_BITS(sb))
+					  +((char *)de - bh->b_data))) {
+				brelse (bh);
 				*err = ERR_BAD_DX_DIR;
 				goto errout;
 			}
-
-			if (ext3_match(namelen, name, de)) {
-				*res_dir = de;
-				dx_release(frames);
-				return bh;
-			}
+			*res_dir = de;
+			dx_release (frames);
+			return bh;
 		}
 		brelse (bh);
 		/* Check to see if we should continue to search */
@@ -1036,7 +1034,7 @@ static struct dentry *ext3_lookup(struct inode * dir, struct dentry *dentry, str
 	if (dentry->d_name.len > EXT3_NAME_LEN)
 		return ERR_PTR(-ENAMETOOLONG);
 
-	bh = ext3_find_entry(dir, &dentry->d_name, &de);
+	bh = ext3_find_entry(dentry, &de);
 	inode = NULL;
 	if (bh) {
 		unsigned long ino = le32_to_cpu(de->inode);
@@ -1057,11 +1055,18 @@ static struct dentry *ext3_lookup(struct inode * dir, struct dentry *dentry, str
 struct dentry *ext3_get_parent(struct dentry *child)
 {
 	unsigned long ino;
-	struct qstr dotdot = {.name = "..", .len = 2};
+	struct dentry *parent;
+	struct inode *inode;
+	struct dentry dotdot;
 	struct ext3_dir_entry_2 * de;
 	struct buffer_head *bh;
 
-	bh = ext3_find_entry(child->d_inode, &dotdot, &de);
+	dotdot.d_name.name = "..";
+	dotdot.d_name.len = 2;
+	dotdot.d_parent = child; /* confusing, isn't it! */
+
+	bh = ext3_find_entry(&dotdot, &de);
+	inode = NULL;
 	if (!bh)
 		return ERR_PTR(-ENOENT);
 	ino = le32_to_cpu(de->inode);
@@ -1073,7 +1078,16 @@ struct dentry *ext3_get_parent(struct dentry *child)
 		return ERR_PTR(-EIO);
 	}
 
-	return d_obtain_alias(ext3_iget(child->d_inode->i_sb, ino));
+	inode = ext3_iget(child->d_inode->i_sb, ino);
+	if (IS_ERR(inode))
+		return ERR_CAST(inode);
+
+	parent = d_alloc_anon(inode);
+	if (!parent) {
+		iput(inode);
+		parent = ERR_PTR(-ENOMEM);
+	}
+	return parent;
 }
 
 #define S_SHIFT 12
@@ -1157,9 +1171,9 @@ static struct ext3_dir_entry_2 *do_split(handle_t *handle, struct inode *dir,
 	u32 hash2;
 	struct dx_map_entry *map;
 	char *data1 = (*bh)->b_data, *data2;
-	unsigned split, move, size;
+	unsigned split, move, size, i;
 	struct ext3_dir_entry_2 *de = NULL, *de2;
-	int	err = 0, i;
+	int	err = 0;
 
 	bh2 = ext3_append (handle, dir, &newblock, &err);
 	if (!(bh2)) {
@@ -1399,8 +1413,6 @@ static int make_indexed_dir(handle_t *handle, struct dentry *dentry,
 
 	/* Initialize as for dx_probe */
 	hinfo.hash_version = root->info.hash_version;
-	if (hinfo.hash_version <= DX_HASH_TEA)
-		hinfo.hash_version += EXT3_SB(dir->i_sb)->s_hash_unsigned;
 	hinfo.seed = EXT3_SB(dir->i_sb)->s_hash_seed;
 	ext3fs_dirhash(name, namelen, &hinfo);
 	frame = frames;
@@ -1489,7 +1501,7 @@ static int ext3_dx_add_entry(handle_t *handle, struct dentry *dentry,
 	struct ext3_dir_entry_2 *de;
 	int err;
 
-	frame = dx_probe(&dentry->d_name, dir, &hinfo, frames, &err);
+	frame = dx_probe(dentry, NULL, &hinfo, frames, &err);
 	if (!frame)
 		return err;
 	entries = frame->entries;
@@ -1655,11 +1667,9 @@ static int ext3_add_nondir(handle_t *handle,
 	if (!err) {
 		ext3_mark_inode_dirty(handle, inode);
 		d_instantiate(dentry, inode);
-		unlock_new_inode(inode);
 		return 0;
 	}
 	drop_nlink(inode);
-	unlock_new_inode(inode);
 	iput(inode);
 	return err;
 }
@@ -1770,7 +1780,6 @@ retry:
 	dir_block = ext3_bread (handle, inode, 0, 1, &err);
 	if (!dir_block) {
 		drop_nlink(inode); /* is this nlink == 0? */
-		unlock_new_inode(inode);
 		ext3_mark_inode_dirty(handle, inode);
 		iput (inode);
 		goto out_stop;
@@ -1798,7 +1807,6 @@ retry:
 	err = ext3_add_entry (handle, dentry, inode);
 	if (err) {
 		inode->i_nlink = 0;
-		unlock_new_inode(inode);
 		ext3_mark_inode_dirty(handle, inode);
 		iput (inode);
 		goto out_stop;
@@ -1807,7 +1815,6 @@ retry:
 	ext3_update_dx_flag(dir);
 	ext3_mark_inode_dirty(handle, dir);
 	d_instantiate(dentry, inode);
-	unlock_new_inode(inode);
 out_stop:
 	ext3_journal_stop(handle);
 	if (err == -ENOSPC && ext3_should_retry_alloc(dir->i_sb, &retries))
@@ -2047,7 +2054,7 @@ static int ext3_rmdir (struct inode * dir, struct dentry *dentry)
 		return PTR_ERR(handle);
 
 	retval = -ENOENT;
-	bh = ext3_find_entry(dir, &dentry->d_name, &de);
+	bh = ext3_find_entry (dentry, &de);
 	if (!bh)
 		goto end_rmdir;
 
@@ -2109,7 +2116,7 @@ static int ext3_unlink(struct inode * dir, struct dentry *dentry)
 		handle->h_sync = 1;
 
 	retval = -ENOENT;
-	bh = ext3_find_entry(dir, &dentry->d_name, &de);
+	bh = ext3_find_entry (dentry, &de);
 	if (!bh)
 		goto end_unlink;
 
@@ -2178,10 +2185,10 @@ retry:
 		 * We have a transaction open.  All is sweetness.  It also sets
 		 * i_size in generic_commit_write().
 		 */
-		err = __page_symlink(inode, symname, l, 1);
+		err = __page_symlink(inode, symname, l,
+				mapping_gfp_mask(inode->i_mapping) & ~__GFP_FS);
 		if (err) {
 			drop_nlink(inode);
-			unlock_new_inode(inode);
 			ext3_mark_inode_dirty(handle, inode);
 			iput (inode);
 			goto out_stop;
@@ -2229,14 +2236,7 @@ retry:
 	inc_nlink(inode);
 	atomic_inc(&inode->i_count);
 
-	err = ext3_add_entry(handle, dentry, inode);
-	if (!err) {
-		ext3_mark_inode_dirty(handle, inode);
-		d_instantiate(dentry, inode);
-	} else {
-		drop_nlink(inode);
-		iput(inode);
-	}
+	err = ext3_add_nondir(handle, dentry, inode);
 	ext3_journal_stop(handle);
 	if (err == -ENOSPC && ext3_should_retry_alloc(dir->i_sb, &retries))
 		goto retry;
@@ -2274,7 +2274,7 @@ static int ext3_rename (struct inode * old_dir, struct dentry *old_dentry,
 	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir))
 		handle->h_sync = 1;
 
-	old_bh = ext3_find_entry(old_dir, &old_dentry->d_name, &old_de);
+	old_bh = ext3_find_entry (old_dentry, &old_de);
 	/*
 	 *  Check for inode number is _not_ due to possible IO errors.
 	 *  We might rmdir the source, keep it as pwd of some process
@@ -2287,7 +2287,7 @@ static int ext3_rename (struct inode * old_dir, struct dentry *old_dentry,
 		goto end_rename;
 
 	new_inode = new_dentry->d_inode;
-	new_bh = ext3_find_entry(new_dir, &new_dentry->d_name, &new_de);
+	new_bh = ext3_find_entry (new_dentry, &new_de);
 	if (new_bh) {
 		if (!new_inode) {
 			brelse (new_bh);
@@ -2353,8 +2353,7 @@ static int ext3_rename (struct inode * old_dir, struct dentry *old_dentry,
 		struct buffer_head *old_bh2;
 		struct ext3_dir_entry_2 *old_de2;
 
-		old_bh2 = ext3_find_entry(old_dir, &old_dentry->d_name,
-					  &old_de2);
+		old_bh2 = ext3_find_entry(old_dentry, &old_de2);
 		if (old_bh2) {
 			retval = ext3_delete_entry(handle, old_dir,
 						   old_de2, old_bh2);

@@ -371,8 +371,9 @@ static int ircomm_tty_open(struct tty_struct *tty, struct file *filp)
 	IRDA_DEBUG(2, "%s()\n", __func__ );
 
 	line = tty->index;
-	if (line >= IRCOMM_TTY_PORTS)
+	if ((line < 0) || (line >= IRCOMM_TTY_PORTS)) {
 		return -ENODEV;
+	}
 
 	/* Check if instance already exists */
 	self = hashbin_lock_find(ircomm_tty, line, NULL);
@@ -404,8 +405,6 @@ static int ircomm_tty_open(struct tty_struct *tty, struct file *filp)
 		 * Force TTY into raw mode by default which is usually what
 		 * we want for IrCOMM and IrLPT. This way applications will
 		 * not have to twiddle with printcap etc.
-		 *
-		 * Note this is completely usafe and doesn't work properly
 		 */
 		tty->termios->c_iflag = 0;
 		tty->termios->c_oflag = 0;
@@ -651,7 +650,12 @@ static void ircomm_tty_do_softint(struct work_struct *work)
 	}
 
 	/* Check if user (still) wants to be waken up */
-	tty_wakeup(tty);
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+	    tty->ldisc.write_wakeup)
+	{
+		(tty->ldisc.write_wakeup)(tty);
+	}
+	wake_up_interruptible(&tty->write_wait);
 }
 
 /*
@@ -1137,7 +1141,6 @@ static int ircomm_tty_data_indication(void *instance, void *sap,
 				      struct sk_buff *skb)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
-	struct tty_ldisc *ld;
 
 	IRDA_DEBUG(2, "%s()\n", __func__ );
 
@@ -1170,11 +1173,7 @@ static int ircomm_tty_data_indication(void *instance, void *sap,
 	 * involve the flip buffers, since we are not running in an interrupt
 	 * handler
 	 */
-
-	ld = tty_ldisc_ref(self->tty);
-	if (ld)
-		ld->ops->receive_buf(self->tty, skb->data, NULL, skb->len);
-	tty_ldisc_deref(ld);
+	self->tty->ldisc.receive_buf(self->tty, skb->data, NULL, skb->len);
 
 	/* No need to kfree_skb - see ircomm_ttp_data_indication() */
 

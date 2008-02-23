@@ -3,7 +3,7 @@
  *          controller out there can be most efficiently programmed
  *          if you make it look like a LANCE.
  *
- * Copyright (C) 1996, 1999, 2003, 2006, 2008 David S. Miller (davem@davemloft.net)
+ * Copyright (C) 1996, 1999, 2003, 2006 David S. Miller (davem@davemloft.net)
  */
 
 #include <linux/module.h>
@@ -24,15 +24,13 @@
 #include <linux/skbuff.h>
 #include <linux/ethtool.h>
 #include <linux/bitops.h>
-#include <linux/dma-mapping.h>
-#include <linux/of.h>
-#include <linux/of_device.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/byteorder.h>
 #include <asm/idprom.h>
+#include <asm/sbus.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>
@@ -42,8 +40,8 @@
 #include "sunqe.h"
 
 #define DRV_NAME	"sunqe"
-#define DRV_VERSION	"4.1"
-#define DRV_RELDATE	"August 27, 2008"
+#define DRV_VERSION	"4.0"
+#define DRV_RELDATE	"June 23, 2006"
 #define DRV_AUTHOR	"David S. Miller (davem@davemloft.net)"
 
 static char version[] =
@@ -446,6 +444,7 @@ static void qe_rx(struct sunqe *qep)
 						 len);
 				skb->protocol = eth_type_trans(skb, qep->dev);
 				netif_rx(skb);
+				qep->dev->last_rx = jiffies;
 				dev->stats.rx_packets++;
 				dev->stats.rx_bytes += len;
 			}
@@ -512,7 +511,7 @@ static irqreturn_t qec_interrupt(int irq, void *dev_id)
 
 static int qe_open(struct net_device *dev)
 {
-	struct sunqe *qep = netdev_priv(dev);
+	struct sunqe *qep = (struct sunqe *) dev->priv;
 
 	qep->mconfig = (MREGS_MCONFIG_TXENAB |
 			MREGS_MCONFIG_RXENAB |
@@ -522,7 +521,7 @@ static int qe_open(struct net_device *dev)
 
 static int qe_close(struct net_device *dev)
 {
-	struct sunqe *qep = netdev_priv(dev);
+	struct sunqe *qep = (struct sunqe *) dev->priv;
 
 	qe_stop(qep);
 	return 0;
@@ -548,7 +547,7 @@ static void qe_tx_reclaim(struct sunqe *qep)
 
 static void qe_tx_timeout(struct net_device *dev)
 {
-	struct sunqe *qep = netdev_priv(dev);
+	struct sunqe *qep = (struct sunqe *) dev->priv;
 	int tx_full;
 
 	spin_lock_irq(&qep->lock);
@@ -574,7 +573,7 @@ out:
 /* Get a packet queued to go onto the wire. */
 static int qe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct sunqe *qep = netdev_priv(dev);
+	struct sunqe *qep = (struct sunqe *) dev->priv;
 	struct sunqe_buffers *qbufs = qep->buffers;
 	__u32 txbuf_dvma, qbufs_dvma = qep->buffers_dvma;
 	unsigned char *txbuf;
@@ -626,7 +625,7 @@ static int qe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 static void qe_set_multicast(struct net_device *dev)
 {
-	struct sunqe *qep = netdev_priv(dev);
+	struct sunqe *qep = (struct sunqe *) dev->priv;
 	struct dev_mc_list *dmi = dev->mc_list;
 	u8 new_mconfig = qep->mconfig;
 	char *addrs;
@@ -691,23 +690,17 @@ static void qe_set_multicast(struct net_device *dev)
 /* Ethtool support... */
 static void qe_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 {
-	const struct linux_prom_registers *regs;
-	struct sunqe *qep = netdev_priv(dev);
-	struct of_device *op;
+	struct sunqe *qep = dev->priv;
 
 	strcpy(info->driver, "sunqe");
 	strcpy(info->version, "3.0");
-
-	op = qep->op;
-	regs = of_get_property(op->node, "reg", NULL);
-	if (regs)
-		sprintf(info->bus_info, "SBUS:%d", regs->which_io);
-
+	sprintf(info->bus_info, "SBUS:%d",
+		qep->qe_sdev->slot);
 }
 
 static u32 qe_get_link(struct net_device *dev)
 {
-	struct sunqe *qep = netdev_priv(dev);
+	struct sunqe *qep = dev->priv;
 	void __iomem *mregs = qep->mregs;
 	u8 phyconfig;
 
@@ -724,11 +717,11 @@ static const struct ethtool_ops qe_ethtool_ops = {
 };
 
 /* This is only called once at boot time for each card probed. */
-static void qec_init_once(struct sunqec *qecp, struct of_device *op)
+static inline void qec_init_once(struct sunqec *qecp, struct sbus_dev *qsdev)
 {
 	u8 bsizes = qecp->qec_bursts;
 
-	if (sbus_can_burst64() && (bsizes & DMA_BURST64)) {
+	if (sbus_can_burst64(qsdev) && (bsizes & DMA_BURST64)) {
 		sbus_writel(GLOB_CTRL_B64, qecp->gregs + GLOB_CTRL);
 	} else if (bsizes & DMA_BURST32) {
 		sbus_writel(GLOB_CTRL_B32, qecp->gregs + GLOB_CTRL);
@@ -742,15 +735,15 @@ static void qec_init_once(struct sunqec *qecp, struct of_device *op)
 	sbus_writel(GLOB_PSIZE_2048, qecp->gregs + GLOB_PSIZE);
 
 	/* Set the local memsize register, divided up to one piece per QE channel. */
-	sbus_writel((resource_size(&op->resource[1]) >> 2),
+	sbus_writel((qsdev->reg_addrs[1].reg_size >> 2),
 		    qecp->gregs + GLOB_MSIZE);
 
 	/* Divide up the local QEC memory amongst the 4 QE receiver and
 	 * transmitter FIFOs.  Basically it is (total / 2 / num_channels).
 	 */
-	sbus_writel((resource_size(&op->resource[1]) >> 2) >> 1,
+	sbus_writel((qsdev->reg_addrs[1].reg_size >> 2) >> 1,
 		    qecp->gregs + GLOB_TSIZE);
-	sbus_writel((resource_size(&op->resource[1]) >> 2) >> 1,
+	sbus_writel((qsdev->reg_addrs[1].reg_size >> 2) >> 1,
 		    qecp->gregs + GLOB_RSIZE);
 }
 
@@ -774,21 +767,24 @@ static u8 __devinit qec_get_burst(struct device_node *dp)
 	return bsizes;
 }
 
-static struct sunqec * __devinit get_qec(struct of_device *child)
+static struct sunqec * __devinit get_qec(struct sbus_dev *child_sdev)
 {
-	struct of_device *op = to_of_device(child->dev.parent);
+	struct sbus_dev *qec_sdev = child_sdev->parent;
 	struct sunqec *qecp;
 
-	qecp = dev_get_drvdata(&op->dev);
+	for (qecp = root_qec_dev; qecp; qecp = qecp->next_module) {
+		if (qecp->qec_sdev == qec_sdev)
+			break;
+	}
 	if (!qecp) {
 		qecp = kzalloc(sizeof(struct sunqec), GFP_KERNEL);
 		if (qecp) {
 			u32 ctrl;
 
-			qecp->op = op;
-			qecp->gregs = of_ioremap(&op->resource[0], 0,
-						 GLOB_REG_SIZE,
-						 "QEC Global Registers");
+			qecp->qec_sdev = qec_sdev;
+			qecp->gregs = sbus_ioremap(&qec_sdev->resource[0], 0,
+						   GLOB_REG_SIZE,
+						   "QEC Global Registers");
 			if (!qecp->gregs)
 				goto fail;
 
@@ -803,17 +799,15 @@ static struct sunqec * __devinit get_qec(struct of_device *child)
 			if (qec_global_reset(qecp->gregs))
 				goto fail;
 
-			qecp->qec_bursts = qec_get_burst(op->node);
+			qecp->qec_bursts = qec_get_burst(qec_sdev->ofdev.node);
 
-			qec_init_once(qecp, op);
+			qec_init_once(qecp, qec_sdev);
 
-			if (request_irq(op->irqs[0], &qec_interrupt,
+			if (request_irq(qec_sdev->irqs[0], &qec_interrupt,
 					IRQF_SHARED, "qec", (void *) qecp)) {
 				printk(KERN_ERR "qec: Can't register irq.\n");
 				goto fail;
 			}
-
-			dev_set_drvdata(&op->dev, qecp);
 
 			qecp->next_module = root_qec_dev;
 			root_qec_dev = qecp;
@@ -824,17 +818,17 @@ static struct sunqec * __devinit get_qec(struct of_device *child)
 
 fail:
 	if (qecp->gregs)
-		of_iounmap(&op->resource[0], qecp->gregs, GLOB_REG_SIZE);
+		sbus_iounmap(qecp->gregs, GLOB_REG_SIZE);
 	kfree(qecp);
 	return NULL;
 }
 
-static int __devinit qec_ether_init(struct of_device *op)
+static int __devinit qec_ether_init(struct sbus_dev *sdev)
 {
 	static unsigned version_printed;
 	struct net_device *dev;
-	struct sunqec *qecp;
 	struct sunqe *qe;
+	struct sunqec *qecp;
 	int i, res;
 
 	if (version_printed++ == 0)
@@ -848,42 +842,49 @@ static int __devinit qec_ether_init(struct of_device *op)
 
 	qe = netdev_priv(dev);
 
-	res = -ENODEV;
-
-	i = of_getintprop_default(op->node, "channel#", -1);
-	if (i == -1)
-		goto fail;
+	i = of_getintprop_default(sdev->ofdev.node, "channel#", -1);
+	if (i == -1) {
+		struct sbus_dev *td = sdev->parent->child;
+		i = 0;
+		while (td != sdev) {
+			td = td->next;
+			i++;
+		}
+	}
 	qe->channel = i;
 	spin_lock_init(&qe->lock);
 
-	qecp = get_qec(op);
+	res = -ENODEV;
+	qecp = get_qec(sdev);
 	if (!qecp)
 		goto fail;
 
 	qecp->qes[qe->channel] = qe;
 	qe->dev = dev;
 	qe->parent = qecp;
-	qe->op = op;
+	qe->qe_sdev = sdev;
 
 	res = -ENOMEM;
-	qe->qcregs = of_ioremap(&op->resource[0], 0,
-				CREG_REG_SIZE, "QEC Channel Registers");
+	qe->qcregs = sbus_ioremap(&qe->qe_sdev->resource[0], 0,
+				  CREG_REG_SIZE, "QEC Channel Registers");
 	if (!qe->qcregs) {
 		printk(KERN_ERR "qe: Cannot map channel registers.\n");
 		goto fail;
 	}
 
-	qe->mregs = of_ioremap(&op->resource[1], 0,
-			       MREGS_REG_SIZE, "QE MACE Registers");
+	qe->mregs = sbus_ioremap(&qe->qe_sdev->resource[1], 0,
+				 MREGS_REG_SIZE, "QE MACE Registers");
 	if (!qe->mregs) {
 		printk(KERN_ERR "qe: Cannot map MACE registers.\n");
 		goto fail;
 	}
 
-	qe->qe_block = dma_alloc_coherent(&op->dev, PAGE_SIZE,
-					  &qe->qblock_dvma, GFP_ATOMIC);
-	qe->buffers = dma_alloc_coherent(&op->dev, sizeof(struct sunqe_buffers),
-					 &qe->buffers_dvma, GFP_ATOMIC);
+	qe->qe_block = sbus_alloc_consistent(qe->qe_sdev,
+					     PAGE_SIZE,
+					     &qe->qblock_dvma);
+	qe->buffers = sbus_alloc_consistent(qe->qe_sdev,
+					    sizeof(struct sunqe_buffers),
+					    &qe->buffers_dvma);
 	if (qe->qe_block == NULL || qe->qblock_dvma == 0 ||
 	    qe->buffers == NULL || qe->buffers_dvma == 0)
 		goto fail;
@@ -891,7 +892,7 @@ static int __devinit qec_ether_init(struct of_device *op)
 	/* Stop this QE. */
 	qe_stop(qe);
 
-	SET_NETDEV_DEV(dev, &op->dev);
+	SET_NETDEV_DEV(dev, &sdev->ofdev.dev);
 
 	dev->open = qe_open;
 	dev->stop = qe_close;
@@ -899,7 +900,7 @@ static int __devinit qec_ether_init(struct of_device *op)
 	dev->set_multicast_list = qe_set_multicast;
 	dev->tx_timeout = qe_tx_timeout;
 	dev->watchdog_timeo = 5*HZ;
-	dev->irq = op->irqs[0];
+	dev->irq = sdev->irqs[0];
 	dev->dma = 0;
 	dev->ethtool_ops = &qe_ethtool_ops;
 
@@ -907,7 +908,7 @@ static int __devinit qec_ether_init(struct of_device *op)
 	if (res)
 		goto fail;
 
-	dev_set_drvdata(&op->dev, qe);
+	dev_set_drvdata(&sdev->ofdev.dev, qe);
 
 	printk(KERN_INFO "%s: qe channel[%d] ", dev->name, qe->channel);
 	for (i = 0; i < 6; i++)
@@ -921,50 +922,58 @@ static int __devinit qec_ether_init(struct of_device *op)
 
 fail:
 	if (qe->qcregs)
-		of_iounmap(&op->resource[0], qe->qcregs, CREG_REG_SIZE);
+		sbus_iounmap(qe->qcregs, CREG_REG_SIZE);
 	if (qe->mregs)
-		of_iounmap(&op->resource[1], qe->mregs, MREGS_REG_SIZE);
+		sbus_iounmap(qe->mregs, MREGS_REG_SIZE);
 	if (qe->qe_block)
-		dma_free_coherent(&op->dev, PAGE_SIZE,
-				  qe->qe_block, qe->qblock_dvma);
+		sbus_free_consistent(qe->qe_sdev,
+				     PAGE_SIZE,
+				     qe->qe_block,
+				     qe->qblock_dvma);
 	if (qe->buffers)
-		dma_free_coherent(&op->dev,
-				  sizeof(struct sunqe_buffers),
-				  qe->buffers,
-				  qe->buffers_dvma);
+		sbus_free_consistent(qe->qe_sdev,
+				     sizeof(struct sunqe_buffers),
+				     qe->buffers,
+				     qe->buffers_dvma);
 
 	free_netdev(dev);
 
 	return res;
 }
 
-static int __devinit qec_sbus_probe(struct of_device *op, const struct of_device_id *match)
+static int __devinit qec_sbus_probe(struct of_device *dev, const struct of_device_id *match)
 {
-	return qec_ether_init(op);
+	struct sbus_dev *sdev = to_sbus_device(&dev->dev);
+
+	return qec_ether_init(sdev);
 }
 
-static int __devexit qec_sbus_remove(struct of_device *op)
+static int __devexit qec_sbus_remove(struct of_device *dev)
 {
-	struct sunqe *qp = dev_get_drvdata(&op->dev);
+	struct sunqe *qp = dev_get_drvdata(&dev->dev);
 	struct net_device *net_dev = qp->dev;
 
 	unregister_netdev(net_dev);
 
-	of_iounmap(&op->resource[0], qp->qcregs, CREG_REG_SIZE);
-	of_iounmap(&op->resource[1], qp->mregs, MREGS_REG_SIZE);
-	dma_free_coherent(&op->dev, PAGE_SIZE,
-			  qp->qe_block, qp->qblock_dvma);
-	dma_free_coherent(&op->dev, sizeof(struct sunqe_buffers),
-			  qp->buffers, qp->buffers_dvma);
+	sbus_iounmap(qp->qcregs, CREG_REG_SIZE);
+	sbus_iounmap(qp->mregs, MREGS_REG_SIZE);
+	sbus_free_consistent(qp->qe_sdev,
+			     PAGE_SIZE,
+			     qp->qe_block,
+			     qp->qblock_dvma);
+	sbus_free_consistent(qp->qe_sdev,
+			     sizeof(struct sunqe_buffers),
+			     qp->buffers,
+			     qp->buffers_dvma);
 
 	free_netdev(net_dev);
 
-	dev_set_drvdata(&op->dev, NULL);
+	dev_set_drvdata(&dev->dev, NULL);
 
 	return 0;
 }
 
-static const struct of_device_id qec_sbus_match[] = {
+static struct of_device_id qec_sbus_match[] = {
 	{
 		.name = "qe",
 	},
@@ -982,7 +991,7 @@ static struct of_platform_driver qec_sbus_driver = {
 
 static int __init qec_init(void)
 {
-	return of_register_driver(&qec_sbus_driver, &of_bus_type);
+	return of_register_driver(&qec_sbus_driver, &sbus_bus_type);
 }
 
 static void __exit qec_exit(void)
@@ -991,11 +1000,11 @@ static void __exit qec_exit(void)
 
 	while (root_qec_dev) {
 		struct sunqec *next = root_qec_dev->next_module;
-		struct of_device *op = root_qec_dev->op;
 
-		free_irq(op->irqs[0], (void *) root_qec_dev);
-		of_iounmap(&op->resource[0], root_qec_dev->gregs,
-			   GLOB_REG_SIZE);
+		free_irq(root_qec_dev->qec_sdev->irqs[0],
+			 (void *) root_qec_dev);
+		sbus_iounmap(root_qec_dev->gregs, GLOB_REG_SIZE);
+
 		kfree(root_qec_dev);
 
 		root_qec_dev = next;

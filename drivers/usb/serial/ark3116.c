@@ -158,13 +158,12 @@ cleanup:
 	return -ENOMEM;
 }
 
-static void ark3116_set_termios(struct tty_struct *tty,
-				struct usb_serial_port *port,
+static void ark3116_set_termios(struct usb_serial_port *port,
 				struct ktermios *old_termios)
 {
 	struct usb_serial *serial = port->serial;
 	struct ark3116_private *priv = usb_get_serial_port_data(port);
-	struct ktermios *termios = tty->termios;
+	struct ktermios *termios = port->tty->termios;
 	unsigned int cflag = termios->c_cflag;
 	unsigned long flags;
 	int baud;
@@ -178,8 +177,8 @@ static void ark3116_set_termios(struct tty_struct *tty,
 
 	spin_lock_irqsave(&priv->lock, flags);
 	if (!priv->termios_initialized) {
-		*termios = tty_std_termios;
-		termios->c_cflag = B9600 | CS8
+		*(port->tty->termios) = tty_std_termios;
+		port->tty->termios->c_cflag = B9600 | CS8
 					      | CREAD | HUPCL | CLOCAL;
 		termios->c_ispeed = 9600;
 		termios->c_ospeed = 9600;
@@ -193,7 +192,7 @@ static void ark3116_set_termios(struct tty_struct *tty,
 	buf = kmalloc(1, GFP_KERNEL);
 	if (!buf) {
 		dbg("error kmalloc");
-		*termios = *old_termios;
+		*port->tty->termios = *old_termios;
 		return;
 	}
 
@@ -244,7 +243,7 @@ static void ark3116_set_termios(struct tty_struct *tty,
 	}
 
 	/* set baudrate */
-	baud = tty_get_baud_rate(tty);
+	baud = tty_get_baud_rate(port->tty);
 
 	switch (baud) {
 	case 75:
@@ -263,11 +262,11 @@ static void ark3116_set_termios(struct tty_struct *tty,
 	case 230400:
 	case 460800:
 		/* Report the resulting rate back to the caller */
-		tty_encode_baud_rate(tty, baud, baud);
+		tty_encode_baud_rate(port->tty, baud, baud);
 		break;
 	/* set 9600 as default (if given baudrate is invalid for example) */
 	default:
-		tty_encode_baud_rate(tty, 9600, 9600);
+		tty_encode_baud_rate(port->tty, 9600, 9600);
 	case 0:
 		baud = 9600;
 	}
@@ -318,8 +317,7 @@ static void ark3116_set_termios(struct tty_struct *tty,
 	return;
 }
 
-static int ark3116_open(struct tty_struct *tty, struct usb_serial_port *port,
-					struct file *filp)
+static int ark3116_open(struct usb_serial_port *port, struct file *filp)
 {
 	struct ktermios tmp_termios;
 	struct usb_serial *serial = port->serial;
@@ -334,7 +332,7 @@ static int ark3116_open(struct tty_struct *tty, struct usb_serial_port *port,
 		return -ENOMEM;
 	}
 
-	result = usb_serial_generic_open(tty, port, filp);
+	result = usb_serial_generic_open(port, filp);
 	if (result)
 		goto err_out;
 
@@ -364,8 +362,8 @@ static int ark3116_open(struct tty_struct *tty, struct usb_serial_port *port,
 	ARK3116_RCV(serial, 124, 0xFE, 0xC0, 0x0000, 0x0006, 0xFF, buf);
 
 	/* initialise termios */
-	if (tty)
-		ark3116_set_termios(tty, port, &tmp_termios);
+	if (port->tty)
+		ark3116_set_termios(port, &tmp_termios);
 
 err_out:
 	kfree(buf);
@@ -373,10 +371,9 @@ err_out:
 	return result;
 }
 
-static int ark3116_ioctl(struct tty_struct *tty, struct file *file,
+static int ark3116_ioctl(struct usb_serial_port *port, struct file *file,
 			 unsigned int cmd, unsigned long arg)
 {
-	struct usb_serial_port *port = tty->driver_data;
 	struct serial_struct serstruct;
 	void __user *user_arg = (void __user *)arg;
 
@@ -406,9 +403,8 @@ static int ark3116_ioctl(struct tty_struct *tty, struct file *file,
 	return -ENOIOCTLCMD;
 }
 
-static int ark3116_tiocmget(struct tty_struct *tty, struct file *file)
+static int ark3116_tiocmget(struct usb_serial_port *port, struct file *file)
 {
-	struct usb_serial_port *port = tty->driver_data;
 	struct usb_serial *serial = port->serial;
 	char *buf;
 	char temp;

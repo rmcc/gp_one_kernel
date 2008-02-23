@@ -20,8 +20,3 @@ config UCC
 	bool
 	default y if UCC_FAST || UCC_SLOW
 
-config QE_USB
-	bool
-	default y if USB_GADGET_FSL_QE
-	help
-	  QE USB Controller support

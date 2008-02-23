@@ -15,7 +15,7 @@
 #define __do_strncpy_from_user(dst,src,count,res)			   \
 do {									   \
 	long __d0, __d1, __d2;						   \
-	might_fault();							   \
+	might_sleep();							   \
 	__asm__ __volatile__(						   \
 		"	testq %1,%1\n"					   \
 		"	jz 2f\n"					   \
@@ -64,7 +64,7 @@ EXPORT_SYMBOL(strncpy_from_user);
 unsigned long __clear_user(void __user *addr, unsigned long size)
 {
 	long __d0;
-	might_fault();
+	might_sleep();
 	/* no memory constraint because it doesn't change any memory gcc knows
 	   about */
 	asm volatile(
@@ -158,26 +158,3 @@ unsigned long copy_in_user(void __user *to, const void __user *from, unsigned le
 }
 EXPORT_SYMBOL(copy_in_user);
 
-/*
- * Try to copy last bytes and clear the rest if needed.
- * Since protection fault in copy_from/to_user is not a normal situation,
- * it is not necessary to optimize tail handling.
- */
-unsigned long
-copy_user_handle_tail(char *to, char *from, unsigned len, unsigned zerorest)
-{
-	char c;
-	unsigned zero_len;
-
-	for (; len; --len) {
-		if (__get_user_nocheck(c, from++, sizeof(char)))
-			break;
-		if (__put_user_nocheck(c, to++, sizeof(char)))
-			break;
-	}
-
-	for (c = 0, zero_len = len; zerorest && zero_len; --zero_len)
-		if (__put_user_nocheck(c, to++, sizeof(char)))
-			break;
-	return len;
-}

@@ -20,15 +20,15 @@
  */
 
 /*
- * UBI input/output sub-system.
+ * UBI input/output unit.
  *
- * This sub-system provides a uniform way to work with all kinds of the
- * underlying MTD devices. It also implements handy functions for reading and
- * writing UBI headers.
+ * This unit provides a uniform way to work with all kinds of the underlying
+ * MTD devices. It also implements handy functions for reading and writing UBI
+ * headers.
  *
  * We are trying to have a paranoid mindset and not to trust to what we read
- * from the flash media in order to be more secure and robust. So this
- * sub-system validates every single header it reads from the flash media.
+ * from the flash media in order to be more secure and robust. So this unit
+ * validates every single header it reads from the flash media.
  *
  * Some words about how the eraseblock headers are stored.
  *
@@ -79,11 +79,11 @@
  * 512-byte chunks, we have to allocate one more buffer and copy our VID header
  * to offset 448 of this buffer.
  *
- * The I/O sub-system does the following trick in order to avoid this extra
- * copy. It always allocates a @ubi->vid_hdr_alsize bytes buffer for the VID
- * header and returns a pointer to offset @ubi->vid_hdr_shift of this buffer.
- * When the VID header is being written out, it shifts the VID header pointer
- * back and writes the whole sub-page.
+ * The I/O unit does the following trick in order to avoid this extra copy.
+ * It always allocates a @ubi->vid_hdr_alsize bytes buffer for the VID header
+ * and returns a pointer to offset @ubi->vid_hdr_shift of this buffer. When the
+ * VID header is being written out, it shifts the VID header pointer back and
+ * writes the whole sub-page.
  */
 
 #include <linux/crc32.h>
@@ -156,19 +156,15 @@ retry:
 			/*
 			 * -EUCLEAN is reported if there was a bit-flip which
 			 * was corrected, so this is harmless.
-			 *
-			 * We do not report about it here unless debugging is
-			 * enabled. A corresponding message will be printed
-			 * later, when it is has been scrubbed.
 			 */
-			dbg_msg("fixable bit-flip detected at PEB %d", pnum);
+			ubi_msg("fixable bit-flip detected at PEB %d", pnum);
 			ubi_assert(len == read);
 			return UBI_IO_BITFLIPS;
 		}
 
 		if (read != len && retries++ < UBI_IO_RETRIES) {
-			dbg_io("error %d while reading %d bytes from PEB %d:%d,"
-			       " read only %zd bytes, retry",
+			dbg_io("error %d while reading %d bytes from PEB %d:%d, "
+			       "read only %zd bytes, retry",
 			       err, len, pnum, offset, read);
 			yield();
 			goto retry;
@@ -191,7 +187,7 @@ retry:
 		ubi_assert(len == read);
 
 		if (ubi_dbg_is_bitflip()) {
-			dbg_gen("bit-flip (emulated)");
+			dbg_msg("bit-flip (emulated)");
 			err = UBI_IO_BITFLIPS;
 		}
 	}
@@ -395,7 +391,6 @@ static int torture_peb(struct ubi_device *ubi, int pnum)
 {
 	int err, i, patt_count;
 
-	ubi_msg("run torture test for PEB %d", pnum);
 	patt_count = ARRAY_SIZE(patterns);
 	ubi_assert(patt_count > 0);
 
@@ -439,7 +434,6 @@ static int torture_peb(struct ubi_device *ubi, int pnum)
 	}
 
 	err = patt_count;
-	ubi_msg("PEB %d passed torture test, do not mark it a bad", pnum);
 
 out:
 	mutex_unlock(&ubi->buf_mutex);
@@ -465,7 +459,7 @@ out:
  * This function synchronously erases physical eraseblock @pnum. If @torture
  * flag is not zero, the physical eraseblock is checked by means of writing
  * different patterns to it and reading them back. If the torturing is enabled,
- * the physical eraseblock is erased more than once.
+ * the physical eraseblock is erased more then once.
  *
  * This function returns the number of erasures made in case of success, %-EIO
  * if the erasure failed or the torturing test failed, and other negative error
@@ -637,6 +631,8 @@ int ubi_io_read_ec_hdr(struct ubi_device *ubi, int pnum,
 
 	dbg_io("read EC header from PEB %d", pnum);
 	ubi_assert(pnum >= 0 && pnum < ubi->peb_count);
+	if (UBI_IO_DEBUG)
+		verbose = 1;
 
 	err = ubi_io_read(ubi, ec_hdr, pnum, 0, UBI_EC_HDR_SIZE);
 	if (err) {
@@ -683,9 +679,6 @@ int ubi_io_read_ec_hdr(struct ubi_device *ubi, int pnum,
 			if (verbose)
 				ubi_warn("no EC header found at PEB %d, "
 					 "only 0xFF bytes", pnum);
-			else if (UBI_IO_DEBUG)
-				dbg_msg("no EC header found at PEB %d, "
-					"only 0xFF bytes", pnum);
 			return UBI_IO_PEB_EMPTY;
 		}
 
@@ -697,9 +690,7 @@ int ubi_io_read_ec_hdr(struct ubi_device *ubi, int pnum,
 			ubi_warn("bad magic number at PEB %d: %08x instead of "
 				 "%08x", pnum, magic, UBI_EC_HDR_MAGIC);
 			ubi_dbg_dump_ec_hdr(ec_hdr);
-		} else if (UBI_IO_DEBUG)
-			dbg_msg("bad magic number at PEB %d: %08x instead of "
-				"%08x", pnum, magic, UBI_EC_HDR_MAGIC);
+		}
 		return UBI_IO_BAD_EC_HDR;
 	}
 
@@ -708,12 +699,10 @@ int ubi_io_read_ec_hdr(struct ubi_device *ubi, int pnum,
 
 	if (hdr_crc != crc) {
 		if (verbose) {
-			ubi_warn("bad EC header CRC at PEB %d, calculated "
-				 "%#08x, read %#08x", pnum, crc, hdr_crc);
+			ubi_warn("bad EC header CRC at PEB %d, calculated %#08x,"
+				 " read %#08x", pnum, crc, hdr_crc);
 			ubi_dbg_dump_ec_hdr(ec_hdr);
-		} else if (UBI_IO_DEBUG)
-			dbg_msg("bad EC header CRC at PEB %d, calculated "
-				"%#08x, read %#08x", pnum, crc, hdr_crc);
+		}
 		return UBI_IO_BAD_EC_HDR;
 	}
 
@@ -917,6 +906,8 @@ int ubi_io_read_vid_hdr(struct ubi_device *ubi, int pnum,
 
 	dbg_io("read VID header from PEB %d", pnum);
 	ubi_assert(pnum >= 0 &&  pnum < ubi->peb_count);
+	if (UBI_IO_DEBUG)
+		verbose = 1;
 
 	p = (char *)vid_hdr - ubi->vid_hdr_shift;
 	err = ubi_io_read(ubi, p, pnum, ubi->vid_hdr_aloffset,
@@ -963,9 +954,6 @@ int ubi_io_read_vid_hdr(struct ubi_device *ubi, int pnum,
 			if (verbose)
 				ubi_warn("no VID header found at PEB %d, "
 					 "only 0xFF bytes", pnum);
-			else if (UBI_IO_DEBUG)
-				dbg_msg("no VID header found at PEB %d, "
-					"only 0xFF bytes", pnum);
 			return UBI_IO_PEB_FREE;
 		}
 
@@ -977,9 +965,7 @@ int ubi_io_read_vid_hdr(struct ubi_device *ubi, int pnum,
 			ubi_warn("bad magic number at PEB %d: %08x instead of "
 				 "%08x", pnum, magic, UBI_VID_HDR_MAGIC);
 			ubi_dbg_dump_vid_hdr(vid_hdr);
-		} else if (UBI_IO_DEBUG)
-			dbg_msg("bad magic number at PEB %d: %08x instead of "
-				"%08x", pnum, magic, UBI_VID_HDR_MAGIC);
+		}
 		return UBI_IO_BAD_VID_HDR;
 	}
 
@@ -991,9 +977,7 @@ int ubi_io_read_vid_hdr(struct ubi_device *ubi, int pnum,
 			ubi_warn("bad CRC at PEB %d, calculated %#08x, "
 				 "read %#08x", pnum, crc, hdr_crc);
 			ubi_dbg_dump_vid_hdr(vid_hdr);
-		} else if (UBI_IO_DEBUG)
-			dbg_msg("bad CRC at PEB %d, calculated %#08x, "
-				"read %#08x", pnum, crc, hdr_crc);
+		}
 		return UBI_IO_BAD_VID_HDR;
 	}
 
@@ -1034,7 +1018,7 @@ int ubi_io_write_vid_hdr(struct ubi_device *ubi, int pnum,
 
 	err = paranoid_check_peb_ec_hdr(ubi, pnum);
 	if (err)
-		return err > 0 ? -EINVAL : err;
+		return err > 0 ? -EINVAL: err;
 
 	vid_hdr->magic = cpu_to_be32(UBI_VID_HDR_MAGIC);
 	vid_hdr->version = UBI_VERSION;
@@ -1111,7 +1095,8 @@ fail:
 }
 
 /**
- * paranoid_check_peb_ec_hdr - check erase counter header.
+ * paranoid_check_peb_ec_hdr - check that the erase counter header of a
+ * physical eraseblock is in-place and is all right.
  * @ubi: UBI device description object
  * @pnum: the physical eraseblock number to check
  *
@@ -1189,7 +1174,8 @@ fail:
 }
 
 /**
- * paranoid_check_peb_vid_hdr - check volume identifier header.
+ * paranoid_check_peb_vid_hdr - check that the volume identifier header of a
+ * physical eraseblock is in-place and is all right.
  * @ubi: UBI device description object
  * @pnum: the physical eraseblock number to check
  *
@@ -1270,7 +1256,7 @@ static int paranoid_check_all_ff(struct ubi_device *ubi, int pnum, int offset,
 
 fail:
 	ubi_err("paranoid check failed for PEB %d", pnum);
-	ubi_msg("hex dump of the %d-%d region", offset, offset + len);
+	dbg_msg("hex dump of the %d-%d region", offset, offset + len);
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1,
 		       ubi->dbg_peb_buf, len, 1);
 	err = 1;

@@ -102,7 +102,8 @@ bail_unlock:
 bail:
 	mutex_unlock(&inode->i_mutex);
 
-	brelse(bh);
+	if (bh)
+		brelse(bh);
 
 	mlog_exit(status);
 	return status;

@@ -190,6 +190,7 @@ static struct bin_attribute ds1682_eeprom_attr = {
 	.attr = {
 		.name = "eeprom",
 		.mode = S_IRUGO | S_IWUSR,
+		.owner = THIS_MODULE,
 	},
 	.size = DS1682_EEPROM_SIZE,
 	.read = ds1682_eeprom_read,

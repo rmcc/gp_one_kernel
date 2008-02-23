@@ -29,6 +29,8 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * $Id: ib_fmr_pool.h 2730 2005-06-28 16:43:03Z sean.hefty $
  */
 
 #if !defined(IB_FMR_POOL_H)
@@ -59,7 +61,7 @@ struct ib_fmr_pool_param {
 	int                     pool_size;
 	int                     dirty_watermark;
 	void                  (*flush_function)(struct ib_fmr_pool *pool,
-						void               *arg);
+						void *              arg);
 	void                   *flush_arg;
 	unsigned                cache:1;
 };

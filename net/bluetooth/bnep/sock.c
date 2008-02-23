@@ -24,6 +24,10 @@
    SOFTWARE IS DISCLAIMED.
 */
 
+/*
+ * $Id: sock.c,v 1.4 2002/08/04 21:23:58 maxk Exp $
+ */
+
 #include <linux/module.h>
 
 #include <linux/types.h>
@@ -45,6 +49,11 @@
 #include <asm/uaccess.h>
 
 #include "bnep.h"
+
+#ifndef CONFIG_BT_BNEP_DEBUG
+#undef  BT_DBG
+#define BT_DBG( A... )
+#endif
 
 static int bnep_sock_release(struct socket *sock)
 {

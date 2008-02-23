@@ -1,22 +1,14 @@
 # ALSA SH drivers
 
-menuconfig SND_SUPERH
-	bool "SUPERH sound devices"
-	depends on SUPERH
-	default y
-	help
-	  Support for sound devices specific to SUPERH architectures.
-	  Drivers that are implemented on ASoC can be found in
-	  "ALSA for SoC audio support" section.
-
-if SND_SUPERH
+menu "SUPERH devices"
+	depends on SND!=n && SUPERH
 
 config SND_AICA
 	tristate "Dreamcast Yamaha AICA sound"
-	depends on SH_DREAMCAST
+	depends on SH_DREAMCAST && SND
 	select SND_PCM
 	help
 	  ALSA Sound driver for the SEGA Dreamcast console.
 
-endif	# SND_SUPERH
+endmenu
 

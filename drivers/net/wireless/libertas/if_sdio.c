@@ -1,7 +1,7 @@
 /*
  *  linux/drivers/net/wireless/libertas/if_sdio.c
  *
- *  Copyright 2007-2008 Pierre Ossman
+ *  Copyright 2007 Pierre Ossman
  *
  * Inspired by if_cs.c, Copyright 2007 Holger Schurig
  *
@@ -26,7 +26,6 @@
  * if_sdio_card_to_host() to pad the data.
  */
 
-#include <linux/kernel.h>
 #include <linux/moduleparam.h>
 #include <linux/firmware.h>
 #include <linux/netdevice.h>
@@ -267,10 +266,13 @@ static int if_sdio_card_to_host(struct if_sdio_card *card)
 
 	/*
 	 * The transfer must be in one transaction or the firmware
-	 * goes suicidal. There's no way to guarantee that for all
-	 * controllers, but we can at least try.
+	 * goes suicidal.
 	 */
-	chunk = sdio_align_size(card->func, size);
+	chunk = size;
+	if ((chunk > card->func->cur_blksize) || (chunk > 512)) {
+		chunk = (chunk + card->func->cur_blksize - 1) /
+			card->func->cur_blksize * card->func->cur_blksize;
+	}
 
 	ret = sdio_readsb(card->func, card->buffer, card->ioport, chunk);
 	if (ret)
@@ -390,7 +392,7 @@ static int if_sdio_prog_helper(struct if_sdio_card *card)
 	unsigned long timeout;
 	u8 *chunk_buffer;
 	u32 chunk_size;
-	const u8 *firmware;
+	u8 *firmware;
 	size_t size;
 
 	lbs_deb_enter(LBS_DEB_SDIO);
@@ -506,7 +508,7 @@ static int if_sdio_prog_real(struct if_sdio_card *card)
 	unsigned long timeout;
 	u8 *chunk_buffer;
 	u32 chunk_size;
-	const u8 *firmware;
+	u8 *firmware;
 	size_t size, req_size;
 
 	lbs_deb_enter(LBS_DEB_SDIO);
@@ -582,7 +584,7 @@ static int if_sdio_prog_real(struct if_sdio_card *card)
 				chunk_size, (chunk_size + 31) / 32 * 32);
 */
 			ret = sdio_writesb(card->func, card->ioport,
-				chunk_buffer, roundup(chunk_size, 32));
+				chunk_buffer, (chunk_size + 31) / 32 * 32);
 			if (ret)
 				goto release;
 
@@ -694,10 +696,13 @@ static int if_sdio_host_to_card(struct lbs_private *priv,
 
 	/*
 	 * The transfer must be in one transaction or the firmware
-	 * goes suicidal. There's no way to guarantee that for all
-	 * controllers, but we can at least try.
+	 * goes suicidal.
 	 */
-	size = sdio_align_size(card->func, nb + 4);
+	size = nb + 4;
+	if ((size > card->func->cur_blksize) || (size > 512)) {
+		size = (size + card->func->cur_blksize - 1) /
+			card->func->cur_blksize * card->func->cur_blksize;
+	}
 
 	packet = kzalloc(sizeof(struct if_sdio_packet) + size,
 			GFP_ATOMIC);

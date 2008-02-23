@@ -17,9 +17,10 @@
 #include <asm/time.h>
 #include <asm/ipic.h>
 #include <asm/udbg.h>
-#include <sysdev/fsl_pci.h>
 
 #include "mpc83xx.h"
+
+extern int mpc837x_usb_cfg(void);
 
 /* ************************************************************************
  *

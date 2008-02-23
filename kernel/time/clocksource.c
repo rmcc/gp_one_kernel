@@ -145,11 +145,10 @@ static void clocksource_watchdog(unsigned long data)
 		 * Cycle through CPUs to check if the CPUs stay
 		 * synchronized to each other.
 		 */
-		int next_cpu = cpumask_next(raw_smp_processor_id(),
-					    cpu_online_mask);
+		int next_cpu = next_cpu(raw_smp_processor_id(), cpu_online_map);
 
-		if (next_cpu >= nr_cpu_ids)
-			next_cpu = cpumask_first(cpu_online_mask);
+		if (next_cpu >= NR_CPUS)
+			next_cpu = first_cpu(cpu_online_map);
 		watchdog_timer.expires += WATCHDOG_INTERVAL;
 		add_timer_on(&watchdog_timer, next_cpu);
 	}
@@ -174,7 +173,7 @@ static void clocksource_check_watchdog(struct clocksource *cs)
 			watchdog_last = watchdog->read();
 			watchdog_timer.expires = jiffies + WATCHDOG_INTERVAL;
 			add_timer_on(&watchdog_timer,
-				     cpumask_first(cpu_online_mask));
+				     first_cpu(cpu_online_map));
 		}
 	} else {
 		if (cs->flags & CLOCK_SOURCE_IS_CONTINUOUS)
@@ -196,7 +195,7 @@ static void clocksource_check_watchdog(struct clocksource *cs)
 				watchdog_timer.expires =
 					jiffies + WATCHDOG_INTERVAL;
 				add_timer_on(&watchdog_timer,
-					     cpumask_first(cpu_online_mask));
+					     first_cpu(cpu_online_map));
 			}
 		}
 	}
@@ -326,9 +325,6 @@ int clocksource_register(struct clocksource *c)
 	unsigned long flags;
 	int ret;
 
-	/* save mult_orig on registration */
-	c->mult_orig = c->mult;
-
 	spin_lock_irqsave(&clocksource_lock, flags);
 	ret = clocksource_enqueue(c);
 	if (!ret)
@@ -380,8 +376,7 @@ void clocksource_unregister(struct clocksource *cs)
  * Provides sysfs interface for listing current clocksource.
  */
 static ssize_t
-sysfs_show_current_clocksources(struct sys_device *dev,
-				struct sysdev_attribute *attr, char *buf)
+sysfs_show_current_clocksources(struct sys_device *dev, char *buf)
 {
 	ssize_t count = 0;
 
@@ -402,7 +397,6 @@ sysfs_show_current_clocksources(struct sys_device *dev,
  * clocksource selction.
  */
 static ssize_t sysfs_override_clocksource(struct sys_device *dev,
-					  struct sysdev_attribute *attr,
 					  const char *buf, size_t count)
 {
 	struct clocksource *ovr = NULL;
@@ -455,9 +449,7 @@ static ssize_t sysfs_override_clocksource(struct sys_device *dev,
  * Provides sysfs interface for listing registered clocksources
  */
 static ssize_t
-sysfs_show_available_clocksources(struct sys_device *dev,
-				  struct sysdev_attribute *attr,
-				  char *buf)
+sysfs_show_available_clocksources(struct sys_device *dev, char *buf)
 {
 	struct clocksource *src;
 	ssize_t count = 0;

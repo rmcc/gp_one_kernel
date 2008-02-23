@@ -407,7 +407,7 @@ static void gigaset_read_int_callback(struct urb *urb)
 	spin_lock_irqsave(&cs->lock, flags);
 	if (!cs->connected) {
 		spin_unlock_irqrestore(&cs->lock, flags);
-		pr_err("%s: disconnected\n", __func__);
+		err("%s: disconnected", __func__);
 		return;
 	}
 	r = usb_submit_urb(urb, GFP_ATOMIC);
@@ -440,7 +440,7 @@ static void gigaset_write_bulk_callback(struct urb *urb)
 
 	spin_lock_irqsave(&cs->lock, flags);
 	if (!cs->connected) {
-		pr_err("%s: disconnected\n", __func__);
+		err("%s: not connected", __func__);
 	} else {
 		cs->hw.usb->busy = 0;
 		tasklet_schedule(&cs->write_tasklet);
@@ -498,9 +498,8 @@ static int send_cb(struct cardstate *cs, struct cmdbuf_t *cb)
 
 			if (status) {
 				ucs->busy = 0;
-				dev_err(cs->dev,
-					"could not submit urb (error %d)\n",
-					-status);
+				err("could not submit urb (error %d)\n",
+				    -status);
 				cb->len = 0; /* skip urb => remove cb+wakeup
 						in next loop cycle */
 			}
@@ -612,10 +611,8 @@ static int gigaset_initcshw(struct cardstate *cs)
 
 	cs->hw.usb = ucs =
 		kmalloc(sizeof(struct usb_cardstate), GFP_KERNEL);
-	if (!ucs) {
-		pr_err("out of memory\n");
+	if (!ucs)
 		return 0;
-	}
 
 	ucs->bchars[0] = 0;
 	ucs->bchars[1] = 0;
@@ -673,7 +670,7 @@ static int write_modem(struct cardstate *cs)
 	spin_unlock_irqrestore(&cs->lock, flags);
 
 	if (ret) {
-		dev_err(cs->dev, "could not submit urb (error %d)\n", -ret);
+		err("could not submit urb (error %d)\n", -ret);
 		ucs->busy = 0;
 	}
 
@@ -938,11 +935,13 @@ static int __init usb_gigaset_init(void)
 	/* register this driver with the USB subsystem */
 	result = usb_register(&gigaset_usb_driver);
 	if (result < 0) {
-		pr_err("error %d registering USB driver\n", -result);
+		err("usb_gigaset: usb_register failed (error %d)",
+		    -result);
 		goto error;
 	}
 
-	pr_info(DRIVER_DESC "\n");
+	info(DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 
 error:

@@ -22,6 +22,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
+ *  $Id: amba.c,v 1.41 2002/07/28 10:03:27 rmk Exp $
+ *
  * This is a generic driver for ARM AMBA-type serial ports.  They
  * have a lot of 16550-like features, but are not register compatible.
  * Note that although they do have CTS, DCD and DSR inputs, they do
@@ -117,7 +119,7 @@ static void pl010_enable_ms(struct uart_port *port)
 
 static void pl010_rx_chars(struct uart_amba_port *uap)
 {
-	struct tty_struct *tty = uap->port.info->port.tty;
+	struct tty_struct *tty = uap->port.info->tty;
 	unsigned int status, ch, flag, rsr, max_count = 256;
 
 	status = readb(uap->port.membase + UART01x_FR);
@@ -512,7 +514,7 @@ static int pl010_verify_port(struct uart_port *port, struct serial_struct *ser)
 	int ret = 0;
 	if (ser->type != PORT_UNKNOWN && ser->type != PORT_AMBA)
 		ret = -EINVAL;
-	if (ser->irq < 0 || ser->irq >= nr_irqs)
+	if (ser->irq < 0 || ser->irq >= NR_IRQS)
 		ret = -EINVAL;
 	if (ser->baud_base < 9600)
 		ret = -EINVAL;
@@ -692,7 +694,7 @@ static int pl010_probe(struct amba_device *dev, void *id)
 		goto free;
 	}
 
-	uap->clk = clk_get(&dev->dev, NULL);
+	uap->clk = clk_get(&dev->dev, "UARTCLK");
 	if (IS_ERR(uap->clk)) {
 		ret = PTR_ERR(uap->clk);
 		goto unmap;
@@ -789,7 +791,7 @@ static int __init pl010_init(void)
 {
 	int ret;
 
-	printk(KERN_INFO "Serial: AMBA driver\n");
+	printk(KERN_INFO "Serial: AMBA driver $Revision: 1.41 $\n");
 
 	ret = uart_register_driver(&amba_reg);
 	if (ret == 0) {
@@ -810,5 +812,5 @@ module_init(pl010_init);
 module_exit(pl010_exit);
 
 MODULE_AUTHOR("ARM Ltd/Deep Blue Solutions Ltd");
-MODULE_DESCRIPTION("ARM AMBA serial port driver");
+MODULE_DESCRIPTION("ARM AMBA serial port driver $Revision: 1.41 $");
 MODULE_LICENSE("GPL");

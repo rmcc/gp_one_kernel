@@ -1,7 +1,7 @@
 #ifndef _PTRACE32_H
 #define _PTRACE32_H
 
-#include "compat_linux.h"  /* needed for psw_compat_t */
+#include "compat_linux.h"  /* needed for _psw_t32 */
 
 typedef struct {
 	__u32 cr[3];
@@ -38,11 +38,10 @@ typedef struct {
 
 struct user_regs_struct32
 {
-	psw_compat_t psw;
+	_psw_t32 psw;
 	u32 gprs[NUM_GPRS];
 	u32 acrs[NUM_ACRS];
 	u32 orig_gpr2;
-	/* nb: there's a 4-byte hole here */
 	s390_fp_regs fp_regs;
 	/*
 	 * These per registers are in here so that gdb can modify them

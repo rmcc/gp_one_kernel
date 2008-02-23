@@ -2,7 +2,6 @@
  * Driver for the MPC5200 Fast Ethernet Controller - MDIO bus driver
  *
  * Copyright (C) 2007  Domen Puncer, Telargo, Inc.
- * Copyright (C) 2008  Wolfram Sang, Pengutronix
  *
  * This file is licensed under the terms of the GNU General Public License
  * version 2. This program is licensed "as is" without any warranty of any
@@ -22,45 +21,58 @@ struct mpc52xx_fec_mdio_priv {
 	struct mpc52xx_fec __iomem *regs;
 };
 
-static int mpc52xx_fec_mdio_transfer(struct mii_bus *bus, int phy_id,
-		int reg, u32 value)
+static int mpc52xx_fec_mdio_read(struct mii_bus *bus, int phy_id, int reg)
 {
 	struct mpc52xx_fec_mdio_priv *priv = bus->priv;
 	struct mpc52xx_fec __iomem *fec;
 	int tries = 100;
-
-	value |= (phy_id << FEC_MII_DATA_PA_SHIFT) & FEC_MII_DATA_PA_MSK;
-	value |= (reg << FEC_MII_DATA_RA_SHIFT) & FEC_MII_DATA_RA_MSK;
+	u32 request = FEC_MII_READ_FRAME;
 
 	fec = priv->regs;
 	out_be32(&fec->ievent, FEC_IEVENT_MII);
-	out_be32(&priv->regs->mii_data, value);
+
+	request |= (phy_id << FEC_MII_DATA_PA_SHIFT) & FEC_MII_DATA_PA_MSK;
+	request |= (reg << FEC_MII_DATA_RA_SHIFT) & FEC_MII_DATA_RA_MSK;
+
+	out_be32(&priv->regs->mii_data, request);
 
 	/* wait for it to finish, this takes about 23 us on lite5200b */
 	while (!(in_be32(&fec->ievent) & FEC_IEVENT_MII) && --tries)
 		udelay(5);
 
-	if (!tries)
+	if (tries == 0)
 		return -ETIMEDOUT;
 
-	return value & FEC_MII_DATA_OP_RD ?
-		in_be32(&priv->regs->mii_data) & FEC_MII_DATA_DATAMSK : 0;
+	return in_be32(&priv->regs->mii_data) & FEC_MII_DATA_DATAMSK;
 }
 
-static int mpc52xx_fec_mdio_read(struct mii_bus *bus, int phy_id, int reg)
+static int mpc52xx_fec_mdio_write(struct mii_bus *bus, int phy_id, int reg, u16 data)
 {
-	return mpc52xx_fec_mdio_transfer(bus, phy_id, reg, FEC_MII_READ_FRAME);
+	struct mpc52xx_fec_mdio_priv *priv = bus->priv;
+	struct mpc52xx_fec __iomem *fec;
+	u32 value = data;
+	int tries = 100;
+
+	fec = priv->regs;
+	out_be32(&fec->ievent, FEC_IEVENT_MII);
+
+	value |= FEC_MII_WRITE_FRAME;
+	value |= (phy_id << FEC_MII_DATA_PA_SHIFT) & FEC_MII_DATA_PA_MSK;
+	value |= (reg << FEC_MII_DATA_RA_SHIFT) & FEC_MII_DATA_RA_MSK;
+
+	out_be32(&priv->regs->mii_data, value);
+
+	/* wait for request to finish */
+	while (!(in_be32(&fec->ievent) & FEC_IEVENT_MII) && --tries)
+		udelay(5);
+
+	if (tries == 0)
+		return -ETIMEDOUT;
+
+	return 0;
 }
 
-static int mpc52xx_fec_mdio_write(struct mii_bus *bus, int phy_id, int reg,
-		u16 data)
-{
-	return mpc52xx_fec_mdio_transfer(bus, phy_id, reg,
-		data | FEC_MII_WRITE_FRAME);
-}
-
-static int mpc52xx_fec_mdio_probe(struct of_device *of,
-		const struct of_device_id *match)
+static int mpc52xx_fec_mdio_probe(struct of_device *of, const struct of_device_id *match)
 {
 	struct device *dev = &of->dev;
 	struct device_node *np = of->node;
@@ -71,7 +83,7 @@ static int mpc52xx_fec_mdio_probe(struct of_device *of,
 	int err;
 	int i;
 
-	bus = mdiobus_alloc();
+	bus = kzalloc(sizeof(*bus), GFP_KERNEL);
 	if (bus == NULL)
 		return -ENOMEM;
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
@@ -115,12 +127,14 @@ static int mpc52xx_fec_mdio_probe(struct of_device *of,
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%x", res.start);
 	bus->priv = priv;
 
-	bus->parent = dev;
+	bus->dev = dev;
 	dev_set_drvdata(dev, bus);
 
 	/* set MII speed */
-	out_be32(&priv->regs->mii_speed,
-		((mpc52xx_find_ipb_freq(of->node) >> 20) / 5) << 1);
+	out_be32(&priv->regs->mii_speed, ((mpc52xx_find_ipb_freq(of->node) >> 20) / 5) << 1);
+
+	/* enable MII interrupt */
+	out_be32(&priv->regs->imask, in_be32(&priv->regs->imask) | FEC_IMASK_MII);
 
 	err = mdiobus_register(bus);
 	if (err)
@@ -136,7 +150,7 @@ static int mpc52xx_fec_mdio_probe(struct of_device *of,
 			irq_dispose_mapping(bus->irq[i]);
 	kfree(bus->irq);
 	kfree(priv);
-	mdiobus_free(bus);
+	kfree(bus);
 
 	return err;
 }
@@ -153,11 +167,11 @@ static int mpc52xx_fec_mdio_remove(struct of_device *of)
 
 	iounmap(priv->regs);
 	for (i=0; i<PHY_MAX_ADDR; i++)
-		if (bus->irq[i] != PHY_POLL)
+		if (bus->irq[i])
 			irq_dispose_mapping(bus->irq[i]);
 	kfree(priv);
 	kfree(bus->irq);
-	mdiobus_free(bus);
+	kfree(bus);
 
 	return 0;
 }

@@ -31,8 +31,7 @@
 #include <linux/bootmem.h>
 #include <linux/uaccess.h>
 #include <asm/bfin-global.h>
-#include <asm/pda.h>
-#include <asm/cplbinit.h>
+#include <asm/l1layout.h>
 #include "blackfin_sram.h"
 
 /*
@@ -54,10 +53,32 @@ static unsigned long empty_bad_page;
 
 unsigned long empty_zero_page;
 
-extern unsigned long exception_stack[NR_CPUS][1024];
+void show_mem(void)
+{
+	unsigned long i;
+	int free = 0, total = 0, reserved = 0, shared = 0;
 
-struct blackfin_pda cpu_pda[NR_CPUS];
-EXPORT_SYMBOL(cpu_pda);
+	int cached = 0;
+	printk(KERN_INFO "Mem-info:\n");
+	show_free_areas();
+	i = max_mapnr;
+	while (i-- > 0) {
+		total++;
+		if (PageReserved(mem_map + i))
+			reserved++;
+		else if (PageSwapCache(mem_map + i))
+			cached++;
+		else if (!page_count(mem_map + i))
+			free++;
+		else
+			shared += page_count(mem_map + i) - 1;
+	}
+	printk(KERN_INFO "%d pages of RAM\n", total);
+	printk(KERN_INFO "%d free pages\n", free);
+	printk(KERN_INFO "%d reserved pages\n", reserved);
+	printk(KERN_INFO "%d pages shared\n", shared);
+	printk(KERN_INFO "%d pages swap cached\n", cached);
+}
 
 /*
  * paging_init() continues the virtual memory environment setup which
@@ -104,32 +125,6 @@ void __init paging_init(void)
 	}
 }
 
-asmlinkage void init_pda(void)
-{
-	unsigned int cpu = raw_smp_processor_id();
-
-	/* Initialize the PDA fields holding references to other parts
-	   of the memory. The content of such memory is still
-	   undefined at the time of the call, we are only setting up
-	   valid pointers to it. */
-	memset(&cpu_pda[cpu], 0, sizeof(cpu_pda[cpu]));
-
-	cpu_pda[0].next = &cpu_pda[1];
-	cpu_pda[1].next = &cpu_pda[0];
-
-	cpu_pda[cpu].ex_stack = exception_stack[cpu + 1];
-
-#ifdef CONFIG_SMP
-	cpu_pda[cpu].imask = 0x1f;
-#endif
-}
-
-void __cpuinit reserve_pda(void)
-{
-	printk(KERN_INFO "PDA for CPU%u reserved at %p\n", smp_processor_id(),
-					&cpu_pda[smp_processor_id()]);
-}
-
 void __init mem_init(void)
 {
 	unsigned int codek = 0, datak = 0, initk = 0;
@@ -169,20 +164,22 @@ void __init mem_init(void)
 		"(%uk init code, %uk kernel code, %uk data, %uk dma, %uk reserved)\n",
 		(unsigned long) freepages << (PAGE_SHIFT-10), _ramend >> 10,
 		initk, codek, datak, DMA_UNCACHED_REGION >> 10, (reservedpages << (PAGE_SHIFT-10)));
-}
 
-static int __init sram_init(void)
-{
 	/* Initialize the blackfin L1 Memory. */
-	bfin_sram_init();
+	l1sram_init();
+	l1_data_sram_init();
+	l1_inst_sram_init();
 
-	/* Reserve the PDA space for the boot CPU right after we
-	 * initialized the scratch memory allocator.
-	 */
-	reserve_pda();
-	return 0;
+	/* Allocate this once; never free it.  We assume this gives us a
+	   pointer to the start of L1 scratchpad memory; panic if it
+	   doesn't.  */
+	tmp = (unsigned long)l1sram_alloc(sizeof(struct l1_scratch_task_info));
+	if (tmp != (unsigned long)L1_SCRATCH_TASK_INFO) {
+		printk(KERN_EMERG "mem_init(): Did not get the right address from l1sram_alloc: %08lx != %08lx\n",
+			tmp, (unsigned long)L1_SCRATCH_TASK_INFO);
+		panic("No L1, time to give up\n");
+	}
 }
-pure_initcall(sram_init);
 
 static void __init free_init_pages(const char *what, unsigned long begin, unsigned long end)
 {

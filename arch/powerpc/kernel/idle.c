@@ -34,7 +34,11 @@
 #include <asm/smp.h>
 
 #ifdef CONFIG_HOTPLUG_CPU
-#define cpu_should_die()	cpu_is_offline(smp_processor_id())
+/* this is used for software suspend, and that shuts down
+ * CPUs even while the system is still booting... */
+#define cpu_should_die()	(cpu_is_offline(smp_processor_id()) && \
+				   (system_state == SYSTEM_RUNNING     \
+				 || system_state == SYSTEM_BOOTING))
 #else
 #define cpu_should_die()	0
 #endif
@@ -56,7 +60,7 @@ void cpu_idle(void)
 
 	set_thread_flag(TIF_POLLING_NRFLAG);
 	while (1) {
-		tick_nohz_stop_sched_tick(1);
+		tick_nohz_stop_sched_tick();
 		while (!need_resched() && !cpu_should_die()) {
 			ppc64_runlatch_off();
 
@@ -69,14 +73,9 @@ void cpu_idle(void)
 				smp_mb();
 				local_irq_disable();
 
-				/* Don't trace irqs off for idle */
-				stop_critical_timings();
-
 				/* check again after disabling irqs */
 				if (!need_resched() && !cpu_should_die())
 					ppc_md.power_save();
-
-				start_critical_timings();
 
 				local_irq_enable();
 				set_thread_flag(TIF_POLLING_NRFLAG);

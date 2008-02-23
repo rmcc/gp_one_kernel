@@ -3,6 +3,7 @@
 #include <asm/io.h>
 #include <asm/time.h>
 #include <asm/mpc52xx.h>
+#include "mpc52xx_pic.h"
 
 /* defined in lite5200_sleep.S and only used here */
 extern void lite5200_low_power(void __iomem *sram, void __iomem *mbar);
@@ -13,7 +14,6 @@ static struct mpc52xx_sdma __iomem *bes;
 static struct mpc52xx_xlb __iomem *xlb;
 static struct mpc52xx_gpio __iomem *gps;
 static struct mpc52xx_gpio_wkup __iomem *gpw;
-static void __iomem *pci;
 static void __iomem *sram;
 static const int sram_size = 0x4000;	/* 16 kBytes */
 static void __iomem *mbar;
@@ -50,8 +50,6 @@ static int lite5200_pm_prepare(void)
 		{ .type = "builtin", .compatible = "mpc5200", }, /* efika */
 		{}
 	};
-	u64 regaddr64 = 0;
-	const u32 *regaddr_p;
 
 	/* deep sleep? let mpc52xx code handle that */
 	if (lite5200_pm_target_state == PM_SUSPEND_STANDBY)
@@ -62,12 +60,8 @@ static int lite5200_pm_prepare(void)
 
 	/* map registers */
 	np = of_find_matching_node(NULL, immr_ids);
-	regaddr_p = of_get_address(np, 0, NULL, NULL);
-	if (regaddr_p)
-		regaddr64 = of_translate_address(np, regaddr_p);
+	mbar = of_iomap(np, 0);
 	of_node_put(np);
-
-	mbar = ioremap((u32) regaddr64, 0xC000);
 	if (!mbar) {
 		printk(KERN_ERR "%s:%i Error mapping registers\n", __func__, __LINE__);
 		return -ENOSYS;
@@ -77,7 +71,6 @@ static int lite5200_pm_prepare(void)
 	pic = mbar + 0x500;
 	gps = mbar + 0xb00;
 	gpw = mbar + 0xc00;
-	pci = mbar + 0xd00;
 	bes = mbar + 0x1200;
 	xlb = mbar + 0x1f00;
 	sram = mbar + 0x8000;
@@ -92,7 +85,6 @@ static struct mpc52xx_sdma sbes;
 static struct mpc52xx_xlb sxlb;
 static struct mpc52xx_gpio sgps;
 static struct mpc52xx_gpio_wkup sgpw;
-static char spci[0x200];
 
 static void lite5200_save_regs(void)
 {
@@ -102,7 +94,6 @@ static void lite5200_save_regs(void)
 	_memcpy_fromio(&sxlb, xlb, sizeof(*xlb));
 	_memcpy_fromio(&sgps, gps, sizeof(*gps));
 	_memcpy_fromio(&sgpw, gpw, sizeof(*gpw));
-	_memcpy_fromio(spci, pci, 0x200);
 
 	_memcpy_fromio(saved_sram, sram, sram_size);
 }
@@ -112,8 +103,6 @@ static void lite5200_restore_regs(void)
 	int i;
 	_memcpy_toio(sram, saved_sram, sram_size);
 
-	/* PCI Configuration */
-	_memcpy_toio(pci, spci, 0x200);
 
 	/*
 	 * GPIOs. Interrupt Master Enable has higher address then other

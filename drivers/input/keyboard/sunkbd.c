@@ -1,4 +1,6 @@
 /*
+ * $Id: sunkbd.c,v 1.14 2001/09/25 10:12:07 vojtech Exp $
+ *
  *  Copyright (c) 1999-2001 Vojtech Pavlik
  */
 

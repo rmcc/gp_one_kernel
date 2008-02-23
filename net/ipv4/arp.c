@@ -1,5 +1,7 @@
 /* linux/net/ipv4/arp.c
  *
+ * Version:	$Id: arp.c,v 1.99 2001/08/30 22:55:42 davem Exp $
+ *
  * Copyright (C) 1994 by Florian  La Roche
  *
  * This module implements the Address Resolution Protocol ARP (RFC 826),
@@ -421,12 +423,11 @@ static int arp_filter(__be32 sip, __be32 tip, struct net_device *dev)
 	struct rtable *rt;
 	int flag = 0;
 	/*unsigned long now; */
-	struct net *net = dev_net(dev);
 
-	if (ip_route_output_key(net, &rt, &fl) < 0)
+	if (ip_route_output_key(dev_net(dev), &rt, &fl) < 0)
 		return 1;
 	if (rt->u.dst.dev != dev) {
-		NET_INC_STATS_BH(net, LINUX_MIB_ARPFILTER);
+		NET_INC_STATS_BH(LINUX_MIB_ARPFILTER);
 		flag = 1;
 	}
 	ip_rt_put(rt);
@@ -506,7 +507,7 @@ int arp_bind_neighbour(struct dst_entry *dst)
 	if (dev == NULL)
 		return -EINVAL;
 	if (n == NULL) {
-		__be32 nexthop = ((struct rtable *)dst)->rt_gateway;
+		__be32 nexthop = ((struct rtable*)dst)->rt_gateway;
 		if (dev->flags&(IFF_LOOPBACK|IFF_POINTOPOINT))
 			nexthop = 0;
 		n = __neigh_lookup_errno(
@@ -640,14 +641,14 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 	arp_ptr=(unsigned char *)(arp+1);
 
 	memcpy(arp_ptr, src_hw, dev->addr_len);
-	arp_ptr += dev->addr_len;
-	memcpy(arp_ptr, &src_ip, 4);
-	arp_ptr += 4;
+	arp_ptr+=dev->addr_len;
+	memcpy(arp_ptr, &src_ip,4);
+	arp_ptr+=4;
 	if (target_hw != NULL)
 		memcpy(arp_ptr, target_hw, dev->addr_len);
 	else
 		memset(arp_ptr, 0, dev->addr_len);
-	arp_ptr += dev->addr_len;
+	arp_ptr+=dev->addr_len;
 	memcpy(arp_ptr, &dest_ip, 4);
 
 	return skb;
@@ -663,7 +664,7 @@ out:
 void arp_xmit(struct sk_buff *skb)
 {
 	/* Send it off, maybe filter it using firewalling first.  */
-	NF_HOOK(NFPROTO_ARP, NF_ARP_OUT, skb, NULL, skb->dev, dev_queue_xmit);
+	NF_HOOK(NF_ARP, NF_ARP_OUT, skb, NULL, skb->dev, dev_queue_xmit);
 }
 
 /*
@@ -818,18 +819,18 @@ static int arp_process(struct sk_buff *skb)
 		addr_type = rt->rt_type;
 
 		if (addr_type == RTN_LOCAL) {
-			int dont_send = 0;
+			n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
+			if (n) {
+				int dont_send = 0;
 
-			if (!dont_send)
-				dont_send |= arp_ignore(in_dev,sip,tip);
-			if (!dont_send && IN_DEV_ARPFILTER(in_dev))
-				dont_send |= arp_filter(sip,tip,dev);
-			if (!dont_send) {
-				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
-				if (n) {
+				if (!dont_send)
+					dont_send |= arp_ignore(in_dev,sip,tip);
+				if (!dont_send && IN_DEV_ARPFILTER(in_dev))
+					dont_send |= arp_filter(sip,tip,dev);
+				if (!dont_send)
 					arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
-					neigh_release(n);
-				}
+
+				neigh_release(n);
 			}
 			goto out;
 		} else if (IN_DEV_FORWARD(in_dev)) {
@@ -928,7 +929,7 @@ static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	memset(NEIGH_CB(skb), 0, sizeof(struct neighbour_cb));
 
-	return NF_HOOK(NFPROTO_ARP, NF_ARP_IN, skb, dev, NULL, arp_process);
+	return NF_HOOK(NF_ARP, NF_ARP_IN, skb, dev, NULL, arp_process);
 
 freeskb:
 	kfree_skb(skb);
@@ -1198,7 +1199,7 @@ static int arp_netdev_event(struct notifier_block *this, unsigned long event, vo
 	switch (event) {
 	case NETDEV_CHANGEADDR:
 		neigh_changeaddr(&arp_tbl, dev);
-		rt_cache_flush(dev_net(dev), 0);
+		rt_cache_flush(0);
 		break;
 	default:
 		break;
@@ -1308,7 +1309,7 @@ static void arp_format_neigh_entry(struct seq_file *seq,
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 	}
 #endif
-	sprintf(tbuf, "%pI4", n->primary_key);
+	sprintf(tbuf, NIPQUAD_FMT, NIPQUAD(*(u32*)n->primary_key));
 	seq_printf(seq, "%-16s 0x%-10x0x%-10x%s     *        %s\n",
 		   tbuf, hatype, arp_state_to_flags(n), hbuffer, dev->name);
 	read_unlock(&n->lock);
@@ -1321,7 +1322,7 @@ static void arp_format_pneigh_entry(struct seq_file *seq,
 	int hatype = dev ? dev->type : 0;
 	char tbuf[16];
 
-	sprintf(tbuf, "%pI4", n->key);
+	sprintf(tbuf, NIPQUAD_FMT, NIPQUAD(*(u32*)n->key));
 	seq_printf(seq, "%-16s 0x%-10x0x%-10x%s     *        %s\n",
 		   tbuf, hatype, ATF_PUBL | ATF_PERM, "00:00:00:00:00:00",
 		   dev ? dev->name : "*");

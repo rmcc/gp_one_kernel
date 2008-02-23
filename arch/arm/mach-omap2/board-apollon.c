@@ -29,19 +29,19 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/flash.h>
 
-#include <mach/gpio.h>
-#include <mach/led.h>
-#include <mach/mux.h>
-#include <mach/usb.h>
-#include <mach/board.h>
-#include <mach/common.h>
-#include <mach/gpmc.h>
-#include <mach/control.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/led.h>
+#include <asm/arch/mux.h>
+#include <asm/arch/usb.h>
+#include <asm/arch/board.h>
+#include <asm/arch/common.h>
+#include <asm/arch/gpmc.h>
+#include <asm/arch/control.h>
 
 /* LED & Switch macros */
 #define LED0_GPIO13		13
@@ -236,13 +236,13 @@ static inline void __init apollon_init_smc91x(void)
 	udelay(100);
 
 	omap_cfg_reg(W4__24XX_GPIO74);
-	if (gpio_request(APOLLON_ETHR_GPIO_IRQ, "SMC91x irq") < 0) {
+	if (omap_request_gpio(APOLLON_ETHR_GPIO_IRQ) < 0) {
 		printk(KERN_ERR "Failed to request GPIO%d for smc91x IRQ\n",
 			APOLLON_ETHR_GPIO_IRQ);
 		gpmc_cs_free(APOLLON_ETH_CS);
 		goto out;
 	}
-	gpio_direction_input(APOLLON_ETHR_GPIO_IRQ);
+	omap_set_gpio_direction(APOLLON_ETHR_GPIO_IRQ, 1);
 
 out:
 	clk_disable(gpmc_fck);
@@ -261,6 +261,16 @@ static struct omap_uart_config apollon_uart_config __initdata = {
 	.enabled_uarts = (1 << 0) | (0 << 1) | (0 << 2),
 };
 
+static struct omap_mmc_config apollon_mmc_config __initdata = {
+	.mmc [0] = {
+		.enabled 	= 1,
+		.wire4		= 1,
+		.wp_pin		= -1,
+		.power_pin	= -1,
+		.switch_pin	= -1,
+	},
+};
+
 static struct omap_usb_config apollon_usb_config __initdata = {
 	.register_dev	= 1,
 	.hmc_mode	= 0x14,	/* 0:dev 1:host1 2:disable */
@@ -274,6 +284,7 @@ static struct omap_lcd_config apollon_lcd_config __initdata = {
 
 static struct omap_board_config_kernel apollon_config[] = {
 	{ OMAP_TAG_UART,	&apollon_uart_config },
+	{ OMAP_TAG_MMC,		&apollon_mmc_config },
 	{ OMAP_TAG_USB,		&apollon_usb_config },
 	{ OMAP_TAG_LCD,		&apollon_lcd_config },
 };
@@ -316,27 +327,27 @@ static void __init apollon_sw_init(void)
 	/* Enter SW - Y11 */
 	omap_cfg_reg(Y11_242X_GPIO16);
 	omap_request_gpio(SW_ENTER_GPIO16);
-	gpio_direction_input(SW_ENTER_GPIO16);
+	omap_set_gpio_direction(SW_ENTER_GPIO16, 1);
 	/* Up SW - AA12 */
 	omap_cfg_reg(AA12_242X_GPIO17);
 	omap_request_gpio(SW_UP_GPIO17);
-	gpio_direction_input(SW_UP_GPIO17);
+	omap_set_gpio_direction(SW_UP_GPIO17, 1);
 	/* Down SW - AA8 */
 	omap_cfg_reg(AA8_242X_GPIO58);
 	omap_request_gpio(SW_DOWN_GPIO58);
-	gpio_direction_input(SW_DOWN_GPIO58);
+	omap_set_gpio_direction(SW_DOWN_GPIO58, 1);
 
-	set_irq_type(OMAP_GPIO_IRQ(SW_ENTER_GPIO16), IRQ_TYPE_EDGE_RISING);
+	set_irq_type(OMAP_GPIO_IRQ(SW_ENTER_GPIO16), IRQT_RISING);
 	if (request_irq(OMAP_GPIO_IRQ(SW_ENTER_GPIO16), &apollon_sw_interrupt,
 				IRQF_SHARED, "enter sw",
 				&apollon_sw_interrupt))
 		return;
-	set_irq_type(OMAP_GPIO_IRQ(SW_UP_GPIO17), IRQ_TYPE_EDGE_RISING);
+	set_irq_type(OMAP_GPIO_IRQ(SW_UP_GPIO17), IRQT_RISING);
 	if (request_irq(OMAP_GPIO_IRQ(SW_UP_GPIO17), &apollon_sw_interrupt,
 				IRQF_SHARED, "up sw",
 				&apollon_sw_interrupt))
 		return;
-	set_irq_type(OMAP_GPIO_IRQ(SW_DOWN_GPIO58), IRQ_TYPE_EDGE_RISING);
+	set_irq_type(OMAP_GPIO_IRQ(SW_DOWN_GPIO58), IRQT_RISING);
 	if (request_irq(OMAP_GPIO_IRQ(SW_DOWN_GPIO58), &apollon_sw_interrupt,
 				IRQF_SHARED, "down sw",
 				&apollon_sw_interrupt))
@@ -348,8 +359,9 @@ static void __init apollon_usb_init(void)
 	/* USB device */
 	/* DEVICE_SUSPEND */
 	omap_cfg_reg(P21_242X_GPIO12);
-	gpio_request(12, "USB suspend");
-	gpio_direction_output(12, 0);
+	omap_request_gpio(12);
+	omap_set_gpio_direction(12, 0);		/* OUT */
+	omap_set_gpio_dataout(12, 0);
 }
 
 static void __init omap_apollon_init(void)

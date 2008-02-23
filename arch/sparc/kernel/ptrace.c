@@ -21,7 +21,6 @@
 #include <linux/signal.h>
 #include <linux/regset.h>
 #include <linux/elf.h>
-#include <linux/tracehook.h>
 
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -288,7 +287,7 @@ static const struct user_regset sparc32_regsets[] = {
 	 */
 	[REGSET_GENERAL] = {
 		.core_note_type = NT_PRSTATUS,
-		.n = 38,
+		.n = 38 * sizeof(u32),
 		.size = sizeof(u32), .align = sizeof(u32),
 		.get = genregs32_get, .set = genregs32_set
 	},
@@ -304,7 +303,7 @@ static const struct user_regset sparc32_regsets[] = {
 	 */
 	[REGSET_FP] = {
 		.core_note_type = NT_PRFPREG,
-		.n = 99,
+		.n = 99 * sizeof(u32),
 		.size = sizeof(u32), .align = sizeof(u32),
 		.get = fpregs32_get, .set = fpregs32_set
 	},
@@ -451,16 +450,21 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	return ret;
 }
 
-asmlinkage int syscall_trace(struct pt_regs *regs, int syscall_exit_p)
+asmlinkage void syscall_trace(void)
 {
-	int ret = 0;
-
-	if (test_thread_flag(TIF_SYSCALL_TRACE)) {
-		if (syscall_exit_p)
-			tracehook_report_syscall_exit(regs, 0);
-		else
-			ret = tracehook_report_syscall_entry(regs);
+	if (!test_thread_flag(TIF_SYSCALL_TRACE))
+		return;
+	if (!(current->ptrace & PT_PTRACED))
+		return;
+	ptrace_notify(SIGTRAP | ((current->ptrace & PT_TRACESYSGOOD)
+				 ? 0x80 : 0));
+	/*
+	 * this isn't the same as continuing with a signal, but it will do
+	 * for normal use.  strace only continues with a signal if the
+	 * stopping signal is not SIGTRAP.  -brl
+	 */
+	if (current->exit_code) {
+		send_sig (current->exit_code, current, 1);
+		current->exit_code = 0;
 	}
-
-	return ret;
 }

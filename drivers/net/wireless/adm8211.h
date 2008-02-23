@@ -443,6 +443,7 @@ struct adm8211_rx_ring_info {
 struct adm8211_tx_ring_info {
 	struct sk_buff *skb;
 	dma_addr_t mapping;
+	struct ieee80211_tx_control tx_control;
 	size_t hdrlen;
 };
 
@@ -553,6 +554,8 @@ struct adm8211_priv {
 
 	int channel;
 	u8 bssid[ETH_ALEN];
+	u8 ssid[32];
+	size_t ssid_len;
 
 	u8 soft_rx_crc;
 	u8 retry_limit;

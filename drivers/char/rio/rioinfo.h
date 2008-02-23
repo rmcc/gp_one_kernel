@@ -33,6 +33,10 @@
 #ifndef __rioinfo_h
 #define __rioinfo_h
 
+#ifdef SCCS_LABELS
+static char *_rioinfo_h_sccs_ = "@(#)rioinfo.h	1.2";
+#endif
+
 /*
 ** Host card data structure
 */

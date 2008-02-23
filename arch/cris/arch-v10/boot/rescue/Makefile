@@ -2,9 +2,12 @@
 # Makefile for rescue (bootstrap) code
 #
 
-ccflags-y += -O2 $(LINUXINCLUDE)
-asflags-y += $(LINUXINCLUDE)
-ldflags-y += -T $(srctree)/$(src)/rescue.lds
+CC = gcc-cris -mlinux $(LINUXINCLUDE)
+ccflags-y += -O2
+asflags-y += -traditional
+LD = gcc-cris -mlinux -nostdlib
+ldflags-y += -T $(obj)/rescue.ld
+OBJCOPY = objcopy-cris
 OBJCOPYFLAGS = -O binary --remove-section=.bss
 obj-$(CONFIG_ETRAX_AXISFLASHMAP) = head.o
 OBJECT := $(obj)/head.o

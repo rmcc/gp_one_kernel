@@ -73,7 +73,7 @@ void __rtnl_unlock(void)
 
 void rtnl_unlock(void)
 {
-	/* This fellow will unlock it for us. */
+	mutex_unlock(&rtnl_mutex);
 	netdev_run_todo();
 }
 
@@ -498,8 +498,7 @@ int rtnetlink_put_metrics(struct sk_buff *skb, u32 *metrics)
 	return nla_nest_end(skb, mx);
 
 nla_put_failure:
-	nla_nest_cancel(skb, mx);
-	return -EMSGSIZE;
+	return nla_nest_cancel(skb, mx);
 }
 
 int rtnl_put_cacheinfo(struct sk_buff *skb, struct dst_entry *dst, u32 id,
@@ -551,7 +550,7 @@ static void set_operstate(struct net_device *dev, unsigned char transition)
 }
 
 static void copy_rtnl_link_stats(struct rtnl_link_stats *a,
-				 const struct net_device_stats *b)
+				 struct net_device_stats *b)
 {
 	a->rx_packets = b->rx_packets;
 	a->tx_packets = b->tx_packets;
@@ -586,7 +585,6 @@ static inline size_t if_nlmsg_size(const struct net_device *dev)
 {
 	return NLMSG_ALIGN(sizeof(struct ifinfomsg))
 	       + nla_total_size(IFNAMSIZ) /* IFLA_IFNAME */
-	       + nla_total_size(IFALIASZ) /* IFLA_IFALIAS */
 	       + nla_total_size(IFNAMSIZ) /* IFLA_QDISC */
 	       + nla_total_size(sizeof(struct rtnl_link_ifmap))
 	       + nla_total_size(sizeof(struct rtnl_link_stats))
@@ -606,11 +604,8 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 			    int type, u32 pid, u32 seq, u32 change,
 			    unsigned int flags)
 {
-	struct netdev_queue *txq;
 	struct ifinfomsg *ifm;
 	struct nlmsghdr *nlh;
-	const struct net_device_stats *stats;
-	struct nlattr *attr;
 
 	nlh = nlmsg_put(skb, pid, seq, type, sizeof(*ifm), flags);
 	if (nlh == NULL)
@@ -637,12 +632,8 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 	if (dev->master)
 		NLA_PUT_U32(skb, IFLA_MASTER, dev->master->ifindex);
 
-	txq = netdev_get_tx_queue(dev, 0);
-	if (txq->qdisc_sleeping)
-		NLA_PUT_STRING(skb, IFLA_QDISC, txq->qdisc_sleeping->ops->id);
-
-	if (dev->ifalias)
-		NLA_PUT_STRING(skb, IFLA_IFALIAS, dev->ifalias);
+	if (dev->qdisc_sleeping)
+		NLA_PUT_STRING(skb, IFLA_QDISC, dev->qdisc_sleeping->ops->id);
 
 	if (1) {
 		struct rtnl_link_ifmap map = {
@@ -661,13 +652,19 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 		NLA_PUT(skb, IFLA_BROADCAST, dev->addr_len, dev->broadcast);
 	}
 
-	attr = nla_reserve(skb, IFLA_STATS,
-			sizeof(struct rtnl_link_stats));
-	if (attr == NULL)
-		goto nla_put_failure;
+	if (dev->get_stats) {
+		struct net_device_stats *stats = dev->get_stats(dev);
+		if (stats) {
+			struct nlattr *attr;
 
-	stats = dev_get_stats(dev);
-	copy_rtnl_link_stats(nla_data(attr), stats);
+			attr = nla_reserve(skb, IFLA_STATS,
+					   sizeof(struct rtnl_link_stats));
+			if (attr == NULL)
+				goto nla_put_failure;
+
+			copy_rtnl_link_stats(nla_data(attr), stats);
+		}
+	}
 
 	if (dev->rtnl_link_ops) {
 		if (rtnl_link_fill(skb, dev) < 0)
@@ -717,7 +714,6 @@ const struct nla_policy ifla_policy[IFLA_MAX+1] = {
 	[IFLA_LINKMODE]		= { .type = NLA_U8 },
 	[IFLA_LINKINFO]		= { .type = NLA_NESTED },
 	[IFLA_NET_NS_PID]	= { .type = NLA_U32 },
-	[IFLA_IFALIAS]	        = { .type = NLA_STRING, .len = IFALIASZ-1 },
 };
 
 static const struct nla_policy ifla_info_policy[IFLA_INFO_MAX+1] = {
@@ -762,7 +758,6 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		      struct nlattr **tb, char *ifname, int modified)
 {
-	const struct net_device_ops *ops = dev->netdev_ops;
 	int send_addr_notify = 0;
 	int err;
 
@@ -784,7 +779,7 @@ static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		struct rtnl_link_ifmap *u_map;
 		struct ifmap k_map;
 
-		if (!ops->ndo_set_config) {
+		if (!dev->set_config) {
 			err = -EOPNOTSUPP;
 			goto errout;
 		}
@@ -802,7 +797,7 @@ static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		k_map.dma = (unsigned char) u_map->dma;
 		k_map.port = (unsigned char) u_map->port;
 
-		err = ops->ndo_set_config(dev, &k_map);
+		err = dev->set_config(dev, &k_map);
 		if (err < 0)
 			goto errout;
 
@@ -813,7 +808,7 @@ static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		struct sockaddr *sa;
 		int len;
 
-		if (!ops->ndo_set_mac_address) {
+		if (!dev->set_mac_address) {
 			err = -EOPNOTSUPP;
 			goto errout;
 		}
@@ -832,7 +827,7 @@ static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		sa->sa_family = dev->type;
 		memcpy(sa->sa_data, nla_data(tb[IFLA_ADDRESS]),
 		       dev->addr_len);
-		err = ops->ndo_set_mac_address(dev, sa);
+		err = dev->set_mac_address(dev, sa);
 		kfree(sa);
 		if (err)
 			goto errout;
@@ -859,14 +854,6 @@ static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		modified = 1;
 	}
 
-	if (tb[IFLA_IFALIAS]) {
-		err = dev_set_alias(dev, nla_data(tb[IFLA_IFALIAS]),
-				    nla_len(tb[IFLA_IFALIAS]));
-		if (err < 0)
-			goto errout;
-		modified = 1;
-	}
-
 	if (tb[IFLA_BROADCAST]) {
 		nla_memcpy(dev->broadcast, tb[IFLA_BROADCAST], dev->addr_len);
 		send_addr_notify = 1;
@@ -879,9 +866,7 @@ static int do_setlink(struct net_device *dev, struct ifinfomsg *ifm,
 		if (ifm->ifi_change)
 			flags = (flags & ifm->ifi_change) |
 				(dev->flags & ~ifm->ifi_change);
-		err = dev_change_flags(dev, flags);
-		if (err < 0)
-			goto errout;
+		dev_change_flags(dev, flags);
 	}
 
 	if (tb[IFLA_TXQLEN])
@@ -1043,7 +1028,7 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 	struct nlattr *linkinfo[IFLA_INFO_MAX+1];
 	int err;
 
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 replay:
 #endif
 	err = nlmsg_parse(nlh, sizeof(*ifm), tb, IFLA_MAX, ifla_policy);
@@ -1132,7 +1117,7 @@ replay:
 			return -EOPNOTSUPP;
 
 		if (!ops) {
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 			if (kind[0]) {
 				__rtnl_unlock();
 				request_module("rtnl-link-%s", kind);

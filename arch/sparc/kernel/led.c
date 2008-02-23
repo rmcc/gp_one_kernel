@@ -2,7 +2,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
-#include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/jiffies.h>
 #include <linux/timer.h>
@@ -46,22 +45,21 @@ static void led_blink(unsigned long timeout)
 	add_timer(&led_blink_timer);
 }
 
-static int led_proc_show(struct seq_file *m, void *v)
+static int led_read_proc(char *buf, char **start, off_t offset, int count,
+			 int *eof, void *data)
 {
+	int len = 0;
+
 	if (get_auxio() & AUXIO_LED)
-		seq_puts(m, "on\n");
+		len = sprintf(buf, "on\n");
 	else
-		seq_puts(m, "off\n");
-	return 0;
+		len = sprintf(buf, "off\n");
+
+	return len;
 }
 
-static int led_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, led_proc_show, NULL);
-}
-
-static ssize_t led_proc_write(struct file *file, const char __user *buffer,
-			      size_t count, loff_t *ppos)
+static int led_write_proc(struct file *file, const char __user *buffer,
+			  unsigned long count, void *data)
 {
 	char *buf = NULL;
 
@@ -105,15 +103,6 @@ static ssize_t led_proc_write(struct file *file, const char __user *buffer,
 	return count;
 }
 
-static const struct file_operations led_proc_fops = {
-	.owner		= THIS_MODULE,
-	.open		= led_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-	.write		= led_proc_write,
-};
-
 static struct proc_dir_entry *led;
 
 #define LED_VERSION	"0.1"
@@ -123,9 +112,12 @@ static int __init led_init(void)
 	init_timer(&led_blink_timer);
 	led_blink_timer.function = led_blink;
 
-	led = proc_create("led", 0, NULL, &led_proc_fops);
+	led = create_proc_entry("led", 0, NULL);
 	if (!led)
 		return -ENOMEM;
+
+	led->read_proc = led_read_proc; /* reader function */
+	led->write_proc = led_write_proc; /* writer function */
 	led->owner = THIS_MODULE;
 
 	printk(KERN_INFO

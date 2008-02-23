@@ -21,7 +21,6 @@
 #include <linux/ctype.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
-#include <linux/seq_file.h>
 #include <asm/uaccess.h>
 #include "jfs_incore.h"
 #include "jfs_filsys.h"
@@ -31,19 +30,29 @@
 
 static struct proc_dir_entry *base;
 #ifdef CONFIG_JFS_DEBUG
-static int jfs_loglevel_proc_show(struct seq_file *m, void *v)
+static int loglevel_read(char *page, char **start, off_t off,
+			 int count, int *eof, void *data)
 {
-	seq_printf(m, "%d\n", jfsloglevel);
-	return 0;
+	int len;
+
+	len = sprintf(page, "%d\n", jfsloglevel);
+
+	len -= off;
+	*start = page + off;
+
+	if (len > count)
+		len = count;
+	else
+		*eof = 1;
+
+	if (len < 0)
+		len = 0;
+
+	return len;
 }
 
-static int jfs_loglevel_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, jfs_loglevel_proc_show, NULL);
-}
-
-static ssize_t jfs_loglevel_proc_write(struct file *file,
-		const char __user *buffer, size_t count, loff_t *ppos)
+static int loglevel_write(struct file *file, const char __user *buffer,
+			unsigned long count, void *data)
 {
 	char c;
 
@@ -56,30 +65,22 @@ static ssize_t jfs_loglevel_proc_write(struct file *file,
 	jfsloglevel = c - '0';
 	return count;
 }
-
-static const struct file_operations jfs_loglevel_proc_fops = {
-	.owner		= THIS_MODULE,
-	.open		= jfs_loglevel_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-	.write		= jfs_loglevel_proc_write,
-};
 #endif
 
 static struct {
 	const char	*name;
-	const struct file_operations *proc_fops;
+	read_proc_t	*read_fn;
+	write_proc_t	*write_fn;
 } Entries[] = {
 #ifdef CONFIG_JFS_STATISTICS
-	{ "lmstats",	&jfs_lmstats_proc_fops, },
-	{ "txstats",	&jfs_txstats_proc_fops, },
-	{ "xtstat",	&jfs_xtstat_proc_fops, },
-	{ "mpstat",	&jfs_mpstat_proc_fops, },
+	{ "lmstats",	jfs_lmstats_read, },
+	{ "txstats",	jfs_txstats_read, },
+	{ "xtstat",	jfs_xtstat_read, },
+	{ "mpstat",	jfs_mpstat_read, },
 #endif
 #ifdef CONFIG_JFS_DEBUG
-	{ "TxAnchor",	&jfs_txanchor_proc_fops, },
-	{ "loglevel",	&jfs_loglevel_proc_fops }
+	{ "TxAnchor",	jfs_txanchor_read, },
+	{ "loglevel",	loglevel_read, loglevel_write }
 #endif
 };
 #define NPROCENT	ARRAY_SIZE(Entries)
@@ -92,8 +93,13 @@ void jfs_proc_init(void)
 		return;
 	base->owner = THIS_MODULE;
 
-	for (i = 0; i < NPROCENT; i++)
-		proc_create(Entries[i].name, 0, base, Entries[i].proc_fops);
+	for (i = 0; i < NPROCENT; i++) {
+		struct proc_dir_entry *p;
+		if ((p = create_proc_entry(Entries[i].name, 0, base))) {
+			p->read_proc = Entries[i].read_fn;
+			p->write_proc = Entries[i].write_fn;
+		}
+	}
 }
 
 void jfs_proc_clean(void)

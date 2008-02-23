@@ -94,11 +94,8 @@ static int at32_rtc_readalarm(struct device *dev, struct rtc_wkalrm *alrm)
 {
 	struct rtc_at32ap700x *rtc = dev_get_drvdata(dev);
 
-	spin_lock_irq(&rtc->lock);
 	rtc_time_to_tm(rtc->alarm_time, &alrm->time);
-	alrm->enabled = rtc_readl(rtc, IMR) & RTC_BIT(IMR_TOPI) ? 1 : 0;
-	alrm->pending = rtc_readl(rtc, ISR) & RTC_BIT(ISR_TOPI) ? 1 : 0;
-	spin_unlock_irq(&rtc->lock);
+	alrm->pending = rtc_readl(rtc, IMR) & RTC_BIT(IMR_TOPI) ? 1 : 0;
 
 	return 0;
 }
@@ -122,7 +119,7 @@ static int at32_rtc_setalarm(struct device *dev, struct rtc_wkalrm *alrm)
 	spin_lock_irq(&rtc->lock);
 	rtc->alarm_time = alarm_unix_time;
 	rtc_writel(rtc, TOP, rtc->alarm_time);
-	if (alrm->enabled)
+	if (alrm->pending)
 		rtc_writel(rtc, CTRL, rtc_readl(rtc, CTRL)
 				| RTC_BIT(CTRL_TOPEN));
 	else
@@ -205,7 +202,7 @@ static int __init at32_rtc_probe(struct platform_device *pdev)
 {
 	struct resource	*regs;
 	struct rtc_at32ap700x *rtc;
-	int irq;
+	int irq = -1;
 	int ret;
 
 	rtc = kzalloc(sizeof(struct rtc_at32ap700x), GFP_KERNEL);
@@ -222,7 +219,7 @@ static int __init at32_rtc_probe(struct platform_device *pdev)
 	}
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq <= 0) {
+	if (irq < 0) {
 		dev_dbg(&pdev->dev, "could not get irq\n");
 		ret = -ENXIO;
 		goto out;
@@ -265,7 +262,6 @@ static int __init at32_rtc_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, rtc);
-	device_init_wakeup(&pdev->dev, 1);
 
 	dev_info(&pdev->dev, "Atmel RTC for AT32AP700x at %08lx irq %ld\n",
 			(unsigned long)rtc->regs, rtc->irq);
@@ -284,8 +280,6 @@ out:
 static int __exit at32_rtc_remove(struct platform_device *pdev)
 {
 	struct rtc_at32ap700x *rtc = platform_get_drvdata(pdev);
-
-	device_init_wakeup(&pdev->dev, 0);
 
 	free_irq(rtc->irq, rtc);
 	iounmap(rtc->regs);

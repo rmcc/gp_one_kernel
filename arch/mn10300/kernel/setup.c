@@ -17,6 +17,7 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/user.h>
+#include <linux/a.out.h>
 #include <linux/tty.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
@@ -161,7 +162,7 @@ void __init setup_arch(char **cmdline_p)
 	   reserve the page it is occupying. */
 	if (CONFIG_INTERRUPT_VECTOR_BASE >= CONFIG_KERNEL_RAM_BASE_ADDRESS &&
 	    CONFIG_INTERRUPT_VECTOR_BASE < memory_end)
-		reserve_bootmem(CONFIG_INTERRUPT_VECTOR_BASE, PAGE_SIZE,
+		reserve_bootmem(CONFIG_INTERRUPT_VECTOR_BASE, 1,
 				BOOTMEM_DEFAULT);
 
 	reserve_bootmem(PAGE_ALIGN(PFN_PHYS(free_pfn)), bootmap_size,

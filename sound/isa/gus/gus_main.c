@@ -276,11 +276,9 @@ static int snd_gus_init_dma_irq(struct snd_gus_card * gus, int latches)
 	static unsigned char dmas[8] =
 		{6, 1, 0, 2, 0, 3, 4, 5};
 
-	if (snd_BUG_ON(!gus))
-		return -EINVAL;
+	snd_assert(gus != NULL, return -EINVAL);
 	card = gus->card;
-	if (snd_BUG_ON(!card))
-		return -EINVAL;
+	snd_assert(card != NULL, return -EINVAL);
 
 	gus->mix_cntrl_reg &= 0xf8;
 	gus->mix_cntrl_reg |= 0x01;	/* disable MIC, LINE IN, enable LINE OUT */

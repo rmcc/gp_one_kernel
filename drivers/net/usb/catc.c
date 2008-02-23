@@ -229,15 +229,14 @@ static void catc_rx_done(struct urb *urb)
 	u8 *pkt_start = urb->transfer_buffer;
 	struct sk_buff *skb;
 	int pkt_len, pkt_offset = 0;
-	int status = urb->status;
 
 	if (!catc->is_f5u011) {
 		clear_bit(RX_RUNNING, &catc->flags);
 		pkt_offset = 2;
 	}
 
-	if (status) {
-		dbg("rx_done, status %d, length %d", status, urb->actual_length);
+	if (urb->status) {
+		dbg("rx_done, status %d, length %d", urb->status, urb->actual_length);
 		return;
 	}
 
@@ -272,14 +271,16 @@ static void catc_rx_done(struct urb *urb)
 
 	} while (pkt_start - (u8 *) urb->transfer_buffer < urb->actual_length);
 
+	catc->netdev->last_rx = jiffies;
+
 	if (catc->is_f5u011) {
 		if (atomic_read(&catc->recq_sz)) {
-			int state;
+			int status;
 			atomic_dec(&catc->recq_sz);
 			dbg("getting extra packet");
 			urb->dev = catc->usbdev;
-			if ((state = usb_submit_urb(urb, GFP_ATOMIC)) < 0) {
-				dbg("submit(rx_urb) status %d", state);
+			if ((status = usb_submit_urb(urb, GFP_ATOMIC)) < 0) {
+				dbg("submit(rx_urb) status %d", status);
 			}
 		} else {
 			clear_bit(RX_RUNNING, &catc->flags);
@@ -291,9 +292,8 @@ static void catc_irq_done(struct urb *urb)
 {
 	struct catc *catc = urb->context;
 	u8 *data = urb->transfer_buffer;
-	int status = urb->status;
+	int status;
 	unsigned int hasdata = 0, linksts = LinkNoChange;
-	int res;
 
 	if (!catc->is_f5u011) {
 		hasdata = data[1] & 0x80;
@@ -309,7 +309,7 @@ static void catc_irq_done(struct urb *urb)
 			linksts = LinkBad;
 	}
 
-	switch (status) {
+	switch (urb->status) {
 	case 0:			/* success */
 		break;
 	case -ECONNRESET:	/* unlink */
@@ -318,7 +318,7 @@ static void catc_irq_done(struct urb *urb)
 		return;
 	/* -EPIPE:  should clear the halt */
 	default:		/* error */
-		dbg("irq_done, status %d, data %02x %02x.", status, data[0], data[1]);
+		dbg("irq_done, status %d, data %02x %02x.", urb->status, data[0], data[1]);
 		goto resubmit;
 	}
 
@@ -338,17 +338,17 @@ static void catc_irq_done(struct urb *urb)
 				atomic_inc(&catc->recq_sz);
 		} else {
 			catc->rx_urb->dev = catc->usbdev;
-			if ((res = usb_submit_urb(catc->rx_urb, GFP_ATOMIC)) < 0) {
-				err("submit(rx_urb) status %d", res);
+			if ((status = usb_submit_urb(catc->rx_urb, GFP_ATOMIC)) < 0) {
+				err("submit(rx_urb) status %d", status);
 			}
 		} 
 	}
 resubmit:
-	res = usb_submit_urb (urb, GFP_ATOMIC);
-	if (res)
+	status = usb_submit_urb (urb, GFP_ATOMIC);
+	if (status)
 		err ("can't resubmit intr, %s-%s, status %d",
 				catc->usbdev->bus->bus_name,
-				catc->usbdev->devpath, res);
+				catc->usbdev->devpath, status);
 }
 
 /*
@@ -380,9 +380,9 @@ static void catc_tx_done(struct urb *urb)
 {
 	struct catc *catc = urb->context;
 	unsigned long flags;
-	int r, status = urb->status;
+	int r;
 
-	if (status == -ECONNRESET) {
+	if (urb->status == -ECONNRESET) {
 		dbg("Tx Reset.");
 		urb->status = 0;
 		catc->netdev->trans_start = jiffies;
@@ -392,8 +392,8 @@ static void catc_tx_done(struct urb *urb)
 		return;
 	}
 
-	if (status) {
-		dbg("tx_done, status %d, length %d", status, urb->actual_length);
+	if (urb->status) {
+		dbg("tx_done, status %d, length %d", urb->status, urb->actual_length);
 		return;
 	}
 
@@ -456,7 +456,7 @@ static void catc_tx_timeout(struct net_device *netdev)
 {
 	struct catc *catc = netdev_priv(netdev);
 
-	dev_warn(&netdev->dev, "Transmit timed out.\n");
+	warn("Transmit timed out.");
 	usb_unlink_urb(catc->tx_urb);
 }
 
@@ -504,10 +504,9 @@ static void catc_ctrl_done(struct urb *urb)
 	struct catc *catc = urb->context;
 	struct ctrl_queue *q;
 	unsigned long flags;
-	int status = urb->status;
 
-	if (status)
-		dbg("ctrl_done, status %d, len %d.", status, urb->actual_length);
+	if (urb->status)
+		dbg("ctrl_done, status %d, len %d.", urb->status, urb->actual_length);
 
 	spin_lock_irqsave(&catc->ctrl_lock, flags);
 
@@ -848,8 +847,7 @@ static int catc_probe(struct usb_interface *intf, const struct usb_device_id *id
 			dbg("64k Memory\n");
 			break;
 		default:
-			dev_warn(&intf->dev,
-				 "Couldn't detect memory size, assuming 32k\n");
+			warn("Couldn't detect memory size, assuming 32k");
 		case 0x87654321:
 			catc_set_reg(catc, TxBufCount, 4);
 			catc_set_reg(catc, RxBufCount, 16);
@@ -955,8 +953,7 @@ static int __init catc_init(void)
 {
 	int result = usb_register(&catc_driver);
 	if (result == 0)
-		printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-		       DRIVER_DESC "\n");
+		info(DRIVER_VERSION " " DRIVER_DESC);
 	return result;
 }
 

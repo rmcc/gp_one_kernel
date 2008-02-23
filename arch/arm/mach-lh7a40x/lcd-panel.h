@@ -1,4 +1,5 @@
 /* lcd-panel.h
+     $Id$
 
    written by Marc Singer
    18 Jul 2005

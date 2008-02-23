@@ -51,7 +51,13 @@ static struct sclp_register sclp_quiesce_event = {
 static int __init
 sclp_quiesce_init(void)
 {
-	return sclp_register(&sclp_quiesce_event);
+	int rc;
+
+	rc = sclp_register(&sclp_quiesce_event);
+	if (rc)
+		printk(KERN_WARNING "sclp: could not register quiesce handler "
+		       "(rc=%d)\n", rc);
+	return rc;
 }
 
 module_init(sclp_quiesce_init);

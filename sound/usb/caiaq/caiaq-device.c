@@ -42,15 +42,14 @@
 #endif
 
 MODULE_AUTHOR("Daniel Mack <daniel@caiaq.de>");
-MODULE_DESCRIPTION("caiaq USB audio, version 1.3.10");
+MODULE_DESCRIPTION("caiaq USB audio, version 1.3.6");
 MODULE_LICENSE("GPL");
 MODULE_SUPPORTED_DEVICE("{{Native Instruments, RigKontrol2},"
 			 "{Native Instruments, RigKontrol3},"
 			 "{Native Instruments, Kore Controller},"
 			 "{Native Instruments, Kore Controller 2},"
-			 "{Native Instruments, Audio Kontrol 1},"
-			 "{Native Instruments, Audio 8 DJ},"
-			 "{Native Instruments, Session I/O}}");
+			 "{Native Instruments, Audio Kontrol 1}"
+			 "{Native Instruments, Audio 8 DJ}}");
 
 static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX; /* Index 0-max */
 static char* id[SNDRV_CARDS] = SNDRV_DEFAULT_STR; /* Id for this card */
@@ -110,11 +109,6 @@ static struct usb_device_id snd_usb_id_table[] = {
 		.match_flags =  USB_DEVICE_ID_MATCH_DEVICE,
 		.idVendor =     USB_VID_NATIVEINSTRUMENTS,
 		.idProduct =    USB_PID_AUDIO8DJ
-	},
-	{
-		.match_flags =  USB_DEVICE_ID_MATCH_DEVICE,
-		.idVendor =     USB_VID_NATIVEINSTRUMENTS,
-		.idProduct =    USB_PID_SESSIONIO
 	},
 	{ /* terminator */ }
 };
@@ -446,7 +440,7 @@ static int __devinit snd_probe(struct usb_interface *intf,
 	if (!card)
 		return -ENOMEM;
 			
-	usb_set_intfdata(intf, card);
+	dev_set_drvdata(&intf->dev, card);
 	ret = init_card(caiaqdev(card));
 	if (ret < 0) {
 		log("unable to init card! (ret=%d)\n", ret);
@@ -460,7 +454,7 @@ static int __devinit snd_probe(struct usb_interface *intf,
 static void snd_disconnect(struct usb_interface *intf)
 {
 	struct snd_usb_caiaqdev *dev;
-	struct snd_card *card = usb_get_intfdata(intf);
+	struct snd_card *card = dev_get_drvdata(&intf->dev);
 
 	debug("%s(%p)\n", __func__, intf);
 

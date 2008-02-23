@@ -99,14 +99,13 @@ static void raw_rcv(struct sk_buff *skb, void *data)
 	struct raw_sock *ro = raw_sk(sk);
 	struct sockaddr_can *addr;
 
-	/* check the received tx sock reference */
-	if (!ro->recv_own_msgs && skb->sk == sk)
-		return;
-
-	/* clone the given skb to be able to enqueue it into the rcv queue */
-	skb = skb_clone(skb, GFP_ATOMIC);
-	if (!skb)
-		return;
+	if (!ro->recv_own_msgs) {
+		/* check the received tx sock reference */
+		if (skb->sk == sk) {
+			kfree_skb(skb);
+			return;
+		}
+	}
 
 	/*
 	 *  Put the datagram to the queue so that raw_recvmsg() can
@@ -211,7 +210,7 @@ static int raw_notifier(struct notifier_block *nb,
 	struct raw_sock *ro = container_of(nb, struct raw_sock, notifier);
 	struct sock *sk = &ro->sk;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	if (dev->type != ARPHRD_CAN)
@@ -633,21 +632,23 @@ static int raw_sendmsg(struct kiocb *iocb, struct socket *sock,
 	} else
 		ifindex = ro->ifindex;
 
-	if (size != sizeof(struct can_frame))
-		return -EINVAL;
-
 	dev = dev_get_by_index(&init_net, ifindex);
 	if (!dev)
 		return -ENXIO;
 
 	skb = sock_alloc_send_skb(sk, size, msg->msg_flags & MSG_DONTWAIT,
 				  &err);
-	if (!skb)
-		goto put_dev;
+	if (!skb) {
+		dev_put(dev);
+		return err;
+	}
 
 	err = memcpy_fromiovec(skb_put(skb, size), msg->msg_iov, size);
-	if (err < 0)
-		goto free_skb;
+	if (err < 0) {
+		kfree_skb(skb);
+		dev_put(dev);
+		return err;
+	}
 	skb->dev = dev;
 	skb->sk  = sk;
 
@@ -656,16 +657,9 @@ static int raw_sendmsg(struct kiocb *iocb, struct socket *sock,
 	dev_put(dev);
 
 	if (err)
-		goto send_failed;
+		return err;
 
 	return size;
-
-free_skb:
-	kfree_skb(skb);
-put_dev:
-	dev_put(dev);
-send_failed:
-	return err;
 }
 
 static int raw_recvmsg(struct kiocb *iocb, struct socket *sock,

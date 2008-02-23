@@ -418,8 +418,7 @@ static int
 romfs_readpage(struct file *file, struct page * page)
 {
 	struct inode *inode = page->mapping->host;
-	loff_t offset, size;
-	unsigned long filled;
+	loff_t offset, avail, readlen;
 	void *buf;
 	int result = -EIO;
 
@@ -431,29 +430,21 @@ romfs_readpage(struct file *file, struct page * page)
 
 	/* 32 bit warning -- but not for us :) */
 	offset = page_offset(page);
-	size = i_size_read(inode);
-	filled = 0;
-	result = 0;
-	if (offset < size) {
-		unsigned long readlen;
-
-		size -= offset;
-		readlen = size > PAGE_SIZE ? PAGE_SIZE : size;
-
-		filled = romfs_copyfrom(inode, buf, ROMFS_I(inode)->i_dataoffset+offset, readlen);
-
-		if (filled != readlen) {
-			SetPageError(page);
-			filled = 0;
-			result = -EIO;
+	if (offset < i_size_read(inode)) {
+		avail = inode->i_size-offset;
+		readlen = min_t(unsigned long, avail, PAGE_SIZE);
+		if (romfs_copyfrom(inode, buf, ROMFS_I(inode)->i_dataoffset+offset, readlen) == readlen) {
+			if (readlen < PAGE_SIZE) {
+				memset(buf + readlen,0,PAGE_SIZE-readlen);
+			}
+			SetPageUptodate(page);
+			result = 0;
 		}
 	}
-
-	if (filled < PAGE_SIZE)
-		memset(buf + filled, 0, PAGE_SIZE-filled);
-
-	if (!result)
-		SetPageUptodate(page);
+	if (result) {
+		memset(buf, 0, PAGE_SIZE);
+		SetPageError(page);
+	}
 	flush_dcache_page(page);
 
 	unlock_page(page);
@@ -490,7 +481,7 @@ static mode_t romfs_modemap[] =
 static struct inode *
 romfs_iget(struct super_block *sb, unsigned long ino)
 {
-	int nextfh, ret;
+	int nextfh;
 	struct romfs_inode ri;
 	struct inode *i;
 
@@ -524,13 +515,14 @@ romfs_iget(struct super_block *sb, unsigned long ino)
 	i->i_size = be32_to_cpu(ri.size);
 	i->i_mtime.tv_sec = i->i_atime.tv_sec = i->i_ctime.tv_sec = 0;
 	i->i_mtime.tv_nsec = i->i_atime.tv_nsec = i->i_ctime.tv_nsec = 0;
+	i->i_uid = i->i_gid = 0;
 
         /* Precalculate the data offset */
-	ret = romfs_strnlen(i, ino + ROMFH_SIZE, ROMFS_MAXFN);
-	if (ret >= 0)
-		ino = (ROMFH_SIZE + ret + 1 + ROMFH_PAD) & ROMFH_MASK;
-	else
-		ino = 0;
+        ino = romfs_strnlen(i, ino+ROMFH_SIZE, ROMFS_MAXFN);
+        if (ino >= 0)
+                ino = ((ROMFH_SIZE+ino+1+ROMFH_PAD)&ROMFH_MASK);
+        else
+                ino = 0;
 
         ROMFS_I(i)->i_metasize = ino;
         ROMFS_I(i)->i_dataoffset = ino+(i->i_ino&ROMFH_MASK);
@@ -585,7 +577,7 @@ static void romfs_destroy_inode(struct inode *inode)
 	kmem_cache_free(romfs_inode_cachep, ROMFS_I(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct romfs_inode_info *ei = foo;
 

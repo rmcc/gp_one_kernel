@@ -246,11 +246,10 @@ out:
 static void asix_async_cmd_callback(struct urb *urb)
 {
 	struct usb_ctrlrequest *req = (struct usb_ctrlrequest *)urb->context;
-	int status = urb->status;
 
-	if (status < 0)
+	if (urb->status < 0)
 		printk(KERN_DEBUG "asix_async_cmd_callback() failed with %d",
-			status);
+			urb->status);
 
 	kfree(req);
 	usb_free_urb(urb);
@@ -1103,13 +1102,11 @@ static int ax88178_link_reset(struct usbnet *dev)
 	mode = AX88178_MEDIUM_DEFAULT;
 
 	if (ecmd.speed == SPEED_1000)
-		mode |= AX_MEDIUM_GM;
+		mode |= AX_MEDIUM_GM | AX_MEDIUM_ENCK;
 	else if (ecmd.speed == SPEED_100)
 		mode |= AX_MEDIUM_PS;
 	else
 		mode &= ~(AX_MEDIUM_PS | AX_MEDIUM_GM);
-
-	mode |= AX_MEDIUM_ENCK;
 
 	if (ecmd.duplex == DUPLEX_FULL)
 		mode |= AX_MEDIUM_FD;
@@ -1443,14 +1440,6 @@ static const struct usb_device_id	products [] = {
 	// Belkin F5D5055
 	USB_DEVICE(0x050d, 0x5055),
 	.driver_info = (unsigned long) &ax88178_info,
-}, {
-	// Apple USB Ethernet Adapter
-	USB_DEVICE(0x05ac, 0x1402),
-	.driver_info = (unsigned long) &ax88772_info,
-}, {
-	// Cables-to-Go USB Ethernet Adapter
-	USB_DEVICE(0x0b95, 0x772a),
-	.driver_info = (unsigned long) &ax88772_info,
 },
 	{ },		// END
 };

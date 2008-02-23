@@ -160,16 +160,14 @@ static void *c_start(struct seq_file *m, loff_t *pos)
 {
 	if (*pos == 0)	/* just in case, cpu 0 is not the first */
 		*pos = first_cpu(cpu_online_map);
-	else
-		*pos = next_cpu_nr(*pos - 1, cpu_online_map);
-	if ((*pos) < nr_cpu_ids)
+	if ((*pos) < NR_CPUS && cpu_online(*pos))
 		return &cpu_data(*pos);
 	return NULL;
 }
 
 static void *c_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	(*pos)++;
+	*pos = next_cpu(*pos, cpu_online_map);
 	return c_start(m, pos);
 }
 

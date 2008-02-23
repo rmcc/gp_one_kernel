@@ -12,10 +12,10 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
-#include <mach/irqs.h>
+#include <asm/arch/irqs.h>
 
 #include "common.h"
 

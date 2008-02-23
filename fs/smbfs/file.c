@@ -297,7 +297,7 @@ static int smb_write_begin(struct file *file, struct address_space *mapping,
 			struct page **pagep, void **fsdata)
 {
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
-	*pagep = grab_cache_page_write_begin(mapping, index, flags);
+	*pagep = __grab_cache_page(mapping, index);
 	if (!*pagep)
 		return -ENOMEM;
 	return 0;
@@ -408,7 +408,7 @@ smb_file_release(struct inode *inode, struct file * file)
  * privileges, so we need our own check for this.
  */
 static int
-smb_file_permission(struct inode *inode, int mask)
+smb_file_permission(struct inode *inode, int mask, struct nameidata *nd)
 {
 	int mode = inode->i_mode;
 	int error = 0;
@@ -417,23 +417,14 @@ smb_file_permission(struct inode *inode, int mask)
 
 	/* Look at user permissions */
 	mode >>= 6;
-	if (mask & ~mode & (MAY_READ | MAY_WRITE | MAY_EXEC))
+	if ((mode & 7 & mask) != mask)
 		error = -EACCES;
 	return error;
 }
 
-static loff_t smb_remote_llseek(struct file *file, loff_t offset, int origin)
-{
-	loff_t ret;
-	lock_kernel();
-	ret = generic_file_llseek_unlocked(file, offset, origin);
-	unlock_kernel();
-	return ret;
-}
-
 const struct file_operations smb_file_operations =
 {
-	.llseek 	= smb_remote_llseek,
+	.llseek		= remote_llseek,
 	.read		= do_sync_read,
 	.aio_read	= smb_file_aio_read,
 	.write		= do_sync_write,

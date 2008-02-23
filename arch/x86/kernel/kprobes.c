@@ -376,10 +376,9 @@ void __kprobes arch_disarm_kprobe(struct kprobe *p)
 
 void __kprobes arch_remove_kprobe(struct kprobe *p)
 {
-	if (p->ainsn.insn) {
-		free_insn_slot(p->ainsn.insn, (p->ainsn.boostable == 1));
-		p->ainsn.insn = NULL;
-	}
+	mutex_lock(&kprobe_mutex);
+	free_insn_slot(p->ainsn.insn, (p->ainsn.boostable == 1));
+	mutex_unlock(&kprobe_mutex);
 }
 
 static void __kprobes save_previous_kprobe(struct kprobe_ctlblk *kcb)
@@ -432,6 +431,7 @@ static void __kprobes prepare_singlestep(struct kprobe *p, struct pt_regs *regs)
 		regs->ip = (unsigned long)p->ainsn.insn;
 }
 
+/* Called with kretprobe_lock held */
 void __kprobes arch_prepare_kretprobe(struct kretprobe_instance *ri,
 				      struct pt_regs *regs)
 {
@@ -682,7 +682,8 @@ static __used __kprobes void *trampoline_handler(struct pt_regs *regs)
 	unsigned long trampoline_address = (unsigned long)&kretprobe_trampoline;
 
 	INIT_HLIST_HEAD(&empty_rp);
-	kretprobe_hash_lock(current, &head, &flags);
+	spin_lock_irqsave(&kretprobe_lock, flags);
+	head = kretprobe_inst_table_head(current);
 	/* fixup registers */
 #ifdef CONFIG_X86_64
 	regs->cs = __KERNEL_CS;
@@ -695,7 +696,7 @@ static __used __kprobes void *trampoline_handler(struct pt_regs *regs)
 	/*
 	 * It is possible to have multiple instances associated with a given
 	 * task either because multiple functions in the call path have
-	 * return probes installed on them, and/or more than one
+	 * return probes installed on them, and/or more then one
 	 * return probe was registered for a target function.
 	 *
 	 * We can handle this because:
@@ -731,7 +732,7 @@ static __used __kprobes void *trampoline_handler(struct pt_regs *regs)
 
 	kretprobe_assert(ri, orig_ret_address, trampoline_address);
 
-	kretprobe_hash_unlock(current, &flags);
+	spin_unlock_irqrestore(&kretprobe_lock, flags);
 
 	hlist_for_each_entry_safe(ri, node, tmp, &empty_rp, hlist) {
 		hlist_del(&ri->hlist);
@@ -859,6 +860,7 @@ static int __kprobes post_kprobe_handler(struct pt_regs *regs)
 
 	resume_execution(cur, regs, kcb);
 	regs->flags |= kcb->kprobe_saved_flags;
+	trace_hardirqs_fixup_flags(regs->flags);
 
 	if ((kcb->kprobe_status != KPROBE_REENTER) && cur->post_handler) {
 		kcb->kprobe_status = KPROBE_HIT_SSDONE;

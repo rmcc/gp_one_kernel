@@ -15,40 +15,22 @@
 #include <linux/err.h>
 #include <linux/device.h>
 #include <linux/string.h>
-#include <linux/list.h>
-
-#include <mach/chip.h>
 
 #include "clock.h"
 
-/* at32 clock list */
-static LIST_HEAD(at32_clock_list);
-
 static DEFINE_SPINLOCK(clk_lock);
-static DEFINE_SPINLOCK(clk_list_lock);
-
-void at32_clk_register(struct clk *clk)
-{
-	spin_lock(&clk_list_lock);
-	/* add the new item to the end of the list */
-	list_add_tail(&clk->list, &at32_clock_list);
-	spin_unlock(&clk_list_lock);
-}
 
 struct clk *clk_get(struct device *dev, const char *id)
 {
-	struct clk *clk;
+	int i;
 
-	spin_lock(&clk_list_lock);
+	for (i = 0; i < at32_nr_clocks; i++) {
+		struct clk *clk = at32_clock_list[i];
 
-	list_for_each_entry(clk, &at32_clock_list, list) {
-		if (clk->dev == dev && strcmp(id, clk->name) == 0) {
-			spin_unlock(&clk_list_lock);
+		if (clk->dev == dev && strcmp(id, clk->name) == 0)
 			return clk;
-		}
 	}
 
-	spin_unlock(&clk_list_lock);
 	return ERR_PTR(-ENOENT);
 }
 EXPORT_SYMBOL(clk_get);
@@ -198,7 +180,7 @@ dump_clock(struct clk *parent, struct clkinf *r)
 	unsigned	i;
 
 	/* skip clocks coupled to devices that aren't registered */
-	if (parent->dev && !dev_name(parent->dev) && !parent->users)
+	if (parent->dev && !parent->dev->bus_id[0] && !parent->users)
 		return;
 
 	/* <nest spaces> name <pad to end> */
@@ -214,13 +196,13 @@ dump_clock(struct clk *parent, struct clkinf *r)
 		parent->users ? "on" : "off",	/* NOTE: not-paranoid!! */
 		clk_get_rate(parent));
 	if (parent->dev)
-		seq_printf(r->s, ", for %s", dev_name(parent->dev));
+		seq_printf(r->s, ", for %s", parent->dev->bus_id);
 	seq_printf(r->s, "\n");
 
 	/* cost of this scan is small, but not linear... */
 	r->nest = nest + NEST_DELTA;
-
-	list_for_each_entry(clk, &at32_clock_list, list) {
+	for (i = 3; i < at32_nr_clocks; i++) {
+		clk = at32_clock_list[i];
 		if (clk->parent == parent)
 			dump_clock(clk, r);
 	}
@@ -231,7 +213,6 @@ static int clk_show(struct seq_file *s, void *unused)
 {
 	struct clkinf	r;
 	int		i;
-	struct clk 	*clk;
 
 	/* show all the power manager registers */
 	seq_printf(s, "MCCTRL  = %8x\n", pm_readl(MCCTRL));
@@ -251,25 +232,14 @@ static int clk_show(struct seq_file *s, void *unused)
 
 	seq_printf(s, "\n");
 
+	/* show clock tree as derived from the three oscillators
+	 * we "know" are at the head of the list
+	 */
 	r.s = s;
 	r.nest = 0;
-	/* protected from changes on the list while dumping */
-	spin_lock(&clk_list_lock);
-
-	/* show clock tree as derived from the three oscillators */
-	clk = clk_get(NULL, "osc32k");
-	dump_clock(clk, &r);
-	clk_put(clk);
-
-	clk = clk_get(NULL, "osc0");
-	dump_clock(clk, &r);
-	clk_put(clk);
-
-	clk = clk_get(NULL, "osc1");
-	dump_clock(clk, &r);
-	clk_put(clk);
-
-	spin_unlock(&clk_list_lock);
+	dump_clock(at32_clock_list[0], &r);
+	dump_clock(at32_clock_list[1], &r);
+	dump_clock(at32_clock_list[2], &r);
 
 	return 0;
 }

@@ -7,6 +7,8 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
+ *	$Id: raw.c,v 1.51 2002/02/01 22:01:04 davem Exp $
+ *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
  *	YOSHIFUJI,H.@USAGI	:	raw checksum (RFC2292(bis) compliance)
@@ -377,14 +379,14 @@ static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
 	    skb_checksum_complete(skb)) {
 		atomic_inc(&sk->sk_drops);
 		kfree_skb(skb);
-		return NET_RX_DROP;
+		return 0;
 	}
 
 	/* Charge it to the socket. */
 	if (sock_queue_rcv_skb(sk,skb)<0) {
 		atomic_inc(&sk->sk_drops);
 		kfree_skb(skb);
-		return NET_RX_DROP;
+		return 0;
 	}
 
 	return 0;
@@ -429,7 +431,7 @@ int rawv6_rcv(struct sock *sk, struct sk_buff *skb)
 		if (skb_checksum_complete(skb)) {
 			atomic_inc(&sk->sk_drops);
 			kfree_skb(skb);
-			return NET_RX_DROP;
+			return 0;
 		}
 	}
 
@@ -638,7 +640,7 @@ static int rawv6_send_hdrinc(struct sock *sk, void *from, int length,
 	if (err)
 		goto error_fault;
 
-	IP6_INC_STATS(sock_net(sk), rt->rt6i_idev, IPSTATS_MIB_OUTREQUESTS);
+	IP6_INC_STATS(rt->rt6i_idev, IPSTATS_MIB_OUTREQUESTS);
 	err = NF_HOOK(PF_INET6, NF_INET_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
 		      dst_output);
 	if (err > 0)
@@ -652,7 +654,7 @@ error_fault:
 	err = -EFAULT;
 	kfree_skb(skb);
 error:
-	IP6_INC_STATS(sock_net(sk), rt->rt6i_idev, IPSTATS_MIB_OUTDISCARDS);
+	IP6_INC_STATS(rt->rt6i_idev, IPSTATS_MIB_OUTDISCARDS);
 	return err;
 }
 
@@ -811,7 +813,7 @@ static int rawv6_sendmsg(struct kiocb *iocb, struct sock *sk,
 		memset(opt, 0, sizeof(struct ipv6_txoptions));
 		opt->tot_len = sizeof(struct ipv6_txoptions);
 
-		err = datagram_send_ctl(sock_net(sk), msg, &fl, opt, &hlimit, &tclass);
+		err = datagram_send_ctl(msg, &fl, opt, &hlimit, &tclass);
 		if (err < 0) {
 			fl6_sock_release(flowlabel);
 			return err;
@@ -860,8 +862,7 @@ static int rawv6_sendmsg(struct kiocb *iocb, struct sock *sk,
 	if (final_p)
 		ipv6_addr_copy(&fl.fl6_dst, final_p);
 
-	err = __xfrm_lookup(sock_net(sk), &dst, &fl, sk, XFRM_LOOKUP_WAIT);
-	if (err < 0) {
+	if ((err = __xfrm_lookup(&dst, &fl, sk, XFRM_LOOKUP_WAIT)) < 0) {
 		if (err == -EREMOTE)
 			err = ip6_dst_blackhole(sk, &dst, &fl);
 		if (err < 0)
@@ -1158,18 +1159,9 @@ static int rawv6_ioctl(struct sock *sk, int cmd, unsigned long arg)
 static void rawv6_close(struct sock *sk, long timeout)
 {
 	if (inet_sk(sk)->num == IPPROTO_RAW)
-		ip6_ra_control(sk, -1);
+		ip6_ra_control(sk, -1, NULL);
 	ip6mr_sk_done(sk);
 	sk_common_release(sk);
-}
-
-static void raw6_destroy(struct sock *sk)
-{
-	lock_sock(sk);
-	ip6_flush_pending_frames(sk);
-	release_sock(sk);
-
-	inet6_destroy_sock(sk);
 }
 
 static int rawv6_init_sk(struct sock *sk)
@@ -1195,11 +1187,11 @@ struct proto rawv6_prot = {
 	.name		   = "RAWv6",
 	.owner		   = THIS_MODULE,
 	.close		   = rawv6_close,
-	.destroy	   = raw6_destroy,
 	.connect	   = ip6_datagram_connect,
 	.disconnect	   = udp_disconnect,
 	.ioctl		   = rawv6_ioctl,
 	.init		   = rawv6_init_sk,
+	.destroy	   = inet6_destroy_sock,
 	.setsockopt	   = rawv6_setsockopt,
 	.getsockopt	   = rawv6_getsockopt,
 	.sendmsg	   = rawv6_sendmsg,
@@ -1252,7 +1244,7 @@ static int raw6_seq_show(struct seq_file *seq, void *v)
 			   "local_address                         "
 			   "remote_address                        "
 			   "st tx_queue rx_queue tr tm->when retrnsmt"
-			   "   uid  timeout inode ref pointer drops\n");
+			   "   uid  timeout inode  drops\n");
 	else
 		raw6_sock_seq_show(seq, v, raw_seq_private(seq)->bucket);
 	return 0;

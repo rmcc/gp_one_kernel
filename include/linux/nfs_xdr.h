@@ -36,7 +36,6 @@ struct nfs_fattr {
 	__u32			nlink;
 	__u32			uid;
 	__u32			gid;
-	dev_t			rdev;
 	__u64			size;
 	union {
 		struct {
@@ -47,6 +46,7 @@ struct nfs_fattr {
 			__u64	used;
 		} nfs3;
 	} du;
+	dev_t			rdev;
 	struct nfs_fsid		fsid;
 	__u64			fileid;
 	struct timespec		atime;
@@ -56,7 +56,6 @@ struct nfs_fattr {
 	__u64			change_attr;	/* NFSv4 change attribute */
 	__u64			pre_change_attr;/* pre-op NFSv4 change attribute */
 	unsigned long		time_start;
-	unsigned long		gencount;
 };
 
 #define NFS_ATTR_WCC		0x0001		/* pre-op WCC data    */
@@ -120,14 +119,13 @@ struct nfs_openargs {
 	const struct nfs_fh *	fh;
 	struct nfs_seqid *	seqid;
 	int			open_flags;
-	fmode_t			fmode;
 	__u64                   clientid;
 	__u64                   id;
 	union {
 		struct iattr *  attrs;    /* UNCHECKED, GUARDED */
 		nfs4_verifier   verifier; /* EXCLUSIVE */
 		nfs4_stateid	delegation;		/* CLAIM_DELEGATE_CUR */
-		fmode_t		delegation_type;	/* CLAIM_PREVIOUS */
+		int		delegation_type;	/* CLAIM_PREVIOUS */
 	} u;
 	const struct qstr *	name;
 	const struct nfs_server *server;	 /* Needed for ID mapping */
@@ -144,7 +142,7 @@ struct nfs_openres {
 	struct nfs_fattr *      dir_attr;
 	struct nfs_seqid *	seqid;
 	const struct nfs_server *server;
-	fmode_t			delegation_type;
+	int			delegation_type;
 	nfs4_stateid		delegation;
 	__u32			do_recall;
 	__u64			maxsize;
@@ -172,7 +170,7 @@ struct nfs_closeargs {
 	struct nfs_fh *         fh;
 	nfs4_stateid *		stateid;
 	struct nfs_seqid *	seqid;
-	fmode_t			fmode;
+	int			open_flags;
 	const u32 *		bitmask;
 };
 
@@ -674,16 +672,16 @@ struct nfs4_rename_res {
 	struct nfs_fattr *		new_fattr;
 };
 
-#define NFS4_SETCLIENTID_NAMELEN	(127)
+#define NFS4_SETCLIENTID_NAMELEN	(56)
 struct nfs4_setclientid {
 	const nfs4_verifier *		sc_verifier;
 	unsigned int			sc_name_len;
-	char				sc_name[NFS4_SETCLIENTID_NAMELEN + 1];
+	char				sc_name[NFS4_SETCLIENTID_NAMELEN];
 	u32				sc_prog;
 	unsigned int			sc_netid_len;
-	char				sc_netid[RPCBIND_MAXNETIDLEN + 1];
+	char				sc_netid[RPCBIND_MAXNETIDLEN];
 	unsigned int			sc_uaddr_len;
-	char				sc_uaddr[RPCBIND_MAXUADDRLEN + 1];
+	char				sc_uaddr[RPCBIND_MAXUADDRLEN];
 	u32				sc_cb_ident;
 };
 
@@ -831,8 +829,9 @@ struct nfs_rpc_ops {
 	int	(*write_done)  (struct rpc_task *, struct nfs_write_data *);
 	void	(*commit_setup) (struct nfs_write_data *, struct rpc_message *);
 	int	(*commit_done) (struct rpc_task *, struct nfs_write_data *);
+	int	(*file_open)   (struct inode *, struct file *);
+	int	(*file_release) (struct inode *, struct file *);
 	int	(*lock)(struct file *, int, struct file_lock *);
-	int	(*lock_check_bounds)(const struct file_lock *);
 	void	(*clear_acl_cache)(struct inode *);
 };
 

@@ -17,7 +17,7 @@
 #include <asm/gpio.h>
 #include <asm/io.h>
 
-#include <mach/portmux.h>
+#include <asm/arch/portmux.h>
 
 #include "pio.h"
 
@@ -50,48 +50,35 @@ static struct pio_device *gpio_to_pio(unsigned int gpio)
 }
 
 /* Pin multiplexing API */
-static DEFINE_SPINLOCK(pio_lock);
 
-void __init at32_select_periph(unsigned int port, u32 pin_mask,
-			       unsigned int periph, unsigned long flags)
+void __init at32_select_periph(unsigned int pin, unsigned int periph,
+			       unsigned long flags)
 {
 	struct pio_device *pio;
+	unsigned int pin_index = pin & 0x1f;
+	u32 mask = 1 << pin_index;
 
-	/* assign and verify pio */
-	pio = gpio_to_pio(port);
+	pio = gpio_to_pio(pin);
 	if (unlikely(!pio)) {
-		printk(KERN_WARNING "pio: invalid port %u\n", port);
+		printk("pio: invalid pin %u\n", pin);
 		goto fail;
 	}
 
-	/* Test if any of the requested pins is already muxed */
-	spin_lock(&pio_lock);
-	if (unlikely(pio->pinmux_mask & pin_mask)) {
-		printk(KERN_WARNING "%s: pin(s) busy (requested 0x%x, busy 0x%x)\n",
-		       pio->name, pin_mask, pio->pinmux_mask & pin_mask);
-		spin_unlock(&pio_lock);
+	if (unlikely(test_and_set_bit(pin_index, &pio->pinmux_mask)
+			 || gpiochip_is_requested(&pio->chip, pin_index))) {
+		printk("%s: pin %u is busy\n", pio->name, pin_index);
 		goto fail;
 	}
 
-	pio->pinmux_mask |= pin_mask;
-
-	/* enable pull ups */
-	pio_writel(pio, PUER, pin_mask);
-
-	/* select either peripheral A or B */
+	pio_writel(pio, PUER, mask);
 	if (periph)
-		pio_writel(pio, BSR, pin_mask);
+		pio_writel(pio, BSR, mask);
 	else
-		pio_writel(pio, ASR, pin_mask);
+		pio_writel(pio, ASR, mask);
 
-	/* enable peripheral control */
-	pio_writel(pio, PDR, pin_mask);
-
-	/* Disable pull ups if not requested. */
+	pio_writel(pio, PDR, mask);
 	if (!(flags & AT32_GPIOF_PULLUP))
-		pio_writel(pio, PUDR, pin_mask);
-
-	spin_unlock(&pio_lock);
+		pio_writel(pio, PUDR, mask);
 
 	return;
 
@@ -147,11 +134,8 @@ fail:
 	dump_stack();
 }
 
-/*
- * Undo a previous pin reservation. Will not affect the hardware
- * configuration.
- */
-void at32_deselect_pin(unsigned int pin)
+/* Reserve a pin, preventing anyone else from changing its configuration. */
+void __init at32_reserve_pin(unsigned int pin)
 {
 	struct pio_device *pio;
 	unsigned int pin_index = pin & 0x1f;
@@ -159,37 +143,14 @@ void at32_deselect_pin(unsigned int pin)
 	pio = gpio_to_pio(pin);
 	if (unlikely(!pio)) {
 		printk("pio: invalid pin %u\n", pin);
-		dump_stack();
-		return;
-	}
-
-	clear_bit(pin_index, &pio->pinmux_mask);
-}
-
-/* Reserve a pin, preventing anyone else from changing its configuration. */
-void __init at32_reserve_pin(unsigned int port, u32 pin_mask)
-{
-	struct pio_device *pio;
-
-	/* assign and verify pio */
-	pio = gpio_to_pio(port);
-	if (unlikely(!pio)) {
-		printk(KERN_WARNING "pio: invalid port %u\n", port);
 		goto fail;
 	}
 
-	/* Test if any of the requested pins is already muxed */
-	spin_lock(&pio_lock);
-	if (unlikely(pio->pinmux_mask & pin_mask)) {
-		printk(KERN_WARNING "%s: pin(s) busy (req. 0x%x, busy 0x%x)\n",
-		       pio->name, pin_mask, pio->pinmux_mask & pin_mask);
-		spin_unlock(&pio_lock);
+	if (unlikely(test_and_set_bit(pin_index, &pio->pinmux_mask))) {
+		printk("%s: pin %u is busy\n", pio->name, pin_index);
 		goto fail;
 	}
 
-	/* Reserve pins */
-	pio->pinmux_mask |= pin_mask;
-	spin_unlock(&pio_lock);
 	return;
 
 fail:
@@ -357,8 +318,6 @@ static void pio_bank_show(struct seq_file *s, struct gpio_chip *chip)
 		const char *label;
 
 		label = gpiochip_is_requested(chip, i);
-		if (!label && (imr & mask))
-			label = "[irq]";
 		if (!label)
 			continue;
 
@@ -399,8 +358,6 @@ static int __init pio_probe(struct platform_device *pdev)
 	pio->chip.label = pio->name;
 	pio->chip.base = pdev->id * 32;
 	pio->chip.ngpio = 32;
-	pio->chip.dev = &pdev->dev;
-	pio->chip.owner = THIS_MODULE;
 
 	pio->chip.direction_input = direction_input;
 	pio->chip.get = gpio_get;
@@ -421,6 +378,7 @@ static int __init pio_probe(struct platform_device *pdev)
 }
 
 static struct platform_driver pio_driver = {
+	.probe		= pio_probe,
 	.driver		= {
 		.name		= "pio",
 	},
@@ -428,7 +386,7 @@ static struct platform_driver pio_driver = {
 
 static int __init pio_init(void)
 {
-	return platform_driver_probe(&pio_driver, pio_probe);
+	return platform_driver_register(&pio_driver);
 }
 postcore_initcall(pio_init);
 

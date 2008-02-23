@@ -68,6 +68,13 @@ static char command_line[CL_SIZE];
 const unsigned long mips_io_port_base __read_mostly = -1;
 EXPORT_SYMBOL(mips_io_port_base);
 
+/*
+ * isa_slot_offset is the address where E(ISA) busaddress 0 is mapped
+ * for the processor.
+ */
+unsigned long isa_slot_offset;
+EXPORT_SYMBOL(isa_slot_offset);
+
 static struct resource code_resource = { .name = "Kernel code", };
 static struct resource data_resource = { .name = "Kernel data", };
 
@@ -78,7 +85,7 @@ void __init add_memory_region(phys_t start, phys_t size, long type)
 
 	/* Sanity check */
 	if (start + size < start) {
-		pr_warning("Trying to add an invalid memory region, skipped\n");
+		printk("Trying to add an invalid memory region, skipped\n");
 		return;
 	}
 
@@ -92,7 +99,7 @@ void __init add_memory_region(phys_t start, phys_t size, long type)
 	}
 
 	if (x == BOOT_MEM_MAP_MAX) {
-		pr_err("Ooops! Too many entries in the memory map!\n");
+		printk("Ooops! Too many entries in the memory map!\n");
 		return;
 	}
 
@@ -108,22 +115,22 @@ static void __init print_memory_map(void)
 	const int field = 2 * sizeof(unsigned long);
 
 	for (i = 0; i < boot_mem_map.nr_map; i++) {
-		printk(KERN_INFO " memory: %0*Lx @ %0*Lx ",
+		printk(" memory: %0*Lx @ %0*Lx ",
 		       field, (unsigned long long) boot_mem_map.map[i].size,
 		       field, (unsigned long long) boot_mem_map.map[i].addr);
 
 		switch (boot_mem_map.map[i].type) {
 		case BOOT_MEM_RAM:
-			printk(KERN_CONT "(usable)\n");
+			printk("(usable)\n");
 			break;
 		case BOOT_MEM_ROM_DATA:
-			printk(KERN_CONT "(ROM data)\n");
+			printk("(ROM data)\n");
 			break;
 		case BOOT_MEM_RESERVED:
-			printk(KERN_CONT "(reserved)\n");
+			printk("(reserved)\n");
 			break;
 		default:
-			printk(KERN_CONT "type %lu\n", boot_mem_map.map[i].type);
+			printk("type %lu\n", boot_mem_map.map[i].type);
 			break;
 		}
 	}
@@ -160,39 +167,36 @@ early_param("rd_size", rd_size_early);
 static unsigned long __init init_initrd(void)
 {
 	unsigned long end;
+	u32 *initrd_header;
 
 	/*
 	 * Board specific code or command line parser should have
 	 * already set up initrd_start and initrd_end. In these cases
 	 * perfom sanity checks and use them if all looks good.
 	 */
-	if (!initrd_start || initrd_end <= initrd_start) {
-#ifdef CONFIG_PROBE_INITRD_HEADER
-		u32 *initrd_header;
+	if (initrd_start && initrd_end > initrd_start)
+		goto sanitize;
 
-		/*
-		 * See if initrd has been added to the kernel image by
-		 * arch/mips/boot/addinitrd.c. In that case a header is
-		 * prepended to initrd and is made up by 8 bytes. The first
-		 * word is a magic number and the second one is the size of
-		 * initrd.  Initrd start must be page aligned in any cases.
-		 */
-		initrd_header = __va(PAGE_ALIGN(__pa_symbol(&_end) + 8)) - 8;
-		if (initrd_header[0] != 0x494E5244)
-			goto disable;
-		initrd_start = (unsigned long)(initrd_header + 2);
-		initrd_end = initrd_start + initrd_header[1];
-#else
+	/*
+	 * See if initrd has been added to the kernel image by
+	 * arch/mips/boot/addinitrd.c. In that case a header is
+	 * prepended to initrd and is made up by 8 bytes. The fisrt
+	 * word is a magic number and the second one is the size of
+	 * initrd.  Initrd start must be page aligned in any cases.
+	 */
+	initrd_header = __va(PAGE_ALIGN(__pa_symbol(&_end) + 8)) - 8;
+	if (initrd_header[0] != 0x494E5244)
 		goto disable;
-#endif
-	}
+	initrd_start = (unsigned long)(initrd_header + 2);
+	initrd_end = initrd_start + initrd_header[1];
 
+sanitize:
 	if (initrd_start & ~PAGE_MASK) {
-		pr_err("initrd start must be page aligned\n");
+		printk(KERN_ERR "initrd start must be page aligned\n");
 		goto disable;
 	}
 	if (initrd_start < PAGE_OFFSET) {
-		pr_err("initrd start < PAGE_OFFSET\n");
+		printk(KERN_ERR "initrd start < PAGE_OFFSET\n");
 		goto disable;
 	}
 
@@ -224,18 +228,18 @@ static void __init finalize_initrd(void)
 		goto disable;
 	}
 	if (__pa(initrd_end) > PFN_PHYS(max_low_pfn)) {
-		printk(KERN_ERR "Initrd extends beyond end of memory");
+		printk("Initrd extends beyond end of memory");
 		goto disable;
 	}
 
 	reserve_bootmem(__pa(initrd_start), size, BOOTMEM_DEFAULT);
 	initrd_below_start_ok = 1;
 
-	pr_info("Initial ramdisk at: 0x%lx (%lu bytes)\n",
-		initrd_start, size);
+	printk(KERN_INFO "Initial ramdisk at: 0x%lx (%lu bytes)\n",
+	       initrd_start, size);
 	return;
 disable:
-	printk(KERN_CONT " - disabling initrd\n");
+	printk(" - disabling initrd\n");
 	initrd_start = 0;
 	initrd_end = 0;
 }
@@ -313,12 +317,14 @@ static void __init bootmem_init(void)
 	if (min_low_pfn >= max_low_pfn)
 		panic("Incorrect memory mapping !!!");
 	if (min_low_pfn > ARCH_PFN_OFFSET) {
-		pr_info("Wasting %lu bytes for tracking %lu unused pages\n",
-			(min_low_pfn - ARCH_PFN_OFFSET) * sizeof(struct page),
-			min_low_pfn - ARCH_PFN_OFFSET);
+		printk(KERN_INFO
+		       "Wasting %lu bytes for tracking %lu unused pages\n",
+		       (min_low_pfn - ARCH_PFN_OFFSET) * sizeof(struct page),
+		       min_low_pfn - ARCH_PFN_OFFSET);
 	} else if (min_low_pfn < ARCH_PFN_OFFSET) {
-		pr_info("%lu free pages won't be used\n",
-			ARCH_PFN_OFFSET - min_low_pfn);
+		printk(KERN_INFO
+		       "%lu free pages won't be used\n",
+		       ARCH_PFN_OFFSET - min_low_pfn);
 	}
 	min_low_pfn = ARCH_PFN_OFFSET;
 
@@ -472,7 +478,7 @@ static void __init arch_mem_init(char **cmdline_p)
 	/* call board setup routine */
 	plat_mem_setup();
 
-	pr_info("Determined physical RAM map:\n");
+	printk("Determined physical RAM map:\n");
 	print_memory_map();
 
 	strlcpy(command_line, arcs_cmdline, sizeof(command_line));
@@ -483,7 +489,7 @@ static void __init arch_mem_init(char **cmdline_p)
 	parse_early_param();
 
 	if (usermem) {
-		pr_info("User-defined physical RAM map:\n");
+		printk("User-defined physical RAM map:\n");
 		print_memory_map();
 	}
 
@@ -551,7 +557,11 @@ void __init setup_arch(char **cmdline_p)
 	prom_init();
 
 #ifdef CONFIG_EARLY_PRINTK
-	setup_early_printk();
+	{
+		extern void setup_early_printk(void);
+
+		setup_early_printk();
+	}
 #endif
 	cpu_report();
 	check_bugs_early();
@@ -601,8 +611,8 @@ static int __init debugfs_mips(void)
 	struct dentry *d;
 
 	d = debugfs_create_dir("mips", NULL);
-	if (!d)
-		return -ENOMEM;
+	if (IS_ERR(d))
+		return PTR_ERR(d);
 	mips_debugfs_dir = d;
 	return 0;
 }

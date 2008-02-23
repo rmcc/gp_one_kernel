@@ -1,7 +1,7 @@
 /*
  *  Driver for the Conexant CX23885 PCIe bridge
  *
- *  Copyright (c) 2007 Steven Toth <stoth@linuxtv.org>
+ *  Copyright (c) 2007 Steven Toth <stoth@hauppauge.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,7 +33,6 @@
 
 #include "cx23885.h"
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #ifdef CONFIG_VIDEO_V4L1_COMPAT
 /* Include V4L1 specific functions. Should be removed soon */
@@ -41,7 +40,7 @@
 #endif
 
 MODULE_DESCRIPTION("v4l2 driver module for cx23885 based TV cards");
-MODULE_AUTHOR("Steven Toth <stoth@linuxtv.org>");
+MODULE_AUTHOR("Steven Toth <stoth@hauppauge.com>");
 MODULE_LICENSE("GPL");
 
 /* ------------------------------------------------------------------ */
@@ -244,7 +243,7 @@ static struct cx23885_ctrl cx23885_ctls[] = {
 };
 static const int CX23885_CTLS = ARRAY_SIZE(cx23885_ctls);
 
-static const u32 cx23885_user_ctrls[] = {
+const u32 cx23885_user_ctrls[] = {
 	V4L2_CID_USER_CLASS,
 	V4L2_CID_BRIGHTNESS,
 	V4L2_CID_CONTRAST,
@@ -254,13 +253,14 @@ static const u32 cx23885_user_ctrls[] = {
 	V4L2_CID_AUDIO_MUTE,
 	0
 };
+EXPORT_SYMBOL(cx23885_user_ctrls);
 
 static const u32 *ctrl_classes[] = {
 	cx23885_user_ctrls,
 	NULL
 };
 
-static void cx23885_video_wakeup(struct cx23885_dev *dev,
+void cx23885_video_wakeup(struct cx23885_dev *dev,
 		 struct cx23885_dmaqueue *q, u32 count)
 {
 	struct cx23885_buffer *buf;
@@ -285,16 +285,17 @@ static void cx23885_video_wakeup(struct cx23885_dev *dev,
 		list_del(&buf->vb.queue);
 		wake_up(&buf->vb.done);
 	}
-	if (list_empty(&q->active))
+	if (list_empty(&q->active)) {
 		del_timer(&q->timeout);
-	else
+	} else {
 		mod_timer(&q->timeout, jiffies+BUFFER_TIMEOUT);
+	}
 	if (bc != 1)
 		printk(KERN_ERR "%s: %d buffers handled (should be 1)\n",
 			__func__, bc);
 }
 
-static int cx23885_set_tvnorm(struct cx23885_dev *dev, v4l2_std_id norm)
+int cx23885_set_tvnorm(struct cx23885_dev *dev, v4l2_std_id norm)
 {
 	dprintk(1, "%s(norm = 0x%08x) name: [%s]\n",
 		__func__,
@@ -312,7 +313,7 @@ static int cx23885_set_tvnorm(struct cx23885_dev *dev, v4l2_std_id norm)
 	return 0;
 }
 
-static struct video_device *cx23885_vdev_init(struct cx23885_dev *dev,
+struct video_device *cx23885_vdev_init(struct cx23885_dev *dev,
 				    struct pci_dev *pci,
 				    struct video_device *template,
 				    char *type)
@@ -325,14 +326,14 @@ static struct video_device *cx23885_vdev_init(struct cx23885_dev *dev,
 		return NULL;
 	*vfd = *template;
 	vfd->minor   = -1;
-	vfd->parent  = &pci->dev;
+	vfd->dev     = &pci->dev;
 	vfd->release = video_device_release;
 	snprintf(vfd->name, sizeof(vfd->name), "%s %s (%s)",
 		 dev->name, type, cx23885_boards[dev->board].name);
 	return vfd;
 }
 
-static int cx23885_ctrl_query(struct v4l2_queryctrl *qctrl)
+int cx23885_ctrl_query(struct v4l2_queryctrl *qctrl)
 {
 	int i;
 
@@ -349,6 +350,7 @@ static int cx23885_ctrl_query(struct v4l2_queryctrl *qctrl)
 	*qctrl = cx23885_ctls[i].v;
 	return 0;
 }
+EXPORT_SYMBOL(cx23885_ctrl_query);
 
 /* ------------------------------------------------------------------- */
 /* resource management                                                 */
@@ -378,12 +380,12 @@ static int res_get(struct cx23885_dev *dev, struct cx23885_fh *fh,
 
 static int res_check(struct cx23885_fh *fh, unsigned int bit)
 {
-	return fh->resources & bit;
+	return (fh->resources & bit);
 }
 
 static int res_locked(struct cx23885_dev *dev, unsigned int bit)
 {
-	return dev->resources & bit;
+	return (dev->resources & bit);
 }
 
 static void res_free(struct cx23885_dev *dev, struct cx23885_fh *fh,
@@ -399,7 +401,7 @@ static void res_free(struct cx23885_dev *dev, struct cx23885_fh *fh,
 	mutex_unlock(&dev->lock);
 }
 
-static int cx23885_video_mux(struct cx23885_dev *dev, unsigned int input)
+int cx23885_video_mux(struct cx23885_dev *dev, unsigned int input)
 {
 	struct v4l2_routing route;
 	memset(&route, 0, sizeof(route));
@@ -419,9 +421,10 @@ static int cx23885_video_mux(struct cx23885_dev *dev, unsigned int input)
 
 	return 0;
 }
+EXPORT_SYMBOL(cx23885_video_mux);
 
 /* ------------------------------------------------------------------ */
-static int cx23885_set_scale(struct cx23885_dev *dev, unsigned int width,
+int cx23885_set_scale(struct cx23885_dev *dev, unsigned int width,
 	unsigned int height, enum v4l2_field field)
 {
 	dprintk(1, "%s()\n", __func__);
@@ -718,16 +721,15 @@ static int get_resource(struct cx23885_fh *fh)
 	}
 }
 
-static int video_open(struct file *file)
+static int video_open(struct inode *inode, struct file *file)
 {
-	int minor = video_devdata(file)->minor;
+	int minor = iminor(inode);
 	struct cx23885_dev *h, *dev = NULL;
 	struct cx23885_fh *fh;
 	struct list_head *list;
 	enum v4l2_buf_type type = 0;
 	int radio = 0;
 
-	lock_kernel();
 	list_for_each(list, &cx23885_devlist) {
 		h = list_entry(list, struct cx23885_dev, devlist);
 		if (h->video_dev->minor == minor) {
@@ -745,20 +747,16 @@ static int video_open(struct file *file)
 			dev   = h;
 		}
 	}
-	if (NULL == dev) {
-		unlock_kernel();
+	if (NULL == dev)
 		return -ENODEV;
-	}
 
 	dprintk(1, "open minor=%d radio=%d type=%s\n",
 		minor, radio, v4l2_type_names[type]);
 
 	/* allocate + initialize per filehandle data */
 	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
-	if (NULL == fh) {
-		unlock_kernel();
+	if (NULL == fh)
 		return -ENOMEM;
-	}
 	file->private_data = fh;
 	fh->dev      = dev;
 	fh->radio    = radio;
@@ -776,7 +774,6 @@ static int video_open(struct file *file)
 
 	dprintk(1, "post videobuf_queue_init()\n");
 
-	unlock_kernel();
 
 	return 0;
 }
@@ -834,7 +831,7 @@ static unsigned int video_poll(struct file *file,
 	return 0;
 }
 
-static int video_release(struct file *file)
+static int video_release(struct inode *inode, struct file *file)
 {
 	struct cx23885_fh *fh = file->private_data;
 	struct cx23885_dev *dev = fh->dev;
@@ -886,21 +883,21 @@ static int video_mmap(struct file *file, struct vm_area_struct *vma)
 /* ------------------------------------------------------------------ */
 /* VIDEO CTRL IOCTLS                                                  */
 
-static int cx23885_get_control(struct cx23885_dev *dev,
-	struct v4l2_control *ctl)
+int cx23885_get_control(struct cx23885_dev *dev, struct v4l2_control *ctl)
 {
 	dprintk(1, "%s() calling cx25840(VIDIOC_G_CTRL)\n", __func__);
 	cx23885_call_i2c_clients(&dev->i2c_bus[2], VIDIOC_G_CTRL, ctl);
 	return 0;
 }
+EXPORT_SYMBOL(cx23885_get_control);
 
-static int cx23885_set_control(struct cx23885_dev *dev,
-	struct v4l2_control *ctl)
+int cx23885_set_control(struct cx23885_dev *dev, struct v4l2_control *ctl)
 {
 	dprintk(1, "%s() calling cx25840(VIDIOC_S_CTRL)"
 		" (disabled - no action)\n", __func__);
 	return 0;
 }
+EXPORT_SYMBOL(cx23885_set_control);
 
 static void init_controls(struct cx23885_dev *dev)
 {
@@ -918,7 +915,7 @@ static void init_controls(struct cx23885_dev *dev)
 /* ------------------------------------------------------------------ */
 /* VIDEO IOCTLS                                                       */
 
-static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
+static int vidioc_g_fmt_cap(struct file *file, void *priv,
 	struct v4l2_format *f)
 {
 	struct cx23885_fh *fh   = priv;
@@ -935,7 +932,7 @@ static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
+static int vidioc_try_fmt_cap(struct file *file, void *priv,
 	struct v4l2_format *f)
 {
 	struct cx23885_dev *dev = ((struct cx23885_fh *)priv)->dev;
@@ -986,7 +983,7 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
+static int vidioc_s_fmt_cap(struct file *file, void *priv,
 	struct v4l2_format *f)
 {
 	struct cx23885_fh *fh = priv;
@@ -994,7 +991,7 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	int err;
 
 	dprintk(2, "%s()\n", __func__);
-	err = vidioc_try_fmt_vid_cap(file, priv, f);
+	err = vidioc_try_fmt_cap(file, priv, f);
 
 	if (0 != err)
 		return err;
@@ -1028,7 +1025,7 @@ static int vidioc_querycap(struct file *file, void  *priv,
 	return 0;
 }
 
-static int vidioc_enum_fmt_vid_cap(struct file *file, void  *priv,
+static int vidioc_enum_fmt_cap(struct file *file, void  *priv,
 	struct v4l2_fmtdesc *f)
 {
 	if (unlikely(f->index >= ARRAY_SIZE(formats)))
@@ -1074,29 +1071,29 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 	struct v4l2_requestbuffers *p)
 {
 	struct cx23885_fh *fh = priv;
-	return videobuf_reqbufs(get_queue(fh), p);
+	return (videobuf_reqbufs(get_queue(fh), p));
 }
 
 static int vidioc_querybuf(struct file *file, void *priv,
 	struct v4l2_buffer *p)
 {
 	struct cx23885_fh *fh = priv;
-	return videobuf_querybuf(get_queue(fh), p);
+	return (videobuf_querybuf(get_queue(fh), p));
 }
 
 static int vidioc_qbuf(struct file *file, void *priv,
 	struct v4l2_buffer *p)
 {
 	struct cx23885_fh *fh = priv;
-	return videobuf_qbuf(get_queue(fh), p);
+	return (videobuf_qbuf(get_queue(fh), p));
 }
 
 static int vidioc_dqbuf(struct file *file, void *priv,
 	struct v4l2_buffer *p)
 {
 	struct cx23885_fh *fh = priv;
-	return videobuf_dqbuf(get_queue(fh), p,
-				file->f_flags & O_NONBLOCK);
+	return (videobuf_dqbuf(get_queue(fh), p,
+				file->f_flags & O_NONBLOCK));
 }
 
 static int vidioc_streamon(struct file *file, void *priv,
@@ -1148,7 +1145,7 @@ static int vidioc_s_std(struct file *file, void *priv, v4l2_std_id *tvnorms)
 	return 0;
 }
 
-static int cx23885_enum_input(struct cx23885_dev *dev, struct v4l2_input *i)
+int cx23885_enum_input(struct cx23885_dev *dev, struct v4l2_input *i)
 {
 	static const char *iname[] = {
 		[CX23885_VMUX_COMPOSITE1] = "Composite1",
@@ -1181,6 +1178,7 @@ static int cx23885_enum_input(struct cx23885_dev *dev, struct v4l2_input *i)
 		i->std = CX23885_NORMS;
 	return 0;
 }
+EXPORT_SYMBOL(cx23885_enum_input);
 
 static int vidioc_enum_input(struct file *file, void *priv,
 				struct v4l2_input *i)
@@ -1289,7 +1287,7 @@ static int vidioc_g_frequency(struct file *file, void *priv,
 	return 0;
 }
 
-static int cx23885_set_freq(struct cx23885_dev *dev, struct v4l2_frequency *f)
+int cx23885_set_freq(struct cx23885_dev *dev, struct v4l2_frequency *f)
 {
 	if (unlikely(UNSET == dev->tuner_type))
 		return -EINVAL;
@@ -1308,6 +1306,7 @@ static int cx23885_set_freq(struct cx23885_dev *dev, struct v4l2_frequency *f)
 
 	return 0;
 }
+EXPORT_SYMBOL(cx23885_set_freq);
 
 static int vidioc_s_frequency(struct file *file, void *priv,
 				struct v4l2_frequency *f)
@@ -1326,11 +1325,11 @@ static int vidioc_s_frequency(struct file *file, void *priv,
 
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 static int vidioc_g_register(struct file *file, void *fh,
-				struct v4l2_dbg_register *reg)
+				struct v4l2_register *reg)
 {
 	struct cx23885_dev *dev = ((struct cx23885_fh *)fh)->dev;
 
-	if (!v4l2_chip_match_host(&reg->match))
+	if (!v4l2_chip_match_host(reg->match_type, reg->match_chip))
 		return -EINVAL;
 
 	cx23885_call_i2c_clients(&dev->i2c_bus[2], VIDIOC_DBG_G_REGISTER, reg);
@@ -1339,11 +1338,11 @@ static int vidioc_g_register(struct file *file, void *fh,
 }
 
 static int vidioc_s_register(struct file *file, void *fh,
-				struct v4l2_dbg_register *reg)
+				struct v4l2_register *reg)
 {
 	struct cx23885_dev *dev = ((struct cx23885_fh *)fh)->dev;
 
-	if (!v4l2_chip_match_host(&reg->match))
+	if (!v4l2_chip_match_host(reg->match_type, reg->match_chip))
 		return -EINVAL;
 
 	cx23885_call_i2c_clients(&dev->i2c_bus[2], VIDIOC_DBG_S_REGISTER, reg);
@@ -1422,7 +1421,7 @@ int cx23885_video_irq(struct cx23885_dev *dev, u32 status)
 /* ----------------------------------------------------------- */
 /* exported stuff                                              */
 
-static const struct v4l2_file_operations video_fops = {
+static const struct file_operations video_fops = {
 	.owner	       = THIS_MODULE,
 	.open	       = video_open,
 	.release       = video_release,
@@ -1430,17 +1429,24 @@ static const struct v4l2_file_operations video_fops = {
 	.poll          = video_poll,
 	.mmap	       = video_mmap,
 	.ioctl	       = video_ioctl2,
+	.compat_ioctl  = v4l_compat_ioctl32,
+	.llseek        = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops video_ioctl_ops = {
+static struct video_device cx23885_vbi_template;
+static struct video_device cx23885_video_template = {
+	.name                 = "cx23885-video",
+	.type                 = VID_TYPE_CAPTURE|VID_TYPE_TUNER|VID_TYPE_SCALES,
+	.fops                 = &video_fops,
+	.minor                = -1,
 	.vidioc_querycap      = vidioc_querycap,
-	.vidioc_enum_fmt_vid_cap  = vidioc_enum_fmt_vid_cap,
-	.vidioc_g_fmt_vid_cap     = vidioc_g_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap   = vidioc_try_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap     = vidioc_s_fmt_vid_cap,
-	.vidioc_g_fmt_vbi_cap     = cx23885_vbi_fmt,
-	.vidioc_try_fmt_vbi_cap   = cx23885_vbi_fmt,
-	.vidioc_s_fmt_vbi_cap     = cx23885_vbi_fmt,
+	.vidioc_enum_fmt_cap  = vidioc_enum_fmt_cap,
+	.vidioc_g_fmt_cap     = vidioc_g_fmt_cap,
+	.vidioc_try_fmt_cap   = vidioc_try_fmt_cap,
+	.vidioc_s_fmt_cap     = vidioc_s_fmt_cap,
+	.vidioc_g_fmt_vbi     = cx23885_vbi_fmt,
+	.vidioc_try_fmt_vbi   = cx23885_vbi_fmt,
+	.vidioc_s_fmt_vbi     = cx23885_vbi_fmt,
 	.vidioc_reqbufs       = vidioc_reqbufs,
 	.vidioc_querybuf      = vidioc_querybuf,
 	.vidioc_qbuf          = vidioc_qbuf,
@@ -1465,23 +1471,17 @@ static const struct v4l2_ioctl_ops video_ioctl_ops = {
 	.vidioc_g_register    = vidioc_g_register,
 	.vidioc_s_register    = vidioc_s_register,
 #endif
-};
-
-static struct video_device cx23885_vbi_template;
-static struct video_device cx23885_video_template = {
-	.name                 = "cx23885-video",
-	.fops                 = &video_fops,
-	.minor                = -1,
-	.ioctl_ops 	      = &video_ioctl_ops,
 	.tvnorms              = CX23885_NORMS,
 	.current_norm         = V4L2_STD_NTSC_M,
 };
 
-static const struct v4l2_file_operations radio_fops = {
+static const struct file_operations radio_fops = {
 	.owner         = THIS_MODULE,
 	.open          = video_open,
 	.release       = video_release,
 	.ioctl         = video_ioctl2,
+	.compat_ioctl  = v4l_compat_ioctl32,
+	.llseek        = no_llseek,
 };
 
 
@@ -1512,6 +1512,7 @@ int cx23885_video_register(struct cx23885_dev *dev)
 	memcpy(&cx23885_vbi_template, &cx23885_video_template,
 		sizeof(cx23885_vbi_template));
 	strcpy(cx23885_vbi_template.name, "cx23885-vbi");
+	cx23885_vbi_template.type = VID_TYPE_TELETEXT|VID_TYPE_TUNER;
 
 	dev->tvnorm = cx23885_video_template.current_norm;
 
@@ -1539,7 +1540,7 @@ int cx23885_video_register(struct cx23885_dev *dev)
 		goto fail_unreg;
 	}
 	printk(KERN_INFO "%s/0: registered device video%d [v4l2]\n",
-	       dev->name, dev->video_dev->num);
+	       dev->name, dev->video_dev->minor & 0x1f);
 	/* initial device configuration */
 	mutex_lock(&dev->lock);
 	cx23885_set_tvnorm(dev, dev->tvnorm);

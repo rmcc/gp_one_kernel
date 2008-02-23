@@ -118,10 +118,6 @@ the name of the kobject, call kobject_rename():
 
     int kobject_rename(struct kobject *kobj, const char *new_name);
 
-kobject_rename does not perform any locking or have a solid notion of
-what names are valid so the caller must provide their own sanity checking
-and serialization.
-
 There is a function called kobject_set_name() but that is legacy cruft and
 is being removed.  If your code needs to call this function, it is
 incorrect and needs to be fixed.
@@ -309,7 +305,7 @@ should not be manipulated by any other user.
 
 A kset keeps its children in a standard kernel linked list.  Kobjects point
 back to their containing kset via their kset field. In almost all cases,
-the kobjects belonging to a kset have that kset (or, strictly, its embedded
+the kobjects belonging to a ket have that kset (or, strictly, its embedded
 kobject) in their parent.
 
 As a kset contains a kobject within it, it should always be dynamically

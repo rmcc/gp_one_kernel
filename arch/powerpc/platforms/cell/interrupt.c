@@ -148,7 +148,7 @@ static unsigned int iic_get_irq(void)
 
 	iic = &__get_cpu_var(iic);
 	*(unsigned long *) &pending =
-		in_be64((u64 __iomem *) &iic->regs->pending_destr);
+		in_be64((unsigned long __iomem *) &iic->regs->pending_destr);
 	if (!(pending.flags & CBE_IIC_IRQ_VALID))
 		return NO_IRQ;
 	virq = irq_linear_revmap(iic_host, iic_pending_to_hwnum(pending));
@@ -218,7 +218,6 @@ void iic_request_IPIs(void)
 {
 	iic_request_ipi(PPC_MSG_CALL_FUNCTION, "IPI-call");
 	iic_request_ipi(PPC_MSG_RESCHEDULE, "IPI-resched");
-	iic_request_ipi(PPC_MSG_CALL_FUNC_SINGLE, "IPI-call-single");
 #ifdef CONFIG_DEBUGGER
 	iic_request_ipi(PPC_MSG_DEBUGGER_BREAK, "IPI-debug");
 #endif /* CONFIG_DEBUGGER */

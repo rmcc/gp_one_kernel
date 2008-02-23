@@ -13,12 +13,12 @@ struct mem_section;
 #ifdef CONFIG_MEMORY_HOTPLUG
 
 /*
- * Types for free bootmem.
+ * Magic number for free bootmem.
  * The normal smallest mapcount is -1. Here is smaller value than it.
  */
-#define SECTION_INFO		(-1 - 1)
-#define MIX_SECTION_INFO	(-1 - 2)
-#define NODE_INFO		(-1 - 3)
+#define SECTION_INFO		0xfffffffe
+#define MIX_INFO		0xfffffffd
+#define NODE_INFO		0xfffffffc
 
 /*
  * pgdat resizing functions
@@ -72,10 +72,18 @@ extern void __offline_isolated_pages(unsigned long, unsigned long);
 extern int offline_pages(unsigned long, unsigned long, unsigned long);
 
 /* reasonably generic interface to expand the physical pages in a zone  */
-extern int __add_pages(int nid, struct zone *zone, unsigned long start_pfn,
+extern int __add_pages(struct zone *zone, unsigned long start_pfn,
 	unsigned long nr_pages);
 extern int __remove_pages(struct zone *zone, unsigned long start_pfn,
 	unsigned long nr_pages);
+
+/*
+ * Walk through all memory which is registered as resource.
+ * arg is (start_pfn, nr_pages, private_arg_pointer)
+ */
+extern int walk_memory_resource(unsigned long start_pfn,
+			unsigned long nr_pages, void *arg,
+			int (*func)(unsigned long, unsigned long, void *));
 
 #ifdef CONFIG_NUMA
 extern int memory_add_physaddr_to_nid(u64 start);
@@ -190,26 +198,6 @@ static inline void register_page_bootmem_info_node(struct pglist_data *pgdat)
 }
 
 #endif /* ! CONFIG_MEMORY_HOTPLUG */
-
-/*
- * Walk through all memory which is registered as resource.
- * arg is (start_pfn, nr_pages, private_arg_pointer)
- */
-extern int walk_memory_resource(unsigned long start_pfn,
-			unsigned long nr_pages, void *arg,
-			int (*func)(unsigned long, unsigned long, void *));
-
-#ifdef CONFIG_MEMORY_HOTREMOVE
-
-extern int is_mem_section_removable(unsigned long pfn, unsigned long nr_pages);
-
-#else
-static inline int is_mem_section_removable(unsigned long pfn,
-					unsigned long nr_pages)
-{
-	return 0;
-}
-#endif /* CONFIG_MEMORY_HOTREMOVE */
 
 extern int add_memory(int nid, u64 start, u64 size);
 extern int arch_add_memory(int nid, u64 start, u64 size);

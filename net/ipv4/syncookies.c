@@ -8,6 +8,8 @@
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
+ *
+ *  $Id: syncookies.c,v 1.18 2002/02/01 22:01:04 davem Exp $
  */
 
 #include <linux/tcp.h>
@@ -16,7 +18,6 @@
 #include <linux/cryptohash.h>
 #include <linux/kernel.h>
 #include <net/tcp.h>
-#include <net/route.h>
 
 /* Timestamps: lowest 9 bits store TCP options */
 #define TSBITS 9
@@ -174,7 +175,7 @@ __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb, __u16 *mssp)
 		;
 	*mssp = msstab[mssind] + 1;
 
-	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_SYNCOOKIESSENT);
+	NET_INC_STATS_BH(LINUX_MIB_SYNCOOKIESSENT);
 
 	return secure_tcp_syn_cookie(iph->saddr, iph->daddr,
 				     th->source, th->dest, ntohl(th->seq),
@@ -270,11 +271,11 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
 
 	if (time_after(jiffies, tp->last_synq_overflow + TCP_TIMEOUT_INIT) ||
 	    (mss = cookie_check(skb, cookie)) == 0) {
-		NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_SYNCOOKIESFAILED);
+		NET_INC_STATS_BH(LINUX_MIB_SYNCOOKIESFAILED);
 		goto out;
 	}
 
-	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_SYNCOOKIESRECV);
+	NET_INC_STATS_BH(LINUX_MIB_SYNCOOKIESRECV);
 
 	/* check for timestamp cookie support */
 	memset(&tcp_opt, 0, sizeof(tcp_opt));
@@ -284,7 +285,7 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
 		cookie_check_timestamp(&tcp_opt);
 
 	ret = NULL;
-	req = inet_reqsk_alloc(&tcp_request_sock_ops); /* for safety */
+	req = reqsk_alloc(&tcp_request_sock_ops); /* for safety */
 	if (!req)
 		goto out;
 
@@ -297,11 +298,10 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
 	treq->rcv_isn		= ntohl(th->seq) - 1;
 	treq->snt_isn		= cookie;
 	req->mss		= mss;
-	ireq->loc_port		= th->dest;
 	ireq->rmt_port		= th->source;
 	ireq->loc_addr		= ip_hdr(skb)->daddr;
 	ireq->rmt_addr		= ip_hdr(skb)->saddr;
-	ireq->ecn_ok		= 0;
+	ireq->opt		= NULL;
 	ireq->snd_wscale	= tcp_opt.snd_wscale;
 	ireq->rcv_wscale	= tcp_opt.rcv_wscale;
 	ireq->sack_ok		= tcp_opt.sack_ok;
@@ -339,7 +339,6 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
 						.saddr = ireq->loc_addr,
 						.tos = RT_CONN_FLAGS(sk) } },
 				    .proto = IPPROTO_TCP,
-				    .flags = inet_sk_flowi_flags(sk),
 				    .uli_u = { .ports =
 					       { .sport = th->dest,
 						 .dport = th->source } } };

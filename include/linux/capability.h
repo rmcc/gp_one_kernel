@@ -31,11 +31,11 @@ struct task_struct;
 #define _LINUX_CAPABILITY_VERSION_1  0x19980330
 #define _LINUX_CAPABILITY_U32S_1     1
 
-#define _LINUX_CAPABILITY_VERSION_2  0x20071026  /* deprecated - use v3 */
+#define _LINUX_CAPABILITY_VERSION_2  0x20071026
 #define _LINUX_CAPABILITY_U32S_2     2
 
-#define _LINUX_CAPABILITY_VERSION_3  0x20080522
-#define _LINUX_CAPABILITY_U32S_3     2
+#define _LINUX_CAPABILITY_VERSION    _LINUX_CAPABILITY_VERSION_2
+#define _LINUX_CAPABILITY_U32S       _LINUX_CAPABILITY_U32S_2
 
 typedef struct __user_cap_header_struct {
 	__u32 version;
@@ -53,7 +53,6 @@ typedef struct __user_cap_data_struct {
 #define XATTR_NAME_CAPS XATTR_SECURITY_PREFIX XATTR_CAPS_SUFFIX
 
 #define VFS_CAP_REVISION_MASK	0xFF000000
-#define VFS_CAP_REVISION_SHIFT	24
 #define VFS_CAP_FLAGS_MASK	~VFS_CAP_REVISION_MASK
 #define VFS_CAP_FLAGS_EFFECTIVE	0x000001
 
@@ -69,9 +68,6 @@ typedef struct __user_cap_data_struct {
 #define VFS_CAP_U32             VFS_CAP_U32_2
 #define VFS_CAP_REVISION	VFS_CAP_REVISION_2
 
-#ifdef CONFIG_SECURITY_FILE_CAPABILITIES
-extern int file_caps_enabled;
-#endif
 
 struct vfs_cap_data {
 	__le32 magic_etc;            /* Little endian */
@@ -81,31 +77,11 @@ struct vfs_cap_data {
 	} data[VFS_CAP_U32];
 };
 
-#ifndef __KERNEL__
-
-/*
- * Backwardly compatible definition for source code - trapped in a
- * 32-bit world. If you find you need this, please consider using
- * libcap to untrap yourself...
- */
-#define _LINUX_CAPABILITY_VERSION  _LINUX_CAPABILITY_VERSION_1
-#define _LINUX_CAPABILITY_U32S     _LINUX_CAPABILITY_U32S_1
-
-#else
-
-#define _KERNEL_CAPABILITY_VERSION _LINUX_CAPABILITY_VERSION_3
-#define _KERNEL_CAPABILITY_U32S    _LINUX_CAPABILITY_U32S_3
+#ifdef __KERNEL__
 
 typedef struct kernel_cap_struct {
-	__u32 cap[_KERNEL_CAPABILITY_U32S];
+	__u32 cap[_LINUX_CAPABILITY_U32S];
 } kernel_cap_t;
-
-/* exact same as vfs_cap_data but in cpu endian and always filled completely */
-struct cpu_vfs_cap_data {
-	__u32 magic_etc;
-	kernel_cap_t permitted;
-	kernel_cap_t inheritable;
-};
 
 #define _USER_CAP_HEADER_SIZE  (sizeof(struct __user_cap_header_struct))
 #define _KERNEL_CAP_T_SIZE     (sizeof(kernel_cap_t))
@@ -375,7 +351,7 @@ struct cpu_vfs_cap_data {
  */
 
 #define CAP_FOR_EACH_U32(__capi)  \
-	for (__capi = 0; __capi < _KERNEL_CAPABILITY_U32S; ++__capi)
+	for (__capi = 0; __capi < _LINUX_CAPABILITY_U32S; ++__capi)
 
 # define CAP_FS_MASK_B0     (CAP_TO_MASK(CAP_CHOWN)		\
 			    | CAP_TO_MASK(CAP_DAC_OVERRIDE)	\
@@ -385,7 +361,7 @@ struct cpu_vfs_cap_data {
 
 # define CAP_FS_MASK_B1     (CAP_TO_MASK(CAP_MAC_OVERRIDE))
 
-#if _KERNEL_CAPABILITY_U32S != 2
+#if _LINUX_CAPABILITY_U32S != 2
 # error Fix up hand-coded capability macro initializers
 #else /* HAND-CODED capability initializers */
 
@@ -396,7 +372,7 @@ struct cpu_vfs_cap_data {
 # define CAP_NFSD_SET     ((kernel_cap_t){{ CAP_FS_MASK_B0|CAP_TO_MASK(CAP_SYS_RESOURCE), \
 					CAP_FS_MASK_B1 } })
 
-#endif /* _KERNEL_CAPABILITY_U32S != 2 */
+#endif /* _LINUX_CAPABILITY_U32S != 2 */
 
 #define CAP_INIT_INH_SET    CAP_EMPTY_SET
 
@@ -465,13 +441,6 @@ static inline int cap_isclear(const kernel_cap_t a)
 	return 1;
 }
 
-/*
- * Check if "a" is a subset of "set".
- * return 1 if ALL of the capabilities in "a" are also in "set"
- *	cap_issubset(0101, 1111) will return 1
- * return 0 if ANY of the capabilities in "a" are not in "set"
- *	cap_issubset(1111, 0101) will return 0
- */
 static inline int cap_issubset(const kernel_cap_t a, const kernel_cap_t set)
 {
 	kernel_cap_t dest;
@@ -519,37 +488,8 @@ extern const kernel_cap_t __cap_empty_set;
 extern const kernel_cap_t __cap_full_set;
 extern const kernel_cap_t __cap_init_eff_set;
 
-/**
- * has_capability - Determine if a task has a superior capability available
- * @t: The task in question
- * @cap: The capability to be tested for
- *
- * Return true if the specified task has the given superior capability
- * currently in effect, false if not.
- *
- * Note that this does not set PF_SUPERPRIV on the task.
- */
-#define has_capability(t, cap) (security_real_capable((t), (cap)) == 0)
-
-/**
- * has_capability_noaudit - Determine if a task has a superior capability available (unaudited)
- * @t: The task in question
- * @cap: The capability to be tested for
- *
- * Return true if the specified task has the given superior capability
- * currently in effect, false if not, but don't write an audit message for the
- * check.
- *
- * Note that this does not set PF_SUPERPRIV on the task.
- */
-#define has_capability_noaudit(t, cap) \
-	(security_real_capable_noaudit((t), (cap)) == 0)
-
-extern int capable(int cap);
-
-/* audit system wants to get cap info from files as well */
-struct dentry;
-extern int get_vfs_caps_from_disk(const struct dentry *dentry, struct cpu_vfs_cap_data *cpu_caps);
+int capable(int cap);
+int __capable(struct task_struct *t, int cap);
 
 #endif /* __KERNEL__ */
 

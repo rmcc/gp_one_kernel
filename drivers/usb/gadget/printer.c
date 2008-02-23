@@ -53,20 +53,6 @@
 
 #include "gadget_chips.h"
 
-
-/*
- * Kbuild is not very cooperative with respect to linking separately
- * compiled library objects into one module.  So for now we won't use
- * separate compilation ... ensuring init/exit sections work to shrink
- * the runtime footprint, and giving us at least some parts of what
- * a "gcc --combine ... part1.c part2.c part3.c ... " build would.
- */
-#include "usbstring.c"
-#include "config.c"
-#include "epautoconf.c"
-
-/*-------------------------------------------------------------------------*/
-
 #define DRIVER_DESC		"Printer Gadget"
 #define DRIVER_VERSION		"2007 OCT 06"
 
@@ -193,7 +179,7 @@ module_param(qlen, uint, S_IRUGO|S_IWUSR);
 
 #define ERROR(dev, fmt, args...) \
 	xprintk(dev, KERN_ERR, fmt, ## args)
-#define WARNING(dev, fmt, args...) \
+#define WARN(dev, fmt, args...) \
 	xprintk(dev, KERN_WARNING, fmt, ## args)
 #define INFO(dev, fmt, args...) \
 	xprintk(dev, KERN_INFO, fmt, ## args)
@@ -252,7 +238,7 @@ static struct usb_config_descriptor config_desc = {
 	.bConfigurationValue =	DEV_CONFIG_VALUE,
 	.iConfiguration =	0,
 	.bmAttributes =		USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
-	.bMaxPower =		CONFIG_USB_GADGET_VBUS_DRAW / 2,
+	.bMaxPower =		1	/* Self-Powered */
 };
 
 static struct usb_interface_descriptor intf_desc = {
@@ -476,7 +462,6 @@ printer_open(struct inode *inode, struct file *fd)
 	unsigned long		flags;
 	int			ret = -EBUSY;
 
-	lock_kernel();
 	dev = container_of(inode->i_cdev, struct printer_dev, printer_cdev);
 
 	spin_lock_irqsave(&dev->lock, flags);
@@ -492,7 +477,7 @@ printer_open(struct inode *inode, struct file *fd)
 	spin_unlock_irqrestore(&dev->lock, flags);
 
 	DBG(dev, "printer_open returned %x\n", ret);
-	unlock_kernel();
+
 	return ret;
 }
 
@@ -842,8 +827,9 @@ printer_poll(struct file *fd, poll_table *wait)
 	return status;
 }
 
-static long
-printer_ioctl(struct file *fd, unsigned int code, unsigned long arg)
+static int
+printer_ioctl(struct inode *inode, struct file *fd, unsigned int code,
+		unsigned long arg)
 {
 	struct printer_dev	*dev = fd->private_data;
 	unsigned long		flags;
@@ -882,7 +868,7 @@ static struct file_operations printer_io_operations = {
 	.write =	printer_write,
 	.fsync =	printer_fsync,
 	.poll =		printer_poll,
-	.unlocked_ioctl = printer_ioctl,
+	.ioctl =	printer_ioctl,
 	.release =	printer_close
 };
 
@@ -1278,7 +1264,8 @@ unknown:
 	/* respond with data transfer before status phase? */
 	if (value >= 0) {
 		req->length = value;
-		req->zero = value < wLength;
+		req->zero = value < wLength
+				&& (value % gadget->ep0->maxpacket) == 0;
 		value = usb_ep_queue(gadget->ep0, req, GFP_ATOMIC);
 		if (value < 0) {
 			DBG(dev, "ep_queue --> %d\n", value);
@@ -1374,7 +1361,7 @@ printer_bind(struct usb_gadget *gadget)
 
 	/* Setup the sysfs files for the printer gadget. */
 	dev->pdev = device_create(usb_gadget_class, NULL, g_printer_devno,
-				  NULL, "g_printer");
+			"g_printer");
 	if (IS_ERR(dev->pdev)) {
 		ERROR(dev, "Failed to create device: g_printer\n");
 		goto fail;
@@ -1476,6 +1463,7 @@ autoconf_fail:
 	if (gadget->is_otg) {
 		otg_desc.bmAttributes |= USB_OTG_HNP,
 		config_desc.bmAttributes |= USB_CONFIG_ATT_WAKEUP;
+		config_desc.bMaxPower = 4;
 	}
 
 	spin_lock_init(&dev->lock);

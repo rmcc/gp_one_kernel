@@ -12,7 +12,7 @@
 #include <linux/pci.h>
 #include <linux/mbus.h>
 #include <asm/mach/pci.h>
-#include <plat/pcie.h>
+#include <asm/plat-orion/pcie.h>
 
 /*
  * PCIe unit register offsets.
@@ -35,11 +35,10 @@
 #define  PCIE_CONF_REG(r)		((((r) & 0xf00) << 16) | ((r) & 0xfc))
 #define  PCIE_CONF_BUS(b)		(((b) & 0xff) << 16)
 #define  PCIE_CONF_DEV(d)		(((d) & 0x1f) << 11)
-#define  PCIE_CONF_FUNC(f)		(((f) & 0x7) << 8)
+#define  PCIE_CONF_FUNC(f)		(((f) & 0x3) << 8)
 #define PCIE_CONF_DATA_OFF	0x18fc
 #define PCIE_MASK_OFF		0x1910
 #define PCIE_CTRL_OFF		0x1a00
-#define  PCIE_CTRL_X1_MODE		0x0001
 #define PCIE_STAT_OFF		0x1a04
 #define  PCIE_STAT_DEV_OFFS		20
 #define  PCIE_STAT_DEV_MASK		0x1f
@@ -61,11 +60,6 @@ u32 __init orion_pcie_rev(void __iomem *base)
 int orion_pcie_link_up(void __iomem *base)
 {
 	return !(readl(base + PCIE_STAT_OFF) & PCIE_STAT_LINK_DOWN);
-}
-
-int __init orion_pcie_x4_mode(void __iomem *base)
-{
-	return !(readl(base + PCIE_CTRL_OFF) & PCIE_CTRL_X1_MODE);
 }
 
 int orion_pcie_get_local_bus_nr(void __iomem *base)

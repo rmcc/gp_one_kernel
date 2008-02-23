@@ -1116,7 +1116,7 @@ void ivtv_yuv_setup_stream_frame(struct ivtv *itv)
 }
 
 /* Attempt to dma a frame from a user buffer */
-int ivtv_yuv_udma_stream_frame(struct ivtv *itv, void __user *src)
+int ivtv_yuv_udma_stream_frame(struct ivtv *itv, void *src)
 {
 	struct yuv_playback_info *yi = &itv->yuv_info;
 	struct ivtv_dma_frame dma_args;
@@ -1147,7 +1147,6 @@ void ivtv_yuv_close(struct ivtv *itv)
 	IVTV_DEBUG_YUV("ivtv_yuv_close\n");
 	ivtv_waitq(&itv->vsync_waitq);
 
-	yi->running = 0;
 	atomic_set(&yi->next_dma_frame, -1);
 	atomic_set(&yi->next_fill_frame, 0);
 

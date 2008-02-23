@@ -88,7 +88,7 @@ static card_t **new_card = &first_card;
 /* EDA address register must be set in EDAL, EDAH order - 8 bit ISA bus */
 #define sca_outw(value, reg, card) do { \
 	writeb(value & 0xFF, (card)->win0base + C101_SCA + (reg)); \
-	writeb((value >> 8 ) & 0xFF, (card)->win0base + C101_SCA + (reg + 1));\
+	writeb((value >> 8 ) & 0xFF, (card)->win0base + C101_SCA + (reg+1));\
 } while(0)
 
 #define port_to_card(port)	   (port)
@@ -113,7 +113,7 @@ static inline void openwin(card_t *card, u8 page)
 }
 
 
-#include "hd64570.c"
+#include "hd6457x.c"
 
 
 static inline void set_carrier(port_t *port)
@@ -133,9 +133,9 @@ static void sca_msci_intr(port_t *port)
 	sca_out(stat & (ST1_UDRN | ST1_CDCD), MSCI0_OFFSET + ST1, port);
 
 	if (stat & ST1_UDRN) {
-		/* TX Underrun error detected */
-		port_to_dev(port)->stats.tx_errors++;
-		port_to_dev(port)->stats.tx_fifo_errors++;
+		struct net_device_stats *stats = hdlc_stats(port_to_dev(port));
+		stats->tx_errors++; /* TX Underrun error detected */
+		stats->tx_fifo_errors++;
 	}
 
 	stat = sca_in(MSCI1_OFFSET + ST1, port); /* read MSCI1 ST1 status */
@@ -381,7 +381,7 @@ static int __init c101_run(unsigned long irq, unsigned long winbase)
 		return result;
 	}
 
-	sca_init_port(card); /* Set up C101 memory */
+	sca_init_sync_port(card); /* Set up C101 memory */
 	set_carrier(card);
 
 	printk(KERN_INFO "%s: Moxa C101 on IRQ%u,"

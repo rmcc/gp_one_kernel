@@ -33,12 +33,7 @@ static const struct i2c_device_id pca953x_id[] = {
 	{ "pca9554", 8, },
 	{ "pca9555", 16, },
 	{ "pca9557", 8, },
-
-	{ "max7310", 8, },
-	{ "pca6107", 8, },
-	{ "tca6408", 8, },
-	{ "tca6416", 16, },
-	/* NYET:  { "tca6424", 24, }, */
+	/* REVISIT several pca955x parts should work here too */
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, pca953x_id);
@@ -52,6 +47,9 @@ struct pca953x_chip {
 	struct gpio_chip gpio_chip;
 };
 
+/* NOTE:  we can't currently rely on fault codes to come from SMBus
+ * calls, so we map all errors to EIO here and return zero otherwise.
+ */
 static int pca953x_write_reg(struct pca953x_chip *chip, int reg, uint16_t val)
 {
 	int ret;
@@ -63,7 +61,7 @@ static int pca953x_write_reg(struct pca953x_chip *chip, int reg, uint16_t val)
 
 	if (ret < 0) {
 		dev_err(&chip->client->dev, "failed writing register\n");
-		return ret;
+		return -EIO;
 	}
 
 	return 0;
@@ -80,7 +78,7 @@ static int pca953x_read_reg(struct pca953x_chip *chip, int reg, uint16_t *val)
 
 	if (ret < 0) {
 		dev_err(&chip->client->dev, "failed reading register\n");
-		return ret;
+		return -EIO;
 	}
 
 	*val = (uint16_t)ret;
@@ -190,7 +188,6 @@ static void pca953x_setup_gpio(struct pca953x_chip *chip, int gpios)
 	gc->base = chip->gpio_start;
 	gc->ngpio = gpios;
 	gc->label = chip->client->name;
-	gc->dev = &chip->client->dev;
 	gc->owner = THIS_MODULE;
 }
 
@@ -291,10 +288,7 @@ static int __init pca953x_init(void)
 {
 	return i2c_add_driver(&pca953x_driver);
 }
-/* register after i2c postcore initcall and before
- * subsys initcalls that may rely on these GPIOs
- */
-subsys_initcall(pca953x_init);
+module_init(pca953x_init);
 
 static void __exit pca953x_exit(void)
 {

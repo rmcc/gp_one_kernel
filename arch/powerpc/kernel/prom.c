@@ -609,10 +609,6 @@ static struct feature_property {
 	{"altivec", 0, CPU_FTR_ALTIVEC, PPC_FEATURE_HAS_ALTIVEC},
 	{"ibm,vmx", 1, CPU_FTR_ALTIVEC, PPC_FEATURE_HAS_ALTIVEC},
 #endif /* CONFIG_ALTIVEC */
-#ifdef CONFIG_VSX
-	/* Yes, this _really_ is ibm,vmx == 2 to enable VSX */
-	{"ibm,vmx", 2, CPU_FTR_VSX, PPC_FEATURE_HAS_VSX},
-#endif /* CONFIG_VSX */
 #ifdef CONFIG_PPC64
 	{"ibm,dfp", 1, 0, PPC_FEATURE_HAS_DFP},
 	{"ibm,purr", 1, CPU_FTR_PURR, 0},
@@ -824,11 +820,11 @@ static int __init early_init_dt_scan_chosen(unsigned long node,
 #endif
 
 #ifdef CONFIG_KEXEC
-	lprop = of_get_flat_dt_prop(node, "linux,crashkernel-base", NULL);
+	lprop = (u64*)of_get_flat_dt_prop(node, "linux,crashkernel-base", NULL);
 	if (lprop)
 		crashk_res.start = *lprop;
 
-	lprop = of_get_flat_dt_prop(node, "linux,crashkernel-size", NULL);
+	lprop = (u64*)of_get_flat_dt_prop(node, "linux,crashkernel-size", NULL);
 	if (lprop)
 		crashk_res.end = crashk_res.start + *lprop - 1;
 #endif
@@ -888,29 +884,22 @@ static u64 __init dt_mem_next_cell(int s, cell_t **cellp)
  */
 static int __init early_init_dt_scan_drconf_memory(unsigned long node)
 {
-	cell_t *dm, *ls, *usm;
+	cell_t *dm, *ls;
 	unsigned long l, n, flags;
 	u64 base, size, lmb_size;
-	unsigned int is_kexec_kdump = 0, rngs;
 
-	ls = of_get_flat_dt_prop(node, "ibm,lmb-size", &l);
+	ls = (cell_t *)of_get_flat_dt_prop(node, "ibm,lmb-size", &l);
 	if (ls == NULL || l < dt_root_size_cells * sizeof(cell_t))
 		return 0;
 	lmb_size = dt_mem_next_cell(dt_root_size_cells, &ls);
 
-	dm = of_get_flat_dt_prop(node, "ibm,dynamic-memory", &l);
+	dm = (cell_t *)of_get_flat_dt_prop(node, "ibm,dynamic-memory", &l);
 	if (dm == NULL || l < sizeof(cell_t))
 		return 0;
 
 	n = *dm++;	/* number of entries */
 	if (l < (n * (dt_root_addr_cells + 4) + 1) * sizeof(cell_t))
 		return 0;
-
-	/* check if this is a kexec/kdump kernel. */
-	usm = of_get_flat_dt_prop(node, "linux,drconf-usable-memory",
-						 &l);
-	if (usm != NULL)
-		is_kexec_kdump = 1;
 
 	for (; n != 0; --n) {
 		base = dt_mem_next_cell(dt_root_addr_cells, &dm);
@@ -922,34 +911,13 @@ static int __init early_init_dt_scan_drconf_memory(unsigned long node)
 		if ((flags & 0x80) || !(flags & 0x8))
 			continue;
 		size = lmb_size;
-		rngs = 1;
-		if (is_kexec_kdump) {
-			/*
-			 * For each lmb in ibm,dynamic-memory, a corresponding
-			 * entry in linux,drconf-usable-memory property contains
-			 * a counter 'p' followed by 'p' (base, size) duple.
-			 * Now read the counter from
-			 * linux,drconf-usable-memory property
-			 */
-			rngs = dt_mem_next_cell(dt_root_size_cells, &usm);
-			if (!rngs) /* there are no (base, size) duple */
+		if (iommu_is_off) {
+			if (base >= 0x80000000ul)
 				continue;
+			if ((base + size) > 0x80000000ul)
+				size = 0x80000000ul - base;
 		}
-		do {
-			if (is_kexec_kdump) {
-				base = dt_mem_next_cell(dt_root_addr_cells,
-							 &usm);
-				size = dt_mem_next_cell(dt_root_size_cells,
-							 &usm);
-			}
-			if (iommu_is_off) {
-				if (base >= 0x80000000ul)
-					continue;
-				if ((base + size) > 0x80000000ul)
-					size = 0x80000000ul - base;
-			}
-			lmb_add(base, size);
-		} while (--rngs);
+		lmb_add(base, size);
 	}
 	lmb_dump_all();
 	return 0;
@@ -981,9 +949,9 @@ static int __init early_init_dt_scan_memory(unsigned long node,
 	} else if (strcmp(type, "memory") != 0)
 		return 0;
 
-	reg = of_get_flat_dt_prop(node, "linux,usable-memory", &l);
+	reg = (cell_t *)of_get_flat_dt_prop(node, "linux,usable-memory", &l);
 	if (reg == NULL)
-		reg = of_get_flat_dt_prop(node, "reg", &l);
+		reg = (cell_t *)of_get_flat_dt_prop(node, "reg", &l);
 	if (reg == NULL)
 		return 0;
 
@@ -1160,8 +1128,6 @@ static inline void __init phyp_dump_reserve_mem(void) {}
 
 void __init early_init_devtree(void *params)
 {
-	unsigned long limit;
-
 	DBG(" -> early_init_devtree(%p)\n", params);
 
 	/* Setup flat device-tree pointer */
@@ -1194,27 +1160,12 @@ void __init early_init_devtree(void *params)
 
 	/* Reserve LMB regions used by kernel, initrd, dt, etc... */
 	lmb_reserve(PHYSICAL_START, __pa(klimit) - PHYSICAL_START);
-	/* If relocatable, reserve first 32k for interrupt vectors etc. */
-	if (PHYSICAL_START > MEMORY_START)
-		lmb_reserve(MEMORY_START, 0x8000);
 	reserve_kdump_trampoline();
 	reserve_crashkernel();
 	early_reserve_mem();
 	phyp_dump_reserve_mem();
 
-	limit = memory_limit;
-	if (! limit) {
-		unsigned long memsize;
-
-		/* Ensure that total memory size is page-aligned, because
-		 * otherwise mark_bootmem() gets upset. */
-		lmb_analyze();
-		memsize = lmb_phys_mem_size();
-		if ((memsize & PAGE_MASK) != memsize)
-			limit = memsize & PAGE_MASK;
-	}
-	lmb_enforce_memory_limit(limit);
-
+	lmb_enforce_memory_limit(memory_limit);
 	lmb_analyze();
 
 	DBG("Phys. mem: %lx\n", lmb_phys_mem_size());
@@ -1283,37 +1234,6 @@ struct device_node *of_find_node_by_phandle(phandle handle)
 	return np;
 }
 EXPORT_SYMBOL(of_find_node_by_phandle);
-
-/**
- *	of_find_next_cache_node - Find a node's subsidiary cache
- *	@np:	node of type "cpu" or "cache"
- *
- *	Returns a node pointer with refcount incremented, use
- *	of_node_put() on it when done.  Caller should hold a reference
- *	to np.
- */
-struct device_node *of_find_next_cache_node(struct device_node *np)
-{
-	struct device_node *child;
-	const phandle *handle;
-
-	handle = of_get_property(np, "l2-cache", NULL);
-	if (!handle)
-		handle = of_get_property(np, "next-level-cache", NULL);
-
-	if (handle)
-		return of_find_node_by_phandle(*handle);
-
-	/* OF on pmac has nodes instead of properties named "l2-cache"
-	 * beneath CPU nodes.
-	 */
-	if (!strcmp(np->type, "cpu"))
-		for_each_child_of_node(np, child)
-			if (!strcmp(child->type, "cache"))
-				return child;
-
-	return NULL;
-}
 
 /**
  *	of_find_all_nodes - Get next node in global list

@@ -12,12 +12,12 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
-#include <linux/gpio.h>
 
 #include <linux/usb/musb.h>
 
-#include <mach/gpmc.h>
-#include <mach/mux.h>
+#include <asm/arch/gpmc.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/mux.h>
 
 
 static u8		async_cs, sync_cs;
@@ -292,12 +292,12 @@ tusb6010_setup_interface(struct musb_hdrc_platform_data *data,
 			);
 
 	/* IRQ */
-	status = gpio_request(irq, "TUSB6010 irq");
+	status = omap_request_gpio(irq);
 	if (status < 0) {
 		printk(error, 3, status);
 		return status;
 	}
-	gpio_direction_input(irq);
+	omap_set_gpio_direction(irq, 1);
 	tusb_resources[2].start = irq + IH_GPIO_BASE;
 
 	/* set up memory timings ... can speed them up later */
@@ -317,6 +317,7 @@ tusb6010_setup_interface(struct musb_hdrc_platform_data *data,
 		printk(error, 6, status);
 		return -ENODEV;
 	}
+	data->multipoint = 1;
 	tusb_device.dev.platform_data = data;
 
 	/* REVISIT let the driver know what DMA channels work */

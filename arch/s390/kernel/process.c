@@ -38,7 +38,6 @@
 #include <linux/utsname.h>
 #include <linux/tick.h>
 #include <linux/elfcore.h>
-#include <linux/kernel_stat.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -46,6 +45,7 @@
 #include <asm/processor.h>
 #include <asm/irq.h>
 #include <asm/timer.h>
+#include <asm/cpu.h>
 #include "entry.h"
 
 asmlinkage void ret_from_fork(void) asm ("ret_from_fork");
@@ -75,6 +75,62 @@ unsigned long thread_saved_pc(struct task_struct *tsk)
 	return sf->gprs[8];
 }
 
+/*
+ * Need to know about CPUs going idle?
+ */
+static ATOMIC_NOTIFIER_HEAD(idle_chain);
+DEFINE_PER_CPU(struct s390_idle_data, s390_idle);
+
+int register_idle_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_register(&idle_chain, nb);
+}
+EXPORT_SYMBOL(register_idle_notifier);
+
+int unregister_idle_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&idle_chain, nb);
+}
+EXPORT_SYMBOL(unregister_idle_notifier);
+
+static int s390_idle_enter(void)
+{
+	struct s390_idle_data *idle;
+	int nr_calls = 0;
+	void *hcpu;
+	int rc;
+
+	hcpu = (void *)(long)smp_processor_id();
+	rc = __atomic_notifier_call_chain(&idle_chain, S390_CPU_IDLE, hcpu, -1,
+					  &nr_calls);
+	if (rc == NOTIFY_BAD) {
+		nr_calls--;
+		__atomic_notifier_call_chain(&idle_chain, S390_CPU_NOT_IDLE,
+					     hcpu, nr_calls, NULL);
+		return rc;
+	}
+	idle = &__get_cpu_var(s390_idle);
+	spin_lock(&idle->lock);
+	idle->idle_count++;
+	idle->in_idle = 1;
+	idle->idle_enter = get_clock();
+	spin_unlock(&idle->lock);
+	return NOTIFY_OK;
+}
+
+void s390_idle_leave(void)
+{
+	struct s390_idle_data *idle;
+
+	idle = &__get_cpu_var(s390_idle);
+	spin_lock(&idle->lock);
+	idle->idle_time += get_clock() - idle->idle_enter;
+	idle->in_idle = 0;
+	spin_unlock(&idle->lock);
+	atomic_notifier_call_chain(&idle_chain, S390_CPU_NOT_IDLE,
+				   (void *)(long) smp_processor_id());
+}
+
 extern void s390_handle_mcck(void);
 /*
  * The idle loop on a S390...
@@ -87,6 +143,10 @@ static void default_idle(void)
 		local_irq_enable();
 		return;
 	}
+	if (s390_idle_enter() == NOTIFY_BAD) {
+		local_irq_enable();
+		return;
+	}
 #ifdef CONFIG_HOTPLUG_CPU
 	if (cpu_is_offline(smp_processor_id())) {
 		preempt_enable_no_resched();
@@ -96,23 +156,21 @@ static void default_idle(void)
 	local_mcck_disable();
 	if (test_thread_flag(TIF_MCCK_PENDING)) {
 		local_mcck_enable();
+		s390_idle_leave();
 		local_irq_enable();
 		s390_handle_mcck();
 		return;
 	}
 	trace_hardirqs_on();
-	/* Don't trace preempt off for idle. */
-	stop_critical_timings();
-	/* Stop virtual timer and halt the cpu. */
-	vtime_stop_cpu();
-	/* Reenable preemption tracer. */
-	start_critical_timings();
+	/* Wait for external, I/O or machine check interrupt. */
+	__load_psw_mask(psw_kernel_bits | PSW_MASK_WAIT |
+			PSW_MASK_IO | PSW_MASK_EXT);
 }
 
 void cpu_idle(void)
 {
 	for (;;) {
-		tick_nohz_stop_sched_tick(1);
+		tick_nohz_stop_sched_tick();
 		while (!need_resched())
 			default_idle();
 		tick_nohz_restart_sched_tick();

@@ -29,13 +29,14 @@
 
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 
-#include <mach/board.h>
-#include <mach/mmc.h>
-#include <mach/gpio.h>
-#include <mach/dma.h>
-#include <mach/mux.h>
-#include <mach/fpga.h>
+#include <asm/arch/board.h>
+#include <asm/arch/mmc.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/dma.h>
+#include <asm/arch/mux.h>
+#include <asm/arch/fpga.h>
 
 #define	OMAP_MMC_REG_CMD	0x00
 #define	OMAP_MMC_REG_ARGL	0x04
@@ -172,7 +173,7 @@ struct mmc_omap_host {
 	struct omap_mmc_platform_data *pdata;
 };
 
-static void mmc_omap_fclk_offdelay(struct mmc_omap_slot *slot)
+void mmc_omap_fclk_offdelay(struct mmc_omap_slot *slot)
 {
 	unsigned long tick_ns;
 
@@ -182,7 +183,7 @@ static void mmc_omap_fclk_offdelay(struct mmc_omap_slot *slot)
 	}
 }
 
-static void mmc_omap_fclk_enable(struct mmc_omap_host *host, unsigned int enable)
+void mmc_omap_fclk_enable(struct mmc_omap_host *host, unsigned int enable)
 {
 	unsigned long flags;
 
@@ -1015,7 +1016,7 @@ static int mmc_omap_get_dma_channel(struct mmc_omap_host *host, struct mmc_data 
 	}
 
 	if (is_read) {
-		if (host->id == 0) {
+		if (host->id == 1) {
 			sync_dev = OMAP_DMA_MMC_RX;
 			dma_dev_name = "MMC1 read";
 		} else {
@@ -1023,7 +1024,7 @@ static int mmc_omap_get_dma_channel(struct mmc_omap_host *host, struct mmc_data 
 			dma_dev_name = "MMC2 read";
 		}
 	} else {
-		if (host->id == 0) {
+		if (host->id == 1) {
 			sync_dev = OMAP_DMA_MMC_TX;
 			dma_dev_name = "MMC1 write";
 		} else {
@@ -1316,8 +1317,8 @@ static int __init mmc_omap_new_slot(struct mmc_omap_host *host, int id)
 
 	host->slots[id] = slot;
 
-	mmc->caps = 0;
-	if (host->pdata->slots[id].wires >= 4)
+	mmc->caps = MMC_CAP_MULTIWRITE;
+	if (host->pdata->conf.wire4)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
 	mmc->ops = &mmc_omap_ops;
@@ -1451,14 +1452,11 @@ static int __init mmc_omap_probe(struct platform_device *pdev)
 	host->irq = irq;
 
 	host->use_dma = 1;
-	host->dev->dma_mask = &pdata->dma_mask;
 	host->dma_ch = -1;
 
 	host->irq = irq;
 	host->phys_base = host->mem_res->start;
-	host->virt_base = ioremap(res->start, res->end - res->start + 1);
-	if (!host->virt_base)
-		goto err_ioremap;
+	host->virt_base = (void __iomem *) IO_ADDRESS(host->phys_base);
 
 	if (cpu_is_omap24xx()) {
 		host->iclk = clk_get(&pdev->dev, "mmc_ick");
@@ -1513,8 +1511,6 @@ err_free_iclk:
 		clk_put(host->iclk);
 	}
 err_free_mmc_host:
-	iounmap(host->virt_base);
-err_ioremap:
 	kfree(host);
 err_free_mem_region:
 	release_mem_region(res->start, res->end - res->start + 1);
@@ -1541,7 +1537,6 @@ static int mmc_omap_remove(struct platform_device *pdev)
 	if (host->fclk && !IS_ERR(host->fclk))
 		clk_put(host->fclk);
 
-	iounmap(host->virt_base);
 	release_mem_region(pdev->resource[0].start,
 			   pdev->resource[0].end - pdev->resource[0].start + 1);
 

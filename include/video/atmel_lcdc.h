@@ -22,7 +22,6 @@
 #ifndef __ATMEL_LCDC_H__
 #define __ATMEL_LCDC_H__
 
-#include <linux/workqueue.h>
 
 /* Way LCD wires are connected to the chip:
  * Some Atmel chips use BGR color mode (instead of standard RGB)
@@ -30,7 +29,6 @@
  */
 #define ATMEL_LCDC_WIRING_BGR	0
 #define ATMEL_LCDC_WIRING_RGB	1
-#define ATMEL_LCDC_WIRING_RGB555	2
 
 
  /* LCD Controller info data structure, stored in device platform_data */
@@ -38,11 +36,9 @@ struct atmel_lcdfb_info {
 	spinlock_t		lock;
 	struct fb_info		*info;
 	void __iomem		*mmio;
-	int			irq_base;
-	struct work_struct	task;
+	unsigned long		irq_base;
 
 	unsigned int		guard_time;
-	unsigned int 		smem_len;
 	struct platform_device	*pdev;
 	struct clk		*bus_clk;
 	struct clk		*lcdc_clk;

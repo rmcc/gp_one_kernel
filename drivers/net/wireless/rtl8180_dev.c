@@ -110,12 +110,12 @@ static void rtl8180_handle_rx(struct ieee80211_hw *dev)
 		struct sk_buff *skb = priv->rx_buf[priv->rx_idx];
 		u32 flags = le32_to_cpu(entry->flags);
 
-		if (flags & RTL818X_RX_DESC_FLAG_OWN)
+		if (flags & RTL8180_RX_DESC_FLAG_OWN)
 			return;
 
-		if (unlikely(flags & (RTL818X_RX_DESC_FLAG_DMA_FAIL |
-				      RTL818X_RX_DESC_FLAG_FOF |
-				      RTL818X_RX_DESC_FLAG_RX_ERR)))
+		if (unlikely(flags & (RTL8180_RX_DESC_FLAG_DMA_FAIL |
+				      RTL8180_RX_DESC_FLAG_FOF |
+				      RTL8180_RX_DESC_FLAG_RX_ERR)))
 			goto done;
 		else {
 			u32 flags2 = le32_to_cpu(entry->flags2);
@@ -132,15 +132,15 @@ static void rtl8180_handle_rx(struct ieee80211_hw *dev)
 
 			rx_status.antenna = (flags2 >> 15) & 1;
 			/* TODO: improve signal/rssi reporting */
-			rx_status.qual = flags2 & 0xFF;
-			rx_status.signal = (flags2 >> 8) & 0x7F;
+			rx_status.signal = flags2 & 0xFF;
+			rx_status.ssi = (flags2 >> 8) & 0x7F;
 			/* XXX: is this correct? */
 			rx_status.rate_idx = (flags >> 20) & 0xF;
 			rx_status.freq = dev->conf.channel->center_freq;
 			rx_status.band = dev->conf.channel->band;
 			rx_status.mactime = le64_to_cpu(entry->tsft);
 			rx_status.flag |= RX_FLAG_TSFT;
-			if (flags & RTL818X_RX_DESC_FLAG_CRC32_ERR)
+			if (flags & RTL8180_RX_DESC_FLAG_CRC32_ERR)
 				rx_status.flag |= RX_FLAG_FAILED_FCS_CRC;
 
 			ieee80211_rx_irqsafe(dev, skb, &rx_status);
@@ -154,10 +154,10 @@ static void rtl8180_handle_rx(struct ieee80211_hw *dev)
 
 	done:
 		entry->rx_buf = cpu_to_le32(*((dma_addr_t *)skb->cb));
-		entry->flags = cpu_to_le32(RTL818X_RX_DESC_FLAG_OWN |
+		entry->flags = cpu_to_le32(RTL8180_RX_DESC_FLAG_OWN |
 					   MAX_RX_SIZE);
 		if (priv->rx_idx == 31)
-			entry->flags |= cpu_to_le32(RTL818X_RX_DESC_FLAG_EOR);
+			entry->flags |= cpu_to_le32(RTL8180_RX_DESC_FLAG_EOR);
 		priv->rx_idx = (priv->rx_idx + 1) % 32;
 	}
 }
@@ -170,29 +170,34 @@ static void rtl8180_handle_tx(struct ieee80211_hw *dev, unsigned int prio)
 	while (skb_queue_len(&ring->queue)) {
 		struct rtl8180_tx_desc *entry = &ring->desc[ring->idx];
 		struct sk_buff *skb;
-		struct ieee80211_tx_info *info;
+		struct ieee80211_tx_status status;
+		struct ieee80211_tx_control *control;
 		u32 flags = le32_to_cpu(entry->flags);
 
-		if (flags & RTL818X_TX_DESC_FLAG_OWN)
+		if (flags & RTL8180_TX_DESC_FLAG_OWN)
 			return;
+
+		memset(&status, 0, sizeof(status));
 
 		ring->idx = (ring->idx + 1) % ring->entries;
 		skb = __skb_dequeue(&ring->queue);
 		pci_unmap_single(priv->pdev, le32_to_cpu(entry->tx_buf),
 				 skb->len, PCI_DMA_TODEVICE);
 
-		info = IEEE80211_SKB_CB(skb);
-		memset(&info->status, 0, sizeof(info->status));
+		control = *((struct ieee80211_tx_control **)skb->cb);
+		if (control)
+			memcpy(&status.control, control, sizeof(*control));
+		kfree(control);
 
-		if (!(info->flags & IEEE80211_TX_CTL_NO_ACK)) {
-			if (flags & RTL818X_TX_DESC_FLAG_TX_OK)
-				info->flags |= IEEE80211_TX_STAT_ACK;
+		if (!(status.control.flags & IEEE80211_TXCTL_NO_ACK)) {
+			if (flags & RTL8180_TX_DESC_FLAG_TX_OK)
+				status.flags = IEEE80211_TX_STATUS_ACK;
 			else
-				info->status.excessive_retries = 1;
+				status.excessive_retries = 1;
 		}
-		info->status.retry_count = flags & 0xFF;
+		status.retry_count = flags & 0xFF;
 
-		ieee80211_tx_status_irqsafe(dev, skb);
+		ieee80211_tx_status_irqsafe(dev, skb, &status);
 		if (ring->entries - skb_queue_len(&ring->queue) == 2)
 			ieee80211_wake_queue(dev, prio);
 	}
@@ -233,9 +238,9 @@ static irqreturn_t rtl8180_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int rtl8180_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
+static int rtl8180_tx(struct ieee80211_hw *dev, struct sk_buff *skb,
+		      struct ieee80211_tx_control *control)
 {
-	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct rtl8180_priv *priv = dev->priv;
 	struct rtl8180_tx_ring *ring;
 	struct rtl8180_tx_desc *entry;
@@ -246,40 +251,46 @@ static int rtl8180_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 	u16 plcp_len = 0;
 	__le16 rts_duration = 0;
 
-	prio = skb_get_queue_mapping(skb);
+	prio = control->queue;
 	ring = &priv->tx_ring[prio];
 
 	mapping = pci_map_single(priv->pdev, skb->data,
 				 skb->len, PCI_DMA_TODEVICE);
 
-	tx_flags = RTL818X_TX_DESC_FLAG_OWN | RTL818X_TX_DESC_FLAG_FS |
-		   RTL818X_TX_DESC_FLAG_LS |
-		   (ieee80211_get_tx_rate(dev, info)->hw_value << 24) |
-		   skb->len;
+	BUG_ON(!control->tx_rate);
+
+	tx_flags = RTL8180_TX_DESC_FLAG_OWN | RTL8180_TX_DESC_FLAG_FS |
+		   RTL8180_TX_DESC_FLAG_LS |
+		   (control->tx_rate->hw_value << 24) | skb->len;
 
 	if (priv->r8185)
-		tx_flags |= RTL818X_TX_DESC_FLAG_DMA |
-			    RTL818X_TX_DESC_FLAG_NO_ENC;
+		tx_flags |= RTL8180_TX_DESC_FLAG_DMA |
+			    RTL8180_TX_DESC_FLAG_NO_ENC;
 
-	if (info->flags & IEEE80211_TX_CTL_USE_RTS_CTS) {
-		tx_flags |= RTL818X_TX_DESC_FLAG_RTS;
-		tx_flags |= ieee80211_get_rts_cts_rate(dev, info)->hw_value << 19;
-	} else if (info->flags & IEEE80211_TX_CTL_USE_CTS_PROTECT) {
-		tx_flags |= RTL818X_TX_DESC_FLAG_CTS;
-		tx_flags |= ieee80211_get_rts_cts_rate(dev, info)->hw_value << 19;
+	if (control->flags & IEEE80211_TXCTL_USE_RTS_CTS) {
+		BUG_ON(!control->rts_cts_rate);
+		tx_flags |= RTL8180_TX_DESC_FLAG_RTS;
+		tx_flags |= control->rts_cts_rate->hw_value << 19;
+	} else if (control->flags & IEEE80211_TXCTL_USE_CTS_PROTECT) {
+		BUG_ON(!control->rts_cts_rate);
+		tx_flags |= RTL8180_TX_DESC_FLAG_CTS;
+		tx_flags |= control->rts_cts_rate->hw_value << 19;
 	}
 
-	if (info->flags & IEEE80211_TX_CTL_USE_RTS_CTS)
+	*((struct ieee80211_tx_control **) skb->cb) =
+		kmemdup(control, sizeof(*control), GFP_ATOMIC);
+
+	if (control->flags & IEEE80211_TXCTL_USE_RTS_CTS)
 		rts_duration = ieee80211_rts_duration(dev, priv->vif, skb->len,
-						      info);
+						      control);
 
 	if (!priv->r8185) {
 		unsigned int remainder;
 
 		plcp_len = DIV_ROUND_UP(16 * (skb->len + 4),
-				(ieee80211_get_tx_rate(dev, info)->bitrate * 2) / 10);
+					(control->tx_rate->bitrate * 2) / 10);
 		remainder = (16 * (skb->len + 4)) %
-			    ((ieee80211_get_tx_rate(dev, info)->bitrate * 2) / 10);
+			    ((control->tx_rate->bitrate * 2) / 10);
 		if (remainder > 0 && remainder <= 6)
 			plcp_len |= 1 << 15;
 	}
@@ -292,13 +303,13 @@ static int rtl8180_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 	entry->plcp_len = cpu_to_le16(plcp_len);
 	entry->tx_buf = cpu_to_le32(mapping);
 	entry->frame_len = cpu_to_le32(skb->len);
-	entry->flags2 = info->control.retries[0].rate_idx >= 0 ?
-		ieee80211_get_alt_retry_rate(dev, info, 0)->bitrate << 4 : 0;
-	entry->retry_limit = info->control.retry_limit;
+	entry->flags2 = control->alt_retry_rate != NULL ?
+			control->alt_retry_rate->bitrate << 4 : 0;
+	entry->retry_limit = control->retry_limit;
 	entry->flags = cpu_to_le32(tx_flags);
 	__skb_queue_tail(&ring->queue, skb);
 	if (ring->entries - skb_queue_len(&ring->queue) < 2)
-		ieee80211_stop_queue(dev, skb_get_queue_mapping(skb));
+		ieee80211_stop_queue(dev, control->queue);
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	rtl818x_iowrite8(priv, &priv->map->TX_DMA_POLLING, (1 << (prio + 4)));
@@ -446,10 +457,10 @@ static int rtl8180_init_rx_ring(struct ieee80211_hw *dev)
 		*mapping = pci_map_single(priv->pdev, skb_tail_pointer(skb),
 					  MAX_RX_SIZE, PCI_DMA_FROMDEVICE);
 		entry->rx_buf = cpu_to_le32(*mapping);
-		entry->flags = cpu_to_le32(RTL818X_RX_DESC_FLAG_OWN |
+		entry->flags = cpu_to_le32(RTL8180_RX_DESC_FLAG_OWN |
 					   MAX_RX_SIZE);
 	}
-	entry->flags |= cpu_to_le32(RTL818X_RX_DESC_FLAG_EOR);
+	entry->flags |= cpu_to_le32(RTL8180_RX_DESC_FLAG_EOR);
 	return 0;
 }
 
@@ -514,6 +525,7 @@ static void rtl8180_free_tx_ring(struct ieee80211_hw *dev, unsigned int prio)
 
 		pci_unmap_single(priv->pdev, le32_to_cpu(entry->tx_buf),
 				 skb->len, PCI_DMA_TODEVICE);
+		kfree(*((struct ieee80211_tx_control **) skb->cb));
 		kfree_skb(skb);
 		ring->idx = (ring->idx + 1) % ring->entries;
 	}
@@ -615,7 +627,7 @@ static int rtl8180_start(struct ieee80211_hw *dev)
 	reg |= RTL818X_CMD_TX_ENABLE;
 	rtl818x_iowrite8(priv, &priv->map->CMD, reg);
 
-	priv->mode = NL80211_IFTYPE_MONITOR;
+	priv->mode = IEEE80211_IF_TYPE_MNTR;
 	return 0;
 
  err_free_rings:
@@ -633,7 +645,7 @@ static void rtl8180_stop(struct ieee80211_hw *dev)
 	u8 reg;
 	int i;
 
-	priv->mode = NL80211_IFTYPE_UNSPECIFIED;
+	priv->mode = IEEE80211_IF_TYPE_INVALID;
 
 	rtl818x_iowrite16(priv, &priv->map->INT_MASK, 0);
 
@@ -661,11 +673,11 @@ static int rtl8180_add_interface(struct ieee80211_hw *dev,
 {
 	struct rtl8180_priv *priv = dev->priv;
 
-	if (priv->mode != NL80211_IFTYPE_MONITOR)
+	if (priv->mode != IEEE80211_IF_TYPE_MNTR)
 		return -EOPNOTSUPP;
 
 	switch (conf->type) {
-	case NL80211_IFTYPE_STATION:
+	case IEEE80211_IF_TYPE_STA:
 		priv->mode = conf->type;
 		break;
 	default:
@@ -688,7 +700,7 @@ static void rtl8180_remove_interface(struct ieee80211_hw *dev,
 				     struct ieee80211_if_init_conf *conf)
 {
 	struct rtl8180_priv *priv = dev->priv;
-	priv->mode = NL80211_IFTYPE_MONITOR;
+	priv->mode = IEEE80211_IF_TYPE_MNTR;
 	priv->vif = NULL;
 }
 
@@ -855,7 +867,6 @@ static int __devinit rtl8180_probe(struct pci_dev *pdev,
 	priv = dev->priv;
 	priv->pdev = pdev;
 
-	dev->max_altrates = 1;
 	SET_IEEE80211_DEV(dev, &pdev->dev);
 	pci_set_drvdata(pdev, dev);
 
@@ -883,10 +894,9 @@ static int __devinit rtl8180_probe(struct pci_dev *pdev,
 	dev->wiphy->bands[IEEE80211_BAND_2GHZ] = &priv->band;
 
 	dev->flags = IEEE80211_HW_HOST_BROADCAST_PS_BUFFERING |
-		     IEEE80211_HW_RX_INCLUDES_FCS |
-		     IEEE80211_HW_SIGNAL_UNSPEC;
+		     IEEE80211_HW_RX_INCLUDES_FCS;
 	dev->queues = 1;
-	dev->max_signal = 65;
+	dev->max_rssi = 65;
 
 	reg = rtl818x_ioread32(priv, &priv->map->TX_CONF);
 	reg &= RTL818X_TX_CONF_HWVER_MASK;

@@ -818,7 +818,8 @@ static struct gameport_driver sw_drv = {
 
 static int __init sw_init(void)
 {
-	return gameport_register_driver(&sw_drv);
+	gameport_register_driver(&sw_drv);
+	return 0;
 }
 
 static void __exit sw_exit(void)

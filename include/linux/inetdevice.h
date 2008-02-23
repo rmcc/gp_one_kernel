@@ -25,7 +25,6 @@ struct in_device
 	struct in_ifaddr	*ifa_list;	/* IP ifaddr chain		*/
 	rwlock_t		mc_list_lock;
 	struct ip_mc_list	*mc_list;	/* IP multicast filter chain    */
-	int			mc_count;	          /* Number of installed mcasts	*/
 	spinlock_t		mc_tomb_lock;
 	struct ip_mc_list	*mc_tomb;
 	unsigned long		mr_v1_seen;
@@ -118,6 +117,7 @@ struct in_ifaddr
 	__be32			ifa_address;
 	__be32			ifa_mask;
 	__be32			ifa_broadcast;
+	__be32			ifa_anycast;
 	unsigned char		ifa_scope;
 	unsigned char		ifa_flags;
 	unsigned char		ifa_prefixlen;

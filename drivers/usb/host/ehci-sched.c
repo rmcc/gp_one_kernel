@@ -437,9 +437,6 @@ static int enable_periodic (struct ehci_hcd *ehci)
 	u32	cmd;
 	int	status;
 
-	if (ehci->periodic_sched++)
-		return 0;
-
 	/* did clearing PSE did take effect yet?
 	 * takes effect only at frame boundaries...
 	 */
@@ -463,9 +460,6 @@ static int disable_periodic (struct ehci_hcd *ehci)
 {
 	u32	cmd;
 	int	status;
-
-	if (--ehci->periodic_sched)
-		return 0;
 
 	/* did setting PSE not take effect yet?
 	 * takes effect only at frame boundaries...
@@ -550,10 +544,13 @@ static int qh_link_periodic (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		: (qh->usecs * 8);
 
 	/* maybe enable periodic schedule processing */
-	return enable_periodic(ehci);
+	if (!ehci->periodic_sched++)
+		return enable_periodic (ehci);
+
+	return 0;
 }
 
-static int qh_unlink_periodic(struct ehci_hcd *ehci, struct ehci_qh *qh)
+static void qh_unlink_periodic (struct ehci_hcd *ehci, struct ehci_qh *qh)
 {
 	unsigned	i;
 	unsigned	period;
@@ -589,7 +586,9 @@ static int qh_unlink_periodic(struct ehci_hcd *ehci, struct ehci_qh *qh)
 	qh_put (qh);
 
 	/* maybe turn off periodic schedule */
-	return disable_periodic(ehci);
+	ehci->periodic_sched--;
+	if (!ehci->periodic_sched)
+		(void) disable_periodic (ehci);
 }
 
 static void intr_deschedule (struct ehci_hcd *ehci, struct ehci_qh *qh)
@@ -918,7 +917,7 @@ iso_stream_init (
 		 */
 		stream->usecs = HS_USECS_ISO (maxp);
 		bandwidth = stream->usecs * 8;
-		bandwidth /= interval;
+		bandwidth /= 1 << (interval - 1);
 
 	} else {
 		u32		addr;
@@ -951,7 +950,7 @@ iso_stream_init (
 		} else
 			stream->raw_mask = smask_out [hs_transfers - 1];
 		bandwidth = stream->usecs + stream->c_usecs;
-		bandwidth /= interval << 3;
+		bandwidth /= 1 << (interval + 2);
 
 		/* stream->splits gets created from raw_mask later */
 		stream->address = cpu_to_hc32(ehci, addr);
@@ -1350,27 +1349,18 @@ iso_stream_schedule (
 	/* when's the last uframe this urb could start? */
 	max = now + mod;
 
-	/* Typical case: reuse current schedule, stream is still active.
-	 * Hopefully there are no gaps from the host falling behind
-	 * (irq delays etc), but if there are we'll take the next
-	 * slot in the schedule, implicitly assuming URB_ISO_ASAP.
+	/* typical case: reuse current schedule. stream is still active,
+	 * and no gaps from host falling behind (irq delays etc)
 	 */
 	if (likely (!list_empty (&stream->td_list))) {
 		start = stream->next_uframe;
 		if (start < now)
 			start += mod;
-
-		/* Fell behind (by up to twice the slop amount)? */
-		if (start >= max - 2 * 8 * SCHEDULE_SLOP)
-			start += stream->interval * DIV_ROUND_UP(
-					max - start, stream->interval) - mod;
-
-		/* Tried to schedule too far into the future? */
-		if (unlikely((start + sched->span) >= max)) {
-			status = -EFBIG;
-			goto fail;
-		}
-		goto ready;
+		if (likely ((start + sched->span) < max))
+			goto ready;
+		/* else fell behind; someday, try to reschedule */
+		status = -EL2NSYNC;
+		goto fail;
 	}
 
 	/* need to schedule; when's the next (u)frame we could start?
@@ -1563,7 +1553,9 @@ itd_link_urb (
 	urb->hcpriv = NULL;
 
 	timer_action (ehci, TIMER_IO_WATCHDOG);
-	return enable_periodic(ehci);
+	if (unlikely (!ehci->periodic_sched++))
+		return enable_periodic (ehci);
+	return 0;
 }
 
 #define	ISO_ERRS (EHCI_ISOC_BUF_ERR | EHCI_ISOC_BABBLE | EHCI_ISOC_XACTERR)
@@ -1621,9 +1613,6 @@ itd_complete (
 		} else if (likely ((t & EHCI_ISOC_ACTIVE) == 0)) {
 			desc->status = 0;
 			desc->actual_length = EHCI_ITD_LENGTH (t);
-		} else {
-			/* URB was too late */
-			desc->status = -EXDEV;
 		}
 	}
 
@@ -1641,7 +1630,7 @@ itd_complete (
 	ehci_urb_done(ehci, urb, 0);
 	retval = true;
 	urb = NULL;
-	(void) disable_periodic(ehci);
+	ehci->periodic_sched--;
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs--;
 
 	if (unlikely (list_empty (&stream->td_list))) {
@@ -1950,7 +1939,9 @@ sitd_link_urb (
 	urb->hcpriv = NULL;
 
 	timer_action (ehci, TIMER_IO_WATCHDOG);
-	return enable_periodic(ehci);
+	if (!ehci->periodic_sched++)
+		return enable_periodic (ehci);
+	return 0;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -2016,7 +2007,7 @@ sitd_complete (
 	ehci_urb_done(ehci, urb, 0);
 	retval = true;
 	urb = NULL;
-	(void) disable_periodic(ehci);
+	ehci->periodic_sched--;
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs--;
 
 	if (list_empty (&stream->td_list)) {
@@ -2104,7 +2095,7 @@ done:
 static void
 scan_periodic (struct ehci_hcd *ehci)
 {
-	unsigned	now_uframe, frame, clock, clock_frame, mod;
+	unsigned	frame, clock, now_uframe, mod;
 	unsigned	modified;
 
 	mod = ehci->periodic_size << 3;
@@ -2120,7 +2111,6 @@ scan_periodic (struct ehci_hcd *ehci)
 	else
 		clock = now_uframe + mod - 1;
 	clock %= mod;
-	clock_frame = clock >> 3;
 
 	for (;;) {
 		union ehci_shadow	q, *q_p;
@@ -2167,26 +2157,22 @@ restart:
 			case Q_TYPE_ITD:
 				/* If this ITD is still active, leave it for
 				 * later processing ... check the next entry.
-				 * No need to check for activity unless the
-				 * frame is current.
 				 */
-				if (frame == clock_frame && live) {
-					rmb();
-					for (uf = 0; uf < 8; uf++) {
-						if (q.itd->hw_transaction[uf] &
-							    ITD_ACTIVE(ehci))
-							break;
-					}
-					if (uf < 8) {
-						incomplete = true;
-						q_p = &q.itd->itd_next;
-						hw_p = &q.itd->hw_next;
-						type = Q_NEXT_TYPE(ehci,
+				rmb ();
+				for (uf = 0; uf < 8 && live; uf++) {
+					if (0 == (q.itd->hw_transaction [uf]
+							& ITD_ACTIVE(ehci)))
+						continue;
+					incomplete = true;
+					q_p = &q.itd->itd_next;
+					hw_p = &q.itd->hw_next;
+					type = Q_NEXT_TYPE(ehci,
 							q.itd->hw_next);
-						q = *q_p;
-						break;
-					}
+					q = *q_p;
+					break;
 				}
+				if (uf < 8 && live)
+					break;
 
 				/* Take finished ITDs out of the schedule
 				 * and process them:  recycle, maybe report
@@ -2203,12 +2189,9 @@ restart:
 			case Q_TYPE_SITD:
 				/* If this SITD is still active, leave it for
 				 * later processing ... check the next entry.
-				 * No need to check for activity unless the
-				 * frame is current.
 				 */
-				if (frame == clock_frame && live &&
-						(q.sitd->hw_results &
-							SITD_ACTIVE(ehci))) {
+				if ((q.sitd->hw_results & SITD_ACTIVE(ehci))
+						&& live) {
 					incomplete = true;
 					q_p = &q.sitd->sitd_next;
 					hw_p = &q.sitd->hw_next;
@@ -2240,7 +2223,8 @@ restart:
 			if (unlikely (modified)) {
 				if (likely(ehci->periodic_sched > 0))
 					goto restart;
-				/* short-circuit this scan */
+				/* maybe we can short-circuit this scan! */
+				disable_periodic(ehci);
 				now_uframe = clock;
 				break;
 			}
@@ -2276,7 +2260,6 @@ restart:
 
 			/* rescan the rest of this frame, then ... */
 			clock = now;
-			clock_frame = clock >> 3;
 		} else {
 			now_uframe++;
 			now_uframe %= mod;

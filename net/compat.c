@@ -75,7 +75,7 @@ int get_compat_msghdr(struct msghdr *kmsg, struct compat_msghdr __user *umsg)
 
 /* I've named the args so it is easy to tell whose space the pointers are in. */
 int verify_compat_iovec(struct msghdr *kern_msg, struct iovec *kern_iov,
-		   struct sockaddr *kern_address, int mode)
+		   char *kern_address, int mode)
 {
 	int tot_len;
 
@@ -226,14 +226,14 @@ int put_cmsg_compat(struct msghdr *kmsg, int level, int type, int len, void *dat
 		return 0; /* XXX: return error? check spec. */
 	}
 
-	if (level == SOL_SOCKET && type == SCM_TIMESTAMP) {
+	if (level == SOL_SOCKET && type == SO_TIMESTAMP) {
 		struct timeval *tv = (struct timeval *)data;
 		ctv.tv_sec = tv->tv_sec;
 		ctv.tv_usec = tv->tv_usec;
 		data = &ctv;
 		len = sizeof(ctv);
 	}
-	if (level == SOL_SOCKET && type == SCM_TIMESTAMPNS) {
+	if (level == SOL_SOCKET && type == SO_TIMESTAMPNS) {
 		struct timespec *ts = (struct timespec *)data;
 		cts.tv_sec = ts->tv_sec;
 		cts.tv_nsec = ts->tv_nsec;
@@ -722,10 +722,9 @@ EXPORT_SYMBOL(compat_mc_getsockopt);
 
 /* Argument list sizes for compat_sys_socketcall */
 #define AL(x) ((x) * sizeof(u32))
-static unsigned char nas[19]={AL(0),AL(3),AL(3),AL(3),AL(2),AL(3),
+static unsigned char nas[18]={AL(0),AL(3),AL(3),AL(3),AL(2),AL(3),
 				AL(3),AL(3),AL(4),AL(4),AL(4),AL(6),
-				AL(6),AL(2),AL(5),AL(5),AL(3),AL(3),
-				AL(4)};
+				AL(6),AL(2),AL(5),AL(5),AL(3),AL(3)};
 #undef AL
 
 asmlinkage long compat_sys_sendmsg(int fd, struct compat_msghdr __user *msg, unsigned flags)
@@ -744,7 +743,7 @@ asmlinkage long compat_sys_socketcall(int call, u32 __user *args)
 	u32 a[6];
 	u32 a0, a1;
 
-	if (call < SYS_SOCKET || call > SYS_ACCEPT4)
+	if (call < SYS_SOCKET || call > SYS_RECVMSG)
 		return -EINVAL;
 	if (copy_from_user(a, args, nas[call]))
 		return -EFAULT;
@@ -765,7 +764,7 @@ asmlinkage long compat_sys_socketcall(int call, u32 __user *args)
 		ret = sys_listen(a0, a1);
 		break;
 	case SYS_ACCEPT:
-		ret = sys_accept4(a0, compat_ptr(a1), compat_ptr(a[2]), 0);
+		ret = sys_accept(a0, compat_ptr(a1), compat_ptr(a[2]));
 		break;
 	case SYS_GETSOCKNAME:
 		ret = sys_getsockname(a0, compat_ptr(a1), compat_ptr(a[2]));
@@ -804,9 +803,6 @@ asmlinkage long compat_sys_socketcall(int call, u32 __user *args)
 		break;
 	case SYS_RECVMSG:
 		ret = compat_sys_recvmsg(a0, compat_ptr(a1), a[2]);
-		break;
-	case SYS_ACCEPT4:
-		ret = sys_accept4(a0, compat_ptr(a1), compat_ptr(a[2]), a[3]);
 		break;
 	default:
 		ret = -EINVAL;

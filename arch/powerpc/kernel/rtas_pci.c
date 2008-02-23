@@ -155,12 +155,12 @@ static int rtas_pci_write_config(struct pci_bus *bus,
 	return PCIBIOS_DEVICE_NOT_FOUND;
 }
 
-static struct pci_ops rtas_pci_ops = {
+struct pci_ops rtas_pci_ops = {
 	.read = rtas_pci_read_config,
 	.write = rtas_pci_write_config,
 };
 
-static int is_python(struct device_node *dev)
+int is_python(struct device_node *dev)
 {
 	const char *model = of_get_property(dev, "model", NULL);
 
@@ -301,3 +301,51 @@ void __init find_and_init_phbs(void)
 #endif /* CONFIG_PPC32 */
 	}
 }
+
+/* RPA-specific bits for removing PHBs */
+int pcibios_remove_root_bus(struct pci_controller *phb)
+{
+	struct pci_bus *b = phb->bus;
+	struct resource *res;
+	int rc, i;
+
+	res = b->resource[0];
+	if (!res->flags) {
+		printk(KERN_ERR "%s: no IO resource for PHB %s\n", __func__,
+				b->name);
+		return 1;
+	}
+
+	rc = pcibios_unmap_io_space(b);
+	if (rc) {
+		printk(KERN_ERR "%s: failed to unmap IO on bus %s\n",
+			__func__, b->name);
+		return 1;
+	}
+
+	if (release_resource(res)) {
+		printk(KERN_ERR "%s: failed to release IO on bus %s\n",
+				__func__, b->name);
+		return 1;
+	}
+
+	for (i = 1; i < 3; ++i) {
+		res = b->resource[i];
+		if (!res->flags && i == 0) {
+			printk(KERN_ERR "%s: no MEM resource for PHB %s\n",
+				__func__, b->name);
+			return 1;
+		}
+		if (res->flags && release_resource(res)) {
+			printk(KERN_ERR
+			       "%s: failed to release IO %d on bus %s\n",
+				__func__, i, b->name);
+			return 1;
+		}
+	}
+
+	pcibios_free_controller(phb);
+
+	return 0;
+}
+EXPORT_SYMBOL(pcibios_remove_root_bus);

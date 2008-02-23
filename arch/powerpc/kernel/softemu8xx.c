@@ -23,6 +23,7 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/user.h>
+#include <linux/a.out.h>
 #include <linux/interrupt.h>
 
 #include <asm/pgtable.h>
@@ -123,7 +124,7 @@ int Soft_emulate_8xx(struct pt_regs *regs)
 	disp = instword & 0xffff;
 
 	ea = (u32 *)(regs->gpr[idxreg] + disp);
-	ip = (u32 *)&current->thread.TS_FPR(flreg);
+	ip = (u32 *)&current->thread.fpr[flreg];
 
 	switch ( inst )
 	{
@@ -167,7 +168,7 @@ int Soft_emulate_8xx(struct pt_regs *regs)
 		break;
 	case FMR:
 		/* assume this is a fp move -- Cort */
-		memcpy(ip, &current->thread.TS_FPR((instword>>11)&0x1f),
+		memcpy(ip, &current->thread.fpr[(instword>>11)&0x1f],
 		       sizeof(double));
 		break;
 	default:

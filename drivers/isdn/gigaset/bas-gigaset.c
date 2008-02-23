@@ -1050,9 +1050,10 @@ static int submit_iso_write_urb(struct isow_urbctx_t *ucx)
 		}
 
 		/* retrieve block of data to send */
-		rc = gigaset_isowbuf_getbytes(ubc->isooutbuf, ifd->length);
-		if (rc < 0) {
-			if (rc == -EBUSY) {
+		ifd->offset = gigaset_isowbuf_getbytes(ubc->isooutbuf,
+						       ifd->length);
+		if (ifd->offset < 0) {
+			if (ifd->offset == -EBUSY) {
 				gig_dbg(DEBUG_ISO,
 					"%s: buffer busy at frame %d",
 					__func__, nframe);
@@ -1061,12 +1062,11 @@ static int submit_iso_write_urb(struct isow_urbctx_t *ucx)
 			} else {
 				dev_err(ucx->bcs->cs->dev,
 					"%s: buffer error %d at frame %d\n",
-					__func__, rc, nframe);
-				return rc;
+					__func__, ifd->offset, nframe);
+				return ifd->offset;
 			}
 			break;
 		}
-		ifd->offset = rc;
 		ucx->limit = ubc->isooutbuf->nextread;
 		ifd->status = 0;
 		ifd->actual_length = 0;
@@ -2067,7 +2067,7 @@ static int gigaset_initbcshw(struct bc_state *bcs)
 
 	bcs->hw.bas = ubc = kmalloc(sizeof(struct bas_bc_state), GFP_KERNEL);
 	if (!ubc) {
-		pr_err("out of memory\n");
+		err("could not allocate bas_bc_state");
 		return 0;
 	}
 
@@ -2081,7 +2081,7 @@ static int gigaset_initbcshw(struct bc_state *bcs)
 	ubc->isooutdone = ubc->isooutfree = ubc->isooutovfl = NULL;
 	ubc->numsub = 0;
 	if (!(ubc->isooutbuf = kmalloc(sizeof(struct isowbuf_t), GFP_KERNEL))) {
-		pr_err("out of memory\n");
+		err("could not allocate isochronous output buffer");
 		kfree(ubc);
 		bcs->hw.bas = NULL;
 		return 0;
@@ -2136,10 +2136,8 @@ static int gigaset_initcshw(struct cardstate *cs)
 	struct bas_cardstate *ucs;
 
 	cs->hw.bas = ucs = kmalloc(sizeof *ucs, GFP_KERNEL);
-	if (!ucs) {
-		pr_err("out of memory\n");
+	if (!ucs)
 		return 0;
-	}
 
 	ucs->urb_cmd_in = NULL;
 	ucs->urb_cmd_out = NULL;
@@ -2505,11 +2503,12 @@ static int __init bas_gigaset_init(void)
 	/* register this driver with the USB subsystem */
 	result = usb_register(&gigaset_usb_driver);
 	if (result < 0) {
-		pr_err("error %d registering USB driver\n", -result);
+		err("usb_register failed (error %d)", -result);
 		goto error;
 	}
 
-	pr_info(DRIVER_DESC "\n");
+	info(DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 
 error:

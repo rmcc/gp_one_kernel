@@ -58,7 +58,7 @@ xfs_buf_trace(
 		bp, id,
 		(void *)(unsigned long)bp->b_flags,
 		(void *)(unsigned long)bp->b_hold.counter,
-		(void *)(unsigned long)bp->b_sema.count,
+		(void *)(unsigned long)bp->b_sema.count.counter,
 		(void *)current,
 		data, ra,
 		(void *)(unsigned long)((bp->b_file_offset>>32) & 0xffffffff),
@@ -253,7 +253,7 @@ _xfs_buf_initialize(
 
 	memset(bp, 0, sizeof(xfs_buf_t));
 	atomic_set(&bp->b_hold, 1);
-	init_completion(&bp->b_iowait);
+	init_MUTEX_LOCKED(&bp->b_iodonesema);
 	INIT_LIST_HEAD(&bp->b_list);
 	INIT_LIST_HEAD(&bp->b_hash_list);
 	init_MUTEX_LOCKED(&bp->b_sema); /* held, no waiters */
@@ -310,7 +310,8 @@ _xfs_buf_free_pages(
 	xfs_buf_t	*bp)
 {
 	if (bp->b_pages != bp->b_page_array) {
-		kmem_free(bp->b_pages);
+		kmem_free(bp->b_pages,
+			  bp->b_page_count * sizeof(struct page *));
 	}
 }
 
@@ -630,29 +631,6 @@ xfs_buf_get_flags(
 	return NULL;
 }
 
-STATIC int
-_xfs_buf_read(
-	xfs_buf_t		*bp,
-	xfs_buf_flags_t		flags)
-{
-	int			status;
-
-	XB_TRACE(bp, "_xfs_buf_read", (unsigned long)flags);
-
-	ASSERT(!(flags & (XBF_DELWRI|XBF_WRITE)));
-	ASSERT(bp->b_bn != XFS_BUF_DADDR_NULL);
-
-	bp->b_flags &= ~(XBF_WRITE | XBF_ASYNC | XBF_DELWRI | \
-			XBF_READ_AHEAD | _XBF_RUN_QUEUES);
-	bp->b_flags |= flags & (XBF_READ | XBF_ASYNC | \
-			XBF_READ_AHEAD | _XBF_RUN_QUEUES);
-
-	status = xfs_buf_iorequest(bp);
-	if (!status && !(flags & XBF_ASYNC))
-		status = xfs_buf_iowait(bp);
-	return status;
-}
-
 xfs_buf_t *
 xfs_buf_read_flags(
 	xfs_buftarg_t		*target,
@@ -669,7 +647,7 @@ xfs_buf_read_flags(
 		if (!XFS_BUF_ISDONE(bp)) {
 			XB_TRACE(bp, "read", (unsigned long)flags);
 			XFS_STATS_INC(xb_get_read);
-			_xfs_buf_read(bp, flags);
+			xfs_buf_iostart(bp, flags);
 		} else if (flags & XBF_ASYNC) {
 			XB_TRACE(bp, "read_async", (unsigned long)flags);
 			/*
@@ -861,7 +839,6 @@ xfs_buf_rele(
 		return;
 	}
 
-	ASSERT(atomic_read(&bp->b_hold) > 0);
 	if (atomic_dec_and_lock(&bp->b_hold, &hash->bh_lock)) {
 		if (bp->b_relse) {
 			atomic_inc(&bp->b_hold);
@@ -875,6 +852,11 @@ xfs_buf_rele(
 			spin_unlock(&hash->bh_lock);
 			xfs_buf_free(bp);
 		}
+	} else {
+		/*
+		 * Catch reference count leaks
+		 */
+		ASSERT(atomic_read(&bp->b_hold) >= 0);
 	}
 }
 
@@ -1024,13 +1006,12 @@ xfs_buf_iodone_work(
 	 * We can get an EOPNOTSUPP to ordered writes.  Here we clear the
 	 * ordered flag and reissue them.  Because we can't tell the higher
 	 * layers directly that they should not issue ordered I/O anymore, they
-	 * need to check if the _XFS_BARRIER_FAILED flag was set during I/O completion.
+	 * need to check if the ordered flag was cleared during I/O completion.
 	 */
 	if ((bp->b_error == EOPNOTSUPP) &&
 	    (bp->b_flags & (XBF_ORDERED|XBF_ASYNC)) == (XBF_ORDERED|XBF_ASYNC)) {
 		XB_TRACE(bp, "ordered_retry", bp->b_iodone);
 		bp->b_flags &= ~XBF_ORDERED;
-		bp->b_flags |= _XFS_BARRIER_FAILED;
 		xfs_buf_iorequest(bp);
 	} else if (bp->b_iodone)
 		(*(bp->b_iodone))(bp);
@@ -1057,7 +1038,7 @@ xfs_buf_ioend(
 			xfs_buf_iodone_work(&bp->b_iodone_work);
 		}
 	} else {
-		complete(&bp->b_iowait);
+		up(&bp->b_iodonesema);
 	}
 }
 
@@ -1071,39 +1052,50 @@ xfs_buf_ioerror(
 	XB_TRACE(bp, "ioerror", (unsigned long)error);
 }
 
+/*
+ *	Initiate I/O on a buffer, based on the flags supplied.
+ *	The b_iodone routine in the buffer supplied will only be called
+ *	when all of the subsidiary I/O requests, if any, have been completed.
+ */
 int
-xfs_bawrite(
-	void			*mp,
-	struct xfs_buf		*bp)
+xfs_buf_iostart(
+	xfs_buf_t		*bp,
+	xfs_buf_flags_t		flags)
 {
-	XB_TRACE(bp, "bawrite", 0);
+	int			status = 0;
 
-	ASSERT(bp->b_bn != XFS_BUF_DADDR_NULL);
+	XB_TRACE(bp, "iostart", (unsigned long)flags);
 
-	xfs_buf_delwri_dequeue(bp);
+	if (flags & XBF_DELWRI) {
+		bp->b_flags &= ~(XBF_READ | XBF_WRITE | XBF_ASYNC);
+		bp->b_flags |= flags & (XBF_DELWRI | XBF_ASYNC);
+		xfs_buf_delwri_queue(bp, 1);
+		return 0;
+	}
 
-	bp->b_flags &= ~(XBF_READ | XBF_DELWRI | XBF_READ_AHEAD);
-	bp->b_flags |= (XBF_WRITE | XBF_ASYNC | _XBF_RUN_QUEUES);
+	bp->b_flags &= ~(XBF_READ | XBF_WRITE | XBF_ASYNC | XBF_DELWRI | \
+			XBF_READ_AHEAD | _XBF_RUN_QUEUES);
+	bp->b_flags |= flags & (XBF_READ | XBF_WRITE | XBF_ASYNC | \
+			XBF_READ_AHEAD | _XBF_RUN_QUEUES);
 
-	bp->b_mount = mp;
-	bp->b_strat = xfs_bdstrat_cb;
-	return xfs_bdstrat_cb(bp);
-}
+	BUG_ON(bp->b_bn == XFS_BUF_DADDR_NULL);
 
-void
-xfs_bdwrite(
-	void			*mp,
-	struct xfs_buf		*bp)
-{
-	XB_TRACE(bp, "bdwrite", 0);
+	/* For writes allow an alternate strategy routine to precede
+	 * the actual I/O request (which may not be issued at all in
+	 * a shutdown situation, for example).
+	 */
+	status = (flags & XBF_WRITE) ?
+		xfs_buf_iostrategy(bp) : xfs_buf_iorequest(bp);
 
-	bp->b_strat = xfs_bdstrat_cb;
-	bp->b_mount = mp;
+	/* Wait for I/O if we are not an async request.
+	 * Note: async I/O request completion will release the buffer,
+	 * and that can already be done by this point.  So using the
+	 * buffer pointer from here on, after async I/O, is invalid.
+	 */
+	if (!status && !(flags & XBF_ASYNC))
+		status = xfs_buf_iowait(bp);
 
-	bp->b_flags &= ~XBF_READ;
-	bp->b_flags |= (XBF_DELWRI | XBF_ASYNC);
-
-	xfs_buf_delwri_queue(bp, 1);
+	return status;
 }
 
 STATIC_INLINE void
@@ -1126,7 +1118,8 @@ xfs_buf_bio_end_io(
 	unsigned int		blocksize = bp->b_target->bt_bsize;
 	struct bio_vec		*bvec = bio->bi_io_vec + bio->bi_vcnt - 1;
 
-	xfs_buf_ioerror(bp, -error);
+	if (!test_bit(BIO_UPTODATE, &bio->bi_flags))
+		bp->b_error = EIO;
 
 	do {
 		struct page	*page = bvec->bv_page;
@@ -1283,7 +1276,7 @@ xfs_buf_iowait(
 	XB_TRACE(bp, "iowait", 0);
 	if (atomic_read(&bp->b_io_remaining))
 		blk_run_address_space(bp->b_target->bt_mapping);
-	wait_for_completion(&bp->b_iowait);
+	down(&bp->b_iodonesema);
 	XB_TRACE(bp, "iowaited", (long)bp->b_error);
 	return bp->b_error;
 }
@@ -1405,7 +1398,7 @@ STATIC void
 xfs_free_bufhash(
 	xfs_buftarg_t		*btp)
 {
-	kmem_free(btp->bt_hash);
+	kmem_free(btp->bt_hash, (1<<btp->bt_hashshift) * sizeof(xfs_bufhash_t));
 	btp->bt_hash = NULL;
 }
 
@@ -1435,10 +1428,13 @@ xfs_unregister_buftarg(
 
 void
 xfs_free_buftarg(
-	xfs_buftarg_t		*btp)
+	xfs_buftarg_t		*btp,
+	int			external)
 {
 	xfs_flush_buftarg(btp, 1);
 	xfs_blkdev_issue_flush(btp);
+	if (external)
+		xfs_blkdev_put(btp->bt_bdev);
 	xfs_free_bufhash(btp);
 	iput(btp->bt_mapping->host);
 
@@ -1448,7 +1444,7 @@ xfs_free_buftarg(
 	xfs_unregister_buftarg(btp);
 	kthread_stop(btp->bt_task);
 
-	kmem_free(btp);
+	kmem_free(btp, sizeof(*btp));
 }
 
 STATIC int
@@ -1579,7 +1575,7 @@ xfs_alloc_buftarg(
 	return btp;
 
 error:
-	kmem_free(btp);
+	kmem_free(btp, sizeof(*btp));
 	return NULL;
 }
 
@@ -1807,7 +1803,7 @@ int __init
 xfs_buf_init(void)
 {
 #ifdef XFS_BUF_TRACE
-	xfs_buf_trace_buf = ktrace_alloc(XFS_BUF_TRACE_SIZE, KM_NOFS);
+	xfs_buf_trace_buf = ktrace_alloc(XFS_BUF_TRACE_SIZE, KM_SLEEP);
 #endif
 
 	xfs_buf_zone = kmem_zone_init_flags(sizeof(xfs_buf_t), "xfs_buf",

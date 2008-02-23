@@ -39,9 +39,9 @@
 
 #ifdef ASD_ENTER_EXIT
 #define ENTER  printk(KERN_NOTICE "%s: ENTER %s\n", ASD_DRIVER_NAME, \
-		__func__)
+		__FUNCTION__)
 #define EXIT   printk(KERN_NOTICE "%s: --EXIT %s\n", ASD_DRIVER_NAME, \
-		__func__)
+		__FUNCTION__)
 #else
 #define ENTER
 #define EXIT

@@ -88,8 +88,8 @@ static int tcf_gact_init(struct nlattr *nla, struct nlattr *est,
 	if (!pc) {
 		pc = tcf_hash_create(parm->index, est, a, sizeof(*gact),
 				     bind, &gact_idx_gen, &gact_hash_info);
-		if (IS_ERR(pc))
-		    return PTR_ERR(pc);
+		if (unlikely(!pc))
+			return -ENOMEM;
 		ret = ACT_P_CREATED;
 	} else {
 		if (!ovr) {
@@ -139,7 +139,7 @@ static int tcf_gact(struct sk_buff *skb, struct tc_action *a, struct tcf_result 
 #else
 	action = gact->tcf_action;
 #endif
-	gact->tcf_bstats.bytes += qdisc_pkt_len(skb);
+	gact->tcf_bstats.bytes += skb->len;
 	gact->tcf_bstats.packets++;
 	if (action == TC_ACT_SHOT)
 		gact->tcf_qstats.drops++;

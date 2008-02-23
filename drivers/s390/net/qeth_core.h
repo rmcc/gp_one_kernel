@@ -31,9 +31,10 @@
 #include <asm/qdio.h>
 #include <asm/ccwdev.h>
 #include <asm/ccwgroup.h>
-#include <asm/sysinfo.h>
 
 #include "qeth_core_mpc.h"
+
+#define KMSG_COMPONENT "qeth"
 
 /**
  * Debug Facility stuff
@@ -73,6 +74,11 @@ struct qeth_dbf_info {
 #define QETH_DBF_TEXT_(name, level, text...) \
 	qeth_dbf_longtext(QETH_DBF_##name, level, text)
 
+/**
+ * some more debug stuff
+ */
+#define PRINTK_HEADER	"qeth: "
+
 #define SENSE_COMMAND_REJECT_BYTE 0
 #define SENSE_COMMAND_REJECT_FLAG 0x80
 #define SENSE_RESETTING_EVENT_BYTE 1
@@ -84,11 +90,11 @@ struct qeth_dbf_info {
 #define CARD_RDEV(card) card->read.ccwdev
 #define CARD_WDEV(card) card->write.ccwdev
 #define CARD_DDEV(card) card->data.ccwdev
-#define CARD_BUS_ID(card) dev_name(&card->gdev->dev)
-#define CARD_RDEV_ID(card) dev_name(&card->read.ccwdev->dev)
-#define CARD_WDEV_ID(card) dev_name(&card->write.ccwdev->dev)
-#define CARD_DDEV_ID(card) dev_name(&card->data.ccwdev->dev)
-#define CHANNEL_ID(channel) dev_name(&channel->ccwdev->dev)
+#define CARD_BUS_ID(card) card->gdev->dev.bus_id
+#define CARD_RDEV_ID(card) card->read.ccwdev->dev.bus_id
+#define CARD_WDEV_ID(card) card->write.ccwdev->dev.bus_id
+#define CARD_DDEV_ID(card) card->data.ccwdev->dev.bus_id
+#define CHANNEL_ID(channel) channel->ccwdev->dev.bus_id
 
 /**
  * card stuff
@@ -232,6 +238,11 @@ static inline int qeth_is_ipa_enabled(struct qeth_ipa_info *ipa,
 #define QETH_PCI_THRESHOLD_B(card) 0
 /*not used unless the microcode gets patched*/
 #define QETH_PCI_TIMER_VALUE(card) 3
+
+#define QETH_MIN_INPUT_THRESHOLD 1
+#define QETH_MAX_INPUT_THRESHOLD 500
+#define QETH_MIN_OUTPUT_THRESHOLD 1
+#define QETH_MAX_OUTPUT_THRESHOLD 300
 
 /* priority queing */
 #define QETH_PRIOQ_DEFAULT QETH_NO_PRIO_QUEUEING
@@ -413,7 +424,6 @@ struct qeth_qdio_out_buffer {
 	int next_element_to_fill;
 	struct sk_buff_head skb_list;
 	struct list_head ctx_list;
-	int is_header[16];
 };
 
 struct qeth_card;
@@ -643,6 +653,7 @@ struct qeth_card_options {
 	int macaddr_mode;
 	int fake_broadcast;
 	int add_hhlen;
+	int fake_ll;
 	int layer2;
 	enum qeth_large_send_types large_send;
 	int performance_stats;
@@ -682,7 +693,6 @@ struct qeth_mc_mac {
 	struct list_head list;
 	__u8 mc_addr[MAX_ADDR_LEN];
 	unsigned char mc_addrlen;
-	int is_vmac;
 };
 
 struct qeth_card {
@@ -726,7 +736,6 @@ struct qeth_card {
 	struct qeth_osn_info osn_info;
 	struct qeth_discipline discipline;
 	atomic_t force_alloc_skb;
-	struct service_level qeth_service_level;
 };
 
 struct qeth_card_list_struct {
@@ -781,7 +790,7 @@ void qeth_core_remove_osn_attributes(struct device *);
 
 /* exports for qeth discipline device drivers */
 extern struct qeth_card_list_struct qeth_core_card_list;
-extern struct kmem_cache *qeth_core_header_cache;
+
 extern struct qeth_dbf_info qeth_dbf[QETH_DBF_INFOS];
 
 void qeth_set_allowed_threads(struct qeth_card *, unsigned long , int);
@@ -802,14 +811,17 @@ int qeth_send_ipa_cmd(struct qeth_card *, struct qeth_cmd_buffer *,
 struct qeth_cmd_buffer *qeth_get_ipacmd_buffer(struct qeth_card *,
 			enum qeth_ipa_cmds, enum qeth_prot_versions);
 int qeth_query_setadapterparms(struct qeth_card *);
-int qeth_check_qdio_errors(struct qdio_buffer *, unsigned int, const char *);
+int qeth_check_qdio_errors(struct qdio_buffer *, unsigned int,
+		       unsigned int, const char *);
 void qeth_queue_input_buffer(struct qeth_card *, int);
 struct sk_buff *qeth_core_get_next_skb(struct qeth_card *,
 		struct qdio_buffer *, struct qdio_buffer_element **, int *,
 		struct qeth_hdr **);
 void qeth_schedule_recovery(struct qeth_card *);
 void qeth_qdio_output_handler(struct ccw_device *, unsigned int,
-			int, int, int, unsigned long);
+			unsigned int, unsigned int,
+			unsigned int, int, int,
+			unsigned long);
 void qeth_clear_ipacmd_list(struct qeth_card *);
 int qeth_qdio_clear_card(struct qeth_card *, int);
 void qeth_clear_working_pool_list(struct qeth_card *);
@@ -839,7 +851,7 @@ int qeth_get_priority_queue(struct qeth_card *, struct sk_buff *, int, int);
 int qeth_get_elements_no(struct qeth_card *, void *, struct sk_buff *, int);
 int qeth_do_send_packet_fast(struct qeth_card *, struct qeth_qdio_out_q *,
 			struct sk_buff *, struct qeth_hdr *, int,
-			struct qeth_eddp_context *, int, int);
+			struct qeth_eddp_context *);
 int qeth_do_send_packet(struct qeth_card *, struct qeth_qdio_out_q *,
 		    struct sk_buff *, struct qeth_hdr *,
 		    int, struct qeth_eddp_context *);

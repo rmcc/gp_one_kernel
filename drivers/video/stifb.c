@@ -1078,7 +1078,8 @@ static struct fb_ops stifb_ops = {
  *  Initialization
  */
 
-static int __init stifb_init_fb(struct sti_struct *sti, int bpp_pref)
+int __init
+stifb_init_fb(struct sti_struct *sti, int bpp_pref)
 {
 	struct fb_fix_screeninfo *fix;
 	struct fb_var_screeninfo *var;
@@ -1314,7 +1315,8 @@ static int stifb_disabled __initdata;
 int __init
 stifb_setup(char *options);
 
-static int __init stifb_init(void)
+int __init
+stifb_init(void)
 {
 	struct sti_struct *sti;
 	struct sti_struct *def_sti;

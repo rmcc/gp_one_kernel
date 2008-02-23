@@ -1,4 +1,4 @@
-#include <asm/unistd_32.h>
+#include <asm-sparc/unistd.h>
 
 unsigned sparc32_dir_class[] = {
 #include <asm-generic/audit_dir_write.h>

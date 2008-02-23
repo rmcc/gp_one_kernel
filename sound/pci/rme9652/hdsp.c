@@ -1036,7 +1036,7 @@ static void hdsp_set_dds_value(struct hdsp *hdsp, int rate)
 	n = DDS_NUMERATOR;
 	div64_32(&n, rate, &r);
 	/* n should be less than 2^32 for being written to FREQ register */
-	snd_BUG_ON(n >> 32);
+	snd_assert((n >> 32) == 0);
 	/* HDSP_freqReg and HDSP_resetPointer are the same, so keep the DDS
 	   value to write it after a reset */
 	hdsp->dds_value = n;
@@ -1452,7 +1452,7 @@ static int snd_hdsp_create_midi (struct snd_card *card, struct hdsp *hdsp, int i
 	if (snd_rawmidi_new (card, buf, id, 1, 1, &hdsp->midi[id].rmidi) < 0)
 		return -1;
 
-	sprintf(hdsp->midi[id].rmidi->name, "HDSP MIDI %d", id+1);
+	sprintf (hdsp->midi[id].rmidi->name, "%s MIDI %d", card->id, id+1);
 	hdsp->midi[id].rmidi->private_data = &hdsp->midi[id];
 
 	snd_rawmidi_set_ops (hdsp->midi[id].rmidi, SNDRV_RAWMIDI_STREAM_OUTPUT, &snd_hdsp_midi_output);
@@ -3043,7 +3043,7 @@ static int snd_hdsp_get_adat_sync_check(struct snd_kcontrol *kcontrol, struct sn
 	struct hdsp *hdsp = snd_kcontrol_chip(kcontrol);
 
 	offset = ucontrol->id.index - 1;
-	snd_BUG_ON(offset < 0);
+	snd_assert(offset >= 0);
 
 	switch (hdsp->io_type) {
 	case Digiface:
@@ -3750,7 +3750,7 @@ static irqreturn_t snd_hdsp_interrupt(int irq, void *dev_id)
 		}
 	}
 	if (hdsp->use_midi_tasklet && schedule)
-		tasklet_schedule(&hdsp->midi_tasklet);
+		tasklet_hi_schedule(&hdsp->midi_tasklet);
 	return IRQ_HANDLED;
 }
 
@@ -3767,8 +3767,7 @@ static char *hdsp_channel_buffer_location(struct hdsp *hdsp,
 {
 	int mapped_channel;
 
-        if (snd_BUG_ON(channel < 0 || channel >= hdsp->max_channels))
-		return NULL;
+        snd_assert(channel >= 0 && channel < hdsp->max_channels, return NULL);
         
 	if ((mapped_channel = hdsp->channel_map[channel]) < 0)
 		return NULL;
@@ -3785,12 +3784,10 @@ static int snd_hdsp_playback_copy(struct snd_pcm_substream *substream, int chann
 	struct hdsp *hdsp = snd_pcm_substream_chip(substream);
 	char *channel_buf;
 
-	if (snd_BUG_ON(pos + count > HDSP_CHANNEL_BUFFER_BYTES / 4))
-		return -EINVAL;
+	snd_assert(pos + count <= HDSP_CHANNEL_BUFFER_BYTES / 4, return -EINVAL);
 
 	channel_buf = hdsp_channel_buffer_location (hdsp, substream->pstr->stream, channel);
-	if (snd_BUG_ON(!channel_buf))
-		return -EIO;
+	snd_assert(channel_buf != NULL, return -EIO);
 	if (copy_from_user(channel_buf + pos * 4, src, count * 4))
 		return -EFAULT;
 	return count;
@@ -3802,12 +3799,10 @@ static int snd_hdsp_capture_copy(struct snd_pcm_substream *substream, int channe
 	struct hdsp *hdsp = snd_pcm_substream_chip(substream);
 	char *channel_buf;
 
-	if (snd_BUG_ON(pos + count > HDSP_CHANNEL_BUFFER_BYTES / 4))
-		return -EINVAL;
+	snd_assert(pos + count <= HDSP_CHANNEL_BUFFER_BYTES / 4, return -EINVAL);
 
 	channel_buf = hdsp_channel_buffer_location (hdsp, substream->pstr->stream, channel);
-	if (snd_BUG_ON(!channel_buf))
-		return -EIO;
+	snd_assert(channel_buf != NULL, return -EIO);
 	if (copy_to_user(dst, channel_buf + pos * 4, count * 4))
 		return -EFAULT;
 	return count;
@@ -3820,8 +3815,7 @@ static int snd_hdsp_hw_silence(struct snd_pcm_substream *substream, int channel,
 	char *channel_buf;
 
 	channel_buf = hdsp_channel_buffer_location (hdsp, substream->pstr->stream, channel);
-	if (snd_BUG_ON(!channel_buf))
-		return -EIO;
+	snd_assert(channel_buf != NULL, return -EIO);
 	memset(channel_buf + pos * 4, 0, count * 4);
 	return count;
 }
@@ -3933,8 +3927,7 @@ static int snd_hdsp_channel_info(struct snd_pcm_substream *substream,
 	struct hdsp *hdsp = snd_pcm_substream_chip(substream);
 	int mapped_channel;
 
-	if (snd_BUG_ON(info->channel >= hdsp->max_channels))
-		return -EINVAL;
+	snd_assert(info->channel < hdsp->max_channels, return -EINVAL);
 
 	if ((mapped_channel = hdsp->channel_map[info->channel]) < 0)
 		return -EINVAL;
@@ -4548,19 +4541,10 @@ static int snd_hdsp_hwdep_ioctl(struct snd_hwdep *hw, struct file *file, unsigne
 {
 	struct hdsp *hdsp = (struct hdsp *)hw->private_data;	
 	void __user *argp = (void __user *)arg;
-	int err;
 
 	switch (cmd) {
 	case SNDRV_HDSP_IOCTL_GET_PEAK_RMS: {
 		struct hdsp_peak_rms __user *peak_rms = (struct hdsp_peak_rms __user *)arg;
-
-		err = hdsp_check_for_iobox(hdsp);
-		if (err < 0)
-			return err;
-
-		err = hdsp_check_for_firmware(hdsp, 1);
-		if (err < 0)
-			return err;
 
 		if (!(hdsp->state & HDSP_FirmwareLoaded)) {
 			snd_printk(KERN_ERR "Hammerfall-DSP: firmware needs to be uploaded to the card.\n");
@@ -4581,14 +4565,10 @@ static int snd_hdsp_hwdep_ioctl(struct snd_hwdep *hw, struct file *file, unsigne
 		unsigned long flags;
 		int i;
 		
-		err = hdsp_check_for_iobox(hdsp);
-		if (err < 0)
-			return err;
-
-		err = hdsp_check_for_firmware(hdsp, 1);
-		if (err < 0)
-			return err;
-
+		if (!(hdsp->state & HDSP_FirmwareLoaded)) {
+			snd_printk(KERN_ERR "Hammerfall-DSP: Firmware needs to be uploaded to the card.\n");	
+			return -EINVAL;
+		}
 		spin_lock_irqsave(&hdsp->lock, flags);
 		info.pref_sync_ref = (unsigned char)hdsp_pref_sync_ref(hdsp);
 		info.wordclock_sync_check = (unsigned char)hdsp_wc_sync_check(hdsp);
@@ -5058,10 +5038,6 @@ static int __devinit snd_hdsp_create(struct snd_card *card,
 		/* we wait 2 seconds to let freshly inserted cardbus cards do their hardware init */
 		ssleep(2);
 
-		err = hdsp_check_for_iobox(hdsp);
-		if (err < 0)
-			return err;
-
 		if ((hdsp_read (hdsp, HDSP_statusRegister) & HDSP_DllError) != 0) {
 #ifdef HDSP_FW_LOADER
 			if ((err = hdsp_request_fw_loader(hdsp)) < 0)
@@ -5074,7 +5050,7 @@ static int __devinit snd_hdsp_create(struct snd_card *card,
 				/* init is complete, we return */
 				return 0;
 #endif
-			/* we defer initialization */
+			/* no iobox connected, we defer initialization */
 			snd_printk(KERN_INFO "Hammerfall-DSP: card initialization pending : waiting for firmware\n");
 			if ((err = snd_hdsp_create_hwdep(card, hdsp)) < 0)
 				return err;

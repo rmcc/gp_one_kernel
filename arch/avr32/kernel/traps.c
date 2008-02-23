@@ -7,7 +7,6 @@
  */
 
 #include <linux/bug.h>
-#include <linux/hardirq.h>
 #include <linux/init.h>
 #include <linux/kallsyms.h>
 #include <linux/kdebug.h>
@@ -117,15 +116,15 @@ asmlinkage void do_nmi(unsigned long ecr, struct pt_regs *regs)
 	switch (ret) {
 	case NOTIFY_OK:
 	case NOTIFY_STOP:
-		break;
+		return;
 	case NOTIFY_BAD:
 		die("Fatal Non-Maskable Interrupt", regs, SIGINT);
 	default:
-		printk(KERN_ALERT "Got NMI, but nobody cared. Disabling...\n");
-		nmi_disable();
 		break;
 	}
-	nmi_exit();
+
+	printk(KERN_ALERT "Got NMI, but nobody cared. Disabling...\n");
+	nmi_disable();
 }
 
 asmlinkage void do_critical_exception(unsigned long ecr, struct pt_regs *regs)

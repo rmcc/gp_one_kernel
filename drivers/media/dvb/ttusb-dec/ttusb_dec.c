@@ -343,7 +343,7 @@ static int ttusb_dec_get_stb_state (struct ttusb_dec *dec, unsigned int *mode,
 	u8 c[COMMAND_PACKET_SIZE];
 	int c_length;
 	int result;
-	__be32 tmp;
+	unsigned int tmp;
 
 	dprintk("%s\n", __func__);
 
@@ -398,9 +398,9 @@ static void ttusb_dec_set_pids(struct ttusb_dec *dec)
 		   0x00, 0x00, 0xff, 0xff,
 		   0xff, 0xff, 0xff, 0xff };
 
-	__be16 pcr = htons(dec->pid[DMX_PES_PCR]);
-	__be16 audio = htons(dec->pid[DMX_PES_AUDIO]);
-	__be16 video = htons(dec->pid[DMX_PES_VIDEO]);
+	u16 pcr = htons(dec->pid[DMX_PES_PCR]);
+	u16 audio = htons(dec->pid[DMX_PES_AUDIO]);
+	u16 video = htons(dec->pid[DMX_PES_VIDEO]);
 
 	dprintk("%s\n", __func__);
 
@@ -435,7 +435,7 @@ static void ttusb_dec_process_pva(struct ttusb_dec *dec, u8 *pva, int length)
 	case 0x01: {		/* VideoStream */
 		int prebytes = pva[5] & 0x03;
 		int postbytes = (pva[5] & 0x0c) >> 2;
-		__be16 v_pes_payload_length;
+		u16 v_pes_payload_length;
 
 		if (output_pva) {
 			dec->video_filter->feed->cb.ts(pva, length, NULL, 0,
@@ -1006,7 +1006,7 @@ static int ttusb_dec_start_sec_feed(struct dvb_demux_feed *dvbdmxfeed)
 		    0x00, 0x00, 0x00, 0x00,
 		    0x00, 0x00, 0x00, 0x00,
 		    0x00 };
-	__be16 pid;
+	u16 pid;
 	u8 c[COMMAND_PACKET_SIZE];
 	int c_length;
 	int result;
@@ -1157,12 +1157,6 @@ static int ttusb_dec_alloc_iso_urbs(struct ttusb_dec *dec)
 						ISO_BUF_COUNT),
 					       &dec->iso_dma_handle);
 
-	if (!dec->iso_buffer) {
-		dprintk("%s: pci_alloc_consistent - not enough memory\n",
-			__func__);
-		return -ENOMEM;
-	}
-
 	memset(dec->iso_buffer, 0,
 	       ISO_FRAME_SIZE * (FRAMES_PER_ISO_BUF * ISO_BUF_COUNT));
 
@@ -1260,7 +1254,6 @@ static int ttusb_dec_init_usb(struct ttusb_dec *dec)
 		dec->irq_buffer = usb_buffer_alloc(dec->udev,IRQ_PACKET_SIZE,
 					GFP_ATOMIC, &dec->irq_dma_handle);
 		if(!dec->irq_buffer) {
-			usb_free_urb(dec->irq_urb);
 			return -ENOMEM;
 		}
 		usb_fill_int_urb(dec->irq_urb, dec->udev,dec->irq_pipe,
@@ -1282,13 +1275,12 @@ static int ttusb_dec_boot_dsp(struct ttusb_dec *dec)
 	u8 b1[] = { 0x61 };
 	u8 *b;
 	char idstring[21];
-	const u8 *firmware = NULL;
+	u8 *firmware = NULL;
 	size_t firmware_size = 0;
 	u16 firmware_csum = 0;
-	__be16 firmware_csum_ns;
-	__be32 firmware_size_nl;
-	u32 crc32_csum, crc32_check;
-	__be32 tmp;
+	u16 firmware_csum_ns;
+	u32 firmware_size_nl;
+	u32 crc32_csum, crc32_check, tmp;
 	const struct firmware *fw_entry = NULL;
 
 	dprintk("%s\n", __func__);
@@ -1314,7 +1306,7 @@ static int ttusb_dec_boot_dsp(struct ttusb_dec *dec)
 	   valid. */
 	crc32_csum = crc32(~0L, firmware, 56) ^ ~0L;
 	memcpy(&tmp, &firmware[56], 4);
-	crc32_check = ntohl(tmp);
+	crc32_check = htonl(tmp);
 	if (crc32_csum != crc32_check) {
 		printk("%s: crc32 check of DSP code failed (calculated "
 		       "0x%08x != 0x%08x in file), file invalid.\n",
@@ -1635,7 +1627,7 @@ static int ttusb_dec_probe(struct usb_interface *intf,
 
 	usb_set_intfdata(intf, (void *)dec);
 
-	switch (id->idProduct) {
+	switch (le16_to_cpu(id->idProduct)) {
 	case 0x1006:
 		ttusb_dec_set_model(dec, TTUSB_DEC3000S);
 		break;
@@ -1660,7 +1652,7 @@ static int ttusb_dec_probe(struct usb_interface *intf,
 	ttusb_dec_init_dvb(dec);
 
 	dec->adapter.priv = dec;
-	switch (id->idProduct) {
+	switch (le16_to_cpu(id->idProduct)) {
 	case 0x1006:
 		dec->fe = ttusbdecfe_dvbs_attach(&fe_config);
 		break;
@@ -1672,7 +1664,7 @@ static int ttusb_dec_probe(struct usb_interface *intf,
 	}
 
 	if (dec->fe == NULL) {
-		printk("dvb-ttusb-dec: A frontend driver was not found for device [%04x:%04x]\n",
+		printk("dvb-ttusb-dec: A frontend driver was not found for device %04x/%04x\n",
 		       le16_to_cpu(dec->udev->descriptor.idVendor),
 		       le16_to_cpu(dec->udev->descriptor.idProduct));
 	} else {

@@ -1,7 +1,7 @@
 /*
  *	SNAP data link layer. Derived from 802.2
  *
- *		Alan Cox <alan@lxorguk.ukuu.org.uk>,
+ *		Alan Cox <Alan.Cox@linux.org>,
  *		from the 802.2 layer by Greg Page.
  *		Merged in additions from Greg Page's psnap.c.
  *
@@ -20,7 +20,6 @@
 #include <linux/mm.h>
 #include <linux/in.h>
 #include <linux/init.h>
-#include <linux/rculist.h>
 
 static LIST_HEAD(snap_list);
 static DEFINE_SPINLOCK(snap_lock);
@@ -31,9 +30,11 @@ static struct llc_sap *snap_sap;
  */
 static struct datalink_proto *find_snap_client(unsigned char *desc)
 {
+	struct list_head *entry;
 	struct datalink_proto *proto = NULL, *p;
 
-	list_for_each_entry_rcu(p, &snap_list, node) {
+	list_for_each_rcu(entry, &snap_list) {
+		p = list_entry(entry, struct datalink_proto, node);
 		if (!memcmp(p->type, desc, 5)) {
 			proto = p;
 			break;

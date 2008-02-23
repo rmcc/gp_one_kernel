@@ -1,7 +1,7 @@
 /*
  *    pata_netcell.c - Netcell PATA driver
  *
- *	(c) 2006 Red Hat
+ *	(c) 2006 Red Hat  <alan@redhat.com>
  */
 
 #include <linux/kernel.h>

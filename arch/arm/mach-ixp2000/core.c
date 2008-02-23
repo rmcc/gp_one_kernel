@@ -29,7 +29,7 @@
 #include <asm/types.h>
 #include <asm/setup.h>
 #include <asm/memory.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/tlbflush.h>
@@ -39,7 +39,7 @@
 #include <asm/mach/time.h>
 #include <asm/mach/irq.h>
 
-#include <mach/gpio.h>
+#include <asm/arch/gpio.h>
 
 static DEFINE_SPINLOCK(ixp2000_slowport_lock);
 static unsigned long ixp2000_slowport_irq_flags;
@@ -84,57 +84,64 @@ static struct map_desc ixp2000_io_desc[] __initdata = {
 		.virtual	= IXP2000_CAP_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_CAP_PHYS_BASE),
 		.length		= IXP2000_CAP_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_INTCTL_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_INTCTL_PHYS_BASE),
 		.length		= IXP2000_INTCTL_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_PCI_CREG_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_PCI_CREG_PHYS_BASE),
 		.length		= IXP2000_PCI_CREG_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_PCI_CSR_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_PCI_CSR_PHYS_BASE),
 		.length		= IXP2000_PCI_CSR_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_MSF_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_MSF_PHYS_BASE),
 		.length		= IXP2000_MSF_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_SCRATCH_RING_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_SCRATCH_RING_PHYS_BASE),
 		.length		= IXP2000_SCRATCH_RING_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_SRAM0_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_SRAM0_PHYS_BASE),
 		.length		= IXP2000_SRAM0_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_PCI_IO_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_PCI_IO_PHYS_BASE),
 		.length		= IXP2000_PCI_IO_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_PCI_CFG0_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_PCI_CFG0_PHYS_BASE),
 		.length		= IXP2000_PCI_CFG0_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}, {
 		.virtual	= IXP2000_PCI_CFG1_VIRT_BASE,
 		.pfn		= __phys_to_pfn(IXP2000_PCI_CFG1_PHYS_BASE),
 		.length		= IXP2000_PCI_CFG1_SIZE,
-		.type		= MT_DEVICE,
+		.type		= MT_DEVICE_IXP2000,
 	}
 };
 
 void __init ixp2000_map_io(void)
 {
+	/*
+	 * On IXP2400 CPUs we need to use MT_DEVICE_IXP2000 so that
+	 * XCB=101 (to avoid triggering erratum #66), and given that
+	 * this mode speeds up I/O accesses and we have write buffer
+	 * flushes in the right places anyway, it doesn't hurt to use
+	 * XCB=101 for all IXP2000s.
+	 */
 	iotable_init(ixp2000_io_desc, ARRAY_SIZE(ixp2000_io_desc));
 
 	/* Set slowport to 8-bit mode.  */
@@ -304,7 +311,8 @@ static void ixp2000_GPIO_irq_handler(unsigned int irq, struct irq_desc *desc)
 		   
 	for (i = 0; i <= 7; i++) {
 		if (status & (1<<i)) {
-			generic_handle_irq(i + IRQ_IXP2000_GPIO0);
+			desc = irq_desc + i + IRQ_IXP2000_GPIO0;
+			desc_handle_irq(i + IRQ_IXP2000_GPIO0, desc);
 		}
 	}
 }
@@ -321,19 +329,19 @@ static int ixp2000_GPIO_irq_type(unsigned int irq, unsigned int type)
 	/*
 	 * Then, set the proper trigger type.
 	 */
-	if (type & IRQ_TYPE_EDGE_FALLING)
+	if (type & IRQT_FALLING)
 		GPIO_IRQ_falling_edge |= 1 << line;
 	else
 		GPIO_IRQ_falling_edge &= ~(1 << line);
-	if (type & IRQ_TYPE_EDGE_RISING)
+	if (type & IRQT_RISING)
 		GPIO_IRQ_rising_edge |= 1 << line;
 	else
 		GPIO_IRQ_rising_edge &= ~(1 << line);
-	if (type & IRQ_TYPE_LEVEL_LOW)
+	if (type & IRQT_LOW)
 		GPIO_IRQ_level_low |= 1 << line;
 	else
 		GPIO_IRQ_level_low &= ~(1 << line);
-	if (type & IRQ_TYPE_LEVEL_HIGH)
+	if (type & IRQT_HIGH)
 		GPIO_IRQ_level_high |= 1 << line;
 	else
 		GPIO_IRQ_level_high &= ~(1 << line);
@@ -396,7 +404,8 @@ static void ixp2000_err_irq_handler(unsigned int irq, struct irq_desc *desc)
 
 	for(i = 31; i >= 0; i--) {
 		if(status & (1 << i)) {
-			generic_handle_irq(IRQ_IXP2000_DRAM0_MIN_ERR + i);
+			desc = irq_desc + IRQ_IXP2000_DRAM0_MIN_ERR + i;
+			desc_handle_irq(IRQ_IXP2000_DRAM0_MIN_ERR + i, desc);
 		}
 	}
 }

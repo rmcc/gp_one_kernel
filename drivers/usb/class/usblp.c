@@ -593,9 +593,8 @@ static long usblp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				err = usblp_hp_channel_change_request(usblp,
 					arg, &newChannel);
 				if (err < 0) {
-					dev_err(&usblp->dev->dev,
-						"usblp%d: error = %d setting "
-						"HP channel\n",
+					err("usblp%d: error = %d setting "
+						"HP channel",
 						usblp->minor, err);
 					retval = -EIO;
 					goto done;
@@ -1077,16 +1076,15 @@ static int usblp_probe(struct usb_interface *intf,
 		       const struct usb_device_id *id)
 {
 	struct usb_device *dev = interface_to_usbdev (intf);
-	struct usblp *usblp;
+	struct usblp *usblp = NULL;
 	int protocol;
 	int retval;
 
 	/* Malloc and start initializing usblp structure so we can use it
 	 * directly. */
-	usblp = kzalloc(sizeof(struct usblp), GFP_KERNEL);
-	if (!usblp) {
+	if (!(usblp = kzalloc(sizeof(struct usblp), GFP_KERNEL))) {
 		retval = -ENOMEM;
-		goto abort_ret;
+		goto abort;
 	}
 	usblp->dev = dev;
 	mutex_init(&usblp->wmut);
@@ -1181,11 +1179,12 @@ abort_intfdata:
 	usb_set_intfdata (intf, NULL);
 	device_remove_file(&intf->dev, &dev_attr_ieee1284_id);
 abort:
-	kfree(usblp->readbuf);
-	kfree(usblp->statusbuf);
-	kfree(usblp->device_id_string);
-	kfree(usblp);
-abort_ret:
+	if (usblp) {
+		kfree(usblp->readbuf);
+		kfree(usblp->statusbuf);
+		kfree(usblp->device_id_string);
+		kfree(usblp);
+	}
 	return retval;
 }
 
@@ -1346,7 +1345,7 @@ static void usblp_disconnect(struct usb_interface *intf)
 	usb_deregister_dev(intf, &usblp_class);
 
 	if (!usblp || !usblp->dev) {
-		dev_err(&intf->dev, "bogus disconnect\n");
+		err("bogus disconnect");
 		BUG ();
 	}
 

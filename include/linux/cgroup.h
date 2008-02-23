@@ -9,24 +9,23 @@
  */
 
 #include <linux/sched.h>
+#include <linux/kref.h>
 #include <linux/cpumask.h>
 #include <linux/nodemask.h>
 #include <linux/rcupdate.h>
 #include <linux/cgroupstats.h>
 #include <linux/prio_heap.h>
-#include <linux/rwsem.h>
 
 #ifdef CONFIG_CGROUPS
 
 struct cgroupfs_root;
 struct cgroup_subsys;
 struct inode;
-struct cgroup;
 
 extern int cgroup_init_early(void);
 extern int cgroup_init(void);
+extern void cgroup_init_smp(void);
 extern void cgroup_lock(void);
-extern bool cgroup_lock_live_group(struct cgroup *cgrp);
 extern void cgroup_unlock(void);
 extern void cgroup_fork(struct task_struct *p);
 extern void cgroup_fork_callbacks(struct task_struct *p);
@@ -52,9 +51,9 @@ struct cgroup_subsys_state {
 	 * hierarchy structure */
 	struct cgroup *cgroup;
 
-	/* State maintained by the cgroup system to allow subsystems
-	 * to be "busy". Should be accessed via css_get(),
-	 * css_tryget() and and css_put(). */
+	/* State maintained by the cgroup system to allow
+	 * subsystems to be "busy". Should be accessed via css_get()
+	 * and css_put() */
 
 	atomic_t refcnt;
 
@@ -64,14 +63,11 @@ struct cgroup_subsys_state {
 /* bits in struct cgroup_subsys_state flags field */
 enum {
 	CSS_ROOT, /* This CSS is the root of the subsystem */
-	CSS_REMOVED, /* This CSS is dead */
 };
 
 /*
- * Call css_get() to hold a reference on the css; it can be used
- * for a reference obtained via:
- * - an existing ref-counted reference to the css
- * - task->cgroups for a locked task
+ * Call css_get() to hold a reference on the cgroup;
+ *
  */
 
 static inline void css_get(struct cgroup_subsys_state *css)
@@ -80,32 +76,9 @@ static inline void css_get(struct cgroup_subsys_state *css)
 	if (!test_bit(CSS_ROOT, &css->flags))
 		atomic_inc(&css->refcnt);
 }
-
-static inline bool css_is_removed(struct cgroup_subsys_state *css)
-{
-	return test_bit(CSS_REMOVED, &css->flags);
-}
-
-/*
- * Call css_tryget() to take a reference on a css if your existing
- * (known-valid) reference isn't already ref-counted. Returns false if
- * the css has been destroyed.
- */
-
-static inline bool css_tryget(struct cgroup_subsys_state *css)
-{
-	if (test_bit(CSS_ROOT, &css->flags))
-		return true;
-	while (!atomic_inc_not_zero(&css->refcnt)) {
-		if (test_bit(CSS_REMOVED, &css->flags))
-			return false;
-	}
-	return true;
-}
-
 /*
  * css_put() should be called to release a reference taken by
- * css_get() or css_tryget()
+ * css_get()
  */
 
 extern void __css_put(struct cgroup_subsys_state *css);
@@ -142,7 +115,7 @@ struct cgroup {
 	struct list_head children;	/* my children */
 
 	struct cgroup *parent;	/* my parent */
-	struct dentry *dentry;	  	/* cgroup fs entry, RCU protected */
+	struct dentry *dentry;	  	/* cgroup fs entry */
 
 	/* Private pointers for each registered subsystem */
 	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];
@@ -162,18 +135,6 @@ struct cgroup {
 	 * release_list_lock
 	 */
 	struct list_head release_list;
-
-	/* pids_mutex protects the fields below */
-	struct rw_semaphore pids_mutex;
-	/* Array of process ids in the cgroup */
-	pid_t *tasks_pids;
-	/* How many files are using the current tasks_pids array */
-	int pids_use_count;
-	/* Length of the current tasks_pids array */
-	int pids_length;
-
-	/* For RCU-protected deletion */
-	struct rcu_head rcu_head;
 };
 
 /* A css_set is a structure holding pointers to a set of
@@ -186,7 +147,7 @@ struct cgroup {
 struct css_set {
 
 	/* Reference count */
-	atomic_t refcount;
+	struct kref ref;
 
 	/*
 	 * List running through all cgroup groups in the same hash
@@ -244,63 +205,49 @@ struct cftype {
 	 * subsystem, followed by a period */
 	char name[MAX_CFTYPE_NAME];
 	int private;
-
-	/*
-	 * If non-zero, defines the maximum length of string that can
-	 * be passed to write_string; defaults to 64
-	 */
-	size_t max_write_len;
-
-	int (*open)(struct inode *inode, struct file *file);
-	ssize_t (*read)(struct cgroup *cgrp, struct cftype *cft,
-			struct file *file,
-			char __user *buf, size_t nbytes, loff_t *ppos);
+	int (*open) (struct inode *inode, struct file *file);
+	ssize_t (*read) (struct cgroup *cgrp, struct cftype *cft,
+			 struct file *file,
+			 char __user *buf, size_t nbytes, loff_t *ppos);
 	/*
 	 * read_u64() is a shortcut for the common case of returning a
 	 * single integer. Use it in place of read()
 	 */
-	u64 (*read_u64)(struct cgroup *cgrp, struct cftype *cft);
+	u64 (*read_u64) (struct cgroup *cgrp, struct cftype *cft);
 	/*
 	 * read_s64() is a signed version of read_u64()
 	 */
-	s64 (*read_s64)(struct cgroup *cgrp, struct cftype *cft);
+	s64 (*read_s64) (struct cgroup *cgrp, struct cftype *cft);
 	/*
 	 * read_map() is used for defining a map of key/value
 	 * pairs. It should call cb->fill(cb, key, value) for each
 	 * entry. The key/value pairs (and their ordering) should not
 	 * change between reboots.
 	 */
-	int (*read_map)(struct cgroup *cont, struct cftype *cft,
-			struct cgroup_map_cb *cb);
+	int (*read_map) (struct cgroup *cont, struct cftype *cft,
+			 struct cgroup_map_cb *cb);
 	/*
 	 * read_seq_string() is used for outputting a simple sequence
 	 * using seqfile.
 	 */
-	int (*read_seq_string)(struct cgroup *cont, struct cftype *cft,
-			       struct seq_file *m);
+	int (*read_seq_string) (struct cgroup *cont, struct cftype *cft,
+			 struct seq_file *m);
 
-	ssize_t (*write)(struct cgroup *cgrp, struct cftype *cft,
-			 struct file *file,
-			 const char __user *buf, size_t nbytes, loff_t *ppos);
+	ssize_t (*write) (struct cgroup *cgrp, struct cftype *cft,
+			  struct file *file,
+			  const char __user *buf, size_t nbytes, loff_t *ppos);
 
 	/*
 	 * write_u64() is a shortcut for the common case of accepting
 	 * a single integer (as parsed by simple_strtoull) from
 	 * userspace. Use in place of write(); return 0 or error.
 	 */
-	int (*write_u64)(struct cgroup *cgrp, struct cftype *cft, u64 val);
+	int (*write_u64) (struct cgroup *cgrp, struct cftype *cft, u64 val);
 	/*
 	 * write_s64() is a signed version of write_u64()
 	 */
-	int (*write_s64)(struct cgroup *cgrp, struct cftype *cft, s64 val);
+	int (*write_s64) (struct cgroup *cgrp, struct cftype *cft, s64 val);
 
-	/*
-	 * write_string() is passed a nul-terminated kernelspace
-	 * buffer of maximum length determined by max_write_len.
-	 * Returns 0 or -ve error code.
-	 */
-	int (*write_string)(struct cgroup *cgrp, struct cftype *cft,
-			    const char *buffer);
 	/*
 	 * trigger() callback can be used to get some kick from the
 	 * userspace, when the actual string written is not important
@@ -309,7 +256,7 @@ struct cftype {
 	 */
 	int (*trigger)(struct cgroup *cgrp, unsigned int event);
 
-	int (*release)(struct inode *inode, struct file *file);
+	int (*release) (struct inode *inode, struct file *file);
 };
 
 struct cgroup_scanner {
@@ -358,7 +305,12 @@ struct cgroup_subsys {
 			struct cgroup *cgrp);
 	void (*post_clone)(struct cgroup_subsys *ss, struct cgroup *cgrp);
 	void (*bind)(struct cgroup_subsys *ss, struct cgroup *root);
-
+	/*
+	 * This routine is called with the task_lock of mm->owner held
+	 */
+	void (*mm_owner_changed)(struct cgroup_subsys *ss,
+					struct cgroup *old,
+					struct cgroup *new);
 	int subsys_id;
 	int active;
 	int disabled;
@@ -366,24 +318,12 @@ struct cgroup_subsys {
 #define MAX_CGROUP_TYPE_NAMELEN 32
 	const char *name;
 
-	/*
-	 * Protects sibling/children links of cgroups in this
-	 * hierarchy, plus protects which hierarchy (or none) the
-	 * subsystem is a part of (i.e. root/sibling).  To avoid
-	 * potential deadlocks, the following operations should not be
-	 * undertaken while holding any hierarchy_mutex:
-	 *
-	 * - allocating memory
-	 * - initiating hotplug events
-	 */
-	struct mutex hierarchy_mutex;
-
-	/*
-	 * Link to parent, and list entry in parent's children.
-	 * Protected by this->hierarchy_mutex and cgroup_lock()
-	 */
+	/* Protected by RCU */
 	struct cgroupfs_root *root;
+
 	struct list_head sibling;
+
+	void *private;
 };
 
 #define SUBSYS(_x) extern struct cgroup_subsys _x ## _subsys;
@@ -408,8 +348,7 @@ static inline struct cgroup* task_cgroup(struct task_struct *task,
 	return task_subsys_state(task, subsys_id)->cgroup;
 }
 
-int cgroup_clone(struct task_struct *tsk, struct cgroup_subsys *ss,
-							char *nodename);
+int cgroup_clone(struct task_struct *tsk, struct cgroup_subsys *ss);
 
 /* A cgroup_iter should be treated as an opaque object */
 struct cgroup_iter {
@@ -441,6 +380,7 @@ int cgroup_attach_task(struct cgroup *, struct task_struct *);
 
 static inline int cgroup_init_early(void) { return 0; }
 static inline int cgroup_init(void) { return 0; }
+static inline void cgroup_init_smp(void) {}
 static inline void cgroup_fork(struct task_struct *p) {}
 static inline void cgroup_fork_callbacks(struct task_struct *p) {}
 static inline void cgroup_post_fork(struct task_struct *p) {}
@@ -456,4 +396,13 @@ static inline int cgroupstats_build(struct cgroupstats *stats,
 
 #endif /* !CONFIG_CGROUPS */
 
+#ifdef CONFIG_MM_OWNER
+extern void
+cgroup_mm_owner_callbacks(struct task_struct *old, struct task_struct *new);
+#else /* !CONFIG_MM_OWNER */
+static inline void
+cgroup_mm_owner_callbacks(struct task_struct *old, struct task_struct *new)
+{
+}
+#endif /* CONFIG_MM_OWNER */
 #endif /* _LINUX_CGROUP_H */

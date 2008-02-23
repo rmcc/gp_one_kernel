@@ -9,9 +9,12 @@ MODULE_AUTHOR("Bart De Schuymer <bdschuym@pandora.be>");
 MODULE_DESCRIPTION("arptables arp payload mangle target");
 
 static unsigned int
-target(struct sk_buff *skb, const struct xt_target_param *par)
+target(struct sk_buff *skb,
+       const struct net_device *in, const struct net_device *out,
+       unsigned int hooknum, const struct xt_target *target,
+       const void *targinfo)
 {
-	const struct arpt_mangle *mangle = par->targinfo;
+	const struct arpt_mangle *mangle = targinfo;
 	const struct arphdr *arp;
 	unsigned char *arpptr;
 	int pln, hln;
@@ -54,9 +57,11 @@ target(struct sk_buff *skb, const struct xt_target_param *par)
 	return mangle->target;
 }
 
-static bool checkentry(const struct xt_tgchk_param *par)
+static bool
+checkentry(const char *tablename, const void *e, const struct xt_target *target,
+	   void *targinfo, unsigned int hook_mask)
 {
-	const struct arpt_mangle *mangle = par->targinfo;
+	const struct arpt_mangle *mangle = targinfo;
 
 	if (mangle->flags & ~ARPT_MANGLE_MASK ||
 	    !(mangle->flags & ARPT_MANGLE_MASK))
@@ -70,7 +75,7 @@ static bool checkentry(const struct xt_tgchk_param *par)
 
 static struct xt_target arpt_mangle_reg __read_mostly = {
 	.name		= "mangle",
-	.family		= NFPROTO_ARP,
+	.family		= NF_ARP,
 	.target		= target,
 	.targetsize	= sizeof(struct arpt_mangle),
 	.checkentry	= checkentry,

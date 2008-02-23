@@ -81,10 +81,6 @@
 
 /*-------------------------------------------------------------------------*/
 
-/* Keep track of which host controller drivers are loaded */
-unsigned long usb_hcds_loaded;
-EXPORT_SYMBOL_GPL(usb_hcds_loaded);
-
 /* host controllers we manage */
 LIST_HEAD (usb_bus_list);
 EXPORT_SYMBOL_GPL (usb_bus_list);
@@ -105,9 +101,6 @@ static DEFINE_SPINLOCK(hcd_root_hub_lock);
 
 /* used when updating an endpoint's URB list */
 static DEFINE_SPINLOCK(hcd_urb_list_lock);
-
-/* used to protect against unlinking URBs after the device is gone */
-static DEFINE_SPINLOCK(hcd_urb_unlink_lock);
 
 /* wait queue for synchronous unlinks */
 DECLARE_WAIT_QUEUE_HEAD(usb_kill_urb_queue);
@@ -825,8 +818,9 @@ static int usb_register_bus(struct usb_bus *bus)
 	set_bit (busnum, busmap.busmap);
 	bus->busnum = busnum;
 
-	bus->dev = device_create(usb_host_class, bus->controller, MKDEV(0, 0),
-				 bus, "usb_host%d", busnum);
+	bus->dev = device_create_drvdata(usb_host_class, bus->controller,
+					 MKDEV(0, 0), bus,
+					 "usb_host%d", busnum);
 	result = PTR_ERR(bus->dev);
 	if (IS_ERR(bus->dev))
 		goto error_create_class_dev;
@@ -906,14 +900,14 @@ static int register_root_hub(struct usb_hcd *hcd)
 	if (retval != sizeof usb_dev->descriptor) {
 		mutex_unlock(&usb_bus_list_lock);
 		dev_dbg (parent_dev, "can't read %s device descriptor %d\n",
-				dev_name(&usb_dev->dev), retval);
+				usb_dev->dev.bus_id, retval);
 		return (retval < 0) ? retval : -EMSGSIZE;
 	}
 
 	retval = usb_new_device (usb_dev);
 	if (retval) {
 		dev_err (parent_dev, "can't register root hub for %s, %d\n",
-				dev_name(&usb_dev->dev), retval);
+				usb_dev->dev.bus_id, retval);
 	}
 	mutex_unlock(&usb_bus_list_lock);
 
@@ -1010,7 +1004,7 @@ int usb_hcd_link_urb_to_ep(struct usb_hcd *hcd, struct urb *urb)
 	spin_lock(&hcd_urb_list_lock);
 
 	/* Check that the URB isn't being killed */
-	if (unlikely(atomic_read(&urb->reject))) {
+	if (unlikely(urb->reject)) {
 		rc = -EPERM;
 		goto done;
 	}
@@ -1340,7 +1334,7 @@ int usb_hcd_submit_urb (struct urb *urb, gfp_t mem_flags)
 		INIT_LIST_HEAD(&urb->urb_list);
 		atomic_dec(&urb->use_count);
 		atomic_dec(&urb->dev->urbnum);
-		if (atomic_read(&urb->reject))
+		if (urb->reject)
 			wake_up(&usb_kill_urb_queue);
 		usb_put_urb(urb);
 	}
@@ -1379,25 +1373,10 @@ static int unlink1(struct usb_hcd *hcd, struct urb *urb, int status)
 int usb_hcd_unlink_urb (struct urb *urb, int status)
 {
 	struct usb_hcd		*hcd;
-	int			retval = -EIDRM;
-	unsigned long		flags;
+	int			retval;
 
-	/* Prevent the device and bus from going away while
-	 * the unlink is carried out.  If they are already gone
-	 * then urb->use_count must be 0, since disconnected
-	 * devices can't have any active URBs.
-	 */
-	spin_lock_irqsave(&hcd_urb_unlink_lock, flags);
-	if (atomic_read(&urb->use_count) > 0) {
-		retval = 0;
-		usb_get_dev(urb->dev);
-	}
-	spin_unlock_irqrestore(&hcd_urb_unlink_lock, flags);
-	if (retval == 0) {
-		hcd = bus_to_hcd(urb->dev->bus);
-		retval = unlink1(hcd, urb, status);
-		usb_put_dev(urb->dev);
-	}
+	hcd = bus_to_hcd(urb->dev->bus);
+	retval = unlink1(hcd, urb, status);
 
 	if (retval == 0)
 		retval = -EINPROGRESS;
@@ -1444,7 +1423,7 @@ void usb_hcd_giveback_urb(struct usb_hcd *hcd, struct urb *urb, int status)
 	urb->status = status;
 	urb->complete (urb);
 	atomic_dec (&urb->use_count);
-	if (unlikely(atomic_read(&urb->reject)))
+	if (unlikely (urb->reject))
 		wake_up (&usb_kill_urb_queue);
 	usb_put_urb (urb);
 }
@@ -1546,17 +1525,6 @@ void usb_hcd_disable_endpoint(struct usb_device *udev,
 		hcd->driver->endpoint_disable(hcd, ep);
 }
 
-/* Protect against drivers that try to unlink URBs after the device
- * is gone, by waiting until all unlinks for @udev are finished.
- * Since we don't currently track URBs by device, simply wait until
- * nothing is running in the locked region of usb_hcd_unlink_urb().
- */
-void usb_hcd_synchronize_unlinks(struct usb_device *udev)
-{
-	spin_lock_irq(&hcd_urb_unlink_lock);
-	spin_unlock_irq(&hcd_urb_unlink_lock);
-}
-
 /*-------------------------------------------------------------------------*/
 
 /* called in any context */
@@ -1573,14 +1541,14 @@ int usb_hcd_get_frame_number (struct usb_device *udev)
 
 #ifdef	CONFIG_PM
 
-int hcd_bus_suspend(struct usb_device *rhdev, pm_message_t msg)
+int hcd_bus_suspend(struct usb_device *rhdev)
 {
 	struct usb_hcd	*hcd = container_of(rhdev->bus, struct usb_hcd, self);
 	int		status;
 	int		old_state = hcd->state;
 
 	dev_dbg(&rhdev->dev, "bus %s%s\n",
-			(msg.event & PM_EVENT_AUTO ? "auto-" : ""), "suspend");
+			rhdev->auto_pm ? "auto-" : "", "suspend");
 	if (!hcd->driver->bus_suspend) {
 		status = -ENOENT;
 	} else {
@@ -1598,14 +1566,14 @@ int hcd_bus_suspend(struct usb_device *rhdev, pm_message_t msg)
 	return status;
 }
 
-int hcd_bus_resume(struct usb_device *rhdev, pm_message_t msg)
+int hcd_bus_resume(struct usb_device *rhdev)
 {
 	struct usb_hcd	*hcd = container_of(rhdev->bus, struct usb_hcd, self);
 	int		status;
 	int		old_state = hcd->state;
 
 	dev_dbg(&rhdev->dev, "usb %s%s\n",
-			(msg.event & PM_EVENT_AUTO ? "auto-" : ""), "resume");
+			rhdev->auto_pm ? "auto-" : "", "resume");
 	if (!hcd->driver->bus_resume)
 		return -ENOENT;
 	if (hcd->state == HC_STATE_RUNNING)
@@ -1638,7 +1606,7 @@ static void hcd_resume_work(struct work_struct *work)
 
 	usb_lock_device(udev);
 	usb_mark_last_busy(udev);
-	usb_external_resume_device(udev, PMSG_REMOTE_RESUME);
+	usb_external_resume_device(udev);
 	usb_unlock_device(udev);
 }
 
@@ -1716,30 +1684,19 @@ EXPORT_SYMBOL_GPL(usb_bus_start_enum);
 irqreturn_t usb_hcd_irq (int irq, void *__hcd)
 {
 	struct usb_hcd		*hcd = __hcd;
-	unsigned long		flags;
-	irqreturn_t		rc;
+	int			start = hcd->state;
 
-	/* IRQF_DISABLED doesn't work correctly with shared IRQs
-	 * when the first handler doesn't use it.  So let's just
-	 * assume it's never used.
-	 */
-	local_irq_save(flags);
+	if (unlikely(start == HC_STATE_HALT ||
+	    !test_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags)))
+		return IRQ_NONE;
+	if (hcd->driver->irq (hcd) == IRQ_NONE)
+		return IRQ_NONE;
 
-	if (unlikely(hcd->state == HC_STATE_HALT ||
-		     !test_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags))) {
-		rc = IRQ_NONE;
-	} else if (hcd->driver->irq(hcd) == IRQ_NONE) {
-		rc = IRQ_NONE;
-	} else {
-		set_bit(HCD_FLAG_SAW_IRQ, &hcd->flags);
+	set_bit(HCD_FLAG_SAW_IRQ, &hcd->flags);
 
-		if (unlikely(hcd->state == HC_STATE_HALT))
-			usb_hc_died(hcd);
-		rc = IRQ_HANDLED;
-	}
-
-	local_irq_restore(flags);
-	return rc;
+	if (unlikely(hcd->state == HC_STATE_HALT))
+		usb_hc_died (hcd);
+	return IRQ_HANDLED;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1787,7 +1744,7 @@ EXPORT_SYMBOL_GPL (usb_hc_died);
  * If memory is unavailable, returns NULL.
  */
 struct usb_hcd *usb_create_hcd (const struct hc_driver *driver,
-		struct device *dev, const char *bus_name)
+		struct device *dev, char *bus_name)
 {
 	struct usb_hcd *hcd;
 
@@ -1903,14 +1860,6 @@ int usb_add_hcd(struct usb_hcd *hcd,
 
 	/* enable irqs just before we start the controller */
 	if (hcd->driver->irq) {
-
-		/* IRQF_DISABLED doesn't work as advertised when used together
-		 * with IRQF_SHARED. As usb_hcd_irq() will always disable
-		 * interrupts we can remove it here.
-		 */
-		if (irqflags & IRQF_SHARED)
-			irqflags &= ~IRQF_DISABLED;
-
 		snprintf(hcd->irq_descr, sizeof(hcd->irq_descr), "%s:usb%d",
 				hcd->driver->description, hcd->self.busnum);
 		if ((retval = request_irq(irqnum, &usb_hcd_irq, irqflags,
@@ -2028,7 +1977,7 @@ EXPORT_SYMBOL_GPL(usb_hcd_platform_shutdown);
 
 /*-------------------------------------------------------------------------*/
 
-#if defined(CONFIG_USB_MON) || defined(CONFIG_USB_MON_MODULE)
+#if defined(CONFIG_USB_MON)
 
 struct usb_mon_operations *mon_ops;
 
@@ -2064,4 +2013,4 @@ void usb_mon_deregister (void)
 }
 EXPORT_SYMBOL_GPL (usb_mon_deregister);
 
-#endif /* CONFIG_USB_MON || CONFIG_USB_MON_MODULE */
+#endif /* CONFIG_USB_MON */

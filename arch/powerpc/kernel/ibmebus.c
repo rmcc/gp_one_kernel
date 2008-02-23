@@ -47,13 +47,13 @@
 #include <asm/abs_addr.h>
 
 static struct device ibmebus_bus_device = { /* fake "parent" device */
-	.init_name = "ibmebus",
+	.bus_id = "ibmebus",
 };
 
 struct bus_type ibmebus_bus_type;
 
 /* These devices will automatically be added to the bus during init */
-static struct of_device_id __initdata ibmebus_matches[] = {
+static struct of_device_id __initdata builtin_matches[] = {
 	{ .compatible = "IBM,lhca" },
 	{ .compatible = "IBM,lhea" },
 	{},
@@ -79,29 +79,25 @@ static void ibmebus_free_coherent(struct device *dev,
 	kfree(vaddr);
 }
 
-static dma_addr_t ibmebus_map_page(struct device *dev,
-				   struct page *page,
-				   unsigned long offset,
-				   size_t size,
-				   enum dma_data_direction direction,
-				   struct dma_attrs *attrs)
+static dma_addr_t ibmebus_map_single(struct device *dev,
+				     void *ptr,
+				     size_t size,
+				     enum dma_data_direction direction)
 {
-	return (dma_addr_t)(page_address(page) + offset);
+	return (dma_addr_t)(ptr);
 }
 
-static void ibmebus_unmap_page(struct device *dev,
-			       dma_addr_t dma_addr,
-			       size_t size,
-			       enum dma_data_direction direction,
-			       struct dma_attrs *attrs)
+static void ibmebus_unmap_single(struct device *dev,
+				 dma_addr_t dma_addr,
+				 size_t size,
+				 enum dma_data_direction direction)
 {
 	return;
 }
 
 static int ibmebus_map_sg(struct device *dev,
 			  struct scatterlist *sgl,
-			  int nents, enum dma_data_direction direction,
-			  struct dma_attrs *attrs)
+			  int nents, enum dma_data_direction direction)
 {
 	struct scatterlist *sg;
 	int i;
@@ -116,8 +112,7 @@ static int ibmebus_map_sg(struct device *dev,
 
 static void ibmebus_unmap_sg(struct device *dev,
 			     struct scatterlist *sg,
-			     int nents, enum dma_data_direction direction,
-			     struct dma_attrs *attrs)
+			     int nents, enum dma_data_direction direction)
 {
 	return;
 }
@@ -130,11 +125,11 @@ static int ibmebus_dma_supported(struct device *dev, u64 mask)
 static struct dma_mapping_ops ibmebus_dma_ops = {
 	.alloc_coherent = ibmebus_alloc_coherent,
 	.free_coherent  = ibmebus_free_coherent,
+	.map_single     = ibmebus_map_single,
+	.unmap_single   = ibmebus_unmap_single,
 	.map_sg         = ibmebus_map_sg,
 	.unmap_sg       = ibmebus_unmap_sg,
 	.dma_supported  = ibmebus_dma_supported,
-	.map_page       = ibmebus_map_page,
-	.unmap_page     = ibmebus_unmap_page,
 };
 
 static int ibmebus_match_path(struct device *dev, void *data)
@@ -231,9 +226,19 @@ void ibmebus_free_irq(u32 ist, void *dev_id)
 	unsigned int irq = irq_find_mapping(NULL, ist);
 
 	free_irq(irq, dev_id);
-	irq_dispose_mapping(irq);
 }
 EXPORT_SYMBOL(ibmebus_free_irq);
+
+static ssize_t name_show(struct device *dev,
+			 struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", to_of_device(dev)->node->name);
+}
+
+static struct device_attribute ibmebus_dev_attrs[] = {
+	__ATTR_RO(name),
+	__ATTR_NULL
+};
 
 static char *ibmebus_chomp(const char *in, size_t count)
 {
@@ -318,6 +323,7 @@ static struct bus_attribute ibmebus_bus_attrs[] = {
 
 struct bus_type ibmebus_bus_type = {
 	.uevent    = of_device_uevent,
+	.dev_attrs = ibmebus_dev_attrs,
 	.bus_attrs = ibmebus_bus_attrs
 };
 EXPORT_SYMBOL(ibmebus_bus_type);
@@ -344,7 +350,7 @@ static int __init ibmebus_bus_init(void)
 		return err;
 	}
 
-	err = ibmebus_create_devices(ibmebus_matches);
+	err = ibmebus_create_devices(builtin_matches);
 	if (err) {
 		device_unregister(&ibmebus_bus_device);
 		bus_unregister(&ibmebus_bus_type);

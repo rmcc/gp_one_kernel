@@ -60,6 +60,3 @@ ENTRY(__delay)
 #endif
 		bhi	__delay
 		mov	pc, lr
-ENDPROC(__udelay)
-ENDPROC(__const_udelay)
-ENDPROC(__delay)

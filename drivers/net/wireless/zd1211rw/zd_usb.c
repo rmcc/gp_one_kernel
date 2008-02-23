@@ -58,15 +58,12 @@ static struct usb_device_id usb_ids[] = {
 	{ USB_DEVICE(0x0586, 0x3407), .driver_info = DEVICE_ZD1211 },
 	{ USB_DEVICE(0x129b, 0x1666), .driver_info = DEVICE_ZD1211 },
 	{ USB_DEVICE(0x157e, 0x300a), .driver_info = DEVICE_ZD1211 },
-	{ USB_DEVICE(0x0105, 0x145f), .driver_info = DEVICE_ZD1211 },
 	/* ZD1211B */
 	{ USB_DEVICE(0x0ace, 0x1215), .driver_info = DEVICE_ZD1211B },
-	{ USB_DEVICE(0x0ace, 0xb215), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x157e, 0x300d), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x079b, 0x0062), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x1582, 0x6003), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x050d, 0x705c), .driver_info = DEVICE_ZD1211B },
-	{ USB_DEVICE(0x083a, 0xe506), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x083a, 0x4505), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x0471, 0x1236), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x13b1, 0x0024), .driver_info = DEVICE_ZD1211B },
@@ -83,7 +80,6 @@ static struct usb_device_id usb_ids[] = {
 	{ USB_DEVICE(0x0cde, 0x001a), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x0586, 0x340a), .driver_info = DEVICE_ZD1211B },
 	{ USB_DEVICE(0x0471, 0x1237), .driver_info = DEVICE_ZD1211B },
-	{ USB_DEVICE(0x07fa, 0x1196), .driver_info = DEVICE_ZD1211B },
 	/* "Driverless" devices that need ejecting */
 	{ USB_DEVICE(0x0ace, 0x2011), .driver_info = DEVICE_INSTALLER },
 	{ USB_DEVICE(0x0ace, 0x20ff), .driver_info = DEVICE_INSTALLER },
@@ -173,11 +169,10 @@ static int upload_code(struct usb_device *udev,
 	if (flags & REBOOT) {
 		u8 ret;
 
-		/* Use "DMA-aware" buffer. */
 		r = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
 			USB_REQ_FIRMWARE_CONFIRM,
 			USB_DIR_IN | USB_TYPE_VENDOR,
-			0, 0, p, sizeof(ret), 5000 /* ms */);
+			0, 0, &ret, sizeof(ret), 5000 /* ms */);
 		if (r != sizeof(ret)) {
 			dev_err(&udev->dev,
 				"control request firmeware confirmation failed."
@@ -186,7 +181,6 @@ static int upload_code(struct usb_device *udev,
 				r = -ENODEV;
 			goto error;
 		}
-		ret = p[0];
 		if (ret & 0x80) {
 			dev_err(&udev->dev,
 				"Internal error while downloading."
@@ -318,31 +312,22 @@ int zd_usb_read_fw(struct zd_usb *usb, zd_addr_t addr, u8 *data, u16 len)
 {
 	int r;
 	struct usb_device *udev = zd_usb_to_usbdev(usb);
-	u8 *buf;
 
-	/* Use "DMA-aware" buffer. */
-	buf = kmalloc(len, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
 	r = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
 		USB_REQ_FIRMWARE_READ_DATA, USB_DIR_IN | 0x40, addr, 0,
-		buf, len, 5000);
+		data, len, 5000);
 	if (r < 0) {
 		dev_err(&udev->dev,
 			"read over firmware interface failed: %d\n", r);
-		goto exit;
+		return r;
 	} else if (r != len) {
 		dev_err(&udev->dev,
 			"incomplete read over firmware interface: %d/%d\n",
 			r, len);
-		r = -EIO;
-		goto exit;
+		return -EIO;
 	}
-	r = 0;
-	memcpy(data, buf, len);
-exit:
-	kfree(buf);
-	return r;
+
+	return 0;
 }
 
 #define urb_dev(urb) (&(urb)->dev->dev)
@@ -884,7 +869,7 @@ static void tx_urb_complete(struct urb *urb)
 {
 	int r;
 	struct sk_buff *skb;
-	struct ieee80211_tx_info *info;
+	struct zd_tx_skb_control_block *cb;
 	struct zd_usb *usb;
 
 	switch (urb->status) {
@@ -908,8 +893,8 @@ free_urb:
 	 * grab 'usb' pointer before handing off the skb (since
 	 * it might be freed by zd_mac_tx_to_dev or mac80211)
 	 */
-	info = IEEE80211_SKB_CB(skb);
-	usb = &zd_hw_mac(info->rate_driver_data[0])->chip.usb;
+	cb = (struct zd_tx_skb_control_block *)skb->cb;
+	usb = &zd_hw_mac(cb->hw)->chip.usb;
 	zd_mac_tx_to_dev(skb, urb->status);
 	free_tx_urb(usb, urb);
 	tx_dec_submitted_urbs(usb);
@@ -1065,7 +1050,8 @@ static int eject_installer(struct usb_interface *intf)
 	/* Find bulk out endpoint */
 	endpoint = &iface_desc->endpoint[1].desc;
 	if ((endpoint->bEndpointAddress & USB_TYPE_MASK) == USB_DIR_OUT &&
-	    usb_endpoint_xfer_bulk(endpoint)) {
+	    (endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
+	    USB_ENDPOINT_XFER_BULK) {
 		bulk_out_ep = endpoint->bEndpointAddress;
 	} else {
 		dev_err(&udev->dev,

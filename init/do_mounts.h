@@ -11,6 +11,7 @@ void  change_floppy(char *fmt, ...);
 void  mount_block_root(char *name, int flags);
 void  mount_root(void);
 extern int root_mountflags;
+extern char *root_device_name;
 
 static inline int create_dev(char *name, dev_t dev)
 {

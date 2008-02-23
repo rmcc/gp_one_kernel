@@ -314,7 +314,7 @@ xfs_bioerror_relse(
 		 * ASYNC buffers.
 		 */
 		XFS_BUF_ERROR(bp, EIO);
-		XFS_BUF_FINISH_IOWAIT(bp);
+		XFS_BUF_V_IODONESEMA(bp);
 	} else {
 		xfs_buf_relse(bp);
 	}
@@ -406,7 +406,7 @@ xfs_bwrite(
 	 * XXXsup how does this work for quotas.
 	 */
 	XFS_BUF_SET_BDSTRAT_FUNC(bp, xfs_bdstrat_cb);
-	bp->b_mount = mp;
+	XFS_BUF_SET_FSPRIVATE3(bp, mp);
 	XFS_BUF_WRITE(bp);
 
 	if ((error = XFS_bwrite(bp))) {

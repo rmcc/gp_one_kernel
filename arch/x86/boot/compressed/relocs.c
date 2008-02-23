@@ -10,19 +10,15 @@
 #define USE_BSD
 #include <endian.h>
 
+#define MAX_SHDRS 100
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 static Elf32_Ehdr ehdr;
+static Elf32_Shdr shdr[MAX_SHDRS];
+static Elf32_Sym  *symtab[MAX_SHDRS];
+static Elf32_Rel  *reltab[MAX_SHDRS];
+static char *strtab[MAX_SHDRS];
 static unsigned long reloc_count, reloc_idx;
 static unsigned long *relocs;
-
-struct section {
-	Elf32_Shdr     shdr;
-	struct section *link;
-	Elf32_Sym      *symtab;
-	Elf32_Rel      *reltab;
-	char           *strtab;
-};
-static struct section *secs;
 
 /*
  * Following symbols have been audited. There values are constant and do
@@ -39,7 +35,7 @@ static int is_safe_abs_reloc(const char* sym_name)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(safe_abs_relocs); i++) {
+	for(i = 0; i < ARRAY_SIZE(safe_abs_relocs); i++) {
 		if (!strcmp(sym_name, safe_abs_relocs[i]))
 			/* Match found */
 			return 1;
@@ -141,10 +137,10 @@ static const char *sec_name(unsigned shndx)
 {
 	const char *sec_strtab;
 	const char *name;
-	sec_strtab = secs[ehdr.e_shstrndx].strtab;
+	sec_strtab = strtab[ehdr.e_shstrndx];
 	name = "<noname>";
 	if (shndx < ehdr.e_shnum) {
-		name = sec_strtab + secs[shndx].shdr.sh_name;
+		name = sec_strtab + shdr[shndx].sh_name;
 	}
 	else if (shndx == SHN_ABS) {
 		name = "ABSOLUTE";
@@ -163,7 +159,7 @@ static const char *sym_name(const char *sym_strtab, Elf32_Sym *sym)
 		name = sym_strtab + sym->st_name;
 	}
 	else {
-		name = sec_name(secs[sym->st_shndx].shdr.sh_name);
+		name = sec_name(shdr[sym->st_shndx].sh_name);
 	}
 	return name;
 }
@@ -248,34 +244,29 @@ static void read_ehdr(FILE *fp)
 static void read_shdrs(FILE *fp)
 {
 	int i;
-	Elf32_Shdr shdr;
-
-	secs = calloc(ehdr.e_shnum, sizeof(struct section));
-	if (!secs) {
-		die("Unable to allocate %d section headers\n",
-		    ehdr.e_shnum);
+	if (ehdr.e_shnum > MAX_SHDRS) {
+		die("%d section headers supported: %d\n",
+			ehdr.e_shnum, MAX_SHDRS);
 	}
 	if (fseek(fp, ehdr.e_shoff, SEEK_SET) < 0) {
 		die("Seek to %d failed: %s\n",
 			ehdr.e_shoff, strerror(errno));
 	}
-	for (i = 0; i < ehdr.e_shnum; i++) {
-		struct section *sec = &secs[i];
-		if (fread(&shdr, sizeof shdr, 1, fp) != 1)
-			die("Cannot read ELF section headers %d/%d: %s\n",
-			    i, ehdr.e_shnum, strerror(errno));
-		sec->shdr.sh_name      = elf32_to_cpu(shdr.sh_name);
-		sec->shdr.sh_type      = elf32_to_cpu(shdr.sh_type);
-		sec->shdr.sh_flags     = elf32_to_cpu(shdr.sh_flags);
-		sec->shdr.sh_addr      = elf32_to_cpu(shdr.sh_addr);
-		sec->shdr.sh_offset    = elf32_to_cpu(shdr.sh_offset);
-		sec->shdr.sh_size      = elf32_to_cpu(shdr.sh_size);
-		sec->shdr.sh_link      = elf32_to_cpu(shdr.sh_link);
-		sec->shdr.sh_info      = elf32_to_cpu(shdr.sh_info);
-		sec->shdr.sh_addralign = elf32_to_cpu(shdr.sh_addralign);
-		sec->shdr.sh_entsize   = elf32_to_cpu(shdr.sh_entsize);
-		if (sec->shdr.sh_link < ehdr.e_shnum)
-			sec->link = &secs[sec->shdr.sh_link];
+	if (fread(&shdr, sizeof(shdr[0]), ehdr.e_shnum, fp) != ehdr.e_shnum) {
+		die("Cannot read ELF section headers: %s\n",
+			strerror(errno));
+	}
+	for(i = 0; i < ehdr.e_shnum; i++) {
+		shdr[i].sh_name      = elf32_to_cpu(shdr[i].sh_name);
+		shdr[i].sh_type      = elf32_to_cpu(shdr[i].sh_type);
+		shdr[i].sh_flags     = elf32_to_cpu(shdr[i].sh_flags);
+		shdr[i].sh_addr      = elf32_to_cpu(shdr[i].sh_addr);
+		shdr[i].sh_offset    = elf32_to_cpu(shdr[i].sh_offset);
+		shdr[i].sh_size      = elf32_to_cpu(shdr[i].sh_size);
+		shdr[i].sh_link      = elf32_to_cpu(shdr[i].sh_link);
+		shdr[i].sh_info      = elf32_to_cpu(shdr[i].sh_info);
+		shdr[i].sh_addralign = elf32_to_cpu(shdr[i].sh_addralign);
+		shdr[i].sh_entsize   = elf32_to_cpu(shdr[i].sh_entsize);
 	}
 
 }
@@ -283,22 +274,20 @@ static void read_shdrs(FILE *fp)
 static void read_strtabs(FILE *fp)
 {
 	int i;
-	for (i = 0; i < ehdr.e_shnum; i++) {
-		struct section *sec = &secs[i];
-		if (sec->shdr.sh_type != SHT_STRTAB) {
+	for(i = 0; i < ehdr.e_shnum; i++) {
+		if (shdr[i].sh_type != SHT_STRTAB) {
 			continue;
 		}
-		sec->strtab = malloc(sec->shdr.sh_size);
-		if (!sec->strtab) {
+		strtab[i] = malloc(shdr[i].sh_size);
+		if (!strtab[i]) {
 			die("malloc of %d bytes for strtab failed\n",
-				sec->shdr.sh_size);
+				shdr[i].sh_size);
 		}
-		if (fseek(fp, sec->shdr.sh_offset, SEEK_SET) < 0) {
+		if (fseek(fp, shdr[i].sh_offset, SEEK_SET) < 0) {
 			die("Seek to %d failed: %s\n",
-				sec->shdr.sh_offset, strerror(errno));
+				shdr[i].sh_offset, strerror(errno));
 		}
-		if (fread(sec->strtab, 1, sec->shdr.sh_size, fp)
-		    != sec->shdr.sh_size) {
+		if (fread(strtab[i], 1, shdr[i].sh_size, fp) != shdr[i].sh_size) {
 			die("Cannot read symbol table: %s\n",
 				strerror(errno));
 		}
@@ -308,31 +297,28 @@ static void read_strtabs(FILE *fp)
 static void read_symtabs(FILE *fp)
 {
 	int i,j;
-	for (i = 0; i < ehdr.e_shnum; i++) {
-		struct section *sec = &secs[i];
-		if (sec->shdr.sh_type != SHT_SYMTAB) {
+	for(i = 0; i < ehdr.e_shnum; i++) {
+		if (shdr[i].sh_type != SHT_SYMTAB) {
 			continue;
 		}
-		sec->symtab = malloc(sec->shdr.sh_size);
-		if (!sec->symtab) {
+		symtab[i] = malloc(shdr[i].sh_size);
+		if (!symtab[i]) {
 			die("malloc of %d bytes for symtab failed\n",
-				sec->shdr.sh_size);
+				shdr[i].sh_size);
 		}
-		if (fseek(fp, sec->shdr.sh_offset, SEEK_SET) < 0) {
+		if (fseek(fp, shdr[i].sh_offset, SEEK_SET) < 0) {
 			die("Seek to %d failed: %s\n",
-				sec->shdr.sh_offset, strerror(errno));
+				shdr[i].sh_offset, strerror(errno));
 		}
-		if (fread(sec->symtab, 1, sec->shdr.sh_size, fp)
-		    != sec->shdr.sh_size) {
+		if (fread(symtab[i], 1, shdr[i].sh_size, fp) != shdr[i].sh_size) {
 			die("Cannot read symbol table: %s\n",
 				strerror(errno));
 		}
-		for (j = 0; j < sec->shdr.sh_size/sizeof(Elf32_Sym); j++) {
-			Elf32_Sym *sym = &sec->symtab[j];
-			sym->st_name  = elf32_to_cpu(sym->st_name);
-			sym->st_value = elf32_to_cpu(sym->st_value);
-			sym->st_size  = elf32_to_cpu(sym->st_size);
-			sym->st_shndx = elf16_to_cpu(sym->st_shndx);
+		for(j = 0; j < shdr[i].sh_size/sizeof(symtab[i][0]); j++) {
+			symtab[i][j].st_name  = elf32_to_cpu(symtab[i][j].st_name);
+			symtab[i][j].st_value = elf32_to_cpu(symtab[i][j].st_value);
+			symtab[i][j].st_size  = elf32_to_cpu(symtab[i][j].st_size);
+			symtab[i][j].st_shndx = elf16_to_cpu(symtab[i][j].st_shndx);
 		}
 	}
 }
@@ -341,29 +327,26 @@ static void read_symtabs(FILE *fp)
 static void read_relocs(FILE *fp)
 {
 	int i,j;
-	for (i = 0; i < ehdr.e_shnum; i++) {
-		struct section *sec = &secs[i];
-		if (sec->shdr.sh_type != SHT_REL) {
+	for(i = 0; i < ehdr.e_shnum; i++) {
+		if (shdr[i].sh_type != SHT_REL) {
 			continue;
 		}
-		sec->reltab = malloc(sec->shdr.sh_size);
-		if (!sec->reltab) {
+		reltab[i] = malloc(shdr[i].sh_size);
+		if (!reltab[i]) {
 			die("malloc of %d bytes for relocs failed\n",
-				sec->shdr.sh_size);
+				shdr[i].sh_size);
 		}
-		if (fseek(fp, sec->shdr.sh_offset, SEEK_SET) < 0) {
+		if (fseek(fp, shdr[i].sh_offset, SEEK_SET) < 0) {
 			die("Seek to %d failed: %s\n",
-				sec->shdr.sh_offset, strerror(errno));
+				shdr[i].sh_offset, strerror(errno));
 		}
-		if (fread(sec->reltab, 1, sec->shdr.sh_size, fp)
-		    != sec->shdr.sh_size) {
+		if (fread(reltab[i], 1, shdr[i].sh_size, fp) != shdr[i].sh_size) {
 			die("Cannot read symbol table: %s\n",
 				strerror(errno));
 		}
-		for (j = 0; j < sec->shdr.sh_size/sizeof(Elf32_Rel); j++) {
-			Elf32_Rel *rel = &sec->reltab[j];
-			rel->r_offset = elf32_to_cpu(rel->r_offset);
-			rel->r_info   = elf32_to_cpu(rel->r_info);
+		for(j = 0; j < shdr[i].sh_size/sizeof(reltab[0][0]); j++) {
+			reltab[i][j].r_offset = elf32_to_cpu(reltab[i][j].r_offset);
+			reltab[i][j].r_info   = elf32_to_cpu(reltab[i][j].r_info);
 		}
 	}
 }
@@ -374,21 +357,19 @@ static void print_absolute_symbols(void)
 	int i;
 	printf("Absolute symbols\n");
 	printf(" Num:    Value Size  Type       Bind        Visibility  Name\n");
-	for (i = 0; i < ehdr.e_shnum; i++) {
-		struct section *sec = &secs[i];
+	for(i = 0; i < ehdr.e_shnum; i++) {
 		char *sym_strtab;
 		Elf32_Sym *sh_symtab;
 		int j;
-
-		if (sec->shdr.sh_type != SHT_SYMTAB) {
+		if (shdr[i].sh_type != SHT_SYMTAB) {
 			continue;
 		}
-		sh_symtab = sec->symtab;
-		sym_strtab = sec->link->strtab;
-		for (j = 0; j < sec->shdr.sh_size/sizeof(Elf32_Sym); j++) {
+		sh_symtab = symtab[i];
+		sym_strtab = strtab[shdr[i].sh_link];
+		for(j = 0; j < shdr[i].sh_size/sizeof(symtab[0][0]); j++) {
 			Elf32_Sym *sym;
 			const char *name;
-			sym = &sec->symtab[j];
+			sym = &symtab[i][j];
 			name = sym_name(sym_strtab, sym);
 			if (sym->st_shndx != SHN_ABS) {
 				continue;
@@ -408,27 +389,26 @@ static void print_absolute_relocs(void)
 {
 	int i, printed = 0;
 
-	for (i = 0; i < ehdr.e_shnum; i++) {
-		struct section *sec = &secs[i];
-		struct section *sec_applies, *sec_symtab;
+	for(i = 0; i < ehdr.e_shnum; i++) {
 		char *sym_strtab;
 		Elf32_Sym *sh_symtab;
+		unsigned sec_applies, sec_symtab;
 		int j;
-		if (sec->shdr.sh_type != SHT_REL) {
+		if (shdr[i].sh_type != SHT_REL) {
 			continue;
 		}
-		sec_symtab  = sec->link;
-		sec_applies = &secs[sec->shdr.sh_info];
-		if (!(sec_applies->shdr.sh_flags & SHF_ALLOC)) {
+		sec_symtab  = shdr[i].sh_link;
+		sec_applies = shdr[i].sh_info;
+		if (!(shdr[sec_applies].sh_flags & SHF_ALLOC)) {
 			continue;
 		}
-		sh_symtab  = sec_symtab->symtab;
-		sym_strtab = sec_symtab->link->strtab;
-		for (j = 0; j < sec->shdr.sh_size/sizeof(Elf32_Rel); j++) {
+		sh_symtab = symtab[sec_symtab];
+		sym_strtab = strtab[shdr[sec_symtab].sh_link];
+		for(j = 0; j < shdr[i].sh_size/sizeof(reltab[0][0]); j++) {
 			Elf32_Rel *rel;
 			Elf32_Sym *sym;
 			const char *name;
-			rel = &sec->reltab[j];
+			rel = &reltab[i][j];
 			sym = &sh_symtab[ELF32_R_SYM(rel->r_info)];
 			name = sym_name(sym_strtab, sym);
 			if (sym->st_shndx != SHN_ABS) {
@@ -476,28 +456,26 @@ static void walk_relocs(void (*visit)(Elf32_Rel *rel, Elf32_Sym *sym))
 {
 	int i;
 	/* Walk through the relocations */
-	for (i = 0; i < ehdr.e_shnum; i++) {
+	for(i = 0; i < ehdr.e_shnum; i++) {
 		char *sym_strtab;
 		Elf32_Sym *sh_symtab;
-		struct section *sec_applies, *sec_symtab;
+		unsigned sec_applies, sec_symtab;
 		int j;
-		struct section *sec = &secs[i];
-
-		if (sec->shdr.sh_type != SHT_REL) {
+		if (shdr[i].sh_type != SHT_REL) {
 			continue;
 		}
-		sec_symtab  = sec->link;
-		sec_applies = &secs[sec->shdr.sh_info];
-		if (!(sec_applies->shdr.sh_flags & SHF_ALLOC)) {
+		sec_symtab  = shdr[i].sh_link;
+		sec_applies = shdr[i].sh_info;
+		if (!(shdr[sec_applies].sh_flags & SHF_ALLOC)) {
 			continue;
 		}
-		sh_symtab = sec_symtab->symtab;
-		sym_strtab = sec_symtab->link->strtab;
-		for (j = 0; j < sec->shdr.sh_size/sizeof(Elf32_Rel); j++) {
+		sh_symtab = symtab[sec_symtab];
+		sym_strtab = strtab[shdr[sec_symtab].sh_link];
+		for(j = 0; j < shdr[i].sh_size/sizeof(reltab[0][0]); j++) {
 			Elf32_Rel *rel;
 			Elf32_Sym *sym;
 			unsigned r_type;
-			rel = &sec->reltab[j];
+			rel = &reltab[i][j];
 			sym = &sh_symtab[ELF32_R_SYM(rel->r_info)];
 			r_type = ELF32_R_TYPE(rel->r_info);
 			/* Don't visit relocations to absolute symbols */
@@ -561,7 +539,7 @@ static void emit_relocs(int as_text)
 		 */
 		printf(".section \".data.reloc\",\"a\"\n");
 		printf(".balign 4\n");
-		for (i = 0; i < reloc_count; i++) {
+		for(i = 0; i < reloc_count; i++) {
 			printf("\t .long 0x%08lx\n", relocs[i]);
 		}
 		printf("\n");
@@ -572,7 +550,7 @@ static void emit_relocs(int as_text)
 		/* Print a stop */
 		printf("%c%c%c%c", buf[0], buf[1], buf[2], buf[3]);
 		/* Now print each relocation */
-		for (i = 0; i < reloc_count; i++) {
+		for(i = 0; i < reloc_count; i++) {
 			buf[0] = (relocs[i] >>  0) & 0xff;
 			buf[1] = (relocs[i] >>  8) & 0xff;
 			buf[2] = (relocs[i] >> 16) & 0xff;
@@ -599,7 +577,7 @@ int main(int argc, char **argv)
 	show_absolute_relocs = 0;
 	as_text = 0;
 	fname = NULL;
-	for (i = 1; i < argc; i++) {
+	for(i = 1; i < argc; i++) {
 		char *arg = argv[i];
 		if (*arg == '-') {
 			if (strcmp(argv[1], "--abs-syms") == 0) {

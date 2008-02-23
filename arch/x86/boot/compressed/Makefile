@@ -27,8 +27,9 @@ $(obj)/vmlinux.bin: vmlinux FORCE
 	$(call if_changed,objcopy)
 
 
-targets += vmlinux.bin.all vmlinux.relocs relocs
-hostprogs-$(CONFIG_X86_32) += relocs
+ifeq ($(CONFIG_X86_32),y)
+targets += vmlinux.bin.all vmlinux.relocs
+hostprogs-y := relocs
 
 quiet_cmd_relocs = RELOCS  $@
       cmd_relocs = $(obj)/relocs $< > $@;$(obj)/relocs --abs-relocs $<
@@ -41,8 +42,6 @@ quiet_cmd_relocbin = BUILD   $@
       cmd_relocbin = cat $(filter-out FORCE,$^) > $@
 $(obj)/vmlinux.bin.all: $(vmlinux.bin.all-y) FORCE
 	$(call if_changed,relocbin)
-
-ifeq ($(CONFIG_X86_32),y)
 
 ifdef CONFIG_RELOCATABLE
 $(obj)/vmlinux.bin.gz: $(obj)/vmlinux.bin.all FORCE
@@ -59,6 +58,7 @@ $(obj)/vmlinux.bin.gz: $(obj)/vmlinux.bin FORCE
 
 LDFLAGS_piggy.o := -r --format binary --oformat elf64-x86-64 -T
 endif
+
 
 $(obj)/piggy.o: $(obj)/vmlinux.scr $(obj)/vmlinux.bin.gz FORCE
 	$(call if_changed,ld)

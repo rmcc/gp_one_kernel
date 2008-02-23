@@ -57,7 +57,7 @@
 
 /* Bitfields in IFDR */
 
-/* Bitfields in IFSR */
+/* Bitfields in ISFR */
 
 /* Bitfields in SODR */
 

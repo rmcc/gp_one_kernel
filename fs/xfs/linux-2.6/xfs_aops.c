@@ -42,40 +42,6 @@
 #include <linux/pagevec.h>
 #include <linux/writeback.h>
 
-
-/*
- * Prime number of hash buckets since address is used as the key.
- */
-#define NVSYNC		37
-#define to_ioend_wq(v)	(&xfs_ioend_wq[((unsigned long)v) % NVSYNC])
-static wait_queue_head_t xfs_ioend_wq[NVSYNC];
-
-void __init
-xfs_ioend_init(void)
-{
-	int i;
-
-	for (i = 0; i < NVSYNC; i++)
-		init_waitqueue_head(&xfs_ioend_wq[i]);
-}
-
-void
-xfs_ioend_wait(
-	xfs_inode_t	*ip)
-{
-	wait_queue_head_t *wq = to_ioend_wq(ip);
-
-	wait_event(*wq, (atomic_read(&ip->i_iocount) == 0));
-}
-
-STATIC void
-xfs_ioend_wake(
-	xfs_inode_t	*ip)
-{
-	if (atomic_dec_and_test(&ip->i_iocount))
-		wake_up(to_ioend_wq(ip));
-}
-
 STATIC void
 xfs_count_page_state(
 	struct page		*page,
@@ -107,6 +73,7 @@ xfs_page_trace(
 	unsigned long	pgoff)
 {
 	xfs_inode_t	*ip;
+	bhv_vnode_t	*vp = vn_from_inode(inode);
 	loff_t		isize = i_size_read(inode);
 	loff_t		offset = page_offset(page);
 	int		delalloc = -1, unmapped = -1, unwritten = -1;
@@ -114,7 +81,7 @@ xfs_page_trace(
 	if (page_has_buffers(page))
 		xfs_count_page_state(page, &delalloc, &unmapped, &unwritten);
 
-	ip = XFS_I(inode);
+	ip = xfs_vtoi(vp);
 	if (!ip->i_rwtrace)
 		return;
 
@@ -180,25 +147,16 @@ xfs_destroy_ioend(
 	xfs_ioend_t		*ioend)
 {
 	struct buffer_head	*bh, *next;
-	struct xfs_inode	*ip = XFS_I(ioend->io_inode);
 
 	for (bh = ioend->io_buffer_head; bh; bh = next) {
 		next = bh->b_private;
 		bh->b_end_io(bh, !ioend->io_error);
 	}
-
-	/*
-	 * Volume managers supporting multiple paths can send back ENODEV
-	 * when the final path disappears.  In this case continuing to fill
-	 * the page cache with dirty data which cannot be written out is
-	 * evil, so prevent that.
-	 */
-	if (unlikely(ioend->io_error == -ENODEV)) {
-		xfs_do_force_shutdown(ip->i_mount, SHUTDOWN_DEVICE_REQ,
-				      __FILE__, __LINE__);
+	if (unlikely(ioend->io_error)) {
+		vn_ioerror(XFS_I(ioend->io_inode), ioend->io_error,
+				__FILE__,__LINE__);
 	}
-
-	xfs_ioend_wake(ip);
+	vn_iowake(XFS_I(ioend->io_inode));
 	mempool_free(ioend, xfs_ioend_pool);
 }
 
@@ -234,7 +192,7 @@ xfs_setfilesize(
 		ip->i_d.di_size = isize;
 		ip->i_update_core = 1;
 		ip->i_update_size = 1;
-		xfs_mark_inode_dirty_sync(ip);
+		mark_inode_dirty_sync(ioend->io_inode);
 	}
 
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
@@ -360,9 +318,14 @@ xfs_map_blocks(
 	xfs_iomap_t		*mapp,
 	int			flags)
 {
-	int			nmaps = 1;
+	xfs_inode_t		*ip = XFS_I(inode);
+	int			error, nmaps = 1;
 
-	return -xfs_iomap(XFS_I(inode), offset, count, flags, mapp, &nmaps);
+	error = xfs_iomap(ip, offset, count,
+				flags, mapp, &nmaps);
+	if (!error && (flags & (BMAPI_WRITE|BMAPI_ALLOCATE)))
+		xfs_iflags_set(ip, XFS_IMODIFIED);
+	return -error;
 }
 
 STATIC_INLINE int
@@ -446,6 +409,7 @@ xfs_start_buffer_writeback(
 STATIC void
 xfs_start_page_writeback(
 	struct page		*page,
+	struct writeback_control *wbc,
 	int			clear_dirty,
 	int			buffers)
 {
@@ -550,7 +514,7 @@ xfs_cancel_ioend(
 			unlock_buffer(bh);
 		} while ((bh = next_bh) != NULL);
 
-		xfs_ioend_wake(XFS_I(ioend->io_inode));
+		vn_iowake(XFS_I(ioend->io_inode));
 		mempool_free(ioend, xfs_ioend_pool);
 	} while ((ioend = next) != NULL);
 }
@@ -712,7 +676,7 @@ xfs_probe_cluster(
 			} else
 				pg_offset = PAGE_CACHE_SIZE;
 
-			if (page->index == tindex && trylock_page(page)) {
+			if (page->index == tindex && !TestSetPageLocked(page)) {
 				pg_len = xfs_probe_page(page, pg_offset, mapped);
 				unlock_page(page);
 			}
@@ -796,7 +760,7 @@ xfs_convert_page(
 
 	if (page->index != tindex)
 		goto fail;
-	if (!trylock_page(page))
+	if (TestSetPageLocked(page))
 		goto fail;
 	if (PageWriteback(page))
 		goto fail_unlock_page;
@@ -894,7 +858,7 @@ xfs_convert_page(
 				done = 1;
 			}
 		}
-		xfs_start_page_writeback(page, !page_dirty, count);
+		xfs_start_page_writeback(page, wbc, !page_dirty, count);
 	}
 
 	return done;
@@ -1141,7 +1105,7 @@ xfs_page_state_convert(
 			 * that we are writing into for the first time.
 			 */
 			type = IOMAP_NEW;
-			if (trylock_buffer(bh)) {
+			if (!test_and_set_bit(BH_Lock, &bh->b_state)) {
 				ASSERT(buffer_mapped(bh));
 				if (iomap_valid)
 					all_bh = 1;
@@ -1166,7 +1130,7 @@ xfs_page_state_convert(
 		SetPageUptodate(page);
 
 	if (startio)
-		xfs_start_page_writeback(page, 1, count);
+		xfs_start_page_writeback(page, wbc, 1, count);
 
 	if (ioend && iomap_valid) {
 		offset = (iomap.iomap_offset + iomap.iomap_bsize - 1) >>
@@ -1376,10 +1340,6 @@ __xfs_get_blocks(
 	offset = (xfs_off_t)iblock << inode->i_blkbits;
 	ASSERT(bh_result->b_size >= (1 << inode->i_blkbits));
 	size = bh_result->b_size;
-
-	if (!create && direct && offset >= i_size_read(inode))
-		return 0;
-
 	error = xfs_iomap(XFS_I(inode), offset, size,
 			     create ? flags : BMAPI_READ, &iomap, &niomap);
 	if (error)

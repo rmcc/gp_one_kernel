@@ -40,7 +40,6 @@
 #define LBS_DEB_THREAD	0x00100000
 #define LBS_DEB_HEX	0x00200000
 #define LBS_DEB_SDIO	0x00400000
-#define LBS_DEB_SYSFS	0x00800000
 
 extern unsigned int lbs_debug;
 
@@ -79,11 +78,10 @@ do { if ((lbs_debug & (grp)) == (grp)) \
 #define lbs_deb_tx(fmt, args...)        LBS_DEB_LL(LBS_DEB_TX, " tx", fmt, ##args)
 #define lbs_deb_fw(fmt, args...)        LBS_DEB_LL(LBS_DEB_FW, " fw", fmt, ##args)
 #define lbs_deb_usb(fmt, args...)       LBS_DEB_LL(LBS_DEB_USB, " usb", fmt, ##args)
-#define lbs_deb_usbd(dev, fmt, args...) LBS_DEB_LL(LBS_DEB_USB, " usbd", "%s:" fmt, dev_name(dev), ##args)
+#define lbs_deb_usbd(dev, fmt, args...) LBS_DEB_LL(LBS_DEB_USB, " usbd", "%s:" fmt, (dev)->bus_id, ##args)
 #define lbs_deb_cs(fmt, args...)        LBS_DEB_LL(LBS_DEB_CS, " cs", fmt, ##args)
 #define lbs_deb_thread(fmt, args...)    LBS_DEB_LL(LBS_DEB_THREAD, " thread", fmt, ##args)
-#define lbs_deb_sdio(fmt, args...)      LBS_DEB_LL(LBS_DEB_SDIO, " sdio", fmt, ##args)
-#define lbs_deb_sysfs(fmt, args...)     LBS_DEB_LL(LBS_DEB_SYSFS, " sysfs", fmt, ##args)
+#define lbs_deb_sdio(fmt, args...)      LBS_DEB_LL(LBS_DEB_SDIO, " thread", fmt, ##args)
 
 #define lbs_pr_info(format, args...) \
 	printk(KERN_INFO DRV_NAME": " format, ## args)
@@ -149,18 +147,6 @@ static inline void lbs_deb_hex(unsigned int grp, const char *prompt, u8 *buf, in
 #define EHS_WAKE_ON_MAC_EVENT		0x0004
 #define EHS_WAKE_ON_MULTICAST_DATA	0x0008
 #define EHS_REMOVE_WAKEUP		0xFFFFFFFF
-/* Wake rules for Host_Sleep_CFG command */
-#define WOL_RULE_NET_TYPE_INFRA_OR_IBSS	0x00
-#define WOL_RULE_NET_TYPE_MESH		0x10
-#define WOL_RULE_ADDR_TYPE_BCAST	0x01
-#define WOL_RULE_ADDR_TYPE_MCAST	0x08
-#define WOL_RULE_ADDR_TYPE_UCAST	0x02
-#define WOL_RULE_OP_AND			0x01
-#define WOL_RULE_OP_OR			0x02
-#define WOL_RULE_OP_INVALID		0xFF
-#define WOL_RESULT_VALID_CMD		0
-#define WOL_RESULT_NOSPC_ERR		1
-#define WOL_RESULT_EEXIST_ERR		2
 
 /** Misc constants */
 /* This section defines 802.11 specific contants */
@@ -184,30 +170,12 @@ static inline void lbs_deb_hex(unsigned int grp, const char *prompt, u8 *buf, in
 
 #define MARVELL_MESH_IE_LENGTH		9
 
-/* Values used to populate the struct mrvl_mesh_ie.  The only time you need this
- * is when enabling the mesh using CMD_MESH_CONFIG.
- */
-#define MARVELL_MESH_IE_TYPE		4
-#define MARVELL_MESH_IE_SUBTYPE		0
-#define MARVELL_MESH_IE_VERSION		0
-#define MARVELL_MESH_PROTO_ID_HWMP	0
-#define MARVELL_MESH_METRIC_ID		0
-#define MARVELL_MESH_CAPABILITY		0
-
 /** INT status Bit Definition*/
 #define MRVDRV_TX_DNLD_RDY		0x0001
 #define MRVDRV_RX_UPLD_RDY		0x0002
 #define MRVDRV_CMD_DNLD_RDY		0x0004
 #define MRVDRV_CMD_UPLD_RDY		0x0008
 #define MRVDRV_CARDEVENT		0x0010
-
-/* Automatic TX control default levels */
-#define POW_ADAPT_DEFAULT_P0 13
-#define POW_ADAPT_DEFAULT_P1 15
-#define POW_ADAPT_DEFAULT_P2 18
-#define TPC_DEFAULT_P0 5
-#define TPC_DEFAULT_P1 10
-#define TPC_DEFAULT_P2 13
 
 /** TxPD status */
 
@@ -263,9 +231,6 @@ static inline void lbs_deb_hex(unsigned int grp, const char *prompt, u8 *buf, in
 
 #define	CMD_F_HOSTCMD		(1 << 0)
 #define FW_CAPINFO_WPA  	(1 << 0)
-#define FW_CAPINFO_FIRMWARE_UPGRADE	(1 << 13)
-#define FW_CAPINFO_BOOT2_UPGRADE	(1<<14)
-#define FW_CAPINFO_PERSISTENT_CONFIG	(1<<15)
 
 #define KEY_LEN_WPA_AES			16
 #define KEY_LEN_WPA_TKIP		32
@@ -339,8 +304,7 @@ enum PS_STATE {
 enum DNLD_STATE {
 	DNLD_RES_RECEIVED,
 	DNLD_DATA_SENT,
-	DNLD_CMD_SENT,
-	DNLD_BOOTCMD_SENT,
+	DNLD_CMD_SENT
 };
 
 /** LBS_MEDIA_STATE */
@@ -363,6 +327,27 @@ enum mv_ms_type {
 	MVMS_EVENT
 };
 
+/** SNMP_MIB_INDEX_e */
+enum SNMP_MIB_INDEX_e {
+	DESIRED_BSSTYPE_I = 0,
+	OP_RATESET_I,
+	BCNPERIOD_I,
+	DTIMPERIOD_I,
+	ASSOCRSP_TIMEOUT_I,
+	RTSTHRESH_I,
+	SHORT_RETRYLIM_I,
+	LONG_RETRYLIM_I,
+	FRAGTHRESH_I,
+	DOT11D_I,
+	DOT11H_I,
+	MANUFID_I,
+	PRODID_I,
+	MANUF_OUI_I,
+	MANUF_NAME_I,
+	MANUF_PRODNAME_I,
+	MANUF_PRODVER_I,
+};
+
 /** KEY_TYPE_ID */
 enum KEY_TYPE_ID {
 	KEY_TYPE_ID_WEP = 0,
@@ -375,6 +360,12 @@ enum KEY_INFO_WPA {
 	KEY_INFO_WPA_MCAST = 0x01,
 	KEY_INFO_WPA_UNICAST = 0x02,
 	KEY_INFO_WPA_ENABLED = 0x04
+};
+
+/** SNMP_MIB_VALUE_e */
+enum SNMP_MIB_VALUE_e {
+	SNMP_MIB_VALUE_INFRA = 1,
+	SNMP_MIB_VALUE_ADHOC
 };
 
 /* Default values for fwt commands. */

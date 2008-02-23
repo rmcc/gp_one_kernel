@@ -14,8 +14,6 @@
 #include <linux/gfs2_ondisk.h>
 #include <linux/crc32.h>
 #include <linux/lm_interface.h>
-#include <linux/kthread.h>
-#include <linux/freezer.h>
 
 #include "gfs2.h"
 #include "incore.h"
@@ -430,9 +428,6 @@ static int clean_journal(struct gfs2_jdesc *jd, struct gfs2_log_header_host *hea
 static void gfs2_lm_recovery_done(struct gfs2_sbd *sdp, unsigned int jid,
 				  unsigned int message)
 {
-	if (!sdp->sd_lockstruct.ls_ops->lm_recovery_done)
-		return;
-
 	if (likely(!test_bit(SDF_SHUTDOWN, &sdp->sd_flags)))
 		sdp->sd_lockstruct.ls_ops->lm_recovery_done(
 			sdp->sd_lockstruct.ls_lockspace, jid, message);
@@ -510,7 +505,7 @@ int gfs2_recover_journal(struct gfs2_jdesc *jd)
 
 		error = gfs2_glock_nq_init(sdp->sd_trans_gl, LM_ST_SHARED,
 					   LM_FLAG_NOEXP | LM_FLAG_PRIORITY |
-					   GL_NOCACHE, &t_gh);
+					   GL_NOCANCEL | GL_NOCACHE, &t_gh);
 		if (error)
 			goto fail_gunlock_ji;
 
@@ -585,35 +580,13 @@ fail:
 	return error;
 }
 
-static struct gfs2_jdesc *gfs2_jdesc_find_dirty(struct gfs2_sbd *sdp)
-{
-	struct gfs2_jdesc *jd;
-	int found = 0;
-
-	spin_lock(&sdp->sd_jindex_spin);
-
-	list_for_each_entry(jd, &sdp->sd_jindex_list, jd_list) {
-		if (jd->jd_dirty) {
-			jd->jd_dirty = 0;
-			found = 1;
-			break;
-		}
-	}
-	spin_unlock(&sdp->sd_jindex_spin);
-
-	if (!found)
-		jd = NULL;
-
-	return jd;
-}
-
 /**
  * gfs2_check_journals - Recover any dirty journals
  * @sdp: the filesystem
  *
  */
 
-static void gfs2_check_journals(struct gfs2_sbd *sdp)
+void gfs2_check_journals(struct gfs2_sbd *sdp)
 {
 	struct gfs2_jdesc *jd;
 
@@ -625,27 +598,5 @@ static void gfs2_check_journals(struct gfs2_sbd *sdp)
 		if (jd != sdp->sd_jdesc)
 			gfs2_recover_journal(jd);
 	}
-}
-
-/**
- * gfs2_recoverd - Recover dead machine's journals
- * @sdp: Pointer to GFS2 superblock
- *
- */
-
-int gfs2_recoverd(void *data)
-{
-	struct gfs2_sbd *sdp = data;
-	unsigned long t;
-
-	while (!kthread_should_stop()) {
-		gfs2_check_journals(sdp);
-		t = gfs2_tune_get(sdp,  gt_recoverd_secs) * HZ;
-		if (freezing(current))
-			refrigerator();
-		schedule_timeout_interruptible(t);
-	}
-
-	return 0;
 }
 

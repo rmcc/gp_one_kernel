@@ -225,7 +225,6 @@ void genl_unregister_mc_group(struct genl_family *family,
 	__genl_unregister_mc_group(family, grp);
 	genl_unlock();
 }
-EXPORT_SYMBOL(genl_unregister_mc_group);
 
 static void genl_unregister_mc_groups(struct genl_family *family)
 {
@@ -445,11 +444,8 @@ static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		if (ops->dumpit == NULL)
 			return -EOPNOTSUPP;
 
-		genl_unlock();
-		err = netlink_dump_start(genl_sock, skb, nlh,
-					 ops->dumpit, ops->done);
-		genl_lock();
-		return err;
+		return netlink_dump_start(genl_sock, skb, nlh,
+					  ops->dumpit, ops->done);
 	}
 
 	if (ops->doit == NULL)
@@ -558,8 +554,7 @@ static int ctrl_fill_info(struct genl_family *family, u32 pid, u32 seq,
 	return genlmsg_end(skb, hdr);
 
 nla_put_failure:
-	genlmsg_cancel(skb, hdr);
-	return -EMSGSIZE;
+	return genlmsg_cancel(skb, hdr);
 }
 
 static int ctrl_fill_mcgrp_info(struct genl_multicast_group *grp, u32 pid,
@@ -595,8 +590,7 @@ static int ctrl_fill_mcgrp_info(struct genl_multicast_group *grp, u32 pid,
 	return genlmsg_end(skb, hdr);
 
 nla_put_failure:
-	genlmsg_cancel(skb, hdr);
-	return -EMSGSIZE;
+	return genlmsg_cancel(skb, hdr);
 }
 
 static int ctrl_dumpfamily(struct sk_buff *skb, struct netlink_callback *cb)
@@ -606,6 +600,9 @@ static int ctrl_dumpfamily(struct sk_buff *skb, struct netlink_callback *cb)
 	struct genl_family *rt;
 	int chains_to_skip = cb->args[0];
 	int fams_to_skip = cb->args[1];
+
+	if (chains_to_skip != 0)
+		genl_lock();
 
 	for (i = 0; i < GENL_FAM_TAB_SIZE; i++) {
 		if (i < chains_to_skip)
@@ -624,6 +621,9 @@ static int ctrl_dumpfamily(struct sk_buff *skb, struct netlink_callback *cb)
 	}
 
 errout:
+	if (chains_to_skip != 0)
+		genl_unlock();
+
 	cb->args[0] = i;
 	cb->args[1] = n;
 
@@ -768,7 +768,7 @@ static int __init genl_init(void)
 
 	/* we'll bump the group number right afterwards */
 	genl_sock = netlink_kernel_create(&init_net, NETLINK_GENERIC, 0,
-					  genl_rcv, &genl_mutex, THIS_MODULE);
+					  genl_rcv, NULL, THIS_MODULE);
 	if (genl_sock == NULL)
 		panic("GENL: Cannot initialize generic netlink\n");
 

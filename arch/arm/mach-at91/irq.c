@@ -25,8 +25,9 @@
 #include <linux/mm.h>
 #include <linux/types.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 #include <asm/setup.h>
 
 #include <asm/mach/arch.h>
@@ -55,19 +56,19 @@ static int at91_aic_set_type(unsigned irq, unsigned type)
 	unsigned int smr, srctype;
 
 	switch (type) {
-	case IRQ_TYPE_LEVEL_HIGH:
+	case IRQT_HIGH:
 		srctype = AT91_AIC_SRCTYPE_HIGH;
 		break;
-	case IRQ_TYPE_EDGE_RISING:
+	case IRQT_RISING:
 		srctype = AT91_AIC_SRCTYPE_RISING;
 		break;
-	case IRQ_TYPE_LEVEL_LOW:
+	case IRQT_LOW:
 		if ((irq == AT91_ID_FIQ) || is_extern_irq(irq))		/* only supported on external interrupts */
 			srctype = AT91_AIC_SRCTYPE_LOW;
 		else
 			return -EINVAL;
 		break;
-	case IRQ_TYPE_EDGE_FALLING:
+	case IRQT_FALLING:
 		if ((irq == AT91_ID_FIQ) || is_extern_irq(irq))		/* only supported on external interrupts */
 			srctype = AT91_AIC_SRCTYPE_FALLING;
 		else

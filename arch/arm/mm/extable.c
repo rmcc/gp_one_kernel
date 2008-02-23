@@ -2,7 +2,7 @@
  *  linux/arch/arm/mm/extable.c
  */
 #include <linux/module.h>
-#include <linux/uaccess.h>
+#include <asm/uaccess.h>
 
 int fixup_exception(struct pt_regs *regs)
 {

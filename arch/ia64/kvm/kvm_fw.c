@@ -130,7 +130,7 @@ static struct ia64_pal_retval pal_cache_flush(struct kvm_vcpu *vcpu)
 	args.cache_type = gr29;
 	args.operation = gr30;
 	smp_call_function(remote_pal_cache_flush,
-				(void *)&args, 1);
+				(void *)&args, 1, 1);
 	if (args.status != 0)
 		printk(KERN_ERR"pal_cache_flush error!,"
 				"status:0x%lx\n", args.status);
@@ -286,12 +286,6 @@ static  u64 kvm_get_pal_call_index(struct kvm_vcpu *vcpu)
 	return index;
 }
 
-static void prepare_for_halt(struct kvm_vcpu *vcpu)
-{
-	vcpu->arch.timer_pending = 1;
-	vcpu->arch.timer_fired = 0;
-}
-
 int kvm_pal_emul(struct kvm_vcpu *vcpu, struct kvm_run *run)
 {
 
@@ -310,10 +304,11 @@ int kvm_pal_emul(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		break;
 	case PAL_HALT_LIGHT:
 	{
+		vcpu->arch.timer_pending = 1;
 		INIT_PAL_STATUS_SUCCESS(result);
-		prepare_for_halt(vcpu);
 		if (kvm_highest_pending_irq(vcpu) == -1)
 			ret = kvm_emulate_halt(vcpu);
+
 	}
 		break;
 

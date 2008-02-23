@@ -82,8 +82,6 @@ register struct thread_info *__current_thread_info asm("gr15");
 
 #define current_thread_info() ({ __current_thread_info; })
 
-#define __HAVE_ARCH_THREAD_INFO_ALLOCATOR
-
 /* thread information allocation */
 #ifdef CONFIG_DEBUG_STACK_USAGE
 #define alloc_thread_info(tsk)					\

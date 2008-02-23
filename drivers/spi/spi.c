@@ -47,7 +47,7 @@ modalias_show(struct device *dev, struct device_attribute *a, char *buf)
 {
 	const struct spi_device	*spi = to_spi_device(dev);
 
-	return sprintf(buf, "%s\n", spi->modalias);
+	return snprintf(buf, BUS_ID_SIZE + 1, "%s\n", spi->modalias);
 }
 
 static struct device_attribute spi_dev_attrs[] = {
@@ -63,7 +63,7 @@ static int spi_match_device(struct device *dev, struct device_driver *drv)
 {
 	const struct spi_device	*spi = to_spi_device(dev);
 
-	return strcmp(spi->modalias, drv->name) == 0;
+	return strncmp(spi->modalias, drv->name, BUS_ID_SIZE) == 0;
 }
 
 static int spi_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -178,113 +178,6 @@ struct boardinfo {
 static LIST_HEAD(board_list);
 static DEFINE_MUTEX(board_lock);
 
-/**
- * spi_alloc_device - Allocate a new SPI device
- * @master: Controller to which device is connected
- * Context: can sleep
- *
- * Allows a driver to allocate and initialize a spi_device without
- * registering it immediately.  This allows a driver to directly
- * fill the spi_device with device parameters before calling
- * spi_add_device() on it.
- *
- * Caller is responsible to call spi_add_device() on the returned
- * spi_device structure to add it to the SPI master.  If the caller
- * needs to discard the spi_device without adding it, then it should
- * call spi_dev_put() on it.
- *
- * Returns a pointer to the new device, or NULL.
- */
-struct spi_device *spi_alloc_device(struct spi_master *master)
-{
-	struct spi_device	*spi;
-	struct device		*dev = master->dev.parent;
-
-	if (!spi_master_get(master))
-		return NULL;
-
-	spi = kzalloc(sizeof *spi, GFP_KERNEL);
-	if (!spi) {
-		dev_err(dev, "cannot alloc spi_device\n");
-		spi_master_put(master);
-		return NULL;
-	}
-
-	spi->master = master;
-	spi->dev.parent = dev;
-	spi->dev.bus = &spi_bus_type;
-	spi->dev.release = spidev_release;
-	device_initialize(&spi->dev);
-	return spi;
-}
-EXPORT_SYMBOL_GPL(spi_alloc_device);
-
-/**
- * spi_add_device - Add spi_device allocated with spi_alloc_device
- * @spi: spi_device to register
- *
- * Companion function to spi_alloc_device.  Devices allocated with
- * spi_alloc_device can be added onto the spi bus with this function.
- *
- * Returns 0 on success; negative errno on failure
- */
-int spi_add_device(struct spi_device *spi)
-{
-	static DEFINE_MUTEX(spi_add_lock);
-	struct device *dev = spi->master->dev.parent;
-	int status;
-
-	/* Chipselects are numbered 0..max; validate. */
-	if (spi->chip_select >= spi->master->num_chipselect) {
-		dev_err(dev, "cs%d >= max %d\n",
-			spi->chip_select,
-			spi->master->num_chipselect);
-		return -EINVAL;
-	}
-
-	/* Set the bus ID string */
-	dev_set_name(&spi->dev, "%s.%u", dev_name(&spi->master->dev),
-			spi->chip_select);
-
-
-	/* We need to make sure there's no other device with this
-	 * chipselect **BEFORE** we call setup(), else we'll trash
-	 * its configuration.  Lock against concurrent add() calls.
-	 */
-	mutex_lock(&spi_add_lock);
-
-	if (bus_find_device_by_name(&spi_bus_type, NULL, dev_name(&spi->dev))
-			!= NULL) {
-		dev_err(dev, "chipselect %d already in use\n",
-				spi->chip_select);
-		status = -EBUSY;
-		goto done;
-	}
-
-	/* Drivers may modify this initial i/o setup, but will
-	 * normally rely on the device being setup.  Devices
-	 * using SPI_CS_HIGH can't coexist well otherwise...
-	 */
-	status = spi->master->setup(spi);
-	if (status < 0) {
-		dev_err(dev, "can't %s %s, status %d\n",
-				"setup", dev_name(&spi->dev), status);
-		goto done;
-	}
-
-	/* Device may be bound to an active driver when this returns */
-	status = device_add(&spi->dev);
-	if (status < 0)
-		dev_err(dev, "can't %s %s, status %d\n",
-				"add", dev_name(&spi->dev), status);
-	else
-		dev_dbg(dev, "registered child %s\n", dev_name(&spi->dev));
-
-done:
-	mutex_unlock(&spi_add_lock);
-	return status;
-}
-EXPORT_SYMBOL_GPL(spi_add_device);
 
 /**
  * spi_new_device - instantiate one new SPI device
@@ -304,6 +197,7 @@ struct spi_device *spi_new_device(struct spi_master *master,
 				  struct spi_board_info *chip)
 {
 	struct spi_device	*proxy;
+	struct device		*dev = master->dev.parent;
 	int			status;
 
 	/* NOTE:  caller did any chip->bus_num checks necessary.
@@ -313,28 +207,64 @@ struct spi_device *spi_new_device(struct spi_master *master,
 	 * suggests syslogged diagnostics are best here (ugh).
 	 */
 
-	proxy = spi_alloc_device(master);
-	if (!proxy)
+	/* Chipselects are numbered 0..max; validate. */
+	if (chip->chip_select >= master->num_chipselect) {
+		dev_err(dev, "cs%d > max %d\n",
+			chip->chip_select,
+			master->num_chipselect);
+		return NULL;
+	}
+
+	if (!spi_master_get(master))
 		return NULL;
 
-	WARN_ON(strlen(chip->modalias) >= sizeof(proxy->modalias));
-
+	proxy = kzalloc(sizeof *proxy, GFP_KERNEL);
+	if (!proxy) {
+		dev_err(dev, "can't alloc dev for cs%d\n",
+			chip->chip_select);
+		goto fail;
+	}
+	proxy->master = master;
 	proxy->chip_select = chip->chip_select;
 	proxy->max_speed_hz = chip->max_speed_hz;
 	proxy->mode = chip->mode;
 	proxy->irq = chip->irq;
-	strlcpy(proxy->modalias, chip->modalias, sizeof(proxy->modalias));
+	proxy->modalias = chip->modalias;
+
+	snprintf(proxy->dev.bus_id, sizeof proxy->dev.bus_id,
+			"%s.%u", master->dev.bus_id,
+			chip->chip_select);
+	proxy->dev.parent = dev;
+	proxy->dev.bus = &spi_bus_type;
 	proxy->dev.platform_data = (void *) chip->platform_data;
 	proxy->controller_data = chip->controller_data;
 	proxy->controller_state = NULL;
+	proxy->dev.release = spidev_release;
 
-	status = spi_add_device(proxy);
+	/* drivers may modify this initial i/o setup */
+	status = master->setup(proxy);
 	if (status < 0) {
-		spi_dev_put(proxy);
-		return NULL;
+		dev_err(dev, "can't %s %s, status %d\n",
+				"setup", proxy->dev.bus_id, status);
+		goto fail;
 	}
 
+	/* driver core catches callers that misbehave by defining
+	 * devices that already exist.
+	 */
+	status = device_register(&proxy->dev);
+	if (status < 0) {
+		dev_err(dev, "can't %s %s, status %d\n",
+				"add", proxy->dev.bus_id, status);
+		goto fail;
+	}
+	dev_dbg(dev, "registered child %s\n", proxy->dev.bus_id);
 	return proxy;
+
+fail:
+	spi_master_put(master);
+	kfree(proxy);
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(spi_new_device);
 
@@ -503,11 +433,12 @@ int spi_register_master(struct spi_master *master)
 	/* register the device, then userspace will see it.
 	 * registration fails if the bus ID is in use.
 	 */
-	dev_set_name(&master->dev, "spi%u", master->bus_num);
+	snprintf(master->dev.bus_id, sizeof master->dev.bus_id,
+		"spi%u", master->bus_num);
 	status = device_add(&master->dev);
 	if (status < 0)
 		goto done;
-	dev_dbg(dev, "registered master %s%s\n", dev_name(&master->dev),
+	dev_dbg(dev, "registered master %s%s\n", master->dev.bus_id,
 			dynamic ? " (dynamic)" : "");
 
 	/* populate children from any spi device tables */
@@ -571,7 +502,7 @@ struct spi_master *spi_busnum_to_master(u16 bus_num)
 	struct device		*dev;
 	struct spi_master	*master = NULL;
 
-	dev = class_find_device(&spi_master_class, NULL, &bus_num,
+	dev = class_find_device(&spi_master_class, &bus_num,
 				__spi_master_match);
 	if (dev)
 		master = container_of(dev, struct spi_master, dev);
@@ -658,7 +589,7 @@ int spi_write_then_read(struct spi_device *spi,
 
 	int			status;
 	struct spi_message	message;
-	struct spi_transfer	x;
+	struct spi_transfer	x[2];
 	u8			*local_buf;
 
 	/* Use preallocated DMA-safe buffer.  We can't avoid copying here,
@@ -669,9 +600,15 @@ int spi_write_then_read(struct spi_device *spi,
 		return -EINVAL;
 
 	spi_message_init(&message);
-	memset(&x, 0, sizeof x);
-	x.len = n_tx + n_rx;
-	spi_message_add_tail(&x, &message);
+	memset(x, 0, sizeof x);
+	if (n_tx) {
+		x[0].len = n_tx;
+		spi_message_add_tail(&x[0], &message);
+	}
+	if (n_rx) {
+		x[1].len = n_rx;
+		spi_message_add_tail(&x[1], &message);
+	}
 
 	/* ... unless someone else is using the pre-allocated buffer */
 	if (!mutex_trylock(&lock)) {
@@ -682,15 +619,15 @@ int spi_write_then_read(struct spi_device *spi,
 		local_buf = buf;
 
 	memcpy(local_buf, txbuf, n_tx);
-	x.tx_buf = local_buf;
-	x.rx_buf = local_buf;
+	x[0].tx_buf = local_buf;
+	x[1].rx_buf = local_buf + n_tx;
 
 	/* do the i/o */
 	status = spi_sync(spi, &message);
 	if (status == 0)
-		memcpy(rxbuf, x.rx_buf + n_tx, n_rx);
+		memcpy(rxbuf, x[1].rx_buf, n_rx);
 
-	if (x.tx_buf == buf)
+	if (x[0].tx_buf == buf)
 		mutex_unlock(&lock);
 	else
 		kfree(local_buf);
@@ -736,5 +673,5 @@ err0:
  * driver registration) _could_ be dynamically linked (modular) ... costs
  * include needing to have boardinfo data structures be much more public.
  */
-postcore_initcall(spi_init);
+subsys_initcall(spi_init);
 

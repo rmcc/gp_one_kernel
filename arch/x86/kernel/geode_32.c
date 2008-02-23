@@ -166,8 +166,6 @@ int geode_has_vsa2(void)
 	static int has_vsa2 = -1;
 
 	if (has_vsa2 == -1) {
-		u16 val;
-
 		/*
 		 * The VSA has virtual registers that we can query for a
 		 * signature.
@@ -175,8 +173,7 @@ int geode_has_vsa2(void)
 		outw(VSA_VR_UNLOCK, VSA_VRC_INDEX);
 		outw(VSA_VR_SIGNATURE, VSA_VRC_INDEX);
 
-		val = inw(VSA_VRC_DATA);
-		has_vsa2 = (val == AMD_VSA_SIG || val == GSW_VSA_SIG);
+		has_vsa2 = (inw(VSA_VRC_DATA) == VSA_SIG);
 	}
 
 	return has_vsa2;

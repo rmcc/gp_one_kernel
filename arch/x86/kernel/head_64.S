@@ -18,8 +18,6 @@
 #include <asm/page.h>
 #include <asm/msr.h>
 #include <asm/cache.h>
-#include <asm/processor-flags.h>
-#include <asm/percpu.h>
 
 #ifdef CONFIG_PARAVIRT
 #include <asm/asm-offsets.h>
@@ -32,13 +30,6 @@
  * because we need identity-mapped pages.
  *
  */
-
-#define pud_index(x)	(((x) >> PUD_SHIFT) & (PTRS_PER_PUD-1))
-
-L4_PAGE_OFFSET = pgd_index(__PAGE_OFFSET)
-L3_PAGE_OFFSET = pud_index(__PAGE_OFFSET)
-L4_START_KERNEL = pgd_index(__START_KERNEL_map)
-L3_START_KERNEL = pud_index(__START_KERNEL_map)
 
 	.text
 	.section .text.head
@@ -85,8 +76,8 @@ startup_64:
 	/* Fixup the physical addresses in the page table
 	 */
 	addq	%rbp, init_level4_pgt + 0(%rip)
-	addq	%rbp, init_level4_pgt + (L4_PAGE_OFFSET*8)(%rip)
-	addq	%rbp, init_level4_pgt + (L4_START_KERNEL*8)(%rip)
+	addq	%rbp, init_level4_pgt + (258*8)(%rip)
+	addq	%rbp, init_level4_pgt + (511*8)(%rip)
 
 	addq	%rbp, level3_ident_pgt + 0(%rip)
 
@@ -111,7 +102,7 @@ startup_64:
 	movq	%rdi, %rax
 	shrq	$PMD_SHIFT, %rax
 	andq	$(PTRS_PER_PMD - 1), %rax
-	leaq	__PAGE_KERNEL_IDENT_LARGE_EXEC(%rdi), %rdx
+	leaq	__PAGE_KERNEL_LARGE_EXEC(%rdi), %rdx
 	leaq	level2_spare_pgt(%rip), %rbx
 	movq	%rdx, 0(%rbx, %rax, 8)
 ident_complete:
@@ -137,7 +128,7 @@ ident_complete:
 	/* Fixup phys_base */
 	addq	%rbp, phys_base(%rip)
 
-#ifdef CONFIG_X86_TRAMPOLINE
+#ifdef CONFIG_SMP
 	addq	%rbp, trampoline_level4_pgt + 0(%rip)
 	addq	%rbp, trampoline_level4_pgt + (511*8)(%rip)
 #endif
@@ -163,7 +154,9 @@ ENTRY(secondary_startup_64)
 	 */
 
 	/* Enable PAE mode and PGE */
-	movl	$(X86_CR4_PAE | X86_CR4_PGE), %eax
+	xorq	%rax, %rax
+	btsq	$5, %rax
+	btsq	$7, %rax
 	movq	%rax, %cr4
 
 	/* Setup early boot stage 4 level pagetables. */
@@ -191,44 +184,31 @@ ENTRY(secondary_startup_64)
 1:	wrmsr				/* Make changes effective */
 
 	/* Setup cr0 */
-#define CR0_STATE	(X86_CR0_PE | X86_CR0_MP | X86_CR0_ET | \
-			 X86_CR0_NE | X86_CR0_WP | X86_CR0_AM | \
-			 X86_CR0_PG)
-	movl	$CR0_STATE, %eax
+#define CR0_PM				1		/* protected mode */
+#define CR0_MP				(1<<1)
+#define CR0_ET				(1<<4)
+#define CR0_NE				(1<<5)
+#define CR0_WP				(1<<16)
+#define CR0_AM				(1<<18)
+#define CR0_PAGING 			(1<<31)
+	movl $CR0_PM|CR0_MP|CR0_ET|CR0_NE|CR0_WP|CR0_AM|CR0_PAGING,%eax
 	/* Make changes effective */
 	movq	%rax, %cr0
 
 	/* Setup a boot time stack */
-	movq stack_start(%rip),%rsp
+	movq init_rsp(%rip),%rsp
 
 	/* zero EFLAGS after setting rsp */
 	pushq $0
 	popfq
 
-#ifdef CONFIG_SMP
-	/*
-	 * early_gdt_base should point to the gdt_page in static percpu init
-	 * data area.  Computing this requires two symbols - __per_cpu_load
-	 * and per_cpu__gdt_page.  As linker can't do no such relocation, do
-	 * it by hand.  As early_gdt_descr is manipulated by C code for
-	 * secondary CPUs, this should be done only once for the boot CPU
-	 * when early_gdt_descr_base contains zero.
-	 */
-	movq	early_gdt_descr_base(%rip), %rax
-	testq	%rax, %rax
-	jnz	1f
-	movq	$__per_cpu_load, %rax
-	addq	$per_cpu__gdt_page, %rax
-	movq	%rax, early_gdt_descr_base(%rip)
-1:
-#endif
 	/*
 	 * We must switch to a new descriptor in kernel space for the GDT
 	 * because soon the kernel won't have access anymore to the userspace
 	 * addresses where we're currently running on. We have to do that here
 	 * because in 32bit we couldn't load a 64bit linear address.
 	 */
-	lgdt	early_gdt_descr(%rip)
+	lgdt	cpu_gdt_descr(%rip)
 
 	/* set up data segments. actually 0 would do too */
 	movl $__KERNEL_DS,%eax
@@ -244,18 +224,12 @@ ENTRY(secondary_startup_64)
 	movl %eax,%fs
 	movl %eax,%gs
 
-	/* Set up %gs.
-	 *
-	 * On SMP, %gs should point to the per-cpu area.  For initial
-	 * boot, make %gs point to the init data section.  For a
-	 * secondary CPU,initial_gs should be set to its pda address
-	 * before the CPU runs this code.
-	 *
-	 * On UP, initial_gs points to PER_CPU_VAR(__pda) and doesn't
-	 * change.
-	 */
+	/* 
+	 * Setup up a dummy PDA. this is just for some early bootup code
+	 * that does in_interrupt() 
+	 */ 
 	movl	$MSR_GS_BASE,%ecx
-	movq	initial_gs(%rip),%rax
+	movq	$empty_zero_page,%rax
 	movq    %rax,%rdx
 	shrq	$32,%rdx
 	wrmsr	
@@ -281,17 +255,10 @@ ENTRY(secondary_startup_64)
 	.align	8
 	ENTRY(initial_code)
 	.quad	x86_64_start_kernel
-	ENTRY(initial_gs)
-#ifdef CONFIG_SMP
-	.quad	__per_cpu_load
-#else
-	.quad	PER_CPU_VAR(__pda)
-#endif
 	__FINITDATA
 
-	ENTRY(stack_start)
+	ENTRY(init_rsp)
 	.quad  init_thread_union+THREAD_SIZE-8
-	.word  0
 
 bad_address:
 	jmp bad_address
@@ -335,7 +302,7 @@ ENTRY(early_idt_handler)
 	call dump_stack
 #ifdef CONFIG_KALLSYMS	
 	leaq early_idt_ripmsg(%rip),%rdi
-	movq 0(%rsp),%rsi	# get rip again
+	movq 8(%rsp),%rsi	# get rip again
 	call __print_symbol
 #endif
 #endif /* EARLY_PRINTK */
@@ -360,11 +327,11 @@ early_idt_ripmsg:
 ENTRY(name)
 
 /* Automate the creation of 1 to 1 mapping pmd entries */
-#define PMDS(START, PERM, COUNT)			\
-	i = 0 ;						\
-	.rept (COUNT) ;					\
-	.quad	(START) + (i << PMD_SHIFT) + (PERM) ;	\
-	i = i + 1 ;					\
+#define PMDS(START, PERM, COUNT)		\
+	i = 0 ;					\
+	.rept (COUNT) ;				\
+	.quad	(START) + (i << 21) + (PERM) ;	\
+	i = i + 1 ;				\
 	.endr
 
 	/*
@@ -375,9 +342,9 @@ ENTRY(name)
 	 */
 NEXT_PAGE(init_level4_pgt)
 	.quad	level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
-	.org	init_level4_pgt + L4_PAGE_OFFSET*8, 0
+	.fill	257,8,0
 	.quad	level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
-	.org	init_level4_pgt + L4_START_KERNEL*8, 0
+	.fill	252,8,0
 	/* (2^48-(2*1024*1024*1024))/(2^39) = 511 */
 	.quad	level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE
 
@@ -386,7 +353,7 @@ NEXT_PAGE(level3_ident_pgt)
 	.fill	511,8,0
 
 NEXT_PAGE(level3_kernel_pgt)
-	.fill	L3_START_KERNEL,8,0
+	.fill	510,8,0
 	/* (2^48-(2*1024*1024*1024)-((2^39)*511))/(2^30) = 510 */
 	.quad	level2_kernel_pgt - __START_KERNEL_map + _KERNPG_TABLE
 	.quad	level2_fixmap_pgt - __START_KERNEL_map + _PAGE_TABLE
@@ -404,7 +371,7 @@ NEXT_PAGE(level2_ident_pgt)
 	/* Since I easily can, map the first 1G.
 	 * Don't set NX because code runs from these pages.
 	 */
-	PMDS(0, __PAGE_KERNEL_IDENT_LARGE_EXEC, PTRS_PER_PMD)
+	PMDS(0, __PAGE_KERNEL_LARGE_EXEC, PTRS_PER_PMD)
 
 NEXT_PAGE(level2_kernel_pgt)
 	/*
@@ -417,7 +384,7 @@ NEXT_PAGE(level2_kernel_pgt)
 	 *  If you want to increase this then increase MODULES_VADDR
 	 *  too.)
 	 */
-	PMDS(0, __PAGE_KERNEL_LARGE_EXEC,
+	PMDS(0, __PAGE_KERNEL_LARGE_EXEC|_PAGE_GLOBAL,
 		KERNEL_IMAGE_SIZE/PMD_SIZE)
 
 NEXT_PAGE(level2_spare_pgt)
@@ -428,22 +395,54 @@ NEXT_PAGE(level2_spare_pgt)
 
 	.data
 	.align 16
-	.globl early_gdt_descr
-early_gdt_descr:
-	.word	GDT_ENTRIES*8-1
+	.globl cpu_gdt_descr
+cpu_gdt_descr:
+	.word	gdt_end-cpu_gdt_table-1
+gdt:
+	.quad	cpu_gdt_table
 #ifdef CONFIG_SMP
-early_gdt_descr_base:
-	.quad   0x0000000000000000
-#else
-	.quad	per_cpu__gdt_page
+	.rept	NR_CPUS-1
+	.word	0
+	.quad	0
+	.endr
 #endif
 
 ENTRY(phys_base)
 	/* This must match the first entry in level2_kernel_pgt */
 	.quad   0x0000000000000000
 
-#include "../../x86/xen/xen-head.S"
+/* We need valid kernel segments for data and code in long mode too
+ * IRET will check the segment types  kkeil 2000/10/28
+ * Also sysret mandates a special GDT layout 
+ */
+		 		
+	.section .data.page_aligned, "aw"
+	.align PAGE_SIZE
+
+/* The TLS descriptors are currently at a different place compared to i386.
+   Hopefully nobody expects them at a fixed place (Wine?) */
 	
+ENTRY(cpu_gdt_table)
+	.quad	0x0000000000000000	/* NULL descriptor */
+	.quad	0x00cf9b000000ffff	/* __KERNEL32_CS */
+	.quad	0x00af9b000000ffff	/* __KERNEL_CS */
+	.quad	0x00cf93000000ffff	/* __KERNEL_DS */
+	.quad	0x00cffb000000ffff	/* __USER32_CS */
+	.quad	0x00cff3000000ffff	/* __USER_DS, __USER32_DS  */
+	.quad	0x00affb000000ffff	/* __USER_CS */
+	.quad	0x0			/* unused */
+	.quad	0,0			/* TSS */
+	.quad	0,0			/* LDT */
+	.quad   0,0,0			/* three TLS descriptors */ 
+	.quad	0x0000f40000000000	/* node/CPU stored in limit */
+gdt_end:	
+	/* asm/segment.h:GDT_ENTRIES must match this */	
+	/* This should be a multiple of the cache line size */
+	/* GDTs of other CPUs are now dynamically allocated */
+
+	/* zero the remaining page */
+	.fill PAGE_SIZE / 8 - GDT_ENTRIES,8,0
+
 	.section .bss, "aw", @nobits
 	.align L1_CACHE_BYTES
 ENTRY(idt_table)

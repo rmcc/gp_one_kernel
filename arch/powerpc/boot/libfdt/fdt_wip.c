@@ -72,11 +72,11 @@ int fdt_setprop_inplace(void *fdt, int nodeoffset, const char *name,
 	return 0;
 }
 
-static void _fdt_nop_region(void *start, int len)
+static void nop_region(void *start, int len)
 {
 	uint32_t *p;
 
-	for (p = start; (char *)p < ((char *)start + len); p++)
+	for (p = start; (void *)p < (start + len); p++)
 		*p = cpu_to_fdt32(FDT_NOP);
 }
 
@@ -89,7 +89,7 @@ int fdt_nop_property(void *fdt, int nodeoffset, const char *name)
 	if (! prop)
 		return len;
 
-	_fdt_nop_region(prop, len + sizeof(*prop));
+	nop_region(prop, len + sizeof(*prop));
 
 	return 0;
 }
@@ -139,7 +139,6 @@ int fdt_nop_node(void *fdt, int nodeoffset)
 	if (endoffset < 0)
 		return endoffset;
 
-	_fdt_nop_region(fdt_offset_ptr_w(fdt, nodeoffset, 0),
-			endoffset - nodeoffset);
+	nop_region(fdt_offset_ptr_w(fdt, nodeoffset, 0), endoffset - nodeoffset);
 	return 0;
 }

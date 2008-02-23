@@ -64,4 +64,3 @@ ENTRY(__raw_writesl)
 		str	ip, [r0]
 		bne	6b
 		mov	pc, lr
-ENDPROC(__raw_writesl)

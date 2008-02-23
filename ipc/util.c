@@ -258,8 +258,6 @@ int ipc_get_maxid(struct ipc_ids *ids)
  
 int ipc_addid(struct ipc_ids* ids, struct kern_ipc_perm* new, int size)
 {
-	uid_t euid;
-	gid_t egid;
 	int id, err;
 
 	if (size > IPCMNI)
@@ -268,29 +266,24 @@ int ipc_addid(struct ipc_ids* ids, struct kern_ipc_perm* new, int size)
 	if (ids->in_use >= size)
 		return -ENOSPC;
 
-	spin_lock_init(&new->lock);
-	new->deleted = 0;
-	rcu_read_lock();
-	spin_lock(&new->lock);
-
 	err = idr_get_new(&ids->ipcs_idr, new, &id);
-	if (err) {
-		spin_unlock(&new->lock);
-		rcu_read_unlock();
+	if (err)
 		return err;
-	}
 
 	ids->in_use++;
 
-	current_euid_egid(&euid, &egid);
-	new->cuid = new->uid = euid;
-	new->gid = new->cgid = egid;
+	new->cuid = new->uid = current->euid;
+	new->gid = new->cgid = current->egid;
 
 	new->seq = ids->seq++;
 	if(ids->seq > ids->seq_max)
 		ids->seq = 0;
 
 	new->id = ipc_buildid(id, new->seq);
+	spin_lock_init(&new->lock);
+	new->deleted = 0;
+	rcu_read_lock();
+	spin_lock(&new->lock);
 	return id;
 }
 
@@ -623,14 +616,13 @@ void ipc_rcu_putref(void *ptr)
  
 int ipcperms (struct kern_ipc_perm *ipcp, short flag)
 {	/* flag will most probably be 0 or S_...UGO from <linux/stat.h> */
-	uid_t euid = current_euid();
-	int requested_mode, granted_mode;
+	int requested_mode, granted_mode, err;
 
-	audit_ipc_obj(ipcp);
+	if (unlikely((err = audit_ipc_obj(ipcp))))
+		return err;
 	requested_mode = (flag >> 6) | (flag >> 3) | flag;
 	granted_mode = ipcp->mode;
-	if (euid == ipcp->cuid ||
-	    euid == ipcp->uid)
+	if (current->euid == ipcp->cuid || current->euid == ipcp->uid)
 		granted_mode >>= 6;
 	else if (in_group_p(ipcp->cgid) || in_group_p(ipcp->gid))
 		granted_mode >>= 3;
@@ -696,9 +688,57 @@ void ipc64_perm_to_ipc_perm (struct ipc64_perm *in, struct ipc_perm *out)
  * Look for an id in the ipc ids idr and lock the associated ipc object.
  *
  * The ipc object is locked on exit.
+ *
+ * This is the routine that should be called when the rw_mutex is not already
+ * held, i.e. idr tree not protected: it protects the idr tree in read mode
+ * during the idr_find().
  */
 
 struct kern_ipc_perm *ipc_lock(struct ipc_ids *ids, int id)
+{
+	struct kern_ipc_perm *out;
+	int lid = ipcid_to_idx(id);
+
+	down_read(&ids->rw_mutex);
+
+	rcu_read_lock();
+	out = idr_find(&ids->ipcs_idr, lid);
+	if (out == NULL) {
+		rcu_read_unlock();
+		up_read(&ids->rw_mutex);
+		return ERR_PTR(-EINVAL);
+	}
+
+	up_read(&ids->rw_mutex);
+
+	spin_lock(&out->lock);
+	
+	/* ipc_rmid() may have already freed the ID while ipc_lock
+	 * was spinning: here verify that the structure is still valid
+	 */
+	if (out->deleted) {
+		spin_unlock(&out->lock);
+		rcu_read_unlock();
+		return ERR_PTR(-EINVAL);
+	}
+
+	return out;
+}
+
+/**
+ * ipc_lock_down - Lock an ipc structure with rw_sem held
+ * @ids: IPC identifier set
+ * @id: ipc id to look for
+ *
+ * Look for an id in the ipc ids idr and lock the associated ipc object.
+ *
+ * The ipc object is locked on exit.
+ *
+ * This is the routine that should be called when the rw_mutex is already
+ * held, i.e. idr tree protected.
+ */
+
+struct kern_ipc_perm *ipc_lock_down(struct ipc_ids *ids, int id)
 {
 	struct kern_ipc_perm *out;
 	int lid = ipcid_to_idx(id);
@@ -711,14 +751,25 @@ struct kern_ipc_perm *ipc_lock(struct ipc_ids *ids, int id)
 	}
 
 	spin_lock(&out->lock);
-	
-	/* ipc_rmid() may have already freed the ID while ipc_lock
-	 * was spinning: here verify that the structure is still valid
+
+	/*
+	 * No need to verify that the structure is still valid since the
+	 * rw_mutex is held.
 	 */
-	if (out->deleted) {
-		spin_unlock(&out->lock);
-		rcu_read_unlock();
-		return ERR_PTR(-EINVAL);
+	return out;
+}
+
+struct kern_ipc_perm *ipc_lock_check_down(struct ipc_ids *ids, int id)
+{
+	struct kern_ipc_perm *out;
+
+	out = ipc_lock_down(ids, id);
+	if (IS_ERR(out))
+		return out;
+
+	if (ipc_checkid(out, id)) {
+		ipc_unlock(out);
+		return ERR_PTR(-EIDRM);
 	}
 
 	return out;
@@ -792,27 +843,31 @@ struct kern_ipc_perm *ipcctl_pre_down(struct ipc_ids *ids, int id, int cmd,
 				      struct ipc64_perm *perm, int extra_perm)
 {
 	struct kern_ipc_perm *ipcp;
-	uid_t euid;
 	int err;
 
 	down_write(&ids->rw_mutex);
-	ipcp = ipc_lock_check(ids, id);
+	ipcp = ipc_lock_check_down(ids, id);
 	if (IS_ERR(ipcp)) {
 		err = PTR_ERR(ipcp);
 		goto out_up;
 	}
 
-	audit_ipc_obj(ipcp);
-	if (cmd == IPC_SET)
-		audit_ipc_set_perm(extra_perm, perm->uid,
-					 perm->gid, perm->mode);
+	err = audit_ipc_obj(ipcp);
+	if (err)
+		goto out_unlock;
 
-	euid = current_euid();
-	if (euid == ipcp->cuid ||
-	    euid == ipcp->uid  || capable(CAP_SYS_ADMIN))
+	if (cmd == IPC_SET) {
+		err = audit_ipc_set_perm(extra_perm, perm->uid,
+					 perm->gid, perm->mode);
+		if (err)
+			goto out_unlock;
+	}
+	if (current->euid == ipcp->cuid ||
+	    current->euid == ipcp->uid || capable(CAP_SYS_ADMIN))
 		return ipcp;
 
 	err = -EPERM;
+out_unlock:
 	ipc_unlock(ipcp);
 out_up:
 	up_write(&ids->rw_mutex);

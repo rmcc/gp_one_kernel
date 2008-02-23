@@ -46,10 +46,10 @@
 #define PRESENT         1	/* Card in slot */
 
 #define MY_NAME "rpaphp"
-extern int rpaphp_debug;
+extern int debug;
 #define dbg(format, arg...)					\
 	do {							\
-		if (rpaphp_debug)					\
+		if (debug)					\
 			printk(KERN_DEBUG "%s: " format,	\
 				MY_NAME , ## arg); 		\
 	} while (0)

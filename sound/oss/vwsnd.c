@@ -150,7 +150,7 @@
 #include <linux/interrupt.h>
 #include <linux/mutex.h>
 
-#include <asm/visws/cobalt.h>
+#include <asm/mach-visws/cobalt.h>
 
 #include "sound_config.h"
 
@@ -1509,7 +1509,7 @@ typedef struct vwsnd_dev {
 	struct mutex open_mutex;
 	struct mutex io_mutex;
 	struct mutex mix_mutex;
-	fmode_t		open_mode;
+	mode_t		open_mode;
 	wait_queue_head_t open_wait;
 
 	lithium_t	lith;

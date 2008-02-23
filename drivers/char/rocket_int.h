@@ -1125,14 +1125,18 @@ Warnings: This function writes the data byte without checking to see if
 
 struct r_port {
 	int magic;
-	struct tty_port port;
 	int line;
-	int flags;		/* Don't yet match the ASY_ flags!! */
+	int flags;
+	int count;
+	int blocked_open;
+	struct tty_struct *tty;
 	unsigned int board:3;
 	unsigned int aiop:2;
 	unsigned int chan:3;
 	CONTROLLER_t *ctlp;
 	CHANNEL_t channel;
+	int closing_wait;
+	int close_delay;
 	int intmask;
 	int xmit_fifo_room;	/* room in xmit fifo */
 	unsigned char *xmit_buf;
@@ -1144,7 +1148,8 @@ struct r_port {
 	int read_status_mask;
 	int cps;
 
-	struct completion close_wait;	/* Not yet matching the core */
+	wait_queue_head_t open_wait;
+	struct completion close_wait;
 	spinlock_t slock;
 	struct mutex write_mtx;
 };
@@ -1161,6 +1166,11 @@ struct r_port {
 
 /* number of characters left in xmit buffer before we ask for more */
 #define WAKEUP_CHARS 256
+
+/* Internal flags used only by the rocketport driver */
+#define ROCKET_INITIALIZED	0x80000000	/* Port is active */
+#define ROCKET_CLOSING		0x40000000	/* Serial port is closing */
+#define ROCKET_NORMAL_ACTIVE	0x20000000	/* Normal port is active */
 
 /*
  * Assigned major numbers for the Comtrol Rocketport

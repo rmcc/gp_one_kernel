@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/uts.h>
 #include <linux/utsname.h>
+#include <linux/version.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 

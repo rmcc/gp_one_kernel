@@ -12,7 +12,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/leds.h>
-#include <mach/board-ams-delta.h>
+#include <asm/arch/board-ams-delta.h>
 
 /*
  * Our context
@@ -79,30 +79,55 @@ static struct ams_delta_led ams_delta_leds[] = {
 	},
 };
 
-static int ams_delta_led_probe(struct platform_device *pdev)
+#ifdef CONFIG_PM
+static int ams_delta_led_suspend(struct platform_device *dev,
+		pm_message_t state)
 {
-	int i, ret;
+	int i;
 
-	for (i = 0; i < ARRAY_SIZE(ams_delta_leds); i++) {
-		ams_delta_leds[i].cdev.flags |= LED_CORE_SUSPENDRESUME;
-		ret = led_classdev_register(&pdev->dev,
-				&ams_delta_leds[i].cdev);
-		if (ret < 0)
-			goto fail;
-	}
+	for (i = 0; i < ARRAY_SIZE(ams_delta_leds); i++)
+		led_classdev_suspend(&ams_delta_leds[i].cdev);
 
 	return 0;
-fail:
-	while (--i >= 0)
-		led_classdev_unregister(&ams_delta_leds[i].cdev);
-	return ret;	
+}
+
+static int ams_delta_led_resume(struct platform_device *dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ams_delta_leds); i++)
+		led_classdev_resume(&ams_delta_leds[i].cdev);
+
+	return 0;
+}
+#else
+#define ams_delta_led_suspend NULL
+#define ams_delta_led_resume NULL
+#endif
+
+static int ams_delta_led_probe(struct platform_device *pdev)
+{
+	int i;
+	int ret;
+
+	for (i = ret = 0; ret >= 0 && i < ARRAY_SIZE(ams_delta_leds); i++) {
+		ret = led_classdev_register(&pdev->dev,
+				&ams_delta_leds[i].cdev);
+	}
+
+	if (ret < 0 && i > 1) {
+		for (i = i - 2; i >= 0; i--)
+			led_classdev_unregister(&ams_delta_leds[i].cdev);
+	}
+
+	return ret;
 }
 
 static int ams_delta_led_remove(struct platform_device *pdev)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(ams_delta_leds); i++)
+	for (i = ARRAY_SIZE(ams_delta_leds) - 1; i >= 0; i--)
 		led_classdev_unregister(&ams_delta_leds[i].cdev);
 
 	return 0;
@@ -111,6 +136,8 @@ static int ams_delta_led_remove(struct platform_device *pdev)
 static struct platform_driver ams_delta_led_driver = {
 	.probe		= ams_delta_led_probe,
 	.remove		= ams_delta_led_remove,
+	.suspend	= ams_delta_led_suspend,
+	.resume		= ams_delta_led_resume,
 	.driver		= {
 		.name = "ams-delta-led",
 		.owner = THIS_MODULE,
@@ -124,7 +151,7 @@ static int __init ams_delta_led_init(void)
 
 static void __exit ams_delta_led_exit(void)
 {
-	platform_driver_unregister(&ams_delta_led_driver);
+	return platform_driver_unregister(&ams_delta_led_driver);
 }
 
 module_init(ams_delta_led_init);

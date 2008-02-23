@@ -573,7 +573,9 @@ static int econet_release(struct socket *sock)
 
 	sk->sk_state_change(sk);	/* It is useless. Just for sanity. */
 
-	sock_orphan(sk);
+	sock->sk = NULL;
+	sk->sk_socket = NULL;
+	sock_set_flag(sk, SOCK_DEAD);
 
 	/* Purge queues */
 
@@ -1062,7 +1064,7 @@ static int econet_rcv(struct sk_buff *skb, struct net_device *dev, struct packet
 	struct sock *sk;
 	struct ec_device *edev = dev->ec_ptr;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		goto drop;
 
 	if (skb->pkt_type == PACKET_OTHERHOST)
@@ -1119,7 +1121,7 @@ static int econet_notifier(struct notifier_block *this, unsigned long msg, void 
 	struct net_device *dev = (struct net_device *)data;
 	struct ec_device *edev;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	switch (msg) {

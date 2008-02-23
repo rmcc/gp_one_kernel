@@ -44,7 +44,7 @@
 /*
  * Module information.
  */
-#define DRV_VERSION	"2.2.3"
+#define DRV_VERSION	"2.1.4"
 #define DRV_PROJECT	"http://rt2x00.serialmonkey.com"
 
 /*
@@ -53,11 +53,11 @@
  */
 #define DEBUG_PRINTK_MSG(__dev, __kernlvl, __lvl, __msg, __args...)	\
 	printk(__kernlvl "%s -> %s: %s - " __msg,			\
-	       wiphy_name((__dev)->hw->wiphy), __func__, __lvl, ##__args)
+	       wiphy_name((__dev)->hw->wiphy), __FUNCTION__, __lvl, ##__args)
 
 #define DEBUG_PRINTK_PROBE(__kernlvl, __lvl, __msg, __args...)	\
 	printk(__kernlvl "%s -> %s: %s - " __msg,		\
-	       KBUILD_MODNAME, __func__, __lvl, ##__args)
+	       KBUILD_MODNAME, __FUNCTION__, __lvl, ##__args)
 
 #ifdef CONFIG_RT2X00_DEBUG
 #define DEBUG_PRINTK(__dev, __kernlvl, __lvl, __msg, __args...)	\
@@ -92,16 +92,6 @@
 	DEBUG_PRINTK(__dev, KERN_DEBUG, "EEPROM recovery", __msg, ##__args)
 
 /*
- * Duration calculations
- * The rate variable passed is: 100kbs.
- * To convert from bytes to bits we multiply size with 8,
- * then the size is multiplied with 10 to make the
- * real rate -> rate argument correction.
- */
-#define GET_DURATION(__size, __rate)	(((__size) * 8 * 10) / (__rate))
-#define GET_DURATION_RES(__size, __rate)(((__size) * 8 * 10) % (__rate))
-
-/*
  * Standard timing and size defines.
  * These values should follow the ieee80211 specifications.
  */
@@ -118,10 +108,34 @@
 #define SHORT_PIFS		( SIFS + SHORT_SLOT_TIME )
 #define DIFS			( PIFS + SLOT_TIME )
 #define SHORT_DIFS		( SHORT_PIFS + SHORT_SLOT_TIME )
-#define EIFS			( SIFS + DIFS + \
-				  GET_DURATION(IEEE80211_HEADER + ACK_SIZE, 10) )
-#define SHORT_EIFS		( SIFS + SHORT_DIFS + \
-				  GET_DURATION(IEEE80211_HEADER + ACK_SIZE, 10) )
+#define EIFS			( SIFS + (8 * (IEEE80211_HEADER + ACK_SIZE)) )
+
+/*
+ * IEEE802.11 header defines
+ */
+static inline int is_rts_frame(u16 fc)
+{
+	return (((fc & IEEE80211_FCTL_FTYPE) == IEEE80211_FTYPE_CTL) &&
+		((fc & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_RTS));
+}
+
+static inline int is_cts_frame(u16 fc)
+{
+	return (((fc & IEEE80211_FCTL_FTYPE) == IEEE80211_FTYPE_CTL) &&
+		((fc & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_CTS));
+}
+
+static inline int is_probe_resp(u16 fc)
+{
+	return (((fc & IEEE80211_FCTL_FTYPE) == IEEE80211_FTYPE_MGMT) &&
+		((fc & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_PROBE_RESP));
+}
+
+static inline int is_beacon(u16 fc)
+{
+	return (((fc & IEEE80211_FCTL_FTYPE) == IEEE80211_FTYPE_MGMT) &&
+		((fc & IEEE80211_FCTL_STYPE) == IEEE80211_STYPE_BEACON));
+}
 
 /*
  * Chipset identification
@@ -151,17 +165,6 @@ struct rf_channel {
 	u32 rf2;
 	u32 rf3;
 	u32 rf4;
-};
-
-/*
- * Channel information structure
- */
-struct channel_info {
-	unsigned int flags;
-#define GEOGRAPHY_ALLOWED	0x00000001
-
-	short tx_power1;
-	short tx_power2;
 };
 
 /*
@@ -325,11 +328,6 @@ static inline int rt2x00_get_link_ant_rssi(struct link *link)
 	return DEFAULT_RSSI;
 }
 
-static inline void rt2x00_reset_link_ant_rssi(struct link *link)
-{
-	link->ant.rssi_ant = 0;
-}
-
 static inline int rt2x00_get_link_ant_rssi_history(struct link *link,
 						   enum antenna ant)
 {
@@ -358,6 +356,13 @@ struct rt2x00_intf {
 	spinlock_t lock;
 
 	/*
+	 * BSS configuration. Copied from the structure
+	 * passed to us through the bss_info_changed()
+	 * callback funtion.
+	 */
+	struct ieee80211_bss_conf conf;
+
+	/*
 	 * MAC of the device.
 	 */
 	u8 mac[ETH_ALEN];
@@ -381,14 +386,6 @@ struct rt2x00_intf {
 #define DELAYED_UPDATE_BEACON		0x00000001
 #define DELAYED_CONFIG_ERP		0x00000002
 #define DELAYED_LED_ASSOC		0x00000004
-
-	/*
-	 * Software sequence counter, this is only required
-	 * for hardware which doesn't support hardware
-	 * sequence counting.
-	 */
-	spinlock_t seqlock;
-	u16 seqno;
 };
 
 static inline struct rt2x00_intf* vif_to_intf(struct ieee80211_vif *vif)
@@ -407,8 +404,11 @@ static inline struct rt2x00_intf* vif_to_intf(struct ieee80211_vif *vif)
  * @supported_rates: Rate types which are supported (CCK, OFDM).
  * @num_channels: Number of supported channels. This is used as array size
  *	for @tx_power_a, @tx_power_bg and @channels.
- * @channels: Device/chipset specific channel values (See &struct rf_channel).
- * @channels_info: Additional information for channels (See &struct channel_info).
+ * channels: Device/chipset specific channel values (See &struct rf_channel).
+ * @tx_power_a: TX power values for all 5.2GHz channels (may be NULL).
+ * @tx_power_bg: TX power values for all 2.4GHz channels (may be NULL).
+ * @tx_power_default: Default TX power value to use when either
+ *	@tx_power_a or @tx_power_bg is missing.
  */
 struct hw_mode_spec {
 	unsigned int supported_bands;
@@ -421,7 +421,10 @@ struct hw_mode_spec {
 
 	unsigned int num_channels;
 	const struct rf_channel *channels;
-	const struct channel_info *channels_info;
+
+	const u8 *tx_power_a;
+	const u8 *tx_power_bg;
+	u8 tx_power_default;
 };
 
 /*
@@ -433,24 +436,14 @@ struct hw_mode_spec {
  */
 struct rt2x00lib_conf {
 	struct ieee80211_conf *conf;
-
 	struct rf_channel rf;
-	struct channel_info channel;
-};
 
-/*
- * Configuration structure for erp settings.
- */
-struct rt2x00lib_erp {
-	int short_preamble;
-	int cts_protection;
+	struct antenna_setup ant;
 
-	int ack_timeout;
-	int ack_consume_time;
+	enum ieee80211_band band;
 
-	u64 basic_rates;
-
-	int slot_time;
+	u32 basic_rates;
+	u32 slot_time;
 
 	short sifs;
 	short pifs;
@@ -459,20 +452,13 @@ struct rt2x00lib_erp {
 };
 
 /*
- * Configuration structure for hardware encryption.
+ * Configuration structure for erp settings.
  */
-struct rt2x00lib_crypto {
-	enum cipher cipher;
+struct rt2x00lib_erp {
+	int short_preamble;
 
-	enum set_key_cmd cmd;
-	const u8 *address;
-
-	u32 bssidx;
-	u32 aid;
-
-	u8 key[16];
-	u8 tx_mic[8];
-	u8 rx_mic[8];
+	int ack_timeout;
+	int ack_consume_time;
 };
 
 /*
@@ -483,7 +469,7 @@ struct rt2x00intf_conf {
 	/*
 	 * Interface type
 	 */
-	enum nl80211_iftype type;
+	enum ieee80211_if_types type;
 
 	/*
 	 * TSF sync value, this is dependant on the operation type.
@@ -520,8 +506,8 @@ struct rt2x00lib_ops {
 	 */
 	int (*probe_hw) (struct rt2x00_dev *rt2x00dev);
 	char *(*get_firmware_name) (struct rt2x00_dev *rt2x00dev);
-	u16 (*get_firmware_crc) (const void *data, const size_t len);
-	int (*load_firmware) (struct rt2x00_dev *rt2x00dev, const void *data,
+	u16 (*get_firmware_crc) (void *data, const size_t len);
+	int (*load_firmware) (struct rt2x00_dev *rt2x00dev, void *data,
 			      const size_t len);
 
 	/*
@@ -533,8 +519,10 @@ struct rt2x00lib_ops {
 	/*
 	 * queue initialization handlers
 	 */
-	bool (*get_entry_state) (struct queue_entry *entry);
-	void (*clear_entry) (struct queue_entry *entry);
+	void (*init_rxentry) (struct rt2x00_dev *rt2x00dev,
+			      struct queue_entry *entry);
+	void (*init_txentry) (struct rt2x00_dev *rt2x00dev,
+			      struct queue_entry *entry);
 
 	/*
 	 * Radio control handlers.
@@ -552,12 +540,15 @@ struct rt2x00lib_ops {
 	 */
 	void (*write_tx_desc) (struct rt2x00_dev *rt2x00dev,
 			       struct sk_buff *skb,
-			       struct txentry_desc *txdesc);
-	int (*write_tx_data) (struct queue_entry *entry);
-	void (*write_beacon) (struct queue_entry *entry);
-	int (*get_tx_data_len) (struct queue_entry *entry);
+			       struct txentry_desc *txdesc,
+			       struct ieee80211_tx_control *control);
+	int (*write_tx_data) (struct rt2x00_dev *rt2x00dev,
+			      struct data_queue *queue, struct sk_buff *skb,
+			      struct ieee80211_tx_control *control);
+	int (*get_tx_data_len) (struct rt2x00_dev *rt2x00dev,
+				struct sk_buff *skb);
 	void (*kick_tx_queue) (struct rt2x00_dev *rt2x00dev,
-			       const enum data_queue_qid queue);
+			       const unsigned int queue);
 
 	/*
 	 * RX control handlers
@@ -568,12 +559,6 @@ struct rt2x00lib_ops {
 	/*
 	 * Configuration handlers.
 	 */
-	int (*config_shared_key) (struct rt2x00_dev *rt2x00dev,
-				  struct rt2x00lib_crypto *crypto,
-				  struct ieee80211_key_conf *key);
-	int (*config_pairwise_key) (struct rt2x00_dev *rt2x00dev,
-				    struct rt2x00lib_crypto *crypto,
-				    struct ieee80211_key_conf *key);
 	void (*config_filter) (struct rt2x00_dev *rt2x00dev,
 			       const unsigned int filter_flags);
 	void (*config_intf) (struct rt2x00_dev *rt2x00dev,
@@ -586,11 +571,16 @@ struct rt2x00lib_ops {
 
 	void (*config_erp) (struct rt2x00_dev *rt2x00dev,
 			    struct rt2x00lib_erp *erp);
-	void (*config_ant) (struct rt2x00_dev *rt2x00dev,
-			    struct antenna_setup *ant);
 	void (*config) (struct rt2x00_dev *rt2x00dev,
 			struct rt2x00lib_conf *libconf,
-			const unsigned int changed_flags);
+			const unsigned int flags);
+#define CONFIG_UPDATE_PHYMODE		( 1 << 1 )
+#define CONFIG_UPDATE_CHANNEL		( 1 << 2 )
+#define CONFIG_UPDATE_TXPOWER		( 1 << 3 )
+#define CONFIG_UPDATE_ANTENNA		( 1 << 4 )
+#define CONFIG_UPDATE_SLOT_TIME 	( 1 << 5 )
+#define CONFIG_UPDATE_BEACON_INT	( 1 << 6 )
+#define CONFIG_UPDATE_ALL		0xffff
 };
 
 /*
@@ -602,7 +592,6 @@ struct rt2x00_ops {
 	const unsigned int max_ap_intf;
 	const unsigned int eeprom_size;
 	const unsigned int rf_size;
-	const unsigned int tx_queues;
 	const struct data_queue_desc *rx;
 	const struct data_queue_desc *tx;
 	const struct data_queue_desc *bcn;
@@ -621,39 +610,33 @@ enum rt2x00_flags {
 	/*
 	 * Device state flags
 	 */
-	DEVICE_STATE_PRESENT,
-	DEVICE_STATE_REGISTERED_HW,
-	DEVICE_STATE_INITIALIZED,
-	DEVICE_STATE_STARTED,
-	DEVICE_STATE_STARTED_SUSPEND,
-	DEVICE_STATE_ENABLED_RADIO,
-	DEVICE_STATE_DISABLED_RADIO_HW,
-
-	/*
-	 * Driver requirements
-	 */
-	DRIVER_REQUIRE_FIRMWARE,
-	DRIVER_REQUIRE_BEACON_GUARD,
-	DRIVER_REQUIRE_ATIM_QUEUE,
-	DRIVER_REQUIRE_SCHEDULED,
-	DRIVER_REQUIRE_DMA,
+	DEVICE_PRESENT,
+	DEVICE_REGISTERED_HW,
+	DEVICE_INITIALIZED,
+	DEVICE_STARTED,
+	DEVICE_STARTED_SUSPEND,
+	DEVICE_ENABLED_RADIO,
+	DEVICE_DISABLED_RADIO_HW,
 
 	/*
 	 * Driver features
 	 */
-	CONFIG_SUPPORT_HW_BUTTON,
-	CONFIG_SUPPORT_HW_CRYPTO,
+	DRIVER_SUPPORT_MIXED_INTERFACES,
+	DRIVER_REQUIRE_FIRMWARE,
+	DRIVER_REQUIRE_BEACON_GUARD,
+	DRIVER_REQUIRE_ATIM_QUEUE,
+	DRIVER_REQUIRE_SCHEDULED,
 
 	/*
 	 * Driver configuration
 	 */
+	CONFIG_SUPPORT_HW_BUTTON,
 	CONFIG_FRAME_TYPE,
 	CONFIG_RF_SEQUENCE,
 	CONFIG_EXTERNAL_LNA_A,
 	CONFIG_EXTERNAL_LNA_BG,
 	CONFIG_DOUBLE_ANTENNA,
 	CONFIG_DISABLE_LINK_TUNING,
-	CONFIG_CRYPTO_COPY_IV,
 };
 
 /*
@@ -667,7 +650,11 @@ struct rt2x00_dev {
 	 * When accessing this variable, the rt2x00dev_{pci,usb}
 	 * macro's should be used for correct typecasting.
 	 */
-	struct device *dev;
+	void *dev;
+#define rt2x00dev_pci(__dev)	( (struct pci_dev *)(__dev)->dev )
+#define rt2x00dev_usb(__dev)	( (struct usb_interface *)(__dev)->dev )
+#define rt2x00dev_usb_dev(__dev)\
+	( (struct usb_device *)interface_to_usbdev(rt2x00dev_usb(__dev)) )
 
 	/*
 	 * Callback functions.
@@ -690,7 +677,7 @@ struct rt2x00_dev {
 #define RFKILL_STATE_ALLOCATED		1
 #define RFKILL_STATE_REGISTERED		2
 	struct rfkill *rfkill;
-	struct delayed_work rfkill_work;
+	struct input_polled_dev *poll_dev;
 #endif /* CONFIG_RT2X00_LIB_RFKILL */
 
 	/*
@@ -731,7 +718,8 @@ struct rt2x00_dev {
 
 	/*
 	 * This is the default TX/RX antenna setup as indicated
-	 * by the device's EEPROM.
+	 * by the device's EEPROM. When mac80211 sets its
+	 * antenna value to 0 we should be using these values.
 	 */
 	struct antenna_setup default_ant;
 
@@ -746,15 +734,16 @@ struct rt2x00_dev {
 	} csr;
 
 	/*
-	 * Mutex to protect register accesses.
-	 * For PCI and USB devices it protects against concurrent indirect
-	 * register access (BBP, RF, MCU) since accessing those
-	 * registers require multiple calls to the CSR registers.
-	 * For USB devices it also protects the csr_cache since that
-	 * field is used for normal CSR access and it cannot support
-	 * multiple callers simultaneously.
+	 * Mutex to protect register accesses on USB devices.
+	 * There are 2 reasons this is needed, one is to ensure
+	 * use of the csr_cache (for USB devices) by one thread
+	 * isn't corrupted by another thread trying to access it.
+	 * The other is that access to BBP and RF registers
+	 * require multiple BUS transactions and if another thread
+	 * attempted to access one of those registers at the same
+	 * time one of the writes could silently fail.
 	 */
-	struct mutex csr_mutex;
+	struct mutex usb_cache_mutex;
 
 	/*
 	 * Current packet filter configuration for the device.
@@ -794,20 +783,14 @@ struct rt2x00_dev {
 	u32 *rf;
 
 	/*
-	 * LNA gain
+	 * USB Max frame size (for rt2500usb & rt73usb).
 	 */
-	short lna_gain;
+	u16 usb_maxpacket;
 
 	/*
 	 * Current TX power value.
 	 */
 	u16 tx_power;
-
-	/*
-	 * Current retry values.
-	 */
-	u8 short_retry;
-	u8 long_retry;
 
 	/*
 	 * Rssi <-> Dbm offset
@@ -832,9 +815,6 @@ struct rt2x00_dev {
 
 	/*
 	 * Scheduled work.
-	 * NOTE: intf_work will use ieee80211_iterate_active_interfaces()
-	 * which means it cannot be placed on the hw->workqueue
-	 * due to RTNL locking requirements.
 	 */
 	struct work_struct intf_work;
 	struct work_struct filter_work;
@@ -844,7 +824,7 @@ struct rt2x00_dev {
 	 * The Beacon array also contains the Atim queue
 	 * if that is supported by the device.
 	 */
-	unsigned int data_queues;
+	int data_queues;
 	struct data_queue *rx;
 	struct data_queue *tx;
 	struct data_queue *bcn;
@@ -930,28 +910,51 @@ static inline u16 rt2x00_check_rev(const struct rt2x00_chip *chipset,
 		!!(chipset->rev & 0x0000f));
 }
 
-/**
- * rt2x00queue_map_txskb - Map a skb into DMA for TX purposes.
- * @rt2x00dev: Pointer to &struct rt2x00_dev.
- * @skb: The skb to map.
+/*
+ * Duration calculations
+ * The rate variable passed is: 100kbs.
+ * To convert from bytes to bits we multiply size with 8,
+ * then the size is multiplied with 10 to make the
+ * real rate -> rate argument correction.
  */
-void rt2x00queue_map_txskb(struct rt2x00_dev *rt2x00dev, struct sk_buff *skb);
+static inline u16 get_duration(const unsigned int size, const u8 rate)
+{
+	return ((size * 8 * 10) / rate);
+}
+
+static inline u16 get_duration_res(const unsigned int size, const u8 rate)
+{
+	return ((size * 8 * 10) % rate);
+}
 
 /**
- * rt2x00queue_get_queue - Convert queue index to queue pointer
+ * rt2x00queue_get_queue - Convert mac80211 queue index to rt2x00 queue
  * @rt2x00dev: Pointer to &struct rt2x00_dev.
- * @queue: rt2x00 queue index (see &enum data_queue_qid).
+ * @queue: mac80211/rt2x00 queue index
+ *	(see &enum ieee80211_tx_queue and &enum rt2x00_bcn_queue).
  */
 struct data_queue *rt2x00queue_get_queue(struct rt2x00_dev *rt2x00dev,
-					 const enum data_queue_qid queue);
+					 const unsigned int queue);
 
 /**
  * rt2x00queue_get_entry - Get queue entry where the given index points to.
- * @queue: Pointer to &struct data_queue from where we obtain the entry.
+ * @rt2x00dev: Pointer to &struct rt2x00_dev.
  * @index: Index identifier for obtaining the correct index.
  */
 struct queue_entry *rt2x00queue_get_entry(struct data_queue *queue,
 					  enum queue_index index);
+
+/**
+ * rt2x00queue_index_inc - Index incrementation function
+ * @queue: Queue (&struct data_queue) to perform the action on.
+ * @action: Index type (&enum queue_index) to perform the action on.
+ *
+ * This function will increase the requested index on the queue,
+ * it will grab the appropriate locks and handle queue overflow events by
+ * resetting the index to the start of the queue.
+ */
+void rt2x00queue_index_inc(struct data_queue *queue, enum queue_index index);
+
 
 /*
  * Interrupt context handlers.
@@ -959,20 +962,28 @@ struct queue_entry *rt2x00queue_get_entry(struct data_queue *queue,
 void rt2x00lib_beacondone(struct rt2x00_dev *rt2x00dev);
 void rt2x00lib_txdone(struct queue_entry *entry,
 		      struct txdone_entry_desc *txdesc);
-void rt2x00lib_rxdone(struct rt2x00_dev *rt2x00dev,
-		      struct queue_entry *entry);
+void rt2x00lib_rxdone(struct queue_entry *entry,
+		      struct rxdone_entry_desc *rxdesc);
+
+/*
+ * TX descriptor initializer
+ */
+void rt2x00lib_write_tx_desc(struct rt2x00_dev *rt2x00dev,
+			     struct sk_buff *skb,
+			     struct ieee80211_tx_control *control);
 
 /*
  * mac80211 handlers.
  */
-int rt2x00mac_tx(struct ieee80211_hw *hw, struct sk_buff *skb);
+int rt2x00mac_tx(struct ieee80211_hw *hw, struct sk_buff *skb,
+		 struct ieee80211_tx_control *control);
 int rt2x00mac_start(struct ieee80211_hw *hw);
 void rt2x00mac_stop(struct ieee80211_hw *hw);
 int rt2x00mac_add_interface(struct ieee80211_hw *hw,
 			    struct ieee80211_if_init_conf *conf);
 void rt2x00mac_remove_interface(struct ieee80211_hw *hw,
 				struct ieee80211_if_init_conf *conf);
-int rt2x00mac_config(struct ieee80211_hw *hw, u32 changed);
+int rt2x00mac_config(struct ieee80211_hw *hw, struct ieee80211_conf *conf);
 int rt2x00mac_config_interface(struct ieee80211_hw *hw,
 			       struct ieee80211_vif *vif,
 			       struct ieee80211_if_conf *conf);
@@ -980,13 +991,6 @@ void rt2x00mac_configure_filter(struct ieee80211_hw *hw,
 				unsigned int changed_flags,
 				unsigned int *total_flags,
 				int mc_count, struct dev_addr_list *mc_list);
-#ifdef CONFIG_RT2X00_LIB_CRYPTO
-int rt2x00mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
-		      const u8 *local_address, const u8 *address,
-		      struct ieee80211_key_conf *key);
-#else
-#define rt2x00mac_set_key	NULL
-#endif /* CONFIG_RT2X00_LIB_CRYPTO */
 int rt2x00mac_get_stats(struct ieee80211_hw *hw,
 			struct ieee80211_low_level_stats *stats);
 int rt2x00mac_get_tx_stats(struct ieee80211_hw *hw,
@@ -995,7 +999,7 @@ void rt2x00mac_bss_info_changed(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_bss_conf *bss_conf,
 				u32 changes);
-int rt2x00mac_conf_tx(struct ieee80211_hw *hw, u16 queue,
+int rt2x00mac_conf_tx(struct ieee80211_hw *hw, int queue,
 		      const struct ieee80211_tx_queue_params *params);
 
 /*

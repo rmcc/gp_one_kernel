@@ -10,7 +10,6 @@
  */
 
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/poll.h>
 #include <linux/module.h>
 #include <linux/serio.h>
@@ -82,10 +81,9 @@ static int serio_raw_open(struct inode *inode, struct file *file)
 	struct serio_raw_list *list;
 	int retval = 0;
 
-	lock_kernel();
 	retval = mutex_lock_interruptible(&serio_raw_mutex);
 	if (retval)
-		goto out_bkl;
+		return retval;
 
 	if (!(serio_raw = serio_raw_locate(iminor(inode)))) {
 		retval = -ENODEV;
@@ -110,8 +108,6 @@ static int serio_raw_open(struct inode *inode, struct file *file)
 
 out:
 	mutex_unlock(&serio_raw_mutex);
-out_bkl:
-	unlock_kernel();
 	return retval;
 }
 
@@ -135,6 +131,7 @@ static int serio_raw_release(struct inode *inode, struct file *file)
 
 	mutex_lock(&serio_raw_mutex);
 
+	serio_raw_fasync(-1, file, 0);
 	serio_raw_cleanup(serio_raw);
 
 	mutex_unlock(&serio_raw_mutex);
@@ -368,12 +365,6 @@ static void serio_raw_disconnect(struct serio *serio)
 static struct serio_device_id serio_raw_serio_ids[] = {
 	{
 		.type	= SERIO_8042,
-		.proto	= SERIO_ANY,
-		.id	= SERIO_ANY,
-		.extra	= SERIO_ANY,
-	},
-	{
-		.type	= SERIO_8042_XL,
 		.proto	= SERIO_ANY,
 		.id	= SERIO_ANY,
 		.extra	= SERIO_ANY,

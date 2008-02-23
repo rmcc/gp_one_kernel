@@ -19,31 +19,32 @@
 
 #include "gfs2.h"
 #include "incore.h"
-#include "super.h"
+#include "ops_fstype.h"
 #include "sys.h"
 #include "util.h"
 #include "glock.h"
 
-static void gfs2_init_inode_once(void *foo)
+static void gfs2_init_inode_once(struct kmem_cache *cachep, void *foo)
 {
 	struct gfs2_inode *ip = foo;
 
 	inode_init_once(&ip->i_inode);
 	init_rwsem(&ip->i_rw_mutex);
-	INIT_LIST_HEAD(&ip->i_trunc_list);
 	ip->i_alloc = NULL;
 }
 
-static void gfs2_init_glock_once(void *foo)
+static void gfs2_init_glock_once(struct kmem_cache *cachep, void *foo)
 {
 	struct gfs2_glock *gl = foo;
 
 	INIT_HLIST_NODE(&gl->gl_list);
 	spin_lock_init(&gl->gl_spin);
 	INIT_LIST_HEAD(&gl->gl_holders);
+	INIT_LIST_HEAD(&gl->gl_waiters1);
+	INIT_LIST_HEAD(&gl->gl_waiters3);
 	gl->gl_lvb = NULL;
 	atomic_set(&gl->gl_lvb_count, 0);
-	INIT_LIST_HEAD(&gl->gl_lru);
+	INIT_LIST_HEAD(&gl->gl_reclaim);
 	INIT_LIST_HEAD(&gl->gl_ail_list);
 	atomic_set(&gl->gl_ail_count, 0);
 }
@@ -94,12 +95,6 @@ static int __init init_gfs2_fs(void)
 	if (!gfs2_rgrpd_cachep)
 		goto fail;
 
-	gfs2_quotad_cachep = kmem_cache_create("gfs2_quotad",
-					       sizeof(struct gfs2_quota_data),
-					       0, 0, NULL);
-	if (!gfs2_quotad_cachep)
-		goto fail;
-
 	error = register_filesystem(&gfs2_fs_type);
 	if (error)
 		goto fail;
@@ -118,9 +113,6 @@ fail_unregister:
 	unregister_filesystem(&gfs2_fs_type);
 fail:
 	gfs2_glock_exit();
-
-	if (gfs2_quotad_cachep)
-		kmem_cache_destroy(gfs2_quotad_cachep);
 
 	if (gfs2_rgrpd_cachep)
 		kmem_cache_destroy(gfs2_rgrpd_cachep);
@@ -150,7 +142,6 @@ static void __exit exit_gfs2_fs(void)
 	unregister_filesystem(&gfs2_fs_type);
 	unregister_filesystem(&gfs2meta_fs_type);
 
-	kmem_cache_destroy(gfs2_quotad_cachep);
 	kmem_cache_destroy(gfs2_rgrpd_cachep);
 	kmem_cache_destroy(gfs2_bufdata_cachep);
 	kmem_cache_destroy(gfs2_inode_cachep);

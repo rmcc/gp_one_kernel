@@ -1,4 +1,6 @@
 /*
+ * $Id: block2mtd.c,v 1.30 2005/11/29 14:48:32 gleixner Exp $
+ *
  * block2mtd.c - create an mtd from a block device
  *
  * Copyright (C) 2001,2002	Simon Evans <spse@secret.org.uk>
@@ -17,6 +19,9 @@
 #include <linux/buffer_head.h>
 #include <linux/mutex.h>
 #include <linux/mount.h>
+
+#define VERSION "$Revision: 1.30 $"
+
 
 #define ERROR(fmt, args...) printk(KERN_ERR "block2mtd: " fmt "\n" , ## args)
 #define INFO(fmt, args...) printk(KERN_INFO "block2mtd: " fmt "\n" , ## args)
@@ -224,7 +229,7 @@ static void block2mtd_free_device(struct block2mtd_dev *dev)
 	if (dev->blkdev) {
 		invalidate_mapping_pages(dev->blkdev->bd_inode->i_mapping,
 					0, -1);
-		close_bdev_exclusive(dev->blkdev, FMODE_READ|FMODE_WRITE);
+		close_bdev_excl(dev->blkdev);
 	}
 
 	kfree(dev);
@@ -236,7 +241,6 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 {
 	struct block_device *bdev;
 	struct block2mtd_dev *dev;
-	char *name;
 
 	if (!devname)
 		return NULL;
@@ -246,7 +250,7 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 		return NULL;
 
 	/* Get a handle on the device */
-	bdev = open_bdev_exclusive(devname, FMODE_READ|FMODE_WRITE, NULL);
+	bdev = open_bdev_excl(devname, O_RDWR, NULL);
 #ifndef MODULE
 	if (IS_ERR(bdev)) {
 
@@ -275,13 +279,12 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 
 	/* Setup the MTD structure */
 	/* make the name contain the block device in */
-	name = kmalloc(sizeof("block2mtd: ") + strlen(devname) + 1,
+	dev->mtd.name = kmalloc(sizeof("block2mtd: ") + strlen(devname),
 			GFP_KERNEL);
-	if (!name)
+	if (!dev->mtd.name)
 		goto devinit_err;
 
-	sprintf(name, "block2mtd: %s", devname);
-	dev->mtd.name = name;
+	sprintf(dev->mtd.name, "block2mtd: %s", devname);
 
 	dev->mtd.size = dev->blkdev->bd_inode->i_size & PAGE_MASK;
 	dev->mtd.erasesize = erase_size;
@@ -448,6 +451,7 @@ MODULE_PARM_DESC(block2mtd, "Device to use. \"block2mtd=<dev>[,<erasesize>]\"");
 static int __init block2mtd_init(void)
 {
 	int ret = 0;
+	INFO("version " VERSION);
 
 #ifndef MODULE
 	if (strlen(block2mtd_paramline))

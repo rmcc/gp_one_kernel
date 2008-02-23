@@ -72,7 +72,6 @@ struct response_type {
 static struct ap_device_id zcrypt_pcixcc_ids[] = {
 	{ AP_DEVICE(AP_DEVICE_TYPE_PCIXCC) },
 	{ AP_DEVICE(AP_DEVICE_TYPE_CEX2C) },
-	{ AP_DEVICE(AP_DEVICE_TYPE_CEX2C2) },
 	{ /* end of list */ },
 };
 
@@ -290,19 +289,38 @@ static int XCRB_msg_to_type6CPRB_msgX(struct zcrypt_device *zdev,
 	ap_msg->length = sizeof(struct type6_hdr) +
 		CEIL4(xcRB->request_control_blk_length) +
 		xcRB->request_data_length;
-	if (ap_msg->length > PCIXCC_MAX_XCRB_MESSAGE_SIZE)
+	if (ap_msg->length > PCIXCC_MAX_XCRB_MESSAGE_SIZE) {
+		PRINTK("Combined message is too large (%ld/%d/%d).\n",
+		    sizeof(struct type6_hdr),
+		    xcRB->request_control_blk_length,
+		    xcRB->request_data_length);
 		return -EFAULT;
-	if (CEIL4(xcRB->reply_control_blk_length) > PCIXCC_MAX_XCRB_REPLY_SIZE)
+	}
+	if (CEIL4(xcRB->reply_control_blk_length) >
+	    PCIXCC_MAX_XCRB_REPLY_SIZE) {
+		PDEBUG("Reply CPRB length is too large (%d).\n",
+		    xcRB->request_control_blk_length);
 		return -EFAULT;
-	if (CEIL4(xcRB->reply_data_length) > PCIXCC_MAX_XCRB_DATA_SIZE)
+	}
+	if (CEIL4(xcRB->reply_data_length) > PCIXCC_MAX_XCRB_DATA_SIZE) {
+		PDEBUG("Reply data block length is too large (%d).\n",
+		    xcRB->reply_data_length);
 		return -EFAULT;
+	}
 	replylen = CEIL4(xcRB->reply_control_blk_length) +
 		CEIL4(xcRB->reply_data_length) +
 		sizeof(struct type86_fmt2_msg);
 	if (replylen > PCIXCC_MAX_XCRB_RESPONSE_SIZE) {
+		PDEBUG("Reply CPRB + data block > PCIXCC_MAX_XCRB_RESPONSE_SIZE"
+		       " (%d/%d/%d).\n",
+		       sizeof(struct type86_fmt2_msg),
+		       xcRB->reply_control_blk_length,
+		       xcRB->reply_data_length);
 		xcRB->reply_control_blk_length = PCIXCC_MAX_XCRB_RESPONSE_SIZE -
 			(sizeof(struct type86_fmt2_msg) +
 			    CEIL4(xcRB->reply_data_length));
+		PDEBUG("Capping Reply CPRB length at %d\n",
+		       xcRB->reply_control_blk_length);
 	}
 
 	/* prepare type6 header */
@@ -321,8 +339,11 @@ static int XCRB_msg_to_type6CPRB_msgX(struct zcrypt_device *zdev,
 		    xcRB->request_control_blk_length))
 		return -EFAULT;
 	if (msg->cprbx.cprb_len + sizeof(msg->hdr.function_code) >
-	    xcRB->request_control_blk_length)
+	    xcRB->request_control_blk_length) {
+		PDEBUG("cprb_len too large (%d/%d)\n", msg->cprbx.cprb_len,
+		    xcRB->request_control_blk_length);
 		return -EFAULT;
+	}
 	function_code = ((unsigned char *)&msg->cprbx) + msg->cprbx.cprb_len;
 	memcpy(msg->hdr.function_code, function_code, sizeof(msg->hdr.function_code));
 
@@ -450,18 +471,29 @@ static int convert_type86_ica(struct zcrypt_device *zdev,
 	service_rc = msg->cprbx.ccp_rtcode;
 	if (unlikely(service_rc != 0)) {
 		service_rs = msg->cprbx.ccp_rscode;
-		if (service_rc == 8 && service_rs == 66)
+		if (service_rc == 8 && service_rs == 66) {
+			PDEBUG("Bad block format on PCIXCC/CEX2C\n");
 			return -EINVAL;
-		if (service_rc == 8 && service_rs == 65)
+		}
+		if (service_rc == 8 && service_rs == 65) {
+			PDEBUG("Probably an even modulus on PCIXCC/CEX2C\n");
 			return -EINVAL;
-		if (service_rc == 8 && service_rs == 770)
+		}
+		if (service_rc == 8 && service_rs == 770) {
+			PDEBUG("Invalid key length on PCIXCC/CEX2C\n");
 			return -EINVAL;
+		}
 		if (service_rc == 8 && service_rs == 783) {
+			PDEBUG("Extended bitlengths not enabled on PCIXCC/CEX2C\n");
 			zdev->min_mod_size = PCIXCC_MIN_MOD_SIZE_OLD;
 			return -EAGAIN;
 		}
-		if (service_rc == 12 && service_rs == 769)
+		if (service_rc == 12 && service_rs == 769) {
+			PDEBUG("Invalid key on PCIXCC/CEX2C\n");
 			return -EINVAL;
+		}
+		PRINTK("Unknown service rc/rs (PCIXCC/CEX2C): %d/%d\n",
+		       service_rc, service_rs);
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
@@ -537,8 +569,11 @@ static int convert_type86_rng(struct zcrypt_device *zdev,
 	} __attribute__((packed)) *msg = reply->message;
 	char *data = reply->message;
 
-	if (msg->cprbx.ccp_rtcode != 0 || msg->cprbx.ccp_rscode != 0)
+	if (msg->cprbx.ccp_rtcode != 0 || msg->cprbx.ccp_rscode != 0) {
+		PDEBUG("RNG response error on PCIXCC/CEX2C rc=%hu/rs=%hu\n",
+		       rc, rs);
 		return -EINVAL;
+	}
 	memcpy(buffer, data + msg->fmt2.offset2, msg->fmt2.count2);
 	return msg->fmt2.count2;
 }
@@ -563,6 +598,9 @@ static int convert_response_ica(struct zcrypt_device *zdev,
 						  outputdata, outputdatalength);
 		/* no break, incorrect cprb version is an unknown response */
 	default: /* Unknown response type, this should NEVER EVER happen */
+		PRINTK("Unrecognized Message Header: %08x%08x\n",
+		       *(unsigned int *) reply->message,
+		       *(unsigned int *) (reply->message+4));
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
@@ -589,6 +627,9 @@ static int convert_response_xcrb(struct zcrypt_device *zdev,
 			return convert_type86_xcrb(zdev, reply, xcRB);
 		/* no break, incorrect cprb version is an unknown response */
 	default: /* Unknown response type, this should NEVER EVER happen */
+		PRINTK("Unrecognized Message Header: %08x%08x\n",
+		       *(unsigned int *) reply->message,
+		       *(unsigned int *) (reply->message+4));
 		xcRB->status = 0x0008044DL; /* HDD_InvalidParm */
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
@@ -612,6 +653,9 @@ static int convert_response_rng(struct zcrypt_device *zdev,
 			return convert_type86_rng(zdev, reply, data);
 		/* no break, incorrect cprb version is an unknown response */
 	default: /* Unknown response type, this should NEVER EVER happen */
+		PRINTK("Unrecognized Message Header: %08x%08x\n",
+		       *(unsigned int *) reply->message,
+		       *(unsigned int *) (reply->message+4));
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
@@ -635,16 +679,13 @@ static void zcrypt_pcixcc_receive(struct ap_device *ap_dev,
 	};
 	struct response_type *resp_type =
 		(struct response_type *) msg->private;
-	struct type86x_reply *t86r;
+	struct type86x_reply *t86r = reply->message;
 	int length;
 
 	/* Copy the reply message to the request message buffer. */
-	if (IS_ERR(reply)) {
+	if (IS_ERR(reply))
 		memcpy(msg->message, &error_reply, sizeof(error_reply));
-		goto out;
-	}
-	t86r = reply->message;
-	if (t86r->hdr.type == TYPE86_RSP_CODE &&
+	else if (t86r->hdr.type == TYPE86_RSP_CODE &&
 		 t86r->cprbx.cprb_ver_id == 0x02) {
 		switch (resp_type->type) {
 		case PCIXCC_RESPONSE_TYPE_ICA:
@@ -659,11 +700,13 @@ static void zcrypt_pcixcc_receive(struct ap_device *ap_dev,
 			memcpy(msg->message, reply->message, length);
 			break;
 		default:
-			memcpy(msg->message, &error_reply, sizeof error_reply);
+			PRINTK("Invalid internal response type: %i\n",
+			    resp_type->type);
+			memcpy(msg->message, &error_reply,
+			    sizeof error_reply);
 		}
 	} else
 		memcpy(msg->message, reply->message, sizeof error_reply);
-out:
 	complete(&(resp_type->work));
 }
 

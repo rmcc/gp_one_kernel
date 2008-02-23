@@ -21,6 +21,9 @@
  *     INFRINGEMENT, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
  *     FOR A PARTICULAR PURPOSE.
  *
+ *     Xilinx products are not intended for use in life support appliances,
+ *     devices, or systems. Use in such applications is expressly prohibited.
+ *
  *     (c) Copyright 2002 Xilinx Inc., Systems Engineering Group
  *     (c) Copyright 2004 Xilinx Inc., Systems Engineering Group
  *     (c) Copyright 2007-2008 Xilinx Inc.
@@ -71,6 +74,7 @@
  * currently programmed in the FPGA.
  */
 
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -81,8 +85,8 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/mutex.h>
-#include <linux/smp_lock.h>
 #include <linux/sysctl.h>
+#include <linux/version.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
@@ -500,12 +504,11 @@ static int hwicap_open(struct inode *inode, struct file *file)
 	struct hwicap_drvdata *drvdata;
 	int status;
 
-	lock_kernel();
 	drvdata = container_of(inode->i_cdev, struct hwicap_drvdata, cdev);
 
 	status = mutex_lock_interruptible(&drvdata->sem);
 	if (status)
-		goto out;
+		return status;
 
 	if (drvdata->is_open) {
 		status = -EBUSY;
@@ -525,8 +528,6 @@ static int hwicap_open(struct inode *inode, struct file *file)
 
  error:
 	mutex_unlock(&drvdata->sem);
- out:
-	unlock_kernel();
 	return status;
 }
 
@@ -623,7 +624,7 @@ static int __devinit hwicap_setup(struct device *dev, int id,
 	if (!request_mem_region(drvdata->mem_start,
 					drvdata->mem_size, DRIVER_NAME)) {
 		dev_err(dev, "Couldn't lock memory region at %Lx\n",
-			(unsigned long long) regs_res->start);
+			regs_res->start);
 		retval = -EBUSY;
 		goto failed1;
 	}
@@ -642,10 +643,9 @@ static int __devinit hwicap_setup(struct device *dev, int id,
 	mutex_init(&drvdata->sem);
 	drvdata->is_open = 0;
 
-	dev_info(dev, "ioremap %llx to %p with size %llx\n",
-		 (unsigned long long) drvdata->mem_start,
-		 drvdata->base_address,
-		 (unsigned long long) drvdata->mem_size);
+	dev_info(dev, "ioremap %lx to %p with size %Lx\n",
+		 (unsigned long int)drvdata->mem_start,
+			drvdata->base_address, drvdata->mem_size);
 
 	cdev_init(&drvdata->cdev, &hwicap_fops);
 	drvdata->cdev.owner = THIS_MODULE;
@@ -654,8 +654,8 @@ static int __devinit hwicap_setup(struct device *dev, int id,
 		dev_err(dev, "cdev_add() failed\n");
 		goto failed3;
 	}
-
-	device_create(icap_class, dev, devt, NULL, "%s%d", DRIVER_NAME, id);
+	/*  devfs_mk_cdev(devt, S_IFCHR|S_IRUGO|S_IWUGO, DRIVER_NAME); */
+	device_create(icap_class, dev, devt, "%s%d", DRIVER_NAME, id);
 	return 0;		/* success */
 
  failed3:

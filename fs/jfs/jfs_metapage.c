@@ -19,12 +19,10 @@
 
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/module.h>
 #include <linux/bio.h>
 #include <linux/init.h>
 #include <linux/buffer_head.h>
 #include <linux/mempool.h>
-#include <linux/seq_file.h>
 #include "jfs_incore.h"
 #include "jfs_superblock.h"
 #include "jfs_filsys.h"
@@ -182,7 +180,7 @@ static inline void remove_metapage(struct page *page, struct metapage *mp)
 
 #endif
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct metapage *mp = (struct metapage *)foo;
 
@@ -806,9 +804,13 @@ void __invalidate_metapages(struct inode *ip, s64 addr, int len)
 }
 
 #ifdef CONFIG_JFS_STATISTICS
-static int jfs_mpstat_proc_show(struct seq_file *m, void *v)
+int jfs_mpstat_read(char *buffer, char **start, off_t offset, int length,
+		    int *eof, void *data)
 {
-	seq_printf(m,
+	int len = 0;
+	off_t begin;
+
+	len += sprintf(buffer,
 		       "JFS Metapage statistics\n"
 		       "=======================\n"
 		       "page allocations = %d\n"
@@ -817,19 +819,19 @@ static int jfs_mpstat_proc_show(struct seq_file *m, void *v)
 		       mpStat.pagealloc,
 		       mpStat.pagefree,
 		       mpStat.lockwait);
-	return 0;
-}
 
-static int jfs_mpstat_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, jfs_mpstat_proc_show, NULL);
-}
+	begin = offset;
+	*start = buffer + begin;
+	len -= begin;
 
-const struct file_operations jfs_mpstat_proc_fops = {
-	.owner		= THIS_MODULE,
-	.open		= jfs_mpstat_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
+	if (len > length)
+		len = length;
+	else
+		*eof = 1;
+
+	if (len < 0)
+		len = 0;
+
+	return len;
+}
 #endif

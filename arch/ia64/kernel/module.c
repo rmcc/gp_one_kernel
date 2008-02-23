@@ -135,6 +135,15 @@ static const char *reloc_name[256] = {
 
 #undef N
 
+struct got_entry {
+	uint64_t val;
+};
+
+struct fdesc {
+	uint64_t ip;
+	uint64_t gp;
+};
+
 /* Opaque struct for insns, to protect against derefs. */
 struct insn;
 
@@ -312,8 +321,7 @@ module_alloc (unsigned long size)
 void
 module_free (struct module *mod, void *module_region)
 {
-	if (mod && mod->arch.init_unw_table &&
-	    module_region == mod->module_init) {
+	if (mod->arch.init_unw_table && module_region == mod->module_init) {
 		unw_remove_unwind_table(mod->arch.init_unw_table);
 		mod->arch.init_unw_table = NULL;
 	}

@@ -43,10 +43,9 @@
 #define SIGP_STAT_RECEIVER_CHECK    0x00000001UL
 
 
-static int __sigp_sense(struct kvm_vcpu *vcpu, u16 cpu_addr,
-			unsigned long *reg)
+static int __sigp_sense(struct kvm_vcpu *vcpu, u16 cpu_addr, u64 *reg)
 {
-	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
+	struct float_interrupt *fi = &vcpu->kvm->arch.float_int;
 	int rc;
 
 	if (cpu_addr >= KVM_MAX_VCPUS)
@@ -72,9 +71,9 @@ static int __sigp_sense(struct kvm_vcpu *vcpu, u16 cpu_addr,
 
 static int __sigp_emergency(struct kvm_vcpu *vcpu, u16 cpu_addr)
 {
-	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
-	struct kvm_s390_local_interrupt *li;
-	struct kvm_s390_interrupt_info *inti;
+	struct float_interrupt *fi = &vcpu->kvm->arch.float_int;
+	struct local_interrupt *li;
+	struct interrupt_info *inti;
 	int rc;
 
 	if (cpu_addr >= KVM_MAX_VCPUS)
@@ -109,9 +108,9 @@ unlock:
 
 static int __sigp_stop(struct kvm_vcpu *vcpu, u16 cpu_addr, int store)
 {
-	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
-	struct kvm_s390_local_interrupt *li;
-	struct kvm_s390_interrupt_info *inti;
+	struct float_interrupt *fi = &vcpu->kvm->arch.float_int;
+	struct local_interrupt *li;
+	struct interrupt_info *inti;
 	int rc;
 
 	if (cpu_addr >= KVM_MAX_VCPUS)
@@ -168,11 +167,11 @@ static int __sigp_set_arch(struct kvm_vcpu *vcpu, u32 parameter)
 }
 
 static int __sigp_set_prefix(struct kvm_vcpu *vcpu, u16 cpu_addr, u32 address,
-			     unsigned long *reg)
+			     u64 *reg)
 {
-	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
-	struct kvm_s390_local_interrupt *li;
-	struct kvm_s390_interrupt_info *inti;
+	struct float_interrupt *fi = &vcpu->kvm->arch.float_int;
+	struct local_interrupt *li;
+	struct interrupt_info *inti;
 	int rc;
 	u8 tmp;
 
@@ -236,11 +235,6 @@ int kvm_s390_handle_sigp(struct kvm_vcpu *vcpu)
 	u16 cpu_addr = vcpu->arch.guest_gprs[r3];
 	u8 order_code;
 	int rc;
-
-	/* sigp in userspace can exit */
-	if (vcpu->arch.sie_block->gpsw.mask & PSW_MASK_PSTATE)
-		return kvm_s390_inject_program_int(vcpu,
-						   PGM_PRIVILEGED_OPERATION);
 
 	order_code = disp2;
 	if (base2)

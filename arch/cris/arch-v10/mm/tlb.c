@@ -12,7 +12,7 @@
 
 #include <asm/tlb.h>
 #include <asm/mmu_context.h>
-#include <arch/svinto.h>
+#include <asm/arch/svinto.h>
 
 #define D(x)
 

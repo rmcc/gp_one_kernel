@@ -120,4 +120,3 @@ ENTRY(__raw_readsb)
 		strgtb	r3, [r1]
 
 		ldmfd	sp!, {r4 - r6, pc}
-ENDPROC(__raw_readsb)

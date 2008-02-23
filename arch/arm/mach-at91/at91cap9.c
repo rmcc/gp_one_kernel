@@ -15,15 +15,12 @@
 #include <linux/module.h>
 #include <linux/pm.h>
 
-#include <asm/irq.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
-
-#include <mach/cpu.h>
-#include <mach/at91cap9.h>
-#include <mach/at91_pmc.h>
-#include <mach/at91_rstc.h>
-#include <mach/at91_shdwc.h>
+#include <asm/arch/at91cap9.h>
+#include <asm/arch/at91_pmc.h>
+#include <asm/arch/at91_rstc.h>
+#include <asm/arch/at91_shdwc.h>
 
 #include "generic.h"
 #include "clock.h"
@@ -144,8 +141,8 @@ static struct clk tcb_clk = {
 	.pmc_mask	= 1 << AT91CAP9_ID_TCB,
 	.type		= CLK_TYPE_PERIPHERAL,
 };
-static struct clk pwm_clk = {
-	.name		= "pwm_clk",
+static struct clk pwmc_clk = {
+	.name		= "pwmc_clk",
 	.pmc_mask	= 1 << AT91CAP9_ID_PWMC,
 	.type		= CLK_TYPE_PERIPHERAL,
 };
@@ -210,7 +207,7 @@ static struct clk *periph_clocks[] __initdata = {
 	&ssc1_clk,
 	&ac97_clk,
 	&tcb_clk,
-	&pwm_clk,
+	&pwmc_clk,
 	&macb_clk,
 	&aestdes_clk,
 	&adc_clk,
@@ -320,12 +317,6 @@ void __init at91cap9_initialize(unsigned long main_clock)
 
 	/* Register GPIO subsystem */
 	at91_gpio_init(at91cap9_gpio, 4);
-
-	/* Remember the silicon revision */
-	if (cpu_is_at91cap9_revB())
-		system_rev = 0xB;
-	else if (cpu_is_at91cap9_revC())
-		system_rev = 0xC;
 }
 
 /* --------------------------------------------------------------------

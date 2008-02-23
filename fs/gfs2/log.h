@@ -21,7 +21,6 @@
  */
 
 static inline void gfs2_log_lock(struct gfs2_sbd *sdp)
-__acquires(&sdp->sd_log_lock)
 {
 	spin_lock(&sdp->sd_log_lock);
 }
@@ -33,7 +32,6 @@ __acquires(&sdp->sd_log_lock)
  */
 
 static inline void gfs2_log_unlock(struct gfs2_sbd *sdp)
-__releases(&sdp->sd_log_lock)
 {
 	spin_unlock(&sdp->sd_log_lock);
 }

@@ -27,7 +27,7 @@
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/hd64461.h>
-#include <cpu/dac.h>
+#include <asm/cpu/dac.h>
 
 #define	WIDTH 640
 

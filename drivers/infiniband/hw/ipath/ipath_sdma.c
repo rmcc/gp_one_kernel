@@ -263,10 +263,14 @@ static void sdma_abort_task(unsigned long opaque)
 		hwstatus = ipath_read_kreg64(dd,
 				dd->ipath_kregs->kr_senddmastatus);
 
-		if ((hwstatus & (IPATH_SDMA_STATUS_SCORE_BOARD_DRAIN_IN_PROG |
-				 IPATH_SDMA_STATUS_ABORT_IN_PROG	     |
-				 IPATH_SDMA_STATUS_INTERNAL_SDMA_ENABLE)) ||
-		    !(hwstatus & IPATH_SDMA_STATUS_SCB_EMPTY)) {
+		if (/* ScoreBoardDrainInProg */
+		    test_bit(63, &hwstatus) ||
+		    /* AbortInProg */
+		    test_bit(62, &hwstatus) ||
+		    /* InternalSDmaEnable */
+		    test_bit(61, &hwstatus) ||
+		    /* ScbEmpty */
+		    !test_bit(30, &hwstatus)) {
 			if (dd->ipath_sdma_reset_wait > 0) {
 				/* not done shutting down sdma */
 				--dd->ipath_sdma_reset_wait;
@@ -698,8 +702,10 @@ retry:
 
 	addr = dma_map_single(&dd->pcidev->dev, tx->txreq.map_addr,
 			      tx->map_len, DMA_TO_DEVICE);
-	if (dma_mapping_error(&dd->pcidev->dev, addr))
-		goto ioerr;
+	if (dma_mapping_error(addr)) {
+		ret = -EIO;
+		goto unlock;
+	}
 
 	dwoffset = tx->map_len >> 2;
 	make_sdma_desc(dd, sdmadesc, (u64) addr, dwoffset, 0);
@@ -739,8 +745,6 @@ retry:
 		dw = (len + 3) >> 2;
 		addr = dma_map_single(&dd->pcidev->dev, sge->vaddr, dw << 2,
 				      DMA_TO_DEVICE);
-		if (dma_mapping_error(&dd->pcidev->dev, addr))
-			goto unmap;
 		make_sdma_desc(dd, sdmadesc, (u64) addr, dw, dwoffset);
 		/* SDmaUseLargeBuf has to be set in every descriptor */
 		if (tx->txreq.flags & IPATH_SDMA_TXREQ_F_USELARGEBUF)
@@ -798,18 +802,7 @@ retry:
 	list_add_tail(&tx->txreq.list, &dd->ipath_sdma_activelist);
 	if (tx->txreq.flags & IPATH_SDMA_TXREQ_F_VL15)
 		vl15_watchdog_enq(dd);
-	goto unlock;
 
-unmap:
-	while (tail != dd->ipath_sdma_descq_tail) {
-		if (!tail)
-			tail = dd->ipath_sdma_descq_cnt - 1;
-		else
-			tail--;
-		unmap_desc(dd, tail);
-	}
-ioerr:
-	ret = -EIO;
 unlock:
 	spin_unlock_irqrestore(&dd->ipath_sdma_lock, flags);
 fail:

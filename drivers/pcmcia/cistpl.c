@@ -30,6 +30,7 @@
 #include <pcmcia/cs_types.h>
 #include <pcmcia/ss.h>
 #include <pcmcia/cs.h>
+#include <pcmcia/bulkmem.h>
 #include <pcmcia/cisreg.h>
 #include <pcmcia/cistpl.h>
 #include "cs_internal.h"
@@ -92,8 +93,7 @@ set_cis_map(struct pcmcia_socket *s, unsigned int card_offset, unsigned int flag
 	if (!(s->features & SS_CAP_STATIC_MAP) && (mem->res == NULL)) {
 		mem->res = pcmcia_find_mem_region(0, s->map_size, s->map_size, 0, s);
 		if (mem->res == NULL) {
-			dev_printk(KERN_NOTICE, &s->dev,
-				   "cs: unable to map card memory!\n");
+			printk(KERN_NOTICE "cs: unable to map card memory!\n");
 			return NULL;
 		}
 		s->cis_virt = NULL;
@@ -266,13 +266,13 @@ EXPORT_SYMBOL(pcmcia_write_cis_mem);
 ======================================================================*/
 
 static void read_cis_cache(struct pcmcia_socket *s, int attr, u_int addr,
-			   size_t len, void *ptr)
+			   u_int len, void *ptr)
 {
     struct cis_cache_entry *cis;
     int ret;
 
     if (s->fake_cis) {
-	if (s->fake_cis_len >= addr+len)
+	if (s->fake_cis_len > addr+len)
 	    memcpy(ptr, s->fake_cis+addr, len);
 	else
 	    memset(ptr, 0xff, len);
@@ -351,11 +351,8 @@ int verify_cis_cache(struct pcmcia_socket *s)
 	char *buf;
 
 	buf = kmalloc(256, GFP_KERNEL);
-	if (buf == NULL) {
-		dev_printk(KERN_WARNING, &s->dev,
-			   "no memory for verifying CIS\n");
-		return -ENOMEM;
-	}
+	if (buf == NULL)
+		return -1;
 	list_for_each_entry(cis, &s->cis_cache, node) {
 		int len = cis->len;
 
@@ -384,22 +381,18 @@ int verify_cis_cache(struct pcmcia_socket *s)
     
 ======================================================================*/
 
-int pcmcia_replace_cis(struct pcmcia_socket *s,
-		       const u8 *data, const size_t len)
+int pcmcia_replace_cis(struct pcmcia_socket *s, cisdump_t *cis)
 {
-	if (len > CISTPL_MAX_CIS_SIZE) {
-		dev_printk(KERN_WARNING, &s->dev, "replacement CIS too big\n");
-		return -EINVAL;
-	}
-	kfree(s->fake_cis);
-	s->fake_cis = kmalloc(len, GFP_KERNEL);
-	if (s->fake_cis == NULL) {
-		dev_printk(KERN_WARNING, &s->dev, "no memory to replace CIS\n");
-		return -ENOMEM;
-	}
-	s->fake_cis_len = len;
-	memcpy(s->fake_cis, data, len);
-	return 0;
+    kfree(s->fake_cis);
+    s->fake_cis = NULL;
+    if (cis->Length > CISTPL_MAX_CIS_SIZE)
+	return CS_BAD_SIZE;
+    s->fake_cis = kmalloc(cis->Length, GFP_KERNEL);
+    if (s->fake_cis == NULL)
+	return CS_OUT_OF_RESOURCE;
+    s->fake_cis_len = cis->Length;
+    memcpy(s->fake_cis, cis->Data, cis->Length);
+    return CS_SUCCESS;
 }
 EXPORT_SYMBOL(pcmcia_replace_cis);
 
@@ -426,9 +419,9 @@ int pccard_get_next_tuple(struct pcmcia_socket *s, unsigned int func, tuple_t *t
 int pccard_get_first_tuple(struct pcmcia_socket *s, unsigned int function, tuple_t *tuple)
 {
     if (!s)
-	return -EINVAL;
+	return CS_BAD_HANDLE;
     if (!(s->state & SOCKET_PRESENT))
-	return -ENODEV;
+	return CS_NO_CARD;
     tuple->TupleLink = tuple->Flags = 0;
 #ifdef CONFIG_CARDBUS
     if (s->state & SOCKET_CARDBUS) {
@@ -448,10 +441,10 @@ int pccard_get_first_tuple(struct pcmcia_socket *s, unsigned int function, tuple
 	!(tuple->Attributes & TUPLE_RETURN_COMMON)) {
 	cisdata_t req = tuple->DesiredTuple;
 	tuple->DesiredTuple = CISTPL_LONGLINK_MFC;
-	if (pccard_get_next_tuple(s, function, tuple) == 0) {
+	if (pccard_get_next_tuple(s, function, tuple) == CS_SUCCESS) {
 	    tuple->DesiredTuple = CISTPL_LINKTARGET;
-	    if (pccard_get_next_tuple(s, function, tuple) != 0)
-		return -ENOSPC;
+	    if (pccard_get_next_tuple(s, function, tuple) != CS_SUCCESS)
+		return CS_NO_MORE_ITEMS;
 	} else
 	    tuple->CISOffset = tuple->TupleLink = 0;
 	tuple->DesiredTuple = req;
@@ -506,9 +499,9 @@ int pccard_get_next_tuple(struct pcmcia_socket *s, unsigned int function, tuple_
     int ofs, i, attr;
 
     if (!s)
-	return -EINVAL;
+	return CS_BAD_HANDLE;
     if (!(s->state & SOCKET_PRESENT))
-	return -ENODEV;
+	return CS_NO_CARD;
 
     link[1] = tuple->TupleLink;
     ofs = tuple->CISOffset + tuple->TupleLink;
@@ -527,7 +520,7 @@ int pccard_get_next_tuple(struct pcmcia_socket *s, unsigned int function, tuple_
 	/* End of chain?  Follow long link if possible */
 	if (link[0] == CISTPL_END) {
 	    if ((ofs = follow_link(s, tuple)) < 0)
-		return -ENOSPC;
+		return CS_NO_MORE_ITEMS;
 	    attr = SPACE(tuple->Flags);
 	    read_cis_cache(s, attr, ofs, 2, link);
 	}
@@ -585,13 +578,13 @@ int pccard_get_next_tuple(struct pcmcia_socket *s, unsigned int function, tuple_
     }
     if (i == MAX_TUPLES) {
 	cs_dbg(s, 1, "cs: overrun in pcmcia_get_next_tuple\n");
-	return -ENOSPC;
+	return CS_NO_MORE_ITEMS;
     }
     
     tuple->TupleCode = link[0];
     tuple->TupleLink = link[1];
     tuple->CISOffset = ofs + 2;
-    return 0;
+    return CS_SUCCESS;
 }
 EXPORT_SYMBOL(pccard_get_next_tuple);
 
@@ -604,18 +597,18 @@ int pccard_get_tuple_data(struct pcmcia_socket *s, tuple_t *tuple)
     u_int len;
 
     if (!s)
-	return -EINVAL;
+	return CS_BAD_HANDLE;
 
     if (tuple->TupleLink < tuple->TupleOffset)
-	return -ENOSPC;
+	return CS_NO_MORE_ITEMS;
     len = tuple->TupleLink - tuple->TupleOffset;
     tuple->TupleDataLen = tuple->TupleLink;
     if (len == 0)
-	return 0;
+	return CS_SUCCESS;
     read_cis_cache(s, SPACE(tuple->Flags),
 		   tuple->CISOffset + tuple->TupleOffset,
 		   _MIN(len, tuple->TupleDataMax), tuple->TupleData);
-    return 0;
+    return CS_SUCCESS;
 }
 EXPORT_SYMBOL(pccard_get_tuple_data);
 
@@ -648,31 +641,25 @@ static int parse_device(tuple_t *tuple, cistpl_device_t *device)
 	case 3: device->dev[i].speed = 150; break;
 	case 4: device->dev[i].speed = 100; break;
 	case 7:
-	    if (++p == q)
-		    return -EINVAL;
+	    if (++p == q) return CS_BAD_TUPLE;
 	    device->dev[i].speed = SPEED_CVT(*p);
 	    while (*p & 0x80)
-		if (++p == q)
-			return -EINVAL;
+		if (++p == q) return CS_BAD_TUPLE;
 	    break;
 	default:
-	    return -EINVAL;
+	    return CS_BAD_TUPLE;
 	}
 
-	if (++p == q)
-		return -EINVAL;
-	if (*p == 0xff)
-		break;
+	if (++p == q) return CS_BAD_TUPLE;
+	if (*p == 0xff) break;
 	scale = *p & 7;
-	if (scale == 7)
-		return -EINVAL;
+	if (scale == 7) return CS_BAD_TUPLE;
 	device->dev[i].size = ((*p >> 3) + 1) * (512 << (scale*2));
 	device->ndev++;
-	if (++p == q)
-		break;
+	if (++p == q) break;
     }
     
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -681,12 +668,12 @@ static int parse_checksum(tuple_t *tuple, cistpl_checksum_t *csum)
 {
     u_char *p;
     if (tuple->TupleDataLen < 5)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     p = (u_char *) tuple->TupleData;
     csum->addr = tuple->CISOffset + get_unaligned_le16(p) - 2;
     csum->len = get_unaligned_le16(p + 2);
     csum->sum = *(p + 4);
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -694,9 +681,9 @@ static int parse_checksum(tuple_t *tuple, cistpl_checksum_t *csum)
 static int parse_longlink(tuple_t *tuple, cistpl_longlink_t *link)
 {
     if (tuple->TupleDataLen < 4)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     link->addr = get_unaligned_le32(tuple->TupleData);
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -711,13 +698,13 @@ static int parse_longlink_mfc(tuple_t *tuple,
     
     link->nfn = *p; p++;
     if (tuple->TupleDataLen <= link->nfn*5)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     for (i = 0; i < link->nfn; i++) {
 	link->fn[i].space = *p; p++;
 	link->fn[i].addr = get_unaligned_le32(p);
 	p += 4;
     }
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -727,27 +714,24 @@ static int parse_strings(u_char *p, u_char *q, int max,
 {
     int i, j, ns;
 
-    if (p == q)
-	    return -EINVAL;
+    if (p == q) return CS_BAD_TUPLE;
     ns = 0; j = 0;
     for (i = 0; i < max; i++) {
-	if (*p == 0xff)
-		break;
+	if (*p == 0xff) break;
 	ofs[i] = j;
 	ns++;
 	for (;;) {
 	    s[j++] = (*p == 0xff) ? '\0' : *p;
 	    if ((*p == '\0') || (*p == 0xff)) break;
-	    if (++p == q)
-		    return -EINVAL;
+	    if (++p == q) return CS_BAD_TUPLE;
 	}
 	if ((*p == 0xff) || (++p == q)) break;
     }
     if (found) {
 	*found = ns;
-	return 0;
+	return CS_SUCCESS;
     } else {
-	return (ns == max) ? 0 : -EINVAL;
+	return (ns == max) ? CS_SUCCESS : CS_BAD_TUPLE;
     }
 }
 
@@ -762,8 +746,7 @@ static int parse_vers_1(tuple_t *tuple, cistpl_vers_1_t *vers_1)
     
     vers_1->major = *p; p++;
     vers_1->minor = *p; p++;
-    if (p >= q)
-	    return -EINVAL;
+    if (p >= q) return CS_BAD_TUPLE;
 
     return parse_strings(p, q, CISTPL_VERS_1_MAX_PROD_STRINGS,
 			 vers_1->str, vers_1->ofs, &vers_1->ns);
@@ -799,7 +782,7 @@ static int parse_jedec(tuple_t *tuple, cistpl_jedec_t *jedec)
 	p += 2;
     }
     jedec->nid = nid;
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -807,10 +790,10 @@ static int parse_jedec(tuple_t *tuple, cistpl_jedec_t *jedec)
 static int parse_manfid(tuple_t *tuple, cistpl_manfid_t *m)
 {
     if (tuple->TupleDataLen < 4)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     m->manf = get_unaligned_le16(tuple->TupleData);
     m->card = get_unaligned_le16(tuple->TupleData + 2);
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -819,11 +802,11 @@ static int parse_funcid(tuple_t *tuple, cistpl_funcid_t *f)
 {
     u_char *p;
     if (tuple->TupleDataLen < 2)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     p = (u_char *)tuple->TupleData;
     f->func = p[0];
     f->sysinit = p[1];
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -833,12 +816,12 @@ static int parse_funce(tuple_t *tuple, cistpl_funce_t *f)
     u_char *p;
     int i;
     if (tuple->TupleDataLen < 1)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     p = (u_char *)tuple->TupleData;
     f->type = p[0];
     for (i = 1; i < tuple->TupleDataLen; i++)
 	f->data[i-1] = p[i];
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -852,7 +835,7 @@ static int parse_config(tuple_t *tuple, cistpl_config_t *config)
     rasz = *p & 0x03;
     rmsz = (*p & 0x3c) >> 2;
     if (tuple->TupleDataLen < rasz+rmsz+4)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     config->last_idx = *(++p);
     p++;
     config->base = 0;
@@ -864,7 +847,7 @@ static int parse_config(tuple_t *tuple, cistpl_config_t *config)
     for (i = 0; i <= rmsz; i++)
 	config->rmask[i>>2] += p[i] << (8*(i%4));
     config->subtuples = tuple->TupleDataLen - (rasz+rmsz+4);
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*======================================================================
@@ -1020,12 +1003,10 @@ static u_char *parse_mem(u_char *p, u_char *q, cistpl_mem_t *mem)
 
 static u_char *parse_irq(u_char *p, u_char *q, cistpl_irq_t *irq)
 {
-    if (p == q)
-	    return NULL;
+    if (p == q) return NULL;
     irq->IRQInfo1 = *p; p++;
     if (irq->IRQInfo1 & IRQ_INFO2_VALID) {
-	if (p+2 > q)
-		return NULL;
+	if (p+2 > q) return NULL;
 	irq->IRQInfo2 = (p[1]<<8) + p[0];
 	p += 2;
     }
@@ -1046,8 +1027,7 @@ static int parse_cftable_entry(tuple_t *tuple,
     if (*p & 0x40)
 	entry->flags |= CISTPL_CFTABLE_DEFAULT;
     if (*p & 0x80) {
-	if (++p == q)
-		return -EINVAL;
+	if (++p == q) return CS_BAD_TUPLE;
 	if (*p & 0x10)
 	    entry->flags |= CISTPL_CFTABLE_BVDS;
 	if (*p & 0x20)
@@ -1061,35 +1041,30 @@ static int parse_cftable_entry(tuple_t *tuple,
 	entry->interface = 0;
 
     /* Process optional features */
-    if (++p == q)
-	    return -EINVAL;
+    if (++p == q) return CS_BAD_TUPLE;
     features = *p; p++;
 
     /* Power options */
     if ((features & 3) > 0) {
 	p = parse_power(p, q, &entry->vcc);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->vcc.present = 0;
     if ((features & 3) > 1) {
 	p = parse_power(p, q, &entry->vpp1);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->vpp1.present = 0;
     if ((features & 3) > 2) {
 	p = parse_power(p, q, &entry->vpp2);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->vpp2.present = 0;
 
     /* Timing options */
     if (features & 0x04) {
 	p = parse_timing(p, q, &entry->timing);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else {
 	entry->timing.wait = 0;
 	entry->timing.ready = 0;
@@ -1099,16 +1074,14 @@ static int parse_cftable_entry(tuple_t *tuple,
     /* I/O window options */
     if (features & 0x08) {
 	p = parse_io(p, q, &entry->io);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->io.nwin = 0;
     
     /* Interrupt options */
     if (features & 0x10) {
 	p = parse_irq(p, q, &entry->irq);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->irq.IRQInfo1 = 0;
 
@@ -1122,8 +1095,7 @@ static int parse_cftable_entry(tuple_t *tuple,
 	entry->mem.win[0].card_addr = 0;
 	entry->mem.win[0].host_addr = 0;
 	p += 2;
-	if (p > q)
-		return -EINVAL;
+	if (p > q) return CS_BAD_TUPLE;
 	break;
     case 0x40:
 	entry->mem.nwin = 1;
@@ -1131,30 +1103,26 @@ static int parse_cftable_entry(tuple_t *tuple,
 	entry->mem.win[0].card_addr = get_unaligned_le16(p + 2) << 8;
 	entry->mem.win[0].host_addr = 0;
 	p += 4;
-	if (p > q)
-		return -EINVAL;
+	if (p > q) return CS_BAD_TUPLE;
 	break;
     case 0x60:
 	p = parse_mem(p, q, &entry->mem);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
 	break;
     }
 
     /* Misc features */
     if (features & 0x80) {
-	if (p == q)
-		return -EINVAL;
+	if (p == q) return CS_BAD_TUPLE;
 	entry->flags |= (*p << 8);
 	while (*p & 0x80)
-	    if (++p == q)
-		    return -EINVAL;
+	    if (++p == q) return CS_BAD_TUPLE;
 	p++;
     }
 
     entry->subtuples = q-p;
     
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -1165,12 +1133,12 @@ static int parse_bar(tuple_t *tuple, cistpl_bar_t *bar)
 {
     u_char *p;
     if (tuple->TupleDataLen < 6)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     p = (u_char *)tuple->TupleData;
     bar->attr = *p;
     p += 2;
     bar->size = get_unaligned_le32(p);
-    return 0;
+    return CS_SUCCESS;
 }
 
 static int parse_config_cb(tuple_t *tuple, cistpl_config_t *config)
@@ -1179,12 +1147,12 @@ static int parse_config_cb(tuple_t *tuple, cistpl_config_t *config)
     
     p = (u_char *)tuple->TupleData;
     if ((*p != 3) || (tuple->TupleDataLen < 6))
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     config->last_idx = *(++p);
     p++;
     config->base = get_unaligned_le32(p);
     config->subtuples = tuple->TupleDataLen - 6;
-    return 0;
+    return CS_SUCCESS;
 }
 
 static int parse_cftable_entry_cb(tuple_t *tuple,
@@ -1200,34 +1168,29 @@ static int parse_cftable_entry_cb(tuple_t *tuple,
 	entry->flags |= CISTPL_CFTABLE_DEFAULT;
 
     /* Process optional features */
-    if (++p == q)
-	    return -EINVAL;
+    if (++p == q) return CS_BAD_TUPLE;
     features = *p; p++;
 
     /* Power options */
     if ((features & 3) > 0) {
 	p = parse_power(p, q, &entry->vcc);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->vcc.present = 0;
     if ((features & 3) > 1) {
 	p = parse_power(p, q, &entry->vpp1);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->vpp1.present = 0;
     if ((features & 3) > 2) {
 	p = parse_power(p, q, &entry->vpp2);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->vpp2.present = 0;
 
     /* I/O window options */
     if (features & 0x08) {
-	if (p == q)
-		return -EINVAL;
+	if (p == q) return CS_BAD_TUPLE;
 	entry->io = *p; p++;
     } else
 	entry->io = 0;
@@ -1235,37 +1198,32 @@ static int parse_cftable_entry_cb(tuple_t *tuple,
     /* Interrupt options */
     if (features & 0x10) {
 	p = parse_irq(p, q, &entry->irq);
-	if (p == NULL)
-		return -EINVAL;
+	if (p == NULL) return CS_BAD_TUPLE;
     } else
 	entry->irq.IRQInfo1 = 0;
 
     if (features & 0x20) {
-	if (p == q)
-		return -EINVAL;
+	if (p == q) return CS_BAD_TUPLE;
 	entry->mem = *p; p++;
     } else
 	entry->mem = 0;
 
     /* Misc features */
     if (features & 0x80) {
-	if (p == q)
-		return -EINVAL;
+	if (p == q) return CS_BAD_TUPLE;
 	entry->flags |= (*p << 8);
 	if (*p & 0x80) {
-	    if (++p == q)
-		    return -EINVAL;
+	    if (++p == q) return CS_BAD_TUPLE;
 	    entry->flags |= (*p << 16);
 	}
 	while (*p & 0x80)
-	    if (++p == q)
-		    return -EINVAL;
+	    if (++p == q) return CS_BAD_TUPLE;
 	p++;
     }
 
     entry->subtuples = q-p;
     
-    return 0;
+    return CS_SUCCESS;
 }
 
 #endif
@@ -1291,7 +1249,7 @@ static int parse_device_geo(tuple_t *tuple, cistpl_device_geo_t *geo)
 	p += 6;
     }
     geo->ngeo = n;
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -1301,7 +1259,7 @@ static int parse_vers_2(tuple_t *tuple, cistpl_vers_2_t *v2)
     u_char *p, *q;
 
     if (tuple->TupleDataLen < 10)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     
     p = tuple->TupleData;
     q = p + tuple->TupleDataLen;
@@ -1325,18 +1283,15 @@ static int parse_org(tuple_t *tuple, cistpl_org_t *org)
     
     p = tuple->TupleData;
     q = p + tuple->TupleDataLen;
-    if (p == q)
-	    return -EINVAL;
+    if (p == q) return CS_BAD_TUPLE;
     org->data_org = *p;
-    if (++p == q)
-	    return -EINVAL;
+    if (++p == q) return CS_BAD_TUPLE;
     for (i = 0; i < 30; i++) {
 	org->desc[i] = *p;
 	if (*p == '\0') break;
-	if (++p == q)
-		return -EINVAL;
+	if (++p == q) return CS_BAD_TUPLE;
     }
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
@@ -1346,7 +1301,7 @@ static int parse_format(tuple_t *tuple, cistpl_format_t *fmt)
     u_char *p;
 
     if (tuple->TupleDataLen < 10)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
 
     p = tuple->TupleData;
 
@@ -1355,17 +1310,17 @@ static int parse_format(tuple_t *tuple, cistpl_format_t *fmt)
     fmt->offset = get_unaligned_le32(p + 2);
     fmt->length = get_unaligned_le32(p + 6);
 
-    return 0;
+    return CS_SUCCESS;
 }
 
 /*====================================================================*/
 
-int pcmcia_parse_tuple(tuple_t *tuple, cisparse_t *parse)
+int pccard_parse_tuple(tuple_t *tuple, cisparse_t *parse)
 {
-    int ret = 0;
+    int ret = CS_SUCCESS;
     
     if (tuple->TupleDataLen > tuple->TupleDataMax)
-	return -EINVAL;
+	return CS_BAD_TUPLE;
     switch (tuple->TupleCode) {
     case CISTPL_DEVICE:
     case CISTPL_DEVICE_A:
@@ -1433,17 +1388,15 @@ int pcmcia_parse_tuple(tuple_t *tuple, cisparse_t *parse)
 	break;
     case CISTPL_NO_LINK:
     case CISTPL_LINKTARGET:
-	ret = 0;
+	ret = CS_SUCCESS;
 	break;
     default:
-	ret = -EINVAL;
+	ret = CS_UNSUPPORTED_FUNCTION;
 	break;
     }
-    if (ret)
-	    __cs_dbg(0, "parse_tuple failed %d\n", ret);
     return ret;
 }
-EXPORT_SYMBOL(pcmcia_parse_tuple);
+EXPORT_SYMBOL(pccard_parse_tuple);
 
 /*======================================================================
 
@@ -1458,22 +1411,18 @@ int pccard_read_tuple(struct pcmcia_socket *s, unsigned int function, cisdata_t 
     int ret;
 
     buf = kmalloc(256, GFP_KERNEL);
-    if (buf == NULL) {
-	    dev_printk(KERN_WARNING, &s->dev, "no memory to read tuple\n");
-	    return -ENOMEM;
-    }
+    if (buf == NULL)
+	return CS_OUT_OF_RESOURCE;
     tuple.DesiredTuple = code;
     tuple.Attributes = TUPLE_RETURN_COMMON;
     ret = pccard_get_first_tuple(s, function, &tuple);
-    if (ret != 0)
-	    goto done;
+    if (ret != CS_SUCCESS) goto done;
     tuple.TupleData = buf;
     tuple.TupleOffset = 0;
     tuple.TupleDataMax = 255;
     ret = pccard_get_tuple_data(s, &tuple);
-    if (ret != 0)
-	    goto done;
-    ret = pcmcia_parse_tuple(&tuple, parse);
+    if (ret != CS_SUCCESS) goto done;
+    ret = pccard_parse_tuple(&tuple, parse);
 done:
     kfree(buf);
     return ret;
@@ -1490,71 +1439,64 @@ EXPORT_SYMBOL(pccard_read_tuple);
     
 ======================================================================*/
 
-int pccard_validate_cis(struct pcmcia_socket *s, unsigned int function, unsigned int *info)
+int pccard_validate_cis(struct pcmcia_socket *s, unsigned int function, cisinfo_t *info)
 {
     tuple_t *tuple;
     cisparse_t *p;
-    unsigned int count = 0;
     int ret, reserved, dev_ok = 0, ident_ok = 0;
 
     if (!s)
-	return -EINVAL;
+	return CS_BAD_HANDLE;
 
     tuple = kmalloc(sizeof(*tuple), GFP_KERNEL);
-    if (tuple == NULL) {
-	    dev_printk(KERN_WARNING, &s->dev, "no memory to validate CIS\n");
-	    return -ENOMEM;
-    }
+    if (tuple == NULL)
+	return CS_OUT_OF_RESOURCE;
     p = kmalloc(sizeof(*p), GFP_KERNEL);
     if (p == NULL) {
-	    kfree(tuple);
-	    dev_printk(KERN_WARNING, &s->dev, "no memory to validate CIS\n");
-	    return -ENOMEM;
+	kfree(tuple);
+	return CS_OUT_OF_RESOURCE;
     }
 
-    count = reserved = 0;
+    info->Chains = reserved = 0;
     tuple->DesiredTuple = RETURN_FIRST_TUPLE;
     tuple->Attributes = TUPLE_RETURN_COMMON;
     ret = pccard_get_first_tuple(s, function, tuple);
-    if (ret != 0)
+    if (ret != CS_SUCCESS)
 	goto done;
 
     /* First tuple should be DEVICE; we should really have either that
        or a CFTABLE_ENTRY of some sort */
     if ((tuple->TupleCode == CISTPL_DEVICE) ||
-	(pccard_read_tuple(s, function, CISTPL_CFTABLE_ENTRY, p) == 0) ||
-	(pccard_read_tuple(s, function, CISTPL_CFTABLE_ENTRY_CB, p) == 0))
+	(pccard_read_tuple(s, function, CISTPL_CFTABLE_ENTRY, p) == CS_SUCCESS) ||
+	(pccard_read_tuple(s, function, CISTPL_CFTABLE_ENTRY_CB, p) == CS_SUCCESS))
 	dev_ok++;
 
     /* All cards should have a MANFID tuple, and/or a VERS_1 or VERS_2
        tuple, for card identification.  Certain old D-Link and Linksys
        cards have only a broken VERS_2 tuple; hence the bogus test. */
-    if ((pccard_read_tuple(s, function, CISTPL_MANFID, p) == 0) ||
-	(pccard_read_tuple(s, function, CISTPL_VERS_1, p) == 0) ||
-	(pccard_read_tuple(s, function, CISTPL_VERS_2, p) != -ENOSPC))
+    if ((pccard_read_tuple(s, function, CISTPL_MANFID, p) == CS_SUCCESS) ||
+	(pccard_read_tuple(s, function, CISTPL_VERS_1, p) == CS_SUCCESS) ||
+	(pccard_read_tuple(s, function, CISTPL_VERS_2, p) != CS_NO_MORE_ITEMS))
 	ident_ok++;
 
     if (!dev_ok && !ident_ok)
 	goto done;
 
-    for (count = 1; count < MAX_TUPLES; count++) {
+    for (info->Chains = 1; info->Chains < MAX_TUPLES; info->Chains++) {
 	ret = pccard_get_next_tuple(s, function, tuple);
-	if (ret != 0)
-		break;
+	if (ret != CS_SUCCESS) break;
 	if (((tuple->TupleCode > 0x23) && (tuple->TupleCode < 0x40)) ||
 	    ((tuple->TupleCode > 0x47) && (tuple->TupleCode < 0x80)) ||
 	    ((tuple->TupleCode > 0x90) && (tuple->TupleCode < 0xff)))
 	    reserved++;
     }
-    if ((count == MAX_TUPLES) || (reserved > 5) ||
-	((!dev_ok || !ident_ok) && (count > 10)))
-	count = 0;
+    if ((info->Chains == MAX_TUPLES) || (reserved > 5) ||
+	((!dev_ok || !ident_ok) && (info->Chains > 10)))
+	info->Chains = 0;
 
 done:
-    if (info)
-	    *info = count;
     kfree(tuple);
     kfree(p);
-    return 0;
+    return CS_SUCCESS;
 }
 EXPORT_SYMBOL(pccard_validate_cis);

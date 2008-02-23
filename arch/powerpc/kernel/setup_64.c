@@ -70,6 +70,7 @@
 #define DBG(fmt...)
 #endif
 
+int have_of = 1;
 int boot_cpuid = 0;
 u64 ppc64_pft_size;
 
@@ -254,11 +255,9 @@ void early_setup_secondary(void)
 #endif /* CONFIG_SMP */
 
 #if defined(CONFIG_SMP) || defined(CONFIG_KEXEC)
-extern unsigned long __secondary_hold_spinloop;
-extern void generic_secondary_smp_init(void);
-
 void smp_release_cpus(void)
 {
+	extern unsigned long __secondary_hold_spinloop;
 	unsigned long *ptr;
 
 	DBG(" -> smp_release_cpus()\n");
@@ -267,11 +266,12 @@ void smp_release_cpus(void)
 	 * all now so they can start to spin on their individual paca
 	 * spinloops. For non SMP kernels, the secondary cpus never get out
 	 * of the common spinloop.
-	 */
+	 * This is useless but harmless on iSeries, secondaries are already
+	 * waiting on their paca spinloops. */
 
 	ptr  = (unsigned long *)((unsigned long)&__secondary_hold_spinloop
 			- PHYSICAL_START);
-	*ptr = __pa(generic_secondary_smp_init);
+	*ptr = 1;
 	mb();
 
 	DBG(" <- smp_release_cpus()\n");
@@ -361,12 +361,8 @@ void __init setup_system(void)
 	 */
 	do_feature_fixups(cur_cpu_spec->cpu_features,
 			  &__start___ftr_fixup, &__stop___ftr_fixup);
-	do_feature_fixups(cur_cpu_spec->mmu_features,
-			  &__start___mmu_ftr_fixup, &__stop___mmu_ftr_fixup);
 	do_feature_fixups(powerpc_firmware_features,
 			  &__start___fw_ftr_fixup, &__stop___fw_ftr_fixup);
-	do_lwsync_fixups(cur_cpu_spec->cpu_features,
-			 &__start___lwsync_fixup, &__stop___lwsync_fixup);
 
 	/*
 	 * Unflatten the device-tree passed by prom_init or kexec
@@ -445,9 +441,9 @@ void __init setup_system(void)
 	if (htab_address)
 		printk("htab_address                  = 0x%p\n", htab_address);
 	printk("htab_hash_mask                = 0x%lx\n", htab_hash_mask);
-	if (PHYSICAL_START > 0)
-		printk("physical_start                = 0x%lx\n",
-		       PHYSICAL_START);
+#if PHYSICAL_START > 0
+	printk("physical_start                = 0x%lx\n", PHYSICAL_START);
+#endif
 	printk("-----------------------------------------------------\n");
 
 	DBG(" <- setup_system()\n");
@@ -607,10 +603,15 @@ void __init setup_per_cpu_areas(void)
 
 	for_each_possible_cpu(i) {
 		ptr = alloc_bootmem_pages_node(NODE_DATA(cpu_to_node(i)), size);
+		if (!ptr)
+			panic("Cannot allocate cpu data for CPU %d\n", i);
 
 		paca[i].data_offset = ptr - __per_cpu_start;
 		memcpy(ptr, __per_cpu_start, __per_cpu_end - __per_cpu_start);
 	}
+
+	/* Now that per_cpu is setup, initialize cpu_sibling_map */
+	smp_setup_cpu_sibling_map();
 }
 #endif
 

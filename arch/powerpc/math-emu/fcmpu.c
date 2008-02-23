@@ -2,16 +2,14 @@
 #include <linux/errno.h>
 #include <asm/uaccess.h>
 
-#include <asm/sfp-machine.h>
-#include <math-emu/soft-fp.h>
-#include <math-emu/double.h>
+#include "soft-fp.h"
+#include "double.h"
 
 int
 fcmpu(u32 *ccr, int crfD, void *frA, void *frB)
 {
 	FP_DECL_D(A);
 	FP_DECL_D(B);
-	FP_DECL_EX;
 	int code[4] = { (1 << 3), (1 << 1), (1 << 2), (1 << 0) };
 	long cmp;
 
@@ -19,8 +17,8 @@ fcmpu(u32 *ccr, int crfD, void *frA, void *frB)
 	printk("%s: %p (%08x) %d %p %p\n", __func__, ccr, *ccr, crfD, frA, frB);
 #endif
 
-	FP_UNPACK_DP(A, frA);
-	FP_UNPACK_DP(B, frB);
+	__FP_UNPACK_D(A, frA);
+	__FP_UNPACK_D(B, frB);
 
 #ifdef DEBUG
 	printk("A: %ld %lu %lu %ld (%ld)\n", A_s, A_f1, A_f0, A_e, A_c);

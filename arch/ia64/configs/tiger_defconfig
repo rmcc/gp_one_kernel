@@ -172,8 +172,6 @@ CONFIG_DMIID=y
 CONFIG_BINFMT_ELF=y
 CONFIG_BINFMT_MISC=m
 
-# CONFIG_DMAR is not set
-
 #
 # Power management and ACPI
 #

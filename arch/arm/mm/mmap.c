@@ -6,8 +6,6 @@
 #include <linux/mman.h>
 #include <linux/shm.h>
 #include <linux/sched.h>
-#include <linux/io.h>
-#include <asm/cputype.h>
 #include <asm/system.h>
 
 #define COLOUR_ALIGN(addr,pgoff)		\
@@ -39,8 +37,8 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	 * caches alias.  This is indicated by bits 9 and 21 of the
 	 * cache type register.
 	 */
-	cache_type = read_cpuid_cachetype();
-	if (cache_type != read_cpuid_id()) {
+	cache_type = read_cpuid(CPUID_CACHETYPE);
+	if (cache_type != read_cpuid(CPUID_ID)) {
 		aliasing = (cache_type | cache_type >> 12) & (1 << 11);
 		if (aliasing)
 			do_align = filp || flags & MAP_SHARED;

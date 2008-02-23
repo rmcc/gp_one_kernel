@@ -71,15 +71,13 @@ static char *mda_type_name;
 
 /* console information */
 
-static int	mda_first_vc = 13;
+static int	mda_first_vc = 1;
 static int	mda_last_vc  = 16;
 
 static struct vc_data	*mda_display_fg = NULL;
 
 module_param(mda_first_vc, int, 0);
-MODULE_PARM_DESC(mda_first_vc, "First virtual console. Default: 13");
 module_param(mda_last_vc, int, 0);
-MODULE_PARM_DESC(mda_last_vc, "Last virtual console. Default: 16");
 
 /* MDA register values
  */
@@ -533,7 +531,7 @@ static void mdacon_cursor(struct vc_data *c, int mode)
 
 static int mdacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)
 {
-	u16 eattr = mda_convert_attr(c->vc_video_erase_char);
+	u16 eattr = mda_convert_attr(c->vc_scrl_erase_char);
 
 	if (!lines)
 		return 0;

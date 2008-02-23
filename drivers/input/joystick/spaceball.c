@@ -1,4 +1,6 @@
 /*
+ * $Id: spaceball.c,v 1.17 2002/01/22 20:29:03 vojtech Exp $
+ *
  *  Copyright (c) 1999-2001 Vojtech Pavlik
  *
  *  Based on the work of:

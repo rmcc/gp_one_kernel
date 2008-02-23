@@ -2,7 +2,7 @@
  *	DDP:	An implementation of the AppleTalk DDP protocol for
  *		Ethernet 'ELAP'.
  *
- *		Alan Cox  <alan@lxorguk.ukuu.org.uk>
+ *		Alan Cox  <Alan.Cox@linux.org>
  *
  *		With more than a little assistance from
  *
@@ -648,7 +648,7 @@ static int ddp_device_event(struct notifier_block *this, unsigned long event,
 {
 	struct net_device *dev = ptr;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	if (event == NETDEV_DOWN)
@@ -815,6 +815,9 @@ static int atif_ioctl(int cmd, void __user *arg)
 				return -EPERM;
 			if (sa->sat_family != AF_APPLETALK)
 				return -EINVAL;
+			if (!atif)
+				return -EADDRNOTAVAIL;
+
 			/*
 			 * for now, we only support proxy AARP on ELAP;
 			 * we should be able to do it for LocalTalk, too.
@@ -956,7 +959,7 @@ static unsigned long atalk_sum_skb(const struct sk_buff *skb, int offset,
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		int end;
 
-		WARN_ON(start > offset + len);
+		BUG_TRAP(start <= offset + len);
 
 		end = start + skb_shinfo(skb)->frags[i].size;
 		if ((copy = end - offset) > 0) {
@@ -983,7 +986,7 @@ static unsigned long atalk_sum_skb(const struct sk_buff *skb, int offset,
 		for (; list; list = list->next) {
 			int end;
 
-			WARN_ON(start > offset + len);
+			BUG_TRAP(start <= offset + len);
 
 			end = start + list->len;
 			if ((copy = end - offset) > 0) {
@@ -1281,7 +1284,7 @@ static int handle_ip_over_ddp(struct sk_buff *skb)
 	skb->dev   = dev;
 	skb_reset_transport_header(skb);
 
-	stats = netdev_priv(dev);
+	stats = dev->priv;
 	stats->rx_packets++;
 	stats->rx_bytes += skb->len + 13;
 	netif_rx(skb);  /* Send the SKB up to a higher place. */
@@ -1402,7 +1405,7 @@ static int atalk_rcv(struct sk_buff *skb, struct net_device *dev,
 	int origlen;
 	__u16 len_hops;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		goto freeit;
 
 	/* Don't mangle buffer if shared */
@@ -1490,7 +1493,7 @@ freeit:
 static int ltalk_rcv(struct sk_buff *skb, struct net_device *dev,
 		     struct packet_type *pt, struct net_device *orig_dev)
 {
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		goto freeit;
 
 	/* Expand any short form frames */
@@ -1931,6 +1934,6 @@ static void __exit atalk_exit(void)
 module_exit(atalk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Alan Cox <alan@lxorguk.ukuu.org.uk>");
+MODULE_AUTHOR("Alan Cox <Alan.Cox@linux.org>");
 MODULE_DESCRIPTION("AppleTalk 0.20\n");
 MODULE_ALIAS_NETPROTO(PF_APPLETALK);

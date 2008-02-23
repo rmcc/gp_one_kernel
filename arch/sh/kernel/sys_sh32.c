@@ -16,7 +16,6 @@
 #include <asm/cacheflush.h>
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
-#include <asm/syscalls.h>
 
 /*
  * sys_pipe() is the normal C calling standard for creating
@@ -30,7 +29,7 @@ asmlinkage int sys_pipe(unsigned long r4, unsigned long r5,
 	int fd[2];
 	int error;
 
-	error = do_pipe_flags(fd, 0);
+	error = do_pipe(fd);
 	if (!error) {
 		regs->regs[1] = fd[1];
 		return fd[0];
@@ -38,13 +37,13 @@ asmlinkage int sys_pipe(unsigned long r4, unsigned long r5,
 	return error;
 }
 
-asmlinkage ssize_t sys_pread_wrapper(unsigned int fd, char __user *buf,
+asmlinkage ssize_t sys_pread_wrapper(unsigned int fd, char * buf,
 			     size_t count, long dummy, loff_t pos)
 {
 	return sys_pread64(fd, buf, count, pos);
 }
 
-asmlinkage ssize_t sys_pwrite_wrapper(unsigned int fd, const char __user *buf,
+asmlinkage ssize_t sys_pwrite_wrapper(unsigned int fd, const char * buf,
 			      size_t count, long dummy, loff_t pos)
 {
 	return sys_pwrite64(fd, buf, count, pos);

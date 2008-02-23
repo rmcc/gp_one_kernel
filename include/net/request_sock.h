@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
-#include <linux/bug.h>
 
 #include <net/sock.h>
 
@@ -31,10 +30,9 @@ struct request_sock_ops {
 	int		family;
 	int		obj_size;
 	struct kmem_cache	*slab;
-	char		*slab_name;
 	int		(*rtx_syn_ack)(struct sock *sk,
 				       struct request_sock *req);
-	void		(*send_ack)(struct sock *sk, struct sk_buff *skb,
+	void		(*send_ack)(struct sk_buff *skb,
 				    struct request_sock *req);
 	void		(*send_reset)(struct sock *sk,
 				      struct sk_buff *skb);
@@ -117,8 +115,8 @@ struct request_sock_queue {
 	struct request_sock	*rskq_accept_head;
 	struct request_sock	*rskq_accept_tail;
 	rwlock_t		syn_wait_lock;
-	u8			rskq_defer_accept;
-	/* 3 bytes hole, try to pack */
+	u16			rskq_defer_accept;
+	/* 2 bytes hole, try to pack */
 	struct listen_sock	*listen_opt;
 };
 
@@ -172,7 +170,7 @@ static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue 
 {
 	struct request_sock *req = queue->rskq_accept_head;
 
-	WARN_ON(req == NULL);
+	BUG_TRAP(req != NULL);
 
 	queue->rskq_accept_head = req->dl_next;
 	if (queue->rskq_accept_head == NULL)
@@ -187,7 +185,7 @@ static inline struct sock *reqsk_queue_get_child(struct request_sock_queue *queu
 	struct request_sock *req = reqsk_queue_remove(queue);
 	struct sock *child = req->sk;
 
-	WARN_ON(child == NULL);
+	BUG_TRAP(child != NULL);
 
 	sk_acceptq_removed(parent);
 	__reqsk_free(req);

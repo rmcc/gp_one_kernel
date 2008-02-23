@@ -29,7 +29,11 @@
 spinlock_t cris_atomic_locks[] = { [0 ... LOCK_COUNT - 1] = SPIN_LOCK_UNLOCKED};
 
 /* CPU masks */
+cpumask_t cpu_online_map = CPU_MASK_NONE;
+EXPORT_SYMBOL(cpu_online_map);
 cpumask_t phys_cpu_present_map = CPU_MASK_NONE;
+cpumask_t cpu_possible_map;
+EXPORT_SYMBOL(cpu_possible_map);
 EXPORT_SYMBOL(phys_cpu_present_map);
 
 /* Variables used during SMP boot */
@@ -174,7 +178,6 @@ void __init smp_callin(void)
 	unmask_irq(IPI_INTR_VECT);
 	unmask_irq(TIMER0_INTR_VECT);
 	preempt_disable();
-	notify_cpu_starting(cpu);
 	local_irq_enable();
 
 	cpu_set(cpu, cpu_online_map);
@@ -191,7 +194,7 @@ void stop_this_cpu(void* dummy)
 /* Other calls */
 void smp_send_stop(void)
 {
-	smp_call_function(stop_this_cpu, NULL, 0);
+	smp_call_function(stop_this_cpu, NULL, 1, 0);
 }
 
 int setup_profiling_timer(unsigned int multiplier)
@@ -313,7 +316,8 @@ int send_ipi(int vector, int wait, cpumask_t cpu_mask)
  * You must not call this function with disabled interrupts or from a
  * hardware interrupt handler or from a bottom half handler.
  */
-int smp_call_function(void (*func)(void *info), void *info, int wait)
+int smp_call_function(void (*func)(void *info), void *info,
+		      int nonatomic, int wait)
 {
 	cpumask_t cpu_mask = CPU_MASK_ALL;
 	struct call_data_struct data;

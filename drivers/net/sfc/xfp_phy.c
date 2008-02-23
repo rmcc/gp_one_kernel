@@ -7,21 +7,22 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 /*
- * Driver for XFP optical PHYs (plus some support specific to the Quake 2022/32)
+ * Driver for XFP optical PHYs (plus some support specific to the Quake 2032)
  * See www.amcc.com for details (search for qt2032)
  */
 
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include "efx.h"
+#include "gmii.h"
 #include "mdio_10g.h"
 #include "xenpack.h"
 #include "phy.h"
-#include "falcon.h"
+#include "mac.h"
 
-#define XFP_REQUIRED_DEVS (MDIO_MMDREG_DEVS_PCS |	\
-			   MDIO_MMDREG_DEVS_PMAPMD |	\
-			   MDIO_MMDREG_DEVS_PHYXS)
+#define XFP_REQUIRED_DEVS (MDIO_MMDREG_DEVS0_PCS |	\
+			   MDIO_MMDREG_DEVS0_PMAPMD |	\
+			   MDIO_MMDREG_DEVS0_PHYXS)
 
 #define XFP_LOOPBACKS ((1 << LOOPBACK_PCS) |		\
 		       (1 << LOOPBACK_PMAPMD) |		\
@@ -39,7 +40,7 @@ void xfp_set_led(struct efx_nic *p, int led, int mode)
 }
 
 struct xfp_phy_data {
-	enum efx_phy_mode phy_mode;
+	int tx_disabled;
 };
 
 #define XFP_MAX_RESET_TIME 500
@@ -64,7 +65,7 @@ static int xfp_reset_phy(struct efx_nic *efx)
 	/* Check that all the MMDs we expect are present and responding. We
 	 * expect faults on some if the link is down, but not on the PHY XS */
 	rc = mdio_clause45_check_mmds(efx, XFP_REQUIRED_DEVS,
-				      MDIO_MMDREG_DEVS_PHYXS);
+				      MDIO_MMDREG_DEVS0_PHYXS);
 	if (rc < 0)
 		goto fail;
 
@@ -84,15 +85,13 @@ static int xfp_phy_init(struct efx_nic *efx)
 	int rc;
 
 	phy_data = kzalloc(sizeof(struct xfp_phy_data), GFP_KERNEL);
-	if (!phy_data)
-		return -ENOMEM;
-	efx->phy_data = phy_data;
+	efx->phy_data = (void *) phy_data;
 
 	EFX_INFO(efx, "XFP: PHY ID reg %x (OUI %x model %x revision"
 		 " %x)\n", devid, MDIO_ID_OUI(devid), MDIO_ID_MODEL(devid),
 		 MDIO_ID_REV(devid));
 
-	phy_data->phy_mode = efx->phy_mode;
+	phy_data->tx_disabled = efx->tx_disabled;
 
 	rc = xfp_reset_phy(efx);
 
@@ -119,12 +118,15 @@ static int xfp_link_ok(struct efx_nic *efx)
 	return mdio_clause45_links_ok(efx, XFP_REQUIRED_DEVS);
 }
 
-static void xfp_phy_poll(struct efx_nic *efx)
+static int xfp_phy_check_hw(struct efx_nic *efx)
 {
+	int rc = 0;
 	int link_up = xfp_link_ok(efx);
 	/* Simulate a PHY event if link state has changed */
 	if (link_up != efx->link_up)
-		falcon_sim_phy_event(efx);
+		falcon_xmac_sim_phy_event(efx);
+
+	return rc;
 }
 
 static void xfp_phy_reconfigure(struct efx_nic *efx)
@@ -132,25 +134,22 @@ static void xfp_phy_reconfigure(struct efx_nic *efx)
 	struct xfp_phy_data *phy_data = efx->phy_data;
 
 	/* Reset the PHY when moving from tx off to tx on */
-	if (!(efx->phy_mode & PHY_MODE_TX_DISABLED) &&
-	    (phy_data->phy_mode & PHY_MODE_TX_DISABLED))
+	if (phy_data->tx_disabled && !efx->tx_disabled)
 		xfp_reset_phy(efx);
 
 	mdio_clause45_transmit_disable(efx);
 	mdio_clause45_phy_reconfigure(efx);
 
-	phy_data->phy_mode = efx->phy_mode;
+	phy_data->tx_disabled = efx->tx_disabled;
 	efx->link_up = xfp_link_ok(efx);
-	efx->link_speed = 10000;
-	efx->link_fd = true;
-	efx->link_fc = efx->wanted_fc;
+	efx->link_options = GM_LPA_10000FULL;
 }
 
 
 static void xfp_phy_fini(struct efx_nic *efx)
 {
 	/* Clobber the LED if it was blinking */
-	efx->board_info.blink(efx, false);
+	efx->board_info.blink(efx, 0);
 
 	/* Free the context block */
 	kfree(efx->phy_data);
@@ -158,14 +157,12 @@ static void xfp_phy_fini(struct efx_nic *efx)
 }
 
 struct efx_phy_operations falcon_xfp_phy_ops = {
-	.macs		 = EFX_XMAC,
 	.init            = xfp_phy_init,
 	.reconfigure     = xfp_phy_reconfigure,
-	.poll            = xfp_phy_poll,
+	.check_hw        = xfp_phy_check_hw,
 	.fini            = xfp_phy_fini,
 	.clear_interrupt = xfp_phy_clear_interrupt,
-	.get_settings    = mdio_clause45_get_settings,
-	.set_settings	 = mdio_clause45_set_settings,
+	.reset_xaui      = efx_port_dummy_op_void,
 	.mmds            = XFP_REQUIRED_DEVS,
 	.loopbacks       = XFP_LOOPBACKS,
 };

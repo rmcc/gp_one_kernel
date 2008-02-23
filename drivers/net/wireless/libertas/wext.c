@@ -8,7 +8,7 @@
 #include <linux/wireless.h>
 #include <linux/bitops.h>
 
-#include <net/lib80211.h>
+#include <net/ieee80211.h>
 #include <net/iw_handler.h>
 
 #include "host.h"
@@ -28,14 +28,6 @@ static inline void lbs_postpone_association_work(struct lbs_private *priv)
 		return;
 	cancel_delayed_work(&priv->assoc_work);
 	queue_delayed_work(priv->work_thread, &priv->assoc_work, HZ / 2);
-}
-
-static inline void lbs_do_association_work(struct lbs_private *priv)
-{
-	if (priv->surpriseremoved)
-		return;
-	cancel_delayed_work(&priv->assoc_work);
-	queue_delayed_work(priv->work_thread, &priv->assoc_work, 0);
 }
 
 static inline void lbs_cancel_association_work(struct lbs_private *priv)
@@ -128,6 +120,34 @@ static struct chan_freq_power *find_cfp_by_band_and_freq(
 	return cfp;
 }
 
+
+/**
+ *  @brief Set Radio On/OFF
+ *
+ *  @param priv                 A pointer to struct lbs_private structure
+ *  @option 			Radio Option
+ *  @return 	   		0 --success, otherwise fail
+ */
+static int lbs_radio_ioctl(struct lbs_private *priv, u8 option)
+{
+	int ret = 0;
+
+	lbs_deb_enter(LBS_DEB_WEXT);
+
+	if (priv->radioon != option) {
+		lbs_deb_wext("switching radio %s\n", option ? "on" : "off");
+		priv->radioon = option;
+
+		ret = lbs_prepare_and_send_command(priv,
+					    CMD_802_11_RADIO_CONTROL,
+					    CMD_ACT_SET,
+					    CMD_OPTION_WAITFORRSP, 0, NULL);
+	}
+
+	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
+	return ret;
+}
+
 /**
  *  @brief Copy active data rates based on adapter mode and status
  *
@@ -163,7 +183,7 @@ static int lbs_get_name(struct net_device *dev, struct iw_request_info *info,
 static int lbs_get_freq(struct net_device *dev, struct iw_request_info *info,
 			 struct iw_freq *fwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct chan_freq_power *cfp;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
@@ -189,7 +209,7 @@ static int lbs_get_freq(struct net_device *dev, struct iw_request_info *info,
 static int lbs_get_wap(struct net_device *dev, struct iw_request_info *info,
 			struct sockaddr *awrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -207,7 +227,7 @@ static int lbs_get_wap(struct net_device *dev, struct iw_request_info *info,
 static int lbs_set_nick(struct net_device *dev, struct iw_request_info *info,
 			 struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -231,7 +251,7 @@ static int lbs_set_nick(struct net_device *dev, struct iw_request_info *info,
 static int lbs_get_nick(struct net_device *dev, struct iw_request_info *info,
 			 struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -248,7 +268,7 @@ static int lbs_get_nick(struct net_device *dev, struct iw_request_info *info,
 static int mesh_get_nick(struct net_device *dev, struct iw_request_info *info,
 			 struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -273,18 +293,22 @@ static int lbs_set_rts(struct net_device *dev, struct iw_request_info *info,
 			struct iw_param *vwrq, char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
-	u32 val = vwrq->value;
+	struct lbs_private *priv = dev->priv;
+	u32 rthr = vwrq->value;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-	if (vwrq->disabled)
-		val = MRVDRV_RTS_MAX_VALUE;
+	if (vwrq->disabled) {
+		priv->rtsthsd = rthr = MRVDRV_RTS_MAX_VALUE;
+	} else {
+		if (rthr < MRVDRV_RTS_MIN_VALUE || rthr > MRVDRV_RTS_MAX_VALUE)
+			return -EINVAL;
+		priv->rtsthsd = rthr;
+	}
 
-	if (val > MRVDRV_RTS_MAX_VALUE) /* min rts value is 0 */
-		return -EINVAL;
-
-	ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_RTS_THRESHOLD, (u16) val);
+	ret = lbs_prepare_and_send_command(priv, CMD_802_11_SNMP_MIB,
+				    CMD_ACT_SET, CMD_OPTION_WAITFORRSP,
+				    OID_802_11_RTS_THRESHOLD, &rthr);
 
 	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
 	return ret;
@@ -293,18 +317,21 @@ static int lbs_set_rts(struct net_device *dev, struct iw_request_info *info,
 static int lbs_get_rts(struct net_device *dev, struct iw_request_info *info,
 			struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
 	int ret = 0;
-	u16 val = 0;
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-	ret = lbs_get_snmp_mib(priv, SNMP_MIB_OID_RTS_THRESHOLD, &val);
+	priv->rtsthsd = 0;
+	ret = lbs_prepare_and_send_command(priv, CMD_802_11_SNMP_MIB,
+				    CMD_ACT_GET, CMD_OPTION_WAITFORRSP,
+				    OID_802_11_RTS_THRESHOLD, NULL);
 	if (ret)
 		goto out;
 
-	vwrq->value = val;
-	vwrq->disabled = val > MRVDRV_RTS_MAX_VALUE; /* min rts value is 0 */
+	vwrq->value = priv->rtsthsd;
+	vwrq->disabled = ((vwrq->value < MRVDRV_RTS_MIN_VALUE)
+			  || (vwrq->value > MRVDRV_RTS_MAX_VALUE));
 	vwrq->fixed = 1;
 
 out:
@@ -315,19 +342,24 @@ out:
 static int lbs_set_frag(struct net_device *dev, struct iw_request_info *info,
 			 struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
 	int ret = 0;
-	u32 val = vwrq->value;
+	u32 fthr = vwrq->value;
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-	if (vwrq->disabled)
-		val = MRVDRV_FRAG_MAX_VALUE;
+	if (vwrq->disabled) {
+		priv->fragthsd = fthr = MRVDRV_FRAG_MAX_VALUE;
+	} else {
+		if (fthr < MRVDRV_FRAG_MIN_VALUE
+		    || fthr > MRVDRV_FRAG_MAX_VALUE)
+			return -EINVAL;
+		priv->fragthsd = fthr;
+	}
 
-	if (val < MRVDRV_FRAG_MIN_VALUE || val > MRVDRV_FRAG_MAX_VALUE)
-		return -EINVAL;
-
-	ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_FRAG_THRESHOLD, (u16) val);
+	ret = lbs_prepare_and_send_command(priv, CMD_802_11_SNMP_MIB,
+				    CMD_ACT_SET, CMD_OPTION_WAITFORRSP,
+				    OID_802_11_FRAGMENTATION_THRESHOLD, &fthr);
 
 	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
 	return ret;
@@ -336,19 +368,22 @@ static int lbs_set_frag(struct net_device *dev, struct iw_request_info *info,
 static int lbs_get_frag(struct net_device *dev, struct iw_request_info *info,
 			 struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
 	int ret = 0;
-	u16 val = 0;
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-	ret = lbs_get_snmp_mib(priv, SNMP_MIB_OID_FRAG_THRESHOLD, &val);
+	priv->fragthsd = 0;
+	ret = lbs_prepare_and_send_command(priv,
+				    CMD_802_11_SNMP_MIB,
+				    CMD_ACT_GET, CMD_OPTION_WAITFORRSP,
+				    OID_802_11_FRAGMENTATION_THRESHOLD, NULL);
 	if (ret)
 		goto out;
 
-	vwrq->value = val;
-	vwrq->disabled = ((val < MRVDRV_FRAG_MIN_VALUE)
-			  || (val > MRVDRV_FRAG_MAX_VALUE));
+	vwrq->value = priv->fragthsd;
+	vwrq->disabled = ((vwrq->value < MRVDRV_FRAG_MIN_VALUE)
+			  || (vwrq->value > MRVDRV_FRAG_MAX_VALUE));
 	vwrq->fixed = 1;
 
 out:
@@ -359,7 +394,7 @@ out:
 static int lbs_get_mode(struct net_device *dev,
 			 struct iw_request_info *info, u32 * uwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -375,7 +410,7 @@ static int mesh_wlan_get_mode(struct net_device *dev,
 {
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-	*uwrq = IW_MODE_REPEAT;
+	*uwrq = IW_MODE_REPEAT ;
 
 	lbs_deb_leave(LBS_DEB_WEXT);
 	return 0;
@@ -385,30 +420,28 @@ static int lbs_get_txpow(struct net_device *dev,
 			  struct iw_request_info *info,
 			  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
-	s16 curlevel = 0;
 	int ret = 0;
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-	if (!priv->radio_on) {
-		lbs_deb_wext("tx power off\n");
-		vwrq->value = 0;
-		vwrq->disabled = 1;
-		goto out;
-	}
+	ret = lbs_prepare_and_send_command(priv,
+				    CMD_802_11_RF_TX_POWER,
+				    CMD_ACT_TX_POWER_OPT_GET,
+				    CMD_OPTION_WAITFORRSP, 0, NULL);
 
-	ret = lbs_get_tx_power(priv, &curlevel, NULL, NULL);
 	if (ret)
 		goto out;
 
-	lbs_deb_wext("tx power level %d dbm\n", curlevel);
-	priv->txpower_cur = curlevel;
-
-	vwrq->value = curlevel;
+	lbs_deb_wext("tx power level %d dbm\n", priv->txpowerlevel);
+	vwrq->value = priv->txpowerlevel;
 	vwrq->fixed = 1;
-	vwrq->disabled = 0;
-	vwrq->flags = IW_TXPOW_DBM;
+	if (priv->radioon) {
+		vwrq->disabled = 0;
+		vwrq->flags = IW_TXPOW_DBM;
+	} else {
+		vwrq->disabled = 1;
+	}
 
 out:
 	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
@@ -418,44 +451,31 @@ out:
 static int lbs_set_retry(struct net_device *dev, struct iw_request_info *info,
 			  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
 	int ret = 0;
-	u16 slimit = 0, llimit = 0;
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
-        if ((vwrq->flags & IW_RETRY_TYPE) != IW_RETRY_LIMIT)
-                return -EOPNOTSUPP;
-
-	/* The MAC has a 4-bit Total_Tx_Count register
-	   Total_Tx_Count = 1 + Tx_Retry_Count */
+	if (vwrq->flags == IW_RETRY_LIMIT) {
+		/* The MAC has a 4-bit Total_Tx_Count register
+		   Total_Tx_Count = 1 + Tx_Retry_Count */
 #define TX_RETRY_MIN 0
 #define TX_RETRY_MAX 14
-	if (vwrq->value < TX_RETRY_MIN || vwrq->value > TX_RETRY_MAX)
-		return -EINVAL;
+		if (vwrq->value < TX_RETRY_MIN || vwrq->value > TX_RETRY_MAX)
+			return -EINVAL;
 
-	/* Add 1 to convert retry count to try count */
-	if (vwrq->flags & IW_RETRY_SHORT)
-		slimit = (u16) (vwrq->value + 1);
-	else if (vwrq->flags & IW_RETRY_LONG)
-		llimit = (u16) (vwrq->value + 1);
-	else
-		slimit = llimit = (u16) (vwrq->value + 1); /* set both */
+		/* Adding 1 to convert retry count to try count */
+		priv->txretrycount = vwrq->value + 1;
 
-	if (llimit) {
-		ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_LONG_RETRY_LIMIT,
-				       llimit);
+		ret = lbs_prepare_and_send_command(priv, CMD_802_11_SNMP_MIB,
+					    CMD_ACT_SET,
+					    CMD_OPTION_WAITFORRSP,
+					    OID_802_11_TX_RETRYCOUNT, NULL);
+
 		if (ret)
 			goto out;
-	}
-
-	if (slimit) {
-		/* txretrycount follows the short retry limit */
-		priv->txretrycount = slimit;
-		ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_SHORT_RETRY_LIMIT,
-				       slimit);
-		if (ret)
-			goto out;
+	} else {
+		return -EOPNOTSUPP;
 	}
 
 out:
@@ -466,32 +486,24 @@ out:
 static int lbs_get_retry(struct net_device *dev, struct iw_request_info *info,
 			  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	int ret = 0;
-	u16 val = 0;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
+	priv->txretrycount = 0;
+	ret = lbs_prepare_and_send_command(priv,
+				    CMD_802_11_SNMP_MIB,
+				    CMD_ACT_GET, CMD_OPTION_WAITFORRSP,
+				    OID_802_11_TX_RETRYCOUNT, NULL);
+	if (ret)
+		goto out;
+
 	vwrq->disabled = 0;
-
-	if (vwrq->flags & IW_RETRY_LONG) {
-		ret = lbs_get_snmp_mib(priv, SNMP_MIB_OID_LONG_RETRY_LIMIT, &val);
-		if (ret)
-			goto out;
-
+	if (!vwrq->flags) {
+		vwrq->flags = IW_RETRY_LIMIT;
 		/* Subtract 1 to convert try count to retry count */
-		vwrq->value = val - 1;
-		vwrq->flags = IW_RETRY_LIMIT | IW_RETRY_LONG;
-	} else {
-		ret = lbs_get_snmp_mib(priv, SNMP_MIB_OID_SHORT_RETRY_LIMIT, &val);
-		if (ret)
-			goto out;
-
-		/* txretry count follows the short retry limit */
-		priv->txretrycount = val;
-		/* Subtract 1 to convert try count to retry count */
-		vwrq->value = val - 1;
-		vwrq->flags = IW_RETRY_LIMIT | IW_RETRY_SHORT;
+		vwrq->value = priv->txretrycount - 1;
 	}
 
 out:
@@ -542,7 +554,7 @@ static int lbs_get_range(struct net_device *dev, struct iw_request_info *info,
 			  struct iw_point *dwrq, char *extra)
 {
 	int i, j;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct iw_range *range = (struct iw_range *)extra;
 	struct chan_freq_power *cfp;
 	u8 rates[MAX_RATES + 1];
@@ -681,12 +693,22 @@ static int lbs_get_range(struct net_device *dev, struct iw_request_info *info,
 
 	range->sensitivity = 0;
 
-	/* Setup the supported power level ranges */
+	/*
+	 * Setup the supported power level ranges
+	 */
 	memset(range->txpower, 0, sizeof(range->txpower));
-	range->txpower_capa = IW_TXPOW_DBM | IW_TXPOW_RANGE;
-	range->txpower[0] = priv->txpower_min;
-	range->txpower[1] = priv->txpower_max;
-	range->num_txpower = 2;
+	range->txpower[0] = 5;
+	range->txpower[1] = 7;
+	range->txpower[2] = 9;
+	range->txpower[3] = 11;
+	range->txpower[4] = 13;
+	range->txpower[5] = 15;
+	range->txpower[6] = 17;
+	range->txpower[7] = 19;
+
+	range->num_txpower = 8;
+	range->txpower_capa = IW_TXPOW_DBM;
+	range->txpower_capa |= IW_TXPOW_RANGE;
 
 	range->event_capa[0] = (IW_EVENT_CAPA_K_0 |
 				IW_EVENT_CAPA_MASK(SIOCGIWAP) |
@@ -708,7 +730,7 @@ out:
 static int lbs_set_power(struct net_device *dev, struct iw_request_info *info,
 			  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -758,7 +780,7 @@ static int lbs_set_power(struct net_device *dev, struct iw_request_info *info,
 static int lbs_get_power(struct net_device *dev, struct iw_request_info *info,
 			  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -781,7 +803,7 @@ static struct iw_statistics *lbs_get_wireless_stats(struct net_device *dev)
 		EXCELLENT = 95,
 		PERFECT = 100
 	};
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	u32 rssi_qual;
 	u32 tx_qual;
 	u32 quality = 0;
@@ -886,7 +908,7 @@ static int lbs_set_freq(struct net_device *dev, struct iw_request_info *info,
 		  struct iw_freq *fwrq, char *extra)
 {
 	int ret = -EINVAL;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct chan_freq_power *cfp;
 	struct assoc_request * assoc_req;
 
@@ -943,7 +965,7 @@ static int lbs_mesh_set_freq(struct net_device *dev,
 			     struct iw_request_info *info,
 			     struct iw_freq *fwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct chan_freq_power *cfp;
 	int ret = -EINVAL;
 
@@ -976,13 +998,11 @@ static int lbs_mesh_set_freq(struct net_device *dev,
 	if (fwrq->m != priv->curbssparams.channel) {
 		lbs_deb_wext("mesh channel change forces eth disconnect\n");
 		if (priv->mode == IW_MODE_INFRA)
-			lbs_cmd_80211_deauthenticate(priv,
-						     priv->curbssparams.bssid,
-						     WLAN_REASON_DEAUTH_LEAVING);
+			lbs_send_deauthentication(priv);
 		else if (priv->mode == IW_MODE_ADHOC)
-			lbs_adhoc_stop(priv);
+			lbs_stop_adhoc_network(priv);
 	}
-	lbs_mesh_config(priv, CMD_ACT_MESH_CONFIG_START, fwrq->m);
+	lbs_mesh_config(priv, 1, fwrq->m);
 	lbs_update_channel(priv);
 	ret = 0;
 
@@ -994,57 +1014,36 @@ out:
 static int lbs_set_rate(struct net_device *dev, struct iw_request_info *info,
 		  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	u8 new_rate = 0;
 	int ret = -EINVAL;
 	u8 rates[MAX_RATES + 1];
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 	lbs_deb_wext("vwrq->value %d\n", vwrq->value);
-	lbs_deb_wext("vwrq->fixed %d\n", vwrq->fixed);
-
-	if (vwrq->fixed && vwrq->value == -1)
-		goto out;
 
 	/* Auto rate? */
-	priv->enablehwauto = !vwrq->fixed;
-
-	if (vwrq->value == -1)
+	if (vwrq->value == -1) {
+		priv->auto_rate = 1;
 		priv->cur_rate = 0;
-	else {
+	} else {
 		if (vwrq->value % 100000)
 			goto out;
 
-		new_rate = vwrq->value / 500000;
-		priv->cur_rate = new_rate;
-		/* the rest is only needed for lbs_set_data_rate() */
 		memset(rates, 0, sizeof(rates));
 		copy_active_data_rates(priv, rates);
+		new_rate = vwrq->value / 500000;
 		if (!memchr(rates, new_rate, sizeof(rates))) {
 			lbs_pr_alert("fixed data rate 0x%X out of range\n",
 				new_rate);
 			goto out;
 		}
-		if (priv->fwrelease < 0x09000000) {
-			ret = lbs_set_power_adapt_cfg(priv, 0,
-					POW_ADAPT_DEFAULT_P0,
-					POW_ADAPT_DEFAULT_P1,
-					POW_ADAPT_DEFAULT_P2);
-			if (ret)
-				goto out;
-		}
-		ret = lbs_set_tpc_cfg(priv, 0, TPC_DEFAULT_P0, TPC_DEFAULT_P1,
-				TPC_DEFAULT_P2, 1);
-		if (ret)
-			goto out;
+
+		priv->cur_rate = new_rate;
+		priv->auto_rate = 0;
 	}
 
-	/* Try the newer command first (Firmware Spec 5.1 and above) */
-	ret = lbs_cmd_802_11_rate_adapt_rateset(priv, CMD_ACT_SET);
-
-	/* Fallback to older version */
-	if (ret)
-		ret = lbs_set_data_rate(priv, new_rate);
+	ret = lbs_set_data_rate(priv, new_rate);
 
 out:
 	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
@@ -1054,14 +1053,14 @@ out:
 static int lbs_get_rate(struct net_device *dev, struct iw_request_info *info,
 		  struct iw_param *vwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
 	if (priv->connect_status == LBS_CONNECTED) {
 		vwrq->value = priv->cur_rate * 500000;
 
-		if (priv->enablehwauto)
+		if (priv->auto_rate)
 			vwrq->fixed = 0;
 		else
 			vwrq->fixed = 1;
@@ -1079,7 +1078,7 @@ static int lbs_set_mode(struct net_device *dev,
 		  struct iw_request_info *info, u32 * uwrq, char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct assoc_request * assoc_req;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
@@ -1124,7 +1123,7 @@ static int lbs_get_encode(struct net_device *dev,
 			   struct iw_request_info *info,
 			   struct iw_point *dwrq, u8 * extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	int index = (dwrq->flags & IW_ENCODE_INDEX) - 1;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
@@ -1319,7 +1318,7 @@ static int lbs_set_encode(struct net_device *dev,
 		    struct iw_point *dwrq, char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct assoc_request * assoc_req;
 	u16 is_default = 0, index = 0, set_tx_key = 0;
 
@@ -1395,7 +1394,7 @@ static int lbs_get_encodeext(struct net_device *dev,
 			      char *extra)
 {
 	int ret = -EINVAL;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct iw_encode_ext *ext = (struct iw_encode_ext *)extra;
 	int index, max_key_len;
 
@@ -1501,7 +1500,7 @@ static int lbs_set_encodeext(struct net_device *dev,
 			      char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct iw_encode_ext *ext = (struct iw_encode_ext *)extra;
 	int alg = ext->alg;
 	struct assoc_request * assoc_req;
@@ -1604,26 +1603,12 @@ static int lbs_set_encodeext(struct net_device *dev,
 			set_bit(ASSOC_FLAG_SECINFO, &assoc_req->flags);
 		}
 
-		/* Only disable wep if necessary: can't waste time here. */
-		if (priv->mac_control & CMD_ACT_MAC_WEP_ENABLE)
-			disable_wep(assoc_req);
+		disable_wep (assoc_req);
 	}
 
 out:
 	if (ret == 0) {
-		/* 802.1x and WPA rekeying must happen as quickly as possible,
-		 * especially during the 4-way handshake; thus if in
-		 * infrastructure mode, and either (a) 802.1x is enabled or
-		 * (b) WPA is being used, set the key right away.
-		 */
-		if (assoc_req->mode == IW_MODE_INFRA &&
-		    ((assoc_req->secinfo.key_mgmt & IW_AUTH_KEY_MGMT_802_1X) ||
-		     (assoc_req->secinfo.key_mgmt & IW_AUTH_KEY_MGMT_PSK) ||
-		      assoc_req->secinfo.WPAenabled ||
-		      assoc_req->secinfo.WPA2enabled)) {
-			lbs_do_association_work(priv);
-		} else
-			lbs_postpone_association_work(priv);
+		lbs_postpone_association_work(priv);
 	} else {
 		lbs_cancel_association_work(priv);
 	}
@@ -1639,7 +1624,7 @@ static int lbs_set_genie(struct net_device *dev,
 			  struct iw_point *dwrq,
 			  char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	int ret = 0;
 	struct assoc_request * assoc_req;
 
@@ -1685,7 +1670,7 @@ static int lbs_get_genie(struct net_device *dev,
 			  char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -1713,7 +1698,7 @@ static int lbs_set_auth(struct net_device *dev,
 			 struct iw_param *dwrq,
 			 char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct assoc_request * assoc_req;
 	int ret = 0;
 	int updated = 0;
@@ -1731,15 +1716,11 @@ static int lbs_set_auth(struct net_device *dev,
 	case IW_AUTH_TKIP_COUNTERMEASURES:
 	case IW_AUTH_CIPHER_PAIRWISE:
 	case IW_AUTH_CIPHER_GROUP:
+	case IW_AUTH_KEY_MGMT:
 	case IW_AUTH_DROP_UNENCRYPTED:
 		/*
 		 * libertas does not use these parameters
 		 */
-		break;
-
-	case IW_AUTH_KEY_MGMT:
-		assoc_req->secinfo.key_mgmt = dwrq->value;
-		updated = 1;
 		break;
 
 	case IW_AUTH_WPA_VERSION:
@@ -1816,15 +1797,11 @@ static int lbs_get_auth(struct net_device *dev,
 			 char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
 	switch (dwrq->flags & IW_AUTH_INDEX) {
-	case IW_AUTH_KEY_MGMT:
-		dwrq->value = priv->secinfo.key_mgmt;
-		break;
-
 	case IW_AUTH_WPA_VERSION:
 		dwrq->value = 0;
 		if (priv->secinfo.WPAenabled)
@@ -1857,78 +1834,40 @@ static int lbs_set_txpow(struct net_device *dev, struct iw_request_info *info,
 		   struct iw_param *vwrq, char *extra)
 {
 	int ret = 0;
-	struct lbs_private *priv = netdev_priv(dev);
-	s16 dbm = (s16) vwrq->value;
+	struct lbs_private *priv = dev->priv;
+
+	u16 dbm;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
 	if (vwrq->disabled) {
-		lbs_set_radio(priv, RADIO_PREAMBLE_AUTO, 0);
-		goto out;
+		lbs_radio_ioctl(priv, RADIO_OFF);
+		return 0;
 	}
 
-	if (vwrq->fixed == 0) {
-		/* User requests automatic tx power control, however there are
-		 * many auto tx settings.  For now use firmware defaults until
-		 * we come up with a good way to expose these to the user. */
-		if (priv->fwrelease < 0x09000000) {
-			ret = lbs_set_power_adapt_cfg(priv, 1,
-					POW_ADAPT_DEFAULT_P0,
-					POW_ADAPT_DEFAULT_P1,
-					POW_ADAPT_DEFAULT_P2);
-			if (ret)
-				goto out;
-		}
-		ret = lbs_set_tpc_cfg(priv, 0, TPC_DEFAULT_P0, TPC_DEFAULT_P1,
-				TPC_DEFAULT_P2, 1);
-		if (ret)
-			goto out;
-		dbm = priv->txpower_max;
-	} else {
-		/* Userspace check in iwrange if it should use dBm or mW,
-		 * therefore this should never happen... Jean II */
-		if ((vwrq->flags & IW_TXPOW_TYPE) != IW_TXPOW_DBM) {
-			ret = -EOPNOTSUPP;
-			goto out;
-		}
+	priv->preamble = CMD_TYPE_AUTO_PREAMBLE;
 
-		/* Validate requested power level against firmware allowed
-		 * levels */
-		if (priv->txpower_min && (dbm < priv->txpower_min)) {
-			ret = -EINVAL;
-			goto out;
-		}
+	lbs_radio_ioctl(priv, RADIO_ON);
 
-		if (priv->txpower_max && (dbm > priv->txpower_max)) {
-			ret = -EINVAL;
-			goto out;
-		}
-		if (priv->fwrelease < 0x09000000) {
-			ret = lbs_set_power_adapt_cfg(priv, 0,
-					POW_ADAPT_DEFAULT_P0,
-					POW_ADAPT_DEFAULT_P1,
-					POW_ADAPT_DEFAULT_P2);
-			if (ret)
-				goto out;
-		}
-		ret = lbs_set_tpc_cfg(priv, 0, TPC_DEFAULT_P0, TPC_DEFAULT_P1,
-				TPC_DEFAULT_P2, 1);
-		if (ret)
-			goto out;
-	}
+	/* Userspace check in iwrange if it should use dBm or mW,
+	 * therefore this should never happen... Jean II */
+	if ((vwrq->flags & IW_TXPOW_TYPE) == IW_TXPOW_MWATT) {
+		return -EOPNOTSUPP;
+	} else
+		dbm = (u16) vwrq->value;
 
-	/* If the radio was off, turn it on */
-	if (!priv->radio_on) {
-		ret = lbs_set_radio(priv, RADIO_PREAMBLE_AUTO, 1);
-		if (ret)
-			goto out;
-	}
+	/* auto tx power control */
 
-	lbs_deb_wext("txpower set %d dBm\n", dbm);
+	if (vwrq->fixed == 0)
+		dbm = 0xffff;
 
-	ret = lbs_set_tx_power(priv, dbm);
+	lbs_deb_wext("txpower set %d dbm\n", dbm);
 
-out:
+	ret = lbs_prepare_and_send_command(priv,
+				    CMD_802_11_RF_TX_POWER,
+				    CMD_ACT_TX_POWER_OPT_SET_LOW,
+				    CMD_OPTION_WAITFORRSP, 0, (void *)&dbm);
+
 	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
 	return ret;
 }
@@ -1936,7 +1875,7 @@ out:
 static int lbs_get_essid(struct net_device *dev, struct iw_request_info *info,
 		   struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -1971,20 +1910,14 @@ static int lbs_get_essid(struct net_device *dev, struct iw_request_info *info,
 static int lbs_set_essid(struct net_device *dev, struct iw_request_info *info,
 		   struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	int ret = 0;
 	u8 ssid[IW_ESSID_MAX_SIZE];
 	u8 ssid_len = 0;
 	struct assoc_request * assoc_req;
 	int in_ssid_len = dwrq->length;
-	DECLARE_SSID_BUF(ssid_buf);
 
 	lbs_deb_enter(LBS_DEB_WEXT);
-
-	if (!priv->radio_on) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	/* Check the size of the string */
 	if (in_ssid_len > IW_ESSID_MAX_SIZE) {
@@ -2006,7 +1939,7 @@ static int lbs_set_essid(struct net_device *dev, struct iw_request_info *info,
 		lbs_deb_wext("requested any SSID\n");
 	} else {
 		lbs_deb_wext("requested SSID '%s'\n",
-		             print_ssid(ssid_buf, ssid, ssid_len));
+		             escape_essid(ssid, ssid_len));
 	}
 
 out:
@@ -2040,7 +1973,7 @@ static int lbs_mesh_get_essid(struct net_device *dev,
 			      struct iw_request_info *info,
 			      struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
 
@@ -2058,15 +1991,10 @@ static int lbs_mesh_set_essid(struct net_device *dev,
 			      struct iw_request_info *info,
 			      struct iw_point *dwrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	int ret = 0;
 
 	lbs_deb_enter(LBS_DEB_WEXT);
-
-	if (!priv->radio_on) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	/* Check the size of the string */
 	if (dwrq->length > IW_ESSID_MAX_SIZE) {
@@ -2083,8 +2011,7 @@ static int lbs_mesh_set_essid(struct net_device *dev,
 		priv->mesh_ssid_len = dwrq->length;
 	}
 
-	lbs_mesh_config(priv, CMD_ACT_MESH_CONFIG_START,
-			priv->curbssparams.channel);
+	lbs_mesh_config(priv, 1, priv->curbssparams.channel);
  out:
 	lbs_deb_leave_args(LBS_DEB_WEXT, "ret %d", ret);
 	return ret;
@@ -2102,19 +2029,17 @@ static int lbs_mesh_set_essid(struct net_device *dev,
 static int lbs_set_wap(struct net_device *dev, struct iw_request_info *info,
 		 struct sockaddr *awrq, char *extra)
 {
-	struct lbs_private *priv = netdev_priv(dev);
+	struct lbs_private *priv = dev->priv;
 	struct assoc_request * assoc_req;
 	int ret = 0;
+	DECLARE_MAC_BUF(mac);
 
 	lbs_deb_enter(LBS_DEB_WEXT);
-
-	if (!priv->radio_on)
-		return -EINVAL;
 
 	if (awrq->sa_family != ARPHRD_ETHER)
 		return -EINVAL;
 
-	lbs_deb_wext("ASSOC: WAP: sa_data %pM\n", awrq->sa_data);
+	lbs_deb_wext("ASSOC: WAP: sa_data %s\n", print_mac(mac, awrq->sa_data));
 
 	mutex_lock(&priv->lock);
 

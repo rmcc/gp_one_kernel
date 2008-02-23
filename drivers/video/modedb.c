@@ -28,7 +28,6 @@
 #endif
 
 const char *fb_mode_option;
-EXPORT_SYMBOL_GPL(fb_mode_option);
 
     /*
      *  Standard video mode definitions (taken from XFree86)
@@ -329,7 +328,7 @@ const struct fb_videomode vesa_modes[] = {
 	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
 	  FB_VMODE_NONINTERLACED, FB_MODE_IS_VESA },
 	/* 17 1152x864-75 VESA */
-	{ NULL, 75, 1152, 864, 9259, 256, 64, 32, 1, 128, 3,
+	{ NULL, 75, 1153, 864, 9259, 256, 64, 32, 1, 128, 3,
 	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
 	  FB_VMODE_NONINTERLACED, FB_MODE_IS_VESA },
 	/* 18 1280x960-60 VESA */
@@ -591,7 +590,6 @@ done:
 		    "", (margins) ? " with margins" : "", (interlace) ?
 		    " interlaced" : "");
 
-	    memset(&cvt_mode, 0, sizeof(cvt_mode));
 	    cvt_mode.xres = xres;
 	    cvt_mode.yres = yres;
 	    cvt_mode.refresh = (refresh) ? refresh : 60;

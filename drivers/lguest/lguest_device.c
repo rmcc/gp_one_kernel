@@ -20,11 +20,14 @@
 /* The pointer to our (page) of device descriptions. */
 static void *lguest_devices;
 
+/* Unique numbering for lguest devices. */
+static unsigned int dev_index;
+
 /* For Guests, device memory can be used as normal memory, so we cast away the
  * __iomem to quieten sparse. */
 static inline void *lguest_map(unsigned long phys_addr, unsigned long pages)
 {
-	return (__force void *)ioremap_cache(phys_addr, PAGE_SIZE*pages);
+	return (__force void *)ioremap(phys_addr, PAGE_SIZE*pages);
 }
 
 static inline void lguest_unmap(void *addr)
@@ -98,28 +101,16 @@ static u32 lg_get_features(struct virtio_device *vdev)
 	return features;
 }
 
-/* The virtio core takes the features the Host offers, and copies the
- * ones supported by the driver into the vdev->features array.  Once
- * that's all sorted out, this routine is called so we can tell the
- * Host which features we understand and accept. */
-static void lg_finalize_features(struct virtio_device *vdev)
+static void lg_set_features(struct virtio_device *vdev, u32 features)
 {
-	unsigned int i, bits;
+	unsigned int i;
 	struct lguest_device_desc *desc = to_lgdev(vdev)->desc;
 	/* Second half of bitmap is features we accept. */
 	u8 *out_features = lg_features(desc) + desc->feature_len;
 
-	/* Give virtio_ring a chance to accept features. */
-	vring_transport_features(vdev);
-
-	/* The vdev->feature array is a Linux bitmask: this isn't the
-	 * same as a the simple array of bits used by lguest devices
-	 * for features.  So we do this slow, manual conversion which is
-	 * completely general. */
 	memset(out_features, 0, desc->feature_len);
-	bits = min_t(unsigned, desc->feature_len, sizeof(vdev->features)) * 8;
-	for (i = 0; i < bits; i++) {
-		if (test_bit(i, vdev->features))
+	for (i = 0; i < min(desc->feature_len * 8, 32); i++) {
+		if (features & (1 << i))
 			out_features[i / 8] |= (1 << (i % 8));
 	}
 }
@@ -250,7 +241,7 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 	/* Figure out how many pages the ring will take, and map that memory */
 	lvq->pages = lguest_map((unsigned long)lvq->config.pfn << PAGE_SHIFT,
 				DIV_ROUND_UP(vring_size(lvq->config.num,
-							LGUEST_VRING_ALIGN),
+							PAGE_SIZE),
 					     PAGE_SIZE));
 	if (!lvq->pages) {
 		err = -ENOMEM;
@@ -259,8 +250,8 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 
 	/* OK, tell virtio_ring.c to set up a virtqueue now we know its size
 	 * and we've got a pointer to its pages. */
-	vq = vring_new_virtqueue(lvq->config.num, LGUEST_VRING_ALIGN,
-				 vdev, lvq->pages, lg_notify, callback);
+	vq = vring_new_virtqueue(lvq->config.num, vdev, lvq->pages,
+				 lg_notify, callback);
 	if (!vq) {
 		err = -ENOMEM;
 		goto unmap;
@@ -272,7 +263,7 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 	 * the interrupt as a source of randomness: it'd be nice to have that
 	 * back.. */
 	err = request_irq(lvq->config.irq, vring_interrupt, IRQF_SHARED,
-			  dev_name(&vdev->dev), vq);
+			  vdev->dev.bus_id, vq);
 	if (err)
 		goto destroy_vring;
 
@@ -309,7 +300,7 @@ static void lg_del_vq(struct virtqueue *vq)
 /* The ops structure which hooks everything together. */
 static struct virtio_config_ops lguest_config_ops = {
 	.get_features = lg_get_features,
-	.finalize_features = lg_finalize_features,
+	.set_features = lg_set_features,
 	.get = lg_get,
 	.set = lg_set,
 	.get_status = lg_get_status,
@@ -321,7 +312,10 @@ static struct virtio_config_ops lguest_config_ops = {
 
 /* The root device for the lguest virtio devices.  This makes them appear as
  * /sys/devices/lguest/0,1,2 not /sys/devices/0,1,2. */
-static struct device *lguest_root;
+static struct device lguest_root = {
+	.parent = NULL,
+	.bus_id = "lguest",
+};
 
 /*D:120 This is the core of the lguest bus: actually adding a new device.
  * It's a separate function because it's neater that way, and because an
@@ -331,10 +325,8 @@ static struct device *lguest_root;
  * As Andrew Tridgell says, "Untested code is buggy code".
  *
  * It's worth reading this carefully: we start with a pointer to the new device
- * descriptor in the "lguest_devices" page, and the offset into the device
- * descriptor page so we can uniquely identify it if things go badly wrong. */
-static void add_lguest_device(struct lguest_device_desc *d,
-			      unsigned int offset)
+ * descriptor in the "lguest_devices" page. */
+static void add_lguest_device(struct lguest_device_desc *d)
 {
 	struct lguest_device *ldev;
 
@@ -342,14 +334,18 @@ static void add_lguest_device(struct lguest_device_desc *d,
 	 * it. */
 	ldev = kzalloc(sizeof(*ldev), GFP_KERNEL);
 	if (!ldev) {
-		printk(KERN_EMERG "Cannot allocate lguest dev %u type %u\n",
-		       offset, d->type);
+		printk(KERN_EMERG "Cannot allocate lguest dev %u\n",
+		       dev_index++);
 		return;
 	}
 
 	/* This devices' parent is the lguest/ dir. */
-	ldev->vdev.dev.parent = lguest_root;
+	ldev->vdev.dev.parent = &lguest_root;
 	/* We have a unique device index thanks to the dev_index counter. */
+	ldev->vdev.index = dev_index++;
+	/* The device type comes straight from the descriptor.  There's also a
+	 * device vendor field in the virtio_device struct, which we leave as
+	 * 0. */
 	ldev->vdev.id.device = d->type;
 	/* We have a simple set of routines for querying the device's
 	 * configuration information and setting its status. */
@@ -361,8 +357,8 @@ static void add_lguest_device(struct lguest_device_desc *d,
 	 * virtio_device and calls device_register().  This makes the bus
 	 * infrastructure look for a matching driver. */
 	if (register_virtio_device(&ldev->vdev) != 0) {
-		printk(KERN_ERR "Failed to register lguest dev %u type %u\n",
-		       offset, d->type);
+		printk(KERN_ERR "Failed to register lguest device %u\n",
+		       ldev->vdev.index);
 		kfree(ldev);
 	}
 }
@@ -383,7 +379,7 @@ static void scan_devices(void)
 			break;
 
 		printk("Device at %i has size %u\n", i, desc_size(d));
-		add_lguest_device(d, i);
+		add_lguest_device(d);
 	}
 }
 
@@ -404,8 +400,7 @@ static int __init lguest_devices_init(void)
 	if (strcmp(pv_info.name, "lguest") != 0)
 		return 0;
 
-	lguest_root = root_device_register("lguest");
-	if (IS_ERR(lguest_root))
+	if (device_register(&lguest_root) != 0)
 		panic("Could not register lguest root");
 
 	/* Devices are in a single page above top of "normal" mem */

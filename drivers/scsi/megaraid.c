@@ -46,7 +46,6 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/dma-mapping.h>
-#include <linux/smp_lock.h>
 #include <scsi/scsicam.h>
 
 #include "scsi.h"
@@ -1967,8 +1966,8 @@ megaraid_abort_and_reset(adapter_t *adapter, Scsi_Cmnd *cmd, int aor)
 			scb->state |= aor;
 
 			/*
-			 * Check if this command has firmware ownership. If
-			 * yes, we cannot reset this command. Whenever f/w
+			 * Check if this command has firmare owenership. If
+			 * yes, we cannot reset this command. Whenever, f/w
 			 * completes this command, we will return appropriate
 			 * status from ISR.
 			 */
@@ -3273,12 +3272,12 @@ mega_init_scb(adapter_t *adapter)
  * @filep - unused
  *
  * Routines for the character/ioctl interface to the driver. Find out if this
- * is a valid open. 
+ * is a valid open. If yes, increment the module use count so that it cannot
+ * be unloaded.
  */
 static int
 megadev_open (struct inode *inode, struct file *filep)
 {
-	cycle_kernel_lock();
 	/*
 	 * Only allow superuser to access private ioctl interface
 	 */
@@ -4402,10 +4401,6 @@ mega_internal_command(adapter_t *adapter, megacmd_t *mc, mega_passthru *pthru)
 	scb_t	*scb;
 	int	rval;
 
-	scmd = scsi_allocate_command(GFP_KERNEL);
-	if (!scmd)
-		return -ENOMEM;
-
 	/*
 	 * The internal commands share one command id and hence are
 	 * serialized. This is so because we want to reserve maximum number of
@@ -4416,11 +4411,12 @@ mega_internal_command(adapter_t *adapter, megacmd_t *mc, mega_passthru *pthru)
 	scb = &adapter->int_scb;
 	memset(scb, 0, sizeof(scb_t));
 
+	scmd = &adapter->int_scmd;
+	memset(scmd, 0, sizeof(Scsi_Cmnd));
+
 	sdev = kzalloc(sizeof(struct scsi_device), GFP_KERNEL);
 	scmd->device = sdev;
 
-	memset(adapter->int_cdb, 0, sizeof(adapter->int_cdb));
-	scmd->cmnd = adapter->int_cdb;
 	scmd->device->host = adapter->host;
 	scmd->host_scribble = (void *)scb;
 	scmd->cmnd[0] = MEGA_INTERNAL_CMD;
@@ -4458,8 +4454,6 @@ mega_internal_command(adapter_t *adapter, megacmd_t *mc, mega_passthru *pthru)
 	}
 
 	mutex_unlock(&adapter->int_mtx);
-
-	scsi_free_command(GFP_KERNEL, scmd);
 
 	return rval;
 }

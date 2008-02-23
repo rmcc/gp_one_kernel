@@ -19,7 +19,6 @@
 
 #include <asm/uaccess.h>
 #include <asm/ucontext.h>
-#include <asm/syscalls.h>
 
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
@@ -92,9 +91,6 @@ asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
 	spin_unlock_irq(&current->sighand->siglock);
 
 	if (restore_sigcontext(regs, &frame->uc.uc_mcontext))
-		goto badframe;
-
-	if (do_sigaltstack(&frame->uc.uc_stack, NULL, regs->sp) == -EFAULT)
 		goto badframe;
 
 	pr_debug("Context restored: pc = %08lx, lr = %08lx, sp = %08lx\n",

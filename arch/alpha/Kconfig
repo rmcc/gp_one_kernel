@@ -5,7 +5,6 @@
 config ALPHA
 	bool
 	default y
-	select HAVE_AOUT
 	select HAVE_IDE
 	select HAVE_OPROFILE
 	help
@@ -69,8 +68,10 @@ config AUTO_IRQ_AFFINITY
 	depends on SMP
 	default y
 
+config ARCH_SUPPORTS_AOUT
+	def_bool y
+
 source "init/Kconfig"
-source "kernel/Kconfig.freezer"
 
 
 menu "System setup"
@@ -223,7 +224,8 @@ config ALPHA_MIATA
 	bool "Miata"
 	help
 	  The Digital PersonalWorkStation (PWS 433a, 433au, 500a, 500au, 600a,
-	  or 600au).
+	  or 600au).  There is an Installation HOWTO for this hardware at
+	  <http://eijk.homelinux.org/~stefan/miata.html>.
 
 config ALPHA_MIKASA
 	bool "Mikasa"
@@ -330,6 +332,11 @@ config PCI_SYSCALL
 
 config IOMMU_HELPER
 	def_bool PCI
+
+config ALPHA_CORE_AGP
+	bool
+	depends on ALPHA_GENERIC || ALPHA_TITAN || ALPHA_MARVEL
+	default y
 
 config ALPHA_NONAME
 	bool
@@ -521,7 +528,6 @@ config ARCH_MAY_HAVE_PC_FDC
 config SMP
 	bool "Symmetric multi-processing support"
 	depends on ALPHA_SABLE || ALPHA_LYNX || ALPHA_RAWHIDE || ALPHA_DP264 || ALPHA_WILDFIRE || ALPHA_TITAN || ALPHA_GENERIC || ALPHA_SHARK || ALPHA_MARVEL
-	select USE_GENERIC_SMP_HELPERS
 	---help---
 	  This enables support for systems with more than one CPU. If you have
 	  a system with only one CPU, like most personal computers, say N. If

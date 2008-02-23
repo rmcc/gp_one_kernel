@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <linux/root_dev.h>
 #include <linux/console.h>
+#include <linux/kexec.h>
 #include <linux/bootmem.h>
 
 #include <asm/machdep.h>
@@ -40,10 +41,6 @@
 #else
 #define DBG pr_debug
 #endif
-
-/* mutex synchronizing GPU accesses and video mode changes */
-DEFINE_MUTEX(ps3_gpu_mutex);
-EXPORT_SYMBOL_GPL(ps3_gpu_mutex);
 
 #if !defined(CONFIG_SMP)
 static void smp_send_stop(void) {}
@@ -204,6 +201,7 @@ static void __init ps3_setup_arch(void)
 	       ps3_firmware_version.rev);
 
 	ps3_spu_set_platform();
+	ps3_map_htab();
 
 #ifdef CONFIG_SMP
 	smp_init_ps3();
@@ -280,5 +278,8 @@ define_machine(ps3) {
 	.halt				= ps3_halt,
 #if defined(CONFIG_KEXEC)
 	.kexec_cpu_down			= ps3_kexec_cpu_down,
+	.machine_kexec			= default_machine_kexec,
+	.machine_kexec_prepare		= default_machine_kexec_prepare,
+	.machine_crash_shutdown		= default_machine_crash_shutdown,
 #endif
 };

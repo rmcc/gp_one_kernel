@@ -1,9 +1,8 @@
 /* pci_sun4v_asm: Hypervisor calls for PCI support.
  *
- * Copyright (C) 2006, 2008 David S. Miller <davem@davemloft.net>
+ * Copyright (C) 2006 David S. Miller <davem@davemloft.net>
  */
 
-#include <linux/linkage.h>
 #include <asm/hypervisor.h>
 
 	/* %o0: devhandle
@@ -15,7 +14,8 @@
 	 * returns %o0:	-status if status was non-zero, else
 	 *         %o0:	num pages mapped
 	 */
-ENTRY(pci_sun4v_iommu_map)
+	.globl	pci_sun4v_iommu_map
+pci_sun4v_iommu_map:
 	mov	%o5, %g1
 	mov	HV_FAST_PCI_IOMMU_MAP, %o5
 	ta	HV_FAST_TRAP
@@ -24,7 +24,6 @@ ENTRY(pci_sun4v_iommu_map)
 	mov	%o1, %o0
 1:	retl
 	 nop
-ENDPROC(pci_sun4v_iommu_map)
 
 	/* %o0: devhandle
 	 * %o1:	tsbid
@@ -32,12 +31,12 @@ ENDPROC(pci_sun4v_iommu_map)
 	 *
 	 * returns %o0:	num ttes demapped
 	 */
-ENTRY(pci_sun4v_iommu_demap)
+	.globl	pci_sun4v_iommu_demap
+pci_sun4v_iommu_demap:
 	mov	HV_FAST_PCI_IOMMU_DEMAP, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o1, %o0
-ENDPROC(pci_sun4v_iommu_demap)
 
 	/* %o0: devhandle
 	 * %o1:	tsbid
@@ -46,7 +45,8 @@ ENDPROC(pci_sun4v_iommu_demap)
 	 *
 	 * returns %o0:	status
 	 */
-ENTRY(pci_sun4v_iommu_getmap)
+	.globl	pci_sun4v_iommu_getmap
+pci_sun4v_iommu_getmap:
 	mov	%o2, %o4
 	mov	HV_FAST_PCI_IOMMU_GETMAP, %o5
 	ta	HV_FAST_TRAP
@@ -54,7 +54,6 @@ ENTRY(pci_sun4v_iommu_getmap)
 	stx	%o2, [%o3]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_iommu_getmap)
 
 	/* %o0: devhandle
 	 * %o1:	pci_device
@@ -66,14 +65,14 @@ ENDPROC(pci_sun4v_iommu_getmap)
 	 * If there is an error, the data will be returned
 	 * as all 1's.
 	 */
-ENTRY(pci_sun4v_config_get)
+	.globl	pci_sun4v_config_get
+pci_sun4v_config_get:
 	mov	HV_FAST_PCI_CONFIG_GET, %o5
 	ta	HV_FAST_TRAP
 	brnz,a,pn %o1, 1f
 	 mov	-1, %o2
 1:	retl
 	 mov	%o2, %o0
-ENDPROC(pci_sun4v_config_get)
 
 	/* %o0: devhandle
 	 * %o1:	pci_device
@@ -86,14 +85,14 @@ ENDPROC(pci_sun4v_config_get)
 	 * status will be zero if the operation completed
 	 * successfully, else -1 if not
 	 */
-ENTRY(pci_sun4v_config_put)
+	.globl	pci_sun4v_config_put
+pci_sun4v_config_put:
 	mov	HV_FAST_PCI_CONFIG_PUT, %o5
 	ta	HV_FAST_TRAP
 	brnz,a,pn %o1, 1f
 	 mov	-1, %o1
 1:	retl
 	 mov	%o1, %o0
-ENDPROC(pci_sun4v_config_put)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -105,12 +104,12 @@ ENDPROC(pci_sun4v_config_put)
 	 * status will be zero if the operation completed
 	 * successfully, else -1 if not
 	 */
-ENTRY(pci_sun4v_msiq_conf)
+	.globl	pci_sun4v_msiq_conf
+pci_sun4v_msiq_conf:
 	mov	HV_FAST_PCI_MSIQ_CONF, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_conf)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -119,7 +118,8 @@ ENDPROC(pci_sun4v_msiq_conf)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_info)
+	.globl	pci_sun4v_msiq_info
+pci_sun4v_msiq_info:
 	mov	%o2, %o4
 	mov	HV_FAST_PCI_MSIQ_INFO, %o5
 	ta	HV_FAST_TRAP
@@ -127,7 +127,6 @@ ENTRY(pci_sun4v_msiq_info)
 	stx	%o2, [%o3]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_info)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -135,13 +134,13 @@ ENDPROC(pci_sun4v_msiq_info)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_getvalid)
+	.globl	pci_sun4v_msiq_getvalid
+pci_sun4v_msiq_getvalid:
 	mov	HV_FAST_PCI_MSIQ_GETVALID, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_getvalid)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -149,12 +148,12 @@ ENDPROC(pci_sun4v_msiq_getvalid)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_setvalid)
+	.globl	pci_sun4v_msiq_setvalid
+pci_sun4v_msiq_setvalid:
 	mov	HV_FAST_PCI_MSIQ_SETVALID, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_setvalid)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -162,13 +161,13 @@ ENDPROC(pci_sun4v_msiq_setvalid)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_getstate)
+	.globl	pci_sun4v_msiq_getstate
+pci_sun4v_msiq_getstate:
 	mov	HV_FAST_PCI_MSIQ_GETSTATE, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_getstate)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -176,12 +175,12 @@ ENDPROC(pci_sun4v_msiq_getstate)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_setstate)
+	.globl	pci_sun4v_msiq_setstate
+pci_sun4v_msiq_setstate:
 	mov	HV_FAST_PCI_MSIQ_SETSTATE, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_setstate)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -189,13 +188,13 @@ ENDPROC(pci_sun4v_msiq_setstate)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_gethead)
+	.globl	pci_sun4v_msiq_gethead
+pci_sun4v_msiq_gethead:
 	mov	HV_FAST_PCI_MSIQ_GETHEAD, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_gethead)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -203,12 +202,12 @@ ENDPROC(pci_sun4v_msiq_gethead)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_sethead)
+	.globl	pci_sun4v_msiq_sethead
+pci_sun4v_msiq_sethead:
 	mov	HV_FAST_PCI_MSIQ_SETHEAD, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_sethead)
 
 	/* %o0: devhandle
 	 * %o1: msiqid
@@ -216,13 +215,13 @@ ENDPROC(pci_sun4v_msiq_sethead)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msiq_gettail)
+	.globl	pci_sun4v_msiq_gettail
+pci_sun4v_msiq_gettail:
 	mov	HV_FAST_PCI_MSIQ_GETTAIL, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msiq_gettail)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -230,13 +229,13 @@ ENDPROC(pci_sun4v_msiq_gettail)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msi_getvalid)
+	.globl	pci_sun4v_msi_getvalid
+pci_sun4v_msi_getvalid:
 	mov	HV_FAST_PCI_MSI_GETVALID, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msi_getvalid)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -244,12 +243,12 @@ ENDPROC(pci_sun4v_msi_getvalid)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msi_setvalid)
+	.globl	pci_sun4v_msi_setvalid
+pci_sun4v_msi_setvalid:
 	mov	HV_FAST_PCI_MSI_SETVALID, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msi_setvalid)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -257,13 +256,13 @@ ENDPROC(pci_sun4v_msi_setvalid)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msi_getmsiq)
+	.globl	pci_sun4v_msi_getmsiq
+pci_sun4v_msi_getmsiq:
 	mov	HV_FAST_PCI_MSI_GETMSIQ, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msi_getmsiq)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -272,12 +271,12 @@ ENDPROC(pci_sun4v_msi_getmsiq)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msi_setmsiq)
+	.globl	pci_sun4v_msi_setmsiq
+pci_sun4v_msi_setmsiq:
 	mov	HV_FAST_PCI_MSI_SETMSIQ, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msi_setmsiq)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -285,13 +284,13 @@ ENDPROC(pci_sun4v_msi_setmsiq)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msi_getstate)
+	.globl	pci_sun4v_msi_getstate
+pci_sun4v_msi_getstate:
 	mov	HV_FAST_PCI_MSI_GETSTATE, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msi_getstate)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -299,12 +298,12 @@ ENDPROC(pci_sun4v_msi_getstate)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msi_setstate)
+	.globl	pci_sun4v_msi_setstate
+pci_sun4v_msi_setstate:
 	mov	HV_FAST_PCI_MSI_SETSTATE, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msi_setstate)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -312,13 +311,13 @@ ENDPROC(pci_sun4v_msi_setstate)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msg_getmsiq)
+	.globl	pci_sun4v_msg_getmsiq
+pci_sun4v_msg_getmsiq:
 	mov	HV_FAST_PCI_MSG_GETMSIQ, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msg_getmsiq)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -326,12 +325,12 @@ ENDPROC(pci_sun4v_msg_getmsiq)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msg_setmsiq)
+	.globl	pci_sun4v_msg_setmsiq
+pci_sun4v_msg_setmsiq:
 	mov	HV_FAST_PCI_MSG_SETMSIQ, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msg_setmsiq)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -339,13 +338,13 @@ ENDPROC(pci_sun4v_msg_setmsiq)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msg_getvalid)
+	.globl	pci_sun4v_msg_getvalid
+pci_sun4v_msg_getvalid:
 	mov	HV_FAST_PCI_MSG_GETVALID, %o5
 	ta	HV_FAST_TRAP
 	stx	%o1, [%o2]
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msg_getvalid)
 
 	/* %o0: devhandle
 	 * %o1: msinum
@@ -353,10 +352,10 @@ ENDPROC(pci_sun4v_msg_getvalid)
 	 *
 	 * returns %o0: status
 	 */
-ENTRY(pci_sun4v_msg_setvalid)
+	.globl	pci_sun4v_msg_setvalid
+pci_sun4v_msg_setvalid:
 	mov	HV_FAST_PCI_MSG_SETVALID, %o5
 	ta	HV_FAST_TRAP
 	retl
 	 mov	%o0, %o0
-ENDPROC(pci_sun4v_msg_setvalid)
 

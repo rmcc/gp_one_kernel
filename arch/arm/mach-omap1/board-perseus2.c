@@ -20,20 +20,20 @@
 #include <linux/mtd/partitions.h>
 #include <linux/input.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/flash.h>
 #include <asm/mach/map.h>
 
-#include <mach/tc.h>
-#include <mach/gpio.h>
-#include <mach/mux.h>
-#include <mach/fpga.h>
-#include <mach/nand.h>
-#include <mach/keypad.h>
-#include <mach/common.h>
-#include <mach/board.h>
+#include <asm/arch/tc.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/mux.h>
+#include <asm/arch/fpga.h>
+#include <asm/arch/nand.h>
+#include <asm/arch/keypad.h>
+#include <asm/arch/common.h>
+#include <asm/arch/board.h>
 
 static int p2_keymap[] = {
 	KEY(0,0,KEY_UP),
@@ -205,7 +205,7 @@ static struct platform_device *devices[] __initdata = {
 
 static int nand_dev_ready(struct omap_nand_platform_data *data)
 {
-	return gpio_get_value(P2_NAND_RB_GPIO_PIN);
+	return omap_get_gpio_datain(P2_NAND_RB_GPIO_PIN);
 }
 
 static struct omap_uart_config perseus2_uart_config __initdata = {
@@ -223,9 +223,8 @@ static struct omap_board_config_kernel perseus2_config[] __initdata = {
 
 static void __init omap_perseus2_init(void)
 {
-	if (gpio_request(P2_NAND_RB_GPIO_PIN, "NAND ready") < 0)
-		BUG();
-	nand_data.dev_ready = nand_dev_ready;
+	if (!(omap_request_gpio(P2_NAND_RB_GPIO_PIN)))
+		nand_data.dev_ready = nand_dev_ready;
 
 	omap_cfg_reg(L3_1610_FLASH_CS2B_OE);
 	omap_cfg_reg(M8_1610_FLASH_CS2B_WE);

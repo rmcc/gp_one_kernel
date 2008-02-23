@@ -26,10 +26,9 @@
 #define NFORCE2_SAFE_DISTANCE 50
 
 /* Delay in ms between FSB changes */
-/* #define NFORCE2_DELAY 10 */
+//#define NFORCE2_DELAY 10
 
-/*
- * nforce2_chipset:
+/* nforce2_chipset:
  * FSB is changed using the chipset
  */
 static struct pci_dev *nforce2_chipset_dev;
@@ -37,13 +36,13 @@ static struct pci_dev *nforce2_chipset_dev;
 /* fid:
  * multiplier * 10
  */
-static int fid;
+static int fid = 0;
 
 /* min_fsb, max_fsb:
  * minimum and maximum FSB (= FSB at boot time)
  */
-static int min_fsb;
-static int max_fsb;
+static int min_fsb = 0;
+static int max_fsb = 0;
 
 MODULE_AUTHOR("Sebastian Witt <se.witt@gmx.net>");
 MODULE_DESCRIPTION("nForce2 FSB changing cpufreq driver");
@@ -54,7 +53,7 @@ module_param(min_fsb, int, 0444);
 
 MODULE_PARM_DESC(fid, "CPU multiplier to use (11.5 = 115)");
 MODULE_PARM_DESC(min_fsb,
-		"Minimum FSB to use, if not defined: current FSB - 50");
+                 "Minimum FSB to use, if not defined: current FSB - 50");
 
 #define dprintk(msg...) cpufreq_debug_printk(CPUFREQ_DEBUG_DRIVER, "cpufreq-nforce2", msg)
 
@@ -140,7 +139,7 @@ static unsigned int nforce2_fsb_read(int bootfsb)
 
 	/* Get chipset boot FSB from subdevice 5 (FSB at boot-time) */
 	nforce2_sub5 = pci_get_subsys(PCI_VENDOR_ID_NVIDIA,
-						0x01EF, PCI_ANY_ID, PCI_ANY_ID, NULL);
+						0x01EF,PCI_ANY_ID,PCI_ANY_ID,NULL);
 	if (!nforce2_sub5)
 		return 0;
 
@@ -148,13 +147,13 @@ static unsigned int nforce2_fsb_read(int bootfsb)
 	fsb /= 1000000;
 
 	/* Check if PLL register is already set */
-	pci_read_config_byte(nforce2_chipset_dev, NFORCE2_PLLENABLE, (u8 *)&temp);
+	pci_read_config_byte(nforce2_chipset_dev,NFORCE2_PLLENABLE, (u8 *)&temp);
 
-	if (bootfsb || !temp)
+	if(bootfsb || !temp)
 		return fsb;
-
+		
 	/* Use PLL register FSB value */
-	pci_read_config_dword(nforce2_chipset_dev, NFORCE2_PLLREG, &temp);
+	pci_read_config_dword(nforce2_chipset_dev,NFORCE2_PLLREG, &temp);
 	fsb = nforce2_calc_fsb(temp);
 
 	return fsb;
@@ -185,7 +184,7 @@ static int nforce2_set_fsb(unsigned int fsb)
 	}
 
 	/* First write? Then set actual value */
-	pci_read_config_byte(nforce2_chipset_dev, NFORCE2_PLLENABLE, (u8 *)&temp);
+	pci_read_config_byte(nforce2_chipset_dev,NFORCE2_PLLENABLE, (u8 *)&temp);
 	if (!temp) {
 		pll = nforce2_calc_pll(tfsb);
 
@@ -211,8 +210,7 @@ static int nforce2_set_fsb(unsigned int fsb)
 			tfsb--;
 
 		/* Calculate the PLL reg. value */
-		pll = nforce2_calc_pll(tfsb);
-		if (pll == -1)
+		if ((pll = nforce2_calc_pll(tfsb)) == -1)
 			return -EINVAL;
 
 		nforce2_write_pll(pll);
@@ -251,7 +249,7 @@ static unsigned int nforce2_get(unsigned int cpu)
 static int nforce2_target(struct cpufreq_policy *policy,
 			  unsigned int target_freq, unsigned int relation)
 {
-/*        unsigned long         flags; */
+//        unsigned long         flags;
 	struct cpufreq_freqs freqs;
 	unsigned int target_fsb;
 
@@ -273,17 +271,17 @@ static int nforce2_target(struct cpufreq_policy *policy,
 	cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
 
 	/* Disable IRQs */
-	/* local_irq_save(flags); */
+	//local_irq_save(flags);
 
 	if (nforce2_set_fsb(target_fsb) < 0)
 		printk(KERN_ERR "cpufreq: Changing FSB to %d failed\n",
-			target_fsb);
+                       target_fsb);
 	else
 		dprintk("Changed FSB successfully to %d\n",
-			target_fsb);
+                       target_fsb);
 
 	/* Enable IRQs */
-	/* local_irq_restore(flags); */
+	//local_irq_restore(flags);
 
 	cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
 
@@ -304,8 +302,8 @@ static int nforce2_verify(struct cpufreq_policy *policy)
 		policy->max = (fsb_pol_max + 1) * fid * 100;
 
 	cpufreq_verify_within_limits(policy,
-				     policy->cpuinfo.min_freq,
-				     policy->cpuinfo.max_freq);
+                                     policy->cpuinfo.min_freq,
+                                     policy->cpuinfo.max_freq);
 	return 0;
 }
 
@@ -349,7 +347,7 @@ static int nforce2_cpu_init(struct cpufreq_policy *policy)
 	/* Set maximum FSB to FSB at boot time */
 	max_fsb = nforce2_fsb_read(1);
 
-	if (!max_fsb)
+	if(!max_fsb)
 		return -EIO;
 
 	if (!min_fsb)

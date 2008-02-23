@@ -168,7 +168,7 @@ clusterip_config_init(const struct ipt_clusterip_tgt_info *i, __be32 ip,
 		char buffer[16];
 
 		/* create proc dir entry */
-		sprintf(buffer, "%pI4", &ip);
+		sprintf(buffer, "%u.%u.%u.%u", NIPQUAD(ip));
 		c->pde = proc_create_data(buffer, S_IWUSR|S_IRUSR,
 					  clusterip_procdir,
 					  &clusterip_proc_fops, c);
@@ -281,9 +281,11 @@ clusterip_responsible(const struct clusterip_config *config, u_int32_t hash)
  ***********************************************************************/
 
 static unsigned int
-clusterip_tg(struct sk_buff *skb, const struct xt_target_param *par)
+clusterip_tg(struct sk_buff *skb, const struct net_device *in,
+             const struct net_device *out, unsigned int hooknum,
+             const struct xt_target *target, const void *targinfo)
 {
-	const struct ipt_clusterip_tgt_info *cipinfo = par->targinfo;
+	const struct ipt_clusterip_tgt_info *cipinfo = targinfo;
 	struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
 	u_int32_t hash;
@@ -347,10 +349,13 @@ clusterip_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	return XT_CONTINUE;
 }
 
-static bool clusterip_tg_check(const struct xt_tgchk_param *par)
+static bool
+clusterip_tg_check(const char *tablename, const void *e_void,
+                   const struct xt_target *target, void *targinfo,
+                   unsigned int hook_mask)
 {
-	struct ipt_clusterip_tgt_info *cipinfo = par->targinfo;
-	const struct ipt_entry *e = par->entryinfo;
+	struct ipt_clusterip_tgt_info *cipinfo = targinfo;
+	const struct ipt_entry *e = e_void;
 
 	struct clusterip_config *config;
 
@@ -373,7 +378,7 @@ static bool clusterip_tg_check(const struct xt_tgchk_param *par)
 	config = clusterip_config_find_get(e->ip.dst.s_addr, 1);
 	if (!config) {
 		if (!(cipinfo->flags & CLUSTERIP_FLAG_NEW)) {
-			printk(KERN_WARNING "CLUSTERIP: no config found for %pI4, need 'new'\n", &e->ip.dst.s_addr);
+			printk(KERN_WARNING "CLUSTERIP: no config found for %u.%u.%u.%u, need 'new'\n", NIPQUAD(e->ip.dst.s_addr));
 			return false;
 		} else {
 			struct net_device *dev;
@@ -401,9 +406,9 @@ static bool clusterip_tg_check(const struct xt_tgchk_param *par)
 	}
 	cipinfo->config = config;
 
-	if (nf_ct_l3proto_try_module_get(par->target->family) < 0) {
+	if (nf_ct_l3proto_try_module_get(target->family) < 0) {
 		printk(KERN_WARNING "can't load conntrack support for "
-				    "proto=%u\n", par->target->family);
+				    "proto=%u\n", target->family);
 		return false;
 	}
 
@@ -411,9 +416,9 @@ static bool clusterip_tg_check(const struct xt_tgchk_param *par)
 }
 
 /* drop reference count of cluster config when rule is deleted */
-static void clusterip_tg_destroy(const struct xt_tgdtor_param *par)
+static void clusterip_tg_destroy(const struct xt_target *target, void *targinfo)
 {
-	const struct ipt_clusterip_tgt_info *cipinfo = par->targinfo;
+	const struct ipt_clusterip_tgt_info *cipinfo = targinfo;
 
 	/* if no more entries are referencing the config, remove it
 	 * from the list and destroy the proc entry */
@@ -421,7 +426,7 @@ static void clusterip_tg_destroy(const struct xt_tgdtor_param *par)
 
 	clusterip_config_put(cipinfo->config);
 
-	nf_ct_l3proto_module_put(par->target->family);
+	nf_ct_l3proto_module_put(target->family);
 }
 
 #ifdef CONFIG_COMPAT
@@ -440,7 +445,7 @@ struct compat_ipt_clusterip_tgt_info
 
 static struct xt_target clusterip_tg_reg __read_mostly = {
 	.name		= "CLUSTERIP",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.target		= clusterip_tg,
 	.checkentry	= clusterip_tg_check,
 	.destroy	= clusterip_tg_destroy,
@@ -470,16 +475,18 @@ static void arp_print(struct arp_payload *payload)
 #define HBUFFERLEN 30
 	char hbuffer[HBUFFERLEN];
 	int j,k;
+	const char hexbuf[]= "0123456789abcdef";
 
 	for (k=0, j=0; k < HBUFFERLEN-3 && j < ETH_ALEN; j++) {
-		hbuffer[k++] = hex_asc_hi(payload->src_hw[j]);
-		hbuffer[k++] = hex_asc_lo(payload->src_hw[j]);
+		hbuffer[k++]=hexbuf[(payload->src_hw[j]>>4)&15];
+		hbuffer[k++]=hexbuf[payload->src_hw[j]&15];
 		hbuffer[k++]=':';
 	}
 	hbuffer[--k]='\0';
 
-	printk("src %pI4@%s, dst %pI4\n",
-		&payload->src_ip, hbuffer, &payload->dst_ip);
+	printk("src %u.%u.%u.%u@%s, dst %u.%u.%u.%u\n",
+		NIPQUAD(payload->src_ip), hbuffer,
+		NIPQUAD(payload->dst_ip));
 }
 #endif
 
@@ -540,7 +547,7 @@ arp_mangle(unsigned int hook,
 
 static struct nf_hook_ops cip_arp_ops __read_mostly = {
 	.hook = arp_mangle,
-	.pf = NFPROTO_ARP,
+	.pf = NF_ARP,
 	.hooknum = NF_ARP_OUT,
 	.priority = -1
 };

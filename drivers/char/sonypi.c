@@ -49,7 +49,6 @@
 #include <linux/err.h>
 #include <linux/kfifo.h>
 #include <linux/platform_device.h>
-#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -523,7 +522,7 @@ static int acpi_driver_registered;
 
 static int sonypi_ec_write(u8 addr, u8 value)
 {
-#ifdef CONFIG_ACPI
+#ifdef CONFIG_ACPI_EC
 	if (SONYPI_ACPI_ACTIVE)
 		return ec_write(addr, value);
 #endif
@@ -539,7 +538,7 @@ static int sonypi_ec_write(u8 addr, u8 value)
 
 static int sonypi_ec_read(u8 addr, u8 *value)
 {
-#ifdef CONFIG_ACPI
+#ifdef CONFIG_ACPI_EC
 	if (SONYPI_ACPI_ACTIVE)
 		return ec_read(addr, value);
 #endif
@@ -898,6 +897,7 @@ static int sonypi_misc_fasync(int fd, struct file *filp, int on)
 
 static int sonypi_misc_release(struct inode *inode, struct file *file)
 {
+	sonypi_misc_fasync(-1, file, 0);
 	mutex_lock(&sonypi_device.lock);
 	sonypi_device.open_count--;
 	mutex_unlock(&sonypi_device.lock);
@@ -906,14 +906,12 @@ static int sonypi_misc_release(struct inode *inode, struct file *file)
 
 static int sonypi_misc_open(struct inode *inode, struct file *file)
 {
-	lock_kernel();
 	mutex_lock(&sonypi_device.lock);
 	/* Flush input queue on first open */
 	if (!sonypi_device.open_count)
 		kfifo_reset(sonypi_device.fifo);
 	sonypi_device.open_count++;
 	mutex_unlock(&sonypi_device.lock);
-	unlock_kernel();
 	return 0;
 }
 

@@ -25,9 +25,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define KMSG_COMPONENT "cio"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/bootmem.h>
 #include <linux/device.h>
 #include <linux/init.h>
@@ -188,19 +185,56 @@ static inline void cmf_activate(void *area, unsigned int onoff)
 static int set_schib(struct ccw_device *cdev, u32 mme, int mbfc,
 		     unsigned long address)
 {
+	int ret;
+	int retry;
 	struct subchannel *sch;
+	struct schib *schib;
 
 	sch = to_subchannel(cdev->dev.parent);
+	schib = &sch->schib;
+	/* msch can silently fail, so do it again if necessary */
+	for (retry = 0; retry < 3; retry++) {
+		/* prepare schib */
+		stsch(sch->schid, schib);
+		schib->pmcw.mme  = mme;
+		schib->pmcw.mbfc = mbfc;
+		/* address can be either a block address or a block index */
+		if (mbfc)
+			schib->mba = address;
+		else
+			schib->pmcw.mbi = address;
 
-	sch->config.mme = mme;
-	sch->config.mbfc = mbfc;
-	/* address can be either a block address or a block index */
-	if (mbfc)
-		sch->config.mba = address;
-	else
-		sch->config.mbi = address;
+		/* try to submit it */
+		switch(ret = msch_err(sch->schid, schib)) {
+			case 0:
+				break;
+			case 1:
+			case 2: /* in I/O or status pending */
+				ret = -EBUSY;
+				break;
+			case 3: /* subchannel is no longer valid */
+				ret = -ENODEV;
+				break;
+			default: /* msch caught an exception */
+				ret = -EINVAL;
+				break;
+		}
+		stsch(sch->schid, schib); /* restore the schib */
 
-	return cio_commit_config(sch);
+		if (ret)
+			break;
+
+		/* check if it worked */
+		if (schib->pmcw.mme  == mme &&
+		    schib->pmcw.mbfc == mbfc &&
+		    (mbfc ? (schib->mba == address)
+			  : (schib->pmcw.mbi == address)))
+			return 0;
+
+		ret = -EINVAL;
+	}
+
+	return ret;
 }
 
 struct set_schib_struct {
@@ -304,15 +338,15 @@ static int cmf_copy_block(struct ccw_device *cdev)
 
 	sch = to_subchannel(cdev->dev.parent);
 
-	if (cio_update_schib(sch))
+	if (stsch(sch->schid, &sch->schib))
 		return -ENODEV;
 
-	if (scsw_fctl(&sch->schib.scsw) & SCSW_FCTL_START_FUNC) {
+	if (sch->schib.scsw.fctl & SCSW_FCTL_START_FUNC) {
 		/* Don't copy if a start function is in progress. */
-		if ((!(scsw_actl(&sch->schib.scsw) & SCSW_ACTL_SUSPENDED)) &&
-		    (scsw_actl(&sch->schib.scsw) &
+		if ((!(sch->schib.scsw.actl & SCSW_ACTL_SUSPENDED)) &&
+		    (sch->schib.scsw.actl &
 		     (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT)) &&
-		    (!(scsw_stctl(&sch->schib.scsw) & SCSW_STCTL_SEC_STATUS)))
+		    (!(sch->schib.scsw.stctl & SCSW_STCTL_SEC_STATUS)))
 			return -EBUSY;
 	}
 	cmb_data = cdev->private->cmb;
@@ -578,6 +612,9 @@ static int alloc_cmb(struct ccw_device *cdev)
 			free_pages((unsigned long)mem, get_order(size));
 		} else if (!mem) {
 			/* no luck */
+			printk(KERN_WARNING "cio: failed to allocate area "
+			       "for measuring %d subchannels\n",
+			       cmb_area.num_channels);
 			ret = -ENOMEM;
 			goto out;
 		} else {
@@ -1193,9 +1230,13 @@ static ssize_t cmb_enable_store(struct device *dev,
 	switch (val) {
 	case 0:
 		ret = disable_cmf(cdev);
+		if (ret)
+			dev_info(&cdev->dev, "disable_cmf failed (%d)\n", ret);
 		break;
 	case 1:
 		ret = enable_cmf(cdev);
+		if (ret && ret != -EBUSY)
+			dev_info(&cdev->dev, "enable_cmf failed (%d)\n", ret);
 		break;
 	}
 
@@ -1303,7 +1344,8 @@ static int __init init_cmf(void)
 	 * to basic mode.
 	 */
 	if (format == CMF_AUTODETECT) {
-		if (!css_general_characteristics.ext_mb) {
+		if (!css_characteristics_avail ||
+		    !css_general_characteristics.ext_mb) {
 			format = CMF_BASIC;
 		} else {
 			format = CMF_EXTENDED;
@@ -1323,10 +1365,13 @@ static int __init init_cmf(void)
 		cmbops = &cmbops_extended;
 		break;
 	default:
+		printk(KERN_ERR "cio: Invalid format %d for channel "
+			"measurement facility\n", format);
 		return 1;
 	}
-	pr_info("Channel measurement facility initialized using format "
-		"%s (mode %s)\n", format_string, detect_string);
+
+	printk(KERN_INFO "cio: Channel measurement facility using %s "
+	       "format (%s)\n", format_string, detect_string);
 	return 0;
 }
 

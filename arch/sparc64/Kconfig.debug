@@ -33,7 +33,7 @@ config DEBUG_PAGEALLOC
 
 config MCOUNT
 	bool
-	depends on STACK_DEBUG || FUNCTION_TRACER
+	depends on STACK_DEBUG
 	default y
 
 config FRAME_POINTER

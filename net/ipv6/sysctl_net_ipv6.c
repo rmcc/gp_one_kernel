@@ -35,19 +35,15 @@ static ctl_table ipv6_table_template[] = {
 		.data		= &init_net.ipv6.sysctl.bindv6only,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
-	{ .ctl_name = 0 }
-};
-
-static ctl_table ipv6_table[] = {
 	{
 		.ctl_name	= NET_IPV6_MLD_MAX_MSF,
 		.procname	= "mld_max_msf",
 		.data		= &sysctl_mld_max_msf,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{ .ctl_name = 0 }
 };
@@ -83,6 +79,12 @@ static int ipv6_sysctl_net_init(struct net *net)
 	ipv6_table[1].child = ipv6_icmp_table;
 
 	ipv6_table[2].data = &net->ipv6.sysctl.bindv6only;
+
+	/* We don't want this value to be per namespace, it should be global
+	   to all namespaces, so make it read-only when we are not in the
+	   init network namespace */
+	if (net != &init_net)
+		ipv6_table[3].mode = 0444;
 
 	net->ipv6.sysctl.table = register_net_sysctl_table(net, net_ipv6_ctl_path,
 							   ipv6_table);
@@ -124,45 +126,12 @@ static struct pernet_operations ipv6_sysctl_net_ops = {
 	.exit = ipv6_sysctl_net_exit,
 };
 
-static struct ctl_table_header *ip6_header;
-
 int ipv6_sysctl_register(void)
 {
-	int err = -ENOMEM;
-
-	ip6_header = register_net_sysctl_rotable(net_ipv6_ctl_path, ipv6_table);
-	if (ip6_header == NULL)
-		goto out;
-
-	err = register_pernet_subsys(&ipv6_sysctl_net_ops);
-	if (err)
-		goto err_pernet;
-out:
-	return err;
-
-err_pernet:
-	unregister_net_sysctl_table(ip6_header);
-	goto out;
+	return register_pernet_subsys(&ipv6_sysctl_net_ops);
 }
 
 void ipv6_sysctl_unregister(void)
 {
-	unregister_net_sysctl_table(ip6_header);
 	unregister_pernet_subsys(&ipv6_sysctl_net_ops);
-}
-
-static struct ctl_table_header *ip6_base;
-
-int ipv6_static_sysctl_register(void)
-{
-	static struct ctl_table empty[1];
-	ip6_base = register_sysctl_paths(net_ipv6_ctl_path, empty);
-	if (ip6_base == NULL)
-		return -ENOMEM;
-	return 0;
-}
-
-void ipv6_static_sysctl_unregister(void)
-{
-	unregister_net_sysctl_table(ip6_base);
 }

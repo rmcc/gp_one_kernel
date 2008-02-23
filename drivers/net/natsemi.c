@@ -612,7 +612,7 @@ static void undo_cable_magic(struct net_device *dev);
 static void check_link(struct net_device *dev);
 static void netdev_timer(unsigned long data);
 static void dump_ring(struct net_device *dev);
-static void ns_tx_timeout(struct net_device *dev);
+static void tx_timeout(struct net_device *dev);
 static int alloc_ring(struct net_device *dev);
 static void refill_rx(struct net_device *dev);
 static void init_ring(struct net_device *dev);
@@ -664,7 +664,7 @@ static ssize_t natsemi_show_##_name(struct device *dev, \
 NATSEMI_ATTR(dspcfg_workaround);
 
 static ssize_t natsemi_show_dspcfg_workaround(struct device *dev,
-				  	      struct device_attribute *attr,
+				  	      struct device_attribute *attr, 
 					      char *buf)
 {
 	struct netdev_private *np = netdev_priv(to_net_dev(dev));
@@ -687,7 +687,7 @@ static ssize_t natsemi_set_dspcfg_workaround(struct device *dev,
                  || !strncmp("0", buf, count - 1))
 		new_setting = 0;
 	else
-                 return count;
+                 return count; 
 
 	spin_lock_irqsave(&np->lock, flags);
 
@@ -779,22 +779,6 @@ static void __devinit natsemi_init_media (struct net_device *dev)
 
 }
 
-static const struct net_device_ops natsemi_netdev_ops = {
-	.ndo_open		= netdev_open,
-	.ndo_stop		= netdev_close,
-	.ndo_start_xmit		= start_tx,
-	.ndo_get_stats		= get_stats,
-	.ndo_set_multicast_list = set_rx_mode,
-	.ndo_change_mtu		= natsemi_change_mtu,
-	.ndo_do_ioctl		= netdev_ioctl,
-	.ndo_tx_timeout 	= ns_tx_timeout,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller	= natsemi_poll_controller,
-#endif
-};
-
 static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	const struct pci_device_id *ent)
 {
@@ -808,6 +792,7 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	const int pcibar = 1; /* PCI base address register */
 	int prev_eedata;
 	u32 tmp;
+	DECLARE_MAC_BUF(mac);
 
 /* when built into the kernel, we only print version if device is found */
 #ifndef MODULE
@@ -927,9 +912,20 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 	if (find_cnt < MAX_UNITS  &&  full_duplex[find_cnt])
 		np->full_duplex = 1;
 
-	dev->netdev_ops = &natsemi_netdev_ops;
+	/* The chip-specific entries in the device structure. */
+	dev->open = &netdev_open;
+	dev->hard_start_xmit = &start_tx;
+	dev->stop = &netdev_close;
+	dev->get_stats = &get_stats;
+	dev->set_multicast_list = &set_rx_mode;
+	dev->change_mtu = &natsemi_change_mtu;
+	dev->do_ioctl = &netdev_ioctl;
+	dev->tx_timeout = &tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
 
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = &natsemi_poll_controller;
+#endif
 	SET_ETHTOOL_OPS(dev, &ethtool_ops);
 
 	if (mtu)
@@ -952,10 +948,10 @@ static int __devinit natsemi_probe1 (struct pci_dev *pdev,
 
 	if (netif_msg_drv(np)) {
 		printk(KERN_INFO "natsemi %s: %s at %#08llx "
-		       "(%s), %pM, IRQ %d",
+		       "(%s), %s, IRQ %d",
 		       dev->name, natsemi_pci_info[chip_idx].name,
 		       (unsigned long long)iostart, pci_name(np->pci_dev),
-		       dev->dev_addr, irq);
+		       print_mac(mac, dev->dev_addr), irq);
 		if (dev->if_port == PORT_TP)
 			printk(", port TP.\n");
 		else if (np->ignore_phy)
@@ -1879,7 +1875,7 @@ static void dump_ring(struct net_device *dev)
 	}
 }
 
-static void ns_tx_timeout(struct net_device *dev)
+static void tx_timeout(struct net_device *dev)
 {
 	struct netdev_private *np = netdev_priv(dev);
 	void __iomem * ioaddr = ns_ioaddr(dev);
@@ -2198,10 +2194,10 @@ static irqreturn_t intr_handler(int irq, void *dev_instance)
 
 	prefetch(&np->rx_skbuff[np->cur_rx % RX_RING_SIZE]);
 
-	if (netif_rx_schedule_prep(&np->napi)) {
+	if (netif_rx_schedule_prep(dev, &np->napi)) {
 		/* Disable interrupts and register for poll */
 		natsemi_irq_disable(dev);
-		__netif_rx_schedule(&np->napi);
+		__netif_rx_schedule(dev, &np->napi);
 	} else
 		printk(KERN_WARNING
 	       	       "%s: Ignoring interrupt, status %#08x, mask %#08x.\n",
@@ -2253,7 +2249,7 @@ static int natsemi_poll(struct napi_struct *napi, int budget)
 		np->intr_status = readl(ioaddr + IntrStatus);
 	} while (np->intr_status);
 
-	netif_rx_complete(napi);
+	netif_rx_complete(dev, napi);
 
 	/* Reenable interrupts providing nothing is trying to shut
 	 * the chip down. */
@@ -2366,6 +2362,7 @@ static void netdev_rx(struct net_device *dev, int *work_done, int work_to_do)
 			}
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_receive_skb(skb);
+			dev->last_rx = jiffies;
 			np->stats.rx_packets++;
 			np->stats.rx_bytes += pkt_len;
 		}
@@ -3235,7 +3232,7 @@ static void __devexit natsemi_remove1 (struct pci_dev *pdev)
  * suspend/resume synchronization:
  * entry points:
  *   netdev_open, netdev_close, netdev_ioctl, set_rx_mode, intr_handler,
- *   start_tx, ns_tx_timeout
+ *   start_tx, tx_timeout
  *
  * No function accesses the hardware without checking np->hands_off.
  *	the check occurs under spin_lock_irq(&np->lock);

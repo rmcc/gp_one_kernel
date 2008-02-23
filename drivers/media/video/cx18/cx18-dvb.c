@@ -1,8 +1,7 @@
 /*
  *  cx18 functions for DVB support
  *
- *  Copyright (c) 2008 Steven Toth <stoth@linuxtv.org>
- *  Copyright (C) 2008  Andy Walls <awalls@radix.net>
+ *  Copyright (c) 2008 Steven Toth <stoth@hauppauge.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,7 +21,6 @@
 
 #include "cx18-version.h"
 #include "cx18-dvb.h"
-#include "cx18-io.h"
 #include "cx18-streams.h"
 #include "cx18-cards.h"
 #include "s5h1409.h"
@@ -71,31 +69,21 @@ static int cx18_dvb_start_feed(struct dvb_demux_feed *feed)
 	struct dvb_demux *demux = feed->demux;
 	struct cx18_stream *stream = (struct cx18_stream *) demux->priv;
 	struct cx18 *cx = stream->cx;
-	int ret;
+	int ret = -EINVAL;
 	u32 v;
 
 	CX18_DEBUG_INFO("Start feed: pid = 0x%x index = %d\n",
 			feed->pid, feed->index);
-
-	mutex_lock(&cx->serialize_lock);
-	ret = cx18_init_on_first_open(cx);
-	mutex_unlock(&cx->serialize_lock);
-	if (ret) {
-		CX18_ERR("Failed to initialize firmware starting DVB feed\n");
-		return ret;
-	}
-	ret = -EINVAL;
-
 	switch (cx->card->type) {
 	case CX18_CARD_HVR_1600_ESMT:
 	case CX18_CARD_HVR_1600_SAMSUNG:
-		v = cx18_read_reg(cx, CX18_REG_DMUX_NUM_PORT_0_CONTROL);
+		v = read_reg(CX18_REG_DMUX_NUM_PORT_0_CONTROL);
 		v |= 0x00400000; /* Serial Mode */
 		v |= 0x00002000; /* Data Length - Byte */
 		v |= 0x00010000; /* Error - Polarity */
 		v |= 0x00020000; /* Error - Passthru */
 		v |= 0x000c0000; /* Error - Ignore */
-		cx18_write_reg(cx, v, CX18_REG_DMUX_NUM_PORT_0_CONTROL);
+		write_reg(v, CX18_REG_DMUX_NUM_PORT_0_CONTROL);
 		break;
 
 	default:
@@ -108,23 +96,15 @@ static int cx18_dvb_start_feed(struct dvb_demux_feed *feed)
 	if (!demux->dmx.frontend)
 		return -EINVAL;
 
-	if (!stream)
-		return -EINVAL;
-
-	mutex_lock(&stream->dvb.feedlock);
-	if (stream->dvb.feeding++ == 0) {
-		CX18_DEBUG_INFO("Starting Transport DMA\n");
-		set_bit(CX18_F_S_STREAMING, &stream->s_flags);
-		ret = cx18_start_v4l2_encode_stream(stream);
-		if (ret < 0) {
-			CX18_DEBUG_INFO("Failed to start Transport DMA\n");
-			stream->dvb.feeding--;
-			if (stream->dvb.feeding == 0)
-				clear_bit(CX18_F_S_STREAMING, &stream->s_flags);
-		}
-	} else
-		ret = 0;
-	mutex_unlock(&stream->dvb.feedlock);
+	if (stream) {
+		mutex_lock(&stream->dvb.feedlock);
+		if (stream->dvb.feeding++ == 0) {
+			CX18_DEBUG_INFO("Starting Transport DMA\n");
+			ret = cx18_start_v4l2_encode_stream(stream);
+		} else
+			ret = 0;
+		mutex_unlock(&stream->dvb.feedlock);
+	}
 
 	return ret;
 }
@@ -217,10 +197,6 @@ int cx18_dvb_register(struct cx18_stream *stream)
 	dvb_net_init(dvb_adapter, &dvb->dvbnet, dmx);
 
 	CX18_INFO("DVB Frontend registered\n");
-	CX18_INFO("Registered DVB adapter%d for %s (%d x %d kB)\n",
-		  stream->dvb.dvb_adapter.num, stream->name,
-		  stream->buffers, stream->buf_size/1024);
-
 	mutex_init(&dvb->feedlock);
 	dvb->enabled = 1;
 	return ret;

@@ -19,7 +19,7 @@
 #ifndef _AT91_PCM_H
 #define _AT91_PCM_H
 
-#include <mach/hardware.h>
+#include <asm/arch/hardware.h>
 
 struct at91_ssc_periph {
 	void __iomem	*base;

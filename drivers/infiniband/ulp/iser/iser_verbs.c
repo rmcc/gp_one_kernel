@@ -29,10 +29,13 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * $Id: iser_verbs.c 7051 2006-05-10 12:29:11Z ogerlitz $
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/version.h>
 
 #include "iscsi_iser.h"
 
@@ -322,18 +325,7 @@ static void iser_conn_release(struct iser_conn *ib_conn)
 		iser_device_try_release(device);
 	if (ib_conn->iser_conn)
 		ib_conn->iser_conn->ib_conn = NULL;
-	iscsi_destroy_endpoint(ib_conn->ep);
-}
-
-void iser_conn_get(struct iser_conn *ib_conn)
-{
-	atomic_inc(&ib_conn->refcount);
-}
-
-void iser_conn_put(struct iser_conn *ib_conn)
-{
-	if (atomic_dec_and_test(&ib_conn->refcount))
-		iser_conn_release(ib_conn);
+	kfree(ib_conn);
 }
 
 /**
@@ -357,7 +349,7 @@ void iser_conn_terminate(struct iser_conn *ib_conn)
 	wait_event_interruptible(ib_conn->wait,
 				 ib_conn->state == ISER_CONN_DOWN);
 
-	iser_conn_put(ib_conn);
+	iser_conn_release(ib_conn);
 }
 
 static void iser_connect_error(struct rdma_cm_id *cma_id)
@@ -482,7 +474,6 @@ static int iser_cma_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *eve
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
-	case RDMA_CM_EVENT_ADDR_CHANGE:
 		iser_disconnected_handler(cma_id);
 		break;
 	default:
@@ -492,16 +483,24 @@ static int iser_cma_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *eve
 	return ret;
 }
 
-void iser_conn_init(struct iser_conn *ib_conn)
+int iser_conn_init(struct iser_conn **ibconn)
 {
+	struct iser_conn *ib_conn;
+
+	ib_conn = kzalloc(sizeof *ib_conn, GFP_KERNEL);
+	if (!ib_conn) {
+		iser_err("can't alloc memory for struct iser_conn\n");
+		return -ENOMEM;
+	}
 	ib_conn->state = ISER_CONN_INIT;
 	init_waitqueue_head(&ib_conn->wait);
 	atomic_set(&ib_conn->post_recv_buf_count, 0);
 	atomic_set(&ib_conn->post_send_buf_count, 0);
-	atomic_set(&ib_conn->unexpected_pdu_count, 0);
-	atomic_set(&ib_conn->refcount, 1);
 	INIT_LIST_HEAD(&ib_conn->conn_list);
 	spin_lock_init(&ib_conn->lock);
+
+	*ibconn = ib_conn;
+	return 0;
 }
 
  /**
@@ -516,14 +515,14 @@ int iser_connect(struct iser_conn   *ib_conn,
 	struct sockaddr *src, *dst;
 	int err = 0;
 
-	sprintf(ib_conn->name, "%pI4:%d",
-		&dst_addr->sin_addr.s_addr, dst_addr->sin_port);
+	sprintf(ib_conn->name,"%d.%d.%d.%d:%d",
+		NIPQUAD(dst_addr->sin_addr.s_addr), dst_addr->sin_port);
 
 	/* the device is known only --after-- address resolution */
 	ib_conn->device = NULL;
 
-	iser_err("connecting to: %pI4, port 0x%x\n",
-		 &dst_addr->sin_addr, dst_addr->sin_port);
+	iser_err("connecting to: %d.%d.%d.%d, port 0x%x\n",
+		 NIPQUAD(dst_addr->sin_addr), dst_addr->sin_port);
 
 	ib_conn->state = ISER_CONN_PENDING;
 

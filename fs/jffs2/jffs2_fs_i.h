@@ -12,6 +12,7 @@
 #ifndef _JFFS2_FS_I
 #define _JFFS2_FS_I
 
+#include <linux/version.h>
 #include <linux/rbtree.h>
 #include <linux/posix_acl.h>
 #include <linux/mutex.h>

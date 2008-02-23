@@ -2,7 +2,8 @@
  * wm9713.c  --  Codec touch driver for Wolfson WM9713 AC97 Codec.
  *
  * Copyright 2003, 2004, 2005, 2006, 2007, 2008 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
  * Parts Copyright : Ian Molton <spyro@f2s.com>
  *                   Andrew Zabolotny <zap@homelink.ru>
  *                   Russell King <rmk@arm.linux.org.uk>
@@ -16,6 +17,7 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/input.h>
 #include <linux/delay.h>
@@ -81,15 +83,6 @@ MODULE_PARM_DESC(pressure, "Set threshold for pressure measurement.");
 static int delay = 4;
 module_param(delay, int, 0);
 MODULE_PARM_DESC(delay, "Set adc sample delay.");
-
-/*
- * Set five_wire = 1 to use a 5 wire touchscreen.
- *
- * NOTE: Five wire mode does not allow for readback of pressure.
- */
-static int five_wire;
-module_param(five_wire, int, 0);
-MODULE_PARM_DESC(five_wire, "Set to '1' to use 5-wire touchscreen.");
 
 /*
  * Set adc mask function.
@@ -167,19 +160,6 @@ static void wm9713_phy_init(struct wm97xx *wm)
 		dig3 |= WM9712_RPU(rpu);
 		dev_info(wm->dev, "setting pen detect pull-up to %d Ohms\n",
 			 64000 / rpu);
-	}
-
-	/* Five wire panel? */
-	if (five_wire) {
-		dig3 |= WM9713_45W;
-		dev_info(wm->dev, "setting 5-wire touchscreen mode.");
-
-		if (pil) {
-			dev_warn(wm->dev,
-				 "Pressure measurement not supported in 5 "
-				 "wire mode, disabling\n");
-			pil = 0;
-		}
 	}
 
 	/* touchpanel pressure */
@@ -475,6 +455,6 @@ struct wm97xx_codec_drv wm9713_codec = {
 EXPORT_SYMBOL_GPL(wm9713_codec);
 
 /* Module information */
-MODULE_AUTHOR("Liam Girdwood <lrg@slimlogic.co.uk>");
+MODULE_AUTHOR("Liam Girdwood <liam.girdwood@wolfsonmicro.com>");
 MODULE_DESCRIPTION("WM9713 Touch Screen Driver");
 MODULE_LICENSE("GPL");

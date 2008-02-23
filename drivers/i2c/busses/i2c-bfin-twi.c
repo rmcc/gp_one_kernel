@@ -49,8 +49,6 @@ struct bfin_twi_iface {
 	struct i2c_msg 		*pmsg;
 	int			msg_num;
 	int			cur_msg;
-	u16			saved_clkdiv;
-	u16			saved_control;
 	void __iomem		*regs_base;
 };
 
@@ -567,43 +565,32 @@ static u32 bfin_twi_functionality(struct i2c_adapter *adap)
 	       I2C_FUNC_I2C;
 }
 
+
 static struct i2c_algorithm bfin_twi_algorithm = {
 	.master_xfer   = bfin_twi_master_xfer,
 	.smbus_xfer    = bfin_twi_smbus_xfer,
 	.functionality = bfin_twi_functionality,
 };
 
-static int i2c_bfin_twi_suspend(struct platform_device *pdev, pm_message_t state)
+
+static int i2c_bfin_twi_suspend(struct platform_device *dev, pm_message_t state)
 {
-	struct bfin_twi_iface *iface = platform_get_drvdata(pdev);
-
-	iface->saved_clkdiv = read_CLKDIV(iface);
-	iface->saved_control = read_CONTROL(iface);
-
-	free_irq(iface->irq, iface);
+	struct bfin_twi_iface *iface = platform_get_drvdata(dev);
 
 	/* Disable TWI */
-	write_CONTROL(iface, iface->saved_control & ~TWI_ENA);
+	write_CONTROL(iface, read_CONTROL(iface) & ~TWI_ENA);
+	SSYNC();
 
 	return 0;
 }
 
-static int i2c_bfin_twi_resume(struct platform_device *pdev)
+static int i2c_bfin_twi_resume(struct platform_device *dev)
 {
-	struct bfin_twi_iface *iface = platform_get_drvdata(pdev);
+	struct bfin_twi_iface *iface = platform_get_drvdata(dev);
 
-	int rc = request_irq(iface->irq, bfin_twi_interrupt_entry,
-		IRQF_DISABLED, pdev->name, iface);
-	if (rc) {
-		dev_err(&pdev->dev, "Can't get IRQ %d !\n", iface->irq);
-		return -ENODEV;
-	}
-
-	/* Resume TWI interface clock as specified */
-	write_CLKDIV(iface, iface->saved_clkdiv);
-
-	/* Resume TWI */
-	write_CONTROL(iface, iface->saved_control);
+	/* Enable TWI */
+	write_CONTROL(iface, read_CONTROL(iface) | TWI_ENA);
+	SSYNC();
 
 	return 0;
 }
@@ -656,7 +643,7 @@ static int i2c_bfin_twi_probe(struct platform_device *pdev)
 	strlcpy(p_adap->name, pdev->name, sizeof(p_adap->name));
 	p_adap->algo = &bfin_twi_algorithm;
 	p_adap->algo_data = iface;
-	p_adap->class = I2C_CLASS_HWMON | I2C_CLASS_SPD;
+	p_adap->class = I2C_CLASS_ALL;
 	p_adap->dev.parent = &pdev->dev;
 
 	rc = peripheral_request_list(pin_req[pdev->id], "i2c-bfin-twi");

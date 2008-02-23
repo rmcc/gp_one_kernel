@@ -19,7 +19,6 @@
  */
 
 #include "dtc.h"
-#include "srcpos.h"
 
 #define FTF_FULLPATH	0x1
 #define FTF_VARALIGN	0x2
@@ -163,18 +162,28 @@ static void asm_emit_data(void *e, struct data d)
 {
 	FILE *f = e;
 	int off = 0;
-	struct marker *m = d.markers;
+	struct marker *m;
 
-	for_each_marker_of_type(m, LABEL)
-		emit_offset_label(f, m->ref, m->offset);
-
-	while ((d.len - off) >= sizeof(uint32_t)) {
-		fprintf(f, "\t.long\t0x%x\n",
-			fdt32_to_cpu(*((uint32_t *)(d.val+off))));
-		off += sizeof(uint32_t);
+	m = d.markers;
+	while (m) {
+		if (m->type == LABEL)
+			emit_offset_label(f, m->ref, m->offset);
+		m = m->next;
 	}
 
-	while ((d.len - off) >= 1) {
+	while ((d.len - off) >= sizeof(u32)) {
+		fprintf(f, "\t.long\t0x%x\n",
+			be32_to_cpu(*((u32 *)(d.val+off))));
+		off += sizeof(u32);
+	}
+
+	if ((d.len - off) >= sizeof(u16)) {
+		fprintf(f, "\t.short\t0x%hx\n",
+			be16_to_cpu(*((u16 *)(d.val+off))));
+		off += sizeof(u16);
+	}
+
+	if ((d.len - off) >= 1) {
 		fprintf(f, "\t.byte\t0x%hhx\n", d.val[off]);
 		off += 1;
 	}
@@ -327,28 +336,29 @@ static void make_fdt_header(struct fdt_header *fdt,
 
 	memset(fdt, 0xff, sizeof(*fdt));
 
-	fdt->magic = cpu_to_fdt32(FDT_MAGIC);
-	fdt->version = cpu_to_fdt32(vi->version);
-	fdt->last_comp_version = cpu_to_fdt32(vi->last_comp_version);
+	fdt->magic = cpu_to_be32(FDT_MAGIC);
+	fdt->version = cpu_to_be32(vi->version);
+	fdt->last_comp_version = cpu_to_be32(vi->last_comp_version);
 
 	/* Reserve map should be doubleword aligned */
 	reserve_off = ALIGN(vi->hdr_size, 8);
 
-	fdt->off_mem_rsvmap = cpu_to_fdt32(reserve_off);
-	fdt->off_dt_struct = cpu_to_fdt32(reserve_off + reservesize);
-	fdt->off_dt_strings = cpu_to_fdt32(reserve_off + reservesize
+	fdt->off_mem_rsvmap = cpu_to_be32(reserve_off);
+	fdt->off_dt_struct = cpu_to_be32(reserve_off + reservesize);
+	fdt->off_dt_strings = cpu_to_be32(reserve_off + reservesize
 					  + dtsize);
-	fdt->totalsize = cpu_to_fdt32(reserve_off + reservesize + dtsize + strsize);
+	fdt->totalsize = cpu_to_be32(reserve_off + reservesize + dtsize + strsize);
 
 	if (vi->flags & FTF_BOOTCPUID)
-		fdt->boot_cpuid_phys = cpu_to_fdt32(boot_cpuid_phys);
+		fdt->boot_cpuid_phys = cpu_to_be32(boot_cpuid_phys);
 	if (vi->flags & FTF_STRTABSIZE)
-		fdt->size_dt_strings = cpu_to_fdt32(strsize);
+		fdt->size_dt_strings = cpu_to_be32(strsize);
 	if (vi->flags & FTF_STRUCTSIZE)
-		fdt->size_dt_struct = cpu_to_fdt32(dtsize);
+		fdt->size_dt_struct = cpu_to_be32(dtsize);
 }
 
-void dt_to_blob(FILE *f, struct boot_info *bi, int version)
+void dt_to_blob(FILE *f, struct boot_info *bi, int version,
+		int boot_cpuid_phys)
 {
 	struct version_info *vi = NULL;
 	int i;
@@ -373,26 +383,26 @@ void dt_to_blob(FILE *f, struct boot_info *bi, int version)
 
 	/* Make header */
 	make_fdt_header(&fdt, vi, reservebuf.len, dtbuf.len, strbuf.len,
-			bi->boot_cpuid_phys);
+			boot_cpuid_phys);
 
 	/*
 	 * If the user asked for more space than is used, adjust the totalsize.
 	 */
 	if (minsize > 0) {
-		padlen = minsize - fdt32_to_cpu(fdt.totalsize);
+		padlen = minsize - be32_to_cpu(fdt.totalsize);
 		if ((padlen < 0) && (quiet < 1))
 			fprintf(stderr,
 				"Warning: blob size %d >= minimum size %d\n",
-				fdt32_to_cpu(fdt.totalsize), minsize);
+				be32_to_cpu(fdt.totalsize), minsize);
 	}
 
 	if (padsize > 0)
 		padlen = padsize;
 
 	if (padlen > 0) {
-		int tsize = fdt32_to_cpu(fdt.totalsize);
+		int tsize = be32_to_cpu(fdt.totalsize);
 		tsize += padlen;
-		fdt.totalsize = cpu_to_fdt32(tsize);
+		fdt.totalsize = cpu_to_be32(tsize);
 	}
 
 	/*
@@ -400,7 +410,7 @@ void dt_to_blob(FILE *f, struct boot_info *bi, int version)
 	 * the reserve buffer, add the reserve map terminating zeroes,
 	 * the device tree itself, and finally the strings.
 	 */
-	blob = data_append_data(blob, &fdt, vi->hdr_size);
+	blob = data_append_data(blob, &fdt, sizeof(fdt));
 	blob = data_append_align(blob, 8);
 	blob = data_merge(blob, reservebuf);
 	blob = data_append_zeroes(blob, sizeof(struct fdt_reserve_entry));
@@ -439,7 +449,7 @@ static void dump_stringtable_asm(FILE *f, struct data strbuf)
 	}
 }
 
-void dt_to_asm(FILE *f, struct boot_info *bi, int version)
+void dt_to_asm(FILE *f, struct boot_info *bi, int version, int boot_cpuid_phys)
 {
 	struct version_info *vi = NULL;
 	int i;
@@ -479,7 +489,7 @@ void dt_to_asm(FILE *f, struct boot_info *bi, int version)
 
 	if (vi->flags & FTF_BOOTCPUID)
 		fprintf(f, "\t.long\t%i\t\t\t\t\t/* boot_cpuid_phys */\n",
-			bi->boot_cpuid_phys);
+			boot_cpuid_phys);
 
 	if (vi->flags & FTF_STRTABSIZE)
 		fprintf(f, "\t.long\t_%s_strings_end - _%s_strings_start\t/* size_dt_strings */\n",
@@ -569,15 +579,15 @@ static void flat_read_chunk(struct inbuf *inb, void *p, int len)
 	inb->ptr += len;
 }
 
-static uint32_t flat_read_word(struct inbuf *inb)
+static u32 flat_read_word(struct inbuf *inb)
 {
-	uint32_t val;
+	u32 val;
 
 	assert(((inb->ptr - inb->base) % sizeof(val)) == 0);
 
 	flat_read_chunk(inb, &val, sizeof(val));
 
-	return fdt32_to_cpu(val);
+	return be32_to_cpu(val);
 }
 
 static void flat_realign(struct inbuf *inb, int align)
@@ -605,7 +615,7 @@ static char *flat_read_string(struct inbuf *inb)
 
 	inb->ptr += len;
 
-	flat_realign(inb, sizeof(uint32_t));
+	flat_realign(inb, sizeof(u32));
 
 	return str;
 }
@@ -622,7 +632,7 @@ static struct data flat_read_data(struct inbuf *inb, int len)
 
 	flat_read_chunk(inb, d.val, len);
 
-	flat_realign(inb, sizeof(uint32_t));
+	flat_realign(inb, sizeof(u32));
 
 	return d;
 }
@@ -649,7 +659,7 @@ static char *flat_read_stringtable(struct inbuf *inb, int offset)
 static struct property *flat_read_property(struct inbuf *dtbuf,
 					   struct inbuf *strbuf, int flags)
 {
-	uint32_t proplen, stroff;
+	u32 proplen, stroff;
 	char *name;
 	struct data val;
 
@@ -683,8 +693,8 @@ static struct reserve_info *flat_read_mem_reserve(struct inbuf *inb)
 	p = inb->ptr;
 	while (1) {
 		flat_read_chunk(inb, &re, sizeof(re));
-		re.address  = fdt64_to_cpu(re.address);
-		re.size = fdt64_to_cpu(re.size);
+		re.address  = be64_to_cpu(re.address);
+		re.size = be64_to_cpu(re.size);
 		if (re.size == 0)
 			break;
 
@@ -698,37 +708,77 @@ static struct reserve_info *flat_read_mem_reserve(struct inbuf *inb)
 
 static char *nodename_from_path(const char *ppath, const char *cpath)
 {
+	const char *lslash;
 	int plen;
 
-	plen = strlen(ppath);
+	lslash = strrchr(cpath, '/');
+	if (! lslash)
+		return NULL;
 
-	if (!strneq(ppath, cpath, plen))
-		die("Path \"%s\" is not valid as a child of \"%s\"\n",
-		    cpath, ppath);
+	plen = lslash - cpath;
 
-	/* root node is a special case */
-	if (!streq(ppath, "/"))
-		plen++;
+	if (streq(cpath, "/") && streq(ppath, ""))
+		return "";
 
-	return strdup(cpath + plen);
+	if ((plen == 0) && streq(ppath, "/"))
+		return strdup(lslash+1);
+
+	if (! strneq(ppath, cpath, plen))
+		return NULL;
+
+	return strdup(lslash+1);
+}
+
+static const char PROPCHAR[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,._+*#?-";
+static const char UNITCHAR[] = "0123456789abcdef,";
+
+static int check_node_name(const char *name)
+{
+	const char *atpos;
+	int basenamelen;
+
+	atpos = strrchr(name, '@');
+
+	if (atpos)
+		basenamelen = atpos - name;
+	else
+		basenamelen = strlen(name);
+
+	if (strspn(name, PROPCHAR) < basenamelen)
+		return -1;
+
+	if (atpos
+	    && ((basenamelen + 1 + strspn(atpos+1, UNITCHAR)) < strlen(name)))
+		return -1;
+
+	return basenamelen;
 }
 
 static struct node *unflatten_tree(struct inbuf *dtbuf,
 				   struct inbuf *strbuf,
-				   const char *parent_flatname, int flags)
+				   const char *parent_path, int flags)
 {
 	struct node *node;
-	char *flatname;
-	uint32_t val;
+	u32 val;
 
 	node = build_node(NULL, NULL);
 
-	flatname = flat_read_string(dtbuf);
+	if (flags & FTF_FULLPATH) {
+		node->fullpath = flat_read_string(dtbuf);
+		node->name = nodename_from_path(parent_path, node->fullpath);
 
-	if (flags & FTF_FULLPATH)
-		node->name = nodename_from_path(parent_flatname, flatname);
-	else
-		node->name = flatname;
+		if (! node->name)
+			die("Path \"%s\" is not valid as a child of \"%s\"\n",
+			    node->fullpath, parent_path);
+	} else {
+		node->name = flat_read_string(dtbuf);
+		node->fullpath = join_path(parent_path, node->name);
+	}
+
+	node->basenamelen = check_node_name(node->name);
+	if (node->basenamelen < 0) {
+		fprintf(stderr, "Warning \"%s\" has incorrect format\n", node->name);
+	}
 
 	do {
 		struct property *prop;
@@ -745,7 +795,8 @@ static struct node *unflatten_tree(struct inbuf *dtbuf,
 			break;
 
 		case FDT_BEGIN_NODE:
-			child = unflatten_tree(dtbuf,strbuf, flatname, flags);
+			child = unflatten_tree(dtbuf,strbuf, node->fullpath,
+					       flags);
 			add_child(node, child);
 			break;
 
@@ -774,11 +825,10 @@ static struct node *unflatten_tree(struct inbuf *dtbuf,
 }
 
 
-struct boot_info *dt_from_blob(const char *fname)
+struct boot_info *dt_from_blob(FILE *f)
 {
-	struct dtc_file *dtcf;
-	uint32_t magic, totalsize, version, size_dt, boot_cpuid_phys;
-	uint32_t off_dt, off_str, off_mem_rsvmap;
+	u32 magic, totalsize, version, size_str, size_dt;
+	u32 off_dt, off_str, off_mem_rsvmap;
 	int rc;
 	char *blob;
 	struct fdt_header *fdt;
@@ -788,56 +838,54 @@ struct boot_info *dt_from_blob(const char *fname)
 	int sizeleft;
 	struct reserve_info *reservelist;
 	struct node *tree;
-	uint32_t val;
+	u32 val;
 	int flags = 0;
 
-	dtcf = dtc_open_file(fname, NULL);
-
-	rc = fread(&magic, sizeof(magic), 1, dtcf->file);
-	if (ferror(dtcf->file))
+	rc = fread(&magic, sizeof(magic), 1, f);
+	if (ferror(f))
 		die("Error reading DT blob magic number: %s\n",
 		    strerror(errno));
 	if (rc < 1) {
-		if (feof(dtcf->file))
+		if (feof(f))
 			die("EOF reading DT blob magic number\n");
 		else
 			die("Mysterious short read reading magic number\n");
 	}
 
-	magic = fdt32_to_cpu(magic);
+	magic = be32_to_cpu(magic);
 	if (magic != FDT_MAGIC)
 		die("Blob has incorrect magic number\n");
 
-	rc = fread(&totalsize, sizeof(totalsize), 1, dtcf->file);
-	if (ferror(dtcf->file))
+	rc = fread(&totalsize, sizeof(totalsize), 1, f);
+	if (ferror(f))
 		die("Error reading DT blob size: %s\n", strerror(errno));
 	if (rc < 1) {
-		if (feof(dtcf->file))
+		if (feof(f))
 			die("EOF reading DT blob size\n");
 		else
 			die("Mysterious short read reading blob size\n");
 	}
 
-	totalsize = fdt32_to_cpu(totalsize);
+	totalsize = be32_to_cpu(totalsize);
 	if (totalsize < FDT_V1_SIZE)
 		die("DT blob size (%d) is too small\n", totalsize);
 
 	blob = xmalloc(totalsize);
 
 	fdt = (struct fdt_header *)blob;
-	fdt->magic = cpu_to_fdt32(magic);
-	fdt->totalsize = cpu_to_fdt32(totalsize);
+	fdt->magic = cpu_to_be32(magic);
+	fdt->totalsize = cpu_to_be32(totalsize);
 
 	sizeleft = totalsize - sizeof(magic) - sizeof(totalsize);
 	p = blob + sizeof(magic)  + sizeof(totalsize);
 
 	while (sizeleft) {
-		if (feof(dtcf->file))
+		if (feof(f))
 			die("EOF before reading %d bytes of DT blob\n",
 			    totalsize);
 
-		rc = fread(p, 1, sizeleft, dtcf->file);
-		if (ferror(dtcf->file))
+		rc = fread(p, 1, sizeleft, f);
+		if (ferror(f))
 			die("Error reading DT blob: %s\n",
 			    strerror(errno));
 
@@ -845,11 +893,19 @@ struct boot_info *dt_from_blob(const char *fname)
 		p += rc;
 	}
 
-	off_dt = fdt32_to_cpu(fdt->off_dt_struct);
-	off_str = fdt32_to_cpu(fdt->off_dt_strings);
-	off_mem_rsvmap = fdt32_to_cpu(fdt->off_mem_rsvmap);
-	version = fdt32_to_cpu(fdt->version);
-	boot_cpuid_phys = fdt32_to_cpu(fdt->boot_cpuid_phys);
+	off_dt = be32_to_cpu(fdt->off_dt_struct);
+	off_str = be32_to_cpu(fdt->off_dt_strings);
+	off_mem_rsvmap = be32_to_cpu(fdt->off_mem_rsvmap);
+	version = be32_to_cpu(fdt->version);
+
+	fprintf(stderr, "\tmagic:\t\t\t0x%x\n", magic);
+	fprintf(stderr, "\ttotalsize:\t\t%d\n", totalsize);
+	fprintf(stderr, "\toff_dt_struct:\t\t0x%x\n", off_dt);
+	fprintf(stderr, "\toff_dt_strings:\t\t0x%x\n", off_str);
+	fprintf(stderr, "\toff_mem_rsvmap:\t\t0x%x\n", off_mem_rsvmap);
+	fprintf(stderr, "\tversion:\t\t0x%x\n", version );
+	fprintf(stderr, "\tlast_comp_version:\t0x%x\n",
+		be32_to_cpu(fdt->last_comp_version));
 
 	if (off_mem_rsvmap >= totalsize)
 		die("Mem Reserve structure offset exceeds total size\n");
@@ -860,17 +916,21 @@ struct boot_info *dt_from_blob(const char *fname)
 	if (off_str > totalsize)
 		die("String table offset exceeds total size\n");
 
+	if (version >= 2)
+		fprintf(stderr, "\tboot_cpuid_phys:\t0x%x\n",
+			be32_to_cpu(fdt->boot_cpuid_phys));
+
+	size_str = -1;
 	if (version >= 3) {
-		uint32_t size_str = fdt32_to_cpu(fdt->size_dt_strings);
+		size_str = be32_to_cpu(fdt->size_dt_strings);
+		fprintf(stderr, "\tsize_dt_strings:\t%d\n", size_str);
 		if (off_str+size_str > totalsize)
 			die("String table extends past total size\n");
-		inbuf_init(&strbuf, blob + off_str, blob + off_str + size_str);
-	} else {
-		inbuf_init(&strbuf, blob + off_str, blob + totalsize);
 	}
 
 	if (version >= 17) {
-		size_dt = fdt32_to_cpu(fdt->size_dt_struct);
+		size_dt = be32_to_cpu(fdt->size_dt_struct);
+		fprintf(stderr, "\tsize_dt_struct:\t\t%d\n", size_dt);
 		if (off_dt+size_dt > totalsize)
 			die("Structure block extends past total size\n");
 	}
@@ -884,6 +944,10 @@ struct boot_info *dt_from_blob(const char *fname)
 	inbuf_init(&memresvbuf,
 		   blob + off_mem_rsvmap, blob + totalsize);
 	inbuf_init(&dtbuf, blob + off_dt, blob + totalsize);
+	if (size_str >= 0)
+		inbuf_init(&strbuf, blob + off_str, blob + off_str + size_str);
+	else
+		inbuf_init(&strbuf, blob + off_str, blob + totalsize);
 
 	reservelist = flat_read_mem_reserve(&memresvbuf);
 
@@ -900,7 +964,5 @@ struct boot_info *dt_from_blob(const char *fname)
 
 	free(blob);
 
-	dtc_close_file(dtcf);
-
-	return build_boot_info(reservelist, tree, boot_cpuid_phys);
+	return build_boot_info(reservelist, tree);
 }

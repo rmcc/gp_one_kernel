@@ -12,6 +12,11 @@
  *  under  the terms of  the GNU General  Public License as published by the
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
+ *
+ *
+ *  Revision history
+ *    11th Dec 2006   Merged with Simtec driver
+ *    10th Nov 2006   Initial version.
  */
 
 #include <linux/init.h>
@@ -27,12 +32,12 @@
 #include <sound/initval.h>
 #include <sound/soc.h>
 
-#include <mach/hardware.h>
-#include <mach/regs-gpio.h>
-#include <mach/regs-clock.h>
-#include <mach/audio.h>
+#include <asm/hardware.h>
+#include <asm/arch/regs-gpio.h>
+#include <asm/arch/regs-clock.h>
+#include <asm/arch/audio.h>
 #include <asm/dma.h>
-#include <mach/dma.h>
+#include <asm/arch/dma.h>
 
 #include <asm/plat-s3c24xx/regs-iis.h>
 
@@ -175,7 +180,7 @@ static void s3c24xx_snd_rxctrl(int on)
 static int s3c24xx_snd_lrsync(void)
 {
 	u32 iiscon;
-	int timeout = 50; /* 5ms */
+	unsigned long timeout = jiffies + msecs_to_jiffies(5);
 
 	DBG("Entered %s\n", __func__);
 
@@ -184,9 +189,8 @@ static int s3c24xx_snd_lrsync(void)
 		if (iiscon & S3C2410_IISCON_LRINDEX)
 			break;
 
-		if (!timeout--)
+		if (time_after(jiffies, timeout))
 			return -ETIMEDOUT;
-		udelay(100);
 	}
 
 	return 0;
@@ -205,7 +209,7 @@ static inline int s3c24xx_snd_is_clkmaster(void)
 /*
  * Set S3C24xx I2S DAI format
  */
-static int s3c24xx_i2s_set_fmt(struct snd_soc_dai *cpu_dai,
+static int s3c24xx_i2s_set_fmt(struct snd_soc_cpu_dai *cpu_dai,
 		unsigned int fmt)
 {
 	u32 iismod;
@@ -243,8 +247,7 @@ static int s3c24xx_i2s_set_fmt(struct snd_soc_dai *cpu_dai,
 }
 
 static int s3c24xx_i2s_hw_params(struct snd_pcm_substream *substream,
-				 struct snd_pcm_hw_params *params,
-				 struct snd_soc_dai *dai)
+				struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	u32 iismod;
@@ -262,17 +265,10 @@ static int s3c24xx_i2s_hw_params(struct snd_pcm_substream *substream,
 
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S8:
-		iismod &= ~S3C2410_IISMOD_16BIT;
-		((struct s3c24xx_pcm_dma_params *)
-		  rtd->dai->cpu_dai->dma_data)->dma_size = 1;
 		break;
 	case SNDRV_PCM_FORMAT_S16_LE:
 		iismod |= S3C2410_IISMOD_16BIT;
-		((struct s3c24xx_pcm_dma_params *)
-		  rtd->dai->cpu_dai->dma_data)->dma_size = 2;
 		break;
-	default:
-		return -EINVAL;
 	}
 
 	writel(iismod, s3c24xx_i2s.regs + S3C2410_IISMOD);
@@ -280,8 +276,7 @@ static int s3c24xx_i2s_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int s3c24xx_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
-			       struct snd_soc_dai *dai)
+static int s3c24xx_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
 
@@ -322,7 +317,7 @@ exit_err:
 /*
  * Set S3C24xx Clock source
  */
-static int s3c24xx_i2s_set_sysclk(struct snd_soc_dai *cpu_dai,
+static int s3c24xx_i2s_set_sysclk(struct snd_soc_cpu_dai *cpu_dai,
 	int clk_id, unsigned int freq, int dir)
 {
 	u32 iismod = readl(s3c24xx_i2s.regs + S3C2410_IISMOD);
@@ -348,7 +343,7 @@ static int s3c24xx_i2s_set_sysclk(struct snd_soc_dai *cpu_dai,
 /*
  * Set S3C24xx Clock dividers
  */
-static int s3c24xx_i2s_set_clkdiv(struct snd_soc_dai *cpu_dai,
+static int s3c24xx_i2s_set_clkdiv(struct snd_soc_cpu_dai *cpu_dai,
 	int div_id, int div)
 {
 	u32 reg;
@@ -386,8 +381,7 @@ u32 s3c24xx_i2s_get_clockrate(void)
 }
 EXPORT_SYMBOL_GPL(s3c24xx_i2s_get_clockrate);
 
-static int s3c24xx_i2s_probe(struct platform_device *pdev,
-			     struct snd_soc_dai *dai)
+static int s3c24xx_i2s_probe(struct platform_device *pdev)
 {
 	DBG("Entered %s\n", __func__);
 
@@ -419,7 +413,8 @@ static int s3c24xx_i2s_probe(struct platform_device *pdev,
 }
 
 #ifdef CONFIG_PM
-static int s3c24xx_i2s_suspend(struct snd_soc_dai *cpu_dai)
+static int s3c24xx_i2s_suspend(struct platform_device *pdev,
+		struct snd_soc_cpu_dai *cpu_dai)
 {
 	DBG("Entered %s\n", __func__);
 
@@ -433,7 +428,8 @@ static int s3c24xx_i2s_suspend(struct snd_soc_dai *cpu_dai)
 	return 0;
 }
 
-static int s3c24xx_i2s_resume(struct snd_soc_dai *cpu_dai)
+static int s3c24xx_i2s_resume(struct platform_device *pdev,
+		struct snd_soc_cpu_dai *cpu_dai)
 {
 	DBG("Entered %s\n", __func__);
 	clk_enable(s3c24xx_i2s.iis_clk);
@@ -456,9 +452,10 @@ static int s3c24xx_i2s_resume(struct snd_soc_dai *cpu_dai)
 	SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
 	SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000)
 
-struct snd_soc_dai s3c24xx_i2s_dai = {
+struct snd_soc_cpu_dai s3c24xx_i2s_dai = {
 	.name = "s3c24xx-i2s",
 	.id = 0,
+	.type = SND_SOC_DAI_I2S,
 	.probe = s3c24xx_i2s_probe,
 	.suspend = s3c24xx_i2s_suspend,
 	.resume = s3c24xx_i2s_resume,
@@ -474,25 +471,14 @@ struct snd_soc_dai s3c24xx_i2s_dai = {
 		.formats = SNDRV_PCM_FMTBIT_S8 | SNDRV_PCM_FMTBIT_S16_LE,},
 	.ops = {
 		.trigger = s3c24xx_i2s_trigger,
-		.hw_params = s3c24xx_i2s_hw_params,
+		.hw_params = s3c24xx_i2s_hw_params,},
+	.dai_ops = {
 		.set_fmt = s3c24xx_i2s_set_fmt,
 		.set_clkdiv = s3c24xx_i2s_set_clkdiv,
 		.set_sysclk = s3c24xx_i2s_set_sysclk,
 	},
 };
 EXPORT_SYMBOL_GPL(s3c24xx_i2s_dai);
-
-static int __init s3c24xx_i2s_init(void)
-{
-	return snd_soc_register_dai(&s3c24xx_i2s_dai);
-}
-module_init(s3c24xx_i2s_init);
-
-static void __exit s3c24xx_i2s_exit(void)
-{
-	snd_soc_unregister_dai(&s3c24xx_i2s_dai);
-}
-module_exit(s3c24xx_i2s_exit);
 
 /* Module information */
 MODULE_AUTHOR("Ben Dooks, <ben@simtec.co.uk>");

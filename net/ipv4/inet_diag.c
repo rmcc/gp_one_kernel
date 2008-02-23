@@ -1,6 +1,8 @@
 /*
  * inet_diag.c	Module for monitoring INET transport protocols sockets.
  *
+ * Version:	$Id: inet_diag.c,v 1.3 2002/02/01 22:01:04 davem Exp $
+ *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
  *	This program is free software; you can redistribute it and/or
@@ -53,9 +55,11 @@ static DEFINE_MUTEX(inet_diag_table_mutex);
 
 static const struct inet_diag_handler *inet_diag_lock_handler(int type)
 {
+#ifdef CONFIG_KMOD
 	if (!inet_diag_table[type])
 		request_module("net-pf-%d-proto-%d-type-%d", PF_NETLINK,
 			       NETLINK_INET_DIAG, type);
+#endif
 
 	mutex_lock(&inet_diag_table_mutex);
 	if (!inet_diag_table[type])
@@ -718,15 +722,13 @@ static int inet_diag_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		if (!(r->idiag_states & (TCPF_LISTEN | TCPF_SYN_RECV)))
 			goto skip_listen_ht;
 
+		inet_listen_lock(hashinfo);
 		for (i = s_i; i < INET_LHTABLE_SIZE; i++) {
 			struct sock *sk;
-			struct hlist_nulls_node *node;
-			struct inet_listen_hashbucket *ilb;
+			struct hlist_node *node;
 
 			num = 0;
-			ilb = &hashinfo->listening_hash[i];
-			spin_lock_bh(&ilb->lock);
-			sk_nulls_for_each(sk, node, &ilb->head) {
+			sk_for_each(sk, node, &hashinfo->listening_hash[i]) {
 				struct inet_sock *inet = inet_sk(sk);
 
 				if (num < s_num) {
@@ -744,7 +746,7 @@ static int inet_diag_dump(struct sk_buff *skb, struct netlink_callback *cb)
 					goto syn_recv;
 
 				if (inet_csk_diag_dump(sk, skb, cb) < 0) {
-					spin_unlock_bh(&ilb->lock);
+					inet_listen_unlock(hashinfo);
 					goto done;
 				}
 
@@ -753,7 +755,7 @@ syn_recv:
 					goto next_listen;
 
 				if (inet_diag_dump_reqs(skb, sk, cb) < 0) {
-					spin_unlock_bh(&ilb->lock);
+					inet_listen_unlock(hashinfo);
 					goto done;
 				}
 
@@ -762,12 +764,12 @@ next_listen:
 				cb->args[4] = 0;
 				++num;
 			}
-			spin_unlock_bh(&ilb->lock);
 
 			s_num = 0;
 			cb->args[3] = 0;
 			cb->args[4] = 0;
 		}
+		inet_listen_unlock(hashinfo);
 skip_listen_ht:
 		cb->args[0] = 1;
 		s_i = num = s_num = 0;
@@ -778,21 +780,16 @@ skip_listen_ht:
 
 	for (i = s_i; i < hashinfo->ehash_size; i++) {
 		struct inet_ehash_bucket *head = &hashinfo->ehash[i];
-		spinlock_t *lock = inet_ehash_lockp(hashinfo, i);
+		rwlock_t *lock = inet_ehash_lockp(hashinfo, i);
 		struct sock *sk;
-		struct hlist_nulls_node *node;
-
-		num = 0;
-
-		if (hlist_nulls_empty(&head->chain) &&
-			hlist_nulls_empty(&head->twchain))
-			continue;
+		struct hlist_node *node;
 
 		if (i > s_i)
 			s_num = 0;
 
-		spin_lock_bh(lock);
-		sk_nulls_for_each(sk, node, &head->chain) {
+		read_lock_bh(lock);
+		num = 0;
+		sk_for_each(sk, node, &head->chain) {
 			struct inet_sock *inet = inet_sk(sk);
 
 			if (num < s_num)
@@ -806,7 +803,7 @@ skip_listen_ht:
 			    r->id.idiag_dport)
 				goto next_normal;
 			if (inet_csk_diag_dump(sk, skb, cb) < 0) {
-				spin_unlock_bh(lock);
+				read_unlock_bh(lock);
 				goto done;
 			}
 next_normal:
@@ -828,14 +825,14 @@ next_normal:
 				    r->id.idiag_dport)
 					goto next_dying;
 				if (inet_twsk_diag_dump(tw, skb, cb) < 0) {
-					spin_unlock_bh(lock);
+					read_unlock_bh(lock);
 					goto done;
 				}
 next_dying:
 				++num;
 			}
 		}
-		spin_unlock_bh(lock);
+		read_unlock_bh(lock);
 	}
 
 done:

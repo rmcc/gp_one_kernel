@@ -34,6 +34,16 @@
 #include <asm/ptrace.h>
 
 /*
+ * bitmask of present and online CPUs.
+ * The present bitmask indicates that the CPU is physically present.
+ * The online bitmask indicates that the CPU is up and running.
+ */
+cpumask_t cpu_possible_map;
+EXPORT_SYMBOL(cpu_possible_map);
+cpumask_t cpu_online_map;
+EXPORT_SYMBOL(cpu_online_map);
+
+/*
  * as from 2.5, kernels no longer have an init_tasks structure
  * so we need some other way of telling a new secondary core
  * where to place its SVC stack
@@ -58,9 +68,19 @@ enum ipi_msg_type {
 	IPI_TIMER,
 	IPI_RESCHEDULE,
 	IPI_CALL_FUNC,
-	IPI_CALL_FUNC_SINGLE,
 	IPI_CPU_STOP,
 };
+
+struct smp_call_struct {
+	void (*func)(void *info);
+	void *info;
+	int wait;
+	cpumask_t pending;
+	cpumask_t unfinished;
+};
+
+static struct smp_call_struct * volatile smp_call_function_data;
+static DEFINE_SPINLOCK(smp_call_function_lock);
 
 int __cpuinit __cpu_up(unsigned int cpu)
 {
@@ -90,7 +110,7 @@ int __cpuinit __cpu_up(unsigned int cpu)
 	 * a 1:1 mapping for the physical address of the kernel.
 	 */
 	pgd = pgd_alloc(&init_mm);
-	pmd = pmd_offset(pgd + pgd_index(PHYS_OFFSET), PHYS_OFFSET);
+	pmd = pmd_offset(pgd, PHYS_OFFSET);
 	*pmd = __pmd((PHYS_OFFSET & PGDIR_MASK) |
 		     PMD_TYPE_SECT | PMD_SECT_AP_WRITE);
 
@@ -129,7 +149,7 @@ int __cpuinit __cpu_up(unsigned int cpu)
 	secondary_data.stack = NULL;
 	secondary_data.pgdir = 0;
 
-	*pmd = __pmd(0);
+	*pmd_offset(pgd, PHYS_OFFSET) = __pmd(0);
 	pgd_free(&init_mm, pgd);
 
 	if (ret) {
@@ -171,7 +191,7 @@ int __cpuexit __cpu_disable(void)
 	/*
 	 * Stop the local timer for this CPU.
 	 */
-	local_timer_stop();
+	local_timer_stop(cpu);
 
 	/*
 	 * Flush user cache and TLB mappings, and then remove this CPU
@@ -267,14 +287,13 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	/*
 	 * Enable local interrupts.
 	 */
-	notify_cpu_starting(cpu);
 	local_irq_enable();
 	local_fiq_enable();
 
 	/*
 	 * Setup local timer for this CPU.
 	 */
-	local_timer_setup();
+	local_timer_setup(cpu);
 
 	calibrate_delay();
 
@@ -347,15 +366,114 @@ static void send_ipi_message(cpumask_t callmap, enum ipi_msg_type msg)
 	local_irq_restore(flags);
 }
 
-void arch_send_call_function_ipi(cpumask_t mask)
+/*
+ * You must not call this function with disabled interrupts, from a
+ * hardware interrupt handler, nor from a bottom half handler.
+ */
+static int smp_call_function_on_cpu(void (*func)(void *info), void *info,
+				    int retry, int wait, cpumask_t callmap)
 {
-	send_ipi_message(mask, IPI_CALL_FUNC);
+	struct smp_call_struct data;
+	unsigned long timeout;
+	int ret = 0;
+
+	data.func = func;
+	data.info = info;
+	data.wait = wait;
+
+	cpu_clear(smp_processor_id(), callmap);
+	if (cpus_empty(callmap))
+		goto out;
+
+	data.pending = callmap;
+	if (wait)
+		data.unfinished = callmap;
+
+	/*
+	 * try to get the mutex on smp_call_function_data
+	 */
+	spin_lock(&smp_call_function_lock);
+	smp_call_function_data = &data;
+
+	send_ipi_message(callmap, IPI_CALL_FUNC);
+
+	timeout = jiffies + HZ;
+	while (!cpus_empty(data.pending) && time_before(jiffies, timeout))
+		barrier();
+
+	/*
+	 * did we time out?
+	 */
+	if (!cpus_empty(data.pending)) {
+		/*
+		 * this may be causing our panic - report it
+		 */
+		printk(KERN_CRIT
+		       "CPU%u: smp_call_function timeout for %p(%p)\n"
+		       "      callmap %lx pending %lx, %swait\n",
+		       smp_processor_id(), func, info, *cpus_addr(callmap),
+		       *cpus_addr(data.pending), wait ? "" : "no ");
+
+		/*
+		 * TRACE
+		 */
+		timeout = jiffies + (5 * HZ);
+		while (!cpus_empty(data.pending) && time_before(jiffies, timeout))
+			barrier();
+
+		if (cpus_empty(data.pending))
+			printk(KERN_CRIT "     RESOLVED\n");
+		else
+			printk(KERN_CRIT "     STILL STUCK\n");
+	}
+
+	/*
+	 * whatever happened, we're done with the data, so release it
+	 */
+	smp_call_function_data = NULL;
+	spin_unlock(&smp_call_function_lock);
+
+	if (!cpus_empty(data.pending)) {
+		ret = -ETIMEDOUT;
+		goto out;
+	}
+
+	if (wait)
+		while (!cpus_empty(data.unfinished))
+			barrier();
+ out:
+
+	return 0;
 }
 
-void arch_send_call_function_single_ipi(int cpu)
+int smp_call_function(void (*func)(void *info), void *info, int retry,
+                      int wait)
 {
-	send_ipi_message(cpumask_of_cpu(cpu), IPI_CALL_FUNC_SINGLE);
+	return smp_call_function_on_cpu(func, info, retry, wait,
+					cpu_online_map);
 }
+EXPORT_SYMBOL_GPL(smp_call_function);
+
+int smp_call_function_single(int cpu, void (*func)(void *info), void *info,
+			     int retry, int wait)
+{
+	/* prevent preemption and reschedule on another processor */
+	int current_cpu = get_cpu();
+	int ret = 0;
+
+	if (cpu == current_cpu) {
+		local_irq_disable();
+		func(info);
+		local_irq_enable();
+	} else
+		ret = smp_call_function_on_cpu(func, info, retry, wait,
+					       cpumask_of_cpu(cpu));
+
+	put_cpu();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(smp_call_function_single);
 
 void show_ipi_list(struct seq_file *p)
 {
@@ -402,6 +520,27 @@ asmlinkage void __exception do_local_timer(struct pt_regs *regs)
 	set_irq_regs(old_regs);
 }
 #endif
+
+/*
+ * ipi_call_function - handle IPI from smp_call_function()
+ *
+ * Note that we copy data out of the cross-call structure and then
+ * let the caller know that we're here and have done with their data
+ */
+static void ipi_call_function(unsigned int cpu)
+{
+	struct smp_call_struct *data = smp_call_function_data;
+	void (*func)(void *info) = data->func;
+	void *info = data->info;
+	int wait = data->wait;
+
+	cpu_clear(cpu, data->pending);
+
+	func(info);
+
+	if (wait)
+		cpu_clear(cpu, data->unfinished);
+}
 
 static DEFINE_SPINLOCK(stop_lock);
 
@@ -472,11 +611,7 @@ asmlinkage void __exception do_IPI(struct pt_regs *regs)
 				break;
 
 			case IPI_CALL_FUNC:
-				generic_smp_call_function_interrupt();
-				break;
-
-			case IPI_CALL_FUNC_SINGLE:
-				generic_smp_call_function_single_interrupt();
+				ipi_call_function(cpu);
 				break;
 
 			case IPI_CPU_STOP:
@@ -527,13 +662,14 @@ int setup_profiling_timer(unsigned int multiplier)
 }
 
 static int
-on_each_cpu_mask(void (*func)(void *), void *info, int wait, cpumask_t mask)
+on_each_cpu_mask(void (*func)(void *), void *info, int retry, int wait,
+		 cpumask_t mask)
 {
 	int ret = 0;
 
 	preempt_disable();
 
-	ret = smp_call_function_mask(mask, func, info, wait);
+	ret = smp_call_function_on_cpu(func, info, retry, wait, mask);
 	if (cpu_isset(smp_processor_id(), mask))
 		func(info);
 
@@ -595,14 +731,14 @@ static inline void ipi_flush_tlb_kernel_range(void *arg)
 
 void flush_tlb_all(void)
 {
-	on_each_cpu(ipi_flush_tlb_all, NULL, 1);
+	on_each_cpu(ipi_flush_tlb_all, NULL, 1, 1);
 }
 
 void flush_tlb_mm(struct mm_struct *mm)
 {
 	cpumask_t mask = mm->cpu_vm_mask;
 
-	on_each_cpu_mask(ipi_flush_tlb_mm, mm, 1, mask);
+	on_each_cpu_mask(ipi_flush_tlb_mm, mm, 1, 1, mask);
 }
 
 void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
@@ -613,7 +749,7 @@ void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
 	ta.ta_vma = vma;
 	ta.ta_start = uaddr;
 
-	on_each_cpu_mask(ipi_flush_tlb_page, &ta, 1, mask);
+	on_each_cpu_mask(ipi_flush_tlb_page, &ta, 1, 1, mask);
 }
 
 void flush_tlb_kernel_page(unsigned long kaddr)
@@ -622,7 +758,7 @@ void flush_tlb_kernel_page(unsigned long kaddr)
 
 	ta.ta_start = kaddr;
 
-	on_each_cpu(ipi_flush_tlb_kernel_page, &ta, 1);
+	on_each_cpu(ipi_flush_tlb_kernel_page, &ta, 1, 1);
 }
 
 void flush_tlb_range(struct vm_area_struct *vma,
@@ -635,7 +771,7 @@ void flush_tlb_range(struct vm_area_struct *vma,
 	ta.ta_start = start;
 	ta.ta_end = end;
 
-	on_each_cpu_mask(ipi_flush_tlb_range, &ta, 1, mask);
+	on_each_cpu_mask(ipi_flush_tlb_range, &ta, 1, 1, mask);
 }
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
@@ -645,5 +781,5 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	ta.ta_start = start;
 	ta.ta_end = end;
 
-	on_each_cpu(ipi_flush_tlb_kernel_range, &ta, 1);
+	on_each_cpu(ipi_flush_tlb_kernel_range, &ta, 1, 1);
 }

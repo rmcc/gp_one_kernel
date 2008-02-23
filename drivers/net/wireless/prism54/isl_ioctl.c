@@ -71,7 +71,7 @@ prism54_mib_mode_helper(islpci_private *priv, u32 iw_mode)
 	if (iw_mode == IW_MODE_REPEAT || iw_mode == IW_MODE_SECOND) {
 		printk(KERN_DEBUG
 		       "%s(): Sorry, Repeater mode and Secondary mode "
-		       "are not yet supported by this driver.\n", __func__);
+		       "are not yet supported by this driver.\n", __FUNCTION__);
 		return -EINVAL;
 	}
 
@@ -333,7 +333,7 @@ prism54_set_mode(struct net_device *ndev, struct iw_request_info *info,
 	if (*uwrq > IW_MODE_MONITOR || *uwrq < IW_MODE_AUTO) {
 		printk(KERN_DEBUG
 		       "%s: %s() You passed a non-valid init_mode.\n",
-		       priv->ndev->name, __func__);
+		       priv->ndev->name, __FUNCTION__);
 		return -EINVAL;
 	}
 
@@ -571,9 +571,8 @@ prism54_set_scan(struct net_device *dev, struct iw_request_info *info,
  */
 
 static char *
-prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
-		      char *current_ev, char *end_buf, struct obj_bss *bss,
-		      char noise)
+prism54_translate_bss(struct net_device *ndev, char *current_ev,
+		      char *end_buf, struct obj_bss *bss, char noise)
 {
 	struct iw_event iwe;	/* Temporary buffer */
 	short cap;
@@ -585,8 +584,8 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 	memcpy(iwe.u.ap_addr.sa_data, bss->address, 6);
 	iwe.u.ap_addr.sa_family = ARPHRD_ETHER;
 	iwe.cmd = SIOCGIWAP;
-	current_ev = iwe_stream_add_event(info, current_ev, end_buf,
-					  &iwe, IW_EV_ADDR_LEN);
+	current_ev =
+	    iwe_stream_add_event(current_ev, end_buf, &iwe, IW_EV_ADDR_LEN);
 
 	/* The following entries will be displayed in the same order we give them */
 
@@ -594,7 +593,7 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 	iwe.u.data.length = bss->ssid.length;
 	iwe.u.data.flags = 1;
 	iwe.cmd = SIOCGIWESSID;
-	current_ev = iwe_stream_add_point(info, current_ev, end_buf,
+	current_ev = iwe_stream_add_point(current_ev, end_buf,
 					  &iwe, bss->ssid.octets);
 
 	/* Capabilities */
@@ -611,8 +610,9 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 		iwe.u.mode = IW_MODE_ADHOC;
 	iwe.cmd = SIOCGIWMODE;
 	if (iwe.u.mode)
-		current_ev = iwe_stream_add_event(info, current_ev, end_buf,
-						  &iwe, IW_EV_UINT_LEN);
+		current_ev =
+		    iwe_stream_add_event(current_ev, end_buf, &iwe,
+					 IW_EV_UINT_LEN);
 
 	/* Encryption capability */
 	if (cap & CAP_CRYPT)
@@ -621,15 +621,14 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 		iwe.u.data.flags = IW_ENCODE_DISABLED;
 	iwe.u.data.length = 0;
 	iwe.cmd = SIOCGIWENCODE;
-	current_ev = iwe_stream_add_point(info, current_ev, end_buf,
-					  &iwe, NULL);
+	current_ev = iwe_stream_add_point(current_ev, end_buf, &iwe, NULL);
 
 	/* Add frequency. (short) bss->channel is the frequency in MHz */
 	iwe.u.freq.m = bss->channel;
 	iwe.u.freq.e = 6;
 	iwe.cmd = SIOCGIWFREQ;
-	current_ev = iwe_stream_add_event(info, current_ev, end_buf,
-					  &iwe, IW_EV_FREQ_LEN);
+	current_ev =
+	    iwe_stream_add_event(current_ev, end_buf, &iwe, IW_EV_FREQ_LEN);
 
 	/* Add quality statistics */
 	iwe.u.qual.level = bss->rssi;
@@ -637,20 +636,20 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 	/* do a simple SNR for quality */
 	iwe.u.qual.qual = bss->rssi - noise;
 	iwe.cmd = IWEVQUAL;
-	current_ev = iwe_stream_add_event(info, current_ev, end_buf,
-					  &iwe, IW_EV_QUAL_LEN);
+	current_ev =
+	    iwe_stream_add_event(current_ev, end_buf, &iwe, IW_EV_QUAL_LEN);
 
 	/* Add WPA/RSN Information Element, if any */
 	wpa_ie_len = prism54_wpa_bss_ie_get(priv, bss->address, wpa_ie);
 	if (wpa_ie_len > 0) {
 		iwe.cmd = IWEVGENIE;
 		iwe.u.data.length = min(wpa_ie_len, (size_t)MAX_WPA_IE_LEN);
-		current_ev = iwe_stream_add_point(info, current_ev, end_buf,
-						  &iwe, wpa_ie);
+		current_ev = iwe_stream_add_point(current_ev, end_buf,
+				&iwe, wpa_ie);
 	}
 	/* Do the bitrates */
 	{
-		char *current_val = current_ev + iwe_stream_lcp_len(info);
+		char *	current_val = current_ev + IW_EV_LCP_LEN;
 		int i;
 		int mask;
 
@@ -663,14 +662,14 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 		for(i = 0; i < sizeof(scan_rate_list); i++) {
 			if(bss->rates & mask) {
 				iwe.u.bitrate.value = (scan_rate_list[i] * 500000);
-				current_val = iwe_stream_add_value(
-					info, current_ev, current_val,
-					end_buf, &iwe, IW_EV_PARAM_LEN);
+				current_val = iwe_stream_add_value(current_ev, current_val,
+								   end_buf, &iwe,
+								   IW_EV_PARAM_LEN);
 			}
 			mask <<= 1;
 		}
 		/* Check if we added any event */
-		if ((current_val - current_ev) > iwe_stream_lcp_len(info))
+		if ((current_val - current_ev) > IW_EV_LCP_LEN)
 			current_ev = current_val;
 	}
 
@@ -711,7 +710,7 @@ prism54_get_scan(struct net_device *ndev, struct iw_request_info *info,
 
 	/* ok now, scan the list and translate its info */
 	for (i = 0; i < (int) bsslist->nr; i++) {
-		current_ev = prism54_translate_bss(ndev, info, current_ev,
+		current_ev = prism54_translate_bss(ndev, current_ev,
 						   extra + dwrq->length,
 						   &(bsslist->bsslist[i]),
 						   noise);
@@ -1234,7 +1233,7 @@ prism54_set_txpower(struct net_device *ndev, struct iw_request_info *info,
 		/* don't know how to disable radio */
 		printk(KERN_DEBUG
 		       "%s: %s() disabling radio is not yet supported.\n",
-		       priv->ndev->name, __func__);
+		       priv->ndev->name, __FUNCTION__);
 		return -ENOTSUPP;
 	} else if (vwrq->fixed)
 		/* currently only fixed value is supported */
@@ -1242,7 +1241,7 @@ prism54_set_txpower(struct net_device *ndev, struct iw_request_info *info,
 	else {
 		printk(KERN_DEBUG
 		       "%s: %s() auto power will be implemented later.\n",
-		       priv->ndev->name, __func__);
+		       priv->ndev->name, __FUNCTION__);
 		return -ENOTSUPP;
 	}
 }
@@ -2028,11 +2027,12 @@ static void
 format_event(islpci_private *priv, char *dest, const char *str,
 	     const struct obj_mlme *mlme, u16 *length, int error)
 {
+	DECLARE_MAC_BUF(mac);
 	int n = snprintf(dest, IW_CUSTOM_MAX,
-			 "%s %s %pM %s (%2.2X)",
+			 "%s %s %s %s (%2.2X)",
 			 str,
 			 ((priv->iw_mode == IW_MODE_MASTER) ? "from" : "to"),
-			 mlme->address,
+			 print_mac(mac, mlme->address),
 			 (error ? (mlme->code ? " : REJECTED " : " : ACCEPTED ")
 			  : ""), mlme->code);
 	BUG_ON(n > IW_CUSTOM_MAX);
@@ -2112,6 +2112,7 @@ prism54_wpa_bss_ie_add(islpci_private *priv, u8 *bssid,
 {
 	struct list_head *ptr;
 	struct islpci_bss_wpa_ie *bss = NULL;
+	DECLARE_MAC_BUF(mac);
 
 	if (wpa_ie_len > MAX_WPA_IE_LEN)
 		wpa_ie_len = MAX_WPA_IE_LEN;
@@ -2152,7 +2153,7 @@ prism54_wpa_bss_ie_add(islpci_private *priv, u8 *bssid,
 		bss->last_update = jiffies;
 	} else {
 		printk(KERN_DEBUG "Failed to add BSS WPA entry for "
-		       "%pM\n", bssid);
+		       "%s\n", print_mac(mac, bssid));
 	}
 
 	/* expire old entries from WPA list */
@@ -2217,6 +2218,7 @@ prism54_process_bss_data(islpci_private *priv, u32 oid, u8 *addr,
 {
 	struct ieee80211_beacon_phdr *hdr;
 	u8 *pos, *end;
+	DECLARE_MAC_BUF(mac);
 
 	if (!priv->wpa)
 		return;
@@ -2227,7 +2229,7 @@ prism54_process_bss_data(islpci_private *priv, u32 oid, u8 *addr,
 	while (pos < end) {
 		if (pos + 2 + pos[1] > end) {
 			printk(KERN_DEBUG "Parsing Beacon/ProbeResp failed "
-			       "for %pM\n", addr);
+			       "for %s\n", print_mac(mac, addr));
 			return;
 		}
 		if (pos[0] == WLAN_EID_GENERIC && pos[1] >= 4 &&
@@ -2266,6 +2268,7 @@ prism54_process_trap_helper(islpci_private *priv, enum oid_num_t oid,
 	size_t len = 0; /* u16, better? */
 	u8 *payload = NULL, *pos = NULL;
 	int ret;
+	DECLARE_MAC_BUF(mac);
 
 	/* I think all trapable objects are listed here.
 	 * Some oids have a EX version. The difference is that they are emitted
@@ -2354,8 +2357,8 @@ prism54_process_trap_helper(islpci_private *priv, enum oid_num_t oid,
 			break;
 
 		memcpy(&confirm->address, mlmeex->address, ETH_ALEN);
-		printk(KERN_DEBUG "Authenticate from: address:\t%pM\n",
-		       mlmeex->address);
+		printk(KERN_DEBUG "Authenticate from: address:\t%s\n",
+		       print_mac(mac, mlmeex->address));
 		confirm->id = -1; /* or mlmeex->id ? */
 		confirm->state = 0; /* not used */
 		confirm->code = 0;
@@ -2400,8 +2403,8 @@ prism54_process_trap_helper(islpci_private *priv, enum oid_num_t oid,
 		wpa_ie_len = prism54_wpa_bss_ie_get(priv, mlmeex->address, wpa_ie);
 
 		if (!wpa_ie_len) {
-			printk(KERN_DEBUG "No WPA IE found from address:\t%pM\n",
-			       mlmeex->address);
+			printk(KERN_DEBUG "No WPA IE found from address:\t%s\n",
+			       print_mac(mac, mlmeex->address));
 			kfree(confirm);
 			break;
 		}
@@ -2437,8 +2440,8 @@ prism54_process_trap_helper(islpci_private *priv, enum oid_num_t oid,
 		wpa_ie_len = prism54_wpa_bss_ie_get(priv, mlmeex->address, wpa_ie);
 
 		if (!wpa_ie_len) {
-			printk(KERN_DEBUG "No WPA IE found from address:\t%pM\n",
-			       mlmeex->address);
+			printk(KERN_DEBUG "No WPA IE found from address:\t%s\n",
+			       print_mac(mac, mlmeex->address));
 			kfree(confirm);
 			break;
 		}
@@ -2514,7 +2517,7 @@ enum {
 
 #define PRISM2_HOSTAPD_MAX_BUF_SIZE 1024
 #define PRISM2_HOSTAPD_GENERIC_ELEMENT_HDR_LEN \
-	offsetof(struct prism2_hostapd_param, u.generic_elem.data)
+((int) (&((struct prism2_hostapd_param *) 0)->u.generic_elem.data))
 
 /* Maximum length for algorithm names (-1 for nul termination)
  * used in ioctl() */
@@ -2701,7 +2704,6 @@ prism2_ioctl_scan_req(struct net_device *ndev,
                      struct prism2_hostapd_param *param)
 {
 	islpci_private *priv = netdev_priv(ndev);
-	struct iw_request_info info;
 	int i, rvalue;
 	struct obj_bsslist *bsslist;
 	u32 noise = 0;
@@ -2725,12 +2727,9 @@ prism2_ioctl_scan_req(struct net_device *ndev,
 	rvalue |= mgt_get_request(priv, DOT11_OID_BSSLIST, 0, NULL, &r);
 	bsslist = r.ptr;
 
-	info.cmd = PRISM54_HOSTAPD;
-	info.flags = 0;
-
 	/* ok now, scan the list and translate its info */
 	for (i = 0; i < min(IW_MAX_AP, (int) bsslist->nr); i++)
-		current_ev = prism54_translate_bss(ndev, &info, current_ev,
+		current_ev = prism54_translate_bss(ndev, current_ev,
 						   extra + IW_SCAN_MAX_DATA,
 						   &(bsslist->bsslist[i]),
 						   noise);

@@ -41,7 +41,6 @@
 #include <linux/pm_qos_params.h>
 #include <linux/clockchips.h>
 #include <linux/cpuidle.h>
-#include <linux/irqflags.h>
 
 /*
  * Include the apic definitions for x86 to have the APIC timer related defines
@@ -58,8 +57,8 @@
 
 #include <acpi/acpi_bus.h>
 #include <acpi/processor.h>
-#include <asm/processor.h>
 
+#define ACPI_PROCESSOR_COMPONENT        0x01000000
 #define ACPI_PROCESSOR_CLASS            "processor"
 #define _COMPONENT              ACPI_PROCESSOR_COMPONENT
 ACPI_MODULE_NAME("processor_idle");
@@ -271,8 +270,6 @@ static atomic_t c3_cpu_count;
 /* Common C-state entry for C2, C3, .. */
 static void acpi_cstate_enter(struct acpi_processor_cx *cstate)
 {
-	/* Don't trace irqs off for idle */
-	stop_critical_timings();
 	if (cstate->entry_method == ACPI_CSTATE_FFH) {
 		/* Call into architectural FFH based C-state */
 		acpi_processor_ffh_cstate_enter(cstate);
@@ -285,7 +282,6 @@ static void acpi_cstate_enter(struct acpi_processor_cx *cstate)
 		   gets asserted in time to freeze execution properly. */
 		unused = inl(acpi_gbl_FADT.xpm_timer_block.address);
 	}
-	start_critical_timings();
 }
 #endif /* !CONFIG_CPU_IDLE */
 
@@ -375,15 +371,15 @@ static int tsc_halts_in_c(int state)
 {
 	switch (boot_cpu_data.x86_vendor) {
 	case X86_VENDOR_AMD:
-	case X86_VENDOR_INTEL:
 		/*
 		 * AMD Fam10h TSC will tick in all
 		 * C/P/S0/S1 states when this bit is set.
 		 */
-		if (boot_cpu_has(X86_FEATURE_NONSTOP_TSC))
+		if (boot_cpu_has(X86_FEATURE_CONSTANT_TSC))
 			return 0;
-
 		/*FALL THROUGH*/
+	case X86_VENDOR_INTEL:
+		/* Several cases known where TSC halts in C2 too */
 	default:
 		return state > ACPI_STATE_C1;
 	}
@@ -405,7 +401,7 @@ static void acpi_processor_idle(void)
 	 */
 	local_irq_disable();
 
-	pr = __get_cpu_var(processors);
+	pr = processors[smp_processor_id()];
 	if (!pr) {
 		local_irq_enable();
 		return;
@@ -959,21 +955,6 @@ static int acpi_processor_get_power_info_cst(struct acpi_processor *pr)
 			} else {
 				continue;
 			}
-			if (cx.type == ACPI_STATE_C1 &&
-					(idle_halt || idle_nomwait)) {
-				/*
-				 * In most cases the C1 space_id obtained from
-				 * _CST object is FIXED_HARDWARE access mode.
-				 * But when the option of idle=halt is added,
-				 * the entry_method type should be changed from
-				 * CSTATE_FFH to CSTATE_HALT.
-				 * When the option of idle=nomwait is added,
-				 * the C1 entry_method type should be
-				 * CSTATE_HALT.
-				 */
-				cx.entry_method = ACPI_CSTATE_HALT;
-				snprintf(cx.desc, ACPI_CX_DESC_LEN, "ACPI HLT");
-			}
 		} else {
 			snprintf(cx.desc, ACPI_CX_DESC_LEN, "ACPI IOPORT 0x%x",
 				 cx.address);
@@ -1331,15 +1312,9 @@ int acpi_processor_cst_has_changed(struct acpi_processor *pr)
 	if (!pr->flags.power_setup_done)
 		return -ENODEV;
 
-	/*
-	 * Fall back to the default idle loop, when pm_idle_save had
-	 * been initialized.
-	 */
-	if (pm_idle_save) {
-		pm_idle = pm_idle_save;
-		/* Relies on interrupts forcing exit from idle. */
-		synchronize_sched();
-	}
+	/* Fall back to the default idle loop */
+	pm_idle = pm_idle_save;
+	synchronize_sched();	/* Relies on interrupts forcing exit from idle. */
 
 	pr->flags.power = 0;
 	result = acpi_processor_get_power_info(pr);
@@ -1364,7 +1339,7 @@ static void smp_callback(void *v)
 static int acpi_processor_latency_notify(struct notifier_block *b,
 		unsigned long l, void *v)
 {
-	smp_call_function(smp_callback, NULL, 1);
+	smp_call_function(smp_callback, NULL, 0, 1);
 	return NOTIFY_OK;
 }
 
@@ -1426,8 +1401,6 @@ static inline void acpi_idle_update_bm_rld(struct acpi_processor *pr,
  */
 static inline void acpi_idle_do_entry(struct acpi_processor_cx *cx)
 {
-	/* Don't trace irqs off for idle */
-	stop_critical_timings();
 	if (cx->entry_method == ACPI_CSTATE_FFH) {
 		/* Call into architectural FFH based C-state */
 		acpi_processor_ffh_cstate_enter(cx);
@@ -1442,7 +1415,6 @@ static inline void acpi_idle_do_entry(struct acpi_processor_cx *cx)
 		   gets asserted in time to freeze execution properly. */
 		unused = inl(acpi_gbl_FADT.xpm_timer_block.address);
 	}
-	start_critical_timings();
 }
 
 /**
@@ -1459,7 +1431,7 @@ static int acpi_idle_enter_c1(struct cpuidle_device *dev,
 	struct acpi_processor *pr;
 	struct acpi_processor_cx *cx = cpuidle_get_statedata(state);
 
-	pr = __get_cpu_var(processors);
+	pr = processors[smp_processor_id()];
 
 	if (unlikely(!pr))
 		return 0;
@@ -1499,7 +1471,7 @@ static int acpi_idle_enter_simple(struct cpuidle_device *dev,
 	u32 t1, t2;
 	int sleep_ticks = 0;
 
-	pr = __get_cpu_var(processors);
+	pr = processors[smp_processor_id()];
 
 	if (unlikely(!pr))
 		return 0;
@@ -1577,7 +1549,7 @@ static int acpi_idle_enter_bm(struct cpuidle_device *dev,
 	u32 t1, t2;
 	int sleep_ticks = 0;
 
-	pr = __get_cpu_var(processors);
+	pr = processors[smp_processor_id()];
 
 	if (unlikely(!pr))
 		return 0;
@@ -1587,7 +1559,6 @@ static int acpi_idle_enter_bm(struct cpuidle_device *dev,
 
 	if (acpi_idle_bm_check()) {
 		if (dev->safe_state) {
-			dev->last_state = dev->safe_state;
 			return dev->safe_state->enter(dev, dev->safe_state);
 		} else {
 			local_irq_disable();
@@ -1698,7 +1669,6 @@ static int acpi_processor_setup_cpuidle(struct acpi_processor *pr)
 		return -EINVAL;
 	}
 
-	dev->cpu = pr->id;
 	for (i = 0; i < CPUIDLE_STATE_MAX; i++) {
 		dev->states[i].name[0] = '\0';
 		dev->states[i].desc[0] = '\0';
@@ -1768,7 +1738,7 @@ static int acpi_processor_setup_cpuidle(struct acpi_processor *pr)
 
 int acpi_processor_cst_has_changed(struct acpi_processor *pr)
 {
-	int ret = 0;
+	int ret;
 
 	if (boot_option_idle_override)
 		return 0;
@@ -1786,10 +1756,8 @@ int acpi_processor_cst_has_changed(struct acpi_processor *pr)
 	cpuidle_pause_and_lock();
 	cpuidle_disable_device(&pr->power.dev);
 	acpi_processor_get_power_info(pr);
-	if (pr->flags.power) {
-		acpi_processor_setup_cpuidle(pr);
-		ret = cpuidle_enable_device(&pr->power.dev);
-	}
+	acpi_processor_setup_cpuidle(pr);
+	ret = cpuidle_enable_device(&pr->power.dev);
 	cpuidle_resume_and_unlock();
 
 	return ret;
@@ -1809,15 +1777,6 @@ int __cpuinit acpi_processor_power_init(struct acpi_processor *pr,
 		return 0;
 
 	if (!first_run) {
-		if (idle_halt) {
-			/*
-			 * When the boot option of "idle=halt" is added, halt
-			 * is used for CPU IDLE.
-			 * In such case C2/C3 is meaningless. So the max_cstate
-			 * is set to one.
-			 */
-			max_cstate = 1;
-		}
 		dmi_check_system(processor_power_dmi_table);
 		max_cstate = acpi_processor_cstate_check(max_cstate);
 		if (max_cstate < ACPI_C_STATES_MAX)
@@ -1854,6 +1813,7 @@ int __cpuinit acpi_processor_power_init(struct acpi_processor *pr,
 	if (pr->flags.power) {
 #ifdef CONFIG_CPU_IDLE
 		acpi_processor_setup_cpuidle(pr);
+		pr->power.dev.cpu = pr->id;
 		if (cpuidle_register_device(&pr->power.dev))
 			return -EIO;
 #endif
@@ -1890,7 +1850,8 @@ int acpi_processor_power_exit(struct acpi_processor *pr,
 		return 0;
 
 #ifdef CONFIG_CPU_IDLE
-	cpuidle_unregister_device(&pr->power.dev);
+	if (pr->flags.power)
+		cpuidle_unregister_device(&pr->power.dev);
 #endif
 	pr->flags.power_setup_done = 0;
 
@@ -1902,8 +1863,7 @@ int acpi_processor_power_exit(struct acpi_processor *pr,
 
 	/* Unregister the idle handler when processor #0 is removed. */
 	if (pr->id == 0) {
-		if (pm_idle_save)
-			pm_idle = pm_idle_save;
+		pm_idle = pm_idle_save;
 
 		/*
 		 * We are about to unload the current idle thread pm callback

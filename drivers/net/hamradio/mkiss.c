@@ -303,6 +303,7 @@ static void ax_bump(struct mkiss *ax)
 	memcpy(skb_put(skb,count), ax->rbuff, count);
 	skb->protocol = ax25_type_trans(skb, ax->dev);
 	netif_rx(skb);
+	ax->dev->last_rx = jiffies;
 	ax->stats.rx_packets++;
 	ax->stats.rx_bytes += count;
 	spin_unlock_bh(&ax->buflock);
@@ -355,9 +356,7 @@ static int ax_set_mac_address(struct net_device *dev, void *addr)
 	struct sockaddr_ax25 *sa = addr;
 
 	netif_tx_lock_bh(dev);
-	netif_addr_lock(dev);
 	memcpy(dev->dev_addr, &sa->sax25_call, AX25_ADDR_LEN);
-	netif_addr_unlock(dev);
 	netif_tx_unlock_bh(dev);
 
 	return 0;
@@ -547,7 +546,7 @@ static int ax_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 
 		printk(KERN_ERR "mkiss: %s: transmit timed out, %s?\n", dev->name,
-		       (tty_chars_in_buffer(ax->tty) || ax->xleft) ?
+		       (ax->tty->ops->chars_in_buffer(ax->tty) || ax->xleft) ?
 		       "bad line quality" : "driver error");
 
 		ax->xleft = 0;
@@ -846,13 +845,12 @@ static int mkiss_ioctl(struct tty_struct *tty, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
 	struct mkiss *ax = mkiss_get(tty);
-	struct net_device *dev;
+	struct net_device *dev = ax->dev;
 	unsigned int tmp, err;
 
 	/* First make sure we're connected. */
 	if (ax == NULL)
 		return -ENXIO;
-	dev = ax->dev;
 
 	switch (cmd) {
  	case SIOCGIFNAME:
@@ -971,7 +969,7 @@ out:
 	mkiss_put(ax);
 }
 
-static struct tty_ldisc_ops ax_ldisc = {
+static struct tty_ldisc ax_ldisc = {
 	.owner		= THIS_MODULE,
 	.magic		= TTY_LDISC_MAGIC,
 	.name		= "mkiss",

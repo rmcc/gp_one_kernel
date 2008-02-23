@@ -233,8 +233,8 @@ void saa7146_pgtable_free(struct pci_dev *pci, struct saa7146_pgtable *pt)
 
 int saa7146_pgtable_alloc(struct pci_dev *pci, struct saa7146_pgtable *pt)
 {
-	__le32       *cpu;
-	dma_addr_t   dma_addr = 0;
+	u32          *cpu;
+	dma_addr_t   dma_addr;
 
 	cpu = pci_alloc_consistent(pci, PAGE_SIZE, &dma_addr);
 	if (NULL == cpu) {
@@ -250,7 +250,7 @@ int saa7146_pgtable_alloc(struct pci_dev *pci, struct saa7146_pgtable *pt)
 int saa7146_pgtable_build_single(struct pci_dev *pci, struct saa7146_pgtable *pt,
 	struct scatterlist *list, int sglen  )
 {
-	__le32 *ptr, fill;
+	u32 *ptr, fill;
 	int nr_pages = 0;
 	int i,p;
 

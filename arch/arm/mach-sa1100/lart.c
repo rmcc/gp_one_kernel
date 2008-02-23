@@ -6,14 +6,14 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/setup.h>
 #include <asm/mach-types.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/serial_sa1100.h>
-#include <mach/mcp.h>
+#include <asm/arch/mcp.h>
 
 #include "generic.h"
 

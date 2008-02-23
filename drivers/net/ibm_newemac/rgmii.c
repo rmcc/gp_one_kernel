@@ -39,7 +39,6 @@
 #define RGMII_FER_RGMII(idx)	(0x5 << ((idx) * 4))
 #define RGMII_FER_TBI(idx)	(0x6 << ((idx) * 4))
 #define RGMII_FER_GMII(idx)	(0x7 << ((idx) * 4))
-#define RGMII_FER_MII(idx)	RGMII_FER_GMII(idx)
 
 /* RGMIIx_SSR */
 #define RGMII_SSR_MASK(idx)	(0x7 << ((idx) * 8))
@@ -50,7 +49,6 @@
 static inline int rgmii_valid_mode(int phy_mode)
 {
 	return  phy_mode == PHY_MODE_GMII ||
-		phy_mode == PHY_MODE_MII ||
 		phy_mode == PHY_MODE_RGMII ||
 		phy_mode == PHY_MODE_TBI ||
 		phy_mode == PHY_MODE_RTBI;
@@ -65,8 +63,6 @@ static inline const char *rgmii_mode_name(int mode)
 		return "TBI";
 	case PHY_MODE_GMII:
 		return "GMII";
-	case PHY_MODE_MII:
-		return "MII";
 	case PHY_MODE_RTBI:
 		return "RTBI";
 	default:
@@ -83,8 +79,6 @@ static inline u32 rgmii_mode_mask(int mode, int input)
 		return RGMII_FER_TBI(input);
 	case PHY_MODE_GMII:
 		return RGMII_FER_GMII(input);
-	case PHY_MODE_MII:
-		return RGMII_FER_MII(input);
 	case PHY_MODE_RTBI:
 		return RGMII_FER_RTBI(input);
 	default:

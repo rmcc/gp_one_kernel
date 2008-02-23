@@ -59,17 +59,10 @@ nf_ct_ext_create(struct nf_ct_ext **ext, enum nf_ct_ext_id id, gfp_t gfp)
 	if (!*ext)
 		return NULL;
 
-	INIT_RCU_HEAD(&(*ext)->rcu);
 	(*ext)->offset[id] = off;
 	(*ext)->len = len;
 
 	return (void *)(*ext) + off;
-}
-
-static void __nf_ct_ext_free_rcu(struct rcu_head *head)
-{
-	struct nf_ct_ext *ext = container_of(head, struct nf_ct_ext, rcu);
-	kfree(ext);
 }
 
 void *__nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
@@ -95,11 +88,13 @@ void *__nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	newlen = newoff + t->len;
 	rcu_read_unlock();
 
-	new = __krealloc(ct->ext, newlen, gfp);
-	if (!new)
-		return NULL;
+	if (newlen >= ksize(ct->ext)) {
+		new = kmalloc(newlen, gfp);
+		if (!new)
+			return NULL;
 
-	if (new != ct->ext) {
+		memcpy(new, ct->ext, ct->ext->len);
+
 		for (i = 0; i < NF_CT_EXT_NUM; i++) {
 			if (!nf_ct_ext_exist(ct, i))
 				continue;
@@ -111,14 +106,14 @@ void *__nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 					(void *)ct->ext + ct->ext->offset[i]);
 			rcu_read_unlock();
 		}
-		call_rcu(&ct->ext->rcu, __nf_ct_ext_free_rcu);
+		kfree(ct->ext);
 		ct->ext = new;
 	}
 
-	new->offset[id] = newoff;
-	new->len = newlen;
-	memset((void *)new + newoff, 0, newlen - newoff);
-	return (void *)new + newoff;
+	ct->ext->offset[id] = newoff;
+	ct->ext->len = newlen;
+	memset((void *)ct->ext + newoff, 0, newlen - newoff);
+	return (void *)ct->ext + newoff;
 }
 EXPORT_SYMBOL(__nf_ct_ext_add);
 

@@ -21,17 +21,14 @@
 %locations
 
 %{
-#include <stdio.h>
-
 #include "dtc.h"
 #include "srcpos.h"
 
-extern int yylex(void);
+int yylex(void);
+unsigned long long eval_literal(const char *s, int base, int bits);
 
 extern struct boot_info *the_boot_info;
-extern int treesource_error;
 
-static unsigned long long eval_literal(const char *s, int base, int bits);
 %}
 
 %union {
@@ -39,10 +36,10 @@ static unsigned long long eval_literal(const char *s, int base, int bits);
 	char *literal;
 	char *labelref;
 	unsigned int cbase;
-	uint8_t byte;
+	u8 byte;
 	struct data data;
 
-	uint64_t addr;
+	u64 addr;
 	cell_t cell;
 	struct property *prop;
 	struct property *proplist;
@@ -61,7 +58,6 @@ static unsigned long long eval_literal(const char *s, int base, int bits);
 %token <data> DT_STRING
 %token <labelref> DT_LABEL
 %token <labelref> DT_REF
-%token DT_INCBIN
 
 %type <data> propdata
 %type <data> propdataprefix
@@ -88,11 +84,11 @@ static unsigned long long eval_literal(const char *s, int base, int bits);
 sourcefile:
 	  DT_V1 ';' memreserves devicetree
 		{
-			the_boot_info = build_boot_info($3, $4, 0);
+			the_boot_info = build_boot_info($3, $4);
 		}
 	| v0_memreserves devicetree
 		{
-			the_boot_info = build_boot_info($1, $2, 0);
+			the_boot_info = build_boot_info($1, $2);
 		}
 	;
 
@@ -200,34 +196,6 @@ propdata:
 		{
 			$$ = data_add_marker($1, REF_PATH, $2);
 		}
-	| propdataprefix DT_INCBIN '(' DT_STRING ',' addr ',' addr ')'
-		{
-			struct search_path path = { srcpos_file->dir, NULL, NULL };
-			struct dtc_file *file = dtc_open_file($4.val, &path);
-			struct data d = empty_data;
-
-			if ($6 != 0)
-				if (fseek(file->file, $6, SEEK_SET) != 0)
-					yyerrorf("Couldn't seek to offset %llu in \"%s\": %s",
-						 (unsigned long long)$6,
-						 $4.val, strerror(errno));
-
-			d = data_copy_file(file->file, $8);
-
-			$$ = data_merge($1, d);
-			dtc_close_file(file);
-		}
-	| propdataprefix DT_INCBIN '(' DT_STRING ')'
-		{
-			struct search_path path = { srcpos_file->dir, NULL, NULL };
-			struct dtc_file *file = dtc_open_file($4.val, &path);
-			struct data d = empty_data;
-
-			d = data_copy_file(file->file, -1);
-
-			$$ = data_merge($1, d);
-			dtc_close_file(file);
-		}
 	| propdata DT_LABEL
 		{
 			$$ = data_add_marker($1, LABEL, $2);
@@ -314,7 +282,7 @@ subnodes:
 		}
 	| subnode propdef
 		{
-			yyerror("syntax error: properties must precede subnodes");
+			yyerror("syntax error: properties must precede subnodes\n");
 			YYERROR;
 		}
 	;
@@ -339,29 +307,18 @@ label:
 
 %%
 
-void yyerrorf(char const *s, ...)
+void yyerror (char const *s)
 {
-	const char *fname = srcpos_file ? srcpos_file->name : "<no-file>";
-	va_list va;
-	va_start(va, s);
+	const char *fname = srcpos_filename_for_num(yylloc.filenum);
 
 	if (strcmp(fname, "-") == 0)
 		fname = "stdin";
 
-	fprintf(stderr, "%s:%d ", fname, yylloc.first_line);
-	vfprintf(stderr, s, va);
-	fprintf(stderr, "\n");
-
-	treesource_error = 1;
-	va_end(va);
+	fprintf(stderr, "%s:%d %s\n",
+		fname, yylloc.first_line, s);
 }
 
-void yyerror (char const *s)
-{
-	yyerrorf("%s", s);
-}
-
-static unsigned long long eval_literal(const char *s, int base, int bits)
+unsigned long long eval_literal(const char *s, int base, int bits)
 {
 	unsigned long long val;
 	char *e;

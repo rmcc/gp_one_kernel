@@ -18,7 +18,6 @@
  *
  */
 #include <stdarg.h>
-#include <linux/smp_lock.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -1814,7 +1813,7 @@ static int powerbook_sleep_grackle(void)
  		_set_L2CR(save_l2cr);
 	
 	/* Restore userland MMU context */
-	switch_mmu_context(NULL, current->active_mm);
+	set_context(current->active_mm->context.id, current->active_mm->pgd);
 
 	/* Power things up */
 	pmu_unlock();
@@ -1903,7 +1902,7 @@ powerbook_sleep_Core99(void)
  		_set_L3CR(save_l3cr);
 	
 	/* Restore userland MMU context */
-	switch_mmu_context(NULL, current->active_mm);
+	set_context(current->active_mm->context.id, current->active_mm->pgd);
 
 	/* Tell PMU we are ready */
 	pmu_unlock();
@@ -2048,7 +2047,6 @@ pmu_open(struct inode *inode, struct file *file)
 	pp->rb_get = pp->rb_put = 0;
 	spin_lock_init(&pp->lock);
 	init_waitqueue_head(&pp->wait);
-	lock_kernel();
 	spin_lock_irqsave(&all_pvt_lock, flags);
 #if defined(CONFIG_INPUT_ADBHID) && defined(CONFIG_PMAC_BACKLIGHT)
 	pp->backlight_locker = 0;
@@ -2056,7 +2054,6 @@ pmu_open(struct inode *inode, struct file *file)
 	list_add(&pp->list, &all_pmu_pvt);
 	spin_unlock_irqrestore(&all_pvt_lock, flags);
 	file->private_data = pp;
-	unlock_kernel();
 	return 0;
 }
 

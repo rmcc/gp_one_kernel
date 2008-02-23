@@ -12,6 +12,8 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License.
+ *
+ *  $Id: 8250_pnp.c,v 1.10 2002/07/21 21:32:30 rmk Exp $
  */
 #include <linux/module.h>
 #include <linux/init.h>
@@ -381,14 +383,21 @@ static int __devinit check_name(char *name)
 	return 0;
 }
 
-static int __devinit check_resources(struct pnp_dev *dev)
+static int __devinit check_resources(struct pnp_option *option)
 {
-	resource_size_t base[] = {0x2f8, 0x3f8, 0x2e8, 0x3e8};
-	int i;
+	struct pnp_option *tmp;
+	if (!option)
+		return 0;
 
-	for (i = 0; i < ARRAY_SIZE(base); i++) {
-		if (pnp_possible_config(dev, IORESOURCE_IO, base[i], 8))
-			return 1;
+	for (tmp = option; tmp; tmp = tmp->next) {
+		struct pnp_port *port;
+		for (port = tmp->port; port; port = port->next)
+			if ((port->size == 8) &&
+			    ((port->min == 0x2f8) ||
+			     (port->min == 0x3f8) ||
+			     (port->min == 0x2e8) ||
+			     (port->min == 0x3e8)))
+				return 1;
 	}
 
 	return 0;
@@ -411,7 +420,10 @@ static int __devinit serial_pnp_guess_board(struct pnp_dev *dev, int *flags)
 		(dev->card && check_name(dev->card->name))))
 			return -ENODEV;
 
-	if (check_resources(dev))
+	if (check_resources(dev->independent))
+		return 0;
+
+	if (check_resources(dev->dependent))
 		return 0;
 
 	return -ENODEV;

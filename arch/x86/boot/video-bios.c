@@ -17,7 +17,7 @@
 #include "boot.h"
 #include "video.h"
 
-static __videocard video_bios;
+__videocard video_bios;
 
 /* Set a conventional BIOS mode */
 static int set_bios_mode(u8 mode);
@@ -119,7 +119,7 @@ static int bios_probe(void)
 	return nmodes;
 }
 
-static __videocard video_bios =
+__videocard video_bios =
 {
 	.card_name	= "BIOS",
 	.probe		= bios_probe,

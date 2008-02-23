@@ -200,9 +200,6 @@ done:
 static struct hv_ops hvc_get_put_ops = {
 	.get_chars = get_chars,
 	.put_chars = put_chars,
-	.notifier_add = notifier_add_irq,
-	.notifier_del = notifier_del_irq,
-	.notifier_hangup = notifier_hangup_irq,
 };
 
 static int __devinit hvc_vio_probe(struct vio_dev *vdev,
@@ -575,10 +572,8 @@ static int __init hvc_find_vtys(void)
 		 * of console adapters.
 		 */
 		if ((num_found >= MAX_NR_HVC_CONSOLES) ||
-				(num_found >= VTTY_PORTS)) {
-			of_node_put(vty);
+				(num_found >= VTTY_PORTS))
 			break;
-		}
 
 		vtermno = of_get_property(vty, "reg", NULL);
 		if (!vtermno)

@@ -30,19 +30,15 @@
  */
 #define CRYPTO_ALG_TYPE_MASK		0x0000000f
 #define CRYPTO_ALG_TYPE_CIPHER		0x00000001
-#define CRYPTO_ALG_TYPE_COMPRESS	0x00000002
-#define CRYPTO_ALG_TYPE_AEAD		0x00000003
+#define CRYPTO_ALG_TYPE_DIGEST		0x00000002
+#define CRYPTO_ALG_TYPE_HASH		0x00000003
 #define CRYPTO_ALG_TYPE_BLKCIPHER	0x00000004
 #define CRYPTO_ALG_TYPE_ABLKCIPHER	0x00000005
 #define CRYPTO_ALG_TYPE_GIVCIPHER	0x00000006
-#define CRYPTO_ALG_TYPE_DIGEST		0x00000008
-#define CRYPTO_ALG_TYPE_HASH		0x00000008
-#define CRYPTO_ALG_TYPE_SHASH		0x00000009
-#define CRYPTO_ALG_TYPE_AHASH		0x0000000a
-#define CRYPTO_ALG_TYPE_RNG		0x0000000c
+#define CRYPTO_ALG_TYPE_COMPRESS	0x00000008
+#define CRYPTO_ALG_TYPE_AEAD		0x00000009
 
 #define CRYPTO_ALG_TYPE_HASH_MASK	0x0000000e
-#define CRYPTO_ALG_TYPE_AHASH_MASK	0x0000000c
 #define CRYPTO_ALG_TYPE_BLKCIPHER_MASK	0x0000000c
 
 #define CRYPTO_ALG_LARVAL		0x00000010
@@ -61,14 +57,6 @@
  * with a generic IV generator to prevent them from being wrapped again.
  */
 #define CRYPTO_ALG_GENIV		0x00000200
-
-/*
- * Set if the algorithm has passed automated run-time testing.  Note that
- * if there is no run-time testing for a given algorithm it is considered
- * to have passed.
- */
-
-#define CRYPTO_ALG_TESTED		0x00000400
 
 /*
  * Transform masks and values (for crt_flags).
@@ -114,8 +102,6 @@ struct crypto_async_request;
 struct crypto_aead;
 struct crypto_blkcipher;
 struct crypto_hash;
-struct crypto_ahash;
-struct crypto_rng;
 struct crypto_tfm;
 struct crypto_type;
 struct aead_givcrypt_request;
@@ -141,16 +127,6 @@ struct ablkcipher_request {
 
 	struct scatterlist *src;
 	struct scatterlist *dst;
-
-	void *__ctx[] CRYPTO_MINALIGN_ATTR;
-};
-
-struct ahash_request {
-	struct crypto_async_request base;
-
-	unsigned int nbytes;
-	struct scatterlist *src;
-	u8		   *result;
 
 	void *__ctx[] CRYPTO_MINALIGN_ATTR;
 };
@@ -217,18 +193,6 @@ struct ablkcipher_alg {
 	unsigned int min_keysize;
 	unsigned int max_keysize;
 	unsigned int ivsize;
-};
-
-struct ahash_alg {
-	int (*init)(struct ahash_request *req);
-	int (*reinit)(struct ahash_request *req);
-	int (*update)(struct ahash_request *req);
-	int (*final)(struct ahash_request *req);
-	int (*digest)(struct ahash_request *req);
-	int (*setkey)(struct crypto_ahash *tfm, const u8 *key,
-			unsigned int keylen);
-
-	unsigned int digestsize;
 };
 
 struct aead_alg {
@@ -302,24 +266,13 @@ struct compress_alg {
 			      unsigned int slen, u8 *dst, unsigned int *dlen);
 };
 
-struct rng_alg {
-	int (*rng_make_random)(struct crypto_rng *tfm, u8 *rdata,
-			       unsigned int dlen);
-	int (*rng_reset)(struct crypto_rng *tfm, u8 *seed, unsigned int slen);
-
-	unsigned int seedsize;
-};
-
-
 #define cra_ablkcipher	cra_u.ablkcipher
 #define cra_aead	cra_u.aead
 #define cra_blkcipher	cra_u.blkcipher
 #define cra_cipher	cra_u.cipher
 #define cra_digest	cra_u.digest
 #define cra_hash	cra_u.hash
-#define cra_ahash	cra_u.ahash
 #define cra_compress	cra_u.compress
-#define cra_rng		cra_u.rng
 
 struct crypto_alg {
 	struct list_head cra_list;
@@ -345,9 +298,7 @@ struct crypto_alg {
 		struct cipher_alg cipher;
 		struct digest_alg digest;
 		struct hash_alg hash;
-		struct ahash_alg ahash;
 		struct compress_alg compress;
-		struct rng_alg rng;
 	} cra_u;
 
 	int (*cra_init)(struct crypto_tfm *tfm);
@@ -432,18 +383,6 @@ struct hash_tfm {
 	unsigned int digestsize;
 };
 
-struct ahash_tfm {
-	int (*init)(struct ahash_request *req);
-	int (*update)(struct ahash_request *req);
-	int (*final)(struct ahash_request *req);
-	int (*digest)(struct ahash_request *req);
-	int (*setkey)(struct crypto_ahash *tfm, const u8 *key,
-			unsigned int keylen);
-
-	unsigned int digestsize;
-	unsigned int reqsize;
-};
-
 struct compress_tfm {
 	int (*cot_compress)(struct crypto_tfm *tfm,
 	                    const u8 *src, unsigned int slen,
@@ -453,20 +392,12 @@ struct compress_tfm {
 	                      u8 *dst, unsigned int *dlen);
 };
 
-struct rng_tfm {
-	int (*rng_gen_random)(struct crypto_rng *tfm, u8 *rdata,
-			      unsigned int dlen);
-	int (*rng_reset)(struct crypto_rng *tfm, u8 *seed, unsigned int slen);
-};
-
 #define crt_ablkcipher	crt_u.ablkcipher
 #define crt_aead	crt_u.aead
 #define crt_blkcipher	crt_u.blkcipher
 #define crt_cipher	crt_u.cipher
 #define crt_hash	crt_u.hash
-#define crt_ahash	crt_u.ahash
 #define crt_compress	crt_u.compress
-#define crt_rng		crt_u.rng
 
 struct crypto_tfm {
 
@@ -478,12 +409,8 @@ struct crypto_tfm {
 		struct blkcipher_tfm blkcipher;
 		struct cipher_tfm cipher;
 		struct hash_tfm hash;
-		struct ahash_tfm ahash;
 		struct compress_tfm compress;
-		struct rng_tfm rng;
 	} crt_u;
-
-	void (*exit)(struct crypto_tfm *tfm);
 	
 	struct crypto_alg *__crt_alg;
 
@@ -511,10 +438,6 @@ struct crypto_comp {
 };
 
 struct crypto_hash {
-	struct crypto_tfm base;
-};
-
-struct crypto_rng {
 	struct crypto_tfm base;
 };
 
@@ -548,13 +471,9 @@ struct crypto_attr_u32 {
  * Transform user interface.
  */
  
-struct crypto_tfm *crypto_alloc_tfm(const char *alg_name,
-				    const struct crypto_type *frontend,
-				    u32 type, u32 mask);
+struct crypto_tfm *crypto_alloc_tfm(const char *alg_name, u32 tfm_flags);
 struct crypto_tfm *crypto_alloc_base(const char *alg_name, u32 type, u32 mask);
 void crypto_free_tfm(struct crypto_tfm *tfm);
-
-int alg_test(const char *driver, const char *alg, u32 type, u32 mask);
 
 /*
  * Transform helpers which query the underlying algorithm.

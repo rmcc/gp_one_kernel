@@ -406,10 +406,8 @@ static int ov7670_read(struct i2c_client *c, unsigned char reg,
 	int ret;
 
 	ret = i2c_smbus_read_byte_data(c, reg);
-	if (ret >= 0) {
+	if (ret >= 0)
 		*value = (unsigned char) ret;
-		ret = 0;
-	}
 	return ret;
 }
 
@@ -682,17 +680,17 @@ static int ov7670_try_fmt(struct i2c_client *c, struct v4l2_format *fmt,
 	for (index = 0; index < N_OV7670_FMTS; index++)
 		if (ov7670_formats[index].pixelformat == pix->pixelformat)
 			break;
-	if (index >= N_OV7670_FMTS) {
-		/* default to first format */
-		index = 0;
-		pix->pixelformat = ov7670_formats[0].pixelformat;
-	}
+	if (index >= N_OV7670_FMTS)
+		return -EINVAL;
 	if (ret_fmt != NULL)
 		*ret_fmt = ov7670_formats + index;
 	/*
 	 * Fields: the OV devices claim to be progressive.
 	 */
-	pix->field = V4L2_FIELD_NONE;
+	if (pix->field == V4L2_FIELD_ANY)
+		pix->field = V4L2_FIELD_NONE;
+	else if (pix->field != V4L2_FIELD_NONE)
+		return -EINVAL;
 	/*
 	 * Round requested image size down to the nearest
 	 * we support, but not below the smallest.
@@ -833,7 +831,7 @@ static int ov7670_store_cmatrix(struct i2c_client *client,
 		int matrix[CMATRIX_LEN])
 {
 	int i, ret;
-	unsigned char signbits = 0;
+	unsigned char signbits;
 
 	/*
 	 * Weird crap seems to exist in the upper part of
@@ -1009,7 +1007,7 @@ static unsigned char ov7670_abs_to_sm(unsigned char v)
 
 static int ov7670_t_brightness(struct i2c_client *client, int value)
 {
-	unsigned char com8 = 0, v;
+	unsigned char com8, v;
 	int ret;
 
 	ov7670_read(client, REG_COM8, &com8);
@@ -1022,7 +1020,7 @@ static int ov7670_t_brightness(struct i2c_client *client, int value)
 
 static int ov7670_q_brightness(struct i2c_client *client, __s32 *value)
 {
-	unsigned char v = 0;
+	unsigned char v;
 	int ret = ov7670_read(client, REG_BRIGHT, &v);
 
 	*value = ov7670_sm_to_abs(v);
@@ -1036,7 +1034,7 @@ static int ov7670_t_contrast(struct i2c_client *client, int value)
 
 static int ov7670_q_contrast(struct i2c_client *client, __s32 *value)
 {
-	unsigned char v = 0;
+	unsigned char v;
 	int ret = ov7670_read(client, REG_CONTRAS, &v);
 
 	*value = v;
@@ -1046,7 +1044,7 @@ static int ov7670_q_contrast(struct i2c_client *client, __s32 *value)
 static int ov7670_q_hflip(struct i2c_client *client, __s32 *value)
 {
 	int ret;
-	unsigned char v = 0;
+	unsigned char v;
 
 	ret = ov7670_read(client, REG_MVFP, &v);
 	*value = (v & MVFP_MIRROR) == MVFP_MIRROR;
@@ -1056,7 +1054,7 @@ static int ov7670_q_hflip(struct i2c_client *client, __s32 *value)
 
 static int ov7670_t_hflip(struct i2c_client *client, int value)
 {
-	unsigned char v = 0;
+	unsigned char v;
 	int ret;
 
 	ret = ov7670_read(client, REG_MVFP, &v);
@@ -1074,7 +1072,7 @@ static int ov7670_t_hflip(struct i2c_client *client, int value)
 static int ov7670_q_vflip(struct i2c_client *client, __s32 *value)
 {
 	int ret;
-	unsigned char v = 0;
+	unsigned char v;
 
 	ret = ov7670_read(client, REG_MVFP, &v);
 	*value = (v & MVFP_FLIP) == MVFP_FLIP;
@@ -1084,7 +1082,7 @@ static int ov7670_q_vflip(struct i2c_client *client, __s32 *value)
 
 static int ov7670_t_vflip(struct i2c_client *client, int value)
 {
-	unsigned char v = 0;
+	unsigned char v;
 	int ret;
 
 	ret = ov7670_read(client, REG_MVFP, &v);
@@ -1310,7 +1308,7 @@ static int ov7670_command(struct i2c_client *client, unsigned int cmd,
 		void *arg)
 {
 	switch (cmd) {
-	case VIDIOC_DBG_G_CHIP_IDENT:
+	case VIDIOC_G_CHIP_IDENT:
 		return v4l2_chip_ident_i2c_client(client, arg, V4L2_IDENT_OV7670, 0);
 
 	case VIDIOC_INT_RESET:
@@ -1347,6 +1345,7 @@ static struct i2c_driver ov7670_driver = {
 		.name = "ov7670",
 	},
 	.id 		= I2C_DRIVERID_OV7670,
+	.class 		= I2C_CLASS_CAM_DIGITAL,
 	.attach_adapter = ov7670_attach,
 	.detach_client	= ov7670_detach,
 	.command	= ov7670_command,

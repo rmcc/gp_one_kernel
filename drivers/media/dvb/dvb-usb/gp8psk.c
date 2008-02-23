@@ -86,8 +86,7 @@ static int gp8psk_load_bcm4500fw(struct dvb_usb_device *d)
 {
 	int ret;
 	const struct firmware *fw = NULL;
-	const u8 *ptr;
-	u8 *buf;
+	u8 *ptr, *buf;
 	if ((ret = request_firmware(&fw, bcm4500_firmware,
 					&d->udev->dev)) != 0) {
 		err("did not find the bcm4500 firmware file. (%s) "
@@ -147,24 +146,24 @@ static int gp8psk_power_ctrl(struct dvb_usb_device *d, int onoff)
 		if (gp_product_id == USB_PID_GENPIX_8PSK_REV_1_WARM)
 			if (! (status & bm8pskFW_Loaded)) /* BCM4500 firmware loaded */
 				if(gp8psk_load_bcm4500fw(d))
-					return -EINVAL;
+					return EINVAL;
 
 		if (! (status & bmIntersilOn)) /* LNB Power */
 			if (gp8psk_usb_in_op(d, START_INTERSIL, 1, 0,
 					&buf, 1))
-				return -EINVAL;
+				return EINVAL;
 
 		/* Set DVB mode to 1 */
 		if (gp_product_id == USB_PID_GENPIX_8PSK_REV_1_WARM)
 			if (gp8psk_usb_out_op(d, SET_DVB_MODE, 1, 0, NULL, 0))
-				return -EINVAL;
+				return EINVAL;
 		/* Abort possible TS (if previous tune crashed) */
 		if (gp8psk_usb_out_op(d, ARM_TRANSFER, 0, 0, NULL, 0))
-			return -EINVAL;
+			return EINVAL;
 	} else {
 		/* Turn off LNB power */
 		if (gp8psk_usb_in_op(d, START_INTERSIL, 0, 0, &buf, 1))
-			return -EINVAL;
+			return EINVAL;
 		/* Turn off 8psk power */
 		if (gp8psk_usb_in_op(d, BOOT_8PSK, 0, 0, &buf, 1))
 			return -EINVAL;
@@ -174,22 +173,6 @@ static int gp8psk_power_ctrl(struct dvb_usb_device *d, int onoff)
 	return 0;
 }
 
-int gp8psk_bcm4500_reload(struct dvb_usb_device *d)
-{
-	u8 buf;
-	int gp_product_id = le16_to_cpu(d->udev->descriptor.idProduct);
-	/* Turn off 8psk power */
-	if (gp8psk_usb_in_op(d, BOOT_8PSK, 0, 0, &buf, 1))
-		return -EINVAL;
-	/* Turn On 8psk power */
-	if (gp8psk_usb_in_op(d, BOOT_8PSK, 1, 0, &buf, 1))
-		return -EINVAL;
-	/* load BCM4500 firmware */
-	if (gp_product_id == USB_PID_GENPIX_8PSK_REV_1_WARM)
-		if (gp8psk_load_bcm4500fw(d))
-			return -EINVAL;
-	return 0;
-}
 
 static int gp8psk_streaming_ctrl(struct dvb_usb_adapter *adap, int onoff)
 {

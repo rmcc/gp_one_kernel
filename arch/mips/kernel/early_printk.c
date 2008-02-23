@@ -10,8 +10,6 @@
 #include <linux/console.h>
 #include <linux/init.h>
 
-#include <asm/setup.h>
-
 extern void prom_putchar(char);
 
 static void __init

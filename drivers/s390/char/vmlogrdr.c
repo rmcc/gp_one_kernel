@@ -10,10 +10,6 @@
  *		   Stefan Weinhuber <wein@de.ibm.com>
  *
  */
-
-#define KMSG_COMPONENT "vmlogrdr"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/errno.h>
@@ -29,8 +25,9 @@
 #include <linux/kmod.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
-#include <linux/smp_lock.h>
 #include <linux/string.h>
+
+
 
 MODULE_AUTHOR
 	("(C) 2004 IBM Corporation by Xenia Tkatschow (xenia@us.ibm.com)\n"
@@ -176,7 +173,8 @@ static void vmlogrdr_iucv_path_severed(struct iucv_path *path, u8 ipuser[16])
 	struct vmlogrdr_priv_t * logptr = path->private;
 	u8 reason = (u8) ipuser[8];
 
-	pr_err("vmlogrdr: connection severed with reason %i\n", reason);
+	printk (KERN_ERR "vmlogrdr: connection severed with"
+		" reason %i\n", reason);
 
 	iucv_path_sever(path, NULL);
 	kfree(path);
@@ -218,7 +216,9 @@ static int vmlogrdr_get_recording_class_AB(void)
 	char *tail;
 	int len,i;
 
+	printk (KERN_DEBUG "vmlogrdr: query command: %s\n", cp_command);
 	cpcmd(cp_command, cp_response, sizeof(cp_response), NULL);
+	printk (KERN_DEBUG "vmlogrdr: response: %s", cp_response);
 	len = strnlen(cp_response,sizeof(cp_response));
 	// now the parsing
 	tail=strnchr(cp_response,len,'=');
@@ -268,7 +268,11 @@ static int vmlogrdr_recording(struct vmlogrdr_priv_t * logptr,
 			 logptr->recording_name,
 			 qid_string);
 
+		printk (KERN_DEBUG "vmlogrdr: recording command: %s\n",
+			cp_command);
 		cpcmd(cp_command, cp_response, sizeof(cp_response), NULL);
+		printk (KERN_DEBUG "vmlogrdr: recording response: %s",
+			cp_response);
 	}
 
 	memset(cp_command, 0x00, sizeof(cp_command));
@@ -278,7 +282,10 @@ static int vmlogrdr_recording(struct vmlogrdr_priv_t * logptr,
 		onoff,
 		qid_string);
 
+	printk (KERN_DEBUG "vmlogrdr: recording command: %s\n", cp_command);
 	cpcmd(cp_command, cp_response, sizeof(cp_response), NULL);
+	printk (KERN_DEBUG "vmlogrdr: recording response: %s",
+		cp_response);
 	/* The recording command will usually answer with 'Command complete'
 	 * on success, but when the specific service was never connected
 	 * before then there might be an additional informational message
@@ -312,11 +319,9 @@ static int vmlogrdr_open (struct inode *inode, struct file *filp)
 		return -ENOSYS;
 
 	/* Besure this device hasn't already been opened */
-	lock_kernel();
 	spin_lock_bh(&logptr->priv_lock);
 	if (logptr->dev_in_use)	{
 		spin_unlock_bh(&logptr->priv_lock);
-		unlock_kernel();
 		return -EBUSY;
 	}
 	logptr->dev_in_use = 1;
@@ -334,8 +339,8 @@ static int vmlogrdr_open (struct inode *inode, struct file *filp)
 	if (logptr->autorecording) {
 		ret = vmlogrdr_recording(logptr,1,logptr->autopurge);
 		if (ret)
-			pr_warning("vmlogrdr: failed to start "
-				   "recording automatically\n");
+			printk (KERN_WARNING "vmlogrdr: failed to start "
+				"recording automatically\n");
 	}
 
 	/* create connection to the system service */
@@ -346,9 +351,9 @@ static int vmlogrdr_open (struct inode *inode, struct file *filp)
 				       logptr->system_service, NULL, NULL,
 				       logptr);
 	if (connect_rc) {
-		pr_err("vmlogrdr: iucv connection to %s "
-		       "failed with rc %i \n",
-		       logptr->system_service, connect_rc);
+		printk (KERN_ERR "vmlogrdr: iucv connection to %s "
+			"failed with rc %i \n", logptr->system_service,
+			connect_rc);
 		goto out_path;
 	}
 
@@ -360,9 +365,7 @@ static int vmlogrdr_open (struct inode *inode, struct file *filp)
 		   || (logptr->iucv_path_severed));
 	if (logptr->iucv_path_severed)
 		goto out_record;
- 	ret = nonseekable_open(inode, filp);
-	unlock_kernel();
-	return ret;
+ 	return nonseekable_open(inode, filp);
 
 out_record:
 	if (logptr->autorecording)
@@ -372,7 +375,6 @@ out_path:
 	logptr->path = NULL;
 out_dev:
 	logptr->dev_in_use = 0;
-	unlock_kernel();
 	return -EIO;
 }
 
@@ -389,8 +391,8 @@ static int vmlogrdr_release (struct inode *inode, struct file *filp)
 	if (logptr->autorecording) {
 		ret = vmlogrdr_recording(logptr,0,logptr->autopurge);
 		if (ret)
-			pr_warning("vmlogrdr: failed to stop "
-				   "recording automatically\n");
+			printk (KERN_WARNING "vmlogrdr: failed to stop "
+				"recording automatically\n");
 	}
 	logptr->dev_in_use = 0;
 
@@ -427,7 +429,7 @@ static int vmlogrdr_receive_data(struct vmlogrdr_priv_t *priv)
 			buffer = priv->buffer + sizeof(int);
 		}
 		/*
-		 * If the record is bigger than our buffer, we receive only
+		 * If the record is bigger then our buffer, we receive only
 		 * a part of it. We can get the rest later.
 		 */
 		if (iucv_data_count > NET_BUFFER_SIZE)
@@ -437,7 +439,7 @@ static int vmlogrdr_receive_data(struct vmlogrdr_priv_t *priv)
 					  0, buffer, iucv_data_count,
 					  &priv->residual_length);
 		spin_unlock_bh(&priv->priv_lock);
-		/* An rc of 5 indicates that the record was bigger than
+		/* An rc of 5 indicates that the record was bigger then
 		 * the buffer, which is OK for us. A 9 indicates that the
 		 * record was purged befor we could receive it.
 		 */
@@ -565,7 +567,10 @@ static ssize_t vmlogrdr_purge_store(struct device * dev,
 			 "RECORDING %s PURGE ",
 			 priv->recording_name);
 
+	printk (KERN_DEBUG "vmlogrdr: recording command: %s\n", cp_command);
 	cpcmd(cp_command, cp_response, sizeof(cp_response), NULL);
+	printk (KERN_DEBUG "vmlogrdr: recording response: %s",
+		cp_response);
 
 	return count;
 }
@@ -677,20 +682,28 @@ static int vmlogrdr_register_driver(void)
 
 	/* Register with iucv driver */
 	ret = iucv_register(&vmlogrdr_iucv_handler, 1);
-	if (ret)
+	if (ret) {
+		printk (KERN_ERR "vmlogrdr: failed to register with "
+			"iucv driver\n");
 		goto out;
+	}
 
 	ret = driver_register(&vmlogrdr_driver);
-	if (ret)
+	if (ret) {
+		printk(KERN_ERR "vmlogrdr: failed to register driver.\n");
 		goto out_iucv;
+	}
 
 	ret = driver_create_file(&vmlogrdr_driver,
 				 &driver_attr_recording_status);
-	if (ret)
+	if (ret) {
+		printk(KERN_ERR "vmlogrdr: failed to add driver attribute.\n");
 		goto out_driver;
+	}
 
 	vmlogrdr_class = class_create(THIS_MODULE, "vmlogrdr");
 	if (IS_ERR(vmlogrdr_class)) {
+		printk(KERN_ERR "vmlogrdr: failed to create class.\n");
 		ret = PTR_ERR(vmlogrdr_class);
 		vmlogrdr_class = NULL;
 		goto out_attr;
@@ -725,7 +738,8 @@ static int vmlogrdr_register_device(struct vmlogrdr_priv_t *priv)
 
 	dev = kzalloc(sizeof(struct device), GFP_KERNEL);
 	if (dev) {
-		dev_set_name(dev, priv->internal_name);
+		snprintf(dev->bus_id, BUS_ID_SIZE, "%s",
+			 priv->internal_name);
 		dev->bus = &iucv_bus;
 		dev->parent = iucv_root;
 		dev->driver = &vmlogrdr_driver;
@@ -748,10 +762,10 @@ static int vmlogrdr_register_device(struct vmlogrdr_priv_t *priv)
 		device_unregister(dev);
 		return ret;
 	}
-	priv->class_device = device_create(vmlogrdr_class, dev,
-					   MKDEV(vmlogrdr_major,
-						 priv->minor_num),
-					   priv, "%s", dev_name(dev));
+	priv->class_device = device_create_drvdata(vmlogrdr_class, dev,
+						   MKDEV(vmlogrdr_major,
+							 priv->minor_num),
+						   priv, "%s", dev->bus_id);
 	if (IS_ERR(priv->class_device)) {
 		ret = PTR_ERR(priv->class_device);
 		priv->class_device=NULL;
@@ -824,7 +838,8 @@ static int __init vmlogrdr_init(void)
 	dev_t dev;
 
 	if (! MACHINE_IS_VM) {
-		pr_err("not running under VM, driver not loaded.\n");
+		printk (KERN_ERR "vmlogrdr: not running under VM, "
+				"driver not loaded.\n");
 		return -ENODEV;
 	}
 
@@ -856,10 +871,12 @@ static int __init vmlogrdr_init(void)
 	rc = vmlogrdr_register_cdev(dev);
 	if (rc)
 		goto cleanup;
+	printk (KERN_INFO "vmlogrdr: driver loaded\n");
 	return 0;
 
 cleanup:
 	vmlogrdr_cleanup();
+	printk (KERN_ERR "vmlogrdr: driver not loaded.\n");
 	return rc;
 }
 
@@ -867,6 +884,7 @@ cleanup:
 static void __exit vmlogrdr_exit(void)
 {
 	vmlogrdr_cleanup();
+	printk (KERN_INFO "vmlogrdr: driver unloaded\n");
 	return;
 }
 

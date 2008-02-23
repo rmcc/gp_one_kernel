@@ -1,7 +1,5 @@
 #ifndef _LINUX_VIRTIO_NET_H
 #define _LINUX_VIRTIO_NET_H
-/* This header is BSD licensed so anyone can use the definitions to implement
- * compatible drivers/servers. */
 #include <linux/virtio_config.h>
 
 /* The ID for virtio_net */
@@ -20,7 +18,6 @@
 #define VIRTIO_NET_F_HOST_TSO6	12	/* Host can handle TSOv6 in. */
 #define VIRTIO_NET_F_HOST_ECN	13	/* Host can handle TSO[6] w/ ECN in. */
 #define VIRTIO_NET_F_HOST_UFO	14	/* Host can handle UFO in. */
-#define VIRTIO_NET_F_MRG_RXBUF	15	/* Host can merge receive buffers. */
 
 struct virtio_net_config
 {
@@ -41,16 +38,8 @@ struct virtio_net_hdr
 #define VIRTIO_NET_HDR_GSO_ECN		0x80	// TCP has ECN set
 	__u8 gso_type;
 	__u16 hdr_len;		/* Ethernet + IP + tcp/udp hdrs */
-	__u16 gso_size;		/* Bytes to append to hdr_len per frame */
+	__u16 gso_size;		/* Bytes to append to gso_hdr_len per frame */
 	__u16 csum_start;	/* Position to start checksumming from */
 	__u16 csum_offset;	/* Offset after that to place checksum */
 };
-
-/* This is the version of the header to use when the MRG_RXBUF
- * feature has been negotiated. */
-struct virtio_net_hdr_mrg_rxbuf {
-	struct virtio_net_hdr hdr;
-	__u16 num_buffers;	/* Number of merged rx buffers */
-};
-
 #endif /* _LINUX_VIRTIO_NET_H */

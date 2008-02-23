@@ -58,14 +58,14 @@ void __init mpc85xx_ds_pic_init(void)
 {
 	struct mpic *mpic;
 	struct resource r;
-	struct device_node *np;
+	struct device_node *np = NULL;
 #ifdef CONFIG_PPC_I8259
 	struct device_node *cascade_node = NULL;
 	int cascade_irq;
 #endif
-	unsigned long root = of_get_flat_dt_root();
 
-	np = of_find_node_by_type(NULL, "open-pic");
+	np = of_find_node_by_type(np, "open-pic");
+
 	if (np == NULL) {
 		printk(KERN_ERR "Could not find open-pic node\n");
 		return;
@@ -77,21 +77,10 @@ void __init mpc85xx_ds_pic_init(void)
 		return;
 	}
 
-	if (of_flat_dt_is_compatible(root, "fsl,MPC8572DS-CAMP")) {
-		mpic = mpic_alloc(np, r.start,
-			MPIC_PRIMARY |
-			MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS,
+	mpic = mpic_alloc(np, r.start,
+			  MPIC_PRIMARY | MPIC_WANTS_RESET | MPIC_BIG_ENDIAN,
 			0, 256, " OpenPIC  ");
-	} else {
-		mpic = mpic_alloc(np, r.start,
-			  MPIC_PRIMARY | MPIC_WANTS_RESET |
-			  MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
-			  MPIC_SINGLE_DEST_CPU,
-			0, 256, " OpenPIC  ");
-	}
-
 	BUG_ON(mpic == NULL);
-	of_node_put(np);
 
 	mpic_init(mpic);
 
@@ -125,6 +114,7 @@ void __init mpc85xx_ds_pic_init(void)
 
 #ifdef CONFIG_PCI
 static int primary_phb_addr;
+extern int uses_fsl_uli_m1575;
 extern int uli_exclude_device(struct pci_controller *hose,
 				u_char bus, u_char devfn);
 
@@ -148,9 +138,6 @@ static int mpc85xx_exclude_device(struct pci_controller *hose,
 /*
  * Setup the architecture
  */
-#ifdef CONFIG_SMP
-extern void __init mpc85xx_smp_init(void);
-#endif
 static void __init mpc85xx_ds_setup_arch(void)
 {
 #ifdef CONFIG_PCI
@@ -173,11 +160,8 @@ static void __init mpc85xx_ds_setup_arch(void)
 		}
 	}
 
+	uses_fsl_uli_m1575 = 1;
 	ppc_md.pci_exclude_device = mpc85xx_exclude_device;
-#endif
-
-#ifdef CONFIG_SMP
-	mpc85xx_smp_init();
 #endif
 
 	printk("MPC85xx DS board from Freescale Semiconductor\n");
@@ -200,10 +184,9 @@ static int __init mpc8544_ds_probe(void)
 	}
 }
 
-static struct of_device_id __initdata mpc85xxds_ids[] = {
+static struct of_device_id mpc85xxds_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
-	{ .compatible = "simple-bus", },
 	{},
 };
 
@@ -212,7 +195,6 @@ static int __init mpc85xxds_publish_devices(void)
 	return of_platform_bus_probe(NULL, mpc85xxds_ids, NULL);
 }
 machine_device_initcall(mpc8544_ds, mpc85xxds_publish_devices);
-machine_device_initcall(mpc8572_ds, mpc85xxds_publish_devices);
 
 /*
  * Called very early, device-tree isn't unflattened

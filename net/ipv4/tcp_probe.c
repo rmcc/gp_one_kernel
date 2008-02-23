@@ -153,11 +153,12 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		= ktime_to_timespec(ktime_sub(p->tstamp, tcp_probe.start));
 
 	return snprintf(tbuf, n,
-			"%lu.%09lu %pI4:%u %pI4:%u %d %#x %#x %u %u %u %u\n",
+			"%lu.%09lu " NIPQUAD_FMT ":%u " NIPQUAD_FMT ":%u"
+			" %d %#x %#x %u %u %u %u\n",
 			(unsigned long) tv.tv_sec,
 			(unsigned long) tv.tv_nsec,
-			&p->saddr, ntohs(p->sport),
-			&p->daddr, ntohs(p->dport),
+			NIPQUAD(p->saddr), ntohs(p->sport),
+			NIPQUAD(p->daddr), ntohs(p->dport),
 			p->length, p->snd_nxt, p->snd_una,
 			p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt);
 }
@@ -223,7 +224,7 @@ static __init int tcpprobe_init(void)
 	if (bufsize < 0)
 		return -EINVAL;
 
-	tcp_probe.log = kcalloc(bufsize, sizeof(struct tcp_log), GFP_KERNEL);
+	tcp_probe.log = kcalloc(sizeof(struct tcp_log), bufsize, GFP_KERNEL);
 	if (!tcp_probe.log)
 		goto err0;
 

@@ -87,10 +87,11 @@ void serio_unregister_port(struct serio *serio);
 void serio_unregister_child_port(struct serio *serio);
 
 int __serio_register_driver(struct serio_driver *drv, struct module *owner, const char *mod_name);
-static inline int __must_check serio_register_driver(struct serio_driver *drv)
+static inline int serio_register_driver(struct serio_driver *drv)
 {
 	return __serio_register_driver(drv, THIS_MODULE, KBUILD_MODNAME);
 }
+int serio_register_driver(struct serio_driver *drv);
 void serio_unregister_driver(struct serio_driver *drv);
 
 static inline int serio_write(struct serio *serio, unsigned char data)
@@ -174,7 +175,7 @@ static inline void serio_unpin_driver(struct serio *serio)
 #define SERIO_8042_XL	0x06
 
 /*
- * Serio protocols
+ * Serio types
  */
 #define SERIO_UNKNOWN	0x00
 #define SERIO_MSC	0x01
@@ -211,8 +212,5 @@ static inline void serio_unpin_driver(struct serio *serio)
 #define SERIO_TAOSEVM	0x34
 #define SERIO_FUJITSU	0x35
 #define SERIO_ZHENHUA	0x36
-#define SERIO_INEXIO	0x37
-#define SERIO_TOUCHIT213	0x37
-#define SERIO_W8001	0x39
 
 #endif

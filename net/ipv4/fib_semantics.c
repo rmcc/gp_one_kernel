@@ -5,6 +5,8 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
+ * Version:	$Id: fib_semantics.c,v 1.19 2002/01/12 07:54:56 davem Exp $
+ *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
  *		This program is free software; you can redistribute it and/or
@@ -63,16 +65,16 @@ static DEFINE_SPINLOCK(fib_multipath_lock);
 for (nhsel=0, nh = (fi)->fib_nh; nhsel < (fi)->fib_nhs; nh++, nhsel++)
 
 #define change_nexthops(fi) { int nhsel; struct fib_nh * nh; \
-for (nhsel=0, nh = (struct fib_nh *)((fi)->fib_nh); nhsel < (fi)->fib_nhs; nh++, nhsel++)
+for (nhsel=0, nh = (struct fib_nh*)((fi)->fib_nh); nhsel < (fi)->fib_nhs; nh++, nhsel++)
 
 #else /* CONFIG_IP_ROUTE_MULTIPATH */
 
 /* Hope, that gcc will optimize it to get rid of dummy loop */
 
-#define for_nexthops(fi) { int nhsel = 0; const struct fib_nh * nh = (fi)->fib_nh; \
+#define for_nexthops(fi) { int nhsel=0; const struct fib_nh * nh = (fi)->fib_nh; \
 for (nhsel=0; nhsel < 1; nhsel++)
 
-#define change_nexthops(fi) { int nhsel = 0; struct fib_nh * nh = (struct fib_nh *)((fi)->fib_nh); \
+#define change_nexthops(fi) { int nhsel=0; struct fib_nh * nh = (struct fib_nh*)((fi)->fib_nh); \
 for (nhsel=0; nhsel < 1; nhsel++)
 
 #endif /* CONFIG_IP_ROUTE_MULTIPATH */
@@ -358,7 +360,7 @@ int fib_detect_death(struct fib_info *fi, int order,
 		state = n->nud_state;
 		neigh_release(n);
 	}
-	if (state == NUD_REACHABLE)
+	if (state==NUD_REACHABLE)
 		return 0;
 	if ((state&NUD_VALID) && order != dflt)
 		return 0;
@@ -958,10 +960,7 @@ int fib_dump_info(struct sk_buff *skb, u32 pid, u32 seq, int event,
 	rtm->rtm_dst_len = dst_len;
 	rtm->rtm_src_len = 0;
 	rtm->rtm_tos = tos;
-	if (tb_id < 256)
-		rtm->rtm_table = tb_id;
-	else
-		rtm->rtm_table = RT_TABLE_COMPAT;
+	rtm->rtm_table = tb_id;
 	NLA_PUT_U32(skb, RTA_TABLE, tb_id);
 	rtm->rtm_type = type;
 	rtm->rtm_flags = fi->fib_flags;

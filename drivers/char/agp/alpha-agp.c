@@ -80,7 +80,7 @@ static void alpha_core_agp_enable(struct agp_bridge_data *bridge, u32 mode)
 	agp->mode.bits.enable = 1;
 	agp->ops->configure(agp);
 
-	agp_device_command(agp->mode.lw, false);
+	agp_device_command(agp->mode.lw, 0);
 }
 
 static int alpha_core_agp_insert_memory(struct agp_memory *mem, off_t pg_start,
@@ -126,7 +126,7 @@ struct agp_bridge_driver alpha_core_agp_driver = {
 	.aperture_sizes		= alpha_core_agp_sizes,
 	.num_aperture_sizes	= 1,
 	.size_type		= FIXED_APER_SIZE,
-	.cant_use_aperture	= true,
+	.cant_use_aperture	= 1,
 	.masks			= NULL,
 
 	.fetch_size		= alpha_core_agp_fetch_size,
@@ -143,9 +143,7 @@ struct agp_bridge_driver alpha_core_agp_driver = {
 	.alloc_by_type		= agp_generic_alloc_by_type,
 	.free_by_type		= agp_generic_free_by_type,
 	.agp_alloc_page		= agp_generic_alloc_page,
-	.agp_alloc_pages	= agp_generic_alloc_pages,
 	.agp_destroy_page	= agp_generic_destroy_page,
-	.agp_destroy_pages	= agp_generic_destroy_pages,
 	.agp_type_to_mask_type  = agp_generic_type_to_mask_type,
 };
 

@@ -62,10 +62,6 @@ struct dvb_adapter {
 	struct device *device;
 
 	struct module *module;
-
-	int mfe_shared;			/* indicates mutually exclusive frontends */
-	struct dvb_device *mfe_dvbdev;	/* frontend device in use */
-	struct mutex mfe_lock;		/* access lock for thread creation */
 };
 
 
@@ -74,7 +70,6 @@ struct dvb_device {
 	struct file_operations *fops;
 	struct dvb_adapter *adapter;
 	int type;
-	int minor;
 	u32 id;
 
 	/* in theory, 'users' can vanish now,

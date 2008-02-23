@@ -23,24 +23,24 @@
 #include <linux/mtd/partitions.h>
 #include <linux/leds.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <mach/led.h>
-#include <mach/mcbsp.h>
-#include <mach/gpio.h>
-#include <mach/mux.h>
-#include <mach/usb.h>
-#include <mach/dma.h>
-#include <mach/tc.h>
-#include <mach/board.h>
-#include <mach/irda.h>
-#include <mach/keypad.h>
-#include <mach/common.h>
-#include <mach/omap-alsa.h>
+#include <asm/arch/led.h>
+#include <asm/arch/mcbsp.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/mux.h>
+#include <asm/arch/usb.h>
+#include <asm/arch/dma.h>
+#include <asm/arch/tc.h>
+#include <asm/arch/board.h>
+#include <asm/arch/irda.h>
+#include <asm/arch/keypad.h>
+#include <asm/arch/common.h>
+#include <asm/arch/omap-alsa.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
@@ -268,7 +268,7 @@ static struct platform_device *palmtt_devices[] __initdata = {
 
 static int palmtt_get_pendown_state(void)
 {
-	return !gpio_get_value(6);
+	return !omap_get_gpio_datain(6);
 }
 
 static const struct ads7846_platform_data palmtt_ts_info = {

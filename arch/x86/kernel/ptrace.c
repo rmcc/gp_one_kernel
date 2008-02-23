@@ -14,7 +14,6 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/regset.h>
-#include <linux/tracehook.h>
 #include <linux/user.h>
 #include <linux/elf.h>
 #include <linux/security.h>
@@ -40,9 +39,7 @@ enum x86_regset {
 	REGSET_GENERAL,
 	REGSET_FP,
 	REGSET_XFP,
-	REGSET_IOPERM64 = REGSET_XFP,
 	REGSET_TLS,
-	REGSET_IOPERM32,
 };
 
 /*
@@ -72,7 +69,7 @@ static inline bool invalid_selector(u16 value)
 
 #define FLAG_MASK		FLAG_MASK_32
 
-static unsigned long *pt_regs_access(struct pt_regs *regs, unsigned long regno)
+static long *pt_regs_access(struct pt_regs *regs, unsigned long regno)
 {
 	BUILD_BUG_ON(offsetof(struct pt_regs, bx) != 0);
 	regno >>= 2;
@@ -557,115 +554,92 @@ static int ptrace_set_debugreg(struct task_struct *child,
 	return 0;
 }
 
-/*
- * These access the current or another (stopped) task's io permission
- * bitmap for debugging or core dump.
- */
-static int ioperm_active(struct task_struct *target,
-			 const struct user_regset *regset)
-{
-	return target->thread.io_bitmap_max / regset->size;
-}
+#ifdef X86_BTS
 
-static int ioperm_get(struct task_struct *target,
-		      const struct user_regset *regset,
-		      unsigned int pos, unsigned int count,
-		      void *kbuf, void __user *ubuf)
+static int ptrace_bts_get_size(struct task_struct *child)
 {
-	if (!target->thread.io_bitmap_ptr)
+	if (!child->thread.ds_area_msr)
 		return -ENXIO;
 
-	return user_regset_copyout(&pos, &count, &kbuf, &ubuf,
-				   target->thread.io_bitmap_ptr,
-				   0, IO_BITMAP_BYTES);
+	return ds_get_bts_index((void *)child->thread.ds_area_msr);
 }
 
-#ifdef CONFIG_X86_PTRACE_BTS
-static int ptrace_bts_read_record(struct task_struct *child, size_t index,
+static int ptrace_bts_read_record(struct task_struct *child,
+				  long index,
 				  struct bts_struct __user *out)
 {
-	const struct bts_trace *trace;
-	struct bts_struct bts;
-	const unsigned char *at;
-	int error;
+	struct bts_struct ret;
+	int retval;
+	int bts_end;
+	int bts_index;
 
-	trace = ds_read_bts(child->bts);
-	if (!trace)
-		return -EPERM;
+	if (!child->thread.ds_area_msr)
+		return -ENXIO;
 
-	at = trace->ds.top - ((index + 1) * trace->ds.size);
-	if ((void *)at < trace->ds.begin)
-		at += (trace->ds.n * trace->ds.size);
+	if (index < 0)
+		return -EINVAL;
 
-	if (!trace->read)
-		return -EOPNOTSUPP;
+	bts_end = ds_get_bts_end((void *)child->thread.ds_area_msr);
+	if (bts_end <= index)
+		return -EINVAL;
 
-	error = trace->read(child->bts, at, &bts);
-	if (error < 0)
-		return error;
+	/* translate the ptrace bts index into the ds bts index */
+	bts_index = ds_get_bts_index((void *)child->thread.ds_area_msr);
+	bts_index -= (index + 1);
+	if (bts_index < 0)
+		bts_index += bts_end;
 
-	if (copy_to_user(out, &bts, sizeof(bts)))
+	retval = ds_read_bts((void *)child->thread.ds_area_msr,
+			     bts_index, &ret);
+	if (retval < 0)
+		return retval;
+
+	if (copy_to_user(out, &ret, sizeof(ret)))
 		return -EFAULT;
 
-	return sizeof(bts);
+	return sizeof(ret);
+}
+
+static int ptrace_bts_clear(struct task_struct *child)
+{
+	if (!child->thread.ds_area_msr)
+		return -ENXIO;
+
+	return ds_clear((void *)child->thread.ds_area_msr);
 }
 
 static int ptrace_bts_drain(struct task_struct *child,
 			    long size,
 			    struct bts_struct __user *out)
 {
-	const struct bts_trace *trace;
-	const unsigned char *at;
-	int error, drained = 0;
+	int end, i;
+	void *ds = (void *)child->thread.ds_area_msr;
 
-	trace = ds_read_bts(child->bts);
-	if (!trace)
-		return -EPERM;
+	if (!ds)
+		return -ENXIO;
 
-	if (!trace->read)
-		return -EOPNOTSUPP;
+	end = ds_get_bts_index(ds);
+	if (end <= 0)
+		return end;
 
-	if (size < (trace->ds.top - trace->ds.begin))
+	if (size < (end * sizeof(struct bts_struct)))
 		return -EIO;
 
-	for (at = trace->ds.begin; (void *)at < trace->ds.top;
-	     out++, drained++, at += trace->ds.size) {
-		struct bts_struct bts;
-		int error;
+	for (i = 0; i < end; i++, out++) {
+		struct bts_struct ret;
+		int retval;
 
-		error = trace->read(child->bts, at, &bts);
-		if (error < 0)
-			return error;
+		retval = ds_read_bts(ds, i, &ret);
+		if (retval < 0)
+			return retval;
 
-		if (copy_to_user(out, &bts, sizeof(bts)))
+		if (copy_to_user(out, &ret, sizeof(ret)))
 			return -EFAULT;
 	}
 
-	memset(trace->ds.begin, 0, trace->ds.n * trace->ds.size);
+	ds_clear(ds);
 
-	error = ds_reset_bts(child->bts);
-	if (error < 0)
-		return error;
-
-	return drained;
-}
-
-static int ptrace_bts_allocate_buffer(struct task_struct *child, size_t size)
-{
-	child->bts_buffer = alloc_locked_buffer(size);
-	if (!child->bts_buffer)
-		return -ENOMEM;
-
-	child->bts_size = size;
-
-	return 0;
-}
-
-static void ptrace_bts_free_buffer(struct task_struct *child)
-{
-	free_locked_buffer(child->bts_buffer, child->bts_size);
-	child->bts_buffer = NULL;
-	child->bts_size = 0;
+	return end;
 }
 
 static int ptrace_bts_config(struct task_struct *child,
@@ -673,7 +647,8 @@ static int ptrace_bts_config(struct task_struct *child,
 			     const struct ptrace_bts_config __user *ucfg)
 {
 	struct ptrace_bts_config cfg;
-	unsigned int flags = 0;
+	int bts_size, ret = 0;
+	void *ds;
 
 	if (cfg_size < sizeof(cfg))
 		return -EIO;
@@ -681,79 +656,87 @@ static int ptrace_bts_config(struct task_struct *child,
 	if (copy_from_user(&cfg, ucfg, sizeof(cfg)))
 		return -EFAULT;
 
-	if (child->bts) {
-		ds_release_bts(child->bts);
-		child->bts = NULL;
+	if ((int)cfg.size < 0)
+		return -EINVAL;
+
+	bts_size = 0;
+	ds = (void *)child->thread.ds_area_msr;
+	if (ds) {
+		bts_size = ds_get_bts_size(ds);
+		if (bts_size < 0)
+			return bts_size;
+	}
+	cfg.size = PAGE_ALIGN(cfg.size);
+
+	if (bts_size != cfg.size) {
+		ret = ptrace_bts_realloc(child, cfg.size,
+					 cfg.flags & PTRACE_BTS_O_CUT_SIZE);
+		if (ret < 0)
+			goto errout;
+
+		ds = (void *)child->thread.ds_area_msr;
 	}
 
-	if (cfg.flags & PTRACE_BTS_O_SIGNAL) {
-		if (!cfg.signal)
-			return -EINVAL;
-
-		return -EOPNOTSUPP;
-
-		child->thread.bts_ovfl_signal = cfg.signal;
-	}
-
-	if ((cfg.flags & PTRACE_BTS_O_ALLOC) &&
-	    (cfg.size != child->bts_size)) {
-		int error;
-
-		ptrace_bts_free_buffer(child);
-
-		error = ptrace_bts_allocate_buffer(child, cfg.size);
-		if (error < 0)
-			return error;
-	}
+	if (cfg.flags & PTRACE_BTS_O_SIGNAL)
+		ret = ds_set_overflow(ds, DS_O_SIGNAL);
+	else
+		ret = ds_set_overflow(ds, DS_O_WRAP);
+	if (ret < 0)
+		goto errout;
 
 	if (cfg.flags & PTRACE_BTS_O_TRACE)
-		flags |= BTS_USER;
+		child->thread.debugctlmsr |= ds_debugctl_mask();
+	else
+		child->thread.debugctlmsr &= ~ds_debugctl_mask();
 
 	if (cfg.flags & PTRACE_BTS_O_SCHED)
-		flags |= BTS_TIMESTAMPS;
+		set_tsk_thread_flag(child, TIF_BTS_TRACE_TS);
+	else
+		clear_tsk_thread_flag(child, TIF_BTS_TRACE_TS);
 
-	child->bts = ds_request_bts(child, child->bts_buffer, child->bts_size,
-				    /* ovfl = */ NULL, /* th = */ (size_t)-1,
-				    flags);
-	if (IS_ERR(child->bts)) {
-		int error = PTR_ERR(child->bts);
+	ret = sizeof(cfg);
 
-		ptrace_bts_free_buffer(child);
-		child->bts = NULL;
+out:
+	if (child->thread.debugctlmsr)
+		set_tsk_thread_flag(child, TIF_DEBUGCTLMSR);
+	else
+		clear_tsk_thread_flag(child, TIF_DEBUGCTLMSR);
 
-		return error;
-	}
+	return ret;
 
-	return sizeof(cfg);
+errout:
+	child->thread.debugctlmsr &= ~ds_debugctl_mask();
+	clear_tsk_thread_flag(child, TIF_BTS_TRACE_TS);
+	goto out;
 }
 
 static int ptrace_bts_status(struct task_struct *child,
 			     long cfg_size,
 			     struct ptrace_bts_config __user *ucfg)
 {
-	const struct bts_trace *trace;
+	void *ds = (void *)child->thread.ds_area_msr;
 	struct ptrace_bts_config cfg;
 
 	if (cfg_size < sizeof(cfg))
 		return -EIO;
 
-	trace = ds_read_bts(child->bts);
-	if (!trace)
-		return -EPERM;
-
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.size = trace->ds.end - trace->ds.begin;
-	cfg.signal = child->thread.bts_ovfl_signal;
+
+	if (ds) {
+		cfg.size = ds_get_bts_size(ds);
+
+		if (ds_get_overflow(ds) == DS_O_SIGNAL)
+			cfg.flags |= PTRACE_BTS_O_SIGNAL;
+
+		if (test_tsk_thread_flag(child, TIF_DEBUGCTLMSR) &&
+		    child->thread.debugctlmsr & ds_debugctl_mask())
+			cfg.flags |= PTRACE_BTS_O_TRACE;
+
+		if (test_tsk_thread_flag(child, TIF_BTS_TRACE_TS))
+			cfg.flags |= PTRACE_BTS_O_SCHED;
+	}
+
 	cfg.bts_size = sizeof(struct bts_struct);
-
-	if (cfg.signal)
-		cfg.flags |= PTRACE_BTS_O_SIGNAL;
-
-	if (trace->ds.flags & BTS_USER)
-		cfg.flags |= PTRACE_BTS_O_TRACE;
-
-	if (trace->ds.flags & BTS_TIMESTAMPS)
-		cfg.flags |= PTRACE_BTS_O_SCHED;
 
 	if (copy_to_user(ucfg, &cfg, sizeof(cfg)))
 		return -EFAULT;
@@ -761,77 +744,102 @@ static int ptrace_bts_status(struct task_struct *child,
 	return sizeof(cfg);
 }
 
-static int ptrace_bts_clear(struct task_struct *child)
+
+static int ptrace_bts_write_record(struct task_struct *child,
+				   const struct bts_struct *in)
 {
-	const struct bts_trace *trace;
+	int retval;
 
-	trace = ds_read_bts(child->bts);
-	if (!trace)
-		return -EPERM;
+	if (!child->thread.ds_area_msr)
+		return -ENXIO;
 
-	memset(trace->ds.begin, 0, trace->ds.n * trace->ds.size);
+	retval = ds_write_bts((void *)child->thread.ds_area_msr, in);
+	if (retval)
+		return retval;
 
-	return ds_reset_bts(child->bts);
+	return sizeof(*in);
 }
 
-static int ptrace_bts_size(struct task_struct *child)
+static int ptrace_bts_realloc(struct task_struct *child,
+			      int size, int reduce_size)
 {
-	const struct bts_trace *trace;
+	unsigned long rlim, vm;
+	int ret, old_size;
 
-	trace = ds_read_bts(child->bts);
-	if (!trace)
-		return -EPERM;
+	if (size < 0)
+		return -EINVAL;
 
-	return (trace->ds.top - trace->ds.begin) / trace->ds.size;
-}
+	old_size = ds_get_bts_size((void *)child->thread.ds_area_msr);
+	if (old_size < 0)
+		return old_size;
 
-static void ptrace_bts_fork(struct task_struct *tsk)
-{
-	tsk->bts = NULL;
-	tsk->bts_buffer = NULL;
-	tsk->bts_size = 0;
-	tsk->thread.bts_ovfl_signal = 0;
-}
+	ret = ds_free((void **)&child->thread.ds_area_msr);
+	if (ret < 0)
+		goto out;
 
-static void ptrace_bts_untrace(struct task_struct *child)
-{
-	if (unlikely(child->bts)) {
-		ds_release_bts(child->bts);
-		child->bts = NULL;
+	size >>= PAGE_SHIFT;
+	old_size >>= PAGE_SHIFT;
 
-		/* We cannot update total_vm and locked_vm since
-		   child's mm is already gone. But we can reclaim the
-		   memory. */
-		kfree(child->bts_buffer);
-		child->bts_buffer = NULL;
-		child->bts_size = 0;
+	current->mm->total_vm  -= old_size;
+	current->mm->locked_vm -= old_size;
+
+	if (size == 0)
+		goto out;
+
+	rlim = current->signal->rlim[RLIMIT_AS].rlim_cur >> PAGE_SHIFT;
+	vm = current->mm->total_vm  + size;
+	if (rlim < vm) {
+		ret = -ENOMEM;
+
+		if (!reduce_size)
+			goto out;
+
+		size = rlim - current->mm->total_vm;
+		if (size <= 0)
+			goto out;
 	}
-}
 
-static void ptrace_bts_detach(struct task_struct *child)
-{
-	if (unlikely(child->bts)) {
-		ds_release_bts(child->bts);
-		child->bts = NULL;
+	rlim = current->signal->rlim[RLIMIT_MEMLOCK].rlim_cur >> PAGE_SHIFT;
+	vm = current->mm->locked_vm  + size;
+	if (rlim < vm) {
+		ret = -ENOMEM;
 
-		ptrace_bts_free_buffer(child);
+		if (!reduce_size)
+			goto out;
+
+		size = rlim - current->mm->locked_vm;
+		if (size <= 0)
+			goto out;
 	}
-}
-#else
-static inline void ptrace_bts_fork(struct task_struct *tsk) {}
-static inline void ptrace_bts_detach(struct task_struct *child) {}
-static inline void ptrace_bts_untrace(struct task_struct *child) {}
-#endif /* CONFIG_X86_PTRACE_BTS */
 
-void x86_ptrace_fork(struct task_struct *child, unsigned long clone_flags)
-{
-	ptrace_bts_fork(child);
+	ret = ds_allocate((void **)&child->thread.ds_area_msr,
+			  size << PAGE_SHIFT);
+	if (ret < 0)
+		goto out;
+
+	current->mm->total_vm  += size;
+	current->mm->locked_vm += size;
+
+out:
+	if (child->thread.ds_area_msr)
+		set_tsk_thread_flag(child, TIF_DS_AREA_MSR);
+	else
+		clear_tsk_thread_flag(child, TIF_DS_AREA_MSR);
+
+	return ret;
 }
 
-void x86_ptrace_untrace(struct task_struct *child)
+void ptrace_bts_take_timestamp(struct task_struct *tsk,
+			       enum bts_qualifier qualifier)
 {
-	ptrace_bts_untrace(child);
+	struct bts_struct rec = {
+		.qualifier = qualifier,
+		.variant.jiffies = jiffies_64
+	};
+
+	ptrace_bts_write_record(tsk, &rec);
 }
+#endif /* X86_BTS */
 
 /*
  * Called by kernel/ptrace.c when detaching..
@@ -844,7 +852,15 @@ void ptrace_disable(struct task_struct *child)
 #ifdef TIF_SYSCALL_EMU
 	clear_tsk_thread_flag(child, TIF_SYSCALL_EMU);
 #endif
-	ptrace_bts_detach(child);
+	if (child->thread.ds_area_msr) {
+#ifdef X86_BTS
+		ptrace_bts_realloc(child, 0, 0);
+#endif
+		child->thread.debugctlmsr &= ~ds_debugctl_mask();
+		if (!child->thread.debugctlmsr)
+			clear_tsk_thread_flag(child, TIF_DEBUGCTLMSR);
+		clear_tsk_thread_flag(child, TIF_BTS_TRACE_TS);
+	}
 }
 
 #if defined CONFIG_X86_32 || defined CONFIG_IA32_EMULATION
@@ -927,13 +943,13 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 		return copy_regset_to_user(child, &user_x86_32_view,
 					   REGSET_XFP,
 					   0, sizeof(struct user_fxsr_struct),
-					   datap) ? -EIO : 0;
+					   datap);
 
 	case PTRACE_SETFPXREGS:	/* Set the child extended FPU state. */
 		return copy_regset_from_user(child, &user_x86_32_view,
 					     REGSET_XFP,
 					     0, sizeof(struct user_fxsr_struct),
-					     datap) ? -EIO : 0;
+					     datap);
 #endif
 
 #if defined CONFIG_X86_32 || defined CONFIG_IA32_EMULATION
@@ -964,7 +980,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	/*
 	 * These bits need more cooking - not enabled yet:
 	 */
-#ifdef CONFIG_X86_PTRACE_BTS
+#ifdef X86_BTS
 	case PTRACE_BTS_CONFIG:
 		ret = ptrace_bts_config
 			(child, data, (struct ptrace_bts_config __user *)addr);
@@ -976,7 +992,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 		break;
 
 	case PTRACE_BTS_SIZE:
-		ret = ptrace_bts_size(child);
+		ret = ptrace_bts_get_size(child);
 		break;
 
 	case PTRACE_BTS_GET:
@@ -992,7 +1008,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 		ret = ptrace_bts_drain
 			(child, data, (struct bts_struct __user *) addr);
 		break;
-#endif /* CONFIG_X86_PTRACE_BTS */
+#endif
 
 	default:
 		ret = ptrace_request(child, request, addr, data);
@@ -1248,14 +1264,6 @@ long compat_arch_ptrace(struct task_struct *child, compat_long_t request,
 
 	case PTRACE_GET_THREAD_AREA:
 	case PTRACE_SET_THREAD_AREA:
-#ifdef CONFIG_X86_PTRACE_BTS
-	case PTRACE_BTS_CONFIG:
-	case PTRACE_BTS_STATUS:
-	case PTRACE_BTS_SIZE:
-	case PTRACE_BTS_GET:
-	case PTRACE_BTS_CLEAR:
-	case PTRACE_BTS_DRAIN:
-#endif /* CONFIG_X86_PTRACE_BTS */
 		return arch_ptrace(child, request, addr, data);
 
 	default:
@@ -1281,12 +1289,6 @@ static const struct user_regset x86_64_regsets[] = {
 		.n = sizeof(struct user_i387_struct) / sizeof(long),
 		.size = sizeof(long), .align = sizeof(long),
 		.active = xfpregs_active, .get = xfpregs_get, .set = xfpregs_set
-	},
-	[REGSET_IOPERM64] = {
-		.core_note_type = NT_386_IOPERM,
-		.n = IO_BITMAP_LONGS,
-		.size = sizeof(long), .align = sizeof(long),
-		.active = ioperm_active, .get = ioperm_get
 	},
 };
 
@@ -1334,12 +1336,6 @@ static const struct user_regset x86_32_regsets[] = {
 		.active = regset_tls_active,
 		.get = regset_tls_get, .set = regset_tls_set
 	},
-	[REGSET_IOPERM32] = {
-		.core_note_type = NT_386_IOPERM,
-		.n = IO_BITMAP_BYTES / sizeof(u32),
-		.size = sizeof(u32), .align = sizeof(u32),
-		.active = ioperm_active, .get = ioperm_get
-	},
 };
 
 static const struct user_regset_view user_x86_32_view = {
@@ -1361,8 +1357,9 @@ const struct user_regset_view *task_user_regset_view(struct task_struct *task)
 #endif
 }
 
-void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs,
-					 int error_code, int si_code)
+#ifdef CONFIG_X86_32
+
+void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs, int error_code)
 {
 	struct siginfo info;
 
@@ -1371,7 +1368,7 @@ void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs,
 
 	memset(&info, 0, sizeof(info));
 	info.si_signo = SIGTRAP;
-	info.si_code = si_code;
+	info.si_code = TRAP_BRKPT;
 
 	/* User-mode ip? */
 	info.si_addr = user_mode_vm(regs) ? (void __user *) regs->ip : NULL;
@@ -1380,83 +1377,143 @@ void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs,
 	force_sig_info(SIGTRAP, &info, tsk);
 }
 
-
-#ifdef CONFIG_X86_32
-# define IS_IA32	1
-#elif defined CONFIG_IA32_EMULATION
-# define IS_IA32	test_thread_flag(TIF_IA32)
-#else
-# define IS_IA32	0
-#endif
-
-/*
- * We must return the syscall number to actually look up in the table.
- * This can be -1L to skip running any syscall at all.
+/* notification of system call entry/exit
+ * - triggered by current->work.syscall_trace
  */
-asmregparm long syscall_trace_enter(struct pt_regs *regs)
+int do_syscall_trace(struct pt_regs *regs, int entryexit)
 {
-	long ret = 0;
+	int is_sysemu = test_thread_flag(TIF_SYSCALL_EMU);
+	/*
+	 * With TIF_SYSCALL_EMU set we want to ignore TIF_SINGLESTEP for syscall
+	 * interception
+	 */
+	int is_singlestep = !is_sysemu && test_thread_flag(TIF_SINGLESTEP);
+	int ret = 0;
+
+	/* do the secure computing check first */
+	if (!entryexit)
+		secure_computing(regs->orig_ax);
+
+	if (unlikely(current->audit_context)) {
+		if (entryexit)
+			audit_syscall_exit(AUDITSC_RESULT(regs->ax),
+						regs->ax);
+		/* Debug traps, when using PTRACE_SINGLESTEP, must be sent only
+		 * on the syscall exit path. Normally, when TIF_SYSCALL_AUDIT is
+		 * not used, entry.S will call us only on syscall exit, not
+		 * entry; so when TIF_SYSCALL_AUDIT is used we must avoid
+		 * calling send_sigtrap() on syscall entry.
+		 *
+		 * Note that when PTRACE_SYSEMU_SINGLESTEP is used,
+		 * is_singlestep is false, despite his name, so we will still do
+		 * the correct thing.
+		 */
+		else if (is_singlestep)
+			goto out;
+	}
+
+	if (!(current->ptrace & PT_PTRACED))
+		goto out;
+
+	/* If a process stops on the 1st tracepoint with SYSCALL_TRACE
+	 * and then is resumed with SYSEMU_SINGLESTEP, it will come in
+	 * here. We have to check this and return */
+	if (is_sysemu && entryexit)
+		return 0;
+
+	/* Fake a debug trap */
+	if (is_singlestep)
+		send_sigtrap(current, regs, 0);
+
+ 	if (!test_thread_flag(TIF_SYSCALL_TRACE) && !is_sysemu)
+		goto out;
+
+	/* the 0x80 provides a way for the tracing parent to distinguish
+	   between a syscall stop and SIGTRAP delivery */
+	/* Note that the debugger could change the result of test_thread_flag!*/
+	ptrace_notify(SIGTRAP | ((current->ptrace & PT_TRACESYSGOOD) ? 0x80:0));
 
 	/*
-	 * If we stepped into a sysenter/syscall insn, it trapped in
-	 * kernel mode; do_debug() cleared TF and set TIF_SINGLESTEP.
-	 * If user-mode had set TF itself, then it's still clear from
-	 * do_debug() and we need to set it again to restore the user
-	 * state.  If we entered on the slow path, TF was already set.
+	 * this isn't the same as continuing with a signal, but it will do
+	 * for normal use.  strace only continues with a signal if the
+	 * stopping signal is not SIGTRAP.  -brl
 	 */
-	if (test_thread_flag(TIF_SINGLESTEP))
-		regs->flags |= X86_EFLAGS_TF;
+	if (current->exit_code) {
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
+	}
+	ret = is_sysemu;
+out:
+	if (unlikely(current->audit_context) && !entryexit)
+		audit_syscall_entry(AUDIT_ARCH_I386, regs->orig_ax,
+				    regs->bx, regs->cx, regs->dx, regs->si);
+	if (ret == 0)
+		return 0;
 
+	regs->orig_ax = -1; /* force skip of syscall restarting */
+	if (unlikely(current->audit_context))
+		audit_syscall_exit(AUDITSC_RESULT(regs->ax), regs->ax);
+	return 1;
+}
+
+#else  /* CONFIG_X86_64 */
+
+static void syscall_trace(struct pt_regs *regs)
+{
+
+#if 0
+	printk("trace %s ip %lx sp %lx ax %d origrax %d caller %lx tiflags %x ptrace %x\n",
+	       current->comm,
+	       regs->ip, regs->sp, regs->ax, regs->orig_ax, __builtin_return_address(0),
+	       current_thread_info()->flags, current->ptrace);
+#endif
+
+	ptrace_notify(SIGTRAP | ((current->ptrace & PT_TRACESYSGOOD)
+				? 0x80 : 0));
+	/*
+	 * this isn't the same as continuing with a signal, but it will do
+	 * for normal use.  strace only continues with a signal if the
+	 * stopping signal is not SIGTRAP.  -brl
+	 */
+	if (current->exit_code) {
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
+	}
+}
+
+asmlinkage void syscall_trace_enter(struct pt_regs *regs)
+{
 	/* do the secure computing check first */
 	secure_computing(regs->orig_ax);
 
-	if (unlikely(test_thread_flag(TIF_SYSCALL_EMU)))
-		ret = -1L;
-
-	if ((ret || test_thread_flag(TIF_SYSCALL_TRACE)) &&
-	    tracehook_report_syscall_entry(regs))
-		ret = -1L;
+	if (test_thread_flag(TIF_SYSCALL_TRACE)
+	    && (current->ptrace & PT_PTRACED))
+		syscall_trace(regs);
 
 	if (unlikely(current->audit_context)) {
-		if (IS_IA32)
+		if (test_thread_flag(TIF_IA32)) {
 			audit_syscall_entry(AUDIT_ARCH_I386,
 					    regs->orig_ax,
 					    regs->bx, regs->cx,
 					    regs->dx, regs->si);
-#ifdef CONFIG_X86_64
-		else
+		} else {
 			audit_syscall_entry(AUDIT_ARCH_X86_64,
 					    regs->orig_ax,
 					    regs->di, regs->si,
 					    regs->dx, regs->r10);
-#endif
+		}
 	}
-
-	return ret ?: regs->orig_ax;
 }
 
-asmregparm void syscall_trace_leave(struct pt_regs *regs)
+asmlinkage void syscall_trace_leave(struct pt_regs *regs)
 {
 	if (unlikely(current->audit_context))
 		audit_syscall_exit(AUDITSC_RESULT(regs->ax), regs->ax);
 
-	if (test_thread_flag(TIF_SYSCALL_TRACE))
-		tracehook_report_syscall_exit(regs, 0);
-
-	/*
-	 * If TIF_SYSCALL_EMU is set, we only get here because of
-	 * TIF_SINGLESTEP (i.e. this is PTRACE_SYSEMU_SINGLESTEP).
-	 * We already reported this syscall instruction in
-	 * syscall_trace_enter(), so don't do any more now.
-	 */
-	if (unlikely(test_thread_flag(TIF_SYSCALL_EMU)))
-		return;
-
-	/*
-	 * If we are single-stepping, synthesize a trap to follow the
-	 * system call instruction.
-	 */
-	if (test_thread_flag(TIF_SINGLESTEP) &&
-	    tracehook_consider_fatal_signal(current, SIGTRAP, SIG_DFL))
-		send_sigtrap(current, regs, 0, TRAP_BRKPT);
+	if ((test_thread_flag(TIF_SYSCALL_TRACE)
+	     || test_thread_flag(TIF_SINGLESTEP))
+	    && (current->ptrace & PT_PTRACED))
+		syscall_trace(regs);
 }
+
+#endif	/* CONFIG_X86_32 */

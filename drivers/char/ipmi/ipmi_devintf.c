@@ -43,7 +43,6 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/compat.h>
-#include <linux/smp_lock.h>
 
 struct ipmi_file_private
 {
@@ -101,9 +100,7 @@ static int ipmi_fasync(int fd, struct file *file, int on)
 	struct ipmi_file_private *priv = file->private_data;
 	int                      result;
 
-	lock_kernel(); /* could race against open() otherwise */
 	result = fasync_helper(fd, file, on, &priv->fasync_queue);
-	unlock_kernel();
 
 	return (result);
 }
@@ -124,7 +121,6 @@ static int ipmi_open(struct inode *inode, struct file *file)
 	if (!priv)
 		return -ENOMEM;
 
-	lock_kernel();
 	priv->file = file;
 
 	rv = ipmi_create_user(if_num,
@@ -133,7 +129,7 @@ static int ipmi_open(struct inode *inode, struct file *file)
 			      &(priv->user));
 	if (rv) {
 		kfree(priv);
-		goto out;
+		return rv;
 	}
 
 	file->private_data = priv;
@@ -148,9 +144,7 @@ static int ipmi_open(struct inode *inode, struct file *file)
 	priv->default_retries = -1;
 	priv->default_retry_time_ms = 0;
 
-out:
-	unlock_kernel();
-	return rv;
+	return 0;
 }
 
 static int ipmi_release(struct inode *inode, struct file *file)
@@ -161,6 +155,8 @@ static int ipmi_release(struct inode *inode, struct file *file)
 	rv = ipmi_destroy_user(priv->user);
 	if (rv)
 		return rv;
+
+	ipmi_fasync (-1, file, 0);
 
 	/* FIXME - free the messages in the list. */
 	kfree(priv);
@@ -869,7 +865,7 @@ static void ipmi_new_smi(int if_num, struct device *device)
 	entry->dev = dev;
 
 	mutex_lock(&reg_list_mutex);
-	device_create(ipmi_class, device, dev, NULL, "ipmi%d", if_num);
+	device_create(ipmi_class, device, dev, "ipmi%d", if_num);
 	list_add(&entry->link, &reg_list);
 	mutex_unlock(&reg_list_mutex);
 }
@@ -955,4 +951,3 @@ module_exit(cleanup_ipmi);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Corey Minyard <minyard@mvista.com>");
 MODULE_DESCRIPTION("Linux device interface for the IPMI message handler.");
-MODULE_ALIAS("platform:ipmi_si");

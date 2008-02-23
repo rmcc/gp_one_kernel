@@ -5,6 +5,8 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
+ *	$Id: br_if.c,v 1.7 2001/12/24 00:59:55 davem Exp $
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -168,7 +170,7 @@ static void del_br(struct net_bridge *br)
 	unregister_netdevice(br->dev);
 }
 
-static struct net_device *new_bridge_dev(struct net *net, const char *name)
+static struct net_device *new_bridge_dev(const char *name)
 {
 	struct net_bridge *br;
 	struct net_device *dev;
@@ -178,7 +180,6 @@ static struct net_device *new_bridge_dev(struct net *net, const char *name)
 
 	if (!dev)
 		return NULL;
-	dev_net_set(dev, net);
 
 	br = netdev_priv(dev);
 	br->dev = dev;
@@ -203,9 +204,6 @@ static struct net_device *new_bridge_dev(struct net *net, const char *name)
 	br->topology_change = 0;
 	br->topology_change_detected = 0;
 	br->ageing_time = 300 * HZ;
-
-	br_netfilter_rtable_init(br);
-
 	INIT_LIST_HEAD(&br->age_list);
 
 	br_stp_timer_init(br);
@@ -263,12 +261,12 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	return p;
 }
 
-int br_add_bridge(struct net *net, const char *name)
+int br_add_bridge(const char *name)
 {
 	struct net_device *dev;
 	int ret;
 
-	dev = new_bridge_dev(net, name);
+	dev = new_bridge_dev(name);
 	if (!dev)
 		return -ENOMEM;
 
@@ -295,13 +293,13 @@ out_free:
 	goto out;
 }
 
-int br_del_bridge(struct net *net, const char *name)
+int br_del_bridge(const char *name)
 {
 	struct net_device *dev;
 	int ret = 0;
 
 	rtnl_lock();
-	dev = __dev_get_by_name(net, name);
+	dev = __dev_get_by_name(&init_net, name);
 	if (dev == NULL)
 		ret =  -ENXIO; 	/* Could not find device */
 
@@ -347,21 +345,15 @@ int br_min_mtu(const struct net_bridge *br)
 void br_features_recompute(struct net_bridge *br)
 {
 	struct net_bridge_port *p;
-	unsigned long features, mask;
+	unsigned long features;
 
-	features = mask = br->feature_mask;
-	if (list_empty(&br->port_list))
-		goto done;
-
-	features &= ~NETIF_F_ONE_FOR_ALL;
+	features = br->feature_mask;
 
 	list_for_each_entry(p, &br->port_list, list) {
-		features = netdev_increment_features(features,
-						     p->dev->features, mask);
+		features = netdev_compute_features(features, p->dev->features);
 	}
 
-done:
-	br->dev->features = netdev_fix_features(features, NULL);
+	br->dev->features = features;
 }
 
 /* called with RTNL */
@@ -373,7 +365,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	if (dev->flags & IFF_LOOPBACK || dev->type != ARPHRD_ETHER)
 		return -EINVAL;
 
-	if (dev->netdev_ops->ndo_start_xmit == br_dev_xmit)
+	if (dev->hard_start_xmit == br_dev_xmit)
 		return -ELOOP;
 
 	if (dev->br_port != NULL)
@@ -382,10 +374,6 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	p = new_nbp(br, dev);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
-
-	err = dev_set_promiscuity(dev, 1);
-	if (err)
-		goto put_back;
 
 	err = kobject_init_and_add(&p->kobj, &brport_ktype, &(dev->dev.kobj),
 				   SYSFS_BRIDGE_PORT_ATTR);
@@ -401,7 +389,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 		goto err2;
 
 	rcu_assign_pointer(dev->br_port, p);
-	dev_disable_lro(dev);
+	dev_set_promiscuity(dev, 1);
 
 	list_add_rcu(&p->list, &br->port_list);
 
@@ -425,12 +413,12 @@ err2:
 	br_fdb_delete_by_port(br, p, 1);
 err1:
 	kobject_del(&p->kobj);
+	goto put_back;
 err0:
 	kobject_put(&p->kobj);
-	dev_set_promiscuity(dev, -1);
+
 put_back:
 	dev_put(dev);
-	kfree(p);
 	return err;
 }
 
@@ -452,18 +440,14 @@ int br_del_if(struct net_bridge *br, struct net_device *dev)
 	return 0;
 }
 
-void br_net_exit(struct net *net)
+void __exit br_cleanup_bridges(void)
 {
-	struct net_device *dev;
+	struct net_device *dev, *nxt;
 
 	rtnl_lock();
-restart:
-	for_each_netdev(net, dev) {
-		if (dev->priv_flags & IFF_EBRIDGE) {
-			del_br(netdev_priv(dev));
-			goto restart;
-		}
-	}
+	for_each_netdev_safe(&init_net, dev, nxt)
+		if (dev->priv_flags & IFF_EBRIDGE)
+			del_br(dev->priv);
 	rtnl_unlock();
 
 }

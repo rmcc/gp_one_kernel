@@ -86,11 +86,6 @@ typedef int __bitwise suspend_state_t;
  *	that implement @begin(), but platforms implementing @begin() should
  *	also provide a @end() which cleans up transitions aborted before
  *	@enter().
- *
- * @recover: Recover the platform from a suspend failure.
- *	Called by the PM core if the suspending of devices fails.
- *	This callback is optional and should only be implemented by platforms
- *	which require special recovery actions in that situation.
  */
 struct platform_suspend_ops {
 	int (*valid)(suspend_state_t state);
@@ -99,7 +94,6 @@ struct platform_suspend_ops {
 	int (*enter)(suspend_state_t state);
 	void (*finish)(void);
 	void (*end)(void);
-	void (*recover)(void);
 };
 
 #ifdef CONFIG_SUSPEND
@@ -155,7 +149,7 @@ extern void mark_free_pages(struct zone *zone);
  * The methods in this structure allow a platform to carry out special
  * operations required by it during a hibernation transition.
  *
- * All the methods below, except for @recover(), must be implemented.
+ * All the methods below must be implemented.
  *
  * @begin: Tell the platform driver that we're starting hibernation.
  *	Called right after shrinking memory and before freezing devices.
@@ -195,11 +189,6 @@ extern void mark_free_pages(struct zone *zone);
  * @restore_cleanup: Clean up after a failing image restoration.
  *	Called right after the nonboot CPUs have been enabled and before
  *	thawing devices (runs with IRQs on).
- *
- * @recover: Recover the platform from a failure to suspend devices.
- *	Called by the PM core if the suspending of devices during hibernation
- *	fails.  This callback is optional and should only be implemented by
- *	platforms which require special recovery actions in that situation.
  */
 struct platform_hibernation_ops {
 	int (*begin)(void);
@@ -211,17 +200,16 @@ struct platform_hibernation_ops {
 	void (*leave)(void);
 	int (*pre_restore)(void);
 	void (*restore_cleanup)(void);
-	void (*recover)(void);
 };
 
 #ifdef CONFIG_HIBERNATION
 /* kernel/power/snapshot.c */
 extern void __register_nosave_region(unsigned long b, unsigned long e, int km);
-static inline void __init register_nosave_region(unsigned long b, unsigned long e)
+static inline void register_nosave_region(unsigned long b, unsigned long e)
 {
 	__register_nosave_region(b, e, 0);
 }
-static inline void __init register_nosave_region_late(unsigned long b, unsigned long e)
+static inline void register_nosave_region_late(unsigned long b, unsigned long e)
 {
 	__register_nosave_region(b, e, 1);
 }
@@ -232,11 +220,6 @@ extern unsigned long get_safe_page(gfp_t gfp_mask);
 
 extern void hibernation_set_ops(struct platform_hibernation_ops *ops);
 extern int hibernate(void);
-extern int hibernate_nvs_register(unsigned long start, unsigned long size);
-extern int hibernate_nvs_alloc(void);
-extern void hibernate_nvs_free(void);
-extern void hibernate_nvs_save(void);
-extern void hibernate_nvs_restore(void);
 #else /* CONFIG_HIBERNATION */
 static inline int swsusp_page_is_forbidden(struct page *p) { return 0; }
 static inline void swsusp_set_page_free(struct page *p) {}
@@ -244,14 +227,6 @@ static inline void swsusp_unset_page_free(struct page *p) {}
 
 static inline void hibernation_set_ops(struct platform_hibernation_ops *ops) {}
 static inline int hibernate(void) { return -ENOSYS; }
-static inline int hibernate_nvs_register(unsigned long a, unsigned long b)
-{
-	return 0;
-}
-static inline int hibernate_nvs_alloc(void) { return 0; }
-static inline void hibernate_nvs_free(void) {}
-static inline void hibernate_nvs_save(void) {}
-static inline void hibernate_nvs_restore(void) {}
 #endif /* CONFIG_HIBERNATION */
 
 #ifdef CONFIG_PM_SLEEP
@@ -290,7 +265,5 @@ static inline void register_nosave_region_late(unsigned long b, unsigned long e)
 {
 }
 #endif
-
-extern struct mutex pm_mutex;
 
 #endif /* _LINUX_SUSPEND_H */

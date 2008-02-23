@@ -43,5 +43,3 @@ ENTRY(__aeabi_lmul)
 	adc	xh, xh, ip, lsr #16
 	mov	pc, lr
 
-ENDPROC(__muldi3)
-ENDPROC(__aeabi_lmul)

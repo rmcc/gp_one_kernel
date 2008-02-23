@@ -2,7 +2,6 @@
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/tlb.h>
-#include <asm/fixmap.h>
 
 pte_t *pte_alloc_one_kernel(struct mm_struct *mm, unsigned long address)
 {
@@ -63,8 +62,16 @@ static inline void pgd_list_del(pgd_t *pgd)
 #define UNSHARED_PTRS_PER_PGD				\
 	(SHARED_KERNEL_PMD ? KERNEL_PGD_BOUNDARY : PTRS_PER_PGD)
 
-static void pgd_ctor(pgd_t *pgd)
+static void pgd_ctor(void *p)
 {
+	pgd_t *pgd = p;
+	unsigned long flags;
+
+	/* Clear usermode parts of PGD */
+	memset(pgd, 0, KERNEL_PGD_BOUNDARY*sizeof(pgd_t));
+
+	spin_lock_irqsave(&pgd_lock, flags);
+
 	/* If the pgd points to a shared pagetable level (either the
 	   ptes in non-PAE, or shared PMD in PAE), then just copy the
 	   references from swapper_pg_dir. */
@@ -83,9 +90,11 @@ static void pgd_ctor(pgd_t *pgd)
 	/* list required to sync kernel mapping updates */
 	if (!SHARED_KERNEL_PMD)
 		pgd_list_add(pgd);
+
+	spin_unlock_irqrestore(&pgd_lock, flags);
 }
 
-static void pgd_dtor(pgd_t *pgd)
+static void pgd_dtor(void *pgd)
 {
 	unsigned long flags; /* can be called from interrupt context */
 
@@ -110,6 +119,30 @@ static void pgd_dtor(pgd_t *pgd)
 
 #ifdef CONFIG_X86_PAE
 /*
+ * Mop up any pmd pages which may still be attached to the pgd.
+ * Normally they will be freed by munmap/exit_mmap, but any pmd we
+ * preallocate which never got a corresponding vma will need to be
+ * freed manually.
+ */
+static void pgd_mop_up_pmds(struct mm_struct *mm, pgd_t *pgdp)
+{
+	int i;
+
+	for(i = 0; i < UNSHARED_PTRS_PER_PGD; i++) {
+		pgd_t pgd = pgdp[i];
+
+		if (pgd_val(pgd) != 0) {
+			pmd_t *pmd = (pmd_t *)pgd_page_vaddr(pgd);
+
+			pgdp[i] = native_make_pgd(0);
+
+			paravirt_release_pmd(pgd_val(pgd) >> PAGE_SHIFT);
+			pmd_free(mm, pmd);
+		}
+	}
+}
+
+/*
  * In PAE mode, we need to do a cr3 reload (=tlb flush) when
  * updating the top-level pagetable entries to guarantee the
  * processor notices the update.  Since this is expensive, and
@@ -120,7 +153,31 @@ static void pgd_dtor(pgd_t *pgd)
  * not shared between pagetables (!SHARED_KERNEL_PMDS), we allocate
  * and initialize the kernel pmds here.
  */
-#define PREALLOCATED_PMDS	UNSHARED_PTRS_PER_PGD
+static int pgd_prepopulate_pmd(struct mm_struct *mm, pgd_t *pgd)
+{
+	pud_t *pud;
+	unsigned long addr;
+	int i;
+
+	pud = pud_offset(pgd, 0);
+ 	for (addr = i = 0; i < UNSHARED_PTRS_PER_PGD;
+	     i++, pud++, addr += PUD_SIZE) {
+		pmd_t *pmd = pmd_alloc_one(mm, addr);
+
+		if (!pmd) {
+			pgd_mop_up_pmds(mm, pgd);
+			return 0;
+		}
+
+		if (i >= KERNEL_PGD_BOUNDARY)
+			memcpy(pmd, (pmd_t *)pgd_page_vaddr(swapper_pg_dir[i]),
+			       sizeof(pmd_t) * PTRS_PER_PMD);
+
+		pud_populate(mm, pud, pmd);
+	}
+
+	return 1;
+}
 
 void pud_populate(struct mm_struct *mm, pud_t *pudp, pmd_t *pmd)
 {
@@ -140,134 +197,39 @@ void pud_populate(struct mm_struct *mm, pud_t *pudp, pmd_t *pmd)
 		write_cr3(read_cr3());
 }
 #else  /* !CONFIG_X86_PAE */
-
 /* No need to prepopulate any pagetable entries in non-PAE modes. */
-#define PREALLOCATED_PMDS	0
+static int pgd_prepopulate_pmd(struct mm_struct *mm, pgd_t *pgd)
+{
+	return 1;
+}
 
+static void pgd_mop_up_pmds(struct mm_struct *mm, pgd_t *pgd)
+{
+}
 #endif	/* CONFIG_X86_PAE */
-
-static void free_pmds(pmd_t *pmds[])
-{
-	int i;
-
-	for(i = 0; i < PREALLOCATED_PMDS; i++)
-		if (pmds[i])
-			free_page((unsigned long)pmds[i]);
-}
-
-static int preallocate_pmds(pmd_t *pmds[])
-{
-	int i;
-	bool failed = false;
-
-	for(i = 0; i < PREALLOCATED_PMDS; i++) {
-		pmd_t *pmd = (pmd_t *)get_zeroed_page(GFP_KERNEL|__GFP_REPEAT);
-		if (pmd == NULL)
-			failed = true;
-		pmds[i] = pmd;
-	}
-
-	if (failed) {
-		free_pmds(pmds);
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-
-/*
- * Mop up any pmd pages which may still be attached to the pgd.
- * Normally they will be freed by munmap/exit_mmap, but any pmd we
- * preallocate which never got a corresponding vma will need to be
- * freed manually.
- */
-static void pgd_mop_up_pmds(struct mm_struct *mm, pgd_t *pgdp)
-{
-	int i;
-
-	for(i = 0; i < PREALLOCATED_PMDS; i++) {
-		pgd_t pgd = pgdp[i];
-
-		if (pgd_val(pgd) != 0) {
-			pmd_t *pmd = (pmd_t *)pgd_page_vaddr(pgd);
-
-			pgdp[i] = native_make_pgd(0);
-
-			paravirt_release_pmd(pgd_val(pgd) >> PAGE_SHIFT);
-			pmd_free(mm, pmd);
-		}
-	}
-}
-
-static void pgd_prepopulate_pmd(struct mm_struct *mm, pgd_t *pgd, pmd_t *pmds[])
-{
-	pud_t *pud;
-	unsigned long addr;
-	int i;
-
-	if (PREALLOCATED_PMDS == 0) /* Work around gcc-3.4.x bug */
-		return;
-
-	pud = pud_offset(pgd, 0);
-
- 	for (addr = i = 0; i < PREALLOCATED_PMDS;
-	     i++, pud++, addr += PUD_SIZE) {
-		pmd_t *pmd = pmds[i];
-
-		if (i >= KERNEL_PGD_BOUNDARY)
-			memcpy(pmd, (pmd_t *)pgd_page_vaddr(swapper_pg_dir[i]),
-			       sizeof(pmd_t) * PTRS_PER_PMD);
-
-		pud_populate(mm, pud, pmd);
-	}
-}
 
 pgd_t *pgd_alloc(struct mm_struct *mm)
 {
-	pgd_t *pgd;
-	pmd_t *pmds[PREALLOCATED_PMDS];
-	unsigned long flags;
+	pgd_t *pgd = (pgd_t *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
 
-	pgd = (pgd_t *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
-
-	if (pgd == NULL)
-		goto out;
-
+	/* so that alloc_pmd can use it */
 	mm->pgd = pgd;
+	if (pgd)
+		pgd_ctor(pgd);
 
-	if (preallocate_pmds(pmds) != 0)
-		goto out_free_pgd;
-
-	if (paravirt_pgd_alloc(mm) != 0)
-		goto out_free_pmds;
-
-	/*
-	 * Make sure that pre-populating the pmds is atomic with
-	 * respect to anything walking the pgd_list, so that they
-	 * never see a partially populated pgd.
-	 */
-	spin_lock_irqsave(&pgd_lock, flags);
-
-	pgd_ctor(pgd);
-	pgd_prepopulate_pmd(mm, pgd, pmds);
-
-	spin_unlock_irqrestore(&pgd_lock, flags);
+	if (pgd && !pgd_prepopulate_pmd(mm, pgd)) {
+		pgd_dtor(pgd);
+		free_page((unsigned long)pgd);
+		pgd = NULL;
+	}
 
 	return pgd;
-
-out_free_pmds:
-	free_pmds(pmds);
-out_free_pgd:
-	free_page((unsigned long)pgd);
-out:
-	return NULL;
 }
 
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
 	pgd_mop_up_pmds(mm, pgd);
 	pgd_dtor(pgd);
-	paravirt_pgd_free(mm, pgd);
 	free_page((unsigned long)pgd);
 }
 
@@ -293,7 +255,7 @@ int ptep_test_and_clear_young(struct vm_area_struct *vma,
 
 	if (pte_young(*ptep))
 		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
-					 (unsigned long *) &ptep->pte);
+					 &ptep->pte);
 
 	if (ret)
 		pte_update(vma->vm_mm, addr, ptep);
@@ -311,23 +273,4 @@ int ptep_clear_flush_young(struct vm_area_struct *vma,
 		flush_tlb_page(vma, address);
 
 	return young;
-}
-
-int fixmaps_set;
-
-void __native_set_fixmap(enum fixed_addresses idx, pte_t pte)
-{
-	unsigned long address = __fix_to_virt(idx);
-
-	if (idx >= __end_of_fixed_addresses) {
-		BUG();
-		return;
-	}
-	set_pte_vaddr(address, pte);
-	fixmaps_set++;
-}
-
-void native_set_fixmap(enum fixed_addresses idx, unsigned long phys, pgprot_t flags)
-{
-	__native_set_fixmap(idx, pfn_pte(phys >> PAGE_SHIFT, flags));
 }

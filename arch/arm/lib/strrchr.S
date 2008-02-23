@@ -23,4 +23,3 @@ ENTRY(strrchr)
 		bne	1b
 		mov	r0, r3
 		mov	pc, lr
-ENDPROC(strrchr)

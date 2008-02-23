@@ -40,8 +40,7 @@ extern int			datagram_recv_ctl(struct sock *sk,
 						  struct msghdr *msg,
 						  struct sk_buff *skb);
 
-extern int			datagram_send_ctl(struct net *net,
-						  struct msghdr *msg,
+extern int			datagram_send_ctl(struct msghdr *msg,
 						  struct flowi *fl,
 						  struct ipv6_txoptions *opt,
 						  int *hlimit, int *tclass);
@@ -53,7 +52,7 @@ extern int			datagram_send_ctl(struct net *net,
  */
 extern struct inet_connection_sock_af_ops ipv4_specific;
 
-extern void inet6_destroy_sock(struct sock *sk);
+extern int inet6_destroy_sock(struct sock *sk);
 
 #endif
 

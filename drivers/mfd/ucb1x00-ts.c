@@ -31,8 +31,8 @@
 #include <linux/slab.h>
 #include <linux/kthread.h>
 
-#include <mach/dma.h>
-#include <mach/collie.h>
+#include <asm/dma.h>
+#include <asm/arch/collie.h>
 #include <asm/mach-types.h>
 
 #include "ucb1x00.h"

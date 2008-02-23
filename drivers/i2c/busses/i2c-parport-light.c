@@ -123,6 +123,11 @@ static struct i2c_adapter parport_adapter = {
 static int __devinit i2c_parport_probe(struct platform_device *pdev)
 {
 	int err;
+	struct resource *res;
+
+	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
+	if (!request_region(res->start, res->end - res->start + 1, DRVNAME))
+		return -EBUSY;
 
 	/* Reset hardware to a sane state (SCL and SDA high) */
 	parport_setsda(NULL, 1);
@@ -133,19 +138,29 @@ static int __devinit i2c_parport_probe(struct platform_device *pdev)
 
 	parport_adapter.dev.parent = &pdev->dev;
 	err = i2c_bit_add_bus(&parport_adapter);
-	if (err)
+	if (err) {
 		dev_err(&pdev->dev, "Unable to register with I2C\n");
+		goto exit_region;
+	}
+	return 0;
+
+exit_region:
+	release_region(res->start, res->end - res->start + 1);
 	return err;
 }
 
 static int __devexit i2c_parport_remove(struct platform_device *pdev)
 {
+	struct resource *res;
+
 	i2c_del_adapter(&parport_adapter);
 
 	/* Un-init if needed (power off...) */
 	if (adapter_parm[type].init.val)
 		line_set(0, &adapter_parm[type].init);
 
+	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
+	release_region(res->start, res->end - res->start + 1);
 	return 0;
 }
 
@@ -160,6 +175,12 @@ static struct platform_driver i2c_parport_driver = {
 
 static int __init i2c_parport_device_add(u16 address)
 {
+	struct resource res = {
+		.start	= address,
+		.end	= address + 2,
+		.name	= DRVNAME,
+		.flags	= IORESOURCE_IO,
+	};
 	int err;
 
 	pdev = platform_device_alloc(DRVNAME, -1);
@@ -167,6 +188,13 @@ static int __init i2c_parport_device_add(u16 address)
 		err = -ENOMEM;
 		printk(KERN_ERR DRVNAME ": Device allocation failed\n");
 		goto exit;
+	}
+
+	err = platform_device_add_resources(pdev, &res, 1);
+	if (err) {
+		printk(KERN_ERR DRVNAME ": Device resource addition failed "
+		       "(%d)\n", err);
+		goto exit_device_put;
 	}
 
 	err = platform_device_add(pdev);
@@ -203,16 +231,13 @@ static int __init i2c_parport_init(void)
 		base = DEFAULT_BASE;
 	}
 
-	if (!request_region(base, 3, DRVNAME))
-		return -EBUSY;
-
         if (!adapter_parm[type].getscl.val)
 		parport_algo_data.getscl = NULL;
 
 	/* Sets global pdev as a side effect */
 	err = i2c_parport_device_add(base);
 	if (err)
-		goto exit_release;
+		goto exit;
 
 	err = platform_driver_register(&i2c_parport_driver);
 	if (err)
@@ -222,8 +247,7 @@ static int __init i2c_parport_init(void)
 
 exit_device:
 	platform_device_unregister(pdev);
-exit_release:
-	release_region(base, 3);
+exit:
 	return err;
 }
 
@@ -231,7 +255,6 @@ static void __exit i2c_parport_exit(void)
 {
 	platform_driver_unregister(&i2c_parport_driver);
 	platform_device_unregister(pdev);
-	release_region(base, 3);
 }
 
 MODULE_AUTHOR("Jean Delvare <khali@linux-fr.org>");

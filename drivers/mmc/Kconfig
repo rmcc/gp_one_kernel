@@ -3,14 +3,13 @@
 #
 
 menuconfig MMC
-	tristate "MMC/SD/SDIO card support"
+	tristate "MMC/SD card support"
 	depends on HAS_IOMEM
 	help
-	  This selects MultiMediaCard, Secure Digital and Secure
-	  Digital I/O support.
+	  MMC is the "multi-media card" bus protocol.
 
-	  If you want MMC/SD/SDIO support, you should say Y here and
-	  also to your specific host controller driver.
+	  If you want MMC support, you should say Y here and also
+	  to the specific driver for your MMC interface.
 
 config MMC_DEBUG
 	bool "MMC debugging"

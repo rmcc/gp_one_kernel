@@ -324,6 +324,7 @@ static int lance_rx (struct net_device *dev)
 					 len);
 			skb->protocol = eth_type_trans (skb, dev);
 			netif_rx (skb);
+			dev->last_rx = jiffies;
 			dev->stats.rx_packets++;
 			dev->stats.rx_bytes += len;
 		}
@@ -474,11 +475,15 @@ static irqreturn_t lance_interrupt (int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+struct net_device *last_dev;
+
 static int lance_open (struct net_device *dev)
 {
 	struct lance_private *lp = netdev_priv(dev);
 	volatile struct lance_regs *ll = lp->ll;
 	int ret;
+
+	last_dev = dev;
 
 	/* Stop the Lance */
 	ll->rap = LE_CSR0;
@@ -709,6 +714,7 @@ static int __devinit a2065_init_one(struct zorro_dev *z,
 	unsigned long board, base_addr, mem_start;
 	struct resource *r1, *r2;
 	int err;
+	DECLARE_MAC_BUF(mac);
 
 	board = z->resource.start;
 	base_addr = board+A2065_LANCE;
@@ -785,7 +791,8 @@ static int __devinit a2065_init_one(struct zorro_dev *z,
 	zorro_set_drvdata(z, dev);
 
 	printk(KERN_INFO "%s: A2065 at 0x%08lx, Ethernet Address "
-	       "%pM\n", dev->name, board, dev->dev_addr);
+	       "%s\n", dev->name, board,
+	       print_mac(mac, dev->dev_addr));
 
 	return 0;
 }

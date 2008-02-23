@@ -74,7 +74,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/sched.h>
 #include <linux/videodev.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <linux/mutex.h>
 #include <asm/uaccess.h>
 
@@ -495,7 +494,7 @@ static void qc_set(struct qcam_device *q)
 		val2 = (((q->port_mode & QC_MODE_MASK) == QC_BIDIR) ? 24 : 8) *
 		    q->transfer_scale;
 	}
-	val = DIV_ROUND_UP(val, val2);
+	val = (val + val2 - 1) / val2;
 	qc_command(q, 0x13);
 	qc_command(q, val);
 
@@ -651,7 +650,7 @@ static long qc_capture(struct qcam_device * q, char __user *buf, unsigned long l
 	transperline = q->width * q->bpp;
 	divisor = (((q->port_mode & QC_MODE_MASK) == QC_BIDIR) ? 24 : 8) *
 	    q->transfer_scale;
-	transperline = DIV_ROUND_UP(transperline, divisor);
+	transperline = (transperline + divisor - 1) / divisor;
 
 	for (i = 0, yield = yieldlines; i < linestotrans; i++)
 	{
@@ -706,7 +705,8 @@ static long qc_capture(struct qcam_device * q, char __user *buf, unsigned long l
  *	Video4linux interfacing
  */
 
-static long qcam_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+static int qcam_do_ioctl(struct inode *inode, struct file *file,
+			 unsigned int cmd, void *arg)
 {
 	struct video_device *dev = video_devdata(file);
 	struct qcam_device *qcam=(struct qcam_device *)dev;
@@ -863,10 +863,10 @@ static long qcam_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	return 0;
 }
 
-static long qcam_ioctl(struct file *file,
+static int qcam_ioctl(struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg)
 {
-	return video_usercopy(file, cmd, arg, qcam_do_ioctl);
+	return video_usercopy(inode, file, cmd, arg, qcam_do_ioctl);
 }
 
 static ssize_t qcam_read(struct file *file, char __user *buf,
@@ -893,35 +893,23 @@ static ssize_t qcam_read(struct file *file, char __user *buf,
 	return len;
 }
 
-static int qcam_exclusive_open(struct file *file)
-{
-	struct video_device *dev = video_devdata(file);
-	struct qcam_device *qcam = (struct qcam_device *)dev;
-
-	return test_and_set_bit(0, &qcam->in_use) ? -EBUSY : 0;
-}
-
-static int qcam_exclusive_release(struct file *file)
-{
-	struct video_device *dev = video_devdata(file);
-	struct qcam_device *qcam = (struct qcam_device *)dev;
-
-	clear_bit(0, &qcam->in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations qcam_fops = {
+static const struct file_operations qcam_fops = {
 	.owner		= THIS_MODULE,
-	.open           = qcam_exclusive_open,
-	.release        = qcam_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl          = qcam_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
 	.read		= qcam_read,
+	.llseek         = no_llseek,
 };
 static struct video_device qcam_template=
 {
+	.owner		= THIS_MODULE,
 	.name		= "Connectix Quickcam",
+	.type		= VID_TYPE_CAPTURE,
 	.fops           = &qcam_fops,
-	.release 	= video_device_release_empty,
 };
 
 #define MAX_CAMS 4
@@ -959,7 +947,8 @@ static int init_bwqcam(struct parport *port)
 
 	printk(KERN_INFO "Connectix Quickcam on %s\n", qcam->pport->name);
 
-	if (video_register_device(&qcam->vdev, VFL_TYPE_GRABBER, video_nr) < 0) {
+	if(video_register_device(&qcam->vdev, VFL_TYPE_GRABBER, video_nr)==-1)
+	{
 		parport_unregister_device(qcam->pdev);
 		kfree(qcam);
 		return -ENODEV;

@@ -36,11 +36,11 @@
 #include <linux/oprofile.h>
 #include <linux/interrupt.h>
 #include <linux/smp.h>
-#include <linux/io.h>
 
+#include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/system.h>
 
 #include "op_counter.h"
@@ -201,7 +201,7 @@ static int em_call_function(int (*fn)(void))
 	data.ret = 0;
 
 	preempt_disable();
-	smp_call_function(em_func, &data, 1);
+	smp_call_function(em_func, &data, 1, 1);
 	em_func(&data);
 	preempt_enable();
 
@@ -260,10 +260,10 @@ static void em_stop(void)
 static void em_route_irq(int irq, unsigned int cpu)
 {
 	struct irq_desc *desc = irq_desc + irq;
-	const struct cpumask *mask = cpumask_of(cpu);
+	cpumask_t mask = cpumask_of_cpu(cpu);
 
 	spin_lock_irq(&desc->lock);
-	cpumask_copy(desc->affinity, mask);
+	desc->affinity = mask;
 	desc->chip->set_affinity(irq, mask);
 	spin_unlock_irq(&desc->lock);
 }

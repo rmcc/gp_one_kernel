@@ -18,7 +18,7 @@
 #include <asm/memory.h>
 #include <asm/glue.h>
 #include <asm/vfpmacros.h>
-#include <mach/entry-macro.S>
+#include <asm/arch/entry-macro.S>
 #include <asm/thread_notify.h>
 
 #include "entry-header.S"
@@ -76,17 +76,14 @@
 __pabt_invalid:
 	inv_entry BAD_PREFETCH
 	b	common_invalid
-ENDPROC(__pabt_invalid)
 
 __dabt_invalid:
 	inv_entry BAD_DATA
 	b	common_invalid
-ENDPROC(__dabt_invalid)
 
 __irq_invalid:
 	inv_entry BAD_IRQ
 	b	common_invalid
-ENDPROC(__irq_invalid)
 
 __und_invalid:
 	inv_entry BAD_UNDEFINSTR
@@ -110,7 +107,6 @@ common_invalid:
 
 	mov	r0, sp
 	b	bad_mode
-ENDPROC(__und_invalid)
 
 /*
  * SVC mode handlers
@@ -196,7 +192,6 @@ __dabt_svc:
 	ldr	r0, [sp, #S_PSR]
 	msr	spsr_cxsf, r0
 	ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
-ENDPROC(__dabt_svc)
 
 	.align	5
 __irq_svc:
@@ -228,7 +223,6 @@ __irq_svc:
 	bleq	trace_hardirqs_on
 #endif
 	ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
-ENDPROC(__irq_svc)
 
 	.ltorg
 
@@ -278,7 +272,6 @@ __und_svc:
 	ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
 	msr	spsr_cxsf, lr
 	ldmia	sp, {r0 - pc}^			@ Restore SVC registers
-ENDPROC(__und_svc)
 
 	.align	5
 __pabt_svc:
@@ -320,7 +313,6 @@ __pabt_svc:
 	ldr	r0, [sp, #S_PSR]
 	msr	spsr_cxsf, r0
 	ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
-ENDPROC(__pabt_svc)
 
 	.align	5
 .LCcralign:
@@ -420,7 +412,6 @@ __dabt_usr:
 	mov	r2, sp
 	adr	lr, ret_from_exception
 	b	do_DataAbort
-ENDPROC(__dabt_usr)
 
 	.align	5
 __irq_usr:
@@ -450,7 +441,6 @@ __irq_usr:
 
 	mov	why, #0
 	b	ret_to_user
-ENDPROC(__irq_usr)
 
 	.ltorg
 
@@ -484,7 +474,6 @@ __und_usr:
 #else
 	b	__und_usr_unknown
 #endif
-ENDPROC(__und_usr)
 
 	@
 	@ fallthrough to call_fpe
@@ -653,7 +642,6 @@ __und_usr_unknown:
 	mov	r0, sp
 	adr	lr, ret_from_exception
 	b	do_undefinstr
-ENDPROC(__und_usr_unknown)
 
 	.align	5
 __pabt_usr:
@@ -678,8 +666,6 @@ ENTRY(ret_from_exception)
 	get_thread_info tsk
 	mov	why, #0
 	b	ret_to_user
-ENDPROC(__pabt_usr)
-ENDPROC(ret_from_exception)
 
 /*
  * Register switch for ARMv3 and ARMv4 processors
@@ -716,7 +702,6 @@ ENTRY(__switch_to)
 	bl	atomic_notifier_call_chain
 	mov	r0, r5
 	ldmia	r4, {r4 - sl, fp, sp, pc}	@ Load all regs saved previously
-ENDPROC(__switch_to)
 
 	__INIT
 
@@ -1044,7 +1029,6 @@ vector_\name:
 	mov	r0, sp
 	ldr	lr, [pc, lr, lsl #2]
 	movs	pc, lr			@ branch to handler in SVC mode
-ENDPROC(vector_\name)
 	.endm
 
 	.globl	__stubs_start

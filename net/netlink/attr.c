@@ -83,12 +83,6 @@ static int validate_nla(struct nlattr *nla, int maxtype,
 		if (attrlen < NLA_ALIGN(pt->len) + NLA_HDRLEN + nla_len(nla))
 			return -ERANGE;
 		break;
-	case NLA_NESTED:
-		/* a nested attributes is allowed to be empty; if its not,
-		 * it must have a size of at least NLA_HDRLEN.
-		 */
-		if (attrlen == 0)
-			break;
 	default:
 		if (pt->len)
 			minlen = pt->len;
@@ -138,7 +132,6 @@ errout:
  * @maxtype: maximum attribute type to be expected
  * @head: head of attribute stream
  * @len: length of attribute stream
- * @policy: validation policy
  *
  * Parses a stream of attributes and stores a pointer to each attribute in
  * the tb array accessable via the attribute type. Attributes with a type
@@ -201,7 +194,7 @@ struct nlattr *nla_find(struct nlattr *head, int len, int attrtype)
 /**
  * nla_strlcpy - Copy string attribute payload into a sized buffer
  * @dst: where to copy the string to
- * @nla: attribute to copy the string from
+ * @src: attribute to copy the string from
  * @dstsize: size of destination buffer
  *
  * Copies at most dstsize - 1 bytes into the destination buffer.
@@ -239,7 +232,7 @@ size_t nla_strlcpy(char *dst, const struct nlattr *nla, size_t dstsize)
  *
  * Returns the number of bytes copied.
  */
-int nla_memcpy(void *dest, const struct nlattr *src, int count)
+int nla_memcpy(void *dest, struct nlattr *src, int count)
 {
 	int minlen = min_t(int, count, nla_len(src));
 
@@ -347,9 +340,9 @@ struct nlattr *nla_reserve(struct sk_buff *skb, int attrtype, int attrlen)
 }
 
 /**
- * nla_reserve_nohdr - reserve room for attribute without header
+ * nla_reserve - reserve room for attribute without header
  * @skb: socket buffer to reserve room on
- * @attrlen: length of attribute payload
+ * @len: length of attribute payload
  *
  * Reserves room for attribute payload without a header.
  *
@@ -407,13 +400,13 @@ void __nla_put_nohdr(struct sk_buff *skb, int attrlen, const void *data)
  * @attrlen: length of attribute payload
  * @data: head of attribute payload
  *
- * Returns -EMSGSIZE if the tailroom of the skb is insufficient to store
+ * Returns -1 if the tailroom of the skb is insufficient to store
  * the attribute header and payload.
  */
 int nla_put(struct sk_buff *skb, int attrtype, int attrlen, const void *data)
 {
 	if (unlikely(skb_tailroom(skb) < nla_total_size(attrlen)))
-		return -EMSGSIZE;
+		return -1;
 
 	__nla_put(skb, attrtype, attrlen, data);
 	return 0;
@@ -425,13 +418,13 @@ int nla_put(struct sk_buff *skb, int attrtype, int attrlen, const void *data)
  * @attrlen: length of attribute payload
  * @data: head of attribute payload
  *
- * Returns -EMSGSIZE if the tailroom of the skb is insufficient to store
+ * Returns -1 if the tailroom of the skb is insufficient to store
  * the attribute payload.
  */
 int nla_put_nohdr(struct sk_buff *skb, int attrlen, const void *data)
 {
 	if (unlikely(skb_tailroom(skb) < NLA_ALIGN(attrlen)))
-		return -EMSGSIZE;
+		return -1;
 
 	__nla_put_nohdr(skb, attrlen, data);
 	return 0;
@@ -443,13 +436,13 @@ int nla_put_nohdr(struct sk_buff *skb, int attrlen, const void *data)
  * @attrlen: length of attribute payload
  * @data: head of attribute payload
  *
- * Returns -EMSGSIZE if the tailroom of the skb is insufficient to store
+ * Returns -1 if the tailroom of the skb is insufficient to store
  * the attribute payload.
  */
 int nla_append(struct sk_buff *skb, int attrlen, const void *data)
 {
 	if (unlikely(skb_tailroom(skb) < NLA_ALIGN(attrlen)))
-		return -EMSGSIZE;
+		return -1;
 
 	memcpy(skb_put(skb, attrlen), data, attrlen);
 	return 0;

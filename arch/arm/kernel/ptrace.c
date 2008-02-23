@@ -18,8 +18,8 @@
 #include <linux/security.h>
 #include <linux/init.h>
 #include <linux/signal.h>
-#include <linux/uaccess.h>
 
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/traps.h>
@@ -126,7 +126,7 @@ ptrace_getrn(struct task_struct *child, unsigned long insn)
 
 	val = get_user_reg(child, reg);
 	if (reg == 15)
-		val += 8;
+		val = pc_pointer(val + 8);
 
 	return val;
 }
@@ -278,7 +278,8 @@ get_branch_address(struct task_struct *child, unsigned long pc, unsigned long in
 				else
 					base -= aluop2;
 			}
-			read_u32(child, base, &alt);
+			if (read_u32(child, base, &alt) == 0)
+				alt = pc_pointer(alt);
 		}
 		break;
 
@@ -304,7 +305,8 @@ get_branch_address(struct task_struct *child, unsigned long pc, unsigned long in
 
 			base = ptrace_getrn(child, insn);
 
-			read_u32(child, base + nr_regs, &alt);
+			if (read_u32(child, base + nr_regs, &alt) == 0)
+				alt = pc_pointer(alt);
 			break;
 		}
 		break;

@@ -2,6 +2,8 @@
 # Makefile for the linux kernel.
 #
 
+EXTRA_AFLAGS := -traditional
+
 #EXTRA_AFLAGS += -DFPU_EMU_DEBUG
 #EXTRA_CFLAGS += -DFPU_EMU_DEBUG
 

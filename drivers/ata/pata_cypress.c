@@ -1,7 +1,7 @@
 /*
  * pata_cypress.c 	- Cypress PATA for new ATA layer
  *			  (C) 2006 Red Hat Inc
- *			  Alan Cox
+ *			  Alan Cox <alan@redhat.com>
  *
  * Based heavily on
  * linux/drivers/ide/pci/cy82c693.c		Version 0.40	Sep. 10, 2002

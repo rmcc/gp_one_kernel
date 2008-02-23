@@ -1,4 +1,6 @@
 /*
+ * $Id: tmdc.c,v 1.31 2002/01/22 20:29:52 vojtech Exp $
+ *
  *  Copyright (c) 1998-2001 Vojtech Pavlik
  *
  *   Based on the work of:
@@ -438,7 +440,8 @@ static struct gameport_driver tmdc_drv = {
 
 static int __init tmdc_init(void)
 {
-	return gameport_register_driver(&tmdc_drv);
+	gameport_register_driver(&tmdc_drv);
+	return 0;
 }
 
 static void __exit tmdc_exit(void)

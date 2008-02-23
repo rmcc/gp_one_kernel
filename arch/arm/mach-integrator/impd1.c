@@ -20,14 +20,14 @@
 #include <linux/mm.h>
 #include <linux/amba/bus.h>
 #include <linux/amba/clcd.h>
-#include <linux/io.h>
 
-#include <asm/clkdev.h>
-#include <mach/clkdev.h>
+#include <asm/io.h>
 #include <asm/hardware/icst525.h>
-#include <mach/lm.h>
-#include <mach/impd1.h>
+#include <asm/arch/lm.h>
+#include <asm/arch/impd1.h>
 #include <asm/sizes.h>
+
+#include "clock.h"
 
 static int module_id;
 
@@ -37,7 +37,6 @@ MODULE_PARM_DESC(lmid, "logic module stack position");
 struct impd1_module {
 	void __iomem	*base;
 	struct clk	vcos[2];
-	struct clk_lookup *clks[3];
 };
 
 static const struct icst525_params impd1_vco_params = {
@@ -340,8 +339,9 @@ static struct impd1_device impd1_devs[] = {
 	}
 };
 
-static struct clk fixed_14745600 = {
-	.rate = 14745600,
+static const char *impd1_vconames[2] = {
+	"CLCDCLK",
+	"AUXVCO2",
 };
 
 static int impd1_probe(struct lm_device *dev)
@@ -374,19 +374,13 @@ static int impd1_probe(struct lm_device *dev)
 
 	for (i = 0; i < ARRAY_SIZE(impd1->vcos); i++) {
 		impd1->vcos[i].owner = THIS_MODULE,
+		impd1->vcos[i].name = impd1_vconames[i],
 		impd1->vcos[i].params = &impd1_vco_params,
 		impd1->vcos[i].data = impd1,
 		impd1->vcos[i].setvco = impd1_setvco;
-	}
 
-	impd1->clks[0] = clkdev_alloc(&impd1->vcos[0], NULL, "lm%x:01000",
-					dev->id);
-	impd1->clks[1] = clkdev_alloc(&fixed_14745600, NULL, "lm%x:00100",
-					dev->id);
-	impd1->clks[2] = clkdev_alloc(&fixed_14745600, NULL, "lm%x:00200",
-					dev->id);
-	for (i = 0; i < ARRAY_SIZE(impd1->clks); i++)
-		clkdev_add(impd1->clks[i]);
+		clk_register(&impd1->vcos[i]);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(impd1_devs); i++) {
 		struct impd1_device *idev = impd1_devs + i;
@@ -399,7 +393,9 @@ static int impd1_probe(struct lm_device *dev)
 		if (!d)
 			continue;
 
-		dev_set_name(&d->dev, "lm%x:%5.5lx", dev->id, idev->offset >> 12);
+		snprintf(d->dev.bus_id, sizeof(d->dev.bus_id),
+			 "lm%x:%5.5lx", dev->id, idev->offset >> 12);
+
 		d->dev.parent	= &dev->dev;
 		d->res.start	= dev->resource.start + idev->offset;
 		d->res.end	= d->res.start + SZ_4K - 1;
@@ -411,7 +407,8 @@ static int impd1_probe(struct lm_device *dev)
 
 		ret = amba_device_register(d, &dev->resource);
 		if (ret) {
-			dev_err(&d->dev, "unable to register device: %d\n", ret);
+			printk("unable to register device %s: %d\n",
+				d->dev.bus_id, ret);
 			kfree(d);
 		}
 	}
@@ -440,8 +437,8 @@ static void impd1_remove(struct lm_device *dev)
 
 	device_for_each_child(&dev->dev, NULL, impd1_remove_one);
 
-	for (i = 0; i < ARRAY_SIZE(impd1->clks); i++)
-		clkdev_drop(impd1->clks[i]);
+	for (i = 0; i < ARRAY_SIZE(impd1->vcos); i++)
+		clk_unregister(&impd1->vcos[i]);
 
 	lm_set_drvdata(dev, NULL);
 

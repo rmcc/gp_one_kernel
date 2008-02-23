@@ -24,9 +24,11 @@ MODULE_ALIAS("ip6t_NFQUEUE");
 MODULE_ALIAS("arpt_NFQUEUE");
 
 static unsigned int
-nfqueue_tg(struct sk_buff *skb, const struct xt_target_param *par)
+nfqueue_tg(struct sk_buff *skb, const struct net_device *in,
+           const struct net_device *out, unsigned int hooknum,
+           const struct xt_target *target, const void *targinfo)
 {
-	const struct xt_NFQ_info *tinfo = par->targinfo;
+	const struct xt_NFQ_info *tinfo = targinfo;
 
 	return NF_QUEUE_NR(tinfo->queuenum);
 }
@@ -34,21 +36,21 @@ nfqueue_tg(struct sk_buff *skb, const struct xt_target_param *par)
 static struct xt_target nfqueue_tg_reg[] __read_mostly = {
 	{
 		.name		= "NFQUEUE",
-		.family		= NFPROTO_IPV4,
+		.family		= AF_INET,
 		.target		= nfqueue_tg,
 		.targetsize	= sizeof(struct xt_NFQ_info),
 		.me		= THIS_MODULE,
 	},
 	{
 		.name		= "NFQUEUE",
-		.family		= NFPROTO_IPV6,
+		.family		= AF_INET6,
 		.target		= nfqueue_tg,
 		.targetsize	= sizeof(struct xt_NFQ_info),
 		.me		= THIS_MODULE,
 	},
 	{
 		.name		= "NFQUEUE",
-		.family		= NFPROTO_ARP,
+		.family		= NF_ARP,
 		.target		= nfqueue_tg,
 		.targetsize	= sizeof(struct xt_NFQ_info),
 		.me		= THIS_MODULE,

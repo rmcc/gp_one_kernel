@@ -75,6 +75,7 @@ struct tc_u_hnode
 
 struct tc_u_common
 {
+	struct tc_u_common	*next;
 	struct tc_u_hnode	*hlist;
 	struct Qdisc		*q;
 	int			refcnt;
@@ -85,6 +86,8 @@ static const struct tcf_ext_map u32_ext_map = {
 	.action = TCA_U32_ACT,
 	.police = TCA_U32_POLICE
 };
+
+static struct tc_u_common *u32_list;
 
 static __inline__ unsigned u32_hash_fold(__be32 key, struct tc_u32_sel *sel, u8 fshift)
 {
@@ -284,7 +287,9 @@ static int u32_init(struct tcf_proto *tp)
 	struct tc_u_hnode *root_ht;
 	struct tc_u_common *tp_c;
 
-	tp_c = tp->q->u32_node;
+	for (tp_c = u32_list; tp_c; tp_c = tp_c->next)
+		if (tp_c->q == tp->q)
+			break;
 
 	root_ht = kzalloc(sizeof(*root_ht), GFP_KERNEL);
 	if (root_ht == NULL)
@@ -302,7 +307,8 @@ static int u32_init(struct tcf_proto *tp)
 			return -ENOBUFS;
 		}
 		tp_c->q = tp->q;
-		tp->q->u32_node = tp_c;
+		tp_c->next = u32_list;
+		u32_list = tp_c;
 	}
 
 	tp_c->refcnt++;
@@ -345,7 +351,7 @@ static int u32_delete_key(struct tcf_proto *tp, struct tc_u_knode* key)
 			}
 		}
 	}
-	WARN_ON(1);
+	BUG_TRAP(0);
 	return 0;
 }
 
@@ -368,7 +374,7 @@ static int u32_destroy_hnode(struct tcf_proto *tp, struct tc_u_hnode *ht)
 	struct tc_u_common *tp_c = tp->data;
 	struct tc_u_hnode **hn;
 
-	WARN_ON(ht->refcnt);
+	BUG_TRAP(!ht->refcnt);
 
 	u32_clear_hnode(tp, ht);
 
@@ -380,24 +386,30 @@ static int u32_destroy_hnode(struct tcf_proto *tp, struct tc_u_hnode *ht)
 		}
 	}
 
-	WARN_ON(1);
+	BUG_TRAP(0);
 	return -ENOENT;
 }
 
 static void u32_destroy(struct tcf_proto *tp)
 {
 	struct tc_u_common *tp_c = tp->data;
-	struct tc_u_hnode *root_ht = tp->root;
+	struct tc_u_hnode *root_ht = xchg(&tp->root, NULL);
 
-	WARN_ON(root_ht == NULL);
+	BUG_TRAP(root_ht != NULL);
 
 	if (root_ht && --root_ht->refcnt == 0)
 		u32_destroy_hnode(tp, root_ht);
 
 	if (--tp_c->refcnt == 0) {
 		struct tc_u_hnode *ht;
+		struct tc_u_common **tp_cp;
 
-		tp->q->u32_node = NULL;
+		for (tp_cp = &u32_list; *tp_cp; tp_cp = &(*tp_cp)->next) {
+			if (*tp_cp == tp_c) {
+				*tp_cp = tp_c->next;
+				break;
+			}
+		}
 
 		for (ht = tp_c->hlist; ht; ht = ht->next) {
 			ht->refcnt--;
@@ -407,7 +419,7 @@ static void u32_destroy(struct tcf_proto *tp)
 		while ((ht = tp_c->hlist) != NULL) {
 			tp_c->hlist = ht->next;
 
-			WARN_ON(ht->refcnt != 0);
+			BUG_TRAP(ht->refcnt == 0);
 
 			kfree(ht);
 		}
@@ -479,7 +491,7 @@ static int u32_set_parms(struct tcf_proto *tp, unsigned long base,
 	err = -EINVAL;
 	if (tb[TCA_U32_LINK]) {
 		u32 handle = nla_get_u32(tb[TCA_U32_LINK]);
-		struct tc_u_hnode *ht_down = NULL, *ht_old;
+		struct tc_u_hnode *ht_down = NULL;
 
 		if (TC_U32_KEY(handle))
 			goto errout;
@@ -493,12 +505,11 @@ static int u32_set_parms(struct tcf_proto *tp, unsigned long base,
 		}
 
 		tcf_tree_lock(tp);
-		ht_old = n->ht_down;
-		n->ht_down = ht_down;
+		ht_down = xchg(&n->ht_down, ht_down);
 		tcf_tree_unlock(tp);
 
-		if (ht_old)
-			ht_old->refcnt--;
+		if (ht_down)
+			ht_down->refcnt--;
 	}
 	if (tb[TCA_U32_CLASSID]) {
 		n->res.classid = nla_get_u32(tb[TCA_U32_CLASSID]);
@@ -638,9 +649,8 @@ static int u32_change(struct tcf_proto *tp, unsigned long base, u32 handle,
 				break;
 
 		n->next = *ins;
-		tcf_tree_lock(tp);
+		wmb();
 		*ins = n;
-		tcf_tree_unlock(tp);
 
 		*arg = (unsigned long)n;
 		return 0;

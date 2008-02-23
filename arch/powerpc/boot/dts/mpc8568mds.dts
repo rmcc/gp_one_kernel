@@ -42,7 +42,6 @@
 			timebase-frequency = <0>;
 			bus-frequency = <0>;
 			clock-frequency = <0>;
-			next-level-cache = <&L2>;
 		};
 	};
 
@@ -52,7 +51,7 @@
 	};
 
 	bcsr@f8000000 {
-		compatible = "fsl,mpc8568mds-bcsr";
+		device_type = "board-control";
 		reg = <0xf8000000 0x8000>;
 	};
 
@@ -60,7 +59,6 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		device_type = "soc";
-		compatible = "simple-bus";
 		ranges = <0x0 0xe0000000 0x100000>;
 		reg = <0xe0000000 0x1000>;
 		bus-frequency = <0>;
@@ -72,7 +70,7 @@
 			interrupts = <18 2>;
 		};
 
-		L2: l2-cache-controller@20000 {
+		l2-cache-controller@20000 {
 			compatible = "fsl,8568-l2-cache-controller";
 			reg = <0x20000 0x1000>;
 			cache-line-size = <32>;	// 32 bytes
@@ -108,47 +106,6 @@
 			dfsrr;
 		};
 
-		dma@21300 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "fsl,mpc8568-dma", "fsl,eloplus-dma";
-			reg = <0x21300 0x4>;
-			ranges = <0x0 0x21100 0x200>;
-			cell-index = <0>;
-			dma-channel@0 {
-				compatible = "fsl,mpc8568-dma-channel",
-						"fsl,eloplus-dma-channel";
-				reg = <0x0 0x80>;
-				cell-index = <0>;
-				interrupt-parent = <&mpic>;
-				interrupts = <20 2>;
-			};
-			dma-channel@80 {
-				compatible = "fsl,mpc8568-dma-channel",
-						"fsl,eloplus-dma-channel";
-				reg = <0x80 0x80>;
-				cell-index = <1>;
-				interrupt-parent = <&mpic>;
-				interrupts = <21 2>;
-			};
-			dma-channel@100 {
-				compatible = "fsl,mpc8568-dma-channel",
-						"fsl,eloplus-dma-channel";
-				reg = <0x100 0x80>;
-				cell-index = <2>;
-				interrupt-parent = <&mpic>;
-				interrupts = <22 2>;
-			};
-			dma-channel@180 {
-				compatible = "fsl,mpc8568-dma-channel",
-						"fsl,eloplus-dma-channel";
-				reg = <0x180 0x80>;
-				cell-index = <3>;
-				interrupt-parent = <&mpic>;
-				interrupts = <23 2>;
-			};
-		};
-
 		mdio@24520 {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -179,22 +136,6 @@
 				reg = <0x3>;
 				device_type = "ethernet-phy";
 			};
-			tbi0: tbi-phy@11 {
-				reg = <0x11>;
-				device_type = "tbi-phy";
-			};
-		};
-
-		mdio@25520 {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			compatible = "fsl,gianfar-tbi";
-			reg = <0x25520 0x20>;
-
-			tbi1: tbi-phy@11 {
-				reg = <0x11>;
-				device_type = "tbi-phy";
-			};
 		};
 
 		enet0: ethernet@24000 {
@@ -206,7 +147,6 @@
 			local-mac-address = [ 00 00 00 00 00 00 ];
  			interrupts = <29 2 30 2 34 2>;
 			interrupt-parent = <&mpic>;
-			tbi-handle = <&tbi0>;
 			phy-handle = <&phy2>;
 		};
 
@@ -219,7 +159,6 @@
 			local-mac-address = [ 00 00 00 00 00 00 ];
  			interrupts = <35 2 36 2 40 2>;
 			interrupt-parent = <&mpic>;
-			tbi-handle = <&tbi1>;
 			phy-handle = <&phy3>;
 		};
 
@@ -250,23 +189,27 @@
 		};
 
 		crypto@30000 {
-			compatible = "fsl,sec2.1", "fsl,sec2.0";
-			reg = <0x30000 0x10000>;
+			device_type = "crypto";
+			model = "SEC2";
+			compatible = "talitos";
+			reg = <0x30000 0xf000>;
 			interrupts = <45 2>;
 			interrupt-parent = <&mpic>;
-			fsl,num-channels = <4>;
-			fsl,channel-fifo-len = <24>;
-			fsl,exec-units-mask = <0xfe>;
-			fsl,descriptor-types-mask = <0x12b0ebf>;
+			num-channels = <4>;
+			channel-fifo-len = <24>;
+			exec-units-mask = <0xfe>;
+			descriptor-types-mask = <0x12b0ebf>;
 		};
 
 		mpic: pic@40000 {
+			clock-frequency = <0>;
 			interrupt-controller;
 			#address-cells = <0>;
 			#interrupt-cells = <2>;
 			reg = <0x40000 0x40000>;
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
+                        big-endian;
 		};
 
 		par_io@e0100 {

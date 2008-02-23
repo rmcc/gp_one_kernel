@@ -44,10 +44,21 @@
 #define REGISTER_BUSY_DELAY	100
 
 /*
+ * Descriptor availability flags.
+ * All PCI device descriptors have these 2 flags
+ * with the exact same definition.
+ * By storing them here we can use them inside rt2x00pci
+ * for some simple entry availability checking.
+ */
+#define TXD_ENTRY_OWNER_NIC	FIELD32(0x00000001)
+#define TXD_ENTRY_VALID		FIELD32(0x00000002)
+#define RXD_ENTRY_OWNER_NIC	FIELD32(0x00000001)
+
+/*
  * Register access.
  */
 static inline void rt2x00pci_register_read(struct rt2x00_dev *rt2x00dev,
-					   const unsigned int offset,
+					   const unsigned long offset,
 					   u32 *value)
 {
 	*value = readl(rt2x00dev->csr.base + offset);
@@ -55,14 +66,14 @@ static inline void rt2x00pci_register_read(struct rt2x00_dev *rt2x00dev,
 
 static inline void
 rt2x00pci_register_multiread(struct rt2x00_dev *rt2x00dev,
-			     const unsigned int offset,
+			     const unsigned long offset,
 			     void *value, const u16 length)
 {
 	memcpy_fromio(value, rt2x00dev->csr.base + offset, length);
 }
 
 static inline void rt2x00pci_register_write(struct rt2x00_dev *rt2x00dev,
-					    const unsigned int offset,
+					    const unsigned long offset,
 					    u32 value)
 {
 	writel(value, rt2x00dev->csr.base + offset);
@@ -70,50 +81,50 @@ static inline void rt2x00pci_register_write(struct rt2x00_dev *rt2x00dev,
 
 static inline void
 rt2x00pci_register_multiwrite(struct rt2x00_dev *rt2x00dev,
-			      const unsigned int offset,
-			      const void *value, const u16 length)
+			      const unsigned long offset,
+			      void *value, const u16 length)
 {
 	memcpy_toio(rt2x00dev->csr.base + offset, value, length);
 }
 
-/**
- * rt2x00pci_regbusy_read - Read from register with busy check
- * @rt2x00dev: Device pointer, see &struct rt2x00_dev.
- * @offset: Register offset
- * @field: Field to check if register is busy
- * @reg: Pointer to where register contents should be stored
- *
- * This function will read the given register, and checks if the
- * register is busy. If it is, it will sleep for a couple of
- * microseconds before reading the register again. If the register
- * is not read after a certain timeout, this function will return
- * FALSE.
+/*
+ * TX data handlers.
  */
-int rt2x00pci_regbusy_read(struct rt2x00_dev *rt2x00dev,
-			   const unsigned int offset,
-			   const struct rt2x00_field32 field,
-			   u32 *reg);
+int rt2x00pci_write_tx_data(struct rt2x00_dev *rt2x00dev,
+			    struct data_queue *queue, struct sk_buff *skb,
+			    struct ieee80211_tx_control *control);
 
 /**
- * rt2x00pci_write_tx_data - Initialize data for TX operation
- * @entry: The entry where the frame is located
+ * struct queue_entry_priv_pci_rx: Per RX entry PCI specific information
  *
- * This function will initialize the DMA and skb descriptor
- * to prepare the entry for the actual TX operation.
- */
-int rt2x00pci_write_tx_data(struct queue_entry *entry);
-
-/**
- * struct queue_entry_priv_pci: Per entry PCI specific information
- *
- * @desc: Pointer to device descriptor
- * @desc_dma: DMA pointer to &desc.
+ * @desc: Pointer to device descriptor.
  * @data: Pointer to device's entry memory.
- * @data_dma: DMA pointer to &data.
+ * @dma: DMA pointer to &data.
  */
-struct queue_entry_priv_pci {
+struct queue_entry_priv_pci_rx {
 	__le32 *desc;
 	dma_addr_t desc_dma;
+
+	void *data;
+	dma_addr_t data_dma;
+};
+
+/**
+ * struct queue_entry_priv_pci_tx: Per TX entry PCI specific information
+ *
+ * @desc: Pointer to device descriptor
+ * @data: Pointer to device's entry memory.
+ * @dma: DMA pointer to &data.
+ * @control: mac80211 control structure used to transmit data.
+ */
+struct queue_entry_priv_pci_tx {
+	__le32 *desc;
+	dma_addr_t desc_dma;
+
+	void *data;
+	dma_addr_t data_dma;
+
+	struct ieee80211_tx_control control;
 };
 
 /**
@@ -121,6 +132,15 @@ struct queue_entry_priv_pci {
  * @rt2x00dev: Device pointer, see &struct rt2x00_dev.
  */
 void rt2x00pci_rxdone(struct rt2x00_dev *rt2x00dev);
+
+/**
+ * rt2x00pci_txdone - Handle TX done events
+ * @rt2x00dev: Device pointer, see &struct rt2x00_dev.
+ * @entry: Entry which has completed the transmission of a frame.
+ * @desc: TX done descriptor
+ */
+void rt2x00pci_txdone(struct rt2x00_dev *rt2x00dev, struct queue_entry *entry,
+		      struct txdone_entry_desc *desc);
 
 /*
  * Device initialization handlers.

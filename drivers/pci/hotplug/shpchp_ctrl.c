@@ -62,7 +62,7 @@ u8 shpchp_handle_attention_button(u8 hp_slot, struct controller *ctrl)
 	u32 event_type;
 
 	/* Attention Button Change */
-	ctrl_dbg(ctrl, "Attention button interrupt received\n");
+	dbg("shpchp:  Attention button interrupt received.\n");
 
 	p_slot = shpchp_find_slot(ctrl, hp_slot + ctrl->slot_device_offset);
 	p_slot->hpc_ops->get_adapter_status(p_slot, &(p_slot->presence_save));
@@ -70,7 +70,7 @@ u8 shpchp_handle_attention_button(u8 hp_slot, struct controller *ctrl)
 	/*
 	 *  Button pressed - See if need to TAKE ACTION!!!
 	 */
-	ctrl_info(ctrl, "Button pressed on Slot(%s)\n", slot_name(p_slot));
+	info("Button pressed on Slot(%s)\n", p_slot->name);
 	event_type = INT_BUTTON_PRESS;
 
 	queue_interrupt_event(p_slot, event_type);
@@ -86,29 +86,29 @@ u8 shpchp_handle_switch_change(u8 hp_slot, struct controller *ctrl)
 	u32 event_type;
 
 	/* Switch Change */
-	ctrl_dbg(ctrl, "Switch interrupt received\n");
+	dbg("shpchp:  Switch interrupt received.\n");
 
 	p_slot = shpchp_find_slot(ctrl, hp_slot + ctrl->slot_device_offset);
 	p_slot->hpc_ops->get_adapter_status(p_slot, &(p_slot->presence_save));
 	p_slot->hpc_ops->get_latch_status(p_slot, &getstatus);
-	ctrl_dbg(ctrl, "Card present %x Power status %x\n",
-		 p_slot->presence_save, p_slot->pwr_save);
+	dbg("%s: Card present %x Power status %x\n", __func__,
+		p_slot->presence_save, p_slot->pwr_save);
 
 	if (getstatus) {
 		/*
 		 * Switch opened
 		 */
-		ctrl_info(ctrl, "Latch open on Slot(%s)\n", slot_name(p_slot));
+		info("Latch open on Slot(%s)\n", p_slot->name);
 		event_type = INT_SWITCH_OPEN;
 		if (p_slot->pwr_save && p_slot->presence_save) {
 			event_type = INT_POWER_FAULT;
-			ctrl_err(ctrl, "Surprise Removal of card\n");
+			err("Surprise Removal of card\n");
 		}
 	} else {
 		/*
 		 *  Switch closed
 		 */
-		ctrl_info(ctrl, "Latch close on Slot(%s)\n", slot_name(p_slot));
+		info("Latch close on Slot(%s)\n", p_slot->name);
 		event_type = INT_SWITCH_CLOSE;
 	}
 
@@ -123,7 +123,7 @@ u8 shpchp_handle_presence_change(u8 hp_slot, struct controller *ctrl)
 	u32 event_type;
 
 	/* Presence Change */
-	ctrl_dbg(ctrl, "Presence/Notify input change\n");
+	dbg("shpchp:  Presence/Notify input change.\n");
 
 	p_slot = shpchp_find_slot(ctrl, hp_slot + ctrl->slot_device_offset);
 
@@ -135,15 +135,13 @@ u8 shpchp_handle_presence_change(u8 hp_slot, struct controller *ctrl)
 		/*
 		 * Card Present
 		 */
-		ctrl_info(ctrl, "Card present on Slot(%s)\n",
-			  slot_name(p_slot));
+		info("Card present on Slot(%s)\n", p_slot->name);
 		event_type = INT_PRESENCE_ON;
 	} else {
 		/*
 		 * Not Present
 		 */
-		ctrl_info(ctrl, "Card not present on Slot(%s)\n",
-			  slot_name(p_slot));
+		info("Card not present on Slot(%s)\n", p_slot->name);
 		event_type = INT_PRESENCE_OFF;
 	}
 
@@ -158,7 +156,7 @@ u8 shpchp_handle_power_fault(u8 hp_slot, struct controller *ctrl)
 	u32 event_type;
 
 	/* Power fault */
-	ctrl_dbg(ctrl, "Power fault interrupt received\n");
+	dbg("shpchp:  Power fault interrupt received.\n");
 
 	p_slot = shpchp_find_slot(ctrl, hp_slot + ctrl->slot_device_offset);
 
@@ -166,19 +164,18 @@ u8 shpchp_handle_power_fault(u8 hp_slot, struct controller *ctrl)
 		/*
 		 * Power fault Cleared
 		 */
-		ctrl_info(ctrl, "Power fault cleared on Slot(%s)\n",
-			  slot_name(p_slot));
+		info("Power fault cleared on Slot(%s)\n", p_slot->name);
 		p_slot->status = 0x00;
 		event_type = INT_POWER_FAULT_CLEAR;
 	} else {
 		/*
 		 *   Power fault
 		 */
-		ctrl_info(ctrl, "Power fault on Slot(%s)\n", slot_name(p_slot));
+		info("Power fault on Slot(%s)\n", p_slot->name);
 		event_type = INT_POWER_FAULT;
 		/* set power fault status for this board */
 		p_slot->status = 0xFF;
-		ctrl_info(ctrl, "Power fault bit %x set\n", hp_slot);
+		info("power fault bit %x set\n", hp_slot);
 	}
 
 	queue_interrupt_event(p_slot, event_type);
@@ -194,10 +191,10 @@ static int change_bus_speed(struct controller *ctrl, struct slot *p_slot,
 {
 	int rc = 0;
 
-	ctrl_dbg(ctrl, "Change speed to %d\n", speed);
+	dbg("%s: change to speed %d\n", __func__, speed);
 	if ((rc = p_slot->hpc_ops->set_bus_speed_mode(p_slot, speed))) {
-		ctrl_err(ctrl, "%s: Issue of set bus speed mode command "
-			 "failed\n", __func__);
+		err("%s: Issue of set bus speed mode command failed\n",
+		    __func__);
 		return WRONG_BUS_FREQUENCY;
 	}
 	return rc;
@@ -215,8 +212,8 @@ static int fix_bus_speed(struct controller *ctrl, struct slot *pslot,
 	 */
 	if (flag) {
 		if (asp < bsp) {
-			ctrl_err(ctrl, "Speed of bus %x and adapter %x "
-				 "mismatch\n", bsp, asp);
+			err("%s: speed of bus %x and adapter %x mismatch\n",
+			    __func__, bsp, asp);
 			rc = WRONG_BUS_FREQUENCY;
 		}
 		return rc;
@@ -246,18 +243,17 @@ static int board_added(struct slot *p_slot)
 	int rc = 0;
 	enum pci_bus_speed asp, bsp, msp;
 	struct controller *ctrl = p_slot->ctrl;
-	struct pci_bus *parent = ctrl->pci_dev->subordinate;
 
 	hp_slot = p_slot->device - ctrl->slot_device_offset;
 
-	ctrl_dbg(ctrl,
-		 "%s: p_slot->device, slot_offset, hp_slot = %d, %d ,%d\n",
-		 __func__, p_slot->device, ctrl->slot_device_offset, hp_slot);
+	dbg("%s: p_slot->device, slot_offset, hp_slot = %d, %d ,%d\n",
+			__func__, p_slot->device,
+			ctrl->slot_device_offset, hp_slot);
 
 	/* Power on slot without connecting to bus */
 	rc = p_slot->hpc_ops->power_on_slot(p_slot);
 	if (rc) {
-		ctrl_err(ctrl, "Failed to power on slot\n");
+		err("%s: Failed to power on slot\n", __func__);
 		return -1;
 	}
 
@@ -266,34 +262,33 @@ static int board_added(struct slot *p_slot)
 			return WRONG_BUS_FREQUENCY;
 
 		if ((rc = p_slot->hpc_ops->set_bus_speed_mode(p_slot, PCI_SPEED_33MHz))) {
-			ctrl_err(ctrl, "%s: Issue of set bus speed mode command"
-				 " failed\n", __func__);
+			err("%s: Issue of set bus speed mode command failed\n", __func__);
 			return WRONG_BUS_FREQUENCY;
 		}
 
 		/* turn on board, blink green LED, turn off Amber LED */
 		if ((rc = p_slot->hpc_ops->slot_enable(p_slot))) {
-			ctrl_err(ctrl, "Issue of Slot Enable command failed\n");
+			err("%s: Issue of Slot Enable command failed\n", __func__);
 			return rc;
 		}
 	}
 
 	rc = p_slot->hpc_ops->get_adapter_speed(p_slot, &asp);
 	if (rc) {
-		ctrl_err(ctrl, "Can't get adapter speed or "
-			 "bus mode mismatch\n");
+		err("%s: Can't get adapter speed or bus mode mismatch\n",
+		    __func__);
 		return WRONG_BUS_FREQUENCY;
 	}
 
 	rc = p_slot->hpc_ops->get_cur_bus_speed(p_slot, &bsp);
 	if (rc) {
-		ctrl_err(ctrl, "Can't get bus operation speed\n");
+		err("%s: Can't get bus operation speed\n", __func__);
 		return WRONG_BUS_FREQUENCY;
 	}
 
 	rc = p_slot->hpc_ops->get_max_bus_speed(p_slot, &msp);
 	if (rc) {
-		ctrl_err(ctrl, "Can't get max bus operation speed\n");
+		err("%s: Can't get max bus operation speed\n", __func__);
 		msp = bsp;
 	}
 
@@ -301,9 +296,9 @@ static int board_added(struct slot *p_slot)
 	if (!list_empty(&ctrl->pci_dev->subordinate->devices))
 		slots_not_empty = 1;
 
-	ctrl_dbg(ctrl, "%s: slots_not_empty %d, adapter_speed %d, bus_speed %d,"
-		 " max_bus_speed %d\n", __func__, slots_not_empty, asp,
-		 bsp, msp);
+	dbg("%s: slots_not_empty %d, adapter_speed %d, bus_speed %d, "
+	    "max_bus_speed %d\n", __func__, slots_not_empty, asp,
+	    bsp, msp);
 
 	rc = fix_bus_speed(ctrl, p_slot, slots_not_empty, asp, bsp, msp);
 	if (rc)
@@ -311,26 +306,26 @@ static int board_added(struct slot *p_slot)
 
 	/* turn on board, blink green LED, turn off Amber LED */
 	if ((rc = p_slot->hpc_ops->slot_enable(p_slot))) {
-		ctrl_err(ctrl, "Issue of Slot Enable command failed\n");
+		err("%s: Issue of Slot Enable command failed\n", __func__);
 		return rc;
 	}
 
 	/* Wait for ~1 second */
 	msleep(1000);
 
-	ctrl_dbg(ctrl, "%s: slot status = %x\n", __func__, p_slot->status);
+	dbg("%s: slot status = %x\n", __func__, p_slot->status);
 	/* Check for a power fault */
 	if (p_slot->status == 0xFF) {
 		/* power fault occurred, but it was benign */
-		ctrl_dbg(ctrl, "%s: Power fault\n", __func__);
+		dbg("%s: power fault\n", __func__);
 		rc = POWER_FAILURE;
 		p_slot->status = 0;
 		goto err_exit;
 	}
 
 	if (shpchp_configure_device(p_slot)) {
-		ctrl_err(ctrl, "Cannot add device at %04x:%02x:%02x\n",
-			 pci_domain_nr(parent), p_slot->bus, p_slot->device);
+		err("Cannot add device at 0x%x:0x%x\n", p_slot->bus,
+				p_slot->device);
 		goto err_exit;
 	}
 
@@ -346,8 +341,7 @@ err_exit:
 	/* turn off slot, turn on Amber LED, turn off Green LED */
 	rc = p_slot->hpc_ops->slot_disable(p_slot);
 	if (rc) {
-		ctrl_err(ctrl, "%s: Issue of Slot Disable command failed\n",
-			 __func__);
+		err("%s: Issue of Slot Disable command failed\n", __func__);
 		return rc;
 	}
 
@@ -371,7 +365,7 @@ static int remove_board(struct slot *p_slot)
 	hp_slot = p_slot->device - ctrl->slot_device_offset;
 	p_slot = shpchp_find_slot(ctrl, hp_slot + ctrl->slot_device_offset);
 
-	ctrl_dbg(ctrl, "%s: hp_slot = %d\n", __func__, hp_slot);
+	dbg("In %s, hp_slot = %d\n", __func__, hp_slot);
 
 	/* Change status to shutdown */
 	if (p_slot->is_a_board)
@@ -380,14 +374,13 @@ static int remove_board(struct slot *p_slot)
 	/* turn off slot, turn on Amber LED, turn off Green LED */
 	rc = p_slot->hpc_ops->slot_disable(p_slot);
 	if (rc) {
-		ctrl_err(ctrl, "%s: Issue of Slot Disable command failed\n",
-			 __func__);
+		err("%s: Issue of Slot Disable command failed\n", __func__);
 		return rc;
 	}
 
 	rc = p_slot->hpc_ops->set_attention_status(p_slot, 0);
 	if (rc) {
-		ctrl_err(ctrl, "Issue of Set Attention command failed\n");
+		err("%s: Issue of Set Attention command failed\n", __func__);
 		return rc;
 	}
 
@@ -446,8 +439,7 @@ void shpchp_queue_pushbutton_work(struct work_struct *work)
 
 	info = kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info) {
-		ctrl_err(p_slot->ctrl, "%s: Cannot allocate memory\n",
-			 __func__);
+		err("%s: Cannot allocate memory\n", __func__);
 		return;
 	}
 	info->p_slot = p_slot;
@@ -494,19 +486,18 @@ static int update_slot_info (struct slot *slot)
 static void handle_button_press_event(struct slot *p_slot)
 {
 	u8 getstatus;
-	struct controller *ctrl = p_slot->ctrl;
 
 	switch (p_slot->state) {
 	case STATIC_STATE:
 		p_slot->hpc_ops->get_power_status(p_slot, &getstatus);
 		if (getstatus) {
 			p_slot->state = BLINKINGOFF_STATE;
-			ctrl_info(ctrl, "PCI slot #%s - powering off due to "
-				  "button press.\n", slot_name(p_slot));
+			info("PCI slot #%s - powering off due to button "
+			     "press.\n", p_slot->name);
 		} else {
 			p_slot->state = BLINKINGON_STATE;
-			ctrl_info(ctrl, "PCI slot #%s - powering on due to "
-				  "button press.\n", slot_name(p_slot));
+			info("PCI slot #%s - powering on due to button "
+			     "press.\n", p_slot->name);
 		}
 		/* blink green LED and turn off amber */
 		p_slot->hpc_ops->green_led_blink(p_slot);
@@ -521,16 +512,16 @@ static void handle_button_press_event(struct slot *p_slot)
 		 * press the attention again before the 5 sec. limit
 		 * expires to cancel hot-add or hot-remove
 		 */
-		ctrl_info(ctrl, "Button cancel on Slot(%s)\n",
-			  slot_name(p_slot));
+		info("Button cancel on Slot(%s)\n", p_slot->name);
+		dbg("%s: button cancel\n", __func__);
 		cancel_delayed_work(&p_slot->work);
 		if (p_slot->state == BLINKINGOFF_STATE)
 			p_slot->hpc_ops->green_led_on(p_slot);
 		else
 			p_slot->hpc_ops->green_led_off(p_slot);
 		p_slot->hpc_ops->set_attention_status(p_slot, 0);
-		ctrl_info(ctrl, "PCI slot #%s - action canceled due to "
-			  "button press\n", slot_name(p_slot));
+		info("PCI slot #%s - action canceled due to button press\n",
+		     p_slot->name);
 		p_slot->state = STATIC_STATE;
 		break;
 	case POWEROFF_STATE:
@@ -540,12 +531,11 @@ static void handle_button_press_event(struct slot *p_slot)
 		 * this means that the previous attention button action
 		 * to hot-add or hot-remove is undergoing
 		 */
-		ctrl_info(ctrl, "Button ignore on Slot(%s)\n",
-			  slot_name(p_slot));
+		info("Button ignore on Slot(%s)\n", p_slot->name);
 		update_slot_info(p_slot);
 		break;
 	default:
-		ctrl_warn(ctrl, "Not a valid state\n");
+		warn("Not a valid state\n");
 		break;
 	}
 }
@@ -561,7 +551,7 @@ static void interrupt_event_handler(struct work_struct *work)
 		handle_button_press_event(p_slot);
 		break;
 	case INT_POWER_FAULT:
-		ctrl_dbg(p_slot->ctrl, "%s: Power fault\n", __func__);
+		dbg("%s: power fault\n", __func__);
 		p_slot->hpc_ops->set_attention_status(p_slot, 1);
 		p_slot->hpc_ops->green_led_off(p_slot);
 		break;
@@ -579,24 +569,22 @@ static int shpchp_enable_slot (struct slot *p_slot)
 {
 	u8 getstatus = 0;
 	int rc, retval = -ENODEV;
-	struct controller *ctrl = p_slot->ctrl;
 
 	/* Check to see if (latch closed, card present, power off) */
 	mutex_lock(&p_slot->ctrl->crit_sect);
 	rc = p_slot->hpc_ops->get_adapter_status(p_slot, &getstatus);
 	if (rc || !getstatus) {
-		ctrl_info(ctrl, "No adapter on slot(%s)\n", slot_name(p_slot));
+		info("No adapter on slot(%s)\n", p_slot->name);
 		goto out;
 	}
 	rc = p_slot->hpc_ops->get_latch_status(p_slot, &getstatus);
 	if (rc || getstatus) {
-		ctrl_info(ctrl, "Latch open on slot(%s)\n", slot_name(p_slot));
+		info("Latch open on slot(%s)\n", p_slot->name);
 		goto out;
 	}
 	rc = p_slot->hpc_ops->get_power_status(p_slot, &getstatus);
 	if (rc || getstatus) {
-		ctrl_info(ctrl, "Already enabled on slot(%s)\n",
-			  slot_name(p_slot));
+		info("Already enabled on slot(%s)\n", p_slot->name);
 		goto out;
 	}
 
@@ -605,7 +593,7 @@ static int shpchp_enable_slot (struct slot *p_slot)
 	/* We have to save the presence info for these slots */
 	p_slot->hpc_ops->get_adapter_status(p_slot, &(p_slot->presence_save));
 	p_slot->hpc_ops->get_power_status(p_slot, &(p_slot->pwr_save));
-	ctrl_dbg(ctrl, "%s: p_slot->pwr_save %x\n", __func__, p_slot->pwr_save);
+	dbg("%s: p_slot->pwr_save %x\n", __func__, p_slot->pwr_save);
 	p_slot->hpc_ops->get_latch_status(p_slot, &getstatus);
 
 	if(((p_slot->ctrl->pci_dev->vendor == PCI_VENDOR_ID_AMD) ||
@@ -636,7 +624,6 @@ static int shpchp_disable_slot (struct slot *p_slot)
 {
 	u8 getstatus = 0;
 	int rc, retval = -ENODEV;
-	struct controller *ctrl = p_slot->ctrl;
 
 	if (!p_slot->ctrl)
 		return -ENODEV;
@@ -646,18 +633,17 @@ static int shpchp_disable_slot (struct slot *p_slot)
 
 	rc = p_slot->hpc_ops->get_adapter_status(p_slot, &getstatus);
 	if (rc || !getstatus) {
-		ctrl_info(ctrl, "No adapter on slot(%s)\n", slot_name(p_slot));
+		info("No adapter on slot(%s)\n", p_slot->name);
 		goto out;
 	}
 	rc = p_slot->hpc_ops->get_latch_status(p_slot, &getstatus);
 	if (rc || getstatus) {
-		ctrl_info(ctrl, "Latch open on slot(%s)\n", slot_name(p_slot));
+		info("Latch open on slot(%s)\n", p_slot->name);
 		goto out;
 	}
 	rc = p_slot->hpc_ops->get_power_status(p_slot, &getstatus);
 	if (rc || !getstatus) {
-		ctrl_info(ctrl, "Already disabled on slot(%s)\n",
-			  slot_name(p_slot));
+		info("Already disabled slot(%s)\n", p_slot->name);
 		goto out;
 	}
 
@@ -671,7 +657,6 @@ static int shpchp_disable_slot (struct slot *p_slot)
 int shpchp_sysfs_enable_slot(struct slot *p_slot)
 {
 	int retval = -ENODEV;
-	struct controller *ctrl = p_slot->ctrl;
 
 	mutex_lock(&p_slot->lock);
 	switch (p_slot->state) {
@@ -685,17 +670,15 @@ int shpchp_sysfs_enable_slot(struct slot *p_slot)
 		p_slot->state = STATIC_STATE;
 		break;
 	case POWERON_STATE:
-		ctrl_info(ctrl, "Slot %s is already in powering on state\n",
-			  slot_name(p_slot));
+		info("Slot %s is already in powering on state\n",
+		     p_slot->name);
 		break;
 	case BLINKINGOFF_STATE:
 	case POWEROFF_STATE:
-		ctrl_info(ctrl, "Already enabled on slot %s\n",
-			  slot_name(p_slot));
+		info("Already enabled on slot %s\n", p_slot->name);
 		break;
 	default:
-		ctrl_err(ctrl, "Not a valid state on slot %s\n",
-			 slot_name(p_slot));
+		err("Not a valid state on slot %s\n", p_slot->name);
 		break;
 	}
 	mutex_unlock(&p_slot->lock);
@@ -706,7 +689,6 @@ int shpchp_sysfs_enable_slot(struct slot *p_slot)
 int shpchp_sysfs_disable_slot(struct slot *p_slot)
 {
 	int retval = -ENODEV;
-	struct controller *ctrl = p_slot->ctrl;
 
 	mutex_lock(&p_slot->lock);
 	switch (p_slot->state) {
@@ -720,17 +702,15 @@ int shpchp_sysfs_disable_slot(struct slot *p_slot)
 		p_slot->state = STATIC_STATE;
 		break;
 	case POWEROFF_STATE:
-		ctrl_info(ctrl, "Slot %s is already in powering off state\n",
-			  slot_name(p_slot));
+		info("Slot %s is already in powering off state\n",
+		     p_slot->name);
 		break;
 	case BLINKINGON_STATE:
 	case POWERON_STATE:
-		ctrl_info(ctrl, "Already disabled on slot %s\n",
-			  slot_name(p_slot));
+		info("Already disabled on slot %s\n", p_slot->name);
 		break;
 	default:
-		ctrl_err(ctrl, "Not a valid state on slot %s\n",
-			 slot_name(p_slot));
+		err("Not a valid state on slot %s\n", p_slot->name);
 		break;
 	}
 	mutex_unlock(&p_slot->lock);

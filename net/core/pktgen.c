@@ -168,7 +168,7 @@
 #include <asm/div64.h>		/* do_div */
 #include <asm/timex.h>
 
-#define VERSION  "pktgen v2.70: Packet Generator for packet performance testing.\n"
+#define VERSION  "pktgen v2.69: Packet Generator for packet performance testing.\n"
 
 #define IP_NAME_SZ 32
 #define MAX_MPLS_LABELS 16 /* This is the max label stack depth */
@@ -189,7 +189,6 @@
 #define F_FLOW_SEQ    (1<<11)	/* Sequential flows */
 #define F_IPSEC_ON    (1<<12)	/* ipsec on for flows */
 #define F_QUEUE_MAP_RND (1<<13)	/* queue map Random */
-#define F_QUEUE_MAP_CPU (1<<14)	/* queue map mirrors smp_processor_id() */
 
 /* Thread control flag bits */
 #define T_TERMINATE   (1<<0)
@@ -422,7 +421,6 @@ static struct pktgen_dev *pktgen_find_dev(struct pktgen_thread *t,
 					  const char *ifname);
 static int pktgen_device_event(struct notifier_block *, unsigned long, void *);
 static void pktgen_run_all_threads(void);
-static void pktgen_reset_all_threads(void);
 static void pktgen_stop_all_threads_ifs(void);
 static int pktgen_stop_device(struct pktgen_dev *pkt_dev);
 static void pktgen_stop(struct pktgen_thread *t);
@@ -481,9 +479,6 @@ static ssize_t pgctrl_write(struct file *file, const char __user * buf,
 	else if (!strcmp(data, "start"))
 		pktgen_run_all_threads();
 
-	else if (!strcmp(data, "reset"))
-		pktgen_reset_all_threads();
-
 	else
 		printk(KERN_WARNING "pktgen: Unknown command: %s\n", data);
 
@@ -513,6 +508,7 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 	__u64 sa;
 	__u64 stopped;
 	__u64 now = getCurUs();
+	DECLARE_MAC_BUF(mac);
 
 	seq_printf(seq,
 		   "Params: count %llu  min_pkt_size: %u  max_pkt_size: %u\n",
@@ -557,12 +553,12 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 
 	seq_puts(seq, "     src_mac: ");
 
-	seq_printf(seq, "%pM ",
-		   is_zero_ether_addr(pkt_dev->src_mac) ?
-			     pkt_dev->odev->dev_addr : pkt_dev->src_mac);
+	seq_printf(seq, "%s ",
+		   print_mac(mac, is_zero_ether_addr(pkt_dev->src_mac) ?
+			     pkt_dev->odev->dev_addr : pkt_dev->src_mac));
 
 	seq_printf(seq, "dst_mac: ");
-	seq_printf(seq, "%pM\n", pkt_dev->dst_mac);
+	seq_printf(seq, "%s\n", print_mac(mac, pkt_dev->dst_mac));
 
 	seq_printf(seq,
 		   "     udp_src_min: %d  udp_src_max: %d  udp_dst_min: %d  udp_dst_max: %d\n",
@@ -624,9 +620,6 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 
 	if (pkt_dev->flags & F_QUEUE_MAP_RND)
 		seq_printf(seq,  "QUEUE_MAP_RND  ");
-
-	if (pkt_dev->flags & F_QUEUE_MAP_CPU)
-		seq_printf(seq,  "QUEUE_MAP_CPU  ");
 
 	if (pkt_dev->cflows) {
 		if (pkt_dev->flags & F_FLOW_SEQ)
@@ -1141,12 +1134,6 @@ static ssize_t pktgen_if_write(struct file *file,
 
 		else if (strcmp(f, "!QUEUE_MAP_RND") == 0)
 			pkt_dev->flags &= ~F_QUEUE_MAP_RND;
-
-		else if (strcmp(f, "QUEUE_MAP_CPU") == 0)
-			pkt_dev->flags |= F_QUEUE_MAP_CPU;
-
-		else if (strcmp(f, "!QUEUE_MAP_CPU") == 0)
-			pkt_dev->flags &= ~F_QUEUE_MAP_CPU;
 #ifdef CONFIG_XFRM
 		else if (strcmp(f, "IPSEC") == 0)
 			pkt_dev->flags |= F_IPSEC_ON;
@@ -1888,7 +1875,7 @@ static int pktgen_device_event(struct notifier_block *unused,
 {
 	struct net_device *dev = ptr;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	/* It is OK that we do not hold the group lock right now,
@@ -1908,23 +1895,6 @@ static int pktgen_device_event(struct notifier_block *unused,
 	return NOTIFY_DONE;
 }
 
-static struct net_device *pktgen_dev_get_by_name(struct pktgen_dev *pkt_dev, const char *ifname)
-{
-	char b[IFNAMSIZ+5];
-	int i = 0;
-
-	for(i=0; ifname[i] != '@'; i++) {
-		if(i == IFNAMSIZ)
-			break;
-
-		b[i] = ifname[i];
-	}
-	b[i] = 0;
-
-	return dev_get_by_name(&init_net, b);
-}
-
-
 /* Associate pktgen_dev with a device. */
 
 static int pktgen_setup_dev(struct pktgen_dev *pkt_dev, const char *ifname)
@@ -1938,7 +1908,7 @@ static int pktgen_setup_dev(struct pktgen_dev *pkt_dev, const char *ifname)
 		pkt_dev->odev = NULL;
 	}
 
-	odev = pktgen_dev_get_by_name(pkt_dev, ifname);
+	odev = dev_get_by_name(&init_net, ifname);
 	if (!odev) {
 		printk(KERN_ERR "pktgen: no such netdevice: \"%s\"\n", ifname);
 		return -ENODEV;
@@ -1964,34 +1934,12 @@ static int pktgen_setup_dev(struct pktgen_dev *pkt_dev, const char *ifname)
  */
 static void pktgen_setup_inject(struct pktgen_dev *pkt_dev)
 {
-	int ntxq;
-
 	if (!pkt_dev->odev) {
 		printk(KERN_ERR "pktgen: ERROR: pkt_dev->odev == NULL in "
 		       "setup_inject.\n");
 		sprintf(pkt_dev->result,
 			"ERROR: pkt_dev->odev == NULL in setup_inject.\n");
 		return;
-	}
-
-	/* make sure that we don't pick a non-existing transmit queue */
-	ntxq = pkt_dev->odev->real_num_tx_queues;
-
-	if (ntxq <= pkt_dev->queue_map_min) {
-		printk(KERN_WARNING "pktgen: WARNING: Requested "
-		       "queue_map_min (zero-based) (%d) exceeds valid range "
-		       "[0 - %d] for (%d) queues on %s, resetting\n",
-		       pkt_dev->queue_map_min, (ntxq ?: 1)- 1, ntxq,
-		       pkt_dev->odev->name);
-		pkt_dev->queue_map_min = ntxq - 1;
-	}
-	if (pkt_dev->queue_map_max >= ntxq) {
-		printk(KERN_WARNING "pktgen: WARNING: Requested "
-		       "queue_map_max (zero-based) (%d) exceeds valid range "
-		       "[0 - %d] for (%d) queues on %s, resetting\n",
-		       pkt_dev->queue_map_max, (ntxq ?: 1)- 1, ntxq,
-		       pkt_dev->odev->name);
-		pkt_dev->queue_map_max = ntxq - 1;
 	}
 
 	/* Default to the interface's mac if not explicitly set. */
@@ -2137,19 +2085,15 @@ static inline int f_pick(struct pktgen_dev *pkt_dev)
 		if (pkt_dev->flows[flow].count >= pkt_dev->lflow) {
 			/* reset time */
 			pkt_dev->flows[flow].count = 0;
-			pkt_dev->flows[flow].flags = 0;
 			pkt_dev->curfl += 1;
 			if (pkt_dev->curfl >= pkt_dev->cflows)
 				pkt_dev->curfl = 0; /*reset */
 		}
 	} else {
 		flow = random32() % pkt_dev->cflows;
-		pkt_dev->curfl = flow;
 
-		if (pkt_dev->flows[flow].count > pkt_dev->lflow) {
+		if (pkt_dev->flows[flow].count > pkt_dev->lflow)
 			pkt_dev->flows[flow].count = 0;
-			pkt_dev->flows[flow].flags = 0;
-		}
 	}
 
 	return pkt_dev->curfl;
@@ -2165,8 +2109,7 @@ static void get_ipsec_sa(struct pktgen_dev *pkt_dev, int flow)
 	struct xfrm_state *x = pkt_dev->flows[flow].x;
 	if (!x) {
 		/*slow path: we dont already have xfrm_state*/
-		x = xfrm_stateonly_find(&init_net,
-					(xfrm_address_t *)&pkt_dev->cur_daddr,
+		x = xfrm_stateonly_find((xfrm_address_t *)&pkt_dev->cur_daddr,
 					(xfrm_address_t *)&pkt_dev->cur_saddr,
 					AF_INET,
 					pkt_dev->ipsmode,
@@ -2180,29 +2123,6 @@ static void get_ipsec_sa(struct pktgen_dev *pkt_dev, int flow)
 	}
 }
 #endif
-static void set_cur_queue_map(struct pktgen_dev *pkt_dev)
-{
-
-	if (pkt_dev->flags & F_QUEUE_MAP_CPU)
-		pkt_dev->cur_queue_map = smp_processor_id();
-
-	else if (pkt_dev->queue_map_min < pkt_dev->queue_map_max) {
-		__u16 t;
-		if (pkt_dev->flags & F_QUEUE_MAP_RND) {
-			t = random32() %
-				(pkt_dev->queue_map_max -
-				 pkt_dev->queue_map_min + 1)
-				+ pkt_dev->queue_map_min;
-		} else {
-			t = pkt_dev->cur_queue_map + 1;
-			if (t > pkt_dev->queue_map_max)
-				t = pkt_dev->queue_map_min;
-		}
-		pkt_dev->cur_queue_map = t;
-	}
-	pkt_dev->cur_queue_map  = pkt_dev->cur_queue_map % pkt_dev->odev->real_num_tx_queues;
-}
-
 /* Increment/randomize headers according to flags and current values
  * for IP src/dest, UDP src/dst port, MAC-Addr src/dst
  */
@@ -2224,7 +2144,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 			mc = random32() % pkt_dev->src_mac_count;
 		else {
 			mc = pkt_dev->cur_src_mac_offset++;
-			if (pkt_dev->cur_src_mac_offset >=
+			if (pkt_dev->cur_src_mac_offset >
 			    pkt_dev->src_mac_count)
 				pkt_dev->cur_src_mac_offset = 0;
 		}
@@ -2251,7 +2171,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 
 		else {
 			mc = pkt_dev->cur_dst_mac_offset++;
-			if (pkt_dev->cur_dst_mac_offset >=
+			if (pkt_dev->cur_dst_mac_offset >
 			    pkt_dev->dst_mac_count) {
 				pkt_dev->cur_dst_mac_offset = 0;
 			}
@@ -2405,7 +2325,19 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 		pkt_dev->cur_pkt_size = t;
 	}
 
-	set_cur_queue_map(pkt_dev);
+	if (pkt_dev->queue_map_min < pkt_dev->queue_map_max) {
+		__u16 t;
+		if (pkt_dev->flags & F_QUEUE_MAP_RND) {
+			t = random32() %
+				(pkt_dev->queue_map_max - pkt_dev->queue_map_min + 1)
+				+ pkt_dev->queue_map_min;
+		} else {
+			t = pkt_dev->cur_queue_map + 1;
+			if (t > pkt_dev->queue_map_max)
+				t = pkt_dev->queue_map_min;
+		}
+		pkt_dev->cur_queue_map = t;
+	}
 
 	pkt_dev->flows[flow].count++;
 }
@@ -2472,7 +2404,7 @@ static inline int process_ipsec(struct pktgen_dev *pkt_dev,
 				if (ret < 0) {
 					printk(KERN_ERR "Error expanding "
 					       "ipsec packet %d\n",ret);
-					goto err;
+					return 0;
 				}
 			}
 
@@ -2482,7 +2414,8 @@ static inline int process_ipsec(struct pktgen_dev *pkt_dev,
 			if (ret) {
 				printk(KERN_ERR "Error creating ipsec "
 				       "packet %d\n",ret);
-				goto err;
+				kfree_skb(skb);
+				return 0;
 			}
 			/* restore ll */
 			eth = (__u8 *) skb_push(skb, ETH_HLEN);
@@ -2491,9 +2424,6 @@ static inline int process_ipsec(struct pktgen_dev *pkt_dev,
 		}
 	}
 	return 1;
-err:
-	kfree_skb(skb);
-	return 0;
 }
 #endif
 
@@ -2528,7 +2458,7 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	__be16 *vlan_encapsulated_proto = NULL;  /* packet type ID field (or len) for VLAN tag */
 	__be16 *svlan_tci = NULL;                /* Encapsulates priority and SVLAN ID */
 	__be16 *svlan_encapsulated_proto = NULL; /* packet type ID field (or len) for SVLAN tag */
-	u16 queue_map;
+
 
 	if (pkt_dev->nr_labels)
 		protocol = htons(ETH_P_MPLS_UC);
@@ -2539,7 +2469,6 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	/* Update any of the values, used when we're incrementing various
 	 * fields.
 	 */
-	queue_map = pkt_dev->cur_queue_map;
 	mod_cur_headers(pkt_dev);
 
 	datalen = (odev->hard_header_len + 16) & ~0xf;
@@ -2578,7 +2507,7 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	skb->network_header = skb->tail;
 	skb->transport_header = skb->network_header + sizeof(struct iphdr);
 	skb_put(skb, sizeof(struct iphdr) + sizeof(struct udphdr));
-	skb_set_queue_mapping(skb, queue_map);
+	skb_set_queue_mapping(skb, pkt_dev->cur_queue_map);
 	iph = ip_hdr(skb);
 	udph = udp_hdr(skb);
 
@@ -2868,7 +2797,6 @@ static struct sk_buff *fill_packet_ipv6(struct net_device *odev,
 	__be16 *vlan_encapsulated_proto = NULL;  /* packet type ID field (or len) for VLAN tag */
 	__be16 *svlan_tci = NULL;                /* Encapsulates priority and SVLAN ID */
 	__be16 *svlan_encapsulated_proto = NULL; /* packet type ID field (or len) for SVLAN tag */
-	u16 queue_map;
 
 	if (pkt_dev->nr_labels)
 		protocol = htons(ETH_P_MPLS_UC);
@@ -2879,7 +2807,6 @@ static struct sk_buff *fill_packet_ipv6(struct net_device *odev,
 	/* Update any of the values, used when we're incrementing various
 	 * fields.
 	 */
-	queue_map = pkt_dev->cur_queue_map;
 	mod_cur_headers(pkt_dev);
 
 	skb = alloc_skb(pkt_dev->cur_pkt_size + 64 + 16 +
@@ -2917,7 +2844,7 @@ static struct sk_buff *fill_packet_ipv6(struct net_device *odev,
 	skb->network_header = skb->tail;
 	skb->transport_header = skb->network_header + sizeof(struct ipv6hdr);
 	skb_put(skb, sizeof(struct ipv6hdr) + sizeof(struct udphdr));
-	skb_set_queue_mapping(skb, queue_map);
+	skb_set_queue_mapping(skb, pkt_dev->cur_queue_map);
 	iph = ipv6_hdr(skb);
 	udph = udp_hdr(skb);
 
@@ -3173,24 +3100,6 @@ static void pktgen_run_all_threads(void)
 	pktgen_wait_all_threads_run();
 }
 
-static void pktgen_reset_all_threads(void)
-{
-	struct pktgen_thread *t;
-
-	pr_debug("pktgen: entering pktgen_reset_all_threads.\n");
-
-	mutex_lock(&pktgen_thread_lock);
-
-	list_for_each_entry(t, &pktgen_threads, th_list)
-		t->control |= (T_REMDEVALL);
-
-	mutex_unlock(&pktgen_thread_lock);
-
-	schedule_timeout_interruptible(msecs_to_jiffies(125));	/* Propagate thread->control  */
-
-	pktgen_wait_all_threads_run();
-}
-
 static void show_results(struct pktgen_dev *pkt_dev, int nr_frags)
 {
 	__u64 total_us, bps, mbps, pps, idle;
@@ -3353,13 +3262,11 @@ static void pktgen_rem_thread(struct pktgen_thread *t)
 
 static __inline__ void pktgen_xmit(struct pktgen_dev *pkt_dev)
 {
-	struct net_device *odev = pkt_dev->odev;
-	int (*xmit)(struct sk_buff *, struct net_device *)
-		= odev->netdev_ops->ndo_start_xmit;
-	struct netdev_queue *txq;
+	struct net_device *odev = NULL;
 	__u64 idle_start = 0;
-	u16 queue_map;
 	int ret;
+
+	odev = pkt_dev->odev;
 
 	if (pkt_dev->delay_us || pkt_dev->delay_ns) {
 		u64 now;
@@ -3378,16 +3285,9 @@ static __inline__ void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		}
 	}
 
-	if (!pkt_dev->skb) {
-		set_cur_queue_map(pkt_dev);
-		queue_map = pkt_dev->cur_queue_map;
-	} else {
-		queue_map = skb_get_queue_mapping(pkt_dev->skb);
-	}
-
-	txq = netdev_get_tx_queue(odev, queue_map);
-	if (netif_tx_queue_stopped(txq) ||
-	    netif_tx_queue_frozen(txq) ||
+	if ((netif_queue_stopped(odev) ||
+	     (pkt_dev->skb &&
+	      netif_subqueue_stopped(odev, pkt_dev->skb))) ||
 	    need_resched()) {
 		idle_start = getCurUs();
 
@@ -3403,8 +3303,8 @@ static __inline__ void pktgen_xmit(struct pktgen_dev *pkt_dev)
 
 		pkt_dev->idle_acc += getCurUs() - idle_start;
 
-		if (netif_tx_queue_stopped(txq) ||
-		    netif_tx_queue_frozen(txq)) {
+		if (netif_queue_stopped(odev) ||
+		    netif_subqueue_stopped(odev, pkt_dev->skb)) {
 			pkt_dev->next_tx_us = getCurUs();	/* TODO */
 			pkt_dev->next_tx_ns = 0;
 			goto out;	/* Try the next interface */
@@ -3431,17 +3331,13 @@ static __inline__ void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		}
 	}
 
-	/* fill_packet() might have changed the queue */
-	queue_map = skb_get_queue_mapping(pkt_dev->skb);
-	txq = netdev_get_tx_queue(odev, queue_map);
-
-	__netif_tx_lock_bh(txq);
-	if (!netif_tx_queue_stopped(txq) &&
-	    !netif_tx_queue_frozen(txq)) {
+	netif_tx_lock_bh(odev);
+	if (!netif_queue_stopped(odev) &&
+	    !netif_subqueue_stopped(odev, pkt_dev->skb)) {
 
 		atomic_inc(&(pkt_dev->skb->users));
 	      retry_now:
-		ret = (*xmit)(pkt_dev->skb, odev);
+		ret = odev->hard_start_xmit(pkt_dev->skb, odev);
 		if (likely(ret == NETDEV_TX_OK)) {
 			pkt_dev->last_ok = 1;
 			pkt_dev->sofar++;
@@ -3481,7 +3377,7 @@ static __inline__ void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		pkt_dev->next_tx_ns = 0;
 	}
 
-	__netif_tx_unlock_bh(txq);
+	netif_tx_unlock_bh(odev);
 
 	/* If pkt_dev->count is zero, then run forever */
 	if ((pkt_dev->count != 0) && (pkt_dev->sofar >= pkt_dev->count)) {

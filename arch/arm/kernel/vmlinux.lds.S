@@ -65,7 +65,6 @@ SECTIONS
 #endif
 		. = ALIGN(4096);
 		__per_cpu_start = .;
-			*(.data.percpu.page_aligned)
 			*(.data.percpu)
 			*(.data.percpu.shared_aligned)
 		__per_cpu_end = .;
@@ -120,7 +119,7 @@ SECTIONS
 #endif
 
 	.data : AT(__data_loc) {
-		_data = .;		/* address in memory */
+		__data_start = .;	/* address in memory */
 
 		/*
 		 * first, the init task union, aligned

@@ -1114,8 +1114,11 @@ dequeue_rx(struct idt77252_dev *card, struct rsq_entry *rsqe)
 
 	rpp = &vc->rcv.rx_pool;
 
-	__skb_queue_tail(&rpp->queue, skb);
 	rpp->len += skb->len;
+	if (!rpp->count++)
+		rpp->first = skb;
+	*rpp->last = skb;
+	rpp->last = &skb->next;
 
 	if (stat & SAR_RSQE_EPDU) {
 		unsigned char *l1l2;
@@ -1142,7 +1145,7 @@ dequeue_rx(struct idt77252_dev *card, struct rsq_entry *rsqe)
 			atomic_inc(&vcc->stats->rx_err);
 			return;
 		}
-		if (skb_queue_len(&rpp->queue) > 1) {
+		if (rpp->count > 1) {
 			struct sk_buff *sb;
 
 			skb = dev_alloc_skb(rpp->len);
@@ -1158,9 +1161,12 @@ dequeue_rx(struct idt77252_dev *card, struct rsq_entry *rsqe)
 				dev_kfree_skb(skb);
 				return;
 			}
-			skb_queue_walk(&rpp->queue, sb)
+			sb = rpp->first;
+			for (i = 0; i < rpp->count; i++) {
 				memcpy(skb_put(skb, sb->len),
 				       sb->data, sb->len);
+				sb = sb->next;
+			}
 
 			recycle_rx_pool_skb(card, rpp);
 
@@ -1174,6 +1180,7 @@ dequeue_rx(struct idt77252_dev *card, struct rsq_entry *rsqe)
 			return;
 		}
 
+		skb->next = NULL;
 		flush_rx_pool(card, rpp);
 
 		if (!atm_charge(vcc, skb->truesize)) {
@@ -1911,18 +1918,25 @@ recycle_rx_skb(struct idt77252_dev *card, struct sk_buff *skb)
 static void
 flush_rx_pool(struct idt77252_dev *card, struct rx_pool *rpp)
 {
-	skb_queue_head_init(&rpp->queue);
 	rpp->len = 0;
+	rpp->count = 0;
+	rpp->first = NULL;
+	rpp->last = &rpp->first;
 }
 
 static void
 recycle_rx_pool_skb(struct idt77252_dev *card, struct rx_pool *rpp)
 {
-	struct sk_buff *skb, *tmp;
+	struct sk_buff *skb, *next;
+	int i;
 
-	skb_queue_walk_safe(&rpp->queue, skb, tmp)
+	skb = rpp->first;
+	for (i = 0; i < rpp->count; i++) {
+		next = skb->next;
+		skb->next = NULL;
 		recycle_rx_skb(card, skb);
-
+		skb = next;
+	}
 	flush_rx_pool(card, rpp);
 }
 
@@ -2523,7 +2537,7 @@ idt77252_close(struct atm_vcc *vcc)
 		waitfor_idle(card);
 		spin_unlock_irqrestore(&card->cmd_lock, flags);
 
-		if (skb_queue_len(&vc->rcv.rx_pool.queue) != 0) {
+		if (vc->rcv.rx_pool.count) {
 			DPRINTK("%s: closing a VC with pending rx buffers.\n",
 				card->name);
 
@@ -2956,7 +2970,7 @@ close_card_oam(struct idt77252_dev *card)
 			waitfor_idle(card);
 			spin_unlock_irqrestore(&card->cmd_lock, flags);
 
-			if (skb_queue_len(&vc->rcv.rx_pool.queue) != 0) {
+			if (vc->rcv.rx_pool.count) {
 				DPRINTK("%s: closing a VC "
 					"with pending rx buffers.\n",
 					card->name);

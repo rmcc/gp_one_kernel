@@ -9,25 +9,6 @@
 
 ENTRY(_stext)
 
-PHDRS {
-	kernel PT_LOAD FLAGS(7); /* RWX */
-	notes PT_NOTE FLAGS(0);
-	dummy PT_NOTE FLAGS(0);
-
-	/* binutils < 2.18 has a bug that makes it misbehave when taking an
-	   ELF file with all segments at load address 0 as input.  This
-	   happens when running "strip" on vmlinux, because of the AT() magic
-	   in this linker script.  People using GCC >= 4.2 won't run into
-	   this problem, because the "build-id" support will put some data
-	   into the "notes" segment (at a non-zero load address).
-
-	   To work around this, we force some data into both the "dummy"
-	   segment and the kernel segment, so the dummy segment will get a
-	   non-zero load address.  It's not enough to always create the
-	   "notes" segment, since if nothing gets assigned to it, its load
-	   address will be zero.  */
-}
-
 #ifdef CONFIG_PPC64
 OUTPUT_ARCH(powerpc:common64)
 jiffies = jiffies_64;
@@ -54,7 +35,7 @@ SECTIONS
 		ALIGN_FUNCTION();
 		*(.text.head)
 		_text = .;
-		*(.text .fixup .text.init.refok .exit.text.refok __ftr_alt_*)
+		*(.text .fixup .text.init.refok .exit.text.refok)
 		SCHED_TEXT
 		LOCK_TEXT
 		KPROBES_TEXT
@@ -66,11 +47,10 @@ SECTIONS
 		__got2_end = .;
 #endif /* CONFIG_PPC32 */
 
-	} :kernel
-
-	. = ALIGN(PAGE_SIZE);
-	_etext = .;
-	PROVIDE32 (etext = .);
+		. = ALIGN(PAGE_SIZE);
+		_etext = .;
+		PROVIDE32 (etext = .);
+	}
 
 	/* Read-only data */
 	RODATA
@@ -82,13 +62,9 @@ SECTIONS
 		__stop___ex_table = .;
 	}
 
-	NOTES :kernel :notes
+	NOTES
 
-	/* The dummy segment contents for the bug workaround mentioned above
-	   near PHDRS.  */
-	.dummy : AT(ADDR(.dummy) - LOAD_OFFSET) {
-		LONG(0xf177)
-	} :kernel :dummy
+	BUG_TABLE
 
 /*
  * Init sections discarded at runtime
@@ -100,7 +76,7 @@ SECTIONS
 		_sinittext = .;
 		INIT_TEXT
 		_einittext = .;
-	} :kernel
+	}
 
 	/* .exit.text is discarded at runtime, not link time,
 	 * to deal with references from __bug_table
@@ -151,18 +127,6 @@ SECTIONS
 		*(__ftr_fixup)
 		__stop___ftr_fixup = .;
 	}
-	. = ALIGN(8);
-	__mmu_ftr_fixup : AT(ADDR(__mmu_ftr_fixup) - LOAD_OFFSET) {
-		__start___mmu_ftr_fixup = .;
-		*(__mmu_ftr_fixup)
-		__stop___mmu_ftr_fixup = .;
-	}
-	. = ALIGN(8);
-	__lwsync_fixup : AT(ADDR(__lwsync_fixup) - LOAD_OFFSET) {
-		__start___lwsync_fixup = .;
-		*(__lwsync_fixup)
-		__stop___lwsync_fixup = .;
-	}
 #ifdef CONFIG_PPC64
 	. = ALIGN(8);
 	__fw_ftr_fixup : AT(ADDR(__fw_ftr_fixup) - LOAD_OFFSET) {
@@ -182,7 +146,6 @@ SECTIONS
 	. = ALIGN(PAGE_SIZE);
 	.data.percpu  : AT(ADDR(.data.percpu) - LOAD_OFFSET) {
 		__per_cpu_start = .;
-		*(.data.percpu.page_aligned)
 		*(.data.percpu)
 		*(.data.percpu.shared_aligned)
 		__per_cpu_end = .;
@@ -194,23 +157,6 @@ SECTIONS
 		*(.machine.desc)
 		__machine_desc_end = . ;
 	}
-#ifdef CONFIG_RELOCATABLE
-	. = ALIGN(8);
-	.dynsym : AT(ADDR(.dynsym) - LOAD_OFFSET) { *(.dynsym) }
-	.dynstr : AT(ADDR(.dynstr) - LOAD_OFFSET) { *(.dynstr) }
-	.dynamic : AT(ADDR(.dynamic) - LOAD_OFFSET)
-	{
-		__dynamic_start = .;
-		*(.dynamic)
-	}
-	.hash : AT(ADDR(.hash) - LOAD_OFFSET) { *(.hash) }
-	.interp : AT(ADDR(.interp) - LOAD_OFFSET) { *(.interp) }
-	.rela.dyn : AT(ADDR(.rela.dyn) - LOAD_OFFSET)
-	{
-		__rela_dyn_start = .;
-		*(.rela*)
-	}
-#endif
 
 	/* freed after init ends here */
 	. = ALIGN(PAGE_SIZE);

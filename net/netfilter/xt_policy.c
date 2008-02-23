@@ -26,9 +26,9 @@ xt_addr_cmp(const union nf_inet_addr *a1, const union nf_inet_addr *m,
 	    const union nf_inet_addr *a2, unsigned short family)
 {
 	switch (family) {
-	case NFPROTO_IPV4:
+	case AF_INET:
 		return ((a1->ip ^ a2->ip) & m->ip) == 0;
-	case NFPROTO_IPV6:
+	case AF_INET6:
 		return ipv6_masked_addr_cmp(&a1->in6, &m->in6, &a2->in6) == 0;
 	}
 	return false;
@@ -110,15 +110,18 @@ match_policy_out(const struct sk_buff *skb, const struct xt_policy_info *info,
 }
 
 static bool
-policy_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+policy_mt(const struct sk_buff *skb, const struct net_device *in,
+          const struct net_device *out, const struct xt_match *match,
+          const void *matchinfo, int offset, unsigned int protoff,
+          bool *hotdrop)
 {
-	const struct xt_policy_info *info = par->matchinfo;
+	const struct xt_policy_info *info = matchinfo;
 	int ret;
 
 	if (info->flags & XT_POLICY_MATCH_IN)
-		ret = match_policy_in(skb, info, par->match->family);
+		ret = match_policy_in(skb, info, match->family);
 	else
-		ret = match_policy_out(skb, info, par->match->family);
+		ret = match_policy_out(skb, info, match->family);
 
 	if (ret < 0)
 		ret = info->flags & XT_POLICY_MATCH_NONE ? true : false;
@@ -128,23 +131,26 @@ policy_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 	return ret;
 }
 
-static bool policy_mt_check(const struct xt_mtchk_param *par)
+static bool
+policy_mt_check(const char *tablename, const void *ip_void,
+                const struct xt_match *match, void *matchinfo,
+                unsigned int hook_mask)
 {
-	const struct xt_policy_info *info = par->matchinfo;
+	const struct xt_policy_info *info = matchinfo;
 
 	if (!(info->flags & (XT_POLICY_MATCH_IN|XT_POLICY_MATCH_OUT))) {
 		printk(KERN_ERR "xt_policy: neither incoming nor "
 				"outgoing policy selected\n");
 		return false;
 	}
-	if (par->hook_mask & ((1 << NF_INET_PRE_ROUTING) |
-	    (1 << NF_INET_LOCAL_IN)) && info->flags & XT_POLICY_MATCH_OUT) {
+	if (hook_mask & (1 << NF_INET_PRE_ROUTING | 1 << NF_INET_LOCAL_IN)
+	    && info->flags & XT_POLICY_MATCH_OUT) {
 		printk(KERN_ERR "xt_policy: output policy not valid in "
 				"PRE_ROUTING and INPUT\n");
 		return false;
 	}
-	if (par->hook_mask & ((1 << NF_INET_POST_ROUTING) |
-	    (1 << NF_INET_LOCAL_OUT)) && info->flags & XT_POLICY_MATCH_IN) {
+	if (hook_mask & (1 << NF_INET_POST_ROUTING | 1 << NF_INET_LOCAL_OUT)
+	    && info->flags & XT_POLICY_MATCH_IN) {
 		printk(KERN_ERR "xt_policy: input policy not valid in "
 				"POST_ROUTING and OUTPUT\n");
 		return false;
@@ -159,7 +165,7 @@ static bool policy_mt_check(const struct xt_mtchk_param *par)
 static struct xt_match policy_mt_reg[] __read_mostly = {
 	{
 		.name		= "policy",
-		.family		= NFPROTO_IPV4,
+		.family		= AF_INET,
 		.checkentry 	= policy_mt_check,
 		.match		= policy_mt,
 		.matchsize	= sizeof(struct xt_policy_info),
@@ -167,7 +173,7 @@ static struct xt_match policy_mt_reg[] __read_mostly = {
 	},
 	{
 		.name		= "policy",
-		.family		= NFPROTO_IPV6,
+		.family		= AF_INET6,
 		.checkentry	= policy_mt_check,
 		.match		= policy_mt,
 		.matchsize	= sizeof(struct xt_policy_info),

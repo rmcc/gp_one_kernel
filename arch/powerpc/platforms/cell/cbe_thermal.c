@@ -97,8 +97,7 @@ static u8 spu_read_register_value(struct sys_device *sysdev, union spe_reg __iom
 	return value.spe[spu->spe_id];
 }
 
-static ssize_t spu_show_temp(struct sys_device *sysdev, struct sysdev_attribute *attr,
-			char *buf)
+static ssize_t spu_show_temp(struct sys_device *sysdev, char *buf)
 {
 	u8 value;
 	struct cbe_pmd_regs __iomem *pmd_regs;
@@ -147,38 +146,32 @@ static ssize_t store_throttle(struct cbe_pmd_regs __iomem *pmd_regs, const char 
 	return size;
 }
 
-static ssize_t spu_show_throttle_end(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t spu_show_throttle_end(struct sys_device *sysdev, char *buf)
 {
 	return show_throttle(get_pmd_regs(sysdev), buf, 0);
 }
 
-static ssize_t spu_show_throttle_begin(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t spu_show_throttle_begin(struct sys_device *sysdev, char *buf)
 {
 	return show_throttle(get_pmd_regs(sysdev), buf, 8);
 }
 
-static ssize_t spu_show_throttle_full_stop(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t spu_show_throttle_full_stop(struct sys_device *sysdev, char *buf)
 {
 	return show_throttle(get_pmd_regs(sysdev), buf, 16);
 }
 
-static ssize_t spu_store_throttle_end(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, const char *buf, size_t size)
+static ssize_t spu_store_throttle_end(struct sys_device *sysdev, const char *buf, size_t size)
 {
 	return store_throttle(get_pmd_regs(sysdev), buf, size, 0);
 }
 
-static ssize_t spu_store_throttle_begin(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, const char *buf, size_t size)
+static ssize_t spu_store_throttle_begin(struct sys_device *sysdev, const char *buf, size_t size)
 {
 	return store_throttle(get_pmd_regs(sysdev), buf, size, 8);
 }
 
-static ssize_t spu_store_throttle_full_stop(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, const char *buf, size_t size)
+static ssize_t spu_store_throttle_full_stop(struct sys_device *sysdev, const char *buf, size_t size)
 {
 	return store_throttle(get_pmd_regs(sysdev), buf, size, 16);
 }
@@ -199,51 +192,43 @@ static ssize_t ppe_show_temp(struct sys_device *sysdev, char *buf, int pos)
 
 /* shows the temperature of the DTS on the PPE,
  * located near the linear thermal sensor */
-static ssize_t ppe_show_temp0(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t ppe_show_temp0(struct sys_device *sysdev, char *buf)
 {
 	return ppe_show_temp(sysdev, buf, 32);
 }
 
 /* shows the temperature of the second DTS on the PPE */
-static ssize_t ppe_show_temp1(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t ppe_show_temp1(struct sys_device *sysdev, char *buf)
 {
 	return ppe_show_temp(sysdev, buf, 0);
 }
 
-static ssize_t ppe_show_throttle_end(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t ppe_show_throttle_end(struct sys_device *sysdev, char *buf)
 {
 	return show_throttle(cbe_get_cpu_pmd_regs(sysdev->id), buf, 32);
 }
 
-static ssize_t ppe_show_throttle_begin(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t ppe_show_throttle_begin(struct sys_device *sysdev, char *buf)
 {
 	return show_throttle(cbe_get_cpu_pmd_regs(sysdev->id), buf, 40);
 }
 
-static ssize_t ppe_show_throttle_full_stop(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t ppe_show_throttle_full_stop(struct sys_device *sysdev, char *buf)
 {
 	return show_throttle(cbe_get_cpu_pmd_regs(sysdev->id), buf, 48);
 }
 
-static ssize_t ppe_store_throttle_end(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, const char *buf, size_t size)
+static ssize_t ppe_store_throttle_end(struct sys_device *sysdev, const char *buf, size_t size)
 {
 	return store_throttle(cbe_get_cpu_pmd_regs(sysdev->id), buf, size, 32);
 }
 
-static ssize_t ppe_store_throttle_begin(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, const char *buf, size_t size)
+static ssize_t ppe_store_throttle_begin(struct sys_device *sysdev, const char *buf, size_t size)
 {
 	return store_throttle(cbe_get_cpu_pmd_regs(sysdev->id), buf, size, 40);
 }
 
-static ssize_t ppe_store_throttle_full_stop(struct sys_device *sysdev,
-			struct sysdev_attribute *attr, const char *buf, size_t size)
+static ssize_t ppe_store_throttle_full_stop(struct sys_device *sysdev, const char *buf, size_t size)
 {
 	return store_throttle(cbe_get_cpu_pmd_regs(sysdev->id), buf, size, 48);
 }

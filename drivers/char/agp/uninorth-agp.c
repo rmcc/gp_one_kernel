@@ -27,7 +27,7 @@
 static int uninorth_rev;
 static int is_u3;
 
-static char *aperture = NULL;
+static char __devinitdata *aperture = NULL;
 
 static int uninorth_fetch_size(void)
 {
@@ -46,8 +46,8 @@ static int uninorth_fetch_size(void)
 				break;
 
 		if (i == agp_bridge->driver->num_aperture_sizes) {
-			dev_err(&agp_bridge->dev->dev, "invalid aperture size, "
-				"using default\n");
+			printk(KERN_ERR PFX "Invalid aperture size, using"
+			       " default\n");
 			size = 0;
 			aperture = NULL;
 		}
@@ -108,8 +108,8 @@ static int uninorth_configure(void)
 
 	current_size = A_SIZE_32(agp_bridge->current_size);
 
-	dev_info(&agp_bridge->dev->dev, "configuring for size idx: %d\n",
-		 current_size->size_value);
+	printk(KERN_INFO PFX "configuring for size idx: %d\n",
+	       current_size->size_value);
 
 	/* aperture size and gatt addr */
 	pci_write_config_dword(agp_bridge->dev,
@@ -197,9 +197,8 @@ static int u3_insert_memory(struct agp_memory *mem, off_t pg_start, int type)
 	gp = (u32 *) &agp_bridge->gatt_table[pg_start];
 	for (i = 0; i < mem->page_count; ++i) {
 		if (gp[i]) {
-			dev_info(&agp_bridge->dev->dev,
-				 "u3_insert_memory: entry 0x%x occupied (%x)\n",
-				 i, gp[i]);
+			printk("u3_insert_memory: entry 0x%x occupied (%x)\n",
+			       i, gp[i]);
 			return -EBUSY;
 		}
 	}
@@ -277,15 +276,15 @@ static void uninorth_agp_enable(struct agp_bridge_data *bridge, u32 mode)
 				       &scratch);
 	} while ((scratch & PCI_AGP_COMMAND_AGP) == 0 && ++timeout < 1000);
 	if ((scratch & PCI_AGP_COMMAND_AGP) == 0)
-		dev_err(&bridge->dev->dev, "can't write UniNorth AGP "
-			"command register\n");
+		printk(KERN_ERR PFX "failed to write UniNorth AGP"
+		       " command register\n");
 
 	if (uninorth_rev >= 0x30) {
 		/* This is an AGP V3 */
-		agp_device_command(command, (status & AGPSTAT_MODE_3_0) != 0);
+		agp_device_command(command, (status & AGPSTAT_MODE_3_0));
 	} else {
 		/* AGP V2 */
-		agp_device_command(command, false);
+		agp_device_command(command, 0);
 	}
 
 	uninorth_tlbflush(NULL);
@@ -331,8 +330,8 @@ static int agp_uninorth_suspend(struct pci_dev *pdev)
 		pci_read_config_dword(device, agp + PCI_AGP_COMMAND, &cmd);
 		if (!(cmd & PCI_AGP_COMMAND_AGP))
 			continue;
-		dev_info(&pdev->dev, "disabling AGP on device %s\n",
-			 pci_name(device));
+		printk("uninorth-agp: disabling AGP on device %s\n",
+				pci_name(device));
 		cmd &= ~PCI_AGP_COMMAND_AGP;
 		pci_write_config_dword(device, agp + PCI_AGP_COMMAND, cmd);
 	}
@@ -342,7 +341,8 @@ static int agp_uninorth_suspend(struct pci_dev *pdev)
 	pci_read_config_dword(pdev, agp + PCI_AGP_COMMAND, &cmd);
 	bridge->dev_private_data = (void *)(long)cmd;
 	if (cmd & PCI_AGP_COMMAND_AGP) {
-		dev_info(&pdev->dev, "disabling AGP on bridge\n");
+		printk("uninorth-agp: disabling AGP on bridge %s\n",
+				pci_name(pdev));
 		cmd &= ~PCI_AGP_COMMAND_AGP;
 		pci_write_config_dword(pdev, agp + PCI_AGP_COMMAND, cmd);
 	}
@@ -509,11 +509,9 @@ const struct agp_bridge_driver uninorth_agp_driver = {
 	.alloc_by_type		= agp_generic_alloc_by_type,
 	.free_by_type		= agp_generic_free_by_type,
 	.agp_alloc_page		= agp_generic_alloc_page,
-	.agp_alloc_pages	= agp_generic_alloc_pages,
 	.agp_destroy_page	= agp_generic_destroy_page,
-	.agp_destroy_pages	= agp_generic_destroy_pages,
 	.agp_type_to_mask_type  = agp_generic_type_to_mask_type,
-	.cant_use_aperture	= true,
+	.cant_use_aperture	= 1,
 };
 
 const struct agp_bridge_driver u3_agp_driver = {
@@ -536,12 +534,10 @@ const struct agp_bridge_driver u3_agp_driver = {
 	.alloc_by_type		= agp_generic_alloc_by_type,
 	.free_by_type		= agp_generic_free_by_type,
 	.agp_alloc_page		= agp_generic_alloc_page,
-	.agp_alloc_pages	= agp_generic_alloc_pages,
 	.agp_destroy_page	= agp_generic_destroy_page,
-	.agp_destroy_pages	= agp_generic_destroy_pages,
 	.agp_type_to_mask_type  = agp_generic_type_to_mask_type,
-	.cant_use_aperture	= true,
-	.needs_scratch_page	= true,
+	.cant_use_aperture	= 1,
+	.needs_scratch_page	= 1,
 };
 
 static struct agp_device_ids uninorth_agp_device_ids[] __devinitdata = {
@@ -595,14 +591,14 @@ static int __devinit agp_uninorth_probe(struct pci_dev *pdev,
 	/* probe for known chipsets */
 	for (j = 0; devs[j].chipset_name != NULL; ++j) {
 		if (pdev->device == devs[j].device_id) {
-			dev_info(&pdev->dev, "Apple %s chipset\n",
-				 devs[j].chipset_name);
+			printk(KERN_INFO PFX "Detected Apple %s chipset\n",
+			       devs[j].chipset_name);
 			goto found;
 		}
 	}
 
-	dev_err(&pdev->dev, "unsupported Apple chipset [%04x/%04x]\n",
-		pdev->vendor, pdev->device);
+	printk(KERN_ERR PFX "Unsupported Apple chipset (device id: %04x).\n",
+		pdev->device);
 	return -ENODEV;
 
  found:

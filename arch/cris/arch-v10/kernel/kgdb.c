@@ -176,7 +176,7 @@
 #include <asm/setup.h>
 #include <asm/ptrace.h>
 
-#include <arch/svinto.h>
+#include <asm/arch/svinto.h>
 #include <asm/irq.h>
 
 static int kgdb_started = 0;
@@ -278,6 +278,14 @@ void putDebugChar (int val);
 
 void enableDebugIRQ (void);
 
+/* Returns the character equivalent of a nibble, bit 7, 6, 5, and 4 of a byte,
+   represented by int x. */
+static char highhex (int x);
+
+/* Returns the character equivalent of a nibble, bit 3, 2, 1, and 0 of a byte,
+   represented by int x. */
+static char lowhex (int x);
+
 /* Returns the integer equivalent of a hexadecimal character. */
 static int hex (char ch);
 
@@ -347,6 +355,9 @@ extern unsigned char executing_task;
 
 /* Run-length encoding maximum length. Send 64 at most. */
 #define RUNLENMAX 64
+
+/* Definition of all valid hexadecimal characters */
+static const char hexchars[] = "0123456789abcdef";
 
 /* The inbound/outbound buffers used in packet I/O */
 static char remcomInBuffer[BUFMAX];
@@ -488,8 +499,8 @@ gdb_cris_strtol (const char *s, char **endptr, int base)
 	char *sd;
 	int x = 0;
 	
-	for (s1 = (char*)s; (sd = gdb_cris_memchr(hex_asc, *s1, base)) != NULL; ++s1)
-		x = x * base + (sd - hex_asc);
+	for (s1 = (char*)s; (sd = gdb_cris_memchr(hexchars, *s1, base)) != NULL; ++s1)
+		x = x * base + (sd - hexchars);
         
         if (endptr)
         {
@@ -659,6 +670,22 @@ read_register (char regno, unsigned int *valptr)
 }
 
 /********************************** Packet I/O ******************************/
+/* Returns the character equivalent of a nibble, bit 7, 6, 5, and 4 of a byte,
+   represented by int x. */
+static inline char
+highhex(int x)
+{
+	return hexchars[(x >> 4) & 0xf];
+}
+
+/* Returns the character equivalent of a nibble, bit 3, 2, 1, and 0 of a byte,
+   represented by int x. */
+static inline char
+lowhex(int x)
+{
+	return hexchars[x & 0xf];
+}
+
 /* Returns the integer equivalent of a hexadecimal character. */
 static int
 hex (char ch)
@@ -694,7 +721,8 @@ mem2hex(char *buf, unsigned char *mem, int count)
                 /* Valid mem address. */
                 for (i = 0; i < count; i++) {
                         ch = *mem++;
-			buf = pack_hex_byte(buf, ch);
+                        *buf++ = highhex (ch);
+                        *buf++ = lowhex (ch);
                 }
         }
         
@@ -829,9 +857,9 @@ putpacket(char *buffer)
 				src++;
 			}
 		}
-		putDebugChar('#');
-		putDebugChar(hex_asc_hi(checksum));
-		putDebugChar(hex_asc_lo(checksum));
+		putDebugChar ('#');
+		putDebugChar (highhex (checksum));
+		putDebugChar (lowhex (checksum));
 	} while(kgdb_started && (getDebugChar() != '+'));
 }
 
@@ -867,8 +895,9 @@ stub_is_stopped(int sigval)
         
 	/* Send trap type (converted to signal) */
 
-	*ptr++ = 'T';
-	ptr = pack_hex_byte(ptr, sigval);
+	*ptr++ = 'T';	
+	*ptr++ = highhex (sigval);
+	*ptr++ = lowhex (sigval);
 
 	/* Send register contents. We probably only need to send the
 	 * PC, frame pointer and stack pointer here. Other registers will be
@@ -881,7 +910,9 @@ stub_is_stopped(int sigval)
                 status = read_register (regno, &reg_cont);
                 
 		if (status == SUCCESS) {
-			ptr = pack_hex_byte(ptr, regno);
+                        
+                        *ptr++ = highhex (regno);
+                        *ptr++ = lowhex (regno);
                         *ptr++ = ':';
 
                         ptr = mem2hex(ptr, (unsigned char *)&reg_cont,
@@ -906,8 +937,8 @@ stub_is_stopped(int sigval)
 	/* Store thread:r...; with the executing task TID. */
 	gdb_cris_strcpy (&remcomOutBuffer[pos], "thread:");
 	pos += gdb_cris_strlen ("thread:");
-	remcomOutBuffer[pos++] = hex_asc_hi(executing_task);
-	remcomOutBuffer[pos++] = hex_asc_lo(executing_task);
+	remcomOutBuffer[pos++] = highhex (executing_task);
+	remcomOutBuffer[pos++] = lowhex (executing_task);
 	gdb_cris_strcpy (&remcomOutBuffer[pos], ";");
 #endif
 
@@ -1095,8 +1126,8 @@ handle_exception (int sigval)
 				   Success: SAA, where AA is the signal number.
 				   Failure: void. */
 				remcomOutBuffer[0] = 'S';
-				remcomOutBuffer[1] = hex_asc_hi(sigval);
-				remcomOutBuffer[2] = hex_asc_lo(sigval);
+				remcomOutBuffer[1] = highhex (sigval);
+				remcomOutBuffer[2] = lowhex (sigval);
 				remcomOutBuffer[3] = 0;
 				break;
 				
@@ -1193,23 +1224,23 @@ handle_exception (int sigval)
 						case 'C':
 							/* Identify the remote current thread. */
 							gdb_cris_strcpy (&remcomOutBuffer[0], "QC");
-							remcomOutBuffer[2] = hex_asc_hi(current_thread_c);
-							remcomOutBuffer[3] = hex_asc_lo(current_thread_c);
+							remcomOutBuffer[2] = highhex (current_thread_c);
+							remcomOutBuffer[3] = lowhex (current_thread_c);
 							remcomOutBuffer[4] = '\0';
 							break;
 						case 'L':
 							gdb_cris_strcpy (&remcomOutBuffer[0], "QM");
 							/* Reply with number of threads. */
 							if (os_is_started()) {
-								remcomOutBuffer[2] = hex_asc_hi(number_of_tasks);
-								remcomOutBuffer[3] = hex_asc_lo(number_of_tasks);
+								remcomOutBuffer[2] = highhex (number_of_tasks);
+								remcomOutBuffer[3] = lowhex (number_of_tasks);
 							}
 							else {
-								remcomOutBuffer[2] = hex_asc_hi(0);
-								remcomOutBuffer[3] = hex_asc_lo(1);
+								remcomOutBuffer[2] = highhex (0);
+								remcomOutBuffer[3] = lowhex (1);
 							}
 							/* Done with the reply. */
-							remcomOutBuffer[4] = hex_asc_lo(1);
+							remcomOutBuffer[4] = lowhex (1);
 							pos = 5;
 							/* Expects the argument thread id. */
 							for (; pos < (5 + HEXCHARS_IN_THREAD_ID); pos++)
@@ -1220,16 +1251,16 @@ handle_exception (int sigval)
 								for (thread_id = 0; thread_id < number_of_tasks; thread_id++) {
 									nextpos = pos + HEXCHARS_IN_THREAD_ID - 1;
 									for (; pos < nextpos; pos ++)
-										remcomOutBuffer[pos] = hex_asc_lo(0);
-									remcomOutBuffer[pos++] = hex_asc_lo(thread_id);
+										remcomOutBuffer[pos] = lowhex (0);
+									remcomOutBuffer[pos++] = lowhex (thread_id);
 								}
 							}
 							else {
 								/* Store the thread identifier of the boot task. */
 								nextpos = pos + HEXCHARS_IN_THREAD_ID - 1;
 								for (; pos < nextpos; pos ++)
-									remcomOutBuffer[pos] = hex_asc_lo(0);
-								remcomOutBuffer[pos++] = hex_asc_lo(current_thread_c);
+									remcomOutBuffer[pos] = lowhex (0);
+								remcomOutBuffer[pos++] = lowhex (current_thread_c);
 							}
 							remcomOutBuffer[pos] = '\0';
 							break;

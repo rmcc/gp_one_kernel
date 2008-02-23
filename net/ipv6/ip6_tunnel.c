@@ -6,6 +6,8 @@
  *	Ville Nuorvala		<vnuorval@tcs.hut.fi>
  *	Yasuyuki Kozakai	<kozakai@linux-ipv6.org>
  *
+ *	$Id$
+ *
  *      Based on:
  *      linux/net/ipv6/sit.c and linux/net/ipv4/ipip.c
  *
@@ -74,8 +76,8 @@ MODULE_LICENSE("GPL");
 		     (addr)->s6_addr32[2] ^ (addr)->s6_addr32[3]) & \
 		    (HASH_SIZE - 1))
 
-static void ip6_fb_tnl_dev_init(struct net_device *dev);
-static void ip6_tnl_dev_init(struct net_device *dev);
+static int ip6_fb_tnl_dev_init(struct net_device *dev);
+static int ip6_tnl_dev_init(struct net_device *dev);
 static void ip6_tnl_dev_setup(struct net_device *dev);
 
 static int ip6_tnl_net_id;
@@ -249,7 +251,7 @@ static struct ip6_tnl *ip6_tnl_create(struct net *net, struct ip6_tnl_parm *p)
 	}
 
 	t = netdev_priv(dev);
-	ip6_tnl_dev_init(dev);
+	dev->init = ip6_tnl_dev_init;
 	t->parms = *p;
 
 	if ((err = register_netdevice(dev)) < 0)
@@ -709,7 +711,7 @@ static int ip6_tnl_rcv(struct sk_buff *skb, __u16 protocol,
 		}
 
 		if (!ip6_tnl_rcv_ctl(t)) {
-			t->dev->stats.rx_dropped++;
+			t->stat.rx_dropped++;
 			read_unlock(&ip6_tnl_lock);
 			goto discard;
 		}
@@ -726,8 +728,8 @@ static int ip6_tnl_rcv(struct sk_buff *skb, __u16 protocol,
 
 		dscp_ecn_decapsulate(t, ipv6h, skb);
 
-		t->dev->stats.rx_packets++;
-		t->dev->stats.rx_bytes += skb->len;
+		t->stat.rx_packets++;
+		t->stat.rx_bytes += skb->len;
 		netif_rx(skb);
 		read_unlock(&ip6_tnl_lock);
 		return 0;
@@ -846,9 +848,8 @@ static int ip6_tnl_xmit2(struct sk_buff *skb,
 			 int encap_limit,
 			 __u32 *pmtu)
 {
-	struct net *net = dev_net(dev);
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct net_device_stats *stats = &t->dev->stats;
+	struct net_device_stats *stats = &t->stat;
 	struct ipv6hdr *ipv6h = ipv6_hdr(skb);
 	struct ipv6_tel_txoption opt;
 	struct dst_entry *dst;
@@ -862,9 +863,9 @@ static int ip6_tnl_xmit2(struct sk_buff *skb,
 	if ((dst = ip6_tnl_dst_check(t)) != NULL)
 		dst_hold(dst);
 	else {
-		dst = ip6_route_output(net, NULL, fl);
+		dst = ip6_route_output(dev_net(dev), NULL, fl);
 
-		if (dst->error || xfrm_lookup(net, &dst, fl, NULL, 0) < 0)
+		if (dst->error || xfrm_lookup(&dst, fl, NULL, 0) < 0)
 			goto tx_err_link_failure;
 	}
 
@@ -1042,19 +1043,19 @@ static int
 ip6_tnl_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct net_device_stats *stats = &t->dev->stats;
+	struct net_device_stats *stats = &t->stat;
 	int ret;
 
 	if (t->recursion++) {
-		stats->collisions++;
+		t->stat.collisions++;
 		goto tx_err;
 	}
 
 	switch (skb->protocol) {
-	case htons(ETH_P_IP):
+	case __constant_htons(ETH_P_IP):
 		ret = ip4ip6_tnl_xmit(skb, dev);
 		break;
-	case htons(ETH_P_IPV6):
+	case __constant_htons(ETH_P_IPV6):
 		ret = ip6ip6_tnl_xmit(skb, dev);
 		break;
 	default:
@@ -1151,6 +1152,7 @@ static void ip6_tnl_link_config(struct ip6_tnl *t)
  * ip6_tnl_change - update the tunnel parameters
  *   @t: tunnel to be changed
  *   @p: tunnel configuration parameters
+ *   @active: != 0 if tunnel is ready for use
  *
  * Description:
  *   ip6_tnl_change() updates the tunnel parameters
@@ -1287,6 +1289,19 @@ ip6_tnl_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 
 /**
+ * ip6_tnl_get_stats - return the stats for tunnel device
+ *   @dev: virtual device associated with tunnel
+ *
+ * Return: stats for device
+ **/
+
+static struct net_device_stats *
+ip6_tnl_get_stats(struct net_device *dev)
+{
+	return &(((struct ip6_tnl *)netdev_priv(dev))->stat);
+}
+
+/**
  * ip6_tnl_change_mtu - change mtu manually for tunnel device
  *   @dev: virtual device associated with tunnel
  *   @new_mtu: the new mtu
@@ -1306,14 +1321,6 @@ ip6_tnl_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-
-static const struct net_device_ops ip6_tnl_netdev_ops = {
-	.ndo_uninit = ip6_tnl_dev_uninit,
-	.ndo_start_xmit = ip6_tnl_xmit,
-	.ndo_do_ioctl = ip6_tnl_ioctl,
-	.ndo_change_mtu = ip6_tnl_change_mtu,
-};
-
 /**
  * ip6_tnl_dev_setup - setup virtual tunnel device
  *   @dev: virtual device associated with tunnel
@@ -1324,8 +1331,12 @@ static const struct net_device_ops ip6_tnl_netdev_ops = {
 
 static void ip6_tnl_dev_setup(struct net_device *dev)
 {
-	dev->netdev_ops = &ip6_tnl_netdev_ops;
+	dev->uninit = ip6_tnl_dev_uninit;
 	dev->destructor = free_netdev;
+	dev->hard_start_xmit = ip6_tnl_xmit;
+	dev->get_stats = ip6_tnl_get_stats;
+	dev->do_ioctl = ip6_tnl_ioctl;
+	dev->change_mtu = ip6_tnl_change_mtu;
 
 	dev->type = ARPHRD_TUNNEL6;
 	dev->hard_header_len = LL_MAX_HEADER + sizeof (struct ipv6hdr);
@@ -1354,11 +1365,13 @@ ip6_tnl_dev_init_gen(struct net_device *dev)
  *   @dev: virtual device associated with tunnel
  **/
 
-static void ip6_tnl_dev_init(struct net_device *dev)
+static int
+ip6_tnl_dev_init(struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
 	ip6_tnl_dev_init_gen(dev);
 	ip6_tnl_link_config(t);
+	return 0;
 }
 
 /**
@@ -1368,7 +1381,8 @@ static void ip6_tnl_dev_init(struct net_device *dev)
  * Return: 0
  **/
 
-static void ip6_fb_tnl_dev_init(struct net_device *dev)
+static int
+ip6_fb_tnl_dev_init(struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
 	struct net *net = dev_net(dev);
@@ -1378,6 +1392,7 @@ static void ip6_fb_tnl_dev_init(struct net_device *dev)
 	t->parms.proto = IPPROTO_IPV6;
 	dev_hold(dev);
 	ip6n->tnls_wc[0] = t;
+	return 0;
 }
 
 static struct xfrm6_tunnel ip4ip6_handler = {
@@ -1429,9 +1444,9 @@ static int ip6_tnl_init_net(struct net *net)
 
 	if (!ip6n->fb_tnl_dev)
 		goto err_alloc_dev;
-	dev_net_set(ip6n->fb_tnl_dev, net);
 
-	ip6_fb_tnl_dev_init(ip6n->fb_tnl_dev);
+	ip6n->fb_tnl_dev->init = ip6_fb_tnl_dev_init;
+	dev_net_set(ip6n->fb_tnl_dev, net);
 
 	err = register_netdev(ip6n->fb_tnl_dev);
 	if (err < 0)

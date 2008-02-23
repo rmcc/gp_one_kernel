@@ -1,4 +1,6 @@
 /*
+ * $Id: a3d.c,v 1.21 2002/01/22 20:11:50 vojtech Exp $
+ *
  *  Copyright (c) 1998-2001 Vojtech Pavlik
  */
 
@@ -414,7 +416,8 @@ static struct gameport_driver a3d_drv = {
 
 static int __init a3d_init(void)
 {
-	return gameport_register_driver(&a3d_drv);
+	gameport_register_driver(&a3d_drv);
+	return 0;
 }
 
 static void __exit a3d_exit(void)

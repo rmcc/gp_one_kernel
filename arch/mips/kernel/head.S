@@ -22,7 +22,6 @@
 #include <asm/irqflags.h>
 #include <asm/regdef.h>
 #include <asm/page.h>
-#include <asm/pgtable-bits.h>
 #include <asm/mipsregs.h>
 #include <asm/stackframe.h>
 

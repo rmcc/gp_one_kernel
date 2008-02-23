@@ -32,16 +32,11 @@ struct files_stat_struct files_stat = {
 /* public. Not pretty! */
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(files_lock);
 
-/* SLAB cache for file structures */
-static struct kmem_cache *filp_cachep __read_mostly;
-
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
 
 static inline void file_free_rcu(struct rcu_head *head)
 {
-	struct file *f = container_of(head, struct file, f_u.fu_rcuhead);
-
-	put_cred(f->f_cred);
+	struct file *f =  container_of(head, struct file, f_u.fu_rcuhead);
 	kmem_cache_free(filp_cachep, f);
 }
 
@@ -99,7 +94,7 @@ int proc_nr_files(ctl_table *table, int write, struct file *filp,
  */
 struct file *get_empty_filp(void)
 {
-	const struct cred *cred = current_cred();
+	struct task_struct *tsk;
 	static int old_max;
 	struct file * f;
 
@@ -123,10 +118,12 @@ struct file *get_empty_filp(void)
 	if (security_file_alloc(f))
 		goto fail_sec;
 
+	tsk = current;
 	INIT_LIST_HEAD(&f->f_u.fu_list);
-	atomic_long_set(&f->f_count, 1);
+	atomic_set(&f->f_count, 1);
 	rwlock_init(&f->f_owner.lock);
-	f->f_cred = get_cred(cred);
+	f->f_uid = tsk->fsuid;
+	f->f_gid = tsk->fsgid;
 	eventpoll_init_file(f);
 	/* f->f_version: 0 */
 	return f;
@@ -164,7 +161,7 @@ EXPORT_SYMBOL(get_empty_filp);
  * code should be moved into this function.
  */
 struct file *alloc_file(struct vfsmount *mnt, struct dentry *dentry,
-		fmode_t mode, const struct file_operations *fop)
+		mode_t mode, const struct file_operations *fop)
 {
 	struct file *file;
 	struct path;
@@ -196,7 +193,7 @@ EXPORT_SYMBOL(alloc_file);
  * of this should be moving to alloc_file().
  */
 int init_file(struct file *file, struct vfsmount *mnt, struct dentry *dentry,
-	   fmode_t mode, const struct file_operations *fop)
+	   mode_t mode, const struct file_operations *fop)
 {
 	int error = 0;
 	file->f_path.dentry = dentry;
@@ -222,7 +219,7 @@ EXPORT_SYMBOL(init_file);
 
 void fput(struct file *file)
 {
-	if (atomic_long_dec_and_test(&file->f_count))
+	if (atomic_dec_and_test(&file->f_count))
 		__fput(file);
 }
 
@@ -272,10 +269,6 @@ void __fput(struct file *file)
 	eventpoll_release(file);
 	locks_remove_flock(file);
 
-	if (unlikely(file->f_flags & FASYNC)) {
-		if (file->f_op && file->f_op->fasync)
-			file->f_op->fasync(-1, file, 0);
-	}
 	if (file->f_op && file->f_op->release)
 		file->f_op->release(inode, file);
 	security_file_free(file);
@@ -301,7 +294,7 @@ struct file *fget(unsigned int fd)
 	rcu_read_lock();
 	file = fcheck_files(files, fd);
 	if (file) {
-		if (!atomic_long_inc_not_zero(&file->f_count)) {
+		if (!atomic_inc_not_zero(&file->f_count)) {
 			/* File object ref couldn't be taken */
 			rcu_read_unlock();
 			return NULL;
@@ -333,7 +326,7 @@ struct file *fget_light(unsigned int fd, int *fput_needed)
 		rcu_read_lock();
 		file = fcheck_files(files, fd);
 		if (file) {
-			if (atomic_long_inc_not_zero(&file->f_count))
+			if (atomic_inc_not_zero(&file->f_count))
 				*fput_needed = 1;
 			else
 				/* Didn't get the reference, someone's freed */
@@ -348,7 +341,7 @@ struct file *fget_light(unsigned int fd, int *fput_needed)
 
 void put_filp(struct file *file)
 {
-	if (atomic_long_dec_and_test(&file->f_count)) {
+	if (atomic_dec_and_test(&file->f_count)) {
 		security_file_free(file);
 		file_kill(file);
 		file_free(file);
@@ -400,12 +393,7 @@ too_bad:
 void __init files_init(unsigned long mempages)
 { 
 	int n; 
-
-	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
-			SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
-
-	/*
-	 * One file with associated inode and dcache is very roughly 1K.
+	/* One file with associated inode and dcache is very roughly 1K. 
 	 * Per default don't use more than 10% of our memory for files. 
 	 */ 
 

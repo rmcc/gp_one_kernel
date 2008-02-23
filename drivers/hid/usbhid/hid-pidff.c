@@ -397,6 +397,7 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 			  effect->u.condition[i].left_saturation);
 		pidff_set(&pidff->set_condition[PID_DEAD_BAND],
 			  effect->u.condition[i].deadband);
+		usbhid_wait_io(pidff->hid);
 		usbhid_submit_report(pidff->hid, pidff->reports[PID_SET_CONDITION],
 				  USB_DIR_OUT);
 	}
@@ -511,6 +512,7 @@ static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n)
 		pidff->effect_operation[PID_LOOP_COUNT].value[0] = n;
 	}
 
+	usbhid_wait_io(pidff->hid);
 	usbhid_submit_report(pidff->hid, pidff->reports[PID_EFFECT_OPERATION],
 			  USB_DIR_OUT);
 }
@@ -546,9 +548,6 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	int pid_id = pidff->pid_id[effect_id];
 
 	debug("starting to erase %d/%d", effect_id, pidff->pid_id[effect_id]);
-	/* Wait for the queue to clear. We do not want a full fifo to
-	   prevent the effect removal. */
-	usbhid_wait_io(pidff->hid);
 	pidff_playback_pid(pidff, pid_id, 0);
 	pidff_erase_pid(pidff, pid_id);
 

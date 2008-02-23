@@ -203,6 +203,7 @@ int xb_read(void *data, unsigned len)
 int xb_init_comms(void)
 {
 	struct xenstore_domain_interface *intf = xen_store_interface;
+	int err;
 
 	if (intf->req_prod != intf->req_cons)
 		printk(KERN_ERR "XENBUS request ring is not quiescent "
@@ -215,20 +216,18 @@ int xb_init_comms(void)
 		intf->rsp_cons = intf->rsp_prod;
 	}
 
-	if (xenbus_irq) {
-		/* Already have an irq; assume we're resuming */
-		rebind_evtchn_irq(xen_store_evtchn, xenbus_irq);
-	} else {
-		int err;
-		err = bind_evtchn_to_irqhandler(xen_store_evtchn, wake_waiting,
-						0, "xenbus", &xb_waitq);
-		if (err <= 0) {
-			printk(KERN_ERR "XENBUS request irq failed %i\n", err);
-			return err;
-		}
+	if (xenbus_irq)
+		unbind_from_irqhandler(xenbus_irq, &xb_waitq);
 
-		xenbus_irq = err;
+	err = bind_evtchn_to_irqhandler(
+		xen_store_evtchn, wake_waiting,
+		0, "xenbus", &xb_waitq);
+	if (err <= 0) {
+		printk(KERN_ERR "XENBUS request irq failed %i\n", err);
+		return err;
 	}
+
+	xenbus_irq = err;
 
 	return 0;
 }

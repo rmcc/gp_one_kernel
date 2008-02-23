@@ -22,7 +22,7 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *****************************************************************************/
 #ifndef __iwl_rf_kill_h__
@@ -31,8 +31,14 @@
 struct iwl_priv;
 
 #include <linux/rfkill.h>
+#include <linux/input.h>
+
 
 #ifdef CONFIG_IWLWIFI_RFKILL
+struct iwl_rfkill_mngr {
+	struct rfkill *rfkill;
+	struct input_dev *input_dev;
+};
 
 void iwl_rfkill_set_hw_state(struct iwl_priv *priv);
 void iwl_rfkill_unregister(struct iwl_priv *priv);

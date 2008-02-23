@@ -1,6 +1,6 @@
 /*
- * A hwmon driver for the IBM System Director Active Energy Manager (AEM)
- * temperature/power/energy sensors and capping functionality.
+ * A hwmon driver for the IBM Active Energy Manager temperature/power sensors
+ * and capping functionality.
  * Copyright (C) 2008 IBM
  *
  * Author: Darrick J. Wong <djwong@us.ibm.com>
@@ -88,11 +88,9 @@
 static DEFINE_IDR(aem_idr);
 static DEFINE_SPINLOCK(aem_idr_lock);
 
-static struct platform_driver aem_driver = {
-	.driver = {
-		.name = DRVNAME,
-		.bus = &platform_bus_type,
-	}
+static struct device_driver aem_driver = {
+	.name = DRVNAME,
+	.bus = &platform_bus_type,
 };
 
 struct aem_ipmi_data {
@@ -191,8 +189,8 @@ static struct aem_iana_id system_x_id = {
 struct aem_find_firmware_req {
 	struct aem_iana_id	id;
 	u8			rsvd;
-	__be16			index;
-	__be16			module_type_id;
+	u16			index;
+	u16			module_type_id;
 } __packed;
 
 struct aem_find_firmware_resp {
@@ -204,7 +202,7 @@ struct aem_find_firmware_resp {
 struct aem_find_instance_req {
 	struct aem_iana_id	id;
 	u8			instance_number;
-	__be16			module_type_id;
+	u16			module_type_id;
 } __packed;
 
 struct aem_find_instance_resp {
@@ -446,17 +444,17 @@ static int aem_read_sensor(struct aem_data *data, u8 elt, u8 reg,
 	}
 	case 2: {
 		u16 *x = buf;
-		*x = be16_to_cpup((__be16 *)rs_resp->bytes);
+		*x = be16_to_cpup((u16 *)rs_resp->bytes);
 		break;
 	}
 	case 4: {
 		u32 *x = buf;
-		*x = be32_to_cpup((__be32 *)rs_resp->bytes);
+		*x = be32_to_cpup((u32 *)rs_resp->bytes);
 		break;
 	}
 	case 8: {
 		u64 *x = buf;
-		*x = be64_to_cpup((__be64 *)rs_resp->bytes);
+		*x = be64_to_cpup((u64 *)rs_resp->bytes);
 		break;
 	}
 	}
@@ -465,18 +463,12 @@ static int aem_read_sensor(struct aem_data *data, u8 elt, u8 reg,
 }
 
 /* Update AEM energy registers */
-static void update_aem_energy_one(struct aem_data *data, int which)
-{
-	aem_read_sensor(data, AEM_ENERGY_ELEMENT, which,
-			&data->energy[which], 8);
-}
-
 static void update_aem_energy(struct aem_data *data)
 {
-	update_aem_energy_one(data, 0);
+	aem_read_sensor(data, AEM_ENERGY_ELEMENT, 0, &data->energy[0], 8);
 	if (data->ver_major < 2)
 		return;
-	update_aem_energy_one(data, 1);
+	aem_read_sensor(data, AEM_ENERGY_ELEMENT, 1, &data->energy[1], 8);
 }
 
 /* Update all AEM1 sensors */
@@ -585,7 +577,7 @@ static int aem_init_aem1_inst(struct aem_ipmi_data *probe, u8 module_handle)
 	data->pdev = platform_device_alloc(DRVNAME, data->id);
 	if (!data->pdev)
 		goto dev_err;
-	data->pdev->dev.driver = &aem_driver.driver;
+	data->pdev->dev.driver = &aem_driver;
 
 	res = platform_device_add(data->pdev);
 	if (res)
@@ -684,8 +676,7 @@ static int aem_find_aem2(struct aem_ipmi_data *data,
 		return -ETIMEDOUT;
 
 	if (data->rx_result || data->rx_msg_len != sizeof(*fi_resp) ||
-	    memcmp(&fi_resp->id, &system_x_id, sizeof(system_x_id)) ||
-	    fi_resp->num_instances <= instance_num)
+	    memcmp(&fi_resp->id, &system_x_id, sizeof(system_x_id)))
 		return -ENOENT;
 
 	return 0;
@@ -718,7 +709,7 @@ static int aem_init_aem2_inst(struct aem_ipmi_data *probe,
 	data->pdev = platform_device_alloc(DRVNAME, data->id);
 	if (!data->pdev)
 		goto dev_err;
-	data->pdev->dev.driver = &aem_driver.driver;
+	data->pdev->dev.driver = &aem_driver;
 
 	res = platform_device_add(data->pdev);
 	if (res)
@@ -858,7 +849,7 @@ static ssize_t aem_show_power(struct device *dev,
 	struct timespec b, a;
 
 	mutex_lock(&data->lock);
-	update_aem_energy_one(data, attr->index);
+	update_aem_energy(data);
 	getnstimeofday(&b);
 	before = data->energy[attr->index];
 
@@ -870,7 +861,7 @@ static ssize_t aem_show_power(struct device *dev,
 		return 0;
 	}
 
-	update_aem_energy_one(data, attr->index);
+	update_aem_energy(data);
 	getnstimeofday(&a);
 	after = data->energy[attr->index];
 	mutex_unlock(&data->lock);
@@ -889,9 +880,7 @@ static ssize_t aem_show_energy(struct device *dev,
 {
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(devattr);
 	struct aem_data *a = dev_get_drvdata(dev);
-	mutex_lock(&a->lock);
-	update_aem_energy_one(a, attr->index);
-	mutex_unlock(&a->lock);
+	a->update(a);
 
 	return sprintf(buf, "%llu\n",
 			(unsigned long long)a->energy[attr->index] * 1000);
@@ -1087,7 +1076,7 @@ static int __init aem_init(void)
 {
 	int res;
 
-	res = driver_register(&aem_driver.driver);
+	res = driver_register(&aem_driver);
 	if (res) {
 		printk(KERN_ERR "Can't register aem driver\n");
 		return res;
@@ -1099,7 +1088,7 @@ static int __init aem_init(void)
 	return 0;
 
 ipmi_reg_err:
-	driver_unregister(&aem_driver.driver);
+	driver_unregister(&aem_driver);
 	return res;
 
 }
@@ -1109,21 +1098,14 @@ static void __exit aem_exit(void)
 	struct aem_data *p1, *next1;
 
 	ipmi_smi_watcher_unregister(&driver_data.bmc_events);
-	driver_unregister(&aem_driver.driver);
+	driver_unregister(&aem_driver);
 	list_for_each_entry_safe(p1, next1, &driver_data.aem_devices, list)
 		aem_delete(p1);
 }
 
 MODULE_AUTHOR("Darrick J. Wong <djwong@us.ibm.com>");
-MODULE_DESCRIPTION("IBM AEM power/temp/energy sensor driver");
+MODULE_DESCRIPTION("IBM Active Energy Manager power/temp sensor driver");
 MODULE_LICENSE("GPL");
 
 module_init(aem_init);
 module_exit(aem_exit);
-
-MODULE_ALIAS("dmi:bvnIBM:*:pnIBMSystemx3350-*");
-MODULE_ALIAS("dmi:bvnIBM:*:pnIBMSystemx3550-*");
-MODULE_ALIAS("dmi:bvnIBM:*:pnIBMSystemx3650-*");
-MODULE_ALIAS("dmi:bvnIBM:*:pnIBMSystemx3655-*");
-MODULE_ALIAS("dmi:bvnIBM:*:pnIBMSystemx3755-*");
-MODULE_ALIAS("dmi:bvnIBM:*:pnIBM3850M2/x3950M2-*");

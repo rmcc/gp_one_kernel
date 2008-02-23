@@ -167,7 +167,6 @@ static int openpromfs_readdir(struct file *, void *, filldir_t);
 static const struct file_operations openprom_operations = {
 	.read		= generic_read_dir,
 	.readdir	= openpromfs_readdir,
-	.llseek		= generic_file_llseek,
 };
 
 static struct dentry *openpromfs_lookup(struct inode *, struct dentry *, struct nameidata *);
@@ -255,6 +254,9 @@ found:
 		inode->i_size = ent_oi->u.prop->length;
 		break;
 	}
+
+	inode->i_gid = 0;
+	inode->i_uid = 0;
 
 	d_add(dentry, inode);
 	return NULL;
@@ -428,7 +430,7 @@ static struct file_system_type openprom_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 
-static void op_inode_init_once(void *data)
+static void op_inode_init_once(struct kmem_cache * cachep, void *data)
 {
 	struct op_inode_info *oi = (struct op_inode_info *) data;
 

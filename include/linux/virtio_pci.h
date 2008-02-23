@@ -9,8 +9,9 @@
  * Authors:
  *  Anthony Liguori  <aliguori@us.ibm.com>
  *
- * This header is BSD licensed so anyone can use the definitions to implement
- * compatible drivers/servers.
+ * This work is licensed under the terms of the GNU GPL, version 2 or later.
+ * See the COPYING file in the top-level directory.
+ *
  */
 
 #ifndef _LINUX_VIRTIO_PCI_H
@@ -53,12 +54,4 @@
 
 /* Virtio ABI version, this must match exactly */
 #define VIRTIO_PCI_ABI_VERSION		0
-
-/* How many bits to shift physical queue address written to QUEUE_PFN.
- * 12 is historical, and due to x86 page size. */
-#define VIRTIO_PCI_QUEUE_ADDR_SHIFT	12
-
-/* The alignment to use between consumer and producer parts of vring.
- * x86 pagesize again. */
-#define VIRTIO_PCI_VRING_ALIGN		4096
 #endif

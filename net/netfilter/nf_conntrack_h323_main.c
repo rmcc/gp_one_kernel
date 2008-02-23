@@ -619,7 +619,6 @@ static const struct nf_conntrack_expect_policy h245_exp_policy = {
 static struct nf_conntrack_helper nf_conntrack_helper_h245 __read_mostly = {
 	.name			= "H.245",
 	.me			= THIS_MODULE,
-	.tuple.src.l3num	= AF_UNSPEC,
 	.tuple.dst.protonum	= IPPROTO_UDP,
 	.help			= h245_help,
 	.expect_policy		= &h245_exp_policy,
@@ -709,8 +708,7 @@ static int expect_h245(struct sk_buff *skb, struct nf_conn *ct,
 /* If the calling party is on the same side of the forward-to party,
  * we don't need to track the second call */
 static int callforward_do_filter(const union nf_inet_addr *src,
-				 const union nf_inet_addr *dst,
-				 u_int8_t family)
+                                 const union nf_inet_addr *dst, int family)
 {
 	const struct nf_afinfo *afinfo;
 	struct flowi fl1, fl2;
@@ -850,8 +848,10 @@ static int process_setup(struct sk_buff *skb, struct nf_conn *ct,
 	    get_h225_addr(ct, *data, &setup->destCallSignalAddress,
 			  &addr, &port) &&
 	    memcmp(&addr, &ct->tuplehash[!dir].tuple.src.u3, sizeof(addr))) {
-		pr_debug("nf_ct_q931: set destCallSignalAddress %pI6:%hu->%pI6:%hu\n",
-			 &addr, ntohs(port), &ct->tuplehash[!dir].tuple.src.u3,
+		pr_debug("nf_ct_q931: set destCallSignalAddress "
+			 NIP6_FMT ":%hu->" NIP6_FMT ":%hu\n",
+			 NIP6(*(struct in6_addr *)&addr), ntohs(port),
+			 NIP6(*(struct in6_addr *)&ct->tuplehash[!dir].tuple.src.u3),
 			 ntohs(ct->tuplehash[!dir].tuple.src.u.tcp.port));
 		ret = set_h225_addr(skb, data, dataoff,
 				    &setup->destCallSignalAddress,
@@ -866,8 +866,10 @@ static int process_setup(struct sk_buff *skb, struct nf_conn *ct,
 	    get_h225_addr(ct, *data, &setup->sourceCallSignalAddress,
 			  &addr, &port) &&
 	    memcmp(&addr, &ct->tuplehash[!dir].tuple.dst.u3, sizeof(addr))) {
-		pr_debug("nf_ct_q931: set sourceCallSignalAddress %pI6:%hu->%pI6:%hu\n",
-			 &addr, ntohs(port), &ct->tuplehash[!dir].tuple.dst.u3,
+		pr_debug("nf_ct_q931: set sourceCallSignalAddress "
+			 NIP6_FMT ":%hu->" NIP6_FMT ":%hu\n",
+			 NIP6(*(struct in6_addr *)&addr), ntohs(port),
+			 NIP6(*(struct in6_addr *)&ct->tuplehash[!dir].tuple.dst.u3),
 			 ntohs(ct->tuplehash[!dir].tuple.dst.u.tcp.port));
 		ret = set_h225_addr(skb, data, dataoff,
 				    &setup->sourceCallSignalAddress,
@@ -1206,7 +1208,6 @@ static struct nf_conntrack_expect *find_expect(struct nf_conn *ct,
 					       union nf_inet_addr *addr,
 					       __be16 port)
 {
-	struct net *net = nf_ct_net(ct);
 	struct nf_conntrack_expect *exp;
 	struct nf_conntrack_tuple tuple;
 
@@ -1216,7 +1217,7 @@ static struct nf_conntrack_expect *find_expect(struct nf_conn *ct,
 	tuple.dst.u.tcp.port = port;
 	tuple.dst.protonum = IPPROTO_TCP;
 
-	exp = __nf_ct_expect_find(net, &tuple);
+	exp = __nf_ct_expect_find(&tuple);
 	if (exp && exp->master == ct)
 		return exp;
 	return NULL;
@@ -1764,7 +1765,6 @@ static void __exit nf_conntrack_h323_fini(void)
 	nf_conntrack_helper_unregister(&nf_conntrack_helper_ras[0]);
 	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931[1]);
 	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931[0]);
-	nf_conntrack_helper_unregister(&nf_conntrack_helper_h245);
 	kfree(h323_buffer);
 	pr_debug("nf_ct_h323: fini\n");
 }
@@ -1777,34 +1777,28 @@ static int __init nf_conntrack_h323_init(void)
 	h323_buffer = kmalloc(65536, GFP_KERNEL);
 	if (!h323_buffer)
 		return -ENOMEM;
-	ret = nf_conntrack_helper_register(&nf_conntrack_helper_h245);
-	if (ret < 0)
-		goto err1;
 	ret = nf_conntrack_helper_register(&nf_conntrack_helper_q931[0]);
 	if (ret < 0)
-		goto err2;
+		goto err1;
 	ret = nf_conntrack_helper_register(&nf_conntrack_helper_q931[1]);
 	if (ret < 0)
-		goto err3;
+		goto err2;
 	ret = nf_conntrack_helper_register(&nf_conntrack_helper_ras[0]);
 	if (ret < 0)
-		goto err4;
+		goto err3;
 	ret = nf_conntrack_helper_register(&nf_conntrack_helper_ras[1]);
 	if (ret < 0)
-		goto err5;
+		goto err4;
 	pr_debug("nf_ct_h323: init success\n");
 	return 0;
 
-err5:
-	nf_conntrack_helper_unregister(&nf_conntrack_helper_ras[0]);
 err4:
-	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931[1]);
+	nf_conntrack_helper_unregister(&nf_conntrack_helper_ras[0]);
 err3:
-	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931[0]);
+	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931[1]);
 err2:
-	nf_conntrack_helper_unregister(&nf_conntrack_helper_h245);
+	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931[0]);
 err1:
-	kfree(h323_buffer);
 	return ret;
 }
 
@@ -1827,4 +1821,3 @@ MODULE_AUTHOR("Jing Min Zhao <zhaojingmin@users.sourceforge.net>");
 MODULE_DESCRIPTION("H.323 connection tracking helper");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("ip_conntrack_h323");
-MODULE_ALIAS_NFCT_HELPER("h323");

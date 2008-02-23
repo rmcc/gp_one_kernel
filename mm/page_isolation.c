@@ -2,6 +2,7 @@
  * linux/mm/page_isolation.c
  */
 
+#include <stddef.h>
 #include <linux/mm.h>
 #include <linux/page-isolation.h>
 #include <linux/pageblock-flags.h>
@@ -114,10 +115,8 @@ __test_page_isolated_in_pageblock(unsigned long pfn, unsigned long end_pfn)
 
 int test_pages_isolated(unsigned long start_pfn, unsigned long end_pfn)
 {
-	unsigned long pfn, flags;
+	unsigned long pfn;
 	struct page *page;
-	struct zone *zone;
-	int ret;
 
 	pfn = start_pfn;
 	/*
@@ -130,13 +129,10 @@ int test_pages_isolated(unsigned long start_pfn, unsigned long end_pfn)
 		if (page && get_pageblock_migratetype(page) != MIGRATE_ISOLATE)
 			break;
 	}
-	page = __first_valid_page(start_pfn, end_pfn - start_pfn);
-	if ((pfn < end_pfn) || !page)
+	if (pfn < end_pfn)
 		return -EBUSY;
 	/* Check all pages are free or Marked as ISOLATED */
-	zone = page_zone(page);
-	spin_lock_irqsave(&zone->lock, flags);
-	ret = __test_page_isolated_in_pageblock(start_pfn, end_pfn);
-	spin_unlock_irqrestore(&zone->lock, flags);
-	return ret ? 0 : -EBUSY;
+	if (__test_page_isolated_in_pageblock(start_pfn, end_pfn))
+		return 0;
+	return -EBUSY;
 }

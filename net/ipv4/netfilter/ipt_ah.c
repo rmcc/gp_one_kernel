@@ -36,23 +36,27 @@ spi_match(u_int32_t min, u_int32_t max, u_int32_t spi, bool invert)
 	return r;
 }
 
-static bool ah_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+static bool
+ah_mt(const struct sk_buff *skb, const struct net_device *in,
+      const struct net_device *out, const struct xt_match *match,
+      const void *matchinfo, int offset, unsigned int protoff, bool *hotdrop)
 {
 	struct ip_auth_hdr _ahdr;
 	const struct ip_auth_hdr *ah;
-	const struct ipt_ah *ahinfo = par->matchinfo;
+	const struct ipt_ah *ahinfo = matchinfo;
 
 	/* Must not be a fragment. */
-	if (par->fragoff != 0)
+	if (offset)
 		return false;
 
-	ah = skb_header_pointer(skb, par->thoff, sizeof(_ahdr), &_ahdr);
+	ah = skb_header_pointer(skb, protoff,
+				sizeof(_ahdr), &_ahdr);
 	if (ah == NULL) {
 		/* We've been asked to examine this packet, and we
 		 * can't.  Hence, no choice but to drop.
 		 */
 		duprintf("Dropping evil AH tinygram.\n");
-		*par->hotdrop = true;
+		*hotdrop = true;
 		return 0;
 	}
 
@@ -61,9 +65,13 @@ static bool ah_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 			 !!(ahinfo->invflags & IPT_AH_INV_SPI));
 }
 
-static bool ah_mt_check(const struct xt_mtchk_param *par)
+/* Called when user tries to insert an entry of this type. */
+static bool
+ah_mt_check(const char *tablename, const void *ip_void,
+            const struct xt_match *match, void *matchinfo,
+            unsigned int hook_mask)
 {
-	const struct ipt_ah *ahinfo = par->matchinfo;
+	const struct ipt_ah *ahinfo = matchinfo;
 
 	/* Must specify no unknown invflags */
 	if (ahinfo->invflags & ~IPT_AH_INV_MASK) {
@@ -75,7 +83,7 @@ static bool ah_mt_check(const struct xt_mtchk_param *par)
 
 static struct xt_match ah_mt_reg __read_mostly = {
 	.name		= "ah",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.match		= ah_mt,
 	.matchsize	= sizeof(struct ipt_ah),
 	.proto		= IPPROTO_AH,

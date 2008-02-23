@@ -2,7 +2,6 @@ config BAMBOO
 	bool "Bamboo"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 440EP
 	select PCI
 	help
@@ -18,20 +17,10 @@ config EBONY
 	help
 	  This option enables support for the IBM PPC440GP evaluation board.
 
-config SAM440EP
-        bool "Sam440ep"
-	depends on 44x
-        default n
-        select 440EP
-        select PCI
-        help
-          This option enables support for the ACube Sam440ep board.
-
 config SEQUOIA
 	bool "Sequoia"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 440EPX
 	help
 	  This option enables support for the AMCC PPC440EPX evaluation board.
@@ -40,7 +29,6 @@ config TAISHAN
 	bool "Taishan"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 440GX
 	select PCI
 	help
@@ -51,7 +39,6 @@ config KATMAI
 	bool "Katmai"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 440SPe
 	select PCI
 	select PPC4xx_PCI_EXPRESS
@@ -62,7 +49,6 @@ config RAINIER
 	bool "Rainier"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 440GRX
 	select PCI
 	help
@@ -81,48 +67,20 @@ config WARP
 	  See http://www.pikatechnologies.com/ and follow the "PIKA for Computer
 	  Telephony Developers" link for more information.
 
-config ARCHES
-	bool "Arches"
-	depends on 44x
-	default n
-	select PPC44x_SIMPLE
-	select 460EX # Odd since it uses 460GT but the effects are the same
-	select PCI
-	select PPC4xx_PCI_EXPRESS
-	help
-	  This option enables support for the AMCC Dual PPC460GT evaluation board.
-
 config CANYONLANDS
 	bool "Canyonlands"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 460EX
 	select PCI
 	select PPC4xx_PCI_EXPRESS
-	select IBM_NEW_EMAC_RGMII
-	select IBM_NEW_EMAC_ZMII
 	help
 	  This option enables support for the AMCC PPC460EX evaluation board.
-
-config GLACIER
-	bool "Glacier"
-	depends on 44x
-	default n
-	select PPC44x_SIMPLE
-	select 460EX # Odd since it uses 460GT but the effects are the same
-	select PCI
-	select PPC4xx_PCI_EXPRESS
-	select IBM_NEW_EMAC_RGMII
-	select IBM_NEW_EMAC_ZMII
-	help
-	  This option enables support for the AMCC PPC460GT evaluation board.
 
 config YOSEMITE
 	bool "Yosemite"
 	depends on 44x
 	default n
-	select PPC44x_SIMPLE
 	select 440EP
 	select PCI
 	help
@@ -143,37 +101,6 @@ config YOSEMITE
 #	select 440GX
 #	help
 #	  This option enables support for the IBM PPC440GX evaluation board.
-
-config XILINX_VIRTEX440_GENERIC_BOARD
-	bool "Generic Xilinx Virtex 440 board"
-	depends on 44x
-	default n
-	select XILINX_VIRTEX_5_FXT
-	help
-	  This option enables generic support for Xilinx Virtex based boards
-	  that use a 440 based processor in the Virtex 5 FXT FPGA architecture.
-
-	  The generic virtex board support matches any device tree which
-	  specifies 'xlnx,virtex440' in its compatible field.  This includes
-	  the Xilinx ML5xx reference designs using the powerpc core.
-
-	  Most Virtex 5 designs should use this unless it needs to do some
-	  special configuration at board probe time.
-
-config PPC44x_SIMPLE
-	bool "Simple PowerPC 44x board support"
-	depends on 44x
-	default n
-	help
-	  This option enables the simple PowerPC 44x platform support.
-
-config PPC4xx_GPIO
-	bool "PPC4xx GPIO support"
-	depends on 44x
-	select ARCH_REQUIRE_GPIOLIB
-	select GENERIC_GPIO
-	help
-	  Enable gpiolib support for ppc440 based boards
 
 # 44x specific CPU modules, selected based on the board above.
 config 440EP
@@ -218,18 +145,10 @@ config 460EX
 	bool
 	select PPC_FPU
 	select IBM_NEW_EMAC_EMAC4
+	select IBM_NEW_EMAC_RGMII
+	select IBM_NEW_EMAC_ZMII
 	select IBM_NEW_EMAC_TAH
 
 # 44x errata/workaround config symbols, selected by the CPU models above
 config IBM440EP_ERR42
 	bool
-
-# Xilinx specific config options.
-config XILINX_VIRTEX
-	bool
-
-# Xilinx Virtex 5 FXT FPGA architecture, selected by a Xilinx board above
-config XILINX_VIRTEX_5_FXT
-	bool
-	select XILINX_VIRTEX
-

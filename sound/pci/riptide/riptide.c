@@ -172,7 +172,7 @@ MODULE_PARM_DESC(opl3_port, "OPL3 port # for Riptide driver.");
 
 #define MAX_WRITE_RETRY  10	/* cmd interface limits */
 #define MAX_ERROR_COUNT  10
-#define CMDIF_TIMEOUT    50000
+#define CMDIF_TIMEOUT    500000
 #define RESET_TRIES      5
 
 #define READ_PORT_ULONG(p)     inl((unsigned long)&(p))
@@ -682,7 +682,7 @@ static union firmware_version firmware_versions[] = {
 	},
 };
 
-static u32 atoh(const unsigned char *in, unsigned int len)
+static u32 atoh(unsigned char *in, unsigned int len)
 {
 	u32 sum = 0;
 	unsigned int mult = 1;
@@ -702,12 +702,12 @@ static u32 atoh(const unsigned char *in, unsigned int len)
 	return sum;
 }
 
-static int senddata(struct cmdif *cif, const unsigned char *in, u32 offset)
+static int senddata(struct cmdif *cif, unsigned char *in, u32 offset)
 {
 	u32 addr;
 	u32 data;
 	u32 i;
-	const unsigned char *p;
+	unsigned char *p;
 
 	i = atoh(&in[1], 2);
 	addr = offset + atoh(&in[3], 4);
@@ -726,10 +726,10 @@ static int senddata(struct cmdif *cif, const unsigned char *in, u32 offset)
 	return 0;
 }
 
-static int loadfirmware(struct cmdif *cif, const unsigned char *img,
+static int loadfirmware(struct cmdif *cif, unsigned char *img,
 			unsigned int size)
 {
-	const unsigned char *in;
+	unsigned char *in;
 	u32 laddr, saddr, t, val;
 	int err = 0;
 
@@ -865,8 +865,7 @@ static int sendcmd(struct cmdif *cif, u32 flags, u32 cmd, u32 parm,
 	struct riptideport *hwport;
 	struct cmdport *cmdport = NULL;
 
-	if (snd_BUG_ON(!cif))
-		return -EINVAL;
+	snd_assert(cif, return -EINVAL);
 
 	hwport = cif->hwport;
 	if (cif->errcnt > MAX_ERROR_COUNT) {
@@ -1483,6 +1482,7 @@ static int snd_riptide_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_riptide *chip = snd_pcm_substream_chip(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_sg_buf *sgbuf = snd_pcm_substream_sgbuf(substream);
 	struct pcmhw *data = get_pcmhwdev(substream);
 	struct cmdif *cif = chip->cif;
 	unsigned char *lbuspath = NULL;
@@ -1490,8 +1490,7 @@ static int snd_riptide_prepare(struct snd_pcm_substream *substream)
 	int err = 0;
 	snd_pcm_format_t format;
 
-	if (snd_BUG_ON(!cif || !data))
-		return -EINVAL;
+	snd_assert(cif && data, return -EINVAL);
 
 	snd_printdd("prepare id %d ch: %d f:0x%x r:%d\n", data->id,
 		    runtime->channels, runtime->format, runtime->rate);
@@ -1514,9 +1513,9 @@ static int snd_riptide_prepare(struct snd_pcm_substream *substream)
 			lbuspath = data->paths.stereo;
 		break;
 	}
-	snd_printdd("use sgdlist at 0x%p\n",
-		    data->sgdlist.area);
-	if (data->sgdlist.area) {
+	snd_printdd("use sgdlist at 0x%p and buffer at 0x%p\n",
+		    data->sgdlist.area, sgbuf);
+	if (data->sgdlist.area && sgbuf) {
 		unsigned int i, j, size, pages, f, pt, period;
 		struct sgd *c, *p = NULL;
 
@@ -1534,7 +1533,6 @@ static int snd_riptide_prepare(struct snd_pcm_substream *substream)
 		pt = 0;
 		j = 0;
 		for (i = 0; i < pages; i++) {
-			unsigned int ofs, addr;
 			c = &data->sgdbuf[i];
 			if (p)
 				p->dwNextLink = cpu_to_le32(data->sgdlist.addr +
@@ -1542,9 +1540,8 @@ static int snd_riptide_prepare(struct snd_pcm_substream *substream)
 							     sizeof(struct
 								    sgd)));
 			c->dwNextLink = cpu_to_le32(data->sgdlist.addr);
-			ofs = j << PAGE_SHIFT;
-			addr = snd_pcm_sgbuf_get_addr(substream, ofs) + pt;
-			c->dwSegPtrPhys = cpu_to_le32(addr);
+			c->dwSegPtrPhys =
+			    cpu_to_le32(sgbuf->table[j].addr + pt);
 			pt = (pt + f) % PAGE_SIZE;
 			if (pt == 0)
 				j++;
@@ -1754,7 +1751,7 @@ snd_riptide_interrupt(int irq, void *dev_id)
 		if (IS_EOBIRQ(cif->hwport) || IS_EOSIRQ(cif->hwport) ||
 		    IS_EOCIRQ(cif->hwport)) {
 			chip->handled_irqs++;
-			tasklet_schedule(&chip->riptide_tq);
+			tasklet_hi_schedule(&chip->riptide_tq);
 		}
 		if (chip->rmidi && IS_MPUIRQ(cif->hwport)) {
 			chip->handled_irqs++;
@@ -1775,8 +1772,7 @@ snd_riptide_codec_write(struct snd_ac97 *ac97, unsigned short reg,
 	union cmdret rptr = CMDRET_ZERO;
 	int i = 0;
 
-	if (snd_BUG_ON(!cif))
-		return;
+	snd_assert(cif, return);
 
 	snd_printdd("Write AC97 reg 0x%x 0x%x\n", reg, val);
 	do {
@@ -1794,8 +1790,7 @@ static unsigned short snd_riptide_codec_read(struct snd_ac97 *ac97,
 	struct cmdif *cif = chip->cif;
 	union cmdret rptr = CMDRET_ZERO;
 
-	if (snd_BUG_ON(!cif))
-		return 0;
+	snd_assert(cif, return 0);
 
 	if (SEND_RACR(cif, reg, &rptr) != 0)
 		SEND_RACR(cif, reg, &rptr);
@@ -1809,8 +1804,7 @@ static int snd_riptide_initialize(struct snd_riptide *chip)
 	unsigned int device_id;
 	int err;
 
-	if (snd_BUG_ON(!chip))
-		return -EINVAL;
+	snd_assert(chip, return -EINVAL);
 
 	cif = chip->cif;
 	if (!cif) {
@@ -1842,8 +1836,7 @@ static int snd_riptide_free(struct snd_riptide *chip)
 {
 	struct cmdif *cif;
 
-	if (!chip)
-		return 0;
+	snd_assert(chip, return 0);
 
 	if ((cif = chip->cif)) {
 		SET_GRESET(cif->hwport);

@@ -164,8 +164,8 @@ struct gelic_eurus_scan_info {
 	__be16 security;
 	u8  bssid[8]; /* last ETH_ALEN are valid. bssid[0],[1] are unused */
 	u8  essid[32]; /* IW_ESSID_MAX_SIZE */
-	u8  rate[16]; /* first 12 are valid */
-	u8  ext_rate[16]; /* first 16 are valid */
+	u8  rate[16]; /* first MAX_RATES_LENGTH(12) are valid */
+	u8  ext_rate[16]; /* first MAX_RATES_EX_LENGTH(16) are valid */
 	__be32 reserved1;
 	__be32 reserved2;
 	__be32 reserved3;
@@ -241,7 +241,7 @@ enum gelic_wl_assoc_state {
 #define GELIC_WEP_KEYS 4
 struct gelic_wl_info {
 	/* bss list */
-	struct mutex scan_lock;
+	struct semaphore scan_lock;
 	struct list_head network_list;
 	struct list_head network_free_list;
 	struct gelic_wl_scan_info *networks;
@@ -266,7 +266,7 @@ struct gelic_wl_info {
 	enum gelic_wl_wpa_level wpa_level; /* wpa/wpa2 */
 
 	/* association handling */
-	struct mutex assoc_stat_lock;
+	struct semaphore assoc_stat_lock;
 	struct delayed_work assoc_work;
 	enum gelic_wl_assoc_state assoc_stat;
 	struct completion assoc_done;
@@ -287,6 +287,9 @@ struct gelic_wl_info {
 	u8 bssid[ETH_ALEN]; /* userland requested */
 	u8 active_bssid[ETH_ALEN]; /* associated bssid */
 	unsigned int essid_len;
+
+	/* buffer for hypervisor IO */
+	void *buf;
 
 	struct iw_public_data wireless_data;
 	struct iw_statistics iwstat;

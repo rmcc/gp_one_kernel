@@ -23,16 +23,15 @@
 #include <linux/ioport.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
+#include <linux/backlight.h>
 #include <linux/input.h>
 #include <linux/gpio_keys.h>
-#include <linux/pwm_backlight.h>
-#include <linux/smc91x.h>
 
 #include <asm/types.h>
 #include <asm/setup.h>
 #include <asm/memory.h>
 #include <asm/mach-types.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/sizes.h>
 
@@ -41,17 +40,17 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/flash.h>
 
-#include <mach/pxa-regs.h>
-#include <mach/pxa2xx-regs.h>
-#include <mach/mfp-pxa27x.h>
-#include <mach/mainstone.h>
-#include <mach/audio.h>
-#include <mach/pxafb.h>
-#include <mach/i2c.h>
-#include <mach/mmc.h>
-#include <mach/irda.h>
-#include <mach/ohci.h>
-#include <mach/pxa27x_keypad.h>
+#include <asm/arch/pxa-regs.h>
+#include <asm/arch/pxa2xx-regs.h>
+#include <asm/arch/mfp-pxa27x.h>
+#include <asm/arch/mainstone.h>
+#include <asm/arch/audio.h>
+#include <asm/arch/pxafb.h>
+#include <asm/arch/i2c.h>
+#include <asm/arch/mmc.h>
+#include <asm/arch/irda.h>
+#include <asm/arch/ohci.h>
+#include <asm/arch/pxa27x_keypad.h>
 
 #include "generic.h"
 #include "devices.h"
@@ -111,9 +110,9 @@ static unsigned long mainstone_pin_config[] = {
 	GPIO45_AC97_SYSCLK,
 
 	/* Keypad */
-	GPIO93_KP_DKIN_0,
-	GPIO94_KP_DKIN_1,
-	GPIO95_KP_DKIN_2,
+	GPIO93_KP_DKIN_0	| WAKEUP_ON_LEVEL_HIGH,
+	GPIO94_KP_DKIN_1	| WAKEUP_ON_LEVEL_HIGH,
+	GPIO95_KP_DKIN_2	| WAKEUP_ON_LEVEL_HIGH,
 	GPIO100_KP_MKIN_0	| WAKEUP_ON_LEVEL_HIGH,
 	GPIO101_KP_MKIN_1	| WAKEUP_ON_LEVEL_HIGH,
 	GPIO102_KP_MKIN_2	| WAKEUP_ON_LEVEL_HIGH,
@@ -127,10 +126,6 @@ static unsigned long mainstone_pin_config[] = {
 	GPIO107_KP_MKOUT_4,
 	GPIO108_KP_MKOUT_5,
 	GPIO96_KP_MKOUT_6,
-
-	/* I2C */
-	GPIO117_I2C_SCL,
-	GPIO118_I2C_SDA,
 
 	/* GPIO */
 	GPIO1_GPIO | WAKEUP_ON_EDGE_BOTH,
@@ -166,7 +161,8 @@ static void mainstone_irq_handler(unsigned int irq, struct irq_desc *desc)
 		GEDR(0) = GPIO_bit(0);  /* clear useless edge notification */
 		if (likely(pending)) {
 			irq = MAINSTONE_IRQ(0) + __ffs(pending);
-			generic_handle_irq(irq);
+			desc = irq_desc + irq;
+			desc_handle_irq(irq, desc);
 		}
 		pending = MST_INTSETCLR & mainstone_irq_enabled;
 	} while (pending);
@@ -194,7 +190,7 @@ static void __init mainstone_init_irq(void)
 	MST_INTSETCLR = 0;
 
 	set_irq_chained_handler(IRQ_GPIO(0), mainstone_irq_handler);
-	set_irq_type(IRQ_GPIO(0), IRQ_TYPE_EDGE_FALLING);
+	set_irq_type(IRQ_GPIO(0), IRQT_FALLING);
 }
 
 #ifdef CONFIG_PM
@@ -244,19 +240,11 @@ static struct resource smc91x_resources[] = {
 	}
 };
 
-static struct smc91x_platdata mainstone_smc91x_info = {
-	.flags	= SMC91X_USE_8BIT | SMC91X_USE_16BIT | SMC91X_USE_32BIT |
-		  SMC91X_NOWAIT | SMC91X_USE_DMA,
-};
-
 static struct platform_device smc91x_device = {
 	.name		= "smc91x",
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(smc91x_resources),
 	.resource	= smc91x_resources,
-	.dev		= {
-		.platform_data = &mainstone_smc91x_info,
-	},
 };
 
 static int mst_audio_startup(struct snd_pcm_substream *substream, void *priv)
@@ -290,6 +278,12 @@ static pxa2xx_audio_ops_t mst_audio_ops = {
 	.shutdown	= mst_audio_shutdown,
 	.suspend	= mst_audio_suspend,
 	.resume		= mst_audio_resume,
+};
+
+static struct platform_device mst_audio_device = {
+	.name		= "pxa2xx-ac97",
+	.id		= -1,
+	.dev		= { .platform_data = &mst_audio_ops },
 };
 
 static struct resource flash_resources[] = {
@@ -355,27 +349,56 @@ static struct platform_device mst_flash_device[2] = {
 	},
 };
 
-#if defined(CONFIG_FB_PXA) || defined(CONFIG_FB_PXA_MODULE)
-static struct platform_pwm_backlight_data mainstone_backlight_data = {
-	.pwm_id		= 0,
-	.max_brightness	= 1023,
-	.dft_brightness	= 1023,
-	.pwm_period_ns	= 78770,
-};
+#ifdef CONFIG_BACKLIGHT_CLASS_DEVICE
+static int mainstone_backlight_update_status(struct backlight_device *bl)
+{
+	int brightness = bl->props.brightness;
 
-static struct platform_device mainstone_backlight_device = {
-	.name		= "pwm-backlight",
-	.dev		= {
-		.parent = &pxa27x_device_pwm0.dev,
-		.platform_data = &mainstone_backlight_data,
-	},
+	if (bl->props.power != FB_BLANK_UNBLANK ||
+	    bl->props.fb_blank != FB_BLANK_UNBLANK)
+		brightness = 0;
+
+	if (brightness != 0)
+		pxa_set_cken(CKEN_PWM0, 1);
+
+	PWM_CTRL0 = 0;
+	PWM_PWDUTY0 = brightness;
+	PWM_PERVAL0 = bl->props.max_brightness;
+
+	if (brightness == 0)
+		pxa_set_cken(CKEN_PWM0, 0);
+	return 0; /* pointless return value */
+}
+
+static int mainstone_backlight_get_brightness(struct backlight_device *bl)
+{
+	return PWM_PWDUTY0;
+}
+
+static /*const*/ struct backlight_ops mainstone_backlight_ops = {
+	.update_status	= mainstone_backlight_update_status,
+	.get_brightness	= mainstone_backlight_get_brightness,
 };
 
 static void __init mainstone_backlight_register(void)
 {
-	int ret = platform_device_register(&mainstone_backlight_device);
-	if (ret)
-		printk(KERN_ERR "mainstone: failed to register backlight device: %d\n", ret);
+	struct backlight_device *bl;
+
+	bl = backlight_device_register("mainstone-bl", &pxa_device_fb.dev,
+				       NULL, &mainstone_backlight_ops);
+	if (IS_ERR(bl)) {
+		printk(KERN_ERR "mainstone: unable to register backlight: %ld\n",
+		       PTR_ERR(bl));
+		return;
+	}
+
+	/*
+	 * broken design - register-then-setup interfaces are
+	 * utterly broken by definition.
+	 */
+	bl->props.max_brightness = 1023;
+	bl->props.brightness = 1023;
+	backlight_update_status(bl);
 }
 #else
 #define mainstone_backlight_register()	do { } while (0)
@@ -467,7 +490,6 @@ static void mainstone_irda_transceiver_mode(struct device *dev, int mode)
 	} else if (mode & IR_FIRMODE) {
 		MST_MSCWR1 |= MST_MSCWR1_IRDA_FIR;
 	}
-	pxa2xx_transceiver_mode(dev, mode);
 	if (mode & IR_OFF) {
 		MST_MSCWR1 = (MST_MSCWR1 & ~MST_MSCWR1_IRDA_MASK) | MST_MSCWR1_IRDA_OFF;
 	} else {
@@ -506,17 +528,28 @@ static struct platform_device mst_gpio_keys_device = {
 
 static struct platform_device *platform_devices[] __initdata = {
 	&smc91x_device,
+	&mst_audio_device,
 	&mst_flash_device[0],
 	&mst_flash_device[1],
 	&mst_gpio_keys_device,
 };
 
+static int mainstone_ohci_init(struct device *dev)
+{
+	/* Set the Power Control Polarity Low and Power Sense
+	   Polarity Low to active low. */
+	UHCHR = (UHCHR | UHCHR_PCPL | UHCHR_PSPL) &
+		~(UHCHR_SSEP1 | UHCHR_SSEP2 | UHCHR_SSEP3 | UHCHR_SSE);
+
+	return 0;
+}
+
 static struct pxaohci_platform_data mainstone_ohci_platform_data = {
 	.port_mode	= PMM_PERPORT_MODE,
-	.flags		= ENABLE_PORT_ALL | POWER_CONTROL_LOW | POWER_SENSE_LOW,
+	.init		= mainstone_ohci_init,
 };
 
-#if defined(CONFIG_KEYBOARD_PXA27x) || defined(CONFIG_KEYBOARD_PXA27x_MODULE)
+#if defined(CONFIG_KEYBOARD_PXA27x) || defined(CONFIG_KEYBOARD_PXA27x_MODULES)
 static unsigned int mainstone_matrix_keys[] = {
 	KEY(0, 0, KEY_A), KEY(1, 0, KEY_B), KEY(2, 0, KEY_C),
 	KEY(3, 0, KEY_D), KEY(4, 0, KEY_E), KEY(5, 0, KEY_F),
@@ -605,7 +638,6 @@ static void __init mainstone_init(void)
 	pxa_set_ficp_info(&mainstone_ficp_platform_data);
 	pxa_set_ohci_info(&mainstone_ohci_platform_data);
 	pxa_set_i2c_info(NULL);
-	pxa_set_ac97_info(&mst_audio_ops);
 
 	mainstone_init_keypad();
 }

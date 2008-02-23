@@ -112,44 +112,6 @@ timer_set_base(struct timer_list *timer, struct tvec_base *new_base)
 				      tbase_get_deferrable(timer->base));
 }
 
-static unsigned long round_jiffies_common(unsigned long j, int cpu,
-		bool force_up)
-{
-	int rem;
-	unsigned long original = j;
-
-	/*
-	 * We don't want all cpus firing their timers at once hitting the
-	 * same lock or cachelines, so we skew each extra cpu with an extra
-	 * 3 jiffies. This 3 jiffies came originally from the mm/ code which
-	 * already did this.
-	 * The skew is done by adding 3*cpunr, then round, then subtract this
-	 * extra offset again.
-	 */
-	j += cpu * 3;
-
-	rem = j % HZ;
-
-	/*
-	 * If the target jiffie is just after a whole second (which can happen
-	 * due to delays of the timer irq, long irq off times etc etc) then
-	 * we should round down to the whole second, not up. Use 1/4th second
-	 * as cutoff for this rounding as an extreme upper bound for this.
-	 * But never round down if @force_up is set.
-	 */
-	if (rem < HZ/4 && !force_up) /* round down */
-		j = j - rem;
-	else /* round up */
-		j = j - rem + HZ;
-
-	/* now that we have rounded, subtract the extra skew again */
-	j -= cpu * 3;
-
-	if (j <= jiffies) /* rounding ate our timeout entirely; */
-		return original;
-	return j;
-}
-
 /**
  * __round_jiffies - function to round jiffies to a full second
  * @j: the time in (absolute) jiffies that should be rounded
@@ -172,7 +134,38 @@ static unsigned long round_jiffies_common(unsigned long j, int cpu,
  */
 unsigned long __round_jiffies(unsigned long j, int cpu)
 {
-	return round_jiffies_common(j, cpu, false);
+	int rem;
+	unsigned long original = j;
+
+	/*
+	 * We don't want all cpus firing their timers at once hitting the
+	 * same lock or cachelines, so we skew each extra cpu with an extra
+	 * 3 jiffies. This 3 jiffies came originally from the mm/ code which
+	 * already did this.
+	 * The skew is done by adding 3*cpunr, then round, then subtract this
+	 * extra offset again.
+	 */
+	j += cpu * 3;
+
+	rem = j % HZ;
+
+	/*
+	 * If the target jiffie is just after a whole second (which can happen
+	 * due to delays of the timer irq, long irq off times etc etc) then
+	 * we should round down to the whole second, not up. Use 1/4th second
+	 * as cutoff for this rounding as an extreme upper bound for this.
+	 */
+	if (rem < HZ/4) /* round down */
+		j = j - rem;
+	else /* round up */
+		j = j - rem + HZ;
+
+	/* now that we have rounded, subtract the extra skew again */
+	j -= cpu * 3;
+
+	if (j <= jiffies) /* rounding ate our timeout entirely; */
+		return original;
+	return j;
 }
 EXPORT_SYMBOL_GPL(__round_jiffies);
 
@@ -198,10 +191,13 @@ EXPORT_SYMBOL_GPL(__round_jiffies);
  */
 unsigned long __round_jiffies_relative(unsigned long j, int cpu)
 {
-	unsigned long j0 = jiffies;
-
-	/* Use j0 because jiffies might change while we run */
-	return round_jiffies_common(j + j0, cpu, false) - j0;
+	/*
+	 * In theory the following code can skip a jiffy in case jiffies
+	 * increments right between the addition and the later subtraction.
+	 * However since the entire point of this function is to use approximate
+	 * timeouts, it's entirely ok to not handle that.
+	 */
+	return  __round_jiffies(j + jiffies, cpu) - jiffies;
 }
 EXPORT_SYMBOL_GPL(__round_jiffies_relative);
 
@@ -222,7 +218,7 @@ EXPORT_SYMBOL_GPL(__round_jiffies_relative);
  */
 unsigned long round_jiffies(unsigned long j)
 {
-	return round_jiffies_common(j, raw_smp_processor_id(), false);
+	return __round_jiffies(j, raw_smp_processor_id());
 }
 EXPORT_SYMBOL_GPL(round_jiffies);
 
@@ -246,71 +242,6 @@ unsigned long round_jiffies_relative(unsigned long j)
 	return __round_jiffies_relative(j, raw_smp_processor_id());
 }
 EXPORT_SYMBOL_GPL(round_jiffies_relative);
-
-/**
- * __round_jiffies_up - function to round jiffies up to a full second
- * @j: the time in (absolute) jiffies that should be rounded
- * @cpu: the processor number on which the timeout will happen
- *
- * This is the same as __round_jiffies() except that it will never
- * round down.  This is useful for timeouts for which the exact time
- * of firing does not matter too much, as long as they don't fire too
- * early.
- */
-unsigned long __round_jiffies_up(unsigned long j, int cpu)
-{
-	return round_jiffies_common(j, cpu, true);
-}
-EXPORT_SYMBOL_GPL(__round_jiffies_up);
-
-/**
- * __round_jiffies_up_relative - function to round jiffies up to a full second
- * @j: the time in (relative) jiffies that should be rounded
- * @cpu: the processor number on which the timeout will happen
- *
- * This is the same as __round_jiffies_relative() except that it will never
- * round down.  This is useful for timeouts for which the exact time
- * of firing does not matter too much, as long as they don't fire too
- * early.
- */
-unsigned long __round_jiffies_up_relative(unsigned long j, int cpu)
-{
-	unsigned long j0 = jiffies;
-
-	/* Use j0 because jiffies might change while we run */
-	return round_jiffies_common(j + j0, cpu, true) - j0;
-}
-EXPORT_SYMBOL_GPL(__round_jiffies_up_relative);
-
-/**
- * round_jiffies_up - function to round jiffies up to a full second
- * @j: the time in (absolute) jiffies that should be rounded
- *
- * This is the same as round_jiffies() except that it will never
- * round down.  This is useful for timeouts for which the exact time
- * of firing does not matter too much, as long as they don't fire too
- * early.
- */
-unsigned long round_jiffies_up(unsigned long j)
-{
-	return round_jiffies_common(j, raw_smp_processor_id(), true);
-}
-EXPORT_SYMBOL_GPL(round_jiffies_up);
-
-/**
- * round_jiffies_up_relative - function to round jiffies up to a full second
- * @j: the time in (relative) jiffies that should be rounded
- *
- * This is the same as round_jiffies_relative() except that it will never
- * round down.  This is useful for timeouts for which the exact time
- * of firing does not matter too much, as long as they don't fire too
- * early.
- */
-unsigned long round_jiffies_up_relative(unsigned long j)
-{
-	return __round_jiffies_up_relative(j, raw_smp_processor_id());
-}
-EXPORT_SYMBOL_GPL(round_jiffies_up_relative);
 
 
 static inline void set_running_timer(struct tvec_base *base,
@@ -881,7 +812,7 @@ static inline void __run_timers(struct tvec_base *base)
 	spin_unlock_irq(&base->lock);
 }
 
-#ifdef CONFIG_NO_HZ
+#if defined(CONFIG_NO_IDLE_HZ) || defined(CONFIG_NO_HZ)
 /*
  * Find out when the next timer event is due to happen. This
  * is used on S/390 to stop all activity when a cpus is idle.
@@ -1016,6 +947,29 @@ unsigned long get_next_timer_interrupt(unsigned long now)
 
 	return cmp_next_hrtimer_event(now, expires);
 }
+
+#ifdef CONFIG_NO_IDLE_HZ
+unsigned long next_timer_interrupt(void)
+{
+	return get_next_timer_interrupt(jiffies);
+}
+#endif
+
+#endif
+
+#ifndef CONFIG_VIRT_CPU_ACCOUNTING
+void account_process_tick(struct task_struct *p, int user_tick)
+{
+	cputime_t one_jiffy = jiffies_to_cputime(1);
+
+	if (user_tick) {
+		account_user_time(p, one_jiffy);
+		account_user_time_scaled(p, cputime_to_scaled(one_jiffy));
+	} else {
+		account_system_time(p, HARDIRQ_OFFSET, one_jiffy);
+		account_system_time_scaled(p, cputime_to_scaled(one_jiffy));
+	}
+}
 #endif
 
 /*
@@ -1032,7 +986,6 @@ void update_process_times(int user_tick)
 	run_local_timers();
 	if (rcu_pending(cpu))
 		rcu_check_callbacks(cpu, user_tick);
-	printk_tick();
 	scheduler_tick();
 	run_posix_cpu_timers(p);
 }
@@ -1177,25 +1130,25 @@ asmlinkage long sys_getppid(void)
 asmlinkage long sys_getuid(void)
 {
 	/* Only we change this so SMP safe */
-	return current_uid();
+	return current->uid;
 }
 
 asmlinkage long sys_geteuid(void)
 {
 	/* Only we change this so SMP safe */
-	return current_euid();
+	return current->euid;
 }
 
 asmlinkage long sys_getgid(void)
 {
 	/* Only we change this so SMP safe */
-	return current_gid();
+	return current->gid;
 }
 
 asmlinkage long sys_getegid(void)
 {
 	/* Only we change this so SMP safe */
-	return  current_egid();
+	return  current->egid;
 }
 
 #endif
@@ -1490,11 +1443,9 @@ static void __cpuinit migrate_timers(int cpu)
 	BUG_ON(cpu_online(cpu));
 	old_base = per_cpu(tvec_bases, cpu);
 	new_base = get_cpu_var(tvec_bases);
-	/*
-	 * The caller is globally serialized and nobody else
-	 * takes two locks at once, deadlock is not possible.
-	 */
-	spin_lock_irq(&new_base->lock);
+
+	local_irq_disable();
+	spin_lock(&new_base->lock);
 	spin_lock_nested(&old_base->lock, SINGLE_DEPTH_NESTING);
 
 	BUG_ON(old_base->running_timer);
@@ -1509,7 +1460,8 @@ static void __cpuinit migrate_timers(int cpu)
 	}
 
 	spin_unlock(&old_base->lock);
-	spin_unlock_irq(&new_base->lock);
+	spin_unlock(&new_base->lock);
+	local_irq_enable();
 	put_cpu_var(tvec_bases);
 }
 #endif /* CONFIG_HOTPLUG_CPU */
@@ -1550,7 +1502,7 @@ void __init init_timers(void)
 
 	BUG_ON(err == NOTIFY_BAD);
 	register_cpu_notifier(&timers_nb);
-	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
+	open_softirq(TIMER_SOFTIRQ, run_timer_softirq, NULL);
 }
 
 /**

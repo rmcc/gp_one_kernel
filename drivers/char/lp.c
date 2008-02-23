@@ -126,7 +126,6 @@
 #include <linux/device.h>
 #include <linux/wait.h>
 #include <linux/jiffies.h>
-#include <linux/smp_lock.h>
 
 #include <linux/parport.h>
 #undef LP_STATS
@@ -490,21 +489,14 @@ static ssize_t lp_read(struct file * file, char __user * buf,
 static int lp_open(struct inode * inode, struct file * file)
 {
 	unsigned int minor = iminor(inode);
-	int ret = 0;
 
-	lock_kernel();
-	if (minor >= LP_NO) {
-		ret = -ENXIO;
-		goto out;
-	}
-	if ((LP_F(minor) & LP_EXIST) == 0) {
-		ret = -ENXIO;
-		goto out;
-	}
-	if (test_and_set_bit(LP_BUSY_BIT_POS, &LP_F(minor))) {
-		ret = -EBUSY;
-		goto out;
-	}
+	if (minor >= LP_NO)
+		return -ENXIO;
+	if ((LP_F(minor) & LP_EXIST) == 0)
+		return -ENXIO;
+	if (test_and_set_bit(LP_BUSY_BIT_POS, &LP_F(minor)))
+		return -EBUSY;
+
 	/* If ABORTOPEN is set and the printer is offline or out of paper,
 	   we may still want to open it to perform ioctl()s.  Therefore we
 	   have commandeered O_NONBLOCK, even though it is being used in
@@ -518,25 +510,21 @@ static int lp_open(struct inode * inode, struct file * file)
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
 			LP_F(minor) &= ~LP_BUSY;
-			ret = -ENOSPC;
-			goto out;
+			return -ENOSPC;
 		} else if (!(status & LP_PSELECD)) {
 			printk(KERN_INFO "lp%d off-line\n", minor);
 			LP_F(minor) &= ~LP_BUSY;
-			ret = -EIO;
-			goto out;
+			return -EIO;
 		} else if (!(status & LP_PERRORP)) {
 			printk(KERN_ERR "lp%d printer error\n", minor);
 			LP_F(minor) &= ~LP_BUSY;
-			ret = -EIO;
-			goto out;
+			return -EIO;
 		}
 	}
 	lp_table[minor].lp_buffer = kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
 	if (!lp_table[minor].lp_buffer) {
 		LP_F(minor) &= ~LP_BUSY;
-		ret = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 	/* Determine if the peripheral supports ECP mode */
 	lp_claim_parport_or_block (&lp_table[minor]);
@@ -552,9 +540,7 @@ static int lp_open(struct inode * inode, struct file * file)
 	parport_negotiate (lp_table[minor].dev->port, IEEE1284_MODE_COMPAT);
 	lp_release_parport (&lp_table[minor]);
 	lp_table[minor].current_mode = IEEE1284_MODE_COMPAT;
-out:
-	unlock_kernel();
-	return ret;
+	return 0;
 }
 
 static int lp_release(struct inode * inode, struct file * file)
@@ -813,8 +799,7 @@ static int lp_register(int nr, struct parport *port)
 	if (reset)
 		lp_reset(nr);
 
-	device_create(lp_class, port->dev, MKDEV(LP_MAJOR, nr), NULL,
-		      "lp%d", nr);
+	device_create(lp_class, port->dev, MKDEV(LP_MAJOR, nr), "lp%d", nr);
 
 	printk(KERN_INFO "lp%d: using %s (%s).\n", nr, port->name, 
 	       (port->irq == PARPORT_IRQ_NONE)?"polling":"interrupt-driven");

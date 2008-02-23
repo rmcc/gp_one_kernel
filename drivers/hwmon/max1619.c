@@ -69,51 +69,33 @@ I2C_CLIENT_INSMOD_1(max1619);
 #define MAX1619_REG_W_TCRIT_HYST	0x13
 
 /*
- * Conversions
+ * Conversions and various macros
  */
 
-static int temp_from_reg(int val)
-{
-	return (val & 0x80 ? val-0x100 : val) * 1000;
-}
-
-static int temp_to_reg(int val)
-{
-	return (val < 0 ? val+0x100*1000 : val) / 1000;
-}
+#define TEMP_FROM_REG(val)	((val & 0x80 ? val-0x100 : val) * 1000)
+#define TEMP_TO_REG(val)	((val < 0 ? val+0x100*1000 : val) / 1000)
 
 /*
  * Functions declaration
  */
 
-static int max1619_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id);
-static int max1619_detect(struct i2c_client *client, int kind,
-			  struct i2c_board_info *info);
+static int max1619_attach_adapter(struct i2c_adapter *adapter);
+static int max1619_detect(struct i2c_adapter *adapter, int address,
+	int kind);
 static void max1619_init_client(struct i2c_client *client);
-static int max1619_remove(struct i2c_client *client);
+static int max1619_detach_client(struct i2c_client *client);
 static struct max1619_data *max1619_update_device(struct device *dev);
 
 /*
  * Driver data (common to all clients)
  */
 
-static const struct i2c_device_id max1619_id[] = {
-	{ "max1619", max1619 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, max1619_id);
-
 static struct i2c_driver max1619_driver = {
-	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		.name	= "max1619",
 	},
-	.probe		= max1619_probe,
-	.remove		= max1619_remove,
-	.id_table	= max1619_id,
-	.detect		= max1619_detect,
-	.address_data	= &addr_data,
+	.attach_adapter	= max1619_attach_adapter,
+	.detach_client	= max1619_detach_client,
 };
 
 /*
@@ -121,6 +103,7 @@ static struct i2c_driver max1619_driver = {
  */
 
 struct max1619_data {
+	struct i2c_client client;
 	struct device *hwmon_dev;
 	struct mutex update_lock;
 	char valid; /* zero until following fields are valid */
@@ -142,7 +125,7 @@ struct max1619_data {
 static ssize_t show_##value(struct device *dev, struct device_attribute *attr, char *buf) \
 { \
 	struct max1619_data *data = max1619_update_device(dev); \
-	return sprintf(buf, "%d\n", temp_from_reg(data->value)); \
+	return sprintf(buf, "%d\n", TEMP_FROM_REG(data->value)); \
 }
 show_temp(temp_input1);
 show_temp(temp_input2);
@@ -160,7 +143,7 @@ static ssize_t set_##value(struct device *dev, struct device_attribute *attr, co
 	long val = simple_strtol(buf, NULL, 10); \
  \
 	mutex_lock(&data->update_lock); \
-	data->value = temp_to_reg(val); \
+	data->value = TEMP_TO_REG(val); \
 	i2c_smbus_write_byte_data(client, reg, data->value); \
 	mutex_unlock(&data->update_lock); \
 	return count; \
@@ -225,15 +208,41 @@ static const struct attribute_group max1619_group = {
  * Real code
  */
 
-/* Return 0 if detection is successful, -ENODEV otherwise */
-static int max1619_detect(struct i2c_client *new_client, int kind,
-			  struct i2c_board_info *info)
+static int max1619_attach_adapter(struct i2c_adapter *adapter)
 {
-	struct i2c_adapter *adapter = new_client->adapter;
+	if (!(adapter->class & I2C_CLASS_HWMON))
+		return 0;
+	return i2c_probe(adapter, &addr_data, max1619_detect);
+}
+
+/*
+ * The following function does more than just detection. If detection
+ * succeeds, it also registers the new chip.
+ */
+static int max1619_detect(struct i2c_adapter *adapter, int address, int kind)
+{
+	struct i2c_client *new_client;
+	struct max1619_data *data;
+	int err = 0;
+	const char *name = "";	
 	u8 reg_config=0, reg_convrate=0, reg_status=0;
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
-		return -ENODEV;
+		goto exit;
+
+	if (!(data = kzalloc(sizeof(struct max1619_data), GFP_KERNEL))) {
+		err = -ENOMEM;
+		goto exit;
+	}
+
+	/* The common I2C client data is placed right before the
+	   MAX1619-specific data. */
+	new_client = &data->client;
+	i2c_set_clientdata(new_client, data);
+	new_client->addr = address;
+	new_client->adapter = adapter;
+	new_client->driver = &max1619_driver;
+	new_client->flags = 0;
 
 	/*
 	 * Now we do the remaining detection. A negative kind means that
@@ -256,8 +265,8 @@ static int max1619_detect(struct i2c_client *new_client, int kind,
 		 || reg_convrate > 0x07 || (reg_status & 0x61 ) !=0x00) {
 			dev_dbg(&adapter->dev,
 				"MAX1619 detection failed at 0x%02x.\n",
-				new_client->addr);
-			return -ENODEV;
+				address);
+			goto exit_free;
 		}
 	}
 
@@ -276,37 +285,28 @@ static int max1619_detect(struct i2c_client *new_client, int kind,
 			dev_info(&adapter->dev,
 			    "Unsupported chip (man_id=0x%02X, "
 			    "chip_id=0x%02X).\n", man_id, chip_id);
-			return -ENODEV;
+			goto exit_free;
 		}
 	}
 
-	strlcpy(info->type, "max1619", I2C_NAME_SIZE);
+	if (kind == max1619)
+		name = "max1619";
 
-	return 0;
-}
-
-static int max1619_probe(struct i2c_client *new_client,
-			 const struct i2c_device_id *id)
-{
-	struct max1619_data *data;
-	int err;
-
-	data = kzalloc(sizeof(struct max1619_data), GFP_KERNEL);
-	if (!data) {
-		err = -ENOMEM;
-		goto exit;
-	}
-
-	i2c_set_clientdata(new_client, data);
+	/* We can fill in the remaining client fields */
+	strlcpy(new_client->name, name, I2C_NAME_SIZE);
 	data->valid = 0;
 	mutex_init(&data->update_lock);
+
+	/* Tell the I2C layer a new client has arrived */
+	if ((err = i2c_attach_client(new_client)))
+		goto exit_free;
 
 	/* Initialize the MAX1619 chip */
 	max1619_init_client(new_client);
 
 	/* Register sysfs hooks */
 	if ((err = sysfs_create_group(&new_client->dev.kobj, &max1619_group)))
-		goto exit_free;
+		goto exit_detach;
 
 	data->hwmon_dev = hwmon_device_register(&new_client->dev);
 	if (IS_ERR(data->hwmon_dev)) {
@@ -318,6 +318,8 @@ static int max1619_probe(struct i2c_client *new_client,
 
 exit_remove_files:
 	sysfs_remove_group(&new_client->dev.kobj, &max1619_group);
+exit_detach:
+	i2c_detach_client(new_client);
 exit_free:
 	kfree(data);
 exit:
@@ -339,12 +341,16 @@ static void max1619_init_client(struct i2c_client *client)
 					  config & 0xBF); /* run */
 }
 
-static int max1619_remove(struct i2c_client *client)
+static int max1619_detach_client(struct i2c_client *client)
 {
 	struct max1619_data *data = i2c_get_clientdata(client);
+	int err;
 
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &max1619_group);
+
+	if ((err = i2c_detach_client(client)))
+		return err;
 
 	kfree(data);
 	return 0;

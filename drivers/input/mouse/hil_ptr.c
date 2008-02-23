@@ -46,7 +46,7 @@
 MODULE_AUTHOR("Brian S. Julin <bri@calyx.com>");
 MODULE_DESCRIPTION(HIL_GENERIC_NAME " driver");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_ALIAS("serio:ty03pr25id0Fex*");
+
 
 #define TABLET_SIMULATES_MOUSE	/* allow tablet to be used as mouse */
 #undef  TABLET_AUTOADJUST	/* auto-adjust valid tablet ranges */
@@ -247,24 +247,19 @@ static void hil_ptr_disconnect(struct serio *serio)
 
 static int hil_ptr_connect(struct serio *serio, struct serio_driver *driver)
 {
-	struct hil_ptr	*ptr;
-	const char	*txt;
-	unsigned int	i, naxsets, btntype;
-	uint8_t		did, *idd;
-	int		error;
+	struct hil_ptr	 *ptr;
+	const char	 *txt;
+	unsigned int	 i, naxsets, btntype;
+	uint8_t		 did, *idd;
 
-	ptr = kzalloc(sizeof(struct hil_ptr), GFP_KERNEL);
-	if (!ptr)
+	if (!(ptr = kzalloc(sizeof(struct hil_ptr), GFP_KERNEL)))
 		return -ENOMEM;
 
 	ptr->dev = input_allocate_device();
-	if (!ptr->dev) {
-		error = -ENOMEM;
+	if (!ptr->dev)
 		goto bail0;
-	}
 
-	error = serio_open(serio, driver);
-	if (error)
+	if (serio_open(serio, driver))
 		goto bail1;
 
 	serio_set_drvdata(serio, ptr);
@@ -302,7 +297,6 @@ static int hil_ptr_connect(struct serio *serio, struct serio_driver *driver)
 	did = ptr->idd[0];
 	idd = ptr->idd + 1;
 	txt = "unknown";
-
 	if ((did & HIL_IDD_DID_TYPE_MASK) == HIL_IDD_DID_TYPE_REL) {
 		ptr->dev->evbit[0] = BIT_MASK(EV_REL);
 		txt = "relative";
@@ -312,11 +306,8 @@ static int hil_ptr_connect(struct serio *serio, struct serio_driver *driver)
 		ptr->dev->evbit[0] = BIT_MASK(EV_ABS);
 		txt = "absolute";
 	}
-
-	if (!ptr->dev->evbit[0]) {
-		error = -ENODEV;
+	if (!ptr->dev->evbit[0])
 		goto bail2;
-	}
 
 	ptr->nbtn = HIL_IDD_NUM_BUTTONS(idd);
 	if (ptr->nbtn)
@@ -389,19 +380,13 @@ static int hil_ptr_connect(struct serio *serio, struct serio_driver *driver)
 	ptr->dev->id.version	= 0x0100; /* TODO: get from ptr->rsc */
 	ptr->dev->dev.parent	= &serio->dev;
 
-	error = input_register_device(ptr->dev);
-	if (error) {
-		printk(KERN_INFO PREFIX "Unable to register input device\n");
-		goto bail2;
-	}
-
+	input_register_device(ptr->dev);
 	printk(KERN_INFO "input: %s (%s), ID: %d\n",
 		ptr->dev->name,
 		(btntype == BTN_MOUSE) ? "HIL mouse":"HIL tablet or touchpad",
 		did);
 
 	return 0;
-
  bail2:
 	serio_close(serio);
  bail1:
@@ -409,7 +394,7 @@ static int hil_ptr_connect(struct serio *serio, struct serio_driver *driver)
  bail0:
 	kfree(ptr);
 	serio_set_drvdata(serio, NULL);
-	return error;
+	return -ENODEV;
 }
 
 static struct serio_device_id hil_ptr_ids[] = {

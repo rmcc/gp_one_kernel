@@ -51,7 +51,6 @@ ENTRY(v7wbi_flush_user_tlb_range)
 	mcr	p15, 0, ip, c7, c5, 6		@ flush BTAC/BTB
 	dsb
 	mov	pc, lr
-ENDPROC(v7wbi_flush_user_tlb_range)
 
 /*
  *	v7wbi_flush_kern_tlb_range(start,end)
@@ -78,7 +77,6 @@ ENTRY(v7wbi_flush_kern_tlb_range)
 	dsb
 	isb
 	mov	pc, lr
-ENDPROC(v7wbi_flush_kern_tlb_range)
 
 	.section ".text.init", #alloc, #execinstr
 

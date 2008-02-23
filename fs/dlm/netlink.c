@@ -115,6 +115,7 @@ static void fill_data(struct dlm_lock_data *data, struct dlm_lkb *lkb)
 	data->status = lkb->lkb_status;
 	data->grmode = lkb->lkb_grmode;
 	data->rqmode = lkb->lkb_rqmode;
+	data->timestamp = lkb->lkb_timestamp;
 	if (lkb->lkb_ua)
 		data->xid = lkb->lkb_ua->xid;
 	if (r) {
@@ -126,8 +127,8 @@ static void fill_data(struct dlm_lock_data *data, struct dlm_lkb *lkb)
 
 void dlm_timeout_warn(struct dlm_lkb *lkb)
 {
-	struct sk_buff *uninitialized_var(send_skb);
 	struct dlm_lock_data *data;
+	struct sk_buff *send_skb;
 	size_t size;
 	int rv;
 

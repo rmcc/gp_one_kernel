@@ -72,16 +72,6 @@ void clockevents_set_mode(struct clock_event_device *dev,
 }
 
 /**
- * clockevents_shutdown - shutdown the device and clear next_event
- * @dev:	device to shutdown
- */
-void clockevents_shutdown(struct clock_event_device *dev)
-{
-	clockevents_set_mode(dev, CLOCK_EVT_MODE_SHUTDOWN);
-	dev->next_event.tv64 = KTIME_MAX;
-}
-
-/**
  * clockevents_program_event - Reprogram the clock event device.
  * @expires:	absolute expiry time (monotonic clock)
  *
@@ -166,8 +156,6 @@ static void clockevents_notify_released(void)
 void clockevents_register_device(struct clock_event_device *dev)
 {
 	BUG_ON(dev->mode != CLOCK_EVT_MODE_UNUSED);
-	BUG_ON(!dev->cpumask);
-
 	/*
 	 * A nsec2cyc multiplicator of 0 is invalid and we'd crash
 	 * on it, so fix it up and emit a warning:
@@ -189,7 +177,7 @@ void clockevents_register_device(struct clock_event_device *dev)
 /*
  * Noop handler when we shut down an event device
  */
-void clockevents_handle_noop(struct clock_event_device *dev)
+static void clockevents_handle_noop(struct clock_event_device *dev)
 {
 }
 
@@ -211,6 +199,7 @@ void clockevents_exchange_device(struct clock_event_device *old,
 	 * released list and do a notify add later.
 	 */
 	if (old) {
+		old->event_handler = clockevents_handle_noop;
 		clockevents_set_mode(old, CLOCK_EVT_MODE_UNUSED);
 		list_del(&old->list);
 		list_add(&old->list, &clockevents_released);
@@ -218,7 +207,7 @@ void clockevents_exchange_device(struct clock_event_device *old,
 
 	if (new) {
 		BUG_ON(new->mode != CLOCK_EVT_MODE_UNUSED);
-		clockevents_shutdown(new);
+		clockevents_set_mode(new, CLOCK_EVT_MODE_SHUTDOWN);
 	}
 	local_irq_restore(flags);
 }

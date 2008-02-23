@@ -18,17 +18,28 @@ core-y			+= $(ARCH_DIR)/kernel/		\
 			   $(ARCH_DIR)/drivers/		\
 			   $(ARCH_DIR)/os-$(OS)/
 
-MODE_INCLUDE	+= -I$(srctree)/$(ARCH_DIR)/include/shared/skas
+# Have to precede the include because the included Makefiles reference them.
+SYMLINK_HEADERS := archparam.h system.h sigcontext.h processor.h ptrace.h \
+	module.h vm-flags.h elf.h host_ldt.h
+SYMLINK_HEADERS := $(foreach header,$(SYMLINK_HEADERS),include/asm-um/$(header))
+
+# XXX: The "os" symlink is only used by arch/um/include/os.h, which includes
+# ../os/include/file.h
+#
+# These are cleaned up during mrproper. Please DO NOT fix it again, this is
+# the Correct Thing(tm) to do!
+ARCH_SYMLINKS = include/asm-um/arch $(ARCH_DIR)/include/sysdep $(ARCH_DIR)/os \
+	$(SYMLINK_HEADERS) $(ARCH_DIR)/include/uml-config.h
+
+MODE_INCLUDE	+= -I$(srctree)/$(ARCH_DIR)/include/skas
 
 include $(srctree)/$(ARCH_DIR)/Makefile-skas
 
-SHARED_HEADERS	:= $(ARCH_DIR)/include/shared
-ARCH_INCLUDE	:= -I$(srctree)/$(SHARED_HEADERS)
-ARCH_INCLUDE	+= -I$(srctree)/$(ARCH_DIR)/sys-$(SUBARCH)/shared
+ARCH_INCLUDE	:= -I$(ARCH_DIR)/include
 ifneq ($(KBUILD_SRC),)
-ARCH_INCLUDE	+= -I$(SHARED_HEADERS)
+ARCH_INCLUDE	+= -I$(srctree)/$(ARCH_DIR)/include
 endif
-KBUILD_CPPFLAGS += -I$(srctree)/$(ARCH_DIR)/sys-$(SUBARCH)
+SYS_DIR		:= $(ARCH_DIR)/include/sysdep-$(SUBARCH)
 
 # -Dvmap=kernel_vmap prevents anything from referencing the libpcap.o symbol so
 # named - it's a common symbol in libpcap, so we get a binary which crashes.
@@ -54,8 +65,6 @@ include $(srctree)/$(ARCH_DIR)/Makefile-$(SUBARCH)
 #This will adjust *FLAGS accordingly to the platform.
 include $(srctree)/$(ARCH_DIR)/Makefile-os-$(OS)
 
-KBUILD_CPPFLAGS += -I$(srctree)/arch/$(HEADER_ARCH)/include
-
 # -Derrno=kernel_errno - This turns all kernel references to errno into
 # kernel_errno to separate them from the libc errno.  This allows -fno-common
 # in KBUILD_CFLAGS.  Otherwise, it would cause ld to complain about the two different
@@ -68,6 +77,7 @@ KBUILD_CPPFLAGS += -I$(srctree)/arch/$(HEADER_ARCH)/include
 KERNEL_DEFINES = $(strip -Derrno=kernel_errno -Dsigprocmask=kernel_sigprocmask \
 			 -Dmktime=kernel_mktime $(ARCH_KERNEL_DEFINES))
 KBUILD_CFLAGS += $(KERNEL_DEFINES)
+KBUILD_CFLAGS += $(call cc-option,-fno-unit-at-a-time,)
 
 PHONY += linux
 
@@ -84,10 +94,14 @@ define archhelp
   echo '		   find in the kernel root.'
 endef
 
-KBUILD_KCONFIG := arch/um/Kconfig.$(HEADER_ARCH)
+ifneq ($(KBUILD_SRC),)
+$(shell mkdir -p $(ARCH_DIR) && ln -fsn $(srctree)/$(ARCH_DIR)/Kconfig.$(SUBARCH) $(ARCH_DIR)/Kconfig.arch)
+else
+$(shell cd $(ARCH_DIR) && ln -sf Kconfig.$(SUBARCH) Kconfig.arch)
+endif
 
-archprepare: $(SHARED_HEADERS)/user_constants.h
-archprepare: $(SHARED_HEADERS)/kern_constants.h
+archprepare: $(ARCH_SYMLINKS) $(ARCH_DIR)/include/user_constants.h
+prepare: $(ARCH_DIR)/include/kern_constants.h
 
 LINK-$(CONFIG_LD_SCRIPT_STATIC) += -static
 LINK-$(CONFIG_LD_SCRIPT_DYN) += -Wl,-rpath,/lib
@@ -119,15 +133,62 @@ endef
 
 # When cleaning we don't include .config, so we don't include
 # TT or skas makefiles and don't clean skas_ptregs.h.
-CLEAN_FILES += linux x.i gmon.out \
-	$(SHARED_HEADERS)/user_constants.h \
-	$(SHARED_HEADERS)/kern_constants.h
+CLEAN_FILES += linux x.i gmon.out $(ARCH_DIR)/include/uml-config.h \
+	$(ARCH_DIR)/include/user_constants.h \
+	$(ARCH_DIR)/include/kern_constants.h $(ARCH_DIR)/Kconfig.arch
+
+MRPROPER_FILES += $(ARCH_SYMLINKS)
 
 archclean:
 	@find . \( -name '*.bb' -o -name '*.bbg' -o -name '*.da' \
 		-o -name '*.gcov' \) -type f -print | xargs rm -f
 
+$(SYMLINK_HEADERS):
+	@echo '  SYMLINK $@'
+ifneq ($(KBUILD_SRC),)
+	$(Q)mkdir -p $(objtree)/include/asm-um
+	$(Q)ln -fsn $(srctree)/include/asm-um/$(basename $(notdir $@))-$(SUBARCH)$(suffix $@) $@
+else
+	$(Q)cd $(srctree)/$(dir $@) ; \
+	ln -sf $(basename $(notdir $@))-$(SUBARCH)$(suffix $@) $(notdir $@)
+endif
+
+include/asm-um/arch:
+	@echo '  SYMLINK $@'
+ifneq ($(KBUILD_SRC),)
+	$(Q)mkdir -p $(objtree)/include/asm-um
+	$(Q)ln -fsn $(srctree)/include/asm-$(HEADER_ARCH) include/asm-um/arch
+else
+	$(Q)cd $(srctree)/include/asm-um && ln -fsn ../asm-$(HEADER_ARCH) arch
+endif
+
+$(objtree)/$(ARCH_DIR)/include:
+	@echo '  MKDIR $@'
+	$(Q)mkdir -p $@
+
+$(ARCH_DIR)/include/sysdep: $(objtree)/$(ARCH_DIR)/include
+	@echo '  SYMLINK $@'
+ifneq ($(KBUILD_SRC),)
+	$(Q)ln -fsn $(srctree)/$(ARCH_DIR)/include/sysdep-$(SUBARCH) $(ARCH_DIR)/include/sysdep
+else
+	$(Q)cd $(ARCH_DIR)/include && ln -fsn sysdep-$(SUBARCH) sysdep
+endif
+
+$(ARCH_DIR)/os:
+	@echo '  SYMLINK $@'
+ifneq ($(KBUILD_SRC),)
+	$(Q)ln -fsn $(srctree)/$(ARCH_DIR)/os-$(OS) $(ARCH_DIR)/os
+else
+	$(Q)cd $(ARCH_DIR) && ln -fsn os-$(OS) os
+endif
+
 # Generated files
+define filechk_umlconfig
+	sed 's/ CONFIG/ UML_CONFIG/'
+endef
+
+$(ARCH_DIR)/include/uml-config.h : include/linux/autoconf.h
+	$(call filechk,umlconfig)
 
 $(ARCH_DIR)/sys-$(SUBARCH)/user-offsets.s: FORCE
 	$(Q)$(MAKE) $(build)=$(ARCH_DIR)/sys-$(SUBARCH) $@
@@ -145,11 +206,11 @@ define filechk_gen-asm-offsets
          echo ""; )
 endef
 
-$(SHARED_HEADERS)/user_constants.h: $(ARCH_DIR)/sys-$(SUBARCH)/user-offsets.s
+$(ARCH_DIR)/include/user_constants.h: $(ARCH_DIR)/sys-$(SUBARCH)/user-offsets.s
 	$(call filechk,gen-asm-offsets)
 
-$(SHARED_HEADERS)/kern_constants.h:
-	$(Q)mkdir -p $(dir $@)
-	$(Q)echo '#include "../../../../include/asm/asm-offsets.h"' >$@
+$(ARCH_DIR)/include/kern_constants.h: $(objtree)/$(ARCH_DIR)/include
+	@echo '  SYMLINK $@'
+	$(Q)ln -sf ../../../include/asm-um/asm-offsets.h $@
 
-export SUBARCH USER_CFLAGS CFLAGS_NO_HARDENING OS HEADER_ARCH DEV_NULL_PATH
+export SUBARCH USER_CFLAGS CFLAGS_NO_HARDENING OS HEADER_ARCH

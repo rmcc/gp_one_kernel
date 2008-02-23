@@ -88,16 +88,12 @@ extern struct pt_regs *__frame; /* current frame pointer */
 /* options set using PTRACE_SETOPTIONS */
 #define PTRACE_O_TRACESYSGOOD     0x00000001
 
-#if defined(__KERNEL__)
-
-#if !defined(__ASSEMBLY__)
+#if defined(__KERNEL__) && !defined(__ASSEMBLY__)
 #define user_mode(regs)			(((regs)->epsw & EPSW_nSL) == EPSW_nSL)
 #define instruction_pointer(regs)	((regs)->pc)
 extern void show_regs(struct pt_regs *);
-#endif  /*  !__ASSEMBLY  */
+#endif
 
 #define profile_pc(regs) ((regs)->pc)
-
-#endif  /*  __KERNEL__  */
 
 #endif /* _ASM_PTRACE_H */

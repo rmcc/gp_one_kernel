@@ -87,8 +87,6 @@ static int gbe_revision;
 static int ypan, ywrap;
 
 static uint32_t pseudo_palette[16];
-static uint32_t gbe_cmap[256];
-static int gbe_turned_on; /* 0 turned off, 1 turned on */
 
 static char *mode_option __initdata = NULL;
 
@@ -209,8 +207,6 @@ void gbe_turn_off(void)
 {
 	int i;
 	unsigned int val, x, y, vpixen_off;
-
-	gbe_turned_on = 0;
 
 	/* check if pixel counter is on */
 	val = gbe->vt_xy;
@@ -375,22 +371,6 @@ static void gbe_turn_on(void)
 	}
 	if (i == 10000)
 		printk(KERN_ERR "gbefb: turn on DMA timed out\n");
-
-	gbe_turned_on = 1;
-}
-
-static void gbe_loadcmap(void)
-{
-	int i, j;
-
-	for (i = 0; i < 256; i++) {
-		for (j = 0; j < 1000 && gbe->cm_fifo >= 63; j++)
-			udelay(10);
-		if (j == 1000)
-			printk(KERN_ERR "gbefb: cmap FIFO timeout\n");
-
-		gbe->cmap[i] = gbe_cmap[i];
-	}
 }
 
 /*
@@ -402,7 +382,6 @@ static int gbefb_blank(int blank, struct fb_info *info)
 	switch (blank) {
 	case FB_BLANK_UNBLANK:		/* unblank */
 		gbe_turn_on();
-		gbe_loadcmap();
 		break;
 
 	case FB_BLANK_NORMAL:		/* blank */
@@ -817,10 +796,16 @@ static int gbefb_set_par(struct fb_info *info)
 		gbe->gmap[i] = (i << 24) | (i << 16) | (i << 8);
 
 	/* Initialize the color map */
-	for (i = 0; i < 256; i++)
-		gbe_cmap[i] = (i << 8) | (i << 16) | (i << 24);
+	for (i = 0; i < 256; i++) {
+		int j;
 
-	gbe_loadcmap();
+		for (j = 0; j < 1000 && gbe->cm_fifo >= 63; j++)
+			udelay(10);
+		if (j == 1000)
+			printk(KERN_ERR "gbefb: cmap FIFO timeout\n");
+
+		gbe->cmap[i] = (i << 8) | (i << 16) | (i << 24);
+	}
 
 	return 0;
 }
@@ -870,17 +855,14 @@ static int gbefb_setcolreg(unsigned regno, unsigned red, unsigned green,
 	blue >>= 8;
 
 	if (info->var.bits_per_pixel <= 8) {
-		gbe_cmap[regno] = (red << 24) | (green << 16) | (blue << 8);
-		if (gbe_turned_on) {
-			/* wait for the color map FIFO to have a free entry */
-			for (i = 0; i < 1000 && gbe->cm_fifo >= 63; i++)
-				udelay(10);
-			if (i == 1000) {
-				printk(KERN_ERR "gbefb: cmap FIFO timeout\n");
-				return 1;
-			}
-			gbe->cmap[regno] = gbe_cmap[regno];
+		/* wait for the color map FIFO to have a free entry */
+		for (i = 0; i < 1000 && gbe->cm_fifo >= 63; i++)
+			udelay(10);
+		if (i == 1000) {
+			printk(KERN_ERR "gbefb: cmap FIFO timeout\n");
+			return 1;
 		}
+		gbe->cmap[regno] = (red << 24) | (green << 16) | (blue << 8);
 	} else if (regno < 16) {
 		switch (info->var.bits_per_pixel) {
 		case 15:
@@ -912,7 +894,6 @@ static int gbefb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	unsigned int line_length;
 	struct gbe_timing_info timing;
-	int ret;
 
 	/* Limit bpp to 8, 16, and 32 */
 	if (var->bits_per_pixel <= 8)
@@ -931,10 +912,8 @@ static int gbefb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	var->grayscale = 0;	/* No grayscale for now */
 
-	ret = compute_gbe_timing(var, &timing);
-	var->pixclock = ret;
-	if (ret < 0)
-		return -EINVAL;
+	if ((var->pixclock = compute_gbe_timing(var, &timing)) < 0)
+		return(-EINVAL);
 
 	/* Adjust virtual resolution, if necessary */
 	if (var->xres > var->xres_virtual || (!ywrap && !ypan))

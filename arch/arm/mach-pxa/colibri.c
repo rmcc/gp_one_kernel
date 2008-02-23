@@ -21,24 +21,19 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/physmap.h>
 #include <asm/mach-types.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/sizes.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 #include <asm/mach/flash.h>
-#include <mach/pxa-regs.h>
-#include <mach/mfp-pxa27x.h>
-#include <mach/colibri.h>
+#include <asm/arch/pxa-regs.h>
+#include <asm/arch/pxa2xx-gpio.h>
+#include <asm/arch/colibri.h>
 
 #include "generic.h"
 #include "devices.h"
-
-static unsigned long colibri_pin_config[] __initdata = {
-	GPIO78_nCS_2,	/* Ethernet CS */
-	GPIO114_GPIO,	/* Ethernet IRQ */
-};
 
 /*
  * Flash
@@ -121,7 +116,9 @@ static struct platform_device *colibri_devices[] __initdata = {
 
 static void __init colibri_init(void)
 {
-	pxa2xx_mfp_config(ARRAY_AND_SIZE(colibri_pin_config));
+	/* DM9000 LAN */
+	pxa_gpio_mode(GPIO78_nCS_2_MD);
+	pxa_gpio_mode(GPIO_DM9000 | GPIO_IN);
 
 	platform_add_devices(colibri_devices, ARRAY_SIZE(colibri_devices));
 }

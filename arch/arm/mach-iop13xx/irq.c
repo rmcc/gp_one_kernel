@@ -23,9 +23,10 @@
 #include <asm/uaccess.h>
 #include <asm/mach/irq.h>
 #include <asm/irq.h>
-#include <mach/hardware.h>
-#include <mach/irqs.h>
-#include <mach/msi.h>
+#include <asm/hardware.h>
+#include <asm/mach-types.h>
+#include <asm/arch/irqs.h>
+#include <asm/arch/msi.h>
 
 /* INTCTL0 CP6 R0 Page 4
  */

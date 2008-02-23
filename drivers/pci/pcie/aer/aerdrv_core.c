@@ -28,14 +28,40 @@
 static int forceload;
 module_param(forceload, bool, 0);
 
+#define PCI_CFG_SPACE_SIZE	(0x100)
+int pci_find_aer_capability(struct pci_dev *dev)
+{
+	int pos;
+	u32 reg32 = 0;
+
+	/* Check if it's a pci-express device */
+	pos = pci_find_capability(dev, PCI_CAP_ID_EXP);
+	if (!pos)
+		return 0;
+
+	/* Check if it supports pci-express AER */
+	pos = PCI_CFG_SPACE_SIZE;
+	while (pos) {
+		if (pci_read_config_dword(dev, pos, &reg32))
+			return 0;
+
+		/* some broken boards return ~0 */
+		if (reg32 == 0xffffffff)
+			return 0;
+
+		if (PCI_EXT_CAP_ID(reg32) == PCI_EXT_CAP_ID_ERR)
+			break;
+
+		pos = reg32 >> 20;
+	}
+
+	return pos;
+}
+
 int pci_enable_pcie_error_reporting(struct pci_dev *dev)
 {
 	u16 reg16 = 0;
 	int pos;
-
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR);
-	if (!pos)
-		return -EIO;
 
 	pos = pci_find_capability(dev, PCI_CAP_ID_EXP);
 	if (!pos)
@@ -76,7 +102,7 @@ int pci_cleanup_aer_uncorrect_error_status(struct pci_dev *dev)
 	int pos;
 	u32 status, mask;
 
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR);
+	pos = pci_find_aer_capability(dev);
 	if (!pos)
 		return -EIO;
 
@@ -97,7 +123,7 @@ int pci_cleanup_aer_correct_error_status(struct pci_dev *dev)
 	int pos;
 	u32 status;
 
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR);
+	pos = pci_find_aer_capability(dev);
 	if (!pos)
 		return -EIO;
 
@@ -195,9 +221,9 @@ static void report_error_detected(struct pci_dev *dev, void *data)
 			 * of a driver for this device is unaware of
 			 * its hw state.
 			 */
-			dev_printk(KERN_DEBUG, &dev->dev, "device has %s\n",
-				   dev->driver ?
-				   "no AER-aware driver" : "no driver");
+			printk(KERN_DEBUG "Device ID[%s] has %s\n",
+					dev->dev.bus_id, (dev->driver) ?
+					"no AER-aware driver" : "no driver");
 		}
 		return;
 	}
@@ -252,7 +278,7 @@ static void report_resume(struct pci_dev *dev, void *data)
 
 	if (!dev->driver ||
 		!dev->driver->err_handler ||
-		!dev->driver->err_handler->resume)
+		!dev->driver->err_handler->slot_reset)
 		return;
 
 	err_handler = dev->driver->err_handler;
@@ -278,7 +304,7 @@ static pci_ers_result_t broadcast_error_message(struct pci_dev *dev,
 {
 	struct aer_broadcast_data result_data;
 
-	dev_printk(KERN_DEBUG, &dev->dev, "broadcast %s message\n", error_mesg);
+	printk(KERN_DEBUG "Broadcast %s message\n", error_mesg);
 	result_data.state = state;
 	if (cb == report_error_detected)
 		result_data.result = PCI_ERS_RESULT_CAN_RECOVER;
@@ -378,16 +404,18 @@ static pci_ers_result_t reset_link(struct pcie_device *aerdev,
 			data.aer_driver =
 				to_service_driver(aerdev->device.driver);
 		} else {
-			dev_printk(KERN_DEBUG, &dev->dev, "no link-reset "
-				   "support\n");
+			printk(KERN_DEBUG "No link-reset support to Device ID"
+				"[%s]\n",
+				dev->dev.bus_id);
 			return PCI_ERS_RESULT_DISCONNECT;
 		}
 	}
 
 	status = data.aer_driver->reset_link(udev);
 	if (status != PCI_ERS_RESULT_RECOVERED) {
-		dev_printk(KERN_DEBUG, &dev->dev, "link reset at upstream "
-			   "device %s failed\n", pci_name(udev));
+		printk(KERN_DEBUG "Link reset at upstream Device ID"
+			"[%s] failed\n",
+			udev->dev.bus_id);
 		return PCI_ERS_RESULT_DISCONNECT;
 	}
 
@@ -476,19 +504,17 @@ static void handle_error_source(struct pcie_device * aerdev,
 		 * Correctable error does not need software intevention.
 		 * No need to go through error recovery process.
 		 */
-		pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR);
+		pos = pci_find_aer_capability(dev);
 		if (pos)
 			pci_write_config_dword(dev, pos + PCI_ERR_COR_STATUS,
 					info.status);
 	} else {
 		status = do_recovery(aerdev, dev, info.severity);
 		if (status == PCI_ERS_RESULT_RECOVERED) {
-			dev_printk(KERN_DEBUG, &dev->dev, "AER driver "
-				   "successfully recovered\n");
+			printk(KERN_DEBUG "AER driver successfully recovered\n");
 		} else {
 			/* TODO: Should kernel panic here? */
-			dev_printk(KERN_DEBUG, &dev->dev, "AER driver didn't "
-				   "recover\n");
+			printk(KERN_DEBUG "AER driver didn't recover\n");
 		}
 	}
 }
@@ -516,7 +542,7 @@ void aer_enable_rootport(struct aer_rpc *rpc)
 	reg16 &= ~(SYSTEM_ERROR_INTR_ON_MESG_MASK);
 	pci_write_config_word(pdev, pos + PCI_EXP_RTCTL, reg16);
 
-	aer_pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
+	aer_pos = pci_find_aer_capability(pdev);
 	/* Clear error status */
 	pci_read_config_dword(pdev, aer_pos + PCI_ERR_ROOT_STATUS, &reg32);
 	pci_write_config_dword(pdev, aer_pos + PCI_ERR_ROOT_STATUS, reg32);
@@ -553,7 +579,7 @@ static void disable_root_aer(struct aer_rpc *rpc)
 	u32 reg32;
 	int pos;
 
-	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
+	pos = pci_find_aer_capability(pdev);
 	/* Disable Root's interrupt in response to error messages */
 	pci_write_config_dword(pdev, pos + PCI_ERR_ROOT_COMMAND, 0);
 
@@ -592,7 +618,7 @@ static int get_device_error_info(struct pci_dev *dev, struct aer_err_info *info)
 {
 	int pos;
 
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ERR);
+	pos = pci_find_aer_capability(dev);
 
 	/* The device might not support AER */
 	if (!pos)
@@ -729,6 +755,7 @@ int aer_init(struct pcie_device *dev)
 	return AER_SUCCESS;
 }
 
+EXPORT_SYMBOL_GPL(pci_find_aer_capability);
 EXPORT_SYMBOL_GPL(pci_enable_pcie_error_reporting);
 EXPORT_SYMBOL_GPL(pci_disable_pcie_error_reporting);
 EXPORT_SYMBOL_GPL(pci_cleanup_aer_uncorrect_error_status);

@@ -1,6 +1,8 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
+ * $Id: scsiglue.c,v 1.26 2002/04/22 03:39:43 mdharm Exp $
+ *
  * Current development and maintenance by:
  *   (c) 1999-2002 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
@@ -59,13 +61,6 @@
 #include "transport.h"
 #include "protocol.h"
 
-/* Vendor IDs for companies that seem to include the READ CAPACITY bug
- * in all their devices
- */
-#define VENDOR_ID_NOKIA		0x0421
-#define VENDOR_ID_NIKON		0x04b0
-#define VENDOR_ID_MOTOROLA	0x22b8
-
 /***********************************************************************
  * Host functions 
  ***********************************************************************/
@@ -78,6 +73,7 @@ static const char* host_info(struct Scsi_Host *host)
 static int slave_alloc (struct scsi_device *sdev)
 {
 	struct us_data *us = host_to_us(sdev->host);
+	struct usb_host_endpoint *bulk_in_ep;
 
 	/*
 	 * Set the INQUIRY transfer length to 36.  We don't use any of
@@ -86,22 +82,16 @@ static int slave_alloc (struct scsi_device *sdev)
 	 */
 	sdev->inquiry_len = 36;
 
-	/* USB has unusual DMA-alignment requirements: Although the
-	 * starting address of each scatter-gather element doesn't matter,
-	 * the length of each element except the last must be divisible
-	 * by the Bulk maxpacket value.  There's currently no way to
-	 * express this by block-layer constraints, so we'll cop out
-	 * and simply require addresses to be aligned at 512-byte
-	 * boundaries.  This is okay since most block I/O involves
-	 * hardware sectors that are multiples of 512 bytes in length,
-	 * and since host controllers up through USB 2.0 have maxpacket
-	 * values no larger than 512.
-	 *
-	 * But it doesn't suffice for Wireless USB, where Bulk maxpacket
-	 * values can be as large as 2048.  To make that work properly
-	 * will require changes to the block layer.
+	/* Scatter-gather buffers (all but the last) must have a length
+	 * divisible by the bulk maxpacket size.  Otherwise a data packet
+	 * would end up being short, causing a premature end to the data
+	 * transfer.  We'll use the maxpacket value of the bulk-IN pipe
+	 * to set the SCSI device queue's DMA alignment mask.
 	 */
-	blk_queue_update_dma_alignment(sdev->request_queue, (512 - 1));
+	bulk_in_ep = us->pusb_dev->ep_in[usb_pipeendpoint(us->recv_bulk_pipe)];
+	blk_queue_update_dma_alignment(sdev->request_queue,
+			le16_to_cpu(bulk_in_ep->desc.wMaxPacketSize) - 1);
+			/* wMaxPacketSize must be a power of 2 */
 
 	/*
 	 * The UFI spec treates the Peripheral Qualifier bits in an
@@ -126,44 +116,20 @@ static int slave_configure(struct scsi_device *sdev)
 	 * while others have trouble with more than 64K. At this time we
 	 * are limiting both to 32K (64 sectores).
 	 */
-	if (us->fflags & (US_FL_MAX_SECTORS_64 | US_FL_MAX_SECTORS_MIN)) {
+	if (us->flags & (US_FL_MAX_SECTORS_64 | US_FL_MAX_SECTORS_MIN)) {
 		unsigned int max_sectors = 64;
 
-		if (us->fflags & US_FL_MAX_SECTORS_MIN)
+		if (us->flags & US_FL_MAX_SECTORS_MIN)
 			max_sectors = PAGE_CACHE_SIZE >> 9;
 		if (sdev->request_queue->max_sectors > max_sectors)
 			blk_queue_max_sectors(sdev->request_queue,
 					      max_sectors);
 	}
 
-	/* Some USB host controllers can't do DMA; they have to use PIO.
-	 * They indicate this by setting their dma_mask to NULL.  For
-	 * such controllers we need to make sure the block layer sets
-	 * up bounce buffers in addressable memory.
-	 */
-	if (!us->pusb_dev->bus->controller->dma_mask)
-		blk_queue_bounce_limit(sdev->request_queue, BLK_BOUNCE_HIGH);
-
 	/* We can't put these settings in slave_alloc() because that gets
 	 * called before the device type is known.  Consequently these
 	 * settings can't be overridden via the scsi devinfo mechanism. */
 	if (sdev->type == TYPE_DISK) {
-
-		/* Some vendors seem to put the READ CAPACITY bug into
-		 * all their devices -- primarily makers of cell phones
-		 * and digital cameras.  Since these devices always use
-		 * flash media and can be expected to have an even number
-		 * of sectors, we will always enable the CAPACITY_HEURISTICS
-		 * flag unless told otherwise. */
-		switch (le16_to_cpu(us->pusb_dev->descriptor.idVendor)) {
-		case VENDOR_ID_NOKIA:
-		case VENDOR_ID_NIKON:
-		case VENDOR_ID_MOTOROLA:
-			if (!(us->fflags & (US_FL_FIX_CAPACITY |
-					US_FL_CAPACITY_OK)))
-				us->fflags |= US_FL_CAPACITY_HEURISTICS;
-			break;
-		}
 
 		/* Disk-type devices use MODE SENSE(6) if the protocol
 		 * (SubClass) is Transparent SCSI, otherwise they use
@@ -182,7 +148,7 @@ static int slave_configure(struct scsi_device *sdev)
 		 * majority of devices work fine, but a few still can't
 		 * handle it.  The sd driver will simply assume those
 		 * devices are write-enabled. */
-		if (us->fflags & US_FL_NO_WP_DETECT)
+		if (us->flags & US_FL_NO_WP_DETECT)
 			sdev->skip_ms_page_3f = 1;
 
 		/* A number of devices have problems with MODE SENSE for
@@ -192,18 +158,14 @@ static int slave_configure(struct scsi_device *sdev)
 		/* Some disks return the total number of blocks in response
 		 * to READ CAPACITY rather than the highest block number.
 		 * If this device makes that mistake, tell the sd driver. */
-		if (us->fflags & US_FL_FIX_CAPACITY)
+		if (us->flags & US_FL_FIX_CAPACITY)
 			sdev->fix_capacity = 1;
 
 		/* A few disks have two indistinguishable version, one of
 		 * which reports the correct capacity and the other does not.
 		 * The sd driver has to guess which is the case. */
-		if (us->fflags & US_FL_CAPACITY_HEURISTICS)
+		if (us->flags & US_FL_CAPACITY_HEURISTICS)
 			sdev->guess_capacity = 1;
-
-		/* assume SPC3 or latter devices support sense size > 18 */
-		if (sdev->scsi_level > SCSI_SPC_2)
-			us->fflags |= US_FL_SANE_SENSE;
 
 		/* Some devices report a SCSI revision level above 2 but are
 		 * unable to handle the REPORT LUNS command (for which
@@ -231,14 +193,6 @@ static int slave_configure(struct scsi_device *sdev)
 		 * sector in a larger then 1 sector read, since the performance
 		 * impact is negible we set this flag for all USB disks */
 		sdev->last_sector_bug = 1;
-
-		/* Enable last-sector hacks for single-target devices using
-		 * the Bulk-only transport, unless we already know the
-		 * capacity will be decremented or is correct. */
-		if (!(us->fflags & (US_FL_FIX_CAPACITY | US_FL_CAPACITY_OK |
-					US_FL_SCM_MULT_TARG)) &&
-				us->protocol == US_PR_BULK)
-			us->use_last_sector_hacks = 1;
 	} else {
 
 		/* Non-disk-type devices don't need to blacklist any pages
@@ -259,7 +213,7 @@ static int slave_configure(struct scsi_device *sdev)
 
 	/* Some devices choke when they receive a PREVENT-ALLOW MEDIUM
 	 * REMOVAL command, so suppress those commands. */
-	if (us->fflags & US_FL_NOT_LOCKABLE)
+	if (us->flags & US_FL_NOT_LOCKABLE)
 		sdev->lockable = 0;
 
 	/* this is to satisfy the compiler, tho I don't think the 
@@ -284,7 +238,7 @@ static int queuecommand(struct scsi_cmnd *srb,
 	}
 
 	/* fail the command if we are disconnecting */
-	if (test_bit(US_FLIDX_DISCONNECTING, &us->dflags)) {
+	if (test_bit(US_FLIDX_DISCONNECTING, &us->flags)) {
 		US_DEBUGP("Fail command during disconnect\n");
 		srb->result = DID_NO_CONNECT << 16;
 		done(srb);
@@ -294,7 +248,7 @@ static int queuecommand(struct scsi_cmnd *srb,
 	/* enqueue the command and wake up the control thread */
 	srb->scsi_done = done;
 	us->srb = srb;
-	complete(&us->cmnd_ready);
+	up(&(us->sema));
 
 	return 0;
 }
@@ -326,9 +280,9 @@ static int command_abort(struct scsi_cmnd *srb)
 	 * with the reset).  Note that we must retain the host lock while
 	 * calling usb_stor_stop_transport(); otherwise it might interfere
 	 * with an auto-reset that begins as soon as we release the lock. */
-	set_bit(US_FLIDX_TIMED_OUT, &us->dflags);
-	if (!test_bit(US_FLIDX_RESETTING, &us->dflags)) {
-		set_bit(US_FLIDX_ABORTING, &us->dflags);
+	set_bit(US_FLIDX_TIMED_OUT, &us->flags);
+	if (!test_bit(US_FLIDX_RESETTING, &us->flags)) {
+		set_bit(US_FLIDX_ABORTING, &us->flags);
 		usb_stor_stop_transport(us);
 	}
 	scsi_unlock(us_to_host(us));
@@ -375,7 +329,7 @@ void usb_stor_report_device_reset(struct us_data *us)
 	struct Scsi_Host *host = us_to_host(us);
 
 	scsi_report_device_reset(host, 0, 0);
-	if (us->fflags & US_FL_SCM_MULT_TARG) {
+	if (us->flags & US_FL_SCM_MULT_TARG) {
 		for (i = 1; i < host->max_id; ++i)
 			scsi_report_device_reset(host, 0, i);
 	}
@@ -446,7 +400,7 @@ static int proc_info (struct Scsi_Host *host, char *buffer,
 		pos += sprintf(pos, "       Quirks:");
 
 #define US_FLAG(name, value) \
-	if (us->fflags & value) pos += sprintf(pos, " " #name);
+	if (us->flags & value) pos += sprintf(pos, " " #name);
 US_DO_ALL_FLAGS
 #undef US_FLAG
 

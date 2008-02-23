@@ -114,6 +114,17 @@ static ssize_t recover_status_show(struct gdlm_ls *ls, char *buf)
 	return sprintf(buf, "%d\n", ls->recover_jid_status);
 }
 
+static ssize_t drop_count_show(struct gdlm_ls *ls, char *buf)
+{
+	return sprintf(buf, "%d\n", ls->drop_locks_count);
+}
+
+static ssize_t drop_count_store(struct gdlm_ls *ls, const char *buf, size_t len)
+{
+	ls->drop_locks_count = simple_strtol(buf, NULL, 0);
+	return len;
+}
+
 struct gdlm_attr {
 	struct attribute attr;
 	ssize_t (*show)(struct gdlm_ls *, char *);
@@ -133,6 +144,7 @@ GDLM_ATTR(first_done,     0444, first_done_show,     NULL);
 GDLM_ATTR(recover,        0644, recover_show,        recover_store);
 GDLM_ATTR(recover_done,   0444, recover_done_show,   NULL);
 GDLM_ATTR(recover_status, 0444, recover_status_show, NULL);
+GDLM_ATTR(drop_count,     0644, drop_count_show,     drop_count_store);
 
 static struct attribute *gdlm_attrs[] = {
 	&gdlm_attr_proto_name.attr,
@@ -145,6 +157,7 @@ static struct attribute *gdlm_attrs[] = {
 	&gdlm_attr_recover.attr,
 	&gdlm_attr_recover_done.attr,
 	&gdlm_attr_recover_status.attr,
+	&gdlm_attr_drop_count.attr,
 	NULL,
 };
 
@@ -195,23 +208,9 @@ void gdlm_kobject_release(struct gdlm_ls *ls)
 	kobject_put(&ls->kobj);
 }
 
-static int gdlm_uevent(struct kset *kset, struct kobject *kobj,
-		       struct kobj_uevent_env *env)
-{
-        struct gdlm_ls *ls = container_of(kobj, struct gdlm_ls, kobj);
-        add_uevent_var(env, "LOCKTABLE=%s:%s", ls->clustername, ls->fsname);
-        add_uevent_var(env, "LOCKPROTO=lock_dlm");
-        return 0;
-}
-
-static struct kset_uevent_ops gdlm_uevent_ops = {
-	.uevent = gdlm_uevent,
-};
-
-
 int gdlm_sysfs_init(void)
 {
-	gdlm_kset = kset_create_and_add("lock_dlm", &gdlm_uevent_ops, kernel_kobj);
+	gdlm_kset = kset_create_and_add("lock_dlm", NULL, kernel_kobj);
 	if (!gdlm_kset) {
 		printk(KERN_WARNING "%s: can not create kset\n", __func__);
 		return -ENOMEM;

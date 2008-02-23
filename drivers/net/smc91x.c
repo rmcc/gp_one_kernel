@@ -90,6 +90,33 @@ static const char version[] =
 
 #include "smc91x.h"
 
+#ifdef CONFIG_ISA
+/*
+ * the LAN91C111 can be at any of the following port addresses.  To change,
+ * for a slightly different card, you can add it to the array.  Keep in
+ * mind that the array must end in zero.
+ */
+static unsigned int smc_portlist[] __initdata = {
+	0x200, 0x220, 0x240, 0x260, 0x280, 0x2A0, 0x2C0, 0x2E0,
+	0x300, 0x320, 0x340, 0x360, 0x380, 0x3A0, 0x3C0, 0x3E0, 0
+};
+
+#ifndef SMC_IOADDR
+# define SMC_IOADDR		-1
+#endif
+static unsigned long io = SMC_IOADDR;
+module_param(io, ulong, 0400);
+MODULE_PARM_DESC(io, "I/O base address");
+
+#ifndef SMC_IRQ
+# define SMC_IRQ		-1
+#endif
+static int irq = SMC_IRQ;
+module_param(irq, int, 0400);
+MODULE_PARM_DESC(irq, "IRQ number");
+
+#endif  /* CONFIG_ISA */
+
 #ifndef SMC_NOWAIT
 # define SMC_NOWAIT		0
 #endif
@@ -243,7 +270,7 @@ static void smc_reset(struct net_device *dev)
 	unsigned int ctl, cfg;
 	struct sk_buff *pending_skb;
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	/* Disable all interrupts, block TX tasklet */
 	spin_lock_irq(&lp->lock);
@@ -281,7 +308,7 @@ static void smc_reset(struct net_device *dev)
 	 * can't handle it then there will be no recovery except for
 	 * a hard reset or power cycle
 	 */
-	if (lp->cfg.flags & SMC91X_NOWAIT)
+	if (nowait)
 		cfg |= CONFIG_NO_WAIT;
 
 	/*
@@ -336,7 +363,7 @@ static void smc_enable(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	int mask;
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	/* see the header file for options in TCR/RCR DEFAULT */
 	SMC_SELECT_BANK(lp, 0);
@@ -370,7 +397,7 @@ static void smc_shutdown(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	struct sk_buff *pending_skb;
 
-	DBG(2, "%s: %s\n", CARDNAME, __func__);
+	DBG(2, "%s: %s\n", CARDNAME, __FUNCTION__);
 
 	/* no more interrupts for me */
 	spin_lock_irq(&lp->lock);
@@ -403,7 +430,7 @@ static inline void  smc_rcv(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	unsigned int packet_number, status, packet_len;
 
-	DBG(3, "%s: %s\n", dev->name, __func__);
+	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
 
 	packet_number = SMC_GET_RXFIFO(lp);
 	if (unlikely(packet_number & RXFIFO_REMPTY)) {
@@ -491,6 +518,7 @@ static inline void  smc_rcv(struct net_device *dev)
 
 		PRINT_PKT(data, packet_len - 4);
 
+		dev->last_rx = jiffies;
 		skb->protocol = eth_type_trans(skb, dev);
 		netif_rx(skb);
 		dev->stats.rx_packets++;
@@ -549,7 +577,7 @@ static void smc_hardware_send_pkt(unsigned long data)
 	unsigned int packet_no, len;
 	unsigned char *buf;
 
-	DBG(3, "%s: %s\n", dev->name, __func__);
+	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
 
 	if (!smc_special_trylock(&lp->lock)) {
 		netif_stop_queue(dev);
@@ -634,7 +662,7 @@ static int smc_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	unsigned int numPages, poll_count, status;
 
-	DBG(3, "%s: %s\n", dev->name, __func__);
+	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
 
 	BUG_ON(lp->pending_tx_skb != NULL);
 
@@ -706,7 +734,7 @@ static void smc_tx(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	unsigned int saved_packet, packet_no, tx_status, pkt_len;
 
-	DBG(3, "%s: %s\n", dev->name, __func__);
+	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
 
 	/* If the TX FIFO is empty then nothing to do */
 	packet_no = SMC_GET_TXFIFO(lp);
@@ -828,7 +856,7 @@ static int smc_phy_read(struct net_device *dev, int phyaddr, int phyreg)
 	SMC_SET_MII(lp, SMC_GET_MII(lp) & ~(MII_MCLK|MII_MDOE|MII_MDO));
 
 	DBG(3, "%s: phyaddr=0x%x, phyreg=0x%x, phydata=0x%x\n",
-		__func__, phyaddr, phyreg, phydata);
+		__FUNCTION__, phyaddr, phyreg, phydata);
 
 	SMC_SELECT_BANK(lp, 2);
 	return phydata;
@@ -855,7 +883,7 @@ static void smc_phy_write(struct net_device *dev, int phyaddr, int phyreg,
 	SMC_SET_MII(lp, SMC_GET_MII(lp) & ~(MII_MCLK|MII_MDOE|MII_MDO));
 
 	DBG(3, "%s: phyaddr=0x%x, phyreg=0x%x, phydata=0x%x\n",
-		__func__, phyaddr, phyreg, phydata);
+		__FUNCTION__, phyaddr, phyreg, phydata);
 
 	SMC_SELECT_BANK(lp, 2);
 }
@@ -868,7 +896,7 @@ static void smc_phy_detect(struct net_device *dev)
 	struct smc_local *lp = netdev_priv(dev);
 	int phyaddr;
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	lp->phy_type = 0;
 
@@ -907,7 +935,7 @@ static int smc_phy_fixed(struct net_device *dev)
 	int phyaddr = lp->mii.phy_id;
 	int bmcr, cfg1;
 
-	DBG(3, "%s: %s\n", dev->name, __func__);
+	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
 
 	/* Enter Link Disable state */
 	cfg1 = smc_phy_read(dev, phyaddr, PHY_CFG1_REG);
@@ -988,8 +1016,15 @@ static void smc_phy_powerdown(struct net_device *dev)
 
 	/* We need to ensure that no calls to smc_phy_configure are
 	   pending.
+
+	   flush_scheduled_work() cannot be called because we are
+	   running with the netlink semaphore held (from
+	   devinet_ioctl()) and the pending work queue contains
+	   linkwatch_event() (scheduled by netif_carrier_off()
+	   above). linkwatch_event() also wants the netlink semaphore.
 	*/
-	cancel_work_sync(&lp->phy_configure);
+	while(lp->work_pending)
+		yield();
 
 	bmcr = smc_phy_read(dev, phy, MII_BMCR);
 	smc_phy_write(dev, phy, MII_BMCR, bmcr | BMCR_PDOWN);
@@ -1126,6 +1161,7 @@ static void smc_phy_configure(struct work_struct *work)
 smc_phy_configure_exit:
 	SMC_SELECT_BANK(lp, 2);
 	spin_unlock_irq(&lp->lock);
+	lp->work_pending = 0;
 }
 
 /*
@@ -1140,7 +1176,7 @@ static void smc_phy_interrupt(struct net_device *dev)
 	int phyaddr = lp->mii.phy_id;
 	int phy18;
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	if (lp->phy_type == 0)
 		return;
@@ -1208,7 +1244,7 @@ static irqreturn_t smc_interrupt(int irq, void *dev_id)
 	int status, mask, timeout, card_stats;
 	int saved_pointer;
 
-	DBG(3, "%s: %s\n", dev->name, __func__);
+	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
 
 	spin_lock(&lp->lock);
 
@@ -1330,7 +1366,7 @@ static void smc_timeout(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	int status, mask, eph_st, meminfo, fifo;
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	spin_lock_irq(&lp->lock);
 	status = SMC_GET_INT(lp);
@@ -1353,8 +1389,11 @@ static void smc_timeout(struct net_device *dev)
 	 * smc_phy_configure() calls msleep() which calls schedule_timeout()
 	 * which calls schedule().  Hence we use a work queue.
 	 */
-	if (lp->phy_type != 0)
-		schedule_work(&lp->phy_configure);
+	if (lp->phy_type != 0) {
+		if (schedule_work(&lp->phy_configure)) {
+			lp->work_pending = 1;
+		}
+	}
 
 	/* We can accept TX packets again */
 	dev->trans_start = jiffies;
@@ -1374,7 +1413,7 @@ static void smc_set_multicast_list(struct net_device *dev)
 	unsigned char multicast_table[8];
 	int update_multicast = 0;
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	if (dev->flags & IFF_PROMISC) {
 		DBG(2, "%s: RCR_PRMS\n", dev->name);
@@ -1477,7 +1516,7 @@ smc_open(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	/*
 	 * Check that the address is valid.  If its not, refuse
@@ -1485,16 +1524,14 @@ smc_open(struct net_device *dev)
 	 * address using ifconfig eth0 hw ether xx:xx:xx:xx:xx:xx
 	 */
 	if (!is_valid_ether_addr(dev->dev_addr)) {
-		PRINTK("%s: no valid ethernet hw addr\n", __func__);
+		PRINTK("%s: no valid ethernet hw addr\n", __FUNCTION__);
 		return -EINVAL;
 	}
 
 	/* Setup the default Register Modes */
 	lp->tcr_cur_mode = TCR_DEFAULT;
 	lp->rcr_cur_mode = RCR_DEFAULT;
-	lp->rpc_cur_mode = RPC_DEFAULT |
-				lp->cfg.leda << RPC_LSXA_SHFT |
-				lp->cfg.ledb << RPC_LSXB_SHFT;
+	lp->rpc_cur_mode = RPC_DEFAULT;
 
 	/*
 	 * If we are not using a MII interface, we need to
@@ -1531,7 +1568,7 @@ static int smc_close(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
 
-	DBG(2, "%s: %s\n", dev->name, __func__);
+	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
 
 	netif_stop_queue(dev);
 	netif_carrier_off(dev);
@@ -1668,13 +1705,13 @@ static const struct ethtool_ops smc_ethtool_ops = {
  * I just deleted auto_irq.c, since it was never built...
  *   --jgarzik
  */
-static int __devinit smc_findirq(struct smc_local *lp)
+static int __init smc_findirq(struct smc_local *lp)
 {
 	void __iomem *ioaddr = lp->base;
 	int timeout = 20;
 	unsigned long cookie;
 
-	DBG(2, "%s: %s\n", CARDNAME, __func__);
+	DBG(2, "%s: %s\n", CARDNAME, __FUNCTION__);
 
 	cookie = probe_irq_on();
 
@@ -1742,7 +1779,7 @@ static int __devinit smc_findirq(struct smc_local *lp)
  * o  actually GRAB the irq.
  * o  GRAB the region
  */
-static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
+static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr,
 			    unsigned long irq_flags)
 {
 	struct smc_local *lp = netdev_priv(dev);
@@ -1750,8 +1787,9 @@ static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
 	int retval;
 	unsigned int val, revision_register;
 	const char *version_string;
+	DECLARE_MAC_BUF(mac);
 
-	DBG(2, "%s: %s\n", CARDNAME, __func__);
+	DBG(2, "%s: %s\n", CARDNAME, __FUNCTION__);
 
 	/* First, see if the high byte is 0x33 */
 	val = SMC_CURRENT_BANK(lp);
@@ -1912,11 +1950,8 @@ static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
       	if (retval)
       		goto err_out;
 
-#ifdef CONFIG_ARCH_PXA
-#  ifdef SMC_USE_PXA_DMA
-	lp->cfg.flags |= SMC91X_USE_DMA;
-#  endif
-	if (lp->cfg.flags & SMC91X_USE_DMA) {
+#ifdef SMC_USE_PXA_DMA
+	{
 		int dma = pxa_request_dma(dev->name, DMA_PRIO_LOW,
 					  smc_pxa_dma_irq, NULL);
 		if (dma >= 0)
@@ -1934,8 +1969,7 @@ static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
 		if (dev->dma != (unsigned char)-1)
 			printk(" DMA %d", dev->dma);
 
-		printk("%s%s\n",
-			lp->cfg.flags & SMC91X_NOWAIT ? " [nowait]" : "",
+		printk("%s%s\n", nowait ? " [nowait]" : "",
 			THROTTLE_TX_PKTS ? " [throttle_tx]" : "");
 
 		if (!is_valid_ether_addr(dev->dev_addr)) {
@@ -1943,8 +1977,8 @@ static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
 			       "set using ifconfig\n", dev->name);
 		} else {
 			/* Print the Ethernet address */
-			printk("%s: Ethernet addr: %pM\n",
-			       dev->name, dev->dev_addr);
+			printk("%s: Ethernet addr: %s\n",
+			       dev->name, print_mac(mac, dev->dev_addr));
 		}
 
 		if (lp->phy_type == 0) {
@@ -1957,7 +1991,7 @@ static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
 	}
 
 err_out:
-#ifdef CONFIG_ARCH_PXA
+#ifdef SMC_USE_PXA_DMA
 	if (retval && dev->dma != (unsigned char)-1)
 		pxa_free_dma(dev->dma);
 #endif
@@ -2027,11 +2061,9 @@ static int smc_enable_device(struct platform_device *pdev)
 	return 0;
 }
 
-static int smc_request_attrib(struct platform_device *pdev,
-			      struct net_device *ndev)
+static int smc_request_attrib(struct platform_device *pdev)
 {
 	struct resource * res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "smc91x-attrib");
-	struct smc_local *lp __maybe_unused = netdev_priv(ndev);
 
 	if (!res)
 		return 0;
@@ -2042,11 +2074,9 @@ static int smc_request_attrib(struct platform_device *pdev,
 	return 0;
 }
 
-static void smc_release_attrib(struct platform_device *pdev,
-			       struct net_device *ndev)
+static void smc_release_attrib(struct platform_device *pdev)
 {
 	struct resource * res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "smc91x-attrib");
-	struct smc_local *lp __maybe_unused = netdev_priv(ndev);
 
 	if (res)
 		release_mem_region(res->start, ATTRIB_SIZE);
@@ -2097,21 +2127,34 @@ static void smc_release_datacs(struct platform_device *pdev, struct net_device *
  *	0 --> there is a device
  *	anything else, error
  */
-static int __devinit smc_drv_probe(struct platform_device *pdev)
+static int smc_drv_probe(struct platform_device *pdev)
 {
 	struct smc91x_platdata *pd = pdev->dev.platform_data;
 	struct smc_local *lp;
 	struct net_device *ndev;
 	struct resource *res, *ires;
 	unsigned int __iomem *addr;
-	unsigned long irq_flags = SMC_IRQ_FLAGS;
 	int ret;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "smc91x-regs");
+	if (!res)
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+
+	if (!request_mem_region(res->start, SMC_IO_EXTENT, CARDNAME)) {
+		ret = -EBUSY;
+		goto out;
+	}
 
 	ndev = alloc_etherdev(sizeof(struct smc_local));
 	if (!ndev) {
 		printk("%s: could not allocate device.\n", CARDNAME);
 		ret = -ENOMEM;
-		goto out;
+		goto out_release_io;
 	}
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 
@@ -2120,52 +2163,37 @@ static int __devinit smc_drv_probe(struct platform_device *pdev)
 	 */
 
 	lp = netdev_priv(ndev);
+	lp->cfg.irq_flags = SMC_IRQ_FLAGS;
 
-	if (pd) {
+#ifdef SMC_DYNAMIC_BUS_CONFIG
+	if (pd)
 		memcpy(&lp->cfg, pd, sizeof(lp->cfg));
-		lp->io_shift = SMC91X_IO_SHIFT(lp->cfg.flags);
-	} else {
-		lp->cfg.flags |= (SMC_CAN_USE_8BIT)  ? SMC91X_USE_8BIT  : 0;
-		lp->cfg.flags |= (SMC_CAN_USE_16BIT) ? SMC91X_USE_16BIT : 0;
-		lp->cfg.flags |= (SMC_CAN_USE_32BIT) ? SMC91X_USE_32BIT : 0;
-		lp->cfg.flags |= (nowait) ? SMC91X_NOWAIT : 0;
+	else {
+		lp->cfg.flags = SMC91X_USE_8BIT;
+		lp->cfg.flags |= SMC91X_USE_16BIT;
+		lp->cfg.flags |= SMC91X_USE_32BIT;
 	}
 
-	if (!lp->cfg.leda && !lp->cfg.ledb) {
-		lp->cfg.leda = RPC_LSA_DEFAULT;
-		lp->cfg.ledb = RPC_LSB_DEFAULT;
-	}
+	lp->cfg.flags &= ~(SMC_CAN_USE_8BIT ? 0 : SMC91X_USE_8BIT);
+	lp->cfg.flags &= ~(SMC_CAN_USE_16BIT ? 0 : SMC91X_USE_16BIT);
+	lp->cfg.flags &= ~(SMC_CAN_USE_32BIT ? 0 : SMC91X_USE_32BIT);
+#endif
 
 	ndev->dma = (unsigned char)-1;
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "smc91x-regs");
-	if (!res)
-		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		ret = -ENODEV;
-		goto out_free_netdev;
-	}
-
-
-	if (!request_mem_region(res->start, SMC_IO_EXTENT, CARDNAME)) {
-		ret = -EBUSY;
-		goto out_free_netdev;
-	}
 
 	ires = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!ires) {
 		ret = -ENODEV;
-		goto out_release_io;
+		goto out_free_netdev;
 	}
 
 	ndev->irq = ires->start;
+	if (SMC_IRQ_FLAGS == -1)
+		lp->cfg.irq_flags = ires->flags & IRQF_TRIGGER_MASK;
 
-	if (ires->flags & IRQF_TRIGGER_MASK)
-		irq_flags = ires->flags & IRQF_TRIGGER_MASK;
-
-	ret = smc_request_attrib(pdev, ndev);
+	ret = smc_request_attrib(pdev);
 	if (ret)
-		goto out_release_io;
+		goto out_free_netdev;
 #if defined(CONFIG_SA1100_ASSABET)
 	NCR_0 |= NCR_ENET_OSC_EN;
 #endif
@@ -2180,7 +2208,7 @@ static int __devinit smc_drv_probe(struct platform_device *pdev)
 		goto out_release_attrib;
 	}
 
-#ifdef CONFIG_ARCH_PXA
+#ifdef SMC_USE_PXA_DMA
 	{
 		struct smc_local *lp = netdev_priv(ndev);
 		lp->device = &pdev->dev;
@@ -2188,7 +2216,7 @@ static int __devinit smc_drv_probe(struct platform_device *pdev)
 	}
 #endif
 
-	ret = smc_probe(ndev, addr, irq_flags);
+	ret = smc_probe(ndev, addr, lp->cfg.irq_flags);
 	if (ret != 0)
 		goto out_iounmap;
 
@@ -2200,18 +2228,18 @@ static int __devinit smc_drv_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	iounmap(addr);
  out_release_attrib:
-	smc_release_attrib(pdev, ndev);
- out_release_io:
-	release_mem_region(res->start, SMC_IO_EXTENT);
+	smc_release_attrib(pdev);
  out_free_netdev:
 	free_netdev(ndev);
+ out_release_io:
+	release_mem_region(res->start, SMC_IO_EXTENT);
  out:
 	printk("%s: not found (%d).\n", CARDNAME, ret);
 
 	return ret;
 }
 
-static int __devexit smc_drv_remove(struct platform_device *pdev)
+static int smc_drv_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct smc_local *lp = netdev_priv(ndev);
@@ -2223,18 +2251,18 @@ static int __devexit smc_drv_remove(struct platform_device *pdev)
 
 	free_irq(ndev->irq, ndev);
 
-#ifdef CONFIG_ARCH_PXA
+#ifdef SMC_USE_PXA_DMA
 	if (ndev->dma != (unsigned char)-1)
 		pxa_free_dma(ndev->dma);
 #endif
 	iounmap(lp->base);
 
 	smc_release_datacs(pdev,ndev);
-	smc_release_attrib(pdev,ndev);
+	smc_release_attrib(pdev);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "smc91x-regs");
 	if (!res)
-		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+		platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	release_mem_region(res->start, SMC_IO_EXTENT);
 
 	free_netdev(ndev);
@@ -2276,7 +2304,7 @@ static int smc_drv_resume(struct platform_device *dev)
 
 static struct platform_driver smc_driver = {
 	.probe		= smc_drv_probe,
-	.remove		= __devexit_p(smc_drv_remove),
+	.remove		= smc_drv_remove,
 	.suspend	= smc_drv_suspend,
 	.resume		= smc_drv_resume,
 	.driver		= {
@@ -2287,6 +2315,15 @@ static struct platform_driver smc_driver = {
 
 static int __init smc_init(void)
 {
+#ifdef MODULE
+#ifdef CONFIG_ISA
+	if (io == -1)
+		printk(KERN_WARNING
+			"%s: You shouldn't use auto-probing with insmod!\n",
+			CARDNAME);
+#endif
+#endif
+
 	return platform_driver_register(&smc_driver);
 }
 

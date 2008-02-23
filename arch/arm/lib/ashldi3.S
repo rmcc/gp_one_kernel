@@ -47,5 +47,3 @@ ENTRY(__aeabi_llsl)
 	mov	al, al, lsl r2
 	mov	pc, lr
 
-ENDPROC(__ashldi3)
-ENDPROC(__aeabi_llsl)

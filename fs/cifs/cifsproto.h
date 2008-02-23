@@ -36,10 +36,10 @@ extern void cifs_buf_release(void *);
 extern struct smb_hdr *cifs_small_buf_get(void);
 extern void cifs_small_buf_release(void *);
 extern int smb_send(struct socket *, struct smb_hdr *,
-			unsigned int /* length */ , struct sockaddr *, bool);
+			unsigned int /* length */ , struct sockaddr *);
 extern unsigned int _GetXid(void);
 extern void _FreeXid(unsigned int);
-#define GetXid() (int)_GetXid(); cFYI(1,("CIFS VFS: in %s as Xid: %d with uid: %d",__func__, xid,current_fsuid()));
+#define GetXid() (int)_GetXid(); cFYI(1,("CIFS VFS: in %s as Xid: %d with uid: %d",__func__, xid,current->fsuid));
 #define FreeXid(curr_xid) {_FreeXid(curr_xid); cFYI(1,("CIFS VFS: leaving %s (xid = %d) rc = %d",__func__,curr_xid,(int)rc));}
 extern char *build_path_from_dentry(struct dentry *);
 extern char *build_wildcard_path_from_dentry(struct dentry *direntry);
@@ -172,15 +172,12 @@ extern int CIFSSMBQFSUnixInfo(const int xid, struct cifsTconInfo *tcon);
 extern int CIFSSMBQFSPosixInfo(const int xid, struct cifsTconInfo *tcon,
 			struct kstatfs *FSData);
 
-extern int CIFSSMBSetPathInfo(const int xid, struct cifsTconInfo *tcon,
+extern int CIFSSMBSetTimes(const int xid, struct cifsTconInfo *tcon,
 			const char *fileName, const FILE_BASIC_INFO *data,
 			const struct nls_table *nls_codepage,
 			int remap_special_chars);
-extern int CIFSSMBSetFileInfo(const int xid, struct cifsTconInfo *tcon,
-			const FILE_BASIC_INFO *data, __u16 fid,
-			__u32 pid_of_opener);
-extern int CIFSSMBSetFileDisposition(const int xid, struct cifsTconInfo *tcon,
-			bool delete_file, __u16 fid, __u32 pid_of_opener);
+extern int CIFSSMBSetFileTimes(const int xid, struct cifsTconInfo *tcon,
+			const FILE_BASIC_INFO *data, __u16 fid);
 #if 0
 extern int CIFSSMBSetAttrLegacy(int xid, struct cifsTconInfo *tcon,
 			char *fileName, __u16 dos_attributes,
@@ -194,20 +191,9 @@ extern int CIFSSMBSetEOF(const int xid, struct cifsTconInfo *tcon,
 extern int CIFSSMBSetFileSize(const int xid, struct cifsTconInfo *tcon,
 			 __u64 size, __u16 fileHandle, __u32 opener_pid,
 			bool AllocSizeFlag);
-
-struct cifs_unix_set_info_args {
-	__u64	ctime;
-	__u64	atime;
-	__u64	mtime;
-	__u64	mode;
-	__u64	uid;
-	__u64	gid;
-	dev_t	device;
-};
-
-extern int CIFSSMBUnixSetInfo(const int xid, struct cifsTconInfo *pTcon,
-			char *fileName,
-			const struct cifs_unix_set_info_args *args,
+extern int CIFSSMBUnixSetPerms(const int xid, struct cifsTconInfo *pTcon,
+			char *full_path, __u64 mode, __u64 uid,
+			__u64 gid, dev_t dev,
 			const struct nls_table *nls_codepage,
 			int remap_special_chars);
 
@@ -231,7 +217,7 @@ extern int CIFSSMBRename(const int xid, struct cifsTconInfo *tcon,
 			const struct nls_table *nls_codepage,
 			int remap_special_chars);
 extern int CIFSSMBRenameOpenFile(const int xid, struct cifsTconInfo *pTcon,
-			int netfid, const char *target_name,
+			int netfid, char *target_name,
 			const struct nls_table *nls_codepage,
 			int remap_special_chars);
 extern int CIFSCreateHardLink(const int xid,
@@ -330,8 +316,7 @@ extern void CalcNTLMv2_response(const struct cifsSesInfo *, char *);
 extern void setup_ntlmv2_rsp(struct cifsSesInfo *, char *,
 			     const struct nls_table *);
 #ifdef CONFIG_CIFS_WEAK_PW_HASH
-extern void calc_lanman_hash(const char *password, const char *cryptkey,
-				bool encrypt, char *lnm_session_key);
+extern void calc_lanman_hash(struct cifsSesInfo *ses, char *lnm_session_key);
 #endif /* CIFS_WEAK_PW_HASH */
 extern int CIFSSMBCopy(int xid,
 			struct cifsTconInfo *source_tcon,

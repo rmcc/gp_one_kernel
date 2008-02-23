@@ -38,6 +38,7 @@
 #if defined(CONFIG_USB_ISP1362_HCD) || defined(CONFIG_USB_ISP1362_HCD_MODULE)
 #include <linux/usb/isp1362.h>
 #endif
+#include <linux/ata_platform.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/usb/sl811.h>
@@ -50,46 +51,57 @@
 /*
  * Name the Board for the /proc/cpuinfo
  */
-const char bfin_board_name[] = "UNKNOWN BOARD";
+const char bfin_board_name[] = "GENERIC Board";
 
 /*
  *  Driver needs to know address, irq and flag pin.
  */
 
+#define ISP1761_BASE       0x203C0000
+#define ISP1761_IRQ        IRQ_PF7
+
 #if defined(CONFIG_USB_ISP1760_HCD) || defined(CONFIG_USB_ISP1760_HCD_MODULE)
-#include <linux/usb/isp1760.h>
-static struct resource bfin_isp1760_resources[] = {
+static struct resource bfin_isp1761_resources[] = {
 	[0] = {
-		.start  = 0x203C0000,
-		.end    = 0x203C0000 + 0x000fffff,
+		.name	= "isp1761-regs",
+		.start  = ISP1761_BASE + 0x00000000,
+		.end    = ISP1761_BASE + 0x000fffff,
 		.flags  = IORESOURCE_MEM,
 	},
 	[1] = {
-		.start  = IRQ_PF7,
-		.end    = IRQ_PF7,
+		.start  = ISP1761_IRQ,
+		.end    = ISP1761_IRQ,
 		.flags  = IORESOURCE_IRQ,
 	},
 };
 
-static struct isp1760_platform_data isp1760_priv = {
-	.is_isp1761 = 0,
-	.port1_disable = 0,
-	.bus_width_16 = 1,
-	.port1_otg = 0,
-	.analog_oc = 0,
-	.dack_polarity_high = 0,
-	.dreq_polarity_high = 0,
+static struct platform_device bfin_isp1761_device = {
+	.name           = "isp1761",
+	.id             = 0,
+	.num_resources  = ARRAY_SIZE(bfin_isp1761_resources),
+	.resource       = bfin_isp1761_resources,
 };
 
-static struct platform_device bfin_isp1760_device = {
-	.name           = "isp1760-hcd",
-	.id             = 0,
-	.dev = {
-		.platform_data = &isp1760_priv,
-	},
-	.num_resources  = ARRAY_SIZE(bfin_isp1760_resources),
-	.resource       = bfin_isp1760_resources,
+static struct platform_device *bfin_isp1761_devices[] = {
+	&bfin_isp1761_device,
 };
+
+int __init bfin_isp1761_init(void)
+{
+	unsigned int num_devices = ARRAY_SIZE(bfin_isp1761_devices);
+
+	printk(KERN_INFO "%s(): registering device resources\n", __func__);
+	set_irq_type(ISP1761_IRQ, IRQF_TRIGGER_FALLING);
+
+	return platform_add_devices(bfin_isp1761_devices, num_devices);
+}
+
+void __exit bfin_isp1761_exit(void)
+{
+	platform_device_unregister(&bfin_isp1761_device);
+}
+
+arch_initcall(bfin_isp1761_init);
 #endif
 
 #if defined(CONFIG_BFIN_CFPCMCIA) || defined(CONFIG_BFIN_CFPCMCIA_MODULE)
@@ -154,15 +166,10 @@ static struct platform_device smc91x_device = {
 static struct resource dm9000_resources[] = {
 	[0] = {
 		.start	= 0x203FB800,
-		.end	= 0x203FB800 + 1,
+		.end	= 0x203FB800 + 8,
 		.flags	= IORESOURCE_MEM,
 	},
 	[1] = {
-		.start	= 0x203FB800 + 4,
-		.end	= 0x203FB800 + 5,
-		.flags	= IORESOURCE_MEM,
-	},
-	[2] = {
 		.start	= IRQ_PF9,
 		.end	= IRQ_PF9,
 		.flags	= (IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE),
@@ -295,16 +302,16 @@ static struct platform_device net2272_bfin_device = {
 	|| defined(CONFIG_MTD_M25P80_MODULE)
 static struct mtd_partition bfin_spi_flash_partitions[] = {
 	{
-		.name = "bootloader(spi)",
+		.name = "bootloader",
 		.size = 0x00020000,
 		.offset = 0,
 		.mask_flags = MTD_CAP_ROM
 	}, {
-		.name = "linux kernel(spi)",
+		.name = "kernel",
 		.size = 0xe0000,
 		.offset = 0x20000
 	}, {
-		.name = "file system(spi)",
+		.name = "file system",
 		.size = 0x700000,
 		.offset = 0x00100000,
 	}
@@ -548,58 +555,29 @@ static struct platform_device bfin_uart_device = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
+static struct resource bfin_sir_resources[] = {
 #ifdef CONFIG_BFIN_SIR0
-static struct resource bfin_sir0_resources[] = {
 	{
 		.start = 0xFFC00400,
 		.end = 0xFFC004FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART0_RX,
-		.end = IRQ_UART0_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART0_RX,
-		.end = CH_UART0_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-
-static struct platform_device bfin_sir0_device = {
-	.name = "bfin_sir",
-	.id = 0,
-	.num_resources = ARRAY_SIZE(bfin_sir0_resources),
-	.resource = bfin_sir0_resources,
-};
 #endif
 #ifdef CONFIG_BFIN_SIR1
-static struct resource bfin_sir1_resources[] = {
 	{
 		.start = 0xFFC02000,
 		.end = 0xFFC020FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART1_RX,
-		.end = IRQ_UART1_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART1_RX,
-		.end = CH_UART1_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
+#endif
 };
 
-static struct platform_device bfin_sir1_device = {
+static struct platform_device bfin_sir_device = {
 	.name = "bfin_sir",
-	.id = 1,
-	.num_resources = ARRAY_SIZE(bfin_sir1_resources),
-	.resource = bfin_sir1_resources,
+	.id = 0,
+	.num_resources = ARRAY_SIZE(bfin_sir_resources),
+	.resource = bfin_sir_resources,
 };
-#endif
 #endif
 
 #if defined(CONFIG_I2C_BLACKFIN_TWI) || defined(CONFIG_I2C_BLACKFIN_TWI_MODULE)
@@ -636,6 +614,43 @@ static struct platform_device bfin_sport1_uart_device = {
 };
 #endif
 
+#if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
+#define PATA_INT	55
+
+static struct pata_platform_info bfin_pata_platform_data = {
+	.ioport_shift = 1,
+	.irq_type = IRQF_TRIGGER_HIGH | IRQF_DISABLED,
+};
+
+static struct resource bfin_pata_resources[] = {
+	{
+		.start = 0x20314020,
+		.end = 0x2031403F,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = 0x2031401C,
+		.end = 0x2031401F,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = PATA_INT,
+		.end = PATA_INT,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device bfin_pata_device = {
+	.name = "pata_platform",
+	.id = -1,
+	.num_resources = ARRAY_SIZE(bfin_pata_resources),
+	.resource = bfin_pata_resources,
+	.dev = {
+		.platform_data = &bfin_pata_platform_data,
+	}
+};
+#endif
+
 static struct platform_device *stamp_devices[] __initdata = {
 #if defined(CONFIG_BFIN_CFPCMCIA) || defined(CONFIG_BFIN_CFPCMCIA_MODULE)
 	&bfin_pcmcia_cf_device,
@@ -669,10 +684,6 @@ static struct platform_device *stamp_devices[] __initdata = {
 	&net2272_bfin_device,
 #endif
 
-#if defined(CONFIG_USB_ISP1760_HCD) || defined(CONFIG_USB_ISP1760_HCD_MODULE)
-	&bfin_isp1760_device,
-#endif
-
 #if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
 	&bfin_spi0_device,
 #endif
@@ -690,12 +701,7 @@ static struct platform_device *stamp_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
-#ifdef CONFIG_BFIN_SIR0
-	&bfin_sir0_device,
-#endif
-#ifdef CONFIG_BFIN_SIR1
-	&bfin_sir1_device,
-#endif
+	&bfin_sir_device,
 #endif
 
 #if defined(CONFIG_I2C_BLACKFIN_TWI) || defined(CONFIG_I2C_BLACKFIN_TWI_MODULE)
@@ -705,6 +711,10 @@ static struct platform_device *stamp_devices[] __initdata = {
 #if defined(CONFIG_SERIAL_BFIN_SPORT) || defined(CONFIG_SERIAL_BFIN_SPORT_MODULE)
 	&bfin_sport0_uart_device,
 	&bfin_sport1_uart_device,
+#endif
+
+#if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
+	&bfin_pata_device,
 #endif
 };
 
@@ -717,6 +727,9 @@ static int __init stamp_init(void)
 				ARRAY_SIZE(bfin_spi_board_info));
 #endif
 
+#if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
+	irq_desc[PATA_INT].status |= IRQ_NOAUTOEN;
+#endif
 	return 0;
 }
 

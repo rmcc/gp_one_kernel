@@ -47,8 +47,7 @@ static int init_hw(struct echoaudio *chip, u16 device_id, u16 subdevice_id)
 
 	local_irq_enable();
 	DE_INIT(("init_hw() - Echo3G\n"));
-	if (snd_BUG_ON((subdevice_id & 0xfff0) != ECHO3G))
-		return -ENODEV;
+	snd_assert((subdevice_id & 0xfff0) == ECHO3G, return -ENODEV);
 
 	if ((err = init_dsp_comm_page(chip))) {
 		DE_INIT(("init_hw - could not initialize DSP comm page\n"));
@@ -105,11 +104,9 @@ static int init_hw(struct echoaudio *chip, u16 device_id, u16 subdevice_id)
 	if ((err = init_line_levels(chip)) < 0)
 		return err;
 	err = set_digital_mode(chip, DIGITAL_MODE_SPDIF_RCA);
-	if (err < 0)
-		return err;
+	snd_assert(err >= 0, return err);
 	err = set_phantom_power(chip, 0);
-	if (err < 0)
-		return err;
+	snd_assert(err >= 0, return err);
 	err = set_professional_spdif(chip, TRUE);
 
 	DE_INIT(("init_hw done\n"));

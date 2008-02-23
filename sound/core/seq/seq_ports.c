@@ -130,8 +130,7 @@ struct snd_seq_client_port *snd_seq_create_port(struct snd_seq_client *client,
 	int num = -1;
 	
 	/* sanity check */
-	if (snd_BUG_ON(!client))
-		return NULL;
+	snd_assert(client, return NULL);
 
 	if (client->num_ports >= SNDRV_SEQ_MAX_PORTS - 1) {
 		snd_printk(KERN_WARNING "too many ports for client %d\n", client->number);
@@ -269,8 +268,8 @@ static int port_delete(struct snd_seq_client *client,
 	if (port->private_free)
 		port->private_free(port->private_data);
 
-	snd_BUG_ON(port->c_src.count != 0);
-	snd_BUG_ON(port->c_dest.count != 0);
+	snd_assert(port->c_src.count == 0,);
+	snd_assert(port->c_dest.count == 0,);
 
 	kfree(port);
 	return 0;
@@ -337,8 +336,7 @@ int snd_seq_delete_all_ports(struct snd_seq_client *client)
 int snd_seq_set_port_info(struct snd_seq_client_port * port,
 			  struct snd_seq_port_info * info)
 {
-	if (snd_BUG_ON(!port || !info))
-		return -EINVAL;
+	snd_assert(port && info, return -EINVAL);
 
 	/* set port name */
 	if (info->name[0])
@@ -367,8 +365,7 @@ int snd_seq_set_port_info(struct snd_seq_client_port * port,
 int snd_seq_get_port_info(struct snd_seq_client_port * port,
 			  struct snd_seq_port_info * info)
 {
-	if (snd_BUG_ON(!port || !info))
-		return -EINVAL;
+	snd_assert(port && info, return -EINVAL);
 
 	/* get port name */
 	strlcpy(info->name, port->name, sizeof(info->name));

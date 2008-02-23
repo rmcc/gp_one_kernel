@@ -91,7 +91,7 @@ aoedev_downdev(struct aoedev *d)
 	}
 
 	if (d->gd)
-		set_capacity(d->gd, 0);
+		d->gd->capacity = 0;
 
 	d->flags &= ~DEVFL_UP;
 }
@@ -188,12 +188,14 @@ skbfree(struct sk_buff *skb)
 static void
 skbpoolfree(struct aoedev *d)
 {
-	struct sk_buff *skb, *tmp;
+	struct sk_buff *skb;
 
-	skb_queue_walk_safe(&d->skbpool, skb, tmp)
+	while ((skb = d->skbpool_hd)) {
+		d->skbpool_hd = skb->next;
+		skb->next = NULL;
 		skbfree(skb);
-
-	__skb_queue_head_init(&d->skbpool);
+	}
+	d->skbpool_tl = NULL;
 }
 
 /* find it or malloc it */
@@ -215,8 +217,6 @@ aoedev_by_sysminor_m(ulong sysminor)
 		goto out;
 	INIT_WORK(&d->work, aoecmd_sleepwork);
 	spin_lock_init(&d->lock);
-	skb_queue_head_init(&d->sendq);
-	skb_queue_head_init(&d->skbpool);
 	init_timer(&d->timer);
 	d->timer.data = (ulong) d;
 	d->timer.function = dummy_timer;

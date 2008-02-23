@@ -144,10 +144,9 @@ static void iuu_shutdown(struct usb_serial *serial)
 	}
 }
 
-static int iuu_tiocmset(struct tty_struct *tty, struct file *file,
+static int iuu_tiocmset(struct usb_serial_port *port, struct file *file,
 			unsigned int set, unsigned int clear)
 {
-	struct usb_serial_port *port = tty->driver_data;
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
 
@@ -172,9 +171,8 @@ static int iuu_tiocmset(struct tty_struct *tty, struct file *file,
  * When no card , the reader respond with TIOCM_CD
  * This is known as CD autodetect mechanism
  */
-static int iuu_tiocmget(struct tty_struct *tty, struct file *file)
+static int iuu_tiocmget(struct usb_serial_port *port, struct file *file)
 {
-	struct usb_serial_port *port = tty->driver_data;
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
 	int rc;
@@ -190,12 +188,10 @@ static void iuu_rxcmd(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	int result;
-	int status = urb->status;
-
 	dbg("%s - enter", __func__);
 
-	if (status) {
-		dbg("%s - status = %d", __func__, status);
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -247,12 +243,10 @@ static void iuu_update_status_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	u8 *st;
-	int status = urb->status;
-
 	dbg("%s - enter", __func__);
 
-	if (status) {
-		dbg("%s - status = %d", __func__, status);
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -278,9 +272,9 @@ static void iuu_status_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	int result;
-	int status = urb->status;
+	dbg("%s - enter", __func__);
 
-	dbg("%s - status = %d", __func__, status);
+	dbg("%s - urb->status = %d", __func__, urb->status);
 	usb_fill_bulk_urb(port->read_urb, port->serial->dev,
 			  usb_rcvbulkpipe(port->serial->dev,
 					  port->bulk_in_endpointAddress),
@@ -322,10 +316,11 @@ static int bulk_immediate(struct usb_serial_port *port, u8 *buf, u8 count)
 					 port->bulk_out_endpointAddress), buf,
 			 count, &actual, HZ * 1);
 
-	if (status != IUU_OPERATION_OK)
+	if (status != IUU_OPERATION_OK) {
 		dbg("%s - error = %2x", __func__, status);
-	else
+	} else {
 		dbg("%s - write OK !", __func__);
+	}
 	return status;
 }
 
@@ -345,10 +340,12 @@ static int read_immediate(struct usb_serial_port *port, u8 *buf, u8 count)
 					 port->bulk_in_endpointAddress), buf,
 			 count, &actual, HZ * 1);
 
-	if (status != IUU_OPERATION_OK)
+	if (status != IUU_OPERATION_OK) {
 		dbg("%s - error = %2x", __func__, status);
-	else
+	} else {
 		dbg("%s - read OK !", __func__);
+	}
+
 	return status;
 }
 
@@ -622,26 +619,24 @@ static void read_buf_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
 	struct tty_struct *tty;
-	int status = urb->status;
+	dbg("%s - urb->status = %d", __func__, urb->status);
 
-	dbg("%s - status = %d", __func__, status);
-
-	if (status) {
-		if (status == -EPROTO) {
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
+		if (urb->status == -EPROTO) {
 			/* reschedule needed */
 		}
 		return;
 	}
 
 	dbg("%s - %i chars to write", __func__, urb->actual_length);
-	tty = tty_port_tty_get(&port->port);
+	tty = port->tty;
 	if (data == NULL)
 		dbg("%s - data is NULL !!!", __func__);
 	if (tty && urb->actual_length && data) {
 		tty_insert_flip_string(tty, data, urb->actual_length);
 		tty_flip_buffer_push(tty);
 	}
-	tty_kref_put(tty);
 	iuu_led_activity_on(urb);
 }
 
@@ -700,7 +695,7 @@ static void iuu_uart_read_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
-	int status = urb->status;
+	int status;
 	int error = 0;
 	int len = 0;
 	unsigned char *data = urb->transfer_buffer;
@@ -708,8 +703,8 @@ static void iuu_uart_read_callback(struct urb *urb)
 
 	dbg("%s - enter", __func__);
 
-	if (status) {
-		dbg("%s - status = %d", __func__, status);
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -757,10 +752,11 @@ static void iuu_uart_read_callback(struct urb *urb)
 	/* if nothing to write call again rxcmd */
 	dbg("%s - rxcmd recall", __func__);
 	iuu_led_activity_off(urb);
+	return;
 }
 
-static int iuu_uart_write(struct tty_struct *tty, struct usb_serial_port *port,
-			  const u8 *buf, int count)
+static int iuu_uart_write(struct usb_serial_port *port, const u8 *buf,
+			  int count)
 {
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
@@ -773,25 +769,26 @@ static int iuu_uart_write(struct tty_struct *tty, struct usb_serial_port *port,
 	if (priv->writelen > 0) {
 		/* buffer already filled but not commited */
 		spin_unlock_irqrestore(&priv->lock, flags);
-		return 0;
+		return (0);
 	}
 	/* fill the buffer */
 	memcpy(priv->writebuf, buf, count);
 	priv->writelen = count;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	return count;
+	return (count);
 }
 
 static void read_rxcmd_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	int result;
-	int status = urb->status;
+	dbg("%s - enter", __func__);
 
-	dbg("%s - status = %d", __func__, status);
+	dbg("%s - urb->status = %d", __func__, urb->status);
 
-	if (status) {
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -951,8 +948,7 @@ static int set_control_lines(struct usb_device *dev, u8 value)
 	return 0;
 }
 
-static void iuu_close(struct tty_struct *tty,
-			struct usb_serial_port *port, struct file *filp)
+static void iuu_close(struct usb_serial_port *port, struct file *filp)
 {
 	/* iuu_led (port,255,0,0,0); */
 	struct usb_serial *serial;
@@ -968,8 +964,8 @@ static void iuu_close(struct tty_struct *tty,
 
 	iuu_uart_off(port);
 	if (serial->dev) {
-		if (tty) {
-			c_cflag = tty->termios->c_cflag;
+		if (port->tty) {
+			c_cflag = port->tty->termios->c_cflag;
 			if (c_cflag & HUPCL) {
 				/* drop DTR and RTS */
 				priv = usb_get_serial_port_data(port);
@@ -993,8 +989,7 @@ static void iuu_close(struct tty_struct *tty,
 	}
 }
 
-static int iuu_open(struct tty_struct *tty,
-			struct usb_serial_port *port, struct file *filp)
+static int iuu_open(struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
 	u8 *buf;
@@ -1041,17 +1036,15 @@ static int iuu_open(struct tty_struct *tty,
 
 	/* set the termios structure */
 	spin_lock_irqsave(&priv->lock, flags);
-	if (tty && !priv->termios_initialized) {
-		*(tty->termios) = tty_std_termios;
-		tty->termios->c_cflag = CLOCAL | CREAD | CS8 | B9600
-					| TIOCM_CTS | CSTOPB | PARENB;
-		tty->termios->c_ispeed = 9600;
-		tty->termios->c_ospeed = 9600;
-		tty->termios->c_lflag = 0;
-		tty->termios->c_oflag = 0;
-		tty->termios->c_iflag = 0;
+	if (!priv->termios_initialized) {
+		*(port->tty->termios) = tty_std_termios;
+		port->tty->termios->c_cflag = CLOCAL | CREAD | CS8 | B9600
+						| TIOCM_CTS | CSTOPB | PARENB;
+		port->tty->termios->c_lflag = 0;
+		port->tty->termios->c_oflag = 0;
+		port->tty->termios->c_iflag = 0;
 		priv->termios_initialized = 1;
-		tty->low_latency = 1;
+		port->tty->low_latency = 1;
 		priv->poll = 0;
 	 }
 	spin_unlock_irqrestore(&priv->lock, flags);
@@ -1155,7 +1148,7 @@ static int iuu_open(struct tty_struct *tty,
 	if (result) {
 		dev_err(&port->dev, "%s - failed submitting read urb,"
 			" error %d\n", __func__, result);
-		iuu_close(tty, port, NULL);
+		iuu_close(port, NULL);
 		return -EPROTO;
 	} else {
 		dbg("%s - rxcmd OK", __func__);
@@ -1189,8 +1182,7 @@ static int __init iuu_init(void)
 	retval = usb_register(&iuu_driver);
 	if (retval)
 		goto failed_usb_register;
-	printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-	       DRIVER_DESC "\n");
+	info(DRIVER_DESC " " DRIVER_VERSION);
 	return 0;
 failed_usb_register:
 	usb_serial_deregister(&iuu_device);

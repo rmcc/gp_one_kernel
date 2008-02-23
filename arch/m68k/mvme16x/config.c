@@ -17,7 +17,6 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/seq_file.h>
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/linkage.h>
@@ -43,11 +42,13 @@ extern t_bdid mvme_bdid;
 static MK48T08ptr_t volatile rtc = (MK48T08ptr_t)MVME_RTC_BASE;
 
 static void mvme16x_get_model(char *model);
+static int  mvme16x_get_hardware_list(char *buffer);
 extern void mvme16x_sched_init(irq_handler_t handler);
 extern unsigned long mvme16x_gettimeoffset (void);
 extern int mvme16x_hwclk (int, struct rtc_time *);
 extern int mvme16x_set_clock_mmss (unsigned long);
 extern void mvme16x_reset (void);
+extern void mvme16x_waitbut(void);
 
 int bcd2int (unsigned char b);
 
@@ -92,21 +93,26 @@ static void mvme16x_get_model(char *model)
 }
 
 
-static void mvme16x_get_hardware_list(struct seq_file *m)
+static int mvme16x_get_hardware_list(char *buffer)
 {
     p_bdid p = &mvme_bdid;
+    int len = 0;
 
     if (p->brdno == 0x0162 || p->brdno == 0x0172)
     {
 	unsigned char rev = *(unsigned char *)MVME162_VERSION_REG;
 
-	seq_printf (m, "VMEchip2        %spresent\n",
+	len += sprintf (buffer+len, "VMEchip2        %spresent\n",
 			rev & MVME16x_CONFIG_NO_VMECHIP2 ? "NOT " : "");
-	seq_printf (m, "SCSI interface  %spresent\n",
+	len += sprintf (buffer+len, "SCSI interface  %spresent\n",
 			rev & MVME16x_CONFIG_NO_SCSICHIP ? "NOT " : "");
-	seq_printf (m, "Ethernet i/f    %spresent\n",
+	len += sprintf (buffer+len, "Ethernet i/f    %spresent\n",
 			rev & MVME16x_CONFIG_NO_ETHERNET ? "NOT " : "");
     }
+    else
+	*buffer = '\0';
+
+    return (len);
 }
 
 /*

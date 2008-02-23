@@ -19,12 +19,13 @@
 #include <linux/interrupt.h>
 #include <linux/ptrace.h>
 #include <linux/timer.h>
+
 #include <linux/irq.h>
-#include <linux/io.h>
+#include <asm/hardware.h>
 
-#include <mach/hardware.h>
+#include <asm/io.h>
 
-#include <mach/msm_iomap.h>
+#include <asm/arch/msm_iomap.h>
 
 #define VIC_REG(off) (MSM_VIC_BASE + (off))
 
@@ -66,20 +67,20 @@
 
 static void msm_irq_ack(unsigned int irq)
 {
-	void __iomem *reg = VIC_INT_CLEAR0 + ((irq & 32) ? 4 : 0);
+	unsigned reg = VIC_INT_CLEAR0 + ((irq & 32) ? 4 : 0);
 	irq = 1 << (irq & 31);
 	writel(irq, reg);
 }
 
 static void msm_irq_mask(unsigned int irq)
 {
-	void __iomem *reg = VIC_INT_ENCLEAR0 + ((irq & 32) ? 4 : 0);
+	unsigned reg = VIC_INT_ENCLEAR0 + ((irq & 32) ? 4 : 0);
 	writel(1 << (irq & 31), reg);
 }
 
 static void msm_irq_unmask(unsigned int irq)
 {
-	void __iomem *reg = VIC_INT_ENSET0 + ((irq & 32) ? 4 : 0);
+	unsigned reg = VIC_INT_ENSET0 + ((irq & 32) ? 4 : 0);
 	writel(1 << (irq & 31), reg);
 }
 
@@ -90,8 +91,8 @@ static int msm_irq_set_wake(unsigned int irq, unsigned int on)
 
 static int msm_irq_set_type(unsigned int irq, unsigned int flow_type)
 {
-	void __iomem *treg = VIC_INT_TYPE0 + ((irq & 32) ? 4 : 0);
-	void __iomem *preg = VIC_INT_POLARITY0 + ((irq & 32) ? 4 : 0);
+	unsigned treg = VIC_INT_TYPE0 + ((irq & 32) ? 4 : 0);
+	unsigned preg = VIC_INT_POLARITY0 + ((irq & 32) ? 4 : 0);
 	int b = 1 << (irq & 31);
 
 	if (flow_type & (IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW))

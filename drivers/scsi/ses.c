@@ -61,7 +61,7 @@ static int ses_probe(struct device *dev)
 	return err;
 }
 
-#define SES_TIMEOUT (30 * HZ)
+#define SES_TIMEOUT 30
 #define SES_RETRIES 3
 
 static int ses_recv_diag(struct scsi_device *sdev, int page_code,
@@ -77,7 +77,7 @@ static int ses_recv_diag(struct scsi_device *sdev, int page_code,
 	};
 
 	return scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf, bufflen,
-				NULL, SES_TIMEOUT, SES_RETRIES, NULL);
+				NULL, SES_TIMEOUT, SES_RETRIES);
 }
 
 static int ses_send_diag(struct scsi_device *sdev, int page_code,
@@ -95,7 +95,7 @@ static int ses_send_diag(struct scsi_device *sdev, int page_code,
 	};
 
 	result = scsi_execute_req(sdev, cmd, DMA_TO_DEVICE, buf, bufflen,
-				  NULL, SES_TIMEOUT, SES_RETRIES, NULL);
+				  NULL, SES_TIMEOUT, SES_RETRIES);
 	if (result)
 		sdev_printk(KERN_ERR, sdev, "SEND DIAGNOSTIC result: %8x\n",
 			    result);
@@ -345,14 +345,14 @@ static int ses_enclosure_find_by_addr(struct enclosure_device *edev,
 	return 0;
 }
 
-#define VPD_INQUIRY_SIZE 36
+#define VPD_INQUIRY_SIZE 512
 
 static void ses_match_to_enclosure(struct enclosure_device *edev,
 				   struct scsi_device *sdev)
 {
 	unsigned char *buf = kmalloc(VPD_INQUIRY_SIZE, GFP_KERNEL);
 	unsigned char *desc;
-	u16 vpd_len;
+	int len;
 	struct efd efd = {
 		.addr = 0,
 	};
@@ -369,23 +369,12 @@ static void ses_match_to_enclosure(struct enclosure_device *edev,
 		return;
 
 	if (scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf,
-			     VPD_INQUIRY_SIZE, NULL, SES_TIMEOUT, SES_RETRIES,
-			     NULL))
+			     VPD_INQUIRY_SIZE, NULL, SES_TIMEOUT, SES_RETRIES))
 		goto free;
 
-	vpd_len = (buf[2] << 8) + buf[3];
-	kfree(buf);
-	buf = kmalloc(vpd_len, GFP_KERNEL);
-	if (!buf)
-		return;
-	cmd[3] = vpd_len >> 8;
-	cmd[4] = vpd_len & 0xff;
-	if (scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf,
-			     vpd_len, NULL, SES_TIMEOUT, SES_RETRIES, NULL))
-		goto free;
-
+	len = (buf[2] << 8) + buf[3];
 	desc = buf + 4;
-	while (desc < buf + vpd_len) {
+	while (desc < buf + len) {
 		enum scsi_protocol proto = desc[0] >> 4;
 		u8 code_set = desc[0] & 0x0f;
 		u8 piv = desc[1] & 0x80;
@@ -526,7 +515,7 @@ static int ses_intf_add(struct device *cdev,
 	if (!scomp)
 		goto err_free;
 
-	edev = enclosure_register(cdev->parent, dev_name(&sdev->sdev_gendev),
+	edev = enclosure_register(cdev->parent, sdev->sdev_gendev.bus_id,
 				  components, &ses_enclosure_callbacks);
 	if (IS_ERR(edev)) {
 		err = PTR_ERR(edev);

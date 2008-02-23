@@ -33,7 +33,6 @@
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/init.h>
-#include <linux/smp_lock.h>
 
 #include <asm/etraxi2c.h>
 
@@ -637,7 +636,6 @@ i2c_readreg(unsigned char theSlave, unsigned char theReg)
 static int
 i2c_open(struct inode *inode, struct file *filp)
 {
-	cycle_kernel_lock();
 	return 0;
 }
 

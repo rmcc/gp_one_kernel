@@ -14,7 +14,7 @@
 #include <linux/platform_device.h>
 
 #include <asm/io.h>
-#include <mach/smc.h>
+#include <asm/arch/smc.h>
 
 #include "hsmc.h"
 
@@ -278,4 +278,4 @@ static int __init hsmc_init(void)
 {
 	return platform_driver_register(&hsmc_driver);
 }
-core_initcall(hsmc_init);
+arch_initcall(hsmc_init);

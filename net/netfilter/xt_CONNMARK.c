@@ -36,9 +36,11 @@ MODULE_ALIAS("ip6t_CONNMARK");
 #include <net/netfilter/nf_conntrack_ecache.h>
 
 static unsigned int
-connmark_tg_v0(struct sk_buff *skb, const struct xt_target_param *par)
+connmark_tg_v0(struct sk_buff *skb, const struct net_device *in,
+               const struct net_device *out, unsigned int hooknum,
+               const struct xt_target *target, const void *targinfo)
 {
-	const struct xt_connmark_target_info *markinfo = par->targinfo;
+	const struct xt_connmark_target_info *markinfo = targinfo;
 	struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
 	u_int32_t diff;
@@ -52,7 +54,7 @@ connmark_tg_v0(struct sk_buff *skb, const struct xt_target_param *par)
 			newmark = (ct->mark & ~markinfo->mask) | markinfo->mark;
 			if (newmark != ct->mark) {
 				ct->mark = newmark;
-				nf_conntrack_event_cache(IPCT_MARK, ct);
+				nf_conntrack_event_cache(IPCT_MARK, skb);
 			}
 			break;
 		case XT_CONNMARK_SAVE:
@@ -60,7 +62,7 @@ connmark_tg_v0(struct sk_buff *skb, const struct xt_target_param *par)
 				  (skb->mark & markinfo->mask);
 			if (ct->mark != newmark) {
 				ct->mark = newmark;
-				nf_conntrack_event_cache(IPCT_MARK, ct);
+				nf_conntrack_event_cache(IPCT_MARK, skb);
 			}
 			break;
 		case XT_CONNMARK_RESTORE:
@@ -75,9 +77,11 @@ connmark_tg_v0(struct sk_buff *skb, const struct xt_target_param *par)
 }
 
 static unsigned int
-connmark_tg(struct sk_buff *skb, const struct xt_target_param *par)
+connmark_tg(struct sk_buff *skb, const struct net_device *in,
+            const struct net_device *out, unsigned int hooknum,
+            const struct xt_target *target, const void *targinfo)
 {
-	const struct xt_connmark_tginfo1 *info = par->targinfo;
+	const struct xt_connmark_tginfo1 *info = targinfo;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	u_int32_t newmark;
@@ -91,7 +95,7 @@ connmark_tg(struct sk_buff *skb, const struct xt_target_param *par)
 		newmark = (ct->mark & ~info->ctmask) ^ info->ctmark;
 		if (ct->mark != newmark) {
 			ct->mark = newmark;
-			nf_conntrack_event_cache(IPCT_MARK, ct);
+			nf_conntrack_event_cache(IPCT_MARK, skb);
 		}
 		break;
 	case XT_CONNMARK_SAVE:
@@ -99,7 +103,7 @@ connmark_tg(struct sk_buff *skb, const struct xt_target_param *par)
 		          (skb->mark & info->nfmask);
 		if (ct->mark != newmark) {
 			ct->mark = newmark;
-			nf_conntrack_event_cache(IPCT_MARK, ct);
+			nf_conntrack_event_cache(IPCT_MARK, skb);
 		}
 		break;
 	case XT_CONNMARK_RESTORE:
@@ -112,15 +116,18 @@ connmark_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	return XT_CONTINUE;
 }
 
-static bool connmark_tg_check_v0(const struct xt_tgchk_param *par)
+static bool
+connmark_tg_check_v0(const char *tablename, const void *entry,
+                     const struct xt_target *target, void *targinfo,
+                     unsigned int hook_mask)
 {
-	const struct xt_connmark_target_info *matchinfo = par->targinfo;
+	const struct xt_connmark_target_info *matchinfo = targinfo;
 
 	if (matchinfo->mode == XT_CONNMARK_RESTORE) {
-		if (strcmp(par->table, "mangle") != 0) {
+		if (strcmp(tablename, "mangle") != 0) {
 			printk(KERN_WARNING "CONNMARK: restore can only be "
 			       "called from \"mangle\" table, not \"%s\"\n",
-			       par->table);
+			       tablename);
 			return false;
 		}
 	}
@@ -128,27 +135,31 @@ static bool connmark_tg_check_v0(const struct xt_tgchk_param *par)
 		printk(KERN_WARNING "CONNMARK: Only supports 32bit mark\n");
 		return false;
 	}
-	if (nf_ct_l3proto_try_module_get(par->family) < 0) {
+	if (nf_ct_l3proto_try_module_get(target->family) < 0) {
 		printk(KERN_WARNING "can't load conntrack support for "
-				    "proto=%u\n", par->family);
+				    "proto=%u\n", target->family);
 		return false;
 	}
 	return true;
 }
 
-static bool connmark_tg_check(const struct xt_tgchk_param *par)
+static bool
+connmark_tg_check(const char *tablename, const void *entry,
+                  const struct xt_target *target, void *targinfo,
+                  unsigned int hook_mask)
 {
-	if (nf_ct_l3proto_try_module_get(par->family) < 0) {
+	if (nf_ct_l3proto_try_module_get(target->family) < 0) {
 		printk(KERN_WARNING "cannot load conntrack support for "
-		       "proto=%u\n", par->family);
+		       "proto=%u\n", target->family);
 		return false;
 	}
 	return true;
 }
 
-static void connmark_tg_destroy(const struct xt_tgdtor_param *par)
+static void
+connmark_tg_destroy(const struct xt_target *target, void *targinfo)
 {
-	nf_ct_l3proto_module_put(par->family);
+	nf_ct_l3proto_module_put(target->family);
 }
 
 #ifdef CONFIG_COMPAT
@@ -186,7 +197,22 @@ static struct xt_target connmark_tg_reg[] __read_mostly = {
 	{
 		.name		= "CONNMARK",
 		.revision	= 0,
-		.family		= NFPROTO_UNSPEC,
+		.family		= AF_INET,
+		.checkentry	= connmark_tg_check_v0,
+		.destroy	= connmark_tg_destroy,
+		.target		= connmark_tg_v0,
+		.targetsize	= sizeof(struct xt_connmark_target_info),
+#ifdef CONFIG_COMPAT
+		.compatsize	= sizeof(struct compat_xt_connmark_target_info),
+		.compat_from_user = connmark_tg_compat_from_user_v0,
+		.compat_to_user	= connmark_tg_compat_to_user_v0,
+#endif
+		.me		= THIS_MODULE
+	},
+	{
+		.name		= "CONNMARK",
+		.revision	= 0,
+		.family		= AF_INET6,
 		.checkentry	= connmark_tg_check_v0,
 		.destroy	= connmark_tg_destroy,
 		.target		= connmark_tg_v0,
@@ -201,7 +227,17 @@ static struct xt_target connmark_tg_reg[] __read_mostly = {
 	{
 		.name           = "CONNMARK",
 		.revision       = 1,
-		.family         = NFPROTO_UNSPEC,
+		.family         = AF_INET,
+		.checkentry     = connmark_tg_check,
+		.target         = connmark_tg,
+		.targetsize     = sizeof(struct xt_connmark_tginfo1),
+		.destroy        = connmark_tg_destroy,
+		.me             = THIS_MODULE,
+	},
+	{
+		.name           = "CONNMARK",
+		.revision       = 1,
+		.family         = AF_INET6,
 		.checkentry     = connmark_tg_check,
 		.target         = connmark_tg,
 		.targetsize     = sizeof(struct xt_connmark_tginfo1),

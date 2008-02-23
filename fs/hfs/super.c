@@ -173,7 +173,7 @@ enum {
 	opt_err
 };
 
-static const match_table_t tokens = {
+static match_table_t tokens = {
 	{ opt_uid, "uid=%u" },
 	{ opt_gid, "gid=%u" },
 	{ opt_umask, "umask=%o" },
@@ -210,8 +210,8 @@ static int parse_options(char *options, struct hfs_sb_info *hsb)
 	int tmp, token;
 
 	/* initialize the sb with defaults */
-	hsb->s_uid = current_uid();
-	hsb->s_gid = current_gid();
+	hsb->s_uid = current->uid;
+	hsb->s_gid = current->gid;
 	hsb->s_file_umask = 0133;
 	hsb->s_dir_umask = 0022;
 	hsb->s_type = hsb->s_creator = cpu_to_be32(0x3f3f3f3f);	/* == '????' */
@@ -372,7 +372,7 @@ static int hfs_fill_super(struct super_block *sb, void *data, int silent)
 
 	sb->s_op = &hfs_super_operations;
 	sb->s_flags |= MS_NODIRATIME;
-	mutex_init(&sbi->bitmap_lock);
+	init_MUTEX(&sbi->bitmap_lock);
 
 	res = hfs_mdb_get(sb);
 	if (res) {
@@ -432,7 +432,7 @@ static struct file_system_type hfs_fs_type = {
 	.fs_flags	= FS_REQUIRES_DEV,
 };
 
-static void hfs_init_once(void *p)
+static void hfs_init_once(struct kmem_cache *cachep, void *p)
 {
 	struct hfs_inode_info *i = p;
 

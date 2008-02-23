@@ -77,9 +77,11 @@ set_ect_tcp(struct sk_buff *skb, const struct ipt_ECN_info *einfo)
 }
 
 static unsigned int
-ecn_tg(struct sk_buff *skb, const struct xt_target_param *par)
+ecn_tg(struct sk_buff *skb, const struct net_device *in,
+       const struct net_device *out, unsigned int hooknum,
+       const struct xt_target *target, const void *targinfo)
 {
-	const struct ipt_ECN_info *einfo = par->targinfo;
+	const struct ipt_ECN_info *einfo = targinfo;
 
 	if (einfo->operation & IPT_ECN_OP_SET_IP)
 		if (!set_ect_ip(skb, einfo))
@@ -93,10 +95,13 @@ ecn_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	return XT_CONTINUE;
 }
 
-static bool ecn_tg_check(const struct xt_tgchk_param *par)
+static bool
+ecn_tg_check(const char *tablename, const void *e_void,
+             const struct xt_target *target, void *targinfo,
+             unsigned int hook_mask)
 {
-	const struct ipt_ECN_info *einfo = par->targinfo;
-	const struct ipt_entry *e = par->entryinfo;
+	const struct ipt_ECN_info *einfo = targinfo;
+	const struct ipt_entry *e = e_void;
 
 	if (einfo->operation & IPT_ECN_OP_MASK) {
 		printk(KERN_WARNING "ECN: unsupported ECN operation %x\n",
@@ -119,7 +124,7 @@ static bool ecn_tg_check(const struct xt_tgchk_param *par)
 
 static struct xt_target ecn_tg_reg __read_mostly = {
 	.name		= "ECN",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.target		= ecn_tg,
 	.targetsize	= sizeof(struct ipt_ECN_info),
 	.table		= "mangle",

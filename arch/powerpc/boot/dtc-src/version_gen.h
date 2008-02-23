@@ -1,1 +1,1 @@
-#define DTC_VERSION "DTC 1.2.0"
+#define DTC_VERSION "DTC 1.0.0-gd6f9b62f"

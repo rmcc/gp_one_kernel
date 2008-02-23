@@ -43,9 +43,9 @@
 /*
  * file operation structure for tape block frontend
  */
-static int tapeblock_open(struct block_device *, fmode_t);
-static int tapeblock_release(struct gendisk *, fmode_t);
-static int tapeblock_ioctl(struct block_device *, fmode_t, unsigned int,
+static int tapeblock_open(struct inode *, struct file *);
+static int tapeblock_release(struct inode *, struct file *);
+static int tapeblock_ioctl(struct inode *, struct file *, unsigned int,
 				unsigned long);
 static int tapeblock_medium_changed(struct gendisk *);
 static int tapeblock_revalidate_disk(struct gendisk *);
@@ -54,7 +54,7 @@ static struct block_device_operations tapeblock_fops = {
 	.owner		 = THIS_MODULE,
 	.open		 = tapeblock_open,
 	.release	 = tapeblock_release,
-	.locked_ioctl           = tapeblock_ioctl,
+	.ioctl           = tapeblock_ioctl,
 	.media_changed   = tapeblock_medium_changed,
 	.revalidate_disk = tapeblock_revalidate_disk,
 };
@@ -76,7 +76,7 @@ tapeblock_trigger_requeue(struct tape_device *device)
 static void
 tapeblock_end_request(struct request *req, int error)
 {
-	if (blk_end_request(req, error, blk_rq_bytes(req)))
+	if (__blk_end_request(req, error, blk_rq_bytes(req)))
 		BUG();
 }
 
@@ -166,7 +166,7 @@ tapeblock_requeue(struct work_struct *work) {
 		nr_queued++;
 	spin_unlock(get_ccwdev_lock(device->cdev));
 
-	spin_lock_irq(&device->blk_data.request_queue_lock);
+	spin_lock(&device->blk_data.request_queue_lock);
 	while (
 		!blk_queue_plugged(queue) &&
 		elv_next_request(queue)   &&
@@ -176,16 +176,14 @@ tapeblock_requeue(struct work_struct *work) {
 		if (rq_data_dir(req) == WRITE) {
 			DBF_EVENT(1, "TBLOCK: Rejecting write request\n");
 			blkdev_dequeue_request(req);
-			spin_unlock_irq(&device->blk_data.request_queue_lock);
 			tapeblock_end_request(req, -EIO);
-			spin_lock_irq(&device->blk_data.request_queue_lock);
 			continue;
 		}
-		blkdev_dequeue_request(req);
-		nr_queued++;
 		spin_unlock_irq(&device->blk_data.request_queue_lock);
 		rc = tapeblock_start_request(device, req);
 		spin_lock_irq(&device->blk_data.request_queue_lock);
+		blkdev_dequeue_request(req);
+		nr_queued++;
 	}
 	spin_unlock_irq(&device->blk_data.request_queue_lock);
 	atomic_set(&device->blk_data.requeue_scheduled, 0);
@@ -280,7 +278,7 @@ tapeblock_cleanup_device(struct tape_device *device)
 
 	if (!device->blk_data.disk) {
 		PRINT_ERR("(%s): No gendisk to clean up!\n",
-			dev_name(&device->cdev->dev));
+			device->cdev->dev.bus_id);
 		goto cleanup_queue;
 	}
 
@@ -366,12 +364,13 @@ tapeblock_medium_changed(struct gendisk *disk)
  * Block frontend tape device open function.
  */
 static int
-tapeblock_open(struct block_device *bdev, fmode_t mode)
+tapeblock_open(struct inode *inode, struct file *filp)
 {
-	struct gendisk *	disk = bdev->bd_disk;
+	struct gendisk *	disk;
 	struct tape_device *	device;
 	int			rc;
 
+	disk   = inode->i_bdev->bd_disk;
 	device = tape_get_device_reference(disk->private_data);
 
 	if (device->required_tapemarks) {
@@ -411,8 +410,9 @@ release:
  *       we just get the pointer here and release the reference.
  */
 static int
-tapeblock_release(struct gendisk *disk, fmode_t mode)
+tapeblock_release(struct inode *inode, struct file *filp)
 {
+	struct gendisk *disk = inode->i_bdev->bd_disk;
 	struct tape_device *device = disk->private_data;
 
 	tape_state_set(device, TS_IN_USE);
@@ -427,21 +427,22 @@ tapeblock_release(struct gendisk *disk, fmode_t mode)
  */
 static int
 tapeblock_ioctl(
-	struct block_device *	bdev,
-	fmode_t			mode,
+	struct inode *		inode,
+	struct file *		file,
 	unsigned int		command,
 	unsigned long		arg
 ) {
 	int rc;
 	int minor;
-	struct gendisk *disk = bdev->bd_disk;
+	struct gendisk *disk;
 	struct tape_device *device;
 
 	rc     = 0;
+	disk   = inode->i_bdev->bd_disk;
 	BUG_ON(!disk);
 	device = disk->private_data;
 	BUG_ON(!device);
-	minor  = MINOR(bdev->bd_dev);
+	minor  = iminor(inode);
 
 	DBF_LH(6, "tapeblock_ioctl(0x%0x)\n", command);
 	DBF_LH(6, "device = %d:%d\n", tapeblock_major, minor);

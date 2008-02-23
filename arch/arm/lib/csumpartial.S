@@ -139,4 +139,3 @@ ENTRY(csum_partial)
 		tst	len, #0x1c
 		bne	4b
 		b	.Lless4
-ENDPROC(csum_partial)

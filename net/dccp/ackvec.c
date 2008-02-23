@@ -12,6 +12,7 @@
 #include "ackvec.h"
 #include "dccp.h"
 
+#include <linux/dccp.h>
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -67,7 +68,7 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
 	struct dccp_sock *dp = dccp_sk(sk);
 	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
 	/* Figure out how many options do we need to represent the ackvec */
-	const u8 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
+	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_MAX_ACKVEC_OPT_LEN);
 	u16 len = av->av_vec_len + 2 * nr_opts, i;
 	u32 elapsed_time;
 	const unsigned char *tail, *from;
@@ -99,8 +100,8 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
 	for (i = 0; i < nr_opts; ++i) {
 		int copylen = len;
 
-		if (len > DCCP_SINGLE_OPT_MAXLEN)
-			copylen = DCCP_SINGLE_OPT_MAXLEN;
+		if (len > DCCP_MAX_ACKVEC_OPT_LEN)
+			copylen = DCCP_MAX_ACKVEC_OPT_LEN;
 
 		*to++ = DCCPO_ACK_VECTOR_0;
 		*to++ = copylen + 2;
@@ -289,12 +290,12 @@ int dccp_ackvec_add(struct dccp_ackvec *av, const struct sock *sk,
 
 		while (1) {
 			const u8 len = dccp_ackvec_len(av, index);
-			const u8 av_state = dccp_ackvec_state(av, index);
+			const u8 state = dccp_ackvec_state(av, index);
 			/*
 			 * valid packets not yet in av_buf have a reserved
 			 * entry, with a len equal to 0.
 			 */
-			if (av_state == DCCP_ACKVEC_STATE_NOT_RECEIVED &&
+			if (state == DCCP_ACKVEC_STATE_NOT_RECEIVED &&
 			    len == 0 && delta == 0) { /* Found our
 							 reserved seat! */
 				dccp_pr_debug("Found %llu reserved seat!\n",
@@ -323,6 +324,31 @@ out_duplicate:
 		      "packet: %llu\n", (unsigned long long)ackno);
 	return -EILSEQ;
 }
+
+#ifdef CONFIG_IP_DCCP_DEBUG
+void dccp_ackvector_print(const u64 ackno, const unsigned char *vector, int len)
+{
+	dccp_pr_debug_cat("ACK vector len=%d, ackno=%llu |", len,
+			 (unsigned long long)ackno);
+
+	while (len--) {
+		const u8 state = (*vector & DCCP_ACKVEC_STATE_MASK) >> 6;
+		const u8 rl = *vector & DCCP_ACKVEC_LEN_MASK;
+
+		dccp_pr_debug_cat("%d,%d|", state, rl);
+		++vector;
+	}
+
+	dccp_pr_debug_cat("\n");
+}
+
+void dccp_ackvec_print(const struct dccp_ackvec *av)
+{
+	dccp_ackvector_print(av->av_buf_ackno,
+			     av->av_buf + av->av_buf_head,
+			     av->av_vec_len);
+}
+#endif
 
 static void dccp_ackvec_throw_record(struct dccp_ackvec *av,
 				     struct dccp_ackvec_record *avr)
@@ -431,7 +457,7 @@ found:
 int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
 		      u64 *ackno, const u8 opt, const u8 *value, const u8 len)
 {
-	if (len > DCCP_SINGLE_OPT_MAXLEN)
+	if (len > DCCP_MAX_ACKVEC_OPT_LEN)
 		return -1;
 
 	/* dccp_ackvector_print(DCCP_SKB_CB(skb)->dccpd_ack_seq, value, len); */

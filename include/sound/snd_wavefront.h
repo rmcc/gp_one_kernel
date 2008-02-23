@@ -1,6 +1,7 @@
 #ifndef __SOUND_SND_WAVEFRONT_H__
 #define __SOUND_SND_WAVEFRONT_H__
 
+#include "cs4231.h"
 #include "mpu401.h"
 #include "hwdep.h"
 #include "rawmidi.h"

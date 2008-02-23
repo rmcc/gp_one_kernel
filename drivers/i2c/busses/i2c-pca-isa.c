@@ -36,8 +36,8 @@
 #define DRIVER "i2c-pca-isa"
 #define IO_SIZE 4
 
-static unsigned long base;
-static int irq = -1;
+static unsigned long base   = 0x330;
+static int irq 	  = 10;
 
 /* Data sheet recommends 59kHz for 100kHz operation due to variation
  * in the actual clock rate */
@@ -107,26 +107,13 @@ static struct i2c_adapter pca_isa_ops = {
 	.timeout	= 100,
 };
 
-static int __devinit pca_isa_match(struct device *dev, unsigned int id)
-{
-	int match = base != 0;
-
-	if (match) {
-		if (irq <= -1)
-			dev_warn(dev, "Using polling mode (specify irq)\n");
-	} else
-		dev_err(dev, "Please specify I/O base\n");
-
-	return match;
-}
-
 static int __devinit pca_isa_probe(struct device *dev, unsigned int id)
 {
 	init_waitqueue_head(&pca_wait);
 
 	dev_info(dev, "i/o base %#08lx. irq %d\n", base, irq);
 
-#ifdef CONFIG_PPC
+#ifdef CONFIG_PPC_MERGE
 	if (check_legacy_ioport(base)) {
 		dev_err(dev, "I/O address %#08lx is not available\n", base);
 		goto out;
@@ -166,7 +153,7 @@ static int __devexit pca_isa_remove(struct device *dev, unsigned int id)
 {
 	i2c_del_adapter(&pca_isa_ops);
 
-	if (irq > -1) {
+	if (irq > 0) {
 		disable_irq(irq);
 		free_irq(irq, &pca_isa_ops);
 	}
@@ -176,7 +163,6 @@ static int __devexit pca_isa_remove(struct device *dev, unsigned int id)
 }
 
 static struct isa_driver pca_isa_driver = {
-	.match		= pca_isa_match,
 	.probe		= pca_isa_probe,
 	.remove		= __devexit_p(pca_isa_remove),
 	.driver = {

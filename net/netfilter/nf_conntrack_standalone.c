@@ -25,7 +25,6 @@
 #include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_expect.h>
 #include <net/netfilter/nf_conntrack_helper.h>
-#include <net/netfilter/nf_conntrack_acct.h>
 
 MODULE_LICENSE("GPL");
 
@@ -39,21 +38,32 @@ print_tuple(struct seq_file *s, const struct nf_conntrack_tuple *tuple,
 }
 EXPORT_SYMBOL_GPL(print_tuple);
 
+#ifdef CONFIG_NF_CT_ACCT
+static unsigned int
+seq_print_counters(struct seq_file *s,
+		   const struct ip_conntrack_counter *counter)
+{
+	return seq_printf(s, "packets=%llu bytes=%llu ",
+			  (unsigned long long)counter->packets,
+			  (unsigned long long)counter->bytes);
+}
+#else
+#define seq_print_counters(x, y)	0
+#endif
+
 struct ct_iter_state {
-	struct seq_net_private p;
 	unsigned int bucket;
 };
 
 static struct hlist_node *ct_get_first(struct seq_file *seq)
 {
-	struct net *net = seq_file_net(seq);
 	struct ct_iter_state *st = seq->private;
 	struct hlist_node *n;
 
 	for (st->bucket = 0;
 	     st->bucket < nf_conntrack_htable_size;
 	     st->bucket++) {
-		n = rcu_dereference(net->ct.hash[st->bucket].first);
+		n = rcu_dereference(nf_conntrack_hash[st->bucket].first);
 		if (n)
 			return n;
 	}
@@ -63,14 +73,13 @@ static struct hlist_node *ct_get_first(struct seq_file *seq)
 static struct hlist_node *ct_get_next(struct seq_file *seq,
 				      struct hlist_node *head)
 {
-	struct net *net = seq_file_net(seq);
 	struct ct_iter_state *st = seq->private;
 
 	head = rcu_dereference(head->next);
 	while (head == NULL) {
 		if (++st->bucket >= nf_conntrack_htable_size)
 			return NULL;
-		head = rcu_dereference(net->ct.hash[st->bucket].first);
+		head = rcu_dereference(nf_conntrack_hash[st->bucket].first);
 	}
 	return head;
 }
@@ -137,7 +146,7 @@ static int ct_seq_show(struct seq_file *s, void *v)
 			l3proto, l4proto))
 		return -ENOSPC;
 
-	if (seq_print_acct(s, ct, IP_CT_DIR_ORIGINAL))
+	if (seq_print_counters(s, &ct->counters[IP_CT_DIR_ORIGINAL]))
 		return -ENOSPC;
 
 	if (!(test_bit(IPS_SEEN_REPLY_BIT, &ct->status)))
@@ -148,7 +157,7 @@ static int ct_seq_show(struct seq_file *s, void *v)
 			l3proto, l4proto))
 		return -ENOSPC;
 
-	if (seq_print_acct(s, ct, IP_CT_DIR_REPLY))
+	if (seq_print_counters(s, &ct->counters[IP_CT_DIR_REPLY]))
 		return -ENOSPC;
 
 	if (test_bit(IPS_ASSURED_BIT, &ct->status))
@@ -180,7 +189,7 @@ static const struct seq_operations ct_seq_ops = {
 
 static int ct_open(struct inode *inode, struct file *file)
 {
-	return seq_open_net(inode, file, &ct_seq_ops,
+	return seq_open_private(file, &ct_seq_ops,
 			sizeof(struct ct_iter_state));
 }
 
@@ -189,22 +198,21 @@ static const struct file_operations ct_file_ops = {
 	.open    = ct_open,
 	.read    = seq_read,
 	.llseek  = seq_lseek,
-	.release = seq_release_net,
+	.release = seq_release_private,
 };
 
 static void *ct_cpu_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	struct net *net = seq_file_net(seq);
 	int cpu;
 
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
-	for (cpu = *pos-1; cpu < nr_cpu_ids; ++cpu) {
+	for (cpu = *pos-1; cpu < NR_CPUS; ++cpu) {
 		if (!cpu_possible(cpu))
 			continue;
 		*pos = cpu + 1;
-		return per_cpu_ptr(net->ct.stat, cpu);
+		return &per_cpu(nf_conntrack_stat, cpu);
 	}
 
 	return NULL;
@@ -212,14 +220,13 @@ static void *ct_cpu_seq_start(struct seq_file *seq, loff_t *pos)
 
 static void *ct_cpu_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	struct net *net = seq_file_net(seq);
 	int cpu;
 
-	for (cpu = *pos; cpu < nr_cpu_ids; ++cpu) {
+	for (cpu = *pos; cpu < NR_CPUS; ++cpu) {
 		if (!cpu_possible(cpu))
 			continue;
 		*pos = cpu + 1;
-		return per_cpu_ptr(net->ct.stat, cpu);
+		return &per_cpu(nf_conntrack_stat, cpu);
 	}
 
 	return NULL;
@@ -231,8 +238,7 @@ static void ct_cpu_seq_stop(struct seq_file *seq, void *v)
 
 static int ct_cpu_seq_show(struct seq_file *seq, void *v)
 {
-	struct net *net = seq_file_net(seq);
-	unsigned int nr_conntracks = atomic_read(&net->ct.count);
+	unsigned int nr_conntracks = atomic_read(&nf_conntrack_count);
 	const struct ip_conntrack_stat *st = v;
 
 	if (v == SEQ_START_TOKEN) {
@@ -272,8 +278,7 @@ static const struct seq_operations ct_cpu_seq_ops = {
 
 static int ct_cpu_seq_open(struct inode *inode, struct file *file)
 {
-	return seq_open_net(inode, file, &ct_cpu_seq_ops,
-			    sizeof(struct seq_net_private));
+	return seq_open(file, &ct_cpu_seq_ops);
 }
 
 static const struct file_operations ct_cpu_seq_fops = {
@@ -281,53 +286,56 @@ static const struct file_operations ct_cpu_seq_fops = {
 	.open	 = ct_cpu_seq_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = seq_release_net,
+	.release = seq_release,
 };
 
-static int nf_conntrack_standalone_init_proc(struct net *net)
+static int nf_conntrack_standalone_init_proc(void)
 {
 	struct proc_dir_entry *pde;
 
-	pde = proc_net_fops_create(net, "nf_conntrack", 0440, &ct_file_ops);
+	pde = proc_net_fops_create(&init_net, "nf_conntrack", 0440, &ct_file_ops);
 	if (!pde)
 		goto out_nf_conntrack;
 
-	pde = proc_create("nf_conntrack", S_IRUGO, net->proc_net_stat,
+	pde = proc_create("nf_conntrack", S_IRUGO, init_net.proc_net_stat,
 			  &ct_cpu_seq_fops);
 	if (!pde)
 		goto out_stat_nf_conntrack;
 	return 0;
 
 out_stat_nf_conntrack:
-	proc_net_remove(net, "nf_conntrack");
+	proc_net_remove(&init_net, "nf_conntrack");
 out_nf_conntrack:
 	return -ENOMEM;
 }
 
-static void nf_conntrack_standalone_fini_proc(struct net *net)
+static void nf_conntrack_standalone_fini_proc(void)
 {
-	remove_proc_entry("nf_conntrack", net->proc_net_stat);
-	proc_net_remove(net, "nf_conntrack");
+	remove_proc_entry("nf_conntrack", init_net.proc_net_stat);
+	proc_net_remove(&init_net, "nf_conntrack");
 }
 #else
-static int nf_conntrack_standalone_init_proc(struct net *net)
+static int nf_conntrack_standalone_init_proc(void)
 {
 	return 0;
 }
 
-static void nf_conntrack_standalone_fini_proc(struct net *net)
+static void nf_conntrack_standalone_fini_proc(void)
 {
 }
 #endif /* CONFIG_PROC_FS */
 
 /* Sysctl support */
 
+int nf_conntrack_checksum __read_mostly = 1;
+EXPORT_SYMBOL_GPL(nf_conntrack_checksum);
+
 #ifdef CONFIG_SYSCTL
 /* Log invalid packets of a given protocol */
 static int log_invalid_proto_min = 0;
 static int log_invalid_proto_max = 255;
 
-static struct ctl_table_header *nf_ct_netfilter_header;
+static struct ctl_table_header *nf_ct_sysctl_header;
 
 static ctl_table nf_ct_sysctl_table[] = {
 	{
@@ -336,15 +344,15 @@ static ctl_table nf_ct_sysctl_table[] = {
 		.data		= &nf_conntrack_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= &proc_dointvec,
 	},
 	{
 		.ctl_name	= NET_NF_CONNTRACK_COUNT,
 		.procname	= "nf_conntrack_count",
-		.data		= &init_net.ct.count,
+		.data		= &nf_conntrack_count,
 		.maxlen		= sizeof(int),
 		.mode		= 0444,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= &proc_dointvec,
 	},
 	{
 		.ctl_name       = NET_NF_CONNTRACK_BUCKETS,
@@ -352,24 +360,24 @@ static ctl_table nf_ct_sysctl_table[] = {
 		.data           = &nf_conntrack_htable_size,
 		.maxlen         = sizeof(unsigned int),
 		.mode           = 0444,
-		.proc_handler   = proc_dointvec,
+		.proc_handler   = &proc_dointvec,
 	},
 	{
 		.ctl_name	= NET_NF_CONNTRACK_CHECKSUM,
 		.procname	= "nf_conntrack_checksum",
-		.data		= &init_net.ct.sysctl_checksum,
+		.data		= &nf_conntrack_checksum,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= &proc_dointvec,
 	},
 	{
 		.ctl_name	= NET_NF_CONNTRACK_LOG_INVALID,
 		.procname	= "nf_conntrack_log_invalid",
-		.data		= &init_net.ct.sysctl_log_invalid,
+		.data		= &nf_ct_log_invalid,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.strategy	= sysctl_intvec,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
 		.extra1		= &log_invalid_proto_min,
 		.extra2		= &log_invalid_proto_max,
 	},
@@ -379,7 +387,7 @@ static ctl_table nf_ct_sysctl_table[] = {
 		.data		= &nf_ct_expect_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= &proc_dointvec,
 	},
 	{ .ctl_name = 0 }
 };
@@ -388,12 +396,18 @@ static ctl_table nf_ct_sysctl_table[] = {
 
 static ctl_table nf_ct_netfilter_table[] = {
 	{
+		.ctl_name	= NET_NETFILTER,
+		.procname	= "netfilter",
+		.mode		= 0555,
+		.child		= nf_ct_sysctl_table,
+	},
+	{
 		.ctl_name	= NET_NF_CONNTRACK_MAX,
 		.procname	= "nf_conntrack_max",
 		.data		= &nf_conntrack_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= &proc_dointvec,
 	},
 	{ .ctl_name = 0 }
 };
@@ -403,109 +417,63 @@ static struct ctl_path nf_ct_path[] = {
 	{ }
 };
 
-static int nf_conntrack_standalone_init_sysctl(struct net *net)
+EXPORT_SYMBOL_GPL(nf_ct_log_invalid);
+
+static int nf_conntrack_standalone_init_sysctl(void)
 {
-	struct ctl_table *table;
-
-	if (net_eq(net, &init_net)) {
-		nf_ct_netfilter_header =
-		       register_sysctl_paths(nf_ct_path, nf_ct_netfilter_table);
-		if (!nf_ct_netfilter_header)
-			goto out;
+	nf_ct_sysctl_header =
+		register_sysctl_paths(nf_ct_path, nf_ct_netfilter_table);
+	if (nf_ct_sysctl_header == NULL) {
+		printk("nf_conntrack: can't register to sysctl.\n");
+		return -ENOMEM;
 	}
-
-	table = kmemdup(nf_ct_sysctl_table, sizeof(nf_ct_sysctl_table),
-			GFP_KERNEL);
-	if (!table)
-		goto out_kmemdup;
-
-	table[1].data = &net->ct.count;
-	table[3].data = &net->ct.sysctl_checksum;
-	table[4].data = &net->ct.sysctl_log_invalid;
-
-	net->ct.sysctl_header = register_net_sysctl_table(net,
-					nf_net_netfilter_sysctl_path, table);
-	if (!net->ct.sysctl_header)
-		goto out_unregister_netfilter;
-
 	return 0;
 
-out_unregister_netfilter:
-	kfree(table);
-out_kmemdup:
-	if (net_eq(net, &init_net))
-		unregister_sysctl_table(nf_ct_netfilter_header);
-out:
-	printk("nf_conntrack: can't register to sysctl.\n");
-	return -ENOMEM;
 }
 
-static void nf_conntrack_standalone_fini_sysctl(struct net *net)
+static void nf_conntrack_standalone_fini_sysctl(void)
 {
-	struct ctl_table *table;
-
-	if (net_eq(net, &init_net))
-		unregister_sysctl_table(nf_ct_netfilter_header);
-	table = net->ct.sysctl_header->ctl_table_arg;
-	unregister_net_sysctl_table(net->ct.sysctl_header);
-	kfree(table);
+	unregister_sysctl_table(nf_ct_sysctl_header);
 }
 #else
-static int nf_conntrack_standalone_init_sysctl(struct net *net)
+static int nf_conntrack_standalone_init_sysctl(void)
 {
 	return 0;
 }
 
-static void nf_conntrack_standalone_fini_sysctl(struct net *net)
+static void nf_conntrack_standalone_fini_sysctl(void)
 {
 }
 #endif /* CONFIG_SYSCTL */
 
-static int nf_conntrack_net_init(struct net *net)
+static int __init nf_conntrack_standalone_init(void)
 {
 	int ret;
 
-	ret = nf_conntrack_init(net);
+	ret = nf_conntrack_init();
 	if (ret < 0)
-		goto out_init;
-	ret = nf_conntrack_standalone_init_proc(net);
+		goto out;
+	ret = nf_conntrack_standalone_init_proc();
 	if (ret < 0)
 		goto out_proc;
-	net->ct.sysctl_checksum = 1;
-	net->ct.sysctl_log_invalid = 0;
-	ret = nf_conntrack_standalone_init_sysctl(net);
+	ret = nf_conntrack_standalone_init_sysctl();
 	if (ret < 0)
 		goto out_sysctl;
 	return 0;
 
 out_sysctl:
-	nf_conntrack_standalone_fini_proc(net);
+	nf_conntrack_standalone_fini_proc();
 out_proc:
-	nf_conntrack_cleanup(net);
-out_init:
+	nf_conntrack_cleanup();
+out:
 	return ret;
-}
-
-static void nf_conntrack_net_exit(struct net *net)
-{
-	nf_conntrack_standalone_fini_sysctl(net);
-	nf_conntrack_standalone_fini_proc(net);
-	nf_conntrack_cleanup(net);
-}
-
-static struct pernet_operations nf_conntrack_net_ops = {
-	.init = nf_conntrack_net_init,
-	.exit = nf_conntrack_net_exit,
-};
-
-static int __init nf_conntrack_standalone_init(void)
-{
-	return register_pernet_subsys(&nf_conntrack_net_ops);
 }
 
 static void __exit nf_conntrack_standalone_fini(void)
 {
-	unregister_pernet_subsys(&nf_conntrack_net_ops);
+	nf_conntrack_standalone_fini_sysctl();
+	nf_conntrack_standalone_fini_proc();
+	nf_conntrack_cleanup();
 }
 
 module_init(nf_conntrack_standalone_init);

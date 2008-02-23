@@ -4,7 +4,6 @@
  *  Derived from ivtv-driver.h
  *
  *  Copyright (C) 2007  Hans Verkuil <hverkuil@xs4all.nl>
- *  Copyright (C) 2008  Andy Walls <awalls@radix.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,15 +38,14 @@
 #include <linux/i2c-algo-bit.h>
 #include <linux/list.h>
 #include <linux/unistd.h>
+#include <linux/byteorder/swab.h>
 #include <linux/pagemap.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
-#include <asm/byteorder.h>
 
 #include <linux/dvb/video.h>
 #include <linux/dvb/audio.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <media/tuner.h>
 #include "cx18-mailbox.h"
 #include "cx18-av-core.h"
@@ -77,10 +75,7 @@
 #define CX18_CARD_HVR_1600_SAMSUNG    1	/* Hauppauge HVR 1600 (Samsung memory) */
 #define CX18_CARD_COMPRO_H900 	      2	/* Compro VideoMate H900 */
 #define CX18_CARD_YUAN_MPC718 	      3	/* Yuan MPC718 */
-#define CX18_CARD_CNXT_RAPTOR_PAL     4	/* Conexant Raptor PAL */
-#define CX18_CARD_TOSHIBA_QOSMIO_DVBT 5 /* Toshiba Qosmio Interal DVB-T/Analog*/
-#define CX18_CARD_LEADTEK_PVR2100     6 /* Leadtek WinFast PVR2100 */
-#define CX18_CARD_LAST 		      6
+#define CX18_CARD_LAST 		      3
 
 #define CX18_ENC_STREAM_TYPE_MPG  0
 #define CX18_ENC_STREAM_TYPE_TS   1
@@ -99,9 +94,6 @@
 #define CX18_PCI_ID_HAUPPAUGE 		0x0070
 #define CX18_PCI_ID_COMPRO 		0x185b
 #define CX18_PCI_ID_YUAN 		0x12ab
-#define CX18_PCI_ID_CONEXANT		0x14f1
-#define CX18_PCI_ID_TOSHIBA		0x1179
-#define CX18_PCI_ID_LEADTEK		0x107D
 
 /* ======================================================================== */
 /* ========================== START USER SETTABLE DMA VARIABLES =========== */
@@ -114,17 +106,6 @@
 #define CX18_DEFAULT_ENC_YUV_BUFFERS 2
 #define CX18_DEFAULT_ENC_VBI_BUFFERS 1
 #define CX18_DEFAULT_ENC_PCM_BUFFERS 1
-
-/* Maximum firmware DMA buffers per stream */
-#define CX18_MAX_FW_MDLS_PER_STREAM 63
-
-/* DMA buffer, default size in kB allocated */
-#define CX18_DEFAULT_ENC_TS_BUFSIZE   32
-#define CX18_DEFAULT_ENC_MPG_BUFSIZE  32
-#define CX18_DEFAULT_ENC_IDX_BUFSIZE  32
-#define CX18_DEFAULT_ENC_YUV_BUFSIZE 128
-/* Default VBI bufsize based on standards supported by card tuner for now */
-#define CX18_DEFAULT_ENC_PCM_BUFSIZE   4
 
 /* i2c stuff */
 #define I2C_CLIENTS_MAX 16
@@ -206,12 +187,12 @@ struct cx18_options {
 #define CX18_F_S_APPL_IO        8	/* this stream is used read/written by an application */
 
 /* per-cx18, i_flags */
-#define CX18_F_I_LOADED_FW		0 	/* Loaded firmware 1st time */
-#define CX18_F_I_EOS			4 	/* End of encoder stream */
-#define CX18_F_I_RADIO_USER		5 	/* radio tuner is selected */
-#define CX18_F_I_ENC_PAUSED		13 	/* the encoder is paused */
-#define CX18_F_I_INITED			21 	/* set after first open */
-#define CX18_F_I_FAILED			22 	/* set if first open failed */
+#define CX18_F_I_LOADED_FW	0 	/* Loaded the firmware the first time */
+#define CX18_F_I_EOS		4 	/* End of encoder stream reached */
+#define CX18_F_I_RADIO_USER	5 	/* The radio tuner is selected */
+#define CX18_F_I_ENC_PAUSED	13 	/* the encoder is paused */
+#define CX18_F_I_INITED		21 	/* set after first open */
+#define CX18_F_I_FAILED		22 	/* set if first open failed */
 
 /* These are the VBI types as they appear in the embedded VBI private packets. */
 #define CX18_SLICED_TYPE_TELETEXT_B     (1)
@@ -224,7 +205,6 @@ struct cx18_buffer {
 	dma_addr_t dma_handle;
 	u32 id;
 	unsigned long b_flags;
-	unsigned skipped;
 	char *buf;
 
 	u32 bytesused;
@@ -233,7 +213,8 @@ struct cx18_buffer {
 
 struct cx18_queue {
 	struct list_head list;
-	atomic_t buffers;
+	u32 buffers;
+	u32 length;
 	u32 bytesused;
 };
 
@@ -247,34 +228,13 @@ struct cx18_dvb {
 	struct dvb_net dvbnet;
 	int enabled;
 	int feeding;
+
 	struct mutex feedlock;
+
 };
 
 struct cx18;	 /* forward reference */
 struct cx18_scb; /* forward reference */
-
-
-#define CX18_MAX_MDL_ACKS 2
-#define CX18_MAX_EPU_WORK_ORDERS (CX18_MAX_FW_MDLS_PER_STREAM + 7)
-/* CPU_DE_RELEASE_MDL can burst CX18_MAX_FW_MDLS_PER_STREAM orders in a group */
-
-#define CX18_F_EWO_MB_STALE_UPON_RECEIPT 0x1
-#define CX18_F_EWO_MB_STALE_WHILE_PROC   0x2
-#define CX18_F_EWO_MB_STALE \
-	     (CX18_F_EWO_MB_STALE_UPON_RECEIPT | CX18_F_EWO_MB_STALE_WHILE_PROC)
-
-struct cx18_epu_work_order {
-	struct work_struct work;
-	atomic_t pending;
-	struct cx18 *cx;
-	unsigned long flags;
-	int rpu;
-	struct cx18_mailbox mb;
-	struct cx18_mdl_ack mdl_ack[CX18_MAX_MDL_ACKS];
-	char *str;
-};
-
-#define CX18_INVALID_TASK_HANDLE 0xffffffff
 
 struct cx18_stream {
 	/* These first four fields are always set, even if the stream
@@ -287,7 +247,7 @@ struct cx18_stream {
 	unsigned mdl_offset;
 
 	u32 id;
-	struct mutex qlock; 	/* locks access to the queues */
+	spinlock_t qlock; 	/* locks access to the queues */
 	unsigned long s_flags;	/* status flags, see above */
 	int dma;		/* can be PCI_DMA_TODEVICE,
 				   PCI_DMA_FROMDEVICE or
@@ -298,11 +258,12 @@ struct cx18_stream {
 	/* Buffer Stats */
 	u32 buffers;
 	u32 buf_size;
+	u32 buffers_stolen;
 
 	/* Buffer Queues */
 	struct cx18_queue q_free;	/* free buffers */
-	struct cx18_queue q_busy;	/* busy buffers - in use by firmware */
-	struct cx18_queue q_full;	/* full buffers - data for user apps */
+	struct cx18_queue q_full;	/* full buffers */
+	struct cx18_queue q_io;		/* waiting for I/O */
 
 	/* DVB / Digital Transport */
 	struct cx18_dvb dvb;
@@ -379,8 +340,6 @@ struct cx18_i2c_algo_callback_data {
 	int bus_index;   /* 0 or 1 for the cx23418's 1st or 2nd I2C bus */
 };
 
-#define CX18_MAX_MMIO_WR_RETRIES 10
-
 /* Struct to hold info about cx18 cards */
 struct cx18 {
 	int num;		/* board number, -1 during init! */
@@ -399,9 +358,7 @@ struct cx18 {
 	u32 v4l2_cap;		/* V4L2 capabilities of card */
 	u32 hw_flags; 		/* Hardware description of the board */
 	unsigned mdl_offset;
-	struct cx18_scb __iomem *scb; /* pointer to SCB */
-	struct mutex epu2apu_mb_lock; /* protect driver to chip mailbox in SCB*/
-	struct mutex epu2cpu_mb_lock; /* protect driver to chip mailbox in SCB*/
+	struct cx18_scb *scb;   /* pointer to SCB */
 
 	struct cx18_av_state av_state;
 
@@ -420,14 +377,14 @@ struct cx18 {
 
 	struct mutex serialize_lock;    /* mutex used to serialize open/close/start/stop/ioctl operations */
 	struct cx18_options options; 	/* User options */
-	int stream_buffers[CX18_MAX_STREAMS]; /* # of buffers for each stream */
 	int stream_buf_size[CX18_MAX_STREAMS]; /* Stream buffer size */
 	struct cx18_stream streams[CX18_MAX_STREAMS]; 	/* Stream data */
 	unsigned long i_flags;  /* global cx18 flags */
-	atomic_t ana_capturing;	/* count number of active analog capture streams */
-	atomic_t tot_capturing;	/* total count number of active capture streams */
+	atomic_t capturing;	/* count number of active capture streams */
 	spinlock_t lock;        /* lock access to this struct */
 	int search_pack_header;
+
+	spinlock_t dma_reg_lock; /* lock access to DMA engine registers */
 
 	int open_id;		/* incremented each time an open occurs, used as
 				   unique ID. Starts at 1, so 0 can be used as
@@ -452,17 +409,11 @@ struct cx18 {
 
 	wait_queue_head_t mb_apu_waitq;
 	wait_queue_head_t mb_cpu_waitq;
+	wait_queue_head_t mb_epu_waitq;
+	wait_queue_head_t mb_hpu_waitq;
 	wait_queue_head_t cap_w;
 	/* when the current DMA is finished this queue is woken up */
 	wait_queue_head_t dma_waitq;
-
-	u32 sw1_irq_mask;
-	u32 sw2_irq_mask;
-	u32 hw2_irq_mask;
-
-	struct workqueue_struct *work_queue;
-	struct cx18_epu_work_order epu_work_order[CX18_MAX_EPU_WORK_ORDERS];
-	char epu_debug_str[256]; /* CX18_EPU_DEBUG is rare: use shared space */
 
 	/* i2c */
 	struct i2c_adapter i2c_adap[2];
@@ -471,11 +422,6 @@ struct cx18 {
 	struct i2c_client i2c_client[2];
 	struct mutex i2c_bus_lock[2];
 	struct i2c_client *i2c_clients[I2C_CLIENTS_MAX];
-
-	/* gpio */
-	u32 gpio_dir;
-	u32 gpio_val;
-	struct mutex gpio_lock;
 
 	/* v4l2 and User settings */
 
@@ -505,10 +451,47 @@ void cx18_read_eeprom(struct cx18 *cx, struct tveeprom *tv);
 /* First-open initialization: load firmware, etc. */
 int cx18_init_on_first_open(struct cx18 *cx);
 
-/* Test if the current VBI mode is raw (1) or sliced (0) */
-static inline int cx18_raw_vbi(const struct cx18 *cx)
-{
-	return cx->vbi.in.type == V4L2_BUF_TYPE_VBI_CAPTURE;
-}
+/* This is a PCI post thing, where if the pci register is not read, then
+   the write doesn't always take effect right away. By reading back the
+   register any pending PCI writes will be performed (in order), and so
+   you can be sure that the writes are guaranteed to be done.
+
+   Rarely needed, only in some timing sensitive cases.
+   Apparently if this is not done some motherboards seem
+   to kill the firmware and get into the broken state until computer is
+   rebooted. */
+#define write_sync(val, reg) \
+	do { writel(val, reg); readl(reg); } while (0)
+
+#define read_reg(reg) readl(cx->reg_mem + (reg))
+#define write_reg(val, reg) writel(val, cx->reg_mem + (reg))
+#define write_reg_sync(val, reg) \
+	do { write_reg(val, reg); read_reg(reg); } while (0)
+
+#define read_enc(addr) readl(cx->enc_mem + (u32)(addr))
+#define write_enc(val, addr) writel(val, cx->enc_mem + (u32)(addr))
+#define write_enc_sync(val, addr) \
+	do { write_enc(val, addr); read_enc(addr); } while (0)
+
+#define sw1_irq_enable(val) do { \
+	write_reg(val, SW1_INT_STATUS); \
+	write_reg(read_reg(SW1_INT_ENABLE_PCI) | (val), SW1_INT_ENABLE_PCI); \
+} while (0)
+
+#define sw1_irq_disable(val) \
+	write_reg(read_reg(SW1_INT_ENABLE_PCI) & ~(val), SW1_INT_ENABLE_PCI);
+
+#define sw2_irq_enable(val) do { \
+	write_reg(val, SW2_INT_STATUS); \
+	write_reg(read_reg(SW2_INT_ENABLE_PCI) | (val), SW2_INT_ENABLE_PCI); \
+} while (0)
+
+#define sw2_irq_disable(val) \
+	write_reg(read_reg(SW2_INT_ENABLE_PCI) & ~(val), SW2_INT_ENABLE_PCI);
+
+#define setup_page(addr) do { \
+    u32 val = read_reg(0xD000F8) & ~0x1f00; \
+    write_reg(val | (((addr) >> 17) & 0x1f00), 0xD000F8); \
+} while (0)
 
 #endif /* CX18_DRIVER_H */

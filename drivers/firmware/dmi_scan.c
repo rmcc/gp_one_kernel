@@ -8,17 +8,7 @@
 #include <linux/slab.h>
 #include <asm/dmi.h>
 
-/*
- * DMI stands for "Desktop Management Interface".  It is part
- * of and an antecedent to, SMBIOS, which stands for System
- * Management BIOS.  See further: http://www.dmtf.org/standards
- */
 static char dmi_empty_string[] = "        ";
-
-/*
- * Catch too early calls to dmi_check_system():
- */
-static int dmi_initialized;
 
 static const char * __init dmi_string_nosave(const struct dmi_header *dm, u8 s)
 {
@@ -81,9 +71,9 @@ static void dmi_table(u8 *buf, int len, int num,
 		const struct dmi_header *dm = (const struct dmi_header *)data;
 
 		/*
-		 *  We want to know the total length (formatted area and
-		 *  strings) before decoding to make sure we won't run off the
-		 *  table in dmi_decode or dmi_string
+		 *  We want to know the total length (formated area and strings)
+		 *  before decoding to make sure we won't run off the table in
+		 *  dmi_decode or dmi_string
 		 */
 		data += dm->length;
 		while ((data - buf < len - 1) && (data[0] || data[1]))
@@ -371,7 +361,7 @@ void __init dmi_scan_machine(void)
 
 	if (efi_enabled) {
 		if (efi.smbios == EFI_INVALID_TABLE_ADDR)
-			goto error;
+			goto out;
 
 		/* This is called as a core_initcall() because it isn't
 		 * needed during early boot.  This also means we can
@@ -379,13 +369,13 @@ void __init dmi_scan_machine(void)
 		 */
 		p = dmi_ioremap(efi.smbios, 32);
 		if (p == NULL)
-			goto error;
+			goto out;
 
 		rc = dmi_present(p + 0x10); /* offset of _DMI_ string */
 		dmi_iounmap(p, 32);
 		if (!rc) {
 			dmi_available = 1;
-			goto out;
+			return;
 		}
 	}
 	else {
@@ -396,22 +386,19 @@ void __init dmi_scan_machine(void)
 		 */
 		p = dmi_ioremap(0xF0000, 0x10000);
 		if (p == NULL)
-			goto error;
+			goto out;
 
 		for (q = p; q < p + 0x10000; q += 16) {
 			rc = dmi_present(q);
 			if (!rc) {
 				dmi_available = 1;
 				dmi_iounmap(p, 0x10000);
-				goto out;
+				return;
 			}
 		}
 		dmi_iounmap(p, 0x10000);
 	}
- error:
-	printk(KERN_INFO "DMI not present or invalid.\n");
- out:
-	dmi_initialized = 1;
+ out:	printk(KERN_INFO "DMI not present or invalid.\n");
 }
 
 /**
@@ -431,8 +418,6 @@ int dmi_check_system(const struct dmi_system_id *list)
 {
 	int i, count = 0;
 	const struct dmi_system_id *d = list;
-
-	WARN(!dmi_initialized, KERN_ERR "dmi check: not initialized yet.\n");
 
 	while (d->ident) {
 		for (i = 0; i < ARRAY_SIZE(d->matches); i++) {
@@ -467,17 +452,6 @@ const char *dmi_get_system_info(int field)
 }
 EXPORT_SYMBOL(dmi_get_system_info);
 
-/**
- * dmi_name_in_serial - Check if string is in the DMI product serial information
- * @str: string to check for
- */
-int dmi_name_in_serial(const char *str)
-{
-	int f = DMI_PRODUCT_SERIAL;
-	if (dmi_ident[f] && strstr(dmi_ident[f], str))
-		return 1;
-	return 0;
-}
 
 /**
  *	dmi_name_in_vendors - Check if string is anywhere in the DMI vendor information.
@@ -582,21 +556,3 @@ int dmi_walk(void (*decode)(const struct dmi_header *))
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dmi_walk);
-
-/**
- * dmi_match - compare a string to the dmi field (if exists)
- * @f: DMI field identifier
- * @str: string to compare the DMI field to
- *
- * Returns true if the requested field equals to the str (including NULL).
- */
-bool dmi_match(enum dmi_field f, const char *str)
-{
-	const char *info = dmi_get_system_info(f);
-
-	if (info == NULL || str == NULL)
-		return info == str;
-
-	return !strcmp(info, str);
-}
-EXPORT_SYMBOL_GPL(dmi_match);

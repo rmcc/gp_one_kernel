@@ -36,18 +36,12 @@
 
 struct igb_adapter;
 
-#ifdef CONFIG_IGB_LRO
-#include <linux/inet_lro.h>
-#define MAX_LRO_AGGR                      32
-#define MAX_LRO_DESCRIPTORS                8
-#endif
-
 /* Interrupt defines */
+#define IGB_MAX_TX_CLEAN 72
+
 #define IGB_MIN_DYN_ITR 3000
 #define IGB_MAX_DYN_ITR 96000
-
-/* ((1000000000ns / (6000ints/s * 1024ns)) << 2 = 648 */
-#define IGB_START_ITR 648
+#define IGB_START_ITR 6000
 
 #define IGB_DYN_ITR_PACKET_THRESHOLD 2
 #define IGB_DYN_ITR_LENGTH_LOW 200
@@ -68,7 +62,6 @@ struct igb_adapter;
 
 /* Transmit and receive queues */
 #define IGB_MAX_RX_QUEUES                  4
-#define IGB_MAX_TX_QUEUES                  4
 
 /* RX descriptor control thresholds.
  * PTHRESH - MAC will consider prefetch if it has fewer than this number of
@@ -125,14 +118,12 @@ struct igb_buffer {
 		/* TX */
 		struct {
 			unsigned long time_stamp;
-			u16 length;
-			u16 next_to_watch;
+			u32 length;
 		};
 		/* RX */
 		struct {
 			struct page *page;
 			u64 page_dma;
-			unsigned int page_offset;
 		};
 	};
 };
@@ -159,27 +150,24 @@ struct igb_ring {
 	u16 itr_register;
 	u16 cpu;
 
-	u16 queue_index;
-	u16 reg_idx;
 	unsigned int total_bytes;
 	unsigned int total_packets;
 
 	union {
 		/* TX */
 		struct {
-			struct igb_queue_stats tx_stats;
+			spinlock_t tx_clean_lock;
+			spinlock_t tx_lock;
 			bool detect_tx_hung;
 		};
 		/* RX */
 		struct {
+			/* arrays of page information for packet split */
+			struct sk_buff *pending_skb;
+			int pending_skb_page;
+			int no_itr_adjust;
 			struct igb_queue_stats rx_stats;
 			struct napi_struct napi;
-			int set_itr;
-			struct igb_ring *buddy;
-#ifdef CONFIG_IGB_LRO
-			struct net_lro_mgr lro_mgr;
-			bool lro_used;
-#endif
 		};
 	};
 
@@ -222,6 +210,7 @@ struct igb_adapter {
 	u32 itr_setting;
 	u16 tx_itr;
 	u16 rx_itr;
+	int set_itr;
 
 	struct work_struct reset_task;
 	struct work_struct watchdog_task;
@@ -276,35 +265,13 @@ struct igb_adapter {
 	int msg_enable;
 	struct msix_entry *msix_entries;
 	u32 eims_enable_mask;
-	u32 eims_other;
 
 	/* to not mess up cache alignment, always add to the bottom */
 	unsigned long state;
-	unsigned int flags;
+	unsigned int msi_enabled;
+
 	u32 eeprom_wol;
-
-	/* for ioport free */
-	int bars;
-	int need_ioport;
-
-	struct igb_ring *multi_tx_table[IGB_MAX_TX_QUEUES];
-#ifdef CONFIG_IGB_LRO
-	unsigned int lro_max_aggr;
-	unsigned int lro_aggregated;
-	unsigned int lro_flushed;
-	unsigned int lro_no_desc;
-#endif
-	unsigned int tx_ring_count;
-	unsigned int rx_ring_count;
 };
-
-#define IGB_FLAG_HAS_MSI           (1 << 0)
-#define IGB_FLAG_MSI_ENABLE        (1 << 1)
-#define IGB_FLAG_HAS_DCA           (1 << 2)
-#define IGB_FLAG_DCA_ENABLED       (1 << 3)
-#define IGB_FLAG_IN_NETPOLL        (1 << 5)
-#define IGB_FLAG_QUAD_PORT_A       (1 << 6)
-#define IGB_FLAG_NEED_CTX_IDX      (1 << 7)
 
 enum e1000_state_t {
 	__IGB_TESTING,
@@ -327,41 +294,7 @@ extern void igb_reset(struct igb_adapter *);
 extern int igb_set_spd_dplx(struct igb_adapter *, u16);
 extern int igb_setup_tx_resources(struct igb_adapter *, struct igb_ring *);
 extern int igb_setup_rx_resources(struct igb_adapter *, struct igb_ring *);
-extern void igb_free_tx_resources(struct igb_ring *);
-extern void igb_free_rx_resources(struct igb_ring *);
 extern void igb_update_stats(struct igb_adapter *);
 extern void igb_set_ethtool_ops(struct net_device *);
-
-static inline s32 igb_reset_phy(struct e1000_hw *hw)
-{
-	if (hw->phy.ops.reset_phy)
-		return hw->phy.ops.reset_phy(hw);
-
-	return 0;
-}
-
-static inline s32 igb_read_phy_reg(struct e1000_hw *hw, u32 offset, u16 *data)
-{
-	if (hw->phy.ops.read_phy_reg)
-		return hw->phy.ops.read_phy_reg(hw, offset, data);
-
-	return 0;
-}
-
-static inline s32 igb_write_phy_reg(struct e1000_hw *hw, u32 offset, u16 data)
-{
-	if (hw->phy.ops.write_phy_reg)
-		return hw->phy.ops.write_phy_reg(hw, offset, data);
-
-	return 0;
-}
-
-static inline s32 igb_get_phy_info(struct e1000_hw *hw)
-{
-	if (hw->phy.ops.get_phy_info)
-		return hw->phy.ops.get_phy_info(hw);
-
-	return 0;
-}
 
 #endif /* _IGB_H_ */

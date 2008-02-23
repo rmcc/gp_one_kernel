@@ -1,7 +1,5 @@
 #ifndef _LINUX_VIRTIO_BALLOON_H
 #define _LINUX_VIRTIO_BALLOON_H
-/* This header is BSD licensed so anyone can use the definitions to implement
- * compatible drivers/servers. */
 #include <linux/virtio_config.h>
 
 /* The ID for virtio_balloon */
@@ -9,9 +7,6 @@
 
 /* The feature bitmap for virtio balloon */
 #define VIRTIO_BALLOON_F_MUST_TELL_HOST	0 /* Tell before reclaiming pages */
-
-/* Size of a PFN in the balloon interface. */
-#define VIRTIO_BALLOON_PFN_SHIFT 12
 
 struct virtio_balloon_config
 {

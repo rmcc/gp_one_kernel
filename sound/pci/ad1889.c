@@ -549,8 +549,7 @@ snd_ad1889_playback_pointer(struct snd_pcm_substream *ss)
 	ptr = ad1889_readl(chip, AD_DMA_WAVCA);
 	ptr -= chip->wave.addr;
 	
-	if (snd_BUG_ON(ptr >= chip->wave.size))
-		return 0;
+	snd_assert((ptr >= 0) && (ptr < chip->wave.size), return 0);
 	
 	return bytes_to_frames(ss->runtime, ptr);
 }
@@ -568,8 +567,7 @@ snd_ad1889_capture_pointer(struct snd_pcm_substream *ss)
 	ptr = ad1889_readl(chip, AD_DMA_ADCCA);
 	ptr -= chip->ramc.addr;
 
-	if (snd_BUG_ON(ptr >= chip->ramc.size))
-		return 0;
+	snd_assert((ptr >= 0) && (ptr < chip->ramc.size), return 0);
 	
 	return bytes_to_frames(ss->runtime, ptr);
 }
@@ -932,7 +930,7 @@ snd_ad1889_create(struct snd_card *card,
 		goto free_and_ret;
 
 	chip->bar = pci_resource_start(pci, 0);
-	chip->iobase = pci_ioremap_bar(pci, 0);
+	chip->iobase = ioremap_nocache(chip->bar, pci_resource_len(pci, 0));
 	if (chip->iobase == NULL) {
 		printk(KERN_ERR PFX "unable to reserve region.\n");
 		err = -EBUSY;

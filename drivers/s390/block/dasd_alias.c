@@ -91,8 +91,7 @@ static struct alias_pav_group *_find_group(struct alias_lcu *lcu,
 	else
 		search_unit_addr = uid->base_unit_addr;
 	list_for_each_entry(pos, &lcu->grouplist, group) {
-		if (pos->uid.base_unit_addr == search_unit_addr &&
-		    !strncmp(pos->uid.vduit, uid->vduit, sizeof(uid->vduit)))
+		if (pos->uid.base_unit_addr == search_unit_addr)
 			return pos;
 	};
 	return NULL;
@@ -333,7 +332,6 @@ static int _add_device_to_lcu(struct alias_lcu *lcu,
 			group->uid.base_unit_addr = uid->real_unit_addr;
 		else
 			group->uid.base_unit_addr = uid->base_unit_addr;
-		memcpy(group->uid.vduit, uid->vduit, sizeof(uid->vduit));
 		INIT_LIST_HEAD(&group->group);
 		INIT_LIST_HEAD(&group->baselist);
 		INIT_LIST_HEAD(&group->aliaslist);

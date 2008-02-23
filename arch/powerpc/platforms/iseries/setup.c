@@ -23,7 +23,6 @@
 #include <linux/string.h>
 #include <linux/seq_file.h>
 #include <linux/kdev_t.h>
-#include <linux/kexec.h>
 #include <linux/major.h>
 #include <linux/root_dev.h>
 #include <linux/kernel.h>
@@ -562,7 +561,7 @@ static void yield_shared_processor(void)
 static void iseries_shared_idle(void)
 {
 	while (1) {
-		tick_nohz_stop_sched_tick(1);
+		tick_nohz_stop_sched_tick();
 		while (!need_resched() && !hvlpevent_is_pending()) {
 			local_irq_disable();
 			ppc64_runlatch_off();
@@ -592,7 +591,7 @@ static void iseries_dedicated_idle(void)
 	set_thread_flag(TIF_POLLING_NRFLAG);
 
 	while (1) {
-		tick_nohz_stop_sched_tick(1);
+		tick_nohz_stop_sched_tick();
 		if (!need_resched()) {
 			while (!need_resched()) {
 				ppc64_runlatch_off();
@@ -639,13 +638,6 @@ static int __init iseries_probe(void)
 	return 1;
 }
 
-#ifdef CONFIG_KEXEC
-static int iseries_kexec_prepare(struct kimage *image)
-{
-	return -ENOSYS;
-}
-#endif
-
 define_machine(iseries) {
 	.name			= "iSeries",
 	.setup_arch		= iSeries_setup_arch,
@@ -666,9 +658,6 @@ define_machine(iseries) {
 	.probe			= iseries_probe,
 	.ioremap		= iseries_ioremap,
 	.iounmap		= iseries_iounmap,
-#ifdef CONFIG_KEXEC
-	.machine_kexec_prepare	= iseries_kexec_prepare,
-#endif
 	/* XXX Implement enable_pmcs for iSeries */
 };
 

@@ -9,6 +9,8 @@
  * Derived from drivers/mtd/nand/autcpu12.c
  *   Copyright (c) 2001 Thomas Gleixner (gleixner@autronix.de)
  *
+ * $Id: ts7250.c,v 1.4 2004/12/30 22:02:07 joff Exp $
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -25,7 +27,7 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <asm/io.h>
-#include <mach/hardware.h>
+#include <asm/arch/hardware.h>
 #include <asm/sizes.h>
 #include <asm/mach-types.h>
 

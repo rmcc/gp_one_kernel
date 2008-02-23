@@ -147,10 +147,9 @@ static void dart_flush(struct iommu_table *tbl)
 	}
 }
 
-static int dart_build(struct iommu_table *tbl, long index,
+static void dart_build(struct iommu_table *tbl, long index,
 		       long npages, unsigned long uaddr,
-		       enum dma_data_direction direction,
-		       struct dma_attrs *attrs)
+		       enum dma_data_direction direction)
 {
 	unsigned int *dp;
 	unsigned int rpn;
@@ -184,7 +183,6 @@ static int dart_build(struct iommu_table *tbl, long index,
 	} else {
 		dart_dirty = 1;
 	}
-	return 0;
 }
 
 

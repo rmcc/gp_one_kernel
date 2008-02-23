@@ -225,7 +225,7 @@ do {									\
  */
 int jbd2_journal_recover(journal_t *journal)
 {
-	int			err, err2;
+	int			err;
 	journal_superblock_t *	sb;
 
 	struct recovery_info	info;
@@ -263,10 +263,7 @@ int jbd2_journal_recover(journal_t *journal)
 	journal->j_transaction_sequence = ++info.end_transaction;
 
 	jbd2_journal_clear_revoke(journal);
-	err2 = sync_blockdev(journal->j_fs_dev);
-	if (!err)
-		err = err2;
-
+	sync_blockdev(journal->j_fs_dev);
 	return err;
 }
 
@@ -347,7 +344,6 @@ static int calc_chksums(journal_t *journal, struct buffer_head *bh,
 			*crc32_sum = crc32_be(*crc32_sum, (void *)obh->b_data,
 				     obh->b_size);
 		}
-		put_bh(obh);
 	}
 	return 0;
 }
@@ -614,8 +610,9 @@ static int do_one_pass(journal_t *journal,
 				chksum_err = chksum_seen = 0;
 
 				if (info->end_transaction) {
-					journal->j_failed_commit =
-						info->end_transaction;
+					printk(KERN_ERR "JBD: Transaction %u "
+						"found to be corrupt.\n",
+						next_commit_ID - 1);
 					brelse(bh);
 					break;
 				}
@@ -646,8 +643,10 @@ static int do_one_pass(journal_t *journal,
 
 					if (!JBD2_HAS_INCOMPAT_FEATURE(journal,
 					   JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT)){
-						journal->j_failed_commit =
-							next_commit_ID;
+						printk(KERN_ERR
+						       "JBD: Transaction %u "
+						       "found to be corrupt.\n",
+						       next_commit_ID);
 						brelse(bh);
 						break;
 					}

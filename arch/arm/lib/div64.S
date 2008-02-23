@@ -198,4 +198,3 @@ ENTRY(__do_div64)
 	mov	xh, #0
 	ldr	pc, [sp], #8
 
-ENDPROC(__do_div64)

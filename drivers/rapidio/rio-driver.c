@@ -79,6 +79,7 @@ void rio_dev_put(struct rio_dev *rdev)
 
 /**
  *  rio_device_probe - Tell if a RIO device structure has a matching RIO device id structure
+ *  @id: the RIO device id structure to match against
  *  @dev: the RIO device structure to match against
  *
  * return 0 and set rio_dev->driver when drv claims rio_dev, else error
@@ -100,8 +101,8 @@ static int rio_device_probe(struct device *dev)
 		if (error >= 0) {
 			rdev->driver = rdrv;
 			error = 0;
-		} else
 			rio_dev_put(rdev);
+		}
 	}
 	return error;
 }

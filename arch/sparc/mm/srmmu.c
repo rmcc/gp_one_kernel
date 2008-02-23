@@ -31,6 +31,7 @@
 #include <asm/mbus.h>
 #include <asm/cache.h>
 #include <asm/oplib.h>
+#include <asm/sbus.h>
 #include <asm/asi.h>
 #include <asm/msi.h>
 #include <asm/mmu_context.h>
@@ -49,7 +50,7 @@
 #include <asm/btfixup.h>
 
 enum mbus_module srmmu_modtype;
-static unsigned int hwbug_bitmask;
+unsigned int hwbug_bitmask;
 int vac_cache_size;
 int vac_line_size;
 
@@ -59,7 +60,7 @@ extern unsigned long last_valid_pfn;
 
 extern unsigned long page_kernel;
 
-static pgd_t *srmmu_swapper_pg_dir;
+pgd_t *srmmu_swapper_pg_dir;
 
 #ifdef CONFIG_SMP
 #define FLUSH_BEGIN(mm)
@@ -82,12 +83,12 @@ BTFIXUPDEF_CALL(void, local_flush_page_for_dma, unsigned long)
 char *srmmu_name;
 
 ctxd_t *srmmu_ctx_table_phys;
-static ctxd_t *srmmu_context_table;
+ctxd_t *srmmu_context_table;
 
 int viking_mxcc_present;
 static DEFINE_SPINLOCK(srmmu_context_spinlock);
 
-static int is_hypersparc;
+int is_hypersparc;
 
 /*
  * In general all page table modifications should use the V8 atomic
@@ -111,11 +112,11 @@ static inline int srmmu_device_memory(unsigned long x)
 	return ((x & 0xF0000000) != 0);
 }
 
-static int srmmu_cache_pagetables;
+int srmmu_cache_pagetables;
 
 /* these will be initialized in srmmu_nocache_calcsize() */
-static unsigned long srmmu_nocache_size;
-static unsigned long srmmu_nocache_end;
+unsigned long srmmu_nocache_size;
+unsigned long srmmu_nocache_end;
 
 /* 1 bit <=> 256 bytes of nocache <=> 64 PTEs */
 #define SRMMU_NOCACHE_BITMAP_SHIFT (PAGE_SHIFT - 4)
@@ -323,7 +324,7 @@ static unsigned long __srmmu_get_nocache(int size, int align)
 	return (SRMMU_NOCACHE_VADDR + (offset << SRMMU_NOCACHE_BITMAP_SHIFT));
 }
 
-static unsigned long srmmu_get_nocache(int size, int align)
+unsigned inline long srmmu_get_nocache(int size, int align)
 {
 	unsigned long tmp;
 
@@ -335,7 +336,7 @@ static unsigned long srmmu_get_nocache(int size, int align)
 	return tmp;
 }
 
-static void srmmu_free_nocache(unsigned long vaddr, int size)
+void srmmu_free_nocache(unsigned long vaddr, int size)
 {
 	int offset;
 
@@ -368,8 +369,7 @@ static void srmmu_free_nocache(unsigned long vaddr, int size)
 	bit_map_clear(&srmmu_nocache_map, offset, size);
 }
 
-static void srmmu_early_allocate_ptable_skeleton(unsigned long start,
-						 unsigned long end);
+void srmmu_early_allocate_ptable_skeleton(unsigned long start, unsigned long end);
 
 extern unsigned long probe_memory(void);	/* in fault.c */
 
@@ -377,7 +377,7 @@ extern unsigned long probe_memory(void);	/* in fault.c */
  * Reserve nocache dynamically proportionally to the amount of
  * system RAM. -- Tomas Szepe <szepe@pinerecords.com>, June 2002
  */
-static void srmmu_nocache_calcsize(void)
+void srmmu_nocache_calcsize(void)
 {
 	unsigned long sysmemavail = probe_memory() / 1024;
 	int srmmu_nocache_npages;
@@ -398,7 +398,7 @@ static void srmmu_nocache_calcsize(void)
 	srmmu_nocache_end = SRMMU_NOCACHE_VADDR + srmmu_nocache_size;
 }
 
-static void __init srmmu_nocache_init(void)
+void __init srmmu_nocache_init(void)
 {
 	unsigned int bitmap_bits;
 	pgd_t *pgd;
@@ -645,7 +645,7 @@ static void srmmu_unmapiorange(unsigned long virt_addr, unsigned int len)
  * mappings on the kernel stack without any special code as we did
  * need on the sun4c.
  */
-static struct thread_info *srmmu_alloc_thread_info(void)
+struct thread_info *srmmu_alloc_thread_info(void)
 {
 	struct thread_info *ret;
 
@@ -1045,14 +1045,13 @@ extern void hypersparc_setup_blockops(void);
  *       around 8mb mapped for us.
  */
 
-static void __init early_pgtable_allocfail(char *type)
+void __init early_pgtable_allocfail(char *type)
 {
 	prom_printf("inherit_prom_mappings: Cannot alloc kernel %s.\n", type);
 	prom_halt();
 }
 
-static void __init srmmu_early_allocate_ptable_skeleton(unsigned long start,
-							unsigned long end)
+void __init srmmu_early_allocate_ptable_skeleton(unsigned long start, unsigned long end)
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
@@ -1082,8 +1081,7 @@ static void __init srmmu_early_allocate_ptable_skeleton(unsigned long start,
 	}
 }
 
-static void __init srmmu_allocate_ptable_skeleton(unsigned long start,
-						  unsigned long end)
+void __init srmmu_allocate_ptable_skeleton(unsigned long start, unsigned long end)
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
@@ -1118,8 +1116,7 @@ static void __init srmmu_allocate_ptable_skeleton(unsigned long start,
  * looking at the prom's page table directly which is what most
  * other OS's do.  Yuck... this is much better.
  */
-static void __init srmmu_inherit_prom_mappings(unsigned long start,
-					       unsigned long end)
+void __init srmmu_inherit_prom_mappings(unsigned long start,unsigned long end)
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
@@ -1251,7 +1248,7 @@ static inline void map_kernel(void)
 /* Paging initialization on the Sparc Reference MMU. */
 extern void sparc_context_init(int);
 
-void (*poke_srmmu)(void) __cpuinitdata = NULL;
+void (*poke_srmmu)(void) __initdata = NULL;
 
 extern unsigned long bootmem_init(unsigned long *pages_avail);
 
@@ -1312,8 +1309,10 @@ void __init srmmu_paging_init(void)
 #endif
 	poke_srmmu();
 
+#ifdef CONFIG_SUN_IO
 	srmmu_allocate_ptable_skeleton(sparc_iomap.start, IOBASE_END);
 	srmmu_allocate_ptable_skeleton(DVMA_VADDR, DVMA_END);
+#endif
 
 	srmmu_allocate_ptable_skeleton(
 		__fix_to_virt(__end_of_fixed_addresses - 1), FIXADDR_TOP);
@@ -1349,7 +1348,8 @@ void __init srmmu_paging_init(void)
 		zones_size[ZONE_HIGHMEM] = npages;
 		zholes_size[ZONE_HIGHMEM] = npages - calc_highpages();
 
-		free_area_init_node(0, zones_size, pfn_base, zholes_size);
+		free_area_init_node(0, &contig_page_data, zones_size,
+				    pfn_base, zholes_size);
 	}
 }
 
@@ -1444,7 +1444,7 @@ static void __init init_vac_layout(void)
 	       (int)vac_cache_size, (int)vac_line_size);
 }
 
-static void __cpuinit poke_hypersparc(void)
+static void __init poke_hypersparc(void)
 {
 	volatile unsigned long clear;
 	unsigned long mreg = srmmu_get_mmureg();
@@ -1499,7 +1499,7 @@ static void __init init_hypersparc(void)
 	hypersparc_setup_blockops();
 }
 
-static void __cpuinit poke_cypress(void)
+static void __init poke_cypress(void)
 {
 	unsigned long mreg = srmmu_get_mmureg();
 	unsigned long faddr, tagval;
@@ -1587,7 +1587,7 @@ static void __init init_cypress_605(unsigned long mrev)
 	init_cypress_common();
 }
 
-static void __cpuinit poke_swift(void)
+static void __init poke_swift(void)
 {
 	unsigned long mreg;
 
@@ -1769,7 +1769,7 @@ static void turbosparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 }
 
 
-static void __cpuinit poke_turbosparc(void)
+static void __init poke_turbosparc(void)
 {
 	unsigned long mreg = srmmu_get_mmureg();
 	unsigned long ccreg;
@@ -1832,7 +1832,7 @@ static void __init init_turbosparc(void)
 	poke_srmmu = poke_turbosparc;
 }
 
-static void __cpuinit poke_tsunami(void)
+static void __init poke_tsunami(void)
 {
 	unsigned long mreg = srmmu_get_mmureg();
 
@@ -1874,7 +1874,7 @@ static void __init init_tsunami(void)
 	tsunami_setup_blockops();
 }
 
-static void __cpuinit poke_viking(void)
+static void __init poke_viking(void)
 {
 	unsigned long mreg = srmmu_get_mmureg();
 	static int smp_catch;
@@ -1914,6 +1914,18 @@ static void __cpuinit poke_viking(void)
 	mreg |= VIKING_SBENABLE;
 	mreg &= ~(VIKING_ACENABLE);
 	srmmu_set_mmureg(mreg);
+
+#ifdef CONFIG_SMP
+	/* Avoid unnecessary cross calls. */
+	BTFIXUPCOPY_CALL(flush_cache_all, local_flush_cache_all);
+	BTFIXUPCOPY_CALL(flush_cache_mm, local_flush_cache_mm);
+	BTFIXUPCOPY_CALL(flush_cache_range, local_flush_cache_range);
+	BTFIXUPCOPY_CALL(flush_cache_page, local_flush_cache_page);
+	BTFIXUPCOPY_CALL(__flush_page_to_ram, local_flush_page_to_ram);
+	BTFIXUPCOPY_CALL(flush_sig_insns, local_flush_sig_insns);
+	BTFIXUPCOPY_CALL(flush_page_for_dma, local_flush_page_for_dma);
+	btfixup();
+#endif
 }
 
 static void __init init_viking(void)
@@ -2258,17 +2270,6 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_CALL(__flush_page_to_ram, smp_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_sig_insns, smp_flush_sig_insns, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_page_for_dma, smp_flush_page_for_dma, BTFIXUPCALL_NORM);
-
-	if (poke_srmmu == poke_viking) {
-		/* Avoid unnecessary cross calls. */
-		BTFIXUPCOPY_CALL(flush_cache_all, local_flush_cache_all);
-		BTFIXUPCOPY_CALL(flush_cache_mm, local_flush_cache_mm);
-		BTFIXUPCOPY_CALL(flush_cache_range, local_flush_cache_range);
-		BTFIXUPCOPY_CALL(flush_cache_page, local_flush_cache_page);
-		BTFIXUPCOPY_CALL(__flush_page_to_ram, local_flush_page_to_ram);
-		BTFIXUPCOPY_CALL(flush_sig_insns, local_flush_sig_insns);
-		BTFIXUPCOPY_CALL(flush_page_for_dma, local_flush_page_for_dma);
-	}
 #endif
 
 	if (sparc_cpu_model == sun4d)

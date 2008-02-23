@@ -34,9 +34,12 @@ MODULE_ALIAS("ipt_connmark");
 MODULE_ALIAS("ip6t_connmark");
 
 static bool
-connmark_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+connmark_mt(const struct sk_buff *skb, const struct net_device *in,
+            const struct net_device *out, const struct xt_match *match,
+            const void *matchinfo, int offset, unsigned int protoff,
+            bool *hotdrop)
 {
-	const struct xt_connmark_mtinfo1 *info = par->matchinfo;
+	const struct xt_connmark_mtinfo1 *info = matchinfo;
 	enum ip_conntrack_info ctinfo;
 	const struct nf_conn *ct;
 
@@ -48,9 +51,12 @@ connmark_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 }
 
 static bool
-connmark_mt_v0(const struct sk_buff *skb, const struct xt_match_param *par)
+connmark_mt_v0(const struct sk_buff *skb, const struct net_device *in,
+               const struct net_device *out, const struct xt_match *match,
+               const void *matchinfo, int offset, unsigned int protoff,
+               bool *hotdrop)
 {
-	const struct xt_connmark_info *info = par->matchinfo;
+	const struct xt_connmark_info *info = matchinfo;
 	const struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
 
@@ -61,35 +67,42 @@ connmark_mt_v0(const struct sk_buff *skb, const struct xt_match_param *par)
 	return ((ct->mark & info->mask) == info->mark) ^ info->invert;
 }
 
-static bool connmark_mt_check_v0(const struct xt_mtchk_param *par)
+static bool
+connmark_mt_check_v0(const char *tablename, const void *ip,
+                     const struct xt_match *match, void *matchinfo,
+                     unsigned int hook_mask)
 {
-	const struct xt_connmark_info *cm = par->matchinfo;
+	const struct xt_connmark_info *cm = matchinfo;
 
 	if (cm->mark > 0xffffffff || cm->mask > 0xffffffff) {
 		printk(KERN_WARNING "connmark: only support 32bit mark\n");
 		return false;
 	}
-	if (nf_ct_l3proto_try_module_get(par->family) < 0) {
+	if (nf_ct_l3proto_try_module_get(match->family) < 0) {
 		printk(KERN_WARNING "can't load conntrack support for "
-				    "proto=%u\n", par->family);
+				    "proto=%u\n", match->family);
 		return false;
 	}
 	return true;
 }
 
-static bool connmark_mt_check(const struct xt_mtchk_param *par)
+static bool
+connmark_mt_check(const char *tablename, const void *ip,
+                  const struct xt_match *match, void *matchinfo,
+                  unsigned int hook_mask)
 {
-	if (nf_ct_l3proto_try_module_get(par->family) < 0) {
+	if (nf_ct_l3proto_try_module_get(match->family) < 0) {
 		printk(KERN_WARNING "cannot load conntrack support for "
-		       "proto=%u\n", par->family);
+		       "proto=%u\n", match->family);
 		return false;
 	}
 	return true;
 }
 
-static void connmark_mt_destroy(const struct xt_mtdtor_param *par)
+static void
+connmark_mt_destroy(const struct xt_match *match, void *matchinfo)
 {
-	nf_ct_l3proto_module_put(par->family);
+	nf_ct_l3proto_module_put(match->family);
 }
 
 #ifdef CONFIG_COMPAT
@@ -127,7 +140,22 @@ static struct xt_match connmark_mt_reg[] __read_mostly = {
 	{
 		.name		= "connmark",
 		.revision	= 0,
-		.family		= NFPROTO_UNSPEC,
+		.family		= AF_INET,
+		.checkentry	= connmark_mt_check_v0,
+		.match		= connmark_mt_v0,
+		.destroy	= connmark_mt_destroy,
+		.matchsize	= sizeof(struct xt_connmark_info),
+#ifdef CONFIG_COMPAT
+		.compatsize	= sizeof(struct compat_xt_connmark_info),
+		.compat_from_user = connmark_mt_compat_from_user_v0,
+		.compat_to_user	= connmark_mt_compat_to_user_v0,
+#endif
+		.me		= THIS_MODULE
+	},
+	{
+		.name		= "connmark",
+		.revision	= 0,
+		.family		= AF_INET6,
 		.checkentry	= connmark_mt_check_v0,
 		.match		= connmark_mt_v0,
 		.destroy	= connmark_mt_destroy,
@@ -142,7 +170,17 @@ static struct xt_match connmark_mt_reg[] __read_mostly = {
 	{
 		.name           = "connmark",
 		.revision       = 1,
-		.family         = NFPROTO_UNSPEC,
+		.family         = AF_INET,
+		.checkentry     = connmark_mt_check,
+		.match          = connmark_mt,
+		.matchsize      = sizeof(struct xt_connmark_mtinfo1),
+		.destroy        = connmark_mt_destroy,
+		.me             = THIS_MODULE,
+	},
+	{
+		.name           = "connmark",
+		.revision       = 1,
+		.family         = AF_INET6,
 		.checkentry     = connmark_mt_check,
 		.match          = connmark_mt,
 		.matchsize      = sizeof(struct xt_connmark_mtinfo1),

@@ -16,7 +16,7 @@
  *
  */
 
-#include <crypto/internal/hash.h>
+#include <crypto/algapi.h>
 #include <crypto/scatterwalk.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -226,7 +226,6 @@ static struct crypto_instance *hmac_alloc(struct rtattr **tb)
 	struct crypto_instance *inst;
 	struct crypto_alg *alg;
 	int err;
-	int ds;
 
 	err = crypto_check_attr_type(tb, CRYPTO_ALG_TYPE_HASH);
 	if (err)
@@ -236,15 +235,6 @@ static struct crypto_instance *hmac_alloc(struct rtattr **tb)
 				  CRYPTO_ALG_TYPE_HASH_MASK);
 	if (IS_ERR(alg))
 		return ERR_CAST(alg);
-
-	inst = ERR_PTR(-EINVAL);
-	ds = alg->cra_type == &crypto_hash_type ?
-	     alg->cra_hash.digestsize :
-	     alg->cra_type ?
-	     __crypto_shash_alg(alg)->digestsize :
-	     alg->cra_digest.dia_digestsize;
-	if (ds > alg->cra_blocksize)
-		goto out_put_alg;
 
 	inst = crypto_alloc_instance("hmac", alg);
 	if (IS_ERR(inst))
@@ -256,10 +246,14 @@ static struct crypto_instance *hmac_alloc(struct rtattr **tb)
 	inst->alg.cra_alignmask = alg->cra_alignmask;
 	inst->alg.cra_type = &crypto_hash_type;
 
-	inst->alg.cra_hash.digestsize = ds;
+	inst->alg.cra_hash.digestsize =
+		(alg->cra_flags & CRYPTO_ALG_TYPE_MASK) ==
+		CRYPTO_ALG_TYPE_HASH ? alg->cra_hash.digestsize :
+				       alg->cra_digest.dia_digestsize;
 
 	inst->alg.cra_ctxsize = sizeof(struct hmac_ctx) +
-				ALIGN(inst->alg.cra_blocksize * 2 + ds,
+				ALIGN(inst->alg.cra_blocksize * 2 +
+				      inst->alg.cra_hash.digestsize,
 				      sizeof(void *));
 
 	inst->alg.cra_init = hmac_init_tfm;

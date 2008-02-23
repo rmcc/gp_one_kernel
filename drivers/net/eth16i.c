@@ -1205,6 +1205,7 @@ static void eth16i_rx(struct net_device *dev)
 				printk(KERN_DEBUG ".\n");
 			}
 			netif_rx(skb);
+			dev->last_rx = jiffies;
 			dev->stats.rx_packets++;
 			dev->stats.rx_bytes += pkt_len;
 
@@ -1355,6 +1356,7 @@ static void eth16i_multicast(struct net_device *dev)
 
 	if(dev->mc_count || dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
 	{
+		dev->flags|=IFF_PROMISC;	/* Must do this */
 		outb(3, ioaddr + RECEIVE_MODE_REG);
 	} else {
 		outb(2, ioaddr + RECEIVE_MODE_REG);
@@ -1465,7 +1467,7 @@ void __exit cleanup_module(void)
 	for(this_dev = 0; this_dev < MAX_ETH16I_CARDS; this_dev++) {
 		struct net_device *dev = dev_eth16i[this_dev];
 
-		if (netdev_priv(dev)) {
+		if(dev->priv) {
 			unregister_netdev(dev);
 			free_irq(dev->irq, dev);
 			release_region(dev->base_addr, ETH16I_IO_EXTENT);
@@ -1474,3 +1476,15 @@ void __exit cleanup_module(void)
 	}
 }
 #endif /* MODULE */
+
+/*
+ * Local variables:
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c eth16i.c"
+ *  alt-compile-command: "gcc -DMODVERSIONS -DMODULE -D__KERNEL__ -Wall -Wstrict -prototypes -O6 -c eth16i.c"
+ *  tab-width: 8
+ *  c-basic-offset: 8
+ *  c-indent-level: 8
+ * End:
+ */
+
+/* End of file eth16i.c */

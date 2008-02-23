@@ -209,44 +209,9 @@ static ssize_t store_tx_queue_len(struct device *dev,
 	return netdev_store(dev, attr, buf, len, change_tx_queue_len);
 }
 
-static ssize_t store_ifalias(struct device *dev, struct device_attribute *attr,
-			     const char *buf, size_t len)
-{
-	struct net_device *netdev = to_net_dev(dev);
-	size_t count = len;
-	ssize_t ret;
-
-	if (!capable(CAP_NET_ADMIN))
-		return -EPERM;
-
-	/* ignore trailing newline */
-	if (len >  0 && buf[len - 1] == '\n')
-		--count;
-
-	rtnl_lock();
-	ret = dev_set_alias(netdev, buf, count);
-	rtnl_unlock();
-
-	return ret < 0 ? ret : len;
-}
-
-static ssize_t show_ifalias(struct device *dev,
-			    struct device_attribute *attr, char *buf)
-{
-	const struct net_device *netdev = to_net_dev(dev);
-	ssize_t ret = 0;
-
-	rtnl_lock();
-	if (netdev->ifalias)
-		ret = sprintf(buf, "%s\n", netdev->ifalias);
-	rtnl_unlock();
-	return ret;
-}
-
 static struct device_attribute net_class_attributes[] = {
 	__ATTR(addr_len, S_IRUGO, show_addr_len, NULL),
 	__ATTR(dev_id, S_IRUGO, show_dev_id, NULL),
-	__ATTR(ifalias, S_IRUGO | S_IWUSR, show_ifalias, store_ifalias),
 	__ATTR(iflink, S_IRUGO, show_iflink, NULL),
 	__ATTR(ifindex, S_IRUGO, show_ifindex, NULL),
 	__ATTR(features, S_IRUGO, show_features, NULL),
@@ -270,17 +235,18 @@ static ssize_t netstat_show(const struct device *d,
 			    unsigned long offset)
 {
 	struct net_device *dev = to_net_dev(d);
+	struct net_device_stats *stats;
 	ssize_t ret = -EINVAL;
 
 	WARN_ON(offset > sizeof(struct net_device_stats) ||
 			offset % sizeof(unsigned long) != 0);
 
 	read_lock(&dev_base_lock);
-	if (dev_isalive(dev)) {
-		const struct net_device_stats *stats = dev_get_stats(dev);
+	if (dev_isalive(dev) && dev->get_stats &&
+	    (stats = (*dev->get_stats)(dev)))
 		ret = sprintf(buf, fmt_ulong,
 			      *(unsigned long *)(((u8 *) stats) + offset));
-	}
+
 	read_unlock(&dev_base_lock);
 	return ret;
 }
@@ -352,7 +318,7 @@ static struct attribute_group netstat_group = {
 	.attrs  = netstat_attrs,
 };
 
-#ifdef CONFIG_WIRELESS_EXT_SYSFS
+#ifdef CONFIG_WIRELESS_EXT
 /* helper function that does all the locking etc for wireless stats */
 static ssize_t wireless_show(struct device *d, char *buf,
 			     ssize_t (*format)(const struct iw_statistics *,
@@ -427,9 +393,6 @@ static int netdev_uevent(struct device *d, struct kobj_uevent_env *env)
 	struct net_device *dev = to_net_dev(d);
 	int retval;
 
-	if (!net_eq(dev_net(dev), &init_net))
-		return 0;
-
 	/* pass interface to uevent. */
 	retval = add_uevent_var(env, "INTERFACE=%s", dev->name);
 	if (retval)
@@ -455,7 +418,6 @@ static void netdev_release(struct device *d)
 
 	BUG_ON(dev->reg_state != NETREG_RELEASED);
 
-	kfree(dev->ifalias);
 	kfree((char *)dev - dev->padded);
 }
 
@@ -478,10 +440,6 @@ void netdev_unregister_kobject(struct net_device * net)
 	struct device *dev = &(net->dev);
 
 	kobject_get(&dev->kobj);
-
-	if (dev_net(net) != &init_net)
-		return;
-
 	device_del(dev);
 }
 
@@ -496,35 +454,20 @@ int netdev_register_kobject(struct net_device *net)
 	dev->groups = groups;
 
 	BUILD_BUG_ON(BUS_ID_SIZE < IFNAMSIZ);
-	dev_set_name(dev, net->name);
+	strlcpy(dev->bus_id, net->name, BUS_ID_SIZE);
 
 #ifdef CONFIG_SYSFS
-	*groups++ = &netstat_group;
+	if (net->get_stats)
+		*groups++ = &netstat_group;
 
-#ifdef CONFIG_WIRELESS_EXT_SYSFS
+#ifdef CONFIG_WIRELESS_EXT
 	if (net->wireless_handlers && net->wireless_handlers->get_wireless_stats)
 		*groups++ = &wireless_group;
 #endif
 #endif /* CONFIG_SYSFS */
 
-	if (dev_net(net) != &init_net)
-		return 0;
-
 	return device_add(dev);
 }
-
-int netdev_class_create_file(struct class_attribute *class_attr)
-{
-	return class_create_file(&net_class, class_attr);
-}
-
-void netdev_class_remove_file(struct class_attribute *class_attr)
-{
-	class_remove_file(&net_class, class_attr);
-}
-
-EXPORT_SYMBOL(netdev_class_create_file);
-EXPORT_SYMBOL(netdev_class_remove_file);
 
 void netdev_initialize_kobject(struct net_device *net)
 {

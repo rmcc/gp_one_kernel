@@ -11,7 +11,6 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/seq_file.h>
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/init.h>
@@ -27,27 +26,36 @@
 #include <asm/sun3mmu.h>
 #include <asm/rtc.h>
 #include <asm/machdep.h>
-#include <asm/idprom.h>
 #include <asm/intersil.h>
 #include <asm/irq.h>
-#include <asm/sections.h>
 #include <asm/segment.h>
 #include <asm/sun3ints.h>
+
+extern char _text, _end;
 
 char sun3_reserved_pmeg[SUN3_PMEGS_NUM];
 
 extern unsigned long sun3_gettimeoffset(void);
-static void sun3_sched_init(irq_handler_t handler);
+extern void sun3_sched_init(irq_handler_t handler);
 extern void sun3_get_model (char* model);
+extern void idprom_init (void);
 extern int sun3_hwclk(int set, struct rtc_time *t);
 
 volatile char* clock_va;
+extern volatile unsigned char* sun3_intreg;
 extern unsigned long availmem;
 unsigned long num_pages;
 
-static void sun3_get_hardware_list(struct seq_file *m)
+static int sun3_get_hardware_list(char *buffer)
 {
-	seq_printf(m, "PROM Revision:\t%s\n", romvec->pv_monid);
+
+	int len = 0;
+
+	len += sprintf(buffer + len, "PROM Revision:\t%s\n",
+		       romvec->pv_monid);
+
+	return len;
+
 }
 
 void __init sun3_init(void)
@@ -106,8 +114,7 @@ static void sun3_halt (void)
 
 /* sun3 bootmem allocation */
 
-static void __init sun3_bootmem_alloc(unsigned long memory_start,
-				      unsigned long memory_end)
+void __init sun3_bootmem_alloc(unsigned long memory_start, unsigned long memory_end)
 {
 	unsigned long start_page;
 
@@ -147,7 +154,7 @@ void __init config_sun3(void)
 	mach_halt	     =  sun3_halt;
 	mach_get_hardware_list = sun3_get_hardware_list;
 
-	memory_start = ((((unsigned long)_end) + 0x2000) & ~0x1fff);
+	memory_start = ((((int)&_end) + 0x2000) & ~0x1fff);
 // PROM seems to want the last couple of physical pages. --m
 	memory_end   = *(romvec->pv_sun3mem) + PAGE_OFFSET - 2*PAGE_SIZE;
 
@@ -157,7 +164,7 @@ void __init config_sun3(void)
 	sun3_bootmem_alloc(memory_start, memory_end);
 }
 
-static void __init sun3_sched_init(irq_handler_t timer_routine)
+void __init sun3_sched_init(irq_handler_t timer_routine)
 {
 	sun3_disable_interrupts();
         intersil_clock->cmd_reg=(INTERSIL_RUN|INTERSIL_INT_DISABLE|INTERSIL_24H_MODE);

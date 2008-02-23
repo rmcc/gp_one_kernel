@@ -27,7 +27,6 @@
 #include <linux/pci.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #include <linux/version.h>      /* for KERNEL_VERSION MACRO     */
 #define RADIO_VERSION KERNEL_VERSION(0,0,6)
@@ -75,21 +74,7 @@ static struct v4l2_queryctrl radio_qctrl[] = {
 static int radio_nr = -1;
 module_param(radio_nr, int, 0);
 
-static unsigned long in_use;
-
 static int maestro_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-
-static int maestro_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &in_use) ? -EBUSY : 0;
-}
-
-static int maestro_exclusive_release(struct file *file)
-{
-	clear_bit(0, &in_use);
-	return 0;
-}
-
 static void maestro_remove(struct pci_dev *pdev);
 
 static struct pci_device_id maestro_r_pci_tbl[] = {
@@ -110,11 +95,15 @@ static struct pci_driver maestro_r_driver = {
 	.remove		= __devexit_p(maestro_remove),
 };
 
-static const struct v4l2_file_operations maestro_fops = {
+static const struct file_operations maestro_fops = {
 	.owner		= THIS_MODULE,
-	.open           = maestro_exclusive_open,
-	.release        = maestro_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl		= video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
 struct radio_device {
@@ -206,7 +195,8 @@ static int vidioc_querycap(struct file *file, void  *priv,
 static int vidioc_g_tuner(struct file *file, void *priv,
 					struct v4l2_tuner *v)
 {
-	struct radio_device *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct radio_device *card = video_get_drvdata(dev);
 
 	if (v->index > 0)
 		return -EINVAL;
@@ -238,7 +228,8 @@ static int vidioc_s_tuner(struct file *file, void *priv,
 static int vidioc_s_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct radio_device *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct radio_device *card = video_get_drvdata(dev);
 
 	if (f->frequency < FREQ_LO || f->frequency > FREQ_HI)
 		return -EINVAL;
@@ -249,7 +240,8 @@ static int vidioc_s_frequency(struct file *file, void *priv,
 static int vidioc_g_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct radio_device *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct radio_device *card = video_get_drvdata(dev);
 
 	f->type = V4L2_TUNER_RADIO;
 	f->frequency = BITS2FREQ(radio_bits_get(card));
@@ -274,7 +266,8 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 static int vidioc_g_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct radio_device *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct radio_device *card = video_get_drvdata(dev);
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -287,7 +280,8 @@ static int vidioc_g_ctrl(struct file *file, void *priv,
 static int vidioc_s_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct radio_device *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct radio_device *card = video_get_drvdata(dev);
 	register u16 io = card->io;
 	register u16 omask = inw(io + IO_MASK);
 
@@ -360,7 +354,10 @@ static u16 __devinit radio_power_on(struct radio_device *dev)
 	return (ofreq == radio_bits_get(dev));
 }
 
-static const struct v4l2_ioctl_ops maestro_ioctl_ops = {
+static struct video_device maestro_radio = {
+	.name           = "Maestro radio",
+	.type           = VID_TYPE_TUNER,
+	.fops           = &maestro_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -373,13 +370,6 @@ static const struct v4l2_ioctl_ops maestro_ioctl_ops = {
 	.vidioc_queryctrl   = vidioc_queryctrl,
 	.vidioc_g_ctrl      = vidioc_g_ctrl,
 	.vidioc_s_ctrl      = vidioc_s_ctrl,
-};
-
-static struct video_device maestro_radio = {
-	.name           = "Maestro radio",
-	.fops           = &maestro_fops,
-	.ioctl_ops 	= &maestro_ioctl_ops,
-	.release	= video_device_release,
 };
 
 static int __devinit maestro_probe(struct pci_dev *pdev,
@@ -415,7 +405,8 @@ static int __devinit maestro_probe(struct pci_dev *pdev,
 	video_set_drvdata(maestro_radio_inst, radio_unit);
 	pci_set_drvdata(pdev, maestro_radio_inst);
 
-	retval = video_register_device(maestro_radio_inst, VFL_TYPE_RADIO, radio_nr);
+	retval = video_register_device(maestro_radio_inst, VFL_TYPE_RADIO,
+		radio_nr);
 	if (retval) {
 		printk(KERN_ERR "can't register video device!\n");
 		goto errfr1;

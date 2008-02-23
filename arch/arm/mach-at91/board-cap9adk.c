@@ -33,19 +33,20 @@
 
 #include <video/atmel_lcdc.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/setup.h>
 #include <asm/mach-types.h>
+#include <asm/irq.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <asm/mach/irq.h>
 
-#include <mach/board.h>
-#include <mach/gpio.h>
-#include <mach/at91cap9_matrix.h>
-#include <mach/at91sam9_smc.h>
+#include <asm/arch/board.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/at91cap9_matrix.h>
+#include <asm/arch/at91sam9_smc.h>
 
-#include "sam9_smc.h"
 #include "generic.h"
 
 
@@ -77,12 +78,6 @@ static struct at91_usbh_data __initdata cap9adk_usbh_data = {
 	.ports		= 2,
 };
 
-/*
- * USB HS Device port
- */
-static struct usba_platform_data __initdata cap9adk_usba_udc_data = {
-	.vbus_pin	= AT91_PIN_PB31,
-};
 
 /*
  * ADS7846 Touchscreen
@@ -180,56 +175,19 @@ static struct mtd_partition * __init nand_partitions(int size, int *num_partitio
 	return cap9adk_nand_partitions;
 }
 
-static struct atmel_nand_data __initdata cap9adk_nand_data = {
+static struct at91_nand_data __initdata cap9adk_nand_data = {
 	.ale		= 21,
 	.cle		= 22,
 //	.det_pin	= ... not connected
 //	.rdy_pin	= ... not connected
 	.enable_pin	= AT91_PIN_PD15,
 	.partition_info	= nand_partitions,
-#if defined(CONFIG_MTD_NAND_ATMEL_BUSWIDTH_16)
+#if defined(CONFIG_MTD_NAND_AT91_BUSWIDTH_16)
 	.bus_width_16	= 1,
 #else
 	.bus_width_16	= 0,
 #endif
 };
-
-static struct sam9_smc_config __initdata cap9adk_nand_smc_config = {
-	.ncs_read_setup		= 1,
-	.nrd_setup		= 2,
-	.ncs_write_setup	= 1,
-	.nwe_setup		= 2,
-
-	.ncs_read_pulse		= 6,
-	.nrd_pulse		= 4,
-	.ncs_write_pulse	= 6,
-	.nwe_pulse		= 4,
-
-	.read_cycle		= 8,
-	.write_cycle		= 8,
-
-	.mode			= AT91_SMC_READMODE | AT91_SMC_WRITEMODE | AT91_SMC_EXNWMODE_DISABLE,
-	.tdf_cycles		= 1,
-};
-
-static void __init cap9adk_add_device_nand(void)
-{
-	unsigned long csa;
-
-	csa = at91_sys_read(AT91_MATRIX_EBICSA);
-	at91_sys_write(AT91_MATRIX_EBICSA, csa | AT91_MATRIX_EBI_VDDIOMSEL_3_3V);
-
-	/* setup bus-width (8 or 16) */
-	if (cap9adk_nand_data.bus_width_16)
-		cap9adk_nand_smc_config.mode |= AT91_SMC_DBW_16;
-	else
-		cap9adk_nand_smc_config.mode |= AT91_SMC_DBW_8;
-
-	/* configure chip-select 3 (NAND) */
-	sam9_smc_configure(3, &cap9adk_nand_smc_config);
-
-	at91_add_device_nand(&cap9adk_nand_data);
-}
 
 
 /*
@@ -250,7 +208,7 @@ static struct physmap_flash_data cap9adk_nor_data = {
 };
 
 #define NOR_BASE	AT91_CHIPSELECT_0
-#define NOR_SIZE	SZ_8M
+#define NOR_SIZE	0x800000
 
 static struct resource nor_flash_resources[] = {
 	{
@@ -270,24 +228,6 @@ static struct platform_device cap9adk_nor_flash = {
 	.num_resources	= ARRAY_SIZE(nor_flash_resources),
 };
 
-static struct sam9_smc_config __initdata cap9adk_nor_smc_config = {
-	.ncs_read_setup		= 2,
-	.nrd_setup		= 4,
-	.ncs_write_setup	= 2,
-	.nwe_setup		= 4,
-
-	.ncs_read_pulse		= 10,
-	.nrd_pulse		= 8,
-	.ncs_write_pulse	= 10,
-	.nwe_pulse		= 8,
-
-	.read_cycle		= 16,
-	.write_cycle		= 16,
-
-	.mode			= AT91_SMC_READMODE | AT91_SMC_WRITEMODE | AT91_SMC_EXNWMODE_DISABLE | AT91_SMC_BAT_WRITE | AT91_SMC_DBW_16,
-	.tdf_cycles		= 1,
-};
-
 static __init void cap9adk_add_device_nor(void)
 {
 	unsigned long csa;
@@ -295,8 +235,18 @@ static __init void cap9adk_add_device_nor(void)
 	csa = at91_sys_read(AT91_MATRIX_EBICSA);
 	at91_sys_write(AT91_MATRIX_EBICSA, csa | AT91_MATRIX_EBI_VDDIOMSEL_3_3V);
 
-	/* configure chip-select 0 (NOR) */
-	sam9_smc_configure(0, &cap9adk_nor_smc_config);
+	/* set the bus interface characteristics */
+	at91_sys_write(AT91_SMC_SETUP(0), AT91_SMC_NWESETUP_(4) | AT91_SMC_NCS_WRSETUP_(2)
+			| AT91_SMC_NRDSETUP_(4) | AT91_SMC_NCS_RDSETUP_(2));
+
+	at91_sys_write(AT91_SMC_PULSE(0), AT91_SMC_NWEPULSE_(8) | AT91_SMC_NCS_WRPULSE_(10)
+			| AT91_SMC_NRDPULSE_(8) | AT91_SMC_NCS_RDPULSE_(10));
+
+	at91_sys_write(AT91_SMC_CYCLE(0), AT91_SMC_NWECYCLE_(16) | AT91_SMC_NRDCYCLE_(16));
+
+	at91_sys_write(AT91_SMC_MODE(0), AT91_SMC_READMODE | AT91_SMC_WRITEMODE
+			| AT91_SMC_EXNWMODE_DISABLE | AT91_SMC_BAT_WRITE
+			| AT91_SMC_DBW_16 | AT91_SMC_TDF_(1));
 
 	platform_device_register(&cap9adk_nor_flash);
 }
@@ -374,9 +324,8 @@ static void __init cap9adk_board_init(void)
 	/* Serial */
 	at91_add_device_serial();
 	/* USB Host */
+	set_irq_type(AT91CAP9_ID_UHP, IRQT_HIGH);
 	at91_add_device_usbh(&cap9adk_usbh_data);
-	/* USB HS */
-	at91_add_device_usba(&cap9adk_usba_udc_data);
 	/* SPI */
 	at91_add_device_spi(cap9adk_spi_devices, ARRAY_SIZE(cap9adk_spi_devices));
 	/* Touchscreen */
@@ -386,12 +335,13 @@ static void __init cap9adk_board_init(void)
 	/* Ethernet */
 	at91_add_device_eth(&cap9adk_macb_data);
 	/* NAND */
-	cap9adk_add_device_nand();
+	at91_add_device_nand(&cap9adk_nand_data);
 	/* NOR Flash */
 	cap9adk_add_device_nor();
 	/* I2C */
 	at91_add_device_i2c(NULL, 0);
 	/* LCD Controller */
+	set_irq_type(AT91CAP9_ID_LCDC, IRQT_HIGH);
 	at91_add_device_lcdc(&cap9adk_lcdc_data);
 	/* AC97 */
 	at91_add_device_ac97(&cap9adk_ac97_data);

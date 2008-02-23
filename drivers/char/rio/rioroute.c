@@ -29,6 +29,9 @@
 **
 ** -----------------------------------------------------------------------------
 */
+#ifdef SCCS_LABELS
+static char *_rioroute_c_sccs_ = "@(#)rioroute.c	1.3";
+#endif
 
 #include <linux/module.h>
 #include <linux/slab.h>

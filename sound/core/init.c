@@ -46,24 +46,17 @@ static char *slots[SNDRV_CARDS];
 module_param_array(slots, charp, NULL, 0444);
 MODULE_PARM_DESC(slots, "Module names assigned to the slots.");
 
-/* return non-zero if the given index is reserved for the given
+/* return non-zero if the given index is already reserved for another
  * module via slots option
  */
-static int module_slot_match(struct module *module, int idx)
+static int module_slot_mismatch(struct module *module, int idx)
 {
-	int match = 1;
 #ifdef MODULE
-	const char *s1, *s2;
-
+	char *s1, *s2;
 	if (!module || !module->name || !slots[idx])
 		return 0;
-
-	s1 = module->name;
-	s2 = slots[idx];
-	if (*s2 == '!') {
-		match = 0; /* negative match */
-		s2++;
-	}
+	s1 = slots[idx];
+	s2 = module->name;
 	/* compare module name strings
 	 * hyphens are handled as equivalent with underscore
 	 */
@@ -75,12 +68,12 @@ static int module_slot_match(struct module *module, int idx)
 		if (c2 == '-')
 			c2 = '_';
 		if (c1 != c2)
-			return !match;
+			return 1;
 		if (!c1)
 			break;
 	}
-#endif /* MODULE */
-	return match;
+#endif
+	return 0;
 }
 
 #if defined(CONFIG_SND_MIXER_OSS) || defined(CONFIG_SND_MIXER_OSS_MODULE)
@@ -136,7 +129,7 @@ struct snd_card *snd_card_new(int idx, const char *xid,
 			 struct module *module, int extra_size)
 {
 	struct snd_card *card;
-	int err, idx2;
+	int err;
 
 	if (extra_size < 0)
 		extra_size = 0;
@@ -151,41 +144,35 @@ struct snd_card *snd_card_new(int idx, const char *xid,
 	err = 0;
 	mutex_lock(&snd_card_mutex);
 	if (idx < 0) {
+		int idx2;
 		for (idx2 = 0; idx2 < SNDRV_CARDS; idx2++)
 			/* idx == -1 == 0xffff means: take any free slot */
 			if (~snd_cards_lock & idx & 1<<idx2) {
-				if (module_slot_match(module, idx2)) {
-					idx = idx2;
-					break;
-				}
+				if (module_slot_mismatch(module, idx2))
+					continue;
+				idx = idx2;
+				if (idx >= snd_ecards_limit)
+					snd_ecards_limit = idx + 1;
+				break;
 			}
+	} else {
+		 if (idx < snd_ecards_limit) {
+			if (snd_cards_lock & (1 << idx))
+				err = -EBUSY;	/* invalid */
+		} else {
+			if (idx < SNDRV_CARDS)
+				snd_ecards_limit = idx + 1; /* increase the limit */
+			else
+				err = -ENODEV;
+		}
 	}
-	if (idx < 0) {
-		for (idx2 = 0; idx2 < SNDRV_CARDS; idx2++)
-			/* idx == -1 == 0xffff means: take any free slot */
-			if (~snd_cards_lock & idx & 1<<idx2) {
-				if (!slots[idx2] || !*slots[idx2]) {
-					idx = idx2;
-					break;
-				}
-			}
-	}
-	if (idx < 0)
-		err = -ENODEV;
-	else if (idx < snd_ecards_limit) {
-		if (snd_cards_lock & (1 << idx))
-			err = -EBUSY;	/* invalid */
-	} else if (idx >= SNDRV_CARDS)
-		err = -ENODEV;
-	if (err < 0) {
+	if (idx < 0 || err < 0) {
 		mutex_unlock(&snd_card_mutex);
 		snd_printk(KERN_ERR "cannot find the slot for index %d (range 0-%i), error: %d\n",
 			 idx, snd_ecards_limit - 1, err);
 		goto __error;
 	}
 	snd_cards_lock |= 1 << idx;		/* lock it */
-	if (idx >= snd_ecards_limit)
-		snd_ecards_limit = idx + 1; /* increase the limit */
 	mutex_unlock(&snd_card_mutex);
 	card->number = idx;
 	card->module = module;
@@ -264,11 +251,8 @@ static int snd_disconnect_release(struct inode *inode, struct file *file)
 	}
 	spin_unlock(&shutdown_lock);
 
-	if (likely(df)) {
-		if ((file->f_flags & FASYNC) && df->disconnected_f_op->fasync)
-			df->disconnected_f_op->fasync(-1, file, 0);
+	if (likely(df))
 		return df->disconnected_f_op->release(inode, file);
-	}
 
 	panic("%s(%p, %p) failed!", __func__, inode, file);
 }
@@ -533,65 +517,6 @@ static void choose_default_id(struct snd_card *card)
 	}
 }
 
-#ifndef CONFIG_SYSFS_DEPRECATED
-static ssize_t
-card_id_show_attr(struct device *dev,
-		  struct device_attribute *attr, char *buf)
-{
-	struct snd_card *card = dev_get_drvdata(dev);
-	return snprintf(buf, PAGE_SIZE, "%s\n", card ? card->id : "(null)");
-}
-
-static ssize_t
-card_id_store_attr(struct device *dev, struct device_attribute *attr,
-		   const char *buf, size_t count)
-{
-	struct snd_card *card = dev_get_drvdata(dev);
-	char buf1[sizeof(card->id)];
-	size_t copy = count > sizeof(card->id) - 1 ?
-					sizeof(card->id) - 1 : count;
-	size_t idx;
-	int c;
-
-	for (idx = 0; idx < copy; idx++) {
-		c = buf[idx];
-		if (!isalnum(c) && c != '_' && c != '-')
-			return -EINVAL;
-	}
-	memcpy(buf1, buf, copy);
-	buf1[copy] = '\0';
-	mutex_lock(&snd_card_mutex);
-	if (!snd_info_check_reserved_words(buf1)) {
-	     __exist:
-		mutex_unlock(&snd_card_mutex);
-		return -EEXIST;
-	}
-	for (idx = 0; idx < snd_ecards_limit; idx++) {
-		if (snd_cards[idx] && !strcmp(snd_cards[idx]->id, buf1))
-			goto __exist;
-	}
-	strcpy(card->id, buf1);
-	snd_info_card_id_change(card);
-	mutex_unlock(&snd_card_mutex);
-
-	return count;
-}
-
-static struct device_attribute card_id_attrs =
-	__ATTR(id, S_IRUGO | S_IWUSR, card_id_show_attr, card_id_store_attr);
-
-static ssize_t
-card_number_show_attr(struct device *dev,
-		     struct device_attribute *attr, char *buf)
-{
-	struct snd_card *card = dev_get_drvdata(dev);
-	return snprintf(buf, PAGE_SIZE, "%i\n", card ? card->number : -1);
-}
-
-static struct device_attribute card_number_attrs =
-	__ATTR(number, S_IRUGO, card_number_show_attr, NULL);
-#endif /* CONFIG_SYSFS_DEPRECATED */
-
 /**
  *  snd_card_register - register the soundcard
  *  @card: soundcard structure
@@ -607,12 +532,10 @@ int snd_card_register(struct snd_card *card)
 {
 	int err;
 
-	if (snd_BUG_ON(!card))
-		return -EINVAL;
+	snd_assert(card != NULL, return -EINVAL);
 #ifndef CONFIG_SYSFS_DEPRECATED
 	if (!card->card_dev) {
-		card->card_dev = device_create(sound_class, card->dev,
-					       MKDEV(0, 0), card,
+		card->card_dev = device_create(sound_class, card->dev, 0,
 					       "card%i", card->number);
 		if (IS_ERR(card->card_dev))
 			card->card_dev = NULL;
@@ -634,16 +557,6 @@ int snd_card_register(struct snd_card *card)
 #if defined(CONFIG_SND_MIXER_OSS) || defined(CONFIG_SND_MIXER_OSS_MODULE)
 	if (snd_mixer_oss_notify_callback)
 		snd_mixer_oss_notify_callback(card, SND_MIXER_OSS_NOTIFY_REGISTER);
-#endif
-#ifndef CONFIG_SYSFS_DEPRECATED
-	if (card->card_dev) {
-		err = device_create_file(card->card_dev, &card_id_attrs);
-		if (err < 0)
-			return err;
-		err = device_create_file(card->card_dev, &card_number_attrs);
-		if (err < 0)
-			return err;
-	}
 #endif
 	return 0;
 }

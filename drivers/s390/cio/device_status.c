@@ -29,11 +29,9 @@
 static void
 ccw_device_msg_control_check(struct ccw_device *cdev, struct irb *irb)
 {
-	char dbf_text[15];
-
-	if (!scsw_is_valid_cstat(&irb->scsw) ||
-	    !(scsw_cstat(&irb->scsw) & (SCHN_STAT_CHN_DATA_CHK |
-	      SCHN_STAT_CHN_CTRL_CHK | SCHN_STAT_INTF_CTRL_CHK)))
+	if (!(irb->scsw.cstat & (SCHN_STAT_CHN_DATA_CHK |
+				 SCHN_STAT_CHN_CTRL_CHK |
+				 SCHN_STAT_INTF_CTRL_CHK)))
 		return;
 	CIO_MSG_EVENT(0, "Channel-Check or Interface-Control-Check "
 		      "received"
@@ -41,10 +39,15 @@ ccw_device_msg_control_check(struct ccw_device *cdev, struct irb *irb)
 		      ": %02X sch_stat : %02X\n",
 		      cdev->private->dev_id.devno, cdev->private->schid.ssid,
 		      cdev->private->schid.sch_no,
-		      scsw_dstat(&irb->scsw), scsw_cstat(&irb->scsw));
-	sprintf(dbf_text, "chk%x", cdev->private->schid.sch_no);
-	CIO_TRACE_EVENT(0, dbf_text);
-	CIO_HEX_EVENT(0, irb, sizeof(struct irb));
+		      irb->scsw.dstat, irb->scsw.cstat);
+
+	if (irb->scsw.cc != 3) {
+		char dbf_text[15];
+
+		sprintf(dbf_text, "chk%x", cdev->private->schid.sch_no);
+		CIO_TRACE_EVENT(0, dbf_text);
+		CIO_HEX_EVENT(0, irb, sizeof (struct irb));
+	}
 }
 
 /*
@@ -56,8 +59,7 @@ ccw_device_path_notoper(struct ccw_device *cdev)
 	struct subchannel *sch;
 
 	sch = to_subchannel(cdev->dev.parent);
-	if (cio_update_schib(sch))
-		goto doverify;
+	stsch (sch->schid, &sch->schib);
 
 	CIO_MSG_EVENT(0, "%s(0.%x.%04x) - path(s) %02x are "
 		      "not operational \n", __func__,
@@ -65,7 +67,6 @@ ccw_device_path_notoper(struct ccw_device *cdev)
 		      sch->schib.pmcw.pnom);
 
 	sch->lpm &= ~sch->schib.pmcw.pnom;
-doverify:
 	cdev->private->flags.doverify = 1;
 }
 
@@ -80,12 +81,12 @@ ccw_device_accumulate_ecw(struct ccw_device *cdev, struct irb *irb)
 	 * are condition that have to be met for the extended control
 	 * bit to have meaning. Sick.
 	 */
-	cdev->private->irb.scsw.cmd.ectl = 0;
-	if ((irb->scsw.cmd.stctl & SCSW_STCTL_ALERT_STATUS) &&
-	    !(irb->scsw.cmd.stctl & SCSW_STCTL_INTER_STATUS))
-		cdev->private->irb.scsw.cmd.ectl = irb->scsw.cmd.ectl;
+	cdev->private->irb.scsw.ectl = 0;
+	if ((irb->scsw.stctl & SCSW_STCTL_ALERT_STATUS) &&
+	    !(irb->scsw.stctl & SCSW_STCTL_INTER_STATUS))
+		cdev->private->irb.scsw.ectl = irb->scsw.ectl;
 	/* Check if extended control word is valid. */
-	if (!cdev->private->irb.scsw.cmd.ectl)
+	if (!cdev->private->irb.scsw.ectl)
 		return;
 	/* Copy concurrent sense / model dependent information. */
 	memcpy (&cdev->private->irb.ecw, irb->ecw, sizeof (irb->ecw));
@@ -97,12 +98,11 @@ ccw_device_accumulate_ecw(struct ccw_device *cdev, struct irb *irb)
 static int
 ccw_device_accumulate_esw_valid(struct irb *irb)
 {
-	if (!irb->scsw.cmd.eswf &&
-	    (irb->scsw.cmd.stctl == SCSW_STCTL_STATUS_PEND))
+	if (!irb->scsw.eswf && irb->scsw.stctl == SCSW_STCTL_STATUS_PEND)
 		return 0;
-	if (irb->scsw.cmd.stctl ==
-			(SCSW_STCTL_INTER_STATUS|SCSW_STCTL_STATUS_PEND) &&
-	    !(irb->scsw.cmd.actl & SCSW_ACTL_SUSPENDED))
+	if (irb->scsw.stctl == 
+	    		(SCSW_STCTL_INTER_STATUS|SCSW_STCTL_STATUS_PEND) &&
+	    !(irb->scsw.actl & SCSW_ACTL_SUSPENDED))
 		return 0;
 	return 1;
 }
@@ -125,7 +125,7 @@ ccw_device_accumulate_esw(struct ccw_device *cdev, struct irb *irb)
 	cdev_irb->esw.esw1.lpum = irb->esw.esw1.lpum;
 
 	/* Copy subchannel logout information if esw is of format 0. */
-	if (irb->scsw.cmd.eswf) {
+	if (irb->scsw.eswf) {
 		cdev_sublog = &cdev_irb->esw.esw0.sublog;
 		sublog = &irb->esw.esw0.sublog;
 		/* Copy extended status flags. */
@@ -134,7 +134,7 @@ ccw_device_accumulate_esw(struct ccw_device *cdev, struct irb *irb)
 		 * Copy fields that have a meaning for channel data check
 		 * channel control check and interface control check.
 		 */
-		if (irb->scsw.cmd.cstat & (SCHN_STAT_CHN_DATA_CHK |
+		if (irb->scsw.cstat & (SCHN_STAT_CHN_DATA_CHK |
 				       SCHN_STAT_CHN_CTRL_CHK |
 				       SCHN_STAT_INTF_CTRL_CHK)) {
 			/* Copy ancillary report bit. */
@@ -155,7 +155,7 @@ ccw_device_accumulate_esw(struct ccw_device *cdev, struct irb *irb)
 		/* Copy i/o-error alert. */
 		cdev_sublog->ioerr = sublog->ioerr;
 		/* Copy channel path timeout bit. */
-		if (irb->scsw.cmd.cstat & SCHN_STAT_INTF_CTRL_CHK)
+		if (irb->scsw.cstat & SCHN_STAT_INTF_CTRL_CHK)
 			cdev_irb->esw.esw0.erw.cpt = irb->esw.esw0.erw.cpt;
 		/* Copy failing storage address validity flag. */
 		cdev_irb->esw.esw0.erw.fsavf = irb->esw.esw0.erw.fsavf;
@@ -200,24 +200,24 @@ ccw_device_accumulate_irb(struct ccw_device *cdev, struct irb *irb)
 	 * If not, the remaining bit have no meaning and we must ignore them.
 	 * The esw is not meaningful as well...
 	 */
-	if (!(scsw_stctl(&irb->scsw) & SCSW_STCTL_STATUS_PEND))
+	if (!(irb->scsw.stctl & SCSW_STCTL_STATUS_PEND))
 		return;
 
 	/* Check for channel checks and interface control checks. */
 	ccw_device_msg_control_check(cdev, irb);
 
 	/* Check for path not operational. */
-	if (scsw_is_valid_pno(&irb->scsw) && scsw_pno(&irb->scsw))
+	if (irb->scsw.pno && irb->scsw.fctl != 0 &&
+	    (!(irb->scsw.stctl & SCSW_STCTL_INTER_STATUS) ||
+	     (irb->scsw.actl & SCSW_ACTL_SUSPENDED)))
 		ccw_device_path_notoper(cdev);
-	/* No irb accumulation for transport mode irbs. */
-	if (scsw_is_tm(&irb->scsw)) {
-		memcpy(&cdev->private->irb, irb, sizeof(struct irb));
-		return;
-	}
+
 	/*
 	 * Don't accumulate unsolicited interrupts.
 	 */
-	if (!scsw_is_solicited(&irb->scsw))
+	if ((irb->scsw.stctl ==
+	     (SCSW_STCTL_STATUS_PEND | SCSW_STCTL_ALERT_STATUS)) &&
+	    (!irb->scsw.cc))
 		return;
 
 	cdev_irb = &cdev->private->irb;
@@ -227,63 +227,62 @@ ccw_device_accumulate_irb(struct ccw_device *cdev, struct irb *irb)
 	 * status at the subchannel has been cleared and we must not pass
 	 * intermediate accumulated status to the device driver.
 	 */
-	if (irb->scsw.cmd.fctl & SCSW_FCTL_CLEAR_FUNC)
+	if (irb->scsw.fctl & SCSW_FCTL_CLEAR_FUNC)
 		memset(&cdev->private->irb, 0, sizeof(struct irb));
 
 	/* Copy bits which are valid only for the start function. */
-	if (irb->scsw.cmd.fctl & SCSW_FCTL_START_FUNC) {
+	if (irb->scsw.fctl & SCSW_FCTL_START_FUNC) {
 		/* Copy key. */
-		cdev_irb->scsw.cmd.key = irb->scsw.cmd.key;
+		cdev_irb->scsw.key = irb->scsw.key;
 		/* Copy suspend control bit. */
-		cdev_irb->scsw.cmd.sctl = irb->scsw.cmd.sctl;
+		cdev_irb->scsw.sctl = irb->scsw.sctl;
 		/* Accumulate deferred condition code. */
-		cdev_irb->scsw.cmd.cc |= irb->scsw.cmd.cc;
+		cdev_irb->scsw.cc |= irb->scsw.cc;
 		/* Copy ccw format bit. */
-		cdev_irb->scsw.cmd.fmt = irb->scsw.cmd.fmt;
+		cdev_irb->scsw.fmt = irb->scsw.fmt;
 		/* Copy prefetch bit. */
-		cdev_irb->scsw.cmd.pfch = irb->scsw.cmd.pfch;
+		cdev_irb->scsw.pfch = irb->scsw.pfch;
 		/* Copy initial-status-interruption-control. */
-		cdev_irb->scsw.cmd.isic = irb->scsw.cmd.isic;
+		cdev_irb->scsw.isic = irb->scsw.isic;
 		/* Copy address limit checking control. */
-		cdev_irb->scsw.cmd.alcc = irb->scsw.cmd.alcc;
+		cdev_irb->scsw.alcc = irb->scsw.alcc;
 		/* Copy suppress suspend bit. */
-		cdev_irb->scsw.cmd.ssi = irb->scsw.cmd.ssi;
+		cdev_irb->scsw.ssi = irb->scsw.ssi;
 	}
 
 	/* Take care of the extended control bit and extended control word. */
 	ccw_device_accumulate_ecw(cdev, irb);
 	    
 	/* Accumulate function control. */
-	cdev_irb->scsw.cmd.fctl |= irb->scsw.cmd.fctl;
+	cdev_irb->scsw.fctl |= irb->scsw.fctl;
 	/* Copy activity control. */
-	cdev_irb->scsw.cmd.actl = irb->scsw.cmd.actl;
+	cdev_irb->scsw.actl= irb->scsw.actl;
 	/* Accumulate status control. */
-	cdev_irb->scsw.cmd.stctl |= irb->scsw.cmd.stctl;
+	cdev_irb->scsw.stctl |= irb->scsw.stctl;
 	/*
 	 * Copy ccw address if it is valid. This is a bit simplified
 	 * but should be close enough for all practical purposes.
 	 */
-	if ((irb->scsw.cmd.stctl & SCSW_STCTL_PRIM_STATUS) ||
-	    ((irb->scsw.cmd.stctl ==
+	if ((irb->scsw.stctl & SCSW_STCTL_PRIM_STATUS) ||
+	    ((irb->scsw.stctl == 
 	      (SCSW_STCTL_INTER_STATUS|SCSW_STCTL_STATUS_PEND)) &&
-	     (irb->scsw.cmd.actl & SCSW_ACTL_DEVACT) &&
-	     (irb->scsw.cmd.actl & SCSW_ACTL_SCHACT)) ||
-	    (irb->scsw.cmd.actl & SCSW_ACTL_SUSPENDED))
-		cdev_irb->scsw.cmd.cpa = irb->scsw.cmd.cpa;
+	     (irb->scsw.actl & SCSW_ACTL_DEVACT) &&
+	     (irb->scsw.actl & SCSW_ACTL_SCHACT)) ||
+	    (irb->scsw.actl & SCSW_ACTL_SUSPENDED))
+		cdev_irb->scsw.cpa = irb->scsw.cpa;
 	/* Accumulate device status, but not the device busy flag. */
-	cdev_irb->scsw.cmd.dstat &= ~DEV_STAT_BUSY;
+	cdev_irb->scsw.dstat &= ~DEV_STAT_BUSY;
 	/* dstat is not always valid. */
-	if (irb->scsw.cmd.stctl &
+	if (irb->scsw.stctl &
 	    (SCSW_STCTL_PRIM_STATUS | SCSW_STCTL_SEC_STATUS
 	     | SCSW_STCTL_INTER_STATUS | SCSW_STCTL_ALERT_STATUS))
-		cdev_irb->scsw.cmd.dstat |= irb->scsw.cmd.dstat;
+		cdev_irb->scsw.dstat |= irb->scsw.dstat;
 	/* Accumulate subchannel status. */
-	cdev_irb->scsw.cmd.cstat |= irb->scsw.cmd.cstat;
+	cdev_irb->scsw.cstat |= irb->scsw.cstat;
 	/* Copy residual count if it is valid. */
-	if ((irb->scsw.cmd.stctl & SCSW_STCTL_PRIM_STATUS) &&
-	    (irb->scsw.cmd.cstat & ~(SCHN_STAT_PCI | SCHN_STAT_INCORR_LEN))
-	     == 0)
-		cdev_irb->scsw.cmd.count = irb->scsw.cmd.count;
+	if ((irb->scsw.stctl & SCSW_STCTL_PRIM_STATUS) &&
+	    (irb->scsw.cstat & ~(SCHN_STAT_PCI | SCHN_STAT_INCORR_LEN)) == 0)
+		cdev_irb->scsw.count = irb->scsw.count;
 
 	/* Take care of bits in the extended status word. */
 	ccw_device_accumulate_esw(cdev, irb);
@@ -300,7 +299,7 @@ ccw_device_accumulate_irb(struct ccw_device *cdev, struct irb *irb)
 	 *	 sense facility available/supported when enabling the
 	 *	 concurrent sense facility.
 	 */
-	if ((cdev_irb->scsw.cmd.dstat & DEV_STAT_UNIT_CHECK) &&
+	if ((cdev_irb->scsw.dstat & DEV_STAT_UNIT_CHECK) &&
 	    !(cdev_irb->esw.esw0.erw.cons))
 		cdev->private->flags.dosense = 1;
 }
@@ -318,7 +317,7 @@ ccw_device_do_sense(struct ccw_device *cdev, struct irb *irb)
 	sch = to_subchannel(cdev->dev.parent);
 
 	/* A sense is required, can we do it now ? */
-	if (scsw_actl(&irb->scsw) & (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT))
+	if ((irb->scsw.actl  & (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT)) != 0)
 		/*
 		 * we received an Unit Check but we have no final
 		 *  status yet, therefore we must delay the SENSE
@@ -356,18 +355,20 @@ ccw_device_accumulate_basic_sense(struct ccw_device *cdev, struct irb *irb)
 	 * If not, the remaining bit have no meaning and we must ignore them.
 	 * The esw is not meaningful as well...
 	 */
-	if (!(scsw_stctl(&irb->scsw) & SCSW_STCTL_STATUS_PEND))
+	if (!(irb->scsw.stctl & SCSW_STCTL_STATUS_PEND))
 		return;
 
 	/* Check for channel checks and interface control checks. */
 	ccw_device_msg_control_check(cdev, irb);
 
 	/* Check for path not operational. */
-	if (scsw_is_valid_pno(&irb->scsw) && scsw_pno(&irb->scsw))
+	if (irb->scsw.pno && irb->scsw.fctl != 0 &&
+	    (!(irb->scsw.stctl & SCSW_STCTL_INTER_STATUS) ||
+	     (irb->scsw.actl & SCSW_ACTL_SUSPENDED)))
 		ccw_device_path_notoper(cdev);
 
-	if (!(irb->scsw.cmd.dstat & DEV_STAT_UNIT_CHECK) &&
-	    (irb->scsw.cmd.dstat & DEV_STAT_CHN_END)) {
+	if (!(irb->scsw.dstat & DEV_STAT_UNIT_CHECK) &&
+	    (irb->scsw.dstat & DEV_STAT_CHN_END)) {
 		cdev->private->irb.esw.esw0.erw.cons = 1;
 		cdev->private->flags.dosense = 0;
 	}
@@ -385,11 +386,11 @@ int
 ccw_device_accumulate_and_sense(struct ccw_device *cdev, struct irb *irb)
 {
 	ccw_device_accumulate_irb(cdev, irb);
-	if ((irb->scsw.cmd.actl  & (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT)) != 0)
+	if ((irb->scsw.actl  & (SCSW_ACTL_DEVACT | SCSW_ACTL_SCHACT)) != 0)
 		return -EBUSY;
 	/* Check for basic sense. */
 	if (cdev->private->flags.dosense &&
-	    !(irb->scsw.cmd.dstat & DEV_STAT_UNIT_CHECK)) {
+	    !(irb->scsw.dstat & DEV_STAT_UNIT_CHECK)) {
 		cdev->private->irb.esw.esw0.erw.cons = 1;
 		cdev->private->flags.dosense = 0;
 		return 0;

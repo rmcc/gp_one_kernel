@@ -19,8 +19,7 @@ static struct cpu_dev umc_cpu_dev __cpuinitdata = {
 		  }
 		},
 	},
-	.c_x86_vendor	= X86_VENDOR_UMC,
 };
 
-cpu_dev_register(umc_cpu_dev);
+cpu_vendor_dev_register(X86_VENDOR_UMC, &umc_cpu_dev);
 

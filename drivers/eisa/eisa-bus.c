@@ -22,7 +22,7 @@
 
 struct eisa_device_info {
 	struct eisa_device_id id;
-	char name[50];
+	char name[DEVICE_NAME_SIZE];
 };
 
 #ifdef CONFIG_EISA_NAMES
@@ -63,7 +63,7 @@ static void __init eisa_name_device (struct eisa_device *edev)
 		if (!strcmp (edev->id.sig, eisa_table[i].id.sig)) {
 			strlcpy (edev->pretty_name,
 				 eisa_table[i].name,
-				 sizeof(edev->pretty_name));
+				 DEVICE_NAME_SIZE);
 			return;
 		}
 	}

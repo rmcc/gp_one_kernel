@@ -1,6 +1,6 @@
 /*
  *    pata_winbond.c - Winbond VLB ATA controllers
- *	(C) 2006 Red Hat
+ *	(C) 2006 Red Hat <alan@redhat.com>
  *
  *    Support for the Winbond 83759A when operating in advanced mode.
  *    Multichip mode is not currently supported.
@@ -105,7 +105,7 @@ static unsigned int winbond_data_xfer(struct ata_device *dev,
 			iowrite32_rep(ap->ioaddr.data_addr, buf, buflen >> 2);
 
 		if (unlikely(slop)) {
-			__le32 pad;
+			u32 pad;
 			if (rw == READ) {
 				pad = cpu_to_le32(ioread32(ap->ioaddr.data_addr));
 				memcpy(buf + buflen - slop, &pad, slop);

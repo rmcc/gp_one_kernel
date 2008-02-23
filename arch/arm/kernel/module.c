@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <linux/moduleloader.h>
 #include <linux/kernel.h>
-#include <linux/mm.h>
 #include <linux/elf.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
@@ -21,17 +20,17 @@
 #include <linux/string.h>
 
 #include <asm/pgtable.h>
-#include <asm/sections.h>
 
 #ifdef CONFIG_XIP_KERNEL
 /*
  * The XIP kernel text is mapped in the module area for modules and
  * some other stuff to work without any indirect relocations.
- * MODULES_VADDR is redefined here and not in asm/memory.h to avoid
+ * MODULE_START is redefined here and not in asm/memory.h to avoid
  * recompiling the whole kernel when CONFIG_XIP_KERNEL is turned on/off.
  */
-#undef MODULES_VADDR
-#define MODULES_VADDR	(((unsigned long)_etext + ~PGDIR_MASK) & PGDIR_MASK)
+extern void _etext;
+#undef MODULE_START
+#define MODULE_START	(((unsigned long)&_etext + ~PGDIR_MASK) & PGDIR_MASK)
 #endif
 
 #ifdef CONFIG_MMU
@@ -43,11 +42,11 @@ void *module_alloc(unsigned long size)
 	if (!size)
 		return NULL;
 
-	area = __get_vm_area(size, VM_ALLOC, MODULES_VADDR, MODULES_END);
+	area = __get_vm_area(size, VM_ALLOC, MODULE_START, MODULE_END);
 	if (!area)
 		return NULL;
 
-	return __vmalloc_area(area, GFP_KERNEL, PAGE_KERNEL_EXEC);
+	return __vmalloc_area(area, GFP_KERNEL, PAGE_KERNEL);
 }
 #else /* CONFIG_MMU */
 void *module_alloc(unsigned long size)

@@ -10,7 +10,7 @@
 #include <linux/pci.h>
 #include <linux/types.h>
 
-#include <asm/lasat/lasat.h>
+#include <asm/bootinfo.h>
 
 #include <irq.h>
 
@@ -39,10 +39,16 @@ static int __init lasat_pci_setup(void)
 {
 	printk(KERN_DEBUG "PCI: starting\n");
 
-	if (IS_LASAT_200())
-		lasat_pci_controller.pci_ops = &nile4_pci_ops;
-	else
+	switch (mips_machtype) {
+	case MACH_LASAT_100:
 		lasat_pci_controller.pci_ops = &gt64xxx_pci0_ops;
+		break;
+	case MACH_LASAT_200:
+		lasat_pci_controller.pci_ops = &nile4_pci_ops;
+		break;
+	default:
+		panic("pcibios_init: mips_machtype incorrect");
+	}
 
 	register_pci_controller(&lasat_pci_controller);
 

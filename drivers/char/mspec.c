@@ -193,23 +193,25 @@ mspec_close(struct vm_area_struct *vma)
 }
 
 /*
- * mspec_fault
+ * mspec_nopfn
  *
  * Creates a mspec page and maps it to user space.
  */
-static int
-mspec_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+static unsigned long
+mspec_nopfn(struct vm_area_struct *vma, unsigned long address)
 {
 	unsigned long paddr, maddr;
 	unsigned long pfn;
-	pgoff_t index = vmf->pgoff;
+	int index;
 	struct vma_data *vdata = vma->vm_private_data;
 
+	BUG_ON(address < vdata->vm_start || address >= vdata->vm_end);
+	index = (address - vdata->vm_start) >> PAGE_SHIFT;
 	maddr = (volatile unsigned long) vdata->maddr[index];
 	if (maddr == 0) {
 		maddr = uncached_alloc_page(numa_node_id(), 1);
 		if (maddr == 0)
-			return VM_FAULT_OOM;
+			return NOPFN_OOM;
 
 		spin_lock(&vdata->lock);
 		if (vdata->maddr[index] == 0) {
@@ -229,20 +231,13 @@ mspec_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 	pfn = paddr >> PAGE_SHIFT;
 
-	/*
-	 * vm_insert_pfn can fail with -EBUSY, but in that case it will
-	 * be because another thread has installed the pte first, so it
-	 * is no problem.
-	 */
-	vm_insert_pfn(vma, (unsigned long)vmf->virtual_address, pfn);
-
-	return VM_FAULT_NOPAGE;
+	return pfn;
 }
 
 static struct vm_operations_struct mspec_vm_ops = {
 	.open = mspec_open,
 	.close = mspec_close,
-	.fault = mspec_fault,
+	.nopfn = mspec_nopfn
 };
 
 /*

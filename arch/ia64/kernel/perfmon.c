@@ -40,7 +40,6 @@
 #include <linux/capability.h>
 #include <linux/rcupdate.h>
 #include <linux/completion.h>
-#include <linux/tracehook.h>
 
 #include <asm/errno.h>
 #include <asm/intrinsics.h>
@@ -1821,7 +1820,7 @@ pfm_syswide_cleanup_other_cpu(pfm_context_t *ctx)
 	int ret;
 
 	DPRINT(("calling CPU%d for cleanup\n", ctx->ctx_cpu));
-	ret = smp_call_function_single(ctx->ctx_cpu, pfm_syswide_force_stop, ctx, 1);
+	ret = smp_call_function_single(ctx->ctx_cpu, pfm_syswide_force_stop, ctx, 0, 1);
 	DPRINT(("called CPU%d for cleanup ret=%d\n", ctx->ctx_cpu, ret));
 }
 #endif /* CONFIG_SMP */
@@ -1865,6 +1864,11 @@ pfm_flush(struct file *filp, fl_owner_t id)
 	 * invoked after, it will find an empty queue and no
 	 * signal will be sent. In both case, we are safe
 	 */
+	if (filp->f_flags & FASYNC) {
+		DPRINT(("cleaning up async_queue=%p\n", ctx->ctx_async_queue));
+		pfm_do_fasync (-1, filp, ctx, 0);
+	}
+
 	PROTECT_CTX(ctx, flags);
 
 	state     = ctx->ctx_state;
@@ -2220,8 +2224,8 @@ pfm_alloc_file(pfm_context_t *ctx)
 	DPRINT(("new inode ino=%ld @%p\n", inode->i_ino, inode));
 
 	inode->i_mode = S_IFCHR|S_IRUGO;
-	inode->i_uid  = current_fsuid();
-	inode->i_gid  = current_fsgid();
+	inode->i_uid  = current->fsuid;
+	inode->i_gid  = current->fsgid;
 
 	sprintf(name, "[%lu]", inode->i_ino);
 	this.name = name;
@@ -2399,33 +2403,22 @@ error_kmem:
 static int
 pfm_bad_permissions(struct task_struct *task)
 {
-	const struct cred *tcred;
-	uid_t uid = current_uid();
-	gid_t gid = current_gid();
-	int ret;
-
-	rcu_read_lock();
-	tcred = __task_cred(task);
-
 	/* inspired by ptrace_attach() */
 	DPRINT(("cur: uid=%d gid=%d task: euid=%d suid=%d uid=%d egid=%d sgid=%d\n",
-		uid,
-		gid,
-		tcred->euid,
-		tcred->suid,
-		tcred->uid,
-		tcred->egid,
-		tcred->sgid));
+		current->uid,
+		current->gid,
+		task->euid,
+		task->suid,
+		task->uid,
+		task->egid,
+		task->sgid));
 
-	ret = ((uid != tcred->euid)
-	       || (uid != tcred->suid)
-	       || (uid != tcred->uid)
-	       || (gid != tcred->egid)
-	       || (gid != tcred->sgid)
-	       || (gid != tcred->gid)) && !capable(CAP_SYS_PTRACE);
-
-	rcu_read_unlock();
-	return ret;
+	return ((current->uid != task->euid)
+	    || (current->uid != task->suid)
+	    || (current->uid != task->uid)
+	    || (current->gid != task->egid)
+	    || (current->gid != task->sgid)
+	    || (current->gid != task->gid)) && !capable(CAP_SYS_PTRACE);
 }
 
 static int
@@ -2633,7 +2626,7 @@ pfm_task_incompatible(pfm_context_t *ctx, struct task_struct *task)
 	/*
 	 * make sure the task is off any CPU
 	 */
-	wait_task_inactive(task, 0);
+	wait_task_inactive(task);
 
 	/* more to come... */
 
@@ -3691,7 +3684,7 @@ pfm_restart(pfm_context_t *ctx, void *arg, int count, struct pt_regs *regs)
 
 		PFM_SET_WORK_PENDING(task, 1);
 
-		set_notify_resume(task);
+		tsk_set_notify_resume(task);
 
 		/*
 		 * XXX: send reschedule if task runs on another CPU
@@ -4781,7 +4774,7 @@ recheck:
 
 		UNPROTECT_CTX(ctx, flags);
 
-		wait_task_inactive(task, 0);
+		wait_task_inactive(task);
 
 		PROTECT_CTX(ctx, flags);
 
@@ -5050,6 +5043,8 @@ pfm_handle_work(void)
 	PROTECT_CTX(ctx, flags);
 
 	PFM_SET_WORK_PENDING(current, 0);
+
+	tsk_clear_notify_resume(current);
 
 	regs = task_pt_regs(current);
 
@@ -5419,7 +5414,7 @@ pfm_overflow_handler(struct task_struct *task, pfm_context_t *ctx, u64 pmc0, str
 			 * when coming from ctxsw, current still points to the
 			 * previous task, therefore we must work with task and not current.
 			 */
-			set_notify_resume(task);
+			tsk_set_notify_resume(task);
 		}
 		/*
 		 * defer until state is changed (shorten spin window). the context is locked
@@ -6513,7 +6508,7 @@ pfm_install_alt_pmu_interrupt(pfm_intr_handler_desc_t *hdl)
 	}
 
 	/* save the current system wide pmu states */
-	ret = on_each_cpu(pfm_alt_save_pmu_state, NULL, 1);
+	ret = on_each_cpu(pfm_alt_save_pmu_state, NULL, 0, 1);
 	if (ret) {
 		DPRINT(("on_each_cpu() failed: %d\n", ret));
 		goto cleanup_reserve;
@@ -6558,7 +6553,7 @@ pfm_remove_alt_pmu_interrupt(pfm_intr_handler_desc_t *hdl)
 
 	pfm_alt_intr_handler = NULL;
 
-	ret = on_each_cpu(pfm_alt_restore_pmu_state, NULL, 1);
+	ret = on_each_cpu(pfm_alt_restore_pmu_state, NULL, 0, 1);
 	if (ret) {
 		DPRINT(("on_each_cpu() failed: %d\n", ret));
 	}

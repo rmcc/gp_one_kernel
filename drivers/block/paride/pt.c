@@ -146,7 +146,6 @@ static int (*drives[4])[6] = {&drive0, &drive1, &drive2, &drive3};
 #include <linux/mtio.h>
 #include <linux/device.h>
 #include <linux/sched.h>	/* current, TASK_*, schedule_timeout() */
-#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -190,7 +189,8 @@ module_param_array(drive3, int, NULL, 0);
 #define ATAPI_LOG_SENSE		0x4d
 
 static int pt_open(struct inode *inode, struct file *file);
-static long pt_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static int pt_ioctl(struct inode *inode, struct file *file,
+		    unsigned int cmd, unsigned long arg);
 static int pt_release(struct inode *inode, struct file *file);
 static ssize_t pt_read(struct file *filp, char __user *buf,
 		       size_t count, loff_t * ppos);
@@ -236,7 +236,7 @@ static const struct file_operations pt_fops = {
 	.owner = THIS_MODULE,
 	.read = pt_read,
 	.write = pt_write,
-	.unlocked_ioctl = pt_ioctl,
+	.ioctl = pt_ioctl,
 	.open = pt_open,
 	.release = pt_release,
 };
@@ -650,11 +650,8 @@ static int pt_open(struct inode *inode, struct file *file)
 	struct pt_unit *tape = pt + unit;
 	int err;
 
-	lock_kernel();
-	if (unit >= PT_UNITS || (!tape->present)) {
-		unlock_kernel();
+	if (unit >= PT_UNITS || (!tape->present))
 		return -ENODEV;
-	}
 
 	err = -EBUSY;
 	if (!atomic_dec_and_test(&tape->available))
@@ -667,7 +664,7 @@ static int pt_open(struct inode *inode, struct file *file)
 		goto out;
 
 	err = -EROFS;
-	if ((!(tape->flags & PT_WRITE_OK)) && (file->f_mode & FMODE_WRITE))
+	if ((!(tape->flags & PT_WRITE_OK)) && (file->f_mode & 2))
 		goto out;
 
 	if (!(iminor(inode) & 128))
@@ -681,16 +678,15 @@ static int pt_open(struct inode *inode, struct file *file)
 	}
 
 	file->private_data = tape;
-	unlock_kernel();
 	return 0;
 
 out:
 	atomic_inc(&tape->available);
-	unlock_kernel();
 	return err;
 }
 
-static long pt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static int pt_ioctl(struct inode *inode, struct file *file,
+	 unsigned int cmd, unsigned long arg)
 {
 	struct pt_unit *tape = file->private_data;
 	struct mtop __user *p = (void __user *)arg;
@@ -704,26 +700,23 @@ static long pt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		switch (mtop.mt_op) {
 
 		case MTREW:
-			lock_kernel();
 			pt_rewind(tape);
-			unlock_kernel();
 			return 0;
 
 		case MTWEOF:
-			lock_kernel();
 			pt_write_fm(tape);
-			unlock_kernel();
 			return 0;
 
 		default:
-			/* FIXME: rate limit ?? */
-			printk(KERN_DEBUG "%s: Unimplemented mt_op %d\n", tape->name,
+			printk("%s: Unimplemented mt_op %d\n", tape->name,
 			       mtop.mt_op);
 			return -EINVAL;
 		}
 
 	default:
-		return -ENOTTY;
+		printk("%s: Unimplemented ioctl 0x%x\n", tape->name, cmd);
+		return -EINVAL;
+
 	}
 }
 
@@ -979,10 +972,10 @@ static int __init pt_init(void)
 
 	for (unit = 0; unit < PT_UNITS; unit++)
 		if (pt[unit].present) {
-			device_create(pt_class, NULL, MKDEV(major, unit), NULL,
+			device_create(pt_class, NULL, MKDEV(major, unit),
 				      "pt%d", unit);
 			device_create(pt_class, NULL, MKDEV(major, unit + 128),
-				      NULL, "pt%dn", unit);
+				      "pt%dn", unit);
 		}
 	goto out;
 

@@ -128,7 +128,7 @@
 	- Integrate ql12160_set_target_parameters() with 1280 version
 	- Make qla1280_setup() non static
 	- Do not call qla1280_check_for_dead_scsi_bus() on every I/O request
-	  sent to the card - this command pauses the firmware!!!
+	  sent to the card - this command pauses the firmare!!!
     Rev  3.23.15 Beta March 19, 2002, Jes Sorensen
 	- Clean up qla1280.h - remove obsolete QL_DEBUG_LEVEL_x definitions
 	- Remove a pile of pointless and confusing (srb_t **) and
@@ -659,7 +659,7 @@ static int qla1280_read_nvram(struct scsi_qla_host *ha)
 	/* The firmware interface is, um, interesting, in that the
 	 * actual firmware image on the chip is little endian, thus,
 	 * the process of taking that image to the CPU would end up
-	 * little endian.  However, the firmware interface requires it
+	 * little endian.  However, the firmare interface requires it
 	 * to be read a word (two bytes) at a time.
 	 *
 	 * The net result of this would be that the word (and
@@ -1695,7 +1695,7 @@ qla1280_load_firmware_dma(struct scsi_qla_host *ha)
 	risc_code_size = *ql1280_board_tbl[ha->devnum].fwlen;
 
 	dprintk(1, "%s: DMA RISC code (%i) words\n",
-			__func__, risc_code_size);
+			__FUNCTION__, risc_code_size);
 
 	num = 0;
 	while (risc_code_size > 0) {
@@ -1721,7 +1721,7 @@ qla1280_load_firmware_dma(struct scsi_qla_host *ha)
 		mb[7] = pci_dma_hi32(ha->request_dma) & 0xffff;
 		mb[6] = pci_dma_hi32(ha->request_dma) >> 16;
 		dprintk(2, "%s: op=%d  0x%p = 0x%4x,0x%4x,0x%4x,0x%4x\n",
-				__func__, mb[0],
+				__FUNCTION__, mb[0],
 				(void *)(long)ha->request_dma,
 				mb[6], mb[7], mb[2], mb[3]);
 		err = qla1280_mailbox_command(ha, BIT_4 | BIT_3 | BIT_2 |
@@ -1753,10 +1753,10 @@ qla1280_load_firmware_dma(struct scsi_qla_host *ha)
 			if (tbuf[i] != sp[i] && warn++ < 10) {
 				printk(KERN_ERR "%s: FW compare error @ "
 						"byte(0x%x) loop#=%x\n",
-						__func__, i, num);
+						__FUNCTION__, i, num);
 				printk(KERN_ERR "%s: FWbyte=%x  "
 						"FWfromChip=%x\n",
-						__func__, sp[i], tbuf[i]);
+						__FUNCTION__, sp[i], tbuf[i]);
 				/*break; */
 			}
 		}
@@ -1781,7 +1781,7 @@ qla1280_start_firmware(struct scsi_qla_host *ha)
 	int err;
 
 	dprintk(1, "%s: Verifying checksum of loaded RISC code.\n",
-			__func__);
+			__FUNCTION__);
 
 	/* Verify checksum of loaded RISC code. */
 	mb[0] = MBC_VERIFY_CHECKSUM;
@@ -1794,7 +1794,7 @@ qla1280_start_firmware(struct scsi_qla_host *ha)
 	}
 
 	/* Start firmware execution. */
-	dprintk(1, "%s: start firmware running.\n", __func__);
+	dprintk(1, "%s: start firmware running.\n", __FUNCTION__);
 	mb[0] = MBC_EXECUTE_FIRMWARE;
 	mb[1] = *ql1280_board_tbl[ha->devnum].fwstart;
 	err = qla1280_mailbox_command(ha, BIT_1 | BIT_0, &mb[0]);
@@ -2845,7 +2845,7 @@ qla1280_64bit_start_scsi(struct scsi_qla_host *ha, struct srb * sp)
 	memset(((char *)pkt + 8), 0, (REQUEST_ENTRY_SIZE - 8));
 
 	/* Set ISP command timeout. */
-	pkt->timeout = cpu_to_le16(cmd->request->timeout/HZ);
+	pkt->timeout = cpu_to_le16(cmd->timeout_per_command/HZ);
 
 	/* Set device target ID and LUN */
 	pkt->lun = SCSI_LUN_32(cmd);
@@ -3114,7 +3114,7 @@ qla1280_32bit_start_scsi(struct scsi_qla_host *ha, struct srb * sp)
 	memset(((char *)pkt + 8), 0, (REQUEST_ENTRY_SIZE - 8));
 
 	/* Set ISP command timeout. */
-	pkt->timeout = cpu_to_le16(cmd->request->timeout/HZ);
+	pkt->timeout = cpu_to_le16(cmd->timeout_per_command/HZ);
 
 	/* Set device target ID and LUN */
 	pkt->lun = SCSI_LUN_32(cmd);
@@ -4294,7 +4294,8 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	error = -ENODEV;
 
 #if MEMORY_MAPPED_IO
-	ha->mmpbase = pci_ioremap_bar(ha->pdev, 1);
+	ha->mmpbase = ioremap(pci_resource_start(ha->pdev, 1),
+			      pci_resource_len(ha->pdev, 1));
 	if (!ha->mmpbase) {
 		printk(KERN_INFO "qla1280: Unable to map I/O memory\n");
 		goto error_free_response_ring;

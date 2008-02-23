@@ -1,7 +1,6 @@
 #ifndef _LINUX_LINKAGE_H
 #define _LINUX_LINKAGE_H
 
-#include <linux/compiler.h>
 #include <asm/linkage.h>
 
 #ifdef __cplusplus
@@ -17,9 +16,6 @@
 #ifndef asmregparm
 # define asmregparm
 #endif
-
-#define __page_aligned_data	__section(.data.page_aligned) __aligned(PAGE_SIZE)
-#define __page_aligned_bss	__section(.bss.page_aligned) __aligned(PAGE_SIZE)
 
 /*
  * This is used by architectures to keep arguments on the stack
@@ -63,6 +59,14 @@
 	.weak name;	   \
 	name:
 #endif
+
+#define KPROBE_ENTRY(name) \
+  .pushsection .kprobes.text, "ax"; \
+  ENTRY(name)
+
+#define KPROBE_END(name) \
+  END(name);		 \
+  .popsection
 
 #ifndef END
 #define END(name) \

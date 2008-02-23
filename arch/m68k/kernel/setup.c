@@ -20,15 +20,12 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/bootmem.h>
-#include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/module.h>
 #include <linux/initrd.h>
 
 #include <asm/bootinfo.h>
-#include <asm/sections.h>
 #include <asm/setup.h>
-#include <asm/fpu.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/machdep.h>
@@ -41,11 +38,6 @@
 #endif
 #ifdef CONFIG_SUN3X
 #include <asm/dvma.h>
-#endif
-
-#if !FPSTATESIZE || !NR_IRQS
-#warning No CPU/platform type selected, your kernel will not work!
-#warning Are you building an allnoconfig kernel?
 #endif
 
 unsigned long m68k_machtype;
@@ -63,6 +55,7 @@ EXPORT_SYMBOL(vme_brdtype);
 int m68k_is040or060;
 EXPORT_SYMBOL(m68k_is040or060);
 
+extern int end;
 extern unsigned long availmem;
 
 int m68k_num_memory;
@@ -81,7 +74,7 @@ void (*mach_sched_init) (irq_handler_t handler) __initdata = NULL;
 /* machine dependent irq functions */
 void (*mach_init_IRQ) (void) __initdata = NULL;
 void (*mach_get_model) (char *model);
-void (*mach_get_hardware_list) (struct seq_file *m);
+int (*mach_get_hardware_list) (char *buffer);
 /* machine dependent timer functions */
 unsigned long (*mach_gettimeoffset) (void);
 int (*mach_hwclk) (int, struct rtc_time*);
@@ -123,7 +116,6 @@ extern int bvme6000_parse_bootinfo(const struct bi_record *);
 extern int mvme16x_parse_bootinfo(const struct bi_record *);
 extern int mvme147_parse_bootinfo(const struct bi_record *);
 extern int hp300_parse_bootinfo(const struct bi_record *);
-extern int apollo_parse_bootinfo(const struct bi_record *);
 
 extern void config_amiga(void);
 extern void config_atari(void);
@@ -191,8 +183,6 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 				unknown = mvme147_parse_bootinfo(record);
 			else if (MACH_IS_HP300)
 				unknown = hp300_parse_bootinfo(record);
-			else if (MACH_IS_APOLLO)
-				unknown = apollo_parse_bootinfo(record);
 			else
 				unknown = 1;
 		}
@@ -215,10 +205,11 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 
 void __init setup_arch(char **cmdline_p)
 {
+	extern int _etext, _edata, _end;
 	int i;
 
 	/* The bootinfo is located right after the kernel bss */
-	m68k_parse_bootinfo((const struct bi_record *)_end);
+	m68k_parse_bootinfo((const struct bi_record *)&_end);
 
 	if (CPU_IS_040)
 		m68k_is040or060 = 4;
@@ -251,9 +242,9 @@ void __init setup_arch(char **cmdline_p)
 	}
 
 	init_mm.start_code = PAGE_OFFSET;
-	init_mm.end_code = (unsigned long)_etext;
-	init_mm.end_data = (unsigned long)_edata;
-	init_mm.brk = (unsigned long)_end;
+	init_mm.end_code = (unsigned long) &_etext;
+	init_mm.end_data = (unsigned long) &_edata;
+	init_mm.brk = (unsigned long) &_end;
 
 	*cmdline_p = m68k_command_line;
 	memcpy(boot_command_line, *cmdline_p, CL_SIZE);
@@ -467,9 +458,9 @@ const struct seq_operations cpuinfo_op = {
 	.show	= show_cpuinfo,
 };
 
-#ifdef CONFIG_PROC_HARDWARE
-static int hardware_proc_show(struct seq_file *m, void *v)
+int get_hardware_list(char *buffer)
 {
+	int len = 0;
 	char model[80];
 	unsigned long mem;
 	int i;
@@ -479,36 +470,16 @@ static int hardware_proc_show(struct seq_file *m, void *v)
 	else
 		strcpy(model, "Unknown m68k");
 
-	seq_printf(m, "Model:\t\t%s\n", model);
+	len += sprintf(buffer + len, "Model:\t\t%s\n", model);
 	for (mem = 0, i = 0; i < m68k_num_memory; i++)
 		mem += m68k_memory[i].size;
-	seq_printf(m, "System Memory:\t%ldK\n", mem >> 10);
+	len += sprintf(buffer + len, "System Memory:\t%ldK\n", mem >> 10);
 
 	if (mach_get_hardware_list)
-		mach_get_hardware_list(m);
+		len += mach_get_hardware_list(buffer + len);
 
-	return 0;
+	return len;
 }
-
-static int hardware_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, hardware_proc_show, NULL);
-}
-
-static const struct file_operations hardware_proc_fops = {
-	.open		= hardware_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
-static int __init proc_hardware_init(void)
-{
-	proc_create("hardware", 0, NULL, &hardware_proc_fops);
-	return 0;
-}
-module_init(proc_hardware_init);
-#endif
 
 void check_bugs(void)
 {

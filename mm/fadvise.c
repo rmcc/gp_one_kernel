@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2002, Linus Torvalds
  *
- * 11Jan2003	Andrew Morton
+ * 11Jan2003	akpm@digeo.com
  *		Initial version.
  */
 

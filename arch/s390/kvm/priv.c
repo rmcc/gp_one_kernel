@@ -118,7 +118,7 @@ static int handle_store_cpu_address(struct kvm_vcpu *vcpu)
 		goto out;
 	}
 
-	VCPU_EVENT(vcpu, 5, "storing cpu address to %llx", useraddr);
+	VCPU_EVENT(vcpu, 5, "storing cpu address to %lx", useraddr);
 out:
 	return 0;
 }
@@ -157,8 +157,7 @@ static int handle_stfl(struct kvm_vcpu *vcpu)
 	int rc;
 
 	vcpu->stat.instruction_stfl++;
-	/* only pass the facility bits, which we can handle */
-	facility_list &= 0xfe00fff3;
+	facility_list &= ~(1UL<<24); /* no stfle */
 
 	rc = copy_to_guest(vcpu, offsetof(struct _lowcore, stfl_fac_list),
 			   &facility_list, sizeof(facility_list));
@@ -200,7 +199,7 @@ out:
 
 static void handle_stsi_3_2_2(struct kvm_vcpu *vcpu, struct sysinfo_3_2_2 *mem)
 {
-	struct kvm_s390_float_interrupt *fi = &vcpu->kvm->arch.float_int;
+	struct float_interrupt *fi = &vcpu->kvm->arch.float_int;
 	int cpus = 0;
 	int n;
 

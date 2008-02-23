@@ -1,4 +1,6 @@
 /*
+ * $Id: turbografx.c,v 1.14 2002/01/22 20:30:39 vojtech Exp $
+ *
  *  Copyright (c) 1998-2001 Vojtech Pavlik
  *
  *  Based on the work of:

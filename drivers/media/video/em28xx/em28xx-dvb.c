@@ -5,8 +5,6 @@
 
  (c) 2008 Devin Heitmueller <devin.heitmueller@gmail.com>
 	- Fixes for the driver to properly work with HVR-950
-	- Fixes for the driver to properly work with Pinnacle PCTV HD Pro Stick
-	- Fixes for the driver to properly work with AMD ATI TV Wonder HD 600
 
  (c) 2008 Aidan Thornton <makosoft@googlemail.com>
 
@@ -28,9 +26,6 @@
 
 #include "lgdt330x.h"
 #include "zl10353.h"
-#ifdef EM28XX_DRX397XD_SUPPORT
-#include "drx397xD.h"
-#endif
 
 MODULE_DESCRIPTION("driver for em28xx based DVB cards");
 MODULE_AUTHOR("Mauro Carvalho Chehab <mchehab@infradead.org>");
@@ -161,7 +156,7 @@ static int stop_streaming(struct em28xx_dvb *dvb)
 
 	em28xx_uninit_isoc(dev);
 
-	em28xx_set_mode(dev, EM28XX_SUSPEND);
+	em28xx_set_mode(dev, EM28XX_MODE_UNDEFINED);
 
 	return 0;
 }
@@ -215,7 +210,7 @@ static int em28xx_dvb_bus_ctrl(struct dvb_frontend *fe, int acquire)
 	if (acquire)
 		return em28xx_set_mode(dev, EM28XX_DIGITAL_MODE);
 	else
-		return em28xx_set_mode(dev, EM28XX_SUSPEND);
+		return em28xx_set_mode(dev, EM28XX_MODE_UNDEFINED);
 }
 
 /* ------------------------------------------------------------------ */
@@ -232,13 +227,6 @@ static struct zl10353_config em28xx_zl10353_with_xc3028 = {
 	.if2 = 45600,
 };
 
-#ifdef EM28XX_DRX397XD_SUPPORT
-/* [TODO] djh - not sure yet what the device config needs to contain */
-static struct drx397xD_config em28xx_drx397xD_with_xc3028 = {
-	.demod_address = (0xe0 >> 1),
-};
-#endif
-
 /* ------------------------------------------------------------------ */
 
 static int attach_xc3028(u8 addr, struct em28xx *dev)
@@ -249,6 +237,7 @@ static int attach_xc3028(u8 addr, struct em28xx *dev)
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.i2c_adap  = &dev->i2c_adap;
 	cfg.i2c_addr  = addr;
+	cfg.callback  = em28xx_tuner_callback;
 
 	if (!dev->dvb->frontend) {
 		printk(KERN_ERR "%s/2: dvb frontend not attached. "
@@ -273,7 +262,7 @@ static int attach_xc3028(u8 addr, struct em28xx *dev)
 
 /* ------------------------------------------------------------------ */
 
-static int register_dvb(struct em28xx_dvb *dvb,
+int register_dvb(struct em28xx_dvb *dvb,
 		 struct module *module,
 		 struct em28xx *dev,
 		 struct device *device)
@@ -393,11 +382,6 @@ static int dvb_init(struct em28xx *dev)
 	int result = 0;
 	struct em28xx_dvb *dvb;
 
-	if (!dev->board.has_dvb) {
-		/* This device does not support the extension */
-		return 0;
-	}
-
 	dvb = kzalloc(sizeof(struct em28xx_dvb), GFP_KERNEL);
 
 	if (dvb == NULL) {
@@ -409,11 +393,7 @@ static int dvb_init(struct em28xx *dev)
 	em28xx_set_mode(dev, EM28XX_DIGITAL_MODE);
 	/* init frontend */
 	switch (dev->model) {
-	case EM2883_BOARD_HAUPPAUGE_WINTV_HVR_850:
-	case EM2883_BOARD_HAUPPAUGE_WINTV_HVR_950:
-	case EM2880_BOARD_PINNACLE_PCTV_HD_PRO:
-	case EM2883_BOARD_KWORLD_HYBRID_A316:
-	case EM2880_BOARD_AMD_ATI_TV_WONDER_HD_600:
+	case EM2880_BOARD_HAUPPAUGE_WINTV_HVR_950:
 		dvb->frontend = dvb_attach(lgdt330x_attach,
 					   &em2880_lgdt3303_dev,
 					   &dev->i2c_adap);
@@ -423,8 +403,6 @@ static int dvb_init(struct em28xx *dev)
 		}
 		break;
 	case EM2880_BOARD_HAUPPAUGE_WINTV_HVR_900:
-	case EM2880_BOARD_TERRATEC_HYBRID_XS:
-	case EM2880_BOARD_KWORLD_DVB_310U:
 		dvb->frontend = dvb_attach(zl10353_attach,
 					   &em28xx_zl10353_with_xc3028,
 					   &dev->i2c_adap);
@@ -433,19 +411,6 @@ static int dvb_init(struct em28xx *dev)
 			goto out_free;
 		}
 		break;
-	case EM2880_BOARD_HAUPPAUGE_WINTV_HVR_900_R2:
-#ifdef EM28XX_DRX397XD_SUPPORT
-		/* We don't have the config structure properly populated, so
-		   this is commented out for now */
-		dvb->frontend = dvb_attach(drx397xD_attach,
-					   &em28xx_drx397xD_with_xc3028,
-					   &dev->i2c_adap);
-		if (attach_xc3028(0x61, dev) < 0) {
-			result = -EINVAL;
-			goto out_free;
-		}
-		break;
-#endif
 	default:
 		printk(KERN_ERR "%s/2: The frontend of your DVB/ATSC card"
 				" isn't supported yet\n",
@@ -459,8 +424,6 @@ static int dvb_init(struct em28xx *dev)
 		result = -EINVAL;
 		goto out_free;
 	}
-	/* define general-purpose callback pointer */
-	dvb->frontend->callback = em28xx_tuner_callback;
 
 	/* register everything */
 	result = register_dvb(dvb, THIS_MODULE, dev, &dev->udev->dev);
@@ -468,12 +431,12 @@ static int dvb_init(struct em28xx *dev)
 	if (result < 0)
 		goto out_free;
 
-	em28xx_set_mode(dev, EM28XX_SUSPEND);
+	em28xx_set_mode(dev, EM28XX_MODE_UNDEFINED);
 	printk(KERN_INFO "Successfully loaded em28xx-dvb\n");
 	return 0;
 
 out_free:
-	em28xx_set_mode(dev, EM28XX_SUSPEND);
+	em28xx_set_mode(dev, EM28XX_MODE_UNDEFINED);
 	kfree(dvb);
 	dev->dvb = NULL;
 	return result;
@@ -481,11 +444,6 @@ out_free:
 
 static int dvb_fini(struct em28xx *dev)
 {
-	if (!dev->board.has_dvb) {
-		/* This device does not support the extension */
-		return 0;
-	}
-
 	if (dev->dvb) {
 		unregister_dvb(dev->dvb);
 		dev->dvb = NULL;

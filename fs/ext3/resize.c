@@ -580,8 +580,7 @@ static int reserve_backup_gdb(handle_t *handle, struct inode *inode,
 	}
 
 	blk = EXT3_SB(sb)->s_sbh->b_blocknr + 1 + EXT3_SB(sb)->s_gdb_count;
-	data = (__le32 *)dind->b_data + (EXT3_SB(sb)->s_gdb_count %
-					 EXT3_ADDR_PER_BLOCK(sb));
+	data = (__le32 *)dind->b_data + EXT3_SB(sb)->s_gdb_count;
 	end = (__le32 *)dind->b_data + EXT3_ADDR_PER_BLOCK(sb);
 
 	/* Get each reserved primary GDT block and verify it holds backups */
@@ -790,8 +789,7 @@ int ext3_group_add(struct super_block *sb, struct ext3_new_group_data *input)
 
 	if (reserved_gdb || gdb_off == 0) {
 		if (!EXT3_HAS_COMPAT_FEATURE(sb,
-					     EXT3_FEATURE_COMPAT_RESIZE_INODE)
-		    || !le16_to_cpu(es->s_reserved_gdt_blocks)) {
+					     EXT3_FEATURE_COMPAT_RESIZE_INODE)){
 			ext3_warning(sb, __func__,
 				     "No reserved GDT blocks, can't resize");
 			return -EPERM;

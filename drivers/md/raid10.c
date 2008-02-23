@@ -19,7 +19,6 @@
  */
 
 #include "dm-bio-list.h"
-#include <linux/delay.h>
 #include <linux/raid/raid10.h>
 #include <linux/raid/bitmap.h>
 
@@ -77,13 +76,11 @@ static void r10bio_pool_free(void *r10_bio, void *data)
 	kfree(r10_bio);
 }
 
-/* Maximum size of each resync request */
 #define RESYNC_BLOCK_SIZE (64*1024)
+//#define RESYNC_BLOCK_SIZE PAGE_SIZE
+#define RESYNC_SECTORS (RESYNC_BLOCK_SIZE >> 9)
 #define RESYNC_PAGES ((RESYNC_BLOCK_SIZE + PAGE_SIZE-1) / PAGE_SIZE)
-/* amount of memory to reserve for resync requests */
-#define RESYNC_WINDOW (1024*1024)
-/* maximum number of concurrent requests, memory permitting */
-#define RESYNC_DEPTH (32*1024*1024/RESYNC_BLOCK_SIZE)
+#define RESYNC_WINDOW (2048*1024)
 
 /*
  * When performing a resync, we need to read and compare, so
@@ -217,9 +214,6 @@ static void reschedule_retry(r10bio_t *r10_bio)
 	list_add(&r10_bio->retry_list, &conf->retry_list);
 	conf->nr_queued ++;
 	spin_unlock_irqrestore(&conf->device_lock, flags);
-
-	/* wake up frozen array... */
-	wake_up(&conf->wait_barrier);
 
 	md_wakeup_thread(mddev->thread);
 }
@@ -445,27 +439,26 @@ static sector_t raid10_find_virt(conf_t *conf, sector_t sector, int dev)
 /**
  *	raid10_mergeable_bvec -- tell bio layer if a two requests can be merged
  *	@q: request queue
- *	@bvm: properties of new bio
+ *	@bio: the buffer head that's been built up so far
  *	@biovec: the request that could be merged to it.
  *
  *	Return amount of bytes we can accept at this offset
  *      If near_copies == raid_disk, there are no striping issues,
  *      but in that case, the function isn't called at all.
  */
-static int raid10_mergeable_bvec(struct request_queue *q,
-				 struct bvec_merge_data *bvm,
-				 struct bio_vec *biovec)
+static int raid10_mergeable_bvec(struct request_queue *q, struct bio *bio,
+				struct bio_vec *bio_vec)
 {
 	mddev_t *mddev = q->queuedata;
-	sector_t sector = bvm->bi_sector + get_start_sect(bvm->bi_bdev);
+	sector_t sector = bio->bi_sector + get_start_sect(bio->bi_bdev);
 	int max;
 	unsigned int chunk_sectors = mddev->chunk_size >> 9;
-	unsigned int bio_sectors = bvm->bi_size >> 9;
+	unsigned int bio_sectors = bio->bi_size >> 9;
 
 	max =  (chunk_sectors - ((sector & (chunk_sectors - 1)) + bio_sectors)) << 9;
 	if (max < 0) max = 0; /* bio_add cannot handle a negative return */
-	if (max <= biovec->bv_len && bio_sectors == 0)
-		return biovec->bv_len;
+	if (max <= bio_vec->bv_len && bio_sectors == 0)
+		return bio_vec->bv_len;
 	else
 		return max;
 }
@@ -693,6 +686,7 @@ static int flush_pending_writes(conf_t *conf)
  *    there is no normal IO happeing.  It must arrange to call
  *    lower_barrier when the particular background IO completes.
  */
+#define RESYNC_DEPTH 32
 
 static void raise_barrier(conf_t *conf, int force)
 {
@@ -790,7 +784,6 @@ static int make_request(struct request_queue *q, struct bio * bio)
 	mirror_info_t *mirror;
 	r10bio_t *r10_bio;
 	struct bio *read_bio;
-	int cpu;
 	int i;
 	int chunk_sects = conf->chunk_mask + 1;
 	const int rw = bio_data_dir(bio);
@@ -818,7 +811,7 @@ static int make_request(struct request_queue *q, struct bio * bio)
 		/* This is a one page bio that upper layers
 		 * refuse to split for us, so we need to split it.
 		 */
-		bp = bio_split(bio,
+		bp = bio_split(bio, bio_split_pool,
 			       chunk_sects - (bio->bi_sector & (chunk_sects - 1)) );
 		if (make_request(q, &bp->bio1))
 			generic_make_request(&bp->bio1);
@@ -845,11 +838,8 @@ static int make_request(struct request_queue *q, struct bio * bio)
 	 */
 	wait_barrier(conf);
 
-	cpu = part_stat_lock();
-	part_stat_inc(cpu, &mddev->gendisk->part0, ios[rw]);
-	part_stat_add(cpu, &mddev->gendisk->part0, sectors[rw],
-		      bio_sectors(bio));
-	part_stat_unlock();
+	disk_stat_inc(mddev->gendisk, ios[rw]);
+	disk_stat_add(mddev->gendisk, sectors[rw], bio_sectors(bio));
 
 	r10_bio = mempool_alloc(conf->r10bio_pool, GFP_NOIO);
 
@@ -1123,30 +1113,24 @@ static int raid10_spare_active(mddev_t *mddev)
 static int raid10_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 {
 	conf_t *conf = mddev->private;
-	int err = -EEXIST;
+	int found = 0;
 	int mirror;
 	mirror_info_t *p;
-	int first = 0;
-	int last = mddev->raid_disks - 1;
 
 	if (mddev->recovery_cp < MaxSector)
 		/* only hot-add to in-sync arrays, as recovery is
 		 * very different from resync
 		 */
-		return -EBUSY;
+		return 0;
 	if (!enough(conf))
-		return -EINVAL;
-
-	if (rdev->raid_disk >= 0)
-		first = last = rdev->raid_disk;
+		return 0;
 
 	if (rdev->saved_raid_disk >= 0 &&
-	    rdev->saved_raid_disk >= first &&
 	    conf->mirrors[rdev->saved_raid_disk].rdev == NULL)
 		mirror = rdev->saved_raid_disk;
 	else
-		mirror = first;
-	for ( ; mirror <= last ; mirror++)
+		mirror = 0;
+	for ( ; mirror < mddev->raid_disks; mirror++)
 		if ( !(p=conf->mirrors+mirror)->rdev) {
 
 			blk_queue_stack_limits(mddev->queue,
@@ -1161,7 +1145,7 @@ static int raid10_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 
 			p->head_position = 0;
 			rdev->raid_disk = mirror;
-			err = 0;
+			found = 1;
 			if (rdev->saved_raid_disk != mirror)
 				conf->fullsync = 1;
 			rcu_assign_pointer(p->rdev, rdev);
@@ -1169,7 +1153,7 @@ static int raid10_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 		}
 
 	print_conf(conf);
-	return err;
+	return found;
 }
 
 static int raid10_remove_disk(mddev_t *mddev, int number)
@@ -1350,6 +1334,9 @@ static void sync_request_write(mddev_t *mddev, r10bio_t *r10_bio)
 		tbio->bi_size = r10_bio->sectors << 9;
 		tbio->bi_idx = 0;
 		tbio->bi_phys_segments = 0;
+		tbio->bi_hw_segments = 0;
+		tbio->bi_hw_front_size = 0;
+		tbio->bi_hw_back_size = 0;
 		tbio->bi_flags &= ~(BIO_POOL_MASK - 1);
 		tbio->bi_flags |= 1 << BIO_UPTODATE;
 		tbio->bi_next = NULL;
@@ -1949,6 +1936,7 @@ static sector_t sync_request(mddev_t *mddev, sector_t sector_nr, int *skipped, i
 		bio->bi_vcnt = 0;
 		bio->bi_idx = 0;
 		bio->bi_phys_segments = 0;
+		bio->bi_hw_segments = 0;
 		bio->bi_size = 0;
 	}
 
@@ -2025,12 +2013,12 @@ static int run(mddev_t *mddev)
 	int i, disk_idx;
 	mirror_info_t *disk;
 	mdk_rdev_t *rdev;
+	struct list_head *tmp;
 	int nc, fc, fo;
 	sector_t stride, size;
 
-	if (mddev->chunk_size < PAGE_SIZE) {
-		printk(KERN_ERR "md/raid10: chunk size must be "
-		       "at least PAGE_SIZE(%ld).\n", PAGE_SIZE);
+	if (mddev->chunk_size == 0) {
+		printk(KERN_ERR "md/raid10: non-zero chunk size required.\n");
 		return -EINVAL;
 	}
 
@@ -2107,7 +2095,7 @@ static int run(mddev_t *mddev)
 	spin_lock_init(&conf->device_lock);
 	mddev->queue->queue_lock = &conf->device_lock;
 
-	list_for_each_entry(rdev, &mddev->disks, same_set) {
+	rdev_for_each(rdev, tmp, mddev) {
 		disk_idx = rdev->raid_disk;
 		if (disk_idx >= mddev->raid_disks
 		    || disk_idx < 0)
@@ -2149,8 +2137,6 @@ static int run(mddev_t *mddev)
 		    !test_bit(In_sync, &disk->rdev->flags)) {
 			disk->head_position = 0;
 			mddev->degraded++;
-			if (disk->rdev)
-				conf->fullsync = 1;
 		}
 	}
 
@@ -2170,7 +2156,7 @@ static int run(mddev_t *mddev)
 	/*
 	 * Ok, everything is just fine now
 	 */
-	mddev->array_sectors = size << conf->chunk_shift;
+	mddev->array_size = size << (conf->chunk_shift-1);
 	mddev->resync_max_sectors = size << conf->chunk_shift;
 
 	mddev->queue->unplug_fn = raid10_unplug;

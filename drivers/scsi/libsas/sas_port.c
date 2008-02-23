@@ -50,7 +50,7 @@ static void sas_form_port(struct asd_sas_phy *phy)
 			sas_deform_port(phy);
 		else {
 			SAS_DPRINTK("%s: phy%d belongs to port%d already(%d)!\n",
-				    __func__, phy->id, phy->port->id,
+				    __FUNCTION__, phy->id, phy->port->id,
 				    phy->port->num_phys);
 			return;
 		}
@@ -78,7 +78,7 @@ static void sas_form_port(struct asd_sas_phy *phy)
 
 	if (i >= sas_ha->num_phys) {
 		printk(KERN_NOTICE "%s: couldn't find a free port, bug?\n",
-		       __func__);
+		       __FUNCTION__);
 		spin_unlock_irqrestore(&sas_ha->phy_port_lock, flags);
 		return;
 	}
@@ -113,7 +113,7 @@ static void sas_form_port(struct asd_sas_phy *phy)
 	sas_port_add_phy(port->port, phy->phy);
 
 	SAS_DPRINTK("%s added to %s, phy_mask:0x%x (%16llx)\n",
-		    dev_name(&phy->phy->dev), dev_name(&port->port->dev),
+		    phy->phy->dev.bus_id,port->port->dev.bus_id,
 		    port->phy_mask,
 		    SAS_ADDR(port->attached_sas_addr));
 

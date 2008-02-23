@@ -355,9 +355,6 @@ report_lost_node(struct fw_card *card,
 {
 	fw_node_event(card, node, FW_NODE_DESTROYED);
 	fw_node_put(node);
-
-	/* Topology has changed - reset bus manager retry counter */
-	card->bm_retries = 0;
 }
 
 static void
@@ -377,9 +374,6 @@ report_found_node(struct fw_card *card,
 	}
 
 	fw_node_event(card, node, FW_NODE_CREATED);
-
-	/* Topology has changed - reset bus manager retry counter */
-	card->bm_retries = 0;
 }
 
 void fw_destroy_nodes(struct fw_card *card)
@@ -419,7 +413,7 @@ static void
 update_tree(struct fw_card *card, struct fw_node *root)
 {
 	struct list_head list0, list1;
-	struct fw_node *node0, *node1, *next1;
+	struct fw_node *node0, *node1;
 	int i, event;
 
 	INIT_LIST_HEAD(&list0);
@@ -491,9 +485,7 @@ update_tree(struct fw_card *card, struct fw_node *root)
 		}
 
 		node0 = fw_node(node0->link.next);
-		next1 = fw_node(node1->link.next);
-		fw_node_put(node1);
-		node1 = next1;
+		node1 = fw_node(node1->link.next);
 	}
 }
 
@@ -518,7 +510,17 @@ fw_core_handle_bus_reset(struct fw_card *card,
 	struct fw_node *local_node;
 	unsigned long flags;
 
+	fw_flush_transactions(card);
+
 	spin_lock_irqsave(&card->lock, flags);
+
+	/*
+	 * If the new topology has a different self_id_count the topology
+	 * changed, either nodes were added or removed. In that case we
+	 * reset the IRM reset counter.
+	 */
+	if (card->self_id_count != self_id_count)
+		card->bm_retries = 0;
 
 	card->node_id = node_id;
 	/*
@@ -528,7 +530,7 @@ fw_core_handle_bus_reset(struct fw_card *card,
 	smp_wmb();
 	card->generation = generation;
 	card->reset_jiffies = jiffies;
-	fw_schedule_bm_work(card, 0);
+	schedule_delayed_work(&card->work, 0);
 
 	local_node = build_tree(card, self_ids, self_id_count);
 

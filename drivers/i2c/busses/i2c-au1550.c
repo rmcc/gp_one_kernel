@@ -269,12 +269,8 @@ static int
 au1550_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg *msgs, int num)
 {
 	struct i2c_au1550_data *adap = i2c_adap->algo_data;
-	volatile psc_smb_t *sp = (volatile psc_smb_t *)adap->psc_base;
 	struct i2c_msg *p;
 	int i, err = 0;
-
-	sp->psc_ctrl = PSC_CTRL_ENABLE;
-	au_sync();
 
 	for (i = 0; !err && i < num; i++) {
 		p = &msgs[i];
@@ -292,10 +288,6 @@ au1550_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg *msgs, int num)
 	*/
 	if (err == 0)
 		err = num;
-
-	sp->psc_ctrl = PSC_CTRL_SUSPEND;
-	au_sync();
-
 	return err;
 }
 
@@ -310,11 +302,53 @@ static const struct i2c_algorithm au1550_algo = {
 	.functionality	= au1550_func,
 };
 
-static void i2c_au1550_setup(struct i2c_au1550_data *priv)
+/*
+ * registering functions to load algorithms at runtime
+ * Prior to calling us, the 50MHz clock frequency and routing
+ * must have been set up for the PSC indicated by the adapter.
+ */
+static int __devinit
+i2c_au1550_probe(struct platform_device *pdev)
 {
-	volatile psc_smb_t *sp = (volatile psc_smb_t *)priv->psc_base;
+	struct i2c_au1550_data *priv;
+	volatile psc_smb_t *sp;
+	struct resource *r;
 	u32 stat;
+	int ret;
 
+	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!r) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	priv = kzalloc(sizeof(struct i2c_au1550_data), GFP_KERNEL);
+	if (!priv) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	priv->ioarea = request_mem_region(r->start, r->end - r->start + 1,
+					  pdev->name);
+	if (!priv->ioarea) {
+		ret = -EBUSY;
+		goto out_mem;
+	}
+
+	priv->psc_base = CKSEG1ADDR(r->start);
+	priv->xfer_timeout = 200;
+	priv->ack_timeout = 200;
+
+	priv->adap.id = I2C_HW_AU1550_PSC;
+	priv->adap.nr = pdev->id;
+	priv->adap.algo = &au1550_algo;
+	priv->adap.algo_data = priv;
+	priv->adap.dev.parent = &pdev->dev;
+	strlcpy(priv->adap.name, "Au1xxx PSC I2C", sizeof(priv->adap.name));
+
+	/* Now, set up the PSC for SMBus PIO mode.
+	*/
+	sp = (volatile psc_smb_t *)priv->psc_base;
 	sp->psc_ctrl = PSC_CTRL_DISABLE;
 	au_sync();
 	sp->psc_sel = PSC_SEL_PS_SMBUSMODE;
@@ -350,66 +384,7 @@ static void i2c_au1550_setup(struct i2c_au1550_data *priv)
 	do {
 		stat = sp->psc_smbstat;
 		au_sync();
-	} while ((stat & PSC_SMBSTAT_SR) == 0);
-
-	sp->psc_ctrl = PSC_CTRL_SUSPEND;
-	au_sync();
-}
-
-static void i2c_au1550_disable(struct i2c_au1550_data *priv)
-{
-	volatile psc_smb_t *sp = (volatile psc_smb_t *)priv->psc_base;
-
-	sp->psc_smbcfg = 0;
-	sp->psc_ctrl = PSC_CTRL_DISABLE;
-	au_sync();
-}
-
-/*
- * registering functions to load algorithms at runtime
- * Prior to calling us, the 50MHz clock frequency and routing
- * must have been set up for the PSC indicated by the adapter.
- */
-static int __devinit
-i2c_au1550_probe(struct platform_device *pdev)
-{
-	struct i2c_au1550_data *priv;
-	struct resource *r;
-	int ret;
-
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r) {
-		ret = -ENODEV;
-		goto out;
-	}
-
-	priv = kzalloc(sizeof(struct i2c_au1550_data), GFP_KERNEL);
-	if (!priv) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	priv->ioarea = request_mem_region(r->start, r->end - r->start + 1,
-					  pdev->name);
-	if (!priv->ioarea) {
-		ret = -EBUSY;
-		goto out_mem;
-	}
-
-	priv->psc_base = CKSEG1ADDR(r->start);
-	priv->xfer_timeout = 200;
-	priv->ack_timeout = 200;
-
-	priv->adap.id = I2C_HW_AU1550_PSC;
-	priv->adap.nr = pdev->id;
-	priv->adap.algo = &au1550_algo;
-	priv->adap.algo_data = priv;
-	priv->adap.dev.parent = &pdev->dev;
-	strlcpy(priv->adap.name, "Au1xxx PSC I2C", sizeof(priv->adap.name));
-
-	/* Now, set up the PSC for SMBus PIO mode.
-	*/
-	i2c_au1550_setup(priv);
+	} while ((stat & PSC_SMBSTAT_DR) == 0);
 
 	ret = i2c_add_numbered_adapter(&priv->adap);
 	if (ret == 0) {
@@ -417,7 +392,10 @@ i2c_au1550_probe(struct platform_device *pdev)
 		return 0;
 	}
 
-	i2c_au1550_disable(priv);
+	/* disable the PSC */
+	sp->psc_smbcfg = 0;
+	sp->psc_ctrl = PSC_CTRL_DISABLE;
+	au_sync();
 
 	release_resource(priv->ioarea);
 	kfree(priv->ioarea);
@@ -431,24 +409,27 @@ static int __devexit
 i2c_au1550_remove(struct platform_device *pdev)
 {
 	struct i2c_au1550_data *priv = platform_get_drvdata(pdev);
+	volatile psc_smb_t *sp = (volatile psc_smb_t *)priv->psc_base;
 
 	platform_set_drvdata(pdev, NULL);
 	i2c_del_adapter(&priv->adap);
-	i2c_au1550_disable(priv);
+	sp->psc_smbcfg = 0;
+	sp->psc_ctrl = PSC_CTRL_DISABLE;
+	au_sync();
 	release_resource(priv->ioarea);
 	kfree(priv->ioarea);
 	kfree(priv);
 	return 0;
 }
 
-#ifdef CONFIG_PM
 static int
 i2c_au1550_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct i2c_au1550_data *priv = platform_get_drvdata(pdev);
+	volatile psc_smb_t *sp = (volatile psc_smb_t *)priv->psc_base;
 
-	i2c_au1550_disable(priv);
-
+	sp->psc_ctrl = PSC_CTRL_SUSPEND;
+	au_sync();
 	return 0;
 }
 
@@ -456,15 +437,14 @@ static int
 i2c_au1550_resume(struct platform_device *pdev)
 {
 	struct i2c_au1550_data *priv = platform_get_drvdata(pdev);
+	volatile psc_smb_t *sp = (volatile psc_smb_t *)priv->psc_base;
 
-	i2c_au1550_setup(priv);
-
+	sp->psc_ctrl = PSC_CTRL_ENABLE;
+	au_sync();
+	while (!(sp->psc_smbstat & PSC_SMBSTAT_SR))
+		au_sync();
 	return 0;
 }
-#else
-#define i2c_au1550_suspend	NULL
-#define i2c_au1550_resume	NULL
-#endif
 
 static struct platform_driver au1xpsc_smbus_driver = {
 	.driver = {

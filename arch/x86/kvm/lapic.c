@@ -32,7 +32,6 @@
 #include <asm/current.h>
 #include <asm/apicdef.h>
 #include <asm/atomic.h>
-#include "kvm_cache_regs.h"
 #include "irq.h"
 
 #define PRId64 "d"
@@ -128,11 +127,6 @@ static inline int apic_lvt_vector(struct kvm_lapic *apic, int lvt_type)
 static inline int apic_lvtt_period(struct kvm_lapic *apic)
 {
 	return apic_get_reg(apic, APIC_LVTT) & APIC_LVT_TIMER_PERIODIC;
-}
-
-static inline int apic_lvt_nmi_mode(u32 lvt_val)
-{
-	return (lvt_val & (APIC_MODE_MASK | APIC_LVT_MASKED)) == APIC_DM_NMI;
 }
 
 static unsigned int apic_lvt_mask[APIC_LVT_NUM] = {
@@ -344,7 +338,13 @@ static int __apic_accept_irq(struct kvm_lapic *apic, int delivery_mode,
 		} else
 			apic_clear_vector(vector, apic->regs + APIC_TMR);
 
-		kvm_vcpu_kick(vcpu);
+		if (vcpu->arch.mp_state == KVM_MP_STATE_RUNNABLE)
+			kvm_vcpu_kick(vcpu);
+		else if (vcpu->arch.mp_state == KVM_MP_STATE_HALTED) {
+			vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
+			if (waitqueue_active(&vcpu->wq))
+				wake_up_interruptible(&vcpu->wq);
+		}
 
 		result = (orig_irr == 0);
 		break;
@@ -356,10 +356,8 @@ static int __apic_accept_irq(struct kvm_lapic *apic, int delivery_mode,
 	case APIC_DM_SMI:
 		printk(KERN_DEBUG "Ignoring guest SMI\n");
 		break;
-
 	case APIC_DM_NMI:
-		kvm_inject_nmi(vcpu);
-		kvm_vcpu_kick(vcpu);
+		printk(KERN_DEBUG "Ignoring guest NMI\n");
 		break;
 
 	case APIC_DM_INIT:
@@ -371,27 +369,22 @@ static int __apic_accept_irq(struct kvm_lapic *apic, int delivery_mode,
 			vcpu->arch.mp_state = KVM_MP_STATE_INIT_RECEIVED;
 			kvm_vcpu_kick(vcpu);
 		} else {
-			apic_debug("Ignoring de-assert INIT to vcpu %d\n",
-				   vcpu->vcpu_id);
+			printk(KERN_DEBUG
+			       "Ignoring de-assert INIT to vcpu %d\n",
+			       vcpu->vcpu_id);
 		}
+
 		break;
 
 	case APIC_DM_STARTUP:
-		apic_debug("SIPI to vcpu %d vector 0x%02x\n",
-			   vcpu->vcpu_id, vector);
+		printk(KERN_DEBUG "SIPI to vcpu %d vector 0x%02x\n",
+		       vcpu->vcpu_id, vector);
 		if (vcpu->arch.mp_state == KVM_MP_STATE_INIT_RECEIVED) {
 			vcpu->arch.sipi_vector = vector;
 			vcpu->arch.mp_state = KVM_MP_STATE_SIPI_RECEIVED;
-			kvm_vcpu_kick(vcpu);
+			if (waitqueue_active(&vcpu->wq))
+				wake_up_interruptible(&vcpu->wq);
 		}
-		break;
-
-	case APIC_DM_EXTINT:
-		/*
-		 * Should only be called by kvm_apic_local_deliver() with LVT0,
-		 * before NMI watchdog was enabled. Already handled by
-		 * kvm_apic_accept_pic_intr().
-		 */
 		break;
 
 	default:
@@ -444,7 +437,7 @@ struct kvm_vcpu *kvm_get_lowest_prio_vcpu(struct kvm *kvm, u8 vector,
 static void apic_set_eoi(struct kvm_lapic *apic)
 {
 	int vector = apic_find_highest_isr(apic);
-	int trigger_mode;
+
 	/*
 	 * Not every write EOI will has corresponding ISR,
 	 * one example is when Kernel check timer on setup_IO_APIC
@@ -456,10 +449,7 @@ static void apic_set_eoi(struct kvm_lapic *apic)
 	apic_update_ppr(apic);
 
 	if (apic_test_and_clear_vector(vector, apic->regs + APIC_TMR))
-		trigger_mode = IOAPIC_LEVEL_TRIG;
-	else
-		trigger_mode = IOAPIC_EDGE_TRIG;
-	kvm_ioapic_update_eoi(apic->vcpu->kvm, vector, trigger_mode);
+		kvm_ioapic_update_eoi(apic->vcpu->kvm, vector);
 }
 
 static void apic_send_ipi(struct kvm_lapic *apic)
@@ -567,7 +557,8 @@ static void __report_tpr_access(struct kvm_lapic *apic, bool write)
 	struct kvm_run *run = vcpu->run;
 
 	set_bit(KVM_REQ_REPORT_TPR_ACCESS, &vcpu->requests);
-	run->tpr_access.rip = kvm_rip_read(vcpu);
+	kvm_x86_ops->cache_regs(vcpu);
+	run->tpr_access.rip = vcpu->arch.rip;
 	run->tpr_access.is_write = write;
 }
 
@@ -580,8 +571,6 @@ static inline void report_tpr_access(struct kvm_lapic *apic, bool write)
 static u32 __apic_read(struct kvm_lapic *apic, unsigned int offset)
 {
 	u32 val = 0;
-
-	KVMTRACE_1D(APIC_ACCESS, apic->vcpu, (u32)offset, handler);
 
 	if (offset >= LAPIC_MMIO_LENGTH)
 		return 0;
@@ -677,20 +666,6 @@ static void start_apic_timer(struct kvm_lapic *apic)
 					apic->timer.period)));
 }
 
-static void apic_manage_nmi_watchdog(struct kvm_lapic *apic, u32 lvt0_val)
-{
-	int nmi_wd_enabled = apic_lvt_nmi_mode(apic_get_reg(apic, APIC_LVT0));
-
-	if (apic_lvt_nmi_mode(lvt0_val)) {
-		if (!nmi_wd_enabled) {
-			apic_debug("Receive NMI setting on APIC_LVT0 "
-				   "for cpu %d\n", apic->vcpu->vcpu_id);
-			apic->vcpu->kvm->arch.vapics_in_nmi_mode++;
-		}
-	} else if (nmi_wd_enabled)
-		apic->vcpu->kvm->arch.vapics_in_nmi_mode--;
-}
-
 static void apic_mmio_write(struct kvm_io_device *this,
 			    gpa_t address, int len, const void *data)
 {
@@ -705,9 +680,9 @@ static void apic_mmio_write(struct kvm_io_device *this,
 	 * Refer SDM 8.4.1
 	 */
 	if (len != 4 || alignment) {
-		/* Don't shout loud, $infamous_os would cause only noise. */
-		apic_debug("apic write: bad size=%d %lx\n",
-			   len, (long)address);
+		if (printk_ratelimit())
+			printk(KERN_ERR "apic write: bad size=%d %lx\n",
+			       len, (long)address);
 		return;
 	}
 
@@ -719,8 +694,6 @@ static void apic_mmio_write(struct kvm_io_device *this,
 			   "0x%x\n", __func__, offset, len, val);
 
 	offset &= 0xff0;
-
-	KVMTRACE_1D(APIC_ACCESS, apic->vcpu, (u32)offset, handler);
 
 	switch (offset) {
 	case APIC_ID:		/* Local APIC ID */
@@ -771,11 +744,10 @@ static void apic_mmio_write(struct kvm_io_device *this,
 		apic_set_reg(apic, APIC_ICR2, val & 0xff000000);
 		break;
 
-	case APIC_LVT0:
-		apic_manage_nmi_watchdog(apic, val);
 	case APIC_LVTT:
 	case APIC_LVTTHMR:
 	case APIC_LVTPC:
+	case APIC_LVT0:
 	case APIC_LVT1:
 	case APIC_LVTERR:
 		/* TODO: Check vector */
@@ -808,8 +780,7 @@ static void apic_mmio_write(struct kvm_io_device *this,
 
 }
 
-static int apic_mmio_range(struct kvm_io_device *this, gpa_t addr,
-			   int len, int size)
+static int apic_mmio_range(struct kvm_io_device *this, gpa_t addr)
 {
 	struct kvm_lapic *apic = (struct kvm_lapic *)this->private;
 	int ret = 0;
@@ -968,14 +939,16 @@ static int __apic_timer_fn(struct kvm_lapic *apic)
 	int result = 0;
 	wait_queue_head_t *q = &apic->vcpu->wq;
 
-	if(!atomic_inc_and_test(&apic->timer.pending))
-		set_bit(KVM_REQ_PENDING_TIMER, &apic->vcpu->requests);
-	if (waitqueue_active(q))
+	atomic_inc(&apic->timer.pending);
+	if (waitqueue_active(q)) {
+		apic->vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
 		wake_up_interruptible(q);
-
+	}
 	if (apic_lvtt_period(apic)) {
 		result = 1;
-		hrtimer_add_expires_ns(&apic->timer.dev, apic->timer.period);
+		apic->timer.dev.expires = ktime_add_ns(
+					apic->timer.dev.expires,
+					apic->timer.period);
 	}
 	return result;
 }
@@ -990,26 +963,12 @@ int apic_has_pending_timer(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
-static int kvm_apic_local_deliver(struct kvm_lapic *apic, int lvt_type)
+static int __inject_apic_timer_irq(struct kvm_lapic *apic)
 {
-	u32 reg = apic_get_reg(apic, lvt_type);
-	int vector, mode, trig_mode;
+	int vector;
 
-	if (apic_hw_enabled(apic) && !(reg & APIC_LVT_MASKED)) {
-		vector = reg & APIC_VECTOR_MASK;
-		mode = reg & APIC_MODE_MASK;
-		trig_mode = reg & APIC_LVT_LEVEL_TRIGGER;
-		return __apic_accept_irq(apic, mode, vector, 1, trig_mode);
-	}
-	return 0;
-}
-
-void kvm_apic_nmi_wd_deliver(struct kvm_vcpu *vcpu)
-{
-	struct kvm_lapic *apic = vcpu->arch.apic;
-
-	if (apic)
-		kvm_apic_local_deliver(apic, APIC_LVT0);
+	vector = apic_lvt_vector(apic, APIC_LVTT);
+	return __apic_accept_irq(apic, APIC_DM_FIXED, vector, 1, 0);
 }
 
 static enum hrtimer_restart apic_timer_fn(struct hrtimer *data)
@@ -1104,8 +1063,9 @@ void kvm_inject_apic_timer_irqs(struct kvm_vcpu *vcpu)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
 
-	if (apic && atomic_read(&apic->timer.pending) > 0) {
-		if (kvm_apic_local_deliver(apic, APIC_LVTT))
+	if (apic && apic_lvt_enabled(apic, APIC_LVTT) &&
+		atomic_read(&apic->timer.pending) > 0) {
+		if (__inject_apic_timer_irq(apic))
 			atomic_dec(&apic->timer.pending);
 	}
 }
@@ -1157,7 +1117,7 @@ void __kvm_migrate_apic_timer(struct kvm_vcpu *vcpu)
 
 	timer = &apic->timer.dev;
 	if (hrtimer_cancel(timer))
-		hrtimer_start_expires(timer, HRTIMER_MODE_ABS);
+		hrtimer_start(timer, timer->expires, HRTIMER_MODE_ABS);
 }
 
 void kvm_lapic_sync_from_vapic(struct kvm_vcpu *vcpu)

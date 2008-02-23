@@ -325,11 +325,28 @@ static int onenand_wait(struct mtd_info *mtd, int state)
 
 	ctrl = this->read_word(this->base + ONENAND_REG_CTRL_STATUS);
 
-	/*
-	 * In the Spec. it checks the controller status first
-	 * However if you get the correct information in case of
-	 * power off recovery (POR) test, it should read ECC status first
-	 */
+	if (ctrl & ONENAND_CTRL_ERROR) {
+		printk(KERN_ERR "onenand_wait: controller error = 0x%04x\n", ctrl);
+		if (ctrl & ONENAND_CTRL_LOCK)
+			printk(KERN_ERR "onenand_wait: it's locked error.\n");
+		if (state == FL_READING) {
+			/*
+			 * A power loss while writing can result in a page
+			 * becoming unreadable.  When the device is mounted
+			 * again, reading that page gives controller errors.
+			 * Upper level software like JFFS2 treat -EIO as fatal,
+			 * refusing to mount at all.  That means it is necessary
+			 * to treat the error as an ECC error to allow recovery.
+			 * Note that typically in this case, the eraseblock can
+			 * still be erased and rewritten i.e. it has not become
+			 * a bad block.
+			 */
+			mtd->ecc_stats.failed++;
+			return -EBADMSG;
+		}
+		return -EIO;
+	}
+
 	if (interrupt & ONENAND_INT_READ) {
 		int ecc = this->read_word(this->base + ONENAND_REG_ECC_STATUS);
 		if (ecc) {
@@ -344,15 +361,6 @@ static int onenand_wait(struct mtd_info *mtd, int state)
 		}
 	} else if (state == FL_READING) {
 		printk(KERN_ERR "onenand_wait: read timeout! ctrl=0x%04x intr=0x%04x\n", ctrl, interrupt);
-		return -EIO;
-	}
-
-	/* If there's controller error, it's a real error */
-	if (ctrl & ONENAND_CTRL_ERROR) {
-		printk(KERN_ERR "onenand_wait: controller error = 0x%04x\n",
-			ctrl);
-		if (ctrl & ONENAND_CTRL_LOCK)
-			printk(KERN_ERR "onenand_wait: it's locked error.\n");
 		return -EIO;
 	}
 
@@ -1127,24 +1135,20 @@ static int onenand_bbt_wait(struct mtd_info *mtd, int state)
 	interrupt = this->read_word(this->base + ONENAND_REG_INTERRUPT);
 	ctrl = this->read_word(this->base + ONENAND_REG_CTRL_STATUS);
 
+	/* Initial bad block case: 0x2400 or 0x0400 */
+	if (ctrl & ONENAND_CTRL_ERROR) {
+		printk(KERN_DEBUG "onenand_bbt_wait: controller error = 0x%04x\n", ctrl);
+		return ONENAND_BBT_READ_ERROR;
+	}
+
 	if (interrupt & ONENAND_INT_READ) {
 		int ecc = this->read_word(this->base + ONENAND_REG_ECC_STATUS);
-		if (ecc & ONENAND_ECC_2BIT_ALL) {
-			printk(KERN_INFO "onenand_bbt_wait: ecc error = 0x%04x"
-				", controller error 0x%04x\n", ecc, ctrl);
+		if (ecc & ONENAND_ECC_2BIT_ALL)
 			return ONENAND_BBT_READ_ERROR;
-		}
 	} else {
 		printk(KERN_ERR "onenand_bbt_wait: read timeout!"
 			"ctrl=0x%04x intr=0x%04x\n", ctrl, interrupt);
 		return ONENAND_BBT_READ_FATAL_ERROR;
-	}
-
-	/* Initial bad block case: 0x2400 or 0x0400 */
-	if (ctrl & ONENAND_CTRL_ERROR) {
-		printk(KERN_DEBUG "onenand_bbt_wait: "
-			"controller error = 0x%04x\n", ctrl);
-		return ONENAND_BBT_READ_ERROR;
 	}
 
 	return 0;
@@ -1772,7 +1776,7 @@ static int onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	int len;
 	int ret = 0;
 
-	DEBUG(MTD_DEBUG_LEVEL3, "onenand_erase: start = 0x%012llx, len = %llu\n", (unsigned long long) instr->addr, (unsigned long long) instr->len);
+	DEBUG(MTD_DEBUG_LEVEL3, "onenand_erase: start = 0x%08x, len = %i\n", (unsigned int) instr->addr, (unsigned int) instr->len);
 
 	block_size = (1 << this->erase_shift);
 
@@ -1794,7 +1798,7 @@ static int onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		return -EINVAL;
 	}
 
-	instr->fail_addr = MTD_FAIL_ADDR_UNKNOWN;
+	instr->fail_addr = 0xffffffff;
 
 	/* Grab the lock and see if the device is available */
 	onenand_get_device(mtd, FL_ERASING);
@@ -1810,7 +1814,7 @@ static int onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 
 		/* Check if we have a bad block, we do not erase bad blocks */
 		if (onenand_block_isbad_nolock(mtd, addr, 0)) {
-			printk (KERN_WARNING "onenand_erase: attempt to erase a bad block at addr 0x%012llx\n", (unsigned long long) addr);
+			printk (KERN_WARNING "onenand_erase: attempt to erase a bad block at addr 0x%08x\n", (unsigned int) addr);
 			instr->state = MTD_ERASE_FAILED;
 			goto erase_exit;
 		}
@@ -2029,7 +2033,7 @@ static int onenand_do_lock_cmd(struct mtd_info *mtd, loff_t ofs, size_t len, int
  *
  * Lock one or more blocks
  */
-static int onenand_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+static int onenand_lock(struct mtd_info *mtd, loff_t ofs, size_t len)
 {
 	int ret;
 
@@ -2047,7 +2051,7 @@ static int onenand_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
  *
  * Unlock one or more blocks
  */
-static int onenand_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+static int onenand_unlock(struct mtd_info *mtd, loff_t ofs, size_t len)
 {
 	int ret;
 

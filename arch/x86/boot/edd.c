@@ -41,7 +41,6 @@ static u32 read_mbr_sig(u8 devno, struct edd_info *ei, u32 *mbrsig)
 	char *mbrbuf_ptr, *mbrbuf_end;
 	u32 buf_base, mbr_base;
 	extern char _end[];
-	u16 mbr_magic;
 
 	sector_size = ei->params.bytes_per_sector;
 	if (!sector_size)
@@ -59,15 +58,11 @@ static u32 read_mbr_sig(u8 devno, struct edd_info *ei, u32 *mbrsig)
 	if (mbrbuf_end > (char *)(size_t)boot_params.hdr.heap_end_ptr)
 		return -1;
 
-	memset(mbrbuf_ptr, 0, sector_size);
 	if (read_mbr(devno, mbrbuf_ptr))
 		return -1;
 
 	*mbrsig = *(u32 *)&mbrbuf_ptr[EDD_MBR_SIG_OFFSET];
-	mbr_magic = *(u16 *)&mbrbuf_ptr[510];
-
-	/* check for valid MBR magic */
-	return mbr_magic == 0xAA55 ? 0 : -1;
+	return 0;
 }
 
 static int get_edd_info(u8 devno, struct edd_info *ei)
@@ -172,8 +167,9 @@ void query_edd(void)
 		 * Scan the BIOS-supported hard disks and query EDD
 		 * information...
 		 */
-		if (!get_edd_info(devno, &ei)
-		    && boot_params.eddbuf_entries < EDDMAXNR) {
+		get_edd_info(devno, &ei);
+
+		if (boot_params.eddbuf_entries < EDDMAXNR) {
 			memcpy(edp, &ei, sizeof ei);
 			edp++;
 			boot_params.eddbuf_entries++;

@@ -285,6 +285,7 @@ static const struct {
 };
 
 /* Local function prototypes */
+static void ati_remote_dump		(unsigned char *data, unsigned int actual_length);
 static int ati_remote_open		(struct input_dev *inputdev);
 static void ati_remote_close		(struct input_dev *inputdev);
 static int ati_remote_sendpacket	(struct ati_remote *ati_remote, u16 cmd, unsigned char *data);
@@ -306,16 +307,15 @@ static struct usb_driver ati_remote_driver = {
 /*
  *	ati_remote_dump_input
  */
-static void ati_remote_dump(struct device *dev, unsigned char *data,
-			    unsigned int len)
+static void ati_remote_dump(unsigned char *data, unsigned int len)
 {
 	if ((len == 1) && (data[0] != (unsigned char)0xff) && (data[0] != 0x00))
-		dev_warn(dev, "Weird byte 0x%02x\n", data[0]);
+		warn("Weird byte 0x%02x", data[0]);
 	else if (len == 4)
-		dev_warn(dev, "Weird key %02x %02x %02x %02x\n",
+		warn("Weird key %02x %02x %02x %02x",
 		     data[0], data[1], data[2], data[3]);
 	else
-		dev_warn(dev, "Weird data, len=%d %02x %02x %02x %02x %02x %02x ...\n",
+		warn("Weird data, len=%d %02x %02x %02x %02x %02x %02x ...",
 		     len, data[0], data[1], data[2], data[3], data[4], data[5]);
 }
 
@@ -330,7 +330,7 @@ static int ati_remote_open(struct input_dev *inputdev)
 	ati_remote->irq_urb->dev = ati_remote->udev;
 	if (usb_submit_urb(ati_remote->irq_urb, GFP_KERNEL)) {
 		dev_err(&ati_remote->interface->dev,
-			"%s: usb_submit_urb failed!\n", __func__);
+			"%s: usb_submit_urb failed!\n", __FUNCTION__);
 		return -EIO;
 	}
 
@@ -356,7 +356,7 @@ static void ati_remote_irq_out(struct urb *urb)
 
 	if (urb->status) {
 		dev_dbg(&ati_remote->interface->dev, "%s: status %d\n",
-			__func__, urb->status);
+			__FUNCTION__, urb->status);
 		return;
 	}
 
@@ -470,7 +470,7 @@ static void ati_remote_input_report(struct urb *urb)
 	/* Deal with strange looking inputs */
 	if ( (urb->actual_length != 4) || (data[0] != 0x14) ||
 		((data[3] & 0x0f) != 0x00) ) {
-		ati_remote_dump(&urb->dev->dev, data, urb->actual_length);
+		ati_remote_dump(data, urb->actual_length);
 		return;
 	}
 
@@ -601,17 +601,17 @@ static void ati_remote_irq_in(struct urb *urb)
 	case -ENOENT:
 	case -ESHUTDOWN:
 		dev_dbg(&ati_remote->interface->dev, "%s: urb error status, unlink? \n",
-			__func__);
+			__FUNCTION__);
 		return;
 	default:		/* error */
 		dev_dbg(&ati_remote->interface->dev, "%s: Nonzero urb status %d\n",
-			__func__, urb->status);
+			__FUNCTION__, urb->status);
 	}
 
 	retval = usb_submit_urb(urb, GFP_ATOMIC);
 	if (retval)
 		dev_err(&ati_remote->interface->dev, "%s: usb_submit_urb()=%d\n",
-			__func__, retval);
+			__FUNCTION__, retval);
 }
 
 /*
@@ -734,7 +734,7 @@ static int ati_remote_probe(struct usb_interface *interface, const struct usb_de
 	int err = -ENOMEM;
 
 	if (iface_host->desc.bNumEndpoints != 2) {
-		err("%s: Unexpected desc.bNumEndpoints\n", __func__);
+		err("%s: Unexpected desc.bNumEndpoints\n", __FUNCTION__);
 		return -ENODEV;
 	}
 
@@ -742,11 +742,11 @@ static int ati_remote_probe(struct usb_interface *interface, const struct usb_de
 	endpoint_out = &iface_host->endpoint[1].desc;
 
 	if (!usb_endpoint_is_int_in(endpoint_in)) {
-		err("%s: Unexpected endpoint_in\n", __func__);
+		err("%s: Unexpected endpoint_in\n", __FUNCTION__);
 		return -ENODEV;
 	}
 	if (le16_to_cpu(endpoint_in->wMaxPacketSize) == 0) {
-		err("%s: endpoint_in message size==0? \n", __func__);
+		err("%s: endpoint_in message size==0? \n", __FUNCTION__);
 		return -ENODEV;
 	}
 
@@ -814,7 +814,7 @@ static void ati_remote_disconnect(struct usb_interface *interface)
 	ati_remote = usb_get_intfdata(interface);
 	usb_set_intfdata(interface, NULL);
 	if (!ati_remote) {
-		dev_warn(&interface->dev, "%s - null device?\n", __func__);
+		warn("%s - null device?\n", __FUNCTION__);
 		return;
 	}
 
@@ -834,11 +834,9 @@ static int __init ati_remote_init(void)
 
 	result = usb_register(&ati_remote_driver);
 	if (result)
-		printk(KERN_ERR KBUILD_MODNAME
-		       ": usb_register error #%d\n", result);
+		err("usb_register error #%d\n", result);
 	else
-		printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-		       DRIVER_DESC "\n");
+		info("Registered USB driver " DRIVER_DESC " v. " DRIVER_VERSION);
 
 	return result;
 }

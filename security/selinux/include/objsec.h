@@ -44,6 +44,7 @@ struct inode_security_struct {
 	u16 sclass;		/* security class of this object */
 	unsigned char initialized;	/* initialization flag */
 	struct mutex lock;
+	unsigned char inherit;	/* inherit SID from parent entry */
 };
 
 struct file_security_struct {
@@ -77,6 +78,17 @@ struct ipc_security_struct {
 	u32 sid;	/* SID of IPC resource */
 };
 
+struct bprm_security_struct {
+	u32 sid;		/* SID for transformed process */
+	unsigned char set;
+
+	/*
+	 * unsafe is used to share failure information from bprm_apply_creds()
+	 * to bprm_post_apply_creds().
+	 */
+	char unsafe;
+};
+
 struct netif_security_struct {
 	int ifindex;			/* device index */
 	u32 sid;			/* SID for this interface */
@@ -98,19 +110,16 @@ struct netport_security_struct {
 };
 
 struct sk_security_struct {
+	u32 sid;			/* SID of this object */
+	u32 peer_sid;			/* SID of peer */
+	u16 sclass;			/* sock security class */
 #ifdef CONFIG_NETLABEL
 	enum {				/* NetLabel state */
 		NLBL_UNSET = 0,
 		NLBL_REQUIRE,
 		NLBL_LABELED,
-		NLBL_REQSKB,
-		NLBL_CONNLABELED,
 	} nlbl_state;
-	struct netlbl_lsm_secattr *nlbl_secattr; /* NetLabel sec attributes */
 #endif
-	u32 sid;			/* SID of this object */
-	u32 peer_sid;			/* SID of peer */
-	u16 sclass;			/* sock security class */
 };
 
 struct key_security_struct {

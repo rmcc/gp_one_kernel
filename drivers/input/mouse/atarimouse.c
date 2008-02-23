@@ -57,12 +57,15 @@ MODULE_AUTHOR("Michael Schmitz <schmitz@biophys.uni-duesseldorf.de>");
 MODULE_DESCRIPTION("Atari mouse driver");
 MODULE_LICENSE("GPL");
 
-static int mouse_threshold[2] = {2, 2};
-module_param_array(mouse_threshold, int, NULL, 0);
+static int mouse_threshold[2] = {2,2};
 
+#ifdef __MODULE__
+MODULE_PARM(mouse_threshold, "2i");
+#endif
 #ifdef FIXED_ATARI_JOYSTICK
 extern int atari_mouse_buttons;
 #endif
+static int atamouse_used = 0;
 
 static struct input_dev *atamouse_dev;
 
@@ -94,6 +97,9 @@ static void atamouse_interrupt(char *buf)
 
 static int atamouse_open(struct input_dev *dev)
 {
+	if (atamouse_used++)
+		return 0;
+
 #ifdef FIXED_ATARI_JOYSTICK
 	atari_mouse_buttons = 0;
 #endif
@@ -101,24 +107,23 @@ static int atamouse_open(struct input_dev *dev)
 	ikbd_mouse_thresh(mouse_threshold[0], mouse_threshold[1]);
 	ikbd_mouse_rel_pos();
 	atari_input_mouse_interrupt_hook = atamouse_interrupt;
-
 	return 0;
 }
 
 static void atamouse_close(struct input_dev *dev)
 {
-	ikbd_mouse_disable();
-	atari_mouse_interrupt_hook = NULL;
+	if (!--atamouse_used) {
+		ikbd_mouse_disable();
+		atari_mouse_interrupt_hook = NULL;
+	}
 }
 
 static int __init atamouse_init(void)
 {
-	int error;
-
 	if (!MACH_IS_ATARI || !ATARIHW_PRESENT(ST_MFP))
 		return -ENODEV;
 
-	if (!atari_keyb_init())
+	if (!(atari_keyb_init()))
 		return -ENODEV;
 
 	atamouse_dev = input_allocate_device();
@@ -136,14 +141,12 @@ static int __init atamouse_init(void)
 	atamouse_dev->relbit[0] = BIT_MASK(REL_X) | BIT_MASK(REL_Y);
 	atamouse_dev->keybit[BIT_WORD(BTN_LEFT)] = BIT_MASK(BTN_LEFT) |
 		BIT_MASK(BTN_MIDDLE) | BIT_MASK(BTN_RIGHT);
-
 	atamouse_dev->open = atamouse_open;
 	atamouse_dev->close = atamouse_close;
 
-	error = input_register_device(atamouse_dev);
-	if (error) {
+	if (input_register_device(atamouse_dev)) {
 		input_free_device(atamouse_dev);
-		return error;
+		return -ENOMEM;
 	}
 
 	return 0;

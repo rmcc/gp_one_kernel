@@ -14,7 +14,7 @@
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
-#include <linux/uaccess.h>
+#include <asm/uaccess.h>
 
 static int debug;
 

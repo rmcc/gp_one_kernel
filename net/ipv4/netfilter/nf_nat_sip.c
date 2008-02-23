@@ -74,7 +74,8 @@ static int map_addr(struct sk_buff *skb,
 	if (newaddr == addr->ip && newport == port)
 		return 1;
 
-	buflen = sprintf(buffer, "%pI4:%u", &newaddr, ntohs(newport));
+	buflen = sprintf(buffer, "%u.%u.%u.%u:%u",
+			 NIPQUAD(newaddr), ntohs(newport));
 
 	return mangle_packet(skb, dptr, datalen, matchoff, matchlen,
 			     buffer, buflen);
@@ -151,8 +152,8 @@ static unsigned int ip_nat_sip(struct sk_buff *skb,
 					       &addr) > 0 &&
 		    addr.ip == ct->tuplehash[dir].tuple.src.u3.ip &&
 		    addr.ip != ct->tuplehash[!dir].tuple.dst.u3.ip) {
-			buflen = sprintf(buffer, "%pI4",
-					&ct->tuplehash[!dir].tuple.dst.u3.ip);
+			__be32 ip = ct->tuplehash[!dir].tuple.dst.u3.ip;
+			buflen = sprintf(buffer, "%u.%u.%u.%u", NIPQUAD(ip));
 			if (!mangle_packet(skb, dptr, datalen, poff, plen,
 					   buffer, buflen))
 				return NF_DROP;
@@ -165,8 +166,8 @@ static unsigned int ip_nat_sip(struct sk_buff *skb,
 					       &addr) > 0 &&
 		    addr.ip == ct->tuplehash[dir].tuple.dst.u3.ip &&
 		    addr.ip != ct->tuplehash[!dir].tuple.src.u3.ip) {
-			buflen = sprintf(buffer, "%pI4",
-					&ct->tuplehash[!dir].tuple.src.u3.ip);
+			__be32 ip = ct->tuplehash[!dir].tuple.src.u3.ip;
+			buflen = sprintf(buffer, "%u.%u.%u.%u", NIPQUAD(ip));
 			if (!mangle_packet(skb, dptr, datalen, poff, plen,
 					   buffer, buflen))
 				return NF_DROP;
@@ -278,7 +279,8 @@ static unsigned int ip_nat_sip_expect(struct sk_buff *skb,
 
 	if (exp->tuple.dst.u3.ip != exp->saved_ip ||
 	    exp->tuple.dst.u.udp.port != exp->saved_proto.udp.port) {
-		buflen = sprintf(buffer, "%pI4:%u", &newip, port);
+		buflen = sprintf(buffer, "%u.%u.%u.%u:%u",
+				 NIPQUAD(newip), port);
 		if (!mangle_packet(skb, dptr, datalen, matchoff, matchlen,
 				   buffer, buflen))
 			goto err;
@@ -316,11 +318,11 @@ static int mangle_content_len(struct sk_buff *skb,
 			     buffer, buflen);
 }
 
-static int mangle_sdp_packet(struct sk_buff *skb, const char **dptr,
-			     unsigned int dataoff, unsigned int *datalen,
-			     enum sdp_header_types type,
-			     enum sdp_header_types term,
-			     char *buffer, int buflen)
+static unsigned mangle_sdp_packet(struct sk_buff *skb, const char **dptr,
+				  unsigned int dataoff, unsigned int *datalen,
+				  enum sdp_header_types type,
+				  enum sdp_header_types term,
+				  char *buffer, int buflen)
 {
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
@@ -328,9 +330,9 @@ static int mangle_sdp_packet(struct sk_buff *skb, const char **dptr,
 
 	if (ct_sip_get_sdp_header(ct, *dptr, dataoff, *datalen, type, term,
 				  &matchoff, &matchlen) <= 0)
-		return -ENOENT;
+		return 0;
 	return mangle_packet(skb, dptr, datalen, matchoff, matchlen,
-			     buffer, buflen) ? 0 : -EINVAL;
+			     buffer, buflen);
 }
 
 static unsigned int ip_nat_sdp_addr(struct sk_buff *skb, const char **dptr,
@@ -343,9 +345,9 @@ static unsigned int ip_nat_sdp_addr(struct sk_buff *skb, const char **dptr,
 	char buffer[sizeof("nnn.nnn.nnn.nnn")];
 	unsigned int buflen;
 
-	buflen = sprintf(buffer, "%pI4", &addr->ip);
-	if (mangle_sdp_packet(skb, dptr, dataoff, datalen, type, term,
-			      buffer, buflen))
+	buflen = sprintf(buffer, NIPQUAD_FMT, NIPQUAD(addr->ip));
+	if (!mangle_sdp_packet(skb, dptr, dataoff, datalen, type, term,
+			       buffer, buflen))
 		return 0;
 
 	return mangle_content_len(skb, dptr, datalen);
@@ -378,28 +380,16 @@ static unsigned int ip_nat_sdp_session(struct sk_buff *skb, const char **dptr,
 	unsigned int buflen;
 
 	/* Mangle session description owner and contact addresses */
-	buflen = sprintf(buffer, "%pI4", &addr->ip);
-	if (mangle_sdp_packet(skb, dptr, dataoff, datalen,
+	buflen = sprintf(buffer, "%u.%u.%u.%u", NIPQUAD(addr->ip));
+	if (!mangle_sdp_packet(skb, dptr, dataoff, datalen,
 			       SDP_HDR_OWNER_IP4, SDP_HDR_MEDIA,
 			       buffer, buflen))
 		return 0;
 
-	switch (mangle_sdp_packet(skb, dptr, dataoff, datalen,
-				  SDP_HDR_CONNECTION_IP4, SDP_HDR_MEDIA,
-				  buffer, buflen)) {
-	case 0:
-	/*
-	 * RFC 2327:
-	 *
-	 * Session description
-	 *
-	 * c=* (connection information - not required if included in all media)
-	 */
-	case -ENOENT:
-		break;
-	default:
+	if (!mangle_sdp_packet(skb, dptr, dataoff, datalen,
+			       SDP_HDR_CONNECTION_IP4, SDP_HDR_MEDIA,
+			       buffer, buflen))
 		return 0;
-	}
 
 	return mangle_content_len(skb, dptr, datalen);
 }

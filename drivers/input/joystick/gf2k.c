@@ -1,4 +1,6 @@
 /*
+ * $Id: gf2k.c,v 1.19 2002/01/22 20:27:43 vojtech Exp $
+ *
  *  Copyright (c) 1998-2001 Vojtech Pavlik
  */
 
@@ -375,7 +377,8 @@ static struct gameport_driver gf2k_drv = {
 
 static int __init gf2k_init(void)
 {
-	return gameport_register_driver(&gf2k_drv);
+	gameport_register_driver(&gf2k_drv);
+	return 0;
 }
 
 static void __exit gf2k_exit(void)

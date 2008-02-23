@@ -1,6 +1,8 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder.
  *
+ *	Version: $Id: ipip.c,v 1.50 2001/10/02 02:22:36 davem Exp $
+ *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
  *
@@ -41,7 +43,7 @@
 		Made the tunnels use dev->name not tunnel: when error reporting.
 		Added tx_dropped stat
 
-		-Alan Cox	(alan@lxorguk.ukuu.org.uk) 21 March 95
+		-Alan Cox	(Alan.Cox@linux.org) 21 March 95
 
 	Reworked:
 		Changed to tunnel to destination gateway in addition to the
@@ -130,8 +132,8 @@ struct ipip_net {
 	struct net_device *fb_tunnel_dev;
 };
 
-static void ipip_fb_tunnel_init(struct net_device *dev);
-static void ipip_tunnel_init(struct net_device *dev);
+static int ipip_fb_tunnel_init(struct net_device *dev);
+static int ipip_tunnel_init(struct net_device *dev);
 static void ipip_tunnel_setup(struct net_device *dev);
 
 static DEFINE_RWLOCK(ipip_lock);
@@ -245,9 +247,8 @@ static struct ip_tunnel * ipip_tunnel_locate(struct net *net,
 	}
 
 	nt = netdev_priv(dev);
+	dev->init = ipip_tunnel_init;
 	nt->parms = *parms;
-
-	ipip_tunnel_init(dev);
 
 	if (register_netdevice(dev) < 0)
 		goto failed_free;
@@ -282,7 +283,7 @@ static int ipip_err(struct sk_buff *skb, u32 info)
    8 bytes of packet payload. It means, that precise relaying of
    ICMP in the real Internet is absolutely infeasible.
  */
-	struct iphdr *iph = (struct iphdr *)skb->data;
+	struct iphdr *iph = (struct iphdr*)skb->data;
 	const int type = icmp_hdr(skb)->type;
 	const int code = icmp_hdr(skb)->code;
 	struct ip_tunnel *t;
@@ -367,8 +368,8 @@ static int ipip_rcv(struct sk_buff *skb)
 		skb->protocol = htons(ETH_P_IP);
 		skb->pkt_type = PACKET_HOST;
 
-		tunnel->dev->stats.rx_packets++;
-		tunnel->dev->stats.rx_bytes += skb->len;
+		tunnel->stat.rx_packets++;
+		tunnel->stat.rx_bytes += skb->len;
 		skb->dev = tunnel->dev;
 		dst_release(skb->dst);
 		skb->dst = NULL;
@@ -391,7 +392,7 @@ static int ipip_rcv(struct sk_buff *skb)
 static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
-	struct net_device_stats *stats = &tunnel->dev->stats;
+	struct net_device_stats *stats = &tunnel->stat;
 	struct iphdr  *tiph = &tunnel->parms.iph;
 	u8     tos = tunnel->parms.iph.tos;
 	__be16 df = tiph->frag_off;
@@ -404,7 +405,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	int    mtu;
 
 	if (tunnel->recursion++) {
-		stats->collisions++;
+		tunnel->stat.collisions++;
 		goto tx_error;
 	}
 
@@ -417,7 +418,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (!dst) {
 		/* NBMA tunnel */
 		if ((rt = skb->rtable) == NULL) {
-			stats->tx_fifo_errors++;
+			tunnel->stat.tx_fifo_errors++;
 			goto tx_error;
 		}
 		if ((dst = rt->rt_gateway) == 0)
@@ -432,7 +433,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 						.tos = RT_TOS(tos) } },
 				    .proto = IPPROTO_IPIP };
 		if (ip_route_output_key(dev_net(dev), &rt, &fl)) {
-			stats->tx_carrier_errors++;
+			tunnel->stat.tx_carrier_errors++;
 			goto tx_error_icmp;
 		}
 	}
@@ -440,7 +441,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (tdev == dev) {
 		ip_rt_put(rt);
-		stats->collisions++;
+		tunnel->stat.collisions++;
 		goto tx_error;
 	}
 
@@ -450,7 +451,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		mtu = skb->dst ? dst_mtu(skb->dst) : dev->mtu;
 
 	if (mtu < 68) {
-		stats->collisions++;
+		tunnel->stat.collisions++;
 		ip_rt_put(rt);
 		goto tx_error;
 	}
@@ -684,6 +685,11 @@ done:
 	return err;
 }
 
+static struct net_device_stats *ipip_tunnel_get_stats(struct net_device *dev)
+{
+	return &(((struct ip_tunnel*)netdev_priv(dev))->stat);
+}
+
 static int ipip_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if (new_mtu < 68 || new_mtu > 0xFFF8 - sizeof(struct iphdr))
@@ -692,17 +698,13 @@ static int ipip_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-static const struct net_device_ops ipip_netdev_ops = {
-	.ndo_uninit	= ipip_tunnel_uninit,
-	.ndo_start_xmit	= ipip_tunnel_xmit,
-	.ndo_do_ioctl	= ipip_tunnel_ioctl,
-	.ndo_change_mtu	= ipip_tunnel_change_mtu,
-
-};
-
 static void ipip_tunnel_setup(struct net_device *dev)
 {
-	dev->netdev_ops		= &ipip_netdev_ops;
+	dev->uninit		= ipip_tunnel_uninit;
+	dev->hard_start_xmit	= ipip_tunnel_xmit;
+	dev->get_stats		= ipip_tunnel_get_stats;
+	dev->do_ioctl		= ipip_tunnel_ioctl;
+	dev->change_mtu		= ipip_tunnel_change_mtu;
 	dev->destructor		= free_netdev;
 
 	dev->type		= ARPHRD_TUNNEL;
@@ -714,9 +716,11 @@ static void ipip_tunnel_setup(struct net_device *dev)
 	dev->features		|= NETIF_F_NETNS_LOCAL;
 }
 
-static void ipip_tunnel_init(struct net_device *dev)
+static int ipip_tunnel_init(struct net_device *dev)
 {
-	struct ip_tunnel *tunnel = netdev_priv(dev);
+	struct ip_tunnel *tunnel;
+
+	tunnel = netdev_priv(dev);
 
 	tunnel->dev = dev;
 	strcpy(tunnel->parms.name, dev->name);
@@ -725,9 +729,11 @@ static void ipip_tunnel_init(struct net_device *dev)
 	memcpy(dev->broadcast, &tunnel->parms.iph.daddr, 4);
 
 	ipip_tunnel_bind_dev(dev);
+
+	return 0;
 }
 
-static void ipip_fb_tunnel_init(struct net_device *dev)
+static int ipip_fb_tunnel_init(struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	struct iphdr *iph = &tunnel->parms.iph;
@@ -742,6 +748,7 @@ static void ipip_fb_tunnel_init(struct net_device *dev)
 
 	dev_hold(dev);
 	ipn->tunnels_wc[0]	= tunnel;
+	return 0;
 }
 
 static struct xfrm_tunnel ipip_handler = {
@@ -793,9 +800,9 @@ static int ipip_init_net(struct net *net)
 		err = -ENOMEM;
 		goto err_alloc_dev;
 	}
-	dev_net_set(ipn->fb_tunnel_dev, net);
 
-	ipip_fb_tunnel_init(ipn->fb_tunnel_dev);
+	ipn->fb_tunnel_dev->init = ipip_fb_tunnel_init;
+	dev_net_set(ipn->fb_tunnel_dev, net);
 
 	if ((err = register_netdev(ipn->fb_tunnel_dev)))
 		goto err_reg_dev;

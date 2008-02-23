@@ -7,15 +7,23 @@
  */
 #include <linux/clk.h>
 #include <linux/clockchips.h>
-#include <linux/init.h>
+#include <linux/time.h>
+#include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/kernel.h>
-#include <linux/time.h>
+#include <linux/kernel_stat.h>
+#include <linux/errno.h>
+#include <linux/init.h>
+#include <linux/profile.h>
+#include <linux/sysdev.h>
+#include <linux/err.h>
 
+#include <asm/div64.h>
 #include <asm/sysreg.h>
+#include <asm/io.h>
+#include <asm/sections.h>
 
-#include <mach/pm.h>
+#include <asm/arch/pm.h>
 
 
 static cycle_t read_cycle_count(void)
@@ -43,9 +51,6 @@ static irqreturn_t timer_interrupt(int irq, void *dev_id)
 {
 	struct clock_event_device *evdev = dev_id;
 
-	if (unlikely(!(intc_get_pending(0) & 1)))
-		return IRQ_NONE;
-
 	/*
 	 * Disable the interrupt until the clockevent subsystem
 	 * reprograms it.
@@ -58,8 +63,7 @@ static irqreturn_t timer_interrupt(int irq, void *dev_id)
 
 static struct irqaction timer_irqaction = {
 	.handler	= timer_interrupt,
-	/* Oprofile uses the same irq as the timer, so allow it to be shared */
-	.flags		= IRQF_TIMER | IRQF_DISABLED | IRQF_SHARED,
+	.flags		= IRQF_TIMER | IRQF_DISABLED,
 	.name		= "avr32_comparator",
 };
 
@@ -106,6 +110,7 @@ static struct clock_event_device comparator = {
 	.features	= CLOCK_EVT_FEAT_ONESHOT,
 	.shift		= 16,
 	.rating		= 50,
+	.cpumask	= CPU_MASK_CPU0,
 	.set_next_event	= comparator_next_event,
 	.set_mode	= comparator_mode,
 };
@@ -133,7 +138,6 @@ void __init time_init(void)
 	comparator.mult = div_sc(counter_hz, NSEC_PER_SEC, comparator.shift);
 	comparator.max_delta_ns = clockevent_delta2ns((u32)~0, &comparator);
 	comparator.min_delta_ns = clockevent_delta2ns(50, &comparator) + 1;
-	comparator.cpumask = cpumask_of(0);
 
 	sysreg_write(COMPARE, 0);
 	timer_irqaction.dev_id = &comparator;

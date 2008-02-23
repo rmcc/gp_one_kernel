@@ -11,7 +11,7 @@
 #undef DEBUG_PROCESS
 #ifdef DEBUG_PROCESS
 #define DPRINTK(fmt, args...)  printk("%s:%d:%s: " fmt, __FILE__, __LINE__, \
-  __func__, ##args)
+  __FUNCTION__, ##args)
 #else
 #define DPRINTK(fmt, args...)
 #endif
@@ -35,6 +35,8 @@
 
 #include <linux/err.h>
 
+static int hlt_counter=0;
+
 /*
  * Return saved PC of a blocked thread.
  */
@@ -46,16 +48,31 @@ unsigned long thread_saved_pc(struct task_struct *tsk)
 /*
  * Powermanagement idle function, if any..
  */
-static void (*pm_idle)(void) = NULL;
+void (*pm_idle)(void) = NULL;
+EXPORT_SYMBOL(pm_idle);
 
 void (*pm_power_off)(void) = NULL;
 EXPORT_SYMBOL(pm_power_off);
+
+void disable_hlt(void)
+{
+	hlt_counter++;
+}
+
+EXPORT_SYMBOL(disable_hlt);
+
+void enable_hlt(void)
+{
+	hlt_counter--;
+}
+
+EXPORT_SYMBOL(enable_hlt);
 
 /*
  * We use this is we don't have any better
  * idle routine..
  */
-static void default_idle(void)
+void default_idle(void)
 {
 	/* M32R_FIXME: Please use "cpu_sleep" mode.  */
 	cpu_relax();
@@ -241,6 +258,15 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long spu,
 	tsk->thread.lr = (unsigned long)ret_from_fork;
 
 	return 0;
+}
+
+/*
+ * Capture the user space registers if the task is not running (in user space)
+ */
+int dump_task_regs(struct task_struct *tsk, elf_gregset_t *regs)
+{
+	/* M32R_FIXME */
+	return 1;
 }
 
 asmlinkage int sys_fork(unsigned long r0, unsigned long r1, unsigned long r2,

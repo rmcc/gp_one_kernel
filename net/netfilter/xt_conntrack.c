@@ -25,9 +25,12 @@ MODULE_ALIAS("ipt_conntrack");
 MODULE_ALIAS("ip6t_conntrack");
 
 static bool
-conntrack_mt_v0(const struct sk_buff *skb, const struct xt_match_param *par)
+conntrack_mt_v0(const struct sk_buff *skb, const struct net_device *in,
+                const struct net_device *out, const struct xt_match *match,
+                const void *matchinfo, int offset, unsigned int protoff,
+                bool *hotdrop)
 {
-	const struct xt_conntrack_info *sinfo = par->matchinfo;
+	const struct xt_conntrack_info *sinfo = matchinfo;
 	const struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
 	unsigned int statebit;
@@ -118,9 +121,9 @@ conntrack_addrcmp(const union nf_inet_addr *kaddr,
                   const union nf_inet_addr *uaddr,
                   const union nf_inet_addr *umask, unsigned int l3proto)
 {
-	if (l3proto == NFPROTO_IPV4)
+	if (l3proto == AF_INET)
 		return ((kaddr->ip ^ uaddr->ip) & umask->ip) == 0;
-	else if (l3proto == NFPROTO_IPV6)
+	else if (l3proto == AF_INET6)
 		return ipv6_masked_addr_cmp(&kaddr->in6, &umask->in6,
 		       &uaddr->in6) == 0;
 	else
@@ -130,7 +133,7 @@ conntrack_addrcmp(const union nf_inet_addr *kaddr,
 static inline bool
 conntrack_mt_origsrc(const struct nf_conn *ct,
                      const struct xt_conntrack_mtinfo1 *info,
-		     u_int8_t family)
+                     unsigned int family)
 {
 	return conntrack_addrcmp(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3,
 	       &info->origsrc_addr, &info->origsrc_mask, family);
@@ -139,7 +142,7 @@ conntrack_mt_origsrc(const struct nf_conn *ct,
 static inline bool
 conntrack_mt_origdst(const struct nf_conn *ct,
                      const struct xt_conntrack_mtinfo1 *info,
-		     u_int8_t family)
+                     unsigned int family)
 {
 	return conntrack_addrcmp(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3,
 	       &info->origdst_addr, &info->origdst_mask, family);
@@ -148,7 +151,7 @@ conntrack_mt_origdst(const struct nf_conn *ct,
 static inline bool
 conntrack_mt_replsrc(const struct nf_conn *ct,
                      const struct xt_conntrack_mtinfo1 *info,
-		     u_int8_t family)
+                     unsigned int family)
 {
 	return conntrack_addrcmp(&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3,
 	       &info->replsrc_addr, &info->replsrc_mask, family);
@@ -157,7 +160,7 @@ conntrack_mt_replsrc(const struct nf_conn *ct,
 static inline bool
 conntrack_mt_repldst(const struct nf_conn *ct,
                      const struct xt_conntrack_mtinfo1 *info,
-		     u_int8_t family)
+                     unsigned int family)
 {
 	return conntrack_addrcmp(&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3,
 	       &info->repldst_addr, &info->repldst_mask, family);
@@ -202,9 +205,12 @@ ct_proto_port_check(const struct xt_conntrack_mtinfo1 *info,
 }
 
 static bool
-conntrack_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+conntrack_mt(const struct sk_buff *skb, const struct net_device *in,
+             const struct net_device *out, const struct xt_match *match,
+             const void *matchinfo, int offset, unsigned int protoff,
+             bool *hotdrop)
 {
-	const struct xt_conntrack_mtinfo1 *info = par->matchinfo;
+	const struct xt_conntrack_mtinfo1 *info = matchinfo;
 	enum ip_conntrack_info ctinfo;
 	const struct nf_conn *ct;
 	unsigned int statebit;
@@ -238,22 +244,22 @@ conntrack_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		return false;
 
 	if (info->match_flags & XT_CONNTRACK_ORIGSRC)
-		if (conntrack_mt_origsrc(ct, info, par->family) ^
+		if (conntrack_mt_origsrc(ct, info, match->family) ^
 		    !(info->invert_flags & XT_CONNTRACK_ORIGSRC))
 			return false;
 
 	if (info->match_flags & XT_CONNTRACK_ORIGDST)
-		if (conntrack_mt_origdst(ct, info, par->family) ^
+		if (conntrack_mt_origdst(ct, info, match->family) ^
 		    !(info->invert_flags & XT_CONNTRACK_ORIGDST))
 			return false;
 
 	if (info->match_flags & XT_CONNTRACK_REPLSRC)
-		if (conntrack_mt_replsrc(ct, info, par->family) ^
+		if (conntrack_mt_replsrc(ct, info, match->family) ^
 		    !(info->invert_flags & XT_CONNTRACK_REPLSRC))
 			return false;
 
 	if (info->match_flags & XT_CONNTRACK_REPLDST)
-		if (conntrack_mt_repldst(ct, info, par->family) ^
+		if (conntrack_mt_repldst(ct, info, match->family) ^
 		    !(info->invert_flags & XT_CONNTRACK_REPLDST))
 			return false;
 
@@ -278,19 +284,23 @@ conntrack_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 	return true;
 }
 
-static bool conntrack_mt_check(const struct xt_mtchk_param *par)
+static bool
+conntrack_mt_check(const char *tablename, const void *ip,
+                   const struct xt_match *match, void *matchinfo,
+                   unsigned int hook_mask)
 {
-	if (nf_ct_l3proto_try_module_get(par->family) < 0) {
+	if (nf_ct_l3proto_try_module_get(match->family) < 0) {
 		printk(KERN_WARNING "can't load conntrack support for "
-				    "proto=%u\n", par->family);
+				    "proto=%u\n", match->family);
 		return false;
 	}
 	return true;
 }
 
-static void conntrack_mt_destroy(const struct xt_mtdtor_param *par)
+static void
+conntrack_mt_destroy(const struct xt_match *match, void *matchinfo)
 {
-	nf_ct_l3proto_module_put(par->family);
+	nf_ct_l3proto_module_put(match->family);
 }
 
 #ifdef CONFIG_COMPAT
@@ -346,7 +356,7 @@ static struct xt_match conntrack_mt_reg[] __read_mostly = {
 	{
 		.name       = "conntrack",
 		.revision   = 0,
-		.family     = NFPROTO_IPV4,
+		.family     = AF_INET,
 		.match      = conntrack_mt_v0,
 		.checkentry = conntrack_mt_check,
 		.destroy    = conntrack_mt_destroy,
@@ -361,7 +371,17 @@ static struct xt_match conntrack_mt_reg[] __read_mostly = {
 	{
 		.name       = "conntrack",
 		.revision   = 1,
-		.family     = NFPROTO_UNSPEC,
+		.family     = AF_INET,
+		.matchsize  = sizeof(struct xt_conntrack_mtinfo1),
+		.match      = conntrack_mt,
+		.checkentry = conntrack_mt_check,
+		.destroy    = conntrack_mt_destroy,
+		.me         = THIS_MODULE,
+	},
+	{
+		.name       = "conntrack",
+		.revision   = 1,
+		.family     = AF_INET6,
 		.matchsize  = sizeof(struct xt_conntrack_mtinfo1),
 		.match      = conntrack_mt,
 		.checkentry = conntrack_mt_check,

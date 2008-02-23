@@ -2,6 +2,7 @@
 # arch/cris/arch-v10/boot/Makefile
 #
 
+OBJCOPY = objcopy-cris
 OBJCOPYFLAGS = -O binary --remove-section=.bss
 
 subdir- := compressed rescue

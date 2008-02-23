@@ -52,8 +52,8 @@
 #include <linux/module.h>
 #include <linux/rwsem.h>
 #include <linux/usb/input.h>
-#include <linux/map_to_7segment.h>
 
+#include "map_to_7segment.h"
 #include "yealink.h"
 
 #define DRIVER_VERSION "yld-20051230"
@@ -118,8 +118,6 @@ struct yealink_dev {
 
 	u8 lcdMap[ARRAY_SIZE(lcdMap)];	/* state of LCD, LED ... */
 	int key_code;			/* last reported key	 */
-
-	unsigned int shutdown:1;
 
 	int	stat_ix;
 	union {
@@ -426,10 +424,10 @@ send_update:
 static void urb_irq_callback(struct urb *urb)
 {
 	struct yealink_dev *yld = urb->context;
-	int ret, status = urb->status;
+	int ret;
 
-	if (status)
-		err("%s - urb status %d", __func__, status);
+	if (urb->status)
+		err("%s - urb status %d", __FUNCTION__, urb->status);
 
 	switch (yld->irq_data->cmd) {
 	case CMD_KEYPRESS:
@@ -449,38 +447,33 @@ static void urb_irq_callback(struct urb *urb)
 
 	yealink_do_idle_tasks(yld);
 
-	if (!yld->shutdown) {
-		ret = usb_submit_urb(yld->urb_ctl, GFP_ATOMIC);
-		if (ret && ret != -EPERM)
-			err("%s - usb_submit_urb failed %d", __func__, ret);
-	}
+	ret = usb_submit_urb(yld->urb_ctl, GFP_ATOMIC);
+	if (ret)
+		err("%s - usb_submit_urb failed %d", __FUNCTION__, ret);
 }
 
 static void urb_ctl_callback(struct urb *urb)
 {
 	struct yealink_dev *yld = urb->context;
-	int ret = 0, status = urb->status;
+	int ret;
 
-	if (status)
-		err("%s - urb status %d", __func__, status);
+	if (urb->status)
+		err("%s - urb status %d", __FUNCTION__, urb->status);
 
 	switch (yld->ctl_data->cmd) {
 	case CMD_KEYPRESS:
 	case CMD_SCANCODE:
 		/* ask for a response */
-		if (!yld->shutdown)
-			ret = usb_submit_urb(yld->urb_irq, GFP_ATOMIC);
+		ret = usb_submit_urb(yld->urb_irq, GFP_ATOMIC);
 		break;
 	default:
 		/* send new command */
 		yealink_do_idle_tasks(yld);
-		if (!yld->shutdown)
-			ret = usb_submit_urb(yld->urb_ctl, GFP_ATOMIC);
-		break;
+		ret = usb_submit_urb(yld->urb_ctl, GFP_ATOMIC);
 	}
 
-	if (ret && ret != -EPERM)
-		err("%s - usb_submit_urb failed %d", __func__, ret);
+	if (ret)
+		err("%s - usb_submit_urb failed %d", __FUNCTION__, ret);
 }
 
 /*******************************************************************************
@@ -512,7 +505,7 @@ static int input_open(struct input_dev *dev)
 	struct yealink_dev *yld = input_get_drvdata(dev);
 	int i, ret;
 
-	dbg("%s", __func__);
+	dbg("%s", __FUNCTION__);
 
 	/* force updates to device */
 	for (i = 0; i<sizeof(yld->master); i++)
@@ -528,7 +521,7 @@ static int input_open(struct input_dev *dev)
 	yld->ctl_data->sum	= 0x100-CMD_INIT-10;
 	if ((ret = usb_submit_urb(yld->urb_ctl, GFP_KERNEL)) != 0) {
 		dbg("%s - usb_submit_urb failed with result %d",
-		     __func__, ret);
+		     __FUNCTION__, ret);
 		return ret;
 	}
 	return 0;
@@ -538,18 +531,8 @@ static void input_close(struct input_dev *dev)
 {
 	struct yealink_dev *yld = input_get_drvdata(dev);
 
-	yld->shutdown = 1;
-	/*
-	 * Make sure the flag is seen by other CPUs before we start
-	 * killing URBs so new URBs won't be submitted
-	 */
-	smp_wmb();
-
 	usb_kill_urb(yld->urb_ctl);
 	usb_kill_urb(yld->urb_irq);
-
-	yld->shutdown = 0;
-	smp_wmb();
 }
 
 /*******************************************************************************
@@ -826,6 +809,9 @@ static int usb_cleanup(struct yealink_dev *yld, int err)
 	if (yld == NULL)
 		return err;
 
+	usb_kill_urb(yld->urb_irq);	/* parameter validation in core/urb */
+	usb_kill_urb(yld->urb_ctl);	/* parameter validation in core/urb */
+
         if (yld->idev) {
 		if (err)
 			input_free_device(yld->idev);
@@ -999,8 +985,7 @@ static int __init yealink_dev_init(void)
 {
 	int ret = usb_register(&yealink_driver);
 	if (ret == 0)
-		printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-		       DRIVER_DESC "\n");
+		info(DRIVER_DESC ":" DRIVER_VERSION);
 	return ret;
 }
 

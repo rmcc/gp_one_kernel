@@ -60,6 +60,8 @@
  *
  */
 
+#include <linux/version.h>
+
 /* MAX_INTR - the maximum number of times we can loop
  * inside the interrupt function before returning
  * control to the OS (maximum value is 256)

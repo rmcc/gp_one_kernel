@@ -39,6 +39,10 @@
 #include <asm/io.h>
 #include <linux/mutex.h>
 
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
+#endif
+
 #include "cpia.h"
 
 static int video_nr = -1;
@@ -1347,7 +1351,7 @@ static void create_proc_cpia_cam(struct cam_data *cam)
 	if (!cpia_proc_root || !cam)
 		return;
 
-	snprintf(name, sizeof(name), "video%d", cam->vdev.num);
+	snprintf(name, sizeof(name), "video%d", cam->vdev.minor);
 
 	ent = create_proc_entry(name, S_IFREG|S_IRUGO|S_IWUSR, cpia_proc_root);
 	if (!ent)
@@ -1372,7 +1376,7 @@ static void destroy_proc_cpia_cam(struct cam_data *cam)
 	if (!cam || !cam->proc_entry)
 		return;
 
-	snprintf(name, sizeof(name), "video%d", cam->vdev.num);
+	snprintf(name, sizeof(name), "video%d", cam->vdev.minor);
 	remove_proc_entry(name, cpia_proc_root);
 	cam->proc_entry = NULL;
 }
@@ -3148,10 +3152,10 @@ static void put_cam(struct cpia_camera_ops* ops)
 }
 
 /* ------------------------- V4L interface --------------------- */
-static int cpia_open(struct file *file)
+static int cpia_open(struct inode *inode, struct file *file)
 {
 	struct video_device *dev = video_devdata(file);
-	struct cam_data *cam = video_get_drvdata(dev);
+	struct cam_data *cam = dev->priv;
 	int err;
 
 	if (!cam) {
@@ -3198,7 +3202,7 @@ static int cpia_open(struct file *file)
 
 	/* Set ownership of /proc/cpia/videoX to current user */
 	if(cam->proc_entry)
-		cam->proc_entry->uid = current_uid();
+		cam->proc_entry->uid = current->uid;
 
 	/* set mark for loading first frame uncompressed */
 	cam->first_frame = 1;
@@ -3225,10 +3229,10 @@ static int cpia_open(struct file *file)
 	return err;
 }
 
-static int cpia_close(struct file *file)
+static int cpia_close(struct inode *inode, struct file *file)
 {
 	struct  video_device *dev = file->private_data;
-	struct cam_data *cam = video_get_drvdata(dev);
+	struct cam_data *cam = dev->priv;
 
 	if (cam->ops) {
 		/* Return ownership of /proc/cpia/videoX to root */
@@ -3280,7 +3284,7 @@ static ssize_t cpia_read(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	struct video_device *dev = file->private_data;
-	struct cam_data *cam = video_get_drvdata(dev);
+	struct cam_data *cam = dev->priv;
 	int err;
 
 	/* make this _really_ smp and multithread-safe */
@@ -3333,10 +3337,11 @@ static ssize_t cpia_read(struct file *file, char __user *buf,
 	return cam->decompressed_frame.count;
 }
 
-static long cpia_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+static int cpia_do_ioctl(struct inode *inode, struct file *file,
+			 unsigned int ioctlnr, void *arg)
 {
 	struct video_device *dev = file->private_data;
-	struct cam_data *cam = video_get_drvdata(dev);
+	struct cam_data *cam = dev->priv;
 	int retval = 0;
 
 	if (!cam || !cam->ops)
@@ -3346,9 +3351,9 @@ static long cpia_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	if (mutex_lock_interruptible(&cam->busy_lock))
 		return -EINTR;
 
-	/* DBG("cpia_ioctl: %u\n", cmd); */
+	//DBG("cpia_ioctl: %u\n", ioctlnr);
 
-	switch (cmd) {
+	switch (ioctlnr) {
 	/* query capabilities */
 	case VIDIOCGCAP:
 	{
@@ -3720,10 +3725,10 @@ static long cpia_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	return retval;
 }
 
-static long cpia_ioctl(struct file *file,
+static int cpia_ioctl(struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg)
 {
-	return video_usercopy(file, cmd, arg, cpia_do_ioctl);
+	return video_usercopy(inode, file, cmd, arg, cpia_do_ioctl);
 }
 
 
@@ -3734,7 +3739,7 @@ static int cpia_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long start = vma->vm_start;
 	unsigned long size  = vma->vm_end - vma->vm_start;
 	unsigned long page, pos;
-	struct cam_data *cam = video_get_drvdata(dev);
+	struct cam_data *cam = dev->priv;
 	int retval;
 
 	if (!cam || !cam->ops)
@@ -3780,19 +3785,24 @@ static int cpia_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static const struct v4l2_file_operations cpia_fops = {
+static const struct file_operations cpia_fops = {
 	.owner		= THIS_MODULE,
 	.open		= cpia_open,
 	.release       	= cpia_close,
 	.read		= cpia_read,
 	.mmap		= cpia_mmap,
 	.ioctl          = cpia_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
 static struct video_device cpia_template = {
+	.owner		= THIS_MODULE,
 	.name		= "CPiA Camera",
+	.type		= VID_TYPE_CAPTURE,
 	.fops           = &cpia_fops,
-	.release 	= video_device_release_empty,
 };
 
 /* initialise cam_data structure  */
@@ -3920,7 +3930,7 @@ static void init_camera_struct(struct cam_data *cam,
 	cam->proc_entry = NULL;
 
 	memcpy(&cam->vdev, &cpia_template, sizeof(cpia_template));
-	video_set_drvdata(&cam->vdev, cam);
+	cam->vdev.priv = cam;
 
 	cam->curframe = 0;
 	for (i = 0; i < FRAME_NUM; i++) {
@@ -3947,7 +3957,7 @@ struct cam_data *cpia_register_camera(struct cpia_camera_ops *ops, void *lowleve
 	camera->lowlevel_data = lowlevel;
 
 	/* register v4l device */
-	if (video_register_device(&camera->vdev, VFL_TYPE_GRABBER, video_nr) < 0) {
+	if (video_register_device(&camera->vdev, VFL_TYPE_GRABBER, video_nr) == -1) {
 		kfree(camera);
 		printk(KERN_DEBUG "video_register_device failed\n");
 		return NULL;
@@ -4000,7 +4010,7 @@ void cpia_unregister_camera(struct cam_data *cam)
 	}
 
 #ifdef CONFIG_PROC_FS
-	DBG("destroying /proc/cpia/video%d\n", cam->vdev.num);
+	DBG("destroying /proc/cpia/video%d\n", cam->vdev.minor);
 	destroy_proc_cpia_cam(cam);
 #endif
 	if (!cam->open_count) {

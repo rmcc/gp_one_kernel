@@ -239,8 +239,7 @@ int mls_context_isvalid(struct policydb *p, struct context *c)
  * Policy read-lock must be held for sidtab lookup.
  *
  */
-int mls_context_to_sid(struct policydb *pol,
-		       char oldc,
+int mls_context_to_sid(char oldc,
 		       char **scontext,
 		       struct context *context,
 		       struct sidtab *s,
@@ -283,11 +282,11 @@ int mls_context_to_sid(struct policydb *pol,
 		p++;
 
 	delim = *p;
-	if (delim != '\0')
-		*p++ = '\0';
+	if (delim != 0)
+		*p++ = 0;
 
 	for (l = 0; l < 2; l++) {
-		levdatum = hashtab_search(pol->p_levels.table, scontextp);
+		levdatum = hashtab_search(policydb.p_levels.table, scontextp);
 		if (!levdatum) {
 			rc = -EINVAL;
 			goto out;
@@ -302,17 +301,17 @@ int mls_context_to_sid(struct policydb *pol,
 				while (*p && *p != ',' && *p != '-')
 					p++;
 				delim = *p;
-				if (delim != '\0')
-					*p++ = '\0';
+				if (delim != 0)
+					*p++ = 0;
 
 				/* Separate into range if exists */
 				rngptr = strchr(scontextp, '.');
 				if (rngptr != NULL) {
 					/* Remove '.' */
-					*rngptr++ = '\0';
+					*rngptr++ = 0;
 				}
 
-				catdatum = hashtab_search(pol->p_cats.table,
+				catdatum = hashtab_search(policydb.p_cats.table,
 							  scontextp);
 				if (!catdatum) {
 					rc = -EINVAL;
@@ -328,7 +327,7 @@ int mls_context_to_sid(struct policydb *pol,
 				if (rngptr) {
 					int i;
 
-					rngdatum = hashtab_search(pol->p_cats.table, rngptr);
+					rngdatum = hashtab_search(policydb.p_cats.table, rngptr);
 					if (!rngdatum) {
 						rc = -EINVAL;
 						goto out;
@@ -357,8 +356,8 @@ int mls_context_to_sid(struct policydb *pol,
 				p++;
 
 			delim = *p;
-			if (delim != '\0')
-				*p++ = '\0';
+			if (delim != 0)
+				*p++ = 0;
 		} else
 			break;
 	}
@@ -396,7 +395,7 @@ int mls_from_string(char *str, struct context *context, gfp_t gfp_mask)
 	if (!tmpstr) {
 		rc = -ENOMEM;
 	} else {
-		rc = mls_context_to_sid(&policydb, ':', &tmpstr, context,
+		rc = mls_context_to_sid(':', &tmpstr, context,
 					NULL, SECSID_NULL);
 		kfree(freestr);
 	}
@@ -437,13 +436,13 @@ int mls_setup_user_range(struct context *fromcon, struct user_datum *user,
 		struct mls_level *usercon_clr = &(usercon->range.level[1]);
 
 		/* Honor the user's default level if we can */
-		if (mls_level_between(user_def, fromcon_sen, fromcon_clr))
+		if (mls_level_between(user_def, fromcon_sen, fromcon_clr)) {
 			*usercon_sen = *user_def;
-		else if (mls_level_between(fromcon_sen, user_def, user_clr))
+		} else if (mls_level_between(fromcon_sen, user_def, user_clr)) {
 			*usercon_sen = *fromcon_sen;
-		else if (mls_level_between(fromcon_clr, user_low, user_def))
+		} else if (mls_level_between(fromcon_clr, user_low, user_def)) {
 			*usercon_sen = *user_low;
-		else
+		} else
 			return -EINVAL;
 
 		/* Lower the clearance of available contexts

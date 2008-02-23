@@ -10,6 +10,7 @@
 #include <linux/init.h>
 
 #include <asm/openprom.h>
+#include <asm/sun4prom.h>
 #include <asm/oplib.h>
 #include <asm/page.h>
 
@@ -45,6 +46,15 @@ static int __init prom_meminit_v2(void)
 	return num_ents;
 }
 
+static int __init prom_meminit_sun4(void)
+{
+#ifdef CONFIG_SUN4
+	sp_banks[0].base_addr = 0;
+	sp_banks[0].num_bytes = *(sun4_romvec->memoryavail);
+#endif
+	return 1;
+}
+
 static int sp_banks_cmp(const void *a, const void *b)
 {
 	const struct sparc_phys_banks *x = a, *y = b;
@@ -69,6 +79,10 @@ void __init prom_meminit(void)
 	case PROM_V2:
 	case PROM_V3:
 		num_ents = prom_meminit_v2();
+		break;
+
+	case PROM_SUN4:
+		num_ents = prom_meminit_sun4();
 		break;
 
 	default:

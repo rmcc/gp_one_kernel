@@ -60,16 +60,14 @@ static int dsmark_graft(struct Qdisc *sch, unsigned long arg,
 		sch, p, new, old);
 
 	if (new == NULL) {
-		new = qdisc_create_dflt(qdisc_dev(sch), sch->dev_queue,
-					&pfifo_qdisc_ops,
+		new = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops,
 					sch->handle);
 		if (new == NULL)
 			new = &noop_qdisc;
 	}
 
 	sch_tree_lock(sch);
-	*old = p->q;
-	p->q = new;
+	*old = xchg(&p->q, new);
 	qdisc_tree_decrease_qlen(*old, (*old)->q.qlen);
 	qdisc_reset(*old);
 	sch_tree_unlock(sch);
@@ -203,7 +201,7 @@ static int dsmark_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 
 	if (p->set_tc_index) {
 		switch (skb->protocol) {
-		case htons(ETH_P_IP):
+		case __constant_htons(ETH_P_IP):
 			if (skb_cow_head(skb, sizeof(struct iphdr)))
 				goto drop;
 
@@ -211,7 +209,7 @@ static int dsmark_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 				& ~INET_ECN_MASK;
 			break;
 
-		case htons(ETH_P_IPV6):
+		case __constant_htons(ETH_P_IPV6):
 			if (skb_cow_head(skb, sizeof(struct ipv6hdr)))
 				goto drop;
 
@@ -237,7 +235,7 @@ static int dsmark_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 		case TC_ACT_QUEUED:
 		case TC_ACT_STOLEN:
 			kfree_skb(skb);
-			return NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
+			return NET_XMIT_SUCCESS;
 
 		case TC_ACT_SHOT:
 			goto drop;
@@ -253,14 +251,13 @@ static int dsmark_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 		}
 	}
 
-	err = qdisc_enqueue(skb, p->q);
+	err = p->q->enqueue(skb, p->q);
 	if (err != NET_XMIT_SUCCESS) {
-		if (net_xmit_drop_count(err))
-			sch->qstats.drops++;
+		sch->qstats.drops++;
 		return err;
 	}
 
-	sch->bstats.bytes += qdisc_pkt_len(skb);
+	sch->bstats.bytes += skb->len;
 	sch->bstats.packets++;
 	sch->q.qlen++;
 
@@ -269,7 +266,7 @@ static int dsmark_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 drop:
 	kfree_skb(skb);
 	sch->qstats.drops++;
-	return NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
+	return NET_XMIT_BYPASS;
 }
 
 static struct sk_buff *dsmark_dequeue(struct Qdisc *sch)
@@ -290,11 +287,11 @@ static struct sk_buff *dsmark_dequeue(struct Qdisc *sch)
 	pr_debug("index %d->%d\n", skb->tc_index, index);
 
 	switch (skb->protocol) {
-	case htons(ETH_P_IP):
+	case __constant_htons(ETH_P_IP):
 		ipv4_change_dsfield(ip_hdr(skb), p->mask[index],
 				    p->value[index]);
 			break;
-	case htons(ETH_P_IPV6):
+	case __constant_htons(ETH_P_IPV6):
 		ipv6_change_dsfield(ipv6_hdr(skb), p->mask[index],
 				    p->value[index]);
 			break;
@@ -314,13 +311,23 @@ static struct sk_buff *dsmark_dequeue(struct Qdisc *sch)
 	return skb;
 }
 
-static struct sk_buff *dsmark_peek(struct Qdisc *sch)
+static int dsmark_requeue(struct sk_buff *skb, struct Qdisc *sch)
 {
 	struct dsmark_qdisc_data *p = qdisc_priv(sch);
+	int err;
 
-	pr_debug("dsmark_peek(sch %p,[qdisc %p])\n", sch, p);
+	pr_debug("dsmark_requeue(skb %p,sch %p,[qdisc %p])\n", skb, sch, p);
 
-	return p->q->ops->peek(p->q);
+	err = p->q->ops->requeue(skb, p->q);
+	if (err != NET_XMIT_SUCCESS) {
+		sch->qstats.drops++;
+		return err;
+	}
+
+	sch->q.qlen++;
+	sch->qstats.requeues++;
+
+	return NET_XMIT_SUCCESS;
 }
 
 static unsigned int dsmark_drop(struct Qdisc *sch)
@@ -383,8 +390,7 @@ static int dsmark_init(struct Qdisc *sch, struct nlattr *opt)
 	p->default_index = default_index;
 	p->set_tc_index = nla_get_flag(tb[TCA_DSMARK_SET_TC_INDEX]);
 
-	p->q = qdisc_create_dflt(qdisc_dev(sch), sch->dev_queue,
-				 &pfifo_qdisc_ops, sch->handle);
+	p->q = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops, sch->handle);
 	if (p->q == NULL)
 		p->q = &noop_qdisc;
 
@@ -410,7 +416,7 @@ static void dsmark_destroy(struct Qdisc *sch)
 
 	pr_debug("dsmark_destroy(sch %p,[qdisc %p])\n", sch, p);
 
-	tcf_destroy_chain(&p->filter_list);
+	tcf_destroy_chain(p->filter_list);
 	qdisc_destroy(p->q);
 	kfree(p->mask);
 }
@@ -438,8 +444,7 @@ static int dsmark_dump_class(struct Qdisc *sch, unsigned long cl,
 	return nla_nest_end(skb, opts);
 
 nla_put_failure:
-	nla_nest_cancel(skb, opts);
-	return -EMSGSIZE;
+	return nla_nest_cancel(skb, opts);
 }
 
 static int dsmark_dump(struct Qdisc *sch, struct sk_buff *skb)
@@ -461,8 +466,7 @@ static int dsmark_dump(struct Qdisc *sch, struct sk_buff *skb)
 	return nla_nest_end(skb, opts);
 
 nla_put_failure:
-	nla_nest_cancel(skb, opts);
-	return -EMSGSIZE;
+	return nla_nest_cancel(skb, opts);
 }
 
 static const struct Qdisc_class_ops dsmark_class_ops = {
@@ -486,7 +490,7 @@ static struct Qdisc_ops dsmark_qdisc_ops __read_mostly = {
 	.priv_size	=	sizeof(struct dsmark_qdisc_data),
 	.enqueue	=	dsmark_enqueue,
 	.dequeue	=	dsmark_dequeue,
-	.peek		=	dsmark_peek,
+	.requeue	=	dsmark_requeue,
 	.drop		=	dsmark_drop,
 	.init		=	dsmark_init,
 	.reset		=	dsmark_reset,

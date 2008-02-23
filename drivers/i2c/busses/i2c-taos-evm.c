@@ -96,8 +96,9 @@ static int taos_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
 			sprintf(p, "$%02X", command);
 		break;
 	default:
-		dev_warn(&adapter->dev, "Unsupported transaction %d\n", size);
-		return -EOPNOTSUPP;
+		dev_dbg(&adapter->dev, "Unsupported transaction size %d\n",
+			size);
+		return -EINVAL;
 	}
 
 	/* Send the transaction to the TAOS EVM */

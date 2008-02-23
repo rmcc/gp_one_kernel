@@ -1,7 +1,7 @@
 /*
  *    pata_sis.c - SiS ATA driver
  *
- *	(C) 2005 Red Hat
+ *	(C) 2005 Red Hat <alan@redhat.com>
  *	(C) 2007 Bartlomiej Zolnierkiewicz
  *
  *    Based upon linux/drivers/ide/pci/sis5513.c
@@ -112,6 +112,7 @@ static int sis_133_cable_detect(struct ata_port *ap)
 /**
  *	sis_66_cable_detect	-	check for 40/80 pin
  *	@ap: Port
+ *	@deadline: deadline jiffies for the operation
  *
  *	Perform cable detection on the UDMA66, UDMA100 and early UDMA133
  *	SiS IDE controllers.

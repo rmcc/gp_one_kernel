@@ -98,10 +98,11 @@ void __init plat_mem_setup(void)
 {
 	extern void wrppmc_machine_restart(char *command);
 	extern void wrppmc_machine_halt(void);
+	extern void wrppmc_machine_power_off(void);
 
 	_machine_restart = wrppmc_machine_restart;
 	_machine_halt	 = wrppmc_machine_halt;
-	pm_power_off	 = wrppmc_machine_halt;
+	pm_power_off	 = wrppmc_machine_power_off;
 
 	/* This makes the operations of 'in/out[bwl]' to the
 	 * physical address ( < KSEG0) can work via KSEG1

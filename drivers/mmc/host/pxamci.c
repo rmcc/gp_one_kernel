@@ -26,14 +26,13 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/mmc/host.h>
-#include <linux/io.h>
 
+#include <asm/dma.h>
+#include <asm/io.h>
 #include <asm/sizes.h>
 
-#include <mach/dma.h>
-#include <mach/hardware.h>
-#include <mach/pxa-regs.h>
-#include <mach/mmc.h>
+#include <asm/arch/pxa-regs.h>
+#include <asm/arch/mmc.h>
 
 #include "pxamci.h"
 
@@ -115,7 +114,6 @@ static void pxamci_setup_data(struct pxamci_host *host, struct mmc_data *data)
 	unsigned int nob = data->blocks;
 	unsigned long long clks;
 	unsigned int timeout;
-	bool dalgn = 0;
 	u32 dcmd;
 	int i;
 
@@ -154,9 +152,6 @@ static void pxamci_setup_data(struct pxamci_host *host, struct mmc_data *data)
 		host->sg_cpu[i].dcmd = dcmd | length;
 		if (length & 31 && !(data->flags & MMC_DATA_READ))
 			host->sg_cpu[i].dcmd |= DCMD_ENDIRQEN;
-		/* Not aligned to 8-byte boundary? */
-		if (sg_dma_address(&data->sg[i]) & 0x7)
-			dalgn = 1;
 		if (data->flags & MMC_DATA_READ) {
 			host->sg_cpu[i].dsadr = host->res->start + MMC_RXFIFO;
 			host->sg_cpu[i].dtadr = sg_dma_address(&data->sg[i]);
@@ -170,15 +165,6 @@ static void pxamci_setup_data(struct pxamci_host *host, struct mmc_data *data)
 	host->sg_cpu[host->dma_len - 1].ddadr = DDADR_STOP;
 	wmb();
 
-	/*
-	 * The PXA27x DMA controller encounters overhead when working with
-	 * unaligned (to 8-byte boundaries) data, so switch on byte alignment
-	 * mode only if we have unaligned data.
-	 */
-	if (dalgn)
-		DALGN |= (1 << host->dma);
-	else
-		DALGN &= ~(1 << host->dma);
 	DDADR(host->dma) = host->sg_dma;
 	DCSR(host->dma) = DCSR_RUN;
 }
@@ -283,7 +269,7 @@ static int pxamci_data_done(struct pxamci_host *host, unsigned int stat)
 		return 0;
 
 	DCSR(host->dma) = 0;
-	dma_unmap_sg(mmc_dev(host->mmc), data->sg, data->sg_len,
+	dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->dma_len,
 		     host->dma_dir);
 
 	if (stat & STAT_READ_TIME_OUT)
@@ -375,12 +361,9 @@ static int pxamci_get_ro(struct mmc_host *mmc)
 	struct pxamci_host *host = mmc_priv(mmc);
 
 	if (host->pdata && host->pdata->get_ro)
-		return !!host->pdata->get_ro(mmc_dev(mmc));
-	/*
-	 * Board doesn't support read only detection; let the mmc core
-	 * decide what to do.
-	 */
-	return -ENOSYS;
+		return host->pdata->get_ro(mmc_dev(mmc));
+	/* Host doesn't support read only detection so assume writeable */
+	return 0;
 }
 
 static void pxamci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
@@ -521,7 +504,7 @@ static int pxamci_probe(struct platform_device *pdev)
 	/*
 	 * Block length register is only 10 bits before PXA27x.
 	 */
-	mmc->max_blk_size = cpu_is_pxa25x() ? 1023 : 2048;
+	mmc->max_blk_size = (cpu_is_pxa21x() || cpu_is_pxa25x()) ? 1023 : 2048;
 
 	/*
 	 * Block count register is 16 bits.
@@ -534,7 +517,7 @@ static int pxamci_probe(struct platform_device *pdev)
 	host->pdata = pdev->dev.platform_data;
 	host->clkrt = CLKRT_OFF;
 
-	host->clk = clk_get(&pdev->dev, NULL);
+	host->clk = clk_get(&pdev->dev, "MMCCLK");
 	if (IS_ERR(host->clk)) {
 		ret = PTR_ERR(host->clk);
 		host->clk = NULL;
@@ -555,7 +538,7 @@ static int pxamci_probe(struct platform_device *pdev)
 			 MMC_VDD_32_33|MMC_VDD_33_34;
 	mmc->caps = 0;
 	host->cmdat = 0;
-	if (!cpu_is_pxa25x()) {
+	if (!cpu_is_pxa21x() && !cpu_is_pxa25x()) {
 		mmc->caps |= MMC_CAP_4_BIT_DATA | MMC_CAP_SDIO_IRQ;
 		host->cmdat |= CMDAT_SDIO_INT_EN;
 		if (cpu_is_pxa300() || cpu_is_pxa310())

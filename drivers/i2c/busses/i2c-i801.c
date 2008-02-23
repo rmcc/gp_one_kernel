@@ -1,8 +1,10 @@
 /*
+    i2c-i801.c - Part of lm_sensors, Linux kernel modules for hardware
+              monitoring
     Copyright (c) 1998 - 2002  Frodo Looijaard <frodol@dds.nl>,
     Philip Edelbrock <phil@netroedge.com>, and Mark D. Studebaker
     <mdsxyz123@yahoo.com>
-    Copyright (C) 2007, 2008   Jean Delvare <khali@linux-fr.org>
+    Copyright (C) 2007         Jean Delvare <khali@linux-fr.org>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,7 +43,6 @@
   Tolapai               0x5032     32     hard     yes     yes     yes
   ICH10                 0x3a30     32     hard     yes     yes     yes
   ICH10                 0x3a60     32     hard     yes     yes     yes
-  PCH                   0x3b30     32     hard     yes     yes     yes
 
   Features supported by this driver:
   Software PEC                     no
@@ -63,8 +64,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
-#include <linux/acpi.h>
-#include <linux/io.h>
+#include <asm/io.h>
 
 /* I801 SMBus address offsets */
 #define SMBHSTSTS	(0 + i801_smba)
@@ -121,10 +121,6 @@
 #define SMBHSTSTS_INTR		0x02
 #define SMBHSTSTS_HOST_BUSY	0x01
 
-#define STATUS_FLAGS		(SMBHSTSTS_BYTE_DONE | SMBHSTSTS_FAILED | \
-				 SMBHSTSTS_BUS_ERR | SMBHSTSTS_DEV_ERR | \
-				 SMBHSTSTS_INTR)
-
 static unsigned long i801_smba;
 static unsigned char i801_original_hstcfg;
 static struct pci_driver i801_driver;
@@ -136,95 +132,30 @@ static struct pci_dev *I801_dev;
 #define FEATURE_I2C_BLOCK_READ	(1 << 3)
 static unsigned int i801_features;
 
-/* Make sure the SMBus host is ready to start transmitting.
-   Return 0 if it is, -EBUSY if it is not. */
-static int i801_check_pre(void)
-{
-	int status;
-
-	status = inb_p(SMBHSTSTS);
-	if (status & SMBHSTSTS_HOST_BUSY) {
-		dev_err(&I801_dev->dev, "SMBus is busy, can't use it!\n");
-		return -EBUSY;
-	}
-
-	status &= STATUS_FLAGS;
-	if (status) {
-		dev_dbg(&I801_dev->dev, "Clearing status flags (%02x)\n",
-			status);
-		outb_p(status, SMBHSTSTS);
-		status = inb_p(SMBHSTSTS) & STATUS_FLAGS;
-		if (status) {
-			dev_err(&I801_dev->dev,
-				"Failed clearing status flags (%02x)\n",
-				status);
-			return -EBUSY;
-		}
-	}
-
-	return 0;
-}
-
-/* Convert the status register to an error code, and clear it. */
-static int i801_check_post(int status, int timeout)
-{
-	int result = 0;
-
-	/* If the SMBus is still busy, we give up */
-	if (timeout) {
-		dev_err(&I801_dev->dev, "Transaction timeout\n");
-		/* try to stop the current command */
-		dev_dbg(&I801_dev->dev, "Terminating the current operation\n");
-		outb_p(inb_p(SMBHSTCNT) | SMBHSTCNT_KILL, SMBHSTCNT);
-		msleep(1);
-		outb_p(inb_p(SMBHSTCNT) & (~SMBHSTCNT_KILL), SMBHSTCNT);
-
-		/* Check if it worked */
-		status = inb_p(SMBHSTSTS);
-		if ((status & SMBHSTSTS_HOST_BUSY) ||
-		    !(status & SMBHSTSTS_FAILED))
-			dev_err(&I801_dev->dev,
-				"Failed terminating the transaction\n");
-		outb_p(STATUS_FLAGS, SMBHSTSTS);
-		return -ETIMEDOUT;
-	}
-
-	if (status & SMBHSTSTS_FAILED) {
-		result = -EIO;
-		dev_err(&I801_dev->dev, "Transaction failed\n");
-	}
-	if (status & SMBHSTSTS_DEV_ERR) {
-		result = -ENXIO;
-		dev_dbg(&I801_dev->dev, "No response\n");
-	}
-	if (status & SMBHSTSTS_BUS_ERR) {
-		result = -EAGAIN;
-		dev_dbg(&I801_dev->dev, "Lost arbitration\n");
-	}
-
-	if (result) {
-		/* Clear error flags */
-		outb_p(status & STATUS_FLAGS, SMBHSTSTS);
-		status = inb_p(SMBHSTSTS) & STATUS_FLAGS;
-		if (status) {
-			dev_warn(&I801_dev->dev, "Failed clearing status "
-				 "flags at end of transaction (%02x)\n",
-				 status);
-		}
-	}
-
-	return result;
-}
-
 static int i801_transaction(int xact)
 {
-	int status;
-	int result;
+	int temp;
+	int result = 0;
 	int timeout = 0;
 
-	result = i801_check_pre();
-	if (result < 0)
-		return result;
+	dev_dbg(&I801_dev->dev, "Transaction (pre): CNT=%02x, CMD=%02x, "
+		"ADD=%02x, DAT0=%02x, DAT1=%02x\n", inb_p(SMBHSTCNT),
+		inb_p(SMBHSTCMD), inb_p(SMBHSTADD), inb_p(SMBHSTDAT0),
+		inb_p(SMBHSTDAT1));
+
+	/* Make sure the SMBus host is ready to start transmitting */
+	/* 0x1f = Failed, Bus_Err, Dev_Err, Intr, Host_Busy */
+	if ((temp = (0x1f & inb_p(SMBHSTSTS))) != 0x00) {
+		dev_dbg(&I801_dev->dev, "SMBus busy (%02x). Resetting...\n",
+			temp);
+		outb_p(temp, SMBHSTSTS);
+		if ((temp = (0x1f & inb_p(SMBHSTSTS))) != 0x00) {
+			dev_dbg(&I801_dev->dev, "Failed! (%02x)\n", temp);
+			return -1;
+		} else {
+			dev_dbg(&I801_dev->dev, "Successful!\n");
+		}
+	}
 
 	/* the current contents of SMBHSTCNT can be overwritten, since PEC,
 	 * INTREN, SMBSCMD are passed in xact */
@@ -233,40 +164,73 @@ static int i801_transaction(int xact)
 	/* We will always wait for a fraction of a second! */
 	do {
 		msleep(1);
-		status = inb_p(SMBHSTSTS);
-	} while ((status & SMBHSTSTS_HOST_BUSY) && (timeout++ < MAX_TIMEOUT));
+		temp = inb_p(SMBHSTSTS);
+	} while ((temp & SMBHSTSTS_HOST_BUSY) && (timeout++ < MAX_TIMEOUT));
 
-	result = i801_check_post(status, timeout >= MAX_TIMEOUT);
-	if (result < 0)
-		return result;
+	/* If the SMBus is still busy, we give up */
+	if (timeout >= MAX_TIMEOUT) {
+		dev_dbg(&I801_dev->dev, "SMBus Timeout!\n");
+		result = -1;
+		/* try to stop the current command */
+		dev_dbg(&I801_dev->dev, "Terminating the current operation\n");
+		outb_p(inb_p(SMBHSTCNT) | SMBHSTCNT_KILL, SMBHSTCNT);
+		msleep(1);
+		outb_p(inb_p(SMBHSTCNT) & (~SMBHSTCNT_KILL), SMBHSTCNT);
+	}
 
-	outb_p(SMBHSTSTS_INTR, SMBHSTSTS);
-	return 0;
+	if (temp & SMBHSTSTS_FAILED) {
+		result = -1;
+		dev_dbg(&I801_dev->dev, "Error: Failed bus transaction\n");
+	}
+
+	if (temp & SMBHSTSTS_BUS_ERR) {
+		result = -1;
+		dev_err(&I801_dev->dev, "Bus collision! SMBus may be locked "
+			"until next hard reset. (sorry!)\n");
+		/* Clock stops and slave is stuck in mid-transmission */
+	}
+
+	if (temp & SMBHSTSTS_DEV_ERR) {
+		result = -1;
+		dev_dbg(&I801_dev->dev, "Error: no response!\n");
+	}
+
+	if ((inb_p(SMBHSTSTS) & 0x1f) != 0x00)
+		outb_p(inb(SMBHSTSTS), SMBHSTSTS);
+
+	if ((temp = (0x1f & inb_p(SMBHSTSTS))) != 0x00) {
+		dev_dbg(&I801_dev->dev, "Failed reset at end of transaction "
+			"(%02x)\n", temp);
+	}
+	dev_dbg(&I801_dev->dev, "Transaction (post): CNT=%02x, CMD=%02x, "
+		"ADD=%02x, DAT0=%02x, DAT1=%02x\n", inb_p(SMBHSTCNT),
+		inb_p(SMBHSTCMD), inb_p(SMBHSTADD), inb_p(SMBHSTDAT0),
+		inb_p(SMBHSTDAT1));
+	return result;
 }
 
 /* wait for INTR bit as advised by Intel */
 static void i801_wait_hwpec(void)
 {
 	int timeout = 0;
-	int status;
+	int temp;
 
 	do {
 		msleep(1);
-		status = inb_p(SMBHSTSTS);
-	} while ((!(status & SMBHSTSTS_INTR))
+		temp = inb_p(SMBHSTSTS);
+	} while ((!(temp & SMBHSTSTS_INTR))
 		 && (timeout++ < MAX_TIMEOUT));
 
 	if (timeout >= MAX_TIMEOUT) {
 		dev_dbg(&I801_dev->dev, "PEC Timeout!\n");
 	}
-	outb_p(status, SMBHSTSTS);
+	outb_p(temp, SMBHSTSTS);
 }
 
 static int i801_block_transaction_by_block(union i2c_smbus_data *data,
 					   char read_write, int hwpec)
 {
 	int i, len;
-	int status;
 
 	inb_p(SMBHSTCNT); /* reset the data buffer index */
 
@@ -278,15 +242,14 @@ static int i801_block_transaction_by_block(union i2c_smbus_data *data,
 			outb_p(data->block[i+1], SMBBLKDAT);
 	}
 
-	status = i801_transaction(I801_BLOCK_DATA | ENABLE_INT9 |
-				  I801_PEC_EN * hwpec);
-	if (status)
-		return status;
+	if (i801_transaction(I801_BLOCK_DATA | ENABLE_INT9 |
+			     I801_PEC_EN * hwpec))
+		return -1;
 
 	if (read_write == I2C_SMBUS_READ) {
 		len = inb_p(SMBHSTDAT0);
 		if (len < 1 || len > I2C_SMBUS_BLOCK_MAX)
-			return -EPROTO;
+			return -1;
 
 		data->block[0] = len;
 		for (i = 0; i < len; i++)
@@ -301,13 +264,10 @@ static int i801_block_transaction_byte_by_byte(union i2c_smbus_data *data,
 {
 	int i, len;
 	int smbcmd;
-	int status;
-	int result;
+	int temp;
+	int result = 0;
 	int timeout;
-
-	result = i801_check_pre();
-	if (result < 0)
-		return result;
+	unsigned char errmask;
 
 	len = data->block[0];
 
@@ -331,6 +291,36 @@ static int i801_block_transaction_byte_by_byte(union i2c_smbus_data *data,
 		}
 		outb_p(smbcmd | ENABLE_INT9, SMBHSTCNT);
 
+		dev_dbg(&I801_dev->dev, "Block (pre %d): CNT=%02x, CMD=%02x, "
+			"ADD=%02x, DAT0=%02x, DAT1=%02x, BLKDAT=%02x\n", i,
+			inb_p(SMBHSTCNT), inb_p(SMBHSTCMD), inb_p(SMBHSTADD),
+			inb_p(SMBHSTDAT0), inb_p(SMBHSTDAT1), inb_p(SMBBLKDAT));
+
+		/* Make sure the SMBus host is ready to start transmitting */
+		temp = inb_p(SMBHSTSTS);
+		if (i == 1) {
+			/* Erroneous conditions before transaction:
+			 * Byte_Done, Failed, Bus_Err, Dev_Err, Intr, Host_Busy */
+			errmask = 0x9f;
+		} else {
+			/* Erroneous conditions during transaction:
+			 * Failed, Bus_Err, Dev_Err, Intr */
+			errmask = 0x1e;
+		}
+		if (temp & errmask) {
+			dev_dbg(&I801_dev->dev, "SMBus busy (%02x). "
+				"Resetting...\n", temp);
+			outb_p(temp, SMBHSTSTS);
+			if (((temp = inb_p(SMBHSTSTS)) & errmask) != 0x00) {
+				dev_err(&I801_dev->dev,
+					"Reset failed! (%02x)\n", temp);
+				return -1;
+			}
+			if (i != 1)
+				/* if die in middle of block transaction, fail */
+				return -1;
+		}
+
 		if (i == 1)
 			outb_p(inb(SMBHSTCNT) | I801_START, SMBHSTCNT);
 
@@ -338,28 +328,41 @@ static int i801_block_transaction_byte_by_byte(union i2c_smbus_data *data,
 		timeout = 0;
 		do {
 			msleep(1);
-			status = inb_p(SMBHSTSTS);
+			temp = inb_p(SMBHSTSTS);
 		}
-		while ((!(status & SMBHSTSTS_BYTE_DONE))
+		while ((!(temp & SMBHSTSTS_BYTE_DONE))
 		       && (timeout++ < MAX_TIMEOUT));
 
-		result = i801_check_post(status, timeout >= MAX_TIMEOUT);
-		if (result < 0)
-			return result;
+		/* If the SMBus is still busy, we give up */
+		if (timeout >= MAX_TIMEOUT) {
+			/* try to stop the current command */
+			dev_dbg(&I801_dev->dev, "Terminating the current "
+						"operation\n");
+			outb_p(inb_p(SMBHSTCNT) | SMBHSTCNT_KILL, SMBHSTCNT);
+			msleep(1);
+			outb_p(inb_p(SMBHSTCNT) & (~SMBHSTCNT_KILL),
+				SMBHSTCNT);
+			result = -1;
+			dev_dbg(&I801_dev->dev, "SMBus Timeout!\n");
+		}
+
+		if (temp & SMBHSTSTS_FAILED) {
+			result = -1;
+			dev_dbg(&I801_dev->dev,
+				"Error: Failed bus transaction\n");
+		} else if (temp & SMBHSTSTS_BUS_ERR) {
+			result = -1;
+			dev_err(&I801_dev->dev, "Bus collision!\n");
+		} else if (temp & SMBHSTSTS_DEV_ERR) {
+			result = -1;
+			dev_dbg(&I801_dev->dev, "Error: no response!\n");
+		}
 
 		if (i == 1 && read_write == I2C_SMBUS_READ
 		 && command != I2C_SMBUS_I2C_BLOCK_DATA) {
 			len = inb_p(SMBHSTDAT0);
-			if (len < 1 || len > I2C_SMBUS_BLOCK_MAX) {
-				dev_err(&I801_dev->dev,
-					"Illegal SMBus block read size %d\n",
-					len);
-				/* Recover */
-				while (inb_p(SMBHSTSTS) & SMBHSTSTS_HOST_BUSY)
-					outb_p(SMBHSTSTS_BYTE_DONE, SMBHSTSTS);
-				outb_p(SMBHSTSTS_INTR, SMBHSTSTS);
-				return -EPROTO;
-			}
+			if (len < 1 || len > I2C_SMBUS_BLOCK_MAX)
+				return -1;
 			data->block[0] = len;
 		}
 
@@ -368,19 +371,30 @@ static int i801_block_transaction_byte_by_byte(union i2c_smbus_data *data,
 			data->block[i] = inb_p(SMBBLKDAT);
 		if (read_write == I2C_SMBUS_WRITE && i+1 <= len)
 			outb_p(data->block[i+1], SMBBLKDAT);
+		if ((temp & 0x9e) != 0x00)
+			outb_p(temp, SMBHSTSTS);  /* signals SMBBLKDAT ready */
 
-		/* signals SMBBLKDAT ready */
-		outb_p(SMBHSTSTS_BYTE_DONE | SMBHSTSTS_INTR, SMBHSTSTS);
+		if ((temp = (0x1e & inb_p(SMBHSTSTS))) != 0x00) {
+			dev_dbg(&I801_dev->dev,
+				"Bad status (%02x) at end of transaction\n",
+				temp);
+		}
+		dev_dbg(&I801_dev->dev, "Block (post %d): CNT=%02x, CMD=%02x, "
+			"ADD=%02x, DAT0=%02x, DAT1=%02x, BLKDAT=%02x\n", i,
+			inb_p(SMBHSTCNT), inb_p(SMBHSTCMD), inb_p(SMBHSTADD),
+			inb_p(SMBHSTDAT0), inb_p(SMBHSTDAT1), inb_p(SMBBLKDAT));
+
+		if (result < 0)
+			return result;
 	}
-
-	return 0;
+	return result;
 }
 
 static int i801_set_block_buffer_mode(void)
 {
 	outb_p(inb_p(SMBAUXCTL) | SMBAUXCTL_E32B, SMBAUXCTL);
 	if ((inb_p(SMBAUXCTL) & SMBAUXCTL_E32B) == 0)
-		return -EIO;
+		return -1;
 	return 0;
 }
 
@@ -400,7 +414,7 @@ static int i801_block_transaction(union i2c_smbus_data *data, char read_write,
 		} else if (!(i801_features & FEATURE_I2C_BLOCK_READ)) {
 			dev_err(&I801_dev->dev,
 				"I2C block read is unsupported!\n");
-			return -EOPNOTSUPP;
+			return -1;
 		}
 	}
 
@@ -435,7 +449,7 @@ static int i801_block_transaction(union i2c_smbus_data *data, char read_write,
 	return result;
 }
 
-/* Return negative errno on error. */
+/* Return -1 on error. */
 static s32 i801_access(struct i2c_adapter * adap, u16 addr,
 		       unsigned short flags, char read_write, u8 command,
 		       int size, union i2c_smbus_data * data)
@@ -497,9 +511,10 @@ static s32 i801_access(struct i2c_adapter * adap, u16 addr,
 			outb_p(command, SMBHSTCMD);
 		block = 1;
 		break;
+	case I2C_SMBUS_PROC_CALL:
 	default:
 		dev_err(&I801_dev->dev, "Unsupported transaction %d\n", size);
-		return -EOPNOTSUPP;
+		return -1;
 	}
 
 	if (hwpec)	/* enable/disable hardware PEC */
@@ -522,7 +537,7 @@ static s32 i801_access(struct i2c_adapter * adap, u16 addr,
 	if(block)
 		return ret;
 	if(ret)
-		return ret;
+		return -1;
 	if ((read_write == I2C_SMBUS_WRITE) || (xact == I801_QUICK))
 		return 0;
 
@@ -557,7 +572,7 @@ static const struct i2c_algorithm smbus_algorithm = {
 static struct i2c_adapter i801_adapter = {
 	.owner		= THIS_MODULE,
 	.id		= I2C_HW_SMBUS_I801,
-	.class		= I2C_CLASS_HWMON | I2C_CLASS_SPD,
+	.class		= I2C_CLASS_HWMON,
 	.algo		= &smbus_algorithm,
 };
 
@@ -577,45 +592,10 @@ static struct pci_device_id i801_ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_TOLAPAI_1) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH10_4) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH10_5) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_PCH_SMBUS) },
 	{ 0, }
 };
 
 MODULE_DEVICE_TABLE (pci, i801_ids);
-
-#if defined CONFIG_INPUT_APANEL || defined CONFIG_INPUT_APANEL_MODULE
-static unsigned char apanel_addr;
-
-/* Scan the system ROM for the signature "FJKEYINF" */
-static __init const void __iomem *bios_signature(const void __iomem *bios)
-{
-	ssize_t offset;
-	const unsigned char signature[] = "FJKEYINF";
-
-	for (offset = 0; offset < 0x10000; offset += 0x10) {
-		if (check_signature(bios + offset, signature,
-				    sizeof(signature)-1))
-			return bios + offset;
-	}
-	return NULL;
-}
-
-static void __init input_apanel_init(void)
-{
-	void __iomem *bios;
-	const void __iomem *p;
-
-	bios = ioremap(0xF0000, 0x10000); /* Can't fail */
-	p = bios_signature(bios);
-	if (p) {
-		/* just use the first address */
-		apanel_addr = readb(p + 8 + 3) >> 1;
-	}
-	iounmap(bios);
-}
-#else
-static void __init input_apanel_init(void) {}
-#endif
 
 static int __devinit i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
@@ -635,7 +615,6 @@ static int __devinit i801_probe(struct pci_dev *dev, const struct pci_device_id 
 	case PCI_DEVICE_ID_INTEL_TOLAPAI_1:
 	case PCI_DEVICE_ID_INTEL_ICH10_4:
 	case PCI_DEVICE_ID_INTEL_ICH10_5:
-	case PCI_DEVICE_ID_INTEL_PCH_SMBUS:
 		i801_features |= FEATURE_I2C_BLOCK_READ;
 		/* fall through */
 	case PCI_DEVICE_ID_INTEL_82801DB_3:
@@ -659,10 +638,6 @@ static int __devinit i801_probe(struct pci_dev *dev, const struct pci_device_id 
 		err = -ENODEV;
 		goto exit;
 	}
-
-	err = acpi_check_resource_conflict(&dev->resource[SMBBAR]);
-	if (err)
-		goto exit;
 
 	err = pci_request_region(dev, SMBBAR, i801_driver.name);
 	if (err) {
@@ -701,19 +676,6 @@ static int __devinit i801_probe(struct pci_dev *dev, const struct pci_device_id 
 		dev_err(&dev->dev, "Failed to add SMBus adapter\n");
 		goto exit_release;
 	}
-
-	/* Register optional slaves */
-#if defined CONFIG_INPUT_APANEL || defined CONFIG_INPUT_APANEL_MODULE
-	if (apanel_addr) {
-		struct i2c_board_info info;
-
-		memset(&info, 0, sizeof(struct i2c_board_info));
-		info.addr = apanel_addr;
-		strlcpy(info.type, "fujitsu_apanel", I2C_NAME_SIZE);
-		i2c_new_device(&i801_adapter, &info);
-	}
-#endif
-
 	return 0;
 
 exit_release:
@@ -764,7 +726,6 @@ static struct pci_driver i801_driver = {
 
 static int __init i2c_i801_init(void)
 {
-	input_apanel_init();
 	return pci_register_driver(&i801_driver);
 }
 

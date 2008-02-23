@@ -1590,10 +1590,7 @@ static int snd_trident_trigger(struct snd_pcm_substream *substream,
 	if (spdif_flag) {
 		if (trident->device != TRIDENT_DEVICE_ID_SI7018) {
 			outl(trident->spdif_pcm_bits, TRID_REG(trident, NX_SPCSTATUS));
-			val = trident->spdif_pcm_ctrl;
-			if (!go)
-				val &= ~(0x28);
-			outb(val, TRID_REG(trident, NX_SPCTRL_SPCSO + 3));
+			outb(trident->spdif_pcm_ctrl, TRID_REG(trident, NX_SPCTRL_SPCSO + 3));
 		} else {
 			outl(trident->spdif_pcm_bits, TRID_REG(trident, SI_SPDIF_CS));
 			val = inl(TRID_REG(trident, SI_SERIAL_INTF_CTRL)) | SPDIF_EN;
@@ -2931,8 +2928,7 @@ static int snd_trident_pcm_mixer_build(struct snd_trident *trident,
 {
 	struct snd_trident_pcm_mixer *tmix;
 
-	if (snd_BUG_ON(!trident || !voice || !substream))
-		return -EINVAL;
+	snd_assert(trident != NULL && voice != NULL && substream != NULL, return -EINVAL);
 	tmix = &trident->pcm_mixer[substream->number];
 	tmix->voice = voice;
 	tmix->vol = T4D_DEFAULT_PCM_VOL;
@@ -2947,8 +2943,7 @@ static int snd_trident_pcm_mixer_free(struct snd_trident *trident, struct snd_tr
 {
 	struct snd_trident_pcm_mixer *tmix;
 
-	if (snd_BUG_ON(!trident || !substream))
-		return -EINVAL;
+	snd_assert(trident != NULL && substream != NULL, return -EINVAL);
 	tmix = &trident->pcm_mixer[substream->number];
 	tmix->voice = NULL;
 	snd_trident_notify_pcm_change(trident, tmix, substream->number, 0);
@@ -3133,8 +3128,7 @@ static unsigned char snd_trident_gameport_read(struct gameport *gameport)
 {
 	struct snd_trident *chip = gameport_get_port_data(gameport);
 
-	if (snd_BUG_ON(!chip))
-		return 0;
+	snd_assert(chip, return 0);
 	return inb(TRID_REG(chip, GAMEPORT_LEGACY));
 }
 
@@ -3142,8 +3136,7 @@ static void snd_trident_gameport_trigger(struct gameport *gameport)
 {
 	struct snd_trident *chip = gameport_get_port_data(gameport);
 
-	if (snd_BUG_ON(!chip))
-		return;
+	snd_assert(chip, return);
 	outb(0xff, TRID_REG(chip, GAMEPORT_LEGACY));
 }
 
@@ -3152,8 +3145,7 @@ static int snd_trident_gameport_cooked_read(struct gameport *gameport, int *axes
 	struct snd_trident *chip = gameport_get_port_data(gameport);
 	int i;
 
-	if (snd_BUG_ON(!chip))
-		return 0;
+	snd_assert(chip, return 0);
 
 	*buttons = (~inb(TRID_REG(chip, GAMEPORT_LEGACY)) >> 4) & 0xf;
 
@@ -3169,8 +3161,7 @@ static int snd_trident_gameport_open(struct gameport *gameport, int mode)
 {
 	struct snd_trident *chip = gameport_get_port_data(gameport);
 
-	if (snd_BUG_ON(!chip))
-		return 0;
+	snd_assert(chip, return 0);
 
 	switch (mode) {
 		case GAMEPORT_MODE_COOKED:
@@ -3897,8 +3888,8 @@ static void snd_trident_clear_voices(struct snd_trident * trident, unsigned shor
 {
 	unsigned int i, val, mask[2] = { 0, 0 };
 
-	if (snd_BUG_ON(v_min > 63 || v_max > 63))
-		return;
+	snd_assert(v_min <= 63, return);
+	snd_assert(v_max <= 63, return);
 	for (i = v_min; i <= v_max; i++)
 		mask[i >> 5] |= 1 << (i & 0x1f);
 	if (mask[0]) {

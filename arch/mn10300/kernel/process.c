@@ -20,6 +20,7 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/user.h>
+#include <linux/a.out.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/reboot.h>
@@ -153,7 +154,6 @@ int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	return do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0, &regs, 0,
 		       NULL, NULL);
 }
-EXPORT_SYMBOL(kernel_thread);
 
 /*
  * free current thread data structures etc..

@@ -9,7 +9,6 @@
 #include <linux/blkdev.h>
 #include <linux/ctype.h>
 #include <linux/device-mapper.h>
-#include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kdev_t.h>
@@ -21,7 +20,6 @@
 #include <linux/log2.h>
 #include <linux/dm-kcopyd.h>
 
-#include "dm-exception-store.h"
 #include "dm-snap.h"
 #include "dm-bio-list.h"
 
@@ -41,11 +39,6 @@
  * Reserve 1MB for each snapshot initially (with minimum of 1 page).
  */
 #define SNAPSHOT_PAGES (((1UL << 20) >> PAGE_SHIFT) ? : 1)
-
-/*
- * The size of the mempool used to track chunks in use.
- */
-#define MIN_IOS 256
 
 static struct workqueue_struct *ksnapd;
 static void flush_queued_bios(struct work_struct *work);
@@ -98,63 +91,7 @@ struct dm_snap_pending_exception {
  */
 static struct kmem_cache *exception_cache;
 static struct kmem_cache *pending_cache;
-
-struct dm_snap_tracked_chunk {
-	struct hlist_node node;
-	chunk_t chunk;
-};
-
-static struct kmem_cache *tracked_chunk_cache;
-
-static struct dm_snap_tracked_chunk *track_chunk(struct dm_snapshot *s,
-						 chunk_t chunk)
-{
-	struct dm_snap_tracked_chunk *c = mempool_alloc(s->tracked_chunk_pool,
-							GFP_NOIO);
-	unsigned long flags;
-
-	c->chunk = chunk;
-
-	spin_lock_irqsave(&s->tracked_chunk_lock, flags);
-	hlist_add_head(&c->node,
-		       &s->tracked_chunk_hash[DM_TRACKED_CHUNK_HASH(chunk)]);
-	spin_unlock_irqrestore(&s->tracked_chunk_lock, flags);
-
-	return c;
-}
-
-static void stop_tracking_chunk(struct dm_snapshot *s,
-				struct dm_snap_tracked_chunk *c)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&s->tracked_chunk_lock, flags);
-	hlist_del(&c->node);
-	spin_unlock_irqrestore(&s->tracked_chunk_lock, flags);
-
-	mempool_free(c, s->tracked_chunk_pool);
-}
-
-static int __chunk_is_tracked(struct dm_snapshot *s, chunk_t chunk)
-{
-	struct dm_snap_tracked_chunk *c;
-	struct hlist_node *hn;
-	int found = 0;
-
-	spin_lock_irq(&s->tracked_chunk_lock);
-
-	hlist_for_each_entry(c, hn,
-	    &s->tracked_chunk_hash[DM_TRACKED_CHUNK_HASH(chunk)], node) {
-		if (c->chunk == chunk) {
-			found = 1;
-			break;
-		}
-	}
-
-	spin_unlock_irq(&s->tracked_chunk_lock);
-
-	return found;
-}
+static mempool_t *pending_pool;
 
 /*
  * One of these per registered origin, held in the snapshot_origins hash
@@ -231,21 +168,19 @@ static void __insert_origin(struct origin *o)
  */
 static int register_snapshot(struct dm_snapshot *snap)
 {
-	struct origin *o, *new_o;
+	struct origin *o;
 	struct block_device *bdev = snap->origin->bdev;
-
-	new_o = kmalloc(sizeof(*new_o), GFP_KERNEL);
-	if (!new_o)
-		return -ENOMEM;
 
 	down_write(&_origins_lock);
 	o = __lookup_origin(bdev);
 
-	if (o)
-		kfree(new_o);
-	else {
+	if (!o) {
 		/* New origin */
-		o = new_o;
+		o = kmalloc(sizeof(*o), GFP_KERNEL);
+		if (!o) {
+			up_write(&_origins_lock);
+			return -ENOMEM;
+		}
 
 		/* Initialise the struct */
 		INIT_LIST_HEAD(&o->snapshots);
@@ -367,24 +302,14 @@ static void free_exception(struct dm_snap_exception *e)
 	kmem_cache_free(exception_cache, e);
 }
 
-static struct dm_snap_pending_exception *alloc_pending_exception(struct dm_snapshot *s)
+static struct dm_snap_pending_exception *alloc_pending_exception(void)
 {
-	struct dm_snap_pending_exception *pe = mempool_alloc(s->pending_pool,
-							     GFP_NOIO);
-
-	atomic_inc(&s->pending_exceptions_count);
-	pe->snap = s;
-
-	return pe;
+	return mempool_alloc(pending_pool, GFP_NOIO);
 }
 
 static void free_pending_exception(struct dm_snap_pending_exception *pe)
 {
-	struct dm_snapshot *s = pe->snap;
-
-	mempool_free(pe, s->pending_pool);
-	smp_mb__before_atomic_dec();
-	atomic_dec(&s->pending_exceptions_count);
+	mempool_free(pe, pending_pool);
 }
 
 static void insert_completed_exception(struct dm_snapshot *s,
@@ -430,13 +355,8 @@ out:
 	list_add(&new_e->hash_list, e ? &e->hash_list : l);
 }
 
-/*
- * Callback used by the exception stores to load exceptions when
- * initialising.
- */
-static int dm_add_exception(void *context, chunk_t old, chunk_t new)
+int dm_add_exception(struct dm_snapshot *s, chunk_t old, chunk_t new)
 {
-	struct dm_snapshot *s = context;
 	struct dm_snap_exception *e;
 
 	e = alloc_exception();
@@ -562,7 +482,6 @@ static int set_chunk_size(struct dm_snapshot *s, const char *chunk_size_arg,
 static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 {
 	struct dm_snapshot *s;
-	int i;
 	int r = -EINVAL;
 	char persistent;
 	char *origin_path;
@@ -614,7 +533,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 	s->valid = 1;
 	s->active = 0;
-	atomic_set(&s->pending_exceptions_count, 0);
+	s->last_percent = 0;
 	init_rwsem(&s->lock);
 	spin_lock_init(&s->pe_lock);
 	s->ti = ti;
@@ -645,30 +564,11 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad5;
 	}
 
-	s->pending_pool = mempool_create_slab_pool(MIN_IOS, pending_cache);
-	if (!s->pending_pool) {
-		ti->error = "Could not allocate mempool for pending exceptions";
-		goto bad6;
-	}
-
-	s->tracked_chunk_pool = mempool_create_slab_pool(MIN_IOS,
-							 tracked_chunk_cache);
-	if (!s->tracked_chunk_pool) {
-		ti->error = "Could not allocate tracked_chunk mempool for "
-			    "tracking reads";
-		goto bad_tracked_chunk_pool;
-	}
-
-	for (i = 0; i < DM_TRACKED_CHUNK_HASH_SIZE; i++)
-		INIT_HLIST_HEAD(&s->tracked_chunk_hash[i]);
-
-	spin_lock_init(&s->tracked_chunk_lock);
-
 	/* Metadata must only be loaded into one table at once */
-	r = s->store.read_metadata(&s->store, dm_add_exception, (void *)s);
+	r = s->store.read_metadata(&s->store);
 	if (r < 0) {
 		ti->error = "Failed to read snapshot metadata";
-		goto bad_load_and_register;
+		goto bad6;
 	} else if (r > 0) {
 		s->valid = 0;
 		DMWARN("Snapshot is marked invalid.");
@@ -682,19 +582,13 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (register_snapshot(s)) {
 		r = -EINVAL;
 		ti->error = "Cannot register snapshot origin";
-		goto bad_load_and_register;
+		goto bad6;
 	}
 
 	ti->private = s;
 	ti->split_io = s->chunk_size;
 
 	return 0;
-
- bad_load_and_register:
-	mempool_destroy(s->tracked_chunk_pool);
-
- bad_tracked_chunk_pool:
-	mempool_destroy(s->pending_pool);
 
  bad6:
 	dm_kcopyd_client_destroy(s->kcopyd_client);
@@ -730,9 +624,6 @@ static void __free_exceptions(struct dm_snapshot *s)
 
 static void snapshot_dtr(struct dm_target *ti)
 {
-#ifdef CONFIG_DM_DEBUG
-	int i;
-#endif
 	struct dm_snapshot *s = ti->private;
 
 	flush_workqueue(ksnapd);
@@ -741,24 +632,7 @@ static void snapshot_dtr(struct dm_target *ti)
 	/* After this returns there can be no new kcopyd jobs. */
 	unregister_snapshot(s);
 
-	while (atomic_read(&s->pending_exceptions_count))
-		msleep(1);
-	/*
-	 * Ensure instructions in mempool_destroy aren't reordered
-	 * before atomic_read.
-	 */
-	smp_mb();
-
-#ifdef CONFIG_DM_DEBUG
-	for (i = 0; i < DM_TRACKED_CHUNK_HASH_SIZE; i++)
-		BUG_ON(!hlist_empty(&s->tracked_chunk_hash[i]));
-#endif
-
-	mempool_destroy(s->tracked_chunk_pool);
-
 	__free_exceptions(s);
-
-	mempool_destroy(s->pending_pool);
 
 	dm_put_device(ti, s->origin);
 	dm_put_device(ti, s->cow);
@@ -846,10 +720,8 @@ static struct bio *put_pending_exception(struct dm_snap_pending_exception *pe)
 	 * the bios for the original write to the origin.
 	 */
 	if (primary_pe &&
-	    atomic_dec_and_test(&primary_pe->ref_count)) {
+	    atomic_dec_and_test(&primary_pe->ref_count))
 		origin_bios = bio_list_get(&primary_pe->origin_bios);
-		free_pending_exception(primary_pe);
-	}
 
 	/*
 	 * Free the pe if it's not linked to an origin write or if
@@ -857,6 +729,12 @@ static struct bio *put_pending_exception(struct dm_snap_pending_exception *pe)
 	 */
 	if (!primary_pe || primary_pe != pe)
 		free_pending_exception(pe);
+
+	/*
+	 * Free the primary pe if nothing references it.
+	 */
+	if (primary_pe && !atomic_read(&primary_pe->ref_count))
+		free_pending_exception(primary_pe);
 
 	return origin_bios;
 }
@@ -892,13 +770,6 @@ static void pending_complete(struct dm_snap_pending_exception *pe, int success)
 		error = 1;
 		goto out;
 	}
-
-	/*
-	 * Check for conflicting reads. This is extremely improbable,
-	 * so msleep(1) is sufficient and there is no need for a wait queue.
-	 */
-	while (__chunk_is_tracked(s, pe->e.old_chunk))
-		msleep(1);
 
 	/*
 	 * Add a proper exception, and remove the
@@ -1002,7 +873,7 @@ __find_pending_exception(struct dm_snapshot *s, struct bio *bio)
 	 * to hold the lock while we do this.
 	 */
 	up_write(&s->lock);
-	pe = alloc_pending_exception(s);
+	pe = alloc_pending_exception();
 	down_write(&s->lock);
 
 	if (!s->valid) {
@@ -1022,6 +893,7 @@ __find_pending_exception(struct dm_snapshot *s, struct bio *bio)
 	bio_list_init(&pe->snapshot_bios);
 	pe->primary_pe = NULL;
 	atomic_set(&pe->ref_count, 0);
+	pe->snap = s;
 	pe->started = 0;
 
 	if (s->store.prepare_exception(&s->store, &pe->e)) {
@@ -1102,27 +974,19 @@ static int snapshot_map(struct dm_target *ti, struct bio *bio,
 			start_copy(pe);
 			goto out;
 		}
-	} else {
+	} else
+		/*
+		 * FIXME: this read path scares me because we
+		 * always use the origin when we have a pending
+		 * exception.  However I can't think of a
+		 * situation where this is wrong - ejt.
+		 */
 		bio->bi_bdev = s->origin->bdev;
-		map_context->ptr = track_chunk(s, chunk);
-	}
 
  out_unlock:
 	up_write(&s->lock);
  out:
 	return r;
-}
-
-static int snapshot_end_io(struct dm_target *ti, struct bio *bio,
-			   int error, union map_info *map_context)
-{
-	struct dm_snapshot *s = ti->private;
-	struct dm_snap_tracked_chunk *c = map_context->ptr;
-
-	if (c)
-		stop_tracking_chunk(s, c);
-
-	return 0;
 }
 
 static void snapshot_resume(struct dm_target *ti)
@@ -1402,7 +1266,6 @@ static struct target_type snapshot_target = {
 	.ctr     = snapshot_ctr,
 	.dtr     = snapshot_dtr,
 	.map     = snapshot_map,
-	.end_io  = snapshot_end_io,
 	.resume  = snapshot_resume,
 	.status  = snapshot_status,
 };
@@ -1410,12 +1273,6 @@ static struct target_type snapshot_target = {
 static int __init dm_snapshot_init(void)
 {
 	int r;
-
-	r = dm_exception_store_init();
-	if (r) {
-		DMERR("Failed to initialize exception stores");
-		return r;
-	}
 
 	r = dm_register_target(&snapshot_target);
 	if (r) {
@@ -1449,9 +1306,9 @@ static int __init dm_snapshot_init(void)
 		goto bad4;
 	}
 
-	tracked_chunk_cache = KMEM_CACHE(dm_snap_tracked_chunk, 0);
-	if (!tracked_chunk_cache) {
-		DMERR("Couldn't create cache to track chunks in use.");
+	pending_pool = mempool_create_slab_pool(128, pending_cache);
+	if (!pending_pool) {
+		DMERR("Couldn't create pending pool.");
 		r = -ENOMEM;
 		goto bad5;
 	}
@@ -1460,39 +1317,44 @@ static int __init dm_snapshot_init(void)
 	if (!ksnapd) {
 		DMERR("Failed to create ksnapd workqueue.");
 		r = -ENOMEM;
-		goto bad_pending_pool;
+		goto bad6;
 	}
 
 	return 0;
 
-bad_pending_pool:
-	kmem_cache_destroy(tracked_chunk_cache);
-bad5:
+      bad6:
+	mempool_destroy(pending_pool);
+      bad5:
 	kmem_cache_destroy(pending_cache);
-bad4:
+      bad4:
 	kmem_cache_destroy(exception_cache);
-bad3:
+      bad3:
 	exit_origin_hash();
-bad2:
+      bad2:
 	dm_unregister_target(&origin_target);
-bad1:
+      bad1:
 	dm_unregister_target(&snapshot_target);
 	return r;
 }
 
 static void __exit dm_snapshot_exit(void)
 {
+	int r;
+
 	destroy_workqueue(ksnapd);
 
-	dm_unregister_target(&snapshot_target);
-	dm_unregister_target(&origin_target);
+	r = dm_unregister_target(&snapshot_target);
+	if (r)
+		DMERR("snapshot unregister failed %d", r);
+
+	r = dm_unregister_target(&origin_target);
+	if (r)
+		DMERR("origin unregister failed %d", r);
 
 	exit_origin_hash();
+	mempool_destroy(pending_pool);
 	kmem_cache_destroy(pending_cache);
 	kmem_cache_destroy(exception_cache);
-	kmem_cache_destroy(tracked_chunk_cache);
-
-	dm_exception_store_exit();
 }
 
 /* Module hooks */

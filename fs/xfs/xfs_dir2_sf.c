@@ -255,7 +255,7 @@ xfs_dir2_block_to_sf(
 	xfs_dir2_sf_check(args);
 out:
 	xfs_trans_log_inode(args->trans, dp, logflags);
-	kmem_free(block);
+	kmem_free(block, mp->m_dirblksize);
 	return error;
 }
 
@@ -332,7 +332,7 @@ xfs_dir2_sf_addname(
 		/*
 		 * Just checking or no space reservation, it doesn't fit.
 		 */
-		if ((args->op_flags & XFS_DA_OP_JUSTCHECK) || args->total == 0)
+		if (args->justcheck || args->total == 0)
 			return XFS_ERROR(ENOSPC);
 		/*
 		 * Convert to block form then add the name.
@@ -345,7 +345,7 @@ xfs_dir2_sf_addname(
 	/*
 	 * Just checking, it fits.
 	 */
-	if (args->op_flags & XFS_DA_OP_JUSTCHECK)
+	if (args->justcheck)
 		return 0;
 	/*
 	 * Do it the easy way - just add it at the end.
@@ -512,7 +512,7 @@ xfs_dir2_sf_addname_hard(
 		sfep = xfs_dir2_sf_nextentry(sfp, sfep);
 		memcpy(sfep, oldsfep, old_isize - nbytes);
 	}
-	kmem_free(buf);
+	kmem_free(buf, old_isize);
 	dp->i_d.di_size = new_isize;
 	xfs_dir2_sf_check(args);
 }
@@ -812,11 +812,8 @@ xfs_dir2_sf_lookup(
 {
 	xfs_inode_t		*dp;		/* incore directory inode */
 	int			i;		/* entry index */
-	int			error;
 	xfs_dir2_sf_entry_t	*sfep;		/* shortform directory entry */
 	xfs_dir2_sf_t		*sfp;		/* shortform structure */
-	enum xfs_dacmp		cmp;		/* comparison result */
-	xfs_dir2_sf_entry_t	*ci_sfep;	/* case-insens. entry */
 
 	xfs_dir2_trace_args("sf_lookup", args);
 	xfs_dir2_sf_check(args);
@@ -839,7 +836,6 @@ xfs_dir2_sf_lookup(
 	 */
 	if (args->namelen == 1 && args->name[0] == '.') {
 		args->inumber = dp->i_ino;
-		args->cmpresult = XFS_CMP_EXACT;
 		return XFS_ERROR(EEXIST);
 	}
 	/*
@@ -848,41 +844,28 @@ xfs_dir2_sf_lookup(
 	if (args->namelen == 2 &&
 	    args->name[0] == '.' && args->name[1] == '.') {
 		args->inumber = xfs_dir2_sf_get_inumber(sfp, &sfp->hdr.parent);
-		args->cmpresult = XFS_CMP_EXACT;
 		return XFS_ERROR(EEXIST);
 	}
 	/*
 	 * Loop over all the entries trying to match ours.
 	 */
-	ci_sfep = NULL;
-	for (i = 0, sfep = xfs_dir2_sf_firstentry(sfp); i < sfp->hdr.count;
-				i++, sfep = xfs_dir2_sf_nextentry(sfp, sfep)) {
-		/*
-		 * Compare name and if it's an exact match, return the inode
-		 * number. If it's the first case-insensitive match, store the
-		 * inode number and continue looking for an exact match.
-		 */
-		cmp = dp->i_mount->m_dirnameops->compname(args, sfep->name,
-								sfep->namelen);
-		if (cmp != XFS_CMP_DIFFERENT && cmp != args->cmpresult) {
-			args->cmpresult = cmp;
-			args->inumber = xfs_dir2_sf_get_inumber(sfp,
-						xfs_dir2_sf_inumberp(sfep));
-			if (cmp == XFS_CMP_EXACT)
-				return XFS_ERROR(EEXIST);
-			ci_sfep = sfep;
+	for (i = 0, sfep = xfs_dir2_sf_firstentry(sfp);
+	     i < sfp->hdr.count;
+	     i++, sfep = xfs_dir2_sf_nextentry(sfp, sfep)) {
+		if (sfep->namelen == args->namelen &&
+		    sfep->name[0] == args->name[0] &&
+		    memcmp(args->name, sfep->name, args->namelen) == 0) {
+			args->inumber =
+				xfs_dir2_sf_get_inumber(sfp,
+					xfs_dir2_sf_inumberp(sfep));
+			return XFS_ERROR(EEXIST);
 		}
 	}
-	ASSERT(args->op_flags & XFS_DA_OP_OKNOENT);
 	/*
-	 * Here, we can only be doing a lookup (not a rename or replace).
-	 * If a case-insensitive match was not found, return ENOENT.
+	 * Didn't find it.
 	 */
-	if (!ci_sfep)
-		return XFS_ERROR(ENOENT);
-	/* otherwise process the CI match as required by the caller */
-	error = xfs_dir_cilookup_result(args, ci_sfep->name, ci_sfep->namelen);
-	return XFS_ERROR(error);
+	ASSERT(args->oknoent);
+	return XFS_ERROR(ENOENT);
 }
 
 /*
@@ -921,21 +904,24 @@ xfs_dir2_sf_removename(
 	 * Loop over the old directory entries.
 	 * Find the one we're deleting.
 	 */
-	for (i = 0, sfep = xfs_dir2_sf_firstentry(sfp); i < sfp->hdr.count;
-				i++, sfep = xfs_dir2_sf_nextentry(sfp, sfep)) {
-		if (xfs_da_compname(args, sfep->name, sfep->namelen) ==
-								XFS_CMP_EXACT) {
+	for (i = 0, sfep = xfs_dir2_sf_firstentry(sfp);
+	     i < sfp->hdr.count;
+	     i++, sfep = xfs_dir2_sf_nextentry(sfp, sfep)) {
+		if (sfep->namelen == args->namelen &&
+		    sfep->name[0] == args->name[0] &&
+		    memcmp(sfep->name, args->name, args->namelen) == 0) {
 			ASSERT(xfs_dir2_sf_get_inumber(sfp,
-						xfs_dir2_sf_inumberp(sfep)) ==
-								args->inumber);
+					xfs_dir2_sf_inumberp(sfep)) ==
+				args->inumber);
 			break;
 		}
 	}
 	/*
 	 * Didn't find it.
 	 */
-	if (i == sfp->hdr.count)
+	if (i == sfp->hdr.count) {
 		return XFS_ERROR(ENOENT);
+	}
 	/*
 	 * Calculate sizes.
 	 */
@@ -1056,10 +1042,11 @@ xfs_dir2_sf_replace(
 	 */
 	else {
 		for (i = 0, sfep = xfs_dir2_sf_firstentry(sfp);
-				i < sfp->hdr.count;
-				i++, sfep = xfs_dir2_sf_nextentry(sfp, sfep)) {
-			if (xfs_da_compname(args, sfep->name, sfep->namelen) ==
-								XFS_CMP_EXACT) {
+		     i < sfp->hdr.count;
+		     i++, sfep = xfs_dir2_sf_nextentry(sfp, sfep)) {
+			if (sfep->namelen == args->namelen &&
+			    sfep->name[0] == args->name[0] &&
+			    memcmp(args->name, sfep->name, args->namelen) == 0) {
 #if XFS_BIG_INUMS || defined(DEBUG)
 				ino = xfs_dir2_sf_get_inumber(sfp,
 					xfs_dir2_sf_inumberp(sfep));
@@ -1074,7 +1061,7 @@ xfs_dir2_sf_replace(
 		 * Didn't find it.
 		 */
 		if (i == sfp->hdr.count) {
-			ASSERT(args->op_flags & XFS_DA_OP_OKNOENT);
+			ASSERT(args->oknoent);
 #if XFS_BIG_INUMS
 			if (i8elevated)
 				xfs_dir2_sf_toino4(args);
@@ -1187,7 +1174,7 @@ xfs_dir2_sf_toino4(
 	/*
 	 * Clean up the inode.
 	 */
-	kmem_free(buf);
+	kmem_free(buf, oldsize);
 	dp->i_d.di_size = newsize;
 	xfs_trans_log_inode(args->trans, dp, XFS_ILOG_CORE | XFS_ILOG_DDATA);
 }
@@ -1264,7 +1251,7 @@ xfs_dir2_sf_toino8(
 	/*
 	 * Clean up the inode.
 	 */
-	kmem_free(buf);
+	kmem_free(buf, oldsize);
 	dp->i_d.di_size = newsize;
 	xfs_trans_log_inode(args->trans, dp, XFS_ILOG_CORE | XFS_ILOG_DDATA);
 }

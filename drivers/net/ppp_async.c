@@ -293,6 +293,9 @@ ppp_asynctty_ioctl(struct tty_struct *tty, struct file *file,
 	err = -EFAULT;
 	switch (cmd) {
 	case PPPIOCGCHAN:
+		err = -ENXIO;
+		if (!ap)
+			break;
 		err = -EFAULT;
 		if (put_user(ppp_channel_index(&ap->chan), p))
 			break;
@@ -300,6 +303,9 @@ ppp_asynctty_ioctl(struct tty_struct *tty, struct file *file,
 		break;
 
 	case PPPIOCGUNIT:
+		err = -ENXIO;
+		if (!ap)
+			break;
 		err = -EFAULT;
 		if (put_user(ppp_unit_number(&ap->chan), p))
 			break;
@@ -372,7 +378,7 @@ ppp_asynctty_wakeup(struct tty_struct *tty)
 }
 
 
-static struct tty_ldisc_ops ppp_ldisc = {
+static struct tty_ldisc ppp_ldisc = {
 	.owner  = THIS_MODULE,
 	.magic	= TTY_LDISC_MAGIC,
 	.name	= "ppp",

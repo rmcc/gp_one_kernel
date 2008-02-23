@@ -35,9 +35,6 @@
 #include <linux/types.h>
 #include <asm/io.h>
 
-/* Features for chips (set in driver_data) */
-#define NSC_FORCE_DONGLE_TYPE9	0x00000001
-
 /* DMA modes needed */
 #define DMA_TX_MODE     0x08    /* Mem to I/O, ++, demand. */
 #define DMA_RX_MODE     0x04    /* I/O to mem, ++, demand. */
@@ -251,6 +248,7 @@ struct nsc_ircc_cb {
 	struct tx_fifo tx_fifo;    /* Info about frames to be transmitted */
 
 	struct net_device *netdev;     /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
 	
 	struct irlap_cb *irlap;    /* The link layer we are binded to */
 	struct qos_info qos;       /* QoS capabilities for this device */

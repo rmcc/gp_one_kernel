@@ -28,16 +28,16 @@
 #include <sound/pcm_params.h>
 #include <sound/initval.h>
 #include <sound/soc.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 
 #include <linux/io.h>
 #include <asm/dma.h>
 
 #include <asm/plat-s3c24xx/regs-s3c2412-iis.h>
 
-#include <mach/regs-gpio.h>
-#include <mach/audio.h>
-#include <mach/dma.h>
+#include <asm/arch/regs-gpio.h>
+#include <asm/arch/audio.h>
+#include <asm/arch/dma.h>
 
 #include "s3c24xx-pcm.h"
 #include "s3c2412-i2s.h"
@@ -295,7 +295,7 @@ static inline int s3c2412_snd_is_clkmaster(void)
 /*
  * Set S3C2412 I2S DAI format
  */
-static int s3c2412_i2s_set_fmt(struct snd_soc_dai *cpu_dai,
+static int s3c2412_i2s_set_fmt(struct snd_soc_cpu_dai *cpu_dai,
 			       unsigned int fmt)
 {
 	u32 iismod;
@@ -343,8 +343,7 @@ static int s3c2412_i2s_set_fmt(struct snd_soc_dai *cpu_dai,
 }
 
 static int s3c2412_i2s_hw_params(struct snd_pcm_substream *substream,
-				 struct snd_pcm_hw_params *params,
-				 struct snd_soc_dai *dai)
+				 struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	u32 iismod;
@@ -374,8 +373,7 @@ static int s3c2412_i2s_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int s3c2412_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
-			       struct snd_soc_dai *dai)
+static int s3c2412_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	int capture = (substream->stream == SNDRV_PCM_STREAM_CAPTURE);
 	unsigned long irqs;
@@ -502,7 +500,7 @@ EXPORT_SYMBOL_GPL(s3c2412_iis_calc_rate);
 /*
  * Set S3C2412 Clock source
  */
-static int s3c2412_i2s_set_sysclk(struct snd_soc_dai *cpu_dai,
+static int s3c2412_i2s_set_sysclk(struct snd_soc_cpu_dai *cpu_dai,
 				  int clk_id, unsigned int freq, int dir)
 {
 	u32 iismod = readl(s3c2412_i2s.regs + S3C2412_IISMOD);
@@ -530,7 +528,7 @@ static int s3c2412_i2s_set_sysclk(struct snd_soc_dai *cpu_dai,
 /*
  * Set S3C2412 Clock dividers
  */
-static int s3c2412_i2s_set_clkdiv(struct snd_soc_dai *cpu_dai,
+static int s3c2412_i2s_set_clkdiv(struct snd_soc_cpu_dai *cpu_dai,
 				  int div_id, int div)
 {
 	struct s3c2412_i2s_info *i2s = &s3c2412_i2s;
@@ -603,8 +601,7 @@ struct clk *s3c2412_get_iisclk(void)
 EXPORT_SYMBOL_GPL(s3c2412_get_iisclk);
 
 
-static int s3c2412_i2s_probe(struct platform_device *pdev,
-			     struct snd_soc_dai *dai)
+static int s3c2412_i2s_probe(struct platform_device *pdev)
 {
 	DBG("Entered %s\n", __func__);
 
@@ -649,7 +646,8 @@ static int s3c2412_i2s_probe(struct platform_device *pdev,
 }
 
 #ifdef CONFIG_PM
-static int s3c2412_i2s_suspend(struct snd_soc_dai *dai)
+static int s3c2412_i2s_suspend(struct platform_device *dev,
+			      struct snd_soc_cpu_dai *dai)
 {
 	struct s3c2412_i2s_info *i2s = &s3c2412_i2s;
 	u32 iismod;
@@ -664,24 +662,25 @@ static int s3c2412_i2s_suspend(struct snd_soc_dai *dai)
 		iismod = readl(i2s->regs + S3C2412_IISMOD);
 
 		if (iismod & S3C2412_IISCON_RXDMA_ACTIVE)
-			pr_warning("%s: RXDMA active?\n", __func__);
+			dev_warn(&dev->dev, "%s: RXDMA active?\n", __func__);
 
 		if (iismod & S3C2412_IISCON_TXDMA_ACTIVE)
-			pr_warning("%s: TXDMA active?\n", __func__);
+			dev_warn(&dev->dev, "%s: TXDMA active?\n", __func__);
 
 		if (iismod & S3C2412_IISCON_IIS_ACTIVE)
-			pr_warning("%s: IIS active\n", __func__);
+			dev_warn(&dev->dev, "%s: IIS active\n", __func__);
 	}
 
 	return 0;
 }
 
-static int s3c2412_i2s_resume(struct snd_soc_dai *dai)
+static int s3c2412_i2s_resume(struct platform_device *pdev,
+			      struct snd_soc_cpu_dai *dai)
 {
 	struct s3c2412_i2s_info *i2s = &s3c2412_i2s;
 
-	pr_info("dai_active %d, IISMOD %08x, IISCON %08x\n",
-		dai->active, i2s->suspend_iismod, i2s->suspend_iiscon);
+	dev_info(&pdev->dev, "dai_active %d, IISMOD %08x, IISCON %08x\n",
+		 dai->active, i2s->suspend_iismod, i2s->suspend_iiscon);
 
 	if (dai->active) {
 		writel(i2s->suspend_iiscon, i2s->regs + S3C2412_IISCON);
@@ -708,9 +707,10 @@ static int s3c2412_i2s_resume(struct snd_soc_dai *dai)
 	SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
 	SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000)
 
-struct snd_soc_dai s3c2412_i2s_dai = {
+struct snd_soc_cpu_dai s3c2412_i2s_dai = {
 	.name	= "s3c2412-i2s",
 	.id	= 0,
+	.type	= SND_SOC_DAI_I2S,
 	.probe	= s3c2412_i2s_probe,
 	.suspend = s3c2412_i2s_suspend,
 	.resume = s3c2412_i2s_resume,
@@ -729,25 +729,14 @@ struct snd_soc_dai s3c2412_i2s_dai = {
 	.ops = {
 		.trigger	= s3c2412_i2s_trigger,
 		.hw_params	= s3c2412_i2s_hw_params,
+	},
+	.dai_ops = {
 		.set_fmt	= s3c2412_i2s_set_fmt,
 		.set_clkdiv	= s3c2412_i2s_set_clkdiv,
 		.set_sysclk	= s3c2412_i2s_set_sysclk,
 	},
 };
 EXPORT_SYMBOL_GPL(s3c2412_i2s_dai);
-
-static int __init s3c2412_i2s_init(void)
-{
-	return snd_soc_register_dai(&s3c2412_i2s_dai);
-}
-module_init(s3c2412_i2s_init);
-
-static void __exit s3c2412_i2s_exit(void)
-{
-	snd_soc_unregister_dai(&s3c2412_i2s_dai);
-}
-module_exit(s3c2412_i2s_exit);
-
 
 /* Module information */
 MODULE_AUTHOR("Ben Dooks, <ben@simtec.co.uk>");

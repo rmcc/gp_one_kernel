@@ -32,12 +32,11 @@
 #include <linux/miscdevice.h>
 #include <linux/watchdog.h>
 #include <linux/uaccess.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 
 static int nowayout = WATCHDOG_NOWAYOUT;
 static unsigned long wdt_status;
 static unsigned long boot_status;
-static spinlock_t wdt_lock;
 
 #define WDT_IN_USE		0
 #define WDT_OK_TO_CLOSE		1
@@ -69,10 +68,8 @@ static void wdt_enable(void)
 	/* Arm and enable the Timer to starting counting down from 0xFFFF.FFFF
 	 * Takes approx. 10.7s to timeout
 	 */
-	spin_lock(&wdt_lock);
 	write_wdtcr(IOP_WDTCR_EN_ARM);
 	write_wdtcr(IOP_WDTCR_EN);
-	spin_unlock(&wdt_lock);
 }
 
 /* returns 0 if the timer was successfully disabled */
@@ -80,11 +77,9 @@ static int wdt_disable(void)
 {
 	/* Stop Counting */
 	if (wdt_supports_disable()) {
-		spin_lock(&wdt_lock);
 		write_wdtcr(IOP_WDTCR_DIS_ARM);
 		write_wdtcr(IOP_WDTCR_DIS);
 		clear_bit(WDT_ENABLED, &wdt_status);
-		spin_unlock(&wdt_lock);
 		printk(KERN_INFO "WATCHDOG: Disabled\n");
 		return 0;
 	} else
@@ -97,12 +92,16 @@ static int iop_wdt_open(struct inode *inode, struct file *file)
 		return -EBUSY;
 
 	clear_bit(WDT_OK_TO_CLOSE, &wdt_status);
+
 	wdt_enable();
+
 	set_bit(WDT_ENABLED, &wdt_status);
+
 	return nonseekable_open(inode, file);
 }
 
-static ssize_t iop_wdt_write(struct file *file, const char *data, size_t len,
+static ssize_t
+iop_wdt_write(struct file *file, const char *data, size_t len,
 		  loff_t *ppos)
 {
 	if (len) {
@@ -122,35 +121,46 @@ static ssize_t iop_wdt_write(struct file *file, const char *data, size_t len,
 		}
 		wdt_enable();
 	}
+
 	return len;
 }
 
-static const struct watchdog_info ident = {
+static struct watchdog_info ident = {
 	.options = WDIOF_CARDRESET | WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING,
 	.identity = "iop watchdog",
 };
 
-static long iop_wdt_ioctl(struct file *file,
-				unsigned int cmd, unsigned long arg)
+static int
+iop_wdt_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+		  unsigned long arg)
 {
 	int options;
 	int ret = -ENOTTY;
-	int __user *argp = (int __user *)arg;
 
 	switch (cmd) {
 	case WDIOC_GETSUPPORT:
-		if (copy_to_user(argp, &ident, sizeof ident))
+		if (copy_to_user
+		    ((struct watchdog_info *)arg, &ident, sizeof ident))
 			ret = -EFAULT;
 		else
 			ret = 0;
 		break;
 
 	case WDIOC_GETSTATUS:
-		ret = put_user(0, argp);
+		ret = put_user(0, (int *)arg);
 		break;
 
 	case WDIOC_GETBOOTSTATUS:
-		ret = put_user(boot_status, argp);
+		ret = put_user(boot_status, (int *)arg);
+		break;
+
+	case WDIOC_GETTIMEOUT:
+		ret = put_user(iop_watchdog_timeout(), (int *)arg);
+		break;
+
+	case WDIOC_KEEPALIVE:
+		wdt_enable();
+		ret = 0;
 		break;
 
 	case WDIOC_SETOPTIONS:
@@ -167,21 +177,14 @@ static long iop_wdt_ioctl(struct file *file,
 			} else
 				ret = 0;
 		}
+
 		if (options & WDIOS_ENABLECARD) {
 			wdt_enable();
 			ret = 0;
 		}
 		break;
-
-	case WDIOC_KEEPALIVE:
-		wdt_enable();
-		ret = 0;
-		break;
-
-	case WDIOC_GETTIMEOUT:
-		ret = put_user(iop_watchdog_timeout(), argp);
-		break;
 	}
+
 	return ret;
 }
 
@@ -211,7 +214,7 @@ static const struct file_operations iop_wdt_fops = {
 	.owner = THIS_MODULE,
 	.llseek = no_llseek,
 	.write = iop_wdt_write,
-	.unlocked_ioctl = iop_wdt_ioctl,
+	.ioctl = iop_wdt_ioctl,
 	.open = iop_wdt_open,
 	.release = iop_wdt_release,
 };
@@ -226,8 +229,10 @@ static int __init iop_wdt_init(void)
 {
 	int ret;
 
-	spin_lock_init(&wdt_lock);
-
+	ret = misc_register(&iop_wdt_miscdev);
+	if (ret == 0)
+		printk("iop watchdog timer: timeout %lu sec\n",
+		       iop_watchdog_timeout());
 
 	/* check if the reset was caused by the watchdog timer */
 	boot_status = (read_rcsr() & IOP_RCSR_WDT) ? WDIOF_CARDRESET : 0;
@@ -236,13 +241,6 @@ static int __init iop_wdt_init(void)
 	 * NOTE: An IB Reset will Reset both cores in the IOP342
 	 */
 	write_wdtsr(IOP13XX_WDTCR_IB_RESET);
-
-	/* Register after we have the device set up so we cannot race
-	   with an open */
-	ret = misc_register(&iop_wdt_miscdev);
-	if (ret == 0)
-		printk(KERN_INFO "iop watchdog timer: timeout %lu sec\n",
-		       iop_watchdog_timeout());
 
 	return ret;
 }

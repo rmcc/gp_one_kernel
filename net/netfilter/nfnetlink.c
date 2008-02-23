@@ -44,17 +44,15 @@ static struct sock *nfnl = NULL;
 static const struct nfnetlink_subsystem *subsys_table[NFNL_SUBSYS_COUNT];
 static DEFINE_MUTEX(nfnl_mutex);
 
-void nfnl_lock(void)
+static inline void nfnl_lock(void)
 {
 	mutex_lock(&nfnl_mutex);
 }
-EXPORT_SYMBOL_GPL(nfnl_lock);
 
-void nfnl_unlock(void)
+static inline void nfnl_unlock(void)
 {
 	mutex_unlock(&nfnl_mutex);
 }
-EXPORT_SYMBOL_GPL(nfnl_unlock);
 
 int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n)
 {
@@ -134,10 +132,9 @@ static int nfnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 		return 0;
 
 	type = nlh->nlmsg_type;
-replay:
 	ss = nfnetlink_get_subsys(type);
 	if (!ss) {
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 		nfnl_unlock();
 		request_module("nfnetlink-subsys-%d", NFNL_SUBSYS_ID(type));
 		nfnl_lock();
@@ -168,10 +165,7 @@ replay:
 		} else
 			return -EINVAL;
 
-		err = nc->call(nfnl, skb, nlh, cda);
-		if (err == -EAGAIN)
-			goto replay;
-		return err;
+		return nc->call(nfnl, skb, nlh, cda);
 	}
 }
 

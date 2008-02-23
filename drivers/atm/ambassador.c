@@ -34,8 +34,6 @@
 #include <linux/poison.h>
 #include <linux/bitrev.h>
 #include <linux/mutex.h>
-#include <linux/firmware.h>
-#include <linux/ihex.h>
 
 #include <asm/atomic.h>
 #include <asm/io.h>
@@ -291,6 +289,29 @@ static inline void __init show_version (void) {
   . Eliminate need for while-schedule around do_command.
   
 */
+
+/********** microcode **********/
+
+#ifdef AMB_NEW_MICROCODE
+#define UCODE(x) UCODE2(atmsar12.x)
+#else
+#define UCODE(x) UCODE2(atmsar11.x)
+#endif
+#define UCODE2(x) #x
+
+static u32 __devinitdata ucode_start =
+#include UCODE(start)
+;
+
+static region __devinitdata ucode_regions[] = {
+#include UCODE(regions)
+  { 0, 0 }
+};
+
+static u32 __devinitdata ucode_data[] = {
+#include UCODE(data)
+  0xdeadbeef
+};
 
 static void do_housekeeping (unsigned long arg);
 /********** globals **********/
@@ -1820,34 +1841,45 @@ static int __devinit get_loader_version (loader_block * lb,
 
 /* loader: write memory data blocks */
 
-static int __devinit loader_write (loader_block* lb,
-				   const amb_dev *dev,
-				   const struct ihex_binrec *rec) {
+static int __devinit loader_write (loader_block * lb,
+				const amb_dev * dev, const u32 * data,
+				u32 address, unsigned int count) {
+  unsigned int i;
   transfer_block * tb = &lb->payload.transfer;
   
   PRINTD (DBG_FLOW|DBG_LOAD, "loader_write");
-
-  tb->address = rec->addr;
-  tb->count = cpu_to_be32(be16_to_cpu(rec->len) / 4);
-  memcpy(tb->data, rec->data, be16_to_cpu(rec->len));
+  
+  if (count > MAX_TRANSFER_DATA)
+    return -EINVAL;
+  tb->address = cpu_to_be32 (address);
+  tb->count = cpu_to_be32 (count);
+  for (i = 0; i < count; ++i)
+    tb->data[i] = cpu_to_be32 (data[i]);
   return do_loader_command (lb, dev, write_adapter_memory);
 }
 
 /* loader: verify memory data blocks */
 
 static int __devinit loader_verify (loader_block * lb,
-				    const amb_dev *dev,
-				    const struct ihex_binrec *rec) {
+				 const amb_dev * dev, const u32 * data,
+				 u32 address, unsigned int count) {
+  unsigned int i;
   transfer_block * tb = &lb->payload.transfer;
   int res;
   
   PRINTD (DBG_FLOW|DBG_LOAD, "loader_verify");
   
-  tb->address = rec->addr;
-  tb->count = cpu_to_be32(be16_to_cpu(rec->len) / 4);
+  if (count > MAX_TRANSFER_DATA)
+    return -EINVAL;
+  tb->address = cpu_to_be32 (address);
+  tb->count = cpu_to_be32 (count);
   res = do_loader_command (lb, dev, read_adapter_memory);
-  if (!res && memcmp(tb->data, rec->data, be16_to_cpu(rec->len)))
-    res = -EINVAL;
+  if (!res)
+    for (i = 0; i < count; ++i)
+      if (tb->data[i] != cpu_to_be32 (data[i])) {
+	res = -EINVAL;
+	break;
+      }
   return res;
 }
 
@@ -1930,53 +1962,47 @@ static int amb_reset (amb_dev * dev, int diags) {
 /********** transfer and start the microcode **********/
 
 static int __devinit ucode_init (loader_block * lb, amb_dev * dev) {
-  const struct firmware *fw;
-  unsigned long start_address;
-  const struct ihex_binrec *rec;
+  unsigned int i = 0;
+  unsigned int total = 0;
+  const u32 * pointer = ucode_data;
+  u32 address;
+  unsigned int count;
   int res;
   
-  res = request_ihex_firmware(&fw, "atmsar11.fw", &dev->pci_dev->dev);
-  if (res) {
-    PRINTK (KERN_ERR, "Cannot load microcode data");
-    return res;
-  }
-
-  /* First record contains just the start address */
-  rec = (const struct ihex_binrec *)fw->data;
-  if (be16_to_cpu(rec->len) != sizeof(__be32) || be32_to_cpu(rec->addr)) {
-    PRINTK (KERN_ERR, "Bad microcode data (no start record)");
-    return -EINVAL;
-  }
-  start_address = be32_to_cpup((__be32 *)rec->data);
-
-  rec = ihex_next_binrec(rec);
-
   PRINTD (DBG_FLOW|DBG_LOAD, "ucode_init");
-
-  while (rec) {
-    PRINTD (DBG_LOAD, "starting region (%x, %u)", be32_to_cpu(rec->addr),
-	    be16_to_cpu(rec->len));
-    if (be16_to_cpu(rec->len) > 4 * MAX_TRANSFER_DATA) {
-	    PRINTK (KERN_ERR, "Bad microcode data (record too long)");
-	    return -EINVAL;
+  
+  while (address = ucode_regions[i].start,
+	 count = ucode_regions[i].count) {
+    PRINTD (DBG_LOAD, "starting region (%x, %u)", address, count);
+    while (count) {
+      unsigned int words;
+      if (count <= MAX_TRANSFER_DATA)
+	words = count;
+      else
+	words = MAX_TRANSFER_DATA;
+      total += words;
+      res = loader_write (lb, dev, pointer, address, words);
+      if (res)
+	return res;
+      res = loader_verify (lb, dev, pointer, address, words);
+      if (res)
+	return res;
+      count -= words;
+      address += sizeof(u32) * words;
+      pointer += words;
     }
-    if (be16_to_cpu(rec->len) & 3) {
-	    PRINTK (KERN_ERR, "Bad microcode data (odd number of bytes)");
-	    return -EINVAL;
-    }
-    res = loader_write(lb, dev, rec);
-    if (res)
-      break;
-
-    res = loader_verify(lb, dev, rec);
-    if (res)
-      break;
+    i += 1;
   }
-  release_firmware(fw);
-  if (!res)
-    res = loader_start(lb, dev, start_address);
-
-  return res;
+  if (*pointer == ATM_POISON) {
+    return loader_start (lb, dev, ucode_start);
+  } else {
+    // cast needed as there is no %? for pointer differnces
+    PRINTD (DBG_LOAD|DBG_ERR,
+	    "offset=%li, *pointer=%x, address=%x, total=%u",
+	    (long) (pointer - ucode_data), *pointer, address, total);
+    PRINTK (KERN_ERR, "incorrect microcode data");
+    return -ENOMEM;
+  }
 }
 
 /********** give adapter parameters **********/

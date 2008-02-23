@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <asm/io.h>
@@ -263,8 +264,8 @@ static int __devinit ck804xrom_init_one (struct pci_dev *pdev,
 		/* Trim the size if we are larger than the map */
 		if (map->mtd->size > map->map.size) {
 			printk(KERN_WARNING MOD_NAME
-				" rom(%llu) larger than window(%lu). fixing...\n",
-				(unsigned long long)map->mtd->size, map->map.size);
+				" rom(%u) larger than window(%lu). fixing...\n",
+				map->mtd->size, map->map.size);
 			map->mtd->size = map->map.size;
 		}
 		if (window->rsrc.parent) {
@@ -330,15 +331,15 @@ static void __devexit ck804xrom_remove_one (struct pci_dev *pdev)
 }
 
 static struct pci_device_id ck804xrom_pci_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0051), .driver_data = DEV_CK804 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0360), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0361), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0362), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0363), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0364), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0365), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0366), .driver_data = DEV_MCP55 },
-	{ PCI_DEVICE(PCI_VENDOR_ID_NVIDIA, 0x0367), .driver_data = DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0051, PCI_ANY_ID, PCI_ANY_ID, DEV_CK804 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0360, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0361, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0362, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0363, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0364, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0365, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0366, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
+	{ PCI_VENDOR_ID_NVIDIA, 0x0367, PCI_ANY_ID, PCI_ANY_ID, DEV_MCP55 },
 	{ 0, }
 };
 

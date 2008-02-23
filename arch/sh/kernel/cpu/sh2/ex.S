@@ -18,17 +18,16 @@
 exception_entry:	
 no	=	0
 	.rept	256
-	mov.l	r1,@-sp
+	mov.l	r0,@-sp
+	mov	#no,r0
 	bra	exception_trampoline
-	mov	#no,r1
+	and	#0xff,r0
 no	=	no + 1
 	.endr
 exception_trampoline:
-	mov.l	r0,@-sp
-	mov.l	$exception_handler,r0
-	extu.b	r1,r1
-	jmp	@r0
-	  extu.w	r1,r1
+	mov.l	r1,@-sp
+	mov.l	$exception_handler,r1
+	jmp	@r1
 
 	.align	2
 $exception_entry:
@@ -42,6 +41,6 @@ $exception_handler:
 ENTRY(vbr_base)
 vector	=	0
 	.rept	256
-	.long	exception_entry + vector * 6
+	.long	exception_entry + vector * 8
 vector	=	vector + 1
 	.endr

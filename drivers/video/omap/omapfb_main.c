@@ -25,20 +25,17 @@
  * 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  */
 #include <linux/platform_device.h>
-#include <linux/mm.h>
 #include <linux/uaccess.h>
 
-#include <mach/dma.h>
-#include <mach/omapfb.h>
-
-#include "lcdc.h"
-#include "dispc.h"
+#include <asm/mach-types.h>
+#include <asm/arch/dma.h>
+#include <asm/arch/omapfb.h>
 
 #define MODULE_NAME	"omapfb"
 
 static unsigned int	def_accel;
 static unsigned long	def_vram[OMAPFB_PLANE_NUM];
-static unsigned int	def_vram_cnt;
+static int		def_vram_cnt;
 static unsigned long	def_vxres;
 static unsigned long	def_vyres;
 static unsigned int	def_rotate;
@@ -87,10 +84,12 @@ static struct caps_table_struct color_caps[] = {
  * LCD panel
  * ---------------------------------------------------------------------------
  */
+extern struct lcd_ctrl omap1_int_ctrl;
+extern struct lcd_ctrl omap2_int_ctrl;
 extern struct lcd_ctrl hwa742_ctrl;
 extern struct lcd_ctrl blizzard_ctrl;
 
-static const struct lcd_ctrl *ctrls[] = {
+static struct lcd_ctrl *ctrls[] = {
 #ifdef CONFIG_ARCH_OMAP1
 	&omap1_int_ctrl,
 #else
@@ -392,7 +391,7 @@ static void set_fb_fix(struct fb_info *fbi)
 	int bpp;
 
 	rg = &plane->fbdev->mem_desc.region[plane->idx];
-	fbi->screen_base	= rg->vaddr;
+	fbi->screen_base	= (char __iomem *)rg->vaddr;
 	fix->smem_start		= rg->paddr;
 	fix->smem_len		= rg->size;
 
@@ -741,7 +740,7 @@ static int omapfb_update_win(struct fb_info *fbi,
 	int ret;
 
 	omapfb_rqueue_lock(plane->fbdev);
-	ret = omapfb_update_window_async(fbi, win, NULL, NULL);
+	ret = omapfb_update_window_async(fbi, win, NULL, 0);
 	omapfb_rqueue_unlock(plane->fbdev);
 
 	return ret;
@@ -769,7 +768,7 @@ static int omapfb_update_full_screen(struct fb_info *fbi)
 	win.format = 0;
 
 	omapfb_rqueue_lock(fbdev);
-	r = fbdev->ctrl->update_window(fbi, &win, NULL, NULL);
+	r = fbdev->ctrl->update_window(fbi, &win, NULL, 0);
 	omapfb_rqueue_unlock(fbdev);
 
 	return r;
@@ -1048,7 +1047,7 @@ void omapfb_write_first_pixel(struct omapfb_device *fbdev, u16 pixval)
 		win.height = 2;
 		win.out_width = 2;
 		win.out_height = 2;
-		fbdev->ctrl->update_window(fbdev->fb_info[0], &win, NULL, NULL);
+		fbdev->ctrl->update_window(fbdev->fb_info[0], &win, NULL, 0);
 	}
 	omapfb_rqueue_unlock(fbdev);
 }

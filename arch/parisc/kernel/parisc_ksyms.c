@@ -152,6 +152,3 @@ EXPORT_SYMBOL($$dyncall);
 EXPORT_SYMBOL(node_data);
 EXPORT_SYMBOL(pfnnid_map);
 #endif
-
-/* from pacache.S -- needed for copy_page */
-EXPORT_SYMBOL(copy_user_page_asm);

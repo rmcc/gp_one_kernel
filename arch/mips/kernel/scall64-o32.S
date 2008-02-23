@@ -174,12 +174,14 @@ not_o32_scall:
 	END(handle_sys)
 
 LEAF(sys32_syscall)
-	subu	t0, a0, __NR_O32_Linux	# check syscall number
-	sltiu	v0, t0, __NR_O32_Linux_syscalls + 1
-	beqz	t0, einval		# do not recurse
-	dsll	t1, t0, 3
+	sltu	v0, a0, __NR_O32_Linux + __NR_O32_Linux_syscalls + 1
 	beqz	v0, einval
-	ld	t2, sys_call_table(t1)		# syscall routine
+
+	dsll	v0, a0, 3
+	ld	t2, (sys_call_table - (__NR_O32_Linux * 8))(v0)
+
+	li	v1, 4000		# indirect syscall number
+	beq	a0, v1, einval		# do not recurse
 
 	move	a0, a1			# shift argument registers
 	move	a1, a2
@@ -196,7 +198,7 @@ LEAF(sys32_syscall)
 	jr	t2
 	/* Unreached */
 
-einval:	li	v0, -ENOSYS
+einval:	li	v0, -EINVAL
 	jr	ra
 	END(sys32_syscall)
 
@@ -229,7 +231,7 @@ sys_call_table:
 	PTR	sys_setuid
 	PTR	sys_getuid
 	PTR	compat_sys_stime		/* 4025 */
-	PTR	compat_sys_ptrace
+	PTR	sys32_ptrace
 	PTR	sys_alarm
 	PTR	sys_ni_syscall			/* was sys_fstat */
 	PTR	sys_pause
@@ -245,7 +247,7 @@ sys_call_table:
 	PTR	sys_mkdir
 	PTR	sys_rmdir			/* 4040 */
 	PTR	sys_dup
-	PTR	sysm_pipe
+	PTR	sys_pipe
 	PTR	compat_sys_times
 	PTR	sys_ni_syscall
 	PTR	sys_brk				/* 4045 */
@@ -281,8 +283,8 @@ sys_call_table:
 	PTR	compat_sys_setrlimit		/* 4075 */
 	PTR	compat_sys_getrlimit
 	PTR	compat_sys_getrusage
-	PTR	compat_sys_gettimeofday
-	PTR	compat_sys_settimeofday
+	PTR	sys32_gettimeofday
+	PTR	sys32_settimeofday
 	PTR	sys_getgroups			/* 4080 */
 	PTR	sys_setgroups
 	PTR	sys_ni_syscall			/* old_select */
@@ -510,7 +512,7 @@ sys_call_table:
 	PTR	sys_splice
 	PTR	sys32_sync_file_range		/* 4305 */
 	PTR	sys_tee
-	PTR	compat_sys_vmsplice
+	PTR	sys_vmsplice
 	PTR	compat_sys_move_pages
 	PTR	compat_sys_set_robust_list
 	PTR	compat_sys_get_robust_list	/* 4310 */
@@ -527,10 +529,4 @@ sys_call_table:
 	PTR	sys_timerfd_create
 	PTR	sys_timerfd_gettime
 	PTR	sys_timerfd_settime
-	PTR	compat_sys_signalfd4
-	PTR	sys_eventfd2			/* 4325 */
-	PTR	sys_epoll_create1
-	PTR	sys_dup3
-	PTR	sys_pipe2
-	PTR	sys_inotify_init1
 	.size	sys_call_table,.-sys_call_table

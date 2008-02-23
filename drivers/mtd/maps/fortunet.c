@@ -1,5 +1,6 @@
 /* fortunet.c memory map
  *
+ * $Id: fortunet.c,v 1.11 2005/11/07 11:14:27 gleixner Exp $
  */
 
 #include <linux/module.h>
@@ -181,7 +182,7 @@ __setup("MTD_Partition=", MTD_New_Partition);
 /* Backwards-spelling-compatibility */
 __setup("MTD_Partion=", MTD_New_Partition);
 
-static int __init init_fortunet(void)
+int __init init_fortunet(void)
 {
 	int	ix,iy;
 	for(iy=ix=0;ix<MAX_NUM_REGIONS;ix++)

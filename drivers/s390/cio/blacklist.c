@@ -9,9 +9,6 @@
  *		 Arnd Bergmann (arndb@de.ibm.com)
  */
 
-#define KMSG_COMPONENT "cio"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/init.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
@@ -27,7 +24,6 @@
 #include "cio.h"
 #include "cio_debug.h"
 #include "css.h"
-#include "device.h"
 
 /*
  * "Blacklisting" of certain devices:
@@ -53,10 +49,9 @@ static int blacklist_range(range_action action, unsigned int from_ssid,
 {
 	if ((from_ssid > to_ssid) || ((from_ssid == to_ssid) && (from > to))) {
 		if (msgtrigger)
-			pr_warning("0.%x.%04x to 0.%x.%04x is not a valid "
-				   "range for cio_ignore\n", from_ssid, from,
-				   to_ssid, to);
-
+			printk(KERN_WARNING "cio: Invalid cio_ignore range "
+			       "0.%x.%04x-0.%x.%04x\n", from_ssid, from,
+			       to_ssid, to);
 		return 1;
 	}
 
@@ -102,8 +97,8 @@ static int pure_hex(char **cp, unsigned int *val, int min_digit,
 	return 0;
 }
 
-static int parse_busid(char *str, unsigned int *cssid, unsigned int *ssid,
-		       unsigned int *devno, int msgtrigger)
+static int parse_busid(char *str, int *cssid, int *ssid, int *devno,
+		       int msgtrigger)
 {
 	char *str_work;
 	int val, rc, ret;
@@ -144,8 +139,8 @@ static int parse_busid(char *str, unsigned int *cssid, unsigned int *ssid,
 	rc = 0;
 out:
 	if (rc && msgtrigger)
-		pr_warning("%s is not a valid device for the cio_ignore "
-			   "kernel parameter\n", str);
+		printk(KERN_WARNING "cio: Invalid cio_ignore device '%s'\n",
+		       str);
 
 	return rc;
 }
@@ -153,7 +148,7 @@ out:
 static int blacklist_parse_parameters(char *str, range_action action,
 				      int msgtrigger)
 {
-	unsigned int from_cssid, to_cssid, from_ssid, to_ssid, from, to;
+	int from_cssid, to_cssid, from_ssid, to_ssid, from, to;
 	int rc, totalrc;
 	char *parm;
 	range_action ra;
@@ -196,9 +191,9 @@ static int blacklist_parse_parameters(char *str, range_action action,
 			rc = blacklist_range(ra, from_ssid, to_ssid, from, to,
 					     msgtrigger);
 			if (rc)
-				totalrc = -EINVAL;
+				totalrc = 1;
 		} else
-			totalrc = -EINVAL;
+			totalrc = 1;
 	}
 
 	return totalrc;
@@ -245,10 +240,8 @@ static int blacklist_parse_proc_parameters(char *buf)
 		rc = blacklist_parse_parameters(buf, free, 0);
 	else if (strcmp("add", parm) == 0)
 		rc = blacklist_parse_parameters(buf, add, 0);
-	else if (strcmp("purge", parm) == 0)
-		return ccw_purge_blacklisted();
 	else
-		return -EINVAL;
+		return 1;
 
 	css_schedule_reprobe();
 
@@ -360,7 +353,7 @@ cio_ignore_write(struct file *file, const char __user *user_buf,
 	}
 	ret = blacklist_parse_proc_parameters(buf);
 	if (ret)
-		rc = ret;
+		rc = -EINVAL;
 	else
 		rc = user_len;
 

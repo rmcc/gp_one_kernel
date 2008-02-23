@@ -26,9 +26,8 @@
 #include <linux/serial_8250.h>
 #include <linux/mtd/physmap.h>
 #include <linux/platform_device.h>
-#include <linux/io.h>
-#include <mach/hardware.h>
-#include <asm/cputype.h>
+#include <asm/hardware.h>
+#include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -37,7 +36,7 @@
 #include <asm/mach-types.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <mach/time.h>
+#include <asm/arch/time.h>
 
 /*
  * Until March of 2007 iq31244 platforms and ep80219 platforms shared the
@@ -50,7 +49,8 @@ static int force_ep80219;
 
 static int is_80219(void)
 {
-	return !!((read_cpuid_id() & 0xffffffe0) == 0x69052e20);
+	extern int processor_id;
+	return !!((processor_id & 0xffffffe0) == 0x69052e20);
 }
 
 static int is_ep80219(void)

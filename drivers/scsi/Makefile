@@ -34,11 +34,8 @@ obj-$(CONFIG_SCSI_ISCSI_ATTRS)	+= scsi_transport_iscsi.o
 obj-$(CONFIG_SCSI_SAS_ATTRS)	+= scsi_transport_sas.o
 obj-$(CONFIG_SCSI_SAS_LIBSAS)	+= libsas/
 obj-$(CONFIG_SCSI_SRP_ATTRS)	+= scsi_transport_srp.o
-obj-$(CONFIG_SCSI_DH)		+= device_handler/
 
-obj-$(CONFIG_LIBFC)		+= libfc/
-obj-$(CONFIG_FCOE)		+= fcoe/
-obj-$(CONFIG_ISCSI_TCP) 	+= libiscsi.o	libiscsi_tcp.o iscsi_tcp.o
+obj-$(CONFIG_ISCSI_TCP) 	+= libiscsi.o	iscsi_tcp.o
 obj-$(CONFIG_INFINIBAND_ISER) 	+= libiscsi.o
 obj-$(CONFIG_SCSI_A4000T)	+= 53c700.o	a4000t.o
 obj-$(CONFIG_SCSI_ZORRO7XX)	+= 53c700.o	zorro7xx.o
@@ -105,6 +102,7 @@ obj-$(CONFIG_SCSI_GDTH)		+= gdth.o
 obj-$(CONFIG_SCSI_INITIO)	+= initio.o
 obj-$(CONFIG_SCSI_INIA100)	+= a100u2w.o
 obj-$(CONFIG_SCSI_QLOGICPTI)	+= qlogicpti.o
+obj-$(CONFIG_BLK_DEV_IDESCSI)	+= ide-scsi.o
 obj-$(CONFIG_SCSI_MESH)		+= mesh.o
 obj-$(CONFIG_SCSI_MAC53C94)	+= mac53c94.o
 obj-$(CONFIG_BLK_DEV_3W_XXXX_RAID) += 3w-xxxx.o
@@ -120,12 +118,10 @@ obj-$(CONFIG_SCSI_IPR)		+= ipr.o
 obj-$(CONFIG_SCSI_SRP)		+= libsrp.o
 obj-$(CONFIG_SCSI_IBMVSCSI)	+= ibmvscsi/
 obj-$(CONFIG_SCSI_IBMVSCSIS)	+= ibmvscsi/
-obj-$(CONFIG_SCSI_IBMVFC)	+= ibmvscsi/
 obj-$(CONFIG_SCSI_HPTIOP)	+= hptiop.o
 obj-$(CONFIG_SCSI_STEX)		+= stex.o
 obj-$(CONFIG_SCSI_MVSAS)	+= mvsas.o
 obj-$(CONFIG_PS3_ROM)		+= ps3rom.o
-obj-$(CONFIG_SCSI_CXGB3_ISCSI)	+= libiscsi.o libiscsi_tcp.o cxgb3i/
 
 obj-$(CONFIG_ARM)		+= arm/
 
@@ -153,8 +149,6 @@ scsi_mod-$(CONFIG_SCSI_PROC_FS)	+= scsi_proc.o
 scsi_tgt-y			+= scsi_tgt_lib.o scsi_tgt_if.o
 
 sd_mod-objs	:= sd.o
-sd_mod-$(CONFIG_BLK_DEV_INTEGRITY) += sd_dif.o
-
 sr_mod-objs	:= sr.o sr_ioctl.o sr_vendor.o
 ncr53c8xx-flags-$(CONFIG_SCSI_ZALON) \
 		:= -DCONFIG_NCR53C8XX_PREFETCH -DSCSI_NCR_BIG_ENDIAN \

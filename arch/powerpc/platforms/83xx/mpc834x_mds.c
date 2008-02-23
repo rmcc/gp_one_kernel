@@ -35,7 +35,6 @@
 #include <asm/prom.h>
 #include <asm/udbg.h>
 #include <sysdev/fsl_soc.h>
-#include <sysdev/fsl_pci.h>
 
 #include "mpc83xx.h"
 
@@ -111,7 +110,6 @@ static void __init mpc834x_mds_init_IRQ(void)
 static struct of_device_id mpc834x_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
-	{ .compatible = "simple-bus", },
 	{},
 };
 

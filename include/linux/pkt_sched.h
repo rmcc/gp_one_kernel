@@ -85,26 +85,6 @@ struct tc_ratespec
 
 #define TC_RTAB_SIZE	1024
 
-struct tc_sizespec {
-	unsigned char	cell_log;
-	unsigned char	size_log;
-	short		cell_align;
-	int		overhead;
-	unsigned int	linklayer;
-	unsigned int	mpu;
-	unsigned int	mtu;
-	unsigned int	tsize;
-};
-
-enum {
-	TCA_STAB_UNSPEC,
-	TCA_STAB_BASE,
-	TCA_STAB_DATA,
-	__TCA_STAB_MAX
-};
-
-#define TCA_STAB_MAX (__TCA_STAB_MAX - 1)
-
 /* FIFO section */
 
 struct tc_fifo_qopt
@@ -123,12 +103,14 @@ struct tc_prio_qopt
 	__u8	priomap[TC_PRIO_MAX+1];	/* Map: logical priority -> PRIO band */
 };
 
-/* MULTIQ section */
-
-struct tc_multiq_qopt {
-	__u16	bands;			/* Number of bands */
-	__u16	max_bands;		/* Maximum number of queues */
+enum
+{
+	TCA_PRIO_UNSPEC,
+	TCA_PRIO_MQ,
+	__TCA_PRIO_MAX
 };
+
+#define TCA_PRIO_MAX    (__TCA_PRIO_MAX - 1)
 
 /* TBF section */
 
@@ -499,21 +481,5 @@ struct tc_netem_corrupt
 };
 
 #define NETEM_DIST_SCALE	8192
-
-/* DRR */
-
-enum
-{
-	TCA_DRR_UNSPEC,
-	TCA_DRR_QUANTUM,
-	__TCA_DRR_MAX
-};
-
-#define TCA_DRR_MAX	(__TCA_DRR_MAX - 1)
-
-struct tc_drr_stats
-{
-	u32	deficit;
-};
 
 #endif

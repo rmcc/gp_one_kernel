@@ -278,7 +278,7 @@ static const struct file_operations wandev_fops = {
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
 	.release = single_release,
-	.unlocked_ioctl  = wanrouter_ioctl,
+	.ioctl	 = wanrouter_ioctl,
 };
 
 /*

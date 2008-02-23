@@ -85,10 +85,8 @@ static void dump_thread32(struct pt_regs *regs, struct user32 *dump)
 	dump->regs.ax = regs->ax;
 	dump->regs.ds = current->thread.ds;
 	dump->regs.es = current->thread.es;
-	savesegment(fs, fs);
-	dump->regs.fs = fs;
-	savesegment(gs, gs);
-	dump->regs.gs = gs;
+	asm("movl %%fs,%0" : "=r" (fs)); dump->regs.fs = fs;
+	asm("movl %%gs,%0" : "=r" (gs)); dump->regs.gs = gs;
 	dump->regs.orig_ax = regs->orig_ax;
 	dump->regs.ip = regs->ip;
 	dump->regs.cs = regs->cs;
@@ -327,7 +325,7 @@ static int load_aout_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	current->mm->cached_hole_size = 0;
 
 	current->mm->mmap = NULL;
-	install_exec_creds(bprm);
+	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
 
 	if (N_MAGIC(ex) == OMAGIC) {
@@ -432,9 +430,8 @@ beyond_if:
 	current->mm->start_stack =
 		(unsigned long)create_aout_tables((char __user *)bprm->p, bprm);
 	/* start thread */
-	loadsegment(fs, 0);
-	loadsegment(ds, __USER32_DS);
-	loadsegment(es, __USER32_DS);
+	asm volatile("movl %0,%%fs" :: "r" (0)); \
+	asm volatile("movl %0,%%es; movl %0,%%ds": :"r" (__USER32_DS));
 	load_gs_index(0);
 	(regs)->ip = ex.a_entry;
 	(regs)->sp = current->mm->start_stack;
@@ -444,6 +441,12 @@ beyond_if:
 	regs->r8 = regs->r9 = regs->r10 = regs->r11 =
 	regs->r12 = regs->r13 = regs->r14 = regs->r15 = 0;
 	set_fs(USER_DS);
+	if (unlikely(current->ptrace & PT_PTRACED)) {
+		if (current->ptrace & PT_TRACE_EXEC)
+			ptrace_notify((PTRACE_EVENT_EXEC << 8) | SIGTRAP);
+		else
+			send_sig(SIGTRAP, current, 0);
+	}
 	return 0;
 }
 

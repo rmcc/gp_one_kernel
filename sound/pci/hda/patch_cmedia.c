@@ -28,6 +28,7 @@
 #include <sound/core.h>
 #include "hda_codec.h"
 #include "hda_local.h"
+#include "hda_patch.h"
 #define NUM_PINS	11
 
 
@@ -610,7 +611,6 @@ static const char *cmi9880_models[CMI_MODELS] = {
 
 static struct snd_pci_quirk cmi9880_cfg_tbl[] = {
 	SND_PCI_QUIRK(0x1043, 0x813d, "ASUS P5AD2", CMI_FULL_DIG),
-	SND_PCI_QUIRK(0x1854, 0x002b, "LG LS75", CMI_MINIMAL),
 	SND_PCI_QUIRK(0x1854, 0x0032, "LG", CMI_FULL_DIG),
 	{} /* terminator */
 };
@@ -735,32 +735,8 @@ static int patch_cmi9880(struct hda_codec *codec)
 /*
  * patch entries
  */
-static struct hda_codec_preset snd_hda_preset_cmedia[] = {
+struct hda_codec_preset snd_hda_preset_cmedia[] = {
 	{ .id = 0x13f69880, .name = "CMI9880", .patch = patch_cmi9880 },
  	{ .id = 0x434d4980, .name = "CMI9880", .patch = patch_cmi9880 },
 	{} /* terminator */
 };
-
-MODULE_ALIAS("snd-hda-codec-id:13f69880");
-MODULE_ALIAS("snd-hda-codec-id:434d4980");
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("C-Media HD-audio codec");
-
-static struct hda_codec_preset_list cmedia_list = {
-	.preset = snd_hda_preset_cmedia,
-	.owner = THIS_MODULE,
-};
-
-static int __init patch_cmedia_init(void)
-{
-	return snd_hda_add_codec_preset(&cmedia_list);
-}
-
-static void __exit patch_cmedia_exit(void)
-{
-	snd_hda_delete_codec_preset(&cmedia_list);
-}
-
-module_init(patch_cmedia_init)
-module_exit(patch_cmedia_exit)

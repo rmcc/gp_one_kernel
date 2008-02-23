@@ -27,12 +27,9 @@
 /*
  * Valid flags for a dirty buffer
  */
-enum {
-	PG_BUSY = 0,
-	PG_CLEAN,
-	PG_NEED_COMMIT,
-	PG_NEED_RESCHED,
-};
+#define PG_BUSY			0
+#define PG_NEED_COMMIT		1
+#define PG_NEED_RESCHED		2
 
 struct nfs_inode;
 struct nfs_page {

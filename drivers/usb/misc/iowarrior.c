@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/poll.h>
+#include <linux/version.h>
 #include <linux/usb/iowarrior.h>
 
 /* Version Information */
@@ -473,8 +474,8 @@ exit:
 /**
  *	iowarrior_ioctl
  */
-static long iowarrior_ioctl(struct file *file, unsigned int cmd,
-							unsigned long arg)
+static int iowarrior_ioctl(struct inode *inode, struct file *file,
+			   unsigned int cmd, unsigned long arg)
 {
 	struct iowarrior *dev = NULL;
 	__u8 *buffer;
@@ -492,7 +493,6 @@ static long iowarrior_ioctl(struct file *file, unsigned int cmd,
 		return -ENOMEM;
 
 	/* lock this object */
-	lock_kernel();
 	mutex_lock(&dev->mutex);
 
 	/* verify that the device wasn't unplugged */
@@ -584,7 +584,6 @@ static long iowarrior_ioctl(struct file *file, unsigned int cmd,
 error_out:
 	/* unlock the device */
 	mutex_unlock(&dev->mutex);
-	unlock_kernel();
 	kfree(buffer);
 	return retval;
 }
@@ -720,7 +719,7 @@ static const struct file_operations iowarrior_fops = {
 	.owner = THIS_MODULE,
 	.write = iowarrior_write,
 	.read = iowarrior_read,
-	.unlocked_ioctl = iowarrior_ioctl,
+	.ioctl = iowarrior_ioctl,
 	.open = iowarrior_open,
 	.release = iowarrior_release,
 	.poll = iowarrior_poll,

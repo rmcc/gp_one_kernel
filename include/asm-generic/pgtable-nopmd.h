@@ -5,8 +5,6 @@
 
 #include <asm-generic/pgtable-nopud.h>
 
-struct mm_struct;
-
 #define __PAGETABLE_PMD_FOLDED
 
 /*
@@ -56,9 +54,7 @@ static inline pmd_t * pmd_offset(pud_t * pud, unsigned long address)
  * inside the pud, so has no extra memory associated with it.
  */
 #define pmd_alloc_one(mm, address)		NULL
-static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
-{
-}
+#define pmd_free(mm, x)				do { } while (0)
 #define __pmd_free_tlb(tlb, x)			do { } while (0)
 
 #undef  pmd_addr_end

@@ -35,7 +35,6 @@ enum bh_state_bits {
 	BH_Ordered,	/* ordered write */
 	BH_Eopnotsupp,	/* operation not supported (barrier) */
 	BH_Unwritten,	/* Buffer is allocated on disk but not written */
-	BH_Quiet,	/* Buffer Error Prinks to be quiet */
 
 	BH_PrivateStart,/* not a state bit, but the first bit available
 			 * for private allocation by other entities
@@ -116,6 +115,7 @@ BUFFER_FNS(Uptodate, uptodate)
 BUFFER_FNS(Dirty, dirty)
 TAS_BUFFER_FNS(Dirty, dirty)
 BUFFER_FNS(Lock, locked)
+TAS_BUFFER_FNS(Lock, locked)
 BUFFER_FNS(Req, req)
 TAS_BUFFER_FNS(Req, req)
 BUFFER_FNS(Mapped, mapped)
@@ -171,7 +171,7 @@ void __wait_on_buffer(struct buffer_head *);
 wait_queue_head_t *bh_waitq_head(struct buffer_head *bh);
 int fsync_bdev(struct block_device *);
 struct super_block *freeze_bdev(struct block_device *);
-int thaw_bdev(struct block_device *, struct super_block *);
+void thaw_bdev(struct block_device *, struct super_block *);
 int fsync_super(struct super_block *);
 int fsync_no_super(struct block_device *);
 struct buffer_head *__find_get_block(struct block_device *bdev, sector_t block,
@@ -205,8 +205,6 @@ void block_invalidatepage(struct page *page, unsigned long offset);
 int block_write_full_page(struct page *page, get_block_t *get_block,
 				struct writeback_control *wbc);
 int block_read_full_page(struct page*, get_block_t*);
-int block_is_partially_uptodate(struct page *page, read_descriptor_t *desc,
-				unsigned long from);
 int block_write_begin(struct file *, struct address_space *,
 				loff_t, unsigned, unsigned,
 				struct page **, void **, get_block_t*);
@@ -321,15 +319,10 @@ static inline void wait_on_buffer(struct buffer_head *bh)
 		__wait_on_buffer(bh);
 }
 
-static inline int trylock_buffer(struct buffer_head *bh)
-{
-	return likely(!test_and_set_bit_lock(BH_Lock, &bh->b_state));
-}
-
 static inline void lock_buffer(struct buffer_head *bh)
 {
 	might_sleep();
-	if (!trylock_buffer(bh))
+	if (test_set_buffer_locked(bh))
 		__lock_buffer(bh);
 }
 
@@ -346,15 +339,6 @@ static inline int remove_inode_buffers(struct inode *inode) { return 1; }
 static inline int sync_mapping_buffers(struct address_space *mapping) { return 0; }
 static inline void invalidate_bdev(struct block_device *bdev) {}
 
-static inline struct super_block *freeze_bdev(struct block_device *sb)
-{
-	return NULL;
-}
-
-static inline int thaw_bdev(struct block_device *bdev, struct super_block *sb)
-{
-	return 0;
-}
 
 #endif /* CONFIG_BLOCK */
 #endif /* _LINUX_BUFFER_HEAD_H */

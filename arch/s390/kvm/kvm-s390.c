@@ -39,7 +39,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "exit_instruction", VCPU_STAT(exit_instruction) },
 	{ "exit_program_interruption", VCPU_STAT(exit_program_interruption) },
 	{ "exit_instr_and_program_int", VCPU_STAT(exit_instr_and_program) },
-	{ "instruction_lctlg", VCPU_STAT(instruction_lctlg) },
+	{ "instruction_lctg", VCPU_STAT(instruction_lctg) },
 	{ "instruction_lctl", VCPU_STAT(instruction_lctl) },
 	{ "deliver_emergency_signal", VCPU_STAT(deliver_emergency_signal) },
 	{ "deliver_service_signal", VCPU_STAT(deliver_service_signal) },
@@ -79,6 +79,10 @@ void kvm_arch_hardware_disable(void *garbage)
 {
 }
 
+void decache_vcpus_on_cpu(int cpu)
+{
+}
+
 int kvm_arch_hardware_setup(void)
 {
 	return 0;
@@ -112,10 +116,7 @@ long kvm_arch_dev_ioctl(struct file *filp,
 
 int kvm_dev_ioctl_check_extension(long ext)
 {
-	switch (ext) {
-	default:
-		return 0;
-	}
+	return 0;
 }
 
 /* Section: vm related */
@@ -183,6 +184,8 @@ struct kvm *kvm_arch_create_vm(void)
 	debug_register_view(kvm->arch.dbf, &debug_sprintf_view);
 	VM_EVENT(kvm, 3, "%s", "vm created");
 
+	try_module_get(THIS_MODULE);
+
 	return kvm;
 out_nodbf:
 	free_page((unsigned long)(kvm->arch.sca));
@@ -192,33 +195,12 @@ out_nokvm:
 	return ERR_PTR(rc);
 }
 
-void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
-{
-	VCPU_EVENT(vcpu, 3, "%s", "free cpu");
-	free_page((unsigned long)(vcpu->arch.sie_block));
-	kvm_vcpu_uninit(vcpu);
-	kfree(vcpu);
-}
-
-static void kvm_free_vcpus(struct kvm *kvm)
-{
-	unsigned int i;
-
-	for (i = 0; i < KVM_MAX_VCPUS; ++i) {
-		if (kvm->vcpus[i]) {
-			kvm_arch_vcpu_destroy(kvm->vcpus[i]);
-			kvm->vcpus[i] = NULL;
-		}
-	}
-}
-
 void kvm_arch_destroy_vm(struct kvm *kvm)
 {
-	kvm_free_vcpus(kvm);
-	kvm_free_physmem(kvm);
-	free_page((unsigned long)(kvm->arch.sca));
 	debug_unregister(kvm->arch.dbf);
+	free_page((unsigned long)(kvm->arch.sca));
 	kfree(kvm);
+	module_put(THIS_MODULE);
 }
 
 /* Section: vcpu related */
@@ -229,7 +211,8 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 
 void kvm_arch_vcpu_uninit(struct kvm_vcpu *vcpu)
 {
-	/* Nothing todo */
+	/* kvm common code refers to this, but does'nt call it */
+	BUG();
 }
 
 void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
@@ -267,16 +250,11 @@ static void kvm_s390_vcpu_initial_reset(struct kvm_vcpu *vcpu)
 	vcpu->arch.sie_block->gbea = 1;
 }
 
-/* The current code can have up to 256 pages for virtio */
-#define VIRTIODESCSPACE (256ul * 4096ul)
-
 int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 {
 	atomic_set(&vcpu->arch.sie_block->cpuflags, CPUSTAT_ZARCH);
-	vcpu->arch.sie_block->gmslm = vcpu->kvm->arch.guest_memsize +
-				      vcpu->kvm->arch.guest_origin +
-				      VIRTIODESCSPACE - 1ul;
-	vcpu->arch.sie_block->gmsor = vcpu->kvm->arch.guest_origin;
+	vcpu->arch.sie_block->gmslm = 0xffffffffffUL;
+	vcpu->arch.sie_block->gmsor = 0x000000000000;
 	vcpu->arch.sie_block->ecb   = 2;
 	vcpu->arch.sie_block->eca   = 0xC1002001U;
 	setup_timer(&vcpu->arch.ckc_timer, kvm_s390_idle_wakeup,
@@ -295,8 +273,7 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm,
 	if (!vcpu)
 		goto out_nomem;
 
-	vcpu->arch.sie_block = (struct kvm_s390_sie_block *)
-					get_zeroed_page(GFP_KERNEL);
+	vcpu->arch.sie_block = (struct sie_block *) get_zeroed_page(GFP_KERNEL);
 
 	if (!vcpu->arch.sie_block)
 		goto out_free_cpu;
@@ -323,11 +300,21 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm,
 	VM_EVENT(kvm, 3, "create cpu %d at %p, sie block at %p", id, vcpu,
 		 vcpu->arch.sie_block);
 
+	try_module_get(THIS_MODULE);
+
 	return vcpu;
 out_free_cpu:
 	kfree(vcpu);
 out_nomem:
 	return ERR_PTR(rc);
+}
+
+void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
+{
+	VCPU_EVENT(vcpu, 3, "%s", "destroy cpu");
+	free_page((unsigned long)(vcpu->arch.sie_block));
+	kfree(vcpu);
+	module_put(THIS_MODULE);
 }
 
 int kvm_arch_vcpu_runnable(struct kvm_vcpu *vcpu)
@@ -436,8 +423,6 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 	return -EINVAL; /* not implemented yet */
 }
 
-extern void s390_handle_mcck(void);
-
 static void __vcpu_run(struct kvm_vcpu *vcpu)
 {
 	memcpy(&vcpu->arch.sie_block->gg14, &vcpu->arch.guest_gprs[14], 16);
@@ -445,21 +430,13 @@ static void __vcpu_run(struct kvm_vcpu *vcpu)
 	if (need_resched())
 		schedule();
 
-	if (test_thread_flag(TIF_MCCK_PENDING))
-		s390_handle_mcck();
-
-	kvm_s390_deliver_pending_interrupts(vcpu);
-
 	vcpu->arch.sie_block->icptcode = 0;
 	local_irq_disable();
 	kvm_guest_enter();
 	local_irq_enable();
 	VCPU_EVENT(vcpu, 6, "entering sie flags %x",
 		   atomic_read(&vcpu->arch.sie_block->cpuflags));
-	if (sie64a(vcpu->arch.sie_block, vcpu->arch.guest_gprs)) {
-		VCPU_EVENT(vcpu, 3, "%s", "fault in sie instruction");
-		kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
-	}
+	sie64a(vcpu->arch.sie_block, vcpu->arch.guest_gprs);
 	VCPU_EVENT(vcpu, 6, "exit sie icptcode %d",
 		   vcpu->arch.sie_block->icptcode);
 	local_irq_disable();
@@ -498,6 +475,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *kvm_run)
 	might_sleep();
 
 	do {
+		kvm_s390_deliver_pending_interrupts(vcpu);
 		__vcpu_run(vcpu);
 		rc = kvm_handle_sie_intercept(vcpu);
 	} while (!signal_pending(current) && !rc);
@@ -683,10 +661,6 @@ int kvm_arch_set_memory_region(struct kvm *kvm,
 	   programming practice. */
 
 	return 0;
-}
-
-void kvm_arch_flush_shadow(struct kvm *kvm)
-{
 }
 
 gfn_t unalias_gfn(struct kvm *kvm, gfn_t gfn)

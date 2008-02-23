@@ -23,8 +23,6 @@
 #include <linux/bootmem.h>
 #include <linux/interrupt.h>
 #include <linux/ptrace.h>
-#include <linux/kgdb.h>
-#include <linux/kdebug.h>
 
 #include <asm/bootinfo.h>
 #include <asm/branch.h>
@@ -32,7 +30,6 @@
 #include <asm/cpu.h>
 #include <asm/dsp.h>
 #include <asm/fpu.h>
-#include <asm/fpu_emulator.h>
 #include <asm/mipsregs.h>
 #include <asm/mipsmtregs.h>
 #include <asm/module.h>
@@ -43,15 +40,10 @@
 #include <asm/tlbdebug.h>
 #include <asm/traps.h>
 #include <asm/uaccess.h>
-#include <asm/watch.h>
 #include <asm/mmu_context.h>
 #include <asm/types.h>
 #include <asm/stacktrace.h>
-#include <asm/irq.h>
 
-extern void check_wait(void);
-extern asmlinkage void r4k_wait(void);
-extern asmlinkage void rollback_handle_int(void);
 extern asmlinkage void handle_int(void);
 extern asmlinkage void handle_tlbm(void);
 extern asmlinkage void handle_tlbl(void);
@@ -79,10 +71,7 @@ extern asmlinkage void handle_reserved(void);
 extern int fpu_emulator_cop1Handler(struct pt_regs *xcp,
 	struct mips_fpu_struct *ctx, int has_fpu);
 
-#ifdef CONFIG_CPU_CAVIUM_OCTEON
-extern asmlinkage void octeon_cop2_restore(struct octeon_cop2_state *task);
-#endif
-
+void (*board_watchpoint_handler)(struct pt_regs *regs);
 void (*board_be_init)(void);
 int (*board_be_handler)(struct pt_regs *regs, int is_fixup);
 void (*board_nmi_handler_setup)(void);
@@ -99,17 +88,15 @@ static void show_raw_backtrace(unsigned long reg29)
 #ifdef CONFIG_KALLSYMS
 	printk("\n");
 #endif
-	while (!kstack_end(sp)) {
-		unsigned long __user *p =
-			(unsigned long __user *)(unsigned long)sp++;
-		if (__get_user(addr, p)) {
-			printk(" (Bad stack address)");
-			break;
+#define IS_KVA01(a) ((((unsigned int)a) & 0xc0000000) == 0x80000000)
+	if (IS_KVA01(sp)) {
+		while (!kstack_end(sp)) {
+			addr = *sp++;
+			if (__kernel_text_address(addr))
+				print_ip_sym(addr);
 		}
-		if (__kernel_text_address(addr))
-			print_ip_sym(addr);
+		printk("\n");
 	}
-	printk("\n");
 }
 
 #ifdef CONFIG_KALLSYMS
@@ -260,11 +247,11 @@ static void __show_regs(const struct pt_regs *regs)
 	/*
 	 * Saved cp0 registers
 	 */
-	printk("epc   : %0*lx %pS\n", field, regs->cp0_epc,
-	       (void *) regs->cp0_epc);
+	printk("epc   : %0*lx ", field, regs->cp0_epc);
+	print_symbol("%s ", regs->cp0_epc);
 	printk("    %s\n", print_tainted());
-	printk("ra    : %0*lx %pS\n", field, regs->regs[31],
-	       (void *) regs->regs[31]);
+	printk("ra    : %0*lx ", field, regs->regs[31]);
+	print_symbol("%s\n", regs->regs[31]);
 
 	printk("Status: %08x    ", (uint32_t) regs->cp0_status);
 
@@ -383,8 +370,8 @@ void __noreturn die(const char * str, const struct pt_regs * regs)
 	do_exit(SIGSEGV);
 }
 
-extern struct exception_table_entry __start___dbe_table[];
-extern struct exception_table_entry __stop___dbe_table[];
+extern const struct exception_table_entry __start___dbe_table[];
+extern const struct exception_table_entry __stop___dbe_table[];
 
 __asm__(
 "	.section	__dbe_table, \"a\"\n"
@@ -437,10 +424,6 @@ asmlinkage void do_be(struct pt_regs *regs)
 	printk(KERN_ALERT "%s bus error, epc == %0*lx, ra == %0*lx\n",
 	       data ? "Data" : "Instruction",
 	       field, regs->cp0_epc, field, regs->regs[31]);
-	if (notify_die(DIE_OOPS, "bus error", regs, SIGBUS, 0, 0)
-	    == NOTIFY_STOP)
-		return;
-
 	die_if_kernel("Oops", regs);
 	force_sig(SIGBUS, current);
 }
@@ -639,9 +622,6 @@ asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 {
 	siginfo_t info;
 
-	if (notify_die(DIE_FP, "FP exception", regs, SIGFPE, 0, 0)
-	    == NOTIFY_STOP)
-		return;
 	die_if_kernel("FP exception in kernel code", regs);
 
 	if (fcr31 & FPU_CSR_UNI_X) {
@@ -701,9 +681,6 @@ static void do_trap_or_bp(struct pt_regs *regs, unsigned int code,
 	siginfo_t info;
 	char b[40];
 
-	if (notify_die(DIE_TRAP, str, regs, code, 0, 0) == NOTIFY_STOP)
-		return;
-
 	/*
 	 * A short test says that IRIX 5.3 sends SIGTRAP for all trap
 	 * insns, even for trap and break codes that indicate arithmetic
@@ -726,21 +703,6 @@ static void do_trap_or_bp(struct pt_regs *regs, unsigned int code,
 		break;
 	case BRK_BUG:
 		die_if_kernel("Kernel bug detected", regs);
-		force_sig(SIGTRAP, current);
-		break;
-	case BRK_MEMU:
-		/*
-		 * Address errors may be deliberately induced by the FPU
-		 * emulator to retake control of the CPU after executing the
-		 * instruction in the delay slot of an emulated branch.
-		 *
-		 * Terminate if exception was recognized as a delay slot return
-		 * otherwise handle as normal.
-		 */
-		if (do_dsemulret(regs))
-			return;
-
-		die_if_kernel("Math emu break/trap", regs);
 		force_sig(SIGTRAP, current);
 		break;
 	default:
@@ -799,10 +761,6 @@ asmlinkage void do_ri(struct pt_regs *regs)
 	unsigned int opcode = 0;
 	int status = -1;
 
-	if (notify_die(DIE_RI, "RI Fault", regs, SIGSEGV, 0, 0)
-	    == NOTIFY_STOP)
-		return;
-
 	die_if_kernel("Reserved instruction in kernel code", regs);
 
 	if (unlikely(compute_return_epc(regs) < 0))
@@ -847,10 +805,8 @@ static void mt_ase_fp_affinity(void)
 		if (cpus_intersects(current->cpus_allowed, mt_fpu_cpumask)) {
 			cpumask_t tmask;
 
-			current->thread.user_cpus_allowed
-				= current->cpus_allowed;
-			cpus_and(tmask, current->cpus_allowed,
-				mt_fpu_cpumask);
+			cpus_and(tmask, current->thread.user_cpus_allowed,
+			         mt_fpu_cpumask);
 			set_cpus_allowed(current, tmask);
 			set_thread_flag(TIF_FPUBOUND);
 		}
@@ -865,7 +821,6 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 	unsigned int opcode;
 	unsigned int cpid;
 	int status;
-	unsigned long __maybe_unused flags;
 
 	die_if_kernel("do_cpu invoked from kernel context!", regs);
 
@@ -921,17 +876,6 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 		return;
 
 	case 2:
-#ifdef CONFIG_CPU_CAVIUM_OCTEON
-		prefetch(&current->thread.cp2);
-		local_irq_save(flags);
-		KSTK_STATUS(current) |= ST0_CU2;
-		status = read_c0_status();
-		write_c0_status(status | ST0_CU2);
-		octeon_cop2_restore(&(current->thread.cp2));
-		write_c0_status(status & ~ST0_CU2);
-		local_irq_restore(flags);
-		return;
-#endif
 	case 3:
 		break;
 	}
@@ -946,26 +890,18 @@ asmlinkage void do_mdmx(struct pt_regs *regs)
 
 asmlinkage void do_watch(struct pt_regs *regs)
 {
-	u32 cause;
+	if (board_watchpoint_handler) {
+		(*board_watchpoint_handler)(regs);
+		return;
+	}
 
 	/*
-	 * Clear WP (bit 22) bit of cause register so we don't loop
-	 * forever.
+	 * We use the watch exception where available to detect stack
+	 * overflows.
 	 */
-	cause = read_c0_cause();
-	cause &= ~(1 << 22);
-	write_c0_cause(cause);
-
-	/*
-	 * If the current thread has the watch registers loaded, save
-	 * their values and send SIGTRAP.  Otherwise another thread
-	 * left the registers set, clear them and continue.
-	 */
-	if (test_tsk_thread_flag(current, TIF_LOAD_WATCH)) {
-		mips_read_watch_registers();
-		force_sig(SIGTRAP, current);
-	} else
-		mips_clear_watch_registers();
+	dump_tlb_all();
+	show_regs(regs);
+	panic("Caught WATCH exception - probably caused by stack overflow.");
 }
 
 asmlinkage void do_mcheck(struct pt_regs *regs)
@@ -1252,7 +1188,7 @@ void *set_except_vector(int n, void *addr)
 	if (n == 0 && cpu_has_divec) {
 		*(u32 *)(ebase + 0x200) = 0x08000000 |
 					  (0x03ffffff & (handler >> 2));
-		local_flush_icache_range(ebase + 0x200, ebase + 0x204);
+		flush_icache_range(ebase + 0x200, ebase + 0x204);
 	}
 	return (void *)old_handler;
 }
@@ -1303,9 +1239,6 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 
 		extern char except_vec_vi, except_vec_vi_lui;
 		extern char except_vec_vi_ori, except_vec_vi_end;
-		extern char rollback_except_vec_vi;
-		char *vec_start = (cpu_wait == r4k_wait) ?
-			&rollback_except_vec_vi : &except_vec_vi;
 #ifdef CONFIG_MIPS_MT_SMTC
 		/*
 		 * We need to provide the SMTC vectored interrupt handler
@@ -1313,11 +1246,11 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 		 * Status.IM bit to be masked before going there.
 		 */
 		extern char except_vec_vi_mori;
-		const int mori_offset = &except_vec_vi_mori - vec_start;
+		const int mori_offset = &except_vec_vi_mori - &except_vec_vi;
 #endif /* CONFIG_MIPS_MT_SMTC */
-		const int handler_len = &except_vec_vi_end - vec_start;
-		const int lui_offset = &except_vec_vi_lui - vec_start;
-		const int ori_offset = &except_vec_vi_ori - vec_start;
+		const int handler_len = &except_vec_vi_end - &except_vec_vi;
+		const int lui_offset = &except_vec_vi_lui - &except_vec_vi;
+		const int ori_offset = &except_vec_vi_ori - &except_vec_vi;
 
 		if (handler_len > VECTORSPACING) {
 			/*
@@ -1327,7 +1260,7 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 			panic("VECTORSPACING too small");
 		}
 
-		memcpy(b, vec_start, handler_len);
+		memcpy(b, &except_vec_vi, handler_len);
 #ifdef CONFIG_MIPS_MT_SMTC
 		BUG_ON(n > 7);	/* Vector index %d exceeds SMTC maximum. */
 
@@ -1338,8 +1271,7 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 		*w = (*w & 0xffff0000) | (((u32)handler >> 16) & 0xffff);
 		w = (u32 *)(b + ori_offset);
 		*w = (*w & 0xffff0000) | ((u32)handler & 0xffff);
-		local_flush_icache_range((unsigned long)b,
-					 (unsigned long)(b+handler_len));
+		flush_icache_range((unsigned long)b, (unsigned long)(b+handler_len));
 	}
 	else {
 		/*
@@ -1351,8 +1283,7 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 		w = (u32 *)b;
 		*w++ = 0x08000000 | (((u32)handler >> 2) & 0x03fffff); /* j handler */
 		*w = 0;
-		local_flush_icache_range((unsigned long)b,
-					 (unsigned long)(b+8));
+		flush_icache_range((unsigned long)b, (unsigned long)(b+8));
 	}
 
 	return (void *)old_handler;
@@ -1505,10 +1436,6 @@ void __cpuinit per_cpu_trap_init(void)
 		write_c0_hwrena(enable);
 	}
 
-#ifdef CONFIG_CPU_CAVIUM_OCTEON
-	write_c0_hwrena(0xc000000f); /* Octeon has register 30 and 31 */
-#endif
-
 #ifdef CONFIG_MIPS_MT_SMTC
 	if (!secondaryTC) {
 #endif /* CONFIG_MIPS_MT_SMTC */
@@ -1576,7 +1503,7 @@ void __cpuinit per_cpu_trap_init(void)
 void __init set_handler(unsigned long offset, void *addr, unsigned long size)
 {
 	memcpy((void *)(ebase + offset), addr, size);
-	local_flush_icache_range(ebase + offset, ebase + offset + size);
+	flush_icache_range(ebase + offset, ebase + offset + size);
 }
 
 static char panic_null_cerr[] __cpuinitdata =
@@ -1592,8 +1519,6 @@ void __cpuinit set_uncached_handler(unsigned long offset, void *addr,
 #ifdef CONFIG_64BIT
 	unsigned long uncached_ebase = TO_UNCAC(ebase);
 #endif
-	if (cpu_has_mips_r2)
-		ebase += (read_c0_ebase() & 0x3ffff000);
 
 	if (!addr)
 		panic(panic_null_cerr);
@@ -1615,23 +1540,11 @@ void __init trap_init(void)
 	extern char except_vec3_generic, except_vec3_r4000;
 	extern char except_vec4;
 	unsigned long i;
-	int rollback;
-
-	check_wait();
-	rollback = (cpu_wait == r4k_wait);
-
-#if defined(CONFIG_KGDB)
-	if (kgdb_early_setup)
-		return;	/* Already done */
-#endif
 
 	if (cpu_has_veic || cpu_has_vint)
 		ebase = (unsigned long) alloc_bootmem_low_pages(0x200 + VECTORSPACING*64);
-	else {
+	else
 		ebase = CAC_BASE;
-		if (cpu_has_mips_r2)
-			ebase += (read_c0_ebase() & 0x3ffff000);
-	}
 
 	per_cpu_trap_init();
 
@@ -1686,7 +1599,7 @@ void __init trap_init(void)
 	if (board_be_init)
 		board_be_init();
 
-	set_except_vector(0, rollback ? rollback_handle_int : handle_int);
+	set_except_vector(0, handle_int);
 	set_except_vector(1, handle_tlbm);
 	set_except_vector(2, handle_tlbl);
 	set_except_vector(3, handle_tlbs);
@@ -1739,19 +1652,17 @@ void __init trap_init(void)
 
 	if (cpu_has_vce)
 		/* Special exception: R4[04]00 uses also the divec space. */
-		memcpy((void *)(ebase + 0x180), &except_vec3_r4000, 0x100);
+		memcpy((void *)(CAC_BASE + 0x180), &except_vec3_r4000, 0x100);
 	else if (cpu_has_4kex)
-		memcpy((void *)(ebase + 0x180), &except_vec3_generic, 0x80);
+		memcpy((void *)(CAC_BASE + 0x180), &except_vec3_generic, 0x80);
 	else
-		memcpy((void *)(ebase + 0x080), &except_vec3_generic, 0x80);
+		memcpy((void *)(CAC_BASE + 0x080), &except_vec3_generic, 0x80);
 
 	signal_init();
 #ifdef CONFIG_MIPS32_COMPAT
 	signal32_init();
 #endif
 
-	local_flush_icache_range(ebase, ebase + 0x400);
+	flush_icache_range(ebase, ebase + 0x400);
 	flush_tlb_handlers();
-
-	sort_extable(__start___dbe_table, __stop___dbe_table);
 }

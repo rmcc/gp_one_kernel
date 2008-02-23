@@ -32,7 +32,6 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev2.h>	/* kernel radio structs		*/
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <linux/spinlock.h>
 
 #include <linux/version.h>      /* for KERNEL_VERSION MACRO     */
@@ -79,7 +78,6 @@ static spinlock_t lock;
 
 struct tt_device
 {
-	unsigned long in_use;
 	int port;
 	int curvol;
 	unsigned long curfreq;
@@ -221,7 +219,8 @@ static int vidioc_querycap(struct file *file, void *priv,
 static int vidioc_g_tuner(struct file *file, void *priv,
 					struct v4l2_tuner *v)
 {
-	struct tt_device *tt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct tt_device *tt = dev->priv;
 
 	if (v->index > 0)
 		return -EINVAL;
@@ -248,7 +247,8 @@ static int vidioc_s_tuner(struct file *file, void *priv,
 static int vidioc_s_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct tt_device *tt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct tt_device *tt = dev->priv;
 
 	tt->curfreq = f->frequency;
 	tt_setfreq(tt, tt->curfreq);
@@ -258,7 +258,8 @@ static int vidioc_s_frequency(struct file *file, void *priv,
 static int vidioc_g_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct tt_device *tt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct tt_device *tt = dev->priv;
 
 	f->type = V4L2_TUNER_RADIO;
 	f->frequency = tt->curfreq;
@@ -283,7 +284,8 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 static int vidioc_g_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct tt_device *tt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct tt_device *tt = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -302,7 +304,8 @@ static int vidioc_g_ctrl(struct file *file, void *priv,
 static int vidioc_s_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct tt_device *tt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct tt_device *tt = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -352,25 +355,23 @@ static int vidioc_s_audio(struct file *file, void *priv,
 
 static struct tt_device terratec_unit;
 
-static int terratec_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &terratec_unit.in_use) ? -EBUSY : 0;
-}
-
-static int terratec_exclusive_release(struct file *file)
-{
-	clear_bit(0, &terratec_unit.in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations terratec_fops = {
+static const struct file_operations terratec_fops = {
 	.owner		= THIS_MODULE,
-	.open           = terratec_exclusive_open,
-	.release        = terratec_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl		= video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops terratec_ioctl_ops = {
+static struct video_device terratec_radio=
+{
+	.owner		= THIS_MODULE,
+	.name		= "TerraTec ActiveRadio",
+	.type		= VID_TYPE_TUNER,
+	.fops           = &terratec_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -383,13 +384,6 @@ static const struct v4l2_ioctl_ops terratec_ioctl_ops = {
 	.vidioc_s_audio     = vidioc_s_audio,
 	.vidioc_g_input     = vidioc_g_input,
 	.vidioc_s_input     = vidioc_s_input,
-};
-
-static struct video_device terratec_radio = {
-	.name		= "TerraTec ActiveRadio",
-	.fops           = &terratec_fops,
-	.ioctl_ops 	= &terratec_ioctl_ops,
-	.release	= video_device_release_empty,
 };
 
 static int __init terratec_init(void)
@@ -405,11 +399,12 @@ static int __init terratec_init(void)
 		return -EBUSY;
 	}
 
-	video_set_drvdata(&terratec_radio, &terratec_unit);
+	terratec_radio.priv=&terratec_unit;
 
 	spin_lock_init(&lock);
 
-	if (video_register_device(&terratec_radio, VFL_TYPE_RADIO, radio_nr) < 0) {
+	if(video_register_device(&terratec_radio, VFL_TYPE_RADIO, radio_nr)==-1)
+	{
 		release_region(io,2);
 		return -EINVAL;
 	}

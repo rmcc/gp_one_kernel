@@ -2,8 +2,7 @@
 #include <linux/errno.h>
 #include <asm/uaccess.h>
 
-#include <asm/sfp-machine.h>
-#include <math-emu/soft-fp.h>
+#include "soft-fp.h"
 
 int
 mcrfs(u32 *ccr, u32 crfD, u32 crfS)

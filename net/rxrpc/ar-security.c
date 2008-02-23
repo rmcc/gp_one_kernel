@@ -40,7 +40,7 @@ static void rxrpc_security_put(struct rxrpc_security *sec)
 /*
  * look up an rxrpc security module
  */
-static struct rxrpc_security *rxrpc_security_lookup(u8 security_index)
+struct rxrpc_security *rxrpc_security_lookup(u8 security_index)
 {
 	struct rxrpc_security *sec = NULL;
 

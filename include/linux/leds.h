@@ -32,10 +32,7 @@ struct led_classdev {
 	int			 brightness;
 	int			 flags;
 
-	/* Lower 16 bits reflect status */
 #define LED_SUSPENDED		(1 << 0)
-	/* Upper 16 bits reflect control information */
-#define LED_CORE_SUSPENDRESUME	(1 << 16)
 
 	/* Set LED brightness level */
 	/* Must not sleep, use a workqueue if needed */
@@ -51,7 +48,7 @@ struct led_classdev {
 
 	struct device		*dev;
 	struct list_head	 node;			/* LED Device list */
-	const char		*default_trigger;	/* Trigger to use */
+	char			*default_trigger;	/* Trigger to use */
 
 #ifdef CONFIG_LEDS_TRIGGERS
 	/* Protects the trigger data below */
@@ -65,7 +62,7 @@ struct led_classdev {
 
 extern int led_classdev_register(struct device *parent,
 				 struct led_classdev *led_cdev);
-extern void led_classdev_unregister(struct led_classdev *led_cdev);
+extern void led_classdev_unregister(struct led_classdev *lcd);
 extern void led_classdev_suspend(struct led_classdev *led_cdev);
 extern void led_classdev_resume(struct led_classdev *led_cdev);
 
@@ -121,24 +118,10 @@ extern void ledtrig_ide_activity(void);
 #define ledtrig_ide_activity() do {} while(0)
 #endif
 
-/*
- * Generic LED platform data for describing LED names and default triggers.
- */
-struct led_info {
-	const char	*name;
-	const char	*default_trigger;
-	int		flags;
-};
-
-struct led_platform_data {
-	int		num_leds;
-	struct led_info	*leds;
-};
-
 /* For the leds-gpio driver */
 struct gpio_led {
 	const char *name;
-	const char *default_trigger;
+	char *default_trigger;
 	unsigned 	gpio;
 	u8 		active_low;
 };

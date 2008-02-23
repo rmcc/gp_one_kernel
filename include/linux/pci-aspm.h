@@ -27,7 +27,6 @@ extern void pcie_aspm_init_link_state(struct pci_dev *pdev);
 extern void pcie_aspm_exit_link_state(struct pci_dev *pdev);
 extern void pcie_aspm_pm_state_change(struct pci_dev *pdev);
 extern void pci_disable_link_state(struct pci_dev *pdev, int state);
-extern void pcie_no_aspm(void);
 #else
 static inline void pcie_aspm_init_link_state(struct pci_dev *pdev)
 {
@@ -39,10 +38,6 @@ static inline void pcie_aspm_pm_state_change(struct pci_dev *pdev)
 {
 }
 static inline void pci_disable_link_state(struct pci_dev *pdev, int state)
-{
-}
-
-static inline void pcie_no_aspm(void)
 {
 }
 #endif

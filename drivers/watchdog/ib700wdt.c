@@ -11,8 +11,8 @@
  *	Based on acquirewdt.c which is based on wdt.c.
  *	Original copyright messages:
  *
- *	(c) Copyright 1996 Alan Cox <alan@lxorguk.ukuu.org.uk>,
- *						All Rights Reserved.
+ *	(c) Copyright 1996 Alan Cox <alan@redhat.com>, All Rights Reserved.
+ *				http://www.redhat.com
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -23,7 +23,7 @@
  *	warranty for any of this software. This material is provided
  *	"AS-IS" and at no charge.
  *
- *	(c) Copyright 1995    Alan Cox <alan@lxorguk.ukuu.org.uk>
+ *	(c) Copyright 1995    Alan Cox <alan@redhat.com>
  *
  *	14-Dec-2001 Matt Domsch <Matt_Domsch@dell.com>
  *	     Added nowayout module option to override CONFIG_WATCHDOG_NOWAYOUT
@@ -41,9 +41,9 @@
 #include <linux/spinlock.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
-#include <linux/io.h>
-#include <linux/uaccess.h>
 
+#include <asm/io.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static struct platform_device *ibwdt_platform_device;
@@ -91,32 +91,45 @@ static char expect_close;
  *
  */
 
+static int wd_times[] = {
+	30,	/* 0x0 */
+	28,	/* 0x1 */
+	26,	/* 0x2 */
+	24,	/* 0x3 */
+	22,	/* 0x4 */
+	20,	/* 0x5 */
+	18,	/* 0x6 */
+	16,	/* 0x7 */
+	14,	/* 0x8 */
+	12,	/* 0x9 */
+	10,	/* 0xA */
+	8,	/* 0xB */
+	6,	/* 0xC */
+	4,	/* 0xD */
+	2,	/* 0xE */
+	0,	/* 0xF */
+};
+
 #define WDT_STOP 0x441
 #define WDT_START 0x443
 
 /* Default timeout */
-#define WATCHDOG_TIMEOUT 30		/* 30 seconds +/- 20% */
-static int timeout = WATCHDOG_TIMEOUT;	/* in seconds */
-module_param(timeout, int, 0);
-MODULE_PARM_DESC(timeout,
-	"Watchdog timeout in seconds. 0<= timeout <=30, default="
-		__MODULE_STRING(WATCHDOG_TIMEOUT) ".");
+#define WD_TIMO 0		/* 30 seconds +/- 20%, from table */
+
+static int wd_margin = WD_TIMO;
 
 static int nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, int, 0);
-MODULE_PARM_DESC(nowayout,
-		"Watchdog cannot be stopped once started (default="
-				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default=" __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 
 /*
  *	Watchdog Operations
  */
 
-static void ibwdt_ping(void)
+static void
+ibwdt_ping(void)
 {
-	int wd_margin = 15 - ((timeout + 1) / 2);
-
 	spin_lock(&ibwdt_lock);
 
 	/* Write a watchdog value */
@@ -125,19 +138,26 @@ static void ibwdt_ping(void)
 	spin_unlock(&ibwdt_lock);
 }
 
-static void ibwdt_disable(void)
+static void
+ibwdt_disable(void)
 {
 	spin_lock(&ibwdt_lock);
 	outb_p(0, WDT_STOP);
 	spin_unlock(&ibwdt_lock);
 }
 
-static int ibwdt_set_heartbeat(int t)
+static int
+ibwdt_set_heartbeat(int t)
 {
-	if (t < 0 || t > 30)
+	int i;
+
+	if ((t < 0) || (t > 30))
 		return -EINVAL;
 
-	timeout = t;
+	for (i = 0x0F; i > -1; i--)
+		if (wd_times[i] > t)
+			break;
+	wd_margin = i;
 	return 0;
 }
 
@@ -145,8 +165,8 @@ static int ibwdt_set_heartbeat(int t)
  *	/dev/watchdog handling
  */
 
-static ssize_t ibwdt_write(struct file *file, const char __user *buf,
-						size_t count, loff_t *ppos)
+static ssize_t
+ibwdt_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
 	if (count) {
 		if (!nowayout) {
@@ -168,71 +188,77 @@ static ssize_t ibwdt_write(struct file *file, const char __user *buf,
 	return count;
 }
 
-static long ibwdt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static int
+ibwdt_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+	  unsigned long arg)
 {
 	int new_margin;
 	void __user *argp = (void __user *)arg;
 	int __user *p = argp;
 
 	static struct watchdog_info ident = {
-		.options = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT
-							| WDIOF_MAGICCLOSE,
+		.options = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE,
 		.firmware_version = 1,
 		.identity = "IB700 WDT",
 	};
 
 	switch (cmd) {
 	case WDIOC_GETSUPPORT:
-		if (copy_to_user(argp, &ident, sizeof(ident)))
-			return -EFAULT;
-		break;
+	  if (copy_to_user(argp, &ident, sizeof(ident)))
+	    return -EFAULT;
+	  break;
 
 	case WDIOC_GETSTATUS:
 	case WDIOC_GETBOOTSTATUS:
-		return put_user(0, p);
+	  return put_user(0, p);
+
+	case WDIOC_KEEPALIVE:
+	  ibwdt_ping();
+	  break;
+
+	case WDIOC_SETTIMEOUT:
+	  if (get_user(new_margin, p))
+		  return -EFAULT;
+	  if (ibwdt_set_heartbeat(new_margin))
+		  return -EINVAL;
+	  ibwdt_ping();
+	  /* Fall */
+
+	case WDIOC_GETTIMEOUT:
+	  return put_user(wd_times[wd_margin], p);
 
 	case WDIOC_SETOPTIONS:
 	{
-		int options, retval = -EINVAL;
+	  int options, retval = -EINVAL;
 
-		if (get_user(options, p))
-			return -EFAULT;
+	  if (get_user(options, p))
+	    return -EFAULT;
 
-		if (options & WDIOS_DISABLECARD) {
-			ibwdt_disable();
-			retval = 0;
-		}
-		if (options & WDIOS_ENABLECARD) {
-			ibwdt_ping();
-			retval = 0;
-		}
-		return retval;
+	  if (options & WDIOS_DISABLECARD) {
+	    ibwdt_disable();
+	    retval = 0;
+	  }
+
+	  if (options & WDIOS_ENABLECARD) {
+	    ibwdt_ping();
+	    retval = 0;
+	  }
+
+	  return retval;
 	}
-	case WDIOC_KEEPALIVE:
-		ibwdt_ping();
-		break;
-
-	case WDIOC_SETTIMEOUT:
-		if (get_user(new_margin, p))
-			return -EFAULT;
-		if (ibwdt_set_heartbeat(new_margin))
-			return -EINVAL;
-		ibwdt_ping();
-		/* Fall */
-
-	case WDIOC_GETTIMEOUT:
-		return put_user(timeout, p);
 
 	default:
-		return -ENOTTY;
+	  return -ENOTTY;
 	}
 	return 0;
 }
 
-static int ibwdt_open(struct inode *inode, struct file *file)
+static int
+ibwdt_open(struct inode *inode, struct file *file)
 {
-	if (test_and_set_bit(0, &ibwdt_is_open))
+	if (test_and_set_bit(0, &ibwdt_is_open)) {
 		return -EBUSY;
+	}
 	if (nowayout)
 		__module_get(THIS_MODULE);
 
@@ -241,13 +267,13 @@ static int ibwdt_open(struct inode *inode, struct file *file)
 	return nonseekable_open(inode, file);
 }
 
-static int ibwdt_close(struct inode *inode, struct file *file)
+static int
+ibwdt_close(struct inode *inode, struct file *file)
 {
 	if (expect_close == 42) {
 		ibwdt_disable();
 	} else {
-		printk(KERN_CRIT PFX
-		     "WDT device closed unexpectedly.  WDT will not stop!\n");
+		printk(KERN_CRIT PFX "WDT device closed unexpectedly.  WDT will not stop!\n");
 		ibwdt_ping();
 	}
 	clear_bit(0, &ibwdt_is_open);
@@ -263,7 +289,7 @@ static const struct file_operations ibwdt_fops = {
 	.owner		= THIS_MODULE,
 	.llseek		= no_llseek,
 	.write		= ibwdt_write,
-	.unlocked_ioctl	= ibwdt_ioctl,
+	.ioctl		= ibwdt_ioctl,
 	.open		= ibwdt_open,
 	.release	= ibwdt_close,
 };
@@ -284,31 +310,21 @@ static int __devinit ibwdt_probe(struct platform_device *dev)
 
 #if WDT_START != WDT_STOP
 	if (!request_region(WDT_STOP, 1, "IB700 WDT")) {
-		printk(KERN_ERR PFX "STOP method I/O %X is not available.\n",
-								WDT_STOP);
+		printk (KERN_ERR PFX "STOP method I/O %X is not available.\n", WDT_STOP);
 		res = -EIO;
 		goto out_nostopreg;
 	}
 #endif
 
 	if (!request_region(WDT_START, 1, "IB700 WDT")) {
-		printk(KERN_ERR PFX "START method I/O %X is not available.\n",
-								WDT_START);
+		printk (KERN_ERR PFX "START method I/O %X is not available.\n", WDT_START);
 		res = -EIO;
 		goto out_nostartreg;
 	}
 
-	/* Check that the heartbeat value is within it's range ;
-	 * if not reset to the default */
-	if (ibwdt_set_heartbeat(timeout)) {
-		ibwdt_set_heartbeat(WATCHDOG_TIMEOUT);
-		printk(KERN_INFO PFX
-			"timeout value must be 0<=x<=30, using %d\n", timeout);
-	}
-
 	res = misc_register(&ibwdt_miscdev);
 	if (res) {
-		printk(KERN_ERR PFX "failed to register misc device\n");
+		printk (KERN_ERR PFX "failed to register misc device\n");
 		goto out_nomisc;
 	}
 	return 0;
@@ -326,9 +342,9 @@ out_nostopreg:
 static int __devexit ibwdt_remove(struct platform_device *dev)
 {
 	misc_deregister(&ibwdt_miscdev);
-	release_region(WDT_START, 1);
+	release_region(WDT_START,1);
 #if WDT_START != WDT_STOP
-	release_region(WDT_STOP, 1);
+	release_region(WDT_STOP,1);
 #endif
 	return 0;
 }
@@ -353,15 +369,13 @@ static int __init ibwdt_init(void)
 {
 	int err;
 
-	printk(KERN_INFO PFX
-		"WDT driver for IB700 single board computer initialising.\n");
+	printk(KERN_INFO PFX "WDT driver for IB700 single board computer initialising.\n");
 
 	err = platform_driver_register(&ibwdt_driver);
 	if (err)
 		return err;
 
-	ibwdt_platform_device = platform_device_register_simple(DRV_NAME,
-								-1, NULL, 0);
+	ibwdt_platform_device = platform_device_register_simple(DRV_NAME, -1, NULL, 0);
 	if (IS_ERR(ibwdt_platform_device)) {
 		err = PTR_ERR(ibwdt_platform_device);
 		goto unreg_platform_driver;

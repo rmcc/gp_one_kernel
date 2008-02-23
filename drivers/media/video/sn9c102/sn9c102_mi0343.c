@@ -20,7 +20,6 @@
  ***************************************************************************/
 
 #include "sn9c102_sensor.h"
-#include "sn9c102_devtable.h"
 
 
 static int mi0343_init(struct sn9c102_device* cam)

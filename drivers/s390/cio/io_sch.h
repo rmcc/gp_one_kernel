@@ -1,12 +1,12 @@
 #ifndef S390_IO_SCH_H
 #define S390_IO_SCH_H
 
-#include <asm/schid.h>
+#include "schid.h"
 
 /*
- * command-mode operation request block
+ * operation request block
  */
-struct cmd_orb {
+struct orb {
 	u32 intparm;	/* interruption parameter */
 	u32 key  : 4;	/* flags, like key, suspend control, etc. */
 	u32 spnd : 1;	/* suspend control */
@@ -28,36 +28,8 @@ struct cmd_orb {
 	u32 cpa;	/* channel program address */
 }  __attribute__ ((packed, aligned(4)));
 
-/*
- * transport-mode operation request block
- */
-struct tm_orb {
-	u32 intparm;
-	u32 key:4;
-	u32 :9;
-	u32 b:1;
-	u32 :2;
-	u32 lpm:8;
-	u32 :7;
-	u32 x:1;
-	u32 tcw;
-	u32 prio:8;
-	u32 :8;
-	u32 rsvpgm:8;
-	u32 :8;
-	u32 :32;
-	u32 :32;
-	u32 :32;
-	u32 :32;
-}  __attribute__ ((packed, aligned(4)));
-
-union orb {
-	struct cmd_orb cmd;
-	struct tm_orb tm;
-}  __attribute__ ((packed, aligned(4)));
-
 struct io_subchannel_private {
-	union orb orb;		/* operation request block */
+	struct orb orb;		/* operation request block */
 	struct ccw1 sense_ccw;	/* static ccw for sense command */
 } __attribute__ ((aligned(8)));
 
@@ -123,20 +95,16 @@ struct ccw_device_private {
 	void *cmb_wait;			/* deferred cmb enable/disable */
 };
 
-static inline int ssch(struct subchannel_id schid, union orb *addr)
+static inline int ssch(struct subchannel_id schid, volatile struct orb *addr)
 {
 	register struct subchannel_id reg1 asm("1") = schid;
-	int ccode = -EIO;
+	int ccode;
 
 	asm volatile(
 		"	ssch	0(%2)\n"
-		"0:	ipm	%0\n"
-		"	srl	%0,28\n"
-		"1:\n"
-		EX_TABLE(0b, 1b)
-		: "+d" (ccode)
-		: "d" (reg1), "a" (addr), "m" (*addr)
-		: "cc", "memory");
+		"	ipm	%0\n"
+		"	srl	%0,28"
+		: "=d" (ccode) : "d" (reg1), "a" (addr), "m" (*addr) : "cc");
 	return ccode;
 }
 
@@ -149,9 +117,7 @@ static inline int rsch(struct subchannel_id schid)
 		"	rsch\n"
 		"	ipm	%0\n"
 		"	srl	%0,28"
-		: "=d" (ccode)
-		: "d" (reg1)
-		: "cc", "memory");
+		: "=d" (ccode) : "d" (reg1) : "cc");
 	return ccode;
 }
 
@@ -164,9 +130,7 @@ static inline int csch(struct subchannel_id schid)
 		"	csch\n"
 		"	ipm	%0\n"
 		"	srl	%0,28"
-		: "=d" (ccode)
-		: "d" (reg1)
-		: "cc");
+		: "=d" (ccode) : "d" (reg1) : "cc");
 	return ccode;
 }
 
@@ -179,9 +143,7 @@ static inline int hsch(struct subchannel_id schid)
 		"	hsch\n"
 		"	ipm	%0\n"
 		"	srl	%0,28"
-		: "=d" (ccode)
-		: "d" (reg1)
-		: "cc");
+		: "=d" (ccode) : "d" (reg1) : "cc");
 	return ccode;
 }
 
@@ -194,9 +156,7 @@ static inline int xsch(struct subchannel_id schid)
 		"	.insn	rre,0xb2760000,%1,0\n"
 		"	ipm	%0\n"
 		"	srl	%0,28"
-		: "=d" (ccode)
-		: "d" (reg1)
-		: "cc");
+		: "=d" (ccode) : "d" (reg1) : "cc");
 	return ccode;
 }
 

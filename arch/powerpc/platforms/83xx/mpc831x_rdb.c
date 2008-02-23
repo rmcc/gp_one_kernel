@@ -19,7 +19,6 @@
 #include <asm/time.h>
 #include <asm/ipic.h>
 #include <asm/udbg.h>
-#include <sysdev/fsl_pci.h>
 
 #include "mpc83xx.h"
 
@@ -42,7 +41,7 @@ static void __init mpc831x_rdb_setup_arch(void)
 	mpc831x_usb_cfg();
 }
 
-static void __init mpc831x_rdb_init_IRQ(void)
+void __init mpc831x_rdb_init_IRQ(void)
 {
 	struct device_node *np;
 

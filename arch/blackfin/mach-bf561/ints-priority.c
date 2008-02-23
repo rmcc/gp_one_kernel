@@ -31,7 +31,7 @@
 #include <linux/irq.h>
 #include <asm/blackfin.h>
 
-void __init program_IAR(void)
+void program_IAR(void)
 {
 	/* Program the IAR0 Register with the configured priority */
 	bfin_write_SICA_IAR0(((CONFIG_IRQ_PLL_WAKEUP - 7) << IRQ_PLL_WAKEUP_POS) |

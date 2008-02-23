@@ -41,7 +41,7 @@ static int tcf_simp(struct sk_buff *skb, struct tc_action *a, struct tcf_result 
 
 	spin_lock(&d->tcf_lock);
 	d->tcf_tm.lastuse = jiffies;
-	d->tcf_bstats.bytes += qdisc_pkt_len(skb);
+	d->tcf_bstats.bytes += skb->len;
 	d->tcf_bstats.packets++;
 
 	/* print policy string followed by _ then packet count
@@ -124,8 +124,8 @@ static int tcf_simp_init(struct nlattr *nla, struct nlattr *est,
 	if (!pc) {
 		pc = tcf_hash_create(parm->index, est, a, sizeof(*d), bind,
 				     &simp_idx_gen, &simp_hash_info);
-		if (IS_ERR(pc))
-		    return PTR_ERR(pc);
+		if (unlikely(!pc))
+			return -ENOMEM;
 
 		d = to_defact(pc);
 		ret = alloc_defdata(d, defdata);

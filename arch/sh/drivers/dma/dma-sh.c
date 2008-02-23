@@ -14,7 +14,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
-#include <mach-dreamcast/mach/dma.h>
+#include <asm/dreamcast/dma.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 #include "dma-sh.h"
@@ -205,8 +205,7 @@ static int sh_dmac_get_dma_residue(struct dma_channel *chan)
 
 #if defined(CONFIG_CPU_SUBTYPE_SH7720) || \
     defined(CONFIG_CPU_SUBTYPE_SH7721) || \
-    defined(CONFIG_CPU_SUBTYPE_SH7780) || \
-    defined(CONFIG_CPU_SUBTYPE_SH7709)
+    defined(CONFIG_CPU_SUBTYPE_SH7780)
 #define dmaor_read_reg()	ctrl_inw(DMAOR)
 #define dmaor_write_reg(data)	ctrl_outw(data, DMAOR)
 #else

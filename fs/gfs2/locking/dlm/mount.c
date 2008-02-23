@@ -22,14 +22,22 @@ static struct gdlm_ls *init_gdlm(lm_callback_t cb, struct gfs2_sbd *sdp,
 	if (!ls)
 		return NULL;
 
+	ls->drop_locks_count = GDLM_DROP_COUNT;
+	ls->drop_locks_period = GDLM_DROP_PERIOD;
 	ls->fscb = cb;
 	ls->sdp = sdp;
 	ls->fsflags = flags;
 	spin_lock_init(&ls->async_lock);
+	INIT_LIST_HEAD(&ls->complete);
+	INIT_LIST_HEAD(&ls->blocking);
 	INIT_LIST_HEAD(&ls->delayed);
 	INIT_LIST_HEAD(&ls->submit);
+	INIT_LIST_HEAD(&ls->all_locks);
 	init_waitqueue_head(&ls->thread_wait);
 	init_waitqueue_head(&ls->wait_control);
+	ls->thread1 = NULL;
+	ls->thread2 = NULL;
+	ls->drop_time = jiffies;
 	ls->jid = -1;
 
 	strncpy(buf, table_name, 256);
@@ -144,8 +152,7 @@ static int gdlm_mount(char *table_name, char *host_data,
 
 	error = dlm_new_lockspace(ls->fsname, strlen(ls->fsname),
 				  &ls->dlm_lockspace,
-				  DLM_LSFL_FS | DLM_LSFL_NEWEXCL |
-				  (nodir ? DLM_LSFL_NODIR : 0),
+				  DLM_LSFL_FS | (nodir ? DLM_LSFL_NODIR : 0),
 				  GDLM_LVB_SIZE);
 	if (error) {
 		log_error("dlm_new_lockspace error %d", error);
@@ -173,6 +180,7 @@ out:
 static void gdlm_unmount(void *lockspace)
 {
 	struct gdlm_ls *ls = lockspace;
+	int rv;
 
 	log_debug("unmount flags %lx", ls->flags);
 
@@ -186,7 +194,9 @@ static void gdlm_unmount(void *lockspace)
 	gdlm_kobject_release(ls);
 	dlm_release_lockspace(ls->dlm_lockspace, 2);
 	gdlm_release_threads(ls);
-	BUG_ON(ls->all_locks_count);
+	rv = gdlm_release_all_locks(ls);
+	if (rv)
+		log_info("gdlm_unmount: %d stray locks freed", rv);
 out:
 	kfree(ls);
 }
@@ -194,25 +204,17 @@ out:
 static void gdlm_recovery_done(void *lockspace, unsigned int jid,
                                unsigned int message)
 {
-	char env_jid[20];
-	char env_status[20];
-	char *envp[] = { env_jid, env_status, NULL };
 	struct gdlm_ls *ls = lockspace;
 	ls->recover_jid_done = jid;
 	ls->recover_jid_status = message;
-	sprintf(env_jid, "JID=%d", jid);
-	sprintf(env_status, "RECOVERY=%s",
-		message == LM_RD_SUCCESS ? "Done" : "Failed");
-	kobject_uevent_env(&ls->kobj, KOBJ_CHANGE, envp);
+	kobject_uevent(&ls->kobj, KOBJ_CHANGE);
 }
 
 static void gdlm_others_may_mount(void *lockspace)
 {
-	char *message = "FIRSTMOUNT=Done";
-	char *envp[] = { message, NULL };
 	struct gdlm_ls *ls = lockspace;
 	ls->first_done = 1;
-	kobject_uevent_env(&ls->kobj, KOBJ_CHANGE, envp);
+	kobject_uevent(&ls->kobj, KOBJ_CHANGE);
 }
 
 /* Userspace gets the offline uevent, blocks new gfs locks on
@@ -230,6 +232,7 @@ static void gdlm_withdraw(void *lockspace)
 
 	dlm_release_lockspace(ls->dlm_lockspace, 2);
 	gdlm_release_threads(ls);
+	gdlm_release_all_locks(ls);
 	gdlm_kobject_release(ls);
 }
 

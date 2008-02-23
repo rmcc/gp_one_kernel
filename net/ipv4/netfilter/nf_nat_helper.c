@@ -16,7 +16,6 @@
 #include <linux/udp.h>
 #include <net/checksum.h>
 #include <net/tcp.h>
-#include <net/route.h>
 
 #include <linux/netfilter_ipv4.h>
 #include <net/netfilter/nf_conntrack.h>
@@ -193,7 +192,7 @@ nf_nat_mangle_tcp_packet(struct sk_buff *skb,
 		nf_conntrack_tcp_update(skb, ip_hdrlen(skb),
 					ct, CTINFO2DIR(ctinfo));
 
-		nf_conntrack_event_cache(IPCT_NATSEQADJ, ct);
+		nf_conntrack_event_cache(IPCT_NATSEQADJ, skb);
 	}
 	return 1;
 }

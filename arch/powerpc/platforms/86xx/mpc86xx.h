@@ -15,7 +15,6 @@
  * mpc86xx_* files. Mostly for use by mpc86xx_setup().
  */
 
-extern void mpc86xx_smp_init(void);
-extern void mpc86xx_init_irq(void);
+extern void __init mpc86xx_smp_init(void);
 
 #endif	/* __MPC86XX_H__ */

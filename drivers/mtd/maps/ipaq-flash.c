@@ -4,6 +4,8 @@
  * (C) 2000 Nicolas Pitre <nico@cam.org>
  * (C) 2002 Hewlett-Packard Company <jamey.hicks@hp.com>
  * (C) 2003 Christian Pellegrin <chri@ascensit.com>, <chri@infis.univ.ts.it>: concatenation of multiple flashes
+ *
+ * $Id: ipaq-flash.c,v 1.5 2005/11/07 11:14:27 gleixner Exp $
  */
 
 #include <linux/module.h>
@@ -24,8 +26,8 @@
 #include <linux/mtd/concat.h>
 #endif
 
-#include <mach/hardware.h>
-#include <mach/h3600.h>
+#include <asm/hardware.h>
+#include <asm/arch-sa1100/h3600.h>
 #include <asm/io.h>
 
 
@@ -202,7 +204,7 @@ static const char *part_probes[] = { "cmdlinepart", "RedBoot", NULL };
 
 static int __init h1900_special_case(void);
 
-static int __init ipaq_mtd_init(void)
+int __init ipaq_mtd_init(void)
 {
 	struct mtd_partition *parts = NULL;
 	int nb_parts = 0;

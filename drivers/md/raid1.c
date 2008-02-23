@@ -32,7 +32,6 @@
  */
 
 #include "dm-bio-list.h"
-#include <linux/delay.h>
 #include <linux/raid/raid1.h>
 #include <linux/raid/bitmap.h>
 
@@ -780,7 +779,7 @@ static int make_request(struct request_queue *q, struct bio * bio)
 	struct page **behind_pages = NULL;
 	const int rw = bio_data_dir(bio);
 	const int do_sync = bio_sync(bio);
-	int cpu, do_barriers;
+	int do_barriers;
 	mdk_rdev_t *blocked_rdev;
 
 	/*
@@ -805,11 +804,8 @@ static int make_request(struct request_queue *q, struct bio * bio)
 
 	bitmap = mddev->bitmap;
 
-	cpu = part_stat_lock();
-	part_stat_inc(cpu, &mddev->gendisk->part0, ios[rw]);
-	part_stat_add(cpu, &mddev->gendisk->part0, sectors[rw],
-		      bio_sectors(bio));
-	part_stat_unlock();
+	disk_stat_inc(mddev->gendisk, ios[rw]);
+	disk_stat_add(mddev->gendisk, sectors[rw], bio_sectors(bio));
 
 	/*
 	 * make_request() can abort the operation when READA is being
@@ -1016,16 +1012,12 @@ static void error(mddev_t *mddev, mdk_rdev_t *rdev)
 	 * else mark the drive as failed
 	 */
 	if (test_bit(In_sync, &rdev->flags)
-	    && (conf->raid_disks - mddev->degraded) == 1) {
+	    && (conf->raid_disks - mddev->degraded) == 1)
 		/*
 		 * Don't fail the drive, act as though we were just a
-		 * normal single drive.
-		 * However don't try a recovery from this drive as
-		 * it is very likely to fail.
+		 * normal single drive
 		 */
-		mddev->recovery_disabled = 1;
 		return;
-	}
 	if (test_and_clear_bit(In_sync, &rdev->flags)) {
 		unsigned long flags;
 		spin_lock_irqsave(&conf->device_lock, flags);
@@ -1108,16 +1100,11 @@ static int raid1_spare_active(mddev_t *mddev)
 static int raid1_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 {
 	conf_t *conf = mddev->private;
-	int err = -EEXIST;
+	int found = 0;
 	int mirror = 0;
 	mirror_info_t *p;
-	int first = 0;
-	int last = mddev->raid_disks - 1;
 
-	if (rdev->raid_disk >= 0)
-		first = last = rdev->raid_disk;
-
-	for (mirror = first; mirror <= last; mirror++)
+	for (mirror=0; mirror < mddev->raid_disks; mirror++)
 		if ( !(p=conf->mirrors+mirror)->rdev) {
 
 			blk_queue_stack_limits(mddev->queue,
@@ -1132,7 +1119,7 @@ static int raid1_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 
 			p->head_position = 0;
 			rdev->raid_disk = mirror;
-			err = 0;
+			found = 1;
 			/* As all devices are equivalent, we don't need a full recovery
 			 * if this was recently any drive of the array
 			 */
@@ -1143,7 +1130,7 @@ static int raid1_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 		}
 
 	print_conf(conf);
-	return err;
+	return found;
 }
 
 static int raid1_remove_disk(mddev_t *mddev, int number)
@@ -1310,6 +1297,9 @@ static void sync_request_write(mddev_t *mddev, r1bio_t *r1_bio)
 					sbio->bi_size = r1_bio->sectors << 9;
 					sbio->bi_idx = 0;
 					sbio->bi_phys_segments = 0;
+					sbio->bi_hw_segments = 0;
+					sbio->bi_hw_front_size = 0;
+					sbio->bi_hw_back_size = 0;
 					sbio->bi_flags &= ~(BIO_POOL_MASK - 1);
 					sbio->bi_flags |= 1 << BIO_UPTODATE;
 					sbio->bi_next = NULL;
@@ -1795,6 +1785,7 @@ static sector_t sync_request(mddev_t *mddev, sector_t sector_nr, int *skipped, i
 		bio->bi_vcnt = 0;
 		bio->bi_idx = 0;
 		bio->bi_phys_segments = 0;
+		bio->bi_hw_segments = 0;
 		bio->bi_size = 0;
 		bio->bi_end_io = NULL;
 		bio->bi_private = NULL;
@@ -1923,6 +1914,7 @@ static int run(mddev_t *mddev)
 	int i, j, disk_idx;
 	mirror_info_t *disk;
 	mdk_rdev_t *rdev;
+	struct list_head *tmp;
 
 	if (mddev->level != 1) {
 		printk("raid1: %s: raid level not set to mirroring (%d)\n",
@@ -1967,7 +1959,7 @@ static int run(mddev_t *mddev)
 	spin_lock_init(&conf->device_lock);
 	mddev->queue->queue_lock = &conf->device_lock;
 
-	list_for_each_entry(rdev, &mddev->disks, same_set) {
+	rdev_for_each(rdev, tmp, mddev) {
 		disk_idx = rdev->raid_disk;
 		if (disk_idx >= mddev->raid_disks
 		    || disk_idx < 0)
@@ -2046,7 +2038,7 @@ static int run(mddev_t *mddev)
 	/*
 	 * Ok, everything is just fine now
 	 */
-	mddev->array_sectors = mddev->size * 2;
+	mddev->array_size = mddev->size;
 
 	mddev->queue->unplug_fn = raid1_unplug;
 	mddev->queue->backing_dev_info.congested_fn = raid1_congested;
@@ -2108,15 +2100,14 @@ static int raid1_resize(mddev_t *mddev, sector_t sectors)
 	 * any io in the removed space completes, but it hardly seems
 	 * worth it.
 	 */
-	mddev->array_sectors = sectors;
-	set_capacity(mddev->gendisk, mddev->array_sectors);
+	mddev->array_size = sectors>>1;
+	set_capacity(mddev->gendisk, mddev->array_size << 1);
 	mddev->changed = 1;
-	if (mddev->array_sectors / 2 > mddev->size &&
-	    mddev->recovery_cp == MaxSector) {
+	if (mddev->array_size > mddev->size && mddev->recovery_cp == MaxSector) {
 		mddev->recovery_cp = mddev->size << 1;
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	}
-	mddev->size = mddev->array_sectors / 2;
+	mddev->size = mddev->array_size;
 	mddev->resync_max_sectors = sectors;
 	return 0;
 }
@@ -2140,7 +2131,7 @@ static int raid1_reshape(mddev_t *mddev)
 	conf_t *conf = mddev_to_conf(mddev);
 	int cnt, raid_disks;
 	unsigned long flags;
-	int d, d2, err;
+	int d, d2;
 
 	/* Cannot change chunk_size, layout, or level */
 	if (mddev->chunk_size != mddev->new_chunk ||
@@ -2152,9 +2143,7 @@ static int raid1_reshape(mddev_t *mddev)
 		return -EINVAL;
 	}
 
-	err = md_allow_write(mddev);
-	if (err)
-		return err;
+	md_allow_write(mddev);
 
 	raid_disks = mddev->raid_disks + mddev->delta_disks;
 

@@ -62,8 +62,6 @@ MC_TOKEN		([~%^&*+=|<>/-]=)|(&&)|("||")|(->)|(<<)|(>>)
 /* We don't do multiple input files.  */
 %option noyywrap
 
-%option noinput
-
 %%
 
 

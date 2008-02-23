@@ -104,34 +104,22 @@ I2C_CLIENT_INSMOD_1(max6650);
 
 #define DIV_FROM_REG(reg) (1 << (reg & 7))
 
-static int max6650_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id);
-static int max6650_detect(struct i2c_client *client, int kind,
-			  struct i2c_board_info *info);
+static int max6650_attach_adapter(struct i2c_adapter *adapter);
+static int max6650_detect(struct i2c_adapter *adapter, int address, int kind);
 static int max6650_init_client(struct i2c_client *client);
-static int max6650_remove(struct i2c_client *client);
+static int max6650_detach_client(struct i2c_client *client);
 static struct max6650_data *max6650_update_device(struct device *dev);
 
 /*
  * Driver data (common to all clients)
  */
 
-static const struct i2c_device_id max6650_id[] = {
-	{ "max6650", max6650 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, max6650_id);
-
 static struct i2c_driver max6650_driver = {
-	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		.name	= "max6650",
 	},
-	.probe		= max6650_probe,
-	.remove		= max6650_remove,
-	.id_table	= max6650_id,
-	.detect		= max6650_detect,
-	.address_data	= &addr_data,
+	.attach_adapter	= max6650_attach_adapter,
+	.detach_client	= max6650_detach_client,
 };
 
 /*
@@ -140,6 +128,7 @@ static struct i2c_driver max6650_driver = {
 
 struct max6650_data
 {
+	struct i2c_client client;
 	struct device *hwmon_dev;
 	struct mutex update_lock;
 	char valid; /* zero until following fields are valid */
@@ -448,20 +437,46 @@ static struct attribute_group max6650_attr_grp = {
  * Real code
  */
 
-/* Return 0 if detection is successful, -ENODEV otherwise */
-static int max6650_detect(struct i2c_client *client, int kind,
-			  struct i2c_board_info *info)
+static int max6650_attach_adapter(struct i2c_adapter *adapter)
 {
-	struct i2c_adapter *adapter = client->adapter;
-	int address = client->addr;
+	if (!(adapter->class & I2C_CLASS_HWMON)) {
+		dev_dbg(&adapter->dev,
+			"FATAL: max6650_attach_adapter class HWMON not set\n");
+		return 0;
+	}
+
+	return i2c_probe(adapter, &addr_data, max6650_detect);
+}
+
+/*
+ * The following function does more than just detection. If detection
+ * succeeds, it also registers the new chip.
+ */
+
+static int max6650_detect(struct i2c_adapter *adapter, int address, int kind)
+{
+	struct i2c_client *client;
+	struct max6650_data *data;
+	int err = -ENODEV;
 
 	dev_dbg(&adapter->dev, "max6650_detect called, kind = %d\n", kind);
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA)) {
 		dev_dbg(&adapter->dev, "max6650: I2C bus doesn't support "
 					"byte read mode, skipping.\n");
-		return -ENODEV;
+		return 0;
 	}
+
+	if (!(data = kzalloc(sizeof(struct max6650_data), GFP_KERNEL))) {
+		dev_err(&adapter->dev, "max6650: out of memory.\n");
+		return -ENOMEM;
+	}
+
+	client = &data->client;
+	i2c_set_clientdata(client, data);
+	client->addr = address;
+	client->adapter = adapter;
+	client->driver = &max6650_driver;
 
 	/*
 	 * Now we do the remaining detection. A negative kind means that
@@ -486,40 +501,28 @@ static int max6650_detect(struct i2c_client *client, int kind,
 	    ||(i2c_smbus_read_byte_data(client, MAX6650_REG_COUNT) & 0xFC))) {
 		dev_dbg(&adapter->dev,
 			"max6650: detection failed at 0x%02x.\n", address);
-		return -ENODEV;
+		goto err_free;
 	}
 
 	dev_info(&adapter->dev, "max6650: chip found at 0x%02x.\n", address);
 
-	strlcpy(info->type, "max6650", I2C_NAME_SIZE);
-
-	return 0;
-}
-
-static int max6650_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
-{
-	struct max6650_data *data;
-	int err;
-
-	if (!(data = kzalloc(sizeof(struct max6650_data), GFP_KERNEL))) {
-		dev_err(&client->dev, "out of memory.\n");
-		return -ENOMEM;
-	}
-
-	i2c_set_clientdata(client, data);
+	strlcpy(client->name, "max6650", I2C_NAME_SIZE);
 	mutex_init(&data->update_lock);
+
+	if ((err = i2c_attach_client(client))) {
+		dev_err(&adapter->dev, "max6650: failed to attach client.\n");
+		goto err_free;
+	}
 
 	/*
 	 * Initialize the max6650 chip
 	 */
-	err = max6650_init_client(client);
-	if (err)
-		goto err_free;
+	if (max6650_init_client(client))
+		goto err_detach;
 
 	err = sysfs_create_group(&client->dev.kobj, &max6650_attr_grp);
 	if (err)
-		goto err_free;
+		goto err_detach;
 
 	data->hwmon_dev = hwmon_device_register(&client->dev);
 	if (!IS_ERR(data->hwmon_dev))
@@ -528,19 +531,24 @@ static int max6650_probe(struct i2c_client *client,
 	err = PTR_ERR(data->hwmon_dev);
 	dev_err(&client->dev, "error registering hwmon device.\n");
 	sysfs_remove_group(&client->dev.kobj, &max6650_attr_grp);
+err_detach:
+	i2c_detach_client(client);
 err_free:
 	kfree(data);
 	return err;
 }
 
-static int max6650_remove(struct i2c_client *client)
+static int max6650_detach_client(struct i2c_client *client)
 {
 	struct max6650_data *data = i2c_get_clientdata(client);
+	int err;
 
 	sysfs_remove_group(&client->dev.kobj, &max6650_attr_grp);
 	hwmon_device_unregister(data->hwmon_dev);
-	kfree(data);
-	return 0;
+	err = i2c_detach_client(client);
+	if (!err)
+		kfree(data);
+	return err;
 }
 
 static int max6650_init_client(struct i2c_client *client)

@@ -499,8 +499,20 @@ sigill:
 
 asmlinkage void do_ade(struct pt_regs *regs)
 {
+	extern int do_dsemulret(struct pt_regs *);
 	unsigned int __user *pc;
 	mm_segment_t seg;
+
+	/*
+	 * Address errors may be deliberately induced by the FPU emulator to
+	 * retake control of the CPU after executing the instruction in the
+	 * delay slot of an emulated branch.
+	 */
+	/* Terminate if exception was recognized as a delay slot return */
+	if (do_dsemulret(regs))
+		return;
+
+	/* Otherwise handle as normal */
 
 	/*
 	 * Did we catch a fault trying to load an instruction?
@@ -548,12 +560,12 @@ static int __init debugfs_unaligned(void)
 		return -ENODEV;
 	d = debugfs_create_u32("unaligned_instructions", S_IRUGO,
 			       mips_debugfs_dir, &unaligned_instructions);
-	if (!d)
-		return -ENOMEM;
+	if (IS_ERR(d))
+		return PTR_ERR(d);
 	d = debugfs_create_u32("unaligned_action", S_IRUGO | S_IWUSR,
 			       mips_debugfs_dir, &unaligned_action);
-	if (!d)
-		return -ENOMEM;
+	if (IS_ERR(d))
+		return PTR_ERR(d);
 	return 0;
 }
 __initcall(debugfs_unaligned);

@@ -20,7 +20,11 @@
 
 extern char *srmmu_name;
 static char version[] __initdata = "Boot time fixup v1.6. 4/Mar/98 Jakub Jelinek (jj@ultra.linux.cz). Patching kernel for ";
+#ifdef CONFIG_SUN4
+static char str_sun4c[] __initdata = "sun4\n";
+#else
 static char str_sun4c[] __initdata = "sun4c\n";
+#endif
 static char str_srmmu[] __initdata = "srmmu[%s]/";
 static char str_iommu[] __initdata = "iommu\n";
 static char str_iounit[] __initdata = "io-unit\n";
@@ -82,7 +86,7 @@ void __init btfixup(void)
 	if (!visited) {
 		visited++;
 		printk(version);
-		if (ARCH_SUN4C)
+		if (ARCH_SUN4C_SUN4)
 			printk(str_sun4c);
 		else {
 			printk(str_srmmu, srmmu_name);

@@ -75,39 +75,37 @@ int acct_parm[3] = {4, 2, 30};
 /*
  * External references and all of the globals.
  */
-static void do_acct_process(struct bsd_acct_struct *acct,
-		struct pid_namespace *ns, struct file *);
+static void do_acct_process(struct pid_namespace *ns, struct file *);
 
 /*
  * This structure is used so that all the data protected by lock
  * can be placed in the same cache line as the lock.  This primes
  * the cache line to have the data after getting the lock.
  */
-struct bsd_acct_struct {
+struct acct_glbs {
+	spinlock_t		lock;
 	volatile int		active;
 	volatile int		needcheck;
 	struct file		*file;
 	struct pid_namespace	*ns;
 	struct timer_list	timer;
-	struct list_head	list;
 };
 
-static DEFINE_SPINLOCK(acct_lock);
-static LIST_HEAD(acct_list);
+static struct acct_glbs acct_globals __cacheline_aligned =
+	{__SPIN_LOCK_UNLOCKED(acct_globals.lock)};
 
 /*
  * Called whenever the timer says to check the free space.
  */
-static void acct_timeout(unsigned long x)
+static void acct_timeout(unsigned long unused)
 {
-	struct bsd_acct_struct *acct = (struct bsd_acct_struct *)x;
-	acct->needcheck = 1;
+	acct_globals.needcheck = 1;
 }
 
 /*
  * Check the amount of free space and suspend/resume accordingly.
  */
-static int check_free_space(struct bsd_acct_struct *acct, struct file *file)
+static int check_free_space(struct file *file)
 {
 	struct kstatfs sbuf;
 	int res;
@@ -115,11 +113,11 @@ static int check_free_space(struct bsd_acct_struct *acct, struct file *file)
 	sector_t resume;
 	sector_t suspend;
 
-	spin_lock(&acct_lock);
-	res = acct->active;
-	if (!file || !acct->needcheck)
+	spin_lock(&acct_globals.lock);
+	res = acct_globals.active;
+	if (!file || !acct_globals.needcheck)
 		goto out;
-	spin_unlock(&acct_lock);
+	spin_unlock(&acct_globals.lock);
 
 	/* May block */
 	if (vfs_statfs(file->f_path.dentry, &sbuf))
@@ -138,35 +136,35 @@ static int check_free_space(struct bsd_acct_struct *acct, struct file *file)
 		act = 0;
 
 	/*
-	 * If some joker switched acct->file under us we'ld better be
+	 * If some joker switched acct_globals.file under us we'ld better be
 	 * silent and _not_ touch anything.
 	 */
-	spin_lock(&acct_lock);
-	if (file != acct->file) {
+	spin_lock(&acct_globals.lock);
+	if (file != acct_globals.file) {
 		if (act)
 			res = act>0;
 		goto out;
 	}
 
-	if (acct->active) {
+	if (acct_globals.active) {
 		if (act < 0) {
-			acct->active = 0;
+			acct_globals.active = 0;
 			printk(KERN_INFO "Process accounting paused\n");
 		}
 	} else {
 		if (act > 0) {
-			acct->active = 1;
+			acct_globals.active = 1;
 			printk(KERN_INFO "Process accounting resumed\n");
 		}
 	}
 
-	del_timer(&acct->timer);
-	acct->needcheck = 0;
-	acct->timer.expires = jiffies + ACCT_TIMEOUT*HZ;
-	add_timer(&acct->timer);
-	res = acct->active;
+	del_timer(&acct_globals.timer);
+	acct_globals.needcheck = 0;
+	acct_globals.timer.expires = jiffies + ACCT_TIMEOUT*HZ;
+	add_timer(&acct_globals.timer);
+	res = acct_globals.active;
 out:
-	spin_unlock(&acct_lock);
+	spin_unlock(&acct_globals.lock);
 	return res;
 }
 
@@ -174,41 +172,39 @@ out:
  * Close the old accounting file (if currently open) and then replace
  * it with file (if non-NULL).
  *
- * NOTE: acct_lock MUST be held on entry and exit.
+ * NOTE: acct_globals.lock MUST be held on entry and exit.
  */
-static void acct_file_reopen(struct bsd_acct_struct *acct, struct file *file,
-		struct pid_namespace *ns)
+static void acct_file_reopen(struct file *file)
 {
 	struct file *old_acct = NULL;
 	struct pid_namespace *old_ns = NULL;
 
-	if (acct->file) {
-		old_acct = acct->file;
-		old_ns = acct->ns;
-		del_timer(&acct->timer);
-		acct->active = 0;
-		acct->needcheck = 0;
-		acct->file = NULL;
-		acct->ns = NULL;
-		list_del(&acct->list);
+	if (acct_globals.file) {
+		old_acct = acct_globals.file;
+		old_ns = acct_globals.ns;
+		del_timer(&acct_globals.timer);
+		acct_globals.active = 0;
+		acct_globals.needcheck = 0;
+		acct_globals.file = NULL;
 	}
 	if (file) {
-		acct->file = file;
-		acct->ns = ns;
-		acct->needcheck = 0;
-		acct->active = 1;
-		list_add(&acct->list, &acct_list);
+		acct_globals.file = file;
+		acct_globals.ns = get_pid_ns(task_active_pid_ns(current));
+		acct_globals.needcheck = 0;
+		acct_globals.active = 1;
 		/* It's been deleted if it was used before so this is safe */
-		setup_timer(&acct->timer, acct_timeout, (unsigned long)acct);
-		acct->timer.expires = jiffies + ACCT_TIMEOUT*HZ;
-		add_timer(&acct->timer);
+		init_timer(&acct_globals.timer);
+		acct_globals.timer.function = acct_timeout;
+		acct_globals.timer.expires = jiffies + ACCT_TIMEOUT*HZ;
+		add_timer(&acct_globals.timer);
 	}
 	if (old_acct) {
 		mnt_unpin(old_acct->f_path.mnt);
-		spin_unlock(&acct_lock);
-		do_acct_process(acct, old_ns, old_acct);
+		spin_unlock(&acct_globals.lock);
+		do_acct_process(old_ns, old_acct);
 		filp_close(old_acct, NULL);
-		spin_lock(&acct_lock);
+		put_pid_ns(old_ns);
+		spin_lock(&acct_globals.lock);
 	}
 }
 
@@ -216,8 +212,6 @@ static int acct_on(char *name)
 {
 	struct file *file;
 	int error;
-	struct pid_namespace *ns;
-	struct bsd_acct_struct *acct = NULL;
 
 	/* Difference from BSD - they don't do O_APPEND */
 	file = filp_open(name, O_WRONLY|O_APPEND|O_LARGEFILE, 0);
@@ -234,34 +228,18 @@ static int acct_on(char *name)
 		return -EIO;
 	}
 
-	ns = task_active_pid_ns(current);
-	if (ns->bacct == NULL) {
-		acct = kzalloc(sizeof(struct bsd_acct_struct), GFP_KERNEL);
-		if (acct == NULL) {
-			filp_close(file, NULL);
-			return -ENOMEM;
-		}
-	}
-
 	error = security_acct(file);
 	if (error) {
-		kfree(acct);
 		filp_close(file, NULL);
 		return error;
 	}
 
-	spin_lock(&acct_lock);
-	if (ns->bacct == NULL) {
-		ns->bacct = acct;
-		acct = NULL;
-	}
-
+	spin_lock(&acct_globals.lock);
 	mnt_pin(file->f_path.mnt);
-	acct_file_reopen(ns->bacct, file, ns);
-	spin_unlock(&acct_lock);
+	acct_file_reopen(file);
+	spin_unlock(&acct_globals.lock);
 
 	mntput(file->f_path.mnt); /* it's pinned, now give up active reference */
-	kfree(acct);
 
 	return 0;
 }
@@ -291,17 +269,11 @@ asmlinkage long sys_acct(const char __user *name)
 		error = acct_on(tmp);
 		putname(tmp);
 	} else {
-		struct bsd_acct_struct *acct;
-
-		acct = task_active_pid_ns(current)->bacct;
-		if (acct == NULL)
-			return 0;
-
 		error = security_acct(NULL);
 		if (!error) {
-			spin_lock(&acct_lock);
-			acct_file_reopen(acct, NULL, NULL);
-			spin_unlock(&acct_lock);
+			spin_lock(&acct_globals.lock);
+			acct_file_reopen(NULL);
+			spin_unlock(&acct_globals.lock);
 		}
 	}
 	return error;
@@ -316,16 +288,10 @@ asmlinkage long sys_acct(const char __user *name)
  */
 void acct_auto_close_mnt(struct vfsmount *m)
 {
-	struct bsd_acct_struct *acct;
-
-	spin_lock(&acct_lock);
-restart:
-	list_for_each_entry(acct, &acct_list, list)
-		if (acct->file && acct->file->f_path.mnt == m) {
-			acct_file_reopen(acct, NULL, NULL);
-			goto restart;
-		}
-	spin_unlock(&acct_lock);
+	spin_lock(&acct_globals.lock);
+	if (acct_globals.file && acct_globals.file->f_path.mnt == m)
+		acct_file_reopen(NULL);
+	spin_unlock(&acct_globals.lock);
 }
 
 /**
@@ -337,31 +303,12 @@ restart:
  */
 void acct_auto_close(struct super_block *sb)
 {
-	struct bsd_acct_struct *acct;
-
-	spin_lock(&acct_lock);
-restart:
-	list_for_each_entry(acct, &acct_list, list)
-		if (acct->file && acct->file->f_path.mnt->mnt_sb == sb) {
-			acct_file_reopen(acct, NULL, NULL);
-			goto restart;
-		}
-	spin_unlock(&acct_lock);
-}
-
-void acct_exit_ns(struct pid_namespace *ns)
-{
-	struct bsd_acct_struct *acct;
-
-	spin_lock(&acct_lock);
-	acct = ns->bacct;
-	if (acct != NULL) {
-		if (acct->file != NULL)
-			acct_file_reopen(acct, NULL, NULL);
-
-		kfree(acct);
+	spin_lock(&acct_globals.lock);
+	if (acct_globals.file &&
+	    acct_globals.file->f_path.mnt->mnt_sb == sb) {
+		acct_file_reopen(NULL);
 	}
-	spin_unlock(&acct_lock);
+	spin_unlock(&acct_globals.lock);
 }
 
 /*
@@ -478,8 +425,7 @@ static u32 encode_float(u64 value)
 /*
  *  do_acct_process does all actual work. Caller holds the reference to file.
  */
-static void do_acct_process(struct bsd_acct_struct *acct,
-		struct pid_namespace *ns, struct file *file)
+static void do_acct_process(struct pid_namespace *ns, struct file *file)
 {
 	struct pacct_struct *pacct = &current->signal->pacct;
 	acct_t ac;
@@ -494,7 +440,7 @@ static void do_acct_process(struct bsd_acct_struct *acct,
 	 * First check to see if there is enough free_space to continue
 	 * the process accounting system.
 	 */
-	if (!check_free_space(acct, file))
+	if (!check_free_space(file))
 		return;
 
 	/*
@@ -530,14 +476,15 @@ static void do_acct_process(struct bsd_acct_struct *acct,
 	do_div(elapsed, AHZ);
 	ac.ac_btime = get_seconds() - elapsed;
 	/* we really need to bite the bullet and change layout */
-	current_uid_gid(&ac.ac_uid, &ac.ac_gid);
+	ac.ac_uid = current->uid;
+	ac.ac_gid = current->gid;
 #if ACCT_VERSION==2
 	ac.ac_ahz = AHZ;
 #endif
 #if ACCT_VERSION==1 || ACCT_VERSION==2
 	/* backward-compatible 16 bit fields */
-	ac.ac_uid16 = ac.ac_uid;
-	ac.ac_gid16 = ac.ac_gid;
+	ac.ac_uid16 = current->uid;
+	ac.ac_gid16 = current->gid;
 #endif
 #if ACCT_VERSION==3
 	ac.ac_pid = task_tgid_nr_ns(current, ns);
@@ -547,7 +494,7 @@ static void do_acct_process(struct bsd_acct_struct *acct,
 #endif
 
 	spin_lock_irq(&current->sighand->siglock);
-	tty = current->signal->tty;	/* Safe as we hold the siglock */
+	tty = current->signal->tty;
 	ac.ac_tty = tty ? old_encode_dev(tty_devnum(tty)) : 0;
 	ac.ac_utime = encode_comp_t(jiffies_to_AHZ(cputime_to_jiffies(pacct->ac_utime)));
 	ac.ac_stime = encode_comp_t(jiffies_to_AHZ(cputime_to_jiffies(pacct->ac_stime)));
@@ -630,46 +577,34 @@ void acct_collect(long exitcode, int group_dead)
 	spin_unlock_irq(&current->sighand->siglock);
 }
 
-static void acct_process_in_ns(struct pid_namespace *ns)
-{
-	struct file *file = NULL;
-	struct bsd_acct_struct *acct;
-
-	acct = ns->bacct;
-	/*
-	 * accelerate the common fastpath:
-	 */
-	if (!acct || !acct->file)
-		return;
-
-	spin_lock(&acct_lock);
-	file = acct->file;
-	if (unlikely(!file)) {
-		spin_unlock(&acct_lock);
-		return;
-	}
-	get_file(file);
-	spin_unlock(&acct_lock);
-
-	do_acct_process(acct, ns, file);
-	fput(file);
-}
-
 /**
- * acct_process - now just a wrapper around acct_process_in_ns,
- * which in turn is a wrapper around do_acct_process.
+ * acct_process - now just a wrapper around do_acct_process
+ * @exitcode: task exit code
  *
  * handles process accounting for an exiting task
  */
 void acct_process(void)
 {
+	struct file *file = NULL;
 	struct pid_namespace *ns;
 
 	/*
-	 * This loop is safe lockless, since current is still
-	 * alive and holds its namespace, which in turn holds
-	 * its parent.
+	 * accelerate the common fastpath:
 	 */
-	for (ns = task_active_pid_ns(current); ns != NULL; ns = ns->parent)
-		acct_process_in_ns(ns);
+	if (!acct_globals.file)
+		return;
+
+	spin_lock(&acct_globals.lock);
+	file = acct_globals.file;
+	if (unlikely(!file)) {
+		spin_unlock(&acct_globals.lock);
+		return;
+	}
+	get_file(file);
+	ns = get_pid_ns(acct_globals.ns);
+	spin_unlock(&acct_globals.lock);
+
+	do_acct_process(ns, file);
+	fput(file);
+	put_pid_ns(ns);
 }

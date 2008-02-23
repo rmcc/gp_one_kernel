@@ -22,11 +22,11 @@
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
 #include <linux/exportfs.h>
-#include <linux/quotaops.h>
 #include <linux/vfs.h>
 #include <linux/mnt_namespace.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
+#include <linux/quotaops.h>
 
 struct file_system_type reiserfs_fs_type;
 
@@ -83,7 +83,7 @@ static void reiserfs_write_super(struct super_block *s)
 	reiserfs_sync_fs(s, 1);
 }
 
-static int reiserfs_freeze(struct super_block *s)
+static void reiserfs_write_super_lockfs(struct super_block *s)
 {
 	struct reiserfs_transaction_handle th;
 	reiserfs_write_lock(s);
@@ -101,13 +101,11 @@ static int reiserfs_freeze(struct super_block *s)
 	}
 	s->s_dirt = 0;
 	reiserfs_write_unlock(s);
-	return 0;
 }
 
-static int reiserfs_unfreeze(struct super_block *s)
+static void reiserfs_unlockfs(struct super_block *s)
 {
 	reiserfs_allow_writes(s);
-	return 0;
 }
 
 extern const struct in_core_key MAX_IN_CORE_KEY;
@@ -184,7 +182,7 @@ static int finish_unfinished(struct super_block *s)
 			int ret = reiserfs_quota_on_mount(s, i);
 			if (ret < 0)
 				reiserfs_warning(s,
-						 "reiserfs: cannot turn on journaled quota: error %d",
+						 "reiserfs: cannot turn on journalled quota: error %d",
 						 ret);
 		}
 	}
@@ -522,7 +520,7 @@ static void reiserfs_destroy_inode(struct inode *inode)
 	kmem_cache_free(reiserfs_inode_cachep, REISERFS_I(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache * cachep, void *foo)
 {
 	struct reiserfs_inode_info *ei = (struct reiserfs_inode_info *)foo;
 
@@ -615,8 +613,8 @@ static const struct super_operations reiserfs_sops = {
 	.put_super = reiserfs_put_super,
 	.write_super = reiserfs_write_super,
 	.sync_fs = reiserfs_sync_fs,
-	.freeze_fs = reiserfs_freeze,
-	.unfreeze_fs = reiserfs_unfreeze,
+	.write_super_lockfs = reiserfs_write_super_lockfs,
+	.unlockfs = reiserfs_unlockfs,
 	.statfs = reiserfs_statfs,
 	.remount_fs = reiserfs_remount,
 	.show_options = generic_show_options,
@@ -651,8 +649,6 @@ static struct dquot_operations reiserfs_quota_operations = {
 	.release_dquot = reiserfs_release_dquot,
 	.mark_dirty = reiserfs_mark_dquot_dirty,
 	.write_info = reiserfs_write_info,
-	.alloc_dquot	= dquot_alloc,
-	.destroy_dquot	= dquot_destroy,
 };
 
 static struct quotactl_ops reiserfs_qctl_operations = {
@@ -880,9 +876,7 @@ static int reiserfs_parse_options(struct super_block *s, char *options,	/* strin
 				     mount options were selected. */
 				  unsigned long *blocks,	/* strtol-ed from NNN of resize=NNN */
 				  char **jdev_name,
-				  unsigned int *commit_max_age,
-				  char **qf_names,
-				  unsigned int *qfmt)
+				  unsigned int *commit_max_age)
 {
 	int c;
 	char *arg = NULL;
@@ -998,10 +992,9 @@ static int reiserfs_parse_options(struct super_block *s, char *options,	/* strin
 		if (c == 'u' || c == 'g') {
 			int qtype = c == 'u' ? USRQUOTA : GRPQUOTA;
 
-			if (sb_any_quota_loaded(s) &&
-			    (!*arg != !REISERFS_SB(s)->s_qf_names[qtype])) {
+			if (sb_any_quota_enabled(s)) {
 				reiserfs_warning(s,
-						 "reiserfs_parse_options: cannot change journaled quota options when quota turned on.");
+						 "reiserfs_parse_options: cannot change journalled quota options when quota turned on.");
 				return 0;
 			}
 			if (*arg) {	/* Some filename specified? */
@@ -1018,58 +1011,51 @@ static int reiserfs_parse_options(struct super_block *s, char *options,	/* strin
 							 "reiserfs_parse_options: quotafile must be on filesystem root.");
 					return 0;
 				}
-				qf_names[qtype] =
+				REISERFS_SB(s)->s_qf_names[qtype] =
 				    kmalloc(strlen(arg) + 1, GFP_KERNEL);
-				if (!qf_names[qtype]) {
+				if (!REISERFS_SB(s)->s_qf_names[qtype]) {
 					reiserfs_warning(s,
 							 "reiserfs_parse_options: not enough memory for storing quotafile name.");
 					return 0;
 				}
-				strcpy(qf_names[qtype], arg);
+				strcpy(REISERFS_SB(s)->s_qf_names[qtype], arg);
 				*mount_options |= 1 << REISERFS_QUOTA;
 			} else {
-				if (qf_names[qtype] !=
-				    REISERFS_SB(s)->s_qf_names[qtype])
-					kfree(qf_names[qtype]);
-				qf_names[qtype] = NULL;
+				kfree(REISERFS_SB(s)->s_qf_names[qtype]);
+				REISERFS_SB(s)->s_qf_names[qtype] = NULL;
 			}
 		}
 		if (c == 'f') {
 			if (!strcmp(arg, "vfsold"))
-				*qfmt = QFMT_VFS_OLD;
+				REISERFS_SB(s)->s_jquota_fmt = QFMT_VFS_OLD;
 			else if (!strcmp(arg, "vfsv0"))
-				*qfmt = QFMT_VFS_V0;
+				REISERFS_SB(s)->s_jquota_fmt = QFMT_VFS_V0;
 			else {
 				reiserfs_warning(s,
 						 "reiserfs_parse_options: unknown quota format specified.");
-				return 0;
-			}
-			if (sb_any_quota_loaded(s) &&
-			    *qfmt != REISERFS_SB(s)->s_jquota_fmt) {
-				reiserfs_warning(s,
-						 "reiserfs_parse_options: cannot change journaled quota options when quota turned on.");
 				return 0;
 			}
 		}
 #else
 		if (c == 'u' || c == 'g' || c == 'f') {
 			reiserfs_warning(s,
-					 "reiserfs_parse_options: journaled quota options not supported.");
+					 "reiserfs_parse_options: journalled quota options not supported.");
 			return 0;
 		}
 #endif
 	}
 
 #ifdef CONFIG_QUOTA
-	if (!REISERFS_SB(s)->s_jquota_fmt && !*qfmt
-	    && (qf_names[USRQUOTA] || qf_names[GRPQUOTA])) {
+	if (!REISERFS_SB(s)->s_jquota_fmt
+	    && (REISERFS_SB(s)->s_qf_names[USRQUOTA]
+		|| REISERFS_SB(s)->s_qf_names[GRPQUOTA])) {
 		reiserfs_warning(s,
-				 "reiserfs_parse_options: journaled quota format not specified.");
+				 "reiserfs_parse_options: journalled quota format not specified.");
 		return 0;
 	}
 	/* This checking is not precise wrt the quota type but for our purposes it is sufficient */
 	if (!(*mount_options & (1 << REISERFS_QUOTA))
-	    && sb_any_quota_loaded(s)) {
+	    && sb_any_quota_enabled(s)) {
 		reiserfs_warning(s,
 				 "reiserfs_parse_options: quota options must be present when quota is turned on.");
 		return 0;
@@ -1144,21 +1130,6 @@ static void handle_attrs(struct super_block *s)
 	}
 }
 
-#ifdef CONFIG_QUOTA
-static void handle_quota_files(struct super_block *s, char **qf_names,
-			       unsigned int *qfmt)
-{
-	int i;
-
-	for (i = 0; i < MAXQUOTAS; i++) {
-		if (qf_names[i] != REISERFS_SB(s)->s_qf_names[i])
-			kfree(REISERFS_SB(s)->s_qf_names[i]);
-		REISERFS_SB(s)->s_qf_names[i] = qf_names[i];
-	}
-	REISERFS_SB(s)->s_jquota_fmt = *qfmt;
-}
-#endif
-
 static int reiserfs_remount(struct super_block *s, int *mount_flags, char *arg)
 {
 	struct reiserfs_super_block *rs;
@@ -1170,30 +1141,23 @@ static int reiserfs_remount(struct super_block *s, int *mount_flags, char *arg)
 	struct reiserfs_journal *journal = SB_JOURNAL(s);
 	char *new_opts = kstrdup(arg, GFP_KERNEL);
 	int err;
-	char *qf_names[MAXQUOTAS];
-	unsigned int qfmt = 0;
 #ifdef CONFIG_QUOTA
 	int i;
-
-	memcpy(qf_names, REISERFS_SB(s)->s_qf_names, sizeof(qf_names));
 #endif
 
 	rs = SB_DISK_SUPER_BLOCK(s);
 
 	if (!reiserfs_parse_options
-	    (s, arg, &mount_options, &blocks, NULL, &commit_max_age,
-	    qf_names, &qfmt)) {
+	    (s, arg, &mount_options, &blocks, NULL, &commit_max_age)) {
 #ifdef CONFIG_QUOTA
-		for (i = 0; i < MAXQUOTAS; i++)
-			if (qf_names[i] != REISERFS_SB(s)->s_qf_names[i])
-				kfree(qf_names[i]);
+		for (i = 0; i < MAXQUOTAS; i++) {
+			kfree(REISERFS_SB(s)->s_qf_names[i]);
+			REISERFS_SB(s)->s_qf_names[i] = NULL;
+		}
 #endif
 		err = -EINVAL;
 		goto out_err;
 	}
-#ifdef CONFIG_QUOTA
-	handle_quota_files(s, qf_names, &qfmt);
-#endif
 
 	handle_attrs(s);
 
@@ -1606,8 +1570,6 @@ static int reiserfs_fill_super(struct super_block *s, void *data, int silent)
 	char *jdev_name;
 	struct reiserfs_sb_info *sbi;
 	int errval = -EINVAL;
-	char *qf_names[MAXQUOTAS] = {};
-	unsigned int qfmt = 0;
 
 	save_mount_options(s, data);
 
@@ -1635,12 +1597,9 @@ static int reiserfs_fill_super(struct super_block *s, void *data, int silent)
 	jdev_name = NULL;
 	if (reiserfs_parse_options
 	    (s, (char *)data, &(sbi->s_mount_opt), &blocks, &jdev_name,
-	     &commit_max_age, qf_names, &qfmt) == 0) {
+	     &commit_max_age) == 0) {
 		goto error;
 	}
-#ifdef CONFIG_QUOTA
-	handle_quota_files(s, qf_names, &qfmt);
-#endif
 
 	if (blocks) {
 		SWARN(silent, s, "jmacd-7: reiserfs_fill_super: resize option "
@@ -1860,7 +1819,7 @@ static int reiserfs_fill_super(struct super_block *s, void *data, int silent)
 
 	return (0);
 
-error:
+      error:
 	if (jinit_done) {	/* kill the commit thread, free journal ram */
 		journal_release_error(NULL, s);
 	}
@@ -1871,8 +1830,10 @@ error:
 #ifdef CONFIG_QUOTA
 	{
 		int j;
-		for (j = 0; j < MAXQUOTAS; j++)
-			kfree(qf_names[j]);
+		for (j = 0; j < MAXQUOTAS; j++) {
+			kfree(sbi->s_qf_names[j]);
+			sbi->s_qf_names[j] = NULL;
+		}
 	}
 #endif
 	kfree(sbi);
@@ -2019,7 +1980,7 @@ static int reiserfs_release_dquot(struct dquot *dquot)
 
 static int reiserfs_mark_dquot_dirty(struct dquot *dquot)
 {
-	/* Are we journaling quotas? */
+	/* Are we journalling quotas? */
 	if (REISERFS_SB(dquot->dq_sb)->s_qf_names[USRQUOTA] ||
 	    REISERFS_SB(dquot->dq_sb)->s_qf_names[GRPQUOTA]) {
 		dquot_mark_dquot_dirty(dquot);
@@ -2060,27 +2021,26 @@ static int reiserfs_quota_on_mount(struct super_block *sb, int type)
  * Standard function to be called on quota_on
  */
 static int reiserfs_quota_on(struct super_block *sb, int type, int format_id,
-			     char *name, int remount)
+			     char *path, int remount)
 {
 	int err;
-	struct path path;
+	struct nameidata nd;
 	struct inode *inode;
-	struct reiserfs_transaction_handle th;
 
 	if (!(REISERFS_SB(sb)->s_mount_opt & (1 << REISERFS_QUOTA)))
 		return -EINVAL;
 	/* No more checks needed? Path and format_id are bogus anyway... */
 	if (remount)
-		return vfs_quota_on(sb, type, format_id, name, 1);
-	err = kern_path(name, LOOKUP_FOLLOW, &path);
+		return vfs_quota_on(sb, type, format_id, path, 1);
+	err = path_lookup(path, LOOKUP_FOLLOW, &nd);
 	if (err)
 		return err;
 	/* Quotafile not on the same filesystem? */
-	if (path.mnt->mnt_sb != sb) {
-		err = -EXDEV;
-		goto out;
+	if (nd.path.mnt->mnt_sb != sb) {
+		path_put(&nd.path);
+		return -EXDEV;
 	}
-	inode = path.dentry->d_inode;
+	inode = nd.path.dentry->d_inode;
 	/* We must not pack tails for quota files on reiserfs for quota IO to work */
 	if (!(REISERFS_I(inode)->i_flags & i_nopack_mask)) {
 		err = reiserfs_unpack(inode, NULL);
@@ -2088,37 +2048,24 @@ static int reiserfs_quota_on(struct super_block *sb, int type, int format_id,
 			reiserfs_warning(sb,
 				"reiserfs: Unpacking tail of quota file failed"
 				" (%d). Cannot turn on quotas.", err);
-			err = -EINVAL;
-			goto out;
+			path_put(&nd.path);
+			return -EINVAL;
 		}
 		mark_inode_dirty(inode);
 	}
-	/* Journaling quota? */
-	if (REISERFS_SB(sb)->s_qf_names[type]) {
-		/* Quotafile not of fs root? */
-		if (path.dentry->d_parent != sb->s_root)
-			reiserfs_warning(sb,
+	/* Not journalling quota? No more tests needed... */
+	if (!REISERFS_SB(sb)->s_qf_names[USRQUOTA] &&
+	    !REISERFS_SB(sb)->s_qf_names[GRPQUOTA]) {
+		path_put(&nd.path);
+		return vfs_quota_on(sb, type, format_id, path, 0);
+	}
+	/* Quotafile not of fs root? */
+	if (nd.path.dentry->d_parent->d_inode != sb->s_root->d_inode)
+		reiserfs_warning(sb,
 				 "reiserfs: Quota file not on filesystem root. "
 				 "Journalled quota will not work.");
-	}
-
-	/*
-	 * When we journal data on quota file, we have to flush journal to see
-	 * all updates to the file when we bypass pagecache...
-	 */
-	if (reiserfs_file_data_log(inode)) {
-		/* Just start temporary transaction and finish it */
-		err = journal_begin(&th, sb, 1);
-		if (err)
-			goto out;
-		err = journal_end_sync(&th, sb, 1);
-		if (err)
-			goto out;
-	}
-	err = vfs_quota_on_path(sb, type, format_id, &path);
-out:
-	path_put(&path);
-	return err;
+	path_put(&nd.path);
+	return vfs_quota_on(sb, type, format_id, path, 0);
 }
 
 /* Read data from quotafile - avoid pagecache and such because we cannot afford
@@ -2218,10 +2165,8 @@ static ssize_t reiserfs_quota_write(struct super_block *sb, int type,
 		blk++;
 	}
 out:
-	if (len == towrite) {
-		mutex_unlock(&inode->i_mutex);
+	if (len == towrite)
 		return err;
-	}
 	if (inode->i_size < off + len - towrite)
 		i_size_write(inode, off + len - towrite);
 	inode->i_version++;

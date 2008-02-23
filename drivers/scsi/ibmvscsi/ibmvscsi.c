@@ -72,7 +72,6 @@
 #include <linux/delay.h>
 #include <asm/firmware.h>
 #include <asm/vio.h>
-#include <asm/firmware.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
@@ -89,7 +88,6 @@ static int max_id = 64;
 static int max_channel = 3;
 static int init_timeout = 5;
 static int max_requests = IBMVSCSI_MAX_REQUESTS_DEFAULT;
-static int max_events = IBMVSCSI_MAX_REQUESTS_DEFAULT + 2;
 
 static struct scsi_transport_template *ibmvscsi_transport_template;
 
@@ -108,7 +106,7 @@ module_param_named(max_channel, max_channel, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_channel, "Largest channel value");
 module_param_named(init_timeout, init_timeout, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(init_timeout, "Initialization timeout in seconds");
-module_param_named(max_requests, max_requests, int, S_IRUGO);
+module_param_named(max_requests, max_requests, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_requests, "Maximum requests for this adapter");
 
 /* ------------------------------------------------------------
@@ -428,10 +426,8 @@ static int map_sg_data(struct scsi_cmnd *cmd,
 					   SG_ALL * sizeof(struct srp_direct_buf),
 					   &evt_struct->ext_list_token, 0);
 		if (!evt_struct->ext_list) {
-			if (!firmware_has_feature(FW_FEATURE_CMO))
-				sdev_printk(KERN_ERR, cmd->device,
-				            "Can't allocate memory "
-				            "for indirect table\n");
+			sdev_printk(KERN_ERR, cmd->device,
+				    "Can't allocate memory for indirect table\n");
 			return 0;
 		}
 	}
@@ -747,9 +743,7 @@ static int ibmvscsi_queuecommand(struct scsi_cmnd *cmnd,
 	srp_cmd->lun = ((u64) lun) << 48;
 
 	if (!map_data_for_srp_cmd(cmnd, evt_struct, srp_cmd, hostdata->dev)) {
-		if (!firmware_has_feature(FW_FEATURE_CMO))
-			sdev_printk(KERN_ERR, cmnd->device,
-			            "couldn't convert cmd to srp_cmd\n");
+		sdev_printk(KERN_ERR, cmnd->device, "couldn't convert cmd to srp_cmd\n");
 		free_event_struct(&hostdata->pool, evt_struct);
 		return SCSI_MLQUEUE_HOST_BUSY;
 	}
@@ -757,7 +751,7 @@ static int ibmvscsi_queuecommand(struct scsi_cmnd *cmnd,
 	init_event_struct(evt_struct,
 			  handle_cmd_rsp,
 			  VIOSRP_SRP_FORMAT,
-			  cmnd->request->timeout/HZ);
+			  cmnd->timeout_per_command/HZ);
 
 	evt_struct->cmnd = cmnd;
 	evt_struct->cmnd_done = done;
@@ -860,11 +854,8 @@ static void send_mad_adapter_info(struct ibmvscsi_host_data *hostdata)
 					    sizeof(hostdata->madapter_info),
 					    DMA_BIDIRECTIONAL);
 
-	if (dma_mapping_error(hostdata->dev, req->buffer)) {
-		if (!firmware_has_feature(FW_FEATURE_CMO))
-			dev_err(hostdata->dev,
-			        "Unable to map request_buffer for "
-			        "adapter_info!\n");
+	if (dma_mapping_error(req->buffer)) {
+		dev_err(hostdata->dev, "Unable to map request_buffer for adapter_info!\n");
 		free_event_struct(&hostdata->pool, evt_struct);
 		return;
 	}
@@ -1357,7 +1348,7 @@ void ibmvscsi_handle_crq(struct viosrp_crq *crq,
 
 	del_timer(&evt_struct->timer);
 
-	if ((crq->status != VIOSRP_OK && crq->status != VIOSRP_OK2) && evt_struct->cmnd)
+	if (crq->status != VIOSRP_OK && evt_struct->cmnd)
 		evt_struct->cmnd->result = DID_ERROR << 16;
 	if (evt_struct->done)
 		evt_struct->done(evt_struct);
@@ -1408,10 +1399,8 @@ static int ibmvscsi_do_host_config(struct ibmvscsi_host_data *hostdata,
 						    length,
 						    DMA_BIDIRECTIONAL);
 
-	if (dma_mapping_error(hostdata->dev, host_config->buffer)) {
-		if (!firmware_has_feature(FW_FEATURE_CMO))
-			dev_err(hostdata->dev,
-			        "dma_mapping error getting host config\n");
+	if (dma_mapping_error(host_config->buffer)) {
+		dev_err(hostdata->dev, "dma_mapping error getting host config\n");
 		free_event_struct(&hostdata->pool, evt_struct);
 		return -1;
 	}
@@ -1443,7 +1432,7 @@ static int ibmvscsi_slave_configure(struct scsi_device *sdev)
 	spin_lock_irqsave(shost->host_lock, lock_flags);
 	if (sdev->type == TYPE_DISK) {
 		sdev->allow_restart = 1;
-		blk_queue_rq_timeout(sdev->request_queue, 60 * HZ);
+		sdev->timeout = 60 * HZ;
 	}
 	scsi_adjust_queue_depth(sdev, 0, shost->cmd_per_lun);
 	spin_unlock_irqrestore(shost->host_lock, lock_flags);
@@ -1615,33 +1604,13 @@ static struct scsi_host_template driver_template = {
 	.eh_host_reset_handler = ibmvscsi_eh_host_reset_handler,
 	.slave_configure = ibmvscsi_slave_configure,
 	.change_queue_depth = ibmvscsi_change_queue_depth,
-	.cmd_per_lun = IBMVSCSI_CMDS_PER_LUN_DEFAULT,
+	.cmd_per_lun = 16,
 	.can_queue = IBMVSCSI_MAX_REQUESTS_DEFAULT,
 	.this_id = -1,
 	.sg_tablesize = SG_ALL,
 	.use_clustering = ENABLE_CLUSTERING,
 	.shost_attrs = ibmvscsi_attrs,
 };
-
-/**
- * ibmvscsi_get_desired_dma - Calculate IO memory desired by the driver
- *
- * @vdev: struct vio_dev for the device whose desired IO mem is to be returned
- *
- * Return value:
- *	Number of bytes of IO data the driver will need to perform well.
- */
-static unsigned long ibmvscsi_get_desired_dma(struct vio_dev *vdev)
-{
-	/* iu_storage data allocated in initialize_event_pool */
-	unsigned long desired_io = max_events * sizeof(union viosrp_iu);
-
-	/* add io space for sg data */
-	desired_io += (IBMVSCSI_MAX_SECTORS_DEFAULT * 512 *
-	                     IBMVSCSI_CMDS_PER_LUN_DEFAULT);
-
-	return desired_io;
-}
 
 /**
  * Called by bus code for each adapter
@@ -1658,6 +1627,7 @@ static int ibmvscsi_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 
 	vdev->dev.driver_data = NULL;
 
+	driver_template.can_queue = max_requests;
 	host = scsi_host_alloc(&driver_template, sizeof(*hostdata));
 	if (!host) {
 		dev_err(&vdev->dev, "couldn't allocate host data\n");
@@ -1671,14 +1641,14 @@ static int ibmvscsi_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	hostdata->host = host;
 	hostdata->dev = dev;
 	atomic_set(&hostdata->request_limit, -1);
-	hostdata->host->max_sectors = IBMVSCSI_MAX_SECTORS_DEFAULT;
+	hostdata->host->max_sectors = 32 * 8; /* default max I/O 32 pages */
 
-	rc = ibmvscsi_ops->init_crq_queue(&hostdata->queue, hostdata, max_events);
+	rc = ibmvscsi_ops->init_crq_queue(&hostdata->queue, hostdata, max_requests);
 	if (rc != 0 && rc != H_RESOURCE) {
 		dev_err(&vdev->dev, "couldn't initialize crq. rc=%d\n", rc);
 		goto init_crq_failed;
 	}
-	if (initialize_event_pool(&hostdata->pool, max_events, hostdata) != 0) {
+	if (initialize_event_pool(&hostdata->pool, max_requests, hostdata) != 0) {
 		dev_err(&vdev->dev, "couldn't initialize event pool\n");
 		goto init_pool_failed;
 	}
@@ -1730,7 +1700,7 @@ static int ibmvscsi_probe(struct vio_dev *vdev, const struct vio_device_id *id)
       add_host_failed:
 	release_event_pool(&hostdata->pool, hostdata);
       init_pool_failed:
-	ibmvscsi_ops->release_crq_queue(&hostdata->queue, hostdata, max_events);
+	ibmvscsi_ops->release_crq_queue(&hostdata->queue, hostdata, max_requests);
       init_crq_failed:
 	scsi_host_put(host);
       scsi_host_alloc_failed:
@@ -1742,7 +1712,7 @@ static int ibmvscsi_remove(struct vio_dev *vdev)
 	struct ibmvscsi_host_data *hostdata = vdev->dev.driver_data;
 	release_event_pool(&hostdata->pool, hostdata);
 	ibmvscsi_ops->release_crq_queue(&hostdata->queue, hostdata,
-					max_events);
+					max_requests);
 
 	srp_remove_host(hostdata->host);
 	scsi_remove_host(hostdata->host);
@@ -1765,7 +1735,6 @@ static struct vio_driver ibmvscsi_driver = {
 	.id_table = ibmvscsi_device_table,
 	.probe = ibmvscsi_probe,
 	.remove = ibmvscsi_remove,
-	.get_desired_dma = ibmvscsi_get_desired_dma,
 	.driver = {
 		.name = "ibmvscsi",
 		.owner = THIS_MODULE,
@@ -1778,10 +1747,6 @@ static struct srp_function_template ibmvscsi_transport_functions = {
 int __init ibmvscsi_module_init(void)
 {
 	int ret;
-
-	/* Ensure we have two requests to do error recovery */
-	driver_template.can_queue = max_requests;
-	max_events = max_requests + 2;
 
 	if (firmware_has_feature(FW_FEATURE_ISERIES))
 		ibmvscsi_ops = &iseriesvscsi_ops;

@@ -19,7 +19,7 @@
 
 static void *lzo_mem;
 static void *lzo_compress_buf;
-static DEFINE_MUTEX(deflate_mutex);	/* for lzo_mem and lzo_compress_buf */
+static DEFINE_MUTEX(deflate_mutex);
 
 static void free_workspace(void)
 {
@@ -49,21 +49,18 @@ static int jffs2_lzo_compress(unsigned char *data_in, unsigned char *cpage_out,
 
 	mutex_lock(&deflate_mutex);
 	ret = lzo1x_1_compress(data_in, *sourcelen, lzo_compress_buf, &compress_size, lzo_mem);
+	mutex_unlock(&deflate_mutex);
+
 	if (ret != LZO_E_OK)
-		goto fail;
+		return -1;
 
 	if (compress_size > *dstlen)
-		goto fail;
+		return -1;
 
 	memcpy(cpage_out, lzo_compress_buf, compress_size);
-	mutex_unlock(&deflate_mutex);
-
 	*dstlen = compress_size;
-	return 0;
 
- fail:
-	mutex_unlock(&deflate_mutex);
-	return -1;
+	return 0;
 }
 
 static int jffs2_lzo_decompress(unsigned char *data_in, unsigned char *cpage_out,

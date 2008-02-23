@@ -91,8 +91,7 @@ static int
 rtctimer_start(struct snd_timer *timer)
 {
 	rtc_task_t *rtc = timer->private_data;
-	if (snd_BUG_ON(!rtc))
-		return -EINVAL;
+	snd_assert(rtc != NULL, return -EINVAL);
 	rtc_control(rtc, RTC_IRQP_SET, rtctimer_freq);
 	rtc_control(rtc, RTC_PIE_ON, 0);
 	return 0;
@@ -102,8 +101,7 @@ static int
 rtctimer_stop(struct snd_timer *timer)
 {
 	rtc_task_t *rtc = timer->private_data;
-	if (snd_BUG_ON(!rtc))
-		return -EINVAL;
+	snd_assert(rtc != NULL, return -EINVAL);
 	rtc_control(rtc, RTC_PIE_OFF, 0);
 	return 0;
 }
@@ -118,7 +116,7 @@ static void rtctimer_tasklet(unsigned long data)
  */
 static void rtctimer_interrupt(void *private_data)
 {
-	tasklet_schedule(private_data);
+	tasklet_hi_schedule(private_data);
 }
 
 

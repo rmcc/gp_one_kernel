@@ -125,11 +125,8 @@ int get_sb_mtd(struct file_system_type *fs_type, int flags,
 	       int (*fill_super)(struct super_block *, void *, int),
 	       struct vfsmount *mnt)
 {
-#ifdef CONFIG_BLOCK
-	struct block_device *bdev;
-	int ret, major;
-#endif
-	int mtdnr;
+	struct nameidata nd;
+	int mtdnr, ret;
 
 	if (!dev_name)
 		return -EINVAL;
@@ -181,38 +178,45 @@ int get_sb_mtd(struct file_system_type *fs_type, int flags,
 		}
 	}
 
-#ifdef CONFIG_BLOCK
 	/* try the old way - the hack where we allowed users to mount
 	 * /dev/mtdblock$(n) but didn't actually _use_ the blockdev
 	 */
-	bdev = lookup_bdev(dev_name);
-	if (IS_ERR(bdev)) {
-		ret = PTR_ERR(bdev);
-		DEBUG(1, "MTDSB: lookup_bdev() returned %d\n", ret);
+	ret = path_lookup(dev_name, LOOKUP_FOLLOW, &nd);
+
+	DEBUG(1, "MTDSB: path_lookup() returned %d, inode %p\n",
+	      ret, nd.path.dentry ? nd.path.dentry->d_inode : NULL);
+
+	if (ret)
 		return ret;
-	}
-	DEBUG(1, "MTDSB: lookup_bdev() returned 0\n");
 
 	ret = -EINVAL;
 
-	major = MAJOR(bdev->bd_dev);
-	mtdnr = MINOR(bdev->bd_dev);
-	bdput(bdev);
+	if (!S_ISBLK(nd.path.dentry->d_inode->i_mode))
+		goto out;
 
-	if (major != MTD_BLOCK_MAJOR)
+	if (nd.path.mnt->mnt_flags & MNT_NODEV) {
+		ret = -EACCES;
+		goto out;
+	}
+
+	if (imajor(nd.path.dentry->d_inode) != MTD_BLOCK_MAJOR)
 		goto not_an_MTD_device;
+
+	mtdnr = iminor(nd.path.dentry->d_inode);
+	path_put(&nd.path);
 
 	return get_sb_mtd_nr(fs_type, flags, dev_name, data, mtdnr, fill_super,
 			     mnt);
 
 not_an_MTD_device:
-#endif /* CONFIG_BLOCK */
-
 	if (!(flags & MS_SILENT))
 		printk(KERN_NOTICE
 		       "MTD: Attempt to mount non-MTD device \"%s\"\n",
 		       dev_name);
-	return -EINVAL;
+out:
+	path_put(&nd.path);
+	return ret;
+
 }
 
 EXPORT_SYMBOL_GPL(get_sb_mtd);

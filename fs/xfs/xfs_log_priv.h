@@ -241,11 +241,10 @@ typedef struct xlog_res {
 } xlog_res_t;
 
 typedef struct xlog_ticket {
-	sv_t		   t_wait;	 /* ticket wait queue            : 20 */
+	sv_t		   t_sema;	 /* sleep on this semaphore      : 20 */
 	struct xlog_ticket *t_next;	 /*			         :4|8 */
 	struct xlog_ticket *t_prev;	 /*				 :4|8 */
 	xlog_tid_t	   t_tid;	 /* transaction identifier	 : 4  */
-	atomic_t	   t_ref;	 /* ticket reference count       : 4  */
 	int		   t_curr_res;	 /* current reservation in bytes : 4  */
 	int		   t_unit_res;	 /* unit reservation in bytes    : 4  */
 	char		   t_ocnt;	 /* original count		 : 1  */
@@ -310,22 +309,12 @@ typedef struct xlog_rec_ext_header {
 } xlog_rec_ext_header_t;
 
 #ifdef __KERNEL__
-
-/*
- * Quite misnamed, because this union lays out the actual on-disk log buffer.
- */
-typedef union xlog_in_core2 {
-	xlog_rec_header_t	hic_header;
-	xlog_rec_ext_header_t	hic_xheader;
-	char			hic_sector[XLOG_HEADER_SIZE];
-} xlog_in_core_2_t;
-
 /*
  * - A log record header is 512 bytes.  There is plenty of room to grow the
  *	xlog_rec_header_t into the reserved space.
  * - ic_data follows, so a write to disk can start at the beginning of
  *	the iclog.
- * - ic_forcewait is used to implement synchronous forcing of the iclog to disk.
+ * - ic_forcesema is used to implement synchronous forcing of the iclog to disk.
  * - ic_next is the pointer to the next iclog in the ring.
  * - ic_bp is a pointer to the buffer used to write this incore log to disk.
  * - ic_log is a pointer back to the global log structure.
@@ -349,9 +338,9 @@ typedef union xlog_in_core2 {
  * We'll put all the read-only and l_icloglock fields in the first cacheline,
  * and move everything else out to subsequent cachelines.
  */
-typedef struct xlog_in_core {
-	sv_t			ic_force_wait;
-	sv_t			ic_write_wait;
+typedef struct xlog_iclog_fields {
+	sv_t			ic_forcesema;
+	sv_t			ic_writesema;
 	struct xlog_in_core	*ic_next;
 	struct xlog_in_core	*ic_prev;
 	struct xfs_buf		*ic_bp;
@@ -372,9 +361,39 @@ typedef struct xlog_in_core {
 
 	/* reference counts need their own cacheline */
 	atomic_t		ic_refcnt ____cacheline_aligned_in_smp;
-	xlog_in_core_2_t	*ic_data;
-#define ic_header	ic_data->hic_header
+} xlog_iclog_fields_t;
+
+typedef union xlog_in_core2 {
+	xlog_rec_header_t	hic_header;
+	xlog_rec_ext_header_t	hic_xheader;
+	char			hic_sector[XLOG_HEADER_SIZE];
+} xlog_in_core_2_t;
+
+typedef struct xlog_in_core {
+	xlog_iclog_fields_t	hic_fields;
+	xlog_in_core_2_t	*hic_data;
 } xlog_in_core_t;
+
+/*
+ * Defines to save our code from this glop.
+ */
+#define	ic_forcesema	hic_fields.ic_forcesema
+#define ic_writesema	hic_fields.ic_writesema
+#define	ic_next		hic_fields.ic_next
+#define	ic_prev		hic_fields.ic_prev
+#define	ic_bp		hic_fields.ic_bp
+#define	ic_log		hic_fields.ic_log
+#define	ic_callback	hic_fields.ic_callback
+#define	ic_callback_lock hic_fields.ic_callback_lock
+#define	ic_callback_tail hic_fields.ic_callback_tail
+#define	ic_trace	hic_fields.ic_trace
+#define	ic_size		hic_fields.ic_size
+#define	ic_offset	hic_fields.ic_offset
+#define	ic_refcnt	hic_fields.ic_refcnt
+#define	ic_bwritecnt	hic_fields.ic_bwritecnt
+#define	ic_state	hic_fields.ic_state
+#define ic_datap	hic_fields.ic_datap
+#define ic_header	hic_data->hic_header
 
 /*
  * The reservation head lsn is not made up of a cycle number and block number.
@@ -385,7 +404,6 @@ typedef struct xlog_in_core {
 typedef struct log {
 	/* The following fields don't need locking */
 	struct xfs_mount	*l_mp;	        /* mount point */
-	struct xfs_ail		*l_ailp;	/* AIL log is working with */
 	struct xfs_buf		*l_xbuf;        /* extra buffer for log
 						 * wrapping */
 	struct xfs_buftarg	*l_targ;        /* buftarg of log */
@@ -405,8 +423,10 @@ typedef struct log {
 	int			l_logBBsize;    /* size of log in BB chunks */
 
 	/* The following block of fields are changed while holding icloglock */
-	sv_t			l_flush_wait ____cacheline_aligned_in_smp;
-						/* waiting for iclog flush */
+	sema_t			l_flushsema ____cacheline_aligned_in_smp;
+						/* iclog flushing semaphore */
+	int			l_flushcnt;	/* # of procs waiting on this
+						 * sema */
 	int			l_covered_state;/* state of "covering disk
 						 * log entries" */
 	xlog_in_core_t		*l_iclog;       /* head log queue	*/
@@ -430,6 +450,7 @@ typedef struct log {
 	int			l_grant_write_bytes;
 
 #ifdef XFS_LOG_TRACE
+	struct ktrace		*l_trace;
 	struct ktrace		*l_grant_trace;
 #endif
 
@@ -449,7 +470,7 @@ extern int	 xlog_find_tail(xlog_t	*log,
 				xfs_daddr_t *head_blk,
 				xfs_daddr_t *tail_blk);
 extern int	 xlog_recover(xlog_t *log);
-extern int	 xlog_recover_finish(xlog_t *log);
+extern int	 xlog_recover_finish(xlog_t *log, int mfsi_flags);
 extern void	 xlog_pack_data(xlog_t *log, xlog_in_core_t *iclog, int);
 extern void	 xlog_recover_process_iunlinks(xlog_t *log);
 

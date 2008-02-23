@@ -20,7 +20,6 @@
  ***************************************************************************/
 
 #include "sn9c102_sensor.h"
-#include "sn9c102_devtable.h"
 
 
 static int hv7131d_init(struct sn9c102_device* cam)

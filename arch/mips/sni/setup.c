@@ -116,6 +116,7 @@ void __init plat_mem_setup(void)
 	/*
 	 * Setup (E)ISA I/O memory access stuff
 	 */
+	isa_slot_offset = CKSEG1ADDR(0xb0000000);
 #ifdef CONFIG_EISA
 	EISA_bus = 1;
 #endif

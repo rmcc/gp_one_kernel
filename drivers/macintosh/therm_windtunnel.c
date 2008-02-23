@@ -37,13 +37,13 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
-#include <linux/of_platform.h>
 
 #include <asm/prom.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/sections.h>
+#include <asm/of_platform.h>
 #include <asm/macio.h>
 
 #define LOG_TEMP		0			/* continously log temperature */
@@ -62,7 +62,7 @@ static struct {
 	volatile int		running;
 	struct task_struct	*poll_task;
 	
-	struct mutex	 	lock;
+	struct semaphore 	lock;
 	struct of_device	*of_dev;
 	
 	struct i2c_client	*thermostat;
@@ -286,23 +286,23 @@ restore_regs( void )
 
 static int control_loop(void *dummy)
 {
-	mutex_lock(&x.lock);
+	down(&x.lock);
 	setup_hardware();
-	mutex_unlock(&x.lock);
+	up(&x.lock);
 
 	for (;;) {
 		msleep_interruptible(8000);
 		if (kthread_should_stop())
 			break;
 
-		mutex_lock(&x.lock);
+		down(&x.lock);
 		poll_temp();
-		mutex_unlock(&x.lock);
+		up(&x.lock);
 	}
 
-	mutex_lock(&x.lock);
+	down(&x.lock);
 	restore_regs();
-	mutex_unlock(&x.lock);
+	up(&x.lock);
 
 	return 0;
 }
@@ -489,7 +489,7 @@ g4fan_init( void )
 	const struct apple_thermal_info *info;
 	struct device_node *np;
 
-	mutex_init(&x.lock);
+	init_MUTEX( &x.lock );
 
 	if( !(np=of_find_node_by_name(NULL, "power-mgt")) )
 		return -ENODEV;

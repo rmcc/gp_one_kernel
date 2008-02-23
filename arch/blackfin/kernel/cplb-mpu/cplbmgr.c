@@ -21,25 +21,18 @@
 #include <linux/mm.h>
 
 #include <asm/blackfin.h>
-#include <asm/cacheflush.h>
 #include <asm/cplbinit.h>
 #include <asm/mmu_context.h>
 
-/*
- * WARNING
- *
- * This file is compiled with certain -ffixed-reg options.  We have to
- * make sure not to call any functions here that could clobber these
- * registers.
- */
+#define FAULT_RW	(1 << 16)
+#define FAULT_USERSUPV	(1 << 17)
 
 int page_mask_nelts;
 int page_mask_order;
-unsigned long *current_rwx_mask[NR_CPUS];
+unsigned long *current_rwx_mask;
 
-int nr_dcplb_miss[NR_CPUS], nr_icplb_miss[NR_CPUS];
-int nr_icplb_supv_miss[NR_CPUS], nr_dcplb_prot[NR_CPUS];
-int nr_cplb_flush[NR_CPUS];
+int nr_dcplb_miss, nr_icplb_miss, nr_icplb_supv_miss, nr_dcplb_prot;
+int nr_cplb_flush;
 
 static inline void disable_dcplb(void)
 {
@@ -104,42 +97,42 @@ static inline int write_permitted(int status, unsigned long data)
 }
 
 /* Counters to implement round-robin replacement.  */
-static int icplb_rr_index[NR_CPUS], dcplb_rr_index[NR_CPUS];
+static int icplb_rr_index, dcplb_rr_index;
 
 /*
  * Find an ICPLB entry to be evicted and return its index.
  */
-static int evict_one_icplb(unsigned int cpu)
+static int evict_one_icplb(void)
 {
 	int i;
 	for (i = first_switched_icplb; i < MAX_CPLBS; i++)
-		if ((icplb_tbl[cpu][i].data & CPLB_VALID) == 0)
+		if ((icplb_tbl[i].data & CPLB_VALID) == 0)
 			return i;
-	i = first_switched_icplb + icplb_rr_index[cpu];
+	i = first_switched_icplb + icplb_rr_index;
 	if (i >= MAX_CPLBS) {
 		i -= MAX_CPLBS - first_switched_icplb;
-		icplb_rr_index[cpu] -= MAX_CPLBS - first_switched_icplb;
+		icplb_rr_index -= MAX_CPLBS - first_switched_icplb;
 	}
-	icplb_rr_index[cpu]++;
+	icplb_rr_index++;
 	return i;
 }
 
-static int evict_one_dcplb(unsigned int cpu)
+static int evict_one_dcplb(void)
 {
 	int i;
 	for (i = first_switched_dcplb; i < MAX_CPLBS; i++)
-		if ((dcplb_tbl[cpu][i].data & CPLB_VALID) == 0)
+		if ((dcplb_tbl[i].data & CPLB_VALID) == 0)
 			return i;
-	i = first_switched_dcplb + dcplb_rr_index[cpu];
+	i = first_switched_dcplb + dcplb_rr_index;
 	if (i >= MAX_CPLBS) {
 		i -= MAX_CPLBS - first_switched_dcplb;
-		dcplb_rr_index[cpu] -= MAX_CPLBS - first_switched_dcplb;
+		dcplb_rr_index -= MAX_CPLBS - first_switched_dcplb;
 	}
-	dcplb_rr_index[cpu]++;
+	dcplb_rr_index++;
 	return i;
 }
 
-static noinline int dcplb_miss(unsigned int cpu)
+static noinline int dcplb_miss(void)
 {
 	unsigned long addr = bfin_read_DCPLB_FAULT_ADDR();
 	int status = bfin_read_DCPLB_STATUS();
@@ -147,11 +140,13 @@ static noinline int dcplb_miss(unsigned int cpu)
 	int idx;
 	unsigned long d_data;
 
-	nr_dcplb_miss[cpu]++;
+	nr_dcplb_miss++;
 
 	d_data = CPLB_SUPV_WR | CPLB_VALID | CPLB_DIRTY | PAGE_SIZE_4KB;
 #ifdef CONFIG_BFIN_DCACHE
-	if (bfin_addr_dcachable(addr)) {
+	if (addr < _ramend - DMA_UNCACHED_REGION ||
+	    (reserved_mem_dcache_on && addr >= _ramend &&
+	     addr < physical_mem_end)) {
 		d_data |= CPLB_L1_CHBL | ANOMALY_05000158_WORKAROUND;
 #ifdef CONFIG_BFIN_WT
 		d_data |= CPLB_L1_AOW | CPLB_WT;
@@ -174,25 +169,25 @@ static noinline int dcplb_miss(unsigned int cpu)
 	} else if (addr >= _ramend) {
 	    d_data |= CPLB_USER_RD | CPLB_USER_WR;
 	} else {
-		mask = current_rwx_mask[cpu];
+		mask = current_rwx_mask;
 		if (mask) {
 			int page = addr >> PAGE_SHIFT;
-			int idx = page >> 5;
+			int offs = page >> 5;
 			int bit = 1 << (page & 31);
 
-			if (mask[idx] & bit)
+			if (mask[offs] & bit)
 				d_data |= CPLB_USER_RD;
 
 			mask += page_mask_nelts;
-			if (mask[idx] & bit)
+			if (mask[offs] & bit)
 				d_data |= CPLB_USER_WR;
 		}
 	}
-	idx = evict_one_dcplb(cpu);
+	idx = evict_one_dcplb();
 
 	addr &= PAGE_MASK;
-	dcplb_tbl[cpu][idx].addr = addr;
-	dcplb_tbl[cpu][idx].data = d_data;
+	dcplb_tbl[idx].addr = addr;
+	dcplb_tbl[idx].data = d_data;
 
 	disable_dcplb();
 	bfin_write32(DCPLB_DATA0 + idx * 4, d_data);
@@ -202,21 +197,21 @@ static noinline int dcplb_miss(unsigned int cpu)
 	return 0;
 }
 
-static noinline int icplb_miss(unsigned int cpu)
+static noinline int icplb_miss(void)
 {
 	unsigned long addr = bfin_read_ICPLB_FAULT_ADDR();
 	int status = bfin_read_ICPLB_STATUS();
 	int idx;
 	unsigned long i_data;
 
-	nr_icplb_miss[cpu]++;
+	nr_icplb_miss++;
 
 	/* If inside the uncached DMA region, fault.  */
 	if (addr >= _ramend - DMA_UNCACHED_REGION && addr < _ramend)
 		return CPLB_PROT_VIOL;
 
 	if (status & FAULT_USERSUPV)
-		nr_icplb_supv_miss[cpu]++;
+		nr_icplb_supv_miss++;
 
 	/*
 	 * First, try to find a CPLB that matches this address.  If we
@@ -224,8 +219,8 @@ static noinline int icplb_miss(unsigned int cpu)
 	 * that the instruction crosses a page boundary.
 	 */
 	for (idx = first_switched_icplb; idx < MAX_CPLBS; idx++) {
-		if (icplb_tbl[cpu][idx].data & CPLB_VALID) {
-			unsigned long this_addr = icplb_tbl[cpu][idx].addr;
+		if (icplb_tbl[idx].data & CPLB_VALID) {
+			unsigned long this_addr = icplb_tbl[idx].addr;
 			if (this_addr <= addr && this_addr + PAGE_SIZE > addr) {
 				addr += PAGE_SIZE;
 				break;
@@ -263,23 +258,23 @@ static noinline int icplb_miss(unsigned int cpu)
 		 * Otherwise, check the x bitmap of the current process.
 		 */
 		if (!(status & FAULT_USERSUPV)) {
-			unsigned long *mask = current_rwx_mask[cpu];
+			unsigned long *mask = current_rwx_mask;
 
 			if (mask) {
 				int page = addr >> PAGE_SHIFT;
-				int idx = page >> 5;
+				int offs = page >> 5;
 				int bit = 1 << (page & 31);
 
 				mask += 2 * page_mask_nelts;
-				if (mask[idx] & bit)
+				if (mask[offs] & bit)
 					i_data |= CPLB_USER_RD;
 			}
 		}
 	}
-	idx = evict_one_icplb(cpu);
+	idx = evict_one_icplb();
 	addr &= PAGE_MASK;
-	icplb_tbl[cpu][idx].addr = addr;
-	icplb_tbl[cpu][idx].data = i_data;
+	icplb_tbl[idx].addr = addr;
+	icplb_tbl[idx].data = i_data;
 
 	disable_icplb();
 	bfin_write32(ICPLB_DATA0 + idx * 4, i_data);
@@ -289,19 +284,19 @@ static noinline int icplb_miss(unsigned int cpu)
 	return 0;
 }
 
-static noinline int dcplb_protection_fault(unsigned int cpu)
+static noinline int dcplb_protection_fault(void)
 {
 	int status = bfin_read_DCPLB_STATUS();
 
-	nr_dcplb_prot[cpu]++;
+	nr_dcplb_prot++;
 
 	if (status & FAULT_RW) {
 		int idx = faulting_cplb_index(status);
-		unsigned long data = dcplb_tbl[cpu][idx].data;
+		unsigned long data = dcplb_tbl[idx].data;
 		if (!(data & CPLB_WT) && !(data & CPLB_DIRTY) &&
 		    write_permitted(status, data)) {
 			data |= CPLB_DIRTY;
-			dcplb_tbl[cpu][idx].data = data;
+			dcplb_tbl[idx].data = data;
 			bfin_write32(DCPLB_DATA0 + idx * 4, data);
 			return 0;
 		}
@@ -312,58 +307,48 @@ static noinline int dcplb_protection_fault(unsigned int cpu)
 int cplb_hdr(int seqstat, struct pt_regs *regs)
 {
 	int cause = seqstat & 0x3f;
-	unsigned int cpu = smp_processor_id();
 	switch (cause) {
 	case 0x23:
-		return dcplb_protection_fault(cpu);
+		return dcplb_protection_fault();
 	case 0x2C:
-		return icplb_miss(cpu);
+		return icplb_miss();
 	case 0x26:
-		return dcplb_miss(cpu);
+		return dcplb_miss();
 	default:
 		return 1;
 	}
 }
 
-void flush_switched_cplbs(unsigned int cpu)
+void flush_switched_cplbs(void)
 {
 	int i;
-	unsigned long flags;
 
-	nr_cplb_flush[cpu]++;
+	nr_cplb_flush++;
 
-	local_irq_save_hw(flags);
 	disable_icplb();
 	for (i = first_switched_icplb; i < MAX_CPLBS; i++) {
-		icplb_tbl[cpu][i].data = 0;
+		icplb_tbl[i].data = 0;
 		bfin_write32(ICPLB_DATA0 + i * 4, 0);
 	}
 	enable_icplb();
 
 	disable_dcplb();
 	for (i = first_switched_dcplb; i < MAX_CPLBS; i++) {
-		dcplb_tbl[cpu][i].data = 0;
+		dcplb_tbl[i].data = 0;
 		bfin_write32(DCPLB_DATA0 + i * 4, 0);
 	}
 	enable_dcplb();
-	local_irq_restore_hw(flags);
-
 }
 
-void set_mask_dcplbs(unsigned long *masks, unsigned int cpu)
+void set_mask_dcplbs(unsigned long *masks)
 {
 	int i;
 	unsigned long addr = (unsigned long)masks;
 	unsigned long d_data;
-	unsigned long flags;
+	current_rwx_mask = masks;
 
-	if (!masks) {
-		current_rwx_mask[cpu] = masks;
+	if (!masks)
 		return;
-	}
-
-	local_irq_save_hw(flags);
-	current_rwx_mask[cpu] = masks;
 
 	d_data = CPLB_SUPV_WR | CPLB_VALID | CPLB_DIRTY | PAGE_SIZE_4KB;
 #ifdef CONFIG_BFIN_DCACHE
@@ -375,12 +360,11 @@ void set_mask_dcplbs(unsigned long *masks, unsigned int cpu)
 
 	disable_dcplb();
 	for (i = first_mask_dcplb; i < first_switched_dcplb; i++) {
-		dcplb_tbl[cpu][i].addr = addr;
-		dcplb_tbl[cpu][i].data = d_data;
+		dcplb_tbl[i].addr = addr;
+		dcplb_tbl[i].data = d_data;
 		bfin_write32(DCPLB_DATA0 + i * 4, d_data);
 		bfin_write32(DCPLB_ADDR0 + i * 4, addr);
 		addr += PAGE_SIZE;
 	}
 	enable_dcplb();
-	local_irq_restore_hw(flags);
 }

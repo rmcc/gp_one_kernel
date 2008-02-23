@@ -35,13 +35,11 @@
 #include <asm/prom.h>
 #include <asm/udbg.h>
 #include <sysdev/fsl_soc.h>
-#include <sysdev/fsl_pci.h>
 
 #include "mpc83xx.h"
 
 static struct of_device_id __initdata mpc834x_itx_ids[] = {
 	{ .compatible = "fsl,pq2pro-localbus", },
-	{ .compatible = "simple-bus", },
 	{},
 };
 

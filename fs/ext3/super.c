@@ -48,8 +48,8 @@ static int ext3_load_journal(struct super_block *, struct ext3_super_block *,
 			     unsigned long journal_devnum);
 static int ext3_create_journal(struct super_block *, struct ext3_super_block *,
 			       unsigned int);
-static int ext3_commit_super(struct super_block *sb,
-			       struct ext3_super_block *es,
+static void ext3_commit_super (struct super_block * sb,
+			       struct ext3_super_block * es,
 			       int sync);
 static void ext3_mark_recovery_complete(struct super_block * sb,
 					struct ext3_super_block * es);
@@ -60,9 +60,9 @@ static const char *ext3_decode_error(struct super_block * sb, int errno,
 				     char nbuf[16]);
 static int ext3_remount (struct super_block * sb, int * flags, char * data);
 static int ext3_statfs (struct dentry * dentry, struct kstatfs * buf);
-static int ext3_unfreeze(struct super_block *sb);
+static void ext3_unlockfs(struct super_block *sb);
 static void ext3_write_super (struct super_block * sb);
-static int ext3_freeze(struct super_block *sb);
+static void ext3_write_super_lockfs(struct super_block *sb);
 
 /*
  * Wrappers for journal_start/end.
@@ -281,8 +281,7 @@ void ext3_abort (struct super_block * sb, const char * function,
 	EXT3_SB(sb)->s_mount_state |= EXT3_ERROR_FS;
 	sb->s_flags |= MS_RDONLY;
 	EXT3_SB(sb)->s_mount_opt |= EXT3_MOUNT_ABORT;
-	if (EXT3_SB(sb)->s_journal)
-		journal_abort(EXT3_SB(sb)->s_journal, -EIO);
+	journal_abort(EXT3_SB(sb)->s_journal, -EIO);
 }
 
 void ext3_warning (struct super_block * sb, const char * function,
@@ -348,7 +347,7 @@ fail:
 static int ext3_blkdev_put(struct block_device *bdev)
 {
 	bd_release(bdev);
-	return blkdev_put(bdev, FMODE_READ|FMODE_WRITE);
+	return blkdev_put(bdev);
 }
 
 static int ext3_blkdev_remove(struct ext3_sb_info *sbi)
@@ -391,14 +390,10 @@ static void ext3_put_super (struct super_block * sb)
 {
 	struct ext3_sb_info *sbi = EXT3_SB(sb);
 	struct ext3_super_block *es = sbi->s_es;
-	int i, err;
+	int i;
 
 	ext3_xattr_put_super(sb);
-	err = journal_destroy(sbi->s_journal);
-	sbi->s_journal = NULL;
-	if (err < 0)
-		ext3_abort(sb, __func__, "Couldn't clean up the journal");
-
+	journal_destroy(sbi->s_journal);
 	if (!(sb->s_flags & MS_RDONLY)) {
 		EXT3_CLEAR_INCOMPAT_FEATURE(sb, EXT3_FEATURE_INCOMPAT_RECOVER);
 		es->s_state = cpu_to_le16(sbi->s_mount_state);
@@ -439,7 +434,6 @@ static void ext3_put_super (struct super_block * sb)
 		ext3_blkdev_remove(sbi);
 	}
 	sb->s_fs_info = NULL;
-	kfree(sbi->s_blockgroup_lock);
 	kfree(sbi);
 	return;
 }
@@ -478,7 +472,7 @@ static void ext3_destroy_inode(struct inode *inode)
 	kmem_cache_free(ext3_inode_cachep, EXT3_I(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache * cachep, void *foo)
 {
 	struct ext3_inode_info *ei = (struct ext3_inode_info *) foo;
 
@@ -631,9 +625,6 @@ static int ext3_show_options(struct seq_file *seq, struct vfsmount *vfs)
 	else if (test_opt(sb, DATA_FLAGS) == EXT3_MOUNT_WRITEBACK_DATA)
 		seq_puts(seq, ",data=writeback");
 
-	if (test_opt(sb, DATA_ERR_ABORT))
-		seq_puts(seq, ",data_err=abort");
-
 	ext3_show_quota_options(seq, sb);
 
 	return 0;
@@ -683,26 +674,6 @@ static struct dentry *ext3_fh_to_parent(struct super_block *sb, struct fid *fid,
 				    ext3_nfs_get_inode);
 }
 
-/*
- * Try to release metadata pages (indirect blocks, directories) which are
- * mapped via the block device.  Since these pages could have journal heads
- * which would prevent try_to_free_buffers() from freeing them, we must use
- * jbd layer's try_to_free_buffers() function to release them.
- */
-static int bdev_try_to_free_page(struct super_block *sb, struct page *page,
-				 gfp_t wait)
-{
-	journal_t *journal = EXT3_SB(sb)->s_journal;
-
-	WARN_ON(PageChecked(page));
-	if (!page_has_buffers(page))
-		return 0;
-	if (journal)
-		return journal_try_to_free_buffers(journal, page, 
-						   wait & ~__GFP_WAIT);
-	return try_to_free_buffers(page);
-}
-
 #ifdef CONFIG_QUOTA
 #define QTYPE2NAME(t) ((t)==USRQUOTA?"user":"group")
 #define QTYPE2MOPT(on, t) ((t)==USRQUOTA?((on)##USRJQUOTA):((on)##GRPJQUOTA))
@@ -734,9 +705,7 @@ static struct dquot_operations ext3_quota_operations = {
 	.acquire_dquot	= ext3_acquire_dquot,
 	.release_dquot	= ext3_release_dquot,
 	.mark_dirty	= ext3_mark_dquot_dirty,
-	.write_info	= ext3_write_info,
-	.alloc_dquot	= dquot_alloc,
-	.destroy_dquot	= dquot_destroy,
+	.write_info	= ext3_write_info
 };
 
 static struct quotactl_ops ext3_qctl_operations = {
@@ -759,8 +728,8 @@ static const struct super_operations ext3_sops = {
 	.put_super	= ext3_put_super,
 	.write_super	= ext3_write_super,
 	.sync_fs	= ext3_sync_fs,
-	.freeze_fs	= ext3_freeze,
-	.unfreeze_fs	= ext3_unfreeze,
+	.write_super_lockfs = ext3_write_super_lockfs,
+	.unlockfs	= ext3_unlockfs,
 	.statfs		= ext3_statfs,
 	.remount_fs	= ext3_remount,
 	.clear_inode	= ext3_clear_inode,
@@ -769,7 +738,6 @@ static const struct super_operations ext3_sops = {
 	.quota_read	= ext3_quota_read,
 	.quota_write	= ext3_quota_write,
 #endif
-	.bdev_try_to_free_page = bdev_try_to_free_page,
 };
 
 static const struct export_operations ext3_export_ops = {
@@ -786,14 +754,13 @@ enum {
 	Opt_reservation, Opt_noreservation, Opt_noload, Opt_nobh, Opt_bh,
 	Opt_commit, Opt_journal_update, Opt_journal_inum, Opt_journal_dev,
 	Opt_abort, Opt_data_journal, Opt_data_ordered, Opt_data_writeback,
-	Opt_data_err_abort, Opt_data_err_ignore,
 	Opt_usrjquota, Opt_grpjquota, Opt_offusrjquota, Opt_offgrpjquota,
 	Opt_jqfmt_vfsold, Opt_jqfmt_vfsv0, Opt_quota, Opt_noquota,
 	Opt_ignore, Opt_barrier, Opt_err, Opt_resize, Opt_usrquota,
 	Opt_grpquota
 };
 
-static const match_table_t tokens = {
+static match_table_t tokens = {
 	{Opt_bsd_df, "bsddf"},
 	{Opt_minix_df, "minixdf"},
 	{Opt_grpid, "grpid"},
@@ -829,8 +796,6 @@ static const match_table_t tokens = {
 	{Opt_data_journal, "data=journal"},
 	{Opt_data_ordered, "data=ordered"},
 	{Opt_data_writeback, "data=writeback"},
-	{Opt_data_err_abort, "data_err=abort"},
-	{Opt_data_err_ignore, "data_err=ignore"},
 	{Opt_offusrjquota, "usrjquota="},
 	{Opt_usrjquota, "usrjquota=%s"},
 	{Opt_offgrpjquota, "grpjquota="},
@@ -877,7 +842,7 @@ static int parse_options (char *options, struct super_block *sb,
 	int data_opt = 0;
 	int option;
 #ifdef CONFIG_QUOTA
-	int qtype, qfmt;
+	int qtype;
 	char *qname;
 #endif
 
@@ -1046,12 +1011,6 @@ static int parse_options (char *options, struct super_block *sb,
 				sbi->s_mount_opt |= data_opt;
 			}
 			break;
-		case Opt_data_err_abort:
-			set_opt(sbi->s_mount_opt, DATA_ERR_ABORT);
-			break;
-		case Opt_data_err_ignore:
-			clear_opt(sbi->s_mount_opt, DATA_ERR_ABORT);
-			break;
 #ifdef CONFIG_QUOTA
 		case Opt_usrjquota:
 			qtype = USRQUOTA;
@@ -1059,10 +1018,9 @@ static int parse_options (char *options, struct super_block *sb,
 		case Opt_grpjquota:
 			qtype = GRPQUOTA;
 set_qf_name:
-			if (sb_any_quota_loaded(sb) &&
-			    !sbi->s_qf_names[qtype]) {
+			if (sb_any_quota_enabled(sb)) {
 				printk(KERN_ERR
-					"EXT3-fs: Cannot change journaled "
+					"EXT3-fs: Cannot change journalled "
 					"quota options when quota turned on.\n");
 				return 0;
 			}
@@ -1098,10 +1056,9 @@ set_qf_name:
 		case Opt_offgrpjquota:
 			qtype = GRPQUOTA;
 clear_qf_name:
-			if (sb_any_quota_loaded(sb) &&
-			    sbi->s_qf_names[qtype]) {
+			if (sb_any_quota_enabled(sb)) {
 				printk(KERN_ERR "EXT3-fs: Cannot change "
-					"journaled quota options when "
+					"journalled quota options when "
 					"quota turned on.\n");
 				return 0;
 			}
@@ -1112,19 +1069,10 @@ clear_qf_name:
 			sbi->s_qf_names[qtype] = NULL;
 			break;
 		case Opt_jqfmt_vfsold:
-			qfmt = QFMT_VFS_OLD;
-			goto set_qf_format;
+			sbi->s_jquota_fmt = QFMT_VFS_OLD;
+			break;
 		case Opt_jqfmt_vfsv0:
-			qfmt = QFMT_VFS_V0;
-set_qf_format:
-			if (sb_any_quota_loaded(sb) &&
-			    sbi->s_jquota_fmt != qfmt) {
-				printk(KERN_ERR "EXT3-fs: Cannot change "
-					"journaled quota options when "
-					"quota turned on.\n");
-				return 0;
-			}
-			sbi->s_jquota_fmt = qfmt;
+			sbi->s_jquota_fmt = QFMT_VFS_V0;
 			break;
 		case Opt_quota:
 		case Opt_usrquota:
@@ -1136,7 +1084,7 @@ set_qf_format:
 			set_opt(sbi->s_mount_opt, GRPQUOTA);
 			break;
 		case Opt_noquota:
-			if (sb_any_quota_loaded(sb)) {
+			if (sb_any_quota_enabled(sb)) {
 				printk(KERN_ERR "EXT3-fs: Cannot change quota "
 					"options when quota turned on.\n");
 				return 0;
@@ -1221,14 +1169,14 @@ set_qf_format:
 		}
 
 		if (!sbi->s_jquota_fmt) {
-			printk(KERN_ERR "EXT3-fs: journaled quota format "
+			printk(KERN_ERR "EXT3-fs: journalled quota format "
 					"not specified.\n");
 			return 0;
 		}
 	} else {
 		if (sbi->s_jquota_fmt) {
-			printk(KERN_ERR "EXT3-fs: journaled quota format "
-					"specified with no journaling "
+			printk(KERN_ERR "EXT3-fs: journalled quota format "
+					"specified with no journalling "
 					"enabled.\n");
 			return 0;
 		}
@@ -1422,7 +1370,7 @@ static void ext3_orphan_cleanup (struct super_block * sb,
 			int ret = ext3_quota_on_mount(sb, i);
 			if (ret < 0)
 				printk(KERN_ERR
-					"EXT3-fs: Cannot turn on journaled "
+					"EXT3-fs: Cannot turn on journalled "
 					"quota: error %d\n", ret);
 		}
 	}
@@ -1568,13 +1516,6 @@ static int ext3_fill_super (struct super_block *sb, void *data, int silent)
 	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
-
-	sbi->s_blockgroup_lock =
-		kzalloc(sizeof(struct blockgroup_lock), GFP_KERNEL);
-	if (!sbi->s_blockgroup_lock) {
-		kfree(sbi);
-		return -ENOMEM;
-	}
 	sb->s_fs_info = sbi;
 	sbi->s_mount_opt = 0;
 	sbi->s_resuid = EXT3_DEF_RESUID;
@@ -1771,18 +1712,6 @@ static int ext3_fill_super (struct super_block *sb, void *data, int silent)
 	for (i=0; i < 4; i++)
 		sbi->s_hash_seed[i] = le32_to_cpu(es->s_hash_seed[i]);
 	sbi->s_def_hash_version = es->s_def_hash_version;
-	i = le32_to_cpu(es->s_flags);
-	if (i & EXT2_FLAGS_UNSIGNED_HASH)
-		sbi->s_hash_unsigned = 3;
-	else if ((i & EXT2_FLAGS_SIGNED_HASH) == 0) {
-#ifdef __CHAR_UNSIGNED__
-		es->s_flags |= cpu_to_le32(EXT2_FLAGS_UNSIGNED_HASH);
-		sbi->s_hash_unsigned = 3;
-#else
-		es->s_flags |= cpu_to_le32(EXT2_FLAGS_SIGNED_HASH);
-#endif
-		sb->s_dirt = 1;
-	}
 
 	if (sbi->s_blocks_per_group > blocksize * 8) {
 		printk (KERN_ERR
@@ -1827,7 +1756,7 @@ static int ext3_fill_super (struct super_block *sb, void *data, int silent)
 		goto failed_mount;
 	}
 
-	bgl_lock_init(sbi->s_blockgroup_lock);
+	bgl_lock_init(&sbi->s_blockgroup_lock);
 
 	for (i = 0; i < db_count; i++) {
 		block = descriptor_loc(sb, logic_sb_block, i);
@@ -2042,10 +1971,6 @@ static void ext3_init_journal_params(struct super_block *sb, journal_t *journal)
 		journal->j_flags |= JFS_BARRIER;
 	else
 		journal->j_flags &= ~JFS_BARRIER;
-	if (test_opt(sb, DATA_ERR_ABORT))
-		journal->j_flags |= JFS_ABORT_ON_SYNCDATA_ERR;
-	else
-		journal->j_flags &= ~JFS_ABORT_ON_SYNCDATA_ERR;
 	spin_unlock(&journal->j_state_lock);
 }
 
@@ -2110,7 +2035,7 @@ static journal_t *ext3_get_dev_journal(struct super_block *sb,
 	if (bd_claim(bdev, sb)) {
 		printk(KERN_ERR
 		        "EXT3: failed to claim external journal device.\n");
-		blkdev_put(bdev, FMODE_READ|FMODE_WRITE);
+		blkdev_put(bdev);
 		return NULL;
 	}
 
@@ -2311,23 +2236,21 @@ static int ext3_create_journal(struct super_block * sb,
 	return 0;
 }
 
-static int ext3_commit_super(struct super_block *sb,
-			       struct ext3_super_block *es,
+static void ext3_commit_super (struct super_block * sb,
+			       struct ext3_super_block * es,
 			       int sync)
 {
 	struct buffer_head *sbh = EXT3_SB(sb)->s_sbh;
-	int error = 0;
 
 	if (!sbh)
-		return error;
+		return;
 	es->s_wtime = cpu_to_le32(get_seconds());
 	es->s_free_blocks_count = cpu_to_le32(ext3_count_free_blocks(sb));
 	es->s_free_inodes_count = cpu_to_le32(ext3_count_free_inodes(sb));
 	BUFFER_TRACE(sbh, "marking dirty");
 	mark_buffer_dirty(sbh);
 	if (sync)
-		error = sync_dirty_buffer(sbh);
-	return error;
+		sync_dirty_buffer(sbh);
 }
 
 
@@ -2342,9 +2265,7 @@ static void ext3_mark_recovery_complete(struct super_block * sb,
 	journal_t *journal = EXT3_SB(sb)->s_journal;
 
 	journal_lock_updates(journal);
-	if (journal_flush(journal) < 0)
-		goto out;
-
+	journal_flush(journal);
 	lock_super(sb);
 	if (EXT3_HAS_INCOMPAT_FEATURE(sb, EXT3_FEATURE_INCOMPAT_RECOVER) &&
 	    sb->s_flags & MS_RDONLY) {
@@ -2353,8 +2274,6 @@ static void ext3_mark_recovery_complete(struct super_block * sb,
 		ext3_commit_super(sb, es, 1);
 	}
 	unlock_super(sb);
-
-out:
 	journal_unlock_updates(journal);
 }
 
@@ -2416,9 +2335,12 @@ int ext3_force_commit(struct super_block *sb)
 /*
  * Ext3 always journals updates to the superblock itself, so we don't
  * have to propagate any other updates to the superblock on disk at this
- * point.  (We can probably nuke this function altogether, and remove
- * any mention to sb->s_dirt in all of fs/ext3; eventual cleanup...)
+ * point.  Just start an async writeback to get the buffers on their way
+ * to the disk.
+ *
+ * This implicitly triggers the writebehind on sync().
  */
+
 static void ext3_write_super (struct super_block * sb)
 {
 	if (mutex_trylock(&sb->s_lock) != 0)
@@ -2428,12 +2350,13 @@ static void ext3_write_super (struct super_block * sb)
 
 static int ext3_sync_fs(struct super_block *sb, int wait)
 {
-	sb->s_dirt = 0;
-	if (wait)
-		ext3_force_commit(sb);
-	else
-		journal_start_commit(EXT3_SB(sb)->s_journal, NULL);
+	tid_t target;
 
+	sb->s_dirt = 0;
+	if (journal_start_commit(EXT3_SB(sb)->s_journal, &target)) {
+		if (wait)
+			log_wait_commit(EXT3_SB(sb)->s_journal, target);
+	}
 	return 0;
 }
 
@@ -2441,44 +2364,28 @@ static int ext3_sync_fs(struct super_block *sb, int wait)
  * LVM calls this function before a (read-only) snapshot is created.  This
  * gives us a chance to flush the journal completely and mark the fs clean.
  */
-static int ext3_freeze(struct super_block *sb)
+static void ext3_write_super_lockfs(struct super_block *sb)
 {
-	int error = 0;
-	journal_t *journal;
 	sb->s_dirt = 0;
 
 	if (!(sb->s_flags & MS_RDONLY)) {
-		journal = EXT3_SB(sb)->s_journal;
+		journal_t *journal = EXT3_SB(sb)->s_journal;
 
 		/* Now we set up the journal barrier. */
 		journal_lock_updates(journal);
-
-		/*
-		 * We don't want to clear needs_recovery flag when we failed
-		 * to flush the journal.
-		 */
-		error = journal_flush(journal);
-		if (error < 0)
-			goto out;
+		journal_flush(journal);
 
 		/* Journal blocked and flushed, clear needs_recovery flag. */
 		EXT3_CLEAR_INCOMPAT_FEATURE(sb, EXT3_FEATURE_INCOMPAT_RECOVER);
-		error = ext3_commit_super(sb, EXT3_SB(sb)->s_es, 1);
-		if (error)
-			goto out;
+		ext3_commit_super(sb, EXT3_SB(sb)->s_es, 1);
 	}
-	return 0;
-
-out:
-	journal_unlock_updates(journal);
-	return error;
 }
 
 /*
  * Called by LVM after the snapshot is done.  We need to reset the RECOVER
  * flag here, even though the filesystem is not technically dirty yet.
  */
-static int ext3_unfreeze(struct super_block *sb)
+static void ext3_unlockfs(struct super_block *sb)
 {
 	if (!(sb->s_flags & MS_RDONLY)) {
 		lock_super(sb);
@@ -2488,7 +2395,6 @@ static int ext3_unfreeze(struct super_block *sb)
 		unlock_super(sb);
 		journal_unlock_updates(EXT3_SB(sb)->s_journal);
 	}
-	return 0;
 }
 
 static int ext3_remount (struct super_block * sb, int * flags, char * data)
@@ -2806,7 +2712,7 @@ static int ext3_release_dquot(struct dquot *dquot)
 
 static int ext3_mark_dquot_dirty(struct dquot *dquot)
 {
-	/* Are we journaling quotas? */
+	/* Are we journalling quotas? */
 	if (EXT3_SB(dquot->dq_sb)->s_qf_names[USRQUOTA] ||
 	    EXT3_SB(dquot->dq_sb)->s_qf_names[GRPQUOTA]) {
 		dquot_mark_dquot_dirty(dquot);
@@ -2846,56 +2752,32 @@ static int ext3_quota_on_mount(struct super_block *sb, int type)
  * Standard function to be called on quota_on
  */
 static int ext3_quota_on(struct super_block *sb, int type, int format_id,
-			 char *name, int remount)
+			 char *path, int remount)
 {
 	int err;
-	struct path path;
+	struct nameidata nd;
 
 	if (!test_opt(sb, QUOTA))
 		return -EINVAL;
-	/* When remounting, no checks are needed and in fact, name is NULL */
-	if (remount)
-		return vfs_quota_on(sb, type, format_id, name, remount);
-
-	err = kern_path(name, LOOKUP_FOLLOW, &path);
+	/* Not journalling quota or remount? */
+	if ((!EXT3_SB(sb)->s_qf_names[USRQUOTA] &&
+	    !EXT3_SB(sb)->s_qf_names[GRPQUOTA]) || remount)
+		return vfs_quota_on(sb, type, format_id, path, remount);
+	err = path_lookup(path, LOOKUP_FOLLOW, &nd);
 	if (err)
 		return err;
-
 	/* Quotafile not on the same filesystem? */
-	if (path.mnt->mnt_sb != sb) {
-		path_put(&path);
+	if (nd.path.mnt->mnt_sb != sb) {
+		path_put(&nd.path);
 		return -EXDEV;
 	}
-	/* Journaling quota? */
-	if (EXT3_SB(sb)->s_qf_names[type]) {
-		/* Quotafile not of fs root? */
-		if (path.dentry->d_parent != sb->s_root)
-			printk(KERN_WARNING
-				"EXT3-fs: Quota file not on filesystem root. "
-				"Journaled quota will not work.\n");
-	}
-
-	/*
-	 * When we journal data on quota file, we have to flush journal to see
-	 * all updates to the file when we bypass pagecache...
-	 */
-	if (ext3_should_journal_data(path.dentry->d_inode)) {
-		/*
-		 * We don't need to lock updates but journal_flush() could
-		 * otherwise be livelocked...
-		 */
-		journal_lock_updates(EXT3_SB(sb)->s_journal);
-		err = journal_flush(EXT3_SB(sb)->s_journal);
-		journal_unlock_updates(EXT3_SB(sb)->s_journal);
-		if (err) {
-			path_put(&path);
-			return err;
-		}
-	}
-
-	err = vfs_quota_on_path(sb, type, format_id, &path);
-	path_put(&path);
-	return err;
+	/* Quotafile not in fs root? */
+	if (nd.path.dentry->d_parent->d_inode != sb->s_root->d_inode)
+		printk(KERN_WARNING
+			"EXT3-fs: Quota file not on filesystem root. "
+			"Journalled quota will not work.\n");
+	path_put(&nd.path);
+	return vfs_quota_on(sb, type, format_id, path, remount);
 }
 
 /* Read data from quotafile - avoid pagecache and such because we cannot afford
@@ -2993,10 +2875,8 @@ static ssize_t ext3_quota_write(struct super_block *sb, int type,
 		blk++;
 	}
 out:
-	if (len == towrite) {
-		mutex_unlock(&inode->i_mutex);
+	if (len == towrite)
 		return err;
-	}
 	if (inode->i_size < off+len-towrite) {
 		i_size_write(inode, off+len-towrite);
 		EXT3_I(inode)->i_disksize = inode->i_size;

@@ -35,6 +35,7 @@
 #include <linux/spi/spi.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
+#include <linux/ata_platform.h>
 #include <asm/dma.h>
 #include <asm/bfin5xx_spi.h>
 #include <asm/portmux.h>
@@ -43,42 +44,53 @@
 /*
  * Name the Board for the /proc/cpuinfo
  */
-const char bfin_board_name[] = "ADI BF561-EZKIT";
+const char bfin_board_name[] = "ADDS-BF561-EZKIT";
+
+#define ISP1761_BASE       0x2C0F0000
+#define ISP1761_IRQ        IRQ_PF10
 
 #if defined(CONFIG_USB_ISP1760_HCD) || defined(CONFIG_USB_ISP1760_HCD_MODULE)
-#include <linux/usb/isp1760.h>
-static struct resource bfin_isp1760_resources[] = {
-	[0] = {
-		.start  = 0x2C0F0000,
-		.end    = 0x203C0000 + 0xfffff,
+static struct resource bfin_isp1761_resources[] = {
+	{
+		.name	= "isp1761-regs",
+		.start  = ISP1761_BASE + 0x00000000,
+		.end    = ISP1761_BASE + 0x000fffff,
 		.flags  = IORESOURCE_MEM,
 	},
-	[1] = {
-		.start  = IRQ_PF10,
-		.end    = IRQ_PF10,
+	{
+		.start  = ISP1761_IRQ,
+		.end    = ISP1761_IRQ,
 		.flags  = IORESOURCE_IRQ,
 	},
 };
 
-static struct isp1760_platform_data isp1760_priv = {
-	.is_isp1761 = 0,
-	.port1_disable = 0,
-	.bus_width_16 = 1,
-	.port1_otg = 0,
-	.analog_oc = 0,
-	.dack_polarity_high = 0,
-	.dreq_polarity_high = 0,
+static struct platform_device bfin_isp1761_device = {
+	.name           = "isp1761",
+	.id             = 0,
+	.num_resources  = ARRAY_SIZE(bfin_isp1761_resources),
+	.resource       = bfin_isp1761_resources,
 };
 
-static struct platform_device bfin_isp1760_device = {
-	.name           = "isp1760-hcd",
-	.id             = 0,
-	.dev = {
-		.platform_data = &isp1760_priv,
-	},
-	.num_resources  = ARRAY_SIZE(bfin_isp1760_resources),
-	.resource       = bfin_isp1760_resources,
+static struct platform_device *bfin_isp1761_devices[] = {
+	&bfin_isp1761_device,
 };
+
+int __init bfin_isp1761_init(void)
+{
+	unsigned int num_devices = ARRAY_SIZE(bfin_isp1761_devices);
+
+	printk(KERN_INFO "%s(): registering device resources\n", __func__);
+	set_irq_type(ISP1761_IRQ, IRQF_TRIGGER_FALLING);
+
+	return platform_add_devices(bfin_isp1761_devices, num_devices);
+}
+
+void __exit bfin_isp1761_exit(void)
+{
+	platform_device_unregister(&bfin_isp1761_device);
+}
+
+arch_initcall(bfin_isp1761_init);
 #endif
 
 #if defined(CONFIG_USB_ISP1362_HCD) || defined(CONFIG_USB_ISP1362_HCD_MODULE)
@@ -210,46 +222,36 @@ static struct platform_device bfin_uart_device = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
+static struct resource bfin_sir_resources[] = {
 #ifdef CONFIG_BFIN_SIR0
-static struct resource bfin_sir0_resources[] = {
 	{
 		.start = 0xFFC00400,
 		.end = 0xFFC004FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART0_RX,
-		.end = IRQ_UART0_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART0_RX,
-		.end = CH_UART0_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
+#endif
 };
 
-static struct platform_device bfin_sir0_device = {
+static struct platform_device bfin_sir_device = {
 	.name = "bfin_sir",
 	.id = 0,
-	.num_resources = ARRAY_SIZE(bfin_sir0_resources),
-	.resource = bfin_sir0_resources,
+	.num_resources = ARRAY_SIZE(bfin_sir_resources),
+	.resource = bfin_sir_resources,
 };
-#endif
 #endif
 
 #if defined(CONFIG_MTD_PHYSMAP) || defined(CONFIG_MTD_PHYSMAP_MODULE)
 static struct mtd_partition ezkit_partitions[] = {
 	{
-		.name       = "bootloader(nor)",
+		.name       = "Bootloader",
 		.size       = 0x40000,
 		.offset     = 0,
 	}, {
-		.name       = "linux kernel(nor)",
+		.name       = "Kernel",
 		.size       = 0x1C0000,
 		.offset     = MTDPART_OFS_APPEND,
 	}, {
-		.name       = "file system(nor)",
+		.name       = "RootFS",
 		.size       = MTDPART_SIZ_FULL,
 		.offset     = MTDPART_OFS_APPEND,
 	}
@@ -278,6 +280,7 @@ static struct platform_device ezkit_flash_device = {
 };
 #endif
 
+#ifdef CONFIG_SPI_BFIN
 #if defined(CONFIG_SND_BLACKFIN_AD1836) \
 	|| defined(CONFIG_SND_BLACKFIN_AD1836_MODULE)
 static struct bfin5xx_spi_chip ad1836_spi_chip_info = {
@@ -292,8 +295,8 @@ static struct bfin5xx_spi_chip spidev_chip_info = {
 	.bits_per_word = 8,
 };
 #endif
+#endif
 
-#if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
 /* SPI (0) */
 static struct resource bfin_spi0_resource[] = {
 	[0] = {
@@ -324,7 +327,6 @@ static struct platform_device bfin_spi0_device = {
 		.platform_data = &bfin_spi0_info, /* Passed to driver */
 	},
 };
-#endif
 
 static struct spi_board_info bfin_spi_board_info[] __initdata = {
 #if defined(CONFIG_SND_BLACKFIN_AD1836) \
@@ -347,6 +349,43 @@ static struct spi_board_info bfin_spi_board_info[] __initdata = {
 	},
 #endif
 };
+
+#if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
+#define PATA_INT	55
+
+static struct pata_platform_info bfin_pata_platform_data = {
+	.ioport_shift = 1,
+	.irq_type = IRQF_TRIGGER_HIGH | IRQF_DISABLED,
+};
+
+static struct resource bfin_pata_resources[] = {
+	{
+		.start = 0x20314020,
+		.end = 0x2031403F,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = 0x2031401C,
+		.end = 0x2031401F,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = PATA_INT,
+		.end = PATA_INT,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device bfin_pata_device = {
+	.name = "pata_platform",
+	.id = -1,
+	.num_resources = ARRAY_SIZE(bfin_pata_resources),
+	.resource = bfin_pata_resources,
+	.dev = {
+		.platform_data = &bfin_pata_platform_data,
+	}
+};
+#endif
 
 #if defined(CONFIG_KEYBOARD_GPIO) || defined(CONFIG_KEYBOARD_GPIO_MODULE)
 #include <linux/input.h>
@@ -448,10 +487,6 @@ static struct platform_device *ezkit_devices[] __initdata = {
 	&net2272_bfin_device,
 #endif
 
-#if defined(CONFIG_USB_ISP1760_HCD) || defined(CONFIG_USB_ISP1760_HCD_MODULE)
-	&bfin_isp1760_device,
-#endif
-
 #if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
 	&bfin_spi0_device,
 #endif
@@ -461,9 +496,11 @@ static struct platform_device *ezkit_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
-#ifdef CONFIG_BFIN_SIR0
-	&bfin_sir0_device,
+	&bfin_sir_device,
 #endif
+
+#if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
+	&bfin_pata_device,
 #endif
 
 #if defined(CONFIG_KEYBOARD_GPIO) || defined(CONFIG_KEYBOARD_GPIO_MODULE)
@@ -500,7 +537,14 @@ static int __init ezkit_init(void)
 	SSYNC();
 #endif
 
-	spi_register_board_info(bfin_spi_board_info, ARRAY_SIZE(bfin_spi_board_info));
+#if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
+	spi_register_board_info(bfin_spi_board_info,
+				ARRAY_SIZE(bfin_spi_board_info));
+#endif
+
+#if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
+	irq_desc[PATA_INT].status |= IRQ_NOAUTOEN;
+#endif
 	return 0;
 }
 

@@ -521,8 +521,7 @@ struct esp {
 
 	struct completion	*eh_reset;
 
-	void			*dma;
-	int			dmarev;
+	struct sbus_dma		*dma;
 };
 
 /* A front-end driver for the ESP chip should do the following in

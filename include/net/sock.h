@@ -42,7 +42,6 @@
 
 #include <linux/kernel.h>
 #include <linux/list.h>
-#include <linux/list_nulls.h>
 #include <linux/timer.h>
 #include <linux/cache.h>
 #include <linux/module.h>
@@ -53,7 +52,6 @@
 #include <linux/security.h>
 
 #include <linux/filter.h>
-#include <linux/rculist_nulls.h>
 
 #include <asm/atomic.h>
 #include <net/dst.h>
@@ -108,7 +106,6 @@ struct net;
  *	@skc_reuse: %SO_REUSEADDR setting
  *	@skc_bound_dev_if: bound device index if != 0
  *	@skc_node: main hash linkage for various protocol lookup tables
- *	@skc_nulls_node: main hash linkage for UDP/UDP-Lite protocol
  *	@skc_bind_node: bind hash linkage for various protocol lookup tables
  *	@skc_refcnt: reference count
  *	@skc_hash: hash value used with various protocol lookup tables
@@ -123,10 +120,7 @@ struct sock_common {
 	volatile unsigned char	skc_state;
 	unsigned char		skc_reuse;
 	int			skc_bound_dev_if;
-	union {
-		struct hlist_node	skc_node;
-		struct hlist_nulls_node skc_nulls_node;
-	};
+	struct hlist_node	skc_node;
 	struct hlist_node	skc_bind_node;
 	atomic_t		skc_refcnt;
 	unsigned int		skc_hash;
@@ -172,7 +166,7 @@ struct sock_common {
   *	@sk_err: last error
   *	@sk_err_soft: errors that don't cause failure but are the cause of a
   *		      persistent failure not just 'timed out'
-  *	@sk_drops: raw/udp drops counter
+  *	@sk_drops: raw drops counter
   *	@sk_ack_backlog: current listen backlog
   *	@sk_max_ack_backlog: listen backlog set in listen()
   *	@sk_priority: %SO_PRIORITY setting
@@ -212,7 +206,6 @@ struct sock {
 #define sk_reuse		__sk_common.skc_reuse
 #define sk_bound_dev_if		__sk_common.skc_bound_dev_if
 #define sk_node			__sk_common.skc_node
-#define sk_nulls_node		__sk_common.skc_nulls_node
 #define sk_bind_node		__sk_common.skc_bind_node
 #define sk_refcnt		__sk_common.skc_refcnt
 #define sk_hash			__sk_common.skc_hash
@@ -236,9 +229,7 @@ struct sock {
 	} sk_backlog;
 	wait_queue_head_t	*sk_sleep;
 	struct dst_entry	*sk_dst_cache;
-#ifdef CONFIG_XFRM
 	struct xfrm_policy	*sk_policy[2];
-#endif
 	rwlock_t		sk_dst_lock;
 	atomic_t		sk_rmem_alloc;
 	atomic_t		sk_wmem_alloc;
@@ -246,9 +237,7 @@ struct sock {
 	int			sk_sndbuf;
 	struct sk_buff_head	sk_receive_queue;
 	struct sk_buff_head	sk_write_queue;
-#ifdef CONFIG_NET_DMA
 	struct sk_buff_head	sk_async_wait_queue;
-#endif
 	int			sk_wmem_queued;
 	int			sk_forward_alloc;
 	gfp_t			sk_allocation;
@@ -280,9 +269,7 @@ struct sock {
 	struct sk_buff		*sk_send_head;
 	__u32			sk_sndmsg_off;
 	int			sk_write_pending;
-#ifdef CONFIG_SECURITY
 	void			*sk_security;
-#endif
 	__u32			sk_mark;
 	/* XXX 4 bytes hole on 64 bit */
 	void			(*sk_state_change)(struct sock *sk);
@@ -307,28 +294,10 @@ static inline struct sock *sk_head(const struct hlist_head *head)
 	return hlist_empty(head) ? NULL : __sk_head(head);
 }
 
-static inline struct sock *__sk_nulls_head(const struct hlist_nulls_head *head)
-{
-	return hlist_nulls_entry(head->first, struct sock, sk_nulls_node);
-}
-
-static inline struct sock *sk_nulls_head(const struct hlist_nulls_head *head)
-{
-	return hlist_nulls_empty(head) ? NULL : __sk_nulls_head(head);
-}
-
 static inline struct sock *sk_next(const struct sock *sk)
 {
 	return sk->sk_node.next ?
 		hlist_entry(sk->sk_node.next, struct sock, sk_node) : NULL;
-}
-
-static inline struct sock *sk_nulls_next(const struct sock *sk)
-{
-	return (!is_a_nulls(sk->sk_nulls_node.next)) ?
-		hlist_nulls_entry(sk->sk_nulls_node.next,
-				  struct sock, sk_nulls_node) :
-		NULL;
 }
 
 static inline int sk_unhashed(const struct sock *sk)
@@ -342,11 +311,6 @@ static inline int sk_hashed(const struct sock *sk)
 }
 
 static __inline__ void sk_node_init(struct hlist_node *node)
-{
-	node->pprev = NULL;
-}
-
-static __inline__ void sk_nulls_node_init(struct hlist_nulls_node *node)
 {
 	node->pprev = NULL;
 }
@@ -397,27 +361,6 @@ static __inline__ int sk_del_node_init(struct sock *sk)
 	return rc;
 }
 
-static __inline__ int __sk_nulls_del_node_init_rcu(struct sock *sk)
-{
-	if (sk_hashed(sk)) {
-		hlist_nulls_del_init_rcu(&sk->sk_nulls_node);
-		return 1;
-	}
-	return 0;
-}
-
-static __inline__ int sk_nulls_del_node_init_rcu(struct sock *sk)
-{
-	int rc = __sk_nulls_del_node_init_rcu(sk);
-
-	if (rc) {
-		/* paranoid for a while -acme */
-		WARN_ON(atomic_read(&sk->sk_refcnt) == 1);
-		__sock_put(sk);
-	}
-	return rc;
-}
-
 static __inline__ void __sk_add_node(struct sock *sk, struct hlist_head *list)
 {
 	hlist_add_head(&sk->sk_node, list);
@@ -427,17 +370,6 @@ static __inline__ void sk_add_node(struct sock *sk, struct hlist_head *list)
 {
 	sock_hold(sk);
 	__sk_add_node(sk, list);
-}
-
-static __inline__ void __sk_nulls_add_node_rcu(struct sock *sk, struct hlist_nulls_head *list)
-{
-	hlist_nulls_add_head_rcu(&sk->sk_nulls_node, list);
-}
-
-static __inline__ void sk_nulls_add_node_rcu(struct sock *sk, struct hlist_nulls_head *list)
-{
-	sock_hold(sk);
-	__sk_nulls_add_node_rcu(sk, list);
 }
 
 static __inline__ void __sk_del_bind_node(struct sock *sk)
@@ -453,16 +385,9 @@ static __inline__ void sk_add_bind_node(struct sock *sk,
 
 #define sk_for_each(__sk, node, list) \
 	hlist_for_each_entry(__sk, node, list, sk_node)
-#define sk_nulls_for_each(__sk, node, list) \
-	hlist_nulls_for_each_entry(__sk, node, list, sk_nulls_node)
-#define sk_nulls_for_each_rcu(__sk, node, list) \
-	hlist_nulls_for_each_entry_rcu(__sk, node, list, sk_nulls_node)
 #define sk_for_each_from(__sk, node) \
 	if (__sk && ({ node = &(__sk)->sk_node; 1; })) \
 		hlist_for_each_entry_from(__sk, node, sk_node)
-#define sk_nulls_for_each_from(__sk, node) \
-	if (__sk && ({ node = &(__sk)->sk_nulls_node; 1; })) \
-		hlist_nulls_for_each_entry_from(__sk, node, sk_nulls_node)
 #define sk_for_each_continue(__sk, node) \
 	if (__sk && ({ node = &(__sk)->sk_node; 1; })) \
 		hlist_for_each_entry_continue(__sk, node, sk_node)
@@ -557,11 +482,6 @@ static inline void sk_add_backlog(struct sock *sk, struct sk_buff *skb)
 	skb->next = NULL;
 }
 
-static inline int sk_backlog_rcv(struct sock *sk, struct sk_buff *skb)
-{
-	return sk->sk_backlog_rcv(sk, skb);
-}
-
 #define sk_wait_event(__sk, __timeo, __condition)			\
 	({	int __rc;						\
 		release_sock(__sk);					\
@@ -604,7 +524,7 @@ struct proto {
 	int			(*ioctl)(struct sock *sk, int cmd,
 					 unsigned long arg);
 	int			(*init)(struct sock *sk);
-	void			(*destroy)(struct sock *sk);
+	int			(*destroy)(struct sock *sk);
 	void			(*shutdown)(struct sock *sk, int how);
 	int			(*setsockopt)(struct sock *sk, int level, 
 					int optname, char __user *optval,
@@ -612,7 +532,6 @@ struct proto {
 	int			(*getsockopt)(struct sock *sk, int level, 
 					int optname, char __user *optval, 
 					int __user *option);  	 
-#ifdef CONFIG_COMPAT
 	int			(*compat_setsockopt)(struct sock *sk,
 					int level,
 					int optname, char __user *optval,
@@ -621,7 +540,6 @@ struct proto {
 					int level,
 					int optname, char __user *optval,
 					int __user *option);
-#endif
 	int			(*sendmsg)(struct kiocb *iocb, struct sock *sk,
 					   struct msghdr *msg, size_t len);
 	int			(*recvmsg)(struct kiocb *iocb, struct sock *sk,
@@ -647,9 +565,9 @@ struct proto {
 #endif
 
 	/* Memory pressure */
-	void			(*enter_memory_pressure)(struct sock *sk);
+	void			(*enter_memory_pressure)(void);
 	atomic_t		*memory_allocated;	/* Current allocated memory. */
-	struct percpu_counter	*sockets_allocated;	/* Current number of sockets. */
+	atomic_t		*sockets_allocated;	/* Current number of sockets. */
 	/*
 	 * Pressure flag: try to collapse.
 	 * Technical note: it is used by multiple contexts non atomically.
@@ -662,18 +580,17 @@ struct proto {
 	int			*sysctl_rmem;
 	int			max_header;
 
-	struct kmem_cache	*slab;
+	struct kmem_cache		*slab;
 	unsigned int		obj_size;
-	int			slab_flags;
 
-	struct percpu_counter	*orphan_count;
+	atomic_t		*orphan_count;
 
 	struct request_sock_ops	*rsk_prot;
 	struct timewait_sock_ops *twsk_prot;
 
 	union {
 		struct inet_hashinfo	*hashinfo;
-		struct udp_table	*udp_table;
+		struct hlist_head	*udp_hash;
 		struct raw_hashinfo	*raw_hash;
 	} h;
 
@@ -891,7 +808,7 @@ static inline void sk_wmem_free_skb(struct sock *sk, struct sk_buff *skb)
  */
 #define sock_lock_init_class_and_name(sk, sname, skey, name, key) 	\
 do {									\
-	sk->sk_lock.owned = 0;						\
+	sk->sk_lock.owned = 0;					\
 	init_waitqueue_head(&sk->sk_lock.wq);				\
 	spin_lock_init(&(sk)->sk_lock.slock);				\
 	debug_check_no_locks_freed((void *)&(sk)->sk_lock,		\
@@ -1012,6 +929,7 @@ extern void sock_init_data(struct socket *sock, struct sock *sk);
 
 /**
  *	sk_filter_release: Release a socket filter
+ *	@sk: socket
  *	@fp: filter to remove
  *
  *	Remove a filter from a socket and release its resources.
@@ -1072,11 +990,6 @@ static inline void sock_put(struct sock *sk)
 extern int sk_receive_skb(struct sock *sk, struct sk_buff *skb,
 			  const int nested);
 
-static inline void sk_set_socket(struct sock *sk, struct socket *sock)
-{
-	sk->sk_socket = sock;
-}
-
 /* Detach socket from process context.
  * Announce socket dead, detach it from wait queue and inode.
  * Note that parent inode held reference count on this struct sock,
@@ -1088,7 +1001,7 @@ static inline void sock_orphan(struct sock *sk)
 {
 	write_lock_bh(&sk->sk_callback_lock);
 	sock_set_flag(sk, SOCK_DEAD);
-	sk_set_socket(sk, NULL);
+	sk->sk_socket = NULL;
 	sk->sk_sleep  = NULL;
 	write_unlock_bh(&sk->sk_callback_lock);
 }
@@ -1098,7 +1011,7 @@ static inline void sock_graft(struct sock *sk, struct socket *parent)
 	write_lock_bh(&sk->sk_callback_lock);
 	sk->sk_sleep = &parent->wait;
 	parent->sk = sk;
-	sk_set_socket(sk, parent);
+	sk->sk_socket = parent;
 	security_sock_graft(sk, parent);
 	write_unlock_bh(&sk->sk_callback_lock);
 }
@@ -1292,7 +1205,7 @@ static inline struct page *sk_stream_alloc_page(struct sock *sk)
 
 	page = alloc_pages(sk->sk_allocation, 0);
 	if (!page) {
-		sk->sk_prot->enter_memory_pressure(sk);
+		sk->sk_prot->enter_memory_pressure();
 		sk_stream_moderate_sndbuf(sk);
 	}
 	return page;
@@ -1404,18 +1317,6 @@ static inline void sk_change_net(struct sock *sk, struct net *net)
 	sock_net_set(sk, hold_net(net));
 }
 
-static inline struct sock *skb_steal_sock(struct sk_buff *skb)
-{
-	if (unlikely(skb->sk)) {
-		struct sock *sk = skb->sk;
-
-		skb->destructor = NULL;
-		skb->sk = NULL;
-		return sk;
-	}
-	return NULL;
-}
-
 extern void sock_enable_timestamp(struct sock *sk);
 extern int sock_get_timestamp(struct sock *, struct timeval __user *);
 extern int sock_get_timestampns(struct sock *, struct timespec __user *);
@@ -1429,6 +1330,30 @@ extern int net_msg_warn;
 
 #define LIMIT_NETDEBUG(fmt, args...) \
 	do { if (net_msg_warn && net_ratelimit()) printk(fmt,##args); } while(0)
+
+/*
+ * Macros for sleeping on a socket. Use them like this:
+ *
+ * SOCK_SLEEP_PRE(sk)
+ * if (condition)
+ * 	schedule();
+ * SOCK_SLEEP_POST(sk)
+ *
+ * N.B. These are now obsolete and were, afaik, only ever used in DECnet
+ * and when the last use of them in DECnet has gone, I'm intending to
+ * remove them.
+ */
+
+#define SOCK_SLEEP_PRE(sk) 	{ struct task_struct *tsk = current; \
+				DECLARE_WAITQUEUE(wait, tsk); \
+				tsk->state = TASK_INTERRUPTIBLE; \
+				add_wait_queue((sk)->sk_sleep, &wait); \
+				release_sock(sk);
+
+#define SOCK_SLEEP_POST(sk)	tsk->state = TASK_RUNNING; \
+				remove_wait_queue((sk)->sk_sleep, &wait); \
+				lock_sock(sk); \
+				}
 
 extern __u32 sysctl_wmem_max;
 extern __u32 sysctl_rmem_max;

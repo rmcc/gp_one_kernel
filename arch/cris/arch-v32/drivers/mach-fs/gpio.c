@@ -22,7 +22,6 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
-#include <linux/smp_lock.h>
 
 #include <asm/etraxgpio.h>
 #include <hwregs/reg_map.h>
@@ -427,10 +426,9 @@ gpio_open(struct inode *inode, struct file *filp)
 		return -EINVAL;
 
 	priv = kmalloc(sizeof(struct gpio_private), GFP_KERNEL);
+
 	if (!priv)
 		return -ENOMEM;
-
-	lock_kernel();
 	memset(priv, 0, sizeof(*priv));
 
 	priv->minor = p;
@@ -451,7 +449,6 @@ gpio_open(struct inode *inode, struct file *filp)
 	alarmlist = priv;
 	spin_unlock_irq(&alarm_lock);
 
-	unlock_kernel();
 	return 0;
 }
 

@@ -128,7 +128,7 @@ struct bt878 {
 	dma_addr_t buf_dma;
 
 	u32 risc_size;
-	__le32 *risc_cpu;
+	u32 *risc_cpu;
 	dma_addr_t risc_dma;
 	u32 risc_pos;
 

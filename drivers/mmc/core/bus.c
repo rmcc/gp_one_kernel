@@ -216,7 +216,8 @@ int mmc_add_card(struct mmc_card *card)
 	int ret;
 	const char *type;
 
-	dev_set_name(&card->dev, "%s:%04x", mmc_hostname(card->host), card->rca);
+	snprintf(card->dev.bus_id, sizeof(card->dev.bus_id),
+		 "%s:%04x", mmc_hostname(card->host), card->rca);
 
 	switch (card->type) {
 	case MMC_TYPE_MMC:
@@ -251,10 +252,6 @@ int mmc_add_card(struct mmc_card *card)
 	if (ret)
 		return ret;
 
-#ifdef CONFIG_DEBUG_FS
-	mmc_add_card_debugfs(card);
-#endif
-
 	mmc_card_set_present(card);
 
 	return 0;
@@ -266,10 +263,6 @@ int mmc_add_card(struct mmc_card *card)
  */
 void mmc_remove_card(struct mmc_card *card)
 {
-#ifdef CONFIG_DEBUG_FS
-	mmc_remove_card_debugfs(card);
-#endif
-
 	if (mmc_card_present(card)) {
 		if (mmc_host_is_spi(card->host)) {
 			printk(KERN_INFO "%s: SPI card removed\n",

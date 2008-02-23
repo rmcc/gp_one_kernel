@@ -43,9 +43,9 @@
 #include <linux/mtd/partitions.h>
 
 #include <asm/io.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach/flash.h>
-#include <mach/tc.h>
+#include <asm/arch/tc.h>
 
 #ifdef CONFIG_MTD_PARTITIONS
 static const char *part_probes[] = { /* "RedBoot", */ "cmdlinepart", NULL };
@@ -60,22 +60,13 @@ struct omapflash_info {
 static void omap_set_vpp(struct map_info *map, int enable)
 {
 	static int	count;
-	u32 l;
 
-	if (cpu_class_is_omap1()) {
-		if (enable) {
-			if (count++ == 0) {
-				l = omap_readl(EMIFS_CONFIG);
-				l |= OMAP_EMIFS_CONFIG_WP;
-				omap_writel(l, EMIFS_CONFIG);
-			}
-		} else {
-			if (count && (--count == 0)) {
-				l = omap_readl(EMIFS_CONFIG);
-				l &= ~OMAP_EMIFS_CONFIG_WP;
-				omap_writel(l, EMIFS_CONFIG);
-			}
-		}
+	if (enable) {
+		if (count++ == 0)
+			OMAP_EMIFS_CONFIG_REG |= OMAP_EMIFS_CONFIG_WP;
+	} else {
+		if (count && (--count == 0))
+			OMAP_EMIFS_CONFIG_REG &= ~OMAP_EMIFS_CONFIG_WP;
 	}
 }
 
@@ -101,7 +92,7 @@ static int __init omapflash_probe(struct platform_device *pdev)
 		err = -ENOMEM;
 		goto out_release_mem_region;
 	}
-	info->map.name		= dev_name(&pdev->dev);
+	info->map.name		= pdev->dev.bus_id;
 	info->map.phys		= res->start;
 	info->map.size		= size;
 	info->map.bankwidth	= pdata->width;
@@ -119,7 +110,7 @@ static int __init omapflash_probe(struct platform_device *pdev)
 	err = parse_mtd_partitions(info->mtd, part_probes, &info->parts, 0);
 	if (err > 0)
 		add_mtd_partitions(info->mtd, info->parts, err);
-	else if (err <= 0 && pdata->parts)
+	else if (err < 0 && pdata->parts)
 		add_mtd_partitions(info->mtd, pdata->parts, pdata->nr_parts);
 	else
 #endif

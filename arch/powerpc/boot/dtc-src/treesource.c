@@ -23,23 +23,20 @@
 
 extern FILE *yyin;
 extern int yyparse(void);
+extern void yyerror(char const *);
 
 struct boot_info *the_boot_info;
-int treesource_error;
 
 struct boot_info *dt_from_source(const char *fname)
 {
 	the_boot_info = NULL;
-	treesource_error = 0;
 
-	srcpos_file = dtc_open_file(fname, NULL);
-	yyin = srcpos_file->file;
+	push_input_file(fname);
 
 	if (yyparse() != 0)
-		die("Unable to parse input tree\n");
+		return NULL;
 
-	if (treesource_error)
-		die("Syntax error parsing input tree\n");
+	fill_fullpaths(the_boot_info->dt, "");
 
 	return the_boot_info;
 }
@@ -147,7 +144,7 @@ static void write_propval_cells(FILE *f, struct data val)
 			m = m->next;
 		}
 
-		fprintf(f, "0x%x", fdt32_to_cpu(*cp++));
+		fprintf(f, "0x%x", be32_to_cpu(*cp++));
 		if ((void *)cp >= propend)
 			break;
 		fprintf(f, " ");
@@ -176,7 +173,7 @@ static void write_propval_bytes(FILE *f, struct data val)
 		}
 
 		fprintf(f, "%02hhx", *bp++);
-		if ((const void *)bp >= propend)
+		if ((void *)bp >= propend)
 			break;
 		fprintf(f, " ");
 	}

@@ -33,17 +33,12 @@ struct cx24110_config
 	u8 demod_address;
 };
 
-static inline int cx24110_pll_write(struct dvb_frontend *fe, u32 val)
-{
-	u8 buf[] = {
-		(u8)((val >> 24) & 0xff),
-		(u8)((val >> 16) & 0xff),
-		(u8)((val >> 8) & 0xff)
-	};
-
+static inline int cx24110_pll_write(struct dvb_frontend *fe, u32 val) {
+	int r = 0;
+	u8 buf[] = {(u8) (val>>24), (u8) (val>>16), (u8) (val>>8)};
 	if (fe->ops.write)
-		return fe->ops.write(fe, buf, 3);
-	return 0;
+		r = fe->ops.write(fe, buf, 3);
+	return r;
 }
 
 #if defined(CONFIG_DVB_CX24110) || (defined(CONFIG_DVB_CX24110_MODULE) && defined(MODULE))

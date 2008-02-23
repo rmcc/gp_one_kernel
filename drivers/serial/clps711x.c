@@ -21,6 +21,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ *  $Id: clps711x.c,v 1.42 2002/07/28 10:03:28 rmk Exp $
+ *
  */
 
 #if defined(CONFIG_SERIAL_CLPS711X_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
@@ -39,7 +42,7 @@
 #include <linux/serial_core.h>
 #include <linux/serial.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/hardware/clps7111.h>
@@ -93,7 +96,7 @@ static void clps711xuart_enable_ms(struct uart_port *port)
 static irqreturn_t clps711xuart_int_rx(int irq, void *dev_id)
 {
 	struct uart_port *port = dev_id;
-	struct tty_struct *tty = port->info->port.tty;
+	struct tty_struct *tty = port->info->tty;
 	unsigned int status, ch, flg;
 
 	status = clps_readl(SYSFLG(port));
@@ -548,7 +551,7 @@ static int __init clps711xuart_init(void)
 {
 	int ret, i;
 
-	printk(KERN_INFO "Serial: CLPS711x driver\n");
+	printk(KERN_INFO "Serial: CLPS711x driver $Revision: 1.42 $\n");
 
 	ret = uart_register_driver(&clps711x_reg);
 	if (ret)
@@ -574,6 +577,6 @@ module_init(clps711xuart_init);
 module_exit(clps711xuart_exit);
 
 MODULE_AUTHOR("Deep Blue Solutions Ltd");
-MODULE_DESCRIPTION("CLPS-711x generic serial driver");
+MODULE_DESCRIPTION("CLPS-711x generic serial driver $Revision: 1.42 $");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_CHARDEV(SERIAL_CLPS711X_MAJOR, SERIAL_CLPS711X_MINOR);

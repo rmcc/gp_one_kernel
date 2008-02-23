@@ -107,10 +107,11 @@ struct dentry *nfs_get_root(struct super_block *sb, struct nfs_fh *mntfh)
 	 * if the dentry tree reaches them; however if the dentry already
 	 * exists, we'll pick it up at this point and use it as the root
 	 */
-	mntroot = d_obtain_alias(inode);
-	if (IS_ERR(mntroot)) {
+	mntroot = d_alloc_anon(inode);
+	if (!mntroot) {
+		iput(inode);
 		dprintk("nfs_get_root: get root dentry failed\n");
-		return mntroot;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	security_d_instantiate(mntroot, inode);
@@ -276,10 +277,11 @@ struct dentry *nfs4_get_root(struct super_block *sb, struct nfs_fh *mntfh)
 	 * if the dentry tree reaches them; however if the dentry already
 	 * exists, we'll pick it up at this point and use it as the root
 	 */
-	mntroot = d_obtain_alias(inode);
-	if (IS_ERR(mntroot)) {
+	mntroot = d_alloc_anon(inode);
+	if (!mntroot) {
+		iput(inode);
 		dprintk("nfs_get_root: get root dentry failed\n");
-		return mntroot;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	security_d_instantiate(mntroot, inode);

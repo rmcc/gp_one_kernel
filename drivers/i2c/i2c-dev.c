@@ -34,7 +34,6 @@
 #include <linux/list.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
-#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 
 static struct i2c_driver i2cdev_driver;
@@ -147,7 +146,7 @@ static ssize_t i2cdev_read (struct file *file, char __user *buf, size_t count,
 	if (tmp==NULL)
 		return -ENOMEM;
 
-	pr_debug("i2c-dev: i2c-%d reading %zu bytes.\n",
+	pr_debug("i2c-dev: i2c-%d reading %zd bytes.\n",
 		iminor(file->f_path.dentry->d_inode), count);
 
 	ret = i2c_master_recv(client,tmp,count);
@@ -175,7 +174,7 @@ static ssize_t i2cdev_write (struct file *file, const char __user *buf, size_t c
 		return -EFAULT;
 	}
 
-	pr_debug("i2c-dev: i2c-%d writing %zu bytes.\n",
+	pr_debug("i2c-dev: i2c-%d writing %zd bytes.\n",
 		iminor(file->f_path.dentry->d_inode), count);
 
 	ret = i2c_master_send(client,tmp,count);
@@ -367,7 +366,8 @@ static noinline int i2cdev_ioctl_smbus(struct i2c_client *client,
 	return res;
 }
 
-static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static int i2cdev_ioctl(struct inode *inode, struct file *file,
+		unsigned int cmd, unsigned long arg)
 {
 	struct i2c_client *client = (struct i2c_client *)file->private_data;
 	unsigned long funcs;
@@ -441,20 +441,14 @@ static int i2cdev_open(struct inode *inode, struct file *file)
 	struct i2c_client *client;
 	struct i2c_adapter *adap;
 	struct i2c_dev *i2c_dev;
-	int ret = 0;
 
-	lock_kernel();
 	i2c_dev = i2c_dev_get_by_minor(minor);
-	if (!i2c_dev) {
-		ret = -ENODEV;
-		goto out;
-	}
+	if (!i2c_dev)
+		return -ENODEV;
 
 	adap = i2c_get_adapter(i2c_dev->adap->nr);
-	if (!adap) {
-		ret = -ENODEV;
-		goto out;
-	}
+	if (!adap)
+		return -ENODEV;
 
 	/* This creates an anonymous i2c_client, which may later be
 	 * pointed to some address using I2C_SLAVE or I2C_SLAVE_FORCE.
@@ -466,8 +460,7 @@ static int i2cdev_open(struct inode *inode, struct file *file)
 	client = kzalloc(sizeof(*client), GFP_KERNEL);
 	if (!client) {
 		i2c_put_adapter(adap);
-		ret = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 	snprintf(client->name, I2C_NAME_SIZE, "i2c-dev %d", adap->nr);
 	client->driver = &i2cdev_driver;
@@ -475,9 +468,7 @@ static int i2cdev_open(struct inode *inode, struct file *file)
 	client->adapter = adap;
 	file->private_data = client;
 
-out:
-	unlock_kernel();
-	return ret;
+	return 0;
 }
 
 static int i2cdev_release(struct inode *inode, struct file *file)
@@ -496,7 +487,7 @@ static const struct file_operations i2cdev_fops = {
 	.llseek		= no_llseek,
 	.read		= i2cdev_read,
 	.write		= i2cdev_write,
-	.unlocked_ioctl	= i2cdev_ioctl,
+	.ioctl		= i2cdev_ioctl,
 	.open		= i2cdev_open,
 	.release	= i2cdev_release,
 };
@@ -522,7 +513,7 @@ static int i2cdev_attach_adapter(struct i2c_adapter *adap)
 
 	/* register this i2c device with the driver core */
 	i2c_dev->dev = device_create(i2c_dev_class, &adap->dev,
-				     MKDEV(I2C_MAJOR, adap->nr), NULL,
+				     MKDEV(I2C_MAJOR, adap->nr),
 				     "i2c-%d", adap->nr);
 	if (IS_ERR(i2c_dev->dev)) {
 		res = PTR_ERR(i2c_dev->dev);
@@ -558,12 +549,19 @@ static int i2cdev_detach_adapter(struct i2c_adapter *adap)
 	return 0;
 }
 
+static int i2cdev_detach_client(struct i2c_client *client)
+{
+	return 0;
+}
+
 static struct i2c_driver i2cdev_driver = {
 	.driver = {
 		.name	= "dev_driver",
 	},
+	.id		= I2C_DRIVERID_I2CDEV,
 	.attach_adapter	= i2cdev_attach_adapter,
 	.detach_adapter	= i2cdev_detach_adapter,
+	.detach_client	= i2cdev_detach_client,
 };
 
 /* ------------------------------------------------------------------------- */
@@ -583,10 +581,8 @@ static int __init i2c_dev_init(void)
 		goto out;
 
 	i2c_dev_class = class_create(THIS_MODULE, "i2c-dev");
-	if (IS_ERR(i2c_dev_class)) {
-		res = PTR_ERR(i2c_dev_class);
+	if (IS_ERR(i2c_dev_class))
 		goto out_unreg_chrdev;
-	}
 
 	res = i2c_add_driver(&i2cdev_driver);
 	if (res)

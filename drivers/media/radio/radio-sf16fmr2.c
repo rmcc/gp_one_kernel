@@ -22,7 +22,6 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev2.h>	/* kernel radio structs		*/
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <linux/mutex.h>
 
 static struct mutex lock;
@@ -64,7 +63,6 @@ static struct v4l2_queryctrl radio_qctrl[] = {
 /* this should be static vars for module size */
 struct fmr2_device
 {
-	unsigned long in_use;
 	int port;
 	int curvol; /* 0-15 */
 	int mute;
@@ -230,7 +228,8 @@ static int vidioc_g_tuner(struct file *file, void *priv,
 					struct v4l2_tuner *v)
 {
 	int mult;
-	struct fmr2_device *fmr2 = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct fmr2_device *fmr2 = dev->priv;
 
 	if (v->index > 0)
 		return -EINVAL;
@@ -262,7 +261,8 @@ static int vidioc_s_tuner(struct file *file, void *priv,
 static int vidioc_s_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct fmr2_device *fmr2 = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct fmr2_device *fmr2 = dev->priv;
 
 	if (!(fmr2->flags & V4L2_TUNER_CAP_LOW))
 		f->frequency *= 1000;
@@ -285,7 +285,8 @@ static int vidioc_s_frequency(struct file *file, void *priv,
 static int vidioc_g_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct fmr2_device *fmr2 = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct fmr2_device *fmr2 = dev->priv;
 
 	f->type = V4L2_TUNER_RADIO;
 	f->frequency = fmr2->curfreq;
@@ -311,7 +312,8 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 static int vidioc_g_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct fmr2_device *fmr2 = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct fmr2_device *fmr2 = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -327,7 +329,8 @@ static int vidioc_g_ctrl(struct file *file, void *priv,
 static int vidioc_s_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct fmr2_device *fmr2 = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct fmr2_device *fmr2 = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -396,25 +399,23 @@ static int vidioc_s_audio(struct file *file, void *priv,
 
 static struct fmr2_device fmr2_unit;
 
-static int fmr2_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &fmr2_unit.in_use) ? -EBUSY : 0;
-}
-
-static int fmr2_exclusive_release(struct file *file)
-{
-	clear_bit(0, &fmr2_unit.in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations fmr2_fops = {
+static const struct file_operations fmr2_fops = {
 	.owner          = THIS_MODULE,
-	.open           = fmr2_exclusive_open,
-	.release        = fmr2_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl          = video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops fmr2_ioctl_ops = {
+static struct video_device fmr2_radio=
+{
+	.owner		= THIS_MODULE,
+	.name		= "SF16FMR2 radio",
+	. type		= VID_TYPE_TUNER,
+	.fops		= &fmr2_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -429,13 +430,6 @@ static const struct v4l2_ioctl_ops fmr2_ioctl_ops = {
 	.vidioc_s_ctrl      = vidioc_s_ctrl,
 };
 
-static struct video_device fmr2_radio = {
-	.name		= "SF16FMR2 radio",
-	.fops		= &fmr2_fops,
-	.ioctl_ops 	= &fmr2_ioctl_ops,
-	.release	= video_device_release_empty,
-};
-
 static int __init fmr2_init(void)
 {
 	fmr2_unit.port = io;
@@ -445,7 +439,7 @@ static int __init fmr2_init(void)
 	fmr2_unit.stereo = 1;
 	fmr2_unit.flags = V4L2_TUNER_CAP_LOW;
 	fmr2_unit.card_type = 0;
-	video_set_drvdata(&fmr2_radio, &fmr2_unit);
+	fmr2_radio.priv = &fmr2_unit;
 
 	mutex_init(&lock);
 

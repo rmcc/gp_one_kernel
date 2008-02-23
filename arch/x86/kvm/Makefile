@@ -2,13 +2,9 @@
 # Makefile for Kernel-based Virtual Machine module
 #
 
-common-objs = $(addprefix ../../../virt/kvm/, kvm_main.o ioapic.o \
-                coalesced_mmio.o irq_comm.o)
+common-objs = $(addprefix ../../../virt/kvm/, kvm_main.o ioapic.o)
 ifeq ($(CONFIG_KVM_TRACE),y)
 common-objs += $(addprefix ../../../virt/kvm/, kvm_trace.o)
-endif
-ifeq ($(CONFIG_IOMMU_API),y)
-common-objs += $(addprefix ../../../virt/kvm/, iommu.o)
 endif
 
 EXTRA_CFLAGS += -Ivirt/kvm -Iarch/x86/kvm

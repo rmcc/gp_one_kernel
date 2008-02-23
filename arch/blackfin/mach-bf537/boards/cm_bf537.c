@@ -33,7 +33,6 @@
 #include <linux/platform_device.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
-#include <linux/mtd/physmap.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
 #if defined(CONFIG_USB_ISP1362_HCD) || defined(CONFIG_USB_ISP1362_HCD_MODULE)
@@ -57,16 +56,16 @@ const char bfin_board_name[] = "Bluetechnix CM BF537";
 #if defined(CONFIG_MTD_M25P80) || defined(CONFIG_MTD_M25P80_MODULE)
 static struct mtd_partition bfin_spi_flash_partitions[] = {
 	{
-		.name = "bootloader(spi)",
+		.name = "bootloader",
 		.size = 0x00020000,
 		.offset = 0,
 		.mask_flags = MTD_CAP_ROM
 	}, {
-		.name = "linux kernel(spi)",
+		.name = "kernel",
 		.size = 0xe0000,
 		.offset = 0x20000
 	}, {
-		.name = "file system(spi)",
+		.name = "file system",
 		.size = 0x700000,
 		.offset = 0x00100000,
 	}
@@ -308,68 +307,6 @@ static struct platform_device net2272_bfin_device = {
 };
 #endif
 
-static struct resource bfin_gpios_resources = {
-	.start = 0,
-	.end   = MAX_BLACKFIN_GPIOS - 1,
-	.flags = IORESOURCE_IRQ,
-};
-
-static struct platform_device bfin_gpios_device = {
-	.name = "simple-gpio",
-	.id = -1,
-	.num_resources = 1,
-	.resource = &bfin_gpios_resources,
-};
-
-#if defined(CONFIG_MTD_GPIO_ADDR) || defined(CONFIG_MTD_GPIO_ADDR_MODULE)
-static struct mtd_partition cm_partitions[] = {
-	{
-		.name   = "bootloader(nor)",
-		.size   = 0x40000,
-		.offset = 0,
-	}, {
-		.name   = "linux kernel(nor)",
-		.size   = 0xE0000,
-		.offset = MTDPART_OFS_APPEND,
-	}, {
-		.name   = "file system(nor)",
-		.size   = MTDPART_SIZ_FULL,
-		.offset = MTDPART_OFS_APPEND,
-	}
-};
-
-static struct physmap_flash_data cm_flash_data = {
-	.width    = 2,
-	.parts    = cm_partitions,
-	.nr_parts = ARRAY_SIZE(cm_partitions),
-};
-
-static unsigned cm_flash_gpios[] = { GPIO_PF4 };
-
-static struct resource cm_flash_resource[] = {
-	{
-		.name  = "cfi_probe",
-		.start = 0x20000000,
-		.end   = 0x201fffff,
-		.flags = IORESOURCE_MEM,
-	}, {
-		.start = (unsigned long)cm_flash_gpios,
-		.end   = ARRAY_SIZE(cm_flash_gpios),
-		.flags = IORESOURCE_IRQ,
-	}
-};
-
-static struct platform_device cm_flash_device = {
-	.name          = "gpio-addr-flash",
-	.id            = 0,
-	.dev = {
-		.platform_data = &cm_flash_data,
-	},
-	.num_resources = ARRAY_SIZE(cm_flash_resource),
-	.resource      = cm_flash_resource,
-};
-#endif
-
 #if defined(CONFIG_SERIAL_BFIN) || defined(CONFIG_SERIAL_BFIN_MODULE)
 static struct resource bfin_uart_resources[] = {
 	{
@@ -392,56 +329,29 @@ static struct platform_device bfin_uart_device = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
+static struct resource bfin_sir_resources[] = {
 #ifdef CONFIG_BFIN_SIR0
-static struct resource bfin_sir0_resources[] = {
 	{
 		.start = 0xFFC00400,
 		.end = 0xFFC004FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART0_RX,
-		.end = IRQ_UART0_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART0_RX,
-		.end = CH_UART0_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-static struct platform_device bfin_sir0_device = {
-	.name = "bfin_sir",
-	.id = 0,
-	.num_resources = ARRAY_SIZE(bfin_sir0_resources),
-	.resource = bfin_sir0_resources,
-};
 #endif
 #ifdef CONFIG_BFIN_SIR1
-static struct resource bfin_sir1_resources[] = {
 	{
 		.start = 0xFFC02000,
 		.end = 0xFFC020FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART1_RX,
-		.end = IRQ_UART1_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART1_RX,
-		.end = CH_UART1_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-static struct platform_device bfin_sir1_device = {
-	.name = "bfin_sir",
-	.id = 1,
-	.num_resources = ARRAY_SIZE(bfin_sir1_resources),
-	.resource = bfin_sir1_resources,
-};
 #endif
+};
+
+static struct platform_device bfin_sir_device = {
+	.name = "bfin_sir",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(bfin_sir_resources),
+	.resource = bfin_sir_resources,
+};
 #endif
 
 #if defined(CONFIG_I2C_BLACKFIN_TWI) || defined(CONFIG_I2C_BLACKFIN_TWI_MODULE)
@@ -485,7 +395,7 @@ static struct platform_device bfin_mac_device = {
 #endif
 
 #if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
-#define PATA_INT	IRQ_PF14
+#define PATA_INT	64
 
 static struct pata_platform_info bfin_pata_platform_data = {
 	.ioport_shift = 2,
@@ -565,12 +475,7 @@ static struct platform_device *cm_bf537_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
-#ifdef CONFIG_BFIN_SIR0
-	&bfin_sir0_device,
-#endif
-#ifdef CONFIG_BFIN_SIR1
-	&bfin_sir1_device,
-#endif
+	&bfin_sir_device,
 #endif
 
 #if defined(CONFIG_I2C_BLACKFIN_TWI) || defined(CONFIG_I2C_BLACKFIN_TWI_MODULE)
@@ -605,12 +510,6 @@ static struct platform_device *cm_bf537_devices[] __initdata = {
 #if defined(CONFIG_PATA_PLATFORM) || defined(CONFIG_PATA_PLATFORM_MODULE)
 	&bfin_pata_device,
 #endif
-
-#if defined(CONFIG_MTD_GPIO_ADDR) || defined(CONFIG_MTD_GPIO_ADDR_MODULE)
-	&cm_flash_device,
-#endif
-
-	&bfin_gpios_device,
 };
 
 static int __init cm_bf537_init(void)

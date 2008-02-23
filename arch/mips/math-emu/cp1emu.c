@@ -48,6 +48,7 @@
 #include <asm/branch.h>
 
 #include "ieee754.h"
+#include "dsemul.h"
 
 /* Strap kernel emulator for full MIPS IV emulation */
 
@@ -345,6 +346,9 @@ static int cop1Emulate(struct pt_regs *xcp, struct mips_fpu_struct *ctx)
 			/* cop control register rd -> gpr[rt] */
 			u32 value;
 
+			if (ir == CP1UNDEF) {
+				return do_dsemulret(xcp);
+			}
 			if (MIPSInst_RD(ir) == FPCREG_CSR) {
 				value = ctx->fcr31;
 				value = (value & ~0x3) | mips_rm[value & 0x3];
@@ -1295,12 +1299,12 @@ static int __init debugfs_fpuemu(void)
 	if (!mips_debugfs_dir)
 		return -ENODEV;
 	dir = debugfs_create_dir("fpuemustats", mips_debugfs_dir);
-	if (!dir)
-		return -ENOMEM;
+	if (IS_ERR(dir))
+		return PTR_ERR(dir);
 	for (i = 0; i < ARRAY_SIZE(vars); i++) {
 		d = debugfs_create_u32(vars[i].name, S_IRUGO, dir, vars[i].v);
-		if (!d)
-			return -ENOMEM;
+		if (IS_ERR(d))
+			return PTR_ERR(d);
 	}
 	return 0;
 }

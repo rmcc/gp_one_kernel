@@ -30,7 +30,7 @@
 
 #define POWER_SUPPLY_ATTR(_name)					\
 {									\
-	.attr = { .name = #_name, .mode = 0444 },	\
+	.attr = { .name = #_name, .mode = 0444, .owner = THIS_MODULE },	\
 	.show = power_supply_show_property,				\
 	.store = NULL,							\
 }
@@ -45,7 +45,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 	};
 	static char *health_text[] = {
 		"Unknown", "Good", "Overheat", "Dead", "Over voltage",
-		"Unspecified failure", "Cold",
+		"Unspecified failure"
 	};
 	static char *technology_text[] = {
 		"Unknown", "NiMH", "Li-ion", "Li-poly", "LiFe", "NiCd",
@@ -99,7 +99,6 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(charge_empty),
 	POWER_SUPPLY_ATTR(charge_now),
 	POWER_SUPPLY_ATTR(charge_avg),
-	POWER_SUPPLY_ATTR(charge_counter),
 	POWER_SUPPLY_ATTR(energy_full_design),
 	POWER_SUPPLY_ATTR(energy_empty_design),
 	POWER_SUPPLY_ATTR(energy_full),
@@ -202,7 +201,7 @@ int power_supply_uevent(struct device *dev, struct kobj_uevent_env *env)
 
 	dev_dbg(dev, "uevent\n");
 
-	if (!psy || !psy->dev) {
+	if (!psy) {
 		dev_dbg(dev, "No power supply yet\n");
 		return ret;
 	}

@@ -12,7 +12,6 @@
 #include "asm/mman.h"
 #include "asm/uaccess.h"
 #include "asm/unistd.h"
-#include "internal.h"
 
 long sys_fork(void)
 {

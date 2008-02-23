@@ -31,16 +31,11 @@ struct i2c_algo_pcf_data {
 	int  (*getpcf) (void *data, int ctl);
 	int  (*getown) (void *data);
 	int  (*getclock) (void *data);
-	void (*waitforpin) (void *data);
+	void (*waitforpin) (void);
 
-	void (*xfer_begin) (void *data);
-	void (*xfer_end) (void *data);
-
-	/* Multi-master lost arbitration back-off delay (msecs)
-	 * This should be set by the bus adapter or knowledgable client
-	 * if bus is multi-mastered, else zero
-	 */
-	unsigned long lab_mdelay;
+	/* local settings */
+	int udelay;
+	int timeout;
 };
 
 int i2c_pcf_add_bus(struct i2c_adapter *);

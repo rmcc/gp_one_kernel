@@ -45,8 +45,7 @@ struct clocksource;
  * @read:		returns a cycle value
  * @mask:		bitmask for two's complement
  *			subtraction of non 64 bit counters
- * @mult:		cycle to nanosecond multiplier (adjusted by NTP)
- * @mult_orig:		cycle to nanosecond multiplier (unadjusted by NTP)
+ * @mult:		cycle to nanosecond multiplier
  * @shift:		cycle to nanosecond divisor (power of two)
  * @flags:		flags describing special properties
  * @vread:		vsyscall based read
@@ -64,7 +63,6 @@ struct clocksource {
 	cycle_t (*read)(void);
 	cycle_t mask;
 	u32 mult;
-	u32 mult_orig;
 	u32 shift;
 	unsigned long flags;
 	cycle_t (*vread)(void);
@@ -79,7 +77,6 @@ struct clocksource {
 	/* timekeeping specific data, ignore */
 	cycle_t cycle_interval;
 	u64	xtime_interval;
-	u32	raw_interval;
 	/*
 	 * Second part is written at each timer interrupt
 	 * Keep it in a different cache line to dirty no
@@ -88,7 +85,6 @@ struct clocksource {
 	cycle_t cycle_last ____cacheline_aligned_in_smp;
 	u64 xtime_nsec;
 	s64 error;
-	struct timespec raw_time;
 
 #ifdef CONFIG_CLOCKSOURCE_WATCHDOG
 	/* Watchdog related data, used by the framework */
@@ -205,19 +201,17 @@ static inline void clocksource_calculate_interval(struct clocksource *c,
 {
 	u64 tmp;
 
-	/* Do the ns -> cycle conversion first, using original mult */
+	/* XXX - All of this could use a whole lot of optimization */
 	tmp = length_nsec;
 	tmp <<= c->shift;
-	tmp += c->mult_orig/2;
-	do_div(tmp, c->mult_orig);
+	tmp += c->mult/2;
+	do_div(tmp, c->mult);
 
 	c->cycle_interval = (cycle_t)tmp;
 	if (c->cycle_interval == 0)
 		c->cycle_interval = 1;
 
-	/* Go back from cycles -> shifted ns, this time use ntp adjused mult */
 	c->xtime_interval = (u64)c->cycle_interval * c->mult;
-	c->raw_interval = ((u64)c->cycle_interval * c->mult_orig) >> c->shift;
 }
 
 

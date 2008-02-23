@@ -16,12 +16,11 @@
 #include <linux/platform_device.h>
 #include <linux/i2c-gpio.h>
 
-#include <mach/board.h>
-#include <mach/gpio.h>
-#include <mach/cpu.h>
-#include <mach/at91sam9260.h>
-#include <mach/at91sam9260_matrix.h>
-#include <mach/at91sam9_smc.h>
+#include <asm/arch/board.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/at91sam9260.h>
+#include <asm/arch/at91sam9260_matrix.h>
+#include <asm/arch/at91sam9_smc.h>
 
 #include "generic.h"
 
@@ -283,8 +282,8 @@ void __init at91_add_device_mmc(short mmc_id, struct at91_mmc_data *data) {}
  *  NAND / SmartMedia
  * -------------------------------------------------------------------- */
 
-#if defined(CONFIG_MTD_NAND_ATMEL) || defined(CONFIG_MTD_NAND_ATMEL_MODULE)
-static struct atmel_nand_data nand_data;
+#if defined(CONFIG_MTD_NAND_AT91) || defined(CONFIG_MTD_NAND_AT91_MODULE)
+static struct at91_nand_data nand_data;
 
 #define NAND_BASE	AT91_CHIPSELECT_3
 
@@ -302,7 +301,7 @@ static struct resource nand_resources[] = {
 };
 
 static struct platform_device at91sam9260_nand_device = {
-	.name		= "atmel_nand",
+	.name		= "at91_nand",
 	.id		= -1,
 	.dev		= {
 				.platform_data	= &nand_data,
@@ -311,15 +310,30 @@ static struct platform_device at91sam9260_nand_device = {
 	.num_resources	= ARRAY_SIZE(nand_resources),
 };
 
-void __init at91_add_device_nand(struct atmel_nand_data *data)
+void __init at91_add_device_nand(struct at91_nand_data *data)
 {
-	unsigned long csa;
+	unsigned long csa, mode;
 
 	if (!data)
 		return;
 
 	csa = at91_sys_read(AT91_MATRIX_EBICSA);
 	at91_sys_write(AT91_MATRIX_EBICSA, csa | AT91_MATRIX_CS3A_SMC_SMARTMEDIA);
+
+	/* set the bus interface characteristics */
+	at91_sys_write(AT91_SMC_SETUP(3), AT91_SMC_NWESETUP_(0) | AT91_SMC_NCS_WRSETUP_(0)
+			| AT91_SMC_NRDSETUP_(0) | AT91_SMC_NCS_RDSETUP_(0));
+
+	at91_sys_write(AT91_SMC_PULSE(3), AT91_SMC_NWEPULSE_(3) | AT91_SMC_NCS_WRPULSE_(3)
+			| AT91_SMC_NRDPULSE_(3) | AT91_SMC_NCS_RDPULSE_(3));
+
+	at91_sys_write(AT91_SMC_CYCLE(3), AT91_SMC_NWECYCLE_(5) | AT91_SMC_NRDCYCLE_(5));
+
+	if (data->bus_width_16)
+		mode = AT91_SMC_DBW_16;
+	else
+		mode = AT91_SMC_DBW_8;
+	at91_sys_write(AT91_SMC_MODE(3), mode | AT91_SMC_READMODE | AT91_SMC_WRITEMODE | AT91_SMC_EXNWMODE_DISABLE | AT91_SMC_TDF_(2));
 
 	/* enable pin */
 	if (data->enable_pin)
@@ -337,7 +351,7 @@ void __init at91_add_device_nand(struct atmel_nand_data *data)
 	platform_device_register(&at91sam9260_nand_device);
 }
 #else
-void __init at91_add_device_nand(struct atmel_nand_data *data) {}
+void __init at91_add_device_nand(struct at91_nand_data *data) {}
 #endif
 
 

@@ -2,6 +2,8 @@
  * Handle mapping of the flash memory access routines
  * on TQM8xxL based devices.
  *
+ * $Id: tqm8xxl.c,v 1.15 2005/11/07 11:14:28 gleixner Exp $
+ *
  * based on rpxlite.c
  *
  * Copyright(C) 2001 Kirk Lee <kirk@hpc.ee.ntu.edu.tw>
@@ -109,7 +111,7 @@ static struct mtd_partition tqm8xxl_fs_partitions[] = {
 };
 #endif
 
-static int __init init_tqm_mtd(void)
+int __init init_tqm_mtd(void)
 {
 	int idx = 0, ret = 0;
 	unsigned long flash_addr, flash_size, mtd_size = 0;

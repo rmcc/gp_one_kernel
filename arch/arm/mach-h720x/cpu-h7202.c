@@ -17,9 +17,9 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <asm/types.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
-#include <mach/irqs.h>
+#include <asm/arch/irqs.h>
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
 #include <linux/device.h>
@@ -120,10 +120,12 @@ h7202_timerx_demux_handler(unsigned int irq_unused, struct irq_desc *desc)
 
 	mask >>= 1;
 	irq = IRQ_TIMER1;
+	desc = irq_desc + irq;
 	while (mask) {
 		if (mask & 1)
-			generic_handle_irq(irq);
+			desc_handle_irq(irq, desc);
 		irq++;
+		desc++;
 		mask >>= 1;
 	}
 }

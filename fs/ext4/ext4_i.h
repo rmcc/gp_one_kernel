@@ -31,7 +31,39 @@ typedef unsigned long long ext4_fsblk_t;
 typedef __u32 ext4_lblk_t;
 
 /* data type for block group number */
-typedef unsigned int ext4_group_t;
+typedef unsigned long ext4_group_t;
+
+struct ext4_reserve_window {
+	ext4_fsblk_t	_rsv_start;	/* First byte reserved */
+	ext4_fsblk_t	_rsv_end;	/* Last byte reserved or 0 */
+};
+
+struct ext4_reserve_window_node {
+	struct rb_node		rsv_node;
+	__u32			rsv_goal_size;
+	__u32			rsv_alloc_hit;
+	struct ext4_reserve_window	rsv_window;
+};
+
+struct ext4_block_alloc_info {
+	/* information about reservation window */
+	struct ext4_reserve_window_node rsv_window_node;
+	/*
+	 * was i_next_alloc_block in ext4_inode_info
+	 * is the logical (file-relative) number of the
+	 * most-recently-allocated block in this file.
+	 * We use this for detecting linearly ascending allocation requests.
+	 */
+	ext4_lblk_t last_alloc_logical_block;
+	/*
+	 * Was i_next_alloc_goal in ext4_inode_info
+	 * is the *physical* companion to i_next_alloc_block.
+	 * it the physical block number of the block which was most-recentl
+	 * allocated to this file.  This give us the goal (target) for the next
+	 * allocation when we detect linearly ascending requests.
+	 */
+	ext4_fsblk_t last_alloc_physical_block;
+};
 
 #define rsv_start rsv_window._rsv_start
 #define rsv_end rsv_window._rsv_end
@@ -47,7 +79,7 @@ struct ext4_ext_cache {
 };
 
 /*
- * fourth extended file system inode data in memory
+ * third extended file system inode data in memory
  */
 struct ext4_inode_info {
 	__le32	i_data[15];	/* unconverted */
@@ -65,8 +97,11 @@ struct ext4_inode_info {
 	ext4_group_t	i_block_group;
 	__u32	i_state;		/* Dynamic state flags for ext4 */
 
+	/* block reservation info */
+	struct ext4_block_alloc_info *i_block_alloc_info;
+
 	ext4_lblk_t		i_dir_start_lookup;
-#ifdef CONFIG_EXT4_FS_XATTR
+#ifdef CONFIG_EXT4DEV_FS_XATTR
 	/*
 	 * Extended attributes can be read independently of the main file
 	 * data. Taking i_mutex even when reading would cause contention
@@ -76,7 +111,7 @@ struct ext4_inode_info {
 	 */
 	struct rw_semaphore xattr_sem;
 #endif
-#ifdef CONFIG_EXT4_FS_POSIX_ACL
+#ifdef CONFIG_EXT4DEV_FS_POSIX_ACL
 	struct posix_acl	*i_acl;
 	struct posix_acl	*i_default_acl;
 #endif
@@ -100,6 +135,9 @@ struct ext4_inode_info {
 	 */
 	loff_t	i_disksize;
 
+	/* on-disk additional length */
+	__u16 i_extra_isize;
+
 	/*
 	 * i_data_sem is for serialising ext4_truncate() against
 	 * ext4_getblock().  In the 2.4 ext2 design, great chunks of inode's
@@ -112,8 +150,8 @@ struct ext4_inode_info {
 	 */
 	struct rw_semaphore i_data_sem;
 	struct inode vfs_inode;
-	struct jbd2_inode jinode;
 
+	unsigned long i_ext_generation;
 	struct ext4_ext_cache i_cached_extent;
 	/*
 	 * File creation time. Its function is same as that of
@@ -124,17 +162,6 @@ struct ext4_inode_info {
 	/* mballoc */
 	struct list_head i_prealloc_list;
 	spinlock_t i_prealloc_lock;
-
-	/* allocation reservation info for delalloc */
-	unsigned int i_reserved_data_blocks;
-	unsigned int i_reserved_meta_blocks;
-	unsigned int i_allocated_meta_blocks;
-	unsigned short i_delalloc_reserved_flag;
-
-	/* on-disk additional length */
-	__u16 i_extra_isize;
-
-	spinlock_t i_block_reservation_lock;
 };
 
 #endif	/* _EXT4_I */

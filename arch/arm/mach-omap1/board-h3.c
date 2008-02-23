@@ -31,7 +31,7 @@
 
 #include <asm/setup.h>
 #include <asm/page.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/gpio.h>
 
 #include <asm/mach-types.h>
@@ -39,18 +39,18 @@
 #include <asm/mach/flash.h>
 #include <asm/mach/map.h>
 
-#include <mach/gpioexpander.h>
-#include <mach/irqs.h>
-#include <mach/mux.h>
-#include <mach/tc.h>
-#include <mach/nand.h>
-#include <mach/irda.h>
-#include <mach/usb.h>
-#include <mach/keypad.h>
-#include <mach/dma.h>
-#include <mach/common.h>
-#include <mach/mcbsp.h>
-#include <mach/omap-alsa.h>
+#include <asm/arch/gpioexpander.h>
+#include <asm/arch/irqs.h>
+#include <asm/arch/mux.h>
+#include <asm/arch/tc.h>
+#include <asm/arch/nand.h>
+#include <asm/arch/irda.h>
+#include <asm/arch/usb.h>
+#include <asm/arch/keypad.h>
+#include <asm/arch/dma.h>
+#include <asm/arch/common.h>
+#include <asm/arch/mcbsp.h>
+#include <asm/arch/omap-alsa.h>
 
 #define H3_TS_GPIO	48
 
@@ -447,6 +447,15 @@ static struct omap_usb_config h3_usb_config __initdata = {
 	.pins[1]	= 3,
 };
 
+static struct omap_mmc_config h3_mmc_config __initdata = {
+	.mmc[0] = {
+		.enabled	= 1,
+		.wire4		= 1,
+       },
+};
+
+extern struct omap_mmc_platform_data h3_mmc_data;
+
 static struct omap_uart_config h3_uart_config __initdata = {
 	.enabled_uarts = ((1 << 0) | (1 << 1) | (1 << 2)),
 };
@@ -457,6 +466,7 @@ static struct omap_lcd_config h3_lcd_config __initdata = {
 
 static struct omap_board_config_kernel h3_config[] __initdata = {
 	{ OMAP_TAG_USB,		&h3_usb_config },
+	{ OMAP_TAG_MMC,		&h3_mmc_config },
 	{ OMAP_TAG_UART,	&h3_uart_config },
 	{ OMAP_TAG_LCD,		&h3_lcd_config },
 };
@@ -466,10 +476,6 @@ static struct i2c_board_info __initdata h3_i2c_board_info[] = {
 		I2C_BOARD_INFO("tps65013", 0x48),
                /* .irq         = OMAP_GPIO_IRQ(??), */
        },
-	{
-		I2C_BOARD_INFO("isp1301_omap", 0x2d),
-		.irq		= OMAP_GPIO_IRQ(14),
-	},
 };
 
 static struct omap_gpio_switch h3_gpio_switches[] __initdata = {
@@ -488,7 +494,7 @@ static struct omap_gpio_switch h3_gpio_switches[] __initdata = {
 
 static int nand_dev_ready(struct omap_nand_platform_data *data)
 {
-	return gpio_get_value(H3_NAND_RB_GPIO_PIN);
+	return omap_get_gpio_datain(H3_NAND_RB_GPIO_PIN);
 }
 
 static void __init h3_init(void)
@@ -506,9 +512,8 @@ static void __init h3_init(void)
 
 	nand_resource.end = nand_resource.start = OMAP_CS2B_PHYS;
 	nand_resource.end += SZ_4K - 1;
-	if (gpio_request(H3_NAND_RB_GPIO_PIN, "NAND ready") < 0)
-		BUG();
-	nand_data.dev_ready = nand_dev_ready;
+	if (!(omap_request_gpio(H3_NAND_RB_GPIO_PIN)))
+		nand_data.dev_ready = nand_dev_ready;
 
 	/* GPIO10 Func_MUX_CTRL reg bit 29:27, Configure V2 to mode1 as GPIO */
 	/* GPIO10 pullup/down register, Enable pullup on GPIO10 */
@@ -528,7 +533,7 @@ static void __init h3_init(void)
 static void __init h3_init_smc91x(void)
 {
 	omap_cfg_reg(W15_1710_GPIO40);
-	if (gpio_request(40, "SMC91x irq") < 0) {
+	if (omap_request_gpio(40) < 0) {
 		printk("Error requesting gpio 40 for smc91x irq\n");
 		return;
 	}

@@ -117,21 +117,23 @@ match_packet(const struct sk_buff *skb,
 }
 
 static bool
-sctp_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+sctp_mt(const struct sk_buff *skb, const struct net_device *in,
+        const struct net_device *out, const struct xt_match *match,
+        const void *matchinfo, int offset, unsigned int protoff, bool *hotdrop)
 {
-	const struct xt_sctp_info *info = par->matchinfo;
+	const struct xt_sctp_info *info = matchinfo;
 	const sctp_sctphdr_t *sh;
 	sctp_sctphdr_t _sh;
 
-	if (par->fragoff != 0) {
+	if (offset) {
 		duprintf("Dropping non-first fragment.. FIXME\n");
 		return false;
 	}
 
-	sh = skb_header_pointer(skb, par->thoff, sizeof(_sh), &_sh);
+	sh = skb_header_pointer(skb, protoff, sizeof(_sh), &_sh);
 	if (sh == NULL) {
 		duprintf("Dropping evil TCP offset=0 tinygram.\n");
-		*par->hotdrop = true;
+		*hotdrop = true;
 		return false;
 	}
 	duprintf("spt: %d\tdpt: %d\n", ntohs(sh->source), ntohs(sh->dest));
@@ -142,14 +144,17 @@ sctp_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		&& SCCHECK(ntohs(sh->dest) >= info->dpts[0]
 			&& ntohs(sh->dest) <= info->dpts[1],
 			XT_SCTP_DEST_PORTS, info->flags, info->invflags)
-		&& SCCHECK(match_packet(skb, par->thoff + sizeof(sctp_sctphdr_t),
-					info, par->hotdrop),
+		&& SCCHECK(match_packet(skb, protoff + sizeof (sctp_sctphdr_t),
+					info, hotdrop),
 			   XT_SCTP_CHUNK_TYPES, info->flags, info->invflags);
 }
 
-static bool sctp_mt_check(const struct xt_mtchk_param *par)
+static bool
+sctp_mt_check(const char *tablename, const void *inf,
+              const struct xt_match *match, void *matchinfo,
+              unsigned int hook_mask)
 {
-	const struct xt_sctp_info *info = par->matchinfo;
+	const struct xt_sctp_info *info = matchinfo;
 
 	return !(info->flags & ~XT_SCTP_VALID_FLAGS)
 		&& !(info->invflags & ~XT_SCTP_VALID_FLAGS)
@@ -164,7 +169,7 @@ static bool sctp_mt_check(const struct xt_mtchk_param *par)
 static struct xt_match sctp_mt_reg[] __read_mostly = {
 	{
 		.name		= "sctp",
-		.family		= NFPROTO_IPV4,
+		.family		= AF_INET,
 		.checkentry	= sctp_mt_check,
 		.match		= sctp_mt,
 		.matchsize	= sizeof(struct xt_sctp_info),
@@ -173,7 +178,7 @@ static struct xt_match sctp_mt_reg[] __read_mostly = {
 	},
 	{
 		.name		= "sctp",
-		.family		= NFPROTO_IPV6,
+		.family		= AF_INET6,
 		.checkentry	= sctp_mt_check,
 		.match		= sctp_mt,
 		.matchsize	= sizeof(struct xt_sctp_info),

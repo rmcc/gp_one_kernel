@@ -53,6 +53,9 @@
 #define NFSPROC4_CB_NULL 0
 #define NFSPROC4_CB_COMPOUND 1
 
+/* declarations */
+static const struct rpc_call_ops nfs4_cb_null_ops;
+
 /* Index of predefined Linux callback client operations */
 
 enum {
@@ -222,8 +225,7 @@ encode_cb_recall(struct xdr_stream *xdr, struct nfs4_cb_recall *cb_rec)
 
 	RESERVE_SPACE(12+sizeof(cb_rec->cbr_stateid) + len);
 	WRITE32(OP_CB_RECALL);
-	WRITE32(cb_rec->cbr_stateid.si_generation);
-	WRITEMEM(&cb_rec->cbr_stateid.si_opaque, sizeof(stateid_opaque_t));
+	WRITEMEM(&cb_rec->cbr_stateid, sizeof(stateid_t));
 	WRITE32(cb_rec->cbr_trunc);
 	WRITE32(len);
 	WRITEMEM(cb_rec->cbr_fhval, len);
@@ -355,7 +357,6 @@ static struct rpc_program cb_program = {
 		.nrvers		= ARRAY_SIZE(nfs_cb_version),
 		.version	= nfs_cb_version,
 		.stats		= &cb_stats,
-		.pipe_dir_name  = "/nfsd4_cb",
 };
 
 /* Reference counting, callback cleanup, etc., all look racy as heck.
@@ -378,11 +379,9 @@ static int do_probe_callback(void *data)
 		.addrsize	= sizeof(addr),
 		.timeout	= &timeparms,
 		.program	= &cb_program,
-		.prognumber	= cb->cb_prog,
 		.version	= nfs_cb_version[1]->number,
-		.authflavor	= clp->cl_flavor,
-		.flags		= (RPC_CLNT_CREATE_NOPING | RPC_CLNT_CREATE_QUIET),
-		.client_name    = clp->cl_principal,
+		.authflavor	= RPC_AUTH_UNIX, /* XXX: need AUTH_GSS... */
+		.flags		= (RPC_CLNT_CREATE_NOPING),
 	};
 	struct rpc_message msg = {
 		.rpc_proc       = &nfs4_cb_procedures[NFSPROC4_CLNT_CB_NULL],
@@ -391,16 +390,14 @@ static int do_probe_callback(void *data)
 	struct rpc_clnt *client;
 	int status;
 
-	if (!clp->cl_principal && (clp->cl_flavor >= RPC_AUTH_GSS_KRB5)) {
-		status = nfserr_cb_path_down;
-		goto out_err;
-	}
-
 	/* Initialize address */
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(cb->cb_port);
 	addr.sin_addr.s_addr = htonl(cb->cb_addr);
+
+	/* Initialize rpc_stat */
+	memset(args.program->stats, 0, sizeof(struct rpc_stat));
 
 	/* Create RPC client */
 	client = rpc_create(&args);

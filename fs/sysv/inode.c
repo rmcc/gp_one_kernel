@@ -27,7 +27,6 @@
 #include <linux/init.h>
 #include <linux/buffer_head.h>
 #include <linux/vfs.h>
-#include <linux/namei.h>
 #include <asm/byteorder.h>
 #include "sysv.h"
 
@@ -164,11 +163,8 @@ void sysv_set_inode(struct inode *inode, dev_t rdev)
 		if (inode->i_blocks) {
 			inode->i_op = &sysv_symlink_inode_operations;
 			inode->i_mapping->a_ops = &sysv_aops;
-		} else {
+		} else
 			inode->i_op = &sysv_fast_symlink_inode_operations;
-			nd_terminate_link(SYSV_I(inode)->i_data, inode->i_size,
-				sizeof(SYSV_I(inode)->i_data) - 1);
-		}
 	} else
 		init_special_inode(inode, inode->i_mode, rdev);
 }
@@ -330,7 +326,7 @@ static void sysv_destroy_inode(struct inode *inode)
 	kmem_cache_free(sysv_inode_cachep, SYSV_I(inode));
 }
 
-static void init_once(void *p)
+static void init_once(struct kmem_cache *cachep, void *p)
 {
 	struct sysv_inode_info *si = (struct sysv_inode_info *)p;
 

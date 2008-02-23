@@ -32,11 +32,9 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/cpufreq.h>
-#include <linux/clk.h>
-#include <linux/err.h>
 #include <asm/system.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 
 #include "generic.h"
 
@@ -53,8 +51,6 @@
 
 static u32 mpctl0_at_boot;
 static u32 bclk_div_at_boot;
-
-static struct clk *system_clk, *mcu_clk;
 
 static void imx_set_async_mode(void)
 {
@@ -164,10 +160,10 @@ static unsigned int imx_get_speed(unsigned int cpu)
 	cr = get_cr();
 
 	if((cr & CR_920T_CLOCK_MODE) == CR_920T_FASTBUS_MODE) {
-		freq = clk_get_rate(system_clk);
+		freq = imx_get_system_clk();
 		freq = (freq + bclk_div/2) / bclk_div;
 	} else {
-		freq = clk_get_rate(mcu_clk);
+		freq = imx_get_mcu_clk();
 		if (cscr & CSCR_MPU_PRESC)
 			freq /= 2;
 	}
@@ -205,7 +201,7 @@ static int imx_set_target(struct cpufreq_policy *policy,
 	pr_debug(KERN_DEBUG "imx: requested frequency %ld Hz, mpctl0 at boot 0x%08x\n",
 			freq, mpctl0_at_boot);
 
-	sysclk = clk_get_rate(system_clk);
+	sysclk = imx_get_system_clk();
 
 	if (freq > sysclk / bclk_div_at_boot + 1000000) {
 		freq = imx_compute_mpctl(&mpctl0, mpctl0_at_boot, CLK32 * 512, freq, relation);
@@ -293,16 +289,6 @@ static int __init imx_cpufreq_init(void)
 {
 	bclk_div_at_boot = __mfld2val(CSCR_BCLK_DIV, CSCR) + 1;
 	mpctl0_at_boot = 0;
-
-	system_clk = clk_get(NULL, "system_clk");
-	if (IS_ERR(system_clk))
-		return PTR_ERR(system_clk);
-
-	mcu_clk = clk_get(NULL, "mcu_clk");
-	if (IS_ERR(mcu_clk)) {
-		clk_put(system_clk);
-		return PTR_ERR(mcu_clk);
-	}
 
 	if((CSCR & CSCR_MPEN) &&
 	   ((get_cr() & CR_920T_CLOCK_MODE) != CR_920T_FASTBUS_MODE))

@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2007 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2007, 2008 Mellanox Technologies. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -79,9 +78,6 @@ static const __be32 mlx4_ib_opcode[] = {
 	[IB_WR_RDMA_READ]		= __constant_cpu_to_be32(MLX4_OPCODE_RDMA_READ),
 	[IB_WR_ATOMIC_CMP_AND_SWP]	= __constant_cpu_to_be32(MLX4_OPCODE_ATOMIC_CS),
 	[IB_WR_ATOMIC_FETCH_AND_ADD]	= __constant_cpu_to_be32(MLX4_OPCODE_ATOMIC_FA),
-	[IB_WR_SEND_WITH_INV]		= __constant_cpu_to_be32(MLX4_OPCODE_SEND_INVAL),
-	[IB_WR_LOCAL_INV]		= __constant_cpu_to_be32(MLX4_OPCODE_LOCAL_INVAL),
-	[IB_WR_FAST_REG_MR]		= __constant_cpu_to_be32(MLX4_OPCODE_FMR),
 };
 
 static struct mlx4_ib_sqp *to_msqp(struct mlx4_ib_qp *mqp)
@@ -133,10 +129,9 @@ static void stamp_send_wqe(struct mlx4_ib_qp *qp, int n, int size)
 	int ind;
 	void *buf;
 	__be32 stamp;
-	struct mlx4_wqe_ctrl_seg *ctrl;
 
+	s = roundup(size, 1U << qp->sq.wqe_shift);
 	if (qp->sq_max_wqes_per_wr > 1) {
-		s = roundup(size, 1U << qp->sq.wqe_shift);
 		for (i = 0; i < s; i += 64) {
 			ind = (i >> qp->sq.wqe_shift) + n;
 			stamp = ind & qp->sq.wqe_cnt ? cpu_to_be32(0x7fffffff) :
@@ -146,8 +141,7 @@ static void stamp_send_wqe(struct mlx4_ib_qp *qp, int n, int size)
 			*wqe = stamp;
 		}
 	} else {
-		ctrl = buf = get_send_wqe(qp, n & (qp->sq.wqe_cnt - 1));
-		s = (ctrl->fence_size & 0x3f) << 4;
+		buf = get_send_wqe(qp, n & (qp->sq.wqe_cnt - 1));
 		for (i = 64; i < s; i += 64) {
 			wqe = buf + i;
 			*wqe = cpu_to_be32(0xffffffff);
@@ -451,7 +445,6 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 			    struct ib_qp_init_attr *init_attr,
 			    struct ib_udata *udata, int sqpn, struct mlx4_ib_qp *qp)
 {
-	int qpn;
 	int err;
 
 	mutex_init(&qp->mutex);
@@ -459,8 +452,19 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 	spin_lock_init(&qp->rq.lock);
 
 	qp->state	 = IB_QPS_RESET;
+	qp->atomic_rd_en = 0;
+	qp->resp_depth   = 0;
+
+	qp->rq.head	    = 0;
+	qp->rq.tail	    = 0;
+	qp->sq.head	    = 0;
+	qp->sq.tail	    = 0;
+	qp->sq_next_wqe     = 0;
+
 	if (init_attr->sq_sig_type == IB_SIGNAL_ALL_WR)
 		qp->sq_signal_bits = cpu_to_be32(MLX4_WQE_CTRL_CQ_UPDATE);
+	else
+		qp->sq_signal_bits = 0;
 
 	err = set_rq_size(dev, &init_attr->cap, !!pd->uobject, !!init_attr->srq, qp);
 	if (err)
@@ -505,9 +509,6 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 	} else {
 		qp->sq_no_prefetch = 0;
 
-		if (init_attr->create_flags & IB_QP_CREATE_BLOCK_MULTICAST_LOOPBACK)
-			qp->flags |= MLX4_IB_QP_BLOCK_MULTICAST_LOOPBACK;
-
 		if (init_attr->create_flags & IB_QP_CREATE_IPOIB_UD_LSO)
 			qp->flags |= MLX4_IB_QP_LSO;
 
@@ -546,17 +547,9 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 		}
 	}
 
-	if (sqpn) {
-		qpn = sqpn;
-	} else {
-		err = mlx4_qp_reserve_range(dev->dev, 1, 1, &qpn);
-		if (err)
-			goto err_wrid;
-	}
-
-	err = mlx4_qp_alloc(dev->dev, qpn, &qp->mqp);
+	err = mlx4_qp_alloc(dev->dev, sqpn, &qp->mqp);
 	if (err)
-		goto err_qpn;
+		goto err_wrid;
 
 	/*
 	 * Hardware wants QPN written in big-endian order (after
@@ -568,10 +561,6 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 	qp->mqp.event = mlx4_ib_qp_event;
 
 	return 0;
-
-err_qpn:
-	if (!sqpn)
-		mlx4_qp_release_range(dev->dev, qpn, 1);
 
 err_wrid:
 	if (pd->uobject) {
@@ -668,10 +657,6 @@ static void destroy_qp_common(struct mlx4_ib_dev *dev, struct mlx4_ib_qp *qp,
 	mlx4_ib_unlock_cqs(send_cq, recv_cq);
 
 	mlx4_qp_free(dev->dev, &qp->mqp);
-
-	if (!is_sqp(dev, qp))
-		mlx4_qp_release_range(dev->dev, qp->mqp.qpn, 1);
-
 	mlx4_mtt_cleanup(dev->dev, &qp->mtt);
 
 	if (is_user) {
@@ -697,15 +682,10 @@ struct ib_qp *mlx4_ib_create_qp(struct ib_pd *pd,
 	struct mlx4_ib_qp *qp;
 	int err;
 
-	/*
-	 * We only support LSO and multicast loopback blocking, and
-	 * only for kernel UD QPs.
-	 */
-	if (init_attr->create_flags & ~(IB_QP_CREATE_IPOIB_UD_LSO |
-					IB_QP_CREATE_BLOCK_MULTICAST_LOOPBACK))
+	/* We only support LSO, and only for kernel UD QPs. */
+	if (init_attr->create_flags & ~IB_QP_CREATE_IPOIB_UD_LSO)
 		return ERR_PTR(-EINVAL);
-
-	if (init_attr->create_flags &&
+	if (init_attr->create_flags & IB_QP_CREATE_IPOIB_UD_LSO &&
 	    (pd->uobject || init_attr->qp_type != IB_QPT_UD))
 		return ERR_PTR(-EINVAL);
 
@@ -714,7 +694,7 @@ struct ib_qp *mlx4_ib_create_qp(struct ib_pd *pd,
 	case IB_QPT_UC:
 	case IB_QPT_UD:
 	{
-		qp = kzalloc(sizeof *qp, GFP_KERNEL);
+		qp = kmalloc(sizeof *qp, GFP_KERNEL);
 		if (!qp)
 			return ERR_PTR(-ENOMEM);
 
@@ -735,7 +715,7 @@ struct ib_qp *mlx4_ib_create_qp(struct ib_pd *pd,
 		if (pd->uobject)
 			return ERR_PTR(-EINVAL);
 
-		sqp = kzalloc(sizeof *sqp, GFP_KERNEL);
+		sqp = kmalloc(sizeof *sqp, GFP_KERNEL);
 		if (!sqp)
 			return ERR_PTR(-ENOMEM);
 
@@ -919,15 +899,14 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 			context->mtu_msgmax = (IB_MTU_4096 << 5) |
 					      ilog2(dev->dev->caps.max_gso_sz);
 		else
-			context->mtu_msgmax = (IB_MTU_4096 << 5) | 12;
+			context->mtu_msgmax = (IB_MTU_4096 << 5) | 11;
 	} else if (attr_mask & IB_QP_PATH_MTU) {
 		if (attr->path_mtu < IB_MTU_256 || attr->path_mtu > IB_MTU_4096) {
 			printk(KERN_ERR "path MTU (%u) is invalid\n",
 			       attr->path_mtu);
 			goto out;
 		}
-		context->mtu_msgmax = (attr->path_mtu << 5) |
-			ilog2(dev->dev->caps.max_msg_sz);
+		context->mtu_msgmax = (attr->path_mtu << 5) | 31;
 	}
 
 	if (qp->rq.wqe_cnt)
@@ -996,10 +975,6 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 
 	context->pd	    = cpu_to_be32(to_mpd(ibqp->pd)->pdn);
 	context->params1    = cpu_to_be32(MLX4_IB_ACK_REQ_FREQ << 28);
-
-	/* Set "fast registration enabled" for all kernel QPs */
-	if (!qp->ibqp.uobject)
-		context->params1 |= cpu_to_be32(1 << 11);
 
 	if (attr_mask & IB_QP_RNR_RETRY) {
 		context->params1 |= cpu_to_be32(attr->rnr_retry << 13);
@@ -1075,9 +1050,6 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 	else
 		sqd_event = 0;
 
-	if (!ibqp->uobject && cur_state == IB_QPS_RESET && new_state == IB_QPS_INIT)
-		context->rlkey |= (1 << 4);
-
 	/*
 	 * Before passing a kernel QP to the HW, make sure that the
 	 * ownership bits of the send queue are set and the SQ
@@ -1091,8 +1063,6 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 		for (i = 0; i < qp->sq.wqe_cnt; ++i) {
 			ctrl = get_send_wqe(qp, i);
 			ctrl->owner_opcode = cpu_to_be32(1 << 31);
-			if (qp->sq_max_wqes_per_wr == 1)
-				ctrl->fence_size = 1 << (qp->sq.wqe_shift - 4);
 
 			stamp_send_wqe(qp, i, 1 << qp->sq.wqe_shift);
 		}
@@ -1157,6 +1127,23 @@ out:
 	return err;
 }
 
+static const struct ib_qp_attr mlx4_ib_qp_attr = { .port_num = 1 };
+static const int mlx4_ib_qp_attr_mask_table[IB_QPT_UD + 1] = {
+		[IB_QPT_UD]  = (IB_QP_PKEY_INDEX		|
+				IB_QP_PORT			|
+				IB_QP_QKEY),
+		[IB_QPT_UC]  = (IB_QP_PKEY_INDEX		|
+				IB_QP_PORT			|
+				IB_QP_ACCESS_FLAGS),
+		[IB_QPT_RC]  = (IB_QP_PKEY_INDEX		|
+				IB_QP_PORT			|
+				IB_QP_ACCESS_FLAGS),
+		[IB_QPT_SMI] = (IB_QP_PKEY_INDEX		|
+				IB_QP_QKEY),
+		[IB_QPT_GSI] = (IB_QP_PKEY_INDEX		|
+				IB_QP_QKEY),
+};
+
 int mlx4_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		      int attr_mask, struct ib_udata *udata)
 {
@@ -1197,6 +1184,15 @@ int mlx4_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	if (cur_state == new_state && cur_state == IB_QPS_RESET) {
 		err = 0;
 		goto out;
+	}
+
+	if (cur_state == IB_QPS_RESET && new_state == IB_QPS_ERR) {
+		err = __mlx4_ib_modify_qp(ibqp, &mlx4_ib_qp_attr,
+					  mlx4_ib_qp_attr_mask_table[ibqp->qp_type],
+					  IB_QPS_RESET, IB_QPS_INIT);
+		if (err)
+			goto out;
+		cur_state = IB_QPS_INIT;
 	}
 
 	err = __mlx4_ib_modify_qp(ibqp, attr, attr_mask, cur_state, new_state);
@@ -1350,44 +1346,6 @@ static int mlx4_wq_overflow(struct mlx4_ib_wq *wq, int nreq, struct ib_cq *ib_cq
 	return cur + nreq >= wq->max_post;
 }
 
-static __be32 convert_access(int acc)
-{
-	return (acc & IB_ACCESS_REMOTE_ATOMIC ? cpu_to_be32(MLX4_WQE_FMR_PERM_ATOMIC)       : 0) |
-	       (acc & IB_ACCESS_REMOTE_WRITE  ? cpu_to_be32(MLX4_WQE_FMR_PERM_REMOTE_WRITE) : 0) |
-	       (acc & IB_ACCESS_REMOTE_READ   ? cpu_to_be32(MLX4_WQE_FMR_PERM_REMOTE_READ)  : 0) |
-	       (acc & IB_ACCESS_LOCAL_WRITE   ? cpu_to_be32(MLX4_WQE_FMR_PERM_LOCAL_WRITE)  : 0) |
-		cpu_to_be32(MLX4_WQE_FMR_PERM_LOCAL_READ);
-}
-
-static void set_fmr_seg(struct mlx4_wqe_fmr_seg *fseg, struct ib_send_wr *wr)
-{
-	struct mlx4_ib_fast_reg_page_list *mfrpl = to_mfrpl(wr->wr.fast_reg.page_list);
-	int i;
-
-	for (i = 0; i < wr->wr.fast_reg.page_list_len; ++i)
-		wr->wr.fast_reg.page_list->page_list[i] =
-			cpu_to_be64(wr->wr.fast_reg.page_list->page_list[i] |
-				    MLX4_MTT_FLAG_PRESENT);
-
-	fseg->flags		= convert_access(wr->wr.fast_reg.access_flags);
-	fseg->mem_key		= cpu_to_be32(wr->wr.fast_reg.rkey);
-	fseg->buf_list		= cpu_to_be64(mfrpl->map);
-	fseg->start_addr	= cpu_to_be64(wr->wr.fast_reg.iova_start);
-	fseg->reg_len		= cpu_to_be64(wr->wr.fast_reg.length);
-	fseg->offset		= 0; /* XXX -- is this just for ZBVA? */
-	fseg->page_size		= cpu_to_be32(wr->wr.fast_reg.page_shift);
-	fseg->reserved[0]	= 0;
-	fseg->reserved[1]	= 0;
-}
-
-static void set_local_inv_seg(struct mlx4_wqe_local_inval_seg *iseg, u32 rkey)
-{
-	iseg->flags	= 0;
-	iseg->mem_key	= cpu_to_be32(rkey);
-	iseg->guest_id	= 0;
-	iseg->pa	= 0;
-}
-
 static __always_inline void set_raddr_seg(struct mlx4_wqe_raddr_seg *rseg,
 					  u64 remote_addr, u32 rkey)
 {
@@ -1461,7 +1419,7 @@ static void __set_data_seg(struct mlx4_wqe_data_seg *dseg, struct ib_sge *sg)
 	dseg->addr       = cpu_to_be64(sg->addr);
 }
 
-static int build_lso_seg(struct mlx4_wqe_lso_seg *wqe, struct ib_send_wr *wr,
+static int build_lso_seg(struct mlx4_lso_seg *wqe, struct ib_send_wr *wr,
 			 struct mlx4_ib_qp *qp, unsigned *lso_seg_len)
 {
 	unsigned halign = ALIGN(sizeof *wqe + wr->wr.ud.hlen, 16);
@@ -1487,21 +1445,6 @@ static int build_lso_seg(struct mlx4_wqe_lso_seg *wqe, struct ib_send_wr *wr,
 
 	*lso_seg_len = halign;
 	return 0;
-}
-
-static __be32 send_ieth(struct ib_send_wr *wr)
-{
-	switch (wr->opcode) {
-	case IB_WR_SEND_WITH_IMM:
-	case IB_WR_RDMA_WRITE_WITH_IMM:
-		return wr->ex.imm_data;
-
-	case IB_WR_SEND_WITH_INV:
-		return cpu_to_be32(wr->ex.invalidate_rkey);
-
-	default:
-		return 0;
-	}
 }
 
 int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
@@ -1550,7 +1493,11 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 				     MLX4_WQE_CTRL_TCP_UDP_CSUM) : 0) |
 			qp->sq_signal_bits;
 
-		ctrl->imm = send_ieth(wr);
+		if (wr->opcode == IB_WR_SEND_WITH_IMM ||
+		    wr->opcode == IB_WR_RDMA_WRITE_WITH_IMM)
+			ctrl->imm = wr->ex.imm_data;
+		else
+			ctrl->imm = 0;
 
 		wqe += sizeof *ctrl;
 		size = sizeof *ctrl / 16;
@@ -1580,18 +1527,6 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 					      wr->wr.rdma.rkey);
 				wqe  += sizeof (struct mlx4_wqe_raddr_seg);
 				size += sizeof (struct mlx4_wqe_raddr_seg) / 16;
-				break;
-
-			case IB_WR_LOCAL_INV:
-				set_local_inv_seg(wqe, wr->ex.invalidate_rkey);
-				wqe  += sizeof (struct mlx4_wqe_local_inval_seg);
-				size += sizeof (struct mlx4_wqe_local_inval_seg) / 16;
-				break;
-
-			case IB_WR_FAST_REG_MR:
-				set_fmr_seg(wqe, wr);
-				wqe  += sizeof (struct mlx4_wqe_fmr_seg);
-				size += sizeof (struct mlx4_wqe_fmr_seg) / 16;
 				break;
 
 			default:
@@ -1929,13 +1864,6 @@ done:
 	qp_attr->cap.max_inline_data = 0;
 
 	qp_init_attr->cap	     = qp_attr->cap;
-
-	qp_init_attr->create_flags = 0;
-	if (qp->flags & MLX4_IB_QP_BLOCK_MULTICAST_LOOPBACK)
-		qp_init_attr->create_flags |= IB_QP_CREATE_BLOCK_MULTICAST_LOOPBACK;
-
-	if (qp->flags & MLX4_IB_QP_LSO)
-		qp_init_attr->create_flags |= IB_QP_CREATE_IPOIB_UD_LSO;
 
 out:
 	mutex_unlock(&qp->mutex);

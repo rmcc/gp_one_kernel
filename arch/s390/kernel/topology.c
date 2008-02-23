@@ -3,19 +3,16 @@
  *    Author(s): Heiko Carstens <heiko.carstens@de.ibm.com>
  */
 
-#define KMSG_COMPONENT "cpu"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/bootmem.h>
 #include <linux/sched.h>
+#include <linux/kthread.h>
 #include <linux/workqueue.h>
 #include <linux/cpu.h>
 #include <linux/smp.h>
-#include <linux/cpuset.h>
 #include <asm/delay.h>
 #include <asm/s390_ext.h>
 #include <asm/sysinfo.h>
@@ -61,29 +58,26 @@ struct core_info {
 	cpumask_t mask;
 };
 
-static int topology_enabled;
 static void topology_work_fn(struct work_struct *work);
 static struct tl_info *tl_info;
 static struct core_info core_info;
 static int machine_has_topology;
+static int machine_has_topology_irq;
 static struct timer_list topology_timer;
 static void set_topology_timer(void);
 static DECLARE_WORK(topology_work, topology_work_fn);
-/* topology_lock protects the core linked list */
-static DEFINE_SPINLOCK(topology_lock);
 
 cpumask_t cpu_core_map[NR_CPUS];
 
 cpumask_t cpu_coregroup_map(unsigned int cpu)
 {
 	struct core_info *core = &core_info;
-	unsigned long flags;
 	cpumask_t mask;
 
 	cpus_clear(mask);
-	if (!topology_enabled || !machine_has_topology)
-		return cpu_possible_map;
-	spin_lock_irqsave(&topology_lock, flags);
+	if (!machine_has_topology)
+		return cpu_present_map;
+	mutex_lock(&smp_cpu_state_mutex);
 	while (core) {
 		if (cpu_isset(cpu, core->mask)) {
 			mask = core->mask;
@@ -91,15 +85,10 @@ cpumask_t cpu_coregroup_map(unsigned int cpu)
 		}
 		core = core->next;
 	}
-	spin_unlock_irqrestore(&topology_lock, flags);
+	mutex_unlock(&smp_cpu_state_mutex);
 	if (cpus_empty(mask))
 		mask = cpumask_of_cpu(cpu);
 	return mask;
-}
-
-const struct cpumask *cpu_coregroup_mask(unsigned int cpu)
-{
-	return &cpu_core_map[cpu];
 }
 
 static void add_cpus_to_core(struct tl_cpu *tl_cpu, struct core_info *core)
@@ -145,7 +134,7 @@ static void tl_to_cores(struct tl_info *info)
 	union tl_entry *tle, *end;
 	struct core_info *core = &core_info;
 
-	spin_lock_irq(&topology_lock);
+	mutex_lock(&smp_cpu_state_mutex);
 	clear_cores();
 	tle = info->tle;
 	end = (union tl_entry *)((unsigned long)info + info->length);
@@ -169,7 +158,7 @@ static void tl_to_cores(struct tl_info *info)
 		}
 		tle = next_tle(tle);
 	}
-	spin_unlock_irq(&topology_lock);
+	mutex_unlock(&smp_cpu_state_mutex);
 }
 
 static void topology_update_polarization_simple(void)
@@ -177,7 +166,7 @@ static void topology_update_polarization_simple(void)
 	int cpu;
 
 	mutex_lock(&smp_cpu_state_mutex);
-	for_each_possible_cpu(cpu)
+	for_each_present_cpu(cpu)
 		smp_cpu_polarization[cpu] = POLARIZATION_HRZ;
 	mutex_unlock(&smp_cpu_state_mutex);
 }
@@ -208,7 +197,7 @@ int topology_set_cpu_management(int fc)
 		rc = ptf(PTF_HORIZONTAL);
 	if (rc)
 		return -EBUSY;
-	for_each_possible_cpu(cpu)
+	for_each_present_cpu(cpu)
 		smp_cpu_polarization[cpu] = POLARIZATION_UNKNWN;
 	return rc;
 }
@@ -217,11 +206,11 @@ static void update_cpu_core_map(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
+	for_each_present_cpu(cpu)
 		cpu_core_map[cpu] = cpu_coregroup_map(cpu);
 }
 
-int arch_update_cpu_topology(void)
+void arch_update_cpu_topology(void)
 {
 	struct tl_info *info = tl_info;
 	struct sys_device *sysdev;
@@ -230,7 +219,7 @@ int arch_update_cpu_topology(void)
 	if (!machine_has_topology) {
 		update_cpu_core_map();
 		topology_update_polarization_simple();
-		return 0;
+		return;
 	}
 	stsi(info, 15, 1, 2);
 	tl_to_cores(info);
@@ -239,12 +228,22 @@ int arch_update_cpu_topology(void)
 		sysdev = get_cpu_sysdev(cpu);
 		kobject_uevent(&sysdev->kobj, KOBJ_CHANGE);
 	}
-	return 1;
+}
+
+static int topology_kthread(void *data)
+{
+	arch_reinit_sched_domains();
+	return 0;
 }
 
 static void topology_work_fn(struct work_struct *work)
 {
-	rebuild_sched_domains();
+	/* We can't call arch_reinit_sched_domains() from a multi-threaded
+	 * workqueue context since it may deadlock in case of cpu hotplug.
+	 * So we have to create a kernel thread in order to call
+	 * arch_reinit_sched_domains().
+	 */
+	kthread_run(topology_kthread, NULL, "topology_update");
 }
 
 void topology_schedule_update(void)
@@ -267,14 +266,10 @@ static void set_topology_timer(void)
 	add_timer(&topology_timer);
 }
 
-static int __init early_parse_topology(char *p)
+static void topology_interrupt(__u16 code)
 {
-	if (strncmp(p, "on", 2))
-		return 0;
-	topology_enabled = 1;
-	return 0;
+	schedule_work(&topology_work);
 }
-early_param("topology", early_parse_topology);
 
 static int __init init_topology_update(void)
 {
@@ -286,7 +281,14 @@ static int __init init_topology_update(void)
 		goto out;
 	}
 	init_timer_deferrable(&topology_timer);
-	set_topology_timer();
+	if (machine_has_topology_irq) {
+		rc = register_external_interrupt(0x2005, topology_interrupt);
+		if (rc)
+			goto out;
+		ctl_set_bit(0, 8);
+	}
+	else
+		set_topology_timer();
 out:
 	update_cpu_core_map();
 	return rc;
@@ -307,7 +309,12 @@ void __init s390_init_cpu_topology(void)
 		return;
 	machine_has_topology = 1;
 
+	if (facility_bits & (1ULL << 51))
+		machine_has_topology_irq = 1;
+
 	tl_info = alloc_bootmem_pages(PAGE_SIZE);
+	if (!tl_info)
+		goto error;
 	info = tl_info;
 	stsi(info, 15, 1, 2);
 
@@ -315,7 +322,7 @@ void __init s390_init_cpu_topology(void)
 	for (i = 0; i < info->mnest - 2; i++)
 		nr_cores *= info->mag[NR_MAG - 3 - i];
 
-	pr_info("The CPU configuration topology of the machine is:");
+	printk(KERN_INFO "CPU topology:");
 	for (i = 0; i < NR_MAG; i++)
 		printk(" %d", info->mag[i]);
 	printk(" / %d\n", info->mnest);
@@ -330,4 +337,5 @@ void __init s390_init_cpu_topology(void)
 	return;
 error:
 	machine_has_topology = 0;
+	machine_has_topology_irq = 0;
 }

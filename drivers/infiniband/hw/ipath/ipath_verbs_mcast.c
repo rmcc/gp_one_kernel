@@ -31,7 +31,8 @@
  * SOFTWARE.
  */
 
-#include <linux/rculist.h>
+#include <linux/list.h>
+#include <linux/rcupdate.h>
 
 #include "ipath_verbs.h"
 

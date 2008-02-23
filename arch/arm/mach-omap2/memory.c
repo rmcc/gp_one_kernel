@@ -21,19 +21,19 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
-#include <linux/io.h>
 
-#include <mach/common.h>
-#include <mach/clock.h>
-#include <mach/sram.h>
+#include <asm/io.h>
+
+#include <asm/arch/clock.h>
+#include <asm/arch/sram.h>
 
 #include "prm.h"
 
 #include "memory.h"
 #include "sdrc.h"
 
-void __iomem *omap2_sdrc_base;
-void __iomem *omap2_sms_base;
+unsigned long omap2_sdrc_base;
+unsigned long omap2_sms_base;
 
 static struct memory_timings mem_timings;
 static u32 curr_perf_level = CORE_CLK_SRC_DPLL_X2;
@@ -101,17 +101,6 @@ u32 omap2_reprogram_sdrc(u32 level, u32 force)
 	return prev;
 }
 
-#if !defined(CONFIG_ARCH_OMAP2)
-void omap2_sram_ddr_init(u32 *slow_dll_ctrl, u32 fast_dll_ctrl,
-				u32 base_cs, u32 force_unlock)
-{
-}
-void omap2_sram_reprogram_sdrc(u32 perf_level, u32 dll_val,
-				      u32 mem_type)
-{
-}
-#endif
-
 void omap2_init_memory_params(u32 force_lock_to_unlock_mode)
 {
 	unsigned long dll_cnt;
@@ -165,19 +154,10 @@ void omap2_init_memory_params(u32 force_lock_to_unlock_mode)
 	mem_timings.slow_dll_ctrl |= ((1 << 1) | (3 << 8));
 }
 
-void __init omap2_set_globals_memory(struct omap_globals *omap2_globals)
-{
-	omap2_sdrc_base = omap2_globals->sdrc;
-	omap2_sms_base = omap2_globals->sms;
-}
-
 /* turn on smart idle modes for SDRAM scheduler and controller */
 void __init omap2_init_memory(void)
 {
 	u32 l;
-
-	if (!cpu_is_omap2420())
-		return;
 
 	l = sms_read_reg(SMS_SYSCONFIG);
 	l &= ~(0x3 << 3);

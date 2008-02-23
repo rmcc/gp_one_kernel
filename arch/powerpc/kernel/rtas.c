@@ -340,8 +340,8 @@ int rtas_get_error_log_max(void)
 EXPORT_SYMBOL(rtas_get_error_log_max);
 
 
-static char rtas_err_buf[RTAS_ERROR_LOG_MAX];
-static int rtas_last_error_token;
+char rtas_err_buf[RTAS_ERROR_LOG_MAX];
+int rtas_last_error_token;
 
 /** Return a copy of the detailed error text associated with the
  *  most recent failed call to rtas.  Because the error text
@@ -484,7 +484,7 @@ unsigned int rtas_busy_delay(int status)
 }
 EXPORT_SYMBOL(rtas_busy_delay);
 
-static int rtas_error_rc(int rtas_rc)
+int rtas_error_rc(int rtas_rc)
 {
 	int rc;
 
@@ -565,32 +565,6 @@ int rtas_get_sensor(int sensor, int index, int *state)
 	return rc;
 }
 EXPORT_SYMBOL(rtas_get_sensor);
-
-bool rtas_indicator_present(int token, int *maxindex)
-{
-	int proplen, count, i;
-	const struct indicator_elem {
-		u32 token;
-		u32 maxindex;
-	} *indicators;
-
-	indicators = of_get_property(rtas.dev, "rtas-indicators", &proplen);
-	if (!indicators)
-		return false;
-
-	count = proplen / sizeof(struct indicator_elem);
-
-	for (i = 0; i < count; i++) {
-		if (indicators[i].token != token)
-			continue;
-		if (maxindex)
-			*maxindex = indicators[i].maxindex;
-		return true;
-	}
-
-	return false;
-}
-EXPORT_SYMBOL(rtas_indicator_present);
 
 int rtas_set_indicator(int indicator, int index, int new_value)
 {
@@ -773,7 +747,7 @@ static int rtas_ibm_suspend_me(struct rtas_args *args)
 	/* Call function on all CPUs.  One of us will make the
 	 * rtas call
 	 */
-	if (on_each_cpu(rtas_percpu_suspend_me, &data, 0))
+	if (on_each_cpu(rtas_percpu_suspend_me, &data, 1, 0))
 		data.error = -EINVAL;
 
 	wait_for_completion(&done);
@@ -818,9 +792,6 @@ asmlinkage int ppc_rtas(struct rtas_args __user *uargs)
 	if (args.token == RTAS_UNKNOWN_SERVICE)
 		return -EINVAL;
 
-	args.rets = &args.args[nargs];
-	memset(args.rets, 0, args.nret * sizeof(rtas_arg_t));
-
 	/* Need to handle ibm,suspend_me call specially */
 	if (args.token == ibm_suspend_me_token) {
 		rc = rtas_ibm_suspend_me(&args);
@@ -836,6 +807,8 @@ asmlinkage int ppc_rtas(struct rtas_args __user *uargs)
 	rtas.args = args;
 	enter_rtas(__pa(&rtas.args));
 	args = rtas.args;
+
+	args.rets = &args.args[nargs];
 
 	/* A -1 return code indicates that the last command couldn't
 	   be completed due to a hardware error. */

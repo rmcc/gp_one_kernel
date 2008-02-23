@@ -2,7 +2,8 @@
  * wm9705.c  --  Codec driver for Wolfson WM9705 AC97 Codec.
  *
  * Copyright 2003, 2004, 2005, 2006, 2007 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
  * Parts Copyright : Ian Molton <spyro@f2s.com>
  *                   Andrew Zabolotny <zap@homelink.ru>
  *                   Russell King <rmk@arm.linux.org.uk>
@@ -16,6 +17,7 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/input.h>
 #include <linux/delay.h>
@@ -346,6 +348,6 @@ struct wm97xx_codec_drv wm9705_codec = {
 EXPORT_SYMBOL_GPL(wm9705_codec);
 
 /* Module information */
-MODULE_AUTHOR("Liam Girdwood <lrg@slimlogic.co.uk>");
+MODULE_AUTHOR("Liam Girdwood <liam.girdwood@wolfsonmicro.com>");
 MODULE_DESCRIPTION("WM9705 Touch Screen Driver");
 MODULE_LICENSE("GPL");

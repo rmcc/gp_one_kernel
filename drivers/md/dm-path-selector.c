@@ -9,8 +9,7 @@
  * Path selector registration.
  */
 
-#include <linux/device-mapper.h>
-
+#include "dm.h"
 #include "dm-path-selector.h"
 
 #include <linux/slab.h>

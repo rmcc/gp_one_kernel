@@ -4,7 +4,7 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
-#include <linux/of_device.h>
+#include <asm/of_device.h>
 
 enum ams_irq {
 	AMS_IRQ_FREEFALL = 0x01,
@@ -46,7 +46,9 @@ struct ams {
 
 #ifdef CONFIG_SENSORS_AMS_I2C
 	/* I2C properties */
-	struct i2c_client *i2c_client;
+	int i2c_bus;
+	int i2c_address;
+	struct i2c_client i2c_client;
 #endif
 
 	/* Joystick emulation */

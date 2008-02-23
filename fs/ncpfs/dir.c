@@ -266,7 +266,7 @@ leave_me:;
 
 
 static int
-__ncp_lookup_validate(struct dentry *dentry)
+__ncp_lookup_validate(struct dentry * dentry, struct nameidata *nd)
 {
 	struct ncp_server *server;
 	struct dentry *parent;
@@ -340,7 +340,7 @@ ncp_lookup_validate(struct dentry * dentry, struct nameidata *nd)
 {
 	int res;
 	lock_kernel();
-	res = __ncp_lookup_validate(dentry);
+	res = __ncp_lookup_validate(dentry, nd);
 	unlock_kernel();
 	return res;
 }

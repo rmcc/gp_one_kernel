@@ -30,7 +30,6 @@
 #include <linux/kprobes.h>
 #include <linux/kdebug.h>
 
-#include <asm/firmware.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/mmu.h>
@@ -100,6 +99,31 @@ static int store_updates_sp(struct pt_regs *regs)
 	}
 	return 0;
 }
+
+#if !(defined(CONFIG_4xx) || defined(CONFIG_BOOKE))
+static void do_dabr(struct pt_regs *regs, unsigned long address,
+		    unsigned long error_code)
+{
+	siginfo_t info;
+
+	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, error_code,
+			11, SIGSEGV) == NOTIFY_STOP)
+		return;
+
+	if (debugger_dabr_match(regs))
+		return;
+
+	/* Clear the DABR */
+	set_dabr(0);
+
+	/* Deliver the signal to userspace */
+	info.si_signo = SIGTRAP;
+	info.si_errno = 0;
+	info.si_code = TRAP_HWBKPT;
+	info.si_addr = (void __user *)address;
+	force_sig_info(SIGTRAP, &info, current);
+}
+#endif /* !(CONFIG_4xx || CONFIG_BOOKE)*/
 
 /*
  * For 600- and 800-family processors, the error_code parameter is DSISR
@@ -282,9 +306,8 @@ good_area:
 					flush_dcache_icache_page(page);
 					set_bit(PG_arch_1, &page->flags);
 				}
-				pte_update(ptep, 0, _PAGE_HWEXEC |
-					   _PAGE_ACCESSED);
-				local_flush_tlb_page(vma, address);
+				pte_update(ptep, 0, _PAGE_HWEXEC);
+				_tlbie(address, mm->context.id);
 				pte_unmap_unlock(ptep, ptl);
 				up_read(&mm->mmap_sem);
 				return 0;
@@ -319,16 +342,9 @@ good_area:
 			goto do_sigbus;
 		BUG();
 	}
-	if (ret & VM_FAULT_MAJOR) {
+	if (ret & VM_FAULT_MAJOR)
 		current->maj_flt++;
-#ifdef CONFIG_PPC_SMLPAR
-		if (firmware_has_feature(FW_FEATURE_CMO)) {
-			preempt_disable();
-			get_lppaca()->page_ins += (1 << PAGE_FACTOR);
-			preempt_enable();
-		}
-#endif
-	} else
+	else
 		current->min_flt++;
 	up_read(&mm->mmap_sem);
 	return 0;
@@ -347,7 +363,7 @@ bad_area_nosemaphore:
 	    && printk_ratelimit())
 		printk(KERN_CRIT "kernel tried to execute NX-protected"
 		       " page (%lx) - exploit attempt? (uid: %d)\n",
-		       address, current_uid());
+		       address, current->uid);
 
 	return SIGSEGV;
 

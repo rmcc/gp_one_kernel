@@ -34,6 +34,7 @@
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
 
+#define ACPI_FAN_COMPONENT		0x00200000
 #define ACPI_FAN_CLASS			"fan"
 #define ACPI_FAN_FILE_STATE		"state"
 
@@ -147,7 +148,7 @@ acpi_fan_write_state(struct file *file, const char __user * buffer,
 	int result = 0;
 	struct seq_file *m = file->private_data;
 	struct acpi_device *device = m->private;
-	char state_string[3] = { '\0' };
+	char state_string[12] = { '\0' };
 
 	if (count > sizeof(state_string) - 1)
 		return -EINVAL;
@@ -156,12 +157,6 @@ acpi_fan_write_state(struct file *file, const char __user * buffer,
 		return -EFAULT;
 
 	state_string[count] = '\0';
-	if ((state_string[0] < '0') || (state_string[0] > '3'))
-		return -EINVAL;
-	if (state_string[1] == '\n')
-		state_string[1] = '\0';
-	if (state_string[1] != '\0')
-		return -EINVAL;
 
 	result = acpi_bus_set_power(device->handle,
 				    simple_strtoul(state_string, NULL, 0));
@@ -262,22 +257,22 @@ static int acpi_fan_add(struct acpi_device *device)
 		goto end;
 	}
 
-	dev_info(&device->dev, "registered as cooling_device%d\n", cdev->id);
+	printk(KERN_INFO PREFIX
+		"%s is registered as cooling_device%d\n",
+		device->dev.bus_id, cdev->id);
 
-	device->driver_data = cdev;
+	acpi_driver_data(device) = cdev;
 	result = sysfs_create_link(&device->dev.kobj,
 				   &cdev->device.kobj,
 				   "thermal_cooling");
 	if (result)
-		dev_err(&device->dev, "Failed to create sysfs link "
-			"'thermal_cooling'\n");
+		printk(KERN_ERR PREFIX "Create sysfs link\n");
 
 	result = sysfs_create_link(&cdev->device.kobj,
 				   &device->dev.kobj,
 				   "device");
 	if (result)
-		dev_err(&device->dev, "Failed to create sysfs link "
-			"'device'\n");
+		printk(KERN_ERR PREFIX "Create sysfs link\n");
 
 	result = acpi_fan_add_fs(device);
 	if (result)
@@ -326,8 +321,8 @@ static int acpi_fan_resume(struct acpi_device *device)
 
 	result = acpi_bus_get_power(device->handle, &power_state);
 	if (result) {
-		printk(KERN_ERR PREFIX
-				  "Error reading fan power state\n");
+		ACPI_DEBUG_PRINT((ACPI_DB_ERROR,
+				  "Error reading fan power state\n"));
 		return result;
 	}
 

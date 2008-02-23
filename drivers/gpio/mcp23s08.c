@@ -40,24 +40,13 @@ struct mcp23s08 {
 	struct spi_device	*spi;
 	u8			addr;
 
-	u8			cache[11];
 	/* lock protects the cached values */
 	struct mutex		lock;
+	u8			cache[11];
 
 	struct gpio_chip	chip;
 
 	struct work_struct	work;
-};
-
-/* A given spi_device can represent up to four mcp23s08 chips
- * sharing the same chipselect but using different addresses
- * (e.g. chips #0 and #3 might be populated, but not #1 or $2).
- * Driver data holds all the per-chip data.
- */
-struct mcp23s08_driver_data {
-	unsigned		ngpio;
-	struct mcp23s08		*mcp[4];
-	struct mcp23s08		chip[];
 };
 
 static int mcp23s08_read(struct mcp23s08 *mcp, unsigned reg)
@@ -219,18 +208,25 @@ done:
 
 /*----------------------------------------------------------------------*/
 
-static int mcp23s08_probe_one(struct spi_device *spi, unsigned addr,
-		unsigned base, unsigned pullups)
+static int mcp23s08_probe(struct spi_device *spi)
 {
-	struct mcp23s08_driver_data	*data = spi_get_drvdata(spi);
-	struct mcp23s08			*mcp = data->mcp[addr];
+	struct mcp23s08			*mcp;
+	struct mcp23s08_platform_data	*pdata;
 	int				status;
 	int				do_update = 0;
+
+	pdata = spi->dev.platform_data;
+	if (!pdata || pdata->slave > 3 || !pdata->base)
+		return -ENODEV;
+
+	mcp = kzalloc(sizeof *mcp, GFP_KERNEL);
+	if (!mcp)
+		return -ENOMEM;
 
 	mutex_init(&mcp->lock);
 
 	mcp->spi = spi;
-	mcp->addr = 0x40 | (addr << 1);
+	mcp->addr = 0x40 | (pdata->slave << 1);
 
 	mcp->chip.label = "mcp23s08",
 
@@ -240,28 +236,26 @@ static int mcp23s08_probe_one(struct spi_device *spi, unsigned addr,
 	mcp->chip.set = mcp23s08_set;
 	mcp->chip.dbg_show = mcp23s08_dbg_show;
 
-	mcp->chip.base = base;
+	mcp->chip.base = pdata->base;
 	mcp->chip.ngpio = 8;
 	mcp->chip.can_sleep = 1;
-	mcp->chip.dev = &spi->dev;
 	mcp->chip.owner = THIS_MODULE;
 
-	/* verify MCP_IOCON.SEQOP = 0, so sequential reads work,
-	 * and MCP_IOCON.HAEN = 1, so we work with all chips.
-	 */
+	spi_set_drvdata(spi, mcp);
+
+	/* verify MCP_IOCON.SEQOP = 0, so sequential reads work */
 	status = mcp23s08_read(mcp, MCP_IOCON);
 	if (status < 0)
 		goto fail;
-	if ((status & IOCON_SEQOP) || !(status & IOCON_HAEN)) {
+	if (status & IOCON_SEQOP) {
 		status &= ~IOCON_SEQOP;
-		status |= IOCON_HAEN;
 		status = mcp23s08_write(mcp, MCP_IOCON, (u8) status);
 		if (status < 0)
 			goto fail;
 	}
 
 	/* configure ~100K pullups */
-	status = mcp23s08_write(mcp, MCP_GPPU, pullups);
+	status = mcp23s08_write(mcp, MCP_GPPU, pdata->pullups);
 	if (status < 0)
 		goto fail;
 
@@ -288,58 +282,11 @@ static int mcp23s08_probe_one(struct spi_device *spi, unsigned addr,
 		tx[1] = MCP_IPOL;
 		memcpy(&tx[2], &mcp->cache[MCP_IPOL], sizeof(tx) - 2);
 		status = spi_write_then_read(mcp->spi, tx, sizeof tx, NULL, 0);
-		if (status < 0)
-			goto fail;
+
+		/* FIXME check status... */
 	}
 
 	status = gpiochip_add(&mcp->chip);
-fail:
-	if (status < 0)
-		dev_dbg(&spi->dev, "can't setup chip %d, --> %d\n",
-				addr, status);
-	return status;
-}
-
-static int mcp23s08_probe(struct spi_device *spi)
-{
-	struct mcp23s08_platform_data	*pdata;
-	unsigned			addr;
-	unsigned			chips = 0;
-	struct mcp23s08_driver_data	*data;
-	int				status;
-	unsigned			base;
-
-	pdata = spi->dev.platform_data;
-	if (!pdata || !gpio_is_valid(pdata->base))
-		return -ENODEV;
-
-	for (addr = 0; addr < 4; addr++) {
-		if (!pdata->chip[addr].is_present)
-			continue;
-		chips++;
-	}
-	if (!chips)
-		return -ENODEV;
-
-	data = kzalloc(sizeof *data + chips * sizeof(struct mcp23s08),
-			GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-	spi_set_drvdata(spi, data);
-
-	base = pdata->base;
-	for (addr = 0; addr < 4; addr++) {
-		if (!pdata->chip[addr].is_present)
-			continue;
-		chips--;
-		data->mcp[addr] = &data->chip[chips];
-		status = mcp23s08_probe_one(spi, addr, base,
-				pdata->chip[addr].pullups);
-		if (status < 0)
-			goto fail;
-		base += 8;
-	}
-	data->ngpio = base - pdata->base;
 
 	/* NOTE:  these chips have a relatively sane IRQ framework, with
 	 * per-signal masking and level/edge triggering.  It's not yet
@@ -347,9 +294,8 @@ static int mcp23s08_probe(struct spi_device *spi)
 	 */
 
 	if (pdata->setup) {
-		status = pdata->setup(spi,
-				pdata->base, data->ngpio,
-				pdata->context);
+		status = pdata->setup(spi, mcp->chip.base,
+				mcp->chip.ngpio, pdata->context);
 		if (status < 0)
 			dev_dbg(&spi->dev, "setup --> %d\n", status);
 	}
@@ -357,29 +303,19 @@ static int mcp23s08_probe(struct spi_device *spi)
 	return 0;
 
 fail:
-	for (addr = 0; addr < 4; addr++) {
-		int tmp;
-
-		if (!data->mcp[addr])
-			continue;
-		tmp = gpiochip_remove(&data->mcp[addr]->chip);
-		if (tmp < 0)
-			dev_err(&spi->dev, "%s --> %d\n", "remove", tmp);
-	}
-	kfree(data);
+	kfree(mcp);
 	return status;
 }
 
 static int mcp23s08_remove(struct spi_device *spi)
 {
-	struct mcp23s08_driver_data	*data = spi_get_drvdata(spi);
+	struct mcp23s08			*mcp = spi_get_drvdata(spi);
 	struct mcp23s08_platform_data	*pdata = spi->dev.platform_data;
-	unsigned			addr;
 	int				status = 0;
 
 	if (pdata->teardown) {
 		status = pdata->teardown(spi,
-				pdata->base, data->ngpio,
+				mcp->chip.base, mcp->chip.ngpio,
 				pdata->context);
 		if (status < 0) {
 			dev_err(&spi->dev, "%s --> %d\n", "teardown", status);
@@ -387,20 +323,11 @@ static int mcp23s08_remove(struct spi_device *spi)
 		}
 	}
 
-	for (addr = 0; addr < 4; addr++) {
-		int tmp;
-
-		if (!data->mcp[addr])
-			continue;
-
-		tmp = gpiochip_remove(&data->mcp[addr]->chip);
-		if (tmp < 0) {
-			dev_err(&spi->dev, "%s --> %d\n", "remove", tmp);
-			status = tmp;
-		}
-	}
+	status = gpiochip_remove(&mcp->chip);
 	if (status == 0)
-		kfree(data);
+		kfree(mcp);
+	else
+		dev_err(&spi->dev, "%s --> %d\n", "remove", status);
 	return status;
 }
 
@@ -419,10 +346,7 @@ static int __init mcp23s08_init(void)
 {
 	return spi_register_driver(&mcp23s08_driver);
 }
-/* register after spi postcore initcall and before
- * subsys initcalls that may rely on these GPIOs
- */
-subsys_initcall(mcp23s08_init);
+module_init(mcp23s08_init);
 
 static void __exit mcp23s08_exit(void)
 {
@@ -431,3 +355,4 @@ static void __exit mcp23s08_exit(void)
 module_exit(mcp23s08_exit);
 
 MODULE_LICENSE("GPL");
+

@@ -334,16 +334,13 @@ static int pda_power_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int ac_wakeup_enabled;
-static int usb_wakeup_enabled;
-
 static int pda_power_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	if (device_may_wakeup(&pdev->dev)) {
 		if (ac_irq)
-			ac_wakeup_enabled = !enable_irq_wake(ac_irq->start);
+			enable_irq_wake(ac_irq->start);
 		if (usb_irq)
-			usb_wakeup_enabled = !enable_irq_wake(usb_irq->start);
+			enable_irq_wake(usb_irq->start);
 	}
 
 	return 0;
@@ -352,9 +349,9 @@ static int pda_power_suspend(struct platform_device *pdev, pm_message_t state)
 static int pda_power_resume(struct platform_device *pdev)
 {
 	if (device_may_wakeup(&pdev->dev)) {
-		if (usb_irq && usb_wakeup_enabled)
+		if (usb_irq)
 			disable_irq_wake(usb_irq->start);
-		if (ac_irq && ac_wakeup_enabled)
+		if (ac_irq)
 			disable_irq_wake(ac_irq->start);
 	}
 
@@ -364,8 +361,6 @@ static int pda_power_resume(struct platform_device *pdev)
 #define pda_power_suspend NULL
 #define pda_power_resume NULL
 #endif /* CONFIG_PM */
-
-MODULE_ALIAS("platform:pda-power");
 
 static struct platform_driver pda_power_pdrv = {
 	.driver = {

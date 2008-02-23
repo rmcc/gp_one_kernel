@@ -1,6 +1,6 @@
 /*
  *	Adaptec AAC series RAID controller driver
- *	(c) Copyright 2001 Red Hat Inc.
+ *	(c) Copyright 2001 Red Hat Inc.	<alan@redhat.com>
  *
  * based on the old aacraid driver that is..
  * Adaptec aacraid device driver for Linux.

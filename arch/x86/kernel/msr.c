@@ -35,10 +35,10 @@
 #include <linux/device.h>
 #include <linux/cpu.h>
 #include <linux/notifier.h>
-#include <linux/uaccess.h>
 
 #include <asm/processor.h>
 #include <asm/msr.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static struct class *msr_class;
@@ -72,28 +72,21 @@ static ssize_t msr_read(struct file *file, char __user *buf,
 	u32 data[2];
 	u32 reg = *ppos;
 	int cpu = iminor(file->f_path.dentry->d_inode);
-	int err = 0;
-	ssize_t bytes = 0;
+	int err;
 
 	if (count % 8)
 		return -EINVAL;	/* Invalid chunk size */
 
 	for (; count; count -= 8) {
 		err = rdmsr_safe_on_cpu(cpu, reg, &data[0], &data[1]);
-		if (err) {
-			if (err == -EFAULT) /* Fix idiotic error code */
-				err = -EIO;
-			break;
-		}
-		if (copy_to_user(tmp, &data, 8)) {
-			err = -EFAULT;
-			break;
-		}
+		if (err)
+			return -EIO;
+		if (copy_to_user(tmp, &data, 8))
+			return -EFAULT;
 		tmp += 2;
-		bytes += 8;
 	}
 
-	return bytes ? bytes : err;
+	return ((char __user *)tmp) - buf;
 }
 
 static ssize_t msr_write(struct file *file, const char __user *buf,
@@ -103,49 +96,34 @@ static ssize_t msr_write(struct file *file, const char __user *buf,
 	u32 data[2];
 	u32 reg = *ppos;
 	int cpu = iminor(file->f_path.dentry->d_inode);
-	int err = 0;
-	ssize_t bytes = 0;
+	int err;
 
 	if (count % 8)
 		return -EINVAL;	/* Invalid chunk size */
 
 	for (; count; count -= 8) {
-		if (copy_from_user(&data, tmp, 8)) {
-			err = -EFAULT;
-			break;
-		}
+		if (copy_from_user(&data, tmp, 8))
+			return -EFAULT;
 		err = wrmsr_safe_on_cpu(cpu, reg, data[0], data[1]);
-		if (err) {
-			if (err == -EFAULT) /* Fix idiotic error code */
-				err = -EIO;
-			break;
-		}
+		if (err)
+			return -EIO;
 		tmp += 2;
-		bytes += 8;
 	}
 
-	return bytes ? bytes : err;
+	return ((char __user *)tmp) - buf;
 }
 
 static int msr_open(struct inode *inode, struct file *file)
 {
 	unsigned int cpu = iminor(file->f_path.dentry->d_inode);
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
-	int ret = 0;
 
-	lock_kernel();
-	cpu = iminor(file->f_path.dentry->d_inode);
-
-	if (cpu >= nr_cpu_ids || !cpu_online(cpu)) {
-		ret = -ENXIO;	/* No such CPU */
-		goto out;
-	}
-	c = &cpu_data(cpu);
+	if (cpu >= NR_CPUS || !cpu_online(cpu))
+		return -ENXIO;	/* No such CPU */
 	if (!cpu_has(c, X86_FEATURE_MSR))
-		ret = -EIO;	/* MSR not supported */
-out:
-	unlock_kernel();
-	return ret;
+		return -EIO;	/* MSR not supported */
+
+	return 0;
 }
 
 /*
@@ -163,7 +141,7 @@ static int __cpuinit msr_device_create(int cpu)
 {
 	struct device *dev;
 
-	dev = device_create(msr_class, NULL, MKDEV(MSR_MAJOR, cpu), NULL,
+	dev = device_create(msr_class, NULL, MKDEV(MSR_MAJOR, cpu),
 			    "msr%d", cpu);
 	return IS_ERR(dev) ? PTR_ERR(dev) : 0;
 }

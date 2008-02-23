@@ -1,6 +1,7 @@
 
 /* Common Flash Interface structures
  * See http://support.intel.com/design/flash/technote/index.htm
+ * $Id: cfi.h,v 1.57 2005/11/15 23:28:17 tpoynor Exp $
  */
 
 #ifndef __MTD_CFI_H__
@@ -12,7 +13,6 @@
 #include <linux/mtd/flashchip.h>
 #include <linux/mtd/map.h>
 #include <linux/mtd/cfi_endian.h>
-#include <linux/mtd/xip.h>
 
 #ifdef CONFIG_MTD_CFI_I1
 #define cfi_interleave(cfi) 1
@@ -282,25 +282,9 @@ struct cfi_private {
 /*
  * Returns the command address according to the given geometry.
  */
-static inline uint32_t cfi_build_cmd_addr(uint32_t cmd_ofs,
-				struct map_info *map, struct cfi_private *cfi)
+static inline uint32_t cfi_build_cmd_addr(uint32_t cmd_ofs, int interleave, int type)
 {
-	unsigned bankwidth = map_bankwidth(map);
-	unsigned interleave = cfi_interleave(cfi);
-	unsigned type = cfi->device_type;
-	uint32_t addr;
-	
-	addr = (cmd_ofs * type) * interleave;
-
-	/* Modify the unlock address if we are in compatiblity mode.
-	 * For 16bit devices on 8 bit busses
-	 * and 32bit devices on 16 bit busses
-	 * set the low bit of the alternating bit sequence of the address.
-	 */
-	if (((type * interleave) > bankwidth) && ((uint8_t)cmd_ofs == 0xaa))
-		addr |= (type >> 1)*interleave;
-
-	return  addr;
+	return (cmd_ofs * type) * interleave;
 }
 
 /*
@@ -446,7 +430,8 @@ static inline uint32_t cfi_send_gen_cmd(u_char cmd, uint32_t cmd_addr, uint32_t 
 				int type, map_word *prev_val)
 {
 	map_word val;
-	uint32_t addr = base + cfi_build_cmd_addr(cmd_addr, map, cfi);
+	uint32_t addr = base + cfi_build_cmd_addr(cmd_addr, cfi_interleave(cfi), type);
+
 	val = cfi_build_cmd(cmd, map, cfi);
 
 	if (prev_val)
@@ -499,13 +484,6 @@ static inline void cfi_udelay(int us)
 	}
 }
 
-int __xipram cfi_qry_present(struct map_info *map, __u32 base,
-			     struct cfi_private *cfi);
-int __xipram cfi_qry_mode_on(uint32_t base, struct map_info *map,
-			     struct cfi_private *cfi);
-void __xipram cfi_qry_mode_off(uint32_t base, struct map_info *map,
-			       struct cfi_private *cfi);
-
 struct cfi_extquery *cfi_read_pri(struct map_info *map, uint16_t adr, uint16_t size,
 			     const char* name);
 struct cfi_fixup {
@@ -520,7 +498,6 @@ struct cfi_fixup {
 
 #define CFI_MFR_AMD 0x0001
 #define CFI_MFR_ATMEL 0x001F
-#define CFI_MFR_SAMSUNG 0x00EC
 #define CFI_MFR_ST  0x0020 	/* STMicroelectronics */
 
 void cfi_fixup(struct mtd_info *mtd, struct cfi_fixup* fixups);

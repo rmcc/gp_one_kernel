@@ -23,7 +23,6 @@
 #include <asm/uaccess.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #include <linux/version.h>      /* for KERNEL_VERSION MACRO     */
 #define RADIO_VERSION KERNEL_VERSION(0,0,2)
@@ -78,7 +77,6 @@ static __u16 curtreble;
 static unsigned long curfreq;
 static int curstereo;
 static int curmute;
-static unsigned long in_use;
 
 /* i2c addresses */
 #define TDA7318_ADDR 0x88
@@ -337,25 +335,23 @@ static int vidioc_s_audio(struct file *file, void *priv,
 	return 0;
 }
 
-static int trust_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &in_use) ? -EBUSY : 0;
-}
-
-static int trust_exclusive_release(struct file *file)
-{
-	clear_bit(0, &in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations trust_fops = {
+static const struct file_operations trust_fops = {
 	.owner		= THIS_MODULE,
-	.open           = trust_exclusive_open,
-	.release        = trust_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl		= video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops trust_ioctl_ops = {
+static struct video_device trust_radio=
+{
+	.owner		= THIS_MODULE,
+	.name		= "Trust FM Radio",
+	.type		= VID_TYPE_TUNER,
+	.fops           = &trust_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -370,13 +366,6 @@ static const struct v4l2_ioctl_ops trust_ioctl_ops = {
 	.vidioc_s_input     = vidioc_s_input,
 };
 
-static struct video_device trust_radio = {
-	.name		= "Trust FM Radio",
-	.fops           = &trust_fops,
-	.ioctl_ops 	= &trust_ioctl_ops,
-	.release	= video_device_release_empty,
-};
-
 static int __init trust_init(void)
 {
 	if(io == -1) {
@@ -387,7 +376,8 @@ static int __init trust_init(void)
 		printk(KERN_ERR "trust: port 0x%x already in use\n", io);
 		return -EBUSY;
 	}
-	if (video_register_device(&trust_radio, VFL_TYPE_RADIO, radio_nr) < 0) {
+	if(video_register_device(&trust_radio, VFL_TYPE_RADIO, radio_nr)==-1)
+	{
 		release_region(io, 2);
 		return -EINVAL;
 	}

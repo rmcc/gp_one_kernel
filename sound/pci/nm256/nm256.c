@@ -562,8 +562,7 @@ snd_nm256_playback_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct nm256_stream *s = substream->runtime->private_data;
 	int err = 0;
 
-	if (snd_BUG_ON(!s))
-		return -ENXIO;
+	snd_assert(s != NULL, return -ENXIO);
 
 	spin_lock(&chip->reg_lock);
 	switch (cmd) {
@@ -600,8 +599,7 @@ snd_nm256_capture_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct nm256_stream *s = substream->runtime->private_data;
 	int err = 0;
 
-	if (snd_BUG_ON(!s))
-		return -ENXIO;
+	snd_assert(s != NULL, return -ENXIO);
 
 	spin_lock(&chip->reg_lock);
 	switch (cmd) {
@@ -637,8 +635,7 @@ static int snd_nm256_pcm_prepare(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct nm256_stream *s = runtime->private_data;
 
-	if (snd_BUG_ON(!s))
-		return -ENXIO;
+	snd_assert(s, return -ENXIO);
 	s->dma_size = frames_to_bytes(runtime, substream->runtime->buffer_size);
 	s->period_size = frames_to_bytes(runtime, substream->runtime->period_size);
 	s->periods = substream->runtime->periods;
@@ -663,8 +660,7 @@ snd_nm256_playback_pointer(struct snd_pcm_substream *substream)
 	struct nm256_stream *s = substream->runtime->private_data;
 	unsigned long curp;
 
-	if (snd_BUG_ON(!s))
-		return 0;
+	snd_assert(s, return 0);
 	curp = snd_nm256_readl(chip, NM_PBUFFER_CURRP) - (unsigned long)s->buf;
 	curp %= s->dma_size;
 	return bytes_to_frames(substream->runtime, curp);
@@ -677,8 +673,7 @@ snd_nm256_capture_pointer(struct snd_pcm_substream *substream)
 	struct nm256_stream *s = substream->runtime->private_data;
 	unsigned long curp;
 
-	if (snd_BUG_ON(!s))
-		return 0;
+	snd_assert(s != NULL, return 0);
 	curp = snd_nm256_readl(chip, NM_RBUFFER_CURRP) - (unsigned long)s->buf;
 	curp %= s->dma_size;	
 	return bytes_to_frames(substream->runtime, curp);
@@ -1307,8 +1302,8 @@ snd_nm256_mixer(struct nm256 *chip)
 		.read = snd_nm256_ac97_read,
 	};
 
-	chip->ac97_regs = kcalloc(ARRAY_SIZE(nm256_ac97_init_val),
-				  sizeof(short), GFP_KERNEL);
+	chip->ac97_regs = kcalloc(sizeof(short),
+				  ARRAY_SIZE(nm256_ac97_init_val), GFP_KERNEL);
 	if (! chip->ac97_regs)
 		return -ENOMEM;
 

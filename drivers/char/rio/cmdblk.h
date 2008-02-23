@@ -33,6 +33,12 @@
 #ifndef __rio_cmdblk_h__
 #define __rio_cmdblk_h__
 
+#ifdef SCCS_LABELS
+#ifndef lint
+static char *_cmdblk_h_sccs_ = "@(#)cmdblk.h	1.2";
+#endif
+#endif
+
 /*
 ** the structure of a command block, used to queue commands destined for
 ** a rup.

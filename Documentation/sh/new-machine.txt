@@ -47,7 +47,9 @@ Next, for companion chips:
     `-- sh
         `-- cchips
             `-- hd6446x
-                `-- hd64461
+                |-- hd64461
+                |   `-- cchip-specific files
+                `-- hd64465
                     `-- cchip-specific files
 
 ... and so on. Headers for the companion chips are treated the same way as

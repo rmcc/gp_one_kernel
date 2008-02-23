@@ -71,7 +71,7 @@ struct epson1355_par {
 #if defined(CONFIG_ARM)
 
 # ifdef CONFIG_ARCH_CEIVA
-#  include <mach/hardware.h>
+#  include <asm/arch/hardware.h>
 #  define EPSON1355FB_BASE_PHYS	(CEIVA_PHYS_SED1355)
 # endif
 

@@ -340,10 +340,11 @@ static int brd_direct_access (struct block_device *bdev, sector_t sector,
 }
 #endif
 
-static int brd_ioctl(struct block_device *bdev, fmode_t mode,
+static int brd_ioctl(struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
 	int error;
+	struct block_device *bdev = inode->i_bdev;
 	struct brd_device *brd = bdev->bd_disk->private_data;
 
 	if (cmd != BLKFLSBUF)
@@ -375,7 +376,7 @@ static int brd_ioctl(struct block_device *bdev, fmode_t mode,
 
 static struct block_device_operations brd_fops = {
 	.owner =		THIS_MODULE,
-	.locked_ioctl =		brd_ioctl,
+	.ioctl =		brd_ioctl,
 #ifdef CONFIG_BLK_DEV_XIP
 	.direct_access =	brd_direct_access,
 #endif
@@ -396,7 +397,6 @@ module_param(max_part, int, 0);
 MODULE_PARM_DESC(max_part, "Maximum number of partitions per RAM disk");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(RAMDISK_MAJOR);
-MODULE_ALIAS("rd");
 
 #ifndef MODULE
 /* Legacy boot options - nonmodular */
@@ -570,8 +570,8 @@ out_free:
 		list_del(&brd->brd_list);
 		brd_free(brd);
 	}
-	unregister_blkdev(RAMDISK_MAJOR, "ramdisk");
 
+	unregister_blkdev(RAMDISK_MAJOR, "brd");
 	return -ENOMEM;
 }
 

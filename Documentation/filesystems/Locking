@@ -97,8 +97,8 @@ prototypes:
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
 	int (*sync_fs)(struct super_block *sb, int wait);
-	int (*freeze_fs) (struct super_block *);
-	int (*unfreeze_fs) (struct super_block *);
+	void (*write_super_lockfs) (struct super_block *);
+	void (*unlockfs) (struct super_block *);
 	int (*statfs) (struct dentry *, struct kstatfs *);
 	int (*remount_fs) (struct super_block *, int *, char *);
 	void (*clear_inode) (struct inode *);
@@ -119,8 +119,8 @@ delete_inode:		no
 put_super:		yes	yes	no
 write_super:		no	yes	read
 sync_fs:		no	no	read
-freeze_fs:		?
-unfreeze_fs:		?
+write_super_lockfs:	?
+unlockfs:		?
 statfs:			no	no	no
 remount_fs:		yes	yes	maybe		(see below)
 clear_inode:		no
@@ -144,8 +144,8 @@ prototypes:
 	void (*kill_sb) (struct super_block *);
 locking rules:
 		may block	BKL
-get_sb		yes		no
-kill_sb		yes		no
+get_sb		yes		yes
+kill_sb		yes		yes
 
 ->get_sb() returns error or 0 with locked superblock attached to the vfsmount
 (exclusive on ->s_umount).
@@ -161,12 +161,8 @@ prototypes:
 	int (*set_page_dirty)(struct page *page);
 	int (*readpages)(struct file *filp, struct address_space *mapping,
 			struct list_head *pages, unsigned nr_pages);
-	int (*write_begin)(struct file *, struct address_space *mapping,
-				loff_t pos, unsigned len, unsigned flags,
-				struct page **pagep, void **fsdata);
-	int (*write_end)(struct file *, struct address_space *mapping,
-				loff_t pos, unsigned len, unsigned copied,
-				struct page *page, void *fsdata);
+	int (*prepare_write)(struct file *, struct page *, unsigned, unsigned);
+	int (*commit_write)(struct file *, struct page *, unsigned, unsigned);
 	sector_t (*bmap)(struct address_space *, sector_t);
 	int (*invalidatepage) (struct page *, unsigned long);
 	int (*releasepage) (struct page *, int);
@@ -184,6 +180,8 @@ sync_page:		no	maybe
 writepages:		no
 set_page_dirty		no	no
 readpages:		no
+prepare_write:		no	yes			yes
+commit_write:		no	yes			yes
 write_begin:		no	locks the page		yes
 write_end:		no	yes, unlocks		yes
 perform_write:		no	n/a			yes
@@ -193,7 +191,7 @@ releasepage:		no	yes
 direct_IO:		no
 launder_page:		no	yes
 
-	->write_begin(), ->write_end(), ->sync_page() and ->readpage()
+	->prepare_write(), ->commit_write(), ->sync_page() and ->readpage()
 may be called from the request handler (/dev/loop).
 
 	->readpage() unlocks the page, either synchronously or via I/O
@@ -394,10 +392,11 @@ prototypes:
 	unsigned long (*get_unmapped_area)(struct file *, unsigned long,
 			unsigned long, unsigned long, unsigned long);
 	int (*check_flags)(int);
+	int (*dir_notify)(struct file *, unsigned long);
 };
 
 locking rules:
-	All may block.
+	All except ->poll() may block.
 			BKL
 llseek:			no	(see below)
 read:			no
@@ -410,12 +409,12 @@ ioctl:			yes	(see below)
 unlocked_ioctl:		no	(see below)
 compat_ioctl:		no
 mmap:			no
-open:			no
+open:			maybe	(see below)
 flush:			no
 release:		no
 fsync:			no	(see below)
 aio_fsync:		no
-fasync:			no
+fasync:			yes	(see below)
 lock:			yes
 readv:			no
 writev:			no
@@ -423,6 +422,7 @@ sendfile:		no
 sendpage:		no
 get_unmapped_area:	no
 check_flags:		no
+dir_notify:		no
 
 ->llseek() locking has moved from llseek to the individual llseek
 implementations.  If your fs is not using generic_file_llseek, you
@@ -430,6 +430,13 @@ need to acquire and release the appropriate locks in your ->llseek().
 For many filesystems, it is probably safe to acquire the inode
 semaphore.  Note some filesystems (i.e. remote ones) provide no
 protection for i_size so you will need to use the BKL.
+
+->open() locking is in-transit: big lock partially moved into the methods.
+The only exception is ->open() in the instances of file_operations that never
+end up in ->i_fop/->proc_fops, i.e. ones that belong to character devices
+(chrdev_open() takes lock before replacing ->f_op and calling the secondary
+method. As soon as we fix the handling of module reference counters all
+instances of ->open() will be called without the BKL.
 
 Note: ext2_release() was *the* source of contention on fs-intensive
 loads and dropping BKL on ->release() helps to get rid of that (we still
@@ -503,7 +510,6 @@ prototypes:
 	void (*close)(struct vm_area_struct*);
 	int (*fault)(struct vm_area_struct*, struct vm_fault *);
 	int (*page_mkwrite)(struct vm_area_struct *, struct page *);
-	int (*access)(struct vm_area_struct *, unsigned long, void*, int, int);
 
 locking rules:
 		BKL	mmap_sem	PageLocked(page)
@@ -511,7 +517,6 @@ open:		no	yes
 close:		no	yes
 fault:		no	yes
 page_mkwrite:	no	yes		no
-access:		no	yes
 
 	->page_mkwrite() is called when a previously read-only page is
 about to become writeable. The file system is responsible for
@@ -519,11 +524,6 @@ protecting against truncate races. Once appropriate action has been
 taking to lock out truncate, the page range should be verified to be
 within i_size. The page mapping should also be checked that it is not
 NULL.
-
-	->access() is called when get_user_pages() fails in
-acces_process_vm(), typically used to debug a process through
-/proc/pid/mem or ptrace.  This function is needed only for
-VM_IO | VM_PFNMAP VMAs.
 
 ================================================================================
 			Dubious stuff

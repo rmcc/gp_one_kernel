@@ -111,10 +111,8 @@ int snd_emu10k1_voice_alloc(struct snd_emu10k1 *emu, int type, int number,
 	unsigned long flags;
 	int result;
 
-	if (snd_BUG_ON(!rvoice))
-		return -EINVAL;
-	if (snd_BUG_ON(!number))
-		return -EINVAL;
+	snd_assert(rvoice != NULL, return -EINVAL);
+	snd_assert(number, return -EINVAL);
 
 	spin_lock_irqsave(&emu->voice_lock, flags);
 	for (;;) {
@@ -147,8 +145,7 @@ int snd_emu10k1_voice_free(struct snd_emu10k1 *emu,
 {
 	unsigned long flags;
 
-	if (snd_BUG_ON(!pvoice))
-		return -EINVAL;
+	snd_assert(pvoice != NULL, return -EINVAL);
 	spin_lock_irqsave(&emu->voice_lock, flags);
 	pvoice->interrupt = NULL;
 	pvoice->use = pvoice->pcm = pvoice->synth = pvoice->midi = pvoice->efx = 0;

@@ -5,24 +5,21 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/dmi.h>
-#include <asm/pci_x86.h>
+#include "pci.h"
 
 /*
- * Functions for accessing PCI base (first 256 bytes) and extended
- * (4096 bytes per PCI function) configuration space with type 1
- * accesses.
+ * Functions for accessing PCI configuration space with type 1 accesses
  */
 
 #define PCI_CONF1_ADDRESS(bus, devfn, reg) \
-	(0x80000000 | ((reg & 0xF00) << 16) | (bus << 16) \
-	| (devfn << 8) | (reg & 0xFC))
+	(0x80000000 | (bus << 16) | (devfn << 8) | (reg & ~3))
 
 static int pci_conf1_read(unsigned int seg, unsigned int bus,
 			  unsigned int devfn, int reg, int len, u32 *value)
 {
 	unsigned long flags;
 
-	if ((bus > 255) || (devfn > 255) || (reg > 4095)) {
+	if ((bus > 255) || (devfn > 255) || (reg > 255)) {
 		*value = -1;
 		return -EINVAL;
 	}
@@ -53,7 +50,7 @@ static int pci_conf1_write(unsigned int seg, unsigned int bus,
 {
 	unsigned long flags;
 
-	if ((bus > 255) || (devfn > 255) || (reg > 4095))
+	if ((bus > 255) || (devfn > 255) || (reg > 255)) 
 		return -EINVAL;
 
 	spin_lock_irqsave(&pci_config_lock, flags);
@@ -173,7 +170,7 @@ static int pci_conf2_write(unsigned int seg, unsigned int bus,
 
 #undef PCI_CONF2_ADDRESS
 
-struct pci_raw_ops pci_direct_conf2 = {
+static struct pci_raw_ops pci_direct_conf2 = {
 	.read =		pci_conf2_read,
 	.write =	pci_conf2_write,
 };
@@ -263,18 +260,10 @@ void __init pci_direct_init(int type)
 		return;
 	printk(KERN_INFO "PCI: Using configuration type %d for base access\n",
 		 type);
-	if (type == 1) {
+	if (type == 1)
 		raw_pci_ops = &pci_direct_conf1;
-		if (raw_pci_ext_ops)
-			return;
-		if (!(pci_probe & PCI_HAS_IO_ECS))
-			return;
-		printk(KERN_INFO "PCI: Using configuration type 1 "
-		       "for extended access\n");
-		raw_pci_ext_ops = &pci_direct_conf1;
-		return;
-	}
-	raw_pci_ops = &pci_direct_conf2;
+	else
+		raw_pci_ops = &pci_direct_conf2;
 }
 
 int __init pci_direct_probe(void)
@@ -289,7 +278,6 @@ int __init pci_direct_probe(void)
 
 	if (pci_check_type1()) {
 		raw_pci_ops = &pci_direct_conf1;
-		port_cf9_safe = true;
 		return 1;
 	}
 	release_resource(region);
@@ -306,7 +294,6 @@ int __init pci_direct_probe(void)
 
 	if (pci_check_type2()) {
 		raw_pci_ops = &pci_direct_conf2;
-		port_cf9_safe = true;
 		return 2;
 	}
 

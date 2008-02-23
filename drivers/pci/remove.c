@@ -73,7 +73,6 @@ void pci_remove_bus(struct pci_bus *pci_bus)
 	up_write(&pci_bus_sem);
 	pci_remove_legacy_files(pci_bus);
 	device_remove_file(&pci_bus->dev, &dev_attr_cpuaffinity);
-	device_remove_file(&pci_bus->dev, &dev_attr_cpulistaffinity);
 	device_unregister(&pci_bus->dev);
 }
 EXPORT_SYMBOL(pci_remove_bus);
@@ -115,9 +114,13 @@ void pci_remove_behind_bridge(struct pci_dev *dev)
 {
 	struct list_head *l, *n;
 
-	if (dev->subordinate)
-		list_for_each_safe(l, n, &dev->subordinate->devices)
-			pci_remove_bus_device(pci_dev_b(l));
+	if (dev->subordinate) {
+		list_for_each_safe(l, n, &dev->subordinate->devices) {
+			struct pci_dev *dev = pci_dev_b(l);
+
+			pci_remove_bus_device(dev);
+		}
+	}
 }
 
 static void pci_stop_bus_devices(struct pci_bus *bus)

@@ -145,10 +145,6 @@ int __init oprofile_arch_init(struct oprofile_operations *ops)
 	spec = &op_mpcore_spec;
 #endif
 
-#ifdef CONFIG_OPROFILE_ARMV7
-	spec = &op_armv7_spec;
-#endif
-
 	if (spec) {
 		ret = spec->init();
 		if (ret < 0)

@@ -10,13 +10,12 @@
  * The macros found in mmu_defs_asm.h uses the ## concatenation operator, so
  * -traditional must not be used when assembling this file.
  */
-#include <linux/autoconf.h>
-#include <arch/memmap.h>
 #include <hwregs/reg_rdwr.h>
+#include <asm/arch/memmap.h>
 #include <hwregs/intr_vect.h>
 #include <hwregs/asm/mmu_defs_asm.h>
 #include <hwregs/asm/reg_map_asm.h>
-#include <mach/startup.inc>
+#include <asm/arch/mach/startup.inc>
 
 #define CRAMFS_MAGIC 0x28cd3d45
 #define JHEAD_MAGIC 0x1FF528A6
@@ -218,14 +217,7 @@ _inflash:
 	beq	_dram_initialized
 	nop
 
-#if defined CONFIG_ETRAXFS
-#include "../mach-fs/dram_init.S"
-#elif defined CONFIG_CRIS_MACH_ARTPEC3
-#include "../mach-a3/dram_init.S"
-#else
-#error Only ETRAXFS and ARTPEC-3 supported!
-#endif
-
+#include "../mach/dram_init.S"
 
 _dram_initialized:
 	;; Copy the text and data section to DRAM. This depends on that the
@@ -480,10 +472,4 @@ swapper_pg_dir = 0xc0002000
 
 	.section ".init.data", "aw"
 
-#if defined CONFIG_ETRAXFS
-#include "../mach-fs/hw_settings.S"
-#elif defined CONFIG_CRIS_MACH_ARTPEC3
-#include "../mach-a3/hw_settings.S"
-#else
-#error Only ETRAXFS and ARTPEC-3 supported!
-#endif
+#include "../mach/hw_settings.S"

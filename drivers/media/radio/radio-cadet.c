@@ -23,7 +23,7 @@
  * 2002-01-17	Adam Belay <ambx1@neo.rr.com>
  *		Updated to latest pnp code
  *
- * 2003-01-31	Alan Cox <alan@lxorguk.ukuu.org.uk>
+ * 2003-01-31	Alan Cox <alan@redhat.com>
  *		Cleaned up locking, delay code, general odds and ends
  *
  * 2006-07-30	Hans J. Koch <koch@hjk-az.de>
@@ -39,7 +39,6 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev2.h>	/* V4L2 API defs		*/
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <linux/param.h>
 #include <linux/pnp.h>
 
@@ -529,7 +528,7 @@ static int vidioc_s_audio(struct file *file, void *priv,
 }
 
 static int
-cadet_open(struct file *file)
+cadet_open(struct inode *inode, struct file *file)
 {
 	users++;
 	if (1 == users) init_waitqueue_head(&read_queue);
@@ -537,7 +536,7 @@ cadet_open(struct file *file)
 }
 
 static int
-cadet_release(struct file *file)
+cadet_release(struct inode *inode, struct file *file)
 {
 	users--;
 	if (0 == users){
@@ -557,16 +556,25 @@ cadet_poll(struct file *file, struct poll_table_struct *wait)
 }
 
 
-static const struct v4l2_file_operations cadet_fops = {
+static const struct file_operations cadet_fops = {
 	.owner		= THIS_MODULE,
 	.open		= cadet_open,
 	.release       	= cadet_release,
 	.read		= cadet_read,
 	.ioctl		= video_ioctl2,
 	.poll		= cadet_poll,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops cadet_ioctl_ops = {
+static struct video_device cadet_radio=
+{
+	.owner		= THIS_MODULE,
+	.name		= "Cadet radio",
+	.type		= VID_TYPE_TUNER,
+	.fops           = &cadet_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -579,13 +587,6 @@ static const struct v4l2_ioctl_ops cadet_ioctl_ops = {
 	.vidioc_s_audio     = vidioc_s_audio,
 	.vidioc_g_input     = vidioc_g_input,
 	.vidioc_s_input     = vidioc_s_input,
-};
-
-static struct video_device cadet_radio = {
-	.name		= "Cadet radio",
-	.fops           = &cadet_fops,
-	.ioctl_ops 	= &cadet_ioctl_ops,
-	.release	= video_device_release_empty,
 };
 
 #ifdef CONFIG_PNP
@@ -679,7 +680,7 @@ static int __init cadet_init(void)
 	}
 	if (!request_region(io,2,"cadet"))
 		goto fail;
-	if (video_register_device(&cadet_radio, VFL_TYPE_RADIO, radio_nr) < 0) {
+	if(video_register_device(&cadet_radio,VFL_TYPE_RADIO,radio_nr)==-1) {
 		release_region(io,2);
 		goto fail;
 	}

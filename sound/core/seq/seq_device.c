@@ -124,7 +124,7 @@ static void snd_seq_device_info(struct snd_info_entry *entry,
  * load all registered drivers (called from seq_clientmgr.c)
  */
 
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 /* avoid auto-loading during module_init() */
 static int snd_seq_in_init;
 void snd_seq_autoload_lock(void)
@@ -140,7 +140,7 @@ void snd_seq_autoload_unlock(void)
 
 void snd_seq_device_load_drivers(void)
 {
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 	struct ops_list *ops;
 
 	/* Calling request_module during module_init()
@@ -187,8 +187,7 @@ int snd_seq_device_new(struct snd_card *card, int device, char *id, int argsize,
 	if (result)
 		*result = NULL;
 
-	if (snd_BUG_ON(!id))
-		return -EINVAL;
+	snd_assert(id != NULL, return -EINVAL);
 
 	ops = find_driver(id, 1);
 	if (ops == NULL)
@@ -233,8 +232,7 @@ static int snd_seq_device_free(struct snd_seq_device *dev)
 {
 	struct ops_list *ops;
 
-	if (snd_BUG_ON(!dev))
-		return -EINVAL;
+	snd_assert(dev != NULL, return -EINVAL);
 
 	ops = find_driver(dev->id, 0);
 	if (ops == NULL)
@@ -568,5 +566,7 @@ EXPORT_SYMBOL(snd_seq_device_load_drivers);
 EXPORT_SYMBOL(snd_seq_device_new);
 EXPORT_SYMBOL(snd_seq_device_register_driver);
 EXPORT_SYMBOL(snd_seq_device_unregister_driver);
+#ifdef CONFIG_KMOD
 EXPORT_SYMBOL(snd_seq_autoload_lock);
 EXPORT_SYMBOL(snd_seq_autoload_unlock);
+#endif

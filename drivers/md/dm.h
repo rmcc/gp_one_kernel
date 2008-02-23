@@ -25,10 +25,13 @@
 /*
  * List of devices that a metadevice uses and should open/close.
  */
-struct dm_dev_internal {
+struct dm_dev {
 	struct list_head list;
+
 	atomic_t count;
-	struct dm_dev dm_dev;
+	int mode;
+	struct block_device *bdev;
+	char name[16];
 };
 
 struct dm_table;
@@ -36,7 +39,6 @@ struct dm_table;
 /*-----------------------------------------------------------------
  * Internal table functions.
  *---------------------------------------------------------------*/
-void dm_table_destroy(struct dm_table *t);
 void dm_table_event_callback(struct dm_table *t,
 			     void (*fn)(void *), void *context);
 struct dm_target *dm_table_get_target(struct dm_table *t, unsigned int index);
@@ -47,12 +49,12 @@ void dm_table_presuspend_targets(struct dm_table *t);
 void dm_table_postsuspend_targets(struct dm_table *t);
 int dm_table_resume_targets(struct dm_table *t);
 int dm_table_any_congested(struct dm_table *t, int bdi_bits);
+void dm_table_unplug_all(struct dm_table *t);
 
 /*
  * To check the return value from dm_table_find_target().
  */
 #define dm_target_is_valid(t) ((t)->table)
-int dm_table_barrier_ok(struct dm_table *t);
 
 /*-----------------------------------------------------------------
  * A registry of target types.
@@ -64,6 +66,15 @@ void dm_put_target_type(struct target_type *t);
 int dm_target_iterate(void (*iter_func)(struct target_type *tt,
 					void *param), void *param);
 
+/*-----------------------------------------------------------------
+ * Useful inlines.
+ *---------------------------------------------------------------*/
+static inline int array_too_big(unsigned long fixed, unsigned long obj,
+				unsigned long num)
+{
+	return (num > (ULONG_MAX - fixed) / obj);
+}
+
 int dm_split_args(int *argc, char ***argvp, char *input);
 
 /*
@@ -74,14 +85,6 @@ int dm_interface_init(void);
 void dm_interface_exit(void);
 
 /*
- * sysfs interface
- */
-int dm_sysfs_init(struct mapped_device *md);
-void dm_sysfs_exit(struct mapped_device *md);
-struct kobject *dm_kobject(struct mapped_device *md);
-struct mapped_device *dm_get_from_kobject(struct kobject *kobj);
-
-/*
  * Targets for linear and striped mappings
  */
 int dm_linear_init(void);
@@ -90,10 +93,18 @@ void dm_linear_exit(void);
 int dm_stripe_init(void);
 void dm_stripe_exit(void);
 
+void *dm_vcalloc(unsigned long nmemb, unsigned long elem_size);
+union map_info *dm_get_mapinfo(struct bio *bio);
 int dm_open_count(struct mapped_device *md);
 int dm_lock_for_deletion(struct mapped_device *md);
 
 void dm_kobject_uevent(struct mapped_device *md);
+
+/*
+ * Dirty log
+ */
+int dm_dirty_log_init(void);
+void dm_dirty_log_exit(void);
 
 int dm_kcopyd_init(void);
 void dm_kcopyd_exit(void);

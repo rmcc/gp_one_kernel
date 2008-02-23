@@ -28,9 +28,10 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/spinlock.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
-#include <mach/hardware.h>
+
+#include <asm/hardware.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 #define MODULE_NAME "PNX4008-WDT: "
 
@@ -143,8 +144,9 @@ static int pnx4008_wdt_open(struct inode *inode, struct file *file)
 	return nonseekable_open(inode, file);
 }
 
-static ssize_t pnx4008_wdt_write(struct file *file, const char *data,
-					size_t len, loff_t *ppos)
+static ssize_t
+pnx4008_wdt_write(struct file *file, const char *data, size_t len,
+		  loff_t * ppos)
 {
 	if (len) {
 		if (!nowayout) {
@@ -167,14 +169,15 @@ static ssize_t pnx4008_wdt_write(struct file *file, const char *data,
 	return len;
 }
 
-static const struct watchdog_info ident = {
+static struct watchdog_info ident = {
 	.options = WDIOF_CARDRESET | WDIOF_MAGICCLOSE |
 	    WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
 	.identity = "PNX4008 Watchdog",
 };
 
-static long pnx4008_wdt_ioctl(struct file *file, unsigned int cmd,
-				unsigned long arg)
+static int
+pnx4008_wdt_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+		  unsigned long arg)
 {
 	int ret = -ENOTTY;
 	int time;
@@ -193,11 +196,6 @@ static long pnx4008_wdt_ioctl(struct file *file, unsigned int cmd,
 		ret = put_user(boot_status, (int *)arg);
 		break;
 
-	case WDIOC_KEEPALIVE:
-		wdt_enable();
-		ret = 0;
-		break;
-
 	case WDIOC_SETTIMEOUT:
 		ret = get_user(time, (int *)arg);
 		if (ret)
@@ -214,6 +212,11 @@ static long pnx4008_wdt_ioctl(struct file *file, unsigned int cmd,
 
 	case WDIOC_GETTIMEOUT:
 		ret = put_user(heartbeat, (int *)arg);
+		break;
+
+	case WDIOC_KEEPALIVE:
+		wdt_enable();
+		ret = 0;
 		break;
 	}
 	return ret;
@@ -235,7 +238,7 @@ static const struct file_operations pnx4008_wdt_fops = {
 	.owner = THIS_MODULE,
 	.llseek = no_llseek,
 	.write = pnx4008_wdt_write,
-	.unlocked_ioctl = pnx4008_wdt_ioctl,
+	.ioctl = pnx4008_wdt_ioctl,
 	.open = pnx4008_wdt_open,
 	.release = pnx4008_wdt_release,
 };

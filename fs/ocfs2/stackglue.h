@@ -28,10 +28,6 @@
 #include "dlm/dlmapi.h"
 #include <linux/dlm.h>
 
-/* Needed for plock-related prototypes */
-struct file;
-struct file_lock;
-
 /*
  * dlmconstants.h does not have a LOCAL flag.  We hope to remove it
  * some day, but right now we need it.  Let's fake it.  This value is larger
@@ -138,10 +134,22 @@ struct ocfs2_stack_operations {
 	 * be freed.  Thus, a stack must not return from ->disconnect()
 	 * until it will no longer reference the conn pointer.
 	 *
-	 * Once this call returns, the stack glue will be dropping this
-	 * connection's reference on the module.
+	 * If hangup_pending is zero, ocfs2_cluster_disconnect() will also
+	 * be dropping the reference on the module.
 	 */
-	int (*disconnect)(struct ocfs2_cluster_connection *conn);
+	int (*disconnect)(struct ocfs2_cluster_connection *conn,
+			  int hangup_pending);
+
+	/*
+	 * ocfs2_cluster_hangup() exists for compatibility with older
+	 * ocfs2 tools.  Only the classic stack really needs it.  As such
+	 * ->hangup() is not required of all stacks.  See the comment by
+	 * ocfs2_cluster_hangup() for more details.
+	 *
+	 * Note that ocfs2_cluster_hangup() can only be called if
+	 * hangup_pending was passed to ocfs2_cluster_disconnect().
+	 */
+	void (*hangup)(const char *group, int grouplen);
 
 	/*
 	 * ->this_node() returns the cluster's unique identifier for the
@@ -189,17 +197,6 @@ struct ocfs2_stack_operations {
 	 * Pull the lvb pointer off of the stack-specific lksb.
 	 */
 	void *(*lock_lvb)(union ocfs2_dlm_lksb *lksb);
-
-	/*
-	 * Cluster-aware posix locks
-	 *
-	 * This is NULL for stacks which do not support posix locks.
-	 */
-	int (*plock)(struct ocfs2_cluster_connection *conn,
-		     u64 ino,
-		     struct file *file,
-		     int cmd,
-		     struct file_lock *fl);
 
 	/*
 	 * This is an optoinal debugging hook.  If provided, the
@@ -255,15 +252,10 @@ int ocfs2_dlm_lock_status(union ocfs2_dlm_lksb *lksb);
 void *ocfs2_dlm_lvb(union ocfs2_dlm_lksb *lksb);
 void ocfs2_dlm_dump_lksb(union ocfs2_dlm_lksb *lksb);
 
-int ocfs2_stack_supports_plocks(void);
-int ocfs2_plock(struct ocfs2_cluster_connection *conn, u64 ino,
-		struct file *file, int cmd, struct file_lock *fl);
-
 void ocfs2_stack_glue_set_locking_protocol(struct ocfs2_locking_protocol *proto);
 
 
 /* Used by stack plugins */
 int ocfs2_stack_glue_register(struct ocfs2_stack_plugin *plugin);
 void ocfs2_stack_glue_unregister(struct ocfs2_stack_plugin *plugin);
-
 #endif  /* STACKGLUE_H */

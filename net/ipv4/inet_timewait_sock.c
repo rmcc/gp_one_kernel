@@ -20,20 +20,19 @@ static void __inet_twsk_kill(struct inet_timewait_sock *tw,
 	struct inet_bind_hashbucket *bhead;
 	struct inet_bind_bucket *tb;
 	/* Unlink from established hashes. */
-	spinlock_t *lock = inet_ehash_lockp(hashinfo, tw->tw_hash);
+	rwlock_t *lock = inet_ehash_lockp(hashinfo, tw->tw_hash);
 
-	spin_lock(lock);
-	if (hlist_nulls_unhashed(&tw->tw_node)) {
-		spin_unlock(lock);
+	write_lock(lock);
+	if (hlist_unhashed(&tw->tw_node)) {
+		write_unlock(lock);
 		return;
 	}
-	hlist_nulls_del_rcu(&tw->tw_node);
-	sk_nulls_node_init(&tw->tw_node);
-	spin_unlock(lock);
+	__hlist_del(&tw->tw_node);
+	sk_node_init(&tw->tw_node);
+	write_unlock(lock);
 
 	/* Disassociate with bind bucket. */
-	bhead = &hashinfo->bhash[inet_bhashfn(twsk_net(tw), tw->tw_num,
-			hashinfo->bhash_size)];
+	bhead = &hashinfo->bhash[inet_bhashfn(tw->tw_num, hashinfo->bhash_size)];
 	spin_lock(&bhead->lock);
 	tb = tw->tw_tb;
 	__hlist_del(&tw->tw_bind_node);
@@ -76,35 +75,30 @@ void __inet_twsk_hashdance(struct inet_timewait_sock *tw, struct sock *sk,
 	const struct inet_sock *inet = inet_sk(sk);
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	struct inet_ehash_bucket *ehead = inet_ehash_bucket(hashinfo, sk->sk_hash);
-	spinlock_t *lock = inet_ehash_lockp(hashinfo, sk->sk_hash);
+	rwlock_t *lock = inet_ehash_lockp(hashinfo, sk->sk_hash);
 	struct inet_bind_hashbucket *bhead;
 	/* Step 1: Put TW into bind hash. Original socket stays there too.
 	   Note, that any socket with inet->num != 0 MUST be bound in
 	   binding cache, even if it is closed.
 	 */
-	bhead = &hashinfo->bhash[inet_bhashfn(twsk_net(tw), inet->num,
-			hashinfo->bhash_size)];
+	bhead = &hashinfo->bhash[inet_bhashfn(inet->num, hashinfo->bhash_size)];
 	spin_lock(&bhead->lock);
 	tw->tw_tb = icsk->icsk_bind_hash;
-	WARN_ON(!icsk->icsk_bind_hash);
+	BUG_TRAP(icsk->icsk_bind_hash);
 	inet_twsk_add_bind_node(tw, &tw->tw_tb->owners);
 	spin_unlock(&bhead->lock);
 
-	spin_lock(lock);
+	write_lock(lock);
 
-	/*
-	 * Step 2: Hash TW into TIMEWAIT chain.
-	 * Should be done before removing sk from established chain
-	 * because readers are lockless and search established first.
-	 */
-	atomic_inc(&tw->tw_refcnt);
-	inet_twsk_add_node_rcu(tw, &ehead->twchain);
-
-	/* Step 3: Remove SK from established hash. */
-	if (__sk_nulls_del_node_init_rcu(sk))
+	/* Step 2: Remove SK from established hash. */
+	if (__sk_del_node_init(sk))
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, -1);
 
-	spin_unlock(lock);
+	/* Step 3: Hash TW into TIMEWAIT chain. */
+	inet_twsk_add_node(tw, &ehead->twchain);
+	atomic_inc(&tw->tw_refcnt);
+
+	write_unlock(lock);
 }
 
 EXPORT_SYMBOL_GPL(__inet_twsk_hashdance);
@@ -130,7 +124,6 @@ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk, const int stat
 		tw->tw_reuse	    = sk->sk_reuse;
 		tw->tw_hash	    = sk->sk_hash;
 		tw->tw_ipv6only	    = 0;
-		tw->tw_transparent  = inet->transparent;
 		tw->tw_prot	    = sk->sk_prot_creator;
 		twsk_net_set(tw, hold_net(sock_net(sk)));
 		atomic_set(&tw->tw_refcnt, 1);
@@ -165,9 +158,6 @@ rescan:
 		__inet_twsk_del_dead_node(tw);
 		spin_unlock(&twdr->death_lock);
 		__inet_twsk_kill(tw, twdr->hashinfo);
-#ifdef CONFIG_NET_NS
-		NET_INC_STATS_BH(twsk_net(tw), LINUX_MIB_TIMEWAITED);
-#endif
 		inet_twsk_put(tw);
 		killed++;
 		spin_lock(&twdr->death_lock);
@@ -186,9 +176,8 @@ rescan:
 	}
 
 	twdr->tw_count -= killed;
-#ifndef CONFIG_NET_NS
-	NET_ADD_STATS_BH(&init_net, LINUX_MIB_TIMEWAITED, killed);
-#endif
+	NET_ADD_STATS_BH(LINUX_MIB_TIMEWAITED, killed);
+
 	return ret;
 }
 
@@ -381,9 +370,6 @@ void inet_twdr_twcal_tick(unsigned long data)
 						       &twdr->twcal_row[slot]) {
 				__inet_twsk_del_dead_node(tw);
 				__inet_twsk_kill(tw, twdr->hashinfo);
-#ifdef CONFIG_NET_NS
-				NET_INC_STATS_BH(twsk_net(tw), LINUX_MIB_TIMEWAITKILLED);
-#endif
 				inet_twsk_put(tw);
 				killed++;
 			}
@@ -407,45 +393,8 @@ void inet_twdr_twcal_tick(unsigned long data)
 out:
 	if ((twdr->tw_count -= killed) == 0)
 		del_timer(&twdr->tw_timer);
-#ifndef CONFIG_NET_NS
-	NET_ADD_STATS_BH(&init_net, LINUX_MIB_TIMEWAITKILLED, killed);
-#endif
+	NET_ADD_STATS_BH(LINUX_MIB_TIMEWAITKILLED, killed);
 	spin_unlock(&twdr->death_lock);
 }
 
 EXPORT_SYMBOL_GPL(inet_twdr_twcal_tick);
-
-void inet_twsk_purge(struct net *net, struct inet_hashinfo *hashinfo,
-		     struct inet_timewait_death_row *twdr, int family)
-{
-	struct inet_timewait_sock *tw;
-	struct sock *sk;
-	struct hlist_nulls_node *node;
-	int h;
-
-	local_bh_disable();
-	for (h = 0; h < (hashinfo->ehash_size); h++) {
-		struct inet_ehash_bucket *head =
-			inet_ehash_bucket(hashinfo, h);
-		spinlock_t *lock = inet_ehash_lockp(hashinfo, h);
-restart:
-		spin_lock(lock);
-		sk_nulls_for_each(sk, node, &head->twchain) {
-
-			tw = inet_twsk(sk);
-			if (!net_eq(twsk_net(tw), net) ||
-			    tw->tw_family != family)
-				continue;
-
-			atomic_inc(&tw->tw_refcnt);
-			spin_unlock(lock);
-			inet_twsk_deschedule(tw, twdr);
-			inet_twsk_put(tw);
-
-			goto restart;
-		}
-		spin_unlock(lock);
-	}
-	local_bh_enable();
-}
-EXPORT_SYMBOL_GPL(inet_twsk_purge);

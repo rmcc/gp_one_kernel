@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/version.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
@@ -32,13 +33,13 @@
 #include <linux/irq.h>
 
 #include <asm/byteorder.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 
 #include <linux/usb.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
-#include <mach/pxa2xx-regs.h> /* FIXME: for PSSR */
-#include <mach/udc.h>
+
+#include <asm/arch/udc.h>
 
 #include "pxa27x_udc.h"
 
@@ -430,6 +431,7 @@ static void pio_irq_enable(struct pxa_ep *ep)
 /**
  * pio_irq_disable - Disables irq generation for one endpoint
  * @ep: udc endpoint
+ * @index: endpoint number
  */
 static void pio_irq_disable(struct pxa_ep *ep)
 {
@@ -585,6 +587,7 @@ static void inc_ep_stats_reqs(struct pxa_ep *ep, int is_in)
  * inc_ep_stats_bytes - Update ep stats counts
  * @ep: physical endpoint
  * @count: bytes transfered on endpoint
+ * @req: usb request
  * @is_in: ep direction (USB_DIR_IN or 0)
  */
 static void inc_ep_stats_bytes(struct pxa_ep *ep, int count, int is_in)
@@ -648,7 +651,7 @@ pxa_ep_alloc_request(struct usb_ep *_ep, gfp_t gfp_flags)
 	struct pxa27x_request *req;
 
 	req = kzalloc(sizeof *req, gfp_flags);
-	if (!req)
+	if (!req || !_ep)
 		return NULL;
 
 	INIT_LIST_HEAD(&req->queue);
@@ -1572,6 +1575,7 @@ static void udc_enable(struct pxa_udc *udc)
 {
 	udc_writel(udc, UDCICR0, 0);
 	udc_writel(udc, UDCICR1, 0);
+	udc_writel(udc, UP2OCR, UP2OCR_HXOE);
 	udc_clear_mask_UDCCR(udc, UDCCR_UDE);
 
 	clk_enable(udc->clk);
@@ -1619,7 +1623,7 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 	struct pxa_udc *udc = the_controller;
 	int retval;
 
-	if (!driver || driver->speed < USB_SPEED_FULL || !driver->bind
+	if (!driver || driver->speed != USB_SPEED_FULL || !driver->bind
 			|| !driver->disconnect || !driver->setup)
 		return -EINVAL;
 	if (!udc)
@@ -2160,7 +2164,7 @@ static struct pxa_udc memory = {
 		.ep0		= &memory.udc_usb_ep[0].usb_ep,
 		.name		= driver_name,
 		.dev = {
-			.init_name	= "gadget",
+			.bus_id		= "gadget",
 		},
 	},
 
@@ -2224,7 +2228,7 @@ static int __init pxa_udc_probe(struct platform_device *pdev)
 	udc->dev = &pdev->dev;
 	udc->mach = pdev->dev.platform_data;
 
-	udc->clk = clk_get(&pdev->dev, NULL);
+	udc->clk = clk_get(&pdev->dev, "UDCCLK");
 	if (IS_ERR(udc->clk)) {
 		retval = PTR_ERR(udc->clk);
 		goto err_clk;
@@ -2356,19 +2360,18 @@ static int pxa_udc_resume(struct platform_device *_dev)
 	 * Software must configure the USB OTG pad, UDC, and UHC
 	 * to the state they were in before entering sleep mode.
 	 */
-	if (cpu_is_pxa27x())
-		PSSR |= PSSR_OTGPH;
+	PSSR |= PSSR_OTGPH;
 
 	return 0;
 }
 #endif
 
 /* work with hotplug and coldplug */
-MODULE_ALIAS("platform:pxa27x-udc");
+MODULE_ALIAS("platform:pxa2xx-udc");
 
 static struct platform_driver udc_driver = {
 	.driver		= {
-		.name	= "pxa27x-udc",
+		.name	= "pxa2xx-udc",
 		.owner	= THIS_MODULE,
 	},
 	.remove		= __exit_p(pxa_udc_remove),

@@ -68,13 +68,6 @@
 #define ucontext	ucontext32
 
 /*
- * Userspace code may pass a ucontext which doesn't include VSX added
- * at the end.  We need to check for this case.
- */
-#define UCONTEXTSIZEWITHOUTVSX \
-		(sizeof(struct ucontext) - sizeof(elf_vsrreghalf_t32))
-
-/*
  * Returning 0 means we return to userspace via
  * ret_from_except and thus restore all user
  * registers from *regs.  This is what we need
@@ -250,7 +243,7 @@ long sys_sigsuspend(old_sigset_t mask)
 
  	current->state = TASK_INTERRUPTIBLE;
  	schedule();
-	set_restore_sigmask();
+ 	set_thread_flag(TIF_RESTORE_SIGMASK);
  	return -ERESTARTNOHAND;
 }
 
@@ -335,90 +328,21 @@ struct rt_sigframe {
 	int			abigap[56];
 };
 
-#ifdef CONFIG_VSX
-unsigned long copy_fpr_to_user(void __user *to,
-			       struct task_struct *task)
-{
-	double buf[ELF_NFPREG];
-	int i;
-
-	/* save FPR copy to local buffer then write to the thread_struct */
-	for (i = 0; i < (ELF_NFPREG - 1) ; i++)
-		buf[i] = task->thread.TS_FPR(i);
-	memcpy(&buf[i], &task->thread.fpscr, sizeof(double));
-	return __copy_to_user(to, buf, ELF_NFPREG * sizeof(double));
-}
-
-unsigned long copy_fpr_from_user(struct task_struct *task,
-				 void __user *from)
-{
-	double buf[ELF_NFPREG];
-	int i;
-
-	if (__copy_from_user(buf, from, ELF_NFPREG * sizeof(double)))
-		return 1;
-	for (i = 0; i < (ELF_NFPREG - 1) ; i++)
-		task->thread.TS_FPR(i) = buf[i];
-	memcpy(&task->thread.fpscr, &buf[i], sizeof(double));
-
-	return 0;
-}
-
-unsigned long copy_vsx_to_user(void __user *to,
-			       struct task_struct *task)
-{
-	double buf[ELF_NVSRHALFREG];
-	int i;
-
-	/* save FPR copy to local buffer then write to the thread_struct */
-	for (i = 0; i < ELF_NVSRHALFREG; i++)
-		buf[i] = task->thread.fpr[i][TS_VSRLOWOFFSET];
-	return __copy_to_user(to, buf, ELF_NVSRHALFREG * sizeof(double));
-}
-
-unsigned long copy_vsx_from_user(struct task_struct *task,
-				 void __user *from)
-{
-	double buf[ELF_NVSRHALFREG];
-	int i;
-
-	if (__copy_from_user(buf, from, ELF_NVSRHALFREG * sizeof(double)))
-		return 1;
-	for (i = 0; i < ELF_NVSRHALFREG ; i++)
-		task->thread.fpr[i][TS_VSRLOWOFFSET] = buf[i];
-	return 0;
-}
-#else
-inline unsigned long copy_fpr_to_user(void __user *to,
-				      struct task_struct *task)
-{
-	return __copy_to_user(to, task->thread.fpr,
-			      ELF_NFPREG * sizeof(double));
-}
-
-inline unsigned long copy_fpr_from_user(struct task_struct *task,
-					void __user *from)
-{
-	return __copy_from_user(task->thread.fpr, from,
-			      ELF_NFPREG * sizeof(double));
-}
-#endif
-
 /*
  * Save the current user registers on the user stack.
  * We only save the altivec/spe registers if the process has used
  * altivec/spe instructions at some point.
  */
 static int save_user_regs(struct pt_regs *regs, struct mcontext __user *frame,
-		int sigret, int ctx_has_vsx_region)
+		int sigret)
 {
-	unsigned long msr = regs->msr;
-
 	/* Make sure floating point registers are stored in regs */
 	flush_fp_to_thread(current);
 
-	/* save general registers */
-	if (save_general_regs(regs, frame))
+	/* save general and floating-point registers */
+	if (save_general_regs(regs, frame) ||
+	    __copy_to_user(&frame->mc_fregs, current->thread.fpr,
+		    ELF_NFPREG * sizeof(double)))
 		return 1;
 
 #ifdef CONFIG_ALTIVEC
@@ -430,7 +354,8 @@ static int save_user_regs(struct pt_regs *regs, struct mcontext __user *frame,
 			return 1;
 		/* set MSR_VEC in the saved MSR value to indicate that
 		   frame->mc_vregs contains valid data */
-		msr |= MSR_VEC;
+		if (__put_user(regs->msr | MSR_VEC, &frame->mc_gregs[PT_MSR]))
+			return 1;
 	}
 	/* else assert((regs->msr & MSR_VEC) == 0) */
 
@@ -442,22 +367,7 @@ static int save_user_regs(struct pt_regs *regs, struct mcontext __user *frame,
 	if (__put_user(current->thread.vrsave, (u32 __user *)&frame->mc_vregs[32]))
 		return 1;
 #endif /* CONFIG_ALTIVEC */
-	if (copy_fpr_to_user(&frame->mc_fregs, current))
-		return 1;
-#ifdef CONFIG_VSX
-	/*
-	 * Copy VSR 0-31 upper half from thread_struct to local
-	 * buffer, then write that to userspace.  Also set MSR_VSX in
-	 * the saved MSR value to indicate that frame->mc_vregs
-	 * contains valid data
-	 */
-	if (current->thread.used_vsr && ctx_has_vsx_region) {
-		__giveup_vsx(current);
-		if (copy_vsx_to_user(&frame->mc_vsregs, current))
-			return 1;
-		msr |= MSR_VSX;
-	}
-#endif /* CONFIG_VSX */
+
 #ifdef CONFIG_SPE
 	/* save spe registers */
 	if (current->thread.used_spe) {
@@ -467,7 +377,8 @@ static int save_user_regs(struct pt_regs *regs, struct mcontext __user *frame,
 			return 1;
 		/* set MSR_SPE in the saved MSR value to indicate that
 		   frame->mc_vregs contains valid data */
-		msr |= MSR_SPE;
+		if (__put_user(regs->msr | MSR_SPE, &frame->mc_gregs[PT_MSR]))
+			return 1;
 	}
 	/* else assert((regs->msr & MSR_SPE) == 0) */
 
@@ -476,8 +387,6 @@ static int save_user_regs(struct pt_regs *regs, struct mcontext __user *frame,
 		return 1;
 #endif /* CONFIG_SPE */
 
-	if (__put_user(msr, &frame->mc_gregs[PT_MSR]))
-		return 1;
 	if (sigret) {
 		/* Set up the sigreturn trampoline: li r0,sigret; sc */
 		if (__put_user(0x38000000UL + sigret, &frame->tramp[0])
@@ -500,9 +409,6 @@ static long restore_user_regs(struct pt_regs *regs,
 	long err;
 	unsigned int save_r2 = 0;
 	unsigned long msr;
-#ifdef CONFIG_VSX
-	int i;
-#endif
 
 	/*
 	 * restore general registers but not including MSR or SOFTE. Also
@@ -530,11 +436,16 @@ static long restore_user_regs(struct pt_regs *regs,
 	 */
 	discard_lazy_cpu_state();
 
+	/* force the process to reload the FP registers from
+	   current->thread when it next does FP instructions */
+	regs->msr &= ~(MSR_FP | MSR_FE0 | MSR_FE1);
+	if (__copy_from_user(current->thread.fpr, &sr->mc_fregs,
+			     sizeof(sr->mc_fregs)))
+		return 1;
+
 #ifdef CONFIG_ALTIVEC
-	/*
-	 * Force the process to reload the altivec registers from
-	 * current->thread when it next does altivec instructions
-	 */
+	/* force the process to reload the altivec registers from
+	   current->thread when it next does altivec instructions */
 	regs->msr &= ~MSR_VEC;
 	if (msr & MSR_VEC) {
 		/* restore altivec registers from the stack */
@@ -548,31 +459,6 @@ static long restore_user_regs(struct pt_regs *regs,
 	if (__get_user(current->thread.vrsave, (u32 __user *)&sr->mc_vregs[32]))
 		return 1;
 #endif /* CONFIG_ALTIVEC */
-	if (copy_fpr_from_user(current, &sr->mc_fregs))
-		return 1;
-
-#ifdef CONFIG_VSX
-	/*
-	 * Force the process to reload the VSX registers from
-	 * current->thread when it next does VSX instruction.
-	 */
-	regs->msr &= ~MSR_VSX;
-	if (msr & MSR_VSX) {
-		/*
-		 * Restore altivec registers from the stack to a local
-		 * buffer, then write this out to the thread_struct
-		 */
-		if (copy_vsx_from_user(current, &sr->mc_vsregs))
-			return 1;
-	} else if (current->thread.used_vsr)
-		for (i = 0; i < 32 ; i++)
-			current->thread.fpr[i][TS_VSRLOWOFFSET] = 0;
-#endif /* CONFIG_VSX */
-	/*
-	 * force the process to reload the FP registers from
-	 * current->thread when it next does FP instructions
-	 */
-	regs->msr &= ~(MSR_FP | MSR_FE0 | MSR_FE1);
 
 #ifdef CONFIG_SPE
 	/* force the process to reload the spe registers from
@@ -858,11 +744,11 @@ int handle_rt_signal32(unsigned long sig, struct k_sigaction *ka,
 	frame = &rt_sf->uc.uc_mcontext;
 	addr = frame;
 	if (vdso32_rt_sigtramp && current->mm->context.vdso_base) {
-		if (save_user_regs(regs, frame, 0, 1))
+		if (save_user_regs(regs, frame, 0))
 			goto badframe;
 		regs->link = current->mm->context.vdso_base + vdso32_rt_sigtramp;
 	} else {
-		if (save_user_regs(regs, frame, __NR_rt_sigreturn, 1))
+		if (save_user_regs(regs, frame, __NR_rt_sigreturn))
 			goto badframe;
 		regs->link = (unsigned long) frame->tramp;
 	}
@@ -936,49 +822,13 @@ long sys_swapcontext(struct ucontext __user *old_ctx,
 		     int ctx_size, int r6, int r7, int r8, struct pt_regs *regs)
 {
 	unsigned char tmp;
-	int ctx_has_vsx_region = 0;
 
-#ifdef CONFIG_PPC64
-	unsigned long new_msr = 0;
-
-	if (new_ctx) {
-		struct mcontext __user *mcp;
-		u32 cmcp;
-
-		/*
-		 * Get pointer to the real mcontext.  No need for
-		 * access_ok since we are dealing with compat
-		 * pointers.
-		 */
-		if (__get_user(cmcp, &new_ctx->uc_regs))
-			return -EFAULT;
-		mcp = (struct mcontext __user *)(u64)cmcp;
-		if (__get_user(new_msr, &mcp->mc_gregs[PT_MSR]))
-			return -EFAULT;
-	}
-	/*
-	 * Check that the context is not smaller than the original
-	 * size (with VMX but without VSX)
-	 */
-	if (ctx_size < UCONTEXTSIZEWITHOUTVSX)
-		return -EINVAL;
-	/*
-	 * If the new context state sets the MSR VSX bits but
-	 * it doesn't provide VSX state.
-	 */
-	if ((ctx_size < sizeof(struct ucontext)) &&
-	    (new_msr & MSR_VSX))
-		return -EINVAL;
-	/* Does the context have enough room to store VSX data? */
-	if (ctx_size >= sizeof(struct ucontext))
-		ctx_has_vsx_region = 1;
-#else
 	/* Context size is for future use. Right now, we only make sure
 	 * we are passed something we understand
 	 */
 	if (ctx_size < sizeof(struct ucontext))
 		return -EINVAL;
-#endif
+
 	if (old_ctx != NULL) {
 		struct mcontext __user *mctx;
 
@@ -991,17 +841,17 @@ long sys_swapcontext(struct ucontext __user *old_ctx,
 		 */
 		mctx = (struct mcontext __user *)
 			((unsigned long) &old_ctx->uc_mcontext & ~0xfUL);
-		if (!access_ok(VERIFY_WRITE, old_ctx, ctx_size)
-		    || save_user_regs(regs, mctx, 0, ctx_has_vsx_region)
+		if (!access_ok(VERIFY_WRITE, old_ctx, sizeof(*old_ctx))
+		    || save_user_regs(regs, mctx, 0)
 		    || put_sigset_t(&old_ctx->uc_sigmask, &current->blocked)
 		    || __put_user(to_user_ptr(mctx), &old_ctx->uc_regs))
 			return -EFAULT;
 	}
 	if (new_ctx == NULL)
 		return 0;
-	if (!access_ok(VERIFY_READ, new_ctx, ctx_size)
+	if (!access_ok(VERIFY_READ, new_ctx, sizeof(*new_ctx))
 	    || __get_user(tmp, (u8 __user *) new_ctx)
-	    || __get_user(tmp, (u8 __user *) new_ctx + ctx_size - 1))
+	    || __get_user(tmp, (u8 __user *) (new_ctx + 1) - 1))
 		return -EFAULT;
 
 	/*
@@ -1202,11 +1052,11 @@ int handle_signal32(unsigned long sig, struct k_sigaction *ka,
 		goto badframe;
 
 	if (vdso32_sigtramp && current->mm->context.vdso_base) {
-		if (save_user_regs(regs, &frame->mctx, 0, 1))
+		if (save_user_regs(regs, &frame->mctx, 0))
 			goto badframe;
 		regs->link = current->mm->context.vdso_base + vdso32_sigtramp;
 	} else {
-		if (save_user_regs(regs, &frame->mctx, __NR_sigreturn, 1))
+		if (save_user_regs(regs, &frame->mctx, __NR_sigreturn))
 			goto badframe;
 		regs->link = (unsigned long) frame->mctx.tramp;
 	}

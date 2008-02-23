@@ -19,9 +19,7 @@
 #undef DEBUGDATA
 #undef DEBUGCCW
 
-#define KMSG_COMPONENT "ctcm"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -151,7 +149,7 @@ void ctcmpc_dumpit(char *buf, int len)
 	for (ct = 0; ct < len; ct++, ptr++, rptr++) {
 		if (sw == 0) {
 			#if (UTS_MACHINE == s390x)
-			sprintf(addr, "%16.16lx", (__u64)rptr);
+			sprintf(addr, "%16.16lx", (unsigned long)rptr);
 			#else
 			sprintf(addr, "%8.8X", (__u32)rptr);
 			#endif
@@ -166,7 +164,7 @@ void ctcmpc_dumpit(char *buf, int len)
 			strcat(bhex, "	");
 
 		#if (UTS_MACHINE == s390x)
-		sprintf(tbuf, "%2.2lX", (__u64)*ptr);
+		sprintf(tbuf, "%2.2lX", (unsigned long)*ptr);
 		#else
 		sprintf(tbuf, "%2.2X", (__u32)*ptr);
 		#endif
@@ -181,24 +179,24 @@ void ctcmpc_dumpit(char *buf, int len)
 		basc[sw+1] = '\0';
 		sw++;
 		rm--;
-		if (sw != 16)
-			continue;
-		if ((strcmp(duphex, bhex)) != 0) {
-			if (dup != 0) {
-				sprintf(tdup,
-					"Duplicate as above to %s", addr);
-				ctcm_pr_debug("		       --- %s ---\n",
-						tdup);
-			}
-			ctcm_pr_debug("   %s (+%s) : %s  [%s]\n",
+		if (sw == 16) {
+			if ((strcmp(duphex, bhex)) != 0) {
+				if (dup != 0) {
+					sprintf(tdup, "Duplicate as above "
+						"to %s", addr);
+					printk(KERN_INFO "		  "
+						"     --- %s ---\n", tdup);
+				}
+				printk(KERN_INFO "   %s (+%s) : %s  [%s]\n",
 					addr, boff, bhex, basc);
-			dup = 0;
-			strcpy(duphex, bhex);
-		} else
-			dup++;
+				dup = 0;
+				strcpy(duphex, bhex);
+			} else
+				dup++;
 
-		sw = 0;
-		rm = 16;
+			sw = 0;
+			rm = 16;
+		}
 	}  /* endfor */
 
 	if (sw != 0) {
@@ -212,17 +210,19 @@ void ctcmpc_dumpit(char *buf, int len)
 		}
 		if (dup != 0) {
 			sprintf(tdup, "Duplicate as above to %s", addr);
-			ctcm_pr_debug("		       --- %s ---\n", tdup);
+			printk(KERN_INFO "		  "
+				"     --- %s ---\n", tdup);
 		}
-		ctcm_pr_debug("   %s (+%s) : %s  [%s]\n",
-					addr, boff, bhex, basc);
+		printk(KERN_INFO "   %s (+%s) : %s  [%s]\n",
+			addr, boff, bhex, basc);
 	} else {
 		if (dup >= 1) {
 			sprintf(tdup, "Duplicate as above to %s", addr);
-			ctcm_pr_debug("		       --- %s ---\n", tdup);
+			printk(KERN_INFO "		  "
+				"     --- %s ---\n", tdup);
 		}
 		if (dup != 0) {
-			ctcm_pr_debug("   %s (+%s) : %s  [%s]\n",
+			printk(KERN_INFO "   %s (+%s) : %s  [%s]\n",
 				addr, boff, bhex, basc);
 		}
 	}
@@ -241,7 +241,7 @@ void ctcmpc_dumpit(char *buf, int len)
  */
 void ctcmpc_dump_skb(struct sk_buff *skb, int offset)
 {
-	__u8 *p = skb->data;
+	unsigned char *p = skb->data;
 	struct th_header *header;
 	struct pdu *pheader;
 	int bl = skb->len;
@@ -253,8 +253,8 @@ void ctcmpc_dump_skb(struct sk_buff *skb, int offset)
 	p += offset;
 	header = (struct th_header *)p;
 
-	ctcm_pr_debug("dump:\n");
-	ctcm_pr_debug("skb len=%d \n", skb->len);
+	printk(KERN_INFO "dump:\n");
+	printk(KERN_INFO "skb len=%d \n", skb->len);
 	if (skb->len > 2) {
 		switch (header->th_ch_flag) {
 		case TH_HAS_PDU:
@@ -273,63 +273,31 @@ void ctcmpc_dump_skb(struct sk_buff *skb, int offset)
 		}
 
 		pheader = (struct pdu *)p;
-		ctcm_pr_debug("pdu->offset: %d hex: %04x\n",
-			       pheader->pdu_offset, pheader->pdu_offset);
-		ctcm_pr_debug("pdu->flag  : %02x\n", pheader->pdu_flag);
-		ctcm_pr_debug("pdu->proto : %02x\n", pheader->pdu_proto);
-		ctcm_pr_debug("pdu->seq   : %02x\n", pheader->pdu_seq);
+		printk(KERN_INFO "pdu->offset: %d hex: %04x\n",
+		       pheader->pdu_offset, pheader->pdu_offset);
+		printk(KERN_INFO "pdu->flag  : %02x\n", pheader->pdu_flag);
+		printk(KERN_INFO "pdu->proto : %02x\n", pheader->pdu_proto);
+		printk(KERN_INFO "pdu->seq   : %02x\n", pheader->pdu_seq);
 					goto dumpdata;
 
 dumpth:
-		ctcm_pr_debug("th->seg     : %02x\n", header->th_seg);
-		ctcm_pr_debug("th->ch      : %02x\n", header->th_ch_flag);
-		ctcm_pr_debug("th->blk_flag: %02x\n", header->th_blk_flag);
-		ctcm_pr_debug("th->type    : %s\n",
-			       (header->th_is_xid) ? "DATA" : "XID");
-		ctcm_pr_debug("th->seqnum  : %04x\n", header->th_seq_num);
+		printk(KERN_INFO "th->seg     : %02x\n", header->th_seg);
+		printk(KERN_INFO "th->ch      : %02x\n", header->th_ch_flag);
+		printk(KERN_INFO "th->blk_flag: %02x\n", header->th_blk_flag);
+		printk(KERN_INFO "th->type    : %s\n",
+		       (header->th_is_xid) ? "DATA" : "XID");
+		printk(KERN_INFO "th->seqnum  : %04x\n", header->th_seq_num);
 
 	}
 dumpdata:
 	if (bl > 32)
 		bl = 32;
-	ctcm_pr_debug("data: ");
+	printk(KERN_INFO "data: ");
 	for (i = 0; i < bl; i++)
-		ctcm_pr_debug("%02x%s", *p++, (i % 16) ? " " : "\n");
-	ctcm_pr_debug("\n");
+		printk(KERN_INFO "%02x%s", *p++, (i % 16) ? " " : "\n<7>");
+	printk(KERN_INFO "\n");
 }
 #endif
-
-static struct net_device *ctcmpc_get_dev(int port_num)
-{
-	char device[20];
-	struct net_device *dev;
-	struct ctcm_priv *priv;
-
-	sprintf(device, "%s%i", MPC_DEVICE_NAME, port_num);
-
-	dev = __dev_get_by_name(&init_net, device);
-
-	if (dev == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s: Device not found by name: %s",
-					CTCM_FUNTAIL, device);
-		return NULL;
-	}
-	priv = dev->ml_priv;
-	if (priv == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): dev->ml_priv is NULL",
-					CTCM_FUNTAIL, device);
-		return NULL;
-	}
-	if (priv->mpcg == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): priv->mpcg is NULL",
-					CTCM_FUNTAIL, device);
-		return NULL;
-	}
-	return dev;
-}
 
 /*
  * ctc_mpc_alloc_channel
@@ -340,23 +308,34 @@ static struct net_device *ctcmpc_get_dev(int port_num)
  */
 int ctc_mpc_alloc_channel(int port_num, void (*callback)(int, int))
 {
+	char device[20];
 	struct net_device *dev;
 	struct mpc_group *grp;
 	struct ctcm_priv *priv;
 
-	dev = ctcmpc_get_dev(port_num);
-	if (dev == NULL)
+	ctcm_pr_debug("ctcmpc enter:	%s()\n", __FUNCTION__);
+
+	sprintf(device, "%s%i", MPC_DEVICE_NAME, port_num);
+	dev = __dev_get_by_name(&init_net, device);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "ctc_mpc_alloc_channel %s dev=NULL\n", device);
 		return 1;
-	priv = dev->ml_priv;
+	}
+
+	priv = dev->priv;
 	grp = priv->mpcg;
+	if (!grp)
+		return 1;
 
 	grp->allochanfunc = callback;
 	grp->port_num = port_num;
 	grp->port_persist = 1;
 
-	CTCM_DBF_TEXT_(MPC_SETUP, CTC_DBF_INFO,
-			"%s(%s): state=%s",
-			CTCM_FUNTAIL, dev->name, fsm_getstate_str(grp->fsm));
+	ctcm_pr_debug("ctcmpc: %s called for device %s state=%s\n",
+		       __FUNCTION__,
+		       dev->name,
+		       fsm_getstate_str(grp->fsm));
 
 	switch (fsm_getstate(grp->fsm)) {
 	case MPCG_STATE_INOP:
@@ -389,7 +368,7 @@ int ctc_mpc_alloc_channel(int port_num, void (*callback)(int, int))
 		if (grp->allocchan_callback_retries < 4) {
 			if (grp->allochanfunc)
 				grp->allochanfunc(grp->port_num,
-						  grp->group_max_buflen);
+					      grp->group_max_buflen);
 		} else {
 			/* there are problems...bail out	    */
 			/* there may be a state mismatch so restart */
@@ -398,8 +377,12 @@ int ctc_mpc_alloc_channel(int port_num, void (*callback)(int, int))
 			grp->allocchan_callback_retries = 0;
 		}
 		break;
+	default:
+		return 0;
+
 	}
 
+	ctcm_pr_debug("ctcmpc exit:  %s()\n", __FUNCTION__);
 	return 0;
 }
 EXPORT_SYMBOL(ctc_mpc_alloc_channel);
@@ -411,22 +394,31 @@ EXPORT_SYMBOL(ctc_mpc_alloc_channel);
 void ctc_mpc_establish_connectivity(int port_num,
 				void (*callback)(int, int, int))
 {
+	char device[20];
 	struct net_device *dev;
 	struct mpc_group *grp;
 	struct ctcm_priv *priv;
 	struct channel *rch, *wch;
 
-	dev = ctcmpc_get_dev(port_num);
-	if (dev == NULL)
+	ctcm_pr_debug("ctcmpc enter:	%s()\n", __FUNCTION__);
+
+	sprintf(device, "%s%i", MPC_DEVICE_NAME, port_num);
+	dev = __dev_get_by_name(&init_net, device);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "ctc_mpc_establish_connectivity "
+				"%s dev=NULL\n", device);
 		return;
-	priv = dev->ml_priv;
-	grp = priv->mpcg;
+	}
+	priv = dev->priv;
 	rch = priv->channel[READ];
 	wch = priv->channel[WRITE];
 
-	CTCM_DBF_TEXT_(MPC_SETUP, CTC_DBF_INFO,
-			"%s(%s): state=%s",
-			CTCM_FUNTAIL, dev->name, fsm_getstate_str(grp->fsm));
+	grp = priv->mpcg;
+
+	ctcm_pr_debug("ctcmpc: %s() called for device %s state=%s\n",
+			__FUNCTION__, dev->name,
+			fsm_getstate_str(grp->fsm));
 
 	grp->estconnfunc = callback;
 	grp->port_num = port_num;
@@ -454,10 +446,8 @@ void ctc_mpc_establish_connectivity(int port_num,
 	case MPCG_STATE_RESET:
 		/* MPC Group is not ready to start XID - min num of */
 		/* 1 read and 1 write channel have not been acquired*/
-
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): REJECTED - inactive channels",
-					CTCM_FUNTAIL, dev->name);
+		printk(KERN_WARNING "ctcmpc: %s() REJECTED ACTIVE XID Req"
+			"uest - Channel Pair is not Active\n", __FUNCTION__);
 		if (grp->estconnfunc) {
 			grp->estconnfunc(grp->port_num, -1, 0);
 			grp->estconnfunc = NULL;
@@ -467,12 +457,11 @@ void ctc_mpc_establish_connectivity(int port_num,
 		/* alloc channel was called but no XID exchange    */
 		/* has occurred. initiate xside XID exchange	   */
 		/* make sure yside XID0 processing has not started */
-
 		if ((fsm_getstate(rch->fsm) > CH_XID0_PENDING) ||
 			(fsm_getstate(wch->fsm) > CH_XID0_PENDING)) {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): ABORT - PASSIVE XID",
-					CTCM_FUNTAIL, dev->name);
+			printk(KERN_WARNING "mpc: %s() ABORT ACTIVE XID"
+			       " Request- PASSIVE XID in process\n"
+			       , __FUNCTION__);
 			break;
 		}
 		grp->send_qllc_disc = 1;
@@ -487,9 +476,9 @@ void ctc_mpc_establish_connectivity(int port_num,
 				(fsm_getstate(rch->fsm) == CH_XID0_PENDING))
 			fsm_event(grp->fsm, MPCG_EVENT_XID0DO, rch);
 		else {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): RX-%s not ready for ACTIVE XID0",
-					CTCM_FUNTAIL, dev->name, rch->id);
+			printk(KERN_WARNING "mpc: %s() Unable to start"
+			       " ACTIVE XID0 on read channel\n",
+			       __FUNCTION__);
 			if (grp->estconnfunc) {
 				grp->estconnfunc(grp->port_num, -1, 0);
 				grp->estconnfunc = NULL;
@@ -501,9 +490,9 @@ void ctc_mpc_establish_connectivity(int port_num,
 				(fsm_getstate(wch->fsm) == CH_XID0_PENDING))
 			fsm_event(grp->fsm, MPCG_EVENT_XID0DO, wch);
 		else {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): WX-%s not ready for ACTIVE XID0",
-					CTCM_FUNTAIL, dev->name, wch->id);
+			printk(KERN_WARNING "mpc: %s() Unable to start"
+				" ACTIVE XID0 on write channel\n",
+					__FUNCTION__);
 			if (grp->estconnfunc) {
 				grp->estconnfunc(grp->port_num, -1, 0);
 				grp->estconnfunc = NULL;
@@ -519,7 +508,7 @@ void ctc_mpc_establish_connectivity(int port_num,
 	}
 
 done:
-	CTCM_PR_DEBUG("Exit %s()\n", __func__);
+	ctcm_pr_debug("ctcmpc exit:  %s()\n", __FUNCTION__);
 	return;
 }
 EXPORT_SYMBOL(ctc_mpc_establish_connectivity);
@@ -531,22 +520,40 @@ EXPORT_SYMBOL(ctc_mpc_establish_connectivity);
 void ctc_mpc_dealloc_ch(int port_num)
 {
 	struct net_device *dev;
+	char device[20];
 	struct ctcm_priv *priv;
 	struct mpc_group *grp;
 
-	dev = ctcmpc_get_dev(port_num);
-	if (dev == NULL)
-		return;
-	priv = dev->ml_priv;
-	grp = priv->mpcg;
+	ctcm_pr_debug("ctcmpc enter:	%s()\n", __FUNCTION__);
+	sprintf(device, "%s%i", MPC_DEVICE_NAME, port_num);
+	dev = __dev_get_by_name(&init_net, device);
 
-	CTCM_DBF_TEXT_(MPC_SETUP, CTC_DBF_DEBUG,
-			"%s: %s: refcount = %d\n",
-			CTCM_FUNTAIL, dev->name, atomic_read(&dev->refcnt));
+	if (dev == NULL) {
+		printk(KERN_INFO "%s() %s dev=NULL\n", __FUNCTION__, device);
+					goto done;
+	}
 
+	ctcm_pr_debug("ctcmpc:%s %s() called for device %s refcount=%d\n",
+			dev->name, __FUNCTION__,
+			dev->name, atomic_read(&dev->refcnt));
+
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "%s() %s priv=NULL\n",
+				__FUNCTION__, device);
+					goto done;
+	}
 	fsm_deltimer(&priv->restart_timer);
+
+	grp = priv->mpcg;
+	if (grp == NULL) {
+		printk(KERN_INFO "%s() %s dev=NULL\n", __FUNCTION__, device);
+					goto done;
+	}
 	grp->channels_terminating = 0;
+
 	fsm_deltimer(&grp->timer);
+
 	grp->allochanfunc = NULL;
 	grp->estconnfunc = NULL;
 	grp->port_persist = 0;
@@ -554,6 +561,8 @@ void ctc_mpc_dealloc_ch(int port_num)
 	fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
 
 	ctcm_close(dev);
+done:
+	ctcm_pr_debug("ctcmpc exit:  %s()\n", __FUNCTION__);
 	return;
 }
 EXPORT_SYMBOL(ctc_mpc_dealloc_ch);
@@ -564,22 +573,32 @@ EXPORT_SYMBOL(ctc_mpc_dealloc_ch);
  */
 void ctc_mpc_flow_control(int port_num, int flowc)
 {
+	char device[20];
 	struct ctcm_priv *priv;
 	struct mpc_group *grp;
 	struct net_device *dev;
 	struct channel *rch;
 	int mpcg_state;
 
-	dev = ctcmpc_get_dev(port_num);
-	if (dev == NULL)
+	ctcm_pr_debug("ctcmpc enter:	%s() %i\n", __FUNCTION__, flowc);
+
+	sprintf(device, "%s%i", MPC_DEVICE_NAME, port_num);
+	dev = __dev_get_by_name(&init_net, device);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "ctc_mpc_flow_control %s dev=NULL\n", device);
 		return;
-	priv = dev->ml_priv;
+	}
+
+	ctcm_pr_debug("ctcmpc: %s %s called \n", dev->name, __FUNCTION__);
+
+	priv  = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "ctcmpc:%s() %s priv=NULL\n",
+		       __FUNCTION__, device);
+		return;
+	}
 	grp = priv->mpcg;
-
-	CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_DEBUG,
-			"%s: %s: flowc = %d",
-				CTCM_FUNTAIL, dev->name, flowc);
-
 	rch = priv->channel[READ];
 
 	mpcg_state = fsm_getstate(grp->fsm);
@@ -610,6 +629,7 @@ void ctc_mpc_flow_control(int port_num, int flowc)
 		break;
 	}
 
+	ctcm_pr_debug("ctcmpc exit:  %s() %i\n", __FUNCTION__, flowc);
 }
 EXPORT_SYMBOL(ctc_mpc_flow_control);
 
@@ -622,12 +642,16 @@ static void mpc_rcvd_sweep_resp(struct mpcg_info *mpcginfo)
 {
 	struct channel	  *rch = mpcginfo->ch;
 	struct net_device *dev = rch->netdev;
-	struct ctcm_priv   *priv = dev->ml_priv;
+	struct ctcm_priv   *priv = dev->priv;
 	struct mpc_group  *grp = priv->mpcg;
 	struct channel	  *ch = priv->channel[WRITE];
 
-	CTCM_PR_DEBUG("%s: ch=0x%p id=%s\n", __func__, ch, ch->id);
-	CTCM_D3_DUMP((char *)mpcginfo->sweep, TH_SWEEP_LENGTH);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc enter: %s(): ch=0x%p id=%s\n",
+			__FUNCTION__, ch, ch->id);
+
+	if (do_debug_data)
+		ctcmpc_dumpit((char *)mpcginfo->sweep, TH_SWEEP_LENGTH);
 
 	grp->sweep_rsp_pend_num--;
 
@@ -653,20 +677,21 @@ static void mpc_rcvd_sweep_resp(struct mpcg_info *mpcginfo)
 static void ctcmpc_send_sweep_resp(struct channel *rch)
 {
 	struct net_device *dev = rch->netdev;
-	struct ctcm_priv *priv = dev->ml_priv;
+	struct ctcm_priv *priv = dev->priv;
 	struct mpc_group *grp = priv->mpcg;
 	int rc = 0;
 	struct th_sweep *header;
 	struct sk_buff *sweep_skb;
 	struct channel *ch  = priv->channel[WRITE];
 
-	CTCM_PR_DEBUG("%s: ch=0x%p id=%s\n", __func__, rch, rch->id);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc exit : %s(): ch=0x%p id=%s\n",
+			__FUNCTION__, rch, rch->id);
 
-	sweep_skb = __dev_alloc_skb(MPC_BUFSIZE_DEFAULT, GFP_ATOMIC | GFP_DMA);
+	sweep_skb = __dev_alloc_skb(MPC_BUFSIZE_DEFAULT,
+				    GFP_ATOMIC|GFP_DMA);
 	if (sweep_skb == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): sweep_skb allocation ERROR\n",
-			CTCM_FUNTAIL, rch->id);
+		printk(KERN_INFO "Couldn't alloc sweep_skb\n");
 		rc = -ENOMEM;
 				goto done;
 	}
@@ -715,13 +740,13 @@ static void mpc_rcvd_sweep_req(struct mpcg_info *mpcginfo)
 {
 	struct channel	  *rch     = mpcginfo->ch;
 	struct net_device *dev     = rch->netdev;
-	struct ctcm_priv  *priv = dev->ml_priv;
+	struct ctcm_priv  *priv = dev->priv;
 	struct mpc_group  *grp  = priv->mpcg;
 	struct channel	  *ch	   = priv->channel[WRITE];
 
 	if (do_debug)
 		CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_DEBUG,
-			" %s(): ch=0x%p id=%s\n", __func__, ch, ch->id);
+			" %s(): ch=0x%p id=%s\n", __FUNCTION__, ch, ch->id);
 
 	if (grp->in_sweep == 0) {
 		grp->in_sweep = 1;
@@ -730,7 +755,8 @@ static void mpc_rcvd_sweep_req(struct mpcg_info *mpcginfo)
 		grp->sweep_rsp_pend_num = grp->active_channels[READ];
 	}
 
-	CTCM_D3_DUMP((char *)mpcginfo->sweep, TH_SWEEP_LENGTH);
+	if (do_debug_data)
+		ctcmpc_dumpit((char *)mpcginfo->sweep, TH_SWEEP_LENGTH);
 
 	grp->sweep_req_pend_num--;
 	ctcmpc_send_sweep_resp(ch);
@@ -849,13 +875,25 @@ static int mpcg_fsm_len = ARRAY_SIZE(mpcg_fsm);
 static void mpc_action_go_ready(fsm_instance *fsm, int event, void *arg)
 {
 	struct net_device *dev = arg;
-	struct ctcm_priv *priv = dev->ml_priv;
-	struct mpc_group *grp = priv->mpcg;
+	struct ctcm_priv *priv = NULL;
+	struct mpc_group *grp = NULL;
 
+	if (dev == NULL) {
+		printk(KERN_INFO "%s() dev=NULL\n", __FUNCTION__);
+		return;
+	}
+
+	ctcm_pr_debug("ctcmpc enter: %s  %s()\n", dev->name, __FUNCTION__);
+
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "%s() priv=NULL\n", __FUNCTION__);
+		return;
+	}
+
+	grp = priv->mpcg;
 	if (grp == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): No MPC group",
-				CTCM_FUNTAIL, dev->name);
+		printk(KERN_INFO "%s() grp=NULL\n", __FUNCTION__);
 		return;
 	}
 
@@ -869,12 +907,7 @@ static void mpc_action_go_ready(fsm_instance *fsm, int event, void *arg)
 			grp->estconnfunc = NULL;
 		} else if (grp->allochanfunc)
 			grp->send_qllc_disc = 1;
-
-		fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): fails",
-					CTCM_FUNTAIL, dev->name);
-		return;
+					goto done;
 	}
 
 	grp->port_persist = 1;
@@ -883,7 +916,14 @@ static void mpc_action_go_ready(fsm_instance *fsm, int event, void *arg)
 
 	tasklet_hi_schedule(&grp->mpc_tasklet2);
 
+	ctcm_pr_debug("ctcmpc exit: %s  %s()\n", dev->name, __FUNCTION__);
 	return;
+
+done:
+	fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
+
+
+	ctcm_pr_info("ctcmpc: %s()failure occurred\n", __FUNCTION__);
 }
 
 /*
@@ -893,28 +933,42 @@ static void mpc_action_go_ready(fsm_instance *fsm, int event, void *arg)
 void mpc_group_ready(unsigned long adev)
 {
 	struct net_device *dev = (struct net_device *)adev;
-	struct ctcm_priv *priv = dev->ml_priv;
-	struct mpc_group *grp = priv->mpcg;
+	struct ctcm_priv *priv = NULL;
+	struct mpc_group  *grp = NULL;
 	struct channel *ch = NULL;
 
-	if (grp == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): No MPC group",
-				CTCM_FUNTAIL, dev->name);
+
+	ctcm_pr_debug("ctcmpc enter:	%s()\n", __FUNCTION__);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "%s() dev=NULL\n", __FUNCTION__);
 		return;
 	}
 
-	CTCM_DBF_TEXT_(MPC_SETUP, CTC_DBF_NOTICE,
-		"%s: %s: GROUP TRANSITIONED TO READY, maxbuf = %d\n",
-			CTCM_FUNTAIL, dev->name, grp->group_max_buflen);
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "%s() priv=NULL\n", __FUNCTION__);
+		return;
+	}
+
+	grp = priv->mpcg;
+	if (grp == NULL) {
+		printk(KERN_INFO "ctcmpc:%s() grp=NULL\n", __FUNCTION__);
+		return;
+	}
+
+	printk(KERN_NOTICE "ctcmpc: %s GROUP TRANSITIONED TO READY"
+	       "  maxbuf:%d\n",
+	       dev->name, grp->group_max_buflen);
 
 	fsm_newstate(grp->fsm, MPCG_STATE_READY);
 
 	/* Put up a read on the channel */
 	ch = priv->channel[READ];
 	ch->pdu_seq = 0;
-	CTCM_PR_DBGDATA("ctcmpc: %s() ToDCM_pdu_seq= %08x\n" ,
-			__func__, ch->pdu_seq);
+	if (do_debug_data)
+		ctcm_pr_debug("ctcmpc: %s() ToDCM_pdu_seq= %08x\n" ,
+			__FUNCTION__, ch->pdu_seq);
 
 	ctcmpc_chx_rxidle(ch->fsm, CTC_EVENT_START, ch);
 	/* Put the write channel in idle state */
@@ -926,18 +980,22 @@ void mpc_group_ready(unsigned long adev)
 		spin_unlock(&ch->collect_lock);
 	}
 	ctcm_chx_txidle(ch->fsm, CTC_EVENT_START, ch);
+
 	ctcm_clear_busy(dev);
 
 	if (grp->estconnfunc) {
 		grp->estconnfunc(grp->port_num, 0,
 				    grp->group_max_buflen);
 		grp->estconnfunc = NULL;
-	} else 	if (grp->allochanfunc)
-		grp->allochanfunc(grp->port_num, grp->group_max_buflen);
+	} else
+		if (grp->allochanfunc)
+		grp->allochanfunc(grp->port_num,
+				     grp->group_max_buflen);
 
 	grp->send_qllc_disc = 1;
 	grp->changed_side = 0;
 
+	ctcm_pr_debug("ctcmpc exit:  %s()\n", __FUNCTION__);
 	return;
 
 }
@@ -946,26 +1004,51 @@ void mpc_group_ready(unsigned long adev)
  * Increment the MPC Group Active Channel Counts
  * helper of dev_action (called from channel fsm)
  */
-void mpc_channel_action(struct channel *ch, int direction, int action)
+int mpc_channel_action(struct channel *ch, int direction, int action)
 {
-	struct net_device  *dev  = ch->netdev;
-	struct ctcm_priv   *priv = dev->ml_priv;
-	struct mpc_group   *grp  = priv->mpcg;
+	struct net_device  *dev     = ch->netdev;
+	struct ctcm_priv    *priv;
+	struct mpc_group   *grp  = NULL;
+	int	    rc = 0;
 
-	if (grp == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): No MPC group",
-				CTCM_FUNTAIL, dev->name);
-		return;
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc enter: %s(): ch=0x%p id=%s\n",
+			__FUNCTION__, ch, ch->id);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "ctcmpc_channel_action %i dev=NULL\n",
+		       action);
+		rc = 1;
+					goto done;
 	}
 
-	CTCM_PR_DEBUG("enter %s: ch=0x%p id=%s\n", __func__, ch, ch->id);
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO
+		       "ctcmpc_channel_action%i priv=NULL, dev=%s\n",
+		       action, dev->name);
+		rc = 2;
+					goto done;
+	}
 
-	CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_NOTICE,
-		"%s: %i / Grp:%s total_channels=%i, active_channels: "
-		"read=%i, write=%i\n", __func__, action,
-		fsm_getstate_str(grp->fsm), grp->num_channel_paths,
-		grp->active_channels[READ], grp->active_channels[WRITE]);
+	grp = priv->mpcg;
+
+	if (grp == NULL) {
+		printk(KERN_INFO "ctcmpc: %s()%i mpcgroup=NULL, dev=%s\n",
+		       __FUNCTION__, action, dev->name);
+		rc = 3;
+					goto done;
+	}
+
+	ctcm_pr_info(
+		      "ctcmpc: %s() %i(): Grp:%s total_channel_paths=%i "
+		      "active_channels read=%i, write=%i\n",
+		      __FUNCTION__,
+		      action,
+		      fsm_getstate_str(grp->fsm),
+		      grp->num_channel_paths,
+		      grp->active_channels[READ],
+		      grp->active_channels[WRITE]);
 
 	if ((action == MPC_CHANNEL_ADD) && (ch->in_mpcgroup == 0)) {
 		grp->num_channel_paths++;
@@ -979,11 +1062,10 @@ void mpc_channel_action(struct channel *ch, int direction, int action)
 		ch->xid_skb = __dev_alloc_skb(MPC_BUFSIZE_DEFAULT,
 					GFP_ATOMIC | GFP_DMA);
 		if (ch->xid_skb == NULL) {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): Couldn't alloc ch xid_skb\n",
-				CTCM_FUNTAIL, dev->name);
+			printk(KERN_INFO "ctcmpc: %s()"
+			       "Couldn't alloc ch xid_skb\n", __FUNCTION__);
 			fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
-			return;
+			return 1;
 		}
 		ch->xid_skb_data = ch->xid_skb->data;
 		ch->xid_th = (struct th_header *)ch->xid_skb->data;
@@ -1015,9 +1097,8 @@ void mpc_channel_action(struct channel *ch, int direction, int action)
 		    (grp->active_channels[WRITE] > 0) &&
 			(fsm_getstate(grp->fsm) < MPCG_STATE_XID2INITW)) {
 			fsm_newstate(grp->fsm, MPCG_STATE_XID2INITW);
-			CTCM_DBF_TEXT_(MPC_SETUP, CTC_DBF_NOTICE,
-				"%s: %s: MPC GROUP CHANNELS ACTIVE\n",
-						__func__, dev->name);
+			printk(KERN_NOTICE "ctcmpc: %s MPC GROUP "
+					"CHANNELS ACTIVE\n", dev->name);
 		}
 	} else if ((action == MPC_CHANNEL_REMOVE) &&
 			(ch->in_mpcgroup == 1)) {
@@ -1038,14 +1119,25 @@ void mpc_channel_action(struct channel *ch, int direction, int action)
 					(grp->active_channels[READ] > 0)))
 			fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
 	}
-done:
-	CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_DEBUG,
-		"exit %s: %i / Grp:%s total_channels=%i, active_channels: "
-		"read=%i, write=%i\n", __func__, action,
-		fsm_getstate_str(grp->fsm), grp->num_channel_paths,
-		grp->active_channels[READ], grp->active_channels[WRITE]);
 
-	CTCM_PR_DEBUG("exit %s: ch=0x%p id=%s\n", __func__, ch, ch->id);
+done:
+
+	if (do_debug) {
+		ctcm_pr_debug(
+		       "ctcmpc: %s() %i Grp:%s ttl_chan_paths=%i "
+		       "active_chans read=%i, write=%i\n",
+		       __FUNCTION__,
+		       action,
+		       fsm_getstate_str(grp->fsm),
+		       grp->num_channel_paths,
+		       grp->active_channels[READ],
+		       grp->active_channels[WRITE]);
+
+		ctcm_pr_debug("ctcmpc exit : %s(): ch=0x%p id=%s\n",
+				__FUNCTION__, ch, ch->id);
+	}
+	return rc;
+
 }
 
 /**
@@ -1059,7 +1151,7 @@ done:
 static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 {
 	struct net_device *dev	= ch->netdev;
-	struct ctcm_priv *priv = dev->ml_priv;
+	struct ctcm_priv *priv = dev->priv;
 	struct mpc_group *grp = priv->mpcg;
 	struct pdu *curr_pdu;
 	struct mpcg_info *mpcginfo;
@@ -1071,8 +1163,9 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 	int skblen;
 	int sendrc = 0;
 
-	CTCM_PR_DEBUG("ctcmpc enter: %s() %s cp:%i ch:%s\n",
-			__func__, dev->name, smp_processor_id(), ch->id);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc enter: %s() %s cp:%i ch:%s\n",
+		       __FUNCTION__, dev->name, smp_processor_id(), ch->id);
 
 	header = (struct th_header *)pskb->data;
 	if ((header->th_seg == 0) &&
@@ -1081,16 +1174,21 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 		(header->th_seq_num == 0))
 		/* nothing for us */	goto done;
 
-	CTCM_PR_DBGDATA("%s: th_header\n", __func__);
-	CTCM_D3_DUMP((char *)header, TH_HEADER_LENGTH);
-	CTCM_PR_DBGDATA("%s: pskb len: %04x \n", __func__, pskb->len);
+	if (do_debug_data) {
+		ctcm_pr_debug("ctcmpc: %s() th_header\n", __FUNCTION__);
+		ctcmpc_dumpit((char *)header, TH_HEADER_LENGTH);
+		ctcm_pr_debug("ctcmpc: %s() pskb len: %04x \n",
+		       __FUNCTION__, pskb->len);
+	}
 
 	pskb->dev = dev;
 	pskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_pull(pskb, TH_HEADER_LENGTH);
 
 	if (likely(header->th_ch_flag == TH_HAS_PDU)) {
-		CTCM_PR_DBGDATA("%s: came into th_has_pdu\n", __func__);
+		if (do_debug_data)
+			ctcm_pr_debug("ctcmpc: %s() came into th_has_pdu\n",
+			       __FUNCTION__);
 		if ((fsm_getstate(grp->fsm) == MPCG_STATE_FLOWC) ||
 		   ((fsm_getstate(grp->fsm) == MPCG_STATE_READY) &&
 		    (header->th_seq_num != ch->th_seq_num + 1) &&
@@ -1104,29 +1202,33 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 			grp->out_of_sequence += 1;
 			__skb_push(pskb, TH_HEADER_LENGTH);
 			skb_queue_tail(&ch->io_queue, pskb);
-			CTCM_PR_DBGDATA("%s: th_seq_num expect:%08x "
-					"got:%08x\n", __func__,
-				ch->th_seq_num + 1, header->th_seq_num);
+			if (do_debug_data)
+				ctcm_pr_debug("ctcmpc: %s() th_seq_num "
+				       "expect:%08x got:%08x\n", __FUNCTION__,
+				       ch->th_seq_num + 1, header->th_seq_num);
 
 			return;
 		}
 		grp->out_of_sequence = 0;
 		ch->th_seq_num = header->th_seq_num;
 
-		CTCM_PR_DBGDATA("ctcmpc: %s() FromVTAM_th_seq=%08x\n",
-					__func__, ch->th_seq_num);
+		if (do_debug_data)
+			ctcm_pr_debug("ctcmpc: %s() FromVTAM_th_seq=%08x\n",
+			       __FUNCTION__, ch->th_seq_num);
 
 		if (unlikely(fsm_getstate(grp->fsm) != MPCG_STATE_READY))
 					goto done;
 		pdu_last_seen = 0;
 		while ((pskb->len > 0) && !pdu_last_seen) {
 			curr_pdu = (struct pdu *)pskb->data;
-
-			CTCM_PR_DBGDATA("%s: pdu_header\n", __func__);
-			CTCM_D3_DUMP((char *)pskb->data, PDU_HEADER_LENGTH);
-			CTCM_PR_DBGDATA("%s: pskb len: %04x \n",
-						__func__, pskb->len);
-
+			if (do_debug_data) {
+				ctcm_pr_debug("ctcm: %s() pdu_header\n",
+				       __FUNCTION__);
+				ctcmpc_dumpit((char *)pskb->data,
+						PDU_HEADER_LENGTH);
+				ctcm_pr_debug("ctcm: %s() pskb len: %04x \n",
+				       __FUNCTION__, pskb->len);
+			}
 			skb_pull(pskb, PDU_HEADER_LENGTH);
 
 			if (curr_pdu->pdu_flag & PDU_LAST)
@@ -1137,39 +1239,46 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 				pskb->protocol = htons(ETH_P_SNA_DIX);
 
 			if ((pskb->len <= 0) || (pskb->len > ch->max_bufsize)) {
-				CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-					"%s(%s): Dropping packet with "
-					"illegal siize %d",
-					CTCM_FUNTAIL, dev->name, pskb->len);
-
+				printk(KERN_INFO
+				       "%s Illegal packet size %d "
+				       "received "
+				       "dropping\n", dev->name,
+				       pskb->len);
 				priv->stats.rx_dropped++;
 				priv->stats.rx_length_errors++;
 					goto done;
 			}
 			skb_reset_mac_header(pskb);
 			new_len = curr_pdu->pdu_offset;
-			CTCM_PR_DBGDATA("%s: new_len: %04x \n",
-						__func__, new_len);
+			if (do_debug_data)
+				ctcm_pr_debug("ctcmpc: %s() new_len: %04x \n",
+				       __FUNCTION__, new_len);
 			if ((new_len == 0) || (new_len > pskb->len)) {
 				/* should never happen		    */
 				/* pskb len must be hosed...bail out */
-				CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-					"%s(%s): non valid pdu_offset: %04x",
-					/* "data may be lost", */
-					CTCM_FUNTAIL, dev->name, new_len);
-				goto done;
+				printk(KERN_INFO
+				       "ctcmpc: %s(): invalid pdu"
+				       " offset of %04x - data may be"
+				       "lost\n", __FUNCTION__, new_len);
+						goto done;
 			}
 			skb = __dev_alloc_skb(new_len+4, GFP_ATOMIC);
 
 			if (!skb) {
-				CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-					"%s(%s): MEMORY allocation error",
-						CTCM_FUNTAIL, dev->name);
+				printk(KERN_INFO
+				       "ctcm: %s Out of memory in "
+				       "%s()- request-len:%04x \n",
+				       dev->name,
+				       __FUNCTION__,
+				       new_len+4);
 				priv->stats.rx_dropped++;
-				fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
+				fsm_event(grp->fsm,
+					  MPCG_EVENT_INOP, dev);
 						goto done;
 			}
-			memcpy(skb_put(skb, new_len), pskb->data, new_len);
+
+			memcpy(skb_put(skb, new_len),
+					pskb->data, new_len);
 
 			skb_reset_mac_header(skb);
 			skb->dev = pskb->dev;
@@ -1178,14 +1287,17 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 			*((__u32 *) skb_push(skb, 4)) = ch->pdu_seq;
 			ch->pdu_seq++;
 
-			if (do_debug_data) {
+			if (do_debug_data)
 				ctcm_pr_debug("%s: ToDCM_pdu_seq= %08x\n",
-						__func__, ch->pdu_seq);
-				ctcm_pr_debug("%s: skb:%0lx "
-					"skb len: %d \n", __func__,
-					(unsigned long)skb, skb->len);
-				ctcm_pr_debug("%s: up to 32 bytes "
-					"of pdu_data sent\n", __func__);
+				       __FUNCTION__, ch->pdu_seq);
+
+			ctcm_pr_debug("ctcm: %s() skb:%0lx "
+				"skb len: %d \n", __FUNCTION__,
+			       (unsigned long)skb, skb->len);
+			if (do_debug_data) {
+				ctcm_pr_debug("ctcmpc: %s() up to 32 bytes"
+					       " of pdu_data sent\n",
+					       __FUNCTION__);
 				ctcmpc_dump32((char *)skb->data, skb->len);
 			}
 
@@ -1204,8 +1316,8 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 		mpcginfo->ch = ch;
 		mpcginfo->th = header;
 		mpcginfo->skb = pskb;
-		CTCM_PR_DEBUG("%s: Not PDU - may be control pkt\n",
-					__func__);
+		ctcm_pr_debug("ctcmpc: %s() Not PDU - may be control pkt\n",
+			       __FUNCTION__);
 		/*  it's a sweep?   */
 		sweep = (struct th_sweep *)pskb->data;
 		mpcginfo->sweep = sweep;
@@ -1221,9 +1333,8 @@ static void ctcmpc_unpack_skb(struct channel *ch, struct sk_buff *pskb)
 		} else if (header->th_blk_flag == TH_DISCONTACT)
 			fsm_event(grp->fsm, MPCG_EVENT_DISCONC, mpcginfo);
 		else if (header->th_seq_num != 0) {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): control pkt expected\n",
-						CTCM_FUNTAIL, dev->name);
+			printk(KERN_INFO "%s unexpected packet"
+					" expected control pkt\n", dev->name);
 			priv->stats.rx_dropped++;
 			/* mpcginfo only used for non-data transfers */
 			kfree(mpcginfo);
@@ -1235,14 +1346,14 @@ done:
 
 	dev_kfree_skb_any(pskb);
 	if (sendrc == NET_RX_DROP) {
-		dev_warn(&dev->dev,
-			"The network backlog for %s is exceeded, "
-			"package dropped\n", __func__);
+		printk(KERN_WARNING "%s %s() NETWORK BACKLOG EXCEEDED"
+		       " - PACKET DROPPED\n", dev->name, __FUNCTION__);
 		fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
 	}
 
-	CTCM_PR_DEBUG("exit %s: %s: ch=0x%p id=%s\n",
-			__func__, dev->name, ch, ch->id);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc exit : %s %s(): ch=0x%p id=%s\n",
+				dev->name, __FUNCTION__, ch, ch->id);
 }
 
 /**
@@ -1255,14 +1366,15 @@ done:
  */
 void ctcmpc_bh(unsigned long thischan)
 {
-	struct channel	  *ch	= (struct channel *)thischan;
+	struct channel	  *ch	    = (struct channel *)thischan;
 	struct sk_buff	  *skb;
-	struct net_device *dev	= ch->netdev;
-	struct ctcm_priv  *priv	= dev->ml_priv;
-	struct mpc_group  *grp	= priv->mpcg;
+	struct net_device *dev	    = ch->netdev;
+	struct ctcm_priv  *priv  = dev->priv;
+	struct mpc_group  *grp   = priv->mpcg;
 
-	CTCM_PR_DEBUG("%s cp:%i enter:  %s() %s\n",
-	       dev->name, smp_processor_id(), __func__, ch->id);
+	if (do_debug)
+		ctcm_pr_debug("%s cp:%i enter:  %s() %s\n",
+		       dev->name, smp_processor_id(), __FUNCTION__, ch->id);
 	/* caller has requested driver to throttle back */
 	while ((fsm_getstate(grp->fsm) != MPCG_STATE_FLOWC) &&
 			(skb = skb_dequeue(&ch->io_queue))) {
@@ -1278,8 +1390,9 @@ void ctcmpc_bh(unsigned long thischan)
 		if (skb == skb_peek(&ch->io_queue))
 			break;
 	}
-	CTCM_PR_DEBUG("exit %s: %s: ch=0x%p id=%s\n",
-			__func__, dev->name, ch, ch->id);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc exit : %s %s(): ch=0x%p id=%s\n",
+			dev->name, __FUNCTION__, ch,  ch->id);
 	return;
 }
 
@@ -1290,16 +1403,16 @@ struct mpc_group *ctcmpc_init_mpc_group(struct ctcm_priv *priv)
 {
 	struct mpc_group *grp;
 
-	CTCM_DBF_TEXT_(MPC_SETUP, CTC_DBF_INFO,
-			"Enter %s(%p)", CTCM_FUNTAIL, priv);
+	CTCM_DBF_TEXT(MPC_SETUP, 3, __FUNCTION__);
 
 	grp = kzalloc(sizeof(struct mpc_group), GFP_KERNEL);
 	if (grp == NULL)
 		return NULL;
 
-	grp->fsm = init_fsm("mpcg", mpcg_state_names, mpcg_event_names,
-			MPCG_NR_STATES, MPCG_NR_EVENTS, mpcg_fsm,
-			mpcg_fsm_len, GFP_KERNEL);
+	grp->fsm =
+		init_fsm("mpcg", mpcg_state_names, mpcg_event_names,
+				 MPCG_NR_STATES, MPCG_NR_EVENTS, mpcg_fsm,
+				 mpcg_fsm_len, GFP_KERNEL);
 	if (grp->fsm == NULL) {
 		kfree(grp);
 		return NULL;
@@ -1311,6 +1424,7 @@ struct mpc_group *ctcmpc_init_mpc_group(struct ctcm_priv *priv)
 	grp->xid_skb =
 		 __dev_alloc_skb(MPC_BUFSIZE_DEFAULT, GFP_ATOMIC | GFP_DMA);
 	if (grp->xid_skb == NULL) {
+		printk(KERN_INFO "Couldn't alloc MPCgroup xid_skb\n");
 		kfree_fsm(grp->fsm);
 		kfree(grp);
 		return NULL;
@@ -1321,7 +1435,7 @@ struct mpc_group *ctcmpc_init_mpc_group(struct ctcm_priv *priv)
 	memcpy(skb_put(grp->xid_skb, TH_HEADER_LENGTH),
 			&thnorm, TH_HEADER_LENGTH);
 
-	grp->xid = (struct xid2 *)skb_tail_pointer(grp->xid_skb);
+	grp->xid = (struct xid2 *) skb_tail_pointer(grp->xid_skb);
 	memcpy(skb_put(grp->xid_skb, XID2_LENGTH), &init_xid, XID2_LENGTH);
 	grp->xid->xid2_adj_id = jiffies | 0xfff00000;
 	grp->xid->xid2_sender_id = jiffies;
@@ -1332,6 +1446,7 @@ struct mpc_group *ctcmpc_init_mpc_group(struct ctcm_priv *priv)
 	grp->rcvd_xid_skb =
 		__dev_alloc_skb(MPC_BUFSIZE_DEFAULT, GFP_ATOMIC|GFP_DMA);
 	if (grp->rcvd_xid_skb == NULL) {
+		printk(KERN_INFO "Couldn't alloc MPCgroup rcvd_xid_skb\n");
 		kfree_fsm(grp->fsm);
 		dev_kfree_skb(grp->xid_skb);
 		kfree(grp);
@@ -1377,27 +1492,32 @@ static void mpc_action_go_inop(fsm_instance *fi, int event, void *arg)
 	int rc = 0;
 	struct channel *wch, *rch;
 
-	BUG_ON(dev == NULL);
-	CTCM_PR_DEBUG("Enter %s: %s\n",	__func__, dev->name);
+	if (dev == NULL) {
+		printk(KERN_INFO "%s() dev=NULL\n", __FUNCTION__);
+		return;
+	}
 
-	priv  = dev->ml_priv;
+	ctcm_pr_debug("ctcmpc enter: %s  %s()\n", dev->name, __FUNCTION__);
+
+	priv  = dev->priv;
 	grp =  priv->mpcg;
 	grp->flow_off_called = 0;
+
 	fsm_deltimer(&grp->timer);
+
 	if (grp->channels_terminating)
-			return;
+					goto done;
 
 	grp->channels_terminating = 1;
+
 	grp->saved_state = fsm_getstate(grp->fsm);
 	fsm_newstate(grp->fsm, MPCG_STATE_INOP);
 	if (grp->saved_state > MPCG_STATE_XID7INITF)
-		CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_NOTICE,
-			"%s(%s): MPC GROUP INOPERATIVE",
-				CTCM_FUNTAIL, dev->name);
+		printk(KERN_NOTICE "%s:MPC GROUP INOPERATIVE\n", dev->name);
 	if ((grp->saved_state != MPCG_STATE_RESET) ||
 		/* dealloc_channel has been called */
-			((grp->saved_state == MPCG_STATE_RESET) &&
-						(grp->port_persist == 0)))
+		((grp->saved_state == MPCG_STATE_RESET) &&
+				(grp->port_persist == 0)))
 		fsm_deltimer(&priv->restart_timer);
 
 	wch = priv->channel[WRITE];
@@ -1447,24 +1567,29 @@ static void mpc_action_go_inop(fsm_instance *fi, int event, void *arg)
 	/* This can result in INOP of VTAM PU due to halting of  */
 	/* outstanding IO which causes a sense to be returned	 */
 	/* Only about 3 senses are allowed and then IOS/VTAM will*/
-	/* become unreachable without manual intervention	 */
-	if ((grp->port_persist == 1) || (grp->alloc_called)) {
+	/* ebcome unreachable without manual intervention	 */
+	if ((grp->port_persist == 1)	|| (grp->alloc_called)) {
 		grp->alloc_called = 0;
 		fsm_deltimer(&priv->restart_timer);
-		fsm_addtimer(&priv->restart_timer, 500, DEV_EVENT_RESTART, dev);
+		fsm_addtimer(&priv->restart_timer,
+			     500,
+			     DEV_EVENT_RESTART,
+			     dev);
 		fsm_newstate(grp->fsm, MPCG_STATE_RESET);
 		if (grp->saved_state > MPCG_STATE_XID7INITF)
-			CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_ALWAYS,
-				"%s(%s): MPC GROUP RECOVERY SCHEDULED",
-					CTCM_FUNTAIL, dev->name);
+			printk(KERN_NOTICE "%s:MPC GROUP RECOVERY SCHEDULED\n",
+			       dev->name);
 	} else {
 		fsm_deltimer(&priv->restart_timer);
 		fsm_addtimer(&priv->restart_timer, 500, DEV_EVENT_STOP, dev);
 		fsm_newstate(grp->fsm, MPCG_STATE_RESET);
-		CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_ALWAYS,
-			"%s(%s): NO MPC GROUP RECOVERY ATTEMPTED",
-						CTCM_FUNTAIL, dev->name);
+		printk(KERN_NOTICE "%s:MPC GROUP RECOVERY NOT ATTEMPTED\n",
+		       dev->name);
 	}
+
+done:
+	ctcm_pr_debug("ctcmpc exit:%s  %s()\n", dev->name, __FUNCTION__);
+	return;
 }
 
 /**
@@ -1484,9 +1609,14 @@ static void mpc_action_timeout(fsm_instance *fi, int event, void *arg)
 	struct channel *wch;
 	struct channel *rch;
 
-	BUG_ON(dev == NULL);
+	CTCM_DBF_TEXT(MPC_TRACE, 6, __FUNCTION__);
 
-	priv = dev->ml_priv;
+	if (dev == NULL) {
+		CTCM_DBF_TEXT_(MPC_ERROR, 4, "%s: dev=NULL\n", __FUNCTION__);
+		return;
+	}
+
+	priv = dev->priv;
 	grp = priv->mpcg;
 	wch = priv->channel[WRITE];
 	rch = priv->channel[READ];
@@ -1503,9 +1633,8 @@ static void mpc_action_timeout(fsm_instance *fi, int event, void *arg)
 		fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
 	}
 
-	CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_DEBUG,
-			"%s: dev=%s exit",
-			CTCM_FUNTAIL, dev->name);
+	CTCM_DBF_TEXT_(MPC_TRACE, 6, "%s: dev=%s exit",
+					__FUNCTION__, dev->name);
 	return;
 }
 
@@ -1517,25 +1646,25 @@ void mpc_action_discontact(fsm_instance *fi, int event, void *arg)
 {
 	struct mpcg_info   *mpcginfo   = arg;
 	struct channel	   *ch	       = mpcginfo->ch;
-	struct net_device  *dev;
-	struct ctcm_priv   *priv;
-	struct mpc_group   *grp;
+	struct net_device  *dev        = ch->netdev;
+	struct ctcm_priv   *priv    = dev->priv;
+	struct mpc_group   *grp     = priv->mpcg;
 
-	if (ch) {
-		dev = ch->netdev;
-		if (dev) {
-			priv = dev->ml_priv;
-			if (priv) {
-				CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_NOTICE,
-					"%s: %s: %s\n",
-					CTCM_FUNTAIL, dev->name, ch->id);
-				grp = priv->mpcg;
-				grp->send_qllc_disc = 1;
-				fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
-			}
-		}
+	if (ch == NULL)	{
+		printk(KERN_INFO "%s() ch=NULL\n", __FUNCTION__);
+		return;
+	}
+	if (ch->netdev == NULL)	{
+		printk(KERN_INFO "%s() dev=NULL\n", __FUNCTION__);
+		return;
 	}
 
+	ctcm_pr_debug("ctcmpc enter: %s  %s()\n", dev->name, __FUNCTION__);
+
+	grp->send_qllc_disc = 1;
+	fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
+
+	ctcm_pr_debug("ctcmpc exit: %s  %s()\n", dev->name, __FUNCTION__);
 	return;
 }
 
@@ -1546,9 +1675,26 @@ void mpc_action_discontact(fsm_instance *fi, int event, void *arg)
  */
 void mpc_action_send_discontact(unsigned long thischan)
 {
-	int rc;
-	struct channel	*ch = (struct channel *)thischan;
-	unsigned long	saveflags = 0;
+	struct channel	   *ch;
+	struct net_device  *dev;
+	struct ctcm_priv    *priv;
+	struct mpc_group   *grp;
+	int rc = 0;
+	unsigned long	  saveflags;
+
+	ch = (struct channel *)thischan;
+	dev = ch->netdev;
+	priv = dev->priv;
+	grp = priv->mpcg;
+
+	ctcm_pr_info("ctcmpc: %s cp:%i enter: %s() GrpState:%s ChState:%s\n",
+		       dev->name,
+		       smp_processor_id(),
+		       __FUNCTION__,
+		       fsm_getstate_str(grp->fsm),
+		       fsm_getstate_str(ch->fsm));
+	saveflags = 0;	/* avoids compiler warning with
+			   spin_unlock_irqrestore */
 
 	spin_lock_irqsave(get_ccwdev_lock(ch->cdev), saveflags);
 	rc = ccw_device_start(ch->cdev, &ch->ccw[15],
@@ -1556,9 +1702,16 @@ void mpc_action_send_discontact(unsigned long thischan)
 	spin_unlock_irqrestore(get_ccwdev_lock(ch->cdev), saveflags);
 
 	if (rc != 0) {
-		ctcm_ccw_check_rc(ch, rc, (char *)__func__);
+		ctcm_pr_info("ctcmpc: %s() ch:%s IO failed \n",
+			       __FUNCTION__,
+			       ch->id);
+		ctcm_ccw_check_rc(ch, rc, "send discontact");
+		/* Not checking return code value here */
+		/* Making best effort to notify partner*/
+		/* that MPC Group is going down        */
 	}
 
+	ctcm_pr_debug("ctcmpc exit: %s  %s()\n", dev->name, __FUNCTION__);
 	return;
 }
 
@@ -1570,50 +1723,49 @@ void mpc_action_send_discontact(unsigned long thischan)
 */
 static int mpc_validate_xid(struct mpcg_info *mpcginfo)
 {
-	struct channel	   *ch	 = mpcginfo->ch;
-	struct net_device  *dev  = ch->netdev;
-	struct ctcm_priv   *priv = dev->ml_priv;
+	struct channel	   *ch	    = mpcginfo->ch;
+	struct net_device  *dev     = ch->netdev;
+	struct ctcm_priv   *priv = dev->priv;
 	struct mpc_group   *grp  = priv->mpcg;
-	struct xid2	   *xid  = mpcginfo->xid;
-	int	rc	 = 0;
-	__u64	our_id   = 0;
-	__u64   their_id = 0;
-	int	len = TH_HEADER_LENGTH + PDU_HEADER_LENGTH;
+	struct xid2	   *xid     = mpcginfo->xid;
+	int	failed	= 0;
+	int	rc	= 0;
+	__u64	our_id, their_id = 0;
+	int	len;
 
-	CTCM_PR_DEBUG("Enter %s: xid=%p\n", __func__, xid);
+	len = TH_HEADER_LENGTH + PDU_HEADER_LENGTH;
 
-	if (xid == NULL) {
+	ctcm_pr_debug("ctcmpc enter:	%s()\n", __FUNCTION__);
+
+	if (mpcginfo->xid == NULL) {
+		printk(KERN_INFO "%s() xid=NULL\n", __FUNCTION__);
 		rc = 1;
-		/* XID REJECTED: xid == NULL */
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): xid = NULL",
-				CTCM_FUNTAIL, ch->id);
-			goto done;
+					goto done;
 	}
 
-	CTCM_D3_DUMP((char *)xid, XID2_LENGTH);
+	ctcm_pr_debug("ctcmpc :  %s  xid received()\n", __FUNCTION__);
+	ctcmpc_dumpit((char *)mpcginfo->xid, XID2_LENGTH);
 
 	/*the received direction should be the opposite of ours  */
 	if (((CHANNEL_DIRECTION(ch->flags) == READ) ? XID2_WRITE_SIDE :
 				XID2_READ_SIDE) != xid->xid2_dlc_type) {
-		rc = 2;
-		/* XID REJECTED: r/w channel pairing mismatch */
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): r/w channel pairing mismatch",
-				CTCM_FUNTAIL, ch->id);
-			goto done;
+		failed = 1;
+		printk(KERN_INFO "ctcmpc:%s() XID REJECTED - READ-WRITE CH "
+			"Pairing Invalid \n", __FUNCTION__);
 	}
 
 	if (xid->xid2_dlc_type == XID2_READ_SIDE) {
-		CTCM_PR_DEBUG("%s: grpmaxbuf:%d xid2buflen:%d\n", __func__,
-				grp->group_max_buflen, xid->xid2_buf_len);
+		ctcm_pr_debug("ctcmpc: %s(): grpmaxbuf:%d xid2buflen:%d\n",
+				__FUNCTION__, grp->group_max_buflen,
+				xid->xid2_buf_len);
 
-		if (grp->group_max_buflen == 0 || grp->group_max_buflen >
-						xid->xid2_buf_len - len)
+		if (grp->group_max_buflen == 0 ||
+			grp->group_max_buflen > xid->xid2_buf_len - len)
 			grp->group_max_buflen = xid->xid2_buf_len - len;
 	}
 
-	if (grp->saved_xid2 == NULL) {
+
+	if (grp->saved_xid2 == NULL)	{
 		grp->saved_xid2 =
 			(struct xid2 *)skb_tail_pointer(grp->rcvd_xid_skb);
 
@@ -1634,55 +1786,49 @@ static int mpc_validate_xid(struct mpcg_info *mpcginfo)
 		/* lower id assume the xside role */
 		if (our_id < their_id) {
 			grp->roll = XSIDE;
-			CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_NOTICE,
-				"%s(%s): WE HAVE LOW ID - TAKE XSIDE",
-					CTCM_FUNTAIL, ch->id);
+			ctcm_pr_debug("ctcmpc :%s() WE HAVE LOW ID-"
+				       "TAKE XSIDE\n", __FUNCTION__);
 		} else {
 			grp->roll = YSIDE;
-			CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_NOTICE,
-				"%s(%s): WE HAVE HIGH ID - TAKE YSIDE",
-					CTCM_FUNTAIL, ch->id);
+			ctcm_pr_debug("ctcmpc :%s() WE HAVE HIGH ID-"
+				       "TAKE YSIDE\n", __FUNCTION__);
 		}
 
 	} else {
 		if (xid->xid2_flag4 != grp->saved_xid2->xid2_flag4) {
-			rc = 3;
-			/* XID REJECTED: xid flag byte4 mismatch */
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): xid flag byte4 mismatch",
-					CTCM_FUNTAIL, ch->id);
+			failed = 1;
+			printk(KERN_INFO "%s XID REJECTED - XID Flag Byte4\n",
+			       __FUNCTION__);
 		}
 		if (xid->xid2_flag2 == 0x40) {
-			rc = 4;
-			/* XID REJECTED - xid NOGOOD */
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): xid NOGOOD",
-					CTCM_FUNTAIL, ch->id);
+			failed = 1;
+			printk(KERN_INFO "%s XID REJECTED - XID NOGOOD\n",
+			       __FUNCTION__);
 		}
 		if (xid->xid2_adj_id != grp->saved_xid2->xid2_adj_id) {
-			rc = 5;
-			/* XID REJECTED - Adjacent Station ID Mismatch */
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): Adjacent Station ID Mismatch",
-					CTCM_FUNTAIL, ch->id);
+			failed = 1;
+			printk(KERN_INFO "%s XID REJECTED - "
+				"Adjacent Station ID Mismatch\n",
+				__FUNCTION__);
 		}
 		if (xid->xid2_sender_id != grp->saved_xid2->xid2_sender_id) {
-			rc = 6;
-			/* XID REJECTED - Sender Address Mismatch */
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): Sender Address Mismatch",
-					CTCM_FUNTAIL, ch->id);
+			failed = 1;
+			printk(KERN_INFO "%s XID REJECTED - "
+				"Sender Address Mismatch\n", __FUNCTION__);
+
 		}
 	}
-done:
-	if (rc) {
-		dev_warn(&dev->dev,
-			"The XID used in the MPC protocol is not valid, "
-			"rc = %d\n", rc);
+
+	if (failed) {
+		ctcm_pr_info("ctcmpc	   :  %s() failed\n", __FUNCTION__);
 		priv->xid->xid2_flag2 = 0x40;
 		grp->saved_xid2->xid2_flag2 = 0x40;
+		rc = 1;
 	}
 
+done:
+
+	ctcm_pr_debug("ctcmpc exit:  %s()\n", __FUNCTION__);
 	return rc;
 }
 
@@ -1693,20 +1839,46 @@ done:
 static void mpc_action_side_xid(fsm_instance *fsm, void *arg, int side)
 {
 	struct channel *ch = arg;
+	struct ctcm_priv *priv;
+	struct mpc_group *grp = NULL;
+	struct net_device *dev = NULL;
 	int rc = 0;
 	int gotlock = 0;
 	unsigned long saveflags = 0;	/* avoids compiler warning with
-					   spin_unlock_irqrestore */
+			   spin_unlock_irqrestore */
 
-	CTCM_PR_DEBUG("Enter %s: cp=%i ch=0x%p id=%s\n",
-			__func__, smp_processor_id(), ch, ch->id);
+	if (ch == NULL)	{
+		printk(KERN_INFO "%s ch=NULL\n", __FUNCTION__);
+					goto done;
+	}
+
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc enter: %s(): cp=%i ch=0x%p id=%s\n",
+			__FUNCTION__, smp_processor_id(), ch, ch->id);
+
+	dev = ch->netdev;
+	if (dev == NULL) {
+		printk(KERN_INFO "%s dev=NULL\n", __FUNCTION__);
+					goto done;
+	}
+
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "%s priv=NULL\n", __FUNCTION__);
+					goto done;
+	}
+
+	grp = priv->mpcg;
+	if (grp == NULL) {
+		printk(KERN_INFO "%s grp=NULL\n", __FUNCTION__);
+					goto done;
+	}
 
 	if (ctcm_checkalloc_buffer(ch))
 					goto done;
 
-	/*
-	 * skb data-buffer referencing:
-	 */
+	/* skb data-buffer referencing: */
+
 	ch->trans_skb->data = ch->trans_skb_data;
 	skb_reset_tail_pointer(ch->trans_skb);
 	ch->trans_skb->len = 0;
@@ -1739,22 +1911,22 @@ static void mpc_action_side_xid(fsm_instance *fsm, void *arg, int side)
 	ch->ccw[8].count	= 0;
 	ch->ccw[8].cda		= 0x00;
 
-	if (!(ch->xid_th && ch->xid && ch->xid_id))
-		CTCM_DBF_TEXT_(MPC_TRACE, CTC_DBF_INFO,
-			"%s(%s): xid_th=%p, xid=%p, xid_id=%p",
-			CTCM_FUNTAIL, ch->id, ch->xid_th, ch->xid, ch->xid_id);
-
 	if (side == XSIDE) {
 		/* mpc_action_xside_xid */
-		if (ch->xid_th == NULL)
-				goto done;
+		if (ch->xid_th == NULL) {
+			printk(KERN_INFO "%s ch->xid_th=NULL\n", __FUNCTION__);
+					goto done;
+		}
 		ch->ccw[9].cmd_code	= CCW_CMD_WRITE;
 		ch->ccw[9].flags	= CCW_FLAG_SLI | CCW_FLAG_CC;
 		ch->ccw[9].count	= TH_HEADER_LENGTH;
 		ch->ccw[9].cda		= virt_to_phys(ch->xid_th);
 
-		if (ch->xid == NULL)
-				goto done;
+		if (ch->xid == NULL) {
+			printk(KERN_INFO "%s ch->xid=NULL\n", __FUNCTION__);
+					goto done;
+		}
+
 		ch->ccw[10].cmd_code	= CCW_CMD_WRITE;
 		ch->ccw[10].flags	= CCW_FLAG_SLI | CCW_FLAG_CC;
 		ch->ccw[10].count	= XID2_LENGTH;
@@ -1784,22 +1956,28 @@ static void mpc_action_side_xid(fsm_instance *fsm, void *arg, int side)
 		ch->ccw[10].count	= XID2_LENGTH;
 		ch->ccw[10].cda		= virt_to_phys(ch->rcvd_xid);
 
-		if (ch->xid_th == NULL)
-				goto done;
+		if (ch->xid_th == NULL)	{
+			printk(KERN_INFO "%s ch->xid_th=NULL\n", __FUNCTION__);
+					goto done;
+		}
 		ch->ccw[11].cmd_code	= CCW_CMD_WRITE;
 		ch->ccw[11].flags	= CCW_FLAG_SLI | CCW_FLAG_CC;
 		ch->ccw[11].count	= TH_HEADER_LENGTH;
 		ch->ccw[11].cda		= virt_to_phys(ch->xid_th);
 
-		if (ch->xid == NULL)
-				goto done;
+		if (ch->xid == NULL) {
+			printk(KERN_INFO "%s ch->xid=NULL\n", __FUNCTION__);
+					goto done;
+		}
 		ch->ccw[12].cmd_code	= CCW_CMD_WRITE;
 		ch->ccw[12].flags	= CCW_FLAG_SLI | CCW_FLAG_CC;
 		ch->ccw[12].count	= XID2_LENGTH;
 		ch->ccw[12].cda		= virt_to_phys(ch->xid);
 
-		if (ch->xid_id == NULL)
-				goto done;
+		if (ch->xid_id == NULL)	{
+			printk(KERN_INFO "%s ch->xid_id=NULL\n", __FUNCTION__);
+					goto done;
+		}
 		ch->ccw[13].cmd_code	= CCW_CMD_WRITE;
 		ch->ccw[13].cda		= virt_to_phys(ch->xid_id);
 
@@ -1812,11 +1990,12 @@ static void mpc_action_side_xid(fsm_instance *fsm, void *arg, int side)
 	ch->ccw[14].count	= 0;
 	ch->ccw[14].cda		= 0;
 
-	CTCM_CCW_DUMP((char *)&ch->ccw[8], sizeof(struct ccw1) * 7);
-	CTCM_D3_DUMP((char *)ch->xid_th, TH_HEADER_LENGTH);
-	CTCM_D3_DUMP((char *)ch->xid, XID2_LENGTH);
-	CTCM_D3_DUMP((char *)ch->xid_id, 4);
+	if (do_debug_ccw)
+		ctcmpc_dumpit((char *)&ch->ccw[8], sizeof(struct ccw1) * 7);
 
+	ctcmpc_dumpit((char *)ch->xid_th, TH_HEADER_LENGTH);
+	ctcmpc_dumpit((char *)ch->xid, XID2_LENGTH);
+	ctcmpc_dumpit((char *)ch->xid_id, 4);
 	if (!in_irq()) {
 			 /* Such conditional locking is a known problem for
 			  * sparse because its static undeterministic.
@@ -1833,13 +2012,16 @@ static void mpc_action_side_xid(fsm_instance *fsm, void *arg, int side)
 		spin_unlock_irqrestore(get_ccwdev_lock(ch->cdev), saveflags);
 
 	if (rc != 0) {
+		ctcm_pr_info("ctcmpc: %s() ch:%s IO failed \n",
+				__FUNCTION__, ch->id);
 		ctcm_ccw_check_rc(ch, rc,
 				(side == XSIDE) ? "x-side XID" : "y-side XID");
 	}
 
 done:
-	CTCM_PR_DEBUG("Exit %s: ch=0x%p id=%s\n",
-				__func__, ch, ch->id);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc exit : %s(): ch=0x%p id=%s\n",
+				__FUNCTION__, ch, ch->id);
 	return;
 
 }
@@ -1868,19 +2050,41 @@ static void mpc_action_yside_xid(fsm_instance *fsm, int event, void *arg)
  */
 static void mpc_action_doxid0(fsm_instance *fsm, int event, void *arg)
 {
-	struct channel	   *ch   = arg;
-	struct net_device  *dev  = ch->netdev;
-	struct ctcm_priv   *priv = dev->ml_priv;
-	struct mpc_group   *grp  = priv->mpcg;
+	struct channel	   *ch = arg;
+	struct ctcm_priv    *priv;
+	struct mpc_group   *grp     = NULL;
+	struct net_device *dev = NULL;
 
-	CTCM_PR_DEBUG("Enter %s: cp=%i ch=0x%p id=%s\n",
-			__func__, smp_processor_id(), ch, ch->id);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc enter: %s(): cp=%i ch=0x%p id=%s\n",
+			__FUNCTION__, smp_processor_id(), ch, ch->id);
+
+	if (ch == NULL) {
+		printk(KERN_WARNING "%s ch=NULL\n", __FUNCTION__);
+					goto done;
+	}
+
+	dev = ch->netdev;
+	if (dev == NULL) {
+		printk(KERN_WARNING "%s dev=NULL\n", __FUNCTION__);
+					goto done;
+	}
+
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_WARNING "%s priv=NULL\n", __FUNCTION__);
+					goto done;
+	}
+
+	grp = priv->mpcg;
+	if (grp == NULL) {
+		printk(KERN_WARNING "%s grp=NULL\n", __FUNCTION__);
+					goto done;
+	}
 
 	if (ch->xid == NULL) {
-		CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-			"%s(%s): ch->xid == NULL",
-				CTCM_FUNTAIL, dev->name);
-		return;
+		printk(KERN_WARNING "%s ch-xid=NULL\n", __FUNCTION__);
+					goto done;
 	}
 
 	fsm_newstate(ch->fsm, CH_XID0_INPROGRESS);
@@ -1900,7 +2104,12 @@ static void mpc_action_doxid0(fsm_instance *fsm, int event, void *arg)
 
 	fsm_event(grp->fsm, MPCG_EVENT_DOIO, ch);
 
+done:
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc exit : %s(): ch=0x%p id=%s\n",
+			__FUNCTION__, ch, ch->id);
 	return;
+
 }
 
 /*
@@ -1910,16 +2119,32 @@ static void mpc_action_doxid0(fsm_instance *fsm, int event, void *arg)
 static void mpc_action_doxid7(fsm_instance *fsm, int event, void *arg)
 {
 	struct net_device *dev = arg;
-	struct ctcm_priv  *priv = dev->ml_priv;
-	struct mpc_group  *grp  = NULL;
+	struct ctcm_priv   *priv = NULL;
+	struct mpc_group  *grp = NULL;
 	int direction;
+	int rc = 0;
 	int send = 0;
 
-	if (priv)
-		grp = priv->mpcg;
+	ctcm_pr_debug("ctcmpc enter:	%s() \n", __FUNCTION__);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "%s dev=NULL \n", __FUNCTION__);
+		rc = 1;
+					goto done;
+	}
+
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "%s priv=NULL \n", __FUNCTION__);
+		rc = 1;
+					goto done;
+	}
+
+	grp = priv->mpcg;
 	if (grp == NULL) {
-		fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
-		return;
+		printk(KERN_INFO "%s grp=NULL \n", __FUNCTION__);
+		rc = 1;
+					goto done;
 	}
 
 	for (direction = READ; direction <= WRITE; direction++)	{
@@ -1974,6 +2199,11 @@ static void mpc_action_doxid7(fsm_instance *fsm, int event, void *arg)
 			fsm_event(grp->fsm, MPCG_EVENT_DOIO, ch);
 	}
 
+done:
+
+	if (rc != 0)
+		fsm_event(grp->fsm, MPCG_EVENT_INOP, dev);
+
 	return;
 }
 
@@ -1984,15 +2214,24 @@ static void mpc_action_doxid7(fsm_instance *fsm, int event, void *arg)
 static void mpc_action_rcvd_xid0(fsm_instance *fsm, int event, void *arg)
 {
 
-	struct mpcg_info   *mpcginfo  = arg;
-	struct channel	   *ch   = mpcginfo->ch;
-	struct net_device  *dev  = ch->netdev;
-	struct ctcm_priv   *priv = dev->ml_priv;
-	struct mpc_group   *grp  = priv->mpcg;
+	struct mpcg_info   *mpcginfo   = arg;
+	struct channel	   *ch	       = mpcginfo->ch;
+	struct net_device  *dev        = ch->netdev;
+	struct ctcm_priv   *priv;
+	struct mpc_group   *grp;
 
-	CTCM_PR_DEBUG("%s: ch-id:%s xid2:%i xid7:%i xidt_p2:%i \n",
-			__func__, ch->id, grp->outstanding_xid2,
-			grp->outstanding_xid7, grp->outstanding_xid7_p2);
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc enter: %s(): cp=%i ch=0x%p id=%s\n",
+			__FUNCTION__, smp_processor_id(), ch, ch->id);
+
+	priv = dev->priv;
+	grp = priv->mpcg;
+
+	ctcm_pr_debug("ctcmpc in:%s() %s xid2:%i xid7:%i xidt_p2:%i \n",
+		       __FUNCTION__, ch->id,
+		       grp->outstanding_xid2,
+		       grp->outstanding_xid7,
+		       grp->outstanding_xid7_p2);
 
 	if (fsm_getstate(ch->fsm) < CH_XID7_PENDING)
 		fsm_newstate(ch->fsm, CH_XID7_PENDING);
@@ -2029,12 +2268,17 @@ static void mpc_action_rcvd_xid0(fsm_instance *fsm, int event, void *arg)
 	}
 	kfree(mpcginfo);
 
-	CTCM_PR_DEBUG("ctcmpc:%s() %s xid2:%i xid7:%i xidt_p2:%i \n",
-		__func__, ch->id, grp->outstanding_xid2,
-		grp->outstanding_xid7, grp->outstanding_xid7_p2);
-	CTCM_PR_DEBUG("ctcmpc:%s() %s grpstate: %s chanstate: %s \n",
-		__func__, ch->id,
-		fsm_getstate_str(grp->fsm), fsm_getstate_str(ch->fsm));
+	if (do_debug) {
+		ctcm_pr_debug("ctcmpc:%s() %s xid2:%i xid7:%i xidt_p2:%i \n",
+				__FUNCTION__, ch->id,
+				grp->outstanding_xid2,
+				grp->outstanding_xid7,
+				grp->outstanding_xid7_p2);
+		ctcm_pr_debug("ctcmpc:%s() %s grpstate: %s chanstate: %s \n",
+				__FUNCTION__, ch->id,
+				fsm_getstate_str(grp->fsm),
+				fsm_getstate_str(ch->fsm));
+	}
 	return;
 
 }
@@ -2049,13 +2293,18 @@ static void mpc_action_rcvd_xid7(fsm_instance *fsm, int event, void *arg)
 	struct mpcg_info   *mpcginfo   = arg;
 	struct channel	   *ch	       = mpcginfo->ch;
 	struct net_device  *dev        = ch->netdev;
-	struct ctcm_priv   *priv    = dev->ml_priv;
+	struct ctcm_priv   *priv    = dev->priv;
 	struct mpc_group   *grp     = priv->mpcg;
 
-	CTCM_PR_DEBUG("Enter %s: cp=%i ch=0x%p id=%s\n",
-		__func__, smp_processor_id(), ch, ch->id);
-	CTCM_PR_DEBUG("%s: outstanding_xid7: %i, outstanding_xid7_p2: %i\n",
-		__func__, grp->outstanding_xid7, grp->outstanding_xid7_p2);
+	if (do_debug) {
+		ctcm_pr_debug("ctcmpc enter: %s(): cp=%i ch=0x%p id=%s\n",
+				__FUNCTION__, smp_processor_id(), ch, ch->id);
+
+		ctcm_pr_debug("ctcmpc:  outstanding_xid7: %i, "
+				" outstanding_xid7_p2: %i\n",
+				grp->outstanding_xid7,
+				grp->outstanding_xid7_p2);
+	}
 
 	grp->outstanding_xid7--;
 	ch->xid_skb->data = ch->xid_skb_data;
@@ -2088,8 +2337,14 @@ static void mpc_action_rcvd_xid7(fsm_instance *fsm, int event, void *arg)
 		mpc_validate_xid(mpcginfo);
 		break;
 	}
+
 	kfree(mpcginfo);
+
+	if (do_debug)
+		ctcm_pr_debug("ctcmpc exit: %s(): cp=%i ch=0x%p id=%s\n",
+			__FUNCTION__, smp_processor_id(), ch, ch->id);
 	return;
+
 }
 
 /*
@@ -2098,14 +2353,36 @@ static void mpc_action_rcvd_xid7(fsm_instance *fsm, int event, void *arg)
  */
 static int mpc_send_qllc_discontact(struct net_device *dev)
 {
+	int	rc	= 0;
 	__u32	new_len	= 0;
 	struct sk_buff   *skb;
 	struct qllc      *qllcptr;
-	struct ctcm_priv *priv = dev->ml_priv;
-	struct mpc_group *grp = priv->mpcg;
+	struct ctcm_priv *priv;
+	struct mpc_group *grp;
 
-	CTCM_PR_DEBUG("%s: GROUP STATE: %s\n",
-		__func__, mpcg_state_names[grp->saved_state]);
+	ctcm_pr_debug("ctcmpc enter:	%s()\n", __FUNCTION__);
+
+	if (dev == NULL) {
+		printk(KERN_INFO "%s() dev=NULL\n", __FUNCTION__);
+		rc = 1;
+					goto done;
+	}
+
+	priv = dev->priv;
+	if (priv == NULL) {
+		printk(KERN_INFO "%s() priv=NULL\n", __FUNCTION__);
+		rc = 1;
+					goto done;
+	}
+
+	grp = priv->mpcg;
+	if (grp == NULL) {
+		printk(KERN_INFO "%s() grp=NULL\n", __FUNCTION__);
+		rc = 1;
+					goto done;
+	}
+	ctcm_pr_info("ctcmpc: %s() GROUP STATE: %s\n", __FUNCTION__,
+			mpcg_state_names[grp->saved_state]);
 
 	switch (grp->saved_state) {
 	/*
@@ -2131,10 +2408,11 @@ static int mpc_send_qllc_discontact(struct net_device *dev)
 		new_len = sizeof(struct qllc);
 		qllcptr = kzalloc(new_len, gfp_type() | GFP_DMA);
 		if (qllcptr == NULL) {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): qllcptr allocation error",
-						CTCM_FUNTAIL, dev->name);
-			return -ENOMEM;
+			printk(KERN_INFO
+			       "ctcmpc: Out of memory in %s()\n",
+			       dev->name);
+			rc = 1;
+				goto done;
 		}
 
 		qllcptr->qllc_address = 0xcc;
@@ -2143,29 +2421,31 @@ static int mpc_send_qllc_discontact(struct net_device *dev)
 		skb = __dev_alloc_skb(new_len, GFP_ATOMIC);
 
 		if (skb == NULL) {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): skb allocation error",
-						CTCM_FUNTAIL, dev->name);
+			printk(KERN_INFO "%s Out of memory in mpc_send_qllc\n",
+			       dev->name);
 			priv->stats.rx_dropped++;
+			rc = 1;
 			kfree(qllcptr);
-			return -ENOMEM;
+				goto done;
 		}
 
 		memcpy(skb_put(skb, new_len), qllcptr, new_len);
 		kfree(qllcptr);
 
 		if (skb_headroom(skb) < 4) {
-			CTCM_DBF_TEXT_(MPC_ERROR, CTC_DBF_ERROR,
-				"%s(%s): skb_headroom error",
-						CTCM_FUNTAIL, dev->name);
+			printk(KERN_INFO "ctcmpc: %s() Unable to"
+			       " build discontact for %s\n",
+			       __FUNCTION__, dev->name);
+			rc = 1;
 			dev_kfree_skb_any(skb);
-			return -ENOMEM;
+				goto done;
 		}
 
 		*((__u32 *)skb_push(skb, 4)) = priv->channel[READ]->pdu_seq;
 		priv->channel[READ]->pdu_seq++;
-		CTCM_PR_DBGDATA("ctcmpc: %s ToDCM_pdu_seq= %08x\n",
-				__func__, priv->channel[READ]->pdu_seq);
+		if (do_debug_data)
+			ctcm_pr_debug("ctcmpc: %s ToDCM_pdu_seq= %08x\n",
+				__FUNCTION__, priv->channel[READ]->pdu_seq);
 
 		/* receipt of CC03 resets anticipated sequence number on
 		      receiving side */
@@ -2175,7 +2455,7 @@ static int mpc_send_qllc_discontact(struct net_device *dev)
 		skb->protocol = htons(ETH_P_SNAP);
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-		CTCM_D3_DUMP(skb->data, (sizeof(struct qllc) + 4));
+		ctcmpc_dumpit((char *)skb->data, (sizeof(struct qllc) + 4));
 
 		netif_rx(skb);
 		break;
@@ -2184,7 +2464,9 @@ static int mpc_send_qllc_discontact(struct net_device *dev)
 
 	}
 
-	return 0;
+done:
+	ctcm_pr_debug("ctcmpc exit:  %s()\n", __FUNCTION__);
+	return rc;
 }
 /* --- This is the END my friend --- */
 

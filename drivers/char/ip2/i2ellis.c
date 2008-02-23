@@ -69,6 +69,38 @@ static DEFINE_RWLOCK(Dl_spinlock);
 //=======================================================
 
 //******************************************************************************
+// Function:   iiEllisInit()
+// Parameters: None
+//
+// Returns:    Nothing
+//
+// Description:
+//
+// This routine performs any required initialization of the iiEllis subsystem.
+//
+//******************************************************************************
+static void
+iiEllisInit(void)
+{
+}
+
+//******************************************************************************
+// Function:   iiEllisCleanup()
+// Parameters: None
+//
+// Returns:    Nothing
+//
+// Description:
+//
+// This routine performs any required cleanup of the iiEllis subsystem.
+//
+//******************************************************************************
+static void
+iiEllisCleanup(void)
+{
+}
+
+//******************************************************************************
 // Function:   iiSetAddress(pB, address, delay)
 // Parameters: pB      - pointer to the board structure
 //             address - the purported I/O address of the board

@@ -26,7 +26,7 @@ static void reserve_range(struct pnp_dev *dev, resource_size_t start,
 			  resource_size_t end, int port)
 {
 	char *regionid;
-	const char *pnpid = dev_name(&dev->dev);
+	const char *pnpid = dev->dev.bus_id;
 	struct resource *res;
 
 	regionid = kmalloc(16, GFP_KERNEL);
@@ -60,7 +60,7 @@ static void reserve_resources_of_dev(struct pnp_dev *dev)
 	int i;
 
 	for (i = 0; (res = pnp_get_resource(dev, IORESOURCE_IO, i)); i++) {
-		if (res->flags & IORESOURCE_DISABLED)
+		if (res->flags & IORESOURCE_UNSET)
 			continue;
 		if (res->start == 0)
 			continue;	/* disabled */
@@ -81,7 +81,7 @@ static void reserve_resources_of_dev(struct pnp_dev *dev)
 	}
 
 	for (i = 0; (res = pnp_get_resource(dev, IORESOURCE_MEM, i)); i++) {
-		if (res->flags & IORESOURCE_DISABLED)
+		if (res->flags & IORESOURCE_UNSET)
 			continue;
 
 		reserve_range(dev, res->start, res->end, 0);

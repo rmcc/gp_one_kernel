@@ -3,7 +3,8 @@
  *                    and WM9713 AC97 Codecs.
  *
  * Copyright 2003, 2004, 2005, 2006, 2007, 2008 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
  * Parts Copyright : Ian Molton <spyro@f2s.com>
  *                   Andrew Zabolotny <zap@homelink.ru>
  *                   Russell King <rmk@arm.linux.org.uk>
@@ -36,6 +37,7 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -606,17 +608,6 @@ static int wm97xx_probe(struct device *dev)
 		goto alloc_err;
 	}
 
-	/* set up physical characteristics */
-	wm->codec->phy_init(wm);
-
-	/* load gpio cache */
-	wm->gpio[0] = wm97xx_reg_read(wm, AC97_GPIO_CFG);
-	wm->gpio[1] = wm97xx_reg_read(wm, AC97_GPIO_POLARITY);
-	wm->gpio[2] = wm97xx_reg_read(wm, AC97_GPIO_STICKY);
-	wm->gpio[3] = wm97xx_reg_read(wm, AC97_GPIO_WAKEUP);
-	wm->gpio[4] = wm97xx_reg_read(wm, AC97_GPIO_STATUS);
-	wm->gpio[5] = wm97xx_reg_read(wm, AC97_MISC_AFE);
-
 	wm->input_dev = input_allocate_device();
 	if (wm->input_dev == NULL) {
 		ret = -ENOMEM;
@@ -625,7 +616,6 @@ static int wm97xx_probe(struct device *dev)
 
 	/* set up touch configuration */
 	wm->input_dev->name = "wm97xx touchscreen";
-	wm->input_dev->phys = "wm97xx";
 	wm->input_dev->open = wm97xx_ts_input_open;
 	wm->input_dev->close = wm97xx_ts_input_close;
 	set_bit(EV_ABS, wm->input_dev->evbit);
@@ -643,6 +633,17 @@ static int wm97xx_probe(struct device *dev)
 	ret = input_register_device(wm->input_dev);
 	if (ret < 0)
 		goto dev_alloc_err;
+
+	/* set up physical characteristics */
+	wm->codec->phy_init(wm);
+
+	/* load gpio cache */
+	wm->gpio[0] = wm97xx_reg_read(wm, AC97_GPIO_CFG);
+	wm->gpio[1] = wm97xx_reg_read(wm, AC97_GPIO_POLARITY);
+	wm->gpio[2] = wm97xx_reg_read(wm, AC97_GPIO_STICKY);
+	wm->gpio[3] = wm97xx_reg_read(wm, AC97_GPIO_WAKEUP);
+	wm->gpio[4] = wm97xx_reg_read(wm, AC97_GPIO_STATUS);
+	wm->gpio[5] = wm97xx_reg_read(wm, AC97_MISC_AFE);
 
 	/* register our battery device */
 	wm->battery_dev = platform_device_alloc("wm97xx-battery", -1);
@@ -800,7 +801,7 @@ void wm97xx_unregister_mach_ops(struct wm97xx *wm)
 EXPORT_SYMBOL_GPL(wm97xx_unregister_mach_ops);
 
 static struct device_driver wm97xx_driver = {
-	.name =		"wm97xx-ts",
+	.name =		"ac97",
 	.bus =		&ac97_bus_type,
 	.owner =	THIS_MODULE,
 	.probe =	wm97xx_probe,
@@ -823,6 +824,6 @@ module_init(wm97xx_init);
 module_exit(wm97xx_exit);
 
 /* Module information */
-MODULE_AUTHOR("Liam Girdwood <lrg@slimlogic.co.uk>");
+MODULE_AUTHOR("Liam Girdwood <liam.girdwood@wolfsonmicro.com>");
 MODULE_DESCRIPTION("WM97xx Core - Touch Screen / AUX ADC / GPIO Driver");
 MODULE_LICENSE("GPL");

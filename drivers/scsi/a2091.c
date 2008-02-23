@@ -169,8 +169,10 @@ int __init a2091_detect(struct scsi_host_template *tpnt)
 	    continue;
 
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));
-	if (instance == NULL)
-	    goto release;
+	if (instance == NULL) {
+	    release_mem_region(address, 256);
+	    continue;
+	}
 	instance->base = ZTWO_VADDR(address);
 	instance->irq = IRQ_AMIGA_PORTS;
 	instance->unique_id = z->slotaddr;
@@ -181,18 +183,10 @@ int __init a2091_detect(struct scsi_host_template *tpnt)
 	HDATA(instance)->fast = 0;
 	HDATA(instance)->dma_mode = CTRL_DMA;
 	wd33c93_init(instance, regs, dma_setup, dma_stop, WD33C93_FS_8_10);
-	if (request_irq(IRQ_AMIGA_PORTS, a2091_intr, IRQF_SHARED, "A2091 SCSI",
-			instance))
-	    goto unregister;
+	request_irq(IRQ_AMIGA_PORTS, a2091_intr, IRQF_SHARED, "A2091 SCSI",
+		    instance);
 	DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;
 	num_a2091++;
-	continue;
-
-unregister:
-	scsi_unregister(instance);
-	wd33c93_release();
-release:
-	release_mem_region(address, 256);
     }
 
     return num_a2091;

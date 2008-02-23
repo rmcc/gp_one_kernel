@@ -15,11 +15,10 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 
-#include <asm/code-patching.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/pci-bridge.h>
-#include <asm/mpic.h>
+#include <asm-powerpc/mpic.h>
 #include <asm/mpc86xx.h>
 #include <asm/cacheflush.h>
 
@@ -57,7 +56,8 @@ smp_86xx_kick_cpu(int nr)
 	unsigned int save_vector;
 	unsigned long target, flags;
 	int n = 0;
-	unsigned int *vector = (unsigned int *)(KERNELBASE + 0x100);
+	volatile unsigned int *vector
+		 = (volatile unsigned int *)(KERNELBASE + 0x100);
 
 	if (nr < 0 || nr >= NR_CPUS)
 		return;
@@ -71,7 +71,7 @@ smp_86xx_kick_cpu(int nr)
 
 	/* Setup fake reset vector to call __secondary_start_mpc86xx. */
 	target = (unsigned long) __secondary_start_mpc86xx;
-	patch_branch(vector, target, BRANCH_SET_LINK);
+	create_branch((unsigned long)vector, target, BRANCH_SET_LINK);
 
 	/* Kick that CPU */
 	smp_86xx_release_core(nr);

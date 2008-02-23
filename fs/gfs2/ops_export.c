@@ -22,7 +22,8 @@
 #include "glock.h"
 #include "glops.h"
 #include "inode.h"
-#include "super.h"
+#include "ops_dentry.h"
+#include "ops_fstype.h"
 #include "rgrp.h"
 #include "util.h"
 
@@ -129,17 +130,28 @@ static int gfs2_get_name(struct dentry *parent, char *name,
 static struct dentry *gfs2_get_parent(struct dentry *child)
 {
 	struct qstr dotdot;
+	struct inode *inode;
 	struct dentry *dentry;
 
-	/*
-	 * XXX(hch): it would be a good idea to keep this around as a
-	 *	     static variable.
-	 */
 	gfs2_str2qstr(&dotdot, "..");
+	inode = gfs2_lookupi(child->d_inode, &dotdot, 1, NULL);
 
-	dentry = d_obtain_alias(gfs2_lookupi(child->d_inode, &dotdot, 1));
-	if (!IS_ERR(dentry))
-		dentry->d_op = &gfs2_dops;
+	if (!inode)
+		return ERR_PTR(-ENOENT);
+	/*
+	 * In case of an error, @inode carries the error value, and we
+	 * have to return that as a(n invalid) pointer to dentry.
+	 */
+	if (IS_ERR(inode))
+		return ERR_CAST(inode);
+
+	dentry = d_alloc_anon(inode);
+	if (!dentry) {
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	dentry->d_op = &gfs2_dops;
 	return dentry;
 }
 
@@ -213,7 +225,7 @@ static struct dentry *gfs2_get_dentry(struct super_block *sb,
 	}
 
 	error = -EIO;
-	if (GFS2_I(inode)->i_diskflags & GFS2_DIF_SYSTEM) {
+	if (GFS2_I(inode)->i_di.di_flags & GFS2_DIF_SYSTEM) {
 		iput(inode);
 		goto fail;
 	}
@@ -221,9 +233,13 @@ static struct dentry *gfs2_get_dentry(struct super_block *sb,
 	gfs2_glock_dq_uninit(&i_gh);
 
 out_inode:
-	dentry = d_obtain_alias(inode);
-	if (!IS_ERR(dentry))
-		dentry->d_op = &gfs2_dops;
+	dentry = d_alloc_anon(inode);
+	if (!dentry) {
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	dentry->d_op = &gfs2_dops;
 	return dentry;
 
 fail_rgd:

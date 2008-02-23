@@ -717,12 +717,14 @@ pipe_rdwr_fasync(int fd, struct file *filp, int on)
 static int
 pipe_read_release(struct inode *inode, struct file *filp)
 {
+	pipe_read_fasync(-1, filp, 0);
 	return pipe_release(inode, 1, 0);
 }
 
 static int
 pipe_write_release(struct inode *inode, struct file *filp)
 {
+	pipe_write_fasync(-1, filp, 0);
 	return pipe_release(inode, 0, 1);
 }
 
@@ -731,6 +733,7 @@ pipe_rdwr_release(struct inode *inode, struct file *filp)
 {
 	int decr, decw;
 
+	pipe_rdwr_fasync(-1, filp, 0);
 	decr = (filp->f_mode & FMODE_READ) != 0;
 	decw = (filp->f_mode & FMODE_WRITE) != 0;
 	return pipe_release(inode, decr, decw);
@@ -774,10 +777,8 @@ pipe_rdwr_open(struct inode *inode, struct file *filp)
 /*
  * The file_operations structs are not static because they
  * are also used in linux/fs/fifo.c to do operations on FIFOs.
- *
- * Pipes reuse fifos' file_operations structs.
  */
-const struct file_operations read_pipefifo_fops = {
+const struct file_operations read_fifo_fops = {
 	.llseek		= no_llseek,
 	.read		= do_sync_read,
 	.aio_read	= pipe_read,
@@ -789,7 +790,7 @@ const struct file_operations read_pipefifo_fops = {
 	.fasync		= pipe_read_fasync,
 };
 
-const struct file_operations write_pipefifo_fops = {
+const struct file_operations write_fifo_fops = {
 	.llseek		= no_llseek,
 	.read		= bad_pipe_r,
 	.write		= do_sync_write,
@@ -801,7 +802,44 @@ const struct file_operations write_pipefifo_fops = {
 	.fasync		= pipe_write_fasync,
 };
 
-const struct file_operations rdwr_pipefifo_fops = {
+const struct file_operations rdwr_fifo_fops = {
+	.llseek		= no_llseek,
+	.read		= do_sync_read,
+	.aio_read	= pipe_read,
+	.write		= do_sync_write,
+	.aio_write	= pipe_write,
+	.poll		= pipe_poll,
+	.unlocked_ioctl	= pipe_ioctl,
+	.open		= pipe_rdwr_open,
+	.release	= pipe_rdwr_release,
+	.fasync		= pipe_rdwr_fasync,
+};
+
+static const struct file_operations read_pipe_fops = {
+	.llseek		= no_llseek,
+	.read		= do_sync_read,
+	.aio_read	= pipe_read,
+	.write		= bad_pipe_w,
+	.poll		= pipe_poll,
+	.unlocked_ioctl	= pipe_ioctl,
+	.open		= pipe_read_open,
+	.release	= pipe_read_release,
+	.fasync		= pipe_read_fasync,
+};
+
+static const struct file_operations write_pipe_fops = {
+	.llseek		= no_llseek,
+	.read		= bad_pipe_r,
+	.write		= do_sync_write,
+	.aio_write	= pipe_write,
+	.poll		= pipe_poll,
+	.unlocked_ioctl	= pipe_ioctl,
+	.open		= pipe_write_open,
+	.release	= pipe_write_release,
+	.fasync		= pipe_write_fasync,
+};
+
+static const struct file_operations rdwr_pipe_fops = {
 	.llseek		= no_llseek,
 	.read		= do_sync_read,
 	.aio_read	= pipe_read,
@@ -889,7 +927,7 @@ static struct inode * get_pipe_inode(void)
 	inode->i_pipe = pipe;
 
 	pipe->readers = pipe->writers = 1;
-	inode->i_fop = &rdwr_pipefifo_fops;
+	inode->i_fop = &rdwr_pipe_fops;
 
 	/*
 	 * Mark the inode dirty from the very beginning,
@@ -899,8 +937,8 @@ static struct inode * get_pipe_inode(void)
 	 */
 	inode->i_state = I_DIRTY;
 	inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
-	inode->i_uid = current_fsuid();
-	inode->i_gid = current_fsgid();
+	inode->i_uid = current->fsuid;
+	inode->i_gid = current->fsgid;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 
 	return inode;
@@ -912,7 +950,7 @@ fail_inode:
 	return NULL;
 }
 
-struct file *create_write_pipe(int flags)
+struct file *create_write_pipe(void)
 {
 	int err;
 	struct inode *inode;
@@ -940,12 +978,12 @@ struct file *create_write_pipe(int flags)
 	d_instantiate(dentry, inode);
 
 	err = -ENFILE;
-	f = alloc_file(pipe_mnt, dentry, FMODE_WRITE, &write_pipefifo_fops);
+	f = alloc_file(pipe_mnt, dentry, FMODE_WRITE, &write_pipe_fops);
 	if (!f)
 		goto err_dentry;
 	f->f_mapping = inode->i_mapping;
 
-	f->f_flags = O_WRONLY | (flags & O_NONBLOCK);
+	f->f_flags = O_WRONLY;
 	f->f_version = 0;
 
 	return f;
@@ -965,58 +1003,59 @@ struct file *create_write_pipe(int flags)
 void free_write_pipe(struct file *f)
 {
 	free_pipe_info(f->f_dentry->d_inode);
-	path_put(&f->f_path);
+	dput(f->f_path.dentry);
+	mntput(f->f_path.mnt);
 	put_filp(f);
 }
 
-struct file *create_read_pipe(struct file *wrf, int flags)
+struct file *create_read_pipe(struct file *wrf)
 {
 	struct file *f = get_empty_filp();
 	if (!f)
 		return ERR_PTR(-ENFILE);
 
 	/* Grab pipe from the writer */
-	f->f_path = wrf->f_path;
-	path_get(&wrf->f_path);
+	f->f_path.mnt = mntget(wrf->f_path.mnt);
+	f->f_path.dentry = dget(wrf->f_path.dentry);
 	f->f_mapping = wrf->f_path.dentry->d_inode->i_mapping;
 
 	f->f_pos = 0;
-	f->f_flags = O_RDONLY | (flags & O_NONBLOCK);
-	f->f_op = &read_pipefifo_fops;
+	f->f_flags = O_RDONLY;
+	f->f_op = &read_pipe_fops;
 	f->f_mode = FMODE_READ;
 	f->f_version = 0;
 
 	return f;
 }
 
-int do_pipe_flags(int *fd, int flags)
+int do_pipe(int *fd)
 {
 	struct file *fw, *fr;
 	int error;
 	int fdw, fdr;
 
-	if (flags & ~(O_CLOEXEC | O_NONBLOCK))
-		return -EINVAL;
-
-	fw = create_write_pipe(flags);
+	fw = create_write_pipe();
 	if (IS_ERR(fw))
 		return PTR_ERR(fw);
-	fr = create_read_pipe(fw, flags);
+	fr = create_read_pipe(fw);
 	error = PTR_ERR(fr);
 	if (IS_ERR(fr))
 		goto err_write_pipe;
 
-	error = get_unused_fd_flags(flags);
+	error = get_unused_fd();
 	if (error < 0)
 		goto err_read_pipe;
 	fdr = error;
 
-	error = get_unused_fd_flags(flags);
+	error = get_unused_fd();
 	if (error < 0)
 		goto err_fdr;
 	fdw = error;
 
-	audit_fd_pair(fdr, fdw);
+	error = audit_fd_pair(fdr, fdw);
+	if (error < 0)
+		goto err_fdw;
+
 	fd_install(fdr, fr);
 	fd_install(fdw, fw);
 	fd[0] = fdr;
@@ -1024,31 +1063,29 @@ int do_pipe_flags(int *fd, int flags)
 
 	return 0;
 
+ err_fdw:
+	put_unused_fd(fdw);
  err_fdr:
 	put_unused_fd(fdr);
  err_read_pipe:
-	path_put(&fr->f_path);
+	dput(fr->f_dentry);
+	mntput(fr->f_vfsmnt);
 	put_filp(fr);
  err_write_pipe:
 	free_write_pipe(fw);
 	return error;
 }
 
-int do_pipe(int *fd)
-{
-	return do_pipe_flags(fd, 0);
-}
-
 /*
  * sys_pipe() is the normal C calling standard for creating
  * a pipe. It's not the way Unix traditionally does this, though.
  */
-asmlinkage long __weak sys_pipe2(int __user *fildes, int flags)
+asmlinkage long __weak sys_pipe(int __user *fildes)
 {
 	int fd[2];
 	int error;
 
-	error = do_pipe_flags(fd, flags);
+	error = do_pipe(fd);
 	if (!error) {
 		if (copy_to_user(fildes, fd, sizeof(fd))) {
 			sys_close(fd[0]);
@@ -1057,11 +1094,6 @@ asmlinkage long __weak sys_pipe2(int __user *fildes, int flags)
 		}
 	}
 	return error;
-}
-
-asmlinkage long __weak sys_pipe(int __user *fildes)
-{
-	return sys_pipe2(fildes, 0);
 }
 
 /*

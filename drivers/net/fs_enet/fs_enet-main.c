@@ -36,17 +36,24 @@
 #include <linux/fs.h>
 #include <linux/platform_device.h>
 #include <linux/phy.h>
-#include <linux/of_platform.h>
-#include <linux/of_gpio.h>
 
 #include <linux/vmalloc.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 
+#ifdef CONFIG_PPC_CPM_NEW_BINDING
+#include <asm/of_platform.h>
+#endif
+
 #include "fs_enet.h"
 
 /*************************************************/
+
+#ifndef CONFIG_PPC_CPM_NEW_BINDING
+static char version[] __devinitdata =
+    DRV_MODULE_NAME ".c:v" DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")" "\n";
+#endif
 
 MODULE_AUTHOR("Pantelis Antoniou <panto@intracom.gr>");
 MODULE_DESCRIPTION("Freescale Ethernet Driver");
@@ -209,7 +216,7 @@ static int fs_enet_rx_napi(struct napi_struct *napi, int budget)
 
 	if (received < budget) {
 		/* done */
-		netif_rx_complete(napi);
+		netif_rx_complete(dev, napi);
 		(*fep->ops->napi_enable_rx)(dev);
 	}
 	return received;
@@ -478,7 +485,7 @@ fs_enet_interrupt(int irq, void *dev_id)
 				/* NOTE: it is possible for FCCs in NAPI mode    */
 				/* to submit a spurious interrupt while in poll  */
 				if (napi_ok)
-					__netif_rx_schedule(&fep->napi);
+					__netif_rx_schedule(dev, &fep->napi);
 			}
 		}
 
@@ -664,6 +671,23 @@ static int fs_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return NETDEV_TX_OK;
 }
 
+static int fs_request_irq(struct net_device *dev, int irq, const char *name,
+		irq_handler_t irqf)
+{
+	struct fs_enet_private *fep = netdev_priv(dev);
+
+	(*fep->ops->pre_request_irq)(dev, irq);
+	return request_irq(irq, irqf, IRQF_SHARED, name, dev);
+}
+
+static void fs_free_irq(struct net_device *dev, int irq)
+{
+	struct fs_enet_private *fep = netdev_priv(dev);
+
+	free_irq(irq, dev);
+	(*fep->ops->post_free_irq)(dev, irq);
+}
+
 static void fs_timeout(struct net_device *dev)
 {
 	struct fs_enet_private *fep = netdev_priv(dev);
@@ -713,6 +737,9 @@ static void generic_adjust_link(struct  net_device *dev)
 		if (!fep->oldlink) {
 			new_state = 1;
 			fep->oldlink = 1;
+			netif_schedule(dev);
+			netif_carrier_on(dev);
+			netif_start_queue(dev);
 		}
 
 		if (new_state)
@@ -722,6 +749,8 @@ static void generic_adjust_link(struct  net_device *dev)
 		fep->oldlink = 0;
 		fep->oldspeed = 0;
 		fep->oldduplex = -1;
+		netif_carrier_off(dev);
+		netif_stop_queue(dev);
 	}
 
 	if (new_state && netif_msg_link(fep))
@@ -775,16 +804,11 @@ static int fs_enet_open(struct net_device *dev)
 	int r;
 	int err;
 
-	/* to initialize the fep->cur_rx,... */
-	/* not doing this, will cause a crash in fs_enet_rx_napi */
-	fs_init_bds(fep->ndev);
-
 	if (fep->fpi->use_napi)
 		napi_enable(&fep->napi);
 
 	/* Install our interrupt handler. */
-	r = request_irq(fep->interrupt, fs_enet_interrupt, IRQF_SHARED,
-			"fs_enet-mac", dev);
+	r = fs_request_irq(dev, fep->interrupt, "fs_enet-mac", fs_enet_interrupt);
 	if (r != 0) {
 		printk(KERN_ERR DRV_MODULE_NAME
 		       ": %s Could not allocate FS_ENET IRQ!", dev->name);
@@ -800,8 +824,6 @@ static int fs_enet_open(struct net_device *dev)
 		return err;
 	}
 	phy_start(fep->phydev);
-
-	netif_start_queue(dev);
 
 	return 0;
 }
@@ -826,7 +848,7 @@ static int fs_enet_close(struct net_device *dev)
 	/* release any irqs */
 	phy_disconnect(fep->phydev);
 	fep->phydev = NULL;
-	free_irq(fep->interrupt, dev);
+	fs_free_irq(dev, fep->interrupt);
 
 	return 0;
 }
@@ -935,6 +957,190 @@ static int fs_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 extern int fs_mii_connect(struct net_device *dev);
 extern void fs_mii_disconnect(struct net_device *dev);
 
+#ifndef CONFIG_PPC_CPM_NEW_BINDING
+static struct net_device *fs_init_instance(struct device *dev,
+		struct fs_platform_info *fpi)
+{
+	struct net_device *ndev = NULL;
+	struct fs_enet_private *fep = NULL;
+	int privsize, i, r, err = 0, registered = 0;
+
+	fpi->fs_no = fs_get_id(fpi);
+	/* guard */
+	if ((unsigned int)fpi->fs_no >= FS_MAX_INDEX)
+		return ERR_PTR(-EINVAL);
+
+	privsize = sizeof(*fep) + (sizeof(struct sk_buff **) *
+			    (fpi->rx_ring + fpi->tx_ring));
+
+	ndev = alloc_etherdev(privsize);
+	if (!ndev) {
+		err = -ENOMEM;
+		goto err;
+	}
+
+	fep = netdev_priv(ndev);
+
+	fep->dev = dev;
+	dev_set_drvdata(dev, ndev);
+	fep->fpi = fpi;
+	if (fpi->init_ioports)
+		fpi->init_ioports((struct fs_platform_info *)fpi);
+
+#ifdef CONFIG_FS_ENET_HAS_FEC
+	if (fs_get_fec_index(fpi->fs_no) >= 0)
+		fep->ops = &fs_fec_ops;
+#endif
+
+#ifdef CONFIG_FS_ENET_HAS_SCC
+	if (fs_get_scc_index(fpi->fs_no) >=0)
+		fep->ops = &fs_scc_ops;
+#endif
+
+#ifdef CONFIG_FS_ENET_HAS_FCC
+	if (fs_get_fcc_index(fpi->fs_no) >= 0)
+		fep->ops = &fs_fcc_ops;
+#endif
+
+	if (fep->ops == NULL) {
+		printk(KERN_ERR DRV_MODULE_NAME
+		       ": %s No matching ops found (%d).\n",
+		       ndev->name, fpi->fs_no);
+		err = -EINVAL;
+		goto err;
+	}
+
+	r = (*fep->ops->setup_data)(ndev);
+	if (r != 0) {
+		printk(KERN_ERR DRV_MODULE_NAME
+		       ": %s setup_data failed\n",
+			ndev->name);
+		err = r;
+		goto err;
+	}
+
+	/* point rx_skbuff, tx_skbuff */
+	fep->rx_skbuff = (struct sk_buff **)&fep[1];
+	fep->tx_skbuff = fep->rx_skbuff + fpi->rx_ring;
+
+	/* init locks */
+	spin_lock_init(&fep->lock);
+	spin_lock_init(&fep->tx_lock);
+
+	/*
+	 * Set the Ethernet address.
+	 */
+	for (i = 0; i < 6; i++)
+		ndev->dev_addr[i] = fpi->macaddr[i];
+
+	r = (*fep->ops->allocate_bd)(ndev);
+
+	if (fep->ring_base == NULL) {
+		printk(KERN_ERR DRV_MODULE_NAME
+		       ": %s buffer descriptor alloc failed (%d).\n", ndev->name, r);
+		err = r;
+		goto err;
+	}
+
+	/*
+	 * Set receive and transmit descriptor base.
+	 */
+	fep->rx_bd_base = fep->ring_base;
+	fep->tx_bd_base = fep->rx_bd_base + fpi->rx_ring;
+
+	/* initialize ring size variables */
+	fep->tx_ring = fpi->tx_ring;
+	fep->rx_ring = fpi->rx_ring;
+
+	/*
+	 * The FEC Ethernet specific entries in the device structure.
+	 */
+	ndev->open = fs_enet_open;
+	ndev->hard_start_xmit = fs_enet_start_xmit;
+	ndev->tx_timeout = fs_timeout;
+	ndev->watchdog_timeo = 2 * HZ;
+	ndev->stop = fs_enet_close;
+	ndev->get_stats = fs_enet_get_stats;
+	ndev->set_multicast_list = fs_set_multicast_list;
+
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	ndev->poll_controller = fs_enet_netpoll;
+#endif
+
+	netif_napi_add(ndev, &fep->napi,
+		       fs_enet_rx_napi, fpi->napi_weight);
+
+	ndev->ethtool_ops = &fs_ethtool_ops;
+	ndev->do_ioctl = fs_ioctl;
+
+	init_timer(&fep->phy_timer_list);
+
+	netif_carrier_off(ndev);
+
+	err = register_netdev(ndev);
+	if (err != 0) {
+		printk(KERN_ERR DRV_MODULE_NAME
+		       ": %s register_netdev failed.\n", ndev->name);
+		goto err;
+	}
+	registered = 1;
+
+
+	return ndev;
+
+err:
+	if (ndev != NULL) {
+		if (registered)
+			unregister_netdev(ndev);
+
+		if (fep != NULL) {
+			(*fep->ops->free_bd)(ndev);
+			(*fep->ops->cleanup_data)(ndev);
+		}
+
+		free_netdev(ndev);
+	}
+
+	dev_set_drvdata(dev, NULL);
+
+	return ERR_PTR(err);
+}
+
+static int fs_cleanup_instance(struct net_device *ndev)
+{
+	struct fs_enet_private *fep;
+	const struct fs_platform_info *fpi;
+	struct device *dev;
+
+	if (ndev == NULL)
+		return -EINVAL;
+
+	fep = netdev_priv(ndev);
+	if (fep == NULL)
+		return -EINVAL;
+
+	fpi = fep->fpi;
+
+	unregister_netdev(ndev);
+
+	dma_free_coherent(fep->dev, (fpi->tx_ring + fpi->rx_ring) * sizeof(cbd_t),
+			  (void __force *)fep->ring_base, fep->ring_mem_addr);
+
+	/* reset it */
+	(*fep->ops->cleanup_data)(ndev);
+
+	dev = fep->dev;
+	if (dev != NULL) {
+		dev_set_drvdata(dev, NULL);
+		fep->dev = NULL;
+	}
+
+	free_netdev(ndev);
+
+	return 0;
+}
+#endif
+
 /**************************************************************************************/
 
 /* handy pointer to the immap */
@@ -961,11 +1167,13 @@ static void cleanup_immap(void)
 
 /**************************************************************************************/
 
+#ifdef CONFIG_PPC_CPM_NEW_BINDING
 static int __devinit find_phy(struct device_node *np,
                               struct fs_platform_info *fpi)
 {
 	struct device_node *phynode, *mdionode;
-	int ret = 0, len, bus_id;
+	struct resource res;
+	int ret = 0, len;
 	const u32 *data;
 
 	data  = of_get_property(np, "fixed-link", NULL);
@@ -982,28 +1190,19 @@ static int __devinit find_phy(struct device_node *np,
 	if (!phynode)
 		return -EINVAL;
 
-	data = of_get_property(phynode, "reg", &len);
-	if (!data || len != 4) {
-		ret = -EINVAL;
-		goto out_put_phy;
-	}
-
 	mdionode = of_get_parent(phynode);
-	if (!mdionode) {
-		ret = -EINVAL;
+	if (!mdionode)
 		goto out_put_phy;
-	}
 
-	bus_id = of_get_gpio(mdionode, 0);
-	if (bus_id < 0) {
-		struct resource res;
-		ret = of_address_to_resource(mdionode, 0, &res);
-		if (ret)
-			goto out_put_mdio;
-		bus_id = res.start;
-	}
+	ret = of_address_to_resource(mdionode, 0, &res);
+	if (ret)
+		goto out_put_mdio;
 
-	snprintf(fpi->bus_id, 16, "%x:%02x", bus_id, *data);
+	data = of_get_property(phynode, "reg", &len);
+	if (!data || len != 4)
+		goto out_put_mdio;
+
+	snprintf(fpi->bus_id, 16, "%x:%02x", res.start, *data);
 
 out_put_mdio:
 	of_node_put(mdionode);
@@ -1099,9 +1298,7 @@ static int __devinit fs_enet_probe(struct of_device *ofdev,
 	ndev->stop = fs_enet_close;
 	ndev->get_stats = fs_enet_get_stats;
 	ndev->set_multicast_list = fs_set_multicast_list;
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	ndev->poll_controller = fs_enet_netpoll;
-#endif
+
 	if (fpi->use_napi)
 		netif_napi_add(ndev, &fep->napi, fs_enet_rx_napi,
 		               fpi->napi_weight);
@@ -1117,7 +1314,10 @@ static int __devinit fs_enet_probe(struct of_device *ofdev,
 	if (ret)
 		goto out_free_bd;
 
-	printk(KERN_INFO "%s: fs_enet: %pM\n", ndev->name, ndev->dev_addr);
+	printk(KERN_INFO "%s: fs_enet: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	       ndev->name,
+	       ndev->dev_addr[0], ndev->dev_addr[1], ndev->dev_addr[2],
+	       ndev->dev_addr[3], ndev->dev_addr[4], ndev->dev_addr[5]);
 
 	return 0;
 
@@ -1152,10 +1352,6 @@ static struct of_device_id fs_enet_match[] = {
 #ifdef CONFIG_FS_ENET_HAS_SCC
 	{
 		.compatible = "fsl,cpm1-scc-enet",
-		.data = (void *)&fs_scc_ops,
-	},
-	{
-		.compatible = "fsl,cpm2-scc-enet",
 		.data = (void *)&fs_scc_ops,
 	},
 #endif
@@ -1203,12 +1399,127 @@ static void __exit fs_cleanup(void)
 	of_unregister_platform_driver(&fs_enet_driver);
 	cleanup_immap();
 }
+#else
+static int __devinit fs_enet_probe(struct device *dev)
+{
+	struct net_device *ndev;
+
+	/* no fixup - no device */
+	if (dev->platform_data == NULL) {
+		printk(KERN_INFO "fs_enet: "
+				"probe called with no platform data; "
+				"remove unused devices\n");
+		return -ENODEV;
+	}
+
+	ndev = fs_init_instance(dev, dev->platform_data);
+	if (IS_ERR(ndev))
+		return PTR_ERR(ndev);
+	return 0;
+}
+
+static int fs_enet_remove(struct device *dev)
+{
+	return fs_cleanup_instance(dev_get_drvdata(dev));
+}
+
+static struct device_driver fs_enet_fec_driver = {
+	.name	  	= "fsl-cpm-fec",
+	.bus		= &platform_bus_type,
+	.probe		= fs_enet_probe,
+	.remove		= fs_enet_remove,
+#ifdef CONFIG_PM
+/*	.suspend	= fs_enet_suspend,	TODO */
+/*	.resume		= fs_enet_resume,	TODO */
+#endif
+};
+
+static struct device_driver fs_enet_scc_driver = {
+	.name	  	= "fsl-cpm-scc",
+	.bus		= &platform_bus_type,
+	.probe		= fs_enet_probe,
+	.remove		= fs_enet_remove,
+#ifdef CONFIG_PM
+/*	.suspend	= fs_enet_suspend,	TODO */
+/*	.resume		= fs_enet_resume,	TODO */
+#endif
+};
+
+static struct device_driver fs_enet_fcc_driver = {
+	.name	  	= "fsl-cpm-fcc",
+	.bus		= &platform_bus_type,
+	.probe		= fs_enet_probe,
+	.remove		= fs_enet_remove,
+#ifdef CONFIG_PM
+/*	.suspend	= fs_enet_suspend,	TODO */
+/*	.resume		= fs_enet_resume,	TODO */
+#endif
+};
+
+static int __init fs_init(void)
+{
+	int r;
+
+	printk(KERN_INFO
+			"%s", version);
+
+	r = setup_immap();
+	if (r != 0)
+		return r;
+
+#ifdef CONFIG_FS_ENET_HAS_FCC
+	/* let's insert mii stuff */
+	r = fs_enet_mdio_bb_init();
+
+	if (r != 0) {
+		printk(KERN_ERR DRV_MODULE_NAME
+			"BB PHY init failed.\n");
+		return r;
+	}
+	r = driver_register(&fs_enet_fcc_driver);
+	if (r != 0)
+		goto err;
+#endif
+
+#ifdef CONFIG_FS_ENET_HAS_FEC
+	r =  fs_enet_mdio_fec_init();
+	if (r != 0) {
+		printk(KERN_ERR DRV_MODULE_NAME
+			"FEC PHY init failed.\n");
+		return r;
+	}
+
+	r = driver_register(&fs_enet_fec_driver);
+	if (r != 0)
+		goto err;
+#endif
+
+#ifdef CONFIG_FS_ENET_HAS_SCC
+	r = driver_register(&fs_enet_scc_driver);
+	if (r != 0)
+		goto err;
+#endif
+
+	return 0;
+err:
+	cleanup_immap();
+	return r;
+}
+
+static void __exit fs_cleanup(void)
+{
+	driver_unregister(&fs_enet_fec_driver);
+	driver_unregister(&fs_enet_fcc_driver);
+	driver_unregister(&fs_enet_scc_driver);
+	cleanup_immap();
+}
+#endif
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
 static void fs_enet_netpoll(struct net_device *dev)
 {
        disable_irq(dev->irq);
-       fs_enet_interrupt(dev->irq, dev);
+       fs_enet_interrupt(dev->irq, dev, NULL);
        enable_irq(dev->irq);
 }
 #endif

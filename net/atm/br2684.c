@@ -52,12 +52,12 @@ static void skb_debug(const struct sk_buff *skb)
 #define ETHERTYPE_IPV6	0x86, 0xdd
 #define PAD_BRIDGED	0x00, 0x00
 
-static const unsigned char ethertype_ipv4[] = { ETHERTYPE_IPV4 };
-static const unsigned char ethertype_ipv6[] = { ETHERTYPE_IPV6 };
-static const unsigned char llc_oui_pid_pad[] =
+static unsigned char ethertype_ipv4[] = { ETHERTYPE_IPV4 };
+static unsigned char ethertype_ipv6[] = { ETHERTYPE_IPV6 };
+static unsigned char llc_oui_pid_pad[] =
 			{ LLC, SNAP_BRIDGED, PID_ETHERNET, PAD_BRIDGED };
-static const unsigned char llc_oui_ipv4[] = { LLC, SNAP_ROUTED, ETHERTYPE_IPV4 };
-static const unsigned char llc_oui_ipv6[] = { LLC, SNAP_ROUTED, ETHERTYPE_IPV6 };
+static unsigned char llc_oui_ipv4[] = { LLC, SNAP_ROUTED, ETHERTYPE_IPV4 };
+static unsigned char llc_oui_ipv6[] = { LLC, SNAP_ROUTED, ETHERTYPE_IPV6 };
 
 enum br2684_encaps {
 	e_vc = BR2684_ENCAPS_VC,
@@ -101,7 +101,7 @@ static LIST_HEAD(br2684_devs);
 
 static inline struct br2684_dev *BRPRIV(const struct net_device *net_dev)
 {
-	return (struct br2684_dev *)netdev_priv(net_dev);
+	return (struct br2684_dev *)net_dev->priv;
 }
 
 static inline struct net_device *list_entry_brdev(const struct list_head *le)
@@ -188,13 +188,10 @@ static int br2684_xmit_vcc(struct sk_buff *skb, struct br2684_dev *brdev,
 				return 0;
 			}
 		}
-	} else { /* e_vc */
-		if (brdev->payload == p_bridged) {
-			skb_push(skb, 2);
+	} else {
+		skb_push(skb, 2);
+		if (brdev->payload == p_bridged)
 			memset(skb->data, 0, 2);
-		} else { /* p_routed */
-			skb_pull(skb, ETH_HLEN);
-		}
 	}
 	skb_debug(skb);
 
@@ -217,8 +214,8 @@ static int br2684_xmit_vcc(struct sk_buff *skb, struct br2684_dev *brdev,
 	return 1;
 }
 
-static inline struct br2684_vcc *pick_outgoing_vcc(const struct sk_buff *skb,
-						   const struct br2684_dev *brdev)
+static inline struct br2684_vcc *pick_outgoing_vcc(struct sk_buff *skb,
+						   struct br2684_dev *brdev)
 {
 	return list_empty(&brdev->brvccs) ? NULL : list_entry_brvcc(brdev->brvccs.next);	/* 1 vcc/dev right now */
 }
@@ -375,13 +372,16 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 			if (memcmp
 			    (skb->data + 6, ethertype_ipv6,
 			     sizeof(ethertype_ipv6)) == 0)
-				skb->protocol = htons(ETH_P_IPV6);
+				skb->protocol = __constant_htons(ETH_P_IPV6);
 			else if (memcmp
 				 (skb->data + 6, ethertype_ipv4,
 				  sizeof(ethertype_ipv4)) == 0)
-				skb->protocol = htons(ETH_P_IP);
-			else
-				goto error;
+				skb->protocol = __constant_htons(ETH_P_IP);
+			else {
+				brdev->stats.rx_errors++;
+				dev_kfree_skb(skb);
+				return;
+			}
 			skb_pull(skb, sizeof(llc_oui_ipv4));
 			skb_reset_network_header(skb);
 			skb->pkt_type = PACKET_HOST;
@@ -394,56 +394,44 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 			   (memcmp(skb->data, llc_oui_pid_pad, 7) == 0)) {
 			skb_pull(skb, sizeof(llc_oui_pid_pad));
 			skb->protocol = eth_type_trans(skb, net_dev);
-		} else
-			goto error;
-
-	} else { /* e_vc */
-		if (brdev->payload == p_routed) {
-			struct iphdr *iph;
-
-			skb_reset_network_header(skb);
-			iph = ip_hdr(skb);
-			if (iph->version == 4)
-				skb->protocol = htons(ETH_P_IP);
-			else if (iph->version == 6)
-				skb->protocol = htons(ETH_P_IPV6);
-			else
-				goto error;
-			skb->pkt_type = PACKET_HOST;
-		} else { /* p_bridged */
-			/* first 2 chars should be 0 */
-			if (*((u16 *) (skb->data)) != 0)
-				goto error;
-			skb_pull(skb, BR2684_PAD_LEN);
-			skb->protocol = eth_type_trans(skb, net_dev);
+		} else {
+			brdev->stats.rx_errors++;
+			dev_kfree_skb(skb);
+			return;
 		}
+
+	} else {
+		/* first 2 chars should be 0 */
+		if (*((u16 *) (skb->data)) != 0) {
+			brdev->stats.rx_errors++;
+			dev_kfree_skb(skb);
+			return;
+		}
+		skb_pull(skb, BR2684_PAD_LEN + ETH_HLEN);	/* pad, dstmac, srcmac, ethtype */
+		skb->protocol = eth_type_trans(skb, net_dev);
 	}
 
 #ifdef CONFIG_ATM_BR2684_IPFILTER
-	if (unlikely(packet_fails_filter(skb->protocol, brvcc, skb)))
-		goto dropped;
+	if (unlikely(packet_fails_filter(skb->protocol, brvcc, skb))) {
+		brdev->stats.rx_dropped++;
+		dev_kfree_skb(skb);
+		return;
+	}
 #endif /* CONFIG_ATM_BR2684_IPFILTER */
 	skb->dev = net_dev;
 	ATM_SKB(skb)->vcc = atmvcc;	/* needed ? */
 	pr_debug("received packet's protocol: %x\n", ntohs(skb->protocol));
 	skb_debug(skb);
-	/* sigh, interface is down? */
-	if (unlikely(!(net_dev->flags & IFF_UP)))
-		goto dropped;
+	if (unlikely(!(net_dev->flags & IFF_UP))) {
+		/* sigh, interface is down */
+		brdev->stats.rx_dropped++;
+		dev_kfree_skb(skb);
+		return;
+	}
 	brdev->stats.rx_packets++;
 	brdev->stats.rx_bytes += skb->len;
 	memset(ATM_SKB(skb), 0, sizeof(struct atm_skb_data));
 	netif_rx(skb);
-	return;
-
-dropped:
-	brdev->stats.rx_dropped++;
-	goto free_skb;
-error:
-	brdev->stats.rx_errors++;
-free_skb:
-	dev_kfree_skb(skb);
-	return;
 }
 
 /*
@@ -530,9 +518,9 @@ static int br2684_regvcc(struct atm_vcc *atmvcc, void __user * arg)
 		struct sk_buff *next = skb->next;
 
 		skb->next = skb->prev = NULL;
-		br2684_push(atmvcc, skb);
 		BRPRIV(skb->dev)->stats.rx_bytes -= skb->len;
 		BRPRIV(skb->dev)->stats.rx_packets--;
+		br2684_push(atmvcc, skb);
 
 		skb = next;
 	}
@@ -698,11 +686,12 @@ static int br2684_seq_show(struct seq_file *seq, void *v)
 						    br2684_devs);
 	const struct net_device *net_dev = brdev->net_dev;
 	const struct br2684_vcc *brvcc;
+	DECLARE_MAC_BUF(mac);
 
-	seq_printf(seq, "dev %.16s: num=%d, mac=%pM (%s)\n",
+	seq_printf(seq, "dev %.16s: num=%d, mac=%s (%s)\n",
 		   net_dev->name,
 		   brdev->number,
-		   net_dev->dev_addr,
+		   print_mac(mac, net_dev->dev_addr),
 		   brdev->mac_was_set ? "set" : "auto");
 
 	list_for_each_entry(brvcc, &brdev->brvccs, brvccs) {

@@ -65,5 +65,4 @@ struct qcam_device {
 	int top, left;
 	int status;
 	unsigned int saved_bits;
-	unsigned long in_use;
 };

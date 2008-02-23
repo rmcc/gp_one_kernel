@@ -151,7 +151,6 @@ enum arq_state {
 
 static DEFINE_PER_CPU(unsigned long, ioc_count);
 static struct completion *ioc_gone;
-static DEFINE_SPINLOCK(ioc_gone_lock);
 
 static void as_move_to_dispatch(struct as_data *ad, struct request *rq);
 static void as_antic_stop(struct as_data *ad);
@@ -165,19 +164,8 @@ static void free_as_io_context(struct as_io_context *aic)
 {
 	kfree(aic);
 	elv_ioc_count_dec(ioc_count);
-	if (ioc_gone) {
-		/*
-		 * AS scheduler is exiting, grab exit lock and check
-		 * the pending io context count. If it hits zero,
-		 * complete ioc_gone and set it back to NULL.
-		 */
-		spin_lock(&ioc_gone_lock);
-		if (ioc_gone && !elv_ioc_count_read(ioc_count)) {
-			complete(ioc_gone);
-			ioc_gone = NULL;
-		}
-		spin_unlock(&ioc_gone_lock);
-	}
+	if (ioc_gone && !elv_ioc_count_read(ioc_count))
+		complete(ioc_gone);
 }
 
 static void as_trim(struct io_context *ioc)
@@ -462,7 +450,7 @@ static void as_antic_stop(struct as_data *ad)
 			del_timer(&ad->antic_timer);
 		ad->antic_status = ANTIC_FINISHED;
 		/* see as_work_handler */
-		kblockd_schedule_work(ad->q, &ad->antic_work);
+		kblockd_schedule_work(&ad->antic_work);
 	}
 }
 
@@ -483,7 +471,7 @@ static void as_antic_timeout(unsigned long data)
 		aic = ad->io_context->aic;
 
 		ad->antic_status = ANTIC_FINISHED;
-		kblockd_schedule_work(q, &ad->antic_work);
+		kblockd_schedule_work(&ad->antic_work);
 
 		if (aic->ttime_samples == 0) {
 			/* process anticipated on has exited or timed out*/
@@ -745,14 +733,6 @@ static int as_can_break_anticipation(struct as_data *ad, struct request *rq)
  */
 static int as_can_anticipate(struct as_data *ad, struct request *rq)
 {
-#if 0 /* disable for now, we need to check tag level as well */
-	/*
-	 * SSD device without seek penalty, disable idling
-	 */
-	if (blk_queue_nonrot(ad->q)) axman
-		return 0;
-#endif
-
 	if (!ad->io_context)
 		/*
 		 * Last request submitted was a write
@@ -845,14 +825,13 @@ static void as_completed_request(struct request_queue *q, struct request *rq)
 	WARN_ON(!list_empty(&rq->queuelist));
 
 	if (RQ_STATE(rq) != AS_RQ_REMOVED) {
-		WARN(1, "rq->state %d\n", RQ_STATE(rq));
+		printk("rq->state %d\n", RQ_STATE(rq));
+		WARN_ON(1);
 		goto out;
 	}
 
 	if (ad->changed_batch && ad->nr_dispatched == 1) {
-		ad->current_batch_expires = jiffies +
-					ad->batch_expire[ad->batch_data_dir];
-		kblockd_schedule_work(q, &ad->antic_work);
+		kblockd_schedule_work(&ad->antic_work);
 		ad->changed_batch = 0;
 
 		if (ad->batch_data_dir == REQ_SYNC)
@@ -1339,12 +1318,12 @@ static int as_may_queue(struct request_queue *q, int rw)
 	return ret;
 }
 
-static void as_exit_queue(struct elevator_queue *e)
+static void as_exit_queue(elevator_t *e)
 {
 	struct as_data *ad = e->elevator_data;
 
 	del_timer_sync(&ad->antic_timer);
-	cancel_work_sync(&ad->antic_work);
+	kblockd_flush_work(&ad->antic_work);
 
 	BUG_ON(!list_empty(&ad->fifo_list[REQ_SYNC]));
 	BUG_ON(!list_empty(&ad->fifo_list[REQ_ASYNC]));
@@ -1409,7 +1388,7 @@ as_var_store(unsigned long *var, const char *page, size_t count)
 	return count;
 }
 
-static ssize_t est_time_show(struct elevator_queue *e, char *page)
+static ssize_t est_time_show(elevator_t *e, char *page)
 {
 	struct as_data *ad = e->elevator_data;
 	int pos = 0;
@@ -1427,7 +1406,7 @@ static ssize_t est_time_show(struct elevator_queue *e, char *page)
 }
 
 #define SHOW_FUNCTION(__FUNC, __VAR)				\
-static ssize_t __FUNC(struct elevator_queue *e, char *page)	\
+static ssize_t __FUNC(elevator_t *e, char *page)		\
 {								\
 	struct as_data *ad = e->elevator_data;			\
 	return as_var_show(jiffies_to_msecs((__VAR)), (page));	\
@@ -1440,7 +1419,7 @@ SHOW_FUNCTION(as_write_batch_expire_show, ad->batch_expire[REQ_ASYNC]);
 #undef SHOW_FUNCTION
 
 #define STORE_FUNCTION(__FUNC, __PTR, MIN, MAX)				\
-static ssize_t __FUNC(struct elevator_queue *e, const char *page, size_t count)	\
+static ssize_t __FUNC(elevator_t *e, const char *page, size_t count)	\
 {									\
 	struct as_data *ad = e->elevator_data;				\
 	int ret = as_var_store(__PTR, (page), count);			\
@@ -1512,7 +1491,7 @@ static void __exit as_exit(void)
 	/* ioc_gone's update must be visible before reading ioc_count */
 	smp_wmb();
 	if (elv_ioc_count_read(ioc_count))
-		wait_for_completion(&all_gone);
+		wait_for_completion(ioc_gone);
 	synchronize_rcu();
 }
 

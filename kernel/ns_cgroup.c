@@ -7,12 +7,12 @@
 #include <linux/module.h>
 #include <linux/cgroup.h>
 #include <linux/fs.h>
-#include <linux/proc_fs.h>
 #include <linux/slab.h>
 #include <linux/nsproxy.h>
 
 struct ns_cgroup {
 	struct cgroup_subsys_state css;
+	spinlock_t lock;
 };
 
 struct cgroup_subsys ns_subsys;
@@ -24,12 +24,9 @@ static inline struct ns_cgroup *cgroup_to_ns(
 			    struct ns_cgroup, css);
 }
 
-int ns_cgroup_clone(struct task_struct *task, struct pid *pid)
+int ns_cgroup_clone(struct task_struct *task)
 {
-	char name[PROC_NUMBUF];
-
-	snprintf(name, PROC_NUMBUF, "%d", pid_vnr(pid));
-	return cgroup_clone(task, &ns_subsys, name);
+	return cgroup_clone(task, &ns_subsys);
 }
 
 /*
@@ -83,6 +80,7 @@ static struct cgroup_subsys_state *ns_create(struct cgroup_subsys *ss,
 	ns_cgroup = kzalloc(sizeof(*ns_cgroup), GFP_KERNEL);
 	if (!ns_cgroup)
 		return ERR_PTR(-ENOMEM);
+	spin_lock_init(&ns_cgroup->lock);
 	return &ns_cgroup->css;
 }
 

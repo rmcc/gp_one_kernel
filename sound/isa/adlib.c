@@ -36,7 +36,7 @@ static int __devinit snd_adlib_match(struct device *dev, unsigned int n)
 		return 0;
 
 	if (port[n] == SNDRV_AUTO_PORT) {
-		dev_err(dev, "please specify port\n");
+		snd_printk(KERN_ERR "%s: please specify port\n", dev->bus_id);
 		return 0;
 	}
 	return 1;
@@ -55,13 +55,13 @@ static int __devinit snd_adlib_probe(struct device *dev, unsigned int n)
 
 	card = snd_card_new(index[n], id[n], THIS_MODULE, 0);
 	if (!card) {
-		dev_err(dev, "could not create card\n");
+		snd_printk(KERN_ERR "%s: could not create card\n", dev->bus_id);
 		return -EINVAL;
 	}
 
 	card->private_data = request_region(port[n], 4, CRD_NAME);
 	if (!card->private_data) {
-		dev_err(dev, "could not grab ports\n");
+		snd_printk(KERN_ERR "%s: could not grab ports\n", dev->bus_id);
 		error = -EBUSY;
 		goto out;
 	}
@@ -73,13 +73,13 @@ static int __devinit snd_adlib_probe(struct device *dev, unsigned int n)
 
 	error = snd_opl3_create(card, port[n], port[n] + 2, OPL3_HW_AUTO, 1, &opl3);
 	if (error < 0) {
-		dev_err(dev, "could not create OPL\n");
+		snd_printk(KERN_ERR "%s: could not create OPL\n", dev->bus_id);
 		goto out;
 	}
 
 	error = snd_opl3_hwdep_new(opl3, 0, 0, NULL);
 	if (error < 0) {
-		dev_err(dev, "could not create FM\n");
+		snd_printk(KERN_ERR "%s: could not create FM\n", dev->bus_id);
 		goto out;
 	}
 
@@ -87,7 +87,7 @@ static int __devinit snd_adlib_probe(struct device *dev, unsigned int n)
 
 	error = snd_card_register(card);
 	if (error < 0) {
-		dev_err(dev, "could not register card\n");
+		snd_printk(KERN_ERR "%s: could not register card\n", dev->bus_id);
 		goto out;
 	}
 

@@ -46,7 +46,7 @@
 
 #include <asm/dma.h>
 #include <asm/ecard.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/mmu_context.h>
 #include <asm/mach/irq.h>
@@ -587,7 +587,8 @@ ecard_irq_handler(unsigned int irq, struct irq_desc *desc)
 			pending = ecard_default_ops.irqpending(ec);
 
 		if (pending) {
-			generic_handle_irq(ec->irq);
+			struct irq_desc *d = irq_desc + ec->irq;
+			desc_handle_irq(ec->irq, d);
 			called ++;
 		}
 	}
@@ -621,6 +622,7 @@ ecard_irqexp_handler(unsigned int irq, struct irq_desc *desc)
 		ecard_t *ec = slot_to_ecard(slot);
 
 		if (ec->claimed) {
+			struct irq_desc *d = irq_desc + ec->irq;
 			/*
 			 * this ugly code is so that we can operate a
 			 * prioritorising system:
@@ -633,7 +635,7 @@ ecard_irqexp_handler(unsigned int irq, struct irq_desc *desc)
 			 * Serial cards should go in 0/1, ethernet/scsi in 2/3
 			 * otherwise you will lose serial data at high speeds!
 			 */
-			generic_handle_irq(ec->irq);
+			desc_handle_irq(ec->irq, d);
 		} else {
 			printk(KERN_WARNING "card%d: interrupt from unclaimed "
 			       "card???\n", slot);
@@ -678,7 +680,7 @@ static int __init ecard_probeirqhw(void)
 #define IO_EC_MEMC8_BASE 0
 #endif
 
-static unsigned int __ecard_address(ecard_t *ec, card_type_t type, card_speed_t speed)
+unsigned int __ecard_address(ecard_t *ec, card_type_t type, card_speed_t speed)
 {
 	unsigned long address = 0;
 	int slot = ec->slot_no;
@@ -781,7 +783,7 @@ static void ecard_proc_init(void)
 
 #define ec_set_resource(ec,nr,st,sz)				\
 	do {							\
-		(ec)->resource[nr].name = dev_name(&ec->dev);	\
+		(ec)->resource[nr].name = ec->dev.bus_id;	\
 		(ec)->resource[nr].start = st;			\
 		(ec)->resource[nr].end = (st) + (sz) - 1;	\
 		(ec)->resource[nr].flags = IORESOURCE_MEM;	\
@@ -817,7 +819,7 @@ static struct expansion_card *__init ecard_alloc_card(int type, int slot)
 	ec->dma = NO_DMA;
 	ec->ops = &ecard_default_ops;
 
-	dev_set_name(&ec->dev, "ecard%d", slot);
+	snprintf(ec->dev.bus_id, sizeof(ec->dev.bus_id), "ecard%d", slot);
 	ec->dev.parent = NULL;
 	ec->dev.bus = &ecard_bus_type;
 	ec->dev.dma_mask = &ec->dma_mask;
@@ -851,7 +853,8 @@ static struct expansion_card *__init ecard_alloc_card(int type, int slot)
 	for (i = 0; i < ECARD_NUM_RESOURCES; i++) {
 		if (ec->resource[i].flags &&
 		    request_resource(&iomem_resource, &ec->resource[i])) {
-			dev_err(&ec->dev, "resource(s) not available\n");
+			printk(KERN_ERR "%s: resource(s) not available\n",
+				ec->dev.bus_id);
 			ec->resource[i].end -= ec->resource[i].start;
 			ec->resource[i].start = 0;
 			ec->resource[i].flags = 0;
@@ -999,7 +1002,7 @@ ecard_probe(int slot, card_type_t type)
 	}
 
 	rc = -ENODEV;
-	if ((ec->podaddr = __ecard_address(ec, type, ECARD_SYNC)) == 0)
+	if ((ec->podaddr = ecard_address(ec, type, ECARD_SYNC)) == 0)
 		goto nodev;
 
 	cid.r_zero = 1;
@@ -1138,10 +1141,10 @@ static int ecard_drv_probe(struct device *dev)
 
 	id = ecard_match_device(drv->id_table, ec);
 
-	ec->claimed = 1;
+	ecard_claim(ec);
 	ret = drv->probe(ec, id);
 	if (ret)
-		ec->claimed = 0;
+		ecard_release(ec);
 	return ret;
 }
 
@@ -1151,7 +1154,7 @@ static int ecard_drv_remove(struct device *dev)
 	struct ecard_driver *drv = ECARD_DRV(dev->driver);
 
 	drv->remove(ec);
-	ec->claimed = 0;
+	ecard_release(ec);
 
 	/*
 	 * Restore the default operations.  We ensure that the
@@ -1179,7 +1182,7 @@ static void ecard_drv_shutdown(struct device *dev)
 	if (dev->driver) {
 		if (drv->shutdown)
 			drv->shutdown(ec);
-		ec->claimed = 0;
+		ecard_release(ec);
 	}
 
 	/*
@@ -1236,6 +1239,7 @@ static int ecard_bus_init(void)
 postcore_initcall(ecard_bus_init);
 
 EXPORT_SYMBOL(ecard_readchunk);
+EXPORT_SYMBOL(__ecard_address);
 EXPORT_SYMBOL(ecard_register_driver);
 EXPORT_SYMBOL(ecard_remove_driver);
 EXPORT_SYMBOL(ecard_bus_type);

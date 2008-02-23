@@ -33,6 +33,33 @@
 #include <asm/rtas.h>
 #include "rpaphp.h"
 
+static ssize_t address_read_file (struct hotplug_slot *php_slot, char *buf)
+{
+	int retval;
+	struct slot *slot = (struct slot *)php_slot->private;
+	struct pci_bus *bus;
+
+	if (!slot)
+		return -ENOENT;
+
+	bus = slot->bus;
+	if (!bus)
+		return -ENOENT;
+
+	if (bus->self)
+		retval = sprintf(buf, pci_name(bus->self));
+	else
+		retval = sprintf(buf, "%04x:%02x:00.0",
+		        pci_domain_nr(bus), bus->number);
+
+	return retval;
+}
+
+static struct hotplug_slot_attribute php_attr_address = {
+	.attr = {.name = "address", .mode = S_IFREG | S_IRUGO},
+	.show = address_read_file,
+};
+
 /* free up the memory used by a slot */
 static void rpaphp_release_slot(struct hotplug_slot *hotplug_slot)
 {
@@ -43,7 +70,7 @@ static void rpaphp_release_slot(struct hotplug_slot *hotplug_slot)
 void dealloc_slot_struct(struct slot *slot)
 {
 	kfree(slot->hotplug_slot->info);
-	kfree(slot->name);
+	kfree(slot->hotplug_slot->name);
 	kfree(slot->hotplug_slot);
 	kfree(slot);
 }
@@ -63,9 +90,11 @@ struct slot *alloc_slot_struct(struct device_node *dn,
 					   GFP_KERNEL);
 	if (!slot->hotplug_slot->info)
 		goto error_hpslot;
-	slot->name = kstrdup(drc_name, GFP_KERNEL);
-	if (!slot->name)
+	slot->hotplug_slot->name = kmalloc(strlen(drc_name) + 1, GFP_KERNEL);
+	if (!slot->hotplug_slot->name)
 		goto error_info;	
+	slot->name = slot->hotplug_slot->name;
+	strcpy(slot->name, drc_name);
 	slot->dn = dn;
 	slot->index = drc_index;
 	slot->power_domain = power_domain;
@@ -106,6 +135,9 @@ int rpaphp_deregister_slot(struct slot *slot)
 
 	list_del(&slot->rpaphp_slot_list);
 	
+	/* remove "address" file */
+	sysfs_remove_file(&php_slot->kobj, &php_attr_address.attr);
+
 	retval = pci_hp_deregister(php_slot);
 	if (retval)
 		err("Problem unregistering a slot %s\n", slot->name);
@@ -119,7 +151,6 @@ int rpaphp_register_slot(struct slot *slot)
 {
 	struct hotplug_slot *php_slot = slot->hotplug_slot;
 	int retval;
-	int slotno;
 
 	dbg("%s registering slot:path[%s] index[%x], name[%s] pdomain[%x] type[%d]\n", 
 		__func__, slot->dn->full_name, slot->index, slot->name,
@@ -131,19 +162,26 @@ int rpaphp_register_slot(struct slot *slot)
 		return -EAGAIN;
 	}	
 
-	if (slot->dn->child)
-		slotno = PCI_SLOT(PCI_DN(slot->dn->child)->devfn);
-	else
-		slotno = -1;
-	retval = pci_hp_register(php_slot, slot->bus, slotno, slot->name);
+	retval = pci_hp_register(php_slot);
 	if (retval) {
 		err("pci_hp_register failed with error %d\n", retval);
 		return retval;
+	}
+
+	/* create "address" file */
+	retval = sysfs_create_file(&php_slot->kobj, &php_attr_address.attr);
+	if (retval) {
+		err("sysfs_create_file failed with error %d\n", retval);
+		goto sysfs_fail;
 	}
 
 	/* add slot to our internal list */
 	list_add(&slot->rpaphp_slot_list, &rpaphp_slot_head);
 	info("Slot [%s] registered\n", slot->name);
 	return 0;
+
+sysfs_fail:
+	pci_hp_deregister(php_slot);
+	return retval;
 }
 

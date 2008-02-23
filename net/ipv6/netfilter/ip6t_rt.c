@@ -36,11 +36,14 @@ segsleft_match(u_int32_t min, u_int32_t max, u_int32_t id, bool invert)
 	return r;
 }
 
-static bool rt_mt6(const struct sk_buff *skb, const struct xt_match_param *par)
+static bool
+rt_mt6(const struct sk_buff *skb, const struct net_device *in,
+       const struct net_device *out, const struct xt_match *match,
+       const void *matchinfo, int offset, unsigned int protoff, bool *hotdrop)
 {
 	struct ipv6_rt_hdr _route;
 	const struct ipv6_rt_hdr *rh;
-	const struct ip6t_rt *rtinfo = par->matchinfo;
+	const struct ip6t_rt *rtinfo = matchinfo;
 	unsigned int temp;
 	unsigned int ptr;
 	unsigned int hdrlen = 0;
@@ -52,13 +55,13 @@ static bool rt_mt6(const struct sk_buff *skb, const struct xt_match_param *par)
 	err = ipv6_find_hdr(skb, &ptr, NEXTHDR_ROUTING, NULL);
 	if (err < 0) {
 		if (err != -ENOENT)
-			*par->hotdrop = true;
+			*hotdrop = true;
 		return false;
 	}
 
 	rh = skb_header_pointer(skb, ptr, sizeof(_route), &_route);
 	if (rh == NULL) {
-		*par->hotdrop = true;
+		*hotdrop = true;
 		return false;
 	}
 
@@ -186,9 +189,13 @@ static bool rt_mt6(const struct sk_buff *skb, const struct xt_match_param *par)
 	return false;
 }
 
-static bool rt_mt6_check(const struct xt_mtchk_param *par)
+/* Called when user tries to insert an entry of this type. */
+static bool
+rt_mt6_check(const char *tablename, const void *entry,
+             const struct xt_match *match, void *matchinfo,
+             unsigned int hook_mask)
 {
-	const struct ip6t_rt *rtinfo = par->matchinfo;
+	const struct ip6t_rt *rtinfo = matchinfo;
 
 	if (rtinfo->invflags & ~IP6T_RT_INV_MASK) {
 		pr_debug("ip6t_rt: unknown flags %X\n", rtinfo->invflags);
@@ -207,7 +214,7 @@ static bool rt_mt6_check(const struct xt_mtchk_param *par)
 
 static struct xt_match rt_mt6_reg __read_mostly = {
 	.name		= "rt",
-	.family		= NFPROTO_IPV6,
+	.family		= AF_INET6,
 	.match		= rt_mt6,
 	.matchsize	= sizeof(struct ip6t_rt),
 	.checkentry	= rt_mt6_check,

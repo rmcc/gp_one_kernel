@@ -52,9 +52,11 @@ static enum hrtimer_restart timerfd_tmrproc(struct hrtimer *htmr)
 
 static ktime_t timerfd_get_remaining(struct timerfd_ctx *ctx)
 {
-	ktime_t remaining;
+	ktime_t now, remaining;
 
-	remaining = hrtimer_expires_remaining(&ctx->tmr);
+	now = ctx->tmr.base->get_time();
+	remaining = ktime_sub(ctx->tmr.expires, now);
+
 	return remaining.tv64 < 0 ? ktime_set(0, 0): remaining;
 }
 
@@ -72,7 +74,7 @@ static void timerfd_setup(struct timerfd_ctx *ctx, int flags,
 	ctx->ticks = 0;
 	ctx->tintv = timespec_to_ktime(ktmr->it_interval);
 	hrtimer_init(&ctx->tmr, ctx->clockid, htmode);
-	hrtimer_set_expires(&ctx->tmr, texp);
+	ctx->tmr.expires = texp;
 	ctx->tmr.function = timerfd_tmrproc;
 	if (texp.tv64 != 0)
 		hrtimer_start(&ctx->tmr, texp, htmode);
@@ -182,11 +184,7 @@ asmlinkage long sys_timerfd_create(int clockid, int flags)
 	int ufd;
 	struct timerfd_ctx *ctx;
 
-	/* Check the TFD_* constants for consistency.  */
-	BUILD_BUG_ON(TFD_CLOEXEC != O_CLOEXEC);
-	BUILD_BUG_ON(TFD_NONBLOCK != O_NONBLOCK);
-
-	if (flags & ~(TFD_CLOEXEC | TFD_NONBLOCK))
+	if (flags)
 		return -EINVAL;
 	if (clockid != CLOCK_MONOTONIC &&
 	    clockid != CLOCK_REALTIME)
@@ -200,8 +198,7 @@ asmlinkage long sys_timerfd_create(int clockid, int flags)
 	ctx->clockid = clockid;
 	hrtimer_init(&ctx->tmr, clockid, HRTIMER_MODE_ABS);
 
-	ufd = anon_inode_getfd("[timerfd]", &timerfd_fops, ctx,
-			       flags & (O_CLOEXEC | O_NONBLOCK));
+	ufd = anon_inode_getfd("[timerfd]", &timerfd_fops, ctx);
 	if (ufd < 0)
 		kfree(ctx);
 

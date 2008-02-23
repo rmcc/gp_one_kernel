@@ -42,10 +42,7 @@ static const unsigned short normal_i2c[] = { 0x2c, 0x2d, 0x2e, 0x2f,
 
 /* Insmod parameters */
 I2C_CLIENT_INSMOD_1(w83793);
-
-static unsigned short force_subclients[4];
-module_param_array(force_subclients, short, NULL, 0);
-MODULE_PARM_DESC(force_subclients, "List of subclient addresses: "
+I2C_CLIENT_MODULE_PARM(force_subclients, "List of subclient addresses: "
 		       "{bus, clientaddr, subclientaddr1, subclientaddr2}");
 
 static int reset;
@@ -182,6 +179,7 @@ static inline s8 TEMP_TO_REG(long val, s8 min, s8 max)
 }
 
 struct w83793_data {
+	struct i2c_client client;
 	struct i2c_client *lm75[2];
 	struct device *hwmon_dev;
 	struct mutex update_lock;
@@ -228,31 +226,19 @@ struct w83793_data {
 
 static u8 w83793_read_value(struct i2c_client *client, u16 reg);
 static int w83793_write_value(struct i2c_client *client, u16 reg, u8 value);
-static int w83793_probe(struct i2c_client *client,
-			const struct i2c_device_id *id);
-static int w83793_detect(struct i2c_client *client, int kind,
-			 struct i2c_board_info *info);
-static int w83793_remove(struct i2c_client *client);
+static int w83793_attach_adapter(struct i2c_adapter *adapter);
+static int w83793_detect(struct i2c_adapter *adapter, int address, int kind);
+static int w83793_detach_client(struct i2c_client *client);
 static void w83793_init_client(struct i2c_client *client);
 static void w83793_update_nonvolatile(struct device *dev);
 static struct w83793_data *w83793_update_device(struct device *dev);
 
-static const struct i2c_device_id w83793_id[] = {
-	{ "w83793", w83793 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, w83793_id);
-
 static struct i2c_driver w83793_driver = {
-	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		   .name = "w83793",
 	},
-	.probe		= w83793_probe,
-	.remove		= w83793_remove,
-	.id_table	= w83793_id,
-	.detect		= w83793_detect,
-	.address_data	= &addr_data,
+	.attach_adapter = w83793_attach_adapter,
+	.detach_client = w83793_detach_client,
 };
 
 static ssize_t
@@ -1067,51 +1053,89 @@ static void w83793_init_client(struct i2c_client *client)
 
 }
 
-static int w83793_remove(struct i2c_client *client)
+static int w83793_attach_adapter(struct i2c_adapter *adapter)
+{
+	if (!(adapter->class & I2C_CLASS_HWMON))
+		return 0;
+	return i2c_probe(adapter, &addr_data, w83793_detect);
+}
+
+static int w83793_detach_client(struct i2c_client *client)
 {
 	struct w83793_data *data = i2c_get_clientdata(client);
 	struct device *dev = &client->dev;
-	int i;
+	int err, i;
 
-	hwmon_device_unregister(data->hwmon_dev);
+	/* main client */
+	if (data) {
+		hwmon_device_unregister(data->hwmon_dev);
 
-	for (i = 0; i < ARRAY_SIZE(w83793_sensor_attr_2); i++)
-		device_remove_file(dev,
-				   &w83793_sensor_attr_2[i].dev_attr);
+		for (i = 0; i < ARRAY_SIZE(w83793_sensor_attr_2); i++)
+			device_remove_file(dev,
+					   &w83793_sensor_attr_2[i].dev_attr);
 
-	for (i = 0; i < ARRAY_SIZE(sda_single_files); i++)
-		device_remove_file(dev, &sda_single_files[i].dev_attr);
+		for (i = 0; i < ARRAY_SIZE(sda_single_files); i++)
+			device_remove_file(dev, &sda_single_files[i].dev_attr);
 
-	for (i = 0; i < ARRAY_SIZE(w83793_vid); i++)
-		device_remove_file(dev, &w83793_vid[i].dev_attr);
-	device_remove_file(dev, &dev_attr_vrm);
+		for (i = 0; i < ARRAY_SIZE(w83793_vid); i++)
+			device_remove_file(dev, &w83793_vid[i].dev_attr);
+		device_remove_file(dev, &dev_attr_vrm);
 
-	for (i = 0; i < ARRAY_SIZE(w83793_left_fan); i++)
-		device_remove_file(dev, &w83793_left_fan[i].dev_attr);
+		for (i = 0; i < ARRAY_SIZE(w83793_left_fan); i++)
+			device_remove_file(dev, &w83793_left_fan[i].dev_attr);
 
-	for (i = 0; i < ARRAY_SIZE(w83793_left_pwm); i++)
-		device_remove_file(dev, &w83793_left_pwm[i].dev_attr);
+		for (i = 0; i < ARRAY_SIZE(w83793_left_pwm); i++)
+			device_remove_file(dev, &w83793_left_pwm[i].dev_attr);
 
-	for (i = 0; i < ARRAY_SIZE(w83793_temp); i++)
-		device_remove_file(dev, &w83793_temp[i].dev_attr);
+		for (i = 0; i < ARRAY_SIZE(w83793_temp); i++)
+			device_remove_file(dev, &w83793_temp[i].dev_attr);
+	}
 
-	if (data->lm75[0] != NULL)
-		i2c_unregister_device(data->lm75[0]);
-	if (data->lm75[1] != NULL)
-		i2c_unregister_device(data->lm75[1]);
+	if ((err = i2c_detach_client(client)))
+		return err;
 
-	kfree(data);
+	/* main client */
+	if (data)
+		kfree(data);
+	/* subclient */
+	else
+		kfree(client);
 
 	return 0;
 }
 
 static int
-w83793_detect_subclients(struct i2c_client *client)
+w83793_create_subclient(struct i2c_adapter *adapter,
+			struct i2c_client *client, int addr,
+			struct i2c_client **sub_cli)
+{
+	int err = 0;
+	struct i2c_client *sub_client;
+
+	(*sub_cli) = sub_client =
+	    kzalloc(sizeof(struct i2c_client), GFP_KERNEL);
+	if (!(sub_client)) {
+		return -ENOMEM;
+	}
+	sub_client->addr = 0x48 + addr;
+	i2c_set_clientdata(sub_client, NULL);
+	sub_client->adapter = adapter;
+	sub_client->driver = &w83793_driver;
+	strlcpy(sub_client->name, "w83793 subclient", I2C_NAME_SIZE);
+	if ((err = i2c_attach_client(sub_client))) {
+		dev_err(&client->dev, "subclient registration "
+			"at address 0x%x failed\n", sub_client->addr);
+		kfree(sub_client);
+	}
+	return err;
+}
+
+static int
+w83793_detect_subclients(struct i2c_adapter *adapter, int address,
+			 int kind, struct i2c_client *client)
 {
 	int i, id, err;
-	int address = client->addr;
 	u8 tmp;
-	struct i2c_adapter *adapter = client->adapter;
 	struct w83793_data *data = i2c_get_clientdata(client);
 
 	id = i2c_adapter_id(adapter);
@@ -1134,7 +1158,11 @@ w83793_detect_subclients(struct i2c_client *client)
 
 	tmp = w83793_read_value(client, W83793_REG_I2C_SUBADDR);
 	if (!(tmp & 0x08)) {
-		data->lm75[0] = i2c_new_dummy(adapter, 0x48 + (tmp & 0x7));
+		err =
+		    w83793_create_subclient(adapter, client, tmp & 0x7,
+					    &data->lm75[0]);
+		if (err < 0)
+			goto ERROR_SC_0;
 	}
 	if (!(tmp & 0x80)) {
 		if ((data->lm75[0] != NULL)
@@ -1145,8 +1173,10 @@ w83793_detect_subclients(struct i2c_client *client)
 			err = -ENODEV;
 			goto ERROR_SC_1;
 		}
-		data->lm75[1] = i2c_new_dummy(adapter,
-					      0x48 + ((tmp >> 4) & 0x7));
+		err = w83793_create_subclient(adapter, client,
+					      (tmp >> 4) & 0x7, &data->lm75[1]);
+		if (err < 0)
+			goto ERROR_SC_1;
 	}
 
 	return 0;
@@ -1154,44 +1184,69 @@ w83793_detect_subclients(struct i2c_client *client)
 	/* Undo inits in case of errors */
 
 ERROR_SC_1:
-	if (data->lm75[0] != NULL)
-		i2c_unregister_device(data->lm75[0]);
+	if (data->lm75[0] != NULL) {
+		i2c_detach_client(data->lm75[0]);
+		kfree(data->lm75[0]);
+	}
 ERROR_SC_0:
 	return err;
 }
 
-/* Return 0 if detection is successful, -ENODEV otherwise */
-static int w83793_detect(struct i2c_client *client, int kind,
-			 struct i2c_board_info *info)
+static int w83793_detect(struct i2c_adapter *adapter, int address, int kind)
 {
-	u8 tmp, bank;
-	struct i2c_adapter *adapter = client->adapter;
-	unsigned short address = client->addr;
+	int i;
+	u8 tmp, val;
+	struct i2c_client *client;
+	struct device *dev;
+	struct w83793_data *data;
+	int files_fan = ARRAY_SIZE(w83793_left_fan) / 7;
+	int files_pwm = ARRAY_SIZE(w83793_left_pwm) / 5;
+	int files_temp = ARRAY_SIZE(w83793_temp) / 6;
+	int err = 0;
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA)) {
-		return -ENODEV;
+		goto exit;
 	}
 
-	bank = i2c_smbus_read_byte_data(client, W83793_REG_BANKSEL);
+	/* OK. For now, we presume we have a valid client. We now create the
+	   client structure, even though we cannot fill it completely yet.
+	   But it allows us to access w83793_{read,write}_value. */
 
+	if (!(data = kzalloc(sizeof(struct w83793_data), GFP_KERNEL))) {
+		err = -ENOMEM;
+		goto exit;
+	}
+
+	client = &data->client;
+	dev = &client->dev;
+	i2c_set_clientdata(client, data);
+	client->addr = address;
+	client->adapter = adapter;
+	client->driver = &w83793_driver;
+
+	data->bank = i2c_smbus_read_byte_data(client, W83793_REG_BANKSEL);
+
+	/* Now, we do the remaining detection. */
 	if (kind < 0) {
-		tmp = bank & 0x80 ? 0x5c : 0xa3;
+		tmp = data->bank & 0x80 ? 0x5c : 0xa3;
 		/* Check Winbond vendor ID */
 		if (tmp != i2c_smbus_read_byte_data(client,
 							W83793_REG_VENDORID)) {
 			pr_debug("w83793: Detection failed at check "
 				 "vendor id\n");
-			return -ENODEV;
+			err = -ENODEV;
+			goto free_mem;
 		}
 
 		/* If Winbond chip, address of chip and W83793_REG_I2C_ADDR
 		   should match */
-		if ((bank & 0x07) == 0
+		if ((data->bank & 0x07) == 0
 		 && i2c_smbus_read_byte_data(client, W83793_REG_I2C_ADDR) !=
 		    (address << 1)) {
 			pr_debug("w83793: Detection failed at check "
 				 "i2c addr\n");
-			return -ENODEV;
+			err = -ENODEV;
+			goto free_mem;
 		}
 
 	}
@@ -1200,46 +1255,29 @@ static int w83793_detect(struct i2c_client *client, int kind,
 	   Winbond. Determine the chip type now */
 
 	if (kind <= 0) {
-		if (0x7b == i2c_smbus_read_byte_data(client,
-						     W83793_REG_CHIPID)) {
+		if (0x7b == w83793_read_value(client, W83793_REG_CHIPID)) {
 			kind = w83793;
 		} else {
 			if (kind == 0)
 				dev_warn(&adapter->dev, "w83793: Ignoring "
 					 "'force' parameter for unknown chip "
 					 "at address 0x%02x\n", address);
-			return -ENODEV;
+			err = -ENODEV;
+			goto free_mem;
 		}
 	}
 
-	strlcpy(info->type, "w83793", I2C_NAME_SIZE);
+	/* Fill in the remaining client fields and put into the global list */
+	strlcpy(client->name, "w83793", I2C_NAME_SIZE);
 
-	return 0;
-}
-
-static int w83793_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
-{
-	struct device *dev = &client->dev;
-	struct w83793_data *data;
-	int i, tmp, val, err;
-	int files_fan = ARRAY_SIZE(w83793_left_fan) / 7;
-	int files_pwm = ARRAY_SIZE(w83793_left_pwm) / 5;
-	int files_temp = ARRAY_SIZE(w83793_temp) / 6;
-
-	data = kzalloc(sizeof(struct w83793_data), GFP_KERNEL);
-	if (!data) {
-		err = -ENOMEM;
-		goto exit;
-	}
-
-	i2c_set_clientdata(client, data);
-	data->bank = i2c_smbus_read_byte_data(client, W83793_REG_BANKSEL);
 	mutex_init(&data->update_lock);
 
-	err = w83793_detect_subclients(client);
-	if (err)
+	/* Tell the I2C layer a new client has arrived */
+	if ((err = i2c_attach_client(client)))
 		goto free_mem;
+
+	if ((err = w83793_detect_subclients(adapter, address, kind, client)))
+		goto detach_client;
 
 	/* Initialize the chip */
 	w83793_init_client(client);
@@ -1421,10 +1459,16 @@ exit_remove:
 	for (i = 0; i < ARRAY_SIZE(w83793_temp); i++)
 		device_remove_file(dev, &w83793_temp[i].dev_attr);
 
-	if (data->lm75[0] != NULL)
-		i2c_unregister_device(data->lm75[0]);
-	if (data->lm75[1] != NULL)
-		i2c_unregister_device(data->lm75[1]);
+	if (data->lm75[0] != NULL) {
+		i2c_detach_client(data->lm75[0]);
+		kfree(data->lm75[0]);
+	}
+	if (data->lm75[1] != NULL) {
+		i2c_detach_client(data->lm75[1]);
+		kfree(data->lm75[1]);
+	}
+detach_client:
+	i2c_detach_client(client);
 free_mem:
 	kfree(data);
 exit:

@@ -205,7 +205,6 @@ fw_device_op_read(struct file *file,
 	return dequeue_event(client, buffer, count);
 }
 
-/* caller must hold card->lock so that node pointers can be dereferenced here */
 static void
 fill_bus_reset_event(struct fw_cdev_event_bus_reset *event,
 		     struct client *client)
@@ -215,6 +214,7 @@ fill_bus_reset_event(struct fw_cdev_event_bus_reset *event,
 	event->closure	     = client->bus_reset_closure;
 	event->type          = FW_CDEV_EVENT_BUS_RESET;
 	event->generation    = client->device->generation;
+	smp_rmb();           /* node_id must not be older than generation */
 	event->node_id       = client->device->node_id;
 	event->local_node_id = card->local_node->node_id;
 	event->bm_node_id    = 0; /* FIXME: We don't track the BM. */
@@ -274,7 +274,6 @@ static int ioctl_get_info(struct client *client, void *buffer)
 {
 	struct fw_cdev_get_info *get_info = buffer;
 	struct fw_cdev_event_bus_reset bus_reset;
-	struct fw_card *card = client->device->card;
 	unsigned long ret = 0;
 
 	client->version = get_info->version;
@@ -300,17 +299,13 @@ static int ioctl_get_info(struct client *client, void *buffer)
 	client->bus_reset_closure = get_info->bus_reset_closure;
 	if (get_info->bus_reset != 0) {
 		void __user *uptr = u64_to_uptr(get_info->bus_reset);
-		unsigned long flags;
 
-		spin_lock_irqsave(&card->lock, flags);
 		fill_bus_reset_event(&bus_reset, client);
-		spin_unlock_irqrestore(&card->lock, flags);
-
 		if (copy_to_user(uptr, &bus_reset, sizeof(bus_reset)))
 			return -EFAULT;
 	}
 
-	get_info->card = card->index;
+	get_info->card = client->device->card->index;
 
 	return 0;
 }
@@ -369,33 +364,22 @@ complete_transaction(struct fw_card *card, int rcode,
 	struct response *response = data;
 	struct client *client = response->client;
 	unsigned long flags;
-	struct fw_cdev_event_response *r = &response->response;
 
-	if (length < r->length)
-		r->length = length;
+	if (length < response->response.length)
+		response->response.length = length;
 	if (rcode == RCODE_COMPLETE)
-		memcpy(r->data, payload, r->length);
+		memcpy(response->response.data, payload,
+		       response->response.length);
 
 	spin_lock_irqsave(&client->lock, flags);
 	list_del(&response->resource.link);
 	spin_unlock_irqrestore(&client->lock, flags);
 
-	r->type   = FW_CDEV_EVENT_RESPONSE;
-	r->rcode  = rcode;
-
-	/*
-	 * In the case that sizeof(*r) doesn't align with the position of the
-	 * data, and the read is short, preserve an extra copy of the data
-	 * to stay compatible with a pre-2.6.27 bug.  Since the bug is harmless
-	 * for short reads and some apps depended on it, this is both safe
-	 * and prudent for compatibility.
-	 */
-	if (r->length <= sizeof(*r) - offsetof(typeof(*r), data))
-		queue_event(client, &response->event, r, sizeof(*r),
-			    r->data, r->length);
-	else
-		queue_event(client, &response->event, r, sizeof(*r) + r->length,
-			    NULL, 0);
+	response->response.type   = FW_CDEV_EVENT_RESPONSE;
+	response->response.rcode  = rcode;
+	queue_event(client, &response->event,
+		    &response->response, sizeof(response->response),
+		    response->response.data, response->response.length);
 }
 
 static int ioctl_send_request(struct client *client, void *buffer)
@@ -720,8 +704,8 @@ static int ioctl_create_iso_context(struct client *client, void *buffer)
 #define GET_PAYLOAD_LENGTH(v)	((v) & 0xffff)
 #define GET_INTERRUPT(v)	(((v) >> 16) & 0x01)
 #define GET_SKIP(v)		(((v) >> 17) & 0x01)
-#define GET_TAG(v)		(((v) >> 18) & 0x03)
-#define GET_SY(v)		(((v) >> 20) & 0x0f)
+#define GET_TAG(v)		(((v) >> 18) & 0x02)
+#define GET_SY(v)		(((v) >> 20) & 0x04)
 #define GET_HEADER_LENGTH(v)	(((v) >> 24) & 0xff)
 
 static int ioctl_queue_iso(struct client *client, void *buffer)
@@ -913,7 +897,7 @@ dispatch_ioctl(struct client *client, unsigned int cmd, void __user *arg)
 			return -EFAULT;
 	}
 
-	return retval;
+	return 0;
 }
 
 static long

@@ -59,6 +59,10 @@ int cfe_cons_handle;
 extern unsigned long initrd_start, initrd_end;
 #endif
 
+#ifdef CONFIG_KGDB
+extern int kgdb_port;
+#endif
+
 static void __noreturn cfe_linux_exit(void *arg)
 {
 	int warm = *(int *)arg;
@@ -70,7 +74,7 @@ static void __noreturn cfe_linux_exit(void *arg)
 		if (!reboot_smp) {
 			/* Get CPU 0 to do the cfe_exit */
 			reboot_smp = 1;
-			smp_call_function(cfe_linux_exit, arg, 0);
+			smp_call_function(cfe_linux_exit, arg, 1, 0);
 		}
 	} else {
 		printk("Passing control back to CFE...\n");
@@ -242,6 +246,9 @@ void __init prom_init(void)
 	int argc = fw_arg0;
 	char **envp = (char **) fw_arg2;
 	int *prom_vec = (int *) fw_arg3;
+#ifdef CONFIG_KGDB
+	char *arg;
+#endif
 
 	_machine_restart   = cfe_linux_restart;
 	_machine_halt      = cfe_linux_halt;
@@ -301,6 +308,13 @@ void __init prom_init(void)
 			while (1) ;
 		}
 	}
+
+#ifdef CONFIG_KGDB
+	if ((arg = strstr(arcs_cmdline, "kgdb=duart")) != NULL)
+		kgdb_port = (arg[10] == '0') ? 0 : 1;
+	else
+		kgdb_port = 1;
+#endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	{

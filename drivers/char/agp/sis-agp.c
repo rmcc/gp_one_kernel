@@ -79,8 +79,10 @@ static void sis_delayed_enable(struct agp_bridge_data *bridge, u32 mode)
 	u32 command;
 	int rate;
 
-	dev_info(&agp_bridge->dev->dev, "AGP %d.%d bridge\n",
-		 agp_bridge->major_version, agp_bridge->minor_version);
+	printk(KERN_INFO PFX "Found an AGP %d.%d compliant device at %s.\n",
+		agp_bridge->major_version,
+		agp_bridge->minor_version,
+		pci_name(agp_bridge->dev));
 
 	pci_read_config_dword(agp_bridge->dev, agp_bridge->capndx + PCI_AGP_STATUS, &command);
 	command = agp_collect_device_status(bridge, mode, command);
@@ -92,8 +94,8 @@ static void sis_delayed_enable(struct agp_bridge_data *bridge, u32 mode)
 		if (!agp)
 			continue;
 
-		dev_info(&agp_bridge->dev->dev, "putting AGP V3 device at %s into %dx mode\n",
-			 pci_name(device), rate);
+		printk(KERN_INFO PFX "Putting AGP V3 device at %s into %dx mode\n",
+			pci_name(device), rate);
 
 		pci_write_config_dword(device, agp + PCI_AGP_COMMAND, command);
 
@@ -103,7 +105,7 @@ static void sis_delayed_enable(struct agp_bridge_data *bridge, u32 mode)
 		 * cannot be configured
 		 */
 		if (device->device == bridge->dev->device) {
-			dev_info(&agp_bridge->dev->dev, "SiS delay workaround: giving bridge time to recover\n");
+			printk(KERN_INFO PFX "SiS delay workaround: giving bridge time to recover.\n");
 			msleep(10);
 		}
 	}
@@ -140,9 +142,7 @@ static struct agp_bridge_driver sis_driver = {
 	.alloc_by_type		= agp_generic_alloc_by_type,
 	.free_by_type		= agp_generic_free_by_type,
 	.agp_alloc_page		= agp_generic_alloc_page,
-	.agp_alloc_pages	= agp_generic_alloc_pages,
 	.agp_destroy_page	= agp_generic_destroy_page,
-	.agp_destroy_pages	= agp_generic_destroy_pages,
 	.agp_type_to_mask_type  = agp_generic_type_to_mask_type,
 };
 
@@ -190,8 +190,7 @@ static int __devinit agp_sis_probe(struct pci_dev *pdev,
 		return -ENODEV;
 
 
-	dev_info(&pdev->dev, "SiS chipset [%04x/%04x]\n",
-		 pdev->vendor, pdev->device);
+	printk(KERN_INFO PFX "Detected SiS chipset - id:%i\n", pdev->device);
 	bridge = agp_alloc_bridge();
 	if (!bridge)
 		return -ENOMEM;
@@ -243,7 +242,7 @@ static struct pci_device_id agp_sis_pci_table[] = {
 		.class		= (PCI_CLASS_BRIDGE_HOST << 8),
 		.class_mask	= ~0,
 		.vendor		= PCI_VENDOR_ID_SI,
-		.device		= PCI_DEVICE_ID_SI_5591,
+		.device		= PCI_DEVICE_ID_SI_5591_AGP,
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 	},

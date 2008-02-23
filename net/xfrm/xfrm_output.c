@@ -27,21 +27,16 @@ static int xfrm_state_check_space(struct xfrm_state *x, struct sk_buff *skb)
 		- skb_headroom(skb);
 	int ntail = dst->dev->needed_tailroom - skb_tailroom(skb);
 
-	if (nhead <= 0) {
-		if (ntail <= 0)
-			return 0;
-		nhead = 0;
-	} else if (ntail < 0)
-		ntail = 0;
+	if (nhead > 0 || ntail > 0)
+		return pskb_expand_head(skb, nhead, ntail, GFP_ATOMIC);
 
-	return pskb_expand_head(skb, nhead, ntail, GFP_ATOMIC);
+	return 0;
 }
 
 static int xfrm_output_one(struct sk_buff *skb, int err)
 {
 	struct dst_entry *dst = skb->dst;
 	struct xfrm_state *x = dst->xfrm;
-	struct net *net = xs_net(x);
 
 	if (err <= 0)
 		goto resume;
@@ -49,33 +44,33 @@ static int xfrm_output_one(struct sk_buff *skb, int err)
 	do {
 		err = xfrm_state_check_space(x, skb);
 		if (err) {
-			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTERROR);
+			XFRM_INC_STATS(LINUX_MIB_XFRMOUTERROR);
 			goto error_nolock;
 		}
 
 		err = x->outer_mode->output(x, skb);
 		if (err) {
-			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTSTATEMODEERROR);
+			XFRM_INC_STATS(LINUX_MIB_XFRMOUTSTATEMODEERROR);
 			goto error_nolock;
 		}
 
 		spin_lock_bh(&x->lock);
 		err = xfrm_state_check_expire(x);
 		if (err) {
-			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTSTATEEXPIRED);
+			XFRM_INC_STATS(LINUX_MIB_XFRMOUTSTATEEXPIRED);
 			goto error;
 		}
 
 		if (x->type->flags & XFRM_TYPE_REPLAY_PROT) {
 			XFRM_SKB_CB(skb)->seq.output = ++x->replay.oseq;
 			if (unlikely(x->replay.oseq == 0)) {
-				XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTSTATESEQERROR);
+				XFRM_INC_STATS(LINUX_MIB_XFRMOUTSTATESEQERROR);
 				x->replay.oseq--;
 				xfrm_audit_state_replay_overflow(x, skb);
 				err = -EOVERFLOW;
 				goto error;
 			}
-			if (xfrm_aevent_is_on(net))
+			if (xfrm_aevent_is_on())
 				xfrm_replay_notify(x, XFRM_REPLAY_UPDATE);
 		}
 
@@ -90,12 +85,12 @@ static int xfrm_output_one(struct sk_buff *skb, int err)
 
 resume:
 		if (err) {
-			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTSTATEPROTOERROR);
+			XFRM_INC_STATS(LINUX_MIB_XFRMOUTSTATEPROTOERROR);
 			goto error_nolock;
 		}
 
 		if (!(skb->dst = dst_pop(dst))) {
-			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTERROR);
+			XFRM_INC_STATS(LINUX_MIB_XFRMOUTERROR);
 			err = -EHOSTUNREACH;
 			goto error_nolock;
 		}
@@ -117,13 +112,16 @@ error_nolock:
 int xfrm_output_resume(struct sk_buff *skb, int err)
 {
 	while (likely((err = xfrm_output_one(skb, err)) == 0)) {
+		struct xfrm_state *x;
+
 		nf_reset(skb);
 
 		err = skb->dst->ops->local_out(skb);
 		if (unlikely(err != 1))
 			goto out;
 
-		if (!skb->dst->xfrm)
+		x = skb->dst->xfrm;
+		if (!x)
 			return dst_output(skb);
 
 		err = nf_hook(skb->dst->ops->family,
@@ -179,7 +177,6 @@ static int xfrm_output_gso(struct sk_buff *skb)
 
 int xfrm_output(struct sk_buff *skb)
 {
-	struct net *net = dev_net(skb->dst->dev);
 	int err;
 
 	if (skb_is_gso(skb))
@@ -188,7 +185,7 @@ int xfrm_output(struct sk_buff *skb)
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		err = skb_checksum_help(skb);
 		if (err) {
-			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTERROR);
+			XFRM_INC_STATS(LINUX_MIB_XFRMOUTERROR);
 			kfree_skb(skb);
 			return err;
 		}

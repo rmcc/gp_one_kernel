@@ -29,7 +29,6 @@
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include <linux/module.h>
 #include <net/checksum.h>
 #include <asm/checksum.h>
 
@@ -77,7 +76,6 @@ __sum16 ip_fast_csum(unsigned char *iph, unsigned int ihl)
 {
 	return (__force __sum16)~do_csum(iph, ihl * 4);
 }
-EXPORT_SYMBOL(ip_fast_csum);
 
 /*
  * computes the checksum of a memory block at buff, length len,
@@ -106,7 +104,6 @@ __wsum csum_partial(const void *buff, int len, __wsum sum)
 
 	return sum;
 }
-EXPORT_SYMBOL(csum_partial);
 
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly
@@ -140,4 +137,3 @@ __wsum csum_partial_copy(const void *src, void *dst, int len, __wsum sum)
 	memcpy(dst, src, len);
 	return csum_partial(dst, len, sum);
 }
-EXPORT_SYMBOL(csum_partial_copy);

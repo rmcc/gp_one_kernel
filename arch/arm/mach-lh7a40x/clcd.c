@@ -17,13 +17,14 @@
 
 //#include <linux/module.h>
 //#include <linux/time.h>
+//#include <asm/hardware.h>
 
 //#include <asm/mach/time.h>
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
 
 #include <asm/system.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <linux/amba/bus.h>
 #include <linux/amba/clcd.h>
 
@@ -207,7 +208,7 @@ static struct clcd_board clcd_platform_data = {
 static struct amba_device name##_device = {			\
 	.dev = {						\
 		.coherent_dma_mask = ~0,			\
-		.init_name = busid,				\
+		.bus_id	= busid,				\
 		.platform_data = plat,				\
 		},						\
 	.res = {						\

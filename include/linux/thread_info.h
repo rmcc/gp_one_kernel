@@ -38,14 +38,6 @@ struct restart_block {
 #endif
 			u64 expires;
 		} nanosleep;
-		/* For poll */
-		struct {
-			struct pollfd __user *ufds;
-			int nfds;
-			int has_timeout;
-			unsigned long tv_sec;
-			unsigned long tv_nsec;
-		} poll;
 	};
 };
 

@@ -27,8 +27,7 @@ struct kvm_io_device {
 		      gpa_t addr,
 		      int len,
 		      const void *val);
-	int (*in_range)(struct kvm_io_device *this, gpa_t addr, int len,
-			int is_write);
+	int (*in_range)(struct kvm_io_device *this, gpa_t addr);
 	void (*destructor)(struct kvm_io_device *this);
 
 	void             *private;
@@ -50,10 +49,9 @@ static inline void kvm_iodevice_write(struct kvm_io_device *dev,
 	dev->write(dev, addr, len, val);
 }
 
-static inline int kvm_iodevice_inrange(struct kvm_io_device *dev,
-				       gpa_t addr, int len, int is_write)
+static inline int kvm_iodevice_inrange(struct kvm_io_device *dev, gpa_t addr)
 {
-	return dev->in_range(dev, addr, len, is_write);
+	return dev->in_range(dev, addr);
 }
 
 static inline void kvm_iodevice_destructor(struct kvm_io_device *dev)

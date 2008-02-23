@@ -9,9 +9,6 @@
  * Also alternative() doesn't work.
  */
 
-/* Disable profiling for userspace code: */
-#define DISABLE_BRANCH_PROFILING
-
 #include <linux/kernel.h>
 #include <linux/posix-timers.h>
 #include <linux/time.h>
@@ -26,7 +23,7 @@
 
 #define gtod vdso_vsyscall_gtod_data
 
-notrace static long vdso_fallback_gettime(long clock, struct timespec *ts)
+static long vdso_fallback_gettime(long clock, struct timespec *ts)
 {
 	long ret;
 	asm("syscall" : "=a" (ret) :
@@ -34,7 +31,7 @@ notrace static long vdso_fallback_gettime(long clock, struct timespec *ts)
 	return ret;
 }
 
-notrace static inline long vgetns(void)
+static inline long vgetns(void)
 {
 	long v;
 	cycles_t (*vread)(void);
@@ -43,7 +40,7 @@ notrace static inline long vgetns(void)
 	return (v * gtod->clock.mult) >> gtod->clock.shift;
 }
 
-notrace static noinline int do_realtime(struct timespec *ts)
+static noinline int do_realtime(struct timespec *ts)
 {
 	unsigned long seq, ns;
 	do {
@@ -57,8 +54,7 @@ notrace static noinline int do_realtime(struct timespec *ts)
 }
 
 /* Copy of the version in kernel/time.c which we cannot directly access */
-notrace static void
-vset_normalized_timespec(struct timespec *ts, long sec, long nsec)
+static void vset_normalized_timespec(struct timespec *ts, long sec, long nsec)
 {
 	while (nsec >= NSEC_PER_SEC) {
 		nsec -= NSEC_PER_SEC;
@@ -72,7 +68,7 @@ vset_normalized_timespec(struct timespec *ts, long sec, long nsec)
 	ts->tv_nsec = nsec;
 }
 
-notrace static noinline int do_monotonic(struct timespec *ts)
+static noinline int do_monotonic(struct timespec *ts)
 {
 	unsigned long seq, ns, secs;
 	do {
@@ -86,7 +82,7 @@ notrace static noinline int do_monotonic(struct timespec *ts)
 	return 0;
 }
 
-notrace int __vdso_clock_gettime(clockid_t clock, struct timespec *ts)
+int __vdso_clock_gettime(clockid_t clock, struct timespec *ts)
 {
 	if (likely(gtod->sysctl_enabled && gtod->clock.vread))
 		switch (clock) {
@@ -100,7 +96,7 @@ notrace int __vdso_clock_gettime(clockid_t clock, struct timespec *ts)
 int clock_gettime(clockid_t, struct timespec *)
 	__attribute__((weak, alias("__vdso_clock_gettime")));
 
-notrace int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
+int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	long ret;
 	if (likely(gtod->sysctl_enabled && gtod->clock.vread)) {

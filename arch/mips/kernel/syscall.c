@@ -7,6 +7,7 @@
  * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  * Copyright (C) 2001 MIPS Technologies, Inc.
  */
+#include <linux/a.out.h>
 #include <linux/capability.h>
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -39,19 +40,12 @@
 #include <asm/sysmips.h>
 #include <asm/uaccess.h>
 
-/*
- * For historic reasons the pipe(2) syscall on MIPS has an unusual calling
- * convention.  It returns results in registers $v0 / $v1 which means there
- * is no need for it to do verify the validity of a userspace pointer
- * argument.  Historically that used to be expensive in Linux.  These days
- * the performance advantage is negligible.
- */
-asmlinkage int sysm_pipe(nabi_no_regargs volatile struct pt_regs regs)
+asmlinkage int sys_pipe(nabi_no_regargs volatile struct pt_regs regs)
 {
 	int fd[2];
 	int error, res;
 
-	error = do_pipe_flags(fd, 0);
+	error = do_pipe(fd);
 	if (error) {
 		res = error;
 		goto out;

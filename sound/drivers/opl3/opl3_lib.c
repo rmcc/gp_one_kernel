@@ -139,8 +139,7 @@ static int snd_opl3_detect(struct snd_opl3 * opl3)
 		 * If we had an OPL4 chip, opl3->hardware would have been set
 		 * by the OPL4 driver; so we can assume OPL3 here.
 		 */
-		if (snd_BUG_ON(!opl3->r_port))
-			return -ENODEV;
+		snd_assert(opl3->r_port != 0, return -ENODEV);
 		opl3->hardware = OPL3_HW_OPL3;
 	}
 	return 0;
@@ -325,8 +324,7 @@ EXPORT_SYMBOL(snd_opl3_interrupt);
 
 static int snd_opl3_free(struct snd_opl3 *opl3)
 {
-	if (snd_BUG_ON(!opl3))
-		return -ENXIO;
+	snd_assert(opl3 != NULL, return -ENXIO);
 	if (opl3->private_free)
 		opl3->private_free(opl3);
 	snd_opl3_clear_patches(opl3);

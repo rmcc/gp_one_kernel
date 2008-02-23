@@ -195,7 +195,7 @@ ulong_aligned:
 	   depending on architecture.  I've experimented with several ways
 	   of writing this section such as using an else before the goto
 	   but this one seems to be the fastest. */
-	while ((unsigned char *)plong < end - sizeof(unsigned long)) {
+	while ((unsigned char *)plong < end - 1) {
 		prefetch(plong + 1);
 		if (((*plong) & LBITMASK) != lskipval)
 			break;
@@ -269,14 +269,16 @@ void gfs2_rgrp_verify(struct gfs2_rgrpd *rgd)
 						  bi->bi_len, x);
 	}
 
-	if (count[0] != rgd->rd_free) {
+	if (count[0] != rgd->rd_rg.rg_free) {
 		if (gfs2_consist_rgrpd(rgd))
 			fs_err(sdp, "free data mismatch:  %u != %u\n",
-			       count[0], rgd->rd_free);
+			       count[0], rgd->rd_rg.rg_free);
 		return;
 	}
 
-	tmp = rgd->rd_data - rgd->rd_free - rgd->rd_dinodes;
+	tmp = rgd->rd_data -
+		rgd->rd_rg.rg_free -
+		rgd->rd_rg.rg_dinodes;
 	if (count[1] + count[2] != tmp) {
 		if (gfs2_consist_rgrpd(rgd))
 			fs_err(sdp, "used data mismatch:  %u != %u\n",
@@ -284,10 +286,10 @@ void gfs2_rgrp_verify(struct gfs2_rgrpd *rgd)
 		return;
 	}
 
-	if (count[3] != rgd->rd_dinodes) {
+	if (count[3] != rgd->rd_rg.rg_dinodes) {
 		if (gfs2_consist_rgrpd(rgd))
 			fs_err(sdp, "used metadata mismatch:  %u != %u\n",
-			       count[3], rgd->rd_dinodes);
+			       count[3], rgd->rd_rg.rg_dinodes);
 		return;
 	}
 
@@ -369,6 +371,11 @@ static void clear_rgrpdi(struct gfs2_sbd *sdp)
 
 	spin_lock(&sdp->sd_rindex_spin);
 	sdp->sd_rindex_forward = NULL;
+	head = &sdp->sd_rindex_recent_list;
+	while (!list_empty(head)) {
+		rgd = list_entry(head->next, struct gfs2_rgrpd, rd_recent);
+		list_del(&rgd->rd_recent);
+	}
 	spin_unlock(&sdp->sd_rindex_spin);
 
 	head = &sdp->sd_rindex_list;
@@ -499,7 +506,7 @@ u64 gfs2_ri_total(struct gfs2_sbd *sdp)
 	for (rgrps = 0;; rgrps++) {
 		loff_t pos = rgrps * sizeof(struct gfs2_rindex);
 
-		if (pos + sizeof(struct gfs2_rindex) >= ip->i_disksize)
+		if (pos + sizeof(struct gfs2_rindex) >= ip->i_di.di_size)
 			break;
 		error = gfs2_internal_read(ip, &ra_state, buf, &pos,
 					   sizeof(struct gfs2_rindex));
@@ -588,7 +595,7 @@ static int gfs2_ri_update(struct gfs2_inode *ip)
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
 	struct inode *inode = &ip->i_inode;
 	struct file_ra_state ra_state;
-	u64 rgrp_count = ip->i_disksize;
+	u64 rgrp_count = ip->i_di.di_size;
 	int error;
 
 	if (do_div(rgrp_count, sizeof(struct gfs2_rindex))) {
@@ -632,7 +639,7 @@ static int gfs2_ri_update_special(struct gfs2_inode *ip)
 	for (sdp->sd_rgrps = 0;; sdp->sd_rgrps++) {
 		/* Ignore partials */
 		if ((sdp->sd_rgrps + 1) * sizeof(struct gfs2_rindex) >
-		    ip->i_disksize)
+		    ip->i_di.di_size)
 			break;
 		error = read_rindex_entry(ip, &ra_state);
 		if (error) {
@@ -690,6 +697,7 @@ int gfs2_rindex_hold(struct gfs2_sbd *sdp, struct gfs2_holder *ri_gh)
 static void gfs2_rgrp_in(struct gfs2_rgrpd *rgd, const void *buf)
 {
 	const struct gfs2_rgrp *str = buf;
+	struct gfs2_rgrp_host *rg = &rgd->rd_rg;
 	u32 rg_flags;
 
 	rg_flags = be32_to_cpu(str->rg_flags);
@@ -697,23 +705,24 @@ static void gfs2_rgrp_in(struct gfs2_rgrpd *rgd, const void *buf)
 		rgd->rd_flags |= GFS2_RDF_NOALLOC;
 	else
 		rgd->rd_flags &= ~GFS2_RDF_NOALLOC;
-	rgd->rd_free = be32_to_cpu(str->rg_free);
-	rgd->rd_dinodes = be32_to_cpu(str->rg_dinodes);
-	rgd->rd_igeneration = be64_to_cpu(str->rg_igeneration);
+	rg->rg_free = be32_to_cpu(str->rg_free);
+	rg->rg_dinodes = be32_to_cpu(str->rg_dinodes);
+	rg->rg_igeneration = be64_to_cpu(str->rg_igeneration);
 }
 
 static void gfs2_rgrp_out(struct gfs2_rgrpd *rgd, void *buf)
 {
 	struct gfs2_rgrp *str = buf;
+	struct gfs2_rgrp_host *rg = &rgd->rd_rg;
 	u32 rg_flags = 0;
 
 	if (rgd->rd_flags & GFS2_RDF_NOALLOC)
 		rg_flags |= GFS2_RGF_NOALLOC;
 	str->rg_flags = cpu_to_be32(rg_flags);
-	str->rg_free = cpu_to_be32(rgd->rd_free);
-	str->rg_dinodes = cpu_to_be32(rgd->rd_dinodes);
+	str->rg_free = cpu_to_be32(rg->rg_free);
+	str->rg_dinodes = cpu_to_be32(rg->rg_dinodes);
 	str->__pad = cpu_to_be32(0);
-	str->rg_igeneration = cpu_to_be64(rgd->rd_igeneration);
+	str->rg_igeneration = cpu_to_be64(rg->rg_igeneration);
 	memset(&str->rg_reserved, 0, sizeof(str->rg_reserved));
 }
 
@@ -772,7 +781,7 @@ int gfs2_rgrp_bh_get(struct gfs2_rgrpd *rgd)
 	}
 
 	spin_lock(&sdp->sd_rindex_spin);
-	rgd->rd_free_clone = rgd->rd_free;
+	rgd->rd_free_clone = rgd->rd_rg.rg_free;
 	rgd->rd_bh_count++;
 	spin_unlock(&sdp->sd_rindex_spin);
 
@@ -846,7 +855,7 @@ void gfs2_rgrp_repolish_clones(struct gfs2_rgrpd *rgd)
 	}
 
 	spin_lock(&sdp->sd_rindex_spin);
-	rgd->rd_free_clone = rgd->rd_free;
+	rgd->rd_free_clone = rgd->rd_rg.rg_free;
 	spin_unlock(&sdp->sd_rindex_spin);
 }
 
@@ -936,27 +945,104 @@ static struct inode *try_rgrp_unlink(struct gfs2_rgrpd *rgd, u64 *last_unlinked)
 }
 
 /**
+ * recent_rgrp_first - get first RG from "recent" list
+ * @sdp: The GFS2 superblock
+ * @rglast: address of the rgrp used last
+ *
+ * Returns: The first rgrp in the recent list
+ */
+
+static struct gfs2_rgrpd *recent_rgrp_first(struct gfs2_sbd *sdp,
+					    u64 rglast)
+{
+	struct gfs2_rgrpd *rgd;
+
+	spin_lock(&sdp->sd_rindex_spin);
+
+	if (rglast) {
+		list_for_each_entry(rgd, &sdp->sd_rindex_recent_list, rd_recent) {
+			if (rgrp_contains_block(rgd, rglast))
+				goto out;
+		}
+	}
+	rgd = NULL;
+	if (!list_empty(&sdp->sd_rindex_recent_list))
+		rgd = list_entry(sdp->sd_rindex_recent_list.next,
+				 struct gfs2_rgrpd, rd_recent);
+out:
+	spin_unlock(&sdp->sd_rindex_spin);
+	return rgd;
+}
+
+/**
  * recent_rgrp_next - get next RG from "recent" list
  * @cur_rgd: current rgrp
+ * @remove:
  *
  * Returns: The next rgrp in the recent list
  */
 
-static struct gfs2_rgrpd *recent_rgrp_next(struct gfs2_rgrpd *cur_rgd)
+static struct gfs2_rgrpd *recent_rgrp_next(struct gfs2_rgrpd *cur_rgd,
+					   int remove)
 {
 	struct gfs2_sbd *sdp = cur_rgd->rd_sbd;
 	struct list_head *head;
 	struct gfs2_rgrpd *rgd;
 
 	spin_lock(&sdp->sd_rindex_spin);
-	head = &sdp->sd_rindex_mru_list;
-	if (unlikely(cur_rgd->rd_list_mru.next == head)) {
-		spin_unlock(&sdp->sd_rindex_spin);
-		return NULL;
+
+	head = &sdp->sd_rindex_recent_list;
+
+	list_for_each_entry(rgd, head, rd_recent) {
+		if (rgd == cur_rgd) {
+			if (cur_rgd->rd_recent.next != head)
+				rgd = list_entry(cur_rgd->rd_recent.next,
+						 struct gfs2_rgrpd, rd_recent);
+			else
+				rgd = NULL;
+
+			if (remove)
+				list_del(&cur_rgd->rd_recent);
+
+			goto out;
+		}
 	}
-	rgd = list_entry(cur_rgd->rd_list_mru.next, struct gfs2_rgrpd, rd_list_mru);
+
+	rgd = NULL;
+	if (!list_empty(head))
+		rgd = list_entry(head->next, struct gfs2_rgrpd, rd_recent);
+
+out:
 	spin_unlock(&sdp->sd_rindex_spin);
 	return rgd;
+}
+
+/**
+ * recent_rgrp_add - add an RG to tail of "recent" list
+ * @new_rgd: The rgrp to add
+ *
+ */
+
+static void recent_rgrp_add(struct gfs2_rgrpd *new_rgd)
+{
+	struct gfs2_sbd *sdp = new_rgd->rd_sbd;
+	struct gfs2_rgrpd *rgd;
+	unsigned int count = 0;
+	unsigned int max = sdp->sd_rgrps / gfs2_jindex_size(sdp);
+
+	spin_lock(&sdp->sd_rindex_spin);
+
+	list_for_each_entry(rgd, &sdp->sd_rindex_recent_list, rd_recent) {
+		if (rgd == new_rgd)
+			goto out;
+
+		if (++count >= max)
+			goto out;
+	}
+	list_add_tail(&new_rgd->rd_recent, &sdp->sd_rindex_recent_list);
+
+out:
+	spin_unlock(&sdp->sd_rindex_spin);
 }
 
 /**
@@ -1026,7 +1112,9 @@ static struct inode *get_local_rgrp(struct gfs2_inode *ip, u64 *last_unlinked)
 	int loops = 0;
 	int error, rg_locked;
 
-	rgd = gfs2_blk2rgrpd(sdp, ip->i_goal);
+	/* Try recently successful rgrps */
+
+	rgd = recent_rgrp_first(sdp, ip->i_goal);
 
 	while (rgd) {
 		rg_locked = 0;
@@ -1048,9 +1136,11 @@ static struct inode *get_local_rgrp(struct gfs2_inode *ip, u64 *last_unlinked)
 				gfs2_glock_dq_uninit(&al->al_rgd_gh);
 			if (inode)
 				return inode;
-			/* fall through */
+			rgd = recent_rgrp_next(rgd, 1);
+			break;
+
 		case GLR_TRYFAILED:
-			rgd = recent_rgrp_next(rgd);
+			rgd = recent_rgrp_next(rgd, 0);
 			break;
 
 		default:
@@ -1109,9 +1199,7 @@ static struct inode *get_local_rgrp(struct gfs2_inode *ip, u64 *last_unlinked)
 
 out:
 	if (begin) {
-		spin_lock(&sdp->sd_rindex_spin);
-		list_move(&rgd->rd_list_mru, &sdp->sd_rindex_mru_list);
-		spin_unlock(&sdp->sd_rindex_spin);
+		recent_rgrp_add(rgd);
 		rgd = gfs2_rgrpd_get_next(rgd);
 		if (!rgd)
 			rgd = gfs2_rgrpd_get_first(sdp);
@@ -1399,8 +1487,8 @@ u64 gfs2_alloc_block(struct gfs2_inode *ip, unsigned int *n)
 	block = rgd->rd_data0 + blk;
 	ip->i_goal = block;
 
-	gfs2_assert_withdraw(sdp, rgd->rd_free >= *n);
-	rgd->rd_free -= *n;
+	gfs2_assert_withdraw(sdp, rgd->rd_rg.rg_free >= *n);
+	rgd->rd_rg.rg_free -= *n;
 
 	gfs2_trans_add_bh(rgd->rd_gl, rgd->rd_bits[0].bi_bh, 1);
 	gfs2_rgrp_out(rgd, rgd->rd_bits[0].bi_bh->b_data);
@@ -1441,10 +1529,10 @@ u64 gfs2_alloc_di(struct gfs2_inode *dip, u64 *generation)
 
 	block = rgd->rd_data0 + blk;
 
-	gfs2_assert_withdraw(sdp, rgd->rd_free);
-	rgd->rd_free--;
-	rgd->rd_dinodes++;
-	*generation = rgd->rd_igeneration++;
+	gfs2_assert_withdraw(sdp, rgd->rd_rg.rg_free);
+	rgd->rd_rg.rg_free--;
+	rgd->rd_rg.rg_dinodes++;
+	*generation = rgd->rd_rg.rg_igeneration++;
 	gfs2_trans_add_bh(rgd->rd_gl, rgd->rd_bits[0].bi_bh, 1);
 	gfs2_rgrp_out(rgd, rgd->rd_bits[0].bi_bh->b_data);
 
@@ -1477,7 +1565,7 @@ void gfs2_free_data(struct gfs2_inode *ip, u64 bstart, u32 blen)
 	if (!rgd)
 		return;
 
-	rgd->rd_free += blen;
+	rgd->rd_rg.rg_free += blen;
 
 	gfs2_trans_add_bh(rgd->rd_gl, rgd->rd_bits[0].bi_bh, 1);
 	gfs2_rgrp_out(rgd, rgd->rd_bits[0].bi_bh->b_data);
@@ -1505,7 +1593,7 @@ void gfs2_free_meta(struct gfs2_inode *ip, u64 bstart, u32 blen)
 	if (!rgd)
 		return;
 
-	rgd->rd_free += blen;
+	rgd->rd_rg.rg_free += blen;
 
 	gfs2_trans_add_bh(rgd->rd_gl, rgd->rd_bits[0].bi_bh, 1);
 	gfs2_rgrp_out(rgd, rgd->rd_bits[0].bi_bh->b_data);
@@ -1542,10 +1630,10 @@ static void gfs2_free_uninit_di(struct gfs2_rgrpd *rgd, u64 blkno)
 		return;
 	gfs2_assert_withdraw(sdp, rgd == tmp_rgd);
 
-	if (!rgd->rd_dinodes)
+	if (!rgd->rd_rg.rg_dinodes)
 		gfs2_consist_rgrpd(rgd);
-	rgd->rd_dinodes--;
-	rgd->rd_free++;
+	rgd->rd_rg.rg_dinodes--;
+	rgd->rd_rg.rg_free++;
 
 	gfs2_trans_add_bh(rgd->rd_gl, rgd->rd_bits[0].bi_bh, 1);
 	gfs2_rgrp_out(rgd, rgd->rd_bits[0].bi_bh->b_data);

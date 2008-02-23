@@ -196,8 +196,8 @@ static inline void dccp_do_pmtu_discovery(struct sock *sk,
 static void dccp_v4_err(struct sk_buff *skb, u32 info)
 {
 	const struct iphdr *iph = (struct iphdr *)skb->data;
-	const u8 offset = iph->ihl << 2;
-	const struct dccp_hdr *dh = (struct dccp_hdr *)(skb->data + offset);
+	const struct dccp_hdr *dh = (struct dccp_hdr *)(skb->data +
+							(iph->ihl << 2));
 	struct dccp_sock *dp;
 	struct inet_sock *inet;
 	const int type = icmp_hdr(skb)->type;
@@ -205,19 +205,17 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
 	struct sock *sk;
 	__u64 seq;
 	int err;
-	struct net *net = dev_net(skb->dev);
 
-	if (skb->len < offset + sizeof(*dh) ||
-	    skb->len < offset + __dccp_basic_hdr_len(dh)) {
-		ICMP_INC_STATS_BH(net, ICMP_MIB_INERRORS);
+	if (skb->len < (iph->ihl << 2) + 8) {
+		ICMP_INC_STATS_BH(ICMP_MIB_INERRORS);
 		return;
 	}
 
-	sk = inet_lookup(net, &dccp_hashinfo,
+	sk = inet_lookup(dev_net(skb->dev), &dccp_hashinfo,
 			iph->daddr, dh->dccph_dport,
 			iph->saddr, dh->dccph_sport, inet_iif(skb));
 	if (sk == NULL) {
-		ICMP_INC_STATS_BH(net, ICMP_MIB_INERRORS);
+		ICMP_INC_STATS_BH(ICMP_MIB_INERRORS);
 		return;
 	}
 
@@ -231,7 +229,7 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
 	 * servers this needs to be solved differently.
 	 */
 	if (sock_owned_by_user(sk))
-		NET_INC_STATS_BH(net, LINUX_MIB_LOCKDROPPEDICMPS);
+		NET_INC_STATS_BH(LINUX_MIB_LOCKDROPPEDICMPS);
 
 	if (sk->sk_state == DCCP_CLOSED)
 		goto out;
@@ -239,8 +237,8 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
 	dp = dccp_sk(sk);
 	seq = dccp_hdr_seq(dh);
 	if ((1 << sk->sk_state) & ~(DCCPF_REQUESTING | DCCPF_LISTEN) &&
-	    !between48(seq, dp->dccps_awl, dp->dccps_awh)) {
-		NET_INC_STATS_BH(net, LINUX_MIB_OUTOFWINDOWICMPS);
+	    !between48(seq, dp->dccps_swl, dp->dccps_swh)) {
+		NET_INC_STATS_BH(LINUX_MIB_OUTOFWINDOWICMPS);
 		goto out;
 	}
 
@@ -284,10 +282,10 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
 		 * ICMPs are not backlogged, hence we cannot get an established
 		 * socket here.
 		 */
-		WARN_ON(req->sk);
+		BUG_TRAP(!req->sk);
 
 		if (seq != dccp_rsk(req)->dreq_iss) {
-			NET_INC_STATS_BH(net, LINUX_MIB_OUTOFWINDOWICMPS);
+			NET_INC_STATS_BH(LINUX_MIB_OUTOFWINDOWICMPS);
 			goto out;
 		}
 		/*
@@ -410,9 +408,9 @@ struct sock *dccp_v4_request_recv_sock(struct sock *sk, struct sk_buff *skb,
 	return newsk;
 
 exit_overflow:
-	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
+	NET_INC_STATS_BH(LINUX_MIB_LISTENOVERFLOWS);
 exit:
-	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENDROPS);
+	NET_INC_STATS_BH(LINUX_MIB_LISTENDROPS);
 	dst_release(dst);
 	return NULL;
 }
@@ -466,7 +464,7 @@ static struct dst_entry* dccp_v4_route_skb(struct net *net, struct sock *sk,
 
 	security_skb_classify_flow(skb, &fl);
 	if (ip_route_output_flow(net, &rt, &fl, sk, 0)) {
-		IP_INC_STATS_BH(net, IPSTATS_MIB_OUTNOROUTES);
+		IP_INC_STATS_BH(IPSTATS_MIB_OUTNOROUTES);
 		return NULL;
 	}
 
@@ -545,7 +543,6 @@ out:
 
 static void dccp_v4_reqsk_destructor(struct request_sock *req)
 {
-	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
 	kfree(inet_rsk(req)->opt);
 }
 
@@ -592,12 +589,11 @@ int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
 		goto drop;
 
-	req = inet_reqsk_alloc(&dccp_request_sock_ops);
+	req = reqsk_alloc(&dccp_request_sock_ops);
 	if (req == NULL)
 		goto drop;
 
-	if (dccp_reqsk_init(req, dccp_sk(sk), skb))
-		goto drop_and_free;
+	dccp_reqsk_init(req, skb);
 
 	dreq = dccp_rsk(req);
 	if (dccp_parse_options(sk, dreq, skb))
@@ -609,6 +605,7 @@ int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	ireq = inet_rsk(req);
 	ireq->loc_addr = ip_hdr(skb)->daddr;
 	ireq->rmt_addr = ip_hdr(skb)->saddr;
+	ireq->opt	= NULL;
 
 	/*
 	 * Step 3: Process LISTEN state
@@ -742,8 +739,8 @@ int dccp_invalid_packet(struct sk_buff *skb)
 	 * If P.type is not Data, Ack, or DataAck and P.X == 0 (the packet
 	 * has short sequence numbers), drop packet and return
 	 */
-	if ((dh->dccph_type < DCCP_PKT_DATA    ||
-	    dh->dccph_type > DCCP_PKT_DATAACK) && dh->dccph_x == 0)  {
+	if (dh->dccph_type >= DCCP_PKT_DATA    &&
+	    dh->dccph_type <= DCCP_PKT_DATAACK && dh->dccph_x == 0)  {
 		DCCP_WARN("P.type (%s) not Data || [Data]Ack, while P.X == 0\n",
 			  dccp_packet_name(dh->dccph_type));
 		return 1;
@@ -794,10 +791,12 @@ static int dccp_v4_rcv(struct sk_buff *skb)
 	DCCP_SKB_CB(skb)->dccpd_seq  = dccp_hdr_seq(dh);
 	DCCP_SKB_CB(skb)->dccpd_type = dh->dccph_type;
 
-	dccp_pr_debug("%8.8s src=%pI4@%-5d dst=%pI4@%-5d seq=%llu",
+	dccp_pr_debug("%8.8s "
+		      "src=%u.%u.%u.%u@%-5d "
+		      "dst=%u.%u.%u.%u@%-5d seq=%llu",
 		      dccp_packet_name(dh->dccph_type),
-		      &iph->saddr, ntohs(dh->dccph_sport),
-		      &iph->daddr, ntohs(dh->dccph_dport),
+		      NIPQUAD(iph->saddr), ntohs(dh->dccph_sport),
+		      NIPQUAD(iph->daddr), ntohs(dh->dccph_dport),
 		      (unsigned long long) DCCP_SKB_CB(skb)->dccpd_seq);
 
 	if (dccp_packet_without_ack(skb)) {
@@ -811,8 +810,9 @@ static int dccp_v4_rcv(struct sk_buff *skb)
 
 	/* Step 2:
 	 *	Look up flow ID in table and get corresponding socket */
-	sk = __inet_lookup_skb(&dccp_hashinfo, skb,
-			       dh->dccph_sport, dh->dccph_dport);
+	sk = __inet_lookup(dev_net(skb->dst->dev), &dccp_hashinfo,
+			   iph->saddr, dh->dccph_sport,
+			   iph->daddr, dh->dccph_dport, inet_iif(skb));
 	/*
 	 * Step 2:
 	 *	If no socket ...
@@ -938,7 +938,6 @@ static struct proto dccp_v4_prot = {
 	.orphan_count		= &dccp_orphan_count,
 	.max_header		= MAX_DCCP_HEADER,
 	.obj_size		= sizeof(struct dccp_sock),
-	.slab_flags		= SLAB_DESTROY_BY_RCU,
 	.rsk_prot		= &dccp_request_sock_ops,
 	.twsk_prot		= &dccp_timewait_sock_ops,
 	.h.hashinfo		= &dccp_hashinfo,

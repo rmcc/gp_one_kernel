@@ -6,7 +6,7 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
-#include <linux/videodev2.h>
+#include <linux/videodev.h>
 #include <media/v4l2-common.h>
 #include <media/tuner.h>
 #include "tuner-i2c.h"
@@ -180,10 +180,11 @@ static struct tvnorm tvnorms[] = {
 	},{
 		.std   = V4L2_STD_SECAM_B | V4L2_STD_SECAM_G | V4L2_STD_SECAM_H,
 		.name  = "SECAM-BGH",
-		.b     = ( cNegativeFmTV  |
+		.b     = ( cPositiveAmTV  |
 			   cQSS           ),
 		.c     = ( cTopDefault),
-		.e     = ( cAudioIF_5_5   |
+		.e     = ( cGating_36	  |
+			   cAudioIF_5_5   |
 			   cVideoIF_38_90 ),
 	},{
 		.std   = V4L2_STD_SECAM_L,
@@ -685,6 +686,7 @@ struct dvb_frontend *tda9887_attach(struct dvb_frontend *fe,
 	case 0:
 		mutex_unlock(&tda9887_list_mutex);
 		return NULL;
+		break;
 	case 1:
 		fe->analog_demod_priv = priv;
 		priv->mode = T_STANDBY;

@@ -117,6 +117,8 @@ int configfs_setattr(struct dentry * dentry, struct iattr * iattr)
 static inline void set_default_inode_attr(struct inode * inode, mode_t mode)
 {
 	inode->i_mode = mode;
+	inode->i_uid = 0;
+	inode->i_gid = 0;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 }
 
@@ -134,6 +136,7 @@ struct inode * configfs_new_inode(mode_t mode, struct configfs_dirent * sd)
 {
 	struct inode * inode = new_inode(configfs_sb);
 	if (inode) {
+		inode->i_blocks = 0;
 		inode->i_mapping->a_ops = &configfs_aops;
 		inode->i_mapping->backing_dev_info = &configfs_backing_dev_info;
 		inode->i_op = &configfs_inode_operations;
@@ -244,9 +247,7 @@ void configfs_hash_and_remove(struct dentry * dir, const char * name)
 		if (!sd->s_element)
 			continue;
 		if (!strcmp(configfs_get_name(sd), name)) {
-			spin_lock(&configfs_dirent_lock);
 			list_del_init(&sd->s_sibling);
-			spin_unlock(&configfs_dirent_lock);
 			configfs_drop_dentry(sd, dir);
 			configfs_put(sd);
 			break;

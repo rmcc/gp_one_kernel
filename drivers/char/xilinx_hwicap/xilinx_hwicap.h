@@ -21,6 +21,9 @@
  *     INFRINGEMENT, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
  *     FOR A PARTICULAR PURPOSE.
  *
+ *     Xilinx products are not intended for use in life support appliances,
+ *     devices, or systems. Use in such applications is expressly prohibited.
+ *
  *     (c) Copyright 2003-2007 Xilinx Inc.
  *     All rights reserved.
  *
@@ -35,6 +38,7 @@
 
 #include <linux/types.h>
 #include <linux/cdev.h>
+#include <linux/version.h>
 #include <linux/platform_device.h>
 
 #include <asm/io.h>

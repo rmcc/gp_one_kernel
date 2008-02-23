@@ -1349,7 +1349,7 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 	int			retval;
 
 	if (!driver
-			|| driver->speed < USB_SPEED_FULL
+			|| driver->speed != USB_SPEED_FULL
 			|| !driver->bind
 			|| !driver->disconnect
 			|| !driver->setup)
@@ -1768,7 +1768,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	 * usb_gadget_driver_{register,unregister}() must change.
 	 */
 	if (the_controller) {
-		WARNING(dev, "ignoring %s\n", pci_name(pdev));
+		WARN(dev, "ignoring %s\n", pci_name(pdev));
 		return -EBUSY;
 	}
 	if (!pdev->irq) {
@@ -1790,7 +1790,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	dev->gadget.ops = &goku_ops;
 
 	/* the "gadget" abstracts/virtualizes the controller */
-	dev_set_name(&dev->gadget.dev, "gadget");
+	strcpy(dev->gadget.dev.bus_id, "gadget");
 	dev->gadget.dev.parent = &pdev->dev;
 	dev->gadget.dev.dma_mask = pdev->dev.dma_mask;
 	dev->gadget.dev.release = gadget_release;

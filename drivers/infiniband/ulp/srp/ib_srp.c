@@ -28,6 +28,8 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * $Id: ib_srp.c 3932 2005-11-01 17:19:29Z roland $
  */
 
 #include <linux/module.h>
@@ -46,6 +48,8 @@
 #include <scsi/scsi_dbg.h>
 #include <scsi/srp.h>
 #include <scsi/scsi_transport_srp.h>
+
+#include <rdma/ib_cache.h>
 
 #include "ib_srp.h"
 
@@ -179,10 +183,10 @@ static int srp_init_qp(struct srp_target_port *target,
 	if (!attr)
 		return -ENOMEM;
 
-	ret = ib_find_pkey(target->srp_host->srp_dev->dev,
-			   target->srp_host->port,
-			   be16_to_cpu(target->path.pkey),
-			   &attr->pkey_index);
+	ret = ib_find_cached_pkey(target->srp_host->srp_dev->dev,
+				  target->srp_host->port,
+				  be16_to_cpu(target->path.pkey),
+				  &attr->pkey_index);
 	if (ret)
 		goto out;
 
@@ -1514,7 +1518,15 @@ static ssize_t show_dgid(struct device *dev, struct device_attribute *attr,
 	    target->state == SRP_TARGET_REMOVED)
 		return -ENODEV;
 
-	return sprintf(buf, "%pI6\n", target->path.dgid.raw);
+	return sprintf(buf, "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[0]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[1]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[2]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[3]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[4]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[5]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[6]),
+		       be16_to_cpu(((__be16 *) target->path.dgid.raw)[7]));
 }
 
 static ssize_t show_orig_dgid(struct device *dev,
@@ -1526,7 +1538,15 @@ static ssize_t show_orig_dgid(struct device *dev,
 	    target->state == SRP_TARGET_REMOVED)
 		return -ENODEV;
 
-	return sprintf(buf, "%pI6\n", target->orig_dgid);
+	return sprintf(buf, "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
+		       be16_to_cpu(target->orig_dgid[0]),
+		       be16_to_cpu(target->orig_dgid[1]),
+		       be16_to_cpu(target->orig_dgid[2]),
+		       be16_to_cpu(target->orig_dgid[3]),
+		       be16_to_cpu(target->orig_dgid[4]),
+		       be16_to_cpu(target->orig_dgid[5]),
+		       be16_to_cpu(target->orig_dgid[6]),
+		       be16_to_cpu(target->orig_dgid[7]));
 }
 
 static ssize_t show_zero_req_lim(struct device *dev,
@@ -1667,7 +1687,7 @@ enum {
 				   SRP_OPT_SERVICE_ID),
 };
 
-static const match_table_t srp_opt_tokens = {
+static match_table_t srp_opt_tokens = {
 	{ SRP_OPT_ID_EXT,		"id_ext=%s" 		},
 	{ SRP_OPT_IOC_GUID,		"ioc_guid=%s" 		},
 	{ SRP_OPT_DGID,			"dgid=%s" 		},
@@ -1863,16 +1883,24 @@ static ssize_t srp_create_target(struct device *dev,
 	if (ret)
 		goto err;
 
-	ib_query_gid(host->srp_dev->dev, host->port, 0, &target->path.sgid);
+	ib_get_cached_gid(host->srp_dev->dev, host->port, 0,
+			  &target->path.sgid);
 
 	shost_printk(KERN_DEBUG, target->scsi_host, PFX
 		     "new target: id_ext %016llx ioc_guid %016llx pkey %04x "
-		     "service_id %016llx dgid %pI6\n",
+		     "service_id %016llx dgid %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
 	       (unsigned long long) be64_to_cpu(target->id_ext),
 	       (unsigned long long) be64_to_cpu(target->ioc_guid),
 	       be16_to_cpu(target->path.pkey),
 	       (unsigned long long) be64_to_cpu(target->service_id),
-	       target->path.dgid.raw);
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[0]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[2]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[4]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[6]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[8]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[10]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[12]),
+	       (int) be16_to_cpu(*(__be16 *) &target->path.dgid.raw[14]));
 
 	ret = srp_create_target_ib(target);
 	if (ret)
@@ -1949,7 +1977,8 @@ static struct srp_host *srp_add_port(struct srp_device *device, u8 port)
 
 	host->dev.class = &srp_class;
 	host->dev.parent = device->dev->dma_device;
-	dev_set_name(&host->dev, "srp-%s-%d", device->dev->name, port);
+	snprintf(host->dev.bus_id, BUS_ID_SIZE, "srp-%s-%d",
+		 device->dev->name, port);
 
 	if (device_register(&host->dev))
 		goto free_host;

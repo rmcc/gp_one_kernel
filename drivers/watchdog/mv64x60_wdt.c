@@ -8,7 +8,7 @@
  * and services the watchdog.
  *
  * Derived from mpc8xx_wdt.c, with the following copyright.
- *
+ * 
  * 2002 (c) Florian Schirmer <jolt@tuxbox.org> This file is licensed under
  * the terms of the GNU General Public License version 2. This program
  * is licensed "as is" without any warranty of any kind, whether express
@@ -22,9 +22,10 @@
 #include <linux/module.h>
 #include <linux/watchdog.h>
 #include <linux/platform_device.h>
+
 #include <linux/mv643xx.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 #define MV64x60_WDT_WDC_OFFSET	0
 
@@ -60,9 +61,7 @@ static DEFINE_SPINLOCK(mv64x60_wdt_spinlock);
 
 static int nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, int, 0);
-MODULE_PARM_DESC(nowayout,
-		"Watchdog cannot be stopped once started (default="
-				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default=" __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 static int mv64x60_wdt_toggle_wdc(int enabled_predicate, int field_shift)
 {
@@ -151,7 +150,7 @@ static int mv64x60_wdt_release(struct inode *inode, struct file *file)
 }
 
 static ssize_t mv64x60_wdt_write(struct file *file, const char __user *data,
-				 size_t len, loff_t *ppos)
+				 size_t len, loff_t * ppos)
 {
 	if (len) {
 		if (!nowayout) {
@@ -161,7 +160,7 @@ static ssize_t mv64x60_wdt_write(struct file *file, const char __user *data,
 
 			for (i = 0; i != len; i++) {
 				char c;
-				if (get_user(c, data + i))
+				if(get_user(c, data + i))
 					return -EFAULT;
 				if (c == 'V')
 					expect_close = 42;
@@ -173,8 +172,8 @@ static ssize_t mv64x60_wdt_write(struct file *file, const char __user *data,
 	return len;
 }
 
-static long mv64x60_wdt_ioctl(struct file *file,
-					unsigned int cmd, unsigned long arg)
+static int mv64x60_wdt_ioctl(struct inode *inode, struct file *file,
+			     unsigned int cmd, unsigned long arg)
 {
 	int timeout;
 	int options;
@@ -241,7 +240,7 @@ static const struct file_operations mv64x60_wdt_fops = {
 	.owner = THIS_MODULE,
 	.llseek = no_llseek,
 	.write = mv64x60_wdt_write,
-	.unlocked_ioctl = mv64x60_wdt_ioctl,
+	.ioctl = mv64x60_wdt_ioctl,
 	.open = mv64x60_wdt_open,
 	.release = mv64x60_wdt_release,
 };

@@ -54,23 +54,12 @@ typedef struct xfs_bmap_free_item
 
 /*
  * Header for free extent list.
- *
- * xbf_low is used by the allocator to activate the lowspace algorithm -
- * when free space is running low the extent allocator may choose to
- * allocate an extent from an AG without leaving sufficient space for
- * a btree split when inserting the new extent.  In this case the allocator
- * will enable the lowspace algorithm which is supposed to allow further
- * allocations (such as btree splits and newroots) to allocate from
- * sequential AGs.  In order to avoid locking AGs out of order the lowspace
- * algorithm will start searching for free space from AG 0.  If the correct
- * transaction reservations have been made then this algorithm will eventually
- * find all the space it needs.
  */
 typedef	struct xfs_bmap_free
 {
 	xfs_bmap_free_item_t	*xbf_first;	/* list of to-be-free extents */
 	int			xbf_count;	/* count of items on list */
-	int			xbf_low;	/* alloc in low mode */
+	int			xbf_low;	/* kludge: alloc in low mode */
 } xfs_bmap_free_t;
 
 #define	XFS_BMAP_MAX_NMAP	4
@@ -137,7 +126,9 @@ typedef struct xfs_bmalloca {
 	char			conv;	/* overwriting unwritten extents */
 } xfs_bmalloca_t;
 
-#if defined(__KERNEL__) && defined(XFS_BMAP_TRACE)
+#ifdef __KERNEL__
+
+#if defined(XFS_BMAP_TRACE)
 /*
  * Trace operations for bmap extent tracing
  */
@@ -161,12 +152,9 @@ xfs_bmap_trace_exlist(
 	int			whichfork);	/* data or attr fork */
 #define	XFS_BMAP_TRACE_EXLIST(ip,c,w)	\
 	xfs_bmap_trace_exlist(__func__,ip,c,w)
-
-#else	/* __KERNEL__ && XFS_BMAP_TRACE */
-
+#else
 #define	XFS_BMAP_TRACE_EXLIST(ip,c,w)
-
-#endif	/* __KERNEL__ && XFS_BMAP_TRACE */
+#endif
 
 /*
  * Convert inode from non-attributed to attributed.
@@ -205,6 +193,20 @@ void
 xfs_bmap_compute_maxlevels(
 	struct xfs_mount	*mp,	/* file system mount structure */
 	int			whichfork);	/* data or attr fork */
+
+/*
+ * Routine to be called at transaction's end by xfs_bmapi, xfs_bunmapi
+ * caller.  Frees all the extents that need freeing, which must be done
+ * last due to locking considerations.
+ *
+ * Return 1 if the given transaction was committed and a new one allocated,
+ * and 0 otherwise.
+ */
+int						/* error */
+xfs_bmap_finish(
+	struct xfs_trans	**tp,		/* transaction pointer addr */
+	xfs_bmap_free_t		*flist,		/* i/o: list extents to free */
+	int			*committed);	/* xact committed or not */
 
 /*
  * Returns the file-relative block number of the first unused block in the file.
@@ -331,43 +333,14 @@ xfs_bunmapi(
 	int			*done);		/* set if not done yet */
 
 /*
- * Check an extent list, which has just been read, for
- * any bit in the extent flag field.
- */
-int
-xfs_check_nostate_extents(
-	struct xfs_ifork	*ifp,
-	xfs_extnum_t		idx,
-	xfs_extnum_t		num);
-
-#ifdef __KERNEL__
-
-/*
- * Routine to be called at transaction's end by xfs_bmapi, xfs_bunmapi
- * caller.  Frees all the extents that need freeing, which must be done
- * last due to locking considerations.
- *
- * Return 1 if the given transaction was committed and a new one allocated,
- * and 0 otherwise.
- */
-int						/* error */
-xfs_bmap_finish(
-	struct xfs_trans	**tp,		/* transaction pointer addr */
-	xfs_bmap_free_t		*flist,		/* i/o: list extents to free */
-	int			*committed);	/* xact committed or not */
-
-/* bmap to userspace formatter - copy to user & advance pointer */
-typedef int (*xfs_bmap_format_t)(void **, struct getbmapx *, int *);
-
-/*
- * Get inode's extents as described in bmv, and format for output.
+ * Fcntl interface to xfs_bmapi.
  */
 int						/* error code */
 xfs_getbmap(
 	xfs_inode_t		*ip,
-	struct getbmapx		*bmv,		/* user bmap structure */
-	xfs_bmap_format_t	formatter,	/* format to user */
-	void			*arg);		/* formatter arg */
+	struct getbmap		*bmv,		/* user bmap structure */
+	void			__user *ap,	/* pointer to user's array */
+	int			iflags);	/* interface flags */
 
 /*
  * Check if the endoff is outside the last extent. If so the caller will grow
@@ -389,6 +362,16 @@ xfs_bmap_count_blocks(
 	struct xfs_inode	*ip,
 	int			whichfork,
 	int			*count);
+
+/*
+ * Check an extent list, which has just been read, for
+ * any bit in the extent flag field.
+ */
+int
+xfs_check_nostate_extents(
+	struct xfs_ifork	*ifp,
+	xfs_extnum_t		idx,
+	xfs_extnum_t		num);
 
 /*
  * Search the extent records for the entry containing block bno.

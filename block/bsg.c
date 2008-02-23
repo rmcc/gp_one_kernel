@@ -19,7 +19,6 @@
 #include <linux/uio.h>
 #include <linux/idr.h>
 #include <linux/bsg.h>
-#include <linux/smp_lock.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_ioctl.h>
@@ -42,13 +41,14 @@ struct bsg_device {
 	int done_cmds;
 	wait_queue_head_t wq_done;
 	wait_queue_head_t wq_free;
-	char name[20];
+	char name[BUS_ID_SIZE];
 	int max_queue;
 	unsigned long flags;
 };
 
 enum {
 	BSG_F_BLOCK		= 1,
+	BSG_F_WRITE_PERM	= 2,
 };
 
 #define BSG_DEFAULT_CMDS	64
@@ -172,8 +172,7 @@ unlock:
 }
 
 static int blk_fill_sgv4_hdr_rq(struct request_queue *q, struct request *rq,
-				struct sg_io_v4 *hdr, struct bsg_device *bd,
-				fmode_t has_write_perm)
+				struct sg_io_v4 *hdr, int has_write_perm)
 {
 	if (hdr->request_len > BLK_MAX_CDB) {
 		rq->cmd = kzalloc(hdr->request_len, GFP_KERNEL);
@@ -186,7 +185,7 @@ static int blk_fill_sgv4_hdr_rq(struct request_queue *q, struct request *rq,
 		return -EFAULT;
 
 	if (hdr->subprotocol == BSG_SUB_PROTOCOL_SCSI_CMD) {
-		if (blk_verify_command(&q->cmd_filter, rq->cmd, has_write_perm))
+		if (blk_verify_command(rq->cmd, has_write_perm))
 			return -EPERM;
 	} else if (!capable(CAP_SYS_RAWIO))
 		return -EPERM;
@@ -202,8 +201,6 @@ static int blk_fill_sgv4_hdr_rq(struct request_queue *q, struct request *rq,
 		rq->timeout = q->sg_timeout;
 	if (!rq->timeout)
 		rq->timeout = BLK_DEFAULT_SG_TIMEOUT;
-	if (rq->timeout < BLK_MIN_SG_TIMEOUT)
-		rq->timeout = BLK_MIN_SG_TIMEOUT;
 
 	return 0;
 }
@@ -244,7 +241,7 @@ bsg_validate_sgv4_hdr(struct request_queue *q, struct sg_io_v4 *hdr, int *rw)
  * map sg_io_v4 to a request.
  */
 static struct request *
-bsg_map_hdr(struct bsg_device *bd, struct sg_io_v4 *hdr, fmode_t has_write_perm)
+bsg_map_hdr(struct bsg_device *bd, struct sg_io_v4 *hdr)
 {
 	struct request_queue *q = bd->queue;
 	struct request *rq, *next_rq = NULL;
@@ -266,7 +263,8 @@ bsg_map_hdr(struct bsg_device *bd, struct sg_io_v4 *hdr, fmode_t has_write_perm)
 	rq = blk_get_request(q, rw, GFP_KERNEL);
 	if (!rq)
 		return ERR_PTR(-ENOMEM);
-	ret = blk_fill_sgv4_hdr_rq(q, rq, hdr, bd, has_write_perm);
+	ret = blk_fill_sgv4_hdr_rq(q, rq, hdr, test_bit(BSG_F_WRITE_PERM,
+						       &bd->flags));
 	if (ret)
 		goto out;
 
@@ -285,8 +283,7 @@ bsg_map_hdr(struct bsg_device *bd, struct sg_io_v4 *hdr, fmode_t has_write_perm)
 		next_rq->cmd_type = rq->cmd_type;
 
 		dxferp = (void*)(unsigned long)hdr->din_xferp;
-		ret =  blk_rq_map_user(q, next_rq, NULL, dxferp,
-				       hdr->din_xfer_len, GFP_KERNEL);
+		ret =  blk_rq_map_user(q, next_rq, dxferp, hdr->din_xfer_len);
 		if (ret)
 			goto out;
 	}
@@ -301,8 +298,7 @@ bsg_map_hdr(struct bsg_device *bd, struct sg_io_v4 *hdr, fmode_t has_write_perm)
 		dxfer_len = 0;
 
 	if (dxfer_len) {
-		ret = blk_rq_map_user(q, rq, NULL, dxferp, dxfer_len,
-				      GFP_KERNEL);
+		ret = blk_rq_map_user(q, rq, dxferp, dxfer_len);
 		if (ret)
 			goto out;
 	}
@@ -570,6 +566,14 @@ static inline void bsg_set_block(struct bsg_device *bd, struct file *file)
 		set_bit(BSG_F_BLOCK, &bd->flags);
 }
 
+static inline void bsg_set_write_perm(struct bsg_device *bd, struct file *file)
+{
+	if (file->f_mode & FMODE_WRITE)
+		set_bit(BSG_F_WRITE_PERM, &bd->flags);
+	else
+		clear_bit(BSG_F_WRITE_PERM, &bd->flags);
+}
+
 /*
  * Check if the error is a "real" error that we should return.
  */
@@ -591,7 +595,6 @@ bsg_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	dprintk("%s: read %Zd bytes\n", bd->name, count);
 
 	bsg_set_block(bd, file);
-
 	bytes_read = 0;
 	ret = __bsg_read(buf, count, bd, NULL, &bytes_read);
 	*ppos = bytes_read;
@@ -603,8 +606,7 @@ bsg_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 }
 
 static int __bsg_write(struct bsg_device *bd, const char __user *buf,
-		       size_t count, ssize_t *bytes_written,
-		       fmode_t has_write_perm)
+		       size_t count, ssize_t *bytes_written)
 {
 	struct bsg_command *bc;
 	struct request *rq;
@@ -635,7 +637,7 @@ static int __bsg_write(struct bsg_device *bd, const char __user *buf,
 		/*
 		 * get a request, fill in the blanks, and add to request queue
 		 */
-		rq = bsg_map_hdr(bd, &bc->hdr, has_write_perm);
+		rq = bsg_map_hdr(bd, &bc->hdr);
 		if (IS_ERR(rq)) {
 			ret = PTR_ERR(rq);
 			rq = NULL;
@@ -666,11 +668,10 @@ bsg_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 	dprintk("%s: write %Zd bytes\n", bd->name, count);
 
 	bsg_set_block(bd, file);
+	bsg_set_write_perm(bd, file);
 
 	bytes_written = 0;
-	ret = __bsg_write(bd, buf, count, &bytes_written,
-			  file->f_mode & FMODE_WRITE);
-
+	ret = __bsg_write(bd, buf, count, &bytes_written);
 	*ppos = bytes_written;
 
 	/*
@@ -708,12 +709,11 @@ static void bsg_kref_release_function(struct kref *kref)
 {
 	struct bsg_class_device *bcd =
 		container_of(kref, struct bsg_class_device, ref);
-	struct device *parent = bcd->parent;
 
 	if (bcd->release)
 		bcd->release(bcd->parent);
 
-	put_device(parent);
+	put_device(bcd->parent);
 }
 
 static int bsg_put_device(struct bsg_device *bd)
@@ -724,13 +724,8 @@ static int bsg_put_device(struct bsg_device *bd)
 	mutex_lock(&bsg_mutex);
 
 	do_free = atomic_dec_and_test(&bd->ref_count);
-	if (!do_free) {
-		mutex_unlock(&bsg_mutex);
+	if (!do_free)
 		goto out;
-	}
-
-	hlist_del(&bd->dev_list);
-	mutex_unlock(&bsg_mutex);
 
 	dprintk("%s: tearing down\n", bd->name);
 
@@ -746,8 +741,10 @@ static int bsg_put_device(struct bsg_device *bd)
 	 */
 	ret = bsg_complete_all_commands(bd);
 
+	hlist_del(&bd->dev_list);
 	kfree(bd);
 out:
+	mutex_unlock(&bsg_mutex);
 	kref_put(&q->bsg_dev.ref, bsg_kref_release_function);
 	if (do_free)
 		blk_put_queue(q);
@@ -774,14 +771,13 @@ static struct bsg_device *bsg_add_device(struct inode *inode,
 	}
 
 	bd->queue = rq;
-
 	bsg_set_block(bd, file);
 
 	atomic_set(&bd->ref_count, 1);
 	mutex_lock(&bsg_mutex);
 	hlist_add_head(&bd->dev_list, bsg_dev_idx_hash(iminor(inode)));
 
-	strncpy(bd->name, dev_name(rq->bsg_dev.class_dev), sizeof(bd->name) - 1);
+	strncpy(bd->name, rq->bsg_dev.class_dev->bus_id, sizeof(bd->name) - 1);
 	dprintk("bound to <%s>, max queue %d\n",
 		format_dev_t(buf, inode->i_rdev), bd->max_queue);
 
@@ -838,11 +834,7 @@ static struct bsg_device *bsg_get_device(struct inode *inode, struct file *file)
 
 static int bsg_open(struct inode *inode, struct file *file)
 {
-	struct bsg_device *bd;
-
-	lock_kernel();
-	bd = bsg_get_device(inode, file);
-	unlock_kernel();
+	struct bsg_device *bd = bsg_get_device(inode, file);
 
 	if (IS_ERR(bd))
 		return PTR_ERR(bd);
@@ -916,7 +908,7 @@ static long bsg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case SG_EMULATED_HOST:
 	case SCSI_IOCTL_SEND_COMMAND: {
 		void __user *uarg = (void __user *) arg;
-		return scsi_cmd_ioctl(bd->queue, NULL, file->f_mode, cmd, uarg);
+		return scsi_cmd_ioctl(file, bd->queue, NULL, cmd, uarg);
 	}
 	case SG_IO: {
 		struct request *rq;
@@ -926,7 +918,7 @@ static long bsg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&hdr, uarg, sizeof(hdr)))
 			return -EFAULT;
 
-		rq = bsg_map_hdr(bd, &hdr, file->f_mode & FMODE_WRITE);
+		rq = bsg_map_hdr(bd, &hdr);
 		if (IS_ERR(rq))
 			return PTR_ERR(rq);
 
@@ -992,7 +984,7 @@ int bsg_register_queue(struct request_queue *q, struct device *parent,
 	if (name)
 		devname = name;
 	else
-		devname = dev_name(parent);
+		devname = parent->bus_id;
 
 	/*
 	 * we need a proper transport to send commands, not a stacked device
@@ -1027,7 +1019,7 @@ int bsg_register_queue(struct request_queue *q, struct device *parent,
 	bcd->release = release;
 	kref_init(&bcd->ref);
 	dev = MKDEV(bsg_major, bcd->minor);
-	class_dev = device_create(bsg_class, parent, dev, NULL, "%s", devname);
+	class_dev = device_create(bsg_class, parent, dev, "%s", devname);
 	if (IS_ERR(class_dev)) {
 		ret = PTR_ERR(class_dev);
 		goto put_dev;

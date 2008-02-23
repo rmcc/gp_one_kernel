@@ -47,14 +47,20 @@ static const struct file_operations name## _ops = {			\
 
 DEBUGFS_READONLY_FILE(frequency, 20, "%d",
 		      local->hw.conf.channel->center_freq);
+DEBUGFS_READONLY_FILE(antenna_sel_tx, 20, "%d",
+		      local->hw.conf.antenna_sel_tx);
+DEBUGFS_READONLY_FILE(antenna_sel_rx, 20, "%d",
+		      local->hw.conf.antenna_sel_rx);
+DEBUGFS_READONLY_FILE(bridge_packets, 20, "%d",
+		      local->bridge_packets);
 DEBUGFS_READONLY_FILE(rts_threshold, 20, "%d",
 		      local->rts_threshold);
 DEBUGFS_READONLY_FILE(fragmentation_threshold, 20, "%d",
 		      local->fragmentation_threshold);
 DEBUGFS_READONLY_FILE(short_retry_limit, 20, "%d",
-		      local->hw.conf.short_frame_max_tx_count);
+		      local->short_retry_limit);
 DEBUGFS_READONLY_FILE(long_retry_limit, 20, "%d",
-		      local->hw.conf.long_frame_max_tx_count);
+		      local->long_retry_limit);
 DEBUGFS_READONLY_FILE(total_ps_buffered, 20, "%d",
 		      local->total_ps_buffered);
 DEBUGFS_READONLY_FILE(wep_iv, 20, "%#06x",
@@ -63,6 +69,16 @@ DEBUGFS_READONLY_FILE(rate_ctrl_alg, 100, "%s",
 		      local->rate_ctrl ? local->rate_ctrl->ops->name : "<unset>");
 
 /* statistics stuff */
+
+static inline int rtnl_lock_local(struct ieee80211_local *local)
+{
+	rtnl_lock();
+	if (unlikely(local->reg_state != IEEE80211_DEV_REGISTERED)) {
+		rtnl_unlock();
+		return -ENODEV;
+	}
+	return 0;
+}
 
 #define DEBUGFS_STATS_FILE(name, buflen, fmt, value...)			\
 	DEBUGFS_READONLY_FILE(stats_ ##name, buflen, fmt, ##value)
@@ -80,7 +96,10 @@ static ssize_t format_devstat_counter(struct ieee80211_local *local,
 	if (!local->ops->get_stats)
 		return -EOPNOTSUPP;
 
-	rtnl_lock();
+	res = rtnl_lock_local(local);
+	if (res)
+		return res;
+
 	res = local->ops->get_stats(local_to_hw(local), &stats);
 	rtnl_unlock();
 	if (!res)
@@ -178,6 +197,45 @@ DEBUGFS_STATS_FILE(rx_handlers_fragments, 20, "%u",
 DEBUGFS_STATS_FILE(tx_status_drop, 20, "%u",
 		   local->tx_status_drop);
 
+static ssize_t stats_wme_rx_queue_read(struct file *file,
+				       char __user *userbuf,
+				       size_t count, loff_t *ppos)
+{
+	struct ieee80211_local *local = file->private_data;
+	char buf[NUM_RX_DATA_QUEUES*15], *p = buf;
+	int i;
+
+	for (i = 0; i < NUM_RX_DATA_QUEUES; i++)
+		p += scnprintf(p, sizeof(buf)+buf-p,
+			       "%u\n", local->wme_rx_queue[i]);
+
+	return simple_read_from_buffer(userbuf, count, ppos, buf, p-buf);
+}
+
+static const struct file_operations stats_wme_rx_queue_ops = {
+	.read = stats_wme_rx_queue_read,
+	.open = mac80211_open_file_generic,
+};
+
+static ssize_t stats_wme_tx_queue_read(struct file *file,
+				       char __user *userbuf,
+				       size_t count, loff_t *ppos)
+{
+	struct ieee80211_local *local = file->private_data;
+	char buf[NUM_TX_DATA_QUEUES*15], *p = buf;
+	int i;
+
+	for (i = 0; i < NUM_TX_DATA_QUEUES; i++)
+		p += scnprintf(p, sizeof(buf)+buf-p,
+			       "%u\n", local->wme_tx_queue[i]);
+
+	return simple_read_from_buffer(userbuf, count, ppos, buf, p-buf);
+}
+
+static const struct file_operations stats_wme_tx_queue_ops = {
+	.read = stats_wme_tx_queue_read,
+	.open = mac80211_open_file_generic,
+};
 #endif
 
 DEBUGFS_DEVSTATS_FILE(dot11ACKFailureCount);
@@ -198,6 +256,9 @@ void debugfs_hw_add(struct ieee80211_local *local)
 	local->debugfs.keys = debugfs_create_dir("keys", phyd);
 
 	DEBUGFS_ADD(frequency);
+	DEBUGFS_ADD(antenna_sel_tx);
+	DEBUGFS_ADD(antenna_sel_rx);
+	DEBUGFS_ADD(bridge_packets);
 	DEBUGFS_ADD(rts_threshold);
 	DEBUGFS_ADD(fragmentation_threshold);
 	DEBUGFS_ADD(short_retry_limit);
@@ -242,6 +303,8 @@ void debugfs_hw_add(struct ieee80211_local *local)
 	DEBUGFS_STATS_ADD(rx_expand_skb_head2);
 	DEBUGFS_STATS_ADD(rx_handlers_fragments);
 	DEBUGFS_STATS_ADD(tx_status_drop);
+	DEBUGFS_STATS_ADD(wme_tx_queue);
+	DEBUGFS_STATS_ADD(wme_rx_queue);
 #endif
 	DEBUGFS_STATS_ADD(dot11ACKFailureCount);
 	DEBUGFS_STATS_ADD(dot11RTSFailureCount);
@@ -252,6 +315,9 @@ void debugfs_hw_add(struct ieee80211_local *local)
 void debugfs_hw_del(struct ieee80211_local *local)
 {
 	DEBUGFS_DEL(frequency);
+	DEBUGFS_DEL(antenna_sel_tx);
+	DEBUGFS_DEL(antenna_sel_rx);
+	DEBUGFS_DEL(bridge_packets);
 	DEBUGFS_DEL(rts_threshold);
 	DEBUGFS_DEL(fragmentation_threshold);
 	DEBUGFS_DEL(short_retry_limit);
@@ -290,6 +356,8 @@ void debugfs_hw_del(struct ieee80211_local *local)
 	DEBUGFS_STATS_DEL(rx_expand_skb_head2);
 	DEBUGFS_STATS_DEL(rx_handlers_fragments);
 	DEBUGFS_STATS_DEL(tx_status_drop);
+	DEBUGFS_STATS_DEL(wme_tx_queue);
+	DEBUGFS_STATS_DEL(wme_rx_queue);
 #endif
 	DEBUGFS_STATS_DEL(dot11ACKFailureCount);
 	DEBUGFS_STATS_DEL(dot11RTSFailureCount);

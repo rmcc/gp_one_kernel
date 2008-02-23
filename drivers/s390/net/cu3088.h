@@ -17,6 +17,9 @@ enum channel_types {
 	/* Device is a FICON channel */
 	channel_type_ficon,
 
+	/* Device is a P390 LCS card */
+	channel_type_p390,
+
 	/* Device is a OSA2 card */
 	channel_type_osa2,
 

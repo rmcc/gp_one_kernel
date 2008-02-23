@@ -44,7 +44,6 @@
 #include <asm/btext.h>
 #include <asm/tlb.h>
 #include <asm/sections.h>
-#include <asm/sparsemem.h>
 #include <asm/vdso.h>
 #include <asm/fixmap.h>
 
@@ -75,10 +74,11 @@ static inline pte_t *virt_to_kpte(unsigned long vaddr)
 
 int page_is_ram(unsigned long pfn)
 {
-#ifndef CONFIG_PPC64	/* XXX for now */
-	return pfn < max_pfn;
-#else
 	unsigned long paddr = (pfn << PAGE_SHIFT);
+
+#ifndef CONFIG_PPC64	/* XXX for now */
+	return paddr < __pa(high_memory);
+#else
 	int i;
 	for (i=0; i < lmb.memory.cnt; i++) {
 		unsigned long base;
@@ -102,8 +102,8 @@ pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 		return ppc_md.phys_mem_access_prot(file, pfn, size, vma_prot);
 
 	if (!page_is_ram(pfn))
-		vma_prot = pgprot_noncached(vma_prot);
-
+		vma_prot = __pgprot(pgprot_val(vma_prot)
+				    | _PAGE_GUARDED | _PAGE_NO_CACHE);
 	return vma_prot;
 }
 EXPORT_SYMBOL(phys_mem_access_prot);
@@ -132,9 +132,25 @@ int arch_add_memory(int nid, u64 start, u64 size)
 	/* this should work for most non-highmem platforms */
 	zone = pgdata->node_zones;
 
-	return __add_pages(nid, zone, start_pfn, nr_pages);
+	return __add_pages(zone, start_pfn, nr_pages);
 }
-#endif /* CONFIG_MEMORY_HOTPLUG */
+
+#ifdef CONFIG_MEMORY_HOTREMOVE
+int remove_memory(u64 start, u64 size)
+{
+	unsigned long start_pfn, end_pfn;
+	int ret;
+
+	start_pfn = start >> PAGE_SHIFT;
+	end_pfn = start_pfn + (size >> PAGE_SHIFT);
+	ret = offline_pages(start_pfn, end_pfn, 120 * HZ);
+	if (ret)
+		goto out;
+	/* Arch-specific calls go here - next patch */
+out:
+	return ret;
+}
+#endif /* CONFIG_MEMORY_HOTREMOVE */
 
 /*
  * walk_memory_resource() needs to make sure there is no holes in a given
@@ -167,6 +183,47 @@ walk_memory_resource(unsigned long start_pfn, unsigned long nr_pages, void *arg,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(walk_memory_resource);
+
+#endif /* CONFIG_MEMORY_HOTPLUG */
+
+void show_mem(void)
+{
+	unsigned long total = 0, reserved = 0;
+	unsigned long shared = 0, cached = 0;
+	unsigned long highmem = 0;
+	struct page *page;
+	pg_data_t *pgdat;
+	unsigned long i;
+
+	printk("Mem-info:\n");
+	show_free_areas();
+	for_each_online_pgdat(pgdat) {
+		unsigned long flags;
+		pgdat_resize_lock(pgdat, &flags);
+		for (i = 0; i < pgdat->node_spanned_pages; i++) {
+			if (!pfn_valid(pgdat->node_start_pfn + i))
+				continue;
+			page = pgdat_page_nr(pgdat, i);
+			total++;
+			if (PageHighMem(page))
+				highmem++;
+			if (PageReserved(page))
+				reserved++;
+			else if (PageSwapCache(page))
+				cached++;
+			else if (page_count(page))
+				shared += page_count(page) - 1;
+		}
+		pgdat_resize_unlock(pgdat, &flags);
+	}
+	printk("%ld pages of RAM\n", total);
+#ifdef CONFIG_HIGHMEM
+	printk("%ld pages of HIGHMEM\n", highmem);
+#endif
+	printk("%ld reserved pages\n", reserved);
+	printk("%ld pages shared\n", shared);
+	printk("%ld pages swap cached\n", cached);
+}
 
 /*
  * Initialize the bootmem system and give it all the memory we
@@ -273,7 +330,7 @@ static int __init mark_nonram_nosave(void)
 void __init paging_init(void)
 {
 	unsigned long total_ram = lmb_phys_mem_size();
-	phys_addr_t top_of_ram = lmb_end_of_DRAM();
+	unsigned long top_of_ram = lmb_end_of_DRAM();
 	unsigned long max_zone_pfns[MAX_NR_ZONES];
 
 #ifdef CONFIG_PPC32
@@ -292,10 +349,10 @@ void __init paging_init(void)
 	kmap_prot = PAGE_KERNEL;
 #endif /* CONFIG_HIGHMEM */
 
-	printk(KERN_DEBUG "Top of RAM: 0x%llx, Total RAM: 0x%lx\n",
-	       (unsigned long long)top_of_ram, total_ram);
+	printk(KERN_DEBUG "Top of RAM: 0x%lx, Total RAM: 0x%lx\n",
+	       top_of_ram, total_ram);
 	printk(KERN_DEBUG "Memory hole size: %ldMB\n",
-	       (long int)((top_of_ram - total_ram) >> 20));
+	       (top_of_ram - total_ram) >> 20);
 	memset(max_zone_pfns, 0, sizeof(max_zone_pfns));
 #ifdef CONFIG_HIGHMEM
 	max_zone_pfns[ZONE_DMA] = lowmem_end_addr >> PAGE_SHIFT;
@@ -488,7 +545,7 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address,
 		 * we invalidate the TLB here, thus avoiding dcbst
 		 * misbehaviour.
 		 */
-		_tlbil_va(address, 0 /* 8xx doesn't care about PID */);
+		_tlbie(address, 0 /* 8xx doesn't care about PID */);
 #endif
 		/* The _PAGE_USER test should really be _PAGE_EXEC, but
 		 * older glibc versions execute some code from no-exec

@@ -48,10 +48,9 @@
  *		CONFIG_HPET_EMULATE_RTC
  *	1.12a	Maciej W. Rozycki: Handle memory-mapped chips properly.
  *	1.12ac	Alan Cox: Allow read access to the day of week register
- *	1.12b	David John: Remove calls to the BKL.
  */
 
-#define RTC_VERSION		"1.12b"
+#define RTC_VERSION		"1.12ac"
 
 /*
  *	Note that *all* calls to CMOS_READ and CMOS_WRITE are done with
@@ -78,9 +77,9 @@
 #include <linux/wait.h>
 #include <linux/bcd.h>
 #include <linux/delay.h>
-#include <linux/uaccess.h>
 
 #include <asm/current.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #ifdef CONFIG_X86
@@ -88,15 +87,15 @@
 #endif
 
 #ifdef CONFIG_SPARC32
-#include <linux/of.h>
-#include <linux/of_device.h>
-#include <asm/io.h>
+#include <linux/pci.h>
+#include <linux/jiffies.h>
+#include <asm/ebus.h>
 
 static unsigned long rtc_port;
-static int rtc_irq;
+static int rtc_irq = PCI_IRQ_NONE;
 #endif
 
-#ifdef	CONFIG_HPET_EMULATE_RTC
+#ifdef	CONFIG_HPET_RTC_IRQ
 #undef	RTC_IRQ
 #endif
 
@@ -120,6 +119,8 @@ static irqreturn_t hpet_rtc_interrupt(int irq, void *dev_id)
 	return 0;
 }
 #endif
+#else
+extern irqreturn_t hpet_rtc_interrupt(int irq, void *dev_id);
 #endif
 
 /*
@@ -142,8 +143,8 @@ static DEFINE_TIMER(rtc_irq_timer, rtc_dropped_irq, 0, 0);
 static ssize_t rtc_read(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos);
 
-static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-static void rtc_get_rtc_time(struct rtc_time *rtc_tm);
+static int rtc_ioctl(struct inode *inode, struct file *file,
+		     unsigned int cmd, unsigned long arg);
 
 #ifdef RTC_IRQ
 static unsigned int rtc_poll(struct file *file, poll_table *wait);
@@ -182,8 +183,8 @@ static int rtc_proc_open(struct inode *inode, struct file *file);
 
 /*
  * rtc_status is never changed by rtc_interrupt, and ioctl/open/close is
- * protected by the spin lock rtc_lock. However, ioctl can still disable the
- * timer in rtc_status and then with del_timer after the interrupt has read
+ * protected by the big kernel lock. However, ioctl can still disable the timer
+ * in rtc_status and then with del_timer after the interrupt has read
  * rtc_status but before mod_timer is called, which would then reenable the
  * timer (but you would need to have an awful timing before you'd trip on it)
  */
@@ -235,7 +236,7 @@ static inline unsigned char rtc_is_updating(void)
  *	(See ./arch/XXXX/kernel/time.c for the set_rtc_mmss() function.)
  */
 
-static irqreturn_t rtc_interrupt(int irq, void *dev_id)
+irqreturn_t rtc_interrupt(int irq, void *dev_id)
 {
 	/*
 	 *	Can be an alarm interrupt, update complete interrupt,
@@ -518,17 +519,17 @@ static int rtc_do_ioctl(unsigned int cmd, unsigned long arg, int kernel)
 		if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) ||
 							RTC_ALWAYS_BCD) {
 			if (sec < 60)
-				sec = bin2bcd(sec);
+				BIN_TO_BCD(sec);
 			else
 				sec = 0xff;
 
 			if (min < 60)
-				min = bin2bcd(min);
+				BIN_TO_BCD(min);
 			else
 				min = 0xff;
 
 			if (hrs < 24)
-				hrs = bin2bcd(hrs);
+				BIN_TO_BCD(hrs);
 			else
 				hrs = 0xff;
 		}
@@ -614,12 +615,12 @@ static int rtc_do_ioctl(unsigned int cmd, unsigned long arg, int kernel)
 
 		if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY)
 		    || RTC_ALWAYS_BCD) {
-			sec = bin2bcd(sec);
-			min = bin2bcd(min);
-			hrs = bin2bcd(hrs);
-			day = bin2bcd(day);
-			mon = bin2bcd(mon);
-			yrs = bin2bcd(yrs);
+			BIN_TO_BCD(sec);
+			BIN_TO_BCD(min);
+			BIN_TO_BCD(hrs);
+			BIN_TO_BCD(day);
+			BIN_TO_BCD(mon);
+			BIN_TO_BCD(yrs);
 		}
 
 		save_control = CMOS_READ(RTC_CONTROL);
@@ -677,13 +678,12 @@ static int rtc_do_ioctl(unsigned int cmd, unsigned long arg, int kernel)
 		if (arg != (1<<tmp))
 			return -EINVAL;
 
-		rtc_freq = arg;
-
 		spin_lock_irqsave(&rtc_lock, flags);
 		if (hpet_set_periodic_freq(arg)) {
 			spin_unlock_irqrestore(&rtc_lock, flags);
 			return 0;
 		}
+		rtc_freq = arg;
 
 		val = CMOS_READ(RTC_FREQ_SELECT) & 0xf0;
 		val |= (16 - tmp);
@@ -717,11 +717,10 @@ static int rtc_do_ioctl(unsigned int cmd, unsigned long arg, int kernel)
 			    &wtime, sizeof wtime) ? -EFAULT : 0;
 }
 
-static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+		     unsigned long arg)
 {
-	long ret;
-	ret = rtc_do_ioctl(cmd, arg, 0);
-	return ret;
+	return rtc_do_ioctl(cmd, arg, 0);
 }
 
 /*
@@ -729,6 +728,9 @@ static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  *	Also clear the previous interrupt data on an open, and clean
  *	up things on a close.
  */
+
+/* We use rtc_lock to protect against concurrent opens. So the BKL is not
+ * needed here. Or anywhere else in this driver. */
 static int rtc_open(struct inode *inode, struct file *file)
 {
 	spin_lock_irq(&rtc_lock);
@@ -780,6 +782,8 @@ static int rtc_release(struct inode *inode, struct file *file)
 	}
 	spin_unlock_irq(&rtc_lock);
 
+	if (file->f_flags & FASYNC)
+		rtc_fasync(-1, file, 0);
 no_irq:
 #endif
 
@@ -792,6 +796,7 @@ no_irq:
 }
 
 #ifdef RTC_IRQ
+/* Called without the kernel lock - fine */
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
 	unsigned long l;
@@ -905,7 +910,7 @@ static const struct file_operations rtc_fops = {
 #ifdef RTC_IRQ
 	.poll		= rtc_poll,
 #endif
-	.unlocked_ioctl	= rtc_ioctl,
+	.ioctl		= rtc_ioctl,
 	.open		= rtc_open,
 	.release	= rtc_release,
 	.fasync		= rtc_fasync,
@@ -962,8 +967,8 @@ static int __init rtc_init(void)
 	char *guess = NULL;
 #endif
 #ifdef CONFIG_SPARC32
-	struct device_node *ebus_dp;
-	struct of_device *op;
+	struct linux_ebus *ebus;
+	struct linux_ebus_device *edev;
 #else
 	void *r;
 #ifdef RTC_IRQ
@@ -972,16 +977,12 @@ static int __init rtc_init(void)
 #endif
 
 #ifdef CONFIG_SPARC32
-	for_each_node_by_name(ebus_dp, "ebus") {
-		struct device_node *dp;
-		for (dp = ebus_dp; dp; dp = dp->sibling) {
-			if (!strcmp(dp->name, "rtc")) {
-				op = of_find_device_by_node(dp);
-				if (op) {
-					rtc_port = op->resource[0].start;
-					rtc_irq = op->irqs[0];
-					goto found;
-				}
+	for_each_ebus(ebus) {
+		for_each_ebusdev(edev, ebus) {
+			if (strcmp(edev->prom_node->name, "rtc") == 0) {
+				rtc_port = edev->resource[0].start;
+				rtc_irq = edev->irqs[0];
+				goto found;
 			}
 		}
 	}
@@ -990,7 +991,7 @@ static int __init rtc_init(void)
 	return -EIO;
 
 found:
-	if (!rtc_irq) {
+	if (rtc_irq == PCI_IRQ_NONE) {
 		rtc_has_irq = 0;
 		goto no_irq;
 	}
@@ -1088,7 +1089,7 @@ no_irq:
 	spin_unlock_irq(&rtc_lock);
 
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
-		year = bcd2bin(year);       /* This should never happen... */
+		BCD_TO_BIN(year);       /* This should never happen... */
 
 	if (year < 20) {
 		epoch = 2000;
@@ -1296,7 +1297,7 @@ static int rtc_proc_open(struct inode *inode, struct file *file)
 }
 #endif
 
-static void rtc_get_rtc_time(struct rtc_time *rtc_tm)
+void rtc_get_rtc_time(struct rtc_time *rtc_tm)
 {
 	unsigned long uip_watchdog = jiffies, flags;
 	unsigned char ctrl;
@@ -1341,13 +1342,13 @@ static void rtc_get_rtc_time(struct rtc_time *rtc_tm)
 	spin_unlock_irqrestore(&rtc_lock, flags);
 
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD) {
-		rtc_tm->tm_sec = bcd2bin(rtc_tm->tm_sec);
-		rtc_tm->tm_min = bcd2bin(rtc_tm->tm_min);
-		rtc_tm->tm_hour = bcd2bin(rtc_tm->tm_hour);
-		rtc_tm->tm_mday = bcd2bin(rtc_tm->tm_mday);
-		rtc_tm->tm_mon = bcd2bin(rtc_tm->tm_mon);
-		rtc_tm->tm_year = bcd2bin(rtc_tm->tm_year);
-		rtc_tm->tm_wday = bcd2bin(rtc_tm->tm_wday);
+		BCD_TO_BIN(rtc_tm->tm_sec);
+		BCD_TO_BIN(rtc_tm->tm_min);
+		BCD_TO_BIN(rtc_tm->tm_hour);
+		BCD_TO_BIN(rtc_tm->tm_mday);
+		BCD_TO_BIN(rtc_tm->tm_mon);
+		BCD_TO_BIN(rtc_tm->tm_year);
+		BCD_TO_BIN(rtc_tm->tm_wday);
 	}
 
 #ifdef CONFIG_MACH_DECSTATION
@@ -1381,9 +1382,9 @@ static void get_rtc_alm_time(struct rtc_time *alm_tm)
 	spin_unlock_irq(&rtc_lock);
 
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD) {
-		alm_tm->tm_sec = bcd2bin(alm_tm->tm_sec);
-		alm_tm->tm_min = bcd2bin(alm_tm->tm_min);
-		alm_tm->tm_hour = bcd2bin(alm_tm->tm_hour);
+		BCD_TO_BIN(alm_tm->tm_sec);
+		BCD_TO_BIN(alm_tm->tm_min);
+		BCD_TO_BIN(alm_tm->tm_hour);
 	}
 }
 

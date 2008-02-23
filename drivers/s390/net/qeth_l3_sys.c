@@ -85,6 +85,7 @@ static ssize_t qeth_l3_dev_route_store(struct qeth_card *card,
 	} else if (!strcmp(tmp, "multicast_router")) {
 		route->type = MULTICAST_ROUTER;
 	} else {
+		PRINT_WARN("Invalid routing type '%s'.\n", tmp);
 		return -EINVAL;
 	}
 	if (((card->state == CARD_STATE_SOFTSETUP) ||
@@ -121,6 +122,9 @@ static ssize_t qeth_l3_dev_route6_show(struct device *dev,
 	if (!card)
 		return -EINVAL;
 
+	if (!qeth_is_supported(card, IPA_IPV6))
+		return sprintf(buf, "%s\n", "n/a");
+
 	return qeth_l3_dev_route_show(card, &card->options.route6, buf);
 }
 
@@ -131,6 +135,13 @@ static ssize_t qeth_l3_dev_route6_store(struct device *dev,
 
 	if (!card)
 		return -EINVAL;
+
+	if (!qeth_is_supported(card, IPA_IPV6)) {
+		PRINT_WARN("IPv6 not supported for interface %s.\n"
+			   "Routing status no changed.\n",
+			   QETH_CARD_IFNAME(card));
+		return -ENOTSUPP;
+	}
 
 	return qeth_l3_dev_route_store(card, &card->options.route6,
 				QETH_PROT_IPV6, buf, count);
@@ -168,6 +179,7 @@ static ssize_t qeth_l3_dev_fake_broadcast_store(struct device *dev,
 	if ((i == 0) || (i == 1))
 		card->options.fake_broadcast = i;
 	else {
+		PRINT_WARN("fake_broadcast: write 0 or 1 to this file!\n");
 		return -EINVAL;
 	}
 	return count;
@@ -208,6 +220,7 @@ static ssize_t qeth_l3_dev_broadcast_mode_store(struct device *dev,
 
 	if (!((card->info.link_type == QETH_LINK_TYPE_HSTR) ||
 	      (card->info.link_type == QETH_LINK_TYPE_LANE_TR))) {
+		PRINT_WARN("Device is not a tokenring device!\n");
 		return -EINVAL;
 	}
 
@@ -220,6 +233,8 @@ static ssize_t qeth_l3_dev_broadcast_mode_store(struct device *dev,
 		card->options.broadcast_mode = QETH_TR_BROADCAST_ALLRINGS;
 		return count;
 	} else {
+		PRINT_WARN("broadcast_mode: invalid mode %s!\n",
+			   tmp);
 		return -EINVAL;
 	}
 	return count;
@@ -260,6 +275,7 @@ static ssize_t qeth_l3_dev_canonical_macaddr_store(struct device *dev,
 
 	if (!((card->info.link_type == QETH_LINK_TYPE_HSTR) ||
 	      (card->info.link_type == QETH_LINK_TYPE_LANE_TR))) {
+		PRINT_WARN("Device is not a tokenring device!\n");
 		return -EINVAL;
 	}
 
@@ -269,6 +285,7 @@ static ssize_t qeth_l3_dev_canonical_macaddr_store(struct device *dev,
 			QETH_TR_MACADDR_CANONICAL :
 			QETH_TR_MACADDR_NONCANONICAL;
 	else {
+		PRINT_WARN("canonical_macaddr: write 0 or 1 to this file!\n");
 		return -EINVAL;
 	}
 	return count;
@@ -310,6 +327,7 @@ static ssize_t qeth_l3_dev_checksum_store(struct device *dev,
 	else if (!strcmp(tmp, "no_checksumming"))
 		card->options.checksum_type = NO_CHECKSUMMING;
 	else {
+		PRINT_WARN("Unknown checksumming type '%s'\n", tmp);
 		return -EINVAL;
 	}
 	return count;
@@ -364,6 +382,8 @@ static ssize_t qeth_l3_dev_ipato_enable_store(struct device *dev,
 	} else if (!strcmp(tmp, "0")) {
 		card->ipato.enabled = 0;
 	} else {
+		PRINT_WARN("ipato_enable: write 0, 1 or 'toggle' to "
+			   "this file\n");
 		return -EINVAL;
 	}
 	return count;
@@ -402,6 +422,8 @@ static ssize_t qeth_l3_dev_ipato_invert4_store(struct device *dev,
 	} else if (!strcmp(tmp, "0")) {
 		card->ipato.invert4 = 0;
 	} else {
+		PRINT_WARN("ipato_invert4: write 0, 1 or 'toggle' to "
+			   "this file\n");
 		return -EINVAL;
 	}
 	return count;
@@ -464,10 +486,13 @@ static int qeth_l3_parse_ipatoe(const char *buf, enum qeth_prot_versions proto,
 	/* get address string */
 	end = strchr(start, '/');
 	if (!end || (end - start >= 40)) {
+		PRINT_WARN("Invalid format for ipato_addx/delx. "
+			   "Use <ip addr>/<mask bits>\n");
 		return -EINVAL;
 	}
 	strncpy(buffer, start, end - start);
 	if (qeth_l3_string_to_ipaddr(buffer, proto, addr)) {
+		PRINT_WARN("Invalid IP address format!\n");
 		return -EINVAL;
 	}
 	start = end + 1;
@@ -475,6 +500,7 @@ static int qeth_l3_parse_ipatoe(const char *buf, enum qeth_prot_versions proto,
 	if (!strlen(start) ||
 	    (tmp == start) ||
 	    (*mask_bits > ((proto == QETH_PROT_IPV4) ? 32 : 128))) {
+		PRINT_WARN("Invalid mask bits for ipato_addx/delx !\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -494,6 +520,7 @@ static ssize_t qeth_l3_dev_ipato_add_store(const char *buf, size_t count,
 
 	ipatoe = kzalloc(sizeof(struct qeth_ipato_entry), GFP_KERNEL);
 	if (!ipatoe) {
+		PRINT_WARN("No memory to allocate ipato entry\n");
 		return -ENOMEM;
 	}
 	ipatoe->proto = proto;
@@ -582,6 +609,8 @@ static ssize_t qeth_l3_dev_ipato_invert6_store(struct device *dev,
 	} else if (!strcmp(tmp, "0")) {
 		card->ipato.invert6 = 0;
 	} else {
+		PRINT_WARN("ipato_invert6: write 0, 1 or 'toggle' to "
+			   "this file\n");
 		return -EINVAL;
 	}
 	return count;
@@ -695,6 +724,7 @@ static int qeth_l3_parse_vipae(const char *buf, enum qeth_prot_versions proto,
 		 u8 *addr)
 {
 	if (qeth_l3_string_to_ipaddr(buf, proto, addr)) {
+		PRINT_WARN("Invalid IP address format!\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -861,6 +891,7 @@ static int qeth_l3_parse_rxipe(const char *buf, enum qeth_prot_versions proto,
 		 u8 *addr)
 {
 	if (qeth_l3_string_to_ipaddr(buf, proto, addr)) {
+		PRINT_WARN("Invalid IP address format!\n");
 		return -EINVAL;
 	}
 	return 0;

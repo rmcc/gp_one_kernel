@@ -18,13 +18,9 @@
 #include <asm/ia32.h>
 #include <asm/bootparam.h>
 
-#include <xen/interface/xen.h>
-
-#include <asm/sigframe.h>
-
 #define __NO_STUBS 1
 #undef __SYSCALL
-#undef _ASM_X86_UNISTD_64_H
+#undef _ASM_X86_64_UNISTD_H_
 #define __SYSCALL(nr, sym) [nr] = 1,
 static char syscalls[] = {
 #include <asm/unistd.h>
@@ -38,7 +34,7 @@ int main(void)
 	ENTRY(pid);
 	BLANK();
 #undef ENTRY
-#define ENTRY(entry) DEFINE(TI_ ## entry, offsetof(struct thread_info, entry))
+#define ENTRY(entry) DEFINE(threadinfo_ ## entry, offsetof(struct thread_info, entry))
 	ENTRY(flags);
 	ENTRY(addr_limit);
 	ENTRY(preempt_count);
@@ -49,7 +45,13 @@ int main(void)
 	BLANK();
 #undef ENTRY
 #define ENTRY(entry) DEFINE(pda_ ## entry, offsetof(struct x8664_pda, entry))
-	DEFINE(pda_size, sizeof(struct x8664_pda));
+	ENTRY(kernelstack); 
+	ENTRY(oldrsp); 
+	ENTRY(pcurrent); 
+	ENTRY(irqcount);
+	ENTRY(cpunumber);
+	ENTRY(irqstackptr);
+	ENTRY(data_offset);
 	BLANK();
 #undef ENTRY
 #ifdef CONFIG_PARAVIRT
@@ -59,11 +61,8 @@ int main(void)
 	OFFSET(PARAVIRT_PATCH_pv_irq_ops, paravirt_patch_template, pv_irq_ops);
 	OFFSET(PV_IRQ_irq_disable, pv_irq_ops, irq_disable);
 	OFFSET(PV_IRQ_irq_enable, pv_irq_ops, irq_enable);
-	OFFSET(PV_IRQ_adjust_exception_frame, pv_irq_ops, adjust_exception_frame);
 	OFFSET(PV_CPU_iret, pv_cpu_ops, iret);
-	OFFSET(PV_CPU_usergs_sysret32, pv_cpu_ops, usergs_sysret32);
-	OFFSET(PV_CPU_usergs_sysret64, pv_cpu_ops, usergs_sysret64);
-	OFFSET(PV_CPU_irq_enable_sysexit, pv_cpu_ops, irq_enable_sysexit);
+	OFFSET(PV_CPU_irq_enable_syscall_ret, pv_cpu_ops, irq_enable_syscall_ret);
 	OFFSET(PV_CPU_swapgs, pv_cpu_ops, swapgs);
 	OFFSET(PV_MMU_read_cr2, pv_mmu_ops, read_cr2);
 #endif
@@ -83,7 +82,7 @@ int main(void)
 	BLANK();
 #undef ENTRY
 	DEFINE(IA32_RT_SIGFRAME_sigcontext,
-	       offsetof (struct rt_sigframe_ia32, uc.uc_mcontext));
+	       offsetof (struct rt_sigframe32, uc.uc_mcontext));
 	BLANK();
 #endif
 	DEFINE(pbe_address, offsetof(struct pbe, address));
@@ -129,14 +128,5 @@ int main(void)
 	OFFSET(BP_loadflags, boot_params, hdr.loadflags);
 	OFFSET(BP_hardware_subarch, boot_params, hdr.hardware_subarch);
 	OFFSET(BP_version, boot_params, hdr.version);
-
-	BLANK();
-	DEFINE(PAGE_SIZE_asm, PAGE_SIZE);
-#ifdef CONFIG_XEN
-	BLANK();
-	OFFSET(XEN_vcpu_info_mask, vcpu_info, evtchn_upcall_mask);
-	OFFSET(XEN_vcpu_info_pending, vcpu_info, evtchn_upcall_pending);
-#undef ENTRY
-#endif
 	return 0;
 }

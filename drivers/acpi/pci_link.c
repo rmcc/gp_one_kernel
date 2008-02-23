@@ -113,23 +113,20 @@ acpi_pci_link_check_possible(struct acpi_resource *resource, void *context)
 
 	switch (resource->type) {
 	case ACPI_RESOURCE_TYPE_START_DEPENDENT:
-	case ACPI_RESOURCE_TYPE_END_TAG:
 		return AE_OK;
 	case ACPI_RESOURCE_TYPE_IRQ:
 		{
 			struct acpi_resource_irq *p = &resource->data.irq;
 			if (!p || !p->interrupt_count) {
-				ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-						  "Blank _PRS IRQ resource\n"));
+				printk(KERN_WARNING PREFIX "Blank IRQ resource\n");
 				return AE_OK;
 			}
 			for (i = 0;
 			     (i < p->interrupt_count
 			      && i < ACPI_PCI_LINK_MAX_POSSIBLE); i++) {
 				if (!p->interrupts[i]) {
-					printk(KERN_WARNING PREFIX
-					       "Invalid _PRS IRQ %d\n",
-					       p->interrupts[i]);
+					printk(KERN_WARNING PREFIX "Invalid IRQ %d\n",
+						      p->interrupts[i]);
 					continue;
 				}
 				link->irq.possible[i] = p->interrupts[i];
@@ -146,16 +143,15 @@ acpi_pci_link_check_possible(struct acpi_resource *resource, void *context)
 			    &resource->data.extended_irq;
 			if (!p || !p->interrupt_count) {
 				printk(KERN_WARNING PREFIX
-					      "Blank _PRS EXT IRQ resource\n");
+					      "Blank EXT IRQ resource\n");
 				return AE_OK;
 			}
 			for (i = 0;
 			     (i < p->interrupt_count
 			      && i < ACPI_PCI_LINK_MAX_POSSIBLE); i++) {
 				if (!p->interrupts[i]) {
-					printk(KERN_WARNING PREFIX
-					       "Invalid _PRS IRQ %d\n",
-					       p->interrupts[i]);
+					printk(KERN_WARNING PREFIX "Invalid IRQ %d\n",
+						      p->interrupts[i]);
 					continue;
 				}
 				link->irq.possible[i] = p->interrupts[i];
@@ -167,8 +163,7 @@ acpi_pci_link_check_possible(struct acpi_resource *resource, void *context)
 			break;
 		}
 	default:
-		printk(KERN_ERR PREFIX "_PRS resource type 0x%x isn't an IRQ\n",
-		       resource->type);
+		printk(KERN_ERR PREFIX "Resource is not an IRQ entry\n");
 		return AE_OK;
 	}
 
@@ -204,9 +199,6 @@ acpi_pci_link_check_current(struct acpi_resource *resource, void *context)
 
 
 	switch (resource->type) {
-	case ACPI_RESOURCE_TYPE_START_DEPENDENT:
-	case ACPI_RESOURCE_TYPE_END_TAG:
-		return AE_OK;
 	case ACPI_RESOURCE_TYPE_IRQ:
 		{
 			struct acpi_resource_irq *p = &resource->data.irq;
@@ -216,7 +208,7 @@ acpi_pci_link_check_current(struct acpi_resource *resource, void *context)
 				 * particularly those those w/ _STA disabled
 				 */
 				ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-						  "Blank _CRS IRQ resource\n"));
+						  "Blank IRQ resource\n"));
 				return AE_OK;
 			}
 			*irq = p->interrupts[0];
@@ -232,7 +224,7 @@ acpi_pci_link_check_current(struct acpi_resource *resource, void *context)
 				 * return at least 1 IRQ
 				 */
 				printk(KERN_WARNING PREFIX
-					      "Blank _CRS EXT IRQ resource\n");
+					      "Blank EXT IRQ resource\n");
 				return AE_OK;
 			}
 			*irq = p->interrupts[0];
@@ -240,11 +232,10 @@ acpi_pci_link_check_current(struct acpi_resource *resource, void *context)
 		}
 		break;
 	default:
-		printk(KERN_ERR PREFIX "_CRS resource type 0x%x isn't an IRQ\n",
-		       resource->type);
+		printk(KERN_ERR PREFIX "Resource %d isn't an IRQ\n", resource->type);
+	case ACPI_RESOURCE_TYPE_END_TAG:
 		return AE_OK;
 	}
-
 	return AE_CTRL_TERMINATE;
 }
 
@@ -531,7 +522,7 @@ int __init acpi_irq_penalty_init(void)
 	return 0;
 }
 
-static int acpi_irq_balance = -1;	/* 0: static, 1: balance */
+static int acpi_irq_balance;	/* 0: static, 1: balance */
 
 static int acpi_pci_link_allocate(struct acpi_pci_link *link)
 {
@@ -709,7 +700,7 @@ int acpi_pci_link_free_irq(acpi_handle handle)
 			  acpi_device_bid(link->device)));
 
 	if (link->refcnt == 0) {
-		acpi_evaluate_object(link->device->handle, "_DIS", NULL, NULL);
+		acpi_ut_evaluate_object(link->device->handle, "_DIS", 0, NULL);
 	}
 	mutex_unlock(&acpi_link_lock);
 	return (link->irq.active);
@@ -737,7 +728,7 @@ static int acpi_pci_link_add(struct acpi_device *device)
 	link->device = device;
 	strcpy(acpi_device_name(device), ACPI_PCI_LINK_DEVICE_NAME);
 	strcpy(acpi_device_class(device), ACPI_PCI_LINK_CLASS);
-	device->driver_data = link;
+	acpi_driver_data(device) = link;
 
 	mutex_lock(&acpi_link_lock);
 	result = acpi_pci_link_get_possible(link);
@@ -773,7 +764,7 @@ static int acpi_pci_link_add(struct acpi_device *device)
 
       end:
 	/* disable all links -- to be activated on use */
-	acpi_evaluate_object(device->handle, "_DIS", NULL, NULL);
+	acpi_ut_evaluate_object(device->handle, "_DIS", 0, NULL);
 	mutex_unlock(&acpi_link_lock);
 
 	if (result)
@@ -795,6 +786,10 @@ static int irqrouter_resume(struct sys_device *dev)
 {
 	struct list_head *node = NULL;
 	struct acpi_pci_link *link = NULL;
+
+
+	/* Make sure SCI is enabled again (Apple firmware bug?) */
+	acpi_set_register(ACPI_BITREG_SCI_ENABLE, 1);
 
 	list_for_each(node, &acpi_link.entries) {
 		link = list_entry(node, struct acpi_pci_link, node);
@@ -845,7 +840,7 @@ static int __init acpi_irq_penalty_update(char *str, int used)
 		if (irq < 0)
 			continue;
 
-		if (irq >= ARRAY_SIZE(acpi_irq_penalty))
+		if (irq >= ACPI_MAX_IRQS)
 			continue;
 
 		if (used)
@@ -868,12 +863,10 @@ static int __init acpi_irq_penalty_update(char *str, int used)
  */
 void acpi_penalize_isa_irq(int irq, int active)
 {
-	if (irq >= 0 && irq < ARRAY_SIZE(acpi_irq_penalty)) {
-		if (active)
-			acpi_irq_penalty[irq] += PIRQ_PENALTY_ISA_USED;
-		else
-			acpi_irq_penalty[irq] += PIRQ_PENALTY_PCI_USING;
-	}
+	if (active)
+		acpi_irq_penalty[irq] += PIRQ_PENALTY_ISA_USED;
+	else
+		acpi_irq_penalty[irq] += PIRQ_PENALTY_PCI_USING;
 }
 
 /*
@@ -908,7 +901,7 @@ static int __init acpi_irq_nobalance_set(char *str)
 
 __setup("acpi_irq_nobalance", acpi_irq_nobalance_set);
 
-static int __init acpi_irq_balance_set(char *str)
+int __init acpi_irq_balance_set(char *str)
 {
 	acpi_irq_balance = 1;
 	return 1;
@@ -946,16 +939,9 @@ device_initcall(irqrouter_init_sysfs);
 
 static int __init acpi_pci_link_init(void)
 {
+
 	if (acpi_noirq)
 		return 0;
-
-	if (acpi_irq_balance == -1) {
-		/* no command line switch: enable balancing in IOAPIC mode */
-		if (acpi_irq_model == ACPI_IRQ_MODEL_IOAPIC)
-			acpi_irq_balance = 1;
-		else
-			acpi_irq_balance = 0;
-	}
 
 	acpi_link.count = 0;
 	INIT_LIST_HEAD(&acpi_link.entries);

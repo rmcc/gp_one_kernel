@@ -27,7 +27,7 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 
-#include <mach/omapfb.h>
+#include <asm/arch/omapfb.h>
 
 #include "dispc.h"
 
@@ -59,7 +59,7 @@
 #define DISPC_CONTROL		0x0040
 
 static struct {
-	void __iomem	*base;
+	u32		base;
 	void		(*lcdc_callback)(void *data);
 	void		*lcdc_callback_data;
 	unsigned long	l4_khz;
@@ -518,11 +518,7 @@ static int rfbi_init(struct omapfb_device *fbdev)
 	int r;
 
 	rfbi.fbdev = fbdev;
-	rfbi.base = ioremap(RFBI_BASE, SZ_1K);
-	if (!rfbi.base) {
-		dev_err(fbdev->dev, "can't ioremap RFBI\n");
-		return -ENOMEM;
-	}
+	rfbi.base = io_p2v(RFBI_BASE);
 
 	if ((r = rfbi_get_clocks()) < 0)
 		return r;
@@ -570,7 +566,6 @@ static void rfbi_cleanup(void)
 {
 	omap_dispc_free_irq();
 	rfbi_put_clocks();
-	iounmap(rfbi.base);
 }
 
 const struct lcd_ctrl_extif omap2_ext_if = {

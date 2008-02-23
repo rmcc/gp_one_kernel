@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/uts.h>
 #include <linux/utsname.h>
+#include <linux/version.h>
 #include <linux/sysctl.h>
 
 static void *get_uts(ctl_table *table, int write)
@@ -60,7 +61,7 @@ static int proc_do_uts_string(ctl_table *table, int write, struct file *filp,
 
 #ifdef CONFIG_SYSCTL_SYSCALL
 /* The generic string strategy routine: */
-static int sysctl_uts_string(ctl_table *table,
+static int sysctl_uts_string(ctl_table *table, int __user *name, int nlen,
 		  void __user *oldval, size_t __user *oldlenp,
 		  void __user *newval, size_t newlen)
 {
@@ -69,7 +70,8 @@ static int sysctl_uts_string(ctl_table *table,
 	write = newval && newlen;
 	memcpy(&uts_table, table, sizeof(uts_table));
 	uts_table.data = get_uts(table, write);
-	r = sysctl_string(&uts_table, oldval, oldlenp, newval, newlen);
+	r = sysctl_string(&uts_table, name, nlen,
+		oldval, oldlenp, newval, newlen);
 	put_uts(table, write, uts_table.data);
 	return r;
 }

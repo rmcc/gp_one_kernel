@@ -31,9 +31,12 @@ MODULE_DESCRIPTION("Xtables: automatic-address SNAT");
 static DEFINE_RWLOCK(masq_lock);
 
 /* FIXME: Multiple targets. --RR */
-static bool masquerade_tg_check(const struct xt_tgchk_param *par)
+static bool
+masquerade_tg_check(const char *tablename, const void *e,
+                    const struct xt_target *target, void *targinfo,
+                    unsigned int hook_mask)
 {
-	const struct nf_nat_multi_range_compat *mr = par->targinfo;
+	const struct nf_nat_multi_range_compat *mr = targinfo;
 
 	if (mr->range[0].flags & IP_NAT_RANGE_MAP_IPS) {
 		pr_debug("masquerade_check: bad MAP_IPS.\n");
@@ -47,7 +50,9 @@ static bool masquerade_tg_check(const struct xt_tgchk_param *par)
 }
 
 static unsigned int
-masquerade_tg(struct sk_buff *skb, const struct xt_target_param *par)
+masquerade_tg(struct sk_buff *skb, const struct net_device *in,
+              const struct net_device *out, unsigned int hooknum,
+              const struct xt_target *target, const void *targinfo)
 {
 	struct nf_conn *ct;
 	struct nf_conn_nat *nat;
@@ -57,7 +62,7 @@ masquerade_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	const struct rtable *rt;
 	__be32 newsrc;
 
-	NF_CT_ASSERT(par->hooknum == NF_INET_POST_ROUTING);
+	NF_CT_ASSERT(hooknum == NF_INET_POST_ROUTING);
 
 	ct = nf_ct_get(skb, &ctinfo);
 	nat = nfct_nat(ct);
@@ -71,16 +76,16 @@ masquerade_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == 0)
 		return NF_ACCEPT;
 
-	mr = par->targinfo;
+	mr = targinfo;
 	rt = skb->rtable;
-	newsrc = inet_select_addr(par->out, rt->rt_gateway, RT_SCOPE_UNIVERSE);
+	newsrc = inet_select_addr(out, rt->rt_gateway, RT_SCOPE_UNIVERSE);
 	if (!newsrc) {
-		printk("MASQUERADE: %s ate my IP address\n", par->out->name);
+		printk("MASQUERADE: %s ate my IP address\n", out->name);
 		return NF_DROP;
 	}
 
 	write_lock_bh(&masq_lock);
-	nat->masq_index = par->out->ifindex;
+	nat->masq_index = out->ifindex;
 	write_unlock_bh(&masq_lock);
 
 	/* Transfer from original range. */
@@ -114,7 +119,9 @@ static int masq_device_event(struct notifier_block *this,
 			     void *ptr)
 {
 	const struct net_device *dev = ptr;
-	struct net *net = dev_net(dev);
+
+	if (dev_net(dev) != &init_net)
+		return NOTIFY_DONE;
 
 	if (event == NETDEV_DOWN) {
 		/* Device was downed.  Search entire table for
@@ -122,8 +129,7 @@ static int masq_device_event(struct notifier_block *this,
 		   and forget them. */
 		NF_CT_ASSERT(dev->ifindex != 0);
 
-		nf_ct_iterate_cleanup(net, device_cmp,
-				      (void *)(long)dev->ifindex);
+		nf_ct_iterate_cleanup(device_cmp, (void *)(long)dev->ifindex);
 	}
 
 	return NOTIFY_DONE;
@@ -147,7 +153,7 @@ static struct notifier_block masq_inet_notifier = {
 
 static struct xt_target masquerade_tg_reg __read_mostly = {
 	.name		= "MASQUERADE",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.target		= masquerade_tg,
 	.targetsize	= sizeof(struct nf_nat_multi_range_compat),
 	.table		= "nat",

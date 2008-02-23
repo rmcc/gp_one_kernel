@@ -10,7 +10,6 @@
 #include <linux/rbtree.h>
 #include <linux/rwsem.h>
 #include <linux/completion.h>
-#include <linux/cpumask.h>
 #include <asm/page.h>
 #include <asm/mmu.h>
 
@@ -21,13 +20,11 @@
 
 struct address_space;
 
-#define USE_SPLIT_PTLOCKS	(NR_CPUS >= CONFIG_SPLIT_PTLOCK_CPUS)
-
-#if USE_SPLIT_PTLOCKS
+#if NR_CPUS >= CONFIG_SPLIT_PTLOCK_CPUS
 typedef atomic_long_t mm_counter_t;
-#else  /* !USE_SPLIT_PTLOCKS */
+#else  /* NR_CPUS < CONFIG_SPLIT_PTLOCK_CPUS */
 typedef unsigned long mm_counter_t;
-#endif /* !USE_SPLIT_PTLOCKS */
+#endif /* NR_CPUS < CONFIG_SPLIT_PTLOCK_CPUS */
 
 /*
  * Each physical page in the system has a struct page associated with
@@ -67,7 +64,7 @@ struct page {
 						 * see PAGE_MAPPING_ANON below.
 						 */
 	    };
-#if USE_SPLIT_PTLOCKS
+#if NR_CPUS >= CONFIG_SPLIT_PTLOCK_CPUS
 	    spinlock_t ptl;
 #endif
 	    struct kmem_cache *slab;	/* SLUB: Pointer to slab */
@@ -94,23 +91,9 @@ struct page {
 	void *virtual;			/* Kernel virtual address (NULL if
 					   not kmapped, ie. highmem) */
 #endif /* WANT_PAGE_VIRTUAL */
-};
-
-/*
- * A region containing a mapping of a non-memory backed file under NOMMU
- * conditions.  These are held in a global tree and are pinned by the VMAs that
- * map parts of them.
- */
-struct vm_region {
-	struct rb_node	vm_rb;		/* link in global region tree */
-	unsigned long	vm_flags;	/* VMA vm_flags */
-	unsigned long	vm_start;	/* start address of region */
-	unsigned long	vm_end;		/* region initialised to here */
-	unsigned long	vm_top;		/* region allocated to here */
-	unsigned long	vm_pgoff;	/* the offset in vm_file corresponding to vm_start */
-	struct file	*vm_file;	/* the backing file or NULL */
-
-	atomic_t	vm_usage;	/* region usage count */
+#ifdef CONFIG_CGROUP_MEM_RES_CTLR
+	unsigned long page_cgroup;
+#endif
 };
 
 /*
@@ -129,7 +112,7 @@ struct vm_area_struct {
 	struct vm_area_struct *vm_next;
 
 	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
-	unsigned long vm_flags;		/* Flags, see mm.h. */
+	unsigned long vm_flags;		/* Flags, listed below. */
 
 	struct rb_node vm_rb;
 
@@ -169,22 +152,11 @@ struct vm_area_struct {
 	unsigned long vm_truncate_count;/* truncate_count or restart_addr */
 
 #ifndef CONFIG_MMU
-	struct vm_region *vm_region;	/* NOMMU mapping region */
+	atomic_t vm_usage;		/* refcount (VMAs shared if !MMU) */
 #endif
 #ifdef CONFIG_NUMA
 	struct mempolicy *vm_policy;	/* NUMA policy for the VMA */
 #endif
-};
-
-struct core_thread {
-	struct task_struct *task;
-	struct core_thread *next;
-};
-
-struct core_state {
-	atomic_t nr_threads;
-	struct core_thread dumper;
-	struct completion startup;
 };
 
 struct mm_struct {
@@ -203,6 +175,7 @@ struct mm_struct {
 	atomic_t mm_users;			/* How many users with user space? */
 	atomic_t mm_count;			/* How many references to "struct mm_struct" (users count as 1) */
 	int map_count;				/* number of VMAs */
+	int core_waiters;
 	struct rw_semaphore mmap_sem;
 	spinlock_t page_table_lock;		/* Protects page tables and some counters */
 
@@ -246,12 +219,12 @@ struct mm_struct {
 
 	unsigned long flags; /* Must use atomic bitops to access the bits */
 
-	struct core_state *core_state; /* coredumping support */
+	/* coredumping support */
+	struct completion *core_startup_done, core_done;
 
 	/* aio bits */
-	spinlock_t		ioctx_lock;
-	struct hlist_head	ioctx_list;
-
+	rwlock_t		ioctx_list_lock;	/* aio lock */
+	struct kioctx		*ioctx_list;
 #ifdef CONFIG_MM_OWNER
 	/*
 	 * "owner" points to a task that is regarded as the canonical
@@ -270,9 +243,6 @@ struct mm_struct {
 	/* store ref to file /proc/<pid>/exe symlink points to */
 	struct file *exe_file;
 	unsigned long num_exe_file_vmas;
-#endif
-#ifdef CONFIG_MMU_NOTIFIER
-	struct mmu_notifier_mm *mmu_notifier_mm;
 #endif
 };
 

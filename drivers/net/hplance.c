@@ -220,12 +220,12 @@ static int hplance_close(struct net_device *dev)
         return 0;
 }
 
-static int __init hplance_init_module(void)
+int __init hplance_init_module(void)
 {
 	return dio_register_driver(&hplance_driver);
 }
 
-static void __exit hplance_cleanup_module(void)
+void __exit hplance_cleanup_module(void)
 {
         dio_unregister_driver(&hplance_driver);
 }

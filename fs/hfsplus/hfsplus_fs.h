@@ -11,7 +11,6 @@
 #define _LINUX_HFSPLUS_FS_H
 
 #include <linux/fs.h>
-#include <linux/mutex.h>
 #include <linux/buffer_head.h>
 #include "hfsplus_raw.h"
 
@@ -155,7 +154,7 @@ struct hfsplus_sb_info {
 
 
 struct hfsplus_inode_info {
-	struct mutex extents_lock;
+	struct semaphore extents_lock;
 	u32 clump_blocks, alloc_blocks;
 	sector_t fs_blocks;
 	/* Allocation extents from catalog record or volume header */

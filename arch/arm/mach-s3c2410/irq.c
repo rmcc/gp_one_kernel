@@ -25,8 +25,8 @@
 #include <linux/ioport.h>
 #include <linux/sysdev.h>
 
-#include <plat/cpu.h>
-#include <plat/pm.h>
+#include <asm/plat-s3c24xx/cpu.h>
+#include <asm/plat-s3c24xx/pm.h>
 
 static int s3c2410_irq_add(struct sys_device *sysdev)
 {

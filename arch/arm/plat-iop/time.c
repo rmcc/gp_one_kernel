@@ -18,13 +18,13 @@
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/timex.h>
-#include <linux/io.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
+#include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
-#include <mach/time.h>
+#include <asm/arch/time.h>
 
 static unsigned long ticks_per_jiffy;
 static unsigned long ticks_per_usec;

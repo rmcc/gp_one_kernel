@@ -12,7 +12,6 @@
  */
 enum dma_attr {
 	DMA_ATTR_WRITE_BARRIER,
-	DMA_ATTR_WEAK_ORDERING,
 	DMA_ATTR_MAX,
 };
 

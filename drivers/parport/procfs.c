@@ -429,6 +429,9 @@ struct parport_default_sysctl_table
 	ctl_table dev_dir[2];
 };
 
+extern unsigned long parport_default_timeslice;
+extern int parport_default_spintime;
+
 static struct parport_default_sysctl_table
 parport_default_sysctl_table = {
 	.sysctl_header	= NULL,

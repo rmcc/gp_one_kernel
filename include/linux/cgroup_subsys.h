@@ -48,15 +48,3 @@ SUBSYS(devices)
 #endif
 
 /* */
-
-#ifdef CONFIG_CGROUP_FREEZER
-SUBSYS(freezer)
-#endif
-
-/* */
-
-#ifdef CONFIG_NET_CLS_CGROUP
-SUBSYS(net_cls)
-#endif
-
-/* */

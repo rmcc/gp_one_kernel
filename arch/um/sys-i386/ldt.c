@@ -14,8 +14,8 @@
 
 extern int modify_ldt(int func, void *ptr, unsigned long bytecount);
 
-static long write_ldt_entry(struct mm_id *mm_idp, int func,
-		     struct user_desc *desc, void **addr, int done)
+long write_ldt_entry(struct mm_id * mm_idp, int func, struct user_desc * desc,
+		     void **addr, int done)
 {
 	long res;
 

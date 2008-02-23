@@ -39,8 +39,6 @@ typedef struct _drive_info_struct
 				   *to prevent it from being opened or it's queue
 				   *from being started.
 				  */
-	__u8 serial_no[16]; /* from inquiry page 0x83, */
-			    /* not necc. null terminated. */
 } drive_info_struct;
 
 #ifdef CONFIG_CISS_SCSI_TAPE
@@ -89,8 +87,8 @@ struct ctlr_info
 	struct access_method access;
 
 	/* queue and queue Info */ 
-	struct hlist_head reqQ;
-	struct hlist_head cmpQ;
+	CommandList_struct *reqQ;
+	CommandList_struct  *cmpQ;
 	unsigned int Qdepth;
 	unsigned int maxQsinceinit;
 	unsigned int maxSG;

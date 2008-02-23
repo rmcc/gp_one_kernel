@@ -28,7 +28,8 @@
 #include <linux/signal.h>
 #include <linux/platform_device.h>
 
-#include <mach/hardware.h>
+#include <asm/mach-types.h>
+#include <asm/hardware.h>
 
 static struct clk *usb_host_clock;
 

@@ -69,7 +69,6 @@ struct dummy_slot {
 };
 
 static int debug;
-static int dup_slots;
 static LIST_HEAD(slot_list);
 static struct workqueue_struct *dummyphp_wq;
 
@@ -96,15 +95,11 @@ static void dummy_release(struct hotplug_slot *slot)
 	kfree(dslot);
 }
 
-#define SLOT_NAME_SIZE	8
-
 static int add_slot(struct pci_dev *dev)
 {
 	struct dummy_slot *dslot;
 	struct hotplug_slot *slot;
-	char name[SLOT_NAME_SIZE];
 	int retval = -ENOMEM;
-	static int count = 1;
 
 	slot = kzalloc(sizeof(struct hotplug_slot), GFP_KERNEL);
 	if (!slot)
@@ -118,26 +113,23 @@ static int add_slot(struct pci_dev *dev)
 	slot->info->max_bus_speed = PCI_SPEED_UNKNOWN;
 	slot->info->cur_bus_speed = PCI_SPEED_UNKNOWN;
 
+	slot->name = &dev->dev.bus_id[0];
+	dbg("slot->name = %s\n", slot->name);
+
 	dslot = kzalloc(sizeof(struct dummy_slot), GFP_KERNEL);
 	if (!dslot)
 		goto error_info;
 
-	if (dup_slots)
-		snprintf(name, SLOT_NAME_SIZE, "fake");
-	else
-		snprintf(name, SLOT_NAME_SIZE, "fake%d", count++);
-	dbg("slot->name = %s\n", name);
 	slot->ops = &dummy_hotplug_slot_ops;
 	slot->release = &dummy_release;
 	slot->private = dslot;
 
-	retval = pci_hp_register(slot, dev->bus, PCI_SLOT(dev->devfn), name);
+	retval = pci_hp_register(slot);
 	if (retval) {
 		err("pci_hp_register failed with error %d\n", retval);
 		goto error_dslot;
 	}
 
-	dbg("slot->name = %s\n", hotplug_slot_name(slot));
 	dslot->slot = slot;
 	dslot->dev = pci_dev_get(dev);
 	list_add (&dslot->node, &slot_list);
@@ -156,28 +148,27 @@ error:
 static int __init pci_scan_buses(void)
 {
 	struct pci_dev *dev = NULL;
-	int lastslot = 0;
+	int retval = 0;
 
 	while ((dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev)) != NULL) {
-		if (PCI_FUNC(dev->devfn) > 0 &&
-				lastslot == PCI_SLOT(dev->devfn))
-			continue;
-		lastslot = PCI_SLOT(dev->devfn);
-		add_slot(dev);
+		retval = add_slot(dev);
+		if (retval) {
+			pci_dev_put(dev);
+			break;
+		}
 	}
 
-	return 0;
+	return retval;
 }
 
 static void remove_slot(struct dummy_slot *dslot)
 {
 	int retval;
 
-	dbg("removing slot %s\n", hotplug_slot_name(dslot->slot));
+	dbg("removing slot %s\n", dslot->slot->name);
 	retval = pci_hp_deregister(dslot->slot);
 	if (retval)
-		err("Problem unregistering a slot %s\n",
-			hotplug_slot_name(dslot->slot));
+		err("Problem unregistering a slot %s\n", dslot->slot->name);
 }
 
 /* called from the single-threaded workqueue handler to remove a slot */
@@ -305,9 +296,23 @@ static int enable_slot(struct hotplug_slot *hotplug_slot)
 	return 0;
 }
 
+/* find the hotplug_slot for the pci_dev */
+static struct hotplug_slot *get_slot_from_dev(struct pci_dev *dev)
+{
+	struct dummy_slot *dslot;
+
+	list_for_each_entry(dslot, &slot_list, node) {
+		if (dslot->dev == dev)
+			return dslot->slot;
+	}
+	return NULL;
+}
+
+
 static int disable_slot(struct hotplug_slot *slot)
 {
 	struct dummy_slot *dslot;
+	struct hotplug_slot *hslot;
 	struct pci_dev *dev;
 	int func;
 
@@ -315,30 +320,43 @@ static int disable_slot(struct hotplug_slot *slot)
 		return -ENODEV;
 	dslot = slot->private;
 
-	dbg("%s - physical_slot = %s\n", __func__, hotplug_slot_name(slot));
+	dbg("%s - physical_slot = %s\n", __func__, slot->name);
 
-	for (func = 7; func >= 0; func--) {
-		dev = pci_get_slot(dslot->dev->bus, dslot->dev->devfn + func);
-		if (!dev)
-			continue;
-
-		if (test_and_set_bit(0, &dslot->removed)) {
-			dbg("Slot already scheduled for removal\n");
-			pci_dev_put(dev);
-			return -ENODEV;
-		}
-
-		/* remove the device from the pci core */
-		pci_remove_bus_device(dev);
-
-		/* queue work item to blow away this sysfs entry and other
-		 * parts.
-		 */
-		INIT_WORK(&dslot->remove_work, remove_slot_worker);
-		queue_work(dummyphp_wq, &dslot->remove_work);
-
-		pci_dev_put(dev);
+	/* don't disable bridged devices just yet, we can't handle them easily... */
+	if (dslot->dev->subordinate) {
+		err("Can't remove PCI devices with other PCI devices behind it yet.\n");
+		return -ENODEV;
 	}
+	if (test_and_set_bit(0, &dslot->removed)) {
+		dbg("Slot already scheduled for removal\n");
+		return -ENODEV;
+	}
+	/* search for subfunctions and disable them first */
+	if (!(dslot->dev->devfn & 7)) {
+		for (func = 1; func < 8; func++) {
+			dev = pci_get_slot(dslot->dev->bus,
+					dslot->dev->devfn + func);
+			if (dev) {
+				hslot = get_slot_from_dev(dev);
+				if (hslot)
+					disable_slot(hslot);
+				else {
+					err("Hotplug slot not found for subfunction of PCI device\n");
+					return -ENODEV;
+				}
+				pci_dev_put(dev);
+			} else
+				dbg("No device in slot found\n");
+		}
+	}
+
+	/* remove the device from the pci core */
+	pci_remove_bus_device(dslot->dev);
+
+	/* queue work item to blow away this sysfs entry and other parts. */
+	INIT_WORK(&dslot->remove_work, remove_slot_worker);
+	queue_work(dummyphp_wq, &dslot->remove_work);
+
 	return 0;
 }
 
@@ -381,5 +399,4 @@ MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL");
 module_param(debug, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Debugging mode enabled or not");
-module_param(dup_slots, bool, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(dup_slots, "Force duplicate slot names for debugging");
+

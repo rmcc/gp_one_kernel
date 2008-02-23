@@ -917,7 +917,9 @@ static int dst_get_mac(struct dst_state *state)
 	}
 	memset(&state->mac_address, '\0', 8);
 	memcpy(&state->mac_address, &state->rxbuffer, 6);
-	dprintk(verbose, DST_ERROR, 1, "MAC Address=[%pM]", state->mac_address);
+	dprintk(verbose, DST_ERROR, 1, "MAC Address=[%02x:%02x:%02x:%02x:%02x:%02x]",
+		state->mac_address[0], state->mac_address[1], state->mac_address[2],
+		state->mac_address[4], state->mac_address[5], state->mac_address[6]);
 
 	return 0;
 }
@@ -1242,7 +1244,7 @@ static int dst_command(struct dst_state *state, u8 *data, u8 len)
 		goto error;
 	}
 	if (state->type_flags & DST_TYPE_HAS_FW_1)
-		mdelay(3);
+		udelay(3000);
 	if (read_dst(state, &reply, GET_ACK)) {
 		dprintk(verbose, DST_DEBUG, 1, "Trying to recover.. ");
 		if ((dst_error_recovery(state)) < 0) {
@@ -1258,7 +1260,7 @@ static int dst_command(struct dst_state *state, u8 *data, u8 len)
 	if (len >= 2 && data[0] == 0 && (data[1] == 1 || data[1] == 3))
 		goto error;
 	if (state->type_flags & DST_TYPE_HAS_FW_1)
-		mdelay(3);
+		udelay(3000);
 	else
 		udelay(2000);
 	if (!dst_wait_dst_ready(state, NO_DELAY))

@@ -46,11 +46,14 @@
 #include <asm/tsb.h>
 #include <asm/hypervisor.h>
 #include <asm/prom.h>
+#include <asm/sstate.h>
 #include <asm/mdesc.h>
 #include <asm/cpudata.h>
-#include <asm/irq.h>
 
-#include "init.h"
+#define MAX_PHYS_ADDRESS	(1UL << 42UL)
+#define KPTE_BITMAP_CHUNK_SZ	(256UL * 1024UL * 1024UL)
+#define KPTE_BITMAP_BYTES	\
+	((MAX_PHYS_ADDRESS / KPTE_BITMAP_CHUNK_SZ) / 8)
 
 unsigned long kern_linear_pte_xor[2] __read_mostly;
 
@@ -389,6 +392,51 @@ void __kprobes flush_icache_range(unsigned long start, unsigned long end)
 	}
 }
 
+void show_mem(void)
+{
+	unsigned long total = 0, reserved = 0;
+	unsigned long shared = 0, cached = 0;
+	pg_data_t *pgdat;
+
+	printk(KERN_INFO "Mem-info:\n");
+	show_free_areas();
+	printk(KERN_INFO "Free swap:       %6ldkB\n",
+	       nr_swap_pages << (PAGE_SHIFT-10));
+	for_each_online_pgdat(pgdat) {
+		unsigned long i, flags;
+
+		pgdat_resize_lock(pgdat, &flags);
+		for (i = 0; i < pgdat->node_spanned_pages; i++) {
+			struct page *page = pgdat_page_nr(pgdat, i);
+			total++;
+			if (PageReserved(page))
+				reserved++;
+			else if (PageSwapCache(page))
+				cached++;
+			else if (page_count(page))
+				shared += page_count(page) - 1;
+		}
+		pgdat_resize_unlock(pgdat, &flags);
+	}
+
+	printk(KERN_INFO "%lu pages of RAM\n", total);
+	printk(KERN_INFO "%lu reserved pages\n", reserved);
+	printk(KERN_INFO "%lu pages shared\n", shared);
+	printk(KERN_INFO "%lu pages swap cached\n", cached);
+
+	printk(KERN_INFO "%lu pages dirty\n",
+	       global_page_state(NR_FILE_DIRTY));
+	printk(KERN_INFO "%lu pages writeback\n",
+	       global_page_state(NR_WRITEBACK));
+	printk(KERN_INFO "%lu pages mapped\n",
+	       global_page_state(NR_FILE_MAPPED));
+	printk(KERN_INFO "%lu pages slab\n",
+		global_page_state(NR_SLAB_RECLAIMABLE) +
+		global_page_state(NR_SLAB_UNRECLAIMABLE));
+	printk(KERN_INFO "%lu pages pagetables\n",
+	       global_page_state(NR_PAGETABLE));
+}
+
 void mmu_info(struct seq_file *m)
 {
 	if (tlb_type == cheetah)
@@ -412,9 +460,17 @@ void mmu_info(struct seq_file *m)
 #endif /* CONFIG_DEBUG_DCFLUSH */
 }
 
+struct linux_prom_translation {
+	unsigned long virt;
+	unsigned long size;
+	unsigned long data;
+};
+
+/* Exported for kernel TLB miss handling in ktlb.S */
 struct linux_prom_translation prom_trans[512] __read_mostly;
 unsigned int prom_trans_ents __read_mostly;
 
+/* Exported for SMP bootup purposes. */
 unsigned long kern_locked_tte_data;
 
 /* The obp translations are saved based on 8k pagesize, since obp can
@@ -732,6 +788,7 @@ int numa_cpu_lookup_table[NR_CPUS];
 cpumask_t numa_cpumask_lookup_table[MAX_NUMNODES];
 
 #ifdef CONFIG_NEED_MULTIPLE_NODES
+static bootmem_data_t plat_node_bdata[MAX_NUMNODES];
 
 struct mdesc_mblock {
 	u64	base;
@@ -784,9 +841,6 @@ static unsigned long nid_range(unsigned long start, unsigned long end,
 		start += PAGE_SIZE;
 	}
 
-	if (start > end)
-		start = end;
-
 	return start;
 }
 #else
@@ -817,7 +871,7 @@ static void __init allocate_node_data(int nid)
 	NODE_DATA(nid) = __va(paddr);
 	memset(NODE_DATA(nid), 0, sizeof(struct pglist_data));
 
-	NODE_DATA(nid)->bdata = &bootmem_node_data[nid];
+	NODE_DATA(nid)->bdata = &plat_node_bdata[nid];
 #endif
 
 	p = NODE_DATA(nid);
@@ -926,10 +980,6 @@ int of_node_to_nid(struct device_node *dp)
 	int count, nid;
 	u64 grp;
 
-	/* This is the right thing to do on currently supported
-	 * SUN4U NUMA platforms as well, as the PCI controller does
-	 * not sit behind any particular memory controller.
-	 */
 	if (!mlgroups)
 		return -1;
 
@@ -1198,44 +1248,8 @@ out:
 	return err;
 }
 
-static int __init numa_parse_jbus(void)
-{
-	unsigned long cpu, index;
-
-	/* NUMA node id is encoded in bits 36 and higher, and there is
-	 * a 1-to-1 mapping from CPU ID to NUMA node ID.
-	 */
-	index = 0;
-	for_each_present_cpu(cpu) {
-		numa_cpu_lookup_table[cpu] = index;
-		numa_cpumask_lookup_table[index] = cpumask_of_cpu(cpu);
-		node_masks[index].mask = ~((1UL << 36UL) - 1UL);
-		node_masks[index].val = cpu << 36UL;
-
-		index++;
-	}
-	num_node_masks = index;
-
-	add_node_ranges();
-
-	for (index = 0; index < num_node_masks; index++) {
-		allocate_node_data(index);
-		node_set_online(index);
-	}
-
-	return 0;
-}
-
 static int __init numa_parse_sun4u(void)
 {
-	if (tlb_type == cheetah || tlb_type == cheetah_plus) {
-		unsigned long ver;
-
-		__asm__ ("rdpr %%ver, %0" : "=r" (ver));
-		if ((ver >> 32UL) == __JALAPENO_ID ||
-		    (ver >> 32UL) == __SERRANO_ID)
-			return numa_parse_jbus();
-	}
 	return -1;
 }
 
@@ -1661,6 +1675,8 @@ void __cpuinit sun4v_ktsb_register(void)
 
 /* paging_init() sets up the page tables */
 
+extern void central_probe(void);
+
 static unsigned long last_valid_pfn;
 pgd_t swapper_pg_dir[2048];
 
@@ -1704,6 +1720,8 @@ void __init paging_init(void)
 
 	kern_base = (prom_boot_mapping_phys_low >> 22UL) << 22UL;
 	kern_size = (unsigned long)&_end - (unsigned long)KERNBASE;
+
+	sstate_booting();
 
 	/* Invalidate both kernel TSBs.  */
 	memset(swapper_tsb, 0x40, sizeof(swapper_tsb));
@@ -1750,7 +1768,8 @@ void __init paging_init(void)
 
 	find_ramdisk(phys_base);
 
-	lmb_enforce_memory_limit(cmdline_memory_size);
+	if (cmdline_memory_size)
+		lmb_enforce_memory_limit(phys_base + cmdline_memory_size);
 
 	lmb_analyze();
 	lmb_dump_all();
@@ -1798,16 +1817,6 @@ void __init paging_init(void)
 	if (tlb_type == hypervisor)
 		sun4v_mdesc_init();
 
-	/* Once the OF device tree and MDESC have been setup, we know
-	 * the list of possible cpus.  Therefore we can allocate the
-	 * IRQ stacks.
-	 */
-	for_each_possible_cpu(i) {
-		/* XXX Use node local allocations... XXX */
-		softirq_stack[i] = __va(lmb_alloc(THREAD_SIZE, THREAD_SIZE));
-		hardirq_stack[i] = __va(lmb_alloc(THREAD_SIZE, THREAD_SIZE));
-	}
-
 	/* Setup bootmem... */
 	last_valid_pfn = end_pfn = bootmem_init(phys_base);
 
@@ -1827,6 +1836,9 @@ void __init paging_init(void)
 	}
 
 	printk("Booting Linux...\n");
+
+	central_probe();
+	cpu_probe();
 }
 
 int __init page_in_phys_avail(unsigned long paddr)
@@ -1864,7 +1876,7 @@ static int pavail_rescan_ents __initdata;
  * memory list again, and make sure it provides at least as much
  * memory as 'pavail' does.
  */
-static void __init setup_valid_addr_bitmap_from_pavail(void)
+static void setup_valid_addr_bitmap_from_pavail(void)
 {
 	int i;
 
@@ -1984,15 +1996,6 @@ void __init mem_init(void)
 void free_initmem(void)
 {
 	unsigned long addr, initend;
-	int do_free = 1;
-
-	/* If the physical memory maps were trimmed by kernel command
-	 * line options, don't even try freeing this initmem stuff up.
-	 * The kernel image could have been in the trimmed out region
-	 * and if so the freeing below will free invalid page structs.
-	 */
-	if (cmdline_memory_size)
-		do_free = 0;
 
 	/*
 	 * The init section is aligned to 8k in vmlinux.lds. Page align for >8k pagesizes.
@@ -2007,16 +2010,13 @@ void free_initmem(void)
 			((unsigned long) __va(kern_base)) -
 			((unsigned long) KERNBASE));
 		memset((void *)addr, POISON_FREE_INITMEM, PAGE_SIZE);
+		p = virt_to_page(page);
 
-		if (do_free) {
-			p = virt_to_page(page);
-
-			ClearPageReserved(p);
-			init_page_count(p);
-			__free_page(p);
-			num_physpages++;
-			totalram_pages++;
-		}
+		ClearPageReserved(p);
+		init_page_count(p);
+		__free_page(p);
+		num_physpages++;
+		totalram_pages++;
 	}
 }
 
@@ -2053,6 +2053,7 @@ pgprot_t PAGE_COPY __read_mostly;
 pgprot_t PAGE_SHARED __read_mostly;
 EXPORT_SYMBOL(PAGE_SHARED);
 
+pgprot_t PAGE_EXEC __read_mostly;
 unsigned long pg_iobits __read_mostly;
 
 unsigned long _PAGE_IE __read_mostly;
@@ -2065,6 +2066,14 @@ unsigned long _PAGE_CACHE __read_mostly;
 EXPORT_SYMBOL(_PAGE_CACHE);
 
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
+
+#define VMEMMAP_CHUNK_SHIFT	22
+#define VMEMMAP_CHUNK		(1UL << VMEMMAP_CHUNK_SHIFT)
+#define VMEMMAP_CHUNK_MASK	~(VMEMMAP_CHUNK - 1UL)
+#define VMEMMAP_ALIGN(x)	(((x)+VMEMMAP_CHUNK-1UL)&VMEMMAP_CHUNK_MASK)
+
+#define VMEMMAP_SIZE	((((1UL << MAX_PHYSADDR_BITS) >> PAGE_SHIFT) * \
+			  sizeof(struct page *)) >> VMEMMAP_CHUNK_SHIFT)
 unsigned long vmemmap_table[VMEMMAP_SIZE];
 
 int __meminit vmemmap_populate(struct page *start, unsigned long nr, int node)
@@ -2148,6 +2157,7 @@ static void __init sun4u_pgprot_init(void)
 				       _PAGE_CACHE_4U | _PAGE_P_4U |
 				       __ACCESS_BITS_4U | __DIRTY_BITS_4U |
 				       _PAGE_EXEC_4U | _PAGE_L_4U);
+	PAGE_EXEC = __pgprot(_PAGE_EXEC_4U);
 
 	_PAGE_IE = _PAGE_IE_4U;
 	_PAGE_E = _PAGE_E_4U;
@@ -2158,10 +2168,10 @@ static void __init sun4u_pgprot_init(void)
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 	kern_linear_pte_xor[0] = (_PAGE_VALID | _PAGE_SZBITS_4U) ^
-		0xfffff80000000000UL;
+		0xfffff80000000000;
 #else
 	kern_linear_pte_xor[0] = (_PAGE_VALID | _PAGE_SZ4MB_4U) ^
-		0xfffff80000000000UL;
+		0xfffff80000000000;
 #endif
 	kern_linear_pte_xor[0] |= (_PAGE_CP_4U | _PAGE_CV_4U |
 				   _PAGE_P_4U | _PAGE_W_4U);
@@ -2199,6 +2209,7 @@ static void __init sun4v_pgprot_init(void)
 				__ACCESS_BITS_4V | __DIRTY_BITS_4V |
 				_PAGE_EXEC_4V);
 	PAGE_KERNEL_LOCKED = PAGE_KERNEL;
+	PAGE_EXEC = __pgprot(_PAGE_EXEC_4V);
 
 	_PAGE_IE = _PAGE_IE_4V;
 	_PAGE_E = _PAGE_E_4V;
@@ -2206,20 +2217,20 @@ static void __init sun4v_pgprot_init(void)
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 	kern_linear_pte_xor[0] = (_PAGE_VALID | _PAGE_SZBITS_4V) ^
-		0xfffff80000000000UL;
+		0xfffff80000000000;
 #else
 	kern_linear_pte_xor[0] = (_PAGE_VALID | _PAGE_SZ4MB_4V) ^
-		0xfffff80000000000UL;
+		0xfffff80000000000;
 #endif
 	kern_linear_pte_xor[0] |= (_PAGE_CP_4V | _PAGE_CV_4V |
 				   _PAGE_P_4V | _PAGE_W_4V);
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 	kern_linear_pte_xor[1] = (_PAGE_VALID | _PAGE_SZBITS_4V) ^
-		0xfffff80000000000UL;
+		0xfffff80000000000;
 #else
 	kern_linear_pte_xor[1] = (_PAGE_VALID | _PAGE_SZ256MB_4V) ^
-		0xfffff80000000000UL;
+		0xfffff80000000000;
 #endif
 	kern_linear_pte_xor[1] |= (_PAGE_CP_4V | _PAGE_CV_4V |
 				   _PAGE_P_4V | _PAGE_W_4V);

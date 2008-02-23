@@ -315,8 +315,7 @@ int snd_seq_enqueue_event(struct snd_seq_event_cell *cell, int atomic, int hop)
 	int dest, err;
 	struct snd_seq_queue *q;
 
-	if (snd_BUG_ON(!cell))
-		return -EINVAL;
+	snd_assert(cell != NULL, return -EINVAL);
 	dest = cell->event.queue;	/* destination queue */
 	q = queueptr(dest);
 	if (q == NULL)
@@ -735,8 +734,7 @@ int snd_seq_control_queue(struct snd_seq_event *ev, int atomic, int hop)
 {
 	struct snd_seq_queue *q;
 
-	if (snd_BUG_ON(!ev))
-		return -EINVAL;
+	snd_assert(ev != NULL, return -EINVAL);
 	q = queueptr(ev->data.queue.queue);
 
 	if (q == NULL)

@@ -885,14 +885,12 @@ static void sdio_uart_set_termios(struct tty_struct *tty, struct ktermios *old_t
 	sdio_uart_release_func(port);
 }
 
-static int sdio_uart_break_ctl(struct tty_struct *tty, int break_state)
+static void sdio_uart_break_ctl(struct tty_struct *tty, int break_state)
 {
 	struct sdio_uart_port *port = tty->driver_data;
-	int result;
 
-	result = sdio_uart_claim_func(port);
-	if (result != 0)
-		return result;
+	if (sdio_uart_claim_func(port) != 0)
+		return;
 
 	if (break_state == -1)
 		port->lcr |= UART_LCR_SBC;
@@ -901,7 +899,6 @@ static int sdio_uart_break_ctl(struct tty_struct *tty, int break_state)
 	sdio_out(port, UART_LCR, port->lcr);
 
 	sdio_uart_release_func(port);
-	return 0;
 }
 
 static int sdio_uart_tiocmget(struct tty_struct *tty, struct file *file)

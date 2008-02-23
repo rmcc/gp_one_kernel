@@ -295,8 +295,8 @@ thermal_cooling_device_trip_point_show(struct device *dev,
 
 /* Device management */
 
-#if defined(CONFIG_THERMAL_HWMON)
-
+#if defined(CONFIG_HWMON) ||	\
+	(defined(CONFIG_HWMON_MODULE) && defined(CONFIG_THERMAL_MODULE))
 /* hwmon sys I/F */
 #include <linux/hwmon.h>
 static LIST_HEAD(thermal_hwmon_list);
@@ -579,7 +579,7 @@ static void thermal_release(struct device *dev)
 	struct thermal_zone_device *tz;
 	struct thermal_cooling_device *cdev;
 
-	if (!strncmp(dev_name(dev), "thermal_zone", sizeof "thermal_zone" - 1)) {
+	if (!strncmp(dev->bus_id, "thermal_zone", sizeof "thermal_zone" - 1)) {
 		tz = to_thermal_zone(dev);
 		kfree(tz);
 	} else {
@@ -630,7 +630,7 @@ struct thermal_cooling_device *thermal_cooling_device_register(char *type,
 	cdev->ops = ops;
 	cdev->device.class = &thermal_class;
 	cdev->devdata = devdata;
-	dev_set_name(&cdev->device, "cooling_device%d", cdev->id);
+	sprintf(cdev->device.bus_id, "cooling_device%d", cdev->id);
 	result = device_register(&cdev->device);
 	if (result) {
 		release_idr(&thermal_cdev_idr, &thermal_idr_lock, cdev->id);
@@ -769,7 +769,7 @@ struct thermal_zone_device *thermal_zone_device_register(char *type,
 	tz->device.class = &thermal_class;
 	tz->devdata = devdata;
 	tz->trips = trips;
-	dev_set_name(&tz->device, "thermal_zone%d", tz->id);
+	sprintf(tz->device.bus_id, "thermal_zone%d", tz->id);
 	result = device_register(&tz->device);
 	if (result) {
 		release_idr(&thermal_tz_idr, &thermal_idr_lock, tz->id);

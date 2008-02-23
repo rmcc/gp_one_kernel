@@ -6,10 +6,9 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/acpi.h>
-#include <linux/signal.h>
-#include <linux/kthread.h>
 
 #include <acpi/acpi_drivers.h>
+#include <acpi/acinterp.h>	/* for acpi_ex_eisa_id_to_string() */
 
 #define _COMPONENT		ACPI_BUS_COMPONENT
 ACPI_MODULE_NAME("scan");
@@ -93,36 +92,17 @@ acpi_device_modalias_show(struct device *dev, struct device_attribute *attr, cha
 }
 static DEVICE_ATTR(modalias, 0444, acpi_device_modalias_show, NULL);
 
-static int acpi_bus_hot_remove_device(void *context)
+static int acpi_eject_operation(acpi_handle handle, int lockable)
 {
-	struct acpi_device *device;
-	acpi_handle handle = context;
 	struct acpi_object_list arg_list;
 	union acpi_object arg;
 	acpi_status status = AE_OK;
 
-	if (acpi_bus_get_device(handle, &device))
-		return 0;
+	/*
+	 * TBD: evaluate _PS3?
+	 */
 
-	if (!device)
-		return 0;
-
-	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-		"Hot-removing device %s...\n", dev_name(&device->dev)));
-
-	if (acpi_bus_trim(device, 1)) {
-		printk(KERN_ERR PREFIX
-				"Removing device failed\n");
-		return -1;
-	}
-
-	/* power off device */
-	status = acpi_evaluate_object(handle, "_PS3", NULL, NULL);
-	if (ACPI_FAILURE(status) && status != AE_NOT_FOUND)
-		printk(KERN_WARNING PREFIX
-				"Power-off device failed\n");
-
-	if (device->flags.lockable) {
+	if (lockable) {
 		arg_list.count = 1;
 		arg_list.pointer = &arg;
 		arg.type = ACPI_TYPE_INTEGER;
@@ -138,22 +118,26 @@ static int acpi_bus_hot_remove_device(void *context)
 	/*
 	 * TBD: _EJD support.
 	 */
-	status = acpi_evaluate_object(handle, "_EJ0", &arg_list, NULL);
-	if (ACPI_FAILURE(status))
-		return -ENODEV;
 
-	return 0;
+	status = acpi_evaluate_object(handle, "_EJ0", &arg_list, NULL);
+	if (ACPI_FAILURE(status)) {
+		return (-ENODEV);
+	}
+
+	return (0);
 }
 
 static ssize_t
 acpi_eject_store(struct device *d, struct device_attribute *attr,
 		const char *buf, size_t count)
 {
+	int result;
 	int ret = count;
+	int islockable;
 	acpi_status status;
+	acpi_handle handle;
 	acpi_object_type type = 0;
 	struct acpi_device *acpi_device = to_acpi_device(d);
-	struct task_struct *task;
 
 	if ((!count) || (buf[0] != '1')) {
 		return -EINVAL;
@@ -170,12 +154,18 @@ acpi_eject_store(struct device *d, struct device_attribute *attr,
 		goto err;
 	}
 
-	/* remove the device in another thread to fix the deadlock issue */
-	task = kthread_run(acpi_bus_hot_remove_device,
-				acpi_device->handle, "acpi_hot_remove_device");
-	if (IS_ERR(task))
-		ret = PTR_ERR(task);
-err:
+	islockable = acpi_device->flags.lockable;
+	handle = acpi_device->handle;
+
+	result = acpi_bus_trim(acpi_device, 1);
+
+	if (!result)
+		result = acpi_eject_operation(handle, islockable);
+
+	if (result) {
+		ret = -EBUSY;
+	}
+      err:
 	return ret;
 }
 
@@ -273,13 +263,6 @@ int acpi_match_device_ids(struct acpi_device *device,
 			  const struct acpi_device_id *ids)
 {
 	const struct acpi_device_id *id;
-
-	/*
-	 * If the device is not present, it is unnecessary to load device
-	 * driver for it.
-	 */
-	if (!device->status.present)
-		return -ENODEV;
 
 	if (device->flags.hardware_id) {
 		for (id = ids; id->id[0]; id++) {
@@ -389,7 +372,7 @@ static int acpi_device_remove(struct device * dev)
 			acpi_drv->ops.remove(acpi_dev, acpi_dev->removal_type);
 	}
 	acpi_dev->driver = NULL;
-	acpi_dev->driver_data = NULL;
+	acpi_driver_data(dev) = NULL;
 
 	put_device(dev);
 	return 0;
@@ -458,7 +441,7 @@ static int acpi_device_register(struct acpi_device *device,
 		acpi_device_bus_id->instance_no = 0;
 		list_add_tail(&acpi_device_bus_id->node, &acpi_bus_id_list);
 	}
-	dev_set_name(&device->dev, "%s:%02x", acpi_device_bus_id->bus_id, acpi_device_bus_id->instance_no);
+	sprintf(device->dev.bus_id, "%s:%02x", acpi_device_bus_id->bus_id, acpi_device_bus_id->instance_no);
 
 	if (device->parent) {
 		list_add_tail(&device->node, &device->parent->children);
@@ -476,14 +459,13 @@ static int acpi_device_register(struct acpi_device *device,
 	device->dev.release = &acpi_device_release;
 	result = device_add(&device->dev);
 	if(result) {
-		dev_err(&device->dev, "Error adding device\n");
+		printk(KERN_ERR PREFIX "Error adding device %s", device->dev.bus_id);
 		goto end;
 	}
 
 	result = acpi_device_setup_files(device);
 	if(result)
-		printk(KERN_ERR PREFIX "Error creating sysfs interface for device %s\n",
-		       dev_name(&device->dev));
+		ACPI_DEBUG_PRINT((ACPI_DB_ERROR, "Error creating sysfs interface for device %s\n", device->dev.bus_id));
 
 	device->removal_type = ACPI_BUS_REMOVAL_NORMAL;
 	return 0;
@@ -543,7 +525,7 @@ acpi_bus_driver_init(struct acpi_device *device, struct acpi_driver *driver)
 	result = driver->ops.add(device);
 	if (result) {
 		device->driver = NULL;
-		device->driver_data = NULL;
+		acpi_driver_data(device) = NULL;
 		return result;
 	}
 
@@ -709,7 +691,9 @@ static int acpi_bus_get_wakeup_device_flags(struct acpi_device *device)
 	acpi_status status = 0;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
 	union acpi_object *package = NULL;
-	int psw_error;
+	union acpi_object in_arg[3];
+	struct acpi_object_list arg_list = { 3, in_arg };
+	acpi_status psw_status = AE_OK;
 
 	struct acpi_device_id button_device_ids[] = {
 		{"PNP0C0D", 0},
@@ -741,11 +725,39 @@ static int acpi_bus_get_wakeup_device_flags(struct acpi_device *device)
 	 * So it is necessary to call _DSW object first. Only when it is not
 	 * present will the _PSW object used.
 	 */
-	psw_error = acpi_device_sleep_wake(device, 0, 0, 0);
-	if (psw_error)
-		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-				"error in _DSW or _PSW evaluation\n"));
-
+	/*
+	 * Three agruments are needed for the _DSW object.
+	 * Argument 0: enable/disable the wake capabilities
+	 * When _DSW object is called to disable the wake capabilities, maybe
+	 * the first argument is filled. The value of the other two agruments
+	 * is meaningless.
+	 */
+	in_arg[0].type = ACPI_TYPE_INTEGER;
+	in_arg[0].integer.value = 0;
+	in_arg[1].type = ACPI_TYPE_INTEGER;
+	in_arg[1].integer.value = 0;
+	in_arg[2].type = ACPI_TYPE_INTEGER;
+	in_arg[2].integer.value = 0;
+	psw_status = acpi_evaluate_object(device->handle, "_DSW",
+						&arg_list, NULL);
+	if (ACPI_FAILURE(psw_status) && (psw_status != AE_NOT_FOUND))
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "error in evaluate _DSW\n"));
+	/*
+	 * When the _DSW object is not present, OSPM will call _PSW object.
+	 */
+	if (psw_status == AE_NOT_FOUND) {
+		/*
+		 * Only one agruments is required for the _PSW object.
+		 * agrument 0: enable/disable the wake capabilities
+		 */
+		arg_list.count = 1;
+		in_arg[0].integer.value = 0;
+		psw_status = acpi_evaluate_object(device->handle, "_PSW",
+						&arg_list, NULL);
+		if (ACPI_FAILURE(psw_status) && (psw_status != AE_NOT_FOUND))
+			ACPI_DEBUG_PRINT((ACPI_DB_INFO, "error in "
+						"evaluate _PSW\n"));
+	}
 	/* Power button, Lid switch always enable wakeup */
 	if (!acpi_match_device_ids(device, button_device_ids))
 		device->wakeup.flags.run_wake = 1;
@@ -813,7 +825,6 @@ static int acpi_bus_get_power_flags(struct acpi_device *device)
 	/* TBD: System wake support and resource requirements. */
 
 	device->power.state = ACPI_STATE_UNKNOWN;
-	acpi_bus_get_power(device->handle, &(device->power.state));
 
 	return 0;
 }
@@ -908,6 +919,36 @@ static void acpi_device_get_busid(struct acpi_device *device,
 	}
 }
 
+static int
+acpi_video_bus_match(struct acpi_device *device)
+{
+	acpi_handle h_dummy;
+
+	if (!device)
+		return -EINVAL;
+
+	/* Since there is no HID, CID for ACPI Video drivers, we have
+	 * to check well known required nodes for each feature we support.
+	 */
+
+	/* Does this device able to support video switching ? */
+	if (ACPI_SUCCESS(acpi_get_handle(device->handle, "_DOD", &h_dummy)) &&
+	    ACPI_SUCCESS(acpi_get_handle(device->handle, "_DOS", &h_dummy)))
+		return 0;
+
+	/* Does this device able to retrieve a video ROM ? */
+	if (ACPI_SUCCESS(acpi_get_handle(device->handle, "_ROM", &h_dummy)))
+		return 0;
+
+	/* Does this device able to configure which video head to be POSTed ? */
+	if (ACPI_SUCCESS(acpi_get_handle(device->handle, "_VPO", &h_dummy)) &&
+	    ACPI_SUCCESS(acpi_get_handle(device->handle, "_GPD", &h_dummy)) &&
+	    ACPI_SUCCESS(acpi_get_handle(device->handle, "_SPD", &h_dummy)))
+		return 0;
+
+	return -ENODEV;
+}
+
 /*
  * acpi_bay_match - see if a device is an ejectable driver bay
  *
@@ -990,7 +1031,7 @@ static void acpi_device_set_id(struct acpi_device *device,
 		   will get autoloaded and the device might still match
 		   against another driver.
 		*/
-		if (acpi_is_video_device(device))
+		if (ACPI_SUCCESS(acpi_video_bus_match(device)))
 			cid_add = ACPI_VIDEO_HID;
 		else if (ACPI_SUCCESS(acpi_bay_match(device)))
 			cid_add = ACPI_BAY_HID;
@@ -1002,7 +1043,7 @@ static void acpi_device_set_id(struct acpi_device *device,
 		hid = ACPI_POWER_HID;
 		break;
 	case ACPI_BUS_TYPE_PROCESSOR:
-		hid = ACPI_PROCESSOR_OBJECT_HID;
+		hid = ACPI_PROCESSOR_HID;
 		break;
 	case ACPI_BUS_TYPE_SYSTEM:
 		hid = ACPI_SYSTEM_HID;
@@ -1130,6 +1171,20 @@ static int acpi_bus_remove(struct acpi_device *dev, int rmdevice)
 }
 
 static int
+acpi_is_child_device(struct acpi_device *device,
+			int (*matcher)(struct acpi_device *))
+{
+	int result = -ENODEV;
+
+	do {
+		if (ACPI_SUCCESS(matcher(device)))
+			return AE_OK;
+	} while ((device = device->parent));
+
+	return result;
+}
+
+static int
 acpi_add_single_object(struct acpi_device **child,
 		       struct acpi_device *parent, acpi_handle handle, int type,
 			struct acpi_bus_ops *ops)
@@ -1184,18 +1239,15 @@ acpi_add_single_object(struct acpi_device **child,
 			result = -ENODEV;
 			goto end;
 		}
-		/*
-		 * When the device is neither present nor functional, the
-		 * device should not be added to Linux ACPI device tree.
-		 * When the status of the device is not present but functinal,
-		 * it should be added to Linux ACPI tree. For example : bay
-		 * device , dock device.
-		 * In such conditions it is unncessary to check whether it is
-		 * bay device or dock device.
-		 */
-		if (!device->status.present && !device->status.functional) {
-			result = -ENODEV;
-			goto end;
+		if (!device->status.present) {
+			/* Bay and dock should be handled even if absent */
+			if (!ACPI_SUCCESS(
+			     acpi_is_child_device(device, acpi_bay_match)) &&
+			    !ACPI_SUCCESS(
+			     acpi_is_child_device(device, acpi_dock_match))) {
+					result = -ENODEV;
+					goto end;
+			}
 		}
 		break;
 	default:
@@ -1216,16 +1268,6 @@ acpi_add_single_object(struct acpi_device **child,
 	 * -------------------------------------
 	 */
 	acpi_device_set_id(device, parent, handle, type);
-
-	/*
-	 * The ACPI device is attached to acpi handle before getting
-	 * the power/wakeup/peformance flags. Otherwise OS can't get
-	 * the corresponding ACPI device by the acpi handle in the course
-	 * of getting the power/wakeup/performance flags.
-	 */
-	result = acpi_device_set_context(device, type);
-	if (result)
-		goto end;
 
 	/*
 	 * Power Management
@@ -1257,6 +1299,8 @@ acpi_add_single_object(struct acpi_device **child,
 			goto end;
 	}
 
+	if ((result = acpi_device_set_context(device, type)))
+		goto end;
 
 	result = acpi_device_register(device, parent);
 
@@ -1376,12 +1420,7 @@ static int acpi_bus_scan(struct acpi_device *start, struct acpi_bus_ops *ops)
 		 * TBD: Need notifications and other detection mechanisms
 		 *      in place before we can fully implement this.
 		 */
-		 /*
-		 * When the device is not present but functional, it is also
-		 * necessary to scan the children of this device.
-		 */
-		if (child->status.present || (!child->status.present &&
-					child->status.functional)) {
+		if (child->status.present) {
 			status = acpi_get_next_object(ACPI_TYPE_ANY, chandle,
 						      NULL, NULL);
 			if (ACPI_SUCCESS(status)) {
@@ -1524,6 +1563,7 @@ static int acpi_bus_scan_fixed(struct acpi_device *root)
 	return result;
 }
 
+int __init acpi_boot_ec_enable(void);
 
 static int __init acpi_scan_init(void)
 {
@@ -1556,6 +1596,9 @@ static int __init acpi_scan_init(void)
 	 * Enumerate devices in the ACPI namespace.
 	 */
 	result = acpi_bus_scan_fixed(acpi_root);
+
+	/* EC region might be needed at bus_scan, so enable it now */
+	acpi_boot_ec_enable();
 
 	if (!result)
 		result = acpi_bus_scan(acpi_root, &ops);

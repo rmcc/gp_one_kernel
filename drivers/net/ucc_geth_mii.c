@@ -36,8 +36,8 @@
 #include <linux/mii.h>
 #include <linux/phy.h>
 #include <linux/fsl_devices.h>
-#include <linux/of_platform.h>
 
+#include <asm/of_platform.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
@@ -141,7 +141,8 @@ static int uec_mdio_probe(struct of_device *ofdev, const struct of_device_id *ma
 	struct resource res;
 	int k, err = 0;
 
-	new_bus = mdiobus_alloc();
+	new_bus = kzalloc(sizeof(struct mii_bus), GFP_KERNEL);
+
 	if (NULL == new_bus)
 		return -ENOMEM;
 
@@ -186,7 +187,7 @@ static int uec_mdio_probe(struct of_device *ofdev, const struct of_device_id *ma
 
 	new_bus->priv = (void __force *)regs;
 
-	new_bus->parent = device;
+	new_bus->dev = device;
 	dev_set_drvdata(device, new_bus);
 
 	/* Read MII management master from device tree */
@@ -234,7 +235,7 @@ bus_register_fail:
 ioremap_fail:
 	kfree(new_bus->irq);
 reg_map_fail:
-	mdiobus_free(new_bus);
+	kfree(new_bus);
 
 	return err;
 }
@@ -250,7 +251,7 @@ static int uec_mdio_remove(struct of_device *ofdev)
 
 	iounmap((void __iomem *)bus->priv);
 	bus->priv = NULL;
-	mdiobus_free(bus);
+	kfree(bus);
 
 	return 0;
 }

@@ -34,10 +34,15 @@
 **		        from within kupdate, it will ignore the immediate flag
 */
 
+#include <asm/uaccess.h>
+#include <asm/system.h>
+
 #include <linux/time.h>
 #include <linux/semaphore.h>
+
 #include <linux/vmalloc.h>
 #include <linux/reiserfs_fs.h>
+
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/fcntl.h>
@@ -49,9 +54,6 @@
 #include <linux/writeback.h>
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
-#include <linux/uaccess.h>
-
-#include <asm/system.h>
 
 /* gets a struct reiserfs_journal_list * from a list head */
 #define JOURNAL_LIST_ENTRY(h) (list_entry((h), struct reiserfs_journal_list, \
@@ -556,13 +558,13 @@ static inline void insert_journal_hash(struct reiserfs_journal_cnode **table,
 static inline void lock_journal(struct super_block *p_s_sb)
 {
 	PROC_INFO_INC(p_s_sb, journal.lock_journal);
-	mutex_lock(&SB_JOURNAL(p_s_sb)->j_mutex);
+	down(&SB_JOURNAL(p_s_sb)->j_lock);
 }
 
 /* unlock the current transaction */
 static inline void unlock_journal(struct super_block *p_s_sb)
 {
-	mutex_unlock(&SB_JOURNAL(p_s_sb)->j_mutex);
+	up(&SB_JOURNAL(p_s_sb)->j_lock);
 }
 
 static inline void get_journal_list(struct reiserfs_journal_list *jl)
@@ -627,7 +629,7 @@ static int journal_list_still_alive(struct super_block *s,
 static void release_buffer_page(struct buffer_head *bh)
 {
 	struct page *page = bh->b_page;
-	if (!page->mapping && trylock_page(page)) {
+	if (!page->mapping && !TestSetPageLocked(page)) {
 		page_cache_get(page);
 		put_bh(bh);
 		if (!page->mapping)
@@ -855,7 +857,7 @@ static int write_ordered_buffers(spinlock_t * lock,
 		jh = JH_ENTRY(list->next);
 		bh = jh->bh;
 		get_bh(bh);
-		if (!trylock_buffer(bh)) {
+		if (test_set_buffer_locked(bh)) {
 			if (!buffer_dirty(bh)) {
 				list_move(&jh->list, &tmp);
 				goto loop_next;
@@ -1043,9 +1045,9 @@ static int flush_commit_list(struct super_block *s,
 	}
 
 	/* make sure nobody is trying to flush this one at the same time */
-	mutex_lock(&jl->j_commit_mutex);
+	down(&jl->j_commit_lock);
 	if (!journal_list_still_alive(s, trans_id)) {
-		mutex_unlock(&jl->j_commit_mutex);
+		up(&jl->j_commit_lock);
 		goto put_jl;
 	}
 	BUG_ON(jl->j_trans_id == 0);
@@ -1055,7 +1057,7 @@ static int flush_commit_list(struct super_block *s,
 		if (flushall) {
 			atomic_set(&(jl->j_older_commits_done), 1);
 		}
-		mutex_unlock(&jl->j_commit_mutex);
+		up(&jl->j_commit_lock);
 		goto put_jl;
 	}
 
@@ -1179,7 +1181,7 @@ static int flush_commit_list(struct super_block *s,
 	if (flushall) {
 		atomic_set(&(jl->j_older_commits_done), 1);
 	}
-	mutex_unlock(&jl->j_commit_mutex);
+	up(&jl->j_commit_lock);
       put_jl:
 	put_journal_list(s, jl);
 
@@ -1409,8 +1411,8 @@ static int flush_journal_list(struct super_block *s,
 
 	/* if flushall == 0, the lock is already held */
 	if (flushall) {
-		mutex_lock(&journal->j_flush_mutex);
-	} else if (mutex_trylock(&journal->j_flush_mutex)) {
+		down(&journal->j_flush_sem);
+	} else if (!down_trylock(&journal->j_flush_sem)) {
 		BUG();
 	}
 
@@ -1640,7 +1642,7 @@ static int flush_journal_list(struct super_block *s,
 	jl->j_state = 0;
 	put_journal_list(s, jl);
 	if (flushall)
-		mutex_unlock(&journal->j_flush_mutex);
+		up(&journal->j_flush_sem);
 	put_fs_excl();
 	return err;
 }
@@ -1770,12 +1772,12 @@ static int kupdate_transactions(struct super_block *s,
 	struct reiserfs_journal *journal = SB_JOURNAL(s);
 	chunk.nr = 0;
 
-	mutex_lock(&journal->j_flush_mutex);
+	down(&journal->j_flush_sem);
 	if (!journal_list_still_alive(s, orig_trans_id)) {
 		goto done;
 	}
 
-	/* we've got j_flush_mutex held, nobody is going to delete any
+	/* we've got j_flush_sem held, nobody is going to delete any
 	 * of these lists out from underneath us
 	 */
 	while ((num_trans && transactions_flushed < num_trans) ||
@@ -1810,7 +1812,7 @@ static int kupdate_transactions(struct super_block *s,
 	}
 
       done:
-	mutex_unlock(&journal->j_flush_mutex);
+	up(&journal->j_flush_sem);
 	return ret;
 }
 
@@ -2554,7 +2556,7 @@ static struct reiserfs_journal_list *alloc_journal_list(struct super_block *s)
 	INIT_LIST_HEAD(&jl->j_working_list);
 	INIT_LIST_HEAD(&jl->j_tail_bh_list);
 	INIT_LIST_HEAD(&jl->j_bh_list);
-	mutex_init(&jl->j_commit_mutex);
+	sema_init(&jl->j_commit_lock, 1);
 	SB_JOURNAL(s)->j_num_lists++;
 	get_journal_list(jl);
 	return jl;
@@ -2575,7 +2577,7 @@ static int release_journal_dev(struct super_block *super,
 	if (journal->j_dev_bd != NULL) {
 		if (journal->j_dev_bd->bd_dev != super->s_dev)
 			bd_release(journal->j_dev_bd);
-		result = blkdev_put(journal->j_dev_bd, journal->j_dev_mode);
+		result = blkdev_put(journal->j_dev_bd);
 		journal->j_dev_bd = NULL;
 	}
 
@@ -2593,7 +2595,7 @@ static int journal_init_dev(struct super_block *super,
 {
 	int result;
 	dev_t jdev;
-	fmode_t blkdev_mode = FMODE_READ | FMODE_WRITE;
+	int blkdev_mode = FMODE_READ | FMODE_WRITE;
 	char b[BDEVNAME_SIZE];
 
 	result = 0;
@@ -2608,7 +2610,6 @@ static int journal_init_dev(struct super_block *super,
 	/* there is no "jdev" option and journal is on separate device */
 	if ((!jdev_name || !jdev_name[0])) {
 		journal->j_dev_bd = open_by_devnum(jdev, blkdev_mode);
-		journal->j_dev_mode = blkdev_mode;
 		if (IS_ERR(journal->j_dev_bd)) {
 			result = PTR_ERR(journal->j_dev_bd);
 			journal->j_dev_bd = NULL;
@@ -2619,7 +2620,7 @@ static int journal_init_dev(struct super_block *super,
 		} else if (jdev != super->s_dev) {
 			result = bd_claim(journal->j_dev_bd, journal);
 			if (result) {
-				blkdev_put(journal->j_dev_bd, blkdev_mode);
+				blkdev_put(journal->j_dev_bd);
 				return result;
 			}
 
@@ -2629,9 +2630,7 @@ static int journal_init_dev(struct super_block *super,
 		return 0;
 	}
 
-	journal->j_dev_mode = blkdev_mode;
-	journal->j_dev_bd = open_bdev_exclusive(jdev_name,
-						blkdev_mode, journal);
+	journal->j_dev_bd = open_bdev_excl(jdev_name, 0, journal);
 	if (IS_ERR(journal->j_dev_bd)) {
 		result = PTR_ERR(journal->j_dev_bd);
 		journal->j_dev_bd = NULL;
@@ -2838,8 +2837,8 @@ int journal_init(struct super_block *p_s_sb, const char *j_dev_name,
 	journal->j_last = NULL;
 	journal->j_first = NULL;
 	init_waitqueue_head(&(journal->j_join_wait));
-	mutex_init(&journal->j_mutex);
-	mutex_init(&journal->j_flush_mutex);
+	sema_init(&journal->j_lock, 1);
+	sema_init(&journal->j_flush_sem, 1);
 
 	journal->j_trans_id = 10;
 	journal->j_mount_id = 10;
@@ -3874,7 +3873,7 @@ int reiserfs_prepare_for_journal(struct super_block *p_s_sb,
 {
 	PROC_INFO_INC(p_s_sb, journal.prepare);
 
-	if (!trylock_buffer(bh)) {
+	if (test_set_buffer_locked(bh)) {
 		if (!wait)
 			return 0;
 		lock_buffer(bh);
@@ -4031,7 +4030,7 @@ static int do_journal_end(struct reiserfs_transaction_handle *th,
 	 * the new transaction is fully setup, and we've already flushed the
 	 * ordered bh list
 	 */
-	mutex_lock(&jl->j_commit_mutex);
+	down(&jl->j_commit_lock);
 
 	/* save the transaction id in case we need to commit it later */
 	commit_trans_id = jl->j_trans_id;
@@ -4197,7 +4196,7 @@ static int do_journal_end(struct reiserfs_transaction_handle *th,
 		lock_kernel();
 	}
 	BUG_ON(!list_empty(&jl->j_tail_bh_list));
-	mutex_unlock(&jl->j_commit_mutex);
+	up(&jl->j_commit_lock);
 
 	/* honor the flush wishes from the caller, simple commits can
 	 ** be done outside the journal lock, they are done below

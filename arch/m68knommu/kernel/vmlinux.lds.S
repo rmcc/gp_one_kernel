@@ -62,7 +62,6 @@ SECTIONS {
 	.text : {
 		_text = .;
 		_stext = . ;
-		HEAD_TEXT
 		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT

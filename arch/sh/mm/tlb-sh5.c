@@ -15,7 +15,9 @@
 #include <asm/mmu_context.h>
 
 /**
- * sh64_tlb_init - Perform initial setup for the DTLB and ITLB.
+ * sh64_tlb_init
+ *
+ * Perform initial setup for the DTLB and ITLB.
  */
 int __init sh64_tlb_init(void)
 {
@@ -44,7 +46,9 @@ int __init sh64_tlb_init(void)
 }
 
 /**
- * sh64_next_free_dtlb_entry - Find the next available DTLB entry
+ * sh64_next_free_dtlb_entry
+ *
+ * Find the next available DTLB entry
  */
 unsigned long long sh64_next_free_dtlb_entry(void)
 {
@@ -52,7 +56,9 @@ unsigned long long sh64_next_free_dtlb_entry(void)
 }
 
 /**
- * sh64_get_wired_dtlb_entry - Allocate a wired (locked-in) entry in the DTLB
+ * sh64_get_wired_dtlb_entry
+ *
+ * Allocate a wired (locked-in) entry in the DTLB
  */
 unsigned long long sh64_get_wired_dtlb_entry(void)
 {
@@ -65,9 +71,11 @@ unsigned long long sh64_get_wired_dtlb_entry(void)
 }
 
 /**
- * sh64_put_wired_dtlb_entry - Free a wired (locked-in) entry in the DTLB.
+ * sh64_put_wired_dtlb_entry
  *
  * @entry:	Address of TLB slot.
+ *
+ * Free a wired (locked-in) entry in the DTLB.
  *
  * Works like a stack, last one to allocate must be first one to free.
  */
@@ -107,7 +115,7 @@ int sh64_put_wired_dtlb_entry(unsigned long long entry)
 }
 
 /**
- * sh64_setup_tlb_slot - Load up a translation in a wired slot.
+ * sh64_setup_tlb_slot
  *
  * @config_addr:	Address of TLB slot.
  * @eaddr:		Virtual address.
@@ -146,7 +154,7 @@ inline void sh64_setup_tlb_slot(unsigned long long config_addr,
 }
 
 /**
- * sh64_teardown_tlb_slot - Teardown a translation.
+ * sh64_teardown_tlb_slot
  *
  * @config_addr:	Address of TLB slot.
  *

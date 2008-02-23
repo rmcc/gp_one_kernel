@@ -6,10 +6,7 @@
 
 #include <linux/hdreg.h>
 #include <linux/blkdev.h>
-#include <linux/completion.h>
 #include <linux/delay.h>
-#include <linux/smp_lock.h>
-#include <linux/skbuff.h>
 #include "aoe.h"
 
 enum {
@@ -38,7 +35,7 @@ struct ErrMsg {
 
 static struct ErrMsg emsgs[NMSG];
 static int emsgs_head_idx, emsgs_tail_idx;
-static struct completion emsgs_comp;
+static struct semaphore emsgs_sema;
 static spinlock_t emsgs_lock;
 static int nblocked_emsgs_readers;
 static struct class *aoe_class;
@@ -104,12 +101,7 @@ loop:
 		spin_lock_irqsave(&d->lock, flags);
 		goto loop;
 	}
-	if (skb) {
-		struct sk_buff_head queue;
-		__skb_queue_head_init(&queue);
-		__skb_queue_tail(&queue, skb);
-		aoenet_xmit(&queue);
-	}
+	aoenet_xmit(skb);
 	aoecmd_cfg(major, minor);
 	return 0;
 }
@@ -148,7 +140,7 @@ bail:		spin_unlock_irqrestore(&emsgs_lock, flags);
 	spin_unlock_irqrestore(&emsgs_lock, flags);
 
 	if (nblocked_emsgs_readers)
-		complete(&emsgs_comp);
+		up(&emsgs_sema);
 }
 
 static ssize_t
@@ -182,16 +174,12 @@ aoechr_open(struct inode *inode, struct file *filp)
 {
 	int n, i;
 
-	lock_kernel();
 	n = iminor(inode);
 	filp->private_data = (void *) (unsigned long) n;
 
 	for (i = 0; i < ARRAY_SIZE(chardevs); ++i)
-		if (chardevs[i].minor == n) {
-			unlock_kernel();
+		if (chardevs[i].minor == n)
 			return 0;
-		}
-	unlock_kernel();
 	return -EINVAL;
 }
 
@@ -228,7 +216,7 @@ aoechr_read(struct file *filp, char __user *buf, size_t cnt, loff_t *off)
 
 		spin_unlock_irqrestore(&emsgs_lock, flags);
 
-		n = wait_for_completion_interruptible(&emsgs_comp);
+		n = down_interruptible(&emsgs_sema);
 
 		spin_lock_irqsave(&emsgs_lock, flags);
 
@@ -276,7 +264,7 @@ aoechr_init(void)
 		printk(KERN_ERR "aoe: can't register char device\n");
 		return n;
 	}
-	init_completion(&emsgs_comp);
+	sema_init(&emsgs_sema, 0);
 	spin_lock_init(&emsgs_lock);
 	aoe_class = class_create(THIS_MODULE, "aoe");
 	if (IS_ERR(aoe_class)) {
@@ -285,8 +273,7 @@ aoechr_init(void)
 	}
 	for (i = 0; i < ARRAY_SIZE(chardevs); ++i)
 		device_create(aoe_class, NULL,
-			      MKDEV(AOE_MAJOR, chardevs[i].minor), NULL,
-			      chardevs[i].name);
+			      MKDEV(AOE_MAJOR, chardevs[i].minor), chardevs[i].name);
 
 	return 0;
 }

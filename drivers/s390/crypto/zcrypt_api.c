@@ -34,7 +34,6 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/compat.h>
-#include <linux/smp_lock.h>
 #include <asm/atomic.h>
 #include <asm/uaccess.h>
 #include <linux/hw_random.h>
@@ -301,9 +300,7 @@ static ssize_t zcrypt_write(struct file *filp, const char __user *buf,
  */
 static int zcrypt_open(struct inode *inode, struct file *filp)
 {
-	lock_kernel();
 	atomic_inc(&zcrypt_open_count);
-	unlock_kernel();
 	return 0;
 }
 
@@ -1071,8 +1068,10 @@ static int zcrypt_status_write(struct file *file, const char __user *buffer,
 
 #define LBUFSIZE 1200UL
 	lbuf = kmalloc(LBUFSIZE, GFP_KERNEL);
-	if (!lbuf)
+	if (!lbuf) {
+		PRINTK("kmalloc failed!\n");
 		return 0;
+	}
 
 	local_count = min(LBUFSIZE - 1, count);
 	if (copy_from_user(lbuf, buffer, local_count) != 0) {
@@ -1082,15 +1081,23 @@ static int zcrypt_status_write(struct file *file, const char __user *buffer,
 	lbuf[local_count] = '\0';
 
 	ptr = strstr(lbuf, "Online devices");
-	if (!ptr)
+	if (!ptr) {
+		PRINTK("Unable to parse data (missing \"Online devices\")\n");
 		goto out;
+	}
 	ptr = strstr(ptr, "\n");
-	if (!ptr)
+	if (!ptr) {
+		PRINTK("Unable to parse data (missing newline "
+		       "after \"Online devices\")\n");
 		goto out;
+	}
 	ptr++;
 
-	if (strstr(ptr, "Waiting work element counts") == NULL)
+	if (strstr(ptr, "Waiting work element counts") == NULL) {
+		PRINTK("Unable to parse data (missing "
+		       "\"Waiting work element counts\")\n");
 		goto out;
+	}
 
 	for (j = 0; j < 64 && *ptr; ptr++) {
 		/*
@@ -1190,12 +1197,16 @@ int __init zcrypt_api_init(void)
 
 	/* Register the request sprayer. */
 	rc = misc_register(&zcrypt_misc_device);
-	if (rc < 0)
+	if (rc < 0) {
+		PRINTKW(KERN_ERR "misc_register (minor %d) failed with %d\n",
+			zcrypt_misc_device.minor, rc);
 		goto out;
+	}
 
 	/* Set up the proc file system */
 	zcrypt_entry = create_proc_entry("driver/z90crypt", 0644, NULL);
 	if (!zcrypt_entry) {
+		PRINTK("Couldn't create z90crypt proc entry\n");
 		rc = -ENOMEM;
 		goto out_misc;
 	}

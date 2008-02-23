@@ -50,7 +50,6 @@
 #include "inode.h"
 #include "journal.h"
 #include "symlink.h"
-#include "xattr.h"
 
 #include "buffer_head_io.h"
 
@@ -84,7 +83,11 @@ static char *ocfs2_fast_symlink_getlink(struct inode *inode,
 
 	mlog_entry_void();
 
-	status = ocfs2_read_inode_block(inode, bh);
+	status = ocfs2_read_block(OCFS2_SB(inode->i_sb),
+				  OCFS2_I(inode)->ip_blkno,
+				  bh,
+				  OCFS2_BH_CACHED,
+				  inode);
 	if (status < 0) {
 		mlog_errno(status);
 		link = ERR_PTR(status);
@@ -154,7 +157,8 @@ bail:
 		kunmap(page);
 		page_cache_release(page);
 	}
-	brelse(bh);
+	if (bh)
+		brelse(bh);
 
 	return ERR_PTR(status);
 }
@@ -164,18 +168,10 @@ const struct inode_operations ocfs2_symlink_inode_operations = {
 	.follow_link	= ocfs2_follow_link,
 	.getattr	= ocfs2_getattr,
 	.setattr	= ocfs2_setattr,
-	.setxattr	= generic_setxattr,
-	.getxattr	= generic_getxattr,
-	.listxattr	= ocfs2_listxattr,
-	.removexattr	= generic_removexattr,
 };
 const struct inode_operations ocfs2_fast_symlink_inode_operations = {
 	.readlink	= ocfs2_readlink,
 	.follow_link	= ocfs2_follow_link,
 	.getattr	= ocfs2_getattr,
 	.setattr	= ocfs2_setattr,
-	.setxattr	= generic_setxattr,
-	.getxattr	= generic_getxattr,
-	.listxattr	= ocfs2_listxattr,
-	.removexattr	= generic_removexattr,
 };

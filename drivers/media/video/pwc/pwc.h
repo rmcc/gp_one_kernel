@@ -32,11 +32,9 @@
 #include <linux/smp_lock.h>
 #include <linux/version.h>
 #include <linux/mutex.h>
-#include <linux/mm.h>
 #include <asm/errno.h>
 #include <linux/videodev.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #include "pwc-uncompress.h"
 #include <media/pwc-ioctl.h>
@@ -337,10 +335,11 @@ extern int pwc_get_dynamic_noise(struct pwc_device *pdev, int *noise);
 extern int pwc_camera_power(struct pwc_device *pdev, int power);
 
 /* Private ioctl()s; see pwc-ioctl.h */
-extern long pwc_ioctl(struct pwc_device *pdev, unsigned int cmd, void *arg);
+extern int pwc_ioctl(struct pwc_device *pdev, unsigned int cmd, void *arg);
 
 /** Functions in pwc-v4l.c */
-extern long pwc_video_do_ioctl(struct file *file, unsigned int cmd, void *arg);
+extern int pwc_video_do_ioctl(struct inode *inode, struct file *file,
+			      unsigned int cmd, void *arg);
 
 /** pwc-uncompress.c */
 /* Expand frame to image, possibly including decompression. Uses read_frame and fill_image */

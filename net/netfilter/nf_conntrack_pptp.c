@@ -37,7 +37,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Harald Welte <laforge@gnumonks.org>");
 MODULE_DESCRIPTION("Netfilter connection tracking helper module for PPTP");
 MODULE_ALIAS("ip_conntrack_pptp");
-MODULE_ALIAS_NFCT_HELPER("pptp");
 
 static DEFINE_SPINLOCK(nf_pptp_lock);
 
@@ -66,7 +65,7 @@ void
 			     struct nf_conntrack_expect *exp) __read_mostly;
 EXPORT_SYMBOL_GPL(nf_nat_pptp_hook_expectfn);
 
-#if defined(DEBUG) || defined(CONFIG_DYNAMIC_PRINTK_DEBUG)
+#ifdef DEBUG
 /* PptpControlMessageType names */
 const char *const pptp_msg_name[] = {
 	"UNKNOWN_MESSAGE",
@@ -99,7 +98,6 @@ EXPORT_SYMBOL(pptp_msg_name);
 static void pptp_expectfn(struct nf_conn *ct,
 			 struct nf_conntrack_expect *exp)
 {
-	struct net *net = nf_ct_net(ct);
 	typeof(nf_nat_pptp_hook_expectfn) nf_nat_pptp_expectfn;
 	pr_debug("increasing timeouts\n");
 
@@ -123,7 +121,7 @@ static void pptp_expectfn(struct nf_conn *ct,
 		pr_debug("trying to unexpect other dir: ");
 		nf_ct_dump_tuple(&inv_t);
 
-		exp_other = nf_ct_expect_find_get(net, &inv_t);
+		exp_other = nf_ct_expect_find_get(&inv_t);
 		if (exp_other) {
 			/* delete other expectation.  */
 			pr_debug("found\n");
@@ -136,8 +134,7 @@ static void pptp_expectfn(struct nf_conn *ct,
 	rcu_read_unlock();
 }
 
-static int destroy_sibling_or_exp(struct net *net,
-				  const struct nf_conntrack_tuple *t)
+static int destroy_sibling_or_exp(const struct nf_conntrack_tuple *t)
 {
 	const struct nf_conntrack_tuple_hash *h;
 	struct nf_conntrack_expect *exp;
@@ -146,7 +143,7 @@ static int destroy_sibling_or_exp(struct net *net,
 	pr_debug("trying to timeout ct or exp for tuple ");
 	nf_ct_dump_tuple(t);
 
-	h = nf_conntrack_find_get(net, t);
+	h = nf_conntrack_find_get(t);
 	if (h)  {
 		sibling = nf_ct_tuplehash_to_ctrack(h);
 		pr_debug("setting timeout of conntrack %p to 0\n", sibling);
@@ -157,7 +154,7 @@ static int destroy_sibling_or_exp(struct net *net,
 		nf_ct_put(sibling);
 		return 1;
 	} else {
-		exp = nf_ct_expect_find_get(net, t);
+		exp = nf_ct_expect_find_get(t);
 		if (exp) {
 			pr_debug("unexpect_related of expect %p\n", exp);
 			nf_ct_unexpect_related(exp);
@@ -171,7 +168,6 @@ static int destroy_sibling_or_exp(struct net *net,
 /* timeout GRE data connections */
 static void pptp_destroy_siblings(struct nf_conn *ct)
 {
-	struct net *net = nf_ct_net(ct);
 	const struct nf_conn_help *help = nfct_help(ct);
 	struct nf_conntrack_tuple t;
 
@@ -182,7 +178,7 @@ static void pptp_destroy_siblings(struct nf_conn *ct)
 	t.dst.protonum = IPPROTO_GRE;
 	t.src.u.gre.key = help->help.ct_pptp_info.pns_call_id;
 	t.dst.u.gre.key = help->help.ct_pptp_info.pac_call_id;
-	if (!destroy_sibling_or_exp(net, &t))
+	if (!destroy_sibling_or_exp(&t))
 		pr_debug("failed to timeout original pns->pac ct/exp\n");
 
 	/* try reply (pac->pns) tuple */
@@ -190,7 +186,7 @@ static void pptp_destroy_siblings(struct nf_conn *ct)
 	t.dst.protonum = IPPROTO_GRE;
 	t.src.u.gre.key = help->help.ct_pptp_info.pac_call_id;
 	t.dst.u.gre.key = help->help.ct_pptp_info.pns_call_id;
-	if (!destroy_sibling_or_exp(net, &t))
+	if (!destroy_sibling_or_exp(&t))
 		pr_debug("failed to timeout reply pac->pns ct/exp\n");
 }
 
@@ -598,32 +594,15 @@ static struct nf_conntrack_helper pptp __read_mostly = {
 	.expect_policy		= &pptp_exp_policy,
 };
 
-static void nf_conntrack_pptp_net_exit(struct net *net)
-{
-	nf_ct_gre_keymap_flush(net);
-}
-
-static struct pernet_operations nf_conntrack_pptp_net_ops = {
-	.exit = nf_conntrack_pptp_net_exit,
-};
-
 static int __init nf_conntrack_pptp_init(void)
 {
-	int rv;
-
-	rv = nf_conntrack_helper_register(&pptp);
-	if (rv < 0)
-		return rv;
-	rv = register_pernet_subsys(&nf_conntrack_pptp_net_ops);
-	if (rv < 0)
-		nf_conntrack_helper_unregister(&pptp);
-	return rv;
+	return nf_conntrack_helper_register(&pptp);
 }
 
 static void __exit nf_conntrack_pptp_fini(void)
 {
 	nf_conntrack_helper_unregister(&pptp);
-	unregister_pernet_subsys(&nf_conntrack_pptp_net_ops);
+	nf_ct_gre_keymap_flush();
 }
 
 module_init(nf_conntrack_pptp_init);

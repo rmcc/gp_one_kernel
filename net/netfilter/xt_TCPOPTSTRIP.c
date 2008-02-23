@@ -75,15 +75,19 @@ tcpoptstrip_mangle_packet(struct sk_buff *skb,
 }
 
 static unsigned int
-tcpoptstrip_tg4(struct sk_buff *skb, const struct xt_target_param *par)
+tcpoptstrip_tg4(struct sk_buff *skb, const struct net_device *in,
+		const struct net_device *out, unsigned int hooknum,
+		const struct xt_target *target, const void *targinfo)
 {
-	return tcpoptstrip_mangle_packet(skb, par->targinfo, ip_hdrlen(skb),
+	return tcpoptstrip_mangle_packet(skb, targinfo, ip_hdrlen(skb),
 	       sizeof(struct iphdr) + sizeof(struct tcphdr));
 }
 
 #if defined(CONFIG_IP6_NF_MANGLE) || defined(CONFIG_IP6_NF_MANGLE_MODULE)
 static unsigned int
-tcpoptstrip_tg6(struct sk_buff *skb, const struct xt_target_param *par)
+tcpoptstrip_tg6(struct sk_buff *skb, const struct net_device *in,
+		const struct net_device *out, unsigned int hooknum,
+		const struct xt_target *target, const void *targinfo)
 {
 	struct ipv6hdr *ipv6h = ipv6_hdr(skb);
 	int tcphoff;
@@ -94,7 +98,7 @@ tcpoptstrip_tg6(struct sk_buff *skb, const struct xt_target_param *par)
 	if (tcphoff < 0)
 		return NF_DROP;
 
-	return tcpoptstrip_mangle_packet(skb, par->targinfo, tcphoff,
+	return tcpoptstrip_mangle_packet(skb, targinfo, tcphoff,
 	       sizeof(*ipv6h) + sizeof(struct tcphdr));
 }
 #endif
@@ -102,7 +106,7 @@ tcpoptstrip_tg6(struct sk_buff *skb, const struct xt_target_param *par)
 static struct xt_target tcpoptstrip_tg_reg[] __read_mostly = {
 	{
 		.name       = "TCPOPTSTRIP",
-		.family     = NFPROTO_IPV4,
+		.family     = AF_INET,
 		.table      = "mangle",
 		.proto      = IPPROTO_TCP,
 		.target     = tcpoptstrip_tg4,
@@ -112,7 +116,7 @@ static struct xt_target tcpoptstrip_tg_reg[] __read_mostly = {
 #if defined(CONFIG_IP6_NF_MANGLE) || defined(CONFIG_IP6_NF_MANGLE_MODULE)
 	{
 		.name       = "TCPOPTSTRIP",
-		.family     = NFPROTO_IPV6,
+		.family     = AF_INET6,
 		.table      = "mangle",
 		.proto      = IPPROTO_TCP,
 		.target     = tcpoptstrip_tg6,

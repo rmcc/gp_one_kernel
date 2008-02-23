@@ -28,7 +28,6 @@
 #include <linux/delay.h>
 #include <linux/kdebug.h>
 #include <linux/utsname.h>
-#include <linux/tracehook.h>
 
 #include <asm/cpu.h>
 #include <asm/delay.h>
@@ -56,10 +55,6 @@ void (*ia64_mark_idle)(int);
 
 unsigned long boot_option_idle_override = 0;
 EXPORT_SYMBOL(boot_option_idle_override);
-unsigned long idle_halt;
-EXPORT_SYMBOL(idle_halt);
-unsigned long idle_nomwait;
-EXPORT_SYMBOL(idle_nomwait);
 
 void
 ia64_do_show_stack (struct unw_frame_info *info, void *arg)
@@ -161,6 +156,21 @@ show_regs (struct pt_regs *regs)
 		show_stack(NULL, NULL);
 }
 
+void tsk_clear_notify_resume(struct task_struct *tsk)
+{
+#ifdef CONFIG_PERFMON
+	if (tsk->thread.pfm_needs_checking)
+		return;
+#endif
+	if (test_ti_thread_flag(task_thread_info(tsk), TIF_RESTORE_RSE))
+		return;
+	clear_ti_thread_flag(task_thread_info(tsk), TIF_NOTIFY_RESUME);
+}
+
+/*
+ * do_notify_resume_user():
+ *	Called from notify_resume_user at entry.S, with interrupts disabled.
+ */
 void
 do_notify_resume_user(sigset_t *unused, struct sigscratch *scr, long in_syscall)
 {
@@ -187,11 +197,6 @@ do_notify_resume_user(sigset_t *unused, struct sigscratch *scr, long in_syscall)
 	if (test_thread_flag(TIF_SIGPENDING)) {
 		local_irq_enable();	/* force interrupt enable */
 		ia64_do_signal(scr, in_syscall);
-	}
-
-	if (test_thread_flag(TIF_NOTIFY_RESUME)) {
-		clear_thread_flag(TIF_NOTIFY_RESUME);
-		tracehook_notify_resume(&scr->pt);
 	}
 
 	/* copy user rbs to kernel rbs */
@@ -242,6 +247,7 @@ default_idle (void)
 /* We don't actually take CPU down, just spin without interrupts. */
 static inline void play_dead(void)
 {
+	extern void ia64_cpu_local_tick (void);
 	unsigned int this_cpu = smp_processor_id();
 
 	/* Ack it */
@@ -280,7 +286,7 @@ void cpu_idle_wait(void)
 {
 	smp_mb();
 	/* kick all the CPUs so that they exit out of pm_idle */
-	smp_call_function(do_nothing, NULL, 1);
+	smp_call_function(do_nothing, NULL, 0, 1);
 }
 EXPORT_SYMBOL_GPL(cpu_idle_wait);
 

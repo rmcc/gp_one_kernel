@@ -16,6 +16,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/dcache.h>
+#include <linux/dirent.h>
 #include <linux/nls.h>
 #include <linux/smp_lock.h>
 #include <linux/net.h>
@@ -864,7 +865,7 @@ smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt)
 		goto out;
 
 	error = -EACCES;
-	if (current_uid() != server->mnt->mounted_uid &&
+	if (current->uid != server->mnt->mounted_uid && 
 	    !capable(CAP_SYS_ADMIN))
 		goto out;
 

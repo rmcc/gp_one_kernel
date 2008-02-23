@@ -26,7 +26,6 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/init.h>
-#include <linux/string.h>
 #include <asm/uaccess.h>
 
 #include <acpi/acpi_drivers.h>
@@ -78,21 +77,26 @@ static ssize_t acpi_table_show(struct kobject *kobj,
 	    container_of(bin_attr, struct acpi_table_attr, attr);
 	struct acpi_table_header *table_header = NULL;
 	acpi_status status;
-	char name[ACPI_NAME_SIZE];
-
-	if (strncmp(table_attr->name, "NULL", 4))
-		memcpy(name, table_attr->name, ACPI_NAME_SIZE);
-	else
-		memcpy(name, "\0\0\0\0", 4);
+	ssize_t ret_count = count;
 
 	status =
-	    acpi_get_table(name, table_attr->instance,
+	    acpi_get_table(table_attr->name, table_attr->instance,
 			   &table_header);
 	if (ACPI_FAILURE(status))
 		return -ENODEV;
 
-	return memory_read_from_buffer(buf, count, &offset,
-					table_header, table_header->length);
+	if (offset >= table_header->length) {
+		ret_count = 0;
+		goto end;
+	}
+
+	if (offset + ret_count > table_header->length)
+		ret_count = table_header->length - offset;
+
+	memcpy(buf, ((char *)table_header) + offset, ret_count);
+
+      end:
+	return ret_count;
 }
 
 static void acpi_table_attr_init(struct acpi_table_attr *table_attr,
@@ -101,29 +105,27 @@ static void acpi_table_attr_init(struct acpi_table_attr *table_attr,
 	struct acpi_table_header *header = NULL;
 	struct acpi_table_attr *attr = NULL;
 
-	if (table_header->signature[0] != '\0')
-		memcpy(table_attr->name, table_header->signature,
-			ACPI_NAME_SIZE);
-	else
-		memcpy(table_attr->name, "NULL", 4);
+	memcpy(table_attr->name, table_header->signature, ACPI_NAME_SIZE);
 
 	list_for_each_entry(attr, &acpi_table_attr_list, node) {
-		if (!memcmp(table_attr->name, attr->name, ACPI_NAME_SIZE))
+		if (!memcmp(table_header->signature, attr->name,
+			    ACPI_NAME_SIZE))
 			if (table_attr->instance < attr->instance)
 				table_attr->instance = attr->instance;
 	}
 	table_attr->instance++;
 
 	if (table_attr->instance > 1 || (table_attr->instance == 1 &&
-					!acpi_get_table
-					(table_header->signature, 2, &header)))
-		sprintf(table_attr->name + ACPI_NAME_SIZE, "%d",
-			table_attr->instance);
+					 !acpi_get_table(table_header->
+							 signature, 2,
+							 &header)))
+		sprintf(table_attr->name + 4, "%d", table_attr->instance);
 
 	table_attr->attr.size = 0;
 	table_attr->attr.read = acpi_table_show;
 	table_attr->attr.attr.name = table_attr->name;
 	table_attr->attr.attr.mode = 0444;
+	table_attr->attr.attr.owner = THIS_MODULE;
 
 	return;
 }
@@ -176,12 +178,7 @@ static int acpi_system_sysfs_init(void)
 #define COUNT_ERROR 2	/* other */
 #define NUM_COUNTERS_EXTRA 3
 
-struct event_counter {
-	u32 count;
-	u32 flags;
-};
-
-static struct event_counter *all_counters;
+static u32 *all_counters;
 static u32 num_gpes;
 static u32 num_counters;
 static struct attribute **all_attrs;
@@ -192,9 +189,33 @@ static struct attribute_group interrupt_stats_attr_group = {
 };
 static struct kobj_attribute *counter_attrs;
 
+static int count_num_gpes(void)
+{
+	int count = 0;
+	struct acpi_gpe_xrupt_info *gpe_xrupt_info;
+	struct acpi_gpe_block_info *gpe_block;
+	acpi_cpu_flags flags;
+
+	flags = acpi_os_acquire_lock(acpi_gbl_gpe_lock);
+
+	gpe_xrupt_info = acpi_gbl_gpe_xrupt_list_head;
+	while (gpe_xrupt_info) {
+		gpe_block = gpe_xrupt_info->gpe_block_list_head;
+		while (gpe_block) {
+			count += gpe_block->register_count *
+			    ACPI_GPE_REGISTER_WIDTH;
+			gpe_block = gpe_block->next;
+		}
+		gpe_xrupt_info = gpe_xrupt_info->next;
+	}
+	acpi_os_release_lock(acpi_gbl_gpe_lock, flags);
+
+	return count;
+}
+
 static void delete_gpe_attr_array(void)
 {
-	struct event_counter *tmp = all_counters;
+	u32 *tmp = all_counters;
 
 	all_counters = NULL;
 	kfree(tmp);
@@ -220,10 +241,9 @@ void acpi_os_gpe_count(u32 gpe_number)
 		return;
 
 	if (gpe_number < num_gpes)
-		all_counters[gpe_number].count++;
+		all_counters[gpe_number]++;
 	else
-		all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_ERROR].
-					count++;
+		all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_ERROR]++;
 
 	return;
 }
@@ -234,140 +254,44 @@ void acpi_os_fixed_event_count(u32 event_number)
 		return;
 
 	if (event_number < ACPI_NUM_FIXED_EVENTS)
-		all_counters[num_gpes + event_number].count++;
+		all_counters[num_gpes + event_number]++;
 	else
-		all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_ERROR].
-				count++;
+		all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_ERROR]++;
 
 	return;
-}
-
-static int get_status(u32 index, acpi_event_status *status, acpi_handle *handle)
-{
-	int result = 0;
-
-	if (index >= num_gpes + ACPI_NUM_FIXED_EVENTS)
-		goto end;
-
-	if (index < num_gpes) {
-		result = acpi_get_gpe_device(index, handle);
-		if (result) {
-			ACPI_EXCEPTION((AE_INFO, AE_NOT_FOUND,
-				"Invalid GPE 0x%x\n", index));
-			goto end;
-		}
-		result = acpi_get_gpe_status(*handle, index,
-						ACPI_NOT_ISR, status);
-	} else if (index < (num_gpes + ACPI_NUM_FIXED_EVENTS))
-		result = acpi_get_event_status(index - num_gpes, status);
-
-end:
-	return result;
 }
 
 static ssize_t counter_show(struct kobject *kobj,
 	struct kobj_attribute *attr, char *buf)
 {
-	int index = attr - counter_attrs;
-	int size;
-	acpi_handle handle;
-	acpi_event_status status;
-	int result = 0;
-
-	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_SCI].count =
+	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_SCI] =
 		acpi_irq_handled;
-	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_GPE].count =
+	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_GPE] =
 		acpi_gpe_count;
 
-	size = sprintf(buf, "%8d", all_counters[index].count);
-
-	/* "gpe_all" or "sci" */
-	if (index >= num_gpes + ACPI_NUM_FIXED_EVENTS)
-		goto end;
-
-	result = get_status(index, &status, &handle);
-	if (result)
-		goto end;
-
-	if (!(status & ACPI_EVENT_FLAG_HANDLE))
-		size += sprintf(buf + size, "	invalid");
-	else if (status & ACPI_EVENT_FLAG_ENABLED)
-		size += sprintf(buf + size, "	enabled");
-	else if (status & ACPI_EVENT_FLAG_WAKE_ENABLED)
-		size += sprintf(buf + size, "	wake_enabled");
-	else
-		size += sprintf(buf + size, "	disabled");
-
-end:
-	size += sprintf(buf + size, "\n");
-	return result ? result : size;
+	return sprintf(buf, "%d\n", all_counters[attr - counter_attrs]);
 }
 
 /*
  * counter_set() sets the specified counter.
  * setting the total "sci" file to any value clears all counters.
- * enable/disable/clear a gpe/fixed event in user space.
  */
 static ssize_t counter_set(struct kobject *kobj,
 	struct kobj_attribute *attr, const char *buf, size_t size)
 {
 	int index = attr - counter_attrs;
-	acpi_event_status status;
-	acpi_handle handle;
-	int result = 0;
 
 	if (index == num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_SCI) {
 		int i;
 		for (i = 0; i < num_counters; ++i)
-			all_counters[i].count = 0;
+			all_counters[i] = 0;
 		acpi_gpe_count = 0;
 		acpi_irq_handled = 0;
-		goto end;
-	}
 
-	/* show the event status for both GPEs and Fixed Events */
-	result = get_status(index, &status, &handle);
-	if (result)
-		goto end;
-
-	if (!(status & ACPI_EVENT_FLAG_HANDLE)) {
-		printk(KERN_WARNING PREFIX
-			"Can not change Invalid GPE/Fixed Event status\n");
-		return -EINVAL;
-	}
-
-	if (index < num_gpes) {
-		if (!strcmp(buf, "disable\n") &&
-				(status & ACPI_EVENT_FLAG_ENABLED))
-			result = acpi_disable_gpe(handle, index);
-		else if (!strcmp(buf, "enable\n") &&
-				!(status & ACPI_EVENT_FLAG_ENABLED))
-			result = acpi_enable_gpe(handle, index);
-		else if (!strcmp(buf, "clear\n") &&
-				(status & ACPI_EVENT_FLAG_SET))
-			result = acpi_clear_gpe(handle, index, ACPI_NOT_ISR);
-		else
-			all_counters[index].count = strtoul(buf, NULL, 0);
-	} else if (index < num_gpes + ACPI_NUM_FIXED_EVENTS) {
-		int event = index - num_gpes;
-		if (!strcmp(buf, "disable\n") &&
-				(status & ACPI_EVENT_FLAG_ENABLED))
-			result = acpi_disable_event(event, ACPI_NOT_ISR);
-		else if (!strcmp(buf, "enable\n") &&
-				!(status & ACPI_EVENT_FLAG_ENABLED))
-			result = acpi_enable_event(event, ACPI_NOT_ISR);
-		else if (!strcmp(buf, "clear\n") &&
-				(status & ACPI_EVENT_FLAG_SET))
-			result = acpi_clear_event(event);
-		else
-			all_counters[index].count = strtoul(buf, NULL, 0);
 	} else
-		all_counters[index].count = strtoul(buf, NULL, 0);
+		all_counters[index] = strtoul(buf, NULL, 0);
 
-	if (ACPI_FAILURE(result))
-		result = -EINVAL;
-end:
-	return result ? result : size;
+	return size;
 }
 
 void acpi_irq_stats_init(void)
@@ -377,7 +301,7 @@ void acpi_irq_stats_init(void)
 	if (all_counters)
 		return;
 
-	num_gpes = acpi_current_gpe_count;
+	num_gpes = count_num_gpes();
 	num_counters = num_gpes + ACPI_NUM_FIXED_EVENTS + NUM_COUNTERS_EXTRA;
 
 	all_attrs = kzalloc(sizeof(struct attribute *) * (num_counters + 1),
@@ -385,8 +309,7 @@ void acpi_irq_stats_init(void)
 	if (all_attrs == NULL)
 		return;
 
-	all_counters = kzalloc(sizeof(struct event_counter) * (num_counters),
-				GFP_KERNEL);
+	all_counters = kzalloc(sizeof(u32) * (num_counters), GFP_KERNEL);
 	if (all_counters == NULL)
 		goto fail;
 

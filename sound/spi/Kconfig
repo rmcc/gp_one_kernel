@@ -1,13 +1,7 @@
 #SPI drivers
 
-menuconfig SND_SPI
-	bool "SPI sound devices"
-	depends on SPI
-	default y
-	help
-	  Support for sound devices connected via the SPI bus.
-
-if SND_SPI
+menu "SPI devices"
+	depends on SND != n
 
 config SND_AT73C213
 	tristate "Atmel AT73C213 DAC driver"
@@ -34,5 +28,4 @@ config SND_AT73C213_TARGET_BITRATE
 
 	  Set to 48000 Hz by default.
 
-endif	# SND_SPI
-
+endmenu

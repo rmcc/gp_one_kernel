@@ -20,14 +20,12 @@
 #include "ams.h"
 
 static unsigned int joystick;
-module_param(joystick, bool, S_IRUGO);
+module_param(joystick, bool, 0644);
 MODULE_PARM_DESC(joystick, "Enable the input class device on module load");
 
 static unsigned int invert;
-module_param(invert, bool, S_IWUSR | S_IRUGO);
+module_param(invert, bool, 0644);
 MODULE_PARM_DESC(invert, "Invert input data on X and Y axis");
-
-static DEFINE_MUTEX(ams_input_mutex);
 
 static void ams_idev_poll(struct input_polled_dev *dev)
 {
@@ -52,11 +50,13 @@ static void ams_idev_poll(struct input_polled_dev *dev)
 }
 
 /* Call with ams_info.lock held! */
-static int ams_input_enable(void)
+static void ams_input_enable(void)
 {
 	struct input_dev *input;
 	s8 x, y, z;
-	int error;
+
+	if (ams_info.idev)
+		return;
 
 	ams_sensors(&x, &y, &z);
 	ams_info.xcalib = x;
@@ -65,7 +65,7 @@ static int ams_input_enable(void)
 
 	ams_info.idev = input_allocate_polled_device();
 	if (!ams_info.idev)
-		return -ENOMEM;
+		return;
 
 	ams_info.idev->poll = ams_idev_poll;
 	ams_info.idev->poll_interval = 25;
@@ -84,18 +84,14 @@ static int ams_input_enable(void)
 	set_bit(EV_KEY, input->evbit);
 	set_bit(BTN_TOUCH, input->keybit);
 
-	error = input_register_polled_device(ams_info.idev);
-	if (error) {
+	if (input_register_polled_device(ams_info.idev)) {
 		input_free_polled_device(ams_info.idev);
 		ams_info.idev = NULL;
-		return error;
+		return;
 	}
-
-	joystick = 1;
-
-	return 0;
 }
 
+/* Call with ams_info.lock held! */
 static void ams_input_disable(void)
 {
 	if (ams_info.idev) {
@@ -103,8 +99,6 @@ static void ams_input_disable(void)
 		input_free_polled_device(ams_info.idev);
 		ams_info.idev = NULL;
 	}
-
-	joystick = 0;
 }
 
 static ssize_t ams_input_show_joystick(struct device *dev,
@@ -116,42 +110,39 @@ static ssize_t ams_input_show_joystick(struct device *dev,
 static ssize_t ams_input_store_joystick(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
-	unsigned long enable;
-	int error = 0;
-
-	if (strict_strtoul(buf, 0, &enable) || enable > 1)
+	if (sscanf(buf, "%d\n", &joystick) != 1)
 		return -EINVAL;
 
-	mutex_lock(&ams_input_mutex);
+	mutex_lock(&ams_info.lock);
 
-	if (enable != joystick) {
-		if (enable)
-			error = ams_input_enable();
-		else
-			ams_input_disable();
-	}
+	if (joystick)
+		ams_input_enable();
+	else
+		ams_input_disable();
 
-	mutex_unlock(&ams_input_mutex);
+	mutex_unlock(&ams_info.lock);
 
-	return error ? error : count;
+	return count;
 }
 
 static DEVICE_ATTR(joystick, S_IRUGO | S_IWUSR,
 	ams_input_show_joystick, ams_input_store_joystick);
 
+/* Call with ams_info.lock held! */
 int ams_input_init(void)
 {
-	if (joystick)
-		ams_input_enable();
+	int result;
 
-	return device_create_file(&ams_info.of_dev->dev, &dev_attr_joystick);
+	result = device_create_file(&ams_info.of_dev->dev, &dev_attr_joystick);
+
+	if (!result && joystick)
+		ams_input_enable();
+	return result;
 }
 
+/* Call with ams_info.lock held! */
 void ams_input_exit(void)
 {
-	device_remove_file(&ams_info.of_dev->dev, &dev_attr_joystick);
-
-	mutex_lock(&ams_input_mutex);
 	ams_input_disable();
-	mutex_unlock(&ams_input_mutex);
+	device_remove_file(&ams_info.of_dev->dev, &dev_attr_joystick);
 }

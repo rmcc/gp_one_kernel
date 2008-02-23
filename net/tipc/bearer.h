@@ -104,7 +104,7 @@ struct bearer {
 	u32 continue_count;
 	int active;
 	char net_plane;
-	struct tipc_node_map nodes;
+	struct node_map nodes;
 };
 
 struct bearer_name {

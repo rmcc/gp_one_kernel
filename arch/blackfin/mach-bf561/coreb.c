@@ -194,7 +194,6 @@ static loff_t coreb_lseek(struct file *file, loff_t offset, int origin)
 	return ret;
 }
 
-/* No BKL needed here */
 static int coreb_open(struct inode *inode, struct file *file)
 {
 	spin_lock_irq(&coreb_lock);

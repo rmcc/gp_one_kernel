@@ -1,5 +1,6 @@
 config SND_AOA_SOUNDBUS
 	tristate "Apple Soundbus support"
+	depends on SOUND
 	select SND_PCM
 	---help---
 	This option enables the generic driver for the soundbus

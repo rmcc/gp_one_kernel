@@ -71,7 +71,6 @@ struct tifm_ms {
 	struct tifm_dev         *dev;
 	struct timer_list       timer;
 	struct memstick_request *req;
-	struct tasklet_struct   notify;
 	unsigned int            mode_mask;
 	unsigned int            block_pos;
 	unsigned long           timeout_jiffies;
@@ -456,51 +455,49 @@ static void tifm_ms_card_event(struct tifm_dev *sock)
 	return;
 }
 
-static void tifm_ms_req_tasklet(unsigned long data)
+static void tifm_ms_request(struct memstick_host *msh)
 {
-	struct memstick_host *msh = (struct memstick_host *)data;
 	struct tifm_ms *host = memstick_priv(msh);
 	struct tifm_dev *sock = host->dev;
 	unsigned long flags;
 	int rc;
 
 	spin_lock_irqsave(&sock->lock, flags);
-	if (!host->req) {
-		if (host->eject) {
-			do {
-				rc = memstick_next_req(msh, &host->req);
-				if (!rc)
-					host->req->error = -ETIME;
-			} while (!rc);
-			spin_unlock_irqrestore(&sock->lock, flags);
-			return;
-		}
+	if (host->req) {
+		printk(KERN_ERR "%s : unfinished request detected\n",
+		       sock->dev.bus_id);
+		spin_unlock_irqrestore(&sock->lock, flags);
+		tifm_eject(host->dev);
+		return;
+	}
 
+	if (host->eject) {
 		do {
 			rc = memstick_next_req(msh, &host->req);
-		} while (!rc && tifm_ms_issue_cmd(host));
+			if (!rc)
+				host->req->error = -ETIME;
+		} while (!rc);
+		spin_unlock_irqrestore(&sock->lock, flags);
+		return;
 	}
-	spin_unlock_irqrestore(&sock->lock, flags);
-}
 
-static void tifm_ms_dummy_submit(struct memstick_host *msh)
-{
+	do {
+		rc = memstick_next_req(msh, &host->req);
+	} while (!rc && tifm_ms_issue_cmd(host));
+
+	spin_unlock_irqrestore(&sock->lock, flags);
 	return;
 }
 
-static void tifm_ms_submit_req(struct memstick_host *msh)
-{
-	struct tifm_ms *host = memstick_priv(msh);
-
-	tasklet_schedule(&host->notify);
-}
-
-static int tifm_ms_set_param(struct memstick_host *msh,
-			     enum memstick_param param,
-			     int value)
+static void tifm_ms_set_param(struct memstick_host *msh,
+			      enum memstick_param param,
+			      int value)
 {
 	struct tifm_ms *host = memstick_priv(msh);
 	struct tifm_dev *sock = host->dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&sock->lock, flags);
 
 	switch (param) {
 	case MEMSTICK_POWER:
@@ -515,8 +512,7 @@ static int tifm_ms_set_param(struct memstick_host *msh,
 			writel(TIFM_MS_SYS_FCLR | TIFM_MS_SYS_INTCLR,
 			       sock->addr + SOCK_MS_SYSTEM);
 			writel(0xffffffff, sock->addr + SOCK_MS_STATUS);
-		} else
-			return -EINVAL;
+		}
 		break;
 	case MEMSTICK_INTERFACE:
 		if (value == MEMSTICK_SERIAL) {
@@ -529,12 +525,11 @@ static int tifm_ms_set_param(struct memstick_host *msh,
 			writel(TIFM_CTRL_FAST_CLK
 			       | readl(sock->addr + SOCK_CONTROL),
 			       sock->addr + SOCK_CONTROL);
-		} else
-			return -EINVAL;
+		}
 		break;
 	};
 
-	return 0;
+	spin_unlock_irqrestore(&sock->lock, flags);
 }
 
 static void tifm_ms_abort(unsigned long data)
@@ -546,7 +541,7 @@ static void tifm_ms_abort(unsigned long data)
 	printk(KERN_ERR
 	       "%s : card failed to respond for a long period of time "
 	       "(%x, %x)\n",
-	       dev_name(&host->dev->dev), host->req ? host->req->tpc : 0,
+	       host->dev->dev.bus_id, host->req ? host->req->tpc : 0,
 	       host->cmd_flags);
 
 	tifm_eject(host->dev);
@@ -561,7 +556,7 @@ static int tifm_ms_probe(struct tifm_dev *sock)
 	if (!(TIFM_SOCK_STATE_OCCUPIED
 	      & readl(sock->addr + SOCK_PRESENT_STATE))) {
 		printk(KERN_WARNING "%s : card gone, unexpectedly\n",
-		       dev_name(&sock->dev));
+		       sock->dev.bus_id);
 		return rc;
 	}
 
@@ -575,9 +570,8 @@ static int tifm_ms_probe(struct tifm_dev *sock)
 	host->timeout_jiffies = msecs_to_jiffies(1000);
 
 	setup_timer(&host->timer, tifm_ms_abort, (unsigned long)host);
-	tasklet_init(&host->notify, tifm_ms_req_tasklet, (unsigned long)msh);
 
-	msh->request = tifm_ms_submit_req;
+	msh->request = tifm_ms_request;
 	msh->set_param = tifm_ms_set_param;
 	sock->card_event = tifm_ms_card_event;
 	sock->data_event = tifm_ms_data_event;
@@ -599,8 +593,6 @@ static void tifm_ms_remove(struct tifm_dev *sock)
 	int rc = 0;
 	unsigned long flags;
 
-	msh->request = tifm_ms_dummy_submit;
-	tasklet_kill(&host->notify);
 	spin_lock_irqsave(&sock->lock, flags);
 	host->eject = 1;
 	if (host->req) {

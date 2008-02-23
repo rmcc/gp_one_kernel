@@ -850,9 +850,8 @@ osf_getpriority:
 sys_getxuid:
 	.prologue 0
 	ldq	$2, TI_TASK($8)
-	ldq	$3, TASK_CRED($2)
-	ldl	$0, CRED_UID($3)
-	ldl	$1, CRED_EUID($3)
+	ldl	$0, TASK_UID($2)
+	ldl	$1, TASK_EUID($2)
 	stq	$1, 80($sp)
 	ret
 .end sys_getxuid
@@ -863,9 +862,8 @@ sys_getxuid:
 sys_getxgid:
 	.prologue 0
 	ldq	$2, TI_TASK($8)
-	ldq	$3, TASK_CRED($2)
-	ldl	$0, CRED_GID($3)
-	ldl	$1, CRED_EGID($3)
+	ldl	$0, TASK_GID($2)
+	ldl	$1, TASK_EGID($2)
 	stq	$1, 80($sp)
 	ret
 .end sys_getxgid

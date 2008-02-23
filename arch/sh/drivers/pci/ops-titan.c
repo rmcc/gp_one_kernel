@@ -16,7 +16,7 @@
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/io.h>
-#include <mach/titan.h>
+#include <asm/titan.h>
 #include "pci-sh4.h"
 
 static char titan_irq_tab[] __initdata = {

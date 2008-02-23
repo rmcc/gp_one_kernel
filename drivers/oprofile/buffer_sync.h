@@ -9,18 +9,14 @@
 
 #ifndef OPROFILE_BUFFER_SYNC_H
 #define OPROFILE_BUFFER_SYNC_H
-
+ 
 /* add the necessary profiling hooks */
 int sync_start(void);
 
 /* remove the hooks */
 void sync_stop(void);
-
+ 
 /* sync the given CPU's buffer */
 void sync_buffer(int cpu);
-
-/* initialize/destroy the buffer system. */
-int buffer_sync_init(void);
-void buffer_sync_cleanup(void);
 
 #endif /* OPROFILE_BUFFER_SYNC_H */

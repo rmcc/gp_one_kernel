@@ -53,14 +53,12 @@ static int finish_range(handle_t *handle, struct inode *inode,
 	 * credit. But below we try to not accumalate too much
 	 * of them by restarting the journal.
 	 */
-	needed = ext4_ext_calc_credits_for_single_extent(inode,
-		    lb->last_block - lb->first_block + 1, path);
+	needed = ext4_ext_calc_credits_for_insert(inode, path);
 
 	/*
 	 * Make sure the credit we accumalated is not really high
 	 */
-	if (needed && ext4_handle_has_enough_credits(handle,
-						EXT4_RESERVE_TRANS_BLOCKS)) {
+	if (needed && handle->h_buffer_credits >= EXT4_RESERVE_TRANS_BLOCKS) {
 		retval = ext4_journal_restart(handle, needed);
 		if (retval)
 			goto err_out;
@@ -230,7 +228,7 @@ static int extend_credit_for_blkdel(handle_t *handle, struct inode *inode)
 {
 	int retval = 0, needed;
 
-	if (ext4_handle_has_enough_credits(handle, EXT4_RESERVE_TRANS_BLOCKS+1))
+	if (handle->h_buffer_credits > EXT4_RESERVE_TRANS_BLOCKS)
 		return 0;
 	/*
 	 * We are freeing a blocks. During this we touch
@@ -448,7 +446,8 @@ static int free_ext_block(handle_t *handle, struct inode *inode)
 
 }
 
-int ext4_ext_migrate(struct inode *inode)
+int ext4_ext_migrate(struct inode *inode, struct file *filp,
+				unsigned int cmd, unsigned long arg)
 {
 	handle_t *handle;
 	int retval = 0, i;
@@ -459,13 +458,13 @@ int ext4_ext_migrate(struct inode *inode)
 	struct list_blocks_struct lb;
 	unsigned long max_entries;
 
-	/*
-	 * If the filesystem does not support extents, or the inode
-	 * already is extent-based, error out.
-	 */
-	if (!EXT4_HAS_INCOMPAT_FEATURE(inode->i_sb,
-				       EXT4_FEATURE_INCOMPAT_EXTENTS) ||
-	    (EXT4_I(inode)->i_flags & EXT4_EXTENTS_FL))
+	if (!test_opt(inode->i_sb, EXTENTS))
+		/*
+		 * if mounted with noextents we don't allow the migrate
+		 */
+		return -EINVAL;
+
+	if ((EXT4_I(inode)->i_flags & EXT4_EXTENTS_FL))
 		return -EINVAL;
 
 	if (S_ISLNK(inode->i_mode) && inode->i_blocks == 0)
@@ -515,6 +514,12 @@ int ext4_ext_migrate(struct inode *inode)
 	 * trascation that created the inode. Later as and
 	 * when we add extents we extent the journal
 	 */
+	/*
+	 * inode_mutex prevent write and truncate on the file. Read still goes
+	 * through. We take i_data_sem in ext4_ext_swap_inode_data before we
+	 * switch the inode format to prevent read.
+	 */
+	mutex_lock(&(inode->i_mutex));
 	/*
 	 * Even though we take i_mutex we can still cause block allocation
 	 * via mmap write to holes. If we have allocated new blocks we fail
@@ -617,6 +622,7 @@ err_out:
 	tmp_inode->i_nlink = 0;
 
 	ext4_journal_stop(handle);
+	mutex_unlock(&(inode->i_mutex));
 
 	if (tmp_inode)
 		iput(tmp_inode);

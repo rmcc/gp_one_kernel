@@ -42,7 +42,6 @@
 /* abbrev for the && above... */
 #define DO_PROC
 #include <linux/proc_fs.h>
-#include <linux/seq_file.h>
 #endif
 
 /*
@@ -324,16 +323,19 @@ static int remove_region( BLOCK *block )
 
 #ifdef DO_PROC
 
-#define	PRINT_PROC(fmt,args...) seq_printf( m, fmt, ##args )
+#define	PRINT_PROC(fmt,args...) len += sprintf( buf+len, fmt, ##args )
 
-static int stram_proc_show(struct seq_file *m, void *v)
+int get_stram_list( char *buf )
 {
+	int len = 0;
 	BLOCK *p;
 
 	PRINT_PROC("Total ST-RAM:      %8u kB\n",
 			   (stram_end - stram_start) >> 10);
 	PRINT_PROC( "Allocated regions:\n" );
 	for( p = alloc_list; p; p = p->next ) {
+		if (len + 50 >= PAGE_SIZE)
+			break;
 		PRINT_PROC("0x%08lx-0x%08lx: %s (",
 			   virt_to_phys(p->start),
 			   virt_to_phys(p->start+p->size-1),
@@ -344,27 +346,9 @@ static int stram_proc_show(struct seq_file *m, void *v)
 			PRINT_PROC( "??)\n" );
 	}
 
-	return 0;
+	return( len );
 }
 
-static int stram_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, stram_proc_show, NULL);
-}
-
-static const struct file_operations stram_proc_fops = {
-	.open		= stram_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
-static int __init proc_stram_init(void)
-{
-	proc_create("stram", 0, NULL, &stram_proc_fops);
-	return 0;
-}
-module_init(proc_stram_init);
 #endif
 
 

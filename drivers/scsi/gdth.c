@@ -120,7 +120,6 @@
 #include <linux/timer.h>
 #include <linux/dma-mapping.h>
 #include <linux/list.h>
-#include <linux/smp_lock.h>
 
 #ifdef GDTH_RTC
 #include <linux/mc146818rtc.h>
@@ -464,6 +463,7 @@ int __gdth_execute(struct scsi_device *sdev, gdth_cmd_str *gdtcmd, char *cmnd,
 
     /* use request field to save the ptr. to completion struct. */
     scp->request = (struct request *)&wait;
+    scp->timeout_per_command = timeout*HZ;
     scp->cmd_len = 12;
     scp->cmnd = cmnd;
     cmndinfo.priority = IOCTL_PRI;
@@ -588,7 +588,7 @@ static struct pci_driver gdth_pci_driver = {
 	.remove		= gdth_pci_remove_one,
 };
 
-static void __devexit gdth_pci_remove_one(struct pci_dev *pdev)
+static void gdth_pci_remove_one(struct pci_dev *pdev)
 {
 	gdth_ha_str *ha = pci_get_drvdata(pdev);
 
@@ -600,7 +600,7 @@ static void __devexit gdth_pci_remove_one(struct pci_dev *pdev)
 	pci_disable_device(pdev);
 }
 
-static int __devinit gdth_pci_init_one(struct pci_dev *pdev,
+static int gdth_pci_init_one(struct pci_dev *pdev,
 				       const struct pci_device_id *ent)
 {
 	ushort vendor = pdev->vendor;
@@ -853,7 +853,7 @@ static int __init gdth_init_isa(ulong32 bios_adr,gdth_ha_str *ha)
 #endif /* CONFIG_ISA */
 
 #ifdef CONFIG_PCI
-static int __devinit gdth_init_pci(struct pci_dev *pdev, gdth_pci_str *pcistr,
+static int gdth_init_pci(struct pci_dev *pdev, gdth_pci_str *pcistr,
 				   gdth_ha_str *ha)
 {
     register gdt6_dpram_str __iomem *dp6_ptr;
@@ -1237,7 +1237,7 @@ static int __devinit gdth_init_pci(struct pci_dev *pdev, gdth_pci_str *pcistr,
 
 /* controller protocol functions */
 
-static void __devinit gdth_enable_int(gdth_ha_str *ha)
+static void __init gdth_enable_int(gdth_ha_str *ha)
 {
     ulong flags;
     gdt2_dpram_str __iomem *dp2_ptr;
@@ -1553,7 +1553,7 @@ static int gdth_internal_cmd(gdth_ha_str *ha, unchar service, ushort opcode,
 
 /* search for devices */
 
-static int __devinit gdth_search_drives(gdth_ha_str *ha)
+static int __init gdth_search_drives(gdth_ha_str *ha)
 {
     ushort cdev_cnt, i;
     int ok;
@@ -1994,12 +1994,23 @@ static void gdth_putq(gdth_ha_str *ha, Scsi_Cmnd *scp, unchar priority)
     register Scsi_Cmnd *pscp;
     register Scsi_Cmnd *nscp;
     ulong flags;
+    unchar b, t;
 
     TRACE(("gdth_putq() priority %d\n",priority));
     spin_lock_irqsave(&ha->smp_lock, flags);
 
-    if (!cmndinfo->internal_command)
+    if (!cmndinfo->internal_command) {
         cmndinfo->priority = priority;
+        b = scp->device->channel;
+        t = scp->device->id;
+        if (priority >= DEFAULT_PRI) {
+            if ((b != ha->virt_bus && ha->raw[BUS_L2P(ha,b)].lock) ||
+                (b==ha->virt_bus && t<MAX_HDRIVES && ha->hdr[t].lock)) {
+                TRACE2(("gdth_putq(): locked IO ->update_timeout()\n"));
+                cmndinfo->timeout = gdth_update_timeout(scp, 0);
+            }
+        }
+    }
 
     if (ha->req_first==NULL) {
         ha->req_first = scp;                    /* queue was empty */
@@ -3887,39 +3898,6 @@ static const char *gdth_info(struct Scsi_Host *shp)
     return ((const char *)ha->binfo.type_string);
 }
 
-static enum blk_eh_timer_return gdth_timed_out(struct scsi_cmnd *scp)
-{
-	gdth_ha_str *ha = shost_priv(scp->device->host);
-	struct gdth_cmndinfo *cmndinfo = gdth_cmnd_priv(scp);
-	unchar b, t;
-	ulong flags;
-	enum blk_eh_timer_return retval = BLK_EH_NOT_HANDLED;
-
-	TRACE(("%s() cmd 0x%x\n", scp->cmnd[0], __func__));
-	b = scp->device->channel;
-	t = scp->device->id;
-
-	/*
-	 * We don't really honor the command timeout, but we try to
-	 * honor 6 times of the actual command timeout! So reset the
-	 * timer if this is less than 6th timeout on this command!
-	 */
-	if (++cmndinfo->timeout_count < 6)
-		retval = BLK_EH_RESET_TIMER;
-
-	/* Reset the timeout if it is locked IO */
-	spin_lock_irqsave(&ha->smp_lock, flags);
-	if ((b != ha->virt_bus && ha->raw[BUS_L2P(ha, b)].lock) ||
-	    (b == ha->virt_bus && t < MAX_HDRIVES && ha->hdr[t].lock)) {
-		TRACE2(("%s(): locked IO, reset timeout\n", __func__));
-		retval = BLK_EH_RESET_TIMER;
-	}
-	spin_unlock_irqrestore(&ha->smp_lock, flags);
-
-	return retval;
-}
-
-
 static int gdth_eh_bus_reset(Scsi_Cmnd *scp)
 {
     gdth_ha_str *ha = shost_priv(scp->device->host);
@@ -4013,7 +3991,7 @@ static int gdth_queuecommand(struct scsi_cmnd *scp,
     BUG_ON(!cmndinfo);
 
     scp->scsi_done = done;
-    cmndinfo->timeout_count = 0;
+    gdth_update_timeout(scp, scp->timeout_per_command * 6);
     cmndinfo->priority = DEFAULT_PRI;
 
     return __gdth_queuecommand(ha, scp, cmndinfo);
@@ -4041,12 +4019,10 @@ static int gdth_open(struct inode *inode, struct file *filep)
 {
     gdth_ha_str *ha;
 
-    lock_kernel();
     list_for_each_entry(ha, &gdth_instances, list) {
         if (!ha->sdev)
             ha->sdev = scsi_get_host_dev(ha->shost);
     }
-    unlock_kernel();
 
     TRACE(("gdth_open()\n"));
     return 0;
@@ -4117,10 +4093,12 @@ static int ioc_lockdrv(void __user *arg)
             ha->hdr[j].lock = 1;
             spin_unlock_irqrestore(&ha->smp_lock, flags);
             gdth_wait_completion(ha, ha->bus_cnt, j);
+            gdth_stop_timeout(ha, ha->bus_cnt, j);
         } else {
             spin_lock_irqsave(&ha->smp_lock, flags);
             ha->hdr[j].lock = 0;
             spin_unlock_irqrestore(&ha->smp_lock, flags);
+            gdth_start_timeout(ha, ha->bus_cnt, j);
             gdth_next(ha);
         }
     } 
@@ -4558,14 +4536,18 @@ static int gdth_ioctl(struct inode *inode, struct file *filep,
                 spin_lock_irqsave(&ha->smp_lock, flags);
                 ha->raw[i].lock = 1;
                 spin_unlock_irqrestore(&ha->smp_lock, flags);
-		for (j = 0; j < ha->tid_cnt; ++j)
+                for (j = 0; j < ha->tid_cnt; ++j) {
                     gdth_wait_completion(ha, i, j);
+                    gdth_stop_timeout(ha, i, j);
+                }
             } else {
                 spin_lock_irqsave(&ha->smp_lock, flags);
                 ha->raw[i].lock = 0;
                 spin_unlock_irqrestore(&ha->smp_lock, flags);
-		for (j = 0; j < ha->tid_cnt; ++j)
+                for (j = 0; j < ha->tid_cnt; ++j) {
+                    gdth_start_timeout(ha, i, j);
                     gdth_next(ha);
+                }
             }
         } 
         break;
@@ -4659,7 +4641,6 @@ static struct scsi_host_template gdth_template = {
         .slave_configure        = gdth_slave_configure,
         .bios_param             = gdth_bios_param,
         .proc_info              = gdth_proc_info,
-	.eh_timed_out		= gdth_timed_out,
         .proc_name              = "gdth",
         .can_queue              = GDTH_MAXCMDS,
         .this_id                = -1,
@@ -4935,7 +4916,7 @@ static int __init gdth_eisa_probe_one(ushort eisa_slot)
 #endif /* CONFIG_EISA */
 
 #ifdef CONFIG_PCI
-static int __devinit gdth_pci_probe_one(gdth_pci_str *pcistr,
+static int gdth_pci_probe_one(gdth_pci_str *pcistr,
 			     gdth_ha_str **ha_out)
 {
 	struct Scsi_Host *shp;

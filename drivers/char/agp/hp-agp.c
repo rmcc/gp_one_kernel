@@ -353,9 +353,9 @@ hp_zx1_insert_memory (struct agp_memory *mem, off_t pg_start, int type)
 		j++;
 	}
 
-	if (!mem->is_flushed) {
+	if (mem->is_flushed == FALSE) {
 		global_cache_flush();
-		mem->is_flushed = true;
+		mem->is_flushed = TRUE;
 	}
 
 	for (i = 0, j = io_pg_start; i < mem->page_count; i++) {
@@ -435,11 +435,9 @@ const struct agp_bridge_driver hp_zx1_driver = {
 	.alloc_by_type		= agp_generic_alloc_by_type,
 	.free_by_type		= agp_generic_free_by_type,
 	.agp_alloc_page		= agp_generic_alloc_page,
-	.agp_alloc_pages	= agp_generic_alloc_pages,
 	.agp_destroy_page	= agp_generic_destroy_page,
-	.agp_destroy_pages	= agp_generic_destroy_pages,
 	.agp_type_to_mask_type  = agp_generic_type_to_mask_type,
-	.cant_use_aperture	= true,
+	.cant_use_aperture	= 1,
 };
 
 static int __init

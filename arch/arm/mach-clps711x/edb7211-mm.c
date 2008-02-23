@@ -22,8 +22,9 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/page.h>
+#include <asm/pgtable.h>
 #include <asm/sizes.h>
  
 #include <asm/mach/map.h>

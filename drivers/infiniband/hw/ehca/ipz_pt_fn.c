@@ -163,7 +163,6 @@ static int alloc_small_queue_page(struct ipz_queue *queue, struct ehca_pd *pd)
 
 out:
 	ehca_err(pd->ib_pd.device, "failed to allocate small queue page");
-	mutex_unlock(&pd->lock);
 	return 0;
 }
 

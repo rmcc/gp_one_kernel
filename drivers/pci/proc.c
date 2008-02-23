@@ -1,4 +1,6 @@
 /*
+ *	$Id: proc.c,v 1.13 1998/05/12 07:36:07 mj Exp $
+ *
  *	Procfs interface for the PCI bus.
  *
  *	Copyright (c) 1997--1999 Martin Mares <mj@ucw.cz>
@@ -88,7 +90,7 @@ proc_bus_pci_read(struct file *file, char __user *buf, size_t nbytes, loff_t *pp
 	if ((pos & 3) && cnt > 2) {
 		unsigned short val;
 		pci_user_read_config_word(dev, pos, &val);
-		__put_user(cpu_to_le16(val), (__le16 __user *) buf);
+		__put_user(cpu_to_le16(val), (unsigned short __user *) buf);
 		buf += 2;
 		pos += 2;
 		cnt -= 2;
@@ -97,7 +99,7 @@ proc_bus_pci_read(struct file *file, char __user *buf, size_t nbytes, loff_t *pp
 	while (cnt >= 4) {
 		unsigned int val;
 		pci_user_read_config_dword(dev, pos, &val);
-		__put_user(cpu_to_le32(val), (__le32 __user *) buf);
+		__put_user(cpu_to_le32(val), (unsigned int __user *) buf);
 		buf += 4;
 		pos += 4;
 		cnt -= 4;
@@ -106,7 +108,7 @@ proc_bus_pci_read(struct file *file, char __user *buf, size_t nbytes, loff_t *pp
 	if (cnt >= 2) {
 		unsigned short val;
 		pci_user_read_config_word(dev, pos, &val);
-		__put_user(cpu_to_le16(val), (__le16 __user *) buf);
+		__put_user(cpu_to_le16(val), (unsigned short __user *) buf);
 		buf += 2;
 		pos += 2;
 		cnt -= 2;
@@ -156,8 +158,8 @@ proc_bus_pci_write(struct file *file, const char __user *buf, size_t nbytes, lof
 	}
 
 	if ((pos & 3) && cnt > 2) {
-		__le16 val;
-		__get_user(val, (__le16 __user *) buf);
+		unsigned short val;
+		__get_user(val, (unsigned short __user *) buf);
 		pci_user_write_config_word(dev, pos, le16_to_cpu(val));
 		buf += 2;
 		pos += 2;
@@ -165,8 +167,8 @@ proc_bus_pci_write(struct file *file, const char __user *buf, size_t nbytes, lof
 	}
 
 	while (cnt >= 4) {
-		__le32 val;
-		__get_user(val, (__le32 __user *) buf);
+		unsigned int val;
+		__get_user(val, (unsigned int __user *) buf);
 		pci_user_write_config_dword(dev, pos, le32_to_cpu(val));
 		buf += 4;
 		pos += 4;
@@ -174,8 +176,8 @@ proc_bus_pci_write(struct file *file, const char __user *buf, size_t nbytes, lof
 	}
 
 	if (cnt >= 2) {
-		__le16 val;
-		__get_user(val, (__le16 __user *) buf);
+		unsigned short val;
+		__get_user(val, (unsigned short __user *) buf);
 		pci_user_write_config_word(dev, pos, le16_to_cpu(val));
 		buf += 2;
 		pos += 2;
@@ -252,19 +254,10 @@ static int proc_bus_pci_mmap(struct file *file, struct vm_area_struct *vma)
 	const struct proc_dir_entry *dp = PDE(inode);
 	struct pci_dev *dev = dp->data;
 	struct pci_filp_private *fpriv = file->private_data;
-	int i, ret;
+	int ret;
 
 	if (!capable(CAP_SYS_RAWIO))
 		return -EPERM;
-
-	/* Make sure the caller is mapping a real resource for this device */
-	for (i = 0; i < PCI_ROM_RESOURCE; i++) {
-		if (pci_mmap_fits(dev, i, vma))
-			break;
-	}
-
-	if (i >= PCI_ROM_RESOURCE)
-		return -ENODEV;
 
 	ret = pci_mmap_page_range(dev, vma,
 				  fpriv->mmap_state,
@@ -361,16 +354,15 @@ static int show_device(struct seq_file *m, void *v)
 			dev->vendor,
 			dev->device,
 			dev->irq);
-
-	/* only print standard and ROM resources to preserve compatibility */
-	for (i = 0; i <= PCI_ROM_RESOURCE; i++) {
+	/* Here should be 7 and not PCI_NUM_RESOURCES as we need to preserve compatibility */
+	for (i=0; i<7; i++) {
 		resource_size_t start, end;
 		pci_resource_to_user(dev, i, &dev->resource[i], &start, &end);
 		seq_printf(m, "\t%16llx",
 			(unsigned long long)(start |
 			(dev->resource[i].flags & PCI_REGION_FLAG_MASK)));
 	}
-	for (i = 0; i <= PCI_ROM_RESOURCE; i++) {
+	for (i=0; i<7; i++) {
 		resource_size_t start, end;
 		pci_resource_to_user(dev, i, &dev->resource[i], &start, &end);
 		seq_printf(m, "\t%16llx",
@@ -490,5 +482,5 @@ static int __init pci_proc_init(void)
 	return 0;
 }
 
-device_initcall(pci_proc_init);
+__initcall(pci_proc_init);
 

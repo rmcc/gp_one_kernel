@@ -12,6 +12,7 @@
 
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <asm/io.h>
@@ -324,8 +325,8 @@ static int __devinit esb2rom_init_one(struct pci_dev *pdev,
 		/* Trim the size if we are larger than the map */
 		if (map->mtd->size > map->map.size) {
 			printk(KERN_WARNING MOD_NAME
-				" rom(%llu) larger than window(%lu). fixing...\n",
-				(unsigned long long)map->mtd->size, map->map.size);
+				" rom(%u) larger than window(%lu). fixing...\n",
+				map->mtd->size, map->map.size);
 			map->mtd->size = map->map.size;
 		}
 		if (window->rsrc.parent) {

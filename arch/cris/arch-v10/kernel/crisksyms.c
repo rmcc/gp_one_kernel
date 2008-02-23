@@ -1,6 +1,6 @@
 #include <linux/module.h>
 #include <asm/io.h>
-#include <arch/svinto.h>
+#include <asm/arch/svinto.h>
 
 /* Export shadow registers for the CPU I/O pins */
 EXPORT_SYMBOL(genconfig_shadow);

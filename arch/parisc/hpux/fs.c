@@ -84,28 +84,22 @@ static int filldir(void * __buf, const char * name, int namlen, loff_t offset,
 	if (reclen > buf->count)
 		return -EINVAL;
 	d_ino = ino;
-	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino) {
-		buf->error = -EOVERFLOW;
+	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino)
 		return -EOVERFLOW;
-	}
 	dirent = buf->previous;
 	if (dirent)
-		if (put_user(offset, &dirent->d_off))
-			goto Efault;
+		put_user(offset, &dirent->d_off);
 	dirent = buf->current_dir;
-	if (put_user(d_ino, &dirent->d_ino) ||
-	    put_user(reclen, &dirent->d_reclen) ||
-	    put_user(namlen, &dirent->d_namlen) ||
-	    copy_to_user(dirent->d_name, name, namlen) ||
-	    put_user(0, dirent->d_name + namlen))
-		goto Efault;
 	buf->previous = dirent;
-	buf->current_dir = (void __user *)dirent + reclen;
+	put_user(d_ino, &dirent->d_ino);
+	put_user(reclen, &dirent->d_reclen);
+	put_user(namlen, &dirent->d_namlen);
+	copy_to_user(dirent->d_name, name, namlen);
+	put_user(0, dirent->d_name + namlen);
+	dirent = (void __user *)dirent + reclen;
+	buf->current_dir = dirent;
 	buf->count -= reclen;
 	return 0;
-Efault:
-	buf->error = -EFAULT;
-	return -EFAULT;
 }
 
 #undef NAME_OFFSET
@@ -127,14 +121,13 @@ int hpux_getdents(unsigned int fd, struct hpux_dirent __user *dirent, unsigned i
 	buf.error = 0;
 
 	error = vfs_readdir(file, filldir, &buf);
-	if (error >= 0)
-		error = buf.error;
+	if (error < 0)
+		goto out_putf;
+	error = buf.error;
 	lastdirent = buf.previous;
 	if (lastdirent) {
-		if (put_user(file->f_pos, &lastdirent->d_off))
-			error = -EFAULT;
-		else
-			error = count - buf.count;
+		put_user(file->f_pos, &lastdirent->d_off);
+		error = count - buf.count;
 	}
 
 out_putf:

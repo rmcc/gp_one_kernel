@@ -4,7 +4,6 @@
  *  Derived from cx25840-core.h
  *
  *  Copyright (C) 2007  Hans Verkuil <hverkuil@xs4all.nl>
- *  Copyright (C) 2008  Andy Walls <awalls@radix.net>
  *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
@@ -38,16 +37,12 @@ enum cx18_av_video_input {
 	CX18_AV_COMPOSITE7,
 	CX18_AV_COMPOSITE8,
 
-	/* S-Video inputs consist of one luma input (In1-In8) ORed with one
+	/* S-Video inputs consist of one luma input (In1-In4) ORed with one
 	   chroma input (In5-In8) */
 	CX18_AV_SVIDEO_LUMA1 = 0x10,
 	CX18_AV_SVIDEO_LUMA2 = 0x20,
 	CX18_AV_SVIDEO_LUMA3 = 0x30,
 	CX18_AV_SVIDEO_LUMA4 = 0x40,
-	CX18_AV_SVIDEO_LUMA5 = 0x50,
-	CX18_AV_SVIDEO_LUMA6 = 0x60,
-	CX18_AV_SVIDEO_LUMA7 = 0x70,
-	CX18_AV_SVIDEO_LUMA8 = 0x80,
 	CX18_AV_SVIDEO_CHROMA4 = 0x400,
 	CX18_AV_SVIDEO_CHROMA5 = 0x500,
 	CX18_AV_SVIDEO_CHROMA6 = 0x600,
@@ -63,8 +58,7 @@ enum cx18_av_video_input {
 
 enum cx18_av_audio_input {
 	/* Audio inputs: serial or In4-In8 */
-	CX18_AV_AUDIO_SERIAL1,
-	CX18_AV_AUDIO_SERIAL2,
+	CX18_AV_AUDIO_SERIAL,
 	CX18_AV_AUDIO4 = 4,
 	CX18_AV_AUDIO5,
 	CX18_AV_AUDIO6,
@@ -80,7 +74,6 @@ struct cx18_av_state {
 	u32 audclk_freq;
 	int audmode;
 	int vbi_line_offset;
-	int default_volume;
 	u32 id;
 	u32 rev;
 	int is_initialized;
@@ -302,16 +295,11 @@ struct cx18_av_state {
 /* cx18_av-core.c 							   */
 int cx18_av_write(struct cx18 *cx, u16 addr, u8 value);
 int cx18_av_write4(struct cx18 *cx, u16 addr, u32 value);
-int cx18_av_write4_noretry(struct cx18 *cx, u16 addr, u32 value);
-int cx18_av_write_expect(struct cx18 *cx, u16 addr, u8 value, u8 eval, u8 mask);
-int cx18_av_write4_expect(struct cx18 *cx, u16 addr, u32 value, u32 eval,
-			  u32 mask);
 u8 cx18_av_read(struct cx18 *cx, u16 addr);
 u32 cx18_av_read4(struct cx18 *cx, u16 addr);
 int cx18_av_and_or(struct cx18 *cx, u16 addr, unsigned mask, u8 value);
 int cx18_av_and_or4(struct cx18 *cx, u16 addr, u32 mask, u32 value);
 int cx18_av_cmd(struct cx18 *cx, unsigned int cmd, void *arg);
-void cx18_av_std_setup(struct cx18 *cx);
 
 /* ----------------------------------------------------------------------- */
 /* cx18_av-firmware.c                                                      */
@@ -324,6 +312,7 @@ void cx18_av_audio_set_path(struct cx18 *cx);
 
 /* ----------------------------------------------------------------------- */
 /* cx18_av-vbi.c                                                           */
+void cx18_av_vbi_setup(struct cx18 *cx);
 int cx18_av_vbi(struct cx18 *cx, unsigned int cmd, void *arg);
 
 #endif

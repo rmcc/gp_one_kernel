@@ -1,7 +1,7 @@
 /*
  * lm63.c - driver for the National Semiconductor LM63 temperature sensor
  *          with integrated fan control
- * Copyright (C) 2004-2008  Jean Delvare <khali@linux-fr.org>
+ * Copyright (C) 2004-2006  Jean Delvare <khali@linux-fr.org>
  * Based on the lm90 driver.
  *
  * The LM63 is a sensor chip made by National Semiconductor. It measures
@@ -128,36 +128,24 @@ I2C_CLIENT_INSMOD_1(lm63);
  * Functions declaration
  */
 
-static int lm63_probe(struct i2c_client *client,
-		      const struct i2c_device_id *id);
-static int lm63_remove(struct i2c_client *client);
+static int lm63_attach_adapter(struct i2c_adapter *adapter);
+static int lm63_detach_client(struct i2c_client *client);
 
 static struct lm63_data *lm63_update_device(struct device *dev);
 
-static int lm63_detect(struct i2c_client *client, int kind,
-		       struct i2c_board_info *info);
+static int lm63_detect(struct i2c_adapter *adapter, int address, int kind);
 static void lm63_init_client(struct i2c_client *client);
 
 /*
  * Driver data (common to all clients)
  */
 
-static const struct i2c_device_id lm63_id[] = {
-	{ "lm63", lm63 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, lm63_id);
-
 static struct i2c_driver lm63_driver = {
-	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		.name	= "lm63",
 	},
-	.probe		= lm63_probe,
-	.remove		= lm63_remove,
-	.id_table	= lm63_id,
-	.detect		= lm63_detect,
-	.address_data	= &addr_data,
+	.attach_adapter	= lm63_attach_adapter,
+	.detach_client	= lm63_detach_client,
 };
 
 /*
@@ -165,6 +153,7 @@ static struct i2c_driver lm63_driver = {
  */
 
 struct lm63_data {
+	struct i2c_client client;
 	struct device *hwmon_dev;
 	struct mutex update_lock;
 	char valid; /* zero until following fields are valid */
@@ -422,14 +411,43 @@ static const struct attribute_group lm63_group_fan1 = {
  * Real code
  */
 
-/* Return 0 if detection is successful, -ENODEV otherwise */
-static int lm63_detect(struct i2c_client *new_client, int kind,
-		       struct i2c_board_info *info)
+static int lm63_attach_adapter(struct i2c_adapter *adapter)
 {
-	struct i2c_adapter *adapter = new_client->adapter;
+	if (!(adapter->class & I2C_CLASS_HWMON))
+		return 0;
+	return i2c_probe(adapter, &addr_data, lm63_detect);
+}
+
+/*
+ * The following function does more than just detection. If detection
+ * succeeds, it also registers the new chip.
+ */
+static int lm63_detect(struct i2c_adapter *adapter, int address, int kind)
+{
+	struct i2c_client *new_client;
+	struct lm63_data *data;
+	int err = 0;
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
-		return -ENODEV;
+		goto exit;
+
+	if (!(data = kzalloc(sizeof(struct lm63_data), GFP_KERNEL))) {
+		err = -ENOMEM;
+		goto exit;
+	}
+
+	/* The common I2C client data is placed right before the
+	   LM63-specific data. */
+	new_client = &data->client;
+	i2c_set_clientdata(new_client, data);
+	new_client->addr = address;
+	new_client->adapter = adapter;
+	new_client->driver = &lm63_driver;
+	new_client->flags = 0;
+
+	/* Default to an LM63 if forced */
+	if (kind == 0)
+		kind = lm63;
 
 	if (kind < 0) { /* must identify */
 		u8 man_id, chip_id, reg_config1, reg_config2;
@@ -459,30 +477,17 @@ static int lm63_detect(struct i2c_client *new_client, int kind,
 			dev_dbg(&adapter->dev, "Unsupported chip "
 				"(man_id=0x%02X, chip_id=0x%02X).\n",
 				man_id, chip_id);
-			return -ENODEV;
+			goto exit_free;
 		}
 	}
 
-	strlcpy(info->type, "lm63", I2C_NAME_SIZE);
-
-	return 0;
-}
-
-static int lm63_probe(struct i2c_client *new_client,
-		      const struct i2c_device_id *id)
-{
-	struct lm63_data *data;
-	int err;
-
-	data = kzalloc(sizeof(struct lm63_data), GFP_KERNEL);
-	if (!data) {
-		err = -ENOMEM;
-		goto exit;
-	}
-
-	i2c_set_clientdata(new_client, data);
+	strlcpy(new_client->name, "lm63", I2C_NAME_SIZE);
 	data->valid = 0;
 	mutex_init(&data->update_lock);
+
+	/* Tell the I2C layer a new client has arrived */
+	if ((err = i2c_attach_client(new_client)))
+		goto exit_free;
 
 	/* Initialize the LM63 chip */
 	lm63_init_client(new_client);
@@ -490,7 +495,7 @@ static int lm63_probe(struct i2c_client *new_client,
 	/* Register sysfs hooks */
 	if ((err = sysfs_create_group(&new_client->dev.kobj,
 				      &lm63_group)))
-		goto exit_free;
+		goto exit_detach;
 	if (data->config & 0x04) { /* tachometer enabled */
 		if ((err = sysfs_create_group(&new_client->dev.kobj,
 					      &lm63_group_fan1)))
@@ -508,6 +513,8 @@ static int lm63_probe(struct i2c_client *new_client,
 exit_remove_files:
 	sysfs_remove_group(&new_client->dev.kobj, &lm63_group);
 	sysfs_remove_group(&new_client->dev.kobj, &lm63_group_fan1);
+exit_detach:
+	i2c_detach_client(new_client);
 exit_free:
 	kfree(data);
 exit:
@@ -549,13 +556,17 @@ static void lm63_init_client(struct i2c_client *client)
 		(data->config_fan & 0x20) ? "manual" : "auto");
 }
 
-static int lm63_remove(struct i2c_client *client)
+static int lm63_detach_client(struct i2c_client *client)
 {
 	struct lm63_data *data = i2c_get_clientdata(client);
+	int err;
 
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &lm63_group);
 	sysfs_remove_group(&client->dev.kobj, &lm63_group_fan1);
+
+	if ((err = i2c_detach_client(client)))
+		return err;
 
 	kfree(data);
 	return 0;

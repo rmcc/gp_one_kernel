@@ -21,6 +21,26 @@
 #include <linux/init.h>
 #include <asm/io.h>
 
+static inline u8 bridge_swizzle(u8 pin, u8 slot)
+{
+	return (((pin - 1) + slot) % 4) + 1;
+}
+
+static u8 __init simple_swizzle(struct pci_dev *dev, u8 *pinp)
+{
+	u8 pin = *pinp;
+
+	while (dev->bus->parent) {
+		pin = bridge_swizzle(pin, PCI_SLOT(dev->devfn));
+		/* Move up the chain of bridges. */
+		dev = dev->bus->self;
+	}
+	*pinp = pin;
+
+	/* The slot is the slot of the last bridge. */
+	return PCI_SLOT(dev->devfn);
+}
+
 static int __init pcibios_init(void)
 {
 	struct pci_channel *p;
@@ -41,7 +61,7 @@ static int __init pcibios_init(void)
 		busno = bus->subordinate + 1;
 	}
 
-	pci_fixup_irqs(pci_common_swizzle, pcibios_map_platform_irq);
+	pci_fixup_irqs(simple_swizzle, pcibios_map_platform_irq);
 
 	return 0;
 }
@@ -54,6 +74,38 @@ subsys_initcall(pcibios_init);
 void __devinit __weak pcibios_fixup_bus(struct pci_bus *bus)
 {
 	pci_read_bridge_bases(bus);
+}
+
+void
+pcibios_update_resource(struct pci_dev *dev, struct resource *root,
+			struct resource *res, int resource)
+{
+	u32 new, check;
+	int reg;
+
+	new = res->start | (res->flags & PCI_REGION_FLAG_MASK);
+	if (resource < 6) {
+		reg = PCI_BASE_ADDRESS_0 + 4*resource;
+	} else if (resource == PCI_ROM_RESOURCE) {
+		res->flags |= IORESOURCE_ROM_ENABLE;
+		new |= PCI_ROM_ADDRESS_ENABLE;
+		reg = dev->rom_base_reg;
+	} else {
+		/*
+		 * Somebody might have asked allocation of a non-standard
+		 * resource
+		 */
+		return;
+	}
+
+	pci_write_config_dword(dev, reg, new);
+	pci_read_config_dword(dev, reg, &check);
+	if ((new ^ check) & ((new & PCI_BASE_ADDRESS_SPACE_IO) ?
+		PCI_BASE_ADDRESS_IO_MASK : PCI_BASE_ADDRESS_MEM_MASK)) {
+		printk(KERN_ERR "PCI: Error while updating region "
+		       "%s/%d (%08x != %08x)\n", pci_name(dev), resource,
+		       new, check);
+	}
 }
 
 void pcibios_align_resource(void *data, struct resource *res,
@@ -115,7 +167,7 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
  *  If we set up a device for bus mastering, we need to check and set
  *  the latency timer as it may not be properly set.
  */
-static unsigned int pcibios_max_latency = 255;
+unsigned int pcibios_max_latency = 255;
 
 void pcibios_set_master(struct pci_dev *dev)
 {

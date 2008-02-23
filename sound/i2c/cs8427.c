@@ -23,7 +23,6 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/init.h>
-#include <asm/unaligned.h>
 #include <sound/core.h>
 #include <sound/control.h>
 #include <sound/pcm.h>
@@ -265,7 +264,10 @@ int snd_cs8427_create(struct snd_i2c_bus *bus,
 		goto __fail;
 	}
 	/* write default channel status bytes */
-	put_unaligned_le32(SNDRV_PCM_DEFAULT_CON_SPDIF, buf);
+	buf[0] = ((unsigned char)(SNDRV_PCM_DEFAULT_CON_SPDIF >> 0));
+	buf[1] = ((unsigned char)(SNDRV_PCM_DEFAULT_CON_SPDIF >> 8));
+	buf[2] = ((unsigned char)(SNDRV_PCM_DEFAULT_CON_SPDIF >> 16));
+	buf[3] = ((unsigned char)(SNDRV_PCM_DEFAULT_CON_SPDIF >> 24));
 	memset(buf + 4, 0, 24 - 4);
 	if (snd_cs8427_send_corudata(device, 0, buf, 24) < 0)
 		goto __fail;
@@ -314,8 +316,7 @@ static void snd_cs8427_reset(struct snd_i2c_device *cs8427)
 	unsigned long end_time;
 	int data, aes3input = 0;
 
-	if (snd_BUG_ON(!cs8427))
-		return;
+	snd_assert(cs8427, return);
 	chip = cs8427->private_data;
 	snd_i2c_lock(cs8427->bus);
 	if ((chip->regmap[CS8427_REG_CLOCKSOURCE] & CS8427_RXDAES3INPUT) ==
@@ -527,8 +528,7 @@ int snd_cs8427_iec958_build(struct snd_i2c_device *cs8427,
 	unsigned int idx;
 	int err;
 
-	if (snd_BUG_ON(!play_substream || !cap_substream))
-		return -EINVAL;
+	snd_assert(play_substream && cap_substream, return -EINVAL);
 	for (idx = 0; idx < ARRAY_SIZE(snd_cs8427_iec958_controls); idx++) {
 		kctl = snd_ctl_new1(&snd_cs8427_iec958_controls[idx], cs8427);
 		if (kctl == NULL)
@@ -545,8 +545,7 @@ int snd_cs8427_iec958_build(struct snd_i2c_device *cs8427,
 
 	chip->playback.substream = play_substream;
 	chip->capture.substream = cap_substream;
-	if (snd_BUG_ON(!chip->playback.pcm_ctl))
-		return -EIO;
+	snd_assert(chip->playback.pcm_ctl, return -EIO);
 	return 0;
 }
 
@@ -556,8 +555,7 @@ int snd_cs8427_iec958_active(struct snd_i2c_device *cs8427, int active)
 {
 	struct cs8427 *chip;
 
-	if (snd_BUG_ON(!cs8427))
-		return -ENXIO;
+	snd_assert(cs8427, return -ENXIO);
 	chip = cs8427->private_data;
 	if (active)
 		memcpy(chip->playback.pcm_status,
@@ -577,8 +575,7 @@ int snd_cs8427_iec958_pcm(struct snd_i2c_device *cs8427, unsigned int rate)
 	char *status;
 	int err, reset;
 
-	if (snd_BUG_ON(!cs8427))
-		return -ENXIO;
+	snd_assert(cs8427, return -ENXIO);
 	chip = cs8427->private_data;
 	status = chip->playback.pcm_status;
 	snd_i2c_lock(cs8427->bus);

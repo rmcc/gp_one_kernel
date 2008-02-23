@@ -1,4 +1,4 @@
-#ifndef _ASM_IPCBUF_H
+#ifndef _ASM_IPCBUF_H_
 #define _ASM_IPCBUF_H
 
 /*

@@ -65,7 +65,6 @@ xfs_dir2_data_check(
 	xfs_mount_t		*mp;		/* filesystem mount point */
 	char			*p;		/* current data position */
 	int			stale;		/* count of stale leaves */
-	struct xfs_name		name;
 
 	mp = dp->i_mount;
 	d = bp->data;
@@ -141,9 +140,7 @@ xfs_dir2_data_check(
 			addr = xfs_dir2_db_off_to_dataptr(mp, mp->m_dirdatablk,
 				(xfs_dir2_data_aoff_t)
 				((char *)dep - (char *)d));
-			name.name = dep->name;
-			name.len = dep->namelen;
-			hash = mp->m_dirnameops->hashname(&name);
+			hash = xfs_da_hashname((char *)dep->name, dep->namelen);
 			for (i = 0; i < be32_to_cpu(btp->count); i++) {
 				if (be32_to_cpu(lep[i].address) == addr &&
 				    be32_to_cpu(lep[i].hashval) == hash)

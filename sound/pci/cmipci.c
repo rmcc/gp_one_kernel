@@ -2357,8 +2357,7 @@ static int snd_cmipci_uswitch_get(struct snd_kcontrol *kcontrol,
 {
 	struct cmipci_switch_args *args;
 	args = (struct cmipci_switch_args *)kcontrol->private_value;
-	if (snd_BUG_ON(!args))
-		return -EINVAL;
+	snd_assert(args != NULL, return -EINVAL);
 	return _snd_cmipci_uswitch_get(kcontrol, ucontrol, args);
 }
 
@@ -2402,8 +2401,7 @@ static int snd_cmipci_uswitch_put(struct snd_kcontrol *kcontrol,
 {
 	struct cmipci_switch_args *args;
 	args = (struct cmipci_switch_args *)kcontrol->private_value;
-	if (snd_BUG_ON(!args))
-		return -EINVAL;
+	snd_assert(args != NULL, return -EINVAL);
 	return _snd_cmipci_uswitch_put(kcontrol, ucontrol, args);
 }
 
@@ -2664,8 +2662,7 @@ static int __devinit snd_cmipci_mixer_new(struct cmipci *cm, int pcm_spdif_devic
 	unsigned int idx;
 	int err;
 
-	if (snd_BUG_ON(!cm || !cm->card))
-		return -EINVAL;
+	snd_assert(cm != NULL && cm->card != NULL, return -EINVAL);
 
 	card = cm->card;
 

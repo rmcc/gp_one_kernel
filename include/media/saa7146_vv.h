@@ -2,7 +2,6 @@
 #define __SAA7146_VV__
 
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <media/saa7146.h>
 #include <media/videobuf-dma-sg.h>
 
@@ -177,9 +176,9 @@ struct saa7146_ext_vv
 	int (*std_callback)(struct saa7146_dev*, struct saa7146_standard *);
 
 	struct saa7146_extension_ioctls *ioctls;
-	long (*ioctl)(struct saa7146_fh *, unsigned int cmd, void *arg);
+	int (*ioctl)(struct saa7146_fh*, unsigned int cmd, void *arg);
 
-	struct v4l2_file_operations vbi_fops;
+	struct file_operations vbi_fops;
 };
 
 struct saa7146_use_ops  {
@@ -216,7 +215,8 @@ void saa7146_set_gpio(struct saa7146_dev *saa, u8 pin, u8 data);
 extern struct saa7146_use_ops saa7146_video_uops;
 int saa7146_start_preview(struct saa7146_fh *fh);
 int saa7146_stop_preview(struct saa7146_fh *fh);
-long saa7146_video_do_ioctl(struct file *file, unsigned int cmd, void *arg);
+int saa7146_video_do_ioctl(struct inode *inode, struct file *file,
+			   unsigned int cmd, void *arg);
 
 /* from saa7146_vbi.c */
 extern struct saa7146_use_ops saa7146_vbi_uops;

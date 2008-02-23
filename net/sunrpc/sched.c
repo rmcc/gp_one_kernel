@@ -576,7 +576,9 @@ EXPORT_SYMBOL_GPL(rpc_delay);
  */
 static void rpc_prepare_task(struct rpc_task *task)
 {
+	lock_kernel();
 	task->tk_ops->rpc_call_prepare(task, task->tk_calldata);
+	unlock_kernel();
 }
 
 /*
@@ -586,7 +588,9 @@ void rpc_exit_task(struct rpc_task *task)
 {
 	task->tk_action = NULL;
 	if (task->tk_ops->rpc_call_done != NULL) {
+		lock_kernel();
 		task->tk_ops->rpc_call_done(task, task->tk_calldata);
+		unlock_kernel();
 		if (task->tk_action != NULL) {
 			WARN_ON(RPC_ASSASSINATED(task));
 			/* Always release the RPC slot and buffer memory */
@@ -598,8 +602,11 @@ EXPORT_SYMBOL_GPL(rpc_exit_task);
 
 void rpc_release_calldata(const struct rpc_call_ops *ops, void *calldata)
 {
-	if (ops->rpc_release != NULL)
+	if (ops->rpc_release != NULL) {
+		lock_kernel();
 		ops->rpc_release(calldata);
+		unlock_kernel();
+	}
 }
 
 /*
@@ -619,15 +626,19 @@ static void __rpc_execute(struct rpc_task *task)
 		/*
 		 * Execute any pending callback.
 		 */
-		if (task->tk_callback) {
+		if (RPC_DO_CALLBACK(task)) {
+			/* Define a callback save pointer */
 			void (*save_callback)(struct rpc_task *);
 
 			/*
-			 * We set tk_callback to NULL before calling it,
-			 * in case it sets the tk_callback field itself:
+			 * If a callback exists, save it, reset it,
+			 * call it.
+			 * The save is needed to stop from resetting
+			 * another callback set within the callback handler
+			 * - Dave
 			 */
-			save_callback = task->tk_callback;
-			task->tk_callback = NULL;
+			save_callback=task->tk_callback;
+			task->tk_callback=NULL;
 			save_callback(task);
 		}
 

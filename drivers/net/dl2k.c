@@ -85,19 +85,6 @@ static int mii_write (struct net_device *dev, int phy_addr, int reg_num,
 
 static const struct ethtool_ops ethtool_ops;
 
-static const struct net_device_ops netdev_ops = {
-	.ndo_open		= rio_open,
-	.ndo_start_xmit	= start_xmit,
-	.ndo_stop		= rio_close,
-	.ndo_get_stats		= get_stats,
-	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_set_multicast_list = set_multicast,
-	.ndo_do_ioctl		= rio_ioctl,
-	.ndo_tx_timeout		= rio_tx_timeout,
-	.ndo_change_mtu		= change_mtu,
-};
-
 static int __devinit
 rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 {
@@ -110,6 +97,7 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 	static int version_printed;
 	void *ring_space;
 	dma_addr_t ring_dma;
+	DECLARE_MAC_BUF(mac);
 
 	if (!version_printed++)
 		printk ("%s", version);
@@ -210,8 +198,15 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 		else if (tx_coalesce > TX_RING_SIZE-1)
 			tx_coalesce = TX_RING_SIZE - 1;
 	}
-	dev->netdev_ops = &netdev_ops;
+	dev->open = &rio_open;
+	dev->hard_start_xmit = &start_xmit;
+	dev->stop = &rio_close;
+	dev->get_stats = &get_stats;
+	dev->set_multicast_list = &set_multicast;
+	dev->do_ioctl = &rio_ioctl;
+	dev->tx_timeout = &rio_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
+	dev->change_mtu = &change_mtu;
 	SET_ETHTOOL_OPS(dev, &ethtool_ops);
 #if 0
 	dev->features = NETIF_F_IP_CSUM;
@@ -262,8 +257,8 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	card_idx++;
 
-	printk (KERN_INFO "%s: %s, %pM, IRQ %d\n",
-		dev->name, np->name, dev->dev_addr, irq);
+	printk (KERN_INFO "%s: %s, %s, IRQ %d\n",
+		dev->name, np->name, print_mac(mac, dev->dev_addr), irq);
 	if (tx_coalesce > 1)
 		printk(KERN_INFO "tx_coalesce:\t%d packets\n",
 				tx_coalesce);
@@ -504,7 +499,7 @@ rio_timer (unsigned long data)
 			entry = np->old_rx % RX_RING_SIZE;
 			/* Dropped packets don't need to re-allocate */
 			if (np->rx_skbuff[entry] == NULL) {
-				skb = netdev_alloc_skb (dev, np->rx_buf_sz);
+				skb = dev_alloc_skb (np->rx_buf_sz);
 				if (skb == NULL) {
 					np->rx_ring[entry].fraginfo = 0;
 					printk (KERN_INFO
@@ -575,7 +570,7 @@ alloc_list (struct net_device *dev)
 	/* Allocate the rx buffers */
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		/* Allocated fixed size of skbuff */
-		struct sk_buff *skb = netdev_alloc_skb (dev, np->rx_buf_sz);
+		struct sk_buff *skb = dev_alloc_skb (np->rx_buf_sz);
 		np->rx_skbuff[i] = skb;
 		if (skb == NULL) {
 			printk (KERN_ERR
@@ -872,7 +867,7 @@ receive_packet (struct net_device *dev)
 						  PCI_DMA_FROMDEVICE);
 				skb_put (skb = np->rx_skbuff[entry], pkt_len);
 				np->rx_skbuff[entry] = NULL;
-			} else if ((skb = netdev_alloc_skb(dev, pkt_len + 2))) {
+			} else if ((skb = dev_alloc_skb (pkt_len + 2)) != NULL) {
 				pci_dma_sync_single_for_cpu(np->pdev,
 							    desc_to_dma(desc),
 							    np->rx_buf_sz,
@@ -897,6 +892,7 @@ receive_packet (struct net_device *dev)
 			}
 #endif
 			netif_rx (skb);
+			dev->last_rx = jiffies;
 		}
 		entry = (entry + 1) % RX_RING_SIZE;
 	}
@@ -908,7 +904,7 @@ receive_packet (struct net_device *dev)
 		struct sk_buff *skb;
 		/* Dropped packets don't need to re-allocate */
 		if (np->rx_skbuff[entry] == NULL) {
-			skb = netdev_alloc_skb(dev, np->rx_buf_sz);
+			skb = dev_alloc_skb (np->rx_buf_sz);
 			if (skb == NULL) {
 				np->rx_ring[entry].fraginfo = 0;
 				printk (KERN_INFO
@@ -1757,7 +1753,7 @@ rio_close (struct net_device *dev)
 
 	/* Stop Tx and Rx logics */
 	writel (TxDisable | RxDisable | StatsDisable, ioaddr + MACCtrl);
-
+	synchronize_irq (dev->irq);
 	free_irq (dev->irq, dev);
 	del_timer_sync (&np->timer);
 

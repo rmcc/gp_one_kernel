@@ -36,7 +36,6 @@ SECTIONS
 		SCHED_TEXT
 		LOCK_TEXT
 		KPROBES_TEXT
-		*(.text.*)
 		*(.fixup)
 		*(.gnu.warning)
 	} :text = 0
@@ -104,7 +103,7 @@ SECTIONS
 	. = ALIGN(_PAGE_SIZE);
 	__nosave_end = .;
 
-	. = ALIGN(1 << CONFIG_MIPS_L1_CACHE_SHIFT);
+	. = ALIGN(32);
 	.data.cacheline_aligned : {
 		*(.data.cacheline_aligned)
 	}

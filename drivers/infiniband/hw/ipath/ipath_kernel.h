@@ -232,11 +232,6 @@ struct ipath_sdma_desc {
 #define IPATH_SDMA_TXREQ_S_ABORTED   2
 #define IPATH_SDMA_TXREQ_S_SHUTDOWN  3
 
-#define IPATH_SDMA_STATUS_SCORE_BOARD_DRAIN_IN_PROG	(1ull << 63)
-#define IPATH_SDMA_STATUS_ABORT_IN_PROG			(1ull << 62)
-#define IPATH_SDMA_STATUS_INTERNAL_SDMA_ENABLE		(1ull << 61)
-#define IPATH_SDMA_STATUS_SCB_EMPTY			(1ull << 30)
-
 /* max dwords in small buffer packet */
 #define IPATH_SMALLBUF_DWORDS (dd->ipath_piosize2k >> 2)
 
@@ -355,19 +350,6 @@ struct ipath_devdata {
 	/* errors masked because they occur too fast */
 	ipath_err_t ipath_maskederrs;
 	u64 ipath_lastlinkrecov; /* link recoveries at last ACTIVE */
-	/* these 5 fields are used to establish deltas for IB Symbol
-	 * errors and linkrecovery errors. They can be reported on
-	 * some chips during link negotiation prior to INIT, and with
-	 * DDR when faking DDR negotiations with non-IBTA switches.
-	 * The chip counters are adjusted at driver unload if there is
-	 * a non-zero delta.
-	 */
-	u64 ibdeltainprog;
-	u64 ibsymdelta;
-	u64 ibsymsnap;
-	u64 iblnkerrdelta;
-	u64 iblnkerrsnap;
-
 	/* time in jiffies at which to re-enable maskederrs */
 	unsigned long ipath_unmasktime;
 	/* count of egrfull errors, combined for all ports */
@@ -477,8 +459,6 @@ struct ipath_devdata {
 	spinlock_t ipath_kernel_tid_lock;
 	spinlock_t ipath_user_tid_lock;
 	spinlock_t ipath_sendctrl_lock;
-	/* around ipath_pd and (user ports) port_cnt use (intr vs free) */
-	spinlock_t ipath_uctxt_lock;
 
 	/*
 	 * IPATH_STATUS_*,

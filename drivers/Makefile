@@ -5,7 +5,7 @@
 # Rewritten to use lists instead of if-statements.
 #
 
-obj-y				+= gpio/
+obj-$(CONFIG_HAVE_GPIO_LIB)	+= gpio/
 obj-$(CONFIG_PCI)		+= pci/
 obj-$(CONFIG_PARISC)		+= parisc/
 obj-$(CONFIG_RAPIDIO)		+= rapidio/
@@ -18,15 +18,9 @@ obj-$(CONFIG_ARM_AMBA)		+= amba/
 
 obj-$(CONFIG_XEN)		+= xen/
 
-# regulators early, since some subsystems rely on them to initialize
-obj-$(CONFIG_REGULATOR)		+= regulator/
-
 # char/ comes before serial/ etc so that the VT console is the boot-time
 # default.
 obj-y				+= char/
-
-# gpu/ comes after char for AGP vs DRM startup
-obj-y				+= gpu/
 
 obj-$(CONFIG_CONNECTOR)		+= connector/
 
@@ -59,10 +53,7 @@ obj-$(CONFIG_MAC)		+= macintosh/
 obj-$(CONFIG_ATA_OVER_ETH)	+= block/aoe/
 obj-$(CONFIG_PARIDE) 		+= block/paride/
 obj-$(CONFIG_TC)		+= tc/
-obj-$(CONFIG_UWB)		+= uwb/
-obj-$(CONFIG_USB_OTG_UTILS)	+= usb/otg/
 obj-$(CONFIG_USB)		+= usb/
-obj-$(CONFIG_USB_MUSB_HDRC)	+= usb/musb/
 obj-$(CONFIG_PCI)		+= usb/
 obj-$(CONFIG_USB_GADGET)	+= usb/gadget/
 obj-$(CONFIG_SERIO)		+= input/serio/
@@ -87,7 +78,6 @@ obj-$(CONFIG_EISA)		+= eisa/
 obj-y				+= lguest/
 obj-$(CONFIG_CPU_FREQ)		+= cpufreq/
 obj-$(CONFIG_CPU_IDLE)		+= cpuidle/
-obj-y				+= idle/
 obj-$(CONFIG_MMC)		+= mmc/
 obj-$(CONFIG_MEMSTICK)		+= memstick/
 obj-$(CONFIG_NEW_LEDS)		+= leds/
@@ -104,5 +94,3 @@ obj-$(CONFIG_PPC_PS3)		+= ps3/
 obj-$(CONFIG_OF)		+= of/
 obj-$(CONFIG_SSB)		+= ssb/
 obj-$(CONFIG_VIRTIO)		+= virtio/
-obj-$(CONFIG_STAGING)		+= staging/
-obj-y				+= platform/

@@ -142,7 +142,7 @@ int udf_write_fi(struct inode *inode, struct fileIdentDesc *cfi,
 }
 
 static struct fileIdentDesc *udf_find_entry(struct inode *dir,
-					    struct qstr *child,
+					    struct dentry *dentry,
 					    struct udf_fileident_bh *fibh,
 					    struct fileIdentDesc *cfi)
 {
@@ -159,8 +159,8 @@ static struct fileIdentDesc *udf_find_entry(struct inode *dir,
 	sector_t offset;
 	struct extent_position epos = {};
 	struct udf_inode_info *dinfo = UDF_I(dir);
-	int isdotdot = child->len == 2 &&
-		child->name[0] == '.' && child->name[1] == '.';
+	int isdotdot = dentry->d_name.len == 2 &&
+		dentry->d_name.name[0] == '.' && dentry->d_name.name[1] == '.';
 
 	size = udf_ext0_offset(dir) + dir->i_size;
 	f_pos = udf_ext0_offset(dir);
@@ -238,7 +238,8 @@ static struct fileIdentDesc *udf_find_entry(struct inode *dir,
 			continue;
 
 		flen = udf_get_filename(dir->i_sb, nameptr, fname, lfi);
-		if (flen && udf_match(flen, fname, child->len, child->name))
+		if (flen && udf_match(flen, fname, dentry->d_name.len,
+				      dentry->d_name.name))
 			goto out_ok;
 	}
 
@@ -282,7 +283,7 @@ static struct dentry *udf_lookup(struct inode *dir, struct dentry *dentry,
 	} else
 #endif /* UDF_RECOVERY */
 
-	if (udf_find_entry(dir, &dentry->d_name, &fibh, &cfi)) {
+	if (udf_find_entry(dir, dentry, &fibh, &cfi)) {
 		if (fibh.sbh != fibh.ebh)
 			brelse(fibh.ebh);
 		brelse(fibh.sbh);
@@ -604,7 +605,7 @@ static int udf_mknod(struct inode *dir, struct dentry *dentry, int mode,
 		goto out;
 
 	iinfo = UDF_I(inode);
-	inode->i_uid = current_fsuid();
+	inode->i_uid = current->fsuid;
 	init_special_inode(inode, mode, rdev);
 	fi = udf_add_entry(dir, dentry, &fibh, &cfi, &err);
 	if (!fi) {
@@ -782,7 +783,7 @@ static int udf_rmdir(struct inode *dir, struct dentry *dentry)
 
 	retval = -ENOENT;
 	lock_kernel();
-	fi = udf_find_entry(dir, &dentry->d_name, &fibh, &cfi);
+	fi = udf_find_entry(dir, dentry, &fibh, &cfi);
 	if (!fi)
 		goto out;
 
@@ -828,7 +829,7 @@ static int udf_unlink(struct inode *dir, struct dentry *dentry)
 
 	retval = -ENOENT;
 	lock_kernel();
-	fi = udf_find_entry(dir, &dentry->d_name, &fibh, &cfi);
+	fi = udf_find_entry(dir, dentry, &fibh, &cfi);
 	if (!fi)
 		goto out;
 
@@ -1112,7 +1113,7 @@ static int udf_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct udf_inode_info *old_iinfo = UDF_I(old_inode);
 
 	lock_kernel();
-	ofi = udf_find_entry(old_dir, &old_dentry->d_name, &ofibh, &ocfi);
+	ofi = udf_find_entry(old_dir, old_dentry, &ofibh, &ocfi);
 	if (ofi) {
 		if (ofibh.sbh != ofibh.ebh)
 			brelse(ofibh.ebh);
@@ -1123,7 +1124,7 @@ static int udf_rename(struct inode *old_dir, struct dentry *old_dentry,
 	    != old_inode->i_ino)
 		goto end_rename;
 
-	nfi = udf_find_entry(new_dir, &new_dentry->d_name, &nfibh, &ncfi);
+	nfi = udf_find_entry(new_dir, new_dentry, &nfibh, &ncfi);
 	if (nfi) {
 		if (!new_inode) {
 			if (nfibh.sbh != nfibh.ebh)
@@ -1191,7 +1192,7 @@ static int udf_rename(struct inode *old_dir, struct dentry *old_dentry,
 	udf_write_fi(new_dir, &ncfi, nfi, &nfibh, NULL, NULL);
 
 	/* The old fid may have moved - find it again */
-	ofi = udf_find_entry(old_dir, &old_dentry->d_name, &ofibh, &ocfi);
+	ofi = udf_find_entry(old_dir, old_dentry, &ofibh, &ocfi);
 	udf_delete_entry(old_dir, ofi, &ofibh, &ocfi);
 
 	if (new_inode) {
@@ -1242,10 +1243,14 @@ end_rename:
 
 static struct dentry *udf_get_parent(struct dentry *child)
 {
+	struct dentry *parent;
 	struct inode *inode = NULL;
-	struct qstr dotdot = {.name = "..", .len = 2};
+	struct dentry dotdot;
 	struct fileIdentDesc cfi;
 	struct udf_fileident_bh fibh;
+
+	dotdot.d_name.name = "..";
+	dotdot.d_name.len = 2;
 
 	lock_kernel();
 	if (!udf_find_entry(child->d_inode, &dotdot, &fibh, &cfi))
@@ -1261,7 +1266,13 @@ static struct dentry *udf_get_parent(struct dentry *child)
 		goto out_unlock;
 	unlock_kernel();
 
-	return d_obtain_alias(inode);
+	parent = d_alloc_anon(inode);
+	if (!parent) {
+		iput(inode);
+		parent = ERR_PTR(-ENOMEM);
+	}
+
+	return parent;
 out_unlock:
 	unlock_kernel();
 	return ERR_PTR(-EACCES);
@@ -1272,6 +1283,7 @@ static struct dentry *udf_nfs_get_inode(struct super_block *sb, u32 block,
 					u16 partref, __u32 generation)
 {
 	struct inode *inode;
+	struct dentry *result;
 	kernel_lb_addr loc;
 
 	if (block == 0)
@@ -1288,7 +1300,12 @@ static struct dentry *udf_nfs_get_inode(struct super_block *sb, u32 block,
 		iput(inode);
 		return ERR_PTR(-ESTALE);
 	}
-	return d_obtain_alias(inode);
+	result = d_alloc_anon(inode);
+	if (!result) {
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	return result;
 }
 
 static struct dentry *udf_fh_to_dentry(struct super_block *sb,

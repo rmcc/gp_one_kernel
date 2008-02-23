@@ -226,6 +226,9 @@ static int convert_response(struct zcrypt_device *zdev,
 		return convert_type84(zdev, reply,
 				      outputdata, outputdatalength);
 	default: /* Unknown response type, this should NEVER EVER happen */
+		PRINTK("Unrecognized Message Header: %08x%08x\n",
+		       *(unsigned int *) reply->message,
+		       *(unsigned int *) (reply->message+4));
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
@@ -247,21 +250,17 @@ static void zcrypt_pcica_receive(struct ap_device *ap_dev,
 		.type = TYPE82_RSP_CODE,
 		.reply_code = REP82_ERROR_MACHINE_FAILURE,
 	};
-	struct type84_hdr *t84h;
+	struct type84_hdr *t84h = reply->message;
 	int length;
 
 	/* Copy the reply message to the request message buffer. */
-	if (IS_ERR(reply)) {
+	if (IS_ERR(reply))
 		memcpy(msg->message, &error_reply, sizeof(error_reply));
-		goto out;
-	}
-	t84h = reply->message;
-	if (t84h->code == TYPE84_RSP_CODE) {
+	else if (t84h->code == TYPE84_RSP_CODE) {
 		length = min(PCICA_MAX_RESPONSE_SIZE, (int) t84h->len);
 		memcpy(msg->message, reply->message, length);
 	} else
 		memcpy(msg->message, reply->message, sizeof error_reply);
-out:
 	complete((struct completion *) msg->private);
 }
 

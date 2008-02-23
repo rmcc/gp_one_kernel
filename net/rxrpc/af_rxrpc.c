@@ -96,9 +96,9 @@ static int rxrpc_validate_address(struct rxrpc_sock *rx,
 
 	switch (srx->transport.family) {
 	case AF_INET:
-		_debug("INET: %x @ %pI4",
+		_debug("INET: %x @ %u.%u.%u.%u",
 		       ntohs(srx->transport.sin.sin_port),
-		       &srx->transport.sin.sin_addr);
+		       NIPQUAD(srx->transport.sin.sin_addr));
 		if (srx->transport_len > 8)
 			memset((void *)&srx->transport + 8, 0,
 			       srx->transport_len - 8);
@@ -660,9 +660,9 @@ static void rxrpc_sock_destructor(struct sock *sk)
 
 	rxrpc_purge_queue(&sk->sk_receive_queue);
 
-	WARN_ON(atomic_read(&sk->sk_wmem_alloc));
-	WARN_ON(!sk_unhashed(sk));
-	WARN_ON(sk->sk_socket);
+	BUG_TRAP(!atomic_read(&sk->sk_wmem_alloc));
+	BUG_TRAP(sk_unhashed(sk));
+	BUG_TRAP(!sk->sk_socket);
 
 	if (!sock_flag(sk, SOCK_DEAD)) {
 		printk("Attempt to release alive rxrpc socket: %p\n", sk);

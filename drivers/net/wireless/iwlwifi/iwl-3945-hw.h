@@ -25,7 +25,7 @@
  * in the file called LICENSE.GPL.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -103,6 +103,7 @@
  * Driver reads 16-bit value from bits 31-16 of CSR_EEPROM_REG.
  */
 #define IWL_EEPROM_ACCESS_TIMEOUT	5000 /* uSec */
+#define IWL_EEPROM_ACCESS_DELAY		10   /* uSec */
 
 /*
  * Regulatory channel usage flags in EEPROM struct iwl_eeprom_channel.flags.
@@ -125,7 +126,7 @@ enum {
 	EEPROM_CHANNEL_ACTIVE = (1 << 3),	/* active scanning allowed */
 	EEPROM_CHANNEL_RADAR = (1 << 4),	/* radar detection required */
 	EEPROM_CHANNEL_WIDE = (1 << 5),		/* 20 MHz channel okay */
-	/* Bit 6 Reserved (was Narrow Channel) */
+	EEPROM_CHANNEL_NARROW = (1 << 6),	/* 10 MHz channel (not used) */
 	EEPROM_CHANNEL_DFS = (1 << 7),	/* dynamic freq selection candidate */
 };
 
@@ -288,6 +289,17 @@ struct iwl3945_eeprom {
 #define PCI_REG_WUM8       0x0E8
 #define PCI_CFG_PMC_PME_FROM_D3COLD_SUPPORT         (0x80000000)
 
+/* SCD (3945 Tx Frame Scheduler) */
+#define SCD_BASE                        (CSR_BASE + 0x2E00)
+
+#define SCD_MODE_REG                    (SCD_BASE + 0x000)
+#define SCD_ARASTAT_REG                 (SCD_BASE + 0x004)
+#define SCD_TXFACT_REG                  (SCD_BASE + 0x010)
+#define SCD_TXF4MF_REG                  (SCD_BASE + 0x014)
+#define SCD_TXF5MF_REG                  (SCD_BASE + 0x020)
+#define SCD_SBYP_MODE_1_REG             (SCD_BASE + 0x02C)
+#define SCD_SBYP_MODE_2_REG             (SCD_BASE + 0x030)
+
 /*=== FH (data Flow Handler) ===*/
 #define FH_BASE     (0x800)
 
@@ -320,7 +332,6 @@ struct iwl3945_eeprom {
 /* RSSR */
 #define FH_RSSR_CTRL            (FH_RSSR_TABLE+0x000)
 #define FH_RSSR_STATUS          (FH_RSSR_TABLE+0x004)
-#define FH_RSSR_CHNL0_RX_STATUS_CHNL_IDLE	(0x01000000)
 /* TCSR */
 #define FH_TCSR(_channel)           (FH_TCSR_TABLE+(_channel)*0x20)
 #define FH_TCSR_CONFIG(_channel)    (FH_TCSR(_channel)+0x00)

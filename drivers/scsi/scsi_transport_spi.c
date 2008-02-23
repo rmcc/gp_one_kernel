@@ -109,11 +109,8 @@ static int spi_execute(struct scsi_device *sdev, const void *cmd,
 	for(i = 0; i < DV_RETRIES; i++) {
 		result = scsi_execute(sdev, cmd, dir, buffer, bufflen,
 				      sense, DV_TIMEOUT, /* retries */ 1,
-				      REQ_FAILFAST_DEV |
-				      REQ_FAILFAST_TRANSPORT |
-				      REQ_FAILFAST_DRIVER,
-				      NULL);
-		if (driver_byte(result) & DRIVER_SENSE) {
+				      REQ_FAILFAST);
+		if (result & DRIVER_SENSE) {
 			struct scsi_sense_hdr sshdr_tmp;
 			if (!sshdr)
 				sshdr = &sshdr_tmp;
@@ -369,14 +366,12 @@ spi_transport_rd_attr(rti, "%d\n");
 spi_transport_rd_attr(pcomp_en, "%d\n");
 spi_transport_rd_attr(hold_mcs, "%d\n");
 
-/* we only care about the first child device that's a real SCSI device
- * so we return 1 to terminate the iteration when we find it */
+/* we only care about the first child device so we return 1 */
 static int child_iter(struct device *dev, void *data)
 {
-	if (!scsi_is_sdev_device(dev))
-		return 0;
+	struct scsi_device *sdev = to_scsi_device(dev);
 
-	spi_dv_device(to_scsi_device(dev));
+	spi_dv_device(sdev);
 	return 1;
 }
 

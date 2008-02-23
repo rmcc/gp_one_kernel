@@ -47,5 +47,3 @@ ENTRY(__aeabi_lasr)
 	mov	ah, ah, asr r2
 	mov	pc, lr
 
-ENDPROC(__ashrdi3)
-ENDPROC(__aeabi_lasr)

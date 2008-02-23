@@ -58,10 +58,21 @@ xfs_error_trap(int e)
 	}
 	return e;
 }
+#endif
+
+#if (defined(DEBUG) || defined(INDUCE_IO_ERROR))
 
 int	xfs_etest[XFS_NUM_INJECT_ERROR];
 int64_t	xfs_etest_fsid[XFS_NUM_INJECT_ERROR];
 char *	xfs_etest_fsname[XFS_NUM_INJECT_ERROR];
+
+void
+xfs_error_test_init(void)
+{
+	memset(xfs_etest, 0, sizeof(xfs_etest));
+	memset(xfs_etest_fsid, 0, sizeof(xfs_etest_fsid));
+	memset(xfs_etest_fsname, 0, sizeof(xfs_etest_fsname));
+}
 
 int
 xfs_error_test(int error_tag, int *fsidp, char *expression,
@@ -139,7 +150,8 @@ xfs_errortag_clearall(xfs_mount_t *mp, int loud)
 				xfs_etest[i]);
 			xfs_etest[i] = 0;
 			xfs_etest_fsid[i] = 0LL;
-			kmem_free(xfs_etest_fsname[i]);
+			kmem_free(xfs_etest_fsname[i],
+				  strlen(xfs_etest_fsname[i]) + 1);
 			xfs_etest_fsname[i] = NULL;
 		}
 	}
@@ -151,8 +163,23 @@ xfs_errortag_clearall(xfs_mount_t *mp, int loud)
 
 	return 0;
 }
-#endif /* DEBUG */
+#endif /* DEBUG || INDUCE_IO_ERROR */
 
+static void
+xfs_fs_vcmn_err(int level, xfs_mount_t *mp, char *fmt, va_list ap)
+{
+	if (mp != NULL) {
+		char	*newfmt;
+		int	len = 16 + mp->m_fsname_len + strlen(fmt);
+
+		newfmt = kmem_alloc(len, KM_SLEEP);
+		sprintf(newfmt, "Filesystem \"%s\": %s", mp->m_fsname, fmt);
+		icmn_err(level, newfmt, ap);
+		kmem_free(newfmt, len);
+	} else {
+		icmn_err(level, fmt, ap);
+	}
+}
 
 void
 xfs_fs_cmn_err(int level, xfs_mount_t *mp, char *fmt, ...)

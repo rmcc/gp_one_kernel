@@ -37,14 +37,11 @@
 #include <linux/tick.h>
 #include <linux/percpu.h>
 #include <linux/prctl.h>
-#include <linux/dmi.h>
-#include <linux/ftrace.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
-#include <linux/kdebug.h>
 
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/io.h>
 #include <asm/ldt.h>
 #include <asm/processor.h>
 #include <asm/i387.h>
@@ -57,14 +54,20 @@
 
 #include <asm/tlbflush.h>
 #include <asm/cpu.h>
-#include <asm/idle.h>
-#include <asm/syscalls.h>
-#include <asm/ds.h>
+#include <asm/kdebug.h>
 
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
+static int hlt_counter;
+
+unsigned long boot_option_idle_override = 0;
+EXPORT_SYMBOL(boot_option_idle_override);
+
 DEFINE_PER_CPU(struct task_struct *, current_task) = &init_task;
 EXPORT_PER_CPU_SYMBOL(current_task);
+
+DEFINE_PER_CPU(int, cpu_number);
+EXPORT_PER_CPU_SYMBOL(cpu_number);
 
 /*
  * Return saved PC of a blocked thread.
@@ -74,12 +77,80 @@ unsigned long thread_saved_pc(struct task_struct *tsk)
 	return ((unsigned long *)tsk->thread.sp)[3];
 }
 
-#ifndef CONFIG_SMP
+/*
+ * Powermanagement idle function, if any..
+ */
+void (*pm_idle)(void);
+EXPORT_SYMBOL(pm_idle);
+
+void disable_hlt(void)
+{
+	hlt_counter++;
+}
+
+EXPORT_SYMBOL(disable_hlt);
+
+void enable_hlt(void)
+{
+	hlt_counter--;
+}
+
+EXPORT_SYMBOL(enable_hlt);
+
+/*
+ * We use this if we don't have any better
+ * idle routine..
+ */
+void default_idle(void)
+{
+	if (!hlt_counter && boot_cpu_data.hlt_works_ok) {
+		current_thread_info()->status &= ~TS_POLLING;
+		/*
+		 * TS_POLLING-cleared state must be visible before we
+		 * test NEED_RESCHED:
+		 */
+		smp_mb();
+
+		if (!need_resched())
+			safe_halt();	/* enables interrupts racelessly */
+		else
+			local_irq_enable();
+		current_thread_info()->status |= TS_POLLING;
+	} else {
+		local_irq_enable();
+		/* loop is done by the caller */
+		cpu_relax();
+	}
+}
+#ifdef CONFIG_APM_MODULE
+EXPORT_SYMBOL(default_idle);
+#endif
+
+#ifdef CONFIG_HOTPLUG_CPU
+#include <asm/nmi.h>
+/* We don't actually take CPU down, just spin without interrupts. */
+static inline void play_dead(void)
+{
+	/* This must be done before dead CPU ack */
+	cpu_exit_clear();
+	wbinvd();
+	mb();
+	/* Ack it */
+	__get_cpu_var(cpu_state) = CPU_DEAD;
+
+	/*
+	 * With physical CPU hotplug, we should halt the cpu
+	 */
+	local_irq_disable();
+	while (1)
+		halt();
+}
+#else
 static inline void play_dead(void)
 {
 	BUG();
 }
-#endif
+#endif /* CONFIG_HOTPLUG_CPU */
 
 /*
  * The idle thread. There's no useful work to be
@@ -95,24 +166,26 @@ void cpu_idle(void)
 
 	/* endless idle loop with no priority at all */
 	while (1) {
-		tick_nohz_stop_sched_tick(1);
+		tick_nohz_stop_sched_tick();
 		while (!need_resched()) {
+			void (*idle)(void);
 
 			check_pgt_cache();
 			rmb();
+			idle = pm_idle;
 
 			if (rcu_pending(cpu))
 				rcu_check_callbacks(cpu, 0);
+
+			if (!idle)
+				idle = default_idle;
 
 			if (cpu_is_offline(cpu))
 				play_dead();
 
 			local_irq_disable();
 			__get_cpu_var(irq_stat).idle_timestamp = jiffies;
-			/* Don't trace irqs off for idle */
-			stop_critical_timings();
-			pm_idle();
-			start_critical_timings();
+			idle();
 		}
 		tick_nohz_restart_sched_tick();
 		preempt_enable_no_resched();
@@ -121,13 +194,12 @@ void cpu_idle(void)
 	}
 }
 
-void __show_regs(struct pt_regs *regs, int all)
+void __show_registers(struct pt_regs *regs, int all)
 {
 	unsigned long cr0 = 0L, cr2 = 0L, cr3 = 0L, cr4 = 0L;
 	unsigned long d0, d1, d2, d3, d6, d7;
 	unsigned long sp;
 	unsigned short ss, gs;
-	const char *board;
 
 	if (user_mode_vm(regs)) {
 		sp = regs->sp;
@@ -140,15 +212,11 @@ void __show_regs(struct pt_regs *regs, int all)
 	}
 
 	printk("\n");
-
-	board = dmi_get_system_info(DMI_PRODUCT_NAME);
-	if (!board)
-		board = "";
-	printk("Pid: %d, comm: %s %s (%s %.*s) %s\n",
+	printk("Pid: %d, comm: %s %s (%s %.*s)\n",
 			task_pid_nr(current), current->comm,
 			print_tainted(), init_utsname()->release,
 			(int)strcspn(init_utsname()->version, " "),
-			init_utsname()->version, board);
+			init_utsname()->version);
 
 	printk("EIP: %04x:[<%08lx>] EFLAGS: %08lx CPU: %d\n",
 			(u16)regs->cs, regs->ip, regs->flags,
@@ -187,7 +255,7 @@ void __show_regs(struct pt_regs *regs, int all)
 
 void show_regs(struct pt_regs *regs)
 {
-	__show_regs(regs, 1);
+	__show_registers(regs, 1);
 	show_trace(NULL, regs, &regs->sp, regs->bp);
 }
 
@@ -201,7 +269,7 @@ extern void kernel_thread_helper(void);
 /*
  * Create a kernel thread
  */
-int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
 	struct pt_regs regs;
 
@@ -248,8 +316,6 @@ void exit_thread(void)
 		tss->x86_tss.io_bitmap_base = INVALID_IO_BITMAP_OFFSET;
 		put_cpu();
 	}
-
-	ds_exit_thread(current);
 }
 
 void flush_thread(void)
@@ -262,12 +328,11 @@ void flush_thread(void)
 	tsk->thread.debugreg3 = 0;
 	tsk->thread.debugreg6 = 0;
 	tsk->thread.debugreg7 = 0;
-	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
+	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));	
 	clear_tsk_thread_flag(tsk, TIF_DEBUG);
 	/*
 	 * Forget coprocessor state..
 	 */
-	tsk->fpu_counter = 0;
 	clear_fpu(tsk);
 	clear_used_math();
 }
@@ -289,9 +354,9 @@ void prepare_to_copy(struct task_struct *tsk)
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	unsigned long unused,
-	struct task_struct *p, struct pt_regs *regs)
+	struct task_struct * p, struct pt_regs * regs)
 {
-	struct pt_regs *childregs;
+	struct pt_regs * childregs;
 	struct task_struct *tsk;
 	int err;
 
@@ -331,19 +396,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		kfree(p->thread.io_bitmap_ptr);
 		p->thread.io_bitmap_max = 0;
 	}
-
-	ds_copy_thread(p, current);
-
-	clear_tsk_thread_flag(p, TIF_DEBUGCTLMSR);
-	p->thread.debugctlmsr = 0;
-
 	return err;
 }
 
 void
 start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
 {
-	__asm__("movl %0, %%gs" : : "r"(0));
+	__asm__("movl %0, %%gs" :: "r"(0));
 	regs->fs		= 0;
 	set_fs(USER_DS);
 	regs->ds		= __USER_DS;
@@ -422,14 +481,21 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		 struct tss_struct *tss)
 {
 	struct thread_struct *prev, *next;
+	unsigned long debugctl;
 
 	prev = &prev_p->thread;
 	next = &next_p->thread;
 
-	if (test_tsk_thread_flag(next_p, TIF_DS_AREA_MSR) ||
-	    test_tsk_thread_flag(prev_p, TIF_DS_AREA_MSR))
-		ds_switch_to(prev_p, next_p);
-	else if (next->debugctlmsr != prev->debugctlmsr)
+	debugctl = prev->debugctlmsr;
+	if (next->ds_area_msr != prev->ds_area_msr) {
+		/* we clear debugctl to make sure DS
+		 * is not in use when we change it */
+		debugctl = 0;
+		update_debugctlmsr(0);
+		wrmsr(MSR_IA32_DS_AREA, next->ds_area_msr, 0);
+	}
+
+	if (next->debugctlmsr != debugctl)
 		update_debugctlmsr(next->debugctlmsr);
 
 	if (test_tsk_thread_flag(next_p, TIF_DEBUG)) {
@@ -450,6 +516,15 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		else
 			hard_enable_TSC();
 	}
+
+#ifdef X86_BTS
+	if (test_tsk_thread_flag(prev_p, TIF_BTS_TRACE_TS))
+		ptrace_bts_take_timestamp(prev_p, BTS_TASK_DEPARTS);
+
+	if (test_tsk_thread_flag(next_p, TIF_BTS_TRACE_TS))
+		ptrace_bts_take_timestamp(next_p, BTS_TASK_ARRIVES);
+#endif
+
 
 	if (!test_tsk_thread_flag(next_p, TIF_IO_BITMAP)) {
 		/*
@@ -508,8 +583,7 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
  * the task-switch, and shows up in ret_from_fork in entry.S,
  * for example.
  */
-__notrace_funcgraph struct task_struct *
-__switch_to(struct task_struct *prev_p, struct task_struct *next_p)
+struct task_struct * __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
 	struct thread_struct *prev = &prev_p->thread,
 				 *next = &next_p->thread;
@@ -575,11 +649,8 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	/* If the task has used fpu the last 5 timeslices, just do a full
 	 * restore of the math state immediately to avoid the trap; the
 	 * chances of needing FPU soon are obviously high now
-	 *
-	 * tsk_used_math() checks prevent calling math_state_restore(),
-	 * which can sleep in the case of !tsk_used_math()
 	 */
-	if (tsk_used_math(next_p) && next_p->fpu_counter > 5)
+	if (next_p->fpu_counter > 5)
 		math_state_restore();
 
 	/*
@@ -588,7 +659,7 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	if (prev->gs | next->gs)
 		loadsegment(gs, next->gs);
 
-	percpu_write(current_task, next_p);
+	x86_write_percpu(current_task, next_p);
 
 	return prev_p;
 }
@@ -634,7 +705,7 @@ asmlinkage int sys_vfork(struct pt_regs regs)
 asmlinkage int sys_execve(struct pt_regs regs)
 {
 	int error;
-	char *filename;
+	char * filename;
 
 	filename = getname((char __user *) regs.bx);
 	error = PTR_ERR(filename);

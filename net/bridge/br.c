@@ -5,6 +5,8 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
+ *	$Id: br.c,v 1.47 2001/12/24 00:56:41 davem Exp $
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -18,49 +20,38 @@
 #include <linux/init.h>
 #include <linux/llc.h>
 #include <net/llc.h>
-#include <net/stp.h>
 
 #include "br_private.h"
 
 int (*br_should_route_hook)(struct sk_buff *skb);
 
-static const struct stp_proto br_stp_proto = {
-	.rcv	= br_stp_rcv,
-};
-
-static struct pernet_operations br_net_ops = {
-	.exit	= br_net_exit,
-};
+static struct llc_sap *br_stp_sap;
 
 static int __init br_init(void)
 {
 	int err;
 
-	err = stp_proto_register(&br_stp_proto);
-	if (err < 0) {
+	br_stp_sap = llc_sap_open(LLC_SAP_BSPAN, br_stp_rcv);
+	if (!br_stp_sap) {
 		printk(KERN_ERR "bridge: can't register sap for STP\n");
-		return err;
+		return -EADDRINUSE;
 	}
 
 	err = br_fdb_init();
 	if (err)
 		goto err_out;
 
-	err = register_pernet_subsys(&br_net_ops);
+	err = br_netfilter_init();
 	if (err)
 		goto err_out1;
 
-	err = br_netfilter_init();
+	err = register_netdevice_notifier(&br_device_notifier);
 	if (err)
 		goto err_out2;
 
-	err = register_netdevice_notifier(&br_device_notifier);
-	if (err)
-		goto err_out3;
-
 	err = br_netlink_init();
 	if (err)
-		goto err_out4;
+		goto err_out3;
 
 	brioctl_set(br_ioctl_deviceless_stub);
 	br_handle_frame_hook = br_handle_frame;
@@ -69,32 +60,31 @@ static int __init br_init(void)
 	br_fdb_put_hook = br_fdb_put;
 
 	return 0;
-err_out4:
-	unregister_netdevice_notifier(&br_device_notifier);
 err_out3:
-	br_netfilter_fini();
+	unregister_netdevice_notifier(&br_device_notifier);
 err_out2:
-	unregister_pernet_subsys(&br_net_ops);
+	br_netfilter_fini();
 err_out1:
 	br_fdb_fini();
 err_out:
-	stp_proto_unregister(&br_stp_proto);
+	llc_sap_put(br_stp_sap);
 	return err;
 }
 
 static void __exit br_deinit(void)
 {
-	stp_proto_unregister(&br_stp_proto);
+	rcu_assign_pointer(br_stp_sap->rcv_func, NULL);
 
 	br_netlink_fini();
 	unregister_netdevice_notifier(&br_device_notifier);
 	brioctl_set(NULL);
 
-	unregister_pernet_subsys(&br_net_ops);
+	br_cleanup_bridges();
 
 	synchronize_net();
 
 	br_netfilter_fini();
+	llc_sap_put(br_stp_sap);
 	br_fdb_get_hook = NULL;
 	br_fdb_put_hook = NULL;
 

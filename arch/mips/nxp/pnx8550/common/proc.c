@@ -22,6 +22,7 @@
 #include <linux/random.h>
 
 #include <asm/io.h>
+#include <asm/gdb-stub.h>
 #include <int.h>
 #include <uart.h>
 

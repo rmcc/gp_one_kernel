@@ -277,7 +277,6 @@ enum acpi_prefered_pm_profiles {
 #define BAF_LEGACY_DEVICES              0x0001
 #define BAF_8042_KEYBOARD_CONTROLLER    0x0002
 #define BAF_MSI_NOT_SUPPORTED           0x0008
-#define BAF_PCIE_ASPM_CONTROL           0x0010
 
 #define FADT2_REVISION_ID               3
 #define FADT2_MINUS_REVISION_ID         2
@@ -287,31 +286,6 @@ enum acpi_prefered_pm_profiles {
 #pragma pack()
 
 #define ACPI_FADT_OFFSET(f)             (u8) ACPI_OFFSET (struct acpi_table_fadt, f)
-
-union acpi_name_union {
-	u32 integer;
-	char ascii[4];
-};
-
-/*
- * Internal ACPI Table Descriptor. One per ACPI table
- */
-struct acpi_table_desc {
-	acpi_physical_address address;
-	struct acpi_table_header *pointer;
-	u32 length;		/* Length fixed at 32 bits */
-	union acpi_name_union signature;
-	acpi_owner_id owner_id;
-	u8 flags;
-};
-
-/* Flags for above */
-
-#define ACPI_TABLE_ORIGIN_UNKNOWN       (0)
-#define ACPI_TABLE_ORIGIN_MAPPED        (1)
-#define ACPI_TABLE_ORIGIN_ALLOCATED     (2)
-#define ACPI_TABLE_ORIGIN_MASK          (3)
-#define ACPI_TABLE_IS_LOADED            (4)
 
 /*
  * Get the remaining ACPI tables

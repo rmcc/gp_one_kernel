@@ -730,6 +730,7 @@ static const struct trans_ctl_table trans_fs_quota_table[] = {
 };
 
 static const struct trans_ctl_table trans_fs_xfs_table[] = {
+	{ XFS_RESTRICT_CHOWN,	"restrict_chown" },
 	{ XFS_SGID_INHERIT,	"irix_sgid_inherit" },
 	{ XFS_SYMLINK_MODE,	"irix_symlink_mode" },
 	{ XFS_PANIC_MASK,	"panic_mask" },
@@ -1531,8 +1532,6 @@ int sysctl_check_table(struct nsproxy *namespaces, struct ctl_table *table)
 			sysctl_check_leaf(namespaces, table, &fail);
 		}
 		sysctl_check_bin_path(table, &fail);
-		if (table->mode > 0777)
-			set_fail(&fail, table, "bogus .mode");
 		if (fail) {
 			set_fail(&fail, table, NULL);
 			error = -EINVAL;

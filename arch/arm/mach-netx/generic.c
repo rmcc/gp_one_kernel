@@ -22,11 +22,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/io.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach/map.h>
 #include <asm/hardware/vic.h>
-#include <mach/netx-regs.h>
+#include <asm/io.h>
+#include <asm/arch/netx-regs.h>
 #include <asm/mach/irq.h>
 
 static struct map_desc netx_io_desc[] __initdata = {
@@ -77,12 +77,15 @@ netx_hif_demux_handler(unsigned int irq_unused, struct irq_desc *desc)
 	stat = ((readl(NETX_DPMAS_INT_EN) &
 		readl(NETX_DPMAS_INT_STAT)) >> 24) & 0x1f;
 
+	desc = irq_desc + NETX_IRQ_HIF_CHAINED(0);
+
 	while (stat) {
 		if (stat & 1) {
 			DEBUG_IRQ("handling irq %d\n", irq);
-			generic_handle_irq(irq);
+			desc_handle_irq(irq, desc);
 		}
 		irq++;
+		desc++;
 		stat >>= 1;
 	}
 }
@@ -96,19 +99,19 @@ netx_hif_irq_type(unsigned int _irq, unsigned int type)
 
 	irq = _irq - NETX_IRQ_HIF_CHAINED(0);
 
-	if (type & IRQ_TYPE_EDGE_RISING) {
+	if (type & __IRQT_RISEDGE) {
 		DEBUG_IRQ("rising edges\n");
 		val |= (1 << 26) << irq;
 	}
-	if (type & IRQ_TYPE_EDGE_FALLING) {
+	if (type & __IRQT_FALEDGE) {
 		DEBUG_IRQ("falling edges\n");
 		val &= ~((1 << 26) << irq);
 	}
-	if (type & IRQ_TYPE_LEVEL_LOW) {
+	if (type & __IRQT_LOWLVL) {
 		DEBUG_IRQ("low level\n");
 		val &= ~((1 << 26) << irq);
 	}
-	if (type & IRQ_TYPE_LEVEL_HIGH) {
+	if (type & __IRQT_HIGHLVL) {
 		DEBUG_IRQ("high level\n");
 		val |= (1 << 26) << irq;
 	}

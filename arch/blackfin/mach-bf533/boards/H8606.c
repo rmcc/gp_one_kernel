@@ -9,7 +9,7 @@
  * Modified:
  *               Copyright 2005 National ICT Australia (NICTA)
  *               Copyright 2004-2006 Analog Devices Inc
- *		 Copyright 2007,2008 HV Sistemas S.L.
+ *		 Copyright 2007 HV Sistemas S.L.
  *
  * Bugs:         Enter bugs at http://blackfin.uclinux.org/
  *
@@ -38,6 +38,7 @@
 #if defined(CONFIG_USB_ISP1362_HCD) || defined(CONFIG_USB_ISP1362_HCD_MODULE)
 #include <linux/usb/isp1362.h>
 #endif
+#include <linux/ata_platform.h>
 #include <linux/irq.h>
 
 #include <asm/dma.h>
@@ -64,18 +65,13 @@ static struct platform_device rtc_device = {
 static struct resource dm9000_resources[] = {
 	[0] = {
 		.start	= 0x20300000,
-		.end	= 0x20300002,
+		.end	= 0x20300000 + 8,
 		.flags	= IORESOURCE_MEM,
 	},
 	[1] = {
-		.start	= 0x20300004,
-		.end	= 0x20300006,
-		.flags	= IORESOURCE_MEM,
-	},
-	[2] = {
 		.start	= IRQ_PF10,
 		.end	= IRQ_PF10,
-		.flags	= (IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE | IRQF_SHARED | IRQF_TRIGGER_HIGH),
+		.flags	= (IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE),
 	},
 };
 
@@ -140,22 +136,18 @@ static struct platform_device net2272_bfin_device = {
 #if defined(CONFIG_MTD_M25P80) || defined(CONFIG_MTD_M25P80_MODULE)
 static struct mtd_partition bfin_spi_flash_partitions[] = {
 	{
-		.name = "bootloader (spi)",
-		.size = 0x40000,
+		.name = "bootloader",
+		.size = 0x00060000,
 		.offset = 0,
 		.mask_flags = MTD_CAP_ROM
 	}, {
-		.name = "fpga (spi)",
-		.size =   0x30000,
-		.offset = 0x40000
+		.name = "kernel",
+		.size = 0x100000,
+		.offset = 0x60000
 	}, {
-		.name = "linux kernel (spi)",
-		.size =   0x150000,
-		.offset =  0x70000
-	}, {
-		.name = "jffs2 root file system (spi)",
-		.size =   0x640000,
-		.offset = 0x1c0000,
+		.name = "file system",
+		.size = 0x6a0000,
+		.offset = 0x00160000,
 	}
 };
 
@@ -313,32 +305,22 @@ static struct platform_device bfin_uart_device = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
+static struct resource bfin_sir_resources[] = {
 #ifdef CONFIG_BFIN_SIR0
-static struct resource bfin_sir0_resources[] = {
 	{
 		.start = 0xFFC00400,
 		.end = 0xFFC004FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART0_RX,
-		.end = IRQ_UART0_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART0_RX,
-		.end = CH_UART0_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
+#endif
 };
 
-static struct platform_device bfin_sir0_device = {
+static struct platform_device bfin_sir_device = {
 	.name = "bfin_sir",
 	.id = 0,
-	.num_resources = ARRAY_SIZE(bfin_sir0_resources),
-	.resource = bfin_sir0_resources,
+	.num_resources = ARRAY_SIZE(bfin_sir_resources),
+	.resource = bfin_sir_resources,
 };
-#endif
 #endif
 
 #if defined(CONFIG_SERIAL_8250) || defined(CONFIG_SERIAL_8250_MODULE)
@@ -354,7 +336,7 @@ static struct platform_device bfin_sir0_device = {
 
 static struct plat_serial8250_port serial8250_platform_data [] = {
 	{
-		.membase = (void *)0x20200000,
+		.membase = 0x20200000,
 		.mapbase = 0x20200000,
 		.irq = IRQ_PF8,
 		.flags = UPF_BOOT_AUTOCONF | UART_CONFIG_TYPE,
@@ -362,7 +344,7 @@ static struct plat_serial8250_port serial8250_platform_data [] = {
 		.regshift = 1,
 		.uartclk = 66666667,
 	}, {
-		.membase = (void *)0x20200010,
+		.membase = 0x20200010,
 		.mapbase = 0x20200010,
 		.irq = IRQ_PF8,
 		.flags = UPF_BOOT_AUTOCONF | UART_CONFIG_TYPE,
@@ -441,9 +423,7 @@ static struct platform_device *h8606_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
-#ifdef CONFIG_BFIN_SIR0
-	&bfin_sir0_device,
-#endif
+	&bfin_sir_device,
 #endif
 
 #if defined(CONFIG_KEYBOARD_OPENCORES) || defined(CONFIG_KEYBOARD_OPENCORES_MODULE)

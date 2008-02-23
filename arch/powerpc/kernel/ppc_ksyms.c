@@ -8,6 +8,7 @@
 #include <linux/screen_info.h>
 #include <linux/vt_kern.h>
 #include <linux/nvram.h>
+#include <linux/console.h>
 #include <linux/irq.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
@@ -42,7 +43,6 @@
 #include <asm/div64.h>
 #include <asm/signal.h>
 #include <asm/dcr.h>
-#include <asm/ftrace.h>
 
 #ifdef CONFIG_PPC32
 extern void transfer_to_handler(void);
@@ -66,10 +66,6 @@ EXPORT_SYMBOL(alignment_exception);
 EXPORT_SYMBOL(program_check_exception);
 EXPORT_SYMBOL(single_step_exception);
 EXPORT_SYMBOL(sys_sigreturn);
-#endif
-
-#ifdef CONFIG_FUNCTION_TRACER
-EXPORT_SYMBOL(_mcount);
 #endif
 
 EXPORT_SYMBOL(strcpy);
@@ -107,15 +103,15 @@ EXPORT_SYMBOL(giveup_fpu);
 #ifdef CONFIG_ALTIVEC
 EXPORT_SYMBOL(giveup_altivec);
 #endif /* CONFIG_ALTIVEC */
-#ifdef CONFIG_VSX
-EXPORT_SYMBOL(giveup_vsx);
-#endif /* CONFIG_VSX */
 #ifdef CONFIG_SPE
 EXPORT_SYMBOL(giveup_spe);
 #endif /* CONFIG_SPE */
 
 #ifndef CONFIG_PPC64
 EXPORT_SYMBOL(flush_instruction_cache);
+EXPORT_SYMBOL(flush_tlb_kernel_range);
+EXPORT_SYMBOL(flush_tlb_page);
+EXPORT_SYMBOL(_tlbie);
 #endif
 EXPORT_SYMBOL(__flush_icache_range);
 EXPORT_SYMBOL(flush_dcache_range);
@@ -164,12 +160,13 @@ EXPORT_SYMBOL(screen_info);
 EXPORT_SYMBOL(timer_interrupt);
 EXPORT_SYMBOL(irq_desc);
 EXPORT_SYMBOL(tb_ticks_per_jiffy);
+EXPORT_SYMBOL(console_drivers);
 EXPORT_SYMBOL(cacheable_memcpy);
-EXPORT_SYMBOL(cacheable_memzero);
 #endif
 
 #ifdef CONFIG_PPC32
-EXPORT_SYMBOL(switch_mmu_context);
+EXPORT_SYMBOL(next_mmu_context);
+EXPORT_SYMBOL(set_context);
 #endif
 
 #ifdef CONFIG_PPC_STD_MMU_32

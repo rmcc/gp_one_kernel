@@ -24,13 +24,13 @@
 
 extern unsigned int saa7146_debug;
 
-//#define DEBUG_PROLOG printk("(0x%08x)(0x%08x) %s: %s(): ",(dev==0?-1:(dev->mem==0?-1:saa7146_read(dev,RPS_ADDR0))),(dev==0?-1:(dev->mem==0?-1:saa7146_read(dev,IER))),KBUILD_MODNAME,__func__)
+//#define DEBUG_PROLOG printk("(0x%08x)(0x%08x) %s: %s(): ",(dev==0?-1:(dev->mem==0?-1:saa7146_read(dev,RPS_ADDR0))),(dev==0?-1:(dev->mem==0?-1:saa7146_read(dev,IER))),KBUILD_MODNAME,__FUNCTION__)
 
 #ifndef DEBUG_VARIABLE
 	#define DEBUG_VARIABLE saa7146_debug
 #endif
 
-#define DEBUG_PROLOG printk("%s: %s(): ",KBUILD_MODNAME, __func__)
+#define DEBUG_PROLOG printk("%s: %s(): ",KBUILD_MODNAME,__FUNCTION__)
 #define INFO(x) { printk("%s: ",KBUILD_MODNAME); printk x; }
 
 #define ERR(x) { DEBUG_PROLOG; printk x; }
@@ -53,7 +53,7 @@ struct saa7146_vv;
 /* saa7146 page table */
 struct saa7146_pgtable {
 	unsigned int	size;
-	__le32		*cpu;
+	u32		*cpu;
 	dma_addr_t	dma;
 	/* used for offsets for u,v planes for planar capture modes */
 	unsigned long	offset;
@@ -101,7 +101,7 @@ struct saa7146_extension
 struct saa7146_dma
 {
 	dma_addr_t	dma_handle;
-	__le32		*cpu_addr;
+	u32		*cpu_addr;
 };
 
 struct saa7146_dev

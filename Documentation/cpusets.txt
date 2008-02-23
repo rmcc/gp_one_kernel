@@ -48,7 +48,7 @@ hooks, beyond what is already present, required to manage dynamic
 job placement on large systems.
 
 Cpusets use the generic cgroup subsystem described in
-Documentation/cgroups/cgroups.txt.
+Documentation/cgroup.txt.
 
 Requests by a task, using the sched_setaffinity(2) system call to
 include CPUs in its CPU affinity mask, and using the mbind(2) and
@@ -154,15 +154,13 @@ browsing and modifying the cpusets presently known to the kernel.  No
 new system calls are added for cpusets - all support for querying and
 modifying cpusets is via this cpuset file system.
 
-The /proc/<pid>/status file for each task has four added lines,
+The /proc/<pid>/status file for each task has two added lines,
 displaying the tasks cpus_allowed (on which CPUs it may be scheduled)
 and mems_allowed (on which Memory Nodes it may obtain memory),
-in the two formats seen in the following example:
+in the format seen in the following example:
 
   Cpus_allowed:   ffffffff,ffffffff,ffffffff,ffffffff
-  Cpus_allowed_list:      0-127
   Mems_allowed:   ffffffff,ffffffff
-  Mems_allowed_list:      0-63
 
 Each cpuset is represented by a directory in the cgroup file system
 containing (on top of the standard cgroup files) the following
@@ -201,7 +199,7 @@ using the sched_setaffinity, mbind and set_mempolicy system calls.
 The following rules apply to each cpuset:
 
  - Its CPUs and Memory Nodes must be a subset of its parents.
- - It can't be marked exclusive unless its parent is.
+ - It can only be marked exclusive if its parent is.
  - If its cpu or memory is exclusive, they may not overlap any sibling.
 
 These rules, and the natural hierarchy of cpusets, enable efficient
@@ -347,7 +345,7 @@ is modified to perform an inline check for this PF_SPREAD_PAGE task
 flag, and if set, a call to a new routine cpuset_mem_spread_node()
 returns the node to prefer for the allocation.
 
-Similarly, setting 'memory_spread_slab' turns on the flag
+Similarly, setting 'memory_spread_cache' turns on the flag
 PF_SPREAD_SLAB, and appropriately marked slab caches will allocate
 pages from the node returned by cpuset_mem_spread_node().
 
@@ -544,10 +542,7 @@ otherwise initial value -1 that indicates the cpuset has no request.
    2  : search cores in a package.
    3  : search cpus in a node [= system wide on non-NUMA system]
  ( 4  : search nodes in a chunk of node [on NUMA system] )
- ( 5  : search system wide [on NUMA system] )
-
-The system default is architecture dependent.  The system default
-can be changed using the relax_domain_level= boot parameter.
+ ( 5~ : search system wide [on NUMA system])
 
 This file is per-cpuset and affect the sched domain where the cpuset
 belongs to.  Therefore if the flag 'sched_load_balance' of a cpuset
@@ -635,16 +630,14 @@ prior 'mems' setting, will not be moved.
 
 There is an exception to the above.  If hotplug functionality is used
 to remove all the CPUs that are currently assigned to a cpuset,
-then all the tasks in that cpuset will be moved to the nearest ancestor
-with non-empty cpus.  But the moving of some (or all) tasks might fail if
-cpuset is bound with another cgroup subsystem which has some restrictions
-on task attaching.  In this failing case, those tasks will stay
-in the original cpuset, and the kernel will automatically update
-their cpus_allowed to allow all online CPUs.  When memory hotplug
-functionality for removing Memory Nodes is available, a similar exception
-is expected to apply there as well.  In general, the kernel prefers to
-violate cpuset placement, over starving a task that has had all
-its allowed CPUs or Memory Nodes taken offline.
+then the kernel will automatically update the cpus_allowed of all
+tasks attached to CPUs in that cpuset to allow all CPUs.  When memory
+hotplug functionality for removing Memory Nodes is available, a
+similar exception is expected to apply there as well.  In general,
+the kernel prefers to violate cpuset placement, over starving a task
+that has had all its allowed CPUs or Memory Nodes taken offline.  User
+code should reconfigure cpusets to only refer to online CPUs and Memory
+Nodes when using hotplug to add or remove such resources.
 
 There is a second exception to the above.  GFP_ATOMIC requests are
 kernel internal allocations that must be satisfied, immediately.
@@ -716,10 +709,7 @@ Now you want to do something with this cpuset.
 
 In this directory you can find several files:
 # ls
-cpu_exclusive  memory_migrate      mems                      tasks
-cpus           memory_pressure     notify_on_release
-mem_exclusive  memory_spread_page  sched_load_balance
-mem_hardwall   memory_spread_slab  sched_relax_domain_level
+cpus  cpu_exclusive  mems  mem_exclusive mem_hardwall  tasks
 
 Reading them will give you information about the state of this cpuset:
 the CPUs and Memory Nodes it can use, the processes that are using

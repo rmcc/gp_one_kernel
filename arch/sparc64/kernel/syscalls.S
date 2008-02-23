@@ -65,8 +65,9 @@ sys32_rt_sigreturn:
 	andcc	%l5, (_TIF_SYSCALL_TRACE|_TIF_SECCOMP|_TIF_SYSCALL_AUDIT), %g0
 	be,pt	%icc, rtrap
 	 nop
-	call	syscall_trace_leave
-	 add	%sp, PTREGS_OFF, %o0
+	add	%sp, PTREGS_OFF, %o0
+	call	syscall_trace
+	 mov	1, %o1
 	ba,pt	%xcc, rtrap
 	 nop
 
@@ -158,10 +159,9 @@ linux_sparc_ni_syscall:
 	 or	%l7, %lo(sys_ni_syscall), %l7
 
 linux_syscall_trace32:
-	call	syscall_trace_enter
-	 add	%sp, PTREGS_OFF, %o0
-	brnz,pn	%o0, 3f
-	 mov	-ENOSYS, %o0
+	add	%sp, PTREGS_OFF, %o0
+	call	syscall_trace
+	 clr	%o1
 	srl	%i0, 0, %o0
 	srl	%i4, 0, %o4
 	srl	%i1, 0, %o1
@@ -170,10 +170,9 @@ linux_syscall_trace32:
 	 srl	%i3, 0, %o3
 
 linux_syscall_trace:
-	call	syscall_trace_enter
-	 add	%sp, PTREGS_OFF, %o0
-	brnz,pn	%o0, 3f
-	 mov	-ENOSYS, %o0
+	add	%sp, PTREGS_OFF, %o0
+	call	syscall_trace
+	 clr	%o1
 	mov	%i0, %o0
 	mov	%i1, %o1
 	mov	%i2, %o2
@@ -272,8 +271,9 @@ ret_sys_call:
 	b,pt	%xcc, rtrap
 	 stx	%l2, [%sp + PTREGS_OFF + PT_V9_TNPC]
 linux_syscall_trace2:
-	call	syscall_trace_leave
-	 add	%sp, PTREGS_OFF, %o0
+	add	%sp, PTREGS_OFF, %o0
+	call	syscall_trace
+	 mov	1, %o1
 	stx	%l1, [%sp + PTREGS_OFF + PT_V9_TPC]
 	ba,pt	%xcc, rtrap
 	 stx	%l2, [%sp + PTREGS_OFF + PT_V9_TNPC]

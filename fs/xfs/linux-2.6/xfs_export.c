@@ -29,6 +29,7 @@
 #include "xfs_vnodeops.h"
 #include "xfs_bmap_btree.h"
 #include "xfs_inode.h"
+#include "xfs_vfsops.h"
 
 /*
  * Note that we only accept fileids which are long enough rather than allow
@@ -138,7 +139,7 @@ xfs_nfs_get_inode(
 	}
 
 	xfs_iunlock(ip, XFS_ILOCK_SHARED);
-	return VFS_I(ip);
+	return ip->i_vnode;
 }
 
 STATIC struct dentry *
@@ -147,6 +148,7 @@ xfs_fs_fh_to_dentry(struct super_block *sb, struct fid *fid,
 {
 	struct xfs_fid64	*fid64 = (struct xfs_fid64 *)fid;
 	struct inode		*inode = NULL;
+	struct dentry		*result;
 
 	if (fh_len < xfs_fileid_length(fileid_type))
 		return NULL;
@@ -162,7 +164,16 @@ xfs_fs_fh_to_dentry(struct super_block *sb, struct fid *fid,
 		break;
 	}
 
-	return d_obtain_alias(inode);
+	if (!inode)
+		return NULL;
+	if (IS_ERR(inode))
+		return ERR_PTR(PTR_ERR(inode));
+	result = d_alloc_anon(inode);
+	if (!result) {
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	return result;
 }
 
 STATIC struct dentry *
@@ -171,6 +182,7 @@ xfs_fs_fh_to_parent(struct super_block *sb, struct fid *fid,
 {
 	struct xfs_fid64	*fid64 = (struct xfs_fid64 *)fid;
 	struct inode		*inode = NULL;
+	struct dentry		*result;
 
 	switch (fileid_type) {
 	case FILEID_INO32_GEN_PARENT:
@@ -183,7 +195,16 @@ xfs_fs_fh_to_parent(struct super_block *sb, struct fid *fid,
 		break;
 	}
 
-	return d_obtain_alias(inode);
+	if (!inode)
+		return NULL;
+	if (IS_ERR(inode))
+		return ERR_PTR(PTR_ERR(inode));
+	result = d_alloc_anon(inode);
+	if (!result) {
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	return result;
 }
 
 STATIC struct dentry *
@@ -192,12 +213,18 @@ xfs_fs_get_parent(
 {
 	int			error;
 	struct xfs_inode	*cip;
+	struct dentry		*parent;
 
-	error = xfs_lookup(XFS_I(child->d_inode), &xfs_name_dotdot, &cip, NULL);
+	error = xfs_lookup(XFS_I(child->d_inode), &xfs_name_dotdot, &cip);
 	if (unlikely(error))
 		return ERR_PTR(-error);
 
-	return d_obtain_alias(VFS_I(cip));
+	parent = d_alloc_anon(cip->i_vnode);
+	if (unlikely(!parent)) {
+		iput(cip->i_vnode);
+		return ERR_PTR(-ENOMEM);
+	}
+	return parent;
 }
 
 const struct export_operations xfs_export_operations = {

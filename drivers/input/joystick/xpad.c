@@ -127,7 +127,6 @@ static const struct xpad_device {
 	{ 0x0738, 0x4716, "Mad Catz Wired Xbox 360 Controller", MAP_DPAD_TO_AXES, XTYPE_XBOX360 },
 	{ 0x0738, 0x6040, "Mad Catz Beat Pad Pro", MAP_DPAD_TO_BUTTONS, XTYPE_XBOX },
 	{ 0x0c12, 0x8802, "Zeroplus Xbox Controller", MAP_DPAD_TO_AXES, XTYPE_XBOX },
-	{ 0x0c12, 0x880a, "Pelican Eclipse PL-2023", MAP_DPAD_TO_AXES, XTYPE_XBOX },
 	{ 0x0c12, 0x8810, "Zeroplus Xbox Controller", MAP_DPAD_TO_AXES, XTYPE_XBOX },
 	{ 0x0c12, 0x9902, "HAMA VibraX - *FAULTY HARDWARE*", MAP_DPAD_TO_AXES, XTYPE_XBOX },
 	{ 0x0e4c, 0x1097, "Radica Gamester Controller", MAP_DPAD_TO_AXES, XTYPE_XBOX },
@@ -419,11 +418,11 @@ static void xpad_irq_in(struct urb *urb)
 	case -ESHUTDOWN:
 		/* this urb is terminated, clean up */
 		dbg("%s - urb shutting down with status: %d",
-			__func__, status);
+			__FUNCTION__, status);
 		return;
 	default:
 		dbg("%s - nonzero urb status received: %d",
-			__func__, status);
+			__FUNCTION__, status);
 		goto exit;
 	}
 
@@ -442,7 +441,7 @@ exit:
 	retval = usb_submit_urb (urb, GFP_ATOMIC);
 	if (retval)
 		err ("%s - usb_submit_urb failed with result %d",
-		     __func__, retval);
+		     __FUNCTION__, retval);
 }
 
 static void xpad_bulk_out(struct urb *urb)
@@ -455,10 +454,10 @@ static void xpad_bulk_out(struct urb *urb)
 	case -ENOENT:
 	case -ESHUTDOWN:
 		/* this urb is terminated, clean up */
-		dbg("%s - urb shutting down with status: %d", __func__, urb->status);
+		dbg("%s - urb shutting down with status: %d", __FUNCTION__, urb->status);
 		break;
 	default:
-		dbg("%s - nonzero urb status received: %d", __func__, urb->status);
+		dbg("%s - nonzero urb status received: %d", __FUNCTION__, urb->status);
 	}
 }
 
@@ -478,11 +477,11 @@ static void xpad_irq_out(struct urb *urb)
 		case -ESHUTDOWN:
 			/* this urb is terminated, clean up */
 			dbg("%s - urb shutting down with status: %d",
-				__func__, status);
+				__FUNCTION__, status);
 			return;
 		default:
 			dbg("%s - nonzero urb status received: %d",
-				__func__, status);
+				__FUNCTION__, status);
 			goto exit;
 	}
 
@@ -490,7 +489,7 @@ exit:
 	retval = usb_submit_urb(urb, GFP_ATOMIC);
 	if (retval)
 		err("%s - usb_submit_urb failed with result %d",
-		    __func__, retval);
+		    __FUNCTION__, retval);
 }
 
 static int xpad_init_output(struct usb_interface *intf, struct usb_xpad *xpad)
@@ -911,7 +910,7 @@ static int __init usb_xpad_init(void)
 {
 	int result = usb_register(&xpad_driver);
 	if (result == 0)
-		printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_DESC "\n");
+		info(DRIVER_DESC);
 	return result;
 }
 

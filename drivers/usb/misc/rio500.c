@@ -89,7 +89,7 @@ static int open_rio(struct inode *inode, struct file *file)
 
 	mutex_unlock(&(rio->lock));
 
-	dev_info(&rio->rio_dev->dev, "Rio opened.\n");
+	info("Rio opened.");
 
 	return 0;
 }
@@ -100,11 +100,13 @@ static int close_rio(struct inode *inode, struct file *file)
 
 	rio->isopen = 0;
 
-	dev_info(&rio->rio_dev->dev, "Rio closed.\n");
+	info("Rio closed.");
 	return 0;
 }
 
-static long ioctl_rio(struct file *file, unsigned int cmd, unsigned long arg)
+static int
+ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
+	  unsigned long arg)
 {
 	struct RioCommand rio_cmd;
 	struct rio_usb_data *rio = &rio_instance;
@@ -114,7 +116,6 @@ static long ioctl_rio(struct file *file, unsigned int cmd, unsigned long arg)
 	int retries;
 	int retval=0;
 
-	lock_kernel();
 	mutex_lock(&(rio->lock));
         /* Sanity check to make sure rio is connected, powered, etc */
         if (rio->present == 0 || rio->rio_dev == NULL) {
@@ -253,7 +254,6 @@ static long ioctl_rio(struct file *file, unsigned int cmd, unsigned long arg)
 
 err_out:
 	mutex_unlock(&(rio->lock));
-	unlock_kernel();
 	return retval;
 }
 
@@ -433,7 +433,7 @@ file_operations usb_rio_fops = {
 	.owner =	THIS_MODULE,
 	.read =		read_rio,
 	.write =	write_rio,
-	.unlocked_ioctl = ioctl_rio,
+	.ioctl =	ioctl_rio,
 	.open =		open_rio,
 	.release =	close_rio,
 };
@@ -451,7 +451,7 @@ static int probe_rio(struct usb_interface *intf,
 	struct rio_usb_data *rio = &rio_instance;
 	int retval;
 
-	dev_info(&intf->dev, "USB Rio found at address %d\n", dev->devnum);
+	info("USB Rio found at address %d", dev->devnum);
 
 	retval = usb_register_dev(intf, &usb_rio_class);
 	if (retval) {
@@ -503,7 +503,7 @@ static void disconnect_rio(struct usb_interface *intf)
 		kfree(rio->ibuf);
 		kfree(rio->obuf);
 
-		dev_info(&intf->dev, "USB Rio disconnected.\n");
+		info("USB Rio disconnected.");
 
 		rio->present = 0;
 		mutex_unlock(&(rio->lock));
@@ -531,8 +531,7 @@ static int __init usb_rio_init(void)
 	if (retval)
 		goto out;
 
-	printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-	       DRIVER_DESC "\n");
+	info(DRIVER_VERSION ":" DRIVER_DESC);
 
 out:
 	return retval;

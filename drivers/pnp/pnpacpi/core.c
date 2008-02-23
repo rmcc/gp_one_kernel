@@ -23,6 +23,7 @@
 #include <linux/pnp.h>
 #include <linux/mod_devicetable.h>
 #include <acpi/acpi_bus.h>
+#include <acpi/actypes.h>
 
 #include "../base.h"
 #include "pnpacpi.h"
@@ -74,7 +75,7 @@ static int __init ispnpidacpi(char *id)
 
 static int pnpacpi_get_resources(struct pnp_dev *dev)
 {
-	pnp_dbg(&dev->dev, "get resources\n");
+	dev_dbg(&dev->dev, "get resources\n");
 	return pnpacpi_parse_allocated_resource(dev);
 }
 
@@ -85,7 +86,7 @@ static int pnpacpi_set_resources(struct pnp_dev *dev)
 	int ret;
 	acpi_status status;
 
-	pnp_dbg(&dev->dev, "set resources\n");
+	dev_dbg(&dev->dev, "set resources\n");
 	ret = pnpacpi_build_resource_template(dev, &buffer);
 	if (ret)
 		return ret;
@@ -116,7 +117,9 @@ static int pnpacpi_suspend(struct pnp_dev *dev, pm_message_t state)
 {
 	int power_state;
 
-	power_state = acpi_pm_device_sleep_state(&dev->dev, NULL);
+	power_state = acpi_pm_device_sleep_state(&dev->dev,
+						device_may_wakeup(&dev->dev),
+						NULL);
 	if (power_state < 0)
 		power_state = (state.event == PM_EVENT_ON) ?
 				ACPI_STATE_D0 : ACPI_STATE_D3;
@@ -147,13 +150,9 @@ static int __init pnpacpi_add_device(struct acpi_device *device)
 	acpi_status status;
 	struct pnp_dev *dev;
 
-	/*
-	 * If a PnPacpi device is not present , the device
-	 * driver should not be loaded.
-	 */
 	status = acpi_get_handle(device->handle, "_CRS", &temp);
 	if (ACPI_FAILURE(status) || !ispnpidacpi(acpi_device_hid(device)) ||
-	    is_exclusive_device(device) || (!device->status.present))
+	    is_exclusive_device(device))
 		return 0;
 
 	dev = pnp_alloc_dev(&pnpacpi_protocol, num, acpi_device_hid(device));
@@ -258,20 +257,20 @@ int pnpacpi_disabled __initdata;
 static int __init pnpacpi_init(void)
 {
 	if (acpi_disabled || pnpacpi_disabled) {
-		printk(KERN_INFO "pnp: PnP ACPI: disabled\n");
+		pnp_info("PnP ACPI: disabled");
 		return 0;
 	}
-	printk(KERN_INFO "pnp: PnP ACPI init\n");
+	pnp_info("PnP ACPI init");
 	pnp_register_protocol(&pnpacpi_protocol);
 	register_acpi_bus_type(&acpi_pnp_bus);
 	acpi_get_devices(NULL, pnpacpi_add_device_handler, NULL, NULL);
-	printk(KERN_INFO "pnp: PnP ACPI: found %d devices\n", num);
+	pnp_info("PnP ACPI: found %d devices", num);
 	unregister_acpi_bus_type(&acpi_pnp_bus);
 	pnp_platform_devices = 1;
 	return 0;
 }
 
-fs_initcall(pnpacpi_init);
+subsys_initcall(pnpacpi_init);
 
 static int __init pnpacpi_setup(char *str)
 {

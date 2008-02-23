@@ -209,7 +209,7 @@ static int __init excite_nand_probe(struct device *dev)
 	if (likely(!scan_res)) {
 		DEBUG(MTD_DEBUG_LEVEL2, "%s: register partitions\n", module_id);
 		add_mtd_partitions(&drvdata->board_mtd, partition_info,
-				   ARRAY_SIZE(partition_info));
+				   sizeof partition_info / sizeof partition_info[0]);
 	} else {
 		iounmap(drvdata->regs);
 		kfree(drvdata);

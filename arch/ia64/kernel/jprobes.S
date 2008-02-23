@@ -45,7 +45,7 @@
  * to the correct location.
  */
 #include <asm/asmmacro.h>
-#include <asm/break.h>
+#include <asm-ia64/break.h>
 
 	/*
 	 * void jprobe_break(void)

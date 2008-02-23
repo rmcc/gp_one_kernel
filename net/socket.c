@@ -63,7 +63,6 @@
 #include <linux/file.h>
 #include <linux/net.h>
 #include <linux/interrupt.h>
-#include <linux/thread_info.h>
 #include <linux/rcupdate.h>
 #include <linux/netdevice.h>
 #include <linux/proc_fs.h>
@@ -91,7 +90,6 @@
 #include <asm/unistd.h>
 
 #include <net/compat.h>
-#include <net/wext.h>
 
 #include <net/sock.h>
 #include <linux/netfilter.h>
@@ -181,9 +179,9 @@ static DEFINE_PER_CPU(int, sockets_in_use) = 0;
  *	invalid addresses -EFAULT is returned. On a success 0 is returned.
  */
 
-int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr *kaddr)
+int move_addr_to_kernel(void __user *uaddr, int ulen, void *kaddr)
 {
-	if (ulen < 0 || ulen > sizeof(struct sockaddr_storage))
+	if (ulen < 0 || ulen > MAX_SOCK_ADDR)
 		return -EINVAL;
 	if (ulen == 0)
 		return 0;
@@ -209,7 +207,7 @@ int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr *kaddr)
  *	specified. Zero is returned for a success.
  */
 
-int move_addr_to_user(struct sockaddr *kaddr, int klen, void __user *uaddr,
+int move_addr_to_user(void *kaddr, int klen, void __user *uaddr,
 		      int __user *ulen)
 {
 	int err;
@@ -220,7 +218,7 @@ int move_addr_to_user(struct sockaddr *kaddr, int klen, void __user *uaddr,
 		return err;
 	if (len > klen)
 		len = klen;
-	if (len < 0 || len > sizeof(struct sockaddr_storage))
+	if (len < 0 || len > MAX_SOCK_ADDR)
 		return -EINVAL;
 	if (len) {
 		if (audit_sockaddr(klen, kaddr))
@@ -264,7 +262,7 @@ static void sock_destroy_inode(struct inode *inode)
 			container_of(inode, struct socket_alloc, vfs_inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct socket_alloc *ei = (struct socket_alloc *)foo;
 
@@ -350,11 +348,11 @@ static struct dentry_operations sockfs_dentry_operations = {
  *	but we take care of internal coherence yet.
  */
 
-static int sock_alloc_fd(struct file **filep, int flags)
+static int sock_alloc_fd(struct file **filep)
 {
 	int fd;
 
-	fd = get_unused_fd_flags(flags);
+	fd = get_unused_fd();
 	if (likely(fd >= 0)) {
 		struct file *file = get_empty_filp();
 
@@ -368,7 +366,7 @@ static int sock_alloc_fd(struct file **filep, int flags)
 	return fd;
 }
 
-static int sock_attach_fd(struct socket *sock, struct file *file, int flags)
+static int sock_attach_fd(struct socket *sock, struct file *file)
 {
 	struct dentry *dentry;
 	struct qstr name = { .name = "" };
@@ -390,20 +388,20 @@ static int sock_attach_fd(struct socket *sock, struct file *file, int flags)
 	init_file(file, sock_mnt, dentry, FMODE_READ | FMODE_WRITE,
 		  &socket_file_ops);
 	SOCK_INODE(sock)->i_fop = &socket_file_ops;
-	file->f_flags = O_RDWR | (flags & O_NONBLOCK);
+	file->f_flags = O_RDWR;
 	file->f_pos = 0;
 	file->private_data = sock;
 
 	return 0;
 }
 
-int sock_map_fd(struct socket *sock, int flags)
+int sock_map_fd(struct socket *sock)
 {
 	struct file *newfile;
-	int fd = sock_alloc_fd(&newfile, flags);
+	int fd = sock_alloc_fd(&newfile);
 
 	if (likely(fd >= 0)) {
-		int err = sock_attach_fd(sock, newfile, flags);
+		int err = sock_attach_fd(sock, newfile);
 
 		if (unlikely(err < 0)) {
 			put_filp(newfile);
@@ -490,8 +488,8 @@ static struct socket *sock_alloc(void)
 	sock = SOCKET_I(inode);
 
 	inode->i_mode = S_IFSOCK | S_IRWXUGO;
-	inode->i_uid = current_fsuid();
-	inode->i_gid = current_fsgid();
+	inode->i_uid = current->fsuid;
+	inode->i_gid = current->fsgid;
 
 	get_cpu_var(sockets_in_use)++;
 	put_cpu_var(sockets_in_use);
@@ -989,6 +987,7 @@ static int sock_close(struct inode *inode, struct file *filp)
 		printk(KERN_DEBUG "sock_close: NULL inode\n");
 		return 0;
 	}
+	sock_fasync(-1, filp, 0);
 	sock_release(SOCKET_I(inode));
 	return 0;
 }
@@ -1140,7 +1139,7 @@ static int __sock_create(struct net *net, int family, int type, int protocol,
 
 	sock->type = type;
 
-#ifdef CONFIG_MODULES
+#if defined(CONFIG_KMOD)
 	/* Attempt to load a protocol module if the find failed.
 	 *
 	 * 12/09/1996 Marcin: But! this makes REALLY only sense, if the user
@@ -1218,27 +1217,12 @@ asmlinkage long sys_socket(int family, int type, int protocol)
 {
 	int retval;
 	struct socket *sock;
-	int flags;
-
-	/* Check the SOCK_* constants for consistency.  */
-	BUILD_BUG_ON(SOCK_CLOEXEC != O_CLOEXEC);
-	BUILD_BUG_ON((SOCK_MAX | SOCK_TYPE_MASK) != SOCK_TYPE_MASK);
-	BUILD_BUG_ON(SOCK_CLOEXEC & SOCK_TYPE_MASK);
-	BUILD_BUG_ON(SOCK_NONBLOCK & SOCK_TYPE_MASK);
-
-	flags = type & ~SOCK_TYPE_MASK;
-	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
-		return -EINVAL;
-	type &= SOCK_TYPE_MASK;
-
-	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
-		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
 	retval = sock_create(family, type, protocol, &sock);
 	if (retval < 0)
 		goto out;
 
-	retval = sock_map_fd(sock, flags & (O_CLOEXEC | O_NONBLOCK));
+	retval = sock_map_fd(sock);
 	if (retval < 0)
 		goto out_release;
 
@@ -1261,15 +1245,6 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 	struct socket *sock1, *sock2;
 	int fd1, fd2, err;
 	struct file *newfile1, *newfile2;
-	int flags;
-
-	flags = type & ~SOCK_TYPE_MASK;
-	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
-		return -EINVAL;
-	type &= SOCK_TYPE_MASK;
-
-	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
-		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
 	/*
 	 * Obtain the first socket and check if the underlying protocol
@@ -1288,13 +1263,13 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 	if (err < 0)
 		goto out_release_both;
 
-	fd1 = sock_alloc_fd(&newfile1, flags & O_CLOEXEC);
+	fd1 = sock_alloc_fd(&newfile1);
 	if (unlikely(fd1 < 0)) {
 		err = fd1;
 		goto out_release_both;
 	}
 
-	fd2 = sock_alloc_fd(&newfile2, flags & O_CLOEXEC);
+	fd2 = sock_alloc_fd(&newfile2);
 	if (unlikely(fd2 < 0)) {
 		err = fd2;
 		put_filp(newfile1);
@@ -1302,18 +1277,24 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 		goto out_release_both;
 	}
 
-	err = sock_attach_fd(sock1, newfile1, flags & O_NONBLOCK);
+	err = sock_attach_fd(sock1, newfile1);
 	if (unlikely(err < 0)) {
 		goto out_fd2;
 	}
 
-	err = sock_attach_fd(sock2, newfile2, flags & O_NONBLOCK);
+	err = sock_attach_fd(sock2, newfile2);
 	if (unlikely(err < 0)) {
 		fput(newfile1);
 		goto out_fd1;
 	}
 
-	audit_fd_pair(fd1, fd2);
+	err = audit_fd_pair(fd1, fd2);
+	if (err < 0) {
+		fput(newfile1);
+		fput(newfile2);
+		goto out_fd;
+	}
+
 	fd_install(fd1, newfile1);
 	fd_install(fd2, newfile2);
 	/* fd1 and fd2 may be already another descriptors.
@@ -1343,6 +1324,7 @@ out_fd2:
 out_fd1:
 	put_filp(newfile2);
 	sock_release(sock2);
+out_fd:
 	put_unused_fd(fd1);
 	put_unused_fd(fd2);
 	goto out;
@@ -1359,20 +1341,20 @@ out_fd1:
 asmlinkage long sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 {
 	struct socket *sock;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
-		err = move_addr_to_kernel(umyaddr, addrlen, (struct sockaddr *)&address);
+		err = move_addr_to_kernel(umyaddr, addrlen, address);
 		if (err >= 0) {
 			err = security_socket_bind(sock,
-						   (struct sockaddr *)&address,
+						   (struct sockaddr *)address,
 						   addrlen);
 			if (!err)
 				err = sock->ops->bind(sock,
 						      (struct sockaddr *)
-						      &address, addrlen);
+						      address, addrlen);
 		}
 		fput_light(sock->file, fput_needed);
 	}
@@ -1418,19 +1400,13 @@ asmlinkage long sys_listen(int fd, int backlog)
  *	clean when we restucture accept also.
  */
 
-asmlinkage long sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
-			    int __user *upeer_addrlen, int flags)
+asmlinkage long sys_accept(int fd, struct sockaddr __user *upeer_sockaddr,
+			   int __user *upeer_addrlen)
 {
 	struct socket *sock, *newsock;
 	struct file *newfile;
 	int err, len, newfd, fput_needed;
-	struct sockaddr_storage address;
-
-	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
-		return -EINVAL;
-
-	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
-		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
+	char address[MAX_SOCK_ADDR];
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
@@ -1449,14 +1425,14 @@ asmlinkage long sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 	 */
 	__module_get(newsock->ops->owner);
 
-	newfd = sock_alloc_fd(&newfile, flags & O_CLOEXEC);
+	newfd = sock_alloc_fd(&newfile);
 	if (unlikely(newfd < 0)) {
 		err = newfd;
 		sock_release(newsock);
 		goto out_put;
 	}
 
-	err = sock_attach_fd(newsock, newfile, flags & O_NONBLOCK);
+	err = sock_attach_fd(newsock, newfile);
 	if (err < 0)
 		goto out_fd_simple;
 
@@ -1469,13 +1445,13 @@ asmlinkage long sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 		goto out_fd;
 
 	if (upeer_sockaddr) {
-		if (newsock->ops->getname(newsock, (struct sockaddr *)&address,
+		if (newsock->ops->getname(newsock, (struct sockaddr *)address,
 					  &len, 2) < 0) {
 			err = -ECONNABORTED;
 			goto out_fd;
 		}
-		err = move_addr_to_user((struct sockaddr *)&address,
-					len, upeer_sockaddr, upeer_addrlen);
+		err = move_addr_to_user(address, len, upeer_sockaddr,
+					upeer_addrlen);
 		if (err < 0)
 			goto out_fd;
 	}
@@ -1502,12 +1478,6 @@ out_fd:
 	goto out_put;
 }
 
-asmlinkage long sys_accept(int fd, struct sockaddr __user *upeer_sockaddr,
-			   int __user *upeer_addrlen)
-{
-	return sys_accept4(fd, upeer_sockaddr, upeer_addrlen, 0);
-}
-
 /*
  *	Attempt to connect to a socket with the server address.  The address
  *	is in user space so we verify it is OK and move it to kernel space.
@@ -1524,22 +1494,22 @@ asmlinkage long sys_connect(int fd, struct sockaddr __user *uservaddr,
 			    int addrlen)
 {
 	struct socket *sock;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
 		goto out;
-	err = move_addr_to_kernel(uservaddr, addrlen, (struct sockaddr *)&address);
+	err = move_addr_to_kernel(uservaddr, addrlen, address);
 	if (err < 0)
 		goto out_put;
 
 	err =
-	    security_socket_connect(sock, (struct sockaddr *)&address, addrlen);
+	    security_socket_connect(sock, (struct sockaddr *)address, addrlen);
 	if (err)
 		goto out_put;
 
-	err = sock->ops->connect(sock, (struct sockaddr *)&address, addrlen,
+	err = sock->ops->connect(sock, (struct sockaddr *)address, addrlen,
 				 sock->file->f_flags);
 out_put:
 	fput_light(sock->file, fput_needed);
@@ -1556,7 +1526,7 @@ asmlinkage long sys_getsockname(int fd, struct sockaddr __user *usockaddr,
 				int __user *usockaddr_len)
 {
 	struct socket *sock;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	int len, err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
@@ -1567,10 +1537,10 @@ asmlinkage long sys_getsockname(int fd, struct sockaddr __user *usockaddr,
 	if (err)
 		goto out_put;
 
-	err = sock->ops->getname(sock, (struct sockaddr *)&address, &len, 0);
+	err = sock->ops->getname(sock, (struct sockaddr *)address, &len, 0);
 	if (err)
 		goto out_put;
-	err = move_addr_to_user((struct sockaddr *)&address, len, usockaddr, usockaddr_len);
+	err = move_addr_to_user(address, len, usockaddr, usockaddr_len);
 
 out_put:
 	fput_light(sock->file, fput_needed);
@@ -1587,7 +1557,7 @@ asmlinkage long sys_getpeername(int fd, struct sockaddr __user *usockaddr,
 				int __user *usockaddr_len)
 {
 	struct socket *sock;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	int len, err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
@@ -1599,10 +1569,10 @@ asmlinkage long sys_getpeername(int fd, struct sockaddr __user *usockaddr,
 		}
 
 		err =
-		    sock->ops->getname(sock, (struct sockaddr *)&address, &len,
+		    sock->ops->getname(sock, (struct sockaddr *)address, &len,
 				       1);
 		if (!err)
-			err = move_addr_to_user((struct sockaddr *)&address, len, usockaddr,
+			err = move_addr_to_user(address, len, usockaddr,
 						usockaddr_len);
 		fput_light(sock->file, fput_needed);
 	}
@@ -1620,7 +1590,7 @@ asmlinkage long sys_sendto(int fd, void __user *buff, size_t len,
 			   int addr_len)
 {
 	struct socket *sock;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	int err;
 	struct msghdr msg;
 	struct iovec iov;
@@ -1639,10 +1609,10 @@ asmlinkage long sys_sendto(int fd, void __user *buff, size_t len,
 	msg.msg_controllen = 0;
 	msg.msg_namelen = 0;
 	if (addr) {
-		err = move_addr_to_kernel(addr, addr_len, (struct sockaddr *)&address);
+		err = move_addr_to_kernel(addr, addr_len, address);
 		if (err < 0)
 			goto out_put;
-		msg.msg_name = (struct sockaddr *)&address;
+		msg.msg_name = address;
 		msg.msg_namelen = addr_len;
 	}
 	if (sock->file->f_flags & O_NONBLOCK)
@@ -1678,7 +1648,7 @@ asmlinkage long sys_recvfrom(int fd, void __user *ubuf, size_t size,
 	struct socket *sock;
 	struct iovec iov;
 	struct msghdr msg;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	int err, err2;
 	int fput_needed;
 
@@ -1692,15 +1662,14 @@ asmlinkage long sys_recvfrom(int fd, void __user *ubuf, size_t size,
 	msg.msg_iov = &iov;
 	iov.iov_len = size;
 	iov.iov_base = ubuf;
-	msg.msg_name = (struct sockaddr *)&address;
-	msg.msg_namelen = sizeof(address);
+	msg.msg_name = address;
+	msg.msg_namelen = MAX_SOCK_ADDR;
 	if (sock->file->f_flags & O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
 	err = sock_recvmsg(sock, &msg, size, flags);
 
 	if (err >= 0 && addr != NULL) {
-		err2 = move_addr_to_user((struct sockaddr *)&address,
-					 msg.msg_namelen, addr, addr_len);
+		err2 = move_addr_to_user(address, msg.msg_namelen, addr, addr_len);
 		if (err2 < 0)
 			err = err2;
 	}
@@ -1820,7 +1789,7 @@ asmlinkage long sys_sendmsg(int fd, struct msghdr __user *msg, unsigned flags)
 	struct compat_msghdr __user *msg_compat =
 	    (struct compat_msghdr __user *)msg;
 	struct socket *sock;
-	struct sockaddr_storage address;
+	char address[MAX_SOCK_ADDR];
 	struct iovec iovstack[UIO_FASTIOV], *iov = iovstack;
 	unsigned char ctl[sizeof(struct cmsghdr) + 20]
 	    __attribute__ ((aligned(sizeof(__kernel_size_t))));
@@ -1858,13 +1827,9 @@ asmlinkage long sys_sendmsg(int fd, struct msghdr __user *msg, unsigned flags)
 
 	/* This will also move the address data into kernel space */
 	if (MSG_CMSG_COMPAT & flags) {
-		err = verify_compat_iovec(&msg_sys, iov,
-					  (struct sockaddr *)&address,
-					  VERIFY_READ);
+		err = verify_compat_iovec(&msg_sys, iov, address, VERIFY_READ);
 	} else
-		err = verify_iovec(&msg_sys, iov,
-				   (struct sockaddr *)&address,
-				   VERIFY_READ);
+		err = verify_iovec(&msg_sys, iov, address, VERIFY_READ);
 	if (err < 0)
 		goto out_freeiov;
 	total_len = err;
@@ -1935,7 +1900,7 @@ asmlinkage long sys_recvmsg(int fd, struct msghdr __user *msg,
 	int fput_needed;
 
 	/* kernel mode address */
-	struct sockaddr_storage addr;
+	char addr[MAX_SOCK_ADDR];
 
 	/* user mode address pointers */
 	struct sockaddr __user *uaddr;
@@ -1973,13 +1938,9 @@ asmlinkage long sys_recvmsg(int fd, struct msghdr __user *msg,
 	uaddr = (__force void __user *)msg_sys.msg_name;
 	uaddr_len = COMPAT_NAMELEN(msg);
 	if (MSG_CMSG_COMPAT & flags) {
-		err = verify_compat_iovec(&msg_sys, iov,
-					  (struct sockaddr *)&addr,
-					  VERIFY_WRITE);
+		err = verify_compat_iovec(&msg_sys, iov, addr, VERIFY_WRITE);
 	} else
-		err = verify_iovec(&msg_sys, iov,
-				   (struct sockaddr *)&addr,
-				   VERIFY_WRITE);
+		err = verify_iovec(&msg_sys, iov, addr, VERIFY_WRITE);
 	if (err < 0)
 		goto out_freeiov;
 	total_len = err;
@@ -1995,8 +1956,7 @@ asmlinkage long sys_recvmsg(int fd, struct msghdr __user *msg,
 	len = err;
 
 	if (uaddr != NULL) {
-		err = move_addr_to_user((struct sockaddr *)&addr,
-					msg_sys.msg_namelen, uaddr,
+		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr,
 					uaddr_len);
 		if (err < 0)
 			goto out_freeiov;
@@ -2028,11 +1988,10 @@ out:
 
 /* Argument list sizes for sys_socketcall */
 #define AL(x) ((x) * sizeof(unsigned long))
-static const unsigned char nargs[19]={
+static const unsigned char nargs[18]={
 	AL(0),AL(3),AL(3),AL(3),AL(2),AL(3),
 	AL(3),AL(3),AL(4),AL(4),AL(4),AL(6),
-	AL(6),AL(2),AL(5),AL(5),AL(3),AL(3),
-	AL(4)
+	AL(6),AL(2),AL(5),AL(5),AL(3),AL(3)
 };
 
 #undef AL
@@ -2051,14 +2010,16 @@ asmlinkage long sys_socketcall(int call, unsigned long __user *args)
 	unsigned long a0, a1;
 	int err;
 
-	if (call < 1 || call > SYS_ACCEPT4)
+	if (call < 1 || call > SYS_RECVMSG)
 		return -EINVAL;
 
 	/* copy_from_user should be SMP safe. */
 	if (copy_from_user(a, args, nargs[call]))
 		return -EFAULT;
 
-	audit_socketcall(nargs[call] / sizeof(unsigned long), a);
+	err = audit_socketcall(nargs[call] / sizeof(unsigned long), a);
+	if (err)
+		return err;
 
 	a0 = a[0];
 	a1 = a[1];
@@ -2077,8 +2038,9 @@ asmlinkage long sys_socketcall(int call, unsigned long __user *args)
 		err = sys_listen(a0, a1);
 		break;
 	case SYS_ACCEPT:
-		err = sys_accept4(a0, (struct sockaddr __user *)a1,
-				  (int __user *)a[2], 0);
+		err =
+		    sys_accept(a0, (struct sockaddr __user *)a1,
+			       (int __user *)a[2]);
 		break;
 	case SYS_GETSOCKNAME:
 		err =
@@ -2124,10 +2086,6 @@ asmlinkage long sys_socketcall(int call, unsigned long __user *args)
 		break;
 	case SYS_RECVMSG:
 		err = sys_recvmsg(a0, (struct msghdr __user *)a1, a[2]);
-		break;
-	case SYS_ACCEPT4:
-		err = sys_accept4(a0, (struct sockaddr __user *)a1,
-				  (int __user *)a[2], a[3]);
 		break;
 	default:
 		err = -EINVAL;
@@ -2252,18 +2210,9 @@ static long compat_sock_ioctl(struct file *file, unsigned cmd,
 {
 	struct socket *sock = file->private_data;
 	int ret = -ENOIOCTLCMD;
-	struct sock *sk;
-	struct net *net;
-
-	sk = sock->sk;
-	net = sock_net(sk);
 
 	if (sock->ops->compat_ioctl)
 		ret = sock->ops->compat_ioctl(sock, cmd, arg);
-
-	if (ret == -ENOIOCTLCMD &&
-	    (cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST))
-		ret = compat_wext_handle_ioctl(net, cmd, arg);
 
 	return ret;
 }
@@ -2297,7 +2246,6 @@ int kernel_accept(struct socket *sock, struct socket **newsock, int flags)
 	}
 
 	(*newsock)->ops = sock->ops;
-	__module_get((*newsock)->ops->owner);
 
 done:
 	return err;

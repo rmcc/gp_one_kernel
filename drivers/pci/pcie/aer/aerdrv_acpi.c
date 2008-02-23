@@ -36,18 +36,24 @@ int aer_osc_setup(struct pcie_device *pciedev)
 	if (acpi_pci_disabled)
 		return -1;
 
-	handle = acpi_find_root_bridge_handle(pdev);
+	/* Find root host bridge */
+	while (pdev->bus->self)
+		pdev = pdev->bus->self;
+	handle = acpi_get_pci_rootbridge_handle(
+		pci_domain_nr(pdev->bus), pdev->bus->number);
+
 	if (handle) {
+		pcie_osc_support_set(OSC_EXT_PCI_CONFIG_SUPPORT);
 		status = pci_osc_control_set(handle,
 					OSC_PCI_EXPRESS_AER_CONTROL |
 					OSC_PCI_EXPRESS_CAP_STRUCTURE_CONTROL);
 	}
 
 	if (ACPI_FAILURE(status)) {
-		dev_printk(KERN_DEBUG, &pciedev->device, "AER service couldn't "
-			   "init device: %s\n",
-			   (status == AE_SUPPORT || status == AE_NOT_FOUND) ?
-			   "no _OSC support" : "_OSC failed");
+		printk(KERN_DEBUG "AER service couldn't init device %s - %s\n",
+		    pciedev->device.bus_id,
+		    (status == AE_SUPPORT || status == AE_NOT_FOUND) ?
+		    "no _OSC support" : "Run ACPI _OSC fails");
 		return -1;
 	}
 

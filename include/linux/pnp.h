@@ -1,8 +1,6 @@
 /*
  * Linux Plug and Play Support
  * Copyright by Adam Belay <ambx1@neo.rr.com>
- * Copyright (C) 2008 Hewlett-Packard Development Company, L.P.
- *	Bjorn Helgaas <bjorn.helgaas@hp.com>
  */
 
 #ifndef _LINUX_PNP_H
@@ -17,31 +15,16 @@
 
 struct pnp_protocol;
 struct pnp_dev;
+struct pnp_resource_table;
 
 /*
  * Resource Management
  */
-#ifdef CONFIG_PNP
-struct resource *pnp_get_resource(struct pnp_dev *dev, unsigned long type,
-				unsigned int num);
-#else
-static inline struct resource *pnp_get_resource(struct pnp_dev *dev,
-			unsigned long type, unsigned int num)
-{
-	return NULL;
-}
-#endif
+struct resource *pnp_get_resource(struct pnp_dev *, unsigned int, unsigned int);
 
 static inline int pnp_resource_valid(struct resource *res)
 {
-	if (res)
-		return 1;
-	return 0;
-}
-
-static inline int pnp_resource_enabled(struct resource *res)
-{
-	if (res && !(res->flags & IORESOURCE_DISABLED))
+	if (res && !(res->flags & IORESOURCE_UNSET))
 		return 1;
 	return 0;
 }
@@ -57,31 +40,19 @@ static inline resource_size_t pnp_resource_len(struct resource *res)
 static inline resource_size_t pnp_port_start(struct pnp_dev *dev,
 					     unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_IO, bar);
-
-	if (pnp_resource_valid(res))
-		return res->start;
-	return 0;
+	return pnp_get_resource(dev, IORESOURCE_IO, bar)->start;
 }
 
 static inline resource_size_t pnp_port_end(struct pnp_dev *dev,
 					   unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_IO, bar);
-
-	if (pnp_resource_valid(res))
-		return res->end;
-	return 0;
+	return pnp_get_resource(dev, IORESOURCE_IO, bar)->end;
 }
 
 static inline unsigned long pnp_port_flags(struct pnp_dev *dev,
 					   unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_IO, bar);
-
-	if (pnp_resource_valid(res))
-		return res->flags;
-	return IORESOURCE_IO | IORESOURCE_AUTO;
+	return pnp_get_resource(dev, IORESOURCE_IO, bar)->flags;
 }
 
 static inline int pnp_port_valid(struct pnp_dev *dev, unsigned int bar)
@@ -92,41 +63,25 @@ static inline int pnp_port_valid(struct pnp_dev *dev, unsigned int bar)
 static inline resource_size_t pnp_port_len(struct pnp_dev *dev,
 					   unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_IO, bar);
-
-	if (pnp_resource_valid(res))
-		return pnp_resource_len(res);
-	return 0;
+	return pnp_resource_len(pnp_get_resource(dev, IORESOURCE_IO, bar));
 }
 
 
 static inline resource_size_t pnp_mem_start(struct pnp_dev *dev,
 					    unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_MEM, bar);
-
-	if (pnp_resource_valid(res))
-		return res->start;
-	return 0;
+	return pnp_get_resource(dev, IORESOURCE_MEM, bar)->start;
 }
 
 static inline resource_size_t pnp_mem_end(struct pnp_dev *dev,
 					  unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_MEM, bar);
-
-	if (pnp_resource_valid(res))
-		return res->end;
-	return 0;
+	return pnp_get_resource(dev, IORESOURCE_MEM, bar)->end;
 }
 
 static inline unsigned long pnp_mem_flags(struct pnp_dev *dev, unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_MEM, bar);
-
-	if (pnp_resource_valid(res))
-		return res->flags;
-	return IORESOURCE_MEM | IORESOURCE_AUTO;
+	return pnp_get_resource(dev, IORESOURCE_MEM, bar)->flags;
 }
 
 static inline int pnp_mem_valid(struct pnp_dev *dev, unsigned int bar)
@@ -137,30 +92,18 @@ static inline int pnp_mem_valid(struct pnp_dev *dev, unsigned int bar)
 static inline resource_size_t pnp_mem_len(struct pnp_dev *dev,
 					  unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_MEM, bar);
-
-	if (pnp_resource_valid(res))
-		return pnp_resource_len(res);
-	return 0;
+	return pnp_resource_len(pnp_get_resource(dev, IORESOURCE_MEM, bar));
 }
 
 
 static inline resource_size_t pnp_irq(struct pnp_dev *dev, unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_IRQ, bar);
-
-	if (pnp_resource_valid(res))
-		return res->start;
-	return -1;
+	return pnp_get_resource(dev, IORESOURCE_IRQ, bar)->start;
 }
 
 static inline unsigned long pnp_irq_flags(struct pnp_dev *dev, unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_IRQ, bar);
-
-	if (pnp_resource_valid(res))
-		return res->flags;
-	return IORESOURCE_IRQ | IORESOURCE_AUTO;
+	return pnp_get_resource(dev, IORESOURCE_IRQ, bar)->flags;
 }
 
 static inline int pnp_irq_valid(struct pnp_dev *dev, unsigned int bar)
@@ -171,20 +114,12 @@ static inline int pnp_irq_valid(struct pnp_dev *dev, unsigned int bar)
 
 static inline resource_size_t pnp_dma(struct pnp_dev *dev, unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_DMA, bar);
-
-	if (pnp_resource_valid(res))
-		return res->start;
-	return -1;
+	return pnp_get_resource(dev, IORESOURCE_DMA, bar)->start;
 }
 
 static inline unsigned long pnp_dma_flags(struct pnp_dev *dev, unsigned int bar)
 {
-	struct resource *res = pnp_get_resource(dev, IORESOURCE_DMA, bar);
-
-	if (pnp_resource_valid(res))
-		return res->flags;
-	return IORESOURCE_DMA | IORESOURCE_AUTO;
+	return pnp_get_resource(dev, IORESOURCE_DMA, bar)->flags;
 }
 
 static inline int pnp_dma_valid(struct pnp_dev *dev, unsigned int bar)
@@ -192,6 +127,57 @@ static inline int pnp_dma_valid(struct pnp_dev *dev, unsigned int bar)
 	return pnp_resource_valid(pnp_get_resource(dev, IORESOURCE_DMA, bar));
 }
 
+
+#define PNP_PORT_FLAG_16BITADDR	(1<<0)
+#define PNP_PORT_FLAG_FIXED	(1<<1)
+
+struct pnp_port {
+	unsigned short min;	/* min base number */
+	unsigned short max;	/* max base number */
+	unsigned char align;	/* align boundary */
+	unsigned char size;	/* size of range */
+	unsigned char flags;	/* port flags */
+	unsigned char pad;	/* pad */
+	struct pnp_port *next;	/* next port */
+};
+
+#define PNP_IRQ_NR 256
+struct pnp_irq {
+	DECLARE_BITMAP(map, PNP_IRQ_NR);	/* bitmask for IRQ lines */
+	unsigned char flags;	/* IRQ flags */
+	unsigned char pad;	/* pad */
+	struct pnp_irq *next;	/* next IRQ */
+};
+
+struct pnp_dma {
+	unsigned char map;	/* bitmask for DMA channels */
+	unsigned char flags;	/* DMA flags */
+	struct pnp_dma *next;	/* next port */
+};
+
+struct pnp_mem {
+	unsigned int min;	/* min base number */
+	unsigned int max;	/* max base number */
+	unsigned int align;	/* align boundary */
+	unsigned int size;	/* size of range */
+	unsigned char flags;	/* memory flags */
+	unsigned char pad;	/* pad */
+	struct pnp_mem *next;	/* next memory resource */
+};
+
+#define PNP_RES_PRIORITY_PREFERRED	0
+#define PNP_RES_PRIORITY_ACCEPTABLE	1
+#define PNP_RES_PRIORITY_FUNCTIONAL	2
+#define PNP_RES_PRIORITY_INVALID	65535
+
+struct pnp_option {
+	unsigned short priority;	/* priority */
+	struct pnp_port *port;		/* first port */
+	struct pnp_irq *irq;		/* first IRQ */
+	struct pnp_dma *dma;		/* first DMA */
+	struct pnp_mem *mem;		/* first memory resource */
+	struct pnp_option *next;	/* used to chain dependent resources */
+};
 
 /*
  * Device Management
@@ -260,9 +246,9 @@ struct pnp_dev {
 
 	int active;
 	int capabilities;
-	unsigned int num_dependent_sets;
-	struct list_head resources;
-	struct list_head options;
+	struct pnp_option *independent;
+	struct pnp_option *dependent;
+	struct pnp_resource_table *res;
 
 	char name[PNP_NAME_LEN];	/* contains a human-readable name */
 	int flags;			/* used by protocols */
@@ -439,8 +425,6 @@ void pnp_unregister_card_driver(struct pnp_card_driver *drv);
 extern struct list_head pnp_cards;
 
 /* resource management */
-int pnp_possible_config(struct pnp_dev *dev, int type, resource_size_t base,
-			resource_size_t size);
 int pnp_auto_config_dev(struct pnp_dev *dev);
 int pnp_start_dev(struct pnp_dev *dev);
 int pnp_stop_dev(struct pnp_dev *dev);
@@ -468,9 +452,6 @@ static inline int pnp_register_card_driver(struct pnp_card_driver *drv) { return
 static inline void pnp_unregister_card_driver(struct pnp_card_driver *drv) { }
 
 /* resource management */
-static inline int pnp_possible_config(struct pnp_dev *dev, int type,
-				      resource_size_t base,
-				      resource_size_t size) { return 0; }
 static inline int pnp_auto_config_dev(struct pnp_dev *dev) { return -ENODEV; }
 static inline int pnp_start_dev(struct pnp_dev *dev) { return -ENODEV; }
 static inline int pnp_stop_dev(struct pnp_dev *dev) { return -ENODEV; }
@@ -484,5 +465,15 @@ static inline int pnp_register_driver(struct pnp_driver *drv) { return -ENODEV; 
 static inline void pnp_unregister_driver(struct pnp_driver *drv) { }
 
 #endif /* CONFIG_PNP */
+
+#define pnp_err(format, arg...) printk(KERN_ERR "pnp: " format "\n" , ## arg)
+#define pnp_info(format, arg...) printk(KERN_INFO "pnp: " format "\n" , ## arg)
+#define pnp_warn(format, arg...) printk(KERN_WARNING "pnp: " format "\n" , ## arg)
+
+#ifdef CONFIG_PNP_DEBUG
+#define pnp_dbg(format, arg...) printk(KERN_DEBUG "pnp: " format "\n" , ## arg)
+#else
+#define pnp_dbg(format, arg...) do {} while (0)
+#endif
 
 #endif /* _LINUX_PNP_H */

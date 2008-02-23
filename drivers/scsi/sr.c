@@ -177,10 +177,7 @@ int sr_test_unit_ready(struct scsi_device *sdev, struct scsi_sense_hdr *sshdr)
 	do {
 		the_result = scsi_execute_req(sdev, cmd, DMA_NONE, NULL,
 					      0, sshdr, SR_TIMEOUT,
-					      retries--, NULL);
-		if (scsi_sense_valid(sshdr) &&
-		    sshdr->sense_key == UNIT_ATTENTION)
-			sdev->changed = 1;
+					      retries--);
 
 	} while (retries > 0 &&
 		 (!scsi_status_is_good(the_result) ||
@@ -331,7 +328,7 @@ static int sr_done(struct scsi_cmnd *SCpnt)
 
 static int sr_prep_fn(struct request_queue *q, struct request *rq)
 {
-	int block = 0, this_count, s_size;
+	int block=0, this_count, s_size, timeout = SR_TIMEOUT;
 	struct scsi_cd *cd;
 	struct scsi_cmnd *SCpnt;
 	struct scsi_device *sdp = q->queuedata;
@@ -461,6 +458,7 @@ static int sr_prep_fn(struct request_queue *q, struct request *rq)
 	SCpnt->transfersize = cd->device->sector_size;
 	SCpnt->underflow = this_count << 9;
 	SCpnt->allowed = MAX_RETRIES;
+	SCpnt->timeout_per_command = timeout;
 
 	/*
 	 * This indicates that the command is ready from our end to be
@@ -471,31 +469,38 @@ static int sr_prep_fn(struct request_queue *q, struct request *rq)
 	return scsi_prep_return(q, rq, ret);
 }
 
-static int sr_block_open(struct block_device *bdev, fmode_t mode)
+static int sr_block_open(struct inode *inode, struct file *file)
 {
-	struct scsi_cd *cd = scsi_cd_get(bdev->bd_disk);
-	int ret = -ENXIO;
+	struct gendisk *disk = inode->i_bdev->bd_disk;
+	struct scsi_cd *cd;
+	int ret = 0;
 
-	if (cd) {
-		ret = cdrom_open(&cd->cdi, bdev, mode);
-		if (ret)
-			scsi_cd_put(cd);
-	}
+	if(!(cd = scsi_cd_get(disk)))
+		return -ENXIO;
+
+	if((ret = cdrom_open(&cd->cdi, inode, file)) != 0)
+		scsi_cd_put(cd);
+
 	return ret;
 }
 
-static int sr_block_release(struct gendisk *disk, fmode_t mode)
+static int sr_block_release(struct inode *inode, struct file *file)
 {
-	struct scsi_cd *cd = scsi_cd(disk);
-	cdrom_release(&cd->cdi, mode);
+	int ret;
+	struct scsi_cd *cd = scsi_cd(inode->i_bdev->bd_disk);
+	ret = cdrom_release(&cd->cdi, file);
+	if(ret)
+		return ret;
+	
 	scsi_cd_put(cd);
+
 	return 0;
 }
 
-static int sr_block_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
+static int sr_block_ioctl(struct inode *inode, struct file *file, unsigned cmd,
 			  unsigned long arg)
 {
-	struct scsi_cd *cd = scsi_cd(bdev->bd_disk);
+	struct scsi_cd *cd = scsi_cd(inode->i_bdev->bd_disk);
 	struct scsi_device *sdev = cd->device;
 	void __user *argp = (void __user *)arg;
 	int ret;
@@ -510,7 +515,7 @@ static int sr_block_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 		return scsi_ioctl(sdev, cmd, argp);
 	}
 
-	ret = cdrom_ioctl(&cd->cdi, bdev, mode, cmd, arg);
+	ret = cdrom_ioctl(file, &cd->cdi, inode, cmd, arg);
 	if (ret != -ENOSYS)
 		return ret;
 
@@ -520,8 +525,7 @@ static int sr_block_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	 * case fall through to scsi_ioctl, which will return ENDOEV again
 	 * if it doesn't recognise the ioctl
 	 */
-	ret = scsi_nonblockable_ioctl(sdev, cmd, argp,
-					(mode & FMODE_NDELAY) != 0);
+	ret = scsi_nonblockable_ioctl(sdev, cmd, argp, NULL);
 	if (ret != -ENODEV)
 		return ret;
 	return scsi_ioctl(sdev, cmd, argp);
@@ -538,7 +542,7 @@ static struct block_device_operations sr_bdops =
 	.owner		= THIS_MODULE,
 	.open		= sr_block_open,
 	.release	= sr_block_release,
-	.locked_ioctl	= sr_block_ioctl,
+	.ioctl		= sr_block_ioctl,
 	.media_changed	= sr_block_media_changed,
 	/* 
 	 * No compat_ioctl for now because sr_block_ioctl never
@@ -613,8 +617,6 @@ static int sr_probe(struct device *dev)
 	disk->fops = &sr_bdops;
 	disk->flags = GENHD_FL_CD;
 
-	blk_queue_rq_timeout(sdev->request_queue, SR_TIMEOUT);
-
 	cd->device = sdev;
 	cd->disk = disk;
 	cd->driver = &sr_template;
@@ -668,20 +670,24 @@ fail:
 static void get_sectorsize(struct scsi_cd *cd)
 {
 	unsigned char cmd[10];
-	unsigned char buffer[8];
+	unsigned char *buffer;
 	int the_result, retries = 3;
 	int sector_size;
 	struct request_queue *queue;
 
+	buffer = kmalloc(512, GFP_KERNEL | GFP_DMA);
+	if (!buffer)
+		goto Enomem;
+
 	do {
 		cmd[0] = READ_CAPACITY;
 		memset((void *) &cmd[1], 0, 9);
-		memset(buffer, 0, sizeof(buffer));
+		memset(buffer, 0, 8);
 
 		/* Do the command and wait.. */
 		the_result = scsi_execute_req(cd->device, cmd, DMA_FROM_DEVICE,
-					      buffer, sizeof(buffer), NULL,
-					      SR_TIMEOUT, MAX_RETRIES, NULL);
+					      buffer, 8, NULL, SR_TIMEOUT,
+					      MAX_RETRIES);
 
 		retries--;
 
@@ -736,8 +742,14 @@ static void get_sectorsize(struct scsi_cd *cd)
 
 	queue = cd->device->request_queue;
 	blk_queue_hardsect_size(queue, sector_size);
-
+out:
+	kfree(buffer);
 	return;
+
+Enomem:
+	cd->capacity = 0x1fffff;
+	cd->device->sector_size = 2048;	/* A guess, just in case */
+	goto out;
 }
 
 static void get_capabilities(struct scsi_cd *cd)
@@ -873,7 +885,7 @@ static void sr_kref_release(struct kref *kref)
 	struct gendisk *disk = cd->disk;
 
 	spin_lock(&sr_index_lock);
-	clear_bit(MINOR(disk_devt(disk)), sr_index_bits);
+	clear_bit(disk->first_minor, sr_index_bits);
 	spin_unlock(&sr_index_lock);
 
 	unregister_cdrom(&cd->cdi);

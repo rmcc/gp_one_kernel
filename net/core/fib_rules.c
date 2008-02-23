@@ -69,7 +69,7 @@ static void rules_ops_put(struct fib_rules_ops *ops)
 static void flush_route_cache(struct fib_rules_ops *ops)
 {
 	if (ops->flush_cache)
-		ops->flush_cache(ops);
+		ops->flush_cache();
 }
 
 int fib_rules_register(struct fib_rules_ops *ops)
@@ -226,7 +226,7 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 
 	ops = lookup_rules_ops(net, frh->family);
 	if (ops == NULL) {
-		err = -EAFNOSUPPORT;
+		err = EAFNOSUPPORT;
 		goto errout;
 	}
 
@@ -365,7 +365,7 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 
 	ops = lookup_rules_ops(net, frh->family);
 	if (ops == NULL) {
-		err = -EAFNOSUPPORT;
+		err = EAFNOSUPPORT;
 		goto errout;
 	}
 
@@ -664,18 +664,17 @@ static int __init fib_rules_init(void)
 	rtnl_register(PF_UNSPEC, RTM_DELRULE, fib_nl_delrule, NULL);
 	rtnl_register(PF_UNSPEC, RTM_GETRULE, NULL, fib_nl_dumprule);
 
-	err = register_pernet_subsys(&fib_rules_net_ops);
+	err = register_netdevice_notifier(&fib_rules_notifier);
 	if (err < 0)
 		goto fail;
 
-	err = register_netdevice_notifier(&fib_rules_notifier);
+	err = register_pernet_subsys(&fib_rules_net_ops);
 	if (err < 0)
 		goto fail_unregister;
-
 	return 0;
 
 fail_unregister:
-	unregister_pernet_subsys(&fib_rules_net_ops);
+	unregister_netdevice_notifier(&fib_rules_notifier);
 fail:
 	rtnl_unregister(PF_UNSPEC, RTM_NEWRULE);
 	rtnl_unregister(PF_UNSPEC, RTM_DELRULE);

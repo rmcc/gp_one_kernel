@@ -116,7 +116,7 @@ char *get_options(const char *str, int nints, int *ints)
 /**
  *	memparse - parse a string with mem suffixes into a number
  *	@ptr: Where parse begins
- *	@retptr: (output) Optional pointer to next char after parse completes
+ *	@retptr: (output) Pointer to next char after parse completes
  *
  *	Parses a string into a number.  The number stored at @ptr is
  *	potentially suffixed with %K (for kilobytes, or 1024 bytes),
@@ -126,13 +126,11 @@ char *get_options(const char *str, int nints, int *ints)
  *	megabyte, or one gigabyte, respectively.
  */
 
-unsigned long long memparse(const char *ptr, char **retptr)
+unsigned long long memparse (char *ptr, char **retptr)
 {
-	char *endptr;	/* local pointer to end of parsed string */
+	unsigned long long ret = simple_strtoull (ptr, retptr, 0);
 
-	unsigned long long ret = simple_strtoull(ptr, &endptr, 0);
-
-	switch (*endptr) {
+	switch (**retptr) {
 	case 'G':
 	case 'g':
 		ret <<= 10;
@@ -142,14 +140,10 @@ unsigned long long memparse(const char *ptr, char **retptr)
 	case 'K':
 	case 'k':
 		ret <<= 10;
-		endptr++;
+		(*retptr)++;
 	default:
 		break;
 	}
-
-	if (retptr)
-		*retptr = endptr;
-
 	return ret;
 }
 

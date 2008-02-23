@@ -1035,6 +1035,10 @@ MODULE_PARM_DESC(copybreak, "Receive copy threshold");
  *	@pdev: the PCI device that received the packet
  *	@fl: the SGE free list holding the packet
  *	@len: the actual packet length, excluding any SGE padding
+ *	@dma_pad: padding at beginning of buffer left by SGE DMA
+ *	@skb_pad: padding to be used if the packet is copied
+ *	@copy_thres: length threshold under which a packet should be copied
+ *	@drop_thres: # of remaining buffers before we start dropping packets
  *
  *	Get the next packet from a free list and complete setup of the
  *	sk_buff.  If the packet is small we make a copy and recycle the
@@ -1381,6 +1385,7 @@ static void sge_rx(struct sge *sge, struct freelQ *fl, unsigned int len)
 	st = per_cpu_ptr(sge->port_stats[p->iff], smp_processor_id());
 
 	skb->protocol = eth_type_trans(skb, adapter->port[p->iff].dev);
+	skb->dev->last_rx = jiffies;
 	if ((adapter->flags & RX_CSUM_ENABLED) && p->csum == 0xffff &&
 	    skb->protocol == htons(ETH_P_IP) &&
 	    (skb->data[9] == IPPROTO_TCP || skb->data[9] == IPPROTO_UDP)) {
@@ -1391,10 +1396,20 @@ static void sge_rx(struct sge *sge, struct freelQ *fl, unsigned int len)
 
 	if (unlikely(adapter->vlan_grp && p->vlan_valid)) {
 		st->vlan_xtract++;
-		vlan_hwaccel_receive_skb(skb, adapter->vlan_grp,
-					 ntohs(p->vlan));
-	} else
+#ifdef CONFIG_CHELSIO_T1_NAPI
+			vlan_hwaccel_receive_skb(skb, adapter->vlan_grp,
+						 ntohs(p->vlan));
+#else
+			vlan_hwaccel_rx(skb, adapter->vlan_grp,
+					ntohs(p->vlan));
+#endif
+	} else {
+#ifdef CONFIG_CHELSIO_T1_NAPI
 		netif_receive_skb(skb);
+#else
+		netif_rx(skb);
+#endif
+	}
 }
 
 /*
@@ -1553,6 +1568,7 @@ static inline int responses_pending(const struct adapter *adapter)
 	return (e->GenerationBit == Q->genbit);
 }
 
+#ifdef CONFIG_CHELSIO_T1_NAPI
 /*
  * A simpler version of process_responses() that handles only pure (i.e.,
  * non data-carrying) responses.  Such respones are too light-weight to justify
@@ -1609,16 +1625,20 @@ static int process_pure_responses(struct adapter *adapter)
 int t1_poll(struct napi_struct *napi, int budget)
 {
 	struct adapter *adapter = container_of(napi, struct adapter, napi);
+	struct net_device *dev = adapter->port[0].dev;
 	int work_done = process_responses(adapter, budget);
 
 	if (likely(work_done < budget)) {
-		netif_rx_complete(napi);
+		netif_rx_complete(dev, napi);
 		writel(adapter->sge->respQ.cidx,
 		       adapter->regs + A_SG_SLEEPING);
 	}
 	return work_done;
 }
 
+/*
+ * NAPI version of the main interrupt handler.
+ */
 irqreturn_t t1_interrupt(int irq, void *data)
 {
 	struct adapter *adapter = data;
@@ -1626,16 +1646,17 @@ irqreturn_t t1_interrupt(int irq, void *data)
 	int handled;
 
 	if (likely(responses_pending(adapter))) {
+		struct net_device *dev = sge->netdev;
+
 		writel(F_PL_INTR_SGE_DATA, adapter->regs + A_PL_CAUSE);
 
 		if (napi_schedule_prep(&adapter->napi)) {
 			if (process_pure_responses(adapter))
-				__netif_rx_schedule(&adapter->napi);
+				__netif_rx_schedule(dev, &adapter->napi);
 			else {
 				/* no data, no NAPI needed */
 				writel(sge->respQ.cidx, adapter->regs + A_SG_SLEEPING);
-				/* undo schedule_prep */
-				napi_enable(&adapter->napi);
+				napi_enable(&adapter->napi);	/* undo schedule_prep */
 			}
 		}
 		return IRQ_HANDLED;
@@ -1650,6 +1671,53 @@ irqreturn_t t1_interrupt(int irq, void *data)
 
 	return IRQ_RETVAL(handled != 0);
 }
+
+#else
+/*
+ * Main interrupt handler, optimized assuming that we took a 'DATA'
+ * interrupt.
+ *
+ * 1. Clear the interrupt
+ * 2. Loop while we find valid descriptors and process them; accumulate
+ *      information that can be processed after the loop
+ * 3. Tell the SGE at which index we stopped processing descriptors
+ * 4. Bookkeeping; free TX buffers, ring doorbell if there are any
+ *      outstanding TX buffers waiting, replenish RX buffers, potentially
+ *      reenable upper layers if they were turned off due to lack of TX
+ *      resources which are available again.
+ * 5. If we took an interrupt, but no valid respQ descriptors was found we
+ *      let the slow_intr_handler run and do error handling.
+ */
+irqreturn_t t1_interrupt(int irq, void *cookie)
+{
+	int work_done;
+	struct adapter *adapter = cookie;
+	struct respQ *Q = &adapter->sge->respQ;
+
+	spin_lock(&adapter->async_lock);
+
+	writel(F_PL_INTR_SGE_DATA, adapter->regs + A_PL_CAUSE);
+
+	if (likely(responses_pending(adapter)))
+		work_done = process_responses(adapter, -1);
+	else
+		work_done = t1_slow_intr_handler(adapter);
+
+	/*
+	 * The unconditional clearing of the PL_CAUSE above may have raced
+	 * with DMA completion and the corresponding generation of a response
+	 * to cause us to miss the resulting data interrupt.  The next write
+	 * is also unconditional to recover the missed interrupt and render
+	 * this race harmless.
+	 */
+	writel(Q->cidx, adapter->regs + A_SG_SLEEPING);
+
+	if (!work_done)
+		adapter->sge->stats.unhandled_irqs++;
+	spin_unlock(&adapter->async_lock);
+	return IRQ_RETVAL(work_done != 0);
+}
+#endif
 
 /*
  * Enqueues the sk_buff onto the cmdQ[qid] and has hardware fetch it.
@@ -1778,7 +1846,7 @@ static inline int eth_hdr_len(const void *data)
  */
 int t1_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct adapter *adapter = dev->ml_priv;
+	struct adapter *adapter = dev->priv;
 	struct sge *sge = adapter->sge;
 	struct sge_port_stats *st = per_cpu_ptr(sge->port_stats[dev->if_port],
 						smp_processor_id());

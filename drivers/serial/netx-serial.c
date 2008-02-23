@@ -35,12 +35,14 @@
 
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <mach/hardware.h>
-#include <mach/netx-regs.h>
+#include <asm/hardware.h>
+#include <asm/arch/netx-regs.h>
 
 /* We've been assigned a range on the "Low-density serial ports" major */
 #define SERIAL_NX_MAJOR	204
 #define MINOR_START	170
+
+#ifdef CONFIG_SERIAL_NETX_CONSOLE
 
 enum uart_regs {
 	UART_DR              = 0x00,
@@ -201,7 +203,7 @@ static void netx_txint(struct uart_port *port)
 static void netx_rxint(struct uart_port *port)
 {
 	unsigned char rx, flg, status;
-	struct tty_struct *tty = port->info->port.tty;
+	struct tty_struct *tty = port->info->tty;
 
 	while (!(readl(port->membase + UART_FR) & FR_RXFE)) {
 		rx = readl(port->membase + UART_DR);
@@ -525,8 +527,6 @@ static struct netx_port netx_ports[] = {
 	},
 	}
 };
-
-#ifdef CONFIG_SERIAL_NETX_CONSOLE
 
 static void netx_console_putchar(struct uart_port *port, int ch)
 {

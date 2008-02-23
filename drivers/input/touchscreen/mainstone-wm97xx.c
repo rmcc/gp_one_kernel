@@ -3,7 +3,8 @@
  *                         Wolfson WM97xx AC97 Codecs.
  *
  * Copyright 2004, 2007 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
  * Parts Copyright : Ian Molton <spyro@f2s.com>
  *                   Andrew Zabolotny <zap@homelink.ru>
  *
@@ -24,6 +25,7 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -31,7 +33,7 @@
 #include <linux/interrupt.h>
 #include <linux/wm97xx.h>
 #include <linux/io.h>
-#include <mach/regs-ac97.h>
+#include <asm/arch/pxa-regs.h>
 
 #define VERSION		"0.13"
 
@@ -196,7 +198,7 @@ static int wm97xx_acc_startup(struct wm97xx *wm)
 		switch (wm->id) {
 		case WM9705_ID2:
 			wm->pen_irq = IRQ_GPIO(4);
-			set_irq_type(IRQ_GPIO(4), IRQ_TYPE_EDGE_BOTH);
+			set_irq_type(IRQ_GPIO(4), IRQT_BOTHEDGE);
 			break;
 		case WM9712_ID2:
 		case WM9713_ID2:
@@ -295,6 +297,6 @@ module_init(mainstone_wm97xx_init);
 module_exit(mainstone_wm97xx_exit);
 
 /* Module information */
-MODULE_AUTHOR("Liam Girdwood <lrg@slimlogic.co.uk>");
+MODULE_AUTHOR("Liam Girdwood <liam.girdwood@wolfsonmicro.com>");
 MODULE_DESCRIPTION("wm97xx continuous touch driver for mainstone");
 MODULE_LICENSE("GPL");

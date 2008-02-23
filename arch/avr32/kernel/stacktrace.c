@@ -10,7 +10,6 @@
 #include <linux/sched.h>
 #include <linux/stacktrace.h>
 #include <linux/thread_info.h>
-#include <linux/module.h>
 
 register unsigned long current_frame_pointer asm("r7");
 
@@ -52,4 +51,3 @@ void save_stack_trace(struct stack_trace *trace)
 		fp = frame->fp;
 	}
 }
-EXPORT_SYMBOL_GPL(save_stack_trace);

@@ -90,7 +90,7 @@ static void affs_destroy_inode(struct inode *inode)
 	kmem_cache_free(affs_inode_cachep, AFFS_I(inode));
 }
 
-static void init_once(void *foo)
+static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct affs_inode_info *ei = (struct affs_inode_info *) foo;
 
@@ -135,7 +135,7 @@ enum {
 	Opt_verbose, Opt_volume, Opt_ignore, Opt_err,
 };
 
-static const match_table_t tokens = {
+static match_table_t tokens = {
 	{Opt_bs, "bs=%u"},
 	{Opt_mode, "mode=%o"},
 	{Opt_mufs, "mufs"},
@@ -163,8 +163,8 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s
 
 	/* Fill in defaults */
 
-	*uid        = current_uid();
-	*gid        = current_gid();
+	*uid        = current->uid;
+	*gid        = current->gid;
 	*reserved   = 2;
 	*root       = -1;
 	*blocksize  = -1;
@@ -290,7 +290,7 @@ static int affs_fill_super(struct super_block *sb, void *data, int silent)
 	if (!sbi)
 		return -ENOMEM;
 	sb->s_fs_info = sbi;
-	mutex_init(&sbi->s_bmlock);
+	init_MUTEX(&sbi->s_bmlock);
 
 	if (!parse_options(data,&uid,&gid,&i,&reserved,&root_block,
 				&blocksize,&sbi->s_prefix,

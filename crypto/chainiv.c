@@ -14,11 +14,11 @@
  */
 
 #include <crypto/internal/skcipher.h>
-#include <crypto/rng.h>
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/random.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/workqueue.h>
@@ -83,7 +83,6 @@ static int chainiv_givencrypt_first(struct skcipher_givcrypt_request *req)
 {
 	struct crypto_ablkcipher *geniv = skcipher_givcrypt_reqtfm(req);
 	struct chainiv_ctx *ctx = crypto_ablkcipher_ctx(geniv);
-	int err = 0;
 
 	spin_lock_bh(&ctx->lock);
 	if (crypto_ablkcipher_crt(geniv)->givencrypt !=
@@ -91,14 +90,10 @@ static int chainiv_givencrypt_first(struct skcipher_givcrypt_request *req)
 		goto unlock;
 
 	crypto_ablkcipher_crt(geniv)->givencrypt = chainiv_givencrypt;
-	err = crypto_rng_get_bytes(crypto_default_rng, ctx->iv,
-				   crypto_ablkcipher_ivsize(geniv));
+	get_random_bytes(ctx->iv, crypto_ablkcipher_ivsize(geniv));
 
 unlock:
 	spin_unlock_bh(&ctx->lock);
-
-	if (err)
-		return err;
 
 	return chainiv_givencrypt(req);
 }
@@ -122,7 +117,6 @@ static int chainiv_init(struct crypto_tfm *tfm)
 static int async_chainiv_schedule_work(struct async_chainiv_ctx *ctx)
 {
 	int queued;
-	int err = ctx->err;
 
 	if (!ctx->queue.qlen) {
 		smp_mb__before_clear_bit();
@@ -137,7 +131,7 @@ static int async_chainiv_schedule_work(struct async_chainiv_ctx *ctx)
 	BUG_ON(!queued);
 
 out:
-	return err;
+	return ctx->err;
 }
 
 static int async_chainiv_postpone_request(struct skcipher_givcrypt_request *req)
@@ -208,7 +202,6 @@ static int async_chainiv_givencrypt_first(struct skcipher_givcrypt_request *req)
 {
 	struct crypto_ablkcipher *geniv = skcipher_givcrypt_reqtfm(req);
 	struct async_chainiv_ctx *ctx = crypto_ablkcipher_ctx(geniv);
-	int err = 0;
 
 	if (test_and_set_bit(CHAINIV_STATE_INUSE, &ctx->state))
 		goto out;
@@ -218,14 +211,10 @@ static int async_chainiv_givencrypt_first(struct skcipher_givcrypt_request *req)
 		goto unlock;
 
 	crypto_ablkcipher_crt(geniv)->givencrypt = async_chainiv_givencrypt;
-	err = crypto_rng_get_bytes(crypto_default_rng, ctx->iv,
-				   crypto_ablkcipher_ivsize(geniv));
+	get_random_bytes(ctx->iv, crypto_ablkcipher_ivsize(geniv));
 
 unlock:
 	clear_bit(CHAINIV_STATE_INUSE, &ctx->state);
-
-	if (err)
-		return err;
 
 out:
 	return async_chainiv_givencrypt(req);
@@ -238,7 +227,6 @@ static void async_chainiv_do_postponed(struct work_struct *work)
 						     postponed);
 	struct skcipher_givcrypt_request *req;
 	struct ablkcipher_request *subreq;
-	int err;
 
 	/* Only handle one request at a time to avoid hogging keventd. */
 	spin_lock_bh(&ctx->lock);
@@ -253,11 +241,7 @@ static void async_chainiv_do_postponed(struct work_struct *work)
 	subreq = skcipher_givcrypt_reqctx(req);
 	subreq->base.flags |= CRYPTO_TFM_REQ_MAY_SLEEP;
 
-	err = async_chainiv_givencrypt_tail(req);
-
-	local_bh_disable();
-	skcipher_givcrypt_complete(req, err);
-	local_bh_enable();
+	async_chainiv_givencrypt_tail(req);
 }
 
 static int async_chainiv_init(struct crypto_tfm *tfm)
@@ -294,13 +278,9 @@ static struct crypto_instance *chainiv_alloc(struct rtattr **tb)
 	if (IS_ERR(algt))
 		return ERR_PTR(err);
 
-	err = crypto_get_default_rng();
-	if (err)
-		return ERR_PTR(err);
-
 	inst = skcipher_geniv_alloc(&chainiv_tmpl, tb, 0, 0);
 	if (IS_ERR(inst))
-		goto put_rng;
+		goto out;
 
 	inst->alg.cra_ablkcipher.givencrypt = chainiv_givencrypt_first;
 
@@ -325,37 +305,21 @@ static struct crypto_instance *chainiv_alloc(struct rtattr **tb)
 
 out:
 	return inst;
-
-put_rng:
-	crypto_put_default_rng();
-	goto out;
-}
-
-static void chainiv_free(struct crypto_instance *inst)
-{
-	skcipher_geniv_free(inst);
-	crypto_put_default_rng();
 }
 
 static struct crypto_template chainiv_tmpl = {
 	.name = "chainiv",
 	.alloc = chainiv_alloc,
-	.free = chainiv_free,
+	.free = skcipher_geniv_free,
 	.module = THIS_MODULE,
 };
 
-static int __init chainiv_module_init(void)
+int __init chainiv_module_init(void)
 {
 	return crypto_register_template(&chainiv_tmpl);
 }
 
-static void chainiv_module_exit(void)
+void chainiv_module_exit(void)
 {
 	crypto_unregister_template(&chainiv_tmpl);
 }
-
-module_init(chainiv_module_init);
-module_exit(chainiv_module_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Chain IV Generator");

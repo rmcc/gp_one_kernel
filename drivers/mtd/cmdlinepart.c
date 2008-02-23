@@ -1,4 +1,6 @@
 /*
+ * $Id: cmdlinepart.c,v 1.19 2005/11/07 11:14:19 gleixner Exp $
+ *
  * Read flash partition table from command line
  *
  * Copyright 2002 SYSGO Real-Time Solutions GmbH
@@ -7,7 +9,6 @@
  *
  * mtdparts=<mtddef>[;<mtddef]
  * <mtddef>  := <mtd-id>:<partdef>[,<partdef>]
- *              where <mtd-id> is the name from the "cat /proc/mtd" command
  * <partdef> := <size>[@offset][<name>][ro][lk]
  * <mtd-id>  := unique name used in mapping driver/device (mtd->name)
  * <size>    := standard linux memsize OR "-" to denote all remaining space
@@ -307,7 +308,7 @@ static int parse_cmdline_partitions(struct mtd_info *master,
 	unsigned long offset;
 	int i;
 	struct cmdline_mtd_partition *part;
-	const char *mtd_id = master->name;
+	char *mtd_id = master->name;
 
 	/* parse command line */
 	if (!cmdline_parsed)

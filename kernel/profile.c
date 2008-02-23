@@ -22,8 +22,6 @@
 #include <linux/cpu.h>
 #include <linux/highmem.h>
 #include <linux/mutex.h>
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
 #include <asm/sections.h>
 #include <asm/irq_regs.h>
 #include <asm/ptrace.h>
@@ -45,18 +43,18 @@ static unsigned long prof_len, prof_shift;
 int prof_on __read_mostly;
 EXPORT_SYMBOL_GPL(prof_on);
 
-static cpumask_var_t prof_cpu_mask;
+static cpumask_t prof_cpu_mask = CPU_MASK_ALL;
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct profile_hit *[2], cpu_profile_hits);
 static DEFINE_PER_CPU(int, cpu_profile_flip);
 static DEFINE_MUTEX(profile_flip_mutex);
 #endif /* CONFIG_SMP */
 
-int profile_setup(char *str)
+static int __init profile_setup(char *str)
 {
-	static char schedstr[] = "schedule";
-	static char sleepstr[] = "sleep";
-	static char kvmstr[] = "kvm";
+	static char __initdata schedstr[] = "schedule";
+	static char __initdata sleepstr[] = "sleep";
+	static char __initdata kvmstr[] = "kvm";
 	int par;
 
 	if (!strncmp(str, sleepstr, strlen(sleepstr))) {
@@ -102,41 +100,19 @@ int profile_setup(char *str)
 __setup("profile=", profile_setup);
 
 
-int __ref profile_init(void)
+void __init profile_init(void)
 {
-	int buffer_bytes;
 	if (!prof_on)
-		return 0;
+		return;
 
 	/* only text is profiled */
 	prof_len = (_etext - _stext) >> prof_shift;
-	buffer_bytes = prof_len*sizeof(atomic_t);
-	if (!slab_is_available()) {
-		prof_buffer = alloc_bootmem(buffer_bytes);
-		alloc_bootmem_cpumask_var(&prof_cpu_mask);
-		return 0;
-	}
-
-	if (!alloc_cpumask_var(&prof_cpu_mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	prof_buffer = kzalloc(buffer_bytes, GFP_KERNEL);
-	if (prof_buffer)
-		return 0;
-
-	prof_buffer = alloc_pages_exact(buffer_bytes, GFP_KERNEL|__GFP_ZERO);
-	if (prof_buffer)
-		return 0;
-
-	prof_buffer = vmalloc(buffer_bytes);
-	if (prof_buffer)
-		return 0;
-
-	free_cpumask_var(prof_cpu_mask);
-	return -ENOMEM;
+	prof_buffer = alloc_bootmem(prof_len*sizeof(atomic_t));
 }
 
 /* Profile event notifications */
+
+#ifdef CONFIG_PROFILING
 
 static BLOCKING_NOTIFIER_HEAD(task_exit_notifier);
 static ATOMIC_NOTIFIER_HEAD(task_free_notifier);
@@ -227,6 +203,8 @@ void unregister_timer_hook(int (*hook)(struct pt_regs *))
 }
 EXPORT_SYMBOL_GPL(unregister_timer_hook);
 
+#endif /* CONFIG_PROFILING */
+
 
 #ifdef CONFIG_SMP
 /*
@@ -274,7 +252,7 @@ static void profile_flip_buffers(void)
 	mutex_lock(&profile_flip_mutex);
 	j = per_cpu(cpu_profile_flip, get_cpu());
 	put_cpu();
-	on_each_cpu(__profile_flip_buffers, NULL, 1);
+	on_each_cpu(__profile_flip_buffers, NULL, 0, 1);
 	for_each_online_cpu(cpu) {
 		struct profile_hit *hits = per_cpu(cpu_profile_hits, cpu)[j];
 		for (i = 0; i < NR_PROFILE_HIT; ++i) {
@@ -297,7 +275,7 @@ static void profile_discard_flip_buffers(void)
 	mutex_lock(&profile_flip_mutex);
 	i = per_cpu(cpu_profile_flip, get_cpu());
 	put_cpu();
-	on_each_cpu(__profile_flip_buffers, NULL, 1);
+	on_each_cpu(__profile_flip_buffers, NULL, 0, 1);
 	for_each_online_cpu(cpu) {
 		struct profile_hit *hits = per_cpu(cpu_profile_hits, cpu)[i];
 		memset(hits, 0, NR_PROFILE_HIT*sizeof(struct profile_hit));
@@ -356,7 +334,7 @@ out:
 	put_cpu();
 }
 
-static int __cpuinit profile_cpu_callback(struct notifier_block *info,
+static int __devinit profile_cpu_callback(struct notifier_block *info,
 					unsigned long action, void *__cpu)
 {
 	int node, cpu = (unsigned long)__cpu;
@@ -391,15 +369,13 @@ out_free:
 		return NOTIFY_BAD;
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
-		if (prof_cpu_mask != NULL)
-			cpumask_set_cpu(cpu, prof_cpu_mask);
+		cpu_set(cpu, prof_cpu_mask);
 		break;
 	case CPU_UP_CANCELED:
 	case CPU_UP_CANCELED_FROZEN:
 	case CPU_DEAD:
 	case CPU_DEAD_FROZEN:
-		if (prof_cpu_mask != NULL)
-			cpumask_clear_cpu(cpu, prof_cpu_mask);
+		cpu_clear(cpu, prof_cpu_mask);
 		if (per_cpu(cpu_profile_hits, cpu)[0]) {
 			page = virt_to_page(per_cpu(cpu_profile_hits, cpu)[0]);
 			per_cpu(cpu_profile_hits, cpu)[0] = NULL;
@@ -437,19 +413,19 @@ void profile_tick(int type)
 
 	if (type == CPU_PROFILING && timer_hook)
 		timer_hook(regs);
-	if (!user_mode(regs) && prof_cpu_mask != NULL &&
-	    cpumask_test_cpu(smp_processor_id(), prof_cpu_mask))
+	if (!user_mode(regs) && cpu_isset(smp_processor_id(), prof_cpu_mask))
 		profile_hit(type, (void *)profile_pc(regs));
 }
 
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
+#include <asm/ptrace.h>
 
 static int prof_cpu_mask_read_proc(char *page, char **start, off_t off,
 			int count, int *eof, void *data)
 {
-	int len = cpumask_scnprintf(page, count, data);
+	int len = cpumask_scnprintf(page, count, *(cpumask_t *)data);
 	if (count - len < 2)
 		return -EINVAL;
 	len += sprintf(page + len, "\n");
@@ -459,20 +435,16 @@ static int prof_cpu_mask_read_proc(char *page, char **start, off_t off,
 static int prof_cpu_mask_write_proc(struct file *file,
 	const char __user *buffer,  unsigned long count, void *data)
 {
-	struct cpumask *mask = data;
+	cpumask_t *mask = (cpumask_t *)data;
 	unsigned long full_count = count, err;
-	cpumask_var_t new_value;
-
-	if (!alloc_cpumask_var(&new_value, GFP_KERNEL))
-		return -ENOMEM;
+	cpumask_t new_value;
 
 	err = cpumask_parse_user(buffer, count, new_value);
-	if (!err) {
-		cpumask_copy(mask, new_value);
-		err = full_count;
-	}
-	free_cpumask_var(new_value);
-	return err;
+	if (err)
+		return err;
+
+	*mask = new_value;
+	return full_count;
 }
 
 void create_prof_cpu_mask(struct proc_dir_entry *root_irq_dir)
@@ -483,7 +455,7 @@ void create_prof_cpu_mask(struct proc_dir_entry *root_irq_dir)
 	entry = create_proc_entry("prof_cpu_mask", 0600, root_irq_dir);
 	if (!entry)
 		return;
-	entry->data = prof_cpu_mask;
+	entry->data = (void *)&prof_cpu_mask;
 	entry->read_proc = prof_cpu_mask_read_proc;
 	entry->write_proc = prof_cpu_mask_write_proc;
 }
@@ -555,11 +527,11 @@ static const struct file_operations proc_profile_operations = {
 };
 
 #ifdef CONFIG_SMP
-static void profile_nop(void *unused)
+static void __init profile_nop(void *unused)
 {
 }
 
-static int create_hash_tables(void)
+static int __init create_hash_tables(void)
 {
 	int cpu;
 
@@ -586,7 +558,7 @@ static int create_hash_tables(void)
 out_cleanup:
 	prof_on = 0;
 	smp_mb();
-	on_each_cpu(profile_nop, NULL, 1);
+	on_each_cpu(profile_nop, NULL, 0, 1);
 	for_each_online_cpu(cpu) {
 		struct page *page;
 
@@ -607,14 +579,14 @@ out_cleanup:
 #define create_hash_tables()			({ 0; })
 #endif
 
-int __ref create_proc_profile(void) /* false positive from hotcpu_notifier */
+static int __init create_proc_profile(void)
 {
 	struct proc_dir_entry *entry;
 
 	if (!prof_on)
 		return 0;
 	if (create_hash_tables())
-		return -ENOMEM;
+		return -1;
 	entry = proc_create("profile", S_IWUSR | S_IRUGO,
 			    NULL, &proc_profile_operations);
 	if (!entry)

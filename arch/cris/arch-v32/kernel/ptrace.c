@@ -17,7 +17,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/processor.h>
-#include <arch/hwregs/supp_reg.h>
+#include <asm/arch/hwregs/supp_reg.h>
 
 /*
  * Determines which bits in CCS the user has access to.

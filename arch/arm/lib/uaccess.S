@@ -277,7 +277,6 @@ USER(		strgebt	r3, [r0], #1)			@ May fault
 		ldrgtb	r3, [r1], #0
 USER(		strgtbt	r3, [r0], #1)			@ May fault
 		b	.Lc2u_finished
-ENDPROC(__copy_to_user)
 
 		.section .fixup,"ax"
 		.align	0
@@ -543,7 +542,6 @@ USER(		ldrgebt	r3, [r1], #1)			@ May fault
 USER(		ldrgtbt	r3, [r1], #1)			@ May fault
 		strgtb	r3, [r0], #1
 		b	.Lcfu_finished
-ENDPROC(__copy_from_user)
 
 		.section .fixup,"ax"
 		.align	0

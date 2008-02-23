@@ -19,7 +19,16 @@
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/raid/multipath.h>
+#include <linux/buffer_head.h>
+#include <asm/atomic.h>
+
+#define MAJOR_NR MD_MAJOR
+#define MD_DRIVER
+#define MD_PERSONALITY
 
 #define MAX_WORK_PER_DISK 128
 
@@ -138,7 +147,6 @@ static int multipath_make_request (struct request_queue *q, struct bio * bio)
 	struct multipath_bh * mp_bh;
 	struct multipath_info *multipath;
 	const int rw = bio_data_dir(bio);
-	int cpu;
 
 	if (unlikely(bio_barrier(bio))) {
 		bio_endio(bio, -EOPNOTSUPP);
@@ -150,11 +158,8 @@ static int multipath_make_request (struct request_queue *q, struct bio * bio)
 	mp_bh->master_bio = bio;
 	mp_bh->mddev = mddev;
 
-	cpu = part_stat_lock();
-	part_stat_inc(cpu, &mddev->gendisk->part0, ios[rw]);
-	part_stat_add(cpu, &mddev->gendisk->part0, sectors[rw],
-		      bio_sectors(bio));
-	part_stat_unlock();
+	disk_stat_inc(mddev->gendisk, ios[rw]);
+	disk_stat_add(mddev->gendisk, sectors[rw], bio_sectors(bio));
 
 	mp_bh->path = multipath_map(conf);
 	if (mp_bh->path < 0) {
@@ -167,7 +172,7 @@ static int multipath_make_request (struct request_queue *q, struct bio * bio)
 	mp_bh->bio = *bio;
 	mp_bh->bio.bi_sector += multipath->rdev->data_offset;
 	mp_bh->bio.bi_bdev = multipath->rdev->bdev;
-	mp_bh->bio.bi_rw |= (1 << BIO_RW_FAILFAST_TRANSPORT);
+	mp_bh->bio.bi_rw |= (1 << BIO_RW_FAILFAST);
 	mp_bh->bio.bi_end_io = multipath_end_request;
 	mp_bh->bio.bi_private = mp_bh;
 	generic_make_request(&mp_bh->bio);
@@ -276,18 +281,13 @@ static int multipath_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 {
 	multipath_conf_t *conf = mddev->private;
 	struct request_queue *q;
-	int err = -EEXIST;
+	int found = 0;
 	int path;
 	struct multipath_info *p;
-	int first = 0;
-	int last = mddev->raid_disks - 1;
-
-	if (rdev->raid_disk >= 0)
-		first = last = rdev->raid_disk;
 
 	print_multipath_conf(conf);
 
-	for (path = first; path <= last; path++)
+	for (path=0; path<mddev->raid_disks; path++) 
 		if ((p=conf->multipaths+path)->rdev == NULL) {
 			q = rdev->bdev->bd_disk->queue;
 			blk_queue_stack_limits(mddev->queue, q);
@@ -307,13 +307,11 @@ static int multipath_add_disk(mddev_t *mddev, mdk_rdev_t *rdev)
 			rdev->raid_disk = path;
 			set_bit(In_sync, &rdev->flags);
 			rcu_assign_pointer(p->rdev, rdev);
-			err = 0;
-			break;
+			found = 1;
 		}
 
 	print_multipath_conf(conf);
-
-	return err;
+	return found;
 }
 
 static int multipath_remove_disk(mddev_t *mddev, int number)
@@ -393,7 +391,7 @@ static void multipathd (mddev_t *mddev)
 			*bio = *(mp_bh->master_bio);
 			bio->bi_sector += conf->multipaths[mp_bh->path].rdev->data_offset;
 			bio->bi_bdev = conf->multipaths[mp_bh->path].rdev->bdev;
-			bio->bi_rw |= (1 << BIO_RW_FAILFAST_TRANSPORT);
+			bio->bi_rw |= (1 << BIO_RW_FAILFAST);
 			bio->bi_end_io = multipath_end_request;
 			bio->bi_private = mp_bh;
 			generic_make_request(bio);
@@ -408,6 +406,7 @@ static int multipath_run (mddev_t *mddev)
 	int disk_idx;
 	struct multipath_info *disk;
 	mdk_rdev_t *rdev;
+	struct list_head *tmp;
 
 	if (mddev->level != LEVEL_MULTIPATH) {
 		printk("multipath: %s: raid level not set to multipath IO (%d)\n",
@@ -440,7 +439,7 @@ static int multipath_run (mddev_t *mddev)
 	}
 
 	conf->working_disks = 0;
-	list_for_each_entry(rdev, &mddev->disks, same_set) {
+	rdev_for_each(rdev, tmp, mddev) {
 		disk_idx = rdev->raid_disk;
 		if (disk_idx < 0 ||
 		    disk_idx >= mddev->raid_disks)
@@ -498,7 +497,7 @@ static int multipath_run (mddev_t *mddev)
 	/*
 	 * Ok, everything is just fine now
 	 */
-	mddev->array_sectors = mddev->size * 2;
+	mddev->array_size = mddev->size;
 
 	mddev->queue->unplug_fn = multipath_unplug;
 	mddev->queue->backing_dev_info.congested_fn = multipath_congested;

@@ -4,6 +4,8 @@
  * Copyright (C) 2001 Lineo Japan, Inc.
  * Copyright (C) 2002  SHARP
  *
+ * $Id: sharpsl-flash.c,v 1.7 2005/11/07 11:14:28 gleixner Exp $
+ *
  * based on rpxlite.c,v 1.15 2001/10/02 15:05:14 dwmw2 Exp
  *          Handle mapping of the flash on the RPX Lite and CLLF boards
  *
@@ -47,7 +49,7 @@ static struct mtd_partition sharpsl_partitions[1] = {
 	}
 };
 
-static int __init init_sharpsl(void)
+int __init init_sharpsl(void)
 {
 	struct mtd_partition *parts;
 	int nb_parts = 0;

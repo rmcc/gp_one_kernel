@@ -34,12 +34,7 @@
 #include <linux/workqueue.h>
 #include <linux/kref.h>
 #include <linux/mutex.h>
-#ifndef CONFIG_OCFS2_COMPAT_JBD
-# include <linux/jbd2.h>
-#else
-# include <linux/jbd.h>
-# include "ocfs2_jbd_compat.h"
-#endif
+#include <linux/jbd.h>
 
 /* For union ocfs2_dlm_lksb */
 #include "stackglue.h"
@@ -85,7 +80,7 @@ enum ocfs2_unlock_action {
 };
 
 /* ocfs2_lock_res->l_flags flags. */
-#define OCFS2_LOCK_ATTACHED      (0x00000001) /* we have initialized
+#define OCFS2_LOCK_ATTACHED      (0x00000001) /* have we initialized
 					       * the lvb */
 #define OCFS2_LOCK_BUSY          (0x00000002) /* we are currently in
 					       * dlm_lock */
@@ -137,18 +132,6 @@ struct ocfs2_lock_res {
 	wait_queue_head_t        l_event;
 
 	struct list_head         l_debug_list;
-
-#ifdef CONFIG_OCFS2_FS_STATS
-	unsigned long long	 l_lock_num_prmode; 	   /* PR acquires */
-	unsigned long long 	 l_lock_num_exmode; 	   /* EX acquires */
-	unsigned int		 l_lock_num_prmode_failed; /* Failed PR gets */
-	unsigned int		 l_lock_num_exmode_failed; /* Failed EX gets */
-	unsigned long long	 l_lock_total_prmode; 	   /* Tot wait for PR */
-	unsigned long long	 l_lock_total_exmode; 	   /* Tot wait for EX */
-	unsigned int		 l_lock_max_prmode; 	   /* Max wait for PR */
-	unsigned int		 l_lock_max_exmode; 	   /* Max wait for EX */
-	unsigned int		 l_lock_refresh;	   /* Disk refreshes */
-#endif
 };
 
 struct ocfs2_dlm_debug {
@@ -161,7 +144,6 @@ enum ocfs2_vol_state
 {
 	VOLUME_INIT = 0,
 	VOLUME_MOUNTED,
-	VOLUME_MOUNTED_QUOTAS,
 	VOLUME_DISMOUNTED,
 	VOLUME_DISABLED
 };
@@ -177,13 +159,9 @@ struct ocfs2_alloc_stats
 
 enum ocfs2_local_alloc_state
 {
-	OCFS2_LA_UNUSED = 0,	/* Local alloc will never be used for
-				 * this mountpoint. */
-	OCFS2_LA_ENABLED,	/* Local alloc is in use. */
-	OCFS2_LA_THROTTLED,	/* Local alloc is in use, but number
-				 * of bits has been reduced. */
-	OCFS2_LA_DISABLED	/* Local alloc has temporarily been
-				 * disabled. */
+	OCFS2_LA_UNUSED = 0,
+	OCFS2_LA_ENABLED,
+	OCFS2_LA_DISABLED
 };
 
 enum ocfs2_mount_options
@@ -194,11 +172,6 @@ enum ocfs2_mount_options
 	OCFS2_MOUNT_ERRORS_PANIC = 1 << 3, /* Panic on errors */
 	OCFS2_MOUNT_DATA_WRITEBACK = 1 << 4, /* No data ordering */
 	OCFS2_MOUNT_LOCALFLOCKS = 1 << 5, /* No cluster aware user file locks */
-	OCFS2_MOUNT_NOUSERXATTR = 1 << 6, /* No user xattr */
-	OCFS2_MOUNT_INODE64 = 1 << 7,	/* Allow inode numbers > 2^32 */
-	OCFS2_MOUNT_POSIX_ACL = 1 << 8,	/* POSIX access control lists */
-	OCFS2_MOUNT_USRQUOTA = 1 << 9, /* We support user quotas */
-	OCFS2_MOUNT_GRPQUOTA = 1 << 10, /* We support group quotas */
 };
 
 #define OCFS2_OSB_SOFT_RO	0x0001
@@ -209,7 +182,6 @@ enum ocfs2_mount_options
 struct ocfs2_journal;
 struct ocfs2_slot_info;
 struct ocfs2_recovery_map;
-struct ocfs2_quota_recovery;
 struct ocfs2_super
 {
 	struct task_struct *commit_task;
@@ -220,8 +192,6 @@ struct ocfs2_super
 
 	struct ocfs2_slot_info *slot_info;
 
-	u32 *slot_recovery_generations;
-
 	spinlock_t node_map_lock;
 
 	u64 root_blkno;
@@ -230,7 +200,6 @@ struct ocfs2_super
 	u32 bitmap_cpg;
 	u8 *uuid;
 	char *uuid_str;
-	u32 uuid_hash;
 	u8 *vol_label;
 	u64 first_cluster_group_blkno;
 	u32 fs_generation;
@@ -258,7 +227,6 @@ struct ocfs2_super
 	int s_sectsize_bits;
 	int s_clustersize;
 	int s_clustersize_bits;
-	unsigned int s_xattr_inline_size;
 
 	atomic_t vol_state;
 	struct mutex recovery_lock;
@@ -270,32 +238,15 @@ struct ocfs2_super
 	struct ocfs2_journal *journal;
 	unsigned long osb_commit_interval;
 
-	struct delayed_work		la_enable_wq;
-
-	/*
-	 * Must hold local alloc i_mutex and osb->osb_lock to change
-	 * local_alloc_bits. Reads can be done under either lock.
-	 */
-	unsigned int local_alloc_bits;
-	unsigned int local_alloc_default_bits;
-
-	enum ocfs2_local_alloc_state local_alloc_state; /* protected
-							 * by osb_lock */
-
+	int local_alloc_size;
+	enum ocfs2_local_alloc_state local_alloc_state;
 	struct buffer_head *local_alloc_bh;
-
 	u64 la_last_gd;
 
-#ifdef CONFIG_OCFS2_FS_STATS
-	struct dentry *local_alloc_debug;
-	char *local_alloc_debug_buf;
-#endif
-
-	/* Next three fields are for local node slot recovery during
+	/* Next two fields are for local node slot recovery during
 	 * mount. */
 	int dirty;
 	struct ocfs2_dinode *local_alloc_copy;
-	struct ocfs2_quota_recovery *quota_rec;
 
 	struct ocfs2_alloc_stats alloc_stats;
 	char dev_str[20];		/* "major,minor" of the device */
@@ -339,10 +290,6 @@ struct ocfs2_super
 
 #define OCFS2_SB(sb)	    ((struct ocfs2_super *)(sb)->s_fs_info)
 
-/* Useful typedef for passing around journal access functions */
-typedef int (*ocfs2_journal_access_func)(handle_t *handle, struct inode *inode,
-					 struct buffer_head *bh, int type);
-
 static inline int ocfs2_should_order_data(struct inode *inode)
 {
 	if (!S_ISREG(inode->i_mode))
@@ -375,20 +322,6 @@ static inline int ocfs2_writes_unwritten_extents(struct ocfs2_super *osb)
 static inline int ocfs2_supports_inline_data(struct ocfs2_super *osb)
 {
 	if (osb->s_feature_incompat & OCFS2_FEATURE_INCOMPAT_INLINE_DATA)
-		return 1;
-	return 0;
-}
-
-static inline int ocfs2_supports_xattr(struct ocfs2_super *osb)
-{
-	if (osb->s_feature_incompat & OCFS2_FEATURE_INCOMPAT_XATTR)
-		return 1;
-	return 0;
-}
-
-static inline int ocfs2_meta_ecc(struct ocfs2_super *osb)
-{
-	if (osb->s_feature_incompat & OCFS2_FEATURE_INCOMPAT_META_ECC)
 		return 1;
 	return 0;
 }
@@ -460,18 +393,35 @@ static inline int ocfs2_uses_extended_slot_map(struct ocfs2_super *osb)
 #define OCFS2_IS_VALID_DINODE(ptr)					\
 	(!strcmp((ptr)->i_signature, OCFS2_INODE_SIGNATURE))
 
+#define OCFS2_RO_ON_INVALID_DINODE(__sb, __di)	do {			\
+	typeof(__di) ____di = (__di);					\
+	ocfs2_error((__sb), 						\
+		"Dinode # %llu has bad signature %.*s",			\
+		(unsigned long long)le64_to_cpu((____di)->i_blkno), 7, 	\
+		(____di)->i_signature);					\
+} while (0)
+
 #define OCFS2_IS_VALID_EXTENT_BLOCK(ptr)				\
 	(!strcmp((ptr)->h_signature, OCFS2_EXTENT_BLOCK_SIGNATURE))
+
+#define OCFS2_RO_ON_INVALID_EXTENT_BLOCK(__sb, __eb)	do {		\
+	typeof(__eb) ____eb = (__eb);					\
+	ocfs2_error((__sb), 						\
+		"Extent Block # %llu has bad signature %.*s",		\
+		(unsigned long long)le64_to_cpu((____eb)->h_blkno), 7,	\
+		(____eb)->h_signature);					\
+} while (0)
 
 #define OCFS2_IS_VALID_GROUP_DESC(ptr)					\
 	(!strcmp((ptr)->bg_signature, OCFS2_GROUP_DESC_SIGNATURE))
 
-
-#define OCFS2_IS_VALID_XATTR_BLOCK(ptr)					\
-	(!strcmp((ptr)->xb_signature, OCFS2_XATTR_BLOCK_SIGNATURE))
-
-#define OCFS2_IS_VALID_DIR_TRAILER(ptr)					\
-	(!strcmp((ptr)->db_signature, OCFS2_DIR_TRAILER_SIGNATURE))
+#define OCFS2_RO_ON_INVALID_GROUP_DESC(__sb, __gd)	do {		\
+	typeof(__gd) ____gd = (__gd);					\
+		ocfs2_error((__sb),					\
+		"Group Descriptor # %llu has bad signature %.*s",	\
+		(unsigned long long)le64_to_cpu((____gd)->bg_blkno), 7, \
+		(____gd)->bg_signature);				\
+} while (0)
 
 static inline unsigned long ino_from_blkno(struct super_block *sb,
 					   u64 blkno)
@@ -590,14 +540,6 @@ static inline unsigned int ocfs2_pages_per_cluster(struct super_block *sb)
 	return pages_per_cluster;
 }
 
-static inline unsigned int ocfs2_megabytes_to_clusters(struct super_block *sb,
-						       unsigned int megs)
-{
-	BUILD_BUG_ON(OCFS2_MAX_CLUSTERSIZE > 1048576);
-
-	return megs << (20 - OCFS2_SB(sb)->s_clustersize_bits);
-}
-
 static inline void ocfs2_init_inode_steal_slot(struct ocfs2_super *osb)
 {
 	spin_lock(&osb->osb_lock);
@@ -629,6 +571,5 @@ static inline s16 ocfs2_get_inode_steal_slot(struct ocfs2_super *osb)
 #define ocfs2_clear_bit ext2_clear_bit
 #define ocfs2_test_bit ext2_test_bit
 #define ocfs2_find_next_zero_bit ext2_find_next_zero_bit
-#define ocfs2_find_next_bit ext2_find_next_bit
 #endif  /* OCFS2_H */
 

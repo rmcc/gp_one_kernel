@@ -14,7 +14,6 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/sched.h>
 #include <linux/nfs_fs.h>
-#include "internal.h"
 
 #ifdef RPC_DEBUG
 # define NFSDBG_FACILITY	NFSDBG_MOUNT
@@ -29,43 +28,47 @@ struct mnt_fhstatus {
 
 /**
  * nfs_mount - Obtain an NFS file handle for the given host and path
- * @info: pointer to mount request arguments
+ * @addr: pointer to server's address
+ * @len: size of server's address
+ * @hostname: name of server host, or NULL
+ * @path: pointer to string containing export path to mount
+ * @version: mount version to use for this request
+ * @protocol: transport protocol to use for thie request
+ * @fh: pointer to location to place returned file handle
  *
  * Uses default timeout parameters specified by underlying transport.
  */
-int nfs_mount(struct nfs_mount_request *info)
+int nfs_mount(struct sockaddr *addr, size_t len, char *hostname, char *path,
+	      int version, int protocol, struct nfs_fh *fh)
 {
 	struct mnt_fhstatus	result = {
-		.fh		= info->fh
+		.fh		= fh
 	};
 	struct rpc_message msg	= {
-		.rpc_argp	= info->dirpath,
+		.rpc_argp	= path,
 		.rpc_resp	= &result,
 	};
 	struct rpc_create_args args = {
-		.protocol	= info->protocol,
-		.address	= info->sap,
-		.addrsize	= info->salen,
-		.servername	= info->hostname,
+		.protocol	= protocol,
+		.address	= addr,
+		.addrsize	= len,
+		.servername	= hostname,
 		.program	= &mnt_program,
-		.version	= info->version,
+		.version	= version,
 		.authflavor	= RPC_AUTH_UNIX,
+		.flags		= 0,
 	};
 	struct rpc_clnt		*mnt_clnt;
 	int			status;
 
 	dprintk("NFS: sending MNT request for %s:%s\n",
-		(info->hostname ? info->hostname : "server"),
-			info->dirpath);
-
-	if (info->noresvport)
-		args.flags |= RPC_CLNT_CREATE_NONPRIVPORT;
+		(hostname ? hostname : "server"), path);
 
 	mnt_clnt = rpc_create(&args);
 	if (IS_ERR(mnt_clnt))
 		goto out_clnt_err;
 
-	if (info->version == NFS_MNT3_VERSION)
+	if (version == NFS_MNT3_VERSION)
 		msg.rpc_proc = &mnt_clnt->cl_procinfo[MOUNTPROC3_MNT];
 	else
 		msg.rpc_proc = &mnt_clnt->cl_procinfo[MNTPROC_MNT];
@@ -95,7 +98,7 @@ out_call_err:
 
 out_mnt_err:
 	dprintk("NFS: MNT server returned result %d\n", result.status);
-	status = nfs_stat_to_errno(result.status);
+	status = -EACCES;
 	goto out;
 }
 
@@ -127,11 +130,10 @@ static int xdr_decode_fhstatus3(struct rpc_rqst *req, __be32 *p,
 				struct mnt_fhstatus *res)
 {
 	struct nfs_fh *fh = res->fh;
-	unsigned size;
 
 	if ((res->status = ntohl(*p++)) == 0) {
-		size = ntohl(*p++);
-		if (size <= NFS3_FHSIZE && size != 0) {
+		int size = ntohl(*p++);
+		if (size <= NFS3_FHSIZE) {
 			fh->size = size;
 			memcpy(fh->data, p, size);
 		} else

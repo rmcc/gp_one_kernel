@@ -55,7 +55,7 @@
 #include <pcmcia/ss.h>
 #include "tcic.h"
 
-#ifdef CONFIG_PCMCIA_DEBUG
+#ifdef DEBUG
 static int pc_debug;
 
 module_param(pc_debug, int, 0644);

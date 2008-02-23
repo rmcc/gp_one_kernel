@@ -1,4 +1,6 @@
 /*
+ * $Id: spaceorb.c,v 1.15 2002/01/22 20:29:19 vojtech Exp $
+ *
  *  Copyright (c) 1999-2001 Vojtech Pavlik
  *
  *  Based on the work of:

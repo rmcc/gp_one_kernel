@@ -235,9 +235,9 @@ config X86_LONGHAUL
 	  If in doubt, say N.
 
 config X86_E_POWERSAVER
-	tristate "VIA C7 Enhanced PowerSaver"
+	tristate "VIA C7 Enhanced PowerSaver (EXPERIMENTAL)"
 	select CPU_FREQ_TABLE
-	depends on X86_32
+	depends on X86_32 && EXPERIMENTAL
 	help
 	  This adds the CPUFreq driver for VIA C7 processors.
 

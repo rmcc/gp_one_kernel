@@ -6,7 +6,6 @@
 #define _LINUX_KALLSYMS_H
 
 #include <linux/errno.h>
-#include <linux/kernel.h>
 #include <linux/stddef.h>
 
 #define KSYM_NAME_LEN 128
@@ -93,10 +92,12 @@ static inline void print_symbol(const char *fmt, unsigned long addr)
 }
 
 /*
- * Pretty-print a function pointer.  This function is deprecated.
- * Please use the "%pF" vsprintf format instead.
+ * Pretty-print a function pointer.
+ *
+ * ia64 and ppc64 function pointers are really function descriptors,
+ * which contain a pointer the real address.
  */
-static inline void __deprecated print_fn_descriptor_symbol(const char *fmt, void *addr)
+static inline void print_fn_descriptor_symbol(const char *fmt, void *addr)
 {
 #if defined(CONFIG_IA64) || defined(CONFIG_PPC64)
 	addr = *(void **)addr;
@@ -104,9 +105,18 @@ static inline void __deprecated print_fn_descriptor_symbol(const char *fmt, void
 	print_symbol(fmt, (unsigned long)addr);
 }
 
-static inline void print_ip_sym(unsigned long ip)
-{
-	printk("[<%p>] %pS\n", (void *) ip, (void *) ip);
-}
+#ifndef CONFIG_64BIT
+#define print_ip_sym(ip)		\
+do {					\
+	printk("[<%08lx>]", ip);	\
+	print_symbol(" %s\n", ip);	\
+} while(0)
+#else
+#define print_ip_sym(ip)		\
+do {					\
+	printk("[<%016lx>]", ip);	\
+	print_symbol(" %s\n", ip);	\
+} while(0)
+#endif
 
 #endif /*_LINUX_KALLSYMS_H*/

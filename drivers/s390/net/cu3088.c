@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/err.h>
 
+#include <asm/s390_rdev.h>
 #include <asm/ccwdev.h>
 #include <asm/ccwgroup.h>
 
@@ -35,6 +36,7 @@ const char *cu3088_type[] = {
 	"CTC/A",
 	"ESCON channel",
 	"FICON channel",
+	"P390 LCS card",
 	"OSA LCS card",
 	"CLAW channel device",
 	"unknown channel type",
@@ -47,6 +49,7 @@ static struct ccw_device_id cu3088_ids[] = {
 	{ CCW_DEVICE(0x3088, 0x08), .driver_info = channel_type_parallel },
 	{ CCW_DEVICE(0x3088, 0x1f), .driver_info = channel_type_escon },
 	{ CCW_DEVICE(0x3088, 0x1e), .driver_info = channel_type_ficon },
+	{ CCW_DEVICE(0x3088, 0x01), .driver_info = channel_type_p390 },
 	{ CCW_DEVICE(0x3088, 0x60), .driver_info = channel_type_osa2 },
 	{ CCW_DEVICE(0x3088, 0x61), .driver_info = channel_type_claw },
 	{ /* end of list */ }
@@ -119,12 +122,12 @@ cu3088_init (void)
 {
 	int rc;
 
-	cu3088_root_dev = root_device_register("cu3088");
+	cu3088_root_dev = s390_root_dev_register("cu3088");
 	if (IS_ERR(cu3088_root_dev))
 		return PTR_ERR(cu3088_root_dev);
 	rc = ccw_driver_register(&cu3088_driver);
 	if (rc)
-		root_device_unregister(cu3088_root_dev);
+		s390_root_dev_unregister(cu3088_root_dev);
 
 	return rc;
 }
@@ -133,7 +136,7 @@ static void __exit
 cu3088_exit (void)
 {
 	ccw_driver_unregister(&cu3088_driver);
-	root_device_unregister(cu3088_root_dev);
+	s390_root_dev_unregister(cu3088_root_dev);
 }
 
 MODULE_DEVICE_TABLE(ccw,cu3088_ids);

@@ -40,7 +40,6 @@ struct inquiry_data {
 	__u8		dev_class[3];
 	__le16		clock_offset;
 	__s8		rssi;
-	__u8		ssp_mode;
 };
 
 struct inquiry_entry {
@@ -76,7 +75,6 @@ struct hci_dev {
 	__u8		dev_class[3];
 	__u8		features[8];
 	__u8		commands[64];
-	__u8		ssp_mode;
 	__u8		hci_ver;
 	__u16		hci_rev;
 	__u16		manufacturer;
@@ -163,12 +161,9 @@ struct hci_conn {
 	__u8		 attempt;
 	__u8		 dev_class[3];
 	__u8             features[8];
-	__u8             ssp_mode;
 	__u16            interval;
-	__u16            pkt_type;
 	__u16            link_policy;
 	__u32		 link_mode;
-	__u8             auth_type;
 	__u8             power_save;
 	unsigned long	 pend;
 
@@ -325,8 +320,7 @@ int hci_conn_del(struct hci_conn *conn);
 void hci_conn_hash_flush(struct hci_dev *hdev);
 void hci_conn_check_pending(struct hci_dev *hdev);
 
-struct hci_conn *hci_connect(struct hci_dev *hdev, int type, bdaddr_t *dst, __u8 auth_type);
-int hci_conn_check_link_mode(struct hci_conn *conn);
+struct hci_conn *hci_connect(struct hci_dev *hdev, int type, bdaddr_t *src);
 int hci_conn_auth(struct hci_conn *conn);
 int hci_conn_encrypt(struct hci_conn *conn);
 int hci_conn_change_link_key(struct hci_conn *conn);
@@ -350,7 +344,7 @@ static inline void hci_conn_put(struct hci_conn *conn)
 			if (conn->state == BT_CONNECTED) {
 				timeo = msecs_to_jiffies(HCI_DISCONN_TIMEOUT);
 				if (!conn->out)
-					timeo *= 5;
+					timeo *= 2;
 			} else
 				timeo = msecs_to_jiffies(10);
 		} else
@@ -424,7 +418,6 @@ int hci_get_dev_list(void __user *arg);
 int hci_get_dev_info(void __user *arg);
 int hci_get_conn_list(void __user *arg);
 int hci_get_conn_info(struct hci_dev *hdev, void __user *arg);
-int hci_get_auth_info(struct hci_dev *hdev, void __user *arg);
 int hci_inquiry(void __user *arg);
 
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb);
@@ -466,7 +459,6 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_sniff_capable(dev)     ((dev)->features[0] & LMP_SNIFF)
 #define lmp_sniffsubr_capable(dev) ((dev)->features[5] & LMP_SNIFF_SUBR)
 #define lmp_esco_capable(dev)      ((dev)->features[3] & LMP_ESCO)
-#define lmp_ssp_capable(dev)       ((dev)->features[6] & LMP_SIMPLE_PAIR)
 
 /* ----- HCI protocols ----- */
 struct hci_proto {
@@ -482,7 +474,7 @@ struct hci_proto {
 	int (*recv_acldata)	(struct hci_conn *conn, struct sk_buff *skb, __u16 flags);
 	int (*recv_scodata)	(struct hci_conn *conn, struct sk_buff *skb);
 	int (*auth_cfm)		(struct hci_conn *conn, __u8 status);
-	int (*encrypt_cfm)	(struct hci_conn *conn, __u8 status, __u8 encrypt);
+	int (*encrypt_cfm)	(struct hci_conn *conn, __u8 status);
 };
 
 static inline int hci_proto_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 type)
@@ -540,17 +532,17 @@ static inline void hci_proto_auth_cfm(struct hci_conn *conn, __u8 status)
 		hp->auth_cfm(conn, status);
 }
 
-static inline void hci_proto_encrypt_cfm(struct hci_conn *conn, __u8 status, __u8 encrypt)
+static inline void hci_proto_encrypt_cfm(struct hci_conn *conn, __u8 status)
 {
 	register struct hci_proto *hp;
 
 	hp = hci_proto[HCI_PROTO_L2CAP];
 	if (hp && hp->encrypt_cfm)
-		hp->encrypt_cfm(conn, status, encrypt);
+		hp->encrypt_cfm(conn, status);
 
 	hp = hci_proto[HCI_PROTO_SCO];
 	if (hp && hp->encrypt_cfm)
-		hp->encrypt_cfm(conn, status, encrypt);
+		hp->encrypt_cfm(conn, status);
 }
 
 int hci_register_proto(struct hci_proto *hproto);
@@ -587,7 +579,7 @@ static inline void hci_encrypt_cfm(struct hci_conn *conn, __u8 status, __u8 encr
 {
 	struct list_head *p;
 
-	hci_proto_encrypt_cfm(conn, status, encrypt);
+	hci_proto_encrypt_cfm(conn, status);
 
 	read_lock_bh(&hci_cb_list_lock);
 	list_for_each(p, &hci_cb_list) {

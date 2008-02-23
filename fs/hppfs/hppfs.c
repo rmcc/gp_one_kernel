@@ -426,7 +426,6 @@ static int file_mode(int fmode)
 
 static int hppfs_open(struct inode *inode, struct file *file)
 {
-	const struct cred *cred = file->f_cred;
 	struct hppfs_private *data;
 	struct vfsmount *proc_mnt;
 	struct dentry *proc_dentry;
@@ -447,7 +446,7 @@ static int hppfs_open(struct inode *inode, struct file *file)
 
 	/* XXX This isn't closed anywhere */
 	data->proc_file = dentry_open(dget(proc_dentry), mntget(proc_mnt),
-				      file_mode(file->f_mode), cred);
+				      file_mode(file->f_mode));
 	err = PTR_ERR(data->proc_file);
 	if (IS_ERR(data->proc_file))
 		goto out_free1;
@@ -490,7 +489,6 @@ static int hppfs_open(struct inode *inode, struct file *file)
 
 static int hppfs_dir_open(struct inode *inode, struct file *file)
 {
-	const struct cred *cred = file->f_cred;
 	struct hppfs_private *data;
 	struct vfsmount *proc_mnt;
 	struct dentry *proc_dentry;
@@ -504,7 +502,7 @@ static int hppfs_dir_open(struct inode *inode, struct file *file)
 	proc_dentry = HPPFS_I(inode)->proc_dentry;
 	proc_mnt = inode->i_sb->s_fs_info;
 	data->proc_file = dentry_open(dget(proc_dentry), mntget(proc_mnt),
-				      file_mode(file->f_mode), cred);
+				      file_mode(file->f_mode));
 	err = PTR_ERR(data->proc_file);
 	if (IS_ERR(data->proc_file))
 		goto out_free;
@@ -657,13 +655,20 @@ static void *hppfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	return proc_dentry->d_inode->i_op->follow_link(proc_dentry, nd);
 }
 
+int hppfs_permission(struct inode *inode, int mask, struct nameidata *nd)
+{
+	return generic_permission(inode, mask, NULL);
+}
+
 static const struct inode_operations hppfs_dir_iops = {
 	.lookup		= hppfs_lookup,
+	.permission	= hppfs_permission,
 };
 
 static const struct inode_operations hppfs_link_iops = {
 	.readlink	= hppfs_readlink,
 	.follow_link	= hppfs_follow_link,
+	.permission	= hppfs_permission,
 };
 
 static struct inode *get_inode(struct super_block *sb, struct dentry *dentry)

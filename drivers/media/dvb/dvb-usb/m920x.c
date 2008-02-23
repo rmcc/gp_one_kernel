@@ -16,7 +16,6 @@
 #include "qt1010.h"
 #include "tda1004x.h"
 #include "tda827x.h"
-#include <asm/unaligned.h>
 
 /* debug */
 static int dvb_usb_m920x_debug;
@@ -348,13 +347,13 @@ static int m920x_firmware_download(struct usb_device *udev, const struct firmwar
 
 	for (pass = 0; pass < 2; pass++) {
 		for (i = 0; i + (sizeof(u16) * 3) < fw->size;) {
-			value = get_unaligned_le16(fw->data + i);
+			value = le16_to_cpu(*(u16 *)(fw->data + i));
 			i += sizeof(u16);
 
-			index = get_unaligned_le16(fw->data + i);
+			index = le16_to_cpu(*(u16 *)(fw->data + i));
 			i += sizeof(u16);
 
-			size = get_unaligned_le16(fw->data + i);
+			size = le16_to_cpu(*(u16 *)(fw->data + i));
 			i += sizeof(u16);
 
 			if (pass == 1) {

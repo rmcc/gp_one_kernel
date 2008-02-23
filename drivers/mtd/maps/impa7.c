@@ -1,4 +1,6 @@
 /*
+ * $Id: impa7.c,v 1.14 2005/11/07 11:14:27 gleixner Exp $
+ *
  * Handle mapping of the NOR flash on implementa A7 boards
  *
  * Copyright 2002 SYSGO Real-Time Solutions GmbH
@@ -70,7 +72,7 @@ static struct mtd_partition *mtd_parts[NUM_FLASHBANKS];
 
 static const char *probes[] = { "cmdlinepart", NULL };
 
-static int __init init_impa7(void)
+int __init init_impa7(void)
 {
 	static const char *rom_probe_types[] = PROBETYPES;
 	const char **type;

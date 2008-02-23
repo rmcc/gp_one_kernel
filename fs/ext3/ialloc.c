@@ -539,7 +539,7 @@ got:
 		percpu_counter_inc(&sbi->s_dirs_counter);
 	sb->s_dirt = 1;
 
-	inode->i_uid = current_fsuid();
+	inode->i_uid = current->fsuid;
 	if (test_opt (sb, GRPID))
 		inode->i_gid = dir->i_gid;
 	else if (dir->i_mode & S_ISGID) {
@@ -547,7 +547,7 @@ got:
 		if (S_ISDIR(mode))
 			mode |= S_ISGID;
 	} else
-		inode->i_gid = current_fsgid();
+		inode->i_gid = current->fsgid;
 	inode->i_mode = mode;
 
 	inode->i_ino = ino;
@@ -559,8 +559,12 @@ got:
 	ei->i_dir_start_lookup = 0;
 	ei->i_disksize = 0;
 
-	ei->i_flags =
-		ext3_mask_flags(mode, EXT3_I(dir)->i_flags & EXT3_FL_INHERITED);
+	ei->i_flags = EXT3_I(dir)->i_flags & ~EXT3_INDEX_FL;
+	if (S_ISLNK(mode))
+		ei->i_flags &= ~(EXT3_IMMUTABLE_FL|EXT3_APPEND_FL);
+	/* dirsync only applies to directories */
+	if (!S_ISDIR(mode))
+		ei->i_flags &= ~EXT3_DIRSYNC_FL;
 #ifdef EXT3_FRAGMENTS
 	ei->i_faddr = 0;
 	ei->i_frag_no = 0;
@@ -575,10 +579,7 @@ got:
 	ext3_set_inode_flags(inode);
 	if (IS_DIRSYNC(inode))
 		handle->h_sync = 1;
-	if (insert_inode_locked(inode) < 0) {
-		err = -EINVAL;
-		goto fail_drop;
-	}
+	insert_inode_hash(inode);
 	spin_lock(&sbi->s_next_gen_lock);
 	inode->i_generation = sbi->s_next_generation++;
 	spin_unlock(&sbi->s_next_gen_lock);
@@ -626,7 +627,6 @@ fail_drop:
 	DQUOT_DROP(inode);
 	inode->i_flags |= S_NOQUOTA;
 	inode->i_nlink = 0;
-	unlock_new_inode(inode);
 	iput(inode);
 	brelse(bitmap_bh);
 	return ERR_PTR(err);
@@ -669,14 +669,6 @@ struct inode *ext3_orphan_get(struct super_block *sb, unsigned long ino)
 	if (IS_ERR(inode))
 		goto iget_failed;
 
-	/*
-	 * If the orphans has i_nlinks > 0 then it should be able to be
-	 * truncated, otherwise it won't be removed from the orphan list
-	 * during processing and an infinite loop will result.
-	 */
-	if (inode->i_nlink && !ext3_can_truncate(inode))
-		goto bad_orphan;
-
 	if (NEXT_ORPHAN(inode) > max_ino)
 		goto bad_orphan;
 	brelse(bitmap_bh);
@@ -698,7 +690,6 @@ bad_orphan:
 		printk(KERN_NOTICE "NEXT_ORPHAN(inode)=%u\n",
 		       NEXT_ORPHAN(inode));
 		printk(KERN_NOTICE "max_ino=%lu\n", max_ino);
-		printk(KERN_NOTICE "i_nlink=%u\n", inode->i_nlink);
 		/* Avoid freeing blocks if we got a bad deleted inode */
 		if (inode->i_nlink == 0)
 			inode->i_blocks = 0;

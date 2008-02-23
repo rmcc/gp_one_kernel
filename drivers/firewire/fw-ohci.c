@@ -171,6 +171,7 @@ struct iso_context {
 struct fw_ohci {
 	struct fw_card card;
 
+	u32 version;
 	__iomem char *registers;
 	dma_addr_t self_id_bus;
 	__le32 *self_id_cpu;
@@ -179,8 +180,6 @@ struct fw_ohci {
 	int generation;
 	int request_generation;	/* for timestamping incoming requests */
 	u32 bus_seconds;
-
-	bool use_dualbuffer;
 	bool old_uninorth;
 	bool bus_reset_packet_quirk;
 
@@ -266,25 +265,27 @@ static void log_irqs(u32 evt)
 	    !(evt & OHCI1394_busReset))
 		return;
 
-	fw_notify("IRQ %08x%s%s%s%s%s%s%s%s%s%s%s%s%s\n", evt,
-	    evt & OHCI1394_selfIDComplete	? " selfID"		: "",
-	    evt & OHCI1394_RQPkt		? " AR_req"		: "",
-	    evt & OHCI1394_RSPkt		? " AR_resp"		: "",
-	    evt & OHCI1394_reqTxComplete	? " AT_req"		: "",
-	    evt & OHCI1394_respTxComplete	? " AT_resp"		: "",
-	    evt & OHCI1394_isochRx		? " IR"			: "",
-	    evt & OHCI1394_isochTx		? " IT"			: "",
-	    evt & OHCI1394_postedWriteErr	? " postedWriteErr"	: "",
-	    evt & OHCI1394_cycleTooLong		? " cycleTooLong"	: "",
-	    evt & OHCI1394_cycle64Seconds	? " cycle64Seconds"	: "",
-	    evt & OHCI1394_regAccessFail	? " regAccessFail"	: "",
-	    evt & OHCI1394_busReset		? " busReset"		: "",
-	    evt & ~(OHCI1394_selfIDComplete | OHCI1394_RQPkt |
-		    OHCI1394_RSPkt | OHCI1394_reqTxComplete |
-		    OHCI1394_respTxComplete | OHCI1394_isochRx |
-		    OHCI1394_isochTx | OHCI1394_postedWriteErr |
-		    OHCI1394_cycleTooLong | OHCI1394_cycle64Seconds |
-		    OHCI1394_regAccessFail | OHCI1394_busReset)
+	printk(KERN_DEBUG KBUILD_MODNAME ": IRQ "
+	       "%08x%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+	       evt,
+	       evt & OHCI1394_selfIDComplete	? " selfID"		: "",
+	       evt & OHCI1394_RQPkt		? " AR_req"		: "",
+	       evt & OHCI1394_RSPkt		? " AR_resp"		: "",
+	       evt & OHCI1394_reqTxComplete	? " AT_req"		: "",
+	       evt & OHCI1394_respTxComplete	? " AT_resp"		: "",
+	       evt & OHCI1394_isochRx		? " IR"			: "",
+	       evt & OHCI1394_isochTx		? " IT"			: "",
+	       evt & OHCI1394_postedWriteErr	? " postedWriteErr"	: "",
+	       evt & OHCI1394_cycleTooLong	? " cycleTooLong"	: "",
+	       evt & OHCI1394_cycle64Seconds	? " cycle64Seconds"	: "",
+	       evt & OHCI1394_regAccessFail	? " regAccessFail"	: "",
+	       evt & OHCI1394_busReset		? " busReset"		: "",
+	       evt & ~(OHCI1394_selfIDComplete | OHCI1394_RQPkt |
+		       OHCI1394_RSPkt | OHCI1394_reqTxComplete |
+		       OHCI1394_respTxComplete | OHCI1394_isochRx |
+		       OHCI1394_isochTx | OHCI1394_postedWriteErr |
+		       OHCI1394_cycleTooLong | OHCI1394_cycle64Seconds |
+		       OHCI1394_regAccessFail | OHCI1394_busReset)
 						? " ?"			: "");
 }
 
@@ -307,22 +308,23 @@ static void log_selfids(int node_id, int generation, int self_id_count, u32 *s)
 	if (likely(!(param_debug & OHCI_PARAM_DEBUG_SELFIDS)))
 		return;
 
-	fw_notify("%d selfIDs, generation %d, local node ID %04x\n",
-		  self_id_count, generation, node_id);
+	printk(KERN_DEBUG KBUILD_MODNAME ": %d selfIDs, generation %d, "
+	       "local node ID %04x\n", self_id_count, generation, node_id);
 
 	for (; self_id_count--; ++s)
 		if ((*s & 1 << 23) == 0)
-			fw_notify("selfID 0: %08x, phy %d [%c%c%c] "
-			    "%s gc=%d %s %s%s%s\n",
-			    *s, *s >> 24 & 63, _p(s, 6), _p(s, 4), _p(s, 2),
-			    speed[*s >> 14 & 3], *s >> 16 & 63,
-			    power[*s >> 8 & 7], *s >> 22 & 1 ? "L" : "",
-			    *s >> 11 & 1 ? "c" : "", *s & 2 ? "i" : "");
+			printk(KERN_DEBUG "selfID 0: %08x, phy %d [%c%c%c] "
+			       "%s gc=%d %s %s%s%s\n",
+			       *s, *s >> 24 & 63, _p(s, 6), _p(s, 4), _p(s, 2),
+			       speed[*s >> 14 & 3], *s >> 16 & 63,
+			       power[*s >> 8 & 7], *s >> 22 & 1 ? "L" : "",
+			       *s >> 11 & 1 ? "c" : "", *s & 2 ? "i" : "");
 		else
-			fw_notify("selfID n: %08x, phy %d [%c%c%c%c%c%c%c%c]\n",
-			    *s, *s >> 24 & 63,
-			    _p(s, 16), _p(s, 14), _p(s, 12), _p(s, 10),
-			    _p(s,  8), _p(s,  6), _p(s,  4), _p(s,  2));
+			printk(KERN_DEBUG "selfID n: %08x, phy %d "
+			       "[%c%c%c%c%c%c%c%c]\n",
+			       *s, *s >> 24 & 63,
+			       _p(s, 16), _p(s, 14), _p(s, 12), _p(s, 10),
+			       _p(s,  8), _p(s,  6), _p(s,  4), _p(s,  2));
 }
 
 static const char *evts[] = {
@@ -371,14 +373,15 @@ static void log_ar_at_event(char dir, int speed, u32 *header, int evt)
 			evt = 0x1f;
 
 	if (evt == OHCI1394_evt_bus_reset) {
-		fw_notify("A%c evt_bus_reset, generation %d\n",
-		    dir, (header[2] >> 16) & 0xff);
+		printk(KERN_DEBUG "A%c evt_bus_reset, generation %d\n",
+		       dir, (header[2] >> 16) & 0xff);
 		return;
 	}
 
 	if (header[0] == ~header[1]) {
-		fw_notify("A%c %s, %s, %08x\n",
-		    dir, evts[evt], phys[header[0] >> 30 & 0x3], header[0]);
+		printk(KERN_DEBUG "A%c %s, %s, %08x\n",
+		       dir, evts[evt], phys[header[0] >> 30 & 0x3],
+		       header[0]);
 		return;
 	}
 
@@ -397,23 +400,24 @@ static void log_ar_at_event(char dir, int speed, u32 *header, int evt)
 
 	switch (tcode) {
 	case 0xe: case 0xa:
-		fw_notify("A%c %s, %s\n", dir, evts[evt], tcodes[tcode]);
+		printk(KERN_DEBUG "A%c %s, %s\n",
+		       dir, evts[evt], tcodes[tcode]);
 		break;
 	case 0x0: case 0x1: case 0x4: case 0x5: case 0x9:
-		fw_notify("A%c spd %x tl %02x, "
-		    "%04x -> %04x, %s, "
-		    "%s, %04x%08x%s\n",
-		    dir, speed, header[0] >> 10 & 0x3f,
-		    header[1] >> 16, header[0] >> 16, evts[evt],
-		    tcodes[tcode], header[1] & 0xffff, header[2], specific);
+		printk(KERN_DEBUG "A%c spd %x tl %02x, "
+		       "%04x -> %04x, %s, "
+		       "%s, %04x%08x%s\n",
+		       dir, speed, header[0] >> 10 & 0x3f,
+		       header[1] >> 16, header[0] >> 16, evts[evt],
+		       tcodes[tcode], header[1] & 0xffff, header[2], specific);
 		break;
 	default:
-		fw_notify("A%c spd %x tl %02x, "
-		    "%04x -> %04x, %s, "
-		    "%s%s\n",
-		    dir, speed, header[0] >> 10 & 0x3f,
-		    header[1] >> 16, header[0] >> 16, evts[evt],
-		    tcodes[tcode], specific);
+		printk(KERN_DEBUG "A%c spd %x tl %02x, "
+		       "%04x -> %04x, %s, "
+		       "%s%s\n",
+		       dir, speed, header[0] >> 10 & 0x3f,
+		       header[1] >> 16, header[0] >> 16, evts[evt],
+		       tcodes[tcode], specific);
 	}
 }
 
@@ -476,7 +480,6 @@ static int ar_context_add_page(struct ar_context *ctx)
 	if (ab == NULL)
 		return -ENOMEM;
 
-	ab->next = NULL;
 	memset(&ab->descriptor, 0, sizeof(ab->descriptor));
 	ab->descriptor.control        = cpu_to_le16(DESCRIPTOR_INPUT_MORE |
 						    DESCRIPTOR_STATUS |
@@ -495,21 +498,6 @@ static int ar_context_add_page(struct ar_context *ctx)
 	flush_writes(ctx->ohci);
 
 	return 0;
-}
-
-static void ar_context_release(struct ar_context *ctx)
-{
-	struct ar_buffer *ab, *ab_next;
-	size_t offset;
-	dma_addr_t ab_bus;
-
-	for (ab = ctx->current_buffer; ab; ab = ab_next) {
-		ab_next = ab->next;
-		offset = offsetof(struct ar_buffer, data);
-		ab_bus = le32_to_cpu(ab->descriptor.data_address) - offset;
-		dma_free_coherent(ctx->ohci->card.device, PAGE_SIZE,
-				  ab, ab_bus);
-	}
 }
 
 #if defined(CONFIG_PPC_PMAC) && defined(CONFIG_PPC32)
@@ -560,11 +548,6 @@ static __le32 *handle_ar_packet(struct ar_context *ctx, __le32 *buffer)
 		p.header_length = 12;
 		p.payload_length = 0;
 		break;
-
-	default:
-		/* FIXME: Stop context, discard everything, and restart? */
-		p.header_length = 0;
-		p.payload_length = 0;
 	}
 
 	p.payload = (void *) buffer + p.header_length;
@@ -970,11 +953,10 @@ at_context_queue_packet(struct context *ctx, struct fw_packet *packet)
 		payload_bus =
 			dma_map_single(ohci->card.device, packet->payload,
 				       packet->payload_length, DMA_TO_DEVICE);
-		if (dma_mapping_error(ohci->card.device, payload_bus)) {
+		if (dma_mapping_error(payload_bus)) {
 			packet->ack = RCODE_SEND_ERROR;
 			return -1;
 		}
-		packet->payload_bus = payload_bus;
 
 		d[2].req_count    = cpu_to_le16(packet->payload_length);
 		d[2].data_address = cpu_to_le32(payload_bus);
@@ -1026,6 +1008,7 @@ static int handle_at_packet(struct context *context,
 	struct driver_data *driver_data;
 	struct fw_packet *packet;
 	struct fw_ohci *ohci = context->ohci;
+	dma_addr_t payload_bus;
 	int evt;
 
 	if (last->transfer_status == 0)
@@ -1038,8 +1021,9 @@ static int handle_at_packet(struct context *context,
 		/* This packet was cancelled, just continue. */
 		return 1;
 
-	if (packet->payload_bus)
-		dma_unmap_single(ohci->card.device, packet->payload_bus,
+	payload_bus = le32_to_cpu(last->data_address);
+	if (payload_bus != 0)
+		dma_unmap_single(ohci->card.device, payload_bus,
 				 packet->payload_length, DMA_TO_DEVICE);
 
 	evt = le16_to_cpu(last->transfer_status) & 0x1f;
@@ -1484,9 +1468,6 @@ static int ohci_enable(struct fw_card *card, u32 *config_rom, size_t length)
 	reg_write(ohci, OHCI1394_HCControlClear,
 		  OHCI1394_HCControl_noByteSwapData);
 
-	reg_write(ohci, OHCI1394_SelfIDBuffer, ohci->self_id_bus);
-	reg_write(ohci, OHCI1394_LinkControlClear,
-		  OHCI1394_LinkControl_rcvPhyPkt);
 	reg_write(ohci, OHCI1394_LinkControlSet,
 		  OHCI1394_LinkControl_rcvSelfID |
 		  OHCI1394_LinkControl_cycleTimerEnable |
@@ -1500,6 +1481,7 @@ static int ohci_enable(struct fw_card *card, u32 *config_rom, size_t length)
 	ar_context_run(&ohci->ar_request_ctx);
 	ar_context_run(&ohci->ar_response_ctx);
 
+	reg_write(ohci, OHCI1394_SelfIDBuffer, ohci->self_id_bus);
 	reg_write(ohci, OHCI1394_PhyUpperBound, 0x00010000);
 	reg_write(ohci, OHCI1394_IntEventClear, ~0);
 	reg_write(ohci, OHCI1394_IntMaskClear, ~0);
@@ -1695,10 +1677,6 @@ static int ohci_cancel_packet(struct fw_card *card, struct fw_packet *packet)
 
 	if (packet->ack != 0)
 		goto out;
-
-	if (packet->payload_bus)
-		dma_unmap_single(ohci->card.device, packet->payload_bus,
-				 packet->payload_length, DMA_TO_DEVICE);
 
 	log_ar_at_event('T', packet->speed, packet->header, 0x20);
 	driver_data->packet = NULL;
@@ -1905,7 +1883,7 @@ ohci_allocate_iso_context(struct fw_card *card, int type, size_t header_size)
 	} else {
 		mask = &ohci->ir_context_mask;
 		list = ohci->ir_context_list;
-		if (ohci->use_dualbuffer)
+		if (ohci->version >= OHCI_VERSION_1_1)
 			callback = handle_ir_dualbuffer_packet;
 		else
 			callback = handle_ir_packet_per_buffer;
@@ -1969,7 +1947,7 @@ static int ohci_start_iso(struct fw_iso_context *base,
 	} else {
 		index = ctx - ohci->ir_context_list;
 		control = IR_CONTEXT_ISOCH_HEADER;
-		if (ohci->use_dualbuffer)
+		if (ohci->version >= OHCI_VERSION_1_1)
 			control |= IR_CONTEXT_DUAL_BUFFER_MODE;
 		match = (tags << 28) | (sync << 8) | ctx->base.channel;
 		if (cycle >= 0) {
@@ -2299,7 +2277,7 @@ ohci_queue_iso(struct fw_iso_context *base,
 	spin_lock_irqsave(&ctx->context.ohci->lock, flags);
 	if (base->type == FW_ISO_CONTEXT_TRANSMIT)
 		retval = ohci_queue_iso_transmit(base, packet, buffer, payload);
-	else if (ctx->context.ohci->use_dualbuffer)
+	else if (ctx->context.ohci->version >= OHCI_VERSION_1_1)
 		retval = ohci_queue_iso_receive_dualbuffer(base, packet,
 							 buffer, payload);
 	else
@@ -2312,6 +2290,7 @@ ohci_queue_iso(struct fw_iso_context *base,
 }
 
 static const struct fw_card_driver ohci_driver = {
+	.name			= ohci_driver_name,
 	.enable			= ohci_enable,
 	.update_phy_reg		= ohci_update_phy_reg,
 	.set_config_rom		= ohci_set_config_rom,
@@ -2361,15 +2340,15 @@ static int __devinit
 pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 {
 	struct fw_ohci *ohci;
-	u32 bus_options, max_receive, link_speed, version;
+	u32 bus_options, max_receive, link_speed;
 	u64 guid;
 	int err;
 	size_t size;
 
 	ohci = kzalloc(sizeof(*ohci), GFP_KERNEL);
 	if (ohci == NULL) {
-		err = -ENOMEM;
-		goto fail;
+		fw_error("Could not malloc fw_ohci data.\n");
+		return -ENOMEM;
 	}
 
 	fw_card_initialize(&ohci->card, &ohci_driver, &dev->dev);
@@ -2378,13 +2357,19 @@ pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 
 	err = pci_enable_device(dev);
 	if (err) {
-		fw_error("Failed to enable OHCI hardware\n");
+		fw_error("Failed to enable OHCI hardware.\n");
 		goto fail_free;
 	}
 
 	pci_set_master(dev);
 	pci_write_config_dword(dev, OHCI1394_PCI_HCI_Control, 0);
 	pci_set_drvdata(dev, ohci);
+
+#if defined(CONFIG_PPC_PMAC) && defined(CONFIG_PPC32)
+	ohci->old_uninorth = dev->vendor == PCI_VENDOR_ID_APPLE &&
+			     dev->device == PCI_DEVICE_ID_APPLE_UNI_N_FW;
+#endif
+	ohci->bus_reset_packet_quirk = dev->vendor == PCI_VENDOR_ID_TI;
 
 	spin_lock_init(&ohci->lock);
 
@@ -2403,23 +2388,6 @@ pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 		err = -ENXIO;
 		goto fail_iomem;
 	}
-
-	version = reg_read(ohci, OHCI1394_Version) & 0x00ff00ff;
-	ohci->use_dualbuffer = version >= OHCI_VERSION_1_1;
-
-/* x86-32 currently doesn't use highmem for dma_alloc_coherent */
-#if !defined(CONFIG_X86_32)
-	/* dual-buffer mode is broken with descriptor addresses above 2G */
-	if (dev->vendor == PCI_VENDOR_ID_TI &&
-	    dev->device == PCI_DEVICE_ID_TI_TSB43AB22)
-		ohci->use_dualbuffer = false;
-#endif
-
-#if defined(CONFIG_PPC_PMAC) && defined(CONFIG_PPC32)
-	ohci->old_uninorth = dev->vendor == PCI_VENDOR_ID_APPLE &&
-			     dev->device == PCI_DEVICE_ID_APPLE_UNI_N_FW;
-#endif
-	ohci->bus_reset_packet_quirk = dev->vendor == PCI_VENDOR_ID_TI;
 
 	ar_context_init(&ohci->ar_request_ctx, ohci,
 			OHCI1394_AsReqRcvContextControlSet);
@@ -2446,8 +2414,9 @@ pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 	ohci->ir_context_list = kzalloc(size, GFP_KERNEL);
 
 	if (ohci->it_context_list == NULL || ohci->ir_context_list == NULL) {
+		fw_error("Out of memory for it/ir contexts.\n");
 		err = -ENOMEM;
-		goto fail_contexts;
+		goto fail_registers;
 	}
 
 	/* self-id dma buffer allocation */
@@ -2456,8 +2425,9 @@ pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 					       &ohci->self_id_bus,
 					       GFP_KERNEL);
 	if (ohci->self_id_cpu == NULL) {
+		fw_error("Out of memory for self ID buffer.\n");
 		err = -ENOMEM;
-		goto fail_contexts;
+		goto fail_registers;
 	}
 
 	bus_options = reg_read(ohci, OHCI1394_BusOptions);
@@ -2470,20 +2440,17 @@ pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 	if (err < 0)
 		goto fail_self_id;
 
+	ohci->version = reg_read(ohci, OHCI1394_Version) & 0x00ff00ff;
 	fw_notify("Added fw-ohci device %s, OHCI version %x.%x\n",
-		  dev_name(&dev->dev), version >> 16, version & 0xff);
+		  dev->dev.bus_id, ohci->version >> 16, ohci->version & 0xff);
 	return 0;
 
  fail_self_id:
 	dma_free_coherent(ohci->card.device, SELF_ID_BUF_SIZE,
 			  ohci->self_id_cpu, ohci->self_id_bus);
- fail_contexts:
-	kfree(ohci->ir_context_list);
+ fail_registers:
 	kfree(ohci->it_context_list);
-	context_release(&ohci->at_response_ctx);
-	context_release(&ohci->at_request_ctx);
-	ar_context_release(&ohci->ar_response_ctx);
-	ar_context_release(&ohci->ar_request_ctx);
+	kfree(ohci->ir_context_list);
 	pci_iounmap(dev, ohci->registers);
  fail_iomem:
 	pci_release_region(dev, 0);
@@ -2492,9 +2459,6 @@ pci_probe(struct pci_dev *dev, const struct pci_device_id *ent)
  fail_free:
 	kfree(&ohci->card);
 	ohci_pmac_off(dev);
- fail:
-	if (err == -ENOMEM)
-		fw_error("Out of memory\n");
 
 	return err;
 }
@@ -2515,19 +2479,8 @@ static void pci_remove(struct pci_dev *dev)
 
 	software_reset(ohci);
 	free_irq(dev->irq, ohci);
-
-	if (ohci->next_config_rom && ohci->next_config_rom != ohci->config_rom)
-		dma_free_coherent(ohci->card.device, CONFIG_ROM_SIZE,
-				  ohci->next_config_rom, ohci->next_config_rom_bus);
-	if (ohci->config_rom)
-		dma_free_coherent(ohci->card.device, CONFIG_ROM_SIZE,
-				  ohci->config_rom, ohci->config_rom_bus);
 	dma_free_coherent(ohci->card.device, SELF_ID_BUF_SIZE,
 			  ohci->self_id_cpu, ohci->self_id_bus);
-	ar_context_release(&ohci->ar_request_ctx);
-	ar_context_release(&ohci->ar_response_ctx);
-	context_release(&ohci->at_request_ctx);
-	context_release(&ohci->at_response_ctx);
 	kfree(ohci->it_context_list);
 	kfree(ohci->ir_context_list);
 	pci_iounmap(dev, ohci->registers);

@@ -68,6 +68,7 @@ struct gameport_driver {
 
 int gameport_open(struct gameport *gameport, struct gameport_driver *drv, int mode);
 void gameport_close(struct gameport *gameport);
+void gameport_rescan(struct gameport *gameport);
 
 #if defined(CONFIG_GAMEPORT) || (defined(MODULE) && defined(CONFIG_GAMEPORT_MODULE))
 
@@ -146,11 +147,10 @@ static inline void gameport_unpin_driver(struct gameport *gameport)
 	mutex_unlock(&gameport->drv_mutex);
 }
 
-int __gameport_register_driver(struct gameport_driver *drv,
-				struct module *owner, const char *mod_name);
-static inline int __must_check gameport_register_driver(struct gameport_driver *drv)
+void __gameport_register_driver(struct gameport_driver *drv, struct module *owner);
+static inline void gameport_register_driver(struct gameport_driver *drv)
 {
-	return __gameport_register_driver(drv, THIS_MODULE, KBUILD_MODNAME);
+	__gameport_register_driver(drv, THIS_MODULE);
 }
 
 void gameport_unregister_driver(struct gameport_driver *drv);

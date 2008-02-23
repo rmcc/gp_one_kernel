@@ -35,8 +35,6 @@ struct clk;
  * clk_get may return different clock producers depending on @dev.)
  *
  * Drivers must assume that the clock source is not enabled.
- *
- * clk_get should not be called from within interrupt context.
  */
 struct clk *clk_get(struct device *dev, const char *id);
 
@@ -78,8 +76,6 @@ unsigned long clk_get_rate(struct clk *clk);
  * Note: drivers must ensure that all clk_enable calls made on this
  * clock source are balanced by clk_disable calls prior to calling
  * this function.
- *
- * clk_put should not be called from within interrupt context.
  */
 void clk_put(struct clk *clk);
 

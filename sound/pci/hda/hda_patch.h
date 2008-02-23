@@ -18,5 +18,3 @@ extern struct hda_codec_preset snd_hda_preset_atihdmi[];
 extern struct hda_codec_preset snd_hda_preset_conexant[];
 /* VIA codecs */
 extern struct hda_codec_preset snd_hda_preset_via[];
-/* NVIDIA HDMI codecs */
-extern struct hda_codec_preset snd_hda_preset_nvhdmi[];

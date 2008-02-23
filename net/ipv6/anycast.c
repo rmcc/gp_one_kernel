@@ -60,7 +60,7 @@ int ipv6_sock_ac_join(struct sock *sk, int ifindex, struct in6_addr *addr)
 	struct inet6_dev *idev;
 	struct ipv6_ac_socklist *pac;
 	struct net *net = sock_net(sk);
-	int	ishost = !net->ipv6.devconf_all->forwarding;
+	int	ishost = !ipv6_devconf.forwarding;
 	int	err = 0;
 
 	if (!capable(CAP_NET_ADMIN))
@@ -512,9 +512,11 @@ static int ac6_seq_show(struct seq_file *seq, void *v)
 	struct ifacaddr6 *im = (struct ifacaddr6 *)v;
 	struct ac6_iter_state *state = ac6_seq_private(seq);
 
-	seq_printf(seq, "%-4d %-15s %pi6 %5d\n",
+	seq_printf(seq,
+		   "%-4d %-15s " NIP6_SEQFMT " %5d\n",
 		   state->dev->ifindex, state->dev->name,
-		   &im->aca_addr, im->aca_users);
+		   NIP6(im->aca_addr),
+		   im->aca_users);
 	return 0;
 }
 

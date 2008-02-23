@@ -333,8 +333,7 @@ dasd_diag_check_device(struct dasd_device *device)
 	if (IS_ERR(block)) {
 		DEV_MESSAGE(KERN_WARNING, device, "%s",
 			    "could not allocate dasd block structure");
-		device->private = NULL;
-		kfree(private);
+		kfree(device->private);
 		return PTR_ERR(block);
 	}
 	device->block = block;
@@ -349,8 +348,7 @@ dasd_diag_check_device(struct dasd_device *device)
 	if (rc) {
 		DEV_MESSAGE(KERN_WARNING, device, "failed to retrieve device "
 			    "information (rc=%d)", rc);
-		rc = -EOPNOTSUPP;
-		goto out;
+		return -ENOTSUPP;
 	}
 
 	/* Figure out position of label block */
@@ -364,8 +362,7 @@ dasd_diag_check_device(struct dasd_device *device)
 	default:
 		DEV_MESSAGE(KERN_WARNING, device, "unsupported device class "
 			    "(class=%d)", private->rdc_data.vdev_class);
-		rc = -EOPNOTSUPP;
-		goto out;
+		return -ENOTSUPP;
 	}
 
 	DBF_DEV_EVENT(DBF_INFO, device,
@@ -382,8 +379,7 @@ dasd_diag_check_device(struct dasd_device *device)
 	if (label == NULL)  {
 		DEV_MESSAGE(KERN_WARNING, device, "%s",
 			    "No memory to allocate initialization request");
-		rc = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 	rc = 0;
 	end_block = 0;
@@ -407,7 +403,7 @@ dasd_diag_check_device(struct dasd_device *device)
 			DEV_MESSAGE(KERN_WARNING, device, "%s",
 				"DIAG call failed");
 			rc = -EOPNOTSUPP;
-			goto out_label;
+			goto out;
 		}
 		mdsk_term_io(device);
 		if (rc == 0)
@@ -417,7 +413,7 @@ dasd_diag_check_device(struct dasd_device *device)
 		DEV_MESSAGE(KERN_WARNING, device, "device access failed "
 			    "(rc=%d)", rc);
 		rc = -EIO;
-		goto out_label;
+		goto out;
 	}
 	/* check for label block */
 	if (memcmp(label->label_id, DASD_DIAG_CMS1,
@@ -443,15 +439,8 @@ dasd_diag_check_device(struct dasd_device *device)
 			    (unsigned long) (block->blocks <<
 				block->s2b_shift) >> 1);
 	}
-out_label:
-	free_page((long) label);
 out:
-	if (rc) {
-		device->block = NULL;
-		dasd_free_block(block);
-		device->private = NULL;
-		kfree(private);
-	}
+	free_page((long) label);
 	return rc;
 }
 
@@ -544,8 +533,7 @@ static struct dasd_ccw_req *dasd_diag_build_cp(struct dasd_device *memdev,
 	}
 	cqr->retries = DIAG_MAX_RETRIES;
 	cqr->buildclk = get_clock();
-	if (blk_noretry_request(req) ||
-	    block->base->features & DASD_FEATURE_FAILFAST)
+	if (req->cmd_flags & REQ_FAILFAST)
 		set_bit(DASD_CQR_FLAGS_FAILFAST, &cqr->flags);
 	cqr->startdev = memdev;
 	cqr->memdev = memdev;

@@ -952,7 +952,7 @@ static int veth_change_mtu(struct net_device *dev, int new_mtu)
 
 static void veth_set_multicast_list(struct net_device *dev)
 {
-	struct veth_port *port = netdev_priv(dev);
+	struct veth_port *port = (struct veth_port *) dev->priv;
 	unsigned long flags;
 
 	write_lock_irqsave(&port->mcast_gate, flags);
@@ -1044,7 +1044,7 @@ static struct net_device *veth_probe_one(int vlan,
 		return NULL;
 	}
 
-	port = netdev_priv(dev);
+	port = (struct veth_port *) dev->priv;
 
 	spin_lock_init(&port->queue_lock);
 	rwlock_init(&port->mcast_gate);
@@ -1102,7 +1102,7 @@ static int veth_transmit_to_one(struct sk_buff *skb, HvLpIndex rlp,
 				struct net_device *dev)
 {
 	struct veth_lpar_connection *cnx = veth_cnx[rlp];
-	struct veth_port *port = netdev_priv(dev);
+	struct veth_port *port = (struct veth_port *) dev->priv;
 	HvLpEvent_Rc rc;
 	struct veth_msg *msg = NULL;
 	unsigned long flags;
@@ -1128,7 +1128,7 @@ static int veth_transmit_to_one(struct sk_buff *skb, HvLpIndex rlp,
 	msg->data.addr[0] = dma_map_single(port->dev, skb->data,
 				skb->len, DMA_TO_DEVICE);
 
-	if (dma_mapping_error(port->dev, msg->data.addr[0]))
+	if (dma_mapping_error(msg->data.addr[0]))
 		goto recycle_and_drop;
 
 	msg->dev = port->dev;
@@ -1191,7 +1191,7 @@ static void veth_transmit_to_many(struct sk_buff *skb,
 static int veth_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	unsigned char *frame = skb->data;
-	struct veth_port *port = netdev_priv(dev);
+	struct veth_port *port = (struct veth_port *) dev->priv;
 	HvLpIndexMap lpmask;
 
 	if (! (frame[0] & 0x01)) {
@@ -1226,7 +1226,7 @@ static void veth_recycle_msg(struct veth_lpar_connection *cnx,
 		dma_address = msg->data.addr[0];
 		dma_length = msg->data.len[0];
 
-		if (!dma_mapping_error(msg->dev, dma_address))
+		if (!dma_mapping_error(dma_address))
 			dma_unmap_single(msg->dev, dma_address, dma_length,
 					DMA_TO_DEVICE);
 
@@ -1255,7 +1255,7 @@ static void veth_wake_queues(struct veth_lpar_connection *cnx)
 		if (! dev)
 			continue;
 
-		port = netdev_priv(dev);
+		port = (struct veth_port *)dev->priv;
 
 		if (! (port->lpar_map & (1<<cnx->remote_lp)))
 			continue;
@@ -1284,7 +1284,7 @@ static void veth_stop_queues(struct veth_lpar_connection *cnx)
 		if (! dev)
 			continue;
 
-		port = netdev_priv(dev);
+		port = (struct veth_port *)dev->priv;
 
 		/* If this cnx is not on the vlan for this port, continue */
 		if (! (port->lpar_map & (1 << cnx->remote_lp)))
@@ -1506,7 +1506,7 @@ static void veth_receive(struct veth_lpar_connection *cnx,
 			continue;
 		}
 
-		port = netdev_priv(dev);
+		port = (struct veth_port *)dev->priv;
 		dest = *((u64 *) skb->data) & 0xFFFFFFFFFFFF0000;
 
 		if ((vlan > HVMAXARCHITECTEDVIRTUALLANS) || !port) {

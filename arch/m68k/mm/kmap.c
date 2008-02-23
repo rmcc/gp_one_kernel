@@ -66,10 +66,8 @@ static struct vm_struct *get_io_area(unsigned long size)
 	for (p = &iolist; (tmp = *p) ; p = &tmp->next) {
 		if (size + addr < (unsigned long)tmp->addr)
 			break;
-		if (addr > KMAP_END-size) {
-			kfree(area);
+		if (addr > KMAP_END-size)
 			return NULL;
-		}
 		addr = tmp->size + (unsigned long)tmp->addr;
 	}
 	area->addr = (void *)addr;

@@ -366,7 +366,7 @@ do_unimap_ioctl(int cmd, struct unimapdesc __user *user_ud, int perm, struct vc_
 int vt_ioctl(struct tty_struct *tty, struct file * file,
 	     unsigned int cmd, unsigned long arg)
 {
-	struct vc_data *vc = tty->driver_data;
+	struct vc_data *vc = (struct vc_data *)tty->driver_data;
 	struct console_font_op op;	/* used in multiple places here */
 	struct kbd_struct * kbd;
 	unsigned int console;
@@ -395,8 +395,6 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
  
 	kbd = kbd_table + console;
 	switch (cmd) {
-	case TIOCLINUX:
-		return tioclinux(tty, arg);
 	case KIOCSOUND:
 		if (!perm)
 			goto eperm;
@@ -949,16 +947,14 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		    get_user(cc, &vtsizes->v_cols))
 			ret = -EFAULT;
 		else {
-			acquire_console_sem();
 			for (i = 0; i < MAX_NR_CONSOLES; i++) {
 				vc = vc_cons[i].d;
 
 				if (vc) {
 					vc->vc_resize_user = 1;
-					vc_resize(vc_cons[i].d, cc, ll);
+					vc_lock_resize(vc_cons[i].d, cc, ll);
 				}
 			}
-			release_console_sem();
 		}
 		break;
 	}

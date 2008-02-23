@@ -82,6 +82,7 @@ typedef struct cx88_audio_dev snd_cx88_card_t;
 
 
 
+
 /****************************************************************************
 			Module global static vars
  ****************************************************************************/
@@ -330,12 +331,6 @@ static int snd_cx88_pcm_open(struct snd_pcm_substream *substream)
 	snd_cx88_card_t *chip = snd_pcm_substream_chip(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int err;
-
-	if (!chip) {
-		printk(KERN_ERR "BUG: cx88 can't find device struct."
-				" Can't proceed with open\n");
-		return -ENODEV;
-	}
 
 	err = snd_pcm_hw_constraint_pow2(runtime, 0, SNDRV_PCM_HW_PARAM_PERIODS);
 	if (err < 0)
@@ -742,6 +737,7 @@ static int __devinit snd_cx88_create(struct snd_card *card,
 	core = cx88_core_get(pci);
 	if (NULL == core) {
 		err = -EINVAL;
+		kfree (chip);
 		return err;
 	}
 
@@ -811,7 +807,7 @@ static int __devinit cx88_audio_initdev(struct pci_dev *pci,
 
 	err = snd_cx88_create(card, pci, &chip);
 	if (err < 0)
-		goto error;
+		return (err);
 
 	err = snd_cx88_pcm(chip, 0, "CX88 Digital");
 	if (err < 0)

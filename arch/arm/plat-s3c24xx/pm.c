@@ -33,21 +33,22 @@
 #include <linux/interrupt.h>
 #include <linux/crc32.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 #include <linux/serial_core.h>
-#include <linux/io.h>
 
 #include <asm/cacheflush.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
+#include <asm/io.h>
 
-#include <plat/regs-serial.h>
-#include <mach/regs-clock.h>
-#include <mach/regs-gpio.h>
-#include <mach/regs-mem.h>
-#include <mach/regs-irq.h>
+#include <asm/plat-s3c/regs-serial.h>
+#include <asm/arch/regs-clock.h>
+#include <asm/arch/regs-gpio.h>
+#include <asm/arch/regs-mem.h>
+#include <asm/arch/regs-irq.h>
 
 #include <asm/mach/time.h>
 
-#include <plat/pm.h>
+#include <asm/plat-s3c24xx/pm.h>
 
 /* for external use */
 
@@ -75,13 +76,11 @@ static struct sleep_save core_save[] = {
 	SAVE_ITEM(S3C2410_BANKCON4),
 	SAVE_ITEM(S3C2410_BANKCON5),
 
-#ifndef CONFIG_CPU_FREQ
 	SAVE_ITEM(S3C2410_CLKDIVN),
 	SAVE_ITEM(S3C2410_MPLLCON),
-	SAVE_ITEM(S3C2410_REFRESH),
-#endif
 	SAVE_ITEM(S3C2410_UPLLCON),
 	SAVE_ITEM(S3C2410_CLKSLOW),
+	SAVE_ITEM(S3C2410_REFRESH),
 };
 
 static struct gpio_sleep {

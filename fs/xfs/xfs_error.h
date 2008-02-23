@@ -125,14 +125,23 @@ extern void xfs_corruption_error(char *tag, int level, struct xfs_mount *mp,
 #define XFS_RANDOM_DIOWRITE_IOERR			(XFS_RANDOM_DEFAULT/10)
 #define	XFS_RANDOM_BMAPIFORMAT				XFS_RANDOM_DEFAULT
 
-#ifdef DEBUG
+#if (defined(DEBUG) || defined(INDUCE_IO_ERROR))
 extern int xfs_error_test(int, int *, char *, int, char *, unsigned long);
+extern void xfs_error_test_init(void);
 
 #define	XFS_NUM_INJECT_ERROR				10
+
+#ifdef __ANSI_CPP__
+#define XFS_TEST_ERROR(expr, mp, tag, rf)		\
+	((expr) || \
+	 xfs_error_test((tag), (mp)->m_fixedfsid, #expr, __LINE__, __FILE__, \
+			 (rf)))
+#else
 #define XFS_TEST_ERROR(expr, mp, tag, rf)		\
 	((expr) || \
 	 xfs_error_test((tag), (mp)->m_fixedfsid, "expr", __LINE__, __FILE__, \
 			(rf)))
+#endif /* __ANSI_CPP__ */
 
 extern int xfs_errortag_add(int error_tag, xfs_mount_t *mp);
 extern int xfs_errortag_clearall(xfs_mount_t *mp, int loud);
@@ -140,7 +149,7 @@ extern int xfs_errortag_clearall(xfs_mount_t *mp, int loud);
 #define XFS_TEST_ERROR(expr, mp, tag, rf)	(expr)
 #define xfs_errortag_add(tag, mp)		(ENOSYS)
 #define xfs_errortag_clearall(mp, loud)		(ENOSYS)
-#endif /* DEBUG */
+#endif /* (DEBUG || INDUCE_IO_ERROR) */
 
 /*
  * XFS panic tags -- allow a call to xfs_cmn_err() be turned into
@@ -159,15 +168,11 @@ extern int xfs_errortag_clearall(xfs_mount_t *mp, int loud);
 #define		XFS_PTAG_FSBLOCK_ZERO		0x00000080
 
 struct xfs_mount;
-
-extern void xfs_fs_vcmn_err(int level, struct xfs_mount *mp,
-		char *fmt, va_list ap)
-	__attribute__ ((format (printf, 3, 0)));
+/* PRINTFLIKE4 */
 extern void xfs_cmn_err(int panic_tag, int level, struct xfs_mount *mp,
-			char *fmt, ...)
-	__attribute__ ((format (printf, 4, 5)));
-extern void xfs_fs_cmn_err(int level, struct xfs_mount *mp, char *fmt, ...)
-	__attribute__ ((format (printf, 3, 4)));
+			char *fmt, ...);
+/* PRINTFLIKE3 */
+extern void xfs_fs_cmn_err(int level, struct xfs_mount *mp, char *fmt, ...);
 
 extern void xfs_hex_dump(void *p, int length);
 

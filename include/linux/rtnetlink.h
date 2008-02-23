@@ -107,11 +107,6 @@ enum {
 	RTM_GETADDRLABEL,
 #define RTM_GETADDRLABEL RTM_GETADDRLABEL
 
-	RTM_GETDCB = 78,
-#define RTM_GETDCB RTM_GETDCB
-	RTM_SETDCB,
-#define RTM_SETDCB RTM_SETDCB
-
 	__RTM_MAX,
 #define RTM_MAX		(((__RTM_MAX + 3) & ~3) - 1)
 };
@@ -251,7 +246,6 @@ enum rt_class_t
 {
 	RT_TABLE_UNSPEC=0,
 /* User defined values */
-	RT_TABLE_COMPAT=252,
 	RT_TABLE_DEFAULT=253,
 	RT_TABLE_MAIN=254,
 	RT_TABLE_LOCAL=255,
@@ -273,10 +267,10 @@ enum rtattr_type_t
 	RTA_PREFSRC,
 	RTA_METRICS,
 	RTA_MULTIPATH,
-	RTA_PROTOINFO, /* no longer used */
+	RTA_PROTOINFO,
 	RTA_FLOW,
 	RTA_CACHEINFO,
-	RTA_SESSION, /* no longer used */
+	RTA_SESSION,
 	RTA_MP_ALGO, /* no longer used */
 	RTA_TABLE,
 	__RTA_MAX
@@ -487,7 +481,6 @@ enum
 	TCA_RATE,
 	TCA_FCNT,
 	TCA_STATS2,
-	TCA_STAB,
 	__TCA_MAX
 };
 
@@ -587,10 +580,6 @@ enum rtnetlink_groups {
 #define RTNLGRP_IPV6_RULE	RTNLGRP_IPV6_RULE
 	RTNLGRP_ND_USEROPT,
 #define RTNLGRP_ND_USEROPT	RTNLGRP_ND_USEROPT
-	RTNLGRP_PHONET_IFADDR,
-#define RTNLGRP_PHONET_IFADDR	RTNLGRP_PHONET_IFADDR
-	RTNLGRP_PHONET_ROUTE,
-#define RTNLGRP_PHONET_ROUTE	RTNLGRP_PHONET_ROUTE
 	__RTNLGRP_MAX
 };
 #define RTNLGRP_MAX	(__RTNLGRP_MAX - 1)
@@ -761,6 +750,13 @@ extern void __rtnl_unlock(void);
 		printk(KERN_ERR "RTNL: assertion failed at %s (%d)\n", \
 		       __FILE__,  __LINE__); \
 		dump_stack(); \
+	} \
+} while(0)
+
+#define BUG_TRAP(x) do { \
+	if (unlikely(!(x))) { \
+		printk(KERN_ERR "KERNEL: assertion (%s) failed at %s (%d)\n", \
+			#x,  __FILE__ , __LINE__); \
 	} \
 } while(0)
 

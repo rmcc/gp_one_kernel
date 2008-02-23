@@ -1,6 +1,6 @@
 /*
  *  AMD K7 Powernow driver.
- *  (C) 2003 Dave Jones on behalf of SuSE Labs.
+ *  (C) 2003 Dave Jones <davej@codemonkey.org.uk> on behalf of SuSE Labs.
  *  (C) 2003-2004 Dave Jones <davej@redhat.com>
  *
  *  Licensed under the terms of the GNU GPL License version 2.
@@ -310,12 +310,6 @@ static int powernow_acpi_init(void)
 		goto err0;
 	}
 
-	if (!alloc_cpumask_var(&acpi_processor_perf->shared_cpu_map,
-								GFP_KERNEL)) {
-		retval = -ENOMEM;
-		goto err05;
-	}
-
 	if (acpi_processor_register_performance(acpi_processor_perf, 0)) {
 		retval = -EIO;
 		goto err1;
@@ -418,8 +412,6 @@ static int powernow_acpi_init(void)
 err2:
 	acpi_processor_unregister_performance(acpi_processor_perf, 0);
 err1:
-	free_cpumask_var(acpi_processor_perf->shared_cpu_map);
-err05:
 	kfree(acpi_processor_perf);
 err0:
 	printk(KERN_WARNING PFX "ACPI perflib can not be used in this platform\n");
@@ -660,7 +652,6 @@ static int powernow_cpu_exit (struct cpufreq_policy *policy) {
 #ifdef CONFIG_X86_POWERNOW_K7_ACPI
 	if (acpi_processor_perf) {
 		acpi_processor_unregister_performance(acpi_processor_perf, 0);
-		free_cpumask_var(acpi_processor_perf->shared_cpu_map);
 		kfree(acpi_processor_perf);
 	}
 #endif
@@ -701,7 +692,7 @@ static void __exit powernow_exit (void)
 module_param(acpi_force,  int, 0444);
 MODULE_PARM_DESC(acpi_force, "Force ACPI to be used.");
 
-MODULE_AUTHOR ("Dave Jones <davej@redhat.com>");
+MODULE_AUTHOR ("Dave Jones <davej@codemonkey.org.uk>");
 MODULE_DESCRIPTION ("Powernow driver for AMD K7 processors.");
 MODULE_LICENSE ("GPL");
 

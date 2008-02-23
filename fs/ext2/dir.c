@@ -103,7 +103,7 @@ static int ext2_commit_chunk(struct page *page, loff_t pos, unsigned len)
 	return err;
 }
 
-static void ext2_check_page(struct page *page, int quiet)
+static void ext2_check_page(struct page *page)
 {
 	struct inode *dir = page->mapping->host;
 	struct super_block *sb = dir->i_sb;
@@ -146,10 +146,10 @@ out:
 	/* Too bad, we had an error */
 
 Ebadsize:
-	if (!quiet)
-		ext2_error(sb, __func__,
-			"size of directory #%lu is not a multiple "
-			"of chunk size", dir->i_ino);
+	ext2_error(sb, "ext2_check_page",
+		"size of directory #%lu is not a multiple of chunk size",
+		dir->i_ino
+	);
 	goto fail;
 Eshort:
 	error = "rec_len is smaller than minimal";
@@ -166,36 +166,32 @@ Espan:
 Einumber:
 	error = "inode out of bounds";
 bad_entry:
-	if (!quiet)
-		ext2_error(sb, __func__, "bad entry in directory #%lu: : %s - "
-			"offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
-			dir->i_ino, error, (page->index<<PAGE_CACHE_SHIFT)+offs,
-			(unsigned long) le32_to_cpu(p->inode),
-			rec_len, p->name_len);
+	ext2_error (sb, "ext2_check_page", "bad entry in directory #%lu: %s - "
+		"offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
+		dir->i_ino, error, (page->index<<PAGE_CACHE_SHIFT)+offs,
+		(unsigned long) le32_to_cpu(p->inode),
+		rec_len, p->name_len);
 	goto fail;
 Eend:
-	if (!quiet) {
-		p = (ext2_dirent *)(kaddr + offs);
-		ext2_error(sb, "ext2_check_page",
-			"entry in directory #%lu spans the page boundary"
-			"offset=%lu, inode=%lu",
-			dir->i_ino, (page->index<<PAGE_CACHE_SHIFT)+offs,
-			(unsigned long) le32_to_cpu(p->inode));
-	}
+	p = (ext2_dirent *)(kaddr + offs);
+	ext2_error (sb, "ext2_check_page",
+		"entry in directory #%lu spans the page boundary"
+		"offset=%lu, inode=%lu",
+		dir->i_ino, (page->index<<PAGE_CACHE_SHIFT)+offs,
+		(unsigned long) le32_to_cpu(p->inode));
 fail:
 	SetPageChecked(page);
 	SetPageError(page);
 }
 
-static struct page * ext2_get_page(struct inode *dir, unsigned long n,
-				   int quiet)
+static struct page * ext2_get_page(struct inode *dir, unsigned long n)
 {
 	struct address_space *mapping = dir->i_mapping;
 	struct page *page = read_mapping_page(mapping, n, NULL);
 	if (!IS_ERR(page)) {
 		kmap(page);
 		if (!PageChecked(page))
-			ext2_check_page(page, quiet);
+			ext2_check_page(page);
 		if (PageError(page))
 			goto fail;
 	}
@@ -296,7 +292,7 @@ ext2_readdir (struct file * filp, void * dirent, filldir_t filldir)
 	for ( ; n < npages; n++, offset = 0) {
 		char *kaddr, *limit;
 		ext2_dirent *de;
-		struct page *page = ext2_get_page(inode, n, 0);
+		struct page *page = ext2_get_page(inode, n);
 
 		if (IS_ERR(page)) {
 			ext2_error(sb, __func__,
@@ -354,18 +350,17 @@ ext2_readdir (struct file * filp, void * dirent, filldir_t filldir)
  * (as a parameter - res_dir). Page is returned mapped and unlocked.
  * Entry is guaranteed to be valid.
  */
-struct ext2_dir_entry_2 *ext2_find_entry (struct inode * dir,
-			struct qstr *child, struct page ** res_page)
+struct ext2_dir_entry_2 * ext2_find_entry (struct inode * dir,
+			struct dentry *dentry, struct page ** res_page)
 {
-	const char *name = child->name;
-	int namelen = child->len;
+	const char *name = dentry->d_name.name;
+	int namelen = dentry->d_name.len;
 	unsigned reclen = EXT2_DIR_REC_LEN(namelen);
 	unsigned long start, n;
 	unsigned long npages = dir_pages(dir);
 	struct page *page = NULL;
 	struct ext2_inode_info *ei = EXT2_I(dir);
 	ext2_dirent * de;
-	int dir_has_error = 0;
 
 	if (npages == 0)
 		goto out;
@@ -379,7 +374,7 @@ struct ext2_dir_entry_2 *ext2_find_entry (struct inode * dir,
 	n = start;
 	do {
 		char *kaddr;
-		page = ext2_get_page(dir, n, dir_has_error);
+		page = ext2_get_page(dir, n);
 		if (!IS_ERR(page)) {
 			kaddr = page_address(page);
 			de = (ext2_dirent *) kaddr;
@@ -396,9 +391,7 @@ struct ext2_dir_entry_2 *ext2_find_entry (struct inode * dir,
 				de = ext2_next_entry(de);
 			}
 			ext2_put_page(page);
-		} else
-			dir_has_error = 1;
-
+		}
 		if (++n >= npages)
 			n = 0;
 		/* next page is past the blocks we've got */
@@ -421,7 +414,7 @@ found:
 
 struct ext2_dir_entry_2 * ext2_dotdot (struct inode *dir, struct page **p)
 {
-	struct page *page = ext2_get_page(dir, 0, 0);
+	struct page *page = ext2_get_page(dir, 0);
 	ext2_dirent *de = NULL;
 
 	if (!IS_ERR(page)) {
@@ -431,13 +424,13 @@ struct ext2_dir_entry_2 * ext2_dotdot (struct inode *dir, struct page **p)
 	return de;
 }
 
-ino_t ext2_inode_by_name(struct inode *dir, struct qstr *child)
+ino_t ext2_inode_by_name(struct inode * dir, struct dentry *dentry)
 {
 	ino_t res = 0;
-	struct ext2_dir_entry_2 *de;
+	struct ext2_dir_entry_2 * de;
 	struct page *page;
 	
-	de = ext2_find_entry (dir, child, &page);
+	de = ext2_find_entry (dir, dentry, &page);
 	if (de) {
 		res = le32_to_cpu(de->inode);
 		ext2_put_page(page);
@@ -494,7 +487,7 @@ int ext2_add_link (struct dentry *dentry, struct inode *inode)
 	for (n = 0; n <= npages; n++) {
 		char *dir_end;
 
-		page = ext2_get_page(dir, n, 0);
+		page = ext2_get_page(dir, n);
 		err = PTR_ERR(page);
 		if (IS_ERR(page))
 			goto out;
@@ -662,17 +655,14 @@ int ext2_empty_dir (struct inode * inode)
 {
 	struct page *page = NULL;
 	unsigned long i, npages = dir_pages(inode);
-	int dir_has_error = 0;
 
 	for (i = 0; i < npages; i++) {
 		char *kaddr;
 		ext2_dirent * de;
-		page = ext2_get_page(inode, i, dir_has_error);
+		page = ext2_get_page(inode, i);
 
-		if (IS_ERR(page)) {
-			dir_has_error = 1;
+		if (IS_ERR(page))
 			continue;
-		}
 
 		kaddr = page_address(page);
 		de = (ext2_dirent *)kaddr;

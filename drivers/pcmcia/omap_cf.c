@@ -19,12 +19,12 @@
 
 #include <pcmcia/ss.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/sizes.h>
 
-#include <mach/mux.h>
-#include <mach/tc.h>
+#include <asm/arch/mux.h>
+#include <asm/arch/tc.h>
 
 
 /* NOTE:  don't expect this to support many I/O cards.  The 16xx chips have
@@ -38,19 +38,19 @@
 #define	CF_BASE	0xfffe2800
 
 /* status; read after IRQ */
-#define CF_STATUS			(CF_BASE + 0x00)
+#define CF_STATUS_REG		__REG16(CF_BASE + 0x00)
 #	define	CF_STATUS_BAD_READ	(1 << 2)
 #	define	CF_STATUS_BAD_WRITE	(1 << 1)
 #	define	CF_STATUS_CARD_DETECT	(1 << 0)
 
 /* which chipselect (CS0..CS3) is used for CF (active low) */
-#define CF_CFG				(CF_BASE + 0x02)
+#define CF_CFG_REG		__REG16(CF_BASE + 0x02)
 
 /* card reset */
-#define CF_CONTROL			(CF_BASE + 0x04)
+#define CF_CONTROL_REG		__REG16(CF_BASE + 0x04)
 #	define	CF_CONTROL_RESET	(1 << 0)
 
-#define omap_cf_present() (!(omap_readw(CF_STATUS) & CF_STATUS_CARD_DETECT))
+#define omap_cf_present() (!(CF_STATUS_REG & CF_STATUS_CARD_DETECT))
 
 /*--------------------------------------------------------------------------*/
 
@@ -139,11 +139,11 @@ omap_cf_set_socket(struct pcmcia_socket *sock, struct socket_state_t *s)
 		return -EINVAL;
 	}
 
-	control = omap_readw(CF_CONTROL);
+	control = CF_CONTROL_REG;
 	if (s->flags & SS_RESET)
-		omap_writew(CF_CONTROL_RESET, CF_CONTROL);
+		CF_CONTROL_REG = CF_CONTROL_RESET;
 	else
-		omap_writew(0, CF_CONTROL);
+		CF_CONTROL_REG = 0;
 
 	pr_debug("%s: Vcc %d, io_irq %d, flags %04x csc %04x\n",
 		driver_name, s->Vcc, s->io_irq, s->flags, s->csc_mask);
@@ -270,7 +270,7 @@ static int __init omap_cf_probe(struct platform_device *pdev)
 	omap_cfg_reg(V10_1610_CF_IREQ);
 	omap_cfg_reg(W10_1610_CF_RESET);
 
-	omap_writew(~(1 << seg), CF_CFG);
+	CF_CFG_REG = ~(1 << seg);
 
 	pr_info("%s: cs%d on irq %d\n", driver_name, seg, irq);
 
@@ -279,15 +279,14 @@ static int __init omap_cf_probe(struct platform_device *pdev)
 	 * CF/PCMCIA variants...
 	 */
 	pr_debug("%s: cs%d, previous ccs %08x acs %08x\n", driver_name,
-		seg, omap_readl(EMIFS_CCS(seg)), omap_readl(EMIFS_ACS(seg)));
-	omap_writel(0x0004a1b3, EMIFS_CCS(seg));	/* synch mode 4 etc */
-	omap_writel(0x00000000, EMIFS_ACS(seg));	/* OE hold/setup */
+			seg, EMIFS_CCS(seg), EMIFS_ACS(seg));
+	EMIFS_CCS(seg) = 0x0004a1b3;	/* synch mode 4 etc */
+	EMIFS_ACS(seg) = 0x00000000;	/* OE hold/setup */
 
 	/* CF uses armxor_ck, which is "always" available */
 
 	pr_debug("%s: sts %04x cfg %04x control %04x %s\n", driver_name,
-		omap_readw(CF_STATUS), omap_readw(CF_CFG),
-		omap_readw(CF_CONTROL),
+		CF_STATUS_REG, CF_CFG_REG, CF_CONTROL_REG,
 		omap_cf_present() ? "present" : "(not present)");
 
 	cf->socket.owner = THIS_MODULE;

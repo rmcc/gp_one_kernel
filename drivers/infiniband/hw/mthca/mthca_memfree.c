@@ -30,6 +30,8 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * $Id$
  */
 
 #include <linux/mm.h>
@@ -107,11 +109,7 @@ static int mthca_alloc_icm_pages(struct scatterlist *mem, int order, gfp_t gfp_m
 {
 	struct page *page;
 
-	/*
-	 * Use __GFP_ZERO because buggy firmware assumes ICM pages are
-	 * cleared, and subtle failures are seen if they aren't.
-	 */
-	page = alloc_pages(gfp_mask | __GFP_ZERO, order);
+	page = alloc_pages(gfp_mask, order);
 	if (!page)
 		return -ENOMEM;
 

@@ -22,19 +22,20 @@
  * - proto->start() and stop() are called with spin_lock_irq held.
  */
 
-#include <linux/errno.h>
-#include <linux/hdlc.h>
-#include <linux/if_arp.h>
-#include <linux/inetdevice.h>
-#include <linux/init.h>
-#include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/notifier.h>
-#include <linux/pkt_sched.h>
-#include <linux/poll.h>
-#include <linux/rtnetlink.h>
-#include <linux/skbuff.h>
+#include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/poll.h>
+#include <linux/errno.h>
+#include <linux/if_arp.h>
+#include <linux/init.h>
+#include <linux/skbuff.h>
+#include <linux/pkt_sched.h>
+#include <linux/inetdevice.h>
+#include <linux/lapb.h>
+#include <linux/rtnetlink.h>
+#include <linux/notifier.h>
+#include <linux/hdlc.h>
 #include <net/net_namespace.h>
 
 
@@ -42,7 +43,8 @@ static const char* version = "HDLC support module revision 1.22";
 
 #undef DEBUG_LINK
 
-static struct hdlc_proto *first_proto;
+static struct hdlc_proto *first_proto = NULL;
+
 
 static int hdlc_change_mtu(struct net_device *dev, int new_mtu)
 {
@@ -56,7 +58,7 @@ static int hdlc_change_mtu(struct net_device *dev, int new_mtu)
 
 static struct net_device_stats *hdlc_get_stats(struct net_device *dev)
 {
-	return &dev->stats;
+	return hdlc_stats(dev);
 }
 
 
@@ -108,7 +110,7 @@ static int hdlc_device_event(struct notifier_block *this, unsigned long event,
 
 	if (dev->get_stats != hdlc_get_stats)
 		return NOTIFY_DONE; /* not an HDLC device */
-
+ 
 	if (event != NETDEV_CHANGE)
 		return NOTIFY_DONE; /* Only interrested in carrier changes */
 
@@ -312,25 +314,21 @@ void detach_hdlc_protocol(struct net_device *dev)
 
 void register_hdlc_protocol(struct hdlc_proto *proto)
 {
-	rtnl_lock();
 	proto->next = first_proto;
 	first_proto = proto;
-	rtnl_unlock();
 }
 
 
 void unregister_hdlc_protocol(struct hdlc_proto *proto)
 {
-	struct hdlc_proto **p;
-
-	rtnl_lock();
-	p = &first_proto;
-	while (*p != proto) {
-		BUG_ON(!*p);
+	struct hdlc_proto **p = &first_proto;
+	while (*p) {
+		if (*p == proto) {
+			*p = proto->next;
+			return;
+		}
 		p = &((*p)->next);
 	}
-	*p = proto->next;
-	rtnl_unlock();
 }
 
 
@@ -356,7 +354,7 @@ static struct packet_type hdlc_packet_type = {
 
 
 static struct notifier_block hdlc_notifier = {
-	.notifier_call = hdlc_device_event,
+        .notifier_call = hdlc_device_event,
 };
 
 
@@ -366,8 +364,8 @@ static int __init hdlc_module_init(void)
 
 	printk(KERN_INFO "%s\n", version);
 	if ((result = register_netdevice_notifier(&hdlc_notifier)) != 0)
-		return result;
-	dev_add_pack(&hdlc_packet_type);
+                return result;
+        dev_add_pack(&hdlc_packet_type);
 	return 0;
 }
 

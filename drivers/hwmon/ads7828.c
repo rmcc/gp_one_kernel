@@ -64,6 +64,7 @@ static unsigned int ads7828_lsb_resol; /* resolution of the ADC sample lsb */
 
 /* Each client has this additional data */
 struct ads7828_data {
+	struct i2c_client client;
 	struct device *hwmon_dev;
 	struct mutex update_lock; /* mutex protect updates */
 	char valid; /* !=0 if following fields are valid */
@@ -72,10 +73,7 @@ struct ads7828_data {
 };
 
 /* Function declaration - necessary due to function dependencies */
-static int ads7828_detect(struct i2c_client *client, int kind,
-			  struct i2c_board_info *info);
-static int ads7828_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id);
+static int ads7828_detect(struct i2c_adapter *adapter, int address, int kind);
 
 /* The ADS7828 returns the 12-bit sample in two bytes,
 	these are read as a word then byte-swapped */
@@ -158,43 +156,58 @@ static const struct attribute_group ads7828_group = {
 	.attrs = ads7828_attributes,
 };
 
-static int ads7828_remove(struct i2c_client *client)
+static int ads7828_attach_adapter(struct i2c_adapter *adapter)
+{
+	if (!(adapter->class & I2C_CLASS_HWMON))
+		return 0;
+	return i2c_probe(adapter, &addr_data, ads7828_detect);
+}
+
+static int ads7828_detach_client(struct i2c_client *client)
 {
 	struct ads7828_data *data = i2c_get_clientdata(client);
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &ads7828_group);
+	i2c_detach_client(client);
 	kfree(i2c_get_clientdata(client));
 	return 0;
 }
 
-static const struct i2c_device_id ads7828_id[] = {
-	{ "ads7828", ads7828 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, ads7828_id);
-
 /* This is the driver that will be inserted */
 static struct i2c_driver ads7828_driver = {
-	.class = I2C_CLASS_HWMON,
 	.driver = {
 		.name = "ads7828",
 	},
-	.probe = ads7828_probe,
-	.remove = ads7828_remove,
-	.id_table = ads7828_id,
-	.detect = ads7828_detect,
-	.address_data = &addr_data,
+	.attach_adapter = ads7828_attach_adapter,
+	.detach_client = ads7828_detach_client,
 };
 
-/* Return 0 if detection is successful, -ENODEV otherwise */
-static int ads7828_detect(struct i2c_client *client, int kind,
-			  struct i2c_board_info *info)
+/* This function is called by i2c_probe */
+static int ads7828_detect(struct i2c_adapter *adapter, int address, int kind)
 {
-	struct i2c_adapter *adapter = client->adapter;
+	struct i2c_client *client;
+	struct ads7828_data *data;
+	int err = 0;
+	const char *name = "";
 
 	/* Check we have a valid client */
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_READ_WORD_DATA))
-		return -ENODEV;
+		goto exit;
+
+	/* OK. For now, we presume we have a valid client. We now create the
+	client structure, even though we cannot fill it completely yet.
+	But it allows us to access ads7828_read_value. */
+	data = kzalloc(sizeof(struct ads7828_data), GFP_KERNEL);
+	if (!data) {
+		err = -ENOMEM;
+		goto exit;
+	}
+
+	client = &data->client;
+	i2c_set_clientdata(client, data);
+	client->addr = address;
+	client->adapter = adapter;
+	client->driver = &ads7828_driver;
 
 	/* Now, we do the remaining detection. There is no identification
 	dedicated register so attempt to sanity check using knowledge of
@@ -212,34 +225,32 @@ static int ads7828_detect(struct i2c_client *client, int kind,
 				printk(KERN_DEBUG
 				"%s : Doesn't look like an ads7828 device\n",
 				__func__);
-				return -ENODEV;
+				goto exit_free;
 			}
 		}
 	}
-	strlcpy(info->type, "ads7828", I2C_NAME_SIZE);
 
-	return 0;
-}
+	/* Determine the chip type - only one kind supported! */
+	if (kind <= 0)
+		kind = ads7828;
 
-static int ads7828_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
-{
-	struct ads7828_data *data;
-	int err;
+	if (kind == ads7828)
+		name = "ads7828";
 
-	data = kzalloc(sizeof(struct ads7828_data), GFP_KERNEL);
-	if (!data) {
-		err = -ENOMEM;
-		goto exit;
-	}
+	/* Fill in the remaining client fields, put it into the global list */
+	strlcpy(client->name, name, I2C_NAME_SIZE);
 
-	i2c_set_clientdata(client, data);
 	mutex_init(&data->update_lock);
+
+	/* Tell the I2C layer a new client has arrived */
+	err = i2c_attach_client(client);
+	if (err)
+		goto exit_free;
 
 	/* Register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &ads7828_group);
 	if (err)
-		goto exit_free;
+		goto exit_detach;
 
 	data->hwmon_dev = hwmon_device_register(&client->dev);
 	if (IS_ERR(data->hwmon_dev)) {
@@ -251,6 +262,8 @@ static int ads7828_probe(struct i2c_client *client,
 
 exit_remove:
 	sysfs_remove_group(&client->dev.kobj, &ads7828_group);
+exit_detach:
+	i2c_detach_client(client);
 exit_free:
 	kfree(data);
 exit:

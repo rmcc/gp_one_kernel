@@ -24,7 +24,7 @@
 				 driver))
 
 struct device platform_bus = {
-	.init_name	= "platform",
+	.bus_id		= "platform",
 };
 EXPORT_SYMBOL_GPL(platform_bus);
 
@@ -42,8 +42,10 @@ struct resource *platform_get_resource(struct platform_device *dev,
 	for (i = 0; i < dev->num_resources; i++) {
 		struct resource *r = &dev->resource[i];
 
-		if (type == resource_type(r) && num-- == 0)
-			return r;
+		if ((r->flags & (IORESOURCE_IO|IORESOURCE_MEM|
+				 IORESOURCE_IRQ|IORESOURCE_DMA)) == type)
+			if (num-- == 0)
+				return r;
 	}
 	return NULL;
 }
@@ -76,8 +78,10 @@ struct resource *platform_get_resource_byname(struct platform_device *dev,
 	for (i = 0; i < dev->num_resources; i++) {
 		struct resource *r = &dev->resource[i];
 
-		if (type == resource_type(r) && !strcmp(r->name, name))
-			return r;
+		if ((r->flags & (IORESOURCE_IO|IORESOURCE_MEM|
+				 IORESOURCE_IRQ|IORESOURCE_DMA)) == type)
+			if (!strcmp(r->name, name))
+				return r;
 	}
 	return NULL;
 }
@@ -242,49 +246,45 @@ int platform_device_add(struct platform_device *pdev)
 	pdev->dev.bus = &platform_bus_type;
 
 	if (pdev->id != -1)
-		dev_set_name(&pdev->dev, "%s.%d", pdev->name,  pdev->id);
+		snprintf(pdev->dev.bus_id, BUS_ID_SIZE, "%s.%d", pdev->name,
+			 pdev->id);
 	else
-		dev_set_name(&pdev->dev, pdev->name);
+		strlcpy(pdev->dev.bus_id, pdev->name, BUS_ID_SIZE);
 
 	for (i = 0; i < pdev->num_resources; i++) {
 		struct resource *p, *r = &pdev->resource[i];
 
 		if (r->name == NULL)
-			r->name = dev_name(&pdev->dev);
+			r->name = pdev->dev.bus_id;
 
 		p = r->parent;
 		if (!p) {
-			if (resource_type(r) == IORESOURCE_MEM)
+			if (r->flags & IORESOURCE_MEM)
 				p = &iomem_resource;
-			else if (resource_type(r) == IORESOURCE_IO)
+			else if (r->flags & IORESOURCE_IO)
 				p = &ioport_resource;
 		}
 
 		if (p && insert_resource(p, r)) {
 			printk(KERN_ERR
 			       "%s: failed to claim resource %d\n",
-			       dev_name(&pdev->dev), i);
+			       pdev->dev.bus_id, i);
 			ret = -EBUSY;
 			goto failed;
 		}
 	}
 
 	pr_debug("Registering platform device '%s'. Parent at %s\n",
-		 dev_name(&pdev->dev), dev_name(pdev->dev.parent));
+		 pdev->dev.bus_id, pdev->dev.parent->bus_id);
 
 	ret = device_add(&pdev->dev);
 	if (ret == 0)
 		return ret;
 
  failed:
-	while (--i >= 0) {
-		struct resource *r = &pdev->resource[i];
-		unsigned long type = resource_type(r);
-
-		if (type == IORESOURCE_MEM || type == IORESOURCE_IO)
-			release_resource(r);
-	}
-
+	while (--i >= 0)
+		if (pdev->resource[i].flags & (IORESOURCE_MEM|IORESOURCE_IO))
+			release_resource(&pdev->resource[i]);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(platform_device_add);
@@ -306,9 +306,7 @@ void platform_device_del(struct platform_device *pdev)
 
 		for (i = 0; i < pdev->num_resources; i++) {
 			struct resource *r = &pdev->resource[i];
-			unsigned long type = resource_type(r);
-
-			if (type == IORESOURCE_MEM || type == IORESOURCE_IO)
+			if (r->flags & (IORESOURCE_MEM|IORESOURCE_IO))
 				release_resource(r);
 		}
 	}
@@ -392,53 +390,6 @@ error:
 	return ERR_PTR(retval);
 }
 EXPORT_SYMBOL_GPL(platform_device_register_simple);
-
-/**
- * platform_device_register_data
- * @parent: parent device for the device we're adding
- * @name: base name of the device we're adding
- * @id: instance id
- * @data: platform specific data for this platform device
- * @size: size of platform specific data
- *
- * This function creates a simple platform device that requires minimal
- * resource and memory management. Canned release function freeing memory
- * allocated for the device allows drivers using such devices to be
- * unloaded without waiting for the last reference to the device to be
- * dropped.
- */
-struct platform_device *platform_device_register_data(
-		struct device *parent,
-		const char *name, int id,
-		const void *data, size_t size)
-{
-	struct platform_device *pdev;
-	int retval;
-
-	pdev = platform_device_alloc(name, id);
-	if (!pdev) {
-		retval = -ENOMEM;
-		goto error;
-	}
-
-	pdev->dev.parent = parent;
-
-	if (size) {
-		retval = platform_device_add_data(pdev, data, size);
-		if (retval)
-			goto error;
-	}
-
-	retval = platform_device_add(pdev);
-	if (retval)
-		goto error;
-
-	return pdev;
-
-error:
-	platform_device_put(pdev);
-	return ERR_PTR(retval);
-}
 
 static int platform_drv_probe(struct device *_dev)
 {
@@ -606,12 +557,10 @@ static int platform_match(struct device *dev, struct device_driver *drv)
 	struct platform_device *pdev;
 
 	pdev = container_of(dev, struct platform_device, dev);
-	return (strcmp(pdev->name, drv->name) == 0);
+	return (strncmp(pdev->name, drv->name, BUS_ID_SIZE) == 0);
 }
 
-#ifdef CONFIG_PM_SLEEP
-
-static int platform_legacy_suspend(struct device *dev, pm_message_t mesg)
+static int platform_suspend(struct device *dev, pm_message_t mesg)
 {
 	int ret = 0;
 
@@ -621,7 +570,7 @@ static int platform_legacy_suspend(struct device *dev, pm_message_t mesg)
 	return ret;
 }
 
-static int platform_legacy_suspend_late(struct device *dev, pm_message_t mesg)
+static int platform_suspend_late(struct device *dev, pm_message_t mesg)
 {
 	struct platform_driver *drv = to_platform_driver(dev->driver);
 	struct platform_device *pdev;
@@ -634,7 +583,7 @@ static int platform_legacy_suspend_late(struct device *dev, pm_message_t mesg)
 	return ret;
 }
 
-static int platform_legacy_resume_early(struct device *dev)
+static int platform_resume_early(struct device *dev)
 {
 	struct platform_driver *drv = to_platform_driver(dev->driver);
 	struct platform_device *pdev;
@@ -647,7 +596,7 @@ static int platform_legacy_resume_early(struct device *dev)
 	return ret;
 }
 
-static int platform_legacy_resume(struct device *dev)
+static int platform_resume(struct device *dev)
 {
 	int ret = 0;
 
@@ -657,298 +606,15 @@ static int platform_legacy_resume(struct device *dev)
 	return ret;
 }
 
-static int platform_pm_prepare(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (drv && drv->pm && drv->pm->prepare)
-		ret = drv->pm->prepare(dev);
-
-	return ret;
-}
-
-static void platform_pm_complete(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-
-	if (drv && drv->pm && drv->pm->complete)
-		drv->pm->complete(dev);
-}
-
-#ifdef CONFIG_SUSPEND
-
-static int platform_pm_suspend(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->suspend)
-			ret = drv->pm->suspend(dev);
-	} else {
-		ret = platform_legacy_suspend(dev, PMSG_SUSPEND);
-	}
-
-	return ret;
-}
-
-static int platform_pm_suspend_noirq(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->suspend_noirq)
-			ret = drv->pm->suspend_noirq(dev);
-	} else {
-		ret = platform_legacy_suspend_late(dev, PMSG_SUSPEND);
-	}
-
-	return ret;
-}
-
-static int platform_pm_resume(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->resume)
-			ret = drv->pm->resume(dev);
-	} else {
-		ret = platform_legacy_resume(dev);
-	}
-
-	return ret;
-}
-
-static int platform_pm_resume_noirq(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->resume_noirq)
-			ret = drv->pm->resume_noirq(dev);
-	} else {
-		ret = platform_legacy_resume_early(dev);
-	}
-
-	return ret;
-}
-
-#else /* !CONFIG_SUSPEND */
-
-#define platform_pm_suspend		NULL
-#define platform_pm_resume		NULL
-#define platform_pm_suspend_noirq	NULL
-#define platform_pm_resume_noirq	NULL
-
-#endif /* !CONFIG_SUSPEND */
-
-#ifdef CONFIG_HIBERNATION
-
-static int platform_pm_freeze(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->freeze)
-			ret = drv->pm->freeze(dev);
-	} else {
-		ret = platform_legacy_suspend(dev, PMSG_FREEZE);
-	}
-
-	return ret;
-}
-
-static int platform_pm_freeze_noirq(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->freeze_noirq)
-			ret = drv->pm->freeze_noirq(dev);
-	} else {
-		ret = platform_legacy_suspend_late(dev, PMSG_FREEZE);
-	}
-
-	return ret;
-}
-
-static int platform_pm_thaw(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->thaw)
-			ret = drv->pm->thaw(dev);
-	} else {
-		ret = platform_legacy_resume(dev);
-	}
-
-	return ret;
-}
-
-static int platform_pm_thaw_noirq(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->thaw_noirq)
-			ret = drv->pm->thaw_noirq(dev);
-	} else {
-		ret = platform_legacy_resume_early(dev);
-	}
-
-	return ret;
-}
-
-static int platform_pm_poweroff(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->poweroff)
-			ret = drv->pm->poweroff(dev);
-	} else {
-		ret = platform_legacy_suspend(dev, PMSG_HIBERNATE);
-	}
-
-	return ret;
-}
-
-static int platform_pm_poweroff_noirq(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->poweroff_noirq)
-			ret = drv->pm->poweroff_noirq(dev);
-	} else {
-		ret = platform_legacy_suspend_late(dev, PMSG_HIBERNATE);
-	}
-
-	return ret;
-}
-
-static int platform_pm_restore(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->restore)
-			ret = drv->pm->restore(dev);
-	} else {
-		ret = platform_legacy_resume(dev);
-	}
-
-	return ret;
-}
-
-static int platform_pm_restore_noirq(struct device *dev)
-{
-	struct device_driver *drv = dev->driver;
-	int ret = 0;
-
-	if (!drv)
-		return 0;
-
-	if (drv->pm) {
-		if (drv->pm->restore_noirq)
-			ret = drv->pm->restore_noirq(dev);
-	} else {
-		ret = platform_legacy_resume_early(dev);
-	}
-
-	return ret;
-}
-
-#else /* !CONFIG_HIBERNATION */
-
-#define platform_pm_freeze		NULL
-#define platform_pm_thaw		NULL
-#define platform_pm_poweroff		NULL
-#define platform_pm_restore		NULL
-#define platform_pm_freeze_noirq	NULL
-#define platform_pm_thaw_noirq		NULL
-#define platform_pm_poweroff_noirq	NULL
-#define platform_pm_restore_noirq	NULL
-
-#endif /* !CONFIG_HIBERNATION */
-
-static struct dev_pm_ops platform_dev_pm_ops = {
-	.prepare = platform_pm_prepare,
-	.complete = platform_pm_complete,
-	.suspend = platform_pm_suspend,
-	.resume = platform_pm_resume,
-	.freeze = platform_pm_freeze,
-	.thaw = platform_pm_thaw,
-	.poweroff = platform_pm_poweroff,
-	.restore = platform_pm_restore,
-	.suspend_noirq = platform_pm_suspend_noirq,
-	.resume_noirq = platform_pm_resume_noirq,
-	.freeze_noirq = platform_pm_freeze_noirq,
-	.thaw_noirq = platform_pm_thaw_noirq,
-	.poweroff_noirq = platform_pm_poweroff_noirq,
-	.restore_noirq = platform_pm_restore_noirq,
-};
-
-#define PLATFORM_PM_OPS_PTR	(&platform_dev_pm_ops)
-
-#else /* !CONFIG_PM_SLEEP */
-
-#define PLATFORM_PM_OPS_PTR	NULL
-
-#endif /* !CONFIG_PM_SLEEP */
-
 struct bus_type platform_bus_type = {
 	.name		= "platform",
 	.dev_attrs	= platform_dev_attrs,
 	.match		= platform_match,
 	.uevent		= platform_uevent,
-	.pm		= PLATFORM_PM_OPS_PTR,
+	.suspend	= platform_suspend,
+	.suspend_late	= platform_suspend_late,
+	.resume_early	= platform_resume_early,
+	.resume		= platform_resume,
 };
 EXPORT_SYMBOL_GPL(platform_bus_type);
 

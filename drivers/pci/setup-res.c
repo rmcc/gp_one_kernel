@@ -26,13 +26,12 @@
 #include "pci.h"
 
 
-void pci_update_resource(struct pci_dev *dev, int resno)
+void
+pci_update_resource(struct pci_dev *dev, struct resource *res, int resno)
 {
 	struct pci_bus_region region;
 	u32 new, check, mask;
 	int reg;
-	enum pci_bar_type type;
-	struct resource *res = dev->resource + resno;
 
 	/*
 	 * Ignore resources for unimplemented BARs and unused resource slots
@@ -44,18 +43,20 @@ void pci_update_resource(struct pci_dev *dev, int resno)
 	/*
 	 * Ignore non-moveable resources.  This might be legacy resources for
 	 * which no functional BAR register exists or another important
-	 * system resource we shouldn't move around.
+	 * system resource we should better not move around in system address
+	 * space.
 	 */
 	if (res->flags & IORESOURCE_PCI_FIXED)
 		return;
 
 	pcibios_resource_to_bus(dev, &region, res);
 
-	dev_dbg(&dev->dev, "BAR %d: got res %pR bus [%#llx-%#llx] "
-		"flags %#lx\n", resno, res,
+	pr_debug("  got res [%llx:%llx] bus [%llx:%llx] flags %lx for "
+		 "BAR %d of %s\n", (unsigned long long)res->start,
+		 (unsigned long long)res->end,
 		 (unsigned long long)region.start,
 		 (unsigned long long)region.end,
-		 (unsigned long)res->flags);
+		 (unsigned long)res->flags, resno, pci_name(dev));
 
 	new = region.start | (res->flags & PCI_REGION_FLAG_MASK);
 	if (res->flags & IORESOURCE_IO)
@@ -63,21 +64,26 @@ void pci_update_resource(struct pci_dev *dev, int resno)
 	else
 		mask = (u32)PCI_BASE_ADDRESS_MEM_MASK;
 
-	reg = pci_resource_bar(dev, resno, &type);
-	if (!reg)
-		return;
-	if (type != pci_bar_unknown) {
+	if (resno < 6) {
+		reg = PCI_BASE_ADDRESS_0 + 4 * resno;
+	} else if (resno == PCI_ROM_RESOURCE) {
 		if (!(res->flags & IORESOURCE_ROM_ENABLE))
 			return;
 		new |= PCI_ROM_ADDRESS_ENABLE;
+		reg = dev->rom_base_reg;
+	} else {
+		/* Hmm, non-standard resource. */
+	
+		return;		/* kill uninitialised var warning */
 	}
 
 	pci_write_config_dword(dev, reg, new);
 	pci_read_config_dword(dev, reg, &check);
 
 	if ((new ^ check) & mask) {
-		dev_err(&dev->dev, "BAR %d: error updating (%#08x != %#08x)\n",
-			resno, new, check);
+		printk(KERN_ERR "PCI: Error while updating region "
+		       "%s/%d (%08x != %08x)\n", pci_name(dev), resno,
+		       new, check);
 	}
 
 	if ((new & (PCI_BASE_ADDRESS_SPACE|PCI_BASE_ADDRESS_MEM_TYPE_MASK)) ==
@@ -86,14 +92,15 @@ void pci_update_resource(struct pci_dev *dev, int resno)
 		pci_write_config_dword(dev, reg + 4, new);
 		pci_read_config_dword(dev, reg + 4, &check);
 		if (check != new) {
-			dev_err(&dev->dev, "BAR %d: error updating "
-			       "(high %#08x != %#08x)\n", resno, new, check);
+			printk(KERN_ERR "PCI: Error updating region "
+			       "%s/%d (high %08x != %08x)\n",
+			       pci_name(dev), resno, new, check);
 		}
 	}
 	res->flags &= ~IORESOURCE_UNSET;
-	dev_dbg(&dev->dev, "BAR %d: moved to bus [%#llx-%#llx] flags %#lx\n",
-		resno, (unsigned long long)region.start,
-		(unsigned long long)region.end, res->flags);
+	pr_debug("PCI: moved device %s resource %d (%lx) to %x\n",
+		pci_name(dev), resno, res->flags,
+		new & ~PCI_REGION_FLAG_MASK);
 }
 
 int pci_claim_resource(struct pci_dev *dev, int resource)
@@ -110,11 +117,12 @@ int pci_claim_resource(struct pci_dev *dev, int resource)
 		err = insert_resource(root, res);
 
 	if (err) {
-		dev_err(&dev->dev, "BAR %d: %s of %s %pR\n",
-			resource,
-			root ? "address space collision on" :
-				"no parent found for",
-			dtype, res);
+		printk(KERN_ERR "PCI: %s region %d of %s %s [%llx:%llx]\n",
+			root ? "Address space collision on" :
+				"No parent found for",
+			resource, dtype, pci_name(dev),
+			(unsigned long long)res->start,
+			(unsigned long long)res->end);
 	}
 
 	return err;
@@ -127,14 +135,16 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 	resource_size_t size, min, align;
 	int ret;
 
-	size = resource_size(res);
+	size = res->end - res->start + 1;
 	min = (res->flags & IORESOURCE_IO) ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM;
 
 	align = resource_alignment(res);
 	if (!align) {
-		dev_info(&dev->dev, "BAR %d: can't allocate resource (bogus "
-			"alignment) %pR flags %#lx\n",
-			resno, res, res->flags);
+		printk(KERN_ERR "PCI: Cannot allocate resource (bogus "
+			"alignment) %d [%llx:%llx] (flags %lx) of %s\n",
+			resno, (unsigned long long)res->start,
+			(unsigned long long)res->end, res->flags,
+			pci_name(dev));
 		return -EINVAL;
 	}
 
@@ -155,12 +165,15 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 	}
 
 	if (ret) {
-		dev_info(&dev->dev, "BAR %d: can't allocate %s resource %pR\n",
-			resno, res->flags & IORESOURCE_IO ? "I/O" : "mem", res);
+		printk(KERN_ERR "PCI: Failed to allocate %s resource "
+			"#%d:%llx@%llx for %s\n",
+			res->flags & IORESOURCE_IO ? "I/O" : "mem",
+			resno, (unsigned long long)size,
+			(unsigned long long)res->start, pci_name(dev));
 	} else {
 		res->flags &= ~IORESOURCE_STARTALIGN;
 		if (resno < PCI_BRIDGE_RESOURCES)
-			pci_update_resource(dev, resno);
+			pci_update_resource(dev, res, resno);
 	}
 
 	return ret;
@@ -192,10 +205,13 @@ int pci_assign_resource_fixed(struct pci_dev *dev, int resno)
 	}
 
 	if (ret) {
-		dev_err(&dev->dev, "BAR %d: can't allocate %s resource %pR\n",
-			resno, res->flags & IORESOURCE_IO ? "I/O" : "mem", res);
+		printk(KERN_ERR "PCI: Failed to allocate %s resource "
+				"#%d:%llx@%llx for %s\n",
+			res->flags & IORESOURCE_IO ? "I/O" : "mem",
+			resno, (unsigned long long)(res->end - res->start + 1),
+			(unsigned long long)res->start, pci_name(dev));
 	} else if (resno < PCI_BRIDGE_RESOURCES) {
-		pci_update_resource(dev, resno);
+		pci_update_resource(dev, res, resno);
 	}
 
 	return ret;
@@ -223,9 +239,11 @@ void pdev_sort_resources(struct pci_dev *dev, struct resource_list *head)
 
 		r_align = resource_alignment(r);
 		if (!r_align) {
-			dev_warn(&dev->dev, "BAR %d: bogus alignment "
-				"%pR flags %#lx\n",
-				i, r, r->flags);
+			printk(KERN_WARNING "PCI: bogus alignment of resource "
+				"%d [%llx:%llx] (flags %lx) of %s\n",
+				i, (unsigned long long)r->start,
+				(unsigned long long)r->end, r->flags,
+				pci_name(dev));
 			continue;
 		}
 		for (list = head; ; list = list->next) {
@@ -273,7 +291,9 @@ int pci_enable_resources(struct pci_dev *dev, int mask)
 
 		if (!r->parent) {
 			dev_err(&dev->dev, "device not available because of "
-				"BAR %d %pR collisions\n", i, r);
+				"BAR %d [%llx:%llx] collisions\n", i,
+				(unsigned long long) r->start,
+				(unsigned long long) r->end);
 			return -EINVAL;
 		}
 

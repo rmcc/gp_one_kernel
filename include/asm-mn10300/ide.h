@@ -23,6 +23,10 @@
 #undef SUPPORT_VLB_SYNC
 #define SUPPORT_VLB_SYNC 0
 
+#ifndef MAX_HWIFS
+#define MAX_HWIFS 8
+#endif
+
 /*
  * some bits needed for parts of the IDE subsystem to compile
  */

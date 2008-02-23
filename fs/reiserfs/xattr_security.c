@@ -6,6 +6,8 @@
 #include <linux/reiserfs_xattr.h>
 #include <asm/uaccess.h>
 
+#define XATTR_SECURITY_PREFIX "security."
+
 static int
 security_get(struct inode *inode, const char *name, void *buffer, size_t size)
 {

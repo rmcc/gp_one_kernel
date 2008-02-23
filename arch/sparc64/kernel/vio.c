@@ -152,7 +152,7 @@ show_pciobppath_attr(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR(obppath, S_IRUSR | S_IRGRP | S_IROTH,
 		   show_pciobppath_attr, NULL);
 
-static struct device_node *cdev_node;
+struct device_node *cdev_node;
 
 static struct vio_dev *root_vdev;
 static u64 cdev_cfg_handle;
@@ -224,7 +224,7 @@ static struct vio_dev *vio_create_one(struct mdesc_handle *hp, u64 mp,
 	if (!strcmp(type, "domain-services-port"))
 		bus_id_name = "ds";
 
-	if (strlen(bus_id_name) >= BUS_ID_SIZE - 4) {
+	if (strlen(bus_id_name) >= KOBJ_NAME_LEN - 4) {
 		printk(KERN_ERR "VIO: bus_id_name [%s] is too long.\n",
 		       bus_id_name);
 		return NULL;
@@ -260,14 +260,16 @@ static struct vio_dev *vio_create_one(struct mdesc_handle *hp, u64 mp,
 	vio_fill_channel_info(hp, mp, vdev);
 
 	if (!id) {
-		dev_set_name(&vdev->dev, "%s", bus_id_name);
+		snprintf(vdev->dev.bus_id, BUS_ID_SIZE, "%s",
+			 bus_id_name);
 		vdev->dev_no = ~(u64)0;
 	} else if (!cfg_handle) {
-		dev_set_name(&vdev->dev, "%s-%lu", bus_id_name, *id);
+		snprintf(vdev->dev.bus_id, BUS_ID_SIZE, "%s-%lu",
+			 bus_id_name, *id);
 		vdev->dev_no = *id;
 	} else {
-		dev_set_name(&vdev->dev, "%s-%lu-%lu", bus_id_name,
-			     *cfg_handle, *id);
+		snprintf(vdev->dev.bus_id, BUS_ID_SIZE, "%s-%lu-%lu",
+			 bus_id_name, *cfg_handle, *id);
 		vdev->dev_no = *cfg_handle;
 	}
 
@@ -290,12 +292,12 @@ static struct vio_dev *vio_create_one(struct mdesc_handle *hp, u64 mp,
 	}
 	vdev->dp = dp;
 
-	printk(KERN_INFO "VIO: Adding device %s\n", dev_name(&vdev->dev));
+	printk(KERN_INFO "VIO: Adding device %s\n", vdev->dev.bus_id);
 
 	err = device_register(&vdev->dev);
 	if (err) {
 		printk(KERN_ERR "VIO: Could not register device %s, err=%d\n",
-		       dev_name(&vdev->dev), err);
+		       vdev->dev.bus_id, err);
 		kfree(vdev);
 		return NULL;
 	}
@@ -328,7 +330,7 @@ static void vio_remove(struct mdesc_handle *hp, u64 node)
 	dev = device_find_child(&root_vdev->dev, (void *) node,
 				vio_md_node_match);
 	if (dev) {
-		printk(KERN_INFO "VIO: Removing device %s\n", dev_name(dev));
+		printk(KERN_INFO "VIO: Removing device %s\n", dev->bus_id);
 
 		device_unregister(dev);
 	}
@@ -371,9 +373,9 @@ static struct mdesc_notifier_client vio_ds_notifier = {
 	.node_name	= "domain-services-port",
 };
 
-static const char *channel_devices_node = "channel-devices";
-static const char *channel_devices_compat = "SUNW,sun4v-channel-devices";
-static const char *cfg_handle_prop = "cfg-handle";
+const char *channel_devices_node = "channel-devices";
+const char *channel_devices_compat = "SUNW,sun4v-channel-devices";
+const char *cfg_handle_prop = "cfg-handle";
 
 static int __init vio_init(void)
 {

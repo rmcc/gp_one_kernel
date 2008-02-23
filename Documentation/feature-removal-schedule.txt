@@ -6,24 +6,6 @@ be removed from this file.
 
 ---------------------------
 
-What:	old static regulatory information and ieee80211_regdom module parameter
-When:	2.6.29
-Why:	The old regulatory infrastructure has been replaced with a new one
-	which does not require statically defined regulatory domains. We do
-	not want to keep static regulatory domains in the kernel due to the
-	the dynamic nature of regulatory law and localization. We kept around
-	the old static definitions for the regulatory domains of:
-		* US
-		* JP
-		* EU
-	and used by default the US when CONFIG_WIRELESS_OLD_REGULATORY was
-	set. We also kept around the ieee80211_regdom module parameter in case
-	some applications were relying on it. Changing regulatory domains
-	can now be done instead by using nl80211, as is done with iw.
-Who:	Luis R. Rodriguez <lrodriguez@atheros.com>
-
----------------------------
-
 What:	dev->power.power_state
 When:	July 2007
 Why:	Broken design for runtime control over driver power states, confusing
@@ -34,6 +16,15 @@ Why:	Broken design for runtime control over driver power states, confusing
 	use it were broken.  Drivers should instead be exposing domain-specific
 	interfaces either to kernel or to userspace.
 Who:	Pavel Machek <pavel@suse.cz>
+
+---------------------------
+
+What:	old NCR53C9x driver
+When:	October 2007
+Why:	Replaced by the much better esp_scsi driver.  Actual low-level
+	driver can be ported over almost trivially.
+Who:	David Miller <davem@davemloft.net>
+	Christoph Hellwig <hch@lst.de>
 
 ---------------------------
 
@@ -120,6 +111,13 @@ Who:	Christoph Hellwig <hch@lst.de>
 
 ---------------------------
 
+What:   eepro100 network driver
+When:   January 2007
+Why:    replaced by the e100 driver
+Who:    Adrian Bunk <bunk@stusta.de>
+
+---------------------------
+
 What:	Unused EXPORT_SYMBOL/EXPORT_SYMBOL_GPL exports
 	(temporary transition config option provided until then)
 	The transition config option will also be removed at the same time.
@@ -137,6 +135,24 @@ Why:	The stacking of class devices makes these values misleading and
 	Class devices should not carry any of these properties, and bus
 	devices have SUBSYTEM and DRIVER as a replacement.
 Who:	Kay Sievers <kay.sievers@suse.de>
+
+---------------------------
+
+What:	find_task_by_pid
+When:	2.6.26
+Why:	With pid namespaces, calling this funciton will return the
+	wrong task when called from inside a namespace.
+
+	The best way to save a task pid and find a task by this
+	pid later, is to find this task's struct pid pointer (or get
+	it directly from the task) and call pid_task() later.
+
+	If someone really needs to get a task by its pid_t, then
+	he most likely needs the find_task_by_vpid() to get the
+	task from the same namespace as the current task is in, but
+	this may be not so in general.
+
+Who:	Pavel Emelyanov <xemul@openvz.org>
 
 ---------------------------
 
@@ -183,6 +199,19 @@ Who:  Tejun Heo <htejun@gmail.com>
 
 ---------------------------
 
+What: The arch/ppc and include/asm-ppc directories
+When: Jun 2008
+Why:  The arch/powerpc tree is the merged architecture for ppc32 and ppc64
+      platforms.  Currently there are efforts underway to port the remaining
+      arch/ppc platforms to the merged tree.  New submissions to the arch/ppc
+      tree have been frozen with the 2.6.22 kernel release and that tree will
+      remain in bug-fix only mode until its scheduled removal.  Platforms
+      that are not ported by June 2008 will be removed due to the lack of an
+      interested maintainer.
+Who:  linuxppc-dev@ozlabs.org
+
+---------------------------
+
 What:	i386/x86_64 bzImage symlinks
 When:	April 2010
 
@@ -190,6 +219,13 @@ Why:	The i386/x86_64 merge provides a symlink to the old bzImage
 	location so not yet updated user space tools, e.g. package
 	scripts, do not break.
 Who:	Thomas Gleixner <tglx@linutronix.de>
+
+---------------------------
+
+What:	i2c-i810, i2c-prosavage and i2c-savage4
+When:	May 2008
+Why:	These drivers are superseded by i810fb, intelfb and savagefb.
+Who:	Jean Delvare <khali@linux-fr.org>
 
 ---------------------------
 
@@ -219,9 +255,6 @@ What (Why):
 	- xt_mark match revision 0
 	  (superseded by xt_mark match revision 1)
 
-	- xt_recent: the old ipt_recent proc dir
-	  (superseded by /proc/net/xt_recent)
-
 When:	January 2009 or Linux 2.7.0, whichever comes first
 Why:	Superseded by newer revisions or modules
 Who:	Jan Engelhardt <jengelh@computergmbh.de>
@@ -237,6 +270,18 @@ Who:	Michael Buesch <mb@bu3sch.de>
 
 ---------------------------
 
+What:	init_mm export
+When:	2.6.26
+Why:	Not used in-tree. The current out-of-tree users used it to
+	work around problems in the CPA code which should be resolved
+	by now. One usecase was described to provide verification code
+	of the CPA operation. That's a good idea in general, but such
+	code / infrastructure should be in the kernel and not in some
+	out-of-tree driver.
+Who:	Thomas Gleixner <tglx@linutronix.de>
+
+----------------------------
+
 What:	usedac i386 kernel parameter
 When:	2.6.27
 Why:	replaced by allowdac and no dac combination
@@ -244,19 +289,11 @@ Who:	Glauber Costa <gcosta@redhat.com>
 
 ---------------------------
 
-What:	remove HID compat support
-When:	2.6.29
-Why:	needed only as a temporary solution until distros fix themselves up
-Who:	Jiri Slaby <jirislaby@gmail.com>
-
----------------------------
-
-What: print_fn_descriptor_symbol()
-When: October 2009
-Why:  The %pF vsprintf format provides the same functionality in a
-      simpler way.  print_fn_descriptor_symbol() is deprecated but
-      still present to give out-of-tree modules time to change.
-Who:  Bjorn Helgaas <bjorn.helgaas@hp.com>
+What:	old style serial driver for ColdFire (CONFIG_SERIAL_COLDFIRE)
+When:	2.6.28
+Why:	This driver still uses the old interface and has been replaced
+	by CONFIG_SERIAL_MCF.
+Who:	Sebastian Siewior <sebastian@breakpoint.cc>
 
 ---------------------------
 
@@ -270,68 +307,8 @@ Who:	ocfs2-devel@oss.oracle.com
 
 ---------------------------
 
-What:	SCTP_GET_PEER_ADDRS_NUM_OLD, SCTP_GET_PEER_ADDRS_OLD,
-	SCTP_GET_LOCAL_ADDRS_NUM_OLD, SCTP_GET_LOCAL_ADDRS_OLD
-When: 	June 2009
-Why:    A newer version of the options have been introduced in 2005 that
-	removes the limitions of the old API.  The sctp library has been
-        converted to use these new options at the same time.  Any user
-	space app that directly uses the old options should convert to using
-	the new options.
-Who:	Vlad Yasevich <vladislav.yasevich@hp.com>
-
----------------------------
-
-What:	CONFIG_THERMAL_HWMON
-When:	January 2009
-Why:	This option was introduced just to allow older lm-sensors userspace
-	to keep working over the upgrade to 2.6.26. At the scheduled time of
-	removal fixed lm-sensors (2.x or 3.x) should be readily available.
-Who:	Rene Herman <rene.herman@gmail.com>
-
----------------------------
-
-What:	Code that is now under CONFIG_WIRELESS_EXT_SYSFS
-	(in net/core/net-sysfs.c)
-When:	After the only user (hal) has seen a release with the patches
-	for enough time, probably some time in 2010.
-Why:	Over 1K .text/.data size reduction, data is available in other
-	ways (ioctls)
-Who:	Johannes Berg <johannes@sipsolutions.net>
-
----------------------------
-
-What: CONFIG_NF_CT_ACCT
-When: 2.6.29
-Why:  Accounting can now be enabled/disabled without kernel recompilation.
-      Currently used only to set a default value for a feature that is also
-      controlled by a kernel/module/sysfs/sysctl parameter.
-Who:  Krzysztof Piotr Oledzki <ole@ans.pl>
-
----------------------------
-
-What:	i2c_attach_client(), i2c_detach_client(), i2c_driver->detach_client()
-When:	2.6.29 (ideally) or 2.6.30 (more likely)
-Why:	Deprecated by the new (standard) device driver binding model. Use
-	i2c_driver->probe() and ->remove() instead.
-Who:	Jean Delvare <khali@linux-fr.org>
-
----------------------------
-
-What:	fscher and fscpos drivers
-When:	June 2009
-Why:	Deprecated by the new fschmd driver.
-Who:	Hans de Goede <hdegoede@redhat.com>
-	Jean Delvare <khali@linux-fr.org>
-
----------------------------
-
-What:	SELinux "compat_net" functionality
-When:	2.6.30 at the earliest
-Why:	In 2.6.18 the Secmark concept was introduced to replace the "compat_net"
-	network access control functionality of SELinux.  Secmark offers both
-	better performance and greater flexibility than the "compat_net"
-	mechanism.  Now that the major Linux distributions have moved to
-	Secmark, it is time to deprecate the older mechanism and start the
-	process of removing the old code.
-Who:	Paul Moore <paul.moore@hp.com>
+What:	asm/semaphore.h
+When:	2.6.26
+Why:	Implementation became generic; users should now include
+	linux/semaphore.h instead.
+Who:	Matthew Wilcox <willy@linux.intel.com>

@@ -2,9 +2,6 @@
 #include <linux/spinlock.h>
 #include <linux/virtio_config.h>
 
-/* Unique numbering for virtio devices. */
-static unsigned int dev_index;
-
 static ssize_t device_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
@@ -71,6 +68,13 @@ static int virtio_uevent(struct device *_dv, struct kobj_uevent_env *env)
 			      dev->id.device, dev->id.vendor);
 }
 
+static struct bus_type virtio_bus = {
+	.name  = "virtio",
+	.match = virtio_dev_match,
+	.dev_attrs = virtio_dev_attrs,
+	.uevent = virtio_uevent,
+};
+
 static void add_status(struct virtio_device *dev, unsigned status)
 {
 	dev->config->set_status(dev, dev->config->get_status(dev) | status);
@@ -113,17 +117,13 @@ static int virtio_dev_probe(struct device *_d)
 			set_bit(f, dev->features);
 	}
 
-	/* Transport features always preserved to pass to finalize_features. */
-	for (i = VIRTIO_TRANSPORT_F_START; i < VIRTIO_TRANSPORT_F_END; i++)
-		if (device_features & (1 << i))
-			set_bit(i, dev->features);
-
 	err = drv->probe(dev);
 	if (err)
 		add_status(dev, VIRTIO_CONFIG_S_FAILED);
 	else {
-		dev->config->finalize_features(dev);
 		add_status(dev, VIRTIO_CONFIG_S_DRIVER_OK);
+		/* They should never have set feature bits beyond 32 */
+		dev->config->set_features(dev, dev->features[0]);
 	}
 	return err;
 }
@@ -144,20 +144,13 @@ static int virtio_dev_remove(struct device *_d)
 	return 0;
 }
 
-static struct bus_type virtio_bus = {
-	.name  = "virtio",
-	.match = virtio_dev_match,
-	.dev_attrs = virtio_dev_attrs,
-	.uevent = virtio_uevent,
-	.probe = virtio_dev_probe,
-	.remove = virtio_dev_remove,
-};
-
 int register_virtio_driver(struct virtio_driver *driver)
 {
 	/* Catch this early. */
 	BUG_ON(driver->feature_table_size && !driver->feature_table);
 	driver->driver.bus = &virtio_bus;
+	driver->driver.probe = virtio_dev_probe;
+	driver->driver.remove = virtio_dev_remove;
 	return driver_register(&driver->driver);
 }
 EXPORT_SYMBOL_GPL(register_virtio_driver);
@@ -173,10 +166,7 @@ int register_virtio_device(struct virtio_device *dev)
 	int err;
 
 	dev->dev.bus = &virtio_bus;
-
-	/* Assign a unique device index and hence name. */
-	dev->index = dev_index++;
-	dev_set_name(&dev->dev, "virtio%u", dev->index);
+	sprintf(dev->dev.bus_id, "%u", dev->index);
 
 	/* We always start by resetting the device, in case a previous
 	 * driver messed it up.  This also tests that code path a little. */

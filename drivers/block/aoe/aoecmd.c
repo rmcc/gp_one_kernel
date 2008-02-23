@@ -114,22 +114,29 @@ ifrotate(struct aoetgt *t)
 static void
 skb_pool_put(struct aoedev *d, struct sk_buff *skb)
 {
-	__skb_queue_tail(&d->skbpool, skb);
+	if (!d->skbpool_hd)
+		d->skbpool_hd = skb;
+	else
+		d->skbpool_tl->next = skb;
+	d->skbpool_tl = skb;
 }
 
 static struct sk_buff *
 skb_pool_get(struct aoedev *d)
 {
-	struct sk_buff *skb = skb_peek(&d->skbpool);
+	struct sk_buff *skb;
 
+	skb = d->skbpool_hd;
 	if (skb && atomic_read(&skb_shinfo(skb)->dataref) == 1) {
-		__skb_unlink(skb, &d->skbpool);
+		d->skbpool_hd = skb->next;
+		skb->next = NULL;
 		return skb;
 	}
-	if (skb_queue_len(&d->skbpool) < NSKBPOOLMAX &&
-	    (skb = new_skb(ETH_ZLEN)))
+	if (d->nskbpool < NSKBPOOLMAX
+	&& (skb = new_skb(ETH_ZLEN))) {
+		d->nskbpool++;
 		return skb;
-
+	}
 	return NULL;
 }
 
@@ -286,21 +293,28 @@ aoecmd_ata_rw(struct aoedev *d)
 
 	skb->dev = t->ifp->nd;
 	skb = skb_clone(skb, GFP_ATOMIC);
-	if (skb)
-		__skb_queue_tail(&d->sendq, skb);
+	if (skb) {
+		if (d->sendq_hd)
+			d->sendq_tl->next = skb;
+		else
+			d->sendq_hd = skb;
+		d->sendq_tl = skb;
+	}
 	return 1;
 }
 
 /* some callers cannot sleep, and they can call this function,
  * transmitting the packets later, when interrupts are on
  */
-static void
-aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff_head *queue)
+static struct sk_buff *
+aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff **tail)
 {
 	struct aoe_hdr *h;
 	struct aoe_cfghdr *ch;
-	struct sk_buff *skb;
+	struct sk_buff *skb, *sl, *sl_tail;
 	struct net_device *ifp;
+
+	sl = sl_tail = NULL;
 
 	read_lock(&dev_base_lock);
 	for_each_netdev(&init_net, ifp) {
@@ -315,7 +329,8 @@ aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff_head *qu
 		}
 		skb_put(skb, sizeof *h + sizeof *ch);
 		skb->dev = ifp;
-		__skb_queue_tail(queue, skb);
+		if (sl_tail == NULL)
+			sl_tail = skb;
 		h = (struct aoe_hdr *) skb_mac_header(skb);
 		memset(h, 0, sizeof *h + sizeof *ch);
 
@@ -327,10 +342,16 @@ aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff_head *qu
 		h->minor = aoeminor;
 		h->cmd = AOECMD_CFG;
 
+		skb->next = sl;
+		sl = skb;
 cont:
 		dev_put(ifp);
 	}
 	read_unlock(&dev_base_lock);
+
+	if (tail != NULL)
+		*tail = sl_tail;
+	return sl;
 }
 
 static void
@@ -349,9 +370,11 @@ resend(struct aoedev *d, struct aoetgt *t, struct frame *f)
 	ah = (struct aoe_atahdr *) (h+1);
 
 	snprintf(buf, sizeof buf,
-		"%15s e%ld.%d oldtag=%08x@%08lx newtag=%08x s=%pm d=%pm nout=%d\n",
+		"%15s e%ld.%d oldtag=%08x@%08lx newtag=%08x "
+		"s=%012llx d=%012llx nout=%d\n",
 		"retransmit", d->aoemajor, d->aoeminor, f->tag, jiffies, n,
-		h->src, h->dst, t->nout);
+		mac_addr(h->src),
+		mac_addr(h->dst), t->nout);
 	aoechr_error(buf);
 
 	f->tag = n;
@@ -383,7 +406,11 @@ resend(struct aoedev *d, struct aoetgt *t, struct frame *f)
 	skb = skb_clone(skb, GFP_ATOMIC);
 	if (skb == NULL)
 		return;
-	__skb_queue_tail(&d->sendq, skb);
+	if (d->sendq_hd)
+		d->sendq_tl->next = skb;
+	else
+		d->sendq_hd = skb;
+	d->sendq_tl = skb;
 }
 
 static int
@@ -481,15 +508,16 @@ ata_scnt(unsigned char *packet) {
 static void
 rexmit_timer(ulong vp)
 {
-	struct sk_buff_head queue;
 	struct aoedev *d;
 	struct aoetgt *t, **tt, **te;
 	struct aoeif *ifp;
 	struct frame *f, *e;
+	struct sk_buff *sl;
 	register long timeout;
 	ulong flags, n;
 
 	d = (struct aoedev *) vp;
+	sl = NULL;
 
 	/* timeout is always ~150% of the moving average */
 	timeout = d->rttavg;
@@ -542,10 +570,10 @@ rexmit_timer(ulong vp)
 				printk(KERN_INFO
 					"aoe: e%ld.%d: "
 					"too many lost jumbo on "
-					"%s:%pm - "
+					"%s:%012llx - "
 					"falling back to %d frames.\n",
 					d->aoemajor, d->aoeminor,
-					ifp->nd->name, t->addr,
+					ifp->nd->name, mac_addr(t->addr),
 					DEFAULTBCNT);
 				ifp->maxbcnt = 0;
 			}
@@ -561,7 +589,7 @@ rexmit_timer(ulong vp)
 		}
 	}
 
-	if (!skb_queue_empty(&d->sendq)) {
+	if (d->sendq_hd) {
 		n = d->rttavg <<= 1;
 		if (n > MAXTIMER)
 			d->rttavg = MAXTIMER;
@@ -572,15 +600,15 @@ rexmit_timer(ulong vp)
 		aoecmd_work(d);
 	}
 
-	__skb_queue_head_init(&queue);
-	skb_queue_splice_init(&d->sendq, &queue);
+	sl = d->sendq_hd;
+	d->sendq_hd = d->sendq_tl = NULL;
 
 	d->timer.expires = jiffies + TIMERTICK;
 	add_timer(&d->timer);
 
 	spin_unlock_irqrestore(&d->lock, flags);
 
-	aoenet_xmit(&queue);
+	aoenet_xmit(sl);
 }
 
 /* enters with d->lock held */
@@ -617,7 +645,7 @@ aoecmd_sleepwork(struct work_struct *work)
 		unsigned long flags;
 		u64 ssize;
 
-		ssize = get_capacity(d->gd);
+		ssize = d->gd->capacity;
 		bd = bdget_disk(d->gd, 0);
 
 		if (bd) {
@@ -670,8 +698,8 @@ ataid_complete(struct aoedev *d, struct aoetgt *t, unsigned char *id)
 
 	if (d->ssize != ssize)
 		printk(KERN_INFO
-			"aoe: %pm e%ld.%d v%04x has %llu sectors\n",
-			t->addr,
+			"aoe: %012llx e%ld.%d v%04x has %llu sectors\n",
+			mac_addr(t->addr),
 			d->aoemajor, d->aoeminor,
 			d->fw_ver, (long long)ssize);
 	d->ssize = ssize;
@@ -679,7 +707,7 @@ ataid_complete(struct aoedev *d, struct aoetgt *t, unsigned char *id)
 	if (d->flags & (DEVFL_GDALLOC|DEVFL_NEWSIZE))
 		return;
 	if (d->gd != NULL) {
-		set_capacity(d->gd, ssize);
+		d->gd->capacity = ssize;
 		d->flags |= DEVFL_NEWSIZE;
 	} else
 		d->flags |= DEVFL_GDALLOC;
@@ -728,28 +756,23 @@ diskstats(struct gendisk *disk, struct bio *bio, ulong duration, sector_t sector
 	unsigned long n_sect = bio->bi_size >> 9;
 	const int rw = bio_data_dir(bio);
 	struct hd_struct *part;
-	int cpu;
 
-	cpu = part_stat_lock();
-	part = disk_map_sector_rcu(disk, sector);
-
-	part_stat_inc(cpu, part, ios[rw]);
-	part_stat_add(cpu, part, ticks[rw], duration);
-	part_stat_add(cpu, part, sectors[rw], n_sect);
-	part_stat_add(cpu, part, io_ticks, duration);
-
-	part_stat_unlock();
+	part = get_part(disk, sector);
+	all_stat_inc(disk, part, ios[rw], sector);
+	all_stat_add(disk, part, ticks[rw], duration, sector);
+	all_stat_add(disk, part, sectors[rw], n_sect, sector);
+	all_stat_add(disk, part, io_ticks, duration, sector);
 }
 
 void
 aoecmd_ata_rsp(struct sk_buff *skb)
 {
-	struct sk_buff_head queue;
 	struct aoedev *d;
 	struct aoe_hdr *hin, *hout;
 	struct aoe_atahdr *ahin, *ahout;
 	struct frame *f;
 	struct buf *buf;
+	struct sk_buff *sl;
 	struct aoetgt *t;
 	struct aoeif *ifp;
 	register long n;
@@ -773,8 +796,8 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 	n = get_unaligned_be32(&hin->tag);
 	t = gettgt(d, hin->src);
 	if (t == NULL) {
-		printk(KERN_INFO "aoe: can't find target e%ld.%d:%pm\n",
-			d->aoemajor, d->aoeminor, hin->src);
+		printk(KERN_INFO "aoe: can't find target e%ld.%d:%012llx\n",
+			d->aoemajor, d->aoeminor, mac_addr(hin->src));
 		spin_unlock_irqrestore(&d->lock, flags);
 		return;
 	}
@@ -870,21 +893,21 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 
 	aoecmd_work(d);
 xmit:
-	__skb_queue_head_init(&queue);
-	skb_queue_splice_init(&d->sendq, &queue);
+	sl = d->sendq_hd;
+	d->sendq_hd = d->sendq_tl = NULL;
 
 	spin_unlock_irqrestore(&d->lock, flags);
-	aoenet_xmit(&queue);
+	aoenet_xmit(sl);
 }
 
 void
 aoecmd_cfg(ushort aoemajor, unsigned char aoeminor)
 {
-	struct sk_buff_head queue;
+	struct sk_buff *sl;
 
-	__skb_queue_head_init(&queue);
-	aoecmd_cfg_pkts(aoemajor, aoeminor, &queue);
-	aoenet_xmit(&queue);
+	sl = aoecmd_cfg_pkts(aoemajor, aoeminor, NULL);
+
+	aoenet_xmit(sl);
 }
  
 struct sk_buff *
@@ -980,7 +1003,7 @@ aoecmd_cfg_rsp(struct sk_buff *skb)
 	 * Enough people have their dip switches set backwards to
 	 * warrant a loud message for this special case.
 	 */
-	aoemajor = get_unaligned_be16(&h->major);
+	aoemajor = be16_to_cpu(get_unaligned(&h->major));
 	if (aoemajor == 0xfff) {
 		printk(KERN_ERR "aoe: Warning: shelf address is all ones.  "
 			"Check shelf dip switches.\n");
@@ -1034,10 +1057,10 @@ aoecmd_cfg_rsp(struct sk_buff *skb)
 		n = n ? n * 512 : DEFAULTBCNT;
 		if (n != ifp->maxbcnt) {
 			printk(KERN_INFO
-				"aoe: e%ld.%d: setting %d%s%s:%pm\n",
+				"aoe: e%ld.%d: setting %d%s%s:%012llx\n",
 				d->aoemajor, d->aoeminor, n,
 				" byte data frames on ", ifp->nd->name,
-				t->addr);
+				mac_addr(t->addr));
 			ifp->maxbcnt = n;
 		}
 	}
@@ -1053,12 +1076,7 @@ aoecmd_cfg_rsp(struct sk_buff *skb)
 
 	spin_unlock_irqrestore(&d->lock, flags);
 
-	if (sl) {
-		struct sk_buff_head queue;
-		__skb_queue_head_init(&queue);
-		__skb_queue_tail(&queue, sl);
-		aoenet_xmit(&queue);
-	}
+	aoenet_xmit(sl);
 }
 
 void

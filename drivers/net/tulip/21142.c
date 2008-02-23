@@ -1,6 +1,7 @@
 /*
 	drivers/net/tulip/21142.c
 
+	Maintained by Valerie Henson <val_henson@linux.intel.com>
 	Copyright 2000,2001  The Linux Kernel Team
 	Written/copyright 1994-2001 by Donald Becker.
 
@@ -8,8 +9,9 @@
 	of the GNU General Public License, incorporated herein by reference.
 
 	Please refer to Documentation/DocBook/tulip-user.{pdf,ps,html}
-	for more information on this driver.
-	Please submit bugs to http://bugzilla.kernel.org/ .
+	for more information on this driver, or visit the project
+	Web page at http://sourceforge.net/projects/tulip/
+
 */
 
 #include <linux/delay.h>

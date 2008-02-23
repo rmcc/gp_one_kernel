@@ -11,7 +11,6 @@
 
 #include <linux/pci.h>
 #include <linux/sched.h>
-#include <linux/mm.h>
 #include <linux/slab.h>
 
 #include "hosts.h"

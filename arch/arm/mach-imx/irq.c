@@ -26,17 +26,20 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/timer.h>
-#include <linux/io.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 
 #include <asm/mach/irq.h>
 
 /*
  *
  * We simply use the ENABLE DISABLE registers inside of the IMX
- * to turn on/off specific interrupts.
+ * to turn on/off specific interrupts.  FIXME- We should
+ * also add support for the accelerated interrupt controller
+ * by putting offets to irq jump code in the appropriate
+ * places.
  *
  */
 
@@ -99,28 +102,6 @@ imx_unmask_irq(unsigned int irq)
 	__raw_writel(irq, IMX_AITC_INTENNUM);
 }
 
-#ifdef CONFIG_FIQ
-int imx_set_irq_fiq(unsigned int irq, unsigned int type)
-{
-	unsigned int irqt;
-
-	if (irq >= IMX_IRQS)
-		return -EINVAL;
-
-	if (irq < IMX_IRQS / 2) {
-		irqt = __raw_readl(IMX_AITC_INTTYPEL) & ~(1 << irq);
-		__raw_writel(irqt | (!!type << irq), IMX_AITC_INTTYPEL);
-	} else {
-		irq -= IMX_IRQS / 2;
-		irqt = __raw_readl(IMX_AITC_INTTYPEH) & ~(1 << irq);
-		__raw_writel(irqt | (!!type << irq), IMX_AITC_INTTYPEH);
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(imx_set_irq_fiq);
-#endif /* CONFIG_FIQ */
-
 static int
 imx_gpio_irq_type(unsigned int _irq, unsigned int type)
 {
@@ -130,7 +111,7 @@ imx_gpio_irq_type(unsigned int _irq, unsigned int type)
 	reg = irq >> 5;
 	bit = 1 << (irq % 32);
 
-	if (type == IRQ_TYPE_PROBE) {
+	if (type == IRQT_PROBE) {
 		/* Don't mess with enabled GPIOs using preconfigured edges or
 		   GPIOs set to alternate function during probe */
 		/* TODO: support probe */
@@ -139,7 +120,7 @@ imx_gpio_irq_type(unsigned int _irq, unsigned int type)
 //                      return 0;
 //              if (GAFR(gpio) & (0x3 << (((gpio) & 0xf)*2)))
 //                      return 0;
-//              type = IRQ_TYPE_EDGE_RISING | IRQ_TYPE_EDGE_FALLING;
+//              type = __IRQT_RISEDGE | __IRQT_FALEDGE;
 	}
 
 	GIUS(reg) |= bit;
@@ -147,19 +128,19 @@ imx_gpio_irq_type(unsigned int _irq, unsigned int type)
 
 	DEBUG_IRQ("setting type of irq %d to ", _irq);
 
-	if (type & IRQ_TYPE_EDGE_RISING) {
+	if (type & __IRQT_RISEDGE) {
 		DEBUG_IRQ("rising edges\n");
 		irq_type = 0x0;
 	}
-	if (type & IRQ_TYPE_EDGE_FALLING) {
+	if (type & __IRQT_FALEDGE) {
 		DEBUG_IRQ("falling edges\n");
 		irq_type = 0x1;
 	}
-	if (type & IRQ_TYPE_LEVEL_LOW) {
+	if (type & __IRQT_LOWLVL) {
 		DEBUG_IRQ("low level\n");
 		irq_type = 0x3;
 	}
-	if (type & IRQ_TYPE_LEVEL_HIGH) {
+	if (type & __IRQT_HIGHLVL) {
 		DEBUG_IRQ("high level\n");
 		irq_type = 0x2;
 	}
@@ -201,12 +182,14 @@ static void
 imx_gpio_handler(unsigned int mask, unsigned int irq,
                  struct irq_desc *desc)
 {
+	desc = irq_desc + irq;
 	while (mask) {
 		if (mask & 1) {
 			DEBUG_IRQ("handling irq %d\n", irq);
-			generic_handle_irq(irq);
+			desc_handle_irq(irq, desc);
 		}
 		irq++;
+		desc++;
 		mask >>= 1;
 	}
 }
@@ -303,9 +286,4 @@ imx_init_irq(void)
 
 	/* Release masking of interrupts according to priority */
 	__raw_writel(-1, IMX_AITC_NIMASK);
-
-#ifdef CONFIG_FIQ
-	/* Initialize FIQ */
-	init_FIQ();
-#endif
 }

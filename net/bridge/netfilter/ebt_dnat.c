@@ -7,17 +7,18 @@
  *  June, 2002
  *
  */
-#include <linux/module.h>
-#include <net/sock.h>
+
 #include <linux/netfilter.h>
-#include <linux/netfilter/x_tables.h>
 #include <linux/netfilter_bridge/ebtables.h>
 #include <linux/netfilter_bridge/ebt_nat.h>
+#include <linux/module.h>
+#include <net/sock.h>
 
-static unsigned int
-ebt_dnat_tg(struct sk_buff *skb, const struct xt_target_param *par)
+static int ebt_target_dnat(struct sk_buff *skb, unsigned int hooknr,
+   const struct net_device *in, const struct net_device *out,
+   const void *data, unsigned int datalen)
 {
-	const struct ebt_nat_info *info = par->targinfo;
+	const struct ebt_nat_info *info = data;
 
 	if (!skb_make_writable(skb, 0))
 		return EBT_DROP;
@@ -26,46 +27,40 @@ ebt_dnat_tg(struct sk_buff *skb, const struct xt_target_param *par)
 	return info->target;
 }
 
-static bool ebt_dnat_tg_check(const struct xt_tgchk_param *par)
+static int ebt_target_dnat_check(const char *tablename, unsigned int hookmask,
+   const struct ebt_entry *e, void *data, unsigned int datalen)
 {
-	const struct ebt_nat_info *info = par->targinfo;
-	unsigned int hook_mask;
+	const struct ebt_nat_info *info = data;
 
 	if (BASE_CHAIN && info->target == EBT_RETURN)
-		return false;
-
-	hook_mask = par->hook_mask & ~(1 << NF_BR_NUMHOOKS);
-	if ((strcmp(par->table, "nat") != 0 ||
-	    (hook_mask & ~((1 << NF_BR_PRE_ROUTING) |
-	    (1 << NF_BR_LOCAL_OUT)))) &&
-	    (strcmp(par->table, "broute") != 0 ||
-	    hook_mask & ~(1 << NF_BR_BROUTING)))
-		return false;
+		return -EINVAL;
+	CLEAR_BASE_CHAIN_BIT;
+	if ( (strcmp(tablename, "nat") ||
+	   (hookmask & ~((1 << NF_BR_PRE_ROUTING) | (1 << NF_BR_LOCAL_OUT)))) &&
+	   (strcmp(tablename, "broute") || hookmask & ~(1 << NF_BR_BROUTING)) )
+		return -EINVAL;
+	if (datalen != EBT_ALIGN(sizeof(struct ebt_nat_info)))
+		return -EINVAL;
 	if (INVALID_TARGET)
-		return false;
-	return true;
+		return -EINVAL;
+	return 0;
 }
 
-static struct xt_target ebt_dnat_tg_reg __read_mostly = {
-	.name		= "dnat",
-	.revision	= 0,
-	.family		= NFPROTO_BRIDGE,
-	.hooks		= (1 << NF_BR_NUMHOOKS) | (1 << NF_BR_PRE_ROUTING) |
-			  (1 << NF_BR_LOCAL_OUT) | (1 << NF_BR_BROUTING),
-	.target		= ebt_dnat_tg,
-	.checkentry	= ebt_dnat_tg_check,
-	.targetsize	= XT_ALIGN(sizeof(struct ebt_nat_info)),
+static struct ebt_target dnat __read_mostly = {
+	.name		= EBT_DNAT_TARGET,
+	.target		= ebt_target_dnat,
+	.check		= ebt_target_dnat_check,
 	.me		= THIS_MODULE,
 };
 
 static int __init ebt_dnat_init(void)
 {
-	return xt_register_target(&ebt_dnat_tg_reg);
+	return ebt_register_target(&dnat);
 }
 
 static void __exit ebt_dnat_fini(void)
 {
-	xt_unregister_target(&ebt_dnat_tg_reg);
+	ebt_unregister_target(&dnat);
 }
 
 module_init(ebt_dnat_init);

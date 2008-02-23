@@ -20,7 +20,6 @@
 #include <linux/swap.h>
 #include <linux/profile.h>
 #include <linux/delay.h>
-#include <linux/cpu.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
@@ -31,6 +30,7 @@
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
+#include <asm/sbus.h>
 #include <asm/sbi.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
@@ -60,7 +60,7 @@ extern int __smp4d_processor_id(void);
 #define SMP_PRINTK(x)
 #endif
 
-static inline unsigned long sun4d_swap(volatile unsigned long *ptr, unsigned long val)
+static inline unsigned long swap(volatile unsigned long *ptr, unsigned long val)
 {
 	__asm__ __volatile__("swap [%1], %0\n\t" :
 			     "=&r" (val), "=&r" (ptr) :
@@ -72,18 +72,7 @@ static void smp_setup_percpu_timer(void);
 extern void cpu_probe(void);
 extern void sun4d_distribute_irqs(void);
 
-static unsigned char cpu_leds[32];
-
-static inline void show_leds(int cpuid)
-{
-	cpuid &= 0x1e;
-	__asm__ __volatile__ ("stba %0, [%1] %2" : :
-			      "r" ((cpu_leds[cpuid] << 4) | cpu_leds[cpuid+1]),
-			      "r" (ECSR_BASE(cpuid) | BB_LEDS),
-			      "i" (ASI_M_CTL));
-}
-
-void __cpuinit smp4d_callin(void)
+void __init smp4d_callin(void)
 {
 	int cpuid = hard_smp4d_processor_id();
 	extern spinlock_t sun4d_imsk_lock;
@@ -99,7 +88,6 @@ void __cpuinit smp4d_callin(void)
 	local_flush_cache_all();
 	local_flush_tlb_all();
 
-	notify_cpu_starting(cpuid);
 	/*
 	 * Unblock the master CPU _only_ when the scheduler state
 	 * of all secondary CPUs will be up-to-date, so after
@@ -115,7 +103,7 @@ void __cpuinit smp4d_callin(void)
 	local_flush_tlb_all();
 
 	/* Allow master to continue. */
-	sun4d_swap((unsigned long *)&cpu_callin_map[cpuid], 1);
+	swap((unsigned long *)&cpu_callin_map[cpuid], 1);
 	local_flush_cache_all();
 	local_flush_tlb_all();
 	
@@ -274,9 +262,8 @@ static struct smp_funcall {
 static DEFINE_SPINLOCK(cross_call_lock);
 
 /* Cross calls must be serialized, at least currently. */
-static void smp4d_cross_call(smpfunc_t func, cpumask_t mask, unsigned long arg1,
-			     unsigned long arg2, unsigned long arg3,
-			     unsigned long arg4)
+void smp4d_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
+		    unsigned long arg3, unsigned long arg4, unsigned long arg5)
 {
 	if(smp_processors_ready) {
 		register int high = smp_highest_cpu;
@@ -291,7 +278,7 @@ static void smp4d_cross_call(smpfunc_t func, cpumask_t mask, unsigned long arg1,
 			register unsigned long a2 asm("i2") = arg2;
 			register unsigned long a3 asm("i3") = arg3;
 			register unsigned long a4 asm("i4") = arg4;
-			register unsigned long a5 asm("i5") = 0;
+			register unsigned long a5 asm("i5") = arg5;
 
 			__asm__ __volatile__(
 				"std %0, [%6]\n\t"
@@ -303,10 +290,11 @@ static void smp4d_cross_call(smpfunc_t func, cpumask_t mask, unsigned long arg1,
 
 		/* Init receive/complete mapping, plus fire the IPI's off. */
 		{
+			cpumask_t mask;
 			register int i;
 
-			cpu_clear(smp_processor_id(), mask);
-			cpus_and(mask, cpu_online_map, mask);
+			mask = cpumask_of_cpu(hard_smp4d_processor_id());
+			cpus_andnot(mask, cpu_online_map, mask);
 			for(i = 0; i <= high; i++) {
 				if (cpu_isset(i, mask)) {
 					ccall_info.processors_in[i] = 0;
@@ -321,16 +309,12 @@ static void smp4d_cross_call(smpfunc_t func, cpumask_t mask, unsigned long arg1,
 
 			i = 0;
 			do {
-				if (!cpu_isset(i, mask))
-					continue;
 				while(!ccall_info.processors_in[i])
 					barrier();
 			} while(++i <= high);
 
 			i = 0;
 			do {
-				if (!cpu_isset(i, mask))
-					continue;
 				while(!ccall_info.processors_out[i])
 					barrier();
 			} while(++i <= high);
@@ -386,7 +370,7 @@ void smp4d_percpu_timer_interrupt(struct pt_regs *regs)
 
 extern unsigned int lvl14_resolution;
 
-static void __cpuinit smp_setup_percpu_timer(void)
+static void __init smp_setup_percpu_timer(void)
 {
 	int cpu = hard_smp4d_processor_id();
 

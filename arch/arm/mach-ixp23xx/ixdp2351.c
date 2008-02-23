@@ -34,7 +34,7 @@
 #include <asm/types.h>
 #include <asm/setup.h>
 #include <asm/memory.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/system.h>
 #include <asm/tlbflush.h>
@@ -68,9 +68,11 @@ static void ixdp2351_inta_handler(unsigned int irq, struct irq_desc *desc)
 
 	for (i = 0; i < IXDP2351_INTA_IRQ_NUM; i++) {
 		if (ex_interrupt & (1 << i)) {
+			struct irq_desc *cpld_desc;
 			int cpld_irq =
 				IXP23XX_MACH_IRQ(IXDP2351_INTA_IRQ_BASE + i);
-			generic_handle_irq(cpld_irq);
+			cpld_desc = irq_desc + cpld_irq;
+			desc_handle_irq(cpld_irq, cpld_desc);
 		}
 	}
 
@@ -103,9 +105,11 @@ static void ixdp2351_intb_handler(unsigned int irq, struct irq_desc *desc)
 
 	for (i = 0; i < IXDP2351_INTB_IRQ_NUM; i++) {
 		if (ex_interrupt & (1 << i)) {
+			struct irq_desc *cpld_desc;
 			int cpld_irq =
 				IXP23XX_MACH_IRQ(IXDP2351_INTB_IRQ_BASE + i);
-			generic_handle_irq(cpld_irq);
+			cpld_desc = irq_desc + cpld_irq;
+			desc_handle_irq(cpld_irq, cpld_desc);
 		}
 	}
 

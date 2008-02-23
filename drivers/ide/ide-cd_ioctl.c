@@ -27,9 +27,10 @@ int ide_cdrom_open_real(struct cdrom_device_info *cdi, int purpose)
 void ide_cdrom_release_real(struct cdrom_device_info *cdi)
 {
 	ide_drive_t *drive = cdi->handle;
+	struct cdrom_info *cd = drive->driver_data;
 
 	if (!cdi->use_count)
-		drive->atapi_flags &= ~IDE_AFLAG_TOC_VALID;
+		cd->cd_flags &= ~IDE_CD_FLAG_TOC_VALID;
 }
 
 /*
@@ -82,12 +83,13 @@ int ide_cdrom_check_media_change_real(struct cdrom_device_info *cdi,
 				       int slot_nr)
 {
 	ide_drive_t *drive = cdi->handle;
+	struct cdrom_info *cd = drive->driver_data;
 	int retval;
 
 	if (slot_nr == CDSL_CURRENT) {
 		(void) cdrom_check_status(drive, NULL);
-		retval = (drive->dev_flags & IDE_DFLAG_MEDIA_CHANGED) ? 1 : 0;
-		drive->dev_flags &= ~IDE_DFLAG_MEDIA_CHANGED;
+		retval = (cd->cd_flags & IDE_CD_FLAG_MEDIA_CHANGED) ? 1 : 0;
+		cd->cd_flags &= ~IDE_CD_FLAG_MEDIA_CHANGED;
 		return retval;
 	} else {
 		return -EINVAL;
@@ -102,26 +104,27 @@ int cdrom_eject(ide_drive_t *drive, int ejectflag,
 {
 	struct cdrom_info *cd = drive->driver_data;
 	struct cdrom_device_info *cdi = &cd->devinfo;
+	struct request req;
 	char loej = 0x02;
-	unsigned char cmd[BLK_MAX_CDB];
 
-	if ((drive->atapi_flags & IDE_AFLAG_NO_EJECT) && !ejectflag)
+	if ((cd->cd_flags & IDE_CD_FLAG_NO_EJECT) && !ejectflag)
 		return -EDRIVE_CANT_DO_THIS;
 
 	/* reload fails on some drives, if the tray is locked */
-	if ((drive->atapi_flags & IDE_AFLAG_DOOR_LOCKED) && ejectflag)
+	if ((cd->cd_flags & IDE_CD_FLAG_DOOR_LOCKED) && ejectflag)
 		return 0;
+
+	ide_cd_init_rq(drive, &req);
 
 	/* only tell drive to close tray if open, if it can do that */
 	if (ejectflag && (cdi->mask & CDC_CLOSE_TRAY))
 		loej = 0;
 
-	memset(cmd, 0, BLK_MAX_CDB);
+	req.sense = sense;
+	req.cmd[0] = GPCMD_START_STOP_UNIT;
+	req.cmd[4] = loej | (ejectflag != 0);
 
-	cmd[0] = GPCMD_START_STOP_UNIT;
-	cmd[4] = loej | (ejectflag != 0);
-
-	return ide_cd_queue_pc(drive, cmd, 0, NULL, NULL, sense, 0, 0);
+	return ide_cd_queue_pc(drive, &req);
 }
 
 /* Lock the door if LOCKFLAG is nonzero; unlock it otherwise. */
@@ -129,25 +132,23 @@ static
 int ide_cd_lockdoor(ide_drive_t *drive, int lockflag,
 		    struct request_sense *sense)
 {
+	struct cdrom_info *cd = drive->driver_data;
 	struct request_sense my_sense;
+	struct request req;
 	int stat;
 
 	if (sense == NULL)
 		sense = &my_sense;
 
 	/* If the drive cannot lock the door, just pretend. */
-	if ((drive->dev_flags & IDE_DFLAG_DOORLOCKING) == 0) {
+	if (cd->cd_flags & IDE_CD_FLAG_NO_DOORLOCK) {
 		stat = 0;
 	} else {
-		unsigned char cmd[BLK_MAX_CDB];
-
-		memset(cmd, 0, BLK_MAX_CDB);
-
-		cmd[0] = GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL;
-		cmd[4] = lockflag ? 1 : 0;
-
-		stat = ide_cd_queue_pc(drive, cmd, 0, NULL, NULL,
-				       sense, 0, 0);
+		ide_cd_init_rq(drive, &req);
+		req.sense = sense;
+		req.cmd[0] = GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL;
+		req.cmd[4] = lockflag ? 1 : 0;
+		stat = ide_cd_queue_pc(drive, &req);
 	}
 
 	/* If we got an illegal field error, the drive
@@ -157,7 +158,7 @@ int ide_cd_lockdoor(ide_drive_t *drive, int lockflag,
 	    (sense->asc == 0x24 || sense->asc == 0x20)) {
 		printk(KERN_ERR "%s: door locking not supported\n",
 			drive->name);
-		drive->dev_flags &= ~IDE_DFLAG_DOORLOCKING;
+		cd->cd_flags |= IDE_CD_FLAG_NO_DOORLOCK;
 		stat = 0;
 	}
 
@@ -167,9 +168,9 @@ int ide_cd_lockdoor(ide_drive_t *drive, int lockflag,
 
 	if (stat == 0) {
 		if (lockflag)
-			drive->atapi_flags |= IDE_AFLAG_DOOR_LOCKED;
+			cd->cd_flags |= IDE_CD_FLAG_DOOR_LOCKED;
 		else
-			drive->atapi_flags &= ~IDE_AFLAG_DOOR_LOCKED;
+			cd->cd_flags &= ~IDE_CD_FLAG_DOOR_LOCKED;
 	}
 
 	return stat;
@@ -205,30 +206,32 @@ int ide_cdrom_select_speed(struct cdrom_device_info *cdi, int speed)
 {
 	ide_drive_t *drive = cdi->handle;
 	struct cdrom_info *cd = drive->driver_data;
+	struct request rq;
 	struct request_sense sense;
 	u8 buf[ATAPI_CAPABILITIES_PAGE_SIZE];
 	int stat;
-	unsigned char cmd[BLK_MAX_CDB];
+
+	ide_cd_init_rq(drive, &rq);
+
+	rq.sense = &sense;
 
 	if (speed == 0)
 		speed = 0xffff; /* set to max */
 	else
 		speed *= 177;   /* Nx to kbytes/s */
 
-	memset(cmd, 0, BLK_MAX_CDB);
-
-	cmd[0] = GPCMD_SET_SPEED;
+	rq.cmd[0] = GPCMD_SET_SPEED;
 	/* Read Drive speed in kbytes/second MSB/LSB */
-	cmd[2] = (speed >> 8) & 0xff;
-	cmd[3] = speed & 0xff;
+	rq.cmd[2] = (speed >> 8) & 0xff;
+	rq.cmd[3] = speed & 0xff;
 	if ((cdi->mask & (CDC_CD_R | CDC_CD_RW | CDC_DVD_R)) !=
 	    (CDC_CD_R | CDC_CD_RW | CDC_DVD_R)) {
 		/* Write Drive speed in kbytes/second MSB/LSB */
-		cmd[4] = (speed >> 8) & 0xff;
-		cmd[5] = speed & 0xff;
+		rq.cmd[4] = (speed >> 8) & 0xff;
+		rq.cmd[5] = speed & 0xff;
 	}
 
-	stat = ide_cd_queue_pc(drive, cmd, 0, NULL, NULL, &sense, 0, 0);
+	stat = ide_cd_queue_pc(drive, &rq);
 
 	if (!ide_cdrom_get_capabilities(drive, buf)) {
 		ide_cdrom_update_speed(drive, buf);
@@ -247,7 +250,7 @@ int ide_cdrom_get_last_session(struct cdrom_device_info *cdi,
 	struct request_sense sense;
 	int ret;
 
-	if ((drive->atapi_flags & IDE_AFLAG_TOC_VALID) == 0 || !info->toc) {
+	if ((info->cd_flags & IDE_CD_FLAG_TOC_VALID) == 0 || !info->toc) {
 		ret = ide_cd_read_toc(drive, &sense);
 		if (ret)
 			return ret;
@@ -265,19 +268,21 @@ int ide_cdrom_get_mcn(struct cdrom_device_info *cdi,
 {
 	ide_drive_t *drive = cdi->handle;
 	int stat, mcnlen;
+	struct request rq;
 	char buf[24];
-	unsigned char cmd[BLK_MAX_CDB];
-	unsigned len = sizeof(buf);
 
-	memset(cmd, 0, BLK_MAX_CDB);
+	ide_cd_init_rq(drive, &rq);
 
-	cmd[0] = GPCMD_READ_SUBCHANNEL;
-	cmd[1] = 2;		/* MSF addressing */
-	cmd[2] = 0x40;	/* request subQ data */
-	cmd[3] = 2;		/* format */
-	cmd[8] = len;
+	rq.data = buf;
+	rq.data_len = sizeof(buf);
 
-	stat = ide_cd_queue_pc(drive, cmd, 0, buf, &len, NULL, 0, 0);
+	rq.cmd[0] = GPCMD_READ_SUBCHANNEL;
+	rq.cmd[1] = 2;		/* MSF addressing */
+	rq.cmd[2] = 0x40;	/* request subQ data */
+	rq.cmd[3] = 2;		/* format */
+	rq.cmd[8] = sizeof(buf);
+
+	stat = ide_cd_queue_pc(drive, &rq);
 	if (stat)
 		return stat;
 
@@ -293,19 +298,19 @@ int ide_cdrom_reset(struct cdrom_device_info *cdi)
 	ide_drive_t *drive = cdi->handle;
 	struct cdrom_info *cd = drive->driver_data;
 	struct request_sense sense;
-	struct request *rq;
+	struct request req;
 	int ret;
 
-	rq = blk_get_request(drive->queue, READ, __GFP_WAIT);
-	rq->cmd_type = REQ_TYPE_SPECIAL;
-	rq->cmd_flags = REQ_QUIET;
-	ret = blk_execute_rq(drive->queue, cd->disk, rq, 0);
-	blk_put_request(rq);
+	ide_cd_init_rq(drive, &req);
+	req.cmd_type = REQ_TYPE_SPECIAL;
+	req.cmd_flags = REQ_QUIET;
+	ret = ide_do_drive_cmd(drive, &req, ide_wait);
+
 	/*
 	 * A reset will unlock the door. If it was previously locked,
 	 * lock it again.
 	 */
-	if (drive->atapi_flags & IDE_AFLAG_DOOR_LOCKED)
+	if (cd->cd_flags & IDE_CD_FLAG_DOOR_LOCKED)
 		(void)ide_cd_lockdoor(drive, 1, &sense);
 
 	return ret;
@@ -321,7 +326,7 @@ static int ide_cd_get_toc_entry(ide_drive_t *drive, int track,
 	/*
 	 * don't serve cached data, if the toc isn't valid
 	 */
-	if ((drive->atapi_flags & IDE_AFLAG_TOC_VALID) == 0)
+	if ((info->cd_flags & IDE_CD_FLAG_TOC_VALID) == 0)
 		return -EINVAL;
 
 	/* Check validity of requested track number. */
@@ -346,8 +351,8 @@ static int ide_cd_fake_play_trkind(ide_drive_t *drive, void *arg)
 	struct atapi_toc_entry *first_toc, *last_toc;
 	unsigned long lba_start, lba_end;
 	int stat;
+	struct request rq;
 	struct request_sense sense;
-	unsigned char cmd[BLK_MAX_CDB];
 
 	stat = ide_cd_get_toc_entry(drive, ti->cdti_trk0, &first_toc);
 	if (stat)
@@ -365,13 +370,14 @@ static int ide_cd_fake_play_trkind(ide_drive_t *drive, void *arg)
 	if (lba_end <= lba_start)
 		return -EINVAL;
 
-	memset(cmd, 0, BLK_MAX_CDB);
+	ide_cd_init_rq(drive, &rq);
 
-	cmd[0] = GPCMD_PLAY_AUDIO_MSF;
-	lba_to_msf(lba_start,   &cmd[3], &cmd[4], &cmd[5]);
-	lba_to_msf(lba_end - 1, &cmd[6], &cmd[7], &cmd[8]);
+	rq.sense = &sense;
+	rq.cmd[0] = GPCMD_PLAY_AUDIO_MSF;
+	lba_to_msf(lba_start,   &rq.cmd[3], &rq.cmd[4], &rq.cmd[5]);
+	lba_to_msf(lba_end - 1, &rq.cmd[6], &rq.cmd[7], &rq.cmd[8]);
 
-	return ide_cd_queue_pc(drive, cmd, 0, NULL, NULL, &sense, 0, 0);
+	return ide_cd_queue_pc(drive, &rq);
 }
 
 static int ide_cd_read_tochdr(ide_drive_t *drive, void *arg)
@@ -441,9 +447,8 @@ int ide_cdrom_audio_ioctl(struct cdrom_device_info *cdi,
 int ide_cdrom_packet(struct cdrom_device_info *cdi,
 			    struct packet_command *cgc)
 {
+	struct request req;
 	ide_drive_t *drive = cdi->handle;
-	unsigned int flags = 0;
-	unsigned len = cgc->buflen;
 
 	if (cgc->timeout <= 0)
 		cgc->timeout = ATAPI_WAIT_PC;
@@ -451,21 +456,24 @@ int ide_cdrom_packet(struct cdrom_device_info *cdi,
 	/* here we queue the commands from the uniform CD-ROM
 	   layer. the packet must be complete, as we do not
 	   touch it at all. */
+	ide_cd_init_rq(drive, &req);
 
 	if (cgc->data_direction == CGC_DATA_WRITE)
-		flags |= REQ_RW;
+		req.cmd_flags |= REQ_RW;
 
+	memcpy(req.cmd, cgc->cmd, CDROM_PACKET_SIZE);
 	if (cgc->sense)
 		memset(cgc->sense, 0, sizeof(struct request_sense));
+	req.data = cgc->buffer;
+	req.data_len = cgc->buflen;
+	req.timeout = cgc->timeout;
 
 	if (cgc->quiet)
-		flags |= REQ_QUIET;
+		req.cmd_flags |= REQ_QUIET;
 
-	cgc->stat = ide_cd_queue_pc(drive, cgc->cmd,
-				    cgc->data_direction == CGC_DATA_WRITE,
-				    cgc->buffer, &len,
-				    cgc->sense, cgc->timeout, flags);
+	req.sense = cgc->sense;
+	cgc->stat = ide_cd_queue_pc(drive, &req);
 	if (!cgc->stat)
-		cgc->buflen -= len;
+		cgc->buflen -= req.data_len;
 	return cgc->stat;
 }

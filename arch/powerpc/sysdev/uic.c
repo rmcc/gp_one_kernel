@@ -280,10 +280,12 @@ static struct uic * __init uic_init_one(struct device_node *node)
 	}
 	uic->dcrbase = *dcrreg;
 
-	uic->irqhost = irq_alloc_host(node, IRQ_HOST_MAP_LINEAR,
+	uic->irqhost = irq_alloc_host(of_node_get(node), IRQ_HOST_MAP_LINEAR,
 				      NR_UIC_INTS, &uic_host_ops, -1);
-	if (! uic->irqhost)
+	if (! uic->irqhost) {
+		of_node_put(node);
 		return NULL; /* FIXME: panic? */
+	}
 
 	uic->irqhost->host_data = uic;
 

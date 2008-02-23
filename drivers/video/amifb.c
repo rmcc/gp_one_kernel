@@ -1136,6 +1136,7 @@ static int amifb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg
 	 * Interface to the low level console driver
 	 */
 
+int amifb_init(void);
 static void amifb_deinit(void);
 
 	/*
@@ -2047,16 +2048,13 @@ static void amifb_copyarea(struct fb_info *info,
 	width = x2 - dx;
 	height = y2 - dy;
 
-	if (area->sx + dx < area->dx || area->sy + dy < area->dy)
-		return;
-
 	/* update sx,sy */
 	sx = area->sx + (dx - area->dx);
 	sy = area->sy + (dy - area->dy);
 
 	/* the source must be completely inside the virtual screen */
-	if (sx + width > info->var.xres_virtual ||
-			sy + height > info->var.yres_virtual)
+	if (sx < 0 || sy < 0 || (sx + width) > info->var.xres_virtual ||
+	    (sy + height) > info->var.yres_virtual)
 		return;
 
 	if (dy > sy || (dy == sy && dx > sx)) {
@@ -2159,9 +2157,9 @@ static void amifb_imageblit(struct fb_info *info, const struct fb_image *image)
 			src += pitch;
 		}
 	} else {
-		c2p_planar(info->screen_base, image->data, dx, dy, width,
-			   height, par->next_line, par->next_plane,
-			   image->width, info->var.bits_per_pixel);
+		c2p(info->screen_base, image->data, dx, dy, width, height,
+		    par->next_line, par->next_plane, image->width,
+		    info->var.bits_per_pixel);
 	}
 }
 
@@ -2247,7 +2245,7 @@ static inline void chipfree(void)
 	 * Initialisation
 	 */
 
-static int __init amifb_init(void)
+int __init amifb_init(void)
 {
 	int tag, i, err = 0;
 	u_long chipptr;
@@ -2384,9 +2382,6 @@ default_chipset:
 		err = -EINVAL;
 		goto amifb_error;
 	}
-
-	fb_videomode_to_modelist(ami_modedb, NUM_TOTAL_MODES,
-				 &fb_info.modelist);
 
 	round_down_bpp = 0;
 	chipptr = chipalloc(fb_info.fix.smem_len+
@@ -3792,14 +3787,16 @@ static void ami_rebuild_copper(void)
 	}
 }
 
-static void __exit amifb_exit(void)
+
+module_init(amifb_init);
+
+#ifdef MODULE
+MODULE_LICENSE("GPL");
+
+void cleanup_module(void)
 {
 	unregister_framebuffer(&fb_info);
 	amifb_deinit();
 	amifb_video_off();
 }
-
-module_init(amifb_init);
-module_exit(amifb_exit);
-
-MODULE_LICENSE("GPL");
+#endif /* MODULE */

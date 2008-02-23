@@ -118,7 +118,7 @@
 DEFINE_RWLOCK(tipc_net_lock);
 struct network tipc_net = { NULL };
 
-struct tipc_node *tipc_net_select_remote_node(u32 addr, u32 ref)
+struct node *tipc_net_select_remote_node(u32 addr, u32 ref)
 {
 	return tipc_zone_select_remote_node(tipc_net.zones[tipc_zone(addr)], addr, ref);
 }
@@ -165,7 +165,7 @@ static int net_init(void)
 	if (!tipc_net.zones) {
 		return -ENOMEM;
 	}
-	return 0;
+	return TIPC_OK;
 }
 
 static void net_stop(void)
@@ -266,7 +266,7 @@ void tipc_net_route_msg(struct sk_buff *buf)
 	tipc_link_send(buf, dnode, msg_link_selector(msg));
 }
 
-int tipc_net_start(u32 addr)
+int tipc_net_start(void)
 {
 	char addr_string[16];
 	int res;
@@ -274,10 +274,6 @@ int tipc_net_start(u32 addr)
 	if (tipc_mode != TIPC_NODE_MODE)
 		return -ENOPROTOOPT;
 
-	tipc_subscr_stop();
-	tipc_cfg_stop();
-
-	tipc_own_addr = addr;
 	tipc_mode = TIPC_NET_MODE;
 	tipc_named_reinit();
 	tipc_port_reinit();
@@ -288,14 +284,14 @@ int tipc_net_start(u32 addr)
 	    (res = tipc_bclink_init())) {
 		return res;
 	}
-
+	tipc_subscr_stop();
+	tipc_cfg_stop();
 	tipc_k_signal((Handler)tipc_subscr_start, 0);
 	tipc_k_signal((Handler)tipc_cfg_init, 0);
-
 	info("Started in network mode\n");
 	info("Own node address %s, network identity %u\n",
 	     addr_string_fill(addr_string, tipc_own_addr), tipc_net_id);
-	return 0;
+	return TIPC_OK;
 }
 
 void tipc_net_stop(void)

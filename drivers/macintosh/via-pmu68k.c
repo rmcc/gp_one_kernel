@@ -35,6 +35,7 @@
 
 #include <asm/macintosh.h>
 #include <asm/macints.h>
+#include <asm/machw.h>
 #include <asm/mac_via.h>
 
 #include <asm/pgtable.h>
@@ -100,6 +101,7 @@ static int pmu_kind = PMU_UNKNOWN;
 static int pmu_fully_inited;
 
 int asleep;
+BLOCKING_NOTIFIER_HEAD(sleep_notifier_list);
 
 static int pmu_probe(void);
 static int pmu_init(void);
@@ -739,8 +741,8 @@ pmu_handle_data(unsigned char *data, int len)
 	}
 }
 
-static int backlight_level = -1;
-static int backlight_enabled = 0;
+int backlight_level = -1;
+int backlight_enabled = 0;
 
 #define LEVEL_TO_BRIGHT(lev)	((lev) < 1? 0x7f: 0x4a - ((lev) << 1))
 

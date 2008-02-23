@@ -40,7 +40,6 @@
 
 #include "cx88.h"
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 MODULE_DESCRIPTION("v4l2 driver module for cx2388x based TV cards");
 MODULE_AUTHOR("Gerd Knorr <kraxel@bytesex.org> [SuSE Labs]");
@@ -71,7 +70,7 @@ static DEFINE_MUTEX(devlist);
 
 /* @lpi: lines per IRQ, or 0 to not generate irqs. Note: IRQ to be
 	 generated _after_ lpi lines are transferred. */
-static __le32* cx88_risc_field(__le32 *rp, struct scatterlist *sglist,
+static u32* cx88_risc_field(u32 *rp, struct scatterlist *sglist,
 			    unsigned int offset, u32 sync_line,
 			    unsigned int bpl, unsigned int padding,
 			    unsigned int lines, unsigned int lpi)
@@ -131,7 +130,7 @@ int cx88_risc_buffer(struct pci_dev *pci, struct btcx_riscmem *risc,
 		     unsigned int bpl, unsigned int padding, unsigned int lines)
 {
 	u32 instructions,fields;
-	__le32 *rp;
+	u32 *rp;
 	int rc;
 
 	fields = 0;
@@ -169,7 +168,7 @@ int cx88_risc_databuffer(struct pci_dev *pci, struct btcx_riscmem *risc,
 			 unsigned int lines, unsigned int lpi)
 {
 	u32 instructions;
-	__le32 *rp;
+	u32 *rp;
 	int rc;
 
 	/* estimate risc mem: worst case is one write per page border +
@@ -194,7 +193,7 @@ int cx88_risc_databuffer(struct pci_dev *pci, struct btcx_riscmem *risc,
 int cx88_risc_stopper(struct pci_dev *pci, struct btcx_riscmem *risc,
 		      u32 reg, u32 mask, u32 value)
 {
-	__le32 *rp;
+	u32 *rp;
 	int rc;
 
 	if ((rc = btcx_riscmem_alloc(pci, risc, 4*16)) < 0)
@@ -549,8 +548,7 @@ void cx88_wakeup(struct cx88_core *core,
 		mod_timer(&q->timeout, jiffies+BUFFER_TIMEOUT);
 	}
 	if (bc != 1)
-		dprintk(2, "%s: %d buffers handled (should be 1)\n",
-			__func__, bc);
+		printk("%s: %d buffers handled (should be 1)\n",__func__,bc);
 }
 
 void cx88_shutdown(struct cx88_core *core)
@@ -844,9 +842,6 @@ static int set_tvaudio(struct cx88_core *core)
 	} else if (V4L2_STD_SECAM_L & norm) {
 		core->tvaudio = WW_L;
 
-	} else if ((V4L2_STD_SECAM_B | V4L2_STD_SECAM_G | V4L2_STD_SECAM_H) & norm) {
-		core->tvaudio = WW_BG;
-
 	} else if (V4L2_STD_SECAM_DK & norm) {
 		core->tvaudio = WW_DK;
 
@@ -1011,7 +1006,7 @@ struct video_device *cx88_vdev_init(struct cx88_core *core,
 		return NULL;
 	*vfd = *template;
 	vfd->minor   = -1;
-	vfd->parent  = &pci->dev;
+	vfd->dev     = &pci->dev;
 	vfd->release = video_device_release;
 	snprintf(vfd->name, sizeof(vfd->name), "%s %s (%s)",
 		 core->name, type, core->board.name);

@@ -5,12 +5,10 @@
  *
  * Copyright (C) 1997 Ralf Baechle
  */
-#include <linux/irqflags.h>
 #include <linux/kernel.h>
 
 #include <asm/cacheflush.h>
 #include <asm/mipsregs.h>
-#include <asm/processor.h>
 
 void wrppmc_machine_restart(char *command)
 {
@@ -34,7 +32,15 @@ void wrppmc_machine_halt(void)
 
 	printk(KERN_NOTICE "You can safely turn off the power\n");
 	while (1) {
-		if (cpu_wait)
-			cpu_wait();
+		__asm__(
+			".set\tmips3\n\t"
+			"wait\n\t"
+			".set\tmips0"
+		);
 	}
+}
+
+void wrppmc_machine_power_off(void)
+{
+	wrppmc_machine_halt();
 }

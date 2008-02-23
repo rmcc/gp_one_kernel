@@ -27,7 +27,6 @@
 #include <asm/qe.h>
 #include <asm/qe_ic.h>
 #include <sysdev/fsl_soc.h>
-#include <sysdev/fsl_pci.h>
 
 #include "mpc83xx.h"
 
@@ -38,7 +37,6 @@
 #define DBG(fmt...)
 #endif
 
-#ifdef CONFIG_QUICC_ENGINE
 static void mpc83xx_spi_activate_cs(u8 cs, u8 polarity)
 {
 	pr_debug("%s %d %d\n", __func__, cs, polarity);
@@ -78,8 +76,8 @@ static int __init mpc832x_spi_init(void)
 			    mpc83xx_spi_activate_cs,
 			    mpc83xx_spi_deactivate_cs);
 }
+
 machine_device_initcall(mpc832x_rdb, mpc832x_spi_init);
-#endif /* CONFIG_QUICC_ENGINE */
 
 /* ************************************************************************
  *
@@ -116,7 +114,6 @@ static void __init mpc832x_rdb_setup_arch(void)
 static struct of_device_id mpc832x_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
-	{ .compatible = "simple-bus", },
 	{ .type = "qe", },
 	{ .compatible = "fsl,qe", },
 	{},
@@ -131,7 +128,7 @@ static int __init mpc832x_declare_of_platform_devices(void)
 }
 machine_device_initcall(mpc832x_rdb, mpc832x_declare_of_platform_devices);
 
-static void __init mpc832x_rdb_init_IRQ(void)
+void __init mpc832x_rdb_init_IRQ(void)
 {
 
 	struct device_node *np;

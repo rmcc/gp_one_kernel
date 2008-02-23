@@ -211,7 +211,7 @@ static struct foo_obj *create_foo_obj(const char *name)
 	 */
 	retval = kobject_init_and_add(&foo->kobj, &foo_ktype, NULL, "%s", name);
 	if (retval) {
-		kobject_put(&foo->kobj);
+		kfree(foo);
 		return NULL;
 	}
 
@@ -229,7 +229,7 @@ static void destroy_foo_obj(struct foo_obj *foo)
 	kobject_put(&foo->kobj);
 }
 
-static int __init example_init(void)
+static int example_init(void)
 {
 	/*
 	 * Create a kset with the name of "kset_example",
@@ -264,7 +264,7 @@ foo_error:
 	return -EINVAL;
 }
 
-static void __exit example_exit(void)
+static void example_exit(void)
 {
 	destroy_foo_obj(baz_obj);
 	destroy_foo_obj(bar_obj);

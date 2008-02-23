@@ -163,15 +163,13 @@ static int vx_calc_clock_from_freq(struct vx_core *chip, int freq)
 {
 	int hexfreq;
 
-	if (snd_BUG_ON(freq <= 0))
-		return 0;
+	snd_assert(freq > 0, return 0);
 
 	hexfreq = (28224000 * 10) / freq;
 	hexfreq = (hexfreq + 5) / 10;
 
 	/* max freq = 55125 Hz */
-	if (snd_BUG_ON(hexfreq <= 0x00000200))
-		return 0;
+	snd_assert(hexfreq > 0x00000200, return 0);
 
 	if (hexfreq <= 0x03ff)
 		return hexfreq - 0x00000201;

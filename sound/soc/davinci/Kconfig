@@ -1,6 +1,6 @@
 config SND_DAVINCI_SOC
 	tristate "SoC Audio for the TI DAVINCI chip"
-	depends on ARCH_DAVINCI
+	depends on ARCH_DAVINCI && SND_SOC
 	help
 	  Say Y or M if you want to add support for codecs attached to
 	  the DAVINCI AC97 or I2S interface. You will also need
@@ -17,13 +17,3 @@ config SND_DAVINCI_SOC_EVM
 	help
 	  Say Y if you want to add support for SoC audio on TI
 	  DaVinci EVM platform.
-
-config SND_DAVINCI_SOC_SFFSDR
-	tristate "SoC Audio support for SFFSDR"
-	depends on SND_DAVINCI_SOC && MACH_DAVINCI_SFFSDR
-	select SND_DAVINCI_SOC_I2S
-	select SND_SOC_PCM3008
-	select SFFSDR_FPGA
-	help
-	  Say Y if you want to add support for SoC audio on
-	  Lyrtech SFFSDR board.

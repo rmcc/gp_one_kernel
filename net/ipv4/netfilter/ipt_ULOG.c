@@ -281,14 +281,18 @@ alloc_failure:
 }
 
 static unsigned int
-ulog_tg(struct sk_buff *skb, const struct xt_target_param *par)
+ulog_tg(struct sk_buff *skb, const struct net_device *in,
+        const struct net_device *out, unsigned int hooknum,
+        const struct xt_target *target, const void *targinfo)
 {
-	ipt_ulog_packet(par->hooknum, skb, par->in, par->out,
-	                par->targinfo, NULL);
+	struct ipt_ulog_info *loginfo = (struct ipt_ulog_info *) targinfo;
+
+	ipt_ulog_packet(hooknum, skb, in, out, loginfo, NULL);
+
 	return XT_CONTINUE;
 }
 
-static void ipt_logfn(u_int8_t pf,
+static void ipt_logfn(unsigned int pf,
 		      unsigned int hooknum,
 		      const struct sk_buff *skb,
 		      const struct net_device *in,
@@ -313,9 +317,12 @@ static void ipt_logfn(u_int8_t pf,
 	ipt_ulog_packet(hooknum, skb, in, out, &loginfo, prefix);
 }
 
-static bool ulog_tg_check(const struct xt_tgchk_param *par)
+static bool
+ulog_tg_check(const char *tablename, const void *e,
+              const struct xt_target *target, void *targinfo,
+              unsigned int hookmask)
 {
-	const struct ipt_ulog_info *loginfo = par->targinfo;
+	const struct ipt_ulog_info *loginfo = targinfo;
 
 	if (loginfo->prefix[sizeof(loginfo->prefix) - 1] != '\0') {
 		pr_debug("ipt_ULOG: prefix term %i\n",
@@ -367,7 +374,7 @@ static int ulog_tg_compat_to_user(void __user *dst, void *src)
 
 static struct xt_target ulog_tg_reg __read_mostly = {
 	.name		= "ULOG",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.target		= ulog_tg,
 	.targetsize	= sizeof(struct ipt_ulog_info),
 	.checkentry	= ulog_tg_check,
@@ -412,7 +419,7 @@ static int __init ulog_tg_init(void)
 		return ret;
 	}
 	if (nflog)
-		nf_log_register(NFPROTO_IPV4, &ipt_ulog_logger);
+		nf_log_register(PF_INET, &ipt_ulog_logger);
 
 	return 0;
 }

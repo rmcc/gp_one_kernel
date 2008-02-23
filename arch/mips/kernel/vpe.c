@@ -38,7 +38,6 @@
 #include <linux/vmalloc.h>
 #include <linux/elf.h>
 #include <linux/seq_file.h>
-#include <linux/smp_lock.h>
 #include <linux/syscalls.h>
 #include <linux/moduleloader.h>
 #include <linux/interrupt.h>
@@ -1051,20 +1050,17 @@ static int vpe_open(struct inode *inode, struct file *filp)
 	enum vpe_state state;
 	struct vpe_notifications *not;
 	struct vpe *v;
-	int ret, err = 0;
+	int ret;
 
-	lock_kernel();
 	if (minor != iminor(inode)) {
 		/* assume only 1 device at the moment. */
 		printk(KERN_WARNING "VPE loader: only vpe1 is supported\n");
-		err = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	if ((v = get_vpe(tclimit)) == NULL) {
 		printk(KERN_WARNING "VPE loader: unable to get vpe\n");
-		err = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	state = xchg(&v->state, VPE_STATE_INUSE);
@@ -1085,8 +1081,8 @@ static int vpe_open(struct inode *inode, struct file *filp)
 	v->load_addr = NULL;
 	v->len = 0;
 
-	v->uid = filp->f_cred->fsuid;
-	v->gid = filp->f_cred->fsgid;
+	v->uid = filp->f_uid;
+	v->gid = filp->f_gid;
 
 #ifdef CONFIG_MIPS_APSP_KSPD
 	/* get kspd to tell us when a syscall_exit happens */
@@ -1104,8 +1100,6 @@ static int vpe_open(struct inode *inode, struct file *filp)
 	v->shared_ptr = NULL;
 	v->__start = 0;
 
-out:
-	unlock_kernel();
 	return 0;
 }
 
@@ -1134,7 +1128,7 @@ static int vpe_release(struct inode *inode, struct file *filp)
 
 	/* It's good to be able to run the SP and if it chokes have a look at
 	   the /dev/rt?. But if we reset the pointer to the shared struct we
-	   lose what has happened. So perhaps if garbage is sent to the vpe
+	   loose what has happened. So perhaps if garbage is sent to the vpe
 	   device, use it as a trigger for the reset. Hopefully a nice
 	   executable will be along shortly. */
 	if (ret < 0)
@@ -1454,7 +1448,7 @@ static int __init vpe_module_init(void)
 	device_initialize(&vpe_device);
 	vpe_device.class	= &vpe_class,
 	vpe_device.parent	= NULL,
-	dev_set_name(&vpe_device, "vpe1");
+	strlcpy(vpe_device.bus_id, "vpe1", BUS_ID_SIZE);
 	vpe_device.devt = MKDEV(major, minor);
 	err = device_add(&vpe_device);
 	if (err) {

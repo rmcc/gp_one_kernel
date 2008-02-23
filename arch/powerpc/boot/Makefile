@@ -35,13 +35,10 @@ endif
 
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj) -I$(srctree)/$(src)/libfdt
 
-DTS_FLAGS	?= -p 1024
-
 $(obj)/4xx.o: BOOTCFLAGS += -mcpu=405
 $(obj)/ebony.o: BOOTCFLAGS += -mcpu=405
 $(obj)/cuboot-taishan.o: BOOTCFLAGS += -mcpu=405
 $(obj)/cuboot-katmai.o: BOOTCFLAGS += -mcpu=405
-$(obj)/cuboot-acadia.o: BOOTCFLAGS += -mcpu=405
 $(obj)/treeboot-walnut.o: BOOTCFLAGS += -mcpu=405
 $(obj)/virtex405-head.o: BOOTAFLAGS += -mcpu=405
 
@@ -50,11 +47,11 @@ zlib       := inffast.c inflate.c inftrees.c
 zlibheader := inffast.h inffixed.h inflate.h inftrees.h infutil.h
 zliblinuxheader := zlib.h zconf.h zutil.h
 
-$(addprefix $(obj)/,$(zlib) cuboot-c2k.o gunzip_util.o main.o prpmc2800.o): \
+$(addprefix $(obj)/,$(zlib) gunzip_util.o main.o): \
 	$(addprefix $(obj)/,$(zliblinuxheader)) $(addprefix $(obj)/,$(zlibheader))
 
 src-libfdt := fdt.c fdt_ro.c fdt_wip.c fdt_sw.c fdt_rw.c fdt_strerror.c
-src-wlib := string.S crt0.S crtsavres.S stdio.c main.c \
+src-wlib := string.S crt0.S stdio.c main.c \
 		$(addprefix libfdt/,$(src-libfdt)) libfdt-wrapper.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S \
 		gunzip_util.c elf_util.c $(zlib) devtree.c oflib.c ofconsole.c \
@@ -66,11 +63,10 @@ src-plat := of.c cuboot-52xx.c cuboot-824x.c cuboot-83xx.c cuboot-85xx.c holly.c
 		ps3-head.S ps3-hvcall.S ps3.c treeboot-bamboo.c cuboot-8xx.c \
 		cuboot-pq2.c cuboot-sequoia.c treeboot-walnut.c \
 		cuboot-bamboo.c cuboot-mpc7448hpc2.c cuboot-taishan.c \
-		fixed-head.S ep88xc.c ep405.c cuboot-c2k.c \
+		fixed-head.S ep88xc.c ep405.c \
 		cuboot-katmai.c cuboot-rainier.c redboot-8xx.c ep8248e.c \
 		cuboot-warp.c cuboot-85xx-cpm2.c cuboot-yosemite.c simpleboot.c \
-		virtex405-head.S virtex.c redboot-83xx.c cuboot-sam440ep.c \
-		cuboot-acadia.c
+		virtex405-head.S
 src-boot := $(src-wlib) $(src-plat) empty.c
 
 src-boot := $(addprefix $(obj)/, $(src-boot))
@@ -165,12 +161,12 @@ quiet_cmd_flex = FLEX    $@
       cmd_flex = $(FLEX) -o$@ $<; cp $@ $@_shipped
 
 $(obj)/dtc-src/dtc-parser.tab.c: $(src)/dtc-src/dtc-parser.y FORCE
-	$(call if_changed,bison)
+     $(call if_changed,bison)
 
 $(obj)/dtc-src/dtc-parser.tab.h: $(obj)/dtc-src/dtc-parser.tab.c
 
 $(obj)/dtc-src/dtc-lexer.lex.c: $(src)/dtc-src/dtc-lexer.l FORCE
-	$(call if_changed,flex)
+     $(call if_changed,flex)
 endif
 
 #############
@@ -194,11 +190,10 @@ image-$(CONFIG_PPC_MAPLE)		+= zImage.pseries
 image-$(CONFIG_PPC_IBM_CELL_BLADE)	+= zImage.pseries
 image-$(CONFIG_PPC_PS3)			+= dtbImage.ps3
 image-$(CONFIG_PPC_CELLEB)		+= zImage.pseries
-image-$(CONFIG_PPC_CELL_QPACE)		+= zImage.pseries
 image-$(CONFIG_PPC_CHRP)		+= zImage.chrp
 image-$(CONFIG_PPC_EFIKA)		+= zImage.chrp
 image-$(CONFIG_PPC_PMAC)		+= zImage.pmac
-image-$(CONFIG_PPC_HOLLY)		+= dtbImage.holly
+image-$(CONFIG_PPC_HOLLY)		+= zImage.holly
 image-$(CONFIG_PPC_PRPMC2800)		+= dtbImage.prpmc2800
 image-$(CONFIG_PPC_ISERIES)		+= zImage.iseries
 image-$(CONFIG_DEFAULT_UIMAGE)		+= uImage
@@ -208,18 +203,16 @@ image-$(CONFIG_DEFAULT_UIMAGE)		+= uImage
 #
 # Theses are default targets to build images which embed device tree blobs.
 # They are only required on boards which do not have FDT support in firmware.
-# Boards with newish u-boot firmware can use the uImage target above
+# Boards with newish u-boot firmare can use the uImage target above
 #
 
 # Board ports in arch/powerpc/platform/40x/Kconfig
 image-$(CONFIG_EP405)			+= dtbImage.ep405
 image-$(CONFIG_WALNUT)			+= treeImage.walnut
-image-$(CONFIG_ACADIA)			+= cuImage.acadia
 
 # Board ports in arch/powerpc/platform/44x/Kconfig
 image-$(CONFIG_EBONY)			+= treeImage.ebony cuImage.ebony
 image-$(CONFIG_BAMBOO)			+= treeImage.bamboo cuImage.bamboo
-image-$(CONFIG_SAM440EP)		+= cuImage.sam440ep
 image-$(CONFIG_SEQUOIA)			+= cuImage.sequoia
 image-$(CONFIG_RAINIER)			+= cuImage.rainier
 image-$(CONFIG_TAISHAN)			+= cuImage.taishan
@@ -228,8 +221,8 @@ image-$(CONFIG_WARP)			+= cuImage.warp
 image-$(CONFIG_YOSEMITE)		+= cuImage.yosemite
 
 # Board ports in arch/powerpc/platform/8xx/Kconfig
-image-$(CONFIG_MPC86XADS)		+= cuImage.mpc866ads
-image-$(CONFIG_MPC885ADS)		+= cuImage.mpc885ads
+image-$(CONFIG_PPC_MPC86XADS)		+= cuImage.mpc866ads
+image-$(CONFIG_PPC_MPC885ADS)		+= cuImage.mpc885ads
 image-$(CONFIG_PPC_EP88XC)		+= dtbImage.ep88xc
 image-$(CONFIG_PPC_ADDER875)		+= cuImage.adder875-uboot \
 					   dtbImage.adder875-redboot
@@ -249,7 +242,6 @@ image-$(CONFIG_MPC834x_ITX)		+= cuImage.mpc8349emitx \
 					   cuImage.mpc8349emitxgp
 image-$(CONFIG_MPC834x_MDS)		+= cuImage.mpc834x_mds
 image-$(CONFIG_MPC836x_MDS)		+= cuImage.mpc836x_mds
-image-$(CONFIG_ASP834x)			+= dtbImage.asp834x-redboot
 
 # Board ports in arch/powerpc/platform/85xx/Kconfig
 image-$(CONFIG_MPC8540_ADS)		+= cuImage.mpc8540ads
@@ -262,7 +254,6 @@ image-$(CONFIG_MPC85xx_DS)		+= cuImage.mpc8544ds \
 					   cuImage.mpc8572ds
 image-$(CONFIG_TQM8540)			+= cuImage.tqm8540
 image-$(CONFIG_TQM8541)			+= cuImage.tqm8541
-image-$(CONFIG_TQM8548)			+= cuImage.tqm8548
 image-$(CONFIG_TQM8555)			+= cuImage.tqm8555
 image-$(CONFIG_TQM8560)			+= cuImage.tqm8560
 image-$(CONFIG_SBC8548)			+= cuImage.sbc8548
@@ -272,7 +263,6 @@ image-$(CONFIG_KSI8560)			+= cuImage.ksi8560
 # Board ports in arch/powerpc/platform/embedded6xx/Kconfig
 image-$(CONFIG_STORCENTER)		+= cuImage.storcenter
 image-$(CONFIG_MPC7448HPC2)		+= cuImage.mpc7448hpc2
-image-$(CONFIG_PPC_C2K)			+= cuImage.c2k
 
 # For 32-bit powermacs, build the COFF and miboot images
 # as well as the ELF images.
@@ -280,14 +270,10 @@ ifeq ($(CONFIG_PPC32),y)
 image-$(CONFIG_PPC_PMAC)	+= zImage.coff zImage.miboot
 endif
 
-# Allow extra targets to be added to the defconfig
-image-y	+= $(subst ",,$(CONFIG_EXTRA_TARGETS))
-
 initrd-  := $(patsubst zImage%, zImage.initrd%, $(image-n) $(image-))
 initrd-y := $(patsubst zImage%, zImage.initrd%, \
 		$(patsubst dtbImage%, dtbImage.initrd%, \
-		$(patsubst simpleImage%, simpleImage.initrd%, \
-		$(patsubst treeImage%, treeImage.initrd%, $(image-y)))))
+		$(patsubst treeImage%, treeImage.initrd%, $(image-y))))
 initrd-y := $(filter-out $(image-y), $(initrd-y))
 targets	+= $(image-y) $(initrd-y)
 
@@ -314,17 +300,11 @@ $(obj)/dtbImage.%: vmlinux $(wrapperbits) $(obj)/%.dtb
 $(obj)/vmlinux.strip: vmlinux
 	$(STRIP) -s -R .comment $< -o $@
 
-# The iseries hypervisor won't take an ET_DYN executable, so this
-# changes the type (byte 17) in the file to ET_EXEC (2).
 $(obj)/zImage.iseries: vmlinux
 	$(STRIP) -s -R .comment $< -o $@
-	printf "\x02" | dd of=$@ conv=notrunc bs=1 seek=17
 
 $(obj)/uImage: vmlinux $(wrapperbits)
 	$(call if_changed,wrap,uboot)
-
-$(obj)/cuImage.initrd.%: vmlinux $(obj)/%.dtb $(wrapperbits)
-	$(call if_changed,wrap,cuboot-$*,,$(obj)/$*.dtb,$(obj)/ramdisk.image.gz)
 
 $(obj)/cuImage.%: vmlinux $(obj)/%.dtb $(wrapperbits)
 	$(call if_changed,wrap,cuboot-$*,,$(obj)/$*.dtb)
@@ -356,7 +336,7 @@ $(obj)/zImage.initrd:	$(addprefix $(obj)/, $(initrd-y))
 	@rm -f $@; ln $< $@
 
 install: $(CONFIGURE) $(addprefix $(obj)/, $(image-y))
-	sh -x $(srctree)/$(src)/install.sh "$(KERNELRELEASE)" vmlinux System.map "$(INSTALL_PATH)" $^
+	sh -x $(srctree)/$(src)/install.sh "$(KERNELRELEASE)" vmlinux System.map "$(INSTALL_PATH)" $<
 
 # anything not in $(targets)
 clean-files += $(image-) $(initrd-) cuImage.* dtbImage.* treeImage.* \

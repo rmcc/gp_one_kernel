@@ -391,7 +391,6 @@ static irqreturn_t mmci_irq(int irq, void *dev_id)
 static void mmci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct mmci_host *host = mmc_priv(mmc);
-	unsigned long flags;
 
 	WARN_ON(host->mrq != NULL);
 
@@ -403,7 +402,7 @@ static void mmci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		return;
 	}
 
-	spin_lock_irqsave(&host->lock, flags);
+	spin_lock_irq(&host->lock);
 
 	host->mrq = mrq;
 
@@ -412,7 +411,7 @@ static void mmci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	mmci_start_command(host, mrq->cmd, 0);
 
-	spin_unlock_irqrestore(&host->lock, flags);
+	spin_unlock_irq(&host->lock);
 }
 
 static void mmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
@@ -500,7 +499,7 @@ static int mmci_probe(struct amba_device *dev, void *id)
 	}
 
 	host = mmc_priv(mmc);
-	host->clk = clk_get(&dev->dev, NULL);
+	host->clk = clk_get(&dev->dev, "MCLK");
 	if (IS_ERR(host->clk)) {
 		ret = PTR_ERR(host->clk);
 		host->clk = NULL;
@@ -536,6 +535,7 @@ static int mmci_probe(struct amba_device *dev, void *id)
 	mmc->f_min = (host->mclk + 511) / 512;
 	mmc->f_max = min(host->mclk, fmax);
 	mmc->ocr_avail = plat->ocr_mask;
+	mmc->caps = MMC_CAP_MULTIWRITE;
 
 	/*
 	 * We can do SGIO

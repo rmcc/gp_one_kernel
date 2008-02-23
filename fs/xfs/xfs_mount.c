@@ -47,10 +47,12 @@
 
 STATIC int	xfs_mount_log_sb(xfs_mount_t *, __int64_t);
 STATIC int	xfs_uuid_mount(xfs_mount_t *);
+STATIC void	xfs_uuid_unmount(xfs_mount_t *mp);
 STATIC void	xfs_unmountfs_wait(xfs_mount_t *);
 
 
 #ifdef HAVE_PERCPU_SB
+STATIC void	xfs_icsb_destroy_counters(xfs_mount_t *);
 STATIC void	xfs_icsb_balance_counter(xfs_mount_t *, xfs_sb_field_t,
 						int);
 STATIC void	xfs_icsb_balance_counter_locked(xfs_mount_t *, xfs_sb_field_t,
@@ -61,6 +63,7 @@ STATIC void	xfs_icsb_disable_counter(xfs_mount_t *, xfs_sb_field_t);
 
 #else
 
+#define xfs_icsb_destroy_counters(mp)			do { } while (0)
 #define xfs_icsb_balance_counter(mp, a, b)		do { } while (0)
 #define xfs_icsb_balance_counter_locked(mp, a, b)	do { } while (0)
 #define xfs_icsb_modify_counters(mp, a, b, c)		do { } while (0)
@@ -123,12 +126,34 @@ static const struct {
 };
 
 /*
+ * Return a pointer to an initialized xfs_mount structure.
+ */
+xfs_mount_t *
+xfs_mount_init(void)
+{
+	xfs_mount_t *mp;
+
+	mp = kmem_zalloc(sizeof(xfs_mount_t), KM_SLEEP);
+
+	if (xfs_icsb_init_counters(mp)) {
+		mp->m_flags |= XFS_MOUNT_NO_PERCPU_SB;
+	}
+
+	spin_lock_init(&mp->m_sb_lock);
+	mutex_init(&mp->m_ilock);
+	mutex_init(&mp->m_growlock);
+	atomic_set(&mp->m_active_trans, 0);
+
+	return mp;
+}
+
+/*
  * Free up the resources associated with a mount structure.  Assume that
  * the structure was initially zeroed, so we can tell which fields got
  * initialized.
  */
-STATIC void
-xfs_free_perag(
+void
+xfs_mount_free(
 	xfs_mount_t	*mp)
 {
 	if (mp->m_perag) {
@@ -136,9 +161,28 @@ xfs_free_perag(
 
 		for (agno = 0; agno < mp->m_maxagi; agno++)
 			if (mp->m_perag[agno].pagb_list)
-				kmem_free(mp->m_perag[agno].pagb_list);
-		kmem_free(mp->m_perag);
+				kmem_free(mp->m_perag[agno].pagb_list,
+						sizeof(xfs_perag_busy_t) *
+							XFS_PAGB_NUM_SLOTS);
+		kmem_free(mp->m_perag,
+			  sizeof(xfs_perag_t) * mp->m_sb.sb_agcount);
 	}
+
+	spinlock_destroy(&mp->m_ail_lock);
+	spinlock_destroy(&mp->m_sb_lock);
+	mutex_destroy(&mp->m_ilock);
+	mutex_destroy(&mp->m_growlock);
+	if (mp->m_quotainfo)
+		XFS_QM_DONE(mp);
+
+	if (mp->m_fsname != NULL)
+		kmem_free(mp->m_fsname, mp->m_fsname_len);
+	if (mp->m_rtname != NULL)
+		kmem_free(mp->m_rtname, strlen(mp->m_rtname) + 1);
+	if (mp->m_logname != NULL)
+		kmem_free(mp->m_logname, strlen(mp->m_logname) + 1);
+
+	xfs_icsb_destroy_counters(mp);
 }
 
 /*
@@ -244,19 +288,6 @@ xfs_mount_validate_sb(
 		return XFS_ERROR(EFSCORRUPTED);
 	}
 
-	/*
-	 * Until this is fixed only page-sized or smaller data blocks work.
-	 */
-	if (unlikely(sbp->sb_blocksize > PAGE_SIZE)) {
-		xfs_fs_mount_cmn_err(flags,
-			"file system with blocksize %d bytes",
-			sbp->sb_blocksize);
-		xfs_fs_mount_cmn_err(flags,
-			"only pagesize (%ld) or less will currently work.",
-			PAGE_SIZE);
-		return XFS_ERROR(ENOSYS);
-	}
-
 	if (xfs_sb_validate_fsb_count(sbp, sbp->sb_dblocks) ||
 	    xfs_sb_validate_fsb_count(sbp, sbp->sb_rblocks)) {
 		xfs_fs_mount_cmn_err(flags,
@@ -275,6 +306,19 @@ xfs_mount_validate_sb(
 	if (unlikely(!xfs_sb_version_hasdirv2(sbp))) {
 		xfs_fs_mount_cmn_err(flags,
 			"file system using version 1 directory format");
+		return XFS_ERROR(ENOSYS);
+	}
+
+	/*
+	 * Until this is fixed only page-sized or smaller data blocks work.
+	 */
+	if (unlikely(sbp->sb_blocksize > PAGE_SIZE)) {
+		xfs_fs_mount_cmn_err(flags,
+			"file system with blocksize %d bytes",
+			sbp->sb_blocksize);
+		xfs_fs_mount_cmn_err(flags,
+			"only pagesize (%ld) or less will currently work.",
+			PAGE_SIZE);
 		return XFS_ERROR(ENOSYS);
 	}
 
@@ -567,6 +611,8 @@ xfs_readsb(xfs_mount_t *mp, int flags)
 STATIC void
 xfs_mount_common(xfs_mount_t *mp, xfs_sb_t *sbp)
 {
+	int	i;
+
 	mp->m_agfrotor = mp->m_agirotor = 0;
 	spin_lock_init(&mp->m_agirotor_lock);
 	mp->m_maxagi = mp->m_sb.sb_agcount;
@@ -575,10 +621,12 @@ xfs_mount_common(xfs_mount_t *mp, xfs_sb_t *sbp)
 	mp->m_sectbb_log = sbp->sb_sectlog - BBSHIFT;
 	mp->m_agno_log = xfs_highbit32(sbp->sb_agcount - 1) + 1;
 	mp->m_agino_log = sbp->sb_inopblog + sbp->sb_agblklog;
-	mp->m_litino = sbp->sb_inodesize - sizeof(struct xfs_dinode);
+	mp->m_litino = sbp->sb_inodesize -
+		((uint)sizeof(xfs_dinode_core_t) + (uint)sizeof(xfs_agino_t));
 	mp->m_blockmask = sbp->sb_blocksize - 1;
 	mp->m_blockwsize = sbp->sb_blocksize >> XFS_WORDLOG;
 	mp->m_blockwmask = mp->m_blockwsize - 1;
+	INIT_LIST_HEAD(&mp->m_del_inodes);
 
 	/*
 	 * Setup for attributes, in case they get created.
@@ -601,20 +649,24 @@ xfs_mount_common(xfs_mount_t *mp, xfs_sb_t *sbp)
 	}
 	ASSERT(mp->m_attroffset < XFS_LITINO(mp));
 
-	mp->m_alloc_mxr[0] = xfs_allocbt_maxrecs(mp, sbp->sb_blocksize, 1);
-	mp->m_alloc_mxr[1] = xfs_allocbt_maxrecs(mp, sbp->sb_blocksize, 0);
-	mp->m_alloc_mnr[0] = mp->m_alloc_mxr[0] / 2;
-	mp->m_alloc_mnr[1] = mp->m_alloc_mxr[1] / 2;
-
-	mp->m_inobt_mxr[0] = xfs_inobt_maxrecs(mp, sbp->sb_blocksize, 1);
-	mp->m_inobt_mxr[1] = xfs_inobt_maxrecs(mp, sbp->sb_blocksize, 0);
-	mp->m_inobt_mnr[0] = mp->m_inobt_mxr[0] / 2;
-	mp->m_inobt_mnr[1] = mp->m_inobt_mxr[1] / 2;
-
-	mp->m_bmap_dmxr[0] = xfs_bmbt_maxrecs(mp, sbp->sb_blocksize, 1);
-	mp->m_bmap_dmxr[1] = xfs_bmbt_maxrecs(mp, sbp->sb_blocksize, 0);
-	mp->m_bmap_dmnr[0] = mp->m_bmap_dmxr[0] / 2;
-	mp->m_bmap_dmnr[1] = mp->m_bmap_dmxr[1] / 2;
+	for (i = 0; i < 2; i++) {
+		mp->m_alloc_mxr[i] = XFS_BTREE_BLOCK_MAXRECS(sbp->sb_blocksize,
+			xfs_alloc, i == 0);
+		mp->m_alloc_mnr[i] = XFS_BTREE_BLOCK_MINRECS(sbp->sb_blocksize,
+			xfs_alloc, i == 0);
+	}
+	for (i = 0; i < 2; i++) {
+		mp->m_bmap_dmxr[i] = XFS_BTREE_BLOCK_MAXRECS(sbp->sb_blocksize,
+			xfs_bmbt, i == 0);
+		mp->m_bmap_dmnr[i] = XFS_BTREE_BLOCK_MINRECS(sbp->sb_blocksize,
+			xfs_bmbt, i == 0);
+	}
+	for (i = 0; i < 2; i++) {
+		mp->m_inobt_mxr[i] = XFS_BTREE_BLOCK_MAXRECS(sbp->sb_blocksize,
+			xfs_inobt, i == 0);
+		mp->m_inobt_mnr[i] = XFS_BTREE_BLOCK_MINRECS(sbp->sb_blocksize,
+			xfs_inobt, i == 0);
+	}
 
 	mp->m_bsize = XFS_FSB_TO_BB(mp, 1);
 	mp->m_ialloc_inos = (int)MAX((__uint16_t)XFS_INODES_PER_CHUNK,
@@ -682,11 +734,11 @@ xfs_initialize_perag_data(xfs_mount_t *mp, xfs_agnumber_t agcount)
  * Update alignment values based on mount options and sb values
  */
 STATIC int
-xfs_update_alignment(xfs_mount_t *mp, __uint64_t *update_flags)
+xfs_update_alignment(xfs_mount_t *mp, int mfsi_flags, __uint64_t *update_flags)
 {
 	xfs_sb_t	*sbp = &(mp->m_sb);
 
-	if (mp->m_dalign) {
+	if (mp->m_dalign && !(mfsi_flags & XFS_MFSI_SECOND)) {
 		/*
 		 * If stripe unit and stripe width are not multiples
 		 * of the fs blocksize turn off alignment.
@@ -842,7 +894,7 @@ xfs_set_inoalignment(xfs_mount_t *mp)
  * Check that the data (and log if separate) are an ok size.
  */
 STATIC int
-xfs_check_sizes(xfs_mount_t *mp)
+xfs_check_sizes(xfs_mount_t *mp, int mfsi_flags)
 {
 	xfs_buf_t	*bp;
 	xfs_daddr_t	d;
@@ -865,7 +917,8 @@ xfs_check_sizes(xfs_mount_t *mp)
 		return error;
 	}
 
-	if (mp->m_logdev_targp != mp->m_ddev_targp) {
+	if (((mfsi_flags & XFS_MFSI_CLIENT) == 0) &&
+	    mp->m_logdev_targp != mp->m_ddev_targp) {
 		d = (xfs_daddr_t)XFS_FSB_TO_BB(mp, mp->m_sb.sb_logblocks);
 		if (XFS_BB_TO_FSB(mp, d) != mp->m_sb.sb_logblocks) {
 			cmn_err(CE_WARN, "XFS: size check 3 failed");
@@ -900,13 +953,15 @@ xfs_check_sizes(xfs_mount_t *mp)
  */
 int
 xfs_mountfs(
-	xfs_mount_t	*mp)
+	xfs_mount_t	*mp,
+	int		mfsi_flags)
 {
 	xfs_sb_t	*sbp = &(mp->m_sb);
 	xfs_inode_t	*rip;
 	__uint64_t	resblks;
 	__int64_t	update_flags = 0LL;
 	uint		quotamount, quotaflags;
+	int		agno;
 	int		uuid_mounted = 0;
 	int		error = 0;
 
@@ -939,19 +994,9 @@ xfs_mountfs(
 		 * Re-check for ATTR2 in case it was found in bad_features2
 		 * slot.
 		 */
-		if (xfs_sb_version_hasattr2(&mp->m_sb) &&
-		   !(mp->m_flags & XFS_MOUNT_NOATTR2))
+		if (xfs_sb_version_hasattr2(&mp->m_sb))
 			mp->m_flags |= XFS_MOUNT_ATTR2;
-	}
 
-	if (xfs_sb_version_hasattr2(&mp->m_sb) &&
-	   (mp->m_flags & XFS_MOUNT_NOATTR2)) {
-		xfs_sb_version_removeattr2(&mp->m_sb);
-		update_flags |= XFS_SB_FEATURES2;
-
-		/* update sb_versionnum for the clearing of the morebits */
-		if (!sbp->sb_features2)
-			update_flags |= XFS_SB_VERSIONNUM;
 	}
 
 	/*
@@ -960,7 +1005,7 @@ xfs_mountfs(
 	 * allocator alignment is within an ag, therefore ag has
 	 * to be aligned at stripe boundary.
 	 */
-	error = xfs_update_alignment(mp, &update_flags);
+	error = xfs_update_alignment(mp, mfsi_flags, &update_flags);
 	if (error)
 		goto error1;
 
@@ -979,7 +1024,8 @@ xfs_mountfs(
 	 * since a single partition filesystem is identical to a single
 	 * partition volume/filesystem.
 	 */
-	if ((mp->m_flags & XFS_MOUNT_NOUUID) == 0) {
+	if ((mfsi_flags & XFS_MFSI_SECOND) == 0 &&
+	    (mp->m_flags & XFS_MOUNT_NOUUID) == 0) {
 		if (xfs_uuid_mount(mp)) {
 			error = XFS_ERROR(EINVAL);
 			goto error1;
@@ -1007,7 +1053,7 @@ xfs_mountfs(
 	/*
 	 * Check that the data (and log if separate) are an ok size.
 	 */
-	error = xfs_check_sizes(mp);
+	error = xfs_check_sizes(mp, mfsi_flags);
 	if (error)
 		goto error1;
 
@@ -1018,6 +1064,13 @@ xfs_mountfs(
 	if (error) {
 		cmn_err(CE_WARN, "XFS: RT mount failed");
 		goto error1;
+	}
+
+	/*
+	 * For client case we are done now
+	 */
+	if (mfsi_flags & XFS_MFSI_CLIENT) {
+		return 0;
 	}
 
 	/*
@@ -1044,10 +1097,8 @@ xfs_mountfs(
 	 * Allocate and initialize the per-ag data.
 	 */
 	init_rwsem(&mp->m_peraglock);
-	mp->m_perag = kmem_zalloc(sbp->sb_agcount * sizeof(xfs_perag_t),
-				  KM_MAYFAIL);
-	if (!mp->m_perag)
-		goto error1;
+	mp->m_perag =
+		kmem_zalloc(sbp->sb_agcount * sizeof(xfs_perag_t), KM_SLEEP);
 
 	mp->m_maxagi = xfs_initialize_perag(mp, sbp->sb_agcount);
 
@@ -1159,7 +1210,7 @@ xfs_mountfs(
 	 * delayed until after the root and real-time bitmap inodes
 	 * were consistently read in.
 	 */
-	error = xfs_log_mount_finish(mp);
+	error = xfs_log_mount_finish(mp, mfsi_flags);
 	if (error) {
 		cmn_err(CE_WARN, "XFS: log mount finish failed");
 		goto error4;
@@ -1168,7 +1219,7 @@ xfs_mountfs(
 	/*
 	 * Complete the quota initialisation, post-log-replay component.
 	 */
-	error = XFS_QM_MOUNT(mp, quotamount, quotaflags);
+	error = XFS_QM_MOUNT(mp, quotamount, quotaflags, mfsi_flags);
 	if (error)
 		goto error4;
 
@@ -1202,35 +1253,31 @@ xfs_mountfs(
  error3:
 	xfs_log_unmount_dealloc(mp);
  error2:
-	xfs_free_perag(mp);
+	for (agno = 0; agno < sbp->sb_agcount; agno++)
+		if (mp->m_perag[agno].pagb_list)
+			kmem_free(mp->m_perag[agno].pagb_list,
+			  sizeof(xfs_perag_busy_t) * XFS_PAGB_NUM_SLOTS);
+	kmem_free(mp->m_perag, sbp->sb_agcount * sizeof(xfs_perag_t));
+	mp->m_perag = NULL;
+	/* FALLTHROUGH */
  error1:
 	if (uuid_mounted)
-		uuid_table_remove(&mp->m_sb.sb_uuid);
+		xfs_uuid_unmount(mp);
+	xfs_freesb(mp);
 	return error;
 }
 
 /*
+ * xfs_unmountfs
+ *
  * This flushes out the inodes,dquots and the superblock, unmounts the
  * log and makes sure that incore structures are freed.
  */
-void
-xfs_unmountfs(
-	struct xfs_mount	*mp)
+int
+xfs_unmountfs(xfs_mount_t *mp, struct cred *cr)
 {
-	__uint64_t		resblks;
-	int			error;
-
-	/*
-	 * Release dquot that rootinode, rbmino and rsumino might be holding,
-	 * and release the quota inodes.
-	 */
-	XFS_QM_UNMOUNT(mp);
-
-	if (mp->m_rbmip)
-		IRELE(mp->m_rbmip);
-	if (mp->m_rsumip)
-		IRELE(mp->m_rsumip);
-	IRELE(mp->m_rootip);
+	__uint64_t	resblks;
+	int		error = 0;
 
 	/*
 	 * We can potentially deadlock here if we have an inode cluster
@@ -1243,12 +1290,9 @@ xfs_unmountfs(
 	 * need to force the log first.
 	 */
 	xfs_log_force(mp, (xfs_lsn_t)0, XFS_LOG_FORCE | XFS_LOG_SYNC);
-	xfs_reclaim_inodes(mp, 0, XFS_IFLUSH_ASYNC);
+	xfs_iflush_all(mp);
 
 	XFS_QM_DQPURGEALL(mp, XFS_QMOPT_QUOTALL | XFS_QMOPT_UMOUNTING);
-
-	if (mp->m_quotainfo)
-		XFS_QM_DONE(mp);
 
 	/*
 	 * Flush out the log synchronously so that we know for sure
@@ -1290,13 +1334,32 @@ xfs_unmountfs(
 	xfs_unmountfs_wait(mp); 		/* wait for async bufs */
 	xfs_log_unmount(mp);			/* Done! No more fs ops. */
 
-	if ((mp->m_flags & XFS_MOUNT_NOUUID) == 0)
-		uuid_table_remove(&mp->m_sb.sb_uuid);
+	xfs_freesb(mp);
 
-#if defined(DEBUG)
+	/*
+	 * All inodes from this mount point should be freed.
+	 */
+	ASSERT(mp->m_inodes == NULL);
+
+	xfs_unmountfs_close(mp, cr);
+	if ((mp->m_flags & XFS_MOUNT_NOUUID) == 0)
+		xfs_uuid_unmount(mp);
+
+#if defined(DEBUG) || defined(INDUCE_IO_ERROR)
 	xfs_errortag_clearall(mp, 0);
 #endif
-	xfs_free_perag(mp);
+	xfs_mount_free(mp);
+	return 0;
+}
+
+void
+xfs_unmountfs_close(xfs_mount_t *mp, struct cred *cr)
+{
+	if (mp->m_logdev_targp && mp->m_logdev_targp != mp->m_ddev_targp)
+		xfs_free_buftarg(mp->m_logdev_targp, 1);
+	if (mp->m_rtdev_targp)
+		xfs_free_buftarg(mp->m_rtdev_targp, 1);
+	xfs_free_buftarg(mp->m_ddev_targp, 0);
 }
 
 STATIC void
@@ -1362,6 +1425,24 @@ xfs_log_sbcount(
 	return error;
 }
 
+STATIC void
+xfs_mark_shared_ro(
+	xfs_mount_t	*mp,
+	xfs_buf_t	*bp)
+{
+	xfs_dsb_t	*sb = XFS_BUF_TO_SBP(bp);
+	__uint16_t	version;
+
+	if (!(sb->sb_flags & XFS_SBF_READONLY))
+		sb->sb_flags |= XFS_SBF_READONLY;
+
+	version = be16_to_cpu(sb->sb_versionnum);
+	if ((version & XFS_SB_VERSION_NUMBITS) != XFS_SB_VERSION_4 ||
+	    !(version & XFS_SB_VERSION_SHAREDBIT))
+		version |= XFS_SB_VERSION_SHAREDBIT;
+	sb->sb_versionnum = cpu_to_be16(version);
+}
+
 int
 xfs_unmountfs_writesb(xfs_mount_t *mp)
 {
@@ -1377,6 +1458,12 @@ xfs_unmountfs_writesb(xfs_mount_t *mp)
 
 		sbp = xfs_getsb(mp, 0);
 
+		/*
+		 * mark shared-readonly if desired
+		 */
+		if (mp->m_mk_sharedro)
+			xfs_mark_shared_ro(mp, sbp);
+
 		XFS_BUF_UNDONE(sbp);
 		XFS_BUF_UNREAD(sbp);
 		XFS_BUF_UNDELAYWRITE(sbp);
@@ -1388,6 +1475,8 @@ xfs_unmountfs_writesb(xfs_mount_t *mp)
 		if (error)
 			xfs_ioerror_alert("xfs_unmountfs_writesb",
 					  mp, sbp, XFS_BUF_ADDR(sbp));
+		if (error && mp->m_mk_sharedro)
+			xfs_fs_cmn_err(CE_ALERT, mp, "Superblock write error detected while unmounting.  Filesystem may not be marked shared readonly");
 		xfs_buf_relse(sbp);
 	}
 	return error;
@@ -1816,6 +1905,16 @@ xfs_uuid_mount(
 }
 
 /*
+ * Remove filesystem from the UUID table.
+ */
+STATIC void
+xfs_uuid_unmount(
+	xfs_mount_t	*mp)
+{
+	uuid_table_remove(&mp->m_sb.sb_uuid);
+}
+
+/*
  * Used to log changes to the superblock unit and width fields which could
  * be altered by the mount options, as well as any potential sb_features2
  * fixup. Only the first superblock is updated.
@@ -1829,8 +1928,7 @@ xfs_mount_log_sb(
 	int		error;
 
 	ASSERT(fields & (XFS_SB_UNIT | XFS_SB_WIDTH | XFS_SB_UUID |
-			 XFS_SB_FEATURES2 | XFS_SB_BAD_FEATURES2 |
-			 XFS_SB_VERSIONNUM));
+			 XFS_SB_FEATURES2 | XFS_SB_BAD_FEATURES2));
 
 	tp = xfs_trans_alloc(mp, XFS_TRANS_SB_UNIT);
 	error = xfs_trans_reserve(tp, 0, mp->m_sb.sb_sectsize + 128, 0, 0,
@@ -2011,7 +2109,7 @@ xfs_icsb_reinit_counters(
 	xfs_icsb_unlock(mp);
 }
 
-void
+STATIC void
 xfs_icsb_destroy_counters(
 	xfs_mount_t	*mp)
 {

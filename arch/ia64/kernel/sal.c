@@ -252,10 +252,11 @@ check_sal_cache_flush (void)
 	local_irq_save(flags);
 
 	/*
-	 * Send ourselves a timer interrupt, wait until it's reported, and see
-	 * if SAL_CACHE_FLUSH drops it.
+	 * Schedule a timer interrupt, wait until it's reported, and see if
+	 * SAL_CACHE_FLUSH drops it.
 	 */
-	platform_send_ipi(cpu, IA64_TIMER_VECTOR, IA64_IPI_DM_INT, 0);
+	ia64_set_itv(IA64_TIMER_VECTOR);
+	ia64_set_itm(ia64_get_itc() + 1000);
 
 	while (!ia64_get_irr(IA64_TIMER_VECTOR))
 		cpu_relax();

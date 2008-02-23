@@ -50,8 +50,8 @@ const struct address_space_operations afs_fs_aops = {
 	.launder_page	= afs_launder_page,
 	.releasepage	= afs_releasepage,
 	.invalidatepage	= afs_invalidatepage,
-	.write_begin	= afs_write_begin,
-	.write_end	= afs_write_end,
+	.prepare_write	= afs_prepare_write,
+	.commit_write	= afs_commit_write,
 	.writepage	= afs_writepage,
 	.writepages	= afs_writepages,
 };

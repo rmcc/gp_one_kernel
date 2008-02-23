@@ -32,7 +32,6 @@
 #include <asm/uaccess.h>
 #include <linux/slab.h>
 #include <linux/poll.h>
-#include <linux/smp_lock.h>
 
 #include <linux/device.h>
 #include <linux/moduleparam.h>
@@ -262,6 +261,8 @@ static const char *CHIP;
 
 #define ERROR(dev,fmt,args...) \
 	xprintk(dev , KERN_ERR , fmt , ## args)
+#define WARN(dev,fmt,args...) \
+	xprintk(dev , KERN_WARNING , fmt , ## args)
 #define INFO(dev,fmt,args...) \
 	xprintk(dev , KERN_INFO , fmt , ## args)
 
@@ -482,7 +483,8 @@ ep_release (struct inode *inode, struct file *fd)
 	return 0;
 }
 
-static long ep_ioctl(struct file *fd, unsigned code, unsigned long value)
+static int ep_ioctl (struct inode *inode, struct file *fd,
+		unsigned code, unsigned long value)
 {
 	struct ep_data		*data = fd->private_data;
 	int			status;
@@ -738,7 +740,7 @@ static const struct file_operations ep_io_operations = {
 
 	.read =		ep_read,
 	.write =	ep_write,
-	.unlocked_ioctl = ep_ioctl,
+	.ioctl =	ep_ioctl,
 	.release =	ep_release,
 
 	.aio_read =	ep_aio_read,
@@ -1251,6 +1253,7 @@ dev_release (struct inode *inode, struct file *fd)
 	 * alternatively, all host requests will time out.
 	 */
 
+	fasync_helper (-1, fd, 0, &dev->fasync);
 	kfree (dev->buf);
 	dev->buf = NULL;
 	put_dev (dev);
@@ -1291,18 +1294,15 @@ out:
        return mask;
 }
 
-static long dev_ioctl (struct file *fd, unsigned code, unsigned long value)
+static int dev_ioctl (struct inode *inode, struct file *fd,
+		unsigned code, unsigned long value)
 {
 	struct dev_data		*dev = fd->private_data;
 	struct usb_gadget	*gadget = dev->gadget;
-	long ret = -ENOTTY;
 
-	if (gadget->ops->ioctl) {
-		lock_kernel();
-		ret = gadget->ops->ioctl (gadget, code, value);
-		unlock_kernel();
-	}
-	return ret;
+	if (gadget->ops->ioctl)
+		return gadget->ops->ioctl (gadget, code, value);
+	return -ENOTTY;
 }
 
 /* used after device configuration */
@@ -1314,7 +1314,7 @@ static const struct file_operations ep0_io_operations = {
 	.write =	ep0_write,
 	.fasync =	ep0_fasync,
 	.poll =		ep0_poll,
-	.unlocked_ioctl =	dev_ioctl,
+	.ioctl =	dev_ioctl,
 	.release =	dev_release,
 };
 
@@ -1501,7 +1501,7 @@ gadgetfs_setup (struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		}
 		break;
 
-#ifndef	CONFIG_USB_GADGET_PXA25X
+#ifndef	CONFIG_USB_GADGET_PXA2XX
 	/* PXA automagically handles this request too */
 	case USB_REQ_GET_CONFIGURATION:
 		if (ctrl->bRequestType != 0x80)
@@ -1964,7 +1964,7 @@ static const struct file_operations dev_init_operations = {
 	.open =		dev_open,
 	.write =	dev_config,
 	.fasync =	ep0_fasync,
-	.unlocked_ioctl = dev_ioctl,
+	.ioctl =	dev_ioctl,
 	.release =	dev_release,
 };
 
@@ -2001,6 +2001,7 @@ gadgetfs_make_inode (struct super_block *sb,
 		inode->i_mode = mode;
 		inode->i_uid = default_uid;
 		inode->i_gid = default_gid;
+		inode->i_blocks = 0;
 		inode->i_atime = inode->i_mtime = inode->i_ctime
 				= CURRENT_TIME;
 		inode->i_private = data;

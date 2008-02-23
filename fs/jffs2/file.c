@@ -46,7 +46,7 @@ const struct file_operations jffs2_file_operations =
  	.aio_read =	generic_file_aio_read,
  	.write =	do_sync_write,
  	.aio_write =	generic_file_aio_write,
-	.unlocked_ioctl=jffs2_ioctl,
+	.ioctl =	jffs2_ioctl,
 	.mmap =		generic_file_readonly_mmap,
 	.fsync =	jffs2_fsync,
 	.splice_read =	generic_file_splice_read,
@@ -132,7 +132,7 @@ static int jffs2_write_begin(struct file *filp, struct address_space *mapping,
 	uint32_t pageofs = index << PAGE_CACHE_SHIFT;
 	int ret = 0;
 
-	pg = grab_cache_page_write_begin(mapping, index, flags);
+	pg = __grab_cache_page(mapping, index);
 	if (!pg)
 		return -ENOMEM;
 	*pagep = pg;

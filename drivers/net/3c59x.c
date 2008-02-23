@@ -90,7 +90,7 @@ static int vortex_debug = 1;
 #include <linux/eisa.h>
 #include <linux/bitops.h>
 #include <linux/jiffies.h>
-#include <asm/irq.h>			/* For nr_irqs only. */
+#include <asm/irq.h>			/* For NR_IRQS only. */
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
@@ -803,7 +803,7 @@ static int vortex_suspend(struct pci_dev *pdev, pm_message_t state)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
 
-	if (dev && netdev_priv(dev)) {
+	if (dev && dev->priv) {
 		if (netif_running(dev)) {
 			netif_device_detach(dev);
 			vortex_down(dev, 1);
@@ -1010,9 +1010,10 @@ static int __devinit vortex_probe1(struct device *gendev,
 	static int printed_version;
 	int retval, print_info;
 	struct vortex_chip_info * const vci = &vortex_info_tbl[chip_idx];
-	const char *print_name = "3c59x";
+	char *print_name = "3c59x";
 	struct pci_dev *pdev = NULL;
 	struct eisa_device *edev = NULL;
+	DECLARE_MAC_BUF(mac);
 
 	if (!printed_version) {
 		printk (version);
@@ -1025,7 +1026,7 @@ static int __devinit vortex_probe1(struct device *gendev,
 		}
 
 		if ((edev = DEVICE_EISA(gendev))) {
-			print_name = dev_name(&edev->dev);
+			print_name = edev->dev.bus_id;
 		}
 	}
 
@@ -1205,7 +1206,7 @@ static int __devinit vortex_probe1(struct device *gendev,
 		((__be16 *)dev->dev_addr)[i] = htons(eeprom[i + 10]);
 	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 	if (print_info)
-		printk(" %pM", dev->dev_addr);
+		printk(" %s", print_mac(mac, dev->dev_addr));
 	/* Unfortunately an all zero eeprom passes the checksum and this
 	   gets found in the wild in failure cases. Crypto is hard 8) */
 	if (!is_valid_ether_addr(dev->dev_addr)) {
@@ -1220,7 +1221,7 @@ static int __devinit vortex_probe1(struct device *gendev,
 	if (print_info)
 		printk(", IRQ %d\n", dev->irq);
 	/* Tell them about an invalid IRQ. */
-	if (dev->irq <= 0 || dev->irq >= nr_irqs)
+	if (dev->irq <= 0 || dev->irq >= NR_IRQS)
 		printk(KERN_WARNING " *** Warning: IRQ %d is unlikely to work! ***\n",
 			   dev->irq);
 
@@ -1691,14 +1692,12 @@ vortex_open(struct net_device *dev)
 			vp->rx_ring[i].next = cpu_to_le32(vp->rx_ring_dma + sizeof(struct boom_rx_desc) * (i+1));
 			vp->rx_ring[i].status = 0;	/* Clear complete bit. */
 			vp->rx_ring[i].length = cpu_to_le32(PKT_BUF_SZ | LAST_FRAG);
-
-			skb = __netdev_alloc_skb(dev, PKT_BUF_SZ + NET_IP_ALIGN,
-						 GFP_KERNEL);
+			skb = dev_alloc_skb(PKT_BUF_SZ);
 			vp->rx_skbuff[i] = skb;
 			if (skb == NULL)
 				break;			/* Bad news!  */
-
-			skb_reserve(skb, NET_IP_ALIGN);	/* Align IP on 16 byte boundaries */
+			skb->dev = dev;			/* Mark as being used by this device. */
+			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 			vp->rx_ring[i].addr = cpu_to_le32(pci_map_single(VORTEX_PCI(vp), skb->data, PKT_BUF_SZ, PCI_DMA_FROMDEVICE));
 		}
 		if (i != RX_RING_SIZE) {
@@ -1769,10 +1768,9 @@ vortex_timer(unsigned long data)
 	case XCVR_MII: case XCVR_NWAY:
 		{
 			ok = 1;
-			/* Interrupts are already disabled */
-			spin_lock(&vp->lock);
+			spin_lock_bh(&vp->lock);
 			vortex_check_media(dev, 0);
-			spin_unlock(&vp->lock);
+			spin_unlock_bh(&vp->lock);
 		}
 		break;
 	  default:					/* Other media types handled by Tx timeouts. */
@@ -2446,6 +2444,7 @@ static int vortex_rx(struct net_device *dev)
 				iowrite16(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
 				skb->protocol = eth_type_trans(skb, dev);
 				netif_rx(skb);
+				dev->last_rx = jiffies;
 				dev->stats.rx_packets++;
 				/* Wait a limited time to go to next packet. */
 				for (i = 200; i >= 0; i--)
@@ -2528,6 +2527,7 @@ boomerang_rx(struct net_device *dev)
 				}
 			}
 			netif_rx(skb);
+			dev->last_rx = jiffies;
 			dev->stats.rx_packets++;
 		}
 		entry = (++vp->cur_rx) % RX_RING_SIZE;
@@ -2537,7 +2537,7 @@ boomerang_rx(struct net_device *dev)
 		struct sk_buff *skb;
 		entry = vp->dirty_rx % RX_RING_SIZE;
 		if (vp->rx_skbuff[entry] == NULL) {
-			skb = netdev_alloc_skb(dev, PKT_BUF_SZ + NET_IP_ALIGN);
+			skb = dev_alloc_skb(PKT_BUF_SZ);
 			if (skb == NULL) {
 				static unsigned long last_jif;
 				if (time_after(jiffies, last_jif + 10 * HZ)) {
@@ -2548,8 +2548,8 @@ boomerang_rx(struct net_device *dev)
 					mod_timer(&vp->rx_oom_timer, RUN_AT(HZ * 1));
 				break;			/* Bad news!  */
 			}
-
-			skb_reserve(skb, NET_IP_ALIGN);
+			skb->dev = dev;			/* Mark as being used by this device. */
+			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 			vp->rx_ring[entry].addr = cpu_to_le32(pci_map_single(VORTEX_PCI(vp), skb->data, PKT_BUF_SZ, PCI_DMA_FROMDEVICE));
 			vp->rx_skbuff[entry] = skb;
 		}
@@ -2883,7 +2883,7 @@ static void vortex_get_drvinfo(struct net_device *dev,
 		strcpy(info->bus_info, pci_name(VORTEX_PCI(vp)));
 	} else {
 		if (VORTEX_EISA(vp))
-			sprintf(info->bus_info, dev_name(vp->gendev));
+			sprintf(info->bus_info, vp->gendev->bus_id);
 		else
 			sprintf(info->bus_info, "EISA 0x%lx %d",
 					dev->base_addr, dev->irq);
@@ -3109,8 +3109,6 @@ static void acpi_set_WOL(struct net_device *dev)
 	struct vortex_private *vp = netdev_priv(dev);
 	void __iomem *ioaddr = vp->ioaddr;
 
-	device_set_wakeup_enable(vp->gendev, vp->enable_wol);
-
 	if (vp->enable_wol) {
 		/* Power up on: 1==Downloaded Filter, 2==Magic Packets, 4==Link Status. */
 		EL3WINDOW(7);
@@ -3216,7 +3214,7 @@ static void __exit vortex_eisa_cleanup(void)
 #endif
 
 	if (compaq_net_device) {
-		vp = netdev_priv(compaq_net_device);
+		vp = compaq_net_device->priv;
 		ioaddr = ioport_map(compaq_net_device->base_addr,
 		                    VORTEX_TOTAL_SIZE);
 

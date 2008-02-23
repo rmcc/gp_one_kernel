@@ -27,7 +27,6 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/smp_lock.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 
@@ -548,7 +547,6 @@ static int gpio_open(struct inode *inode, struct file *file)
 {
 	unsigned int pin;
 
-	cycle_kernel_lock();
 	pin = iminor(inode);
 	if (pin >= giu_nr_pins)
 		return -EBADF;
@@ -641,7 +639,7 @@ static int __devinit giu_probe(struct platform_device *dev)
 	}
 
 	irq = platform_get_irq(dev, 0);
-	if (irq < 0 || irq >= nr_irqs)
+	if (irq < 0 || irq >= NR_IRQS)
 		return -EBUSY;
 
 	return cascade_irq(irq, giu_get_irq);

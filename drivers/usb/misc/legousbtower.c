@@ -851,8 +851,9 @@ static int tower_probe (struct usb_interface *interface, const struct usb_device
 
 	dbg(2, "%s: enter", __func__);
 
-	if (udev == NULL)
-		dev_info(&interface->dev, "udev is NULL.\n");
+	if (udev == NULL) {
+		info ("udev is NULL.");
+	}
 
 	/* allocate memory for our device state and initialize it */
 
@@ -953,9 +954,7 @@ static int tower_probe (struct usb_interface *interface, const struct usb_device
 	dev->minor = interface->minor;
 
 	/* let the user know what node this device is now attached to */
-	dev_info(&interface->dev, "LEGO USB Tower #%d now attached to major "
-		 "%d minor %d\n", (dev->minor - LEGO_USB_TOWER_MINOR_BASE),
-		 USB_MAJOR, dev->minor);
+	info ("LEGO USB Tower #%d now attached to major %d minor %d", (dev->minor - LEGO_USB_TOWER_MINOR_BASE), USB_MAJOR, dev->minor);
 
 	/* get the firmware version and log it */
 	result = usb_control_msg (udev,
@@ -972,10 +971,10 @@ static int tower_probe (struct usb_interface *interface, const struct usb_device
 		retval = result;
 		goto error;
 	}
-	dev_info(&interface->dev, "LEGO USB Tower firmware version is %d.%d "
-		 "build %d\n", get_version_reply.major,
-		 get_version_reply.minor,
-		 le16_to_cpu(get_version_reply.build_no));
+	info("LEGO USB Tower firmware version is %d.%d build %d",
+	     get_version_reply.major,
+	     get_version_reply.minor,
+	     le16_to_cpu(get_version_reply.build_no));
 
 
 exit:
@@ -1022,8 +1021,7 @@ static void tower_disconnect (struct usb_interface *interface)
 		mutex_unlock(&dev->lock);
 	}
 
-	dev_info(&interface->dev, "LEGO USB Tower #%d now disconnected\n",
-		 (minor - LEGO_USB_TOWER_MINOR_BASE));
+	info("LEGO USB Tower #%d now disconnected", (minor - LEGO_USB_TOWER_MINOR_BASE));
 
 	dbg(2, "%s: leave", __func__);
 }
@@ -1048,8 +1046,7 @@ static int __init lego_usb_tower_init(void)
 		goto exit;
 	}
 
-	printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
-	       DRIVER_DESC "\n");
+	info(DRIVER_DESC " " DRIVER_VERSION);
 
 exit:
 	dbg(2, "%s: leave, return value %d", __func__, retval);

@@ -1,6 +1,8 @@
 #
 # Serial device configuration
 #
+# $Id: Kconfig,v 1.11 2004/03/11 18:08:04 lethal Exp $
+#
 
 menu "Serial drivers"
 	depends on HAS_IOMEM
@@ -9,6 +11,7 @@ menu "Serial drivers"
 # The new 8250/16550 serial drivers
 config SERIAL_8250
 	tristate "8250/16550 and compatible serial support"
+	depends on (BROKEN || !SPARC)
 	select SERIAL_CORE
 	---help---
 	  This selects whether you want to include the driver for the standard
@@ -445,9 +448,9 @@ config SERIAL_CLPS711X_CONSOLE
 	  your boot loader (lilo or loadlin) about how to pass options to the
 	  kernel at boot time.)
 
-config SERIAL_SAMSUNG
-	tristate "Samsung SoC serial support"
-	depends on ARM && PLAT_S3C
+config SERIAL_S3C2410
+	tristate "Samsung S3C2410/S3C2440/S3C2442/S3C2412 Serial port support"
+	depends on ARM && ARCH_S3C2410
 	select SERIAL_CORE
 	help
 	  Support for the on-chip UARTs on the Samsung S3C24XX series CPUs,
@@ -455,28 +458,12 @@ config SERIAL_SAMSUNG
 	  provide all of these ports, depending on how the serial port
 	  pins are configured.
 
-config SERIAL_SAMSUNG_UARTS
-	int
-	depends on ARM && PLAT_S3C
-	default 2 if ARCH_S3C2400
-	default 4 if ARCH_S3C64XX || CPU_S3C2443
-	default 3
-	help
-	  Select the number of available UART ports for the Samsung S3C
-	  serial driver
-	
-config SERIAL_SAMSUNG_DEBUG
-	bool "Samsung SoC serial debug"
-	depends on SERIAL_SAMSUNG && DEBUG_LL
-	help
-	  Add support for debugging the serial driver. Since this is
-	  generally being used as a console, we use our own output
-	  routines that go via the low-level debug printascii()
-	  function.
+	  Currently this driver supports the UARTS on the S3C2410, S3C2440,
+	  S3C2442, S3C2412 and S3C2413 CPUs.
 
-config SERIAL_SAMSUNG_CONSOLE
-	bool "Support for console on Samsung SoC serial port"
-	depends on SERIAL_SAMSUNG=y
+config SERIAL_S3C2410_CONSOLE
+	bool "Support for console on S3C2410 serial port"
+	depends on SERIAL_S3C2410=y
 	select SERIAL_CORE_CONSOLE
 	help
 	  Allow selection of the S3C24XX on-board serial ports for use as
@@ -488,50 +475,6 @@ config SERIAL_SAMSUNG_CONSOLE
 	  "console=ttySACx". (Try "man bootparam" or see the documentation of
 	  your boot loader about how to pass options to the kernel at
 	  boot time.)
-
-config SERIAL_S3C2400
-	tristate "Samsung S3C2410 Serial port support"
-	depends on ARM && SERIAL_SAMSUNG && CPU_S3C2400
-	default y if CPU_S3C2400
-	help
-	  Serial port support for the Samsung S3C2400 SoC
-
-config SERIAL_S3C2410
-	tristate "Samsung S3C2410 Serial port support"
-	depends on SERIAL_SAMSUNG && CPU_S3C2410
-	default y if CPU_S3C2410
-	help
-	  Serial port support for the Samsung S3C2410 SoC
-
-config SERIAL_S3C2412
-	tristate "Samsung S3C2412/S3C2413 Serial port support"
-	depends on SERIAL_SAMSUNG && CPU_S3C2412
-	default y if CPU_S3C2412
-	help
-	  Serial port support for the Samsung S3C2412 and S3C2413 SoC
-
-config SERIAL_S3C2440
-	tristate "Samsung S3C2440/S3C2442 Serial port support"
-	depends on SERIAL_SAMSUNG && (CPU_S3C2440 || CPU_S3C2442)
-	default y if CPU_S3C2440
-	default y if CPU_S3C2442
-	help
-	  Serial port support for the Samsung S3C2440 and S3C2442 SoC
-
-config SERIAL_S3C24A0
-	tristate "Samsung S3C24A0 Serial port support"
-	depends on SERIAL_SAMSUNG && CPU_S3C24A0
-	default y if CPU_S3C24A0
-	help
-	  Serial port support for the Samsung S3C24A0 SoC
-
-config SERIAL_S3C6400
-	tristate "Samsung S3C6400/S3C6410 Serial port support"
-	depends on SERIAL_SAMSUNG && (CPU_S3C600 || CPU_S3C6410)
-	default y
-	help
-	  Serial port support for the Samsung S3C6400 and S3C6410
-	  SoCs
 
 config SERIAL_DZ
 	bool "DECstation DZ serial driver"
@@ -810,7 +753,7 @@ config BFIN_UART3_CTSRTS
 
 config SERIAL_IMX
 	bool "IMX serial port support"
-	depends on ARM && (ARCH_IMX || ARCH_MXC)
+	depends on ARM && ARCH_IMX
 	select SERIAL_CORE
 	help
 	  If you have a machine based on a Motorola IMX CPU you
@@ -965,6 +908,22 @@ config SERIAL_IP22_ZILOG_CONSOLE
 	depends on SERIAL_IP22_ZILOG=y
 	select SERIAL_CORE_CONSOLE
 
+config V850E_UART
+	bool "NEC V850E on-chip UART support"
+	depends on V850E_MA1 || V850E_ME2 || V850E_TEG || V850E2_ANNA || V850E_AS85EP1
+	select SERIAL_CORE
+	default y
+
+config V850E_UARTB
+        bool
+	depends on V850E_UART && V850E_ME2
+	default y
+
+config V850E_UART_CONSOLE
+	bool "Use NEC V850E on-chip UART for console"
+	depends on V850E_UART
+	select SERIAL_CORE_CONSOLE
+
 config SERIAL_SH_SCI
 	tristate "SuperH SCI(F) serial port support"
 	depends on SUPERH || H8300
@@ -1016,12 +975,24 @@ config SERIAL_68328_RTS_CTS
 	bool "Support RTS/CTS on 68328 serial port"
 	depends on SERIAL_68328
 
+config SERIAL_COLDFIRE
+	bool "ColdFire serial support (DEPRECATED)"
+	depends on COLDFIRE
+	help
+	  This driver supports the built-in serial ports of the Motorola ColdFire
+	  family of CPUs.
+	  This driver is deprecated because it supports only the old interface
+	  for serial drivers and features like magic keys are not working.
+	  Please switch to the new style driver because this driver will be
+	  removed soon.
+
 config SERIAL_MCF
-	bool "Coldfire serial support"
+	bool "Coldfire serial support (new style driver)"
 	depends on COLDFIRE
 	select SERIAL_CORE
 	help
-	  This serial driver supports the Freescale Coldfire serial ports.
+	  This new serial driver supports the Freescale Coldfire serial ports
+	  using the new serial driver subsystem.
 
 config SERIAL_MCF_BAUDRATE
 	int "Default baudrate for Coldfire serial ports"
@@ -1145,6 +1116,42 @@ config SERIAL_CPM_CONSOLE
 	  "console=ttyCPM0". (Try "man bootparam" or see the documentation of
 	  your boot loader (lilo or loadlin) about how to pass options to the
 	  kernel at boot time.)
+
+config SERIAL_CPM_SCC1
+	bool "Support for SCC1 serial port"
+	depends on SERIAL_CPM=y
+	help
+	  Select this option to use SCC1 as a serial port
+
+config SERIAL_CPM_SCC2
+	bool "Support for SCC2 serial port"
+	depends on SERIAL_CPM=y
+	help
+	  Select this option to use SCC2 as a serial port
+
+config SERIAL_CPM_SCC3
+	bool "Support for SCC3 serial port"
+	depends on SERIAL_CPM=y
+	help
+	  Select this option to use SCC3 as a serial port
+
+config SERIAL_CPM_SCC4
+	bool "Support for SCC4 serial port"
+	depends on SERIAL_CPM=y
+	help
+	  Select this option to use SCC4 as a serial port
+
+config SERIAL_CPM_SMC1
+	bool "Support for SMC1 serial port"
+	depends on SERIAL_CPM=y
+	help
+	  Select this option to use SMC1 as a serial port
+
+config SERIAL_CPM_SMC2
+	bool "Support for SMC2 serial port"
+	depends on SERIAL_CPM=y
+	help
+	  Select this option to use SMC2 as a serial port
 
 config SERIAL_SGI_L1_CONSOLE
 	bool "SGI Altix L1 serial console support"
@@ -1299,7 +1306,7 @@ config SERIAL_SGI_IOC3
 	  say Y or M.  Otherwise, say N.
 
 config SERIAL_NETX
-	tristate "NetX serial port support"
+	bool "NetX serial port support"
 	depends on ARM && ARCH_NETX
 	select SERIAL_CORE
 	help
@@ -1311,7 +1318,7 @@ config SERIAL_NETX
 
 config SERIAL_NETX_CONSOLE
 	bool "Console on NetX serial port"
-	depends on SERIAL_NETX=y
+	depends on SERIAL_NETX
 	select SERIAL_CORE_CONSOLE
 	help
 	  If you have enabled the serial port on the Hilscher NetX SoC
@@ -1320,29 +1327,12 @@ config SERIAL_NETX_CONSOLE
 config SERIAL_OF_PLATFORM
 	tristate "Serial port on Open Firmware platform bus"
 	depends on PPC_OF
-	depends on SERIAL_8250 || SERIAL_OF_PLATFORM_NWPSERIAL
+	depends on SERIAL_8250
 	help
 	  If you have a PowerPC based system that has serial ports
 	  on a platform specific bus, you should enable this option.
 	  Currently, only 8250 compatible ports are supported, but
 	  others can easily be added.
-
-config SERIAL_OF_PLATFORM_NWPSERIAL
-	tristate "NWP serial port driver"
-	depends on PPC_OF && PPC_DCR
-	select SERIAL_OF_PLATFORM
-	select SERIAL_CORE_CONSOLE
-	select SERIAL_CORE
-	help
-	  This driver supports the cell network processor nwp serial
-	  device.
-
-config SERIAL_OF_PLATFORM_NWPSERIAL_CONSOLE
-	bool "Console on NWP serial port"
-	depends on SERIAL_OF_PLATFORM_NWPSERIAL=y
-	select SERIAL_CORE_CONSOLE
-	help
-	  Support for Console on the NWP serial ports.
 
 config SERIAL_QE
 	tristate "Freescale QUICC Engine serial port support"

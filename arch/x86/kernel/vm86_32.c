@@ -46,7 +46,6 @@
 #include <asm/io.h>
 #include <asm/tlbflush.h>
 #include <asm/irq.h>
-#include <asm/syscalls.h>
 
 /*
  * Known problems:

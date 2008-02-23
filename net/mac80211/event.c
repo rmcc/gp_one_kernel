@@ -8,6 +8,7 @@
  * mac80211 - events
  */
 
+#include <linux/netdevice.h>
 #include <net/iw_handler.h>
 #include "ieee80211_i.h"
 
@@ -16,21 +17,22 @@
  * (in the variable hdr) must be long enough to extract the TKIP
  * fields like TSC
  */
-void mac80211_ev_michael_mic_failure(struct ieee80211_sub_if_data *sdata, int keyidx,
+void mac80211_ev_michael_mic_failure(struct net_device *dev, int keyidx,
 				     struct ieee80211_hdr *hdr)
 {
 	union iwreq_data wrqu;
 	char *buf = kmalloc(128, GFP_ATOMIC);
+	DECLARE_MAC_BUF(mac);
 
 	if (buf) {
 		/* TODO: needed parameters: count, key type, TSC */
 		sprintf(buf, "MLME-MICHAELMICFAILURE.indication("
-			"keyid=%d %scast addr=%pM)",
+			"keyid=%d %scast addr=%s)",
 			keyidx, hdr->addr1[0] & 0x01 ? "broad" : "uni",
-			hdr->addr2);
+			print_mac(mac, hdr->addr2));
 		memset(&wrqu, 0, sizeof(wrqu));
 		wrqu.data.length = strlen(buf);
-		wireless_send_event(sdata->dev, IWEVCUSTOM, &wrqu, buf);
+		wireless_send_event(dev, IWEVCUSTOM, &wrqu, buf);
 		kfree(buf);
 	}
 

@@ -11,15 +11,13 @@
 #include <linux/module.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
-#include <linux/hardirq.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
-#include <linux/uaccess.h>
-#include <linux/page-flags.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
+#include <asm/uaccess.h>
 
 #include "fault.h"
 
@@ -74,8 +72,9 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 		}
 
 		pmd = pmd_offset(pgd, addr);
-		if (PTRS_PER_PMD != 1)
-			printk(", *pmd=%08lx", pmd_val(*pmd));
+#if PTRS_PER_PMD != 1
+		printk(", *pmd=%08lx", pmd_val(*pmd));
+#endif
 
 		if (pmd_none(*pmd))
 			break;
@@ -85,14 +84,13 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 			break;
 		}
 
+#ifndef CONFIG_HIGHMEM
 		/* We must not map this if we have highmem enabled */
-		if (PageHighMem(pfn_to_page(pmd_val(*pmd) >> PAGE_SHIFT)))
-			break;
-
 		pte = pte_offset_map(pmd, addr);
 		printk(", *pte=%08lx", pte_val(*pte));
 		printk(", *ppte=%08lx", pte_val(pte[-PTRS_PER_PTE]));
 		pte_unmap(pte);
+#endif
 	} while(0);
 
 	printk("\n");

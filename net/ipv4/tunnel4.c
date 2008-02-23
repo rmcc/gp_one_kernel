@@ -97,7 +97,7 @@ static int tunnel64_rcv(struct sk_buff *skb)
 {
 	struct xfrm_tunnel *handler;
 
-	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr)))
+	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto drop;
 
 	for (handler = tunnel64_handlers; handler; handler = handler->next)

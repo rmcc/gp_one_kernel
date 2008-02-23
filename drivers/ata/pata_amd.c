@@ -1,6 +1,7 @@
 /*
  * pata_amd.c 	- AMD PATA for new ATA layer
  *			  (C) 2005-2006 Red Hat Inc
+ *			  Alan Cox <alan@redhat.com>
  *
  *  Based on pata-sil680. Errata information is taken from data sheets
  *  and the amd74xx.c driver by Vojtech Pavlik. Nvidia SATA devices are
@@ -24,7 +25,7 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_amd"
-#define DRV_VERSION "0.3.11"
+#define DRV_VERSION "0.3.10"
 
 /**
  *	timing_setup		-	shared timing computation and load
@@ -345,7 +346,7 @@ static struct scsi_host_template amd_sht = {
 };
 
 static const struct ata_port_operations amd_base_port_ops = {
-	.inherits	= &ata_bmdma32_port_ops,
+	.inherits	= &ata_bmdma_port_ops,
 	.prereset	= amd_pre_reset,
 };
 

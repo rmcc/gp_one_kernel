@@ -676,11 +676,11 @@ static int alauda_probe(struct usb_interface *interface,
 		goto error;
 
 	al->write_out = usb_sndbulkpipe(al->dev,
-			usb_endpoint_num(ep_wr));
+			ep_wr->bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
 	al->bulk_in = usb_rcvbulkpipe(al->dev,
-			usb_endpoint_num(ep_in));
+			ep_in->bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
 	al->bulk_out = usb_sndbulkpipe(al->dev,
-			usb_endpoint_num(ep_out));
+			ep_out->bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
 
 	/* second device is identical up to now */
 	memcpy(al+1, al, sizeof(*al));
@@ -691,7 +691,7 @@ static int alauda_probe(struct usb_interface *interface,
 	al[0].port = ALAUDA_PORT_XD;
 	al[1].port = ALAUDA_PORT_SM;
 
-	dev_info(&interface->dev, "alauda probed\n");
+	info("alauda probed");
 	alauda_check_media(al);
 	alauda_check_media(al+1);
 
@@ -716,7 +716,7 @@ static void alauda_disconnect(struct usb_interface *interface)
 	if (al)
 		kref_put(&al->kref, alauda_delete);
 
-	dev_info(&interface->dev, "alauda gone");
+	info("alauda gone");
 }
 
 static struct usb_driver alauda_driver = {

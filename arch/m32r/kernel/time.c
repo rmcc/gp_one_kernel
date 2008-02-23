@@ -34,6 +34,7 @@
 #include <asm/hw_irq.h>
 
 #ifdef CONFIG_SMP
+extern void send_IPI_allbutself(int, int);
 extern void smp_local_timer_interrupt(void);
 #endif
 
@@ -187,7 +188,7 @@ static long last_rtc_update = 0;
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
  */
-static irqreturn_t timer_interrupt(int irq, void *dev_id)
+irqreturn_t timer_interrupt(int irq, void *dev_id)
 {
 #ifndef CONFIG_SMP
 	profile_tick(CPU_PROFILING);
@@ -227,7 +228,7 @@ static irqreturn_t timer_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static struct irqaction irq0 = {
+struct irqaction irq0 = {
 	.handler = timer_interrupt,
 	.flags = IRQF_DISABLED,
 	.mask = CPU_MASK_NONE,

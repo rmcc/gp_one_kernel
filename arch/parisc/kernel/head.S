@@ -33,7 +33,6 @@ ENTRY(boot_args)
 END(boot_args)
 
 	__HEAD
-
 	.align	4
 	.import init_thread_union,data
 	.import fault_vector_20,code    /* IVA parisc 2.0 32 bit */
@@ -121,7 +120,7 @@ $pgt_fill_loop:
 	copy		%r0,%r2
 
 	/* And the RFI Target address too */
-	load32		start_parisc,%r11
+	load32		start_kernel,%r11
 
 	/* And the initial task pointer */
 	load32		init_thread_union,%r6

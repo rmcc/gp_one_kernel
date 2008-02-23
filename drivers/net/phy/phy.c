@@ -45,7 +45,7 @@
  */
 void phy_print_status(struct phy_device *phydev)
 {
-	pr_info("PHY: %s - Link is %s", dev_name(&phydev->dev),
+	pr_info("PHY: %s - Link is %s", phydev->dev.bus_id,
 			phydev->link ? "Up" : "Down");
 	if (phydev->link)
 		printk(" - %d/%s", phydev->speed,
@@ -56,6 +56,55 @@ void phy_print_status(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(phy_print_status);
 
+
+/**
+ * phy_read - Convenience function for reading a given PHY register
+ * @phydev: the phy_device struct
+ * @regnum: register number to read
+ *
+ * NOTE: MUST NOT be called from interrupt context,
+ * because the bus read/write functions may wait for an interrupt
+ * to conclude the operation.
+ */
+int phy_read(struct phy_device *phydev, u16 regnum)
+{
+	int retval;
+	struct mii_bus *bus = phydev->bus;
+
+	BUG_ON(in_interrupt());
+
+	mutex_lock(&bus->mdio_lock);
+	retval = bus->read(bus, phydev->addr, regnum);
+	mutex_unlock(&bus->mdio_lock);
+
+	return retval;
+}
+EXPORT_SYMBOL(phy_read);
+
+/**
+ * phy_write - Convenience function for writing a given PHY register
+ * @phydev: the phy_device struct
+ * @regnum: register number to write
+ * @val: value to write to @regnum
+ *
+ * NOTE: MUST NOT be called from interrupt context,
+ * because the bus read/write functions may wait for an interrupt
+ * to conclude the operation.
+ */
+int phy_write(struct phy_device *phydev, u16 regnum, u16 val)
+{
+	int err;
+	struct mii_bus *bus = phydev->bus;
+
+	BUG_ON(in_interrupt());
+
+	mutex_lock(&bus->mdio_lock);
+	err = bus->write(bus, phydev->addr, regnum, val);
+	mutex_unlock(&bus->mdio_lock);
+
+	return err;
+}
+EXPORT_SYMBOL(phy_write);
 
 /**
  * phy_clear_interrupt - Ack the phy device's interrupt
@@ -317,8 +366,7 @@ int phy_mii_ioctl(struct phy_device *phydev,
 	switch (cmd) {
 	case SIOCGMIIPHY:
 		mii_data->phy_id = phydev->addr;
-		/* fall through */
-
+		break;
 	case SIOCGMIIREG:
 		mii_data->val_out = phy_read(phydev, mii_data->reg_num);
 		break;
@@ -365,7 +413,7 @@ int phy_mii_ioctl(struct phy_device *phydev,
 		break;
 
 	default:
-		return -EOPNOTSUPP;
+		return -ENOTTY;
 	}
 
 	return 0;
@@ -679,12 +727,6 @@ static void phy_change(struct work_struct *work)
 
 	if (err)
 		goto irq_enable_err;
-
-	/* Stop timer and run the state queue now.  The work function for
-	 * state_queue will start the timer up again.
-	 */
-	del_timer(&phydev->phy_timer);
-	schedule_work(&phydev->state_queue);
 
 	return;
 

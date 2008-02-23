@@ -116,7 +116,7 @@ static int ax25_device_event(struct notifier_block *this, unsigned long event,
 {
 	struct net_device *dev = (struct net_device *)ptr;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	/* Reject non AX.25 devices */
@@ -316,9 +316,6 @@ void ax25_destroy_socket(ax25_cb *ax25)
 
 				/* Queue the unaccepted socket for death */
 				sock_orphan(skb->sk);
-
-				/* 9A4GL: hack to release unaccepted sockets */
-				skb->sk->sk_state = TCP_LISTEN;
 
 				ax25_start_heartbeat(sax25);
 				sax25->state = AX25_STATE_0;
@@ -896,11 +893,13 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 
 	sk->sk_destruct = ax25_free_sock;
 	sk->sk_type     = osk->sk_type;
+	sk->sk_socket   = osk->sk_socket;
 	sk->sk_priority = osk->sk_priority;
 	sk->sk_protocol = osk->sk_protocol;
 	sk->sk_rcvbuf   = osk->sk_rcvbuf;
 	sk->sk_sndbuf   = osk->sk_sndbuf;
 	sk->sk_state    = TCP_ESTABLISHED;
+	sk->sk_sleep    = osk->sk_sleep;
 	sock_copy_flags(sk, osk);
 
 	oax25 = ax25_sk(osk);
@@ -1045,7 +1044,7 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (addr->fsa_ax25.sax25_family != AF_AX25)
 		return -EINVAL;
 
-	user = ax25_findbyuid(current_euid());
+	user = ax25_findbyuid(current->euid);
 	if (user) {
 		call = user->call;
 		ax25_uid_put(user);
@@ -1362,11 +1361,13 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 		goto out;
 
 	newsk		 = skb->sk;
-	sock_graft(newsk, newsock);
+	newsk->sk_socket = newsock;
+	newsk->sk_sleep	 = &newsock->wait;
 
 	/* Now attach up the new socket */
 	kfree_skb(skb);
 	sk->sk_ack_backlog--;
+	newsock->sk    = newsk;
 	newsock->state = SS_CONNECTED;
 
 out:

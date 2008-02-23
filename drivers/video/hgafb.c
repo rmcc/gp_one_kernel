@@ -279,7 +279,7 @@ static void hga_blank(int blank_mode)
 
 static int __init hga_card_detect(void)
 {
-	int count = 0;
+	int count=0;
 	void __iomem *p, *q;
 	unsigned short p_save, q_save;
 
@@ -303,18 +303,20 @@ static int __init hga_card_detect(void)
 	writew(0x55aa, p); if (readw(p) == 0x55aa) count++;
 	writew(p_save, p);
 
-	if (count != 2)
-		goto error;
+	if (count != 2) {
+		return 0;
+	}
 
 	/* Ok, there is definitely a card registering at the correct
 	 * memory location, so now we do an I/O port test.
 	 */
 	
-	if (!test_hga_b(0x66, 0x0f))	    /* cursor low register */
-		goto error;
-
-	if (!test_hga_b(0x99, 0x0f))     /* cursor low register */
-		goto error;
+	if (!test_hga_b(0x66, 0x0f)) {	    /* cursor low register */
+		return 0;
+	}
+	if (!test_hga_b(0x99, 0x0f)) {     /* cursor low register */
+		return 0;
+	}
 
 	/* See if the card is a Hercules, by checking whether the vsync
 	 * bit of the status register is changing.  This test lasts for
@@ -329,7 +331,7 @@ static int __init hga_card_detect(void)
 	}
 
 	if (p_save == q_save) 
-		goto error;
+		return 0;
 
 	switch (inb_p(HGA_STATUS_PORT) & 0x70) {
 		case 0x10:
@@ -346,12 +348,6 @@ static int __init hga_card_detect(void)
 			break;
 	}
 	return 1;
-error:
-	if (release_io_ports)
-		release_region(0x3b0, 12);
-	if (release_io_port)
-		release_region(0x3bf, 1);
-	return 0;
 }
 
 /**
@@ -551,7 +547,7 @@ static struct fb_ops hgafb_ops = {
 	 *  Initialization
 	 */
 
-static int __init hgafb_probe(struct platform_device *pdev)
+static int __init hgafb_probe(struct device *device)
 {
 	struct fb_info *info;
 
@@ -565,7 +561,7 @@ static int __init hgafb_probe(struct platform_device *pdev)
 	printk(KERN_INFO "hgafb: %s with %ldK of memory detected.\n",
 		hga_type_name, hga_vram_len/1024);
 
-	info = framebuffer_alloc(0, &pdev->dev);
+	info = framebuffer_alloc(0, NULL);
 	if (!info) {
 		iounmap(hga_vram);
 		return -ENOMEM;
@@ -593,13 +589,13 @@ static int __init hgafb_probe(struct platform_device *pdev)
 
         printk(KERN_INFO "fb%d: %s frame buffer device\n",
                info->node, info->fix.id);
-	platform_set_drvdata(pdev, info);
+	dev_set_drvdata(device, info);
 	return 0;
 }
 
-static int hgafb_remove(struct platform_device *pdev)
+static int hgafb_remove(struct device *device)
 {
-	struct fb_info *info = platform_get_drvdata(pdev);
+	struct fb_info *info = dev_get_drvdata(device);
 
 	hga_txt_mode();
 	hga_clear_screen();
@@ -620,15 +616,16 @@ static int hgafb_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver hgafb_driver = {
+static struct device_driver hgafb_driver = {
+	.name = "hgafb",
+	.bus  = &platform_bus_type,
 	.probe = hgafb_probe,
 	.remove = hgafb_remove,
-	.driver = {
-		.name = "hgafb",
-	},
 };
 
-static struct platform_device *hgafb_device;
+static struct platform_device hgafb_device = {
+	.name = "hgafb",
+};
 
 static int __init hgafb_init(void)
 {
@@ -637,15 +634,12 @@ static int __init hgafb_init(void)
 	if (fb_get_options("hgafb", NULL))
 		return -ENODEV;
 
-	ret = platform_driver_register(&hgafb_driver);
+	ret = driver_register(&hgafb_driver);
 
 	if (!ret) {
-		hgafb_device = platform_device_register_simple("hgafb", 0, NULL, 0);
-
-		if (IS_ERR(hgafb_device)) {
-			platform_driver_unregister(&hgafb_driver);
-			ret = PTR_ERR(hgafb_device);
-		}
+		ret = platform_device_register(&hgafb_device);
+		if (ret)
+			driver_unregister(&hgafb_driver);
 	}
 
 	return ret;
@@ -653,8 +647,8 @@ static int __init hgafb_init(void)
 
 static void __exit hgafb_exit(void)
 {
-	platform_device_unregister(hgafb_device);
-	platform_driver_unregister(&hgafb_driver);
+	platform_device_unregister(&hgafb_device);
+	driver_unregister(&hgafb_driver);
 }
 
 /* -------------------------------------------------------------------------

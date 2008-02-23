@@ -277,7 +277,7 @@ static int get_skb_hdr(struct sk_buff *skb, void **iphdr,
 	*tcph = tcp_hdr(skb);
 
 	/* check if ip header and tcp header are complete */
-	if (ntohs(iph->tot_len) < ip_len + tcp_hdrlen(skb))
+	if (iph->tot_len < ip_len + tcp_hdrlen(skb))
 		return -1;
 
 	*hdr_flags = LRO_IPV4 | LRO_TCP;
@@ -650,7 +650,7 @@ static void pasemi_mac_replenish_rx_ring(const struct net_device *dev,
 				     mac->bufsz - LOCAL_SKB_ALIGN,
 				     PCI_DMA_FROMDEVICE);
 
-		if (unlikely(pci_dma_mapping_error(mac->dma_pdev, dma))) {
+		if (unlikely(dma_mapping_error(dma))) {
 			dev_kfree_skb_irq(info->skb);
 			break;
 		}
@@ -954,6 +954,7 @@ static irqreturn_t pasemi_mac_rx_intr(int irq, void *data)
 {
 	const struct pasemi_mac_rxring *rxring = data;
 	struct pasemi_mac *mac = rxring->mac;
+	struct net_device *dev = mac->netdev;
 	const struct pasemi_dmachan *chan = &rxring->chan;
 	unsigned int reg;
 
@@ -970,7 +971,7 @@ static irqreturn_t pasemi_mac_rx_intr(int irq, void *data)
 	if (*chan->status & PAS_STATUS_ERROR)
 		reg |= PAS_IOB_DMA_RXCH_RESET_DINTC;
 
-	netif_rx_schedule(&mac->napi);
+	netif_rx_schedule(dev, &mac->napi);
 
 	write_iob_reg(PAS_IOB_DMA_RXCH_RESET(chan->chno), reg);
 
@@ -1010,7 +1011,7 @@ static irqreturn_t pasemi_mac_tx_intr(int irq, void *data)
 
 	mod_timer(&txring->clean_timer, jiffies + (TX_CLEAN_INTERVAL)*2);
 
-	netif_rx_schedule(&mac->napi);
+	netif_rx_schedule(mac->netdev, &mac->napi);
 
 	if (reg)
 		write_iob_reg(PAS_IOB_DMA_TXCH_RESET(chan->chno), reg);
@@ -1104,8 +1105,7 @@ static int pasemi_mac_phy_init(struct net_device *dev)
 		goto err;
 
 	phy_id = *prop;
-	snprintf(mac->phy_id, sizeof(mac->phy_id), "%x:%02x",
-		 (int)r.start, phy_id);
+	snprintf(mac->phy_id, BUS_ID_SIZE, "%x:%02x", (int)r.start, phy_id);
 
 	of_node_put(phy_dn);
 
@@ -1519,7 +1519,7 @@ static int pasemi_mac_start_tx(struct sk_buff *skb, struct net_device *dev)
 	map[0] = pci_map_single(mac->dma_pdev, skb->data, skb_headlen(skb),
 				PCI_DMA_TODEVICE);
 	map_size[0] = skb_headlen(skb);
-	if (pci_dma_mapping_error(mac->dma_pdev, map[0]))
+	if (dma_mapping_error(map[0]))
 		goto out_err_nolock;
 
 	for (i = 0; i < nfrags; i++) {
@@ -1529,7 +1529,7 @@ static int pasemi_mac_start_tx(struct sk_buff *skb, struct net_device *dev)
 					frag->page_offset, frag->size,
 					PCI_DMA_TODEVICE);
 		map_size[i+1] = frag->size;
-		if (pci_dma_mapping_error(mac->dma_pdev, map[i+1])) {
+		if (dma_mapping_error(map[i+1])) {
 			nfrags = i;
 			goto out_err_nolock;
 		}
@@ -1633,13 +1633,14 @@ static void pasemi_mac_set_rx_mode(struct net_device *dev)
 static int pasemi_mac_poll(struct napi_struct *napi, int budget)
 {
 	struct pasemi_mac *mac = container_of(napi, struct pasemi_mac, napi);
+	struct net_device *dev = mac->netdev;
 	int pkts;
 
 	pasemi_mac_clean_tx(tx_ring(mac));
 	pkts = pasemi_mac_clean_rx(rx_ring(mac), budget);
 	if (pkts < budget) {
 		/* all done, no more packets present */
-		netif_rx_complete(napi);
+		netif_rx_complete(dev, napi);
 
 		pasemi_mac_restart_rx_intr(mac);
 		pasemi_mac_restart_tx_intr(mac);
@@ -1741,6 +1742,7 @@ pasemi_mac_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct net_device *dev;
 	struct pasemi_mac *mac;
 	int err;
+	DECLARE_MAC_BUF(mac_buf);
 
 	err = pci_enable_device(pdev);
 	if (err)
@@ -1847,9 +1849,9 @@ pasemi_mac_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			err);
 		goto out;
 	} else if netif_msg_probe(mac)
-		printk(KERN_INFO "%s: PA Semi %s: intf %d, hw addr %pM\n",
+		printk(KERN_INFO "%s: PA Semi %s: intf %d, hw addr %s\n",
 		       dev->name, mac->type == MAC_TYPE_GMAC ? "GMAC" : "XAUI",
-		       mac->dma_if, dev->dev_addr);
+		       mac->dma_if, print_mac(mac_buf, dev->dev_addr));
 
 	return err;
 

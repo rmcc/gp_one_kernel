@@ -18,7 +18,6 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
-#include <linux/spinlock.h>
 #include <linux/module.h>
 
 #include <asm/irq.h>
@@ -27,6 +26,8 @@
 #include <asm/qe.h>
 #include <asm/ucc.h>
 
+static DEFINE_SPINLOCK(ucc_lock);
+
 int ucc_set_qe_mux_mii_mng(unsigned int ucc_num)
 {
 	unsigned long flags;
@@ -34,10 +35,10 @@ int ucc_set_qe_mux_mii_mng(unsigned int ucc_num)
 	if (ucc_num > UCC_MAX_NUM - 1)
 		return -EINVAL;
 
-	spin_lock_irqsave(&cmxgcr_lock, flags);
+	spin_lock_irqsave(&ucc_lock, flags);
 	clrsetbits_be32(&qe_immr->qmx.cmxgcr, QE_CMXGCR_MII_ENET_MNG,
 		ucc_num << QE_CMXGCR_MII_ENET_MNG_SHIFT);
-	spin_unlock_irqrestore(&cmxgcr_lock, flags);
+	spin_unlock_irqrestore(&ucc_lock, flags);
 
 	return 0;
 }
@@ -86,7 +87,7 @@ int ucc_set_type(unsigned int ucc_num, enum ucc_speed_type speed)
 	return 0;
 }
 
-static void get_cmxucr_reg(unsigned int ucc_num, __be32 __iomem **cmxucr,
+static void get_cmxucr_reg(unsigned int ucc_num, __be32 **cmxucr,
 	unsigned int *reg_num, unsigned int *shift)
 {
 	unsigned int cmx = ((ucc_num & 1) << 1) + (ucc_num > 3);
@@ -98,7 +99,7 @@ static void get_cmxucr_reg(unsigned int ucc_num, __be32 __iomem **cmxucr,
 
 int ucc_mux_set_grant_tsa_bkpt(unsigned int ucc_num, int set, u32 mask)
 {
-	__be32 __iomem *cmxucr;
+	__be32 *cmxucr;
 	unsigned int reg_num;
 	unsigned int shift;
 
@@ -119,7 +120,7 @@ int ucc_mux_set_grant_tsa_bkpt(unsigned int ucc_num, int set, u32 mask)
 int ucc_set_qe_mux_rxtx(unsigned int ucc_num, enum qe_clock clock,
 	enum comm_dir mode)
 {
-	__be32 __iomem *cmxucr;
+	__be32 *cmxucr;
 	unsigned int reg_num;
 	unsigned int shift;
 	u32 clock_bits = 0;

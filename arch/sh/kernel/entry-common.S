@@ -92,7 +92,6 @@ ENTRY(ret_from_irq)
 	bra	resume_userspace
 	 nop
 ENTRY(resume_kernel)
-	cli
 	mov.l	@(TI_PRE_COUNT,r8), r0	! current_thread_info->preempt_count
 	tst	r0, r0
 	bf	noresched
@@ -106,9 +105,28 @@ need_resched:
 	and	#0xf0, r0		! interrupts off (exception path)?
 	cmp/eq	#0xf0, r0
 	bt	noresched
+
+	mov.l	1f, r0
+	mov.l	r0, @(TI_PRE_COUNT,r8)
+
+#ifdef CONFIG_TRACE_IRQFLAGS
 	mov.l	3f, r0
-	jsr	@r0			! call preempt_schedule_irq
+	jsr	@r0
 	 nop
+#endif
+	sti
+	mov.l	2f, r0
+	jsr	@r0
+	 nop
+	mov	#0, r0
+	mov.l	r0, @(TI_PRE_COUNT,r8)
+	cli
+#ifdef CONFIG_TRACE_IRQFLAGS
+	mov.l	4f, r0
+	jsr	@r0
+	 nop
+#endif
+
 	bra	need_resched
 	 nop
 
@@ -119,7 +137,10 @@ noresched:
 	.align 2
 1:	.long	PREEMPT_ACTIVE
 2:	.long	schedule
-3:	.long	preempt_schedule_irq
+#ifdef CONFIG_TRACE_IRQFLAGS
+3:	.long	trace_hardirqs_on
+4:	.long	trace_hardirqs_off
+#endif
 #endif
 
 ENTRY(resume_userspace)
@@ -171,7 +192,7 @@ work_resched:
 	.align	2
 1:	.long	schedule
 2:	.long	do_notify_resume
-3:	.long	resume_userspace
+3:	.long	restore_all
 #ifdef CONFIG_TRACE_IRQFLAGS
 4:	.long	trace_hardirqs_on
 5:	.long	trace_hardirqs_off
@@ -181,7 +202,7 @@ work_resched:
 syscall_exit_work:
 	! r0: current_thread_info->flags
 	! r8: current_thread_info
-	tst	#_TIF_WORK_SYSCALL_MASK, r0
+	tst	#_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP | _TIF_SYSCALL_AUDIT, r0
 	bt/s	work_pending
 	 tst	#_TIF_NEED_RESCHED, r0
 #ifdef CONFIG_TRACE_IRQFLAGS
@@ -190,8 +211,10 @@ syscall_exit_work:
 	 nop
 #endif
 	sti
+	! XXX setup arguments...
 	mov	r15, r4
-	mov.l	8f, r0			! do_syscall_trace_leave
+	mov	#1, r5
+	mov.l	4f, r0			! do_syscall_trace
 	jsr	@r0
 	 nop
 	bra	resume_userspace
@@ -200,11 +223,12 @@ syscall_exit_work:
 	.align	2
 syscall_trace_entry:
 	!                     	Yes it is traced.
+	! XXX setup arguments...
 	mov     r15, r4
-	mov.l	7f, r11		! Call do_syscall_trace_enter which notifies
+	mov     #0, r5
+	mov.l	4f, r11		! Call do_syscall_trace which notifies
 	jsr	@r11	    	! superior (will chomp R[0-7])
 	 nop
-	mov.l	r0, @(OFF_R0,r15)	! Save return value
 	!			Reload R0-R4 from kernel stack, where the
 	!   	    	    	parent may have modified them using
 	!   	    	    	ptrace(POKEUSR).  (Note that R0-R2 are
@@ -308,19 +332,15 @@ ENTRY(system_call)
 	mov.l	1f, r9
 	mov.l	@r9, r8		! Read from TRA (Trap Address) Register
 #endif
-
-	mov	#OFF_TRA, r10
-	add	r15, r10
-	mov.l	r8, @r10		! set TRA value to tra
-
 	/*
 	 * Check the trap type
 	 */
 	mov	#((0x20 << 2) - 1), r9
 	cmp/hi	r9, r8
 	bt/s	debug_trap		! it's a debug trap..
-	 nop
-
+	 mov	#OFF_TRA, r9
+	add	r15, r9
+	mov.l	r8, @r9			! set TRA value to tra
 #ifdef CONFIG_TRACE_IRQFLAGS
 	mov.l	5f, r10
 	jsr	@r10
@@ -331,7 +351,7 @@ ENTRY(system_call)
 	!
 	get_current_thread_info r8, r10
 	mov.l	@(TI_FLAGS,r8), r8
-	mov	#_TIF_WORK_SYSCALL_MASK, r10
+	mov	#(_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT), r10
 	tst	r10, r8
 	bf	syscall_trace_entry
 	!
@@ -369,9 +389,8 @@ syscall_exit:
 #endif
 2:	.long	NR_syscalls
 3:	.long	sys_call_table
+4:	.long	do_syscall_trace
 #ifdef CONFIG_TRACE_IRQFLAGS
 5:	.long	trace_hardirqs_on
 6:	.long	trace_hardirqs_off
 #endif
-7:	.long	do_syscall_trace_enter
-8:	.long	do_syscall_trace_leave

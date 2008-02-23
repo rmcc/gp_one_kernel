@@ -275,8 +275,6 @@ int line_ioctl(struct tty_struct *tty, struct file * file,
 	case TIOCGLTC:
 	case TIOCSLTC:
 #endif
-	/* Note: these are out of date as we now have TCGETS2 etc but this
-	   whole lot should probably go away */
 	case TCGETS:
 	case TCSETSF:
 	case TCSETSW:
@@ -364,7 +362,19 @@ static irqreturn_t line_write_interrupt(int irq, void *data)
 	if (tty == NULL)
 		return IRQ_NONE;
 
-	tty_wakeup(tty);
+	if (test_bit(TTY_DO_WRITE_WAKEUP, &tty->flags) &&
+	   (tty->ldisc.write_wakeup != NULL))
+		(tty->ldisc.write_wakeup)(tty);
+
+	/*
+	 * BLOCKING mode
+	 * In blocking mode, everything sleeps on tty->write_wait.
+	 * Sleeping in the console driver would break non-blocking
+	 * writes.
+	 */
+
+	if (waitqueue_active(&tty->write_wait))
+		wake_up_interruptible(&tty->write_wait);
 	return IRQ_HANDLED;
 }
 

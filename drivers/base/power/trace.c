@@ -140,7 +140,7 @@ static unsigned int hash_string(unsigned int seed, const char *data, unsigned in
 
 void set_trace_device(struct device *dev)
 {
-	dev_hash_value = hash_string(DEVSEED, dev_name(dev), DEVHASH);
+	dev_hash_value = hash_string(DEVSEED, dev->bus_id, DEVHASH);
 }
 EXPORT_SYMBOL(set_trace_device);
 
@@ -153,7 +153,7 @@ EXPORT_SYMBOL(set_trace_device);
  * it's not any guarantee, but it's a high _likelihood_ that
  * the match is valid).
  */
-void generate_resume_trace(const void *tracedata, unsigned int user)
+void generate_resume_trace(void *tracedata, unsigned int user)
 {
 	unsigned short lineno = *(unsigned short *)tracedata;
 	const char *file = *(const char **)(tracedata + 2);
@@ -188,13 +188,13 @@ static int show_file_hash(unsigned int value)
 static int show_dev_hash(unsigned int value)
 {
 	int match = 0;
-	struct list_head *entry = dpm_list.prev;
+	struct list_head * entry = dpm_active.prev;
 
-	while (entry != &dpm_list) {
+	while (entry != &dpm_active) {
 		struct device * dev = to_device(entry);
-		unsigned int hash = hash_string(DEVSEED, dev_name(dev), DEVHASH);
+		unsigned int hash = hash_string(DEVSEED, dev->bus_id, DEVHASH);
 		if (hash == value) {
-			dev_info(dev, "hash matches\n");
+			printk("  hash matches device %s\n", dev->bus_id);
 			match++;
 		}
 		entry = entry->prev;

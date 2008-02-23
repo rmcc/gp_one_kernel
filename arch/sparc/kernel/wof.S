@@ -306,6 +306,7 @@ spwin_bad_ustack_from_kernel:
  * As noted above %curptr cannot be touched by this routine at all.
  */
 
+	.globl	spwin_sun4c_stackchk
 spwin_sun4c_stackchk:
 	/* LOCATION: Window to be saved on the stack */
 

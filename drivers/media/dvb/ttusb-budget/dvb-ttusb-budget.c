@@ -12,7 +12,6 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
-#include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/delay.h>
@@ -20,7 +19,6 @@
 #include <linux/errno.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
-#include <linux/firmware.h>
 
 #include "dvb_frontend.h"
 #include "dmxdev.h"
@@ -287,18 +285,12 @@ static int master_xfer(struct i2c_adapter* adapter, struct i2c_msg *msg, int num
 	return i;
 }
 
+#include "dvb-ttusb-dspbootcode.h"
+
 static int ttusb_boot_dsp(struct ttusb *ttusb)
 {
-	const struct firmware *fw;
 	int i, err;
 	u8 b[40];
-
-	err = request_firmware(&fw, "ttusb-budget/dspbootcode.bin",
-			       &ttusb->dev->dev);
-	if (err) {
-		printk(KERN_ERR "ttusb-budget: failed to request firmware\n");
-		return err;
-	}
 
 	/* BootBlock */
 	b[0] = 0xaa;
@@ -307,8 +299,8 @@ static int ttusb_boot_dsp(struct ttusb *ttusb)
 
 	/* upload dsp code in 32 byte steps (36 didn't work for me ...) */
 	/* 32 is max packet size, no messages should be splitted. */
-	for (i = 0; i < fw->size; i += 28) {
-		memcpy(&b[4], &fw->data[i], 28);
+	for (i = 0; i < sizeof(dsp_bootcode); i += 28) {
+		memcpy(&b[4], &dsp_bootcode[i], 28);
 
 		b[1] = ++ttusb->c;
 
@@ -560,7 +552,7 @@ static void ttusb_process_muxpack(struct ttusb *ttusb, const u8 * muxpack,
 	u16 csum = 0, cc;
 	int i;
 	for (i = 0; i < len; i += 2)
-		csum ^= le16_to_cpup((__le16 *) (muxpack + i));
+		csum ^= le16_to_cpup((u16 *) (muxpack + i));
 	if (csum) {
 		printk("%s: muxpack with incorrect checksum, ignoring\n",
 		       __func__);
@@ -808,12 +800,6 @@ static int ttusb_alloc_iso_urbs(struct ttusb *ttusb)
 						 ISO_BUF_COUNT,
 						 &ttusb->iso_dma_handle);
 
-	if (!ttusb->iso_buffer) {
-		dprintk("%s: pci_alloc_consistent - not enough memory\n",
-			__func__);
-		return -ENOMEM;
-	}
-
 	memset(ttusb->iso_buffer, 0,
 	       ISO_FRAME_SIZE * FRAMES_PER_ISO_BUF * ISO_BUF_COUNT);
 
@@ -997,9 +983,22 @@ static int stc_open(struct inode *inode, struct file *file)
 }
 
 static ssize_t stc_read(struct file *file, char *buf, size_t count,
-		 loff_t *offset)
+		 loff_t * offset)
 {
-	return simple_read_from_buffer(buf, count, offset, stc_firmware, 8192);
+	int tc = count;
+
+	if ((tc + *offset) > 8192)
+		tc = 8192 - *offset;
+
+	if (tc < 0)
+		return 0;
+
+	if (copy_to_user(buf, stc_firmware + *offset, tc))
+		return -EFAULT;
+
+	*offset += tc;
+
+	return tc;
 }
 
 static int stc_release(struct inode *inode, struct file *file)
@@ -1620,7 +1619,7 @@ static void frontend_init(struct ttusb* ttusb)
 	}
 
 	if (ttusb->fe == NULL) {
-		printk("dvb-ttusb-budget: A frontend driver was not found for device [%04x:%04x]\n",
+		printk("dvb-ttusb-budget: A frontend driver was not found for device %04x/%04x\n",
 		       le16_to_cpu(ttusb->dev->descriptor.idVendor),
 		       le16_to_cpu(ttusb->dev->descriptor.idProduct));
 	} else {
@@ -1665,14 +1664,7 @@ static int ttusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 
 	ttusb_setup_interfaces(ttusb);
 
-	result = ttusb_alloc_iso_urbs(ttusb);
-	if (result < 0) {
-		dprintk("%s: ttusb_alloc_iso_urbs - failed\n", __func__);
-		mutex_unlock(&ttusb->semi2c);
-		kfree(ttusb);
-		return result;
-	}
-
+	ttusb_alloc_iso_urbs(ttusb);
 	if (ttusb_init_controller(ttusb))
 		printk("ttusb_init_controller: error\n");
 
@@ -1694,7 +1686,11 @@ static int ttusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 
 	i2c_set_adapdata(&ttusb->i2c_adap, ttusb);
 
+#ifdef I2C_ADAP_CLASS_TV_DIGITAL
+	ttusb->i2c_adap.class		  = I2C_ADAP_CLASS_TV_DIGITAL;
+#else
 	ttusb->i2c_adap.class		  = I2C_CLASS_TV_DIGITAL;
+#endif
 	ttusb->i2c_adap.algo              = &ttusb_dec_algo;
 	ttusb->i2c_adap.algo_data         = NULL;
 	ttusb->i2c_adap.dev.parent	  = &udev->dev;
@@ -1824,4 +1820,3 @@ module_exit(ttusb_exit);
 MODULE_AUTHOR("Holger Waechtler <holger@convergence.de>");
 MODULE_DESCRIPTION("TTUSB DVB Driver");
 MODULE_LICENSE("GPL");
-MODULE_FIRMWARE("ttusb-budget/dspbootcode.bin");

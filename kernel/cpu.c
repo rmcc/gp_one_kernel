@@ -15,8 +15,7 @@
 #include <linux/stop_machine.h>
 #include <linux/mutex.h>
 
-#ifdef CONFIG_SMP
-/* Serializes the updates to cpu_online_mask, cpu_present_mask */
+/* Serializes the updates to cpu_online_map, cpu_present_map */
 static DEFINE_MUTEX(cpu_add_remove_lock);
 
 static __cpuinitdata RAW_NOTIFIER_HEAD(cpu_chain);
@@ -73,7 +72,7 @@ EXPORT_SYMBOL_GPL(put_online_cpus);
 
 /*
  * The following two API's must be used when attempting
- * to serialize the updates to cpu_online_mask, cpu_present_mask.
+ * to serialize the updates to cpu_online_map, cpu_present_map.
  */
 void cpu_maps_update_begin(void)
 {
@@ -176,13 +175,12 @@ static int __ref take_cpu_down(void *_param)
 	struct take_cpu_down_param *param = _param;
 	int err;
 
+	raw_notifier_call_chain(&cpu_chain, CPU_DYING | param->mod,
+				param->hcpu);
 	/* Ensure this CPU doesn't handle any more interrupts. */
 	err = __cpu_disable();
 	if (err < 0)
 		return err;
-
-	raw_notifier_call_chain(&cpu_chain, CPU_DYING | param->mod,
-				param->hcpu);
 
 	/* Force idle task to run as soon as we yield: it should
 	   immediately notice cpu is offline and die quickly. */
@@ -194,7 +192,8 @@ static int __ref take_cpu_down(void *_param)
 static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 {
 	int err, nr_calls = 0;
-	cpumask_var_t old_allowed;
+	struct task_struct *p;
+	cpumask_t old_allowed, tmp;
 	void *hcpu = (void *)(long)cpu;
 	unsigned long mod = tasks_frozen ? CPU_TASKS_FROZEN : 0;
 	struct take_cpu_down_param tcd_param = {
@@ -207,9 +206,6 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 
 	if (!cpu_online(cpu))
 		return -EINVAL;
-
-	if (!alloc_cpumask_var(&old_allowed, GFP_KERNEL))
-		return -ENOMEM;
 
 	cpu_hotplug_begin();
 	err = __raw_notifier_call_chain(&cpu_chain, CPU_DOWN_PREPARE | mod,
@@ -225,20 +221,25 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 	}
 
 	/* Ensure that we are not runnable on dying cpu */
-	cpumask_copy(old_allowed, &current->cpus_allowed);
-	set_cpus_allowed_ptr(current,
-			     cpumask_of(cpumask_any_but(cpu_online_mask, cpu)));
+	old_allowed = current->cpus_allowed;
+	cpus_setall(tmp);
+	cpu_clear(cpu, tmp);
+	set_cpus_allowed_ptr(current, &tmp);
 
-	err = __stop_machine(take_cpu_down, &tcd_param, cpumask_of(cpu));
-	if (err) {
+	p = __stop_machine_run(take_cpu_down, &tcd_param, cpu);
+
+	if (IS_ERR(p) || cpu_online(cpu)) {
 		/* CPU didn't die: tell everyone.  Can't complain. */
 		if (raw_notifier_call_chain(&cpu_chain, CPU_DOWN_FAILED | mod,
 					    hcpu) == NOTIFY_BAD)
 			BUG();
 
-		goto out_allowed;
+		if (IS_ERR(p)) {
+			err = PTR_ERR(p);
+			goto out_allowed;
+		}
+		goto out_thread;
 	}
-	BUG_ON(cpu_online(cpu));
 
 	/* Wait for it to sleep (leaving idle task). */
 	while (!idle_cpu(cpu))
@@ -254,56 +255,28 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 
 	check_for_tasks(cpu);
 
+out_thread:
+	err = kthread_stop(p);
 out_allowed:
-	set_cpus_allowed_ptr(current, old_allowed);
+	set_cpus_allowed_ptr(current, &old_allowed);
 out_release:
 	cpu_hotplug_done();
-	if (!err) {
-		if (raw_notifier_call_chain(&cpu_chain, CPU_POST_DEAD | mod,
-					    hcpu) == NOTIFY_BAD)
-			BUG();
-	}
-	free_cpumask_var(old_allowed);
 	return err;
 }
 
 int __ref cpu_down(unsigned int cpu)
 {
-	int err;
+	int err = 0;
 
-	err = stop_machine_create();
-	if (err)
-		return err;
 	cpu_maps_update_begin();
-
-	if (cpu_hotplug_disabled) {
+	if (cpu_hotplug_disabled)
 		err = -EBUSY;
-		goto out;
-	}
+	else
+		err = _cpu_down(cpu, 0);
 
-	cpu_clear(cpu, cpu_active_map);
-
-	/*
-	 * Make sure the all cpus did the reschedule and are not
-	 * using stale version of the cpu_active_mask.
-	 * This is not strictly necessary becuase stop_machine()
-	 * that we run down the line already provides the required
-	 * synchronization. But it's really a side effect and we do not
-	 * want to depend on the innards of the stop_machine here.
-	 */
-	synchronize_sched();
-
-	err = _cpu_down(cpu, 0);
-
-	if (cpu_online(cpu))
-		cpu_set(cpu, cpu_active_map);
-
-out:
 	cpu_maps_update_done();
-	stop_machine_destroy();
 	return err;
 }
-EXPORT_SYMBOL(cpu_down);
 #endif /*CONFIG_HOTPLUG_CPU*/
 
 /* Requires cpu_add_remove_lock to be held */
@@ -333,8 +306,6 @@ static int __cpuinit _cpu_up(unsigned int cpu, int tasks_frozen)
 		goto out_notify;
 	BUG_ON(!cpu_online(cpu));
 
-	cpu_set(cpu, cpu_active_map);
-
 	/* Now call notifier in preparation. */
 	raw_notifier_call_chain(&cpu_chain, CPU_ONLINE | mod, hcpu);
 
@@ -350,10 +321,10 @@ out_notify:
 int __cpuinit cpu_up(unsigned int cpu)
 {
 	int err = 0;
-	if (!cpu_possible(cpu)) {
+	if (!cpu_isset(cpu, cpu_possible_map)) {
 		printk(KERN_ERR "can't online cpu %d because it is not "
 			"configured as may-hotadd at boot time\n", cpu);
-#if defined(CONFIG_IA64) || defined(CONFIG_X86_64)
+#if defined(CONFIG_IA64) || defined(CONFIG_X86_64) || defined(CONFIG_S390)
 		printk(KERN_ERR "please check additional_cpus= boot "
 				"parameter\n");
 #endif
@@ -361,42 +332,35 @@ int __cpuinit cpu_up(unsigned int cpu)
 	}
 
 	cpu_maps_update_begin();
-
-	if (cpu_hotplug_disabled) {
+	if (cpu_hotplug_disabled)
 		err = -EBUSY;
-		goto out;
-	}
+	else
+		err = _cpu_up(cpu, 0);
 
-	err = _cpu_up(cpu, 0);
-
-out:
 	cpu_maps_update_done();
 	return err;
 }
 
 #ifdef CONFIG_PM_SLEEP_SMP
-static cpumask_var_t frozen_cpus;
+static cpumask_t frozen_cpus;
 
 int disable_nonboot_cpus(void)
 {
-	int cpu, first_cpu, error;
+	int cpu, first_cpu, error = 0;
 
-	error = stop_machine_create();
-	if (error)
-		return error;
 	cpu_maps_update_begin();
-	first_cpu = cpumask_first(cpu_online_mask);
+	first_cpu = first_cpu(cpu_online_map);
 	/* We take down all of the non-boot CPUs in one shot to avoid races
 	 * with the userspace trying to use the CPU hotplug at the same time
 	 */
-	cpumask_clear(frozen_cpus);
+	cpus_clear(frozen_cpus);
 	printk("Disabling non-boot CPUs ...\n");
 	for_each_online_cpu(cpu) {
 		if (cpu == first_cpu)
 			continue;
 		error = _cpu_down(cpu, 1);
 		if (!error) {
-			cpumask_set_cpu(cpu, frozen_cpus);
+			cpu_set(cpu, frozen_cpus);
 			printk("CPU%d is down\n", cpu);
 		} else {
 			printk(KERN_ERR "Error taking CPU%d down: %d\n",
@@ -412,7 +376,6 @@ int disable_nonboot_cpus(void)
 		printk(KERN_ERR "Non-boot CPUs are not disabled\n");
 	}
 	cpu_maps_update_done();
-	stop_machine_destroy();
 	return error;
 }
 
@@ -423,11 +386,11 @@ void __ref enable_nonboot_cpus(void)
 	/* Allow everyone to use the CPU hotplug again */
 	cpu_maps_update_begin();
 	cpu_hotplug_disabled = 0;
-	if (cpumask_empty(frozen_cpus))
+	if (cpus_empty(frozen_cpus))
 		goto out;
 
 	printk("Enabling non-boot CPUs ...\n");
-	for_each_cpu(cpu, frozen_cpus) {
+	for_each_cpu_mask(cpu, frozen_cpus) {
 		error = _cpu_up(cpu, 1);
 		if (!error) {
 			printk("CPU%d is up\n", cpu);
@@ -435,133 +398,8 @@ void __ref enable_nonboot_cpus(void)
 		}
 		printk(KERN_WARNING "Error taking CPU%d up: %d\n", cpu, error);
 	}
-	cpumask_clear(frozen_cpus);
+	cpus_clear(frozen_cpus);
 out:
 	cpu_maps_update_done();
 }
-
-static int alloc_frozen_cpus(void)
-{
-	if (!alloc_cpumask_var(&frozen_cpus, GFP_KERNEL|__GFP_ZERO))
-		return -ENOMEM;
-	return 0;
-}
-core_initcall(alloc_frozen_cpus);
 #endif /* CONFIG_PM_SLEEP_SMP */
-
-/**
- * notify_cpu_starting(cpu) - call the CPU_STARTING notifiers
- * @cpu: cpu that just started
- *
- * This function calls the cpu_chain notifiers with CPU_STARTING.
- * It must be called by the arch code on the new cpu, before the new cpu
- * enables interrupts and before the "boot" cpu returns from __cpu_up().
- */
-void __cpuinit notify_cpu_starting(unsigned int cpu)
-{
-	unsigned long val = CPU_STARTING;
-
-#ifdef CONFIG_PM_SLEEP_SMP
-	if (frozen_cpus != NULL && cpumask_test_cpu(cpu, frozen_cpus))
-		val = CPU_STARTING_FROZEN;
-#endif /* CONFIG_PM_SLEEP_SMP */
-	raw_notifier_call_chain(&cpu_chain, val, (void *)(long)cpu);
-}
-
-#endif /* CONFIG_SMP */
-
-/*
- * cpu_bit_bitmap[] is a special, "compressed" data structure that
- * represents all NR_CPUS bits binary values of 1<<nr.
- *
- * It is used by cpumask_of() to get a constant address to a CPU
- * mask value that has a single bit set only.
- */
-
-/* cpu_bit_bitmap[0] is empty - so we can back into it */
-#define MASK_DECLARE_1(x)	[x+1][0] = 1UL << (x)
-#define MASK_DECLARE_2(x)	MASK_DECLARE_1(x), MASK_DECLARE_1(x+1)
-#define MASK_DECLARE_4(x)	MASK_DECLARE_2(x), MASK_DECLARE_2(x+2)
-#define MASK_DECLARE_8(x)	MASK_DECLARE_4(x), MASK_DECLARE_4(x+4)
-
-const unsigned long cpu_bit_bitmap[BITS_PER_LONG+1][BITS_TO_LONGS(NR_CPUS)] = {
-
-	MASK_DECLARE_8(0),	MASK_DECLARE_8(8),
-	MASK_DECLARE_8(16),	MASK_DECLARE_8(24),
-#if BITS_PER_LONG > 32
-	MASK_DECLARE_8(32),	MASK_DECLARE_8(40),
-	MASK_DECLARE_8(48),	MASK_DECLARE_8(56),
-#endif
-};
-EXPORT_SYMBOL_GPL(cpu_bit_bitmap);
-
-const DECLARE_BITMAP(cpu_all_bits, NR_CPUS) = CPU_BITS_ALL;
-EXPORT_SYMBOL(cpu_all_bits);
-
-#ifdef CONFIG_INIT_ALL_POSSIBLE
-static DECLARE_BITMAP(cpu_possible_bits, CONFIG_NR_CPUS) __read_mostly
-	= CPU_BITS_ALL;
-#else
-static DECLARE_BITMAP(cpu_possible_bits, CONFIG_NR_CPUS) __read_mostly;
-#endif
-const struct cpumask *const cpu_possible_mask = to_cpumask(cpu_possible_bits);
-EXPORT_SYMBOL(cpu_possible_mask);
-
-static DECLARE_BITMAP(cpu_online_bits, CONFIG_NR_CPUS) __read_mostly;
-const struct cpumask *const cpu_online_mask = to_cpumask(cpu_online_bits);
-EXPORT_SYMBOL(cpu_online_mask);
-
-static DECLARE_BITMAP(cpu_present_bits, CONFIG_NR_CPUS) __read_mostly;
-const struct cpumask *const cpu_present_mask = to_cpumask(cpu_present_bits);
-EXPORT_SYMBOL(cpu_present_mask);
-
-static DECLARE_BITMAP(cpu_active_bits, CONFIG_NR_CPUS) __read_mostly;
-const struct cpumask *const cpu_active_mask = to_cpumask(cpu_active_bits);
-EXPORT_SYMBOL(cpu_active_mask);
-
-void set_cpu_possible(unsigned int cpu, bool possible)
-{
-	if (possible)
-		cpumask_set_cpu(cpu, to_cpumask(cpu_possible_bits));
-	else
-		cpumask_clear_cpu(cpu, to_cpumask(cpu_possible_bits));
-}
-
-void set_cpu_present(unsigned int cpu, bool present)
-{
-	if (present)
-		cpumask_set_cpu(cpu, to_cpumask(cpu_present_bits));
-	else
-		cpumask_clear_cpu(cpu, to_cpumask(cpu_present_bits));
-}
-
-void set_cpu_online(unsigned int cpu, bool online)
-{
-	if (online)
-		cpumask_set_cpu(cpu, to_cpumask(cpu_online_bits));
-	else
-		cpumask_clear_cpu(cpu, to_cpumask(cpu_online_bits));
-}
-
-void set_cpu_active(unsigned int cpu, bool active)
-{
-	if (active)
-		cpumask_set_cpu(cpu, to_cpumask(cpu_active_bits));
-	else
-		cpumask_clear_cpu(cpu, to_cpumask(cpu_active_bits));
-}
-
-void init_cpu_present(const struct cpumask *src)
-{
-	cpumask_copy(to_cpumask(cpu_present_bits), src);
-}
-
-void init_cpu_possible(const struct cpumask *src)
-{
-	cpumask_copy(to_cpumask(cpu_possible_bits), src);
-}
-
-void init_cpu_online(const struct cpumask *src)
-{
-	cpumask_copy(to_cpumask(cpu_online_bits), src);
-}

@@ -761,7 +761,9 @@ static struct gameport_driver analog_drv = {
 static int __init analog_init(void)
 {
 	analog_parse_options();
-	return gameport_register_driver(&analog_drv);
+	gameport_register_driver(&analog_drv);
+
+	return 0;
 }
 
 static void __exit analog_exit(void)

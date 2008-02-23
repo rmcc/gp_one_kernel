@@ -4,7 +4,7 @@
 #include <linux/irq.h>
 #include <linux/dmi.h>
 #include <asm/numa.h>
-#include <asm/pci_x86.h>
+#include "pci.h"
 
 struct pci_root_info {
 	char *name;
@@ -171,11 +171,8 @@ struct pci_bus * __devinit pci_acpi_scan_root(struct acpi_device *device, int do
 	if (node != -1)
 		set_mp_bus_to_node(busnum, node);
 	else
-#endif
 		node = get_mp_bus_to_node(busnum);
-
-	if (node != -1 && !node_online(node))
-		node = -1;
+#endif
 
 	/* Allocate per-root-bus (not per bus) arch-specific data.
 	 * TODO: leak; this memory is never freed.
@@ -207,22 +204,22 @@ struct pci_bus * __devinit pci_acpi_scan_root(struct acpi_device *device, int do
 	if (!bus)
 		kfree(sd);
 
-	if (bus && node != -1) {
 #ifdef CONFIG_ACPI_NUMA
-		if (pxm >= 0)
-			dev_printk(KERN_DEBUG, &bus->dev,
-				   "on NUMA node %d (pxm %d)\n", node, pxm);
-#else
-		dev_printk(KERN_DEBUG, &bus->dev, "on NUMA node %d\n", node);
-#endif
+	if (bus) {
+		if (pxm >= 0) {
+			printk(KERN_DEBUG "bus %02x -> pxm %d -> node %d\n",
+				busnum, pxm, pxm_to_node(pxm));
+		}
 	}
+#endif
 
 	if (bus && (pci_probe & PCI_USE__CRS))
 		get_current_resources(device, busnum, domain, bus);
 	return bus;
 }
 
-int __init pci_acpi_init(void)
+extern int pci_routeirq;
+static int __init pci_acpi_init(void)
 {
 	struct pci_dev *dev = NULL;
 
@@ -249,5 +246,11 @@ int __init pci_acpi_init(void)
 			acpi_pci_irq_enable(dev);
 	}
 
+#ifdef CONFIG_X86_IO_APIC
+	if (acpi_ioapic)
+		print_IO_APIC();
+#endif
+
 	return 0;
 }
+subsys_initcall(pci_acpi_init);

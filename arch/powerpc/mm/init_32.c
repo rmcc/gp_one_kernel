@@ -35,6 +35,7 @@
 #include <asm/pgalloc.h>
 #include <asm/prom.h>
 #include <asm/io.h>
+#include <asm/mmu_context.h>
 #include <asm/pgtable.h>
 #include <asm/mmu.h>
 #include <asm/smp.h>
@@ -42,13 +43,12 @@
 #include <asm/btext.h>
 #include <asm/tlb.h>
 #include <asm/sections.h>
-#include <asm/system.h>
 
 #include "mmu_decl.h"
 
 #if defined(CONFIG_KERNEL_START_BOOL) || defined(CONFIG_LOWMEM_SIZE_BOOL)
 /* The ammount of lowmem must be within 0xF0000000 - KERNELBASE. */
-#if (CONFIG_LOWMEM_SIZE > (0xF0000000 - PAGE_OFFSET))
+#if (CONFIG_LOWMEM_SIZE > (0xF0000000 - KERNELBASE))
 #error "You must adjust CONFIG_LOWMEM_SIZE or CONFIG_START_KERNEL"
 #endif
 #endif
@@ -56,8 +56,8 @@
 
 DEFINE_PER_CPU(struct mmu_gather, mmu_gathers);
 
-phys_addr_t total_memory;
-phys_addr_t total_lowmem;
+unsigned long total_memory;
+unsigned long total_lowmem;
 
 phys_addr_t memstart_addr = (phys_addr_t)~0ull;
 EXPORT_SYMBOL(memstart_addr);
@@ -75,6 +75,8 @@ void MMU_init(void);
 
 /* XXX should be in current.h  -- paulus */
 extern struct task_struct *current_set[NR_CPUS];
+
+extern int init_bootmem_done;
 
 /*
  * this tells the system to map all of ram with the segregs
@@ -178,6 +180,9 @@ void __init MMU_init(void)
 	/* Map in I/O resources */
 	if (ppc_md.progress)
 		ppc_md.progress("MMU:setio", 0x302);
+
+	/* Initialize the context management stuff */
+	mmu_context_init();
 
 	if (ppc_md.progress)
 		ppc_md.progress("MMU:exit", 0x211);

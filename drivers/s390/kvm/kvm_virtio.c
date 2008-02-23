@@ -15,7 +15,6 @@
 #include <linux/err.h>
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
-#include <linux/virtio_console.h>
 #include <linux/interrupt.h>
 #include <linux/virtio_ring.h>
 #include <linux/pfn.h>
@@ -31,6 +30,11 @@
  * The pointer to our (page) of device descriptions.
  */
 static void *kvm_devices;
+
+/*
+ * Unique numbering for kvm devices.
+ */
+static unsigned int dev_index;
 
 struct kvm_device {
 	struct virtio_device vdev;
@@ -88,20 +92,16 @@ static u32 kvm_get_features(struct virtio_device *vdev)
 	return features;
 }
 
-static void kvm_finalize_features(struct virtio_device *vdev)
+static void kvm_set_features(struct virtio_device *vdev, u32 features)
 {
-	unsigned int i, bits;
+	unsigned int i;
 	struct kvm_device_desc *desc = to_kvmdev(vdev)->desc;
 	/* Second half of bitmap is features we accept. */
 	u8 *out_features = kvm_vq_features(desc) + desc->feature_len;
 
-	/* Give virtio_ring a chance to accept features. */
-	vring_transport_features(vdev);
-
 	memset(out_features, 0, desc->feature_len);
-	bits = min_t(unsigned, desc->feature_len, sizeof(vdev->features)) * 8;
-	for (i = 0; i < bits; i++) {
-		if (test_bit(i, vdev->features))
+	for (i = 0; i < min(desc->feature_len * 8, 32); i++) {
+		if (features & (1 << i))
 			out_features[i / 8] |= (1 << (i % 8));
 	}
 }
@@ -187,13 +187,11 @@ static struct virtqueue *kvm_find_vq(struct virtio_device *vdev,
 	config = kvm_vq_config(kdev->desc)+index;
 
 	err = vmem_add_mapping(config->address,
-			       vring_size(config->num,
-					  KVM_S390_VIRTIO_RING_ALIGN));
+			       vring_size(config->num, PAGE_SIZE));
 	if (err)
 		goto out;
 
-	vq = vring_new_virtqueue(config->num, KVM_S390_VIRTIO_RING_ALIGN,
-				 vdev, (void *) config->address,
+	vq = vring_new_virtqueue(config->num, vdev, (void *) config->address,
 				 kvm_notify, callback);
 	if (!vq) {
 		err = -ENOMEM;
@@ -210,8 +208,7 @@ static struct virtqueue *kvm_find_vq(struct virtio_device *vdev,
 	return vq;
 unmap:
 	vmem_remove_mapping(config->address,
-			    vring_size(config->num,
-				       KVM_S390_VIRTIO_RING_ALIGN));
+			    vring_size(config->num, PAGE_SIZE));
 out:
 	return ERR_PTR(err);
 }
@@ -222,8 +219,7 @@ static void kvm_del_vq(struct virtqueue *vq)
 
 	vring_del_virtqueue(vq);
 	vmem_remove_mapping(config->address,
-			    vring_size(config->num,
-				       KVM_S390_VIRTIO_RING_ALIGN));
+			    vring_size(config->num, PAGE_SIZE));
 }
 
 /*
@@ -231,7 +227,7 @@ static void kvm_del_vq(struct virtqueue *vq)
  */
 static struct virtio_config_ops kvm_vq_configspace_ops = {
 	.get_features = kvm_get_features,
-	.finalize_features = kvm_finalize_features,
+	.set_features = kvm_set_features,
 	.get = kvm_get,
 	.set = kvm_set,
 	.get_status = kvm_get_status,
@@ -245,31 +241,35 @@ static struct virtio_config_ops kvm_vq_configspace_ops = {
  * The root device for the kvm virtio devices.
  * This makes them appear as /sys/devices/kvm_s390/0,1,2 not /sys/devices/0,1,2.
  */
-static struct device *kvm_root;
+static struct device kvm_root = {
+	.parent = NULL,
+	.bus_id = "kvm_s390",
+};
 
 /*
  * adds a new device and register it with virtio
  * appropriate drivers are loaded by the device model
  */
-static void add_kvm_device(struct kvm_device_desc *d, unsigned int offset)
+static void add_kvm_device(struct kvm_device_desc *d)
 {
 	struct kvm_device *kdev;
 
 	kdev = kzalloc(sizeof(*kdev), GFP_KERNEL);
 	if (!kdev) {
-		printk(KERN_EMERG "Cannot allocate kvm dev %u type %u\n",
-		       offset, d->type);
+		printk(KERN_EMERG "Cannot allocate kvm dev %u\n",
+		       dev_index++);
 		return;
 	}
 
-	kdev->vdev.dev.parent = kvm_root;
+	kdev->vdev.dev.parent = &kvm_root;
+	kdev->vdev.index = dev_index++;
 	kdev->vdev.id.device = d->type;
 	kdev->vdev.config = &kvm_vq_configspace_ops;
 	kdev->desc = d;
 
 	if (register_virtio_device(&kdev->vdev) != 0) {
-		printk(KERN_ERR "Failed to register kvm device %u type %u\n",
-		       offset, d->type);
+		printk(KERN_ERR "Failed to register kvm device %u\n",
+		       kdev->vdev.index);
 		kfree(kdev);
 	}
 }
@@ -289,7 +289,7 @@ static void scan_devices(void)
 		if (d->type == 0)
 			break;
 
-		add_kvm_device(d, i);
+		add_kvm_device(d);
 	}
 }
 
@@ -298,29 +298,13 @@ static void scan_devices(void)
  */
 static void kvm_extint_handler(u16 code)
 {
-	struct virtqueue *vq;
-	u16 subcode;
-	int config_changed;
+	void *data = (void *) *(long *) __LC_PFAULT_INTPARM;
+	u16 subcode = S390_lowcore.cpu_addr;
 
-	subcode = S390_lowcore.cpu_addr;
 	if ((subcode & 0xff00) != VIRTIO_SUBCODE_64)
 		return;
 
-	/* The LSB might be overloaded, we have to mask it */
-	vq = (struct virtqueue *) ((*(long *) __LC_PFAULT_INTPARM) & ~1UL);
-
-	/* We use the LSB of extparam, to decide, if this interrupt is a config
-	 * change or a "standard" interrupt */
-	config_changed =  (*(int *)  __LC_EXT_PARAMS & 1);
-
-	if (config_changed) {
-		struct virtio_driver *drv;
-		drv = container_of(vq->vdev->dev.driver,
-				   struct virtio_driver, driver);
-		if (drv->config_changed)
-			drv->config_changed(vq->vdev);
-	} else
-		vring_interrupt(0, vq);
+	vring_interrupt(0, data);
 }
 
 /*
@@ -334,45 +318,25 @@ static int __init kvm_devices_init(void)
 	if (!MACHINE_IS_KVM)
 		return -ENODEV;
 
-	kvm_root = root_device_register("kvm_s390");
-	if (IS_ERR(kvm_root)) {
-		rc = PTR_ERR(kvm_root);
+	rc = device_register(&kvm_root);
+	if (rc) {
 		printk(KERN_ERR "Could not register kvm_s390 root device");
 		return rc;
 	}
 
-	rc = vmem_add_mapping(real_memory_size, PAGE_SIZE);
+	rc = vmem_add_mapping(PFN_PHYS(max_pfn), PAGE_SIZE);
 	if (rc) {
-		root_device_unregister(kvm_root);
+		device_unregister(&kvm_root);
 		return rc;
 	}
 
-	kvm_devices = (void *) real_memory_size;
+	kvm_devices = (void *) PFN_PHYS(max_pfn);
 
 	ctl_set_bit(0, 9);
 	register_external_interrupt(0x2603, kvm_extint_handler);
 
 	scan_devices();
 	return 0;
-}
-
-/* code for early console output with virtio_console */
-static __init int early_put_chars(u32 vtermno, const char *buf, int count)
-{
-	char scratch[17];
-	unsigned int len = count;
-
-	if (len > sizeof(scratch) - 1)
-		len = sizeof(scratch) - 1;
-	scratch[len] = '\0';
-	memcpy(scratch, buf, len);
-	kvm_hypercall1(KVM_S390_VIRTIO_NOTIFY, __pa(scratch));
-	return len;
-}
-
-void __init s390_virtio_console_init(void)
-{
-	virtio_cons_early_init(early_put_chars);
 }
 
 /*

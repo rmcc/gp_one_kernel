@@ -30,7 +30,13 @@
 #ifndef _AGP_BACKEND_H
 #define _AGP_BACKEND_H 1
 
-#include <linux/list.h>
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
 
 enum chipset_type {
 	NOT_SUPPORTED,
@@ -51,7 +57,7 @@ struct agp_kern_info {
 	size_t aper_size;
 	int max_memory;		/* In pages */
 	int current_memory;
-	bool cant_use_aperture;
+	int cant_use_aperture;
 	unsigned long page_mask;
 	struct vm_operations_struct *vm_ops;
 };
@@ -77,11 +83,9 @@ struct agp_memory {
 	off_t pg_start;
 	u32 type;
 	u32 physical;
-	bool is_bound;
-	bool is_flushed;
-        bool vmalloc_flag;
-	/* list of agp_memory mapped to the aperture */
-	struct list_head mapped_list;
+	u8 is_bound;
+	u8 is_flushed;
+        u8 vmalloc_flag;
 };
 
 #define AGP_NORMAL_MEMORY 0
@@ -100,7 +104,6 @@ extern struct agp_memory *agp_allocate_memory(struct agp_bridge_data *, size_t, 
 extern int agp_copy_info(struct agp_bridge_data *, struct agp_kern_info *);
 extern int agp_bind_memory(struct agp_memory *, off_t);
 extern int agp_unbind_memory(struct agp_memory *);
-extern int agp_rebind_memory(void);
 extern void agp_enable(struct agp_bridge_data *, u32);
 extern struct agp_bridge_data *agp_backend_acquire(struct pci_dev *);
 extern void agp_backend_release(struct agp_bridge_data *);

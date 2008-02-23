@@ -2,7 +2,6 @@
     tea6420 - i2c-driver for the tea6420 by SGS Thomson
 
     Copyright (C) 1998-2003 Michael Hunold <michael@mihu.de>
-    Copyright (C) 2008 Hans Verkuil <hverkuil@xs4all.nl>
 
     The tea6420 is a bus controlled audio-matrix with 5 stereo inputs,
     4 stereo outputs and gain control for each output.
@@ -31,18 +30,14 @@
 #include <linux/module.h>
 #include <linux/ioctl.h>
 #include <linux/i2c.h>
-#include <media/v4l2-device.h>
-#include <media/v4l2-i2c-drv-legacy.h>
+
 #include "tea6420.h"
 
-MODULE_AUTHOR("Michael Hunold <michael@mihu.de>");
-MODULE_DESCRIPTION("tea6420 driver");
-MODULE_LICENSE("GPL");
-
-static int debug;
+static int debug;		/* insmod parameter */
 module_param(debug, int, 0644);
-
-MODULE_PARM_DESC(debug, "Debug level (0-1)");
+MODULE_PARM_DESC(debug, "Turn on/off device debugging (default:off).");
+#define dprintk(args...) \
+	    do { if (debug) { printk("%s: %s()[%d]: ", KBUILD_MODNAME, __func__, __LINE__); printk(args); } } while (0)
 
 /* addresses to scan, found only at 0x4c and/or 0x4d (7-Bit) */
 static unsigned short normal_i2c[] = { I2C_ADDR_TEA6420_1, I2C_ADDR_TEA6420_2, I2C_CLIENT_END };
@@ -50,20 +45,23 @@ static unsigned short normal_i2c[] = { I2C_ADDR_TEA6420_1, I2C_ADDR_TEA6420_2, I
 /* magic definition of all other variables and things */
 I2C_CLIENT_INSMOD;
 
+static struct i2c_driver driver;
+static struct i2c_client client_template;
+
 /* make a connection between the input 'i' and the output 'o'
    with gain 'g' for the tea6420-client 'client' (note: i = 6 means 'mute') */
 static int tea6420_switch(struct i2c_client *client, int i, int o, int g)
 {
-	u8 byte;
+	u8 byte = 0;
 	int ret;
 
-	v4l_dbg(1, debug, client, "i=%d, o=%d, g=%d\n", i, o, g);
+	dprintk("adr:0x%02x, i:%d, o:%d, g:%d\n", client->addr, i, o, g);
 
 	/* check if the parameters are valid */
 	if (i < 1 || i > 6 || o < 1 || o > 4 || g < 0 || g > 6 || g % 2 != 0)
 		return -1;
 
-	byte = ((o - 1) << 5);
+	byte  = ((o - 1) << 5);
 	byte |= (i - 1);
 
 	/* to understand this, have a look at the tea6420-specs (p.5) */
@@ -83,52 +81,40 @@ static int tea6420_switch(struct i2c_client *client, int i, int o, int g)
 
 	ret = i2c_smbus_write_byte(client, byte);
 	if (ret) {
-		v4l_dbg(1, debug, client,
-			"i2c_smbus_write_byte() failed, ret:%d\n", ret);
+		dprintk("i2c_smbus_write_byte() failed, ret:%d\n", ret);
 		return -EIO;
 	}
+
 	return 0;
 }
 
-static long tea6420_ioctl(struct v4l2_subdev *sd, unsigned cmd, void *arg)
-{
-	if (cmd == TEA6420_SWITCH) {
-		struct i2c_client *client = v4l2_get_subdevdata(sd);
-		struct tea6420_multiplex *a = (struct tea6420_multiplex *)arg;
-
-		return tea6420_switch(client, a->in, a->out, a->gain);
-	}
-	return -ENOIOCTLCMD;
-}
-
-static int tea6420_command(struct i2c_client *client, unsigned cmd, void *arg)
-{
-	return v4l2_subdev_command(i2c_get_clientdata(client), cmd, arg);
-}
-
-/* ----------------------------------------------------------------------- */
-
-static const struct v4l2_subdev_core_ops tea6420_core_ops = {
-	.ioctl = tea6420_ioctl,
-};
-
-static const struct v4l2_subdev_ops tea6420_ops = {
-	.core = &tea6420_core_ops,
-};
-
 /* this function is called by i2c_probe */
-static int tea6420_probe(struct i2c_client *client,
-			  const struct i2c_device_id *id)
+static int tea6420_detect(struct i2c_adapter *adapter, int address, int kind)
 {
-	struct v4l2_subdev *sd;
-	int err, i;
+	struct i2c_client *client;
+	int err = 0, i = 0;
 
 	/* let's see whether this adapter can support what we need */
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_WRITE_BYTE))
-		return -EIO;
+	if (0 == i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WRITE_BYTE)) {
+		return 0;
+	}
 
-	v4l_info(client, "chip found @ 0x%x (%s)\n",
-			client->addr << 1, client->adapter->name);
+	/* allocate memory for client structure */
+	client = kzalloc(sizeof(struct i2c_client), GFP_KERNEL);
+	if (!client) {
+		return -ENOMEM;
+	}
+
+	/* fill client structure */
+	memcpy(client, &client_template, sizeof(struct i2c_client));
+	client->addr = address;
+	client->adapter = adapter;
+
+	/* tell the i2c layer a new client has arrived */
+	if (0 != (err = i2c_attach_client(client))) {
+		kfree(client);
+		return err;
+	}
 
 	/* set initial values: set "mute"-input to all outputs at gain 0 */
 	err = 0;
@@ -136,45 +122,78 @@ static int tea6420_probe(struct i2c_client *client,
 		err += tea6420_switch(client, 6, i, 0);
 	}
 	if (err) {
-		v4l_dbg(1, debug, client, "could not initialize tea6420\n");
+		dprintk("could not initialize tea6420\n");
+		kfree(client);
 		return -ENODEV;
 	}
 
-	sd = kmalloc(sizeof(struct v4l2_subdev), GFP_KERNEL);
-	if (sd == NULL)
-		return -ENOMEM;
-	v4l2_i2c_subdev_init(sd, client, &tea6420_ops);
+	printk("tea6420: detected @ 0x%02x on adapter %s\n", address, &client->adapter->name[0]);
+
 	return 0;
 }
 
-static int tea6420_remove(struct i2c_client *client)
+static int attach(struct i2c_adapter *adapter)
 {
-	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	/* let's see whether this is a know adapter we can attach to */
+	if (adapter->id != I2C_HW_SAA7146) {
+		dprintk("refusing to probe on unknown adapter [name='%s',id=0x%x]\n", adapter->name, adapter->id);
+		return -ENODEV;
+	}
 
-	v4l2_device_unregister_subdev(sd);
-	kfree(sd);
-	return 0;
+	return i2c_probe(adapter, &addr_data, &tea6420_detect);
 }
 
-static int tea6420_legacy_probe(struct i2c_adapter *adapter)
+static int detach(struct i2c_client *client)
 {
-	/* Let's see whether this is a known adapter we can attach to.
-	   Prevents conflicts with tvaudio.c. */
-	return adapter->id == I2C_HW_SAA7146;
+	int ret = i2c_detach_client(client);
+	kfree(client);
+	return ret;
 }
 
-static const struct i2c_device_id tea6420_id[] = {
-	{ "tea6420", 0 },
-	{ }
+static int command(struct i2c_client *client, unsigned int cmd, void *arg)
+{
+	struct tea6420_multiplex *a = (struct tea6420_multiplex *)arg;
+	int result = 0;
+
+	switch (cmd) {
+	case TEA6420_SWITCH:
+		result = tea6420_switch(client, a->in, a->out, a->gain);
+		break;
+	default:
+		return -ENOIOCTLCMD;
+	}
+
+	return result;
+}
+
+static struct i2c_driver driver = {
+	.driver = {
+		.name = "tea6420",
+	},
+	.id	= I2C_DRIVERID_TEA6420,
+	.attach_adapter	= attach,
+	.detach_client	= detach,
+	.command	= command,
 };
-MODULE_DEVICE_TABLE(i2c, tea6420_id);
 
-static struct v4l2_i2c_driver_data v4l2_i2c_data = {
+static struct i2c_client client_template = {
 	.name = "tea6420",
-	.driverid = I2C_DRIVERID_TEA6420,
-	.command = tea6420_command,
-	.probe = tea6420_probe,
-	.remove = tea6420_remove,
-	.legacy_probe = tea6420_legacy_probe,
-	.id_table = tea6420_id,
+	.driver = &driver,
 };
+
+static int __init this_module_init(void)
+{
+	return i2c_add_driver(&driver);
+}
+
+static void __exit this_module_exit(void)
+{
+	i2c_del_driver(&driver);
+}
+
+module_init(this_module_init);
+module_exit(this_module_exit);
+
+MODULE_AUTHOR("Michael Hunold <michael@mihu.de>");
+MODULE_DESCRIPTION("tea6420 driver");
+MODULE_LICENSE("GPL");

@@ -99,12 +99,12 @@ static struct mb_cache *ext4_xattr_cache;
 
 static struct xattr_handler *ext4_xattr_handler_map[] = {
 	[EXT4_XATTR_INDEX_USER]		     = &ext4_xattr_user_handler,
-#ifdef CONFIG_EXT4_FS_POSIX_ACL
+#ifdef CONFIG_EXT4DEV_FS_POSIX_ACL
 	[EXT4_XATTR_INDEX_POSIX_ACL_ACCESS]  = &ext4_xattr_acl_access_handler,
 	[EXT4_XATTR_INDEX_POSIX_ACL_DEFAULT] = &ext4_xattr_acl_default_handler,
 #endif
 	[EXT4_XATTR_INDEX_TRUSTED]	     = &ext4_xattr_trusted_handler,
-#ifdef CONFIG_EXT4_FS_SECURITY
+#ifdef CONFIG_EXT4DEV_FS_SECURITY
 	[EXT4_XATTR_INDEX_SECURITY]	     = &ext4_xattr_security_handler,
 #endif
 };
@@ -112,11 +112,11 @@ static struct xattr_handler *ext4_xattr_handler_map[] = {
 struct xattr_handler *ext4_xattr_handlers[] = {
 	&ext4_xattr_user_handler,
 	&ext4_xattr_trusted_handler,
-#ifdef CONFIG_EXT4_FS_POSIX_ACL
+#ifdef CONFIG_EXT4DEV_FS_POSIX_ACL
 	&ext4_xattr_acl_access_handler,
 	&ext4_xattr_acl_default_handler,
 #endif
-#ifdef CONFIG_EXT4_FS_SECURITY
+#ifdef CONFIG_EXT4DEV_FS_SECURITY
 	&ext4_xattr_security_handler,
 #endif
 	NULL
@@ -457,7 +457,7 @@ static void ext4_xattr_update_super_block(handle_t *handle,
 	if (ext4_journal_get_write_access(handle, EXT4_SB(sb)->s_sbh) == 0) {
 		EXT4_SET_COMPAT_FEATURE(sb, EXT4_FEATURE_COMPAT_EXT_ATTR);
 		sb->s_dirt = 1;
-		ext4_handle_dirty_metadata(handle, NULL, EXT4_SB(sb)->s_sbh);
+		ext4_journal_dirty_metadata(handle, EXT4_SB(sb)->s_sbh);
 	}
 }
 
@@ -487,9 +487,9 @@ ext4_xattr_release_block(handle_t *handle, struct inode *inode,
 		ext4_forget(handle, 1, inode, bh, bh->b_blocknr);
 	} else {
 		le32_add_cpu(&BHDR(bh)->h_refcount, -1);
-		error = ext4_handle_dirty_metadata(handle, inode, bh);
+		error = ext4_journal_dirty_metadata(handle, bh);
 		if (IS_SYNC(inode))
-			ext4_handle_sync(handle);
+			handle->h_sync = 1;
 		DQUOT_FREE_BLOCK(inode, 1);
 		ea_bdebug(bh, "refcount now=%d; releasing",
 			  le32_to_cpu(BHDR(bh)->h_refcount));
@@ -724,9 +724,8 @@ ext4_xattr_block_set(handle_t *handle, struct inode *inode,
 			if (error == -EIO)
 				goto bad_block;
 			if (!error)
-				error = ext4_handle_dirty_metadata(handle,
-								   inode,
-								   bs->bh);
+				error = ext4_journal_dirty_metadata(handle,
+								    bs->bh);
 			if (error)
 				goto cleanup;
 			goto inserted;
@@ -795,9 +794,8 @@ inserted:
 				ea_bdebug(new_bh, "reusing; refcount now=%d",
 					le32_to_cpu(BHDR(new_bh)->h_refcount));
 				unlock_buffer(new_bh);
-				error = ext4_handle_dirty_metadata(handle,
-								   inode,
-								   new_bh);
+				error = ext4_journal_dirty_metadata(handle,
+								    new_bh);
 				if (error)
 					goto cleanup_dquot;
 			}
@@ -812,8 +810,8 @@ inserted:
 			/* We need to allocate a new block */
 			ext4_fsblk_t goal = ext4_group_first_block_no(sb,
 						EXT4_I(inode)->i_block_group);
-			ext4_fsblk_t block = ext4_new_meta_blocks(handle, inode,
-						  goal, NULL, &error);
+			ext4_fsblk_t block = ext4_new_block(handle, inode,
+							goal, &error);
 			if (error)
 				goto cleanup;
 			ea_idebug(inode, "creating block %d", block);
@@ -835,8 +833,7 @@ getblk_failed:
 			set_buffer_uptodate(new_bh);
 			unlock_buffer(new_bh);
 			ext4_xattr_cache_insert(new_bh);
-			error = ext4_handle_dirty_metadata(handle,
-							   inode, new_bh);
+			error = ext4_journal_dirty_metadata(handle, new_bh);
 			if (error)
 				goto cleanup;
 		}
@@ -962,7 +959,6 @@ ext4_xattr_set_handle(handle_t *handle, struct inode *inode, int name_index,
 	struct ext4_xattr_block_find bs = {
 		.s = { .not_found = -ENODATA, },
 	};
-	unsigned long no_expand;
 	int error;
 
 	if (!name)
@@ -970,9 +966,6 @@ ext4_xattr_set_handle(handle_t *handle, struct inode *inode, int name_index,
 	if (strlen(name) > 255)
 		return -ERANGE;
 	down_write(&EXT4_I(inode)->xattr_sem);
-	no_expand = EXT4_I(inode)->i_state & EXT4_STATE_NO_EXPAND;
-	EXT4_I(inode)->i_state |= EXT4_STATE_NO_EXPAND;
-
 	error = ext4_get_inode_loc(inode, &is.iloc);
 	if (error)
 		goto cleanup;
@@ -1043,14 +1036,12 @@ ext4_xattr_set_handle(handle_t *handle, struct inode *inode, int name_index,
 		 */
 		is.iloc.bh = NULL;
 		if (IS_SYNC(inode))
-			ext4_handle_sync(handle);
+			handle->h_sync = 1;
 	}
 
 cleanup:
 	brelse(is.iloc.bh);
 	brelse(bs.bh);
-	if (no_expand == 0)
-		EXT4_I(inode)->i_state &= ~EXT4_STATE_NO_EXPAND;
 	up_write(&EXT4_I(inode)->xattr_sem);
 	return error;
 }
@@ -1521,7 +1512,7 @@ static inline void ext4_xattr_hash_entry(struct ext4_xattr_header *header,
 	char *name = entry->e_name;
 	int n;
 
-	for (n = 0; n < entry->e_name_len; n++) {
+	for (n=0; n < entry->e_name_len; n++) {
 		hash = (hash << NAME_HASH_SHIFT) ^
 		       (hash >> (8*sizeof(hash) - NAME_HASH_SHIFT)) ^
 		       *name++;

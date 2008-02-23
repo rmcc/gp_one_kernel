@@ -180,9 +180,7 @@ struct rfcomm_dlc {
 	u8            addr;
 	u8            priority;
 	u8            v24_sig;
-	u8            remote_v24_sig;
 	u8            mscex;
-	u8            out;
 
 	u32           link_mode;
 

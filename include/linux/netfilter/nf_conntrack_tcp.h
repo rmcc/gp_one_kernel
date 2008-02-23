@@ -30,9 +30,6 @@ enum tcp_conntrack {
 /* Be liberal in window checking */
 #define IP_CT_TCP_FLAG_BE_LIBERAL		0x08
 
-/* Has unacknowledged data */
-#define IP_CT_TCP_FLAG_DATA_UNACKNOWLEDGED	0x10
-
 struct nf_ct_tcp_flags {
 	u_int8_t flags;
 	u_int8_t mask;

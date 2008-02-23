@@ -49,7 +49,7 @@
 	};
 
 	bcsr@e2400000 {
-		compatible = "fsl,mpc8349mds-bcsr";
+		device_type = "board-control";
 		reg = <0xe2400000 0x8000>;
 	};
 
@@ -57,7 +57,6 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		device_type = "soc";
-		compatible = "simple-bus";
 		ranges = <0x0 0xe0000000 0x00100000>;
 		reg = <0xe0000000 0x00000200>;
 		bus-frequency = <0>;
@@ -104,45 +103,6 @@
 			mode = "cpu";
 		};
 
-		dma@82a8 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "fsl,mpc8349-dma", "fsl,elo-dma";
-			reg = <0x82a8 4>;
-			ranges = <0 0x8100 0x1a8>;
-			interrupt-parent = <&ipic>;
-			interrupts = <71 8>;
-			cell-index = <0>;
-			dma-channel@0 {
-				compatible = "fsl,mpc8349-dma-channel", "fsl,elo-dma-channel";
-				reg = <0 0x80>;
-				cell-index = <0>;
-				interrupt-parent = <&ipic>;
-				interrupts = <71 8>;
-			};
-			dma-channel@80 {
-				compatible = "fsl,mpc8349-dma-channel", "fsl,elo-dma-channel";
-				reg = <0x80 0x80>;
-				cell-index = <1>;
-				interrupt-parent = <&ipic>;
-				interrupts = <71 8>;
-			};
-			dma-channel@100 {
-				compatible = "fsl,mpc8349-dma-channel", "fsl,elo-dma-channel";
-				reg = <0x100 0x80>;
-				cell-index = <2>;
-				interrupt-parent = <&ipic>;
-				interrupts = <71 8>;
-			};
-			dma-channel@180 {
-				compatible = "fsl,mpc8349-dma-channel", "fsl,elo-dma-channel";
-				reg = <0x180 0x28>;
-				cell-index = <3>;
-				interrupt-parent = <&ipic>;
-				interrupts = <71 8>;
-			};
-		};
-
 		/* phy type (ULPI or SERIAL) are only types supported for MPH */
 		/* port = 0 or 1 */
 		usb@22000 {
@@ -185,24 +145,7 @@
 				reg = <0x1>;
 				device_type = "ethernet-phy";
 			};
-			tbi0: tbi-phy@11 {
-				reg = <0x11>;
-				device_type = "tbi-phy";
-			};
 		};
-
-		mdio@25520 {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			compatible = "fsl,gianfar-tbi";
-			reg = <0x25520 0x20>;
-
-			tbi1: tbi-phy@11 {
-				reg = <0x11>;
-				device_type = "tbi-phy";
-			};
-		};
-
 
 		enet0: ethernet@24000 {
 			cell-index = <0>;
@@ -213,7 +156,6 @@
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupts = <32 0x8 33 0x8 34 0x8>;
 			interrupt-parent = <&ipic>;
-			tbi-handle = <&tbi0>;
 			phy-handle = <&phy0>;
 			linux,network-index = <0>;
 		};
@@ -227,7 +169,6 @@
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupts = <35 0x8 36 0x8 37 0x8>;
 			interrupt-parent = <&ipic>;
-			tbi-handle = <&tbi1>;
 			phy-handle = <&phy1>;
 			linux,network-index = <1>;
 		};
@@ -252,15 +193,20 @@
 			interrupt-parent = <&ipic>;
 		};
 
+		/* May need to remove if on a part without crypto engine */
 		crypto@30000 {
-			compatible = "fsl,sec2.0";
+			device_type = "crypto";
+			model = "SEC2";
+			compatible = "talitos";
 			reg = <0x30000 0x10000>;
 			interrupts = <11 0x8>;
 			interrupt-parent = <&ipic>;
-			fsl,num-channels = <4>;
-			fsl,channel-fifo-len = <24>;
-			fsl,exec-units-mask = <0x7e>;
-			fsl,descriptor-types-mask = <0x01010ebf>;
+			num-channels = <4>;
+			channel-fifo-len = <24>;
+			exec-units-mask = <0x0000007e>;
+			/* desc mask is for rev2.0,
+			 * we need runtime fixup for >2.0 */
+			descriptor-types-mask = <0x01010ebf>;
 		};
 
 		/* IPIC
@@ -334,8 +280,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
-		reg = <0xe0008500 0x100		/* internal registers */
-		       0xe0008300 0x8>;		/* config space access registers */
+		reg = <0xe0008500 0x100>;
 		compatible = "fsl,mpc8349-pci";
 		device_type = "pci";
 	};
@@ -396,8 +341,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
-		reg = <0xe0008600 0x100		/* internal registers */
-		       0xe0008380 0x8>;		/* config space access registers */
+		reg = <0xe0008600 0x100>;
 		compatible = "fsl,mpc8349-pci";
 		device_type = "pci";
 	};

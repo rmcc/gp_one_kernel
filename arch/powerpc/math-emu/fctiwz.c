@@ -2,15 +2,13 @@
 #include <linux/errno.h>
 #include <asm/uaccess.h>
 
-#include <asm/sfp-machine.h>
-#include <math-emu/soft-fp.h>
-#include <math-emu/double.h>
+#include "soft-fp.h"
+#include "double.h"
 
 int
 fctiwz(u32 *frD, void *frB)
 {
 	FP_DECL_D(B);
-	FP_DECL_EX;
 	u32 fpscr;
 	unsigned int r;
 
@@ -18,7 +16,7 @@ fctiwz(u32 *frD, void *frB)
 	__FPU_FPSCR &= ~(3);
 	__FPU_FPSCR |= FP_RND_ZERO;
 
-	FP_UNPACK_DP(B, frB);
+	__FP_UNPACK_D(B, frB);
 	FP_TO_INT_D(r, B, 32, 1);
 	frD[1] = r;
 

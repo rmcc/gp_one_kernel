@@ -28,6 +28,7 @@
 #include <asm/prom.h>
 #include <mm/mmu_decl.h>
 #include <asm/udbg.h>
+#include <asm/i8259.h>
 
 #include <asm/mpic.h>
 
@@ -45,6 +46,68 @@
 #endif
 
 #ifdef CONFIG_PCI
+static void mpc86xx_8259_cascade(unsigned int irq, struct irq_desc *desc)
+{
+	unsigned int cascade_irq = i8259_irq();
+	if (cascade_irq != NO_IRQ)
+		generic_handle_irq(cascade_irq);
+	desc->chip->eoi(irq);
+}
+#endif	/* CONFIG_PCI */
+
+static void __init
+mpc86xx_hpcn_init_irq(void)
+{
+	struct mpic *mpic1;
+	struct device_node *np;
+	struct resource res;
+#ifdef CONFIG_PCI
+	struct device_node *cascade_node = NULL;
+	int cascade_irq;
+#endif
+
+	/* Determine PIC address. */
+	np = of_find_node_by_type(NULL, "open-pic");
+	if (np == NULL)
+		return;
+	of_address_to_resource(np, 0, &res);
+
+	/* Alloc mpic structure and per isu has 16 INT entries. */
+	mpic1 = mpic_alloc(np, res.start,
+			MPIC_PRIMARY | MPIC_WANTS_RESET | MPIC_BIG_ENDIAN,
+			0, 256, " MPIC     ");
+	BUG_ON(mpic1 == NULL);
+
+	mpic_init(mpic1);
+
+#ifdef CONFIG_PCI
+	/* Initialize i8259 controller */
+	for_each_node_by_type(np, "interrupt-controller")
+		if (of_device_is_compatible(np, "chrp,iic")) {
+			cascade_node = np;
+			break;
+		}
+	if (cascade_node == NULL) {
+		printk(KERN_DEBUG "mpc86xxhpcn: no ISA interrupt controller\n");
+		return;
+	}
+
+	cascade_irq = irq_of_parse_and_map(cascade_node, 0);
+	if (cascade_irq == NO_IRQ) {
+		printk(KERN_ERR "mpc86xxhpcn: failed to map cascade interrupt");
+		return;
+	}
+	DBG("mpc86xxhpcn: cascade mapped to irq %d\n", cascade_irq);
+
+	i8259_init(cascade_node, 0);
+	of_node_put(cascade_node);
+
+	set_irq_chained_handler(cascade_irq, mpc86xx_8259_cascade);
+#endif
+}
+
+#ifdef CONFIG_PCI
+extern int uses_fsl_uli_m1575;
 extern int uli_exclude_device(struct pci_controller *hose,
 				u_char bus, u_char devfn);
 
@@ -86,6 +149,7 @@ mpc86xx_hpcn_setup_arch(void)
 			fsl_add_bridge(np, 0);
 	}
 
+	uses_fsl_uli_m1575 = 1;
 	ppc_md.pci_exclude_device = mpc86xx_exclude_device;
 
 #endif
@@ -101,11 +165,21 @@ mpc86xx_hpcn_setup_arch(void)
 static void
 mpc86xx_hpcn_show_cpuinfo(struct seq_file *m)
 {
+	struct device_node *root;
+	uint memsize = total_memory;
+	const char *model = "";
 	uint svid = mfspr(SPRN_SVR);
 
 	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
 
+	root = of_find_node_by_path("/");
+	if (root)
+		model = of_get_property(root, "model", NULL);
+	seq_printf(m, "Machine\t\t: %s\n", model);
+	of_node_put(root);
+
 	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
+	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
 }
 
 
@@ -163,7 +237,7 @@ define_machine(mpc86xx_hpcn) {
 	.name			= "MPC86xx HPCN",
 	.probe			= mpc86xx_hpcn_probe,
 	.setup_arch		= mpc86xx_hpcn_setup_arch,
-	.init_IRQ		= mpc86xx_init_irq,
+	.init_IRQ		= mpc86xx_hpcn_init_irq,
 	.show_cpuinfo		= mpc86xx_hpcn_show_cpuinfo,
 	.get_irq		= mpic_get_irq,
 	.restart		= fsl_rstcr_restart,

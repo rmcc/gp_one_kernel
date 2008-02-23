@@ -2,7 +2,8 @@
  * wm9712.c  --  Codec driver for Wolfson WM9712 AC97 Codecs.
  *
  * Copyright 2003, 2004, 2005, 2006, 2007 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
  * Parts Copyright : Ian Molton <spyro@f2s.com>
  *                   Andrew Zabolotny <zap@homelink.ru>
  *                   Russell King <rmk@arm.linux.org.uk>
@@ -16,6 +17,7 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/input.h>
 #include <linux/delay.h>
@@ -166,18 +168,6 @@ static void wm9712_phy_init(struct wm97xx *wm)
 			64000 / rpu);
 	}
 
-	/* WM9712 five wire */
-	if (five_wire) {
-		dig2 |= WM9712_45W;
-		dev_dbg(wm->dev, "setting 5-wire touchscreen mode.");
-
-		if (pil) {
-			dev_warn(wm->dev, "pressure measurement is not "
-				 "supported in 5-wire mode\n");
-			pil = 0;
-		}
-	}
-
 	/* touchpanel pressure current*/
 	if (pil == 2) {
 		dig2 |= WM9712_PIL;
@@ -188,6 +178,12 @@ static void wm9712_phy_init(struct wm97xx *wm)
 			"setting pressure measurement current to 200uA.");
 	if (!pil)
 		pressure = 0;
+
+	/* WM9712 five wire */
+	if (five_wire) {
+		dig2 |= WM9712_45W;
+		dev_dbg(wm->dev, "setting 5-wire touchscreen mode.");
+	}
 
 	/* polling mode sample settling delay */
 	if (delay < 0 || delay > 15) {
@@ -461,6 +457,6 @@ struct wm97xx_codec_drv wm9712_codec = {
 EXPORT_SYMBOL_GPL(wm9712_codec);
 
 /* Module information */
-MODULE_AUTHOR("Liam Girdwood <lrg@slimlogic.co.uk>");
+MODULE_AUTHOR("Liam Girdwood <liam.girdwood@wolfsonmicro.com>");
 MODULE_DESCRIPTION("WM9712 Touch Screen Driver");
 MODULE_LICENSE("GPL");

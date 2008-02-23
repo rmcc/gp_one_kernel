@@ -8,7 +8,7 @@
  *  Copyright 2003-2005 Jeff Garzik
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
  *  Copyright (C) 1998-2000 Andre Hedrick <andre@linux-ide.org>
- *  Copyright (C) 2003 Red Hat Inc
+ *  Copyright (C) 2003 Red Hat Inc <alan@redhat.com>
  *
  * and drivers/ata/ahci.c:
  *  Copyright 2004-2005 Red Hat, Inc.
@@ -210,6 +210,7 @@ static void scc_set_piomode (struct ata_port *ap, struct ata_device *adev)
  *	scc_set_dmamode - Initialize host controller PATA DMA timings
  *	@ap: Port whose timings we are configuring
  *	@adev: um
+ *	@udma: udma mode, 0 - 6
  *
  *	Set UDMA mode for device.
  *
@@ -695,7 +696,7 @@ static void scc_bmdma_stop (struct ata_queued_cmd *qc)
 
 		if (reg & INTSTS_BMSINT) {
 			unsigned int classes;
-			unsigned long deadline = ata_deadline(jiffies, ATA_TMOUT_BOOT);
+			unsigned long deadline = jiffies + ATA_TMOUT_BOOT;
 			printk(KERN_WARNING "%s: Internal Bus Error\n", DRV_NAME);
 			out_be32(bmid_base + SCC_DMA_INTST, INTSTS_BMSINT);
 			/* TBD: SW reset */
@@ -725,7 +726,7 @@ static void scc_bmdma_stop (struct ata_queued_cmd *qc)
 		 in_be32(bmid_base + SCC_DMA_CMD) & ~ATA_DMA_START);
 
 	/* one-PIO-cycle guaranteed wait, per spec, for HDMA1:0 transition */
-	ata_sff_dma_pause(ap);	/* dummy read */
+	ata_sff_altstatus(ap);	/* dummy read */
 }
 
 /**
@@ -746,8 +747,7 @@ static u8 scc_bmdma_status (struct ata_port *ap)
 		return host_stat;
 
 	/* errata A252,A308 workaround: Step4 */
-	if ((scc_check_altstatus(ap) & ATA_ERR)
-					&& (int_status & INTSTS_INTRQ))
+	if ((ata_sff_altstatus(ap) & ATA_ERR) && (int_status & INTSTS_INTRQ))
 		return (host_stat | ATA_DMA_INTR);
 
 	/* errata A308 workaround Step5 */

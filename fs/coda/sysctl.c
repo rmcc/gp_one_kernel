@@ -11,9 +11,7 @@
 
 #include "coda_int.h"
 
-#ifdef CONFIG_SYSCTL
 static struct ctl_table_header *fs_table_header;
-#endif
 
 static ctl_table coda_table[] = {
 	{
@@ -43,7 +41,6 @@ static ctl_table coda_table[] = {
 	{}
 };
 
-#ifdef CONFIG_SYSCTL
 static ctl_table fs_table[] = {
 	{
 		.ctl_name	= CTL_UNNUMBERED,
@@ -53,7 +50,7 @@ static ctl_table fs_table[] = {
 	},
 	{}
 };
-#endif
+
 
 void coda_sysctl_init(void)
 {

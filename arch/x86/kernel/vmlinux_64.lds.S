@@ -5,7 +5,6 @@
 #define LOAD_OFFSET __START_KERNEL_map
 
 #include <asm-generic/vmlinux.lds.h>
-#include <asm/asm-offsets.h>
 #include <asm/page.h>
 
 #undef i386	/* in case the preprocessor is a 32bit one */
@@ -14,15 +13,13 @@ OUTPUT_FORMAT("elf64-x86-64", "elf64-x86-64", "elf64-x86-64")
 OUTPUT_ARCH(i386:x86-64)
 ENTRY(phys_startup_64)
 jiffies_64 = jiffies;
+_proxy_pda = 1;
 PHDRS {
 	text PT_LOAD FLAGS(5);	/* R_E */
 	data PT_LOAD FLAGS(7);	/* RWE */
 	user PT_LOAD FLAGS(7);	/* RWE */
 	data.init PT_LOAD FLAGS(7);	/* RWE */
-#ifdef CONFIG_SMP
-	percpu PT_LOAD FLAGS(7);	/* RWE */
-#endif
-	note PT_NOTE FLAGS(0);	/* ___ */
+	note PT_NOTE FLAGS(4);	/* R__ */
 }
 SECTIONS
 {
@@ -38,22 +35,30 @@ SECTIONS
 	SCHED_TEXT
 	LOCK_TEXT
 	KPROBES_TEXT
-	IRQENTRY_TEXT
 	*(.fixup)
 	*(.gnu.warning)
 	_etext = .;		/* End of text section */
   } :text = 0x9090
-
-  NOTES :text :note
 
   . = ALIGN(16);		/* Exception table */
   __ex_table : AT(ADDR(__ex_table) - LOAD_OFFSET) {
   	__start___ex_table = .;
 	 *(__ex_table)
   	__stop___ex_table = .;
-  } :text = 0x9090
+  }
+
+  NOTES :text :note
+
+  BUG_TABLE :text
 
   RODATA
+
+  . = ALIGN(4);
+  .tracedata : AT(ADDR(.tracedata) - LOAD_OFFSET) {
+  	__tracedata_start = .;
+	*(.tracedata)
+  	__tracedata_end = .;
+  }
 
   . = ALIGN(PAGE_SIZE);		/* Align data segment to page size boundary */
 				/* Data */
@@ -172,11 +177,11 @@ SECTIONS
 	*(.con_initcall.init)
   }
   __con_initcall_end = .;
-  __x86_cpu_dev_start = .;
-  .x86_cpu_dev.init : AT(ADDR(.x86_cpu_dev.init) - LOAD_OFFSET) {
-	*(.x86_cpu_dev.init)
+  __x86cpuvendor_start = .;
+  .x86cpuvendor.init : AT(ADDR(.x86cpuvendor.init) - LOAD_OFFSET) {
+	*(.x86cpuvendor.init)
   }
-  __x86_cpu_dev_end = .;
+  __x86cpuvendor_end = .;
   SECURITY_INIT
 
   . = ALIGN(8);
@@ -211,29 +216,14 @@ SECTIONS
   __initramfs_end = .;
 #endif
 
-#ifdef CONFIG_SMP
-  /*
-   * percpu offsets are zero-based on SMP.  PERCPU_VADDR() changes the
-   * output PHDR, so the next output section - __data_nosave - should
-   * switch it back to data.init.  Also, pda should be at the head of
-   * percpu area.  Preallocate it and define the percpu offset symbol
-   * so that it can be accessed as a percpu variable.
-   */
-  . = ALIGN(PAGE_SIZE);
-  PERCPU_VADDR_PREALLOC(0, :percpu, pda_size)
-  per_cpu____pda = __per_cpu_start;
-#else
   PERCPU(PAGE_SIZE)
-#endif
 
   . = ALIGN(PAGE_SIZE);
   __init_end = .;
 
   . = ALIGN(PAGE_SIZE);
   __nosave_begin = .;
-  .data_nosave : AT(ADDR(.data_nosave) - LOAD_OFFSET) {
-      *(.data.nosave)
-  } :data.init	/* switch back to data.init, see PERCPU_VADDR() above */
+  .data_nosave : AT(ADDR(.data_nosave) - LOAD_OFFSET) { *(.data.nosave) }
   . = ALIGN(PAGE_SIZE);
   __nosave_end = .;
 

@@ -26,16 +26,14 @@ static DEFINE_PER_CPU(struct cpu, cpu_devices);
  * XXX: If/when a SMP-capable implementation of AVR32 will ever be
  * made, we must make sure that the code executes on the correct CPU.
  */
-static ssize_t show_pc0event(struct sys_device *dev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t show_pc0event(struct sys_device *dev, char *buf)
 {
 	unsigned long pccr;
 
 	pccr = sysreg_read(PCCR);
 	return sprintf(buf, "0x%lx\n", (pccr >> 12) & 0x3f);
 }
-static ssize_t store_pc0event(struct sys_device *dev,
-			struct sysdev_attribute *attr, const char *buf,
+static ssize_t store_pc0event(struct sys_device *dev, const char *buf,
 			      size_t count)
 {
 	unsigned long val;
@@ -48,17 +46,15 @@ static ssize_t store_pc0event(struct sys_device *dev,
 	sysreg_write(PCCR, val);
 	return count;
 }
-static ssize_t show_pc0count(struct sys_device *dev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t show_pc0count(struct sys_device *dev, char *buf)
 {
 	unsigned long pcnt0;
 
 	pcnt0 = sysreg_read(PCNT0);
 	return sprintf(buf, "%lu\n", pcnt0);
 }
-static ssize_t store_pc0count(struct sys_device *dev,
-				struct sysdev_attribute *attr,
-				const char *buf, size_t count)
+static ssize_t store_pc0count(struct sys_device *dev, const char *buf,
+			      size_t count)
 {
 	unsigned long val;
 	char *endp;
@@ -71,16 +67,14 @@ static ssize_t store_pc0count(struct sys_device *dev,
 	return count;
 }
 
-static ssize_t show_pc1event(struct sys_device *dev,
-				struct sysdev_attribute *attr, char *buf)
+static ssize_t show_pc1event(struct sys_device *dev, char *buf)
 {
 	unsigned long pccr;
 
 	pccr = sysreg_read(PCCR);
 	return sprintf(buf, "0x%lx\n", (pccr >> 18) & 0x3f);
 }
-static ssize_t store_pc1event(struct sys_device *dev,
-			      struct sysdev_attribute *attr, const char *buf,
+static ssize_t store_pc1event(struct sys_device *dev, const char *buf,
 			      size_t count)
 {
 	unsigned long val;
@@ -93,16 +87,14 @@ static ssize_t store_pc1event(struct sys_device *dev,
 	sysreg_write(PCCR, val);
 	return count;
 }
-static ssize_t show_pc1count(struct sys_device *dev,
-				struct sysdev_attribute *attr, char *buf)
+static ssize_t show_pc1count(struct sys_device *dev, char *buf)
 {
 	unsigned long pcnt1;
 
 	pcnt1 = sysreg_read(PCNT1);
 	return sprintf(buf, "%lu\n", pcnt1);
 }
-static ssize_t store_pc1count(struct sys_device *dev,
-				struct sysdev_attribute *attr, const char *buf,
+static ssize_t store_pc1count(struct sys_device *dev, const char *buf,
 			      size_t count)
 {
 	unsigned long val;
@@ -116,16 +108,14 @@ static ssize_t store_pc1count(struct sys_device *dev,
 	return count;
 }
 
-static ssize_t show_pccycles(struct sys_device *dev,
-				struct sysdev_attribute *attr, char *buf)
+static ssize_t show_pccycles(struct sys_device *dev, char *buf)
 {
 	unsigned long pccnt;
 
 	pccnt = sysreg_read(PCCNT);
 	return sprintf(buf, "%lu\n", pccnt);
 }
-static ssize_t store_pccycles(struct sys_device *dev,
-				struct sysdev_attribute *attr, const char *buf,
+static ssize_t store_pccycles(struct sys_device *dev, const char *buf,
 			      size_t count)
 {
 	unsigned long val;
@@ -139,16 +129,14 @@ static ssize_t store_pccycles(struct sys_device *dev,
 	return count;
 }
 
-static ssize_t show_pcenable(struct sys_device *dev,
-			struct sysdev_attribute *attr, char *buf)
+static ssize_t show_pcenable(struct sys_device *dev, char *buf)
 {
 	unsigned long pccr;
 
 	pccr = sysreg_read(PCCR);
 	return sprintf(buf, "%c\n", (pccr & 1)?'1':'0');
 }
-static ssize_t store_pcenable(struct sys_device *dev,
-			      struct sysdev_attribute *attr, const char *buf,
+static ssize_t store_pcenable(struct sys_device *dev, const char *buf,
 			      size_t count)
 {
 	unsigned long pccr, val;

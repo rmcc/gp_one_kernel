@@ -12,7 +12,6 @@
 #include <net/net_namespace.h>
 
 extern struct files_struct init_files;
-extern struct fs_struct init_fs;
 
 #define INIT_KIOCTX(name, which_mm) \
 {							\
@@ -58,6 +57,7 @@ extern struct nsproxy init_nsproxy;
 	.mnt_ns		= NULL,						\
 	INIT_NET_NS(net_ns)                                             \
 	INIT_IPC_NS(ipc_ns)						\
+	.user_ns	= &init_user_ns,				\
 }
 
 #define INIT_SIGHAND(sighand) {						\
@@ -113,8 +113,6 @@ extern struct group_info init_groups;
 # define CAP_INIT_BSET  CAP_INIT_EFF_SET
 #endif
 
-extern struct cred init_cred;
-
 /*
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
@@ -124,7 +122,7 @@ extern struct cred init_cred;
 	.state		= 0,						\
 	.stack		= &init_thread_info,				\
 	.usage		= ATOMIC_INIT(2),				\
-	.flags		= PF_KTHREAD,					\
+	.flags		= 0,						\
 	.lock_depth	= -1,						\
 	.prio		= MAX_PRIO-20,					\
 	.static_prio	= MAX_PRIO-20,					\
@@ -142,17 +140,20 @@ extern struct cred init_cred;
 		.nr_cpus_allowed = NR_CPUS,				\
 	},								\
 	.tasks		= LIST_HEAD_INIT(tsk.tasks),			\
-	.ptraced	= LIST_HEAD_INIT(tsk.ptraced),			\
-	.ptrace_entry	= LIST_HEAD_INIT(tsk.ptrace_entry),		\
+	.ptrace_children= LIST_HEAD_INIT(tsk.ptrace_children),		\
+	.ptrace_list	= LIST_HEAD_INIT(tsk.ptrace_list),		\
 	.real_parent	= &tsk,						\
 	.parent		= &tsk,						\
 	.children	= LIST_HEAD_INIT(tsk.children),			\
 	.sibling	= LIST_HEAD_INIT(tsk.sibling),			\
 	.group_leader	= &tsk,						\
-	.real_cred	= &init_cred,					\
-	.cred		= &init_cred,					\
-	.cred_exec_mutex =						\
-		 __MUTEX_INITIALIZER(tsk.cred_exec_mutex),		\
+	.group_info	= &init_groups,					\
+	.cap_effective	= CAP_INIT_EFF_SET,				\
+	.cap_inheritable = CAP_INIT_INH_SET,				\
+	.cap_permitted	= CAP_FULL_SET,					\
+	.cap_bset 	= CAP_INIT_BSET,				\
+	.securebits     = SECUREBITS_DEFAULT,				\
+	.user		= INIT_USER,					\
 	.comm		= "swapper",					\
 	.thread		= INIT_THREAD,					\
 	.fs		= &init_fs,					\
@@ -169,7 +170,6 @@ extern struct cred init_cred;
 	.cpu_timers	= INIT_CPU_TIMERS(tsk.cpu_timers),		\
 	.fs_excl	= ATOMIC_INIT(0),				\
 	.pi_lock	= __SPIN_LOCK_UNLOCKED(tsk.pi_lock),		\
-	.timer_slack_ns = 50000, /* 50 usec default slack */		\
 	.pids = {							\
 		[PIDTYPE_PID]  = INIT_PID_LINK(PIDTYPE_PID),		\
 		[PIDTYPE_PGID] = INIT_PID_LINK(PIDTYPE_PGID),		\

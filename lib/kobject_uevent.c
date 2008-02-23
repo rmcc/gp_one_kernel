@@ -165,7 +165,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	/* keys passed in from the caller */
 	if (envp_ext) {
 		for (i = 0; envp_ext[i]; i++) {
-			retval = add_uevent_var(env, "%s", envp_ext[i]);
+			retval = add_uevent_var(env, envp_ext[i]);
 			if (retval)
 				goto exit;
 		}
@@ -225,10 +225,8 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 			}
 
 			NETLINK_CB(skb).dst_group = 1;
-			retval = netlink_broadcast(uevent_sock, skb, 0, 1,
-						   GFP_KERNEL);
-		} else
-			retval = -ENOMEM;
+			netlink_broadcast(uevent_sock, skb, 0, 1, GFP_KERNEL);
+		}
 	}
 #endif
 
@@ -247,8 +245,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		if (retval)
 			goto exit;
 
-		retval = call_usermodehelper(argv[0], argv,
-					     env->envp, UMH_WAIT_EXEC);
+		call_usermodehelper(argv[0], argv, env->envp, UMH_WAIT_EXEC);
 	}
 
 exit:
@@ -287,7 +284,8 @@ int add_uevent_var(struct kobj_uevent_env *env, const char *format, ...)
 	int len;
 
 	if (env->envp_idx >= ARRAY_SIZE(env->envp)) {
-		WARN(1, KERN_ERR "add_uevent_var: too many keys\n");
+		printk(KERN_ERR "add_uevent_var: too many keys\n");
+		WARN_ON(1);
 		return -ENOMEM;
 	}
 
@@ -298,7 +296,8 @@ int add_uevent_var(struct kobj_uevent_env *env, const char *format, ...)
 	va_end(args);
 
 	if (len >= (sizeof(env->buf) - env->buflen)) {
-		WARN(1, KERN_ERR "add_uevent_var: buffer size too small\n");
+		printk(KERN_ERR "add_uevent_var: buffer size too small\n");
+		WARN_ON(1);
 		return -ENOMEM;
 	}
 

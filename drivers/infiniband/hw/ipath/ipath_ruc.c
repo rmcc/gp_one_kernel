@@ -156,7 +156,7 @@ bail:
 /**
  * ipath_get_rwqe - copy the next RWQE into the QP's RWQE
  * @qp: the QP
- * @wr_id_only: update qp->r_wr_id only, not qp->r_sge
+ * @wr_id_only: update wr_id only, not SGEs
  *
  * Return 0 if no RWQE is available, otherwise return 1.
  *
@@ -172,6 +172,8 @@ int ipath_get_rwqe(struct ipath_qp *qp, int wr_id_only)
 	void (*handler)(struct ib_event *, void *);
 	u32 tail;
 	int ret;
+
+	qp->r_sge.sg_list = qp->r_sg_list;
 
 	if (qp->ibqp.srq) {
 		srq = to_isrq(qp->ibqp.srq);
@@ -204,10 +206,8 @@ int ipath_get_rwqe(struct ipath_qp *qp, int wr_id_only)
 		wqe = get_rwqe_ptr(rq, tail);
 		if (++tail >= rq->size)
 			tail = 0;
-		if (wr_id_only)
-			break;
-		qp->r_sge.sg_list = qp->r_sg_list;
-	} while (!ipath_init_sge(qp, wqe, &qp->r_len, &qp->r_sge));
+	} while (!wr_id_only && !ipath_init_sge(qp, wqe, &qp->r_len,
+						&qp->r_sge));
 	qp->r_wr_id = wqe->wr_id;
 	wq->tail = tail;
 
@@ -331,7 +331,7 @@ again:
 	switch (wqe->wr.opcode) {
 	case IB_WR_SEND_WITH_IMM:
 		wc.wc_flags = IB_WC_WITH_IMM;
-		wc.ex.imm_data = wqe->wr.ex.imm_data;
+		wc.imm_data = wqe->wr.ex.imm_data;
 		/* FALLTHROUGH */
 	case IB_WR_SEND:
 		if (!ipath_get_rwqe(qp, 0))
@@ -342,7 +342,7 @@ again:
 		if (unlikely(!(qp->qp_access_flags & IB_ACCESS_REMOTE_WRITE)))
 			goto inv_err;
 		wc.wc_flags = IB_WC_WITH_IMM;
-		wc.ex.imm_data = wqe->wr.ex.imm_data;
+		wc.imm_data = wqe->wr.ex.imm_data;
 		if (!ipath_get_rwqe(qp, 1))
 			goto rnr_nak;
 		/* FALLTHROUGH */
@@ -618,8 +618,7 @@ void ipath_make_ruc_header(struct ipath_ibdev *dev, struct ipath_qp *qp,
 	qp->s_hdr.lrh[0] = cpu_to_be16(lrh0);
 	qp->s_hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	qp->s_hdr.lrh[2] = cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	qp->s_hdr.lrh[3] = cpu_to_be16(dev->dd->ipath_lid |
-				       qp->remote_ah_attr.src_path_bits);
+	qp->s_hdr.lrh[3] = cpu_to_be16(dev->dd->ipath_lid);
 	bth0 |= ipath_get_pkey(dev->dd, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0 | (1 << 22));

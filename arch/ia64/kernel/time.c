@@ -24,7 +24,6 @@
 #include <asm/machvec.h>
 #include <asm/delay.h>
 #include <asm/hw_irq.h>
-#include <asm/paravirt.h>
 #include <asm/ptrace.h>
 #include <asm/sal.h>
 #include <asm/sections.h>
@@ -49,15 +48,6 @@ EXPORT_SYMBOL(last_cli_ip);
 
 #endif
 
-#ifdef CONFIG_PARAVIRT
-static void
-paravirt_clocksource_resume(void)
-{
-	if (pv_time_ops.clocksource_resume)
-		pv_time_ops.clocksource_resume();
-}
-#endif
-
 static struct clocksource clocksource_itc = {
 	.name           = "itc",
 	.rating         = 350,
@@ -66,9 +56,6 @@ static struct clocksource clocksource_itc = {
 	.mult           = 0, /*to be calculated*/
 	.shift          = 16,
 	.flags          = CLOCK_SOURCE_IS_CONTINUOUS,
-#ifdef CONFIG_PARAVIRT
-	.resume		= paravirt_clocksource_resume,
-#endif
 };
 static struct clocksource *itc_clocksource;
 
@@ -93,14 +80,13 @@ void ia64_account_on_switch(struct task_struct *prev, struct task_struct *next)
 	now = ia64_get_itc();
 
 	delta_stime = cycle_to_cputime(pi->ac_stime + (now - pi->ac_stamp));
-	if (idle_task(smp_processor_id()) != prev)
-		account_system_time(prev, 0, delta_stime, delta_stime);
-	else
-		account_idle_time(delta_stime);
+	account_system_time(prev, 0, delta_stime);
+	account_system_time_scaled(prev, delta_stime);
 
 	if (pi->ac_utime) {
 		delta_utime = cycle_to_cputime(pi->ac_utime);
-		account_user_time(prev, delta_utime, delta_utime);
+		account_user_time(prev, delta_utime);
+		account_user_time_scaled(prev, delta_utime);
 	}
 
 	pi->ac_stamp = ni->ac_stamp = now;
@@ -123,17 +109,14 @@ void account_system_vtime(struct task_struct *tsk)
 	now = ia64_get_itc();
 
 	delta_stime = cycle_to_cputime(ti->ac_stime + (now - ti->ac_stamp));
-	if (irq_count() || idle_task(smp_processor_id()) != tsk)
-		account_system_time(tsk, 0, delta_stime, delta_stime);
-	else
-		account_idle_time(delta_stime);
+	account_system_time(tsk, 0, delta_stime);
+	account_system_time_scaled(tsk, delta_stime);
 	ti->ac_stime = 0;
 
 	ti->ac_stamp = now;
 
 	local_irq_restore(flags);
 }
-EXPORT_SYMBOL_GPL(account_system_vtime);
 
 /*
  * Called from the timer interrupt handler to charge accumulated user time
@@ -146,7 +129,8 @@ void account_process_tick(struct task_struct *p, int user_tick)
 
 	if (ti->ac_utime) {
 		delta_utime = cycle_to_cputime(ti->ac_utime);
-		account_user_time(p, delta_utime, delta_utime);
+		account_user_time(p, delta_utime);
+		account_user_time_scaled(p, delta_utime);
 		ti->ac_utime = 0;
 	}
 }
@@ -171,9 +155,6 @@ timer_interrupt (int irq, void *dev_id)
 		       ia64_get_itc(), new_itm);
 
 	profile_tick(CPU_PROFILING);
-
-	if (paravirt_do_steal_accounting(&new_itm))
-		goto skip_process_time_accounting;
 
 	while (1) {
 		update_process_times(user_mode(get_irq_regs()));
@@ -203,8 +184,6 @@ timer_interrupt (int irq, void *dev_id)
 		local_irq_enable();
 		local_irq_disable();
 	}
-
-skip_process_time_accounting:
 
 	do {
 		/*
@@ -354,11 +333,6 @@ ia64_init_itm (void)
 		 * ITCs. Until that time we have to avoid ITC.
 		 */
 		clocksource_itc.rating = 50;
-
-	paravirt_init_missing_ticks_accounting(smp_processor_id());
-
-	/* avoid softlock up message when cpu is unplug and plugged again. */
-	touch_softlockup_watchdog();
 
 	/* Setup the CPU local timer tick */
 	ia64_cpu_local_tick();

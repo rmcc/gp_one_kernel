@@ -147,6 +147,4 @@ typedef struct _MWAVE_DEVICE_DATA {
 
 } MWAVE_DEVICE_DATA, *pMWAVE_DEVICE_DATA;
 
-extern MWAVE_DEVICE_DATA mwave_s_mdd;
-
 #endif

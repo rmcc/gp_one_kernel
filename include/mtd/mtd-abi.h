@@ -1,4 +1,6 @@
 /*
+ * $Id: mtd-abi.h,v 1.13 2005/11/07 11:14:56 gleixner Exp $
+ *
  * Portions of MTD ABI definition which are shared by kernel and user space
  */
 

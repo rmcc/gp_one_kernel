@@ -41,6 +41,7 @@
 #define INSTALL_NOTIFY_HANDLER		1
 #define UNINSTALL_NOTIFY_HANDLER	2
 
+#define ACPI_CONTAINER_COMPONENT	0x01000000
 #define _COMPONENT			ACPI_CONTAINER_COMPONENT
 ACPI_MODULE_NAME("container");
 
@@ -75,7 +76,7 @@ static int is_device_present(acpi_handle handle)
 {
 	acpi_handle temp;
 	acpi_status status;
-	unsigned long long sta;
+	unsigned long sta;
 
 
 	status = acpi_get_handle(handle, "_STA", &temp);
@@ -107,7 +108,7 @@ static int acpi_container_add(struct acpi_device *device)
 	container->handle = device->handle;
 	strcpy(acpi_device_name(device), ACPI_CONTAINER_DEVICE_NAME);
 	strcpy(acpi_device_class(device), ACPI_CONTAINER_CLASS);
-	device->driver_data = container;
+	acpi_driver_data(device) = container;
 
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Device <%s> bid <%s>\n",
 			  acpi_device_name(device), acpi_device_bid(device)));

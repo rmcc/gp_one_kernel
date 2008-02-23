@@ -356,10 +356,9 @@ static void handle_e_ibstatuschanged(struct ipath_devdata *dd,
 			dd->ipath_cregs->cr_iblinkerrrecovcnt);
 		if (linkrecov != dd->ipath_lastlinkrecov) {
 			ipath_dbg("IB linkrecov up %Lx (%s %s) recov %Lu\n",
-				(unsigned long long) ibcs,
-				ib_linkstate(dd, ibcs),
+				ibcs, ib_linkstate(dd, ibcs),
 				ipath_ibcstatus_str[ltstate],
-				(unsigned long long) linkrecov);
+				linkrecov);
 			/* and no more until active again */
 			dd->ipath_lastlinkrecov = 0;
 			ipath_set_linkstate(dd, IPATH_IB_LINKDOWN);
@@ -1119,11 +1118,9 @@ irqreturn_t ipath_intr(int irq, void *data)
 	if (unlikely(istat & ~dd->ipath_i_bitsextant))
 		ipath_dev_err(dd,
 			      "interrupt with unknown interrupts %Lx set\n",
-			      (unsigned long long)
 			      istat & ~dd->ipath_i_bitsextant);
 	else if (istat & ~INFINIPATH_I_ERROR) /* errors do own printing */
-		ipath_cdbg(VERBOSE, "intr stat=0x%Lx\n",
-			(unsigned long long) istat);
+		ipath_cdbg(VERBOSE, "intr stat=0x%Lx\n", istat);
 
 	if (istat & INFINIPATH_I_ERROR) {
 		ipath_stats.sps_errints++;
@@ -1131,8 +1128,7 @@ irqreturn_t ipath_intr(int irq, void *data)
 					  dd->ipath_kregs->kr_errorstatus);
 		if (!estat)
 			dev_info(&dd->pcidev->dev, "error interrupt (%Lx), "
-				 "but no error bits set!\n",
-				 (unsigned long long) istat);
+				 "but no error bits set!\n", istat);
 		else if (estat == -1LL)
 			/*
 			 * should we try clearing all, or hope next read

@@ -37,29 +37,6 @@
 #define MEM_DISCARD(sec) *(.mem##sec)
 #endif
 
-#ifdef CONFIG_FTRACE_MCOUNT_RECORD
-#define MCOUNT_REC()	VMLINUX_SYMBOL(__start_mcount_loc) = .; \
-			*(__mcount_loc)				\
-			VMLINUX_SYMBOL(__stop_mcount_loc) = .;
-#else
-#define MCOUNT_REC()
-#endif
-
-#ifdef CONFIG_TRACE_BRANCH_PROFILING
-#define LIKELY_PROFILE()	VMLINUX_SYMBOL(__start_annotated_branch_profile) = .; \
-				*(_ftrace_annotated_branch)			      \
-				VMLINUX_SYMBOL(__stop_annotated_branch_profile) = .;
-#else
-#define LIKELY_PROFILE()
-#endif
-
-#ifdef CONFIG_PROFILE_ALL_BRANCHES
-#define BRANCH_PROFILE()	VMLINUX_SYMBOL(__start_branch_profile) = .;   \
-				*(_ftrace_branch)			      \
-				VMLINUX_SYMBOL(__stop_branch_profile) = .;
-#else
-#define BRANCH_PROFILE()
-#endif
 
 /* .data section */
 #define DATA_DATA							\
@@ -75,13 +52,7 @@
 	. = ALIGN(8);							\
 	VMLINUX_SYMBOL(__start___markers) = .;				\
 	*(__markers)							\
-	VMLINUX_SYMBOL(__stop___markers) = .;				\
-	. = ALIGN(32);							\
-	VMLINUX_SYMBOL(__start___tracepoints) = .;			\
-	*(__tracepoints)						\
-	VMLINUX_SYMBOL(__stop___tracepoints) = .;			\
-	LIKELY_PROFILE()		       				\
-	BRANCH_PROFILE()
+	VMLINUX_SYMBOL(__stop___markers) = .;
 
 #define RO_DATA(align)							\
 	. = ALIGN((align));						\
@@ -90,14 +61,11 @@
 		*(.rodata) *(.rodata.*)					\
 		*(__vermagic)		/* Kernel version magic */	\
 		*(__markers_strings)	/* Markers: strings */		\
-		*(__tracepoints_strings)/* Tracepoints: strings */	\
 	}								\
 									\
 	.rodata1          : AT(ADDR(.rodata1) - LOAD_OFFSET) {		\
 		*(.rodata1)						\
 	}								\
-									\
-	BUG_TABLE							\
 									\
 	/* PCI quirks */						\
 	.pci_fixup        : AT(ADDR(.pci_fixup) - LOAD_OFFSET) {	\
@@ -116,19 +84,6 @@
 		VMLINUX_SYMBOL(__start_pci_fixups_resume) = .;		\
 		*(.pci_fixup_resume)					\
 		VMLINUX_SYMBOL(__end_pci_fixups_resume) = .;		\
-		VMLINUX_SYMBOL(__start_pci_fixups_resume_early) = .;	\
-		*(.pci_fixup_resume_early)				\
-		VMLINUX_SYMBOL(__end_pci_fixups_resume_early) = .;	\
-		VMLINUX_SYMBOL(__start_pci_fixups_suspend) = .;		\
-		*(.pci_fixup_suspend)					\
-		VMLINUX_SYMBOL(__end_pci_fixups_suspend) = .;		\
-	}								\
-									\
-	/* Built-in firmware blobs */					\
-	.builtin_fw        : AT(ADDR(.builtin_fw) - LOAD_OFFSET) {	\
-		VMLINUX_SYMBOL(__start_builtin_fw) = .;			\
-		*(.builtin_fw)						\
-		VMLINUX_SYMBOL(__end_builtin_fw) = .;			\
 	}								\
 									\
 	/* RapidIO route ops */						\
@@ -137,8 +92,6 @@
 		*(.rio_route_ops)					\
 		VMLINUX_SYMBOL(__end_rio_route_ops) = .;		\
 	}								\
-									\
-	TRACEDATA							\
 									\
 	/* Kernel symbol table: Normal symbols */			\
 	__ksymtab         : AT(ADDR(__ksymtab) - LOAD_OFFSET) {		\
@@ -218,7 +171,6 @@
 	/* __*init sections */						\
 	__init_rodata : AT(ADDR(__init_rodata) - LOAD_OFFSET) {		\
 		*(.ref.rodata)						\
-		MCOUNT_REC()						\
 		DEV_KEEP(init.rodata)					\
 		DEV_KEEP(exit.rodata)					\
 		CPU_KEEP(init.rodata)					\
@@ -252,7 +204,6 @@
  * during second ld run in second ld pass when generating System.map */
 #define TEXT_TEXT							\
 		ALIGN_FUNCTION();					\
-		*(.text.hot)						\
 		*(.text)						\
 		*(.ref.text)						\
 		*(.text.init.refok)					\
@@ -262,8 +213,7 @@
 	CPU_KEEP(init.text)						\
 	CPU_KEEP(exit.text)						\
 	MEM_KEEP(init.text)						\
-	MEM_KEEP(exit.text)						\
-		*(.text.unlikely)
+	MEM_KEEP(exit.text)
 
 
 /* sched.text is aling to function alignment to secure we have same
@@ -288,16 +238,6 @@
 		*(.kprobes.text)					\
 		VMLINUX_SYMBOL(__kprobes_text_end) = .;
 
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
-#define IRQENTRY_TEXT							\
-		ALIGN_FUNCTION();					\
-		VMLINUX_SYMBOL(__irqentry_text_start) = .;		\
-		*(.irqentry.text)					\
-		VMLINUX_SYMBOL(__irqentry_text_end) = .;
-#else
-#define IRQENTRY_TEXT
-#endif
-
 /* Section used for early init (in .S files) */
 #define HEAD_TEXT  *(.head.text)
 
@@ -309,15 +249,7 @@
 	CPU_DISCARD(init.data)						\
 	CPU_DISCARD(init.rodata)					\
 	MEM_DISCARD(init.data)						\
-	MEM_DISCARD(init.rodata)					\
-	/* implement dynamic printk debug */				\
-	VMLINUX_SYMBOL(__start___verbose_strings) = .;                  \
-	*(__verbose_strings)                                            \
-	VMLINUX_SYMBOL(__stop___verbose_strings) = .;                   \
-	. = ALIGN(8);							\
-	VMLINUX_SYMBOL(__start___verbose) = .;                          \
-	*(__verbose)                                                    \
-	VMLINUX_SYMBOL(__stop___verbose) = .;
+	MEM_DISCARD(init.rodata)
 
 #define INIT_TEXT							\
 	*(.init.text)							\
@@ -378,29 +310,13 @@
 		.stab.indexstr 0 : { *(.stab.indexstr) }		\
 		.comment 0 : { *(.comment) }
 
-#ifdef CONFIG_GENERIC_BUG
 #define BUG_TABLE							\
 	. = ALIGN(8);							\
 	__bug_table : AT(ADDR(__bug_table) - LOAD_OFFSET) {		\
-		VMLINUX_SYMBOL(__start___bug_table) = .;		\
+		__start___bug_table = .;				\
 		*(__bug_table)						\
-		VMLINUX_SYMBOL(__stop___bug_table) = .;			\
+		__stop___bug_table = .;					\
 	}
-#else
-#define BUG_TABLE
-#endif
-
-#ifdef CONFIG_PM_TRACE
-#define TRACEDATA							\
-	. = ALIGN(4);							\
-	.tracedata : AT(ADDR(.tracedata) - LOAD_OFFSET) {		\
-		VMLINUX_SYMBOL(__tracedata_start) = .;			\
-		*(.tracedata)						\
-		VMLINUX_SYMBOL(__tracedata_end) = .;			\
-	}
-#else
-#define TRACEDATA
-#endif
 
 #define NOTES								\
 	.notes : AT(ADDR(.notes) - LOAD_OFFSET) {			\
@@ -410,8 +326,6 @@
 	}
 
 #define INITCALLS							\
-	*(.initcallearly.init)						\
-	VMLINUX_SYMBOL(__early_initcall_end) = .;			\
   	*(.initcall0.init)						\
   	*(.initcall0s.init)						\
   	*(.initcall1.init)						\
@@ -430,75 +344,11 @@
   	*(.initcall7.init)						\
   	*(.initcall7s.init)
 
-#define PERCPU_PROLOG(vaddr)						\
-	VMLINUX_SYMBOL(__per_cpu_load) = .;				\
-	.data.percpu vaddr : AT(VMLINUX_SYMBOL(__per_cpu_load)		\
-				- LOAD_OFFSET) {			\
-		VMLINUX_SYMBOL(__per_cpu_start) = .;
-
-#define PERCPU_EPILOG(phdr)						\
-		VMLINUX_SYMBOL(__per_cpu_end) = .;			\
-	} phdr								\
-	. = VMLINUX_SYMBOL(__per_cpu_load) + SIZEOF(.data.percpu);
-
-/**
- * PERCPU_VADDR_PREALLOC - define output section for percpu area with prealloc
- * @vaddr: explicit base address (optional)
- * @phdr: destination PHDR (optional)
- * @prealloc: the size of prealloc area
- *
- * Macro which expands to output section for percpu area.  If @vaddr
- * is not blank, it specifies explicit base address and all percpu
- * symbols will be offset from the given address.  If blank, @vaddr
- * always equals @laddr + LOAD_OFFSET.
- *
- * @phdr defines the output PHDR to use if not blank.  Be warned that
- * output PHDR is sticky.  If @phdr is specified, the next output
- * section in the linker script will go there too.  @phdr should have
- * a leading colon.
- *
- * If @prealloc is non-zero, the specified number of bytes will be
- * reserved at the start of percpu area.  As the prealloc area is
- * likely to break alignment, this macro puts areas in increasing
- * alignment order.
- *
- * This macro defines three symbols, __per_cpu_load, __per_cpu_start
- * and __per_cpu_end.  The first one is the vaddr of loaded percpu
- * init data.  __per_cpu_start equals @vaddr and __per_cpu_end is the
- * end offset.
- */
-#define PERCPU_VADDR_PREALLOC(vaddr, segment, prealloc)			\
-	PERCPU_PROLOG(vaddr)						\
-		. += prealloc;						\
-		*(.data.percpu)						\
-		*(.data.percpu.shared_aligned)				\
-		*(.data.percpu.page_aligned)				\
-	PERCPU_EPILOG(segment)
-
-/**
- * PERCPU_VADDR - define output section for percpu area
- * @vaddr: explicit base address (optional)
- * @phdr: destination PHDR (optional)
- *
- * Macro which expands to output section for percpu area.  Mostly
- * identical to PERCPU_VADDR_PREALLOC(@vaddr, @phdr, 0) other than
- * using slighly different layout.
- */
-#define PERCPU_VADDR(vaddr, phdr)					\
-	PERCPU_PROLOG(vaddr)						\
-		*(.data.percpu.page_aligned)				\
-		*(.data.percpu)						\
-		*(.data.percpu.shared_aligned)				\
-	PERCPU_EPILOG(phdr)
-
-/**
- * PERCPU - define output section for percpu area, simple version
- * @align: required alignment
- *
- * Align to @align and outputs output section for percpu area.  This
- * macro doesn't maniuplate @vaddr or @phdr and __per_cpu_load and
- * __per_cpu_start will be identical.
- */
 #define PERCPU(align)							\
 	. = ALIGN(align);						\
-	PERCPU_VADDR( , )
+	__per_cpu_start = .;						\
+	.data.percpu  : AT(ADDR(.data.percpu) - LOAD_OFFSET) {		\
+		*(.data.percpu)						\
+		*(.data.percpu.shared_aligned)				\
+	}								\
+	__per_cpu_end = .;

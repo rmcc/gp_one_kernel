@@ -29,15 +29,15 @@
 #include <linux/spi/spi.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
-#include <linux/clk.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/hardware.h>
 #include <asm/delay.h>
 
-#include <mach/hardware.h>
-#include <mach/imx-dma.h>
-#include <mach/spi_imx.h>
+#include <asm/arch/hardware.h>
+#include <asm/arch/imx-dma.h>
+#include <asm/arch/spi_imx.h>
 
 /*-------------------------------------------------------------------------*/
 /* SPI Registers offsets from peripheral base address */
@@ -250,8 +250,6 @@ struct driver_data {
 	int tx_dma_needs_unmap;
 	size_t tx_map_len;
 	u32 dummy_dma_buf ____cacheline_aligned;
-
-	struct clk *clk;
 };
 
 /* Runtime state */
@@ -490,7 +488,7 @@ static int map_dma_buffers(struct driver_data *drv_data)
 							buf,
 							drv_data->tx_map_len,
 							DMA_TO_DEVICE);
-			if (dma_mapping_error(dev, drv_data->tx_dma))
+			if (dma_mapping_error(drv_data->tx_dma))
 				return -1;
 
 			drv_data->tx_dma_needs_unmap = 1;
@@ -506,6 +504,20 @@ static int map_dma_buffers(struct driver_data *drv_data)
 	if (!IS_DMA_ALIGNED(drv_data->rx) || !IS_DMA_ALIGNED(drv_data->tx))
 		return -1;
 
+	/* NULL rx means write-only transfer and no map needed
+	   since rx DMA will not be used */
+	if (drv_data->rx) {
+		buf = drv_data->rx;
+		drv_data->rx_dma = dma_map_single(
+					dev,
+					buf,
+					drv_data->len,
+					DMA_FROM_DEVICE);
+		if (dma_mapping_error(drv_data->rx_dma))
+			return -1;
+		drv_data->rx_dma_needs_unmap = 1;
+	}
+
 	if (drv_data->tx == NULL) {
 		/* Read only message --> use drv_data->dummy_dma_buf for dummy
 		   writes to achive reads */
@@ -519,30 +531,17 @@ static int map_dma_buffers(struct driver_data *drv_data)
 					buf,
 					drv_data->tx_map_len,
 					DMA_TO_DEVICE);
-	if (dma_mapping_error(dev, drv_data->tx_dma))
-		return -1;
-	drv_data->tx_dma_needs_unmap = 1;
-
-	/* NULL rx means write-only transfer and no map needed
-	 * since rx DMA will not be used */
-	if (drv_data->rx) {
-		buf = drv_data->rx;
-		drv_data->rx_dma = dma_map_single(dev,
-						buf,
-						drv_data->len,
-						DMA_FROM_DEVICE);
-		if (dma_mapping_error(dev, drv_data->rx_dma)) {
-			if (drv_data->tx_dma) {
-				dma_unmap_single(dev,
-						drv_data->tx_dma,
-						drv_data->tx_map_len,
-						DMA_TO_DEVICE);
-				drv_data->tx_dma_needs_unmap = 0;
-			}
-			return -1;
+	if (dma_mapping_error(drv_data->tx_dma)) {
+		if (drv_data->rx_dma) {
+			dma_unmap_single(dev,
+					drv_data->rx_dma,
+					drv_data->len,
+					DMA_FROM_DEVICE);
+			drv_data->rx_dma_needs_unmap = 0;
 		}
-		drv_data->rx_dma_needs_unmap = 1;
+		return -1;
 	}
+	drv_data->tx_dma_needs_unmap = 1;
 
 	return 0;
 }
@@ -856,15 +855,15 @@ static irqreturn_t spi_int(int irq, void *dev_id)
 	return drv_data->transfer_handler(drv_data);
 }
 
-static inline u32 spi_speed_hz(struct driver_data *drv_data, u32 data_rate)
+static inline u32 spi_speed_hz(u32 data_rate)
 {
-	return clk_get_rate(drv_data->clk) / (4 << ((data_rate) >> 13));
+	return imx_get_perclk2() / (4 << ((data_rate) >> 13));
 }
 
-static u32 spi_data_rate(struct driver_data *drv_data, u32 speed_hz)
+static u32 spi_data_rate(u32 speed_hz)
 {
 	u32 div;
-	u32 quantized_hz = clk_get_rate(drv_data->clk) >> 2;
+	u32 quantized_hz = imx_get_perclk2() >> 2;
 
 	for (div = SPI_PERCLK2_DIV_MIN;
 		div <= SPI_PERCLK2_DIV_MAX;
@@ -948,7 +947,7 @@ static void pump_transfers(unsigned long data)
 	tmp = transfer->speed_hz;
 	if (tmp == 0)
 		tmp = chip->max_speed_hz;
-	tmp = spi_data_rate(drv_data, tmp);
+	tmp = spi_data_rate(tmp);
 	u32_EDIT(control, SPI_CONTROL_DATARATE, tmp);
 
 	writel(control, regs + SPI_CONTROL);
@@ -1110,7 +1109,7 @@ static int transfer(struct spi_device *spi, struct spi_message *msg)
 	msg->actual_length = 0;
 
 	/* Per transfer setup check */
-	min_speed_hz = spi_speed_hz(drv_data, SPI_CONTROL_DATARATE_MIN);
+	min_speed_hz = spi_speed_hz(SPI_CONTROL_DATARATE_MIN);
 	max_speed_hz = spi->max_speed_hz;
 	list_for_each_entry(trans, &msg->transfers, transfer_list) {
 		tmp = trans->bits_per_word;
@@ -1177,7 +1176,6 @@ msg_rejected:
    applied and notified to the calling driver. */
 static int setup(struct spi_device *spi)
 {
-	struct driver_data *drv_data = spi_master_get_devdata(spi->master);
 	struct spi_imx_chip *chip_info;
 	struct chip_data *chip;
 	int first_setup = 0;
@@ -1306,14 +1304,14 @@ static int setup(struct spi_device *spi)
 	chip->n_bytes = (tmp <= 8) ? 1 : 2;
 
 	/* SPI datarate */
-	tmp = spi_data_rate(drv_data, spi->max_speed_hz);
+	tmp = spi_data_rate(spi->max_speed_hz);
 	if (tmp == SPI_CONTROL_DATARATE_BAD) {
 		status = -EINVAL;
 		dev_err(&spi->dev,
 			"setup - "
 			"HW min speed (%d Hz) exceeds required "
 			"max speed (%d Hz)\n",
-			spi_speed_hz(drv_data, SPI_CONTROL_DATARATE_MIN),
+			spi_speed_hz(SPI_CONTROL_DATARATE_MIN),
 			spi->max_speed_hz);
 		if (first_setup)
 			goto err_first_setup;
@@ -1323,7 +1321,7 @@ static int setup(struct spi_device *spi)
 	} else {
 		u32_EDIT(chip->control, SPI_CONTROL_DATARATE, tmp);
 		/* Actual rounded max_speed_hz */
-		tmp = spi_speed_hz(drv_data, tmp);
+		tmp = spi_speed_hz(tmp);
 		spi->max_speed_hz = tmp;
 		chip->max_speed_hz = tmp;
 	}
@@ -1354,7 +1352,7 @@ static int setup(struct spi_device *spi)
 		chip->period & SPI_PERIOD_WAIT,
 		spi->mode,
 		spi->bits_per_word,
-		spi_speed_hz(drv_data, SPI_CONTROL_DATARATE_MIN),
+		spi_speed_hz(SPI_CONTROL_DATARATE_MIN),
 		spi->max_speed_hz);
 	return status;
 
@@ -1456,7 +1454,7 @@ static int __init spi_imx_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct spi_imx_master *platform_info;
 	struct spi_master *master;
-	struct driver_data *drv_data;
+	struct driver_data *drv_data = NULL;
 	struct resource *res;
 	int irq, status = 0;
 
@@ -1486,14 +1484,6 @@ static int __init spi_imx_probe(struct platform_device *pdev)
 	master->transfer = transfer;
 
 	drv_data->dummy_dma_buf = SPI_DUMMY_u32;
-
-	drv_data->clk = clk_get(&pdev->dev, "perclk2");
-	if (IS_ERR(drv_data->clk)) {
-		dev_err(&pdev->dev, "probe - cannot get clock\n");
-		status = PTR_ERR(drv_data->clk);
-		goto err_no_clk;
-	}
-	clk_enable(drv_data->clk);
 
 	/* Find and map resources */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1536,24 +1526,24 @@ static int __init spi_imx_probe(struct platform_device *pdev)
 	drv_data->rx_channel = -1;
 	if (platform_info->enable_dma) {
 		/* Get rx DMA channel */
-		drv_data->rx_channel = imx_dma_request_by_prio("spi_imx_rx",
-							       DMA_PRIO_HIGH);
-		if (drv_data->rx_channel < 0) {
+		status = imx_dma_request_by_prio(&drv_data->rx_channel,
+			"spi_imx_rx", DMA_PRIO_HIGH);
+		if (status < 0) {
 			dev_err(dev,
 				"probe - problem (%d) requesting rx channel\n",
-				drv_data->rx_channel);
+				status);
 			goto err_no_rxdma;
 		} else
 			imx_dma_setup_handlers(drv_data->rx_channel, NULL,
 						dma_err_handler, drv_data);
 
 		/* Get tx DMA channel */
-		drv_data->tx_channel = imx_dma_request_by_prio("spi_imx_tx",
-							       DMA_PRIO_MEDIUM);
-		if (drv_data->tx_channel < 0) {
+		status = imx_dma_request_by_prio(&drv_data->tx_channel,
+						"spi_imx_tx", DMA_PRIO_MEDIUM);
+		if (status < 0) {
 			dev_err(dev,
 				"probe - problem (%d) requesting tx channel\n",
-				drv_data->tx_channel);
+				status);
 			imx_dma_free(drv_data->rx_channel);
 			goto err_no_txdma;
 		} else
@@ -1630,10 +1620,6 @@ err_no_iomap:
 	kfree(drv_data->ioarea);
 
 err_no_iores:
-	clk_disable(drv_data->clk);
-	clk_put(drv_data->clk);
-
-err_no_clk:
 	spi_master_put(master);
 
 err_no_pdata:
@@ -1675,9 +1661,6 @@ static int __exit spi_imx_remove(struct platform_device *pdev)
 	irq = platform_get_irq(pdev, 0);
 	if (irq >= 0)
 		free_irq(irq, drv_data);
-
-	clk_disable(drv_data->clk);
-	clk_put(drv_data->clk);
 
 	/* Release map resources */
 	iounmap(drv_data->regs);

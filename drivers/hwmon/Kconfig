@@ -57,16 +57,6 @@ config SENSORS_ABITUGURU3
 	  This driver can also be built as a module.  If so, the module
 	  will be called abituguru3.
 
-config SENSORS_AD7414
-	tristate "Analog Devices AD7414"
-	depends on I2C && EXPERIMENTAL
-	help
-	  If you say yes here you get support for the Analog Devices
-	  AD7414 temperature monitoring chip.
-
-	  This driver can also be built as a module. If so, the module
-	  will be called ad7414.
-
 config SENSORS_AD7418
 	tristate "Analog Devices AD7416, AD7417 and AD7418"
 	depends on I2C && EXPERIMENTAL
@@ -76,22 +66,6 @@ config SENSORS_AD7418
 
 	  This driver can also be built as a module. If so, the module
 	  will be called ad7418.
-
-config SENSORS_ADCXX
-	tristate "National Semiconductor ADCxxxSxxx"
-	depends on SPI_MASTER && EXPERIMENTAL
-	help
-	  If you say yes here you get support for the National Semiconductor
-	  ADC<bb><c>S<sss> chip family, where
-	  * bb  is the resolution in number of bits (8, 10, 12)
-	  * c   is the number of channels (1, 2, 4, 8)
-	  * sss is the maximum conversion speed (021 for 200 kSPS, 051 for 500
-	    kSPS and 101 for 1 MSPS)
-
-	  Examples : ADC081S101, ADC124S501, ...
-
-	  This driver can also be built as a module.  If so, the module
-	  will be called adcxx.
 
 config SENSORS_ADM1021
 	tristate "Analog Devices ADM1021 and compatibles"
@@ -150,7 +124,7 @@ config SENSORS_ADM1031
 
 config SENSORS_ADM9240
 	tristate "Analog Devices ADM9240 and compatibles"
-	depends on I2C
+	depends on I2C && EXPERIMENTAL
 	select HWMON_VID
 	help
 	  If you say yes here you get support for Analog Devices ADM9240,
@@ -158,16 +132,6 @@ config SENSORS_ADM9240
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called adm9240.
-
-config SENSORS_ADT7462
-	tristate "Analog Devices ADT7462"
-	depends on I2C && EXPERIMENTAL
-	help
-	  If you say yes here you get support for the Analog Devices
-	  ADT7462 temperature monitoring chips.
-
-	  This driver can also be built as a module. If so, the module
-	  will be called adt7462.
 
 config SENSORS_ADT7470
 	tristate "Analog Devices ADT7470"
@@ -284,12 +248,11 @@ config SENSORS_F71805F
 	  will be called f71805f.
 
 config SENSORS_F71882FG
-	tristate "Fintek F71862FG, F71882FG and F8000"
+	tristate "Fintek F71882FG and F71883FG"
 	depends on EXPERIMENTAL
 	help
 	  If you say yes here you get support for hardware monitoring
-	  features of the Fintek F71882FG/F71883FG, F71862FG/71863FG
-	  and F8000 Super-I/O chips.
+	  features of the Fintek F71882FG and F71883FG Super-I/O chips.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called f71882fg.
@@ -305,13 +268,9 @@ config SENSORS_F75375S
 	  will be called f75375s.
 
 config SENSORS_FSCHER
-	tristate "FSC Hermes (DEPRECATED)"
+	tristate "FSC Hermes"
 	depends on X86 && I2C
 	help
-	  This driver is DEPRECATED please use the new merged fschmd
-	  ("FSC Poseidon, Scylla, Hermes, Heimdall and Heracles") driver
-	  instead.
-
 	  If you say yes here you get support for Fujitsu Siemens
 	  Computers Hermes sensor chips.
 
@@ -319,13 +278,9 @@ config SENSORS_FSCHER
 	  will be called fscher.
 
 config SENSORS_FSCPOS
-	tristate "FSC Poseidon (DEPRECATED)"
+	tristate "FSC Poseidon"
 	depends on X86 && I2C
 	help
-	  This driver is DEPRECATED please use the new merged fschmd
-	  ("FSC Poseidon, Scylla, Hermes, Heimdall and Heracles") driver
-	  instead.
-
 	  If you say yes here you get support for Fujitsu Siemens
 	  Computers Poseidon sensor chips.
 
@@ -334,15 +289,14 @@ config SENSORS_FSCPOS
 
 config SENSORS_FSCHMD
 	tristate "FSC Poseidon, Scylla, Hermes, Heimdall and Heracles"
-	depends on X86 && I2C
+	depends on X86 && I2C && EXPERIMENTAL
 	help
 	  If you say yes here you get support for various Fujitsu Siemens
-	  Computers sensor chips, including support for the integrated
-	  watchdog.
+	  Computers sensor chips.
 
-	  This is a merged driver for FSC sensor chips replacing the fscpos,
-	  fscscy and fscher drivers and adding support for several other FSC
-	  sensor chips.
+	  This is a new merged driver for FSC sensor chips which is intended
+	  as a replacment for the fscpos, fscscy and fscher drivers and adds
+	  support for several other FCS sensor chips.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called fschmd.
@@ -409,8 +363,7 @@ config SENSORS_IT87
 	select HWMON_VID
 	help
 	  If you say yes here you get support for ITE IT8705F, IT8712F,
-	  IT8716F, IT8718F, IT8720F and IT8726F sensor chips, and the
-	  SiS960 clone.
+	  IT8716F, IT8718F and IT8726F sensor chips, and the SiS960 clone.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called it87.
@@ -428,12 +381,11 @@ config SENSORS_LM63
 	  will be called lm63.
 
 config SENSORS_LM70
-	tristate "National Semiconductor LM70 / Texas Instruments TMP121"
+	tristate "National Semiconductor LM70"
 	depends on SPI_MASTER && EXPERIMENTAL
 	help
 	  If you say yes here you get support for the National Semiconductor
-	  LM70 and Texas Instruments TMP121/TMP123 digital temperature
-	  sensor chips.
+	  LM70 digital temperature sensor chip.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called lm70.
@@ -442,24 +394,13 @@ config SENSORS_LM75
 	tristate "National Semiconductor LM75 and compatibles"
 	depends on I2C
 	help
-	  If you say yes here you get support for one common type of
-	  temperature sensor chip, with models including:
+	  If you say yes here you get support for National Semiconductor LM75
+	  sensor chips and clones: Dallas Semiconductor DS75 and DS1775 (in
+	  9-bit precision mode), and TelCom (now Microchip) TCN75.
 
-		- Dallas Semiconductor DS75 and DS1775
-		- Maxim MAX6625 and MAX6626
-		- Microchip MCP980x
-		- National Semiconductor LM75
-		- NXP's LM75A
-		- ST Microelectronics STDS75
-		- TelCom (now Microchip) TCN75
-		- Texas Instruments TMP100, TMP101, TMP75, TMP175, TMP275
-
-	  This driver supports driver model based binding through board
-	  specific I2C device tables.
-
-	  It also supports the "legacy" style of driver binding.  To use
-	  that with some chips which don't replicate LM75 quirks exactly,
-	  you may need the "force" module parameter.
+	  The DS75 and DS1775 in 10- to 12-bit precision modes will require
+	  a force module parameter. The driver will not handle the extra
+	  precision anyhow.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called lm75.
@@ -532,9 +473,11 @@ config SENSORS_LM90
 	depends on I2C
 	help
 	  If you say yes here you get support for National Semiconductor LM90,
-	  LM86, LM89 and LM99, Analog Devices ADM1032 and ADT7461, and Maxim
-	  MAX6646, MAX6647, MAX6649, MAX6657, MAX6658, MAX6659, MAX6680 and
-	  MAX6681 sensor chips.
+	  LM86, LM89 and LM99, Analog Devices ADM1032 and Maxim MAX6657,
+	  MAX6658, MAX6659, MAX6680 and MAX6681 sensor chips.
+
+	  The Analog Devices ADT7461 sensor chip is also supported, but only
+	  if found in ADM1032 compatibility mode.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called lm90.
@@ -559,26 +502,6 @@ config SENSORS_LM93
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called lm93.
-
-config SENSORS_LTC4245
-	tristate "Linear Technology LTC4245"
-	depends on I2C && EXPERIMENTAL
-	default n
-	help
-	  If you say yes here you get support for Linear Technology LTC4245
-	  Multiple Supply Hot Swap Controller I2C interface.
-
-	  This driver can also be built as a module. If so, the module will
-	  be called ltc4245.
-
-config SENSORS_MAX1111
-	tristate "Maxim MAX1111 Multichannel, Serial 8-bit ADC chip"
-	depends on SPI_MASTER
-	help
-	  Say y here to support Maxim's MAX1111 ADC chips.
-
-	  This driver can also be built as a module.  If so, the module
-	  will be called max1111.
 
 config SENSORS_MAX1619
 	tristate "Maxim MAX1619 sensor chip"
@@ -641,8 +564,8 @@ config SENSORS_DME1737
 	select HWMON_VID
 	help
 	  If you say yes here you get support for the hardware monitoring
-	  and fan control features of the SMSC DME1737, SCH311x, SCH5027, and
-	  Asus A8000 Super-I/O chips.
+	  and fan control features of the SMSC DME1737 (and compatibles
+	  like the Asus A8000) and SCH311x Super-I/O chips.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called dme1737.
@@ -831,13 +754,6 @@ config SENSORS_W83627EHF
 	  This driver can also be built as a module.  If so, the module
 	  will be called w83627ehf.
 
-config SENSORS_ULTRA45
-	tristate "Sun Ultra45 PIC16F747"
-	depends on SPARC64
-	help
-	  This driver provides support for the Ultra45 workstation environmental
-	  sensors.
-
 config SENSORS_HDAPS
 	tristate "IBM Hard Drive Active Protection System (hdaps)"
 	depends on INPUT && X86
@@ -857,25 +773,6 @@ config SENSORS_HDAPS
 
 	  Say Y here if you have an applicable laptop and want to experience
 	  the awesome power of hdaps.
-
-config SENSORS_LIS3LV02D
-	tristate "STMicroeletronics LIS3LV02Dx three-axis digital accelerometer"
-	depends on ACPI && INPUT
-	default n
-	help
-	  This driver provides support for the LIS3LV02Dx accelerometer. In
-	  particular, it can be found in a number of HP laptops, which have the
-	  "Mobile Data Protection System 3D" or "3D DriveGuard" feature. On such
-	  systems the driver should load automatically (via ACPI). The
-	  accelerometer might also be found in other systems, connected via SPI
-	  or I2C.  The accelerometer data is readable via
-	  /sys/devices/platform/lis3lv02d.
-
-	  This driver also provides an absolute input class device, allowing
-	  the laptop to act as a pinball machine-esque joystick.
-
-	  This driver can also be built as a module.  If so, the module
-	  will be called lis3lv02d.
 
 config SENSORS_APPLESMC
 	tristate "Apple SMC (Motion sensor, light sensor, keyboard backlight)"

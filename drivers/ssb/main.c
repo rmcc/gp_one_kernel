@@ -226,7 +226,7 @@ int ssb_devices_freeze(struct ssb_bus *bus)
 		err = drv->suspend(dev, state);
 		if (err) {
 			ssb_printk(KERN_ERR PFX "Failed to freeze device %s\n",
-				   dev_name(dev->dev));
+				   dev->dev->bus_id);
 			goto err_unwind;
 		}
 	}
@@ -269,7 +269,7 @@ int ssb_devices_thaw(struct ssb_bus *bus)
 		err = drv->resume(dev);
 		if (err) {
 			ssb_printk(KERN_ERR PFX "Failed to thaw device %s\n",
-				   dev_name(dev->dev));
+				   dev->dev->bus_id);
 		}
 	}
 
@@ -454,23 +454,26 @@ static int ssb_devices_register(struct ssb_bus *bus)
 
 		dev->release = ssb_release_dev;
 		dev->bus = &ssb_bustype;
-		dev_set_name(dev, "ssb%u:%d", bus->busnumber, dev_idx);
+		snprintf(dev->bus_id, sizeof(dev->bus_id),
+			 "ssb%u:%d", bus->busnumber, dev_idx);
 
 		switch (bus->bustype) {
 		case SSB_BUSTYPE_PCI:
 #ifdef CONFIG_SSB_PCIHOST
 			sdev->irq = bus->host_pci->irq;
 			dev->parent = &bus->host_pci->dev;
+			sdev->dma_dev = &bus->host_pci->dev;
 #endif
 			break;
 		case SSB_BUSTYPE_PCMCIA:
 #ifdef CONFIG_SSB_PCMCIAHOST
 			sdev->irq = bus->host_pcmcia->irq.AssignedIRQ;
 			dev->parent = &bus->host_pcmcia->dev;
+			sdev->dma_dev = &bus->host_pcmcia->dev;
 #endif
 			break;
 		case SSB_BUSTYPE_SSB:
-			dev->dma_mask = &dev->coherent_dma_mask;
+			sdev->dma_dev = dev;
 			break;
 		}
 
@@ -479,7 +482,7 @@ static int ssb_devices_register(struct ssb_bus *bus)
 		if (err) {
 			ssb_printk(KERN_ERR PFX
 				   "Could not register %s\n",
-				   dev_name(dev));
+				   dev->bus_id);
 			/* Set dev to NULL to not unregister
 			 * dev on error unwinding. */
 			sdev->dev = NULL;
@@ -795,7 +798,7 @@ int ssb_bus_pcibus_register(struct ssb_bus *bus,
 	err = ssb_bus_register(bus, ssb_pci_get_invariants, 0);
 	if (!err) {
 		ssb_printk(KERN_INFO PFX "Sonics Silicon Backplane found on "
-			   "PCI device %s\n", dev_name(&host_pci->dev));
+			   "PCI device %s\n", host_pci->dev.bus_id);
 	}
 
 	return err;
@@ -1153,89 +1156,29 @@ u32 ssb_dma_translation(struct ssb_device *dev)
 {
 	switch (dev->bus->bustype) {
 	case SSB_BUSTYPE_SSB:
+	case SSB_BUSTYPE_PCMCIA:
 		return 0;
 	case SSB_BUSTYPE_PCI:
 		return SSB_PCI_DMA;
-	default:
-		__ssb_dma_not_implemented(dev);
 	}
 	return 0;
 }
 EXPORT_SYMBOL(ssb_dma_translation);
 
-int ssb_dma_set_mask(struct ssb_device *dev, u64 mask)
+int ssb_dma_set_mask(struct ssb_device *ssb_dev, u64 mask)
 {
-#ifdef CONFIG_SSB_PCIHOST
-	int err;
-#endif
+	struct device *dma_dev = ssb_dev->dma_dev;
 
-	switch (dev->bus->bustype) {
-	case SSB_BUSTYPE_PCI:
 #ifdef CONFIG_SSB_PCIHOST
-		err = pci_set_dma_mask(dev->bus->host_pci, mask);
-		if (err)
-			return err;
-		err = pci_set_consistent_dma_mask(dev->bus->host_pci, mask);
-		return err;
+	if (ssb_dev->bus->bustype == SSB_BUSTYPE_PCI)
+		return dma_set_mask(dma_dev, mask);
 #endif
-	case SSB_BUSTYPE_SSB:
-		return dma_set_mask(dev->dev, mask);
-	default:
-		__ssb_dma_not_implemented(dev);
-	}
-	return -ENOSYS;
+	dma_dev->coherent_dma_mask = mask;
+	dma_dev->dma_mask = &dma_dev->coherent_dma_mask;
+
+	return 0;
 }
 EXPORT_SYMBOL(ssb_dma_set_mask);
-
-void * ssb_dma_alloc_consistent(struct ssb_device *dev, size_t size,
-				dma_addr_t *dma_handle, gfp_t gfp_flags)
-{
-	switch (dev->bus->bustype) {
-	case SSB_BUSTYPE_PCI:
-#ifdef CONFIG_SSB_PCIHOST
-		if (gfp_flags & GFP_DMA) {
-			/* Workaround: The PCI API does not support passing
-			 * a GFP flag. */
-			return dma_alloc_coherent(&dev->bus->host_pci->dev,
-						  size, dma_handle, gfp_flags);
-		}
-		return pci_alloc_consistent(dev->bus->host_pci, size, dma_handle);
-#endif
-	case SSB_BUSTYPE_SSB:
-		return dma_alloc_coherent(dev->dev, size, dma_handle, gfp_flags);
-	default:
-		__ssb_dma_not_implemented(dev);
-	}
-	return NULL;
-}
-EXPORT_SYMBOL(ssb_dma_alloc_consistent);
-
-void ssb_dma_free_consistent(struct ssb_device *dev, size_t size,
-			     void *vaddr, dma_addr_t dma_handle,
-			     gfp_t gfp_flags)
-{
-	switch (dev->bus->bustype) {
-	case SSB_BUSTYPE_PCI:
-#ifdef CONFIG_SSB_PCIHOST
-		if (gfp_flags & GFP_DMA) {
-			/* Workaround: The PCI API does not support passing
-			 * a GFP flag. */
-			dma_free_coherent(&dev->bus->host_pci->dev,
-					  size, vaddr, dma_handle);
-			return;
-		}
-		pci_free_consistent(dev->bus->host_pci, size,
-				    vaddr, dma_handle);
-		return;
-#endif
-	case SSB_BUSTYPE_SSB:
-		dma_free_coherent(dev->dev, size, vaddr, dma_handle);
-		return;
-	default:
-		__ssb_dma_not_implemented(dev);
-	}
-}
-EXPORT_SYMBOL(ssb_dma_free_consistent);
 
 int ssb_bus_may_powerdown(struct ssb_bus *bus)
 {

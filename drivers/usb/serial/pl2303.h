@@ -14,8 +14,6 @@
 #define PL2303_PRODUCT_ID_PHAROS	0xaaa0
 #define PL2303_PRODUCT_ID_RSAQ3		0xaaa2
 #define PL2303_PRODUCT_ID_ALDIGA	0x0611
-#define PL2303_PRODUCT_ID_MMX		0x0612
-#define PL2303_PRODUCT_ID_GPRS		0x0609
 
 #define ATEN_VENDOR_ID		0x0557
 #define ATEN_VENDOR_ID2		0x0547
@@ -107,14 +105,10 @@
 #define COREGA_VENDOR_ID	0x07aa
 #define COREGA_PRODUCT_ID	0x002a
 
+/* HL HL-340 (ID: 4348:5523) */
+#define HL340_VENDOR_ID		0x4348
+#define HL340_PRODUCT_ID	0x5523
+
 /* Y.C. Cable U.S.A., Inc - USB to RS-232 */
 #define YCCABLE_VENDOR_ID	0x05ad
 #define YCCABLE_PRODUCT_ID	0x0fba
-
-/* "Superial" USB - Serial */
-#define SUPERIAL_VENDOR_ID	0x5372
-#define SUPERIAL_PRODUCT_ID	0x2303
-
-/* Hewlett-Packard LD220-HP POS Pole Display */
-#define HP_VENDOR_ID		0x03f0
-#define HP_LD220_PRODUCT_ID	0x3524

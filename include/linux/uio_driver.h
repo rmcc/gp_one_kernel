@@ -36,25 +36,7 @@ struct uio_mem {
 	struct uio_map		*map;
 };
 
-#define MAX_UIO_MAPS	5
-
-struct uio_portio;
-
-/**
- * struct uio_port - description of a UIO port region
- * @start:		start of port region
- * @size:		size of port region
- * @porttype:		type of port (see UIO_PORT_* below)
- * @portio:		for use by the UIO core only.
- */
-struct uio_port {
-	unsigned long		start;
-	unsigned long		size;
-	int			porttype;
-	struct uio_portio	*portio;
-};
-
-#define MAX_UIO_PORT_REGIONS	5
+#define MAX_UIO_MAPS 	5
 
 struct uio_device;
 
@@ -64,7 +46,6 @@ struct uio_device;
  * @name:		device name
  * @version:		device driver version
  * @mem:		list of mappable memory regions, size==0 for end of list
- * @port:		list of port regions, size==0 for end of list
  * @irq:		interrupt number or UIO_IRQ_CUSTOM
  * @irq_flags:		flags for request_irq()
  * @priv:		optional private data
@@ -72,14 +53,12 @@ struct uio_device;
  * @mmap:		mmap operation for this uio device
  * @open:		open operation for this uio device
  * @release:		release operation for this uio device
- * @irqcontrol:		disable/enable irqs when 0/1 is written to /dev/uioX
  */
 struct uio_info {
 	struct uio_device	*uio_dev;
-	const char		*name;
-	const char		*version;
+	char			*name;
+	char			*version;
 	struct uio_mem		mem[MAX_UIO_MAPS];
-	struct uio_port		port[MAX_UIO_PORT_REGIONS];
 	long			irq;
 	unsigned long		irq_flags;
 	void			*priv;
@@ -87,7 +66,6 @@ struct uio_info {
 	int (*mmap)(struct uio_info *info, struct vm_area_struct *vma);
 	int (*open)(struct uio_info *info, struct inode *inode);
 	int (*release)(struct uio_info *info, struct inode *inode);
-	int (*irqcontrol)(struct uio_info *info, s32 irq_on);
 };
 
 extern int __must_check
@@ -102,20 +80,14 @@ static inline int __must_check
 extern void uio_unregister_device(struct uio_info *info);
 extern void uio_event_notify(struct uio_info *info);
 
-/* defines for uio_info->irq */
+/* defines for uio_device->irq */
 #define UIO_IRQ_CUSTOM	-1
 #define UIO_IRQ_NONE	-2
 
-/* defines for uio_mem->memtype */
+/* defines for uio_device->memtype */
 #define UIO_MEM_NONE	0
 #define UIO_MEM_PHYS	1
 #define UIO_MEM_LOGICAL	2
 #define UIO_MEM_VIRTUAL 3
-
-/* defines for uio_port->porttype */
-#define UIO_PORT_NONE	0
-#define UIO_PORT_X86	1
-#define UIO_PORT_GPIO	2
-#define UIO_PORT_OTHER	3
 
 #endif /* _LINUX_UIO_DRIVER_H_ */

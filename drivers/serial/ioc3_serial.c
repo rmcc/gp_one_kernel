@@ -905,7 +905,7 @@ static void transmit_chars(struct uart_port *the_port)
 		return;
 
 	info = the_port->info;
-	tty = info->port.tty;
+	tty = info->tty;
 
 	if (uart_circ_empty(&info->xmit) || uart_tx_stopped(the_port)) {
 		/* Nothing to do or hw stopped */
@@ -997,14 +997,14 @@ ioc3_change_speed(struct uart_port *the_port,
 
 	the_port->ignore_status_mask = N_ALL_INPUT;
 
-	info->port.tty->low_latency = 1;
+	info->tty->low_latency = 1;
 
-	if (I_IGNPAR(info->port.tty))
+	if (I_IGNPAR(info->tty))
 		the_port->ignore_status_mask &= ~(N_PARITY_ERROR
 						  | N_FRAMING_ERROR);
-	if (I_IGNBRK(info->port.tty)) {
+	if (I_IGNBRK(info->tty)) {
 		the_port->ignore_status_mask &= ~N_BREAK;
-		if (I_IGNPAR(info->port.tty))
+		if (I_IGNPAR(info->tty))
 			the_port->ignore_status_mask &= ~N_OVERRUN_ERROR;
 	}
 	if (!(cflag & CREAD)) {
@@ -1399,14 +1399,14 @@ static int receive_chars(struct uart_port *the_port)
 	/* Make sure all the pointers are "good" ones */
 	if (!info)
 		return 0;
-	if (!info->port.tty)
+	if (!info->tty)
 		return 0;
 
 	if (!(port->ip_flags & INPUT_ENABLE))
 		return 0;
 
 	spin_lock_irqsave(&the_port->lock, pflags);
-	tty = info->port.tty;
+	tty = info->tty;
 
 	read_count = do_read(the_port, ch, MAX_CHARS);
 	if (read_count > 0) {
@@ -2149,7 +2149,7 @@ out4:
 	return ret;
 }
 
-static struct ioc3_submodule ioc3uart_ops = {
+static struct ioc3_submodule ioc3uart_submodule = {
 	.name = "IOC3uart",
 	.probe = ioc3uart_probe,
 	.remove = ioc3uart_remove,
@@ -2173,7 +2173,7 @@ static int __devinit ioc3uart_init(void)
 		       __func__);
 		return ret;
 	}
-	ret = ioc3_register_submodule(&ioc3uart_ops);
+	ret = ioc3_register_submodule(&ioc3uart_submodule);
 	if (ret)
 		uart_unregister_driver(&ioc3_uart);
 	return ret;
@@ -2181,7 +2181,7 @@ static int __devinit ioc3uart_init(void)
 
 static void __devexit ioc3uart_exit(void)
 {
-	ioc3_unregister_submodule(&ioc3uart_ops);
+	ioc3_unregister_submodule(&ioc3uart_submodule);
 	uart_unregister_driver(&ioc3_uart);
 }
 

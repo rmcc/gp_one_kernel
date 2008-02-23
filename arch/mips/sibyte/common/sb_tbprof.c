@@ -28,7 +28,6 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 #include <linux/fs.h>
 #include <linux/errno.h>
@@ -403,26 +402,18 @@ static int sbprof_zbprof_stop(void)
 static int sbprof_tb_open(struct inode *inode, struct file *filp)
 {
 	int minor;
-	int err = 0;
 
-	lock_kernel();
 	minor = iminor(inode);
-	if (minor != 0) {
-		err = -ENODEV;
-		goto out;
-	}
+	if (minor != 0)
+		return -ENODEV;
 
-	if (xchg(&sbp.open, SB_OPENING) != SB_CLOSED) {
-		err = -EBUSY;
-		goto out;
-	}
+	if (xchg(&sbp.open, SB_OPENING) != SB_CLOSED)
+		return -EBUSY;
 
 	memset(&sbp, 0, sizeof(struct sbprof_tb));
 	sbp.sbprof_tbbuf = vmalloc(MAX_TBSAMPLE_BYTES);
-	if (!sbp.sbprof_tbbuf) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (!sbp.sbprof_tbbuf)
+		return -ENOMEM;
 	memset(sbp.sbprof_tbbuf, 0, MAX_TBSAMPLE_BYTES);
 	init_waitqueue_head(&sbp.tb_sync);
 	init_waitqueue_head(&sbp.tb_read);
@@ -430,9 +421,7 @@ static int sbprof_tb_open(struct inode *inode, struct file *filp)
 
 	sbp.open = SB_OPEN;
 
-  out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 static int sbprof_tb_release(struct inode *inode, struct file *filp)
@@ -576,7 +565,7 @@ static int __init sbprof_tb_init(void)
 
 	tb_class = tbc;
 
-	dev = device_create(tbc, NULL, MKDEV(SBPROF_TB_MAJOR, 0), NULL, "tb");
+	dev = device_create(tbc, NULL, MKDEV(SBPROF_TB_MAJOR, 0), "tb");
 	if (IS_ERR(dev)) {
 		err = PTR_ERR(dev);
 		goto out_class;

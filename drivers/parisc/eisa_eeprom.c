@@ -24,7 +24,6 @@
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/fs.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -84,9 +83,7 @@ static int eisa_eeprom_ioctl(struct inode *inode, struct file *file,
 
 static int eisa_eeprom_open(struct inode *inode, struct file *file)
 {
-	cycle_kernel_lock();
-
-	if (file->f_mode & FMODE_WRITE)
+	if (file->f_mode & 2)
 		return -EINVAL;
    
 	return 0;

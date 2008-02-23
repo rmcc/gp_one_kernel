@@ -21,12 +21,18 @@
 #include <linux/types.h>
 
 /*
+ * Some types are conditional depending on the target system.
  * XFS_BIG_BLKNOS needs block layer disk addresses to be 64 bits.
- * XFS_BIG_INUMS requires XFS_BIG_BLKNOS to be set.
+ * XFS_BIG_INUMS needs the VFS inode number to be 64 bits, as well
+ * as requiring XFS_BIG_BLKNOS to be set.
  */
 #if defined(CONFIG_LBD) || (BITS_PER_LONG == 64)
 # define XFS_BIG_BLKNOS	1
-# define XFS_BIG_INUMS	1
+# if BITS_PER_LONG == 64
+#  define XFS_BIG_INUMS	1
+# else
+#  define XFS_BIG_INUMS	0
+# endif
 #else
 # define XFS_BIG_BLKNOS	0
 # define XFS_BIG_INUMS	0
@@ -39,13 +45,13 @@
 #include <mrlock.h>
 #include <sv.h>
 #include <mutex.h>
+#include <sema.h>
 #include <time.h>
 
 #include <support/ktrace.h>
 #include <support/debug.h>
 #include <support/uuid.h>
 
-#include <linux/semaphore.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
@@ -70,8 +76,6 @@
 #include <linux/log2.h>
 #include <linux/spinlock.h>
 #include <linux/random.h>
-#include <linux/ctype.h>
-#include <linux/writeback.h>
 
 #include <asm/page.h>
 #include <asm/div64.h>
@@ -80,6 +84,7 @@
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 
+#include <xfs_vfs.h>
 #include <xfs_cred.h>
 #include <xfs_vnode.h>
 #include <xfs_stats.h>
@@ -101,6 +106,7 @@
 #undef  HAVE_PERCPU_SB	/* per cpu superblock counters are a 2.6 feature */
 #endif
 
+#define restricted_chown	xfs_params.restrict_chown.val
 #define irix_sgid_inherit	xfs_params.sgid_inherit.val
 #define irix_symlink_mode	xfs_params.symlink_mode.val
 #define xfs_panic_mask		xfs_params.panic_mask.val
@@ -119,6 +125,8 @@
 
 #define current_cpu()		(raw_smp_processor_id())
 #define current_pid()		(current->pid)
+#define current_fsuid(cred)	(current->fsuid)
+#define current_fsgid(cred)	(current->fsgid)
 #define current_test_flags(f)	(current->flags & (f))
 #define current_set_flags_nested(sp, f)		\
 		(*(sp) = current->flags, current->flags |= (f))
@@ -171,7 +179,7 @@
 #define xfs_sort(a,n,s,fn)	sort(a,n,s,fn,NULL)
 #define xfs_stack_trace()	dump_stack()
 #define xfs_itruncate_data(ip, off)	\
-	(-vmtruncate(VFS_I(ip), (off)))
+	(-vmtruncate(vn_to_inode(XFS_ITOV(ip)), (off)))
 
 
 /* Move the kernel do_div definition off to one side */
@@ -290,12 +298,5 @@ static inline __uint64_t howmany_64(__uint64_t x, __uint32_t y)
 	do_div(x, y);
 	return x;
 }
-
-/* ARM old ABI has some weird alignment/padding */
-#if defined(__arm__) && !defined(__ARM_EABI__)
-#define __arch_pack __attribute__((packed))
-#else
-#define __arch_pack
-#endif
 
 #endif /* __XFS_LINUX__ */

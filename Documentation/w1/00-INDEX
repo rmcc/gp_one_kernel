@@ -1,7 +1,5 @@
 00-INDEX
 	- This file
-slaves/
-	- Drivers that provide support for specific family codes.
 masters/
 	- Individual chips providing 1-wire busses.
 w1.generic

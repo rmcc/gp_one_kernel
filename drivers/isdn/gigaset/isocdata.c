@@ -88,9 +88,11 @@ static inline int isowbuf_startwrite(struct isowbuf_t *iwb)
 			__func__);
 		return 0;
 	}
+#ifdef CONFIG_GIGASET_DEBUG
 	gig_dbg(DEBUG_ISO,
 		"%s: acquired iso write semaphore, data[write]=%02x, nbits=%d",
 		__func__, iwb->data[iwb->write], iwb->wbits);
+#endif
 	return 1;
 }
 
@@ -171,13 +173,13 @@ int gigaset_isowbuf_getbytes(struct isowbuf_t *iwb, int size)
 		__func__, read, write, limit);
 #ifdef CONFIG_GIGASET_DEBUG
 	if (unlikely(size < 0 || size > BAS_OUTBUFPAD)) {
-		pr_err("invalid size %d\n", size);
+		err("invalid size %d", size);
 		return -EINVAL;
 	}
 	src = iwb->read;
 	if (unlikely(limit > BAS_OUTBUFSIZE + BAS_OUTBUFPAD ||
 		     (read < src && limit >= src))) {
-		pr_err("isoc write buffer frame reservation violated\n");
+		err("isoc write buffer frame reservation violated");
 		return -EFAULT;
 	}
 #endif
@@ -245,6 +247,7 @@ static inline void dump_bytes(enum debuglevel level, const char *tag,
 #ifdef CONFIG_GIGASET_DEBUG
 	unsigned char c;
 	static char dbgline[3 * 32 + 1];
+	static const char hexdigit[] = "0123456789abcdef";
 	int i = 0;
 	while (count-- > 0) {
 		if (i > sizeof(dbgline) - 4) {
@@ -255,8 +258,8 @@ static inline void dump_bytes(enum debuglevel level, const char *tag,
 		c = *bytes++;
 		dbgline[i] = (i && !(i % 12)) ? '-' : ' ';
 		i++;
-		dbgline[i++] = hex_asc_hi(c);
-		dbgline[i++] = hex_asc_lo(c);
+		dbgline[i++] = hexdigit[(c >> 4) & 0x0f];
+		dbgline[i++] = hexdigit[c & 0x0f];
 	}
 	dbgline[i] = '\0';
 	gig_dbg(level, "%s:%s", tag, dbgline);

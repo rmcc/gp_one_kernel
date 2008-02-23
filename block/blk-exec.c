@@ -16,9 +16,9 @@
 /**
  * blk_end_sync_rq - executes a completion event on a request
  * @rq: request to complete
- * @error: end I/O status of the request
+ * @error: end io status of the request
  */
-static void blk_end_sync_rq(struct request *rq, int error)
+void blk_end_sync_rq(struct request *rq, int error)
 {
 	struct completion *waiting = rq->end_io_data;
 
@@ -31,6 +31,7 @@ static void blk_end_sync_rq(struct request *rq, int error)
 	 */
 	complete(waiting);
 }
+EXPORT_SYMBOL(blk_end_sync_rq);
 
 /**
  * blk_execute_rq_nowait - insert a request into queue for execution
@@ -41,7 +42,7 @@ static void blk_end_sync_rq(struct request *rq, int error)
  * @done:	I/O completion handler
  *
  * Description:
- *    Insert a fully prepared request at the back of the I/O scheduler queue
+ *    Insert a fully prepared request at the back of the io scheduler queue
  *    for execution.  Don't wait for completion.
  */
 void blk_execute_rq_nowait(struct request_queue *q, struct gendisk *bd_disk,
@@ -57,9 +58,6 @@ void blk_execute_rq_nowait(struct request_queue *q, struct gendisk *bd_disk,
 	spin_lock_irq(q->queue_lock);
 	__elv_add_request(q, rq, where, 1);
 	__generic_unplug_device(q);
-	/* the queue is stopped so it won't be plugged+unplugged */
-	if (blk_pm_resume_request(rq))
-		q->request_fn(q);
 	spin_unlock_irq(q->queue_lock);
 }
 EXPORT_SYMBOL_GPL(blk_execute_rq_nowait);
@@ -72,7 +70,7 @@ EXPORT_SYMBOL_GPL(blk_execute_rq_nowait);
  * @at_head:    insert request at head or tail of queue
  *
  * Description:
- *    Insert a fully prepared request at the back of the I/O scheduler queue
+ *    Insert a fully prepared request at the back of the io scheduler queue
  *    for execution and wait for completion.
  */
 int blk_execute_rq(struct request_queue *q, struct gendisk *bd_disk,

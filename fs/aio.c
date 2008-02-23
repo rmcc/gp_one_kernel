@@ -191,20 +191,6 @@ static int aio_setup_ring(struct kioctx *ctx)
 	kunmap_atomic((void *)((unsigned long)__event & PAGE_MASK), km); \
 } while(0)
 
-static void ctx_rcu_free(struct rcu_head *head)
-{
-	struct kioctx *ctx = container_of(head, struct kioctx, rcu_head);
-	unsigned nr_events = ctx->max_reqs;
-
-	kmem_cache_free(kioctx_cachep, ctx);
-
-	if (nr_events) {
-		spin_lock(&aio_nr_lock);
-		BUG_ON(aio_nr - nr_events > aio_nr);
-		aio_nr -= nr_events;
-		spin_unlock(&aio_nr_lock);
-	}
-}
 
 /* __put_ioctx
  *	Called when the last user of an aio context has gone away,
@@ -212,6 +198,8 @@ static void ctx_rcu_free(struct rcu_head *head)
  */
 static void __put_ioctx(struct kioctx *ctx)
 {
+	unsigned nr_events = ctx->max_reqs;
+
 	BUG_ON(ctx->reqs_active);
 
 	cancel_delayed_work(&ctx->wq);
@@ -220,7 +208,14 @@ static void __put_ioctx(struct kioctx *ctx)
 	mmdrop(ctx->mm);
 	ctx->mm = NULL;
 	pr_debug("__put_ioctx: freeing %p\n", ctx);
-	call_rcu(&ctx->rcu_head, ctx_rcu_free);
+	kmem_cache_free(kioctx_cachep, ctx);
+
+	if (nr_events) {
+		spin_lock(&aio_nr_lock);
+		BUG_ON(aio_nr - nr_events > aio_nr);
+		aio_nr -= nr_events;
+		spin_unlock(&aio_nr_lock);
+	}
 }
 
 #define get_ioctx(kioctx) do {						\
@@ -240,7 +235,6 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 {
 	struct mm_struct *mm;
 	struct kioctx *ctx;
-	int did_sync = 0;
 
 	/* Prevent overflows */
 	if ((nr_events > (0x10000000U / sizeof(struct io_event))) ||
@@ -273,30 +267,21 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 		goto out_freectx;
 
 	/* limit the number of system wide aios */
-	do {
-		spin_lock_bh(&aio_nr_lock);
-		if (aio_nr + nr_events > aio_max_nr ||
-		    aio_nr + nr_events < aio_nr)
-			ctx->max_reqs = 0;
-		else
-			aio_nr += ctx->max_reqs;
-		spin_unlock_bh(&aio_nr_lock);
-		if (ctx->max_reqs || did_sync)
-			break;
-
-		/* wait for rcu callbacks to have completed before giving up */
-		synchronize_rcu();
-		did_sync = 1;
-		ctx->max_reqs = nr_events;
-	} while (1);
-
+	spin_lock(&aio_nr_lock);
+	if (aio_nr + ctx->max_reqs > aio_max_nr ||
+	    aio_nr + ctx->max_reqs < aio_nr)
+		ctx->max_reqs = 0;
+	else
+		aio_nr += ctx->max_reqs;
+	spin_unlock(&aio_nr_lock);
 	if (ctx->max_reqs == 0)
 		goto out_cleanup;
 
 	/* now link into global list. */
-	spin_lock(&mm->ioctx_lock);
-	hlist_add_head_rcu(&ctx->list, &mm->ioctx_list);
-	spin_unlock(&mm->ioctx_lock);
+	write_lock(&mm->ioctx_list_lock);
+	ctx->next = mm->ioctx_list;
+	mm->ioctx_list = ctx;
+	write_unlock(&mm->ioctx_list_lock);
 
 	dprintk("aio: allocated ioctx %p[%ld]: mm=%p mask=0x%x\n",
 		ctx, ctx->user_id, current->mm, ctx->ring_info.nr);
@@ -390,12 +375,11 @@ ssize_t wait_on_sync_kiocb(struct kiocb *iocb)
  */
 void exit_aio(struct mm_struct *mm)
 {
-	struct kioctx *ctx;
-
-	while (!hlist_empty(&mm->ioctx_list)) {
-		ctx = hlist_entry(mm->ioctx_list.first, struct kioctx, list);
-		hlist_del_rcu(&ctx->list);
-
+	struct kioctx *ctx = mm->ioctx_list;
+	mm->ioctx_list = NULL;
+	while (ctx) {
+		struct kioctx *next = ctx->next;
+		ctx->next = NULL;
 		aio_cancel_all(ctx);
 
 		wait_for_all_aios(ctx);
@@ -410,6 +394,7 @@ void exit_aio(struct mm_struct *mm)
 				atomic_read(&ctx->users), ctx->dead,
 				ctx->reqs_active);
 		put_ioctx(ctx);
+		ctx = next;
 	}
 }
 
@@ -527,8 +512,8 @@ static void aio_fput_routine(struct work_struct *data)
  */
 static int __aio_put_req(struct kioctx *ctx, struct kiocb *req)
 {
-	dprintk(KERN_DEBUG "aio_put(%p): f_count=%ld\n",
-		req, atomic_long_read(&req->ki_filp->f_count));
+	dprintk(KERN_DEBUG "aio_put(%p): f_count=%d\n",
+		req, atomic_read(&req->ki_filp->f_count));
 
 	assert_spin_locked(&ctx->ctx_lock);
 
@@ -543,7 +528,7 @@ static int __aio_put_req(struct kioctx *ctx, struct kiocb *req)
 	/* Must be done under the lock to serialise against cancellation.
 	 * Call this aio_fput as it duplicates fput via the fput_work.
 	 */
-	if (unlikely(atomic_long_dec_and_test(&req->ki_filp->f_count))) {
+	if (unlikely(atomic_dec_and_test(&req->ki_filp->f_count))) {
 		get_ioctx(ctx);
 		spin_lock(&fput_lock);
 		list_add(&req->ki_list, &fput_head);
@@ -570,21 +555,19 @@ int aio_put_req(struct kiocb *req)
 
 static struct kioctx *lookup_ioctx(unsigned long ctx_id)
 {
-	struct mm_struct *mm = current->mm;
-	struct kioctx *ctx = NULL;
-	struct hlist_node *n;
+	struct kioctx *ioctx;
+	struct mm_struct *mm;
 
-	rcu_read_lock();
-
-	hlist_for_each_entry_rcu(ctx, n, &mm->ioctx_list, list) {
-		if (ctx->user_id == ctx_id && !ctx->dead) {
-			get_ioctx(ctx);
+	mm = current->mm;
+	read_lock(&mm->ioctx_list_lock);
+	for (ioctx = mm->ioctx_list; ioctx; ioctx = ioctx->next)
+		if (likely(ioctx->user_id == ctx_id && !ioctx->dead)) {
+			get_ioctx(ioctx);
 			break;
 		}
-	}
+	read_unlock(&mm->ioctx_list_lock);
 
-	rcu_read_unlock();
-	return ctx;
+	return ioctx;
 }
 
 /*
@@ -603,10 +586,15 @@ static void use_mm(struct mm_struct *mm)
 	struct task_struct *tsk = current;
 
 	task_lock(tsk);
+	tsk->flags |= PF_BORROWED_MM;
 	active_mm = tsk->active_mm;
 	atomic_inc(&mm->mm_count);
 	tsk->mm = mm;
 	tsk->active_mm = mm;
+	/*
+	 * Note that on UML this *requires* PF_BORROWED_MM to be set, otherwise
+	 * it won't work. Update it accordingly if you change it here
+	 */
 	switch_mm(active_mm, mm, tsk);
 	task_unlock(tsk);
 
@@ -626,6 +614,7 @@ static void unuse_mm(struct mm_struct *mm)
 	struct task_struct *tsk = current;
 
 	task_lock(tsk);
+	tsk->flags &= ~PF_BORROWED_MM;
 	tsk->mm = NULL;
 	/* active_mm is still 'mm' */
 	enter_lazy_tlb(mm, tsk);
@@ -1232,14 +1221,19 @@ out:
 static void io_destroy(struct kioctx *ioctx)
 {
 	struct mm_struct *mm = current->mm;
+	struct kioctx **tmp;
 	int was_dead;
 
 	/* delete the entry from the list is someone else hasn't already */
-	spin_lock(&mm->ioctx_lock);
+	write_lock(&mm->ioctx_list_lock);
 	was_dead = ioctx->dead;
 	ioctx->dead = 1;
-	hlist_del_rcu(&ioctx->list);
-	spin_unlock(&mm->ioctx_lock);
+	for (tmp = &mm->ioctx_list; *tmp && *tmp != ioctx;
+	     tmp = &(*tmp)->next)
+		;
+	if (*tmp)
+		*tmp = ioctx->next;
+	write_unlock(&mm->ioctx_list_lock);
 
 	dprintk("aio_release(%p)\n", ioctx);
 	if (likely(!was_dead))

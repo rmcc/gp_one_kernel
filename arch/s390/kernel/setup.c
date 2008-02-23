@@ -14,9 +14,6 @@
  * This file handles the architecture-dependent parts of initialization
  */
 
-#define KMSG_COMPONENT "setup"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/sched.h>
@@ -35,6 +32,7 @@
 #include <linux/bootmem.h>
 #include <linux/root_dev.h>
 #include <linux/console.h>
+#include <linux/seq_file.h>
 #include <linux/kernel_stat.h>
 #include <linux/device.h>
 #include <linux/notifier.h>
@@ -56,7 +54,6 @@
 #include <asm/sections.h>
 #include <asm/ebcdic.h>
 #include <asm/compat.h>
-#include <asm/kvm_virtio.h>
 
 long psw_kernel_bits	= (PSW_BASE_BITS | PSW_MASK_DAT | PSW_ASC_PRIMARY |
 			   PSW_MASK_MCHECK | PSW_DEFAULT_KEY);
@@ -80,7 +77,7 @@ unsigned long machine_flags;
 unsigned long elf_hwcap = 0;
 char elf_platform[ELF_PLATFORM_SIZE];
 
-struct mem_chunk __initdata memory_chunk[MEMORY_CHUNKS];
+struct mem_chunk __meminitdata memory_chunk[MEMORY_CHUNKS];
 volatile int __cpu_logical_map[NR_CPUS]; /* logical cpu to cpu address */
 static unsigned long __initdata memory_end;
 
@@ -208,6 +205,12 @@ static void __init conmode_default(void)
 			SET_CONSOLE_SCLP;
 #endif
 		}
+        } else if (MACHINE_IS_P390) {
+#if defined(CONFIG_TN3215_CONSOLE)
+		SET_CONSOLE_3215;
+#elif defined(CONFIG_TN3270_CONSOLE)
+		SET_CONSOLE_3270;
+#endif
 	} else {
 #if defined(CONFIG_SCLP_CONSOLE) || defined(CONFIG_SCLP_VT220_CONSOLE)
 		SET_CONSOLE_SCLP;
@@ -218,17 +221,18 @@ static void __init conmode_default(void)
 #if defined(CONFIG_ZFCPDUMP) || defined(CONFIG_ZFCPDUMP_MODULE)
 static void __init setup_zfcpdump(unsigned int console_devno)
 {
-	static char str[41];
+	static char str[64];
 
 	if (ipl_info.type != IPL_TYPE_FCP_DUMP)
 		return;
 	if (console_devno != -1)
-		sprintf(str, " cio_ignore=all,!0.0.%04x,!0.0.%04x",
+		sprintf(str, "cio_ignore=all,!0.0.%04x,!0.0.%04x",
 			ipl_info.data.fcp.dev_id.devno, console_devno);
 	else
-		sprintf(str, " cio_ignore=all,!0.0.%04x",
+		sprintf(str, "cio_ignore=all,!0.0.%04x",
 			ipl_info.data.fcp.dev_id.devno);
-	strcat(boot_command_line, str);
+	strcat(COMMAND_LINE, " ");
+	strcat(COMMAND_LINE, str);
 	console_loglevel = 2;
 }
 #else
@@ -285,6 +289,32 @@ static int __init early_parse_mem(char *p)
 }
 early_param("mem", early_parse_mem);
 
+/*
+ * "ipldelay=XXX[sm]" sets ipl delay in seconds or minutes
+ */
+static int __init early_parse_ipldelay(char *p)
+{
+	unsigned long delay = 0;
+
+	delay = simple_strtoul(p, &p, 0);
+
+	switch (*p) {
+	case 's':
+	case 'S':
+		delay *= 1000000;
+		break;
+	case 'm':
+	case 'M':
+		delay *= 60 * 1000000;
+	}
+
+	/* now wait for the requested amount of time */
+	udelay(delay);
+
+	return 0;
+}
+early_param("ipldelay", early_parse_ipldelay);
+
 #ifdef CONFIG_S390_SWITCH_AMODE
 #ifdef CONFIG_PGSTE
 unsigned int switch_amode = 1;
@@ -293,8 +323,8 @@ unsigned int switch_amode = 0;
 #endif
 EXPORT_SYMBOL_GPL(switch_amode);
 
-static int set_amode_and_uaccess(unsigned long user_amode,
-				 unsigned long user32_amode)
+static void set_amode_and_uaccess(unsigned long user_amode,
+				  unsigned long user32_amode)
 {
 	psw_user_bits = PSW_BASE_BITS | PSW_MASK_DAT | user_amode |
 			PSW_MASK_IO | PSW_MASK_EXT | PSW_MASK_MCHECK |
@@ -311,11 +341,11 @@ static int set_amode_and_uaccess(unsigned long user_amode,
 			  PSW_MASK_MCHECK | PSW_DEFAULT_KEY;
 
 	if (MACHINE_HAS_MVCOS) {
+		printk("mvcos available.\n");
 		memcpy(&uaccess, &uaccess_mvcos_switch, sizeof(uaccess));
-		return 1;
 	} else {
+		printk("mvcos not available.\n");
 		memcpy(&uaccess, &uaccess_pt, sizeof(uaccess));
-		return 0;
 	}
 }
 
@@ -330,10 +360,9 @@ static int __init early_parse_switch_amode(char *p)
 early_param("switch_amode", early_parse_switch_amode);
 
 #else /* CONFIG_S390_SWITCH_AMODE */
-static inline int set_amode_and_uaccess(unsigned long user_amode,
-					unsigned long user32_amode)
+static inline void set_amode_and_uaccess(unsigned long user_amode,
+					 unsigned long user32_amode)
 {
-	return 0;
 }
 #endif /* CONFIG_S390_SWITCH_AMODE */
 
@@ -358,20 +387,11 @@ early_param("noexec", early_parse_noexec);
 static void setup_addressing_mode(void)
 {
 	if (s390_noexec) {
-		if (set_amode_and_uaccess(PSW_ASC_SECONDARY,
-					  PSW32_ASC_SECONDARY))
-			pr_info("Execute protection active, "
-				"mvcos available\n");
-		else
-			pr_info("Execute protection active, "
-				"mvcos not available\n");
+		printk("S390 execute protection active, ");
+		set_amode_and_uaccess(PSW_ASC_SECONDARY, PSW32_ASC_SECONDARY);
 	} else if (switch_amode) {
-		if (set_amode_and_uaccess(PSW_ASC_PRIMARY, PSW32_ASC_PRIMARY))
-			pr_info("Address spaces switched, "
-				"mvcos available\n");
-		else
-			pr_info("Address spaces switched, "
-				"mvcos not available\n");
+		printk("S390 address spaces switched, ");
+		set_amode_and_uaccess(PSW_ASC_PRIMARY, PSW32_ASC_PRIMARY);
 	}
 #ifdef CONFIG_TRACE_IRQFLAGS
 	sysc_restore_trace_psw.mask = psw_kernel_bits & ~PSW_MASK_MCHECK;
@@ -427,8 +447,6 @@ setup_lowcore(void)
 		/* enable extended save area */
 		__ctl_set_bit(14, 29);
 	}
-#else
-	lc->vdso_per_cpu_data = (unsigned long) &lc->paste[0];
 #endif
 	set_prefix((u32)(unsigned long) lc);
 }
@@ -586,15 +604,15 @@ setup_memory(void)
 			start = PFN_PHYS(start_pfn) + bmap_size + PAGE_SIZE;
 
 			if (start + INITRD_SIZE > memory_end) {
-				pr_err("initrd extends beyond end of "
-				       "memory (0x%08lx > 0x%08lx) "
+				printk("initrd extends beyond end of memory "
+				       "(0x%08lx > 0x%08lx)\n"
 				       "disabling initrd\n",
 				       start + INITRD_SIZE, memory_end);
 				INITRD_START = INITRD_SIZE = 0;
 			} else {
-				pr_info("Moving initrd (0x%08lx -> "
-					"0x%08lx, size: %ld)\n",
-					INITRD_START, start, INITRD_SIZE);
+				printk("Moving initrd (0x%08lx -> 0x%08lx, "
+				       "size: %ld)\n",
+				       INITRD_START, start, INITRD_SIZE);
 				memmove((void *) start, (void *) INITRD_START,
 					INITRD_SIZE);
 				INITRD_START = start;
@@ -618,13 +636,13 @@ setup_memory(void)
 		if (memory_chunk[i].type != CHUNK_READ_WRITE)
 			continue;
 		start_chunk = PFN_DOWN(memory_chunk[i].addr);
-		end_chunk = start_chunk + PFN_DOWN(memory_chunk[i].size);
+		end_chunk = start_chunk + PFN_DOWN(memory_chunk[i].size) - 1;
 		end_chunk = min(end_chunk, end_pfn);
 		if (start_chunk >= end_chunk)
 			continue;
 		add_active_range(0, start_chunk, end_chunk);
 		pfn = max(start_chunk, start_pfn);
-		for (; pfn < end_chunk; pfn++)
+		for (; pfn <= end_chunk; pfn++)
 			page_set_storage_key(PFN_PHYS(pfn), PAGE_DEFAULT_KEY);
 	}
 
@@ -656,14 +674,30 @@ setup_memory(void)
 			initrd_start = INITRD_START;
 			initrd_end = initrd_start + INITRD_SIZE;
 		} else {
-			pr_err("initrd extends beyond end of "
-			       "memory (0x%08lx > 0x%08lx) "
-			       "disabling initrd\n",
+			printk("initrd extends beyond end of memory "
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
 			       initrd_start + INITRD_SIZE, memory_end);
 			initrd_start = initrd_end = 0;
 		}
 	}
 #endif
+}
+
+static int __init __stfle(unsigned long long *list, int doublewords)
+{
+	typedef struct { unsigned long long _[doublewords]; } addrtype;
+	register unsigned long __nr asm("0") = doublewords - 1;
+
+	asm volatile(".insn s,0xb2b00000,%0" /* stfle */
+		     : "=m" (*(addrtype *) list), "+d" (__nr) : : "cc");
+	return __nr + 1;
+}
+
+int __init stfle(unsigned long long *list, int doublewords)
+{
+	if (!(stfl() & (1UL << 24)))
+		return -EOPNOTSUPP;
+	return __stfle(list, doublewords);
 }
 
 /*
@@ -737,12 +771,7 @@ static void __init setup_hwcaps(void)
 		strcpy(elf_platform, "z990");
 		break;
 	case 0x2094:
-	case 0x2096:
 		strcpy(elf_platform, "z9-109");
-		break;
-	case 0x2097:
-	case 0x2098:
-		strcpy(elf_platform, "z10");
 		break;
 	}
 }
@@ -755,39 +784,31 @@ static void __init setup_hwcaps(void)
 void __init
 setup_arch(char **cmdline_p)
 {
-	/* set up preferred console */
-	add_preferred_console("ttyS", 0, NULL);
-
         /*
          * print what head.S has found out about the machine
          */
 #ifndef CONFIG_64BIT
-	if (MACHINE_IS_VM)
-		pr_info("Linux is running as a z/VM "
-			"guest operating system in 31-bit mode\n");
-	else
-		pr_info("Linux is running natively in 31-bit mode\n");
-	if (MACHINE_HAS_IEEE)
-		pr_info("The hardware system has IEEE compatible "
-			"floating point units\n");
-	else
-		pr_info("The hardware system has no IEEE compatible "
-			"floating point units\n");
+	printk((MACHINE_IS_VM) ?
+	       "We are running under VM (31 bit mode)\n" :
+	       "We are running native (31 bit mode)\n");
+	printk((MACHINE_HAS_IEEE) ?
+	       "This machine has an IEEE fpu\n" :
+	       "This machine has no IEEE fpu\n");
 #else /* CONFIG_64BIT */
 	if (MACHINE_IS_VM)
-		pr_info("Linux is running as a z/VM "
-			"guest operating system in 64-bit mode\n");
+		printk("We are running under VM (64 bit mode)\n");
 	else if (MACHINE_IS_KVM) {
-		pr_info("Linux is running under KVM in 64-bit mode\n");
-		add_preferred_console("hvc", 0, NULL);
-		s390_virtio_console_init();
+		printk("We are running under KVM (64 bit mode)\n");
+		add_preferred_console("ttyS", 1, NULL);
 	} else
-		pr_info("Linux is running natively in 64-bit mode\n");
+		printk("We are running native (64 bit mode)\n");
 #endif /* CONFIG_64BIT */
 
-	/* Have one command line that is parsed and saved in /proc/cmdline */
-	/* boot_command_line has been already set up in early.c */
-	*cmdline_p = boot_command_line;
+	/* Save unparsed command line copy for /proc/cmdline */
+	strlcpy(boot_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
+
+	*cmdline_p = COMMAND_LINE;
+	*(*cmdline_p + COMMAND_LINE_SIZE - 1) = '\0';
 
         ROOT_DEV = Root_RAM0;
 
@@ -830,3 +851,90 @@ setup_arch(char **cmdline_p)
 	/* Setup zfcpdump support */
 	setup_zfcpdump(console_devno);
 }
+
+void __cpuinit print_cpu_info(struct cpuinfo_S390 *cpuinfo)
+{
+   printk(KERN_INFO "cpu %d "
+#ifdef CONFIG_SMP
+           "phys_idx=%d "
+#endif
+           "vers=%02X ident=%06X machine=%04X unused=%04X\n",
+           cpuinfo->cpu_nr,
+#ifdef CONFIG_SMP
+           cpuinfo->cpu_addr,
+#endif
+           cpuinfo->cpu_id.version,
+           cpuinfo->cpu_id.ident,
+           cpuinfo->cpu_id.machine,
+           cpuinfo->cpu_id.unused);
+}
+
+/*
+ * show_cpuinfo - Get information on one CPU for use by procfs.
+ */
+
+static int show_cpuinfo(struct seq_file *m, void *v)
+{
+	static const char *hwcap_str[8] = {
+		"esan3", "zarch", "stfle", "msa", "ldisp", "eimm", "dfp",
+		"edat"
+	};
+        struct cpuinfo_S390 *cpuinfo;
+	unsigned long n = (unsigned long) v - 1;
+	int i;
+
+	s390_adjust_jiffies();
+	preempt_disable();
+	if (!n) {
+		seq_printf(m, "vendor_id       : IBM/S390\n"
+			       "# processors    : %i\n"
+			       "bogomips per cpu: %lu.%02lu\n",
+			       num_online_cpus(), loops_per_jiffy/(500000/HZ),
+			       (loops_per_jiffy/(5000/HZ))%100);
+		seq_puts(m, "features\t: ");
+		for (i = 0; i < 8; i++)
+			if (hwcap_str[i] && (elf_hwcap & (1UL << i)))
+				seq_printf(m, "%s ", hwcap_str[i]);
+		seq_puts(m, "\n");
+	}
+
+	if (cpu_online(n)) {
+#ifdef CONFIG_SMP
+		if (smp_processor_id() == n)
+			cpuinfo = &S390_lowcore.cpu_data;
+		else
+			cpuinfo = &lowcore_ptr[n]->cpu_data;
+#else
+		cpuinfo = &S390_lowcore.cpu_data;
+#endif
+		seq_printf(m, "processor %li: "
+			       "version = %02X,  "
+			       "identification = %06X,  "
+			       "machine = %04X\n",
+			       n, cpuinfo->cpu_id.version,
+			       cpuinfo->cpu_id.ident,
+			       cpuinfo->cpu_id.machine);
+	}
+	preempt_enable();
+        return 0;
+}
+
+static void *c_start(struct seq_file *m, loff_t *pos)
+{
+	return *pos < NR_CPUS ? (void *)((unsigned long) *pos + 1) : NULL;
+}
+static void *c_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	++*pos;
+	return c_start(m, pos);
+}
+static void c_stop(struct seq_file *m, void *v)
+{
+}
+const struct seq_operations cpuinfo_op = {
+	.start	= c_start,
+	.next	= c_next,
+	.stop	= c_stop,
+	.show	= show_cpuinfo,
+};
+

@@ -16,7 +16,6 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mm.h>
-#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 #include "mem_user.h"
 
@@ -78,7 +77,6 @@ out:
 
 static int mmapper_open(struct inode *inode, struct file *file)
 {
-	cycle_kernel_lock();
 	return 0;
 }
 

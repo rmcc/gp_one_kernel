@@ -18,14 +18,14 @@
  */
 #include <linux/pci.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/mach/pci.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-#include <mach/pci.h>
+#include <asm/arch/pci.h>
 #include <asm/mach/time.h>
-#include <mach/time.h>
+#include <asm/arch/time.h>
 
 extern int init_atu;
 

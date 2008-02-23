@@ -1,4 +1,6 @@
 /*
+ * $Id: grip.c,v 1.21 2002/01/22 20:27:57 vojtech Exp $
+ *
  *  Copyright (c) 1998-2001 Vojtech Pavlik
  */
 
@@ -426,7 +428,8 @@ static struct gameport_driver grip_drv = {
 
 static int __init grip_init(void)
 {
-	return gameport_register_driver(&grip_drv);
+	gameport_register_driver(&grip_drv);
+	return 0;
 }
 
 static void __exit grip_exit(void)

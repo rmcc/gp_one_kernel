@@ -121,11 +121,8 @@ acpi_os_wait_semaphore(acpi_semaphore handle, u32 units, u16 timeout);
 acpi_status acpi_os_signal_semaphore(acpi_semaphore handle, u32 units);
 
 /*
- * Mutex primitives. May be configured to use semaphores instead via
- * ACPI_MUTEX_TYPE (see platform/acenv.h)
+ * Mutex primitives
  */
-#if (ACPI_MUTEX_TYPE != ACPI_BINARY_SEMAPHORE)
-
 acpi_status acpi_os_create_mutex(acpi_mutex * out_handle);
 
 void acpi_os_delete_mutex(acpi_mutex handle);
@@ -133,7 +130,13 @@ void acpi_os_delete_mutex(acpi_mutex handle);
 acpi_status acpi_os_acquire_mutex(acpi_mutex handle, u16 timeout);
 
 void acpi_os_release_mutex(acpi_mutex handle);
-#endif
+
+/* Temporary macros for Mutex* interfaces, map to existing semaphore xfaces */
+
+#define acpi_os_create_mutex(out_handle)    acpi_os_create_semaphore (1, 1, out_handle)
+#define acpi_os_delete_mutex(handle)        (void) acpi_os_delete_semaphore (handle)
+#define acpi_os_acquire_mutex(handle,time)  acpi_os_wait_semaphore (handle, 1, time)
+#define acpi_os_release_mutex(handle)       (void) acpi_os_signal_semaphore (handle, 1)
 
 /*
  * Memory allocation and mapping
@@ -141,7 +144,7 @@ void acpi_os_release_mutex(acpi_mutex handle);
 void *acpi_os_allocate(acpi_size size);
 
 void __iomem *acpi_os_map_memory(acpi_physical_address where,
-				acpi_size length);
+				 acpi_native_uint length);
 
 void acpi_os_unmap_memory(void __iomem * logical_address, acpi_size size);
 
@@ -189,9 +192,6 @@ acpi_thread_id acpi_os_get_thread_id(void);
 acpi_status
 acpi_os_execute(acpi_execute_type type,
 		acpi_osd_exec_callback function, void *context);
-
-acpi_status
-acpi_os_hotplug_execute(acpi_osd_exec_callback function, void *context);
 
 void acpi_os_wait_events_complete(void *context);
 

@@ -1,6 +1,7 @@
 /*
 	drivers/net/tulip/eeprom.c
 
+	Maintained by Valerie Henson <val_henson@linux.intel.com>
 	Copyright 2000,2001  The Linux Kernel Team
 	Written/copyright 1994-2001 by Donald Becker.
 
@@ -8,8 +9,9 @@
 	of the GNU General Public License, incorporated herein by reference.
 
 	Please refer to Documentation/DocBook/tulip-user.{pdf,ps,html}
-	for more information on this driver.
-	Please submit bug reports to http://bugzilla.kernel.org/.
+	for more information on this driver, or visit the project
+	Web page at http://sourceforge.net/projects/tulip/
+
 */
 
 #include <linux/pci.h>
@@ -337,7 +339,7 @@ int __devinit tulip_read_eeprom(struct net_device *dev, int location, int addr_l
 {
 	int i;
 	unsigned retval = 0;
-	struct tulip_private *tp = netdev_priv(dev);
+	struct tulip_private *tp = dev->priv;
 	void __iomem *ee_addr = tp->base_addr + CSR9;
 	int read_cmd = location | (EE_READ_CMD << addr_len);
 

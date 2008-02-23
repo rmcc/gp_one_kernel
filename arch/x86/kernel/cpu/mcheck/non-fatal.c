@@ -1,7 +1,7 @@
 /*
  * Non Fatal Machine Check Exception Reporting
  *
- * (C) Copyright 2002 Dave Jones. <davej@redhat.com>
+ * (C) Copyright 2002 Dave Jones. <davej@codemonkey.org.uk>
  *
  * This file contains routines to check for non-fatal MCEs every 15s
  *
@@ -59,7 +59,7 @@ static DECLARE_DELAYED_WORK(mce_work, mce_work_fn);
 
 static void mce_work_fn(struct work_struct *work)
 {
-	on_each_cpu(mce_checkregs, NULL, 1);
+	on_each_cpu(mce_checkregs, NULL, 1, 1);
 	schedule_delayed_work(&mce_work, round_jiffies_relative(MCE_RATE));
 }
 

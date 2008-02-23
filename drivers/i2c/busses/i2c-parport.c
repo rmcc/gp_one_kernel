@@ -189,6 +189,8 @@ static void i2c_parport_attach (struct parport *port)
 	if (adapter_parm[type].init.val)
 		line_set(port, 1, &adapter_parm[type].init);
 
+	parport_release(adapter->pdev);
+
 	if (i2c_bit_add_bus(&adapter->adapter) < 0) {
 		printk(KERN_ERR "i2c-parport: Unable to register with I2C\n");
 		goto ERROR1;
@@ -200,7 +202,6 @@ static void i2c_parport_attach (struct parport *port)
         return;
 
 ERROR1:
-	parport_release(adapter->pdev);
 	parport_unregister_device(adapter->pdev);
 ERROR0:
 	kfree(adapter);
@@ -220,7 +221,6 @@ static void i2c_parport_detach (struct parport *port)
 			if (adapter_parm[type].init.val)
 				line_set(port, 0, &adapter_parm[type].init);
 				
-			parport_release(adapter->pdev);
 			parport_unregister_device(adapter->pdev);
 			if (prev)
 				prev->next = adapter->next;

@@ -16,6 +16,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/lockd.h>
+#include <linux/lockd/sm_inter.h>
 
 #define NLMDBG_FACILITY		NLMDBG_CLIENT
 #define NLMCLNT_GRACE_WAIT	(5*HZ)
@@ -223,9 +224,7 @@ void nlm_release_call(struct nlm_rqst *call)
 
 static void nlmclnt_rpc_release(void *data)
 {
-	lock_kernel();
 	nlm_release_call(data);
-	unlock_kernel();
 }
 
 static int nlm_wait_on_grace(wait_queue_head_t *queue)
@@ -431,7 +430,7 @@ nlmclnt_test(struct nlm_rqst *req, struct file_lock *fl)
 			 * Report the conflicting lock back to the application.
 			 */
 			fl->fl_start = req->a_res.lock.fl.fl_start;
-			fl->fl_end = req->a_res.lock.fl.fl_end;
+			fl->fl_end = req->a_res.lock.fl.fl_start;
 			fl->fl_type = req->a_res.lock.fl.fl_type;
 			fl->fl_pid = 0;
 			break;
@@ -517,9 +516,11 @@ nlmclnt_lock(struct nlm_rqst *req, struct file_lock *fl)
 	unsigned char fl_type;
 	int status = -ENOLCK;
 
-	if (nsm_monitor(host) < 0)
+	if (nsm_monitor(host) < 0) {
+		printk(KERN_NOTICE "lockd: failed to monitor %s\n",
+					host->h_name);
 		goto out;
-
+	}
 	fl->fl_flags |= FL_ACCESS;
 	status = do_vfs_lock(fl);
 	fl->fl_flags = fl_flags;
@@ -579,15 +580,7 @@ again:
 	}
 	if (status < 0)
 		goto out_unlock;
-	/*
-	 * EAGAIN doesn't make sense for sleeping locks, and in some
-	 * cases NLM_LCK_DENIED is returned for a permanent error.  So
-	 * turn it into an ENOLCK.
-	 */
-	if (resp->status == nlm_lck_denied && (fl_flags & FL_SLEEP))
-		status = -ENOLCK;
-	else
-		status = nlm_stat_to_errno(resp->status);
+	status = nlm_stat_to_errno(resp->status);
 out_unblock:
 	nlmclnt_finish_block(block);
 out:
@@ -717,9 +710,7 @@ static void nlmclnt_unlock_callback(struct rpc_task *task, void *data)
 die:
 	return;
  retry_rebind:
-	lock_kernel();
 	nlm_rebind_host(req->a_host);
-	unlock_kernel();
  retry_unlock:
 	rpc_restart_call(task);
 }
@@ -797,9 +788,7 @@ retry_cancel:
 	/* Don't ever retry more than 3 times */
 	if (req->a_retries++ >= NLMCLNT_MAX_RETRIES)
 		goto die;
-	lock_kernel();
 	nlm_rebind_host(req->a_host);
-	unlock_kernel();
 	rpc_restart_call(task);
 	rpc_delay(task, 30 * HZ);
 }

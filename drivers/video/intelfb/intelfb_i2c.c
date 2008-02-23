@@ -100,8 +100,7 @@ static int intelfb_gpio_getsda(void *data)
 
 static int intelfb_setup_i2c_bus(struct intelfb_info *dinfo,
 				 struct intelfb_i2c_chan *chan,
-				 const u32 reg, const char *name,
-				 int class)
+				 const u32 reg, const char *name)
 {
 	int rc;
 
@@ -109,7 +108,6 @@ static int intelfb_setup_i2c_bus(struct intelfb_info *dinfo,
 	chan->reg			= reg;
 	snprintf(chan->adapter.name, sizeof(chan->adapter.name),
 		 "intelfb %s", name);
-	chan->adapter.class		= class;
 	chan->adapter.owner		= THIS_MODULE;
 	chan->adapter.id		= I2C_HW_B_INTELFB;
 	chan->adapter.algo_data		= &chan->algo;
@@ -147,7 +145,7 @@ void intelfb_create_i2c_busses(struct intelfb_info *dinfo)
 
 	/* setup the DDC bus for analog output */
 	intelfb_setup_i2c_bus(dinfo, &dinfo->output[i].ddc_bus, GPIOA,
-			      "CRTDDC_A", I2C_CLASS_DDC);
+			      "CRTDDC_A");
 	i++;
 
 	/* need to add the output busses for each device
@@ -161,9 +159,9 @@ void intelfb_create_i2c_busses(struct intelfb_info *dinfo)
 	case INTEL_865G:
 		dinfo->output[i].type = INTELFB_OUTPUT_DVO;
 		intelfb_setup_i2c_bus(dinfo, &dinfo->output[i].ddc_bus,
-				      GPIOD, "DVODDC_D", I2C_CLASS_DDC);
+				      GPIOD, "DVODDC_D");
 		intelfb_setup_i2c_bus(dinfo, &dinfo->output[i].i2c_bus,
-				      GPIOE, "DVOI2C_E", 0);
+				      GPIOE, "DVOI2C_E");
 		i++;
 		break;
 	case INTEL_915G:
@@ -171,13 +169,12 @@ void intelfb_create_i2c_busses(struct intelfb_info *dinfo)
 		/* has some LVDS + tv-out */
 	case INTEL_945G:
 	case INTEL_945GM:
-	case INTEL_945GME:
 	case INTEL_965G:
 	case INTEL_965GM:
 		/* SDVO ports have a single control bus - 2 devices */
 		dinfo->output[i].type = INTELFB_OUTPUT_SDVO;
 		intelfb_setup_i2c_bus(dinfo, &dinfo->output[i].i2c_bus,
-				      GPIOE, "SDVOCTRL_E", 0);
+				      GPIOE, "SDVOCTRL_E");
 		/* TODO: initialize the SDVO */
 		/* I830SDVOInit(pScrn, i, DVOB); */
 		i++;

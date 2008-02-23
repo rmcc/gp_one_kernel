@@ -130,9 +130,6 @@ static unsigned long init_dump_header(struct phyp_dump_header *ph)
 static void print_dump_header(const struct phyp_dump_header *ph)
 {
 #ifdef DEBUG
-	if (ph == NULL)
-		return;
-
 	printk(KERN_INFO "dump header:\n");
 	/* setup some ph->sections required */
 	printk(KERN_INFO "version = %d\n", ph->version);
@@ -413,8 +410,6 @@ static int __init phyp_dump_setup(void)
 						&header_len);
 		of_node_put(rtas);
 	}
-
-	ibm_configure_kernel_dump = rtas_token("ibm,configure-kernel-dump");
 
 	print_dump_header(dump_header);
 	dump_area_length = init_dump_header(&phdr);

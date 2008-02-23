@@ -164,8 +164,8 @@ static int mip6_destopt_output(struct xfrm_state *x, struct sk_buff *skb)
 			calc_padlen(sizeof(*dstopt), 6));
 
 	hao->type = IPV6_TLV_HAO;
-	BUILD_BUG_ON(sizeof(*hao) != 18);
 	hao->length = sizeof(*hao) - 2;
+	BUG_TRAP(hao->length == 16);
 
 	len = ((char *)hao - (char *)dstopt) + sizeof(*hao);
 
@@ -174,7 +174,7 @@ static int mip6_destopt_output(struct xfrm_state *x, struct sk_buff *skb)
 	memcpy(&iph->saddr, x->coaddr, sizeof(iph->saddr));
 	spin_unlock_bh(&x->lock);
 
-	WARN_ON(len != x->props.header_len);
+	BUG_TRAP(len == x->props.header_len);
 	dstopt->hdrlen = (x->props.header_len >> 3) - 1;
 
 	return 0;
@@ -205,7 +205,6 @@ static inline int mip6_report_rl_allow(struct timeval *stamp,
 
 static int mip6_destopt_reject(struct xfrm_state *x, struct sk_buff *skb, struct flowi *fl)
 {
-	struct net *net = xs_net(x);
 	struct inet6_skb_parm *opt = (struct inet6_skb_parm *)skb->cb;
 	struct ipv6_destopt_hao *hao = NULL;
 	struct xfrm_selector sel;
@@ -248,7 +247,7 @@ static int mip6_destopt_reject(struct xfrm_state *x, struct sk_buff *skb, struct
 		sel.sport_mask = htons(~0);
 	sel.ifindex = fl->oif;
 
-	err = km_report(net, IPPROTO_DSTOPTS, &sel,
+	err = km_report(IPPROTO_DSTOPTS, &sel,
 			(hao ? (xfrm_address_t *)&hao->addr : NULL));
 
  out:
@@ -318,7 +317,7 @@ static int mip6_destopt_init_state(struct xfrm_state *x)
 	x->props.header_len = sizeof(struct ipv6_destopt_hdr) +
 		calc_padlen(sizeof(struct ipv6_destopt_hdr), 6) +
 		sizeof(struct ipv6_destopt_hao);
-	WARN_ON(x->props.header_len != 24);
+	BUG_TRAP(x->props.header_len == 24);
 
 	return 0;
 }
@@ -381,7 +380,7 @@ static int mip6_rthdr_output(struct xfrm_state *x, struct sk_buff *skb)
 	rt2->rt_hdr.segments_left = 1;
 	memset(&rt2->reserved, 0, sizeof(rt2->reserved));
 
-	WARN_ON(rt2->rt_hdr.hdrlen != 2);
+	BUG_TRAP(rt2->rt_hdr.hdrlen == 2);
 
 	memcpy(&rt2->addr, &iph->daddr, sizeof(rt2->addr));
 	spin_lock_bh(&x->lock);

@@ -15,16 +15,16 @@
 
 #define NF_LOG_PREFIXLEN		128
 
-static const struct nf_logger *nf_loggers[NFPROTO_NUMPROTO] __read_mostly;
+static const struct nf_logger *nf_loggers[NPROTO] __read_mostly;
 static DEFINE_MUTEX(nf_log_mutex);
 
 /* return EBUSY if somebody else is registered, EEXIST if the same logger
  * is registred, 0 on success. */
-int nf_log_register(u_int8_t pf, const struct nf_logger *logger)
+int nf_log_register(int pf, const struct nf_logger *logger)
 {
 	int ret;
 
-	if (pf >= ARRAY_SIZE(nf_loggers))
+	if (pf >= NPROTO)
 		return -EINVAL;
 
 	/* Any setup of logging members must be done before
@@ -45,9 +45,9 @@ int nf_log_register(u_int8_t pf, const struct nf_logger *logger)
 }
 EXPORT_SYMBOL(nf_log_register);
 
-void nf_log_unregister_pf(u_int8_t pf)
+void nf_log_unregister_pf(int pf)
 {
-	if (pf >= ARRAY_SIZE(nf_loggers))
+	if (pf >= NPROTO)
 		return;
 	mutex_lock(&nf_log_mutex);
 	rcu_assign_pointer(nf_loggers[pf], NULL);
@@ -63,7 +63,7 @@ void nf_log_unregister(const struct nf_logger *logger)
 	int i;
 
 	mutex_lock(&nf_log_mutex);
-	for (i = 0; i < ARRAY_SIZE(nf_loggers); i++) {
+	for (i = 0; i < NPROTO; i++) {
 		if (nf_loggers[i] == logger)
 			rcu_assign_pointer(nf_loggers[i], NULL);
 	}
@@ -73,7 +73,7 @@ void nf_log_unregister(const struct nf_logger *logger)
 }
 EXPORT_SYMBOL(nf_log_unregister);
 
-void nf_log_packet(u_int8_t pf,
+void nf_log_packet(int pf,
 		   unsigned int hooknum,
 		   const struct sk_buff *skb,
 		   const struct net_device *in,
@@ -92,6 +92,10 @@ void nf_log_packet(u_int8_t pf,
 		vsnprintf(prefix, sizeof(prefix), fmt, args);
 		va_end(args);
 		logger->logfn(pf, hooknum, skb, in, out, loginfo, prefix);
+	} else if (net_ratelimit()) {
+		printk(KERN_WARNING "nf_log_packet: can\'t log since "
+		       "no backend logging module loaded in! Please either "
+		       "load one, or disable logging explicitly\n");
 	}
 	rcu_read_unlock();
 }
@@ -103,7 +107,7 @@ static void *seq_start(struct seq_file *seq, loff_t *pos)
 {
 	rcu_read_lock();
 
-	if (*pos >= ARRAY_SIZE(nf_loggers))
+	if (*pos >= NPROTO)
 		return NULL;
 
 	return pos;
@@ -113,7 +117,7 @@ static void *seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	(*pos)++;
 
-	if (*pos >= ARRAY_SIZE(nf_loggers))
+	if (*pos >= NPROTO)
 		return NULL;
 
 	return pos;

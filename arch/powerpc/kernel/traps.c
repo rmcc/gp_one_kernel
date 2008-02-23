@@ -23,6 +23,7 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/user.h>
+#include <linux/a.out.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -966,20 +967,6 @@ void altivec_unavailable_exception(struct pt_regs *regs)
 	die("Unrecoverable VMX/Altivec Unavailable Exception", regs, SIGABRT);
 }
 
-void vsx_unavailable_exception(struct pt_regs *regs)
-{
-	if (user_mode(regs)) {
-		/* A user program has executed an vsx instruction,
-		   but this kernel doesn't support vsx. */
-		_exception(SIGILL, regs, ILL_ILLOPC, regs->nip);
-		return;
-	}
-
-	printk(KERN_EMERG "Unrecoverable VSX Unavailable Exception "
-			"%lx at %lx\n", regs->trap, regs->nip);
-	die("Unrecoverable VSX Unavailable Exception", regs, SIGABRT);
-}
-
 void performance_monitor_exception(struct pt_regs *regs)
 {
 	perf_irq(regs);
@@ -1043,45 +1030,21 @@ void SoftwareEmulation(struct pt_regs *regs)
 
 #if defined(CONFIG_40x) || defined(CONFIG_BOOKE)
 
-void __kprobes DebugException(struct pt_regs *regs, unsigned long debug_status)
+void DebugException(struct pt_regs *regs, unsigned long debug_status)
 {
 	if (debug_status & DBSR_IC) {	/* instruction completion */
 		regs->msr &= ~MSR_DE;
-
-		/* Disable instruction completion */
-		mtspr(SPRN_DBCR0, mfspr(SPRN_DBCR0) & ~DBCR0_IC);
-		/* Clear the instruction completion event */
-		mtspr(SPRN_DBSR, DBSR_IC);
-
-		if (notify_die(DIE_SSTEP, "single_step", regs, 5,
-			       5, SIGTRAP) == NOTIFY_STOP) {
-			return;
-		}
-
-		if (debugger_sstep(regs))
-			return;
-
 		if (user_mode(regs)) {
 			current->thread.dbcr0 &= ~DBCR0_IC;
-		}
-
-		_exception(SIGTRAP, regs, TRAP_TRACE, regs->nip);
-	} else if (debug_status & (DBSR_DAC1R | DBSR_DAC1W)) {
-		regs->msr &= ~MSR_DE;
-
-		if (user_mode(regs)) {
-			current->thread.dbcr0 &= ~(DBSR_DAC1R | DBSR_DAC1W |
-								DBCR0_IDM);
 		} else {
-			/* Disable DAC interupts */
-			mtspr(SPRN_DBCR0, mfspr(SPRN_DBCR0) & ~(DBSR_DAC1R |
-						DBSR_DAC1W | DBCR0_IDM));
-
-			/* Clear the DAC event */
-			mtspr(SPRN_DBSR, (DBSR_DAC1R | DBSR_DAC1W));
+			/* Disable instruction completion */
+			mtspr(SPRN_DBCR0, mfspr(SPRN_DBCR0) & ~DBCR0_IC);
+			/* Clear the instruction completion event */
+			mtspr(SPRN_DBSR, DBSR_IC);
+			if (debugger_sstep(regs))
+				return;
 		}
-		/* Setup and send the trap to the handler */
-		do_dabr(regs, mfspr(SPRN_DAC1), debug_status);
+		_exception(SIGTRAP, regs, TRAP_TRACE, 0);
 	}
 }
 #endif /* CONFIG_4xx || CONFIG_BOOKE */
@@ -1128,21 +1091,6 @@ void altivec_assist_exception(struct pt_regs *regs)
 }
 #endif /* CONFIG_ALTIVEC */
 
-#ifdef CONFIG_VSX
-void vsx_assist_exception(struct pt_regs *regs)
-{
-	if (!user_mode(regs)) {
-		printk(KERN_EMERG "VSX assist exception in kernel mode"
-		       " at %lx\n", regs->nip);
-		die("Kernel VSX assist exception", regs, SIGILL);
-	}
-
-	flush_vsx_to_thread(current);
-	printk(KERN_INFO "VSX assist not supported at %lx\n", regs->nip);
-	_exception(SIGILL, regs, ILL_ILLOPC, regs->nip);
-}
-#endif /* CONFIG_VSX */
-
 #ifdef CONFIG_FSL_BOOKE
 void CacheLockingException(struct pt_regs *regs, unsigned long address,
 			   unsigned long error_code)
@@ -1160,84 +1108,36 @@ void CacheLockingException(struct pt_regs *regs, unsigned long address,
 #ifdef CONFIG_SPE
 void SPEFloatingPointException(struct pt_regs *regs)
 {
-	extern int do_spe_mathemu(struct pt_regs *regs);
 	unsigned long spefscr;
 	int fpexc_mode;
 	int code = 0;
-	int err;
-
-	preempt_disable();
-	if (regs->msr & MSR_SPE)
-		giveup_spe(current);
-	preempt_enable();
 
 	spefscr = current->thread.spefscr;
 	fpexc_mode = current->thread.fpexc_mode;
 
+	/* Hardware does not neccessarily set sticky
+	 * underflow/overflow/invalid flags */
 	if ((spefscr & SPEFSCR_FOVF) && (fpexc_mode & PR_FP_EXC_OVF)) {
 		code = FPE_FLTOVF;
+		spefscr |= SPEFSCR_FOVFS;
 	}
 	else if ((spefscr & SPEFSCR_FUNF) && (fpexc_mode & PR_FP_EXC_UND)) {
 		code = FPE_FLTUND;
+		spefscr |= SPEFSCR_FUNFS;
 	}
 	else if ((spefscr & SPEFSCR_FDBZ) && (fpexc_mode & PR_FP_EXC_DIV))
 		code = FPE_FLTDIV;
 	else if ((spefscr & SPEFSCR_FINV) && (fpexc_mode & PR_FP_EXC_INV)) {
 		code = FPE_FLTINV;
+		spefscr |= SPEFSCR_FINVS;
 	}
 	else if ((spefscr & (SPEFSCR_FG | SPEFSCR_FX)) && (fpexc_mode & PR_FP_EXC_RES))
 		code = FPE_FLTRES;
 
-	err = do_spe_mathemu(regs);
-	if (err == 0) {
-		regs->nip += 4;		/* skip emulated instruction */
-		emulate_single_step(regs);
-		return;
-	}
+	current->thread.spefscr = spefscr;
 
-	if (err == -EFAULT) {
-		/* got an error reading the instruction */
-		_exception(SIGSEGV, regs, SEGV_ACCERR, regs->nip);
-	} else if (err == -EINVAL) {
-		/* didn't recognize the instruction */
-		printk(KERN_ERR "unrecognized spe instruction "
-		       "in %s at %lx\n", current->comm, regs->nip);
-	} else {
-		_exception(SIGFPE, regs, code, regs->nip);
-	}
-
+	_exception(SIGFPE, regs, code, regs->nip);
 	return;
-}
-
-void SPEFloatingPointRoundException(struct pt_regs *regs)
-{
-	extern int speround_handler(struct pt_regs *regs);
-	int err;
-
-	preempt_disable();
-	if (regs->msr & MSR_SPE)
-		giveup_spe(current);
-	preempt_enable();
-
-	regs->nip -= 4;
-	err = speround_handler(regs);
-	if (err == 0) {
-		regs->nip += 4;		/* skip emulated instruction */
-		emulate_single_step(regs);
-		return;
-	}
-
-	if (err == -EFAULT) {
-		/* got an error reading the instruction */
-		_exception(SIGSEGV, regs, SEGV_ACCERR, regs->nip);
-	} else if (err == -EINVAL) {
-		/* didn't recognize the instruction */
-		printk(KERN_ERR "unrecognized spe instruction "
-		       "in %s at %lx\n", current->comm, regs->nip);
-	} else {
-		_exception(SIGFPE, regs, 0, regs->nip);
-		return;
-	}
 }
 #endif
 

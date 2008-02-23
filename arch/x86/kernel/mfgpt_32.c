@@ -33,8 +33,6 @@
 #include <linux/module.h>
 #include <asm/geode.h>
 
-#define MFGPT_DEFAULT_IRQ	7
-
 static struct mfgpt_timer_t {
 	unsigned int avail:1;
 } mfgpt_timers[MFGPT_MAX_TIMERS];
@@ -157,50 +155,30 @@ int geode_mfgpt_toggle_event(int timer, int cmp, int event, int enable)
 	wrmsr(msr, value, dummy);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(geode_mfgpt_toggle_event);
 
-int geode_mfgpt_set_irq(int timer, int cmp, int *irq, int enable)
+int geode_mfgpt_set_irq(int timer, int cmp, int irq, int enable)
 {
-	u32 zsel, lpc, dummy;
-	int shift;
+	u32 val, dummy;
+	int offset;
 
 	if (timer < 0 || timer >= MFGPT_MAX_TIMERS)
 		return -EIO;
 
-	/*
-	 * Unfortunately, MFGPTs come in pairs sharing their IRQ lines. If VSA
-	 * is using the same CMP of the timer's Siamese twin, the IRQ is set to
-	 * 2, and we mustn't use nor change it.
-	 * XXX: Likewise, 2 Linux drivers might clash if the 2nd overwrites the
-	 * IRQ of the 1st. This can only happen if forcing an IRQ, calling this
-	 * with *irq==0 is safe. Currently there _are_ no 2 drivers.
-	 */
-	rdmsr(MSR_PIC_ZSEL_LOW, zsel, dummy);
-	shift = ((cmp == MFGPT_CMP1 ? 0 : 4) + timer % 4) * 4;
-	if (((zsel >> shift) & 0xF) == 2)
-		return -EIO;
-
-	/* Choose IRQ: if none supplied, keep IRQ already set or use default */
-	if (!*irq)
-		*irq = (zsel >> shift) & 0xF;
-	if (!*irq)
-		*irq = MFGPT_DEFAULT_IRQ;
-
-	/* Can't use IRQ if it's 0 (=disabled), 2, or routed to LPC */
-	if (*irq < 1 || *irq == 2 || *irq > 15)
-		return -EIO;
-	rdmsr(MSR_PIC_IRQM_LPC, lpc, dummy);
-	if (lpc & (1 << *irq))
-		return -EIO;
-
-	/* All chosen and checked - go for it */
 	if (geode_mfgpt_toggle_event(timer, cmp, MFGPT_EVENT_IRQ, enable))
 		return -EIO;
+
+	rdmsr(MSR_PIC_ZSEL_LOW, val, dummy);
+
+	offset = (timer % 4) * 4;
+
+	val &= ~((0xF << offset) | (0xF << (offset + 16)));
+
 	if (enable) {
-		zsel = (zsel & ~(0xF << shift)) | (*irq << shift);
-		wrmsr(MSR_PIC_ZSEL_LOW, zsel, dummy);
+		val |= (irq & 0x0F) << (offset);
+		val |= (irq & 0x0F) << (offset + 16);
 	}
 
+	wrmsr(MSR_PIC_ZSEL_LOW, val, dummy);
 	return 0;
 }
 
@@ -244,7 +222,6 @@ int geode_mfgpt_alloc_timer(int timer, int domain)
 	/* No timers available - too bad */
 	return -1;
 }
-EXPORT_SYMBOL_GPL(geode_mfgpt_alloc_timer);
 
 
 #ifdef CONFIG_GEODE_MFGPT_TIMER
@@ -252,7 +229,7 @@ EXPORT_SYMBOL_GPL(geode_mfgpt_alloc_timer);
 /*
  * The MFPGT timers on the CS5536 provide us with suitable timers to use
  * as clock event sources - not as good as a HPET or APIC, but certainly
- * better than the PIT.  This isn't a general purpose MFGPT driver, but
+ * better then the PIT.  This isn't a general purpose MFGPT driver, but
  * a simplified one designed specifically to act as a clock event source.
  * For full details about the MFGPT, please consult the CS5536 data sheet.
  */
@@ -263,7 +240,7 @@ EXPORT_SYMBOL_GPL(geode_mfgpt_alloc_timer);
 static unsigned int mfgpt_tick_mode = CLOCK_EVT_MODE_SHUTDOWN;
 static u16 mfgpt_event_clock;
 
-static int irq;
+static int irq = 7;
 static int __init mfgpt_setup(char *str)
 {
 	get_option(&str, &irq);
@@ -287,7 +264,7 @@ static struct clock_event_device mfgpt_clockevent = {
 	.set_mode = mfgpt_set_mode,
 	.set_next_event = mfgpt_next_event,
 	.rating = 250,
-	.cpumask = cpu_all_mask,
+	.cpumask = CPU_MASK_ALL,
 	.shift = 32
 };
 
@@ -367,7 +344,7 @@ int __init mfgpt_timer_setup(void)
 	mfgpt_event_clock = timer;
 
 	/* Set up the IRQ on the MFGPT side */
-	if (geode_mfgpt_setup_irq(mfgpt_event_clock, MFGPT_CMP2, &irq)) {
+	if (geode_mfgpt_setup_irq(mfgpt_event_clock, MFGPT_CMP2, irq)) {
 		printk(KERN_ERR "mfgpt-timer:  Could not set up IRQ %d\n", irq);
 		return -EIO;
 	}
@@ -395,14 +372,13 @@ int __init mfgpt_timer_setup(void)
 			&mfgpt_clockevent);
 
 	printk(KERN_INFO
-	       "mfgpt-timer:  Registering MFGPT timer %d as a clock event, using IRQ %d\n",
-	       timer, irq);
+	       "mfgpt-timer:  registering the MFGPT timer as a clock event.\n");
 	clockevents_register_device(&mfgpt_clockevent);
 
 	return 0;
 
 err:
-	geode_mfgpt_release_irq(mfgpt_event_clock, MFGPT_CMP2, &irq);
+	geode_mfgpt_release_irq(mfgpt_event_clock, MFGPT_CMP2, irq);
 	printk(KERN_ERR
 	       "mfgpt-timer:  Unable to set up the MFGPT clock source\n");
 	return -EIO;

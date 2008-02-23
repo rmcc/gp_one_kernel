@@ -196,7 +196,7 @@ static void clear_irq_vector(int irq)
 }
 
 int
-ia64_native_assign_irq_vector (int irq)
+assign_irq_vector (int irq)
 {
 	unsigned long flags;
 	int vector, cpu;
@@ -222,7 +222,7 @@ ia64_native_assign_irq_vector (int irq)
 }
 
 void
-ia64_native_free_irq_vector (int vector)
+free_irq_vector (int vector)
 {
 	if (vector < IA64_FIRST_DEVICE_VECTOR ||
 	    vector > IA64_LAST_DEVICE_VECTOR)
@@ -493,13 +493,11 @@ ia64_handle_irq (ia64_vector vector, struct pt_regs *regs)
 	saved_tpr = ia64_getreg(_IA64_REG_CR_TPR);
 	ia64_srlz_d();
 	while (vector != IA64_SPURIOUS_INT_VECTOR) {
-		struct irq_desc *desc = irq_to_desc(vector);
-
 		if (unlikely(IS_LOCAL_TLB_FLUSH(vector))) {
 			smp_local_flush_tlb();
-			kstat_incr_irqs_this_cpu(vector, desc);
+			kstat_this_cpu.irqs[vector]++;
 		} else if (unlikely(IS_RESCHEDULE(vector)))
-			kstat_incr_irqs_this_cpu(vector, desc);
+			kstat_this_cpu.irqs[vector]++;
 		else {
 			int irq = local_vector_to_irq(vector);
 
@@ -553,13 +551,11 @@ void ia64_process_pending_intr(void)
 	  * Perform normal interrupt style processing
 	  */
 	while (vector != IA64_SPURIOUS_INT_VECTOR) {
-		struct irq_desc *desc = irq_to_desc(vector);
-
 		if (unlikely(IS_LOCAL_TLB_FLUSH(vector))) {
 			smp_local_flush_tlb();
-			kstat_incr_irqs_this_cpu(vector, desc);
+			kstat_this_cpu.irqs[vector]++;
 		} else if (unlikely(IS_RESCHEDULE(vector)))
-			kstat_incr_irqs_this_cpu(vector, desc);
+			kstat_this_cpu.irqs[vector]++;
 		else {
 			struct pt_regs *old_regs = set_irq_regs(NULL);
 			int irq = local_vector_to_irq(vector);
@@ -604,6 +600,7 @@ static irqreturn_t dummy_handler (int irq, void *dev_id)
 {
 	BUG();
 }
+extern irqreturn_t handle_IPI (int irq, void *dev_id);
 
 static struct irqaction ipi_irqaction = {
 	.handler =	handle_IPI,
@@ -626,7 +623,7 @@ static struct irqaction tlb_irqaction = {
 #endif
 
 void
-ia64_native_register_percpu_irq (ia64_vector vec, struct irqaction *action)
+register_percpu_irq (ia64_vector vec, struct irqaction *action)
 {
 	irq_desc_t *desc;
 	unsigned int irq;
@@ -641,21 +638,13 @@ ia64_native_register_percpu_irq (ia64_vector vec, struct irqaction *action)
 }
 
 void __init
-ia64_native_register_ipi(void)
+init_IRQ (void)
 {
+	register_percpu_irq(IA64_SPURIOUS_INT_VECTOR, NULL);
 #ifdef CONFIG_SMP
 	register_percpu_irq(IA64_IPI_VECTOR, &ipi_irqaction);
 	register_percpu_irq(IA64_IPI_RESCHEDULE, &resched_irqaction);
 	register_percpu_irq(IA64_IPI_LOCAL_TLB_FLUSH, &tlb_irqaction);
-#endif
-}
-
-void __init
-init_IRQ (void)
-{
-	ia64_register_ipi();
-	register_percpu_irq(IA64_SPURIOUS_INT_VECTOR, NULL);
-#ifdef CONFIG_SMP
 #if defined(CONFIG_IA64_GENERIC) || defined(CONFIG_IA64_DIG)
 	if (vector_domain_type != VECTOR_DOMAIN_NONE) {
 		BUG_ON(IA64_FIRST_DEVICE_VECTOR != IA64_IRQ_MOVE_VECTOR);

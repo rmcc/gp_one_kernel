@@ -30,9 +30,11 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 
+#define IN_CARD_SERVICES
 #include <pcmcia/cs_types.h>
 #include <pcmcia/ss.h>
 #include <pcmcia/cs.h>
+#include <pcmcia/bulkmem.h>
 #include <pcmcia/cistpl.h>
 #include "cs_internal.h"
 
@@ -238,7 +240,7 @@ int __ref cb_alloc(struct pcmcia_socket * s)
 	pci_bus_add_devices(bus);
 
 	s->irq.AssignedIRQ = s->pci_irq;
-	return 0;
+	return CS_SUCCESS;
 }
 
 void cb_free(struct pcmcia_socket * s)

@@ -87,7 +87,7 @@ static unsigned char *pnpbios_parse_allocated_resource_data(struct pnp_dev *dev,
 	if (!p)
 		return NULL;
 
-	pnp_dbg(&dev->dev, "parse allocated resources\n");
+	dev_dbg(&dev->dev, "parse allocated resources\n");
 
 	pnp_init_resources(dev);
 
@@ -216,116 +216,137 @@ len_err:
 
 static __init void pnpbios_parse_mem_option(struct pnp_dev *dev,
 					    unsigned char *p, int size,
-					    unsigned int option_flags)
+					    struct pnp_option *option)
 {
-	resource_size_t min, max, align, len;
-	unsigned char flags;
+	struct pnp_mem *mem;
 
-	min = ((p[5] << 8) | p[4]) << 8;
-	max = ((p[7] << 8) | p[6]) << 8;
-	align = (p[9] << 8) | p[8];
-	len = ((p[11] << 8) | p[10]) << 8;
-	flags = p[3];
-	pnp_register_mem_resource(dev, option_flags, min, max, align, len,
-				  flags);
+	mem = kzalloc(sizeof(struct pnp_mem), GFP_KERNEL);
+	if (!mem)
+		return;
+	mem->min = ((p[5] << 8) | p[4]) << 8;
+	mem->max = ((p[7] << 8) | p[6]) << 8;
+	mem->align = (p[9] << 8) | p[8];
+	mem->size = ((p[11] << 8) | p[10]) << 8;
+	mem->flags = p[3];
+	pnp_register_mem_resource(dev, option, mem);
 }
 
 static __init void pnpbios_parse_mem32_option(struct pnp_dev *dev,
 					      unsigned char *p, int size,
-					      unsigned int option_flags)
+					      struct pnp_option *option)
 {
-	resource_size_t min, max, align, len;
-	unsigned char flags;
+	struct pnp_mem *mem;
 
-	min = (p[7] << 24) | (p[6] << 16) | (p[5] << 8) | p[4];
-	max = (p[11] << 24) | (p[10] << 16) | (p[9] << 8) | p[8];
-	align = (p[15] << 24) | (p[14] << 16) | (p[13] << 8) | p[12];
-	len = (p[19] << 24) | (p[18] << 16) | (p[17] << 8) | p[16];
-	flags = p[3];
-	pnp_register_mem_resource(dev, option_flags, min, max, align, len,
-				  flags);
+	mem = kzalloc(sizeof(struct pnp_mem), GFP_KERNEL);
+	if (!mem)
+		return;
+	mem->min = (p[7] << 24) | (p[6] << 16) | (p[5] << 8) | p[4];
+	mem->max = (p[11] << 24) | (p[10] << 16) | (p[9] << 8) | p[8];
+	mem->align = (p[15] << 24) | (p[14] << 16) | (p[13] << 8) | p[12];
+	mem->size = (p[19] << 24) | (p[18] << 16) | (p[17] << 8) | p[16];
+	mem->flags = p[3];
+	pnp_register_mem_resource(dev, option, mem);
 }
 
 static __init void pnpbios_parse_fixed_mem32_option(struct pnp_dev *dev,
 						    unsigned char *p, int size,
-						    unsigned int option_flags)
+						    struct pnp_option *option)
 {
-	resource_size_t base, len;
-	unsigned char flags;
+	struct pnp_mem *mem;
 
-	base = (p[7] << 24) | (p[6] << 16) | (p[5] << 8) | p[4];
-	len = (p[11] << 24) | (p[10] << 16) | (p[9] << 8) | p[8];
-	flags = p[3];
-	pnp_register_mem_resource(dev, option_flags, base, base, 0, len, flags);
+	mem = kzalloc(sizeof(struct pnp_mem), GFP_KERNEL);
+	if (!mem)
+		return;
+	mem->min = mem->max = (p[7] << 24) | (p[6] << 16) | (p[5] << 8) | p[4];
+	mem->size = (p[11] << 24) | (p[10] << 16) | (p[9] << 8) | p[8];
+	mem->align = 0;
+	mem->flags = p[3];
+	pnp_register_mem_resource(dev, option, mem);
 }
 
 static __init void pnpbios_parse_irq_option(struct pnp_dev *dev,
 					    unsigned char *p, int size,
-					    unsigned int option_flags)
+					    struct pnp_option *option)
 {
+	struct pnp_irq *irq;
 	unsigned long bits;
-	pnp_irq_mask_t map;
-	unsigned char flags = IORESOURCE_IRQ_HIGHEDGE;
 
+	irq = kzalloc(sizeof(struct pnp_irq), GFP_KERNEL);
+	if (!irq)
+		return;
 	bits = (p[2] << 8) | p[1];
-
-	bitmap_zero(map.bits, PNP_IRQ_NR);
-	bitmap_copy(map.bits, &bits, 16);
-
+	bitmap_copy(irq->map, &bits, 16);
 	if (size > 2)
-		flags = p[3];
-
-	pnp_register_irq_resource(dev, option_flags, &map, flags);
+		irq->flags = p[3];
+	else
+		irq->flags = IORESOURCE_IRQ_HIGHEDGE;
+	pnp_register_irq_resource(dev, option, irq);
 }
 
 static __init void pnpbios_parse_dma_option(struct pnp_dev *dev,
 					    unsigned char *p, int size,
-					    unsigned int option_flags)
+					    struct pnp_option *option)
 {
-	pnp_register_dma_resource(dev, option_flags, p[1], p[2]);
+	struct pnp_dma *dma;
+
+	dma = kzalloc(sizeof(struct pnp_dma), GFP_KERNEL);
+	if (!dma)
+		return;
+	dma->map = p[1];
+	dma->flags = p[2];
+	pnp_register_dma_resource(dev, option, dma);
 }
 
 static __init void pnpbios_parse_port_option(struct pnp_dev *dev,
 					     unsigned char *p, int size,
-					     unsigned int option_flags)
+					     struct pnp_option *option)
 {
-	resource_size_t min, max, align, len;
-	unsigned char flags;
+	struct pnp_port *port;
 
-	min = (p[3] << 8) | p[2];
-	max = (p[5] << 8) | p[4];
-	align = p[6];
-	len = p[7];
-	flags = p[1] ? IORESOURCE_IO_16BIT_ADDR : 0;
-	pnp_register_port_resource(dev, option_flags, min, max, align, len,
-				   flags);
+	port = kzalloc(sizeof(struct pnp_port), GFP_KERNEL);
+	if (!port)
+		return;
+	port->min = (p[3] << 8) | p[2];
+	port->max = (p[5] << 8) | p[4];
+	port->align = p[6];
+	port->size = p[7];
+	port->flags = p[1] ? PNP_PORT_FLAG_16BITADDR : 0;
+	pnp_register_port_resource(dev, option, port);
 }
 
 static __init void pnpbios_parse_fixed_port_option(struct pnp_dev *dev,
 						   unsigned char *p, int size,
-						   unsigned int option_flags)
+						   struct pnp_option *option)
 {
-	resource_size_t base, len;
+	struct pnp_port *port;
 
-	base = (p[2] << 8) | p[1];
-	len = p[3];
-	pnp_register_port_resource(dev, option_flags, base, base, 0, len,
-				   IORESOURCE_IO_FIXED);
+	port = kzalloc(sizeof(struct pnp_port), GFP_KERNEL);
+	if (!port)
+		return;
+	port->min = port->max = (p[2] << 8) | p[1];
+	port->size = p[3];
+	port->align = 0;
+	port->flags = PNP_PORT_FLAG_FIXED;
+	pnp_register_port_resource(dev, option, port);
 }
 
 static __init unsigned char *
 pnpbios_parse_resource_option_data(unsigned char *p, unsigned char *end,
-				   struct pnp_dev *dev)
+					struct pnp_dev *dev)
 {
 	unsigned int len, tag;
-	int priority;
-	unsigned int option_flags;
+	int priority = 0;
+	struct pnp_option *option, *option_independent;
 
 	if (!p)
 		return NULL;
 
-	pnp_dbg(&dev->dev, "parse resource options\n");
-	option_flags = 0;
+	dev_dbg(&dev->dev, "parse resource options\n");
+
+	option_independent = option = pnp_register_independent_option(dev);
+	if (!option)
+		return NULL;
+
 	while ((char *)p < (char *)end) {
 
 		/* determine the type of tag */
@@ -342,38 +363,37 @@ pnpbios_parse_resource_option_data(unsigned char *p, unsigned char *end,
 		case LARGE_TAG_MEM:
 			if (len != 9)
 				goto len_err;
-			pnpbios_parse_mem_option(dev, p, len, option_flags);
+			pnpbios_parse_mem_option(dev, p, len, option);
 			break;
 
 		case LARGE_TAG_MEM32:
 			if (len != 17)
 				goto len_err;
-			pnpbios_parse_mem32_option(dev, p, len, option_flags);
+			pnpbios_parse_mem32_option(dev, p, len, option);
 			break;
 
 		case LARGE_TAG_FIXEDMEM32:
 			if (len != 9)
 				goto len_err;
-			pnpbios_parse_fixed_mem32_option(dev, p, len,
-							 option_flags);
+			pnpbios_parse_fixed_mem32_option(dev, p, len, option);
 			break;
 
 		case SMALL_TAG_IRQ:
 			if (len < 2 || len > 3)
 				goto len_err;
-			pnpbios_parse_irq_option(dev, p, len, option_flags);
+			pnpbios_parse_irq_option(dev, p, len, option);
 			break;
 
 		case SMALL_TAG_DMA:
 			if (len != 2)
 				goto len_err;
-			pnpbios_parse_dma_option(dev, p, len, option_flags);
+			pnpbios_parse_dma_option(dev, p, len, option);
 			break;
 
 		case SMALL_TAG_PORT:
 			if (len != 7)
 				goto len_err;
-			pnpbios_parse_port_option(dev, p, len, option_flags);
+			pnpbios_parse_port_option(dev, p, len, option);
 			break;
 
 		case SMALL_TAG_VENDOR:
@@ -383,23 +403,28 @@ pnpbios_parse_resource_option_data(unsigned char *p, unsigned char *end,
 		case SMALL_TAG_FIXEDPORT:
 			if (len != 3)
 				goto len_err;
-			pnpbios_parse_fixed_port_option(dev, p, len,
-							option_flags);
+			pnpbios_parse_fixed_port_option(dev, p, len, option);
 			break;
 
 		case SMALL_TAG_STARTDEP:
 			if (len > 1)
 				goto len_err;
-			priority = PNP_RES_PRIORITY_ACCEPTABLE;
+			priority = 0x100 | PNP_RES_PRIORITY_ACCEPTABLE;
 			if (len > 0)
-				priority = p[1];
-			option_flags = pnp_new_dependent_set(dev, priority);
+				priority = 0x100 | p[1];
+			option = pnp_register_dependent_option(dev, priority);
+			if (!option)
+				return NULL;
 			break;
 
 		case SMALL_TAG_ENDDEP:
 			if (len != 0)
 				goto len_err;
-			option_flags = 0;
+			if (option_independent == option)
+				dev_warn(&dev->dev, "missing "
+					 "SMALL_TAG_STARTDEP tag\n");
+			option = option_independent;
+			dev_dbg(&dev->dev, "end dependent options\n");
 			break;
 
 		case SMALL_TAG_END:
@@ -501,16 +526,8 @@ len_err:
 static void pnpbios_encode_mem(struct pnp_dev *dev, unsigned char *p,
 			       struct resource *res)
 {
-	unsigned long base;
-	unsigned long len;
-
-	if (pnp_resource_enabled(res)) {
-		base = res->start;
-		len = res->end - res->start + 1;
-	} else {
-		base = 0;
-		len = 0;
-	}
+	unsigned long base = res->start;
+	unsigned long len = res->end - res->start + 1;
 
 	p[4] = (base >> 8) & 0xff;
 	p[5] = ((base >> 8) >> 8) & 0xff;
@@ -519,22 +536,15 @@ static void pnpbios_encode_mem(struct pnp_dev *dev, unsigned char *p,
 	p[10] = (len >> 8) & 0xff;
 	p[11] = ((len >> 8) >> 8) & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode mem %#lx-%#lx\n", base, base + len - 1);
+	dev_dbg(&dev->dev, "  encode mem %#llx-%#llx\n",
+		(unsigned long long) res->start, (unsigned long long) res->end);
 }
 
 static void pnpbios_encode_mem32(struct pnp_dev *dev, unsigned char *p,
 				 struct resource *res)
 {
-	unsigned long base;
-	unsigned long len;
-
-	if (pnp_resource_enabled(res)) {
-		base = res->start;
-		len = res->end - res->start + 1;
-	} else {
-		base = 0;
-		len = 0;
-	}
+	unsigned long base = res->start;
+	unsigned long len = res->end - res->start + 1;
 
 	p[4] = base & 0xff;
 	p[5] = (base >> 8) & 0xff;
@@ -549,22 +559,15 @@ static void pnpbios_encode_mem32(struct pnp_dev *dev, unsigned char *p,
 	p[18] = (len >> 16) & 0xff;
 	p[19] = (len >> 24) & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode mem32 %#lx-%#lx\n", base, base + len - 1);
+	dev_dbg(&dev->dev, "  encode mem32 %#llx-%#llx\n",
+		(unsigned long long) res->start, (unsigned long long) res->end);
 }
 
 static void pnpbios_encode_fixed_mem32(struct pnp_dev *dev, unsigned char *p,
 				       struct resource *res)
 {
-	unsigned long base;
-	unsigned long len;
-
-	if (pnp_resource_enabled(res)) {
-		base = res->start;
-		len = res->end - res->start + 1;
-	} else {
-		base = 0;
-		len = 0;
-	}
+	unsigned long base = res->start;
+	unsigned long len = res->end - res->start + 1;
 
 	p[4] = base & 0xff;
 	p[5] = (base >> 8) & 0xff;
@@ -575,54 +578,40 @@ static void pnpbios_encode_fixed_mem32(struct pnp_dev *dev, unsigned char *p,
 	p[10] = (len >> 16) & 0xff;
 	p[11] = (len >> 24) & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode fixed_mem32 %#lx-%#lx\n", base,
-		base + len - 1);
+	dev_dbg(&dev->dev, "  encode fixed_mem32 %#llx-%#llx\n",
+		(unsigned long long) res->start, (unsigned long long) res->end);
 }
 
 static void pnpbios_encode_irq(struct pnp_dev *dev, unsigned char *p,
 			       struct resource *res)
 {
-	unsigned long map;
+	unsigned long map = 0;
 
-	if (pnp_resource_enabled(res))
-		map = 1 << res->start;
-	else
-		map = 0;
-
+	map = 1 << res->start;
 	p[1] = map & 0xff;
 	p[2] = (map >> 8) & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode irq mask %#lx\n", map);
+	dev_dbg(&dev->dev, "  encode irq %llu\n",
+		(unsigned long long)res->start);
 }
 
 static void pnpbios_encode_dma(struct pnp_dev *dev, unsigned char *p,
 			       struct resource *res)
 {
-	unsigned long map;
+	unsigned long map = 0;
 
-	if (pnp_resource_enabled(res))
-		map = 1 << res->start;
-	else
-		map = 0;
-
+	map = 1 << res->start;
 	p[1] = map & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode dma mask %#lx\n", map);
+	dev_dbg(&dev->dev, "  encode dma %llu\n",
+		(unsigned long long)res->start);
 }
 
 static void pnpbios_encode_port(struct pnp_dev *dev, unsigned char *p,
 				struct resource *res)
 {
-	unsigned long base;
-	unsigned long len;
-
-	if (pnp_resource_enabled(res)) {
-		base = res->start;
-		len = res->end - res->start + 1;
-	} else {
-		base = 0;
-		len = 0;
-	}
+	unsigned long base = res->start;
+	unsigned long len = res->end - res->start + 1;
 
 	p[2] = base & 0xff;
 	p[3] = (base >> 8) & 0xff;
@@ -630,7 +619,8 @@ static void pnpbios_encode_port(struct pnp_dev *dev, unsigned char *p,
 	p[5] = (base >> 8) & 0xff;
 	p[7] = len & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode io %#lx-%#lx\n", base, base + len - 1);
+	dev_dbg(&dev->dev, "  encode io %#llx-%#llx\n",
+		(unsigned long long) res->start, (unsigned long long) res->end);
 }
 
 static void pnpbios_encode_fixed_port(struct pnp_dev *dev, unsigned char *p,
@@ -639,20 +629,12 @@ static void pnpbios_encode_fixed_port(struct pnp_dev *dev, unsigned char *p,
 	unsigned long base = res->start;
 	unsigned long len = res->end - res->start + 1;
 
-	if (pnp_resource_enabled(res)) {
-		base = res->start;
-		len = res->end - res->start + 1;
-	} else {
-		base = 0;
-		len = 0;
-	}
-
 	p[1] = base & 0xff;
 	p[2] = (base >> 8) & 0xff;
 	p[3] = len & 0xff;
 
-	pnp_dbg(&dev->dev, "  encode fixed_io %#lx-%#lx\n", base,
-		base + len - 1);
+	dev_dbg(&dev->dev, "  encode fixed_io %#llx-%#llx\n",
+		(unsigned long long) res->start, (unsigned long long) res->end);
 }
 
 static unsigned char *pnpbios_encode_allocated_resource_data(struct pnp_dev

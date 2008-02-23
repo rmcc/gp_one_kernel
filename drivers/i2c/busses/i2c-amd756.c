@@ -1,4 +1,7 @@
 /*
+    amd756.c - Part of lm_sensors, Linux kernel modules for hardware
+              monitoring
+
     Copyright (c) 1999-2002 Merlin Hughes <merlin@merlin.org>
 
     Shamelessly ripped from i2c-piix4.c:
@@ -42,7 +45,6 @@
 #include <linux/ioport.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
-#include <linux/acpi.h>
 #include <asm/io.h>
 
 /* AMD756 SMBus address offsets */
@@ -149,17 +151,17 @@ static int amd756_transaction(struct i2c_adapter *adap)
 	}
 
 	if (temp & GS_PRERR_STS) {
-		result = -ENXIO;
+		result = -1;
 		dev_dbg(&adap->dev, "SMBus Protocol error (no response)!\n");
 	}
 
 	if (temp & GS_COL_STS) {
-		result = -EIO;
+		result = -1;
 		dev_warn(&adap->dev, "SMBus collision!\n");
 	}
 
 	if (temp & GS_TO_STS) {
-		result = -ETIMEDOUT;
+		result = -1;
 		dev_dbg(&adap->dev, "SMBus protocol timeout!\n");
 	}
 
@@ -187,18 +189,22 @@ static int amd756_transaction(struct i2c_adapter *adap)
 	outw_p(inw(SMB_GLOBAL_ENABLE) | GE_ABORT, SMB_GLOBAL_ENABLE);
 	msleep(100);
 	outw_p(GS_CLEAR_STS, SMB_GLOBAL_STATUS);
-	return -EIO;
+	return -1;
 }
 
-/* Return negative errno on error. */
+/* Return -1 on error. */
 static s32 amd756_access(struct i2c_adapter * adap, u16 addr,
 		  unsigned short flags, char read_write,
 		  u8 command, int size, union i2c_smbus_data * data)
 {
 	int i, len;
-	int status;
 
+	/** TODO: Should I supporte the 10-bit transfers? */
 	switch (size) {
+	case I2C_SMBUS_PROC_CALL:
+		dev_dbg(&adap->dev, "I2C_SMBUS_PROC_CALL not supported!\n");
+		/* TODO: Well... It is supported, I'm just not sure what to do here... */
+		return -1;
 	case I2C_SMBUS_QUICK:
 		outw_p(((addr & 0x7f) << 1) | (read_write & 0x01),
 		       SMB_HOST_ADDRESS);
@@ -245,17 +251,13 @@ static s32 amd756_access(struct i2c_adapter * adap, u16 addr,
 		}
 		size = AMD756_BLOCK_DATA;
 		break;
-	default:
-		dev_warn(&adap->dev, "Unsupported transaction %d\n", size);
-		return -EOPNOTSUPP;
 	}
 
 	/* How about enabling interrupts... */
 	outw_p(size & GE_CYC_TYPE_MASK, SMB_GLOBAL_ENABLE);
 
-	status = amd756_transaction(adap);
-	if (status)
-		return status;
+	if (amd756_transaction(adap))	/* Error in transaction */
+		return -1;
 
 	if ((read_write == I2C_SMBUS_WRITE) || (size == AMD756_QUICK))
 		return 0;
@@ -299,7 +301,7 @@ static const struct i2c_algorithm smbus_algorithm = {
 struct i2c_adapter amd756_smbus = {
 	.owner		= THIS_MODULE,
 	.id		= I2C_HW_SMBUS_AMD756,
-	.class          = I2C_CLASS_HWMON | I2C_CLASS_SPD,
+	.class          = I2C_CLASS_HWMON,
 	.algo		= &smbus_algorithm,
 };
 
@@ -332,6 +334,10 @@ static int __devinit amd756_probe(struct pci_dev *pdev,
 	int error;
 	u8 temp;
 	
+	/* driver_data might come from user-space, so check it */
+	if (id->driver_data >= ARRAY_SIZE(chipname))
+		return -EINVAL;
+
 	if (amd756_ioport) {
 		dev_err(&pdev->dev, "Only one device supported "
 		       "(you have a strange motherboard, btw)\n");
@@ -362,11 +368,6 @@ static int __devinit amd756_probe(struct pci_dev *pdev,
 		amd756_ioport += SMB_ADDR_OFFSET;
 	}
 
-	error = acpi_check_region(amd756_ioport, SMB_IOSIZE,
-				  amd756_driver.name);
-	if (error)
-		return error;
-
 	if (!request_region(amd756_ioport, SMB_IOSIZE, amd756_driver.name)) {
 		dev_err(&pdev->dev, "SMB region 0x%x already in use!\n",
 			amd756_ioport);
@@ -380,9 +381,8 @@ static int __devinit amd756_probe(struct pci_dev *pdev,
 	/* set up the sysfs linkage to our parent device */
 	amd756_smbus.dev.parent = &pdev->dev;
 
-	snprintf(amd756_smbus.name, sizeof(amd756_smbus.name),
-		 "SMBus %s adapter at %04x", chipname[id->driver_data],
-		 amd756_ioport);
+	sprintf(amd756_smbus.name, "SMBus %s adapter at %04x",
+		chipname[id->driver_data], amd756_ioport);
 
 	error = i2c_add_adapter(&amd756_smbus);
 	if (error) {
@@ -409,6 +409,7 @@ static struct pci_driver amd756_driver = {
 	.id_table	= amd756_ids,
 	.probe		= amd756_probe,
 	.remove		= __devexit_p(amd756_remove),
+	.dynids.use_driver_data = 1,
 };
 
 static int __init amd756_init(void)

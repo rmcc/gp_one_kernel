@@ -43,10 +43,6 @@ struct res_counter {
 	 * the routines below consider this to be IRQ-safe
 	 */
 	spinlock_t lock;
-	/*
-	 * Parent counter, used for hierarchial resource accounting
-	 */
-	struct res_counter *parent;
 };
 
 /**
@@ -67,14 +63,9 @@ u64 res_counter_read_u64(struct res_counter *counter, int member);
 ssize_t res_counter_read(struct res_counter *counter, int member,
 		const char __user *buf, size_t nbytes, loff_t *pos,
 		int (*read_strategy)(unsigned long long val, char *s));
-
-typedef int (*write_strategy_fn)(const char *buf, unsigned long long *val);
-
-int res_counter_memparse_write_strategy(const char *buf,
-					unsigned long long *res);
-
-int res_counter_write(struct res_counter *counter, int member,
-		      const char *buffer, write_strategy_fn write_strategy);
+ssize_t res_counter_write(struct res_counter *counter, int member,
+		const char __user *buf, size_t nbytes, loff_t *pos,
+		int (*write_strategy)(char *buf, unsigned long long *val));
 
 /*
  * the field descriptors. one for each member of res_counter
@@ -91,7 +82,7 @@ enum {
  * helpers for accounting
  */
 
-void res_counter_init(struct res_counter *counter, struct res_counter *parent);
+void res_counter_init(struct res_counter *counter);
 
 /*
  * charge - try to consume more resource.
@@ -104,10 +95,8 @@ void res_counter_init(struct res_counter *counter, struct res_counter *parent);
  * counter->limit _locked call expects the counter->lock to be taken
  */
 
-int __must_check res_counter_charge_locked(struct res_counter *counter,
-		unsigned long val);
-int __must_check res_counter_charge(struct res_counter *counter,
-		unsigned long val, struct res_counter **limit_fail_at);
+int res_counter_charge_locked(struct res_counter *counter, unsigned long val);
+int res_counter_charge(struct res_counter *counter, unsigned long val);
 
 /*
  * uncharge - tell that some portion of the resource is released
@@ -162,20 +151,4 @@ static inline void res_counter_reset_failcnt(struct res_counter *cnt)
 	cnt->failcnt = 0;
 	spin_unlock_irqrestore(&cnt->lock, flags);
 }
-
-static inline int res_counter_set_limit(struct res_counter *cnt,
-		unsigned long long limit)
-{
-	unsigned long flags;
-	int ret = -EBUSY;
-
-	spin_lock_irqsave(&cnt->lock, flags);
-	if (cnt->usage <= limit) {
-		cnt->limit = limit;
-		ret = 0;
-	}
-	spin_unlock_irqrestore(&cnt->lock, flags);
-	return ret;
-}
-
 #endif

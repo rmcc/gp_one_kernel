@@ -142,16 +142,16 @@ static struct {
 
 /***/
 
-static int pwc_video_open(struct file *file);
-static int pwc_video_close(struct file *file);
+static int pwc_video_open(struct inode *inode, struct file *file);
+static int pwc_video_close(struct inode *inode, struct file *file);
 static ssize_t pwc_video_read(struct file *file, char __user *buf,
 			  size_t count, loff_t *ppos);
 static unsigned int pwc_video_poll(struct file *file, poll_table *wait);
-static long  pwc_video_ioctl(struct file *file,
+static int  pwc_video_ioctl(struct inode *inode, struct file *file,
 			    unsigned int ioctlnr, unsigned long arg);
 static int  pwc_video_mmap(struct file *file, struct vm_area_struct *vma);
 
-static const struct v4l2_file_operations pwc_fops = {
+static const struct file_operations pwc_fops = {
 	.owner =	THIS_MODULE,
 	.open =		pwc_video_open,
 	.release =     	pwc_video_close,
@@ -159,9 +159,15 @@ static const struct v4l2_file_operations pwc_fops = {
 	.poll =		pwc_video_poll,
 	.mmap =		pwc_video_mmap,
 	.ioctl =        pwc_video_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = v4l_compat_ioctl32,
+#endif
+	.llseek =       no_llseek,
 };
 static struct video_device pwc_template = {
+	.owner =	THIS_MODULE,
 	.name =		"Philips Webcam",	/* Filled in later */
+	.type =		VID_TYPE_CAPTURE,
 	.release =	video_device_release,
 	.fops =         &pwc_fops,
 	.minor =        -1,
@@ -1042,20 +1048,19 @@ static int pwc_create_sysfs_files(struct video_device *vdev)
 	struct pwc_device *pdev = video_get_drvdata(vdev);
 	int rc;
 
-	rc = device_create_file(&vdev->dev, &dev_attr_button);
+	rc = video_device_create_file(vdev, &dev_attr_button);
 	if (rc)
 		goto err;
 	if (pdev->features & FEATURE_MOTOR_PANTILT) {
-		rc = device_create_file(&vdev->dev, &dev_attr_pan_tilt);
+		rc = video_device_create_file(vdev, &dev_attr_pan_tilt);
 		if (rc) goto err_button;
 	}
 
 	return 0;
 
 err_button:
-	device_remove_file(&vdev->dev, &dev_attr_button);
+	video_device_remove_file(vdev, &dev_attr_button);
 err:
-	PWC_ERROR("Could not create sysfs files.\n");
 	return rc;
 }
 
@@ -1063,8 +1068,8 @@ static void pwc_remove_sysfs_files(struct video_device *vdev)
 {
 	struct pwc_device *pdev = video_get_drvdata(vdev);
 	if (pdev->features & FEATURE_MOTOR_PANTILT)
-		device_remove_file(&vdev->dev, &dev_attr_pan_tilt);
-	device_remove_file(&vdev->dev, &dev_attr_button);
+		video_device_remove_file(vdev, &dev_attr_pan_tilt);
+	video_device_remove_file(vdev, &dev_attr_button);
 }
 
 #ifdef CONFIG_USB_PWC_DEBUG
@@ -1100,7 +1105,7 @@ static const char *pwc_sensor_type_to_string(unsigned int sensor_type)
 /***************************************************************************/
 /* Video4Linux functions */
 
-static int pwc_video_open(struct file *file)
+static int pwc_video_open(struct inode *inode, struct file *file)
 {
 	int i, ret;
 	struct video_device *vdev = video_devdata(file);
@@ -1108,7 +1113,7 @@ static int pwc_video_open(struct file *file)
 
 	PWC_DEBUG_OPEN(">> video_open called(vdev = 0x%p).\n", vdev);
 
-	pdev = video_get_drvdata(vdev);
+	pdev = (struct pwc_device *)vdev->priv;
 	BUG_ON(!pdev);
 	if (pdev->vopen) {
 		PWC_DEBUG_OPEN("I'm busy, someone is using the device.\n");
@@ -1220,7 +1225,7 @@ static void pwc_cleanup(struct pwc_device *pdev)
 }
 
 /* Note that all cleanup is done in the reverse order as in _open */
-static int pwc_video_close(struct file *file)
+static int pwc_video_close(struct inode *inode, struct file *file)
 {
 	struct video_device *vdev = file->private_data;
 	struct pwc_device *pdev;
@@ -1229,7 +1234,7 @@ static int pwc_video_close(struct file *file)
 	PWC_DEBUG_OPEN(">> video_close called(vdev = 0x%p).\n", vdev);
 
 	lock_kernel();
-	pdev = video_get_drvdata(vdev);
+	pdev = (struct pwc_device *)vdev->priv;
 	if (pdev->vopen == 0)
 		PWC_DEBUG_MODULE("video_close() called on closed device?\n");
 
@@ -1300,7 +1305,7 @@ static ssize_t pwc_video_read(struct file *file, char __user *buf,
 			vdev, buf, count);
 	if (vdev == NULL)
 		return -EFAULT;
-	pdev = video_get_drvdata(vdev);
+	pdev = vdev->priv;
 	if (pdev == NULL)
 		return -EFAULT;
 
@@ -1382,7 +1387,7 @@ static unsigned int pwc_video_poll(struct file *file, poll_table *wait)
 
 	if (vdev == NULL)
 		return -EFAULT;
-	pdev = video_get_drvdata(vdev);
+	pdev = vdev->priv;
 	if (pdev == NULL)
 		return -EFAULT;
 
@@ -1395,20 +1400,20 @@ static unsigned int pwc_video_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
-static long pwc_video_ioctl(struct file *file,
+static int pwc_video_ioctl(struct inode *inode, struct file *file,
 			   unsigned int cmd, unsigned long arg)
 {
 	struct video_device *vdev = file->private_data;
 	struct pwc_device *pdev;
-	long r = -ENODEV;
+	int r = -ENODEV;
 
 	if (!vdev)
 		goto out;
-	pdev = video_get_drvdata(vdev);
+	pdev = vdev->priv;
 
 	mutex_lock(&pdev->modlock);
 	if (!pdev->unplugged)
-		r = video_usercopy(file, cmd, arg, pwc_video_do_ioctl);
+		r = video_usercopy(inode, file, cmd, arg, pwc_video_do_ioctl);
 	mutex_unlock(&pdev->modlock);
 out:
 	return r;
@@ -1424,7 +1429,7 @@ static int pwc_video_mmap(struct file *file, struct vm_area_struct *vma)
 	int index;
 
 	PWC_DEBUG_MEMORY(">> %s\n", __func__);
-	pdev = video_get_drvdata(vdev);
+	pdev = vdev->priv;
 	size = vma->vm_end - vma->vm_start;
 	start = vma->vm_start;
 
@@ -1762,8 +1767,9 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 		return -ENOMEM;
 	}
 	memcpy(pdev->vdev, &pwc_template, sizeof(pwc_template));
-	pdev->vdev->parent = &(udev->dev);
+	pdev->vdev->dev = &(udev->dev);
 	strcpy(pdev->vdev->name, name);
+	pdev->vdev->owner = THIS_MODULE;
 	video_set_drvdata(pdev->vdev, pdev);
 
 	pdev->release = le16_to_cpu(udev->descriptor.bcdDevice);
@@ -1791,7 +1797,7 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 		goto err;
 	}
 	else {
-		PWC_INFO("Registered as /dev/video%d.\n", pdev->vdev->num);
+		PWC_INFO("Registered as /dev/video%d.\n", pdev->vdev->minor & 0x3F);
 	}
 
 	/* occupy slot */

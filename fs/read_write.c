@@ -31,71 +31,57 @@ const struct file_operations generic_ro_fops = {
 
 EXPORT_SYMBOL(generic_ro_fops);
 
-/**
- * generic_file_llseek_unlocked - lockless generic llseek implementation
- * @file:	file structure to seek on
- * @offset:	file offset to seek to
- * @origin:	type of seek
- *
- * Updates the file offset to the value specified by @offset and @origin.
- * Locking must be provided by the caller.
- */
-loff_t
-generic_file_llseek_unlocked(struct file *file, loff_t offset, int origin)
-{
-	struct inode *inode = file->f_mapping->host;
-
-	switch (origin) {
-	case SEEK_END:
-		offset += inode->i_size;
-		break;
-	case SEEK_CUR:
-		/*
-		 * Here we special-case the lseek(fd, 0, SEEK_CUR)
-		 * position-querying operation.  Avoid rewriting the "same"
-		 * f_pos value back to the file because a concurrent read(),
-		 * write() or lseek() might have altered it
-		 */
-		if (offset == 0)
-			return file->f_pos;
-		offset += file->f_pos;
-		break;
-	}
-
-	if (offset < 0 || offset > inode->i_sb->s_maxbytes)
-		return -EINVAL;
-
-	/* Special lock needed here? */
-	if (offset != file->f_pos) {
-		file->f_pos = offset;
-		file->f_version = 0;
-	}
-
-	return offset;
-}
-EXPORT_SYMBOL(generic_file_llseek_unlocked);
-
-/**
- * generic_file_llseek - generic llseek implementation for regular files
- * @file:	file structure to seek on
- * @offset:	file offset to seek to
- * @origin:	type of seek
- *
- * This is a generic implemenation of ->llseek useable for all normal local
- * filesystems.  It just updates the file offset to the value specified by
- * @offset and @origin under i_mutex.
- */
 loff_t generic_file_llseek(struct file *file, loff_t offset, int origin)
 {
-	loff_t rval;
+	loff_t retval;
+	struct inode *inode = file->f_mapping->host;
 
-	mutex_lock(&file->f_dentry->d_inode->i_mutex);
-	rval = generic_file_llseek_unlocked(file, offset, origin);
-	mutex_unlock(&file->f_dentry->d_inode->i_mutex);
-
-	return rval;
+	mutex_lock(&inode->i_mutex);
+	switch (origin) {
+		case SEEK_END:
+			offset += inode->i_size;
+			break;
+		case SEEK_CUR:
+			offset += file->f_pos;
+	}
+	retval = -EINVAL;
+	if (offset>=0 && offset<=inode->i_sb->s_maxbytes) {
+		if (offset != file->f_pos) {
+			file->f_pos = offset;
+			file->f_version = 0;
+		}
+		retval = offset;
+	}
+	mutex_unlock(&inode->i_mutex);
+	return retval;
 }
+
 EXPORT_SYMBOL(generic_file_llseek);
+
+loff_t remote_llseek(struct file *file, loff_t offset, int origin)
+{
+	loff_t retval;
+
+	lock_kernel();
+	switch (origin) {
+		case SEEK_END:
+			offset += i_size_read(file->f_path.dentry->d_inode);
+			break;
+		case SEEK_CUR:
+			offset += file->f_pos;
+	}
+	retval = -EINVAL;
+	if (offset>=0 && offset<=file->f_path.dentry->d_inode->i_sb->s_maxbytes) {
+		if (offset != file->f_pos) {
+			file->f_pos = offset;
+			file->f_version = 0;
+		}
+		retval = offset;
+	}
+	unlock_kernel();
+	return retval;
+}
+EXPORT_SYMBOL(remote_llseek);
 
 loff_t no_llseek(struct file *file, loff_t offset, int origin)
 {
@@ -113,10 +99,6 @@ loff_t default_llseek(struct file *file, loff_t offset, int origin)
 			offset += i_size_read(file->f_path.dentry->d_inode);
 			break;
 		case SEEK_CUR:
-			if (offset == 0) {
-				retval = file->f_pos;
-				goto out;
-			}
 			offset += file->f_pos;
 	}
 	retval = -EINVAL;
@@ -127,7 +109,6 @@ loff_t default_llseek(struct file *file, loff_t offset, int origin)
 		}
 		retval = offset;
 	}
-out:
 	unlock_kernel();
 	return retval;
 }

@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2006, 2007 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2007, 2008 Mellanox Technologies. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -91,8 +90,7 @@ static int mlx4_ib_query_device(struct ib_device *ibdev,
 	props->device_cap_flags    = IB_DEVICE_CHANGE_PHY_PORT |
 		IB_DEVICE_PORT_ACTIVE_EVENT		|
 		IB_DEVICE_SYS_IMAGE_GUID		|
-		IB_DEVICE_RC_RNR_NAK_GEN		|
-		IB_DEVICE_BLOCK_MULTICAST_LOOPBACK;
+		IB_DEVICE_RC_RNR_NAK_GEN;
 	if (dev->dev->caps.flags & MLX4_DEV_CAP_FLAG_BAD_PKEY_CNTR)
 		props->device_cap_flags |= IB_DEVICE_BAD_PKEY_CNTR;
 	if (dev->dev->caps.flags & MLX4_DEV_CAP_FLAG_BAD_QKEY_CNTR)
@@ -105,12 +103,6 @@ static int mlx4_ib_query_device(struct ib_device *ibdev,
 		props->device_cap_flags |= IB_DEVICE_UD_IP_CSUM;
 	if (dev->dev->caps.max_gso_sz)
 		props->device_cap_flags |= IB_DEVICE_UD_TSO;
-	if (dev->dev->caps.bmme_flags & MLX4_BMME_FLAG_RESERVED_LKEY)
-		props->device_cap_flags |= IB_DEVICE_LOCAL_DMA_LKEY;
-	if ((dev->dev->caps.bmme_flags & MLX4_BMME_FLAG_LOCAL_INV) &&
-	    (dev->dev->caps.bmme_flags & MLX4_BMME_FLAG_REMOTE_INV) &&
-	    (dev->dev->caps.bmme_flags & MLX4_BMME_FLAG_FAST_REG_WR))
-		props->device_cap_flags |= IB_DEVICE_MEM_MGT_EXTENSIONS;
 
 	props->vendor_id	   = be32_to_cpup((__be32 *) (out_mad->data + 36)) &
 		0xffffff;
@@ -134,7 +126,6 @@ static int mlx4_ib_query_device(struct ib_device *ibdev,
 	props->max_srq		   = dev->dev->caps.num_srqs - dev->dev->caps.reserved_srqs;
 	props->max_srq_wr	   = dev->dev->caps.max_srq_wqes - 1;
 	props->max_srq_sge	   = dev->dev->caps.max_srq_sge;
-	props->max_fast_reg_page_list_len = PAGE_SIZE / sizeof (u64);
 	props->local_ca_ack_delay  = dev->dev->caps.local_ca_ack_delay;
 	props->atomic_cap	   = dev->dev->caps.flags & MLX4_DEV_CAP_FLAG_ATOMIC ?
 		IB_ATOMIC_HCA : IB_ATOMIC_NONE;
@@ -446,9 +437,7 @@ static int mlx4_ib_dealloc_pd(struct ib_pd *pd)
 static int mlx4_ib_mcg_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
 	return mlx4_multicast_attach(to_mdev(ibqp->device)->dev,
-				     &to_mqp(ibqp)->mqp, gid->raw,
-				     !!(to_mqp(ibqp)->flags &
-					MLX4_IB_QP_BLOCK_MULTICAST_LOOPBACK));
+				     &to_mqp(ibqp)->mqp, gid->raw);
 }
 
 static int mlx4_ib_mcg_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
@@ -543,20 +532,13 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 {
 	static int mlx4_ib_version_printed;
 	struct mlx4_ib_dev *ibdev;
-	int num_ports = 0;
 	int i;
+
 
 	if (!mlx4_ib_version_printed) {
 		printk(KERN_INFO "%s", mlx4_ib_version);
 		++mlx4_ib_version_printed;
 	}
-
-	mlx4_foreach_port(i, dev, MLX4_PORT_TYPE_IB)
-		num_ports++;
-
-	/* No point in registering a device with no ports... */
-	if (num_ports == 0)
-		return NULL;
 
 	ibdev = (struct mlx4_ib_dev *) ib_alloc_device(sizeof *ibdev);
 	if (!ibdev) {
@@ -580,10 +562,8 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	strlcpy(ibdev->ib_dev.name, "mlx4_%d", IB_DEVICE_NAME_MAX);
 	ibdev->ib_dev.owner		= THIS_MODULE;
 	ibdev->ib_dev.node_type		= RDMA_NODE_IB_CA;
-	ibdev->ib_dev.local_dma_lkey	= dev->caps.reserved_lkey;
-	ibdev->num_ports		= num_ports;
-	ibdev->ib_dev.phys_port_cnt     = ibdev->num_ports;
-	ibdev->ib_dev.num_comp_vectors	= dev->caps.num_comp_vectors;
+	ibdev->ib_dev.phys_port_cnt	= dev->caps.num_ports;
+	ibdev->ib_dev.num_comp_vectors	= 1;
 	ibdev->ib_dev.dma_device	= &dev->pdev->dev;
 
 	ibdev->ib_dev.uverbs_abi_ver	= MLX4_IB_UVERBS_ABI_VERSION;
@@ -644,9 +624,6 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	ibdev->ib_dev.get_dma_mr	= mlx4_ib_get_dma_mr;
 	ibdev->ib_dev.reg_user_mr	= mlx4_ib_reg_user_mr;
 	ibdev->ib_dev.dereg_mr		= mlx4_ib_dereg_mr;
-	ibdev->ib_dev.alloc_fast_reg_mr = mlx4_ib_alloc_fast_reg_mr;
-	ibdev->ib_dev.alloc_fast_reg_page_list = mlx4_ib_alloc_fast_reg_page_list;
-	ibdev->ib_dev.free_fast_reg_page_list  = mlx4_ib_free_fast_reg_page_list;
 	ibdev->ib_dev.attach_mcast	= mlx4_ib_mcg_attach;
 	ibdev->ib_dev.detach_mcast	= mlx4_ib_mcg_detach;
 	ibdev->ib_dev.process_mad	= mlx4_ib_process_mad;
@@ -699,7 +676,7 @@ static void mlx4_ib_remove(struct mlx4_dev *dev, void *ibdev_ptr)
 	struct mlx4_ib_dev *ibdev = ibdev_ptr;
 	int p;
 
-	for (p = 1; p <= ibdev->num_ports; ++p)
+	for (p = 1; p <= dev->caps.num_ports; ++p)
 		mlx4_CLOSE_PORT(dev, p);
 
 	mlx4_ib_mad_cleanup(ibdev);
@@ -714,10 +691,6 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 			  enum mlx4_dev_event event, int port)
 {
 	struct ib_event ibev;
-	struct mlx4_ib_dev *ibdev = to_mdev((struct ib_device *) ibdev_ptr);
-
-	if (port > ibdev->num_ports)
-		return;
 
 	switch (event) {
 	case MLX4_DEV_EVENT_PORT_UP:

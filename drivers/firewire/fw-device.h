@@ -21,7 +21,6 @@
 
 #include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/idr.h>
 #include <linux/rwsem.h>
 #include <asm/atomic.h>
 
@@ -63,6 +62,7 @@ struct fw_device {
 	bool cmc;
 	struct fw_card *card;
 	struct device device;
+	struct list_head link;
 	struct list_head client_list;
 	u32 *config_rom;
 	size_t config_rom_length;
@@ -100,7 +100,6 @@ void fw_device_cdev_update(struct fw_device *device);
 void fw_device_cdev_remove(struct fw_device *device);
 
 extern struct rw_semaphore fw_device_rwsem;
-extern struct idr fw_device_idr;
 extern int fw_cdev_major;
 
 /*

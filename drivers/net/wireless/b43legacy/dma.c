@@ -393,13 +393,13 @@ dma_addr_t map_descbuffer(struct b43legacy_dmaring *ring,
 	dma_addr_t dmaaddr;
 
 	if (tx)
-		dmaaddr = ssb_dma_map_single(ring->dev->dev,
-					     buf, len,
-					     DMA_TO_DEVICE);
+		dmaaddr = dma_map_single(ring->dev->dev->dma_dev,
+					 buf, len,
+					 DMA_TO_DEVICE);
 	else
-		dmaaddr = ssb_dma_map_single(ring->dev->dev,
-					     buf, len,
-					     DMA_FROM_DEVICE);
+		dmaaddr = dma_map_single(ring->dev->dev->dma_dev,
+					 buf, len,
+					 DMA_FROM_DEVICE);
 
 	return dmaaddr;
 }
@@ -411,13 +411,13 @@ void unmap_descbuffer(struct b43legacy_dmaring *ring,
 		      int tx)
 {
 	if (tx)
-		ssb_dma_unmap_single(ring->dev->dev,
-				     addr, len,
-				     DMA_TO_DEVICE);
+		dma_unmap_single(ring->dev->dev->dma_dev,
+				 addr, len,
+				 DMA_TO_DEVICE);
 	else
-		ssb_dma_unmap_single(ring->dev->dev,
-				     addr, len,
-				     DMA_FROM_DEVICE);
+		dma_unmap_single(ring->dev->dev->dma_dev,
+				 addr, len,
+				 DMA_FROM_DEVICE);
 }
 
 static inline
@@ -427,8 +427,8 @@ void sync_descbuffer_for_cpu(struct b43legacy_dmaring *ring,
 {
 	B43legacy_WARN_ON(ring->tx);
 
-	ssb_dma_sync_single_for_cpu(ring->dev->dev,
-				    addr, len, DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(ring->dev->dev->dma_dev,
+				addr, len, DMA_FROM_DEVICE);
 }
 
 static inline
@@ -438,8 +438,8 @@ void sync_descbuffer_for_device(struct b43legacy_dmaring *ring,
 {
 	B43legacy_WARN_ON(ring->tx);
 
-	ssb_dma_sync_single_for_device(ring->dev->dev,
-				       addr, len, DMA_FROM_DEVICE);
+	dma_sync_single_for_device(ring->dev->dev->dma_dev,
+				   addr, len, DMA_FROM_DEVICE);
 }
 
 static inline
@@ -458,11 +458,10 @@ void free_descriptor_buffer(struct b43legacy_dmaring *ring,
 
 static int alloc_ringmemory(struct b43legacy_dmaring *ring)
 {
-	/* GFP flags must match the flags in free_ringmemory()! */
-	ring->descbase = ssb_dma_alloc_consistent(ring->dev->dev,
-						  B43legacy_DMA_RINGMEMSIZE,
-						  &(ring->dmabase),
-						  GFP_KERNEL);
+	struct device *dma_dev = ring->dev->dev->dma_dev;
+
+	ring->descbase = dma_alloc_coherent(dma_dev, B43legacy_DMA_RINGMEMSIZE,
+					    &(ring->dmabase), GFP_KERNEL);
 	if (!ring->descbase) {
 		b43legacyerr(ring->dev->wl, "DMA ringmemory allocation"
 			     " failed\n");
@@ -475,8 +474,10 @@ static int alloc_ringmemory(struct b43legacy_dmaring *ring)
 
 static void free_ringmemory(struct b43legacy_dmaring *ring)
 {
-	ssb_dma_free_consistent(ring->dev->dev, B43legacy_DMA_RINGMEMSIZE,
-				ring->descbase, ring->dmabase, GFP_KERNEL);
+	struct device *dma_dev = ring->dev->dev->dma_dev;
+
+	dma_free_coherent(dma_dev, B43legacy_DMA_RINGMEMSIZE,
+			  ring->descbase, ring->dmabase);
 }
 
 /* Reset the RX DMA channel */
@@ -588,7 +589,7 @@ static bool b43legacy_dma_mapping_error(struct b43legacy_dmaring *ring,
 					 size_t buffersize,
 					 bool dma_to_device)
 {
-	if (unlikely(ssb_dma_mapping_error(ring->dev->dev, addr)))
+	if (unlikely(dma_mapping_error(addr)))
 		return 1;
 
 	switch (ring->type) {
@@ -859,18 +860,6 @@ static u64 supported_dma_mask(struct b43legacy_wldev *dev)
 	return DMA_30BIT_MASK;
 }
 
-static enum b43legacy_dmatype dma_mask_to_engine_type(u64 dmamask)
-{
-	if (dmamask == DMA_30BIT_MASK)
-		return B43legacy_DMA_30BIT;
-	if (dmamask == DMA_32BIT_MASK)
-		return B43legacy_DMA_32BIT;
-	if (dmamask == DMA_64BIT_MASK)
-		return B43legacy_DMA_64BIT;
-	B43legacy_WARN_ON(1);
-	return B43legacy_DMA_30BIT;
-}
-
 /* Main initialization function. */
 static
 struct b43legacy_dmaring *b43legacy_setup_dmaring(struct b43legacy_wldev *dev,
@@ -887,7 +876,6 @@ struct b43legacy_dmaring *b43legacy_setup_dmaring(struct b43legacy_wldev *dev,
 	if (!ring)
 		goto out;
 	ring->type = type;
-	ring->dev = dev;
 
 	nr_slots = B43legacy_RXRING_SLOTS;
 	if (for_tx)
@@ -905,9 +893,9 @@ struct b43legacy_dmaring *b43legacy_setup_dmaring(struct b43legacy_wldev *dev,
 			goto err_kfree_meta;
 
 		/* test for ability to dma to txhdr_cache */
-		dma_test = ssb_dma_map_single(dev->dev, ring->txhdr_cache,
-					      sizeof(struct b43legacy_txhdr_fw3),
-					      DMA_TO_DEVICE);
+		dma_test = dma_map_single(dev->dev->dma_dev, ring->txhdr_cache,
+					  sizeof(struct b43legacy_txhdr_fw3),
+					  DMA_TO_DEVICE);
 
 		if (b43legacy_dma_mapping_error(ring, dma_test,
 					sizeof(struct b43legacy_txhdr_fw3), 1)) {
@@ -919,7 +907,7 @@ struct b43legacy_dmaring *b43legacy_setup_dmaring(struct b43legacy_wldev *dev,
 			if (!ring->txhdr_cache)
 				goto err_kfree_meta;
 
-			dma_test = ssb_dma_map_single(dev->dev,
+			dma_test = dma_map_single(dev->dev->dma_dev,
 					ring->txhdr_cache,
 					sizeof(struct b43legacy_txhdr_fw3),
 					DMA_TO_DEVICE);
@@ -929,11 +917,12 @@ struct b43legacy_dmaring *b43legacy_setup_dmaring(struct b43legacy_wldev *dev,
 				goto err_kfree_txhdr_cache;
 		}
 
-		ssb_dma_unmap_single(dev->dev, dma_test,
-				     sizeof(struct b43legacy_txhdr_fw3),
-				     DMA_TO_DEVICE);
+		dma_unmap_single(dev->dev->dma_dev,
+				 dma_test, sizeof(struct b43legacy_txhdr_fw3),
+				 DMA_TO_DEVICE);
 	}
 
+	ring->dev = dev;
 	ring->nr_slots = nr_slots;
 	ring->mmio_base = b43legacy_dmacontroller_base(type, controller_index);
 	ring->index = controller_index;
@@ -1030,43 +1019,6 @@ void b43legacy_dma_free(struct b43legacy_wldev *dev)
 	dma->tx_ring0 = NULL;
 }
 
-static int b43legacy_dma_set_mask(struct b43legacy_wldev *dev, u64 mask)
-{
-	u64 orig_mask = mask;
-	bool fallback = 0;
-	int err;
-
-	/* Try to set the DMA mask. If it fails, try falling back to a
-	 * lower mask, as we can always also support a lower one. */
-	while (1) {
-		err = ssb_dma_set_mask(dev->dev, mask);
-		if (!err)
-			break;
-		if (mask == DMA_64BIT_MASK) {
-			mask = DMA_32BIT_MASK;
-			fallback = 1;
-			continue;
-		}
-		if (mask == DMA_32BIT_MASK) {
-			mask = DMA_30BIT_MASK;
-			fallback = 1;
-			continue;
-		}
-		b43legacyerr(dev->wl, "The machine/kernel does not support "
-		       "the required %u-bit DMA mask\n",
-		       (unsigned int)dma_mask_to_engine_type(orig_mask));
-		return -EOPNOTSUPP;
-	}
-	if (fallback) {
-		b43legacyinfo(dev->wl, "DMA mask fallback from %u-bit to %u-"
-			"bit\n",
-			(unsigned int)dma_mask_to_engine_type(orig_mask),
-			(unsigned int)dma_mask_to_engine_type(mask));
-	}
-
-	return 0;
-}
-
 int b43legacy_dma_init(struct b43legacy_wldev *dev)
 {
 	struct b43legacy_dma *dma = &dev->dma;
@@ -1076,8 +1028,21 @@ int b43legacy_dma_init(struct b43legacy_wldev *dev)
 	enum b43legacy_dmatype type;
 
 	dmamask = supported_dma_mask(dev);
-	type = dma_mask_to_engine_type(dmamask);
-	err = b43legacy_dma_set_mask(dev, dmamask);
+	switch (dmamask) {
+	default:
+		B43legacy_WARN_ON(1);
+	case DMA_30BIT_MASK:
+		type = B43legacy_DMA_30BIT;
+		break;
+	case DMA_32BIT_MASK:
+		type = B43legacy_DMA_32BIT;
+		break;
+	case DMA_64BIT_MASK:
+		type = B43legacy_DMA_64BIT;
+		break;
+	}
+
+	err = ssb_dma_set_mask(dev->dev, dmamask);
 	if (err) {
 #ifdef CONFIG_B43LEGACY_PIO
 		b43legacywarn(dev->wl, "DMA for this device not supported. "
@@ -1240,10 +1205,10 @@ struct b43legacy_dmaring *parse_cookie(struct b43legacy_wldev *dev,
 }
 
 static int dma_tx_fragment(struct b43legacy_dmaring *ring,
-			    struct sk_buff *skb)
+			    struct sk_buff *skb,
+			    struct ieee80211_tx_control *ctl)
 {
 	const struct b43legacy_dma_ops *ops = ring->ops;
-	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	u8 *header;
 	int slot, old_top_slot, old_used_slots;
 	int err;
@@ -1266,7 +1231,7 @@ static int dma_tx_fragment(struct b43legacy_dmaring *ring,
 	header = &(ring->txhdr_cache[slot * sizeof(
 			       struct b43legacy_txhdr_fw3)]);
 	err = b43legacy_generate_txhdr(ring->dev, header,
-				 skb->data, skb->len, info,
+				 skb->data, skb->len, ctl,
 				 generate_cookie(ring, slot));
 	if (unlikely(err)) {
 		ring->current_slot = old_top_slot;
@@ -1290,6 +1255,7 @@ static int dma_tx_fragment(struct b43legacy_dmaring *ring,
 	desc = ops->idx2desc(ring, slot, &meta);
 	memset(meta, 0, sizeof(*meta));
 
+	memcpy(&meta->txstat.control, ctl, sizeof(*ctl));
 	meta->skb = skb;
 	meta->is_last_fragment = 1;
 
@@ -1357,13 +1323,14 @@ int should_inject_overflow(struct b43legacy_dmaring *ring)
 }
 
 int b43legacy_dma_tx(struct b43legacy_wldev *dev,
-		     struct sk_buff *skb)
+		     struct sk_buff *skb,
+		     struct ieee80211_tx_control *ctl)
 {
 	struct b43legacy_dmaring *ring;
 	int err = 0;
 	unsigned long flags;
 
-	ring = priority_to_txring(dev, skb_get_queue_mapping(skb));
+	ring = priority_to_txring(dev, ctl->queue);
 	spin_lock_irqsave(&ring->lock, flags);
 	B43legacy_WARN_ON(!ring->tx);
 	if (unlikely(free_slots(ring) < SLOTS_PER_PACKET)) {
@@ -1376,7 +1343,7 @@ int b43legacy_dma_tx(struct b43legacy_wldev *dev,
 	 * That would be a mac80211 bug. */
 	B43legacy_BUG_ON(ring->stopped);
 
-	err = dma_tx_fragment(ring, skb);
+	err = dma_tx_fragment(ring, skb, ctl);
 	if (unlikely(err == -ENOKEY)) {
 		/* Drop this packet, as we don't have the encryption key
 		 * anymore and must not transmit it unencrypted. */
@@ -1411,7 +1378,6 @@ void b43legacy_dma_handle_txstatus(struct b43legacy_wldev *dev,
 	struct b43legacy_dmaring *ring;
 	struct b43legacy_dmadesc_generic *desc;
 	struct b43legacy_dmadesc_meta *meta;
-	int retry_limit;
 	int slot;
 
 	ring = parse_cookie(dev, status->cookie, &slot);
@@ -1435,46 +1401,26 @@ void b43legacy_dma_handle_txstatus(struct b43legacy_wldev *dev,
 					 1);
 
 		if (meta->is_last_fragment) {
-			struct ieee80211_tx_info *info;
-			BUG_ON(!meta->skb);
-			info = IEEE80211_SKB_CB(meta->skb);
-
-			/* preserve the confiured retry limit before clearing the status
-			 * The xmit function has overwritten the rc's value with the actual
-			 * retry limit done by the hardware */
-			retry_limit = info->status.rates[0].count;
-			ieee80211_tx_info_clear_status(info);
-
-			if (status->acked)
-				info->flags |= IEEE80211_TX_STAT_ACK;
-
-			if (status->rts_count > dev->wl->hw->conf.short_frame_max_tx_count) {
-				/*
-				 * If the short retries (RTS, not data frame) have exceeded
-				 * the limit, the hw will not have tried the selected rate,
-				 * but will have used the fallback rate instead.
-				 * Don't let the rate control count attempts for the selected
-				 * rate in this case, otherwise the statistics will be off.
-				 */
-				info->status.rates[0].count = 0;
-				info->status.rates[1].count = status->frame_count;
-			} else {
-				if (status->frame_count > retry_limit) {
-					info->status.rates[0].count = retry_limit;
-					info->status.rates[1].count = status->frame_count -
-							retry_limit;
-
-				} else {
-					info->status.rates[0].count = status->frame_count;
-					info->status.rates[1].idx = -1;
-				}
-			}
-
+			B43legacy_WARN_ON(!meta->skb);
 			/* Call back to inform the ieee80211 subsystem about the
 			 * status of the transmission.
 			 * Some fields of txstat are already filled in dma_tx().
 			 */
-			ieee80211_tx_status_irqsafe(dev->wl->hw, meta->skb);
+			if (status->acked) {
+				meta->txstat.flags |= IEEE80211_TX_STATUS_ACK;
+			} else {
+				if (!(meta->txstat.control.flags
+				      & IEEE80211_TXCTL_NO_ACK))
+					 meta->txstat.excessive_retries = 1;
+			}
+			if (status->frame_count == 0) {
+				/* The frame was not transmitted at all. */
+				meta->txstat.retry_count = 0;
+			} else
+				meta->txstat.retry_count = status->frame_count
+							   - 1;
+			ieee80211_tx_status_irqsafe(dev->wl->hw, meta->skb,
+						    &(meta->txstat));
 			/* skb is freed by ieee80211_tx_status_irqsafe() */
 			meta->skb = NULL;
 		} else {
@@ -1509,16 +1455,18 @@ void b43legacy_dma_get_tx_stats(struct b43legacy_wldev *dev,
 {
 	const int nr_queues = dev->wl->hw->queues;
 	struct b43legacy_dmaring *ring;
+	struct ieee80211_tx_queue_stats_data *data;
 	unsigned long flags;
 	int i;
 
 	for (i = 0; i < nr_queues; i++) {
+		data = &(stats->data[i]);
 		ring = priority_to_txring(dev, i);
 
 		spin_lock_irqsave(&ring->lock, flags);
-		stats[i].len = ring->used_slots / SLOTS_PER_PACKET;
-		stats[i].limit = ring->nr_slots / SLOTS_PER_PACKET;
-		stats[i].count = ring->nr_tx_packets;
+		data->len = ring->used_slots / SLOTS_PER_PACKET;
+		data->limit = ring->nr_slots / SLOTS_PER_PACKET;
+		data->count = ring->nr_tx_packets;
 		spin_unlock_irqrestore(&ring->lock, flags);
 	}
 }

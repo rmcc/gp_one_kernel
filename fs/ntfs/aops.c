@@ -1194,7 +1194,7 @@ lock_retry_remap:
 		tbh = bhs[i];
 		if (!tbh)
 			continue;
-		if (!trylock_buffer(tbh))
+		if (unlikely(test_set_buffer_locked(tbh)))
 			BUG();
 		/* The buffer dirty state is now irrelevant, just clean it. */
 		clear_buffer_dirty(tbh);

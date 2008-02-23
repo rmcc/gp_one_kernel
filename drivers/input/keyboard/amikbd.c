@@ -1,4 +1,6 @@
 /*
+ * $Id: amikbd.c,v 1.13 2002/02/01 16:02:24 vojtech Exp $
+ *
  *  Copyright (c) 2000-2001 Vojtech Pavlik
  *
  *  Based on the work of:

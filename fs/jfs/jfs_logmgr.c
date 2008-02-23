@@ -69,7 +69,6 @@
 #include <linux/freezer.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
-#include <linux/seq_file.h>
 #include "jfs_incore.h"
 #include "jfs_filsys.h"
 #include "jfs_metapage.h"
@@ -1168,7 +1167,7 @@ journal_found:
 	bd_release(bdev);
 
       close:		/* close external log device */
-	blkdev_put(bdev, FMODE_READ|FMODE_WRITE);
+	blkdev_put(bdev);
 
       free:		/* free log descriptor */
 	mutex_unlock(&jfs_log_mutex);
@@ -1514,7 +1513,7 @@ int lmLogClose(struct super_block *sb)
 	rc = lmLogShutdown(log);
 
 	bd_release(bdev);
-	blkdev_put(bdev, FMODE_READ|FMODE_WRITE);
+	blkdev_put(bdev);
 
 	kfree(log);
 
@@ -2504,9 +2503,13 @@ exit:
 }
 
 #ifdef CONFIG_JFS_STATISTICS
-static int jfs_lmstats_proc_show(struct seq_file *m, void *v)
+int jfs_lmstats_read(char *buffer, char **start, off_t offset, int length,
+		      int *eof, void *data)
 {
-	seq_printf(m,
+	int len = 0;
+	off_t begin;
+
+	len += sprintf(buffer,
 		       "JFS Logmgr stats\n"
 		       "================\n"
 		       "commits = %d\n"
@@ -2519,19 +2522,19 @@ static int jfs_lmstats_proc_show(struct seq_file *m, void *v)
 		       lmStat.pagedone,
 		       lmStat.full_page,
 		       lmStat.partial_page);
-	return 0;
-}
 
-static int jfs_lmstats_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, jfs_lmstats_proc_show, NULL);
-}
+	begin = offset;
+	*start = buffer + begin;
+	len -= begin;
 
-const struct file_operations jfs_lmstats_proc_fops = {
-	.owner		= THIS_MODULE,
-	.open		= jfs_lmstats_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
+	if (len > length)
+		len = length;
+	else
+		*eof = 1;
+
+	if (len < 0)
+		len = 0;
+
+	return len;
+}
 #endif /* CONFIG_JFS_STATISTICS */

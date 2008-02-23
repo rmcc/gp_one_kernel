@@ -119,8 +119,6 @@ static const struct cpm_pin mpc8560_ads_pins[] = {
 	{3, 31, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
 
 	/* SCC2 */
-	{2, 12, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
-	{2, 13, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
 	{3, 26, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
 	{3, 27, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
 	{3, 28, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
@@ -147,6 +145,7 @@ static const struct cpm_pin mpc8560_ads_pins[] = {
 	{1, 4, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
 	{1, 5, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
 	{1, 6, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
+	{1, 7, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
 	{1, 8, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
 	{1, 9, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
 	{1, 10, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
@@ -157,9 +156,8 @@ static const struct cpm_pin mpc8560_ads_pins[] = {
 	{1, 15, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
 	{1, 16, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
 	{1, 17, CPM_PIN_INPUT | CPM_PIN_PRIMARY},
-	{2, 16, CPM_PIN_INPUT | CPM_PIN_PRIMARY}, /* CLK16 */
-	{2, 17, CPM_PIN_INPUT | CPM_PIN_PRIMARY}, /* CLK15 */
-	{2, 27, CPM_PIN_OUTPUT | CPM_PIN_PRIMARY},
+	{2, 16, CPM_PIN_INPUT | CPM_PIN_SECONDARY}, /* CLK16 */
+	{2, 17, CPM_PIN_INPUT | CPM_PIN_SECONDARY}, /* CLK15 */
 };
 
 static void __init init_ioports(void)
@@ -207,17 +205,22 @@ static void __init mpc85xx_ads_setup_arch(void)
 static void mpc85xx_ads_show_cpuinfo(struct seq_file *m)
 {
 	uint pvid, svid, phid1;
+	uint memsize = total_memory;
 
 	pvid = mfspr(SPRN_PVR);
 	svid = mfspr(SPRN_SVR);
 
 	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
+	seq_printf(m, "Machine\t\t: mpc85xx\n");
 	seq_printf(m, "PVR\t\t: 0x%x\n", pvid);
 	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
 
 	/* Display cpu Pll setting */
 	phid1 = mfspr(SPRN_HID1);
 	seq_printf(m, "PLL setting\t: 0x%x\n", ((phid1 >> 24) & 0x3f));
+
+	/* Display the amount of memory */
+	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
 }
 
 static struct of_device_id __initdata of_bus_ids[] = {
@@ -225,7 +228,6 @@ static struct of_device_id __initdata of_bus_ids[] = {
 	{ .type = "soc", },
 	{ .name = "cpm", },
 	{ .name = "localbus", },
-	{ .compatible = "simple-bus", },
 	{},
 };
 

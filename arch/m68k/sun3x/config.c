@@ -8,7 +8,6 @@
 
 #include <linux/types.h>
 #include <linux/mm.h>
-#include <linux/seq_file.h>
 #include <linux/console.h>
 #include <linux/init.h>
 
@@ -23,6 +22,7 @@
 #include "time.h"
 
 volatile char *clock_va;
+extern volatile unsigned char *sun3_intreg;
 
 extern void sun3_get_model(char *model);
 
@@ -31,9 +31,16 @@ void sun3_leds(unsigned int i)
 
 }
 
-static void sun3x_get_hardware_list(struct seq_file *m)
+static int sun3x_get_hardware_list(char *buffer)
 {
-	seq_printf(m, "PROM Revision:\t%s\n", romvec->pv_monid);
+
+	int len = 0;
+
+	len += sprintf(buffer + len, "PROM Revision:\t%s\n",
+		       romvec->pv_monid);
+
+	return len;
+
 }
 
 /*

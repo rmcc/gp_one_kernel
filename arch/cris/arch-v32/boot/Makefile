@@ -2,6 +2,7 @@
 # arch/cris/arch-v32/boot/Makefile
 #
 
+OBJCOPY = objcopy-cris
 OBJCOPYFLAGS = -O binary -R .note -R .comment
 
 subdir- := compressed rescue

@@ -14,6 +14,14 @@
 #include <asm/pat.h>
 #include "mtrr.h"
 
+struct mtrr_state {
+	struct mtrr_var_range var_ranges[MAX_VAR_RANGES];
+	mtrr_type fixed_ranges[NUM_FIXED_RANGES];
+	unsigned char enabled;
+	unsigned char have_fixed;
+	mtrr_type def_type;
+};
+
 struct fixed_range_block {
 	int base_msr; /* start address of an MTRR block */
 	int ranges;   /* number of MTRRs in this block  */
@@ -27,11 +35,9 @@ static struct fixed_range_block fixed_range_blocks[] = {
 };
 
 static unsigned long smp_changes_mask;
+static struct mtrr_state mtrr_state = {};
 static int mtrr_state_set;
-u64 mtrr_tom2;
-
-struct mtrr_state_type mtrr_state = {};
-EXPORT_SYMBOL_GPL(mtrr_state);
+static u64 tom2;
 
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "mtrr."
@@ -133,8 +139,8 @@ u8 mtrr_type_lookup(u64 start, u64 end)
 		}
 	}
 
-	if (mtrr_tom2) {
-		if (start >= (1ULL<<32) && (end < mtrr_tom2))
+	if (tom2) {
+		if (start >= (1ULL<<32) && (end < tom2))
 			return MTRR_TYPE_WRBACK;
 	}
 
@@ -150,20 +156,6 @@ get_mtrr_var_range(unsigned int index, struct mtrr_var_range *vr)
 {
 	rdmsr(MTRRphysBase_MSR(index), vr->base_lo, vr->base_hi);
 	rdmsr(MTRRphysMask_MSR(index), vr->mask_lo, vr->mask_hi);
-}
-
-/*  fill the MSR pair relating to a var range  */
-void fill_mtrr_var_range(unsigned int index,
-		u32 base_lo, u32 base_hi, u32 mask_lo, u32 mask_hi)
-{
-	struct mtrr_var_range *vr;
-
-	vr = mtrr_state.var_ranges;
-
-	vr[index].base_lo = base_lo;
-	vr[index].base_hi = base_hi;
-	vr[index].mask_lo = mask_lo;
-	vr[index].mask_hi = mask_hi;
 }
 
 static void
@@ -221,13 +213,13 @@ void __init get_mtrr_state(void)
 	mtrr_state.enabled = (lo & 0xc00) >> 10;
 
 	if (amd_special_default_mtrr()) {
-		unsigned low, high;
+		unsigned lo, hi;
 		/* TOP_MEM2 */
-		rdmsr(MSR_K8_TOP_MEM2, low, high);
-		mtrr_tom2 = high;
-		mtrr_tom2 <<= 32;
-		mtrr_tom2 |= low;
-		mtrr_tom2 &= 0xffffff800000ULL;
+		rdmsr(MSR_K8_TOP_MEM2, lo, hi);
+		tom2 = hi;
+		tom2 <<= 32;
+		tom2 |= lo;
+		tom2 &= 0xffffff8000000ULL;
 	}
 	if (mtrr_show) {
 		int high_width;
@@ -259,9 +251,9 @@ void __init get_mtrr_state(void)
 			else
 				printk(KERN_INFO "MTRR %u disabled\n", i);
 		}
-		if (mtrr_tom2) {
+		if (tom2) {
 			printk(KERN_INFO "TOM2: %016llx aka %lldM\n",
-					  mtrr_tom2, mtrr_tom2>>20);
+					  tom2, tom2>>20);
 		}
 	}
 	mtrr_state_set = 1;
@@ -336,7 +328,7 @@ static void set_fixed_range(int msr, bool *changed, unsigned int *msrwords)
 
 	if (lo != msrwords[0] || hi != msrwords[1]) {
 		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
-		    (boot_cpu_data.x86 >= 0x0f && boot_cpu_data.x86 <= 0x11) &&
+		    boot_cpu_data.x86 == 15 &&
 		    ((msrwords[0] | msrwords[1]) & K8_MTRR_RDMEM_WRMEM_MASK))
 			k8_enable_fixed_iorrs();
 		mtrr_wrmsr(msr, msrwords[0], msrwords[1]);
@@ -373,7 +365,6 @@ static void generic_get_mtrr(unsigned int reg, unsigned long *base,
 			     unsigned long *size, mtrr_type *type)
 {
 	unsigned int mask_lo, mask_hi, base_lo, base_hi;
-	unsigned int tmp, hi;
 
 	rdmsr(MTRRphysMask_MSR(reg), mask_lo, mask_hi);
 	if ((mask_lo & 0x800) == 0) {
@@ -387,18 +378,8 @@ static void generic_get_mtrr(unsigned int reg, unsigned long *base,
 	rdmsr(MTRRphysBase_MSR(reg), base_lo, base_hi);
 
 	/* Work out the shifted address mask. */
-	tmp = mask_hi << (32 - PAGE_SHIFT) | mask_lo >> PAGE_SHIFT;
-	mask_lo = size_or_mask | tmp;
-	/* Expand tmp with high bits to all 1s*/
-	hi = fls(tmp);
-	if (hi > 0) {
-		tmp |= ~((1<<(hi - 1)) - 1);
-
-		if (tmp != mask_lo) {
-			WARN_ONCE(1, KERN_INFO "mtrr: your BIOS has set up an incorrect mask, fixing it up.\n");
-			mask_lo = tmp;
-		}
-	}
+	mask_lo = size_or_mask | mask_hi << (32 - PAGE_SHIFT)
+	    | mask_lo >> PAGE_SHIFT;
 
 	/* This works correctly if size is a power of two, i.e. a
 	   contiguous range. */

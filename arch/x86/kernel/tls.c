@@ -10,7 +10,6 @@
 #include <asm/ldt.h>
 #include <asm/processor.h>
 #include <asm/proto.h>
-#include <asm/syscalls.h>
 
 #include "tls.h"
 

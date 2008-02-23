@@ -531,7 +531,9 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 	if (!n)
 		goto out;
 
-	write_pnet(&n->net, hold_net(net));
+#ifdef CONFIG_NET_NS
+	n->net = hold_net(net);
+#endif
 	memcpy(n->key, pkey, key_len);
 	n->dev = dev;
 	if (dev)
@@ -925,9 +927,9 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 			if (skb_queue_len(&neigh->arp_queue) >=
 			    neigh->parms->queue_len) {
 				struct sk_buff *buff;
-				buff = __skb_dequeue(&neigh->arp_queue);
+				buff = neigh->arp_queue.next;
+				__skb_unlink(buff, &neigh->arp_queue);
 				kfree_skb(buff);
-				NEIGH_CACHE_STAT_INC(neigh->tbl, unres_discards);
 			}
 			__skb_queue_tail(&neigh->arp_queue, skb);
 		}
@@ -1256,20 +1258,24 @@ static void neigh_proxy_process(unsigned long arg)
 	struct neigh_table *tbl = (struct neigh_table *)arg;
 	long sched_next = 0;
 	unsigned long now = jiffies;
-	struct sk_buff *skb, *n;
+	struct sk_buff *skb;
 
 	spin_lock(&tbl->proxy_queue.lock);
 
-	skb_queue_walk_safe(&tbl->proxy_queue, skb, n) {
-		long tdif = NEIGH_CB(skb)->sched_next - now;
+	skb = tbl->proxy_queue.next;
 
+	while (skb != (struct sk_buff *)&tbl->proxy_queue) {
+		struct sk_buff *back = skb;
+		long tdif = NEIGH_CB(back)->sched_next - now;
+
+		skb = skb->next;
 		if (tdif <= 0) {
-			struct net_device *dev = skb->dev;
-			__skb_unlink(skb, &tbl->proxy_queue);
+			struct net_device *dev = back->dev;
+			__skb_unlink(back, &tbl->proxy_queue);
 			if (tbl->proxy_redo && netif_running(dev))
-				tbl->proxy_redo(skb);
+				tbl->proxy_redo(back);
 			else
-				kfree_skb(skb);
+				kfree_skb(back);
 
 			dev_put(dev);
 		} else if (!sched_next || tdif < sched_next)
@@ -1327,9 +1333,9 @@ struct neigh_parms *neigh_parms_alloc(struct net_device *dev,
 				      struct neigh_table *tbl)
 {
 	struct neigh_parms *p, *ref;
-	struct net *net = dev_net(dev);
-	const struct net_device_ops *ops = dev->netdev_ops;
+	struct net *net;
 
+	net = dev_net(dev);
 	ref = lookup_neigh_params(tbl, net, 0);
 	if (!ref)
 		return NULL;
@@ -1338,17 +1344,20 @@ struct neigh_parms *neigh_parms_alloc(struct net_device *dev,
 	if (p) {
 		p->tbl		  = tbl;
 		atomic_set(&p->refcnt, 1);
+		INIT_RCU_HEAD(&p->rcu_head);
 		p->reachable_time =
 				neigh_rand_reach_time(p->base_reachable_time);
 
-		if (ops->ndo_neigh_setup && ops->ndo_neigh_setup(dev, p)) {
+		if (dev->neigh_setup && dev->neigh_setup(dev, p)) {
 			kfree(p);
 			return NULL;
 		}
 
 		dev_hold(dev);
 		p->dev = dev;
-		write_pnet(&p->net, hold_net(net));
+#ifdef CONFIG_NET_NS
+		p->net = hold_net(net);
+#endif
 		p->sysctl_table = NULL;
 		write_lock_bh(&tbl->lock);
 		p->next		= tbl->parms.next;
@@ -1403,8 +1412,11 @@ void neigh_table_init_no_netlink(struct neigh_table *tbl)
 	unsigned long now = jiffies;
 	unsigned long phsize;
 
-	write_pnet(&tbl->parms.net, &init_net);
+#ifdef CONFIG_NET_NS
+	tbl->parms.net = &init_net;
+#endif
 	atomic_set(&tbl->parms.refcnt, 1);
+	INIT_RCU_HEAD(&tbl->parms.rcu_head);
 	tbl->parms.reachable_time =
 			  neigh_rand_reach_time(tbl->parms.base_reachable_time);
 
@@ -1418,8 +1430,9 @@ void neigh_table_init_no_netlink(struct neigh_table *tbl)
 		panic("cannot create neighbour cache statistics");
 
 #ifdef CONFIG_PROC_FS
-	if (!proc_create_data(tbl->id, 0, init_net.proc_net_stat,
-			      &neigh_stat_seq_fops, tbl))
+	tbl->pde = proc_create_data(tbl->id, 0, init_net.proc_net_stat,
+				    &neigh_stat_seq_fops, tbl);
+	if (!tbl->pde)
 		panic("cannot create neighbour proc dir entry");
 #endif
 
@@ -1701,8 +1714,7 @@ static int neightbl_fill_parms(struct sk_buff *skb, struct neigh_parms *parms)
 	return nla_nest_end(skb, nest);
 
 nla_put_failure:
-	nla_nest_cancel(skb, nest);
-	return -EMSGSIZE;
+	return nla_nest_cancel(skb, nest);
 }
 
 static int neightbl_fill_info(struct sk_buff *skb, struct neigh_table *tbl,
@@ -2045,9 +2057,9 @@ static int neigh_fill_info(struct sk_buff *skb, struct neighbour *neigh,
 		goto nla_put_failure;
 	}
 
-	ci.ndm_used	 = jiffies_to_clock_t(now - neigh->used);
-	ci.ndm_confirmed = jiffies_to_clock_t(now - neigh->confirmed);
-	ci.ndm_updated	 = jiffies_to_clock_t(now - neigh->updated);
+	ci.ndm_used	 = now - neigh->used;
+	ci.ndm_confirmed = now - neigh->confirmed;
+	ci.ndm_updated	 = now - neigh->updated;
 	ci.ndm_refcnt	 = atomic_read(&neigh->refcnt) - 1;
 	read_unlock_bh(&neigh->lock);
 
@@ -2267,7 +2279,6 @@ static struct neighbour *neigh_get_idx(struct seq_file *seq, loff_t *pos)
 	struct neighbour *n = neigh_get_first(seq);
 
 	if (n) {
-		--(*pos);
 		while (*pos) {
 			n = neigh_get_next(seq, n, pos);
 			if (!n)
@@ -2328,7 +2339,6 @@ static struct pneigh_entry *pneigh_get_idx(struct seq_file *seq, loff_t *pos)
 	struct pneigh_entry *pn = pneigh_get_first(seq);
 
 	if (pn) {
-		--(*pos);
 		while (*pos) {
 			pn = pneigh_get_next(seq, pn, pos);
 			if (!pn)
@@ -2342,11 +2352,10 @@ static void *neigh_get_idx_any(struct seq_file *seq, loff_t *pos)
 {
 	struct neigh_seq_state *state = seq->private;
 	void *rc;
-	loff_t idxpos = *pos;
 
-	rc = neigh_get_idx(seq, &idxpos);
+	rc = neigh_get_idx(seq, pos);
 	if (!rc && !(state->flags & NEIGH_SEQ_NEIGH_ONLY))
-		rc = pneigh_get_idx(seq, &idxpos);
+		rc = pneigh_get_idx(seq, pos);
 
 	return rc;
 }
@@ -2355,6 +2364,7 @@ void *neigh_seq_start(struct seq_file *seq, loff_t *pos, struct neigh_table *tbl
 	__acquires(tbl->lock)
 {
 	struct neigh_seq_state *state = seq->private;
+	loff_t pos_minus_one;
 
 	state->tbl = tbl;
 	state->bucket = 0;
@@ -2362,7 +2372,8 @@ void *neigh_seq_start(struct seq_file *seq, loff_t *pos, struct neigh_table *tbl
 
 	read_lock_bh(&tbl->lock);
 
-	return *pos ? neigh_get_idx_any(seq, pos) : SEQ_START_TOKEN;
+	pos_minus_one = *pos - 1;
+	return *pos ? neigh_get_idx_any(seq, &pos_minus_one) : SEQ_START_TOKEN;
 }
 EXPORT_SYMBOL(neigh_seq_start);
 
@@ -2372,7 +2383,7 @@ void *neigh_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	void *rc;
 
 	if (v == SEQ_START_TOKEN) {
-		rc = neigh_get_first(seq);
+		rc = neigh_get_idx(seq, pos);
 		goto out;
 	}
 
@@ -2414,7 +2425,7 @@ static void *neigh_stat_seq_start(struct seq_file *seq, loff_t *pos)
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
-	for (cpu = *pos-1; cpu < nr_cpu_ids; ++cpu) {
+	for (cpu = *pos-1; cpu < NR_CPUS; ++cpu) {
 		if (!cpu_possible(cpu))
 			continue;
 		*pos = cpu+1;
@@ -2429,7 +2440,7 @@ static void *neigh_stat_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	struct neigh_table *tbl = pde->data;
 	int cpu;
 
-	for (cpu = *pos; cpu < nr_cpu_ids; ++cpu) {
+	for (cpu = *pos; cpu < NR_CPUS; ++cpu) {
 		if (!cpu_possible(cpu))
 			continue;
 		*pos = cpu+1;
@@ -2450,12 +2461,12 @@ static int neigh_stat_seq_show(struct seq_file *seq, void *v)
 	struct neigh_statistics *st = v;
 
 	if (v == SEQ_START_TOKEN) {
-		seq_printf(seq, "entries  allocs destroys hash_grows  lookups hits  res_failed  rcv_probes_mcast rcv_probes_ucast  periodic_gc_runs forced_gc_runs unresolved_discards\n");
+		seq_printf(seq, "entries  allocs destroys hash_grows  lookups hits  res_failed  rcv_probes_mcast rcv_probes_ucast  periodic_gc_runs forced_gc_runs\n");
 		return 0;
 	}
 
 	seq_printf(seq, "%08x  %08lx %08lx %08lx  %08lx %08lx  %08lx  "
-			"%08lx %08lx  %08lx %08lx %08lx\n",
+			"%08lx %08lx  %08lx %08lx\n",
 		   atomic_read(&tbl->entries),
 
 		   st->allocs,
@@ -2471,8 +2482,7 @@ static int neigh_stat_seq_show(struct seq_file *seq, void *v)
 		   st->rcv_probes_ucast,
 
 		   st->periodic_gc_runs,
-		   st->forced_gc_runs,
-		   st->unres_discards
+		   st->forced_gc_runs
 		   );
 
 	return 0;
@@ -2559,128 +2569,128 @@ static struct neigh_sysctl_table {
 			.procname	= "mcast_solicit",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.ctl_name	= NET_NEIGH_UCAST_SOLICIT,
 			.procname	= "ucast_solicit",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.ctl_name	= NET_NEIGH_APP_SOLICIT,
 			.procname	= "app_solicit",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.procname	= "retrans_time",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_userhz_jiffies,
+			.proc_handler	= &proc_dointvec_userhz_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_REACHABLE_TIME,
 			.procname	= "base_reachable_time",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_jiffies,
-			.strategy	= sysctl_jiffies,
+			.proc_handler	= &proc_dointvec_jiffies,
+			.strategy	= &sysctl_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_DELAY_PROBE_TIME,
 			.procname	= "delay_first_probe_time",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_jiffies,
-			.strategy	= sysctl_jiffies,
+			.proc_handler	= &proc_dointvec_jiffies,
+			.strategy	= &sysctl_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_GC_STALE_TIME,
 			.procname	= "gc_stale_time",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_jiffies,
-			.strategy	= sysctl_jiffies,
+			.proc_handler	= &proc_dointvec_jiffies,
+			.strategy	= &sysctl_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_UNRES_QLEN,
 			.procname	= "unres_qlen",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.ctl_name	= NET_NEIGH_PROXY_QLEN,
 			.procname	= "proxy_qlen",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.procname	= "anycast_delay",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_userhz_jiffies,
+			.proc_handler	= &proc_dointvec_userhz_jiffies,
 		},
 		{
 			.procname	= "proxy_delay",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_userhz_jiffies,
+			.proc_handler	= &proc_dointvec_userhz_jiffies,
 		},
 		{
 			.procname	= "locktime",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_userhz_jiffies,
+			.proc_handler	= &proc_dointvec_userhz_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_RETRANS_TIME_MS,
 			.procname	= "retrans_time_ms",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_ms_jiffies,
-			.strategy	= sysctl_ms_jiffies,
+			.proc_handler	= &proc_dointvec_ms_jiffies,
+			.strategy	= &sysctl_ms_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_REACHABLE_TIME_MS,
 			.procname	= "base_reachable_time_ms",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_ms_jiffies,
-			.strategy	= sysctl_ms_jiffies,
+			.proc_handler	= &proc_dointvec_ms_jiffies,
+			.strategy	= &sysctl_ms_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_GC_INTERVAL,
 			.procname	= "gc_interval",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec_jiffies,
-			.strategy	= sysctl_jiffies,
+			.proc_handler	= &proc_dointvec_jiffies,
+			.strategy	= &sysctl_jiffies,
 		},
 		{
 			.ctl_name	= NET_NEIGH_GC_THRESH1,
 			.procname	= "gc_thresh1",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.ctl_name	= NET_NEIGH_GC_THRESH2,
 			.procname	= "gc_thresh2",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{
 			.ctl_name	= NET_NEIGH_GC_THRESH3,
 			.procname	= "gc_thresh3",
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= &proc_dointvec,
 		},
 		{},
 	},

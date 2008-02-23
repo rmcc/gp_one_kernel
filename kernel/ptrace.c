@@ -25,17 +25,6 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
-
-/*
- * Initialize a new task whose father had been ptraced.
- *
- * Called from copy_process().
- */
-void ptrace_fork(struct task_struct *child, unsigned long clone_flags)
-{
-	arch_ptrace_fork(child, clone_flags);
-}
-
 /*
  * ptrace a task: make the debugger its new parent and
  * move it to the ptrace list.
@@ -44,9 +33,13 @@ void ptrace_fork(struct task_struct *child, unsigned long clone_flags)
  */
 void __ptrace_link(struct task_struct *child, struct task_struct *new_parent)
 {
-	BUG_ON(!list_empty(&child->ptrace_entry));
-	list_add(&child->ptrace_entry, &new_parent->ptraced);
+	BUG_ON(!list_empty(&child->ptrace_list));
+	if (child->parent == new_parent)
+		return;
+	list_add(&child->ptrace_list, &child->parent->ptrace_children);
+	remove_parent(child);
 	child->parent = new_parent;
+	add_parent(child);
 }
  
 /*
@@ -56,7 +49,7 @@ void __ptrace_link(struct task_struct *child, struct task_struct *new_parent)
  * TASK_TRACED, resume it now.
  * Requires that irqs be disabled.
  */
-static void ptrace_untrace(struct task_struct *child)
+void ptrace_untrace(struct task_struct *child)
 {
 	spin_lock(&child->sighand->siglock);
 	if (task_is_traced(child)) {
@@ -80,10 +73,13 @@ void __ptrace_unlink(struct task_struct *child)
 	BUG_ON(!child->ptrace);
 
 	child->ptrace = 0;
-	child->parent = child->real_parent;
-	list_del_init(&child->ptrace_entry);
+	if (ptrace_reparented(child)) {
+		list_del_init(&child->ptrace_list);
+		remove_parent(child);
+		child->parent = child->real_parent;
+		add_parent(child);
+	}
 
-	arch_ptrace_untrace(child);
 	if (task_is_traced(child))
 		ptrace_untrace(child);
 }
@@ -119,16 +115,14 @@ int ptrace_check_attach(struct task_struct *child, int kill)
 	read_unlock(&tasklist_lock);
 
 	if (!ret && !kill)
-		ret = wait_task_inactive(child, TASK_TRACED) ? 0 : -ESRCH;
+		wait_task_inactive(child);
 
 	/* All systems go.. */
 	return ret;
 }
 
-int __ptrace_may_access(struct task_struct *task, unsigned int mode)
+int __ptrace_may_attach(struct task_struct *task)
 {
-	const struct cred *cred = current_cred(), *tcred;
-
 	/* May we inspect the given task?
 	 * This check is used both for attaching with ptrace
 	 * and for allowing access to sensitive information in /proc.
@@ -141,35 +135,29 @@ int __ptrace_may_access(struct task_struct *task, unsigned int mode)
 	/* Don't let security modules deny introspection */
 	if (task == current)
 		return 0;
-	rcu_read_lock();
-	tcred = __task_cred(task);
-	if ((cred->uid != tcred->euid ||
-	     cred->uid != tcred->suid ||
-	     cred->uid != tcred->uid  ||
-	     cred->gid != tcred->egid ||
-	     cred->gid != tcred->sgid ||
-	     cred->gid != tcred->gid) &&
-	    !capable(CAP_SYS_PTRACE)) {
-		rcu_read_unlock();
+	if (((current->uid != task->euid) ||
+	     (current->uid != task->suid) ||
+	     (current->uid != task->uid) ||
+	     (current->gid != task->egid) ||
+	     (current->gid != task->sgid) ||
+	     (current->gid != task->gid)) && !capable(CAP_SYS_PTRACE))
 		return -EPERM;
-	}
-	rcu_read_unlock();
 	smp_rmb();
 	if (task->mm)
 		dumpable = get_dumpable(task->mm);
 	if (!dumpable && !capable(CAP_SYS_PTRACE))
 		return -EPERM;
 
-	return security_ptrace_may_access(task, mode);
+	return security_ptrace(current, task);
 }
 
-bool ptrace_may_access(struct task_struct *task, unsigned int mode)
+int ptrace_may_attach(struct task_struct *task)
 {
 	int err;
 	task_lock(task);
-	err = __ptrace_may_access(task, mode);
+	err = __ptrace_may_attach(task);
 	task_unlock(task);
-	return (!err ? true : false);
+	return !err;
 }
 
 int ptrace_attach(struct task_struct *task)
@@ -183,14 +171,6 @@ int ptrace_attach(struct task_struct *task)
 	if (same_thread_group(task, current))
 		goto out;
 
-	/* Protect exec's credential calculations against our interference;
-	 * SUID, SGID and LSM creds get determined differently under ptrace.
-	 */
-	retval = mutex_lock_interruptible(&current->cred_exec_mutex);
-	if (retval  < 0)
-		goto out;
-
-	retval = -EPERM;
 repeat:
 	/*
 	 * Nasty, nasty.
@@ -215,7 +195,7 @@ repeat:
 	/* the same process cannot be attached many times */
 	if (task->ptrace & PT_PTRACED)
 		goto bad;
-	retval = __ptrace_may_access(task, PTRACE_MODE_ATTACH);
+	retval = __ptrace_may_attach(task);
 	if (retval)
 		goto bad;
 
@@ -230,7 +210,6 @@ repeat:
 bad:
 	write_unlock_irqrestore(&tasklist_lock, flags);
 	task_unlock(task);
-	mutex_unlock(&current->cred_exec_mutex);
 out:
 	return retval;
 }
@@ -513,33 +492,14 @@ int ptrace_traceme(void)
 	/*
 	 * Are we already being traced?
 	 */
-repeat:
 	task_lock(current);
 	if (!(current->ptrace & PT_PTRACED)) {
-		/*
-		 * See ptrace_attach() comments about the locking here.
-		 */
-		unsigned long flags;
-		if (!write_trylock_irqsave(&tasklist_lock, flags)) {
-			task_unlock(current);
-			do {
-				cpu_relax();
-			} while (!write_can_lock(&tasklist_lock));
-			goto repeat;
-		}
-
-		ret = security_ptrace_traceme(current->parent);
-
+		ret = security_ptrace(current->parent, current);
 		/*
 		 * Set the ptrace bit in the process ptrace flags.
-		 * Then link us on our parent's ptraced list.
 		 */
-		if (!ret) {
+		if (!ret)
 			current->ptrace |= PT_PTRACED;
-			__ptrace_link(current, current->real_parent);
-		}
-
-		write_unlock_irqrestore(&tasklist_lock, flags);
 	}
 	task_unlock(current);
 	return ret;
@@ -641,7 +601,7 @@ int generic_ptrace_pokedata(struct task_struct *tsk, long addr, long data)
 	return (copied == sizeof(data)) ? 0 : -EIO;
 }
 
-#if defined CONFIG_COMPAT
+#if defined CONFIG_COMPAT && defined __ARCH_WANT_COMPAT_SYS_PTRACE
 #include <linux/compat.h>
 
 int compat_ptrace_request(struct task_struct *child, compat_long_t request,
@@ -738,4 +698,4 @@ asmlinkage long compat_sys_ptrace(compat_long_t request, compat_long_t pid,
 	unlock_kernel();
 	return ret;
 }
-#endif	/* CONFIG_COMPAT */
+#endif	/* CONFIG_COMPAT && __ARCH_WANT_COMPAT_SYS_PTRACE */

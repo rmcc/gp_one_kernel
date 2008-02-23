@@ -12,11 +12,20 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/kernel_stat.h>
+#include <linux/signal.h>
+#include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
 
+#include <asm/mipsregs.h>
+#include <asm/addrspace.h>
 #include <asm/irq_cpu.h>
+#include <asm/sgi/ioc.h>
 #include <asm/sgi/hpc3.h>
 #include <asm/sgi/ip22.h>
+#include <asm/time.h>
+
+/* #define DEBUG_SGINT */
 
 /* So far nothing hangs here */
 #undef USE_LIO3_IRQ
@@ -59,7 +68,7 @@ static void enable_local1_irq(unsigned int irq)
 		sgint->imask1 |= (1 << (irq - SGINT_LOCAL1));
 }
 
-static void disable_local1_irq(unsigned int irq)
+void disable_local1_irq(unsigned int irq)
 {
 	sgint->imask1 &= ~(1 << (irq - SGINT_LOCAL1));
 }
@@ -78,7 +87,7 @@ static void enable_local2_irq(unsigned int irq)
 	sgint->cmeimask0 |= (1 << (irq - SGINT_LOCAL2));
 }
 
-static void disable_local2_irq(unsigned int irq)
+void disable_local2_irq(unsigned int irq)
 {
 	sgint->cmeimask0 &= ~(1 << (irq - SGINT_LOCAL2));
 	if (!sgint->cmeimask0)
@@ -99,7 +108,7 @@ static void enable_local3_irq(unsigned int irq)
 	sgint->cmeimask1 |= (1 << (irq - SGINT_LOCAL3));
 }
 
-static void disable_local3_irq(unsigned int irq)
+void disable_local3_irq(unsigned int irq)
 {
 	sgint->cmeimask1 &= ~(1 << (irq - SGINT_LOCAL3));
 	if (!sgint->cmeimask1)
@@ -155,7 +164,7 @@ static void indy_buserror_irq(void)
 	int irq = SGI_BUSERR_IRQ;
 
 	irq_enter();
-	kstat_incr_irqs_this_cpu(irq, irq_to_desc(irq));
+	kstat_this_cpu.irqs[irq]++;
 	ip22_be_interrupt(irq);
 	irq_exit();
 }
@@ -335,6 +344,6 @@ void __init arch_init_irq(void)
 
 #ifdef CONFIG_EISA
 	if (ip22_is_fullhouse())	/* Only Indigo-2 has EISA stuff */
-		ip22_eisa_init();
+	        ip22_eisa_init();
 #endif
 }

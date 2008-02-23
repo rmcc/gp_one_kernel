@@ -1,5 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  *
+ * $Id: protocol.c,v 1.14 2002/04/22 03:39:43 mdharm Exp $
+ *
  * Current development and maintenance by:
  *   (c) 1999-2002 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
@@ -56,9 +58,9 @@
  * Protocol routines
  ***********************************************************************/
 
-void usb_stor_pad12_command(struct scsi_cmnd *srb, struct us_data *us)
+void usb_stor_qic157_command(struct scsi_cmnd *srb, struct us_data *us)
 {
-	/* Pad the SCSI command with zeros out to 12 bytes
+	/* Pad the ATAPI command with zeros 
 	 *
 	 * NOTE: This only works because a scsi_cmnd struct field contains
 	 * a unsigned char cmnd[16], so we know we have storage available
@@ -72,6 +74,26 @@ void usb_stor_pad12_command(struct scsi_cmnd *srb, struct us_data *us)
 	/* send the command to the transport layer */
 	usb_stor_invoke_transport(srb, us);
 }
+
+void usb_stor_ATAPI_command(struct scsi_cmnd *srb, struct us_data *us)
+{
+	/* Pad the ATAPI command with zeros 
+	 *
+	 * NOTE: This only works because a scsi_cmnd struct field contains
+	 * a unsigned char cmnd[16], so we know we have storage available
+	 */
+
+	/* Pad the ATAPI command with zeros */
+	for (; srb->cmd_len<12; srb->cmd_len++)
+		srb->cmnd[srb->cmd_len] = 0;
+
+	/* set command length to 12 bytes */
+	srb->cmd_len = 12;
+
+	/* send the command to the transport layer */
+	usb_stor_invoke_transport(srb, us);
+}
+
 
 void usb_stor_ufi_command(struct scsi_cmnd *srb, struct us_data *us)
 {

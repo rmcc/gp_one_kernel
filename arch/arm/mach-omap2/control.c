@@ -13,21 +13,22 @@
 #undef DEBUG
 
 #include <linux/kernel.h>
-#include <linux/io.h>
 
-#include <mach/common.h>
-#include <mach/control.h>
+#include <asm/io.h>
 
-static void __iomem *omap2_ctrl_base;
+#include <asm/arch/control.h>
 
-#define OMAP_CTRL_REGADDR(reg)		(omap2_ctrl_base + (reg))
+static u32 omap2_ctrl_base;
 
-void __init omap2_set_globals_control(struct omap_globals *omap2_globals)
+#define OMAP_CTRL_REGADDR(reg)	(void __iomem *)IO_ADDRESS(omap2_ctrl_base \
+								+ (reg))
+
+void omap_ctrl_base_set(u32 base)
 {
-	omap2_ctrl_base = omap2_globals->ctrl;
+	omap2_ctrl_base = base;
 }
 
-void __iomem *omap_ctrl_base_get(void)
+u32 omap_ctrl_base_get(void)
 {
 	return omap2_ctrl_base;
 }
@@ -49,16 +50,25 @@ u32 omap_ctrl_readl(u16 offset)
 
 void omap_ctrl_writeb(u8 val, u16 offset)
 {
+	pr_debug("omap_ctrl_writeb: writing 0x%0x to 0x%0x\n", val,
+		 (u32)OMAP_CTRL_REGADDR(offset));
+
 	__raw_writeb(val, OMAP_CTRL_REGADDR(offset));
 }
 
 void omap_ctrl_writew(u16 val, u16 offset)
 {
+	pr_debug("omap_ctrl_writew: writing 0x%0x to 0x%0x\n", val,
+		 (u32)OMAP_CTRL_REGADDR(offset));
+
 	__raw_writew(val, OMAP_CTRL_REGADDR(offset));
 }
 
 void omap_ctrl_writel(u32 val, u16 offset)
 {
+	pr_debug("omap_ctrl_writel: writing 0x%0x to 0x%0x\n", val,
+		 (u32)OMAP_CTRL_REGADDR(offset));
+
 	__raw_writel(val, OMAP_CTRL_REGADDR(offset));
 }
 

@@ -24,13 +24,13 @@
 #include <linux/kthread.h>
 #include <linux/moduleparam.h>
 #include <linux/freezer.h>
-#include <linux/of_platform.h>
 
 #include <asm/prom.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/sections.h>
+#include <asm/of_platform.h>
 
 #undef DEBUG
 
@@ -554,7 +554,7 @@ thermostat_init(void)
 	const u32 *prop;
 	int i = 0, offset = 0;
 	int err;
-
+	
 	np = of_find_node_by_name(NULL, "fan");
 	if (!np)
 		return -ENODEV;
@@ -562,24 +562,18 @@ thermostat_init(void)
 		therm_type = ADT7460;
 	else if (of_device_is_compatible(np, "adt7467"))
 		therm_type = ADT7467;
-	else {
-		of_node_put(np);
+	else
 		return -ENODEV;
-	}
 
 	prop = of_get_property(np, "hwsensor-params-version", NULL);
 	printk(KERN_INFO "adt746x: version %d (%ssupported)\n", *prop,
 			 (*prop == 1)?"":"un");
-	if (*prop != 1) {
-		of_node_put(np);
+	if (*prop != 1)
 		return -ENODEV;
-	}
 
 	prop = of_get_property(np, "reg", NULL);
-	if (!prop) {
-		of_node_put(np);
+	if (!prop)
 		return -ENODEV;
-	}
 
 	/* look for bus either by path or using "reg" */
 	if (strstr(np->full_name, "/i2c-bus@") != NULL) {
@@ -613,13 +607,12 @@ thermostat_init(void)
 	}
 
 	of_dev = of_platform_device_create(np, "temperatures", NULL);
-	of_node_put(np);
-
+	
 	if (of_dev == NULL) {
 		printk(KERN_ERR "Can't register temperatures device !\n");
 		return -ENODEV;
 	}
-
+	
 	err = device_create_file(&of_dev->dev, &dev_attr_sensor1_temperature);
 	err |= device_create_file(&of_dev->dev, &dev_attr_sensor2_temperature);
 	err |= device_create_file(&of_dev->dev, &dev_attr_sensor1_limit);

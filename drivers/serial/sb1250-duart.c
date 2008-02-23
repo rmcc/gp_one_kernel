@@ -384,7 +384,7 @@ static void sbd_receive_chars(struct sbd_port *sport)
 		uart_insert_char(uport, status, M_DUART_OVRUN_ERR, ch, flag);
 	}
 
-	tty_flip_buffer_push(uport->info->port.tty);
+	tty_flip_buffer_push(uport->info->tty);
 }
 
 static void sbd_transmit_chars(struct sbd_port *sport)
@@ -924,7 +924,7 @@ console_initcall(sbd_serial_console_init);
 
 static struct uart_driver sbd_reg = {
 	.owner		= THIS_MODULE,
-	.driver_name	= "sb1250_duart",
+	.driver_name	= "serial",
 	.dev_name	= "duart",
 	.major		= TTY_MAJOR,
 	.minor		= SB1250_DUART_MINOR_BASE,

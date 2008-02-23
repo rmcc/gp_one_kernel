@@ -2,8 +2,8 @@
 #include <linux/errno.h>
 #include <asm/uaccess.h>
 
-#include <asm/sfp-machine.h>
-#include <math-emu/double.h>
+#include "sfp-machine.h"
+#include "double.h"
 
 int
 lfd(void *frD, void *ea)

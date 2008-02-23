@@ -6,7 +6,6 @@
  * published by the Free Software Foundation.
  */
 #include <linux/vmalloc.h>
-#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/io.h>
 

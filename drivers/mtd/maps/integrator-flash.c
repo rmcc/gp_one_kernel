@@ -22,6 +22,8 @@
    This is access code for flashes using ARM's flash partitioning
    standards.
 
+   $Id: integrator-flash.c,v 1.20 2005/11/07 11:14:27 gleixner Exp $
+
 ======================================================================*/
 
 #include <linux/module.h>
@@ -37,7 +39,7 @@
 #include <linux/mtd/partitions.h>
 
 #include <asm/mach/flash.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -105,7 +107,7 @@ static int armflash_probe(struct platform_device *dev)
 	info->map.bankwidth	= plat->width;
 	info->map.phys		= res->start;
 	info->map.virt		= base;
-	info->map.name		= dev_name(&dev->dev);
+	info->map.name		= dev->dev.bus_id;
 	info->map.set_vpp	= armflash_set_vpp;
 
 	simple_map_init(&info->map);

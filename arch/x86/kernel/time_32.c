@@ -36,9 +36,11 @@
 #include <asm/arch_hooks.h>
 #include <asm/hpet.h>
 #include <asm/time.h>
-#include <asm/timer.h>
 
 #include "do_timer.h"
+
+unsigned int cpu_khz;	/* Detected as we calibrate the TSC */
+EXPORT_SYMBOL(cpu_khz);
 
 int timer_ack;
 
@@ -47,9 +49,10 @@ unsigned long profile_pc(struct pt_regs *regs)
 	unsigned long pc = instruction_pointer(regs);
 
 #ifdef CONFIG_SMP
-	if (!user_mode_vm(regs) && in_lock_functions(pc)) {
+	if (!v8086_mode(regs) && SEGMENT_IS_KERNEL_CODE(regs->cs) &&
+	    in_lock_functions(pc)) {
 #ifdef CONFIG_FRAME_POINTER
-		return *(unsigned long *)(regs->bp + sizeof(long));
+		return *(unsigned long *)(regs->bp + 4);
 #else
 		unsigned long *sp = (unsigned long *)&regs->sp;
 
@@ -75,13 +78,14 @@ EXPORT_SYMBOL(profile_pc);
 irqreturn_t timer_interrupt(int irq, void *dev_id)
 {
 	/* Keep nmi watchdog up to date */
-	inc_irq_stat(irq0_irqs);
+	per_cpu(irq_stat, smp_processor_id()).irq0_irqs++;
 
 #ifdef CONFIG_X86_IO_APIC
 	if (timer_ack) {
 		/*
 		 * Subtle, when I/O APICs are used we have to ack timer IRQ
-		 * manually to deassert NMI lines for the watchdog if run
+		 * manually to reset the IRR bit for do_slow_gettimeoffset().
+		 * This will also deassert NMI lines for the watchdog if run
 		 * on an 82489DX-based system.
 		 */
 		spin_lock(&i8259A_lock);
@@ -94,7 +98,6 @@ irqreturn_t timer_interrupt(int irq, void *dev_id)
 
 	do_timer_interrupt_hook();
 
-#ifdef CONFIG_MCA
 	if (MCA_bus) {
 		/* The PS/2 uses level-triggered interrupts.  You can't
 		turn them off, nor would you want to (any attempt to
@@ -105,10 +108,9 @@ irqreturn_t timer_interrupt(int irq, void *dev_id)
 		high bit of the PPI port B (0x61).  Note that some PS/2s,
 		notably the 55SX, work fine if this is removed.  */
 
-		u8 irq_v = inb_p(0x61);		/* read the current state */
-		outb_p(irq_v | 0x80, 0x61);	/* reset the IRQ */
+		u8 irq_v = inb_p( 0x61 );	/* read the current state */
+		outb_p( irq_v|0x80, 0x61 );	/* reset the IRQ */
 	}
-#endif
 
 	return IRQ_HANDLED;
 }
@@ -131,7 +133,6 @@ void __init hpet_time_init(void)
  */
 void __init time_init(void)
 {
-	pre_time_init_hook();
 	tsc_init();
 	late_time_init = choose_time_init();
 }

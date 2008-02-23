@@ -92,7 +92,9 @@ void __kprobes arch_disarm_kprobe(struct kprobe *p)
 void __kprobes arch_remove_kprobe(struct kprobe *p)
 {
 	if (p->ainsn.insn) {
+		mutex_lock(&kprobe_mutex);
 		free_insn_slot(p->ainsn.insn, 0);
+		mutex_unlock(&kprobe_mutex);
 		p->ainsn.insn = NULL;
 	}
 }
@@ -198,12 +200,9 @@ void __kprobes kprobe_handler(struct pt_regs *regs)
 	}
 }
 
-static int __kprobes kprobe_trap_handler(struct pt_regs *regs, unsigned int instr)
+int kprobe_trap_handler(struct pt_regs *regs, unsigned int instr)
 {
-	unsigned long flags;
-	local_irq_save(flags);
 	kprobe_handler(regs);
-	local_irq_restore(flags);
 	return 0;
 }
 
@@ -275,7 +274,7 @@ int __kprobes kprobe_exceptions_notify(struct notifier_block *self,
  * for kretprobe handlers which should normally be interested in r0 only
  * anyway.
  */
-void __naked __kprobes kretprobe_trampoline(void)
+static void __attribute__((naked)) __kprobes kretprobe_trampoline(void)
 {
 	__asm__ __volatile__ (
 		"stmdb	sp!, {r0 - r11}		\n\t"
@@ -297,7 +296,8 @@ static __used __kprobes void *trampoline_handler(struct pt_regs *regs)
 	unsigned long trampoline_address = (unsigned long)&kretprobe_trampoline;
 
 	INIT_HLIST_HEAD(&empty_rp);
-	kretprobe_hash_lock(current, &head, &flags);
+	spin_lock_irqsave(&kretprobe_lock, flags);
+	head = kretprobe_inst_table_head(current);
 
 	/*
 	 * It is possible to have multiple instances associated with a given
@@ -337,7 +337,7 @@ static __used __kprobes void *trampoline_handler(struct pt_regs *regs)
 	}
 
 	kretprobe_assert(ri, orig_ret_address, trampoline_address);
-	kretprobe_hash_unlock(current, &flags);
+	spin_unlock_irqrestore(&kretprobe_lock, flags);
 
 	hlist_for_each_entry_safe(ri, node, tmp, &empty_rp, hlist) {
 		hlist_del(&ri->hlist);
@@ -347,6 +347,7 @@ static __used __kprobes void *trampoline_handler(struct pt_regs *regs)
 	return (void *)orig_ret_address;
 }
 
+/* Called with kretprobe_lock held. */
 void __kprobes arch_prepare_kretprobe(struct kretprobe_instance *ri,
 				      struct pt_regs *regs)
 {

@@ -39,14 +39,12 @@
 #ifdef USE_DOUBLE
 
 #define LOAD   ld
-#define LOAD32 lwu
 #define ADD    daddu
 #define NBYTES 8
 
 #else
 
 #define LOAD   lw
-#define LOAD32 lw
 #define ADD    addu
 #define NBYTES 4
 
@@ -55,14 +53,12 @@
 #define UNIT(unit)  ((unit)*NBYTES)
 
 #define ADDC(sum,reg)						\
+	.set	push;						\
+	.set	noat;						\
 	ADD	sum, reg;					\
 	sltu	v1, sum, reg;					\
 	ADD	sum, v1;					\
-
-#define ADDC32(sum,reg)						\
-	addu	sum, reg;					\
-	sltu	v1, sum, reg;					\
-	addu	sum, v1;					\
+	.set	pop
 
 #define CSUM_BIGCHUNK1(src, offset, sum, _t0, _t1, _t2, _t3)	\
 	LOAD	_t0, (offset + UNIT(0))(src);			\
@@ -136,7 +132,7 @@ LEAF(csum_partial)
 	beqz	t8, .Lqword_align
 	 andi	t8, src, 0x8
 
-	LOAD32	t0, 0x00(src)
+	lw	t0, 0x00(src)
 	LONG_SUBU	a1, a1, 0x4
 	ADDC(sum, t0)
 	PTR_ADDU	src, src, 0x4
@@ -215,7 +211,7 @@ LEAF(csum_partial)
 	LONG_SRL	t8, t8, 0x2
 
 .Lend_words:
-	LOAD32	t0, (src)
+	lw	t0, (src)
 	LONG_SUBU	t8, t8, 0x1
 	ADDC(sum, t0)
 	.set	reorder				/* DADDI_WAR */
@@ -234,9 +230,6 @@ LEAF(csum_partial)
 	/* Still a full word to go  */
 	ulw	t1, (src)
 	PTR_ADDIU	src, 4
-#ifdef USE_DOUBLE
-	dsll	t1, t1, 32			/* clear lower 32bit */
-#endif
 	ADDC(sum, t1)
 
 1:	move	t1, zero
@@ -261,6 +254,8 @@ LEAF(csum_partial)
 1:	ADDC(sum, t1)
 
 	/* fold checksum */
+	.set	push
+	.set	noat
 #ifdef USE_DOUBLE
 	dsll32	v1, sum, 0
 	daddu	sum, v1
@@ -268,25 +263,24 @@ LEAF(csum_partial)
 	dsra32	sum, sum, 0
 	addu	sum, v1
 #endif
+	sll	v1, sum, 16
+	addu	sum, v1
+	sltu	v1, sum, v1
+	srl	sum, sum, 16
+	addu	sum, v1
 
 	/* odd buffer alignment? */
-#ifdef CPU_MIPSR2
-	wsbh	v1, sum
-	movn	sum, v1, t7
-#else
-	beqz	t7, 1f			/* odd buffer alignment? */
-	 lui	v1, 0x00ff
-	addu	v1, 0x00ff
-	and	t0, sum, v1
-	sll	t0, t0, 8
+	beqz	t7, 1f
+	 nop
+	sll	v1, sum, 8
 	srl	sum, sum, 8
-	and	sum, sum, v1
-	or	sum, sum, t0
+	or	sum, v1
+	andi	sum, 0xffff
+	.set	pop
 1:
-#endif
 	.set	reorder
 	/* Add the passed partial csum.  */
-	ADDC32(sum, a2)
+	ADDC(sum, a2)
 	jr	ra
 	.set	noreorder
 	END(csum_partial)
@@ -662,6 +656,8 @@ EXC(	sb	t0, NBYTES-2(dst), .Ls_exc)
 	ADDC(sum, t2)
 .Ldone:
 	/* fold checksum */
+	.set	push
+	.set	noat
 #ifdef USE_DOUBLE
 	dsll32	v1, sum, 0
 	daddu	sum, v1
@@ -669,23 +665,23 @@ EXC(	sb	t0, NBYTES-2(dst), .Ls_exc)
 	dsra32	sum, sum, 0
 	addu	sum, v1
 #endif
+	sll	v1, sum, 16
+	addu	sum, v1
+	sltu	v1, sum, v1
+	srl	sum, sum, 16
+	addu	sum, v1
 
-#ifdef CPU_MIPSR2
-	wsbh	v1, sum
-	movn	sum, v1, odd
-#else
-	beqz	odd, 1f			/* odd buffer alignment? */
-	 lui	v1, 0x00ff
-	addu	v1, 0x00ff
-	and	t0, sum, v1
-	sll	t0, t0, 8
+	/* odd buffer alignment? */
+	beqz	odd, 1f
+	 nop
+	sll	v1, sum, 8
 	srl	sum, sum, 8
-	and	sum, sum, v1
-	or	sum, sum, t0
+	or	sum, v1
+	andi	sum, 0xffff
+	.set	pop
 1:
-#endif
 	.set reorder
-	ADDC32(sum, psum)
+	ADDC(sum, psum)
 	jr	ra
 	.set noreorder
 

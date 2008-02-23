@@ -39,16 +39,16 @@
 #include <linux/sched.h>
 #include <asm/atomic.h>
 #include <linux/bitops.h>
+#include <linux/completion.h>
 #include <linux/percpu.h>
 #include <linux/notifier.h>
 #include <linux/cpu.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
 
-enum rcu_barrier {
-	RCU_BARRIER_STD,
-	RCU_BARRIER_BH,
-	RCU_BARRIER_SCHED,
+struct rcu_synchronize {
+	struct rcu_head head;
+	struct completion completion;
 };
 
 static DEFINE_PER_CPU(struct rcu_head, rcu_barrier_head) = {NULL};
@@ -60,7 +60,7 @@ static struct completion rcu_barrier_completion;
  * Awaken the corresponding synchronize_rcu() instance now that a
  * grace period has elapsed.
  */
-void wakeme_after_rcu(struct rcu_head  *head)
+static void wakeme_after_rcu(struct rcu_head  *head)
 {
 	struct rcu_synchronize *rcu;
 
@@ -80,10 +80,12 @@ void wakeme_after_rcu(struct rcu_head  *head)
 void synchronize_rcu(void)
 {
 	struct rcu_synchronize rcu;
+
 	init_completion(&rcu.completion);
-	/* Will wake me after RCU finished. */
+	/* Will wake me after RCU finished */
 	call_rcu(&rcu.head, wakeme_after_rcu);
-	/* Wait for it. */
+
+	/* Wait for it */
 	wait_for_completion(&rcu.completion);
 }
 EXPORT_SYMBOL_GPL(synchronize_rcu);
@@ -97,78 +99,40 @@ static void rcu_barrier_callback(struct rcu_head *notused)
 /*
  * Called with preemption disabled, and from cross-cpu IRQ context.
  */
-static void rcu_barrier_func(void *type)
+static void rcu_barrier_func(void *notused)
 {
 	int cpu = smp_processor_id();
 	struct rcu_head *head = &per_cpu(rcu_barrier_head, cpu);
 
 	atomic_inc(&rcu_barrier_cpu_count);
-	switch ((enum rcu_barrier)type) {
-	case RCU_BARRIER_STD:
-		call_rcu(head, rcu_barrier_callback);
-		break;
-	case RCU_BARRIER_BH:
-		call_rcu_bh(head, rcu_barrier_callback);
-		break;
-	case RCU_BARRIER_SCHED:
-		call_rcu_sched(head, rcu_barrier_callback);
-		break;
-	}
+	call_rcu(head, rcu_barrier_callback);
 }
 
-/*
- * Orchestrate the specified type of RCU barrier, waiting for all
- * RCU callbacks of the specified type to complete.
+/**
+ * rcu_barrier - Wait until all the in-flight RCUs are complete.
  */
-static void _rcu_barrier(enum rcu_barrier type)
+void rcu_barrier(void)
 {
 	BUG_ON(in_interrupt());
 	/* Take cpucontrol mutex to protect against CPU hotplug */
 	mutex_lock(&rcu_barrier_mutex);
 	init_completion(&rcu_barrier_completion);
+	atomic_set(&rcu_barrier_cpu_count, 0);
 	/*
-	 * Initialize rcu_barrier_cpu_count to 1, then invoke
-	 * rcu_barrier_func() on each CPU, so that each CPU also has
-	 * incremented rcu_barrier_cpu_count.  Only then is it safe to
-	 * decrement rcu_barrier_cpu_count -- otherwise the first CPU
-	 * might complete its grace period before all of the other CPUs
-	 * did their increment, causing this function to return too
-	 * early.
+	 * The queueing of callbacks in all CPUs must be atomic with
+	 * respect to RCU, otherwise one CPU may queue a callback,
+	 * wait for a grace period, decrement barrier count and call
+	 * complete(), while other CPUs have not yet queued anything.
+	 * So, we need to make sure that grace periods cannot complete
+	 * until all the callbacks are queued.
 	 */
-	atomic_set(&rcu_barrier_cpu_count, 1);
-	on_each_cpu(rcu_barrier_func, (void *)type, 1);
-	if (atomic_dec_and_test(&rcu_barrier_cpu_count))
-		complete(&rcu_barrier_completion);
+	rcu_read_lock();
+	on_each_cpu(rcu_barrier_func, NULL, 0, 1);
+	rcu_read_unlock();
 	wait_for_completion(&rcu_barrier_completion);
 	mutex_unlock(&rcu_barrier_mutex);
 }
-
-/**
- * rcu_barrier - Wait until all in-flight call_rcu() callbacks complete.
- */
-void rcu_barrier(void)
-{
-	_rcu_barrier(RCU_BARRIER_STD);
-}
 EXPORT_SYMBOL_GPL(rcu_barrier);
-
-/**
- * rcu_barrier_bh - Wait until all in-flight call_rcu_bh() callbacks complete.
- */
-void rcu_barrier_bh(void)
-{
-	_rcu_barrier(RCU_BARRIER_BH);
-}
-EXPORT_SYMBOL_GPL(rcu_barrier_bh);
-
-/**
- * rcu_barrier_sched - Wait for in-flight call_rcu_sched() callbacks.
- */
-void rcu_barrier_sched(void)
-{
-	_rcu_barrier(RCU_BARRIER_SCHED);
-}
-EXPORT_SYMBOL_GPL(rcu_barrier_sched);
 
 void __init rcu_init(void)
 {

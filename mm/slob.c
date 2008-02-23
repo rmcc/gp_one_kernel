@@ -130,17 +130,17 @@ static LIST_HEAD(free_slob_large);
  */
 static inline int slob_page(struct slob_page *sp)
 {
-	return PageSlobPage((struct page *)sp);
+	return test_bit(PG_active, &sp->flags);
 }
 
 static inline void set_slob_page(struct slob_page *sp)
 {
-	__SetPageSlobPage((struct page *)sp);
+	__set_bit(PG_active, &sp->flags);
 }
 
 static inline void clear_slob_page(struct slob_page *sp)
 {
-	__ClearPageSlobPage((struct page *)sp);
+	__clear_bit(PG_active, &sp->flags);
 }
 
 /*
@@ -148,19 +148,19 @@ static inline void clear_slob_page(struct slob_page *sp)
  */
 static inline int slob_page_free(struct slob_page *sp)
 {
-	return PageSlobFree((struct page *)sp);
+	return test_bit(PG_private, &sp->flags);
 }
 
 static void set_slob_page_free(struct slob_page *sp, struct list_head *list)
 {
 	list_add(&sp->list, list);
-	__SetPageSlobFree((struct page *)sp);
+	__set_bit(PG_private, &sp->flags);
 }
 
 static inline void clear_slob_page_free(struct slob_page *sp)
 {
 	list_del(&sp->list);
-	__ClearPageSlobFree((struct page *)sp);
+	__clear_bit(PG_private, &sp->flags);
 }
 
 #define SLOB_UNIT sizeof(slob_t)
@@ -469,9 +469,8 @@ void *__kmalloc_node(size_t size, gfp_t gfp, int node)
 			return ZERO_SIZE_PTR;
 
 		m = slob_alloc(size + align, gfp, align, node);
-		if (!m)
-			return NULL;
-		*m = size;
+		if (m)
+			*m = size;
 		return (void *)m + align;
 	} else {
 		void *ret;
@@ -514,28 +513,28 @@ size_t ksize(const void *block)
 		return 0;
 
 	sp = (struct slob_page *)virt_to_page(block);
-	if (slob_page(sp)) {
-		int align = max(ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
-		unsigned int *m = (unsigned int *)(block - align);
-		return SLOB_UNITS(*m) * SLOB_UNIT;
-	} else
+	if (slob_page(sp))
+		return ((slob_t *)block - 1)->units + SLOB_UNIT;
+	else
 		return sp->page.private;
 }
+EXPORT_SYMBOL(ksize);
 
 struct kmem_cache {
 	unsigned int size, align;
 	unsigned long flags;
 	const char *name;
-	void (*ctor)(void *);
+	void (*ctor)(struct kmem_cache *, void *);
 };
 
 struct kmem_cache *kmem_cache_create(const char *name, size_t size,
-	size_t align, unsigned long flags, void (*ctor)(void *))
+	size_t align, unsigned long flags,
+	void (*ctor)(struct kmem_cache *, void *))
 {
 	struct kmem_cache *c;
 
 	c = slob_alloc(sizeof(struct kmem_cache),
-		GFP_KERNEL, ARCH_KMALLOC_MINALIGN, -1);
+		flags, ARCH_KMALLOC_MINALIGN, -1);
 
 	if (c) {
 		c->name = name;
@@ -575,7 +574,7 @@ void *kmem_cache_alloc_node(struct kmem_cache *c, gfp_t flags, int node)
 		b = slob_new_page(flags, get_order(c->size), node);
 
 	if (c->ctor)
-		c->ctor(b);
+		c->ctor(c, b);
 
 	return b;
 }

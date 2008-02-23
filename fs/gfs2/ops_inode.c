@@ -19,7 +19,6 @@
 #include <linux/gfs2_ondisk.h>
 #include <linux/crc32.h>
 #include <linux/lm_interface.h>
-#include <linux/fiemap.h>
 #include <asm/uaccess.h>
 
 #include "gfs2.h"
@@ -32,11 +31,12 @@
 #include "glock.h"
 #include "inode.h"
 #include "meta_io.h"
+#include "ops_dentry.h"
+#include "ops_inode.h"
 #include "quota.h"
 #include "rgrp.h"
 #include "trans.h"
 #include "util.h"
-#include "super.h"
 
 /**
  * gfs2_create - Create a file
@@ -69,12 +69,12 @@ static int gfs2_create(struct inode *dir, struct dentry *dentry,
 			mark_inode_dirty(inode);
 			break;
 		} else if (PTR_ERR(inode) != -EEXIST ||
-			   (nd && nd->flags & LOOKUP_EXCL)) {
+			   (nd && (nd->intent.open.flags & O_EXCL))) {
 			gfs2_holder_uninit(ghs);
 			return PTR_ERR(inode);
 		}
 
-		inode = gfs2_lookupi(dir, &dentry->d_name, 0);
+		inode = gfs2_lookupi(dir, &dentry->d_name, 0, nd);
 		if (inode) {
 			if (!IS_ERR(inode)) {
 				gfs2_holder_uninit(ghs);
@@ -109,7 +109,7 @@ static struct dentry *gfs2_lookup(struct inode *dir, struct dentry *dentry,
 
 	dentry->d_op = &gfs2_dops;
 
-	inode = gfs2_lookupi(dir, &dentry->d_name, 0);
+	inode = gfs2_lookupi(dir, &dentry->d_name, 0, nd);
 	if (inode && IS_ERR(inode))
 		return ERR_CAST(inode);
 
@@ -159,15 +159,11 @@ static int gfs2_link(struct dentry *old_dentry, struct inode *dir,
 	gfs2_holder_init(dip->i_gl, LM_ST_EXCLUSIVE, 0, ghs);
 	gfs2_holder_init(ip->i_gl, LM_ST_EXCLUSIVE, 0, ghs + 1);
 
-	error = gfs2_glock_nq(ghs); /* parent */
+	error = gfs2_glock_nq_m(2, ghs);
 	if (error)
-		goto out_parent;
+		goto out;
 
-	error = gfs2_glock_nq(ghs + 1); /* child */
-	if (error)
-		goto out_child;
-
-	error = gfs2_permission(dir, MAY_WRITE | MAY_EXEC);
+	error = permission(dir, MAY_WRITE | MAY_EXEC, NULL);
 	if (error)
 		goto out_gunlock;
 
@@ -185,7 +181,7 @@ static int gfs2_link(struct dentry *old_dentry, struct inode *dir,
 	if (!dip->i_inode.i_nlink)
 		goto out_gunlock;
 	error = -EFBIG;
-	if (dip->i_entries == (u32)-1)
+	if (dip->i_di.di_entries == (u32)-1)
 		goto out_gunlock;
 	error = -EPERM;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
@@ -249,10 +245,8 @@ out_alloc:
 	if (alloc_required)
 		gfs2_alloc_put(dip);
 out_gunlock:
-	gfs2_glock_dq(ghs + 1);
-out_child:
-	gfs2_glock_dq(ghs);
-out_parent:
+	gfs2_glock_dq_m(2, ghs);
+out:
 	gfs2_holder_uninit(ghs);
 	gfs2_holder_uninit(ghs + 1);
 	if (!error) {
@@ -308,7 +302,7 @@ static int gfs2_unlink(struct inode *dir, struct dentry *dentry)
 
 	error = gfs2_unlink_ok(dip, &dentry->d_name, ip);
 	if (error)
-		goto out_gunlock;
+		goto out_rgrp;
 
 	error = gfs2_trans_begin(sdp, 2*RES_DINODE + RES_LEAF + RES_RG_BIT, 0);
 	if (error)
@@ -322,7 +316,6 @@ static int gfs2_unlink(struct inode *dir, struct dentry *dentry)
 
 out_end_trans:
 	gfs2_trans_end(sdp);
-out_gunlock:
 	gfs2_glock_dq(ghs + 2);
 out_rgrp:
 	gfs2_holder_uninit(ghs + 2);
@@ -371,7 +364,7 @@ static int gfs2_symlink(struct inode *dir, struct dentry *dentry,
 
 	ip = ghs[1].gh_gl->gl_object;
 
-	ip->i_disksize = size;
+	ip->i_di.di_size = size;
 
 	error = gfs2_meta_inode_buffer(ip, &dibh);
 
@@ -425,9 +418,9 @@ static int gfs2_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	ip = ghs[1].gh_gl->gl_object;
 
 	ip->i_inode.i_nlink = 2;
-	ip->i_disksize = sdp->sd_sb.sb_bsize - sizeof(struct gfs2_dinode);
-	ip->i_diskflags |= GFS2_DIF_JDATA;
-	ip->i_entries = 2;
+	ip->i_di.di_size = sdp->sd_sb.sb_bsize - sizeof(struct gfs2_dinode);
+	ip->i_di.di_flags |= GFS2_DIF_JDATA;
+	ip->i_di.di_entries = 2;
 
 	error = gfs2_meta_inode_buffer(ip, &dibh);
 
@@ -492,6 +485,7 @@ static int gfs2_rmdir(struct inode *dir, struct dentry *dentry)
 	struct gfs2_holder ri_gh;
 	int error;
 
+
 	error = gfs2_rindex_hold(sdp, &ri_gh);
 	if (error)
 		return error;
@@ -501,29 +495,21 @@ static int gfs2_rmdir(struct inode *dir, struct dentry *dentry)
 	rgd = gfs2_blk2rgrpd(sdp, ip->i_no_addr);
 	gfs2_holder_init(rgd->rd_gl, LM_ST_EXCLUSIVE, 0, ghs + 2);
 
-	error = gfs2_glock_nq(ghs); /* parent */
+	error = gfs2_glock_nq_m(3, ghs);
 	if (error)
-		goto out_parent;
-
-	error = gfs2_glock_nq(ghs + 1); /* child */
-	if (error)
-		goto out_child;
-
-	error = gfs2_glock_nq(ghs + 2); /* rgrp */
-	if (error)
-		goto out_rgrp;
+		goto out;
 
 	error = gfs2_unlink_ok(dip, &dentry->d_name, ip);
 	if (error)
 		goto out_gunlock;
 
-	if (ip->i_entries < 2) {
+	if (ip->i_di.di_entries < 2) {
 		if (gfs2_consist_inode(ip))
 			gfs2_dinode_print(ip);
 		error = -EIO;
 		goto out_gunlock;
 	}
-	if (ip->i_entries > 2) {
+	if (ip->i_di.di_entries > 2) {
 		error = -ENOTEMPTY;
 		goto out_gunlock;
 	}
@@ -537,15 +523,11 @@ static int gfs2_rmdir(struct inode *dir, struct dentry *dentry)
 	gfs2_trans_end(sdp);
 
 out_gunlock:
-	gfs2_glock_dq(ghs + 2);
-out_rgrp:
-	gfs2_holder_uninit(ghs + 2);
-	gfs2_glock_dq(ghs + 1);
-out_child:
-	gfs2_holder_uninit(ghs + 1);
-	gfs2_glock_dq(ghs);
-out_parent:
+	gfs2_glock_dq_m(3, ghs);
+out:
 	gfs2_holder_uninit(ghs);
+	gfs2_holder_uninit(ghs + 1);
+	gfs2_holder_uninit(ghs + 2);
 	gfs2_glock_dq_uninit(&ri_gh);
 	return error;
 }
@@ -589,54 +571,6 @@ static int gfs2_mknod(struct inode *dir, struct dentry *dentry, int mode,
 	return 0;
 }
 
-/*
- * gfs2_ok_to_move - check if it's ok to move a directory to another directory
- * @this: move this
- * @to: to here
- *
- * Follow @to back to the root and make sure we don't encounter @this
- * Assumes we already hold the rename lock.
- *
- * Returns: errno
- */
-
-static int gfs2_ok_to_move(struct gfs2_inode *this, struct gfs2_inode *to)
-{
-	struct inode *dir = &to->i_inode;
-	struct super_block *sb = dir->i_sb;
-	struct inode *tmp;
-	struct qstr dotdot;
-	int error = 0;
-
-	gfs2_str2qstr(&dotdot, "..");
-
-	igrab(dir);
-
-	for (;;) {
-		if (dir == &this->i_inode) {
-			error = -EINVAL;
-			break;
-		}
-		if (dir == sb->s_root->d_inode) {
-			error = 0;
-			break;
-		}
-
-		tmp = gfs2_lookupi(dir, &dotdot, 1);
-		if (IS_ERR(tmp)) {
-			error = PTR_ERR(tmp);
-			break;
-		}
-
-		iput(dir);
-		dir = tmp;
-	}
-
-	iput(dir);
-
-	return error;
-}
-
 /**
  * gfs2_rename - Rename a file
  * @odir: Parent directory of old file name
@@ -655,7 +589,7 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 	struct gfs2_inode *ip = GFS2_I(odentry->d_inode);
 	struct gfs2_inode *nip = NULL;
 	struct gfs2_sbd *sdp = GFS2_SB(odir);
-	struct gfs2_holder ghs[5], r_gh = { .gh_gl = NULL, };
+	struct gfs2_holder ghs[5], r_gh;
 	struct gfs2_rgrpd *nrgd;
 	unsigned int num_gh;
 	int dir_rename = 0;
@@ -669,20 +603,19 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 			return 0;
 	}
 
+	/* Make sure we aren't trying to move a dirctory into it's subdir */
 
-	if (odip != ndip) {
-		error = gfs2_glock_nq_init(sdp->sd_rename_gl, LM_ST_EXCLUSIVE,
-					   0, &r_gh);
+	if (S_ISDIR(ip->i_inode.i_mode) && odip != ndip) {
+		dir_rename = 1;
+
+		error = gfs2_glock_nq_init(sdp->sd_rename_gl, LM_ST_EXCLUSIVE, 0,
+					   &r_gh);
 		if (error)
 			goto out;
 
-		if (S_ISDIR(ip->i_inode.i_mode)) {
-			dir_rename = 1;
-			/* don't move a dirctory into it's subdir */
-			error = gfs2_ok_to_move(ip, ndip);
-			if (error)
-				goto out_gunlock_r;
-		}
+		error = gfs2_ok_to_move(ip, ndip);
+		if (error)
+			goto out_gunlock_r;
 	}
 
 	num_gh = 1;
@@ -706,11 +639,9 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 			gfs2_holder_init(nrgd->rd_gl, LM_ST_EXCLUSIVE, 0, ghs + num_gh++);
 	}
 
-	for (x = 0; x < num_gh; x++) {
-		error = gfs2_glock_nq(ghs + x);
-		if (error)
-			goto out_gunlock;
-	}
+	error = gfs2_glock_nq_m(num_gh, ghs);
+	if (error)
+		goto out_uninit;
 
 	/* Check out the old directory */
 
@@ -726,19 +657,19 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 			goto out_gunlock;
 
 		if (S_ISDIR(nip->i_inode.i_mode)) {
-			if (nip->i_entries < 2) {
+			if (nip->i_di.di_entries < 2) {
 				if (gfs2_consist_inode(nip))
 					gfs2_dinode_print(nip);
 				error = -EIO;
 				goto out_gunlock;
 			}
-			if (nip->i_entries > 2) {
+			if (nip->i_di.di_entries > 2) {
 				error = -ENOTEMPTY;
 				goto out_gunlock;
 			}
 		}
 	} else {
-		error = gfs2_permission(ndir, MAY_WRITE | MAY_EXEC);
+		error = permission(ndir, MAY_WRITE | MAY_EXEC, NULL);
 		if (error)
 			goto out_gunlock;
 
@@ -758,7 +689,7 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 				error = -EINVAL;
 				goto out_gunlock;
 			}
-			if (ndip->i_entries == (u32)-1) {
+			if (ndip->i_di.di_entries == (u32)-1) {
 				error = -EFBIG;
 				goto out_gunlock;
 			}
@@ -773,7 +704,7 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 	/* Check out the dir to be renamed */
 
 	if (dir_rename) {
-		error = gfs2_permission(odentry->d_inode, MAY_WRITE);
+		error = permission(odentry->d_inode, MAY_WRITE, NULL);
 		if (error)
 			goto out_gunlock;
 	}
@@ -873,12 +804,12 @@ out_alloc:
 	if (alloc_required)
 		gfs2_alloc_put(ndip);
 out_gunlock:
-	while (x--) {
-		gfs2_glock_dq(ghs + x);
+	gfs2_glock_dq_m(num_gh, ghs);
+out_uninit:
+	for (x = 0; x < num_gh; x++)
 		gfs2_holder_uninit(ghs + x);
-	}
 out_gunlock_r:
-	if (r_gh.gh_gl)
+	if (dir_rename)
 		gfs2_glock_dq_uninit(&r_gh);
 out:
 	return error;
@@ -960,7 +891,7 @@ static void *gfs2_follow_link(struct dentry *dentry, struct nameidata *nd)
  * Returns: errno
  */
 
-int gfs2_permission(struct inode *inode, int mask)
+static int gfs2_permission(struct inode *inode, int mask, struct nameidata *nd)
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_holder i_gh;
@@ -974,10 +905,7 @@ int gfs2_permission(struct inode *inode, int mask)
 		unlock = 1;
 	}
 
-	if ((mask & MAY_WRITE) && IS_IMMUTABLE(inode))
-		error = -EACCES;
-	else
-		error = generic_permission(inode, mask, gfs2_check_acl);
+	error = generic_permission(inode, mask, gfs2_check_acl);
 	if (unlock)
 		gfs2_glock_dq_uninit(&i_gh);
 
@@ -990,7 +918,7 @@ static int setattr_size(struct inode *inode, struct iattr *attr)
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
 	int error;
 
-	if (attr->ia_size != ip->i_disksize) {
+	if (attr->ia_size != ip->i_di.di_size) {
 		error = gfs2_trans_begin(sdp, 0, sdp->sd_jdesc->jd_blocks);
 		if (error)
 			return error;
@@ -1001,8 +929,8 @@ static int setattr_size(struct inode *inode, struct iattr *attr)
 	}
 
 	error = gfs2_truncatei(ip, attr->ia_size);
-	if (error && (inode->i_size != ip->i_disksize))
-		i_size_write(inode, ip->i_disksize);
+	if (error && (inode->i_size != ip->i_di.di_size))
+		i_size_write(inode, ip->i_di.di_size);
 
 	return error;
 }
@@ -1212,48 +1140,6 @@ static int gfs2_removexattr(struct dentry *dentry, const char *name)
 	return gfs2_ea_remove(GFS2_I(dentry->d_inode), &er);
 }
 
-static int gfs2_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
-		       u64 start, u64 len)
-{
-	struct gfs2_inode *ip = GFS2_I(inode);
-	struct gfs2_holder gh;
-	int ret;
-
-	ret = fiemap_check_flags(fieinfo, FIEMAP_FLAG_SYNC);
-	if (ret)
-		return ret;
-
-	mutex_lock(&inode->i_mutex);
-
-	ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
-	if (ret)
-		goto out;
-
-	if (gfs2_is_stuffed(ip)) {
-		u64 phys = ip->i_no_addr << inode->i_blkbits;
-		u64 size = i_size_read(inode);
-		u32 flags = FIEMAP_EXTENT_LAST|FIEMAP_EXTENT_NOT_ALIGNED|
-			    FIEMAP_EXTENT_DATA_INLINE;
-		phys += sizeof(struct gfs2_dinode);
-		phys += start;
-		if (start + len > size)
-			len = size - start;
-		if (start < size)
-			ret = fiemap_fill_next_extent(fieinfo, start, phys,
-						      len, flags);
-		if (ret == 1)
-			ret = 0;
-	} else {
-		ret = __generic_block_fiemap(inode, fieinfo, start, len,
-					     gfs2_block_map);
-	}
-
-	gfs2_glock_dq_uninit(&gh);
-out:
-	mutex_unlock(&inode->i_mutex);
-	return ret;
-}
-
 const struct inode_operations gfs2_file_iops = {
 	.permission = gfs2_permission,
 	.setattr = gfs2_setattr,
@@ -1262,7 +1148,6 @@ const struct inode_operations gfs2_file_iops = {
 	.getxattr = gfs2_getxattr,
 	.listxattr = gfs2_listxattr,
 	.removexattr = gfs2_removexattr,
-	.fiemap = gfs2_fiemap,
 };
 
 const struct inode_operations gfs2_dir_iops = {
@@ -1282,7 +1167,6 @@ const struct inode_operations gfs2_dir_iops = {
 	.getxattr = gfs2_getxattr,
 	.listxattr = gfs2_listxattr,
 	.removexattr = gfs2_removexattr,
-	.fiemap = gfs2_fiemap,
 };
 
 const struct inode_operations gfs2_symlink_iops = {
@@ -1295,6 +1179,5 @@ const struct inode_operations gfs2_symlink_iops = {
 	.getxattr = gfs2_getxattr,
 	.listxattr = gfs2_listxattr,
 	.removexattr = gfs2_removexattr,
-	.fiemap = gfs2_fiemap,
 };
 

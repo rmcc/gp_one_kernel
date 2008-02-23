@@ -292,7 +292,7 @@ EXPORT_SYMBOL(sn_io_slot_fixup);
  * sn_pci_controller_fixup() - This routine sets up a bus's resources
  *			       consistent with the Linux PCI abstraction layer.
  */
-static void __init
+static void
 sn_pci_controller_fixup(int segment, int busnum, struct pci_bus *bus)
 {
 	s64 status = 0;

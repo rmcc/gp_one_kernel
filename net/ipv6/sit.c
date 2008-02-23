@@ -6,6 +6,8 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
+ *	$Id: sit.c,v 1.53 2001/09/25 05:09:53 davem Exp $
+ *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
@@ -62,8 +64,8 @@
 #define HASH_SIZE  16
 #define HASH(addr) (((__force u32)addr^((__force u32)addr>>4))&0xF)
 
-static void ipip6_fb_tunnel_init(struct net_device *dev);
-static void ipip6_tunnel_init(struct net_device *dev);
+static int ipip6_fb_tunnel_init(struct net_device *dev);
+static int ipip6_tunnel_init(struct net_device *dev);
 static void ipip6_tunnel_setup(struct net_device *dev);
 
 static int sit_net_id;
@@ -188,8 +190,7 @@ static struct ip_tunnel * ipip6_tunnel_locate(struct net *net,
 	}
 
 	nt = netdev_priv(dev);
-	ipip6_tunnel_init(dev);
-
+	dev->init = ipip6_tunnel_init;
 	nt->parms = *parms;
 
 	if (parms->i_flags & SIT_ISATAP)
@@ -221,18 +222,15 @@ __ipip6_tunnel_locate_prl(struct ip_tunnel *t, __be32 addr)
 
 }
 
-static int ipip6_tunnel_get_prl(struct ip_tunnel *t,
-				struct ip_tunnel_prl __user *a)
+static int ipip6_tunnel_get_prl(struct ip_tunnel *t, struct ip_tunnel_prl *a)
 {
-	struct ip_tunnel_prl kprl, *kp;
+	struct ip_tunnel_prl *kp;
 	struct ip_tunnel_prl_entry *prl;
 	unsigned int cmax, c = 0, ca, len;
 	int ret = 0;
 
-	if (copy_from_user(&kprl, a, sizeof(kprl)))
-		return -EFAULT;
-	cmax = kprl.datalen / sizeof(kprl);
-	if (cmax > 1 && kprl.addr != htonl(INADDR_ANY))
+	cmax = a->datalen / sizeof(*a);
+	if (cmax > 1 && a->addr != htonl(INADDR_ANY))
 		cmax = 1;
 
 	/* For simple GET or for root users,
@@ -263,25 +261,26 @@ static int ipip6_tunnel_get_prl(struct ip_tunnel *t,
 	for (prl = t->prl; prl; prl = prl->next) {
 		if (c > cmax)
 			break;
-		if (kprl.addr != htonl(INADDR_ANY) && prl->addr != kprl.addr)
+		if (a->addr != htonl(INADDR_ANY) && prl->addr != a->addr)
 			continue;
 		kp[c].addr = prl->addr;
 		kp[c].flags = prl->flags;
 		c++;
-		if (kprl.addr != htonl(INADDR_ANY))
+		if (a->addr != htonl(INADDR_ANY))
 			break;
 	}
 out:
 	read_unlock(&ipip6_lock);
 
 	len = sizeof(*kp) * c;
-	ret = 0;
-	if ((len && copy_to_user(a + 1, kp, len)) || put_user(len, &a->datalen))
-		ret = -EFAULT;
+	ret = len ? copy_to_user(a->data, kp, len) : 0;
 
 	kfree(kp);
+	if (ret)
+		return -EFAULT;
 
-	return ret;
+	a->datalen = len;
+	return 0;
 }
 
 static int
@@ -492,13 +491,13 @@ static int ipip6_rcv(struct sk_buff *skb)
 
 		if ((tunnel->dev->priv_flags & IFF_ISATAP) &&
 		    !isatap_chksrc(skb, iph, tunnel)) {
-			tunnel->dev->stats.rx_errors++;
+			tunnel->stat.rx_errors++;
 			read_unlock(&ipip6_lock);
 			kfree_skb(skb);
 			return 0;
 		}
-		tunnel->dev->stats.rx_packets++;
-		tunnel->dev->stats.rx_bytes += skb->len;
+		tunnel->stat.rx_packets++;
+		tunnel->stat.rx_bytes += skb->len;
 		skb->dev = tunnel->dev;
 		dst_release(skb->dst);
 		skb->dst = NULL;
@@ -538,7 +537,7 @@ static inline __be32 try_6to4(struct in6_addr *v6dst)
 static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
-	struct net_device_stats *stats = &tunnel->dev->stats;
+	struct net_device_stats *stats = &tunnel->stat;
 	struct iphdr  *tiph = &tunnel->parms.iph;
 	struct ipv6hdr *iph6 = ipv6_hdr(skb);
 	u8     tos = tunnel->parms.iph.tos;
@@ -552,7 +551,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	int addr_type;
 
 	if (tunnel->recursion++) {
-		stats->collisions++;
+		tunnel->stat.collisions++;
 		goto tx_error;
 	}
 
@@ -619,20 +618,20 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 				    .oif = tunnel->parms.link,
 				    .proto = IPPROTO_IPV6 };
 		if (ip_route_output_key(dev_net(dev), &rt, &fl)) {
-			stats->tx_carrier_errors++;
+			tunnel->stat.tx_carrier_errors++;
 			goto tx_error_icmp;
 		}
 	}
 	if (rt->rt_type != RTN_UNICAST) {
 		ip_rt_put(rt);
-		stats->tx_carrier_errors++;
+		tunnel->stat.tx_carrier_errors++;
 		goto tx_error_icmp;
 	}
 	tdev = rt->u.dst.dev;
 
 	if (tdev == dev) {
 		ip_rt_put(rt);
-		stats->collisions++;
+		tunnel->stat.collisions++;
 		goto tx_error;
 	}
 
@@ -642,7 +641,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		mtu = skb->dst ? dst_mtu(skb->dst) : dev->mtu;
 
 	if (mtu < 68) {
-		stats->collisions++;
+		tunnel->stat.collisions++;
 		ip_rt_put(rt);
 		goto tx_error;
 	}
@@ -874,20 +873,11 @@ ipip6_tunnel_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCGETPRL:
-		err = -EINVAL;
-		if (dev == sitn->fb_tunnel_dev)
-			goto done;
-		err = -ENOENT;
-		if (!(t = netdev_priv(dev)))
-			goto done;
-		err = ipip6_tunnel_get_prl(t, ifr->ifr_ifru.ifru_data);
-		break;
-
 	case SIOCADDPRL:
 	case SIOCDELPRL:
 	case SIOCCHGPRL:
 		err = -EPERM;
-		if (!capable(CAP_NET_ADMIN))
+		if (cmd != SIOCGETPRL && !capable(CAP_NET_ADMIN))
 			goto done;
 		err = -EINVAL;
 		if (dev == sitn->fb_tunnel_dev)
@@ -900,6 +890,12 @@ ipip6_tunnel_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 			goto done;
 
 		switch (cmd) {
+		case SIOCGETPRL:
+			err = ipip6_tunnel_get_prl(t, &prl);
+			if (!err && copy_to_user(ifr->ifr_ifru.ifru_data,
+						 &prl, sizeof(prl)))
+				err = -EFAULT;
+			break;
 		case SIOCDELPRL:
 			err = ipip6_tunnel_del_prl(t, &prl);
 			break;
@@ -908,7 +904,8 @@ ipip6_tunnel_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 			err = ipip6_tunnel_add_prl(t, &prl, cmd == SIOCCHGPRL);
 			break;
 		}
-		netdev_state_change(dev);
+		if (cmd != SIOCGETPRL)
+			netdev_state_change(dev);
 		break;
 
 	default:
@@ -919,6 +916,11 @@ done:
 	return err;
 }
 
+static struct net_device_stats *ipip6_tunnel_get_stats(struct net_device *dev)
+{
+	return &(((struct ip_tunnel*)netdev_priv(dev))->stat);
+}
+
 static int ipip6_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if (new_mtu < IPV6_MIN_MTU || new_mtu > 0xFFF8 - sizeof(struct iphdr))
@@ -927,17 +929,14 @@ static int ipip6_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-static const struct net_device_ops ipip6_netdev_ops = {
-	.ndo_uninit	= ipip6_tunnel_uninit,
-	.ndo_start_xmit	= ipip6_tunnel_xmit,
-	.ndo_do_ioctl	= ipip6_tunnel_ioctl,
-	.ndo_change_mtu	= ipip6_tunnel_change_mtu,
-};
-
 static void ipip6_tunnel_setup(struct net_device *dev)
 {
-	dev->netdev_ops		= &ipip6_netdev_ops;
+	dev->uninit		= ipip6_tunnel_uninit;
 	dev->destructor 	= free_netdev;
+	dev->hard_start_xmit	= ipip6_tunnel_xmit;
+	dev->get_stats		= ipip6_tunnel_get_stats;
+	dev->do_ioctl		= ipip6_tunnel_ioctl;
+	dev->change_mtu		= ipip6_tunnel_change_mtu;
 
 	dev->type		= ARPHRD_SIT;
 	dev->hard_header_len 	= LL_MAX_HEADER + sizeof(struct iphdr);
@@ -948,9 +947,11 @@ static void ipip6_tunnel_setup(struct net_device *dev)
 	dev->features		|= NETIF_F_NETNS_LOCAL;
 }
 
-static void ipip6_tunnel_init(struct net_device *dev)
+static int ipip6_tunnel_init(struct net_device *dev)
 {
-	struct ip_tunnel *tunnel = netdev_priv(dev);
+	struct ip_tunnel *tunnel;
+
+	tunnel = netdev_priv(dev);
 
 	tunnel->dev = dev;
 	strcpy(tunnel->parms.name, dev->name);
@@ -959,9 +960,11 @@ static void ipip6_tunnel_init(struct net_device *dev)
 	memcpy(dev->broadcast, &tunnel->parms.iph.daddr, 4);
 
 	ipip6_tunnel_bind_dev(dev);
+
+	return 0;
 }
 
-static void ipip6_fb_tunnel_init(struct net_device *dev)
+static int ipip6_fb_tunnel_init(struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	struct iphdr *iph = &tunnel->parms.iph;
@@ -978,6 +981,7 @@ static void ipip6_fb_tunnel_init(struct net_device *dev)
 
 	dev_hold(dev);
 	sitn->tunnels_wc[0]	= tunnel;
+	return 0;
 }
 
 static struct xfrm_tunnel sit_handler = {
@@ -1025,9 +1029,9 @@ static int sit_init_net(struct net *net)
 		err = -ENOMEM;
 		goto err_alloc_dev;
 	}
-	dev_net_set(sitn->fb_tunnel_dev, net);
 
-	ipip6_fb_tunnel_init(sitn->fb_tunnel_dev);
+	sitn->fb_tunnel_dev->init = ipip6_fb_tunnel_init;
+	dev_net_set(sitn->fb_tunnel_dev, net);
 
 	if ((err = register_netdev(sitn->fb_tunnel_dev)))
 		goto err_reg_dev;
@@ -1035,7 +1039,6 @@ static int sit_init_net(struct net *net)
 	return 0;
 
 err_reg_dev:
-	dev_put(sitn->fb_tunnel_dev);
 	free_netdev(sitn->fb_tunnel_dev);
 err_alloc_dev:
 	/* nothing */

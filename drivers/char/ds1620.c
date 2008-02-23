@@ -8,9 +8,8 @@
 #include <linux/proc_fs.h>
 #include <linux/capability.h>
 #include <linux/init.h>
-#include <linux/smp_lock.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/uaccess.h>
 #include <asm/therm.h>
@@ -43,51 +42,52 @@ static const char *fan_state[] = { "off", "on", "on (hardwired)" };
  *  chance that the WaveArtist driver could touch these bits to
  *  enable or disable the speaker.
  */
+extern spinlock_t gpio_lock;
 extern unsigned int system_rev;
 
 static inline void netwinder_ds1620_set_clk(int clk)
 {
-	nw_gpio_modify_op(GPIO_DSCLK, clk ? GPIO_DSCLK : 0);
+	gpio_modify_op(GPIO_DSCLK, clk ? GPIO_DSCLK : 0);
 }
 
 static inline void netwinder_ds1620_set_data(int dat)
 {
-	nw_gpio_modify_op(GPIO_DATA, dat ? GPIO_DATA : 0);
+	gpio_modify_op(GPIO_DATA, dat ? GPIO_DATA : 0);
 }
 
 static inline int netwinder_ds1620_get_data(void)
 {
-	return nw_gpio_read() & GPIO_DATA;
+	return gpio_read() & GPIO_DATA;
 }
 
 static inline void netwinder_ds1620_set_data_dir(int dir)
 {
-	nw_gpio_modify_io(GPIO_DATA, dir ? GPIO_DATA : 0);
+	gpio_modify_io(GPIO_DATA, dir ? GPIO_DATA : 0);
 }
 
 static inline void netwinder_ds1620_reset(void)
 {
-	nw_cpld_modify(CPLD_DS_ENABLE, 0);
-	nw_cpld_modify(CPLD_DS_ENABLE, CPLD_DS_ENABLE);
+	cpld_modify(CPLD_DS_ENABLE, 0);
+	cpld_modify(CPLD_DS_ENABLE, CPLD_DS_ENABLE);
 }
 
 static inline void netwinder_lock(unsigned long *flags)
 {
-	spin_lock_irqsave(&nw_gpio_lock, *flags);
+	spin_lock_irqsave(&gpio_lock, *flags);
 }
 
 static inline void netwinder_unlock(unsigned long *flags)
 {
-	spin_unlock_irqrestore(&nw_gpio_lock, *flags);
+	spin_unlock_irqrestore(&gpio_lock, *flags);
 }
 
 static inline void netwinder_set_fan(int i)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&nw_gpio_lock, flags);
-	nw_gpio_modify_op(GPIO_FAN, i ? GPIO_FAN : 0);
-	spin_unlock_irqrestore(&nw_gpio_lock, flags);
+	spin_lock_irqsave(&gpio_lock, flags);
+	gpio_modify_op(GPIO_FAN, i ? GPIO_FAN : 0);
+	spin_unlock_irqrestore(&gpio_lock, flags);
 }
 
 static inline int netwinder_get_fan(void)
@@ -95,7 +95,7 @@ static inline int netwinder_get_fan(void)
 	if ((system_rev & 0xf000) == 0x4000)
 		return FAN_ALWAYS_ON;
 
-	return (nw_gpio_read() & GPIO_FAN) ? FAN_ON : FAN_OFF;
+	return (gpio_read() & GPIO_FAN) ? FAN_ON : FAN_OFF;
 }
 
 /*
@@ -206,12 +206,6 @@ static void ds1620_read_state(struct therm *therm)
 {
 	therm->lo = cvt_9_to_int(ds1620_in(THERM_READ_TL, 9));
 	therm->hi = cvt_9_to_int(ds1620_in(THERM_READ_TH, 9));
-}
-
-static int ds1620_open(struct inode *inode, struct file *file)
-{
-	cycle_kernel_lock();
-	return nonseekable_open(inode, file);
 }
 
 static ssize_t
@@ -342,7 +336,7 @@ static struct proc_dir_entry *proc_therm_ds1620;
 
 static const struct file_operations ds1620_fops = {
 	.owner		= THIS_MODULE,
-	.open		= ds1620_open,
+	.open		= nonseekable_open,
 	.read		= ds1620_read,
 	.ioctl		= ds1620_ioctl,
 };

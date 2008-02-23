@@ -227,6 +227,39 @@ void kvmppc_check_and_deliver_interrupts(struct kvm_vcpu *vcpu)
 	}
 }
 
+static int kvmppc_emulate_mmio(struct kvm_run *run, struct kvm_vcpu *vcpu)
+{
+	enum emulation_result er;
+	int r;
+
+	er = kvmppc_emulate_instruction(run, vcpu);
+	switch (er) {
+	case EMULATE_DONE:
+		/* Future optimization: only reload non-volatiles if they were
+		 * actually modified. */
+		r = RESUME_GUEST_NV;
+		break;
+	case EMULATE_DO_MMIO:
+		run->exit_reason = KVM_EXIT_MMIO;
+		/* We must reload nonvolatiles because "update" load/store
+		 * instructions modify register state. */
+		/* Future optimization: only reload non-volatiles if they were
+		 * actually modified. */
+		r = RESUME_HOST_NV;
+		break;
+	case EMULATE_FAIL:
+		/* XXX Deliver Program interrupt to guest. */
+		printk(KERN_EMERG "%s: emulation failed (%08x)\n", __func__,
+		       vcpu->arch.last_inst);
+		r = RESUME_HOST;
+		break;
+	default:
+		BUG();
+	}
+
+	return r;
+}
+
 /**
  * kvmppc_handle_exit
  *
@@ -410,21 +443,6 @@ int kvmppc_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu,
 		break;
 	}
 
-	case BOOKE_INTERRUPT_DEBUG: {
-		u32 dbsr;
-
-		vcpu->arch.pc = mfspr(SPRN_CSRR0);
-
-		/* clear IAC events in DBSR register */
-		dbsr = mfspr(SPRN_DBSR);
-		dbsr &= DBSR_IAC1 | DBSR_IAC2 | DBSR_IAC3 | DBSR_IAC4;
-		mtspr(SPRN_DBSR, dbsr);
-
-		run->exit_reason = KVM_EXIT_DEBUG;
-		r = RESUME_HOST;
-		break;
-	}
-
 	default:
 		printk(KERN_EMERG "exit_nr %d\n", exit_nr);
 		BUG();
@@ -485,8 +503,6 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 	vcpu->arch.pc = 0;
 	vcpu->arch.msr = 0;
 	vcpu->arch.gpr[1] = (16<<20) - 8; /* -8 for the callee-save LR slot */
-
-	vcpu->arch.shadow_pid = 1;
 
 	/* Eye-catching number so we know if the guest takes an interrupt
 	 * before it's programmed its own IVPR. */

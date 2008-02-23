@@ -28,7 +28,6 @@
 #include <linux/vmalloc.h>
 #include <linux/elf.h>
 #include <linux/seq_file.h>
-#include <linux/smp_lock.h>
 #include <linux/syscalls.h>
 #include <linux/moduleloader.h>
 #include <linux/interrupt.h>
@@ -393,12 +392,8 @@ out:
 static int file_open(struct inode *inode, struct file *filp)
 {
 	int minor = iminor(inode);
-	int err;
 
-	lock_kernel();
-	err = rtlx_open(minor, (filp->f_flags & O_NONBLOCK) ? 0 : 1);
-	unlock_kernel();
-	return err;
+	return rtlx_open(minor, (filp->f_flags & O_NONBLOCK) ? 0 : 1);
 }
 
 static int file_release(struct inode *inode, struct file *filp)
@@ -522,8 +517,8 @@ static int __init rtlx_module_init(void)
 		atomic_set(&channel_wqs[i].in_open, 0);
 		mutex_init(&channel_wqs[i].mutex);
 
-		dev = device_create(mt_class, NULL, MKDEV(major, i), NULL,
-				    "%s%d", module_name, i);
+		dev = device_create(mt_class, NULL, MKDEV(major, i),
+		                    "%s%d", module_name, i);
 		if (IS_ERR(dev)) {
 			err = PTR_ERR(dev);
 			goto out_chrdev;

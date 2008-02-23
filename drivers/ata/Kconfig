@@ -7,6 +7,7 @@ menuconfig ATA
 	depends on HAS_IOMEM
 	depends on BLOCK
 	depends on !(M32R || M68K) || BROKEN
+	depends on !SUN4 || BROKEN
 	select SCSI
 	---help---
 	  If you want to use a ATA hard disk, ATA tape drive, ATA CD-ROM or
@@ -153,7 +154,7 @@ config SATA_PROMISE
 	  If unsure, say N.
 
 config SATA_SX4
-	tristate "Promise SATA SX4 support (Experimental)"
+	tristate "Promise SATA SX4 support"
 	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for Promise Serial ATA SX4.
@@ -219,8 +220,8 @@ config PATA_ACPI
 	  otherwise unsupported hardware.
 
 config PATA_ALI
-	tristate "ALi PATA support"
-	depends on PCI
+	tristate "ALi PATA support (Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the ALi ATA interfaces
 	  found on the many ALi chipsets.
@@ -263,7 +264,7 @@ config PATA_ATIIXP
 	  If unsure, say N.
 
 config PATA_CMD640_PCI
-	tristate "CMD640 PCI PATA support (Experimental)"
+	tristate "CMD640 PCI PATA support (Very Experimental)"
 	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the CMD640 PCI IDE
@@ -291,8 +292,8 @@ config PATA_CS5520
 	  If unsure, say N.
 
 config PATA_CS5530
-	tristate "CS5530 PATA support"
-	depends on PCI
+	tristate "CS5530 PATA support (Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the Cyrix/NatSemi/AMD CS5530
 	  companion chip used with the MediaGX/Geode processor family.
@@ -309,8 +310,8 @@ config PATA_CS5535
 	  If unsure, say N.
 
 config PATA_CS5536
-	tristate "CS5536 PATA support"
-	depends on PCI && X86 && !X86_64
+	tristate "CS5536 PATA support (Experimental)"
+	depends on PCI && X86 && !X86_64 && EXPERIMENTAL
 	help
 	  This option enables support for the AMD CS5536
 	  companion chip used with the Geode LX processor family.
@@ -363,7 +364,7 @@ config PATA_HPT37X
 	  If unsure, say N.
 
 config PATA_HPT3X2N
-	tristate "HPT 372N/302N PATA support (Experimental)"
+	tristate "HPT 372N/302N PATA support (Very Experimental)"
 	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the N variant HPT PATA
@@ -389,8 +390,8 @@ config PATA_HPT3X3_DMA
 	  problems with DMA on this chipset.
 
 config PATA_ISAPNP
-	tristate "ISA Plug and Play PATA support"
-	depends on ISAPNP
+	tristate "ISA Plug and Play PATA support (Experimental)"
+	depends on EXPERIMENTAL && ISAPNP
 	help
 	  This option enables support for ISA plug & play ATA
 	  controllers such as those found on old soundcards.
@@ -447,17 +448,14 @@ config PATA_MARVELL
 	tristate "Marvell PATA support via legacy mode"
 	depends on PCI
 	help
-	  This option enables limited support for the Marvell 88SE61xx ATA
-	  controllers. If you wish to use only the SATA ports then select
-	  the AHCI driver alone. If you wish to the use the PATA port or
-	  both SATA and PATA include this driver.
+	  This option enables limited support for the Marvell 88SE6145 ATA
+	  controller.
 
 	  If unsure, say N.
 
 config PATA_MPC52xx
 	tristate "Freescale MPC52xx SoC internal IDE"
-	depends on PPC_MPC52xx && PPC_BESTCOMM
-	select PPC_BESTCOMM_ATA
+	depends on PPC_MPC52xx
 	help
 	  This option enables support for integrated IDE controller
 	  of the Freescale MPC52xx SoC.
@@ -499,8 +497,8 @@ config PATA_NINJA32
 	  If unsure, say N.
 
 config PATA_NS87410
-	tristate "Nat Semi NS87410 PATA support"
-	depends on PCI
+	tristate "Nat Semi NS87410 PATA support (Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the National Semiconductor
 	  NS87410 PCI-IDE controller.
@@ -508,8 +506,8 @@ config PATA_NS87410
 	  If unsure, say N.
 
 config PATA_NS87415
-	tristate "Nat Semi NS87415 PATA support"
-	depends on PCI
+	tristate "Nat Semi NS87415 PATA support (Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the National Semiconductor
 	  NS87415 PCI-IDE controller.
@@ -545,8 +543,8 @@ config PATA_PCMCIA
 	  If unsure, say N.
 
 config PATA_PDC_OLD
-	tristate "Older Promise PATA controller support"
-	depends on PCI
+	tristate "Older Promise PATA controller support (Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the Promise 20246, 20262, 20263,
 	  20265 and 20267 adapters.
@@ -560,7 +558,7 @@ config PATA_QDI
 	  Support for QDI 6500 and 6580 PATA controllers on VESA local bus.
 
 config PATA_RADISYS
-	tristate "RADISYS 82600 PATA support (Experimental)"
+	tristate "RADISYS 82600 PATA support (Very Experimental)"
 	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the RADISYS 82600
@@ -587,8 +585,8 @@ config PATA_RZ1000
 	  If unsure, say N.
 
 config PATA_SC1200
-	tristate "SC1200 PATA support"
-	depends on PCI
+	tristate "SC1200 PATA support (Very Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for the NatSemi/AMD SC1200 SoC
 	  companion chip used with the Geode processor family.
@@ -621,8 +619,8 @@ config PATA_SIL680
 	  If unsure, say N.
 
 config PATA_SIS
-	tristate "SiS PATA support"
-	depends on PCI
+	tristate "SiS PATA support (Experimental)"
+	depends on PCI && EXPERIMENTAL
 	help
 	  This option enables support for SiS PATA controllers
 
@@ -653,17 +651,9 @@ config PATA_WINBOND_VLB
 	  Support for the Winbond W83759A controller on Vesa Local Bus
 	  systems.
 
-config HAVE_PATA_PLATFORM
-	bool
-	help
-	  This is an internal configuration node for any machine that
-	  uses pata-platform driver to enable the relevant driver in the
-	  configuration structure without having to submit endless patches
-	  to update the PATA_PLATFORM entry.
-
 config PATA_PLATFORM
 	tristate "Generic platform device PATA support"
-	depends on EMBEDDED || PPC || HAVE_PATA_PLATFORM
+	depends on EMBEDDED || ARCH_RPC || PPC
 	help
 	  This option enables support for generic directly connected ATA
 	  devices commonly found on embedded systems.

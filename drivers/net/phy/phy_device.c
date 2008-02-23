@@ -74,7 +74,7 @@ int phy_register_fixup(const char *bus_id, u32 phy_uid, u32 phy_uid_mask,
 	if (!fixup)
 		return -ENOMEM;
 
-	strlcpy(fixup->bus_id, bus_id, sizeof(fixup->bus_id));
+	strncpy(fixup->bus_id, bus_id, BUS_ID_SIZE);
 	fixup->phy_uid = phy_uid;
 	fixup->phy_uid_mask = phy_uid_mask;
 	fixup->run = run;
@@ -109,7 +109,7 @@ EXPORT_SYMBOL(phy_register_fixup_for_id);
  */
 static int phy_needs_fixup(struct phy_device *phydev, struct phy_fixup *fixup)
 {
-	if (strcmp(fixup->bus_id, dev_name(&phydev->dev)) != 0)
+	if (strcmp(fixup->bus_id, phydev->dev.bus_id) != 0)
 		if (strcmp(fixup->bus_id, PHY_ANY_ID) != 0)
 			return 0;
 
@@ -207,7 +207,6 @@ int get_phy_id(struct mii_bus *bus, int addr, u32 *phy_id)
 
 	return 0;
 }
-EXPORT_SYMBOL(get_phy_id);
 
 /**
  * get_phy_device - reads the specified PHY device and returns its @phy_device struct
@@ -227,17 +226,8 @@ struct phy_device * get_phy_device(struct mii_bus *bus, int addr)
 	if (r)
 		return ERR_PTR(r);
 
-	/* If the phy_id is mostly Fs, there is no device there */
-	if ((phy_id & 0x1fffffff) == 0x1fffffff)
-		return NULL;
-
-	/*
-	 * Broken hardware is sometimes missing the pull-up resistor on the
-	 * MDIO line, which results in reads to non-existent devices returning
-	 * 0 rather than 0xffff. Catch this here and treat 0 as a non-existent
-	 * device as well.
-	 */
-	if (phy_id == 0)
+	/* If the phy_id is all Fs, there is no device there */
+	if (0xffffffff == phy_id)
 		return NULL;
 
 	dev = phy_device_create(bus, addr, phy_id);
@@ -318,6 +308,11 @@ void phy_disconnect(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(phy_disconnect);
 
+static int phy_compare_id(struct device *dev, void *data)
+{
+	return strcmp((char *)data, dev->bus_id) ? 0 : 1;
+}
+
 /**
  * phy_attach - attach a network device to a particular PHY device
  * @dev: network device to attach
@@ -341,7 +336,8 @@ struct phy_device *phy_attach(struct net_device *dev,
 
 	/* Search the list of PHY devices on the mdio bus for the
 	 * PHY with the requested name */
-	d = bus_find_device_by_name(bus, NULL, bus_id);
+	d = bus_find_device(bus, NULL, (void *)bus_id, phy_compare_id);
+
 	if (d) {
 		phydev = to_phy_device(d);
 	} else {
@@ -422,14 +418,13 @@ EXPORT_SYMBOL(phy_detach);
  *
  * Description: Writes MII_ADVERTISE with the appropriate values,
  *   after sanitizing the values to make sure we only advertise
- *   what is supported.  Returns < 0 on error, 0 if the PHY's advertisement
- *   hasn't changed, and > 0 if it has changed.
+ *   what is supported.
  */
 int genphy_config_advert(struct phy_device *phydev)
 {
 	u32 advertise;
-	int oldadv, adv;
-	int err, changed = 0;
+	int adv;
+	int err;
 
 	/* Only allow advertising what
 	 * this PHY supports */
@@ -437,7 +432,7 @@ int genphy_config_advert(struct phy_device *phydev)
 	advertise = phydev->advertising;
 
 	/* Setup standard advertisement */
-	oldadv = adv = phy_read(phydev, MII_ADVERTISE);
+	adv = phy_read(phydev, MII_ADVERTISE);
 
 	if (adv < 0)
 		return adv;
@@ -457,18 +452,15 @@ int genphy_config_advert(struct phy_device *phydev)
 	if (advertise & ADVERTISED_Asym_Pause)
 		adv |= ADVERTISE_PAUSE_ASYM;
 
-	if (adv != oldadv) {
-		err = phy_write(phydev, MII_ADVERTISE, adv);
+	err = phy_write(phydev, MII_ADVERTISE, adv);
 
-		if (err < 0)
-			return err;
-		changed = 1;
-	}
+	if (err < 0)
+		return err;
 
 	/* Configure gigabit if it's supported */
 	if (phydev->supported & (SUPPORTED_1000baseT_Half |
 				SUPPORTED_1000baseT_Full)) {
-		oldadv = adv = phy_read(phydev, MII_CTRL1000);
+		adv = phy_read(phydev, MII_CTRL1000);
 
 		if (adv < 0)
 			return adv;
@@ -478,17 +470,13 @@ int genphy_config_advert(struct phy_device *phydev)
 			adv |= ADVERTISE_1000HALF;
 		if (advertise & SUPPORTED_1000baseT_Full)
 			adv |= ADVERTISE_1000FULL;
+		err = phy_write(phydev, MII_CTRL1000, adv);
 
-		if (adv != oldadv) {
-			err = phy_write(phydev, MII_CTRL1000, adv);
-
-			if (err < 0)
-				return err;
-			changed = 1;
-		}
+		if (err < 0)
+			return err;
 	}
 
-	return changed;
+	return adv;
 }
 EXPORT_SYMBOL(genphy_config_advert);
 
@@ -517,6 +505,23 @@ int genphy_setup_forced(struct phy_device *phydev)
 	
 	err = phy_write(phydev, MII_BMCR, ctl);
 
+	if (err < 0)
+		return err;
+
+	/*
+	 * Run the fixups on this PHY, just in case the
+	 * board code needs to change something after a reset
+	 */
+	err = phy_scan_fixups(phydev);
+
+	if (err < 0)
+		return err;
+
+	/* We just reset the device, so we'd better configure any
+	 * settings the PHY requires to operate */
+	if (phydev->drv->config_init)
+		err = phydev->drv->config_init(phydev);
+
 	return err;
 }
 
@@ -543,7 +548,6 @@ int genphy_restart_aneg(struct phy_device *phydev)
 
 	return ctl;
 }
-EXPORT_SYMBOL(genphy_restart_aneg);
 
 
 /**
@@ -556,34 +560,19 @@ EXPORT_SYMBOL(genphy_restart_aneg);
  */
 int genphy_config_aneg(struct phy_device *phydev)
 {
-	int result;
+	int err = 0;
 
-	if (AUTONEG_ENABLE != phydev->autoneg)
-		return genphy_setup_forced(phydev);
+	if (AUTONEG_ENABLE == phydev->autoneg) {
+		err = genphy_config_advert(phydev);
 
-	result = genphy_config_advert(phydev);
+		if (err < 0)
+			return err;
 
-	if (result < 0) /* error */
-		return result;
+		err = genphy_restart_aneg(phydev);
+	} else
+		err = genphy_setup_forced(phydev);
 
-	if (result == 0) {
-		/* Advertisment hasn't changed, but maybe aneg was never on to
-		 * begin with?  Or maybe phy was isolated? */
-		int ctl = phy_read(phydev, MII_BMCR);
-
-		if (ctl < 0)
-			return ctl;
-
-		if (!(ctl & BMCR_ANENABLE) || (ctl & BMCR_ISOLATE))
-			result = 1; /* do restart aneg */
-	}
-
-	/* Only restart aneg if we are advertising something different
-	 * than we were before.	 */
-	if (result > 0)
-		result = genphy_restart_aneg(phydev);
-
-	return result;
+	return err;
 }
 EXPORT_SYMBOL(genphy_config_aneg);
 
@@ -762,35 +751,7 @@ static int genphy_config_init(struct phy_device *phydev)
 
 	return 0;
 }
-int genphy_suspend(struct phy_device *phydev)
-{
-	int value;
 
-	mutex_lock(&phydev->lock);
-
-	value = phy_read(phydev, MII_BMCR);
-	phy_write(phydev, MII_BMCR, (value | BMCR_PDOWN));
-
-	mutex_unlock(&phydev->lock);
-
-	return 0;
-}
-EXPORT_SYMBOL(genphy_suspend);
-
-int genphy_resume(struct phy_device *phydev)
-{
-	int value;
-
-	mutex_lock(&phydev->lock);
-
-	value = phy_read(phydev, MII_BMCR);
-	phy_write(phydev, MII_BMCR, (value & ~BMCR_PDOWN));
-
-	mutex_unlock(&phydev->lock);
-
-	return 0;
-}
-EXPORT_SYMBOL(genphy_resume);
 
 /**
  * phy_probe - probe and init a PHY device
@@ -866,6 +827,7 @@ int phy_driver_register(struct phy_driver *new_driver)
 {
 	int retval;
 
+	memset(&new_driver->driver, 0, sizeof(new_driver->driver));
 	new_driver->driver.name = new_driver->name;
 	new_driver->driver.bus = &mdio_bus_type;
 	new_driver->driver.probe = phy_probe;
@@ -900,8 +862,6 @@ static struct phy_driver genphy_driver = {
 	.features	= 0,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
 	.driver		= {.owner= THIS_MODULE, },
 };
 

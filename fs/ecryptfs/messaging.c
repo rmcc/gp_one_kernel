@@ -134,11 +134,12 @@ out:
 }
 
 static int
-ecryptfs_send_message_locked(char *data, int data_len, u8 msg_type,
-			     struct ecryptfs_msg_ctx **msg_ctx);
+ecryptfs_send_message_locked(unsigned int transport, char *data, int data_len,
+			     u8 msg_type, struct ecryptfs_msg_ctx **msg_ctx);
 
 /**
  * ecryptfs_send_raw_message
+ * @transport: Transport type
  * @msg_type: Message type
  * @daemon: Daemon struct for recipient of message
  *
@@ -149,25 +150,38 @@ ecryptfs_send_message_locked(char *data, int data_len, u8 msg_type,
  *
  * Returns zero on success; non-zero otherwise
  */
-static int ecryptfs_send_raw_message(u8 msg_type,
+static int ecryptfs_send_raw_message(unsigned int transport, u8 msg_type,
 				     struct ecryptfs_daemon *daemon)
 {
 	struct ecryptfs_msg_ctx *msg_ctx;
 	int rc;
 
-	rc = ecryptfs_send_message_locked(NULL, 0, msg_type, &msg_ctx);
-	if (rc) {
-		printk(KERN_ERR "%s: Error whilst attempting to send "
-		       "message to ecryptfsd; rc = [%d]\n", __func__, rc);
-		goto out;
+	switch(transport) {
+	case ECRYPTFS_TRANSPORT_NETLINK:
+		rc = ecryptfs_send_netlink(NULL, 0, NULL, msg_type, 0,
+					   daemon->pid);
+		break;
+	case ECRYPTFS_TRANSPORT_MISCDEV:
+		rc = ecryptfs_send_message_locked(transport, NULL, 0, msg_type,
+						  &msg_ctx);
+		if (rc) {
+			printk(KERN_ERR "%s: Error whilst attempting to send "
+			       "message via procfs; rc = [%d]\n", __func__, rc);
+			goto out;
+		}
+		/* Raw messages are logically context-free (e.g., no
+		 * reply is expected), so we set the state of the
+		 * ecryptfs_msg_ctx object to indicate that it should
+		 * be freed as soon as the transport sends out the message. */
+		mutex_lock(&msg_ctx->mux);
+		msg_ctx->state = ECRYPTFS_MSG_CTX_STATE_NO_REPLY;
+		mutex_unlock(&msg_ctx->mux);
+		break;
+	case ECRYPTFS_TRANSPORT_CONNECTOR:
+	case ECRYPTFS_TRANSPORT_RELAYFS:
+	default:
+		rc = -ENOSYS;
 	}
-	/* Raw messages are logically context-free (e.g., no
-	 * reply is expected), so we set the state of the
-	 * ecryptfs_msg_ctx object to indicate that it should
-	 * be freed as soon as the message is sent. */
-	mutex_lock(&msg_ctx->mux);
-	msg_ctx->state = ECRYPTFS_MSG_CTX_STATE_NO_REPLY;
-	mutex_unlock(&msg_ctx->mux);
 out:
 	return rc;
 }
@@ -193,7 +207,7 @@ ecryptfs_spawn_daemon(struct ecryptfs_daemon **daemon, uid_t euid,
 	(*daemon) = kzalloc(sizeof(**daemon), GFP_KERNEL);
 	if (!(*daemon)) {
 		rc = -ENOMEM;
-		printk(KERN_ERR "%s: Failed to allocate [%zd] bytes of "
+		printk(KERN_ERR "%s: Failed to allocate [%Zd] bytes of "
 		       "GFP_KERNEL memory\n", __func__, sizeof(**daemon));
 		goto out;
 	}
@@ -213,6 +227,7 @@ out:
 
 /**
  * ecryptfs_process_helo
+ * @transport: The underlying transport (netlink, etc.)
  * @euid: The user ID owner of the message
  * @user_ns: The namespace in which @euid applies
  * @pid: The process ID for the userspace program that sent the
@@ -224,8 +239,8 @@ out:
  * Returns zero after adding a new daemon to the hash list;
  * non-zero otherwise.
  */
-int ecryptfs_process_helo(uid_t euid, struct user_namespace *user_ns,
-			  struct pid *pid)
+int ecryptfs_process_helo(unsigned int transport, uid_t euid,
+			  struct user_namespace *user_ns, struct pid *pid)
 {
 	struct ecryptfs_daemon *new_daemon;
 	struct ecryptfs_daemon *old_daemon;
@@ -237,7 +252,8 @@ int ecryptfs_process_helo(uid_t euid, struct user_namespace *user_ns,
 		printk(KERN_WARNING "Received request from user [%d] "
 		       "to register daemon [0x%p]; unregistering daemon "
 		       "[0x%p]\n", euid, pid, old_daemon->pid);
-		rc = ecryptfs_send_raw_message(ECRYPTFS_MSG_QUIT, old_daemon);
+		rc = ecryptfs_send_raw_message(transport, ECRYPTFS_MSG_QUIT,
+					       old_daemon);
 		if (rc)
 			printk(KERN_WARNING "Failed to send QUIT "
 			       "message to daemon [0x%p]; rc = [%d]\n",
@@ -360,8 +376,7 @@ int ecryptfs_process_response(struct ecryptfs_message *msg, uid_t euid,
 	struct ecryptfs_msg_ctx *msg_ctx;
 	size_t msg_size;
 	struct nsproxy *nsproxy;
-	struct user_namespace *tsk_user_ns;
-	uid_t ctx_euid;
+	struct user_namespace *current_user_ns;
 	int rc;
 
 	if (msg->index >= ecryptfs_message_buf_len) {
@@ -385,9 +400,9 @@ int ecryptfs_process_response(struct ecryptfs_message *msg, uid_t euid,
 		mutex_unlock(&ecryptfs_daemon_hash_mux);
 		goto wake_up;
 	}
-	tsk_user_ns = __task_cred(msg_ctx->task)->user->user_ns;
-	ctx_euid = task_euid(msg_ctx->task);
-	rc = ecryptfs_find_daemon_by_euid(&daemon, ctx_euid, tsk_user_ns);
+	current_user_ns = nsproxy->user_ns;
+	rc = ecryptfs_find_daemon_by_euid(&daemon, msg_ctx->task->euid,
+					  current_user_ns);
 	rcu_read_unlock();
 	mutex_unlock(&ecryptfs_daemon_hash_mux);
 	if (rc) {
@@ -395,28 +410,28 @@ int ecryptfs_process_response(struct ecryptfs_message *msg, uid_t euid,
 		printk(KERN_WARNING "%s: User [%d] received a "
 		       "message response from process [0x%p] but does "
 		       "not have a registered daemon\n", __func__,
-		       ctx_euid, pid);
+		       msg_ctx->task->euid, pid);
 		goto wake_up;
 	}
-	if (ctx_euid != euid) {
+	if (msg_ctx->task->euid != euid) {
 		rc = -EBADMSG;
 		printk(KERN_WARNING "%s: Received message from user "
 		       "[%d]; expected message from user [%d]\n", __func__,
-		       euid, ctx_euid);
+		       euid, msg_ctx->task->euid);
 		goto unlock;
 	}
-	if (tsk_user_ns != user_ns) {
+	if (current_user_ns != user_ns) {
 		rc = -EBADMSG;
 		printk(KERN_WARNING "%s: Received message from user_ns "
 		       "[0x%p]; expected message from user_ns [0x%p]\n",
-		       __func__, user_ns, tsk_user_ns);
+		       __func__, user_ns, nsproxy->user_ns);
 		goto unlock;
 	}
 	if (daemon->pid != pid) {
 		rc = -EBADMSG;
 		printk(KERN_ERR "%s: User [%d] sent a message response "
 		       "from an unrecognized process [0x%p]\n",
-		       __func__, ctx_euid, pid);
+		       __func__, msg_ctx->task->euid, pid);
 		goto unlock;
 	}
 	if (msg_ctx->state != ECRYPTFS_MSG_CTX_STATE_PENDING) {
@@ -435,7 +450,7 @@ int ecryptfs_process_response(struct ecryptfs_message *msg, uid_t euid,
 	msg_ctx->msg = kmalloc(msg_size, GFP_KERNEL);
 	if (!msg_ctx->msg) {
 		rc = -ENOMEM;
-		printk(KERN_ERR "%s: Failed to allocate [%zd] bytes of "
+		printk(KERN_ERR "%s: Failed to allocate [%Zd] bytes of "
 		       "GFP_KERNEL memory\n", __func__, msg_size);
 		goto unlock;
 	}
@@ -452,6 +467,8 @@ out:
 
 /**
  * ecryptfs_send_message_locked
+ * @transport: The transport over which to send the message (i.e.,
+ *             netlink)
  * @data: The data to send
  * @data_len: The length of data
  * @msg_ctx: The message context allocated for the send
@@ -461,18 +478,18 @@ out:
  * Returns zero on success; non-zero otherwise
  */
 static int
-ecryptfs_send_message_locked(char *data, int data_len, u8 msg_type,
-			     struct ecryptfs_msg_ctx **msg_ctx)
+ecryptfs_send_message_locked(unsigned int transport, char *data, int data_len,
+			     u8 msg_type, struct ecryptfs_msg_ctx **msg_ctx)
 {
 	struct ecryptfs_daemon *daemon;
-	uid_t euid = current_euid();
 	int rc;
 
-	rc = ecryptfs_find_daemon_by_euid(&daemon, euid, current_user_ns());
+	rc = ecryptfs_find_daemon_by_euid(&daemon, current->euid,
+					  current->nsproxy->user_ns);
 	if (rc || !daemon) {
 		rc = -ENOTCONN;
 		printk(KERN_ERR "%s: User [%d] does not have a daemon "
-		       "registered\n", __func__, euid);
+		       "registered\n", __func__, current->euid);
 		goto out;
 	}
 	mutex_lock(&ecryptfs_msg_ctx_lists_mux);
@@ -486,8 +503,20 @@ ecryptfs_send_message_locked(char *data, int data_len, u8 msg_type,
 	ecryptfs_msg_ctx_free_to_alloc(*msg_ctx);
 	mutex_unlock(&(*msg_ctx)->mux);
 	mutex_unlock(&ecryptfs_msg_ctx_lists_mux);
-	rc = ecryptfs_send_miscdev(data, data_len, *msg_ctx, msg_type, 0,
-				   daemon);
+	switch (transport) {
+	case ECRYPTFS_TRANSPORT_NETLINK:
+		rc = ecryptfs_send_netlink(data, data_len, *msg_ctx, msg_type,
+					   0, daemon->pid);
+		break;
+	case ECRYPTFS_TRANSPORT_MISCDEV:
+		rc = ecryptfs_send_miscdev(data, data_len, *msg_ctx, msg_type,
+					   0, daemon);
+		break;
+	case ECRYPTFS_TRANSPORT_CONNECTOR:
+	case ECRYPTFS_TRANSPORT_RELAYFS:
+	default:
+		rc = -ENOSYS;
+	}
 	if (rc)
 		printk(KERN_ERR "%s: Error attempting to send message to "
 		       "userspace daemon; rc = [%d]\n", __func__, rc);
@@ -497,6 +526,8 @@ out:
 
 /**
  * ecryptfs_send_message
+ * @transport: The transport over which to send the message (i.e.,
+ *             netlink)
  * @data: The data to send
  * @data_len: The length of data
  * @msg_ctx: The message context allocated for the send
@@ -505,14 +536,14 @@ out:
  *
  * Returns zero on success; non-zero otherwise
  */
-int ecryptfs_send_message(char *data, int data_len,
+int ecryptfs_send_message(unsigned int transport, char *data, int data_len,
 			  struct ecryptfs_msg_ctx **msg_ctx)
 {
 	int rc;
 
 	mutex_lock(&ecryptfs_daemon_hash_mux);
-	rc = ecryptfs_send_message_locked(data, data_len, ECRYPTFS_MSG_REQUEST,
-					  msg_ctx);
+	rc = ecryptfs_send_message_locked(transport, data, data_len,
+					  ECRYPTFS_MSG_REQUEST, msg_ctx);
 	mutex_unlock(&ecryptfs_daemon_hash_mux);
 	return rc;
 }
@@ -555,7 +586,7 @@ sleep:
 	return rc;
 }
 
-int ecryptfs_init_messaging(void)
+int ecryptfs_init_messaging(unsigned int transport)
 {
 	int i;
 	int rc = 0;
@@ -608,14 +639,27 @@ int ecryptfs_init_messaging(void)
 		mutex_unlock(&ecryptfs_msg_ctx_arr[i].mux);
 	}
 	mutex_unlock(&ecryptfs_msg_ctx_lists_mux);
-	rc = ecryptfs_init_ecryptfs_miscdev();
-	if (rc)
-		ecryptfs_release_messaging();
+	switch(transport) {
+	case ECRYPTFS_TRANSPORT_NETLINK:
+		rc = ecryptfs_init_netlink();
+		if (rc)
+			ecryptfs_release_messaging(transport);
+		break;
+	case ECRYPTFS_TRANSPORT_MISCDEV:
+		rc = ecryptfs_init_ecryptfs_miscdev();
+		if (rc)
+			ecryptfs_release_messaging(transport);
+		break;
+	case ECRYPTFS_TRANSPORT_CONNECTOR:
+	case ECRYPTFS_TRANSPORT_RELAYFS:
+	default:
+		rc = -ENOSYS;
+	}
 out:
 	return rc;
 }
 
-void ecryptfs_release_messaging(void)
+void ecryptfs_release_messaging(unsigned int transport)
 {
 	if (ecryptfs_msg_ctx_arr) {
 		int i;
@@ -654,6 +698,17 @@ void ecryptfs_release_messaging(void)
 		kfree(ecryptfs_daemon_hash);
 		mutex_unlock(&ecryptfs_daemon_hash_mux);
 	}
-	ecryptfs_destroy_ecryptfs_miscdev();
+	switch(transport) {
+	case ECRYPTFS_TRANSPORT_NETLINK:
+		ecryptfs_release_netlink();
+		break;
+	case ECRYPTFS_TRANSPORT_MISCDEV:
+		ecryptfs_destroy_ecryptfs_miscdev();
+		break;
+	case ECRYPTFS_TRANSPORT_CONNECTOR:
+	case ECRYPTFS_TRANSPORT_RELAYFS:
+	default:
+		break;
+	}
 	return;
 }

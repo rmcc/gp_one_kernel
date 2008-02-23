@@ -22,46 +22,28 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  *****************************************************************************/
 #ifndef __iwl_sta_h__
 #define __iwl_sta_h__
 
-#define HW_KEY_DYNAMIC 0
-#define HW_KEY_DEFAULT 1
+#include <net/mac80211.h>
 
-/**
- * iwl_find_station - Find station id for a given BSSID
- * @bssid: MAC address of station ID to find
- */
-u8 iwl_find_station(struct iwl_priv *priv, const u8 *bssid);
+#include "iwl-eeprom.h"
+#include "iwl-core.h"
+#include "iwl-4965.h"
+#include "iwl-io.h"
+#include "iwl-helpers.h"
 
+int iwl_get_free_ucode_key_index(struct iwl_priv *priv);
 int iwl_send_static_wepkey_cmd(struct iwl_priv *priv, u8 send_if_empty);
 int iwl_remove_default_wep_key(struct iwl_priv *priv,
-			       struct ieee80211_key_conf *key);
+				struct ieee80211_key_conf *key);
 int iwl_set_default_wep_key(struct iwl_priv *priv,
-			    struct ieee80211_key_conf *key);
+				struct ieee80211_key_conf *key);
+int iwl_remove_dynamic_key(struct iwl_priv *priv, u8 sta_id);
 int iwl_set_dynamic_key(struct iwl_priv *priv,
-			struct ieee80211_key_conf *key, u8 sta_id);
-int iwl_remove_dynamic_key(struct iwl_priv *priv,
-			   struct ieee80211_key_conf *key, u8 sta_id);
-void iwl_update_tkip_key(struct iwl_priv *priv,
-			struct ieee80211_key_conf *keyconf,
-			const u8 *addr, u32 iv32, u16 *phase1key);
-
-int iwl_rxon_add_station(struct iwl_priv *priv, const u8 *addr, int is_ap);
-int iwl_remove_station(struct iwl_priv *priv, const u8 *addr, int is_ap);
-void iwl_clear_stations_table(struct iwl_priv *priv);
-int iwl_get_sta_id(struct iwl_priv *priv, struct ieee80211_hdr *hdr);
-int iwl_get_ra_sta_id(struct iwl_priv *priv, struct ieee80211_hdr *hdr);
-u8 iwl_add_station_flags(struct iwl_priv *priv, const u8 *addr,
-			int is_ap, u8 flags,
-			struct ieee80211_sta_ht_cap *ht_info);
-void iwl_sta_tx_modify_enable_tid(struct iwl_priv *priv, int sta_id, int tid);
-int iwl_sta_rx_agg_start(struct iwl_priv *priv,
-			 const u8 *addr, int tid, u16 ssn);
-int iwl_sta_rx_agg_stop(struct iwl_priv *priv, const u8 *addr, int tid);
-void iwl_update_ps_mode(struct iwl_priv *priv, u16 ps_bit, u8 *addr);
+				struct ieee80211_key_conf *key, u8 sta_id);
 #endif /* __iwl_sta_h__ */

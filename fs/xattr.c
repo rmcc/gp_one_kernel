@@ -63,7 +63,7 @@ xattr_permission(struct inode *inode, const char *name, int mask)
 			return -EPERM;
 	}
 
-	return inode_permission(inode, mask);
+	return permission(inode, mask, NULL);
 }
 
 int
@@ -175,7 +175,7 @@ vfs_listxattr(struct dentry *d, char *list, size_t size)
 	if (error)
 		return error;
 	error = -EOPNOTSUPP;
-	if (d->d_inode->i_op->listxattr) {
+	if (d->d_inode->i_op && d->d_inode->i_op->listxattr) {
 		error = d->d_inode->i_op->listxattr(d, list, size);
 	} else {
 		error = security_inode_listsecurity(d->d_inode, list, size);
@@ -252,40 +252,40 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 }
 
 asmlinkage long
-sys_setxattr(const char __user *pathname, const char __user *name,
+sys_setxattr(const char __user *path, const char __user *name,
 	     const void __user *value, size_t size, int flags)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
-	error = user_path(pathname, &path);
+	error = user_path_walk(path, &nd);
 	if (error)
 		return error;
-	error = mnt_want_write(path.mnt);
+	error = mnt_want_write(nd.path.mnt);
 	if (!error) {
-		error = setxattr(path.dentry, name, value, size, flags);
-		mnt_drop_write(path.mnt);
+		error = setxattr(nd.path.dentry, name, value, size, flags);
+		mnt_drop_write(nd.path.mnt);
 	}
-	path_put(&path);
+	path_put(&nd.path);
 	return error;
 }
 
 asmlinkage long
-sys_lsetxattr(const char __user *pathname, const char __user *name,
+sys_lsetxattr(const char __user *path, const char __user *name,
 	      const void __user *value, size_t size, int flags)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
-	error = user_lpath(pathname, &path);
+	error = user_path_walk_link(path, &nd);
 	if (error)
 		return error;
-	error = mnt_want_write(path.mnt);
+	error = mnt_want_write(nd.path.mnt);
 	if (!error) {
-		error = setxattr(path.dentry, name, value, size, flags);
-		mnt_drop_write(path.mnt);
+		error = setxattr(nd.path.dentry, name, value, size, flags);
+		mnt_drop_write(nd.path.mnt);
 	}
-	path_put(&path);
+	path_put(&nd.path);
 	return error;
 }
 
@@ -350,32 +350,32 @@ getxattr(struct dentry *d, const char __user *name, void __user *value,
 }
 
 asmlinkage ssize_t
-sys_getxattr(const char __user *pathname, const char __user *name,
+sys_getxattr(const char __user *path, const char __user *name,
 	     void __user *value, size_t size)
 {
-	struct path path;
+	struct nameidata nd;
 	ssize_t error;
 
-	error = user_path(pathname, &path);
+	error = user_path_walk(path, &nd);
 	if (error)
 		return error;
-	error = getxattr(path.dentry, name, value, size);
-	path_put(&path);
+	error = getxattr(nd.path.dentry, name, value, size);
+	path_put(&nd.path);
 	return error;
 }
 
 asmlinkage ssize_t
-sys_lgetxattr(const char __user *pathname, const char __user *name, void __user *value,
+sys_lgetxattr(const char __user *path, const char __user *name, void __user *value,
 	      size_t size)
 {
-	struct path path;
+	struct nameidata nd;
 	ssize_t error;
 
-	error = user_lpath(pathname, &path);
+	error = user_path_walk_link(path, &nd);
 	if (error)
 		return error;
-	error = getxattr(path.dentry, name, value, size);
-	path_put(&path);
+	error = getxattr(nd.path.dentry, name, value, size);
+	path_put(&nd.path);
 	return error;
 }
 
@@ -425,30 +425,30 @@ listxattr(struct dentry *d, char __user *list, size_t size)
 }
 
 asmlinkage ssize_t
-sys_listxattr(const char __user *pathname, char __user *list, size_t size)
+sys_listxattr(const char __user *path, char __user *list, size_t size)
 {
-	struct path path;
+	struct nameidata nd;
 	ssize_t error;
 
-	error = user_path(pathname, &path);
+	error = user_path_walk(path, &nd);
 	if (error)
 		return error;
-	error = listxattr(path.dentry, list, size);
-	path_put(&path);
+	error = listxattr(nd.path.dentry, list, size);
+	path_put(&nd.path);
 	return error;
 }
 
 asmlinkage ssize_t
-sys_llistxattr(const char __user *pathname, char __user *list, size_t size)
+sys_llistxattr(const char __user *path, char __user *list, size_t size)
 {
-	struct path path;
+	struct nameidata nd;
 	ssize_t error;
 
-	error = user_lpath(pathname, &path);
+	error = user_path_walk_link(path, &nd);
 	if (error)
 		return error;
-	error = listxattr(path.dentry, list, size);
-	path_put(&path);
+	error = listxattr(nd.path.dentry, list, size);
+	path_put(&nd.path);
 	return error;
 }
 
@@ -486,38 +486,38 @@ removexattr(struct dentry *d, const char __user *name)
 }
 
 asmlinkage long
-sys_removexattr(const char __user *pathname, const char __user *name)
+sys_removexattr(const char __user *path, const char __user *name)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
-	error = user_path(pathname, &path);
+	error = user_path_walk(path, &nd);
 	if (error)
 		return error;
-	error = mnt_want_write(path.mnt);
+	error = mnt_want_write(nd.path.mnt);
 	if (!error) {
-		error = removexattr(path.dentry, name);
-		mnt_drop_write(path.mnt);
+		error = removexattr(nd.path.dentry, name);
+		mnt_drop_write(nd.path.mnt);
 	}
-	path_put(&path);
+	path_put(&nd.path);
 	return error;
 }
 
 asmlinkage long
-sys_lremovexattr(const char __user *pathname, const char __user *name)
+sys_lremovexattr(const char __user *path, const char __user *name)
 {
-	struct path path;
+	struct nameidata nd;
 	int error;
 
-	error = user_lpath(pathname, &path);
+	error = user_path_walk_link(path, &nd);
 	if (error)
 		return error;
-	error = mnt_want_write(path.mnt);
+	error = mnt_want_write(nd.path.mnt);
 	if (!error) {
-		error = removexattr(path.dentry, name);
-		mnt_drop_write(path.mnt);
+		error = removexattr(nd.path.dentry, name);
+		mnt_drop_write(nd.path.mnt);
 	}
-	path_put(&path);
+	path_put(&nd.path);
 	return error;
 }
 

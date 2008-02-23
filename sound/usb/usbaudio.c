@@ -71,7 +71,6 @@ static int pid[SNDRV_CARDS] = { [0 ... (SNDRV_CARDS-1)] = -1 };
 static int nrpacks = 8;		/* max. number of packets per urb */
 static int async_unlink = 1;
 static int device_setup[SNDRV_CARDS]; /* device parameter for this card*/
-static int ignore_ctl_error;
 
 module_param_array(index, int, NULL, 0444);
 MODULE_PARM_DESC(index, "Index value for the USB audio adapter.");
@@ -89,9 +88,7 @@ module_param(async_unlink, bool, 0444);
 MODULE_PARM_DESC(async_unlink, "Use async unlink mode.");
 module_param_array(device_setup, int, NULL, 0444);
 MODULE_PARM_DESC(device_setup, "Specific device setup (if needed).");
-module_param(ignore_ctl_error, bool, 0444);
-MODULE_PARM_DESC(ignore_ctl_error,
-		 "Ignore errors from USB controller for mixer interfaces.");
+
 
 /*
  * debug the h/w constraints
@@ -484,7 +481,7 @@ static int retire_playback_sync_urb_hs(struct snd_usb_substream *subs,
 }
 
 /*
- * process after E-Mu 0202/0404/Tracker Pre high speed playback sync complete
+ * process after E-Mu 0202/0404 high speed playback sync complete
  *
  * These devices return the number of samples per packet instead of the number
  * of samples per microframe.
@@ -822,6 +819,10 @@ static const char *usb_error_string(int err)
 		return "device disabled";
 	case -EHOSTUNREACH:
 		return "device suspended";
+#ifndef CONFIG_USB_EHCI_SPLIT_ISO
+	case -ENOSYS:
+		return "enable CONFIG_USB_EHCI_SPLIT_ISO to play through a hub";
+#endif
 	case -EINVAL:
 	case -EAGAIN:
 	case -EFBIG:
@@ -844,8 +845,7 @@ static int start_urbs(struct snd_usb_substream *subs, struct snd_pcm_runtime *ru
 		return -EBADFD;
 
 	for (i = 0; i < subs->nurbs; i++) {
-		if (snd_BUG_ON(!subs->dataurb[i].urb))
-			return -EINVAL;
+		snd_assert(subs->dataurb[i].urb, return -EINVAL);
 		if (subs->ops.prepare(subs, runtime, subs->dataurb[i].urb) < 0) {
 			snd_printk(KERN_ERR "cannot prepare datapipe for urb %d\n", i);
 			goto __error;
@@ -853,8 +853,7 @@ static int start_urbs(struct snd_usb_substream *subs, struct snd_pcm_runtime *ru
 	}
 	if (subs->syncpipe) {
 		for (i = 0; i < SYNC_URBS; i++) {
-			if (snd_BUG_ON(!subs->syncurb[i].urb))
-				return -EINVAL;
+			snd_assert(subs->syncurb[i].urb, return -EINVAL);
 			if (subs->ops.prepare_sync(subs, runtime, subs->syncurb[i].urb) < 0) {
 				snd_printk(KERN_ERR "cannot prepare syncpipe for urb %d\n", i);
 				goto __error;
@@ -1326,12 +1325,10 @@ static int set_format(struct snd_usb_substream *subs, struct audioformat *fmt)
 	int err;
 
 	iface = usb_ifnum_to_if(dev, fmt->iface);
-	if (WARN_ON(!iface))
-		return -EINVAL;
+	snd_assert(iface, return -EINVAL);
 	alts = &iface->altsetting[fmt->altset_idx];
 	altsd = get_iface_desc(alts);
-	if (WARN_ON(altsd->bAlternateSetting != fmt->altsetting))
-		return -EINVAL;
+	snd_assert(altsd->bAlternateSetting == fmt->altsetting, return -EINVAL);
 
 	if (fmt == subs->cur_audiofmt)
 		return 0;
@@ -2264,7 +2261,6 @@ static void init_substream(struct snd_usb_stream *as, int stream, struct audiofo
 		switch (as->chip->usb_id) {
 		case USB_ID(0x041e, 0x3f02): /* E-Mu 0202 USB */
 		case USB_ID(0x041e, 0x3f04): /* E-Mu 0404 USB */
-		case USB_ID(0x041e, 0x3f0a): /* E-Mu Tracker Pre */
 			subs->ops.retire_sync = retire_playback_sync_urb_hs_emu;
 			break;
 		}
@@ -2997,12 +2993,12 @@ static int create_standard_audio_quirk(struct snd_usb_audio *chip,
 }
 
 /*
- * Create a stream for an Edirol UA-700/UA-25/UA-4FX interface.  
- * The only way to detect the sample rate is by looking at wMaxPacketSize.
+ * Create a stream for an Edirol UA-700/UA-25 interface.  The only way
+ * to detect the sample rate is by looking at wMaxPacketSize.
  */
-static int create_uaxx_quirk(struct snd_usb_audio *chip,
-			      struct usb_interface *iface,
-			      const struct snd_usb_audio_quirk *quirk)
+static int create_ua700_ua25_quirk(struct snd_usb_audio *chip,
+				   struct usb_interface *iface,
+				   const struct snd_usb_audio_quirk *quirk)
 {
 	static const struct audioformat ua_format = {
 		.format = SNDRV_PCM_FORMAT_S24_3LE,
@@ -3017,8 +3013,8 @@ static int create_uaxx_quirk(struct snd_usb_audio *chip,
 	struct audioformat *fp;
 	int stream, err;
 
-	/* both PCM and MIDI interfaces have 2 or more altsettings */
-	if (iface->num_altsetting < 2)
+	/* both PCM and MIDI interfaces have 2 altsettings */
+	if (iface->num_altsetting != 2)
 		return -ENXIO;
 	alts = &iface->altsetting[1];
 	altsd = get_iface_desc(alts);
@@ -3032,20 +3028,20 @@ static int create_uaxx_quirk(struct snd_usb_audio *chip,
 			.type = QUIRK_MIDI_FIXED_ENDPOINT,
 			.data = &ua700_ep
 		};
-		static const struct snd_usb_midi_endpoint_info uaxx_ep = {
+		static const struct snd_usb_midi_endpoint_info ua25_ep = {
 			.out_cables = 0x0001,
 			.in_cables  = 0x0001
 		};
-		static const struct snd_usb_audio_quirk uaxx_quirk = {
+		static const struct snd_usb_audio_quirk ua25_quirk = {
 			.type = QUIRK_MIDI_FIXED_ENDPOINT,
-			.data = &uaxx_ep
+			.data = &ua25_ep
 		};
 		if (chip->usb_id == USB_ID(0x0582, 0x002b))
 			return snd_usb_create_midi_interface(chip, iface,
 							     &ua700_quirk);
 		else
 			return snd_usb_create_midi_interface(chip, iface,
-							     &uaxx_quirk);
+							     &ua25_quirk);
 	}
 
 	if (altsd->bNumEndpoints != 1)
@@ -3377,9 +3373,9 @@ static int snd_usb_create_quirk(struct snd_usb_audio *chip,
 		[QUIRK_MIDI_CME] = snd_usb_create_midi_interface,
 		[QUIRK_AUDIO_STANDARD_INTERFACE] = create_standard_audio_quirk,
 		[QUIRK_AUDIO_FIXED_ENDPOINT] = create_fixed_stream_quirk,
+		[QUIRK_AUDIO_EDIROL_UA700_UA25] = create_ua700_ua25_quirk,
 		[QUIRK_AUDIO_EDIROL_UA1000] = create_ua1000_quirk,
 		[QUIRK_AUDIO_EDIROL_UA101] = create_ua101_quirk,
-		[QUIRK_AUDIO_EDIROL_UAXX] = create_uaxx_quirk
 	};
 
 	if (quirk->type < QUIRK_TYPE_COUNT) {
@@ -3637,7 +3633,7 @@ static void *snd_usb_audio_probe(struct usb_device *dev,
 	if (err > 0) {
 		/* create normal USB audio interfaces */
 		if (snd_usb_create_streams(chip, ifnum) < 0 ||
-		    snd_usb_create_mixer(chip, ifnum, ignore_ctl_error) < 0) {
+		    snd_usb_create_mixer(chip, ifnum) < 0) {
 			goto __error;
 		}
 	}
@@ -3709,7 +3705,7 @@ static int usb_audio_probe(struct usb_interface *intf,
 	void *chip;
 	chip = snd_usb_audio_probe(interface_to_usbdev(intf), intf, id);
 	if (chip) {
-		usb_set_intfdata(intf, chip);
+		dev_set_drvdata(&intf->dev, chip);
 		return 0;
 	} else
 		return -EIO;
@@ -3718,13 +3714,13 @@ static int usb_audio_probe(struct usb_interface *intf,
 static void usb_audio_disconnect(struct usb_interface *intf)
 {
 	snd_usb_audio_disconnect(interface_to_usbdev(intf),
-				 usb_get_intfdata(intf));
+				 dev_get_drvdata(&intf->dev));
 }
 
 #ifdef CONFIG_PM
 static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 {
-	struct snd_usb_audio *chip = usb_get_intfdata(intf);
+	struct snd_usb_audio *chip = dev_get_drvdata(&intf->dev);
 	struct list_head *p;
 	struct snd_usb_stream *as;
 
@@ -3744,7 +3740,7 @@ static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 
 static int usb_audio_resume(struct usb_interface *intf)
 {
-	struct snd_usb_audio *chip = usb_get_intfdata(intf);
+	struct snd_usb_audio *chip = dev_get_drvdata(&intf->dev);
 
 	if (chip == (void *)-1L)
 		return 0;

@@ -15,16 +15,10 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/platform_device.h>
 
-#include <mach/hardware.h>
-#include <mach/mfp.h>
-#include <mach/pxa3xx-regs.h>
-#include <mach/mfp-pxa320.h>
-
-#include "generic.h"
-#include "devices.h"
-#include "clock.h"
+#include <asm/hardware.h>
+#include <asm/arch/mfp.h>
+#include <asm/arch/mfp-pxa320.h>
 
 static struct pxa3xx_mfp_addr_map pxa320_mfp_addr_map[] __initdata = {
 
@@ -80,19 +74,16 @@ static struct pxa3xx_mfp_addr_map pxa320_mfp_addr_map[] __initdata = {
 	MFP_ADDR_END,
 };
 
-static DEFINE_PXA3_CKEN(pxa320_nand, NAND, 104000000, 0);
-
-static struct clk_lookup pxa320_clkregs[] = {
-	INIT_CLKREG(&clk_pxa320_nand, "pxa3xx-nand", "NANDCLK"),
-};
+static void __init pxa320_init_mfp(void)
+{
+	pxa3xx_init_mfp();
+	pxa3xx_mfp_init_addr(pxa320_mfp_addr_map);
+}
 
 static int __init pxa320_init(void)
 {
-	if (cpu_is_pxa320()) {
-		pxa3xx_init_mfp();
-		pxa3xx_mfp_init_addr(pxa320_mfp_addr_map);
-		clks_register(ARRAY_AND_SIZE(pxa320_clkregs));
-	}
+	if (cpu_is_pxa320())
+		pxa320_init_mfp();
 
 	return 0;
 }

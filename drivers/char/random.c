@@ -236,7 +236,6 @@
 #include <linux/fs.h>
 #include <linux/genhd.h>
 #include <linux/interrupt.h>
-#include <linux/mm.h>
 #include <linux/spinlock.h>
 #include <linux/percpu.h>
 #include <linux/cryptohash.h>
@@ -520,7 +519,6 @@ static void mix_pool_bytes(struct entropy_store *r, const void *in, int bytes)
 static void credit_entropy_bits(struct entropy_store *r, int nbits)
 {
 	unsigned long flags;
-	int entropy_count;
 
 	if (!nbits)
 		return;
@@ -528,20 +526,20 @@ static void credit_entropy_bits(struct entropy_store *r, int nbits)
 	spin_lock_irqsave(&r->lock, flags);
 
 	DEBUG_ENT("added %d entropy credits to %s\n", nbits, r->name);
-	entropy_count = r->entropy_count;
-	entropy_count += nbits;
-	if (entropy_count < 0) {
+	r->entropy_count += nbits;
+	if (r->entropy_count < 0) {
 		DEBUG_ENT("negative entropy/overflow\n");
-		entropy_count = 0;
-	} else if (entropy_count > r->poolinfo->POOLBITS)
-		entropy_count = r->poolinfo->POOLBITS;
-	r->entropy_count = entropy_count;
+		r->entropy_count = 0;
+	} else if (r->entropy_count > r->poolinfo->POOLBITS)
+		r->entropy_count = r->poolinfo->POOLBITS;
 
 	/* should we wake readers? */
-	if (r == &input_pool && entropy_count >= random_read_wakeup_thresh) {
+	if (r == &input_pool &&
+	    r->entropy_count >= random_read_wakeup_thresh) {
 		wake_up_interruptible(&random_read_wait);
 		kill_fasync(&fasync, SIGIO, POLL_IN);
 	}
+
 	spin_unlock_irqrestore(&r->lock, flags);
 }
 
@@ -558,44 +556,8 @@ struct timer_rand_state {
 	unsigned dont_count_entropy:1;
 };
 
-#ifndef CONFIG_SPARSE_IRQ
-
-static struct timer_rand_state *irq_timer_state[NR_IRQS];
-
-static struct timer_rand_state *get_timer_rand_state(unsigned int irq)
-{
-	return irq_timer_state[irq];
-}
-
-static void set_timer_rand_state(unsigned int irq,
-				 struct timer_rand_state *state)
-{
-	irq_timer_state[irq] = state;
-}
-
-#else
-
-static struct timer_rand_state *get_timer_rand_state(unsigned int irq)
-{
-	struct irq_desc *desc;
-
-	desc = irq_to_desc(irq);
-
-	return desc->timer_rand_state;
-}
-
-static void set_timer_rand_state(unsigned int irq,
-				 struct timer_rand_state *state)
-{
-	struct irq_desc *desc;
-
-	desc = irq_to_desc(irq);
-
-	desc->timer_rand_state = state;
-}
-#endif
-
 static struct timer_rand_state input_timer_state;
+static struct timer_rand_state *irq_timer_state[NR_IRQS];
 
 /*
  * This function adds entropy to the entropy "pool" by using timing
@@ -684,15 +646,11 @@ EXPORT_SYMBOL_GPL(add_input_randomness);
 
 void add_interrupt_randomness(int irq)
 {
-	struct timer_rand_state *state;
-
-	state = get_timer_rand_state(irq);
-
-	if (state == NULL)
+	if (irq >= NR_IRQS || irq_timer_state[irq] == NULL)
 		return;
 
 	DEBUG_ENT("irq event %d\n", irq);
-	add_timer_randomness(state, 0x100 + irq);
+	add_timer_randomness(irq_timer_state[irq], 0x100 + irq);
 }
 
 #ifdef CONFIG_BLOCK
@@ -701,10 +659,10 @@ void add_disk_randomness(struct gendisk *disk)
 	if (!disk || !disk->random)
 		return;
 	/* first major is 1, so we get >= 0x200 here */
-	DEBUG_ENT("disk event %d:%d\n",
-		  MAJOR(disk_devt(disk)), MINOR(disk_devt(disk)));
+	DEBUG_ENT("disk event %d:%d\n", disk->major, disk->first_minor);
 
-	add_timer_randomness(disk->random, 0x100 + disk_devt(disk));
+	add_timer_randomness(disk->random,
+			     0x100 + MKDEV(disk->major, disk->first_minor));
 }
 #endif
 
@@ -767,10 +725,11 @@ static size_t account(struct entropy_store *r, size_t nbytes, int min,
 {
 	unsigned long flags;
 
+	BUG_ON(r->entropy_count > r->poolinfo->POOLBITS);
+
 	/* Hold lock while accounting */
 	spin_lock_irqsave(&r->lock, flags);
 
-	BUG_ON(r->entropy_count > r->poolinfo->POOLBITS);
 	DEBUG_ENT("trying to extract %d bits from %s\n",
 		  nbytes * 8, r->name);
 
@@ -951,9 +910,7 @@ void rand_initialize_irq(int irq)
 {
 	struct timer_rand_state *state;
 
-	state = get_timer_rand_state(irq);
-
-	if (state)
+	if (irq >= NR_IRQS || irq_timer_state[irq])
 		return;
 
 	/*
@@ -962,7 +919,7 @@ void rand_initialize_irq(int irq)
 	 */
 	state = kzalloc(sizeof(struct timer_rand_state), GFP_KERNEL);
 	if (state)
-		set_timer_rand_state(irq, state);
+		irq_timer_state[irq] = state;
 }
 
 #ifdef CONFIG_BLOCK
@@ -1154,12 +1111,18 @@ static int random_fasync(int fd, struct file *filp, int on)
 	return fasync_helper(fd, filp, on, &fasync);
 }
 
+static int random_release(struct inode *inode, struct file *filp)
+{
+	return fasync_helper(-1, filp, 0, &fasync);
+}
+
 const struct file_operations random_fops = {
 	.read  = random_read,
 	.write = random_write,
 	.poll  = random_poll,
 	.unlocked_ioctl = random_ioctl,
 	.fasync = random_fasync,
+	.release = random_release,
 };
 
 const struct file_operations urandom_fops = {
@@ -1167,6 +1130,7 @@ const struct file_operations urandom_fops = {
 	.write = random_write,
 	.unlocked_ioctl = random_ioctl,
 	.fasync = random_fasync,
+	.release = random_release,
 };
 
 /***************************************************************
@@ -1239,7 +1203,7 @@ static int proc_do_uuid(ctl_table *table, int write, struct file *filp,
 	return proc_dostring(&fake_table, write, filp, buffer, lenp, ppos);
 }
 
-static int uuid_strategy(ctl_table *table,
+static int uuid_strategy(ctl_table *table, int __user *name, int nlen,
 			 void __user *oldval, size_t __user *oldlenp,
 			 void __user *newval, size_t newlen)
 {
@@ -1606,7 +1570,6 @@ u32 secure_ipv4_port_ephemeral(__be32 saddr, __be32 daddr, __be16 dport)
 
 	return half_md4_transform(hash, keyptr->secret);
 }
-EXPORT_SYMBOL_GPL(secure_ipv4_port_ephemeral);
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 u32 secure_ipv6_port_ephemeral(const __be32 *saddr, const __be32 *daddr,

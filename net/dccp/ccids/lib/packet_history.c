@@ -94,6 +94,7 @@ int tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno)
 	*headp	     = entry;
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tfrc_tx_hist_add);
 
 void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp)
 {
@@ -108,6 +109,7 @@ void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp)
 
 	*headp = NULL;
 }
+EXPORT_SYMBOL_GPL(tfrc_tx_hist_purge);
 
 u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
 		     const ktime_t now)
@@ -125,6 +127,7 @@ u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
 
 	return rtt;
 }
+EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
 
 
 /*
@@ -150,7 +153,7 @@ void tfrc_rx_packet_history_exit(void)
 
 static inline void tfrc_rx_hist_entry_from_skb(struct tfrc_rx_hist_entry *entry,
 					       const struct sk_buff *skb,
-					       const u64 ndp)
+					       const u32 ndp)
 {
 	const struct dccp_hdr *dh = dccp_hdr(skb);
 
@@ -163,12 +166,13 @@ static inline void tfrc_rx_hist_entry_from_skb(struct tfrc_rx_hist_entry *entry,
 
 void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
 			     const struct sk_buff *skb,
-			     const u64 ndp)
+			     const u32 ndp)
 {
 	struct tfrc_rx_hist_entry *entry = tfrc_rx_hist_last_rcv(h);
 
 	tfrc_rx_hist_entry_from_skb(entry, skb, ndp);
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_add_packet);
 
 /* has the packet contained in skb been seen before? */
 int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb)
@@ -185,6 +189,7 @@ int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_duplicate);
 
 static void tfrc_rx_hist_swap(struct tfrc_rx_hist *h, const u8 a, const u8 b)
 {
@@ -201,39 +206,31 @@ static void tfrc_rx_hist_swap(struct tfrc_rx_hist *h, const u8 a, const u8 b)
  *
  * In the descriptions, `Si' refers to the sequence number of entry number i,
  * whose NDP count is `Ni' (lower case is used for variables).
- * Note: All __xxx_loss functions expect that a test against duplicates has been
- *       performed already: the seqno of the skb must not be less than the seqno
- *       of loss_prev; and it must not equal that of any valid history entry.
+ * Note: All __after_loss functions expect that a test against duplicates has
+ *       been performed already: the seqno of the skb must not be less than the
+ *       seqno of loss_prev; and it must not equal that of any valid hist_entry.
  */
-static void __do_track_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u64 n1)
-{
-	u64 s0 = tfrc_rx_hist_loss_prev(h)->tfrchrx_seqno,
-	    s1 = DCCP_SKB_CB(skb)->dccpd_seq;
-
-	if (!dccp_loss_free(s0, s1, n1)) {	/* gap between S0 and S1 */
-		h->loss_count = 1;
-		tfrc_rx_hist_entry_from_skb(tfrc_rx_hist_entry(h, 1), skb, n1);
-	}
-}
-
 static void __one_after_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u32 n2)
 {
 	u64 s0 = tfrc_rx_hist_loss_prev(h)->tfrchrx_seqno,
 	    s1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_seqno,
 	    s2 = DCCP_SKB_CB(skb)->dccpd_seq;
+	int n1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_ndp,
+	   d12 = dccp_delta_seqno(s1, s2), d2;
 
-	if (likely(dccp_delta_seqno(s1, s2) > 0)) {	/* S1  <  S2 */
+	if (d12 > 0) {			/* S1  <  S2 */
 		h->loss_count = 2;
 		tfrc_rx_hist_entry_from_skb(tfrc_rx_hist_entry(h, 2), skb, n2);
 		return;
 	}
 
 	/* S0  <  S2  <  S1 */
+	d2 = dccp_delta_seqno(s0, s2);
 
-	if (dccp_loss_free(s0, s2, n2)) {
-		u64 n1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_ndp;
+	if (d2 == 1 || n2 >= d2) {	/* S2 is direct successor of S0 */
+		int d21 = -d12;
 
-		if (dccp_loss_free(s2, s1, n1)) {
+		if (d21 == 1 || n1 >= d21) {
 			/* hole is filled: S0, S2, and S1 are consecutive */
 			h->loss_count = 0;
 			h->loss_start = tfrc_rx_hist_index(h, 1);
@@ -241,9 +238,9 @@ static void __one_after_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u32 n2
 			/* gap between S2 and S1: just update loss_prev */
 			tfrc_rx_hist_entry_from_skb(tfrc_rx_hist_loss_prev(h), skb, n2);
 
-	} else {	/* gap between S0 and S2 */
+	} else {			/* hole between S0 and S2 */
 		/*
-		 * Reorder history to insert S2 between S0 and S1
+		 * Reorder history to insert S2 between S0 and s1
 		 */
 		tfrc_rx_hist_swap(h, 0, 3);
 		h->loss_start = tfrc_rx_hist_index(h, 3);
@@ -259,18 +256,22 @@ static int __two_after_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u32 n3)
 	    s1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_seqno,
 	    s2 = tfrc_rx_hist_entry(h, 2)->tfrchrx_seqno,
 	    s3 = DCCP_SKB_CB(skb)->dccpd_seq;
+	int n1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_ndp,
+	   d23 = dccp_delta_seqno(s2, s3), d13, d3, d31;
 
-	if (likely(dccp_delta_seqno(s2, s3) > 0)) {	/* S2  <  S3 */
+	if (d23 > 0) {			/* S2  <  S3 */
 		h->loss_count = 3;
 		tfrc_rx_hist_entry_from_skb(tfrc_rx_hist_entry(h, 3), skb, n3);
 		return 1;
 	}
 
 	/* S3  <  S2 */
+	d13 = dccp_delta_seqno(s1, s3);
 
-	if (dccp_delta_seqno(s1, s3) > 0) {		/* S1  <  S3  <  S2 */
+	if (d13 > 0) {
 		/*
-		 * Reorder history to insert S3 between S1 and S2
+		 * The sequence number order is S1, S3, S2
+		 * Reorder history to insert entry between S1 and S2
 		 */
 		tfrc_rx_hist_swap(h, 2, 3);
 		tfrc_rx_hist_entry_from_skb(tfrc_rx_hist_entry(h, 2), skb, n3);
@@ -279,15 +280,17 @@ static int __two_after_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u32 n3)
 	}
 
 	/* S0  <  S3  <  S1 */
+	d31 = -d13;
+	d3  = dccp_delta_seqno(s0, s3);
 
-	if (dccp_loss_free(s0, s3, n3)) {
-		u64 n1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_ndp;
+	if (d3 == 1 || n3 >= d3) {	/* S3 is a successor of S0 */
 
-		if (dccp_loss_free(s3, s1, n1)) {
+		if (d31 == 1 || n1 >= d31) {
 			/* hole between S0 and S1 filled by S3 */
-			u64 n2 = tfrc_rx_hist_entry(h, 2)->tfrchrx_ndp;
+			int  d2 = dccp_delta_seqno(s1, s2),
+			     n2 = tfrc_rx_hist_entry(h, 2)->tfrchrx_ndp;
 
-			if (dccp_loss_free(s1, s2, n2)) {
+			if (d2 == 1 || n2 >= d2) {
 				/* entire hole filled by S0, S3, S1, S2 */
 				h->loss_start = tfrc_rx_hist_index(h, 2);
 				h->loss_count = 0;
@@ -304,8 +307,8 @@ static int __two_after_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u32 n3)
 	}
 
 	/*
-	 * The remaining case:  S0  <  S3  <  S1  <  S2;  gap between S0 and S3
-	 * Reorder history to insert S3 between S0 and S1.
+	 * The remaining case: S3 is not a successor of S0.
+	 * Sequence order is S0, S3, S1, S2; reorder to insert between S0 and S1
 	 */
 	tfrc_rx_hist_swap(h, 0, 3);
 	h->loss_start = tfrc_rx_hist_index(h, 3);
@@ -315,25 +318,33 @@ static int __two_after_loss(struct tfrc_rx_hist *h, struct sk_buff *skb, u32 n3)
 	return 1;
 }
 
+/* return the signed modulo-2^48 sequence number distance from entry e1 to e2 */
+static s64 tfrc_rx_hist_delta_seqno(struct tfrc_rx_hist *h, u8 e1, u8 e2)
+{
+	DCCP_BUG_ON(e1 > h->loss_count || e2 > h->loss_count);
+
+	return dccp_delta_seqno(tfrc_rx_hist_entry(h, e1)->tfrchrx_seqno,
+				tfrc_rx_hist_entry(h, e2)->tfrchrx_seqno);
+}
+
 /* recycle RX history records to continue loss detection if necessary */
 static void __three_after_loss(struct tfrc_rx_hist *h)
 {
 	/*
-	 * At this stage we know already that there is a gap between S0 and S1
-	 * (since S0 was the highest sequence number received before detecting
-	 * the loss). To recycle the loss record, it is	thus only necessary to
-	 * check for other possible gaps between S1/S2 and between S2/S3.
+	 * The distance between S0 and S1 is always greater than 1 and the NDP
+	 * count of S1 is smaller than this distance. Otherwise there would
+	 * have been no loss. Hence it is only necessary to see whether there
+	 * are further missing data packets between S1/S2 and S2/S3.
 	 */
-	u64 s1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_seqno,
-	    s2 = tfrc_rx_hist_entry(h, 2)->tfrchrx_seqno,
-	    s3 = tfrc_rx_hist_entry(h, 3)->tfrchrx_seqno;
-	u64 n2 = tfrc_rx_hist_entry(h, 2)->tfrchrx_ndp,
+	int d2 = tfrc_rx_hist_delta_seqno(h, 1, 2),
+	    d3 = tfrc_rx_hist_delta_seqno(h, 2, 3),
+	    n2 = tfrc_rx_hist_entry(h, 2)->tfrchrx_ndp,
 	    n3 = tfrc_rx_hist_entry(h, 3)->tfrchrx_ndp;
 
-	if (dccp_loss_free(s1, s2, n2)) {
+	if (d2 == 1 || n2 >= d2) {	/* S2 is successor to S1 */
 
-		if (dccp_loss_free(s2, s3, n3)) {
-			/* no gap between S2 and S3: entire hole is filled */
+		if (d3 == 1 || n3 >= d3) {
+			/* S3 is successor of S2: entire hole is filled */
 			h->loss_start = tfrc_rx_hist_index(h, 3);
 			h->loss_count = 0;
 		} else {
@@ -342,7 +353,7 @@ static void __three_after_loss(struct tfrc_rx_hist *h)
 			h->loss_count = 1;
 		}
 
-	} else {	/* gap between S1 and S2 */
+	} else {			/* gap between S1 and S2 */
 		h->loss_start = tfrc_rx_hist_index(h, 1);
 		h->loss_count = 2;
 	}
@@ -359,20 +370,15 @@ static void __three_after_loss(struct tfrc_rx_hist *h)
  *  Chooses action according to pending loss, updates LI database when a new
  *  loss was detected, and does required post-processing. Returns 1 when caller
  *  should send feedback, 0 otherwise.
- *  Since it also takes care of reordering during loss detection and updates the
- *  records accordingly, the caller should not perform any more RX history
- *  operations when loss_count is greater than 0 after calling this function.
  */
 int tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
 			struct tfrc_loss_hist *lh,
-			struct sk_buff *skb, const u64 ndp,
+			struct sk_buff *skb, u32 ndp,
 			u32 (*calc_first_li)(struct sock *), struct sock *sk)
 {
 	int is_new_loss = 0;
 
-	if (h->loss_count == 0) {
-		__do_track_loss(h, skb, ndp);
-	} else if (h->loss_count == 1) {
+	if (h->loss_count == 1) {
 		__one_after_loss(h, skb, ndp);
 	} else if (h->loss_count != 2) {
 		DCCP_BUG("invalid loss_count %d", h->loss_count);
@@ -385,6 +391,7 @@ int tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
 	}
 	return is_new_loss;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_handle_loss);
 
 int tfrc_rx_hist_alloc(struct tfrc_rx_hist *h)
 {
@@ -406,6 +413,7 @@ out_free:
 	}
 	return -ENOBUFS;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_alloc);
 
 void tfrc_rx_hist_purge(struct tfrc_rx_hist *h)
 {
@@ -417,6 +425,7 @@ void tfrc_rx_hist_purge(struct tfrc_rx_hist *h)
 			h->ring[i] = NULL;
 		}
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_purge);
 
 /**
  * tfrc_rx_hist_rtt_last_s - reference entry to compute RTT samples against
@@ -487,3 +496,4 @@ keep_ref_for_next_time:
 
 	return sample;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_sample_rtt);

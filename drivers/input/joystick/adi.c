@@ -572,7 +572,8 @@ static struct gameport_driver adi_drv = {
 
 static int __init adi_init(void)
 {
-	return gameport_register_driver(&adi_drv);
+	gameport_register_driver(&adi_drv);
+	return 0;
 }
 
 static void __exit adi_exit(void)

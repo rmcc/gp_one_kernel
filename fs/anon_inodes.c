@@ -58,9 +58,8 @@ static struct dentry_operations anon_inodefs_dentry_operations = {
  *                    of the file
  *
  * @name:    [in]    name of the "class" of the new file
- * @fops:    [in]    file operations for the new file
- * @priv:    [in]    private data for the new file (will be file's private_data)
- * @flags:   [in]    flags
+ * @fops     [in]    file operations for the new file
+ * @priv     [in]    private data for the new file (will be file's private_data)
  *
  * Creates a new file by hooking it on a single inode. This is useful for files
  * that do not need to have a full-fledged inode in order to operate correctly.
@@ -69,7 +68,7 @@ static struct dentry_operations anon_inodefs_dentry_operations = {
  * setup.  Returns new descriptor or -error.
  */
 int anon_inode_getfd(const char *name, const struct file_operations *fops,
-		     void *priv, int flags)
+		     void *priv)
 {
 	struct qstr this;
 	struct dentry *dentry;
@@ -79,12 +78,9 @@ int anon_inode_getfd(const char *name, const struct file_operations *fops,
 	if (IS_ERR(anon_inode_inode))
 		return -ENODEV;
 
-	if (fops->owner && !try_module_get(fops->owner))
-		return -ENOENT;
-
-	error = get_unused_fd_flags(flags);
+	error = get_unused_fd();
 	if (error < 0)
-		goto err_module;
+		return error;
 	fd = error;
 
 	/*
@@ -119,7 +115,7 @@ int anon_inode_getfd(const char *name, const struct file_operations *fops,
 	file->f_mapping = anon_inode_inode->i_mapping;
 
 	file->f_pos = 0;
-	file->f_flags = O_RDWR | (flags & O_NONBLOCK);
+	file->f_flags = O_RDWR;
 	file->f_version = 0;
 	file->private_data = priv;
 
@@ -131,8 +127,6 @@ err_dput:
 	dput(dentry);
 err_put_unused_fd:
 	put_unused_fd(fd);
-err_module:
-	module_put(fops->owner);
 	return error;
 }
 EXPORT_SYMBOL_GPL(anon_inode_getfd);
@@ -159,8 +153,8 @@ static struct inode *anon_inode_mkinode(void)
 	 */
 	inode->i_state = I_DIRTY;
 	inode->i_mode = S_IRUSR | S_IWUSR;
-	inode->i_uid = current_fsuid();
-	inode->i_gid = current_fsgid();
+	inode->i_uid = current->fsuid;
+	inode->i_gid = current->fsgid;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	return inode;
 }

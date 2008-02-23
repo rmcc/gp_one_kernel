@@ -99,8 +99,8 @@ struct agp_bridge_driver {
 	const void *aperture_sizes;
 	int num_aperture_sizes;
 	enum aper_size_type size_type;
-	bool cant_use_aperture;
-	bool needs_scratch_page;
+	int cant_use_aperture;
+	int needs_scratch_page;
 	const struct gatt_mask *masks;
 	int (*fetch_size)(void);
 	int (*configure)(void);
@@ -116,9 +116,7 @@ struct agp_bridge_driver {
 	struct agp_memory *(*alloc_by_type) (size_t, int);
 	void (*free_by_type)(struct agp_memory *);
 	void *(*agp_alloc_page)(struct agp_bridge_data *);
-	int (*agp_alloc_pages)(struct agp_bridge_data *, struct agp_memory *, size_t);
 	void (*agp_destroy_page)(void *, int flags);
-	void (*agp_destroy_pages)(struct agp_memory *);
 	int (*agp_type_to_mask_type) (struct agp_bridge_data *, int);
 	void (*chipset_flush)(struct agp_bridge_data *);
 };
@@ -150,9 +148,6 @@ struct agp_bridge_data {
 	char minor_version;
 	struct list_head list;
 	u32 apbase_config;
-	/* list of agp_memory mapped to the aperture */
-	struct list_head mapped_list;
-	spinlock_t mapped_lock;
 };
 
 #define KB(x)	((x) * 1024)
@@ -279,14 +274,11 @@ int agp_generic_remove_memory(struct agp_memory *mem, off_t pg_start, int type);
 struct agp_memory *agp_generic_alloc_by_type(size_t page_count, int type);
 void agp_generic_free_by_type(struct agp_memory *curr);
 void *agp_generic_alloc_page(struct agp_bridge_data *bridge);
-int agp_generic_alloc_pages(struct agp_bridge_data *agp_bridge,
-			    struct agp_memory *memory, size_t page_count);
 void agp_generic_destroy_page(void *addr, int flags);
-void agp_generic_destroy_pages(struct agp_memory *memory);
 void agp_free_key(int key);
 int agp_num_entries(void);
 u32 agp_collect_device_status(struct agp_bridge_data *bridge, u32 mode, u32 command);
-void agp_device_command(u32 command, bool agp_v3);
+void agp_device_command(u32 command, int agp_v3);
 int agp_3_5_enable(struct agp_bridge_data *bridge);
 void global_cache_flush(void);
 void get_agp_version(struct agp_bridge_data *bridge);

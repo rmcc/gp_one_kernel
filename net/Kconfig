@@ -2,7 +2,9 @@
 # Network configuration
 #
 
-menuconfig NET
+menu "Networking"
+
+config NET
 	bool "Networking support"
 	---help---
 	  Unless you really know what you are doing, you should say Y here.
@@ -20,6 +22,7 @@ menuconfig NET
 	  recommended to read the NET-HOWTO, available from
 	  <http://www.tldp.org/docs.html#howto>.
 
+# Make sure that all config symbols are dependent on NET
 if NET
 
 menu "Networking options"
@@ -27,13 +30,10 @@ menu "Networking options"
 config NET_NS
 	bool "Network namespace support"
 	default n
-	depends on EXPERIMENTAL && NAMESPACES
+	depends on EXPERIMENTAL && !SYSFS && NAMESPACES
 	help
 	  Allow user space to create what appear to be multiple instances
 	  of the network stack.
-
-config COMPAT_NET_DEV_OPS
-       def_bool y
 
 source "net/packet/Kconfig"
 source "net/unix/Kconfig"
@@ -181,9 +181,7 @@ source "net/dccp/Kconfig"
 source "net/sctp/Kconfig"
 source "net/tipc/Kconfig"
 source "net/atm/Kconfig"
-source "net/802/Kconfig"
 source "net/bridge/Kconfig"
-source "net/dsa/Kconfig"
 source "net/8021q/Kconfig"
 source "net/decnet/Kconfig"
 source "net/llc/Kconfig"
@@ -194,7 +192,6 @@ source "net/lapb/Kconfig"
 source "net/econet/Kconfig"
 source "net/wanrouter/Kconfig"
 source "net/sched/Kconfig"
-source "net/dcb/Kconfig"
 
 menu "Network testing"
 
@@ -237,26 +234,22 @@ source "net/can/Kconfig"
 source "net/irda/Kconfig"
 source "net/bluetooth/Kconfig"
 source "net/rxrpc/Kconfig"
-source "net/phonet/Kconfig"
 
 config FIB_RULES
 	bool
 
-menuconfig WIRELESS
-	bool "Wireless"
+menu "Wireless"
 	depends on !S390
-	default y
-
-if WIRELESS
 
 source "net/wireless/Kconfig"
 source "net/mac80211/Kconfig"
+source "net/ieee80211/Kconfig"
 
-endif # WIRELESS
-
-source "net/wimax/Kconfig"
+endmenu
 
 source "net/rfkill/Kconfig"
 source "net/9p/Kconfig"
 
 endif   # if NET
+endmenu # Networking
+

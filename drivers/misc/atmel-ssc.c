@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/io.h>
+#include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/atmel-ssc.h>
 

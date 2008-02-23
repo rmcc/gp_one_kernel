@@ -114,7 +114,7 @@
  *	- convert dma address types to dma_addr_t
  *	- remove unused 'montype' stuff
  *	- remove redundant zero inits of init_var after the initial
- *	  memset.
+ *	  memzero.
  *	- remove allow_modeset (acornfb idea does not belong here)
  *
  * 2001/05/28: <rmk@arm.linux.org.uk>
@@ -167,7 +167,6 @@
 #include <linux/string.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
-#include <linux/mm.h>
 #include <linux/fb.h>
 #include <linux/delay.h>
 #include <linux/init.h>
@@ -175,13 +174,12 @@
 #include <linux/cpufreq.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
-#include <linux/mutex.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/mach-types.h>
-#include <mach/assabet.h>
-#include <mach/shannon.h>
+#include <asm/arch/assabet.h>
+#include <asm/arch/shannon.h>
 
 /*
  * debugging?
@@ -1109,7 +1107,7 @@ static void set_ctrlr_state(struct sa1100fb_info *fbi, u_int state)
 {
 	u_int old_state;
 
-	mutex_lock(&fbi->ctrlr_lock);
+	down(&fbi->ctrlr_sem);
 
 	old_state = fbi->state;
 
@@ -1194,7 +1192,7 @@ static void set_ctrlr_state(struct sa1100fb_info *fbi, u_int state)
 		}
 		break;
 	}
-	mutex_unlock(&fbi->ctrlr_lock);
+	up(&fbi->ctrlr_sem);
 }
 
 /*
@@ -1446,7 +1444,7 @@ static struct sa1100fb_info * __init sa1100fb_init_fbinfo(struct device *dev)
 
 	init_waitqueue_head(&fbi->ctrlr_wait);
 	INIT_WORK(&fbi->task, sa1100fb_task);
-	mutex_init(&fbi->ctrlr_lock);
+	init_MUTEX(&fbi->ctrlr_sem);
 
 	return fbi;
 }

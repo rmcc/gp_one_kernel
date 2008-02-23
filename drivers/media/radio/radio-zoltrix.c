@@ -37,7 +37,6 @@
 #include <asm/uaccess.h>	/* copy to/from user              */
 #include <linux/videodev2.h>	/* kernel radio structs           */
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #include <linux/version.h>      /* for KERNEL_VERSION MACRO     */
 #define RADIO_VERSION KERNEL_VERSION(0,0,2)
@@ -69,7 +68,6 @@ static int io = CONFIG_RADIO_ZOLTRIX_PORT;
 static int radio_nr = -1;
 
 struct zol_device {
-	unsigned long in_use;
 	int port;
 	int curvol;
 	unsigned long curfreq;
@@ -123,11 +121,8 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	unsigned int stereo = dev->stereo;
 	int i;
 
-	if (freq == 0) {
-		printk(KERN_WARNING "zoltrix: received zero freq. Failed to set.\n");
-		return -EINVAL;
-	}
-
+	if (freq == 0)
+		return 1;
 	m = (freq / 160 - 8800) * 2;
 	f = (unsigned long long) m + 0x4d1c;
 
@@ -249,7 +244,8 @@ static int vidioc_querycap(struct file *file, void  *priv,
 static int vidioc_g_tuner(struct file *file, void *priv,
 					struct v4l2_tuner *v)
 {
-	struct zol_device *zol = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct zol_device *zol = dev->priv;
 
 	if (v->index > 0)
 		return -EINVAL;
@@ -279,20 +275,19 @@ static int vidioc_s_tuner(struct file *file, void *priv,
 static int vidioc_s_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct zol_device *zol = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct zol_device *zol = dev->priv;
 
 	zol->curfreq = f->frequency;
-	if (zol_setfreq(zol, zol->curfreq) != 0) {
-		printk(KERN_WARNING "zoltrix: Set frequency failed.\n");
-		return -EINVAL;
-	}
+	zol_setfreq(zol, zol->curfreq);
 	return 0;
 }
 
 static int vidioc_g_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct zol_device *zol = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct zol_device *zol = dev->priv;
 
 	f->type = V4L2_TUNER_RADIO;
 	f->frequency = zol->curfreq;
@@ -317,7 +312,8 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 static int vidioc_g_ctrl(struct file *file, void *priv,
 				struct v4l2_control *ctrl)
 {
-	struct zol_device *zol = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct zol_device *zol = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -333,7 +329,8 @@ static int vidioc_g_ctrl(struct file *file, void *priv,
 static int vidioc_s_ctrl(struct file *file, void *priv,
 				struct v4l2_control *ctrl)
 {
-	struct zol_device *zol = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct zol_device *zol = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -349,10 +346,7 @@ static int vidioc_s_ctrl(struct file *file, void *priv,
 		return 0;
 	}
 	zol->stereo = 1;
-	if (zol_setfreq(zol, zol->curfreq) != 0) {
-		printk(KERN_WARNING "zoltrix: Set frequency failed.\n");
-		return -EINVAL;
-	}
+	zol_setfreq(zol, zol->curfreq);
 #if 0
 /* FIXME: Implement stereo/mono switch on V4L2 */
 			if (v->mode & VIDEO_SOUND_STEREO) {
@@ -401,26 +395,24 @@ static int vidioc_s_audio(struct file *file, void *priv,
 
 static struct zol_device zoltrix_unit;
 
-static int zoltrix_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &zoltrix_unit.in_use) ? -EBUSY : 0;
-}
-
-static int zoltrix_exclusive_release(struct file *file)
-{
-	clear_bit(0, &zoltrix_unit.in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations zoltrix_fops =
+static const struct file_operations zoltrix_fops =
 {
 	.owner		= THIS_MODULE,
-	.open           = zoltrix_exclusive_open,
-	.release        = zoltrix_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl		= video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops zoltrix_ioctl_ops = {
+static struct video_device zoltrix_radio =
+{
+	.owner		= THIS_MODULE,
+	.name		= "Zoltrix Radio Plus",
+	.type		= VID_TYPE_TUNER,
+	.fops           = &zoltrix_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -435,13 +427,6 @@ static const struct v4l2_ioctl_ops zoltrix_ioctl_ops = {
 	.vidioc_s_ctrl      = vidioc_s_ctrl,
 };
 
-static struct video_device zoltrix_radio = {
-	.name		= "Zoltrix Radio Plus",
-	.fops           = &zoltrix_fops,
-	.ioctl_ops 	= &zoltrix_ioctl_ops,
-	.release	= video_device_release_empty,
-};
-
 static int __init zoltrix_init(void)
 {
 	if (io == -1) {
@@ -453,13 +438,14 @@ static int __init zoltrix_init(void)
 		return -ENXIO;
 	}
 
-	video_set_drvdata(&zoltrix_radio, &zoltrix_unit);
+	zoltrix_radio.priv = &zoltrix_unit;
 	if (!request_region(io, 2, "zoltrix")) {
 		printk(KERN_ERR "zoltrix: port 0x%x already in use\n", io);
 		return -EBUSY;
 	}
 
-	if (video_register_device(&zoltrix_radio, VFL_TYPE_RADIO, radio_nr) < 0) {
+	if (video_register_device(&zoltrix_radio, VFL_TYPE_RADIO, radio_nr) == -1)
+	{
 		release_region(io, 2);
 		return -EINVAL;
 	}

@@ -67,9 +67,12 @@ static inline bool match_tcp(const struct sk_buff *skb,
 	return true;
 }
 
-static bool ecn_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+static bool
+ecn_mt(const struct sk_buff *skb, const struct net_device *in,
+       const struct net_device *out, const struct xt_match *match,
+       const void *matchinfo, int offset, unsigned int protoff, bool *hotdrop)
 {
-	const struct ipt_ecn_info *info = par->matchinfo;
+	const struct ipt_ecn_info *info = matchinfo;
 
 	if (info->operation & IPT_ECN_OP_MATCH_IP)
 		if (!match_ip(skb, info))
@@ -78,17 +81,20 @@ static bool ecn_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 	if (info->operation & (IPT_ECN_OP_MATCH_ECE|IPT_ECN_OP_MATCH_CWR)) {
 		if (ip_hdr(skb)->protocol != IPPROTO_TCP)
 			return false;
-		if (!match_tcp(skb, info, par->hotdrop))
+		if (!match_tcp(skb, info, hotdrop))
 			return false;
 	}
 
 	return true;
 }
 
-static bool ecn_mt_check(const struct xt_mtchk_param *par)
+static bool
+ecn_mt_check(const char *tablename, const void *ip_void,
+             const struct xt_match *match, void *matchinfo,
+             unsigned int hook_mask)
 {
-	const struct ipt_ecn_info *info = par->matchinfo;
-	const struct ipt_ip *ip = par->entryinfo;
+	const struct ipt_ecn_info *info = matchinfo;
+	const struct ipt_ip *ip = ip_void;
 
 	if (info->operation & IPT_ECN_OP_MATCH_MASK)
 		return false;
@@ -108,7 +114,7 @@ static bool ecn_mt_check(const struct xt_mtchk_param *par)
 
 static struct xt_match ecn_mt_reg __read_mostly = {
 	.name		= "ecn",
-	.family		= NFPROTO_IPV4,
+	.family		= AF_INET,
 	.match		= ecn_mt,
 	.matchsize	= sizeof(struct ipt_ecn_info),
 	.checkentry	= ecn_mt_check,

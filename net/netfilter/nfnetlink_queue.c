@@ -243,6 +243,7 @@ nfqnl_build_packet_message(struct nfqnl_instance *queue,
 	switch ((enum nfqnl_config_mode)queue->copy_mode) {
 	case NFQNL_COPY_META:
 	case NFQNL_COPY_NONE:
+		data_len = 0;
 		break;
 
 	case NFQNL_COPY_PACKET:
@@ -555,7 +556,7 @@ nfqnl_rcv_dev_event(struct notifier_block *this,
 {
 	struct net_device *dev = ptr;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	/* Drop any packets associated with the downed device */

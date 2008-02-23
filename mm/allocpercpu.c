@@ -1,7 +1,7 @@
 /*
  * linux/mm/allocpercpu.c
  *
- * Separated from slab.c August 11, 2006 Christoph Lameter
+ * Separated from slab.c August 11, 2006 Christoph Lameter <clameter@sgi.com>
  */
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -18,28 +18,27 @@
  * Depopulating per-cpu data for a cpu going offline would be a typical
  * use case. You need to register a cpu hotplug handler for that purpose.
  */
-static void percpu_depopulate(void *__pdata, int cpu)
+void percpu_depopulate(void *__pdata, int cpu)
 {
 	struct percpu_data *pdata = __percpu_disguise(__pdata);
 
 	kfree(pdata->ptrs[cpu]);
 	pdata->ptrs[cpu] = NULL;
 }
+EXPORT_SYMBOL_GPL(percpu_depopulate);
 
 /**
  * percpu_depopulate_mask - depopulate per-cpu data for some cpu's
  * @__pdata: per-cpu data to depopulate
  * @mask: depopulate per-cpu data for cpu's selected through mask bits
  */
-static void __percpu_depopulate_mask(void *__pdata, cpumask_t *mask)
+void __percpu_depopulate_mask(void *__pdata, cpumask_t *mask)
 {
 	int cpu;
-	for_each_cpu_mask_nr(cpu, *mask)
+	for_each_cpu_mask(cpu, *mask)
 		percpu_depopulate(__pdata, cpu);
 }
-
-#define percpu_depopulate_mask(__pdata, mask) \
-	__percpu_depopulate_mask((__pdata), &(mask))
+EXPORT_SYMBOL_GPL(__percpu_depopulate_mask);
 
 /**
  * percpu_populate - populate per-cpu data for given cpu
@@ -52,7 +51,7 @@ static void __percpu_depopulate_mask(void *__pdata, cpumask_t *mask)
  * use case. You need to register a cpu hotplug handler for that purpose.
  * Per-cpu object is populated with zeroed buffer.
  */
-static void *percpu_populate(void *__pdata, size_t size, gfp_t gfp, int cpu)
+void *percpu_populate(void *__pdata, size_t size, gfp_t gfp, int cpu)
 {
 	struct percpu_data *pdata = __percpu_disguise(__pdata);
 	int node = cpu_to_node(cpu);
@@ -69,6 +68,7 @@ static void *percpu_populate(void *__pdata, size_t size, gfp_t gfp, int cpu)
 		pdata->ptrs[cpu] = kzalloc(size, gfp);
 	return pdata->ptrs[cpu];
 }
+EXPORT_SYMBOL_GPL(percpu_populate);
 
 /**
  * percpu_populate_mask - populate per-cpu data for more cpu's
@@ -79,14 +79,14 @@ static void *percpu_populate(void *__pdata, size_t size, gfp_t gfp, int cpu)
  *
  * Per-cpu objects are populated with zeroed buffers.
  */
-static int __percpu_populate_mask(void *__pdata, size_t size, gfp_t gfp,
-				  cpumask_t *mask)
+int __percpu_populate_mask(void *__pdata, size_t size, gfp_t gfp,
+			   cpumask_t *mask)
 {
 	cpumask_t populated;
 	int cpu;
 
 	cpus_clear(populated);
-	for_each_cpu_mask_nr(cpu, *mask)
+	for_each_cpu_mask(cpu, *mask)
 		if (unlikely(!percpu_populate(__pdata, size, gfp, cpu))) {
 			__percpu_depopulate_mask(__pdata, &populated);
 			return -ENOMEM;
@@ -94,9 +94,7 @@ static int __percpu_populate_mask(void *__pdata, size_t size, gfp_t gfp,
 			cpu_set(cpu, populated);
 	return 0;
 }
-
-#define percpu_populate_mask(__pdata, size, gfp, mask) \
-	__percpu_populate_mask((__pdata), (size), (gfp), &(mask))
+EXPORT_SYMBOL_GPL(__percpu_populate_mask);
 
 /**
  * percpu_alloc_mask - initial setup of per-cpu data

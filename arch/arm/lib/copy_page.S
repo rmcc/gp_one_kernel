@@ -44,4 +44,3 @@ ENTRY(copy_page)
 	PLD(	ldmeqia r1!, {r3, r4, ip, lr}	)
 	PLD(	beq	2b			)
 		ldmfd	sp!, {r4, pc}			@	3
-ENDPROC(copy_page)

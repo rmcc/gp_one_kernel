@@ -31,7 +31,6 @@
 #include <linux/sched.h>
 #include <linux/semaphore.h>
 #include <linux/spinlock.h>
-#include <linux/ftrace.h>
 
 static noinline void __down(struct semaphore *sem);
 static noinline int __down_interruptible(struct semaphore *sem);
@@ -212,7 +211,9 @@ static inline int __sched __down_common(struct semaphore *sem, long state,
 	waiter.up = 0;
 
 	for (;;) {
-		if (signal_pending_state(state, task))
+		if (state == TASK_INTERRUPTIBLE && signal_pending(task))
+			goto interrupted;
+		if (state == TASK_KILLABLE && fatal_signal_pending(task))
 			goto interrupted;
 		if (timeout <= 0)
 			goto timed_out;

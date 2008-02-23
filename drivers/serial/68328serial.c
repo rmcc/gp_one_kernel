@@ -66,6 +66,7 @@
 #endif
 
 static struct m68k_serial m68k_soft[NR_PORTS];
+struct m68k_serial *IRQ_ports[NR_IRQS];
 
 static unsigned int uart_irqs[NR_PORTS] = UART_IRQ_DEFNS;
 
@@ -248,7 +249,7 @@ static void status_handle(struct m68k_serial *info, unsigned short status)
 {
 #if 0
 	if(status & DCD) {
-		if((info->port.tty->termios->c_cflag & CRTSCTS) &&
+		if((info->tty->termios->c_cflag & CRTSCTS) &&
 		   ((info->curregs[3] & AUTO_ENAB)==0)) {
 			info->curregs[3] |= AUTO_ENAB;
 			info->pendregs[3] |= AUTO_ENAB;
@@ -273,7 +274,7 @@ static void status_handle(struct m68k_serial *info, unsigned short status)
 
 static void receive_chars(struct m68k_serial *info, unsigned short rx)
 {
-	struct tty_struct *tty = info->port.tty;
+	struct tty_struct *tty = info->tty;
 	m68328_uart *uart = &uart_addr[info->line];
 	unsigned char ch, flag;
 
@@ -344,7 +345,7 @@ static void transmit_chars(struct m68k_serial *info)
 		goto clear_and_return;
 	}
 
-	if((info->xmit_cnt <= 0) || info->port.tty->stopped) {
+	if((info->xmit_cnt <= 0) || info->tty->stopped) {
 		/* That's peculiar... TX ints off */
 		uart->ustcnt &= ~USTCNT_TX_INTR_MASK;
 		goto clear_and_return;
@@ -374,10 +375,14 @@ clear_and_return:
  */
 irqreturn_t rs_interrupt(int irq, void *dev_id)
 {
-	struct m68k_serial *info = dev_id;
+	struct m68k_serial * info;
 	m68328_uart *uart;
 	unsigned short rx;
 	unsigned short tx;
+
+	info = IRQ_ports[irq];
+	if(!info)
+	    return IRQ_NONE;
 
 	uart = &uart_addr[info->line];
 	rx = uart->urx.w;
@@ -398,7 +403,7 @@ static void do_softint(struct work_struct *work)
 	struct m68k_serial	*info = container_of(work, struct m68k_serial, tqueue);
 	struct tty_struct	*tty;
 	
-	tty = info->port.tty;
+	tty = info->tty;
 	if (!tty)
 		return;
 #if 0
@@ -422,7 +427,7 @@ static void do_serial_hangup(struct work_struct *work)
 	struct m68k_serial	*info = container_of(work, struct m68k_serial, tqueue_hangup);
 	struct tty_struct	*tty;
 	
-	tty = info->port.tty;
+	tty = info->tty;
 	if (!tty)
 		return;
 
@@ -466,8 +471,8 @@ static int startup(struct m68k_serial * info)
 	uart->ustcnt = USTCNT_UEN | USTCNT_RXEN | USTCNT_RX_INTR_MASK;
 #endif
 
-	if (info->port.tty)
-		clear_bit(TTY_IO_ERROR, &info->port.tty->flags);
+	if (info->tty)
+		clear_bit(TTY_IO_ERROR, &info->tty->flags);
 	info->xmit_cnt = info->xmit_head = info->xmit_tail = 0;
 
 	/*
@@ -501,8 +506,8 @@ static void shutdown(struct m68k_serial * info)
 		info->xmit_buf = 0;
 	}
 
-	if (info->port.tty)
-		set_bit(TTY_IO_ERROR, &info->port.tty->flags);
+	if (info->tty)
+		set_bit(TTY_IO_ERROR, &info->tty->flags);
 	
 	info->flags &= ~S_INITIALIZED;
 	local_irq_restore(flags);
@@ -568,9 +573,9 @@ static void change_speed(struct m68k_serial *info)
 	unsigned cflag;
 	int	i;
 
-	if (!info->port.tty || !info->port.tty->termios)
+	if (!info->tty || !info->tty->termios)
 		return;
-	cflag = info->port.tty->termios->c_cflag;
+	cflag = info->tty->termios->c_cflag;
 	if (!(port = info->port))
 		return;
 
@@ -1126,7 +1131,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	tty_ldisc_flush(tty);
 	tty->closing = 0;
 	info->event = 0;
-	info->port.tty = NULL;
+	info->tty = 0;
 #warning "This is not and has never been valid so fix it"	
 #if 0
 	if (tty->ldisc.num != ldiscs[N_TTY].num) {
@@ -1164,7 +1169,7 @@ void rs_hangup(struct tty_struct *tty)
 	info->event = 0;
 	info->count = 0;
 	info->flags &= ~S_NORMAL_ACTIVE;
-	info->port.tty = NULL;
+	info->tty = 0;
 	wake_up_interruptible(&info->open_wait);
 }
 
@@ -1281,7 +1286,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 	info->count++;
 	tty->driver_data = info;
-	info->port.tty = tty;
+	info->tty = tty;
 
 	/*
 	 * Start up serial port
@@ -1358,7 +1363,7 @@ rs68328_init(void)
 	    info = &m68k_soft[i];
 	    info->magic = SERIAL_MAGIC;
 	    info->port = (int) &uart_addr[i];
-	    info->port.tty = NULL;
+	    info->tty = 0;
 	    info->irq = uart_irqs[i];
 	    info->custom_divisor = 16;
 	    info->close_delay = 50;
@@ -1378,6 +1383,8 @@ rs68328_init(void)
 		   info->port, info->irq);
 	    printk(" is a builtin MC68328 UART\n");
 	    
+	    IRQ_ports[info->irq] = info;	/* waste of space */
+
 #ifdef CONFIG_M68VZ328
 		if (i > 0 )
 			PJSEL &= 0xCF;  /* PSW enable second port output */
@@ -1386,7 +1393,7 @@ rs68328_init(void)
 	    if (request_irq(uart_irqs[i],
 			    rs_interrupt,
 			    IRQF_DISABLED,
-			    "M68328_UART", info))
+			    "M68328_UART", NULL))
                 panic("Unable to attach 68328 serial interrupt\n");
 	}
 	local_irq_restore(flags);

@@ -1,7 +1,7 @@
 /* radiotrack (radioreveal) driver for Linux radio support
  * (c) 1997 M. Kirkwood
  * Converted to V4L2 API by Mauro Carvalho Chehab <mchehab@infradead.org>
- * Converted to new API by Alan Cox <alan@lxorguk.ukuu.org.uk>
+ * Converted to new API by Alan Cox <Alan.Cox@linux.org>
  * Various bugfixes and enhancements by Russell Kroll <rkroll@exploits.org>
  *
  * History:
@@ -36,7 +36,6 @@
 #include <asm/uaccess.h>	/* copy to/from user		*/
 #include <linux/videodev2.h>	/* kernel radio structs		*/
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 
 #include <linux/version.h>	/* for KERNEL_VERSION MACRO	*/
 #define RADIO_VERSION KERNEL_VERSION(0,0,2)
@@ -51,7 +50,6 @@ static struct mutex lock;
 
 struct rt_device
 {
-	unsigned long in_use;
 	int port;
 	int curvol;
 	unsigned long curfreq;
@@ -246,7 +244,8 @@ static int vidioc_querycap(struct file *file, void  *priv,
 static int vidioc_g_tuner(struct file *file, void *priv,
 					struct v4l2_tuner *v)
 {
-	struct rt_device *rt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct rt_device *rt = dev->priv;
 
 	if (v->index > 0)
 		return -EINVAL;
@@ -273,7 +272,8 @@ static int vidioc_s_tuner(struct file *file, void *priv,
 static int vidioc_s_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct rt_device *rt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct rt_device *rt = dev->priv;
 
 	rt->curfreq = f->frequency;
 	rt_setfreq(rt, rt->curfreq);
@@ -283,7 +283,8 @@ static int vidioc_s_frequency(struct file *file, void *priv,
 static int vidioc_g_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct rt_device *rt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct rt_device *rt = dev->priv;
 
 	f->type = V4L2_TUNER_RADIO;
 	f->frequency = rt->curfreq;
@@ -308,7 +309,8 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 static int vidioc_g_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct rt_device *rt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct rt_device *rt = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -324,7 +326,8 @@ static int vidioc_g_ctrl(struct file *file, void *priv,
 static int vidioc_s_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct rt_device *rt = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct rt_device *rt = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -374,25 +377,23 @@ static int vidioc_s_audio(struct file *file, void *priv,
 
 static struct rt_device rtrack_unit;
 
-static int rtrack_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &rtrack_unit.in_use) ? -EBUSY : 0;
-}
-
-static int rtrack_exclusive_release(struct file *file)
-{
-	clear_bit(0, &rtrack_unit.in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations rtrack_fops = {
+static const struct file_operations rtrack_fops = {
 	.owner		= THIS_MODULE,
-	.open           = rtrack_exclusive_open,
-	.release        = rtrack_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl		= video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops rtrack_ioctl_ops = {
+static struct video_device rtrack_radio=
+{
+	.owner		= THIS_MODULE,
+	.name		= "RadioTrack radio",
+	.type		= VID_TYPE_TUNER,
+	.fops           = &rtrack_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -405,13 +406,6 @@ static const struct v4l2_ioctl_ops rtrack_ioctl_ops = {
 	.vidioc_queryctrl   = vidioc_queryctrl,
 	.vidioc_g_ctrl      = vidioc_g_ctrl,
 	.vidioc_s_ctrl      = vidioc_s_ctrl,
-};
-
-static struct video_device rtrack_radio = {
-	.name		= "RadioTrack radio",
-	.fops           = &rtrack_fops,
-	.ioctl_ops 	= &rtrack_ioctl_ops,
-	.release	= video_device_release_empty,
 };
 
 static int __init rtrack_init(void)
@@ -428,9 +422,10 @@ static int __init rtrack_init(void)
 		return -EBUSY;
 	}
 
-	video_set_drvdata(&rtrack_radio, &rtrack_unit);
+	rtrack_radio.priv=&rtrack_unit;
 
-	if (video_register_device(&rtrack_radio, VFL_TYPE_RADIO, radio_nr) < 0) {
+	if(video_register_device(&rtrack_radio, VFL_TYPE_RADIO, radio_nr)==-1)
+	{
 		release_region(io, 2);
 		return -EINVAL;
 	}

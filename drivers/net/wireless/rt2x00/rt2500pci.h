@@ -48,6 +48,8 @@
  * Signal information.
  * Defaul offset is required for RSSI <-> dBm conversion.
  */
+#define MAX_SIGNAL			100
+#define MAX_RX_SSI			-1
 #define DEFAULT_RSSI_OFFSET		121
 
 /*
@@ -57,15 +59,8 @@
 #define CSR_REG_SIZE			0x0174
 #define EEPROM_BASE			0x0000
 #define EEPROM_SIZE			0x0200
-#define BBP_BASE			0x0000
 #define BBP_SIZE			0x0040
-#define RF_BASE				0x0000
 #define RF_SIZE				0x0014
-
-/*
- * Number of TX queues.
- */
-#define NUM_TX_QUEUES			2
 
 /*
  * Control/Status Registers(CSR).
@@ -753,7 +748,7 @@
 #define LEDCSR_LED_DEFAULT		FIELD32(0x00100000)
 
 /*
- * SECCSR3: AES control register.
+ * AES control register.
  */
 #define SECCSR3				0x00fc
 
@@ -897,7 +892,7 @@
 #define ARTCSR2_ACK_CTS_54MBS		FIELD32(0xff000000)
 
 /*
- * SECCSR1: WEP control register.
+ * SECCSR1_RT2509: WEP control register.
  * KICK_ENCRYPT: Kick encryption engine, self-clear.
  * ONE_SHOT: 0: ring mode, 1: One shot only mode.
  * DESC_ADDRESS: Descriptor physical address of frame.
@@ -1225,10 +1220,17 @@
 #define MAX_TXPOWER	31
 #define DEFAULT_TXPOWER	24
 
-#define TXPOWER_FROM_DEV(__txpower) \
-	(((u8)(__txpower)) > MAX_TXPOWER) ? DEFAULT_TXPOWER : (__txpower)
+#define TXPOWER_FROM_DEV(__txpower)		\
+({						\
+	((__txpower) > MAX_TXPOWER) ?		\
+		DEFAULT_TXPOWER : (__txpower);	\
+})
 
-#define TXPOWER_TO_DEV(__txpower) \
-	clamp_t(char, __txpower, MIN_TXPOWER, MAX_TXPOWER)
+#define TXPOWER_TO_DEV(__txpower)			\
+({							\
+	((__txpower) <= MIN_TXPOWER) ? MIN_TXPOWER :	\
+	(((__txpower) >= MAX_TXPOWER) ? MAX_TXPOWER :	\
+	(__txpower));					\
+})
 
 #endif /* RT2500PCI_H */

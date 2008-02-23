@@ -14,7 +14,6 @@
 #define MOUSEDEV_MIX		31
 
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/poll.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -519,6 +518,7 @@ static int mousedev_release(struct inode *inode, struct file *file)
 	struct mousedev_client *client = file->private_data;
 	struct mousedev *mousedev = client->mousedev;
 
+	mousedev_fasync(-1, file, 0);
 	mousedev_detach_client(mousedev, client);
 	kfree(client);
 
@@ -545,21 +545,16 @@ static int mousedev_open(struct inode *inode, struct file *file)
 	if (i >= MOUSEDEV_MINORS)
 		return -ENODEV;
 
-	lock_kernel();
 	error = mutex_lock_interruptible(&mousedev_table_mutex);
-	if (error) {
-		unlock_kernel();
+	if (error)
 		return error;
-	}
 	mousedev = mousedev_table[i];
 	if (mousedev)
 		get_device(&mousedev->dev);
 	mutex_unlock(&mousedev_table_mutex);
 
-	if (!mousedev) {
-		unlock_kernel();
+	if (!mousedev)
 		return -ENODEV;
-	}
 
 	client = kzalloc(sizeof(struct mousedev_client), GFP_KERNEL);
 	if (!client) {
@@ -578,7 +573,6 @@ static int mousedev_open(struct inode *inode, struct file *file)
 		goto err_free_client;
 
 	file->private_data = client;
-	unlock_kernel();
 	return 0;
 
  err_free_client:
@@ -586,7 +580,6 @@ static int mousedev_open(struct inode *inode, struct file *file)
 	kfree(client);
  err_put_mousedev:
 	put_device(&mousedev->dev);
-	unlock_kernel();
 	return error;
 }
 
@@ -878,7 +871,8 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 	mousedev->handle.handler = handler;
 	mousedev->handle.private = mousedev;
 
-	dev_set_name(&mousedev->dev, mousedev->name);
+	strlcpy(mousedev->dev.bus_id, mousedev->name,
+		sizeof(mousedev->dev.bus_id));
 	mousedev->dev.class = &input_class;
 	if (dev)
 		mousedev->dev.parent = &dev->dev;

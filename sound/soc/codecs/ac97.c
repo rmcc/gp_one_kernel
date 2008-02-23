@@ -2,12 +2,16 @@
  * ac97.c  --  ALSA Soc AC97 codec support
  *
  * Copyright 2005 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
  *
  *  This program is free software; you can redistribute  it and/or modify it
  *  under  the terms of  the GNU General  Public License as published by the
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
+ *
+ *  Revision history
+ *    17th Oct 2005   Initial version.
  *
  * Generic AC97 support.
  */
@@ -20,12 +24,10 @@
 #include <sound/ac97_codec.h>
 #include <sound/initval.h>
 #include <sound/soc.h>
-#include "ac97.h"
 
 #define AC97_VERSION "0.6"
 
-static int ac97_prepare(struct snd_pcm_substream *substream,
-			struct snd_soc_dai *dai)
+static int ac97_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -41,9 +43,9 @@ static int ac97_prepare(struct snd_pcm_substream *substream,
 		SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_44100 |\
 		SNDRV_PCM_RATE_48000)
 
-struct snd_soc_dai ac97_dai = {
+struct snd_soc_codec_dai ac97_dai = {
 	.name = "AC97 HiFi",
-	.ac97_control = 1,
+	.type = SND_SOC_DAI_AC97,
 	.playback = {
 		.stream_name = "AC97 Playback",
 		.channels_min = 1,
@@ -114,7 +116,7 @@ static int ac97_soc_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto bus_err;
 
-	ret = snd_soc_init_card(socdev);
+	ret = snd_soc_register_card(socdev);
 	if (ret < 0)
 		goto bus_err;
 	return 0;
@@ -144,34 +146,9 @@ static int ac97_soc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int ac97_soc_suspend(struct platform_device *pdev, pm_message_t msg)
-{
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-
-	snd_ac97_suspend(socdev->codec->ac97);
-
-	return 0;
-}
-
-static int ac97_soc_resume(struct platform_device *pdev)
-{
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-
-	snd_ac97_resume(socdev->codec->ac97);
-
-	return 0;
-}
-#else
-#define ac97_soc_suspend NULL
-#define ac97_soc_resume NULL
-#endif
-
 struct snd_soc_codec_device soc_codec_dev_ac97 = {
 	.probe = 	ac97_soc_probe,
 	.remove = 	ac97_soc_remove,
-	.suspend =	ac97_soc_suspend,
-	.resume =	ac97_soc_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_ac97);
 

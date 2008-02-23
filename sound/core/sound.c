@@ -21,7 +21,6 @@
 
 #include <linux/init.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/time.h>
 #include <linux/device.h>
 #include <linux/moduleparam.h>
@@ -33,6 +32,8 @@
 #include <sound/initval.h>
 #include <linux/kmod.h>
 #include <linux/mutex.h>
+
+#define SNDRV_OS_MINORS 256
 
 static int major = CONFIG_SND_MAJOR;
 int snd_major;
@@ -59,14 +60,14 @@ EXPORT_SYMBOL(snd_ecards_limit);
 static struct snd_minor *snd_minors[SNDRV_OS_MINORS];
 static DEFINE_MUTEX(sound_mutex);
 
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 
 /**
  * snd_request_card - try to load the card module
  * @card: the card number
  *
  * Tries to load the module "snd-card-X" for the given card number
- * via request_module.  Returns immediately if already loaded.
+ * via KMOD.  Returns immediately if already loaded.
  */
 void snd_request_card(int card)
 {
@@ -91,7 +92,7 @@ static void snd_request_other(int minor)
 	request_module(str);
 }
 
-#endif	/* modular kernel */
+#endif				/* request_module support */
 
 /**
  * snd_lookup_minor_data - get user data of a registered device
@@ -120,7 +121,7 @@ void *snd_lookup_minor_data(unsigned int minor, int type)
 
 EXPORT_SYMBOL(snd_lookup_minor_data);
 
-static int __snd_open(struct inode *inode, struct file *file)
+static int snd_open(struct inode *inode, struct file *file)
 {
 	unsigned int minor = iminor(inode);
 	struct snd_minor *mptr = NULL;
@@ -131,7 +132,7 @@ static int __snd_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	mptr = snd_minors[minor];
 	if (mptr == NULL) {
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_KMOD
 		int dev = SNDRV_MINOR_DEVICE(minor);
 		if (dev == SNDRV_MINOR_CONTROL) {
 			/* /dev/aloadC? */
@@ -152,10 +153,6 @@ static int __snd_open(struct inode *inode, struct file *file)
 	}
 	old_fops = file->f_op;
 	file->f_op = fops_get(mptr->f_ops);
-	if (file->f_op == NULL) {
-		file->f_op = old_fops;
-		return -ENODEV;
-	}
 	if (file->f_op->open)
 		err = file->f_op->open(inode, file);
 	if (err) {
@@ -164,18 +161,6 @@ static int __snd_open(struct inode *inode, struct file *file)
 	}
 	fops_put(old_fops);
 	return err;
-}
-
-
-/* BKL pushdown: nasty #ifdef avoidance wrapper */
-static int snd_open(struct inode *inode, struct file *file)
-{
-	int ret;
-
-	lock_kernel();
-	ret = __snd_open(inode, file);
-	unlock_kernel();
-	return ret;
 }
 
 static const struct file_operations snd_fops =
@@ -210,23 +195,20 @@ static int snd_kernel_minor(int type, struct snd_card *card, int dev)
 		minor = type;
 		break;
 	case SNDRV_DEVICE_TYPE_CONTROL:
-		if (snd_BUG_ON(!card))
-			return -EINVAL;
+		snd_assert(card != NULL, return -EINVAL);
 		minor = SNDRV_MINOR(card->number, type);
 		break;
 	case SNDRV_DEVICE_TYPE_HWDEP:
 	case SNDRV_DEVICE_TYPE_RAWMIDI:
 	case SNDRV_DEVICE_TYPE_PCM_PLAYBACK:
 	case SNDRV_DEVICE_TYPE_PCM_CAPTURE:
-		if (snd_BUG_ON(!card))
-			return -EINVAL;
+		snd_assert(card != NULL, return -EINVAL);
 		minor = SNDRV_MINOR(card->number, type + dev);
 		break;
 	default:
 		return -EINVAL;
 	}
-	if (snd_BUG_ON(minor < 0 || minor >= SNDRV_OS_MINORS))
-		return -EINVAL;
+	snd_assert(minor >= 0 && minor < SNDRV_OS_MINORS, return -EINVAL);
 	return minor;
 }
 #endif
@@ -254,8 +236,7 @@ int snd_register_device_for_dev(int type, struct snd_card *card, int dev,
 	int minor;
 	struct snd_minor *preg;
 
-	if (snd_BUG_ON(!name))
-		return -EINVAL;
+	snd_assert(name, return -EINVAL);
 	preg = kmalloc(sizeof *preg, GFP_KERNEL);
 	if (preg == NULL)
 		return -ENOMEM;
@@ -278,8 +259,9 @@ int snd_register_device_for_dev(int type, struct snd_card *card, int dev,
 		return minor;
 	}
 	snd_minors[minor] = preg;
-	preg->dev = device_create(sound_class, device, MKDEV(major, minor),
-				  private_data, "%s", name);
+	preg->dev = device_create_drvdata(sound_class, device,
+					  MKDEV(major, minor),
+					  private_data, "%s", name);
 	if (IS_ERR(preg->dev)) {
 		snd_minors[minor] = NULL;
 		mutex_unlock(&sound_mutex);

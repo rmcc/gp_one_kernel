@@ -30,6 +30,10 @@
 ** -----------------------------------------------------------------------------
 */
 
+#ifdef SCCS_LABELS
+static char *_rioparam_c_sccs_ = "@(#)rioparam.c	1.3";
+#endif
+
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
@@ -160,7 +164,7 @@ int RIOParam(struct Port *PortP, int cmd, int Modem, int SleepFlag)
 
 	func_enter();
 
-	TtyP = PortP->gs.port.tty;
+	TtyP = PortP->gs.tty;
 
 	rio_dprintk(RIO_DEBUG_PARAM, "RIOParam: Port:%d cmd:%d Modem:%d SleepFlag:%d Mapped: %d, tty=%p\n", PortP->PortNum, cmd, Modem, SleepFlag, PortP->Mapped, TtyP);
 

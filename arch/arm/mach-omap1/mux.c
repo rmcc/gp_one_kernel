@@ -24,12 +24,11 @@
  */
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/io.h>
+#include <asm/system.h>
+#include <asm/io.h>
 #include <linux/spinlock.h>
 
-#include <asm/system.h>
-
-#include <mach/mux.h>
+#include <asm/arch/mux.h>
 
 #ifdef CONFIG_OMAP_MUX
 

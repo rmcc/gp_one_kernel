@@ -1,6 +1,6 @@
 /*
  *	Adaptec AAC series RAID controller driver
- *	(c) Copyright 2001 Red Hat Inc.
+ *	(c) Copyright 2001 Red Hat Inc.	<alan@redhat.com>
  *
  * based on the old aacraid driver that is..
  * Adaptec aacraid device driver for Linux.
@@ -41,7 +41,6 @@
 #include <linux/kthread.h>
 #include <linux/semaphore.h>
 #include <asm/uaccess.h>
-#include <scsi/scsi_host.h>
 
 #include "aacraid.h"
 
@@ -90,24 +89,14 @@ static int ioctl_send_fib(struct aac_dev * dev, void __user *arg)
 	if (size < le16_to_cpu(kfib->header.SenderSize))
 		size = le16_to_cpu(kfib->header.SenderSize);
 	if (size > dev->max_fib_size) {
-		dma_addr_t daddr;
-
 		if (size > 2048) {
 			retval = -EINVAL;
 			goto cleanup;
 		}
-
-		kfib = pci_alloc_consistent(dev->pdev, size, &daddr);
-		if (!kfib) {
-			retval = -ENOMEM;
-			goto cleanup;
-		}
-
 		/* Highjack the hw_fib */
 		hw_fib = fibptr->hw_fib_va;
 		hw_fib_pa = fibptr->hw_fib_pa;
-		fibptr->hw_fib_va = kfib;
-		fibptr->hw_fib_pa = daddr;
+		fibptr->hw_fib_va = kfib = pci_alloc_consistent(dev->pdev, size, &fibptr->hw_fib_pa);
 		memset(((char *)kfib) + dev->max_fib_size, 0, size - dev->max_fib_size);
 		memcpy(kfib, hw_fib, dev->max_fib_size);
 	}
@@ -592,14 +581,6 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 			for (i = 0; i < upsg->count; i++) {
 				u64 addr;
 				void* p;
-				if (upsg->sg[i].count >
-				    (dev->adapter_info.options &
-				     AAC_OPT_NEW_COMM) ?
-				      (dev->scsi_host_ptr->max_sectors << 9) :
-				      65536) {
-					rcode = -EINVAL;
-					goto cleanup;
-				}
 				/* Does this really need to be GFP_DMA? */
 				p = kmalloc(upsg->sg[i].count,GFP_KERNEL|__GFP_DMA);
 				if(!p) {
@@ -644,14 +625,6 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 			for (i = 0; i < usg->count; i++) {
 				u64 addr;
 				void* p;
-				if (usg->sg[i].count >
-				    (dev->adapter_info.options &
-				     AAC_OPT_NEW_COMM) ?
-				      (dev->scsi_host_ptr->max_sectors << 9) :
-				      65536) {
-					rcode = -EINVAL;
-					goto cleanup;
-				}
 				/* Does this really need to be GFP_DMA? */
 				p = kmalloc(usg->sg[i].count,GFP_KERNEL|__GFP_DMA);
 				if(!p) {
@@ -694,14 +667,6 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 			for (i = 0; i < upsg->count; i++) {
 				uintptr_t addr;
 				void* p;
-				if (usg->sg[i].count >
-				    (dev->adapter_info.options &
-				     AAC_OPT_NEW_COMM) ?
-				      (dev->scsi_host_ptr->max_sectors << 9) :
-				      65536) {
-					rcode = -EINVAL;
-					goto cleanup;
-				}
 				/* Does this really need to be GFP_DMA? */
 				p = kmalloc(usg->sg[i].count,GFP_KERNEL|__GFP_DMA);
 				if(!p) {
@@ -733,14 +698,6 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 			for (i = 0; i < upsg->count; i++) {
 				dma_addr_t addr;
 				void* p;
-				if (upsg->sg[i].count >
-				    (dev->adapter_info.options &
-				     AAC_OPT_NEW_COMM) ?
-				      (dev->scsi_host_ptr->max_sectors << 9) :
-				      65536) {
-					rcode = -EINVAL;
-					goto cleanup;
-				}
 				p = kmalloc(upsg->sg[i].count, GFP_KERNEL);
 				if (!p) {
 					dprintk((KERN_DEBUG"aacraid: Could not allocate SG buffer - size = %d buffer number %d of %d\n",

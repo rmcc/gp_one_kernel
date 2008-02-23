@@ -36,7 +36,6 @@
 #include <asm/prom.h>
 #include <asm/udbg.h>
 #include <sysdev/fsl_soc.h>
-#include <sysdev/fsl_pci.h>
 #include <asm/qe.h>
 #include <asm/qe_ic.h>
 
@@ -49,6 +48,8 @@
 #define DBG(fmt...)
 #endif
 
+static u8 *bcsr_regs = NULL;
+
 /* ************************************************************************
  *
  * Setup the architecture
@@ -57,14 +58,13 @@
 static void __init mpc832x_sys_setup_arch(void)
 {
 	struct device_node *np;
-	u8 __iomem *bcsr_regs = NULL;
 
 	if (ppc_md.progress)
 		ppc_md.progress("mpc832x_sys_setup_arch()", 0);
 
 	/* Map BCSR area */
 	np = of_find_node_by_name(NULL, "bcsr");
-	if (np) {
+	if (np != 0) {
 		struct resource res;
 
 		of_address_to_resource(np, 0, &res);
@@ -92,9 +92,9 @@ static void __init mpc832x_sys_setup_arch(void)
 			!= NULL){
 		/* Reset the Ethernet PHYs */
 #define BCSR8_FETH_RST 0x50
-		clrbits8(&bcsr_regs[8], BCSR8_FETH_RST);
+		bcsr_regs[8] &= ~BCSR8_FETH_RST;
 		udelay(1000);
-		setbits8(&bcsr_regs[8], BCSR8_FETH_RST);
+		bcsr_regs[8] |= BCSR8_FETH_RST;
 		iounmap(bcsr_regs);
 		of_node_put(np);
 	}
@@ -104,7 +104,6 @@ static void __init mpc832x_sys_setup_arch(void)
 static struct of_device_id mpc832x_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
-	{ .compatible = "simple-bus", },
 	{ .type = "qe", },
 	{ .compatible = "fsl,qe", },
 	{},

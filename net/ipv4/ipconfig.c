@@ -1,4 +1,6 @@
 /*
+ *  $Id: ipconfig.c,v 1.46 2002/02/01 22:01:04 davem Exp $
+ *
  *  Automatic Configuration of IP -- use DHCP, BOOTP, RARP, or
  *  user-supplied information to configure own IP address and routes.
  *
@@ -374,7 +376,7 @@ static int __init ic_defaults(void)
 	 */
 
 	if (!ic_host_name_set)
-		sprintf(init_utsname()->nodename, "%pI4", &ic_myaddr);
+		sprintf(init_utsname()->nodename, NIPQUAD_FMT, NIPQUAD(ic_myaddr));
 
 	if (root_server_addr == NONE)
 		root_server_addr = ic_servaddr;
@@ -387,11 +389,11 @@ static int __init ic_defaults(void)
 		else if (IN_CLASSC(ntohl(ic_myaddr)))
 			ic_netmask = htonl(IN_CLASSC_NET);
 		else {
-			printk(KERN_ERR "IP-Config: Unable to guess netmask for address %pI4\n",
-				&ic_myaddr);
+			printk(KERN_ERR "IP-Config: Unable to guess netmask for address " NIPQUAD_FMT "\n",
+				NIPQUAD(ic_myaddr));
 			return -1;
 		}
-		printk("IP-Config: Guessing netmask %pI4\n", &ic_netmask);
+		printk("IP-Config: Guessing netmask " NIPQUAD_FMT "\n", NIPQUAD(ic_netmask));
 	}
 
 	return 0;
@@ -432,7 +434,7 @@ ic_rarp_recv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	unsigned char *sha, *tha;		/* s for "source", t for "target" */
 	struct ic_device *d;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		goto drop;
 
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
@@ -852,7 +854,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct net_device *dev, str
 	struct ic_device *d;
 	int len, ext_len;
 
-	if (!net_eq(dev_net(dev), &init_net))
+	if (dev_net(dev) != &init_net)
 		goto drop;
 
 	/* Perform verifications before taking the lock.  */
@@ -979,8 +981,10 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct net_device *dev, str
 				ic_myaddr = b->your_ip;
 				ic_servaddr = server_id;
 #ifdef IPCONFIG_DEBUG
-				printk("DHCP: Offered address %pI4 by server %pI4\n",
-				       &ic_myaddr, &ic_servaddr);
+				printk("DHCP: Offered address " NIPQUAD_FMT,
+				       NIPQUAD(ic_myaddr));
+				printk(" by server " NIPQUAD_FMT "\n",
+				       NIPQUAD(ic_servaddr));
 #endif
 				/* The DHCP indicated server address takes
 				 * precedence over the bootp header one if
@@ -1175,11 +1179,11 @@ static int __init ic_dynamic(void)
 		return -1;
 	}
 
-	printk("IP-Config: Got %s answer from %pI4, ",
+	printk("IP-Config: Got %s answer from " NIPQUAD_FMT ", ",
 		((ic_got_reply & IC_RARP) ? "RARP"
 		 : (ic_proto_enabled & IC_USE_DHCP) ? "DHCP" : "BOOTP"),
-		&ic_servaddr);
-	printk("my address is %pI4\n", &ic_myaddr);
+		NIPQUAD(ic_servaddr));
+	printk("my address is " NIPQUAD_FMT "\n", NIPQUAD(ic_myaddr));
 
 	return 0;
 }
@@ -1204,12 +1208,14 @@ static int pnp_seq_show(struct seq_file *seq, void *v)
 			   "domain %s\n", ic_domain);
 	for (i = 0; i < CONF_NAMESERVERS_MAX; i++) {
 		if (ic_nameservers[i] != NONE)
-			seq_printf(seq, "nameserver %pI4\n",
-				   &ic_nameservers[i]);
+			seq_printf(seq,
+				   "nameserver " NIPQUAD_FMT "\n",
+				   NIPQUAD(ic_nameservers[i]));
 	}
 	if (ic_servaddr != NONE)
-		seq_printf(seq, "bootserver %pI4\n",
-			   &ic_servaddr);
+		seq_printf(seq,
+			   "bootserver " NIPQUAD_FMT "\n",
+			   NIPQUAD(ic_servaddr));
 	return 0;
 }
 
@@ -1383,13 +1389,13 @@ static int __init ip_auto_config(void)
 	 */
 	printk("IP-Config: Complete:");
 	printk("\n     device=%s", ic_dev->name);
-	printk(", addr=%pI4", &ic_myaddr);
-	printk(", mask=%pI4", &ic_netmask);
-	printk(", gw=%pI4", &ic_gateway);
+	printk(", addr=" NIPQUAD_FMT, NIPQUAD(ic_myaddr));
+	printk(", mask=" NIPQUAD_FMT, NIPQUAD(ic_netmask));
+	printk(", gw=" NIPQUAD_FMT, NIPQUAD(ic_gateway));
 	printk(",\n     host=%s, domain=%s, nis-domain=%s",
 	       utsname()->nodename, ic_domain, utsname()->domainname);
-	printk(",\n     bootserver=%pI4", &ic_servaddr);
-	printk(", rootserver=%pI4", &root_server_addr);
+	printk(",\n     bootserver=" NIPQUAD_FMT, NIPQUAD(ic_servaddr));
+	printk(", rootserver=" NIPQUAD_FMT, NIPQUAD(root_server_addr));
 	printk(", rootpath=%s", root_server_path);
 	printk("\n");
 #endif /* !SILENT */

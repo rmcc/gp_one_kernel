@@ -83,10 +83,9 @@ static u32 *iob_l2_base;
 static struct iommu_table iommu_table_iobmap;
 static int iommu_table_iobmap_inited;
 
-static int iobmap_build(struct iommu_table *tbl, long index,
+static void iobmap_build(struct iommu_table *tbl, long index,
 			 long npages, unsigned long uaddr,
-			 enum dma_data_direction direction,
-			 struct dma_attrs *attrs)
+			 enum dma_data_direction direction)
 {
 	u32 *ip;
 	u32 rpn;
@@ -108,7 +107,6 @@ static int iobmap_build(struct iommu_table *tbl, long index,
 		uaddr += IOBMAP_PAGE_SIZE;
 		bus_addr += IOBMAP_PAGE_SIZE;
 	}
-	return 0;
 }
 
 

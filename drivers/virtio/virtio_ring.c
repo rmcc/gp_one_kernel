@@ -18,7 +18,6 @@
  */
 #include <linux/virtio.h>
 #include <linux/virtio_ring.h>
-#include <linux/virtio_config.h>
 #include <linux/device.h>
 
 #ifdef DEBUG
@@ -88,11 +87,8 @@ static int vring_add_buf(struct virtqueue *_vq,
 	if (vq->num_free < out + in) {
 		pr_debug("Can't add buf len %i - avail = %i\n",
 			 out + in, vq->num_free);
-		/* FIXME: for historical reasons, we force a notify here if
-		 * there are outgoing parts to the buffer.  Presumably the
-		 * host should service the ring ASAP. */
-		if (out)
-			vq->notify(&vq->vq);
+		/* We notify *even if* VRING_USED_F_NO_NOTIFY is set here. */
+		vq->notify(&vq->vq);
 		END_USE(vq);
 		return -ENOSPC;
 	}
@@ -231,6 +227,7 @@ static bool vring_enable_cb(struct virtqueue *_vq)
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
 	START_USE(vq);
+	BUG_ON(!(vq->vring.avail->flags & VRING_AVAIL_F_NO_INTERRUPT));
 
 	/* We optimistically turn back on interrupts, then check if there was
 	 * more to do. */
@@ -257,6 +254,13 @@ irqreturn_t vring_interrupt(int irq, void *_vq)
 	if (unlikely(vq->broken))
 		return IRQ_HANDLED;
 
+	/* Other side may have missed us turning off the interrupt,
+	 * but we should preserve disable semantic for virtio users. */
+	if (unlikely(vq->vring.avail->flags & VRING_AVAIL_F_NO_INTERRUPT)) {
+		pr_debug("virtqueue interrupt after disable for %p\n", vq);
+		return IRQ_HANDLED;
+	}
+
 	pr_debug("virtqueue callback for %p (%p)\n", vq, vq->vq.callback);
 	if (vq->vq.callback)
 		vq->vq.callback(&vq->vq);
@@ -274,7 +278,6 @@ static struct virtqueue_ops vring_vq_ops = {
 };
 
 struct virtqueue *vring_new_virtqueue(unsigned int num,
-				      unsigned int vring_align,
 				      struct virtio_device *vdev,
 				      void *pages,
 				      void (*notify)(struct virtqueue *),
@@ -293,7 +296,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int num,
 	if (!vq)
 		return NULL;
 
-	vring_init(&vq->vring, num, pages, vring_align);
+	vring_init(&vq->vring, num, pages, PAGE_SIZE);
 	vq->vq.callback = callback;
 	vq->vq.vdev = vdev;
 	vq->vq.vq_ops = &vring_vq_ops;
@@ -324,20 +327,5 @@ void vring_del_virtqueue(struct virtqueue *vq)
 	kfree(to_vvq(vq));
 }
 EXPORT_SYMBOL_GPL(vring_del_virtqueue);
-
-/* Manipulates transport-specific feature bits. */
-void vring_transport_features(struct virtio_device *vdev)
-{
-	unsigned int i;
-
-	for (i = VIRTIO_TRANSPORT_F_START; i < VIRTIO_TRANSPORT_F_END; i++) {
-		switch (i) {
-		default:
-			/* We don't understand this bit. */
-			clear_bit(i, vdev->features);
-		}
-	}
-}
-EXPORT_SYMBOL_GPL(vring_transport_features);
 
 MODULE_LICENSE("GPL");

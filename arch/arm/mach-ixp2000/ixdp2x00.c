@@ -25,13 +25,13 @@
 #include <linux/ioport.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
-#include <linux/io.h>
 
+#include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/system.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach-types.h>
 
 #include <asm/mach/pci.h>
@@ -41,7 +41,7 @@
 #include <asm/mach/flash.h>
 #include <asm/mach/arch.h>
 
-#include <mach/gpio.h>
+#include <asm/arch/gpio.h>
 
 
 /*************************************************************************
@@ -129,8 +129,10 @@ static void ixdp2x00_irq_handler(unsigned int irq, struct irq_desc *desc)
 
 	for(i = 0; i < board_irq_count; i++) {
 		if(ex_interrupt & (1 << i))  {
+			struct irq_desc *cpld_desc;
 			int cpld_irq = IXP2000_BOARD_IRQ(0) + i;
-			generic_handle_irq(cpld_irq);
+			cpld_desc = irq_desc + cpld_irq;
+			desc_handle_irq(cpld_irq, cpld_desc);
 		}
 	}
 
@@ -143,7 +145,7 @@ static struct irq_chip ixdp2x00_cpld_irq_chip = {
 	.unmask	= ixdp2x00_irq_unmask
 };
 
-void __init ixdp2x00_init_irq(volatile unsigned long *stat_reg, volatile unsigned long *mask_reg, unsigned long nr_of_irqs)
+void __init ixdp2x00_init_irq(volatile unsigned long *stat_reg, volatile unsigned long *mask_reg, unsigned long nr_irqs)
 {
 	unsigned int irq;
 
@@ -154,7 +156,7 @@ void __init ixdp2x00_init_irq(volatile unsigned long *stat_reg, volatile unsigne
 
 	board_irq_stat = stat_reg;
 	board_irq_mask = mask_reg;
-	board_irq_count = nr_of_irqs;
+	board_irq_count = nr_irqs;
 
 	*board_irq_mask = 0xffffffff;
 

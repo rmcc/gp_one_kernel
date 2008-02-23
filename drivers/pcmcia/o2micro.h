@@ -140,8 +140,7 @@ static int o2micro_override(struct yenta_socket *socket)
 		a = config_readb(socket, O2_RESERVED1);
 		b = config_readb(socket, O2_RESERVED2);
 
-		dev_printk(KERN_INFO, &socket->dev->dev,
-			   "O2: res at 0x94/0xD4: %02x/%02x\n", a, b);
+		printk(KERN_INFO "Yenta O2: res at 0x94/0xD4: %02x/%02x\n", a, b);
 
 		switch (socket->dev->device) {
 		/*
@@ -154,9 +153,7 @@ static int o2micro_override(struct yenta_socket *socket)
 		case PCI_DEVICE_ID_O2_6812:
 		case PCI_DEVICE_ID_O2_6832:
 		case PCI_DEVICE_ID_O2_6836:
-			dev_printk(KERN_INFO, &socket->dev->dev,
-				   "Yenta O2: old bridge, disabling read "
-				   "prefetch/write burst\n");
+			printk(KERN_INFO "Yenta O2: old bridge, disabling read prefetch/write burst\n");
 			config_writeb(socket, O2_RESERVED1,
 			              a & ~(O2_RES_READ_PREFETCH | O2_RES_WRITE_BURST));
 			config_writeb(socket, O2_RESERVED2,
@@ -164,8 +161,7 @@ static int o2micro_override(struct yenta_socket *socket)
 			break;
 
 		default:
-			dev_printk(KERN_INFO , &socket->dev->dev,
-				   "O2: enabling read prefetch/write burst\n");
+			printk(KERN_INFO "Yenta O2: enabling read prefetch/write burst\n");
 			config_writeb(socket, O2_RESERVED1,
 			              a | O2_RES_READ_PREFETCH | O2_RES_WRITE_BURST);
 			config_writeb(socket, O2_RESERVED2,

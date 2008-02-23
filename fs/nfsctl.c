@@ -10,8 +10,6 @@
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
 #include <linux/nfsd/syscall.h>
-#include <linux/cred.h>
-#include <linux/sched.h>
 #include <linux/linkage.h>
 #include <linux/namei.h>
 #include <linux/mount.h>
@@ -38,14 +36,12 @@ static struct file *do_open(char *name, int flags)
 		return ERR_PTR(error);
 
 	if (flags == O_RDWR)
-		error = may_open(&nd.path, MAY_READ|MAY_WRITE,
-					   FMODE_READ|FMODE_WRITE);
+		error = may_open(&nd,MAY_READ|MAY_WRITE,FMODE_READ|FMODE_WRITE);
 	else
-		error = may_open(&nd.path, MAY_WRITE, FMODE_WRITE);
+		error = may_open(&nd, MAY_WRITE, FMODE_WRITE);
 
 	if (!error)
-		return dentry_open(nd.path.dentry, nd.path.mnt, flags,
-				   current_cred());
+		return dentry_open(nd.path.dentry, nd.path.mnt, flags);
 
 	path_put(&nd.path);
 	return ERR_PTR(error);

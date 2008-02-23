@@ -209,36 +209,6 @@ static int ethtool_get_drvinfo(struct net_device *dev, void __user *useraddr)
 	return 0;
 }
 
-static int ethtool_set_rxhash(struct net_device *dev, void __user *useraddr)
-{
-	struct ethtool_rxnfc cmd;
-
-	if (!dev->ethtool_ops->set_rxhash)
-		return -EOPNOTSUPP;
-
-	if (copy_from_user(&cmd, useraddr, sizeof(cmd)))
-		return -EFAULT;
-
-	return dev->ethtool_ops->set_rxhash(dev, &cmd);
-}
-
-static int ethtool_get_rxhash(struct net_device *dev, void __user *useraddr)
-{
-	struct ethtool_rxnfc info;
-
-	if (!dev->ethtool_ops->get_rxhash)
-		return -EOPNOTSUPP;
-
-	if (copy_from_user(&info, useraddr, sizeof(info)))
-		return -EFAULT;
-
-	dev->ethtool_ops->get_rxhash(dev, &info);
-
-	if (copy_to_user(useraddr, &info, sizeof(info)))
-		return -EFAULT;
-	return 0;
-}
-
 static int ethtool_get_regs(struct net_device *dev, char __user *useraddr)
 {
 	struct ethtool_regs regs;
@@ -528,22 +498,6 @@ static int ethtool_set_tx_csum(struct net_device *dev, char __user *useraddr)
 	return dev->ethtool_ops->set_tx_csum(dev, edata.data);
 }
 
-static int ethtool_set_rx_csum(struct net_device *dev, char __user *useraddr)
-{
-	struct ethtool_value edata;
-
-	if (!dev->ethtool_ops->set_rx_csum)
-		return -EOPNOTSUPP;
-
-	if (copy_from_user(&edata, useraddr, sizeof(edata)))
-		return -EFAULT;
-
-	if (!edata.data && dev->ethtool_ops->set_sg)
-		dev->features &= ~NETIF_F_GRO;
-
-	return dev->ethtool_ops->set_rx_csum(dev, edata.data);
-}
-
 static int ethtool_set_sg(struct net_device *dev, char __user *useraddr)
 {
 	struct ethtool_value edata;
@@ -612,34 +566,6 @@ static int ethtool_set_gso(struct net_device *dev, char __user *useraddr)
 		dev->features |= NETIF_F_GSO;
 	else
 		dev->features &= ~NETIF_F_GSO;
-	return 0;
-}
-
-static int ethtool_get_gro(struct net_device *dev, char __user *useraddr)
-{
-	struct ethtool_value edata = { ETHTOOL_GGRO };
-
-	edata.data = dev->features & NETIF_F_GRO;
-	if (copy_to_user(useraddr, &edata, sizeof(edata)))
-		 return -EFAULT;
-	return 0;
-}
-
-static int ethtool_set_gro(struct net_device *dev, char __user *useraddr)
-{
-	struct ethtool_value edata;
-
-	if (copy_from_user(&edata, useraddr, sizeof(edata)))
-		return -EFAULT;
-
-	if (edata.data) {
-		if (!dev->ethtool_ops->get_rx_csum ||
-		    !dev->ethtool_ops->get_rx_csum(dev))
-			return -EINVAL;
-		dev->features |= NETIF_F_GRO;
-	} else
-		dev->features &= ~NETIF_F_GRO;
-
 	return 0;
 }
 
@@ -900,7 +826,6 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_GGSO:
 	case ETHTOOL_GFLAGS:
 	case ETHTOOL_GPFLAGS:
-	case ETHTOOL_GRXFH:
 		break;
 	default:
 		if (!capable(CAP_NET_ADMIN))
@@ -976,7 +901,8 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 				       dev->ethtool_ops->get_rx_csum);
 		break;
 	case ETHTOOL_SRXCSUM:
-		rc = ethtool_set_rx_csum(dev, useraddr);
+		rc = ethtool_set_value(dev, useraddr,
+				       dev->ethtool_ops->set_rx_csum);
 		break;
 	case ETHTOOL_GTXCSUM:
 		rc = ethtool_get_value(dev, useraddr, ethcmd,
@@ -1050,18 +976,6 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SPFLAGS:
 		rc = ethtool_set_value(dev, useraddr,
 				       dev->ethtool_ops->set_priv_flags);
-		break;
-	case ETHTOOL_GRXFH:
-		rc = ethtool_get_rxhash(dev, useraddr);
-		break;
-	case ETHTOOL_SRXFH:
-		rc = ethtool_set_rxhash(dev, useraddr);
-		break;
-	case ETHTOOL_GGRO:
-		rc = ethtool_get_gro(dev, useraddr);
-		break;
-	case ETHTOOL_SGRO:
-		rc = ethtool_set_gro(dev, useraddr);
 		break;
 	default:
 		rc = -EOPNOTSUPP;

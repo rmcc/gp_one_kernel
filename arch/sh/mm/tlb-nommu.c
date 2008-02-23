@@ -10,7 +10,6 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/pgtable.h>
-#include <asm/tlbflush.h>
 
 /*
  * Nothing too terribly exciting here ..

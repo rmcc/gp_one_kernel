@@ -21,7 +21,6 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
-#include <linux/smp_lock.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
@@ -242,7 +241,7 @@ static void input_handle_event(struct input_dev *dev,
 		break;
 	}
 
-	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
+	if (type != EV_SYN)
 		dev->sync = 0;
 
 	if ((disposition & INPUT_PASS_TO_DEVICE) && dev->event)
@@ -1389,8 +1388,8 @@ int input_register_device(struct input_dev *dev)
 	if (!dev->setkeycode)
 		dev->setkeycode = input_default_setkeycode;
 
-	dev_set_name(&dev->dev, "input%ld",
-		     (unsigned long) atomic_inc_return(&input_no) - 1);
+	snprintf(dev->dev.bus_id, sizeof(dev->dev.bus_id),
+		 "input%ld", (unsigned long) atomic_inc_return(&input_no) - 1);
 
 	error = device_add(&dev->dev);
 	if (error)
@@ -1589,17 +1588,13 @@ EXPORT_SYMBOL(input_unregister_handle);
 
 static int input_open_file(struct inode *inode, struct file *file)
 {
-	struct input_handler *handler;
+	struct input_handler *handler = input_table[iminor(inode) >> 5];
 	const struct file_operations *old_fops, *new_fops = NULL;
 	int err;
 
-	lock_kernel();
 	/* No load-on-demand here? */
-	handler = input_table[iminor(inode) >> 5];
-	if (!handler || !(new_fops = fops_get(handler->fops))) {
-		err = -ENODEV;
-		goto out;
-	}
+	if (!handler || !(new_fops = fops_get(handler->fops)))
+		return -ENODEV;
 
 	/*
 	 * That's _really_ odd. Usually NULL ->open means "nothing special",
@@ -1607,8 +1602,7 @@ static int input_open_file(struct inode *inode, struct file *file)
 	 */
 	if (!new_fops->open) {
 		fops_put(new_fops);
-		err = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 	old_fops = file->f_op;
 	file->f_op = new_fops;
@@ -1620,8 +1614,6 @@ static int input_open_file(struct inode *inode, struct file *file)
 		file->f_op = fops_get(old_fops);
 	}
 	fops_put(old_fops);
-out:
-	unlock_kernel();
 	return err;
 }
 

@@ -1,12 +1,13 @@
-menuconfig SND_AOA
+menu "Apple Onboard Audio driver"
+	depends on SND!=n && PPC_PMAC
+
+config SND_AOA
 	tristate "Apple Onboard Audio driver"
-	depends on PPC_PMAC
+	depends on SND
 	select SND_PCM
 	---help---
 	This option enables the new driver for the various
 	Apple Onboard Audio components.
-
-if SND_AOA
 
 source "sound/aoa/fabrics/Kconfig"
 
@@ -14,4 +15,4 @@ source "sound/aoa/codecs/Kconfig"
 
 source "sound/aoa/soundbus/Kconfig"
 
-endif	# SND_AOA
+endmenu

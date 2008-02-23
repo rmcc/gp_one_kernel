@@ -12,6 +12,10 @@
  *  under  the terms of  the GNU General  Public License as published by the
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
+ *
+ *  Revision history
+ *    11th Dec 2006   Merged with Simtec driver
+ *    10th Nov 2006   Initial version.
  */
 
 #include <linux/module.h>
@@ -27,9 +31,9 @@
 #include <sound/soc.h>
 
 #include <asm/dma.h>
-#include <mach/hardware.h>
-#include <mach/dma.h>
-#include <mach/audio.h>
+#include <asm/hardware.h>
+#include <asm/arch/dma.h>
+#include <asm/arch/audio.h>
 
 #include "s3c24xx-pcm.h"
 
@@ -429,7 +433,7 @@ static void s3c24xx_pcm_free_dma_buffers(struct snd_pcm *pcm)
 static u64 s3c24xx_pcm_dmamask = DMA_32BIT_MASK;
 
 static int s3c24xx_pcm_new(struct snd_card *card,
-	struct snd_soc_dai *dai, struct snd_pcm *pcm)
+	struct snd_soc_codec_dai *dai, struct snd_pcm *pcm)
 {
 	int ret = 0;
 
@@ -464,18 +468,6 @@ struct snd_soc_platform s3c24xx_soc_platform = {
 	.pcm_free	= s3c24xx_pcm_free_dma_buffers,
 };
 EXPORT_SYMBOL_GPL(s3c24xx_soc_platform);
-
-static int __init s3c24xx_soc_platform_init(void)
-{
-	return snd_soc_register_platform(&s3c24xx_soc_platform);
-}
-module_init(s3c24xx_soc_platform_init);
-
-static void __exit s3c24xx_soc_platform_exit(void)
-{
-	snd_soc_unregister_platform(&s3c24xx_soc_platform);
-}
-module_exit(s3c24xx_soc_platform_exit);
 
 MODULE_AUTHOR("Ben Dooks, <ben@simtec.co.uk>");
 MODULE_DESCRIPTION("Samsung S3C24XX PCM DMA module");

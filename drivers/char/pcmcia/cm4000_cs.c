@@ -32,9 +32,8 @@
 #include <linux/fs.h>
 #include <linux/delay.h>
 #include <linux/bitrev.h>
-#include <linux/smp_lock.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 #include <pcmcia/cs_types.h>
 #include <pcmcia/cs.h>
@@ -1406,11 +1405,11 @@ static void stop_monitor(struct cm4000_dev *dev)
 	DEBUGP(3, dev, "<- stop_monitor\n");
 }
 
-static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static int cmm_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
+		     unsigned long arg)
 {
 	struct cm4000_dev *dev = filp->private_data;
 	unsigned int iobase = dev->p_dev->io.BasePort1;
-	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct pcmcia_device *link;
 	int size;
 	int rc;
@@ -1427,42 +1426,38 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	DEBUGP(3, dev, "cmm_ioctl(device=%d.%d) %s\n", imajor(inode),
 	       iminor(inode), ioctl_names[_IOC_NR(cmd)]);
 
-	lock_kernel();
-	rc = -ENODEV;
 	link = dev_table[iminor(inode)];
 	if (!pcmcia_dev_present(link)) {
 		DEBUGP(4, dev, "DEV_OK false\n");
-		goto out;
+		return -ENODEV;
 	}
 
 	if (test_bit(IS_CMM_ABSENT, &dev->flags)) {
 		DEBUGP(4, dev, "CMM_ABSENT flag set\n");
-		goto out;
+		return -ENODEV;
 	}
-	rc = -EINVAL;
 
 	if (_IOC_TYPE(cmd) != CM_IOC_MAGIC) {
 		DEBUGP(4, dev, "ioctype mismatch\n");
-		goto out;
+		return -EINVAL;
 	}
 	if (_IOC_NR(cmd) > CM_IOC_MAXNR) {
 		DEBUGP(4, dev, "iocnr mismatch\n");
-		goto out;
+		return -EINVAL;
 	}
 	size = _IOC_SIZE(cmd);
-	rc = -EFAULT;
+	rc = 0;
 	DEBUGP(4, dev, "iocdir=%.4x iocr=%.4x iocw=%.4x iocsize=%d cmd=%.4x\n",
 	      _IOC_DIR(cmd), _IOC_READ, _IOC_WRITE, size, cmd);
 
 	if (_IOC_DIR(cmd) & _IOC_READ) {
 		if (!access_ok(VERIFY_WRITE, argp, size))
-			goto out;
+			return -EFAULT;
 	}
 	if (_IOC_DIR(cmd) & _IOC_WRITE) {
 		if (!access_ok(VERIFY_READ, argp, size))
-			goto out;
+			return -EFAULT;
 	}
-	rc = 0;
 
 	switch (cmd) {
 	case CM_IOCGSTATUS:
@@ -1482,9 +1477,9 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			if (test_bit(IS_BAD_CARD, &dev->flags))
 				status |= CM_BAD_CARD;
 			if (copy_to_user(argp, &status, sizeof(int)))
-				rc = -EFAULT;
+				return -EFAULT;
 		}
-		break;
+		return 0;
 	case CM_IOCGATR:
 		DEBUGP(4, dev, "... in CM_IOCGATR\n");
 		{
@@ -1497,29 +1492,25 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			      || (test_bit(IS_ATR_PRESENT, (void *)&dev->flags)
 				  != 0)))) {
 				if (filp->f_flags & O_NONBLOCK)
-					rc = -EAGAIN;
-				else
-					rc = -ERESTARTSYS;
-				break;
+					return -EAGAIN;
+				return -ERESTARTSYS;
 			}
 
-			rc = -EFAULT;
 			if (test_bit(IS_ATR_VALID, &dev->flags) == 0) {
 				tmp = -1;
 				if (copy_to_user(&(atreq->atr_len), &tmp,
 						 sizeof(int)))
-					break;
+					return -EFAULT;
 			} else {
 				if (copy_to_user(atreq->atr, dev->atr,
 						 dev->atr_len))
-					break;
+					return -EFAULT;
 
 				tmp = dev->atr_len;
 				if (copy_to_user(&(atreq->atr_len), &tmp, sizeof(int)))
-					break;
+					return -EFAULT;
 			}
-			rc = 0;
-			break;
+			return 0;
 		}
 	case CM_IOCARDOFF:
 
@@ -1547,10 +1538,8 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			      || (test_and_set_bit(LOCK_IO, (void *)&dev->flags)
 				  == 0)))) {
 				if (filp->f_flags & O_NONBLOCK)
-					rc = -EAGAIN;
-				else
-					rc = -ERESTARTSYS;
-				break;
+					return -EAGAIN;
+				return -ERESTARTSYS;
 			}
 			/* Set Flags0 = 0x42 */
 			DEBUGP(4, dev, "Set Flags0=0x42 \n");
@@ -1565,10 +1554,8 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			      || (test_bit(IS_ATR_VALID, (void *)&dev->flags) !=
 				  0)))) {
 				if (filp->f_flags & O_NONBLOCK)
-					rc = -EAGAIN;
-				else
-					rc = -ERESTARTSYS;
-				break;
+					return -EAGAIN;
+				return -ERESTARTSYS;
 			}
 		}
 		/* release lock */
@@ -1581,10 +1568,8 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			struct ptsreq krnptsreq;
 
 			if (copy_from_user(&krnptsreq, argp,
-					   sizeof(struct ptsreq))) {
-				rc = -EFAULT;
-				break;
-			}
+					   sizeof(struct ptsreq)))
+				return -EFAULT;
 
 			rc = 0;
 			DEBUGP(4, dev, "... in CM_IOCSPTS\n");
@@ -1595,10 +1580,8 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			      || (test_bit(IS_ATR_PRESENT, (void *)&dev->flags)
 				  != 0)))) {
 				if (filp->f_flags & O_NONBLOCK)
-					rc = -EAGAIN;
-				else
-					rc = -ERESTARTSYS;
-				break;
+					return -EAGAIN;
+				return -ERESTARTSYS;
 			}
 			/* get IO lock */
 			if (wait_event_interruptible
@@ -1607,10 +1590,8 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			      || (test_and_set_bit(LOCK_IO, (void *)&dev->flags)
 				  == 0)))) {
 				if (filp->f_flags & O_NONBLOCK)
-					rc = -EAGAIN;
-				else
-					rc = -ERESTARTSYS;
-				break;
+					return -EAGAIN;
+				return -ERESTARTSYS;
 			}
 
 			if ((rc = set_protocol(dev, &krnptsreq)) != 0) {
@@ -1623,7 +1604,7 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			wake_up_interruptible(&dev->ioq);
 
 		}
-		break;
+		return rc;
 #ifdef PCMCIA_DEBUG
 	case CM_IOSDBGLVL:	/* set debug log level */
 		{
@@ -1631,20 +1612,18 @@ static long cmm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 			old_pc_debug = pc_debug;
 			if (copy_from_user(&pc_debug, argp, sizeof(int)))
-				rc = -EFAULT;
-			else if (old_pc_debug != pc_debug)
+				return -EFAULT;
+
+			if (old_pc_debug != pc_debug)
 				DEBUGP(0, dev, "Changed debug log level "
 				       "to %i\n", pc_debug);
 		}
-		break;
+		return rc;
 #endif
 	default:
 		DEBUGP(4, dev, "... in default (unknown IOCTL code)\n");
-		rc = -ENOTTY;
+		return -EINVAL;
 	}
-out:
-	unlock_kernel();
-	return rc;
 }
 
 static int cmm_open(struct inode *inode, struct file *filp)
@@ -1652,22 +1631,16 @@ static int cmm_open(struct inode *inode, struct file *filp)
 	struct cm4000_dev *dev;
 	struct pcmcia_device *link;
 	int minor = iminor(inode);
-	int ret;
 
 	if (minor >= CM4000_MAX_DEV)
 		return -ENODEV;
 
-	lock_kernel();
 	link = dev_table[minor];
-	if (link == NULL || !pcmcia_dev_present(link)) {
-		ret = -ENODEV;
-		goto out;
-	}
+	if (link == NULL || !pcmcia_dev_present(link))
+		return -ENODEV;
 
-	if (link->open) {
-		ret = -EBUSY;
-		goto out;
-	}
+	if (link->open)
+		return -EBUSY;
 
 	dev = link->priv;
 	filp->private_data = dev;
@@ -1687,10 +1660,8 @@ static int cmm_open(struct inode *inode, struct file *filp)
 	 * vaild = block until valid (or card
 	 * inserted)
 	 */
-	if (filp->f_flags & O_NONBLOCK) {
-		ret = -EAGAIN;
-		goto out;
-	}
+	if (filp->f_flags & O_NONBLOCK)
+		return -EAGAIN;
 
 	dev->mdelay = T_50MSEC;
 
@@ -1700,10 +1671,7 @@ static int cmm_open(struct inode *inode, struct file *filp)
 	link->open = 1;		/* only one open per device */
 
 	DEBUGP(2, dev, "<- cmm_open\n");
-	ret = nonseekable_open(inode, filp);
-out:
-	unlock_kernel();
-	return ret;
+	return nonseekable_open(inode, filp);
 }
 
 static int cmm_close(struct inode *inode, struct file *filp)
@@ -1759,40 +1727,65 @@ static void cmm_cm4000_release(struct pcmcia_device * link)
 
 /*==== Interface to PCMCIA Layer =======================================*/
 
-static int cm4000_config_check(struct pcmcia_device *p_dev,
-			       cistpl_cftable_entry_t *cfg,
-			       cistpl_cftable_entry_t *dflt,
-			       unsigned int vcc,
-			       void *priv_data)
-{
-	if (!cfg->io.nwin)
-		return -ENODEV;
-
-	/* Get the IOaddr */
-	p_dev->io.BasePort1 = cfg->io.win[0].base;
-	p_dev->io.NumPorts1 = cfg->io.win[0].len;
-	p_dev->io.Attributes1 = IO_DATA_PATH_WIDTH_AUTO;
-	if (!(cfg->io.flags & CISTPL_IO_8BIT))
-		p_dev->io.Attributes1 = IO_DATA_PATH_WIDTH_16;
-	if (!(cfg->io.flags & CISTPL_IO_16BIT))
-		p_dev->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
-	p_dev->io.IOAddrLines = cfg->io.flags & CISTPL_IO_LINES_MASK;
-
-	return pcmcia_request_io(p_dev, &p_dev->io);
-}
-
 static int cm4000_config(struct pcmcia_device * link, int devno)
 {
 	struct cm4000_dev *dev;
+	tuple_t tuple;
+	cisparse_t parse;
+	u_char buf[64];
+	int fail_fn, fail_rc;
+	int rc;
 
 	/* read the config-tuples */
-	if (pcmcia_loop_config(link, cm4000_config_check, NULL))
+	tuple.Attributes = 0;
+	tuple.TupleData = buf;
+	tuple.TupleDataMax = sizeof(buf);
+	tuple.TupleOffset = 0;
+
+	link->io.BasePort2 = 0;
+	link->io.NumPorts2 = 0;
+	link->io.Attributes2 = 0;
+	tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
+	for (rc = pcmcia_get_first_tuple(link, &tuple);
+	     rc == CS_SUCCESS; rc = pcmcia_get_next_tuple(link, &tuple)) {
+
+		rc = pcmcia_get_tuple_data(link, &tuple);
+		if (rc != CS_SUCCESS)
+			continue;
+		rc = pcmcia_parse_tuple(link, &tuple, &parse);
+		if (rc != CS_SUCCESS)
+			continue;
+
+		link->conf.ConfigIndex = parse.cftable_entry.index;
+
+		if (!parse.cftable_entry.io.nwin)
+			continue;
+
+		/* Get the IOaddr */
+		link->io.BasePort1 = parse.cftable_entry.io.win[0].base;
+		link->io.NumPorts1 = parse.cftable_entry.io.win[0].len;
+		link->io.Attributes1 = IO_DATA_PATH_WIDTH_AUTO;
+		if (!(parse.cftable_entry.io.flags & CISTPL_IO_8BIT))
+			link->io.Attributes1 = IO_DATA_PATH_WIDTH_16;
+		if (!(parse.cftable_entry.io.flags & CISTPL_IO_16BIT))
+			link->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
+		link->io.IOAddrLines = parse.cftable_entry.io.flags
+		    & CISTPL_IO_LINES_MASK;
+
+		rc = pcmcia_request_io(link, &link->io);
+		if (rc == CS_SUCCESS)
+			break;	/* we are done */
+	}
+	if (rc != CS_SUCCESS)
 		goto cs_release;
 
 	link->conf.IntType = 00000002;
 
-	if (pcmcia_request_configuration(link, &link->conf))
+	if ((fail_rc =
+	     pcmcia_request_configuration(link, &link->conf)) != CS_SUCCESS) {
+		fail_fn = RequestConfiguration;
 		goto cs_release;
+	}
 
 	dev = link->priv;
 	sprintf(dev->node.dev_name, DEVICE_NAME "%d", devno);
@@ -1871,7 +1864,7 @@ static int cm4000_probe(struct pcmcia_device *link)
 		return ret;
 	}
 
-	device_create(cmm_class, NULL, MKDEV(major, i), NULL, "cmm%d", i);
+	device_create(cmm_class, NULL, MKDEV(major, i), "cmm%d", i);
 
 	return 0;
 }
@@ -1904,7 +1897,7 @@ static const struct file_operations cm4000_fops = {
 	.owner	= THIS_MODULE,
 	.read	= cmm_read,
 	.write	= cmm_write,
-	.unlocked_ioctl	= cmm_ioctl,
+	.ioctl	= cmm_ioctl,
 	.open	= cmm_open,
 	.release= cmm_close,
 };

@@ -14,7 +14,6 @@
 #include <linux/percpu.h>
 #include <asm/tlbflush.h>
 #include <asm/uaccess.h>
-#include <asm/bootparam.h>
 #include "lg.h"
 
 /*M:008 We hold reference to pages, which prevents them from being swapped.
@@ -109,8 +108,9 @@ static unsigned long gpte_addr(pgd_t gpgd, unsigned long vaddr)
 }
 /*:*/
 
-/*M:014 get_pfn is slow: we could probably try to grab batches of pages here as
- * an optimization (ie. pre-faulting). :*/
+/*M:014 get_pfn is slow; it takes the mmap sem and calls get_user_pages.  We
+ * could probably try to grab batches of pages here as an optimization
+ * (ie. pre-faulting). :*/
 
 /*H:350 This routine takes a page number given by the Guest and converts it to
  * an actual, physical page number.  It can fail for several reasons: the
@@ -123,13 +123,19 @@ static unsigned long gpte_addr(pgd_t gpgd, unsigned long vaddr)
 static unsigned long get_pfn(unsigned long virtpfn, int write)
 {
 	struct page *page;
-
-	/* gup me one page at this address please! */
-	if (get_user_pages_fast(virtpfn << PAGE_SHIFT, 1, write, &page) == 1)
-		return page_to_pfn(page);
-
 	/* This value indicates failure. */
-	return -1UL;
+	unsigned long ret = -1UL;
+
+	/* get_user_pages() is a complex interface: it gets the "struct
+	 * vm_area_struct" and "struct page" assocated with a range of pages.
+	 * It also needs the task's mmap_sem held, and is not very quick.
+	 * It returns the number of pages it got. */
+	down_read(&current->mm->mmap_sem);
+	if (get_user_pages(current, current->mm, virtpfn << PAGE_SHIFT,
+			   1, write, 1, &page, NULL) == 1)
+		ret = page_to_pfn(page);
+	up_read(&current->mm->mmap_sem);
+	return ret;
 }
 
 /*H:340 Converting a Guest page table entry to a shadow (ie. real) page table
@@ -168,7 +174,7 @@ static pte_t gpte_to_spte(struct lg_cpu *cpu, pte_t gpte, int write)
 /*H:460 And to complete the chain, release_pte() looks like this: */
 static void release_pte(pte_t pte)
 {
-	/* Remember that get_user_pages_fast() took a reference to the page, in
+	/* Remember that get_user_pages() took a reference to the page, in
 	 * get_pfn()?  We have to put it back now. */
 	if (pte_flags(pte) & _PAGE_PRESENT)
 		put_page(pfn_to_page(pte_pfn(pte)));
@@ -582,82 +588,15 @@ void guest_set_pmd(struct lguest *lg, unsigned long gpgdir, u32 idx)
 		release_pgd(lg, lg->pgdirs[pgdir].pgdir + idx);
 }
 
-/* Once we know how much memory we have we can construct simple identity
- * (which set virtual == physical) and linear mappings
- * which will get the Guest far enough into the boot to create its own.
- *
- * We lay them out of the way, just below the initrd (which is why we need to
- * know its size here). */
-static unsigned long setup_pagetables(struct lguest *lg,
-				      unsigned long mem,
-				      unsigned long initrd_size)
-{
-	pgd_t __user *pgdir;
-	pte_t __user *linear;
-	unsigned int mapped_pages, i, linear_pages, phys_linear;
-	unsigned long mem_base = (unsigned long)lg->mem_base;
-
-	/* We have mapped_pages frames to map, so we need
-	 * linear_pages page tables to map them. */
-	mapped_pages = mem / PAGE_SIZE;
-	linear_pages = (mapped_pages + PTRS_PER_PTE - 1) / PTRS_PER_PTE;
-
-	/* We put the toplevel page directory page at the top of memory. */
-	pgdir = (pgd_t *)(mem + mem_base - initrd_size - PAGE_SIZE);
-
-	/* Now we use the next linear_pages pages as pte pages */
-	linear = (void *)pgdir - linear_pages * PAGE_SIZE;
-
-	/* Linear mapping is easy: put every page's address into the
-	 * mapping in order. */
-	for (i = 0; i < mapped_pages; i++) {
-		pte_t pte;
-		pte = pfn_pte(i, __pgprot(_PAGE_PRESENT|_PAGE_RW|_PAGE_USER));
-		if (copy_to_user(&linear[i], &pte, sizeof(pte)) != 0)
-			return -EFAULT;
-	}
-
-	/* The top level points to the linear page table pages above.
-	 * We setup the identity and linear mappings here. */
-	phys_linear = (unsigned long)linear - mem_base;
-	for (i = 0; i < mapped_pages; i += PTRS_PER_PTE) {
-		pgd_t pgd;
-		pgd = __pgd((phys_linear + i * sizeof(pte_t)) |
-			    (_PAGE_PRESENT | _PAGE_RW | _PAGE_USER));
-
-		if (copy_to_user(&pgdir[i / PTRS_PER_PTE], &pgd, sizeof(pgd))
-		    || copy_to_user(&pgdir[pgd_index(PAGE_OFFSET)
-					   + i / PTRS_PER_PTE],
-				    &pgd, sizeof(pgd)))
-			return -EFAULT;
-	}
-
-	/* We return the top level (guest-physical) address: remember where
-	 * this is. */
-	return (unsigned long)pgdir - mem_base;
-}
-
 /*H:500 (vii) Setting up the page tables initially.
  *
  * When a Guest is first created, the Launcher tells us where the toplevel of
  * its first page table is.  We set some things up here: */
-int init_guest_pagetable(struct lguest *lg)
+int init_guest_pagetable(struct lguest *lg, unsigned long pgtable)
 {
-	u64 mem;
-	u32 initrd_size;
-	struct boot_params __user *boot = (struct boot_params *)lg->mem_base;
-
-	/* Get the Guest memory size and the ramdisk size from the boot header
-	 * located at lg->mem_base (Guest address 0). */
-	if (copy_from_user(&mem, &boot->e820_map[0].size, sizeof(mem))
-	    || get_user(initrd_size, &boot->hdr.ramdisk_size))
-		return -EFAULT;
-
 	/* We start on the first shadow page table, and give it a blank PGD
 	 * page. */
-	lg->pgdirs[0].gpgdir = setup_pagetables(lg, mem, initrd_size);
-	if (IS_ERR_VALUE(lg->pgdirs[0].gpgdir))
-		return lg->pgdirs[0].gpgdir;
+	lg->pgdirs[0].gpgdir = pgtable;
 	lg->pgdirs[0].pgdir = (pgd_t *)get_zeroed_page(GFP_KERNEL);
 	if (!lg->pgdirs[0].pgdir)
 		return -ENOMEM;

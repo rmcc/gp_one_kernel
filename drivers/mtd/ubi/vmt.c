@@ -28,9 +28,9 @@
 #include "ubi.h"
 
 #ifdef CONFIG_MTD_UBI_DEBUG_PARANOID
-static int paranoid_check_volumes(struct ubi_device *ubi);
+static void paranoid_check_volumes(struct ubi_device *ubi);
 #else
-#define paranoid_check_volumes(ubi) 0
+#define paranoid_check_volumes(ubi)
 #endif
 
 static ssize_t vol_attribute_show(struct device *dev,
@@ -127,7 +127,6 @@ static void vol_release(struct device *dev)
 {
 	struct ubi_volume *vol = container_of(dev, struct ubi_volume, dev);
 
-	kfree(vol->eba_tbl);
 	kfree(vol);
 }
 
@@ -202,7 +201,7 @@ static void volume_sysfs_close(struct ubi_volume *vol)
  */
 int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 {
-	int i, err, vol_id = req->vol_id, do_free = 1;
+	int i, err, vol_id = req->vol_id, dont_free = 0;
 	struct ubi_volume *vol;
 	struct ubi_vtbl_record vtbl_rec;
 	uint64_t bytes;
@@ -218,7 +217,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 	spin_lock(&ubi->volumes_lock);
 	if (vol_id == UBI_VOL_NUM_AUTO) {
 		/* Find unused volume ID */
-		dbg_gen("search for vacant volume ID");
+		dbg_msg("search for vacant volume ID");
 		for (i = 0; i < ubi->vtbl_slots; i++)
 			if (!ubi->volumes[i]) {
 				vol_id = i;
@@ -233,7 +232,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 		req->vol_id = vol_id;
 	}
 
-	dbg_gen("volume ID %d, %llu bytes, type %d, name %s",
+	dbg_msg("volume ID %d, %llu bytes, type %d, name %s",
 		vol_id, (unsigned long long)req->bytes,
 		(int)req->vol_type, req->name);
 
@@ -253,7 +252,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 			goto out_unlock;
 		}
 
-	/* Calculate how many eraseblocks are requested */
+        /* Calculate how many eraseblocks are requested */
 	vol->usable_leb_size = ubi->leb_size - ubi->leb_size % req->alignment;
 	bytes = req->bytes;
 	if (do_div(bytes, vol->usable_leb_size))
@@ -275,7 +274,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 	vol->data_pad  = ubi->leb_size % vol->alignment;
 	vol->vol_type  = req->vol_type;
 	vol->name_len  = req->name_len;
-	memcpy(vol->name, req->name, vol->name_len);
+	memcpy(vol->name, req->name, vol->name_len + 1);
 	vol->ubi = ubi;
 
 	/*
@@ -329,7 +328,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 	vol->dev.devt = dev;
 	vol->dev.class = ubi_class;
 
-	dev_set_name(&vol->dev, "%s_%d", ubi->ubi_name, vol->vol_id);
+	sprintf(&vol->dev.bus_id[0], "%s_%d", ubi->ubi_name, vol->vol_id);
 	err = device_register(&vol->dev);
 	if (err) {
 		ubi_err("cannot register device");
@@ -350,7 +349,7 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 		vtbl_rec.vol_type = UBI_VID_DYNAMIC;
 	else
 		vtbl_rec.vol_type = UBI_VID_STATIC;
-	memcpy(vtbl_rec.name, vol->name, vol->name_len);
+	memcpy(vtbl_rec.name, vol->name, vol->name_len + 1);
 
 	err = ubi_change_vtbl_record(ubi, vol_id, &vtbl_rec);
 	if (err)
@@ -361,19 +360,19 @@ int ubi_create_volume(struct ubi_device *ubi, struct ubi_mkvol_req *req)
 	ubi->vol_count += 1;
 	spin_unlock(&ubi->volumes_lock);
 
-	err = paranoid_check_volumes(ubi);
-	return err;
+	paranoid_check_volumes(ubi);
+	return 0;
 
 out_sysfs:
 	/*
-	 * We have registered our device, we should not free the volume
+	 * We have registered our device, we should not free the volume*
 	 * description object in this function in case of an error - it is
 	 * freed by the release function.
 	 *
 	 * Get device reference to prevent the release function from being
 	 * called just after sysfs has been closed.
 	 */
-	do_free = 0;
+	dont_free = 1;
 	get_device(&vol->dev);
 	volume_sysfs_close(vol);
 out_gluebi:
@@ -383,18 +382,17 @@ out_gluebi:
 out_cdev:
 	cdev_del(&vol->cdev);
 out_mapping:
-	if (do_free)
-		kfree(vol->eba_tbl);
+	kfree(vol->eba_tbl);
 out_acc:
 	spin_lock(&ubi->volumes_lock);
 	ubi->rsvd_pebs -= vol->reserved_pebs;
 	ubi->avail_pebs += vol->reserved_pebs;
 out_unlock:
 	spin_unlock(&ubi->volumes_lock);
-	if (do_free)
-		kfree(vol);
-	else
+	if (dont_free)
 		put_device(&vol->dev);
+	else
+		kfree(vol);
 	ubi_err("cannot create volume %d, error %d", vol_id, err);
 	return err;
 }
@@ -402,20 +400,19 @@ out_unlock:
 /**
  * ubi_remove_volume - remove volume.
  * @desc: volume descriptor
- * @no_vtbl: do not change volume table if not zero
  *
  * This function removes volume described by @desc. The volume has to be opened
  * in "exclusive" mode. Returns zero in case of success and a negative error
  * code in case of failure. The caller has to have the @ubi->volumes_mutex
  * locked.
  */
-int ubi_remove_volume(struct ubi_volume_desc *desc, int no_vtbl)
+int ubi_remove_volume(struct ubi_volume_desc *desc)
 {
 	struct ubi_volume *vol = desc->vol;
 	struct ubi_device *ubi = vol->ubi;
 	int i, err, vol_id = vol->vol_id, reserved_pebs = vol->reserved_pebs;
 
-	dbg_gen("remove UBI volume %d", vol_id);
+	dbg_msg("remove UBI volume %d", vol_id);
 	ubi_assert(desc->mode == UBI_EXCLUSIVE);
 	ubi_assert(vol == ubi->volumes[vol_id]);
 
@@ -438,11 +435,9 @@ int ubi_remove_volume(struct ubi_volume_desc *desc, int no_vtbl)
 	if (err)
 		goto out_err;
 
-	if (!no_vtbl) {
-		err = ubi_change_vtbl_record(ubi, vol_id, NULL);
-		if (err)
-			goto out_err;
-	}
+	err = ubi_change_vtbl_record(ubi, vol_id, NULL);
+	if (err)
+		goto out_err;
 
 	for (i = 0; i < vol->reserved_pebs; i++) {
 		err = ubi_eba_unmap_leb(ubi, vol, i);
@@ -450,6 +445,8 @@ int ubi_remove_volume(struct ubi_volume_desc *desc, int no_vtbl)
 			goto out_err;
 	}
 
+	kfree(vol->eba_tbl);
+	vol->eba_tbl = NULL;
 	cdev_del(&vol->cdev);
 	volume_sysfs_close(vol);
 
@@ -468,9 +465,8 @@ int ubi_remove_volume(struct ubi_volume_desc *desc, int no_vtbl)
 	ubi->vol_count -= 1;
 	spin_unlock(&ubi->volumes_lock);
 
-	if (!no_vtbl)
-		err = paranoid_check_volumes(ubi);
-	return err;
+	paranoid_check_volumes(ubi);
+	return 0;
 
 out_err:
 	ubi_err("cannot remove volume %d, error %d", vol_id, err);
@@ -501,7 +497,7 @@ int ubi_resize_volume(struct ubi_volume_desc *desc, int reserved_pebs)
 	if (ubi->ro_mode)
 		return -EROFS;
 
-	dbg_gen("re-size volume %d to from %d to %d PEBs",
+	dbg_msg("re-size volume %d to from %d to %d PEBs",
 		vol_id, vol->reserved_pebs, reserved_pebs);
 
 	if (vol->vol_type == UBI_STATIC_VOLUME &&
@@ -590,8 +586,8 @@ int ubi_resize_volume(struct ubi_volume_desc *desc, int reserved_pebs)
 			(long long)vol->used_ebs * vol->usable_leb_size;
 	}
 
-	err = paranoid_check_volumes(ubi);
-	return err;
+	paranoid_check_volumes(ubi);
+	return 0;
 
 out_acc:
 	if (pebs > 0) {
@@ -602,44 +598,6 @@ out_acc:
 	}
 out_free:
 	kfree(new_mapping);
-	return err;
-}
-
-/**
- * ubi_rename_volumes - re-name UBI volumes.
- * @ubi: UBI device description object
- * @rename_list: list of &struct ubi_rename_entry objects
- *
- * This function re-names or removes volumes specified in the re-name list.
- * Returns zero in case of success and a negative error code in case of
- * failure.
- */
-int ubi_rename_volumes(struct ubi_device *ubi, struct list_head *rename_list)
-{
-	int err;
-	struct ubi_rename_entry *re;
-
-	err = ubi_vtbl_rename_volumes(ubi, rename_list);
-	if (err)
-		return err;
-
-	list_for_each_entry(re, rename_list, list) {
-		if (re->remove) {
-			err = ubi_remove_volume(re->desc, 1);
-			if (err)
-				break;
-		} else {
-			struct ubi_volume *vol = re->desc->vol;
-
-			spin_lock(&ubi->volumes_lock);
-			vol->name_len = re->new_name_len;
-			memcpy(vol->name, re->new_name, re->new_name_len + 1);
-			spin_unlock(&ubi->volumes_lock);
-		}
-	}
-
-	if (!err)
-		err = paranoid_check_volumes(ubi);
 	return err;
 }
 
@@ -657,7 +615,8 @@ int ubi_add_volume(struct ubi_device *ubi, struct ubi_volume *vol)
 	int err, vol_id = vol->vol_id;
 	dev_t dev;
 
-	dbg_gen("add volume %d", vol_id);
+	dbg_msg("add volume %d", vol_id);
+	ubi_dbg_dump_vol_info(vol);
 
 	/* Register character device for the volume */
 	cdev_init(&vol->cdev, &ubi_vol_cdev_operations);
@@ -678,7 +637,7 @@ int ubi_add_volume(struct ubi_device *ubi, struct ubi_volume *vol)
 	vol->dev.parent = &ubi->dev;
 	vol->dev.devt = dev;
 	vol->dev.class = ubi_class;
-	dev_set_name(&vol->dev, "%s_%d", ubi->ubi_name, vol->vol_id);
+	sprintf(&vol->dev.bus_id[0], "%s_%d", ubi->ubi_name, vol->vol_id);
 	err = device_register(&vol->dev);
 	if (err)
 		goto out_gluebi;
@@ -691,8 +650,8 @@ int ubi_add_volume(struct ubi_device *ubi, struct ubi_volume *vol)
 		return err;
 	}
 
-	err = paranoid_check_volumes(ubi);
-	return err;
+	paranoid_check_volumes(ubi);
+	return 0;
 
 out_gluebi:
 	err = ubi_destroy_gluebi(vol);
@@ -713,7 +672,7 @@ void ubi_free_volume(struct ubi_device *ubi, struct ubi_volume *vol)
 {
 	int err;
 
-	dbg_gen("free volume %d", vol->vol_id);
+	dbg_msg("free volume %d", vol->vol_id);
 
 	ubi->volumes[vol->vol_id] = NULL;
 	err = ubi_destroy_gluebi(vol);
@@ -727,10 +686,8 @@ void ubi_free_volume(struct ubi_device *ubi, struct ubi_volume *vol)
  * paranoid_check_volume - check volume information.
  * @ubi: UBI device description object
  * @vol_id: volume ID
- *
- * Returns zero if volume is all right and a a negative error code if not.
  */
-static int paranoid_check_volume(struct ubi_device *ubi, int vol_id)
+static void paranoid_check_volume(struct ubi_device *ubi, int vol_id)
 {
 	int idx = vol_id2idx(ubi, vol_id);
 	int reserved_pebs, alignment, data_pad, vol_type, name_len, upd_marker;
@@ -748,7 +705,16 @@ static int paranoid_check_volume(struct ubi_device *ubi, int vol_id)
 			goto fail;
 		}
 		spin_unlock(&ubi->volumes_lock);
-		return 0;
+		return;
+	}
+
+	if (vol->exclusive) {
+		/*
+		 * The volume may be being created at the moment, do not check
+		 * it (e.g., it may be in the middle of ubi_create_volume().
+		 */
+		spin_unlock(&ubi->volumes_lock);
+		return;
 	}
 
 	if (vol->reserved_pebs < 0 || vol->alignment < 0 || vol->data_pad < 0 ||
@@ -761,7 +727,7 @@ static int paranoid_check_volume(struct ubi_device *ubi, int vol_id)
 		goto fail;
 	}
 
-	n = vol->alignment & (ubi->min_io_size - 1);
+	n = vol->alignment % ubi->min_io_size;
 	if (vol->alignment != 1 && n) {
 		ubi_err("alignment is not multiple of min I/O unit");
 		goto fail;
@@ -858,39 +824,31 @@ static int paranoid_check_volume(struct ubi_device *ubi, int vol_id)
 
 	if (alignment != vol->alignment || data_pad != vol->data_pad ||
 	    upd_marker != vol->upd_marker || vol_type != vol->vol_type ||
-	    name_len != vol->name_len || strncmp(name, vol->name, name_len)) {
+	    name_len!= vol->name_len || strncmp(name, vol->name, name_len)) {
 		ubi_err("volume info is different");
 		goto fail;
 	}
 
 	spin_unlock(&ubi->volumes_lock);
-	return 0;
+	return;
 
 fail:
 	ubi_err("paranoid check failed for volume %d", vol_id);
-	if (vol)
-		ubi_dbg_dump_vol_info(vol);
+	ubi_dbg_dump_vol_info(vol);
 	ubi_dbg_dump_vtbl_record(&ubi->vtbl[vol_id], vol_id);
 	spin_unlock(&ubi->volumes_lock);
-	return -EINVAL;
+	BUG();
 }
 
 /**
  * paranoid_check_volumes - check information about all volumes.
  * @ubi: UBI device description object
- *
- * Returns zero if volumes are all right and a a negative error code if not.
  */
-static int paranoid_check_volumes(struct ubi_device *ubi)
+static void paranoid_check_volumes(struct ubi_device *ubi)
 {
-	int i, err = 0;
+	int i;
 
-	for (i = 0; i < ubi->vtbl_slots; i++) {
-		err = paranoid_check_volume(ubi, i);
-		if (err)
-			break;
-	}
-
-	return err;
+	for (i = 0; i < ubi->vtbl_slots; i++)
+		paranoid_check_volume(ubi, i);
 }
 #endif

@@ -215,12 +215,12 @@ tape_med_state_set(struct tape_device *device, enum tape_medium_state newstate)
 	case MS_UNLOADED:
 		device->tape_generic_status |= GMT_DR_OPEN(~0);
 		PRINT_INFO("(%s): Tape is unloaded\n",
-			   dev_name(&device->cdev->dev));
+			   device->cdev->dev.bus_id);
 		break;
 	case MS_LOADED:
 		device->tape_generic_status &= ~GMT_DR_OPEN(~0);
 		PRINT_INFO("(%s): Tape has been mounted\n",
-			   dev_name(&device->cdev->dev));
+			   device->cdev->dev.bus_id);
 		break;
 	default:
 		// print nothing
@@ -415,7 +415,7 @@ tape_generic_offline(struct tape_device *device)
 				device->cdev_id);
 			PRINT_WARN("(%s): Set offline failed "
 				"- drive in use.\n",
-				dev_name(&device->cdev->dev));
+				device->cdev->dev.bus_id);
 			spin_unlock_irq(get_ccwdev_lock(device->cdev));
 			return -EBUSY;
 	}
@@ -449,7 +449,6 @@ tape_alloc_device(void)
 	INIT_LIST_HEAD(&device->req_queue);
 	INIT_LIST_HEAD(&device->node);
 	init_waitqueue_head(&device->state_change_wq);
-	init_waitqueue_head(&device->wait_queue);
 	device->tape_state = TS_INIT;
 	device->medium_state = MS_UNKNOWN;
 	*device->modeset_byte = 0;
@@ -538,8 +537,7 @@ tape_generic_probe(struct ccw_device *cdev)
 	ret = sysfs_create_group(&cdev->dev.kobj, &tape_attr_group);
 	if (ret) {
 		tape_put_device(device);
-		PRINT_ERR("probe failed for tape device %s\n",
-			  dev_name(&cdev->dev));
+		PRINT_ERR("probe failed for tape device %s\n", cdev->dev.bus_id);
 		return ret;
 	}
 	cdev->dev.driver_data = device;
@@ -547,7 +545,7 @@ tape_generic_probe(struct ccw_device *cdev)
 	device->cdev = cdev;
 	ccw_device_get_id(cdev, &dev_id);
 	device->cdev_id = devid_to_int(&dev_id);
-	PRINT_INFO("tape device %s found\n", dev_name(&cdev->dev));
+	PRINT_INFO("tape device %s found\n", cdev->dev.bus_id);
 	return ret;
 }
 
@@ -617,7 +615,7 @@ tape_generic_remove(struct ccw_device *cdev)
 				device->cdev_id);
 			PRINT_WARN("(%s): Drive in use vanished - "
 				"expect trouble!\n",
-				dev_name(&device->cdev->dev));
+				device->cdev->dev.bus_id);
 			PRINT_WARN("State was %i\n", device->tape_state);
 			tape_state_set(device, TS_NOT_OPER);
 			__tape_discard_requests(device);
@@ -840,8 +838,8 @@ tape_dump_sense(struct tape_device* device, struct tape_request *request,
 
 	PRINT_INFO("-------------------------------------------------\n");
 	PRINT_INFO("DSTAT : %02x  CSTAT: %02x	CPA: %04x\n",
-		   irb->scsw.cmd.dstat, irb->scsw.cmd.cstat, irb->scsw.cmd.cpa);
-	PRINT_INFO("DEVICE: %s\n", dev_name(&device->cdev->dev));
+		   irb->scsw.dstat, irb->scsw.cstat, irb->scsw.cpa);
+	PRINT_INFO("DEVICE: %s\n", device->cdev->dev.bus_id);
 	if (request != NULL)
 		PRINT_INFO("OP	  : %s\n", tape_op_verbose[request->op]);
 
@@ -868,7 +866,7 @@ tape_dump_sense_dbf(struct tape_device *device, struct tape_request *request,
 	else
 		op = "---";
 	DBF_EVENT(3, "DSTAT : %02x   CSTAT: %02x\n",
-		  irb->scsw.cmd.dstat, irb->scsw.cmd.cstat);
+		  irb->scsw.dstat,irb->scsw.cstat);
 	DBF_EVENT(3, "DEVICE: %08x OP\t: %s\n", device->cdev_id, op);
 	sptr = (unsigned int *) irb->ecw;
 	DBF_EVENT(3, "%08x %08x\n", sptr[0], sptr[1]);
@@ -956,19 +954,21 @@ __tape_wake_up(struct tape_request *request, void *data)
 int
 tape_do_io(struct tape_device *device, struct tape_request *request)
 {
+	wait_queue_head_t wq;
 	int rc;
 
+	init_waitqueue_head(&wq);
 	spin_lock_irq(get_ccwdev_lock(device->cdev));
 	/* Setup callback */
 	request->callback = __tape_wake_up;
-	request->callback_data = &device->wait_queue;
+	request->callback_data = &wq;
 	/* Add request to request queue and try to start it. */
 	rc = __tape_start_request(device, request);
 	spin_unlock_irq(get_ccwdev_lock(device->cdev));
 	if (rc)
 		return rc;
 	/* Request added to the queue. Wait for its completion. */
-	wait_event(device->wait_queue, (request->callback == NULL));
+	wait_event(wq, (request->callback == NULL));
 	/* Get rc from request */
 	return request->rc;
 }
@@ -989,19 +989,20 @@ int
 tape_do_io_interruptible(struct tape_device *device,
 			 struct tape_request *request)
 {
+	wait_queue_head_t wq;
 	int rc;
 
+	init_waitqueue_head(&wq);
 	spin_lock_irq(get_ccwdev_lock(device->cdev));
 	/* Setup callback */
 	request->callback = __tape_wake_up_interruptible;
-	request->callback_data = &device->wait_queue;
+	request->callback_data = &wq;
 	rc = __tape_start_request(device, request);
 	spin_unlock_irq(get_ccwdev_lock(device->cdev));
 	if (rc)
 		return rc;
 	/* Request added to the queue. Wait for its completion. */
-	rc = wait_event_interruptible(device->wait_queue,
-				      (request->callback == NULL));
+	rc = wait_event_interruptible(wq, (request->callback == NULL));
 	if (rc != -ERESTARTSYS)
 		/* Request finished normally. */
 		return request->rc;
@@ -1014,7 +1015,7 @@ tape_do_io_interruptible(struct tape_device *device,
 		/* Wait for the interrupt that acknowledges the halt. */
 		do {
 			rc = wait_event_interruptible(
-				device->wait_queue,
+				wq,
 				(request->callback == NULL)
 			);
 		} while (rc == -ERESTARTSYS);
@@ -1052,7 +1053,7 @@ __tape_do_irq (struct ccw_device *cdev, unsigned long intparm, struct irb *irb)
 	device = (struct tape_device *) cdev->dev.driver_data;
 	if (device == NULL) {
 		PRINT_ERR("could not get device structure for %s "
-			  "in interrupt\n", dev_name(&cdev->dev));
+			  "in interrupt\n", cdev->dev.bus_id);
 		return;
 	}
 	request = (struct tape_request *) intparm;
@@ -1065,13 +1066,13 @@ __tape_do_irq (struct ccw_device *cdev, unsigned long intparm, struct irb *irb)
 		switch (PTR_ERR(irb)) {
 			case -ETIMEDOUT:
 				PRINT_WARN("(%s): Request timed out\n",
-					dev_name(&cdev->dev));
+					cdev->dev.bus_id);
 			case -EIO:
 				__tape_end_request(device, request, -EIO);
 				break;
 			default:
 				PRINT_ERR("(%s): Unexpected i/o error %li\n",
-					dev_name(&cdev->dev),
+					cdev->dev.bus_id,
 					PTR_ERR(irb));
 		}
 		return;
@@ -1084,11 +1085,10 @@ __tape_do_irq (struct ccw_device *cdev, unsigned long intparm, struct irb *irb)
 	 * error might still apply. So we just schedule the request to be
 	 * started later.
 	 */
-	if (irb->scsw.cmd.cc != 0 &&
-	    (irb->scsw.cmd.fctl & SCSW_FCTL_START_FUNC) &&
+	if (irb->scsw.cc != 0 && (irb->scsw.fctl & SCSW_FCTL_START_FUNC) &&
 	    (request->status == TAPE_REQUEST_IN_IO)) {
 		DBF_EVENT(3,"(%08x): deferred cc=%i, fctl=%i. restarting\n",
-			device->cdev_id, irb->scsw.cmd.cc, irb->scsw.cmd.fctl);
+			device->cdev_id, irb->scsw.cc, irb->scsw.fctl);
 		request->status = TAPE_REQUEST_QUEUED;
 		schedule_delayed_work(&device->tape_dnr, HZ);
 		return;
@@ -1096,8 +1096,8 @@ __tape_do_irq (struct ccw_device *cdev, unsigned long intparm, struct irb *irb)
 
 	/* May be an unsolicited irq */
 	if(request != NULL)
-		request->rescnt = irb->scsw.cmd.count;
-	else if ((irb->scsw.cmd.dstat == 0x85 || irb->scsw.cmd.dstat == 0x80) &&
+		request->rescnt = irb->scsw.count;
+	else if ((irb->scsw.dstat == 0x85 || irb->scsw.dstat == 0x80) &&
 		 !list_empty(&device->req_queue)) {
 		/* Not Ready to Ready after long busy ? */
 		struct tape_request *req;
@@ -1113,7 +1113,7 @@ __tape_do_irq (struct ccw_device *cdev, unsigned long intparm, struct irb *irb)
 			return;
 		}
 	}
-	if (irb->scsw.cmd.dstat != 0x0c) {
+	if (irb->scsw.dstat != 0x0c) {
 		/* Set the 'ONLINE' flag depending on sense byte 1 */
 		if(*(((__u8 *) irb->ecw) + 1) & SENSE_DRIVE_ONLINE)
 			device->tape_generic_status |= GMT_ONLINE(~0);
@@ -1200,7 +1200,7 @@ tape_open(struct tape_device *device)
 {
 	int rc;
 
-	spin_lock_irq(get_ccwdev_lock(device->cdev));
+	spin_lock(get_ccwdev_lock(device->cdev));
 	if (device->tape_state == TS_NOT_OPER) {
 		DBF_EVENT(6, "TAPE:nodev\n");
 		rc = -ENODEV;
@@ -1218,7 +1218,7 @@ tape_open(struct tape_device *device)
 		tape_state_set(device, TS_IN_USE);
 		rc = 0;
 	}
-	spin_unlock_irq(get_ccwdev_lock(device->cdev));
+	spin_unlock(get_ccwdev_lock(device->cdev));
 	return rc;
 }
 
@@ -1228,11 +1228,11 @@ tape_open(struct tape_device *device)
 int
 tape_release(struct tape_device *device)
 {
-	spin_lock_irq(get_ccwdev_lock(device->cdev));
+	spin_lock(get_ccwdev_lock(device->cdev));
 	if (device->tape_state == TS_IN_USE)
 		tape_state_set(device, TS_UNUSED);
 	module_put(device->discipline->owner);
-	spin_unlock_irq(get_ccwdev_lock(device->cdev));
+	spin_unlock(get_ccwdev_lock(device->cdev));
 	return 0;
 }
 

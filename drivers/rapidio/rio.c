@@ -467,7 +467,7 @@ static int __devinit rio_init(void)
 
 device_initcall(rio_init);
 
-int __devinit rio_init_mports(void)
+int rio_init_mports(void)
 {
 	int rc = 0;
 	struct rio_mport *port;

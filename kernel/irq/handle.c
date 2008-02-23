@@ -15,16 +15,8 @@
 #include <linux/random.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
-#include <linux/rculist.h>
-#include <linux/hash.h>
-#include <linux/bootmem.h>
 
 #include "internals.h"
-
-/*
- * lockdep: we want to handle all irq_desc locks as a single lock-class:
- */
-struct lock_class_key irq_desc_lock_class;
 
 /**
  * handle_bad_irq - handle spurious and unhandled irqs
@@ -33,10 +25,11 @@ struct lock_class_key irq_desc_lock_class;
  *
  * Handles spurious and unhandled IRQ's. It also prints a debugmessage.
  */
-void handle_bad_irq(unsigned int irq, struct irq_desc *desc)
+void
+handle_bad_irq(unsigned int irq, struct irq_desc *desc)
 {
 	print_irq_desc(irq, desc);
-	kstat_incr_irqs_this_cpu(irq, desc);
+	kstat_this_cpu.irqs[irq]++;
 	ack_bad_irq(irq);
 }
 
@@ -54,165 +47,6 @@ void handle_bad_irq(unsigned int irq, struct irq_desc *desc)
  *
  * Controller mappings for all interrupt sources:
  */
-int nr_irqs = NR_IRQS;
-EXPORT_SYMBOL_GPL(nr_irqs);
-
-#ifdef CONFIG_SPARSE_IRQ
-
-static struct irq_desc irq_desc_init = {
-	.irq	    = -1,
-	.status	    = IRQ_DISABLED,
-	.chip	    = &no_irq_chip,
-	.handle_irq = handle_bad_irq,
-	.depth      = 1,
-	.lock       = __SPIN_LOCK_UNLOCKED(irq_desc_init.lock),
-};
-
-void init_kstat_irqs(struct irq_desc *desc, int cpu, int nr)
-{
-	unsigned long bytes;
-	char *ptr;
-	int node;
-
-	/* Compute how many bytes we need per irq and allocate them */
-	bytes = nr * sizeof(unsigned int);
-
-	node = cpu_to_node(cpu);
-	ptr = kzalloc_node(bytes, GFP_ATOMIC, node);
-	printk(KERN_DEBUG "  alloc kstat_irqs on cpu %d node %d\n", cpu, node);
-
-	if (ptr)
-		desc->kstat_irqs = (unsigned int *)ptr;
-}
-
-static void init_one_irq_desc(int irq, struct irq_desc *desc, int cpu)
-{
-	memcpy(desc, &irq_desc_init, sizeof(struct irq_desc));
-
-	spin_lock_init(&desc->lock);
-	desc->irq = irq;
-#ifdef CONFIG_SMP
-	desc->cpu = cpu;
-#endif
-	lockdep_set_class(&desc->lock, &irq_desc_lock_class);
-	init_kstat_irqs(desc, cpu, nr_cpu_ids);
-	if (!desc->kstat_irqs) {
-		printk(KERN_ERR "can not alloc kstat_irqs\n");
-		BUG_ON(1);
-	}
-	if (!init_alloc_desc_masks(desc, cpu, false)) {
-		printk(KERN_ERR "can not alloc irq_desc cpumasks\n");
-		BUG_ON(1);
-	}
-	arch_init_chip_data(desc, cpu);
-}
-
-/*
- * Protect the sparse_irqs:
- */
-DEFINE_SPINLOCK(sparse_irq_lock);
-
-struct irq_desc **irq_desc_ptrs __read_mostly;
-
-static struct irq_desc irq_desc_legacy[NR_IRQS_LEGACY] __cacheline_aligned_in_smp = {
-	[0 ... NR_IRQS_LEGACY-1] = {
-		.irq	    = -1,
-		.status	    = IRQ_DISABLED,
-		.chip	    = &no_irq_chip,
-		.handle_irq = handle_bad_irq,
-		.depth	    = 1,
-		.lock	    = __SPIN_LOCK_UNLOCKED(irq_desc_init.lock),
-	}
-};
-
-static unsigned int *kstat_irqs_legacy;
-
-int __init early_irq_init(void)
-{
-	struct irq_desc *desc;
-	int legacy_count;
-	int i;
-
-	 /* initialize nr_irqs based on nr_cpu_ids */
-	arch_probe_nr_irqs();
-	printk(KERN_INFO "NR_IRQS:%d nr_irqs:%d\n", NR_IRQS, nr_irqs);
-
-	desc = irq_desc_legacy;
-	legacy_count = ARRAY_SIZE(irq_desc_legacy);
-
-	/* allocate irq_desc_ptrs array based on nr_irqs */
-	irq_desc_ptrs = alloc_bootmem(nr_irqs * sizeof(void *));
-
-	/* allocate based on nr_cpu_ids */
-	/* FIXME: invert kstat_irgs, and it'd be a per_cpu_alloc'd thing */
-	kstat_irqs_legacy = alloc_bootmem(NR_IRQS_LEGACY * nr_cpu_ids *
-					  sizeof(int));
-
-	for (i = 0; i < legacy_count; i++) {
-		desc[i].irq = i;
-		desc[i].kstat_irqs = kstat_irqs_legacy + i * nr_cpu_ids;
-		lockdep_set_class(&desc[i].lock, &irq_desc_lock_class);
-		init_alloc_desc_masks(&desc[i], 0, true);
-		irq_desc_ptrs[i] = desc + i;
-	}
-
-	for (i = legacy_count; i < nr_irqs; i++)
-		irq_desc_ptrs[i] = NULL;
-
-	return arch_early_irq_init();
-}
-
-struct irq_desc *irq_to_desc(unsigned int irq)
-{
-	if (irq_desc_ptrs && irq < nr_irqs)
-		return irq_desc_ptrs[irq];
-
-	return NULL;
-}
-
-struct irq_desc *irq_to_desc_alloc_cpu(unsigned int irq, int cpu)
-{
-	struct irq_desc *desc;
-	unsigned long flags;
-	int node;
-
-	if (irq >= nr_irqs) {
-		WARN(1, "irq (%d) >= nr_irqs (%d) in irq_to_desc_alloc\n",
-			irq, nr_irqs);
-		return NULL;
-	}
-
-	desc = irq_desc_ptrs[irq];
-	if (desc)
-		return desc;
-
-	spin_lock_irqsave(&sparse_irq_lock, flags);
-
-	/* We have to check it to avoid races with another CPU */
-	desc = irq_desc_ptrs[irq];
-	if (desc)
-		goto out_unlock;
-
-	node = cpu_to_node(cpu);
-	desc = kzalloc_node(sizeof(*desc), GFP_ATOMIC, node);
-	printk(KERN_DEBUG "  alloc irq_desc for %d on cpu %d node %d\n",
-		 irq, cpu, node);
-	if (!desc) {
-		printk(KERN_ERR "can not alloc irq_desc\n");
-		BUG_ON(1);
-	}
-	init_one_irq_desc(irq, desc, cpu);
-
-	irq_desc_ptrs[irq] = desc;
-
-out_unlock:
-	spin_unlock_irqrestore(&sparse_irq_lock, flags);
-
-	return desc;
-}
-
-#else /* !CONFIG_SPARSE_IRQ */
-
 struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned_in_smp = {
 	[0 ... NR_IRQS-1] = {
 		.status = IRQ_DISABLED,
@@ -220,37 +54,11 @@ struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned_in_smp = {
 		.handle_irq = handle_bad_irq,
 		.depth = 1,
 		.lock = __SPIN_LOCK_UNLOCKED(irq_desc->lock),
+#ifdef CONFIG_SMP
+		.affinity = CPU_MASK_ALL
+#endif
 	}
 };
-
-int __init early_irq_init(void)
-{
-	struct irq_desc *desc;
-	int count;
-	int i;
-
-	printk(KERN_INFO "NR_IRQS:%d\n", NR_IRQS);
-
-	desc = irq_desc;
-	count = ARRAY_SIZE(irq_desc);
-
-	for (i = 0; i < count; i++) {
-		desc[i].irq = i;
-		init_alloc_desc_masks(&desc[i], 0, true);
-	}
-	return arch_early_irq_init();
-}
-
-struct irq_desc *irq_to_desc(unsigned int irq)
-{
-	return (irq < NR_IRQS) ? irq_desc + irq : NULL;
-}
-
-struct irq_desc *irq_to_desc_alloc_cpu(unsigned int irq, int cpu)
-{
-	return irq_to_desc(irq);
-}
-#endif /* !CONFIG_SPARSE_IRQ */
 
 /*
  * What should we do if we get a hw irq event on an illegal vector?
@@ -258,9 +66,7 @@ struct irq_desc *irq_to_desc_alloc_cpu(unsigned int irq, int cpu)
  */
 static void ack_bad(unsigned int irq)
 {
-	struct irq_desc *desc = irq_to_desc(irq);
-
-	print_irq_desc(irq, desc);
+	print_irq_desc(irq, irq_desc + irq);
 	ack_bad_irq(irq);
 }
 
@@ -325,6 +131,8 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 	irqreturn_t ret, retval = IRQ_NONE;
 	unsigned int status = 0;
 
+	handle_dynamic_tick(action);
+
 	if (!(action->flags & IRQF_DISABLED))
 		local_irq_enable_in_hardirq();
 
@@ -357,23 +165,19 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
  */
 unsigned int __do_IRQ(unsigned int irq)
 {
-	struct irq_desc *desc = irq_to_desc(irq);
+	struct irq_desc *desc = irq_desc + irq;
 	struct irqaction *action;
 	unsigned int status;
 
-	kstat_incr_irqs_this_cpu(irq, desc);
-
+	kstat_this_cpu.irqs[irq]++;
 	if (CHECK_IRQ_PER_CPU(desc->status)) {
 		irqreturn_t action_ret;
 
 		/*
 		 * No locking required for CPU-local interrupts:
 		 */
-		if (desc->chip->ack) {
+		if (desc->chip->ack)
 			desc->chip->ack(irq);
-			/* get new one */
-			desc = irq_remap_to_desc(irq, desc);
-		}
 		if (likely(!(desc->status & IRQ_DISABLED))) {
 			action_ret = handle_IRQ_event(irq, desc->action);
 			if (!noirqdebug)
@@ -384,10 +188,8 @@ unsigned int __do_IRQ(unsigned int irq)
 	}
 
 	spin_lock(&desc->lock);
-	if (desc->chip->ack) {
+	if (desc->chip->ack)
 		desc->chip->ack(irq);
-		desc = irq_remap_to_desc(irq, desc);
-	}
 	/*
 	 * REPLAY is when Linux resends an IRQ that was dropped earlier
 	 * WAITING is used by probe to mark irqs that are being tested
@@ -454,22 +256,19 @@ out:
 }
 #endif
 
+#ifdef CONFIG_TRACE_IRQFLAGS
+
+/*
+ * lockdep: we want to handle all irq_desc locks as a single lock-class:
+ */
+static struct lock_class_key irq_desc_lock_class;
+
 void early_init_irq_lock_class(void)
 {
-	struct irq_desc *desc;
 	int i;
 
-	for_each_irq_desc(i, desc) {
-		lockdep_set_class(&desc->lock, &irq_desc_lock_class);
-	}
+	for (i = 0; i < NR_IRQS; i++)
+		lockdep_set_class(&irq_desc[i].lock, &irq_desc_lock_class);
 }
 
-#ifdef CONFIG_SPARSE_IRQ
-unsigned int kstat_irqs_cpu(unsigned int irq, int cpu)
-{
-	struct irq_desc *desc = irq_to_desc(irq);
-	return desc ? desc->kstat_irqs[cpu] : 0;
-}
 #endif
-EXPORT_SYMBOL(kstat_irqs_cpu);
-

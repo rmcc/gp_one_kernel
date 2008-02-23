@@ -16,7 +16,6 @@
 #include <linux/mutex.h>
 #include <linux/freezer.h>
 #include <linux/kthread.h>
-#include <linux/sunrpc/svcauth_gss.h>
 
 #include <net/inet_sock.h>
 
@@ -28,7 +27,7 @@
 
 struct nfs_callback_data {
 	unsigned int users;
-	struct svc_rqst *rqst;
+	struct svc_serv *serv;
 	struct task_struct *task;
 };
 
@@ -40,16 +39,6 @@ unsigned int nfs_callback_set_tcpport;
 unsigned short nfs_callback_tcpport;
 static const int nfs_set_port_min = 0;
 static const int nfs_set_port_max = 65535;
-
-/*
- * If the kernel has IPv6 support available, always listen for
- * both AF_INET and AF_INET6 requests.
- */
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-static const sa_family_t	nfs_callback_family = AF_INET6;
-#else
-static const sa_family_t	nfs_callback_family = AF_INET;
-#endif
 
 static int param_set_port(const char *val, struct kernel_param *kp)
 {
@@ -102,22 +91,25 @@ nfs_callback_svc(void *vrqstp)
 		svc_process(rqstp);
 	}
 	unlock_kernel();
+	nfs_callback_info.task = NULL;
+	svc_exit_thread(rqstp);
 	return 0;
 }
 
 /*
- * Bring up the callback thread if it is not already up.
+ * Bring up the server process if it is not already up.
  */
 int nfs_callback_up(void)
 {
 	struct svc_serv *serv = NULL;
+	struct svc_rqst *rqstp;
 	int ret = 0;
 
+	lock_kernel();
 	mutex_lock(&nfs_callback_mutex);
 	if (nfs_callback_info.users++ || nfs_callback_info.task != NULL)
 		goto out;
-	serv = svc_create(&nfs4_callback_program, NFS4_CALLBACK_BUFSIZE,
-				nfs_callback_family, NULL);
+	serv = svc_create(&nfs4_callback_program, NFS4_CALLBACK_BUFSIZE, NULL);
 	ret = -ENOMEM;
 	if (!serv)
 		goto out_err;
@@ -127,26 +119,24 @@ int nfs_callback_up(void)
 	if (ret <= 0)
 		goto out_err;
 	nfs_callback_tcpport = ret;
-	dprintk("NFS: Callback listener port = %u (af %u)\n",
-			nfs_callback_tcpport, nfs_callback_family);
+	dprintk("Callback port = 0x%x\n", nfs_callback_tcpport);
 
-	nfs_callback_info.rqst = svc_prepare_thread(serv, &serv->sv_pools[0]);
-	if (IS_ERR(nfs_callback_info.rqst)) {
-		ret = PTR_ERR(nfs_callback_info.rqst);
-		nfs_callback_info.rqst = NULL;
+	rqstp = svc_prepare_thread(serv, &serv->sv_pools[0]);
+	if (IS_ERR(rqstp)) {
+		ret = PTR_ERR(rqstp);
 		goto out_err;
 	}
 
 	svc_sock_update_bufs(serv);
+	nfs_callback_info.serv = serv;
 
-	nfs_callback_info.task = kthread_run(nfs_callback_svc,
-					     nfs_callback_info.rqst,
+	nfs_callback_info.task = kthread_run(nfs_callback_svc, rqstp,
 					     "nfsv4-svc");
 	if (IS_ERR(nfs_callback_info.task)) {
 		ret = PTR_ERR(nfs_callback_info.task);
-		svc_exit_thread(nfs_callback_info.rqst);
-		nfs_callback_info.rqst = NULL;
+		nfs_callback_info.serv = NULL;
 		nfs_callback_info.task = NULL;
+		svc_exit_thread(rqstp);
 		goto out_err;
 	}
 out:
@@ -159,58 +149,33 @@ out:
 	if (serv)
 		svc_destroy(serv);
 	mutex_unlock(&nfs_callback_mutex);
+	unlock_kernel();
 	return ret;
 out_err:
-	dprintk("NFS: Couldn't create callback socket or server thread; "
-		"err = %d\n", ret);
+	dprintk("Couldn't create callback socket or server thread; err = %d\n",
+		ret);
 	nfs_callback_info.users--;
 	goto out;
 }
 
 /*
- * Kill the callback thread if it's no longer being used.
+ * Kill the server process if it is not already down.
  */
 void nfs_callback_down(void)
 {
+	lock_kernel();
 	mutex_lock(&nfs_callback_mutex);
 	nfs_callback_info.users--;
-	if (nfs_callback_info.users == 0 && nfs_callback_info.task != NULL) {
+	if (nfs_callback_info.users == 0 && nfs_callback_info.task != NULL)
 		kthread_stop(nfs_callback_info.task);
-		svc_exit_thread(nfs_callback_info.rqst);
-		nfs_callback_info.rqst = NULL;
-		nfs_callback_info.task = NULL;
-	}
 	mutex_unlock(&nfs_callback_mutex);
-}
-
-static int check_gss_callback_principal(struct nfs_client *clp,
-					struct svc_rqst *rqstp)
-{
-	struct rpc_clnt *r = clp->cl_rpcclient;
-	char *p = svc_gss_principal(rqstp);
-
-	/*
-	 * It might just be a normal user principal, in which case
-	 * userspace won't bother to tell us the name at all.
-	 */
-	if (p == NULL)
-		return SVC_DENIED;
-
-	/* Expect a GSS_C_NT_HOSTBASED_NAME like "nfs@serverhostname" */
-
-	if (memcmp(p, "nfs@", 4) != 0)
-		return SVC_DENIED;
-	p += 4;
-	if (strcmp(p, r->cl_server) != 0)
-		return SVC_DENIED;
-	return SVC_OK;
+	unlock_kernel();
 }
 
 static int nfs_callback_authenticate(struct svc_rqst *rqstp)
 {
 	struct nfs_client *clp;
 	RPC_IFDEBUG(char buf[RPC_MAX_ADDRBUFLEN]);
-	int ret = SVC_OK;
 
 	/* Don't talk to strangers */
 	clp = nfs_find_client(svc_addr(rqstp), 4);
@@ -219,22 +184,21 @@ static int nfs_callback_authenticate(struct svc_rqst *rqstp)
 
 	dprintk("%s: %s NFSv4 callback!\n", __func__,
 			svc_print_addr(rqstp, buf, sizeof(buf)));
+	nfs_put_client(clp);
 
 	switch (rqstp->rq_authop->flavour) {
 		case RPC_AUTH_NULL:
 			if (rqstp->rq_proc != CB_NULL)
-				ret = SVC_DENIED;
+				return SVC_DENIED;
 			break;
 		case RPC_AUTH_UNIX:
 			break;
 		case RPC_AUTH_GSS:
-			ret = check_gss_callback_principal(clp, rqstp);
-			break;
+			/* FIXME: RPCSEC_GSS handling? */
 		default:
-			ret = SVC_DENIED;
+			return SVC_DENIED;
 	}
-	nfs_put_client(clp);
-	return ret;
+	return SVC_OK;
 }
 
 /*

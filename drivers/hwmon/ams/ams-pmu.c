@@ -149,6 +149,8 @@ int __init ams_pmu_init(struct device_node *np)
 	const u32 *prop;
 	int result;
 
+	mutex_lock(&ams_info.lock);
+
 	/* Set implementation stuff */
 	ams_info.of_node = np;
 	ams_info.exit = ams_pmu_exit;
@@ -159,9 +161,10 @@ int __init ams_pmu_init(struct device_node *np)
 
 	/* Get PMU command, should be 0x4e, but we can never know */
 	prop = of_get_property(ams_info.of_node, "reg", NULL);
-	if (!prop)
-		return -ENODEV;
-
+	if (!prop) {
+		result = -ENODEV;
+		goto exit;
+	}
 	ams_pmu_cmd = ((*prop) >> 8) & 0xff;
 
 	/* Disable interrupts */
@@ -172,7 +175,7 @@ int __init ams_pmu_init(struct device_node *np)
 
 	result = ams_sensor_attach();
 	if (result < 0)
-		return result;
+		goto exit;
 
 	/* Set default values */
 	ams_pmu_set_register(AMS_FF_LOW_LIMIT, 0x15);
@@ -195,5 +198,10 @@ int __init ams_pmu_init(struct device_node *np)
 
 	printk(KERN_INFO "ams: Found PMU based motion sensor\n");
 
-	return 0;
+	result = 0;
+
+exit:
+	mutex_unlock(&ams_info.lock);
+
+	return result;
 }

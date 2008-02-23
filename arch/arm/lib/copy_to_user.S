@@ -90,8 +90,6 @@ ENTRY(__copy_to_user)
 
 #include "copy_template.S"
 
-ENDPROC(__copy_to_user)
-
 	.section .fixup,"ax"
 	.align 0
 	copy_abort_preamble

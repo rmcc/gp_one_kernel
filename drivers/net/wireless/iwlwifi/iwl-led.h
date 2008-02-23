@@ -19,7 +19,7 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  *****************************************************************************/
@@ -49,14 +49,14 @@ enum led_type {
 };
 
 
-struct iwl_led {
+struct iwl4965_led {
 	struct iwl_priv *priv;
 	struct led_classdev led_dev;
-	char name[32];
 
 	int (*led_on) (struct iwl_priv *priv, int led_id);
 	int (*led_off) (struct iwl_priv *priv, int led_id);
-	int (*led_pattern) (struct iwl_priv *priv, int led_id, unsigned int idx);
+	int (*led_pattern) (struct iwl_priv *priv, int led_id,
+			    enum led_brightness brightness);
 
 	enum led_type type;
 	unsigned int registered;

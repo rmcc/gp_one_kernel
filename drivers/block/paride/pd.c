@@ -712,25 +712,27 @@ static void do_pd_request(struct request_queue * q)
 static int pd_special_command(struct pd_unit *disk,
 		      enum action (*func)(struct pd_unit *disk))
 {
-	struct request *rq;
+	DECLARE_COMPLETION_ONSTACK(wait);
+	struct request rq;
 	int err = 0;
 
-	rq = blk_get_request(disk->gd->queue, READ, __GFP_WAIT);
-
-	rq->cmd_type = REQ_TYPE_SPECIAL;
-	rq->special = func;
-
-	err = blk_execute_rq(disk->gd->queue, disk->gd, rq, 0);
-
-	blk_put_request(rq);
+	blk_rq_init(NULL, &rq);
+	rq.rq_disk = disk->gd;
+	rq.end_io_data = &wait;
+	rq.end_io = blk_end_sync_rq;
+	blk_insert_request(disk->gd->queue, &rq, 0, func);
+	wait_for_completion(&wait);
+	if (rq.errors)
+		err = -EIO;
+	blk_put_request(&rq);
 	return err;
 }
 
 /* kernel glue structures */
 
-static int pd_open(struct block_device *bdev, fmode_t mode)
+static int pd_open(struct inode *inode, struct file *file)
 {
-	struct pd_unit *disk = bdev->bd_disk->private_data;
+	struct pd_unit *disk = inode->i_bdev->bd_disk->private_data;
 
 	disk->access++;
 
@@ -758,10 +760,10 @@ static int pd_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 	return 0;
 }
 
-static int pd_ioctl(struct block_device *bdev, fmode_t mode,
+static int pd_ioctl(struct inode *inode, struct file *file,
 	 unsigned int cmd, unsigned long arg)
 {
-	struct pd_unit *disk = bdev->bd_disk->private_data;
+	struct pd_unit *disk = inode->i_bdev->bd_disk->private_data;
 
 	switch (cmd) {
 	case CDROMEJECT:
@@ -773,9 +775,9 @@ static int pd_ioctl(struct block_device *bdev, fmode_t mode,
 	}
 }
 
-static int pd_release(struct gendisk *p, fmode_t mode)
+static int pd_release(struct inode *inode, struct file *file)
 {
-	struct pd_unit *disk = p->private_data;
+	struct pd_unit *disk = inode->i_bdev->bd_disk->private_data;
 
 	if (!--disk->access && disk->removable)
 		pd_special_command(disk, pd_door_unlock);
@@ -809,7 +811,7 @@ static struct block_device_operations pd_fops = {
 	.owner		= THIS_MODULE,
 	.open		= pd_open,
 	.release	= pd_release,
-	.locked_ioctl	= pd_ioctl,
+	.ioctl		= pd_ioctl,
 	.getgeo		= pd_getgeo,
 	.media_changed	= pd_check_media,
 	.revalidate_disk= pd_revalidate

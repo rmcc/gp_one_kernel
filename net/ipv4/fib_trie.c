@@ -22,6 +22,8 @@
  * IP-address lookup using LC-tries. Stefan Nilsson and Gunnar Karlsson
  * IEEE Journal on Selected Areas in Communications, 17(6):1083-1092, June 1999
  *
+ * Version:	$Id: fib_trie.c,v 1.3 2005/06/08 14:20:01 robert Exp $
+ *
  *
  * Code from fib_hash has been reused which includes the following header:
  *
@@ -1271,7 +1273,7 @@ static int fn_trie_insert(struct fib_table *tb, struct fib_config *cfg)
 
 			fib_release_info(fi_drop);
 			if (state & FA_S_ACCESSED)
-				rt_cache_flush(cfg->fc_nlinfo.nl_net, -1);
+				rt_cache_flush(-1);
 			rtmsg_fib(RTM_NEWROUTE, htonl(key), new_fa, plen,
 				tb->tb_id, &cfg->fc_nlinfo, NLM_F_REPLACE);
 
@@ -1316,7 +1318,7 @@ static int fn_trie_insert(struct fib_table *tb, struct fib_config *cfg)
 	list_add_tail_rcu(&new_fa->fa_list,
 			  (fa ? &fa->fa_list : fa_head));
 
-	rt_cache_flush(cfg->fc_nlinfo.nl_net, -1);
+	rt_cache_flush(-1);
 	rtmsg_fib(RTM_NEWROUTE, htonl(key), new_fa, plen, tb->tb_id,
 		  &cfg->fc_nlinfo, 0);
 succeeded:
@@ -1357,17 +1359,17 @@ static int check_leaf(struct trie *t, struct leaf *l,
 			t->stats.semantic_match_miss++;
 #endif
 		if (err <= 0)
-			return err;
+			return plen;
 	}
 
-	return 1;
+	return -1;
 }
 
 static int fn_trie_lookup(struct fib_table *tb, const struct flowi *flp,
 			  struct fib_result *res)
 {
 	struct trie *t = (struct trie *) tb->tb_data;
-	int ret;
+	int plen, ret = 0;
 	struct node *n;
 	struct tnode *pn;
 	int pos, bits;
@@ -1391,7 +1393,10 @@ static int fn_trie_lookup(struct fib_table *tb, const struct flowi *flp,
 
 	/* Just a leaf? */
 	if (IS_LEAF(n)) {
-		ret = check_leaf(t, (struct leaf *)n, key, flp, res);
+		plen = check_leaf(t, (struct leaf *)n, key, flp, res);
+		if (plen < 0)
+			goto failed;
+		ret = 0;
 		goto found;
 	}
 
@@ -1416,9 +1421,11 @@ static int fn_trie_lookup(struct fib_table *tb, const struct flowi *flp,
 		}
 
 		if (IS_LEAF(n)) {
-			ret = check_leaf(t, (struct leaf *)n, key, flp, res);
-			if (ret > 0)
+			plen = check_leaf(t, (struct leaf *)n, key, flp, res);
+			if (plen < 0)
 				goto backtrace;
+
+			ret = 0;
 			goto found;
 		}
 
@@ -1659,7 +1666,7 @@ static int fn_trie_delete(struct fib_table *tb, struct fib_config *cfg)
 		trie_leaf_remove(t, l);
 
 	if (fa->fa_state & FA_S_ACCESSED)
-		rt_cache_flush(cfg->fc_nlinfo.nl_net, -1);
+		rt_cache_flush(-1);
 
 	fib_release_info(fa->fa_info);
 	alias_free_mem_rcu(fa);
@@ -2251,7 +2258,25 @@ static int fib_triestat_seq_show(struct seq_file *seq, void *v)
 
 static int fib_triestat_seq_open(struct inode *inode, struct file *file)
 {
-	return single_open_net(inode, file, fib_triestat_seq_show);
+	int err;
+	struct net *net;
+
+	net = get_proc_net(inode);
+	if (net == NULL)
+		return -ENXIO;
+	err = single_open(file, fib_triestat_seq_show, net);
+	if (err < 0) {
+		put_net(net);
+		return err;
+	}
+	return 0;
+}
+
+static int fib_triestat_seq_release(struct inode *ino, struct file *f)
+{
+	struct seq_file *seq = f->private_data;
+	put_net(seq->private);
+	return single_release(ino, f);
 }
 
 static const struct file_operations fib_triestat_fops = {
@@ -2259,7 +2284,7 @@ static const struct file_operations fib_triestat_fops = {
 	.open	= fib_triestat_seq_open,
 	.read	= seq_read,
 	.llseek	= seq_lseek,
-	.release = single_release_net,
+	.release = fib_triestat_seq_release,
 };
 
 static struct node *fib_trie_get_idx(struct seq_file *seq, loff_t pos)
@@ -2399,8 +2424,8 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 		__be32 prf = htonl(mask_pfx(tn->key, tn->pos));
 
 		seq_indent(seq, iter->depth-1);
-		seq_printf(seq, "  +-- %pI4/%d %d %d %d\n",
-			   &prf, tn->pos, tn->bits, tn->full_children,
+		seq_printf(seq, "  +-- " NIPQUAD_FMT "/%d %d %d %d\n",
+			   NIPQUAD(prf), tn->pos, tn->bits, tn->full_children,
 			   tn->empty_children);
 
 	} else {
@@ -2410,7 +2435,7 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 		__be32 val = htonl(l->key);
 
 		seq_indent(seq, iter->depth);
-		seq_printf(seq, "  |-- %pI4\n", &val);
+		seq_printf(seq, "  |-- " NIPQUAD_FMT "\n", NIPQUAD(val));
 
 		hlist_for_each_entry_rcu(li, node, &l->list, hlist) {
 			struct fib_alias *fa;

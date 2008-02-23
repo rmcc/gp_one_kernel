@@ -52,7 +52,8 @@ struct frame_head {
 	unsigned long ret;
 } __attribute__((packed));
 
-static struct frame_head *dump_user_backtrace(struct frame_head *head)
+static struct frame_head *
+dump_user_backtrace(struct frame_head * head)
 {
 	struct frame_head bufhead[2];
 

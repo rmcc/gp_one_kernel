@@ -63,7 +63,7 @@
 #include "vg468.h"
 #include "ricoh.h"
 
-#ifdef CONFIG_PCMCIA_DEBUG
+#ifdef DEBUG
 static const char version[] =
 "i82365.c 1.265 1999/11/10 18:36:21 (David Hinds)";
 
@@ -1263,7 +1263,7 @@ static int __init init_i82365(void)
 
     ret = driver_register(&i82365_driver);
     if (ret)
-	goto err_out;
+	return ret;
 
     i82365_device = platform_device_alloc("i82365", 0);
     if (i82365_device) {
@@ -1273,8 +1273,10 @@ static int __init init_i82365(void)
     } else
 	    ret = -ENOMEM;
 
-    if (ret)
-	goto err_driver_unregister;
+    if (ret) {
+	driver_unregister(&i82365_driver);
+	return ret;
+    }
 
     printk(KERN_INFO "Intel ISA PCIC probe: ");
     sockets = 0;
@@ -1283,17 +1285,16 @@ static int __init init_i82365(void)
 
     if (sockets == 0) {
 	printk("not found.\n");
-	ret = -ENODEV;
-	goto err_dev_unregister;
+	platform_device_unregister(i82365_device);
+	release_region(i365_base, 2);
+	driver_unregister(&i82365_driver);
+	return -ENODEV;
     }
 
     /* Set up interrupt handler(s) */
     if (grab_irq != 0)
-	ret = request_irq(cs_irq, pcic_interrupt, 0, "i82365", pcic_interrupt);
-
-    if (ret)
-	goto err_socket_release;
-
+	request_irq(cs_irq, pcic_interrupt, 0, "i82365", pcic_interrupt);
+    
     /* register sockets with the pcmcia core */
     for (i = 0; i < sockets; i++) {
 	    socket[i].socket.dev.parent = &i82365_device->dev;
@@ -1323,23 +1324,7 @@ static int __init init_i82365(void)
     }
     
     return 0;
-err_socket_release:
-    for (i = 0; i < sockets; i++) {
-	/* Turn off all interrupt sources! */
-	i365_set(i, I365_CSCINT, 0);
-	release_region(socket[i].ioaddr, 2);
-    }
-err_dev_unregister:
-    platform_device_unregister(i82365_device);
-    release_region(i365_base, 2);
-#ifdef CONFIG_PNP
-    if (i82365_pnpdev)
-	pnp_disable_dev(i82365_pnpdev);
-#endif
-err_driver_unregister:
-    driver_unregister(&i82365_driver);
-err_out:
-    return ret;
+    
 } /* init_i82365 */
 
 static void __exit exit_i82365(void)

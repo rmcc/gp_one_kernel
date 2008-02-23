@@ -130,8 +130,6 @@ static char		stl_unwanted[SC26198_RXFIFOSIZE];
 static DEFINE_MUTEX(stl_brdslock);
 static struct stlbrd		*stl_brds[STL_MAXBRDS];
 
-static const struct tty_port_operations stl_port_ops;
-
 /*
  *	Per board state flags. Used with the state field of the board struct.
  *	Not really much here!
@@ -407,8 +405,9 @@ static unsigned int	stl_baudrates[] = {
 
 static int	stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 static int	stl_brdinit(struct stlbrd *brdp);
-static int	stl_getportstats(struct tty_struct *tty, struct stlport *portp, comstats_t __user *cp);
+static int	stl_getportstats(struct stlport *portp, comstats_t __user *cp);
 static int	stl_clrportstats(struct stlport *portp, comstats_t __user *cp);
+static int	stl_waitcarrier(struct stlport *portp, struct file *filp);
 
 /*
  *	CD1400 uart specific handling functions.
@@ -613,20 +612,18 @@ static struct class *stallion_class;
 static void stl_cd_change(struct stlport *portp)
 {
 	unsigned int oldsigs = portp->sigs;
-	struct tty_struct *tty = tty_port_tty_get(&portp->port);
 
-	if (!tty)
+	if (!portp->tty)
 		return;
 
 	portp->sigs = stl_getsignals(portp);
 
 	if ((portp->sigs & TIOCM_CD) && ((oldsigs & TIOCM_CD) == 0))
-		wake_up_interruptible(&portp->port.open_wait);
+		wake_up_interruptible(&portp->open_wait);
 
 	if ((oldsigs & TIOCM_CD) && ((portp->sigs & TIOCM_CD) == 0))
-		if (portp->port.flags & ASYNC_CHECK_CD)
-			tty_hangup(tty);
-	tty_kref_put(tty);
+		if (portp->flags & ASYNC_CHECK_CD)
+			tty_hangup(portp->tty);
 }
 
 /*
@@ -704,9 +701,8 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 {
 	struct stlport	*portp;
 	struct stlbrd	*brdp;
-	struct tty_port *port;
 	unsigned int	minordev, brdnr, panelnr;
-	int		portnr;
+	int		portnr, rc;
 
 	pr_debug("stl_open(tty=%p,filp=%p): device=%s\n", tty, filp, tty->name);
 
@@ -717,7 +713,6 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 	brdp = stl_brds[brdnr];
 	if (brdp == NULL)
 		return -ENODEV;
-
 	minordev = MINOR2PORT(minordev);
 	for (portnr = -1, panelnr = 0; panelnr < STL_MAXPANELS; panelnr++) {
 		if (brdp->panels[panelnr] == NULL)
@@ -734,17 +729,16 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 	portp = brdp->panels[panelnr]->ports[portnr];
 	if (portp == NULL)
 		return -ENODEV;
-	port = &portp->port;
 
 /*
  *	On the first open of the device setup the port hardware, and
  *	initialize the per port data structure.
  */
-	tty_port_tty_set(port, tty);
+	portp->tty = tty;
 	tty->driver_data = portp;
-	port->count++;
+	portp->refcount++;
 
-	if ((port->flags & ASYNC_INITIALIZED) == 0) {
+	if ((portp->flags & ASYNC_INITIALIZED) == 0) {
 		if (!portp->tx.buf) {
 			portp->tx.buf = kmalloc(STL_TXBUFSIZE, GFP_KERNEL);
 			if (!portp->tx.buf)
@@ -758,24 +752,90 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 		stl_enablerxtx(portp, 1, 1);
 		stl_startrxtx(portp, 1, 0);
 		clear_bit(TTY_IO_ERROR, &tty->flags);
-		port->flags |= ASYNC_INITIALIZED;
+		portp->flags |= ASYNC_INITIALIZED;
 	}
-	return tty_port_block_til_ready(port, tty, filp);
+
+/*
+ *	Check if this port is in the middle of closing. If so then wait
+ *	until it is closed then return error status, based on flag settings.
+ *	The sleep here does not need interrupt protection since the wakeup
+ *	for it is done with the same context.
+ */
+	if (portp->flags & ASYNC_CLOSING) {
+		interruptible_sleep_on(&portp->close_wait);
+		if (portp->flags & ASYNC_HUP_NOTIFY)
+			return -EAGAIN;
+		return -ERESTARTSYS;
+	}
+
+/*
+ *	Based on type of open being done check if it can overlap with any
+ *	previous opens still in effect. If we are a normal serial device
+ *	then also we might have to wait for carrier.
+ */
+	if (!(filp->f_flags & O_NONBLOCK))
+		if ((rc = stl_waitcarrier(portp, filp)) != 0)
+			return rc;
+
+	portp->flags |= ASYNC_NORMAL_ACTIVE;
+
+	return 0;
 }
 
 /*****************************************************************************/
 
-static int stl_carrier_raised(struct tty_port *port)
-{
-	struct stlport *portp = container_of(port, struct stlport, port);
-	return (portp->sigs & TIOCM_CD) ? 1 : 0;
-}
+/*
+ *	Possibly need to wait for carrier (DCD signal) to come high. Say
+ *	maybe because if we are clocal then we don't need to wait...
+ */
 
-static void stl_raise_dtr_rts(struct tty_port *port)
+static int stl_waitcarrier(struct stlport *portp, struct file *filp)
 {
-	struct stlport *portp = container_of(port, struct stlport, port);
-	/* Takes brd_lock internally */
-	stl_setsignals(portp, 1, 1);
+	unsigned long	flags;
+	int		rc, doclocal;
+
+	pr_debug("stl_waitcarrier(portp=%p,filp=%p)\n", portp, filp);
+
+	rc = 0;
+	doclocal = 0;
+
+	spin_lock_irqsave(&stallion_lock, flags);
+
+	if (portp->tty->termios->c_cflag & CLOCAL)
+		doclocal++;
+
+	portp->openwaitcnt++;
+	if (! tty_hung_up_p(filp))
+		portp->refcount--;
+
+	for (;;) {
+		/* Takes brd_lock internally */
+		stl_setsignals(portp, 1, 1);
+		if (tty_hung_up_p(filp) ||
+		    ((portp->flags & ASYNC_INITIALIZED) == 0)) {
+			if (portp->flags & ASYNC_HUP_NOTIFY)
+				rc = -EBUSY;
+			else
+				rc = -ERESTARTSYS;
+			break;
+		}
+		if (((portp->flags & ASYNC_CLOSING) == 0) &&
+		    (doclocal || (portp->sigs & TIOCM_CD)))
+			break;
+		if (signal_pending(current)) {
+			rc = -ERESTARTSYS;
+			break;
+		}
+		/* FIXME */
+		interruptible_sleep_on(&portp->open_wait);
+	}
+
+	if (! tty_hung_up_p(filp))
+		portp->refcount++;
+	portp->openwaitcnt--;
+	spin_unlock_irqrestore(&stallion_lock, flags);
+
+	return rc;
 }
 
 /*****************************************************************************/
@@ -786,6 +846,8 @@ static void stl_flushbuffer(struct tty_struct *tty)
 
 	pr_debug("stl_flushbuffer(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -803,6 +865,8 @@ static void stl_waituntilsent(struct tty_struct *tty, int timeout)
 
 	pr_debug("stl_waituntilsent(tty=%p,timeout=%d)\n", tty, timeout);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -827,29 +891,47 @@ static void stl_waituntilsent(struct tty_struct *tty, int timeout)
 static void stl_close(struct tty_struct *tty, struct file *filp)
 {
 	struct stlport	*portp;
-	struct tty_port *port;
 	unsigned long	flags;
 
 	pr_debug("stl_close(tty=%p,filp=%p)\n", tty, filp);
 
 	portp = tty->driver_data;
-	BUG_ON(portp == NULL);
-
-	port = &portp->port;
-
-	if (tty_port_close_start(port, tty, filp) == 0)
+	if (portp == NULL)
 		return;
+
+	spin_lock_irqsave(&stallion_lock, flags);
+	if (tty_hung_up_p(filp)) {
+		spin_unlock_irqrestore(&stallion_lock, flags);
+		return;
+	}
+	if ((tty->count == 1) && (portp->refcount != 1))
+		portp->refcount = 1;
+	if (portp->refcount-- > 1) {
+		spin_unlock_irqrestore(&stallion_lock, flags);
+		return;
+	}
+
+	portp->refcount = 0;
+	portp->flags |= ASYNC_CLOSING;
+
 /*
  *	May want to wait for any data to drain before closing. The BUSY
  *	flag keeps track of whether we are still sending or not - it is
  *	very accurate for the cd1400, not quite so for the sc26198.
  *	(The sc26198 has no "end-of-data" interrupt only empty FIFO)
  */
+	tty->closing = 1;
+
+	spin_unlock_irqrestore(&stallion_lock, flags);
+
+	if (portp->closing_wait != ASYNC_CLOSING_WAIT_NONE)
+		tty_wait_until_sent(tty, portp->closing_wait);
 	stl_waituntilsent(tty, (HZ / 2));
 
-	spin_lock_irqsave(&port->lock, flags);
-	portp->port.flags &= ~ASYNC_INITIALIZED;
-	spin_unlock_irqrestore(&port->lock, flags);
+
+	spin_lock_irqsave(&stallion_lock, flags);
+	portp->flags &= ~ASYNC_INITIALIZED;
+	spin_unlock_irqrestore(&stallion_lock, flags);
 
 	stl_disableintrs(portp);
 	if (tty->termios->c_cflag & HUPCL)
@@ -863,9 +945,20 @@ static void stl_close(struct tty_struct *tty, struct file *filp)
 		portp->tx.head = NULL;
 		portp->tx.tail = NULL;
 	}
+	set_bit(TTY_IO_ERROR, &tty->flags);
+	tty_ldisc_flush(tty);
 
-	tty_port_close_end(port, tty);
-	tty_port_tty_set(port, NULL);
+	tty->closing = 0;
+	portp->tty = NULL;
+
+	if (portp->openwaitcnt) {
+		if (portp->close_delay)
+			msleep_interruptible(jiffies_to_msecs(portp->close_delay));
+		wake_up_interruptible(&portp->open_wait);
+	}
+
+	portp->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CLOSING);
+	wake_up_interruptible(&portp->close_wait);
 }
 
 /*****************************************************************************/
@@ -932,7 +1025,7 @@ static int stl_write(struct tty_struct *tty, const unsigned char *buf, int count
 
 /*****************************************************************************/
 
-static int stl_putchar(struct tty_struct *tty, unsigned char ch)
+static void stl_putchar(struct tty_struct *tty, unsigned char ch)
 {
 	struct stlport	*portp;
 	unsigned int	len;
@@ -940,11 +1033,13 @@ static int stl_putchar(struct tty_struct *tty, unsigned char ch)
 
 	pr_debug("stl_putchar(tty=%p,ch=%x)\n", tty, ch);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
-		return -EINVAL;
+		return;
 	if (portp->tx.buf == NULL)
-		return -EINVAL;
+		return;
 
 	head = portp->tx.head;
 	tail = portp->tx.tail;
@@ -958,7 +1053,6 @@ static int stl_putchar(struct tty_struct *tty, unsigned char ch)
 			head = portp->tx.buf;
 	}	
 	portp->tx.head = head;
-	return 0;
 }
 
 /*****************************************************************************/
@@ -975,6 +1069,8 @@ static void stl_flushchars(struct tty_struct *tty)
 
 	pr_debug("stl_flushchars(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -993,6 +1089,8 @@ static int stl_writeroom(struct tty_struct *tty)
 
 	pr_debug("stl_writeroom(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return 0;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return 0;
@@ -1023,6 +1121,8 @@ static int stl_charsinbuffer(struct tty_struct *tty)
 
 	pr_debug("stl_charsinbuffer(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return 0;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return 0;
@@ -1053,7 +1153,7 @@ static int stl_getserial(struct stlport *portp, struct serial_struct __user *sp)
 	memset(&sio, 0, sizeof(struct serial_struct));
 	sio.line = portp->portnr;
 	sio.port = portp->ioaddr;
-	sio.flags = portp->port.flags;
+	sio.flags = portp->flags;
 	sio.baud_base = portp->baud_base;
 	sio.close_delay = portp->close_delay;
 	sio.closing_wait = portp->closing_wait;
@@ -1082,9 +1182,8 @@ static int stl_getserial(struct stlport *portp, struct serial_struct __user *sp)
  *	just quietly ignore any requests to change irq, etc.
  */
 
-static int stl_setserial(struct tty_struct *tty, struct serial_struct __user *sp)
+static int stl_setserial(struct stlport *portp, struct serial_struct __user *sp)
 {
-	struct stlport *	portp = tty->driver_data;
 	struct serial_struct	sio;
 
 	pr_debug("stl_setserial(portp=%p,sp=%p)\n", portp, sp);
@@ -1095,17 +1194,17 @@ static int stl_setserial(struct tty_struct *tty, struct serial_struct __user *sp
 		if ((sio.baud_base != portp->baud_base) ||
 		    (sio.close_delay != portp->close_delay) ||
 		    ((sio.flags & ~ASYNC_USR_MASK) !=
-		    (portp->port.flags & ~ASYNC_USR_MASK)))
+		    (portp->flags & ~ASYNC_USR_MASK)))
 			return -EPERM;
 	} 
 
-	portp->port.flags = (portp->port.flags & ~ASYNC_USR_MASK) |
+	portp->flags = (portp->flags & ~ASYNC_USR_MASK) |
 		(sio.flags & ASYNC_USR_MASK);
 	portp->baud_base = sio.baud_base;
 	portp->close_delay = sio.close_delay;
 	portp->closing_wait = sio.closing_wait;
 	portp->custom_divisor = sio.custom_divisor;
-	stl_setport(portp, tty->termios);
+	stl_setport(portp, portp->tty->termios);
 	return 0;
 }
 
@@ -1115,6 +1214,8 @@ static int stl_tiocmget(struct tty_struct *tty, struct file *file)
 {
 	struct stlport	*portp;
 
+	if (tty == NULL)
+		return -ENODEV;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return -ENODEV;
@@ -1130,6 +1231,8 @@ static int stl_tiocmset(struct tty_struct *tty, struct file *file,
 	struct stlport	*portp;
 	int rts = -1, dtr = -1;
 
+	if (tty == NULL)
+		return -ENODEV;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return -ENODEV;
@@ -1152,12 +1255,15 @@ static int stl_tiocmset(struct tty_struct *tty, struct file *file,
 static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct stlport	*portp;
+	unsigned int	ival;
 	int		rc;
 	void __user *argp = (void __user *)arg;
 
 	pr_debug("stl_ioctl(tty=%p,file=%p,cmd=%x,arg=%lx)\n", tty, file, cmd,
 			arg);
 
+	if (tty == NULL)
+		return -ENODEV;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return -ENODEV;
@@ -1176,10 +1282,10 @@ static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd
 		rc = stl_getserial(portp, argp);
 		break;
 	case TIOCSSERIAL:
-		rc = stl_setserial(tty, argp);
+		rc = stl_setserial(portp, argp);
 		break;
 	case COM_GETPORTSTATS:
-		rc = stl_getportstats(tty, portp, argp);
+		rc = stl_getportstats(portp, argp);
 		break;
 	case COM_CLRPORTSTATS:
 		rc = stl_clrportstats(portp, argp);
@@ -1211,6 +1317,8 @@ static void stl_start(struct tty_struct *tty)
 
 	pr_debug("stl_start(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -1226,6 +1334,8 @@ static void stl_settermios(struct tty_struct *tty, struct ktermios *old)
 
 	pr_debug("stl_settermios(tty=%p,old=%p)\n", tty, old);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -1243,7 +1353,7 @@ static void stl_settermios(struct tty_struct *tty, struct ktermios *old)
 		stl_start(tty);
 	}
 	if (((old->c_cflag & CLOCAL) == 0) && (tiosp->c_cflag & CLOCAL))
-		wake_up_interruptible(&portp->port.open_wait);
+		wake_up_interruptible(&portp->open_wait);
 }
 
 /*****************************************************************************/
@@ -1259,6 +1369,8 @@ static void stl_throttle(struct tty_struct *tty)
 
 	pr_debug("stl_throttle(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -1277,6 +1389,8 @@ static void stl_unthrottle(struct tty_struct *tty)
 
 	pr_debug("stl_unthrottle(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -1296,6 +1410,8 @@ static void stl_stop(struct tty_struct *tty)
 
 	pr_debug("stl_stop(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -1313,20 +1429,16 @@ static void stl_stop(struct tty_struct *tty)
 static void stl_hangup(struct tty_struct *tty)
 {
 	struct stlport	*portp;
-	struct tty_port *port;
-	unsigned long flags;
 
 	pr_debug("stl_hangup(tty=%p)\n", tty);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
-	port = &portp->port;
 
-	spin_lock_irqsave(&port->lock, flags);
-	port->flags &= ~ASYNC_INITIALIZED;
-	spin_unlock_irqrestore(&port->lock, flags);
-
+	portp->flags &= ~ASYNC_INITIALIZED;
 	stl_disableintrs(portp);
 	if (tty->termios->c_cflag & HUPCL)
 		stl_setsignals(portp, 0, 0);
@@ -1340,23 +1452,27 @@ static void stl_hangup(struct tty_struct *tty)
 		portp->tx.head = NULL;
 		portp->tx.tail = NULL;
 	}
-	tty_port_hangup(port);
+	portp->tty = NULL;
+	portp->flags &= ~ASYNC_NORMAL_ACTIVE;
+	portp->refcount = 0;
+	wake_up_interruptible(&portp->open_wait);
 }
 
 /*****************************************************************************/
 
-static int stl_breakctl(struct tty_struct *tty, int state)
+static void stl_breakctl(struct tty_struct *tty, int state)
 {
 	struct stlport	*portp;
 
 	pr_debug("stl_breakctl(tty=%p,state=%d)\n", tty, state);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
-		return -EINVAL;
+		return;
 
 	stl_sendbreak(portp, ((state == -1) ? 1 : 2));
-	return 0;
 }
 
 /*****************************************************************************/
@@ -1367,6 +1483,8 @@ static void stl_sendxchar(struct tty_struct *tty, char ch)
 
 	pr_debug("stl_sendxchar(tty=%p,ch=%x)\n", tty, ch);
 
+	if (tty == NULL)
+		return;
 	portp = tty->driver_data;
 	if (portp == NULL)
 		return;
@@ -1686,8 +1804,7 @@ static int __devinit stl_initports(struct stlbrd *brdp, struct stlpanel *panelp)
 				"(size=%Zd)\n", sizeof(struct stlport));
 			break;
 		}
-		tty_port_init(&portp->port);
-		portp->port.ops = &stl_port_ops;
+
 		portp->magic = STL_PORTMAGIC;
 		portp->portnr = i;
 		portp->brdnr = panelp->brdnr;
@@ -1697,8 +1814,8 @@ static int __devinit stl_initports(struct stlbrd *brdp, struct stlpanel *panelp)
 		portp->baud_base = STL_BAUDBASE;
 		portp->close_delay = STL_CLOSEDELAY;
 		portp->closing_wait = 30 * HZ;
-		init_waitqueue_head(&portp->port.open_wait);
-		init_waitqueue_head(&portp->port.close_wait);
+		init_waitqueue_head(&portp->open_wait);
+		init_waitqueue_head(&portp->close_wait);
 		portp->stats.brd = portp->brdnr;
 		portp->stats.panel = portp->panelnr;
 		portp->stats.port = portp->portnr;
@@ -1714,7 +1831,6 @@ static void stl_cleanup_panels(struct stlbrd *brdp)
 	struct stlpanel *panelp;
 	struct stlport *portp;
 	unsigned int j, k;
-	struct tty_struct *tty;
 
 	for (j = 0; j < STL_MAXPANELS; j++) {
 		panelp = brdp->panels[j];
@@ -1724,11 +1840,8 @@ static void stl_cleanup_panels(struct stlbrd *brdp)
 			portp = panelp->ports[k];
 			if (portp == NULL)
 				continue;
-			tty = tty_port_tty_get(&portp->port);
-			if (tty != NULL) {
-				stl_hangup(tty);
-				tty_kref_put(tty);
-			}
+			if (portp->tty != NULL)
+				stl_hangup(portp->tty);
 			kfree(portp->tx.buf);
 			kfree(portp);
 		}
@@ -2384,7 +2497,7 @@ static struct stlport *stl_getport(int brdnr, int panelnr, int portnr)
  *	what port to get stats for (used through board control device).
  */
 
-static int stl_getportstats(struct tty_struct *tty, struct stlport *portp, comstats_t __user *cp)
+static int stl_getportstats(struct stlport *portp, comstats_t __user *cp)
 {
 	comstats_t	stl_comstats;
 	unsigned char	*head, *tail;
@@ -2400,7 +2513,7 @@ static int stl_getportstats(struct tty_struct *tty, struct stlport *portp, comst
 	}
 
 	portp->stats.state = portp->istate;
-	portp->stats.flags = portp->port.flags;
+	portp->stats.flags = portp->flags;
 	portp->stats.hwid = portp->hwid;
 
 	portp->stats.ttystate = 0;
@@ -2411,17 +2524,18 @@ static int stl_getportstats(struct tty_struct *tty, struct stlport *portp, comst
 	portp->stats.rxbuffered = 0;
 
 	spin_lock_irqsave(&stallion_lock, flags);
-	if (tty != NULL && portp->port.tty == tty) {
-		portp->stats.ttystate = tty->flags;
-		/* No longer available as a statistic */
-		portp->stats.rxbuffered = 1; /*tty->flip.count; */
-		if (tty->termios != NULL) {
-			portp->stats.cflags = tty->termios->c_cflag;
-			portp->stats.iflags = tty->termios->c_iflag;
-			portp->stats.oflags = tty->termios->c_oflag;
-			portp->stats.lflags = tty->termios->c_lflag;
+	if (portp->tty != NULL)
+		if (portp->tty->driver_data == portp) {
+			portp->stats.ttystate = portp->tty->flags;
+			/* No longer available as a statistic */
+			portp->stats.rxbuffered = 1; /*portp->tty->flip.count; */
+			if (portp->tty->termios != NULL) {
+				portp->stats.cflags = portp->tty->termios->c_cflag;
+				portp->stats.iflags = portp->tty->termios->c_iflag;
+				portp->stats.oflags = portp->tty->termios->c_oflag;
+				portp->stats.lflags = portp->tty->termios->c_lflag;
+			}
 		}
-	}
 	spin_unlock_irqrestore(&stallion_lock, flags);
 
 	head = portp->tx.head;
@@ -2525,7 +2639,7 @@ static int stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, uns
 
 	switch (cmd) {
 	case COM_GETPORTSTATS:
-		rc = stl_getportstats(NULL, NULL, argp);
+		rc = stl_getportstats(NULL, argp);
 		break;
 	case COM_CLRPORTSTATS:
 		rc = stl_clrportstats(NULL, argp);
@@ -2569,11 +2683,6 @@ static const struct tty_operations stl_ops = {
 	.read_proc = stl_readproc,
 	.tiocmget = stl_tiocmget,
 	.tiocmset = stl_tiocmset,
-};
-
-static const struct tty_port_operations stl_port_ops = {
-	.carrier_raised = stl_carrier_raised,
-	.raise_dtr_rts = stl_raise_dtr_rts,
 };
 
 /*****************************************************************************/
@@ -2830,15 +2939,15 @@ static void stl_cd1400setport(struct stlport *portp, struct ktermios *tiosp)
 	}
 	baudrate = stl_baudrates[baudrate];
 	if ((tiosp->c_cflag & CBAUD) == B38400) {
-		if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
+		if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
 			baudrate = 57600;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
 			baudrate = 115200;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
 			baudrate = 230400;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
 			baudrate = 460800;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
 			baudrate = (portp->baud_base / portp->custom_divisor);
 	}
 	if (baudrate > STL_CD1400MAXBAUD)
@@ -2860,9 +2969,9 @@ static void stl_cd1400setport(struct stlport *portp, struct ktermios *tiosp)
 		mcor1 |= MCOR1_DCD;
 		mcor2 |= MCOR2_DCD;
 		sreron |= SRER_MODEM;
-		portp->port.flags |= ASYNC_CHECK_CD;
+		portp->flags |= ASYNC_CHECK_CD;
 	} else
-		portp->port.flags &= ~ASYNC_CHECK_CD;
+		portp->flags &= ~ASYNC_CHECK_CD;
 
 /*
  *	Setup cd1400 enhanced modes if we can. In particular we want to
@@ -3133,7 +3242,7 @@ static void stl_cd1400flowctrl(struct stlport *portp, int state)
 
 	if (portp == NULL)
 		return;
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 	if (tty == NULL)
 		return;
 
@@ -3178,7 +3287,6 @@ static void stl_cd1400flowctrl(struct stlport *portp, int state)
 
 	BRDDISABLE(portp->brdnr);
 	spin_unlock_irqrestore(&brd_lock, flags);
-	tty_kref_put(tty);
 }
 
 /*****************************************************************************/
@@ -3196,7 +3304,7 @@ static void stl_cd1400sendflow(struct stlport *portp, int state)
 
 	if (portp == NULL)
 		return;
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 	if (tty == NULL)
 		return;
 
@@ -3216,7 +3324,6 @@ static void stl_cd1400sendflow(struct stlport *portp, int state)
 	}
 	BRDDISABLE(portp->brdnr);
 	spin_unlock_irqrestore(&brd_lock, flags);
-	tty_kref_put(tty);
 }
 
 /*****************************************************************************/
@@ -3370,7 +3477,6 @@ static void stl_cd1400txisr(struct stlpanel *panelp, int ioaddr)
 	int		len, stlen;
 	char		*head, *tail;
 	unsigned char	ioack, srer;
-	struct tty_struct *tty;
 
 	pr_debug("stl_cd1400txisr(panelp=%p,ioaddr=%x)\n", panelp, ioaddr);
 
@@ -3397,11 +3503,8 @@ static void stl_cd1400txisr(struct stlpanel *panelp, int ioaddr)
 	if ((len == 0) || ((len < STL_TXBUFLOW) &&
 	    (test_bit(ASYI_TXLOW, &portp->istate) == 0))) {
 		set_bit(ASYI_TXLOW, &portp->istate);
-		tty = tty_port_tty_get(&portp->port);
-		if (tty) {
-			tty_wakeup(tty);
-			tty_kref_put(tty);
-		}
+		if (portp->tty)
+			tty_wakeup(portp->tty);
 	}
 
 	if (len == 0) {
@@ -3465,7 +3568,7 @@ static void stl_cd1400rxisr(struct stlpanel *panelp, int ioaddr)
 		return;
 	}
 	portp = panelp->ports[(ioack >> 3)];
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 
 	if ((ioack & ACK_TYPMASK) == ACK_TYPRXGOOD) {
 		outb((RDCR + portp->uartaddr), ioaddr);
@@ -3510,7 +3613,7 @@ static void stl_cd1400rxisr(struct stlpanel *panelp, int ioaddr)
 			if (portp->rxmarkmsk & status) {
 				if (status & ST_BREAK) {
 					status = TTY_BREAK;
-					if (portp->port.flags & ASYNC_SAK) {
+					if (portp->flags & ASYNC_SAK) {
 						do_SAK(tty);
 						BRDENABLE(portp->brdnr, portp->pagenr);
 					}
@@ -3529,12 +3632,10 @@ static void stl_cd1400rxisr(struct stlpanel *panelp, int ioaddr)
 		}
 	} else {
 		printk("STALLION: bad RX interrupt ack value=%x\n", ioack);
-		tty_kref_put(tty);
 		return;
 	}
 
 stl_rxalldone:
-	tty_kref_put(tty);
 	outb((EOSRR + portp->uartaddr), ioaddr);
 	outb(0, (ioaddr + EREG_DATA));
 }
@@ -3798,15 +3899,15 @@ static void stl_sc26198setport(struct stlport *portp, struct ktermios *tiosp)
 	}
 	baudrate = stl_baudrates[baudrate];
 	if ((tiosp->c_cflag & CBAUD) == B38400) {
-		if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
+		if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
 			baudrate = 57600;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
 			baudrate = 115200;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
 			baudrate = 230400;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
 			baudrate = 460800;
-		else if ((portp->port.flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
+		else if ((portp->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
 			baudrate = (portp->baud_base / portp->custom_divisor);
 	}
 	if (baudrate > STL_SC26198MAXBAUD)
@@ -3821,11 +3922,11 @@ static void stl_sc26198setport(struct stlport *portp, struct ktermios *tiosp)
  *	Check what form of modem signaling is required and set it up.
  */
 	if (tiosp->c_cflag & CLOCAL) {
-		portp->port.flags &= ~ASYNC_CHECK_CD;
+		portp->flags &= ~ASYNC_CHECK_CD;
 	} else {
 		iopr |= IOPR_DCDCOS;
 		imron |= IR_IOPORT;
-		portp->port.flags |= ASYNC_CHECK_CD;
+		portp->flags |= ASYNC_CHECK_CD;
 	}
 
 /*
@@ -4073,7 +4174,7 @@ static void stl_sc26198flowctrl(struct stlport *portp, int state)
 
 	if (portp == NULL)
 		return;
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 	if (tty == NULL)
 		return;
 
@@ -4124,7 +4225,6 @@ static void stl_sc26198flowctrl(struct stlport *portp, int state)
 
 	BRDDISABLE(portp->brdnr);
 	spin_unlock_irqrestore(&brd_lock, flags);
-	tty_kref_put(tty);
 }
 
 /*****************************************************************************/
@@ -4143,7 +4243,7 @@ static void stl_sc26198sendflow(struct stlport *portp, int state)
 
 	if (portp == NULL)
 		return;
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 	if (tty == NULL)
 		return;
 
@@ -4168,7 +4268,6 @@ static void stl_sc26198sendflow(struct stlport *portp, int state)
 	}
 	BRDDISABLE(portp->brdnr);
 	spin_unlock_irqrestore(&brd_lock, flags);
-	tty_kref_put(tty);
 }
 
 /*****************************************************************************/
@@ -4308,7 +4407,6 @@ static void stl_sc26198intr(struct stlpanel *panelp, unsigned int iobase)
 
 static void stl_sc26198txisr(struct stlport *portp)
 {
-	struct tty_struct *tty;
 	unsigned int	ioaddr;
 	unsigned char	mr0;
 	int		len, stlen;
@@ -4323,11 +4421,8 @@ static void stl_sc26198txisr(struct stlport *portp)
 	if ((len == 0) || ((len < STL_TXBUFLOW) &&
 	    (test_bit(ASYI_TXLOW, &portp->istate) == 0))) {
 		set_bit(ASYI_TXLOW, &portp->istate);
-		tty = tty_port_tty_get(&portp->port);
-		if (tty) {
-			tty_wakeup(tty);
-			tty_kref_put(tty);
-		}
+		if (portp->tty)
+			tty_wakeup(portp->tty);
 	}
 
 	if (len == 0) {
@@ -4380,7 +4475,7 @@ static void stl_sc26198rxisr(struct stlport *portp, unsigned int iack)
 
 	pr_debug("stl_sc26198rxisr(portp=%p,iack=%x)\n", portp, iack);
 
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 	ioaddr = portp->ioaddr;
 	outb(GIBCR, (ioaddr + XP_ADDR));
 	len = inb(ioaddr + XP_DATA) + 1;
@@ -4419,7 +4514,6 @@ static void stl_sc26198rxisr(struct stlport *portp, unsigned int iack)
 			stl_sc26198txunflow(portp, tty);
 		}
 	}
-	tty_kref_put(tty);
 }
 
 /*****************************************************************************/
@@ -4433,7 +4527,7 @@ static void stl_sc26198rxbadch(struct stlport *portp, unsigned char status, char
 	struct tty_struct	*tty;
 	unsigned int		ioaddr;
 
-	tty = tty_port_tty_get(&portp->port);
+	tty = portp->tty;
 	ioaddr = portp->ioaddr;
 
 	if (status & SR_RXPARITY)
@@ -4450,7 +4544,7 @@ static void stl_sc26198rxbadch(struct stlport *portp, unsigned char status, char
 		if (portp->rxmarkmsk & status) {
 			if (status & SR_RXBREAK) {
 				status = TTY_BREAK;
-				if (portp->port.flags & ASYNC_SAK) {
+				if (portp->flags & ASYNC_SAK) {
 					do_SAK(tty);
 					BRDENABLE(portp->brdnr, portp->pagenr);
 				}
@@ -4471,7 +4565,6 @@ static void stl_sc26198rxbadch(struct stlport *portp, unsigned char status, char
 		if (status == 0)
 			portp->stats.rxtotal++;
 	}
-	tty_kref_put(tty);
 }
 
 /*****************************************************************************/
@@ -4661,7 +4754,7 @@ static int __init stallion_module_init(void)
 		printk("STALLION: failed to create class\n");
 	for (i = 0; i < 4; i++)
 		device_create(stallion_class, NULL, MKDEV(STL_SIOMEMMAJOR, i),
-			      NULL, "staliomem%d", i);
+			      "staliomem%d", i);
 
 	return 0;
 err_unrtty:

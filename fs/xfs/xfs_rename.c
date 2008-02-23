@@ -42,6 +42,31 @@
 
 
 /*
+ * Given an array of up to 4 inode pointers, unlock the pointed to inodes.
+ * If there are fewer than 4 entries in the array, the empty entries will
+ * be at the end and will have NULL pointers in them.
+ */
+STATIC void
+xfs_rename_unlock4(
+	xfs_inode_t	**i_tab,
+	uint		lock_mode)
+{
+	int	i;
+
+	xfs_iunlock(i_tab[0], lock_mode);
+	for (i = 1; i < 4; i++) {
+		if (i_tab[i] == NULL)
+			break;
+
+		/*
+		 * Watch out for duplicate entries in the table.
+		 */
+		if (i_tab[i] != i_tab[i-1])
+			xfs_iunlock(i_tab[i], lock_mode);
+	}
+}
+
+/*
  * Enter all inodes for a rename transaction into a sorted array.
  */
 STATIC void
@@ -180,6 +205,19 @@ xfs_rename(
 	xfs_lock_inodes(inodes, num_inodes, XFS_ILOCK_EXCL);
 
 	/*
+	 * If we are using project inheritance, we only allow renames
+	 * into our tree when the project IDs are the same; else the
+	 * tree quota mechanism would be circumvented.
+	 */
+	if (unlikely((target_dp->i_d.di_flags & XFS_DIFLAG_PROJINHERIT) &&
+		     (target_dp->i_d.di_projid != src_ip->i_d.di_projid))) {
+		error = XFS_ERROR(EXDEV);
+		xfs_rename_unlock4(inodes, XFS_ILOCK_SHARED);
+		xfs_trans_cancel(tp, cancel_flags);
+		goto std_return;
+	}
+
+	/*
 	 * Join all the inodes to the transaction. From this point on,
 	 * we can rely on either trans_commit or trans_cancel to unlock
 	 * them.  Note that we need to add a vnode reference to the
@@ -201,17 +239,6 @@ xfs_rename(
 	if (target_ip) {
 		IHOLD(target_ip);
 		xfs_trans_ijoin(tp, target_ip, XFS_ILOCK_EXCL);
-	}
-
-	/*
-	 * If we are using project inheritance, we only allow renames
-	 * into our tree when the project IDs are the same; else the
-	 * tree quota mechanism would be circumvented.
-	 */
-	if (unlikely((target_dp->i_d.di_flags & XFS_DIFLAG_PROJINHERIT) &&
-		     (target_dp->i_d.di_projid != src_ip->i_d.di_projid))) {
-		error = XFS_ERROR(EXDEV);
-		goto error_return;
 	}
 
 	/*
@@ -309,16 +336,20 @@ xfs_rename(
 		ASSERT(error != EEXIST);
 		if (error)
 			goto abort_return;
-	}
+		xfs_ichgtime(src_ip, XFS_ICHGTIME_MOD | XFS_ICHGTIME_CHG);
 
-	/*
-	 * We always want to hit the ctime on the source inode.
-	 *
-	 * This isn't strictly required by the standards since the source
-	 * inode isn't really being changed, but old unix file systems did
-	 * it and some incremental backup programs won't work without it.
-	 */
-	xfs_ichgtime(src_ip, XFS_ICHGTIME_CHG);
+	} else {
+		/*
+		 * We always want to hit the ctime on the source inode.
+		 * We do it in the if clause above for the 'new_parent &&
+		 * src_is_directory' case, and here we get all the other
+		 * cases.  This isn't strictly required by the standards
+		 * since the source inode isn't really being changed,
+		 * but old unix file systems did it and some incremental
+		 * backup programs won't work without it.
+		 */
+		xfs_ichgtime(src_ip, XFS_ICHGTIME_CHG);
+	}
 
 	/*
 	 * Adjust the link count on src_dp.  This is necessary when
@@ -340,11 +371,19 @@ xfs_rename(
 					&first_block, &free_list, spaceres);
 	if (error)
 		goto abort_return;
-
 	xfs_ichgtime(src_dp, XFS_ICHGTIME_MOD | XFS_ICHGTIME_CHG);
+
+	/*
+	 * Update the generation counts on all the directory inodes
+	 * that we're modifying.
+	 */
+	src_dp->i_gen++;
 	xfs_trans_log_inode(tp, src_dp, XFS_ILOG_CORE);
-	if (new_parent)
+
+	if (new_parent) {
+		target_dp->i_gen++;
 		xfs_trans_log_inode(tp, target_dp, XFS_ILOG_CORE);
+	}
 
 	/*
 	 * If this is a synchronous mount, make sure that the

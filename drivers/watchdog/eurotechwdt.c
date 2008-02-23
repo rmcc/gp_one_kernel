@@ -8,8 +8,8 @@
  *	Based on wdt.c.
  *	Original copyright messages:
  *
- *      (c) Copyright 1996-1997 Alan Cox <alan@lxorguk.ukuu.org.uk>,
- *						All Rights Reserved.
+ *      (c) Copyright 1996-1997 Alan Cox <alan@redhat.com>, All Rights Reserved.
+ *                              http://www.redhat.com
  *
  *      This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -56,15 +56,14 @@
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
-#include <linux/io.h>
-#include <linux/uaccess.h>
 
+#include <asm/io.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static unsigned long eurwdt_is_open;
 static int eurwdt_timeout;
 static char eur_expect_close;
-static spinlock_t eurwdt_lock;
 
 /*
  * You must set these - there is no sane way to probe for this board.
@@ -79,9 +78,7 @@ static char *ev = "int";
 
 static int nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, int, 0);
-MODULE_PARM_DESC(nowayout,
-		"Watchdog cannot be stopped once started (default="
-				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default=" __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 /*
  * Some symbolic names
@@ -140,8 +137,7 @@ static void eurwdt_activate_timer(void)
 {
 	eurwdt_disable_timer();
 	eurwdt_write_reg(WDT_CTRL_REG, 0x01);	/* activate the WDT */
-	eurwdt_write_reg(WDT_OUTPIN_CFG,
-		!strcmp("int", ev) ? WDT_EVENT_INT : WDT_EVENT_REBOOT);
+	eurwdt_write_reg(WDT_OUTPIN_CFG, !strcmp("int", ev) ? WDT_EVENT_INT : WDT_EVENT_REBOOT);
 
 	/* Setting interrupt line */
 	if (irq == 2 || irq > 15 || irq < 0) {
@@ -210,21 +206,21 @@ size_t count, loff_t *ppos)
 
 			for (i = 0; i != count; i++) {
 				char c;
-				if (get_user(c, buf + i))
+				if(get_user(c, buf+i))
 					return -EFAULT;
 				if (c == 'V')
 					eur_expect_close = 42;
 			}
 		}
-		spin_lock(&eurwdt_lock);
 		eurwdt_ping();	/* the default timeout */
-		spin_unlock(&eurwdt_lock);
 	}
+
 	return count;
 }
 
 /**
  * eurwdt_ioctl:
+ * @inode: inode of the device
  * @file: file handle to the device
  * @cmd: watchdog command
  * @arg: argument pointer
@@ -233,14 +229,13 @@ size_t count, loff_t *ppos)
  * according to their available features.
  */
 
-static long eurwdt_ioctl(struct file *file,
-					unsigned int cmd, unsigned long arg)
+static int eurwdt_ioctl(struct inode *inode, struct file *file,
+	unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 	int __user *p = argp;
 	static struct watchdog_info ident = {
-		.options	  = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT
-							| WDIOF_MAGICCLOSE,
+		.options	  = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE,
 		.firmware_version = 1,
 		.identity	  = "WDT Eurotech CPU-1220/1410",
 	};
@@ -248,7 +243,10 @@ static long eurwdt_ioctl(struct file *file,
 	int time;
 	int options, retval = -EINVAL;
 
-	switch (cmd) {
+	switch(cmd) {
+	default:
+		return -ENOTTY;
+
 	case WDIOC_GETSUPPORT:
 		return copy_to_user(argp, &ident, sizeof(ident)) ? -EFAULT : 0;
 
@@ -256,26 +254,8 @@ static long eurwdt_ioctl(struct file *file,
 	case WDIOC_GETBOOTSTATUS:
 		return put_user(0, p);
 
-	case WDIOC_SETOPTIONS:
-		if (get_user(options, p))
-			return -EFAULT;
-		spin_lock(&eurwdt_lock);
-		if (options & WDIOS_DISABLECARD) {
-			eurwdt_disable_timer();
-			retval = 0;
-		}
-		if (options & WDIOS_ENABLECARD) {
-			eurwdt_activate_timer();
-			eurwdt_ping();
-			retval = 0;
-		}
-		spin_unlock(&eurwdt_lock);
-		return retval;
-
 	case WDIOC_KEEPALIVE:
-		spin_lock(&eurwdt_lock);
 		eurwdt_ping();
-		spin_unlock(&eurwdt_lock);
 		return 0;
 
 	case WDIOC_SETTIMEOUT:
@@ -286,17 +266,26 @@ static long eurwdt_ioctl(struct file *file,
 		if (time < 0 || time > 255)
 			return -EINVAL;
 
-		spin_lock(&eurwdt_lock);
 		eurwdt_timeout = time;
 		eurwdt_set_timeout(time);
-		spin_unlock(&eurwdt_lock);
 		/* Fall */
 
 	case WDIOC_GETTIMEOUT:
 		return put_user(eurwdt_timeout, p);
 
-	default:
-		return -ENOTTY;
+	case WDIOC_SETOPTIONS:
+		if (get_user(options, p))
+			return -EFAULT;
+		if (options & WDIOS_DISABLECARD) {
+			eurwdt_disable_timer();
+			retval = 0;
+		}
+		if (options & WDIOS_ENABLECARD) {
+			eurwdt_activate_timer();
+			eurwdt_ping();
+			retval = 0;
+		}
+		return retval;
 	}
 }
 
@@ -333,11 +322,10 @@ static int eurwdt_open(struct inode *inode, struct file *file)
 
 static int eurwdt_release(struct inode *inode, struct file *file)
 {
-	if (eur_expect_close == 42)
+	if (eur_expect_close == 42) {
 		eurwdt_disable_timer();
-	else {
-		printk(KERN_CRIT
-			"eurwdt: Unexpected close, not stopping watchdog!\n");
+	} else {
+		printk(KERN_CRIT "eurwdt: Unexpected close, not stopping watchdog!\n");
 		eurwdt_ping();
 	}
 	clear_bit(0, &eurwdt_is_open);
@@ -360,8 +348,10 @@ static int eurwdt_release(struct inode *inode, struct file *file)
 static int eurwdt_notify_sys(struct notifier_block *this, unsigned long code,
 	void *unused)
 {
-	if (code == SYS_DOWN || code == SYS_HALT)
-		eurwdt_disable_timer();	/* Turn the card off */
+	if (code == SYS_DOWN || code == SYS_HALT) {
+		/* Turn the card off */
+		eurwdt_disable_timer();
+	}
 
 	return NOTIFY_DONE;
 }
@@ -372,11 +362,11 @@ static int eurwdt_notify_sys(struct notifier_block *this, unsigned long code,
 
 
 static const struct file_operations eurwdt_fops = {
-	.owner		= THIS_MODULE,
-	.llseek		= no_llseek,
-	.write		= eurwdt_write,
-	.unlocked_ioctl	= eurwdt_ioctl,
-	.open		= eurwdt_open,
+	.owner	= THIS_MODULE,
+	.llseek	= no_llseek,
+	.write	= eurwdt_write,
+	.ioctl	= eurwdt_ioctl,
+	.open	= eurwdt_open,
 	.release	= eurwdt_release,
 };
 
@@ -429,7 +419,7 @@ static int __init eurwdt_init(void)
 	int ret;
 
 	ret = request_irq(irq, eurwdt_interrupt, IRQF_DISABLED, "eurwdt", NULL);
-	if (ret) {
+	if(ret) {
 		printk(KERN_ERR "eurwdt: IRQ %d is not free.\n", irq);
 		goto out;
 	}
@@ -442,12 +432,9 @@ static int __init eurwdt_init(void)
 
 	ret = register_reboot_notifier(&eurwdt_notifier);
 	if (ret) {
-		printk(KERN_ERR
-		    "eurwdt: can't register reboot notifier (err=%d)\n", ret);
+		printk(KERN_ERR "eurwdt: can't register reboot notifier (err=%d)\n", ret);
 		goto outreg;
 	}
-
-	spin_lock_init(&eurwdt_lock);
 
 	ret = misc_register(&eurwdt_miscdev);
 	if (ret) {

@@ -1,6 +1,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
-#include <linux/io.h>
+
+#include <asm/io.h>
 
 /*
  * Copy data from IO memory space to "real" memory space.

@@ -38,6 +38,29 @@
 #include "mpc86xx.h"
 
 static void __init
+sbc8641_init_irq(void)
+{
+	struct mpic *mpic1;
+	struct device_node *np;
+	struct resource res;
+
+	/* Determine PIC address. */
+	np = of_find_node_by_type(NULL, "open-pic");
+	if (np == NULL)
+		return;
+	of_address_to_resource(np, 0, &res);
+
+	/* Alloc mpic structure and per isu has 16 INT entries. */
+	mpic1 = mpic_alloc(np, res.start,
+			MPIC_PRIMARY | MPIC_WANTS_RESET | MPIC_BIG_ENDIAN,
+			0, 256, " MPIC     ");
+	of_node_put(np);
+	BUG_ON(mpic1 == NULL);
+
+	mpic_init(mpic1);
+}
+
+static void __init
 sbc8641_setup_arch(void)
 {
 #ifdef CONFIG_PCI
@@ -63,11 +86,21 @@ sbc8641_setup_arch(void)
 static void
 sbc8641_show_cpuinfo(struct seq_file *m)
 {
+	struct device_node *root;
+	uint memsize = total_memory;
+	const char *model = "";
 	uint svid = mfspr(SPRN_SVR);
 
 	seq_printf(m, "Vendor\t\t: Wind River Systems\n");
 
+	root = of_find_node_by_path("/");
+	if (root)
+		model = of_get_property(root, "model", NULL);
+	seq_printf(m, "Machine\t\t: %s\n", model);
+	of_node_put(root);
+
 	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
+	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
 }
 
 
@@ -118,7 +151,7 @@ define_machine(sbc8641) {
 	.name			= "SBC8641D",
 	.probe			= sbc8641_probe,
 	.setup_arch		= sbc8641_setup_arch,
-	.init_IRQ		= mpc86xx_init_irq,
+	.init_IRQ		= sbc8641_init_irq,
 	.show_cpuinfo		= sbc8641_show_cpuinfo,
 	.get_irq		= mpic_get_irq,
 	.restart		= fsl_rstcr_restart,

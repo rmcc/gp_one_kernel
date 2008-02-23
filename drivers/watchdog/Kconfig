@@ -55,13 +55,6 @@ config SOFT_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called softdog.
 
-config WM8350_WATCHDOG
-	tristate "WM8350 watchdog"
-	depends on MFD_WM8350
-	help
-	  Support for the watchdog in the WM8350 AudioPlus PMIC.  When
-	  the watchdog triggers the system will be reset.
-
 # ALPHA Architecture
 
 # ARM Architecture
@@ -72,13 +65,6 @@ config AT91RM9200_WATCHDOG
 	help
 	  Watchdog timer embedded into AT91RM9200 chips. This will reboot your
 	  system when the timeout is reached.
-
-config AT91SAM9X_WATCHDOG
-	tristate "AT91SAM9X / AT91CAP9 watchdog"
-	depends on ARCH_AT91 && !ARCH_AT91RM9200
-	help
-	  Watchdog timer embedded into AT91SAM9X and AT91CAP9 chips. This will
-	  reboot your system when the timeout is reached.
 
 config 21285_WATCHDOG
 	tristate "DC21285 watchdog"
@@ -231,15 +217,6 @@ config DAVINCI_WATCHDOG
 	  NOTE: once enabled, this timer cannot be disabled.
 	  Say N if you are unsure.
 
-config ORION5X_WATCHDOG
-	tristate "Orion5x watchdog"
-	depends on ARCH_ORION5X
-	help
-	  Say Y here if to include support for the watchdog timer
-	  in the Orion5x ARM SoCs.
-	  To compile this driver as a module, choose M here: the
-	  module will be called orion5x_wdt.
-
 # ARM26 Architecture
 
 # AVR32 Architecture
@@ -308,11 +285,10 @@ config ALIM1535_WDT
 
 config ALIM7101_WDT
 	tristate "ALi M7101 PMU Computer Watchdog"
-	depends on PCI
+	depends on X86 && PCI
 	help
 	  This is the driver for the hardware watchdog on the ALi M7101 PMU
-	  as used in the x86 Cobalt servers and also found in some
-	  SPARC Netra servers too.
+	  as used in the x86 Cobalt servers.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called alim7101_wdt.
@@ -439,18 +415,6 @@ config IT8712F_WDT
 	  To compile this driver as a module, choose M here: the
 	  module will be called it8712f_wdt.
 
-config IT87_WDT
-	tristate "IT87 Watchdog Timer"
-	depends on X86 && EXPERIMENTAL
-	---help---
-	  This is the driver for the hardware watchdog on the ITE IT8716,
-	  IT8718, IT8726, IT8712(Version J,K) Super I/O chips. This watchdog
-	  simply watches your kernel to make sure it doesn't freeze, and if
-	  it does, it reboots your computer after a certain amount of time.
-
-	  To compile this driver as a module, choose M here: the module will
-	  be called it87_wdt.
-
 config HP_WATCHDOG
 	tristate "HP Proliant iLO 2 Hardware Watchdog Timer"
 	depends on X86
@@ -499,17 +463,7 @@ config PC87413_WDT
 	  module will be called pc87413_wdt.
 
 	  Most people will say N.
-
-config RDC321X_WDT
-	tristate "RDC R-321x SoC watchdog"
-	depends on X86_RDC321X
-	help
-	  This is the driver for the built in hardware watchdog
-	  in the RDC R-321x SoC.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called rdc321x_wdt.
-
+ 
 config 60XX_WDT
 	tristate "SBC-60XX Watchdog Timer"
 	depends on X86
@@ -558,18 +512,6 @@ config CPU5_WDT
 	  To compile this driver as a module, choose M here: the
 	  module will be called cpu5wdt.
 
-config SMSC_SCH311X_WDT
-	tristate "SMSC SCH311X Watchdog Timer"
-	depends on X86
-	---help---
-	  This is the driver for the hardware watchdog timer on the
-	  SMSC SCH3112, SCH3114 and SCH3116 Super IO chipset
-	  (LPC IO with 8042 KBC, Reset Generation, HWM and multiple
-	  serial ports).
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called sch311x_wdt.
-
 config SMSC37B787_WDT
 	tristate "Winbond SMsC37B787 Watchdog Timer"
 	depends on X86
@@ -617,21 +559,6 @@ config W83697HF_WDT
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called w83697hf_wdt.
-
-	  Most people will say N.
-
-config W83697UG_WDT
-	tristate "W83697UG/W83697UF Watchdog Timer"
-	depends on X86
-	---help---
-	  This is the driver for the hardware watchdog on the W83697UG/UF
-	  chipset as used in MSI Fuzzy CX700 VIA motherboards (and likely others).
-	  This watchdog simply watches your kernel to make sure it doesn't
-	  freeze, and if it does, it reboots your computer after a certain
-	  amount of time.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called w83697ug_wdt.
 
 	  Most people will say N.
 
@@ -705,16 +632,6 @@ config SBC_EPX_C3_WATCHDOG
 
 # MIPS Architecture
 
-config RC32434_WDT
-	tristate "IDT RC32434 SoC Watchdog Timer"
-	depends on MIKROTIK_RB532
-	help
-	  Hardware driver for the IDT RC32434 SoC built-in
-	  watchdog timer.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called rc32434_wdt.
-
 config INDYDOG
 	tristate "Indy/I2 Hardware Watchdog"
 	depends on SGI_HAS_INDYDOG
@@ -770,39 +687,21 @@ config TXX9_WDT
 
 # POWERPC Architecture
 
-config GEF_WDT
-	tristate "GE Fanuc Watchdog Timer"
-	depends on GEF_SBC610
-	---help---
-	  Watchdog timer found in a number of GE Fanuc single board computers.
-
 config MPC5200_WDT
 	tristate "MPC5200 Watchdog Timer"
 	depends on PPC_MPC52xx
 
-config 8xxx_WDT
-	tristate "MPC8xxx Platform Watchdog Timer"
-	depends on PPC_8xx || PPC_83xx || PPC_86xx
-	help
-	  This driver is for a SoC level watchdog that exists on some
-	  Freescale PowerPC processors. So far this driver supports:
-	  - MPC8xx watchdogs
-	  - MPC83xx watchdogs
-	  - MPC86xx watchdogs
+config 8xx_WDT
+	tristate "MPC8xx Watchdog Timer"
+	depends on 8xx
 
-	  For BookE processors (MPC85xx) use the BOOKE_WDT driver instead.
+config 83xx_WDT
+	tristate "MPC83xx Watchdog Timer"
+	depends on PPC_83xx
 
 config MV64X60_WDT
 	tristate "MV64X60 (Marvell Discovery) Watchdog Timer"
 	depends on MV64X60
-
-config PIKA_WDT
-	tristate "PIKA FPGA Watchdog"
-	depends on WARP
-	default y
-	help
-	  This enables the watchdog in the PIKA FPGA. Currently used on
-	  the Warp platform.
 
 config BOOKE_WDT
 	bool "PowerPC Book-E Watchdog Timer"
@@ -888,6 +787,8 @@ config WATCHDOG_RIO
 	  Say Y here to support the hardware watchdog capability on Sun RIO
 	  machines.  The watchdog timeout period is normally one minute but
 	  can be changed with a boot-time parameter.
+
+# V850 Architecture
 
 # XTENSA Architecture
 

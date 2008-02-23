@@ -99,6 +99,9 @@ struct sixpack {
 	unsigned int		rx_count;
 	unsigned int		rx_count_cooked;
 
+	/* 6pack interface statistics. */
+	struct net_device_stats stats;
+
 	int			mtu;		/* Our mtu (to spot changes!) */
 	int			buffsize;       /* Max buffers sizes */
 
@@ -234,7 +237,7 @@ static void sp_encaps(struct sixpack *sp, unsigned char *icp, int len)
 	return;
 
 out_drop:
-	sp->dev->stats.tx_dropped++;
+	sp->stats.tx_dropped++;
 	netif_start_queue(sp->dev);
 	if (net_ratelimit())
 		printk(KERN_DEBUG "%s: %s - dropped.\n", sp->dev->name, msg);
@@ -249,7 +252,7 @@ static int sp_xmit(struct sk_buff *skb, struct net_device *dev)
 	spin_lock_bh(&sp->lock);
 	/* We were not busy, so we are now... :-) */
 	netif_stop_queue(dev);
-	dev->stats.tx_bytes += skb->len;
+	sp->stats.tx_bytes += skb->len;
 	sp_encaps(sp, skb->data, skb->len);
 	spin_unlock_bh(&sp->lock);
 
@@ -295,14 +298,18 @@ static int sp_header(struct sk_buff *skb, struct net_device *dev,
 	return 0;
 }
 
+static struct net_device_stats *sp_get_stats(struct net_device *dev)
+{
+	struct sixpack *sp = netdev_priv(dev);
+	return &sp->stats;
+}
+
 static int sp_set_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr_ax25 *sa = addr;
 
 	netif_tx_lock_bh(dev);
-	netif_addr_lock(dev);
 	memcpy(dev->dev_addr, &sa->sax25_call, AX25_ADDR_LEN);
-	netif_addr_unlock(dev);
 	netif_tx_unlock_bh(dev);
 
 	return 0;
@@ -331,6 +338,7 @@ static void sp_setup(struct net_device *dev)
 	dev->destructor		= free_netdev;
 	dev->stop		= sp_close;
 
+	dev->get_stats	        = sp_get_stats;
 	dev->set_mac_address    = sp_set_mac_address;
 	dev->hard_header_len	= AX25_MAX_HEADER_LEN;
 	dev->header_ops 	= &sp_header_ops;
@@ -362,7 +370,7 @@ static void sp_bump(struct sixpack *sp, char cmd)
 
 	count = sp->rcount + 1;
 
-	sp->dev->stats.rx_bytes += count;
+	sp->stats.rx_bytes += count;
 
 	if ((skb = dev_alloc_skb(count)) == NULL)
 		goto out_mem;
@@ -373,12 +381,13 @@ static void sp_bump(struct sixpack *sp, char cmd)
 	memcpy(ptr, sp->cooked_buf + 1, count);
 	skb->protocol = ax25_type_trans(skb, sp->dev);
 	netif_rx(skb);
-	sp->dev->stats.rx_packets++;
+	sp->dev->last_rx = jiffies;
+	sp->stats.rx_packets++;
 
 	return;
 
 out_mem:
-	sp->dev->stats.rx_dropped++;
+	sp->stats.rx_dropped++;
 }
 
 
@@ -427,7 +436,7 @@ static void sixpack_write_wakeup(struct tty_struct *tty)
 	if (sp->xleft <= 0)  {
 		/* Now serial buffer is almost free & we can start
 		 * transmission of another packet */
-		sp->dev->stats.tx_packets++;
+		sp->stats.tx_packets++;
 		clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
 		sp->tx_enable = 0;
 		netif_wake_queue(sp->dev);
@@ -475,7 +484,7 @@ static void sixpack_receive_buf(struct tty_struct *tty,
 		count--;
 		if (fp && *fp++) {
 			if (!test_and_set_bit(SIXPF_ERROR, &sp->flags))
-				sp->dev->stats.rx_errors++;
+				sp->stats.rx_errors++;
 			continue;
 		}
 	}
@@ -717,12 +726,11 @@ static int sixpack_ioctl(struct tty_struct *tty, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
 	struct sixpack *sp = sp_get(tty);
-	struct net_device *dev;
+	struct net_device *dev = sp->dev;
 	unsigned int tmp, err;
 
 	if (!sp)
 		return -ENXIO;
-	dev = sp->dev;
 
 	switch(cmd) {
 	case SIOCGIFNAME:
@@ -775,7 +783,7 @@ static int sixpack_ioctl(struct tty_struct *tty, struct file *file,
 	return err;
 }
 
-static struct tty_ldisc_ops sp_ldisc = {
+static struct tty_ldisc sp_ldisc = {
 	.owner		= THIS_MODULE,
 	.magic		= TTY_LDISC_MAGIC,
 	.name		= "6pack",

@@ -22,14 +22,6 @@
 #include "xfs_inum.h"
 #include "xfs_trans.h"
 #include "xfs_trans_priv.h"
-/* XXX: from here down needed until struct xfs_trans has it's own ailp */
-#include "xfs_bit.h"
-#include "xfs_buf_item.h"
-#include "xfs_sb.h"
-#include "xfs_ag.h"
-#include "xfs_dir2.h"
-#include "xfs_dmapi.h"
-#include "xfs_mount.h"
 
 STATIC int	xfs_trans_unlock_chunk(xfs_log_item_chunk_t *,
 					int, int, xfs_lsn_t);
@@ -61,11 +53,11 @@ xfs_trans_add_item(xfs_trans_t *tp, xfs_log_item_t *lip)
 		 * Initialize the chunk, and then
 		 * claim the first slot in the newly allocated chunk.
 		 */
-		xfs_lic_init(licp);
-		xfs_lic_claim(licp, 0);
+		XFS_LIC_INIT(licp);
+		XFS_LIC_CLAIM(licp, 0);
 		licp->lic_unused = 1;
-		xfs_lic_init_slot(licp, 0);
-		lidp = xfs_lic_slot(licp, 0);
+		XFS_LIC_INIT_SLOT(licp, 0);
+		lidp = XFS_LIC_SLOT(licp, 0);
 
 		/*
 		 * Link in the new chunk and update the free count.
@@ -87,7 +79,6 @@ xfs_trans_add_item(xfs_trans_t *tp, xfs_log_item_t *lip)
 		lidp->lid_size = 0;
 		lip->li_desc = lidp;
 		lip->li_mountp = tp->t_mountp;
-		lip->li_ailp = tp->t_mountp->m_ail;
 		return lidp;
 	}
 
@@ -97,14 +88,14 @@ xfs_trans_add_item(xfs_trans_t *tp, xfs_log_item_t *lip)
 	 */
 	licp = &tp->t_items;
 	while (licp != NULL) {
-		if (xfs_lic_vacancy(licp)) {
+		if (XFS_LIC_VACANCY(licp)) {
 			if (licp->lic_unused <= XFS_LIC_MAX_SLOT) {
 				i = licp->lic_unused;
-				ASSERT(xfs_lic_isfree(licp, i));
+				ASSERT(XFS_LIC_ISFREE(licp, i));
 				break;
 			}
 			for (i = 0; i <= XFS_LIC_MAX_SLOT; i++) {
-				if (xfs_lic_isfree(licp, i))
+				if (XFS_LIC_ISFREE(licp, i))
 					break;
 			}
 			ASSERT(i <= XFS_LIC_MAX_SLOT);
@@ -117,19 +108,18 @@ xfs_trans_add_item(xfs_trans_t *tp, xfs_log_item_t *lip)
 	 * If we find a free descriptor, claim it,
 	 * initialize it, and return it.
 	 */
-	xfs_lic_claim(licp, i);
+	XFS_LIC_CLAIM(licp, i);
 	if (licp->lic_unused <= i) {
 		licp->lic_unused = i + 1;
-		xfs_lic_init_slot(licp, i);
+		XFS_LIC_INIT_SLOT(licp, i);
 	}
-	lidp = xfs_lic_slot(licp, i);
+	lidp = XFS_LIC_SLOT(licp, i);
 	tp->t_items_free--;
 	lidp->lid_item = lip;
 	lidp->lid_flags = 0;
 	lidp->lid_size = 0;
 	lip->li_desc = lidp;
 	lip->li_mountp = tp->t_mountp;
-	lip->li_ailp = tp->t_mountp->m_ail;
 	return lidp;
 }
 
@@ -146,9 +136,9 @@ xfs_trans_free_item(xfs_trans_t	*tp, xfs_log_item_desc_t *lidp)
 	xfs_log_item_chunk_t	*licp;
 	xfs_log_item_chunk_t	**licpp;
 
-	slot = xfs_lic_desc_to_slot(lidp);
-	licp = xfs_lic_desc_to_chunk(lidp);
-	xfs_lic_relse(licp, slot);
+	slot = XFS_LIC_DESC_TO_SLOT(lidp);
+	licp = XFS_LIC_DESC_TO_CHUNK(lidp);
+	XFS_LIC_RELSE(licp, slot);
 	lidp->lid_item->li_desc = NULL;
 	tp->t_items_free++;
 
@@ -164,14 +154,14 @@ xfs_trans_free_item(xfs_trans_t	*tp, xfs_log_item_desc_t *lidp)
 	 * Also decrement the transaction structure's count of free items
 	 * by the number in a chunk since we are freeing an empty chunk.
 	 */
-	if (xfs_lic_are_all_free(licp) && (licp != &(tp->t_items))) {
+	if (XFS_LIC_ARE_ALL_FREE(licp) && (licp != &(tp->t_items))) {
 		licpp = &(tp->t_items.lic_next);
 		while (*licpp != licp) {
 			ASSERT(*licpp != NULL);
 			licpp = &((*licpp)->lic_next);
 		}
 		*licpp = licp->lic_next;
-		kmem_free(licp);
+		kmem_free(licp, sizeof(xfs_log_item_chunk_t));
 		tp->t_items_free -= XFS_LIC_NUM_SLOTS;
 	}
 }
@@ -217,20 +207,20 @@ xfs_trans_first_item(xfs_trans_t *tp)
 	/*
 	 * If it's not in the first chunk, skip to the second.
 	 */
-	if (xfs_lic_are_all_free(licp)) {
+	if (XFS_LIC_ARE_ALL_FREE(licp)) {
 		licp = licp->lic_next;
 	}
 
 	/*
 	 * Return the first non-free descriptor in the chunk.
 	 */
-	ASSERT(!xfs_lic_are_all_free(licp));
+	ASSERT(!XFS_LIC_ARE_ALL_FREE(licp));
 	for (i = 0; i < licp->lic_unused; i++) {
-		if (xfs_lic_isfree(licp, i)) {
+		if (XFS_LIC_ISFREE(licp, i)) {
 			continue;
 		}
 
-		return xfs_lic_slot(licp, i);
+		return XFS_LIC_SLOT(licp, i);
 	}
 	cmn_err(CE_WARN, "xfs_trans_first_item() -- no first item");
 	return NULL;
@@ -252,18 +242,18 @@ xfs_trans_next_item(xfs_trans_t *tp, xfs_log_item_desc_t *lidp)
 	xfs_log_item_chunk_t	*licp;
 	int			i;
 
-	licp = xfs_lic_desc_to_chunk(lidp);
+	licp = XFS_LIC_DESC_TO_CHUNK(lidp);
 
 	/*
 	 * First search the rest of the chunk. The for loop keeps us
 	 * from referencing things beyond the end of the chunk.
 	 */
-	for (i = (int)xfs_lic_desc_to_slot(lidp) + 1; i < licp->lic_unused; i++) {
-		if (xfs_lic_isfree(licp, i)) {
+	for (i = (int)XFS_LIC_DESC_TO_SLOT(lidp) + 1; i < licp->lic_unused; i++) {
+		if (XFS_LIC_ISFREE(licp, i)) {
 			continue;
 		}
 
-		return xfs_lic_slot(licp, i);
+		return XFS_LIC_SLOT(licp, i);
 	}
 
 	/*
@@ -276,13 +266,13 @@ xfs_trans_next_item(xfs_trans_t *tp, xfs_log_item_desc_t *lidp)
 	}
 
 	licp = licp->lic_next;
-	ASSERT(!xfs_lic_are_all_free(licp));
+	ASSERT(!XFS_LIC_ARE_ALL_FREE(licp));
 	for (i = 0; i < licp->lic_unused; i++) {
-		if (xfs_lic_isfree(licp, i)) {
+		if (XFS_LIC_ISFREE(licp, i)) {
 			continue;
 		}
 
-		return xfs_lic_slot(licp, i);
+		return XFS_LIC_SLOT(licp, i);
 	}
 	ASSERT(0);
 	/* NOTREACHED */
@@ -310,9 +300,9 @@ xfs_trans_free_items(
 	/*
 	 * Special case the embedded chunk so we don't free it below.
 	 */
-	if (!xfs_lic_are_all_free(licp)) {
+	if (!XFS_LIC_ARE_ALL_FREE(licp)) {
 		(void) xfs_trans_unlock_chunk(licp, 1, abort, NULLCOMMITLSN);
-		xfs_lic_all_free(licp);
+		XFS_LIC_ALL_FREE(licp);
 		licp->lic_unused = 0;
 	}
 	licp = licp->lic_next;
@@ -321,10 +311,10 @@ xfs_trans_free_items(
 	 * Unlock each item in each chunk and free the chunks.
 	 */
 	while (licp != NULL) {
-		ASSERT(!xfs_lic_are_all_free(licp));
+		ASSERT(!XFS_LIC_ARE_ALL_FREE(licp));
 		(void) xfs_trans_unlock_chunk(licp, 1, abort, NULLCOMMITLSN);
 		next_licp = licp->lic_next;
-		kmem_free(licp);
+		kmem_free(licp, sizeof(xfs_log_item_chunk_t));
 		licp = next_licp;
 	}
 
@@ -357,7 +347,7 @@ xfs_trans_unlock_items(xfs_trans_t *tp, xfs_lsn_t commit_lsn)
 	/*
 	 * Special case the embedded chunk so we don't free.
 	 */
-	if (!xfs_lic_are_all_free(licp)) {
+	if (!XFS_LIC_ARE_ALL_FREE(licp)) {
 		freed = xfs_trans_unlock_chunk(licp, 0, 0, commit_lsn);
 	}
 	licpp = &(tp->t_items.lic_next);
@@ -368,12 +358,12 @@ xfs_trans_unlock_items(xfs_trans_t *tp, xfs_lsn_t commit_lsn)
 	 * and free empty chunks.
 	 */
 	while (licp != NULL) {
-		ASSERT(!xfs_lic_are_all_free(licp));
+		ASSERT(!XFS_LIC_ARE_ALL_FREE(licp));
 		freed += xfs_trans_unlock_chunk(licp, 0, 0, commit_lsn);
 		next_licp = licp->lic_next;
-		if (xfs_lic_are_all_free(licp)) {
+		if (XFS_LIC_ARE_ALL_FREE(licp)) {
 			*licpp = next_licp;
-			kmem_free(licp);
+			kmem_free(licp, sizeof(xfs_log_item_chunk_t));
 			freed -= XFS_LIC_NUM_SLOTS;
 		} else {
 			licpp = &(licp->lic_next);
@@ -412,7 +402,7 @@ xfs_trans_unlock_chunk(
 	freed = 0;
 	lidp = licp->lic_descs;
 	for (i = 0; i < licp->lic_unused; i++, lidp++) {
-		if (xfs_lic_isfree(licp, i)) {
+		if (XFS_LIC_ISFREE(licp, i)) {
 			continue;
 		}
 		lip = lidp->lid_item;
@@ -431,7 +421,7 @@ xfs_trans_unlock_chunk(
 		 */
 		if (!(freeing_chunk) &&
 		    (!(lidp->lid_flags & XFS_LID_DIRTY) || abort)) {
-			xfs_lic_relse(licp, i);
+			XFS_LIC_RELSE(licp, i);
 			freed++;
 		}
 	}
@@ -540,7 +530,7 @@ xfs_trans_free_busy(xfs_trans_t *tp)
 	lbcp = tp->t_busy.lbc_next;
 	while (lbcp != NULL) {
 		lbcq = lbcp->lbc_next;
-		kmem_free(lbcp);
+		kmem_free(lbcp, sizeof(xfs_log_busy_chunk_t));
 		lbcp = lbcq;
 	}
 

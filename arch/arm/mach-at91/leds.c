@@ -12,15 +12,17 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/platform_device.h>
 
-#include <mach/board.h>
-#include <mach/gpio.h>
+#include <asm/mach-types.h>
+#include <asm/arch/board.h>
+#include <asm/arch/gpio.h>
 
 
 /* ------------------------------------------------------------------------- */
 
 #if defined(CONFIG_NEW_LEDS)
+
+#include <linux/platform_device.h>
 
 /*
  * New cross-platform LED support.
@@ -28,7 +30,7 @@
 
 static struct gpio_led_platform_data led_data;
 
-static struct platform_device at91_gpio_leds_device = {
+static struct platform_device at91_leds = {
 	.name			= "leds-gpio",
 	.id			= -1,
 	.dev.platform_data	= &led_data,
@@ -46,49 +48,11 @@ void __init at91_gpio_leds(struct gpio_led *leds, int nr)
 
 	led_data.leds = leds;
 	led_data.num_leds = nr;
-	platform_device_register(&at91_gpio_leds_device);
+	platform_device_register(&at91_leds);
 }
 
 #else
 void __init at91_gpio_leds(struct gpio_led *leds, int nr) {}
-#endif
-
-
-/* ------------------------------------------------------------------------- */
-
-#if defined (CONFIG_LEDS_ATMEL_PWM)
-
-/*
- * PWM Leds
- */
-
-static struct gpio_led_platform_data pwm_led_data;
-
-static struct platform_device at91_pwm_leds_device = {
-	.name			= "leds-atmel-pwm",
-	.id			= -1,
-	.dev.platform_data	= &pwm_led_data,
-};
-
-void __init at91_pwm_leds(struct gpio_led *leds, int nr)
-{
-	int i;
-	u32 pwm_mask = 0;
-
-	if (!nr)
-		return;
-
-	for (i = 0; i < nr; i++)
-		pwm_mask |= (1 << leds[i].gpio);
-
-	pwm_led_data.leds = leds;
-	pwm_led_data.num_leds = nr;
-
-	at91_add_device_pwm(pwm_mask);
-	platform_device_register(&at91_pwm_leds_device);
-}
-#else
-void __init at91_pwm_leds(struct gpio_led *leds, int nr){}
 #endif
 
 

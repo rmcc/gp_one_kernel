@@ -42,6 +42,8 @@
  ***************************************************************************/
 
 /*
+ * $Log: ixj.c,v $
+ *
  * Revision 4.8  2003/07/09 19:39:00  Daniele Bellucci
  * Audit some copy_*_user and minor cleanup.
  *
@@ -2328,6 +2330,7 @@ static int ixj_release(struct inode *inode, struct file *file_p)
 	j->rec_codec = j->play_codec = 0;
 	j->rec_frame_size = j->play_frame_size = 0;
 	j->flags.cidsent = j->flags.cidring = 0;
+	ixj_fasync(-1, file_p, 0);	/* remove from list of async notification */
 
 	if(j->cardtype == QTI_LINEJACK && !j->readers && !j->writers) {
 		ixj_set_port(j, PORT_PSTN);
@@ -6092,15 +6095,15 @@ static int capabilities_check(IXJ *j, struct phone_capability *pcreq)
 	return retval;
 }
 
-static long do_ixj_ioctl(struct file *file_p, unsigned int cmd, unsigned long arg)
+static int ixj_ioctl(struct inode *inode, struct file *file_p, unsigned int cmd, unsigned long arg)
 {
 	IXJ_TONE ti;
 	IXJ_FILTER jf;
 	IXJ_FILTER_RAW jfr;
 	void __user *argp = (void __user *)arg;
-	struct inode *inode = file_p->f_path.dentry->d_inode;
-	unsigned int minor = iminor(inode);
+
 	unsigned int raise, mant;
+	unsigned int minor = iminor(inode);
 	int board = NUM(inode);
 
 	IXJ *j = get_ixj(NUM(inode));
@@ -6658,15 +6661,6 @@ static long do_ixj_ioctl(struct file *file_p, unsigned int cmd, unsigned long ar
 	return retval;
 }
 
-static long ixj_ioctl(struct file *file_p, unsigned int cmd, unsigned long arg)
-{
-	long ret;
-	lock_kernel();
-	ret = do_ixj_ioctl(file_p, cmd, arg);
-	unlock_kernel();
-	return ret;
-}
-
 static int ixj_fasync(int fd, struct file *file_p, int mode)
 {
 	IXJ *j = get_ixj(NUM(file_p->f_path.dentry->d_inode));
@@ -6680,7 +6674,7 @@ static const struct file_operations ixj_fops =
         .read           = ixj_enhanced_read,
         .write          = ixj_enhanced_write,
         .poll           = ixj_poll,
-        .unlocked_ioctl = ixj_ioctl,
+        .ioctl          = ixj_ioctl,
         .release        = ixj_release,
         .fasync         = ixj_fasync
 };

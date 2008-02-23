@@ -8,9 +8,6 @@
  *  Author(s):	Jennifer Hunt <jenhunt@us.ibm.com>
  */
 
-#define KMSG_COMPONENT "af_iucv"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/list.h>
@@ -494,21 +491,7 @@ static int iucv_sock_connect(struct socket *sock, struct sockaddr *addr,
 	if (err) {
 		iucv_path_free(iucv->path);
 		iucv->path = NULL;
-		switch (err) {
-		case 0x0b:	/* Target communicator is not logged on */
-			err = -ENETUNREACH;
-			break;
-		case 0x0d:	/* Max connections for this guest exceeded */
-		case 0x0e:	/* Max connections for target guest exceeded */
-			err = -EAGAIN;
-			break;
-		case 0x0f:	/* Missing IUCV authorization */
-			err = -EACCES;
-			break;
-		default:
-			err = -ECONNREFUSED;
-			break;
-		}
+		err = -ECONNREFUSED;
 		goto done;
 	}
 
@@ -521,13 +504,6 @@ static int iucv_sock_connect(struct socket *sock, struct sockaddr *addr,
 		release_sock(sk);
 		return -ECONNREFUSED;
 	}
-
-	if (err) {
-		iucv_path_sever(iucv->path, NULL);
-		iucv_path_free(iucv->path);
-		iucv->path = NULL;
-	}
-
 done:
 	release_sock(sk);
 	return err;
@@ -640,8 +616,6 @@ static int iucv_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 	struct iucv_sock *iucv = iucv_sk(sk);
 	struct sk_buff *skb;
 	struct iucv_message txmsg;
-	char user_id[9];
-	char appl_id[9];
 	int err;
 
 	err = sock_error(sk);
@@ -670,22 +644,14 @@ static int iucv_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 		}
 
 		txmsg.class = 0;
-		memcpy(&txmsg.class, skb->data, skb->len >= 4 ? 4 : skb->len);
 		txmsg.tag = iucv->send_tag++;
 		memcpy(skb->cb, &txmsg.tag, 4);
 		skb_queue_tail(&iucv->send_skb_q, skb);
 		err = iucv_message_send(iucv->path, &txmsg, 0, 0,
 					(void *) skb->data, skb->len);
 		if (err) {
-			if (err == 3) {
-				user_id[8] = 0;
-				memcpy(user_id, iucv->dst_user_id, 8);
-				appl_id[8] = 0;
-				memcpy(appl_id, iucv->dst_name, 8);
-				pr_err("Application %s on z/VM guest %s"
-				       " exceeds message limit\n",
-				       user_id, appl_id);
-			}
+			if (err == 3)
+				printk(KERN_ERR "AF_IUCV msg limit exceeded\n");
 			skb_unlink(skb, &iucv->send_skb_q);
 			err = -EPIPE;
 			goto fail;
@@ -1042,14 +1008,12 @@ static int iucv_callback_connreq(struct iucv_path *path,
 	ASCEBC(user_data, sizeof(user_data));
 	if (sk->sk_state != IUCV_LISTEN) {
 		err = iucv_path_sever(path, user_data);
-		iucv_path_free(path);
 		goto fail;
 	}
 
 	/* Check for backlog size */
 	if (sk_acceptq_is_full(sk)) {
 		err = iucv_path_sever(path, user_data);
-		iucv_path_free(path);
 		goto fail;
 	}
 
@@ -1057,7 +1021,6 @@ static int iucv_callback_connreq(struct iucv_path *path,
 	nsk = iucv_sock_alloc(NULL, SOCK_STREAM, GFP_ATOMIC);
 	if (!nsk) {
 		err = iucv_path_sever(path, user_data);
-		iucv_path_free(path);
 		goto fail;
 	}
 
@@ -1081,8 +1044,6 @@ static int iucv_callback_connreq(struct iucv_path *path,
 	err = iucv_path_accept(path, &af_iucv_handler, nuser_data, nsk);
 	if (err) {
 		err = iucv_path_sever(path, user_data);
-		iucv_path_free(path);
-		iucv_sock_kill(nsk);
 		goto fail;
 	}
 
@@ -1174,7 +1135,8 @@ static void iucv_callback_txdone(struct iucv_path *path,
 		if (this)
 			kfree_skb(this);
 	}
-	BUG_ON(!this);
+	if (!this)
+		printk(KERN_ERR "AF_IUCV msg tag %u not found\n", msg->tag);
 
 	if (sk->sk_state == IUCV_CLOSING) {
 		if (skb_queue_empty(&iucv_sk(sk)->send_skb_q)) {
@@ -1228,14 +1190,13 @@ static int __init afiucv_init(void)
 	int err;
 
 	if (!MACHINE_IS_VM) {
-		pr_err("The af_iucv module cannot be loaded"
-		       " without z/VM\n");
+		printk(KERN_ERR "AF_IUCV connection needs VM as base\n");
 		err = -EPROTONOSUPPORT;
 		goto out;
 	}
 	cpcmd("QUERY USERID", iucv_userid, sizeof(iucv_userid), &err);
 	if (unlikely(err)) {
-		WARN_ON(err);
+		printk(KERN_ERR "AF_IUCV needs the VM userid\n");
 		err = -EPROTONOSUPPORT;
 		goto out;
 	}
@@ -1249,6 +1210,7 @@ static int __init afiucv_init(void)
 	err = sock_register(&iucv_sock_family_ops);
 	if (err)
 		goto out_proto;
+	printk(KERN_INFO "AF_IUCV lowlevel driver initialized\n");
 	return 0;
 
 out_proto:
@@ -1264,6 +1226,8 @@ static void __exit afiucv_exit(void)
 	sock_unregister(PF_IUCV);
 	proto_unregister(&iucv_proto);
 	iucv_unregister(&af_iucv_handler, 0);
+
+	printk(KERN_INFO "AF_IUCV lowlevel driver unloaded\n");
 }
 
 module_init(afiucv_init);

@@ -13,8 +13,7 @@
 #include <asm/vgtod.h>
 #include "vextern.h"
 
-notrace long
-__vdso_getcpu(unsigned *cpu, unsigned *node, struct getcpu_cache *unused)
+long __vdso_getcpu(unsigned *cpu, unsigned *node, struct getcpu_cache *unused)
 {
 	unsigned int p;
 

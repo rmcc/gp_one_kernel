@@ -1,4 +1,6 @@
 /*
+ * $Id: ixp2000.c,v 1.9 2005/11/07 11:14:27 gleixner Exp $
+ *
  * drivers/mtd/maps/ixp2000.c
  *
  * Mapping for the Intel XScale IXP2000 based systems
@@ -30,7 +32,7 @@
 #include <linux/mtd/partitions.h>
 
 #include <asm/io.h>
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/mach/flash.h>
 
 #include <linux/reboot.h>
@@ -170,7 +172,7 @@ static int ixp2000_flash_probe(struct platform_device *dev)
 		err = -ENOMEM;
 		goto Error;
 	}
-	memset(info, 0, sizeof(struct ixp2000_flash_info));
+	memzero(info, sizeof(struct ixp2000_flash_info));
 
 	platform_set_drvdata(dev, info);
 
@@ -188,7 +190,7 @@ static int ixp2000_flash_probe(struct platform_device *dev)
  	 */
 	info->map.map_priv_2 = (unsigned long) ixp_data->bank_setup;
 
-	info->map.name = dev_name(&dev->dev);
+	info->map.name = dev->dev.bus_id;
 	info->map.read = ixp2000_flash_read8;
 	info->map.write = ixp2000_flash_write8;
 	info->map.copy_from = ixp2000_flash_copy_from;
@@ -196,7 +198,7 @@ static int ixp2000_flash_probe(struct platform_device *dev)
 
 	info->res = request_mem_region(dev->resource->start,
 			dev->resource->end - dev->resource->start + 1,
-			dev_name(&dev->dev));
+			dev->dev.bus_id);
 	if (!info->res) {
 		dev_err(&dev->dev, "Could not reserve memory region\n");
 		err = -ENOMEM;

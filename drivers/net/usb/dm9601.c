@@ -23,7 +23,7 @@
 #include <linux/usb/usbnet.h>
 
 /* datasheet:
- http://ptm2.cc.utu.fi/ftp/network/cards/DM9601/From_NET/DM9601-DS-P01-930914.pdf
+ http://www.davicom.com.tw/big5/download/Data%20Sheet/DM9601-DS-P01-930914.pdf
 */
 
 /* control requests */
@@ -55,28 +55,12 @@
 
 static int dm_read(struct usbnet *dev, u8 reg, u16 length, void *data)
 {
-	void *buf;
-	int err = -ENOMEM;
-
 	devdbg(dev, "dm_read() reg=0x%02x length=%d", reg, length);
-
-	buf = kmalloc(length, GFP_KERNEL);
-	if (!buf)
-		goto out;
-
-	err = usb_control_msg(dev->udev,
-			      usb_rcvctrlpipe(dev->udev, 0),
-			      DM_READ_REGS,
-			      USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
-			      0, reg, buf, length, USB_CTRL_SET_TIMEOUT);
-	if (err == length)
-		memcpy(data, buf, length);
-	else if (err >= 0)
-		err = -EINVAL;
-	kfree(buf);
-
- out:
-	return err;
+	return usb_control_msg(dev->udev,
+			       usb_rcvctrlpipe(dev->udev, 0),
+			       DM_READ_REGS,
+			       USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
+			       0, reg, data, length, USB_CTRL_SET_TIMEOUT);
 }
 
 static int dm_read_reg(struct usbnet *dev, u8 reg, u8 *value)
@@ -86,28 +70,12 @@ static int dm_read_reg(struct usbnet *dev, u8 reg, u8 *value)
 
 static int dm_write(struct usbnet *dev, u8 reg, u16 length, void *data)
 {
-	void *buf = NULL;
-	int err = -ENOMEM;
-
 	devdbg(dev, "dm_write() reg=0x%02x, length=%d", reg, length);
-
-	if (data) {
-		buf = kmalloc(length, GFP_KERNEL);
-		if (!buf)
-			goto out;
-		memcpy(buf, data, length);
-	}
-
-	err = usb_control_msg(dev->udev,
-			      usb_sndctrlpipe(dev->udev, 0),
-			      DM_WRITE_REGS,
-			      USB_DIR_OUT | USB_TYPE_VENDOR |USB_RECIP_DEVICE,
-			      0, reg, buf, length, USB_CTRL_SET_TIMEOUT);
-	kfree(buf);
-	if (err >= 0 && err < length)
-		err = -EINVAL;
- out:
-	return err;
+	return usb_control_msg(dev->udev,
+			       usb_sndctrlpipe(dev->udev, 0),
+			       DM_WRITE_REGS,
+			       USB_DIR_OUT | USB_TYPE_VENDOR |USB_RECIP_DEVICE,
+			       0, reg, data, length, USB_CTRL_SET_TIMEOUT);
 }
 
 static int dm_write_reg(struct usbnet *dev, u8 reg, u8 value)
@@ -123,11 +91,10 @@ static int dm_write_reg(struct usbnet *dev, u8 reg, u8 value)
 static void dm_write_async_callback(struct urb *urb)
 {
 	struct usb_ctrlrequest *req = (struct usb_ctrlrequest *)urb->context;
-	int status = urb->status;
 
-	if (status < 0)
+	if (urb->status < 0)
 		printk(KERN_DEBUG "dm_write_async_callback() failed with %d\n",
-		       status);
+		       urb->status);
 
 	kfree(req);
 	usb_free_urb(urb);
@@ -397,32 +364,9 @@ static void dm9601_set_multicast(struct net_device *net)
 	dm_write_reg_async(dev, DM_RX_CTRL, rx_ctl);
 }
 
-static void __dm9601_set_mac_address(struct usbnet *dev)
-{
-	dm_write_async(dev, DM_PHY_ADDR, ETH_ALEN, dev->net->dev_addr);
-}
-
-static int dm9601_set_mac_address(struct net_device *net, void *p)
-{
-	struct sockaddr *addr = p;
-	struct usbnet *dev = netdev_priv(net);
-
-	if (!is_valid_ether_addr(addr->sa_data)) {
-		dev_err(&net->dev, "not setting invalid mac address %pM\n",
-								addr->sa_data);
-		return -EINVAL;
-	}
-
-	memcpy(net->dev_addr, addr->sa_data, net->addr_len);
-	__dm9601_set_mac_address(dev);
-
-	return 0;
-}
-
 static int dm9601_bind(struct usbnet *dev, struct usb_interface *intf)
 {
 	int ret;
-	u8 mac[ETH_ALEN];
 
 	ret = usbnet_get_endpoints(dev, intf);
 	if (ret)
@@ -430,7 +374,6 @@ static int dm9601_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	dev->net->do_ioctl = dm9601_ioctl;
 	dev->net->set_multicast_list = dm9601_set_multicast;
-	dev->net->set_mac_address = dm9601_set_mac_address;
 	dev->net->ethtool_ops = &dm9601_ethtool_ops;
 	dev->net->hard_header_len += DM_TX_OVERHEAD;
 	dev->hard_mtu = dev->net->mtu + dev->net->hard_header_len;
@@ -447,22 +390,10 @@ static int dm9601_bind(struct usbnet *dev, struct usb_interface *intf)
 	udelay(20);
 
 	/* read MAC */
-	if (dm_read(dev, DM_PHY_ADDR, ETH_ALEN, mac) < 0) {
+	if (dm_read(dev, DM_PHY_ADDR, ETH_ALEN, dev->net->dev_addr) < 0) {
 		printk(KERN_ERR "Error reading MAC address\n");
 		ret = -ENODEV;
 		goto out;
-	}
-
-	/*
-	 * Overwrite the auto-generated address only with good ones.
-	 */
-	if (is_valid_ether_addr(mac))
-		memcpy(dev->net->dev_addr, mac, ETH_ALEN);
-	else {
-		printk(KERN_WARNING
-			"dm9601: No valid MAC address in EEPROM, using %pM\n",
-			dev->net->dev_addr);
-		__dm9601_set_mac_address(dev);
 	}
 
 	/* power up phy */

@@ -38,66 +38,32 @@
 #include <linux/irq.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#if defined(CONFIG_USB_MUSB_HDRC) || defined(CONFIG_USB_MUSB_HDRC_MODULE)
 #include <linux/usb/musb.h>
+#endif
 #include <asm/bfin5xx_spi.h>
+#include <asm/cplb.h>
 #include <asm/dma.h>
 #include <asm/gpio.h>
 #include <asm/nand.h>
 #include <asm/dpmc.h>
 #include <asm/portmux.h>
-#include <asm/bfin_sdh.h>
-#include <mach/bf54x_keys.h>
+#include <asm/mach/bf54x_keys.h>
 #include <linux/input.h>
 #include <linux/spi/ad7877.h>
 
 /*
  * Name the Board for the /proc/cpuinfo
  */
-const char bfin_board_name[] = "ADI BF548-EZKIT";
+const char bfin_board_name[] = "ADSP-BF548-EZKIT";
 
 /*
  *  Driver needs to know address, irq and flag pin.
  */
 
-#if defined(CONFIG_USB_ISP1760_HCD) || defined(CONFIG_USB_ISP1760_HCD_MODULE)
-#include <linux/usb/isp1760.h>
-static struct resource bfin_isp1760_resources[] = {
-	[0] = {
-		.start  = 0x2C0C0000,
-		.end    = 0x2C0C0000 + 0xfffff,
-		.flags  = IORESOURCE_MEM,
-	},
-	[1] = {
-		.start  = IRQ_PG7,
-		.end    = IRQ_PG7,
-		.flags  = IORESOURCE_IRQ,
-	},
-};
-
-static struct isp1760_platform_data isp1760_priv = {
-	.is_isp1761 = 0,
-	.port1_disable = 0,
-	.bus_width_16 = 1,
-	.port1_otg = 0,
-	.analog_oc = 0,
-	.dack_polarity_high = 0,
-	.dreq_polarity_high = 0,
-};
-
-static struct platform_device bfin_isp1760_device = {
-	.name           = "isp1760-hcd",
-	.id             = 0,
-	.dev = {
-		.platform_data = &isp1760_priv,
-	},
-	.num_resources  = ARRAY_SIZE(bfin_isp1760_resources),
-	.resource       = bfin_isp1760_resources,
-};
-#endif
-
 #if defined(CONFIG_FB_BF54X_LQ043) || defined(CONFIG_FB_BF54X_LQ043_MODULE)
 
-#include <mach/bf54x-lq043.h>
+#include <asm/mach/bf54x-lq043.h>
 
 static struct bfin_bf54xfb_mach_info bf54x_lq043_data = {
 	.width =	480,
@@ -177,37 +143,6 @@ static struct platform_device bf54x_kpad_device = {
 };
 #endif
 
-#if defined(CONFIG_JOYSTICK_BFIN_ROTARY) || defined(CONFIG_JOYSTICK_BFIN_ROTARY_MODULE)
-#include <asm/bfin_rotary.h>
-
-static struct bfin_rotary_platform_data bfin_rotary_data = {
-	/*.rotary_up_key     = KEY_UP,*/
-	/*.rotary_down_key   = KEY_DOWN,*/
-	.rotary_rel_code   = REL_WHEEL,
-	.rotary_button_key = KEY_ENTER,
-	.debounce	   = 10,	/* 0..17 */
-	.mode		   = ROT_QUAD_ENC | ROT_DEBE,
-};
-
-static struct resource bfin_rotary_resources[] = {
-	{
-		.start = IRQ_CNT,
-		.end = IRQ_CNT,
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device bfin_rotary_device = {
-	.name		= "bfin-rotary",
-	.id		= -1,
-	.num_resources 	= ARRAY_SIZE(bfin_rotary_resources),
-	.resource 	= bfin_rotary_resources,
-	.dev		= {
-		.platform_data = &bfin_rotary_data,
-	},
-};
-#endif
-
 #if defined(CONFIG_RTC_DRV_BFIN) || defined(CONFIG_RTC_DRV_BFIN_MODULE)
 static struct platform_device rtc_device = {
 	.name = "rtc-bfin",
@@ -242,7 +177,6 @@ static struct resource bfin_uart_resources[] = {
 	{
 		.start = 0xFFC03100,
 		.end = 0xFFC031FF,
-		.flags = IORESOURCE_MEM,
 	},
 #endif
 };
@@ -256,106 +190,43 @@ static struct platform_device bfin_uart_device = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
+static struct resource bfin_sir_resources[] = {
 #ifdef CONFIG_BFIN_SIR0
-static struct resource bfin_sir0_resources[] = {
 	{
 		.start = 0xFFC00400,
 		.end = 0xFFC004FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART0_RX,
-		.end = IRQ_UART0_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART0_RX,
-		.end = CH_UART0_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-static struct platform_device bfin_sir0_device = {
-	.name = "bfin_sir",
-	.id = 0,
-	.num_resources = ARRAY_SIZE(bfin_sir0_resources),
-	.resource = bfin_sir0_resources,
-};
 #endif
 #ifdef CONFIG_BFIN_SIR1
-static struct resource bfin_sir1_resources[] = {
 	{
 		.start = 0xFFC02000,
 		.end = 0xFFC020FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART1_RX,
-		.end = IRQ_UART1_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART1_RX,
-		.end = CH_UART1_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-static struct platform_device bfin_sir1_device = {
-	.name = "bfin_sir",
-	.id = 1,
-	.num_resources = ARRAY_SIZE(bfin_sir1_resources),
-	.resource = bfin_sir1_resources,
-};
 #endif
 #ifdef CONFIG_BFIN_SIR2
-static struct resource bfin_sir2_resources[] = {
 	{
 		.start = 0xFFC02100,
 		.end = 0xFFC021FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART2_RX,
-		.end = IRQ_UART2_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART2_RX,
-		.end = CH_UART2_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-static struct platform_device bfin_sir2_device = {
-	.name = "bfin_sir",
-	.id = 2,
-	.num_resources = ARRAY_SIZE(bfin_sir2_resources),
-	.resource = bfin_sir2_resources,
-};
 #endif
 #ifdef CONFIG_BFIN_SIR3
-static struct resource bfin_sir3_resources[] = {
 	{
 		.start = 0xFFC03100,
 		.end = 0xFFC031FF,
 		.flags = IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART3_RX,
-		.end = IRQ_UART3_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART3_RX,
-		.end = CH_UART3_RX+1,
-		.flags = IORESOURCE_DMA,
-	},
-};
-static struct platform_device bfin_sir3_device = {
-	.name = "bfin_sir",
-	.id = 3,
-	.num_resources = ARRAY_SIZE(bfin_sir3_resources),
-	.resource = bfin_sir3_resources,
-};
 #endif
+};
+
+static struct platform_device bfin_sir_device = {
+	.name = "bfin_sir",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(bfin_sir_resources),
+	.resource = bfin_sir_resources,
+};
 #endif
 
 #if defined(CONFIG_SMSC911X) || defined(CONFIG_SMSC911X_MODULE)
@@ -399,16 +270,6 @@ static struct resource musb_resources[] = {
 	},
 };
 
-static struct musb_hdrc_config musb_config = {
-	.multipoint	= 0,
-	.dyn_fifo	= 0,
-	.soft_con	= 1,
-	.dma		= 1,
-	.num_eps	= 8,
-	.dma_channels	= 8,
-	.gpio_vrsel	= GPIO_PE7,
-};
-
 static struct musb_hdrc_platform_data musb_plat = {
 #if defined(CONFIG_USB_MUSB_OTG)
 	.mode		= MUSB_OTG,
@@ -417,7 +278,7 @@ static struct musb_hdrc_platform_data musb_plat = {
 #elif defined(CONFIG_USB_GADGET_MUSB_HDRC)
 	.mode		= MUSB_PERIPHERAL,
 #endif
-	.config		= &musb_config,
+	.multipoint	= 0,
 };
 
 static u64 musb_dmamask = ~(u32)0;
@@ -460,12 +321,12 @@ static struct platform_device bfin_atapi_device = {
 #if defined(CONFIG_MTD_NAND_BF5XX) || defined(CONFIG_MTD_NAND_BF5XX_MODULE)
 static struct mtd_partition partition_info[] = {
 	{
-		.name = "linux kernel(nand)",
+		.name = "Linux Kernel",
 		.offset = 0,
-		.size = 4 * 1024 * 1024,
+		.size = 4 * SIZE_1M,
 	},
 	{
-		.name = "file system(nand)",
+		.name = "File System",
 		.offset = MTDPART_OFS_APPEND,
 		.size = MTDPART_SIZ_FULL,
 	},
@@ -505,34 +366,24 @@ static struct platform_device bf5xx_nand_device = {
 #endif
 
 #if defined(CONFIG_SDH_BFIN) || defined(CONFIG_SDH_BFIN_MODULE)
-
-static struct bfin_sd_host bfin_sdh_data = {
-	.dma_chan = CH_SDH,
-	.irq_int0 = IRQ_SDH_MASK0,
-	.pin_req = {P_SD_D0, P_SD_D1, P_SD_D2, P_SD_D3, P_SD_CLK, P_SD_CMD, 0},
-};
-
 static struct platform_device bf54x_sdh_device = {
 	.name = "bfin-sdh",
 	.id = 0,
-	.dev = {
-		.platform_data = &bfin_sdh_data,
-	},
 };
 #endif
 
 #if defined(CONFIG_MTD_PHYSMAP) || defined(CONFIG_MTD_PHYSMAP_MODULE)
 static struct mtd_partition ezkit_partitions[] = {
 	{
-		.name       = "bootloader(nor)",
+		.name       = "Bootloader",
 		.size       = 0x40000,
 		.offset     = 0,
 	}, {
-		.name       = "linux kernel(nor)",
-		.size       = 0x400000,
+		.name       = "Kernel",
+		.size       = 0x1C0000,
 		.offset     = MTDPART_OFS_APPEND,
 	}, {
-		.name       = "file system(nor)",
+		.name       = "RootFS",
 		.size       = MTDPART_SIZ_FULL,
 		.offset     = MTDPART_OFS_APPEND,
 	}
@@ -546,7 +397,7 @@ static struct physmap_flash_data ezkit_flash_data = {
 
 static struct resource ezkit_flash_resource = {
 	.start = 0x20000000,
-	.end   = 0x21ffffff,
+	.end   = 0x20ffffff,
 	.flags = IORESOURCE_MEM,
 };
 
@@ -561,17 +412,19 @@ static struct platform_device ezkit_flash_device = {
 };
 #endif
 
+#if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
+/* all SPI peripherals info goes here */
 #if defined(CONFIG_MTD_M25P80) \
 	|| defined(CONFIG_MTD_M25P80_MODULE)
 /* SPI flash chip (m25p16) */
 static struct mtd_partition bfin_spi_flash_partitions[] = {
 	{
-		.name = "bootloader(spi)",
+		.name = "bootloader",
 		.size = 0x00040000,
 		.offset = 0,
 		.mask_flags = MTD_CAP_ROM
 	}, {
-		.name = "linux kernel(spi)",
+		.name = "linux kernel",
 		.size = MTDPART_SIZ_FULL,
 		.offset = MTDPART_OFS_APPEND,
 	}
@@ -628,7 +481,7 @@ static struct bfin5xx_spi_chip spidev_chip_info = {
 };
 #endif
 
-static struct spi_board_info bfin_spi_board_info[] __initdata = {
+static struct spi_board_info bf54x_spi_board_info[] __initdata = {
 #if defined(CONFIG_MTD_M25P80) \
 	|| defined(CONFIG_MTD_M25P80_MODULE)
 	{
@@ -656,7 +509,7 @@ static struct spi_board_info bfin_spi_board_info[] __initdata = {
 {
 	.modalias		= "ad7877",
 	.platform_data		= &bfin_ad7877_ts_info,
-	.irq			= IRQ_PB4,	/* old boards (<=Rev 1.3) use IRQ_PJ11 */
+	.irq			= IRQ_PJ11,
 	.max_speed_hz		= 12500000,     /* max spi clock (SCK) speed in HZ */
 	.bus_num		= 0,
 	.chip_select  		= 2,
@@ -674,7 +527,6 @@ static struct spi_board_info bfin_spi_board_info[] __initdata = {
 #endif
 };
 
-#if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
 /* SPI (0) */
 static struct resource bfin_spi0_resource[] = {
 	[0] = {
@@ -879,18 +731,7 @@ static struct platform_device *ezkit_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
-#ifdef CONFIG_BFIN_SIR0
-	&bfin_sir0_device,
-#endif
-#ifdef CONFIG_BFIN_SIR1
-	&bfin_sir1_device,
-#endif
-#ifdef CONFIG_BFIN_SIR2
-	&bfin_sir2_device,
-#endif
-#ifdef CONFIG_BFIN_SIR3
-	&bfin_sir3_device,
-#endif
+	&bfin_sir_device,
 #endif
 
 #if defined(CONFIG_FB_BF54X_LQ043) || defined(CONFIG_FB_BF54X_LQ043_MODULE)
@@ -903,10 +744,6 @@ static struct platform_device *ezkit_devices[] __initdata = {
 
 #if defined(CONFIG_USB_MUSB_HDRC) || defined(CONFIG_USB_MUSB_HDRC_MODULE)
 	&musb_device,
-#endif
-
-#if defined(CONFIG_USB_ISP1760_HCD) || defined(CONFIG_USB_ISP1760_HCD_MODULE)
-	&bfin_isp1760_device,
 #endif
 
 #if defined(CONFIG_PATA_BF54X) || defined(CONFIG_PATA_BF54X_MODULE)
@@ -928,10 +765,6 @@ static struct platform_device *ezkit_devices[] __initdata = {
 
 #if defined(CONFIG_KEYBOARD_BFIN) || defined(CONFIG_KEYBOARD_BFIN_MODULE)
 	&bf54x_kpad_device,
-#endif
-
-#if defined(CONFIG_JOYSTICK_BFIN_ROTARY) || defined(CONFIG_JOYSTICK_BFIN_ROTARY_MODULE)
-	&bfin_rotary_device,
 #endif
 
 #if defined(CONFIG_I2C_BLACKFIN_TWI) || defined(CONFIG_I2C_BLACKFIN_TWI_MODULE)
@@ -967,7 +800,10 @@ static int __init ezkit_init(void)
 
 	platform_add_devices(ezkit_devices, ARRAY_SIZE(ezkit_devices));
 
-	spi_register_board_info(bfin_spi_board_info, ARRAY_SIZE(bfin_spi_board_info));
+#if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
+	spi_register_board_info(bf54x_spi_board_info,
+			ARRAY_SIZE(bf54x_spi_board_info));
+#endif
 
 	return 0;
 }

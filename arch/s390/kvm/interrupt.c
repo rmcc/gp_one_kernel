@@ -13,7 +13,6 @@
 #include <asm/lowcore.h>
 #include <asm/uaccess.h>
 #include <linux/kvm_host.h>
-#include <linux/signal.h>
 #include "kvm-s390.h"
 #include "gaccess.h"
 
@@ -32,7 +31,7 @@ static int psw_interrupts_disabled(struct kvm_vcpu *vcpu)
 }
 
 static int __interrupt_is_deliverable(struct kvm_vcpu *vcpu,
-				      struct kvm_s390_interrupt_info *inti)
+				      struct interrupt_info *inti)
 {
 	switch (inti->type) {
 	case KVM_S390_INT_EMERGENCY:
@@ -92,7 +91,7 @@ static void __set_cpuflag(struct kvm_vcpu *vcpu, u32 flag)
 }
 
 static void __set_intercept_indicator(struct kvm_vcpu *vcpu,
-				      struct kvm_s390_interrupt_info *inti)
+				      struct interrupt_info *inti)
 {
 	switch (inti->type) {
 	case KVM_S390_INT_EMERGENCY:
@@ -112,7 +111,7 @@ static void __set_intercept_indicator(struct kvm_vcpu *vcpu,
 }
 
 static void __do_deliver_interrupt(struct kvm_vcpu *vcpu,
-				   struct kvm_s390_interrupt_info *inti)
+				   struct interrupt_info *inti)
 {
 	const unsigned short table[] = { 2, 4, 4, 6 };
 	int rc, exception = 0;
@@ -160,7 +159,7 @@ static void __do_deliver_interrupt(struct kvm_vcpu *vcpu,
 		break;
 
 	case KVM_S390_INT_VIRTIO:
-		VCPU_EVENT(vcpu, 4, "interrupt: virtio parm:%x,parm64:%llx",
+		VCPU_EVENT(vcpu, 4, "interrupt: virtio parm:%x,parm64:%lx",
 			   inti->ext.ext_params, inti->ext.ext_params2);
 		vcpu->stat.deliver_virtio_interrupt++;
 		rc = put_guest_u16(vcpu, __LC_EXT_INT_CODE, 0x2603);
@@ -247,10 +246,15 @@ static void __do_deliver_interrupt(struct kvm_vcpu *vcpu,
 	default:
 		BUG();
 	}
+
 	if (exception) {
-		printk("kvm: The guest lowcore is not mapped during interrupt "
-			"delivery, killing userspace\n");
-		do_exit(SIGKILL);
+		VCPU_EVENT(vcpu, 1, "%s", "program exception while delivering"
+			   " interrupt");
+		kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
+		if (inti->type == KVM_S390_PROGRAM_INT) {
+			printk(KERN_WARNING "kvm: recursive program check\n");
+			BUG();
+		}
 	}
 }
 
@@ -273,19 +277,22 @@ static int __try_deliver_ckc_interrupt(struct kvm_vcpu *vcpu)
 		__LC_EXT_NEW_PSW, sizeof(psw_t));
 	if (rc == -EFAULT)
 		exception = 1;
+
 	if (exception) {
-		printk("kvm: The guest lowcore is not mapped during interrupt "
-			"delivery, killing userspace\n");
-		do_exit(SIGKILL);
+		VCPU_EVENT(vcpu, 1, "%s", "program exception while delivering" \
+			   " ckc interrupt");
+		kvm_s390_inject_program_int(vcpu, PGM_ADDRESSING);
+		return 0;
 	}
+
 	return 1;
 }
 
 int kvm_cpu_has_interrupt(struct kvm_vcpu *vcpu)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_float_interrupt *fi = vcpu->arch.local_int.float_int;
-	struct kvm_s390_interrupt_info  *inti;
+	struct local_interrupt *li = &vcpu->arch.local_int;
+	struct float_interrupt *fi = vcpu->arch.local_int.float_int;
+	struct interrupt_info  *inti;
 	int rc = 0;
 
 	if (atomic_read(&li->active)) {
@@ -332,11 +339,6 @@ int kvm_s390_handle_wait(struct kvm_vcpu *vcpu)
 	if (kvm_cpu_has_interrupt(vcpu))
 		return 0;
 
-	__set_cpu_idle(vcpu);
-	spin_lock_bh(&vcpu->arch.local_int.lock);
-	vcpu->arch.local_int.timer_due = 0;
-	spin_unlock_bh(&vcpu->arch.local_int.lock);
-
 	if (psw_interrupts_disabled(vcpu)) {
 		VCPU_EVENT(vcpu, 3, "%s", "disabled wait");
 		__unset_cpu_idle(vcpu);
@@ -360,10 +362,12 @@ int kvm_s390_handle_wait(struct kvm_vcpu *vcpu)
 	vcpu->arch.ckc_timer.expires = jiffies + sltime;
 
 	add_timer(&vcpu->arch.ckc_timer);
-	VCPU_EVENT(vcpu, 5, "enabled wait timer:%llx jiffies", sltime);
+	VCPU_EVENT(vcpu, 5, "enabled wait timer:%lx jiffies", sltime);
 no_timer:
 	spin_lock_bh(&vcpu->arch.local_int.float_int->lock);
 	spin_lock_bh(&vcpu->arch.local_int.lock);
+	__set_cpu_idle(vcpu);
+	vcpu->arch.local_int.timer_due = 0;
 	add_wait_queue(&vcpu->arch.local_int.wq, &wait);
 	while (list_empty(&vcpu->arch.local_int.list) &&
 		list_empty(&vcpu->arch.local_int.float_int->list) &&
@@ -401,9 +405,9 @@ void kvm_s390_idle_wakeup(unsigned long data)
 
 void kvm_s390_deliver_pending_interrupts(struct kvm_vcpu *vcpu)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_float_interrupt *fi = vcpu->arch.local_int.float_int;
-	struct kvm_s390_interrupt_info  *n, *inti = NULL;
+	struct local_interrupt *li = &vcpu->arch.local_int;
+	struct float_interrupt *fi = vcpu->arch.local_int.float_int;
+	struct interrupt_info  *n, *inti = NULL;
 	int deliver;
 
 	__reset_intercept_indicators(vcpu);
@@ -458,8 +462,8 @@ void kvm_s390_deliver_pending_interrupts(struct kvm_vcpu *vcpu)
 
 int kvm_s390_inject_program_int(struct kvm_vcpu *vcpu, u16 code)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_interrupt_info *inti;
+	struct local_interrupt *li = &vcpu->arch.local_int;
+	struct interrupt_info *inti;
 
 	inti = kzalloc(sizeof(*inti), GFP_KERNEL);
 	if (!inti)
@@ -480,9 +484,9 @@ int kvm_s390_inject_program_int(struct kvm_vcpu *vcpu, u16 code)
 int kvm_s390_inject_vm(struct kvm *kvm,
 		       struct kvm_s390_interrupt *s390int)
 {
-	struct kvm_s390_local_interrupt *li;
-	struct kvm_s390_float_interrupt *fi;
-	struct kvm_s390_interrupt_info *inti;
+	struct local_interrupt *li;
+	struct float_interrupt *fi;
+	struct interrupt_info *inti;
 	int sigcpu;
 
 	inti = kzalloc(sizeof(*inti), GFP_KERNEL);
@@ -491,7 +495,7 @@ int kvm_s390_inject_vm(struct kvm *kvm,
 
 	switch (s390int->type) {
 	case KVM_S390_INT_VIRTIO:
-		VM_EVENT(kvm, 5, "inject: virtio parm:%x,parm64:%llx",
+		VM_EVENT(kvm, 5, "inject: virtio parm:%x,parm64:%lx",
 			 s390int->parm, s390int->parm64);
 		inti->type = s390int->type;
 		inti->ext.ext_params = s390int->parm;
@@ -537,8 +541,8 @@ int kvm_s390_inject_vm(struct kvm *kvm,
 int kvm_s390_inject_vcpu(struct kvm_vcpu *vcpu,
 			 struct kvm_s390_interrupt *s390int)
 {
-	struct kvm_s390_local_interrupt *li;
-	struct kvm_s390_interrupt_info *inti;
+	struct local_interrupt *li;
+	struct interrupt_info *inti;
 
 	inti = kzalloc(sizeof(*inti), GFP_KERNEL);
 	if (!inti)

@@ -10,11 +10,12 @@
  */
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
-#include <linux/io.h>
+#include <asm/io.h>
 #include <asm/mach/irq.h>
-#include <mach/regs-sys-common.h>
-#include <mach/irqs.h>
-#include <mach/board.h>
+#include <asm/mach-types.h>
+#include <asm/arch-ns9xxx/regs-sys-common.h>
+#include <asm/arch-ns9xxx/irqs.h>
+#include <asm/arch-ns9xxx/board.h>
 
 #include "generic.h"
 

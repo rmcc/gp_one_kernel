@@ -40,13 +40,13 @@
 #include <asm/io.h>
 
 #define DRV_NAME	"ehea"
-#define DRV_VERSION	"EHEA_0096"
+#define DRV_VERSION	"EHEA_0091"
 
 /* eHEA capability flags */
 #define DLPAR_PORT_ADD_REM 1
 #define DLPAR_MEM_ADD      2
 #define DLPAR_MEM_REM      4
-#define EHEA_CAPABILITIES  (DLPAR_PORT_ADD_REM | DLPAR_MEM_ADD | DLPAR_MEM_REM)
+#define EHEA_CAPABILITIES  (DLPAR_PORT_ADD_REM | DLPAR_MEM_ADD)
 
 #define EHEA_MSG_DEFAULT (NETIF_MSG_LINK | NETIF_MSG_TIMER \
 	| NETIF_MSG_RX_ERR | NETIF_MSG_TX_ERR)
@@ -452,7 +452,7 @@ struct ehea_bcmc_reg_entry {
 struct ehea_bcmc_reg_array {
 	struct ehea_bcmc_reg_entry *arr;
 	int num_entries;
-	spinlock_t lock;
+	struct mutex lock;
 };
 
 #define EHEA_PORT_UP 1
@@ -478,7 +478,6 @@ struct ehea_port {
 	int num_add_tx_qps;
 	int num_mcs;
 	int resets;
-	unsigned long flags;
 	u64 mac_addr;
 	u32 logical_port_id;
 	u32 port_speed;
@@ -502,14 +501,14 @@ struct port_res_cfg {
 };
 
 enum ehea_flag_bits {
-	__EHEA_STOP_XFER,
-	__EHEA_DISABLE_PORT_RESET
+	__EHEA_STOP_XFER
 };
 
 void ehea_set_ethtool_ops(struct net_device *netdev);
 int ehea_sense_port_attr(struct ehea_port *port);
 int ehea_set_portspeed(struct ehea_port *port, u32 port_speed);
 
+extern u64 ehea_driver_flags;
 extern struct work_struct ehea_rereg_mr_task;
 
 #endif	/* __EHEA_H__ */

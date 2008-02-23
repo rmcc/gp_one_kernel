@@ -20,40 +20,14 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/mach/map.h>
-#include <asm/mach-types.h>
 
-#include <mach/pxa-regs.h>
-#include <mach/reset.h>
+#include <asm/arch/pxa-regs.h>
 
 #include "generic.h"
-
-void clear_reset_status(unsigned int mask)
-{
-	if (cpu_is_pxa2xx())
-		pxa2xx_clear_reset_status(mask);
-
-	if (cpu_is_pxa3xx())
-		pxa3xx_clear_reset_status(mask);
-}
-
-unsigned long get_clock_tick_rate(void)
-{
-	unsigned long clock_tick_rate;
-
-	if (cpu_is_pxa25x())
-		clock_tick_rate = 3686400;
-	else if (machine_is_mainstone())
-		clock_tick_rate = 3249600;
-	else
-		clock_tick_rate = 3250000;
-
-	return clock_tick_rate;
-}
-EXPORT_SYMBOL(get_clock_tick_rate);
 
 /*
  * Get the clock frequency as reflected by CCCR and the turbo flag.
@@ -62,7 +36,7 @@ EXPORT_SYMBOL(get_clock_tick_rate);
  */
 unsigned int get_clk_frequency_khz(int info)
 {
-	if (cpu_is_pxa25x())
+	if (cpu_is_pxa21x() || cpu_is_pxa25x())
 		return pxa25x_get_clk_frequency_khz(info);
 	else if (cpu_is_pxa27x())
 		return pxa27x_get_clk_frequency_khz(info);
@@ -76,7 +50,7 @@ EXPORT_SYMBOL(get_clk_frequency_khz);
  */
 unsigned int get_memclk_frequency_10khz(void)
 {
-	if (cpu_is_pxa25x())
+	if (cpu_is_pxa21x() || cpu_is_pxa25x())
 		return pxa25x_get_memclk_frequency_10khz();
 	else if (cpu_is_pxa27x())
 		return pxa27x_get_memclk_frequency_10khz();
@@ -84,6 +58,23 @@ unsigned int get_memclk_frequency_10khz(void)
 		return pxa3xx_get_memclk_frequency_10khz();
 }
 EXPORT_SYMBOL(get_memclk_frequency_10khz);
+
+/*
+ * Routine to safely enable or disable a clock in the CKEN
+ */
+void __pxa_set_cken(int clock, int enable)
+{
+	unsigned long flags;
+	local_irq_save(flags);
+
+	if (enable)
+		CKEN |= (1 << clock);
+	else
+		CKEN &= ~(1 << clock);
+
+	local_irq_restore(flags);
+}
+EXPORT_SYMBOL(__pxa_set_cken);
 
 /*
  * Intel PXA2xx internal register mapping.
@@ -103,6 +94,11 @@ static struct map_desc standard_io_desc[] __initdata = {
 		.virtual	=  0xf6000000,
 		.pfn		= __phys_to_pfn(0x48000000),
 		.length		= 0x00200000,
+		.type		= MT_DEVICE
+	}, {	/* USB host */
+		.virtual	=  0xf8000000,
+		.pfn		= __phys_to_pfn(0x4c000000),
+		.length		= 0x00100000,
 		.type		= MT_DEVICE
 	}, {	/* Camera */
 		.virtual	=  0xfa000000,

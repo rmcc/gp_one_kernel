@@ -73,13 +73,9 @@ bool nf_nat_proto_unique_tuple(struct nf_conntrack_tuple *tuple,
 		range_size = ntohs(range->max.all) - min + 1;
 	}
 
+	off = *rover;
 	if (range->flags & IP_NAT_RANGE_PROTO_RANDOM)
-		off = secure_ipv4_port_ephemeral(tuple->src.u3.ip, tuple->dst.u3.ip,
-						 maniptype == IP_NAT_MANIP_SRC
-						 ? tuple->dst.u.all
-						 : tuple->src.u.all);
-	else
-		off = *rover;
+		off = net_random();
 
 	for (i = 0; i < range_size; i++, off++) {
 		*portptr = htons(min + off % range_size);

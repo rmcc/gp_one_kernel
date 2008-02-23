@@ -171,7 +171,6 @@ int ucc_slow_init(struct ucc_slow_info * us_info, struct ucc_slow_private ** ucc
 	uccs->us_regs = ioremap(us_info->regs, sizeof(struct ucc_slow));
 	if (uccs->us_regs == NULL) {
 		printk(KERN_ERR "%s: Cannot map UCC registers\n", __func__);
-		kfree(uccs);
 		return -ENOMEM;
 	}
 
@@ -368,11 +367,10 @@ void ucc_slow_free(struct ucc_slow_private * uccs)
 	if (uccs->tx_base_offset)
 		qe_muram_free(uccs->tx_base_offset);
 
-	if (uccs->us_pram)
+	if (uccs->us_pram) {
 		qe_muram_free(uccs->us_pram_offset);
-
-	if (uccs->us_regs)
-		iounmap(uccs->us_regs);
+		uccs->us_pram = NULL;
+	}
 
 	kfree(uccs);
 }

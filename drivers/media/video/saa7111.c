@@ -28,23 +28,42 @@
  */
 
 #include <linux/module.h>
+#include <linux/init.h>
+#include <linux/delay.h>
+#include <linux/errno.h>
+#include <linux/fs.h>
+#include <linux/kernel.h>
+#include <linux/major.h>
+#include <linux/slab.h>
+#include <linux/mm.h>
+#include <linux/signal.h>
 #include <linux/types.h>
-#include <linux/ioctl.h>
-#include <asm/uaccess.h>
 #include <linux/i2c.h>
-#include <linux/i2c-id.h>
+#include <asm/io.h>
+#include <asm/pgtable.h>
+#include <asm/page.h>
+#include <asm/uaccess.h>
+
 #include <linux/videodev.h>
 #include <linux/video_decoder.h>
-#include <media/v4l2-common.h>
-#include <media/v4l2-i2c-drv-legacy.h>
 
 MODULE_DESCRIPTION("Philips SAA7111 video decoder driver");
 MODULE_AUTHOR("Dave Perks");
 MODULE_LICENSE("GPL");
 
+
+#define I2C_NAME(s) (s)->name
+
+
 static int debug;
 module_param(debug, int, 0644);
 MODULE_PARM_DESC(debug, "Debug level (0-1)");
+
+#define dprintk(num, format, args...) \
+	do { \
+		if (debug >= num) \
+			printk(format, ##args); \
+	} while (0)
 
 /* ----------------------------------------------------------------------- */
 
@@ -58,9 +77,14 @@ struct saa7111 {
 	int enable;
 };
 
+#define   I2C_SAA7111        0x48
+
 /* ----------------------------------------------------------------------- */
 
-static inline int saa7111_write(struct i2c_client *client, u8 reg, u8 value)
+static inline int
+saa7111_write (struct i2c_client *client,
+	       u8                 reg,
+	       u8                 value)
 {
 	struct saa7111 *decoder = i2c_get_clientdata(client);
 
@@ -68,7 +92,8 @@ static inline int saa7111_write(struct i2c_client *client, u8 reg, u8 value)
 	return i2c_smbus_write_byte_data(client, reg, value);
 }
 
-static inline void saa7111_write_if_changed(struct i2c_client *client, u8 reg, u8 value)
+static inline void
+saa7111_write_if_changed(struct i2c_client *client, u8 reg, u8 value)
 {
 	struct saa7111 *decoder = i2c_get_clientdata(client);
 
@@ -78,7 +103,10 @@ static inline void saa7111_write_if_changed(struct i2c_client *client, u8 reg, u
 	}
 }
 
-static int saa7111_write_block(struct i2c_client *client, const u8 *data, unsigned int len)
+static int
+saa7111_write_block (struct i2c_client *client,
+		     const u8          *data,
+		     unsigned int       len)
 {
 	int ret = -1;
 	u8 reg;
@@ -99,17 +127,18 @@ static int saa7111_write_block(struct i2c_client *client, const u8 *data, unsign
 				    decoder->reg[reg++] = data[1];
 				len -= 2;
 				data += 2;
-			} while (len >= 2 && data[0] == reg && block_len < 32);
-			ret = i2c_master_send(client, block_data, block_len);
-			if (ret < 0)
+			} while (len >= 2 && data[0] == reg &&
+				 block_len < 32);
+			if ((ret = i2c_master_send(client, block_data,
+						   block_len)) < 0)
 				break;
 		}
 	} else {
 		/* do some slow I2C emulation kind of thing */
 		while (len >= 2) {
 			reg = *data++;
-			ret = saa7111_write(client, reg, *data++);
-			if (ret < 0)
+			if ((ret = saa7111_write(client, reg,
+						 *data++)) < 0)
 				break;
 			len -= 2;
 		}
@@ -118,13 +147,16 @@ static int saa7111_write_block(struct i2c_client *client, const u8 *data, unsign
 	return ret;
 }
 
-static int saa7111_init_decoder(struct i2c_client *client,
-		struct video_decoder_init *init)
+static int
+saa7111_init_decoder (struct i2c_client *client,
+	      struct video_decoder_init *init)
 {
 	return saa7111_write_block(client, init->data, init->len);
 }
 
-static inline int saa7111_read(struct i2c_client *client, u8 reg)
+static inline int
+saa7111_read (struct i2c_client *client,
+	      u8                 reg)
 {
 	return i2c_smbus_read_byte_data(client, reg);
 }
@@ -171,23 +203,28 @@ static const unsigned char saa7111_i2c_init[] = {
 	0x17, 0x00,		/* 17 - VBI */
 };
 
-static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
+static int
+saa7111_command (struct i2c_client *client,
+		 unsigned int       cmd,
+		 void              *arg)
 {
 	struct saa7111 *decoder = i2c_get_clientdata(client);
 
 	switch (cmd) {
+
 	case 0:
 		break;
 	case DECODER_INIT:
 	{
 		struct video_decoder_init *init = arg;
-		struct video_decoder_init vdi;
-
 		if (NULL != init)
 			return saa7111_init_decoder(client, init);
-		vdi.data = saa7111_i2c_init;
-		vdi.len = sizeof(saa7111_i2c_init);
-		return saa7111_init_decoder(client, &vdi);
+		else {
+			struct video_decoder_init vdi;
+			vdi.data = saa7111_i2c_init;
+			vdi.len = sizeof(saa7111_i2c_init);
+			return saa7111_init_decoder(client, &vdi);
+		}
 	}
 
 	case DECODER_DUMP:
@@ -197,15 +234,15 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 		for (i = 0; i < SAA7111_NR_REG; i += 16) {
 			int j;
 
-			v4l_info(client, "%03x", i);
+			printk(KERN_DEBUG "%s: %03x", I2C_NAME(client), i);
 			for (j = 0; j < 16 && i + j < SAA7111_NR_REG; ++j) {
-				printk(KERN_CONT " %02x",
+				printk(" %02x",
 				       saa7111_read(client, i + j));
 			}
-			printk(KERN_CONT "\n");
+			printk("\n");
 		}
-		break;
 	}
+		break;
 
 	case DECODER_GET_CAPABILITIES:
 	{
@@ -218,8 +255,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 			     VIDEO_DECODER_CCIR;
 		cap->inputs = 8;
 		cap->outputs = 1;
-		break;
 	}
+		break;
 
 	case DECODER_GET_STATUS:
 	{
@@ -228,7 +265,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 		int res;
 
 		status = saa7111_read(client, 0x1f);
-		v4l_dbg(1, debug, client, "status: 0x%02x\n", status);
+		dprintk(1, KERN_DEBUG "%s status: 0x%02x\n", I2C_NAME(client),
+			status);
 		res = 0;
 		if ((status & (1 << 6)) == 0) {
 			res |= DECODER_STATUS_GOOD;
@@ -256,8 +294,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 			res |= DECODER_STATUS_COLOR;
 		}
 		*iarg = res;
-		break;
 	}
+		break;
 
 	case DECODER_SET_GPIO:
 	{
@@ -324,8 +362,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 
 		}
 		decoder->norm = *iarg;
-		break;
 	}
+		break;
 
 	case DECODER_SET_INPUT:
 	{
@@ -349,8 +387,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 							     3) ? 0x80 :
 							    0));
 		}
-		break;
 	}
+		break;
 
 	case DECODER_SET_OUTPUT:
 	{
@@ -360,8 +398,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 		if (*iarg != 0) {
 			return -EINVAL;
 		}
-		break;
 	}
+		break;
 
 	case DECODER_ENABLE_OUTPUT:
 	{
@@ -401,8 +439,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 					      (decoder->reg[0x11] & 0xf3));
 			}
 		}
-		break;
 	}
+		break;
 
 	case DECODER_SET_PICTURE:
 	{
@@ -416,8 +454,8 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 		saa7111_write(client, 0x0c, pic->colour >> 9);
 		/* We want -128 to 127 we get 0-65535 */
 		saa7111_write(client, 0x0d, (pic->hue - 32768) >> 8);
-		break;
 	}
+		break;
 
 	default:
 		return -EINVAL;
@@ -428,23 +466,48 @@ static int saa7111_command(struct i2c_client *client, unsigned cmd, void *arg)
 
 /* ----------------------------------------------------------------------- */
 
-static unsigned short normal_i2c[] = { 0x48 >> 1, I2C_CLIENT_END };
+/*
+ * Generic i2c probe
+ * concerning the addresses: i2c wants 7 bit (without the r/w bit), so '>>1'
+ */
+static unsigned short normal_i2c[] = { I2C_SAA7111 >> 1, I2C_CLIENT_END };
 
-I2C_CLIENT_INSMOD;
+static unsigned short ignore = I2C_CLIENT_END;
 
-static int saa7111_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static struct i2c_client_address_data addr_data = {
+	.normal_i2c		= normal_i2c,
+	.probe			= &ignore,
+	.ignore			= &ignore,
+};
+
+static struct i2c_driver i2c_driver_saa7111;
+
+static int
+saa7111_detect_client (struct i2c_adapter *adapter,
+		       int                 address,
+		       int                 kind)
 {
 	int i;
+	struct i2c_client *client;
 	struct saa7111 *decoder;
 	struct video_decoder_init vdi;
 
-	/* Check if the adapter supports the needed features */
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
-		return -ENODEV;
+	dprintk(1,
+		KERN_INFO
+		"saa7111.c: detecting saa7111 client on address 0x%x\n",
+		address << 1);
 
-	v4l_info(client, "chip found @ 0x%x (%s)\n",
-			client->addr << 1, client->adapter->name);
+	/* Check if the adapter supports the needed features */
+	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
+		return 0;
+
+	client = kzalloc(sizeof(struct i2c_client), GFP_KERNEL);
+	if (!client)
+		return -ENOMEM;
+	client->addr = address;
+	client->adapter = adapter;
+	client->driver = &i2c_driver_saa7111;
+	strlcpy(I2C_NAME(client), "saa7111", sizeof(I2C_NAME(client)));
 
 	decoder = kzalloc(sizeof(struct saa7111), GFP_KERNEL);
 	if (decoder == NULL) {
@@ -456,37 +519,82 @@ static int saa7111_probe(struct i2c_client *client,
 	decoder->enable = 1;
 	i2c_set_clientdata(client, decoder);
 
+	i = i2c_attach_client(client);
+	if (i) {
+		kfree(client);
+		kfree(decoder);
+		return i;
+	}
+
 	vdi.data = saa7111_i2c_init;
 	vdi.len = sizeof(saa7111_i2c_init);
 	i = saa7111_init_decoder(client, &vdi);
 	if (i < 0) {
-		v4l_dbg(1, debug, client, "init status %d\n", i);
+		dprintk(1, KERN_ERR "%s_attach error: init status %d\n",
+			I2C_NAME(client), i);
 	} else {
-		v4l_dbg(1, debug, client, "revision %x\n",
-			saa7111_read(client, 0x00) >> 4);
+		dprintk(1,
+			KERN_INFO
+			"%s_attach: chip version %x at address 0x%x\n",
+			I2C_NAME(client), saa7111_read(client, 0x00) >> 4,
+			client->addr << 1);
 	}
+
 	return 0;
 }
 
-static int saa7111_remove(struct i2c_client *client)
+static int
+saa7111_attach_adapter (struct i2c_adapter *adapter)
 {
-	kfree(i2c_get_clientdata(client));
+	dprintk(1,
+		KERN_INFO
+		"saa7111.c: starting probe for adapter %s (0x%x)\n",
+		I2C_NAME(adapter), adapter->id);
+	return i2c_probe(adapter, &addr_data, &saa7111_detect_client);
+}
+
+static int
+saa7111_detach_client (struct i2c_client *client)
+{
+	struct saa7111 *decoder = i2c_get_clientdata(client);
+	int err;
+
+	err = i2c_detach_client(client);
+	if (err) {
+		return err;
+	}
+
+	kfree(decoder);
+	kfree(client);
+
 	return 0;
 }
 
 /* ----------------------------------------------------------------------- */
 
-static const struct i2c_device_id saa7111_id[] = {
-	{ "saa7111_old", 0 },	/* "saa7111" maps to the saa7115 driver */
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, saa7111_id);
+static struct i2c_driver i2c_driver_saa7111 = {
+	.driver = {
+		.name = "saa7111",
+	},
 
-static struct v4l2_i2c_driver_data v4l2_i2c_data = {
-	.name = "saa7111",
-	.driverid = I2C_DRIVERID_SAA7111A,
+	.id = I2C_DRIVERID_SAA7111A,
+
+	.attach_adapter = saa7111_attach_adapter,
+	.detach_client = saa7111_detach_client,
 	.command = saa7111_command,
-	.probe = saa7111_probe,
-	.remove = saa7111_remove,
-	.id_table = saa7111_id,
 };
+
+static int __init
+saa7111_init (void)
+{
+	return i2c_add_driver(&i2c_driver_saa7111);
+}
+
+static void __exit
+saa7111_exit (void)
+{
+	i2c_del_driver(&i2c_driver_saa7111);
+}
+
+module_init(saa7111_init);
+module_exit(saa7111_exit);

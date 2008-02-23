@@ -112,11 +112,9 @@ static int set_digital_mode(struct echoaudio *chip, u8 mode)
 		return -EIO;
 
 	/* All audio channels must be closed before changing the digital mode */
-	if (snd_BUG_ON(chip->pipe_alloc_mask))
-		return -EAGAIN;
+	snd_assert(!chip->pipe_alloc_mask, return -EAGAIN);
 
-	if (snd_BUG_ON(!(chip->digital_modes & (1 << mode))))
-		return -EINVAL;
+	snd_assert(chip->digital_modes & (1 << mode), return -EINVAL);
 
 	previous_mode = chip->digital_mode;
 	err = dsp_set_digital_mode(chip, mode);

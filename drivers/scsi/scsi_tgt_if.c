@@ -21,7 +21,6 @@
  */
 #include <linux/miscdevice.h>
 #include <linux/file.h>
-#include <linux/smp_lock.h>
 #include <net/tcp.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -322,7 +321,6 @@ static int tgt_open(struct inode *inode, struct file *file)
 {
 	tx_ring.tr_idx = rx_ring.tr_idx = 0;
 
-	cycle_kernel_lock();
 	return 0;
 }
 

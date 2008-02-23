@@ -25,7 +25,7 @@
  * in the file called LICENSE.GPL.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -60,13 +60,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *****************************************************************************/
-#ifndef __iwl_csr_h__
-#define __iwl_csr_h__
 /*=== CSR (control and status registers) ===*/
 #define CSR_BASE    (0x000)
 
 #define CSR_HW_IF_CONFIG_REG    (CSR_BASE+0x000) /* hardware interface config */
-#define CSR_INT_COALESCING     (CSR_BASE+0x004) /* accum ints, 32-usec units */
+#define CSR_INT_COALESCING      (CSR_BASE+0x004) /* accum ints, 32-usec units */
 #define CSR_INT                 (CSR_BASE+0x008) /* host interrupt status/ack */
 #define CSR_INT_MASK            (CSR_BASE+0x00c) /* host interrupt enable */
 #define CSR_FH_INT_STATUS       (CSR_BASE+0x010) /* busmaster int status/ack*/
@@ -89,16 +87,16 @@
 /* EEPROM reads */
 #define CSR_EEPROM_REG          (CSR_BASE+0x02c)
 #define CSR_EEPROM_GP           (CSR_BASE+0x030)
-#define CSR_GIO_REG		(CSR_BASE+0x03C)
 #define CSR_GP_UCODE		(CSR_BASE+0x044)
 #define CSR_UCODE_DRV_GP1       (CSR_BASE+0x054)
 #define CSR_UCODE_DRV_GP1_SET   (CSR_BASE+0x058)
 #define CSR_UCODE_DRV_GP1_CLR   (CSR_BASE+0x05c)
 #define CSR_UCODE_DRV_GP2       (CSR_BASE+0x060)
-#define CSR_LED_REG             (CSR_BASE+0x094)
 #define CSR_GIO_CHICKEN_BITS    (CSR_BASE+0x100)
+#define CSR_LED_REG             (CSR_BASE+0x094)
 
-/* Analog phase-lock-loop configuration  */
+/* Analog phase-lock-loop configuration (3945 only)
+ * Set bit 24. */
 #define CSR_ANA_PLL_CFG         (CSR_BASE+0x20c)
 /*
  * Indicates hardware rev, to determine CCK backoff for txpower calculation.
@@ -106,13 +104,12 @@
  *  3-2:  0 = A, 1 = B, 2 = C, 3 = D step
  */
 #define CSR_HW_REV_WA_REG	(CSR_BASE+0x22C)
-#define CSR_DBG_HPET_MEM_REG	(CSR_BASE+0x240)
 
 /* Bits for CSR_HW_IF_CONFIG_REG */
 #define CSR49_HW_IF_CONFIG_REG_BIT_4965_R	(0x00000010)
-#define CSR_HW_IF_CONFIG_REG_MSK_BOARD_VER	(0x00000C00)
-#define CSR_HW_IF_CONFIG_REG_BIT_MAC_SI 	(0x00000100)
-#define CSR_HW_IF_CONFIG_REG_BIT_RADIO_SI	(0x00000200)
+#define CSR49_HW_IF_CONFIG_REG_MSK_BOARD_VER	(0x00000C00)
+#define CSR49_HW_IF_CONFIG_REG_BIT_MAC_SI		(0x00000100)
+#define CSR49_HW_IF_CONFIG_REG_BIT_RADIO_SI	(0x00000200)
 
 #define CSR39_HW_IF_CONFIG_REG_BIT_3945_MB         (0x00000100)
 #define CSR39_HW_IF_CONFIG_REG_BIT_3945_MM         (0x00000200)
@@ -121,12 +118,7 @@
 #define CSR39_HW_IF_CONFIG_REG_BITS_SILICON_TYPE_A    (0x00000000)
 #define CSR39_HW_IF_CONFIG_REG_BITS_SILICON_TYPE_B    (0x00001000)
 
-#define CSR_HW_IF_CONFIG_REG_BIT_HAP_WAKE_L1A		(0x00080000)
-#define CSR_HW_IF_CONFIG_REG_BIT_EEPROM_OWN_SEM		(0x00200000)
-#define CSR_HW_IF_CONFIG_REG_BIT_PCI_OWN_SEM		(0x00400000)
-#define CSR_HW_IF_CONFIG_REG_BIT_ME_OWN			(0x02000000)
-#define CSR_HW_IF_CONFIG_REG_BIT_WAKE_ME		(0x08000000)
-
+#define CSR_HW_IF_CONFIG_REG_BIT_EEPROM_OWN_SEM     (0x00200000)
 
 /* interrupt flags in INTA, set by uCode or hardware (e.g. dma),
  * acknowledged (reset) by host writing "1" to flagged bits. */
@@ -178,10 +170,6 @@
 #define CSR49_FH_INT_TX_MASK	(CSR_FH_INT_BIT_TX_CHNL1 | \
 				 CSR_FH_INT_BIT_TX_CHNL0)
 
-/* GPIO */
-#define CSR_GPIO_IN_BIT_AUX_POWER                   (0x00000200)
-#define CSR_GPIO_IN_VAL_VAUX_PWR_SRC                (0x00000000)
-#define CSR_GPIO_IN_VAL_VMAIN_PWR_SRC               (0x00000200)
 
 /* RESET */
 #define CSR_RESET_REG_FLAG_NEVO_RESET                (0x00000001)
@@ -203,35 +191,25 @@
 #define CSR_GP_CNTRL_REG_FLAG_HW_RF_KILL_SW          (0x08000000)
 
 
-/* HW REV */
-#define CSR_HW_REV_TYPE_MSK            (0x00000F0)
-#define CSR_HW_REV_TYPE_3945           (0x00000D0)
-#define CSR_HW_REV_TYPE_4965           (0x0000000)
-#define CSR_HW_REV_TYPE_5300           (0x0000020)
-#define CSR_HW_REV_TYPE_5350           (0x0000030)
-#define CSR_HW_REV_TYPE_5100           (0x0000050)
-#define CSR_HW_REV_TYPE_5150           (0x0000040)
-#define CSR_HW_REV_TYPE_NONE           (0x00000F0)
-
 /* EEPROM REG */
 #define CSR_EEPROM_REG_READ_VALID_MSK	(0x00000001)
 #define CSR_EEPROM_REG_BIT_CMD		(0x00000002)
-#define CSR_EEPROM_REG_MSK_ADDR		(0x0000FFFC)
-#define CSR_EEPROM_REG_MSK_DATA		(0xFFFF0000)
 
 /* EEPROM GP */
 #define CSR_EEPROM_GP_VALID_MSK		(0x00000006)
 #define CSR_EEPROM_GP_BAD_SIGNATURE	(0x00000000)
 #define CSR_EEPROM_GP_IF_OWNER_MSK	(0x00000180)
 
-/* CSR GIO */
-#define CSR_GIO_REG_VAL_L0S_ENABLED	(0x00000002)
-
 /* UCODE DRV GP */
 #define CSR_UCODE_DRV_GP1_BIT_MAC_SLEEP             (0x00000001)
 #define CSR_UCODE_SW_BIT_RFKILL                     (0x00000002)
 #define CSR_UCODE_DRV_GP1_BIT_CMD_BLOCKED           (0x00000004)
 #define CSR_UCODE_DRV_GP1_REG_BIT_CT_KILL_EXIT      (0x00000008)
+
+/* GPIO */
+#define CSR_GPIO_IN_BIT_AUX_POWER                   (0x00000200)
+#define CSR_GPIO_IN_VAL_VAUX_PWR_SRC                (0x00000000)
+#define CSR_GPIO_IN_VAL_VMAIN_PWR_SRC		CSR_GPIO_IN_BIT_AUX_POWER
 
 /* GI Chicken Bits */
 #define CSR_GIO_CHICKEN_BITS_REG_BIT_L1A_NO_L0S_RX  (0x00800000)
@@ -242,12 +220,6 @@
 #define CSR_LED_REG_TRUN_ON (0x78)
 #define CSR_LED_REG_TRUN_OFF (0x38)
 
-/* ANA_PLL */
-#define CSR39_ANA_PLL_CFG_VAL        (0x01000000)
-#define CSR50_ANA_PLL_CFG_VAL        (0x00880300)
-
-/* HPET MEM debug */
-#define CSR_DBG_HPET_MEM_REG_VAL	(0xFFFF0000)
 /*=== HBUS (Host-side Bus) ===*/
 #define HBUS_BASE	(0x400)
 /*
@@ -290,4 +262,4 @@
 #define HBUS_TARG_MBX_C_REG_BIT_CMD_BLOCKED         (0x00000004)
 
 
-#endif /* !__iwl_csr_h__ */
+

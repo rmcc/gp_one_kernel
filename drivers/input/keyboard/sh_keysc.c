@@ -18,7 +18,6 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
-#include <linux/clk.h>
 #include <linux/io.h>
 #include <asm/sh_keysc.h>
 
@@ -40,7 +39,6 @@ static const struct {
 
 struct sh_keysc_priv {
 	void __iomem *iomem_base;
-	struct clk *clk;
 	unsigned long last_keys;
 	struct input_dev *input;
 	struct sh_keysc_info pdata;
@@ -127,7 +125,6 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 	struct sh_keysc_info *pdata;
 	struct resource *res;
 	struct input_dev *input;
-	char clk_name[8];
 	int i, k;
 	int irq, error;
 
@@ -161,18 +158,17 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 	memcpy(&priv->pdata, pdev->dev.platform_data, sizeof(priv->pdata));
 	pdata = &priv->pdata;
 
+	res = request_mem_region(res->start, res_size(res), pdev->name);
+	if (res == NULL) {
+		dev_err(&pdev->dev, "failed to request I/O memory\n");
+		error = -EBUSY;
+		goto err1;
+	}
+
 	priv->iomem_base = ioremap_nocache(res->start, res_size(res));
 	if (priv->iomem_base == NULL) {
 		dev_err(&pdev->dev, "failed to remap I/O memory\n");
 		error = -ENXIO;
-		goto err1;
-	}
-
-	snprintf(clk_name, sizeof(clk_name), "keysc%d", pdev->id);
-	priv->clk = clk_get(&pdev->dev, clk_name);
-	if (IS_ERR(priv->clk)) {
-		dev_err(&pdev->dev, "cannot get clock \"%s\"\n", clk_name);
-		error = PTR_ERR(priv->clk);
 		goto err2;
 	}
 
@@ -213,8 +209,6 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 		goto err5;
 	}
 
-	clk_enable(priv->clk);
-
 	iowrite16((sh_keysc_mode[pdata->mode].kymd << 8) |
 		  pdata->scan_timing, priv->iomem_base + KYCR1_OFFS);
 	iowrite16(0, priv->iomem_base + KYOUTDR_OFFS);
@@ -225,9 +219,9 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
  err4:
 	input_free_device(input);
  err3:
-	clk_put(priv->clk);
- err2:
 	iounmap(priv->iomem_base);
+ err2:
+	release_mem_region(res->start, res_size(res));
  err1:
 	platform_set_drvdata(pdev, NULL);
 	kfree(priv);
@@ -238,6 +232,7 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 static int __devexit sh_keysc_remove(struct platform_device *pdev)
 {
 	struct sh_keysc_priv *priv = platform_get_drvdata(pdev);
+	struct resource *res;
 
 	iowrite16(KYCR2_IRQ_DISABLED, priv->iomem_base + KYCR2_OFFS);
 
@@ -245,8 +240,8 @@ static int __devexit sh_keysc_remove(struct platform_device *pdev)
 	free_irq(platform_get_irq(pdev, 0), pdev);
 	iounmap(priv->iomem_base);
 
-	clk_disable(priv->clk);
-	clk_put(priv->clk);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	release_mem_region(res->start, res_size(res));
 
 	platform_set_drvdata(pdev, NULL);
 	kfree(priv);

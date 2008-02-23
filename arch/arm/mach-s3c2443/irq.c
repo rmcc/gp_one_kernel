@@ -24,19 +24,19 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/sysdev.h>
-#include <linux/io.h>
 
-#include <mach/hardware.h>
+#include <asm/hardware.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 
 #include <asm/mach/irq.h>
 
-#include <mach/regs-irq.h>
-#include <mach/regs-gpio.h>
+#include <asm/arch/regs-irq.h>
+#include <asm/arch/regs-gpio.h>
 
-#include <plat/cpu.h>
-#include <plat/pm.h>
-#include <plat/irq.h>
+#include <asm/plat-s3c24xx/cpu.h>
+#include <asm/plat-s3c24xx/pm.h>
+#include <asm/plat-s3c24xx/irq.h>
 
 #define INTMSK(start, end) ((1 << ((end) + 1 - (start))) - 1)
 
@@ -44,6 +44,7 @@ static inline void s3c2443_irq_demux(unsigned int irq, unsigned int len)
 {
 	unsigned int subsrc, submsk;
 	unsigned int end;
+	struct irq_desc *mydesc;
 
 	/* read the current pending interrupts, and the mask
 	 * for what it is available */
@@ -56,11 +57,13 @@ static inline void s3c2443_irq_demux(unsigned int irq, unsigned int len)
 	subsrc  &= (1 << len)-1;
 
 	end = len + irq;
+	mydesc = irq_desc + irq;
 
 	for (; irq < end && subsrc; irq++) {
 		if (subsrc & 1)
-			generic_handle_irq(irq);
+			desc_handle_irq(irq, mydesc);
 
+		mydesc++;
 		subsrc >>= 1;
 	}
 }

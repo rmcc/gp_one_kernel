@@ -1,64 +1,7 @@
 /*
- *	Sound core.  This file is composed of two parts.  sound_class
- *	which is common to both OSS and ALSA and OSS sound core which
- *	is used OSS or emulation of it.
- */
-
-/*
- * First, the common part.
- */
-#include <linux/module.h>
-#include <linux/device.h>
-#include <linux/err.h>
-#include <sound/core.h>
-
-#ifdef CONFIG_SOUND_OSS_CORE
-static int __init init_oss_soundcore(void);
-static void cleanup_oss_soundcore(void);
-#else
-static inline int init_oss_soundcore(void)	{ return 0; }
-static inline void cleanup_oss_soundcore(void)	{ }
-#endif
-
-struct class *sound_class;
-EXPORT_SYMBOL(sound_class);
-
-MODULE_DESCRIPTION("Core sound module");
-MODULE_AUTHOR("Alan Cox");
-MODULE_LICENSE("GPL");
-
-static int __init init_soundcore(void)
-{
-	int rc;
-
-	rc = init_oss_soundcore();
-	if (rc)
-		return rc;
-
-	sound_class = class_create(THIS_MODULE, "sound");
-	if (IS_ERR(sound_class)) {
-		cleanup_oss_soundcore();
-		return PTR_ERR(sound_class);
-	}
-
-	return 0;
-}
-
-static void __exit cleanup_soundcore(void)
-{
-	cleanup_oss_soundcore();
-	class_destroy(sound_class);
-}
-
-module_init(init_soundcore);
-module_exit(cleanup_soundcore);
-
-
-#ifdef CONFIG_SOUND_OSS_CORE
-/*
- *	OSS sound core handling. Breaks out sound functions to submodules
+ *	Sound core handling. Breaks out sound functions to submodules
  *	
- *	Author:		Alan Cox <alan@lxorguk.ukuu.org.uk>
+ *	Author:		Alan Cox <alan.cox@linux.org>
  *
  *	Fixes:
  *
@@ -91,16 +34,19 @@ module_exit(cleanup_soundcore);
  *	locking at some point in 2.3.x.
  */
 
+#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/fs.h>
 #include <linux/sound.h>
 #include <linux/major.h>
 #include <linux/kmod.h>
+#include <linux/device.h>
 
 #define SOUND_STEP 16
+
 
 struct sound_unit
 {
@@ -116,6 +62,9 @@ extern int msnd_classic_init(void);
 #ifdef CONFIG_SOUND_MSNDPIN
 extern int msnd_pinnacle_init(void);
 #endif
+
+struct class *sound_class;
+EXPORT_SYMBOL(sound_class);
 
 /*
  *	Low level list operator. Scan the ordered list, find a hole and
@@ -222,7 +171,7 @@ static int sound_insert_unit(struct sound_unit **list, const struct file_operati
 		sprintf(s->name, "sound/%s%d", name, r / SOUND_STEP);
 
 	device_create(sound_class, dev, MKDEV(SOUND_MAJOR, s->unit_minor),
-		      NULL, s->name+6);
+		      s->name+6);
 	return r;
 
  fail:
@@ -458,7 +407,7 @@ EXPORT_SYMBOL(unregister_sound_mixer);
 
 void unregister_sound_midi(int unit)
 {
-	sound_remove_unit(&chains[2], unit);
+	return sound_remove_unit(&chains[2], unit);
 }
 
 EXPORT_SYMBOL(unregister_sound_midi);
@@ -475,7 +424,7 @@ EXPORT_SYMBOL(unregister_sound_midi);
 
 void unregister_sound_dsp(int unit)
 {
-	sound_remove_unit(&chains[3], unit);
+	return sound_remove_unit(&chains[3], unit);
 }
 
 
@@ -508,14 +457,12 @@ static struct sound_unit *__look_for_unit(int chain, int unit)
 	return NULL;
 }
 
-static int soundcore_open(struct inode *inode, struct file *file)
+int soundcore_open(struct inode *inode, struct file *file)
 {
 	int chain;
 	int unit = iminor(inode);
 	struct sound_unit *s;
 	const struct file_operations *new_fops = NULL;
-
-	lock_kernel ();
 
 	chain=unit&0x0F;
 	if(chain==4 || chain==5)	/* dsp/audio/dsp16 */
@@ -564,31 +511,37 @@ static int soundcore_open(struct inode *inode, struct file *file)
 			file->f_op = fops_get(old_fops);
 		}
 		fops_put(old_fops);
-		unlock_kernel();
 		return err;
 	}
 	spin_unlock(&sound_loader_lock);
-	unlock_kernel();
 	return -ENODEV;
 }
 
+MODULE_DESCRIPTION("Core sound module");
+MODULE_AUTHOR("Alan Cox");
+MODULE_LICENSE("GPL");
 MODULE_ALIAS_CHARDEV_MAJOR(SOUND_MAJOR);
 
-static void cleanup_oss_soundcore(void)
+static void __exit cleanup_soundcore(void)
 {
 	/* We have nothing to really do here - we know the lists must be
 	   empty */
 	unregister_chrdev(SOUND_MAJOR, "sound");
+	class_destroy(sound_class);
 }
 
-static int __init init_oss_soundcore(void)
+static int __init init_soundcore(void)
 {
 	if (register_chrdev(SOUND_MAJOR, "sound", &soundcore_fops)==-1) {
 		printk(KERN_ERR "soundcore: sound device already in use.\n");
 		return -EBUSY;
 	}
+	sound_class = class_create(THIS_MODULE, "sound");
+	if (IS_ERR(sound_class))
+		return PTR_ERR(sound_class);
 
 	return 0;
 }
 
-#endif /* CONFIG_SOUND_OSS_CORE */
+module_init(init_soundcore);
+module_exit(cleanup_soundcore);

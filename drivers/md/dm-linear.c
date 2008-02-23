@@ -5,12 +5,12 @@
  */
 
 #include "dm.h"
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/blkdev.h>
 #include <linux/bio.h>
 #include <linux/slab.h>
-#include <linux/device-mapper.h>
 
 #define DM_MSG_PREFIX "linear"
 
@@ -69,25 +69,13 @@ static void linear_dtr(struct dm_target *ti)
 	kfree(lc);
 }
 
-static sector_t linear_map_sector(struct dm_target *ti, sector_t bi_sector)
-{
-	struct linear_c *lc = ti->private;
-
-	return lc->start + (bi_sector - ti->begin);
-}
-
-static void linear_map_bio(struct dm_target *ti, struct bio *bio)
-{
-	struct linear_c *lc = ti->private;
-
-	bio->bi_bdev = lc->dev->bdev;
-	bio->bi_sector = linear_map_sector(ti, bio->bi_sector);
-}
-
 static int linear_map(struct dm_target *ti, struct bio *bio,
 		      union map_info *map_context)
 {
-	linear_map_bio(ti, bio);
+	struct linear_c *lc = (struct linear_c *) ti->private;
+
+	bio->bi_bdev = lc->dev->bdev;
+	bio->bi_sector = lc->start + (bio->bi_sector - ti->begin);
 
 	return DM_MAPIO_REMAPPED;
 }
@@ -110,39 +98,31 @@ static int linear_status(struct dm_target *ti, status_type_t type,
 	return 0;
 }
 
-static int linear_ioctl(struct dm_target *ti, unsigned int cmd,
+static int linear_ioctl(struct dm_target *ti, struct inode *inode,
+			struct file *filp, unsigned int cmd,
 			unsigned long arg)
 {
 	struct linear_c *lc = (struct linear_c *) ti->private;
-	return __blkdev_driver_ioctl(lc->dev->bdev, lc->dev->mode, cmd, arg);
-}
+	struct block_device *bdev = lc->dev->bdev;
+	struct file fake_file = {};
+	struct dentry fake_dentry = {};
 
-static int linear_merge(struct dm_target *ti, struct bvec_merge_data *bvm,
-			struct bio_vec *biovec, int max_size)
-{
-	struct linear_c *lc = ti->private;
-	struct request_queue *q = bdev_get_queue(lc->dev->bdev);
+	fake_file.f_mode = lc->dev->mode;
+	fake_file.f_path.dentry = &fake_dentry;
+	fake_dentry.d_inode = bdev->bd_inode;
 
-	if (!q->merge_bvec_fn)
-		return max_size;
-
-	bvm->bi_bdev = lc->dev->bdev;
-	bvm->bi_sector = linear_map_sector(ti, bvm->bi_sector);
-
-	return min(max_size, q->merge_bvec_fn(q, bvm, biovec));
+	return blkdev_driver_ioctl(bdev->bd_inode, &fake_file, bdev->bd_disk, cmd, arg);
 }
 
 static struct target_type linear_target = {
 	.name   = "linear",
-	.version= {1, 0, 3},
+	.version= {1, 0, 2},
 	.module = THIS_MODULE,
 	.ctr    = linear_ctr,
 	.dtr    = linear_dtr,
 	.map    = linear_map,
 	.status = linear_status,
 	.ioctl  = linear_ioctl,
-	.merge  = linear_merge,
-	.features = DM_TARGET_SUPPORTS_BARRIERS,
 };
 
 int __init dm_linear_init(void)
@@ -157,5 +137,8 @@ int __init dm_linear_init(void)
 
 void dm_linear_exit(void)
 {
-	dm_unregister_target(&linear_target);
+	int r = dm_unregister_target(&linear_target);
+
+	if (r < 0)
+		DMERR("unregister failed %d", r);
 }

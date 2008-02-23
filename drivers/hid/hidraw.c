@@ -30,7 +30,6 @@
 #include <linux/major.h>
 #include <linux/hid.h>
 #include <linux/mutex.h>
-#include <linux/smp_lock.h>
 
 #include <linux/hidraw.h>
 
@@ -38,7 +37,7 @@ static int hidraw_major;
 static struct cdev hidraw_cdev;
 static struct class *hidraw_class;
 static struct hidraw *hidraw_table[HIDRAW_MAX_DEVICES];
-static DEFINE_MUTEX(minors_lock);
+static DEFINE_SPINLOCK(minors_lock);
 
 static ssize_t hidraw_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)
 {
@@ -105,7 +104,6 @@ out:
 static ssize_t hidraw_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
 {
 	unsigned int minor = iminor(file->f_path.dentry->d_inode);
-	/* FIXME: What stops hidraw_table going NULL */
 	struct hid_device *dev = hidraw_table[minor]->hid;
 	__u8 *buf;
 	int ret = 0;
@@ -113,7 +111,7 @@ static ssize_t hidraw_write(struct file *file, const char __user *buffer, size_t
 	if (!dev->hid_output_raw_report)
 		return -ENODEV;
 
-	if (count > HID_MAX_BUFFER_SIZE) {
+	if (count > HID_MIN_BUFFER_SIZE) {
 		printk(KERN_WARNING "hidraw: pid %d passed too large report\n",
 				task_pid_nr(current));
 		return -EINVAL;
@@ -164,8 +162,7 @@ static int hidraw_open(struct inode *inode, struct file *file)
 		goto out;
 	}
 
-	lock_kernel();
-	mutex_lock(&minors_lock);
+	spin_lock(&minors_lock);
 	if (!hidraw_table[minor]) {
 		printk(KERN_EMERG "hidraw device with minor %d doesn't exist\n",
 				minor);
@@ -180,15 +177,11 @@ static int hidraw_open(struct inode *inode, struct file *file)
 	file->private_data = list;
 
 	dev = hidraw_table[minor];
-	if (!dev->open++) {
-		err = dev->hid->ll_driver->open(dev->hid);
-		if (err < 0)
-			dev->open--;
-	}
+	if (!dev->open++)
+		dev->hid->hid_open(dev->hid);
 
 out_unlock:
-	mutex_unlock(&minors_lock);
-	unlock_kernel();
+	spin_unlock(&minors_lock);
 out:
 	return err;
 
@@ -208,50 +201,45 @@ static int hidraw_release(struct inode * inode, struct file * file)
 
 	list_del(&list->node);
 	dev = hidraw_table[minor];
-	if (!--dev->open) {
+	if (!dev->open--) {
 		if (list->hidraw->exist)
-			dev->hid->ll_driver->close(dev->hid);
+			dev->hid->hid_close(dev->hid);
 		else
 			kfree(list->hidraw);
 	}
 
-	kfree(list);
-
 	return 0;
 }
 
-static long hidraw_ioctl(struct file *file, unsigned int cmd,
-							unsigned long arg)
+static int hidraw_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct inode *inode = file->f_path.dentry->d_inode;
 	unsigned int minor = iminor(inode);
-	long ret = 0;
-	/* FIXME: What stops hidraw_table going NULL */
 	struct hidraw *dev = hidraw_table[minor];
 	void __user *user_arg = (void __user*) arg;
 
-	lock_kernel();
 	switch (cmd) {
 		case HIDIOCGRDESCSIZE:
 			if (put_user(dev->hid->rsize, (int __user *)arg))
-				ret = -EFAULT;
-			break;
+				return -EFAULT;
+			return 0;
 
 		case HIDIOCGRDESC:
 			{
 				__u32 len;
 
 				if (get_user(len, (int __user *)arg))
-					ret = -EFAULT;
-				else if (len > HID_MAX_DESCRIPTOR_SIZE - 1)
-					ret = -EINVAL;
-				else if (copy_to_user(user_arg + offsetof(
-					struct hidraw_report_descriptor,
-					value[0]),
-					dev->hid->rdesc,
-					min(dev->hid->rsize, len)))
-					ret = -EFAULT;
-				break;
+					return -EFAULT;
+
+				if (len > HID_MAX_DESCRIPTOR_SIZE - 1)
+					return -EINVAL;
+
+				if (copy_to_user(user_arg + offsetof(
+								struct hidraw_report_descriptor,
+								value[0]),
+							dev->hid->rdesc,
+							min(dev->hid->rsize, len)))
+						return -EFAULT;
+				return 0;
 			}
 		case HIDIOCGRAWINFO:
 			{
@@ -261,42 +249,15 @@ static long hidraw_ioctl(struct file *file, unsigned int cmd,
 				dinfo.vendor = dev->hid->vendor;
 				dinfo.product = dev->hid->product;
 				if (copy_to_user(user_arg, &dinfo, sizeof(dinfo)))
-					ret = -EFAULT;
-				break;
+					return -EFAULT;
+
+				return 0;
 			}
 		default:
-			{
-				struct hid_device *hid = dev->hid;
-				if (_IOC_TYPE(cmd) != 'H' || _IOC_DIR(cmd) != _IOC_READ)
-					return -EINVAL;
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWNAME(0))) {
-					int len;
-					if (!hid->name)
-						return 0;
-					len = strlen(hid->name) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					return copy_to_user(user_arg, hid->name, len) ?
-						-EFAULT : len;
-				}
-
-				if (_IOC_NR(cmd) == _IOC_NR(HIDIOCGRAWPHYS(0))) {
-					int len;
-					if (!hid->phys)
-						return 0;
-					len = strlen(hid->phys) + 1;
-					if (len > _IOC_SIZE(cmd))
-						len = _IOC_SIZE(cmd);
-					return copy_to_user(user_arg, hid->phys, len) ?
-						-EFAULT : len;
-				}
-                }
-
-			ret = -ENOTTY;
+			printk(KERN_EMERG "hidraw: unsupported ioctl() %x\n",
+					cmd);
 	}
-	unlock_kernel();
-	return ret;
+	return -EINVAL;
 }
 
 static const struct file_operations hidraw_ops = {
@@ -306,7 +267,7 @@ static const struct file_operations hidraw_ops = {
 	.poll =         hidraw_poll,
 	.open =         hidraw_open,
 	.release =      hidraw_release,
-	.unlocked_ioctl = hidraw_ioctl,
+	.ioctl =        hidraw_ioctl,
 };
 
 void hidraw_report_event(struct hid_device *hid, u8 *data, int len)
@@ -341,7 +302,7 @@ int hidraw_connect(struct hid_device *hid)
 
 	result = -EINVAL;
 
-	mutex_lock(&minors_lock);
+	spin_lock(&minors_lock);
 
 	for (minor = 0; minor < HIDRAW_MAX_DEVICES; minor++) {
 		if (hidraw_table[minor])
@@ -351,24 +312,25 @@ int hidraw_connect(struct hid_device *hid)
 		break;
 	}
 
+	spin_unlock(&minors_lock);
+
 	if (result) {
-		mutex_unlock(&minors_lock);
 		kfree(dev);
 		goto out;
 	}
 
-	dev->dev = device_create(hidraw_class, &hid->dev, MKDEV(hidraw_major, minor),
-				 NULL, "%s%d", "hidraw", minor);
+	dev->dev = device_create(hidraw_class, NULL, MKDEV(hidraw_major, minor),
+				"%s%d", "hidraw", minor);
 
 	if (IS_ERR(dev->dev)) {
+		spin_lock(&minors_lock);
 		hidraw_table[minor] = NULL;
-		mutex_unlock(&minors_lock);
+		spin_unlock(&minors_lock);
 		result = PTR_ERR(dev->dev);
 		kfree(dev);
 		goto out;
 	}
 
-	mutex_unlock(&minors_lock);
 	init_waitqueue_head(&dev->wait);
 	INIT_LIST_HEAD(&dev->list);
 
@@ -390,14 +352,14 @@ void hidraw_disconnect(struct hid_device *hid)
 
 	hidraw->exist = 0;
 
-	mutex_lock(&minors_lock);
+	spin_lock(&minors_lock);
 	hidraw_table[hidraw->minor] = NULL;
-	mutex_unlock(&minors_lock);
+	spin_unlock(&minors_lock);
 
 	device_destroy(hidraw_class, MKDEV(hidraw_major, hidraw->minor));
 
 	if (hidraw->open) {
-		hid->ll_driver->close(hid);
+		hid->hid_close(hid);
 		wake_up_interruptible(&hidraw->wait);
 	} else {
 		kfree(hidraw);
@@ -434,7 +396,7 @@ out:
 	return result;
 }
 
-void hidraw_exit(void)
+void __exit hidraw_exit(void)
 {
 	dev_t dev_id = MKDEV(hidraw_major, 0);
 

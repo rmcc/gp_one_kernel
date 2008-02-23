@@ -35,8 +35,8 @@
 
 #include <linux/spi/spi.h>
 
-#include <mach/dma.h>
-#include <mach/clock.h>
+#include <asm/arch/dma.h>
+#include <asm/arch/clock.h>
 
 
 #define OMAP2_MCSPI_MAX_FREQ		48000000
@@ -119,14 +119,12 @@ struct omap2_mcspi {
 	struct clk		*fck;
 	/* Virtual base address of the controller */
 	void __iomem		*base;
-	unsigned long		phys;
 	/* SPI1 has 4 channels, while SPI2 has 2 */
 	struct omap2_mcspi_dma	*dma_channels;
 };
 
 struct omap2_mcspi_cs {
 	void __iomem		*base;
-	unsigned long		phys;
 	int			word_len;
 };
 
@@ -235,7 +233,7 @@ omap2_mcspi_txrx_dma(struct spi_device *spi, struct spi_transfer *xfer)
 	c = count;
 	word_len = cs->word_len;
 
-	base = cs->phys;
+	base = (unsigned long) io_v2p(cs->base);
 	tx_reg = base + OMAP2_MCSPI_TX0;
 	rx_reg = base + OMAP2_MCSPI_RX0;
 	rx = xfer->rx_buf;
@@ -635,7 +633,6 @@ static int omap2_mcspi_setup(struct spi_device *spi)
 		if (!cs)
 			return -ENOMEM;
 		cs->base = mcspi->base + spi->chip_select * 0x14;
-		cs->phys = mcspi->phys + spi->chip_select * 0x14;
 		spi->controller_state = cs;
 	}
 
@@ -839,7 +836,7 @@ static int omap2_mcspi_transfer(struct spi_device *spi, struct spi_message *m)
 		if (tx_buf != NULL) {
 			t->tx_dma = dma_map_single(&spi->dev, (void *) tx_buf,
 					len, DMA_TO_DEVICE);
-			if (dma_mapping_error(&spi->dev, t->tx_dma)) {
+			if (dma_mapping_error(t->tx_dma)) {
 				dev_dbg(&spi->dev, "dma %cX %d bytes error\n",
 						'T', len);
 				return -EINVAL;
@@ -848,7 +845,7 @@ static int omap2_mcspi_transfer(struct spi_device *spi, struct spi_message *m)
 		if (rx_buf != NULL) {
 			t->rx_dma = dma_map_single(&spi->dev, rx_buf, t->len,
 					DMA_FROM_DEVICE);
-			if (dma_mapping_error(&spi->dev, t->rx_dma)) {
+			if (dma_mapping_error(t->rx_dma)) {
 				dev_dbg(&spi->dev, "dma %cX %d bytes error\n",
 						'R', len);
 				if (tx_buf != NULL)
@@ -1008,13 +1005,7 @@ static int __init omap2_mcspi_probe(struct platform_device *pdev)
 		goto err1;
 	}
 
-	mcspi->phys = r->start;
-	mcspi->base = ioremap(r->start, r->end - r->start + 1);
-	if (!mcspi->base) {
-		dev_dbg(&pdev->dev, "can't ioremap MCSPI\n");
-		status = -ENOMEM;
-		goto err1aa;
-	}
+	mcspi->base = (void __iomem *) io_p2v(r->start);
 
 	INIT_WORK(&mcspi->work, omap2_mcspi_work);
 
@@ -1064,8 +1055,6 @@ err3:
 err2:
 	clk_put(mcspi->ick);
 err1a:
-	iounmap(mcspi->base);
-err1aa:
 	release_mem_region(r->start, (r->end - r->start) + 1);
 err1:
 	spi_master_put(master);
@@ -1078,7 +1067,6 @@ static int __exit omap2_mcspi_remove(struct platform_device *pdev)
 	struct omap2_mcspi	*mcspi;
 	struct omap2_mcspi_dma	*dma_channels;
 	struct resource		*r;
-	void __iomem *base;
 
 	master = dev_get_drvdata(&pdev->dev);
 	mcspi = spi_master_get_devdata(master);
@@ -1090,9 +1078,7 @@ static int __exit omap2_mcspi_remove(struct platform_device *pdev)
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	release_mem_region(r->start, (r->end - r->start) + 1);
 
-	base = mcspi->base;
 	spi_unregister_master(master);
-	iounmap(base);
 	kfree(dma_channels);
 
 	return 0;

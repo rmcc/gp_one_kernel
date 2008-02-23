@@ -76,7 +76,7 @@ static int do_cpumask(cnodeid_t cnode, nasid_t nasid, int highest)
 			/* Only let it join in if it's marked enabled */
 			if ((acpu->cpu_info.flags & KLINFO_ENABLE) &&
 			    (tot_cpus_found != NR_CPUS)) {
-				cpu_set(cpuid, cpu_possible_map);
+				cpu_set(cpuid, phys_cpu_present_map);
 				alloc_cpupda(cpuid, tot_cpus_found);
 				cpus_found++;
 				tot_cpus_found++;
@@ -176,14 +176,11 @@ static void ip27_send_ipi_mask(cpumask_t mask, unsigned int action)
 static void __cpuinit ip27_init_secondary(void)
 {
 	per_cpu_init();
+	local_irq_enable();
 }
 
 static void __cpuinit ip27_smp_finish(void)
 {
-	extern void hub_rt_clock_event_init(void);
-
-	hub_rt_clock_event_init();
-	local_irq_enable();
 }
 
 static void __init ip27_cpus_done(void)

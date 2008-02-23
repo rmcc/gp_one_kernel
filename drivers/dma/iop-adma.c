@@ -24,6 +24,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/async_tx.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/spinlock.h>
@@ -32,7 +33,7 @@
 #include <linux/memory.h>
 #include <linux/ioport.h>
 
-#include <mach/adma.h>
+#include <asm/arch/adma.h>
 
 #define to_iop_adma_chan(chan) container_of(chan, struct iop_adma_chan, common)
 #define to_iop_adma_device(dev) \
@@ -81,41 +82,24 @@ iop_adma_run_tx_complete_actions(struct iop_adma_desc_slot *desc,
 			struct device *dev =
 				&iop_chan->device->pdev->dev;
 			u32 len = unmap->unmap_len;
-			enum dma_ctrl_flags flags = desc->async_tx.flags;
-			u32 src_cnt;
-			dma_addr_t addr;
-			dma_addr_t dest;
+			u32 src_cnt = unmap->unmap_src_cnt;
+			dma_addr_t addr = iop_desc_get_dest_addr(unmap,
+				iop_chan);
 
-			src_cnt = unmap->unmap_src_cnt;
-			dest = iop_desc_get_dest_addr(unmap, iop_chan);
-			if (!(flags & DMA_COMPL_SKIP_DEST_UNMAP)) {
-				enum dma_data_direction dir;
-
-				if (src_cnt > 1) /* is xor? */
-					dir = DMA_BIDIRECTIONAL;
-				else
-					dir = DMA_FROM_DEVICE;
-
-				dma_unmap_page(dev, dest, len, dir);
-			}
-
-			if (!(flags & DMA_COMPL_SKIP_SRC_UNMAP)) {
-				while (src_cnt--) {
-					addr = iop_desc_get_src_addr(unmap,
-								     iop_chan,
-								     src_cnt);
-					if (addr == dest)
-						continue;
-					dma_unmap_page(dev, addr, len,
-						       DMA_TO_DEVICE);
-				}
+			dma_unmap_page(dev, addr, len, DMA_FROM_DEVICE);
+			while (src_cnt--) {
+				addr = iop_desc_get_src_addr(unmap,
+							iop_chan,
+							src_cnt);
+				dma_unmap_page(dev, addr, len,
+					DMA_TO_DEVICE);
 			}
 			desc->group_head = NULL;
 		}
 	}
 
 	/* run dependent operations */
-	dma_run_dependencies(&desc->async_tx);
+	async_tx_run_dependencies(&desc->async_tx);
 
 	return cookie;
 }
@@ -269,6 +253,8 @@ static void __iop_adma_slot_cleanup(struct iop_adma_chan *iop_chan)
 			break;
 	}
 
+	BUG_ON(!seen_current);
+
 	if (cookie > 0) {
 		iop_chan->completed_cookie = cookie;
 		pr_debug("\tcompleted cookie %d\n", cookie);
@@ -380,8 +366,8 @@ retry:
 	if (!retry++)
 		goto retry;
 
-	/* perform direct reclaim if the allocation fails */
-	__iop_adma_slot_cleanup(iop_chan);
+	/* try to free some slots if the allocation fails */
+	tasklet_schedule(&iop_chan->irq_tasklet);
 
 	return NULL;
 }
@@ -418,7 +404,6 @@ iop_adma_tx_submit(struct dma_async_tx_descriptor *tx)
 	int slot_cnt;
 	int slots_per_op;
 	dma_cookie_t cookie;
-	dma_addr_t next_dma;
 
 	grp_start = sw_desc->group_head;
 	slot_cnt = grp_start->slot_cnt;
@@ -433,12 +418,12 @@ iop_adma_tx_submit(struct dma_async_tx_descriptor *tx)
 			 &old_chain_tail->chain_node);
 
 	/* fix up the hardware chain */
-	next_dma = grp_start->async_tx.phys;
-	iop_desc_set_next_desc(old_chain_tail, next_dma);
-	BUG_ON(iop_desc_get_next_desc(old_chain_tail) != next_dma); /* flush */
+	iop_desc_set_next_desc(old_chain_tail, grp_start->async_tx.phys);
 
-	/* check for pre-chained descriptors */
-	iop_paranoia(iop_desc_get_next_desc(sw_desc));
+	/* 1/ don't add pre-chained descriptors
+	 * 2/ dummy read to flush next_desc write
+	 */
+	BUG_ON(iop_desc_get_next_desc(sw_desc));
 
 	/* increment the pending count by the number of slots
 	 * memcpy operations have a 1:1 (slot:operation) relation
@@ -458,16 +443,7 @@ iop_adma_tx_submit(struct dma_async_tx_descriptor *tx)
 static void iop_chan_start_null_memcpy(struct iop_adma_chan *iop_chan);
 static void iop_chan_start_null_xor(struct iop_adma_chan *iop_chan);
 
-/**
- * iop_adma_alloc_chan_resources -  returns the number of allocated descriptors
- * @chan - allocate descriptor resources for this channel
- * @client - current client requesting the channel be ready for requests
- *
- * Note: We keep the slots for 1 operation on iop_chan->chain at all times.  To
- * avoid deadlock, via async_xor, num_descs_in_pool must at a minimum be
- * greater than 2x the number slots needed to satisfy a device->max_xor
- * request.
- * */
+/* returns the number of allocated descriptors */
 static int iop_adma_alloc_chan_resources(struct dma_chan *chan)
 {
 	char *hw_desc;
@@ -1111,12 +1087,25 @@ static int __devexit iop_adma_remove(struct platform_device *dev)
 	struct iop_adma_device *device = platform_get_drvdata(dev);
 	struct dma_chan *chan, *_chan;
 	struct iop_adma_chan *iop_chan;
+	int i;
 	struct iop_adma_platform_data *plat_data = dev->dev.platform_data;
 
 	dma_async_device_unregister(&device->common);
 
+	for (i = 0; i < 3; i++) {
+		unsigned int irq;
+		irq = platform_get_irq(dev, i);
+		free_irq(irq, device);
+	}
+
 	dma_free_coherent(&dev->dev, plat_data->pool_size,
 			device->dma_desc_pool_virt, device->dma_desc_pool);
+
+	do {
+		struct resource *res;
+		res = platform_get_resource(dev, IORESOURCE_MEM, 0);
+		release_mem_region(res->start, res->end - res->start);
+	} while (0);
 
 	list_for_each_entry_safe(chan, _chan, &device->common.channels,
 				device_node) {
@@ -1238,6 +1227,7 @@ static int __devinit iop_adma_probe(struct platform_device *pdev)
 	spin_lock_init(&iop_chan->lock);
 	INIT_LIST_HEAD(&iop_chan->chain);
 	INIT_LIST_HEAD(&iop_chan->all_slots);
+	INIT_RCU_HEAD(&iop_chan->common.rcu);
 	iop_chan->common.device = dma_dev;
 	list_add_tail(&iop_chan->common.device_node, &dma_dev->channels);
 
@@ -1397,8 +1387,6 @@ static void iop_chan_start_null_xor(struct iop_adma_chan *iop_chan)
 	spin_unlock_bh(&iop_chan->lock);
 }
 
-MODULE_ALIAS("platform:iop-adma");
-
 static struct platform_driver iop_adma_driver = {
 	.probe		= iop_adma_probe,
 	.remove		= iop_adma_remove,
@@ -1413,12 +1401,16 @@ static int __init iop_adma_init (void)
 	return platform_driver_register(&iop_adma_driver);
 }
 
+/* it's currently unsafe to unload this module */
+#if 0
 static void __exit iop_adma_exit (void)
 {
 	platform_driver_unregister(&iop_adma_driver);
 	return;
 }
 module_exit(iop_adma_exit);
+#endif
+
 module_init(iop_adma_init);
 
 MODULE_AUTHOR("Intel Corporation");

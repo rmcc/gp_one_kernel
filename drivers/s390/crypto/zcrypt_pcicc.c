@@ -361,18 +361,26 @@ static int convert_type86(struct zcrypt_device *zdev,
 	service_rc = le16_to_cpu(msg->cprb.ccp_rtcode);
 	if (unlikely(service_rc != 0)) {
 		service_rs = le16_to_cpu(msg->cprb.ccp_rscode);
-		if (service_rc == 8 && service_rs == 66)
+		if (service_rc == 8 && service_rs == 66) {
+			PDEBUG("Bad block format on PCICC\n");
 			return -EINVAL;
-		if (service_rc == 8 && service_rs == 65)
+		}
+		if (service_rc == 8 && service_rs == 65) {
+			PDEBUG("Probably an even modulus on PCICC\n");
 			return -EINVAL;
+		}
 		if (service_rc == 8 && service_rs == 770) {
+			PDEBUG("Invalid key length on PCICC\n");
 			zdev->max_mod_size = PCICC_MAX_MOD_SIZE_OLD;
 			return -EAGAIN;
 		}
 		if (service_rc == 8 && service_rs == 783) {
+			PDEBUG("Extended bitlengths not enabled on PCICC\n");
 			zdev->max_mod_size = PCICC_MAX_MOD_SIZE_OLD;
 			return -EAGAIN;
 		}
+		PRINTK("Unknown service rc/rs (PCICC): %d/%d\n",
+		       service_rc, service_rs);
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
@@ -426,6 +434,9 @@ static int convert_response(struct zcrypt_device *zdev,
 					      outputdata, outputdatalength);
 		/* no break, incorrect cprb version is an unknown response */
 	default: /* Unknown response type, this should NEVER EVER happen */
+		PRINTK("Unrecognized Message Header: %08x%08x\n",
+		       *(unsigned int *) reply->message,
+		       *(unsigned int *) (reply->message+4));
 		zdev->online = 0;
 		return -EAGAIN;	/* repeat the request on a different device. */
 	}
@@ -447,23 +458,19 @@ static void zcrypt_pcicc_receive(struct ap_device *ap_dev,
 		.type = TYPE82_RSP_CODE,
 		.reply_code = REP82_ERROR_MACHINE_FAILURE,
 	};
-	struct type86_reply *t86r;
+	struct type86_reply *t86r = reply->message;
 	int length;
 
 	/* Copy the reply message to the request message buffer. */
-	if (IS_ERR(reply)) {
+	if (IS_ERR(reply))
 		memcpy(msg->message, &error_reply, sizeof(error_reply));
-		goto out;
-	}
-	t86r = reply->message;
-	if (t86r->hdr.type == TYPE86_RSP_CODE &&
+	else if (t86r->hdr.type == TYPE86_RSP_CODE &&
 		 t86r->cprb.cprb_ver_id == 0x01) {
 		length = sizeof(struct type86_reply) + t86r->length - 2;
 		length = min(PCICC_MAX_RESPONSE_SIZE, length);
 		memcpy(msg->message, reply->message, length);
 	} else
 		memcpy(msg->message, reply->message, sizeof error_reply);
-out:
 	complete((struct completion *) msg->private);
 }
 

@@ -75,7 +75,7 @@ static struct uart_port ulite_ports[ULITE_NR_UARTS];
 
 static int ulite_receive(struct uart_port *port, int stat)
 {
-	struct tty_struct *tty = port->info->port.tty;
+	struct tty_struct *tty = port->info->tty;
 	unsigned char ch = 0;
 	char flag = TTY_NORMAL;
 
@@ -162,7 +162,7 @@ static irqreturn_t ulite_isr(int irq, void *dev_id)
 		busy |= ulite_transmit(port, stat);
 	} while (busy);
 
-	tty_flip_buffer_push(port->info->port.tty);
+	tty_flip_buffer_push(port->info->tty);
 
 	return IRQ_HANDLED;
 }
@@ -286,8 +286,8 @@ static void ulite_release_port(struct uart_port *port)
 
 static int ulite_request_port(struct uart_port *port)
 {
-	pr_debug("ulite console: port=%p; port->mapbase=%llx\n",
-		 port, (unsigned long long) port->mapbase);
+	pr_debug("ulite console: port=%p; port->mapbase=%x\n",
+		 port, port->mapbase);
 
 	if (!request_mem_region(port->mapbase, ULITE_REGION, "uartlite")) {
 		dev_err(port->dev, "Memory region busy\n");

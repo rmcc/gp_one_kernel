@@ -13,7 +13,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/physmap.h>
 
-#include <mach/smc.h>
+#include <asm/arch/smc.h>
 
 static struct smc_timing flash_timing __initdata = {
 	.ncs_read_setup		= 0,

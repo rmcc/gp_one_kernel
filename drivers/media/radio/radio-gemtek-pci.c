@@ -46,7 +46,6 @@
 #include <linux/pci.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-common.h>
-#include <media/v4l2-ioctl.h>
 #include <linux/errno.h>
 
 #include <linux/version.h>      /* for KERNEL_VERSION MACRO     */
@@ -100,8 +99,9 @@ struct gemtek_pci_card {
 	u8  mute;
 };
 
+static const char rcsid[] = "$Id: radio-gemtek-pci.c,v 1.1 2001/07/23 08:08:16 ted Exp ted $";
+
 static int nr_radio = -1;
-static unsigned long in_use;
 
 static inline u8 gemtek_pci_out( u16 value, u32 port )
 {
@@ -204,7 +204,8 @@ static int vidioc_querycap(struct file *file, void *priv,
 static int vidioc_g_tuner(struct file *file, void *priv,
 					struct v4l2_tuner *v)
 {
-	struct gemtek_pci_card *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct gemtek_pci_card *card = dev->priv;
 
 	if (v->index > 0)
 		return -EINVAL;
@@ -231,7 +232,8 @@ static int vidioc_s_tuner(struct file *file, void *priv,
 static int vidioc_s_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct gemtek_pci_card *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct gemtek_pci_card *card = dev->priv;
 
 	if ( (f->frequency < GEMTEK_PCI_RANGE_LOW) ||
 			(f->frequency > GEMTEK_PCI_RANGE_HIGH) )
@@ -245,7 +247,8 @@ static int vidioc_s_frequency(struct file *file, void *priv,
 static int vidioc_g_frequency(struct file *file, void *priv,
 					struct v4l2_frequency *f)
 {
-	struct gemtek_pci_card *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct gemtek_pci_card *card = dev->priv;
 
 	f->type = V4L2_TUNER_RADIO;
 	f->frequency = card->current_frequency;
@@ -269,7 +272,8 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 static int vidioc_g_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct gemtek_pci_card *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct gemtek_pci_card *card = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -288,7 +292,8 @@ static int vidioc_g_ctrl(struct file *file, void *priv,
 static int vidioc_s_ctrl(struct file *file, void *priv,
 					struct v4l2_control *ctrl)
 {
-	struct gemtek_pci_card *card = video_drvdata(file);
+	struct video_device *dev = video_devdata(file);
+	struct gemtek_pci_card *card = dev->priv;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_MUTE:
@@ -358,25 +363,22 @@ MODULE_DEVICE_TABLE( pci, gemtek_pci_id );
 
 static int mx = 1;
 
-static int gemtek_pci_exclusive_open(struct file *file)
-{
-	return test_and_set_bit(0, &in_use) ? -EBUSY : 0;
-}
-
-static int gemtek_pci_exclusive_release(struct file *file)
-{
-	clear_bit(0, &in_use);
-	return 0;
-}
-
-static const struct v4l2_file_operations gemtek_pci_fops = {
+static const struct file_operations gemtek_pci_fops = {
 	.owner		= THIS_MODULE,
-	.open           = gemtek_pci_exclusive_open,
-	.release        = gemtek_pci_exclusive_release,
+	.open           = video_exclusive_open,
+	.release        = video_exclusive_release,
 	.ioctl		= video_ioctl2,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
-static const struct v4l2_ioctl_ops gemtek_pci_ioctl_ops = {
+static struct video_device vdev_template = {
+	.owner         = THIS_MODULE,
+	.name          = "Gemtek PCI Radio",
+	.type          = VID_TYPE_TUNER,
+	.fops          = &gemtek_pci_fops,
 	.vidioc_querycap    = vidioc_querycap,
 	.vidioc_g_tuner     = vidioc_g_tuner,
 	.vidioc_s_tuner     = vidioc_s_tuner,
@@ -389,13 +391,6 @@ static const struct v4l2_ioctl_ops gemtek_pci_ioctl_ops = {
 	.vidioc_queryctrl   = vidioc_queryctrl,
 	.vidioc_g_ctrl      = vidioc_g_ctrl,
 	.vidioc_s_ctrl      = vidioc_s_ctrl,
-};
-
-static struct video_device vdev_template = {
-	.name          	= "Gemtek PCI Radio",
-	.fops          	= &gemtek_pci_fops,
-	.ioctl_ops 	= &gemtek_pci_ioctl_ops,
-	.release	= video_device_release_empty,
 };
 
 static int __devinit gemtek_pci_probe( struct pci_dev *pci_dev, const struct pci_device_id *pci_id )
@@ -427,13 +422,13 @@ static int __devinit gemtek_pci_probe( struct pci_dev *pci_dev, const struct pci
 	}
 	*devradio = vdev_template;
 
-	if (video_register_device(devradio, VFL_TYPE_RADIO, nr_radio) < 0) {
+	if ( video_register_device( devradio, VFL_TYPE_RADIO , nr_radio) == -1 ) {
 		kfree( devradio );
 		goto err_video;
 	}
 
 	card->videodev = devradio;
-	video_set_drvdata(devradio, card);
+	devradio->priv = card;
 	gemtek_pci_mute( card );
 
 	printk( KERN_INFO "Gemtek PCI Radio (rev. %d) found at 0x%04x-0x%04x.\n",

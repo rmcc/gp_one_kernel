@@ -8,7 +8,7 @@ config VT
 	bool "Virtual terminal" if EMBEDDED
 	depends on !S390
 	select INPUT
-	default y
+	default y if !VIOCONS
 	---help---
 	  If you say Y here, you will get support for terminal devices with
 	  display and keyboard devices. These are called "virtual" because you
@@ -35,14 +35,6 @@ config VT
 
 	  If unsure, say Y, or else you won't be able to do much with your new
 	  shiny Linux system :-)
-
-config CONSOLE_TRANSLATIONS
-	depends on VT
-	default y
-	bool "Enable character translations in console" if EMBEDDED
-	---help---
-	  This enables support for font mapping and Unicode translation
-	  on virtual consoles.
 
 config VT_CONSOLE
 	bool "Support for console on virtual terminal" if EMBEDDED
@@ -124,10 +116,10 @@ config COMPUTONE
 	  which give you many serial ports. You would need something like this
 	  to connect more than two modems to your Linux box, for instance in
 	  order to become a dial-in server. If you have a card like that, say
-	  Y here and read <file:Documentation/serial/computone.txt>.
+	  Y here and read <file:Documentation/computone.txt>.
 
-	  To compile this driver as module, choose M here: the
-	  module will be called ip2.
+	  To compile this driver as modules, choose M here: the
+	  modules will be called ip2 and ip2main.
 
 config ROCKETPORT
 	tristate "Comtrol RocketPort support"
@@ -136,7 +128,7 @@ config ROCKETPORT
 	  This driver supports Comtrol RocketPort and RocketModem PCI boards.   
           These boards provide 2, 4, 8, 16, or 32 high-speed serial ports or
           modems.  For information about the RocketPort/RocketModem  boards
-          and this driver read <file:Documentation/serial/rocket.txt>.
+          and this driver read <file:Documentation/rocket.txt>.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called rocket.
@@ -154,7 +146,7 @@ config CYCLADES
 	  your Linux box, for instance in order to become a dial-in server.
 
 	  For information about the Cyclades-Z card, read
-	  <file:Documentation/serial/README.cycladesZ>.
+	  <file:Documentation/README.cycladesZ>.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called cyclades.
@@ -183,14 +175,14 @@ config DIGIEPCA
 	  box, for instance in order to become a dial-in server. This driver
 	  supports the original PC (ISA) boards as well as PCI, and EISA. If
 	  you have a card like this, say Y here and read the file
-	  <file:Documentation/serial/digiepca.txt>.
+	  <file:Documentation/digiepca.txt>.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called epca.
 
 config ESPSERIAL
 	tristate "Hayes ESP serial port support"
-	depends on SERIAL_NONSTANDARD && ISA && ISA_DMA_API && BROKEN
+	depends on SERIAL_NONSTANDARD && ISA && ISA_DMA_API
 	help
 	  This is a driver which supports Hayes ESP serial ports.  Both single
 	  port cards and multiport cards are supported.  Make sure to read
@@ -289,7 +281,7 @@ config RISCOM8
 	  which gives you many serial ports. You would need something like
 	  this to connect more than two modems to your Linux box, for instance
 	  in order to become a dial-in server. If you have a card like that,
-	  say Y here and read the file <file:Documentation/serial/riscom8.txt>.
+	  say Y here and read the file <file:Documentation/riscom8.txt>.
 
 	  Also it's possible to say M here and compile this driver as kernel
 	  loadable module; the module will be called riscom8.
@@ -304,16 +296,26 @@ config SPECIALIX
 	  your Linux box, for instance in order to become a dial-in server.
 
 	  If you have a card like that, say Y here and read the file
-	  <file:Documentation/serial/specialix.txt>. Also it's possible to say
-	  M here and compile this driver as kernel loadable module which will be
+	  <file:Documentation/specialix.txt>. Also it's possible to say M here
+	  and compile this driver as kernel loadable module which will be
 	  called specialix.
+
+config SPECIALIX_RTSCTS
+	bool "Specialix DTR/RTS pin is RTS"
+	depends on SPECIALIX
+	help
+	  The Specialix IO8+ card can only support either RTS or DTR. If you
+	  say N here, the driver will use the pin as "DTR" when the tty is in
+	  software handshake mode.  If you say Y here or hardware handshake is
+	  on, it will always be RTS.  Read the file
+	  <file:Documentation/specialix.txt> for more information.
 
 config SX
 	tristate "Specialix SX (and SI) card support"
 	depends on SERIAL_NONSTANDARD && (PCI || EISA || ISA)
 	help
 	  This is a driver for the SX and SI multiport serial cards.
-	  Please read the file <file:Documentation/serial/sx.txt> for details.
+	  Please read the file <file:Documentation/sx.txt> for details.
 
 	  This driver can only be built as a module ( = code which can be
 	  inserted in and removed from the running kernel whenever you want).
@@ -344,28 +346,28 @@ config STALDRV
 	  like this to connect more than two modems to your Linux box, for
 	  instance in order to become a dial-in server.  If you say Y here,
 	  you will be asked for your specific card model in the next
-	  questions.  Make sure to read <file:Documentation/serial/stallion.txt>
-	  in this case.  If you have never heard about all this, it's safe to
+	  questions.  Make sure to read <file:Documentation/stallion.txt> in
+	  this case.  If you have never heard about all this, it's safe to
 	  say N.
 
 config STALLION
 	tristate "Stallion EasyIO or EC8/32 support"
-	depends on STALDRV && (ISA || EISA || PCI)
+	depends on STALDRV && BROKEN_ON_SMP && (ISA || EISA || PCI)
 	help
 	  If you have an EasyIO or EasyConnection 8/32 multiport Stallion
 	  card, then this is for you; say Y.  Make sure to read
-	  <file:Documentation/serial/stallion.txt>.
+	  <file:Documentation/stallion.txt>.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called stallion.
 
 config ISTALLION
 	tristate "Stallion EC8/64, ONboard, Brumby support"
-	depends on STALDRV && (ISA || EISA || PCI)
+	depends on STALDRV && BROKEN_ON_SMP && (ISA || EISA || PCI)
 	help
 	  If you have an EasyConnection 8/64, ONboard, Brumby or Stallion
 	  serial multiport card, say Y here. Make sure to read
-	  <file:Documentation/serial/stallion.txt>.
+	  <file:Documentation/stallion.txt>.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called istallion.
@@ -442,17 +444,6 @@ config UNIX98_PTYS
 
 	  All modern Linux systems use the Unix98 ptys.  Say Y unless
 	  you're on an embedded system and want to conserve memory.
-
-config DEVPTS_MULTIPLE_INSTANCES
-	bool "Support multiple instances of devpts"
-	depends on UNIX98_PTYS
-	default n
-	---help---
-	  Enable support for multiple instances of devpts filesystem.
-	  If you want to have isolated PTY namespaces (eg: in containers),
-	  say Y here.  Otherwise, say N. If enabled, each mount of devpts
-	  filesystem with the '-o newinstance' option will create an
-	  independent PTY namespace.
 
 config LEGACY_PTYS
 	bool "Legacy (BSD) PTY support"
@@ -597,14 +588,11 @@ config HVC_DRIVER
 	  It will automatically be selected if one of the back-end console drivers
 	  is selected.
 
-config HVC_IRQ
-	bool
 
 config HVC_CONSOLE
 	bool "pSeries Hypervisor Virtual Console support"
 	depends on PPC_PSERIES
 	select HVC_DRIVER
-	select HVC_IRQ
 	help
 	  pSeries machines when partitioned support a hypervisor virtual
 	  console. This driver allows each pSeries partition to have a console
@@ -615,8 +603,6 @@ config HVC_ISERIES
 	depends on PPC_ISERIES
 	default y
 	select HVC_DRIVER
-	select HVC_IRQ
-	select VIOPATH
 	help
 	  iSeries machines support a hypervisor virtual console.
 
@@ -634,38 +620,17 @@ config HVC_BEAT
 	help
 	  Toshiba's Cell Reference Set Beat Console device driver
 
-config HVC_IUCV
-	bool "z/VM IUCV Hypervisor console support (VM only)"
-	depends on S390
-	select HVC_DRIVER
-	select IUCV
-	default y
-	help
-	  This driver provides a Hypervisor console (HVC) back-end to access
-	  a Linux (console) terminal via a z/VM IUCV communication path.
-
 config HVC_XEN
 	bool "Xen Hypervisor Console support"
 	depends on XEN
 	select HVC_DRIVER
-	select HVC_IRQ
 	default y
 	help
 	  Xen virtual console device driver
 
-config HVC_UDBG
-       bool "udbg based fake hypervisor console"
-       depends on PPC && EXPERIMENTAL
-       select HVC_DRIVER
-       default n
-
 config VIRTIO_CONSOLE
-	tristate "Virtio console"
-	depends on VIRTIO
+	bool
 	select HVC_DRIVER
-	help
-	  Virtio console for use with lguest and other hypervisors.
-
 
 config HVCS
 	tristate "IBM Hypervisor Virtual Console Server support"
@@ -683,14 +648,6 @@ config HVCS
 	  will depend on arch specific APIs exported from hvcserver.ko
 	  which will also be compiled when this driver is built as a
 	  module.
-
-config IBM_BSR
-	tristate "IBM POWER Barrier Synchronization Register support"
-	depends on PPC_PSERIES
-	help
-	  This devices exposes a hardware mechanism for fast synchronization
-	  of threads across a large system which avoids bouncing a cacheline
-	  between several cores on a system
 
 source "drivers/char/ipmi/Kconfig"
 
@@ -792,7 +749,7 @@ config NVRAM
 if RTC_LIB=n
 
 config RTC
-	tristate "Enhanced Real Time Clock Support (legacy PC RTC driver)"
+	tristate "Enhanced Real Time Clock Support"
 	depends on !PPC && !PARISC && !IA64 && !M68K && !SPARC && !FRV \
 			&& !ARM && !SUPERH && !S390 && !AVR32
 	---help---
@@ -840,9 +797,31 @@ config JS_RTC
 	  To compile this driver as a module, choose M here: the
 	  module will be called js-rtc.
 
+config SGI_DS1286
+	tristate "SGI DS1286 RTC support"
+	depends on SGI_HAS_DS1286
+	help
+	  If you say Y here and create a character special file /dev/rtc with
+	  major number 10 and minor number 135 using mknod ("man mknod"), you
+	  will get access to the real time clock built into your computer.
+	  Every SGI has such a clock built in. It reports status information
+	  via the file /proc/rtc and its behaviour is set by various ioctls on
+	  /dev/rtc.
+
+config SGI_IP27_RTC
+	bool "SGI M48T35 RTC support"
+	depends on SGI_IP27
+	help
+	  If you say Y here and create a character special file /dev/rtc with
+	  major number 10 and minor number 135 using mknod ("man mknod"), you
+	  will get access to the real time clock built into your computer.
+	  Every SGI has such a clock built in. It reports status information
+	  via the file /proc/rtc and its behaviour is set by various ioctls on
+	  /dev/rtc.
+
 config GEN_RTC
 	tristate "Generic /dev/rtc emulation"
-	depends on RTC!=y && !IA64 && !ARM && !M32R && !MIPS && !SPARC && !FRV && !S390 && !SUPERH && !AVR32 && !BLACKFIN
+	depends on RTC!=y && !IA64 && !ARM && !M32R && !MIPS && !SPARC && !FRV && !S390 && !SUPERH && !AVR32
 	---help---
 	  If you say Y here and create a character special file /dev/rtc with
 	  major number 10 and minor number 135 using mknod ("man mknod"), you
@@ -879,6 +858,13 @@ config DS1302
 	  into your computer.
 
 endif # RTC_LIB
+
+config COBALT_LCD
+	bool "Support for Cobalt LCD"
+	depends on MIPS_COBALT
+	help
+	  This option enables support for the LCD display and buttons found
+	  on Cobalt systems through a misc device.
 
 config DTLK
 	tristate "Double Talk PC internal speech card support"
@@ -1048,6 +1034,15 @@ config HPET
 	  If you say Y here, you will have a miscdevice named "/dev/hpet/".  Each
 	  open selects one of the timers supported by the HPET.  The timers are
 	  non-periodic and/or periodic.
+
+config HPET_RTC_IRQ
+	bool "HPET Control RTC IRQ" if !HPET_EMULATE_RTC
+	default n
+	depends on HPET
+	help
+	  If you say Y here, you will disable RTC_IRQ in drivers/char/rtc.c. It
+	  is assumed the platform called hpet_alloc with the RTC IRQ values for
+	  the HPET timers.
 
 config HPET_MMAP
 	bool "Allow mmap of HPET"
