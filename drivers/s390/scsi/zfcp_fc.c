@@ -3,7 +3,7 @@
  *
  * Fibre Channel related functions for the zfcp device driver.
  *
- * Copyright IBM Corporation 2008, 2009
+ * Copyright IBM Corporation 2008
  */
 
 #define KMSG_COMPONENT "zfcp"
@@ -98,12 +98,8 @@ static void zfcp_wka_port_offline(struct work_struct *work)
 	struct zfcp_wka_port *wka_port =
 			container_of(dw, struct zfcp_wka_port, work);
 
-	/* Don't wait forvever. If the wka_port is too busy take it offline
-	   through a new call later */
-	if (!wait_event_timeout(wka_port->completion_wq,
-				atomic_read(&wka_port->refcount) == 0,
-				HZ >> 1))
-		return;
+	wait_event(wka_port->completion_wq,
+			atomic_read(&wka_port->refcount) == 0);
 
 	mutex_lock(&wka_port->mutex);
 	if ((atomic_read(&wka_port->refcount) != 0) ||
@@ -149,10 +145,16 @@ static void _zfcp_fc_incoming_rscn(struct zfcp_fsf_req *fsf_req, u32 range,
 	struct zfcp_port *port;
 
 	read_lock_irqsave(&zfcp_data.config_lock, flags);
-	list_for_each_entry(port, &fsf_req->adapter->port_list_head, list)
-		if ((port->d_id & range) == (elem->nport_did & range))
+	list_for_each_entry(port, &fsf_req->adapter->port_list_head, list) {
+		if (!(atomic_read(&port->status) & ZFCP_STATUS_PORT_PHYS_OPEN))
+			/* Try to connect to unused ports anyway. */
+			zfcp_erp_port_reopen(port,
+					     ZFCP_STATUS_COMMON_ERP_FAILED,
+					     82, fsf_req);
+		else if ((port->d_id & range) == (elem->nport_did & range))
+			/* Check connection status for connected ports */
 			zfcp_test_link(port);
-
+	}
 	read_unlock_irqrestore(&zfcp_data.config_lock, flags);
 }
 
@@ -194,7 +196,7 @@ static void zfcp_fc_incoming_wwpn(struct zfcp_fsf_req *req, u64 wwpn)
 	read_unlock_irqrestore(&zfcp_data.config_lock, flags);
 
 	if (port && (port->wwpn == wwpn))
-		zfcp_erp_port_forced_reopen(port, 0, "fciwwp1", req);
+		zfcp_erp_port_forced_reopen(port, 0, 83, req);
 }
 
 static void zfcp_fc_incoming_plogi(struct zfcp_fsf_req *req)
@@ -257,9 +259,10 @@ static void zfcp_fc_ns_gid_pn_eval(unsigned long data)
 
 	if (ct->status)
 		return;
-	if (ct_iu_resp->header.cmd_rsp_code != ZFCP_CT_ACCEPT)
+	if (ct_iu_resp->header.cmd_rsp_code != ZFCP_CT_ACCEPT) {
+		atomic_set_mask(ZFCP_STATUS_PORT_INVALID_WWPN, &port->status);
 		return;
-
+	}
 	/* paranoia */
 	if (ct_iu_req->wwpn != port->wwpn)
 		return;
@@ -372,22 +375,16 @@ static void zfcp_fc_adisc_handler(unsigned long data)
 
 	if (adisc->els.status) {
 		/* request rejected or timed out */
-		zfcp_erp_port_forced_reopen(port, 0, "fcadh_1", NULL);
+		zfcp_erp_port_forced_reopen(port, 0, 63, NULL);
 		goto out;
 	}
 
 	if (!port->wwnn)
 		port->wwnn = ls_adisc->wwnn;
 
-	if ((port->wwpn != ls_adisc->wwpn) ||
-	    !(atomic_read(&port->status) & ZFCP_STATUS_COMMON_OPEN)) {
-		zfcp_erp_port_reopen(port, ZFCP_STATUS_COMMON_ERP_FAILED,
-				     "fcadh_2", NULL);
-		goto out;
-	}
+	if (port->wwpn != ls_adisc->wwpn)
+		zfcp_erp_port_reopen(port, 0, 64, NULL);
 
-	/* port is good, unblock rport without going through erp */
-	zfcp_scsi_schedule_rport_register(port);
  out:
 	zfcp_port_put(port);
 	kfree(adisc);
@@ -425,31 +422,6 @@ static int zfcp_fc_adisc(struct zfcp_port *port)
 	return zfcp_fsf_send_els(&adisc->els);
 }
 
-void zfcp_fc_link_test_work(struct work_struct *work)
-{
-	struct zfcp_port *port =
-		container_of(work, struct zfcp_port, test_link_work);
-	int retval;
-
-	if (!(atomic_read(&port->status) & ZFCP_STATUS_COMMON_UNBLOCKED)) {
-		zfcp_port_put(port);
-		return; /* port erp is running and will update rport status */
-	}
-
-	zfcp_port_get(port);
-	port->rport_task = RPORT_DEL;
-	zfcp_scsi_rport_work(&port->rport_work);
-
-	retval = zfcp_fc_adisc(port);
-	if (retval == 0)
-		return;
-
-	/* send of ADISC was not possible */
-	zfcp_erp_port_forced_reopen(port, 0, "fcltwk1", NULL);
-
-	zfcp_port_put(port);
-}
-
 /**
  * zfcp_test_link - lightweight link test procedure
  * @port: port to be tested
@@ -460,9 +432,17 @@ void zfcp_fc_link_test_work(struct work_struct *work)
  */
 void zfcp_test_link(struct zfcp_port *port)
 {
+	int retval;
+
 	zfcp_port_get(port);
-	if (!queue_work(zfcp_data.work_queue, &port->test_link_work))
-		zfcp_port_put(port);
+	retval = zfcp_fc_adisc(port);
+	if (retval == 0)
+		return;
+
+	/* send of ADISC was not possible */
+	zfcp_port_put(port);
+	if (retval != -EBUSY)
+		zfcp_erp_port_forced_reopen(port, 0, 65, NULL);
 }
 
 static void zfcp_free_sg_env(struct zfcp_gpn_ft *gpn_ft, int buf_num)
@@ -549,7 +529,7 @@ static void zfcp_validate_port(struct zfcp_port *port)
 		zfcp_port_put(port);
 		return;
 	}
-	zfcp_erp_port_shutdown(port, 0, "fcpval1", NULL);
+	zfcp_erp_port_shutdown(port, 0, 151, NULL);
 	zfcp_erp_wait(adapter);
 	zfcp_port_put(port);
 	zfcp_port_dequeue(port);
@@ -612,7 +592,7 @@ static int zfcp_scan_eval_gpn_ft(struct zfcp_gpn_ft *gpn_ft, int max_entries)
 		if (IS_ERR(port))
 			ret = PTR_ERR(port);
 		else
-			zfcp_erp_port_reopen(port, 0, "fcegpf1", NULL);
+			zfcp_erp_port_reopen(port, 0, 149, NULL);
 	}
 
 	zfcp_erp_wait(adapter);

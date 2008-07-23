@@ -101,7 +101,8 @@ free_snic:
 }
 
 /**
- * cxgb3i_adapter_remove - release the resources held and cleanup h/w settings
+ * cxgb3i_adapter_remove - release all the resources held and cleanup any
+ *	h/w settings
  * @t3dev: t3cdev adapter
  */
 void cxgb3i_adapter_remove(struct t3cdev *t3dev)
@@ -134,7 +135,8 @@ void cxgb3i_adapter_remove(struct t3cdev *t3dev)
 }
 
 /**
- * cxgb3i_hba_find_by_netdev - find the cxgb3i_hba structure via net_device
+ * cxgb3i_hba_find_by_netdev - find the cxgb3i_hba structure with a given
+ *	net_device
  * @t3dev: t3cdev adapter
  */
 struct cxgb3i_hba *cxgb3i_hba_find_by_netdev(struct net_device *ndev)
@@ -168,7 +170,8 @@ struct cxgb3i_hba *cxgb3i_hba_host_add(struct cxgb3i_adapter *snic,
 	int err;
 
 	shost = iscsi_host_alloc(&cxgb3i_host_template,
-				 sizeof(struct cxgb3i_hba), 1);
+				 sizeof(struct cxgb3i_hba),
+				 CXGB3I_SCSI_QDEPTH_DFLT);
 	if (!shost) {
 		cxgb3i_log_info("iscsi_host_alloc failed.\n");
 		return NULL;
@@ -332,12 +335,13 @@ static void cxgb3i_ep_disconnect(struct iscsi_endpoint *ep)
  * @cmds_max:		max # of commands
  * @qdepth:		scsi queue depth
  * @initial_cmdsn:	initial iscsi CMDSN for this session
+ * @host_no:		pointer to return host no
  *
  * Creates a new iSCSI session
  */
 static struct iscsi_cls_session *
 cxgb3i_session_create(struct iscsi_endpoint *ep, u16 cmds_max, u16 qdepth,
-		      u32 initial_cmdsn)
+		      u32 initial_cmdsn, u32 *host_no)
 {
 	struct cxgb3i_endpoint *cep;
 	struct cxgb3i_hba *hba;
@@ -355,6 +359,8 @@ cxgb3i_session_create(struct iscsi_endpoint *ep, u16 cmds_max, u16 qdepth,
 	shost = hba->shost;
 	cxgb3i_api_debug("ep 0x%p, cep 0x%p, hba 0x%p.\n", ep, cep, hba);
 	BUG_ON(hba != iscsi_host_priv(shost));
+
+	*host_no = shost->host_no;
 
 	cls_session = iscsi_session_setup(&cxgb3i_iscsi_transport, shost,
 					  cmds_max,
@@ -388,9 +394,9 @@ static void cxgb3i_session_destroy(struct iscsi_cls_session *cls_session)
 }
 
 /**
- * cxgb3i_conn_max_xmit_dlength -- calc the max. xmit pdu segment size
+ * cxgb3i_conn_max_xmit_dlength -- check the max. xmit pdu segment size,
+ * reduce it to be within the hardware limit if needed
  * @conn: iscsi connection
- * check the max. xmit pdu payload, reduce it if needed
  */
 static inline int cxgb3i_conn_max_xmit_dlength(struct iscsi_conn *conn)
 
@@ -411,7 +417,8 @@ static inline int cxgb3i_conn_max_xmit_dlength(struct iscsi_conn *conn)
 }
 
 /**
- * cxgb3i_conn_max_recv_dlength -- check the max. recv pdu segment size
+ * cxgb3i_conn_max_recv_dlength -- check the max. recv pdu segment size against
+ * the hardware limit
  * @conn: iscsi connection
  * return 0 if the value is valid, < 0 otherwise.
  */
@@ -752,9 +759,9 @@ static void cxgb3i_parse_itt(struct iscsi_conn *conn, itt_t itt,
 
 /**
  * cxgb3i_reserve_itt - generate tag for a give task
+ * Try to set up ddp for a scsi read task.
  * @task: iscsi task
  * @hdr_itt: tag, filled in by this function
- * Set up ddp for scsi read tasks if possible.
  */
 int cxgb3i_reserve_itt(struct iscsi_task *task, itt_t *hdr_itt)
 {
@@ -802,9 +809,9 @@ int cxgb3i_reserve_itt(struct iscsi_task *task, itt_t *hdr_itt)
 
 /**
  * cxgb3i_release_itt - release the tag for a given task
+ * if the tag is a ddp tag, release the ddp setup
  * @task:	iscsi task
  * @hdr_itt:	tag
- * If the tag is a ddp tag, release the ddp setup
  */
 void cxgb3i_release_itt(struct iscsi_task *task, itt_t hdr_itt)
 {
@@ -836,7 +843,7 @@ static struct scsi_host_template cxgb3i_host_template = {
 	.can_queue		= CXGB3I_SCSI_QDEPTH_DFLT - 1,
 	.sg_tablesize		= SG_ALL,
 	.max_sectors		= 0xFFFF,
-	.cmd_per_lun		= CXGB3I_SCSI_QDEPTH_DFLT,
+	.cmd_per_lun		= ISCSI_DEF_CMD_PER_LUN,
 	.eh_abort_handler	= iscsi_eh_abort,
 	.eh_device_reset_handler = iscsi_eh_device_reset,
 	.eh_target_reset_handler = iscsi_eh_target_reset,

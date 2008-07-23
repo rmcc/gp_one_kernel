@@ -354,7 +354,6 @@ struct sym_trans {
 	unsigned int dt:1;
 	unsigned int qas:1;
 	unsigned int check_nego:1;
-	unsigned int renego:2;
 };
 
 /*
@@ -419,9 +418,6 @@ struct sym_tcb {
 
 	/* Transfer goal */
 	struct sym_trans tgoal;
-
-	/* Last printed transfer speed */
-	struct sym_trans tprint;
 
 	/*
 	 * Keep track of the CCB used for the negotiation in order

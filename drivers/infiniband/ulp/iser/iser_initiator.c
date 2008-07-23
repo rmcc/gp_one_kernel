@@ -661,7 +661,7 @@ void iser_snd_completion(struct iser_desc *tx_desc)
 
 	if (resume_tx) {
 		iser_dbg("%ld resuming tx\n",jiffies);
-		iscsi_conn_queue_work(conn);
+		scsi_queue_work(conn->session->host, &conn->xmitwork);
 	}
 
 	if (tx_desc->type == ISCSI_TX_CONTROL) {

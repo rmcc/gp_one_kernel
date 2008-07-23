@@ -22,7 +22,6 @@
 #include <linux/spinlock.h>
 #include <linux/capability.h>
 #include <linux/bitops.h>
-#include <linux/blkdev.h>
 
 #include <scsi/scsi.h>
 #include <linux/cdrom.h>
