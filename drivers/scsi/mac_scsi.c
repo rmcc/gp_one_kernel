@@ -47,6 +47,7 @@
 
 #include <asm/macintosh.h>
 #include <asm/macints.h>
+#include <asm/machw.h>
 #include <asm/mac_via.h>
 
 #include "scsi.h"

@@ -70,6 +70,11 @@ enum ipi_message_type {
 /* Set to a secondary's cpuid when it comes online.  */
 static int smp_secondary_alive __devinitdata = 0;
 
+/* Which cpus ids came online.  */
+cpumask_t cpu_online_map;
+
+EXPORT_SYMBOL(cpu_online_map);
+
 int smp_num_probed;		/* Internal processor count */
 int smp_num_cpus = 1;		/* Number that came online.  */
 EXPORT_SYMBOL(smp_num_cpus);
@@ -116,13 +121,12 @@ wait_boot_cpu_to_stop(int cpuid)
 /*
  * Where secondaries begin a life of C.
  */
-void __cpuinit
+void __init
 smp_callin(void)
 {
 	int cpuid = hard_smp_processor_id();
-	cpumask_t mask = cpu_online_map;
 
-	if (cpu_test_and_set(cpuid, mask)) {
+	if (cpu_test_and_set(cpuid, cpu_online_map)) {
 		printk("??, cpu 0x%x already present??\n", cpuid);
 		BUG();
 	}
@@ -194,7 +198,7 @@ wait_for_txrdy (unsigned long cpumask)
  * Send a message to a secondary's console.  "START" is one such
  * interesting message.  ;-)
  */
-static void __cpuinit
+static void __init
 send_secondary_console_msg(char *str, int cpuid)
 {
 	struct percpu_struct *cpu;
@@ -285,7 +289,7 @@ recv_secondary_console_msg(void)
 /*
  * Convince the console to have a secondary cpu begin execution.
  */
-static int __cpuinit
+static int __init
 secondary_cpu_start(int cpuid, struct task_struct *idle)
 {
 	struct percpu_struct *cpu;
@@ -436,7 +440,6 @@ setup_smp(void)
 				((char *)cpubase + i*hwrpb->processor_size);
 			if ((cpu->flags & 0x1cc) == 0x1cc) {
 				smp_num_probed++;
-				cpu_set(i, cpu_possible_map);
 				cpu_set(i, cpu_present_map);
 				cpu->pal_revision = boot_cpu_palrev;
 			}
@@ -470,7 +473,6 @@ smp_prepare_cpus(unsigned int max_cpus)
 
 	/* Nothing to do on a UP box, or when told not to.  */
 	if (smp_num_probed == 1 || max_cpus == 0) {
-		cpu_possible_map = cpumask_of_cpu(boot_cpuid);
 		cpu_present_map = cpumask_of_cpu(boot_cpuid);
 		printk(KERN_INFO "SMP mode deactivated.\n");
 		return;

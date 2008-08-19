@@ -163,11 +163,9 @@ static int __devinit fun_chip_init(struct fsl_upm_nand *fun,
 	ret = parse_mtd_partitions(&fun->mtd, part_types, &fun->parts, 0);
 
 #ifdef CONFIG_MTD_OF_PARTS
-	if (ret == 0) {
-		ret = of_mtd_parse_partitions(fun->dev, flash_np, &fun->parts);
-		if (ret < 0)
-			goto err;
-	}
+	if (ret == 0)
+		ret = of_mtd_parse_partitions(fun->dev, &fun->mtd,
+					      flash_np, &fun->parts);
 #endif
 	if (ret > 0)
 		ret = add_mtd_partitions(&fun->mtd, fun->parts, ret);
@@ -222,7 +220,7 @@ static int __devinit fun_probe(struct of_device *ofdev,
 
 	fun->rnb_gpio = of_get_gpio(ofdev->node, 0);
 	if (fun->rnb_gpio >= 0) {
-		ret = gpio_request(fun->rnb_gpio, dev_name(&ofdev->dev));
+		ret = gpio_request(fun->rnb_gpio, ofdev->dev.bus_id);
 		if (ret) {
 			dev_err(&ofdev->dev, "can't request RNB gpio\n");
 			goto err2;

@@ -174,12 +174,14 @@ not_o32_scall:
 	END(handle_sys)
 
 LEAF(sys32_syscall)
-	subu	t0, a0, __NR_O32_Linux	# check syscall number
-	sltiu	v0, t0, __NR_O32_Linux_syscalls + 1
-	beqz	t0, einval		# do not recurse
-	dsll	t1, t0, 3
+	sltu	v0, a0, __NR_O32_Linux + __NR_O32_Linux_syscalls + 1
 	beqz	v0, einval
-	ld	t2, sys_call_table(t1)		# syscall routine
+
+	dsll	v0, a0, 3
+	ld	t2, (sys_call_table - (__NR_O32_Linux * 8))(v0)
+
+	li	v1, 4000		# indirect syscall number
+	beq	a0, v1, einval		# do not recurse
 
 	move	a0, a1			# shift argument registers
 	move	a1, a2
@@ -196,7 +198,7 @@ LEAF(sys32_syscall)
 	jr	t2
 	/* Unreached */
 
-einval:	li	v0, -ENOSYS
+einval:	li	v0, -EINVAL
 	jr	ra
 	END(sys32_syscall)
 
@@ -510,7 +512,7 @@ sys_call_table:
 	PTR	sys_splice
 	PTR	sys32_sync_file_range		/* 4305 */
 	PTR	sys_tee
-	PTR	compat_sys_vmsplice
+	PTR	sys_vmsplice
 	PTR	compat_sys_move_pages
 	PTR	compat_sys_set_robust_list
 	PTR	compat_sys_get_robust_list	/* 4310 */

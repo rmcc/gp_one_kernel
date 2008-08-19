@@ -116,8 +116,7 @@ out:
 }
 
 static int au1xpsc_i2s_hw_params(struct snd_pcm_substream *substream,
-				 struct snd_pcm_hw_params *params,
-				 struct snd_soc_dai *dai)
+				 struct snd_pcm_hw_params *params)
 {
 	struct au1xpsc_audio_data *pscdata = au1xpsc_i2s_workdata;
 
@@ -241,8 +240,7 @@ static int au1xpsc_i2s_stop(struct au1xpsc_audio_data *pscdata, int stype)
 	return 0;
 }
 
-static int au1xpsc_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
-			       struct snd_soc_dai *dai)
+static int au1xpsc_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	struct au1xpsc_audio_data *pscdata = au1xpsc_i2s_workdata;
 	int ret, stype = SUBSTREAM_TYPE(substream);
@@ -339,7 +337,8 @@ static void au1xpsc_i2s_remove(struct platform_device *pdev,
 	au1xpsc_i2s_workdata = NULL;
 }
 
-static int au1xpsc_i2s_suspend(struct snd_soc_dai *cpu_dai)
+static int au1xpsc_i2s_suspend(struct platform_device *pdev,
+			       struct snd_soc_dai *cpu_dai)
 {
 	/* save interesting register and disable PSC */
 	au1xpsc_i2s_workdata->pm[0] =
@@ -353,7 +352,8 @@ static int au1xpsc_i2s_suspend(struct snd_soc_dai *cpu_dai)
 	return 0;
 }
 
-static int au1xpsc_i2s_resume(struct snd_soc_dai *cpu_dai)
+static int au1xpsc_i2s_resume(struct platform_device *pdev,
+			      struct snd_soc_dai *cpu_dai)
 {
 	/* select I2S mode and PSC clock */
 	au_writel(PSC_CTRL_DISABLE, PSC_CTRL(au1xpsc_i2s_workdata));
@@ -369,6 +369,7 @@ static int au1xpsc_i2s_resume(struct snd_soc_dai *cpu_dai)
 
 struct snd_soc_dai au1xpsc_i2s_dai = {
 	.name			= "au1xpsc_i2s",
+	.type			= SND_SOC_DAI_I2S,
 	.probe			= au1xpsc_i2s_probe,
 	.remove			= au1xpsc_i2s_remove,
 	.suspend		= au1xpsc_i2s_suspend,
@@ -388,6 +389,8 @@ struct snd_soc_dai au1xpsc_i2s_dai = {
 	.ops = {
 		.trigger	= au1xpsc_i2s_trigger,
 		.hw_params	= au1xpsc_i2s_hw_params,
+	},
+	.dai_ops = {
 		.set_fmt	= au1xpsc_i2s_set_fmt,
 	},
 };
@@ -396,12 +399,11 @@ EXPORT_SYMBOL(au1xpsc_i2s_dai);
 static int __init au1xpsc_i2s_init(void)
 {
 	au1xpsc_i2s_workdata = NULL;
-	return snd_soc_register_dai(&au1xpsc_i2s_dai);
+	return 0;
 }
 
 static void __exit au1xpsc_i2s_exit(void)
 {
-	snd_soc_unregister_dai(&au1xpsc_i2s_dai);
 }
 
 module_init(au1xpsc_i2s_init);

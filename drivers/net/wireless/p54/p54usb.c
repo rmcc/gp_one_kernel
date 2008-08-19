@@ -28,8 +28,6 @@ MODULE_AUTHOR("Michael Wu <flamingice@sourmilk.net>");
 MODULE_DESCRIPTION("Prism54 USB wireless driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("prism54usb");
-MODULE_FIRMWARE("isl3886usb");
-MODULE_FIRMWARE("isl3887usb");
 
 static struct usb_device_id p54u_table[] __devinitdata = {
 	/* Version 1 devices (pci chip + net2280) */
@@ -56,7 +54,6 @@ static struct usb_device_id p54u_table[] __devinitdata = {
 	{USB_DEVICE(0x050d, 0x7050)},	/* Belkin F5D7050 ver 1000 */
 	{USB_DEVICE(0x0572, 0x2000)},	/* Cohiba Proto board */
 	{USB_DEVICE(0x0572, 0x2002)},	/* Cohiba Proto board */
-	{USB_DEVICE(0x06b9, 0x0121)},	/* Thomson SpeedTouch 121g */
 	{USB_DEVICE(0x0707, 0xee13)},   /* SMC 2862W-G version 2 */
 	{USB_DEVICE(0x083a, 0x4521)},   /* Siemens Gigaset USB Adapter 54 version 2 */
 	{USB_DEVICE(0x0846, 0x4240)},	/* Netgear WG111 (v2) */
@@ -87,13 +84,13 @@ static void p54u_rx_cb(struct urb *urb)
 	struct ieee80211_hw *dev = info->dev;
 	struct p54u_priv *priv = dev->priv;
 
-	skb_unlink(skb, &priv->rx_queue);
-
 	if (unlikely(urb->status)) {
-		dev_kfree_skb_irq(skb);
+		info->urb = NULL;
+		usb_free_urb(urb);
 		return;
 	}
 
+	skb_unlink(skb, &priv->rx_queue);
 	skb_put(skb, urb->actual_length);
 
 	if (priv->hw_type == P54U_NET2280)
@@ -106,6 +103,7 @@ static void p54u_rx_cb(struct urb *urb)
 	if (p54_rx(dev, skb)) {
 		skb = dev_alloc_skb(priv->common.rx_mtu + 32);
 		if (unlikely(!skb)) {
+			usb_free_urb(urb);
 			/* TODO check rx queue length and refill *somewhere* */
 			return;
 		}
@@ -115,6 +113,7 @@ static void p54u_rx_cb(struct urb *urb)
 		info->dev = dev;
 		urb->transfer_buffer = skb_tail_pointer(skb);
 		urb->context = skb;
+		skb_queue_tail(&priv->rx_queue, skb);
 	} else {
 		if (priv->hw_type == P54U_NET2280)
 			skb_push(skb, priv->common.tx_hdr_len);
@@ -129,53 +128,40 @@ static void p54u_rx_cb(struct urb *urb)
 			WARN_ON(1);
 			urb->transfer_buffer = skb_tail_pointer(skb);
 		}
+
+		skb_queue_tail(&priv->rx_queue, skb);
 	}
-	skb_queue_tail(&priv->rx_queue, skb);
-	usb_anchor_urb(urb, &priv->submitted);
-	if (usb_submit_urb(urb, GFP_ATOMIC)) {
-		skb_unlink(skb, &priv->rx_queue);
-		usb_unanchor_urb(urb);
-		dev_kfree_skb_irq(skb);
-	}
+
+	usb_submit_urb(urb, GFP_ATOMIC);
 }
 
 static void p54u_tx_cb(struct urb *urb)
 {
-	struct sk_buff *skb = urb->context;
-	struct ieee80211_hw *dev = (struct ieee80211_hw *)
-		usb_get_intfdata(usb_ifnum_to_if(urb->dev, 0));
-
-	p54_free_skb(dev, skb);
+	usb_free_urb(urb);
 }
 
-static void p54u_tx_dummy_cb(struct urb *urb) { }
-
-static void p54u_free_urbs(struct ieee80211_hw *dev)
+static void p54u_tx_free_cb(struct urb *urb)
 {
-	struct p54u_priv *priv = dev->priv;
-	usb_kill_anchored_urbs(&priv->submitted);
+	kfree(urb->transfer_buffer);
+	usb_free_urb(urb);
 }
 
 static int p54u_init_urbs(struct ieee80211_hw *dev)
 {
 	struct p54u_priv *priv = dev->priv;
-	struct urb *entry = NULL;
+	struct urb *entry;
 	struct sk_buff *skb;
 	struct p54u_rx_info *info;
-	int ret = 0;
 
 	while (skb_queue_len(&priv->rx_queue) < 32) {
 		skb = __dev_alloc_skb(priv->common.rx_mtu + 32, GFP_KERNEL);
-		if (!skb) {
-			ret = -ENOMEM;
-			goto err;
-		}
+		if (!skb)
+			break;
 		entry = usb_alloc_urb(0, GFP_KERNEL);
 		if (!entry) {
-			ret = -ENOMEM;
-			goto err;
+			kfree_skb(skb);
+			break;
 		}
-
 		usb_fill_bulk_urb(entry, priv->udev,
 				  usb_rcvbulkpipe(priv->udev, P54U_PIPE_DATA),
 				  skb_tail_pointer(skb),
@@ -184,32 +170,33 @@ static int p54u_init_urbs(struct ieee80211_hw *dev)
 		info->urb = entry;
 		info->dev = dev;
 		skb_queue_tail(&priv->rx_queue, skb);
-
-		usb_anchor_urb(entry, &priv->submitted);
-		ret = usb_submit_urb(entry, GFP_KERNEL);
-		if (ret) {
-			skb_unlink(skb, &priv->rx_queue);
-			usb_unanchor_urb(entry);
-			goto err;
-		}
-		usb_free_urb(entry);
-		entry = NULL;
+		usb_submit_urb(entry, GFP_KERNEL);
 	}
 
 	return 0;
-
- err:
-	usb_free_urb(entry);
-	kfree_skb(skb);
-	p54u_free_urbs(dev);
-	return ret;
 }
 
-static void p54u_tx_3887(struct ieee80211_hw *dev, struct sk_buff *skb)
+static void p54u_free_urbs(struct ieee80211_hw *dev)
+{
+	struct p54u_priv *priv = dev->priv;
+	struct p54u_rx_info *info;
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(&priv->rx_queue))) {
+		info = (struct p54u_rx_info *) skb->cb;
+		if (!info->urb)
+			continue;
+
+		usb_kill_urb(info->urb);
+		kfree_skb(skb);
+	}
+}
+
+static void p54u_tx_3887(struct ieee80211_hw *dev, struct p54_control_hdr *data,
+			 size_t len, int free_on_tx)
 {
 	struct p54u_priv *priv = dev->priv;
 	struct urb *addr_urb, *data_urb;
-	int err = 0;
 
 	addr_urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!addr_urb)
@@ -222,83 +209,59 @@ static void p54u_tx_3887(struct ieee80211_hw *dev, struct sk_buff *skb)
 	}
 
 	usb_fill_bulk_urb(addr_urb, priv->udev,
-			  usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA),
-			  &((struct p54_hdr *)skb->data)->req_id, 4,
-			  p54u_tx_dummy_cb, dev);
+		usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA), &data->req_id,
+		sizeof(data->req_id), p54u_tx_cb, dev);
 	usb_fill_bulk_urb(data_urb, priv->udev,
-			  usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA),
-			  skb->data, skb->len, FREE_AFTER_TX(skb) ?
-			  p54u_tx_cb : p54u_tx_dummy_cb, skb);
-	addr_urb->transfer_flags |= URB_ZERO_PACKET;
-	data_urb->transfer_flags |= URB_ZERO_PACKET;
+		usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA), data, len,
+		free_on_tx ? p54u_tx_free_cb : p54u_tx_cb, dev);
 
-	usb_anchor_urb(addr_urb, &priv->submitted);
-	err = usb_submit_urb(addr_urb, GFP_ATOMIC);
-	if (err) {
-		usb_unanchor_urb(addr_urb);
-		goto out;
-	}
-
-	usb_anchor_urb(data_urb, &priv->submitted);
-	err = usb_submit_urb(data_urb, GFP_ATOMIC);
-	if (err)
-		usb_unanchor_urb(data_urb);
-
- out:
-	usb_free_urb(addr_urb);
-	usb_free_urb(data_urb);
-
-	if (err)
-		p54_free_skb(dev, skb);
+	usb_submit_urb(addr_urb, GFP_ATOMIC);
+	usb_submit_urb(data_urb, GFP_ATOMIC);
 }
 
-static __le32 p54u_lm87_chksum(const __le32 *data, size_t length)
+static __le32 p54u_lm87_chksum(const u32 *data, size_t length)
 {
 	u32 chk = 0;
 
 	length >>= 2;
 	while (length--) {
-		chk ^= le32_to_cpu(*data++);
+		chk ^= *data++;
 		chk = (chk >> 5) ^ (chk << 3);
 	}
 
 	return cpu_to_le32(chk);
 }
 
-static void p54u_tx_lm87(struct ieee80211_hw *dev, struct sk_buff *skb)
+static void p54u_tx_lm87(struct ieee80211_hw *dev,
+			 struct p54_control_hdr *data,
+			 size_t len, int free_on_tx)
 {
 	struct p54u_priv *priv = dev->priv;
 	struct urb *data_urb;
-	struct lm87_tx_hdr *hdr = (void *)skb->data - sizeof(*hdr);
+	struct lm87_tx_hdr *hdr = (void *)data - sizeof(*hdr);
 
 	data_urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!data_urb)
 		return;
 
-	hdr->chksum = p54u_lm87_chksum((__le32 *)skb->data, skb->len);
-	hdr->device_addr = ((struct p54_hdr *)skb->data)->req_id;
+	hdr->chksum = p54u_lm87_chksum((u32 *)data, len);
+	hdr->device_addr = data->req_id;
 
 	usb_fill_bulk_urb(data_urb, priv->udev,
-			  usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA),
-			  hdr, skb->len + sizeof(*hdr),  FREE_AFTER_TX(skb) ?
-			  p54u_tx_cb : p54u_tx_dummy_cb, skb);
-	data_urb->transfer_flags |= URB_ZERO_PACKET;
+		usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA), hdr,
+		len + sizeof(*hdr), free_on_tx ? p54u_tx_free_cb : p54u_tx_cb,
+		dev);
 
-	usb_anchor_urb(data_urb, &priv->submitted);
-	if (usb_submit_urb(data_urb, GFP_ATOMIC)) {
-		usb_unanchor_urb(data_urb);
-		p54_free_skb(dev, skb);
-	}
-	usb_free_urb(data_urb);
+	usb_submit_urb(data_urb, GFP_ATOMIC);
 }
 
-static void p54u_tx_net2280(struct ieee80211_hw *dev, struct sk_buff *skb)
+static void p54u_tx_net2280(struct ieee80211_hw *dev, struct p54_control_hdr *data,
+			    size_t len, int free_on_tx)
 {
 	struct p54u_priv *priv = dev->priv;
 	struct urb *int_urb, *data_urb;
-	struct net2280_tx_hdr *hdr = (void *)skb->data - sizeof(*hdr);
+	struct net2280_tx_hdr *hdr;
 	struct net2280_reg_write *reg;
-	int err = 0;
 
 	reg = kmalloc(sizeof(*reg), GFP_ATOMIC);
 	if (!reg)
@@ -321,48 +284,21 @@ static void p54u_tx_net2280(struct ieee80211_hw *dev, struct sk_buff *skb)
 	reg->addr = cpu_to_le32(P54U_DEV_BASE);
 	reg->val = cpu_to_le32(ISL38XX_DEV_INT_DATA);
 
+	len += sizeof(*data);
+	hdr = (void *)data - sizeof(*hdr);
 	memset(hdr, 0, sizeof(*hdr));
-	hdr->len = cpu_to_le16(skb->len);
-	hdr->device_addr = ((struct p54_hdr *) skb->data)->req_id;
+	hdr->device_addr = data->req_id;
+	hdr->len = cpu_to_le16(len);
 
 	usb_fill_bulk_urb(int_urb, priv->udev,
 		usb_sndbulkpipe(priv->udev, P54U_PIPE_DEV), reg, sizeof(*reg),
-		p54u_tx_dummy_cb, dev);
-
-	/*
-	 * This flag triggers a code path in the USB subsystem that will
-	 * free what's inside the transfer_buffer after the callback routine
-	 * has completed.
-	 */
-	int_urb->transfer_flags |= URB_FREE_BUFFER | URB_ZERO_PACKET;
+		p54u_tx_free_cb, dev);
+	usb_submit_urb(int_urb, GFP_ATOMIC);
 
 	usb_fill_bulk_urb(data_urb, priv->udev,
-			  usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA),
-			  hdr, skb->len + sizeof(*hdr), FREE_AFTER_TX(skb) ?
-			  p54u_tx_cb : p54u_tx_dummy_cb, skb);
-	data_urb->transfer_flags |= URB_ZERO_PACKET;
-
-	usb_anchor_urb(int_urb, &priv->submitted);
-	err = usb_submit_urb(int_urb, GFP_ATOMIC);
-	if (err) {
-		usb_unanchor_urb(int_urb);
-		goto out;
-	}
-
-	usb_anchor_urb(data_urb, &priv->submitted);
-	err = usb_submit_urb(data_urb, GFP_ATOMIC);
-	if (err) {
-		usb_unanchor_urb(data_urb);
-		goto out;
-	}
- out:
-	usb_free_urb(int_urb);
-	usb_free_urb(data_urb);
-
-	if (err) {
-		skb_pull(skb, sizeof(*hdr));
-		p54_free_skb(dev, skb);
-	}
+		usb_sndbulkpipe(priv->udev, P54U_PIPE_DATA), hdr, len + sizeof(*hdr),
+		free_on_tx ? p54u_tx_free_cb : p54u_tx_cb, dev);
+	usb_submit_urb(data_urb, GFP_ATOMIC);
 }
 
 static int p54u_write(struct p54u_priv *priv,
@@ -439,8 +375,7 @@ static int p54u_upload_firmware_3887(struct ieee80211_hw *dev)
 
 	tmp = buf = kmalloc(P54U_FW_BLOCK, GFP_KERNEL);
 	if (!buf) {
-		dev_err(&priv->udev->dev, "(p54usb) cannot allocate firmware"
-					  "upload buffer!\n");
+		printk(KERN_ERR "p54usb: cannot allocate firmware upload buffer!\n");
 		err = -ENOMEM;
 		goto err_bufalloc;
 	}
@@ -448,18 +383,14 @@ static int p54u_upload_firmware_3887(struct ieee80211_hw *dev)
 	memcpy(buf, start_string, 4);
 	err = p54u_bulk_msg(priv, P54U_PIPE_DATA, buf, 4);
 	if (err) {
-		dev_err(&priv->udev->dev, "(p54usb) reset failed! (%d)\n", err);
+		printk(KERN_ERR "p54usb: reset failed! (%d)\n", err);
 		goto err_reset;
 	}
 
-	err = request_firmware(&fw_entry, "isl3887usb", &priv->udev->dev);
+	err = request_firmware(&fw_entry, "isl3887usb_bare", &priv->udev->dev);
 	if (err) {
-		dev_err(&priv->udev->dev, "p54usb: cannot find firmware "
-					  "(isl3887usb)\n");
-		err = request_firmware(&fw_entry, "isl3887usb_bare",
-			&priv->udev->dev);
-		if (err)
-			goto err_req_fw_failed;
+		printk(KERN_ERR "p54usb: cannot find firmware (isl3887usb_bare)!\n");
+		goto err_req_fw_failed;
 	}
 
 	err = p54_parse_firmware(dev, fw_entry);
@@ -510,8 +441,7 @@ static int p54u_upload_firmware_3887(struct ieee80211_hw *dev)
 
 		err = p54u_bulk_msg(priv, P54U_PIPE_DATA, buf, block_size);
 		if (err) {
-			dev_err(&priv->udev->dev, "(p54usb) firmware "
-						  "upload failed!\n");
+			printk(KERN_ERR "p54usb: firmware upload failed!\n");
 			goto err_upload_failed;
 		}
 
@@ -522,9 +452,10 @@ static int p54u_upload_firmware_3887(struct ieee80211_hw *dev)
 	*((__le32 *)buf) = cpu_to_le32(~crc32_le(~0, fw_entry->data, fw_entry->size));
 	err = p54u_bulk_msg(priv, P54U_PIPE_DATA, buf, sizeof(u32));
 	if (err) {
-		dev_err(&priv->udev->dev, "(p54usb) firmware upload failed!\n");
+		printk(KERN_ERR "p54usb: firmware upload failed!\n");
 		goto err_upload_failed;
 	}
+
 	timeout = jiffies + msecs_to_jiffies(1000);
 	while (!(err = usb_bulk_msg(priv->udev,
 		usb_rcvbulkpipe(priv->udev, P54U_PIPE_DATA), buf, 128, &alen, 1000))) {
@@ -532,27 +463,25 @@ static int p54u_upload_firmware_3887(struct ieee80211_hw *dev)
 			break;
 
 		if (alen > 5 && !memcmp(buf, "ERROR", 5)) {
+			printk(KERN_INFO "p54usb: firmware upload failed!\n");
 			err = -EINVAL;
 			break;
 		}
 
 		if (time_after(jiffies, timeout)) {
-			dev_err(&priv->udev->dev, "(p54usb) firmware boot "
-						  "timed out!\n");
+			printk(KERN_ERR "p54usb: firmware boot timed out!\n");
 			err = -ETIMEDOUT;
 			break;
 		}
 	}
-	if (err) {
-		dev_err(&priv->udev->dev, "(p54usb) firmware upload failed!\n");
+	if (err)
 		goto err_upload_failed;
-	}
 
 	buf[0] = 'g';
 	buf[1] = '\r';
 	err = p54u_bulk_msg(priv, P54U_PIPE_DATA, buf, 2);
 	if (err) {
-		dev_err(&priv->udev->dev, "(p54usb) firmware boot failed!\n");
+		printk(KERN_ERR "p54usb: firmware boot failed!\n");
 		goto err_upload_failed;
 	}
 
@@ -592,21 +521,15 @@ static int p54u_upload_firmware_net2280(struct ieee80211_hw *dev)
 
 	buf = kmalloc(512, GFP_KERNEL);
 	if (!buf) {
-		dev_err(&priv->udev->dev, "(p54usb) firmware buffer "
-					  "alloc failed!\n");
+		printk(KERN_ERR "p54usb: firmware buffer alloc failed!\n");
 		return -ENOMEM;
 	}
 
-	err = request_firmware(&fw_entry, "isl3886usb", &priv->udev->dev);
+	err = request_firmware(&fw_entry, "isl3890usb", &priv->udev->dev);
 	if (err) {
-		dev_err(&priv->udev->dev, "(p54usb) cannot find firmware "
-					  "(isl3886usb)\n");
-		err = request_firmware(&fw_entry, "isl3890usb",
-			&priv->udev->dev);
-		if (err) {
-			kfree(buf);
-			return err;
-			}
+		printk(KERN_ERR "p54usb: cannot find firmware (isl3890usb)!\n");
+		kfree(buf);
+		return err;
 	}
 
 	err = p54_parse_firmware(dev, fw_entry);
@@ -725,8 +648,8 @@ static int p54u_upload_firmware_net2280(struct ieee80211_hw *dev)
 
 		err = p54u_bulk_msg(priv, P54U_PIPE_DATA, buf, block_len);
 		if (err) {
-			dev_err(&priv->udev->dev, "(p54usb) firmware block "
-						  "upload failed\n");
+			printk(KERN_ERR "p54usb: firmware block upload "
+			       "failed\n");
 			goto fail;
 		}
 
@@ -759,8 +682,8 @@ static int p54u_upload_firmware_net2280(struct ieee80211_hw *dev)
 			  0x002C | (unsigned long)&devreg->direct_mem_win);
 		if (!(reg & cpu_to_le32(ISL38XX_DMA_STATUS_DONE)) ||
 		    !(reg & cpu_to_le32(ISL38XX_DMA_STATUS_READY))) {
-			dev_err(&priv->udev->dev, "(p54usb) firmware DMA "
-						  "transfer failed\n");
+			printk(KERN_ERR "p54usb: firmware DMA transfer "
+			       "failed\n");
 			goto fail;
 		}
 
@@ -863,11 +786,11 @@ static int __devinit p54u_probe(struct usb_interface *intf,
 	struct p54u_priv *priv;
 	int err;
 	unsigned int i, recognized_pipes;
+	DECLARE_MAC_BUF(mac);
 
 	dev = p54_init_common(sizeof(*priv));
-
 	if (!dev) {
-		dev_err(&udev->dev, "(p54usb) ieee80211 alloc failed\n");
+		printk(KERN_ERR "p54usb: ieee80211 alloc failed\n");
 		return -ENOMEM;
 	}
 
@@ -919,7 +842,6 @@ static int __devinit p54u_probe(struct usb_interface *intf,
 		goto err_free_dev;
 
 	skb_queue_head_init(&priv->rx_queue);
-	init_usb_anchor(&priv->submitted);
 
 	p54u_open(dev);
 	err = p54_read_eeprom(dev);
@@ -929,7 +851,7 @@ static int __devinit p54u_probe(struct usb_interface *intf,
 
 	err = ieee80211_register_hw(dev);
 	if (err) {
-		dev_err(&udev->dev, "(p54usb) Cannot register netdevice\n");
+		printk(KERN_ERR "p54usb: Cannot register netdevice\n");
 		goto err_free_dev;
 	}
 

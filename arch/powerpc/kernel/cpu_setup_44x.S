@@ -34,13 +34,7 @@ _GLOBAL(__setup_cpu_440grx)
 	blr
 _GLOBAL(__setup_cpu_460ex)
 _GLOBAL(__setup_cpu_460gt)
-	mflr	r4
-	bl	__init_fpu_44x
-	bl	__fixup_440A_mcheck
-	mtlr	r4
-	blr
-
-_GLOBAL(__setup_cpu_440x5)
+	b	__init_fpu_44x
 _GLOBAL(__setup_cpu_440gx)
 _GLOBAL(__setup_cpu_440spe)
 	b	__fixup_440A_mcheck

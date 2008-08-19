@@ -250,7 +250,7 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 	/* Figure out how many pages the ring will take, and map that memory */
 	lvq->pages = lguest_map((unsigned long)lvq->config.pfn << PAGE_SHIFT,
 				DIV_ROUND_UP(vring_size(lvq->config.num,
-							LGUEST_VRING_ALIGN),
+							PAGE_SIZE),
 					     PAGE_SIZE));
 	if (!lvq->pages) {
 		err = -ENOMEM;
@@ -259,8 +259,8 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 
 	/* OK, tell virtio_ring.c to set up a virtqueue now we know its size
 	 * and we've got a pointer to its pages. */
-	vq = vring_new_virtqueue(lvq->config.num, LGUEST_VRING_ALIGN,
-				 vdev, lvq->pages, lg_notify, callback);
+	vq = vring_new_virtqueue(lvq->config.num, vdev, lvq->pages,
+				 lg_notify, callback);
 	if (!vq) {
 		err = -ENOMEM;
 		goto unmap;
@@ -272,7 +272,7 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 	 * the interrupt as a source of randomness: it'd be nice to have that
 	 * back.. */
 	err = request_irq(lvq->config.irq, vring_interrupt, IRQF_SHARED,
-			  dev_name(&vdev->dev), vq);
+			  vdev->dev.bus_id, vq);
 	if (err)
 		goto destroy_vring;
 
@@ -321,7 +321,10 @@ static struct virtio_config_ops lguest_config_ops = {
 
 /* The root device for the lguest virtio devices.  This makes them appear as
  * /sys/devices/lguest/0,1,2 not /sys/devices/0,1,2. */
-static struct device *lguest_root;
+static struct device lguest_root = {
+	.parent = NULL,
+	.bus_id = "lguest",
+};
 
 /*D:120 This is the core of the lguest bus: actually adding a new device.
  * It's a separate function because it's neater that way, and because an
@@ -348,7 +351,7 @@ static void add_lguest_device(struct lguest_device_desc *d,
 	}
 
 	/* This devices' parent is the lguest/ dir. */
-	ldev->vdev.dev.parent = lguest_root;
+	ldev->vdev.dev.parent = &lguest_root;
 	/* We have a unique device index thanks to the dev_index counter. */
 	ldev->vdev.id.device = d->type;
 	/* We have a simple set of routines for querying the device's
@@ -404,8 +407,7 @@ static int __init lguest_devices_init(void)
 	if (strcmp(pv_info.name, "lguest") != 0)
 		return 0;
 
-	lguest_root = root_device_register("lguest");
-	if (IS_ERR(lguest_root))
+	if (device_register(&lguest_root) != 0)
 		panic("Could not register lguest root");
 
 	/* Devices are in a single page above top of "normal" mem */

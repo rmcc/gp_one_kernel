@@ -50,6 +50,7 @@
 #include <linux/rmap.h>
 #include <linux/mempolicy.h>
 #include <linux/key.h>
+#include <linux/unwind.h>
 #include <linux/buffer_head.h>
 #include <linux/page_cgroup.h>
 #include <linux/debug_locks.h>
@@ -62,8 +63,6 @@
 #include <linux/signal.h>
 #include <linux/idr.h>
 #include <linux/ftrace.h>
-#include <linux/async.h>
-#include <trace/boot.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -73,6 +72,15 @@
 
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
+#endif
+
+/*
+ * This is one of the first .c files built. Error out early if we have compiler
+ * trouble.
+ */
+
+#if __GNUC__ == 4 && __GNUC_MINOR__ == 1 && __GNUC_PATCHLEVEL__ == 0
+#warning gcc-4.1.0 is known to miscompile the kernel.  A different compiler version is recommended.
 #endif
 
 static int kernel_init(void *);
@@ -108,7 +116,7 @@ EXPORT_SYMBOL(system_state);
 
 extern void time_init(void);
 /* Default late time init is NULL. archs can override this later. */
-void (*__initdata late_time_init)(void);
+void (*late_time_init)(void);
 extern void softirq_init(void);
 
 /* Untouched command line saved by arch-specific code. */
@@ -371,7 +379,12 @@ EXPORT_SYMBOL(nr_cpu_ids);
 /* An arch may set nr_cpu_ids earlier if needed, so this would be redundant */
 static void __init setup_nr_cpu_ids(void)
 {
-	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask),NR_CPUS) + 1;
+	int cpu, highest_cpu = 0;
+
+	for_each_possible_cpu(cpu)
+		highest_cpu = cpu;
+
+	nr_cpu_ids = highest_cpu + 1;
 }
 
 #ifndef CONFIG_HAVE_SETUP_PER_CPU_AREA
@@ -447,7 +460,7 @@ static void __init setup_command_line(char *command_line)
  * gcc-3.4 accidentally inlines this function, so use noinline.
  */
 
-static noinline void __init_refok rest_init(void)
+static void noinline __init_refok rest_init(void)
 	__releases(kernel_lock)
 {
 	int pid;
@@ -513,9 +526,9 @@ static void __init boot_cpu_init(void)
 {
 	int cpu = smp_processor_id();
 	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
-	set_cpu_online(cpu, true);
-	set_cpu_present(cpu, true);
-	set_cpu_possible(cpu, true);
+	cpu_set(cpu, cpu_online_map);
+	cpu_set(cpu, cpu_present_map);
+	cpu_set(cpu, cpu_possible_map);
 }
 
 void __init __weak smp_setup_processor_id(void)
@@ -537,6 +550,7 @@ asmlinkage void __init start_kernel(void)
 	 * Need to run as early as possible, to initialize the
 	 * lockdep hash:
 	 */
+	unwind_init();
 	lockdep_init();
 	debug_objects_early_init();
 	cgroup_init_early();
@@ -558,6 +572,7 @@ asmlinkage void __init start_kernel(void)
 	setup_arch(&command_line);
 	mm_init_owner(&init_mm, &init_task);
 	setup_command_line(command_line);
+	unwind_setup();
 	setup_per_cpu_areas();
 	setup_nr_cpu_ids();
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
@@ -588,8 +603,6 @@ asmlinkage void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	rcu_init();
-	/* init some links before init_ISA_irqs() */
-	early_irq_init();
 	init_IRQ();
 	pidhash_init();
 	init_timers();
@@ -600,8 +613,7 @@ asmlinkage void __init start_kernel(void)
 	sched_clock_init();
 	profile_init();
 	if (!irqs_disabled())
-		printk(KERN_CRIT "start_kernel(): bug: interrupts were "
-				 "enabled early\n");
+		printk("start_kernel(): bug: interrupts were enabled early\n");
 	early_boot_irqs_on();
 	local_irq_enable();
 
@@ -657,7 +669,6 @@ asmlinkage void __init start_kernel(void)
 		efi_enter_virtual_mode();
 #endif
 	thread_info_cache_init();
-	cred_init();
 	fork_init(num_physpages);
 	proc_caches_init();
 	buffer_init();
@@ -686,41 +697,37 @@ asmlinkage void __init start_kernel(void)
 	rest_init();
 }
 
-int initcall_debug;
+static int initcall_debug;
 core_param(initcall_debug, initcall_debug, bool, 0644);
 
 int do_one_initcall(initcall_t fn)
 {
 	int count = preempt_count();
-	ktime_t calltime, delta, rettime;
+	ktime_t delta;
 	char msgbuf[64];
-	struct boot_trace_call call;
-	struct boot_trace_ret ret;
+	struct boot_trace it;
 
 	if (initcall_debug) {
-		call.caller = task_pid_nr(current);
-		printk("calling  %pF @ %i\n", fn, call.caller);
-		calltime = ktime_get();
-		trace_boot_call(&call, fn);
-		enable_boot_trace();
+		it.caller = task_pid_nr(current);
+		printk("calling  %pF @ %i\n", fn, it.caller);
+		it.calltime = ktime_get();
 	}
 
-	ret.result = fn();
+	it.result = fn();
 
 	if (initcall_debug) {
-		disable_boot_trace();
-		rettime = ktime_get();
-		delta = ktime_sub(rettime, calltime);
-		ret.duration = (unsigned long long) ktime_to_ns(delta) >> 10;
-		trace_boot_ret(&ret, fn);
+		it.rettime = ktime_get();
+		delta = ktime_sub(it.rettime, it.calltime);
+		it.duration = (unsigned long long) delta.tv64 >> 10;
 		printk("initcall %pF returned %d after %Ld usecs\n", fn,
-			ret.result, ret.duration);
+			it.result, it.duration);
+		trace_boot(&it, fn);
 	}
 
 	msgbuf[0] = 0;
 
-	if (ret.result && ret.result != -ENODEV && initcall_debug)
-		sprintf(msgbuf, "error code %d ", ret.result);
+	if (it.result && it.result != -ENODEV && initcall_debug)
+		sprintf(msgbuf, "error code %d ", it.result);
 
 	if (preempt_count() != count) {
 		strlcat(msgbuf, "preemption imbalance ", sizeof(msgbuf));
@@ -734,7 +741,7 @@ int do_one_initcall(initcall_t fn)
 		printk("initcall %pF returned with %s\n", fn, msgbuf);
 	}
 
-	return ret.result;
+	return it.result;
 }
 
 
@@ -785,10 +792,8 @@ static void run_init_process(char *init_filename)
 /* This is a non __init function. Force it to be noinline otherwise gcc
  * makes it inline to init() and it becomes part of init.text section
  */
-static noinline int init_post(void)
+static int noinline init_post(void)
 {
-	/* need to finish all async __init code before freeing the memory */
-	async_synchronize_full();
 	free_initmem();
 	unlock_kernel();
 	mark_rodata_ro();
@@ -877,7 +882,7 @@ static int __init kernel_init(void * unused)
 	 * we're essentially up and running. Get rid of the
 	 * initmem segments and start the user-mode stuff..
 	 */
-
+	stop_boot_trace();
 	init_post();
 	return 0;
 }

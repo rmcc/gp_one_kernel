@@ -17,20 +17,23 @@ config PPC_BESTCOMM
 	  answer Y or M. Otherwise say N.
 
 config PPC_BESTCOMM_ATA
-	tristate
+	tristate "Bestcomm ATA task support"
 	depends on PPC_BESTCOMM
+	default n
 	help
 	  This option enables the support for the ATA task.
 
 config PPC_BESTCOMM_FEC
-	tristate
+	tristate "Bestcomm FEC tasks support"
 	depends on PPC_BESTCOMM
+	default n
 	help
 	  This option enables the support for the FEC tasks.
 
 config PPC_BESTCOMM_GEN_BD
-	tristate
+	tristate "Bestcomm GenBD tasks support"
 	depends on PPC_BESTCOMM
+	default n
 	help
 	  This option enables the support for the GenBD tasks.
 

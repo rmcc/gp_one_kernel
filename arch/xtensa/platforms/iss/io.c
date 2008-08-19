@@ -3,7 +3,7 @@
 #if 0
 
 #include <asm/io.h>
-#include <platform/platform-iss/simcall.h>
+#include <xtensa/simcall.h>
 
 extern int __simc ();
 

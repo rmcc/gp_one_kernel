@@ -29,14 +29,11 @@ static void dccp_get_info(struct sock *sk, struct tcp_info *info)
 	info->tcpi_backoff	= icsk->icsk_backoff;
 	info->tcpi_pmtu		= icsk->icsk_pmtu_cookie;
 
-	if (dp->dccps_hc_rx_ackvec != NULL)
+	if (dccp_msk(sk)->dccpms_send_ack_vector)
 		info->tcpi_options |= TCPI_OPT_SACK;
 
-	if (dp->dccps_hc_rx_ccid != NULL)
-		ccid_hc_rx_get_info(dp->dccps_hc_rx_ccid, sk, info);
-
-	if (dp->dccps_hc_tx_ccid != NULL)
-		ccid_hc_tx_get_info(dp->dccps_hc_tx_ccid, sk, info);
+	ccid_hc_rx_get_info(dp->dccps_hc_rx_ccid, sk, info);
+	ccid_hc_tx_get_info(dp->dccps_hc_tx_ccid, sk, info);
 }
 
 static void dccp_diag_get_info(struct sock *sk, struct inet_diag_msg *r,
@@ -48,7 +45,7 @@ static void dccp_diag_get_info(struct sock *sk, struct inet_diag_msg *r,
 		dccp_get_info(sk, _info);
 }
 
-static const struct inet_diag_handler dccp_diag_handler = {
+static struct inet_diag_handler dccp_diag_handler = {
 	.idiag_hashinfo	 = &dccp_hashinfo,
 	.idiag_get_info	 = dccp_diag_get_info,
 	.idiag_type	 = DCCPDIAG_GETSOCK,

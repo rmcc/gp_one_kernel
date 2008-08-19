@@ -32,16 +32,11 @@ struct files_stat_struct files_stat = {
 /* public. Not pretty! */
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(files_lock);
 
-/* SLAB cache for file structures */
-static struct kmem_cache *filp_cachep __read_mostly;
-
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
 
 static inline void file_free_rcu(struct rcu_head *head)
 {
-	struct file *f = container_of(head, struct file, f_u.fu_rcuhead);
-
-	put_cred(f->f_cred);
+	struct file *f =  container_of(head, struct file, f_u.fu_rcuhead);
 	kmem_cache_free(filp_cachep, f);
 }
 
@@ -99,7 +94,7 @@ int proc_nr_files(ctl_table *table, int write, struct file *filp,
  */
 struct file *get_empty_filp(void)
 {
-	const struct cred *cred = current_cred();
+	struct task_struct *tsk;
 	static int old_max;
 	struct file * f;
 
@@ -123,10 +118,12 @@ struct file *get_empty_filp(void)
 	if (security_file_alloc(f))
 		goto fail_sec;
 
+	tsk = current;
 	INIT_LIST_HEAD(&f->f_u.fu_list);
 	atomic_long_set(&f->f_count, 1);
 	rwlock_init(&f->f_owner.lock);
-	f->f_cred = get_cred(cred);
+	f->f_uid = tsk->fsuid;
+	f->f_gid = tsk->fsgid;
 	eventpoll_init_file(f);
 	/* f->f_version: 0 */
 	return f;
@@ -400,12 +397,7 @@ too_bad:
 void __init files_init(unsigned long mempages)
 { 
 	int n; 
-
-	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
-			SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
-
-	/*
-	 * One file with associated inode and dcache is very roughly 1K.
+	/* One file with associated inode and dcache is very roughly 1K. 
 	 * Per default don't use more than 10% of our memory for files. 
 	 */ 
 

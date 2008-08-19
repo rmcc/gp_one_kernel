@@ -40,7 +40,6 @@
 #include <asm/cacheflush.h>
 #include <asm/irq_regs.h>
 
-#include "kernel.h"
 #include "irq.h"
 
 /* If you trust current SCSI layer to handle different SCSI IRQs, enable this. I don't trust it... -jj */
@@ -59,6 +58,7 @@ static struct sun4d_timer_regs __iomem *sun4d_timers;
 #define TIMER_IRQ	10
 
 #define MAX_STATIC_ALLOC	4
+extern struct irqaction static_irqaction[MAX_STATIC_ALLOC];
 extern int static_irq_count;
 static unsigned char sbus_tid[32];
 
@@ -508,7 +508,6 @@ static void __init sun4d_init_timers(irq_handler_t counter_fn)
 	 * bootbus.
 	 */
 	reg = of_get_property(dp, "reg", NULL);
-	of_node_put(dp);
 	if (!reg) {
 		prom_printf("sun4d_init_timers: No reg property\n");
 		prom_halt();

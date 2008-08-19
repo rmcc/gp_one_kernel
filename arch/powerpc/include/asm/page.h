@@ -19,15 +19,12 @@
 #include <asm/kdump.h>
 
 /*
- * On regular PPC32 page size is 4K (but we support 4K/16K/64K pages
- * on PPC44x). For PPC64 we support either 4K or 64K software
+ * On PPC32 page size is 4K. For PPC64 we support either 4K or 64K software
  * page size. When using 64K pages however, whether we are really supporting
  * 64K pages in HW or not is irrelevant to those definitions.
  */
-#if defined(CONFIG_PPC_64K_PAGES)
+#ifdef CONFIG_PPC_64K_PAGES
 #define PAGE_SHIFT		16
-#elif defined(CONFIG_PPC_16K_PAGES)
-#define PAGE_SHIFT		14
 #else
 #define PAGE_SHIFT		12
 #endif
@@ -154,7 +151,7 @@ typedef struct { pte_basic_t pte; } pte_t;
 /* 64k pages additionally define a bigger "real PTE" type that gathers
  * the "second half" part of the PTE for pseudo 64k pages
  */
-#if defined(CONFIG_PPC_64K_PAGES) && defined(CONFIG_PPC_STD_MMU_64)
+#ifdef CONFIG_PPC_64K_PAGES
 typedef struct { pte_t pte; unsigned long hidx; } real_pte_t;
 #else
 typedef struct { pte_t pte; } real_pte_t;
@@ -194,10 +191,10 @@ typedef pte_basic_t pte_t;
 #define pte_val(x)	(x)
 #define __pte(x)	(x)
 
-#if defined(CONFIG_PPC_64K_PAGES) && defined(CONFIG_PPC_STD_MMU_64)
+#ifdef CONFIG_PPC_64K_PAGES
 typedef struct { pte_t pte; unsigned long hidx; } real_pte_t;
 #else
-typedef pte_t real_pte_t;
+typedef unsigned long real_pte_t;
 #endif
 
 

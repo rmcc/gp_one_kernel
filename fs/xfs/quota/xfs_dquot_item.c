@@ -88,22 +88,25 @@ xfs_qm_dquot_logitem_format(
 
 /*
  * Increment the pin count of the given dquot.
+ * This value is protected by pinlock spinlock in the xQM structure.
  */
 STATIC void
 xfs_qm_dquot_logitem_pin(
 	xfs_dq_logitem_t *logitem)
 {
-	xfs_dquot_t *dqp = logitem->qli_dquot;
+	xfs_dquot_t *dqp;
 
+	dqp = logitem->qli_dquot;
 	ASSERT(XFS_DQ_IS_LOCKED(dqp));
-	atomic_inc(&dqp->q_pincount);
+	spin_lock(&(XFS_DQ_TO_QINF(dqp)->qi_pinlock));
+	dqp->q_pincount++;
+	spin_unlock(&(XFS_DQ_TO_QINF(dqp)->qi_pinlock));
 }
 
 /*
  * Decrement the pin count of the given dquot, and wake up
  * anyone in xfs_dqwait_unpin() if the count goes to 0.	 The
- * dquot must have been previously pinned with a call to
- * xfs_qm_dquot_logitem_pin().
+ * dquot must have been previously pinned with a call to xfs_dqpin().
  */
 /* ARGSUSED */
 STATIC void
@@ -111,11 +114,16 @@ xfs_qm_dquot_logitem_unpin(
 	xfs_dq_logitem_t *logitem,
 	int		  stale)
 {
-	xfs_dquot_t *dqp = logitem->qli_dquot;
+	xfs_dquot_t *dqp;
 
-	ASSERT(atomic_read(&dqp->q_pincount) > 0);
-	if (atomic_dec_and_test(&dqp->q_pincount))
-		wake_up(&dqp->q_pinwait);
+	dqp = logitem->qli_dquot;
+	ASSERT(dqp->q_pincount > 0);
+	spin_lock(&(XFS_DQ_TO_QINF(dqp)->qi_pinlock));
+	dqp->q_pincount--;
+	if (dqp->q_pincount == 0) {
+		sv_broadcast(&dqp->q_pinwait);
+	}
+	spin_unlock(&(XFS_DQ_TO_QINF(dqp)->qi_pinlock));
 }
 
 /* ARGSUSED */
@@ -185,14 +193,21 @@ xfs_qm_dqunpin_wait(
 	xfs_dquot_t	*dqp)
 {
 	ASSERT(XFS_DQ_IS_LOCKED(dqp));
-	if (atomic_read(&dqp->q_pincount) == 0)
+	if (dqp->q_pincount == 0) {
 		return;
+	}
 
 	/*
 	 * Give the log a push so we don't wait here too long.
 	 */
 	xfs_log_force(dqp->q_mount, (xfs_lsn_t)0, XFS_LOG_FORCE);
-	wait_event(dqp->q_pinwait, (atomic_read(&dqp->q_pincount) == 0));
+	spin_lock(&(XFS_DQ_TO_QINF(dqp)->qi_pinlock));
+	if (dqp->q_pincount == 0) {
+		spin_unlock(&(XFS_DQ_TO_QINF(dqp)->qi_pinlock));
+		return;
+	}
+	sv_wait(&(dqp->q_pinwait), PINOD,
+		&(XFS_DQ_TO_QINF(dqp)->qi_pinlock), s);
 }
 
 /*
@@ -295,7 +310,7 @@ xfs_qm_dquot_logitem_trylock(
 	uint			retval;
 
 	dqp = qip->qli_dquot;
-	if (atomic_read(&dqp->q_pincount) > 0)
+	if (dqp->q_pincount > 0)
 		return (XFS_ITEM_PINNED);
 
 	if (! xfs_qm_dqlock_nowait(dqp))
@@ -553,16 +568,14 @@ xfs_qm_qoffend_logitem_committed(
 	xfs_lsn_t lsn)
 {
 	xfs_qoff_logitem_t	*qfs;
-	struct xfs_ail		*ailp;
 
 	qfs = qfe->qql_start_lip;
-	ailp = qfs->qql_item.li_ailp;
-	spin_lock(&ailp->xa_lock);
+	spin_lock(&qfs->qql_item.li_mountp->m_ail_lock);
 	/*
 	 * Delete the qoff-start logitem from the AIL.
-	 * xfs_trans_ail_delete() drops the AIL lock.
+	 * xfs_trans_delete_ail() drops the AIL lock.
 	 */
-	xfs_trans_ail_delete(ailp, (xfs_log_item_t *)qfs);
+	xfs_trans_delete_ail(qfs->qql_item.li_mountp, (xfs_log_item_t *)qfs);
 	kmem_free(qfs);
 	kmem_free(qfe);
 	return (xfs_lsn_t)-1;

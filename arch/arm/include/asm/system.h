@@ -3,6 +3,8 @@
 
 #ifdef __KERNEL__
 
+#include <asm/memory.h>
+
 #define CPU_ARCH_UNKNOWN	0
 #define CPU_ARCH_ARMv3		1
 #define CPU_ARCH_ARMv4		2

@@ -24,7 +24,6 @@
 
 #include <mach/sram.h>
 #include <mach/board.h>
-#include <mach/cpu.h>
 
 #include <mach/control.h>
 
@@ -88,7 +87,7 @@ static int is_sram_locked(void)
 	int type = 0;
 
 	if (cpu_is_omap242x())
-		type = omap_rev() & OMAP2_DEVICETYPE_MASK;
+		type = system_rev & OMAP2_DEVICETYPE_MASK;
 
 	if (type == GP_DEVICE) {
 		/* RAMFW: R/W access to all initiators for all qualifier sets */
@@ -256,7 +255,7 @@ void omap_sram_reprogram_clock(u32 dpllctl, u32 ckctl)
 	if (!_omap_sram_reprogram_clock)
 		omap_sram_error();
 
-	_omap_sram_reprogram_clock(dpllctl, ckctl);
+	return _omap_sram_reprogram_clock(dpllctl, ckctl);
 }
 
 int __init omap1_sram_init(void)
@@ -283,8 +282,8 @@ void omap2_sram_ddr_init(u32 *slow_dll_ctrl, u32 fast_dll_ctrl,
 	if (!_omap2_sram_ddr_init)
 		omap_sram_error();
 
-	_omap2_sram_ddr_init(slow_dll_ctrl, fast_dll_ctrl,
-			     base_cs, force_unlock);
+	return _omap2_sram_ddr_init(slow_dll_ctrl, fast_dll_ctrl,
+				    base_cs, force_unlock);
 }
 
 static void (*_omap2_sram_reprogram_sdrc)(u32 perf_level, u32 dll_val,
@@ -295,7 +294,7 @@ void omap2_sram_reprogram_sdrc(u32 perf_level, u32 dll_val, u32 mem_type)
 	if (!_omap2_sram_reprogram_sdrc)
 		omap_sram_error();
 
-	_omap2_sram_reprogram_sdrc(perf_level, dll_val, mem_type);
+	return _omap2_sram_reprogram_sdrc(perf_level, dll_val, mem_type);
 }
 
 static u32 (*_omap2_set_prcm)(u32 dpll_ctrl_val, u32 sdrc_rfr_val, int bypass);

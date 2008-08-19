@@ -18,7 +18,6 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
-#include <linux/clk.h>
 #include <linux/io.h>
 #include <asm/sh_keysc.h>
 
@@ -40,7 +39,6 @@ static const struct {
 
 struct sh_keysc_priv {
 	void __iomem *iomem_base;
-	struct clk *clk;
 	unsigned long last_keys;
 	struct input_dev *input;
 	struct sh_keysc_info pdata;
@@ -127,7 +125,6 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 	struct sh_keysc_info *pdata;
 	struct resource *res;
 	struct input_dev *input;
-	char clk_name[8];
 	int i, k;
 	int irq, error;
 
@@ -168,19 +165,11 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 		goto err1;
 	}
 
-	snprintf(clk_name, sizeof(clk_name), "keysc%d", pdev->id);
-	priv->clk = clk_get(&pdev->dev, clk_name);
-	if (IS_ERR(priv->clk)) {
-		dev_err(&pdev->dev, "cannot get clock \"%s\"\n", clk_name);
-		error = PTR_ERR(priv->clk);
-		goto err2;
-	}
-
 	priv->input = input_allocate_device();
 	if (!priv->input) {
 		dev_err(&pdev->dev, "failed to allocate input device\n");
 		error = -ENOMEM;
-		goto err3;
+		goto err2;
 	}
 
 	input = priv->input;
@@ -198,7 +187,7 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 	error = request_irq(irq, sh_keysc_isr, 0, pdev->name, pdev);
 	if (error) {
 		dev_err(&pdev->dev, "failed to request IRQ\n");
-		goto err4;
+		goto err3;
 	}
 
 	for (i = 0; i < SH_KEYSC_MAXKEYS; i++) {
@@ -210,22 +199,18 @@ static int __devinit sh_keysc_probe(struct platform_device *pdev)
 	error = input_register_device(input);
 	if (error) {
 		dev_err(&pdev->dev, "failed to register input device\n");
-		goto err5;
+		goto err4;
 	}
-
-	clk_enable(priv->clk);
 
 	iowrite16((sh_keysc_mode[pdata->mode].kymd << 8) |
 		  pdata->scan_timing, priv->iomem_base + KYCR1_OFFS);
 	iowrite16(0, priv->iomem_base + KYOUTDR_OFFS);
 	iowrite16(KYCR2_IRQ_LEVEL, priv->iomem_base + KYCR2_OFFS);
 	return 0;
- err5:
-	free_irq(irq, pdev);
  err4:
-	input_free_device(input);
+	free_irq(irq, pdev);
  err3:
-	clk_put(priv->clk);
+	input_free_device(input);
  err2:
 	iounmap(priv->iomem_base);
  err1:
@@ -244,9 +229,6 @@ static int __devexit sh_keysc_remove(struct platform_device *pdev)
 	input_unregister_device(priv->input);
 	free_irq(platform_get_irq(pdev, 0), pdev);
 	iounmap(priv->iomem_base);
-
-	clk_disable(priv->clk);
-	clk_put(priv->clk);
 
 	platform_set_drvdata(pdev, NULL);
 	kfree(priv);

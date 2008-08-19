@@ -58,9 +58,9 @@
 
 /*
  * __mark_inode_dirty expects inodes to be hashed.  Since we don't want
- * special inodes in the fileset inode space, we make them appear hashed,
- * but do not put on any lists.
+ * special inodes in the fileset inode space, we hash them to a dummy head
  */
+static HLIST_HEAD(aggregate_hash);
 
 /*
  * imap locks
@@ -496,11 +496,7 @@ struct inode *diReadSpecial(struct super_block *sb, ino_t inum, int secondary)
 	/* release the page */
 	release_metapage(mp);
 
-	/*
-	 * that will look hashed, but won't be on any list; hlist_del()
-	 * will work fine and require no locking.
-	 */
-	ip->i_hash.pprev = &ip->i_hash.next;
+	hlist_add_head(&ip->i_hash, &aggregate_hash);
 
 	return (ip);
 }

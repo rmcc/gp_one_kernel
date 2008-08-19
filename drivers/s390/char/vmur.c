@@ -8,9 +8,6 @@
  *	    Frank Munzert <munzert@de.ibm.com>
  */
 
-#define KMSG_COMPONENT "vmur"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/cdev.h>
 #include <linux/smp_lock.h>
 
@@ -42,6 +39,8 @@ static char ur_banner[] = "z/VM virtual unit record device driver";
 MODULE_AUTHOR("IBM Corporation");
 MODULE_DESCRIPTION("s390 z/VM virtual unit record device driver");
 MODULE_LICENSE("GPL");
+
+#define PRINTK_HEADER "vmur: "
 
 static dev_t ur_first_dev_maj_min;
 static struct class *vmur_class;
@@ -988,8 +987,7 @@ static int __init ur_init(void)
 	dev_t dev;
 
 	if (!MACHINE_IS_VM) {
-		pr_err("The %s cannot be loaded without z/VM\n",
-		       ur_banner);
+		PRINT_ERR("%s is only available under z/VM.\n", ur_banner);
 		return -ENODEV;
 	}
 
@@ -1008,8 +1006,7 @@ static int __init ur_init(void)
 
 	rc = alloc_chrdev_region(&dev, 0, NUM_MINORS, "vmur");
 	if (rc) {
-		pr_err("Kernel function alloc_chrdev_region failed with "
-		       "error code %d\n", rc);
+		PRINT_ERR("alloc_chrdev_region failed: err = %d\n", rc);
 		goto fail_unregister_driver;
 	}
 	ur_first_dev_maj_min = MKDEV(MAJOR(dev), 0);
@@ -1019,7 +1016,7 @@ static int __init ur_init(void)
 		rc = PTR_ERR(vmur_class);
 		goto fail_unregister_region;
 	}
-	pr_info("%s loaded.\n", ur_banner);
+	PRINT_INFO("%s loaded.\n", ur_banner);
 	return 0;
 
 fail_unregister_region:
@@ -1037,7 +1034,7 @@ static void __exit ur_exit(void)
 	unregister_chrdev_region(ur_first_dev_maj_min, NUM_MINORS);
 	ccw_driver_unregister(&ur_driver);
 	debug_unregister(vmur_dbf);
-	pr_info("%s unloaded.\n", ur_banner);
+	PRINT_INFO("%s unloaded.\n", ur_banner);
 }
 
 module_init(ur_init);

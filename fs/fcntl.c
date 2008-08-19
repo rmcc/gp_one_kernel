@@ -19,7 +19,6 @@
 #include <linux/signal.h>
 #include <linux/rcupdate.h>
 #include <linux/pid_namespace.h>
-#include <linux/smp_lock.h>
 
 #include <asm/poll.h>
 #include <asm/siginfo.h>
@@ -50,7 +49,7 @@ static int get_close_on_exec(unsigned int fd)
 	return res;
 }
 
-SYSCALL_DEFINE3(dup3, unsigned int, oldfd, unsigned int, newfd, int, flags)
+asmlinkage long sys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
 {
 	int err = -EBADF;
 	struct file * file, *tofree;
@@ -113,7 +112,7 @@ out_unlock:
 	return err;
 }
 
-SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
+asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	if (unlikely(newfd == oldfd)) { /* corner case */
 		struct files_struct *files = current->files;
@@ -126,7 +125,7 @@ SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
 	return sys_dup3(oldfd, newfd, 0);
 }
 
-SYSCALL_DEFINE1(dup, unsigned int, fildes)
+asmlinkage long sys_dup(unsigned int fildes)
 {
 	int ret = -EBADF;
 	struct file *file = fget(fildes);
@@ -176,11 +175,6 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 	if (error)
 		return error;
 
-	/*
-	 * We still need a lock here for now to keep multiple FASYNC calls
-	 * from racing with each other.
-	 */
-	lock_kernel();
 	if ((arg ^ filp->f_flags) & FASYNC) {
 		if (filp->f_op && filp->f_op->fasync) {
 			error = filp->f_op->fasync(fd, filp, (arg & FASYNC) != 0);
@@ -191,7 +185,6 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 
 	filp->f_flags = (arg & SETFL_MASK) | (filp->f_flags & ~SETFL_MASK);
  out:
-	unlock_kernel();
 	return error;
 }
 
@@ -212,14 +205,13 @@ static void f_modown(struct file *filp, struct pid *pid, enum pid_type type,
 int __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
 		int force)
 {
-	const struct cred *cred = current_cred();
 	int err;
 	
 	err = security_file_set_fowner(filp);
 	if (err)
 		return err;
 
-	f_modown(filp, pid, type, cred->uid, cred->euid, force);
+	f_modown(filp, pid, type, current->uid, current->euid, force);
 	return 0;
 }
 EXPORT_SYMBOL(__f_setown);
@@ -335,7 +327,7 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	return err;
 }
 
-SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
+asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file *filp;
 	long err = -EBADF;
@@ -358,8 +350,7 @@ out:
 }
 
 #if BITS_PER_LONG == 32
-SYSCALL_DEFINE3(fcntl64, unsigned int, fd, unsigned int, cmd,
-		unsigned long, arg)
+asmlinkage long sys_fcntl64(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 	long err;
@@ -409,17 +400,10 @@ static const long band_table[NSIGPOLL] = {
 static inline int sigio_perm(struct task_struct *p,
                              struct fown_struct *fown, int sig)
 {
-	const struct cred *cred;
-	int ret;
-
-	rcu_read_lock();
-	cred = __task_cred(p);
-	ret = ((fown->euid == 0 ||
-		fown->euid == cred->suid || fown->euid == cred->uid ||
-		fown->uid  == cred->suid || fown->uid  == cred->uid) &&
-	       !security_file_send_sigiotask(p, fown, sig));
-	rcu_read_unlock();
-	return ret;
+	return (((fown->euid == 0) ||
+		 (fown->euid == p->suid) || (fown->euid == p->uid) ||
+		 (fown->uid == p->suid) || (fown->uid == p->uid)) &&
+		!security_file_send_sigiotask(p, fown, sig));
 }
 
 static void send_sigio_to_task(struct task_struct *p,

@@ -1453,8 +1453,7 @@ neo2200_imageblit(struct fb_info *info, const struct fb_image *image)
 			 * is less than 16 bits wide. This is due to insufficient
 			 * padding when writing the image. We need to adjust
 			 * struct fb_pixmap. Not yet done. */
-			cfb_imageblit(info, image);
-			return;
+			return cfb_imageblit(info, image);
 		}
 		bltCntl_flags = NEO_BC0_SRC_MONO;
 	} else if (image->depth == info->var.bits_per_pixel) {
@@ -1462,8 +1461,7 @@ neo2200_imageblit(struct fb_info *info, const struct fb_image *image)
 	} else {
 		/* We don't currently support hardware acceleration if image
 		 * depth is different from display */
-		cfb_imageblit(info, image);
-		return;
+		return cfb_imageblit(info, image);
 	}
 
 	switch (info->var.bits_per_pixel) {

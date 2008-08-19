@@ -56,6 +56,7 @@ static const struct sis_laptop sis_laptop[] = {
 	{ 0x5513, 0x1043, 0x1107 },	/* ASUS A6K */
 	{ 0x5513, 0x1734, 0x105F },	/* FSC Amilo A1630 */
 	{ 0x5513, 0x1071, 0x8640 },     /* EasyNote K5305 */
+	{ 0x5513, 0x1039, 0x5513 },	/* Targa Visionary 1000 */
 	/* end marker */
 	{ 0, }
 };
@@ -112,6 +113,7 @@ static int sis_133_cable_detect(struct ata_port *ap)
 /**
  *	sis_66_cable_detect	-	check for 40/80 pin
  *	@ap: Port
+ *	@deadline: deadline jiffies for the operation
  *
  *	Perform cable detection on the UDMA66, UDMA100 and early UDMA133
  *	SiS IDE controllers.

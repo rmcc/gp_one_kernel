@@ -48,6 +48,11 @@
 #include <net/bluetooth/hci_core.h>
 #include <net/bluetooth/sco.h>
 
+#ifndef CONFIG_BT_SCO_DEBUG
+#undef  BT_DBG
+#define BT_DBG(D...)
+#endif
+
 #define VERSION "0.6"
 
 static int disable_esco = 0;

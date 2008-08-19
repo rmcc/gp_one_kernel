@@ -54,26 +54,20 @@
 static struct path rec_dir;
 static int rec_dir_init = 0;
 
-static int
-nfs4_save_creds(const struct cred **original_creds)
+static void
+nfs4_save_user(uid_t *saveuid, gid_t *savegid)
 {
-	struct cred *new;
-
-	new = prepare_creds();
-	if (!new)
-		return -ENOMEM;
-
-	new->fsuid = 0;
-	new->fsgid = 0;
-	*original_creds = override_creds(new);
-	put_cred(new);
-	return 0;
+	*saveuid = current->fsuid;
+	*savegid = current->fsgid;
+	current->fsuid = 0;
+	current->fsgid = 0;
 }
 
 static void
-nfs4_reset_creds(const struct cred *original)
+nfs4_reset_user(uid_t saveuid, gid_t savegid)
 {
-	revert_creds(original);
+	current->fsuid = saveuid;
+	current->fsgid = savegid;
 }
 
 static void
@@ -116,9 +110,9 @@ nfs4_make_rec_clidname(char *dname, struct xdr_netobj *clname)
 
 	md5_to_hex(dname, cksum.data);
 
+	kfree(cksum.data);
 	status = nfs_ok;
 out:
-	kfree(cksum.data);
 	crypto_free_hash(desc.tfm);
 out_no_tfm:
 	return status;
@@ -135,9 +129,10 @@ nfsd4_sync_rec_dir(void)
 int
 nfsd4_create_clid_dir(struct nfs4_client *clp)
 {
-	const struct cred *original_cred;
 	char *dname = clp->cl_recdir;
 	struct dentry *dentry;
+	uid_t uid;
+	gid_t gid;
 	int status;
 
 	dprintk("NFSD: nfsd4_create_clid_dir for \"%s\"\n", dname);
@@ -145,9 +140,7 @@ nfsd4_create_clid_dir(struct nfs4_client *clp)
 	if (!rec_dir_init || clp->cl_firststate)
 		return 0;
 
-	status = nfs4_save_creds(&original_cred);
-	if (status < 0)
-		return status;
+	nfs4_save_user(&uid, &gid);
 
 	/* lock the parent */
 	mutex_lock(&rec_dir.dentry->d_inode->i_mutex);
@@ -175,7 +168,7 @@ out_unlock:
 		clp->cl_firststate = 1;
 		nfsd4_sync_rec_dir();
 	}
-	nfs4_reset_creds(original_cred);
+	nfs4_reset_user(uid, gid);
 	dprintk("NFSD: nfsd4_create_clid_dir returns %d\n", status);
 	return status;
 }
@@ -218,25 +211,22 @@ nfsd4_build_dentrylist(void *arg, const char *name, int namlen,
 static int
 nfsd4_list_rec_dir(struct dentry *dir, recdir_func *f)
 {
-	const struct cred *original_cred;
 	struct file *filp;
 	struct dentry_list_arg dla = {
 		.parent = dir,
 	};
 	struct list_head *dentries = &dla.dentries;
 	struct dentry_list *child;
+	uid_t uid;
+	gid_t gid;
 	int status;
 
 	if (!rec_dir_init)
 		return 0;
 
-	status = nfs4_save_creds(&original_cred);
-	if (status < 0)
-		return status;
-	INIT_LIST_HEAD(dentries);
+	nfs4_save_user(&uid, &gid);
 
-	filp = dentry_open(dget(dir), mntget(rec_dir.mnt), O_RDONLY,
-			   current_cred());
+	filp = dentry_open(dget(dir), mntget(rec_dir.mnt), O_RDONLY);
 	status = PTR_ERR(filp);
 	if (IS_ERR(filp))
 		goto out;
@@ -259,7 +249,7 @@ out:
 		dput(child->dentry);
 		kfree(child);
 	}
-	nfs4_reset_creds(original_cred);
+	nfs4_reset_user(uid, gid);
 	return status;
 }
 
@@ -321,7 +311,8 @@ out:
 void
 nfsd4_remove_clid_dir(struct nfs4_client *clp)
 {
-	const struct cred *original_cred;
+	uid_t uid;
+	gid_t gid;
 	int status;
 
 	if (!rec_dir_init || !clp->cl_firststate)
@@ -331,13 +322,9 @@ nfsd4_remove_clid_dir(struct nfs4_client *clp)
 	if (status)
 		goto out;
 	clp->cl_firststate = 0;
-
-	status = nfs4_save_creds(&original_cred);
-	if (status < 0)
-		goto out;
-
+	nfs4_save_user(&uid, &gid);
 	status = nfsd4_unlink_clid_dir(clp->cl_recdir, HEXDIR_LEN-1);
-	nfs4_reset_creds(original_cred);
+	nfs4_reset_user(uid, gid);
 	if (status == 0)
 		nfsd4_sync_rec_dir();
 	mnt_drop_write(rec_dir.mnt);
@@ -414,21 +401,16 @@ nfsd4_recdir_load(void) {
 void
 nfsd4_init_recdir(char *rec_dirname)
 {
-	const struct cred *original_cred;
-	int status;
+	uid_t			uid = 0;
+	gid_t			gid = 0;
+	int 			status;
 
 	printk("NFSD: Using %s as the NFSv4 state recovery directory\n",
 			rec_dirname);
 
 	BUG_ON(rec_dir_init);
 
-	status = nfs4_save_creds(&original_cred);
-	if (status < 0) {
-		printk("NFSD: Unable to change credentials to find recovery"
-		       " directory: error %d\n",
-		       status);
-		return;
-	}
+	nfs4_save_user(&uid, &gid);
 
 	status = kern_path(rec_dirname, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
 			&rec_dir);
@@ -438,7 +420,7 @@ nfsd4_init_recdir(char *rec_dirname)
 
 	if (!status)
 		rec_dir_init = 1;
-	nfs4_reset_creds(original_cred);
+	nfs4_reset_user(uid, gid);
 }
 
 void

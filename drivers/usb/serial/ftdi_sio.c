@@ -143,7 +143,6 @@ static struct ftdi_sio_quirk ftdi_HE_TIRA1_quirk = {
 static struct usb_device_id id_table_combined [] = {
 	{ USB_DEVICE(FTDI_VID, FTDI_AMC232_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_CANUSB_PID) },
-	{ USB_DEVICE(FTDI_VID, FTDI_CANDAPTER_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_0_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_1_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_2_PID) },
@@ -167,7 +166,6 @@ static struct usb_device_id id_table_combined [] = {
 	{ USB_DEVICE(FTDI_VID, FTDI_OPENDCC_PID) },
 	{ USB_DEVICE(INTERBIOMETRICS_VID, INTERBIOMETRICS_IOBOARD_PID) },
 	{ USB_DEVICE(INTERBIOMETRICS_VID, INTERBIOMETRICS_MINI_IOBOARD_PID) },
-	{ USB_DEVICE(FTDI_VID, FTDI_SPROG_II) },
 	{ USB_DEVICE(FTDI_VID, FTDI_XF_632_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_XF_634_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_XF_547_PID) },
@@ -660,9 +658,6 @@ static struct usb_device_id id_table_combined [] = {
 	{ USB_DEVICE(PAPOUCH_VID, PAPOUCH_QUIDO4x4_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_DOMINTELL_DGQG_PID) },
 	{ USB_DEVICE(FTDI_VID, FTDI_DOMINTELL_DUSB_PID) },
-	{ USB_DEVICE(ALTI2_VID, ALTI2_N3_PID) },
-	{ USB_DEVICE(FTDI_VID, DIEBOLD_BCS_SE923_PID) },
-	{ USB_DEVICE(FTDI_VID, FTDI_NDI_HUC_PID) },
 	{ },					/* Optional parameter entry */
 	{ }					/* Terminating entry */
 };
@@ -1057,18 +1052,14 @@ static int set_serial_info(struct tty_struct *tty,
 
 	if (copy_from_user(&new_serial, newinfo, sizeof(new_serial)))
 		return -EFAULT;
-
-	lock_kernel();
 	old_priv = *priv;
 
 	/* Do error checking and permission checking */
 
 	if (!capable(CAP_SYS_ADMIN)) {
 		if (((new_serial.flags & ~ASYNC_USR_MASK) !=
-		     (priv->flags & ~ASYNC_USR_MASK))) {
-			unlock_kernel();
+		     (priv->flags & ~ASYNC_USR_MASK)))
 			return -EPERM;
-		}
 		priv->flags = ((priv->flags & ~ASYNC_USR_MASK) |
 			       (new_serial.flags & ASYNC_USR_MASK));
 		priv->custom_divisor = new_serial.custom_divisor;
@@ -1076,10 +1067,8 @@ static int set_serial_info(struct tty_struct *tty,
 	}
 
 	if ((new_serial.baud_base != priv->baud_base) &&
-	    (new_serial.baud_base < 9600)) {
-	    	unlock_kernel();
+	    (new_serial.baud_base < 9600))
 		return -EINVAL;
-	}
 
 	/* Make the changes - these are privileged changes! */
 
@@ -1107,11 +1096,8 @@ check_and_exit:
 	     (priv->flags & ASYNC_SPD_MASK)) ||
 	    (((priv->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST) &&
 	     (old_priv.custom_divisor != priv->custom_divisor))) {
-		unlock_kernel();
 		change_speed(tty, port);
 	}
-	else
-		unlock_kernel();
 	return 0;
 
 } /* set_serial_info */
@@ -1512,7 +1498,7 @@ static int ftdi_open(struct tty_struct *tty,
 			priv->interface, buf, 0, WDR_TIMEOUT);
 
 	/* Termios defaults are set by usb_serial_init. We don't change
-	   port->tty->termios - this would lose speed settings, etc.
+	   port->tty->termios - this would loose speed settings, etc.
 	   This is same behaviour as serial.c/rs_open() - Kuba */
 
 	/* ftdi_set_termios  will send usb control messages */
@@ -2035,7 +2021,7 @@ static void ftdi_process_read(struct work_struct *work)
 			spin_unlock_irqrestore(&priv->rx_lock, flags);
 			dbg("%s - deferring remainder until unthrottled",
 					__func__);
-			goto out;
+			return;
 		}
 		spin_unlock_irqrestore(&priv->rx_lock, flags);
 		/* if the port is closed stop trying to read */

@@ -10,7 +10,6 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/err.h>
-#include <sound/core.h>
 
 #ifdef CONFIG_SOUND_OSS_CORE
 static int __init init_oss_soundcore(void);
@@ -458,7 +457,7 @@ EXPORT_SYMBOL(unregister_sound_mixer);
 
 void unregister_sound_midi(int unit)
 {
-	sound_remove_unit(&chains[2], unit);
+	return sound_remove_unit(&chains[2], unit);
 }
 
 EXPORT_SYMBOL(unregister_sound_midi);
@@ -475,7 +474,7 @@ EXPORT_SYMBOL(unregister_sound_midi);
 
 void unregister_sound_dsp(int unit)
 {
-	sound_remove_unit(&chains[3], unit);
+	return sound_remove_unit(&chains[3], unit);
 }
 
 
@@ -508,7 +507,7 @@ static struct sound_unit *__look_for_unit(int chain, int unit)
 	return NULL;
 }
 
-static int soundcore_open(struct inode *inode, struct file *file)
+int soundcore_open(struct inode *inode, struct file *file)
 {
 	int chain;
 	int unit = iminor(inode);

@@ -11,13 +11,13 @@
 #define HI_STAT                                0x004C  
 #define BUS_CNTL1                              0x0034
 #define I2C_CNTL_1			       0x0094  
-#define CNFG_CNTL                              0x00E0
-#define CNFG_MEMSIZE                           0x00F8
-#define CNFG_APER_0_BASE                       0x0100
-#define CNFG_APER_1_BASE                       0x0104
-#define CNFG_APER_SIZE                         0x0108
-#define CNFG_REG_1_BASE                        0x010C
-#define CNFG_REG_APER_SIZE                     0x0110
+#define CONFIG_CNTL                            0x00E0  
+#define CONFIG_MEMSIZE                         0x00F8  
+#define CONFIG_APER_0_BASE                     0x0100  
+#define CONFIG_APER_1_BASE                     0x0104  
+#define CONFIG_APER_SIZE                       0x0108  
+#define CONFIG_REG_1_BASE                      0x010C  
+#define CONFIG_REG_APER_SIZE                   0x0110  
 #define PAD_AGPINPUT_DELAY                     0x0164  
 #define PAD_CTLR_STRENGTH                      0x0168  
 #define PAD_CTLR_UPDATE                        0x016C
@@ -509,7 +509,7 @@
 /* CLOCK_CNTL_INDEX bit constants */
 #define PLL_WR_EN                                  0x00000080
 
-/* CNFG_CNTL bit constants */
+/* CONFIG_CNTL bit constants */
 #define CFG_VGA_RAM_EN                             0x00000100
 #define CFG_ATI_REV_ID_MASK			   (0xf << 16)
 #define CFG_ATI_REV_A11				   (0 << 16)
@@ -525,6 +525,9 @@
 #define CRTC_DISPLAY_DIS			   (1 << 10)
 #define CRTC_CRT_ON				   (1 << 15)
 
+/* DSTCACHE_MODE bits constants */
+#define RB2D_DC_AUTOFLUSH_ENABLE                   (1 << 8)
+#define RB2D_DC_DC_DISABLE_IGNORE_PE               (1 << 17)
 
 /* DSTCACHE_CTLSTAT bit constants */
 #define RB2D_DC_FLUSH_2D			   (1 << 0)
@@ -866,15 +869,10 @@
 #define GMC_DST_16BPP_YVYU422                      0x00000c00
 #define GMC_DST_32BPP_AYUV444                      0x00000e00
 #define GMC_DST_16BPP_ARGB4444                     0x00000f00
-#define GMC_SRC_MONO                               0x00000000
-#define GMC_SRC_MONO_LBKGD                         0x00001000
-#define GMC_SRC_DSTCOLOR                           0x00003000
 #define GMC_BYTE_ORDER_MSB_TO_LSB                  0x00000000
 #define GMC_BYTE_ORDER_LSB_TO_MSB                  0x00004000
 #define GMC_DP_CONVERSION_TEMP_9300                0x00008000
 #define GMC_DP_CONVERSION_TEMP_6500                0x00000000
-#define GMC_DP_SRC_RECT                            0x02000000
-#define GMC_DP_SRC_HOST                            0x03000000
 #define GMC_DP_SRC_HOST_BYTEALIGN                  0x04000000
 #define GMC_3D_FCN_EN_CLR                          0x00000000
 #define GMC_3D_FCN_EN_SET                          0x08000000
@@ -885,6 +883,9 @@
 #define GMC_WRITE_MASK_LEAVE                       0x00000000
 #define GMC_WRITE_MASK_SET                         0x40000000
 #define GMC_CLR_CMP_CNTL_DIS      		   (1 << 28)
+#define GMC_SRC_DATATYPE_MASK			   (3 << 12)
+#define GMC_SRC_DATATYPE_MONO_FG_BG		   (0 << 12)
+#define GMC_SRC_DATATYPE_MONO_FG_LA		   (1 << 12)
 #define GMC_SRC_DATATYPE_COLOR			   (3 << 12)
 #define ROP3_S                			   0x00cc0000
 #define ROP3_SRCCOPY				   0x00cc0000
@@ -893,6 +894,7 @@
 #define DP_SRC_SOURCE_MASK        		   (7    << 24)
 #define GMC_BRUSH_NONE            		   (15   <<  4)
 #define DP_SRC_SOURCE_MEMORY			   (2    << 24)
+#define DP_SRC_SOURCE_HOST_DATA			   (3    << 24)
 #define GMC_BRUSH_SOLIDCOLOR			   0x000000d0
 
 /* DP_MIX bit constants */
@@ -978,9 +980,15 @@
 #define DISP_PWR_MAN_TV_ENABLE_RST                 (1 << 25)
 #define DISP_PWR_MAN_AUTO_PWRUP_EN                 (1 << 26)
 
+/* RBBM_GUICNTL constants */
+#define RBBM_GUICNTL_HOST_DATA_SWAP_NONE	   (0 << 0)
+#define RBBM_GUICNTL_HOST_DATA_SWAP_16BIT          (1 << 0)
+#define RBBM_GUICNTL_HOST_DATA_SWAP_32BIT	   (2 << 0)
+#define RBBM_GUICNTL_HOST_DATA_SWAP_HDW		   (3 << 0)
+
 /* masks */
 
-#define CNFG_MEMSIZE_MASK		0x1f000000
+#define CONFIG_MEMSIZE_MASK		0x1f000000
 #define MEM_CFG_TYPE			0x40000000
 #define DST_OFFSET_MASK			0x003fffff
 #define DST_PITCH_MASK			0x3fc00000

@@ -40,9 +40,6 @@
 /* AlphaMicro Components AMC-232USB01 device */
 #define FTDI_AMC232_PID 0xFF00 /* Product Id */
 
-/* www.candapter.com Ewert Energy Systems CANdapter device */
-#define FTDI_CANDAPTER_PID 0x9F80 /* Product Id */
-
 /* SCS HF Radio Modems PID's (http://www.scs-ptc.com) */
 /* the VID is the standard ftdi vid (FTDI_VID) */
 #define FTDI_SCS_DEVICE_0_PID 0xD010    /* SCS PTC-IIusb */
@@ -77,9 +74,6 @@
 
 /* OpenDCC (www.opendcc.de) product id */
 #define FTDI_OPENDCC_PID	0xBFD8
-
-/* Sprog II (Andrew Crosland's SprogII DCC interface) */
-#define FTDI_SPROG_II		0xF0C8
 
 /* www.crystalfontz.com devices - thanx for providing free devices for evaluation ! */
 /* they use the ftdi chipset for the USB interface and the vendor id is the same */
@@ -844,9 +838,6 @@
 #define TML_VID			0x1B91	/* Vendor ID */
 #define TML_USB_SERIAL_PID	0x0064	/* USB - Serial Converter */
 
-/* NDI Polaris System */
-#define FTDI_NDI_HUC_PID        0xDA70
-
 /* Propox devices */
 #define FTDI_PROPOX_JTAGCABLEII_PID	0xD738
 
@@ -856,10 +847,6 @@
 /* Domintell products  http://www.domintell.com */
 #define FTDI_DOMINTELL_DGQG_PID	0xEF50	/* Master */
 #define FTDI_DOMINTELL_DUSB_PID	0xEF51	/* DUSB01 module */
-
-/* Alti-2 products  http://www.alti-2.com */
-#define ALTI2_VID	0x1BC9
-#define ALTI2_N3_PID	0x6001	/* Neptune 3 */
 
 /* Commands */
 #define FTDI_SIO_RESET 		0 /* Reset the port */
@@ -886,11 +873,6 @@
  */
 #define RATOC_VENDOR_ID		0x0584
 #define RATOC_PRODUCT_ID_USB60F	0xb020
-
-/*
- * DIEBOLD BCS SE923
- */
-#define DIEBOLD_BCS_SE923_PID	0xfb99
 
 /*
  *   BmRequestType:  1100 0000b

@@ -9,8 +9,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <mach/hardware.h>
-
 #define AVIC_NIMASK	0x04
 
 	@ this macro disables fast irq (not implemented)

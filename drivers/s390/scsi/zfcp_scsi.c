@@ -6,9 +6,6 @@
  * Copyright IBM Corporation 2002, 2008
  */
 
-#define KMSG_COMPONENT "zfcp"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include "zfcp_ext.h"
 #include <asm/atomic.h>
 
@@ -91,7 +88,7 @@ static int zfcp_scsi_queuecommand(struct scsi_cmnd *scpnt,
 	ret = zfcp_fsf_send_fcp_command_task(adapter, unit, scpnt, 0,
 					     ZFCP_REQ_AUTO_CLEANUP);
 	if (unlikely(ret == -EBUSY))
-		return SCSI_MLQUEUE_DEVICE_BUSY;
+		zfcp_scsi_command_fail(scpnt, DID_NO_CONNECT);
 	else if (unlikely(ret < 0))
 		return SCSI_MLQUEUE_HOST_BUSY;
 

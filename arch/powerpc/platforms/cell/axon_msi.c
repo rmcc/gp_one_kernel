@@ -95,7 +95,6 @@ static void axon_msi_cascade(unsigned int irq, struct irq_desc *desc)
 	struct axon_msic *msic = get_irq_data(irq);
 	u32 write_offset, msi;
 	int idx;
-	int retry = 0;
 
 	write_offset = dcr_read(msic->dcr_host, MSIC_WRITE_OFFSET_REG);
 	pr_debug("axon_msi: original write_offset 0x%x\n", write_offset);
@@ -103,7 +102,7 @@ static void axon_msi_cascade(unsigned int irq, struct irq_desc *desc)
 	/* write_offset doesn't wrap properly, so we have to mask it */
 	write_offset &= MSIC_FIFO_SIZE_MASK;
 
-	while (msic->read_offset != write_offset && retry < 100) {
+	while (msic->read_offset != write_offset) {
 		idx  = msic->read_offset / sizeof(__le32);
 		msi  = le32_to_cpu(msic->fifo_virt[idx]);
 		msi &= 0xFFFF;
@@ -111,37 +110,13 @@ static void axon_msi_cascade(unsigned int irq, struct irq_desc *desc)
 		pr_debug("axon_msi: woff %x roff %x msi %x\n",
 			  write_offset, msic->read_offset, msi);
 
-		if (msi < NR_IRQS && irq_map[msi].host == msic->irq_host) {
+		msic->read_offset += MSIC_FIFO_ENTRY_SIZE;
+		msic->read_offset &= MSIC_FIFO_SIZE_MASK;
+
+		if (msi < NR_IRQS && irq_map[msi].host == msic->irq_host)
 			generic_handle_irq(msi);
-			msic->fifo_virt[idx] = cpu_to_le32(0xffffffff);
-		} else {
-			/*
-			 * Reading the MSIC_WRITE_OFFSET_REG does not
-			 * reliably flush the outstanding DMA to the
-			 * FIFO buffer. Here we were reading stale
-			 * data, so we need to retry.
-			 */
-			udelay(1);
-			retry++;
+		else
 			pr_debug("axon_msi: invalid irq 0x%x!\n", msi);
-			continue;
-		}
-
-		if (retry) {
-			pr_debug("axon_msi: late irq 0x%x, retry %d\n",
-				 msi, retry);
-			retry = 0;
-		}
-
-		msic->read_offset += MSIC_FIFO_ENTRY_SIZE;
-		msic->read_offset &= MSIC_FIFO_SIZE_MASK;
-	}
-
-	if (retry) {
-		printk(KERN_WARNING "axon_msi: irq timed out\n");
-
-		msic->read_offset += MSIC_FIFO_ENTRY_SIZE;
-		msic->read_offset &= MSIC_FIFO_SIZE_MASK;
 	}
 
 	desc->chip->eoi(irq);
@@ -389,7 +364,6 @@ static int axon_msi_probe(struct of_device *device,
 		       dn->full_name);
 		goto out_free_fifo;
 	}
-	memset(msic->fifo_virt, 0xff, MSIC_FIFO_SIZE_BYTES);
 
 	msic->irq_host = irq_alloc_host(dn, IRQ_HOST_MAP_NOMAP,
 					NR_IRQS, &msic_host_ops, 0);
@@ -412,9 +386,6 @@ static int axon_msi_probe(struct of_device *device,
 	msic_dcr_write(msic, MSIC_CTRL_REG,
 			MSIC_CTRL_IRQ_ENABLE | MSIC_CTRL_ENABLE |
 			MSIC_CTRL_FIFO_SIZE);
-
-	msic->read_offset = dcr_read(msic->dcr_host, MSIC_WRITE_OFFSET_REG)
-				& MSIC_FIFO_SIZE_MASK;
 
 	device->dev.platform_data = msic;
 

@@ -20,6 +20,7 @@
 #include <linux/seq_file.h>
 #include <linux/time.h>
 #include <linux/of.h>
+#include <linux/kexec.h>
 
 #include <asm/machdep.h>
 #include <asm/prom.h>
@@ -146,4 +147,9 @@ define_machine(c2k) {
 	.get_irq		= mv64x60_get_irq,
 	.restart		= c2k_restart,
 	.calibrate_decr		= generic_calibrate_decr,
+#ifdef CONFIG_KEXEC
+	.machine_kexec		= default_machine_kexec,
+	.machine_kexec_prepare	= default_machine_kexec_prepare,
+	.machine_crash_shutdown	= default_machine_crash_shutdown,
+#endif
 };

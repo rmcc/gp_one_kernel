@@ -435,7 +435,7 @@ static void __init mpic_scan_ht_msi(struct mpic *mpic, u8 __iomem *devbase,
 		addr = addr | ((u64)readl(base + HT_MSI_ADDR_HI) << 32);
 	}
 
-	printk(KERN_DEBUG "mpic:   - HT:%02x.%x %s MSI mapping found @ 0x%llx\n",
+	printk(KERN_DEBUG "mpic:   - HT:%02x.%x %s MSI mapping found @ 0x%lx\n",
 		PCI_SLOT(devfn), PCI_FUNC(devfn),
 		flags & HT_MSI_FLAGS_ENABLE ? "enabled" : "disabled", addr);
 
@@ -600,7 +600,7 @@ static int irq_choose_cpu(unsigned int virt_irq)
 		cpuid = first_cpu(tmp);
 	}
 
-	return get_hard_smp_processor_id(cpuid);
+	return cpuid;
 }
 #else
 static int irq_choose_cpu(unsigned int virt_irq)
@@ -660,6 +660,17 @@ static inline void mpic_eoi(struct mpic *mpic)
 	mpic_cpu_write(MPIC_INFO(CPU_EOI), 0);
 	(void)mpic_cpu_read(MPIC_INFO(CPU_WHOAMI));
 }
+
+#ifdef CONFIG_SMP
+static irqreturn_t mpic_ipi_action(int irq, void *data)
+{
+	long ipi = (long)data;
+
+	smp_message_recv(ipi);
+
+	return IRQ_HANDLED;
+}
+#endif /* CONFIG_SMP */
 
 /*
  * Linux descriptor level callbacks
@@ -806,7 +817,7 @@ static void mpic_end_ipi(unsigned int irq)
 
 #endif /* CONFIG_SMP */
 
-void mpic_set_affinity(unsigned int irq, const struct cpumask *cpumask)
+void mpic_set_affinity(unsigned int irq, cpumask_t cpumask)
 {
 	struct mpic *mpic = mpic_from_irq(irq);
 	unsigned int src = mpic_irq_to_hw(irq);
@@ -818,7 +829,7 @@ void mpic_set_affinity(unsigned int irq, const struct cpumask *cpumask)
 	} else {
 		cpumask_t tmp;
 
-		cpumask_and(&tmp, cpumask, cpu_online_mask);
+		cpus_and(tmp, cpumask, cpu_online_map);
 
 		mpic_irq_write(src, MPIC_INFO(IRQ_DESTINATION),
 			       mpic_physmask(cpus_addr(tmp)[0]));
@@ -1260,7 +1271,6 @@ void __init mpic_set_default_senses(struct mpic *mpic, u8 *senses, int count)
 void __init mpic_init(struct mpic *mpic)
 {
 	int i;
-	int cpu;
 
 	BUG_ON(mpic->num_sources == 0);
 
@@ -1303,11 +1313,6 @@ void __init mpic_init(struct mpic *mpic)
 
 	mpic_pasemi_msi_init(mpic);
 
-	if (mpic->flags & MPIC_PRIMARY)
-		cpu = hard_smp_processor_id();
-	else
-		cpu = 0;
-
 	for (i = 0; i < mpic->num_sources; i++) {
 		/* start with vector = source number, and masked */
 		u32 vecpri = MPIC_VECPRI_MASK | i |
@@ -1318,7 +1323,8 @@ void __init mpic_init(struct mpic *mpic)
 			continue;
 		/* init hw */
 		mpic_irq_write(i, MPIC_INFO(IRQ_VECTOR_PRI), vecpri);
-		mpic_irq_write(i, MPIC_INFO(IRQ_DESTINATION), 1 << cpu);
+		mpic_irq_write(i, MPIC_INFO(IRQ_DESTINATION),
+			       1 << hard_smp_processor_id());
 	}
 	
 	/* Init spurious vector */
@@ -1537,7 +1543,13 @@ unsigned int mpic_get_mcirq(void)
 void mpic_request_ipis(void)
 {
 	struct mpic *mpic = mpic_primary;
-	int i;
+	long i, err;
+	static char *ipi_names[] = {
+		"IPI0 (call function)",
+		"IPI1 (reschedule)",
+		"IPI2 (call function single)",
+		"IPI3 (debugger break)",
+	};
 	BUG_ON(mpic == NULL);
 
 	printk(KERN_INFO "mpic: requesting IPIs ... \n");
@@ -1546,10 +1558,17 @@ void mpic_request_ipis(void)
 		unsigned int vipi = irq_create_mapping(mpic->irqhost,
 						       mpic->ipi_vecs[0] + i);
 		if (vipi == NO_IRQ) {
-			printk(KERN_ERR "Failed to map %s\n", smp_ipi_name[i]);
-			continue;
+			printk(KERN_ERR "Failed to map IPI %ld\n", i);
+			break;
 		}
-		smp_request_message_ipi(vipi, i);
+		err = request_irq(vipi, mpic_ipi_action,
+				  IRQF_DISABLED|IRQF_PERCPU,
+				  ipi_names[i], (void *)i);
+		if (err) {
+			printk(KERN_ERR "Request of irq %d for IPI %ld failed\n",
+			       vipi, i);
+			break;
+		}
 	}
 }
 

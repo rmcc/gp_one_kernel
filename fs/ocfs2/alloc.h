@@ -45,9 +45,7 @@
  *
  * ocfs2_extent_tree contains info for the root of the b-tree, it must have a
  * root ocfs2_extent_list and a root_bh so that they can be used in the b-tree
- * functions.  With metadata ecc, we now call different journal_access
- * functions for each type of metadata, so it must have the
- * root_journal_access function.
+ * functions.
  * ocfs2_extent_tree_operations abstract the normal operations we do for
  * the root of extent b-tree.
  */
@@ -56,7 +54,6 @@ struct ocfs2_extent_tree {
 	struct ocfs2_extent_tree_operations	*et_ops;
 	struct buffer_head			*et_root_bh;
 	struct ocfs2_extent_list		*et_root_el;
-	ocfs2_journal_access_func		et_root_journal_access;
 	void					*et_object;
 	unsigned int				et_max_leaf_clusters;
 };
@@ -71,18 +68,10 @@ void ocfs2_init_dinode_extent_tree(struct ocfs2_extent_tree *et,
 void ocfs2_init_xattr_tree_extent_tree(struct ocfs2_extent_tree *et,
 				       struct inode *inode,
 				       struct buffer_head *bh);
-struct ocfs2_xattr_value_buf;
 void ocfs2_init_xattr_value_extent_tree(struct ocfs2_extent_tree *et,
 					struct inode *inode,
-					struct ocfs2_xattr_value_buf *vb);
-
-/*
- * Read an extent block into *bh.  If *bh is NULL, a bh will be
- * allocated.  This is a cached read.  The extent block will be validated
- * with ocfs2_validate_extent_block().
- */
-int ocfs2_read_extent_block(struct inode *inode, u64 eb_blkno,
-			    struct buffer_head **bh);
+					struct buffer_head *bh,
+					struct ocfs2_xattr_value_root *xv);
 
 struct ocfs2_alloc_context;
 int ocfs2_insert_extent(struct ocfs2_super *osb,
@@ -121,11 +110,6 @@ int ocfs2_remove_extent(struct inode *inode,
 			u32 cpos, u32 len, handle_t *handle,
 			struct ocfs2_alloc_context *meta_ac,
 			struct ocfs2_cached_dealloc_ctxt *dealloc);
-int ocfs2_remove_btree_range(struct inode *inode,
-			     struct ocfs2_extent_tree *et,
-			     u32 cpos, u32 phys_cpos, u32 len,
-			     struct ocfs2_cached_dealloc_ctxt *dealloc);
-
 int ocfs2_num_free_extents(struct ocfs2_super *osb,
 			   struct inode *inode,
 			   struct ocfs2_extent_tree *et);
@@ -183,18 +167,10 @@ int __ocfs2_flush_truncate_log(struct ocfs2_super *osb);
  */
 struct ocfs2_cached_dealloc_ctxt {
 	struct ocfs2_per_slot_free_list		*c_first_suballocator;
-	struct ocfs2_cached_block_free 		*c_global_allocator;
 };
 static inline void ocfs2_init_dealloc_ctxt(struct ocfs2_cached_dealloc_ctxt *c)
 {
 	c->c_first_suballocator = NULL;
-	c->c_global_allocator = NULL;
-}
-int ocfs2_cache_cluster_dealloc(struct ocfs2_cached_dealloc_ctxt *ctxt,
-				u64 blkno, unsigned int bit);
-static inline int ocfs2_dealloc_has_cluster(struct ocfs2_cached_dealloc_ctxt *c)
-{
-	return c->c_global_allocator != NULL;
 }
 int ocfs2_run_deallocs(struct ocfs2_super *osb,
 		       struct ocfs2_cached_dealloc_ctxt *ctxt);

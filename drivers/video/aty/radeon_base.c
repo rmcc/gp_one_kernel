@@ -852,7 +852,6 @@ static int radeonfb_pan_display (struct fb_var_screeninfo *var,
         if (rinfo->asleep)
         	return 0;
 
-	radeon_fifo_wait(2);
         OUTREG(CRTC_OFFSET, ((var->yoffset * var->xres_virtual + var->xoffset)
 			     * var->bits_per_pixel / 8) & ~7);
         return 0;
@@ -882,7 +881,6 @@ static int radeonfb_ioctl (struct fb_info *info, unsigned int cmd,
 			if (rc)
 				return rc;
 
-			radeon_fifo_wait(2);
 			if (value & 0x01) {
 				tmp = INREG(LVDS_GEN_CNTL);
 
@@ -940,7 +938,7 @@ int radeon_screen_blank(struct radeonfb_info *rinfo, int blank, int mode_switch)
 	if (rinfo->lock_blank)
 		return 0;
 
-	radeon_engine_idle();
+	radeon_engine_idle(rinfo);
 
 	val = INREG(CRTC_EXT_CNTL);
         val &= ~(CRTC_DISPLAY_DIS | CRTC_HSYNC_DIS |
@@ -1048,7 +1046,7 @@ static int radeonfb_blank (int blank, struct fb_info *info)
 
 	if (rinfo->asleep)
 		return 0;
-		
+
 	return radeon_screen_blank(rinfo, blank, 0);
 }
 
@@ -1074,8 +1072,6 @@ static int radeon_setcolreg (unsigned regno, unsigned red, unsigned green,
         pindex = regno;
 
         if (!rinfo->asleep) {
-		radeon_fifo_wait(9);
-
 		if (rinfo->bpp == 16) {
 			pindex = regno * 8;
 
@@ -1244,8 +1240,6 @@ static void radeon_write_pll_regs(struct radeonfb_info *rinfo, struct radeon_reg
 {
 	int i;
 
-	radeon_fifo_wait(20);
-
 	/* Workaround from XFree */
 	if (rinfo->is_mobility) {
 	        /* A temporal workaround for the occational blanking on certain laptop
@@ -1341,7 +1335,7 @@ static void radeon_lvds_timer_func(unsigned long data)
 {
 	struct radeonfb_info *rinfo = (struct radeonfb_info *)data;
 
-	radeon_engine_idle();
+	radeon_engine_idle(rinfo);
 
 	OUTREG(LVDS_GEN_CNTL, rinfo->pending_lvds_gen_cntl);
 }
@@ -1359,10 +1353,11 @@ void radeon_write_mode (struct radeonfb_info *rinfo, struct radeon_regs *mode,
 	if (nomodeset)
 		return;
 
+	radeon_engine_idle(rinfo);
+
 	if (!regs_only)
 		radeon_screen_blank(rinfo, FB_BLANK_NORMAL, 0);
 
-	radeon_fifo_wait(31);
 	for (i=0; i<10; i++)
 		OUTREG(common_regs[i].reg, common_regs[i].val);
 
@@ -1390,7 +1385,6 @@ void radeon_write_mode (struct radeonfb_info *rinfo, struct radeon_regs *mode,
 	radeon_write_pll_regs(rinfo, mode);
 
 	if ((primary_mon == MT_DFP) || (primary_mon == MT_LCD)) {
-		radeon_fifo_wait(10);
 		OUTREG(FP_CRTC_H_TOTAL_DISP, mode->fp_crtc_h_total_disp);
 		OUTREG(FP_CRTC_V_TOTAL_DISP, mode->fp_crtc_v_total_disp);
 		OUTREG(FP_H_SYNC_STRT_WID, mode->fp_h_sync_strt_wid);
@@ -1405,7 +1399,6 @@ void radeon_write_mode (struct radeonfb_info *rinfo, struct radeon_regs *mode,
 	if (!regs_only)
 		radeon_screen_blank(rinfo, FB_BLANK_UNBLANK, 0);
 
-	radeon_fifo_wait(2);
 	OUTPLL(VCLK_ECP_CNTL, mode->vclk_ecp_cntl);
 	
 	return;
@@ -1556,7 +1549,7 @@ static int radeonfb_set_par(struct fb_info *info)
 	/* We always want engine to be idle on a mode switch, even
 	 * if we won't actually change the mode
 	 */
-	radeon_engine_idle();
+	radeon_engine_idle(rinfo);
 
 	hSyncStart = mode->xres + mode->right_margin;
 	hSyncEnd = hSyncStart + mode->hsync_len;
@@ -1851,7 +1844,6 @@ static int radeonfb_set_par(struct fb_info *info)
 	return 0;
 }
 
-
 static struct fb_ops radeonfb_ops = {
 	.owner			= THIS_MODULE,
 	.fb_check_var		= radeonfb_check_var,
@@ -1875,6 +1867,7 @@ static int __devinit radeon_set_fbinfo (struct radeonfb_info *rinfo)
 	info->par = rinfo;
 	info->pseudo_palette = rinfo->pseudo_palette;
 	info->flags = FBINFO_DEFAULT
+		    | FBINFO_HWACCEL_IMAGEBLIT
 		    | FBINFO_HWACCEL_COPYAREA
 		    | FBINFO_HWACCEL_FILLRECT
 		    | FBINFO_HWACCEL_XPAN
@@ -1936,8 +1929,8 @@ static void fixup_memory_mappings(struct radeonfb_info *rinfo)
 	OUTREG(CRTC_GEN_CNTL, save_crtc_gen_cntl | CRTC_DISP_REQ_EN_B);
 	mdelay(100);
 
-	aper_base = INREG(CNFG_APER_0_BASE);
-	aper_size = INREG(CNFG_APER_SIZE);
+	aper_base = INREG(CONFIG_APER_0_BASE);
+	aper_size = INREG(CONFIG_APER_SIZE);
 
 #ifdef SET_MC_FB_FROM_APERTURE
 	/* Set framebuffer to be at the same address as set in PCI BAR */
@@ -2006,7 +1999,6 @@ static void radeon_identify_vram(struct radeonfb_info *rinfo)
           u32 tom = INREG(NB_TOM);
           tmp = ((((tom >> 16) - (tom & 0xffff) + 1) << 6) * 1024);
 
- 		radeon_fifo_wait(6);
           OUTREG(MC_FB_LOCATION, tom);
           OUTREG(DISPLAY_BASE_ADDR, (tom & 0xffff) << 16);
           OUTREG(CRTC2_DISPLAY_BASE_ADDR, (tom & 0xffff) << 16);
@@ -2024,11 +2016,11 @@ static void radeon_identify_vram(struct radeonfb_info *rinfo)
                      ~CRTC_H_CUTOFF_ACTIVE_EN);
           }
         } else {
-          tmp = INREG(CNFG_MEMSIZE);
+          tmp = INREG(CONFIG_MEMSIZE);
         }
 
 	/* mem size is bits [28:0], mask off the rest */
-	rinfo->video_ram = tmp & CNFG_MEMSIZE_MASK;
+	rinfo->video_ram = tmp & CONFIG_MEMSIZE_MASK;
 
 	/*
 	 * Hack to get around some busted production M6's
@@ -2228,7 +2220,7 @@ static int __devinit radeonfb_pci_register (struct pci_dev *pdev,
 	 */
 	rinfo->errata = 0;
 	if (rinfo->family == CHIP_FAMILY_R300 &&
-	    (INREG(CNFG_CNTL) & CFG_ATI_REV_ID_MASK)
+	    (INREG(CONFIG_CNTL) & CFG_ATI_REV_ID_MASK)
 	    == CFG_ATI_REV_A11)
 		rinfo->errata |= CHIP_ERRATA_R300_CG;
 

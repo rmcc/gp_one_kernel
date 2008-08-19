@@ -663,10 +663,8 @@ int relay_late_setup_files(struct rchan *chan,
 
 	mutex_lock(&relay_channels_mutex);
 	/* Is chan already set up? */
-	if (unlikely(chan->has_base_filename)) {
-		mutex_unlock(&relay_channels_mutex);
+	if (unlikely(chan->has_base_filename))
 		return -EEXIST;
-	}
 	chan->has_base_filename = 1;
 	chan->parent = parent;
 	curr_cpu = get_cpu();
@@ -1319,9 +1317,12 @@ static ssize_t relay_file_splice_read(struct file *in,
 		if (ret < 0)
 			break;
 		else if (!ret) {
-			if (flags & SPLICE_F_NONBLOCK)
+			if (spliced)
+				break;
+			if (flags & SPLICE_F_NONBLOCK) {
 				ret = -EAGAIN;
-			break;
+				break;
+			}
 		}
 
 		*ppos += ret;

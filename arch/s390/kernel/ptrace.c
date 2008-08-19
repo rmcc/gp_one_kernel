@@ -204,6 +204,7 @@ static unsigned long __peek_user(struct task_struct *child, addr_t addr)
 static int
 peek_user(struct task_struct *child, addr_t addr, addr_t data)
 {
+	struct user *dummy = NULL;
 	addr_t tmp, mask;
 
 	/*
@@ -212,8 +213,8 @@ peek_user(struct task_struct *child, addr_t addr, addr_t data)
 	 */
 	mask = __ADDR_MASK;
 #ifdef CONFIG_64BIT
-	if (addr >= (addr_t) &((struct user *) NULL)->regs.acrs &&
-	    addr < (addr_t) &((struct user *) NULL)->regs.orig_gpr2)
+	if (addr >= (addr_t) &dummy->regs.acrs &&
+	    addr < (addr_t) &dummy->regs.orig_gpr2)
 		mask = 3;
 #endif
 	if ((addr & mask) || addr > sizeof(struct user) - __ADDR_MASK)
@@ -311,6 +312,7 @@ static int __poke_user(struct task_struct *child, addr_t addr, addr_t data)
 static int
 poke_user(struct task_struct *child, addr_t addr, addr_t data)
 {
+	struct user *dummy = NULL;
 	addr_t mask;
 
 	/*
@@ -319,8 +321,8 @@ poke_user(struct task_struct *child, addr_t addr, addr_t data)
 	 */
 	mask = __ADDR_MASK;
 #ifdef CONFIG_64BIT
-	if (addr >= (addr_t) &((struct user *) NULL)->regs.acrs &&
-	    addr < (addr_t) &((struct user *) NULL)->regs.orig_gpr2)
+	if (addr >= (addr_t) &dummy->regs.acrs &&
+	    addr < (addr_t) &dummy->regs.orig_gpr2)
 		mask = 3;
 #endif
 	if ((addr & mask) || addr > sizeof(struct user) - __ADDR_MASK)
@@ -655,7 +657,7 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 		 * debugger stored an invalid system call number. Skip
 		 * the system call and the system call restart handling.
 		 */
-		regs->svcnr = 0;
+		regs->trap = -1;
 		ret = -1;
 	}
 

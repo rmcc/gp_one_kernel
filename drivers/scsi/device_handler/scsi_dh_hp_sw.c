@@ -107,7 +107,6 @@ static int hp_sw_tur(struct scsi_device *sdev, struct hp_sw_dh_data *h)
 	struct request *req;
 	int ret;
 
-retry:
 	req = blk_get_request(sdev->request_queue, WRITE, GFP_NOIO);
 	if (!req)
 		return SCSI_DH_RES_TEMP_UNAVAIL;
@@ -122,6 +121,7 @@ retry:
 	memset(req->sense, 0, SCSI_SENSE_BUFFERSIZE);
 	req->sense_len = 0;
 
+retry:
 	ret = blk_execute_rq(req->q, NULL, req, 1);
 	if (ret == -EIO) {
 		if (req->sense_len > 0) {
@@ -136,10 +136,8 @@ retry:
 		h->path_state = HP_SW_PATH_ACTIVE;
 		ret = SCSI_DH_OK;
 	}
-	if (ret == SCSI_DH_IMM_RETRY) {
-		blk_put_request(req);
+	if (ret == SCSI_DH_IMM_RETRY)
 		goto retry;
-	}
 	if (ret == SCSI_DH_DEV_OFFLINED) {
 		h->path_state = HP_SW_PATH_PASSIVE;
 		ret = SCSI_DH_OK;
@@ -202,7 +200,6 @@ static int hp_sw_start_stop(struct scsi_device *sdev, struct hp_sw_dh_data *h)
 	struct request *req;
 	int ret, retry;
 
-retry:
 	req = blk_get_request(sdev->request_queue, WRITE, GFP_NOIO);
 	if (!req)
 		return SCSI_DH_RES_TEMP_UNAVAIL;
@@ -219,6 +216,7 @@ retry:
 	req->sense_len = 0;
 	retry = h->retries;
 
+retry:
 	ret = blk_execute_rq(req->q, NULL, req, 1);
 	if (ret == -EIO) {
 		if (req->sense_len > 0) {
@@ -233,10 +231,8 @@ retry:
 		ret = SCSI_DH_OK;
 
 	if (ret == SCSI_DH_RETRY) {
-		if (--retry) {
-			blk_put_request(req);
+		if (--retry)
 			goto retry;
-		}
 		ret = SCSI_DH_IO;
 	}
 

@@ -124,22 +124,33 @@ int scsi_eh_scmd_add(struct scsi_cmnd *scmd, int eh_flag)
 enum blk_eh_timer_return scsi_times_out(struct request *req)
 {
 	struct scsi_cmnd *scmd = req->special;
+	enum blk_eh_timer_return (*eh_timed_out)(struct scsi_cmnd *);
 	enum blk_eh_timer_return rtn = BLK_EH_NOT_HANDLED;
 
 	scsi_log_completion(scmd, TIMEOUT_ERROR);
 
 	if (scmd->device->host->transportt->eh_timed_out)
-		rtn = scmd->device->host->transportt->eh_timed_out(scmd);
+		eh_timed_out = scmd->device->host->transportt->eh_timed_out;
 	else if (scmd->device->host->hostt->eh_timed_out)
-		rtn = scmd->device->host->hostt->eh_timed_out(scmd);
+		eh_timed_out = scmd->device->host->hostt->eh_timed_out;
+	else
+		eh_timed_out = NULL;
 
-	if (unlikely(rtn == BLK_EH_NOT_HANDLED &&
-		     !scsi_eh_scmd_add(scmd, SCSI_EH_CANCEL_CMD))) {
+	if (eh_timed_out)
+		rtn = eh_timed_out(scmd);
+		switch (rtn) {
+		case BLK_EH_NOT_HANDLED:
+			break;
+		default:
+			return rtn;
+		}
+
+	if (unlikely(!scsi_eh_scmd_add(scmd, SCSI_EH_CANCEL_CMD))) {
 		scmd->result |= DID_TIME_OUT << 16;
-		rtn = BLK_EH_HANDLED;
+		return BLK_EH_HANDLED;
 	}
 
-	return rtn;
+	return BLK_EH_NOT_HANDLED;
 }
 
 /**
@@ -921,7 +932,8 @@ static int scsi_eh_try_stu(struct scsi_cmnd *scmd)
 		int i, rtn = NEEDS_RETRY;
 
 		for (i = 0; rtn == NEEDS_RETRY && i < 2; i++)
-			rtn = scsi_send_eh_cmnd(scmd, stu_command, 6, scmd->device->request_queue->rq_timeout, 0);
+			rtn = scsi_send_eh_cmnd(scmd, stu_command, 6,
+						scmd->device->timeout, 0);
 
 		if (rtn == SUCCESS)
 			return 0;
@@ -1394,9 +1406,8 @@ int scsi_decide_disposition(struct scsi_cmnd *scmd)
 		return ADD_TO_MLQUEUE;
 	case GOOD:
 	case COMMAND_TERMINATED:
-		return SUCCESS;
 	case TASK_ABORTED:
-		goto maybe_retry;
+		return SUCCESS;
 	case CHECK_CONDITION:
 		rtn = scsi_check_sense(scmd);
 		if (rtn == NEEDS_RETRY)
@@ -1638,7 +1649,7 @@ int scsi_error_handler(void *data)
 	 * We use TASK_INTERRUPTIBLE so that the thread is not
 	 * counted against the load average as a running process.
 	 * We never actually get interrupted because kthread_run
-	 * disables signal delivery for the created thread.
+	 * disables singal delivery for the created thread.
 	 */
 	set_current_state(TASK_INTERRUPTIBLE);
 	while (!kthread_should_stop()) {

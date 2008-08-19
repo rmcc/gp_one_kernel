@@ -89,17 +89,17 @@ static cycle_t kvm_clock_read(void)
  */
 static unsigned long kvm_get_tsc_khz(void)
 {
-	struct pvclock_vcpu_time_info *src;
-	src = &per_cpu(hv_clock, 0);
-	return pvclock_tsc_khz(src);
+	return preset_lpj;
 }
 
 static void kvm_get_preset_lpj(void)
 {
+	struct pvclock_vcpu_time_info *src;
 	unsigned long khz;
 	u64 lpj;
 
-	khz = kvm_get_tsc_khz();
+	src = &per_cpu(hv_clock, 0);
+	khz = pvclock_tsc_khz(src);
 
 	lpj = ((u64)khz * 1000);
 	do_div(lpj, HZ);
@@ -128,7 +128,7 @@ static int kvm_register_clock(char *txt)
 }
 
 #ifdef CONFIG_X86_LOCAL_APIC
-static void __cpuinit kvm_setup_secondary_clock(void)
+static void __devinit kvm_setup_secondary_clock(void)
 {
 	/*
 	 * Now that the first cpu already had this clocksource initialized,
@@ -194,7 +194,5 @@ void __init kvmclock_init(void)
 #endif
 		kvm_get_preset_lpj();
 		clocksource_register(&kvm_clock);
-		pv_info.paravirt_enabled = 1;
-		pv_info.name = "KVM";
 	}
 }

@@ -26,7 +26,7 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  Stripped of 2.4 stuff ready for main kernel submit by
- *		Alan Cox <alan@lxorguk.ukuu.org.uk>
+ *		Alan Cox <alan@redhat.com>
  ****************************************************************************/
 
 #include <linux/version.h>
@@ -239,7 +239,7 @@ static struct v4l2_queryctrl controls[] = {
  *  cpia2_open
  *
  *****************************************************************************/
-static int cpia2_open(struct file *file)
+static int cpia2_open(struct inode *inode, struct file *file)
 {
 	struct camera_data *cam = video_drvdata(file);
 	int retval = 0;
@@ -302,7 +302,7 @@ err_return:
  *  cpia2_close
  *
  *****************************************************************************/
-static int cpia2_close(struct file *file)
+static int cpia2_close(struct inode *inode, struct file *file)
 {
 	struct video_device *dev = video_devdata(file);
 	struct camera_data *cam = video_get_drvdata(dev);
@@ -1572,10 +1572,11 @@ static int ioctl_dqbuf(void *arg,struct camera_data *cam, struct file *file)
  *  cpia2_ioctl
  *
  *****************************************************************************/
-static long cpia2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+static int cpia2_do_ioctl(struct inode *inode, struct file *file,
+			  unsigned int ioctl_nr, void *arg)
 {
 	struct camera_data *cam = video_drvdata(file);
-	long retval = 0;
+	int retval = 0;
 
 	if (!cam)
 		return -ENOTTY;
@@ -1590,7 +1591,7 @@ static long cpia2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	}
 
 	/* Priority check */
-	switch (cmd) {
+	switch (ioctl_nr) {
 	case VIDIOCSWIN:
 	case VIDIOCMCAPTURE:
 	case VIDIOC_S_FMT:
@@ -1617,7 +1618,7 @@ static long cpia2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		break;
 	}
 
-	switch (cmd) {
+	switch (ioctl_nr) {
 	case VIDIOCGCAP:	/* query capabilities */
 		retval = ioctl_cap_query(arg, cam);
 		break;
@@ -1682,7 +1683,7 @@ static long cpia2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	case VIDIOC_ENUMINPUT:
 	case VIDIOC_G_INPUT:
 	case VIDIOC_S_INPUT:
-		retval = ioctl_input(cmd, arg, cam);
+		retval = ioctl_input(ioctl_nr, arg,cam);
 		break;
 
 	case VIDIOC_ENUM_FMT:
@@ -1841,10 +1842,10 @@ static long cpia2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	return retval;
 }
 
-static long cpia2_ioctl(struct file *file,
-		       unsigned int cmd, unsigned long arg)
+static int cpia2_ioctl(struct inode *inode, struct file *file,
+		       unsigned int ioctl_nr, unsigned long iarg)
 {
-	return video_usercopy(file, cmd, arg, cpia2_do_ioctl);
+	return video_usercopy(inode, file, ioctl_nr, iarg, cpia2_do_ioctl);
 }
 
 /******************************************************************************
@@ -1912,13 +1913,17 @@ static void reset_camera_struct_v4l(struct camera_data *cam)
 /***
  * The v4l video device structure initialized for this device
  ***/
-static const struct v4l2_file_operations fops_template = {
+static const struct file_operations fops_template = {
 	.owner		= THIS_MODULE,
 	.open		= cpia2_open,
 	.release	= cpia2_close,
 	.read		= cpia2_v4l_read,
 	.poll		= cpia2_v4l_poll,
 	.ioctl		= cpia2_ioctl,
+	.llseek		= no_llseek,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
 	.mmap		= cpia2_mmap,
 };
 

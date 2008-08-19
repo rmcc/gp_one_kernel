@@ -169,21 +169,18 @@ static int ehci_pci_setup(struct usb_hcd *hcd)
 		}
 		break;
 	case PCI_VENDOR_ID_ATI:
-		/* SB600 and old version of SB700 have a bug in EHCI controller,
+		/* SB700 old version has a bug in EHCI controller,
 		 * which causes usb devices lose response in some cases.
 		 */
-		if ((pdev->device == 0x4386) || (pdev->device == 0x4396)) {
+		if (pdev->device == 0x4396) {
 			p_smbus = pci_get_device(PCI_VENDOR_ID_ATI,
 						 PCI_DEVICE_ID_ATI_SBX00_SMBUS,
 						 NULL);
 			if (!p_smbus)
 				break;
 			rev = p_smbus->revision;
-			if ((pdev->device == 0x4386) || (rev == 0x3a)
-			    || (rev == 0x3b)) {
+			if ((rev == 0x3a) || (rev == 0x3b)) {
 				u8 tmp;
-				ehci_info(ehci, "applying AMD SB600/SB700 USB "
-					"freeze workaround\n");
 				pci_read_config_byte(pdev, 0x53, &tmp);
 				pci_write_config_byte(pdev, 0x53, tmp | (1<<3));
 			}
@@ -219,19 +216,15 @@ static int ehci_pci_setup(struct usb_hcd *hcd)
 	/* Serial Bus Release Number is at PCI 0x60 offset */
 	pci_read_config_byte(pdev, 0x60, &ehci->sbrn);
 
-	/* Keep this around for a while just in case some EHCI
-	 * implementation uses legacy PCI PM support.  This test
-	 * can be removed on 17 Dec 2009 if the dev_warn() hasn't
-	 * been triggered by then.
+	/* Workaround current PCI init glitch:  wakeup bits aren't
+	 * being set from PCI PM capability.
 	 */
 	if (!device_can_wakeup(&pdev->dev)) {
 		u16	port_wake;
 
 		pci_read_config_word(pdev, 0x62, &port_wake);
-		if (port_wake & 0x0001) {
-			dev_warn(&pdev->dev, "Enabling legacy PCI PM\n");
-			device_set_wakeup_capable(&pdev->dev, 1);
-		}
+		if (port_wake & 0x0001)
+			device_init_wakeup(&pdev->dev, 1);
 	}
 
 #ifdef	CONFIG_USB_SUSPEND
@@ -432,7 +425,6 @@ static struct pci_driver ehci_pci_driver = {
 
 #ifdef	CONFIG_PM
 	.suspend =	usb_hcd_pci_suspend,
-	.resume_early =	usb_hcd_pci_resume_early,
 	.resume =	usb_hcd_pci_resume,
 #endif
 	.shutdown = 	usb_hcd_pci_shutdown,
