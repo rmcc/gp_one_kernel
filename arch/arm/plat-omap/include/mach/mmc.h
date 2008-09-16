@@ -37,8 +37,6 @@
 #define OMAP_MMC_MAX_SLOTS	2
 
 struct omap_mmc_platform_data {
-	/* back-link to device */
-	struct device *dev;
 
 	/* number of slots per controller */
 	unsigned nr_slots:2;

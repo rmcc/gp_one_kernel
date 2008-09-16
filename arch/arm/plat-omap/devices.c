@@ -228,9 +228,6 @@ int __init omap_mmc_add(const char *name, int id, unsigned long base,
 	ret = platform_device_add(pdev);
 	if (ret)
 		goto fail;
-
-	/* return device handle to board setup code */
-	data->dev = &pdev->dev;
 	return 0;
 
 fail:

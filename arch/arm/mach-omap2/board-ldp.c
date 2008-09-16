@@ -28,6 +28,7 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
+#include <mach/board-ldp.h>
 #include <mach/mcspi.h>
 #include <mach/gpio.h>
 #include <mach/board.h>
@@ -37,19 +38,15 @@
 #include <asm/io.h>
 #include <asm/delay.h>
 #include <mach/control.h>
-#include <mach/usb.h>
 
 #include "mmc-twl4030.h"
 
-#define LDP_SMC911X_CS		1
-#define LDP_SMC911X_GPIO	152
-#define DEBUG_BASE		0x08000000
-#define LDP_ETHR_START		DEBUG_BASE
+#define SDP3430_SMC91X_CS	3
 
 static struct resource ldp_smc911x_resources[] = {
 	[0] = {
-		.start	= LDP_ETHR_START,
-		.end	= LDP_ETHR_START + SZ_4K,
+		.start	= OMAP34XX_ETHR_START,
+		.end	= OMAP34XX_ETHR_START + SZ_4K,
 		.flags	= IORESOURCE_MEM,
 	},
 	[1] = {
@@ -84,7 +81,7 @@ static inline void __init ldp_init_smc911x(void)
 	}
 
 	ldp_smc911x_resources[0].start = cs_mem_base + 0x0;
-	ldp_smc911x_resources[0].end   = cs_mem_base + 0xff;
+	ldp_smc911x_resources[0].end   = cs_mem_base + 0xf;
 	udelay(100);
 
 	eth_gpio = LDP_SMC911X_GPIO;
@@ -165,7 +162,6 @@ static void __init omap_ldp_init(void)
 	omap_board_config_size = ARRAY_SIZE(ldp_config);
 	omap_serial_init();
 	twl4030_mmc_init(mmc);
-	usb_musb_init();
 }
 
 static void __init omap_ldp_map_io(void)

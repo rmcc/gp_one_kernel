@@ -286,12 +286,14 @@ int __init uids_sysfs_init(void)
 /* work function to remove sysfs directory for a user and free up
  * corresponding structures.
  */
-static void cleanup_user_struct(struct work_struct *w)
+static void remove_user_sysfs_dir(struct work_struct *w)
 {
 	struct user_struct *up = container_of(w, struct user_struct, work);
 	unsigned long flags;
 	int remove_user = 0;
 
+	if (up->user_ns != &init_user_ns)
+		return;
 	/* Make uid_hash_remove() + sysfs_remove_file() + kobject_del()
 	 * atomic.
 	 */
@@ -310,11 +312,9 @@ static void cleanup_user_struct(struct work_struct *w)
 	if (!remove_user)
 		goto done;
 
-	if (up->user_ns == &init_user_ns) {
-		kobject_uevent(&up->kobj, KOBJ_REMOVE);
-		kobject_del(&up->kobj);
-		kobject_put(&up->kobj);
-	}
+	kobject_uevent(&up->kobj, KOBJ_REMOVE);
+	kobject_del(&up->kobj);
+	kobject_put(&up->kobj);
 
 	sched_destroy_user(up);
 	key_put(up->uid_keyring);
@@ -335,7 +335,7 @@ static void free_user(struct user_struct *up, unsigned long flags)
 	atomic_inc(&up->__count);
 	spin_unlock_irqrestore(&uidhash_lock, flags);
 
-	INIT_WORK(&up->work, cleanup_user_struct);
+	INIT_WORK(&up->work, remove_user_sysfs_dir);
 	schedule_work(&up->work);
 }
 

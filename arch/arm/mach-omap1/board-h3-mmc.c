@@ -19,8 +19,6 @@
 #include <mach/mmc.h>
 #include <mach/gpio.h>
 
-#include "board-h3.h"
-
 #if defined(CONFIG_MMC_OMAP) || defined(CONFIG_MMC_OMAP_MODULE)
 
 static int mmc_set_power(struct device *dev, int slot, int power_on,
