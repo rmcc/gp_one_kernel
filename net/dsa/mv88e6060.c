@@ -222,7 +222,7 @@ static void mv88e6060_poll_link(struct dsa_switch *ds)
 
 	for (i = 0; i < DSA_MAX_PORTS; i++) {
 		struct net_device *dev;
-		int uninitialized_var(port_status);
+		int port_status;
 		int link;
 		int speed;
 		int duplex;
@@ -273,14 +273,14 @@ static struct dsa_switch_driver mv88e6060_switch_driver = {
 	.poll_link	= mv88e6060_poll_link,
 };
 
-static int __init mv88e6060_init(void)
+int __init mv88e6060_init(void)
 {
 	register_switch_driver(&mv88e6060_switch_driver);
 	return 0;
 }
 module_init(mv88e6060_init);
 
-static void __exit mv88e6060_cleanup(void)
+void __exit mv88e6060_cleanup(void)
 {
 	unregister_switch_driver(&mv88e6060_switch_driver);
 }

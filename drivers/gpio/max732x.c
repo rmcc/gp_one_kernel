@@ -372,10 +372,7 @@ static int __init max732x_init(void)
 {
 	return i2c_add_driver(&max732x_driver);
 }
-/* register after i2c postcore initcall and before
- * subsys initcalls that may rely on these GPIOs
- */
-subsys_initcall(max732x_init);
+module_init(max732x_init);
 
 static void __exit max732x_exit(void)
 {

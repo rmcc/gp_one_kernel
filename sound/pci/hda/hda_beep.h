@@ -31,7 +31,6 @@ struct hda_beep {
 	char phys[32];
 	int tone;
 	int nid;
-	int enabled;
 	struct work_struct beep_work; /* scheduled task for beep event */
 };
 

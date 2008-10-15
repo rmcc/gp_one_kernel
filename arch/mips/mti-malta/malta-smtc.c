@@ -114,9 +114,9 @@ struct plat_smp_ops msmtc_smp_ops = {
  */
 
 
-void plat_set_irq_affinity(unsigned int irq, const struct cpumask *affinity)
+void plat_set_irq_affinity(unsigned int irq, cpumask_t affinity)
 {
-	cpumask_t tmask;
+	cpumask_t tmask = affinity;
 	int cpu = 0;
 	void smtc_set_irq_affinity(unsigned int irq, cpumask_t aff);
 
@@ -139,12 +139,11 @@ void plat_set_irq_affinity(unsigned int irq, const struct cpumask *affinity)
 	 * be made to forward to an offline "CPU".
 	 */
 
-	cpumask_copy(&tmask, affinity);
-	for_each_cpu(cpu, affinity) {
+	for_each_cpu_mask(cpu, affinity) {
 		if ((cpu_data[cpu].vpe_id != 0) || !cpu_online(cpu))
 			cpu_clear(cpu, tmask);
 	}
-	cpumask_copy(irq_desc[irq].affinity, &tmask);
+	irq_desc[irq].affinity = tmask;
 
 	if (cpus_empty(tmask))
 		/*

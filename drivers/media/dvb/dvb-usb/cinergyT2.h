@@ -70,11 +70,11 @@ struct dvbt_get_status_msg {
 	uint8_t bandwidth;
 	uint16_t tps;
 	uint8_t flags;
-	__le16 gain;
+	uint16_t gain;
 	uint8_t snr;
-	__le32 viterbi_error_rate;
+	uint32_t viterbi_error_rate;
 	uint32_t rs_error_rate;
-	__le32 uncorrected_block_count;
+	uint32_t uncorrected_block_count;
 	uint8_t lock_bits;
 	uint8_t prev_lock_bits;
 } __attribute__((packed));
@@ -82,9 +82,9 @@ struct dvbt_get_status_msg {
 
 struct dvbt_set_parameters_msg {
 	uint8_t cmd;
-	__le32 freq;
+	uint32_t freq;
 	uint8_t bandwidth;
-	__le16 tps;
+	uint16_t tps;
 	uint8_t flags;
 } __attribute__((packed));
 

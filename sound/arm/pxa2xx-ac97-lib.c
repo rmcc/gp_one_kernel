@@ -22,7 +22,7 @@
 
 #include <asm/irq.h>
 #include <mach/hardware.h>
-#include <mach/regs-ac97.h>
+#include <mach/pxa-regs.h>
 #include <mach/pxa2xx-gpio.h>
 #include <mach/audio.h>
 
@@ -50,7 +50,7 @@ unsigned short pxa2xx_ac97_read(struct snd_ac97 *ac97, unsigned short reg)
 	mutex_lock(&car_mutex);
 
 	/* set up primary or secondary codec space */
-	if (cpu_is_pxa25x() && reg == AC97_GPIO_STATUS)
+	if ((cpu_is_pxa21x() || cpu_is_pxa25x()) && reg == AC97_GPIO_STATUS)
 		reg_addr = ac97->num ? &SMC_REG_BASE : &PMC_REG_BASE;
 	else
 		reg_addr = ac97->num ? &SAC_REG_BASE : &PAC_REG_BASE;
@@ -90,7 +90,7 @@ void pxa2xx_ac97_write(struct snd_ac97 *ac97, unsigned short reg,
 	mutex_lock(&car_mutex);
 
 	/* set up primary or secondary codec space */
-	if (cpu_is_pxa25x() && reg == AC97_GPIO_STATUS)
+	if ((cpu_is_pxa21x() || cpu_is_pxa25x()) && reg == AC97_GPIO_STATUS)
 		reg_addr = ac97->num ? &SMC_REG_BASE : &PMC_REG_BASE;
 	else
 		reg_addr = ac97->num ? &SAC_REG_BASE : &PAC_REG_BASE;
@@ -200,7 +200,7 @@ static inline void pxa_ac97_cold_pxa3xx(void)
 bool pxa2xx_ac97_try_warm_reset(struct snd_ac97 *ac97)
 {
 #ifdef CONFIG_PXA25x
-	if (cpu_is_pxa25x())
+	if (cpu_is_pxa21x() || cpu_is_pxa25x())
 		pxa_ac97_warm_pxa25x();
 	else
 #endif
@@ -230,7 +230,7 @@ EXPORT_SYMBOL_GPL(pxa2xx_ac97_try_warm_reset);
 bool pxa2xx_ac97_try_cold_reset(struct snd_ac97 *ac97)
 {
 #ifdef CONFIG_PXA25x
-	if (cpu_is_pxa25x())
+	if (cpu_is_pxa21x() || cpu_is_pxa25x())
 		pxa_ac97_cold_pxa25x();
 	else
 #endif
@@ -301,7 +301,7 @@ EXPORT_SYMBOL_GPL(pxa2xx_ac97_hw_suspend);
 
 int pxa2xx_ac97_hw_resume(void)
 {
-	if (cpu_is_pxa25x() || cpu_is_pxa27x()) {
+	if (cpu_is_pxa21x() || cpu_is_pxa25x() || cpu_is_pxa27x()) {
 		pxa_gpio_mode(GPIO31_SYNC_AC97_MD);
 		pxa_gpio_mode(GPIO30_SDATA_OUT_AC97_MD);
 		pxa_gpio_mode(GPIO28_BITCLK_AC97_MD);
@@ -321,7 +321,11 @@ int __devinit pxa2xx_ac97_hw_probe(struct platform_device *dev)
 {
 	int ret;
 
-	if (cpu_is_pxa25x() || cpu_is_pxa27x()) {
+	ret = request_irq(IRQ_AC97, pxa2xx_ac97_irq, 0, "AC97", NULL);
+	if (ret < 0)
+		goto err;
+
+	if (cpu_is_pxa21x() || cpu_is_pxa25x() || cpu_is_pxa27x()) {
 		pxa_gpio_mode(GPIO31_SYNC_AC97_MD);
 		pxa_gpio_mode(GPIO30_SDATA_OUT_AC97_MD);
 		pxa_gpio_mode(GPIO28_BITCLK_AC97_MD);
@@ -335,7 +339,7 @@ int __devinit pxa2xx_ac97_hw_probe(struct platform_device *dev)
 		if (IS_ERR(ac97conf_clk)) {
 			ret = PTR_ERR(ac97conf_clk);
 			ac97conf_clk = NULL;
-			goto err_conf;
+			goto err_irq;
 		}
 	}
 
@@ -343,30 +347,19 @@ int __devinit pxa2xx_ac97_hw_probe(struct platform_device *dev)
 	if (IS_ERR(ac97_clk)) {
 		ret = PTR_ERR(ac97_clk);
 		ac97_clk = NULL;
-		goto err_clk;
+		goto err_irq;
 	}
 
-	ret = clk_enable(ac97_clk);
-	if (ret)
-		goto err_clk2;
-
-	ret = request_irq(IRQ_AC97, pxa2xx_ac97_irq, IRQF_DISABLED, "AC97", NULL);
-	if (ret < 0)
-		goto err_irq;
-
-	return 0;
+	return clk_enable(ac97_clk);
 
 err_irq:
 	GCR |= GCR_ACLINK_OFF;
-err_clk2:
-	clk_put(ac97_clk);
-	ac97_clk = NULL;
-err_clk:
 	if (ac97conf_clk) {
 		clk_put(ac97conf_clk);
 		ac97conf_clk = NULL;
 	}
-err_conf:
+	free_irq(IRQ_AC97, NULL);
+err:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pxa2xx_ac97_hw_probe);

@@ -18,7 +18,6 @@
 #include <linux/platform_device.h>
 
 #include <mach/dma.h>
-#include <mach/irqs.h>
 #include <mach/mux.h>
 #include <mach/cpu.h>
 #include <mach/mcbsp.h>
@@ -104,6 +103,30 @@ static inline void omap_mcbsp_clk_init(struct mcbsp_internal_clk *mclk)
 { }
 #endif
 
+static int omap1_mcbsp_check(unsigned int id)
+{
+	/* REVISIT: Check correctly for number of registered McBSPs */
+	if (cpu_is_omap730()) {
+		if (id > OMAP_MAX_MCBSP_COUNT - 2) {
+		       printk(KERN_ERR "OMAP-McBSP: McBSP%d doesn't exist\n",
+				id + 1);
+		       return -ENODEV;
+		}
+		return 0;
+	}
+
+	if (cpu_is_omap15xx() || cpu_is_omap16xx()) {
+		if (id > OMAP_MAX_MCBSP_COUNT - 1) {
+			printk(KERN_ERR "OMAP-McBSP: McBSP%d doesn't exist\n",
+				id + 1);
+			return -ENODEV;
+		}
+		return 0;
+	}
+
+	return -ENODEV;
+}
+
 static void omap1_mcbsp_request(unsigned int id)
 {
 	/*
@@ -128,6 +151,7 @@ static void omap1_mcbsp_free(unsigned int id)
 }
 
 static struct omap_mcbsp_ops omap1_mcbsp_ops = {
+	.check		= omap1_mcbsp_check,
 	.request	= omap1_mcbsp_request,
 	.free		= omap1_mcbsp_free,
 };
@@ -136,6 +160,7 @@ static struct omap_mcbsp_ops omap1_mcbsp_ops = {
 static struct omap_mcbsp_platform_data omap730_mcbsp_pdata[] = {
 	{
 		.phys_base	= OMAP730_MCBSP1_BASE,
+		.virt_base	= io_p2v(OMAP730_MCBSP1_BASE),
 		.dma_rx_sync	= OMAP_DMA_MCBSP1_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP1_TX,
 		.rx_irq		= INT_730_McBSP1RX,
@@ -144,6 +169,7 @@ static struct omap_mcbsp_platform_data omap730_mcbsp_pdata[] = {
 	},
 	{
 		.phys_base	= OMAP730_MCBSP2_BASE,
+		.virt_base	= io_p2v(OMAP730_MCBSP2_BASE),
 		.dma_rx_sync	= OMAP_DMA_MCBSP3_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP3_TX,
 		.rx_irq		= INT_730_McBSP2RX,
@@ -161,6 +187,7 @@ static struct omap_mcbsp_platform_data omap730_mcbsp_pdata[] = {
 static struct omap_mcbsp_platform_data omap15xx_mcbsp_pdata[] = {
 	{
 		.phys_base	= OMAP1510_MCBSP1_BASE,
+		.virt_base	= OMAP1510_MCBSP1_BASE,
 		.dma_rx_sync	= OMAP_DMA_MCBSP1_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP1_TX,
 		.rx_irq		= INT_McBSP1RX,
@@ -170,6 +197,7 @@ static struct omap_mcbsp_platform_data omap15xx_mcbsp_pdata[] = {
 		},
 	{
 		.phys_base	= OMAP1510_MCBSP2_BASE,
+		.virt_base	= io_p2v(OMAP1510_MCBSP2_BASE),
 		.dma_rx_sync	= OMAP_DMA_MCBSP2_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP2_TX,
 		.rx_irq		= INT_1510_SPI_RX,
@@ -178,6 +206,7 @@ static struct omap_mcbsp_platform_data omap15xx_mcbsp_pdata[] = {
 	},
 	{
 		.phys_base	= OMAP1510_MCBSP3_BASE,
+		.virt_base	= OMAP1510_MCBSP3_BASE,
 		.dma_rx_sync	= OMAP_DMA_MCBSP3_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP3_TX,
 		.rx_irq		= INT_McBSP3RX,
@@ -196,6 +225,7 @@ static struct omap_mcbsp_platform_data omap15xx_mcbsp_pdata[] = {
 static struct omap_mcbsp_platform_data omap16xx_mcbsp_pdata[] = {
 	{
 		.phys_base	= OMAP1610_MCBSP1_BASE,
+		.virt_base	= OMAP1610_MCBSP1_BASE,
 		.dma_rx_sync	= OMAP_DMA_MCBSP1_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP1_TX,
 		.rx_irq		= INT_McBSP1RX,
@@ -205,6 +235,7 @@ static struct omap_mcbsp_platform_data omap16xx_mcbsp_pdata[] = {
 	},
 	{
 		.phys_base	= OMAP1610_MCBSP2_BASE,
+		.virt_base	= io_p2v(OMAP1610_MCBSP2_BASE),
 		.dma_rx_sync	= OMAP_DMA_MCBSP2_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP2_TX,
 		.rx_irq		= INT_1610_McBSP2_RX,
@@ -213,6 +244,7 @@ static struct omap_mcbsp_platform_data omap16xx_mcbsp_pdata[] = {
 	},
 	{
 		.phys_base	= OMAP1610_MCBSP3_BASE,
+		.virt_base	= OMAP1610_MCBSP3_BASE,
 		.dma_rx_sync	= OMAP_DMA_MCBSP3_RX,
 		.dma_tx_sync	= OMAP_DMA_MCBSP3_TX,
 		.rx_irq		= INT_McBSP3RX,
@@ -237,18 +269,6 @@ int __init omap1_mcbsp_init(void)
 			clk_register(&omap_mcbsp_clks[i].clk);
 		}
 	}
-
-	if (cpu_is_omap730())
-		omap_mcbsp_count = OMAP730_MCBSP_PDATA_SZ;
-	if (cpu_is_omap15xx())
-		omap_mcbsp_count = OMAP15XX_MCBSP_PDATA_SZ;
-	if (cpu_is_omap16xx())
-		omap_mcbsp_count = OMAP16XX_MCBSP_PDATA_SZ;
-
-	mcbsp_ptr = kzalloc(omap_mcbsp_count * sizeof(struct omap_mcbsp *),
-								GFP_KERNEL);
-	if (!mcbsp_ptr)
-		return -ENOMEM;
 
 	if (cpu_is_omap730())
 		omap_mcbsp_register_board_cfg(omap730_mcbsp_pdata,

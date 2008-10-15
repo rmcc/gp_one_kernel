@@ -7,6 +7,10 @@
 #define irq_canonicalize(i)	(i)
 #endif
 
+#ifndef NR_IRQS
+#define NR_IRQS	128
+#endif
+
 /*
  * Use this value to indicate lack of interrupt
  * capability

@@ -11,7 +11,6 @@
 #ifndef __ARCH_KIRKWOOD_COMMON_H
 #define __ARCH_KIRKWOOD_COMMON_H
 
-struct dsa_platform_data;
 struct mv643xx_eth_platform_data;
 struct mv_sata_platform_data;
 
@@ -30,8 +29,6 @@ void kirkwood_pcie_id(u32 *dev, u32 *rev);
 
 void kirkwood_ehci_init(void);
 void kirkwood_ge00_init(struct mv643xx_eth_platform_data *eth_data);
-void kirkwood_ge01_init(struct mv643xx_eth_platform_data *eth_data);
-void kirkwood_ge00_switch_init(struct dsa_platform_data *d, int irq);
 void kirkwood_pcie_init(void);
 void kirkwood_rtc_init(void);
 void kirkwood_sata_init(struct mv_sata_platform_data *sata_data);

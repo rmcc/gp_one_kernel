@@ -20,7 +20,7 @@ static int mfd_add_device(struct device *parent, int id,
 			  struct resource *mem_base,
 			  int irq_base)
 {
-	struct resource *res;
+	struct resource res[cell->num_resources];
 	struct platform_device *pdev;
 	int ret = -ENOMEM;
 	int r;
@@ -29,18 +29,14 @@ static int mfd_add_device(struct device *parent, int id,
 	if (!pdev)
 		goto fail_alloc;
 
-	res = kzalloc(sizeof(*res) * cell->num_resources, GFP_KERNEL);
-	if (!res)
-		goto fail_device;
-
 	pdev->dev.parent = parent;
-	platform_set_drvdata(pdev, cell->driver_data);
 
 	ret = platform_device_add_data(pdev,
 			cell->platform_data, cell->data_size);
 	if (ret)
-		goto fail_res;
+		goto fail_device;
 
+	memset(res, 0, sizeof(res));
 	for (r = 0; r < cell->num_resources; r++) {
 		res[r].name = cell->resources[r].name;
 		res[r].flags = cell->resources[r].flags;
@@ -68,15 +64,11 @@ static int mfd_add_device(struct device *parent, int id,
 
 	ret = platform_device_add(pdev);
 	if (ret)
-		goto fail_res;
-
-	kfree(res);
+		goto fail_device;
 
 	return 0;
 
 /*	platform_device_del(pdev); */
-fail_res:
-	kfree(res);
 fail_device:
 	platform_device_put(pdev);
 fail_alloc:

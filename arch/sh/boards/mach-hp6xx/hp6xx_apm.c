@@ -14,7 +14,7 @@
 #include <linux/apm-emulation.h>
 #include <linux/io.h>
 #include <asm/adc.h>
-#include <mach/hp6xx.h>
+#include <asm/hp6xx.h>
 
 /* percentage values */
 #define APM_CRITICAL			10

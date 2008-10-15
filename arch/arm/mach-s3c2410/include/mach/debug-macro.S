@@ -14,7 +14,7 @@
 
 #include <mach/map.h>
 #include <mach/regs-gpio.h>
-#include <plat/regs-serial.h>
+#include <asm/plat-s3c/regs-serial.h>
 
 #define S3C2410_UART1_OFF (0x4000)
 #define SHIFT_2440TXF (14-9)
@@ -99,4 +99,4 @@
 
 /* include the reset of the code which will do the work */
 
-#include <plat/debug-macro.S>
+#include <asm/plat-s3c/debug-macro.S>

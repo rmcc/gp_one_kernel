@@ -108,12 +108,6 @@ typedef struct user_fpu_struct elf_fpregset_t;
 #define elf_check_fdpic(x)		((x)->e_flags & EF_SH_FDPIC)
 #define elf_check_const_displacement(x)	((x)->e_flags & EF_SH_PIC)
 
-/*
- * Enable dump using regset.
- * This covers all of general/DSP/FPU regs.
- */
-#define CORE_DUMP_USE_REGSET
-
 #define USE_ELF_CORE_DUMP
 #define ELF_FDPIC_CORE_EFLAGS	EF_SH_FDPIC
 #define ELF_EXEC_PAGESIZE	PAGE_SIZE
@@ -195,14 +189,20 @@ do {									\
 } while (0)
 #endif
 
-#define SET_PERSONALITY(ex) set_personality(PER_LINUX_32BIT)
+#define SET_PERSONALITY(ex, ibcs2) set_personality(PER_LINUX_32BIT)
+struct task_struct;
+extern int dump_task_regs (struct task_struct *, elf_gregset_t *);
+extern int dump_task_fpu (struct task_struct *, elf_fpregset_t *);
+
+#define ELF_CORE_COPY_TASK_REGS(tsk, elf_regs) dump_task_regs(tsk, elf_regs)
+#define ELF_CORE_COPY_FPREGS(tsk, elf_fpregs) dump_task_fpu(tsk, elf_fpregs)
 
 #ifdef CONFIG_VSYSCALL
 /* vDSO has arch_setup_additional_pages */
 #define ARCH_HAS_SETUP_ADDITIONAL_PAGES
 struct linux_binprm;
 extern int arch_setup_additional_pages(struct linux_binprm *bprm,
-				       int uses_interp);
+				       int executable_stack);
 
 extern unsigned int vdso_enabled;
 extern void __kernel_vsyscall;

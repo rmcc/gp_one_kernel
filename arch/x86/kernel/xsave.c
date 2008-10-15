@@ -159,7 +159,7 @@ int save_i387_xstate(void __user *buf)
  * Restore the extended state if present. Otherwise, restore the FP/SSE
  * state.
  */
-static int restore_user_xstate(void __user *buf)
+int restore_user_xstate(void __user *buf)
 {
 	struct _fpx_sw_bytes fx_sw_user;
 	u64 mask;
@@ -248,7 +248,7 @@ clear:
  * This will be saved when ever the FP and extended state context is
  * saved on the user stack during the signal handler delivery to the user.
  */
-static void prepare_fx_sw_frame(void)
+void prepare_fx_sw_frame(void)
 {
 	int size_extended = (xstate_size - sizeof(struct i387_fxsave_struct)) +
 			     FP_XSTATE_MAGIC2_SIZE;
@@ -310,7 +310,7 @@ static void __init setup_xstate_init(void)
 /*
  * Enable and initialize the xsave feature.
  */
-void __ref xsave_cntxt_init(void)
+void __init xsave_cntxt_init(void)
 {
 	unsigned int eax, ebx, ecx, edx;
 

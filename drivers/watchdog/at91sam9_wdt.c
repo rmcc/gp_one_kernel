@@ -30,7 +30,7 @@
 #include <linux/bitops.h>
 #include <linux/uaccess.h>
 
-#include <mach/at91_wdt.h>
+#include <asm/arch/at91_wdt.h>
 
 #define DRV_NAME "AT91SAM9 Watchdog"
 

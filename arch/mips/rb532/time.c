@@ -28,6 +28,7 @@
 #include <linux/timex.h>
 
 #include <asm/mipsregs.h>
+#include <asm/debug.h>
 #include <asm/time.h>
 #include <asm/mach-rc32434/rc32434.h>
 

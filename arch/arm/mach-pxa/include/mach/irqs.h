@@ -9,8 +9,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#ifndef __ASM_MACH_IRQS_H
-#define __ASM_MACH_IRQS_H
+
 
 #ifdef CONFIG_PXA_HAVE_ISA_IRQS
 #define PXA_ISA_IRQ(x)	(x)
@@ -265,5 +264,3 @@
 #endif
 
 #endif /* CONFIG_PCI_HOST_ITE8152 */
-
-#endif /* __ASM_MACH_IRQS_H */

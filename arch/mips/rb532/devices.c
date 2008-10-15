@@ -118,7 +118,7 @@ static struct platform_device cf_slot0 = {
 /* Resources and device for NAND */
 static int rb532_dev_ready(struct mtd_info *mtd)
 {
-	return gpio_get_value(GPIO_RDY);
+	return readl(IDT434_REG_BASE + GPIOD) & GPIO_RDY;
 }
 
 static void rb532_cmd_ctrl(struct mtd_info *mtd, int cmd, unsigned int ctrl)
@@ -280,7 +280,7 @@ static int __init plat_setup_devices(void)
 {
 	/* Look for the CF card reader */
 	if (!readl(IDT434_REG_BASE + DEV1MASK))
-		rb532_devs[2] = NULL;	/* disable cf_slot0 at index 2 */
+		rb532_devs[1] = NULL;
 	else {
 		cf_slot0_res[0].start =
 		    readl(IDT434_REG_BASE + DEV1BASE);

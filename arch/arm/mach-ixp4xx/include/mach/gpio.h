@@ -25,7 +25,6 @@
 #ifndef __ASM_ARCH_IXP4XX_GPIO_H
 #define __ASM_ARCH_IXP4XX_GPIO_H
 
-#include <linux/kernel.h>
 #include <mach/hardware.h>
 
 static inline int gpio_request(unsigned gpio, const char *label)
@@ -35,8 +34,6 @@ static inline int gpio_request(unsigned gpio, const char *label)
 
 static inline void gpio_free(unsigned gpio)
 {
-	might_sleep();
-
 	return;
 }
 

@@ -14,7 +14,7 @@
 struct cpupri_vec {
 	spinlock_t lock;
 	int        count;
-	cpumask_var_t mask;
+	cpumask_t  mask;
 };
 
 struct cpupri {
@@ -27,8 +27,7 @@ struct cpupri {
 int  cpupri_find(struct cpupri *cp,
 		 struct task_struct *p, cpumask_t *lowest_mask);
 void cpupri_set(struct cpupri *cp, int cpu, int pri);
-int cpupri_init(struct cpupri *cp, bool bootmem);
-void cpupri_cleanup(struct cpupri *cp);
+void cpupri_init(struct cpupri *cp);
 #else
 #define cpupri_set(cp, cpu, pri) do { } while (0)
 #define cpupri_init() do { } while (0)

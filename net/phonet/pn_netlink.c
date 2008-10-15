@@ -123,7 +123,6 @@ nla_put_failure:
 
 static int getaddr_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 {
-	struct net *net = sock_net(skb->sk);
 	struct phonet_device *pnd;
 	int dev_idx = 0, dev_start_idx = cb->args[0];
 	int addr_idx = 0, addr_start_idx = cb->args[1];
@@ -132,8 +131,6 @@ static int getaddr_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	list_for_each_entry(pnd, &pndevs.list, list) {
 		u8 addr;
 
-		if (!net_eq(dev_net(pnd->netdev), net))
-			continue;
 		if (dev_idx > dev_start_idx)
 			addr_start_idx = 0;
 		if (dev_idx++ < dev_start_idx)

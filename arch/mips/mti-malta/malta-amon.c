@@ -22,9 +22,9 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 
-#include <asm/addrspace.h>
-#include <asm/mips-boards/launch.h>
-#include <asm/mipsmtregs.h>
+#include <asm-mips/addrspace.h>
+#include <asm-mips/mips-boards/launch.h>
+#include <asm-mips/mipsmtregs.h>
 
 int amon_cpu_avail(int cpu)
 {

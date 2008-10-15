@@ -25,7 +25,7 @@
  * in the file called LICENSE.GPL.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * Tomas Winkler <tomas.winkler@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -70,16 +70,7 @@
  * INIT calibrations framework
  *****************************************************************************/
 
-struct statistics_general_data {
-	u32 beacon_silence_rssi_a;
-	u32 beacon_silence_rssi_b;
-	u32 beacon_silence_rssi_c;
-	u32 beacon_energy_a;
-	u32 beacon_energy_b;
-	u32 beacon_energy_c;
-};
-
-int iwl_send_calib_results(struct iwl_priv *priv)
+ int iwl_send_calib_results(struct iwl_priv *priv)
 {
 	int ret = 0;
 	int i = 0;
@@ -89,16 +80,14 @@ int iwl_send_calib_results(struct iwl_priv *priv)
 		.meta.flags = CMD_SIZE_HUGE,
 	};
 
-	for (i = 0; i < IWL_CALIB_MAX; i++) {
-		if ((BIT(i) & priv->hw_params.calib_init_cfg) &&
-		    priv->calib_results[i].buf) {
+	for (i = 0; i < IWL_CALIB_MAX; i++)
+		if (priv->calib_results[i].buf) {
 			hcmd.len = priv->calib_results[i].buf_len;
 			hcmd.data = priv->calib_results[i].buf;
 			ret = iwl_send_cmd_sync(priv, &hcmd);
 			if (ret)
 				goto err;
 		}
-	}
 
 	return 0;
 err:

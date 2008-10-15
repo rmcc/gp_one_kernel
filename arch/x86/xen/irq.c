@@ -21,6 +21,7 @@ void xen_force_evtchn_callback(void)
 
 static void __init __xen_init_IRQ(void)
 {
+#ifdef CONFIG_X86_64
 	int i;
 
 	/* Create identity vector->irq map */
@@ -30,6 +31,7 @@ static void __init __xen_init_IRQ(void)
 		for_each_possible_cpu(cpu)
 			per_cpu(vector_irq, cpu)[i] = i;
 	}
+#endif	/* CONFIG_X86_64 */
 
 	xen_init_IRQ();
 }
@@ -39,7 +41,7 @@ static unsigned long xen_save_fl(void)
 	struct vcpu_info *vcpu;
 	unsigned long flags;
 
-	vcpu = percpu_read(xen_vcpu);
+	vcpu = x86_read_percpu(xen_vcpu);
 
 	/* flag has opposite sense of mask */
 	flags = !vcpu->evtchn_upcall_mask;
@@ -62,7 +64,7 @@ static void xen_restore_fl(unsigned long flags)
 	   make sure we're don't switch CPUs between getting the vcpu
 	   pointer and updating the mask. */
 	preempt_disable();
-	vcpu = percpu_read(xen_vcpu);
+	vcpu = x86_read_percpu(xen_vcpu);
 	vcpu->evtchn_upcall_mask = flags;
 	preempt_enable_no_resched();
 
@@ -83,7 +85,7 @@ static void xen_irq_disable(void)
 	   make sure we're don't switch CPUs between getting the vcpu
 	   pointer and updating the mask. */
 	preempt_disable();
-	percpu_read(xen_vcpu)->evtchn_upcall_mask = 1;
+	x86_read_percpu(xen_vcpu)->evtchn_upcall_mask = 1;
 	preempt_enable_no_resched();
 }
 
@@ -96,7 +98,7 @@ static void xen_irq_enable(void)
 	   the caller is confused and is trying to re-enable interrupts
 	   on an indeterminate processor. */
 
-	vcpu = percpu_read(xen_vcpu);
+	vcpu = x86_read_percpu(xen_vcpu);
 	vcpu->evtchn_upcall_mask = 0;
 
 	/* Doesn't matter if we get preempted here, because any

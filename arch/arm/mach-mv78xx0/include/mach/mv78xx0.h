@@ -122,4 +122,7 @@
 #define SATA_PHYS_BASE		(MV78XX0_REGS_PHYS_BASE | 0xa0000)
 
 
+#define GPIO_MAX		32
+
+
 #endif

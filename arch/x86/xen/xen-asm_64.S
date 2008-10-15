@@ -17,7 +17,6 @@
 #include <asm/processor-flags.h>
 #include <asm/errno.h>
 #include <asm/segment.h>
-#include <asm/percpu.h>
 
 #include <xen/interface/xen.h>
 
@@ -29,10 +28,12 @@
 
 #if 1
 /*
-	FIXME: x86_64 now can support direct access to percpu variables
-	via a segment override.  Update xen accordingly.
+	x86-64 does not yet support direct access to percpu variables
+	via a segment override, so we just need to make sure this code
+	never gets used
  */
 #define BUG			ud2a
+#define PER_CPU_VAR(var, off)	0xdeadbeef
 #endif
 
 /*
@@ -44,14 +45,14 @@ ENTRY(xen_irq_enable_direct)
 	BUG
 
 	/* Unmask events */
-	movb $0, PER_CPU_VAR(xen_vcpu_info) + XEN_vcpu_info_mask
+	movb $0, PER_CPU_VAR(xen_vcpu_info, XEN_vcpu_info_mask)
 
 	/* Preempt here doesn't matter because that will deal with
 	   any pending interrupts.  The pending check may end up being
 	   run on the wrong CPU, but that doesn't hurt. */
 
 	/* Test for pending */
-	testb $0xff, PER_CPU_VAR(xen_vcpu_info) + XEN_vcpu_info_pending
+	testb $0xff, PER_CPU_VAR(xen_vcpu_info, XEN_vcpu_info_pending)
 	jz 1f
 
 2:	call check_events
@@ -68,7 +69,7 @@ ENDPATCH(xen_irq_enable_direct)
 ENTRY(xen_irq_disable_direct)
 	BUG
 
-	movb $1, PER_CPU_VAR(xen_vcpu_info) + XEN_vcpu_info_mask
+	movb $1, PER_CPU_VAR(xen_vcpu_info, XEN_vcpu_info_mask)
 ENDPATCH(xen_irq_disable_direct)
 	ret
 	ENDPROC(xen_irq_disable_direct)
@@ -86,7 +87,7 @@ ENDPATCH(xen_irq_disable_direct)
 ENTRY(xen_save_fl_direct)
 	BUG
 
-	testb $0xff, PER_CPU_VAR(xen_vcpu_info) + XEN_vcpu_info_mask
+	testb $0xff, PER_CPU_VAR(xen_vcpu_info, XEN_vcpu_info_mask)
 	setz %ah
 	addb %ah,%ah
 ENDPATCH(xen_save_fl_direct)
@@ -106,13 +107,13 @@ ENTRY(xen_restore_fl_direct)
 	BUG
 
 	testb $X86_EFLAGS_IF>>8, %ah
-	setz PER_CPU_VAR(xen_vcpu_info) + XEN_vcpu_info_mask
+	setz PER_CPU_VAR(xen_vcpu_info, XEN_vcpu_info_mask)
 	/* Preempt here doesn't matter because that will deal with
 	   any pending interrupts.  The pending check may end up being
 	   run on the wrong CPU, but that doesn't hurt. */
 
 	/* check for unmasked and pending */
-	cmpw $0x0001, PER_CPU_VAR(xen_vcpu_info) + XEN_vcpu_info_pending
+	cmpw $0x0001, PER_CPU_VAR(xen_vcpu_info, XEN_vcpu_info_pending)
 	jz 1f
 2:	call check_events
 1:
@@ -194,11 +195,11 @@ RELOC(xen_sysexit, 1b+1)
 ENTRY(xen_sysret64)
 	/* We're already on the usermode stack at this point, but still
 	   with the kernel gs, so we can easily switch back */
-	movq %rsp, PER_CPU_VAR(old_rsp)
-	movq PER_CPU_VAR(kernel_stack),%rsp
+	movq %rsp, %gs:pda_oldrsp
+	movq %gs:pda_kernelstack,%rsp
 
 	pushq $__USER_DS
-	pushq PER_CPU_VAR(old_rsp)
+	pushq %gs:pda_oldrsp
 	pushq %r11
 	pushq $__USER_CS
 	pushq %rcx
@@ -211,11 +212,11 @@ RELOC(xen_sysret64, 1b+1)
 ENTRY(xen_sysret32)
 	/* We're already on the usermode stack at this point, but still
 	   with the kernel gs, so we can easily switch back */
-	movq %rsp, PER_CPU_VAR(old_rsp)
-	movq PER_CPU_VAR(kernel_stack), %rsp
+	movq %rsp, %gs:pda_oldrsp
+	movq %gs:pda_kernelstack, %rsp
 
 	pushq $__USER32_DS
-	pushq PER_CPU_VAR(old_rsp)
+	pushq %gs:pda_oldrsp
 	pushq %r11
 	pushq $__USER32_CS
 	pushq %rcx

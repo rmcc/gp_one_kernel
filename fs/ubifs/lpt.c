@@ -36,16 +36,15 @@
  * can be written into a single eraseblock. In that case, garbage collection
  * consists of just writing the whole table, which therefore makes all other
  * eraseblocks reusable. In the case of the big model, dirty eraseblocks are
- * selected for garbage collection, which consists of marking the clean nodes in
+ * selected for garbage collection, which consists are marking the nodes in
  * that LEB as dirty, and then only the dirty nodes are written out. Also, in
  * the case of the big model, a table of LEB numbers is saved so that the entire
  * LPT does not to be scanned looking for empty eraseblocks when UBIFS is first
  * mounted.
  */
 
-#include "ubifs.h"
 #include <linux/crc16.h>
-#include <linux/math64.h>
+#include "ubifs.h"
 
 /**
  * do_calc_lpt_geom - calculate sizes for the LPT area.
@@ -110,8 +109,7 @@ static void do_calc_lpt_geom(struct ubifs_info *c)
 	c->lpt_sz = (long long)c->pnode_cnt * c->pnode_sz;
 	c->lpt_sz += (long long)c->nnode_cnt * c->nnode_sz;
 	c->lpt_sz += c->ltab_sz;
-	if (c->big_lpt)
-		c->lpt_sz += c->lsave_sz;
+	c->lpt_sz += c->lsave_sz;
 
 	/* Add wastage */
 	sz = c->lpt_sz;
@@ -136,13 +134,15 @@ static void do_calc_lpt_geom(struct ubifs_info *c)
 int ubifs_calc_lpt_geom(struct ubifs_info *c)
 {
 	int lebs_needed;
-	long long sz;
+	uint64_t sz;
 
 	do_calc_lpt_geom(c);
 
 	/* Verify that lpt_lebs is big enough */
 	sz = c->lpt_sz * 2; /* Must have at least 2 times the size */
-	lebs_needed = div_u64(sz + c->leb_size - 1, c->leb_size);
+	sz += c->leb_size - 1;
+	do_div(sz, c->leb_size);
+	lebs_needed = sz;
 	if (lebs_needed > c->lpt_lebs) {
 		ubifs_err("too few LPT LEBs");
 		return -EINVAL;
@@ -155,6 +155,7 @@ int ubifs_calc_lpt_geom(struct ubifs_info *c)
 	}
 
 	c->check_lpt_free = c->big_lpt;
+
 	return 0;
 }
 
@@ -174,7 +175,7 @@ static int calc_dflt_lpt_geom(struct ubifs_info *c, int *main_lebs,
 			      int *big_lpt)
 {
 	int i, lebs_needed;
-	long long sz;
+	uint64_t sz;
 
 	/* Start by assuming the minimum number of LPT LEBs */
 	c->lpt_lebs = UBIFS_MIN_LPT_LEBS;
@@ -201,7 +202,9 @@ static int calc_dflt_lpt_geom(struct ubifs_info *c, int *main_lebs,
 	/* Now check there are enough LPT LEBs */
 	for (i = 0; i < 64 ; i++) {
 		sz = c->lpt_sz * 4; /* Allow 4 times the size */
-		lebs_needed = div_u64(sz + c->leb_size - 1, c->leb_size);
+		sz += c->leb_size - 1;
+		do_div(sz, c->leb_size);
+		lebs_needed = sz;
 		if (lebs_needed > c->lpt_lebs) {
 			/* Not enough LPT LEBs so try again with more */
 			c->lpt_lebs = lebs_needed;
@@ -284,56 +287,25 @@ uint32_t ubifs_unpack_bits(uint8_t **addr, int *pos, int nrbits)
 	const int k = 32 - nrbits;
 	uint8_t *p = *addr;
 	int b = *pos;
-	uint32_t uninitialized_var(val);
-	const int bytes = (nrbits + b + 7) >> 3;
+	uint32_t val;
 
 	ubifs_assert(nrbits > 0);
 	ubifs_assert(nrbits <= 32);
 	ubifs_assert(*pos >= 0);
 	ubifs_assert(*pos < 8);
 	if (b) {
-		switch (bytes) {
-		case 2:
-			val = p[1];
-			break;
-		case 3:
-			val = p[1] | ((uint32_t)p[2] << 8);
-			break;
-		case 4:
-			val = p[1] | ((uint32_t)p[2] << 8) |
-				     ((uint32_t)p[3] << 16);
-			break;
-		case 5:
-			val = p[1] | ((uint32_t)p[2] << 8) |
-				     ((uint32_t)p[3] << 16) |
-				     ((uint32_t)p[4] << 24);
-		}
+		val = p[1] | ((uint32_t)p[2] << 8) | ((uint32_t)p[3] << 16) |
+		      ((uint32_t)p[4] << 24);
 		val <<= (8 - b);
 		val |= *p >> b;
 		nrbits += b;
-	} else {
-		switch (bytes) {
-		case 1:
-			val = p[0];
-			break;
-		case 2:
-			val = p[0] | ((uint32_t)p[1] << 8);
-			break;
-		case 3:
-			val = p[0] | ((uint32_t)p[1] << 8) |
-				     ((uint32_t)p[2] << 16);
-			break;
-		case 4:
-			val = p[0] | ((uint32_t)p[1] << 8) |
-				     ((uint32_t)p[2] << 16) |
-				     ((uint32_t)p[3] << 24);
-			break;
-		}
-	}
+	} else
+		val = p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+		      ((uint32_t)p[3] << 24);
 	val <<= k;
 	val >>= k;
 	b = nrbits & 7;
-	p += nrbits >> 3;
+	p += nrbits / 8;
 	*addr = p;
 	*pos = b;
 	ubifs_assert((val >> nrbits) == 0 || nrbits - b == 32);
@@ -554,7 +526,7 @@ static int calc_nnode_num(int row, int col)
  * This function calculates and returns the nnode number based on the parent's
  * nnode number and the index in parent.
  */
-static int calc_nnode_num_from_parent(const struct ubifs_info *c,
+static int calc_nnode_num_from_parent(struct ubifs_info *c,
 				      struct ubifs_nnode *parent, int iip)
 {
 	int num, shft;
@@ -579,7 +551,7 @@ static int calc_nnode_num_from_parent(const struct ubifs_info *c,
  * This function calculates and returns the pnode number based on the parent's
  * nnode number and the index in parent.
  */
-static int calc_pnode_num_from_parent(const struct ubifs_info *c,
+static int calc_pnode_num_from_parent(struct ubifs_info *c,
 				      struct ubifs_nnode *parent, int iip)
 {
 	int i, n = c->lpt_hght - 1, pnum = parent->num, num = 0;
@@ -962,7 +934,7 @@ static int check_lpt_type(uint8_t **addr, int *pos, int type)
  *
  * This function returns %0 on success and a negative error code on failure.
  */
-static int unpack_pnode(const struct ubifs_info *c, void *buf,
+static int unpack_pnode(struct ubifs_info *c, void *buf,
 			struct ubifs_pnode *pnode)
 {
 	uint8_t *addr = buf + UBIFS_LPT_CRC_BYTES;
@@ -992,15 +964,15 @@ static int unpack_pnode(const struct ubifs_info *c, void *buf,
 }
 
 /**
- * ubifs_unpack_nnode - unpack a nnode.
+ * unpack_nnode - unpack a nnode.
  * @c: UBIFS file-system description object
  * @buf: buffer containing packed nnode to unpack
  * @nnode: nnode structure to fill
  *
  * This function returns %0 on success and a negative error code on failure.
  */
-int ubifs_unpack_nnode(const struct ubifs_info *c, void *buf,
-		       struct ubifs_nnode *nnode)
+static int unpack_nnode(struct ubifs_info *c, void *buf,
+			struct ubifs_nnode *nnode)
 {
 	uint8_t *addr = buf + UBIFS_LPT_CRC_BYTES;
 	int i, pos = 0, err;
@@ -1032,7 +1004,7 @@ int ubifs_unpack_nnode(const struct ubifs_info *c, void *buf,
  *
  * This function returns %0 on success and a negative error code on failure.
  */
-static int unpack_ltab(const struct ubifs_info *c, void *buf)
+static int unpack_ltab(struct ubifs_info *c, void *buf)
 {
 	uint8_t *addr = buf + UBIFS_LPT_CRC_BYTES;
 	int i, pos = 0, err;
@@ -1064,7 +1036,7 @@ static int unpack_ltab(const struct ubifs_info *c, void *buf)
  *
  * This function returns %0 on success and a negative error code on failure.
  */
-static int unpack_lsave(const struct ubifs_info *c, void *buf)
+static int unpack_lsave(struct ubifs_info *c, void *buf)
 {
 	uint8_t *addr = buf + UBIFS_LPT_CRC_BYTES;
 	int i, pos = 0, err;
@@ -1092,7 +1064,7 @@ static int unpack_lsave(const struct ubifs_info *c, void *buf)
  *
  * This function returns %0 on success and a negative error code on failure.
  */
-static int validate_nnode(const struct ubifs_info *c, struct ubifs_nnode *nnode,
+static int validate_nnode(struct ubifs_info *c, struct ubifs_nnode *nnode,
 			  struct ubifs_nnode *parent, int iip)
 {
 	int i, lvl, max_offs;
@@ -1136,7 +1108,7 @@ static int validate_nnode(const struct ubifs_info *c, struct ubifs_nnode *nnode,
  *
  * This function returns %0 on success and a negative error code on failure.
  */
-static int validate_pnode(const struct ubifs_info *c, struct ubifs_pnode *pnode,
+static int validate_pnode(struct ubifs_info *c, struct ubifs_pnode *pnode,
 			  struct ubifs_nnode *parent, int iip)
 {
 	int i;
@@ -1170,8 +1142,7 @@ static int validate_pnode(const struct ubifs_info *c, struct ubifs_pnode *pnode,
  * This function calculates the LEB numbers for the LEB properties it contains
  * based on the pnode number.
  */
-static void set_pnode_lnum(const struct ubifs_info *c,
-			   struct ubifs_pnode *pnode)
+static void set_pnode_lnum(struct ubifs_info *c, struct ubifs_pnode *pnode)
 {
 	int i, lnum;
 
@@ -1224,7 +1195,7 @@ int ubifs_read_nnode(struct ubifs_info *c, struct ubifs_nnode *parent, int iip)
 		err = ubi_read(c->ubi, lnum, buf, offs, c->nnode_sz);
 		if (err)
 			goto out;
-		err = ubifs_unpack_nnode(c, buf, nnode);
+		err = unpack_nnode(c, buf, nnode);
 		if (err)
 			goto out;
 	}
@@ -1813,7 +1784,7 @@ static struct ubifs_nnode *scan_get_nnode(struct ubifs_info *c,
 			       c->nnode_sz);
 		if (err)
 			return ERR_PTR(err);
-		err = ubifs_unpack_nnode(c, buf, nnode);
+		err = unpack_nnode(c, buf, nnode);
 		if (err)
 			return ERR_PTR(err);
 	}

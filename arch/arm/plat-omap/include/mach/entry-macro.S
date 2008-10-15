@@ -55,18 +55,9 @@
 1510:
 		.endm
 
-#endif
-#if defined(CONFIG_ARCH_OMAP24XX) || defined(CONFIG_ARCH_OMAP34XX)
+#elif defined(CONFIG_ARCH_OMAP24XX)
 
-#if defined(CONFIG_ARCH_OMAP24XX)
 #include <mach/omap24xx.h>
-#endif
-#if defined(CONFIG_ARCH_OMAP34XX)
-#include <mach/omap34xx.h>
-#endif
-
-#define INTCPS_SIR_IRQ_OFFSET	0x0040		/* Active interrupt offset */
-#define	ACTIVEIRQ_MASK		0x7f		/* Active interrupt bits */
 
 		.macro	disable_fiq
 		.endm
@@ -88,8 +79,7 @@
 		ldr	\irqnr, [\base, #0xd8] /* IRQ pending reg 3 */
 		cmp	\irqnr, #0x0
 2222:
-		ldrne	\irqnr, [\base, #INTCPS_SIR_IRQ_OFFSET]
-		and	\irqnr, \irqnr, #ACTIVEIRQ_MASK /* Clear spurious bits */
+		ldrne	\irqnr, [\base, #IRQ_SIR_IRQ]
 
 		.endm
 

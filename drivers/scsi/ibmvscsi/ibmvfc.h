@@ -29,11 +29,11 @@
 #include "viosrp.h"
 
 #define IBMVFC_NAME	"ibmvfc"
-#define IBMVFC_DRIVER_VERSION		"1.0.4"
-#define IBMVFC_DRIVER_DATE		"(November 14, 2008)"
+#define IBMVFC_DRIVER_VERSION		"1.0.2"
+#define IBMVFC_DRIVER_DATE		"(August 14, 2008)"
 
 #define IBMVFC_DEFAULT_TIMEOUT	15
-#define IBMVFC_INIT_TIMEOUT		120
+#define IBMVFC_INIT_TIMEOUT		30
 #define IBMVFC_MAX_REQUESTS_DEFAULT	100
 
 #define IBMVFC_DEBUG			0
@@ -43,8 +43,7 @@
 #define IBMVFC_MAX_DISC_THREADS	4
 #define IBMVFC_TGT_MEMPOOL_SZ		64
 #define IBMVFC_MAX_CMDS_PER_LUN	64
-#define IBMVFC_MAX_HOST_INIT_RETRIES	6
-#define IBMVFC_MAX_TGT_INIT_RETRIES		3
+#define IBMVFC_MAX_INIT_RETRIES	3
 #define IBMVFC_DEV_LOSS_TMO		(5 * 60)
 #define IBMVFC_DEFAULT_LOG_LEVEL	2
 #define IBMVFC_MAX_CDB_LEN		16
@@ -110,7 +109,6 @@ enum ibmvfc_vios_errors {
 	IBMVFC_TRANS_CANCELLED			= 0x0006,
 	IBMVFC_TRANS_CANCELLED_IMPLICIT	= 0x0007,
 	IBMVFC_INSUFFICIENT_RESOURCE		= 0x0008,
-	IBMVFC_PLOGI_REQUIRED			= 0x0010,
 	IBMVFC_COMMAND_FAILED			= 0x8000,
 };
 
@@ -339,6 +337,7 @@ struct ibmvfc_tmf {
 #define IBMVFC_TMF_LUA_VALID		0x40
 	u32 cancel_key;
 	u32 my_cancel_key;
+#define IBMVFC_TMF_CANCEL_KEY		0x80000000
 	u32 pad;
 	u64 reserved[2];
 }__attribute__((packed, aligned (8)));
@@ -525,10 +524,10 @@ enum ibmvfc_async_event {
 };
 
 struct ibmvfc_crq {
-	volatile u8 valid;
-	volatile u8 format;
+	u8 valid;
+	u8 format;
 	u8 reserved[6];
-	volatile u64 ioba;
+	u64 ioba;
 }__attribute__((packed, aligned (8)));
 
 struct ibmvfc_crq_queue {
@@ -538,13 +537,13 @@ struct ibmvfc_crq_queue {
 };
 
 struct ibmvfc_async_crq {
-	volatile u8 valid;
+	u8 valid;
 	u8 pad[3];
 	u32 pad2;
-	volatile u64 event;
-	volatile u64 scsi_id;
-	volatile u64 wwpn;
-	volatile u64 node_name;
+	u64 event;
+	u64 scsi_id;
+	u64 wwpn;
+	u64 node_name;
 	u64 reserved;
 }__attribute__((packed, aligned (8)));
 
@@ -607,7 +606,6 @@ struct ibmvfc_event {
 	struct srp_direct_buf *ext_list;
 	dma_addr_t ext_list_token;
 	struct completion comp;
-	struct completion *eh_comp;
 	struct timer_list timer;
 };
 
@@ -628,7 +626,6 @@ enum ibmvfc_host_action {
 	IBMVFC_HOST_ACTION_TGT_DEL,
 	IBMVFC_HOST_ACTION_ALLOC_TGTS,
 	IBMVFC_HOST_ACTION_TGT_INIT,
-	IBMVFC_HOST_ACTION_TGT_DEL_FAILED,
 	IBMVFC_HOST_ACTION_TGT_ADD,
 };
 
@@ -674,7 +671,6 @@ struct ibmvfc_host {
 	int discovery_threads;
 	int client_migrated;
 	int reinit;
-	int delay_init;
 	int events_to_log;
 #define IBMVFC_AE_LINKUP	0x0001
 #define IBMVFC_AE_LINKDOWN	0x0002
@@ -704,7 +700,7 @@ struct ibmvfc_host {
 
 #define ibmvfc_log(vhost, level, ...) \
 	do { \
-		if ((vhost)->log_level >= level) \
+		if (level >= (vhost)->log_level) \
 			dev_err((vhost)->dev, ##__VA_ARGS__); \
 	} while (0)
 

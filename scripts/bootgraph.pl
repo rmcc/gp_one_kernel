@@ -37,53 +37,32 @@
 # 	dmesg | perl scripts/bootgraph.pl > output.svg
 #
 
-use strict;
-
-my %start;
-my %end;
-my %type;
+my @rows;
+my %start, %end, %row;
 my $done = 0;
+my $rowcount = 0;
 my $maxtime = 0;
 my $firsttime = 100;
 my $count = 0;
-my %pids;
-my %pidctr;
-
 while (<>) {
 	my $line = $_;
 	if ($line =~ /([0-9\.]+)\] calling  ([a-zA-Z0-9\_]+)\+/) {
 		my $func = $2;
 		if ($done == 0) {
 			$start{$func} = $1;
-			$type{$func} = 0;
 			if ($1 < $firsttime) {
 				$firsttime = $1;
 			}
 		}
+		$row{$func} = 1;
 		if ($line =~ /\@ ([0-9]+)/) {
-			$pids{$func} = $1;
-		}
-		$count = $count + 1;
-	}
-
-	if ($line =~ /([0-9\.]+)\] async_waiting @ ([0-9]+)/) {
-		my $pid = $2;
-		my $func;
-		if (!defined($pidctr{$pid})) {
-			$func = "wait_" . $pid . "_1";
-			$pidctr{$pid} = 1;
-		} else {
-			$pidctr{$pid} = $pidctr{$pid} + 1;
-			$func = "wait_" . $pid . "_" . $pidctr{$pid};
-		}
-		if ($done == 0) {
-			$start{$func} = $1;
-			$type{$func} = 1;
-			if ($1 < $firsttime) {
-				$firsttime = $1;
+			my $pid = $1;
+			if (!defined($rows[$pid])) {
+				$rowcount = $rowcount + 1;
+				$rows[$pid] = $rowcount;
 			}
+			$row{$func} = $rows[$pid];
 		}
-		$pids{$func} = $pid;
 		$count = $count + 1;
 	}
 
@@ -92,13 +71,6 @@ while (<>) {
 			$end{$2} = $1;
 			$maxtime = $1;
 		}
-	}
-
-	if ($line =~ /([0-9\.]+)\] async_continuing @ ([0-9]+)/) {
-		my $pid = $2;
-		my $func =  "wait_" . $pid . "_" . $pidctr{$pid};
-		$end{$func} = $1;
-		$maxtime = $1;
 	}
 	if ($line =~ /Write protecting the/) {
 		$done = 1;
@@ -109,17 +81,15 @@ while (<>) {
 }
 
 if ($count == 0) {
-    print STDERR <<END;
-No data found in the dmesg. Make sure that 'printk.time=1' and
-'initcall_debug' are passed on the kernel command line.
-Usage:
-      dmesg | perl scripts/bootgraph.pl > output.svg
-END
-    exit 1;
+	print "No data found in the dmesg. Make sure that 'printk.time=1' and\n";
+	print "'initcall_debug' are passed on the kernel command line.\n\n";
+	print "Usage: \n";
+	print "      dmesg | perl scripts/bootgraph.pl > output.svg\n\n";
+	exit;
 }
 
 print "<?xml version=\"1.0\" standalone=\"no\"?> \n";
-print "<svg width=\"2000\" height=\"100%\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n";
+print "<svg width=\"1000\" height=\"100%\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n";
 
 my @styles;
 
@@ -136,34 +106,20 @@ $styles[9] = "fill:rgb(255,255,128);fill-opacity:0.5;stroke-width:1;stroke:rgb(0
 $styles[10] = "fill:rgb(255,128,255);fill-opacity:0.5;stroke-width:1;stroke:rgb(0,0,0)";
 $styles[11] = "fill:rgb(128,255,255);fill-opacity:0.5;stroke-width:1;stroke:rgb(0,0,0)";
 
-my $style_wait = "fill:rgb(128,128,128);fill-opacity:0.5;stroke-width:0;stroke:rgb(0,0,0)";
-
-my $mult = 1950.0 / ($maxtime - $firsttime);
-my $threshold2 = ($maxtime - $firsttime) / 120.0;
-my $threshold = $threshold2/10;
+my $mult = 950.0 / ($maxtime - $firsttime);
+my $threshold = ($maxtime - $firsttime) / 60.0;
 my $stylecounter = 0;
-my %rows;
-my $rowscount = 1;
-my @initcalls = sort { $start{$a} <=> $start{$b} } keys(%start);
-
-foreach my $key (@initcalls) {
+while (($key,$value) = each %start) {
 	my $duration = $end{$key} - $start{$key};
 
 	if ($duration >= $threshold) {
-		my ($s, $s2, $s3, $e, $w, $y, $y2, $style);
-		my $pid = $pids{$key};
-
-		if (!defined($rows{$pid})) {
-			$rows{$pid} = $rowscount;
-			$rowscount = $rowscount + 1;
-		}
-		$s = ($start{$key} - $firsttime) * $mult;
+		my $s, $s2, $e, $y;
+		$s = ($value - $firsttime) * $mult;
 		$s2 = $s + 6;
-		$s3 = $s + 1;
 		$e = ($end{$key} - $firsttime) * $mult;
 		$w = $e - $s;
 
-		$y = $rows{$pid} * 150;
+		$y = $row{$key} * 150;
 		$y2 = $y + 4;
 
 		$style = $styles[$stylecounter];
@@ -172,17 +128,8 @@ foreach my $key (@initcalls) {
 			$stylecounter = 0;
 		};
 
-		if ($type{$key} == 1) {
-			$y = $y + 15;
-			print "<rect x=\"$s\" width=\"$w\" y=\"$y\" height=\"115\" style=\"$style_wait\"/>\n";
-		} else {
-			print "<rect x=\"$s\" width=\"$w\" y=\"$y\" height=\"145\" style=\"$style\"/>\n";
-			if ($duration >= $threshold2) {
-				print "<text transform=\"translate($s2,$y2) rotate(90)\">$key</text>\n";
-			} else {
-				print "<text transform=\"translate($s3,$y2) rotate(90)\" font-size=\"3pt\">$key</text>\n";
-			}
-		}
+		print "<rect x=\"$s\" width=\"$w\" y=\"$y\" height=\"145\" style=\"$style\"/>\n";
+		print "<text transform=\"translate($s2,$y2) rotate(90)\">$key</text>\n";
 	}
 }
 
@@ -191,9 +138,9 @@ foreach my $key (@initcalls) {
 my $time = $firsttime;
 my $step = ($maxtime - $firsttime) / 15;
 while ($time < $maxtime) {
-	my $s3 = ($time - $firsttime) * $mult;
+	my $s2 = ($time - $firsttime) * $mult;
 	my $tm = int($time * 100) / 100.0;
-	print "<text transform=\"translate($s3,89) rotate(90)\">$tm</text>\n";
+	print "<text transform=\"translate($s2,89) rotate(90)\">$tm</text>\n";
 	$time = $time + $step;
 }
 

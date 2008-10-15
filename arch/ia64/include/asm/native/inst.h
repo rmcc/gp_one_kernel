@@ -36,13 +36,8 @@
 	;;					\
 	movl clob = PARAVIRT_POISON;		\
 	;;
-# define CLOBBER_PRED(pred_clob)		\
-	;;					\
-	cmp.eq pred_clob, p0 = r0, r0		\
-	;;
 #else
-# define CLOBBER(clob)			/* nothing */
-# define CLOBBER_PRED(pred_clob)	/* nothing */
+# define CLOBBER(clob)		/* nothing */
 #endif
 
 #define MOV_FROM_IFA(reg)	\
@@ -141,8 +136,7 @@
 
 #define SSM_PSR_I(pred, pred_clob, clob)	\
 (pred)	ssm psr.i				\
-	CLOBBER(clob)				\
-	CLOBBER_PRED(pred_clob)
+	CLOBBER(clob)
 
 #define RSM_PSR_I(pred, clob0, clob1)	\
 (pred)	rsm psr.i			\

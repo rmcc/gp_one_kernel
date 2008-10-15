@@ -11,6 +11,8 @@
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
 
+#include <asm/memory.h>
+
 /*
  * NetSilicon NS9xxx internal mapping:
  *

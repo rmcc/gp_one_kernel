@@ -120,10 +120,6 @@ typedef s390_compat_regs compat_elf_gregset_t;
 #include <asm/system.h>		/* for save_access_regs */
 #include <asm/mmu_context.h>
 
-#include <asm/vdso.h>
-
-extern unsigned int vdso_enabled;
-
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
@@ -170,11 +166,13 @@ extern char elf_platform[];
 #define ELF_PLATFORM (elf_platform)
 
 #ifndef __s390x__
-#define SET_PERSONALITY(ex) set_personality(PER_LINUX)
+#define SET_PERSONALITY(ex, ibcs2) set_personality((ibcs2)?PER_SVR4:PER_LINUX)
 #else /* __s390x__ */
-#define SET_PERSONALITY(ex)				\
+#define SET_PERSONALITY(ex, ibcs2)			\
 do {							\
-	if (current->personality != PER_LINUX32)	\
+	if (ibcs2)					\
+		set_personality(PER_SVR4);		\
+	else if (current->personality != PER_LINUX32)	\
 		set_personality(PER_LINUX);		\
 	if ((ex).e_ident[EI_CLASS] == ELFCLASS32)	\
 		set_thread_flag(TIF_31BIT);		\
@@ -194,17 +192,5 @@ do {							\
 		disable_noexec(current->mm, current);	\
 	current->mm->context.noexec == 0;		\
 })
-
-#define ARCH_DLINFO							    \
-do {									    \
-	if (vdso_enabled)						    \
-		NEW_AUX_ENT(AT_SYSINFO_EHDR,				    \
-			    (unsigned long)current->mm->context.vdso_base); \
-} while (0)
-
-struct linux_binprm;
-
-#define ARCH_HAS_SETUP_ADDITIONAL_PAGES 1
-int arch_setup_additional_pages(struct linux_binprm *, int);
 
 #endif

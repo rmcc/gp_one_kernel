@@ -437,7 +437,7 @@ static void ep0_rxstate(struct musb *musb)
 {
 	void __iomem		*regs = musb->control_ep->regs;
 	struct usb_request	*req;
-	u16			count, csr;
+	u16			tmp;
 
 	req = next_ep0_request(musb);
 
@@ -449,35 +449,35 @@ static void ep0_rxstate(struct musb *musb)
 		unsigned	len = req->length - req->actual;
 
 		/* read the buffer */
-		count = musb_readb(regs, MUSB_COUNT0);
-		if (count > len) {
+		tmp = musb_readb(regs, MUSB_COUNT0);
+		if (tmp > len) {
 			req->status = -EOVERFLOW;
-			count = len;
+			tmp = len;
 		}
-		musb_read_fifo(&musb->endpoints[0], count, buf);
-		req->actual += count;
-		csr = MUSB_CSR0_P_SVDRXPKTRDY;
-		if (count < 64 || req->actual == req->length) {
+		musb_read_fifo(&musb->endpoints[0], tmp, buf);
+		req->actual += tmp;
+		tmp = MUSB_CSR0_P_SVDRXPKTRDY;
+		if (tmp < 64 || req->actual == req->length) {
 			musb->ep0_state = MUSB_EP0_STAGE_STATUSIN;
-			csr |= MUSB_CSR0_P_DATAEND;
+			tmp |= MUSB_CSR0_P_DATAEND;
 		} else
 			req = NULL;
 	} else
-		csr = MUSB_CSR0_P_SVDRXPKTRDY | MUSB_CSR0_P_SENDSTALL;
+		tmp = MUSB_CSR0_P_SVDRXPKTRDY | MUSB_CSR0_P_SENDSTALL;
 
 
 	/* Completion handler may choose to stall, e.g. because the
 	 * message just received holds invalid data.
 	 */
 	if (req) {
-		musb->ackpend = csr;
+		musb->ackpend = tmp;
 		musb_g_ep0_giveback(musb, req);
 		if (!musb->ackpend)
 			return;
 		musb->ackpend = 0;
 	}
 	musb_ep_select(musb->mregs, 0);
-	musb_writew(regs, MUSB_CSR0, csr);
+	musb_writew(regs, MUSB_CSR0, tmp);
 }
 
 /*

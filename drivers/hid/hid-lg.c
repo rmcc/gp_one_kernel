@@ -26,6 +26,7 @@
 #define LG_RDESC		0x001
 #define LG_BAD_RELATIVE_KEYS	0x002
 #define LG_DUPLICATE_USAGES	0x004
+#define LG_RESET_LEDS		0x008
 #define LG_EXPANDED_KEYMAP	0x010
 #define LG_IGNORE_DOUBLED_WHEEL	0x020
 #define LG_WIRELESS		0x040
@@ -247,6 +248,9 @@ static int lg_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto err_free;
 	}
 
+	if (quirks & LG_RESET_LEDS)
+		usbhid_set_leds(hdev);
+
 	if (quirks & LG_FF)
 		lgff_init(hdev);
 	if (quirks & LG_FF2)
@@ -275,10 +279,18 @@ static const struct hid_device_id lg_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_DINOVO_MINI),
 		.driver_data = LG_DUPLICATE_USAGES },
 
+	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_KBD),
+		.driver_data = LG_RESET_LEDS },
+
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_ELITE_KBD),
 		.driver_data = LG_IGNORE_DOUBLED_WHEEL | LG_EXPANDED_KEYMAP },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_CORDLESS_DESKTOP_LX500),
 		.driver_data = LG_IGNORE_DOUBLED_WHEEL | LG_EXPANDED_KEYMAP },
+
+	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_LX3),
+		.driver_data = LG_INVERT_HWHEEL },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_V150),
+		.driver_data = LG_INVERT_HWHEEL },
 
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_EXTREME_3D),
 		.driver_data = LG_NOGET },

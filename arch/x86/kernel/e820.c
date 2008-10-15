@@ -665,27 +665,6 @@ void __init e820_mark_nosave_regions(unsigned long limit_pfn)
 }
 #endif
 
-#ifdef CONFIG_HIBERNATION
-/**
- * Mark ACPI NVS memory region, so that we can save/restore it during
- * hibernation and the subsequent resume.
- */
-static int __init e820_mark_nvs_memory(void)
-{
-	int i;
-
-	for (i = 0; i < e820.nr_map; i++) {
-		struct e820entry *ei = &e820.map[i];
-
-		if (ei->type == E820_NVS)
-			hibernate_nvs_register(ei->addr, ei->size);
-	}
-
-	return 0;
-}
-core_initcall(e820_mark_nvs_memory);
-#endif
-
 /*
  * Early reserved memory areas.
  */
@@ -698,6 +677,22 @@ struct early_res {
 };
 static struct early_res early_res[MAX_EARLY_RES] __initdata = {
 	{ 0, PAGE_SIZE, "BIOS data page" },	/* BIOS data page */
+#if defined(CONFIG_X86_64) && defined(CONFIG_X86_TRAMPOLINE)
+	{ TRAMPOLINE_BASE, TRAMPOLINE_BASE + 2 * PAGE_SIZE, "TRAMPOLINE" },
+#endif
+#if defined(CONFIG_X86_32) && defined(CONFIG_SMP)
+	/*
+	 * But first pinch a few for the stack/trampoline stuff
+	 * FIXME: Don't need the extra page at 4K, but need to fix
+	 * trampoline before removing it. (see the GDT stuff)
+	 */
+	{ PAGE_SIZE, PAGE_SIZE + PAGE_SIZE, "EX TRAMPOLINE" },
+	/*
+	 * Has to be in very low memory so we can execute
+	 * real-mode AP code.
+	 */
+	{ TRAMPOLINE_BASE, TRAMPOLINE_BASE + PAGE_SIZE, "TRAMPOLINE" },
+#endif
 	{}
 };
 
@@ -1287,25 +1282,25 @@ void __init e820_reserve_resources(void)
 	e820_res = res;
 	for (i = 0; i < e820.nr_map; i++) {
 		end = e820.map[i].addr + e820.map[i].size - 1;
-		if (end != (resource_size_t)end) {
+#ifndef CONFIG_RESOURCES_64BIT
+		if (end > 0x100000000ULL) {
 			res++;
 			continue;
 		}
+#endif
 		res->name = e820_type_to_string(e820.map[i].type);
 		res->start = e820.map[i].addr;
 		res->end = end;
 
-		res->flags = IORESOURCE_MEM;
+		res->flags = IORESOURCE_MEM | IORESOURCE_BUSY;
 
 		/*
 		 * don't register the region that could be conflicted with
 		 * pci device BAR resource and insert them later in
 		 * pcibios_resource_survey()
 		 */
-		if (e820.map[i].type != E820_RESERVED || res->start < (1ULL<<20)) {
-			res->flags |= IORESOURCE_BUSY;
+		if (e820.map[i].type != E820_RESERVED || res->start < (1ULL<<20))
 			insert_resource(&iomem_resource, res);
-		}
 		res++;
 	}
 
@@ -1325,7 +1320,7 @@ void __init e820_reserve_resources_late(void)
 	res = e820_res;
 	for (i = 0; i < e820.nr_map; i++) {
 		if (!res->parent && res->end)
-			insert_resource_expand_to_fit(&iomem_resource, res);
+			reserve_region_with_split(&iomem_resource, res->start, res->end, res->name);
 		res++;
 	}
 }

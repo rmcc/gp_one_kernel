@@ -24,10 +24,8 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/err.h>
 #include <linux/io.h>
 #include <linux/irq.h>
-#include <linux/clk.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/tmio.h>
@@ -58,8 +56,6 @@ struct t7l66xb {
 	spinlock_t		lock;
 
 	struct resource		rscr;
-	struct clk		*clk48m;
-	struct clk		*clk32k;
 	int			irq;
 	int			irq_base;
 };
@@ -69,11 +65,13 @@ struct t7l66xb {
 static int t7l66xb_mmc_enable(struct platform_device *mmc)
 {
 	struct platform_device *dev = to_platform_device(mmc->dev.parent);
+	struct t7l66xb_platform_data   *pdata = dev->dev.platform_data;
 	struct t7l66xb *t7l66xb = platform_get_drvdata(dev);
 	unsigned long flags;
 	u8 dev_ctl;
 
-	clk_enable(t7l66xb->clk32k);
+	if (pdata->enable_clk32k)
+		pdata->enable_clk32k(dev);
 
 	spin_lock_irqsave(&t7l66xb->lock, flags);
 
@@ -89,6 +87,7 @@ static int t7l66xb_mmc_enable(struct platform_device *mmc)
 static int t7l66xb_mmc_disable(struct platform_device *mmc)
 {
 	struct platform_device *dev = to_platform_device(mmc->dev.parent);
+	struct t7l66xb_platform_data   *pdata = dev->dev.platform_data;
 	struct t7l66xb *t7l66xb = platform_get_drvdata(dev);
 	unsigned long flags;
 	u8 dev_ctl;
@@ -101,7 +100,8 @@ static int t7l66xb_mmc_disable(struct platform_device *mmc)
 
 	spin_unlock_irqrestore(&t7l66xb->lock, flags);
 
-	clk_disable(t7l66xb->clk32k);
+	if (pdata->disable_clk32k)
+		pdata->disable_clk32k(dev);
 
 	return 0;
 }
@@ -258,22 +258,18 @@ static void t7l66xb_detach_irq(struct platform_device *dev)
 #ifdef CONFIG_PM
 static int t7l66xb_suspend(struct platform_device *dev, pm_message_t state)
 {
-	struct t7l66xb *t7l66xb = platform_get_drvdata(dev);
 	struct t7l66xb_platform_data *pdata = dev->dev.platform_data;
 
 	if (pdata && pdata->suspend)
 		pdata->suspend(dev);
-	clk_disable(t7l66xb->clk48m);
 
 	return 0;
 }
 
 static int t7l66xb_resume(struct platform_device *dev)
 {
-	struct t7l66xb *t7l66xb = platform_get_drvdata(dev);
 	struct t7l66xb_platform_data *pdata = dev->dev.platform_data;
 
-	clk_enable(t7l66xb->clk48m);
 	if (pdata && pdata->resume)
 		pdata->resume(dev);
 
@@ -313,19 +309,6 @@ static int t7l66xb_probe(struct platform_device *dev)
 
 	t7l66xb->irq_base = pdata->irq_base;
 
-	t7l66xb->clk32k = clk_get(&dev->dev, "CLK_CK32K");
-	if (IS_ERR(t7l66xb->clk32k)) {
-		ret = PTR_ERR(t7l66xb->clk32k);
-		goto err_clk32k_get;
-	}
-
-	t7l66xb->clk48m = clk_get(&dev->dev, "CLK_CK48M");
-	if (IS_ERR(t7l66xb->clk48m)) {
-		ret = PTR_ERR(t7l66xb->clk48m);
-		clk_put(t7l66xb->clk32k);
-		goto err_clk48m_get;
-	}
-
 	rscr = &t7l66xb->rscr;
 	rscr->name = "t7l66xb-core";
 	rscr->start = iomem->start;
@@ -341,8 +324,6 @@ static int t7l66xb_probe(struct platform_device *dev)
 		ret = -ENOMEM;
 		goto err_ioremap;
 	}
-
-	clk_enable(t7l66xb->clk48m);
 
 	if (pdata && pdata->enable)
 		pdata->enable(dev);
@@ -378,13 +359,9 @@ static int t7l66xb_probe(struct platform_device *dev)
 	iounmap(t7l66xb->scr);
 err_ioremap:
 	release_resource(&t7l66xb->rscr);
+err_noirq:
 err_request_scr:
 	kfree(t7l66xb);
-	clk_put(t7l66xb->clk48m);
-err_clk48m_get:
-	clk_put(t7l66xb->clk32k);
-err_clk32k_get:
-err_noirq:
 	return ret;
 }
 
@@ -395,8 +372,7 @@ static int t7l66xb_remove(struct platform_device *dev)
 	int ret;
 
 	ret = pdata->disable(dev);
-	clk_disable(t7l66xb->clk48m);
-	clk_put(t7l66xb->clk48m);
+
 	t7l66xb_detach_irq(dev);
 	iounmap(t7l66xb->scr);
 	release_resource(&t7l66xb->rscr);

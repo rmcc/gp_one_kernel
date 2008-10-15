@@ -1,8 +1,32 @@
-/* mach/dma.h - arch-specific DMA defines
+/*
+ * file:         include/asm-blackfin/mach-bf548/dma.h
+ * based on:
+ * author:
  *
- * Copyright 2004-2008 Analog Devices Inc.
+ * created:
+ * description:
+ *	system mmr register map
+ * rev:
  *
- * Licensed under the GPL-2 or later.
+ * modified:
+ *
+ *
+ * bugs:         enter bugs at http://blackfin.uclinux.org/
+ *
+ * this program is free software; you can redistribute it and/or modify
+ * it under the terms of the gnu general public license as published by
+ * the free software foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * this program is distributed in the hope that it will be useful,
+ * but without any warranty; without even the implied warranty of
+ * merchantability or fitness for a particular purpose.  see the
+ * gnu general public license for more details.
+ *
+ * you should have received a copy of the gnu general public license
+ * along with this program; see the file copying.
+ * if not, write to the free software foundation,
+ * 59 temple place - suite 330, boston, ma 02111-1307, usa.
  */
 
 #ifndef _MACH_DMA_H_
@@ -47,6 +71,6 @@
 #define CH_MEM_STREAM3_DEST	30
 #define CH_MEM_STREAM3_SRC	31
 
-#define MAX_DMA_CHANNELS 32
+#define MAX_BLACKFIN_DMA_CHANNEL 32
 
 #endif

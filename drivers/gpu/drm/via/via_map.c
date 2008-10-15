@@ -107,17 +107,8 @@ int via_driver_load(struct drm_device *dev, unsigned long chipset)
 	ret = drm_sman_init(&dev_priv->sman, 2, 12, 8);
 	if (ret) {
 		drm_free(dev_priv, sizeof(*dev_priv), DRM_MEM_DRIVER);
-		return ret;
 	}
-
-	ret = drm_vblank_init(dev, 1);
-	if (ret) {
-		drm_sman_takedown(&dev_priv->sman);
-		drm_free(dev_priv, sizeof(drm_via_private_t), DRM_MEM_DRIVER);
-		return ret;
-	}
-
-	return 0;
+	return ret;
 }
 
 int via_driver_unload(struct drm_device *dev)

@@ -1,4 +1,3 @@
-#include <asm/iommu.h>
 #include <asm/machvec.h>
 
 extern ia64_mv_send_ipi_t ia64_send_ipi;

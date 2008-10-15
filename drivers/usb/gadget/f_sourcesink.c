@@ -552,6 +552,7 @@ static struct usb_configuration sourcesink_driver = {
 	.setup		= sourcesink_setup,
 	.bConfigurationValue = 3,
 	.bmAttributes	= USB_CONFIG_ATT_SELFPOWER,
+	.bMaxPower	= 1,	/* 2 mA, minimal */
 	/* .iConfiguration = DYNAMIC */
 };
 

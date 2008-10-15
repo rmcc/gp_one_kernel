@@ -98,8 +98,6 @@ search_module_dbetables(unsigned long addr)
 #define MODULE_PROC_FAMILY "R5000 "
 #elif defined CONFIG_CPU_R5432
 #define MODULE_PROC_FAMILY "R5432 "
-#elif defined CONFIG_CPU_R5500
-#define MODULE_PROC_FAMILY "R5500 "
 #elif defined CONFIG_CPU_R6000
 #define MODULE_PROC_FAMILY "R6000 "
 #elif defined CONFIG_CPU_NEVADA
@@ -116,8 +114,6 @@ search_module_dbetables(unsigned long addr)
 #define MODULE_PROC_FAMILY "SB1 "
 #elif defined CONFIG_CPU_LOONGSON2
 #define MODULE_PROC_FAMILY "LOONGSON2 "
-#elif defined CONFIG_CPU_CAVIUM_OCTEON
-#define MODULE_PROC_FAMILY "OCTEON "
 #else
 #error MODULE_PROC_FAMILY undefined for your processor configuration
 #endif

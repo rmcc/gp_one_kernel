@@ -44,11 +44,6 @@
 #define OMAP16XX_DSPREG_SIZE	SZ_128K
 #define OMAP16XX_DSPREG_START	0xE1000000
 
-#define OMAP16XX_SEC_BASE	0xFFFE4000
-#define OMAP16XX_SEC_DES	(OMAP16XX_SEC_BASE + 0x0000)
-#define OMAP16XX_SEC_SHA1MD5	(OMAP16XX_SEC_BASE + 0x0800)
-#define OMAP16XX_SEC_RNG	(OMAP16XX_SEC_BASE + 0x1000)
-
 /*
  * ---------------------------------------------------------------------------
  * Interrupts
@@ -195,7 +190,7 @@
 #define WSPR_DISABLE_0         (0x0000aaaa)
 #define WSPR_DISABLE_1         (0x00005555)
 
-#define OMAP16XX_DSP_MMU_BASE	(0xfffed200)
+/* Mailbox */
 #define OMAP16XX_MAILBOX_BASE	(0xfffcf000)
 
 #endif /*  __ASM_ARCH_OMAP16XX_H */

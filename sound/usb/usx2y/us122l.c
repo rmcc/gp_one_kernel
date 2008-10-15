@@ -118,11 +118,12 @@ static int usb_stream_hwdep_vm_fault(struct vm_area_struct *area,
 	void *vaddr;
 	struct us122l *us122l = area->vm_private_data;
 	struct usb_stream *s;
+	int vm_f = VM_FAULT_SIGBUS;
 
 	mutex_lock(&us122l->mutex);
 	s = us122l->sk.s;
 	if (!s)
-		goto unlock;
+		goto out;
 
 	offset = vmf->pgoff << PAGE_SHIFT;
 	if (offset < PAGE_ALIGN(s->read_size))
@@ -130,7 +131,7 @@ static int usb_stream_hwdep_vm_fault(struct vm_area_struct *area,
 	else {
 		offset -= PAGE_ALIGN(s->read_size);
 		if (offset >= PAGE_ALIGN(s->write_size))
-			goto unlock;
+			goto out;
 
 		vaddr = us122l->sk.write_page + offset;
 	}
@@ -140,11 +141,9 @@ static int usb_stream_hwdep_vm_fault(struct vm_area_struct *area,
 	mutex_unlock(&us122l->mutex);
 
 	vmf->page = page;
-
-	return 0;
-unlock:
-	mutex_unlock(&us122l->mutex);
-	return VM_FAULT_SIGBUS;
+	vm_f = 0;
+out:
+	return vm_f;
 }
 
 static void usb_stream_hwdep_vm_close(struct vm_area_struct *area)
@@ -589,7 +588,7 @@ static int snd_us122l_suspend(struct usb_interface *intf, pm_message_t message)
 	struct us122l *us122l;
 	struct list_head *p;
 
-	card = usb_get_intfdata(intf);
+	card = dev_get_drvdata(&intf->dev);
 	if (!card)
 		return 0;
 	snd_power_change_state(card, SNDRV_CTL_POWER_D3hot);
@@ -615,7 +614,7 @@ static int snd_us122l_resume(struct usb_interface *intf)
 	struct list_head *p;
 	int err;
 
-	card = usb_get_intfdata(intf);
+	card = dev_get_drvdata(&intf->dev);
 	if (!card)
 		return 0;
 

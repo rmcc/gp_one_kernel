@@ -16,10 +16,6 @@ struct omap_onenand_platform_data {
 	int			gpio_irq;
 	struct mtd_partition	*parts;
 	int			nr_parts;
-	int                     (*onenand_setup)(void __iomem *, int freq);
+	int                     (*onenand_setup)(void __iomem *);
 	int			dma_channel;
 };
-
-int omap2_onenand_rephase(void);
-
-#define ONENAND_MAX_PARTITIONS 8

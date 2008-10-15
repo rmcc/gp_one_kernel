@@ -1,7 +1,7 @@
 /*
- * reboot.h - shutdown/reboot header
+ * include/asm-blackfin/reboot.h - shutdown/reboot header
  *
- * Copyright 2004-2008 Analog Devices Inc.
+ * Copyright 2004-2007 Analog Devices Inc.
  *
  * Licensed under the GPL-2 or later.
  */

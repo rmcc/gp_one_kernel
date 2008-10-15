@@ -10,7 +10,6 @@
 #include <linux/kbuild.h>
 #include <linux/threads.h>
 #include <asm/native/irq.h>
-#include <asm/xen/irq.h>
 
 void foo(void)
 {

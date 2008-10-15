@@ -12,7 +12,7 @@
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/io.h>
-#include <mach/sdk7780.h>
+#include <asm/sdk7780.h>
 
 enum {
 	UNUSED = 0,
