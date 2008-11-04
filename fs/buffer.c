@@ -777,7 +777,6 @@ static int __set_page_dirty(struct page *page,
 			__inc_zone_page_state(page, NR_FILE_DIRTY);
 			__inc_bdi_stat(mapping->backing_dev_info,
 					BDI_RECLAIMABLE);
-			task_dirty_inc(current);
 			task_io_account_write(PAGE_CACHE_SIZE);
 		}
 		radix_tree_tag_set(&mapping->page_tree,
@@ -2689,7 +2688,7 @@ int nobh_write_end(struct file *file, struct address_space *mapping,
 	struct buffer_head *bh;
 	BUG_ON(fsdata != NULL && page_has_buffers(page));
 
-	if (unlikely(copied < len) && head)
+	if (unlikely(copied < len) && !page_has_buffers(page))
 		attach_nobh_buffers(page, head);
 	if (page_has_buffers(page))
 		return generic_write_end(file, mapping, pos, len,
@@ -3109,7 +3108,7 @@ int sync_dirty_buffer(struct buffer_head *bh)
 	if (test_clear_buffer_dirty(bh)) {
 		get_bh(bh);
 		bh->b_end_io = end_buffer_write_sync;
-		ret = submit_bh(WRITE, bh);
+		ret = submit_bh(WRITE_SYNC, bh);
 		wait_on_buffer(bh);
 		if (buffer_eopnotsupp(bh)) {
 			clear_buffer_eopnotsupp(bh);

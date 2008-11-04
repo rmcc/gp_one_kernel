@@ -35,7 +35,6 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 #include <linux/smp_lock.h>
-#include <linux/jiffies.h>
 #include <asm/uaccess.h>
 
 static struct i2c_driver i2cdev_driver;
@@ -423,10 +422,7 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		client->adapter->retries = arg;
 		break;
 	case I2C_TIMEOUT:
-		/* For historical reasons, user-space sets the timeout
-		 * value in units of 10 ms.
-		 */
-		client->adapter->timeout = msecs_to_jiffies(arg * 10);
+		client->adapter->timeout = arg;
 		break;
 	default:
 		/* NOTE:  returning a fault code here could cause trouble
