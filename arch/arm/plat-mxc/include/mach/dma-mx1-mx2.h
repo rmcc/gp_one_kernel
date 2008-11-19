@@ -22,12 +22,14 @@
  * MA 02110-1301, USA.
  */
 
-#include <mach/dma.h>
-
 #ifndef __ASM_ARCH_MXC_DMA_H
 #define __ASM_ARCH_MXC_DMA_H
 
 #define IMX_DMA_CHANNELS  16
+
+#define DMA_MODE_READ		0
+#define DMA_MODE_WRITE		1
+#define DMA_MODE_MASK		1
 
 #define DMA_BASE IO_ADDRESS(DMA_BASE_ADDR)
 

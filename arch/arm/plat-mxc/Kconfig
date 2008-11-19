@@ -6,6 +6,12 @@ choice
 	prompt "MXC/iMX Base Type"
 	default ARCH_MX3
 
+config ARCH_MX1
+	bool "MX1-based"
+	select CPU_ARM920T
+	help
+	  This enables support for systems based on the Freescale i.MX1 family
+
 config ARCH_MX2
 	bool "MX2-based"
 	select CPU_ARM926T
@@ -20,6 +26,7 @@ config ARCH_MX3
 
 endchoice
 
+source "arch/arm/mach-mx1/Kconfig"
 source "arch/arm/mach-mx2/Kconfig"
 source "arch/arm/mach-mx3/Kconfig"
 

@@ -17,6 +17,7 @@
 
 #include <asm/cputype.h>
 #include <asm/mach-types.h>
+#include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/sizes.h>
 #include <asm/tlb.h>
@@ -730,7 +731,7 @@ static inline void prepare_page_table(void)
 
 #ifdef CONFIG_XIP_KERNEL
 	/* The XIP kernel is mapped in the module area -- skip over it */
-	addr = ((unsigned long)&_etext + PGDIR_SIZE - 1) & PGDIR_MASK;
+	addr = ((unsigned long)_etext + PGDIR_SIZE - 1) & PGDIR_MASK;
 #endif
 	for ( ; addr < PAGE_OFFSET; addr += PGDIR_SIZE)
 		pmd_clear(pmd_off_k(addr));
@@ -756,10 +757,10 @@ void __init reserve_node_zero(pg_data_t *pgdat)
 	 * Note that this can only be in node 0.
 	 */
 #ifdef CONFIG_XIP_KERNEL
-	reserve_bootmem_node(pgdat, __pa(&__data_start), &_end - &__data_start,
+	reserve_bootmem_node(pgdat, __pa(_data), _end - _data,
 			BOOTMEM_DEFAULT);
 #else
-	reserve_bootmem_node(pgdat, __pa(&_stext), &_end - &_stext,
+	reserve_bootmem_node(pgdat, __pa(_stext), _end - _stext,
 			BOOTMEM_DEFAULT);
 #endif
 
@@ -826,7 +827,6 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	 * Allocate the vector page early.
 	 */
 	vectors = alloc_bootmem_low_pages(PAGE_SIZE);
-	BUG_ON(!vectors);
 
 	for (addr = VMALLOC_END; addr; addr += PGDIR_SIZE)
 		pmd_clear(pmd_off_k(addr));
@@ -838,7 +838,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 #ifdef CONFIG_XIP_KERNEL
 	map.pfn = __phys_to_pfn(CONFIG_XIP_PHYS_ADDR & SECTION_MASK);
 	map.virtual = MODULES_VADDR;
-	map.length = ((unsigned long)&_etext - map.virtual + ~SECTION_MASK) & SECTION_MASK;
+	map.length = ((unsigned long)_etext - map.virtual + ~SECTION_MASK) & SECTION_MASK;
 	map.type = MT_ROM;
 	create_mapping(&map);
 #endif
@@ -911,10 +911,10 @@ void __init paging_init(struct machine_desc *mdesc)
 	top_pmd = pmd_off_k(0xffff0000);
 
 	/*
-	 * allocate the zero page.  Note that we count on this going ok.
+	 * allocate the zero page.  Note that this always succeeds and
+	 * returns a zeroed result.
 	 */
 	zero_page = alloc_bootmem_low_pages(PAGE_SIZE);
-	memset(zero_page, 0, PAGE_SIZE);
 	empty_zero_page = virt_to_page(zero_page);
 	flush_dcache_page(empty_zero_page);
 }
