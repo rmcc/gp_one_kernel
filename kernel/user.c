@@ -20,7 +20,7 @@
 
 struct user_namespace init_user_ns = {
 	.kref = {
-		.refcount	= ATOMIC_INIT(2),
+		.refcount	= ATOMIC_INIT(1),
 	},
 	.creator = &root_user,
 };
