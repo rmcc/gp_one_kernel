@@ -94,6 +94,7 @@ int tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno)
 	*headp	     = entry;
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tfrc_tx_hist_add);
 
 void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp)
 {
@@ -108,6 +109,7 @@ void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp)
 
 	*headp = NULL;
 }
+EXPORT_SYMBOL_GPL(tfrc_tx_hist_purge);
 
 u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
 		     const ktime_t now)
@@ -125,6 +127,7 @@ u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
 
 	return rtt;
 }
+EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
 
 
 /*
@@ -169,6 +172,7 @@ void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
 
 	tfrc_rx_hist_entry_from_skb(entry, skb, ndp);
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_add_packet);
 
 /* has the packet contained in skb been seen before? */
 int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb)
@@ -185,6 +189,7 @@ int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_duplicate);
 
 static void tfrc_rx_hist_swap(struct tfrc_rx_hist *h, const u8 a, const u8 b)
 {
@@ -385,6 +390,7 @@ int tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
 	}
 	return is_new_loss;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_handle_loss);
 
 int tfrc_rx_hist_alloc(struct tfrc_rx_hist *h)
 {
@@ -406,6 +412,7 @@ out_free:
 	}
 	return -ENOBUFS;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_alloc);
 
 void tfrc_rx_hist_purge(struct tfrc_rx_hist *h)
 {
@@ -417,6 +424,7 @@ void tfrc_rx_hist_purge(struct tfrc_rx_hist *h)
 			h->ring[i] = NULL;
 		}
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_purge);
 
 /**
  * tfrc_rx_hist_rtt_last_s - reference entry to compute RTT samples against
@@ -487,3 +495,4 @@ keep_ref_for_next_time:
 
 	return sample;
 }
+EXPORT_SYMBOL_GPL(tfrc_rx_hist_sample_rtt);

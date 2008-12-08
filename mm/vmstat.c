@@ -20,7 +20,7 @@
 DEFINE_PER_CPU(struct vm_event_state, vm_event_states) = {{0}};
 EXPORT_PER_CPU_SYMBOL(vm_event_states);
 
-static void sum_vm_events(unsigned long *ret, const struct cpumask *cpumask)
+static void sum_vm_events(unsigned long *ret, cpumask_t *cpumask)
 {
 	int cpu;
 	int i;
@@ -43,7 +43,7 @@ static void sum_vm_events(unsigned long *ret, const struct cpumask *cpumask)
 void all_vm_events(unsigned long *ret)
 {
 	get_online_cpus();
-	sum_vm_events(ret, cpu_online_mask);
+	sum_vm_events(ret, &cpu_online_map);
 	put_online_cpus();
 }
 EXPORT_SYMBOL_GPL(all_vm_events);

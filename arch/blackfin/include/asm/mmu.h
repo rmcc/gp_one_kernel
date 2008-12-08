@@ -10,6 +10,7 @@ struct sram_list_struct {
 };
 
 typedef struct {
+	struct vm_list_struct *vmlist;
 	unsigned long end_brk;
 	unsigned long stack_start;
 

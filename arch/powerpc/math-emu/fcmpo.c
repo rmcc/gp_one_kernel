@@ -14,6 +14,7 @@ fcmpo(u32 *ccr, int crfD, void *frA, void *frB)
 	FP_DECL_EX;
 	int code[4] = { (1 << 3), (1 << 1), (1 << 2), (1 << 0) };
 	long cmp;
+	int ret = 0;
 
 #ifdef DEBUG
 	printk("%s: %p (%08x) %d %p %p\n", __func__, ccr, *ccr, crfD, frA, frB);
@@ -28,7 +29,7 @@ fcmpo(u32 *ccr, int crfD, void *frA, void *frB)
 #endif
 
 	if (A_c == FP_CLS_NAN || B_c == FP_CLS_NAN)
-		FP_SET_EXCEPTION(EFLAG_VXVC);
+		ret |= EFLAG_VXVC;
 
 	FP_CMP_D(cmp, A, B, 2);
 	cmp = code[(cmp + 1) & 3];
@@ -43,5 +44,5 @@ fcmpo(u32 *ccr, int crfD, void *frA, void *frB)
 	printk("CR: %08x\n", *ccr);
 #endif
 
-	return FP_CUR_EXCEPTIONS;
+	return ret;
 }

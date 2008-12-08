@@ -265,15 +265,12 @@ int __init via_calibrate_decr(void)
 	struct resource rsrc;
 
 	vias = of_find_node_by_name(NULL, "via-cuda");
-	if (vias == NULL)
+	if (vias == 0)
 		vias = of_find_node_by_name(NULL, "via-pmu");
-	if (vias == NULL)
+	if (vias == 0)
 		vias = of_find_node_by_name(NULL, "via");
-	if (vias == NULL || of_address_to_resource(vias, 0, &rsrc)) {
-	        of_node_put(vias);
+	if (vias == 0 || of_address_to_resource(vias, 0, &rsrc))
 		return 0;
-	}
-	of_node_put(vias);
 	via = ioremap(rsrc.start, rsrc.end - rsrc.start + 1);
 	if (via == NULL) {
 		printk(KERN_ERR "Failed to map VIA for timer calibration !\n");
@@ -300,7 +297,7 @@ int __init via_calibrate_decr(void)
 	ppc_tb_freq = (dstart - dend) * 100 / 6;
 
 	iounmap(via);
-
+	
 	return 1;
 }
 #endif

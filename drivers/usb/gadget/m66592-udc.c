@@ -623,6 +623,7 @@ static void start_ep0(struct m66592_ep *ep, struct m66592_request *req)
 #if defined(CONFIG_SUPERH_BUILT_IN_M66592)
 static void init_controller(struct m66592 *m66592)
 {
+	usbf_start_clock();
 	m66592_bset(m66592, M66592_HSE, M66592_SYSCFG);		/* High spd */
 	m66592_bclr(m66592, M66592_USBE, M66592_SYSCFG);
 	m66592_bclr(m66592, M66592_DPRPU, M66592_SYSCFG);
@@ -670,7 +671,9 @@ static void init_controller(struct m66592 *m66592)
 
 static void disable_controller(struct m66592 *m66592)
 {
-#if !defined(CONFIG_SUPERH_BUILT_IN_M66592)
+#if defined(CONFIG_SUPERH_BUILT_IN_M66592)
+	usbf_stop_clock();
+#else
 	m66592_bclr(m66592, M66592_SCKE, M66592_SYSCFG);
 	udelay(1);
 	m66592_bclr(m66592, M66592_PLLC, M66592_SYSCFG);
@@ -683,7 +686,9 @@ static void disable_controller(struct m66592 *m66592)
 
 static void m66592_start_xclock(struct m66592 *m66592)
 {
-#if !defined(CONFIG_SUPERH_BUILT_IN_M66592)
+#if defined(CONFIG_SUPERH_BUILT_IN_M66592)
+	usbf_start_clock();
+#else
 	u16 tmp;
 
 	tmp = m66592_read(m66592, M66592_SYSCFG);
@@ -1534,10 +1539,7 @@ static int __exit m66592_remove(struct platform_device *pdev)
 	iounmap(m66592->reg);
 	free_irq(platform_get_irq(pdev, 0), m66592);
 	m66592_free_request(&m66592->ep[0].ep, m66592->ep0_req);
-#if defined(CONFIG_SUPERH_BUILT_IN_M66592) && defined(CONFIG_HAVE_CLK)
-	clk_disable(m66592->clk);
-	clk_put(m66592->clk);
-#endif
+	usbf_stop_clock();
 	kfree(m66592);
 	return 0;
 }
@@ -1546,22 +1548,22 @@ static void nop_completion(struct usb_ep *ep, struct usb_request *r)
 {
 }
 
+#define resource_len(r) (((r)->end - (r)->start) + 1)
+
 static int __init m66592_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	int irq;
 	void __iomem *reg = NULL;
 	struct m66592 *m66592 = NULL;
-#if defined(CONFIG_SUPERH_BUILT_IN_M66592) && defined(CONFIG_HAVE_CLK)
-	char clk_name[8];
-#endif
 	int ret = 0;
 	int i;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+			(char *)udc_name);
 	if (!res) {
 		ret = -ENODEV;
-		pr_err("platform_get_resource error.\n");
+		pr_err("platform_get_resource_byname error.\n");
 		goto clean_up;
 	}
 
@@ -1572,7 +1574,7 @@ static int __init m66592_probe(struct platform_device *pdev)
 		goto clean_up;
 	}
 
-	reg = ioremap(res->start, resource_size(res));
+	reg = ioremap(res->start, resource_len(res));
 	if (reg == NULL) {
 		ret = -ENOMEM;
 		pr_err("ioremap error.\n");
@@ -1612,16 +1614,6 @@ static int __init m66592_probe(struct platform_device *pdev)
 		goto clean_up;
 	}
 
-#if defined(CONFIG_SUPERH_BUILT_IN_M66592) && defined(CONFIG_HAVE_CLK)
-	snprintf(clk_name, sizeof(clk_name), "usbf%d", pdev->id);
-	m66592->clk = clk_get(&pdev->dev, clk_name);
-	if (IS_ERR(m66592->clk)) {
-		dev_err(&pdev->dev, "cannot get clock \"%s\"\n", clk_name);
-		ret = PTR_ERR(m66592->clk);
-		goto clean_up2;
-	}
-	clk_enable(m66592->clk);
-#endif
 	INIT_LIST_HEAD(&m66592->gadget.ep_list);
 	m66592->gadget.ep0 = &m66592->ep[0].ep;
 	INIT_LIST_HEAD(&m66592->gadget.ep0->ep_list);
@@ -1653,7 +1645,7 @@ static int __init m66592_probe(struct platform_device *pdev)
 
 	m66592->ep0_req = m66592_alloc_request(&m66592->ep[0].ep, GFP_KERNEL);
 	if (m66592->ep0_req == NULL)
-		goto clean_up3;
+		goto clean_up2;
 	m66592->ep0_req->complete = nop_completion;
 
 	init_controller(m66592);
@@ -1661,12 +1653,7 @@ static int __init m66592_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "version %s\n", DRIVER_VERSION);
 	return 0;
 
-clean_up3:
-#if defined(CONFIG_SUPERH_BUILT_IN_M66592) && defined(CONFIG_HAVE_CLK)
-	clk_disable(m66592->clk);
-	clk_put(m66592->clk);
 clean_up2:
-#endif
 	free_irq(irq, m66592);
 clean_up:
 	if (m66592) {

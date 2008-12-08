@@ -48,7 +48,6 @@
 #include <mach/hardware.h>
 #include <asm/irq.h>
 #include <mach/pxa-regs.h>
-#include <mach/regs-uart.h>
 
 
 struct uart_pxa_port {

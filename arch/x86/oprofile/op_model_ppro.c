@@ -69,7 +69,7 @@ static void ppro_setup_ctrs(struct op_msrs const * const msrs)
 	int i;
 
 	if (!reset_value) {
-		reset_value = kmalloc(sizeof(reset_value[0]) * num_counters,
+		reset_value = kmalloc(sizeof(unsigned) * num_counters,
 					GFP_ATOMIC);
 		if (!reset_value)
 			return;
@@ -78,18 +78,8 @@ static void ppro_setup_ctrs(struct op_msrs const * const msrs)
 	if (cpu_has_arch_perfmon) {
 		union cpuid10_eax eax;
 		eax.full = cpuid_eax(0xa);
-
-		/*
-		 * For Core2 (family 6, model 15), don't reset the
-		 * counter width:
-		 */
-		if (!(eax.split.version_id == 0 &&
-			current_cpu_data.x86 == 6 &&
-				current_cpu_data.x86_model == 15)) {
-
-			if (counter_width < eax.split.bit_width)
-				counter_width = eax.split.bit_width;
-		}
+		if (counter_width < eax.split.bit_width)
+			counter_width = eax.split.bit_width;
 	}
 
 	/* clear all counters */
@@ -166,8 +156,6 @@ static void ppro_start(struct op_msrs const * const msrs)
 	unsigned int low, high;
 	int i;
 
-	if (!reset_value)
-		return;
 	for (i = 0; i < num_counters; ++i) {
 		if (reset_value[i]) {
 			CTRL_READ(low, high, msrs, i);
@@ -183,8 +171,6 @@ static void ppro_stop(struct op_msrs const * const msrs)
 	unsigned int low, high;
 	int i;
 
-	if (!reset_value)
-		return;
 	for (i = 0; i < num_counters; ++i) {
 		if (!reset_value[i])
 			continue;

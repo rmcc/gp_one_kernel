@@ -60,6 +60,9 @@ static int of_isp1760_probe(struct of_device *dev,
 	if (of_device_is_compatible(dp, "nxp,usb-isp1761"))
 		devflags |= ISP1760_FLAG_ISP1761;
 
+	if (of_get_property(dp, "port1-disable", NULL) != NULL)
+		devflags |= ISP1760_FLAG_PORT1_DIS;
+
 	/* Some systems wire up only 16 of the 32 data lines */
 	prop = of_get_property(dp, "bus-width", NULL);
 	if (prop && *prop == 16)
@@ -126,23 +129,23 @@ static struct of_platform_driver isp1760_of_driver = {
 #endif
 
 #ifdef CONFIG_PCI
+static u32 nxp_pci_io_base;
+static u32 iolength;
+static u32 pci_mem_phy0;
+static u32 length;
+static u8 __iomem *chip_addr;
+static u8 __iomem *iobase;
+
 static int __devinit isp1761_pci_probe(struct pci_dev *dev,
 		const struct pci_device_id *id)
 {
 	u8 latency, limit;
 	__u32 reg_data;
 	int retry_count;
+	int length;
+	int status = 1;
 	struct usb_hcd *hcd;
 	unsigned int devflags = 0;
-	int ret_status = 0;
-
-	resource_size_t pci_mem_phy0;
-	resource_size_t memlength;
-
-	u8 __iomem *chip_addr;
-	u8 __iomem *iobase;
-	resource_size_t nxp_pci_io_base;
-	resource_size_t iolength;
 
 	if (usb_disabled())
 		return -ENODEV;
@@ -165,30 +168,26 @@ static int __devinit isp1761_pci_probe(struct pci_dev *dev,
 	iobase = ioremap_nocache(nxp_pci_io_base, iolength);
 	if (!iobase) {
 		printk(KERN_ERR "ioremap #1\n");
-		ret_status = -ENOMEM;
-		goto cleanup1;
+		release_mem_region(nxp_pci_io_base, iolength);
+		return -ENOMEM;
 	}
 	/* Grab the PLX PCI shared memory of the ISP 1761 we need  */
 	pci_mem_phy0 = pci_resource_start(dev, 3);
-	memlength = pci_resource_len(dev, 3);
-	if (memlength < 0xffff) {
-		printk(KERN_ERR "memory length for this resource is wrong\n");
-		ret_status = -ENOMEM;
-		goto cleanup2;
+	length = pci_resource_len(dev, 3);
+
+	if (length < 0xffff) {
+		printk(KERN_ERR "memory length for this resource is less than "
+				"required\n");
+		release_mem_region(nxp_pci_io_base, iolength);
+		iounmap(iobase);
+		return  -ENOMEM;
 	}
 
-	if (!request_mem_region(pci_mem_phy0, memlength, "ISP-PCI")) {
+	if (!request_mem_region(pci_mem_phy0, length, "ISP-PCI")) {
 		printk(KERN_ERR "host controller already in use\n");
-		ret_status = -EBUSY;
-		goto cleanup2;
-	}
-
-	/* map available memory */
-	chip_addr = ioremap_nocache(pci_mem_phy0,memlength);
-	if (!chip_addr) {
-		printk(KERN_ERR "Error ioremap failed\n");
-		ret_status = -ENOMEM;
-		goto cleanup3;
+		release_mem_region(nxp_pci_io_base, iolength);
+		iounmap(iobase);
+		return -EBUSY;
 	}
 
 	/* bad pci latencies can contribute to overruns */
@@ -211,54 +210,39 @@ static int __devinit isp1761_pci_probe(struct pci_dev *dev,
 		 * */
 		writel(0xface, chip_addr + HC_SCRATCH_REG);
 		udelay(100);
-		reg_data = readl(chip_addr + HC_SCRATCH_REG) & 0x0000ffff;
+		reg_data = readl(chip_addr + HC_SCRATCH_REG);
 		retry_count--;
 	}
-
-	iounmap(chip_addr);
 
 	/* Host Controller presence is detected by writing to scratch register
 	 * and reading back and checking the contents are same or not
 	 */
 	if (reg_data != 0xFACE) {
 		dev_err(&dev->dev, "scratch register mismatch %x\n", reg_data);
-		ret_status = -ENOMEM;
-		goto cleanup3;
+		goto clean;
 	}
 
 	pci_set_master(dev);
 
-	/* configure PLX PCI chip to pass interrupts */
-#define PLX_INT_CSR_REG 0x68
-	reg_data = readl(iobase + PLX_INT_CSR_REG);
-	reg_data |= 0x900;
-	writel(reg_data, iobase + PLX_INT_CSR_REG);
+	status = readl(iobase + 0x68);
+	status |= 0x900;
+	writel(status, iobase + 0x68);
 
 	dev->dev.dma_mask = NULL;
-	hcd = isp1760_register(pci_mem_phy0, memlength, dev->irq,
+	hcd = isp1760_register(pci_mem_phy0, length, dev->irq,
 		IRQF_SHARED | IRQF_DISABLED, &dev->dev, dev_name(&dev->dev),
 		devflags);
-	if (IS_ERR(hcd)) {
-		ret_status = -ENODEV;
-		goto cleanup3;
+	if (!IS_ERR(hcd)) {
+		pci_set_drvdata(dev, hcd);
+		return 0;
 	}
-
-	/* done with PLX IO access */
+clean:
+	status = -ENODEV;
 	iounmap(iobase);
+	release_mem_region(pci_mem_phy0, length);
 	release_mem_region(nxp_pci_io_base, iolength);
-
-	pci_set_drvdata(dev, hcd);
-	return 0;
-
-cleanup3:
-	release_mem_region(pci_mem_phy0, memlength);
-cleanup2:
-	iounmap(iobase);
-cleanup1:
-	release_mem_region(nxp_pci_io_base, iolength);
-	return ret_status;
+	return status;
 }
-
 static void isp1761_pci_remove(struct pci_dev *dev)
 {
 	struct usb_hcd *hcd;
@@ -271,6 +255,12 @@ static void isp1761_pci_remove(struct pci_dev *dev)
 	usb_put_hcd(hcd);
 
 	pci_disable_device(dev);
+
+	iounmap(iobase);
+	iounmap(chip_addr);
+
+	release_mem_region(nxp_pci_io_base, iolength);
+	release_mem_region(pci_mem_phy0, length);
 }
 
 static void isp1761_pci_shutdown(struct pci_dev *dev)
@@ -278,16 +268,12 @@ static void isp1761_pci_shutdown(struct pci_dev *dev)
 	printk(KERN_ERR "ips1761_pci_shutdown\n");
 }
 
-static const struct pci_device_id isp1760_plx [] = {
-	{
-		.class          = PCI_CLASS_BRIDGE_OTHER << 8,
-		.class_mask     = ~0,
-		.vendor		= PCI_VENDOR_ID_PLX,
-		.device		= 0x5406,
-		.subvendor	= PCI_VENDOR_ID_PLX,
-		.subdevice	= 0x9054,
-	},
-	{ }
+static const struct pci_device_id isp1760_plx [] = { {
+	/* handle any USB 2.0 EHCI controller */
+	PCI_DEVICE_CLASS(((PCI_CLASS_BRIDGE_OTHER << 8) | (0x06 << 16)), ~0),
+		.driver_data = 0,
+},
+{ /* end: all zeroes */ }
 };
 MODULE_DEVICE_TABLE(pci, isp1760_plx);
 

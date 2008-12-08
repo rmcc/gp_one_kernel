@@ -624,12 +624,6 @@ proc_types:
 		b	__armv4_mmu_cache_off
 		b	__armv4_mmu_cache_flush
 
-		.word	0x56056930
-		.word	0xff0ffff0		@ PXA935
-		b	__armv4_mmu_cache_on
-		b	__armv4_mmu_cache_off
-		b	__armv4_mmu_cache_flush
-
 		.word	0x56050000		@ Feroceon
 		.word	0xff0f0000
 		b	__armv4_mmu_cache_on

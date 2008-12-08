@@ -23,7 +23,7 @@ __INITDATA
 /*
  * References to members of the boot_cpu_data structure.
  */
-.section .text.head, "ax"
+	.text
 	.global	start_kernel
 	.global __bss_start
 	.global _end
@@ -133,6 +133,7 @@ loop1:
 /*
  * AP startup routine
  */
+	.text
 	.global	eit_vector
 ENTRY(startup_AP)
 ;; setup EVB
@@ -229,7 +230,6 @@ ENTRY(startup_AP)
 	nop
 #endif  /* CONFIG_SMP */
 
-	.text
 ENTRY(stack_start)
 	.long	init_thread_union+8192
 	.long	__KERNEL_DS

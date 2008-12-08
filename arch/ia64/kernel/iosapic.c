@@ -330,25 +330,25 @@ unmask_irq (unsigned int irq)
 
 
 static void
-iosapic_set_affinity(unsigned int irq, const struct cpumask *mask)
+iosapic_set_affinity (unsigned int irq, cpumask_t mask)
 {
 #ifdef CONFIG_SMP
 	u32 high32, low32;
-	int cpu, dest, rte_index;
+	int dest, rte_index;
 	int redir = (irq & IA64_IRQ_REDIRECTED) ? 1 : 0;
 	struct iosapic_rte_info *rte;
 	struct iosapic *iosapic;
 
 	irq &= (~IA64_IRQ_REDIRECTED);
 
-	cpu = cpumask_first_and(cpu_online_mask, mask);
-	if (cpu >= nr_cpu_ids)
+	cpus_and(mask, mask, cpu_online_map);
+	if (cpus_empty(mask))
 		return;
 
-	if (irq_prepare_move(irq, cpu))
+	if (irq_prepare_move(irq, first_cpu(mask)))
 		return;
 
-	dest = cpu_physical_id(cpu);
+	dest = cpu_physical_id(first_cpu(mask));
 
 	if (!iosapic_intr_info[irq].count)
 		return;			/* not an IOSAPIC interrupt */
@@ -507,7 +507,7 @@ static int iosapic_find_sharable_irq(unsigned long trigger, unsigned long pol)
 	if (trigger == IOSAPIC_EDGE)
 		return -EINVAL;
 
-	for (i = 0; i < NR_IRQS; i++) {
+	for (i = 0; i <= NR_IRQS; i++) {
 		info = &iosapic_intr_info[i];
 		if (info->trigger == trigger && info->polarity == pol &&
 		    (info->dmode == IOSAPIC_FIXED ||
@@ -695,19 +695,21 @@ get_target_cpu (unsigned int gsi, int irq)
 #ifdef CONFIG_NUMA
 	{
 		int num_cpus, cpu_index, iosapic_index, numa_cpu, i = 0;
-		const struct cpumask *cpu_mask;
+		cpumask_t cpu_mask;
 
 		iosapic_index = find_iosapic(gsi);
 		if (iosapic_index < 0 ||
 		    iosapic_lists[iosapic_index].node == MAX_NUMNODES)
 			goto skip_numa_setup;
 
-		cpu_mask = cpumask_of_node(iosapic_lists[iosapic_index].node);
-		num_cpus = 0;
-		for_each_cpu_and(numa_cpu, cpu_mask, &domain) {
-			if (cpu_online(numa_cpu))
-				num_cpus++;
+		cpu_mask = node_to_cpumask(iosapic_lists[iosapic_index].node);
+		cpus_and(cpu_mask, cpu_mask, domain);
+		for_each_cpu_mask(numa_cpu, cpu_mask) {
+			if (!cpu_online(numa_cpu))
+				cpu_clear(numa_cpu, cpu_mask);
 		}
+
+		num_cpus = cpus_weight(cpu_mask);
 
 		if (!num_cpus)
 			goto skip_numa_setup;
@@ -715,11 +717,10 @@ get_target_cpu (unsigned int gsi, int irq)
 		/* Use irq assignment to distribute across cpus in node */
 		cpu_index = irq % num_cpus;
 
-		for_each_cpu_and(numa_cpu, cpu_mask, &domain)
-			if (cpu_online(numa_cpu) && i++ >= cpu_index)
-				break;
+		for (numa_cpu = first_cpu(cpu_mask) ; i < cpu_index ; i++)
+			numa_cpu = next_cpu(numa_cpu, cpu_mask);
 
-		if (numa_cpu < nr_cpu_ids)
+		if (numa_cpu != NR_CPUS)
 			return cpu_physical_id(numa_cpu);
 	}
 skip_numa_setup:
@@ -730,7 +731,7 @@ skip_numa_setup:
 	 * case of NUMA.)
 	 */
 	do {
-		if (++cpu >= nr_cpu_ids)
+		if (++cpu >= NR_CPUS)
 			cpu = 0;
 	} while (!cpu_online(cpu) || !cpu_isset(cpu, domain));
 

@@ -644,7 +644,7 @@ static int i2c_pxa_do_pio_xfer(struct pxa_i2c *i2c,
 
 	i2c_pxa_start_message(i2c);
 
-	while (i2c->msg_num > 0 && --timeout) {
+	while (timeout-- && i2c->msg_num > 0) {
 		i2c_pxa_handler(0, i2c);
 		udelay(10);
 	}
@@ -1076,10 +1076,10 @@ static int i2c_pxa_probe(struct platform_device *dev)
 
 #ifdef CONFIG_I2C_PXA_SLAVE
 	printk(KERN_INFO "I2C: %s: PXA I2C adapter, slave address %d\n",
-	       dev_name(&i2c->adap.dev), i2c->slave_addr);
+	       i2c->adap.dev.bus_id, i2c->slave_addr);
 #else
 	printk(KERN_INFO "I2C: %s: PXA I2C adapter\n",
-	       dev_name(&i2c->adap.dev));
+	       i2c->adap.dev.bus_id);
 #endif
 	return 0;
 

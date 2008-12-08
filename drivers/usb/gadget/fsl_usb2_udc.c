@@ -404,10 +404,7 @@ static void struct_ep_qh_setup(struct fsl_udc *udc, unsigned char ep_num,
 	}
 	if (zlt)
 		tmp |= EP_QUEUE_HEAD_ZLT_SEL;
-
 	p_QH->max_pkt_length = cpu_to_le32(tmp);
-	p_QH->next_dtd_ptr = 1;
-	p_QH->size_ioc_int_sts = 0;
 
 	return;
 }
@@ -1838,9 +1835,6 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 			ep.ep_list)
 		nuke(loop_ep, -ESHUTDOWN);
 	spin_unlock_irqrestore(&udc_controller->lock, flags);
-
-	/* report disconnect; the controller is already quiesced */
-	driver->disconnect(&udc_controller->gadget);
 
 	/* unbind gadget and unhook driver. */
 	driver->unbind(&udc_controller->gadget);

@@ -1,14 +1,15 @@
-w35und-objs :=			\
-	mds.o			\
-	mlmetxrx.o		\
-	mto.o			\
+	DRIVER_DIR=./linux
+
+w35und-objs := $(DRIVER_DIR)/wbusb.o $(DRIVER_DIR)/wb35reg.o $(DRIVER_DIR)/wb35rx.o $(DRIVER_DIR)/wb35tx.o \
+	mds.o \
+	mlmetxrx.o \
+	mto.o	\
 	phy_calibration.o	\
 	reg.o			\
-	wb35reg.o		\
-	wb35rx.o		\
-	wb35tx.o		\
+	rxisr.o			\
+	sme_api.o		\
 	wbhal.o			\
-	wbusb.o			\
+	wblinux.o		\
 
 
 obj-$(CONFIG_W35UND) += w35und.o

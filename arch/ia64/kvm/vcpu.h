@@ -737,12 +737,9 @@ void kvm_init_vtlb(struct kvm_vcpu *v);
 void kvm_init_vhpt(struct kvm_vcpu *v);
 void thash_init(struct thash_cb *hcb, u64 sz);
 
-void panic_vm(struct kvm_vcpu *v, const char *fmt, ...);
+void panic_vm(struct kvm_vcpu *v);
 
 extern u64 ia64_call_vsa(u64 proc, u64 arg1, u64 arg2, u64 arg3,
 		u64 arg4, u64 arg5, u64 arg6, u64 arg7);
-
-extern long vmm_sanity;
-
 #endif
 #endif	/* __VCPU_H__ */

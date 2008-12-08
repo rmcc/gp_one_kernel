@@ -33,7 +33,7 @@
 #include "xen-ops.h"
 #include "mmu.h"
 
-cpumask_var_t xen_cpu_initialized_map;
+cpumask_t xen_cpu_initialized_map;
 
 static DEFINE_PER_CPU(int, resched_irq);
 static DEFINE_PER_CPU(int, callfunc_irq);
@@ -158,7 +158,7 @@ static void __init xen_fill_possible_map(void)
 {
 	int i, rc;
 
-	for (i = 0; i < nr_cpu_ids; i++) {
+	for (i = 0; i < NR_CPUS; i++) {
 		rc = HYPERVISOR_vcpu_op(VCPUOP_is_up, i, NULL);
 		if (rc >= 0) {
 			num_processors++;
@@ -192,14 +192,11 @@ static void __init xen_smp_prepare_cpus(unsigned int max_cpus)
 	if (xen_smp_intr_init(0))
 		BUG();
 
-	if (!alloc_cpumask_var(&xen_cpu_initialized_map, GFP_KERNEL))
-		panic("could not allocate xen_cpu_initialized_map\n");
-
-	cpumask_copy(xen_cpu_initialized_map, cpumask_of(0));
+	xen_cpu_initialized_map = cpumask_of_cpu(0);
 
 	/* Restrict the possible_map according to max_cpus. */
 	while ((num_possible_cpus() > 1) && (num_possible_cpus() > max_cpus)) {
-		for (cpu = nr_cpu_ids - 1; !cpu_possible(cpu); cpu--)
+		for (cpu = NR_CPUS - 1; !cpu_possible(cpu); cpu--)
 			continue;
 		cpu_clear(cpu, cpu_possible_map);
 	}
@@ -224,7 +221,7 @@ cpu_initialize_context(unsigned int cpu, struct task_struct *idle)
 	struct vcpu_guest_context *ctxt;
 	struct desc_struct *gdt;
 
-	if (cpumask_test_and_set_cpu(cpu, xen_cpu_initialized_map))
+	if (cpu_test_and_set(cpu, xen_cpu_initialized_map))
 		return 0;
 
 	ctxt = kzalloc(sizeof(*ctxt), GFP_KERNEL);
@@ -365,7 +362,7 @@ static void xen_cpu_die(unsigned int cpu)
 		alternatives_smp_switch(0);
 }
 
-static void __cpuinit xen_play_dead(void) /* used only with CPU_HOTPLUG */
+static void xen_play_dead(void)
 {
 	play_dead_common();
 	HYPERVISOR_vcpu_op(VCPUOP_down, smp_processor_id(), NULL);
@@ -411,23 +408,24 @@ static void xen_smp_send_reschedule(int cpu)
 	xen_send_IPI_one(cpu, XEN_RESCHEDULE_VECTOR);
 }
 
-static void xen_send_IPI_mask(const struct cpumask *mask,
-			      enum ipi_vector vector)
+static void xen_send_IPI_mask(cpumask_t mask, enum ipi_vector vector)
 {
 	unsigned cpu;
 
-	for_each_cpu_and(cpu, mask, cpu_online_mask)
+	cpus_and(mask, mask, cpu_online_map);
+
+	for_each_cpu_mask_nr(cpu, mask)
 		xen_send_IPI_one(cpu, vector);
 }
 
-static void xen_smp_send_call_function_ipi(const struct cpumask *mask)
+static void xen_smp_send_call_function_ipi(cpumask_t mask)
 {
 	int cpu;
 
 	xen_send_IPI_mask(mask, XEN_CALL_FUNCTION_VECTOR);
 
 	/* Make sure other vcpus get a chance to run if they need to. */
-	for_each_cpu(cpu, mask) {
+	for_each_cpu_mask_nr(cpu, mask) {
 		if (xen_vcpu_stolen(cpu)) {
 			HYPERVISOR_sched_op(SCHEDOP_yield, 0);
 			break;
@@ -437,8 +435,7 @@ static void xen_smp_send_call_function_ipi(const struct cpumask *mask)
 
 static void xen_smp_send_call_function_single_ipi(int cpu)
 {
-	xen_send_IPI_mask(cpumask_of(cpu),
-			  XEN_CALL_FUNCTION_SINGLE_VECTOR);
+	xen_send_IPI_mask(cpumask_of_cpu(cpu), XEN_CALL_FUNCTION_SINGLE_VECTOR);
 }
 
 static irqreturn_t xen_call_function_interrupt(int irq, void *dev_id)

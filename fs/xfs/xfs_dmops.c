@@ -25,6 +25,7 @@
 #include "xfs_inum.h"
 #include "xfs_ag.h"
 #include "xfs_mount.h"
+#include "xfs_clnt.h"
 
 
 static struct xfs_dmops xfs_dmcore_stub = {
@@ -37,9 +38,9 @@ static struct xfs_dmops xfs_dmcore_stub = {
 };
 
 int
-xfs_dmops_get(struct xfs_mount *mp)
+xfs_dmops_get(struct xfs_mount *mp, struct xfs_mount_args *args)
 {
-	if (mp->m_flags & XFS_MOUNT_DMAPI) {
+	if (args->flags & XFSMNT_DMAPI) {
 		cmn_err(CE_WARN,
 			"XFS: dmapi support not available in this kernel.");
 		return EINVAL;

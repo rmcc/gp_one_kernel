@@ -31,7 +31,6 @@
 #include <asm/ppc_asm.h>
 #include <asm/asm-offsets.h>
 #include <asm/ptrace.h>
-#include <asm/bug.h>
 
 /* 601 only have IBAT; cr0.eq is set on 601 when using this macro */
 #define LOAD_BAT(n, reg, RA, RB)	\
@@ -183,8 +182,7 @@ __after_mmu_off:
 	bl	reloc_offset
 	mr	r26,r3
 	addis	r4,r3,KERNELBASE@h	/* current address of _start */
-	lis	r5,PHYSICAL_START@h
-	cmplw	0,r4,r5			/* already running at PHYSICAL_START? */
+	cmpwi	0,r4,0			/* are we already running at 0? */
 	bne	relocate_kernel
 /*
  * we now have the 1st 16M of ram mapped with the bats.
@@ -812,13 +810,13 @@ giveup_altivec:
 
 /*
  * This code is jumped to from the startup code to copy
- * the kernel image to physical address PHYSICAL_START.
+ * the kernel image to physical address 0.
  */
 relocate_kernel:
 	addis	r9,r26,klimit@ha	/* fetch klimit */
 	lwz	r25,klimit@l(r9)
 	addis	r25,r25,-KERNELBASE@h
-	lis	r3,PHYSICAL_START@h	/* Destination base address */
+	li	r3,0			/* Destination base address */
 	li	r6,0			/* Destination offset */
 	li	r5,0x4000		/* # bytes of memory to copy */
 	bl	copy_and_flush		/* copy the first 0x4000 bytes */
@@ -991,12 +989,12 @@ load_up_mmu:
 	LOAD_BAT(1,r3,r4,r5)
 	LOAD_BAT(2,r3,r4,r5)
 	LOAD_BAT(3,r3,r4,r5)
-BEGIN_MMU_FTR_SECTION
+BEGIN_FTR_SECTION
 	LOAD_BAT(4,r3,r4,r5)
 	LOAD_BAT(5,r3,r4,r5)
 	LOAD_BAT(6,r3,r4,r5)
 	LOAD_BAT(7,r3,r4,r5)
-END_MMU_FTR_SECTION_IFSET(MMU_FTR_USE_HIGH_BATS)
+END_FTR_SECTION_IFSET(CPU_FTR_HAS_HIGH_BATS)
 	blr
 
 /*
@@ -1072,14 +1070,9 @@ start_here:
 	RFI
 
 /*
- * void switch_mmu_context(struct mm_struct *prev, struct mm_struct *next);
- *
  * Set up the segment registers for a new context.
  */
-_ENTRY(switch_mmu_context)
-	lwz	r3,MMCONTEXTID(r4)
-	cmpwi	cr0,r3,0
-	blt-	4f
+_ENTRY(set_context)
 	mulli	r3,r3,897	/* multiply context by skew factor */
 	rlwinm	r3,r3,4,8,27	/* VSID = (context & 0xfffff) << 4 */
 	addis	r3,r3,0x6000	/* Set Ks, Ku bits */
@@ -1090,7 +1083,6 @@ _ENTRY(switch_mmu_context)
 	/* Context switch the PTE pointer for the Abatron BDI2000.
 	 * The PGDIR is passed as second argument.
 	 */
-	lwz	r4,MM_PGD(r4)
 	lis	r5, KERNELBASE@h
 	lwz	r5, 0xf0(r5)
 	stw	r4, 0x4(r5)
@@ -1105,9 +1097,6 @@ _ENTRY(switch_mmu_context)
 	bdnz	3b
 	sync
 	isync
-	blr
-4:	trap
-	EMIT_BUG_ENTRY 4b,__FILE__,__LINE__,0
 	blr
 
 /*
@@ -1142,7 +1131,7 @@ clear_bats:
 	mtspr	SPRN_IBAT2L,r10
 	mtspr	SPRN_IBAT3U,r10
 	mtspr	SPRN_IBAT3L,r10
-BEGIN_MMU_FTR_SECTION
+BEGIN_FTR_SECTION
 	/* Here's a tweak: at this point, CPU setup have
 	 * not been called yet, so HIGH_BAT_EN may not be
 	 * set in HID0 for the 745x processors. However, it
@@ -1165,7 +1154,7 @@ BEGIN_MMU_FTR_SECTION
 	mtspr	SPRN_IBAT6L,r10
 	mtspr	SPRN_IBAT7U,r10
 	mtspr	SPRN_IBAT7L,r10
-END_MMU_FTR_SECTION_IFSET(MMU_FTR_USE_HIGH_BATS)
+END_FTR_SECTION_IFSET(CPU_FTR_HAS_HIGH_BATS)
 	blr
 
 flush_tlbs:
@@ -1189,11 +1178,11 @@ mmu_off:
 
 /*
  * Use the first pair of BAT registers to map the 1st 16MB
- * of RAM to PAGE_OFFSET.  From this point on we can't safely
+ * of RAM to KERNELBASE.  From this point on we can't safely
  * call OF any more.
  */
 initial_bats:
-	lis	r11,PAGE_OFFSET@h
+	lis	r11,KERNELBASE@h
 	mfspr	r9,SPRN_PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpwi	0,r9,1

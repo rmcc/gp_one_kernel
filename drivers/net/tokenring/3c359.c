@@ -296,9 +296,8 @@ static int __devinit xl_probe(struct pci_dev *pdev,
 	} ; 
 
 	/* 
-	 * Allowing init_trdev to allocate the private data will align
-	 * xl_private on a 32 bytes boundary which we need for the rx/tx
-	 * descriptors
+	 * Allowing init_trdev to allocate the dev->priv structure will align xl_private
+   	 * on a 32 bytes boundary which we need for the rx/tx descriptors
 	 */
 
 	dev = alloc_trdev(sizeof(struct xl_private)) ; 
@@ -639,13 +638,13 @@ static int xl_open(struct net_device *dev)
 	/* These MUST be on 8 byte boundaries */
 	xl_priv->xl_tx_ring = kzalloc((sizeof(struct xl_tx_desc) * XL_TX_RING_SIZE) + 7, GFP_DMA | GFP_KERNEL);
 	if (xl_priv->xl_tx_ring == NULL) {
-		printk(KERN_WARNING "%s: Not enough memory to allocate tx buffers.\n",
+		printk(KERN_WARNING "%s: Not enough memory to allocate rx buffers.\n",
 				     dev->name);
 		free_irq(dev->irq,dev);
 		return -ENOMEM;
 	}
 	xl_priv->xl_rx_ring = kzalloc((sizeof(struct xl_rx_desc) * XL_RX_RING_SIZE) +7, GFP_DMA | GFP_KERNEL);
-	if (xl_priv->xl_rx_ring == NULL) {
+	if (xl_priv->xl_tx_ring == NULL) {
 		printk(KERN_WARNING "%s: Not enough memory to allocate rx buffers.\n",
 				     dev->name);
 		free_irq(dev->irq,dev);
@@ -670,8 +669,6 @@ static int xl_open(struct net_device *dev)
 	if (i==0) { 
 		printk(KERN_WARNING "%s: Not enough memory to allocate rx buffers. Adapter disabled \n",dev->name) ; 
 		free_irq(dev->irq,dev) ; 
-		kfree(xl_priv->xl_tx_ring);
-		kfree(xl_priv->xl_rx_ring);
 		return -EIO ; 
 	} 
 
@@ -977,6 +974,7 @@ static void xl_rx(struct net_device *dev)
 
 			netif_rx(skb2) ; 		
 		 } /* if multiple buffers */
+		dev->last_rx = jiffies ; 	
 	} /* while packet to do */
 
 	/* Clear the updComplete interrupt */
@@ -1573,6 +1571,7 @@ static void xl_arb_cmd(struct net_device *dev)
 		 * anyway.
 		 */
 
+		dev->last_rx = jiffies ; 
 		/* Acknowledge interrupt, this tells nic we are done with the arb */
 		writel(ACK_INTERRUPT | ARBCACK | LATCH_ACK, xl_mmio + MMIO_COMMAND) ; 
 

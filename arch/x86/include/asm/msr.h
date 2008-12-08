@@ -22,10 +22,10 @@ static inline unsigned long long native_read_tscp(unsigned int *aux)
 }
 
 /*
- * both i386 and x86_64 returns 64-bit value in edx:eax, but gcc's "A"
- * constraint has different meanings. For i386, "A" means exactly
- * edx:eax, while for x86_64 it doesn't mean rdx:rax or edx:eax. Instead,
- * it means rax *or* rdx.
+ * i386 calling convention returns 64-bit value in edx:eax, while
+ * x86_64 returns at rax. Also, the "A" constraint does not really
+ * mean rdx:rax in x86_64, so we need specialized behaviour for each
+ * architecture
  */
 #ifdef CONFIG_X86_64
 #define DECLARE_ARGS(val, low, high)	unsigned low, high
@@ -85,8 +85,7 @@ static inline void native_write_msr(unsigned int msr,
 	asm volatile("wrmsr" : : "c" (msr), "a"(low), "d" (high) : "memory");
 }
 
-/* Can be uninlined because referenced by paravirt */
-notrace static inline int native_write_msr_safe(unsigned int msr,
+static inline int native_write_msr_safe(unsigned int msr,
 					unsigned low, unsigned high)
 {
 	int err;
@@ -182,10 +181,10 @@ static inline int rdmsrl_amd_safe(unsigned msr, unsigned long long *p)
 }
 
 #define rdtscl(low)						\
-	((low) = (u32)__native_read_tsc())
+	((low) = (u32)native_read_tsc())
 
 #define rdtscll(val)						\
-	((val) = __native_read_tsc())
+	((val) = native_read_tsc())
 
 #define rdpmc(counter, low, high)			\
 do {							\

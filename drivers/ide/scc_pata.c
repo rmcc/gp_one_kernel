@@ -143,7 +143,7 @@ static u8 scc_read_altstatus(ide_hwif_t *hwif)
 	return (u8)in_be32((void *)hwif->io_ports.ctl_addr);
 }
 
-static u8 scc_dma_sff_read_status(ide_hwif_t *hwif)
+static u8 scc_read_sff_dma_status(ide_hwif_t *hwif)
 {
 	return (u8)in_be32((void *)(hwif->dma_base + 4));
 }
@@ -217,7 +217,7 @@ scc_ide_outsl(unsigned long port, void *addr, u32 count)
 
 static void scc_set_pio_mode(ide_drive_t *drive, const u8 pio)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	struct scc_ports *ports = ide_get_hwifdata(hwif);
 	unsigned long ctl_base = ports->ctl;
 	unsigned long cckctrl_port = ctl_base + 0xff0;
@@ -249,7 +249,7 @@ static void scc_set_pio_mode(ide_drive_t *drive, const u8 pio)
 
 static void scc_set_dma_mode(ide_drive_t *drive, const u8 speed)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	struct scc_ports *ports = ide_get_hwifdata(hwif);
 	unsigned long ctl_base = ports->ctl;
 	unsigned long cckctrl_port = ctl_base + 0xff0;
@@ -259,7 +259,7 @@ static void scc_set_dma_mode(ide_drive_t *drive, const u8 speed)
 	unsigned long scrcst_port = ctl_base + 0x014;
 	unsigned long udenvt_port = ctl_base + 0x018;
 	unsigned long tdvhsel_port   = ctl_base + 0x020;
-	int is_slave = drive->dn & 1;
+	int is_slave = (&hwif->drives[1] == drive);
 	int offset, idx;
 	unsigned long reg;
 	unsigned long jcactsel;
@@ -292,7 +292,7 @@ static void scc_dma_host_set(ide_drive_t *drive, int on)
 {
 	ide_hwif_t *hwif = drive->hwif;
 	u8 unit = drive->dn & 1;
-	u8 dma_stat = scc_dma_sff_read_status(hwif);
+	u8 dma_stat = scc_ide_inb(hwif->dma_base + 4);
 
 	if (on)
 		dma_stat |= (1 << (5 + unit));
@@ -316,7 +316,7 @@ static void scc_dma_host_set(ide_drive_t *drive, int on)
 static int scc_dma_setup(ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = drive->hwif;
-	struct request *rq = hwif->rq;
+	struct request *rq = HWGROUP(drive)->rq;
 	unsigned int reading;
 	u8 dma_stat;
 
@@ -338,7 +338,7 @@ static int scc_dma_setup(ide_drive_t *drive)
 	out_be32((void __iomem *)hwif->dma_base, reading);
 
 	/* read DMA status for INTR & ERROR flags */
-	dma_stat = scc_dma_sff_read_status(hwif);
+	dma_stat = in_be32((void __iomem *)(hwif->dma_base + 4));
 
 	/* clear INTR & ERROR flags */
 	out_be32((void __iomem *)(hwif->dma_base + 4), dma_stat | 6);
@@ -367,7 +367,7 @@ static int __scc_dma_end(ide_drive_t *drive)
 	/* stop DMA */
 	scc_ide_outb(dma_cmd & ~1, hwif->dma_base);
 	/* get DMA status */
-	dma_stat = scc_dma_sff_read_status(hwif);
+	dma_stat = scc_ide_inb(hwif->dma_base + 4);
 	/* clear the INTR & ERROR bits */
 	scc_ide_outb(dma_stat | 6, hwif->dma_base + 4);
 	/* purge DMA mappings */
@@ -387,7 +387,7 @@ static int __scc_dma_end(ide_drive_t *drive)
 
 static int scc_dma_end(ide_drive_t *drive)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	void __iomem *dma_base = (void __iomem *)hwif->dma_base;
 	unsigned long intsts_port = hwif->dma_base + 0x014;
 	u32 reg;
@@ -405,18 +405,17 @@ static int scc_dma_end(ide_drive_t *drive)
 			       drive->name);
 			data_loss = 1;
 			if (retry++) {
-				struct request *rq = hwif->rq;
-				ide_drive_t *drive;
-				int i;
-
+				struct request *rq = HWGROUP(drive)->rq;
+				int unit;
 				/* ERROR_RESET and drive->crc_count are needed
 				 * to reduce DMA transfer mode in retry process.
 				 */
 				if (rq)
 					rq->errors |= ERROR_RESET;
-
-				ide_port_for_each_dev(i, drive, hwif)
+				for (unit = 0; unit < MAX_DRIVES; unit++) {
+					ide_drive_t *drive = &hwif->drives[unit];
 					drive->crc_count++;
+				}
 			}
 		}
 	}
@@ -497,7 +496,7 @@ static int scc_dma_end(ide_drive_t *drive)
 /* returns 1 if dma irq issued, 0 otherwise */
 static int scc_dma_test_irq(ide_drive_t *drive)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	u32 int_stat = in_be32((void __iomem *)hwif->dma_base + 0x014);
 
 	/* SCC errata A252,A308 workaround: Step4 */
@@ -853,6 +852,7 @@ static const struct ide_tp_ops scc_tp_ops = {
 	.exec_command		= scc_exec_command,
 	.read_status		= scc_read_status,
 	.read_altstatus		= scc_read_altstatus,
+	.read_sff_dma_status	= scc_read_sff_dma_status,
 
 	.set_irq		= scc_set_irq,
 
@@ -879,7 +879,6 @@ static const struct ide_dma_ops scc_dma_ops = {
 	.dma_test_irq		= scc_dma_test_irq,
 	.dma_lost_irq		= ide_dma_lost_irq,
 	.dma_timeout		= ide_dma_timeout,
-	.dma_sff_read_status	= scc_dma_sff_read_status,
 };
 
 #define DECLARE_SCC_DEV(name_str)			\

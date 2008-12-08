@@ -224,7 +224,7 @@ static inline void tmio_mmc_data_irq(struct tmio_mmc_host *host)
 {
 	void __iomem *ctl = host->ctl;
 	struct mmc_data *data = host->data;
-	struct mmc_command *stop;
+	struct mmc_command *stop = data->stop;
 
 	host->data = NULL;
 
@@ -232,7 +232,6 @@ static inline void tmio_mmc_data_irq(struct tmio_mmc_host *host)
 		pr_debug("Spurious data end IRQ\n");
 		return;
 	}
-	stop = data->stop;
 
 	/* FIXME - return correct transfer count on errors */
 	if (!data->error)

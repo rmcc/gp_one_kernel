@@ -134,19 +134,8 @@ extern unsigned long find_first_bit(const unsigned long *addr,
  */
 extern unsigned long find_first_zero_bit(const unsigned long *addr,
 					 unsigned long size);
-#endif /* CONFIG_GENERIC_FIND_FIRST_BIT */
 
-#ifdef CONFIG_GENERIC_FIND_LAST_BIT
-/**
- * find_last_bit - find the last set bit in a memory region
- * @addr: The address to start the search at
- * @size: The maximum size to search
- *
- * Returns the bit number of the first set bit, or size.
- */
-extern unsigned long find_last_bit(const unsigned long *addr,
-				   unsigned long size);
-#endif /* CONFIG_GENERIC_FIND_LAST_BIT */
+#endif /* CONFIG_GENERIC_FIND_FIRST_BIT */
 
 #ifdef CONFIG_GENERIC_FIND_NEXT_BIT
 

@@ -16,6 +16,7 @@
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/tty.h>
+#include <linux/poll.h>
 #include <linux/completion.h>
 
 /* Version Information */
@@ -407,7 +408,7 @@ static int gigaset_initcshw(struct cardstate *cs)
 	int rc;
 
 	if (!(cs->hw.ser = kzalloc(sizeof(struct ser_cardstate), GFP_KERNEL))) {
-		pr_err("out of memory\n");
+		err("%s: out of memory!", __func__);
 		return 0;
 	}
 
@@ -415,7 +416,7 @@ static int gigaset_initcshw(struct cardstate *cs)
 	cs->hw.ser->dev.id = cs->minor_index;
 	cs->hw.ser->dev.dev.release = gigaset_device_release;
 	if ((rc = platform_device_register(&cs->hw.ser->dev)) != 0) {
-		pr_err("error %d registering platform device\n", rc);
+		err("error %d registering platform device", rc);
 		kfree(cs->hw.ser);
 		cs->hw.ser = NULL;
 		return 0;
@@ -513,10 +514,11 @@ gigaset_tty_open(struct tty_struct *tty)
 
 	gig_dbg(DEBUG_INIT, "Starting HLL for Gigaset M101");
 
-	pr_info(DRIVER_DESC "\n");
+	info(DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 
 	if (!driver) {
-		pr_err("%s: no driver structure\n", __func__);
+		err("%s: no driver structure", __func__);
 		return -ENODEV;
 	}
 
@@ -569,10 +571,11 @@ gigaset_tty_close(struct tty_struct *tty)
 	}
 
 	/* prevent other callers from entering ldisc methods */
+	/* FIXME: should use the tty state flags */
 	tty->disc_data = NULL;
 
 	if (!cs->hw.ser)
-		pr_err("%s: no hw cardstate\n", __func__);
+		err("%s: no hw cardstate", __func__);
 	else {
 		/* wait for running methods to finish */
 		if (!atomic_dec_and_test(&cs->hw.ser->refcnt))
@@ -670,6 +673,18 @@ gigaset_tty_ioctl(struct tty_struct *tty, struct file *file,
 }
 
 /*
+ * Poll on the tty.
+ * Unused, always return zero.
+ *
+ * FIXME: should probably return an exception - especially on hangup
+ */
+static unsigned int
+gigaset_tty_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
+{
+	return 0;
+}
+
+/*
  * Called by the tty driver when a block of data has been received.
  * Will not be re-entered while running but other ldisc functions
  * may be called in parallel.
@@ -758,6 +773,7 @@ static struct tty_ldisc_ops gigaset_ldisc = {
 	.read		= gigaset_tty_read,
 	.write		= gigaset_tty_write,
 	.ioctl		= gigaset_tty_ioctl,
+	.poll		= gigaset_tty_poll,
 	.receive_buf	= gigaset_tty_receive,
 	.write_wakeup	= gigaset_tty_wakeup,
 };
@@ -772,7 +788,7 @@ static int __init ser_gigaset_init(void)
 
 	gig_dbg(DEBUG_INIT, "%s", __func__);
 	if ((rc = platform_driver_register(&device_driver)) != 0) {
-		pr_err("error %d registering platform driver\n", rc);
+		err("error %d registering platform driver", rc);
 		return rc;
 	}
 
@@ -783,7 +799,7 @@ static int __init ser_gigaset_init(void)
 		goto error;
 
 	if ((rc = tty_register_ldisc(N_GIGASET_M101, &gigaset_ldisc)) != 0) {
-		pr_err("error %d registering line discipline\n", rc);
+		err("error %d registering line discipline", rc);
 		goto error;
 	}
 
@@ -810,7 +826,7 @@ static void __exit ser_gigaset_exit(void)
 	}
 
 	if ((rc = tty_unregister_ldisc(N_GIGASET_M101)) != 0)
-		pr_err("error %d unregistering line discipline\n", rc);
+		err("error %d unregistering line discipline", rc);
 
 	platform_driver_unregister(&device_driver);
 }

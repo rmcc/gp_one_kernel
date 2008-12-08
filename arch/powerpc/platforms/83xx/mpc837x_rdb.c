@@ -21,6 +21,8 @@
 
 #include "mpc83xx.h"
 
+extern int mpc837x_usb_cfg(void);
+
 /* ************************************************************************
  *
  * Setup the architecture

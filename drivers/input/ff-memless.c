@@ -397,9 +397,8 @@ static int ml_ff_playback(struct input_dev *dev, int effect_id, int value)
 {
 	struct ml_device *ml = dev->ff->private;
 	struct ml_effect_state *state = &ml->states[effect_id];
-	unsigned long flags;
 
-	spin_lock_irqsave(&ml->timer_lock, flags);
+	spin_lock_bh(&ml->timer_lock);
 
 	if (value > 0) {
 		debug("initiated play");
@@ -425,7 +424,7 @@ static int ml_ff_playback(struct input_dev *dev, int effect_id, int value)
 		ml_play_effects(ml);
 	}
 
-	spin_unlock_irqrestore(&ml->timer_lock, flags);
+	spin_unlock_bh(&ml->timer_lock);
 
 	return 0;
 }

@@ -136,7 +136,7 @@ do {									\
  */
 static inline void *radix_tree_deref_slot(void **pslot)
 {
-	void *ret = rcu_dereference(*pslot);
+	void *ret = *pslot;
 	if (unlikely(radix_tree_is_indirect_ptr(ret)))
 		ret = RADIX_TREE_RETRY;
 	return ret;

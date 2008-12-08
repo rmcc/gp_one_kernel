@@ -1,4 +1,3 @@
-
 /* arch/arm/mach-s3c2410/include/mach/uncompress.h
  *
  * Copyright (c) 2003, 2007 Simtec Electronics

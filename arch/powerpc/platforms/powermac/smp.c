@@ -53,7 +53,7 @@
 #include <asm/pmac_low_i2c.h>
 #include <asm/pmac_pfunc.h>
 
-#undef DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define DBG(fmt...) udbg_printf(fmt)
@@ -739,7 +739,7 @@ static void __init smp_core99_setup(int ncpus)
 
 		/* XXX should get this from reg properties */
 		for (i = 1; i < ncpus; ++i)
-			set_hard_smp_processor_id(i, i);
+			smp_hw_index[i] = i;
 	}
 #endif
 

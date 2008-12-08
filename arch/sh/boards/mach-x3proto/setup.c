@@ -14,7 +14,6 @@
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/smc91x.h>
-#include <linux/irq.h>
 #include <asm/ilsel.h>
 
 static struct resource heartbeat_resources[] = {

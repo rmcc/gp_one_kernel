@@ -121,8 +121,7 @@ static struct pxa2xx_gpio gpio_bus[] = {
 	},
 };
 
-static int pxa2xx_i2s_startup(struct snd_pcm_substream *substream,
-			      struct snd_soc_dai *dai)
+static int pxa2xx_i2s_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -188,8 +187,7 @@ static int pxa2xx_i2s_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 }
 
 static int pxa2xx_i2s_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params,
-				struct snd_soc_dai *dai)
+				struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -250,8 +248,7 @@ static int pxa2xx_i2s_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int pxa2xx_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
-			      struct snd_soc_dai *dai)
+static int pxa2xx_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
 
@@ -272,8 +269,7 @@ static int pxa2xx_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	return ret;
 }
 
-static void pxa2xx_i2s_shutdown(struct snd_pcm_substream *substream,
-				struct snd_soc_dai *dai)
+static void pxa2xx_i2s_shutdown(struct snd_pcm_substream *substream)
 {
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		SACR1 |= SACR1_DRPL;
@@ -293,7 +289,8 @@ static void pxa2xx_i2s_shutdown(struct snd_pcm_substream *substream,
 }
 
 #ifdef CONFIG_PM
-static int pxa2xx_i2s_suspend(struct snd_soc_dai *dai)
+static int pxa2xx_i2s_suspend(struct platform_device *dev,
+	struct snd_soc_dai *dai)
 {
 	if (!dai->active)
 		return 0;
@@ -310,7 +307,8 @@ static int pxa2xx_i2s_suspend(struct snd_soc_dai *dai)
 	return 0;
 }
 
-static int pxa2xx_i2s_resume(struct snd_soc_dai *dai)
+static int pxa2xx_i2s_resume(struct platform_device *pdev,
+	struct snd_soc_dai *dai)
 {
 	if (!dai->active)
 		return 0;
@@ -338,6 +336,7 @@ static int pxa2xx_i2s_resume(struct snd_soc_dai *dai)
 struct snd_soc_dai pxa_i2s_dai = {
 	.name = "pxa2xx-i2s",
 	.id = 0,
+	.type = SND_SOC_DAI_I2S,
 	.suspend = pxa2xx_i2s_suspend,
 	.resume = pxa2xx_i2s_resume,
 	.playback = {
@@ -354,7 +353,8 @@ struct snd_soc_dai pxa_i2s_dai = {
 		.startup = pxa2xx_i2s_startup,
 		.shutdown = pxa2xx_i2s_shutdown,
 		.trigger = pxa2xx_i2s_trigger,
-		.hw_params = pxa2xx_i2s_hw_params,
+		.hw_params = pxa2xx_i2s_hw_params,},
+	.dai_ops = {
 		.set_fmt = pxa2xx_i2s_set_dai_fmt,
 		.set_sysclk = pxa2xx_i2s_set_dai_sysclk,
 	},
@@ -364,23 +364,12 @@ EXPORT_SYMBOL_GPL(pxa_i2s_dai);
 
 static int pxa2xx_i2s_probe(struct platform_device *dev)
 {
-	int ret;
-
 	clk_i2s = clk_get(&dev->dev, "I2SCLK");
-	if (IS_ERR(clk_i2s))
-		return PTR_ERR(clk_i2s);
-
-	pxa_i2s_dai.dev = &dev->dev;
-	ret = snd_soc_register_dai(&pxa_i2s_dai);
-	if (ret != 0)
-		clk_put(clk_i2s);
-
-	return ret;
+	return IS_ERR(clk_i2s) ? PTR_ERR(clk_i2s) : 0;
 }
 
 static int __devexit pxa2xx_i2s_remove(struct platform_device *dev)
 {
-	snd_soc_unregister_dai(&pxa_i2s_dai);
 	clk_put(clk_i2s);
 	clk_i2s = ERR_PTR(-ENOENT);
 	return 0;

@@ -385,7 +385,8 @@ static struct memstick_dev *memstick_alloc_card(struct memstick_host *host)
 
 	if (card) {
 		card->host = host;
-		dev_set_name(&card->dev, "%s", dev_name(&host->dev));
+		snprintf(card->dev.bus_id, sizeof(card->dev.bus_id),
+			 "%s", host->dev.bus_id);
 		card->dev.parent = &host->dev;
 		card->dev.bus = &memstick_bus_type;
 		card->dev.release = memstick_free_card;
@@ -518,7 +519,7 @@ int memstick_add_host(struct memstick_host *host)
 	if (rc)
 		return rc;
 
-	dev_set_name(&host->dev, "memstick%u", host->id);
+	snprintf(host->dev.bus_id, BUS_ID_SIZE, "memstick%u", host->id);
 
 	rc = device_add(&host->dev);
 	if (rc) {

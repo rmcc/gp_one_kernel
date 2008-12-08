@@ -22,7 +22,6 @@ MODULE_AUTHOR("Magnus Boden <mb@ozaba.mine.nu>");
 MODULE_DESCRIPTION("TFTP connection tracking helper");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("ip_conntrack_tftp");
-MODULE_ALIAS_NFCT_HELPER("tftp");
 
 #define MAX_PORTS 8
 static unsigned short ports[MAX_PORTS];

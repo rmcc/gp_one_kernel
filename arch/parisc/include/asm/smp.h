@@ -16,6 +16,8 @@
 #include <linux/cpumask.h>
 typedef unsigned long address_t;
 
+extern cpumask_t cpu_online_map;
+
 
 /*
  *	Private routines/data

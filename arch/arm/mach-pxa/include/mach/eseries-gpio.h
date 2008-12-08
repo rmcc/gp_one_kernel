@@ -43,10 +43,8 @@
 #define GPIO_E800_PCMCIA_PWR1    73
 
 /* e7xx IrDA power control */
-#define GPIO_E7XX_IR_OFF         38
+#define GPIO_E7XX_IR_ON          38
 
 /* ASIC related GPIOs */
 #define GPIO_ESERIES_TMIO_IRQ        5
-#define GPIO_ESERIES_TMIO_PCLR      19
-#define GPIO_ESERIES_TMIO_SUSPEND   45
 #define GPIO_E800_ANGELX_IRQ      8

@@ -24,6 +24,7 @@
 #include <linux/initrd.h>
 
 #include <mach/hardware.h>
+#include <asm/irq.h>
 #include <asm/setup.h>
 #include <asm/mach-types.h>
 

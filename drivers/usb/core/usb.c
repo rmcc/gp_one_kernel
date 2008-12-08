@@ -253,7 +253,7 @@ static int usb_dev_prepare(struct device *dev)
 static void usb_dev_complete(struct device *dev)
 {
 	/* Currently used only for rebinding interfaces */
-	usb_resume(dev, PMSG_RESUME);	/* Message event is meaningless */
+	usb_resume(dev);	/* Implement eventually? */
 }
 
 static int usb_dev_suspend(struct device *dev)
@@ -263,7 +263,7 @@ static int usb_dev_suspend(struct device *dev)
 
 static int usb_dev_resume(struct device *dev)
 {
-	return usb_resume(dev, PMSG_RESUME);
+	return usb_resume(dev);
 }
 
 static int usb_dev_freeze(struct device *dev)
@@ -273,7 +273,7 @@ static int usb_dev_freeze(struct device *dev)
 
 static int usb_dev_thaw(struct device *dev)
 {
-	return usb_resume(dev, PMSG_THAW);
+	return usb_resume(dev);
 }
 
 static int usb_dev_poweroff(struct device *dev)
@@ -283,10 +283,10 @@ static int usb_dev_poweroff(struct device *dev)
 
 static int usb_dev_restore(struct device *dev)
 {
-	return usb_resume(dev, PMSG_RESTORE);
+	return usb_resume(dev);
 }
 
-static struct dev_pm_ops usb_device_pm_ops = {
+static struct pm_ops usb_device_pm_ops = {
 	.prepare =	usb_dev_prepare,
 	.complete =	usb_dev_complete,
 	.suspend =	usb_dev_suspend,
@@ -301,7 +301,7 @@ static struct dev_pm_ops usb_device_pm_ops = {
 
 #define ksuspend_usb_init()	0
 #define ksuspend_usb_cleanup()	do {} while (0)
-#define usb_device_pm_ops	(*(struct dev_pm_ops *)0)
+#define usb_device_pm_ops	(*(struct pm_ops *)0)
 
 #endif	/* CONFIG_PM */
 
@@ -362,7 +362,7 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 	dev->ep0.desc.bLength = USB_DT_ENDPOINT_SIZE;
 	dev->ep0.desc.bDescriptorType = USB_DT_ENDPOINT;
 	/* ep0 maxpacket comes later, from device descriptor */
-	usb_enable_endpoint(dev, &dev->ep0, true);
+	usb_enable_endpoint(dev, &dev->ep0);
 	dev->can_submit = 1;
 
 	/* Save readable and stable topology id, distinguishing devices
@@ -402,7 +402,6 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 #ifdef	CONFIG_PM
 	mutex_init(&dev->pm_mutex);
 	INIT_DELAYED_WORK(&dev->autosuspend, usb_autosuspend_work);
-	INIT_WORK(&dev->autoresume, usb_autoresume_work);
 	dev->autosuspend_delay = usb_autosuspend_delay * HZ;
 	dev->connect_time = jiffies;
 	dev->active_duration = -jiffies;
@@ -514,7 +513,10 @@ EXPORT_SYMBOL_GPL(usb_put_intf);
  * disconnect; in some drivers (such as usb-storage) the disconnect()
  * or suspend() method will block waiting for a device reset to complete.
  *
- * Returns a negative error code for failure, otherwise 0.
+ * Returns a negative error code for failure, otherwise 1 or 0 to indicate
+ * that the device will or will not have to be unlocked.  (0 can be
+ * returned when an interface is given and is BINDING, because in that
+ * case the driver already owns the device lock.)
  */
 int usb_lock_device_for_reset(struct usb_device *udev,
 			      const struct usb_interface *iface)
@@ -525,9 +527,16 @@ int usb_lock_device_for_reset(struct usb_device *udev,
 		return -ENODEV;
 	if (udev->state == USB_STATE_SUSPENDED)
 		return -EHOSTUNREACH;
-	if (iface && (iface->condition == USB_INTERFACE_UNBINDING ||
-			iface->condition == USB_INTERFACE_UNBOUND))
-		return -EINTR;
+	if (iface) {
+		switch (iface->condition) {
+		case USB_INTERFACE_BINDING:
+			return 0;
+		case USB_INTERFACE_BOUND:
+			break;
+		default:
+			return -EINTR;
+		}
+	}
 
 	while (usb_trylock_device(udev) != 0) {
 
@@ -541,11 +550,10 @@ int usb_lock_device_for_reset(struct usb_device *udev,
 			return -ENODEV;
 		if (udev->state == USB_STATE_SUSPENDED)
 			return -EHOSTUNREACH;
-		if (iface && (iface->condition == USB_INTERFACE_UNBINDING ||
-				iface->condition == USB_INTERFACE_UNBOUND))
+		if (iface && iface->condition != USB_INTERFACE_BOUND)
 			return -EINTR;
 	}
-	return 0;
+	return 1;
 }
 EXPORT_SYMBOL_GPL(usb_lock_device_for_reset);
 
@@ -954,12 +962,8 @@ void usb_buffer_unmap_sg(const struct usb_device *dev, int is_in,
 }
 EXPORT_SYMBOL_GPL(usb_buffer_unmap_sg);
 
-/* To disable USB, kernel command line is 'nousb' not 'usbcore.nousb' */
-#ifdef MODULE
-module_param(nousb, bool, 0444);
-#else
-core_param(nousb, nousb, bool, 0444);
-#endif
+/* format to disable USB on kernel command line is: nousb */
+__module_param_call("", nousb, param_set_bool, param_get_bool, &nousb, 0444);
 
 /*
  * for external read access to <nousb>
@@ -969,37 +973,6 @@ int usb_disabled(void)
 	return nousb;
 }
 EXPORT_SYMBOL_GPL(usb_disabled);
-
-/*
- * Notifications of device and interface registration
- */
-static int usb_bus_notify(struct notifier_block *nb, unsigned long action,
-		void *data)
-{
-	struct device *dev = data;
-
-	switch (action) {
-	case BUS_NOTIFY_ADD_DEVICE:
-		if (dev->type == &usb_device_type)
-			(void) usb_create_sysfs_dev_files(to_usb_device(dev));
-		else if (dev->type == &usb_if_device_type)
-			(void) usb_create_sysfs_intf_files(
-					to_usb_interface(dev));
-		break;
-
-	case BUS_NOTIFY_DEL_DEVICE:
-		if (dev->type == &usb_device_type)
-			usb_remove_sysfs_dev_files(to_usb_device(dev));
-		else if (dev->type == &usb_if_device_type)
-			usb_remove_sysfs_intf_files(to_usb_interface(dev));
-		break;
-	}
-	return 0;
-}
-
-static struct notifier_block usb_bus_nb = {
-	.notifier_call = usb_bus_notify,
-};
 
 /*
  * Init
@@ -1018,9 +991,6 @@ static int __init usb_init(void)
 	retval = bus_register(&usb_bus_type);
 	if (retval)
 		goto bus_register_failed;
-	retval = bus_register_notifier(&usb_bus_type, &usb_bus_nb);
-	if (retval)
-		goto bus_notifier_failed;
 	retval = usb_host_init();
 	if (retval)
 		goto host_init_failed;
@@ -1055,8 +1025,6 @@ driver_register_failed:
 major_init_failed:
 	usb_host_cleanup();
 host_init_failed:
-	bus_unregister_notifier(&usb_bus_type, &usb_bus_nb);
-bus_notifier_failed:
 	bus_unregister(&usb_bus_type);
 bus_register_failed:
 	ksuspend_usb_cleanup();
@@ -1080,7 +1048,6 @@ static void __exit usb_exit(void)
 	usb_devio_cleanup();
 	usb_hub_cleanup();
 	usb_host_cleanup();
-	bus_unregister_notifier(&usb_bus_type, &usb_bus_nb);
 	bus_unregister(&usb_bus_type);
 	ksuspend_usb_cleanup();
 }

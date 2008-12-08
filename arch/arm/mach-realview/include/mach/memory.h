@@ -23,10 +23,6 @@
 /*
  * Physical DRAM offset.
  */
-#ifdef CONFIG_REALVIEW_HIGH_PHYS_OFFSET
-#define PHYS_OFFSET		UL(0x70000000)
-#else
 #define PHYS_OFFSET		UL(0x00000000)
-#endif
 
 #endif

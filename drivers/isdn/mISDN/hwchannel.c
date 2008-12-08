@@ -50,6 +50,9 @@ bchannel_bh(struct work_struct *ws)
 
 	if (test_and_clear_bit(FLG_RECVQUEUE, &bch->Flags)) {
 		while ((skb = skb_dequeue(&bch->rqueue))) {
+			if (bch->rcount >= 64)
+				printk(KERN_WARNING "B-channel %p receive "
+					"queue if full, but empties...\n", bch);
 			bch->rcount--;
 			if (likely(bch->ch.peer)) {
 				err = bch->ch.recv(bch->ch.peer, skb);
@@ -166,25 +169,6 @@ recv_Dchannel(struct dchannel *dch)
 EXPORT_SYMBOL(recv_Dchannel);
 
 void
-recv_Echannel(struct dchannel *ech, struct dchannel *dch)
-{
-	struct mISDNhead *hh;
-
-	if (ech->rx_skb->len < 2) { /* at least 2 for sapi / tei */
-		dev_kfree_skb(ech->rx_skb);
-		ech->rx_skb = NULL;
-		return;
-	}
-	hh = mISDN_HEAD_P(ech->rx_skb);
-	hh->prim = PH_DATA_E_IND;
-	hh->id = get_sapi_tei(ech->rx_skb->data);
-	skb_queue_tail(&dch->rqueue, ech->rx_skb);
-	ech->rx_skb = NULL;
-	schedule_event(dch, FLG_RECVQUEUE);
-}
-EXPORT_SYMBOL(recv_Echannel);
-
-void
 recv_Bchannel(struct bchannel *bch)
 {
 	struct mISDNhead *hh;
@@ -193,10 +177,8 @@ recv_Bchannel(struct bchannel *bch)
 	hh->prim = PH_DATA_IND;
 	hh->id = MISDN_ID_ANY;
 	if (bch->rcount >= 64) {
-		printk(KERN_WARNING "B-channel %p receive queue overflow, "
-			"fushing!\n", bch);
-		skb_queue_purge(&bch->rqueue);
-		bch->rcount = 0;
+		dev_kfree_skb(bch->rx_skb);
+		bch->rx_skb = NULL;
 		return;
 	}
 	bch->rcount++;
@@ -218,10 +200,8 @@ void
 recv_Bchannel_skb(struct bchannel *bch, struct sk_buff *skb)
 {
 	if (bch->rcount >= 64) {
-		printk(KERN_WARNING "B-channel %p receive queue overflow, "
-			"fushing!\n", bch);
-		skb_queue_purge(&bch->rqueue);
-		bch->rcount = 0;
+		dev_kfree_skb(skb);
+		return;
 	}
 	bch->rcount++;
 	skb_queue_tail(&bch->rqueue, skb);
@@ -265,12 +245,8 @@ confirm_Bsend(struct bchannel *bch)
 {
 	struct sk_buff	*skb;
 
-	if (bch->rcount >= 64) {
-		printk(KERN_WARNING "B-channel %p receive queue overflow, "
-			"fushing!\n", bch);
-		skb_queue_purge(&bch->rqueue);
-		bch->rcount = 0;
-	}
+	if (bch->rcount >= 64)
+		return;
 	skb = _alloc_mISDN_skb(PH_DATA_CNF, mISDN_HEAD_ID(bch->tx_skb),
 	    0, NULL, GFP_ATOMIC);
 	if (!skb) {

@@ -149,7 +149,7 @@ EXPORT_SYMBOL_GPL(ps3_get_spe_id);
 
 static unsigned long get_vas_id(void)
 {
-	u64 id;
+	unsigned long id;
 
 	lv1_get_logical_ppe_id(&id);
 	lv1_get_virtual_address_space_id_of_ppe(id, &id);
@@ -160,18 +160,14 @@ static unsigned long get_vas_id(void)
 static int __init construct_spu(struct spu *spu)
 {
 	int result;
-	u64 unused;
-	u64 problem_phys;
-	u64 local_store_phys;
+	unsigned long unused;
 
 	result = lv1_construct_logical_spe(PAGE_SHIFT, PAGE_SHIFT, PAGE_SHIFT,
 		PAGE_SHIFT, PAGE_SHIFT, get_vas_id(), SPE_TYPE_LOGICAL,
-		&spu_pdata(spu)->priv2_addr, &problem_phys,
-		&local_store_phys, &unused,
+		&spu_pdata(spu)->priv2_addr, &spu->problem_phys,
+		&spu->local_store_phys, &unused,
 		&spu_pdata(spu)->shadow_addr,
 		&spu_pdata(spu)->spe_id);
-	spu->problem_phys = problem_phys;
-	spu->local_store_phys = local_store_phys;
 
 	if (result) {
 		pr_debug("%s:%d: lv1_construct_logical_spe failed: %s\n",

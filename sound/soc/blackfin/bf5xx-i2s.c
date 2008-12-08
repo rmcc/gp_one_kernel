@@ -132,8 +132,7 @@ static int bf5xx_i2s_set_dai_fmt(struct snd_soc_dai *cpu_dai,
 	return ret;
 }
 
-static int bf5xx_i2s_startup(struct snd_pcm_substream *substream,
-			     struct snd_soc_dai *dai)
+static int bf5xx_i2s_startup(struct snd_pcm_substream *substream)
 {
 	pr_debug("%s enter\n", __func__);
 
@@ -143,8 +142,7 @@ static int bf5xx_i2s_startup(struct snd_pcm_substream *substream,
 }
 
 static int bf5xx_i2s_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params,
-				struct snd_soc_dai *dai)
+				struct snd_pcm_hw_params *params)
 {
 	int ret = 0;
 
@@ -195,8 +193,7 @@ static int bf5xx_i2s_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static void bf5xx_i2s_shutdown(struct snd_pcm_substream *substream,
-			       struct snd_soc_dai *dai)
+static void bf5xx_i2s_shutdown(struct snd_pcm_substream *substream)
 {
 	pr_debug("%s enter\n", __func__);
 	bf5xx_i2s.counter--;
@@ -222,14 +219,16 @@ static int bf5xx_i2s_probe(struct platform_device *pdev,
 	return 0;
 }
 
-static void bf5xx_i2s_remove(struct snd_soc_dai *dai)
+static void bf5xx_i2s_remove(struct platform_device *pdev,
+			   struct snd_soc_dai *dai)
 {
 	pr_debug("%s enter\n", __func__);
 	peripheral_free_list(&sport_req[sport_num][0]);
 }
 
 #ifdef CONFIG_PM
-static int bf5xx_i2s_suspend(struct snd_soc_dai *dai)
+static int bf5xx_i2s_suspend(struct platform_device *dev,
+			     struct snd_soc_dai *dai)
 {
 	struct sport_device *sport =
 		(struct sport_device *)dai->private_data;
@@ -290,6 +289,7 @@ static int bf5xx_i2s_resume(struct platform_device *pdev,
 struct snd_soc_dai bf5xx_i2s_dai = {
 	.name = "bf5xx-i2s",
 	.id = 0,
+	.type = SND_SOC_DAI_I2S,
 	.probe = bf5xx_i2s_probe,
 	.remove = bf5xx_i2s_remove,
 	.suspend = bf5xx_i2s_suspend,
@@ -307,23 +307,12 @@ struct snd_soc_dai bf5xx_i2s_dai = {
 	.ops = {
 		.startup   = bf5xx_i2s_startup,
 		.shutdown  = bf5xx_i2s_shutdown,
-		.hw_params = bf5xx_i2s_hw_params,
+		.hw_params = bf5xx_i2s_hw_params,},
+	.dai_ops = {
 		.set_fmt = bf5xx_i2s_set_dai_fmt,
 	},
 };
 EXPORT_SYMBOL_GPL(bf5xx_i2s_dai);
-
-static int __init bfin_i2s_init(void)
-{
-	return snd_soc_register_dai(&bf5xx_i2s_dai);
-}
-module_init(bfin_i2s_init);
-
-static void __exit bfin_i2s_exit(void)
-{
-	snd_soc_unregister_dai(&bf5xx_i2s_dai);
-}
-module_exit(bfin_i2s_exit);
 
 /* Module information */
 MODULE_AUTHOR("Cliff Cai");

@@ -197,7 +197,7 @@ concat_writev(struct mtd_info *mtd, const struct kvec *vecs,
 			continue;
 		}
 
-		size = min_t(uint64_t, total_len, subdev->size - to);
+		size = min(total_len, (size_t)(subdev->size - to));
 		wsize = size; /* store for future use */
 
 		entry_high = entry_low;
@@ -385,7 +385,7 @@ static int concat_erase(struct mtd_info *mtd, struct erase_info *instr)
 	struct mtd_concat *concat = CONCAT(mtd);
 	struct mtd_info *subdev;
 	int i, err;
-	uint64_t length, offset = 0;
+	u_int32_t length, offset = 0;
 	struct erase_info *erase;
 
 	if (!(mtd->flags & MTD_WRITEABLE))
@@ -518,7 +518,7 @@ static int concat_erase(struct mtd_info *mtd, struct erase_info *instr)
 	return 0;
 }
 
-static int concat_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+static int concat_lock(struct mtd_info *mtd, loff_t ofs, size_t len)
 {
 	struct mtd_concat *concat = CONCAT(mtd);
 	int i, err = -EINVAL;
@@ -528,7 +528,7 @@ static int concat_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 
 	for (i = 0; i < concat->num_subdev; i++) {
 		struct mtd_info *subdev = concat->subdev[i];
-		uint64_t size;
+		size_t size;
 
 		if (ofs >= subdev->size) {
 			size = 0;
@@ -556,7 +556,7 @@ static int concat_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 	return err;
 }
 
-static int concat_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+static int concat_unlock(struct mtd_info *mtd, loff_t ofs, size_t len)
 {
 	struct mtd_concat *concat = CONCAT(mtd);
 	int i, err = 0;
@@ -566,7 +566,7 @@ static int concat_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 
 	for (i = 0; i < concat->num_subdev; i++) {
 		struct mtd_info *subdev = concat->subdev[i];
-		uint64_t size;
+		size_t size;
 
 		if (ofs >= subdev->size) {
 			size = 0;
@@ -691,12 +691,12 @@ static int concat_block_markbad(struct mtd_info *mtd, loff_t ofs)
  */
 struct mtd_info *mtd_concat_create(struct mtd_info *subdev[],	/* subdevices to concatenate */
 				   int num_devs,	/* number of subdevices      */
-				   const char *name)
+				   char *name)
 {				/* name for the new device   */
 	int i;
 	size_t size;
 	struct mtd_concat *concat;
-	uint32_t max_erasesize, curr_erasesize;
+	u_int32_t max_erasesize, curr_erasesize;
 	int num_erase_region;
 
 	printk(KERN_NOTICE "Concatenating MTD devices:\n");
@@ -842,14 +842,12 @@ struct mtd_info *mtd_concat_create(struct mtd_info *subdev[],	/* subdevices to c
 		concat->mtd.erasesize = curr_erasesize;
 		concat->mtd.numeraseregions = 0;
 	} else {
-		uint64_t tmp64;
-
 		/*
 		 * erase block size varies across the subdevices: allocate
 		 * space to store the data describing the variable erase regions
 		 */
 		struct mtd_erase_region_info *erase_region_p;
-		uint64_t begin, position;
+		u_int32_t begin, position;
 
 		concat->mtd.erasesize = max_erasesize;
 		concat->mtd.numeraseregions = num_erase_region;
@@ -881,9 +879,8 @@ struct mtd_info *mtd_concat_create(struct mtd_info *subdev[],	/* subdevices to c
 					erase_region_p->offset = begin;
 					erase_region_p->erasesize =
 					    curr_erasesize;
-					tmp64 = position - begin;
-					do_div(tmp64, curr_erasesize);
-					erase_region_p->numblocks = tmp64;
+					erase_region_p->numblocks =
+					    (position - begin) / curr_erasesize;
 					begin = position;
 
 					curr_erasesize = subdev[i]->erasesize;
@@ -900,9 +897,9 @@ struct mtd_info *mtd_concat_create(struct mtd_info *subdev[],	/* subdevices to c
 						erase_region_p->offset = begin;
 						erase_region_p->erasesize =
 						    curr_erasesize;
-						tmp64 = position - begin;
-						do_div(tmp64, curr_erasesize);
-						erase_region_p->numblocks = tmp64;
+						erase_region_p->numblocks =
+						    (position -
+						     begin) / curr_erasesize;
 						begin = position;
 
 						curr_erasesize =
@@ -912,16 +909,14 @@ struct mtd_info *mtd_concat_create(struct mtd_info *subdev[],	/* subdevices to c
 					}
 					position +=
 					    subdev[i]->eraseregions[j].
-					    numblocks * (uint64_t)curr_erasesize;
+					    numblocks * curr_erasesize;
 				}
 			}
 		}
 		/* Now write the final entry */
 		erase_region_p->offset = begin;
 		erase_region_p->erasesize = curr_erasesize;
-		tmp64 = position - begin;
-		do_div(tmp64, curr_erasesize);
-		erase_region_p->numblocks = tmp64;
+		erase_region_p->numblocks = (position - begin) / curr_erasesize;
 	}
 
 	return &concat->mtd;

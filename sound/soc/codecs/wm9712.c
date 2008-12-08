@@ -487,8 +487,7 @@ static int ac97_write(struct snd_soc_codec *codec, unsigned int reg,
 	return 0;
 }
 
-static int ac97_prepare(struct snd_pcm_substream *substream,
-			struct snd_soc_dai *dai)
+static int ac97_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -508,8 +507,7 @@ static int ac97_prepare(struct snd_pcm_substream *substream,
 	return ac97_write(codec, reg, runtime->rate);
 }
 
-static int ac97_aux_prepare(struct snd_pcm_substream *substream,
-			    struct snd_soc_dai *dai)
+static int ac97_aux_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -535,7 +533,7 @@ static int ac97_aux_prepare(struct snd_pcm_substream *substream,
 struct snd_soc_dai wm9712_dai[] = {
 {
 	.name = "AC97 HiFi",
-	.ac97_control = 1,
+	.type = SND_SOC_DAI_AC97_BUS,
 	.playback = {
 		.stream_name = "HiFi Playback",
 		.channels_min = 1,
@@ -690,7 +688,7 @@ static int wm9712_soc_probe(struct platform_device *pdev)
 
 	ret = wm9712_reset(codec, 0);
 	if (ret < 0) {
-		printk(KERN_ERR "Failed to reset WM9712: AC97 link error\n");
+		printk(KERN_ERR "AC97 link error\n");
 		goto reset_err;
 	}
 
@@ -700,7 +698,7 @@ static int wm9712_soc_probe(struct platform_device *pdev)
 	wm9712_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	wm9712_add_controls(codec);
 	wm9712_add_widgets(codec);
-	ret = snd_soc_init_card(socdev);
+	ret = snd_soc_register_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "wm9712: failed to register card\n");
 		goto reset_err;

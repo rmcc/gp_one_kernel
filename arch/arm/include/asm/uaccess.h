@@ -11,8 +11,7 @@
 /*
  * User space memory access functions
  */
-#include <linux/string.h>
-#include <linux/thread_info.h>
+#include <linux/sched.h>
 #include <asm/errno.h>
 #include <asm/memory.h>
 #include <asm/domain.h>

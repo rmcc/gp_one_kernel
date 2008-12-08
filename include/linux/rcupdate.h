@@ -52,18 +52,11 @@ struct rcu_head {
 	void (*func)(struct rcu_head *head);
 };
 
-/* Internal to kernel, but needed by rcupreempt.h. */
-extern int rcu_scheduler_active;
-
-#if defined(CONFIG_CLASSIC_RCU)
+#ifdef CONFIG_CLASSIC_RCU
 #include <linux/rcuclassic.h>
-#elif defined(CONFIG_TREE_RCU)
-#include <linux/rcutree.h>
-#elif defined(CONFIG_PREEMPT_RCU)
+#else /* #ifdef CONFIG_CLASSIC_RCU */
 #include <linux/rcupreempt.h>
-#else
-#error "Unknown RCU implementation specified to kernel configuration"
-#endif /* #else #if defined(CONFIG_CLASSIC_RCU) */
+#endif /* #else #ifdef CONFIG_CLASSIC_RCU */
 
 #define RCU_HEAD_INIT 	{ .next = NULL, .func = NULL }
 #define RCU_HEAD(head) struct rcu_head head = RCU_HEAD_INIT
@@ -149,7 +142,6 @@ extern int rcu_scheduler_active;
  * on the write-side to insure proper synchronization.
  */
 #define rcu_read_lock_sched() preempt_disable()
-#define rcu_read_lock_sched_notrace() preempt_disable_notrace()
 
 /*
  * rcu_read_unlock_sched - marks the end of a RCU-classic critical section
@@ -157,7 +149,6 @@ extern int rcu_scheduler_active;
  * See rcu_read_lock_sched for more information.
  */
 #define rcu_read_unlock_sched() preempt_enable()
-#define rcu_read_unlock_sched_notrace() preempt_enable_notrace()
 
 
 
@@ -206,6 +197,18 @@ struct rcu_synchronize {
 };
 
 extern void wakeme_after_rcu(struct rcu_head  *head);
+
+#define synchronize_rcu_xxx(name, func) \
+void name(void) \
+{ \
+	struct rcu_synchronize rcu; \
+	\
+	init_completion(&rcu.completion); \
+	/* Will wake me after RCU finished. */ \
+	func(&rcu.head, wakeme_after_rcu); \
+	/* Wait for it. */ \
+	wait_for_completion(&rcu.completion); \
+}
 
 /**
  * synchronize_sched - block until all CPUs have exited any non-preemptive
@@ -268,7 +271,6 @@ extern void rcu_barrier_sched(void);
 
 /* Internal to kernel */
 extern void rcu_init(void);
-extern void rcu_scheduler_starting(void);
 extern int rcu_needs_cpu(int cpu);
 
 #endif /* __LINUX_RCUPDATE_H */

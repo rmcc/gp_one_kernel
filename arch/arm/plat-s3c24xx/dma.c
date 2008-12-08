@@ -25,6 +25,7 @@
 #include <linux/sysdev.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
+#include <linux/delay.h>
 #include <linux/io.h>
 
 #include <asm/system.h>

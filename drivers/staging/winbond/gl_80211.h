@@ -1,7 +1,6 @@
+
 #ifndef __GL_80211_H__
 #define __GL_80211_H__
-
-#include <linux/types.h>
 
 /****************** CONSTANT AND MACRO SECTION ******************************/
 

@@ -30,28 +30,53 @@
 #define KS8695_GPIO_14		14
 #define KS8695_GPIO_15		15
 
+
 /*
  * Configure GPIO pin as external interrupt source.
  */
-extern int ks8695_gpio_interrupt(unsigned int pin, unsigned int type);
+int __init_or_module ks8695_gpio_interrupt(unsigned int pin, unsigned int type);
+
+/*
+ * Configure the GPIO line as an input.
+ */
+int __init_or_module gpio_direction_input(unsigned int pin);
+
+/*
+ * Configure the GPIO line as an output, with default state.
+ */
+int __init_or_module gpio_direction_output(unsigned int pin, unsigned int state);
+
+/*
+ * Set the state of an output GPIO line.
+ */
+void gpio_set_value(unsigned int pin, unsigned int state);
+
+/*
+ * Read the state of a GPIO line.
+ */
+int gpio_get_value(unsigned int pin);
+
+/*
+ * Map GPIO line to IRQ number.
+ */
+int gpio_to_irq(unsigned int pin);
 
 /*
  * Map IRQ number to GPIO line.
  */
-extern int irq_to_gpio(unsigned int irq);
+int irq_to_gpio(unsigned int irq);
+
 
 #include <asm-generic/gpio.h>
 
-/* If it turns out that we need to optimise GPIO access for the
- * Micrel's GPIOs, then these can be changed to check their argument
- * directly as static inlines. However for now it's probably not
- * worthwhile.
- */
-#define gpio_get_value __gpio_get_value
-#define gpio_set_value __gpio_set_value
-#define gpio_to_irq __gpio_to_irq
+static inline int gpio_request(unsigned int pin, const char *label)
+{
+	return 0;
+}
 
-/* Register the GPIOs */
-extern void ks8695_register_gpios(void);
+static inline void gpio_free(unsigned int pin)
+{
+	might_sleep();
+}
 
 #endif

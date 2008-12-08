@@ -225,7 +225,6 @@ static int pipe_rcv_status(struct sock *sk, struct sk_buff *skb)
 {
 	struct pep_sock *pn = pep_sk(sk);
 	struct pnpipehdr *hdr = pnp_hdr(skb);
-	int wake = 0;
 
 	if (!pskb_may_pull(skb, sizeof(*hdr) + 4))
 		return -EINVAL;
@@ -242,16 +241,16 @@ static int pipe_rcv_status(struct sock *sk, struct sk_buff *skb)
 		case PN_LEGACY_FLOW_CONTROL:
 			switch (hdr->data[4]) {
 			case PEP_IND_BUSY:
-				atomic_set(&pn->tx_credits, 0);
+				pn->tx_credits = 0;
 				break;
 			case PEP_IND_READY:
-				atomic_set(&pn->tx_credits, wake = 1);
+				pn->tx_credits = 1;
 				break;
 			}
 			break;
 		case PN_ONE_CREDIT_FLOW_CONTROL:
 			if (hdr->data[4] == PEP_IND_READY)
-				atomic_set(&pn->tx_credits, wake = 1);
+				pn->tx_credits = 1;
 			break;
 		}
 		break;
@@ -259,7 +258,10 @@ static int pipe_rcv_status(struct sock *sk, struct sk_buff *skb)
 	case PN_PEP_IND_ID_MCFC_GRANT_CREDITS:
 		if (pn->tx_fc != PN_MULTI_CREDIT_FLOW_CONTROL)
 			break;
-		atomic_add(wake = hdr->data[4], &pn->tx_credits);
+		if (pn->tx_credits + hdr->data[4] > 0xff)
+			pn->tx_credits = 0xff;
+		else
+			pn->tx_credits += hdr->data[4];
 		break;
 
 	default:
@@ -267,7 +269,7 @@ static int pipe_rcv_status(struct sock *sk, struct sk_buff *skb)
 				(unsigned)hdr->data[1]);
 		return -EOPNOTSUPP;
 	}
-	if (wake)
+	if (pn->tx_credits)
 		sk->sk_write_space(sk);
 	return 0;
 }
@@ -341,7 +343,7 @@ static int pipe_do_rcv(struct sock *sk, struct sk_buff *skb)
 		}
 		/* fall through */
 	case PNS_PEP_DISABLE_REQ:
-		atomic_set(&pn->tx_credits, 0);
+		pn->tx_credits = 0;
 		pep_reply(sk, skb, PN_PIPE_NO_ERROR, NULL, 0, GFP_ATOMIC);
 		break;
 
@@ -388,7 +390,7 @@ static int pipe_do_rcv(struct sock *sk, struct sk_buff *skb)
 		/* fall through */
 	case PNS_PIPE_ENABLED_IND:
 		if (!pn_flow_safe(pn->tx_fc)) {
-			atomic_set(&pn->tx_credits, 1);
+			pn->tx_credits = 1;
 			sk->sk_write_space(sk);
 		}
 		if (sk->sk_state == TCP_ESTABLISHED)
@@ -502,9 +504,8 @@ static int pep_connreq_rcv(struct sock *sk, struct sk_buff *skb)
 	newpn->pn_sk.resource = pn->pn_sk.resource;
 	skb_queue_head_init(&newpn->ctrlreq_queue);
 	newpn->pipe_handle = pipe_handle;
-	atomic_set(&newpn->tx_credits, 0);
 	newpn->peer_type = peer_type;
-	newpn->rx_credits = 0;
+	newpn->rx_credits = newpn->tx_credits = 0;
 	newpn->rx_fc = newpn->tx_fc = PN_LEGACY_FLOW_CONTROL;
 	newpn->init_enable = enabled;
 
@@ -553,7 +554,7 @@ static int pep_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	struct pep_sock *pn = pep_sk(sk);
 	struct sock *sknode;
-	struct pnpipehdr *hdr;
+	struct pnpipehdr *hdr = pnp_hdr(skb);
 	struct sockaddr_pn dst;
 	int err = NET_RX_SUCCESS;
 	u8 pipe_handle;
@@ -820,18 +821,14 @@ static int pipe_skb_send(struct sock *sk, struct sk_buff *skb)
 	struct pep_sock *pn = pep_sk(sk);
 	struct pnpipehdr *ph;
 
-	if (pn_flow_safe(pn->tx_fc) &&
-	    !atomic_add_unless(&pn->tx_credits, -1, 0)) {
-		kfree_skb(skb);
-		return -ENOBUFS;
-	}
-
 	skb_push(skb, 3);
 	skb_reset_transport_header(skb);
 	ph = pnp_hdr(skb);
 	ph->utid = 0;
 	ph->message_id = PNS_PIPE_DATA;
 	ph->pipe_handle = pn->pipe_handle;
+	if (pn_flow_safe(pn->tx_fc) && pn->tx_credits)
+		pn->tx_credits--;
 
 	return pn_skb_send(sk, skb, &pipe_srv);
 }
@@ -869,7 +866,7 @@ disabled:
 	BUG_ON(sk->sk_state != TCP_ESTABLISHED);
 
 	/* Wait until flow control allows TX */
-	done = atomic_read(&pn->tx_credits);
+	done = pn->tx_credits > 0;
 	while (!done) {
 		DEFINE_WAIT(wait);
 
@@ -884,7 +881,7 @@ disabled:
 
 		prepare_to_wait(&sk->sk_socket->wait, &wait,
 				TASK_INTERRUPTIBLE);
-		done = sk_wait_event(sk, &timeo, atomic_read(&pn->tx_credits));
+		done = sk_wait_event(sk, &timeo, pn->tx_credits > 0);
 		finish_wait(&sk->sk_socket->wait, &wait);
 
 		if (sk->sk_state != TCP_ESTABLISHED)
@@ -898,8 +895,7 @@ disabled:
 			goto out;
 		skb_reserve(skb, MAX_PHONET_HEADER + 3);
 
-		if (sk->sk_state != TCP_ESTABLISHED ||
-		    !atomic_read(&pn->tx_credits))
+		if (sk->sk_state != TCP_ESTABLISHED || !pn->tx_credits)
 			goto disabled; /* sock_alloc_send_skb might sleep */
 	}
 
@@ -921,7 +917,7 @@ int pep_writeable(struct sock *sk)
 {
 	struct pep_sock *pn = pep_sk(sk);
 
-	return atomic_read(&pn->tx_credits);
+	return (sk->sk_state == TCP_ESTABLISHED) ? pn->tx_credits : 0;
 }
 
 int pep_write(struct sock *sk, struct sk_buff *skb)

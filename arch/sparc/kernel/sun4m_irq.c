@@ -374,7 +374,6 @@ static void __init sun4m_init_timers(irq_handler_t counter_fn)
 	}
 
 	addr = of_get_property(dp, "address", &len);
-	of_node_put(dp);
 	if (!addr) {
 		printk(KERN_ERR "sun4m_init_timers: No 'address' prop.\n");
 		return;
@@ -438,7 +437,6 @@ void __init sun4m_init_IRQ(void)
 	}
 
 	addr = of_get_property(dp, "address", &len);
-	of_node_put(dp);
 	if (!addr) {
 		printk(KERN_ERR "sun4m_init_IRQ: No 'address' prop.\n");
 		return;

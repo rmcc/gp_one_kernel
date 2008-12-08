@@ -1,11 +1,3 @@
-#ifndef __WINBOND_SME_S_H
-#define __WINBOND_SME_S_H
-
-#include <linux/types.h>
-
-#include "mac_structures.h"
-#include "localpara.h"
-
 //
 // SME_S.H -
 // SME task global CONSTANTS, STRUCTURES, variables
@@ -114,7 +106,8 @@ typedef struct _SME_PARAMETERS
 	u8				bDesiredPowerSave;
 
 	// SME timer and timeout value
-	struct timer_list timer;
+	//NDIS_MINIPORT_TIMER	nTimer;
+	OS_TIMER			nTimer;
 
 	u8				boInTimerHandler;
 	u8 				boAuthRetryActive;
@@ -203,9 +196,9 @@ typedef struct _SME_PARAMETERS
 
 } SME_PARAMETERS, *PSME_PARAMETERS;
 
-#define psSME			(&(adapter->sSmePara))
+#define psSME			(&(Adapter->sSmePara))
 
-#define wSMEGetCurrentSTAState(adapter)		((u16)(adapter)->sSmePara.wState)
+#define wSMEGetCurrentSTAState(Adapter)		((u16)(Adapter)->sSmePara.wState)
 
 
 
@@ -233,4 +226,3 @@ typedef struct _SME_PARAMETERS
 
 // Static function
 
-#endif

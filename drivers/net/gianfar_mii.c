@@ -34,8 +34,6 @@
 #include <linux/crc32.h>
 #include <linux/mii.h>
 #include <linux/phy.h>
-#include <linux/of.h>
-#include <linux/of_platform.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -152,116 +150,53 @@ static int gfar_mdio_reset(struct mii_bus *bus)
 	return 0;
 }
 
-/* Allocate an array which provides irq #s for each PHY on the given bus */
-static int *create_irq_map(struct device_node *np)
+
+static int gfar_mdio_probe(struct device *dev)
 {
-	int *irqs;
-	int i;
-	struct device_node *child = NULL;
-
-	irqs = kcalloc(PHY_MAX_ADDR, sizeof(int), GFP_KERNEL);
-
-	if (!irqs)
-		return NULL;
-
-	for (i = 0; i < PHY_MAX_ADDR; i++)
-		irqs[i] = PHY_POLL;
-
-	while ((child = of_get_next_child(np, child)) != NULL) {
-		int irq = irq_of_parse_and_map(child, 0);
-		const u32 *id;
-
-		if (irq == NO_IRQ)
-			continue;
-
-		id = of_get_property(child, "reg", NULL);
-
-		if (!id)
-			continue;
-
-		if (*id < PHY_MAX_ADDR && *id >= 0)
-			irqs[*id] = irq;
-		else
-			printk(KERN_WARNING "%s: "
-					"%d is not a valid PHY address\n",
-					np->full_name, *id);
-	}
-
-	return irqs;
-}
-
-
-void gfar_mdio_bus_name(char *name, struct device_node *np)
-{
-	const u32 *reg;
-
-	reg = of_get_property(np, "reg", NULL);
-
-	snprintf(name, MII_BUS_ID_SIZE, "%s@%x", np->name, reg ? *reg : 0);
-}
-
-/* Scan the bus in reverse, looking for an empty spot */
-static int gfar_mdio_find_free(struct mii_bus *new_bus)
-{
-	int i;
-
-	for (i = PHY_MAX_ADDR; i > 0; i--) {
-		u32 phy_id;
-
-		if (get_phy_id(new_bus, i, &phy_id))
-			return -1;
-
-		if (phy_id == 0xffffffff)
-			break;
-	}
-
-	return i;
-}
-
-static int gfar_mdio_probe(struct of_device *ofdev,
-		const struct of_device_id *match)
-{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct gianfar_mdio_data *pdata;
 	struct gfar_mii __iomem *regs;
 	struct gfar __iomem *enet_regs;
 	struct mii_bus *new_bus;
-	int err = 0;
-	u64 addr, size;
-	struct device_node *np = ofdev->node;
-	struct device_node *tbi;
-	int tbiaddr = -1;
+	struct resource *r;
+	int i, err = 0;
+
+	if (NULL == dev)
+		return -EINVAL;
 
 	new_bus = mdiobus_alloc();
 	if (NULL == new_bus)
 		return -ENOMEM;
 
-	device_init_wakeup(&ofdev->dev, 1);
-
 	new_bus->name = "Gianfar MII Bus",
 	new_bus->read = &gfar_mdio_read,
 	new_bus->write = &gfar_mdio_write,
 	new_bus->reset = &gfar_mdio_reset,
-	gfar_mdio_bus_name(new_bus->id, np);
+	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%x", pdev->id);
+
+	pdata = (struct gianfar_mdio_data *)pdev->dev.platform_data;
+
+	if (NULL == pdata) {
+		printk(KERN_ERR "gfar mdio %d: Missing platform data!\n", pdev->id);
+		return -ENODEV;
+	}
+
+	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	/* Set the PHY base address */
-	addr = of_translate_address(np, of_get_address(np, 0, &size, NULL));
-	regs = ioremap(addr, size);
+	regs = ioremap(r->start, sizeof (struct gfar_mii));
 
 	if (NULL == regs) {
 		err = -ENOMEM;
-		goto err_free_bus;
+		goto reg_map_fail;
 	}
 
 	new_bus->priv = (void __force *)regs;
 
-	new_bus->irq = create_irq_map(np);
+	new_bus->irq = pdata->irq;
 
-	if (new_bus->irq == NULL) {
-		err = -ENOMEM;
-		goto err_unmap_regs;
-	}
-
-	new_bus->parent = &ofdev->dev;
-	dev_set_drvdata(&ofdev->dev, new_bus);
+	new_bus->parent = dev;
+	dev_set_drvdata(dev, new_bus);
 
 	/*
 	 * This is mildly evil, but so is our hardware for doing this.
@@ -271,109 +206,96 @@ static int gfar_mdio_probe(struct of_device *ofdev,
 	enet_regs = (struct gfar __iomem *)
 		((char *)regs - offsetof(struct gfar, gfar_mii_regs));
 
-	for_each_child_of_node(np, tbi) {
-		if (!strncmp(tbi->type, "tbi-phy", 8))
+	/* Scan the bus, looking for an empty spot for TBIPA */
+	gfar_write(&enet_regs->tbipa, 0);
+	for (i = PHY_MAX_ADDR; i > 0; i--) {
+		u32 phy_id;
+
+		err = get_phy_id(new_bus, i, &phy_id);
+		if (err)
+			goto bus_register_fail;
+
+		if (phy_id == 0xffffffff)
 			break;
 	}
 
-	if (tbi) {
-		const u32 *prop = of_get_property(tbi, "reg", NULL);
-
-		if (prop)
-			tbiaddr = *prop;
-	}
-
-	if (tbiaddr == -1) {
-		gfar_write(&enet_regs->tbipa, 0);
-
-		tbiaddr = gfar_mdio_find_free(new_bus);
-	}
-
-	/*
-	 * We define TBIPA at 0 to be illegal, opting to fail for boards that
-	 * have PHYs at 1-31, rather than change tbipa and rescan.
-	 */
-	if (tbiaddr == 0) {
+	/* The bus is full.  We don't support using 31 PHYs, sorry */
+	if (i == 0) {
 		err = -EBUSY;
 
-		goto err_free_irqs;
+		goto bus_register_fail;
 	}
 
-	gfar_write(&enet_regs->tbipa, tbiaddr);
-
-	/*
-	 * The TBIPHY-only buses will find PHYs at every address,
-	 * so we mask them all but the TBI
-	 */
-	if (!of_device_is_compatible(np, "fsl,gianfar-mdio"))
-		new_bus->phy_mask = ~(1 << tbiaddr);
+	gfar_write(&enet_regs->tbipa, i);
 
 	err = mdiobus_register(new_bus);
 
-	if (err != 0) {
+	if (0 != err) {
 		printk (KERN_ERR "%s: Cannot register as MDIO bus\n",
 				new_bus->name);
-		goto err_free_irqs;
+		goto bus_register_fail;
 	}
 
 	return 0;
 
-err_free_irqs:
-	kfree(new_bus->irq);
-err_unmap_regs:
+bus_register_fail:
 	iounmap(regs);
-err_free_bus:
+reg_map_fail:
 	mdiobus_free(new_bus);
 
 	return err;
 }
 
 
-static int gfar_mdio_remove(struct of_device *ofdev)
+static int gfar_mdio_remove(struct device *dev)
 {
-	struct mii_bus *bus = dev_get_drvdata(&ofdev->dev);
+	struct mii_bus *bus = dev_get_drvdata(dev);
 
 	mdiobus_unregister(bus);
 
-	dev_set_drvdata(&ofdev->dev, NULL);
+	dev_set_drvdata(dev, NULL);
 
 	iounmap((void __iomem *)bus->priv);
 	bus->priv = NULL;
-	kfree(bus->irq);
 	mdiobus_free(bus);
 
 	return 0;
 }
 
-static struct of_device_id gfar_mdio_match[] =
-{
-	{
-		.compatible = "fsl,gianfar-mdio",
-	},
-	{
-		.compatible = "fsl,gianfar-tbi",
-	},
-	{
-		.type = "mdio",
-		.compatible = "gianfar",
-	},
-	{},
-};
-
-static struct of_platform_driver gianfar_mdio_driver = {
+static struct device_driver gianfar_mdio_driver = {
 	.name = "fsl-gianfar_mdio",
-	.match_table = gfar_mdio_match,
-
+	.bus = &platform_bus_type,
 	.probe = gfar_mdio_probe,
 	.remove = gfar_mdio_remove,
 };
 
+static int match_mdio_bus(struct device *dev, void *data)
+{
+	const struct gfar_private *priv = data;
+	const struct platform_device *pdev = to_platform_device(dev);
+
+	return !strcmp(pdev->name, gianfar_mdio_driver.name) &&
+		pdev->id == priv->einfo->mdio_bus;
+}
+
+/* Given a gfar_priv structure, find the mii_bus controlled by this device (not
+ * necessarily the same as the bus the gfar's PHY is on), if one exists.
+ * Normally only the first gianfar controls a mii_bus.  */
+struct mii_bus *gfar_get_miibus(const struct gfar_private *priv)
+{
+	/*const*/ struct device *d;
+
+	d = bus_find_device(gianfar_mdio_driver.bus, NULL, (void *)priv,
+			    match_mdio_bus);
+	return d ? dev_get_drvdata(d) : NULL;
+}
+
 int __init gfar_mdio_init(void)
 {
-	return of_register_platform_driver(&gianfar_mdio_driver);
+	return driver_register(&gianfar_mdio_driver);
 }
 
 void gfar_mdio_exit(void)
 {
-	of_unregister_platform_driver(&gianfar_mdio_driver);
+	driver_unregister(&gianfar_mdio_driver);
 }

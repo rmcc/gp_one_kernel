@@ -40,10 +40,6 @@ static int fb_notifier_callback(struct notifier_block *self,
 		if (!bd->ops->check_fb ||
 		    bd->ops->check_fb(evdata->info)) {
 			bd->props.fb_blank = *(int *)evdata->data;
-			if (bd->props.fb_blank == FB_BLANK_UNBLANK)
-				bd->props.state &= ~BL_CORE_FBBLANK;
-			else
-				bd->props.state |= BL_CORE_FBBLANK;
 			backlight_update_status(bd);
 		}
 	mutex_unlock(&bd->ops_lock);
@@ -84,18 +80,20 @@ static ssize_t backlight_show_power(struct device *dev,
 static ssize_t backlight_store_power(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	int rc;
+	int rc = -ENXIO;
+	char *endp;
 	struct backlight_device *bd = to_backlight_device(dev);
-	unsigned long power;
+	int power = simple_strtoul(buf, &endp, 0);
+	size_t size = endp - buf;
 
-	rc = strict_strtoul(buf, 0, &power);
-	if (rc)
-		return rc;
+	if (*endp && isspace(*endp))
+		size++;
+	if (size != count)
+		return -EINVAL;
 
-	rc = -ENXIO;
 	mutex_lock(&bd->ops_lock);
 	if (bd->ops) {
-		pr_debug("backlight: set power to %lu\n", power);
+		pr_debug("backlight: set power to %d\n", power);
 		if (bd->props.power != power) {
 			bd->props.power = power;
 			backlight_update_status(bd);
@@ -118,25 +116,28 @@ static ssize_t backlight_show_brightness(struct device *dev,
 static ssize_t backlight_store_brightness(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	int rc;
+	int rc = -ENXIO;
+	char *endp;
 	struct backlight_device *bd = to_backlight_device(dev);
-	unsigned long brightness;
+	int brightness = simple_strtoul(buf, &endp, 0);
+	size_t size = endp - buf;
 
-	rc = strict_strtoul(buf, 0, &brightness);
-	if (rc)
-		return rc;
-
-	rc = -ENXIO;
+	if (*endp && isspace(*endp))
+		size++;
+	if (size != count)
+		return -EINVAL;
 
 	mutex_lock(&bd->ops_lock);
 	if (bd->ops) {
 		if (brightness > bd->props.max_brightness)
 			rc = -EINVAL;
 		else {
-			pr_debug("backlight: set brightness to %lu\n",
+			pr_debug("backlight: set brightness to %d\n",
 				 brightness);
-			bd->props.brightness = brightness;
-			backlight_update_status(bd);
+			if (bd->props.brightness != brightness) {
+				bd->props.brightness = brightness;
+				backlight_update_status(bd);
+			}
 			rc = count;
 		}
 	}
@@ -168,34 +169,6 @@ static ssize_t backlight_show_actual_brightness(struct device *dev,
 }
 
 static struct class *backlight_class;
-
-static int backlight_suspend(struct device *dev, pm_message_t state)
-{
-	struct backlight_device *bd = to_backlight_device(dev);
-
-	if (bd->ops->options & BL_CORE_SUSPENDRESUME) {
-		mutex_lock(&bd->ops_lock);
-		bd->props.state |= BL_CORE_SUSPENDED;
-		backlight_update_status(bd);
-		mutex_unlock(&bd->ops_lock);
-	}
-
-	return 0;
-}
-
-static int backlight_resume(struct device *dev)
-{
-	struct backlight_device *bd = to_backlight_device(dev);
-
-	if (bd->ops->options & BL_CORE_SUSPENDRESUME) {
-		mutex_lock(&bd->ops_lock);
-		bd->props.state &= ~BL_CORE_SUSPENDED;
-		backlight_update_status(bd);
-		mutex_unlock(&bd->ops_lock);
-	}
-
-	return 0;
-}
 
 static void bl_device_release(struct device *dev)
 {
@@ -244,7 +217,7 @@ struct backlight_device *backlight_device_register(const char *name,
 	new_bd->dev.class = backlight_class;
 	new_bd->dev.parent = parent;
 	new_bd->dev.release = bl_device_release;
-	dev_set_name(&new_bd->dev, name);
+	strlcpy(new_bd->dev.bus_id, name, BUS_ID_SIZE);
 	dev_set_drvdata(&new_bd->dev, devdata);
 
 	rc = device_register(&new_bd->dev);
@@ -313,8 +286,6 @@ static int __init backlight_class_init(void)
 	}
 
 	backlight_class->dev_attrs = bl_device_attributes;
-	backlight_class->suspend = backlight_suspend;
-	backlight_class->resume = backlight_resume;
 	return 0;
 }
 

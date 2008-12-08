@@ -137,7 +137,6 @@
 /* #define CMX_CONF_DEBUG */
 
 /*#define CMX_DEBUG * massive read/write pointer output */
-/*#define CMX_DELAY_DEBUG * gives rx-buffer delay overview */
 /*#define CMX_TX_DEBUG * massive read/write on tx-buffer with content */
 
 static inline int
@@ -745,11 +744,11 @@ conf_software:
 					if (dsp->pcm_slot_rx >= 0 &&
 					    dsp->pcm_slot_rx <
 					    sizeof(freeslots))
-						freeslots[dsp->pcm_slot_rx] = 0;
+						freeslots[dsp->pcm_slot_tx] = 0;
 					if (dsp->pcm_slot_tx >= 0 &&
 					    dsp->pcm_slot_tx <
 					    sizeof(freeslots))
-						freeslots[dsp->pcm_slot_tx] = 0;
+						freeslots[dsp->pcm_slot_rx] = 0;
 				}
 			}
 			i = 0;
@@ -837,11 +836,11 @@ conf_software:
 					if (dsp->pcm_slot_rx >= 0 &&
 					    dsp->pcm_slot_rx <
 					    sizeof(freeslots))
-						freeslots[dsp->pcm_slot_rx] = 0;
+						freeslots[dsp->pcm_slot_tx] = 0;
 					if (dsp->pcm_slot_tx >= 0 &&
 					    dsp->pcm_slot_tx <
 					    sizeof(freeslots))
-						freeslots[dsp->pcm_slot_tx] = 0;
+						freeslots[dsp->pcm_slot_rx] = 0;
 				}
 			}
 			i1 = 0;
@@ -927,6 +926,10 @@ conf_software:
 
 	/* for more than two members.. */
 
+	/* in case of hdlc, we change to software */
+	if (dsp->hdlc)
+		goto conf_software;
+
 	/* if all members already have the same conference */
 	if (all_conf)
 		return;
@@ -937,9 +940,6 @@ conf_software:
 	if (current_conf >= 0) {
 join_members:
 		list_for_each_entry(member, &conf->mlist, list) {
-			/* in case of hdlc, change to software */
-			if (member->dsp->hdlc)
-				goto conf_software;
 			/* join to current conference */
 			if (member->dsp->hfc_conf == current_conf)
 				continue;
@@ -1135,25 +1135,6 @@ dsp_cmx_conf(struct dsp *dsp, u32 conf_id)
 	return 0;
 }
 
-#ifdef CMX_DELAY_DEBUG
-int delaycount;
-static void
-showdelay(struct dsp *dsp, int samples, int delay)
-{
-	char bar[] = "--------------------------------------------------|";
-	int sdelay;
-
-	delaycount += samples;
-	if (delaycount < 8000)
-		return;
-	delaycount = 0;
-
-	sdelay = delay * 50 / (dsp_poll << 2);
-
-	printk(KERN_DEBUG "DELAY (%s) %3d >%s\n", dsp->name, delay,
-		sdelay > 50 ? "..." : bar + 50 - sdelay);
-}
-#endif
 
 /*
  * audio data is received from card
@@ -1187,18 +1168,11 @@ dsp_cmx_receive(struct dsp *dsp, struct sk_buff *skb)
 		dsp->rx_init = 0;
 		if (dsp->features.unordered) {
 			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
-			if (dsp->cmx_delay)
-				dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
-					& CMX_BUFF_MASK;
-			else
-				dsp->rx_W = (dsp->rx_R + (dsp_poll >> 1))
-					& CMX_BUFF_MASK;
+			dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
+				& CMX_BUFF_MASK;
 		} else {
 			dsp->rx_R = 0;
-			if (dsp->cmx_delay)
-				dsp->rx_W = dsp->cmx_delay;
-			else
-				dsp->rx_W = dsp_poll >> 1;
+			dsp->rx_W = dsp->cmx_delay;
 		}
 	}
 	/* if frame contains time code, write directly */
@@ -1211,25 +1185,19 @@ dsp_cmx_receive(struct dsp *dsp, struct sk_buff *skb)
 	 * we set our new read pointer, and write silence to buffer
 	 */
 	if (((dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
-		if (dsp_debug & DEBUG_DSP_CLOCK)
+		if (dsp_debug & DEBUG_DSP_CMX)
 			printk(KERN_DEBUG
 			    "cmx_receive(dsp=%lx): UNDERRUN (or overrun the "
 			    "maximum delay), adjusting read pointer! "
 			    "(inst %s)\n", (u_long)dsp, dsp->name);
-		/* flush rx buffer and set delay to dsp_poll / 2 */
+		/* flush buffer */
 		if (dsp->features.unordered) {
 			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
-			if (dsp->cmx_delay)
-				dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
-					& CMX_BUFF_MASK;
-				dsp->rx_W = (dsp->rx_R + (dsp_poll >> 1))
-					& CMX_BUFF_MASK;
+			dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
+				& CMX_BUFF_MASK;
 		} else {
 			dsp->rx_R = 0;
-			if (dsp->cmx_delay)
-				dsp->rx_W = dsp->cmx_delay;
-			else
-				dsp->rx_W = dsp_poll >> 1;
+			dsp->rx_W = dsp->cmx_delay;
 		}
 		memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	}
@@ -1237,7 +1205,7 @@ dsp_cmx_receive(struct dsp *dsp, struct sk_buff *skb)
 	if (dsp->cmx_delay)
 		if (((dsp->rx_W - dsp->rx_R) & CMX_BUFF_MASK) >=
 		    (dsp->cmx_delay << 1)) {
-			if (dsp_debug & DEBUG_DSP_CLOCK)
+			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "cmx_receive(dsp=%lx): OVERRUN (because "
 				    "twice the delay is reached), adjusting "
@@ -1275,9 +1243,6 @@ dsp_cmx_receive(struct dsp *dsp, struct sk_buff *skb)
 
 	/* increase write-pointer */
 	dsp->rx_W = ((dsp->rx_W+len) & CMX_BUFF_MASK);
-#ifdef CMX_DELAY_DEBUG
-	showdelay(dsp, len, (dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK);
-#endif
 }
 
 
@@ -1395,12 +1360,8 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
 			}
-			if (r != rr) {
-				if (dsp_debug & DEBUG_DSP_CLOCK)
-					printk(KERN_DEBUG "%s: RX empty\n",
-						__func__);
+			if (r != rr)
 				memset(d, dsp_silence, (rr-r)&CMX_BUFF_MASK);
-			}
 		/* -> if echo is enabled */
 		} else {
 			/*
@@ -1579,11 +1540,11 @@ send_packet:
 	schedule_work(&dsp->workq);
 }
 
-static u32	jittercount; /* counter for jitter check */
+u32	samplecount;
 struct timer_list dsp_spl_tl;
 u32	dsp_spl_jiffies; /* calculate the next time to fire */
-static u16	dsp_count; /* last sample count */
-static int	dsp_count_valid ; /* if we have last sample count */
+u32	dsp_start_jiffies; /* jiffies at the time, the calculation begins */
+struct timeval dsp_start_tv; /* time at start of calculation */
 
 void
 dsp_cmx_send(void *arg)
@@ -1597,32 +1558,38 @@ dsp_cmx_send(void *arg)
 	int r, rr;
 	int jittercheck = 0, delay, i;
 	u_long flags;
-	u16 length, count;
+	struct timeval tv;
+	u32 elapsed;
+	s16 length;
 
 	/* lock */
 	spin_lock_irqsave(&dsp_lock, flags);
 
-	if (!dsp_count_valid) {
-		dsp_count = mISDN_clock_get();
+	if (!dsp_start_tv.tv_sec) {
+		do_gettimeofday(&dsp_start_tv);
 		length = dsp_poll;
-		dsp_count_valid = 1;
 	} else {
-		count = mISDN_clock_get();
-		length = count - dsp_count;
-		dsp_count = count;
+		do_gettimeofday(&tv);
+		elapsed = ((tv.tv_sec - dsp_start_tv.tv_sec) * 8000)
+		    + ((s32)(tv.tv_usec / 125) - (dsp_start_tv.tv_usec / 125));
+		dsp_start_tv.tv_sec = tv.tv_sec;
+		dsp_start_tv.tv_usec = tv.tv_usec;
+		length = elapsed;
 	}
 	if (length > MAX_POLL + 100)
 		length = MAX_POLL + 100;
-	/* printk(KERN_DEBUG "len=%d dsp_count=0x%x\n", length, dsp_count); */
+/* printk(KERN_DEBUG "len=%d dsp_count=0x%x.%04x dsp_poll_diff=0x%x.%04x\n",
+ length, dsp_count >> 16, dsp_count & 0xffff, dsp_poll_diff >> 16,
+ dsp_poll_diff & 0xffff);
+ */
 
 	/*
-	 * check if jitter needs to be checked (this is every second)
+	 * check if jitter needs to be checked
+	 * (this is about every second = 8192 samples)
 	 */
-	jittercount += length;
-	if (jittercount >= 8000) {
-		jittercount -= 8000;
+	samplecount += length;
+	if ((samplecount & 8191) < length)
 		jittercheck = 1;
-	}
 
 	/* loop all members that do not require conference mixing */
 	list_for_each_entry(dsp, &dsp_ilist, list) {
@@ -1735,19 +1702,17 @@ dsp_cmx_send(void *arg)
 			}
 			/*
 			 * remove rx_delay only if we have delay AND we
-			 * have not preset cmx_delay AND
-			 * the delay is greater dsp_poll
+			 * have not preset cmx_delay
 			 */
-			if (delay > dsp_poll && !dsp->cmx_delay) {
-				if (dsp_debug & DEBUG_DSP_CLOCK)
+			if (delay && !dsp->cmx_delay) {
+				if (dsp_debug & DEBUG_DSP_CMX)
 					printk(KERN_DEBUG
 					    "%s lowest rx_delay of %d bytes for"
 					    " dsp %s are now removed.\n",
 					    __func__, delay,
 					    dsp->name);
 				r = dsp->rx_R;
-				rr = (r + delay - (dsp_poll >> 1))
-					& CMX_BUFF_MASK;
+				rr = (r + delay) & CMX_BUFF_MASK;
 				/* delete rx-data */
 				while (r != rr) {
 					p[r] = dsp_silence;
@@ -1769,16 +1734,15 @@ dsp_cmx_send(void *arg)
 			 * remove delay only if we have delay AND we
 			 * have enabled tx_dejitter
 			 */
-			if (delay > dsp_poll && dsp->tx_dejitter) {
-				if (dsp_debug & DEBUG_DSP_CLOCK)
+			if (delay && dsp->tx_dejitter) {
+				if (dsp_debug & DEBUG_DSP_CMX)
 					printk(KERN_DEBUG
 					    "%s lowest tx_delay of %d bytes for"
 					    " dsp %s are now removed.\n",
 					    __func__, delay,
 					    dsp->name);
 				r = dsp->tx_R;
-				rr = (r + delay - (dsp_poll >> 1))
-					& CMX_BUFF_MASK;
+				rr = (r + delay) & CMX_BUFF_MASK;
 				/* delete tx-data */
 				while (r != rr) {
 					q[r] = dsp_silence;
@@ -1831,16 +1795,14 @@ dsp_cmx_transmit(struct dsp *dsp, struct sk_buff *skb)
 	ww = dsp->tx_R;
 	p = dsp->tx_buff;
 	d = skb->data;
-	space = (ww - w - 1) & CMX_BUFF_MASK;
+	space = ww-w;
+	if (space <= 0)
+		space += CMX_BUFF_SIZE;
 	/* write-pointer should not overrun nor reach read pointer */
-	if (space < skb->len) {
+	if (space-1 < skb->len)
 		/* write to the space we have left */
-		ww = (ww - 1) & CMX_BUFF_MASK; /* end one byte prior tx_R */
-		if (dsp_debug & DEBUG_DSP_CLOCK)
-			printk(KERN_DEBUG "%s: TX overflow space=%d skb->len="
-			    "%d, w=0x%04x, ww=0x%04x\n", __func__, space,
-			    skb->len, w, ww);
-	} else
+		ww = (ww - 1) & CMX_BUFF_MASK;
+	else
 		/* write until all byte are copied */
 		ww = (w + skb->len) & CMX_BUFF_MASK;
 	dsp->tx_W = ww;
@@ -1893,7 +1855,7 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 		/* in case of hardware (echo) */
 		if (dsp->pcm_slot_tx >= 0)
 			return;
-		if (dsp->echo) {
+		if (dsp->echo)
 			nskb = skb_clone(skb, GFP_ATOMIC);
 			if (nskb) {
 				hh = mISDN_HEAD_P(nskb);
@@ -1902,7 +1864,6 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 				skb_queue_tail(&dsp->sendq, nskb);
 				schedule_work(&dsp->workq);
 			}
-		}
 		return;
 	}
 	/* in case of hardware conference */

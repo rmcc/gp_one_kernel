@@ -42,7 +42,7 @@ static int writebuf_from_LL(int driverID, int channel, int ack,
 	unsigned skblen;
 
 	if (!(cs = gigaset_get_cs_by_id(driverID))) {
-		pr_err("%s: invalid driver ID (%d)\n", __func__, driverID);
+		err("%s: invalid driver ID (%d)", __func__, driverID);
 		return -ENODEV;
 	}
 	if (channel < 0 || channel >= cs->channels) {
@@ -119,7 +119,7 @@ static int command_from_LL(isdn_ctrl *cntrl)
 	gigaset_debugdrivers();
 
 	if (!cs) {
-		pr_err("%s: invalid driver ID (%d)\n", __func__, cntrl->driver);
+		err("%s: invalid driver ID (%d)", __func__, cntrl->driver);
 		return -ENODEV;
 	}
 

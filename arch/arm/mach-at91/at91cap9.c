@@ -15,11 +15,8 @@
 #include <linux/module.h>
 #include <linux/pm.h>
 
-#include <asm/irq.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
-
-#include <mach/cpu.h>
 #include <mach/at91cap9.h>
 #include <mach/at91_pmc.h>
 #include <mach/at91_rstc.h>
@@ -320,12 +317,6 @@ void __init at91cap9_initialize(unsigned long main_clock)
 
 	/* Register GPIO subsystem */
 	at91_gpio_init(at91cap9_gpio, 4);
-
-	/* Remember the silicon revision */
-	if (cpu_is_at91cap9_revB())
-		system_rev = 0xB;
-	else if (cpu_is_at91cap9_revC())
-		system_rev = 0xC;
 }
 
 /* --------------------------------------------------------------------

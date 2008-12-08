@@ -58,7 +58,7 @@ void __cpuinit mxcsr_feature_mask_init(void)
 	stts();
 }
 
-void __cpuinit init_thread_xstate(void)
+void __init init_thread_xstate(void)
 {
 	if (!HAVE_HWFP) {
 		xstate_size = sizeof(struct i387_soft_struct);
@@ -136,7 +136,7 @@ int init_fpu(struct task_struct *tsk)
 #ifdef CONFIG_X86_32
 	if (!HAVE_HWFP) {
 		memset(tsk->thread.xstate, 0, xstate_size);
-		finit_task(tsk);
+		finit();
 		set_stopped_child_used_math(tsk);
 		return 0;
 	}

@@ -102,6 +102,20 @@ void local_bh_disable(void)
 
 EXPORT_SYMBOL(local_bh_disable);
 
+void __local_bh_enable(void)
+{
+	WARN_ON_ONCE(in_irq());
+
+	/*
+	 * softirqs should never be enabled by __local_bh_enable(),
+	 * it always nests inside local_bh_enable() sections:
+	 */
+	WARN_ON_ONCE(softirq_count() == SOFTIRQ_OFFSET);
+
+	sub_preempt_count(SOFTIRQ_OFFSET);
+}
+EXPORT_SYMBOL_GPL(__local_bh_enable);
+
 /*
  * Special-case - softirqs can safely be enabled in
  * cond_resched_softirq(), or by __do_softirq(),
@@ -255,7 +269,6 @@ void irq_enter(void)
 {
 	int cpu = smp_processor_id();
 
-	rcu_irq_enter();
 	if (idle_cpu(cpu) && !in_interrupt()) {
 		__irq_enter();
 		tick_check_idle(cpu);
@@ -282,9 +295,9 @@ void irq_exit(void)
 
 #ifdef CONFIG_NO_HZ
 	/* Make sure that timer wheel updates are propagated */
-	rcu_irq_exit();
-	if (idle_cpu(smp_processor_id()) && !in_interrupt() && !need_resched())
+	if (!in_interrupt() && idle_cpu(smp_processor_id()) && !need_resched())
 		tick_nohz_stop_sched_tick(0);
+	rcu_irq_exit();
 #endif
 	preempt_enable_no_resched();
 }
@@ -626,7 +639,6 @@ static int ksoftirqd(void * __bind_cpu)
 			preempt_enable_no_resched();
 			cond_resched();
 			preempt_disable();
-			rcu_qsctr_inc((long)__bind_cpu);
 		}
 		preempt_enable();
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -734,7 +746,7 @@ static int __cpuinit cpu_callback(struct notifier_block *nfb,
 			break;
 		/* Unbind so it can run.  Fall thru. */
 		kthread_bind(per_cpu(ksoftirqd, hotcpu),
-			     cpumask_any(cpu_online_mask));
+			     any_online_cpu(cpu_online_map));
 	case CPU_DEAD:
 	case CPU_DEAD_FROZEN: {
 		struct sched_param param = { .sched_priority = MAX_RT_PRIO-1 };
@@ -785,23 +797,3 @@ int on_each_cpu(void (*func) (void *info), void *info, int wait)
 }
 EXPORT_SYMBOL(on_each_cpu);
 #endif
-
-/*
- * [ These __weak aliases are kept in a separate compilation unit, so that
- *   GCC does not inline them incorrectly. ]
- */
-
-int __init __weak early_irq_init(void)
-{
-	return 0;
-}
-
-int __init __weak arch_early_irq_init(void)
-{
-	return 0;
-}
-
-int __weak arch_init_chip_data(struct irq_desc *desc, int cpu)
-{
-	return 0;
-}

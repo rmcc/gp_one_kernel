@@ -10,8 +10,8 @@
  * with every copy.
  *
  * To compute the message digest of a chunk of bytes, declare an
- * MD5Context structure, pass it to cifs_MD5_init, call cifs_MD5_update as
- * needed on buffers full of bytes, and then call cifs_MD5_final, which
+ * MD5Context structure, pass it to MD5Init, call MD5Update as
+ * needed on buffers full of bytes, and then call MD5Final, which
  * will fill a supplied 16-byte array with the digest.
  */
 
@@ -45,7 +45,7 @@ byteReverse(unsigned char *buf, unsigned longs)
  * initialization constants.
  */
 void
-cifs_MD5_init(struct MD5Context *ctx)
+MD5Init(struct MD5Context *ctx)
 {
 	ctx->buf[0] = 0x67452301;
 	ctx->buf[1] = 0xefcdab89;
@@ -61,7 +61,7 @@ cifs_MD5_init(struct MD5Context *ctx)
  * of bytes.
  */
 void
-cifs_MD5_update(struct MD5Context *ctx, unsigned char const *buf, unsigned len)
+MD5Update(struct MD5Context *ctx, unsigned char const *buf, unsigned len)
 {
 	register __u32 t;
 
@@ -110,7 +110,7 @@ cifs_MD5_update(struct MD5Context *ctx, unsigned char const *buf, unsigned len)
  * 1 0* (64-bit count of bits processed, MSB-first)
  */
 void
-cifs_MD5_final(unsigned char digest[16], struct MD5Context *ctx)
+MD5Final(unsigned char digest[16], struct MD5Context *ctx)
 {
 	unsigned int count;
 	unsigned char *p;
@@ -165,7 +165,7 @@ cifs_MD5_final(unsigned char digest[16], struct MD5Context *ctx)
 
 /*
  * The core of the MD5 algorithm, this alters an existing MD5 hash to
- * reflect the addition of 16 longwords of new data.  cifs_MD5_update blocks
+ * reflect the addition of 16 longwords of new data.  MD5Update blocks
  * the data and converts bytes into longwords for this routine.
  */
 static void
@@ -267,9 +267,9 @@ hmac_md5_init_rfc2104(unsigned char *key, int key_len,
 		unsigned char tk[16];
 		struct MD5Context tctx;
 
-		cifs_MD5_init(&tctx);
-		cifs_MD5_update(&tctx, key, key_len);
-		cifs_MD5_final(tk, &tctx);
+		MD5Init(&tctx);
+		MD5Update(&tctx, key, key_len);
+		MD5Final(tk, &tctx);
 
 		key = tk;
 		key_len = 16;
@@ -287,8 +287,8 @@ hmac_md5_init_rfc2104(unsigned char *key, int key_len,
 		ctx->k_opad[i] ^= 0x5c;
 	}
 
-	cifs_MD5_init(&ctx->ctx);
-	cifs_MD5_update(&ctx->ctx, ctx->k_ipad, 64);
+	MD5Init(&ctx->ctx);
+	MD5Update(&ctx->ctx, ctx->k_ipad, 64);
 }
 #endif
 
@@ -317,8 +317,8 @@ hmac_md5_init_limK_to_64(const unsigned char *key, int key_len,
 		ctx->k_opad[i] ^= 0x5c;
 	}
 
-	cifs_MD5_init(&ctx->ctx);
-	cifs_MD5_update(&ctx->ctx, ctx->k_ipad, 64);
+	MD5Init(&ctx->ctx);
+	MD5Update(&ctx->ctx, ctx->k_ipad, 64);
 }
 
 /***********************************************************************
@@ -328,7 +328,7 @@ void
 hmac_md5_update(const unsigned char *text, int text_len,
 		struct HMACMD5Context *ctx)
 {
-	cifs_MD5_update(&ctx->ctx, text, text_len);	/* then text of datagram */
+	MD5Update(&ctx->ctx, text, text_len);	/* then text of datagram */
 }
 
 /***********************************************************************
@@ -339,12 +339,12 @@ hmac_md5_final(unsigned char *digest, struct HMACMD5Context *ctx)
 {
 	struct MD5Context ctx_o;
 
-	cifs_MD5_final(digest, &ctx->ctx);
+	MD5Final(digest, &ctx->ctx);
 
-	cifs_MD5_init(&ctx_o);
-	cifs_MD5_update(&ctx_o, ctx->k_opad, 64);
-	cifs_MD5_update(&ctx_o, digest, 16);
-	cifs_MD5_final(digest, &ctx_o);
+	MD5Init(&ctx_o);
+	MD5Update(&ctx_o, ctx->k_opad, 64);
+	MD5Update(&ctx_o, digest, 16);
+	MD5Final(digest, &ctx_o);
 }
 
 /***********************************************************

@@ -694,10 +694,6 @@ struct ace_private
 	u32			last_tx, last_std_rx, last_mini_rx;
 #endif
 	int			pci_using_dac;
-	u8			firmware_major;
-	u8			firmware_minor;
-	u8			firmware_fix;
-	u32			firmware_start;
 };
 
 

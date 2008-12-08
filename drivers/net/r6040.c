@@ -49,8 +49,8 @@
 #include <asm/processor.h>
 
 #define DRV_NAME	"r6040"
-#define DRV_VERSION	"0.21"
-#define DRV_RELDATE	"09Jan2009"
+#define DRV_VERSION	"0.18"
+#define DRV_RELDATE	"13Jul2008"
 
 /* PHY CHIP Address */
 #define PHY1_ADDR	1	/* For MAC1 */
@@ -200,7 +200,7 @@ struct r6040_private {
 
 static char version[] __devinitdata = KERN_INFO DRV_NAME
 	": RDC R6040 NAPI net driver,"
-	"version "DRV_VERSION " (" DRV_RELDATE ")";
+	"version "DRV_VERSION " (" DRV_RELDATE ")\n";
 
 static int phy_table[] = { PHY1_ADDR, PHY2_ADDR };
 
@@ -214,7 +214,7 @@ static int r6040_phy_read(void __iomem *ioaddr, int phy_addr, int reg)
 	/* Wait for the read bit to be cleared */
 	while (limit--) {
 		cmd = ioread16(ioaddr + MMDIO);
-		if (!(cmd & MDIO_READ))
+		if (cmd & MDIO_READ)
 			break;
 	}
 
@@ -233,7 +233,7 @@ static void r6040_phy_write(void __iomem *ioaddr, int phy_addr, int reg, u16 val
 	/* Wait for the write bit to be cleared */
 	while (limit--) {
 		cmd = ioread16(ioaddr + MMDIO);
-		if (!(cmd & MDIO_WRITE))
+		if (cmd & MDIO_WRITE)
 			break;
 	}
 }
@@ -330,7 +330,7 @@ static int r6040_alloc_rxbufs(struct net_device *dev)
 	do {
 		skb = netdev_alloc_skb(dev, MAX_BUF_SIZE);
 		if (!skb) {
-			printk(KERN_ERR DRV_NAME "%s: failed to alloc skb for rx\n", dev->name);
+			printk(KERN_ERR "%s: failed to alloc skb for rx\n", dev->name);
 			rc = -ENOMEM;
 			goto err_exit;
 		}
@@ -438,6 +438,7 @@ static void r6040_down(struct net_device *dev)
 {
 	struct r6040_private *lp = netdev_priv(dev);
 	void __iomem *ioaddr = lp->base;
+	struct pci_dev *pdev = lp->pdev;
 	int limit = 2048;
 	u16 *adrp;
 	u16 cmd;
@@ -456,21 +457,6 @@ static void r6040_down(struct net_device *dev)
 	iowrite16(adrp[0], ioaddr + MID_0L);
 	iowrite16(adrp[1], ioaddr + MID_0M);
 	iowrite16(adrp[2], ioaddr + MID_0H);
-}
-
-static int r6040_close(struct net_device *dev)
-{
-	struct r6040_private *lp = netdev_priv(dev);
-	struct pci_dev *pdev = lp->pdev;
-
-	/* deleted timer */
-	del_timer_sync(&lp->timer);
-
-	spin_lock_irq(&lp->lock);
-	napi_disable(&lp->napi);
-	netif_stop_queue(dev);
-	r6040_down(dev);
-
 	free_irq(dev->irq, dev);
 
 	/* Free RX buffer */
@@ -479,18 +465,23 @@ static int r6040_close(struct net_device *dev)
 	/* Free TX buffer */
 	r6040_free_txbufs(dev);
 
-	spin_unlock_irq(&lp->lock);
-
 	/* Free Descriptor memory */
-	if (lp->rx_ring) {
-		pci_free_consistent(pdev, RX_DESC_SIZE, lp->rx_ring, lp->rx_ring_dma);
-		lp->rx_ring = 0;
-	}
+	pci_free_consistent(pdev, RX_DESC_SIZE, lp->rx_ring, lp->rx_ring_dma);
+	pci_free_consistent(pdev, TX_DESC_SIZE, lp->tx_ring, lp->tx_ring_dma);
+}
 
-	if (lp->tx_ring) {
-		pci_free_consistent(pdev, TX_DESC_SIZE, lp->tx_ring, lp->tx_ring_dma);
-		lp->tx_ring = 0;
-	}
+static int r6040_close(struct net_device *dev)
+{
+	struct r6040_private *lp = netdev_priv(dev);
+
+	/* deleted timer */
+	del_timer_sync(&lp->timer);
+
+	spin_lock_irq(&lp->lock);
+	napi_disable(&lp->napi);
+	netif_stop_queue(dev);
+	r6040_down(dev);
+	spin_unlock_irq(&lp->lock);
 
 	return 0;
 }
@@ -607,6 +598,7 @@ static int r6040_rx(struct net_device *dev, int limit)
 		
 		/* Send to upper layer */
 		netif_receive_skb(skb_ptr);
+		dev->last_rx = jiffies;
 		dev->stats.rx_packets++;
 		dev->stats.rx_bytes += descptr->len - 4;
 
@@ -676,7 +668,7 @@ static int r6040_poll(struct napi_struct *napi, int budget)
 	work_done = r6040_rx(dev, budget);
 
 	if (work_done < budget) {
-		netif_rx_complete(napi);
+		netif_rx_complete(dev, napi);
 		/* Enable RX interrupt */
 		iowrite16(ioread16(ioaddr + MIER) | RX_INTS, ioaddr + MIER);
 	}
@@ -689,10 +681,8 @@ static irqreturn_t r6040_interrupt(int irq, void *dev_id)
 	struct net_device *dev = dev_id;
 	struct r6040_private *lp = netdev_priv(dev);
 	void __iomem *ioaddr = lp->base;
-	u16 misr, status;
+	u16 status;
 
-	/* Save MIER */
-	misr = ioread16(ioaddr + MIER);
 	/* Mask off RDC MAC interrupt */
 	iowrite16(MSK_INT, ioaddr + MIER);
 	/* Read MISR status and clear */
@@ -712,16 +702,13 @@ static irqreturn_t r6040_interrupt(int irq, void *dev_id)
 			dev->stats.rx_fifo_errors++;
 
 		/* Mask off RX interrupt */
-		misr &= ~RX_INTS;
-		netif_rx_schedule(&lp->napi);
+		iowrite16(ioread16(ioaddr + MIER) & ~RX_INTS, ioaddr + MIER);
+		netif_rx_schedule(dev, &lp->napi);
 	}
 
 	/* TX interrupt request */
 	if (status & TX_INTS)
 		r6040_tx(dev);
-
-	/* Restore RDC MAC interrupt */
-	iowrite16(misr, ioaddr + MIER);
 
 	return IRQ_HANDLED;
 }
@@ -1043,27 +1030,11 @@ static u32 netdev_get_link(struct net_device *dev)
 	return mii_link_ok(&rp->mii_if);
 }
 
-static const struct ethtool_ops netdev_ethtool_ops = {
+static struct ethtool_ops netdev_ethtool_ops = {
 	.get_drvinfo		= netdev_get_drvinfo,
 	.get_settings		= netdev_get_settings,
 	.set_settings		= netdev_set_settings,
 	.get_link		= netdev_get_link,
-};
-
-static const struct net_device_ops r6040_netdev_ops = {
-	.ndo_open		= r6040_open,
-	.ndo_stop		= r6040_close,
-	.ndo_start_xmit		= r6040_start_xmit,
-	.ndo_get_stats		= r6040_get_stats,
-	.ndo_set_multicast_list = r6040_multicast_list,
-	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_do_ioctl		= r6040_ioctl,
-	.ndo_tx_timeout		= r6040_tx_timeout,
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller	= r6040_poll_controller,
-#endif
 };
 
 static int __devinit r6040_init_one(struct pci_dev *pdev,
@@ -1087,20 +1058,20 @@ static int __devinit r6040_init_one(struct pci_dev *pdev,
 	/* this should always be supported */
 	err = pci_set_dma_mask(pdev, DMA_32BIT_MASK);
 	if (err) {
-		printk(KERN_ERR DRV_NAME ": 32-bit PCI DMA addresses"
+		printk(KERN_ERR DRV_NAME "32-bit PCI DMA addresses"
 				"not supported by the card\n");
 		goto err_out;
 	}
 	err = pci_set_consistent_dma_mask(pdev, DMA_32BIT_MASK);
 	if (err) {
-		printk(KERN_ERR DRV_NAME ": 32-bit PCI DMA addresses"
+		printk(KERN_ERR DRV_NAME "32-bit PCI DMA addresses"
 				"not supported by the card\n");
 		goto err_out;
 	}
 
 	/* IO Size check */
 	if (pci_resource_len(pdev, 0) < io_size) {
-		printk(KERN_ERR DRV_NAME ": Insufficient PCI resources, aborting\n");
+		printk(KERN_ERR DRV_NAME "Insufficient PCI resources, aborting\n");
 		err = -EIO;
 		goto err_out;
 	}
@@ -1110,7 +1081,7 @@ static int __devinit r6040_init_one(struct pci_dev *pdev,
 
 	dev = alloc_etherdev(sizeof(struct r6040_private));
 	if (!dev) {
-		printk(KERN_ERR DRV_NAME ": Failed to allocate etherdev\n");
+		printk(KERN_ERR DRV_NAME "Failed to allocate etherdev\n");
 		err = -ENOMEM;
 		goto err_out;
 	}
@@ -1126,15 +1097,11 @@ static int __devinit r6040_init_one(struct pci_dev *pdev,
 
 	ioaddr = pci_iomap(pdev, bar, io_size);
 	if (!ioaddr) {
-		printk(KERN_ERR DRV_NAME ": ioremap failed for device %s\n",
+		printk(KERN_ERR "ioremap failed for device %s\n",
 			pci_name(pdev));
 		err = -EIO;
 		goto err_out_free_res;
 	}
-	/* If PHY status change register is still set to zero it means the
-	 * bootloader didn't initialize it */
-	if (ioread16(ioaddr + PHY_CC) == 0)
-		iowrite16(0x9f07, ioaddr + PHY_CC);
 
 	/* Init system & device */
 	lp->base = ioaddr;
@@ -1151,13 +1118,6 @@ static int __devinit r6040_init_one(struct pci_dev *pdev,
 	adrp[1] = ioread16(ioaddr + MID_0M);
 	adrp[2] = ioread16(ioaddr + MID_0H);
 
-	/* Some bootloader/BIOSes do not initialize
-	 * MAC address, warn about that */
-	if (!(adrp[0] || adrp[1] || adrp[2])) {
-		printk(KERN_WARNING DRV_NAME ": MAC address not initialized, generating random\n");
-		random_ether_addr(dev->dev_addr);
-	}
-
 	/* Link new device into r6040_root_dev */
 	lp->pdev = pdev;
 	lp->dev = dev;
@@ -1168,10 +1128,18 @@ static int __devinit r6040_init_one(struct pci_dev *pdev,
 	lp->switch_sig = 0;
 
 	/* The RDC-specific entries in the device structure. */
-	dev->netdev_ops = &r6040_netdev_ops;
+	dev->open = &r6040_open;
+	dev->hard_start_xmit = &r6040_start_xmit;
+	dev->stop = &r6040_close;
+	dev->get_stats = r6040_get_stats;
+	dev->set_multicast_list = &r6040_multicast_list;
+	dev->do_ioctl = &r6040_ioctl;
 	dev->ethtool_ops = &netdev_ethtool_ops;
+	dev->tx_timeout = &r6040_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
-
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = r6040_poll_controller;
+#endif
 	netif_napi_add(dev, &lp->napi, r6040_poll, 64);
 	lp->mii_if.dev = dev;
 	lp->mii_if.mdio_read = r6040_mdio_read;

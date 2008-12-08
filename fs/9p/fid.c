@@ -45,7 +45,7 @@ int v9fs_fid_add(struct dentry *dentry, struct p9_fid *fid)
 	struct v9fs_dentry *dent;
 
 	P9_DPRINTK(P9_DEBUG_VFS, "fid %d dentry %s\n",
-					fid->fid, dentry->d_name.name);
+					fid->fid, dentry->d_iname);
 
 	dent = dentry->d_fsdata;
 	if (!dent) {
@@ -79,7 +79,7 @@ static struct p9_fid *v9fs_fid_find(struct dentry *dentry, u32 uid, int any)
 	struct p9_fid *fid, *ret;
 
 	P9_DPRINTK(P9_DEBUG_VFS, " dentry: %s (%p) uid %d any %d\n",
-		dentry->d_name.name, dentry, uid, any);
+		dentry->d_iname, dentry, uid, any);
 	dent = (struct v9fs_dentry *) dentry->d_fsdata;
 	ret = NULL;
 	if (dent) {
@@ -120,7 +120,7 @@ struct p9_fid *v9fs_fid_lookup(struct dentry *dentry)
 	switch (access) {
 	case V9FS_ACCESS_SINGLE:
 	case V9FS_ACCESS_USER:
-		uid = current_fsuid();
+		uid = current->fsuid;
 		any = 0;
 		break;
 

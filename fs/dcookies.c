@@ -93,15 +93,10 @@ static struct dcookie_struct *alloc_dcookie(struct path *path)
 {
 	struct dcookie_struct *dcs = kmem_cache_alloc(dcookie_cache,
 							GFP_KERNEL);
-	struct dentry *d;
 	if (!dcs)
 		return NULL;
 
-	d = path->dentry;
-	spin_lock(&d->d_lock);
-	d->d_flags |= DCACHE_COOKIE;
-	spin_unlock(&d->d_lock);
-
+	path->dentry->d_cookie = dcs;
 	dcs->path = *path;
 	path_get(path);
 	hash_dcookie(dcs);
@@ -124,14 +119,14 @@ int get_dcookie(struct path *path, unsigned long *cookie)
 		goto out;
 	}
 
-	if (path->dentry->d_flags & DCACHE_COOKIE) {
-		dcs = find_dcookie((unsigned long)path->dentry);
-	} else {
+	dcs = path->dentry->d_cookie;
+
+	if (!dcs)
 		dcs = alloc_dcookie(path);
-		if (!dcs) {
-			err = -ENOMEM;
-			goto out;
-		}
+
+	if (!dcs) {
+		err = -ENOMEM;
+		goto out;
 	}
 
 	*cookie = dcookie_value(dcs);
@@ -145,7 +140,7 @@ out:
 /* And here is where the userspace process can look up the cookie value
  * to retrieve the path.
  */
-SYSCALL_DEFINE(lookup_dcookie)(u64 cookie64, char __user * buf, size_t len)
+asmlinkage long sys_lookup_dcookie(u64 cookie64, char __user * buf, size_t len)
 {
 	unsigned long cookie = (unsigned long)cookie64;
 	int err = -EINVAL;
@@ -198,13 +193,7 @@ out:
 	mutex_unlock(&dcookie_mutex);
 	return err;
 }
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_lookup_dcookie(u64 cookie64, long buf, long len)
-{
-	return SYSC_lookup_dcookie(cookie64, (char __user *) buf, (size_t) len);
-}
-SYSCALL_ALIAS(sys_lookup_dcookie, SyS_lookup_dcookie);
-#endif
+
 
 static int dcookie_init(void)
 {
@@ -262,12 +251,7 @@ out_kmem:
 
 static void free_dcookie(struct dcookie_struct * dcs)
 {
-	struct dentry *d = dcs->path.dentry;
-
-	spin_lock(&d->d_lock);
-	d->d_flags &= ~DCACHE_COOKIE;
-	spin_unlock(&d->d_lock);
-
+	dcs->path.dentry->d_cookie = NULL;
 	path_put(&dcs->path);
 	kmem_cache_free(dcookie_cache, dcs);
 }

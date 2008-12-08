@@ -273,10 +273,6 @@ static int match_revfn(u8 af, const char *name, u8 revision, int *bestp)
 				have_rev = 1;
 		}
 	}
-
-	if (af != NFPROTO_UNSPEC && !have_rev)
-		return match_revfn(NFPROTO_UNSPEC, name, revision, bestp);
-
 	return have_rev;
 }
 
@@ -293,10 +289,6 @@ static int target_revfn(u8 af, const char *name, u8 revision, int *bestp)
 				have_rev = 1;
 		}
 	}
-
-	if (af != NFPROTO_UNSPEC && !have_rev)
-		return target_revfn(NFPROTO_UNSPEC, name, revision, bestp);
-
 	return have_rev;
 }
 
@@ -827,143 +819,59 @@ static const struct file_operations xt_table_ops = {
 	.release = seq_release_net,
 };
 
-/*
- * Traverse state for ip{,6}_{tables,matches} for helping crossing
- * the multi-AF mutexes.
- */
-struct nf_mttg_trav {
-	struct list_head *head, *curr;
-	uint8_t class, nfproto;
-};
-
-enum {
-	MTTG_TRAV_INIT,
-	MTTG_TRAV_NFP_UNSPEC,
-	MTTG_TRAV_NFP_SPEC,
-	MTTG_TRAV_DONE,
-};
-
-static void *xt_mttg_seq_next(struct seq_file *seq, void *v, loff_t *ppos,
-    bool is_target)
-{
-	static const uint8_t next_class[] = {
-		[MTTG_TRAV_NFP_UNSPEC] = MTTG_TRAV_NFP_SPEC,
-		[MTTG_TRAV_NFP_SPEC]   = MTTG_TRAV_DONE,
-	};
-	struct nf_mttg_trav *trav = seq->private;
-
-	switch (trav->class) {
-	case MTTG_TRAV_INIT:
-		trav->class = MTTG_TRAV_NFP_UNSPEC;
-		mutex_lock(&xt[NFPROTO_UNSPEC].mutex);
-		trav->head = trav->curr = is_target ?
-			&xt[NFPROTO_UNSPEC].target : &xt[NFPROTO_UNSPEC].match;
- 		break;
-	case MTTG_TRAV_NFP_UNSPEC:
-		trav->curr = trav->curr->next;
-		if (trav->curr != trav->head)
-			break;
-		mutex_unlock(&xt[NFPROTO_UNSPEC].mutex);
-		mutex_lock(&xt[trav->nfproto].mutex);
-		trav->head = trav->curr = is_target ?
-			&xt[trav->nfproto].target : &xt[trav->nfproto].match;
-		trav->class = next_class[trav->class];
-		break;
-	case MTTG_TRAV_NFP_SPEC:
-		trav->curr = trav->curr->next;
-		if (trav->curr != trav->head)
-			break;
-		/* fallthru, _stop will unlock */
-	default:
-		return NULL;
-	}
-
-	if (ppos != NULL)
-		++*ppos;
-	return trav;
-}
-
-static void *xt_mttg_seq_start(struct seq_file *seq, loff_t *pos,
-    bool is_target)
-{
-	struct nf_mttg_trav *trav = seq->private;
-	unsigned int j;
-
-	trav->class = MTTG_TRAV_INIT;
-	for (j = 0; j < *pos; ++j)
-		if (xt_mttg_seq_next(seq, NULL, NULL, is_target) == NULL)
-			return NULL;
-	return trav;
-}
-
-static void xt_mttg_seq_stop(struct seq_file *seq, void *v)
-{
-	struct nf_mttg_trav *trav = seq->private;
-
-	switch (trav->class) {
-	case MTTG_TRAV_NFP_UNSPEC:
-		mutex_unlock(&xt[NFPROTO_UNSPEC].mutex);
-		break;
-	case MTTG_TRAV_NFP_SPEC:
-		mutex_unlock(&xt[trav->nfproto].mutex);
-		break;
-	}
-}
-
 static void *xt_match_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	return xt_mttg_seq_start(seq, pos, false);
+	struct proc_dir_entry *pde = (struct proc_dir_entry *)seq->private;
+	u_int16_t af = (unsigned long)pde->data;
+
+	mutex_lock(&xt[af].mutex);
+	return seq_list_start(&xt[af].match, *pos);
 }
 
-static void *xt_match_seq_next(struct seq_file *seq, void *v, loff_t *ppos)
+static void *xt_match_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	return xt_mttg_seq_next(seq, v, ppos, false);
+	struct proc_dir_entry *pde = (struct proc_dir_entry *)seq->private;
+	u_int16_t af = (unsigned long)pde->data;
+
+	return seq_list_next(v, &xt[af].match, pos);
+}
+
+static void xt_match_seq_stop(struct seq_file *seq, void *v)
+{
+	struct proc_dir_entry *pde = seq->private;
+	u_int16_t af = (unsigned long)pde->data;
+
+	mutex_unlock(&xt[af].mutex);
 }
 
 static int xt_match_seq_show(struct seq_file *seq, void *v)
 {
-	const struct nf_mttg_trav *trav = seq->private;
-	const struct xt_match *match;
+	struct xt_match *match = list_entry(v, struct xt_match, list);
 
-	switch (trav->class) {
-	case MTTG_TRAV_NFP_UNSPEC:
-	case MTTG_TRAV_NFP_SPEC:
-		if (trav->curr == trav->head)
-			return 0;
-		match = list_entry(trav->curr, struct xt_match, list);
-		return (*match->name == '\0') ? 0 :
-		       seq_printf(seq, "%s\n", match->name);
-	}
-	return 0;
+	if (strlen(match->name))
+		return seq_printf(seq, "%s\n", match->name);
+	else
+		return 0;
 }
 
 static const struct seq_operations xt_match_seq_ops = {
 	.start	= xt_match_seq_start,
 	.next	= xt_match_seq_next,
-	.stop	= xt_mttg_seq_stop,
+	.stop	= xt_match_seq_stop,
 	.show	= xt_match_seq_show,
 };
 
 static int xt_match_open(struct inode *inode, struct file *file)
 {
-	struct seq_file *seq;
-	struct nf_mttg_trav *trav;
 	int ret;
 
-	trav = kmalloc(sizeof(*trav), GFP_KERNEL);
-	if (trav == NULL)
-		return -ENOMEM;
-
 	ret = seq_open(file, &xt_match_seq_ops);
-	if (ret < 0) {
-		kfree(trav);
-		return ret;
-	}
+	if (!ret) {
+		struct seq_file *seq = file->private_data;
 
-	seq = file->private_data;
-	seq->private = trav;
-	trav->nfproto = (unsigned long)PDE(inode)->data;
-	return 0;
+		seq->private = PDE(inode);
+	}
+	return ret;
 }
 
 static const struct file_operations xt_match_ops = {
@@ -971,63 +879,62 @@ static const struct file_operations xt_match_ops = {
 	.open	 = xt_match_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = seq_release_private,
+	.release = seq_release,
 };
 
 static void *xt_target_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	return xt_mttg_seq_start(seq, pos, true);
+	struct proc_dir_entry *pde = (struct proc_dir_entry *)seq->private;
+	u_int16_t af = (unsigned long)pde->data;
+
+	mutex_lock(&xt[af].mutex);
+	return seq_list_start(&xt[af].target, *pos);
 }
 
-static void *xt_target_seq_next(struct seq_file *seq, void *v, loff_t *ppos)
+static void *xt_target_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	return xt_mttg_seq_next(seq, v, ppos, true);
+	struct proc_dir_entry *pde = (struct proc_dir_entry *)seq->private;
+	u_int16_t af = (unsigned long)pde->data;
+
+	return seq_list_next(v, &xt[af].target, pos);
+}
+
+static void xt_target_seq_stop(struct seq_file *seq, void *v)
+{
+	struct proc_dir_entry *pde = seq->private;
+	u_int16_t af = (unsigned long)pde->data;
+
+	mutex_unlock(&xt[af].mutex);
 }
 
 static int xt_target_seq_show(struct seq_file *seq, void *v)
 {
-	const struct nf_mttg_trav *trav = seq->private;
-	const struct xt_target *target;
+	struct xt_target *target = list_entry(v, struct xt_target, list);
 
-	switch (trav->class) {
-	case MTTG_TRAV_NFP_UNSPEC:
-	case MTTG_TRAV_NFP_SPEC:
-		if (trav->curr == trav->head)
-			return 0;
-		target = list_entry(trav->curr, struct xt_target, list);
-		return (*target->name == '\0') ? 0 :
-		       seq_printf(seq, "%s\n", target->name);
-	}
-	return 0;
+	if (strlen(target->name))
+		return seq_printf(seq, "%s\n", target->name);
+	else
+		return 0;
 }
 
 static const struct seq_operations xt_target_seq_ops = {
 	.start	= xt_target_seq_start,
 	.next	= xt_target_seq_next,
-	.stop	= xt_mttg_seq_stop,
+	.stop	= xt_target_seq_stop,
 	.show	= xt_target_seq_show,
 };
 
 static int xt_target_open(struct inode *inode, struct file *file)
 {
-	struct seq_file *seq;
-	struct nf_mttg_trav *trav;
 	int ret;
 
-	trav = kmalloc(sizeof(*trav), GFP_KERNEL);
-	if (trav == NULL)
-		return -ENOMEM;
-
 	ret = seq_open(file, &xt_target_seq_ops);
-	if (ret < 0) {
-		kfree(trav);
-		return ret;
-	}
+	if (!ret) {
+		struct seq_file *seq = file->private_data;
 
-	seq = file->private_data;
-	seq->private = trav;
-	trav->nfproto = (unsigned long)PDE(inode)->data;
-	return 0;
+		seq->private = PDE(inode);
+	}
+	return ret;
 }
 
 static const struct file_operations xt_target_ops = {
@@ -1035,7 +942,7 @@ static const struct file_operations xt_target_ops = {
 	.open	 = xt_target_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = seq_release_private,
+	.release = seq_release,
 };
 
 #define FORMAT_TABLES	"_tables_names"

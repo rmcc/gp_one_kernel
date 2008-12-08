@@ -119,7 +119,8 @@ struct inode *affs_iget(struct super_block *sb, unsigned long ino)
 		goto bad_inode;
 #else
 		inode->i_mode |= S_IFDIR;
-		/* ... and leave ->i_op and ->i_fop pointing to empty */
+		inode->i_op = NULL;
+		inode->i_fop = NULL;
 		break;
 #endif
 	case ST_LINKFILE:
@@ -292,8 +293,8 @@ affs_new_inode(struct inode *dir)
 	mark_buffer_dirty_inode(bh, inode);
 	affs_brelse(bh);
 
-	inode->i_uid     = current_fsuid();
-	inode->i_gid     = current_fsgid();
+	inode->i_uid     = current->fsuid;
+	inode->i_gid     = current->fsgid;
 	inode->i_ino     = block;
 	inode->i_nlink   = 1;
 	inode->i_mtime   = inode->i_atime = inode->i_ctime = CURRENT_TIME_SEC;

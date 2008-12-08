@@ -46,6 +46,11 @@
 
 #include "bnep.h"
 
+#ifndef CONFIG_BT_BNEP_DEBUG
+#undef  BT_DBG
+#define BT_DBG( A... )
+#endif
+
 static int bnep_sock_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;

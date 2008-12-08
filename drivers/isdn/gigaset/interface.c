@@ -107,7 +107,7 @@ static int if_config(struct cardstate *cs, int *arg)
 		return -EBUSY;
 
 	if (!cs->connected) {
-		pr_err("%s: not connected\n", __func__);
+		err("not connected!");
 		return -ENODEV;
 	}
 
@@ -143,6 +143,9 @@ static const struct tty_operations if_ops = {
 	.set_termios =		if_set_termios,
 	.throttle =		if_throttle,
 	.unthrottle =		if_unthrottle,
+#if 0
+	.break_ctl =		serial_break,
+#endif
 	.tiocmget =		if_tiocmget,
 	.tiocmset =		if_tiocmset,
 };
@@ -185,7 +188,7 @@ static void if_close(struct tty_struct *tty, struct file *filp)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return;
 	}
 
@@ -219,7 +222,7 @@ static int if_ioctl(struct tty_struct *tty, struct file *file,
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return -ENODEV;
 	}
 
@@ -294,7 +297,7 @@ static int if_tiocmget(struct tty_struct *tty, struct file *file)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return -ENODEV;
 	}
 
@@ -320,7 +323,7 @@ static int if_tiocmset(struct tty_struct *tty, struct file *file,
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return -ENODEV;
 	}
 
@@ -351,7 +354,7 @@ static int if_write(struct tty_struct *tty, const unsigned char *buf, int count)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return -ENODEV;
 	}
 
@@ -385,7 +388,7 @@ static int if_write_room(struct tty_struct *tty)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return -ENODEV;
 	}
 
@@ -417,7 +420,7 @@ static int if_chars_in_buffer(struct tty_struct *tty)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return -ENODEV;
 	}
 
@@ -448,7 +451,7 @@ static void if_throttle(struct tty_struct *tty)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return;
 	}
 
@@ -471,7 +474,7 @@ static void if_unthrottle(struct tty_struct *tty)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return;
 	}
 
@@ -498,7 +501,7 @@ static void if_set_termios(struct tty_struct *tty, struct ktermios *old)
 
 	cs = (struct cardstate *) tty->driver_data;
 	if (!cs) {
-		pr_err("%s: no cardstate\n", __func__);
+		err("cs==NULL in %s", __func__);
 		return;
 	}
 
@@ -561,6 +564,29 @@ static void if_set_termios(struct tty_struct *tty, struct ktermios *old)
 	 */
 
 	cs->ops->set_line_ctrl(cs, cflag);
+
+#if 0
+	//FIXME this hangs M101 [ts 2005-03-09]
+	//FIXME do we need this?
+	/*
+	 * Set flow control: well, I do not really now how to handle DTR/RTS.
+	 * Just do what we have seen with SniffUSB on Win98.
+	 */
+	/* Drop DTR/RTS if no flow control otherwise assert */
+	gig_dbg(DEBUG_IF, "%u: control_state %x",
+		cs->minor_index, control_state);
+	new_state = control_state;
+	if ((iflag & IXOFF) || (iflag & IXON) || (cflag & CRTSCTS))
+		new_state |= TIOCM_DTR | TIOCM_RTS;
+	else
+		new_state &= ~(TIOCM_DTR | TIOCM_RTS);
+	if (new_state != control_state) {
+		gig_dbg(DEBUG_IF, "%u: new_state %x",
+			cs->minor_index, new_state);
+		gigaset_set_modem_ctrl(cs, control_state, new_state);
+		control_state = new_state;
+	}
+#endif
 
 	/* save off the modified port settings */
 	cs->control_state = control_state;
@@ -675,7 +701,7 @@ void gigaset_if_initdriver(struct gigaset_driver *drv, const char *procname,
 
 	ret = tty_register_driver(tty);
 	if (ret < 0) {
-		pr_err("error %d registering tty driver\n", ret);
+		warn("failed to register tty driver (error %d)", ret);
 		goto error;
 	}
 	gig_dbg(DEBUG_IF, "tty driver initialized");
@@ -683,7 +709,7 @@ void gigaset_if_initdriver(struct gigaset_driver *drv, const char *procname,
 	return;
 
 enomem:
-	pr_err("out of memory\n");
+	warn("could not allocate tty structures");
 error:
 	if (drv->tty)
 		put_tty_driver(drv->tty);

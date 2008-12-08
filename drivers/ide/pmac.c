@@ -66,6 +66,7 @@ typedef struct pmac_ide_hwif {
 	struct macio_dev		*mdev;
 	u32				timings[4];
 	volatile u32 __iomem *		*kauai_fcr;
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 	/* Those fields are duplicating what is in hwif. We currently
 	 * can't use the hwif ones because of some assumptions that are
 	 * beeing done by the generic code about the kind of dma controller
@@ -73,6 +74,8 @@ typedef struct pmac_ide_hwif {
 	 */
 	volatile struct dbdma_regs __iomem *	dma_regs;
 	struct dbdma_cmd*		dma_table_cpu;
+#endif
+	
 } pmac_ide_hwif_t;
 
 enum {
@@ -218,6 +221,8 @@ static const char* model_name[] = {
 #define KAUAI_FCR_UATA_MAGIC		0x00000004
 #define KAUAI_FCR_UATA_RESET_N		0x00000002
 #define KAUAI_FCR_UATA_ENABLE		0x00000001
+
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 
 /* Rounded Multiword DMA timings
  * 
@@ -408,6 +413,8 @@ static int pmac_ide_build_dmatable(ide_drive_t *drive, struct request *rq);
 static void pmac_ide_selectproc(ide_drive_t *drive);
 static void pmac_ide_kauai_selectproc(ide_drive_t *drive);
 
+#endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
+
 #define PMAC_IDE_REG(x) \
 	((void __iomem *)((drive)->hwif->io_ports.data_addr + (x)))
 
@@ -576,6 +583,8 @@ pmac_ide_set_pio_mode(ide_drive_t *drive, const u8 pio)
 	*timings = t;
 	pmac_ide_do_update_timings(drive);
 }
+
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 
 /*
  * Calculate KeyLargo ATA/66 UDMA timings
@@ -777,6 +786,7 @@ set_timings_mdma(ide_drive_t *drive, int intf_type, u32 *timings, u32 *timings2,
 		drive->name, speed & 0xf,  *timings);
 #endif	
 }
+#endif /* #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC */
 
 static void pmac_ide_set_dma_mode(ide_drive_t *drive, const u8 speed)
 {
@@ -794,6 +804,7 @@ static void pmac_ide_set_dma_mode(ide_drive_t *drive, const u8 speed)
 	tl[0] = *timings;
 	tl[1] = *timings2;
 
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 	if (speed >= XFER_UDMA_0) {
 		if (pmif->kind == controller_kl_ata4)
 			ret = set_timings_udma_ata4(&tl[0], speed);
@@ -806,7 +817,7 @@ static void pmac_ide_set_dma_mode(ide_drive_t *drive, const u8 speed)
 			ret = -1;
 	} else
 		set_timings_mdma(drive, pmif->kind, &tl[0], &tl[1], speed);
-
+#endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 	if (ret)
 		return;
 
@@ -955,6 +966,7 @@ static const struct ide_tp_ops pmac_tp_ops = {
 	.exec_command		= pmac_exec_command,
 	.read_status		= ide_read_status,
 	.read_altstatus		= ide_read_altstatus,
+	.read_sff_dma_status	= ide_read_sff_dma_status,
 
 	.set_irq		= pmac_set_irq,
 
@@ -996,7 +1008,9 @@ static const struct ide_port_info pmac_port_info = {
 	.chipset		= ide_pmac,
 	.tp_ops			= &pmac_tp_ops,
 	.port_ops		= &pmac_ide_port_ops,
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 	.dma_ops		= &pmac_dma_ops,
+#endif
 	.host_flags		= IDE_HFLAG_SET_PIO_MODE_KEEP_DMA |
 				  IDE_HFLAG_POST_SET_MODE |
 				  IDE_HFLAG_MMIO |
@@ -1168,7 +1182,7 @@ pmac_ide_macio_attach(struct macio_dev *mdev, const struct of_device_id *match)
 	pmif->regbase = regbase;
 	pmif->irq = irq;
 	pmif->kauai_fcr = NULL;
-
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 	if (macio_resource_count(mdev) >= 2) {
 		if (macio_request_resource(mdev, 1, "ide-pmac (dma)"))
 			printk(KERN_WARNING "ide-pmac: can't request DMA "
@@ -1178,7 +1192,7 @@ pmac_ide_macio_attach(struct macio_dev *mdev, const struct of_device_id *match)
 			pmif->dma_regs = ioremap(macio_resource_start(mdev, 1), 0x1000);
 	} else
 		pmif->dma_regs = NULL;
-
+#endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 	dev_set_drvdata(&mdev->ofdev.dev, pmif);
 
 	memset(&hw, 0, sizeof(hw));
@@ -1286,7 +1300,9 @@ pmac_ide_pci_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	base = ioremap(rbase, rlen);
 	pmif->regbase = (unsigned long) base + 0x2000;
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 	pmif->dma_regs = base + 0x1000;
+#endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 	pmif->kauai_fcr = base;
 	pmif->irq = pdev->irq;
 
@@ -1418,6 +1434,8 @@ out:
 	return error;
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
+
 /*
  * pmac_ide_build_dmatable builds the DBDMA command list
  * for a transfer and sets the DBDMA channel to point to it.
@@ -1512,10 +1530,10 @@ use_pio_instead:
 static int
 pmac_ide_dma_setup(ide_drive_t *drive)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	pmac_ide_hwif_t *pmif =
 		(pmac_ide_hwif_t *)dev_get_drvdata(hwif->gendev.parent);
-	struct request *rq = hwif->rq;
+	struct request *rq = HWGROUP(drive)->rq;
 	u8 unit = drive->dn & 1, ata4 = (pmif->kind == controller_kl_ata4);
 
 	if (!pmac_ide_build_dmatable(drive, rq)) {
@@ -1636,7 +1654,7 @@ pmac_ide_dma_test_irq (ide_drive_t *drive)
 			break;
 		if (++timeout > 100) {
 			printk(KERN_WARNING "ide%d, ide_dma_test_irq \
-			timeout flushing channel\n", hwif->index);
+			timeout flushing channel\n", HWIF(drive)->index);
 			break;
 		}
 	}	
@@ -1705,6 +1723,13 @@ static int __devinit pmac_ide_init_dma(ide_hwif_t *hwif,
 
 	return 0;
 }
+#else
+static int __devinit pmac_ide_init_dma(ide_hwif_t *hwif,
+				       const struct ide_port_info *d)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 
 module_init(pmac_ide_probe);
 

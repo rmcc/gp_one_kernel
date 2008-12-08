@@ -15,7 +15,11 @@
 /*
  * There are not real ISA nor PCI buses, so we fake it.
  */
-#define __io(a)		__typesafe_io(a)
-#define __mem_pci(a)	(a)
+static inline void __iomem *__io(unsigned long addr)
+{
+	return (void __iomem *)addr;
+}
+#define __io(a)	__io(a)
+#define __mem_pci(a)		(a)
 
 #endif

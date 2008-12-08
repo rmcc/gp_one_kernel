@@ -63,9 +63,7 @@ EXPORT_SYMBOL(mdiobus_alloc);
 static void mdiobus_release(struct device *d)
 {
 	struct mii_bus *bus = to_mii_bus(d);
-	BUG_ON(bus->state != MDIOBUS_RELEASED &&
-	       /* for compatibility with error handling in drivers */
-	       bus->state != MDIOBUS_ALLOCATED);
+	BUG_ON(bus->state != MDIOBUS_RELEASED);
 	kfree(bus);
 }
 
@@ -85,7 +83,8 @@ static struct class mdio_bus_class = {
  */
 int mdiobus_register(struct mii_bus *bus)
 {
-	int i, err;
+	int i;
+	int err = 0;
 
 	if (NULL == bus || NULL == bus->name ||
 			NULL == bus->read ||
@@ -98,13 +97,15 @@ int mdiobus_register(struct mii_bus *bus)
 	bus->dev.parent = bus->parent;
 	bus->dev.class = &mdio_bus_class;
 	bus->dev.groups = NULL;
-	dev_set_name(&bus->dev, bus->id);
+	memcpy(bus->dev.bus_id, bus->id, MII_BUS_ID_SIZE);
 
 	err = device_register(&bus->dev);
 	if (err) {
 		printk(KERN_ERR "mii_bus %s failed to register\n", bus->id);
 		return -EINVAL;
 	}
+
+	bus->state = MDIOBUS_REGISTERED;
 
 	mutex_init(&bus->mdio_lock);
 
@@ -117,23 +118,13 @@ int mdiobus_register(struct mii_bus *bus)
 			struct phy_device *phydev;
 
 			phydev = mdiobus_scan(bus, i);
-			if (IS_ERR(phydev)) {
+			if (IS_ERR(phydev))
 				err = PTR_ERR(phydev);
-				goto error;
-			}
 		}
 	}
 
-	bus->state = MDIOBUS_REGISTERED;
 	pr_info("%s: probed\n", bus->name);
-	return 0;
 
-error:
-	while (--i >= 0) {
-		if (bus->phy_map[i])
-			device_unregister(&bus->phy_map[i]->dev);
-	}
-	device_del(&bus->dev);
 	return err;
 }
 EXPORT_SYMBOL(mdiobus_register);
@@ -200,7 +191,7 @@ struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr)
 
 	phydev->dev.parent = bus->parent;
 	phydev->dev.bus = &mdio_bus_type;
-	dev_set_name(&phydev->dev, PHY_ID_FMT, bus->id, addr);
+	snprintf(phydev->dev.bus_id, BUS_ID_SIZE, PHY_ID_FMT, bus->id, addr);
 
 	phydev->bus = bus;
 
@@ -293,11 +284,9 @@ static int mdio_bus_suspend(struct device * dev, pm_message_t state)
 {
 	int ret = 0;
 	struct device_driver *drv = dev->driver;
-	struct phy_driver *phydrv = to_phy_driver(drv);
-	struct phy_device *phydev = to_phy_device(dev);
 
-	if (drv && phydrv->suspend && !device_may_wakeup(phydev->dev.parent))
-		ret = phydrv->suspend(phydev);
+	if (drv && drv->suspend)
+		ret = drv->suspend(dev, state);
 
 	return ret;
 }
@@ -306,11 +295,9 @@ static int mdio_bus_resume(struct device * dev)
 {
 	int ret = 0;
 	struct device_driver *drv = dev->driver;
-	struct phy_driver *phydrv = to_phy_driver(drv);
-	struct phy_device *phydev = to_phy_device(dev);
 
-	if (drv && phydrv->resume && !device_may_wakeup(phydev->dev.parent))
-		ret = phydrv->resume(phydev);
+	if (drv && drv->resume)
+		ret = drv->resume(dev);
 
 	return ret;
 }

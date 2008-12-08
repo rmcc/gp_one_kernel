@@ -22,7 +22,7 @@ void slirp_init(struct net_device *dev, void *data)
 	struct slirp_init *init = data;
 	int i;
 
-	private = netdev_priv(dev);
+	private = dev->priv;
 	spri = (struct slirp_data *) private->user;
 
 	spri->argw = init->argw;

@@ -21,9 +21,6 @@
 #undef DEBUGDATA
 #undef DEBUGCCW
 
-#define KMSG_COMPONENT "ctcm"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -284,16 +281,14 @@ static long ctcm_check_irb_error(struct ccw_device *cdev, struct irb *irb)
 
 	switch (PTR_ERR(irb)) {
 	case -EIO:
-		dev_err(&cdev->dev,
-			"An I/O-error occurred on the CTCM device\n");
+		ctcm_pr_warn("i/o-error on device %s\n", dev_name(&cdev->dev));
 		break;
 	case -ETIMEDOUT:
-		dev_err(&cdev->dev,
-			"An adapter hardware operation timed out\n");
+		ctcm_pr_warn("timeout on device %s\n", dev_name(&cdev->dev));
 		break;
 	default:
-		dev_err(&cdev->dev,
-			"An error occurred on the adapter hardware\n");
+		ctcm_pr_warn("unknown error %ld on device %s\n",
+				PTR_ERR(irb), dev_name(&cdev->dev));
 	}
 	return PTR_ERR(irb);
 }
@@ -314,17 +309,15 @@ static inline void ccw_unit_check(struct channel *ch, __u8 sense)
 	if (sense & SNS0_INTERVENTION_REQ) {
 		if (sense & 0x01) {
 			if (ch->sense_rc != 0x01) {
-				pr_notice(
-					"%s: The communication peer has "
-					"disconnected\n", ch->id);
+				ctcm_pr_debug("%s: Interface disc. or Sel. "
+					      "reset (remote)\n", ch->id);
 				ch->sense_rc = 0x01;
 			}
 			fsm_event(ch->fsm, CTC_EVENT_UC_RCRESET, ch);
 		} else {
 			if (ch->sense_rc != SNS0_INTERVENTION_REQ) {
-				pr_notice(
-					"%s: The remote operating system is "
-					"not available\n", ch->id);
+				ctcm_pr_debug("%s: System reset (remote)\n",
+					      ch->id);
 				ch->sense_rc = SNS0_INTERVENTION_REQ;
 			}
 			fsm_event(ch->fsm, CTC_EVENT_UC_RSRESET, ch);
@@ -1201,11 +1194,8 @@ static void ctcm_irq_handler(struct ccw_device *cdev,
 
 	/* Check for unsolicited interrupts. */
 	if (cgdev == NULL) {
-		CTCM_DBF_TEXT_(TRACE, CTC_DBF_ERROR,
-			"%s(%s) unsolicited irq: c-%02x d-%02x\n",
-			CTCM_FUNTAIL, dev_name(&cdev->dev), cstat, dstat);
-		dev_warn(&cdev->dev,
-			"The adapter received a non-specific IRQ\n");
+		ctcm_pr_warn("ctcm: Got unsolicited irq: c-%02x d-%02x\n",
+			     cstat, dstat);
 		return;
 	}
 
@@ -1217,34 +1207,31 @@ static void ctcm_irq_handler(struct ccw_device *cdev,
 	else if (priv->channel[WRITE]->cdev == cdev)
 		ch = priv->channel[WRITE];
 	else {
-		dev_err(&cdev->dev,
-			"%s: Internal error: Can't determine channel for "
-			"interrupt device %s\n",
-			__func__, dev_name(&cdev->dev));
-			/* Explain: inconsistent internal structures */
+		ctcm_pr_err("ctcm: Can't determine channel for interrupt, "
+			   "device %s\n", dev_name(&cdev->dev));
 		return;
 	}
 
 	dev = ch->netdev;
 	if (dev == NULL) {
-		dev_err(&cdev->dev,
-			"%s Internal error: net_device is NULL, ch = 0x%p\n",
-			__func__, ch);
-			/* Explain: inconsistent internal structures */
+		ctcm_pr_crit("ctcm: %s dev=NULL bus_id=%s, ch=0x%p\n",
+				__func__, dev_name(&cdev->dev), ch);
 		return;
 	}
+
+	CTCM_DBF_TEXT_(TRACE, CTC_DBF_DEBUG,
+		"%s(%s): int. for %s: cstat=%02x dstat=%02x",
+			CTCM_FUNTAIL, dev->name, ch->id, cstat, dstat);
 
 	/* Copy interruption response block. */
 	memcpy(ch->irb, irb, sizeof(struct irb));
 
-	/* Issue error message and return on subchannel error code */
 	if (irb->scsw.cmd.cstat) {
+	/* Check for good subchannel return code, otherwise error message */
 		fsm_event(ch->fsm, CTC_EVENT_SC_UNKNOWN, ch);
-		CTCM_DBF_TEXT_(TRACE, CTC_DBF_WARN,
-			"%s(%s): sub-ch check %s: cs=%02x ds=%02x",
-				CTCM_FUNTAIL, dev->name, ch->id, cstat, dstat);
-		dev_warn(&cdev->dev,
-				"A check occurred on the subchannel\n");
+		ctcm_pr_warn("%s: subchannel check for dev: %s - %02x %02x\n",
+			    dev->name, ch->id, irb->scsw.cmd.cstat,
+			    irb->scsw.cmd.dstat);
 		return;
 	}
 
@@ -1252,7 +1239,7 @@ static void ctcm_irq_handler(struct ccw_device *cdev,
 	if (irb->scsw.cmd.dstat & DEV_STAT_UNIT_CHECK) {
 		if ((irb->ecw[0] & ch->sense_rc) == 0)
 			/* print it only once */
-			CTCM_DBF_TEXT_(TRACE, CTC_DBF_WARN,
+			CTCM_DBF_TEXT_(TRACE, CTC_DBF_INFO,
 				"%s(%s): sense=%02x, ds=%02x",
 				CTCM_FUNTAIL, ch->id, irb->ecw[0], dstat);
 		ccw_unit_check(ch, irb->ecw[0]);
@@ -1587,11 +1574,6 @@ static int ctcm_new_device(struct ccwgroup_device *cgdev)
 
 	strlcpy(priv->fsm->name, dev->name, sizeof(priv->fsm->name));
 
-	dev_info(&dev->dev,
-		"setup OK : r/w = %s/%s, protocol : %d\n",
-			priv->channel[READ]->id,
-			priv->channel[WRITE]->id, priv->protocol);
-
 	CTCM_DBF_TEXT_(SETUP, CTC_DBF_INFO,
 		"setup(%s) OK : r/w = %s/%s, protocol : %d", dev->name,
 			priv->channel[READ]->id,
@@ -1705,7 +1687,7 @@ static void __exit ctcm_exit(void)
 {
 	unregister_cu3088_discipline(&ctcm_group_driver);
 	ctcm_unregister_dbf_views();
-	pr_info("CTCM driver unloaded\n");
+	ctcm_pr_info("CTCM driver unloaded\n");
 }
 
 /*
@@ -1713,7 +1695,7 @@ static void __exit ctcm_exit(void)
  */
 static void print_banner(void)
 {
-	pr_info("CTCM driver initialized\n");
+	printk(KERN_INFO "CTCM driver initialized\n");
 }
 
 /**
@@ -1735,8 +1717,8 @@ static int __init ctcm_init(void)
 	ret = register_cu3088_discipline(&ctcm_group_driver);
 	if (ret) {
 		ctcm_unregister_dbf_views();
-		pr_err("%s / register_cu3088_discipline failed, ret = %d\n",
-			__func__, ret);
+		ctcm_pr_crit("ctcm_init failed with register_cu3088_discipline "
+				"(rc = %d)\n", ret);
 		return ret;
 	}
 	print_banner();

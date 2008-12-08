@@ -273,10 +273,12 @@ spufs_mem_mmap_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 		return VM_FAULT_NOPAGE;
 
 	if (ctx->state == SPU_STATE_SAVED) {
-		vma->vm_page_prot = pgprot_cached(vma->vm_page_prot);
+		vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+							& ~_PAGE_NO_CACHE);
 		pfn = vmalloc_to_pfn(ctx->csa.lscsa->ls + offset);
 	} else {
-		vma->vm_page_prot = pgprot_noncached_wc(vma->vm_page_prot);
+		vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+					     | _PAGE_NO_CACHE);
 		pfn = (ctx->spu->local_store_phys + offset) >> PAGE_SHIFT;
 	}
 	vm_insert_pfn(vma, address, pfn);
@@ -336,7 +338,8 @@ static int spufs_mem_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached_wc(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE);
 
 	vma->vm_ops = &spufs_mem_mmap_vmops;
 	return 0;
@@ -385,9 +388,6 @@ static int spufs_ps_fault(struct vm_area_struct *vma,
 	spu_context_nospu_trace(spufs_ps_fault__enter, ctx);
 
 	if (offset >= ps_size)
-		return VM_FAULT_SIGBUS;
-
-	if (fatal_signal_pending(current))
 		return VM_FAULT_SIGBUS;
 
 	/*
@@ -449,7 +449,8 @@ static int spufs_cntl_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE | _PAGE_GUARDED);
 
 	vma->vm_ops = &spufs_cntl_mmap_vmops;
 	return 0;
@@ -1151,7 +1152,8 @@ static int spufs_signal1_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE | _PAGE_GUARDED);
 
 	vma->vm_ops = &spufs_signal1_mmap_vmops;
 	return 0;
@@ -1287,7 +1289,8 @@ static int spufs_signal2_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE | _PAGE_GUARDED);
 
 	vma->vm_ops = &spufs_signal2_mmap_vmops;
 	return 0;
@@ -1408,7 +1411,8 @@ static int spufs_mss_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE | _PAGE_GUARDED);
 
 	vma->vm_ops = &spufs_mss_mmap_vmops;
 	return 0;
@@ -1469,7 +1473,8 @@ static int spufs_psmap_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE | _PAGE_GUARDED);
 
 	vma->vm_ops = &spufs_psmap_mmap_vmops;
 	return 0;
@@ -1528,7 +1533,8 @@ static int spufs_mfc_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = __pgprot(pgprot_val(vma->vm_page_prot)
+				     | _PAGE_NO_CACHE | _PAGE_GUARDED);
 
 	vma->vm_ops = &spufs_mfc_mmap_vmops;
 	return 0;
@@ -1654,7 +1660,7 @@ out:
 
 static int spufs_check_valid_dma(struct mfc_dma_command *cmd)
 {
-	pr_debug("queueing DMA %x %llx %x %x %x\n", cmd->lsa,
+	pr_debug("queueing DMA %x %lx %x %x %x\n", cmd->lsa,
 		 cmd->ea, cmd->size, cmd->tag, cmd->cmd);
 
 	switch (cmd->cmd) {
@@ -1671,7 +1677,7 @@ static int spufs_check_valid_dma(struct mfc_dma_command *cmd)
 	}
 
 	if ((cmd->lsa & 0xf) != (cmd->ea &0xf)) {
-		pr_debug("invalid DMA alignment, ea %llx lsa %x\n",
+		pr_debug("invalid DMA alignment, ea %lx lsa %x\n",
 				cmd->ea, cmd->lsa);
 		return -EIO;
 	}
@@ -2633,7 +2639,7 @@ static int spufs_show_ctx(struct seq_file *s, void *private)
 	}
 
 	seq_printf(s, "%c flgs(%lx) sflgs(%lx) pri(%d) ts(%d) spu(%02d)"
-		" %c %llx %llx %llx %llx %x %x\n",
+		" %c %lx %lx %lx %lx %x %x\n",
 		ctx->state == SPU_STATE_SAVED ? 'S' : 'R',
 		ctx->flags,
 		ctx->sched_flags,

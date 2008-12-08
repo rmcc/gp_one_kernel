@@ -1,11 +1,3 @@
-#ifndef __WINBOND_BSSDSCPT_H
-#define __WINBOND_BSSDSCPT_H
-
-#include <linux/types.h>
-
-#include "mds_s.h"
-#include "mlme_s.h"
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //	bssdscpt.c
 //		BSS descriptor data base
@@ -86,8 +78,8 @@ typedef struct BSSDescriptionElement
     u16		wState;			// the current state of the system
 	u16		wIndex;			// THIS BSS element entry index
 
-	void*	psadapter;		// pointer to THIS adapter
-	struct timer_list timer;  // MLME timer
+	void*	psAdapter;		// pointer to THIS Adapter
+	OS_TIMER	nTimer;  // MLME timer
 
     // Authentication
     u16		wAuthAlgo;      // peer MAC MLME use Auth algorithm, default OPEN_AUTH
@@ -156,9 +148,9 @@ typedef struct BSSDescriptionElement
 
 } WB_BSSDESCRIPTION, *PWB_BSSDESCRIPTION;
 
-#define wBSSConnectedSTA(adapter)             \
-    ((u16)(adapter)->sLocalPara.wConnectedSTAindex)
+#define wBSSConnectedSTA(Adapter)             \
+    ((u16)(Adapter)->sLocalPara.wConnectedSTAindex)
 
-#define psBSS(i)			(&(adapter->asBSSDescriptElement[(i)]))
+#define psBSS(i)			(&(Adapter->asBSSDescriptElement[(i)]))
 
-#endif
+

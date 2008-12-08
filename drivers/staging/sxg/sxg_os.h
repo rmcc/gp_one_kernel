@@ -44,10 +44,10 @@
 #define FALSE	(0)
 #define TRUE	(1)
 
-struct LIST_ENTRY {
-	struct LIST_ENTRY *nle_flink;
-	struct LIST_ENTRY *nle_blink;
-};
+typedef struct _LIST_ENTRY {
+	struct _LIST_ENTRY *nle_flink;
+	struct _LIST_ENTRY *nle_blink;
+} list_entry, LIST_ENTRY, *PLIST_ENTRY;
 
 #define InitializeListHead(l)                   \
         (l)->nle_flink = (l)->nle_blink = (l)
@@ -68,10 +68,10 @@ struct LIST_ENTRY {
 
 /* These two have to be inlined since they return things. */
 
-static __inline struct LIST_ENTRY *RemoveHeadList(struct LIST_ENTRY *l)
+static __inline PLIST_ENTRY RemoveHeadList(list_entry * l)
 {
-	struct LIST_ENTRY *f;
-	struct LIST_ENTRY *e;
+	list_entry *f;
+	list_entry *e;
 
 	e = l->nle_flink;
 	f = e->nle_flink;
@@ -81,10 +81,10 @@ static __inline struct LIST_ENTRY *RemoveHeadList(struct LIST_ENTRY *l)
 	return (e);
 }
 
-static __inline struct LIST_ENTRY *RemoveTailList(struct LIST_ENTRY *l)
+static __inline PLIST_ENTRY RemoveTailList(list_entry * l)
 {
-	struct LIST_ENTRY *b;
-	struct LIST_ENTRY *e;
+	list_entry *b;
+	list_entry *e;
 
 	e = l->nle_blink;
 	b = e->nle_blink;
@@ -96,7 +96,7 @@ static __inline struct LIST_ENTRY *RemoveTailList(struct LIST_ENTRY *l)
 
 #define InsertTailList(l, e)                    \
         do {                                    \
-                struct LIST_ENTRY       *b;     \
+                list_entry              *b;     \
                                                 \
                 b = (l)->nle_blink;             \
                 (e)->nle_flink = (l);           \
@@ -107,7 +107,7 @@ static __inline struct LIST_ENTRY *RemoveTailList(struct LIST_ENTRY *l)
 
 #define InsertHeadList(l, e)                    \
         do {                                    \
-                struct LIST_ENTRY       *f;     \
+                list_entry              *f;     \
                                                 \
                 f = (l)->nle_flink;             \
                 (e)->nle_flink = f;             \

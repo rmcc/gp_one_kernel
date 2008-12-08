@@ -39,7 +39,6 @@ struct tosa_lcd_data {
 	struct i2c_client *i2c;
 
 	int lcd_power;
-	bool is_vga;
 };
 
 static int tosa_tg_send(struct spi_device *spi, int adrs, uint8_t data)
@@ -82,12 +81,8 @@ static void tosa_lcd_tg_init(struct tosa_lcd_data *data)
 static void tosa_lcd_tg_on(struct tosa_lcd_data *data)
 {
 	struct spi_device *spi = data->spi;
-	int value = TG_REG0_COLOR | TG_REG0_UD | TG_REG0_LR;
-
-	if (data->is_vga)
-		value |= TG_REG0_VQV;
-
-	tosa_tg_send(spi, TG_PNLCTL, value);
+	const int value = TG_REG0_COLOR | TG_REG0_UD | TG_REG0_LR;
+	tosa_tg_send(spi, TG_PNLCTL, value | TG_REG0_VQV); /* this depends on mode */
 
 	/* TG LCD pannel power up */
 	tosa_tg_send(spi, TG_PINICTL,0x4);
@@ -147,25 +142,9 @@ static int tosa_lcd_get_power(struct lcd_device *lcd)
 	return data->lcd_power;
 }
 
-static int tosa_lcd_set_mode(struct lcd_device *lcd, struct fb_videomode *mode)
-{
-	struct tosa_lcd_data *data = lcd_get_data(lcd);
-
-	if (mode->xres == 320 || mode->yres == 320)
-		data->is_vga = false;
-	else
-		data->is_vga = true;
-
-	if (POWER_IS_ON(data->lcd_power))
-		tosa_lcd_tg_on(data);
-
-	return 0;
-}
-
 static struct lcd_ops tosa_lcd_ops = {
 	.set_power = tosa_lcd_set_power,
 	.get_power = tosa_lcd_get_power,
-	.set_mode = tosa_lcd_set_mode,
 };
 
 static int __devinit tosa_lcd_probe(struct spi_device *spi)
@@ -176,8 +155,6 @@ static int __devinit tosa_lcd_probe(struct spi_device *spi)
 	data = kzalloc(sizeof(struct tosa_lcd_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
-
-	data->is_vga = true; /* defaut to VGA mode */
 
 	/*
 	 * bits_per_word cannot be configured in platform data

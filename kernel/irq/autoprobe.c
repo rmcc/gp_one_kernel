@@ -10,7 +10,6 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <linux/async.h>
 
 #include "internals.h"
 
@@ -35,10 +34,6 @@ unsigned long probe_irq_on(void)
 	unsigned int status;
 	int i;
 
-	/*
-	 * quiesce the kernel, or at least the asynchronous portion
-	 */
-	async_synchronize_full();
 	mutex_lock(&probing_active);
 	/*
 	 * something may have generated an irq long ago and we want to

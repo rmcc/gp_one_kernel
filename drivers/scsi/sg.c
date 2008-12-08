@@ -1078,7 +1078,7 @@ sg_ioctl(struct inode *inode, struct file *filp,
 	case BLKTRACESETUP:
 		return blk_trace_setup(sdp->device->request_queue,
 				       sdp->disk->disk_name,
-				       MKDEV(SCSI_GENERIC_MAJOR, sdp->index),
+				       sdp->device->sdev_gendev.devt,
 				       (char *)arg);
 	case BLKTRACESTART:
 		return blk_trace_startstop(sdp->device->request_queue, 1);
@@ -1669,8 +1669,6 @@ static int sg_start_req(Sg_request *srp, unsigned char *cmd)
 		md->pages = req_schp->pages;
 		md->page_order = req_schp->page_order;
 		md->nr_entries = req_schp->k_use_sg;
-		md->offset = 0;
-		md->null_mapped = hp->dxferp ? 0 : 1;
 	}
 
 	if (iov_count)

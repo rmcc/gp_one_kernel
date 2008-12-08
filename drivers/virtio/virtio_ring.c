@@ -274,7 +274,6 @@ static struct virtqueue_ops vring_vq_ops = {
 };
 
 struct virtqueue *vring_new_virtqueue(unsigned int num,
-				      unsigned int vring_align,
 				      struct virtio_device *vdev,
 				      void *pages,
 				      void (*notify)(struct virtqueue *),
@@ -293,7 +292,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int num,
 	if (!vq)
 		return NULL;
 
-	vring_init(&vq->vring, num, pages, vring_align);
+	vring_init(&vq->vring, num, pages, PAGE_SIZE);
 	vq->vq.callback = callback;
 	vq->vq.vdev = vdev;
 	vq->vq.vq_ops = &vring_vq_ops;

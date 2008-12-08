@@ -231,8 +231,7 @@ static int ioctl_fiemap(struct file *filp, unsigned long arg)
 #define blk_to_logical(inode, blk) (blk << (inode)->i_blkbits)
 #define logical_to_blk(inode, offset) (offset >> (inode)->i_blkbits);
 
-/**
- * __generic_block_fiemap - FIEMAP for block based inodes (no locking)
+/*
  * @inode - the inode to map
  * @arg - the pointer to userspace where we copy everything to
  * @get_block - the fs's get_block function
@@ -243,15 +242,11 @@ static int ioctl_fiemap(struct file *filp, unsigned long arg)
  *
  * If it is possible to have data blocks beyond a hole past @inode->i_size, then
  * please do not use this function, it will stop at the first unmapped block
- * beyond i_size.
- *
- * If you use this function directly, you need to do your own locking. Use
- * generic_block_fiemap if you want the locking done for you.
+ * beyond i_size
  */
-
-int __generic_block_fiemap(struct inode *inode,
-			   struct fiemap_extent_info *fieinfo, u64 start,
-			   u64 len, get_block_t *get_block)
+int generic_block_fiemap(struct inode *inode,
+			 struct fiemap_extent_info *fieinfo, u64 start,
+			 u64 len, get_block_t *get_block)
 {
 	struct buffer_head tmp;
 	unsigned int start_blk;
@@ -264,6 +259,9 @@ int __generic_block_fiemap(struct inode *inode,
 		return ret;
 
 	start_blk = logical_to_blk(inode, start);
+
+	/* guard against change */
+	mutex_lock(&inode->i_mutex);
 
 	length = (long long)min_t(u64, len, i_size_read(inode));
 	map_len = length;
@@ -336,34 +334,12 @@ int __generic_block_fiemap(struct inode *inode,
 		cond_resched();
 	} while (1);
 
+	mutex_unlock(&inode->i_mutex);
+
 	/* if ret is 1 then we just hit the end of the extent array */
 	if (ret == 1)
 		ret = 0;
 
-	return ret;
-}
-EXPORT_SYMBOL(__generic_block_fiemap);
-
-/**
- * generic_block_fiemap - FIEMAP for block based inodes
- * @inode: The inode to map
- * @fieinfo: The mapping information
- * @start: The initial block to map
- * @len: The length of the extect to attempt to map
- * @get_block: The block mapping function for the fs
- *
- * Calls __generic_block_fiemap to map the inode, after taking
- * the inode's mutex lock.
- */
-
-int generic_block_fiemap(struct inode *inode,
-			 struct fiemap_extent_info *fieinfo, u64 start,
-			 u64 len, get_block_t *get_block)
-{
-	int ret;
-	mutex_lock(&inode->i_mutex);
-	ret = __generic_block_fiemap(inode, fieinfo, start, len, get_block);
-	mutex_unlock(&inode->i_mutex);
 	return ret;
 }
 EXPORT_SYMBOL(generic_block_fiemap);
@@ -424,9 +400,11 @@ static int ioctl_fioasync(unsigned int fd, struct file *filp,
 
 	/* Did FASYNC state change ? */
 	if ((flag ^ filp->f_flags) & FASYNC) {
-		if (filp->f_op && filp->f_op->fasync)
+		if (filp->f_op && filp->f_op->fasync) {
+			lock_kernel();
 			error = filp->f_op->fasync(fd, filp, on);
-		else
+			unlock_kernel();
+		} else
 			error = -ENOTTY;
 	}
 	if (error)
@@ -437,43 +415,6 @@ static int ioctl_fioasync(unsigned int fd, struct file *filp,
 	else
 		filp->f_flags &= ~FASYNC;
 	return error;
-}
-
-static int ioctl_fsfreeze(struct file *filp)
-{
-	struct super_block *sb = filp->f_path.dentry->d_inode->i_sb;
-
-	if (!capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	/* If filesystem doesn't support freeze feature, return. */
-	if (sb->s_op->freeze_fs == NULL)
-		return -EOPNOTSUPP;
-
-	/* If a blockdevice-backed filesystem isn't specified, return. */
-	if (sb->s_bdev == NULL)
-		return -EINVAL;
-
-	/* Freeze */
-	sb = freeze_bdev(sb->s_bdev);
-	if (IS_ERR(sb))
-		return PTR_ERR(sb);
-	return 0;
-}
-
-static int ioctl_fsthaw(struct file *filp)
-{
-	struct super_block *sb = filp->f_path.dentry->d_inode->i_sb;
-
-	if (!capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	/* If a blockdevice-backed filesystem isn't specified, return EINVAL. */
-	if (sb->s_bdev == NULL)
-		return -EINVAL;
-
-	/* Thaw */
-	return thaw_bdev(sb->s_bdev, sb);
 }
 
 /*
@@ -499,17 +440,11 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 		break;
 
 	case FIONBIO:
-		/* BKL needed to avoid races tweaking f_flags */
-		lock_kernel();
 		error = ioctl_fionbio(filp, argp);
-		unlock_kernel();
 		break;
 
 	case FIOASYNC:
-		/* BKL needed to avoid races tweaking f_flags */
-		lock_kernel();
 		error = ioctl_fioasync(fd, filp, argp);
-		unlock_kernel();
 		break;
 
 	case FIOQSIZE:
@@ -523,15 +458,6 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 		} else
 			error = -ENOTTY;
 		break;
-
-	case FIFREEZE:
-		error = ioctl_fsfreeze(filp);
-		break;
-
-	case FITHAW:
-		error = ioctl_fsthaw(filp);
-		break;
-
 	default:
 		if (S_ISREG(filp->f_path.dentry->d_inode->i_mode))
 			error = file_ioctl(filp, cmd, arg);
@@ -542,7 +468,7 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 	return error;
 }
 
-SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
+asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct file *filp;
 	int error = -EBADF;

@@ -19,8 +19,6 @@
 #include <linux/io.h>
 #include <linux/pwm.h>
 
-#include <mach/irqs.h>
-
 #include <plat/devs.h>
 #include <plat/regs-timer.h>
 

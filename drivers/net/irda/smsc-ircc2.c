@@ -150,6 +150,7 @@ struct smsc_chip_address {
 /* Private data for each instance */
 struct smsc_ircc_cb {
 	struct net_device *netdev;     /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
 	struct irlap_cb    *irlap; /* The link layer we are binded to */
 
 	chipio_t io;               /* IrDA controller information */
@@ -214,6 +215,7 @@ static int  smsc_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq, int cm
 #if SMSC_IRCC2_C_NET_TIMEOUT
 static void smsc_ircc_timeout(struct net_device *dev);
 #endif
+static struct net_device_stats *smsc_ircc_net_get_stats(struct net_device *dev);
 static int smsc_ircc_is_receiving(struct smsc_ircc_cb *self);
 static void smsc_ircc_probe_transceiver(struct smsc_ircc_cb *self);
 static void smsc_ircc_set_transceiver_for_speed(struct smsc_ircc_cb *self, u32 speed);
@@ -527,6 +529,7 @@ static int __init smsc_ircc_open(unsigned int fir_base, unsigned int sir_base, u
 	dev->open            = smsc_ircc_net_open;
 	dev->stop            = smsc_ircc_net_close;
 	dev->do_ioctl        = smsc_ircc_net_ioctl;
+	dev->get_stats	     = smsc_ircc_net_get_stats;
 
 	self = netdev_priv(dev);
 	self->netdev = dev;
@@ -831,6 +834,13 @@ static int smsc_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd
 	return ret;
 }
 
+static struct net_device_stats *smsc_ircc_net_get_stats(struct net_device *dev)
+{
+	struct smsc_ircc_cb *self = netdev_priv(dev);
+
+	return &self->stats;
+}
+
 #if SMSC_IRCC2_C_NET_TIMEOUT
 /*
  * Function smsc_ircc_timeout (struct net_device *dev)
@@ -862,7 +872,7 @@ static void smsc_ircc_timeout(struct net_device *dev)
  *    waits until the next transmit interrupt, and continues until the
  *    frame is transmitted.
  */
-static int smsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
+int smsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
 {
 	struct smsc_ircc_cb *self;
 	unsigned long flags;
@@ -910,7 +920,7 @@ static int smsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
 	self->tx_buff.len = async_wrap_skb(skb, self->tx_buff.data,
 					   self->tx_buff.truesize);
 
-	dev->stats.tx_bytes += self->tx_buff.len;
+	self->stats.tx_bytes += self->tx_buff.len;
 
 	/* Turn on transmit finished interrupt. Will fire immediately!  */
 	outb(UART_IER_THRI, self->io.sir_base + UART_IER);
@@ -1118,7 +1128,7 @@ static void smsc_ircc_change_speed(struct smsc_ircc_cb *self, u32 speed)
  *    Set speed of IrDA port to specified baudrate
  *
  */
-static void smsc_ircc_set_sir_speed(struct smsc_ircc_cb *self, __u32 speed)
+void smsc_ircc_set_sir_speed(struct smsc_ircc_cb *self, __u32 speed)
 {
 	int iobase;
 	int fcr;    /* FIFO control reg */
@@ -1310,16 +1320,16 @@ static void smsc_ircc_dma_xmit_complete(struct smsc_ircc_cb *self)
 	/* Check for underrun! */
 	register_bank(iobase, 0);
 	if (inb(iobase + IRCC_LSR) & IRCC_LSR_UNDERRUN) {
-		self->netdev->stats.tx_errors++;
-		self->netdev->stats.tx_fifo_errors++;
+		self->stats.tx_errors++;
+		self->stats.tx_fifo_errors++;
 
 		/* Reset error condition */
 		register_bank(iobase, 0);
 		outb(IRCC_MASTER_ERROR_RESET, iobase + IRCC_MASTER);
 		outb(0x00, iobase + IRCC_MASTER);
 	} else {
-		self->netdev->stats.tx_packets++;
-		self->netdev->stats.tx_bytes += self->tx_buff.len;
+		self->stats.tx_packets++;
+		self->stats.tx_bytes += self->tx_buff.len;
 	}
 
 	/* Check if it's time to change the speed */
@@ -1419,15 +1429,15 @@ static void smsc_ircc_dma_receive_complete(struct smsc_ircc_cb *self)
 
 	/* Look for errors */
 	if (lsr & (IRCC_LSR_FRAME_ERROR | IRCC_LSR_CRC_ERROR | IRCC_LSR_SIZE_ERROR)) {
-		self->netdev->stats.rx_errors++;
+		self->stats.rx_errors++;
 		if (lsr & IRCC_LSR_FRAME_ERROR)
-			self->netdev->stats.rx_frame_errors++;
+			self->stats.rx_frame_errors++;
 		if (lsr & IRCC_LSR_CRC_ERROR)
-			self->netdev->stats.rx_crc_errors++;
+			self->stats.rx_crc_errors++;
 		if (lsr & IRCC_LSR_SIZE_ERROR)
-			self->netdev->stats.rx_length_errors++;
+			self->stats.rx_length_errors++;
 		if (lsr & (IRCC_LSR_UNDERRUN | IRCC_LSR_OVERRUN))
-			self->netdev->stats.rx_length_errors++;
+			self->stats.rx_length_errors++;
 		return;
 	}
 
@@ -1450,8 +1460,8 @@ static void smsc_ircc_dma_receive_complete(struct smsc_ircc_cb *self)
 	skb_reserve(skb, 1);
 
 	memcpy(skb_put(skb, len), self->rx_buff.data, len);
-	self->netdev->stats.rx_packets++;
-	self->netdev->stats.rx_bytes += len;
+	self->stats.rx_packets++;
+	self->stats.rx_bytes += len;
 
 	skb->dev = self->netdev;
 	skb_reset_mac_header(skb);
@@ -1479,7 +1489,7 @@ static void smsc_ircc_sir_receive(struct smsc_ircc_cb *self)
          * async_unwrap_char will deliver all found frames
 	 */
 	do {
-		async_unwrap_char(self->netdev, &self->netdev->stats, &self->rx_buff,
+		async_unwrap_char(self->netdev, &self->stats, &self->rx_buff,
 				  inb(iobase + UART_RX));
 
 		/* Make sure we don't stay here to long */
@@ -1884,7 +1894,7 @@ static void __exit smsc_ircc_cleanup(void)
  * This function *must* be called with spinlock held, because it may
  * be called from the irq handler (via smsc_ircc_change_speed()). - Jean II
  */
-static void smsc_ircc_sir_start(struct smsc_ircc_cb *self)
+void smsc_ircc_sir_start(struct smsc_ircc_cb *self)
 {
 	struct net_device *dev;
 	int fir_base, sir_base;
@@ -1982,7 +1992,7 @@ static void smsc_ircc_sir_write_wakeup(struct smsc_ircc_cb *self)
 			/* Tell network layer that we want more frames */
 			netif_wake_queue(self->netdev);
 		}
-		self->netdev->stats.tx_packets++;
+		self->stats.tx_packets++;
 
 		if (self->io.speed <= 115200) {
 			/*

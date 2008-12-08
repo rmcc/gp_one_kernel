@@ -186,7 +186,6 @@ static unsigned int  netcard_portlist[ ] __initdata = {
 	0x2b0, 0x2b4, 0x2c0, 0x2c4, 0x2d0, 0x2d4, 0x2e0, 0x2e4, 0x2f0, 0x2f4,
 	0 };
 
-#define NET_LOCAL_LOCK(dev) (((struct net_local *)netdev_priv(dev))->lock)
 
 /*
  * Look for SBNI card which addr stored in dev->base_addr, if nonzero.
@@ -288,7 +287,7 @@ static int __init sbni_init(struct net_device *dev)
 }
 
 
-static int __init
+int __init
 sbni_pci_probe( struct net_device  *dev )
 {
 	struct pci_dev  *pdev = NULL;
@@ -379,23 +378,22 @@ sbni_probe1( struct net_device  *dev,  unsigned long  ioaddr,  int  irq )
 	dev->irq = irq;
 	dev->base_addr = ioaddr;
 
-	/* Fill in sbni-specific dev fields. */
-	nl = netdev_priv(dev);
+	/* Allocate dev->priv and fill in sbni-specific dev fields. */
+	nl = dev->priv;
 	if( !nl ) {
 		printk( KERN_ERR "%s: unable to get memory!\n", dev->name );
 		release_region( ioaddr, SBNI_IO_EXTENT );
 		return NULL;
 	}
 
+	dev->priv = nl;
 	memset( nl, 0, sizeof(struct net_local) );
 	spin_lock_init( &nl->lock );
 
 	/* store MAC address (generate if that isn't known) */
 	*(__be16 *)dev->dev_addr = htons( 0x00ff );
 	*(__be32 *)(dev->dev_addr + 2) = htonl( 0x01000000 |
-		((mac[num] ?
-		mac[num] :
-		(u32)((long)netdev_priv(dev))) & 0x00ffffff));
+		( (mac[num]  ?  mac[num]  :  (u32)((long)dev->priv)) & 0x00ffffff) );
 
 	/* store link settings (speed, receive level ) */
 	nl->maxframe  = DEFAULT_FRAME_LEN;
@@ -449,7 +447,7 @@ sbni_start_xmit( struct sk_buff  *skb,  struct net_device  *dev )
 
 	/* Looking for idle device in the list */
 	for( p = dev;  p; ) {
-		struct net_local  *nl = netdev_priv(p);
+		struct net_local  *nl = (struct net_local *) p->priv;
 		spin_lock( &nl->lock );
 		if( nl->tx_buf_p  ||  (nl->state & FL_LINE_DOWN) ) {
 			p = nl->link;
@@ -471,7 +469,7 @@ sbni_start_xmit( struct sk_buff  *skb,  struct net_device  *dev )
 static int
 sbni_start_xmit( struct sk_buff  *skb,  struct net_device  *dev )
 {
-	struct net_local  *nl  = netdev_priv(dev);
+	struct net_local  *nl  = (struct net_local *) dev->priv;
 
 	netif_stop_queue( dev );
 	spin_lock( &nl->lock );
@@ -505,12 +503,12 @@ static irqreturn_t
 sbni_interrupt( int  irq,  void  *dev_id )
 {
 	struct net_device	  *dev = dev_id;
-	struct net_local  *nl  = netdev_priv(dev);
+	struct net_local  *nl  = dev->priv;
 	int	repeat;
 
 	spin_lock( &nl->lock );
 	if( nl->second )
-		spin_lock(&NET_LOCAL_LOCK(nl->second));
+		spin_lock( &((struct net_local *) nl->second->priv)->lock );
 
 	do {
 		repeat = 0;
@@ -524,7 +522,7 @@ sbni_interrupt( int  irq,  void  *dev_id )
 	} while( repeat );
 
 	if( nl->second )
-		spin_unlock(&NET_LOCAL_LOCK(nl->second));
+		spin_unlock( &((struct net_local *)nl->second->priv)->lock );
 	spin_unlock( &nl->lock );
 	return IRQ_HANDLED;
 }
@@ -533,7 +531,7 @@ sbni_interrupt( int  irq,  void  *dev_id )
 static void
 handle_channel( struct net_device  *dev )
 {
-	struct net_local	*nl    = netdev_priv(dev);
+	struct net_local	*nl    = (struct net_local *) dev->priv;
 	unsigned long		ioaddr = dev->base_addr;
 
 	int  req_ans;
@@ -542,7 +540,7 @@ handle_channel( struct net_device  *dev )
 #ifdef CONFIG_SBNI_MULTILINE
 	/* Lock the master device because we going to change its local data */
 	if( nl->state & FL_SLAVE )
-		spin_lock(&NET_LOCAL_LOCK(nl->master));
+		spin_lock( &((struct net_local *) nl->master->priv)->lock );
 #endif
 
 	outb( (inb( ioaddr + CSR0 ) & ~EN_INT) | TR_REQ, ioaddr + CSR0 );
@@ -578,7 +576,7 @@ handle_channel( struct net_device  *dev )
 
 #ifdef CONFIG_SBNI_MULTILINE
 	if( nl->state & FL_SLAVE )
-		spin_unlock(&NET_LOCAL_LOCK(nl->master));
+		spin_unlock( &((struct net_local *) nl->master->priv)->lock );
 #endif
 }
 
@@ -591,7 +589,7 @@ handle_channel( struct net_device  *dev )
 static int
 recv_frame( struct net_device  *dev )
 {
-	struct net_local  *nl   = netdev_priv(dev);
+	struct net_local  *nl   = (struct net_local *) dev->priv;
 	unsigned long  ioaddr	= dev->base_addr;
 
 	u32  crc = CRC32_INITIAL;
@@ -625,7 +623,7 @@ recv_frame( struct net_device  *dev )
 static void
 send_frame( struct net_device  *dev )
 {
-	struct net_local  *nl    = netdev_priv(dev);
+	struct net_local  *nl    = (struct net_local *) dev->priv;
 
 	u32  crc = CRC32_INITIAL;
 
@@ -682,7 +680,7 @@ do_send:
 static void
 download_data( struct net_device  *dev,  u32  *crc_p )
 {
-	struct net_local  *nl    = netdev_priv(dev);
+	struct net_local  *nl    = (struct net_local *) dev->priv;
 	struct sk_buff    *skb	 = nl->tx_buf_p;
 
 	unsigned  len = min_t(unsigned int, skb->len - nl->outpos, nl->framelen);
@@ -701,7 +699,7 @@ static int
 upload_data( struct net_device  *dev,  unsigned  framelen,  unsigned  frameno,
 	     unsigned  is_first,  u32  crc )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	int  frame_ok;
 
@@ -723,9 +721,9 @@ upload_data( struct net_device  *dev,  unsigned  framelen,  unsigned  frameno,
 			nl->wait_frameno = 0,
 			nl->inppos = 0,
 #ifdef CONFIG_SBNI_MULTILINE
-			((struct net_local *)netdev_priv(nl->master))
+			((struct net_local *) nl->master->priv)
 				->stats.rx_errors++,
-			((struct net_local *)netdev_priv(nl->master))
+			((struct net_local *) nl->master->priv)
 				->stats.rx_missed_errors++;
 #else
 			nl->stats.rx_errors++,
@@ -742,10 +740,8 @@ upload_data( struct net_device  *dev,  unsigned  framelen,  unsigned  frameno,
 		 */
 		nl->wait_frameno = 0,
 #ifdef CONFIG_SBNI_MULTILINE
-		((struct net_local *)netdev_priv(nl->master))
-			->stats.rx_errors++,
-		((struct net_local *)netdev_priv(nl->master))
-			->stats.rx_crc_errors++;
+		((struct net_local *) nl->master->priv)->stats.rx_errors++,
+		((struct net_local *) nl->master->priv)->stats.rx_crc_errors++;
 #else
 		nl->stats.rx_errors++,
 		nl->stats.rx_crc_errors++;
@@ -759,8 +755,8 @@ static inline void
 send_complete( struct net_local  *nl )
 {
 #ifdef CONFIG_SBNI_MULTILINE
-	((struct net_local *)netdev_priv(nl->master))->stats.tx_packets++;
-	((struct net_local *)netdev_priv(nl->master))->stats.tx_bytes
+	((struct net_local *) nl->master->priv)->stats.tx_packets++;
+	((struct net_local *) nl->master->priv)->stats.tx_bytes
 		+= nl->tx_buf_p->len;
 #else
 	nl->stats.tx_packets++;
@@ -779,7 +775,7 @@ send_complete( struct net_local  *nl )
 static void
 interpret_ack( struct net_device  *dev,  unsigned  ack )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	if( ack == FRAME_SENT_OK ) {
 		nl->state &= ~FL_NEED_RESEND;
@@ -813,7 +809,7 @@ interpret_ack( struct net_device  *dev,  unsigned  ack )
 static int
 append_frame_to_pkt( struct net_device  *dev,  unsigned  framelen,  u32  crc )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	u8  *p;
 
@@ -844,7 +840,7 @@ append_frame_to_pkt( struct net_device  *dev,  unsigned  framelen,  u32  crc )
 static void
 prepare_to_send( struct sk_buff  *skb,  struct net_device  *dev )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	unsigned int  len;
 
@@ -875,15 +871,15 @@ prepare_to_send( struct sk_buff  *skb,  struct net_device  *dev )
 static void
 drop_xmit_queue( struct net_device  *dev )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	if( nl->tx_buf_p )
 		dev_kfree_skb_any( nl->tx_buf_p ),
 		nl->tx_buf_p = NULL,
 #ifdef CONFIG_SBNI_MULTILINE
-		((struct net_local *)netdev_priv(nl->master))
+		((struct net_local *) nl->master->priv)
 			->stats.tx_errors++,
-		((struct net_local *)netdev_priv(nl->master))
+		((struct net_local *) nl->master->priv)
 			->stats.tx_carrier_errors++;
 #else
 		nl->stats.tx_errors++,
@@ -907,7 +903,7 @@ drop_xmit_queue( struct net_device  *dev )
 static void
 send_frame_header( struct net_device  *dev,  u32  *crc_p )
 {
-	struct net_local  *nl  = netdev_priv(dev);
+	struct net_local  *nl  = (struct net_local *) dev->priv;
 
 	u32  crc = *crc_p;
 	u32  len_field = nl->framelen + 6;	/* CRC + frameno + reserved */
@@ -1009,7 +1005,7 @@ get_rx_buf( struct net_device  *dev )
 static void
 indicate_pkt( struct net_device  *dev )
 {
-	struct net_local  *nl  = netdev_priv(dev);
+	struct net_local  *nl  = (struct net_local *) dev->priv;
 	struct sk_buff    *skb = nl->rx_buf_p;
 
 	skb_put( skb, nl->inppos );
@@ -1017,12 +1013,13 @@ indicate_pkt( struct net_device  *dev )
 #ifdef CONFIG_SBNI_MULTILINE
 	skb->protocol = eth_type_trans( skb, nl->master );
 	netif_rx( skb );
-	++((struct net_local *)netdev_priv(nl->master))->stats.rx_packets;
-	((struct net_local *)netdev_priv(nl->master))->stats.rx_bytes +=
-		nl->inppos;
+	dev->last_rx = jiffies;
+	++((struct net_local *) nl->master->priv)->stats.rx_packets;
+	((struct net_local *) nl->master->priv)->stats.rx_bytes += nl->inppos;
 #else
 	skb->protocol = eth_type_trans( skb, dev );
 	netif_rx( skb );
+	dev->last_rx = jiffies;
 	++nl->stats.rx_packets;
 	nl->stats.rx_bytes += nl->inppos;
 #endif
@@ -1041,7 +1038,7 @@ static void
 sbni_watchdog( unsigned long  arg )
 {
 	struct net_device  *dev = (struct net_device *) arg;
-	struct net_local   *nl  = netdev_priv(dev);
+	struct net_local   *nl  = (struct net_local *) dev->priv;
 	struct timer_list  *w   = &nl->watchdog; 
 	unsigned long	   flags;
 	unsigned char	   csr0;
@@ -1094,7 +1091,7 @@ static unsigned char  timeout_rxl_tab[] = {
 static void
 card_start( struct net_device  *dev )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	nl->timer_ticks = CHANGE_LEVEL_START_TICKS;
 	nl->state &= ~(FL_WAIT_ACK | FL_NEED_RESEND);
@@ -1116,7 +1113,7 @@ card_start( struct net_device  *dev )
 static void
 change_level( struct net_device  *dev )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	if( nl->delta_rxl == 0 )	/* do not auto-negotiate RxL */
 		return;
@@ -1140,7 +1137,7 @@ change_level( struct net_device  *dev )
 static void
 timeout_change_level( struct net_device  *dev )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	nl->cur_rxl_index = timeout_rxl_tab[ nl->timeout_rxl ];
 	if( ++nl->timeout_rxl >= 4 )
@@ -1163,7 +1160,7 @@ timeout_change_level( struct net_device  *dev )
 static int
 sbni_open( struct net_device  *dev )
 {
-	struct net_local	*nl = netdev_priv(dev);
+	struct net_local	*nl = (struct net_local *) dev->priv;
 	struct timer_list	*w  = &nl->watchdog;
 
 	/*
@@ -1179,7 +1176,7 @@ sbni_open( struct net_device  *dev )
 				 ||  (*p)->base_addr == dev->base_addr - 4)
 			    &&  (*p)->flags & IFF_UP ) {
 
-				((struct net_local *) (netdev_priv(*p)))
+				((struct net_local *) ((*p)->priv))
 					->second = dev;
 				printk( KERN_NOTICE "%s: using shared irq "
 					"with %s\n", dev->name, (*p)->name );
@@ -1219,7 +1216,7 @@ handler_attached:
 static int
 sbni_close( struct net_device  *dev )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv;
 
 	if( nl->second  &&  nl->second->flags & IFF_UP ) {
 		printk( KERN_NOTICE "Secondary channel (%s) is active!\n",
@@ -1303,7 +1300,7 @@ sbni_card_probe( unsigned long  ioaddr )
 static int
 sbni_ioctl( struct net_device  *dev,  struct ifreq  *ifr,  int  cmd )
 {
-	struct net_local  *nl = netdev_priv(dev);
+	struct net_local  *nl = (struct net_local *) dev->priv; 
 	struct sbni_flags  flags;
 	int  error = 0;
 
@@ -1393,8 +1390,8 @@ sbni_ioctl( struct net_device  *dev,  struct ifreq  *ifr,  int  cmd )
 static int
 enslave( struct net_device  *dev,  struct net_device  *slave_dev )
 {
-	struct net_local  *nl  = netdev_priv(dev);
-	struct net_local  *snl = netdev_priv(slave_dev);
+	struct net_local  *nl  = (struct net_local *) dev->priv;
+	struct net_local  *snl = (struct net_local *) slave_dev->priv;
 
 	if( nl->state & FL_SLAVE )	/* This isn't master or free device */
 		return  -EBUSY;
@@ -1428,9 +1425,9 @@ enslave( struct net_device  *dev,  struct net_device  *slave_dev )
 static int
 emancipate( struct net_device  *dev )
 {
-	struct net_local   *snl = netdev_priv(dev);
+	struct net_local   *snl = (struct net_local *) dev->priv;
 	struct net_device  *p   = snl->master;
-	struct net_local   *nl  = netdev_priv(p);
+	struct net_local   *nl  = (struct net_local *) p->priv;
 
 	if( !(snl->state & FL_SLAVE) )
 		return  -EINVAL;
@@ -1441,7 +1438,7 @@ emancipate( struct net_device  *dev )
 
 	/* exclude from list */
 	for(;;) {	/* must be in list */
-		struct net_local  *t = netdev_priv(p);
+		struct net_local  *t = (struct net_local *) p->priv;
 		if( t->link == dev ) {
 			t->link = snl->link;
 			break;
@@ -1468,7 +1465,7 @@ emancipate( struct net_device  *dev )
 static struct net_device_stats *
 sbni_get_stats( struct net_device  *dev )
 {
-	return  &((struct net_local *)netdev_priv(dev))->stats;
+	return  &((struct net_local *) dev->priv)->stats;
 }
 
 

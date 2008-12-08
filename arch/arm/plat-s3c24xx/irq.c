@@ -62,7 +62,6 @@
 
 #include <asm/mach/irq.h>
 
-#include <plat/regs-irqtype.h>
 #include <mach/regs-irq.h>
 #include <mach/regs-gpio.h>
 

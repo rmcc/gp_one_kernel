@@ -317,6 +317,7 @@ int gru_proc_init(void)
 {
 	struct proc_entry *p;
 
+	proc_mkdir("sgi_uv", NULL);
 	proc_gru = proc_mkdir("sgi_uv/gru", NULL);
 
 	for (p = proc_files; p->name; p++)

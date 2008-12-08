@@ -573,7 +573,7 @@ static int new_inode_init(struct inode *inode, struct inode *dir, int mode)
 	/* the quota init calls have to know who to charge the quota to, so
 	 ** we have to set uid and gid here
 	 */
-	inode->i_uid = current_fsuid();
+	inode->i_uid = current->fsuid;
 	inode->i_mode = mode;
 	/* Make inode invalid - just in case we are going to drop it before
 	 * the initialization happens */
@@ -584,7 +584,7 @@ static int new_inode_init(struct inode *inode, struct inode *dir, int mode)
 		if (S_ISDIR(mode))
 			inode->i_mode |= S_ISGID;
 	} else {
-		inode->i_gid = current_fsgid();
+		inode->i_gid = current->fsgid;
 	}
 	DQUOT_INIT(inode);
 	return 0;
@@ -646,7 +646,6 @@ static int reiserfs_create(struct inode *dir, struct dentry *dentry, int mode,
 		err = journal_end(&th, dir->i_sb, jbegin_count);
 		if (err)
 			retval = err;
-		unlock_new_inode(inode);
 		iput(inode);
 		goto out_failed;
 	}
@@ -654,7 +653,6 @@ static int reiserfs_create(struct inode *dir, struct dentry *dentry, int mode,
 	reiserfs_update_inode_transaction(dir);
 
 	d_instantiate(dentry, inode);
-	unlock_new_inode(inode);
 	retval = journal_end(&th, dir->i_sb, jbegin_count);
 
       out_failed:
@@ -729,13 +727,11 @@ static int reiserfs_mknod(struct inode *dir, struct dentry *dentry, int mode,
 		err = journal_end(&th, dir->i_sb, jbegin_count);
 		if (err)
 			retval = err;
-		unlock_new_inode(inode);
 		iput(inode);
 		goto out_failed;
 	}
 
 	d_instantiate(dentry, inode);
-	unlock_new_inode(inode);
 	retval = journal_end(&th, dir->i_sb, jbegin_count);
 
       out_failed:
@@ -816,7 +812,6 @@ static int reiserfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		err = journal_end(&th, dir->i_sb, jbegin_count);
 		if (err)
 			retval = err;
-		unlock_new_inode(inode);
 		iput(inode);
 		goto out_failed;
 	}
@@ -824,7 +819,6 @@ static int reiserfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	reiserfs_update_sd(&th, dir);
 
 	d_instantiate(dentry, inode);
-	unlock_new_inode(inode);
 	retval = journal_end(&th, dir->i_sb, jbegin_count);
       out_failed:
 	if (locked)
@@ -1102,13 +1096,11 @@ static int reiserfs_symlink(struct inode *parent_dir,
 		err = journal_end(&th, parent_dir->i_sb, jbegin_count);
 		if (err)
 			retval = err;
-		unlock_new_inode(inode);
 		iput(inode);
 		goto out_failed;
 	}
 
 	d_instantiate(dentry, inode);
-	unlock_new_inode(inode);
 	retval = journal_end(&th, parent_dir->i_sb, jbegin_count);
       out_failed:
 	reiserfs_write_unlock(parent_dir->i_sb);

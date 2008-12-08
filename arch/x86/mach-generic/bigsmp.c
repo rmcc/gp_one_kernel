@@ -17,7 +17,6 @@
 #include <asm/bigsmp/apic.h>
 #include <asm/bigsmp/ipi.h>
 #include <asm/mach-default/mach_mpparse.h>
-#include <asm/mach-default/mach_wakecpu.h>
 
 static int dmi_bigsmp; /* can be set by dmi scanners */
 
@@ -42,10 +41,9 @@ static const struct dmi_system_id bigsmp_dmi_table[] = {
 	 { }
 };
 
-static void vector_allocation_domain(int cpu, cpumask_t *retmask)
+static cpumask_t vector_allocation_domain(int cpu)
 {
-	cpus_clear(*retmask);
-	cpu_set(cpu, *retmask);
+        return cpumask_of_cpu(cpu);
 }
 
 static int probe_bigsmp(void)

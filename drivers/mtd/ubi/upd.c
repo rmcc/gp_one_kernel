@@ -40,7 +40,7 @@
 
 #include <linux/err.h>
 #include <linux/uaccess.h>
-#include <linux/math64.h>
+#include <asm/div64.h>
 #include "ubi.h"
 
 /**
@@ -89,6 +89,7 @@ static int clear_update_marker(struct ubi_device *ubi, struct ubi_volume *vol,
 			       long long bytes)
 {
 	int err;
+	uint64_t tmp;
 	struct ubi_vtbl_record vtbl_rec;
 
 	dbg_gen("clear update marker for volume %d", vol->vol_id);
@@ -100,9 +101,9 @@ static int clear_update_marker(struct ubi_device *ubi, struct ubi_volume *vol,
 
 	if (vol->vol_type == UBI_STATIC_VOLUME) {
 		vol->corrupted = 0;
-		vol->used_bytes = bytes;
-		vol->used_ebs = div_u64_rem(bytes, vol->usable_leb_size,
-					    &vol->last_eb_bytes);
+		vol->used_bytes = tmp = bytes;
+		vol->last_eb_bytes = do_div(tmp, vol->usable_leb_size);
+		vol->used_ebs = tmp;
 		if (vol->last_eb_bytes)
 			vol->used_ebs += 1;
 		else
@@ -130,6 +131,7 @@ int ubi_start_update(struct ubi_device *ubi, struct ubi_volume *vol,
 		     long long bytes)
 {
 	int i, err;
+	uint64_t tmp;
 
 	dbg_gen("start update of volume %d, %llu bytes", vol->vol_id, bytes);
 	ubi_assert(!vol->updating && !vol->changing_leb);
@@ -159,8 +161,9 @@ int ubi_start_update(struct ubi_device *ubi, struct ubi_volume *vol,
 	if (!vol->upd_buf)
 		return -ENOMEM;
 
-	vol->upd_ebs = div_u64(bytes + vol->usable_leb_size - 1,
-			       vol->usable_leb_size);
+	tmp = bytes;
+	vol->upd_ebs = !!do_div(tmp, vol->usable_leb_size);
+	vol->upd_ebs += tmp;
 	vol->upd_bytes = bytes;
 	vol->upd_received = 0;
 	return 0;
@@ -279,6 +282,7 @@ static int write_leb(struct ubi_device *ubi, struct ubi_volume *vol, int lnum,
 int ubi_more_update_data(struct ubi_device *ubi, struct ubi_volume *vol,
 			 const void __user *buf, int count)
 {
+	uint64_t tmp;
 	int lnum, offs, err = 0, len, to_write = count;
 
 	dbg_gen("write %d of %lld bytes, %lld already passed",
@@ -287,7 +291,10 @@ int ubi_more_update_data(struct ubi_device *ubi, struct ubi_volume *vol,
 	if (ubi->ro_mode)
 		return -EROFS;
 
-	lnum = div_u64_rem(vol->upd_received,  vol->usable_leb_size, &offs);
+	tmp = vol->upd_received;
+	offs = do_div(tmp, vol->usable_leb_size);
+	lnum = tmp;
+
 	if (vol->upd_received + count > vol->upd_bytes)
 		to_write = count = vol->upd_bytes - vol->upd_received;
 

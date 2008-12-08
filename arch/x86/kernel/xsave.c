@@ -159,7 +159,7 @@ int save_i387_xstate(void __user *buf)
  * Restore the extended state if present. Otherwise, restore the FP/SSE
  * state.
  */
-static int restore_user_xstate(void __user *buf)
+int restore_user_xstate(void __user *buf)
 {
 	struct _fpx_sw_bytes fx_sw_user;
 	u64 mask;
@@ -310,7 +310,7 @@ static void __init setup_xstate_init(void)
 /*
  * Enable and initialize the xsave feature.
  */
-void __ref xsave_cntxt_init(void)
+void __init xsave_cntxt_init(void)
 {
 	unsigned int eax, ebx, ecx, edx;
 

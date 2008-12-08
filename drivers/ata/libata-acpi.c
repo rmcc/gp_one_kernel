@@ -19,6 +19,12 @@
 #include "libata.h"
 
 #include <acpi/acpi_bus.h>
+#include <acpi/acnames.h>
+#include <acpi/acnamesp.h>
+#include <acpi/acparser.h>
+#include <acpi/acexcep.h>
+#include <acpi/acmacros.h>
+#include <acpi/actypes.h>
 
 enum {
 	ATA_ACPI_FILTER_SETXFER	= 1 << 0,
@@ -83,7 +89,7 @@ void ata_acpi_associate_sata_port(struct ata_port *ap)
 
 		ap->link.device->acpi_handle = NULL;
 
-		ata_for_each_link(link, ap, EDGE) {
+		ata_port_for_each_link(link, ap) {
 			acpi_integer adr = SATA_ADR(ap->port_no, link->pmp);
 
 			link->device->acpi_handle =
@@ -123,8 +129,8 @@ static void ata_acpi_detach_device(struct ata_port *ap, struct ata_device *dev)
 		struct ata_link *tlink;
 		struct ata_device *tdev;
 
-		ata_for_each_link(tlink, ap, EDGE)
-			ata_for_each_dev(tdev, tlink, ALL)
+		ata_port_for_each_link(tlink, ap)
+			ata_link_for_each_dev(tdev, tlink)
 				tdev->flags |= ATA_DFLAG_DETACH;
 	}
 
@@ -582,8 +588,11 @@ int ata_acpi_cbl_80wire(struct ata_port *ap, const struct ata_acpi_gtm *gtm)
 {
 	struct ata_device *dev;
 
-	ata_for_each_dev(dev, &ap->link, ENABLED) {
+	ata_link_for_each_dev(dev, &ap->link) {
 		unsigned long xfer_mask, udma_mask;
+
+		if (!ata_dev_enabled(dev))
+			continue;
 
 		xfer_mask = ata_acpi_gtm_xfermask(dev, gtm);
 		ata_unpack_xfermask(xfer_mask, NULL, NULL, &udma_mask);
@@ -884,7 +893,7 @@ void ata_acpi_on_resume(struct ata_port *ap)
 		 * use values set by _STM.  Cache _GTF result and
 		 * schedule _GTF.
 		 */
-		ata_for_each_dev(dev, &ap->link, ALL) {
+		ata_link_for_each_dev(dev, &ap->link) {
 			ata_acpi_clear_gtf(dev);
 			if (ata_dev_enabled(dev) &&
 			    ata_dev_get_GTF(dev, NULL) >= 0)
@@ -895,7 +904,7 @@ void ata_acpi_on_resume(struct ata_port *ap)
 		 * there's no reason to evaluate IDE _GTF early
 		 * without _STM.  Clear cache and schedule _GTF.
 		 */
-		ata_for_each_dev(dev, &ap->link, ALL) {
+		ata_link_for_each_dev(dev, &ap->link) {
 			ata_acpi_clear_gtf(dev);
 			if (ata_dev_enabled(dev))
 				dev->flags |= ATA_DFLAG_ACPI_PENDING;
@@ -923,8 +932,8 @@ void ata_acpi_set_state(struct ata_port *ap, pm_message_t state)
 	if (state.event == PM_EVENT_ON)
 		acpi_bus_set_power(ap->acpi_handle, ACPI_STATE_D0);
 
-	ata_for_each_dev(dev, &ap->link, ENABLED) {
-		if (dev->acpi_handle)
+	ata_link_for_each_dev(dev, &ap->link) {
+		if (dev->acpi_handle && ata_dev_enabled(dev))
 			acpi_bus_set_power(dev->acpi_handle,
 				state.event == PM_EVENT_ON ?
 					ACPI_STATE_D0 : ACPI_STATE_D3);

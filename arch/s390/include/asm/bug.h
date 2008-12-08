@@ -47,10 +47,7 @@
 
 #endif /* CONFIG_DEBUG_BUGVERBOSE */
 
-#define BUG() do {					\
-	__EMIT_BUG(0);					\
-	for (;;);					\
-} while (0)
+#define BUG()	__EMIT_BUG(0)
 
 #define WARN_ON(x) ({					\
 	int __ret_warn_on = !!(x);			\

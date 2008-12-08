@@ -14,6 +14,7 @@
 
 #include <asm/clkdev.h>
 #include <mach/pxa2xx-regs.h>
+#include <mach/pxa2xx-gpio.h>
 #include <mach/hardware.h>
 
 #include "devices.h"

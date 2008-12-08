@@ -70,6 +70,7 @@ static const struct ide_tp_ops falconide_tp_ops = {
 	.exec_command		= ide_exec_command,
 	.read_status		= ide_read_status,
 	.read_altstatus		= ide_read_altstatus,
+	.read_sff_dma_status	= ide_read_sff_dma_status,
 
 	.set_irq		= ide_set_irq,
 
@@ -82,7 +83,7 @@ static const struct ide_tp_ops falconide_tp_ops = {
 
 static const struct ide_port_info falconide_port_info = {
 	.tp_ops			= &falconide_tp_ops,
-	.host_flags		= IDE_HFLAG_NO_DMA | IDE_HFLAG_SERIALIZE,
+	.host_flags		= IDE_HFLAG_NO_DMA,
 };
 
 static void __init falconide_setup_ports(hw_regs_t *hw)

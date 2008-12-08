@@ -1474,7 +1474,7 @@ static struct at91_udc controller = {
 		.ep0	= &controller.ep[0].ep,
 		.name	= driver_name,
 		.dev	= {
-			.init_name = "gadget",
+			.bus_id = "gadget",
 			.release = nop_release,
 		}
 	},

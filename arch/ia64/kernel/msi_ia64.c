@@ -49,12 +49,11 @@
 static struct irq_chip	ia64_msi_chip;
 
 #ifdef CONFIG_SMP
-static void ia64_set_msi_irq_affinity(unsigned int irq,
-				      const cpumask_t *cpu_mask)
+static void ia64_set_msi_irq_affinity(unsigned int irq, cpumask_t cpu_mask)
 {
 	struct msi_msg msg;
 	u32 addr, data;
-	int cpu = first_cpu(*cpu_mask);
+	int cpu = first_cpu(cpu_mask);
 
 	if (!cpu_online(cpu))
 		return;
@@ -167,11 +166,12 @@ void arch_teardown_msi_irq(unsigned int irq)
 
 #ifdef CONFIG_DMAR
 #ifdef CONFIG_SMP
-static void dmar_msi_set_affinity(unsigned int irq, const struct cpumask *mask)
+static void dmar_msi_set_affinity(unsigned int irq, cpumask_t mask)
 {
 	struct irq_cfg *cfg = irq_cfg + irq;
 	struct msi_msg msg;
-	int cpu = cpumask_first(mask);
+	int cpu = first_cpu(mask);
+
 
 	if (!cpu_online(cpu))
 		return;
@@ -187,7 +187,7 @@ static void dmar_msi_set_affinity(unsigned int irq, const struct cpumask *mask)
 	msg.address_lo |= MSI_ADDR_DESTID_CPU(cpu_physical_id(cpu));
 
 	dmar_msi_write(irq, &msg);
-	irq_desc[irq].affinity = *mask;
+	irq_desc[irq].affinity = mask;
 }
 #endif /* CONFIG_SMP */
 

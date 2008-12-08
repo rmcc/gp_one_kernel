@@ -1,12 +1,6 @@
-#ifndef __WINBOND_LOCALPARA_H
-#define __WINBOND_LOCALPARA_H
-
 //=============================================================
 // LocalPara.h -
 //=============================================================
-
-#include "mac_structures.h"
-
 //Define the local ability
 
 #define LOCAL_DEFAULT_BEACON_PERIOD			100		//ms
@@ -31,7 +25,7 @@
 #define LOCAL_UNKNOWN_5_CHANNEL_NUM			34	//not include 165
 
 
-#define psLOCAL			(&(adapter->sLocalPara))
+#define psLOCAL			(&(Adapter->sLocalPara))
 
 #define MODE_802_11_BG			0
 #define MODE_802_11_A			1
@@ -149,6 +143,7 @@ typedef struct LOCAL_PARA
 
     //// power-save variables
     u8  		  	iPowerSaveMode;     // 0 indicates it is on, 1 indicates it is off
+	u8			ShutDowned;
 	u8			ATIMmode;
 	u8			ExcludeUnencrypted;
 
@@ -277,4 +272,4 @@ typedef struct LOCAL_PARA
 
 } WB_LOCALDESCRIPT, *PWB_LOCALDESCRIPT;
 
-#endif
+

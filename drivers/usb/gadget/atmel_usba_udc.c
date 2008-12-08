@@ -1034,7 +1034,7 @@ static struct usba_udc the_udc = {
 		.is_dualspeed	= 1,
 		.name		= "atmel_usba_udc",
 		.dev	= {
-			.init_name	= "gadget",
+			.bus_id		= "gadget",
 			.release	= nop_release,
 		},
 	},

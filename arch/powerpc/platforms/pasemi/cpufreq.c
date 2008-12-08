@@ -112,7 +112,7 @@ static int get_gizmo_latency(void)
 
 static void set_astate(int cpu, unsigned int astate)
 {
-	unsigned long flags;
+	u64 flags;
 
 	/* Return if called before init has run */
 	if (unlikely(!sdcasr_mapbase))
@@ -213,7 +213,7 @@ static int pas_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	pr_debug("current astate is at %d\n",cur_astate);
 
 	policy->cur = pas_freqs[cur_astate].frequency;
-	cpumask_copy(policy->cpus, &cpu_online_map);
+	policy->cpus = cpu_online_map;
 
 	ppc_proc_freq = policy->cur * 1000ul;
 

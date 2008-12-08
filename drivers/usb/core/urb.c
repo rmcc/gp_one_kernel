@@ -10,6 +10,7 @@
 
 #define to_urb(d) container_of(d, struct urb, kref)
 
+static DEFINE_SPINLOCK(usb_reject_lock);
 
 static void urb_destroy(struct kref *kref)
 {
@@ -130,7 +131,9 @@ void usb_anchor_urb(struct urb *urb, struct usb_anchor *anchor)
 	urb->anchor = anchor;
 
 	if (unlikely(anchor->poisoned)) {
-		atomic_inc(&urb->reject);
+		spin_lock(&usb_reject_lock);
+		urb->reject++;
+		spin_unlock(&usb_reject_lock);
 	}
 
 	spin_unlock_irqrestore(&anchor->lock, flags);
@@ -562,12 +565,16 @@ void usb_kill_urb(struct urb *urb)
 	might_sleep();
 	if (!(urb && urb->dev && urb->ep))
 		return;
-	atomic_inc(&urb->reject);
+	spin_lock_irq(&usb_reject_lock);
+	++urb->reject;
+	spin_unlock_irq(&usb_reject_lock);
 
 	usb_hcd_unlink_urb(urb, -ENOENT);
 	wait_event(usb_kill_urb_queue, atomic_read(&urb->use_count) == 0);
 
-	atomic_dec(&urb->reject);
+	spin_lock_irq(&usb_reject_lock);
+	--urb->reject;
+	spin_unlock_irq(&usb_reject_lock);
 }
 EXPORT_SYMBOL_GPL(usb_kill_urb);
 
@@ -599,7 +606,9 @@ void usb_poison_urb(struct urb *urb)
 	might_sleep();
 	if (!(urb && urb->dev && urb->ep))
 		return;
-	atomic_inc(&urb->reject);
+	spin_lock_irq(&usb_reject_lock);
+	++urb->reject;
+	spin_unlock_irq(&usb_reject_lock);
 
 	usb_hcd_unlink_urb(urb, -ENOENT);
 	wait_event(usb_kill_urb_queue, atomic_read(&urb->use_count) == 0);
@@ -608,10 +617,14 @@ EXPORT_SYMBOL_GPL(usb_poison_urb);
 
 void usb_unpoison_urb(struct urb *urb)
 {
+	unsigned long flags;
+
 	if (!urb)
 		return;
 
-	atomic_dec(&urb->reject);
+	spin_lock_irqsave(&usb_reject_lock, flags);
+	--urb->reject;
+	spin_unlock_irqrestore(&usb_reject_lock, flags);
 }
 EXPORT_SYMBOL_GPL(usb_unpoison_urb);
 
@@ -678,26 +691,6 @@ void usb_poison_anchored_urbs(struct usb_anchor *anchor)
 }
 EXPORT_SYMBOL_GPL(usb_poison_anchored_urbs);
 
-/**
- * usb_unpoison_anchored_urbs - let an anchor be used successfully again
- * @anchor: anchor the requests are bound to
- *
- * Reverses the effect of usb_poison_anchored_urbs
- * the anchor can be used normally after it returns
- */
-void usb_unpoison_anchored_urbs(struct usb_anchor *anchor)
-{
-	unsigned long flags;
-	struct urb *lazarus;
-
-	spin_lock_irqsave(&anchor->lock, flags);
-	list_for_each_entry(lazarus, &anchor->urb_list, anchor_list) {
-		usb_unpoison_urb(lazarus);
-	}
-	anchor->poisoned = 0;
-	spin_unlock_irqrestore(&anchor->lock, flags);
-}
-EXPORT_SYMBOL_GPL(usb_unpoison_anchored_urbs);
 /**
  * usb_unlink_anchored_urbs - asynchronously cancel transfer requests en masse
  * @anchor: anchor the requests are bound to

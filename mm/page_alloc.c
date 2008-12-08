@@ -69,7 +69,7 @@ EXPORT_SYMBOL(node_states);
 
 unsigned long totalram_pages __read_mostly;
 unsigned long totalreserve_pages __read_mostly;
-unsigned long highest_memmap_pfn __read_mostly;
+long nr_swap_pages;
 int percpu_pagelist_fraction;
 
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
@@ -223,41 +223,19 @@ static inline int bad_range(struct zone *zone, struct page *page)
 
 static void bad_page(struct page *page)
 {
-	static unsigned long resume;
-	static unsigned long nr_shown;
-	static unsigned long nr_unshown;
+	printk(KERN_EMERG "Bad page state in process '%s'\n" KERN_EMERG
+		"page:%p flags:0x%0*lx mapping:%p mapcount:%d count:%d\n",
+		current->comm, page, (int)(2*sizeof(unsigned long)),
+		(unsigned long)page->flags, page->mapping,
+		page_mapcount(page), page_count(page));
 
-	/*
-	 * Allow a burst of 60 reports, then keep quiet for that minute;
-	 * or allow a steady drip of one report per second.
-	 */
-	if (nr_shown == 60) {
-		if (time_before(jiffies, resume)) {
-			nr_unshown++;
-			goto out;
-		}
-		if (nr_unshown) {
-			printk(KERN_ALERT
-			      "BUG: Bad page state: %lu messages suppressed\n",
-				nr_unshown);
-			nr_unshown = 0;
-		}
-		nr_shown = 0;
-	}
-	if (nr_shown++ == 0)
-		resume = jiffies + 60 * HZ;
-
-	printk(KERN_ALERT "BUG: Bad page state in process %s  pfn:%05lx\n",
-		current->comm, page_to_pfn(page));
-	printk(KERN_ALERT
-		"page:%p flags:%p count:%d mapcount:%d mapping:%p index:%lx\n",
-		page, (void *)page->flags, page_count(page),
-		page_mapcount(page), page->mapping, page->index);
-
+	printk(KERN_EMERG "Trying to fix it up, but a reboot is needed\n"
+		KERN_EMERG "Backtrace:\n");
 	dump_stack();
-out:
-	/* Leave bad fields for debug, except PageBuddy could make trouble */
-	__ClearPageBuddy(page);
+	page->flags &= ~PAGE_FLAGS_CLEAR_WHEN_BAD;
+	set_page_count(page, 0);
+	reset_page_mapcount(page);
+	page->mapping = NULL;
 	add_taint(TAINT_BAD_PAGE);
 }
 
@@ -314,31 +292,25 @@ void prep_compound_gigantic_page(struct page *page, unsigned long order)
 }
 #endif
 
-static int destroy_compound_page(struct page *page, unsigned long order)
+static void destroy_compound_page(struct page *page, unsigned long order)
 {
 	int i;
 	int nr_pages = 1 << order;
-	int bad = 0;
 
-	if (unlikely(compound_order(page) != order) ||
-	    unlikely(!PageHead(page))) {
+	if (unlikely(compound_order(page) != order))
 		bad_page(page);
-		bad++;
-	}
 
+	if (unlikely(!PageHead(page)))
+			bad_page(page);
 	__ClearPageHead(page);
-
 	for (i = 1; i < nr_pages; i++) {
 		struct page *p = page + i;
 
-		if (unlikely(!PageTail(p) | (p->first_page != page))) {
+		if (unlikely(!PageTail(p) |
+				(p->first_page != page)))
 			bad_page(page);
-			bad++;
-		}
 		__ClearPageTail(p);
 	}
-
-	return bad;
 }
 
 static inline void prep_zero_page(struct page *page, int order, gfp_t gfp_flags)
@@ -458,8 +430,7 @@ static inline void __free_one_page(struct page *page,
 	int migratetype = get_pageblock_migratetype(page);
 
 	if (unlikely(PageCompound(page)))
-		if (unlikely(destroy_compound_page(page, order)))
-			return;
+		destroy_compound_page(page, order);
 
 	page_idx = page_to_pfn(page) & ((1 << MAX_ORDER) - 1);
 
@@ -496,13 +467,18 @@ static inline int free_pages_check(struct page *page)
 	if (unlikely(page_mapcount(page) |
 		(page->mapping != NULL)  |
 		(page_count(page) != 0)  |
-		(page->flags & PAGE_FLAGS_CHECK_AT_FREE))) {
+		(page->flags & PAGE_FLAGS_CHECK_AT_FREE)))
 		bad_page(page);
-		return 1;
-	}
-	if (page->flags & PAGE_FLAGS_CHECK_AT_PREP)
-		page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
-	return 0;
+	if (PageDirty(page))
+		__ClearPageDirty(page);
+	if (PageSwapBacked(page))
+		__ClearPageSwapBacked(page);
+	/*
+	 * For now, we report if PG_reserved was found set, but do not
+	 * clear it, and do not free the page.  But we shall soon need
+	 * to do more, for when the ZERO_PAGE count wraps negative.
+	 */
+	return PageReserved(page);
 }
 
 /*
@@ -547,11 +523,11 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 {
 	unsigned long flags;
 	int i;
-	int bad = 0;
+	int reserved = 0;
 
 	for (i = 0 ; i < (1 << order) ; ++i)
-		bad += free_pages_check(page + i);
-	if (bad)
+		reserved += free_pages_check(page + i);
+	if (reserved)
 		return;
 
 	if (!PageHighMem(page)) {
@@ -636,11 +612,23 @@ static int prep_new_page(struct page *page, int order, gfp_t gfp_flags)
 	if (unlikely(page_mapcount(page) |
 		(page->mapping != NULL)  |
 		(page_count(page) != 0)  |
-		(page->flags & PAGE_FLAGS_CHECK_AT_PREP))) {
+		(page->flags & PAGE_FLAGS_CHECK_AT_PREP)))
 		bad_page(page);
-		return 1;
-	}
 
+	/*
+	 * For now, we report if PG_reserved was found set, but do not
+	 * clear it, and do not allocate the page: as a safety net.
+	 */
+	if (PageReserved(page))
+		return 1;
+
+	page->flags &= ~(1 << PG_uptodate | 1 << PG_error | 1 << PG_reclaim |
+			1 << PG_referenced | 1 << PG_arch_1 |
+			1 << PG_owner_priv_1 | 1 << PG_mappedtodisk
+#ifdef CONFIG_UNEVICTABLE_LRU
+			| 1 << PG_mlocked
+#endif
+			);
 	set_page_private(page, 0);
 	set_page_refcounted(page);
 
@@ -2621,9 +2609,6 @@ void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 	unsigned long pfn;
 	struct zone *z;
 
-	if (highest_memmap_pfn < end_pfn - 1)
-		highest_memmap_pfn = end_pfn - 1;
-
 	z = &NODE_DATA(nid)->node_zones[zone];
 	for (pfn = start_pfn; pfn < end_pfn; pfn++) {
 		/*
@@ -2989,7 +2974,7 @@ static int __meminit next_active_region_index_in_nid(int index, int nid)
  * was used and there are no special requirements, this is a convenient
  * alternative
  */
-int __meminit __early_pfn_to_nid(unsigned long pfn)
+int __meminit early_pfn_to_nid(unsigned long pfn)
 {
 	int i;
 
@@ -3000,33 +2985,10 @@ int __meminit __early_pfn_to_nid(unsigned long pfn)
 		if (start_pfn <= pfn && pfn < end_pfn)
 			return early_node_map[i].nid;
 	}
-	/* This is a memory hole */
-	return -1;
-}
-#endif /* CONFIG_HAVE_ARCH_EARLY_PFN_TO_NID */
 
-int __meminit early_pfn_to_nid(unsigned long pfn)
-{
-	int nid;
-
-	nid = __early_pfn_to_nid(pfn);
-	if (nid >= 0)
-		return nid;
-	/* just returns 0 */
 	return 0;
 }
-
-#ifdef CONFIG_NODES_SPAN_OTHER_NODES
-bool __meminit early_pfn_in_nid(unsigned long pfn, int node)
-{
-	int nid;
-
-	nid = __early_pfn_to_nid(pfn);
-	if (nid >= 0 && nid != node)
-		return false;
-	return true;
-}
-#endif
+#endif /* CONFIG_HAVE_ARCH_EARLY_PFN_TO_NID */
 
 /* Basic iterator support to walk early_node_map[] */
 #define for_each_active_range_index_in_nid(i, nid) \
@@ -3419,8 +3381,10 @@ static void __init setup_usemap(struct pglist_data *pgdat,
 {
 	unsigned long usemapsize = usemap_size(zonesize);
 	zone->pageblock_flags = NULL;
-	if (usemapsize)
+	if (usemapsize) {
 		zone->pageblock_flags = alloc_bootmem_node(pgdat, usemapsize);
+		memset(zone->pageblock_flags, 0, usemapsize);
+	}
 }
 #else
 static void inline setup_usemap(struct pglist_data *pgdat,
@@ -3505,10 +3469,9 @@ static void __paginginit free_area_init_core(struct pglist_data *pgdat,
 			PAGE_ALIGN(size * sizeof(struct page)) >> PAGE_SHIFT;
 		if (realsize >= memmap_pages) {
 			realsize -= memmap_pages;
-			if (memmap_pages)
-				printk(KERN_DEBUG
-				       "  %s zone: %lu pages used for memmap\n",
-				       zone_names[j], memmap_pages);
+			printk(KERN_DEBUG
+				"  %s zone: %lu pages used for memmap\n",
+				zone_names[j], memmap_pages);
 		} else
 			printk(KERN_WARNING
 				"  %s zone: %lu pages exceeds realsize %lu\n",
@@ -3546,10 +3509,10 @@ static void __paginginit free_area_init_core(struct pglist_data *pgdat,
 			INIT_LIST_HEAD(&zone->lru[l].list);
 			zone->lru[l].nr_scan = 0;
 		}
-		zone->reclaim_stat.recent_rotated[0] = 0;
-		zone->reclaim_stat.recent_rotated[1] = 0;
-		zone->reclaim_stat.recent_scanned[0] = 0;
-		zone->reclaim_stat.recent_scanned[1] = 0;
+		zone->recent_rotated[0] = 0;
+		zone->recent_rotated[1] = 0;
+		zone->recent_scanned[0] = 0;
+		zone->recent_scanned[1] = 0;
 		zap_zone_vm_stats(zone);
 		zone->flags = 0;
 		if (!size)
@@ -4353,7 +4316,7 @@ void setup_per_zone_pages_min(void)
  *    1TB     101        10GB
  *   10TB     320        32GB
  */
-static void setup_per_zone_inactive_ratio(void)
+void setup_per_zone_inactive_ratio(void)
 {
 	struct zone *zone;
 
@@ -4609,6 +4572,19 @@ void *__init alloc_large_system_hash(const char *tablename,
 
 	return table;
 }
+
+#ifdef CONFIG_OUT_OF_LINE_PFN_TO_PAGE
+struct page *pfn_to_page(unsigned long pfn)
+{
+	return __pfn_to_page(pfn);
+}
+unsigned long page_to_pfn(struct page *page)
+{
+	return __page_to_pfn(page);
+}
+EXPORT_SYMBOL(pfn_to_page);
+EXPORT_SYMBOL(page_to_pfn);
+#endif /* CONFIG_OUT_OF_LINE_PFN_TO_PAGE */
 
 /* Return a pointer to the bitmap storing bits affecting a block of pages */
 static inline unsigned long *get_pageblock_bitmap(struct zone *zone,

@@ -37,6 +37,11 @@
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
+#ifndef CONFIG_BT_HCIBTSDIO_DEBUG
+#undef  BT_DBG
+#define BT_DBG(D...)
+#endif
+
 #define VERSION "0.1"
 
 static const struct sdio_device_id btsdio_table[] = {
@@ -86,7 +91,6 @@ static int btsdio_tx_packet(struct btsdio_data *data, struct sk_buff *skb)
 
 	err = sdio_writesb(data->func, REG_TDAT, skb->data, skb->len);
 	if (err < 0) {
-		skb_pull(skb, 4);
 		sdio_writeb(data->func, 0x01, REG_PC_WRT, NULL);
 		return err;
 	}

@@ -2039,9 +2039,9 @@ static irqreturn_t sbmac_intr(int irq,void *dev_instance)
 		sbdma_tx_process(sc,&(sc->sbm_txdma), 0);
 
 	if (isr & (M_MAC_INT_CHANNEL << S_MAC_RX_CH0)) {
-		if (netif_rx_schedule_prep(&sc->napi)) {
+		if (netif_rx_schedule_prep(dev, &sc->napi)) {
 			__raw_writeq(0, sc->sbm_imr);
-			__netif_rx_schedule(&sc->napi);
+			__netif_rx_schedule(dev, &sc->napi);
 			/* Depend on the exit from poll to reenable intr */
 		}
 		else {
@@ -2292,6 +2292,7 @@ static int sbmac_init(struct platform_device *pldev, long long base)
 	uint64_t ea_reg;
 	int i;
 	int err;
+	DECLARE_MAC_BUF(mac);
 
 	sc->sbm_dev = dev;
 	sc->sbe_idx = idx;
@@ -2372,8 +2373,8 @@ static int sbmac_init(struct platform_device *pldev, long long base)
 	 * process so we need to finish off the config message that
 	 * was being displayed)
 	 */
-	pr_info("%s: SiByte Ethernet at 0x%08Lx, address: %pM\n",
-	       dev->name, base, eaddr);
+	pr_info("%s: SiByte Ethernet at 0x%08Lx, address: %s\n",
+	       dev->name, base, print_mac(mac, eaddr));
 
 	sc->mii_bus->name = sbmac_mdio_string;
 	snprintf(sc->mii_bus->id, MII_BUS_ID_SIZE, "%x", idx);
@@ -2667,7 +2668,7 @@ static int sbmac_poll(struct napi_struct *napi, int budget)
 	sbdma_tx_process(sc, &(sc->sbm_txdma), 1);
 
 	if (work_done < budget) {
-		netif_rx_complete(napi);
+		netif_rx_complete(dev, napi);
 
 #ifdef CONFIG_SBMAC_COALESCE
 		__raw_writeq(((M_MAC_INT_EOP_COUNT | M_MAC_INT_EOP_TIMER) << S_MAC_TX_CH0) |

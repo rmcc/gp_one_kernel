@@ -15,7 +15,7 @@
 #ifndef __LINUX_IF_PPPOL2TP_H
 #define __LINUX_IF_PPPOL2TP_H
 
-#include <linux/types.h>
+#include <asm/types.h>
 
 #ifdef __KERNEL__
 #include <linux/in.h>

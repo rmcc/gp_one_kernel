@@ -236,7 +236,7 @@ struct strip {
 	unsigned long tx_errors;	/* Planned stuff                */
 	unsigned long rx_dropped;	/* No memory for skb            */
 	unsigned long tx_dropped;	/* When MTU change              */
-	unsigned long rx_over_errors;	/* Frame bigger than STRIP buf. */
+	unsigned long rx_over_errors;	/* Frame bigger then STRIP buf. */
 
 	unsigned long pps_timer;	/* Timer to determine pps       */
 	unsigned long rx_pps_count;	/* Counter to determine pps     */
@@ -1234,7 +1234,7 @@ static void ResetRadio(struct strip *strip_info)
 
 static void strip_write_some_more(struct tty_struct *tty)
 {
-	struct strip *strip_info = tty->disc_data;
+	struct strip *strip_info = (struct strip *) tty->disc_data;
 
 	/* First make sure we're connected. */
 	if (!strip_info || strip_info->magic != STRIP_MAGIC ||
@@ -1252,7 +1252,7 @@ static void strip_write_some_more(struct tty_struct *tty)
 #endif
 	} else {		/* Else start transmission of another packet */
 
-		clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 		strip_unlock(strip_info);
 	}
 }
@@ -1455,7 +1455,8 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
 	 */
 	strip_info->tx_head = strip_info->tx_buff;
 	strip_info->tx_left = ptr - strip_info->tx_buff;
-	set_bit(TTY_DO_WRITE_WAKEUP, &strip_info->tty->flags);
+	strip_info->tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
+
 	/*
 	 * 4. Debugging check to make sure we're not overflowing the buffer.
 	 */
@@ -1996,6 +1997,7 @@ static void deliver_packet(struct strip *strip_info, STRIP_Header * header,
 #ifdef EXT_COUNTERS
 		strip_info->rx_bytes += packetlen;
 #endif
+		skb->dev->last_rx = jiffies;
 		netif_rx(skb);
 	}
 }
@@ -2259,7 +2261,7 @@ static void process_message(struct strip *strip_info)
 static void strip_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 		  char *fp, int count)
 {
-	struct strip *strip_info = tty->disc_data;
+	struct strip *strip_info = (struct strip *) tty->disc_data;
 	const unsigned char *end = cp + count;
 
 	if (!strip_info || strip_info->magic != STRIP_MAGIC
@@ -2453,7 +2455,8 @@ static int strip_close_low(struct net_device *dev)
 
 	if (strip_info->tty == NULL)
 		return -EBUSY;
-	clear_bit(TTY_DO_WRITE_WAKEUP, &strip_info->tty->flags);
+	strip_info->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
+
 	netif_stop_queue(dev);
 
 	/*
@@ -2487,6 +2490,7 @@ static void strip_dev_setup(struct net_device *dev)
 	 */
 
 	dev->trans_start = 0;
+	dev->last_rx = 0;
 	dev->tx_queue_len = 30;	/* Drop after 30 frames queued */
 
 	dev->flags = 0;
@@ -2494,7 +2498,7 @@ static void strip_dev_setup(struct net_device *dev)
 	dev->type = ARPHRD_METRICOM;	/* dtang */
 	dev->hard_header_len = sizeof(STRIP_Header);
 	/*
-	 *  netdev_priv(dev) Already holds a pointer to our struct strip
+	 *  dev->priv             Already holds a pointer to our struct strip
 	 */
 
 	*(MetricomAddress *) & dev->broadcast = broadcast_address;
@@ -2594,7 +2598,7 @@ static struct strip *strip_alloc(void)
 
 static int strip_open(struct tty_struct *tty)
 {
-	struct strip *strip_info = tty->disc_data;
+	struct strip *strip_info = (struct strip *) tty->disc_data;
 
 	/*
 	 * First make sure we're not already connected.
@@ -2665,7 +2669,7 @@ static int strip_open(struct tty_struct *tty)
 
 static void strip_close(struct tty_struct *tty)
 {
-	struct strip *strip_info = tty->disc_data;
+	struct strip *strip_info = (struct strip *) tty->disc_data;
 
 	/*
 	 * First make sure we're connected.
@@ -2691,7 +2695,7 @@ static void strip_close(struct tty_struct *tty)
 static int strip_ioctl(struct tty_struct *tty, struct file *file,
 		       unsigned int cmd, unsigned long arg)
 {
-	struct strip *strip_info = tty->disc_data;
+	struct strip *strip_info = (struct strip *) tty->disc_data;
 
 	/*
 	 * First make sure we're connected.

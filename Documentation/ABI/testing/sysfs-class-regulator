@@ -3,9 +3,8 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
-		state. This reports the regulator enable status, for
-		regulators which can report that value.
+		Each regulator directory will contain a field called
+		state. This holds the regulator output state.
 
 		This will be one of the following strings:
 
@@ -19,8 +18,7 @@ Description:
 		'disabled' means the regulator output is OFF and is not
 		supplying power to the system..
 
-		'unknown' means software cannot determine the state, or
-		the reported state is invalid.
+		'unknown' means software cannot determine the state.
 
 		NOTE: this field can be used in conjunction with microvolts
 		and microamps to determine regulator output levels.
@@ -55,10 +53,9 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		microvolts. This holds the regulator output voltage setting
-		measured in microvolts (i.e. E-6 Volts), for regulators
-		which can report that voltage.
+		measured in microvolts (i.e. E-6 Volts).
 
 		NOTE: This value should not be used to determine the regulator
 		output voltage level as this value is the same regardless of
@@ -70,10 +67,9 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		microamps. This holds the regulator output current limit
-		setting measured in microamps (i.e. E-6 Amps), for regulators
-		which can report that current.
+		setting measured in microamps (i.e. E-6 Amps).
 
 		NOTE: This value should not be used to determine the regulator
 		output current level as this value is the same regardless of
@@ -85,9 +81,8 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
-		opmode. This holds the current regulator operating mode,
-		for regulators which can report it.
+		Each regulator directory will contain a field called
+		opmode. This holds the regulator operating mode setting.
 
 		The opmode value can be one of the following strings:
 
@@ -97,7 +92,7 @@ Description:
 		'standby'
 		'unknown'
 
-		The modes are described in include/linux/regulator/consumer.h
+		The modes are described in include/linux/regulator/regulator.h
 
 		NOTE: This value should not be used to determine the regulator
 		output operating mode as this value is the same regardless of
@@ -109,10 +104,9 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		min_microvolts. This holds the minimum safe working regulator
-		output voltage setting for this domain measured in microvolts,
-		for regulators which support voltage constraints.
+		output voltage setting for this domain measured in microvolts.
 
 		NOTE: this will return the string 'constraint not defined' if
 		the power domain has no min microvolts constraint defined by
@@ -124,10 +118,9 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		max_microvolts. This holds the maximum safe working regulator
-		output voltage setting for this domain measured in microvolts,
-		for regulators which support voltage constraints.
+		output voltage setting for this domain measured in microvolts.
 
 		NOTE: this will return the string 'constraint not defined' if
 		the power domain has no max microvolts constraint defined by
@@ -139,10 +132,10 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		min_microamps. This holds the minimum safe working regulator
 		output current limit setting for this domain measured in
-		microamps, for regulators which support current constraints.
+		microamps.
 
 		NOTE: this will return the string 'constraint not defined' if
 		the power domain has no min microamps constraint defined by
@@ -154,10 +147,10 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		max_microamps. This holds the maximum safe working regulator
 		output current limit setting for this domain measured in
-		microamps, for regulators which support current constraints.
+		microamps.
 
 		NOTE: this will return the string 'constraint not defined' if
 		the power domain has no max microamps constraint defined by
@@ -192,7 +185,7 @@ Date:		April 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		requested_microamps. This holds the total requested load
 		current in microamps for this regulator from all its consumer
 		devices.
@@ -211,102 +204,125 @@ Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_mem_microvolts. This holds the regulator output
 		voltage setting for this domain measured in microvolts when
-		the system is suspended to memory, for voltage regulators
-		implementing suspend voltage configuration constraints.
+		the system is suspended to memory.
+
+		NOTE: this will return the string 'not defined' if
+		the power domain has no suspend to memory voltage defined by
+		platform code.
 
 What:		/sys/class/regulator/.../suspend_disk_microvolts
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_disk_microvolts. This holds the regulator output
 		voltage setting for this domain measured in microvolts when
-		the system is suspended to disk, for voltage regulators
-		implementing suspend voltage configuration constraints.
+		the system is suspended to disk.
+
+		NOTE: this will return the string 'not defined' if
+		the power domain has no suspend to disk voltage defined by
+		platform code.
 
 What:		/sys/class/regulator/.../suspend_standby_microvolts
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_standby_microvolts. This holds the regulator output
 		voltage setting for this domain measured in microvolts when
-		the system is suspended to standby, for voltage regulators
-		implementing suspend voltage configuration constraints.
+		the system is suspended to standby.
+
+		NOTE: this will return the string 'not defined' if
+		the power domain has no suspend to standby voltage defined by
+		platform code.
 
 What:		/sys/class/regulator/.../suspend_mem_mode
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_mem_mode. This holds the regulator operating mode
 		setting for this domain when the system is suspended to
-		memory, for regulators implementing suspend mode
-		configuration constraints.
+		memory.
+
+		NOTE: this will return the string 'not defined' if
+		the power domain has no suspend to memory mode defined by
+		platform code.
 
 What:		/sys/class/regulator/.../suspend_disk_mode
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_disk_mode. This holds the regulator operating mode
-		setting for this domain when the system is suspended to disk,
-		for regulators implementing suspend mode configuration
-		constraints.
+		setting for this domain when the system is suspended to disk.
+
+		NOTE: this will return the string 'not defined' if
+		the power domain has no suspend to disk mode defined by
+		platform code.
 
 What:		/sys/class/regulator/.../suspend_standby_mode
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_standby_mode. This holds the regulator operating mode
 		setting for this domain when the system is suspended to
-		standby, for regulators implementing suspend mode
-		configuration constraints.
+		standby.
+
+		NOTE: this will return the string 'not defined' if
+		the power domain has no suspend to standby mode defined by
+		platform code.
 
 What:		/sys/class/regulator/.../suspend_mem_state
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_mem_state. This holds the regulator operating state
-		when suspended to memory, for regulators implementing suspend
-		configuration constraints.
+		when suspended to memory.
 
-		This will be one of the same strings reported by
-		the "state" attribute.
+		This will be one of the following strings:
+
+		'enabled'
+		'disabled'
+		'not defined'
 
 What:		/sys/class/regulator/.../suspend_disk_state
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_disk_state. This holds the regulator operating state
-		when suspended to disk, for regulators implementing
-		suspend configuration constraints.
+		when suspended to disk.
 
-		This will be one of the same strings reported by
-		the "state" attribute.
+		This will be one of the following strings:
+
+		'enabled'
+		'disabled'
+		'not defined'
 
 What:		/sys/class/regulator/.../suspend_standby_state
 Date:		May 2008
 KernelVersion:	2.6.26
 Contact:	Liam Girdwood <lrg@slimlogic.co.uk>
 Description:
-		Some regulator directories will contain a field called
+		Each regulator directory will contain a field called
 		suspend_standby_state. This holds the regulator operating
-		state when suspended to standby, for regulators implementing
-		suspend configuration constraints.
+		state when suspended to standby.
 
-		This will be one of the same strings reported by
-		the "state" attribute.
+		This will be one of the following strings:
+
+		'enabled'
+		'disabled'
+		'not defined'

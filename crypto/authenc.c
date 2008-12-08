@@ -11,7 +11,6 @@
  */
 
 #include <crypto/aead.h>
-#include <crypto/internal/hash.h>
 #include <crypto/internal/skcipher.h>
 #include <crypto/authenc.h>
 #include <crypto/scatterwalk.h>
@@ -158,19 +157,16 @@ static int crypto_authenc_genicv(struct aead_request *req, u8 *iv,
 	dstp = sg_page(dst);
 	vdst = PageHighMem(dstp) ? NULL : page_address(dstp) + dst->offset;
 
-	if (ivsize) {
-		sg_init_table(cipher, 2);
-		sg_set_buf(cipher, iv, ivsize);
-		authenc_chain(cipher, dst, vdst == iv + ivsize);
-		dst = cipher;
-	}
+	sg_init_table(cipher, 2);
+	sg_set_buf(cipher, iv, ivsize);
+	authenc_chain(cipher, dst, vdst == iv + ivsize);
 
 	cryptlen = req->cryptlen + ivsize;
-	hash = crypto_authenc_hash(req, flags, dst, cryptlen);
+	hash = crypto_authenc_hash(req, flags, cipher, cryptlen);
 	if (IS_ERR(hash))
 		return PTR_ERR(hash);
 
-	scatterwalk_map_and_copy(hash, dst, cryptlen,
+	scatterwalk_map_and_copy(hash, cipher, cryptlen,
 				 crypto_aead_authsize(authenc), 1);
 	return 0;
 }
@@ -288,14 +284,11 @@ static int crypto_authenc_iverify(struct aead_request *req, u8 *iv,
 	srcp = sg_page(src);
 	vsrc = PageHighMem(srcp) ? NULL : page_address(srcp) + src->offset;
 
-	if (ivsize) {
-		sg_init_table(cipher, 2);
-		sg_set_buf(cipher, iv, ivsize);
-		authenc_chain(cipher, src, vsrc == iv + ivsize);
-		src = cipher;
-	}
+	sg_init_table(cipher, 2);
+	sg_set_buf(cipher, iv, ivsize);
+	authenc_chain(cipher, src, vsrc == iv + ivsize);
 
-	return crypto_authenc_verify(req, src, cryptlen + ivsize);
+	return crypto_authenc_verify(req, cipher, cryptlen + ivsize);
 }
 
 static int crypto_authenc_decrypt(struct aead_request *req)
@@ -438,8 +431,6 @@ static struct crypto_instance *crypto_authenc_alloc(struct rtattr **tb)
 	inst->alg.cra_aead.ivsize = enc->cra_ablkcipher.ivsize;
 	inst->alg.cra_aead.maxauthsize = auth->cra_type == &crypto_hash_type ?
 					 auth->cra_hash.digestsize :
-					 auth->cra_type ?
-					 __crypto_shash_alg(auth)->digestsize :
 					 auth->cra_digest.dia_digestsize;
 
 	inst->alg.cra_ctxsize = sizeof(struct crypto_authenc_ctx);

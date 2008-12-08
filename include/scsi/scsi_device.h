@@ -159,6 +159,8 @@ struct scsi_device {
 	atomic_t iodone_cnt;
 	atomic_t ioerr_cnt;
 
+	int timeout;
+
 	struct device		sdev_gendev,
 				sdev_dev;
 
@@ -365,11 +367,10 @@ extern int scsi_is_target_device(const struct device *);
 extern int scsi_execute(struct scsi_device *sdev, const unsigned char *cmd,
 			int data_direction, void *buffer, unsigned bufflen,
 			unsigned char *sense, int timeout, int retries,
-			int flag, int *resid);
+			int flag);
 extern int scsi_execute_req(struct scsi_device *sdev, const unsigned char *cmd,
 			    int data_direction, void *buffer, unsigned bufflen,
-			    struct scsi_sense_hdr *, int timeout, int retries,
-			    int *resid);
+			    struct scsi_sense_hdr *, int timeout, int retries);
 extern int scsi_execute_async(struct scsi_device *sdev,
 			      const unsigned char *cmd, int cmd_len, int data_direction,
 			      void *buffer, unsigned bufflen, int use_sg,

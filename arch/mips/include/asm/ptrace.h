@@ -9,6 +9,10 @@
 #ifndef _ASM_PTRACE_H
 #define _ASM_PTRACE_H
 
+#ifdef CONFIG_64BIT
+#define __ARCH_WANT_COMPAT_SYS_PTRACE
+#endif
+
 /* 0 - 31 are integer registers, 32 - 63 are fp registers.  */
 #define FPR_BASE	32
 #define PC		64
@@ -48,10 +52,6 @@ struct pt_regs {
 #ifdef CONFIG_MIPS_MT_SMTC
 	unsigned long cp0_tcstatus;
 #endif /* CONFIG_MIPS_MT_SMTC */
-#ifdef CONFIG_CPU_CAVIUM_OCTEON
-	unsigned long long mpl[3];        /* MTM{0,1,2} */
-	unsigned long long mtp[3];        /* MTP{0,1,2} */
-#endif
 } __attribute__ ((aligned (8)));
 
 /* Arbitrarily choose the same ptrace numbers as used by the Sparc code. */
@@ -105,7 +105,7 @@ struct pt_watch_regs {
 	enum pt_watch_style style;
 	union {
 		struct mips32_watch_regs mips32;
-		struct mips64_watch_regs mips64;
+		struct mips32_watch_regs mips64;
 	};
 };
 

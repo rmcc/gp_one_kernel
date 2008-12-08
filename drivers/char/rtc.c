@@ -48,10 +48,9 @@
  *		CONFIG_HPET_EMULATE_RTC
  *	1.12a	Maciej W. Rozycki: Handle memory-mapped chips properly.
  *	1.12ac	Alan Cox: Allow read access to the day of week register
- *	1.12b	David John: Remove calls to the BKL.
  */
 
-#define RTC_VERSION		"1.12b"
+#define RTC_VERSION		"1.12ac"
 
 /*
  *	Note that *all* calls to CMOS_READ and CMOS_WRITE are done with
@@ -74,6 +73,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
+#include <linux/smp_lock.h>
 #include <linux/sysctl.h>
 #include <linux/wait.h>
 #include <linux/bcd.h>
@@ -182,8 +182,8 @@ static int rtc_proc_open(struct inode *inode, struct file *file);
 
 /*
  * rtc_status is never changed by rtc_interrupt, and ioctl/open/close is
- * protected by the spin lock rtc_lock. However, ioctl can still disable the
- * timer in rtc_status and then with del_timer after the interrupt has read
+ * protected by the big kernel lock. However, ioctl can still disable the timer
+ * in rtc_status and then with del_timer after the interrupt has read
  * rtc_status but before mod_timer is called, which would then reenable the
  * timer (but you would need to have an awful timing before you'd trip on it)
  */
@@ -720,7 +720,9 @@ static int rtc_do_ioctl(unsigned int cmd, unsigned long arg, int kernel)
 static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	long ret;
+	lock_kernel();
 	ret = rtc_do_ioctl(cmd, arg, 0);
+	unlock_kernel();
 	return ret;
 }
 
@@ -729,8 +731,12 @@ static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  *	Also clear the previous interrupt data on an open, and clean
  *	up things on a close.
  */
+
+/* We use rtc_lock to protect against concurrent opens. So the BKL is not
+ * needed here. Or anywhere else in this driver. */
 static int rtc_open(struct inode *inode, struct file *file)
 {
+	lock_kernel();
 	spin_lock_irq(&rtc_lock);
 
 	if (rtc_status & RTC_IS_OPEN)
@@ -740,10 +746,12 @@ static int rtc_open(struct inode *inode, struct file *file)
 
 	rtc_irq_data = 0;
 	spin_unlock_irq(&rtc_lock);
+	unlock_kernel();
 	return 0;
 
 out_busy:
 	spin_unlock_irq(&rtc_lock);
+	unlock_kernel();
 	return -EBUSY;
 }
 
@@ -792,6 +800,7 @@ no_irq:
 }
 
 #ifdef RTC_IRQ
+/* Called without the kernel lock - fine */
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
 	unsigned long l;

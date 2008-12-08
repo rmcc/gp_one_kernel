@@ -212,7 +212,8 @@ void flexcop_reset_block_300(struct flexcop_device *fc)
 	v210.sw_reset_210.Block_reset_enable = 0xb2;
 
 	fc->write_ibi_reg(fc,sw_reset_210,v210);
-	udelay(1000);
+	msleep(1);
+
 	fc->write_ibi_reg(fc,ctrl_208,v208_save);
 }
 
@@ -269,7 +270,7 @@ int flexcop_device_initialize(struct flexcop_device *fc)
 	/* do the MAC address reading after initializing the dvb_adapter */
 	if (fc->get_mac_addr(fc, 0) == 0) {
 		u8 *b = fc->dvb_adapter.proposed_mac;
-		info("MAC address = %pM", b);
+		info("MAC address = %02x:%02x:%02x:%02x:%02x:%02x", b[0],b[1],b[2],b[3],b[4],b[5]);
 		flexcop_set_mac_filter(fc,b);
 		flexcop_mac_filter_ctrl(fc,1);
 	} else

@@ -174,12 +174,14 @@ not_o32_scall:
 	END(handle_sys)
 
 LEAF(sys32_syscall)
-	subu	t0, a0, __NR_O32_Linux	# check syscall number
-	sltiu	v0, t0, __NR_O32_Linux_syscalls + 1
-	beqz	t0, einval		# do not recurse
-	dsll	t1, t0, 3
+	sltu	v0, a0, __NR_O32_Linux + __NR_O32_Linux_syscalls + 1
 	beqz	v0, einval
-	ld	t2, sys_call_table(t1)		# syscall routine
+
+	dsll	v0, a0, 3
+	ld	t2, (sys_call_table - (__NR_O32_Linux * 8))(v0)
+
+	li	v1, 4000		# indirect syscall number
+	beq	a0, v1, einval		# do not recurse
 
 	move	a0, a1			# shift argument registers
 	move	a1, a2
@@ -196,7 +198,7 @@ LEAF(sys32_syscall)
 	jr	t2
 	/* Unreached */
 
-einval:	li	v0, -ENOSYS
+einval:	li	v0, -EINVAL
 	jr	ra
 	END(sys32_syscall)
 
@@ -265,12 +267,12 @@ sys_call_table:
 	PTR	sys_olduname
 	PTR	sys_umask			/* 4060 */
 	PTR	sys_chroot
-	PTR	sys_32_ustat
+	PTR	sys32_ustat
 	PTR	sys_dup2
 	PTR	sys_getppid
 	PTR	sys_getpgrp			/* 4065 */
 	PTR	sys_setsid
-	PTR	sys_32_sigaction
+	PTR	sys32_sigaction
 	PTR	sys_sgetmask
 	PTR	sys_ssetmask
 	PTR	sys_setreuid			/* 4070 */
@@ -293,7 +295,7 @@ sys_call_table:
 	PTR	sys_swapon
 	PTR	sys_reboot
 	PTR	compat_sys_old_readdir
-	PTR	sys_mips_mmap			/* 4090 */
+	PTR	old_mmap			/* 4090 */
 	PTR	sys_munmap
 	PTR	sys_truncate
 	PTR	sys_ftruncate
@@ -320,12 +322,12 @@ sys_call_table:
 	PTR	compat_sys_wait4
 	PTR	sys_swapoff			/* 4115 */
 	PTR	compat_sys_sysinfo
-	PTR	sys_32_ipc
+	PTR	sys32_ipc
 	PTR	sys_fsync
 	PTR	sys32_sigreturn
 	PTR	sys32_clone			/* 4120 */
 	PTR	sys_setdomainname
-	PTR	sys_32_newuname
+	PTR	sys32_newuname
 	PTR	sys_ni_syscall			/* sys_modify_ldt */
 	PTR	compat_sys_adjtimex
 	PTR	sys_mprotect			/* 4125 */
@@ -339,11 +341,11 @@ sys_call_table:
 	PTR	sys_fchdir
 	PTR	sys_bdflush
 	PTR	sys_sysfs			/* 4135 */
-	PTR	sys_32_personality
+	PTR	sys32_personality
 	PTR	sys_ni_syscall	 		/* for afs_syscall */
 	PTR	sys_setfsuid
 	PTR	sys_setfsgid
-	PTR	sys_32_llseek			/* 4140 */
+	PTR	sys32_llseek			/* 4140 */
 	PTR	compat_sys_getdents
 	PTR	compat_sys_select
 	PTR	sys_flock
@@ -356,7 +358,7 @@ sys_call_table:
 	PTR	sys_ni_syscall			/* 4150 */
 	PTR	sys_getsid
 	PTR	sys_fdatasync
-	PTR	sys_32_sysctl
+	PTR	sys32_sysctl
 	PTR	sys_mlock
 	PTR	sys_munlock			/* 4155 */
 	PTR	sys_mlockall
@@ -368,7 +370,7 @@ sys_call_table:
 	PTR	sys_sched_yield
 	PTR	sys_sched_get_priority_max
 	PTR	sys_sched_get_priority_min
-	PTR	sys_32_sched_rr_get_interval 	/* 4165 */
+	PTR	sys32_sched_rr_get_interval 	/* 4165 */
 	PTR	compat_sys_nanosleep
 	PTR	sys_mremap
 	PTR	sys_accept
@@ -397,25 +399,25 @@ sys_call_table:
 	PTR	sys_getresgid
 	PTR	sys_prctl
 	PTR	sys32_rt_sigreturn
-	PTR	sys_32_rt_sigaction
-	PTR	sys_32_rt_sigprocmask 		/* 4195 */
-	PTR	sys_32_rt_sigpending
+	PTR	sys32_rt_sigaction
+	PTR	sys32_rt_sigprocmask 		/* 4195 */
+	PTR	sys32_rt_sigpending
 	PTR	compat_sys_rt_sigtimedwait
-	PTR	sys_32_rt_sigqueueinfo
+	PTR	sys32_rt_sigqueueinfo
 	PTR	sys32_rt_sigsuspend
-	PTR	sys_32_pread			/* 4200 */
-	PTR	sys_32_pwrite
+	PTR	sys32_pread			/* 4200 */
+	PTR	sys32_pwrite
 	PTR	sys_chown
 	PTR	sys_getcwd
 	PTR	sys_capget
 	PTR	sys_capset			/* 4205 */
 	PTR	sys32_sigaltstack
-	PTR	sys_32_sendfile
+	PTR	sys32_sendfile
 	PTR	sys_ni_syscall
 	PTR	sys_ni_syscall
-	PTR	sys_mips_mmap2			/* 4210 */
-	PTR	sys_32_truncate64
-	PTR	sys_32_ftruncate64
+	PTR	sys32_mmap2			/* 4210 */
+	PTR	sys32_truncate64
+	PTR	sys32_ftruncate64
 	PTR	sys_newstat
 	PTR	sys_newlstat
 	PTR	sys_newfstat			/* 4215 */
@@ -481,7 +483,7 @@ sys_call_table:
 	PTR	compat_sys_mq_notify		/* 4275 */
 	PTR	compat_sys_mq_getsetattr
 	PTR	sys_ni_syscall			/* sys_vserver */
-	PTR	sys_32_waitid
+	PTR	sys32_waitid
 	PTR	sys_ni_syscall			/* available, was setaltroot */
 	PTR	sys_add_key			/* 4280 */
 	PTR	sys_request_key
@@ -510,7 +512,7 @@ sys_call_table:
 	PTR	sys_splice
 	PTR	sys32_sync_file_range		/* 4305 */
 	PTR	sys_tee
-	PTR	compat_sys_vmsplice
+	PTR	sys_vmsplice
 	PTR	compat_sys_move_pages
 	PTR	compat_sys_set_robust_list
 	PTR	compat_sys_get_robust_list	/* 4310 */

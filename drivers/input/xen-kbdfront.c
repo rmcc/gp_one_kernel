@@ -323,7 +323,7 @@ static struct xenbus_device_id xenkbd_ids[] = {
 	{ "" }
 };
 
-static struct xenbus_driver xenkbd_driver = {
+static struct xenbus_driver xenkbd = {
 	.name = "vkbd",
 	.owner = THIS_MODULE,
 	.ids = xenkbd_ids,
@@ -342,12 +342,12 @@ static int __init xenkbd_init(void)
 	if (xen_initial_domain())
 		return -ENODEV;
 
-	return xenbus_register_frontend(&xenkbd_driver);
+	return xenbus_register_frontend(&xenkbd);
 }
 
 static void __exit xenkbd_cleanup(void)
 {
-	xenbus_unregister_driver(&xenkbd_driver);
+	xenbus_unregister_driver(&xenkbd);
 }
 
 module_init(xenkbd_init);

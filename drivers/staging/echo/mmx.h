@@ -27,7 +27,7 @@
  * values by ULL, lest they be truncated by the compiler)
  */
 
-union mmx_t {
+typedef union {
 	long long q;		/* Quadword (64-bit) value */
 	unsigned long long uq;	/* Unsigned Quadword */
 	int d[2];		/* 2 Doubleword (32-bit) values */
@@ -37,12 +37,12 @@ union mmx_t {
 	char b[8];		/* 8 Byte (8-bit) values */
 	unsigned char ub[8];	/* 8 Unsigned Byte */
 	float s[2];		/* Single-precision (32-bit) value */
-};				/* On an 8-byte (64-bit) boundary */
+} mmx_t;			/* On an 8-byte (64-bit) boundary */
 
 /* SSE registers */
-union xmm_t {
+typedef union {
 	char b[16];
-};
+} xmm_t;
 
 #define         mmx_i2r(op,imm,reg) \
         __asm__ __volatile__ (#op " %0, %%" #reg \

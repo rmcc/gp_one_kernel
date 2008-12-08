@@ -210,8 +210,10 @@ static struct pxafb_mode_info generic_stn_320x240_mode = {
 static struct pxafb_mach_info generic_stn_320x240 = {
 	.modes		= &generic_stn_320x240_mode,
 	.num_modes	= 1,
-	.lcd_conn	= LCD_COLOR_STN_8BPP | LCD_PCLK_EDGE_FALL |\
-			  LCD_AC_BIAS_FREQ(0xff),
+	.lccr0		= 0,
+	.lccr3		= (LCCR3_PixClkDiv(0x03) |
+			   LCCR3_Acb(0xff) |
+			   LCCR3_PCP),
 	.cmap_inverse	= 0,
 	.cmap_static	= 0,
 };
@@ -234,8 +236,10 @@ static struct pxafb_mode_info generic_tft_640x480_mode = {
 static struct pxafb_mach_info generic_tft_640x480 = {
 	.modes		= &generic_tft_640x480_mode,
 	.num_modes	= 1,
-	.lcd_conn	= LCD_COLOR_TFT_8BPP | LCD_PCLK_EDGE_FALL |\
-			  LCD_AC_BIAS_FREQ(0xff),
+	.lccr0		= (LCCR0_PAS),
+	.lccr3		= (LCCR3_PixClkDiv(0x01) |
+			   LCCR3_Acb(0xff) |
+			   LCCR3_PCP),
 	.cmap_inverse	= 0,
 	.cmap_static	= 0,
 };
@@ -259,7 +263,9 @@ static struct pxafb_mode_info generic_crt_640x480_mode = {
 static struct pxafb_mach_info generic_crt_640x480 = {
 	.modes		= &generic_crt_640x480_mode,
 	.num_modes	= 1,
-	.lcd_conn	= LCD_COLOR_TFT_8BPP | LCD_AC_BIAS_FREQ(0xff),
+	.lccr0		= (LCCR0_PAS),
+	.lccr3		= (LCCR3_PixClkDiv(0x01) |
+			   LCCR3_Acb(0xff)),
 	.cmap_inverse	= 0,
 	.cmap_static	= 0,
 };
@@ -283,7 +289,9 @@ static struct pxafb_mode_info generic_crt_800x600_mode = {
 static struct pxafb_mach_info generic_crt_800x600 = {
 	.modes		= &generic_crt_800x600_mode,
 	.num_modes	= 1,
-	.lcd_conn	= LCD_COLOR_TFT_8BPP | LCD_AC_BIAS_FREQ(0xff),
+	.lccr0		= (LCCR0_PAS),
+	.lccr3		= (LCCR3_PixClkDiv(0x02) |
+			   LCCR3_Acb(0xff)),
 	.cmap_inverse	= 0,
 	.cmap_static	= 0,
 };
@@ -306,7 +314,10 @@ static struct pxafb_mode_info generic_tft_320x240_mode = {
 static struct pxafb_mach_info generic_tft_320x240 = {
 	.modes		= &generic_tft_320x240_mode,
 	.num_modes	= 1,
-	.lcd_conn	= LCD_COLOR_TFT_16BPP | LCD_AC_BIAS_FREQ(0xff),
+	.lccr0		= (LCCR0_PAS),
+	.lccr3		= (LCCR3_PixClkDiv(0x06) |
+			   LCCR3_Acb(0xff) |
+			   LCCR3_PCP),
 	.cmap_inverse	= 0,
 	.cmap_static	= 0,
 };
@@ -330,7 +341,9 @@ static struct pxafb_mode_info generic_stn_640x480_mode = {
 static struct pxafb_mach_info generic_stn_640x480 = {
 	.modes		= &generic_stn_640x480_mode,
 	.num_modes	= 1,
-	.lcd_conn	= LCD_COLOR_STN_8BPP | LCD_AC_BIAS_FREQ(0xff),
+	.lccr0		= 0,
+	.lccr3		= (LCCR3_PixClkDiv(0x02) |
+			   LCCR3_Acb(0xff)),
 	.cmap_inverse	= 0,
 	.cmap_static	= 0,
 };

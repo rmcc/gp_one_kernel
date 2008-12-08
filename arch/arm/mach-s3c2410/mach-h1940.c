@@ -38,13 +38,11 @@
 #include <mach/h1940.h>
 #include <mach/h1940-latch.h>
 #include <mach/fb.h>
-#include <plat/udc.h>
-#include <plat/iic.h>
+#include <asm/plat-s3c24xx/udc.h>
 
 #include <plat/clock.h>
 #include <plat/devs.h>
 #include <plat/cpu.h>
-#include <plat/pll.h>
 #include <plat/pm.h>
 
 static struct map_desc h1940_iodesc[] __initdata = {
@@ -185,7 +183,7 @@ static struct platform_device *h1940_devices[] __initdata = {
 	&s3c_device_usb,
 	&s3c_device_lcd,
 	&s3c_device_wdt,
-	&s3c_device_i2c0,
+	&s3c_device_i2c,
 	&s3c_device_iis,
 	&s3c_device_usbgadget,
 	&s3c_device_leds,
@@ -217,7 +215,6 @@ static void __init h1940_init(void)
 
 	s3c24xx_fb_set_platdata(&h1940_fb_info);
  	s3c24xx_udc_set_platdata(&h1940_udc_cfg);
-	s3c_i2c0_set_platdata(NULL);
 
 	/* Turn off suspend on both USB ports, and switch the
 	 * selectable USB port to USB device mode. */
@@ -226,9 +223,10 @@ static void __init h1940_init(void)
 			      S3C2410_MISCCR_USBSUSPND0 |
 			      S3C2410_MISCCR_USBSUSPND1, 0x0);
 
-	tmp =   (0x78 << S3C24XX_PLLCON_MDIVSHIFT)
-	      | (0x02 << S3C24XX_PLLCON_PDIVSHIFT)
-	      | (0x03 << S3C24XX_PLLCON_SDIVSHIFT);
+	tmp = (
+		 0x78 << S3C2410_PLLCON_MDIVSHIFT)
+	      | (0x02 << S3C2410_PLLCON_PDIVSHIFT)
+	      | (0x03 << S3C2410_PLLCON_SDIVSHIFT);
 	writel(tmp, S3C2410_UPLLCON);
 
 	platform_add_devices(h1940_devices, ARRAY_SIZE(h1940_devices));

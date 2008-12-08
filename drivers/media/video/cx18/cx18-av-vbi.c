@@ -141,11 +141,10 @@ int cx18_av_vbi(struct cx18 *cx, unsigned int cmd, void *arg)
 		u8 lcr[24];
 
 		fmt = arg;
-		if (fmt->type != V4L2_BUF_TYPE_SLICED_VBI_CAPTURE &&
-		    fmt->type != V4L2_BUF_TYPE_VBI_CAPTURE)
+		if (fmt->type != V4L2_BUF_TYPE_SLICED_VBI_CAPTURE)
 			return -EINVAL;
 		svbi = &fmt->fmt.sliced;
-		if (fmt->type == V4L2_BUF_TYPE_VBI_CAPTURE) {
+		if (svbi->service_set == 0) {
 			/* raw VBI */
 			memset(svbi, 0, sizeof(*svbi));
 

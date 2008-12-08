@@ -102,6 +102,7 @@ static struct i2c_algo_bit_data hydra_bit_data = {
 static struct i2c_adapter hydra_adap = {
 	.owner		= THIS_MODULE,
 	.name		= "Hydra i2c",
+	.id		= I2C_HW_B_HYDRA,
 	.algo_data	= &hydra_bit_data,
 };
 

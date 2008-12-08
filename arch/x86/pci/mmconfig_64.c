@@ -10,7 +10,8 @@
 #include <linux/acpi.h>
 #include <linux/bitmap.h>
 #include <asm/e820.h>
-#include <asm/pci_x86.h>
+
+#include "pci.h"
 
 /* Static virtual mapping of the MMCONFIG aperture */
 struct mmcfg_virt {

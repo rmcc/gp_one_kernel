@@ -24,7 +24,6 @@
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <linux/io.h>
-#include <linux/log2.h>
 #include <asm/rtc.h>
 
 #define DRV_NAME	"sh-rtc"
@@ -90,9 +89,7 @@ struct sh_rtc {
 	void __iomem *regbase;
 	unsigned long regsize;
 	struct resource *res;
-	int alarm_irq;
-	int periodic_irq;
-	int carry_irq;
+	unsigned int alarm_irq, periodic_irq, carry_irq;
 	struct rtc_device *rtc_dev;
 	spinlock_t lock;
 	unsigned long capabilities;	/* See asm-sh/rtc.h for cap bits */
@@ -552,8 +549,6 @@ static int sh_rtc_irq_set_state(struct device *dev, int enabled)
 
 static int sh_rtc_irq_set_freq(struct device *dev, int freq)
 {
-	if (!is_power_of_2(freq))
-		return -EINVAL;
 	return sh_rtc_ioctl(dev, RTC_IRQP_SET, freq);
 }
 
@@ -583,7 +578,7 @@ static int __devinit sh_rtc_probe(struct platform_device *pdev)
 
 	/* get periodic/carry/alarm irqs */
 	ret = platform_get_irq(pdev, 0);
-	if (unlikely(ret <= 0)) {
+	if (unlikely(ret < 0)) {
 		ret = -ENOENT;
 		dev_err(&pdev->dev, "No IRQ for period\n");
 		goto err_badres;
@@ -591,7 +586,7 @@ static int __devinit sh_rtc_probe(struct platform_device *pdev)
 	rtc->periodic_irq = ret;
 
 	ret = platform_get_irq(pdev, 1);
-	if (unlikely(ret <= 0)) {
+	if (unlikely(ret < 0)) {
 		ret = -ENOENT;
 		dev_err(&pdev->dev, "No IRQ for carry\n");
 		goto err_badres;
@@ -599,7 +594,7 @@ static int __devinit sh_rtc_probe(struct platform_device *pdev)
 	rtc->carry_irq = ret;
 
 	ret = platform_get_irq(pdev, 2);
-	if (unlikely(ret <= 0)) {
+	if (unlikely(ret < 0)) {
 		ret = -ENOENT;
 		dev_err(&pdev->dev, "No IRQ for alarm\n");
 		goto err_badres;

@@ -65,7 +65,7 @@ static const char *probes[] = { "cmdlinepart", NULL };
 /*
  * Initialize FLASH support
  */
-static int __init h720x_mtd_init(void)
+int __init h720x_mtd_init(void)
 {
 
 	char	*part_type = NULL;

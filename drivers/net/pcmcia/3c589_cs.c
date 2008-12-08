@@ -255,6 +255,7 @@ static int tc589_config(struct pcmcia_device *link)
     int last_fn, last_ret, i, j, multi = 0, fifo;
     unsigned int ioaddr;
     char *ram_split[] = {"5:3", "3:1", "1:1", "3:5"};
+    DECLARE_MAC_BUF(mac);
     
     DEBUG(0, "3c589_config(0x%p)\n", link);
 
@@ -332,9 +333,9 @@ static int tc589_config(struct pcmcia_device *link)
     strcpy(lp->node.dev_name, dev->name);
 
     printk(KERN_INFO "%s: 3Com 3c%s, io %#3lx, irq %d, "
-	   "hw_addr %pM\n",
+	   "hw_addr %s\n",
 	   dev->name, (multi ? "562" : "589"), dev->base_addr, dev->irq,
-	   dev->dev_addr);
+	   print_mac(mac, dev->dev_addr));
     printk(KERN_INFO "  %dK FIFO split %s Rx:Tx, %s xcvr\n",
 	   (fifo & 7) ? 32 : 8, ram_split[(fifo >> 16) & 3],
 	   if_names[dev->if_port]);
@@ -857,8 +858,7 @@ static int el3_rx(struct net_device *dev)
     DEBUG(3, "%s: in rx_packet(), status %4.4x, rx_status %4.4x.\n",
 	  dev->name, inw(ioaddr+EL3_STATUS), inw(ioaddr+RX_STATUS));
     while (!((rx_status = inw(ioaddr + RX_STATUS)) & 0x8000) &&
-		    worklimit > 0) {
-	worklimit--;
+	   (--worklimit >= 0)) {
 	if (rx_status & 0x4000) { /* Error, update stats. */
 	    short error = rx_status & 0x3800;
 	    dev->stats.rx_errors++;
@@ -884,6 +884,7 @@ static int el3_rx(struct net_device *dev)
 			(pkt_len+3)>>2);
 		skb->protocol = eth_type_trans(skb, dev);
 		netif_rx(skb);
+		dev->last_rx = jiffies;
 		dev->stats.rx_packets++;
 		dev->stats.rx_bytes += pkt_len;
 	    } else {

@@ -1,8 +1,6 @@
 #ifndef _UVESAFB_H
 #define _UVESAFB_H
 
-#include <linux/types.h>
-
 struct v86_regs {
 	__u32 ebx;
 	__u32 ecx;

@@ -18,23 +18,11 @@ _GLOBAL(memcpy)
 	andi.	r6,r6,7
 	dcbt	0,r4
 	blt	cr1,.Lshort_copy
-/* Below we want to nop out the bne if we're on a CPU that has the
-   CPU_FTR_UNALIGNED_LD_STD bit set and the CPU_FTR_CP_USE_DCBTZ bit
-   cleared.
-   At the time of writing the only CPU that has this combination of bits
-   set is Power6. */
-BEGIN_FTR_SECTION
-	nop
-FTR_SECTION_ELSE
 	bne	.Ldst_unaligned
-ALT_FTR_SECTION_END(CPU_FTR_UNALIGNED_LD_STD | CPU_FTR_CP_USE_DCBTZ, \
-                    CPU_FTR_UNALIGNED_LD_STD)
 .Ldst_aligned:
-	addi	r3,r3,-16
-BEGIN_FTR_SECTION
 	andi.	r0,r4,7
+	addi	r3,r3,-16
 	bne	.Lsrc_unaligned
-END_FTR_SECTION_IFCLR(CPU_FTR_UNALIGNED_LD_STD)
 	srdi	r7,r5,4
 	ld	r9,0(r4)
 	addi	r4,r4,-8
@@ -53,19 +41,18 @@ END_FTR_SECTION_IFCLR(CPU_FTR_UNALIGNED_LD_STD)
 3:	std	r8,8(r3)
 	beq	3f
 	addi	r3,r3,16
+	ld	r9,8(r4)
 .Ldo_tail:
 	bf	cr7*4+1,1f
-	lwz	r9,8(r4)
-	addi	r4,r4,4
+	rotldi	r9,r9,32
 	stw	r9,0(r3)
 	addi	r3,r3,4
 1:	bf	cr7*4+2,2f
-	lhz	r9,8(r4)
-	addi	r4,r4,2
+	rotldi	r9,r9,16
 	sth	r9,0(r3)
 	addi	r3,r3,2
 2:	bf	cr7*4+3,3f
-	lbz	r9,8(r4)
+	rotldi	r9,r9,8
 	stb	r9,0(r3)
 3:	ld	r3,48(r1)	/* return dest pointer */
 	blr
@@ -134,30 +121,17 @@ END_FTR_SECTION_IFCLR(CPU_FTR_UNALIGNED_LD_STD)
 	cmpwi	cr1,r5,8
 	addi	r3,r3,32
 	sld	r9,r9,r10
-	ble	cr1,6f
+	ble	cr1,.Ldo_tail
 	ld	r0,8(r4)
 	srd	r7,r0,r11
 	or	r9,r7,r9
-6:
-	bf	cr7*4+1,1f
-	rotldi	r9,r9,32
-	stw	r9,0(r3)
-	addi	r3,r3,4
-1:	bf	cr7*4+2,2f
-	rotldi	r9,r9,16
-	sth	r9,0(r3)
-	addi	r3,r3,2
-2:	bf	cr7*4+3,3f
-	rotldi	r9,r9,8
-	stb	r9,0(r3)
-3:	ld	r3,48(r1)	/* return dest pointer */
-	blr
+	b	.Ldo_tail
 
 .Ldst_unaligned:
 	PPC_MTOCRF	0x01,r6		# put #bytes to 8B bdry into cr7
 	subf	r5,r6,r5
 	li	r7,0
-	cmpldi	cr1,r5,16
+	cmpldi	r1,r5,16
 	bf	cr7*4+3,1f
 	lbz	r0,0(r4)
 	stb	r0,0(r3)

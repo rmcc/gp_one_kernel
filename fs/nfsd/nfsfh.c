@@ -186,14 +186,9 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 		 * access control settings being in effect, we cannot
 		 * fix that case easily.
 		 */
-		struct cred *new = prepare_creds();
-		if (!new)
-			return nfserrno(-ENOMEM);
-		new->cap_effective =
-			cap_raise_nfsd_set(new->cap_effective,
-					   new->cap_permitted);
-		put_cred(override_creds(new));
-		put_cred(new);
+		current->cap_effective =
+			cap_raise_nfsd_set(current->cap_effective,
+					   current->cap_permitted);
 	} else {
 		error = nfsd_setuser_and_check_port(rqstp, exp);
 		if (error)
@@ -258,32 +253,14 @@ out:
 	return error;
 }
 
-/**
- * fh_verify - filehandle lookup and access checking
- * @rqstp: pointer to current rpc request
- * @fhp: filehandle to be verified
- * @type: expected type of object pointed to by filehandle
- * @access: type of access needed to object
+/*
+ * Perform sanity checks on the dentry in a client's file handle.
  *
- * Look up a dentry from the on-the-wire filehandle, check the client's
- * access to the export, and set the current task's credentials.
+ * Note that the file handle dentry may need to be freed even after
+ * an error return.
  *
- * Regardless of success or failure of fh_verify(), fh_put() should be
- * called on @fhp when the caller is finished with the filehandle.
- *
- * fh_verify() may be called multiple times on a given filehandle, for
- * example, when processing an NFSv4 compound.  The first call will look
- * up a dentry using the on-the-wire filehandle.  Subsequent calls will
- * skip the lookup and just perform the other checks and possibly change
- * the current task's credentials.
- *
- * @type specifies the type of object expected using one of the S_IF*
- * constants defined in include/linux/stat.h.  The caller may use zero
- * to indicate that it doesn't care, or a negative integer to indicate
- * that it expects something not of the given type.
- *
- * @access is formed from the NFSD_MAY_* constants defined in
- * include/linux/nfsd/nfsd.h.
+ * This is only called at the start of an nfsproc call, so fhp points to
+ * a svc_fh which is all 0 except for the over-the-wire file handle.
  */
 __be32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
@@ -484,8 +461,6 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry,
 				goto retry;
 			break;
 		}
-	} else if (exp->ex_flags & NFSEXP_FSID) {
-		fsid_type = FSID_NUM;
 	} else if (exp->ex_uuid) {
 		if (fhp->fh_maxsize >= 64) {
 			if (root_export)
@@ -498,7 +473,9 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry,
 			else
 				fsid_type = FSID_UUID4_INUM;
 		}
-	} else if (!old_valid_dev(ex_dev))
+	} else if (exp->ex_flags & NFSEXP_FSID)
+		fsid_type = FSID_NUM;
+	else if (!old_valid_dev(ex_dev))
 		/* for newer device numbers, we must use a newer fsid format */
 		fsid_type = FSID_ENCODE_DEV;
 	else

@@ -8,9 +8,7 @@ enum reboot_type {
 	BOOT_BIOS = 'b',
 #endif
 	BOOT_ACPI = 'a',
-	BOOT_EFI = 'e',
-	BOOT_CF9 = 'p',
-	BOOT_CF9_COND = 'q',
+	BOOT_EFI = 'e'
 };
 
 extern enum reboot_type reboot_type;

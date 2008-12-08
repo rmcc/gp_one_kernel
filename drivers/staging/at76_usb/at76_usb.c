@@ -231,8 +231,6 @@ static struct usb_device_id dev_table[] = {
 	{USB_DEVICE(0x03eb, 0x7617), USB_DEVICE_DATA(BOARD_505A)},
 	/* Siemens Gigaset USB WLAN Adapter 11 */
 	{USB_DEVICE(0x1690, 0x0701), USB_DEVICE_DATA(BOARD_505A)},
-	/* OQO Model 01+ Internal Wi-Fi */
-	{USB_DEVICE(0x1557, 0x0002), USB_DEVICE_DATA(BOARD_505A)},
 	/*
 	 * at76c505amx-rfmd
 	 */
@@ -643,25 +641,18 @@ static int at76_remap(struct usb_device *udev)
 static int at76_get_op_mode(struct usb_device *udev)
 {
 	int ret;
-	u8 saved;
-	u8 *op_mode;
+	u8 op_mode;
 
-	op_mode = kmalloc(1, GFP_NOIO);
-	if (!op_mode)
-		return -ENOMEM;
 	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x33,
 			      USB_TYPE_VENDOR | USB_DIR_IN |
-			      USB_RECIP_INTERFACE, 0x01, 0, op_mode, 1,
+			      USB_RECIP_INTERFACE, 0x01, 0, &op_mode, 1,
 			      USB_CTRL_GET_TIMEOUT);
-	saved = *op_mode;
-	kfree(op_mode);
-
 	if (ret < 0)
 		return ret;
 	else if (ret < 1)
 		return -EIO;
 	else
-		return saved;
+		return op_mode;
 }
 
 /* Load a block of the second ("external") part of the firmware */
@@ -774,25 +765,20 @@ static inline int at76_get_mib(struct usb_device *udev, u16 mib, void *buf,
 /* Return positive number for status, negative for an error */
 static inline int at76_get_cmd_status(struct usb_device *udev, u8 cmd)
 {
-	u8 *stat_buf;
+	u8 stat_buf[40];
 	int ret;
-
-	stat_buf = kmalloc(40, GFP_NOIO);
-	if (!stat_buf)
-		return -ENOMEM;
 
 	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0), 0x22,
 			      USB_TYPE_VENDOR | USB_DIR_IN |
 			      USB_RECIP_INTERFACE, cmd, 0, stat_buf,
-			      40, USB_CTRL_GET_TIMEOUT);
-	if (ret >= 0)
-		ret = stat_buf[5];
-	kfree(stat_buf);
+			      sizeof(stat_buf), USB_CTRL_GET_TIMEOUT);
+	if (ret < 0)
+		return ret;
 
-	return ret;
+	return stat_buf[5];
 }
 
-static int at76_set_card_command(struct usb_device *udev, u8 cmd, void *buf,
+static int at76_set_card_command(struct usb_device *udev, int cmd, void *buf,
 				 int buf_size)
 {
 	int ret;
@@ -5329,7 +5315,7 @@ static int at76_init_new_device(struct at76_priv *priv,
 	priv->netdev_registered = 1;
 
 	printk(KERN_INFO "%s: USB %s, MAC %s, firmware %d.%d.%d-%d\n",
-	       netdev->name, dev_name(&interface->dev), mac2str(priv->mac_addr),
+	       netdev->name, interface->dev.bus_id, mac2str(priv->mac_addr),
 	       priv->fw_version.major, priv->fw_version.minor,
 	       priv->fw_version.patch, priv->fw_version.build);
 	printk(KERN_INFO "%s: regulatory domain 0x%02x: %s\n", netdev->name,
