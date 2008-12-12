@@ -502,13 +502,6 @@ P:	Richard Purdie
 M:	rpurdie@rpsys.net
 S:	Maintained
 
-ARM/CORTINA SYSTEMS GEMINI ARM ARCHITECTURE
-P:	Paulius Zaleckas
-M:	paulius.zaleckas@teltonika.lt
-L:	linux-arm-kernel@lists.arm.linux.org.uk (subscribers-only)
-T:	git gitorious.org/linux-gemini/mainline.git
-S:	Maintained
-
 ARM/EZX SMARTPHONES (A780, A910, A1200, E680, ROKR E2 and ROKR E6)
 P:	Daniel Ribeiro
 M:	drwyrm@gmail.com
@@ -518,12 +511,6 @@ P:	Harald Welte
 M:	laforge@openezx.org
 L:	openezx-devel@lists.openezx.org (subscribers-only)
 W:	http://www.openezx.org/
-S:	Maintained
-
-ARM/FARADAY FA526 PORT
-P:	Paulius Zaleckas
-M:	paulius.zaleckas@teltonika.lt
-L:	linux-arm-kernel@lists.arm.linux.org.uk (subscribers-only)
 S:	Maintained
 
 ARM/FREESCALE IMX / MXC ARM ARCHITECTURE
@@ -1482,6 +1469,8 @@ L:	linux-acpi@vger.kernel.org
 S:	Supported
 
 DOCUMENTATION (/Documentation directory)
+P:	Michael Kerrisk
+M:	mtk.manpages@gmail.com
 P:	Randy Dunlap
 M:	rdunlap@xenotime.net
 L:	linux-doc@vger.kernel.org
@@ -2890,7 +2879,7 @@ P:	Michael Kerrisk
 M:	mtk.manpages@gmail.com
 W:	http://www.kernel.org/doc/man-pages
 L:	linux-man@vger.kernel.org
-S:	Maintained
+S:	Supported
 
 MARVELL LIBERTAS WIRELESS DRIVER
 P:	Dan Williams
@@ -3363,8 +3352,10 @@ S:	Maintained
 PARISC ARCHITECTURE
 P:	Kyle McMartin
 M:	kyle@mcmartin.ca
-P:	Helge Deller
-M:	deller@gmx.de
+P:	Matthew Wilcox
+M:	matthew@wil.cx
+P:	Grant Grundler
+M:	grundler@parisc-linux.org
 L:	linux-parisc@vger.kernel.org
 W:	http://www.parisc-linux.org/
 T:	git kernel.org:/pub/scm/linux/kernel/git/kyle/parisc-2.6.git
@@ -3888,15 +3879,6 @@ M:	jgarzik@pobox.com
 L:	linux-ide@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/jgarzik/libata-dev.git
 S:	Supported
-
-SERVER ENGINES 10Gbps NIC - BladeEngine 2 DRIVER
-P:	Sathya Perla
-M:	sathyap@serverengines.com
-P:      Subbu Seetharaman
-M:      subbus@serverengines.com
-L:      netdev@vger.kernel.org
-W:      http://www.serverengines.com
-S:      Supported
 
 SFC NETWORK DRIVER
 P:	Steve Hodgson

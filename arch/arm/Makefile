@@ -72,7 +72,6 @@ tune-$(CONFIG_CPU_ARM920T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM922T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM925T)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_ARM926T)	:=-mtune=arm9tdmi
-tune-$(CONFIG_CPU_FA526)	:=-mtune=arm9tdmi
 tune-$(CONFIG_CPU_SA110)	:=-mtune=strongarm110
 tune-$(CONFIG_CPU_SA1100)	:=-mtune=strongarm1100
 tune-$(CONFIG_CPU_XSCALE)	:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -Wa,-mcpu=xscale
@@ -108,7 +107,6 @@ endif
  machine-$(CONFIG_ARCH_PXA)	   := pxa
  machine-$(CONFIG_ARCH_L7200)	   := l7200
  machine-$(CONFIG_ARCH_INTEGRATOR) := integrator
- machine-$(CONFIG_ARCH_GEMINI)     := gemini
  textofs-$(CONFIG_ARCH_CLPS711X)   := 0x00028000
  machine-$(CONFIG_ARCH_CLPS711X)   := clps711x
  machine-$(CONFIG_ARCH_IOP32X)	   := iop32x
