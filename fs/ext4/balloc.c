@@ -20,7 +20,6 @@
 #include "ext4.h"
 #include "ext4_jbd2.h"
 #include "group.h"
-#include "mballoc.h"
 
 /*
  * balloc.c contains the blocks allocation and deallocation routines
@@ -101,10 +100,10 @@ unsigned ext4_init_block_bitmap(struct super_block *sb, struct buffer_head *bh,
 		 * essentially implementing a per-group read-only flag. */
 		if (!ext4_group_desc_csum_verify(sbi, block_group, gdp)) {
 			ext4_error(sb, __func__,
-				  "Checksum bad for group %u", block_group);
-			ext4_free_blks_set(sb, gdp, 0);
-			ext4_free_inodes_set(sb, gdp, 0);
-			ext4_itable_unused_set(sb, gdp, 0);
+				  "Checksum bad for group %lu\n", block_group);
+			gdp->bg_free_blocks_count = 0;
+			gdp->bg_free_inodes_count = 0;
+			gdp->bg_itable_unused = 0;
 			memset(bh->b_data, 0xff, sb->s_blocksize);
 			return 0;
 		}
@@ -206,15 +205,15 @@ struct ext4_group_desc * ext4_get_group_desc(struct super_block *sb,
 					     ext4_group_t block_group,
 					     struct buffer_head **bh)
 {
-	unsigned int group_desc;
-	unsigned int offset;
+	unsigned long group_desc;
+	unsigned long offset;
 	struct ext4_group_desc *desc;
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
 	if (block_group >= sbi->s_groups_count) {
 		ext4_error(sb, "ext4_get_group_desc",
 			   "block_group >= groups_count - "
-			   "block_group = %u, groups_count = %u",
+			   "block_group = %lu, groups_count = %lu",
 			   block_group, sbi->s_groups_count);
 
 		return NULL;
@@ -226,7 +225,7 @@ struct ext4_group_desc * ext4_get_group_desc(struct super_block *sb,
 	if (!sbi->s_group_desc[group_desc]) {
 		ext4_error(sb, "ext4_get_group_desc",
 			   "Group descriptor not loaded - "
-			   "block_group = %u, group_desc = %u, desc = %u",
+			   "block_group = %lu, group_desc = %lu, desc = %lu",
 			   block_group, group_desc, offset);
 		return NULL;
 	}
@@ -316,50 +315,29 @@ ext4_read_block_bitmap(struct super_block *sb, ext4_group_t block_group)
 	if (unlikely(!bh)) {
 		ext4_error(sb, __func__,
 			    "Cannot read block bitmap - "
-			    "block_group = %u, block_bitmap = %llu",
+			    "block_group = %lu, block_bitmap = %llu",
 			    block_group, bitmap_blk);
 		return NULL;
 	}
-
-	if (bitmap_uptodate(bh))
+	if (buffer_uptodate(bh) &&
+	    !(desc->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)))
 		return bh;
 
 	lock_buffer(bh);
-	if (bitmap_uptodate(bh)) {
-		unlock_buffer(bh);
-		return bh;
-	}
 	spin_lock(sb_bgl_lock(EXT4_SB(sb), block_group));
 	if (desc->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT)) {
 		ext4_init_block_bitmap(sb, bh, block_group, desc);
-		set_bitmap_uptodate(bh);
 		set_buffer_uptodate(bh);
-		spin_unlock(sb_bgl_lock(EXT4_SB(sb), block_group));
 		unlock_buffer(bh);
+		spin_unlock(sb_bgl_lock(EXT4_SB(sb), block_group));
 		return bh;
 	}
 	spin_unlock(sb_bgl_lock(EXT4_SB(sb), block_group));
-	if (buffer_uptodate(bh)) {
-		/*
-		 * if not uninit if bh is uptodate,
-		 * bitmap is also uptodate
-		 */
-		set_bitmap_uptodate(bh);
-		unlock_buffer(bh);
-		return bh;
-	}
-	/*
-	 * submit the buffer_head for read. We can
-	 * safely mark the bitmap as uptodate now.
-	 * We do it here so the bitmap uptodate bit
-	 * get set with buffer lock held.
-	 */
-	set_bitmap_uptodate(bh);
 	if (bh_submit_read(bh) < 0) {
 		put_bh(bh);
 		ext4_error(sb, __func__,
 			    "Cannot read block bitmap - "
-			    "block_group = %u, block_bitmap = %llu",
+			    "block_group = %lu, block_bitmap = %llu",
 			    block_group, bitmap_blk);
 		return NULL;
 	}
@@ -372,44 +350,62 @@ ext4_read_block_bitmap(struct super_block *sb, ext4_group_t block_group)
 }
 
 /**
- * ext4_add_groupblocks() -- Add given blocks to an existing group
+ * ext4_free_blocks_sb() -- Free given blocks and update quota
  * @handle:			handle to this transaction
  * @sb:				super block
- * @block:			start physcial block to add to the block group
+ * @block:			start physcial block to free
  * @count:			number of blocks to free
+ * @pdquot_freed_blocks:	pointer to quota
  *
- * This marks the blocks as free in the bitmap. We ask the
- * mballoc to reload the buddy after this by setting group
- * EXT4_GROUP_INFO_NEED_INIT_BIT flag
+ * XXX This function is only used by the on-line resizing code, which
+ * should probably be fixed up to call the mballoc variant.  There
+ * this needs to be cleaned up later; in fact, I'm not convinced this
+ * is 100% correct in the face of the mballoc code.  The online resizing
+ * code needs to be fixed up to more tightly (and correctly) interlock
+ * with the mballoc code.
  */
-void ext4_add_groupblocks(handle_t *handle, struct super_block *sb,
-			 ext4_fsblk_t block, unsigned long count)
+void ext4_free_blocks_sb(handle_t *handle, struct super_block *sb,
+			 ext4_fsblk_t block, unsigned long count,
+			 unsigned long *pdquot_freed_blocks)
 {
 	struct buffer_head *bitmap_bh = NULL;
 	struct buffer_head *gd_bh;
 	ext4_group_t block_group;
 	ext4_grpblk_t bit;
-	unsigned int i;
+	unsigned long i;
+	unsigned long overflow;
 	struct ext4_group_desc *desc;
 	struct ext4_super_block *es;
 	struct ext4_sb_info *sbi;
-	int err = 0, ret, blk_free_count;
-	ext4_grpblk_t blocks_freed;
-	struct ext4_group_info *grp;
+	int err = 0, ret;
+	ext4_grpblk_t group_freed;
 
+	*pdquot_freed_blocks = 0;
 	sbi = EXT4_SB(sb);
 	es = sbi->s_es;
-	ext4_debug("Adding block(s) %llu-%llu\n", block, block + count - 1);
+	if (block < le32_to_cpu(es->s_first_data_block) ||
+	    block + count < block ||
+	    block + count > ext4_blocks_count(es)) {
+		ext4_error(sb, "ext4_free_blocks",
+			   "Freeing blocks not in datazone - "
+			   "block = %llu, count = %lu", block, count);
+		goto error_return;
+	}
 
+	ext4_debug("freeing block(s) %llu-%llu\n", block, block + count - 1);
+
+do_more:
+	overflow = 0;
 	ext4_get_group_no_and_offset(sb, block, &block_group, &bit);
-	grp = ext4_get_group_info(sb, block_group);
 	/*
 	 * Check to see if we are freeing blocks across a group
 	 * boundary.
 	 */
 	if (bit + count > EXT4_BLOCKS_PER_GROUP(sb)) {
-		goto error_return;
+		overflow = bit + count - EXT4_BLOCKS_PER_GROUP(sb);
+		count -= overflow;
 	}
+	brelse(bitmap_bh);
 	bitmap_bh = ext4_read_block_bitmap(sb, block_group);
 	if (!bitmap_bh)
 		goto error_return;
@@ -422,17 +418,18 @@ void ext4_add_groupblocks(handle_t *handle, struct super_block *sb,
 	    in_range(block, ext4_inode_table(sb, desc), sbi->s_itb_per_group) ||
 	    in_range(block + count - 1, ext4_inode_table(sb, desc),
 		     sbi->s_itb_per_group)) {
-		ext4_error(sb, __func__,
-			   "Adding blocks in system zones - "
+		ext4_error(sb, "ext4_free_blocks",
+			   "Freeing blocks in system zones - "
 			   "Block = %llu, count = %lu",
 			   block, count);
 		goto error_return;
 	}
 
 	/*
-	 * We are about to add blocks to the bitmap,
+	 * We are about to start releasing blocks in the bitmap,
 	 * so we need undo access.
 	 */
+	/* @@@ check errors */
 	BUFFER_TRACE(bitmap_bh, "getting undo access");
 	err = ext4_journal_get_undo_access(handle, bitmap_bh);
 	if (err)
@@ -447,55 +444,107 @@ void ext4_add_groupblocks(handle_t *handle, struct super_block *sb,
 	err = ext4_journal_get_write_access(handle, gd_bh);
 	if (err)
 		goto error_return;
-	/*
-	 * make sure we don't allow a parallel init on other groups in the
-	 * same buddy cache
-	 */
-	down_write(&grp->alloc_sem);
-	for (i = 0, blocks_freed = 0; i < count; i++) {
+
+	jbd_lock_bh_state(bitmap_bh);
+
+	for (i = 0, group_freed = 0; i < count; i++) {
+		/*
+		 * An HJ special.  This is expensive...
+		 */
+#ifdef CONFIG_JBD2_DEBUG
+		jbd_unlock_bh_state(bitmap_bh);
+		{
+			struct buffer_head *debug_bh;
+			debug_bh = sb_find_get_block(sb, block + i);
+			if (debug_bh) {
+				BUFFER_TRACE(debug_bh, "Deleted!");
+				if (!bh2jh(bitmap_bh)->b_committed_data)
+					BUFFER_TRACE(debug_bh,
+						"No commited data in bitmap");
+				BUFFER_TRACE2(debug_bh, bitmap_bh, "bitmap");
+				__brelse(debug_bh);
+			}
+		}
+		jbd_lock_bh_state(bitmap_bh);
+#endif
+		if (need_resched()) {
+			jbd_unlock_bh_state(bitmap_bh);
+			cond_resched();
+			jbd_lock_bh_state(bitmap_bh);
+		}
+		/* @@@ This prevents newly-allocated data from being
+		 * freed and then reallocated within the same
+		 * transaction.
+		 *
+		 * Ideally we would want to allow that to happen, but to
+		 * do so requires making jbd2_journal_forget() capable of
+		 * revoking the queued write of a data block, which
+		 * implies blocking on the journal lock.  *forget()
+		 * cannot block due to truncate races.
+		 *
+		 * Eventually we can fix this by making jbd2_journal_forget()
+		 * return a status indicating whether or not it was able
+		 * to revoke the buffer.  On successful revoke, it is
+		 * safe not to set the allocation bit in the committed
+		 * bitmap, because we know that there is no outstanding
+		 * activity on the buffer any more and so it is safe to
+		 * reallocate it.
+		 */
+		BUFFER_TRACE(bitmap_bh, "set in b_committed_data");
+		J_ASSERT_BH(bitmap_bh,
+				bh2jh(bitmap_bh)->b_committed_data != NULL);
+		ext4_set_bit_atomic(sb_bgl_lock(sbi, block_group), bit + i,
+				bh2jh(bitmap_bh)->b_committed_data);
+
+		/*
+		 * We clear the bit in the bitmap after setting the committed
+		 * data bit, because this is the reverse order to that which
+		 * the allocator uses.
+		 */
 		BUFFER_TRACE(bitmap_bh, "clear bit");
 		if (!ext4_clear_bit_atomic(sb_bgl_lock(sbi, block_group),
 						bit + i, bitmap_bh->b_data)) {
+			jbd_unlock_bh_state(bitmap_bh);
 			ext4_error(sb, __func__,
 				   "bit already cleared for block %llu",
 				   (ext4_fsblk_t)(block + i));
+			jbd_lock_bh_state(bitmap_bh);
 			BUFFER_TRACE(bitmap_bh, "bit already cleared");
 		} else {
-			blocks_freed++;
+			group_freed++;
 		}
 	}
+	jbd_unlock_bh_state(bitmap_bh);
+
 	spin_lock(sb_bgl_lock(sbi, block_group));
-	blk_free_count = blocks_freed + ext4_free_blks_count(sb, desc);
-	ext4_free_blks_set(sb, desc, blk_free_count);
+	le16_add_cpu(&desc->bg_free_blocks_count, group_freed);
 	desc->bg_checksum = ext4_group_desc_csum(sbi, block_group, desc);
 	spin_unlock(sb_bgl_lock(sbi, block_group));
-	percpu_counter_add(&sbi->s_freeblocks_counter, blocks_freed);
+	percpu_counter_add(&sbi->s_freeblocks_counter, count);
 
 	if (sbi->s_log_groups_per_flex) {
 		ext4_group_t flex_group = ext4_flex_group(sbi, block_group);
 		spin_lock(sb_bgl_lock(sbi, flex_group));
-		sbi->s_flex_groups[flex_group].free_blocks += blocks_freed;
+		sbi->s_flex_groups[flex_group].free_blocks += count;
 		spin_unlock(sb_bgl_lock(sbi, flex_group));
 	}
-	/*
-	 * request to reload the buddy with the
-	 * new bitmap information
-	 */
-	set_bit(EXT4_GROUP_INFO_NEED_INIT_BIT, &(grp->bb_state));
-	ext4_mb_update_group_info(grp, blocks_freed);
-	up_write(&grp->alloc_sem);
 
 	/* We dirtied the bitmap block */
 	BUFFER_TRACE(bitmap_bh, "dirtied bitmap block");
-	err = ext4_handle_dirty_metadata(handle, NULL, bitmap_bh);
+	err = ext4_journal_dirty_metadata(handle, bitmap_bh);
 
 	/* And the group descriptor block */
 	BUFFER_TRACE(gd_bh, "dirtied group descriptor block");
-	ret = ext4_handle_dirty_metadata(handle, NULL, gd_bh);
-	if (!err)
-		err = ret;
-	sb->s_dirt = 1;
+	ret = ext4_journal_dirty_metadata(handle, gd_bh);
+	if (!err) err = ret;
+	*pdquot_freed_blocks += group_freed;
 
+	if (overflow && !err) {
+		block += count;
+		count = overflow;
+		goto do_more;
+	}
+	sb->s_dirt = 1;
 error_return:
 	brelse(bitmap_bh);
 	ext4_std_error(sb, err);
@@ -565,7 +614,7 @@ int ext4_has_free_blocks(struct ext4_sb_info *sbi, s64 nblocks)
 		if (dirty_blocks < 0) {
 			printk(KERN_CRIT "Dirty block accounting "
 					"went wrong %lld\n",
-					(long long)dirty_blocks);
+					dirty_blocks);
 		}
 	}
 	/* Check whether we have space after
@@ -575,7 +624,7 @@ int ext4_has_free_blocks(struct ext4_sb_info *sbi, s64 nblocks)
 		return 1;
 
 	/* Hm, nope.  Are (enough) root reserved blocks available? */
-	if (sbi->s_resuid == current_fsuid() ||
+	if (sbi->s_resuid == current->fsuid ||
 	    ((sbi->s_resgid != 0) && in_group_p(sbi->s_resgid)) ||
 	    capable(CAP_SYS_RESOURCE)) {
 		if (free_blocks >= (nblocks + dirty_blocks))
@@ -617,43 +666,99 @@ int ext4_should_retry_alloc(struct super_block *sb, int *retries)
 	return jbd2_journal_force_commit_nested(EXT4_SB(sb)->s_journal);
 }
 
-/*
- * ext4_new_meta_blocks() -- allocate block for meta data (indexing) blocks
- *
- * @handle:             handle to this transaction
- * @inode:              file inode
- * @goal:               given target block(filesystem wide)
- * @count:		pointer to total number of blocks needed
- * @errp:               error code
- *
- * Return 1st allocated block number on success, *count stores total account
- * error stores in errp pointer
- */
-ext4_fsblk_t ext4_new_meta_blocks(handle_t *handle, struct inode *inode,
-		ext4_fsblk_t goal, unsigned long *count, int *errp)
+#define EXT4_META_BLOCK 0x1
+
+static ext4_fsblk_t do_blk_alloc(handle_t *handle, struct inode *inode,
+				ext4_lblk_t iblock, ext4_fsblk_t goal,
+				unsigned long *count, int *errp, int flags)
 {
 	struct ext4_allocation_request ar;
 	ext4_fsblk_t ret;
 
 	memset(&ar, 0, sizeof(ar));
 	/* Fill with neighbour allocated blocks */
+
 	ar.inode = inode;
 	ar.goal = goal;
-	ar.len = count ? *count : 1;
+	ar.len = *count;
+	ar.logical = iblock;
+
+	if (S_ISREG(inode->i_mode) && !(flags & EXT4_META_BLOCK))
+		/* enable in-core preallocation for data block allocation */
+		ar.flags = EXT4_MB_HINT_DATA;
+	else
+		/* disable in-core preallocation for non-regular files */
+		ar.flags = 0;
 
 	ret = ext4_mb_new_blocks(handle, &ar, errp);
-	if (count)
-		*count = ar.len;
+	*count = ar.len;
+	return ret;
+}
 
+/*
+ * ext4_new_meta_blocks() -- allocate block for meta data (indexing) blocks
+ *
+ * @handle:             handle to this transaction
+ * @inode:              file inode
+ * @goal:               given target block(filesystem wide)
+ * @count:		total number of blocks need
+ * @errp:               error code
+ *
+ * Return 1st allocated block numberon success, *count stores total account
+ * error stores in errp pointer
+ */
+ext4_fsblk_t ext4_new_meta_blocks(handle_t *handle, struct inode *inode,
+		ext4_fsblk_t goal, unsigned long *count, int *errp)
+{
+	ext4_fsblk_t ret;
+	ret = do_blk_alloc(handle, inode, 0, goal,
+				count, errp, EXT4_META_BLOCK);
 	/*
 	 * Account for the allocated meta blocks
 	 */
 	if (!(*errp) && EXT4_I(inode)->i_delalloc_reserved_flag) {
 		spin_lock(&EXT4_I(inode)->i_block_reservation_lock);
-		EXT4_I(inode)->i_allocated_meta_blocks += ar.len;
+		EXT4_I(inode)->i_allocated_meta_blocks += *count;
 		spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
 	}
 	return ret;
+}
+
+/*
+ * ext4_new_meta_block() -- allocate block for meta data (indexing) blocks
+ *
+ * @handle:             handle to this transaction
+ * @inode:              file inode
+ * @goal:               given target block(filesystem wide)
+ * @errp:               error code
+ *
+ * Return allocated block number on success
+ */
+ext4_fsblk_t ext4_new_meta_block(handle_t *handle, struct inode *inode,
+		ext4_fsblk_t goal, int *errp)
+{
+	unsigned long count = 1;
+	return ext4_new_meta_blocks(handle, inode, goal, &count, errp);
+}
+
+/*
+ * ext4_new_blocks() -- allocate data blocks
+ *
+ * @handle:             handle to this transaction
+ * @inode:              file inode
+ * @goal:               given target block(filesystem wide)
+ * @count:		total number of blocks need
+ * @errp:               error code
+ *
+ * Return 1st allocated block numberon success, *count stores total account
+ * error stores in errp pointer
+ */
+
+ext4_fsblk_t ext4_new_blocks(handle_t *handle, struct inode *inode,
+				ext4_lblk_t iblock, ext4_fsblk_t goal,
+				unsigned long *count, int *errp)
+{
+	return do_blk_alloc(handle, inode, iblock, goal, count, errp, 0);
 }
 
 /**
@@ -671,7 +776,7 @@ ext4_fsblk_t ext4_count_free_blocks(struct super_block *sb)
 #ifdef EXT4FS_DEBUG
 	struct ext4_super_block *es;
 	ext4_fsblk_t bitmap_count;
-	unsigned int x;
+	unsigned long x;
 	struct buffer_head *bitmap_bh = NULL;
 
 	es = EXT4_SB(sb)->s_es;
@@ -684,15 +789,15 @@ ext4_fsblk_t ext4_count_free_blocks(struct super_block *sb)
 		gdp = ext4_get_group_desc(sb, i, NULL);
 		if (!gdp)
 			continue;
-		desc_count += ext4_free_blks_count(sb, gdp);
+		desc_count += le16_to_cpu(gdp->bg_free_blocks_count);
 		brelse(bitmap_bh);
 		bitmap_bh = ext4_read_block_bitmap(sb, i);
 		if (bitmap_bh == NULL)
 			continue;
 
 		x = ext4_count_free(bitmap_bh, sb->s_blocksize);
-		printk(KERN_DEBUG "group %u: stored = %d, counted = %u\n",
-			i, ext4_free_blks_count(sb, gdp), x);
+		printk(KERN_DEBUG "group %lu: stored = %d, counted = %lu\n",
+			i, le16_to_cpu(gdp->bg_free_blocks_count), x);
 		bitmap_count += x;
 	}
 	brelse(bitmap_bh);
@@ -707,7 +812,7 @@ ext4_fsblk_t ext4_count_free_blocks(struct super_block *sb)
 		gdp = ext4_get_group_desc(sb, i, NULL);
 		if (!gdp)
 			continue;
-		desc_count += ext4_free_blks_count(sb, gdp);
+		desc_count += le16_to_cpu(gdp->bg_free_blocks_count);
 	}
 
 	return desc_count;

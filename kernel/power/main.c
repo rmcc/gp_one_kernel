@@ -22,6 +22,7 @@
 #include <linux/freezer.h>
 #include <linux/vmstat.h>
 #include <linux/syscalls.h>
+#include <linux/ftrace.h>
 
 #include "power.h"
 
@@ -56,6 +57,16 @@ int pm_notifier_call_chain(unsigned long val)
 
 #ifdef CONFIG_PM_DEBUG
 int pm_test_level = TEST_NONE;
+
+static int suspend_test(int level)
+{
+	if (pm_test_level == level) {
+		printk(KERN_INFO "suspend debug: Waiting for 5 seconds.\n");
+		mdelay(5000);
+		return 1;
+	}
+	return 0;
+}
 
 static const char * const pm_tests[__TEST_AFTER_LAST] = {
 	[TEST_NONE] = "none",
@@ -115,23 +126,13 @@ static ssize_t pm_test_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 power_attr(pm_test);
-#endif /* CONFIG_PM_DEBUG */
+#else /* !CONFIG_PM_DEBUG */
+static inline int suspend_test(int level) { return 0; }
+#endif /* !CONFIG_PM_DEBUG */
 
 #endif /* CONFIG_PM_SLEEP */
 
 #ifdef CONFIG_SUSPEND
-
-static int suspend_test(int level)
-{
-#ifdef CONFIG_PM_DEBUG
-	if (pm_test_level == level) {
-		printk(KERN_INFO "suspend debug: Waiting for 5 seconds.\n");
-		mdelay(5000);
-		return 1;
-	}
-#endif /* !CONFIG_PM_DEBUG */
-	return 0;
-}
 
 #ifdef CONFIG_PM_TEST_SUSPEND
 
@@ -316,7 +317,7 @@ static int suspend_enter(suspend_state_t state)
  */
 int suspend_devices_and_enter(suspend_state_t state)
 {
-	int error;
+	int error, ftrace_save;
 
 	if (!suspend_ops)
 		return -ENOSYS;
@@ -327,6 +328,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 			goto Close;
 	}
 	suspend_console();
+	ftrace_save = __ftrace_enabled_save();
 	suspend_test_start();
 	error = device_suspend(PMSG_SUSPEND);
 	if (error) {
@@ -358,6 +360,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 	suspend_test_start();
 	device_resume(PMSG_RESUME);
 	suspend_test_finish("resume devices");
+	__ftrace_enabled_restore(ftrace_save);
 	resume_console();
  Close:
 	if (suspend_ops->end)
@@ -615,7 +618,7 @@ static void __init test_wakealarm(struct rtc_device *rtc, suspend_state_t state)
 	/* this may fail if the RTC hasn't been initialized */
 	status = rtc_read_time(rtc, &alm.time);
 	if (status < 0) {
-		printk(err_readtime, dev_name(&rtc->dev), status);
+		printk(err_readtime, rtc->dev.bus_id, status);
 		return;
 	}
 	rtc_tm_to_time(&alm.time, &now);
@@ -626,7 +629,7 @@ static void __init test_wakealarm(struct rtc_device *rtc, suspend_state_t state)
 
 	status = rtc_set_alarm(rtc, &alm);
 	if (status < 0) {
-		printk(err_wakealarm, dev_name(&rtc->dev), status);
+		printk(err_wakealarm, rtc->dev.bus_id, status);
 		return;
 	}
 
@@ -660,7 +663,7 @@ static int __init has_wakealarm(struct device *dev, void *name_ptr)
 	if (!device_may_wakeup(candidate->dev.parent))
 		return 0;
 
-	*(const char **)name_ptr = dev_name(dev);
+	*(char **)name_ptr = dev->bus_id;
 	return 1;
 }
 

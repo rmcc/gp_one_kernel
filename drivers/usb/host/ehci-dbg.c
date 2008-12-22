@@ -455,7 +455,9 @@ static void qh_lines (
 				(scratch >> 16) & 0x7fff,
 				scratch,
 				td->urb);
-		if (size < temp)
+		if (temp < 0)
+			temp = 0;
+		else if (size < temp)
 			temp = size;
 		size -= temp;
 		next += temp;
@@ -464,7 +466,9 @@ static void qh_lines (
 	}
 
 	temp = snprintf (next, size, "\n");
-	if (size < temp)
+	if (temp < 0)
+		temp = 0;
+	else if (size < temp)
 		temp = size;
 	size -= temp;
 	next += temp;

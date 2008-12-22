@@ -329,41 +329,6 @@ struct device_node *of_find_compatible_node(struct device_node *from,
 EXPORT_SYMBOL(of_find_compatible_node);
 
 /**
- *	of_find_node_with_property - Find a node which has a property with
- *                                   the given name.
- *	@from:		The node to start searching from or NULL, the node
- *			you pass will not be searched, only the next one
- *			will; typically, you pass what the previous call
- *			returned. of_node_put() will be called on it
- *	@prop_name:	The name of the property to look for.
- *
- *	Returns a node pointer with refcount incremented, use
- *	of_node_put() on it when done.
- */
-struct device_node *of_find_node_with_property(struct device_node *from,
-	const char *prop_name)
-{
-	struct device_node *np;
-	struct property *pp;
-
-	read_lock(&devtree_lock);
-	np = from ? from->allnext : allnodes;
-	for (; np; np = np->allnext) {
-		for (pp = np->properties; pp != 0; pp = pp->next) {
-			if (of_prop_cmp(pp->name, prop_name) == 0) {
-				of_node_get(np);
-				goto out;
-			}
-		}
-	}
-out:
-	of_node_put(from);
-	read_unlock(&devtree_lock);
-	return np;
-}
-EXPORT_SYMBOL(of_find_node_with_property);
-
-/**
  * of_match_node - Tell if an device_node has a matching of_match structure
  *	@matches:	array of of device match structures to search in
  *	@node:		the of device structure to match against
@@ -499,8 +464,8 @@ EXPORT_SYMBOL_GPL(of_modalias_node);
  * @list_name:	property name that contains a list
  * @cells_name:	property name that specifies phandles' arguments count
  * @index:	index of a phandle to parse out
- * @out_node:	optional pointer to device_node struct pointer (will be filled)
- * @out_args:	optional pointer to arguments pointer (will be filled)
+ * @out_node:	pointer to device_node struct pointer (will be filled)
+ * @out_args:	pointer to arguments pointer (will be filled)
  *
  * This function is useful to parse lists of phandles and their arguments.
  * Returns 0 on success and fills out_node and out_args, on error returns
@@ -534,7 +499,7 @@ int of_parse_phandles_with_args(struct device_node *np, const char *list_name,
 	int size;
 	int cur_index = 0;
 	struct device_node *node = NULL;
-	const void *args = NULL;
+	const void *args;
 
 	list = of_get_property(np, list_name, &size);
 	if (!list) {
@@ -547,12 +512,14 @@ int of_parse_phandles_with_args(struct device_node *np, const char *list_name,
 		const u32 *cells;
 		const phandle *phandle;
 
-		phandle = list++;
-		args = list;
+		phandle = list;
+		args = list + 1;
 
 		/* one cell hole in the list = <>; */
-		if (!*phandle)
+		if (!*phandle) {
+			list++;
 			goto next;
+		}
 
 		node = of_find_node_by_phandle(*phandle);
 		if (!node) {
@@ -568,7 +535,8 @@ int of_parse_phandles_with_args(struct device_node *np, const char *list_name,
 			goto err1;
 		}
 
-		list += *cells;
+		/* Next phandle is at offset of one phandle cell + #cells */
+		list += 1 + *cells;
 		if (list > list_end) {
 			pr_debug("%s: insufficient arguments length\n",
 				 np->full_name);
@@ -580,26 +548,16 @@ next:
 
 		of_node_put(node);
 		node = NULL;
-		args = NULL;
 		cur_index++;
 	}
 
 	if (!node) {
-		/*
-		 * args w/o node indicates that the loop above has stopped at
-		 * the 'hole' cell. Report this differently.
-		 */
-		if (args)
-			ret = -EEXIST;
-		else
-			ret = -ENOENT;
+		ret = -ENOENT;
 		goto err0;
 	}
 
-	if (out_node)
-		*out_node = node;
-	if (out_args)
-		*out_args = args;
+	*out_node = node;
+	*out_args = args;
 
 	return 0;
 err1:

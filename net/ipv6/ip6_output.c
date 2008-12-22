@@ -137,8 +137,7 @@ static int ip6_output2(struct sk_buff *skb)
 		struct inet6_dev *idev = ip6_dst_idev(skb->dst);
 
 		if (!(dev->flags & IFF_LOOPBACK) && (!np || np->mc_loop) &&
-		    ((mroute6_socket(dev_net(dev)) &&
-		     !(IP6CB(skb)->flags & IP6SKB_FORWARDED)) ||
+		    ((mroute6_socket && !(IP6CB(skb)->flags & IP6SKB_FORWARDED)) ||
 		     ipv6_chk_mcast_addr(dev, &ipv6_hdr(skb)->daddr,
 					 &ipv6_hdr(skb)->saddr))) {
 			struct sk_buff *newskb = skb_clone(skb, GFP_ATOMIC);
@@ -491,7 +490,7 @@ int ip6_forward(struct sk_buff *skb)
 	   We don't send redirects to frames decapsulated from IPsec.
 	 */
 	if (skb->dev == dst->dev && dst->neighbour && opt->srcrt == 0 &&
-	    !skb_sec_path(skb)) {
+	    !skb->sp) {
 		struct in6_addr *target = NULL;
 		struct rt6_info *rt;
 		struct neighbour *n = dst->neighbour;
@@ -1105,18 +1104,6 @@ static inline int ip6_ufo_append_data(struct sock *sk,
 	return err;
 }
 
-static inline struct ipv6_opt_hdr *ip6_opt_dup(struct ipv6_opt_hdr *src,
-					       gfp_t gfp)
-{
-	return src ? kmemdup(src, (src->hdrlen + 1) * 8, gfp) : NULL;
-}
-
-static inline struct ipv6_rt_hdr *ip6_rthdr_dup(struct ipv6_rt_hdr *src,
-						gfp_t gfp)
-{
-	return src ? kmemdup(src, (src->hdrlen + 1) * 8, gfp) : NULL;
-}
-
 int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 	int offset, int len, int odd, struct sk_buff *skb),
 	void *from, int length, int transhdrlen,
@@ -1142,37 +1129,17 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 		 * setup for corking
 		 */
 		if (opt) {
-			if (WARN_ON(np->cork.opt))
+			if (np->cork.opt == NULL) {
+				np->cork.opt = kmalloc(opt->tot_len,
+						       sk->sk_allocation);
+				if (unlikely(np->cork.opt == NULL))
+					return -ENOBUFS;
+			} else if (np->cork.opt->tot_len < opt->tot_len) {
+				printk(KERN_DEBUG "ip6_append_data: invalid option length\n");
 				return -EINVAL;
-
-			np->cork.opt = kmalloc(opt->tot_len, sk->sk_allocation);
-			if (unlikely(np->cork.opt == NULL))
-				return -ENOBUFS;
-
-			np->cork.opt->tot_len = opt->tot_len;
-			np->cork.opt->opt_flen = opt->opt_flen;
-			np->cork.opt->opt_nflen = opt->opt_nflen;
-
-			np->cork.opt->dst0opt = ip6_opt_dup(opt->dst0opt,
-							    sk->sk_allocation);
-			if (opt->dst0opt && !np->cork.opt->dst0opt)
-				return -ENOBUFS;
-
-			np->cork.opt->dst1opt = ip6_opt_dup(opt->dst1opt,
-							    sk->sk_allocation);
-			if (opt->dst1opt && !np->cork.opt->dst1opt)
-				return -ENOBUFS;
-
-			np->cork.opt->hopopt = ip6_opt_dup(opt->hopopt,
-							   sk->sk_allocation);
-			if (opt->hopopt && !np->cork.opt->hopopt)
-				return -ENOBUFS;
-
-			np->cork.opt->srcrt = ip6_rthdr_dup(opt->srcrt,
-							    sk->sk_allocation);
-			if (opt->srcrt && !np->cork.opt->srcrt)
-				return -ENOBUFS;
-
+			}
+			memcpy(np->cork.opt, opt, opt->tot_len);
+			inet->cork.flags |= IPCORK_OPT;
 			/* need source address above miyazawa*/
 		}
 		dst_hold(&rt->u.dst);
@@ -1199,7 +1166,8 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 	} else {
 		rt = (struct rt6_info *)inet->cork.dst;
 		fl = &inet->cork.fl;
-		opt = np->cork.opt;
+		if (inet->cork.flags & IPCORK_OPT)
+			opt = np->cork.opt;
 		transhdrlen = 0;
 		exthdrlen = 0;
 		mtu = inet->cork.fragsize;
@@ -1438,15 +1406,9 @@ error:
 
 static void ip6_cork_release(struct inet_sock *inet, struct ipv6_pinfo *np)
 {
-	if (np->cork.opt) {
-		kfree(np->cork.opt->dst0opt);
-		kfree(np->cork.opt->dst1opt);
-		kfree(np->cork.opt->hopopt);
-		kfree(np->cork.opt->srcrt);
-		kfree(np->cork.opt);
-		np->cork.opt = NULL;
-	}
-
+	inet->cork.flags &= ~IPCORK_OPT;
+	kfree(np->cork.opt);
+	np->cork.opt = NULL;
 	if (inet->cork.dst) {
 		dst_release(inet->cork.dst);
 		inet->cork.dst = NULL;

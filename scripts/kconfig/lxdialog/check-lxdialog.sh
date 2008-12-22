@@ -52,7 +52,7 @@ EOF
 }
 
 usage() {
-	printf "Usage: $0 [-check compiler options|-ccflags|-ldflags compiler options]\n"
+	printf "Usage: $0 [-check compiler options|-header|-library]\n"
 }
 
 if [ $# -eq 0 ]; then

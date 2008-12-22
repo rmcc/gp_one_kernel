@@ -661,8 +661,6 @@ bail:
 static void __devexit cleanup_device(struct ipath_devdata *dd)
 {
 	int port;
-	struct ipath_portdata **tmp;
-	unsigned long flags;
 
 	if (*dd->ipath_statusp & IPATH_STATUS_CHIP_PRESENT) {
 		/* can't do anything more with chip; needs re-init */
@@ -744,21 +742,20 @@ static void __devexit cleanup_device(struct ipath_devdata *dd)
 
 	/*
 	 * free any resources still in use (usually just kernel ports)
-	 * at unload; we do for portcnt, because that's what we allocate.
-	 * We acquire lock to be really paranoid that ipath_pd isn't being
-	 * accessed from some interrupt-related code (that should not happen,
-	 * but best to be sure).
+	 * at unload; we do for portcnt, not cfgports, because cfgports
+	 * could have changed while we were loaded.
 	 */
-	spin_lock_irqsave(&dd->ipath_uctxt_lock, flags);
-	tmp = dd->ipath_pd;
-	dd->ipath_pd = NULL;
-	spin_unlock_irqrestore(&dd->ipath_uctxt_lock, flags);
 	for (port = 0; port < dd->ipath_portcnt; port++) {
-		struct ipath_portdata *pd = tmp[port];
-		tmp[port] = NULL; /* debugging paranoia */
+		struct ipath_portdata *pd = dd->ipath_pd[port];
+		dd->ipath_pd[port] = NULL;
 		ipath_free_pddata(dd, pd);
 	}
-	kfree(tmp);
+	kfree(dd->ipath_pd);
+	/*
+	 * debuggability, in case some cleanup path tries to use it
+	 * after this
+	 */
+	dd->ipath_pd = NULL;
 }
 
 static void __devexit ipath_remove_one(struct pci_dev *pdev)
@@ -2589,7 +2586,6 @@ int ipath_reset_device(int unit)
 {
 	int ret, i;
 	struct ipath_devdata *dd = ipath_lookup(unit);
-	unsigned long flags;
 
 	if (!dd) {
 		ret = -ENODEV;
@@ -2615,21 +2611,18 @@ int ipath_reset_device(int unit)
 		goto bail;
 	}
 
-	spin_lock_irqsave(&dd->ipath_uctxt_lock, flags);
 	if (dd->ipath_pd)
 		for (i = 1; i < dd->ipath_cfgports; i++) {
-			if (!dd->ipath_pd[i] || !dd->ipath_pd[i]->port_cnt)
-				continue;
-			spin_unlock_irqrestore(&dd->ipath_uctxt_lock, flags);
-			ipath_dbg("unit %u port %d is in use "
-				  "(PID %u cmd %s), can't reset\n",
-				  unit, i,
-				  pid_nr(dd->ipath_pd[i]->port_pid),
-				  dd->ipath_pd[i]->port_comm);
-			ret = -EBUSY;
-			goto bail;
+			if (dd->ipath_pd[i] && dd->ipath_pd[i]->port_cnt) {
+				ipath_dbg("unit %u port %d is in use "
+					  "(PID %u cmd %s), can't reset\n",
+					  unit, i,
+					  pid_nr(dd->ipath_pd[i]->port_pid),
+					  dd->ipath_pd[i]->port_comm);
+				ret = -EBUSY;
+				goto bail;
+			}
 		}
-	spin_unlock_irqrestore(&dd->ipath_uctxt_lock, flags);
 
 	if (dd->ipath_flags & IPATH_HAS_SEND_DMA)
 		teardown_sdma(dd);
@@ -2663,12 +2656,9 @@ static int ipath_signal_procs(struct ipath_devdata *dd, int sig)
 {
 	int i, sub, any = 0;
 	struct pid *pid;
-	unsigned long flags;
 
 	if (!dd->ipath_pd)
 		return 0;
-
-	spin_lock_irqsave(&dd->ipath_uctxt_lock, flags);
 	for (i = 1; i < dd->ipath_cfgports; i++) {
 		if (!dd->ipath_pd[i] || !dd->ipath_pd[i]->port_cnt)
 			continue;
@@ -2692,7 +2682,6 @@ static int ipath_signal_procs(struct ipath_devdata *dd, int sig)
 			any++;
 		}
 	}
-	spin_unlock_irqrestore(&dd->ipath_uctxt_lock, flags);
 	return any;
 }
 
@@ -2715,7 +2704,7 @@ static void ipath_hol_signal_up(struct ipath_devdata *dd)
  * to prevent HoL blocking, then start the HoL timer that
  * periodically continues, then stop procs, so they can detect
  * link down if they want, and do something about it.
- * Timer may already be running, so use mod_timer, not add_timer.
+ * Timer may already be running, so use __mod_timer, not add_timer.
  */
 void ipath_hol_down(struct ipath_devdata *dd)
 {
@@ -2724,7 +2713,7 @@ void ipath_hol_down(struct ipath_devdata *dd)
 	dd->ipath_hol_next = IPATH_HOL_DOWNCONT;
 	dd->ipath_hol_timer.expires = jiffies +
 		msecs_to_jiffies(ipath_hol_timeout_ms);
-	mod_timer(&dd->ipath_hol_timer, dd->ipath_hol_timer.expires);
+	__mod_timer(&dd->ipath_hol_timer, dd->ipath_hol_timer.expires);
 }
 
 /*
@@ -2763,7 +2752,7 @@ void ipath_hol_event(unsigned long opaque)
 	else {
 		dd->ipath_hol_timer.expires = jiffies +
 			msecs_to_jiffies(ipath_hol_timeout_ms);
-		mod_timer(&dd->ipath_hol_timer,
+		__mod_timer(&dd->ipath_hol_timer,
 			dd->ipath_hol_timer.expires);
 	}
 }

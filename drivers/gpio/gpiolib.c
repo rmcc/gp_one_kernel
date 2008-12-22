@@ -789,7 +789,6 @@ int gpio_request(unsigned gpio, const char *label)
 	} else {
 		status = -EBUSY;
 		module_put(chip->owner);
-		goto done;
 	}
 
 	if (chip->request) {
@@ -1214,7 +1213,7 @@ static int gpiolib_show(struct seq_file *s, void *unused)
 		if (dev)
 			seq_printf(s, ", %s/%s",
 				dev->bus ? dev->bus->name : "no-bus",
-				dev_name(dev));
+				dev->bus_id);
 		if (chip->label)
 			seq_printf(s, ", %s", chip->label);
 		if (chip->can_sleep)

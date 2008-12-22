@@ -152,7 +152,7 @@ static int cp_old_stat(struct kstat *stat, struct __old_kernel_stat __user * sta
 	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
-SYSCALL_DEFINE2(stat, char __user *, filename, struct __old_kernel_stat __user *, statbuf)
+asmlinkage long sys_stat(char __user * filename, struct __old_kernel_stat __user * statbuf)
 {
 	struct kstat stat;
 	int error = vfs_stat_fd(AT_FDCWD, filename, &stat);
@@ -162,8 +162,7 @@ SYSCALL_DEFINE2(stat, char __user *, filename, struct __old_kernel_stat __user *
 
 	return error;
 }
-
-SYSCALL_DEFINE2(lstat, char __user *, filename, struct __old_kernel_stat __user *, statbuf)
+asmlinkage long sys_lstat(char __user * filename, struct __old_kernel_stat __user * statbuf)
 {
 	struct kstat stat;
 	int error = vfs_lstat_fd(AT_FDCWD, filename, &stat);
@@ -173,8 +172,7 @@ SYSCALL_DEFINE2(lstat, char __user *, filename, struct __old_kernel_stat __user 
 
 	return error;
 }
-
-SYSCALL_DEFINE2(fstat, unsigned int, fd, struct __old_kernel_stat __user *, statbuf)
+asmlinkage long sys_fstat(unsigned int fd, struct __old_kernel_stat __user * statbuf)
 {
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
@@ -237,7 +235,7 @@ static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
-SYSCALL_DEFINE2(newstat, char __user *, filename, struct stat __user *, statbuf)
+asmlinkage long sys_newstat(char __user *filename, struct stat __user *statbuf)
 {
 	struct kstat stat;
 	int error = vfs_stat_fd(AT_FDCWD, filename, &stat);
@@ -248,7 +246,7 @@ SYSCALL_DEFINE2(newstat, char __user *, filename, struct stat __user *, statbuf)
 	return error;
 }
 
-SYSCALL_DEFINE2(newlstat, char __user *, filename, struct stat __user *, statbuf)
+asmlinkage long sys_newlstat(char __user *filename, struct stat __user *statbuf)
 {
 	struct kstat stat;
 	int error = vfs_lstat_fd(AT_FDCWD, filename, &stat);
@@ -260,8 +258,8 @@ SYSCALL_DEFINE2(newlstat, char __user *, filename, struct stat __user *, statbuf
 }
 
 #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
-SYSCALL_DEFINE4(newfstatat, int, dfd, char __user *, filename,
-		struct stat __user *, statbuf, int, flag)
+asmlinkage long sys_newfstatat(int dfd, char __user *filename,
+				struct stat __user *statbuf, int flag)
 {
 	struct kstat stat;
 	int error = -EINVAL;
@@ -282,7 +280,7 @@ out:
 }
 #endif
 
-SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
+asmlinkage long sys_newfstat(unsigned int fd, struct stat __user *statbuf)
 {
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
@@ -293,8 +291,8 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 	return error;
 }
 
-SYSCALL_DEFINE4(readlinkat, int, dfd, const char __user *, pathname,
-		char __user *, buf, int, bufsiz)
+asmlinkage long sys_readlinkat(int dfd, const char __user *pathname,
+				char __user *buf, int bufsiz)
 {
 	struct path path;
 	int error;
@@ -307,7 +305,7 @@ SYSCALL_DEFINE4(readlinkat, int, dfd, const char __user *, pathname,
 		struct inode *inode = path.dentry->d_inode;
 
 		error = -EINVAL;
-		if (inode->i_op->readlink) {
+		if (inode->i_op && inode->i_op->readlink) {
 			error = security_inode_readlink(path.dentry);
 			if (!error) {
 				touch_atime(path.mnt, path.dentry);
@@ -320,8 +318,8 @@ SYSCALL_DEFINE4(readlinkat, int, dfd, const char __user *, pathname,
 	return error;
 }
 
-SYSCALL_DEFINE3(readlink, const char __user *, path, char __user *, buf,
-		int, bufsiz)
+asmlinkage long sys_readlink(const char __user *path, char __user *buf,
+				int bufsiz)
 {
 	return sys_readlinkat(AT_FDCWD, path, buf, bufsiz);
 }
@@ -367,7 +365,7 @@ static long cp_new_stat64(struct kstat *stat, struct stat64 __user *statbuf)
 	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
-SYSCALL_DEFINE2(stat64, char __user *, filename, struct stat64 __user *, statbuf)
+asmlinkage long sys_stat64(char __user * filename, struct stat64 __user * statbuf)
 {
 	struct kstat stat;
 	int error = vfs_stat(filename, &stat);
@@ -377,8 +375,7 @@ SYSCALL_DEFINE2(stat64, char __user *, filename, struct stat64 __user *, statbuf
 
 	return error;
 }
-
-SYSCALL_DEFINE2(lstat64, char __user *, filename, struct stat64 __user *, statbuf)
+asmlinkage long sys_lstat64(char __user * filename, struct stat64 __user * statbuf)
 {
 	struct kstat stat;
 	int error = vfs_lstat(filename, &stat);
@@ -388,8 +385,7 @@ SYSCALL_DEFINE2(lstat64, char __user *, filename, struct stat64 __user *, statbu
 
 	return error;
 }
-
-SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
+asmlinkage long sys_fstat64(unsigned long fd, struct stat64 __user * statbuf)
 {
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
@@ -400,8 +396,8 @@ SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 	return error;
 }
 
-SYSCALL_DEFINE4(fstatat64, int, dfd, char __user *, filename,
-		struct stat64 __user *, statbuf, int, flag)
+asmlinkage long sys_fstatat64(int dfd, char __user *filename,
+			       struct stat64 __user *statbuf, int flag)
 {
 	struct kstat stat;
 	int error = -EINVAL;

@@ -10,7 +10,6 @@
 #include <linux/debugfs.h>
 #include <linux/ftrace.h>
 #include <linux/module.h>
-#include <linux/sysctl.h>
 #include <linux/init.h>
 #include <linux/fs.h>
 #include "trace.h"
@@ -32,10 +31,6 @@ static raw_spinlock_t max_stack_lock =
 
 static int stack_trace_disabled __read_mostly;
 static DEFINE_PER_CPU(int, trace_active);
-static DEFINE_MUTEX(stack_sysctl_mutex);
-
-int stack_tracer_enabled;
-static int last_stack_tracer_enabled;
 
 static inline void check_stack(void)
 {
@@ -53,7 +48,7 @@ static inline void check_stack(void)
 	if (!object_is_on_stack(&this_size))
 		return;
 
-	local_irq_save(flags);
+	raw_local_irq_save(flags);
 	__raw_spin_lock(&max_stack_lock);
 
 	/* a race could have already updated it */
@@ -83,7 +78,6 @@ static inline void check_stack(void)
 	 * on a new max, so it is far from a fast path.
 	 */
 	while (i < max_stack_trace.nr_entries) {
-		int found = 0;
 
 		stack_dump_index[i] = this_size;
 		p = start;
@@ -92,19 +86,17 @@ static inline void check_stack(void)
 			if (*p == stack_dump_trace[i]) {
 				this_size = stack_dump_index[i++] =
 					(top - p) * sizeof(unsigned long);
-				found = 1;
 				/* Start the search from here */
 				start = p + 1;
 			}
 		}
 
-		if (!found)
-			i++;
+		i++;
 	}
 
  out:
 	__raw_spin_unlock(&max_stack_lock);
-	local_irq_restore(flags);
+	raw_local_irq_restore(flags);
 }
 
 static void
@@ -115,7 +107,8 @@ stack_trace_call(unsigned long ip, unsigned long parent_ip)
 	if (unlikely(!ftrace_enabled || stack_trace_disabled))
 		return;
 
-	resched = ftrace_preempt_disable();
+	resched = need_resched();
+	preempt_disable_notrace();
 
 	cpu = raw_smp_processor_id();
 	/* no atomic needed, we only modify this variable by this cpu */
@@ -127,7 +120,10 @@ stack_trace_call(unsigned long ip, unsigned long parent_ip)
  out:
 	per_cpu(trace_active, cpu)--;
 	/* prevent recursion in schedule */
-	ftrace_preempt_enable(resched);
+	if (resched)
+		preempt_enable_no_resched_notrace();
+	else
+		preempt_enable_notrace();
 }
 
 static struct ftrace_ops trace_ops __read_mostly =
@@ -170,16 +166,16 @@ stack_max_size_write(struct file *filp, const char __user *ubuf,
 	if (ret < 0)
 		return ret;
 
-	local_irq_save(flags);
+	raw_local_irq_save(flags);
 	__raw_spin_lock(&max_stack_lock);
 	*ptr = val;
 	__raw_spin_unlock(&max_stack_lock);
-	local_irq_restore(flags);
+	raw_local_irq_restore(flags);
 
 	return count;
 }
 
-static const struct file_operations stack_max_size_fops = {
+static struct file_operations stack_max_size_fops = {
 	.open		= tracing_open_generic,
 	.read		= stack_max_size_read,
 	.write		= stack_max_size_write,
@@ -277,7 +273,7 @@ static int t_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-static const struct seq_operations stack_trace_seq_ops = {
+static struct seq_operations stack_trace_seq_ops = {
 	.start		= t_start,
 	.next		= t_next,
 	.stop		= t_stop,
@@ -293,46 +289,11 @@ static int stack_trace_open(struct inode *inode, struct file *file)
 	return ret;
 }
 
-static const struct file_operations stack_trace_fops = {
+static struct file_operations stack_trace_fops = {
 	.open		= stack_trace_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 };
-
-int
-stack_trace_sysctl(struct ctl_table *table, int write,
-		   struct file *file, void __user *buffer, size_t *lenp,
-		   loff_t *ppos)
-{
-	int ret;
-
-	mutex_lock(&stack_sysctl_mutex);
-
-	ret = proc_dointvec(table, write, file, buffer, lenp, ppos);
-
-	if (ret || !write ||
-	    (last_stack_tracer_enabled == stack_tracer_enabled))
-		goto out;
-
-	last_stack_tracer_enabled = stack_tracer_enabled;
-
-	if (stack_tracer_enabled)
-		register_ftrace_function(&trace_ops);
-	else
-		unregister_ftrace_function(&trace_ops);
-
- out:
-	mutex_unlock(&stack_sysctl_mutex);
-	return ret;
-}
-
-static __init int enable_stacktrace(char *str)
-{
-	stack_tracer_enabled = 1;
-	last_stack_tracer_enabled = 1;
-	return 1;
-}
-__setup("stacktrace", enable_stacktrace);
 
 static __init int stack_trace_init(void)
 {
@@ -351,8 +312,7 @@ static __init int stack_trace_init(void)
 	if (!entry)
 		pr_warning("Could not create debugfs 'stack_trace' entry\n");
 
-	if (stack_tracer_enabled)
-		register_ftrace_function(&trace_ops);
+	register_ftrace_function(&trace_ops);
 
 	return 0;
 }

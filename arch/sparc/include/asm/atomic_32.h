@@ -13,6 +13,8 @@
 
 #include <linux/types.h>
 
+typedef struct { volatile int counter; } atomic_t;
+
 #ifdef __KERNEL__
 
 #define ATOMIC_INIT(i)  { (i) }

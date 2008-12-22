@@ -79,8 +79,7 @@ struct inode *ialloc(struct inode *parent, umode_t mode)
 	inode = new_inode(sb);
 	if (!inode) {
 		jfs_warn("ialloc: new_inode returned NULL!");
-		rc = -ENOMEM;
-		goto fail;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	jfs_inode = JFS_IP(inode);
@@ -90,21 +89,17 @@ struct inode *ialloc(struct inode *parent, umode_t mode)
 		jfs_warn("ialloc: diAlloc returned %d!", rc);
 		if (rc == -EIO)
 			make_bad_inode(inode);
-		goto fail_put;
+		iput(inode);
+		return ERR_PTR(rc);
 	}
 
-	if (insert_inode_locked(inode) < 0) {
-		rc = -EINVAL;
-		goto fail_unlock;
-	}
-
-	inode->i_uid = current_fsuid();
+	inode->i_uid = current->fsuid;
 	if (parent->i_mode & S_ISGID) {
 		inode->i_gid = parent->i_gid;
 		if (S_ISDIR(mode))
 			mode |= S_ISGID;
 	} else
-		inode->i_gid = current_fsgid();
+		inode->i_gid = current->fsgid;
 
 	/*
 	 * New inodes need to save sane values on disk when
@@ -117,8 +112,11 @@ struct inode *ialloc(struct inode *parent, umode_t mode)
 	 * Allocate inode to quota.
 	 */
 	if (DQUOT_ALLOC_INODE(inode)) {
-		rc = -EDQUOT;
-		goto fail_drop;
+		DQUOT_DROP(inode);
+		inode->i_flags |= S_NOQUOTA;
+		inode->i_nlink = 0;
+		iput(inode);
+		return ERR_PTR(-EDQUOT);
 	}
 
 	inode->i_mode = mode;
@@ -160,15 +158,4 @@ struct inode *ialloc(struct inode *parent, umode_t mode)
 	jfs_info("ialloc returns inode = 0x%p\n", inode);
 
 	return inode;
-
-fail_drop:
-	DQUOT_DROP(inode);
-	inode->i_flags |= S_NOQUOTA;
-fail_unlock:
-	inode->i_nlink = 0;
-	unlock_new_inode(inode);
-fail_put:
-	iput(inode);
-fail:
-	return ERR_PTR(rc);
 }

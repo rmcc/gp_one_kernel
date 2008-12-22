@@ -1187,9 +1187,6 @@ compat_sys_readv(unsigned long fd, const struct compat_iovec __user *vec, unsign
 	ret = compat_do_readv_writev(READ, file, vec, vlen, &file->f_pos);
 
 out:
-	if (ret > 0)
-		add_rchar(current, ret);
-	inc_syscr(current);
 	fput(file);
 	return ret;
 }
@@ -1213,9 +1210,6 @@ compat_sys_writev(unsigned long fd, const struct compat_iovec __user *vec, unsig
 	ret = compat_do_readv_writev(WRITE, file, vec, vlen, &file->f_pos);
 
 out:
-	if (ret > 0)
-		add_wchar(current, ret);
-	inc_syscw(current);
 	fput(file);
 	return ret;
 }
@@ -1399,20 +1393,10 @@ int compat_do_execve(char * filename,
 	if (!bprm)
 		goto out_ret;
 
-	retval = mutex_lock_interruptible(&current->cred_exec_mutex);
-	if (retval < 0)
-		goto out_free;
-
-	retval = -ENOMEM;
-	bprm->cred = prepare_exec_creds();
-	if (!bprm->cred)
-		goto out_unlock;
-	check_unsafe_exec(bprm, current->files);
-
 	file = open_exec(filename);
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
-		goto out_unlock;
+		goto out_kfree;
 
 	sched_exec();
 
@@ -1426,10 +1410,14 @@ int compat_do_execve(char * filename,
 
 	bprm->argc = compat_count(argv, MAX_ARG_STRINGS);
 	if ((retval = bprm->argc) < 0)
-		goto out;
+		goto out_mm;
 
 	bprm->envc = compat_count(envp, MAX_ARG_STRINGS);
 	if ((retval = bprm->envc) < 0)
+		goto out_mm;
+
+	retval = security_bprm_alloc(bprm);
+	if (retval)
 		goto out;
 
 	retval = prepare_binprm(bprm);
@@ -1450,16 +1438,19 @@ int compat_do_execve(char * filename,
 		goto out;
 
 	retval = search_binary_handler(bprm, regs);
-	if (retval < 0)
-		goto out;
-
-	/* execve succeeded */
-	mutex_unlock(&current->cred_exec_mutex);
-	acct_update_integrals(current);
-	free_bprm(bprm);
-	return retval;
+	if (retval >= 0) {
+		/* execve success */
+		security_bprm_free(bprm);
+		acct_update_integrals(current);
+		free_bprm(bprm);
+		return retval;
+	}
 
 out:
+	if (bprm->security)
+		security_bprm_free(bprm);
+
+out_mm:
 	if (bprm->mm)
 		mmput(bprm->mm);
 
@@ -1469,10 +1460,7 @@ out_file:
 		fput(bprm->file);
 	}
 
-out_unlock:
-	mutex_unlock(&current->cred_exec_mutex);
-
-out_free:
+out_kfree:
 	free_bprm(bprm);
 
 out_ret:
@@ -1709,7 +1697,7 @@ asmlinkage long compat_sys_select(int n, compat_ulong_t __user *inp,
 }
 
 #ifdef HAVE_SET_RESTORE_SIGMASK
-static long do_compat_pselect(int n, compat_ulong_t __user *inp,
+asmlinkage long compat_sys_pselect7(int n, compat_ulong_t __user *inp,
 	compat_ulong_t __user *outp, compat_ulong_t __user *exp,
 	struct compat_timespec __user *tsp, compat_sigset_t __user *sigmask,
 	compat_size_t sigsetsize)
@@ -1775,8 +1763,8 @@ asmlinkage long compat_sys_pselect6(int n, compat_ulong_t __user *inp,
 				(compat_size_t __user *)(sig+sizeof(up))))
 			return -EFAULT;
 	}
-	return do_compat_pselect(n, inp, outp, exp, tsp, compat_ptr(up),
-				 sigsetsize);
+	return compat_sys_pselect7(n, inp, outp, exp, tsp, compat_ptr(up),
+					sigsetsize);
 }
 
 asmlinkage long compat_sys_ppoll(struct pollfd __user *ufds,

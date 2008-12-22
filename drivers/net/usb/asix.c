@@ -246,11 +246,10 @@ out:
 static void asix_async_cmd_callback(struct urb *urb)
 {
 	struct usb_ctrlrequest *req = (struct usb_ctrlrequest *)urb->context;
-	int status = urb->status;
 
-	if (status < 0)
+	if (urb->status < 0)
 		printk(KERN_DEBUG "asix_async_cmd_callback() failed with %d",
-			status);
+			urb->status);
 
 	kfree(req);
 	usb_free_urb(urb);

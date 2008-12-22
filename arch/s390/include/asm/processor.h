@@ -13,7 +13,6 @@
 #ifndef __ASM_S390_PROCESSOR_H
 #define __ASM_S390_PROCESSOR_H
 
-#include <linux/linkage.h>
 #include <asm/ptrace.h>
 
 #ifdef __KERNEL__
@@ -259,7 +258,7 @@ static inline void enabled_wait(void)
  * Function to drop a processor into disabled wait state
  */
 
-static inline void ATTRIB_NORET disabled_wait(unsigned long code)
+static inline void disabled_wait(unsigned long code)
 {
         unsigned long ctl_buf;
         psw_t dw_psw;
@@ -323,7 +322,6 @@ static inline void ATTRIB_NORET disabled_wait(unsigned long code)
 		: "=m" (ctl_buf)
 		: "a" (&dw_psw), "a" (&ctl_buf), "m" (dw_psw) : "cc", "0");
 #endif /* __s390x__ */
-	while (1);
 }
 
 /*

@@ -10,9 +10,8 @@
 #ifndef _LINUX_SERIAL_H
 #define _LINUX_SERIAL_H
 
-#include <linux/types.h>
-
 #ifdef __KERNEL__
+#include <linux/types.h>
 #include <asm/page.h>
 
 /*

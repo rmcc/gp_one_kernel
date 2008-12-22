@@ -47,6 +47,11 @@
 
 #include "hidp.h"
 
+#ifndef CONFIG_BT_HIDP_DEBUG
+#undef  BT_DBG
+#define BT_DBG(D...)
+#endif
+
 #define VERSION "1.2"
 
 static DECLARE_RWSEM(hidp_session_sem);

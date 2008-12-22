@@ -6,9 +6,6 @@
  * Copyright IBM Corporation 2002, 2008
  */
 
-#define KMSG_COMPONENT "zfcp"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include "zfcp_ext.h"
 
 #define ZFCP_MAX_ERPS                   3
@@ -840,6 +837,7 @@ static int zfcp_erp_open_ptp_port(struct zfcp_erp_action *act)
 		return ZFCP_ERP_FAILED;
 	}
 	port->d_id = adapter->peer_d_id;
+	atomic_set_mask(ZFCP_STATUS_PORT_DID_DID, &port->status);
 	return zfcp_erp_port_strategy_open_port(act);
 }
 
@@ -870,12 +868,12 @@ static int zfcp_erp_port_strategy_open_common(struct zfcp_erp_action *act)
 	case ZFCP_ERP_STEP_PORT_CLOSING:
 		if (fc_host_port_type(adapter->scsi_host) == FC_PORTTYPE_PTP)
 			return zfcp_erp_open_ptp_port(act);
-		if (!port->d_id) {
+		if (!(p_status & ZFCP_STATUS_PORT_DID_DID)) {
 			queue_work(zfcp_data.work_queue, &port->gid_pn_work);
 			return ZFCP_ERP_CONTINUES;
 		}
 	case ZFCP_ERP_STEP_NAMESERVER_LOOKUP:
-		if (!port->d_id) {
+		if (!(p_status & ZFCP_STATUS_PORT_DID_DID)) {
 			if (p_status & (ZFCP_STATUS_PORT_INVALID_WWPN)) {
 				zfcp_erp_port_failed(port, 26, NULL);
 				return ZFCP_ERP_EXIT;
@@ -887,7 +885,7 @@ static int zfcp_erp_port_strategy_open_common(struct zfcp_erp_action *act)
 	case ZFCP_ERP_STEP_PORT_OPENING:
 		/* D_ID might have changed during open */
 		if (p_status & ZFCP_STATUS_COMMON_OPEN) {
-			if (port->d_id)
+			if (p_status & ZFCP_STATUS_PORT_DID_DID)
 				return ZFCP_ERP_SUCCEEDED;
 			else {
 				act->step = ZFCP_ERP_STEP_PORT_CLOSING;
@@ -1283,13 +1281,10 @@ static void zfcp_erp_action_cleanup(struct zfcp_erp_action *act, int result)
 		break;
 
 	case ZFCP_ERP_ACTION_REOPEN_ADAPTER:
-		if (result != ZFCP_ERP_SUCCEEDED) {
-			unregister_service_level(&adapter->service_level);
+		if (result != ZFCP_ERP_SUCCEEDED)
 			zfcp_erp_rports_del(adapter);
-		} else {
-			register_service_level(&adapter->service_level);
+		else
 			schedule_work(&adapter->scan_work);
-		}
 		zfcp_adapter_put(adapter);
 		break;
 	}
@@ -1384,7 +1379,6 @@ static int zfcp_erp_thread(void *data)
 	struct list_head *next;
 	struct zfcp_erp_action *act;
 	unsigned long flags;
-	int ignore;
 
 	daemonize("zfcperp%s", dev_name(&adapter->ccw_device->dev));
 	/* Block all signals */
@@ -1407,7 +1401,7 @@ static int zfcp_erp_thread(void *data)
 		}
 
 		zfcp_rec_dbf_event_thread_lock(4, adapter);
-		ignore = down_interruptible(&adapter->erp_ready_sem);
+		down_interruptible(&adapter->erp_ready_sem);
 		zfcp_rec_dbf_event_thread_lock(5, adapter);
 	}
 

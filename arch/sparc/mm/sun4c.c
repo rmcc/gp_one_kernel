@@ -18,7 +18,6 @@
 #include <linux/seq_file.h>
 #include <linux/scatterlist.h>
 
-#include <asm/sections.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
@@ -241,7 +240,9 @@ void sun4c_complete_all_stores(void)
 
 	_unused = sun4c_get_context();
 	sun4c_set_context(_unused);
+#ifdef CONFIG_SUN_AUXIO
 	_unused = get_auxio();
+#endif
 }
 
 /* Bootup utility functions. */
@@ -1123,8 +1124,8 @@ static void sun4c_get_scsi_sgl(struct device *dev, struct scatterlist *sg, int s
 {
 	while (sz != 0) {
 		--sz;
-		sg->dma_address = (__u32)sun4c_lockarea(sg_virt(sg), sg->length);
-		sg->dma_length = sg->length;
+		sg->dvma_address = (__u32)sun4c_lockarea(sg_virt(sg), sg->length);
+		sg->dvma_length = sg->length;
 		sg = sg_next(sg);
 	}
 }
@@ -1140,7 +1141,7 @@ static void sun4c_release_scsi_sgl(struct device *dev, struct scatterlist *sg, i
 {
 	while (sz != 0) {
 		--sz;
-		sun4c_unlockarea((char *)sg->dma_address, sg->length);
+		sun4c_unlockarea((char *)sg->dvma_address, sg->length);
 		sg = sg_next(sg);
 	}
 }
@@ -1952,6 +1953,7 @@ void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long address, p
 }
 
 extern void sparc_context_init(int);
+extern unsigned long end;
 extern unsigned long bootmem_init(unsigned long *pages_avail);
 extern unsigned long last_valid_pfn;
 
@@ -1962,7 +1964,7 @@ void __init sun4c_paging_init(void)
 	extern struct resource sparc_iomap;
 	unsigned long end_pfn, pages_avail;
 
-	kernel_end = (unsigned long) &_end;
+	kernel_end = (unsigned long) &end;
 	kernel_end = SUN4C_REAL_PGDIR_ALIGN(kernel_end);
 
 	pages_avail = 0;

@@ -369,6 +369,7 @@ static void de600_rx_intr(struct net_device *dev)
 	netif_rx(skb);
 
 	/* update stats */
+	dev->last_rx = jiffies;
 	dev->stats.rx_packets++; /* count all receives */
 	dev->stats.rx_bytes += size; /* count all received bytes */
 
@@ -378,21 +379,12 @@ static void de600_rx_intr(struct net_device *dev)
 	 */
 }
 
-static const struct net_device_ops de600_netdev_ops = {
-	.ndo_open		= de600_open,
-	.ndo_stop		= de600_close,
-	.ndo_start_xmit		= de600_start_xmit,
-	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-};
-
-
 static struct net_device * __init de600_probe(void)
 {
 	int	i;
 	struct net_device *dev;
 	int err;
+	DECLARE_MAC_BUF(mac);
 
 	dev = alloc_etherdev(0);
 	if (!dev)
@@ -447,9 +439,11 @@ static struct net_device * __init de600_probe(void)
 		goto out1;
 	}
 
-	printk(", Ethernet Address: %pM\n", dev->dev_addr);
+	printk(", Ethernet Address: %s\n", print_mac(mac, dev->dev_addr));
 
-	dev->netdev_ops = &de600_netdev_ops;
+	dev->open = de600_open;
+	dev->stop = de600_close;
+	dev->hard_start_xmit = &de600_start_xmit;
 
 	dev->flags&=~IFF_MULTICAST;
 

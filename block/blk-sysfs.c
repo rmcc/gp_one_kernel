@@ -88,7 +88,9 @@ queue_ra_store(struct request_queue *q, const char *page, size_t count)
 	unsigned long ra_kb;
 	ssize_t ret = queue_var_store(&ra_kb, page, count);
 
+	spin_lock_irq(q->queue_lock);
 	q->backing_dev_info.ra_pages = ra_kb >> (PAGE_CACHE_SHIFT - 10);
+	spin_unlock_irq(q->queue_lock);
 
 	return ret;
 }
@@ -115,7 +117,10 @@ queue_max_sectors_store(struct request_queue *q, const char *page, size_t count)
 
 	if (max_sectors_kb > max_hw_sectors_kb || max_sectors_kb < page_kb)
 		return -EINVAL;
-
+	/*
+	 * Take the queue lock to update the readahead and max_sectors
+	 * values synchronously:
+	 */
 	spin_lock_irq(q->queue_lock);
 	q->max_sectors = max_sectors_kb << 1;
 	spin_unlock_irq(q->queue_lock);
@@ -128,27 +133,6 @@ static ssize_t queue_max_hw_sectors_show(struct request_queue *q, char *page)
 	int max_hw_sectors_kb = q->max_hw_sectors >> 1;
 
 	return queue_var_show(max_hw_sectors_kb, (page));
-}
-
-static ssize_t queue_nonrot_show(struct request_queue *q, char *page)
-{
-	return queue_var_show(!blk_queue_nonrot(q), page);
-}
-
-static ssize_t queue_nonrot_store(struct request_queue *q, const char *page,
-				  size_t count)
-{
-	unsigned long nm;
-	ssize_t ret = queue_var_store(&nm, page, count);
-
-	spin_lock_irq(q->queue_lock);
-	if (nm)
-		queue_flag_clear(QUEUE_FLAG_NONROT, q);
-	else
-		queue_flag_set(QUEUE_FLAG_NONROT, q);
-	spin_unlock_irq(q->queue_lock);
-
-	return ret;
 }
 
 static ssize_t queue_nomerges_show(struct request_queue *q, char *page)
@@ -167,8 +151,8 @@ static ssize_t queue_nomerges_store(struct request_queue *q, const char *page,
 		queue_flag_set(QUEUE_FLAG_NOMERGES, q);
 	else
 		queue_flag_clear(QUEUE_FLAG_NOMERGES, q);
-	spin_unlock_irq(q->queue_lock);
 
+	spin_unlock_irq(q->queue_lock);
 	return ret;
 }
 
@@ -194,27 +178,6 @@ queue_rq_affinity_store(struct request_queue *q, const char *page, size_t count)
 		queue_flag_clear(QUEUE_FLAG_SAME_COMP,  q);
 	spin_unlock_irq(q->queue_lock);
 #endif
-	return ret;
-}
-
-static ssize_t queue_iostats_show(struct request_queue *q, char *page)
-{
-	return queue_var_show(blk_queue_io_stat(q), page);
-}
-
-static ssize_t queue_iostats_store(struct request_queue *q, const char *page,
-				   size_t count)
-{
-	unsigned long stats;
-	ssize_t ret = queue_var_store(&stats, page, count);
-
-	spin_lock_irq(q->queue_lock);
-	if (stats)
-		queue_flag_set(QUEUE_FLAG_IO_STAT, q);
-	else
-		queue_flag_clear(QUEUE_FLAG_IO_STAT, q);
-	spin_unlock_irq(q->queue_lock);
-
 	return ret;
 }
 
@@ -252,12 +215,6 @@ static struct queue_sysfs_entry queue_hw_sector_size_entry = {
 	.show = queue_hw_sector_size_show,
 };
 
-static struct queue_sysfs_entry queue_nonrot_entry = {
-	.attr = {.name = "rotational", .mode = S_IRUGO | S_IWUSR },
-	.show = queue_nonrot_show,
-	.store = queue_nonrot_store,
-};
-
 static struct queue_sysfs_entry queue_nomerges_entry = {
 	.attr = {.name = "nomerges", .mode = S_IRUGO | S_IWUSR },
 	.show = queue_nomerges_show,
@@ -270,12 +227,6 @@ static struct queue_sysfs_entry queue_rq_affinity_entry = {
 	.store = queue_rq_affinity_store,
 };
 
-static struct queue_sysfs_entry queue_iostats_entry = {
-	.attr = {.name = "iostats", .mode = S_IRUGO | S_IWUSR },
-	.show = queue_iostats_show,
-	.store = queue_iostats_store,
-};
-
 static struct attribute *default_attrs[] = {
 	&queue_requests_entry.attr,
 	&queue_ra_entry.attr,
@@ -283,10 +234,8 @@ static struct attribute *default_attrs[] = {
 	&queue_max_sectors_entry.attr,
 	&queue_iosched_entry.attr,
 	&queue_hw_sector_size_entry.attr,
-	&queue_nonrot_entry.attr,
 	&queue_nomerges_entry.attr,
 	&queue_rq_affinity_entry.attr,
-	&queue_iostats_entry.attr,
 	NULL,
 };
 

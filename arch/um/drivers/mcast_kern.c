@@ -28,7 +28,7 @@ static void mcast_init(struct net_device *dev, void *data)
 	struct mcast_data *dpri;
 	struct mcast_init *init = data;
 
-	pri = netdev_priv(dev);
+	pri = dev->priv;
 	dpri = (struct mcast_data *) pri->user;
 	dpri->addr = init->addr;
 	dpri->port = init->port;

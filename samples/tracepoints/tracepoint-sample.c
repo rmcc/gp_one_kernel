@@ -13,9 +13,6 @@
 #include <linux/proc_fs.h>
 #include "tp-samples-trace.h"
 
-DEFINE_TRACE(subsys_event);
-DEFINE_TRACE(subsys_eventb);
-
 struct proc_dir_entry *pentry_example;
 
 static int my_open(struct inode *inode, struct file *file)
@@ -32,7 +29,7 @@ static struct file_operations mark_ops = {
 	.open = my_open,
 };
 
-static int __init example_init(void)
+static int example_init(void)
 {
 	printk(KERN_ALERT "example init\n");
 	pentry_example = proc_create("tracepoint-example", 0444, NULL,
@@ -42,7 +39,7 @@ static int __init example_init(void)
 	return 0;
 }
 
-static void __exit example_exit(void)
+static void example_exit(void)
 {
 	printk(KERN_ALERT "example exit\n");
 	remove_proc_entry("tracepoint-example", NULL);
