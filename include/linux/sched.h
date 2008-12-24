@@ -96,6 +96,7 @@ struct exec_domain;
 struct futex_pi_state;
 struct robust_list_head;
 struct bio;
+struct bts_tracer;
 
 /*
  * List of flags we want to share for kernel threads,
@@ -630,6 +631,10 @@ struct user_struct {
 	atomic_t inotify_watches; /* How many inotify watches does this user have? */
 	atomic_t inotify_devs;	/* How many inotify devs does this user have opened? */
 #endif
+#ifdef CONFIG_EPOLL
+	atomic_t epoll_devs;	/* The number of epoll descriptors currently open */
+	atomic_t epoll_watches;	/* The number of file descriptors currently watched */
+#endif
 #ifdef CONFIG_POSIX_MQUEUE
 	/* protected by mq_lock	*/
 	unsigned long mq_bytes;	/* How many bytes can be allocated to mqueue? */
@@ -1161,6 +1166,19 @@ struct task_struct {
 	struct list_head ptraced;
 	struct list_head ptrace_entry;
 
+#ifdef CONFIG_X86_PTRACE_BTS
+	/*
+	 * This is the tracer handle for the ptrace BTS extension.
+	 * This field actually belongs to the ptracer task.
+	 */
+	struct bts_tracer *bts;
+	/*
+	 * The buffer to hold the BTS data.
+	 */
+	void *bts_buffer;
+	size_t bts_size;
+#endif /* CONFIG_X86_PTRACE_BTS */
+
 	/* PID/PID hash table linkage. */
 	struct pid_link pids[PIDTYPE_MAX];
 	struct list_head thread_group;
@@ -1352,6 +1370,23 @@ struct task_struct {
 	unsigned long default_timer_slack_ns;
 
 	struct list_head	*scm_work_list;
+#ifdef CONFIG_FUNCTION_GRAPH_TRACER
+	/* Index of current stored adress in ret_stack */
+	int curr_ret_stack;
+	/* Stack of return addresses for return function tracing */
+	struct ftrace_ret_stack	*ret_stack;
+	/*
+	 * Number of functions that haven't been traced
+	 * because of depth overrun.
+	 */
+	atomic_t trace_overrun;
+	/* Pause for the tracing */
+	atomic_t tracing_graph_pause;
+#endif
+#ifdef CONFIG_TRACING
+	/* state flags for use by tracers */
+	unsigned long trace;
+#endif
 };
 
 /*

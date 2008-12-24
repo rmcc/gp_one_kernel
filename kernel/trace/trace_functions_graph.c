@@ -79,7 +79,7 @@ print_graph_cpu(struct trace_seq *s, int cpu)
 	int i;
 	int ret;
 	int log10_this = log10_cpu(cpu);
-	int log10_all = log10_cpu(cpumask_weight(cpu_online_mask));
+	int log10_all = log10_cpu(cpus_weight_nr(cpu_online_map));
 
 
 	/*
@@ -591,6 +591,12 @@ print_graph_comment(struct print_entry *trace, struct trace_seq *s,
 
 	if (ent->flags & TRACE_FLAG_CONT)
 		trace_seq_print_cont(s, iter);
+
+	/* Strip ending newline */
+	if (s->buffer[s->len - 1] == '\n') {
+		s->buffer[s->len - 1] = '\0';
+		s->len--;
+	}
 
 	ret = trace_seq_printf(s, " */\n");
 	if (!ret)

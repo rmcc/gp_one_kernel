@@ -25,6 +25,17 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
+
+/*
+ * Initialize a new task whose father had been ptraced.
+ *
+ * Called from copy_process().
+ */
+void ptrace_fork(struct task_struct *child, unsigned long clone_flags)
+{
+	arch_ptrace_fork(child, clone_flags);
+}
+
 /*
  * ptrace a task: make the debugger its new parent and
  * move it to the ptrace list.
@@ -72,6 +83,7 @@ void __ptrace_unlink(struct task_struct *child)
 	child->parent = child->real_parent;
 	list_del_init(&child->ptrace_entry);
 
+	arch_ptrace_untrace(child);
 	if (task_is_traced(child))
 		ptrace_untrace(child);
 }
@@ -612,7 +624,7 @@ int generic_ptrace_pokedata(struct task_struct *tsk, long addr, long data)
 	return (copied == sizeof(data)) ? 0 : -EIO;
 }
 
-#if defined CONFIG_COMPAT && defined __ARCH_WANT_COMPAT_SYS_PTRACE
+#if defined CONFIG_COMPAT
 #include <linux/compat.h>
 
 int compat_ptrace_request(struct task_struct *child, compat_long_t request,
@@ -709,4 +721,4 @@ asmlinkage long compat_sys_ptrace(compat_long_t request, compat_long_t pid,
 	unlock_kernel();
 	return ret;
 }
-#endif	/* CONFIG_COMPAT && __ARCH_WANT_COMPAT_SYS_PTRACE */
+#endif	/* CONFIG_COMPAT */

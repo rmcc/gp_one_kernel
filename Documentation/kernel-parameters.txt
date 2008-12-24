@@ -49,7 +49,6 @@ parameter is applicable:
 	ISAPNP	ISA PnP code is enabled.
 	ISDN	Appropriate ISDN support is enabled.
 	JOY	Appropriate joystick support is enabled.
-	KMEMTRACE kmemtrace is enabled.
 	LIBATA  Libata driver is enabled
 	LP	Printer support is enabled.
 	LOOP	Loopback device support is enabled.
@@ -90,6 +89,7 @@ parameter is applicable:
 	SPARC	Sparc architecture is enabled.
 	SWSUSP	Software suspend (hibernation) is enabled.
 	SUSPEND	System suspend states are enabled.
+	FTRACE	Function tracing enabled.
 	TS	Appropriate touchscreen support is enabled.
 	USB	USB support is enabled.
 	USBHID	USB Human Interface Device support is enabled.
@@ -221,14 +221,17 @@ and is between 256 and 4096 characters. It is defined in the file
 			Bits in debug_level correspond to a level in
 			ACPI_DEBUG_PRINT statements, e.g.,
 			    ACPI_DEBUG_PRINT((ACPI_DB_INFO, ...
-			See Documentation/acpi/debug.txt for more information
-			about debug layers and levels.
+			The debug_level mask defaults to "info".  See
+			Documentation/acpi/debug.txt for more information about
+			debug layers and levels.
 
+			Enable processor driver info messages:
+			    acpi.debug_layer=0x20000000
+			Enable PCI/PCI interrupt routing info messages:
+			    acpi.debug_layer=0x400000
 			Enable AML "Debug" output, i.e., stores to the Debug
 			object while interpreting AML:
 			    acpi.debug_layer=0xffffffff acpi.debug_level=0x2
-			Enable PCI/PCI interrupt routing info messages:
-			    acpi.debug_layer=0x400000 acpi.debug_level=0x4
 			Enable all messages related to ACPI hardware:
 			    acpi.debug_layer=0x2 acpi.debug_level=0xffffffff
 
@@ -751,6 +754,14 @@ and is between 256 and 4096 characters. It is defined in the file
 			parameter will force ia64_sal_cache_flush to call
 			ia64_pal_cache_flush instead of SAL_CACHE_FLUSH.
 
+	ftrace=[tracer]
+			[ftrace] will set and start the specified tracer
+			as early as possible in order to facilitate early
+			boot debugging.
+
+	ftrace_dump_on_oops
+			[ftrace] will dump the trace buffers on oops.
+
 	gamecon.map[2|3]=
 			[HW,JOY] Multisystem joystick and NES/SNES/PSX pad
 			support via parallel port (up to 5 devices per port)
@@ -1018,15 +1029,6 @@ and is between 256 and 4096 characters. It is defined in the file
 			Note that allocations like PTEs-from-HighMem still
 			use the HighMem zone if it exists, and the Normal
 			zone if it does not.
-
-	kmemtrace.enable=	[KNL,KMEMTRACE] Format: { yes | no }
-				Controls whether kmemtrace is enabled
-				at boot-time.
-
-	kmemtrace.subbufs=n	[KNL,KMEMTRACE] Overrides the number of
-			subbufs kmemtrace's relay channel has. Set this
-			higher than default (KMEMTRACE_N_SUBBUFS in code) if
-			you experience buffer overruns.
 
 	movablecore=nn[KMG]	[KNL,X86-32,IA-64,PPC,X86-64] This parameter
 			is similar to kernelcore except it specifies the
@@ -2174,6 +2176,9 @@ and is between 256 and 4096 characters. It is defined in the file
 
 	st=		[HW,SCSI] SCSI tape parameters (buffers, etc.)
 			See Documentation/scsi/st.txt.
+
+	stacktrace	[FTRACE]
+			Enabled the stack tracer on boot up.
 
 	sti=		[PARISC,HW]
 			Format: <num>

@@ -287,16 +287,14 @@ static int __cpuinitdata unsafe_smp;
 /*
  * Activate a secondary processor.
  */
-static void __cpuinit start_secondary(void *unused)
+notrace static void __cpuinit start_secondary(void *unused)
 {
 	/*
 	 * Don't put *anything* before cpu_init(), SMP booting is too
 	 * fragile that we want to limit the things done here to the
 	 * most necessary things.
 	 */
-#ifdef CONFIG_VMI
 	vmi_bringup();
-#endif
 	cpu_init();
 	preempt_disable();
 	smp_callin();

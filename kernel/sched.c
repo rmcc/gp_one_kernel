@@ -118,6 +118,12 @@
  */
 #define RUNTIME_INF	((u64)~0ULL)
 
+DEFINE_TRACE(sched_wait_task);
+DEFINE_TRACE(sched_wakeup);
+DEFINE_TRACE(sched_wakeup_new);
+DEFINE_TRACE(sched_switch);
+DEFINE_TRACE(sched_migrate_task);
+
 #ifdef CONFIG_SMP
 /*
  * Divide a load by a sched group cpu_power : (load / sg->__cpu_power)
@@ -1453,9 +1459,10 @@ static int task_hot(struct task_struct *p, u64 now, struct sched_domain *sd);
 static unsigned long cpu_avg_load_per_task(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
+	unsigned long nr_running = ACCESS_ONCE(rq->nr_running);
 
-	if (rq->nr_running)
-		rq->avg_load_per_task = rq->load.weight / rq->nr_running;
+	if (nr_running)
+		rq->avg_load_per_task = rq->load.weight / nr_running;
 	else
 		rq->avg_load_per_task = 0;
 
@@ -1843,6 +1850,8 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 	u64 clock_offset;
 
 	clock_offset = old_rq->clock - new_rq->clock;
+
+	trace_sched_migrate_task(p, task_cpu(p), new_cpu);
 
 #ifdef CONFIG_SCHEDSTATS
 	if (p->se.wait_start)
@@ -2315,7 +2324,7 @@ out_activate:
 	success = 1;
 
 out_running:
-	trace_sched_wakeup(rq, p);
+	trace_sched_wakeup(rq, p, success);
 	check_preempt_curr(rq, p, sync);
 
 	p->state = TASK_RUNNING;
@@ -2448,7 +2457,7 @@ void wake_up_new_task(struct task_struct *p, unsigned long clone_flags)
 		p->sched_class->task_new(rq, p);
 		inc_nr_running(rq);
 	}
-	trace_sched_wakeup_new(rq, p);
+	trace_sched_wakeup_new(rq, p, 1);
 	check_preempt_curr(rq, p, 0);
 #ifdef CONFIG_SMP
 	if (p->sched_class->task_wake_up)
@@ -2861,7 +2870,6 @@ static void sched_migrate_task(struct task_struct *p, int dest_cpu)
 	    || unlikely(!cpu_active(dest_cpu)))
 		goto out;
 
-	trace_sched_migrate_task(rq, p, dest_cpu);
 	/* force the process onto the specified CPU */
 	if (migrate_task(p, dest_cpu, &req)) {
 		/* Need to wait for migration thread (might exit: take ref). */
@@ -5895,6 +5903,7 @@ void __cpuinit init_idle(struct task_struct *idle, int cpu)
 	 * The idle tasks have their own, simple scheduling class:
 	 */
 	idle->sched_class = &idle_sched_class;
+	ftrace_graph_init_task(idle);
 }
 
 /*
@@ -6586,7 +6595,9 @@ migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
 			req = list_entry(rq->migration_queue.next,
 					 struct migration_req, list);
 			list_del_init(&req->list);
+			spin_unlock_irq(&rq->lock);
 			complete(&req->done);
+			spin_lock_irq(&rq->lock);
 		}
 		spin_unlock_irq(&rq->lock);
 		break;
