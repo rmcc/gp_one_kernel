@@ -89,7 +89,7 @@
 
 			ramdisk@0 {
 				reg = <0x0 0x03000000>;
-				read-only;
+				readl-only;
 			};
 
 			diagnostic@3000000 {

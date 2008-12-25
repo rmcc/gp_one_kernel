@@ -35,7 +35,6 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <asm/trace.h>
-#include <asm/pda.h>
 
 static atomic_t irq_err_count;
 static spinlock_t irq_controller_lock;
@@ -92,13 +91,8 @@ int show_interrupts(struct seq_file *p, void *v)
 		seq_putc(p, '\n');
  skip:
 		spin_unlock_irqrestore(&irq_desc[i].lock, flags);
-	} else if (i == NR_IRQS) {
-		seq_printf(p, "NMI: ");
-		for_each_online_cpu(j)
-			seq_printf(p, "%10u ", cpu_pda[j].__nmi_count);
-		seq_printf(p, "     CORE  Non Maskable Interrupt\n");
+	} else if (i == NR_IRQS)
 		seq_printf(p, "Err: %10u\n",  atomic_read(&irq_err_count));
-	}
 	return 0;
 }
 
@@ -144,15 +138,11 @@ asmlinkage void asm_do_IRQ(unsigned int irq, struct pt_regs *regs)
 #endif
 	generic_handle_irq(irq);
 
-#ifndef CONFIG_IPIPE
-	/*
-	 * If we're the only interrupt running (ignoring IRQ15 which
-	 * is for syscalls), lower our priority to IRQ14 so that
-	 * softirqs run at that level.  If there's another,
-	 * lower-level interrupt, irq_exit will defer softirqs to
-	 * that. If the interrupt pipeline is enabled, we are already
-	 * running at IRQ14 priority, so we don't need this code.
-	 */
+#ifndef CONFIG_IPIPE	/* Useless and bugous over the I-pipe: IRQs are threaded. */
+	/* If we're the only interrupt running (ignoring IRQ15 which is for
+	   syscalls), lower our priority to IRQ14 so that softirqs run at
+	   that level.  If there's another, lower-level interrupt, irq_exit
+	   will defer softirqs to that.  */
 	CSYNC();
 	pending = bfin_read_IPEND() & ~0x8000;
 	other_ints = pending & (pending - 1);
