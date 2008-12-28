@@ -123,7 +123,6 @@ config PPC
 	select HAVE_DMA_ATTRS if PPC64
 	select USE_GENERIC_SMP_HELPERS if SMP
 	select HAVE_OPROFILE
-	select HAVE_SYSCALL_WRAPPERS if PPC64
 
 config EARLY_PRINTK
 	bool
@@ -875,6 +874,10 @@ source "net/Kconfig"
 source "drivers/Kconfig"
 
 source "fs/Kconfig"
+
+# XXX source "arch/ppc/8xx_io/Kconfig"
+
+# XXX source "arch/ppc/8260_io/Kconfig"
 
 source "arch/powerpc/sysdev/qe_lib/Kconfig"
 

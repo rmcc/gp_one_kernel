@@ -398,19 +398,21 @@ static int msi_capability_init(struct pci_dev *dev)
 	entry->msi_attrib.masked = 1;
 	entry->msi_attrib.default_irq = dev->irq;	/* Save IOAPIC IRQ */
 	entry->msi_attrib.pos = pos;
+	if (entry->msi_attrib.maskbit) {
+		entry->mask_base = (void __iomem *)(long)msi_mask_bits_reg(pos,
+				entry->msi_attrib.is_64);
+	}
 	entry->dev = dev;
 	if (entry->msi_attrib.maskbit) {
-		unsigned int base, maskbits, temp;
-
-		base = msi_mask_bits_reg(pos, entry->msi_attrib.is_64);
-		entry->mask_base = (void __iomem *)(long)base;
-
+		unsigned int maskbits, temp;
 		/* All MSIs are unmasked by default, Mask them all */
-		pci_read_config_dword(dev, base, &maskbits);
+		pci_read_config_dword(dev,
+			msi_mask_bits_reg(pos, entry->msi_attrib.is_64),
+			&maskbits);
 		temp = (1 << multi_msi_capable(control));
 		temp = ((temp - 1) & ~temp);
 		maskbits |= temp;
-		pci_write_config_dword(dev, base, maskbits);
+		pci_write_config_dword(dev, entry->msi_attrib.is_64, maskbits);
 		entry->msi_attrib.maskbits_mask = temp;
 	}
 	list_add_tail(&entry->list, &dev->msi_list);

@@ -33,10 +33,9 @@
 
 #include "drmP.h"
 #include <linux/module.h>
+#include <asm/agp.h>
 
 #if __OS_HAS_AGP
-
-#include <asm/agp.h>
 
 /**
  * Get AGP information.

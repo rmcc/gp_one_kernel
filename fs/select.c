@@ -557,8 +557,8 @@ out_nofds:
 	return ret;
 }
 
-SYSCALL_DEFINE5(select, int, n, fd_set __user *, inp, fd_set __user *, outp,
-		fd_set __user *, exp, struct timeval __user *, tvp)
+asmlinkage long sys_select(int n, fd_set __user *inp, fd_set __user *outp,
+			fd_set __user *exp, struct timeval __user *tvp)
 {
 	struct timespec end_time, *to = NULL;
 	struct timeval tv;
@@ -582,9 +582,9 @@ SYSCALL_DEFINE5(select, int, n, fd_set __user *, inp, fd_set __user *, outp,
 }
 
 #ifdef HAVE_SET_RESTORE_SIGMASK
-static long do_pselect(int n, fd_set __user *inp, fd_set __user *outp,
-		       fd_set __user *exp, struct timespec __user *tsp,
-		       const sigset_t __user *sigmask, size_t sigsetsize)
+asmlinkage long sys_pselect7(int n, fd_set __user *inp, fd_set __user *outp,
+		fd_set __user *exp, struct timespec __user *tsp,
+		const sigset_t __user *sigmask, size_t sigsetsize)
 {
 	sigset_t ksigmask, sigsaved;
 	struct timespec ts, end_time, *to = NULL;
@@ -610,7 +610,7 @@ static long do_pselect(int n, fd_set __user *inp, fd_set __user *outp,
 		sigprocmask(SIG_SETMASK, &ksigmask, &sigsaved);
 	}
 
-	ret = core_sys_select(n, inp, outp, exp, to);
+	ret = core_sys_select(n, inp, outp, exp, &end_time);
 	ret = poll_select_copy_remaining(&end_time, tsp, 0, ret);
 
 	if (ret == -ERESTARTNOHAND) {
@@ -636,9 +636,8 @@ static long do_pselect(int n, fd_set __user *inp, fd_set __user *outp,
  * which has a pointer to the sigset_t itself followed by a size_t containing
  * the sigset size.
  */
-SYSCALL_DEFINE6(pselect6, int, n, fd_set __user *, inp, fd_set __user *, outp,
-		fd_set __user *, exp, struct timespec __user *, tsp,
-		void __user *, sig)
+asmlinkage long sys_pselect6(int n, fd_set __user *inp, fd_set __user *outp,
+	fd_set __user *exp, struct timespec __user *tsp, void __user *sig)
 {
 	size_t sigsetsize = 0;
 	sigset_t __user *up = NULL;
@@ -651,7 +650,7 @@ SYSCALL_DEFINE6(pselect6, int, n, fd_set __user *, inp, fd_set __user *, outp,
 			return -EFAULT;
 	}
 
-	return do_pselect(n, inp, outp, exp, tsp, up, sigsetsize);
+	return sys_pselect7(n, inp, outp, exp, tsp, up, sigsetsize);
 }
 #endif /* HAVE_SET_RESTORE_SIGMASK */
 
@@ -855,8 +854,8 @@ static long do_restart_poll(struct restart_block *restart_block)
 	return ret;
 }
 
-SYSCALL_DEFINE3(poll, struct pollfd __user *, ufds, unsigned int, nfds,
-		long, timeout_msecs)
+asmlinkage long sys_poll(struct pollfd __user *ufds, unsigned int nfds,
+			long timeout_msecs)
 {
 	struct timespec end_time, *to = NULL;
 	int ret;
@@ -890,9 +889,9 @@ SYSCALL_DEFINE3(poll, struct pollfd __user *, ufds, unsigned int, nfds,
 }
 
 #ifdef HAVE_SET_RESTORE_SIGMASK
-SYSCALL_DEFINE5(ppoll, struct pollfd __user *, ufds, unsigned int, nfds,
-		struct timespec __user *, tsp, const sigset_t __user *, sigmask,
-		size_t, sigsetsize)
+asmlinkage long sys_ppoll(struct pollfd __user *ufds, unsigned int nfds,
+	struct timespec __user *tsp, const sigset_t __user *sigmask,
+	size_t sigsetsize)
 {
 	sigset_t ksigmask, sigsaved;
 	struct timespec ts, end_time, *to = NULL;
