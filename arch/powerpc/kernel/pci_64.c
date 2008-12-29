@@ -32,6 +32,13 @@
 #include <asm/machdep.h>
 #include <asm/ppc-pci.h>
 
+#ifdef DEBUG
+#include <asm/udbg.h>
+#define DBG(fmt...) printk(fmt)
+#else
+#define DBG(fmt...)
+#endif
+
 unsigned long pci_probe_only = 1;
 
 /* pci_io_base -- the base address from which io bars are offsets.
@@ -95,7 +102,7 @@ static void pci_parse_of_addrs(struct device_node *node, struct pci_dev *dev)
 	addrs = of_get_property(node, "assigned-addresses", &proplen);
 	if (!addrs)
 		return;
-	pr_debug("    parse addresses (%d bytes) @ %p\n", proplen, addrs);
+	DBG("    parse addresses (%d bytes) @ %p\n", proplen, addrs);
 	for (; proplen >= 20; proplen -= 20, addrs += 5) {
 		flags = pci_parse_of_flags(addrs[0]);
 		if (!flags)
@@ -105,9 +112,8 @@ static void pci_parse_of_addrs(struct device_node *node, struct pci_dev *dev)
 		if (!size)
 			continue;
 		i = addrs[0] & 0xff;
-		pr_debug("  base: %llx, size: %llx, i: %x\n",
-			 (unsigned long long)base,
-			 (unsigned long long)size, i);
+		DBG("  base: %llx, size: %llx, i: %x\n",
+		    (unsigned long long)base, (unsigned long long)size, i);
 
 		if (PCI_BASE_ADDRESS_0 <= i && i <= PCI_BASE_ADDRESS_5) {
 			res = &dev->resource[(i - PCI_BASE_ADDRESS_0) >> 2];
@@ -138,7 +144,7 @@ struct pci_dev *of_create_pci_dev(struct device_node *node,
 	if (type == NULL)
 		type = "";
 
-	pr_debug("    create device, devfn: %x, type: %s\n", devfn, type);
+	DBG("    create device, devfn: %x, type: %s\n", devfn, type);
 
 	dev->bus = bus;
 	dev->sysdata = node;
@@ -159,8 +165,8 @@ struct pci_dev *of_create_pci_dev(struct device_node *node,
 	dev->class = get_int_prop(node, "class-code", 0);
 	dev->revision = get_int_prop(node, "revision-id", 0);
 
-	pr_debug("    class: 0x%x\n", dev->class);
-	pr_debug("    revision: 0x%x\n", dev->revision);
+	DBG("    class: 0x%x\n", dev->class);
+	DBG("    revision: 0x%x\n", dev->revision);
 
 	dev->current_state = 4;		/* unknown power state */
 	dev->error_state = pci_channel_io_normal;
@@ -181,7 +187,7 @@ struct pci_dev *of_create_pci_dev(struct device_node *node,
 
 	pci_parse_of_addrs(node, dev);
 
-	pr_debug("    adding to system ...\n");
+	DBG("    adding to system ...\n");
 
 	pci_device_add(dev, bus);
 
@@ -189,20 +195,19 @@ struct pci_dev *of_create_pci_dev(struct device_node *node,
 }
 EXPORT_SYMBOL(of_create_pci_dev);
 
-static void __devinit __of_scan_bus(struct device_node *node,
-				    struct pci_bus *bus, int rescan_existing)
+void __devinit of_scan_bus(struct device_node *node,
+			   struct pci_bus *bus)
 {
 	struct device_node *child;
 	const u32 *reg;
 	int reglen, devfn;
 	struct pci_dev *dev;
 
-	pr_debug("of_scan_bus(%s) bus no %d... \n",
-		 node->full_name, bus->number);
+	DBG("of_scan_bus(%s) bus no %d... \n", node->full_name, bus->number);
 
 	/* Scan direct children */
 	for_each_child_of_node(node, child) {
-		pr_debug("  * %s\n", child->full_name);
+		DBG("  * %s\n", child->full_name);
 		reg = of_get_property(child, "reg", &reglen);
 		if (reg == NULL || reglen < 20)
 			continue;
@@ -212,15 +217,11 @@ static void __devinit __of_scan_bus(struct device_node *node,
 		dev = of_create_pci_dev(child, bus, devfn);
 		if (!dev)
 			continue;
-		pr_debug("    dev header type: %x\n", dev->hdr_type);
+		DBG("    dev header type: %x\n", dev->hdr_type);
 	}
 
-	/* Apply all fixups necessary. We don't fixup the bus "self"
-	 * for an existing bridge that is being rescanned
-	 */
-	if (!rescan_existing)
-		pcibios_setup_bus_self(bus);
-	pcibios_setup_bus_devices(bus);
+	/* Ally all fixups */
+	pcibios_fixup_of_probed_bus(bus);
 
 	/* Now scan child busses */
 	list_for_each_entry(dev, &bus->devices, bus_list) {
@@ -232,20 +233,7 @@ static void __devinit __of_scan_bus(struct device_node *node,
 		}
 	}
 }
-
-void __devinit of_scan_bus(struct device_node *node,
-			   struct pci_bus *bus)
-{
-	__of_scan_bus(node, bus, 0);
-}
-EXPORT_SYMBOL_GPL(of_scan_bus);
-
-void __devinit of_rescan_bus(struct device_node *node,
-			     struct pci_bus *bus)
-{
-	__of_scan_bus(node, bus, 1);
-}
-EXPORT_SYMBOL_GPL(of_rescan_bus);
+EXPORT_SYMBOL(of_scan_bus);
 
 void __devinit of_scan_pci_bridge(struct device_node *node,
 				  struct pci_dev *dev)
@@ -257,7 +245,7 @@ void __devinit of_scan_pci_bridge(struct device_node *node,
 	unsigned int flags;
 	u64 size;
 
-	pr_debug("of_scan_pci_bridge(%s)\n", node->full_name);
+	DBG("of_scan_pci_bridge(%s)\n", node->full_name);
 
 	/* parse bus-range property */
 	busrange = of_get_property(node, "bus-range", &len);
@@ -321,12 +309,12 @@ void __devinit of_scan_pci_bridge(struct device_node *node,
 	}
 	sprintf(bus->name, "PCI Bus %04x:%02x", pci_domain_nr(bus),
 		bus->number);
-	pr_debug("    bus name: %s\n", bus->name);
+	DBG("    bus name: %s\n", bus->name);
 
 	mode = PCI_PROBE_NORMAL;
 	if (ppc_md.pci_probe_mode)
 		mode = ppc_md.pci_probe_mode(bus);
-	pr_debug("    probe mode: %d\n", mode);
+	DBG("    probe mode: %d\n", mode);
 
 	if (mode == PCI_PROBE_DEVTREE)
 		of_scan_bus(node, bus);
@@ -339,10 +327,9 @@ void __devinit scan_phb(struct pci_controller *hose)
 {
 	struct pci_bus *bus;
 	struct device_node *node = hose->dn;
-	int mode;
+	int i, mode;
 
-	pr_debug("PCI: Scanning PHB %s\n",
-		 node ? node->full_name : "<NO NAME>");
+	DBG("PCI: Scanning PHB %s\n", node ? node->full_name : "<NO NAME>");
 
 	/* Create an empty bus for the toplevel */
 	bus = pci_create_bus(hose->parent, hose->first_busno, hose->ops, node);
@@ -358,13 +345,26 @@ void __devinit scan_phb(struct pci_controller *hose)
 	pcibios_map_io_space(bus);
 
 	/* Wire up PHB bus resources */
-	pcibios_setup_phb_resources(hose);
+	DBG("PCI: PHB IO resource    = %016lx-%016lx [%lx]\n",
+	    hose->io_resource.start, hose->io_resource.end,
+	    hose->io_resource.flags);
+	bus->resource[0] = &hose->io_resource;
+	for (i = 0; i < 3; ++i) {
+		DBG("PCI: PHB MEM resource %d = %016lx-%016lx [%lx]\n", i,
+		    hose->mem_resources[i].start,
+		    hose->mem_resources[i].end,
+		    hose->mem_resources[i].flags);
+		bus->resource[i+1] = &hose->mem_resources[i];
+	}
+	DBG("PCI: PHB MEM offset     = %016lx\n", hose->pci_mem_offset);
+	DBG("PCI: PHB IO  offset     = %08lx\n",
+	    (unsigned long)hose->io_base_virt - _IO_BASE);
 
 	/* Get probe mode and perform scan */
 	mode = PCI_PROBE_NORMAL;
 	if (node && ppc_md.pci_probe_mode)
 		mode = ppc_md.pci_probe_mode(bus);
-	pr_debug("    probe mode: %d\n", mode);
+	DBG("    probe mode: %d\n", mode);
 	if (mode == PCI_PROBE_DEVTREE) {
 		bus->subordinate = hose->last_busno;
 		of_scan_bus(node, bus);
@@ -380,18 +380,13 @@ static int __init pcibios_init(void)
 
 	printk(KERN_INFO "PCI: Probing PCI hardware\n");
 
-	/* For now, override phys_mem_access_prot. If we need it,g
+	/* For now, override phys_mem_access_prot. If we need it,
 	 * later, we may move that initialization to each ppc_md
 	 */
 	ppc_md.phys_mem_access_prot = pci_phys_mem_access_prot;
 
 	if (pci_probe_only)
 		ppc_pci_flags |= PPC_PCI_PROBE_ONLY;
-
-	/* On ppc64, we always enable PCI domains and we keep domain 0
-	 * backward compatible in /proc for video cards
-	 */
-	ppc_pci_flags |= PPC_PCI_ENABLE_PROC_DOMAINS | PPC_PCI_COMPAT_DOMAIN_0;
 
 	/* Scan all of the recorded PCI controllers.  */
 	list_for_each_entry_safe(hose, tmp, &hose_list, list_node) {
@@ -427,8 +422,8 @@ int pcibios_unmap_io_space(struct pci_bus *bus)
 	if (bus->self) {
 		struct resource *res = bus->resource[0];
 
-		pr_debug("IO unmapping for PCI-PCI bridge %s\n",
-			 pci_name(bus->self));
+		DBG("IO unmapping for PCI-PCI bridge %s\n",
+		    pci_name(bus->self));
 
 		__flush_hash_table_range(&init_mm, res->start + _IO_BASE,
 					 res->end + _IO_BASE + 1);
@@ -442,8 +437,8 @@ int pcibios_unmap_io_space(struct pci_bus *bus)
 	if (hose->io_base_alloc == 0)
 		return 0;
 
-	pr_debug("IO unmapping for PHB %s\n", hose->dn->full_name);
-	pr_debug("  alloc=0x%p\n", hose->io_base_alloc);
+	DBG("IO unmapping for PHB %s\n", hose->dn->full_name);
+	DBG("  alloc=0x%p\n", hose->io_base_alloc);
 
 	/* This is a PHB, we fully unmap the IO area */
 	vunmap(hose->io_base_alloc);
@@ -468,11 +463,11 @@ int __devinit pcibios_map_io_space(struct pci_bus *bus)
 	 * thus HPTEs will be faulted in when needed
 	 */
 	if (bus->self) {
-		pr_debug("IO mapping for PCI-PCI bridge %s\n",
-			 pci_name(bus->self));
-		pr_debug("  virt=0x%016lx...0x%016lx\n",
-			 bus->resource[0]->start + _IO_BASE,
-			 bus->resource[0]->end + _IO_BASE);
+		DBG("IO mapping for PCI-PCI bridge %s\n",
+		    pci_name(bus->self));
+		DBG("  virt=0x%016lx...0x%016lx\n",
+		    bus->resource[0]->start + _IO_BASE,
+		    bus->resource[0]->end + _IO_BASE);
 		return 0;
 	}
 
@@ -501,11 +496,11 @@ int __devinit pcibios_map_io_space(struct pci_bus *bus)
 	hose->io_base_virt = (void __iomem *)(area->addr +
 					      hose->io_base_phys - phys_page);
 
-	pr_debug("IO mapping for PHB %s\n", hose->dn->full_name);
-	pr_debug("  phys=0x%016lx, virt=0x%p (alloc=0x%p)\n",
-		 hose->io_base_phys, hose->io_base_virt, hose->io_base_alloc);
-	pr_debug("  size=0x%016lx (alloc=0x%016lx)\n",
-		 hose->pci_io_size, size_page);
+	DBG("IO mapping for PHB %s\n", hose->dn->full_name);
+	DBG("  phys=0x%016lx, virt=0x%p (alloc=0x%p)\n",
+	    hose->io_base_phys, hose->io_base_virt, hose->io_base_alloc);
+	DBG("  size=0x%016lx (alloc=0x%016lx)\n",
+	    hose->pci_io_size, size_page);
 
 	/* Establish the mapping */
 	if (__ioremap_at(phys_page, area->addr, size_page,
@@ -517,12 +512,23 @@ int __devinit pcibios_map_io_space(struct pci_bus *bus)
 	hose->io_resource.start += io_virt_offset;
 	hose->io_resource.end += io_virt_offset;
 
-	pr_debug("  hose->io_resource=0x%016lx...0x%016lx\n",
-		 hose->io_resource.start, hose->io_resource.end);
+	DBG("  hose->io_resource=0x%016lx...0x%016lx\n",
+	    hose->io_resource.start, hose->io_resource.end);
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pcibios_map_io_space);
+
+void __devinit pcibios_do_bus_setup(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+
+	if (ppc_md.pci_dma_bus_setup)
+		ppc_md.pci_dma_bus_setup(bus);
+
+	list_for_each_entry(dev, &bus->devices, bus_list)
+		pcibios_setup_new_device(dev);
+}
 
 unsigned long pci_address_to_pio(phys_addr_t address)
 {
@@ -560,14 +566,9 @@ long sys_pciconfig_iobase(long which, unsigned long in_bus,
 	 * G5 machines... So when something asks for bus 0 io base
 	 * (bus 0 is HT root), we return the AGP one instead.
 	 */
-	if (in_bus == 0 && machine_is_compatible("MacRISC4")) {
-		struct device_node *agp;
-
-		agp = of_find_compatible_node(NULL, NULL, "u3-agp");
-		if (agp)
+	if (machine_is_compatible("MacRISC4"))
+		if (in_bus == 0)
 			in_bus = 0xf0;
-		of_node_put(agp);
-	}
 
 	/* That syscall isn't quite compatible with PCI domains, but it's
 	 * used on pre-domains setup. We return the first match

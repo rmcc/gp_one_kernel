@@ -115,11 +115,10 @@ static int mcs7830_set_reg(struct usbnet *dev, u16 index, u16 size, void *data)
 static void mcs7830_async_cmd_callback(struct urb *urb)
 {
 	struct usb_ctrlrequest *req = (struct usb_ctrlrequest *)urb->context;
-	int status = urb->status;
 
-	if (status < 0)
+	if (urb->status < 0)
 		printk(KERN_DEBUG "%s() failed with %d\n",
-		       __func__, status);
+		       __func__, urb->status);
 
 	kfree(req);
 	usb_free_urb(urb);
@@ -345,14 +344,14 @@ out:
 static int mcs7830_mdio_read(struct net_device *netdev, int phy_id,
 			     int location)
 {
-	struct usbnet *dev = netdev_priv(netdev);
+	struct usbnet *dev = netdev->priv;
 	return mcs7830_read_phy(dev, location);
 }
 
 static void mcs7830_mdio_write(struct net_device *netdev, int phy_id,
 				int location, int val)
 {
-	struct usbnet *dev = netdev_priv(netdev);
+	struct usbnet *dev = netdev->priv;
 	mcs7830_write_phy(dev, location, val);
 }
 

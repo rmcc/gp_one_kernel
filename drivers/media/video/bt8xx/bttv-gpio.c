@@ -42,7 +42,7 @@ static int bttv_sub_bus_match(struct device *dev, struct device_driver *drv)
 	struct bttv_sub_driver *sub = to_bttv_sub_drv(drv);
 	int len = strlen(sub->wanted);
 
-	if (0 == strncmp(dev_name(dev), sub->wanted, len))
+	if (0 == strncmp(dev->bus_id, sub->wanted, len))
 		return 1;
 	return 0;
 }
@@ -91,14 +91,15 @@ int bttv_sub_add_device(struct bttv_core *core, char *name)
 	sub->dev.parent  = &core->pci->dev;
 	sub->dev.bus     = &bttv_sub_bus_type;
 	sub->dev.release = release_sub_device;
-	dev_set_name(&sub->dev, "%s%d", name, core->nr);
+	snprintf(sub->dev.bus_id,sizeof(sub->dev.bus_id),"%s%d",
+		 name, core->nr);
 
 	err = device_register(&sub->dev);
 	if (0 != err) {
 		kfree(sub);
 		return err;
 	}
-	printk("bttv%d: add subdevice \"%s\"\n", core->nr, dev_name(&sub->dev));
+	printk("bttv%d: add subdevice \"%s\"\n", core->nr, sub->dev.bus_id);
 	list_add_tail(&sub->list,&core->subs);
 	return 0;
 }

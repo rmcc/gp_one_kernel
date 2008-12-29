@@ -1,9 +1,8 @@
 /*
  * Firmware replacement code.
  *
- * Work around broken BIOSes that don't set an aperture, only set the
- * aperture in the AGP bridge, or set too small aperture.
- *
+ * Work around broken BIOSes that don't set an aperture or only set the
+ * aperture in the AGP bridge.
  * If all fails map the aperture over some low memory.  This is cheaper than
  * doing bounce buffering. The memory is lost. This is done at early boot
  * because only the bootmem allocator can allocate 32+MB.

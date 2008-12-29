@@ -212,14 +212,13 @@ static void f_modown(struct file *filp, struct pid *pid, enum pid_type type,
 int __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
 		int force)
 {
-	const struct cred *cred = current_cred();
 	int err;
 	
 	err = security_file_set_fowner(filp);
 	if (err)
 		return err;
 
-	f_modown(filp, pid, type, cred->uid, cred->euid, force);
+	f_modown(filp, pid, type, current->uid, current->euid, force);
 	return 0;
 }
 EXPORT_SYMBOL(__f_setown);
@@ -408,17 +407,10 @@ static const long band_table[NSIGPOLL] = {
 static inline int sigio_perm(struct task_struct *p,
                              struct fown_struct *fown, int sig)
 {
-	const struct cred *cred;
-	int ret;
-
-	rcu_read_lock();
-	cred = __task_cred(p);
-	ret = ((fown->euid == 0 ||
-		fown->euid == cred->suid || fown->euid == cred->uid ||
-		fown->uid  == cred->suid || fown->uid  == cred->uid) &&
-	       !security_file_send_sigiotask(p, fown, sig));
-	rcu_read_unlock();
-	return ret;
+	return (((fown->euid == 0) ||
+		 (fown->euid == p->suid) || (fown->euid == p->uid) ||
+		 (fown->uid == p->suid) || (fown->uid == p->uid)) &&
+		!security_file_send_sigiotask(p, fown, sig));
 }
 
 static void send_sigio_to_task(struct task_struct *p,

@@ -469,7 +469,7 @@ l1oip_socket_recv(struct l1oip *hc, u8 remotecodec, u8 channel, u16 timebase,
 static void
 l1oip_socket_parse(struct l1oip *hc, struct sockaddr_in *sin, u8 *buf, int len)
 {
-	u32			packet_id;
+	u32			id;
 	u8			channel;
 	u8			remotecodec;
 	u16			timebase;
@@ -508,7 +508,7 @@ l1oip_socket_parse(struct l1oip *hc, struct sockaddr_in *sin, u8 *buf, int len)
 	}
 
 	/* get id flag */
-	packet_id = (*buf>>4)&1;
+	id = (*buf>>4)&1;
 
 	/* check coding */
 	remotecodec = (*buf) & 0x0f;
@@ -520,11 +520,11 @@ l1oip_socket_parse(struct l1oip *hc, struct sockaddr_in *sin, u8 *buf, int len)
 	buf++;
 	len--;
 
-	/* check packet_id */
-	if (packet_id) {
+	/* check id */
+	if (id) {
 		if (!hc->id) {
 			printk(KERN_WARNING "%s: packet error - packet has id "
-				"0x%x, but we have not\n", __func__, packet_id);
+				"0x%x, but we have not\n", __func__, id);
 			return;
 		}
 		if (len < 4) {
@@ -532,16 +532,16 @@ l1oip_socket_parse(struct l1oip *hc, struct sockaddr_in *sin, u8 *buf, int len)
 				"short for ID value\n", __func__);
 			return;
 		}
-		packet_id = (*buf++) << 24;
-		packet_id += (*buf++) << 16;
-		packet_id += (*buf++) << 8;
-		packet_id += (*buf++);
+		id = (*buf++) << 24;
+		id += (*buf++) << 16;
+		id += (*buf++) << 8;
+		id += (*buf++);
 		len -= 4;
 
-		if (packet_id != hc->id) {
+		if (id != hc->id) {
 			printk(KERN_WARNING "%s: packet error - ID mismatch, "
 				"got 0x%x, we 0x%x\n",
-				__func__, packet_id, hc->id);
+				__func__, id, hc->id);
 			return;
 		}
 	} else {
@@ -777,8 +777,6 @@ fail:
 static void
 l1oip_socket_close(struct l1oip *hc)
 {
-	struct dchannel *dch = hc->chan[hc->d_idx].dch;
-
 	/* kill thread */
 	if (hc->socket_thread) {
 		if (debug & DEBUG_L1OIP_SOCKET)
@@ -786,16 +784,6 @@ l1oip_socket_close(struct l1oip *hc)
 				"killing...\n", __func__);
 		send_sig(SIGTERM, hc->socket_thread, 0);
 		wait_for_completion(&hc->socket_complete);
-	}
-
-	/* if active, we send up a PH_DEACTIVATE and deactivate */
-	if (test_bit(FLG_ACTIVE, &dch->Flags)) {
-		if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
-			printk(KERN_DEBUG "%s: interface become deactivated "
-				"due to timeout\n", __func__);
-		test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
-		_queue_data(&dch->dev.D, PH_DEACTIVATE_IND, MISDN_ID_ANY, 0,
-			NULL, GFP_ATOMIC);
 	}
 }
 
@@ -956,8 +944,7 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 
 	switch (cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = MISDN_CTRL_SETPEER | MISDN_CTRL_UNSETPEER
-			| MISDN_CTRL_GETPEER;
+		cq->op = MISDN_CTRL_SETPEER | MISDN_CTRL_UNSETPEER;
 		break;
 	case MISDN_CTRL_SETPEER:
 		hc->remoteip = (u32)cq->p1;
@@ -976,13 +963,6 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 				__func__);
 		hc->remoteip = 0;
 		l1oip_socket_open(hc);
-		break;
-	case MISDN_CTRL_GETPEER:
-		if (debug & DEBUG_L1OIP_SOCKET)
-			printk(KERN_DEBUG "%s: getting ip address.\n",
-				__func__);
-		cq->p1 = hc->remoteip;
-		cq->p2 = hc->remoteport | (hc->localport << 16);
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown Op %x\n",
@@ -1433,8 +1413,7 @@ init_card(struct l1oip *hc, int pri, int bundle)
 		hc->chan[i + ch].bch = bch;
 		set_channelmap(bch->nr, dch->dev.channelmap);
 	}
-	/* TODO: create a parent device for this driver */
-	ret = mISDN_register_device(&dch->dev, NULL, hc->name);
+	ret = mISDN_register_device(&dch->dev, hc->name);
 	if (ret)
 		return ret;
 	hc->registered = 1;

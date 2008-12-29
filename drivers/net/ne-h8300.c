@@ -167,7 +167,7 @@ static void cleanup_card(struct net_device *dev)
 #ifndef MODULE
 struct net_device * __init ne_probe(int unit)
 {
-	struct net_device *dev = alloc_ei_netdev();
+	struct net_device *dev = ____alloc_ei_netdev(0);
 	int err;
 
 	if (!dev)
@@ -193,21 +193,6 @@ out:
 }
 #endif
 
-static const struct net_device_ops ne_netdev_ops = {
-	.ndo_open		= ne_open,
-	.ndo_stop		= ne_close,
-
-	.ndo_start_xmit		= ei_start_xmit,
-	.ndo_tx_timeout		= ei_tx_timeout,
-	.ndo_get_stats		= ei_get_stats,
-	.ndo_set_multicast_list = ei_set_multicast_list,
-	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_change_mtu		= eth_change_mtu,
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller	= ei_poll,
-#endif
-};
-
 static int __init ne_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
@@ -219,6 +204,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 	static unsigned version_printed;
 	struct ei_device *ei_local = (struct ei_device *) netdev_priv(dev);
 	unsigned char bus_width;
+	DECLARE_MAC_BUF(mac);
 
 	if (!request_region(ioaddr, NE_IO_EXTENT, DRV_NAME))
 		return -EBUSY;
@@ -313,7 +299,7 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
 		dev->dev_addr[i] = SA_prom[i];
-	printk(" %pM\n", dev->dev_addr);
+	printk(" %s\n", print_mac(mac, dev->dev_addr));
 
 	printk("%s: %s found at %#x, using IRQ %d.\n",
 		dev->name, name, ioaddr, dev->irq);
@@ -334,9 +320,11 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 	ei_status.block_output = &ne_block_output;
 	ei_status.get_8390_hdr = &ne_get_8390_hdr;
 	ei_status.priv = 0;
-
-	dev->netdev_ops = &ne_netdev_ops;
-
+	dev->open = &ne_open;
+	dev->stop = &ne_close;
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = __ei_poll;
+#endif
 	__NS8390_init(dev, 0);
 
 	ret = register_netdev(dev);
@@ -637,7 +625,7 @@ int init_module(void)
 	int err;
 
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
-		struct net_device *dev = alloc_ei_netdev();
+		struct net_device *dev = ____alloc_ei_netdev(0);
 		if (!dev)
 			break;
 		if (io[this_dev]) {

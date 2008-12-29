@@ -456,8 +456,7 @@ config PATA_MARVELL
 
 config PATA_MPC52xx
 	tristate "Freescale MPC52xx SoC internal IDE"
-	depends on PPC_MPC52xx && PPC_BESTCOMM
-	select PPC_BESTCOMM_ATA
+	depends on PPC_MPC52xx
 	help
 	  This option enables support for integrated IDE controller
 	  of the Freescale MPC52xx SoC.

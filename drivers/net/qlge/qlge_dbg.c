@@ -821,11 +821,14 @@ void ql_dump_ib_mac_rsp(struct ib_mac_iocb_rsp *ib_mac_rsp)
 		       le16_to_cpu(ib_mac_rsp->vlan_id));
 
 	printk(KERN_ERR PFX "flags4 = %s%s%s.\n",
-		ib_mac_rsp->flags4 & IB_MAC_IOCB_RSP_HV ? "HV " : "",
-		ib_mac_rsp->flags4 & IB_MAC_IOCB_RSP_HS ? "HS " : "",
-		ib_mac_rsp->flags4 & IB_MAC_IOCB_RSP_HL ? "HL " : "");
+	       le32_to_cpu(ib_mac_rsp->
+			   flags4) & IB_MAC_IOCB_RSP_HV ? "HV " : "",
+	       le32_to_cpu(ib_mac_rsp->
+			   flags4) & IB_MAC_IOCB_RSP_HS ? "HS " : "",
+	       le32_to_cpu(ib_mac_rsp->
+			   flags4) & IB_MAC_IOCB_RSP_HL ? "HL " : "");
 
-	if (ib_mac_rsp->flags4 & IB_MAC_IOCB_RSP_HV) {
+	if (le32_to_cpu(ib_mac_rsp->flags4) & IB_MAC_IOCB_RSP_HV) {
 		printk(KERN_ERR PFX "hdr length	= %d.\n",
 		       le32_to_cpu(ib_mac_rsp->hdr_len));
 		printk(KERN_ERR PFX "hdr addr_hi    = 0x%x.\n",

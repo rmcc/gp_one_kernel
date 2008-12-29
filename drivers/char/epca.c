@@ -69,9 +69,7 @@ static int invalid_lilo_config;
 
 /*
  * The ISA boards do window flipping into the same spaces so its only sane with
- * a single lock. It's still pretty efficient. This lock guards the hardware
- * and the tty_port lock guards the kernel side stuff like use counts. Take
- * this lock inside the port lock if you must take both.
+ * a single lock. It's still pretty efficient.
  */
 static DEFINE_SPINLOCK(epca_lock);
 
@@ -158,12 +156,14 @@ static struct channel *verifyChannel(struct tty_struct *);
 static void pc_sched_event(struct channel *, int);
 static void epca_error(int, char *);
 static void pc_close(struct tty_struct *, struct file *);
-static void shutdown(struct channel *, struct tty_struct *tty);
+static void shutdown(struct channel *);
 static void pc_hangup(struct tty_struct *);
 static int pc_write_room(struct tty_struct *);
 static int pc_chars_in_buffer(struct tty_struct *);
 static void pc_flush_buffer(struct tty_struct *);
 static void pc_flush_chars(struct tty_struct *);
+static int block_til_ready(struct tty_struct *, struct file *,
+			struct channel *);
 static int pc_open(struct tty_struct *, struct file *);
 static void post_fep_init(unsigned int crd);
 static void epcapoll(unsigned long);
@@ -173,7 +173,7 @@ static unsigned termios2digi_h(struct channel *ch, unsigned);
 static unsigned termios2digi_i(struct channel *ch, unsigned);
 static unsigned termios2digi_c(struct channel *ch, unsigned);
 static void epcaparam(struct tty_struct *, struct channel *);
-static void receive_data(struct channel *, struct tty_struct *tty);
+static void receive_data(struct channel *);
 static int pc_ioctl(struct tty_struct *, struct file *,
 			unsigned int, unsigned long);
 static int info_ioctl(struct tty_struct *, struct file *,
@@ -392,7 +392,7 @@ static struct channel *verifyChannel(struct tty_struct *tty)
 	 * through tty->driver_data this should catch it.
 	 */
 	if (tty) {
-		struct channel *ch = tty->driver_data;
+		struct channel *ch = (struct channel *)tty->driver_data;
 		if (ch >= &digi_channels[0] && ch < &digi_channels[nbdevs]) {
 			if (ch->magic == EPCA_MAGIC)
 				return ch;
@@ -419,34 +419,76 @@ static void epca_error(int line, char *msg)
 static void pc_close(struct tty_struct *tty, struct file *filp)
 {
 	struct channel *ch;
-	struct tty_port *port;
+	unsigned long flags;
 	/*
 	 * verifyChannel returns the channel from the tty struct if it is
 	 * valid. This serves as a sanity check.
 	 */
 	ch = verifyChannel(tty);
-	if (ch == NULL)
-		return;
-	port = &ch->port;
+	if (ch != NULL) {
+		spin_lock_irqsave(&epca_lock, flags);
+		if (tty_hung_up_p(filp)) {
+			spin_unlock_irqrestore(&epca_lock, flags);
+			return;
+		}
+		if (ch->port.count-- > 1)  {
+			/* Begin channel is open more than once */
+			/*
+			 * Return without doing anything. Someone might still
+			 * be using the channel.
+			 */
+			spin_unlock_irqrestore(&epca_lock, flags);
+			return;
+		}
+		/* Port open only once go ahead with shutdown & reset */
+		BUG_ON(ch->port.count < 0);
 
-	if (tty_port_close_start(port, tty, filp) == 0)
-		return;
+		/*
+		 * Let the rest of the driver know the channel is being closed.
+		 * This becomes important if an open is attempted before close
+		 * is finished.
+		 */
+		ch->port.flags |= ASYNC_CLOSING;
+		tty->closing = 1;
 
-	pc_flush_buffer(tty);
-	shutdown(ch, tty);
+		spin_unlock_irqrestore(&epca_lock, flags);
 
-	tty_port_close_end(port, tty);
-	ch->event = 0;	/* FIXME: review ch->event locking */
-	tty_port_tty_set(port, NULL);
+		if (ch->port.flags & ASYNC_INITIALIZED)  {
+			/* Setup an event to indicate when the
+			   transmit buffer empties */
+			setup_empty_event(tty, ch);
+			/* 30 seconds timeout */
+			tty_wait_until_sent(tty, 3000);
+		}
+		pc_flush_buffer(tty);
+
+		tty_ldisc_flush(tty);
+		shutdown(ch);
+
+		spin_lock_irqsave(&epca_lock, flags);
+		tty->closing = 0;
+		ch->event = 0;
+		ch->port.tty = NULL;
+		spin_unlock_irqrestore(&epca_lock, flags);
+
+		if (ch->port.blocked_open) {
+			if (ch->close_delay)
+				msleep_interruptible(jiffies_to_msecs(ch->close_delay));
+			wake_up_interruptible(&ch->port.open_wait);
+		}
+		ch->port.flags &= ~(ASYNC_NORMAL_ACTIVE | ASYNC_INITIALIZED |
+					ASYNC_CLOSING);
+		wake_up_interruptible(&ch->port.close_wait);
+	}
 }
 
-static void shutdown(struct channel *ch, struct tty_struct *tty)
+static void shutdown(struct channel *ch)
 {
 	unsigned long flags;
+	struct tty_struct *tty;
 	struct board_chan __iomem *bc;
-	struct tty_port *port = &ch->port;
 
-	if (!(port->flags & ASYNC_INITIALIZED))
+	if (!(ch->port.flags & ASYNC_INITIALIZED))
 		return;
 
 	spin_lock_irqsave(&epca_lock, flags);
@@ -461,6 +503,7 @@ static void shutdown(struct channel *ch, struct tty_struct *tty)
 	 */
 	if (bc)
 		writeb(0, &bc->idata);
+	tty = ch->port.tty;
 
 	/* If we're a modem control device and HUPCL is on, drop RTS & DTR. */
 	if (tty->termios->c_cflag & HUPCL)  {
@@ -474,26 +517,32 @@ static void shutdown(struct channel *ch, struct tty_struct *tty)
 	 * will have to reinitialized. Set a flag to indicate this.
 	 */
 	/* Prevent future Digi programmed interrupts from coming active */
-	port->flags &= ~ASYNC_INITIALIZED;
+	ch->port.flags &= ~ASYNC_INITIALIZED;
 	spin_unlock_irqrestore(&epca_lock, flags);
 }
 
 static void pc_hangup(struct tty_struct *tty)
 {
 	struct channel *ch;
-
 	/*
 	 * verifyChannel returns the channel from the tty struct if it is
 	 * valid. This serves as a sanity check.
 	 */
 	ch = verifyChannel(tty);
 	if (ch != NULL) {
+		unsigned long flags;
+
 		pc_flush_buffer(tty);
 		tty_ldisc_flush(tty);
-		shutdown(ch, tty);
+		shutdown(ch);
 
-		ch->event = 0;	/* FIXME: review locking of ch->event */
-		tty_port_hangup(&ch->port);
+		spin_lock_irqsave(&epca_lock, flags);
+		ch->port.tty   = NULL;
+		ch->event = 0;
+		ch->port.count = 0;
+		ch->port.flags &= ~(ASYNC_NORMAL_ACTIVE | ASYNC_INITIALIZED);
+		spin_unlock_irqrestore(&epca_lock, flags);
+		wake_up_interruptible(&ch->port.open_wait);
 	}
 }
 
@@ -737,22 +786,100 @@ static void pc_flush_chars(struct tty_struct *tty)
 	}
 }
 
-static int epca_carrier_raised(struct tty_port *port)
+static int block_til_ready(struct tty_struct *tty,
+				struct file *filp, struct channel *ch)
 {
-	struct channel *ch = container_of(port, struct channel, port);
-	if (ch->imodem & ch->dcd)
-		return 1;
-	return 0;
-}
+	DECLARE_WAITQUEUE(wait, current);
+	int retval, do_clocal = 0;
+	unsigned long flags;
 
-static void epca_raise_dtr_rts(struct tty_port *port)
-{
+	if (tty_hung_up_p(filp)) {
+		if (ch->port.flags & ASYNC_HUP_NOTIFY)
+			retval = -EAGAIN;
+		else
+			retval = -ERESTARTSYS;
+		return retval;
+	}
+
+	/*
+	 * If the device is in the middle of being closed, then block until
+	 * it's done, and then try again.
+	 */
+	if (ch->port.flags & ASYNC_CLOSING) {
+		interruptible_sleep_on(&ch->port.close_wait);
+
+		if (ch->port.flags & ASYNC_HUP_NOTIFY)
+			return -EAGAIN;
+		else
+			return -ERESTARTSYS;
+	}
+
+	if (filp->f_flags & O_NONBLOCK)  {
+		/*
+		 * If non-blocking mode is set, then make the check up front
+		 * and then exit.
+		 */
+		ch->port.flags |= ASYNC_NORMAL_ACTIVE;
+		return 0;
+	}
+	if (tty->termios->c_cflag & CLOCAL)
+		do_clocal = 1;
+	/* Block waiting for the carrier detect and the line to become free */
+
+	retval = 0;
+	add_wait_queue(&ch->port.open_wait, &wait);
+
+	spin_lock_irqsave(&epca_lock, flags);
+	/* We dec count so that pc_close will know when to free things */
+	if (!tty_hung_up_p(filp))
+		ch->port.count--;
+	ch->port.blocked_open++;
+	while (1) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (tty_hung_up_p(filp) ||
+				!(ch->port.flags & ASYNC_INITIALIZED)) {
+			if (ch->port.flags & ASYNC_HUP_NOTIFY)
+				retval = -EAGAIN;
+			else
+				retval = -ERESTARTSYS;
+			break;
+		}
+		if (!(ch->port.flags & ASYNC_CLOSING) &&
+			  (do_clocal || (ch->imodem & ch->dcd)))
+			break;
+		if (signal_pending(current)) {
+			retval = -ERESTARTSYS;
+			break;
+		}
+		spin_unlock_irqrestore(&epca_lock, flags);
+		/*
+		 * Allow someone else to be scheduled. We will occasionally go
+		 * through this loop until one of the above conditions change.
+		 * The below schedule call will allow other processes to enter
+		 * and prevent this loop from hogging the cpu.
+		 */
+		schedule();
+		spin_lock_irqsave(&epca_lock, flags);
+	}
+
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&ch->port.open_wait, &wait);
+	if (!tty_hung_up_p(filp))
+		ch->port.count++;
+	ch->port.blocked_open--;
+
+	spin_unlock_irqrestore(&epca_lock, flags);
+
+	if (retval)
+		return retval;
+
+	ch->port.flags |= ASYNC_NORMAL_ACTIVE;
+	return 0;
 }
 
 static int pc_open(struct tty_struct *tty, struct file *filp)
 {
 	struct channel *ch;
-	struct tty_port *port;
 	unsigned long flags;
 	int line, retval, boardnum;
 	struct board_chan __iomem *bc;
@@ -763,13 +890,12 @@ static int pc_open(struct tty_struct *tty, struct file *filp)
 		return -ENODEV;
 
 	ch = &digi_channels[line];
-	port = &ch->port;
 	boardnum = ch->boardnum;
 
 	/* Check status of board configured in system.  */
 
 	/*
-	 * I check to see if the epca_setup routine detected a user error. It
+	 * I check to see if the epca_setup routine detected an user error. It
 	 * might be better to put this in pc_init, but for the moment it goes
 	 * here.
 	 */
@@ -800,24 +926,22 @@ static int pc_open(struct tty_struct *tty, struct file *filp)
 		return -ENODEV;
 	}
 
-	spin_lock_irqsave(&port->lock, flags);
+	spin_lock_irqsave(&epca_lock, flags);
 	/*
 	 * Every time a channel is opened, increment a counter. This is
 	 * necessary because we do not wish to flush and shutdown the channel
 	 * until the last app holding the channel open, closes it.
 	 */
-	port->count++;
+	ch->port.count++;
 	/*
 	 * Set a kernel structures pointer to our local channel structure. This
 	 * way we can get to it when passed only a tty struct.
 	 */
 	tty->driver_data = ch;
-	port->tty = tty;
 	/*
 	 * If this is the first time the channel has been opened, initialize
 	 * the tty->termios struct otherwise let pc_close handle it.
 	 */
-	spin_lock(&epca_lock);
 	globalwinon(ch);
 	ch->statusflags = 0;
 
@@ -832,33 +956,31 @@ static int pc_open(struct tty_struct *tty, struct file *filp)
 	writew(head, &bc->rout);
 
 	/* Set the channels associated tty structure */
+	ch->port.tty = tty;
 
 	/*
 	 * The below routine generally sets up parity, baud, flow control
 	 * issues, etc.... It effect both control flags and input flags.
 	 */
 	epcaparam(tty, ch);
+	ch->port.flags |= ASYNC_INITIALIZED;
 	memoff(ch);
-	spin_unlock(&epca_lock);
-	port->flags |= ASYNC_INITIALIZED;
-	spin_unlock_irqrestore(&port->lock, flags);
+	spin_unlock_irqrestore(&epca_lock, flags);
 
-	retval = tty_port_block_til_ready(port, tty, filp);
+	retval = block_til_ready(tty, filp, ch);
 	if (retval)
 		return retval;
 	/*
 	 * Set this again in case a hangup set it to zero while this open() was
 	 * waiting for the line...
 	 */
-	spin_lock_irqsave(&port->lock, flags);
-	port->tty = tty;
-	spin_lock(&epca_lock);
+	spin_lock_irqsave(&epca_lock, flags);
+	ch->port.tty = tty;
 	globalwinon(ch);
 	/* Enable Digi Data events */
 	writeb(1, &bc->idata);
 	memoff(ch);
-	spin_unlock(&epca_lock);
-	spin_unlock_irqrestore(&port->lock, flags);
+	spin_unlock_irqrestore(&epca_lock, flags);
 	return 0;
 }
 
@@ -894,11 +1016,8 @@ static void __exit epca_module_exit(void)
 		}
 		ch = card_ptr[crd];
 		for (count = 0; count < bd->numports; count++, ch++) {
-			struct tty_struct *tty = tty_port_tty_get(&ch->port);
-			if (tty) {
-				tty_hangup(tty);
-				tty_kref_put(tty);
-			}
+			if (ch && ch->port.tty)
+				tty_hangup(ch->port.tty);
 		}
 	}
 	pci_unregister_driver(&epca_driver);
@@ -921,11 +1040,6 @@ static const struct tty_operations pc_ops = {
 	.unthrottle = pc_unthrottle,
 	.hangup = pc_hangup,
 	.break_ctl = pc_send_break
-};
-
-static const struct tty_port_operations epca_port_ops = {
-	.carrier_raised = epca_carrier_raised,
-	.raise_dtr_rts = epca_raise_dtr_rts,
 };
 
 static int info_open(struct tty_struct *tty, struct file *filp)
@@ -1263,7 +1377,6 @@ static void post_fep_init(unsigned int crd)
 		u16 tseg, rseg;
 
 		tty_port_init(&ch->port);
-		ch->port.ops = &epca_port_ops;
 		ch->brdchan = bc;
 		ch->mailbox = gd;
 		INIT_WORK(&ch->tqueue, do_softint);
@@ -1315,7 +1428,7 @@ static void post_fep_init(unsigned int crd)
 		ch->boardnum   = crd;
 		ch->channelnum = i;
 		ch->magic      = EPCA_MAGIC;
-		tty_port_tty_set(&ch->port, NULL);
+		ch->port.tty        = NULL;
 
 		if (shrinkmem) {
 			fepcmd(ch, SETBUFFER, 32, 0, 0, 0);
@@ -1397,7 +1510,7 @@ static void post_fep_init(unsigned int crd)
 		ch->fepstartca = 0;
 		ch->fepstopca = 0;
 
-		ch->port.close_delay = 50;
+		ch->close_delay = 50;
 
 		spin_unlock_irqrestore(&epca_lock, flags);
 	}
@@ -1509,16 +1622,15 @@ static void doevent(int crd)
 		if (bc == NULL)
 			goto next;
 
-		tty = tty_port_tty_get(&ch->port);
 		if (event & DATA_IND)  { /* Begin DATA_IND */
-			receive_data(ch, tty);
+			receive_data(ch);
 			assertgwinon(ch);
 		} /* End DATA_IND */
 		/* else *//* Fix for DCD transition missed bug */
 		if (event & MODEMCHG_IND) {
 			/* A modem signal change has been indicated */
 			ch->imodem = mstat;
-			if (test_bit(ASYNC_CHECK_CD, &ch->port.flags)) {
+			if (ch->port.flags & ASYNC_CHECK_CD) {
 				/* We are now receiving dcd */
 				if (mstat & ch->dcd)
 					wake_up_interruptible(&ch->port.open_wait);
@@ -1526,6 +1638,7 @@ static void doevent(int crd)
 					pc_sched_event(ch, EPCA_EVENT_HANGUP);
 			}
 		}
+		tty = ch->port.tty;
 		if (tty) {
 			if (event & BREAK_IND) {
 				/* A break has been indicated */
@@ -1545,7 +1658,6 @@ static void doevent(int crd)
 					tty_wakeup(tty);
 				}
 			}
-			tty_kref_put(tty);
 		}
 next:
 		globalwinon(ch);
@@ -1765,9 +1877,9 @@ static void epcaparam(struct tty_struct *tty, struct channel *ch)
 		 * that the driver will wait on carrier detect.
 		 */
 		if (ts->c_cflag & CLOCAL)
-			clear_bit(ASYNC_CHECK_CD, &ch->port.flags);
+			ch->port.flags &= ~ASYNC_CHECK_CD;
 		else
-			set_bit(ASYNC_CHECK_CD, &ch->port.flags);
+			ch->port.flags |= ASYNC_CHECK_CD;
 		mval = ch->m_dtr | ch->m_rts;
 	} /* End CBAUD not detected */
 	iflag = termios2digi_i(ch, ts->c_iflag);
@@ -1840,10 +1952,11 @@ static void epcaparam(struct tty_struct *tty, struct channel *ch)
 }
 
 /* Caller holds lock */
-static void receive_data(struct channel *ch, struct tty_struct *tty)
+static void receive_data(struct channel *ch)
 {
 	unchar *rptr;
 	struct ktermios *ts = NULL;
+	struct tty_struct *tty;
 	struct board_chan __iomem *bc;
 	int dataToRead, wrapgap, bytesAvailable;
 	unsigned int tail, head;
@@ -1856,6 +1969,7 @@ static void receive_data(struct channel *ch, struct tty_struct *tty)
 	globalwinon(ch);
 	if (ch->statusflags & RXSTOPPED)
 		return;
+	tty = ch->port.tty;
 	if (tty)
 		ts = tty->termios;
 	bc = ch->brdchan;
@@ -1915,7 +2029,7 @@ static void receive_data(struct channel *ch, struct tty_struct *tty)
 	globalwinon(ch);
 	writew(tail, &bc->rout);
 	/* Must be called with global data */
-	tty_schedule_flip(tty);
+	tty_schedule_flip(ch->port.tty);
 }
 
 static int info_ioctl(struct tty_struct *tty, struct file *file,
@@ -1983,7 +2097,7 @@ static int info_ioctl(struct tty_struct *tty, struct file *file,
 
 static int pc_tiocmget(struct tty_struct *tty, struct file *file)
 {
-	struct channel *ch = tty->driver_data;
+	struct channel *ch = (struct channel *) tty->driver_data;
 	struct board_chan __iomem *bc;
 	unsigned int mstat, mflag = 0;
 	unsigned long flags;
@@ -2017,7 +2131,7 @@ static int pc_tiocmget(struct tty_struct *tty, struct file *file)
 static int pc_tiocmset(struct tty_struct *tty, struct file *file,
 		       unsigned int set, unsigned int clear)
 {
-	struct channel *ch = tty->driver_data;
+	struct channel *ch = (struct channel *) tty->driver_data;
 	unsigned long flags;
 
 	if (!ch)
@@ -2064,7 +2178,7 @@ static int pc_ioctl(struct tty_struct *tty, struct file *file,
 	unsigned int mflag, mstat;
 	unsigned char startc, stopc;
 	struct board_chan __iomem *bc;
-	struct channel *ch = tty->driver_data;
+	struct channel *ch = (struct channel *) tty->driver_data;
 	void __user *argp = (void __user *)arg;
 
 	if (ch)
@@ -2238,16 +2352,15 @@ static void do_softint(struct work_struct *work)
 	struct channel *ch = container_of(work, struct channel, tqueue);
 	/* Called in response to a modem change event */
 	if (ch && ch->magic == EPCA_MAGIC) {
-		struct tty_struct *tty = tty_port_tty_get(&ch->port);;
+		struct tty_struct *tty = ch->port.tty;
 
 		if (tty && tty->driver_data) {
 			if (test_and_clear_bit(EPCA_EVENT_HANGUP, &ch->event)) {
 				tty_hangup(tty);
 				wake_up_interruptible(&ch->port.open_wait);
-				clear_bit(ASYNC_NORMAL_ACTIVE, &ch->port.flags);
+				ch->port.flags &= ~ASYNC_NORMAL_ACTIVE;
 			}
 		}
-		tty_kref_put(tty);
 	}
 }
 
@@ -2360,7 +2473,7 @@ static void pc_unthrottle(struct tty_struct *tty)
 
 static int pc_send_break(struct tty_struct *tty, int msec)
 {
-	struct channel *ch = tty->driver_data;
+	struct channel *ch = (struct channel *) tty->driver_data;
 	unsigned long flags;
 
 	if (msec == -1)

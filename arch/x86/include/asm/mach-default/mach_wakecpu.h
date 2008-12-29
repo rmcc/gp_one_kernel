@@ -1,8 +1,17 @@
 #ifndef _ASM_X86_MACH_DEFAULT_MACH_WAKECPU_H
 #define _ASM_X86_MACH_DEFAULT_MACH_WAKECPU_H
 
-#define TRAMPOLINE_PHYS_LOW (0x467)
-#define TRAMPOLINE_PHYS_HIGH (0x469)
+/* 
+ * This file copes with machines that wakeup secondary CPUs by the
+ * INIT, INIT, STARTUP sequence.
+ */
+
+#define WAKE_SECONDARY_VIA_INIT
+
+#define TRAMPOLINE_LOW phys_to_virt(0x467)
+#define TRAMPOLINE_HIGH phys_to_virt(0x469)
+
+#define boot_cpu_apicid boot_cpu_physical_apicid
 
 static inline void wait_for_init_deassert(atomic_t *deassert)
 {
@@ -24,12 +33,9 @@ static inline void restore_NMI_vector(unsigned short *high, unsigned short *low)
 {
 }
 
-extern void __inquire_remote_apic(int apicid);
-
-static inline void inquire_remote_apic(int apicid)
-{
-	if (apic_verbosity >= APIC_DEBUG)
-		__inquire_remote_apic(apicid);
-}
+#define inquire_remote_apic(apicid) do {		\
+		if (apic_verbosity >= APIC_DEBUG)	\
+			__inquire_remote_apic(apicid);	\
+	} while (0)
 
 #endif /* _ASM_X86_MACH_DEFAULT_MACH_WAKECPU_H */

@@ -17,8 +17,7 @@
 #include <linux/types.h>
 #include <linux/math64.h>
 #include "../../dccp.h"
-
-/* internal includes that this library exports: */
+/* internal includes that this module exports: */
 #include "loss_interval.h"
 #include "packet_history.h"
 
@@ -67,12 +66,4 @@ extern void tfrc_rx_packet_history_exit(void);
 
 extern int  tfrc_li_init(void);
 extern void tfrc_li_exit(void);
-
-#ifdef CONFIG_IP_DCCP_TFRC_LIB
-extern int  tfrc_lib_init(void);
-extern void tfrc_lib_exit(void);
-#else
-#define tfrc_lib_init() (0)
-#define tfrc_lib_exit()
-#endif
 #endif /* _TFRC_H_ */

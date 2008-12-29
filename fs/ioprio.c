@@ -27,20 +27,14 @@
 #include <linux/security.h>
 #include <linux/pid_namespace.h>
 
-int set_task_ioprio(struct task_struct *task, int ioprio)
+static int set_task_ioprio(struct task_struct *task, int ioprio)
 {
 	int err;
 	struct io_context *ioc;
-	const struct cred *cred = current_cred(), *tcred;
 
-	rcu_read_lock();
-	tcred = __task_cred(task);
-	if (tcred->uid != cred->euid &&
-	    tcred->uid != cred->uid && !capable(CAP_SYS_NICE)) {
-		rcu_read_unlock();
+	if (task->uid != current->euid &&
+	    task->uid != current->uid && !capable(CAP_SYS_NICE))
 		return -EPERM;
-	}
-	rcu_read_unlock();
 
 	err = security_task_setioprio(task, ioprio);
 	if (err)
@@ -70,7 +64,6 @@ int set_task_ioprio(struct task_struct *task, int ioprio)
 	task_unlock(task);
 	return err;
 }
-EXPORT_SYMBOL_GPL(set_task_ioprio);
 
 asmlinkage long sys_ioprio_set(int which, int who, int ioprio)
 {
@@ -130,7 +123,7 @@ asmlinkage long sys_ioprio_set(int which, int who, int ioprio)
 			break;
 		case IOPRIO_WHO_USER:
 			if (!who)
-				user = current_user();
+				user = current->user;
 			else
 				user = find_user(who);
 
@@ -138,7 +131,7 @@ asmlinkage long sys_ioprio_set(int which, int who, int ioprio)
 				break;
 
 			do_each_thread(g, p) {
-				if (__task_cred(p)->uid != who)
+				if (p->uid != who)
 					continue;
 				ret = set_task_ioprio(p, ioprio);
 				if (ret)
@@ -223,7 +216,7 @@ asmlinkage long sys_ioprio_get(int which, int who)
 			break;
 		case IOPRIO_WHO_USER:
 			if (!who)
-				user = current_user();
+				user = current->user;
 			else
 				user = find_user(who);
 
@@ -231,7 +224,7 @@ asmlinkage long sys_ioprio_get(int which, int who)
 				break;
 
 			do_each_thread(g, p) {
-				if (__task_cred(p)->uid != user->uid)
+				if (p->uid != user->uid)
 					continue;
 				tmpio = get_task_ioprio(p);
 				if (tmpio < 0)

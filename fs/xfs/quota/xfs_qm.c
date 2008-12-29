@@ -20,6 +20,7 @@
 #include "xfs_bit.h"
 #include "xfs_log.h"
 #include "xfs_inum.h"
+#include "xfs_clnt.h"
 #include "xfs_trans.h"
 #include "xfs_sb.h"
 #include "xfs_ag.h"
@@ -395,10 +396,13 @@ xfs_qm_mount_quotas(
 /*
  * Called from the vfsops layer.
  */
-void
+int
 xfs_qm_unmount_quotas(
 	xfs_mount_t	*mp)
 {
+	xfs_inode_t	*uqp, *gqp;
+	int		error = 0;
+
 	/*
 	 * Release the dquots that root inode, et al might be holding,
 	 * before we flush quotas and blow away the quotainfo structure.
@@ -411,18 +415,43 @@ xfs_qm_unmount_quotas(
 		xfs_qm_dqdetach(mp->m_rsumip);
 
 	/*
-	 * Release the quota inodes.
+	 * Flush out the quota inodes.
 	 */
+	uqp = gqp = NULL;
 	if (mp->m_quotainfo) {
-		if (mp->m_quotainfo->qi_uquotaip) {
-			IRELE(mp->m_quotainfo->qi_uquotaip);
-			mp->m_quotainfo->qi_uquotaip = NULL;
+		if ((uqp = mp->m_quotainfo->qi_uquotaip) != NULL) {
+			xfs_ilock(uqp, XFS_ILOCK_EXCL);
+			xfs_iflock(uqp);
+			error = xfs_iflush(uqp, XFS_IFLUSH_SYNC);
+			xfs_iunlock(uqp, XFS_ILOCK_EXCL);
+			if (unlikely(error == EFSCORRUPTED)) {
+				XFS_ERROR_REPORT("xfs_qm_unmount_quotas(1)",
+						 XFS_ERRLEVEL_LOW, mp);
+				goto out;
+			}
 		}
-		if (mp->m_quotainfo->qi_gquotaip) {
-			IRELE(mp->m_quotainfo->qi_gquotaip);
-			mp->m_quotainfo->qi_gquotaip = NULL;
+		if ((gqp = mp->m_quotainfo->qi_gquotaip) != NULL) {
+			xfs_ilock(gqp, XFS_ILOCK_EXCL);
+			xfs_iflock(gqp);
+			error = xfs_iflush(gqp, XFS_IFLUSH_SYNC);
+			xfs_iunlock(gqp, XFS_ILOCK_EXCL);
+			if (unlikely(error == EFSCORRUPTED)) {
+				XFS_ERROR_REPORT("xfs_qm_unmount_quotas(2)",
+						 XFS_ERRLEVEL_LOW, mp);
+				goto out;
+			}
 		}
 	}
+	if (uqp) {
+		 IRELE(uqp);
+		 mp->m_quotainfo->qi_uquotaip = NULL;
+	}
+	if (gqp) {
+		IRELE(gqp);
+		mp->m_quotainfo->qi_gquotaip = NULL;
+	}
+out:
+	return XFS_ERROR(error);
 }
 
 /*
@@ -958,10 +987,14 @@ xfs_qm_dqdetach(
 }
 
 /*
- * This is called to sync quotas. We can be told to use non-blocking
- * semantics by either the SYNC_BDFLUSH flag or the absence of the
- * SYNC_WAIT flag.
+ * This is called by VFS_SYNC and flags arg determines the caller,
+ * and its motives, as done in xfs_sync.
+ *
+ * vfs_sync: SYNC_FSDATA|SYNC_ATTR|SYNC_BDFLUSH 0x31
+ * syscall sync: SYNC_FSDATA|SYNC_ATTR|SYNC_DELWRI 0x25
+ * umountroot : SYNC_WAIT | SYNC_CLOSE | SYNC_ATTR | SYNC_FSDATA
  */
+
 int
 xfs_qm_sync(
 	xfs_mount_t	*mp,
@@ -1104,6 +1137,7 @@ xfs_qm_init_quotainfo(
 		return error;
 	}
 
+	spin_lock_init(&qinf->qi_pinlock);
 	xfs_qm_list_init(&qinf->qi_dqlist, "mpdqlist", 0);
 	qinf->qi_dqreclaims = 0;
 
@@ -1200,6 +1234,7 @@ xfs_qm_destroy_quotainfo(
 	 */
 	xfs_qm_rele_quotafs_ref(mp);
 
+	spinlock_destroy(&qi->qi_pinlock);
 	xfs_qm_list_destroy(&qi->qi_dqlist);
 
 	if (qi->qi_uquotaip) {

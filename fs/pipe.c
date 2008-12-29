@@ -899,8 +899,8 @@ static struct inode * get_pipe_inode(void)
 	 */
 	inode->i_state = I_DIRTY;
 	inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
-	inode->i_uid = current_fsuid();
-	inode->i_gid = current_fsgid();
+	inode->i_uid = current->fsuid;
+	inode->i_gid = current->fsgid;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 
 	return inode;
@@ -1016,7 +1016,10 @@ int do_pipe_flags(int *fd, int flags)
 		goto err_fdr;
 	fdw = error;
 
-	audit_fd_pair(fdr, fdw);
+	error = audit_fd_pair(fdr, fdw);
+	if (error < 0)
+		goto err_fdw;
+
 	fd_install(fdr, fr);
 	fd_install(fdw, fw);
 	fd[0] = fdr;
@@ -1024,6 +1027,8 @@ int do_pipe_flags(int *fd, int flags)
 
 	return 0;
 
+ err_fdw:
+	put_unused_fd(fdw);
  err_fdr:
 	put_unused_fd(fdr);
  err_read_pipe:

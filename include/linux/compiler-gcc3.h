@@ -2,9 +2,8 @@
 #error "Please don't include <linux/compiler-gcc3.h> directly, include <linux/compiler.h> instead."
 #endif
 
-#if __GNUC_MINOR__ < 2
-# error Sorry, your compiler is too old - please upgrade it.
-#endif
+/* These definitions are for GCC v3.x.  */
+#include <linux/compiler-gcc.h>
 
 #if __GNUC_MINOR__ >= 3
 # define __used			__attribute__((__used__))

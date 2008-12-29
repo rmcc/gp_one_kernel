@@ -79,7 +79,11 @@ static inline void zap_pid_ns_processes(struct pid_namespace *ns)
 }
 #endif /* CONFIG_PID_NS */
 
-extern struct pid_namespace *task_active_pid_ns(struct task_struct *tsk);
+static inline struct pid_namespace *task_active_pid_ns(struct task_struct *tsk)
+{
+	return tsk->nsproxy->pid_ns;
+}
+
 void pidhash_init(void);
 void pidmap_init(void);
 

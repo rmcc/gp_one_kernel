@@ -23,8 +23,8 @@
  * FIXME: Docs
  *
  */
-#include <linux/wlp.h>
 
+#include <linux/wlp.h>
 #include "wlp-internal.h"
 
 static

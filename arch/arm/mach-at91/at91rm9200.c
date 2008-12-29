@@ -12,7 +12,6 @@
 
 #include <linux/module.h>
 
-#include <asm/irq.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <mach/at91rm9200.h>

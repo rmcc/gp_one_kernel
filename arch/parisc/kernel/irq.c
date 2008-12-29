@@ -131,12 +131,12 @@ int cpu_check_affinity(unsigned int irq, cpumask_t *dest)
 	return 0;
 }
 
-static void cpu_set_affinity_irq(unsigned int irq, const struct cpumask *dest)
+static void cpu_set_affinity_irq(unsigned int irq, cpumask_t dest)
 {
-	if (cpu_check_affinity(irq, dest))
+	if (cpu_check_affinity(irq, &dest))
 		return;
 
-	irq_desc[irq].affinity = *dest;
+	irq_desc[irq].affinity = dest;
 }
 #endif
 
@@ -183,7 +183,7 @@ int show_interrupts(struct seq_file *p, void *v)
 		seq_printf(p, "%3d: ", i);
 #ifdef CONFIG_SMP
 		for_each_online_cpu(j)
-			seq_printf(p, "%10u ", kstat_irqs_cpu(i, j));
+			seq_printf(p, "%10u ", kstat_cpu(j).irqs[i]);
 #else
 		seq_printf(p, "%10u ", kstat_irqs(i));
 #endif
@@ -298,7 +298,7 @@ unsigned long txn_affinity_addr(unsigned int irq, int cpu)
 	irq_desc[irq].affinity = cpumask_of_cpu(cpu);
 #endif
 
-	return per_cpu(cpu_data, cpu).txn_addr;
+	return cpu_data[cpu].txn_addr;
 }
 
 
@@ -309,9 +309,8 @@ unsigned long txn_alloc_addr(unsigned int virt_irq)
 	next_cpu++; /* assign to "next" CPU we want this bugger on */
 
 	/* validate entry */
-	while ((next_cpu < NR_CPUS) &&
-		(!per_cpu(cpu_data, next_cpu).txn_addr ||
-		 !cpu_online(next_cpu)))
+	while ((next_cpu < NR_CPUS) && (!cpu_data[next_cpu].txn_addr || 
+		!cpu_online(next_cpu)))
 		next_cpu++;
 
 	if (next_cpu >= NR_CPUS) 
@@ -360,7 +359,7 @@ void do_cpu_irq_mask(struct pt_regs *regs)
 		printk(KERN_DEBUG "redirecting irq %d from CPU %d to %d\n",
 		       irq, smp_processor_id(), cpu);
 		gsc_writel(irq + CPU_IRQ_BASE,
-			   per_cpu(cpu_data, cpu).hpa);
+			   cpu_data[cpu].hpa);
 		goto set_out;
 	}
 #endif
@@ -422,5 +421,5 @@ void __init init_IRQ(void)
 
 void ack_bad_irq(unsigned int irq)
 {
-	printk(KERN_WARNING "unexpected IRQ %d\n", irq);
+	printk("unexpected IRQ %d\n", irq);
 }

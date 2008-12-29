@@ -51,7 +51,6 @@ asmlinkage long mipsmt_sys_sched_setaffinity(pid_t pid, unsigned int len,
 	int retval;
 	struct task_struct *p;
 	struct thread_info *ti;
-	uid_t euid;
 
 	if (len < sizeof(new_mask))
 		return -EINVAL;
@@ -77,9 +76,9 @@ asmlinkage long mipsmt_sys_sched_setaffinity(pid_t pid, unsigned int len,
 	 */
 	get_task_struct(p);
 
-	euid = current_euid();
 	retval = -EPERM;
-	if (euid != p->euid && euid != p->uid && !capable(CAP_SYS_NICE)) {
+	if ((current->euid != p->euid) && (current->euid != p->uid) &&
+			!capable(CAP_SYS_NICE)) {
 		read_unlock(&tasklist_lock);
 		goto out_unlock;
 	}

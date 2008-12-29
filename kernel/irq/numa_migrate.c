@@ -17,11 +17,16 @@ static void init_copy_kstat_irqs(struct irq_desc *old_desc,
 				 struct irq_desc *desc,
 				 int cpu, int nr)
 {
+	unsigned long bytes;
+
 	init_kstat_irqs(desc, cpu, nr);
 
-	if (desc->kstat_irqs != old_desc->kstat_irqs)
-		memcpy(desc->kstat_irqs, old_desc->kstat_irqs,
-			 nr * sizeof(*desc->kstat_irqs));
+	if (desc->kstat_irqs != old_desc->kstat_irqs) {
+		/* Compute how many bytes we need per irq and allocate them */
+		bytes = nr * sizeof(unsigned int);
+
+		memcpy(desc->kstat_irqs, old_desc->kstat_irqs, bytes);
+	}
 }
 
 static void free_kstat_irqs(struct irq_desc *old_desc, struct irq_desc *desc)
@@ -37,7 +42,6 @@ static void init_copy_one_irq_desc(int irq, struct irq_desc *old_desc,
 		 struct irq_desc *desc, int cpu)
 {
 	memcpy(desc, old_desc, sizeof(struct irq_desc));
-	spin_lock_init(&desc->lock);
 	desc->cpu = cpu;
 	lockdep_set_class(&desc->lock, &irq_desc_lock_class);
 	init_copy_kstat_irqs(old_desc, desc, cpu, nr_cpu_ids);
@@ -70,8 +74,10 @@ static struct irq_desc *__real_move_irq_desc(struct irq_desc *old_desc,
 
 	node = cpu_to_node(cpu);
 	desc = kzalloc_node(sizeof(*desc), GFP_ATOMIC, node);
+	printk(KERN_DEBUG "  move irq_desc for %d to cpu %d node %d\n",
+		 irq, cpu, node);
 	if (!desc) {
-		printk(KERN_ERR "irq %d: can not get new irq_desc for migration.\n", irq);
+		printk(KERN_ERR "can not get new irq_desc for moving\n");
 		/* still use old one */
 		desc = old_desc;
 		goto out_unlock;
@@ -100,6 +106,8 @@ struct irq_desc *move_irq_desc(struct irq_desc *desc, int cpu)
 		return desc;
 
 	old_cpu = desc->cpu;
+	printk(KERN_DEBUG
+		 "try to move irq_desc from cpu %d to %d\n", old_cpu, cpu);
 	if (old_cpu != cpu) {
 		node = cpu_to_node(cpu);
 		old_node = cpu_to_node(old_cpu);

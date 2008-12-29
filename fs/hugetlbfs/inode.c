@@ -252,7 +252,6 @@ static ssize_t hugetlbfs_read(struct file *filp, char __user *buf,
 	for (;;) {
 		struct page *page;
 		unsigned long nr, ret;
-		int ra;
 
 		/* nr is the maximum number of bytes to copy from this page */
 		nr = huge_page_size(h);
@@ -275,19 +274,16 @@ static ssize_t hugetlbfs_read(struct file *filp, char __user *buf,
 			 */
 			ret = len < nr ? len : nr;
 			if (clear_user(buf, ret))
-				ra = -EFAULT;
-			else
-				ra = 0;
+				ret = -EFAULT;
 		} else {
 			/*
 			 * We have the page, copy it to user space buffer.
 			 */
-			ra = hugetlbfs_read_actor(page, offset, buf, len, nr);
-			ret = ra;
+			ret = hugetlbfs_read_actor(page, offset, buf, len, nr);
 		}
-		if (ra < 0) {
+		if (ret < 0) {
 			if (retval == 0)
-				retval = ra;
+				retval = ret;
 			if (page)
 				page_cache_release(page);
 			goto out;
@@ -510,6 +506,7 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb, uid_t uid,
 		inode->i_mode = mode;
 		inode->i_uid = uid;
 		inode->i_gid = gid;
+		inode->i_blocks = 0;
 		inode->i_mapping->a_ops = &hugetlbfs_aops;
 		inode->i_mapping->backing_dev_info =&hugetlbfs_backing_dev_info;
 		inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
@@ -554,9 +551,9 @@ static int hugetlbfs_mknod(struct inode *dir,
 		if (S_ISDIR(mode))
 			mode |= S_ISGID;
 	} else {
-		gid = current_fsgid();
+		gid = current->fsgid;
 	}
-	inode = hugetlbfs_get_inode(dir->i_sb, current_fsuid(), gid, mode, dev);
+	inode = hugetlbfs_get_inode(dir->i_sb, current->fsuid, gid, mode, dev);
 	if (inode) {
 		dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 		d_instantiate(dentry, inode);
@@ -589,9 +586,9 @@ static int hugetlbfs_symlink(struct inode *dir,
 	if (dir->i_mode & S_ISGID)
 		gid = dir->i_gid;
 	else
-		gid = current_fsgid();
+		gid = current->fsgid;
 
-	inode = hugetlbfs_get_inode(dir->i_sb, current_fsuid(),
+	inode = hugetlbfs_get_inode(dir->i_sb, current->fsuid,
 					gid, S_IFLNK|S_IRWXUGO, 0);
 	if (inode) {
 		int l = strlen(symname)+1;
@@ -857,8 +854,8 @@ hugetlbfs_fill_super(struct super_block *sb, void *data, int silent)
 
 	config.nr_blocks = -1; /* No limit on size by default */
 	config.nr_inodes = -1; /* No limit on number of inodes by default */
-	config.uid = current_fsuid();
-	config.gid = current_fsgid();
+	config.uid = current->fsuid;
+	config.gid = current->fsgid;
 	config.mode = 0755;
 	config.hstate = &default_hstate;
 	ret = hugetlbfs_parse_options(data, &config);
@@ -954,7 +951,6 @@ struct file *hugetlb_file_setup(const char *name, size_t size)
 	struct inode *inode;
 	struct dentry *dentry, *root;
 	struct qstr quick_string;
-	struct user_struct *user = current_user();
 
 	if (!hugetlbfs_vfsmount)
 		return ERR_PTR(-ENOENT);
@@ -962,7 +958,7 @@ struct file *hugetlb_file_setup(const char *name, size_t size)
 	if (!can_do_hugetlb_shm())
 		return ERR_PTR(-EPERM);
 
-	if (!user_shm_lock(size, user))
+	if (!user_shm_lock(size, current->user))
 		return ERR_PTR(-ENOMEM);
 
 	root = hugetlbfs_vfsmount->mnt_root;
@@ -974,8 +970,8 @@ struct file *hugetlb_file_setup(const char *name, size_t size)
 		goto out_shm_unlock;
 
 	error = -ENOSPC;
-	inode = hugetlbfs_get_inode(root->d_sb, current_fsuid(),
-				current_fsgid(), S_IFREG | S_IRWXUGO, 0);
+	inode = hugetlbfs_get_inode(root->d_sb, current->fsuid,
+				current->fsgid, S_IFREG | S_IRWXUGO, 0);
 	if (!inode)
 		goto out_dentry;
 
@@ -1002,7 +998,7 @@ out_inode:
 out_dentry:
 	dput(dentry);
 out_shm_unlock:
-	user_shm_unlock(size, user);
+	user_shm_unlock(size, current->user);
 	return ERR_PTR(error);
 }
 

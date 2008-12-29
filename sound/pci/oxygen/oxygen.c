@@ -61,7 +61,6 @@ MODULE_PARM_DESC(enable, "enable card");
 enum {
 	MODEL_CMEDIA_REF,	/* C-Media's reference design */
 	MODEL_MERIDIAN,		/* AuzenTech X-Meridian */
-	MODEL_HALO,		/* HT-Omega Claro halo */
 };
 
 static struct pci_device_id oxygen_ids[] __devinitdata = {
@@ -75,7 +74,6 @@ static struct pci_device_id oxygen_ids[] __devinitdata = {
 	{ OXYGEN_PCI_SUBID(0x1a58, 0x0910), .driver_data = MODEL_CMEDIA_REF },
 	{ OXYGEN_PCI_SUBID(0x415a, 0x5431), .driver_data = MODEL_MERIDIAN },
 	{ OXYGEN_PCI_SUBID(0x7284, 0x9761), .driver_data = MODEL_CMEDIA_REF },
-	{ OXYGEN_PCI_SUBID(0x7284, 0x9781), .driver_data = MODEL_HALO },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, oxygen_ids);
@@ -303,8 +301,6 @@ static int generic_probe(struct oxygen *chip, unsigned long driver_data)
 					    PLAYBACK_1_TO_SPDIF |
 					    CAPTURE_0_FROM_I2S_2 |
 					    CAPTURE_1_FROM_SPDIF;
-	}
-	if (driver_data == MODEL_MERIDIAN || driver_data == MODEL_HALO) {
 		chip->model.misc_flags = OXYGEN_MISC_MIDI;
 		chip->model.device_config |= MIDI_OUTPUT | MIDI_INPUT;
 	}

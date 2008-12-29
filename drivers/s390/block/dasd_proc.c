@@ -180,12 +180,12 @@ dasd_calc_metrics(char *page, char **start, off_t off,
 
 #ifdef CONFIG_DASD_PROFILE
 static char *
-dasd_statistics_array(char *str, unsigned int *array, int factor)
+dasd_statistics_array(char *str, unsigned int *array, int shift)
 {
 	int i;
 
 	for (i = 0; i < 32; i++) {
-		str += sprintf(str, "%7d ", array[i] / factor);
+		str += sprintf(str, "%7d ", array[i] >> shift);
 		if (i == 15)
 			str += sprintf(str, "\n");
 	}
@@ -202,7 +202,7 @@ dasd_statistics_read(char *page, char **start, off_t off,
 #ifdef CONFIG_DASD_PROFILE
 	struct dasd_profile_info_t *prof;
 	char *str;
-	int factor;
+	int shift;
 
 	/* check for active profiling */
 	if (dasd_profile_level == DASD_PROFILE_OFF) {
@@ -214,14 +214,12 @@ dasd_statistics_read(char *page, char **start, off_t off,
 
 	prof = &dasd_global_profile;
 	/* prevent couter 'overflow' on output */
-	for (factor = 1; (prof->dasd_io_reqs / factor) > 9999999;
-	     factor *= 10);
+	for (shift = 0; (prof->dasd_io_reqs >> shift) > 9999999; shift++);
 
 	str = page;
 	str += sprintf(str, "%d dasd I/O requests\n", prof->dasd_io_reqs);
-	str += sprintf(str, "with %u sectors(512B each)\n",
+	str += sprintf(str, "with %d sectors(512B each)\n",
 		       prof->dasd_io_sects);
-	str += sprintf(str, "Scale Factor is  %d\n", factor);
 	str += sprintf(str,
 		       "   __<4	   ___8	   __16	   __32	   __64	   _128	"
 		       "   _256	   _512	   __1k	   __2k	   __4k	   __8k	"
@@ -232,22 +230,22 @@ dasd_statistics_read(char *page, char **start, off_t off,
 		       "   __1G	   __2G	   __4G " "   _>4G\n");
 
 	str += sprintf(str, "Histogram of sizes (512B secs)\n");
-	str = dasd_statistics_array(str, prof->dasd_io_secs, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_secs, shift);
 	str += sprintf(str, "Histogram of I/O times (microseconds)\n");
-	str = dasd_statistics_array(str, prof->dasd_io_times, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_times, shift);
 	str += sprintf(str, "Histogram of I/O times per sector\n");
-	str = dasd_statistics_array(str, prof->dasd_io_timps, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_timps, shift);
 	str += sprintf(str, "Histogram of I/O time till ssch\n");
-	str = dasd_statistics_array(str, prof->dasd_io_time1, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_time1, shift);
 	str += sprintf(str, "Histogram of I/O time between ssch and irq\n");
-	str = dasd_statistics_array(str, prof->dasd_io_time2, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_time2, shift);
 	str += sprintf(str, "Histogram of I/O time between ssch "
 			    "and irq per sector\n");
-	str = dasd_statistics_array(str, prof->dasd_io_time2ps, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_time2ps, shift);
 	str += sprintf(str, "Histogram of I/O time between irq and end\n");
-	str = dasd_statistics_array(str, prof->dasd_io_time3, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_time3, shift);
 	str += sprintf(str, "# of req in chanq at enqueuing (1..32) \n");
-	str = dasd_statistics_array(str, prof->dasd_io_nr_req, factor);
+	str = dasd_statistics_array(str, prof->dasd_io_nr_req, shift);
 	len = str - page;
 #else
 	len = sprintf(page, "Statistics are not activated in this kernel\n");

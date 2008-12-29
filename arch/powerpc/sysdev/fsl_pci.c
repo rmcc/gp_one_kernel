@@ -29,8 +29,7 @@
 
 #if defined(CONFIG_PPC_85xx) || defined(CONFIG_PPC_86xx)
 /* atmu setup for fsl pci/pcie controller */
-static void __init setup_pci_atmu(struct pci_controller *hose,
-				  struct resource *rsrc)
+void __init setup_pci_atmu(struct pci_controller *hose, struct resource *rsrc)
 {
 	struct ccsr_pci __iomem *pci;
 	int i;
@@ -87,7 +86,7 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 	out_be32(&pci->piw[2].piwar, PIWAR_2G);
 }
 
-static void __init setup_pci_cmd(struct pci_controller *hose)
+void __init setup_pci_cmd(struct pci_controller *hose)
 {
 	u16 cmd;
 	int cap_x;
@@ -131,7 +130,7 @@ static void __init quirk_fsl_pcie_header(struct pci_dev *dev)
 	return ;
 }
 
-static int __init fsl_pcie_check_link(struct pci_controller *hose)
+int __init fsl_pcie_check_link(struct pci_controller *hose)
 {
 	u32 val;
 	early_read_config_dword(hose, 0, 0, PCIE_LTSSM, &val);
@@ -188,7 +187,7 @@ int __init fsl_add_bridge(struct device_node *dev, int is_primary)
 		printk(KERN_WARNING "Can't get bus-range for %s, assume"
 			" bus 0\n", dev->full_name);
 
-	ppc_pci_add_flags(PPC_PCI_REASSIGN_ALL_BUS);
+	ppc_pci_flags |= PPC_PCI_REASSIGN_ALL_BUS;
 	hose = pcibios_alloc_controller(dev);
 	if (!hose)
 		return -ENOMEM;
@@ -301,7 +300,7 @@ int __init mpc83xx_add_bridge(struct device_node *dev)
 		       " bus 0\n", dev->full_name);
 	}
 
-	ppc_pci_add_flags(PPC_PCI_REASSIGN_ALL_BUS);
+	ppc_pci_flags |= PPC_PCI_REASSIGN_ALL_BUS;
 	hose = pcibios_alloc_controller(dev);
 	if (!hose)
 		return -ENOMEM;

@@ -58,21 +58,21 @@ void thread_group_cputime(
 	struct task_struct *tsk,
 	struct task_cputime *times)
 {
-	struct task_cputime *totals, *tot;
+	struct signal_struct *sig;
 	int i;
+	struct task_cputime *tot;
 
-	totals = tsk->signal->cputime.totals;
-	if (!totals) {
+	sig = tsk->signal;
+	if (unlikely(!sig) || !sig->cputime.totals) {
 		times->utime = tsk->utime;
 		times->stime = tsk->stime;
 		times->sum_exec_runtime = tsk->se.sum_exec_runtime;
 		return;
 	}
-
 	times->stime = times->utime = cputime_zero;
 	times->sum_exec_runtime = 0;
 	for_each_possible_cpu(i) {
-		tot = per_cpu_ptr(totals, i);
+		tot = per_cpu_ptr(tsk->signal->cputime.totals, i);
 		times->utime = cputime_add(times->utime, tot->utime);
 		times->stime = cputime_add(times->stime, tot->stime);
 		times->sum_exec_runtime += tot->sum_exec_runtime;

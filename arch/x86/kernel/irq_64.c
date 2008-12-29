@@ -13,12 +13,12 @@
 #include <linux/seq_file.h>
 #include <linux/module.h>
 #include <linux/delay.h>
-#include <linux/ftrace.h>
-#include <linux/uaccess.h>
-#include <linux/smp.h>
+#include <asm/uaccess.h>
 #include <asm/io_apic.h>
 #include <asm/idle.h>
+#include <asm/smp.h>
 
+#ifdef CONFIG_DEBUG_STACKOVERFLOW
 /*
  * Probabilistic stack overflow check:
  *
@@ -28,25 +28,26 @@
  */
 static inline void stack_overflow_check(struct pt_regs *regs)
 {
-#ifdef CONFIG_DEBUG_STACKOVERFLOW
 	u64 curbase = (u64)task_stack_page(current);
+	static unsigned long warned = -60*HZ;
 
-	WARN_ONCE(regs->sp >= curbase &&
-		  regs->sp <= curbase + THREAD_SIZE &&
-		  regs->sp <  curbase + sizeof(struct thread_info) +
-					sizeof(struct pt_regs) + 128,
-
-		  "do_IRQ: %s near stack overflow (cur:%Lx,sp:%lx)\n",
-			current->comm, curbase, regs->sp);
-#endif
+	if (regs->sp >= curbase && regs->sp <= curbase + THREAD_SIZE &&
+	    regs->sp <  curbase + sizeof(struct thread_info) + 128 &&
+	    time_after(jiffies, warned + 60*HZ)) {
+		printk("do_IRQ: %s near stack overflow (cur:%Lx,sp:%lx)\n",
+		       current->comm, curbase, regs->sp);
+		show_stack(NULL,NULL);
+		warned = jiffies;
+	}
 }
+#endif
 
 /*
  * do_IRQ handles all normal device IRQ's (the special
  * SMP cross-CPU interrupts have their own specific
  * handlers).
  */
-asmlinkage unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
+asmlinkage unsigned int do_IRQ(struct pt_regs *regs)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 	struct irq_desc *desc;
@@ -59,7 +60,9 @@ asmlinkage unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 	irq_enter();
 	irq = __get_cpu_var(vector_irq)[vector];
 
+#ifdef CONFIG_DEBUG_STACKOVERFLOW
 	stack_overflow_check(regs);
+#endif
 
 	desc = irq_to_desc(irq);
 	if (likely(desc))
@@ -80,17 +83,16 @@ asmlinkage unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
-/* A cpu has been removed from cpu_online_mask.  Reset irq affinities. */
-void fixup_irqs(void)
+void fixup_irqs(cpumask_t map)
 {
 	unsigned int irq;
 	static int warned;
 	struct irq_desc *desc;
 
 	for_each_irq_desc(irq, desc) {
+		cpumask_t mask;
 		int break_affinity = 0;
 		int set_affinity = 1;
-		const struct cpumask *affinity;
 
 		if (!desc)
 			continue;
@@ -100,23 +102,23 @@ void fixup_irqs(void)
 		/* interrupt's are disabled at this point */
 		spin_lock(&desc->lock);
 
-		affinity = &desc->affinity;
 		if (!irq_has_action(irq) ||
-		    cpumask_equal(affinity, cpu_online_mask)) {
+		    cpus_equal(desc->affinity, map)) {
 			spin_unlock(&desc->lock);
 			continue;
 		}
 
-		if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids) {
+		cpus_and(mask, desc->affinity, map);
+		if (cpus_empty(mask)) {
 			break_affinity = 1;
-			affinity = cpu_all_mask;
+			mask = map;
 		}
 
 		if (desc->chip->mask)
 			desc->chip->mask(irq);
 
 		if (desc->chip->set_affinity)
-			desc->chip->set_affinity(irq, affinity);
+			desc->chip->set_affinity(irq, mask);
 		else if (!(warned++))
 			set_affinity = 0;
 
@@ -142,18 +144,18 @@ extern void call_softirq(void);
 
 asmlinkage void do_softirq(void)
 {
-	__u32 pending;
-	unsigned long flags;
+ 	__u32 pending;
+ 	unsigned long flags;
 
-	if (in_interrupt())
-		return;
+ 	if (in_interrupt())
+ 		return;
 
-	local_irq_save(flags);
-	pending = local_softirq_pending();
-	/* Switch to interrupt stack */
-	if (pending) {
+ 	local_irq_save(flags);
+ 	pending = local_softirq_pending();
+ 	/* Switch to interrupt stack */
+ 	if (pending) {
 		call_softirq();
 		WARN_ON_ONCE(softirq_count());
 	}
-	local_irq_restore(flags);
+ 	local_irq_restore(flags);
 }

@@ -127,6 +127,7 @@
 #include <asm/irq.h>
 #include <asm/traps.h>
 #include <asm/bootinfo.h>
+#include <asm/machw.h>
 #include <asm/macintosh.h>
 #include <asm/mac_via.h>
 #include <asm/mac_psc.h>
@@ -214,8 +215,8 @@ irqreturn_t mac_debug_handler(int, void *);
 
 /* #define DEBUG_MACINTS */
 
-void mac_enable_irq(unsigned int irq);
-void mac_disable_irq(unsigned int irq);
+static void mac_enable_irq(unsigned int irq);
+static void mac_disable_irq(unsigned int irq);
 
 static struct irq_controller mac_irq_controller = {
 	.name		= "mac",
@@ -274,7 +275,7 @@ void __init mac_init_IRQ(void)
  * These routines are just dispatchers to the VIA/OSS/PSC routines.
  */
 
-void mac_enable_irq(unsigned int irq)
+static void mac_enable_irq(unsigned int irq)
 {
 	int irq_src = IRQ_SRC(irq);
 
@@ -307,7 +308,7 @@ void mac_enable_irq(unsigned int irq)
 	}
 }
 
-void mac_disable_irq(unsigned int irq)
+static void mac_disable_irq(unsigned int irq)
 {
 	int irq_src = IRQ_SRC(irq);
 

@@ -150,8 +150,8 @@ static int cbe_nr_iommus;
 static void invalidate_tce_cache(struct cbe_iommu *iommu, unsigned long *pte,
 		long n_ptes)
 {
-	u64 __iomem *reg;
-	u64 val;
+	unsigned long __iomem *reg;
+	unsigned long val;
 	long n;
 
 	reg = iommu->xlate_regs + IOC_IOPT_CacheInvd;
@@ -1053,7 +1053,10 @@ static int __init cell_iommu_fixed_mapping_init(void)
 	}
 
 	/* We must have dma-ranges properties for fixed mapping to work */
-	np = of_find_node_with_property(NULL, "dma-ranges");
+	for (np = NULL; (np = of_find_all_nodes(np));) {
+		if (of_find_property(np, "dma-ranges", NULL))
+			break;
+	}
 	of_node_put(np);
 
 	if (!np) {

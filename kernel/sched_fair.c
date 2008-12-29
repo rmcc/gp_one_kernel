@@ -386,6 +386,20 @@ int sched_nr_latency_handler(struct ctl_table *table, int write,
 #endif
 
 /*
+ * delta *= P[w / rw]
+ */
+static inline unsigned long
+calc_delta_weight(unsigned long delta, struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		delta = calc_delta_mine(delta,
+				se->load.weight, &cfs_rq_of(se)->load);
+	}
+
+	return delta;
+}
+
+/*
  * delta /= w
  */
 static inline unsigned long
@@ -426,20 +440,12 @@ static u64 __sched_period(unsigned long nr_running)
  */
 static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	u64 slice = __sched_period(cfs_rq->nr_running + !se->on_rq);
+	unsigned long nr_running = cfs_rq->nr_running;
 
-	for_each_sched_entity(se) {
-		struct load_weight *load = &cfs_rq->load;
+	if (unlikely(!se->on_rq))
+		nr_running++;
 
-		if (unlikely(!se->on_rq)) {
-			struct load_weight lw = cfs_rq->load;
-
-			update_load_add(&lw, se->load.weight);
-			load = &lw;
-		}
-		slice = calc_delta_mine(slice, se->load.weight, load);
-	}
-	return slice;
+	return calc_delta_weight(__sched_period(nr_running), se);
 }
 
 /*
@@ -486,8 +492,6 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	 * overflow on 32 bits):
 	 */
 	delta_exec = (unsigned long)(now - curr->exec_start);
-	if (!delta_exec)
-		return;
 
 	__update_curr(cfs_rq, curr, delta_exec);
 	curr->exec_start = now;
@@ -1013,33 +1017,16 @@ static void yield_task_fair(struct rq *rq)
  * search starts with cpus closest then further out as needed,
  * so we always favor a closer, idle cpu.
  * Domains may include CPUs that are not usable for migration,
- * hence we need to mask them out (cpu_active_mask)
+ * hence we need to mask them out (cpu_active_map)
  *
  * Returns the CPU we should wake onto.
  */
 #if defined(ARCH_HAS_SCHED_WAKE_IDLE)
 static int wake_idle(int cpu, struct task_struct *p)
 {
+	cpumask_t tmp;
 	struct sched_domain *sd;
 	int i;
-	unsigned int chosen_wakeup_cpu;
-	int this_cpu;
-
-	/*
-	 * At POWERSAVINGS_BALANCE_WAKEUP level, if both this_cpu and prev_cpu
-	 * are idle and this is not a kernel thread and this task's affinity
-	 * allows it to be moved to preferred cpu, then just move!
-	 */
-
-	this_cpu = smp_processor_id();
-	chosen_wakeup_cpu =
-		cpu_rq(this_cpu)->rd->sched_mc_preferred_wakeup_cpu;
-
-	if (sched_mc_power_savings >= POWERSAVINGS_BALANCE_WAKEUP &&
-		idle_cpu(cpu) && idle_cpu(this_cpu) &&
-		p->mm && !(p->flags & PF_KTHREAD) &&
-		cpu_isset(chosen_wakeup_cpu, p->cpus_allowed))
-		return chosen_wakeup_cpu;
 
 	/*
 	 * If it is idle, then it is the best cpu to run this task.
@@ -1057,9 +1044,10 @@ static int wake_idle(int cpu, struct task_struct *p)
 		if ((sd->flags & SD_WAKE_IDLE)
 		    || ((sd->flags & SD_WAKE_IDLE_FAR)
 			&& !task_hot(p, task_rq(p)->clock, sd))) {
-			for_each_cpu_and(i, sched_domain_span(sd),
-					 &p->cpus_allowed) {
-				if (cpu_active(i) && idle_cpu(i)) {
+			cpus_and(tmp, sd->span, p->cpus_allowed);
+			cpus_and(tmp, tmp, cpu_active_map);
+			for_each_cpu_mask_nr(i, tmp) {
+				if (idle_cpu(i)) {
 					if (i != task_cpu(p)) {
 						schedstat_inc(p,
 						       se.nr_wakeups_idle);
@@ -1252,13 +1240,13 @@ static int select_task_rq_fair(struct task_struct *p, int sync)
 	 * this_cpu and prev_cpu are present in:
 	 */
 	for_each_domain(this_cpu, sd) {
-		if (cpumask_test_cpu(prev_cpu, sched_domain_span(sd))) {
+		if (cpu_isset(prev_cpu, sd->span)) {
 			this_sd = sd;
 			break;
 		}
 	}
 
-	if (unlikely(!cpumask_test_cpu(this_cpu, &p->cpus_allowed)))
+	if (unlikely(!cpu_isset(this_cpu, p->cpus_allowed)))
 		goto out;
 
 	/*
@@ -1357,11 +1345,12 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int sync)
 {
 	struct task_struct *curr = rq->curr;
 	struct sched_entity *se = &curr->se, *pse = &p->se;
-	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
-
-	update_curr(cfs_rq);
 
 	if (unlikely(rt_prio(p->prio))) {
+		struct cfs_rq *cfs_rq = task_cfs_rq(curr);
+
+		update_rq_clock(rq);
+		update_curr(cfs_rq);
 		resched_task(curr);
 		return;
 	}
@@ -1616,6 +1605,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 		entity_tick(cfs_rq, se, queued);
 	}
 }
+
+#define swap(a, b) do { typeof(a) tmp = (a); (a) = (b); (b) = tmp; } while (0)
 
 /*
  * Share the fairness runtime between parent and child, thus the

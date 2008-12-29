@@ -77,7 +77,7 @@ static int ses_recv_diag(struct scsi_device *sdev, int page_code,
 	};
 
 	return scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf, bufflen,
-				NULL, SES_TIMEOUT, SES_RETRIES, NULL);
+				NULL, SES_TIMEOUT, SES_RETRIES);
 }
 
 static int ses_send_diag(struct scsi_device *sdev, int page_code,
@@ -95,7 +95,7 @@ static int ses_send_diag(struct scsi_device *sdev, int page_code,
 	};
 
 	result = scsi_execute_req(sdev, cmd, DMA_TO_DEVICE, buf, bufflen,
-				  NULL, SES_TIMEOUT, SES_RETRIES, NULL);
+				  NULL, SES_TIMEOUT, SES_RETRIES);
 	if (result)
 		sdev_printk(KERN_ERR, sdev, "SEND DIAGNOSTIC result: %8x\n",
 			    result);
@@ -369,8 +369,7 @@ static void ses_match_to_enclosure(struct enclosure_device *edev,
 		return;
 
 	if (scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf,
-			     VPD_INQUIRY_SIZE, NULL, SES_TIMEOUT, SES_RETRIES,
-			     NULL))
+			     VPD_INQUIRY_SIZE, NULL, SES_TIMEOUT, SES_RETRIES))
 		goto free;
 
 	vpd_len = (buf[2] << 8) + buf[3];
@@ -381,7 +380,7 @@ static void ses_match_to_enclosure(struct enclosure_device *edev,
 	cmd[3] = vpd_len >> 8;
 	cmd[4] = vpd_len & 0xff;
 	if (scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf,
-			     vpd_len, NULL, SES_TIMEOUT, SES_RETRIES, NULL))
+			     vpd_len, NULL, SES_TIMEOUT, SES_RETRIES))
 		goto free;
 
 	desc = buf + 4;
@@ -526,7 +525,7 @@ static int ses_intf_add(struct device *cdev,
 	if (!scomp)
 		goto err_free;
 
-	edev = enclosure_register(cdev->parent, dev_name(&sdev->sdev_gendev),
+	edev = enclosure_register(cdev->parent, sdev->sdev_gendev.bus_id,
 				  components, &ses_enclosure_callbacks);
 	if (IS_ERR(edev)) {
 		err = PTR_ERR(edev);

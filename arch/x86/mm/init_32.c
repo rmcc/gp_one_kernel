@@ -21,7 +21,6 @@
 #include <linux/init.h>
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
-#include <linux/pci.h>
 #include <linux/pfn.h>
 #include <linux/poison.h>
 #include <linux/bootmem.h>
@@ -68,7 +67,7 @@ static unsigned long __meminitdata table_top;
 
 static int __initdata after_init_bootmem;
 
-static __init void *alloc_low_page(void)
+static __init void *alloc_low_page(unsigned long *phys)
 {
 	unsigned long pfn = table_end++;
 	void *adr;
@@ -78,6 +77,7 @@ static __init void *alloc_low_page(void)
 
 	adr = __va(pfn * PAGE_SIZE);
 	memset(adr, 0, PAGE_SIZE);
+	*phys  = pfn * PAGE_SIZE;
 	return adr;
 }
 
@@ -92,17 +92,16 @@ static pmd_t * __init one_md_table_init(pgd_t *pgd)
 	pmd_t *pmd_table;
 
 #ifdef CONFIG_X86_PAE
+	unsigned long phys;
 	if (!(pgd_val(*pgd) & _PAGE_PRESENT)) {
 		if (after_init_bootmem)
 			pmd_table = (pmd_t *)alloc_bootmem_low_pages(PAGE_SIZE);
 		else
-			pmd_table = (pmd_t *)alloc_low_page();
+			pmd_table = (pmd_t *)alloc_low_page(&phys);
 		paravirt_alloc_pmd(&init_mm, __pa(pmd_table) >> PAGE_SHIFT);
 		set_pgd(pgd, __pgd(__pa(pmd_table) | _PAGE_PRESENT));
 		pud = pud_offset(pgd, 0);
 		BUG_ON(pmd_table != pmd_offset(pud, 0));
-
-		return pmd_table;
 	}
 #endif
 	pud = pud_offset(pgd, 0);
@@ -127,8 +126,10 @@ static pte_t * __init one_page_table_init(pmd_t *pmd)
 			if (!page_table)
 				page_table =
 				(pte_t *)alloc_bootmem_low_pages(PAGE_SIZE);
-		} else
-			page_table = (pte_t *)alloc_low_page();
+		} else {
+			unsigned long phys;
+			page_table = (pte_t *)alloc_low_page(&phys);
+		}
 
 		paravirt_alloc_pte(&init_mm, __pa(page_table) >> PAGE_SHIFT);
 		set_pmd(pmd, __pmd(__pa(page_table) | _PAGE_TABLE));
@@ -328,8 +329,6 @@ int devmem_is_allowed(unsigned long pagenr)
 {
 	if (pagenr <= 256)
 		return 1;
-	if (iomem_is_exclusive(pagenr << PAGE_SHIFT))
-		return 0;
 	if (!page_is_ram(pagenr))
 		return 1;
 	return 0;
@@ -437,12 +436,8 @@ static void __init set_highmem_pages_init(void)
 #endif /* !CONFIG_NUMA */
 
 #else
-static inline void permanent_kmaps_init(pgd_t *pgd_base)
-{
-}
-static inline void set_highmem_pages_init(void)
-{
-}
+# define permanent_kmaps_init(pgd_base)		do { } while (0)
+# define set_highmem_pages_init()	do { } while (0)
 #endif /* CONFIG_HIGHMEM */
 
 void __init native_pagetable_setup_start(pgd_t *base)
@@ -974,7 +969,7 @@ void __init mem_init(void)
 	int codesize, reservedpages, datasize, initsize;
 	int tmp;
 
-	pci_iommu_alloc();
+	start_periodic_check_for_corruption();
 
 #ifdef CONFIG_FLATMEM
 	BUG_ON(!mem_map);
@@ -1045,25 +1040,11 @@ void __init mem_init(void)
 		(unsigned long)&_text, (unsigned long)&_etext,
 		((unsigned long)&_etext - (unsigned long)&_text) >> 10);
 
-	/*
-	 * Check boundaries twice: Some fundamental inconsistencies can
-	 * be detected at build time already.
-	 */
-#define __FIXADDR_TOP (-PAGE_SIZE)
-#ifdef CONFIG_HIGHMEM
-	BUILD_BUG_ON(PKMAP_BASE + LAST_PKMAP*PAGE_SIZE	> FIXADDR_START);
-	BUILD_BUG_ON(VMALLOC_END			> PKMAP_BASE);
-#endif
-#define high_memory (-128UL << 20)
-	BUILD_BUG_ON(VMALLOC_START			>= VMALLOC_END);
-#undef high_memory
-#undef __FIXADDR_TOP
-
 #ifdef CONFIG_HIGHMEM
 	BUG_ON(PKMAP_BASE + LAST_PKMAP*PAGE_SIZE	> FIXADDR_START);
 	BUG_ON(VMALLOC_END				> PKMAP_BASE);
 #endif
-	BUG_ON(VMALLOC_START				>= VMALLOC_END);
+	BUG_ON(VMALLOC_START				> VMALLOC_END);
 	BUG_ON((unsigned long)high_memory		> VMALLOC_START);
 
 	if (boot_cpu_data.wp_works_ok < 0)
@@ -1081,7 +1062,7 @@ int arch_add_memory(int nid, u64 start, u64 size)
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 
-	return __add_pages(nid, zone, start_pfn, nr_pages);
+	return __add_pages(zone, start_pfn, nr_pages);
 }
 #endif
 

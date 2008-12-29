@@ -788,6 +788,7 @@ static int tsi108_complete_rx(struct net_device *dev, int budget)
 		skb_put(skb, data->rxring[rx].len);
 		skb->protocol = eth_type_trans(skb, dev);
 		netif_receive_skb(skb);
+		dev->last_rx = jiffies;
 	}
 
 	return done;
@@ -888,7 +889,7 @@ static int tsi108_poll(struct napi_struct *napi, int budget)
 
 	if (num_received < budget) {
 		data->rxpending = 0;
-		netif_rx_complete(napi);
+		netif_rx_complete(dev, napi);
 
 		TSI_WRITE(TSI108_EC_INTMASK,
 				     TSI_READ(TSI108_EC_INTMASK)
@@ -919,7 +920,7 @@ static void tsi108_rx_int(struct net_device *dev)
 	 * from tsi108_check_rxring().
 	 */
 
-	if (netif_rx_schedule_prep(&data->napi)) {
+	if (netif_rx_schedule_prep(dev, &data->napi)) {
 		/* Mask, rather than ack, the receive interrupts.  The ack
 		 * will happen in tsi108_poll().
 		 */
@@ -930,7 +931,7 @@ static void tsi108_rx_int(struct net_device *dev)
 				     | TSI108_INT_RXTHRESH |
 				     TSI108_INT_RXOVERRUN | TSI108_INT_RXERROR |
 				     TSI108_INT_RXWAIT);
-		__netif_rx_schedule(&data->napi);
+		__netif_rx_schedule(dev, &data->napi);
 	} else {
 		if (!netif_running(dev)) {
 			/* This can happen if an interrupt occurs while the
@@ -1568,6 +1569,7 @@ tsi108_init_one(struct platform_device *pdev)
 	struct tsi108_prv_data *data = NULL;
 	hw_info *einfo;
 	int err = 0;
+	DECLARE_MAC_BUF(mac);
 
 	einfo = pdev->dev.platform_data;
 
@@ -1657,8 +1659,8 @@ tsi108_init_one(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, dev);
-	printk(KERN_INFO "%s: Tsi108 Gigabit Ethernet, MAC: %pM\n",
-	       dev->name, dev->dev_addr);
+	printk(KERN_INFO "%s: Tsi108 Gigabit Ethernet, MAC: %s\n",
+	       dev->name, print_mac(mac, dev->dev_addr));
 #ifdef DEBUG
 	data->msg_enable = DEBUG;
 	dump_eth_one(dev);

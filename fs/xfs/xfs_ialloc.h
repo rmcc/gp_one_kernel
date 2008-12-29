@@ -20,7 +20,6 @@
 
 struct xfs_buf;
 struct xfs_dinode;
-struct xfs_imap;
 struct xfs_mount;
 struct xfs_trans;
 
@@ -57,6 +56,7 @@ static inline int xfs_ialloc_find_free(xfs_inofree_t *fp)
 }
 
 
+#ifdef __KERNEL__
 /*
  * Allocate an inode on disk.
  * Mode is used to tell whether the new inode will need space, and whether
@@ -105,14 +105,17 @@ xfs_difree(
 	xfs_ino_t	*first_ino);	/* first inode in deleted cluster */
 
 /*
- * Return the location of the inode in imap, for mapping it into a buffer.
+ * Return the location of the inode in bno/len/off,
+ * for mapping it into a buffer.
  */
 int
-xfs_imap(
+xfs_dilocate(
 	struct xfs_mount *mp,		/* file system mount structure */
 	struct xfs_trans *tp,		/* transaction pointer */
 	xfs_ino_t	ino,		/* inode to locate */
-	struct xfs_imap	*imap,		/* location map structure */
+	xfs_fsblock_t	*bno,		/* output: block containing inode */
+	int		*len,		/* output: num blocks in cluster*/
+	int		*off,		/* output: index in block of inode */
 	uint		flags);		/* flags for inode btree lookup */
 
 /*
@@ -151,24 +154,6 @@ xfs_ialloc_pagi_init(
 	struct xfs_trans *tp,		/* transaction pointer */
         xfs_agnumber_t  agno);		/* allocation group number */
 
-/*
- * Lookup the first record greater than or equal to ino
- * in the btree given by cur.
- */
-int xfs_inobt_lookup_ge(struct xfs_btree_cur *cur, xfs_agino_t ino,
-		__int32_t fcnt,	xfs_inofree_t free, int *stat);
-
-/*
- * Lookup the first record less than or equal to ino
- * in the btree given by cur.
- */
-int xfs_inobt_lookup_le(struct xfs_btree_cur *cur, xfs_agino_t ino,
-		__int32_t fcnt,	xfs_inofree_t free, int *stat);
-
-/*
- * Get the data from the pointed-to record.
- */
-extern int xfs_inobt_get_rec(struct xfs_btree_cur *cur, xfs_agino_t *ino,
-			     __int32_t *fcnt, xfs_inofree_t *free, int *stat);
+#endif	/* __KERNEL__ */
 
 #endif	/* __XFS_IALLOC_H__ */

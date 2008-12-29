@@ -14,7 +14,6 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
-#include <linux/kernel.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -24,6 +23,13 @@
 #include <asm/dma.h>
 
 #include "davinci-pcm.h"
+
+#define DAVINCI_PCM_DEBUG 0
+#if DAVINCI_PCM_DEBUG
+#define DPRINTK(x...) printk(KERN_DEBUG x)
+#else
+#define DPRINTK(x...)
+#endif
 
 static struct snd_pcm_hardware davinci_pcm_hardware = {
 	.info = (SNDRV_PCM_INFO_INTERLEAVED | SNDRV_PCM_INFO_BLOCK_TRANSFER |
@@ -72,8 +78,8 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 	dma_offset = prtd->period * period_size;
 	dma_pos = runtime->dma_addr + dma_offset;
 
-	pr_debug("davinci_pcm: audio_set_dma_params_play channel = %d "
-		"dma_ptr = %x period_size=%x\n", lch, dma_pos, period_size);
+	DPRINTK("audio_set_dma_params_play channel = %d dma_ptr = %x "
+		"period_size=%x\n", lch, dma_pos, period_size);
 
 	data_type = prtd->params->data_type;
 	count = period_size / data_type;
@@ -106,7 +112,7 @@ static void davinci_pcm_dma_irq(int lch, u16 ch_status, void *data)
 	struct snd_pcm_substream *substream = data;
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
 
-	pr_debug("davinci_pcm: lch=%d, status=0x%x\n", lch, ch_status);
+	DPRINTK("lch=%d, status=0x%x\n", lch, ch_status);
 
 	if (unlikely(ch_status != DMA_COMPLETE))
 		return;
@@ -212,7 +218,7 @@ davinci_pcm_pointer(struct snd_pcm_substream *substream)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		count = src - runtime->dma_addr;
 	else
-		count = dst - runtime->dma_addr;
+		count = dst - runtime->dma_addr;;
 
 	spin_unlock(&prtd->lock);
 
@@ -310,8 +316,8 @@ static int davinci_pcm_preallocate_dma_buffer(struct snd_pcm *pcm, int stream)
 	buf->area = dma_alloc_writecombine(pcm->card->dev, size,
 					   &buf->addr, GFP_KERNEL);
 
-	pr_debug("davinci_pcm: preallocate_dma_buffer: area=%p, addr=%p, "
-		"size=%d\n", (void *) buf->area, (void *) buf->addr, size);
+	DPRINTK("preallocate_dma_buffer: area=%p, addr=%p, size=%d\n",
+		(void *) buf->area, (void *) buf->addr, size);
 
 	if (!buf->area)
 		return -ENOMEM;
@@ -377,18 +383,6 @@ struct snd_soc_platform davinci_soc_platform = {
 	.pcm_free = 	davinci_pcm_free,
 };
 EXPORT_SYMBOL_GPL(davinci_soc_platform);
-
-static int __init davinci_soc_platform_init(void)
-{
-	return snd_soc_register_platform(&davinci_soc_platform);
-}
-module_init(davinci_soc_platform_init);
-
-static void __exit davinci_soc_platform_exit(void)
-{
-	snd_soc_unregister_platform(&davinci_soc_platform);
-}
-module_exit(davinci_soc_platform_exit);
 
 MODULE_AUTHOR("Vladimir Barinov");
 MODULE_DESCRIPTION("TI DAVINCI PCM DMA module");

@@ -24,6 +24,7 @@
 #define BOOTINFO_COMPAT_1_0
 #include <asm/setup.h>
 #include <asm/bootinfo.h>
+#include <asm/machw.h>
 #include <asm/macints.h>
 
 extern unsigned long mac_videobase;
