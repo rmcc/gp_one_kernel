@@ -92,12 +92,11 @@ struct futex_pi_state {
  * A futex_q has a woken state, just like tasks have TASK_RUNNING.
  * It is considered woken when plist_node_empty(&q->list) || q->lock_ptr == 0.
  * The order of wakup is always to make the first condition true, then
- * wake up q->waiter, then make the second condition true.
+ * wake up q->waiters, then make the second condition true.
  */
 struct futex_q {
 	struct plist_node list;
-	/* There can only be a single waiter */
-	wait_queue_head_t waiter;
+	wait_queue_head_t waiters;
 
 	/* Which hash list lock to use: */
 	spinlock_t *lock_ptr;
@@ -170,11 +169,8 @@ static void get_futex_key_refs(union futex_key *key)
  */
 static void drop_futex_key_refs(union futex_key *key)
 {
-	if (!key->both.ptr) {
-		/* If we're here then we tried to put a key we failed to get */
-		WARN_ON_ONCE(1);
+	if (!key->both.ptr)
 		return;
-	}
 
 	switch (key->both.offset & (FUT_OFF_INODE|FUT_OFF_MMSHARED)) {
 	case FUT_OFF_INODE:
@@ -409,20 +405,13 @@ static void free_pi_state(struct futex_pi_state *pi_state)
 static struct task_struct * futex_find_get_task(pid_t pid)
 {
 	struct task_struct *p;
-	const struct cred *cred = current_cred(), *pcred;
 
 	rcu_read_lock();
 	p = find_task_by_vpid(pid);
-	if (!p) {
+	if (!p || ((current->euid != p->euid) && (current->euid != p->uid)))
 		p = ERR_PTR(-ESRCH);
-	} else {
-		pcred = __task_cred(p);
-		if (cred->euid != pcred->euid &&
-		    cred->euid != pcred->uid)
-			p = ERR_PTR(-ESRCH);
-		else
-			get_task_struct(p);
-	}
+	else
+		get_task_struct(p);
 
 	rcu_read_unlock();
 
@@ -584,7 +573,7 @@ static void wake_futex(struct futex_q *q)
 	 * The lock in wake_up_all() is a crucial memory barrier after the
 	 * plist_del() and also before assigning to q->lock_ptr.
 	 */
-	wake_up(&q->waiter);
+	wake_up_all(&q->waiters);
 	/*
 	 * The waiting task can free the futex_q as soon as this is written,
 	 * without taking any locks.  This must come last.
@@ -733,8 +722,8 @@ static int futex_wake(u32 __user *uaddr, int fshared, int nr_wake, u32 bitset)
 	}
 
 	spin_unlock(&hb->lock);
-	put_futex_key(fshared, &key);
 out:
+	put_futex_key(fshared, &key);
 	return ret;
 }
 
@@ -758,7 +747,7 @@ retryfull:
 		goto out;
 	ret = get_futex_key(uaddr2, fshared, &key2);
 	if (unlikely(ret != 0))
-		goto out_put_key1;
+		goto out;
 
 	hb1 = hash_futex(&key1);
 	hb2 = hash_futex(&key2);
@@ -780,12 +769,12 @@ retry:
 		 * but we might get them from range checking
 		 */
 		ret = op_ret;
-		goto out_put_keys;
+		goto out;
 #endif
 
 		if (unlikely(op_ret != -EFAULT)) {
 			ret = op_ret;
-			goto out_put_keys;
+			goto out;
 		}
 
 		/*
@@ -799,7 +788,7 @@ retry:
 			ret = futex_handle_fault((unsigned long)uaddr2,
 						 attempt);
 			if (ret)
-				goto out_put_keys;
+				goto out;
 			goto retry;
 		}
 
@@ -837,11 +826,10 @@ retry:
 	spin_unlock(&hb1->lock);
 	if (hb1 != hb2)
 		spin_unlock(&hb2->lock);
-out_put_keys:
-	put_futex_key(fshared, &key2);
-out_put_key1:
-	put_futex_key(fshared, &key1);
 out:
+	put_futex_key(fshared, &key2);
+	put_futex_key(fshared, &key1);
+
 	return ret;
 }
 
@@ -858,13 +846,13 @@ static int futex_requeue(u32 __user *uaddr1, int fshared, u32 __user *uaddr2,
 	struct futex_q *this, *next;
 	int ret, drop_count = 0;
 
-retry:
+ retry:
 	ret = get_futex_key(uaddr1, fshared, &key1);
 	if (unlikely(ret != 0))
 		goto out;
 	ret = get_futex_key(uaddr2, fshared, &key2);
 	if (unlikely(ret != 0))
-		goto out_put_key1;
+		goto out;
 
 	hb1 = hash_futex(&key1);
 	hb2 = hash_futex(&key2);
@@ -886,7 +874,7 @@ retry:
 			if (!ret)
 				goto retry;
 
-			goto out_put_keys;
+			return ret;
 		}
 		if (curval != *cmpval) {
 			ret = -EAGAIN;
@@ -931,11 +919,9 @@ out_unlock:
 	while (--drop_count >= 0)
 		drop_futex_key_refs(&key1);
 
-out_put_keys:
-	put_futex_key(fshared, &key2);
-out_put_key1:
-	put_futex_key(fshared, &key1);
 out:
+	put_futex_key(fshared, &key2);
+	put_futex_key(fshared, &key1);
 	return ret;
 }
 
@@ -944,7 +930,7 @@ static inline struct futex_hash_bucket *queue_lock(struct futex_q *q)
 {
 	struct futex_hash_bucket *hb;
 
-	init_waitqueue_head(&q->waiter);
+	init_waitqueue_head(&q->waiters);
 
 	get_futex_key_refs(&q->key);
 	hb = hash_futex(&q->key);
@@ -996,7 +982,7 @@ static int unqueue_me(struct futex_q *q)
 	int ret = 0;
 
 	/* In the common case we don't take the spinlock, which is nice. */
-retry:
+ retry:
 	lock_ptr = q->lock_ptr;
 	barrier();
 	if (lock_ptr != NULL) {
@@ -1156,16 +1142,14 @@ handle_fault:
  * In case we must use restart_block to restart a futex_wait,
  * we encode in the 'flags' shared capability
  */
-#define FLAGS_SHARED		0x01
-#define FLAGS_CLOCKRT		0x02
+#define FLAGS_SHARED  1
 
 static long futex_wait_restart(struct restart_block *restart);
 
 static int futex_wait(u32 __user *uaddr, int fshared,
-		      u32 val, ktime_t *abs_time, u32 bitset, int clockrt)
+		      u32 val, ktime_t *abs_time, u32 bitset)
 {
 	struct task_struct *curr = current;
-	struct restart_block *restart;
 	DECLARE_WAITQUEUE(wait, curr);
 	struct futex_hash_bucket *hb;
 	struct futex_q q;
@@ -1179,11 +1163,11 @@ static int futex_wait(u32 __user *uaddr, int fshared,
 
 	q.pi_state = NULL;
 	q.bitset = bitset;
-retry:
+ retry:
 	q.key = FUTEX_KEY_INIT;
 	ret = get_futex_key(uaddr, fshared, &q.key);
 	if (unlikely(ret != 0))
-		goto out;
+		goto out_release_sem;
 
 	hb = queue_lock(&q);
 
@@ -1211,19 +1195,16 @@ retry:
 
 	if (unlikely(ret)) {
 		queue_unlock(&q, hb);
-		put_futex_key(fshared, &q.key);
 
 		ret = get_user(uval, uaddr);
 
 		if (!ret)
 			goto retry;
-		goto out;
+		return ret;
 	}
 	ret = -EWOULDBLOCK;
-	if (unlikely(uval != val)) {
-		queue_unlock(&q, hb);
-		goto out_put_key;
-	}
+	if (uval != val)
+		goto out_unlock_release_sem;
 
 	/* Only actually queue if *uaddr contained val.  */
 	queue_me(&q, hb);
@@ -1239,7 +1220,7 @@ retry:
 
 	/* add_wait_queue is the barrier after __set_current_state. */
 	__set_current_state(TASK_INTERRUPTIBLE);
-	add_wait_queue(&q.waiter, &wait);
+	add_wait_queue(&q.waiters, &wait);
 	/*
 	 * !plist_node_empty() is safe here without any lock.
 	 * q.lock_ptr != 0 is not safe, because of ordering against wakeup.
@@ -1252,10 +1233,8 @@ retry:
 			slack = current->timer_slack_ns;
 			if (rt_task(current))
 				slack = 0;
-			hrtimer_init_on_stack(&t.timer,
-					      clockrt ? CLOCK_REALTIME :
-					      CLOCK_MONOTONIC,
-					      HRTIMER_MODE_ABS);
+			hrtimer_init_on_stack(&t.timer, CLOCK_MONOTONIC,
+						HRTIMER_MODE_ABS);
 			hrtimer_init_sleeper(&t, current);
 			hrtimer_set_expires_range_ns(&t.timer, *abs_time, slack);
 
@@ -1287,39 +1266,37 @@ retry:
 	 */
 
 	/* If we were woken (and unqueued), we succeeded, whatever. */
-	ret = 0;
 	if (!unqueue_me(&q))
-		goto out_put_key;
-	ret = -ETIMEDOUT;
+		return 0;
 	if (rem)
-		goto out_put_key;
+		return -ETIMEDOUT;
 
 	/*
 	 * We expect signal_pending(current), but another thread may
 	 * have handled it for us already.
 	 */
-	ret = -ERESTARTSYS;
 	if (!abs_time)
-		goto out_put_key;
+		return -ERESTARTSYS;
+	else {
+		struct restart_block *restart;
+		restart = &current_thread_info()->restart_block;
+		restart->fn = futex_wait_restart;
+		restart->futex.uaddr = (u32 *)uaddr;
+		restart->futex.val = val;
+		restart->futex.time = abs_time->tv64;
+		restart->futex.bitset = bitset;
+		restart->futex.flags = 0;
 
-	restart = &current_thread_info()->restart_block;
-	restart->fn = futex_wait_restart;
-	restart->futex.uaddr = (u32 *)uaddr;
-	restart->futex.val = val;
-	restart->futex.time = abs_time->tv64;
-	restart->futex.bitset = bitset;
-	restart->futex.flags = 0;
+		if (fshared)
+			restart->futex.flags |= FLAGS_SHARED;
+		return -ERESTART_RESTARTBLOCK;
+	}
 
-	if (fshared)
-		restart->futex.flags |= FLAGS_SHARED;
-	if (clockrt)
-		restart->futex.flags |= FLAGS_CLOCKRT;
+ out_unlock_release_sem:
+	queue_unlock(&q, hb);
 
-	ret = -ERESTART_RESTARTBLOCK;
-
-out_put_key:
+ out_release_sem:
 	put_futex_key(fshared, &q.key);
-out:
 	return ret;
 }
 
@@ -1335,8 +1312,7 @@ static long futex_wait_restart(struct restart_block *restart)
 	if (restart->futex.flags & FLAGS_SHARED)
 		fshared = 1;
 	return (long)futex_wait(uaddr, fshared, restart->futex.val, &t,
-				restart->futex.bitset,
-				restart->futex.flags & FLAGS_CLOCKRT);
+				restart->futex.bitset);
 }
 
 
@@ -1368,16 +1344,16 @@ static int futex_lock_pi(u32 __user *uaddr, int fshared,
 	}
 
 	q.pi_state = NULL;
-retry:
+ retry:
 	q.key = FUTEX_KEY_INIT;
 	ret = get_futex_key(uaddr, fshared, &q.key);
 	if (unlikely(ret != 0))
-		goto out;
+		goto out_release_sem;
 
-retry_unlocked:
+ retry_unlocked:
 	hb = queue_lock(&q);
 
-retry_locked:
+ retry_locked:
 	ret = lock_taken = 0;
 
 	/*
@@ -1398,14 +1374,14 @@ retry_locked:
 	 */
 	if (unlikely((curval & FUTEX_TID_MASK) == task_pid_vnr(current))) {
 		ret = -EDEADLK;
-		goto out_unlock_put_key;
+		goto out_unlock_release_sem;
 	}
 
 	/*
 	 * Surprise - we got the lock. Just return to userspace:
 	 */
 	if (unlikely(!curval))
-		goto out_unlock_put_key;
+		goto out_unlock_release_sem;
 
 	uval = curval;
 
@@ -1441,7 +1417,7 @@ retry_locked:
 	 * We took the lock due to owner died take over.
 	 */
 	if (unlikely(lock_taken))
-		goto out_unlock_put_key;
+		goto out_unlock_release_sem;
 
 	/*
 	 * We dont have the lock. Look up the PI state (or create it if
@@ -1480,7 +1456,7 @@ retry_locked:
 				goto retry_locked;
 			}
 		default:
-			goto out_unlock_put_key;
+			goto out_unlock_release_sem;
 		}
 	}
 
@@ -1571,35 +1547,35 @@ retry_locked:
 		destroy_hrtimer_on_stack(&to->timer);
 	return ret != -EINTR ? ret : -ERESTARTNOINTR;
 
-out_unlock_put_key:
+ out_unlock_release_sem:
 	queue_unlock(&q, hb);
 
-out_put_key:
+ out_release_sem:
 	put_futex_key(fshared, &q.key);
-out:
 	if (to)
 		destroy_hrtimer_on_stack(&to->timer);
 	return ret;
 
-uaddr_faulted:
+ uaddr_faulted:
 	/*
-	 * We have to r/w  *(int __user *)uaddr, and we have to modify it
-	 * atomically.  Therefore, if we continue to fault after get_user()
-	 * below, we need to handle the fault ourselves, while still holding
-	 * the mmap_sem.  This can occur if the uaddr is under contention as
-	 * we have to drop the mmap_sem in order to call get_user().
+	 * We have to r/w  *(int __user *)uaddr, but we can't modify it
+	 * non-atomically.  Therefore, if get_user below is not
+	 * enough, we need to handle the fault ourselves, while
+	 * still holding the mmap_sem.
+	 *
+	 * ... and hb->lock. :-) --ANK
 	 */
 	queue_unlock(&q, hb);
 
 	if (attempt++) {
 		ret = futex_handle_fault((unsigned long)uaddr, attempt);
 		if (ret)
-			goto out_put_key;
+			goto out_release_sem;
 		goto retry_unlocked;
 	}
 
 	ret = get_user(uval, uaddr);
-	if (!ret)
+	if (!ret && (uval != -EFAULT))
 		goto retry;
 
 	if (to)
@@ -1686,18 +1662,19 @@ retry_unlocked:
 
 out_unlock:
 	spin_unlock(&hb->lock);
+out:
 	put_futex_key(fshared, &key);
 
-out:
 	return ret;
 
 pi_faulted:
 	/*
-	 * We have to r/w  *(int __user *)uaddr, and we have to modify it
-	 * atomically.  Therefore, if we continue to fault after get_user()
-	 * below, we need to handle the fault ourselves, while still holding
-	 * the mmap_sem.  This can occur if the uaddr is under contention as
-	 * we have to drop the mmap_sem in order to call get_user().
+	 * We have to r/w  *(int __user *)uaddr, but we can't modify it
+	 * non-atomically.  Therefore, if get_user below is not
+	 * enough, we need to handle the fault ourselves, while
+	 * still holding the mmap_sem.
+	 *
+	 * ... and hb->lock. --ANK
 	 */
 	spin_unlock(&hb->lock);
 
@@ -1710,7 +1687,7 @@ pi_faulted:
 	}
 
 	ret = get_user(uval, uaddr);
-	if (!ret)
+	if (!ret && (uval != -EFAULT))
 		goto retry;
 
 	return ret;
@@ -1736,8 +1713,9 @@ pi_faulted:
  * @head: pointer to the list-head
  * @len: length of the list-head, as userspace expects
  */
-SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
-		size_t, len)
+asmlinkage long
+sys_set_robust_list(struct robust_list_head __user *head,
+		    size_t len)
 {
 	if (!futex_cmpxchg_enabled)
 		return -ENOSYS;
@@ -1758,13 +1736,12 @@ SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
  * @head_ptr: pointer to a list-head pointer, the kernel fills it in
  * @len_ptr: pointer to a length field, the kernel fills in the header size
  */
-SYSCALL_DEFINE3(get_robust_list, int, pid,
-		struct robust_list_head __user * __user *, head_ptr,
-		size_t __user *, len_ptr)
+asmlinkage long
+sys_get_robust_list(int pid, struct robust_list_head __user * __user *head_ptr,
+		    size_t __user *len_ptr)
 {
 	struct robust_list_head __user *head;
 	unsigned long ret;
-	const struct cred *cred = current_cred(), *pcred;
 
 	if (!futex_cmpxchg_enabled)
 		return -ENOSYS;
@@ -1780,10 +1757,8 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 		if (!p)
 			goto err_unlock;
 		ret = -EPERM;
-		pcred = __task_cred(p);
-		if (cred->euid != pcred->euid &&
-		    cred->euid != pcred->uid &&
-		    !capable(CAP_SYS_PTRACE))
+		if ((current->euid != p->euid) && (current->euid != p->uid) &&
+				!capable(CAP_SYS_PTRACE))
 			goto err_unlock;
 		head = p->robust_list;
 		rcu_read_unlock();
@@ -1930,22 +1905,18 @@ void exit_robust_list(struct task_struct *curr)
 long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 		u32 __user *uaddr2, u32 val2, u32 val3)
 {
-	int clockrt, ret = -ENOSYS;
+	int ret = -ENOSYS;
 	int cmd = op & FUTEX_CMD_MASK;
 	int fshared = 0;
 
 	if (!(op & FUTEX_PRIVATE_FLAG))
 		fshared = 1;
 
-	clockrt = op & FUTEX_CLOCK_REALTIME;
-	if (clockrt && cmd != FUTEX_WAIT_BITSET)
-		return -ENOSYS;
-
 	switch (cmd) {
 	case FUTEX_WAIT:
 		val3 = FUTEX_BITSET_MATCH_ANY;
 	case FUTEX_WAIT_BITSET:
-		ret = futex_wait(uaddr, fshared, val, timeout, val3, clockrt);
+		ret = futex_wait(uaddr, fshared, val, timeout, val3);
 		break;
 	case FUTEX_WAKE:
 		val3 = FUTEX_BITSET_MATCH_ANY;
@@ -1980,9 +1951,9 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 }
 
 
-SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
-		struct timespec __user *, utime, u32 __user *, uaddr2,
-		u32, val3)
+asmlinkage long sys_futex(u32 __user *uaddr, int op, u32 val,
+			  struct timespec __user *utime, u32 __user *uaddr2,
+			  u32 val3)
 {
 	struct timespec ts;
 	ktime_t t, *tp = NULL;

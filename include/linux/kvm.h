@@ -7,7 +7,7 @@
  * Note: you must update KVM_API_VERSION if you change this interface.
  */
 
-#include <linux/types.h>
+#include <asm/types.h>
 #include <linux/compiler.h>
 #include <linux/ioctl.h>
 #include <asm/kvm.h>
@@ -58,10 +58,10 @@ struct kvm_irqchip {
 	__u32 pad;
         union {
 		char dummy[512];  /* reserving space */
-#ifdef __KVM_HAVE_PIT
+#ifdef CONFIG_X86
 		struct kvm_pic_state pic;
 #endif
-#ifdef __KVM_HAVE_IOAPIC
+#if defined(CONFIG_X86) || defined(CONFIG_IA64)
 		struct kvm_ioapic_state ioapic;
 #endif
 	} chip;
@@ -83,7 +83,6 @@ struct kvm_irqchip {
 #define KVM_EXIT_S390_SIEIC       13
 #define KVM_EXIT_S390_RESET       14
 #define KVM_EXIT_DCR              15
-#define KVM_EXIT_NMI              16
 
 /* for KVM_RUN, returned by mmap(vcpu_fd, offset=0) */
 struct kvm_run {
@@ -384,18 +383,10 @@ struct kvm_trace_rec {
 #define KVM_CAP_MP_STATE 14
 #define KVM_CAP_COALESCED_MMIO 15
 #define KVM_CAP_SYNC_MMU 16  /* Changes to host mmap are reflected in guest */
-#ifdef __KVM_HAVE_DEVICE_ASSIGNMENT
+#if defined(CONFIG_X86)||defined(CONFIG_IA64)
 #define KVM_CAP_DEVICE_ASSIGNMENT 17
 #endif
 #define KVM_CAP_IOMMU 18
-#ifdef __KVM_HAVE_MSI
-#define KVM_CAP_DEVICE_MSI 20
-#endif
-/* Bug in KVM_SET_USER_MEMORY_REGION fixed: */
-#define KVM_CAP_DESTROY_MEMORY_REGION_WORKS 21
-#ifdef __KVM_HAVE_USER_NMI
-#define KVM_CAP_USER_NMI 22
-#endif
 
 /*
  * ioctls for VM fds
@@ -467,8 +458,6 @@ struct kvm_trace_rec {
 #define KVM_S390_INITIAL_RESET    _IO(KVMIO,  0x97)
 #define KVM_GET_MP_STATE          _IOR(KVMIO,  0x98, struct kvm_mp_state)
 #define KVM_SET_MP_STATE          _IOW(KVMIO,  0x99, struct kvm_mp_state)
-/* Available with KVM_CAP_NMI */
-#define KVM_NMI                   _IO(KVMIO,  0x9a)
 
 #define KVM_TRC_INJ_VIRQ         (KVM_TRC_HANDLER + 0x02)
 #define KVM_TRC_REDELIVER_EVT    (KVM_TRC_HANDLER + 0x03)
@@ -511,17 +500,10 @@ struct kvm_assigned_irq {
 	__u32 guest_irq;
 	__u32 flags;
 	union {
-		struct {
-			__u32 addr_lo;
-			__u32 addr_hi;
-			__u32 data;
-		} guest_msi;
 		__u32 reserved[12];
 	};
 };
 
 #define KVM_DEV_ASSIGN_ENABLE_IOMMU	(1 << 0)
-
-#define KVM_DEV_IRQ_ASSIGN_ENABLE_MSI	(1 << 0)
 
 #endif

@@ -22,12 +22,13 @@
 #include <linux/dma-mapping.h>
 #include <linux/amba/bus.h>
 #include <linux/amba/clcd.h>
-#include <linux/err.h>
-
-#include <asm/irq.h>
 
 #include <mach/netx-regs.h>
 #include <mach/hardware.h>
+
+struct clk {};
+
+static struct clk fb_clk;
 
 static struct clcd_panel *netx_panel;
 
@@ -84,7 +85,7 @@ int clk_enable(struct clk *clk)
 
 struct clk *clk_get(struct device *dev, const char *id)
 {
-	return dev && strcmp(dev_name(dev), "fb") == 0 ? NULL : ERR_PTR(-ENOENT);
+	return &fb_clk;
 }
 
 void clk_put(struct clk *clk)
@@ -93,7 +94,7 @@ void clk_put(struct clk *clk)
 
 static struct amba_device fb_device = {
 	.dev		= {
-		.init_name = "fb",
+		.bus_id	= "fb",
 		.coherent_dma_mask = ~0,
 	},
 	.res		= {

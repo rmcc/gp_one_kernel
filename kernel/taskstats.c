@@ -290,17 +290,18 @@ ret:
 	return;
 }
 
-static int add_del_listener(pid_t pid, const struct cpumask *mask, int isadd)
+static int add_del_listener(pid_t pid, cpumask_t *maskp, int isadd)
 {
 	struct listener_list *listeners;
 	struct listener *s, *tmp;
 	unsigned int cpu;
+	cpumask_t mask = *maskp;
 
-	if (!cpumask_subset(mask, cpu_possible_mask))
+	if (!cpus_subset(mask, cpu_possible_map))
 		return -EINVAL;
 
 	if (isadd == REGISTER) {
-		for_each_cpu(cpu, mask) {
+		for_each_cpu_mask_nr(cpu, mask) {
 			s = kmalloc_node(sizeof(struct listener), GFP_KERNEL,
 					 cpu_to_node(cpu));
 			if (!s)
@@ -319,7 +320,7 @@ static int add_del_listener(pid_t pid, const struct cpumask *mask, int isadd)
 
 	/* Deregister or cleanup */
 cleanup:
-	for_each_cpu(cpu, mask) {
+	for_each_cpu_mask_nr(cpu, mask) {
 		listeners = &per_cpu(listener_array, cpu);
 		down_write(&listeners->sem);
 		list_for_each_entry_safe(s, tmp, &listeners->list, list) {
@@ -334,7 +335,7 @@ cleanup:
 	return 0;
 }
 
-static int parse(struct nlattr *na, struct cpumask *mask)
+static int parse(struct nlattr *na, cpumask_t *mask)
 {
 	char *data;
 	int len;
@@ -427,33 +428,23 @@ err:
 
 static int taskstats_user_cmd(struct sk_buff *skb, struct genl_info *info)
 {
-	int rc;
+	int rc = 0;
 	struct sk_buff *rep_skb;
 	struct taskstats *stats;
 	size_t size;
-	cpumask_var_t mask;
+	cpumask_t mask;
 
-	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	rc = parse(info->attrs[TASKSTATS_CMD_ATTR_REGISTER_CPUMASK], mask);
+	rc = parse(info->attrs[TASKSTATS_CMD_ATTR_REGISTER_CPUMASK], &mask);
 	if (rc < 0)
-		goto free_return_rc;
-	if (rc == 0) {
-		rc = add_del_listener(info->snd_pid, mask, REGISTER);
-		goto free_return_rc;
-	}
-
-	rc = parse(info->attrs[TASKSTATS_CMD_ATTR_DEREGISTER_CPUMASK], mask);
-	if (rc < 0)
-		goto free_return_rc;
-	if (rc == 0) {
-		rc = add_del_listener(info->snd_pid, mask, DEREGISTER);
-free_return_rc:
-		free_cpumask_var(mask);
 		return rc;
-	}
-	free_cpumask_var(mask);
+	if (rc == 0)
+		return add_del_listener(info->snd_pid, &mask, REGISTER);
+
+	rc = parse(info->attrs[TASKSTATS_CMD_ATTR_DEREGISTER_CPUMASK], &mask);
+	if (rc < 0)
+		return rc;
+	if (rc == 0)
+		return add_del_listener(info->snd_pid, &mask, DEREGISTER);
 
 	/*
 	 * Size includes space for nested attributes

@@ -129,6 +129,7 @@ static struct irq_pin_list *get_one_free_irq_2_pin(int cpu)
 	node = cpu_to_node(cpu);
 
 	pin = kzalloc_node(sizeof(*pin), GFP_ATOMIC, node);
+	printk(KERN_DEBUG "  alloc irq_2_pin on cpu %d node %d\n", cpu, node);
 
 	return pin;
 }
@@ -169,7 +170,7 @@ static struct irq_cfg irq_cfgx[NR_IRQS] = {
 	[15] = { .vector = IRQ15_VECTOR, },
 };
 
-int __init arch_early_irq_init(void)
+void __init arch_early_irq_init(void)
 {
 	struct irq_cfg *cfg;
 	struct irq_desc *desc;
@@ -187,8 +188,6 @@ int __init arch_early_irq_init(void)
 		if (i < NR_IRQS_LEGACY)
 			cpumask_setall(cfg[i].domain);
 	}
-
-	return 0;
 }
 
 #ifdef CONFIG_SPARSE_IRQ
@@ -213,11 +212,11 @@ static struct irq_cfg *get_one_free_irq_cfg(int cpu)
 
 	cfg = kzalloc_node(sizeof(*cfg), GFP_ATOMIC, node);
 	if (cfg) {
-		if (!alloc_cpumask_var_node(&cfg->domain, GFP_ATOMIC, node)) {
+		/* FIXME: needs alloc_cpumask_var_node() */
+		if (!alloc_cpumask_var(&cfg->domain, GFP_ATOMIC)) {
 			kfree(cfg);
 			cfg = NULL;
-		} else if (!alloc_cpumask_var_node(&cfg->old_domain,
-							  GFP_ATOMIC, node)) {
+		} else if (!alloc_cpumask_var(&cfg->old_domain, GFP_ATOMIC)) {
 			free_cpumask_var(cfg->domain);
 			kfree(cfg);
 			cfg = NULL;
@@ -226,11 +225,12 @@ static struct irq_cfg *get_one_free_irq_cfg(int cpu)
 			cpumask_clear(cfg->old_domain);
 		}
 	}
+	printk(KERN_DEBUG "  alloc irq_cfg on cpu %d node %d\n", cpu, node);
 
 	return cfg;
 }
 
-int arch_init_chip_data(struct irq_desc *desc, int cpu)
+void arch_init_chip_data(struct irq_desc *desc, int cpu)
 {
 	struct irq_cfg *cfg;
 
@@ -242,8 +242,6 @@ int arch_init_chip_data(struct irq_desc *desc, int cpu)
 			BUG_ON(1);
 		}
 	}
-
-	return 0;
 }
 
 #ifdef CONFIG_NUMA_MIGRATE_IRQ_DESC
@@ -704,7 +702,7 @@ static void __unmask_IO_APIC_irq(struct irq_cfg *cfg)
 }
 
 #ifdef CONFIG_X86_64
-static void io_apic_sync(struct irq_pin_list *entry)
+void io_apic_sync(struct irq_pin_list *entry)
 {
 	/*
 	 * Synchronize the IO-APIC and the CPU by doing
@@ -1402,6 +1400,8 @@ void __setup_vector_irq(int cpu)
 
 	/* Mark the inuse vectors */
 	for_each_irq_desc(irq, desc) {
+		if (!desc)
+			continue;
 		cfg = desc->chip_data;
 		if (!cpumask_test_cpu(cpu, cfg->domain))
 			continue;
@@ -1783,6 +1783,8 @@ __apicdebuginit(void) print_IO_APIC(void)
 	for_each_irq_desc(irq, desc) {
 		struct irq_pin_list *entry;
 
+		if (!desc)
+			continue;
 		cfg = desc->chip_data;
 		entry = cfg->irq_2_pin;
 		if (!entry)
@@ -2423,6 +2425,9 @@ static void ir_irq_migration(struct work_struct *work)
 	struct irq_desc *desc;
 
 	for_each_irq_desc(irq, desc) {
+		if (!desc)
+			continue;
+
 		if (desc->status & IRQ_MOVE_PENDING) {
 			unsigned long flags;
 
@@ -2467,9 +2472,10 @@ static void set_ir_ioapic_affinity_irq(unsigned int irq,
 asmlinkage void smp_irq_move_cleanup_interrupt(void)
 {
 	unsigned vector, me;
-
 	ack_APIC_irq();
+#ifdef CONFIG_X86_64
 	exit_idle();
+#endif
 	irq_enter();
 
 	me = smp_processor_id();
@@ -2514,7 +2520,7 @@ static void irq_complete_move(struct irq_desc **descp)
 		if (likely(!cfg->move_desc_pending))
 			return;
 
-		/* domain has not changed, but affinity did */
+		/* domain is not change, but affinity is changed */
 		me = smp_processor_id();
 		if (cpu_isset(me, desc->affinity)) {
 			*descp = desc = move_irq_desc(desc, me);
@@ -2528,15 +2534,14 @@ static void irq_complete_move(struct irq_desc **descp)
 
 	vector = ~get_irq_regs()->orig_ax;
 	me = smp_processor_id();
-
-	if (vector == cfg->vector && cpumask_test_cpu(me, cfg->domain)) {
 #ifdef CONFIG_NUMA_MIGRATE_IRQ_DESC
 		*descp = desc = move_irq_desc(desc, me);
 		/* get the new one */
 		cfg = desc->chip_data;
 #endif
+
+	if (vector == cfg->vector && cpumask_test_cpu(me, cfg->domain))
 		send_cleanup_vector(cfg);
-	}
 }
 #else
 static inline void irq_complete_move(struct irq_desc **descp) {}
@@ -2709,6 +2714,9 @@ static inline void init_IO_APIC_traps(void)
 	 * 0x80, because int 0x80 is hm, kind of importantish. ;)
 	 */
 	for_each_irq_desc(irq, desc) {
+		if (!desc)
+			continue;
+
 		cfg = desc->chip_data;
 		if (IO_APIC_IRQ(irq) && cfg && !cfg->vector) {
 			/*
@@ -3841,24 +3849,14 @@ int __init io_apic_get_redir_entries (int ioapic)
 
 void __init probe_nr_irqs_gsi(void)
 {
+	int idx;
 	int nr = 0;
 
-	nr = acpi_probe_gsi();
-	if (nr > nr_irqs_gsi) {
+	for (idx = 0; idx < nr_ioapics; idx++)
+		nr += io_apic_get_redir_entries(idx) + 1;
+
+	if (nr > nr_irqs_gsi)
 		nr_irqs_gsi = nr;
-	} else {
-		/* for acpi=off or acpi is not compiled in */
-		int idx;
-
-		nr = 0;
-		for (idx = 0; idx < nr_ioapics; idx++)
-			nr += io_apic_get_redir_entries(idx) + 1;
-
-		if (nr > nr_irqs_gsi)
-			nr_irqs_gsi = nr;
-	}
-
-	printk(KERN_DEBUG "nr_irqs_gsi: %d\n", nr_irqs_gsi);
 }
 
 /* --------------------------------------------------------------------------

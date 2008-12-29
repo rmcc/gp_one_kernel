@@ -11,48 +11,23 @@
 #include <linux/uwb/umc.h>
 #include <linux/pci.h>
 
-static int umc_bus_pre_reset_helper(struct device *dev, void *data)
+static int umc_bus_unbind_helper(struct device *dev, void *data)
 {
-	int ret = 0;
+	struct device *parent = data;
 
-	if (dev->driver) {
-		struct umc_dev *umc = to_umc_dev(dev);
-		struct umc_driver *umc_drv = to_umc_driver(dev->driver);
-
-		if (umc_drv->pre_reset)
-			ret = umc_drv->pre_reset(umc);
-		else
-			device_release_driver(dev);
-	}
-	return ret;
-}
-
-static int umc_bus_post_reset_helper(struct device *dev, void *data)
-{
-	int ret = 0;
-
-	if (dev->driver) {
-		struct umc_dev *umc = to_umc_dev(dev);
-		struct umc_driver *umc_drv = to_umc_driver(dev->driver);
-
-		if (umc_drv->post_reset)
-			ret = umc_drv->post_reset(umc);
-	} else
-		ret = device_attach(dev);
-
-	return ret;
+	if (dev->parent == parent && dev->driver)
+		device_release_driver(dev);
+	return 0;
 }
 
 /**
  * umc_controller_reset - reset the whole UMC controller
  * @umc: the UMC device for the radio controller.
  *
- * Drivers or all capabilities of the controller will have their
- * pre_reset methods called or be unbound from their device.  Then all
- * post_reset methods will be called or the drivers will be rebound.
- *
- * Radio controllers must provide pre_reset and post_reset methods and
- * reset the hardware in their start method.
+ * Drivers will be unbound from all UMC devices belonging to the
+ * controller and then the radio controller will be rebound.  The
+ * radio controller is expected to do a full hardware reset when it is
+ * probed.
  *
  * If this is called while a probe() or remove() is in progress it
  * will return -EAGAIN and not perform the reset.
@@ -60,13 +35,14 @@ static int umc_bus_post_reset_helper(struct device *dev, void *data)
 int umc_controller_reset(struct umc_dev *umc)
 {
 	struct device *parent = umc->dev.parent;
-	int ret = 0;
+	int ret;
 
-	if(down_trylock(&parent->sem))
+	if (down_trylock(&parent->sem))
 		return -EAGAIN;
-	ret = device_for_each_child(parent, parent, umc_bus_pre_reset_helper);
-	if (ret >= 0)
-		device_for_each_child(parent, parent, umc_bus_post_reset_helper);
+	bus_for_each_dev(&umc_bus_type, NULL, parent, umc_bus_unbind_helper);
+	ret = device_attach(&umc->dev);
+	if (ret == 1)
+		ret = 0;
 	up(&parent->sem);
 
 	return ret;
@@ -99,10 +75,10 @@ static int umc_bus_rescan_helper(struct device *dev, void *data)
 	if (!dev->driver)
 		ret = device_attach(dev);
 
-	return ret;
+	return ret < 0 ? ret : 0;
 }
 
-static void umc_bus_rescan(struct device *parent)
+static void umc_bus_rescan(void)
 {
 	int err;
 
@@ -110,7 +86,7 @@ static void umc_bus_rescan(struct device *parent)
 	 * We can't use bus_rescan_devices() here as it deadlocks when
 	 * it tries to retake the dev->parent semaphore.
 	 */
-	err = device_for_each_child(parent, NULL, umc_bus_rescan_helper);
+	err = bus_for_each_dev(&umc_bus_type, NULL, NULL, umc_bus_rescan_helper);
 	if (err < 0)
 		printk(KERN_WARNING "%s: rescan of bus failed: %d\n",
 		       KBUILD_MODNAME, err);
@@ -144,7 +120,7 @@ static int umc_device_probe(struct device *dev)
 	if (err)
 		put_device(dev);
 	else
-		umc_bus_rescan(dev->parent);
+		umc_bus_rescan();
 
 	return err;
 }

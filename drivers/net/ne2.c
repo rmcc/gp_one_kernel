@@ -137,6 +137,9 @@ extern int netcard_probe(struct net_device *dev);
 
 static int ne2_probe1(struct net_device *dev, int slot);
 
+static int ne_open(struct net_device *dev);
+static int ne_close(struct net_device *dev);
+
 static void ne_reset_8390(struct net_device *dev);
 static void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 		int ring_page);
@@ -299,6 +302,7 @@ out:
 static int ne2_procinfo(char *buf, int slot, struct net_device *dev)
 {
 	int len=0;
+	DECLARE_MAC_BUF(mac);
 
 	len += sprintf(buf+len, "The NE/2 Ethernet Adapter\n" );
 	len += sprintf(buf+len, "Driver written by Wim Dumon ");
@@ -309,7 +313,7 @@ static int ne2_procinfo(char *buf, int slot, struct net_device *dev)
 	len += sprintf(buf+len, "Based on the original NE2000 drivers\n" );
 	len += sprintf(buf+len, "Base IO: %#x\n", (unsigned int)dev->base_addr);
 	len += sprintf(buf+len, "IRQ    : %d\n", dev->irq);
-	len += sprintf(buf+len, "HW addr : %pM\n", dev->dev_addr);
+	len += sprintf(buf+len, "HW addr : %s\n", print_mac(mac, dev->dev_addr));
 
 	return len;
 }
@@ -322,6 +326,7 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	const char *name = "NE/2";
 	int start_page, stop_page;
 	static unsigned version_printed;
+	DECLARE_MAC_BUF(mac);
 
 	if (ei_debug && version_printed++ == 0)
 		printk(version);
@@ -464,7 +469,7 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
 		dev->dev_addr[i] = SA_prom[i];
 
-	printk(" %pM\n", dev->dev_addr);
+	printk(" %s\n", print_mac(mac, dev->dev_addr));
 
 	printk("%s: %s found at %#x, using IRQ %d.\n",
 			dev->name, name, base_addr, dev->irq);
@@ -489,7 +494,11 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 
 	ei_status.priv = slot;
 
-	dev->netdev_ops = &eip_netdev_ops;
+	dev->open = &ne_open;
+	dev->stop = &ne_close;
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = eip_poll;
+#endif
 	NS8390p_init(dev, 0);
 
 	retval = register_netdev(dev);
@@ -502,6 +511,20 @@ out1:
 out:
 	release_region(base_addr, NE_IO_EXTENT);
 	return retval;
+}
+
+static int ne_open(struct net_device *dev)
+{
+	eip_open(dev);
+	return 0;
+}
+
+static int ne_close(struct net_device *dev)
+{
+	if (ei_debug > 1)
+		printk("%s: Shutting down ethercard.\n", dev->name);
+	eip_close(dev);
+	return 0;
 }
 
 /* Hard reset the card.  This used to pause for the same period that a

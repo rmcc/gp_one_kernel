@@ -30,6 +30,7 @@
 #include <linux/gfp.h>
 #include <linux/fs.h>
 #include <linux/kprobes.h>
+#include <linux/seq_file.h>
 #include <linux/writeback.h>
 
 #include <linux/stacktrace.h>
@@ -40,7 +41,7 @@
 
 #define TRACE_BUFFER_FLAGS	(RB_FL_OVERWRITE)
 
-unsigned long __read_mostly	tracing_max_latency;
+unsigned long __read_mostly	tracing_max_latency = (cycle_t)ULONG_MAX;
 unsigned long __read_mostly	tracing_thresh;
 
 /*
@@ -89,10 +90,10 @@ static inline void ftrace_enable_cpu(void)
 	preempt_enable();
 }
 
-static cpumask_var_t __read_mostly	tracing_buffer_mask;
+static cpumask_t __read_mostly		tracing_buffer_mask;
 
 #define for_each_tracing_cpu(cpu)	\
-	for_each_cpu(cpu, tracing_buffer_mask)
+	for_each_cpu_mask(cpu, tracing_buffer_mask)
 
 /*
  * ftrace_dump_on_oops - variable to dump ftrace buffer on oops
@@ -286,7 +287,6 @@ static const char *trace_options[] = {
 	"annotate",
 	"userstacktrace",
 	"sym-userobj",
-	"printk-msg-only",
 	NULL
 };
 
@@ -320,7 +320,7 @@ __update_max_tr(struct trace_array *tr, struct task_struct *tsk, int cpu)
 
 	memcpy(data->comm, tsk->comm, TASK_COMM_LEN);
 	data->pid = tsk->pid;
-	data->uid = task_uid(tsk);
+	data->uid = tsk->uid;
 	data->nice = tsk->static_prio - 20 - MAX_RT_PRIO;
 	data->policy = tsk->policy;
 	data->rt_priority = tsk->rt_priority;
@@ -676,16 +676,6 @@ void tracing_reset(struct trace_array *tr, int cpu)
 	ftrace_disable_cpu();
 	ring_buffer_reset_cpu(tr->buffer, cpu);
 	ftrace_enable_cpu();
-}
-
-void tracing_reset_online_cpus(struct trace_array *tr)
-{
-	int cpu;
-
-	tr->time_start = ftrace_now(tr->cpu);
-
-	for_each_online_cpu(cpu)
-		tracing_reset(tr, cpu);
 }
 
 #define SAVED_CMDLINES 128
@@ -1309,7 +1299,7 @@ enum trace_file_type {
 	TRACE_FILE_ANNOTATE	= 2,
 };
 
-static void trace_iterator_increment(struct trace_iterator *iter)
+static void trace_iterator_increment(struct trace_iterator *iter, int cpu)
 {
 	/* Don't allow ftrace to trace into the ring buffers */
 	ftrace_disable_cpu();
@@ -1388,7 +1378,7 @@ static void *find_next_entry_inc(struct trace_iterator *iter)
 	iter->ent = __find_next_entry(iter, &iter->cpu, &iter->ts);
 
 	if (iter->ent)
-		trace_iterator_increment(iter);
+		trace_iterator_increment(iter, iter->cpu);
 
 	return iter->ent ? iter : NULL;
 }
@@ -1757,13 +1747,6 @@ lat_print_timestamp(struct trace_seq *s, u64 abs_usecs,
 
 static const char state_to_char[] = TASK_STATE_TO_CHAR_STR;
 
-static int task_state_char(unsigned long state)
-{
-	int bit = state ? __ffs(state) + 1 : 0;
-
-	return bit < sizeof(state_to_char) - 1 ? state_to_char[bit] : '?';
-}
-
 /*
  * The message is supposed to contain an ending newline.
  * If the printing stops prematurely, try to add a newline of our own.
@@ -1811,10 +1794,10 @@ static void test_cpu_buff_start(struct trace_iterator *iter)
 	if (!(iter->iter_flags & TRACE_FILE_ANNOTATE))
 		return;
 
-	if (cpumask_test_cpu(iter->cpu, iter->started))
+	if (cpu_isset(iter->cpu, iter->started))
 		return;
 
-	cpumask_set_cpu(iter->cpu, iter->started);
+	cpu_set(iter->cpu, iter->started);
 	trace_seq_printf(s, "##### CPU %u buffer started ####\n", iter->cpu);
 }
 
@@ -1832,6 +1815,7 @@ print_lat_fmt(struct trace_iterator *iter, unsigned int trace_idx, int cpu)
 	char *comm;
 	int S, T;
 	int i;
+	unsigned state;
 
 	if (entry->type == TRACE_CONT)
 		return TRACE_TYPE_HANDLED;
@@ -1877,8 +1861,12 @@ print_lat_fmt(struct trace_iterator *iter, unsigned int trace_idx, int cpu)
 
 		trace_assign_type(field, entry);
 
-		T = task_state_char(field->next_state);
-		S = task_state_char(field->prev_state);
+		T = field->next_state < sizeof(state_to_char) ?
+			state_to_char[field->next_state] : 'X';
+
+		state = field->prev_state ?
+			__ffs(field->prev_state) + 1 : 0;
+		S = state < sizeof(state_to_char) - 1 ? state_to_char[state] : 'X';
 		comm = trace_find_cmdline(field->next_pid);
 		trace_seq_printf(s, " %5d:%3d:%c %s [%03d] %5d:%3d:%c %s\n",
 				 field->prev_pid,
@@ -2019,8 +2007,10 @@ static enum print_line_t print_trace_fmt(struct trace_iterator *iter)
 
 		trace_assign_type(field, entry);
 
-		T = task_state_char(field->next_state);
-		S = task_state_char(field->prev_state);
+		S = field->prev_state < sizeof(state_to_char) ?
+			state_to_char[field->prev_state] : 'X';
+		T = field->next_state < sizeof(state_to_char) ?
+			state_to_char[field->next_state] : 'X';
 		ret = trace_seq_printf(s, " %5d:%3d:%c %s [%03d] %5d:%3d:%c\n",
 				       field->prev_pid,
 				       field->prev_prio,
@@ -2150,9 +2140,12 @@ static enum print_line_t print_raw_fmt(struct trace_iterator *iter)
 
 		trace_assign_type(field, entry);
 
-		T = task_state_char(field->next_state);
-		S = entry->type == TRACE_WAKE ? '+' :
-			task_state_char(field->prev_state);
+		S = field->prev_state < sizeof(state_to_char) ?
+			state_to_char[field->prev_state] : 'X';
+		T = field->next_state < sizeof(state_to_char) ?
+			state_to_char[field->next_state] : 'X';
+		if (entry->type == TRACE_WAKE)
+			S = '+';
 		ret = trace_seq_printf(s, "%d %d %c %d %d %d %c\n",
 				       field->prev_pid,
 				       field->prev_prio,
@@ -2239,9 +2232,12 @@ static enum print_line_t print_hex_fmt(struct trace_iterator *iter)
 
 		trace_assign_type(field, entry);
 
-		T = task_state_char(field->next_state);
-		S = entry->type == TRACE_WAKE ? '+' :
-			task_state_char(field->prev_state);
+		S = field->prev_state < sizeof(state_to_char) ?
+			state_to_char[field->prev_state] : 'X';
+		T = field->next_state < sizeof(state_to_char) ?
+			state_to_char[field->next_state] : 'X';
+		if (entry->type == TRACE_WAKE)
+			S = '+';
 		SEQ_PUT_HEX_FIELD_RET(s, field->prev_pid);
 		SEQ_PUT_HEX_FIELD_RET(s, field->prev_prio);
 		SEQ_PUT_HEX_FIELD_RET(s, S);
@@ -2265,25 +2261,6 @@ static enum print_line_t print_hex_fmt(struct trace_iterator *iter)
 	}
 	}
 	SEQ_PUT_FIELD_RET(s, newline);
-
-	return TRACE_TYPE_HANDLED;
-}
-
-static enum print_line_t print_printk_msg_only(struct trace_iterator *iter)
-{
-	struct trace_seq *s = &iter->seq;
-	struct trace_entry *entry = iter->ent;
-	struct print_entry *field;
-	int ret;
-
-	trace_assign_type(field, entry);
-
-	ret = trace_seq_printf(s, field->buf);
-	if (!ret)
-		return TRACE_TYPE_PARTIAL_LINE;
-
-	if (entry->flags & TRACE_FLAG_CONT)
-		trace_seq_print_cont(s, iter);
 
 	return TRACE_TYPE_HANDLED;
 }
@@ -2368,11 +2345,6 @@ static enum print_line_t print_trace_line(struct trace_iterator *iter)
 			return ret;
 	}
 
-	if (iter->ent->type == TRACE_PRINT &&
-			trace_flags & TRACE_ITER_PRINTK &&
-			trace_flags & TRACE_ITER_PRINTK_MSGONLY)
-		return print_printk_msg_only(iter);
-
 	if (trace_flags & TRACE_ITER_BIN)
 		return print_bin_fmt(iter);
 
@@ -2453,7 +2425,7 @@ __tracing_open(struct inode *inode, struct file *file, int *ret)
 
 	/* Notify the tracer early; before we stop tracing. */
 	if (iter->trace && iter->trace->open)
-		iter->trace->open(iter);
+			iter->trace->open(iter);
 
 	/* Annotate start of buffers if we had overruns */
 	if (ring_buffer_overruns(iter->tr->buffer))
@@ -2646,7 +2618,13 @@ static struct file_operations show_traces_fops = {
 /*
  * Only trace on a CPU if the bitmask is set:
  */
-static cpumask_var_t tracing_cpumask;
+static cpumask_t tracing_cpumask = CPU_MASK_ALL;
+
+/*
+ * When tracing/tracing_cpu_mask is modified then this holds
+ * the new bitmask we are about to install:
+ */
+static cpumask_t tracing_cpumask_new;
 
 /*
  * The tracer itself will not take this lock, but still we want
@@ -2668,7 +2646,7 @@ tracing_cpumask_read(struct file *filp, char __user *ubuf,
 
 	mutex_lock(&tracing_cpumask_update_lock);
 
-	len = cpumask_scnprintf(mask_str, count, tracing_cpumask);
+	len = cpumask_scnprintf(mask_str, count, &tracing_cpumask);
 	if (count - len < 2) {
 		count = -EINVAL;
 		goto out_err;
@@ -2687,13 +2665,9 @@ tracing_cpumask_write(struct file *filp, const char __user *ubuf,
 		      size_t count, loff_t *ppos)
 {
 	int err, cpu;
-	cpumask_var_t tracing_cpumask_new;
-
-	if (!alloc_cpumask_var(&tracing_cpumask_new, GFP_KERNEL))
-		return -ENOMEM;
 
 	mutex_lock(&tracing_cpumask_update_lock);
-	err = cpumask_parse_user(ubuf, count, tracing_cpumask_new);
+	err = cpumask_parse_user(ubuf, count, &tracing_cpumask_new);
 	if (err)
 		goto err_unlock;
 
@@ -2704,28 +2678,26 @@ tracing_cpumask_write(struct file *filp, const char __user *ubuf,
 		 * Increase/decrease the disabled counter if we are
 		 * about to flip a bit in the cpumask:
 		 */
-		if (cpumask_test_cpu(cpu, tracing_cpumask) &&
-				!cpumask_test_cpu(cpu, tracing_cpumask_new)) {
+		if (cpu_isset(cpu, tracing_cpumask) &&
+				!cpu_isset(cpu, tracing_cpumask_new)) {
 			atomic_inc(&global_trace.data[cpu]->disabled);
 		}
-		if (!cpumask_test_cpu(cpu, tracing_cpumask) &&
-				cpumask_test_cpu(cpu, tracing_cpumask_new)) {
+		if (!cpu_isset(cpu, tracing_cpumask) &&
+				cpu_isset(cpu, tracing_cpumask_new)) {
 			atomic_dec(&global_trace.data[cpu]->disabled);
 		}
 	}
 	__raw_spin_unlock(&ftrace_max_lock);
 	local_irq_enable();
 
-	cpumask_copy(tracing_cpumask, tracing_cpumask_new);
+	tracing_cpumask = tracing_cpumask_new;
 
 	mutex_unlock(&tracing_cpumask_update_lock);
-	free_cpumask_var(tracing_cpumask_new);
 
 	return count;
 
 err_unlock:
 	mutex_unlock(&tracing_cpumask_update_lock);
-	free_cpumask_var(tracing_cpumask);
 
 	return err;
 }
@@ -3114,15 +3086,10 @@ static int tracing_open_pipe(struct inode *inode, struct file *filp)
 	if (!iter)
 		return -ENOMEM;
 
-	if (!alloc_cpumask_var(&iter->started, GFP_KERNEL)) {
-		kfree(iter);
-		return -ENOMEM;
-	}
-
 	mutex_lock(&trace_types_lock);
 
 	/* trace pipe does not show start of buffer */
-	cpumask_setall(iter->started);
+	cpus_setall(iter->started);
 
 	iter->tr = &global_trace;
 	iter->trace = current_trace;
@@ -3139,7 +3106,6 @@ static int tracing_release_pipe(struct inode *inode, struct file *file)
 {
 	struct trace_iterator *iter = file->private_data;
 
-	free_cpumask_var(iter->started);
 	kfree(iter);
 	atomic_dec(&tracing_reader);
 
@@ -3736,7 +3702,7 @@ static struct notifier_block trace_die_notifier = {
  * it if we decide to change what log level the ftrace dump
  * should be at.
  */
-#define KERN_TRACE		KERN_EMERG
+#define KERN_TRACE		KERN_INFO
 
 static void
 trace_printk_seq(struct trace_seq *s)
@@ -3758,6 +3724,7 @@ void ftrace_dump(void)
 	static DEFINE_SPINLOCK(ftrace_dump_lock);
 	/* use static because iter can be a bit big for the stack */
 	static struct trace_iterator iter;
+	static cpumask_t mask;
 	static int dump_ran;
 	unsigned long flags;
 	int cnt = 0, cpu;
@@ -3770,7 +3737,6 @@ void ftrace_dump(void)
 	dump_ran = 1;
 
 	/* No turning back! */
-	tracing_off();
 	ftrace_kill();
 
 	for_each_tracing_cpu(cpu) {
@@ -3791,6 +3757,8 @@ void ftrace_dump(void)
 	 * not done often. We fill all what we can read,
 	 * and then release the locks again.
 	 */
+
+	cpus_clear(mask);
 
 	while (!trace_empty(&iter)) {
 
@@ -3827,27 +3795,18 @@ __init static int tracer_alloc_buffers(void)
 {
 	struct trace_array_cpu *data;
 	int i;
-	int ret = -ENOMEM;
-
-	if (!alloc_cpumask_var(&tracing_buffer_mask, GFP_KERNEL))
-		goto out;
-
-	if (!alloc_cpumask_var(&tracing_cpumask, GFP_KERNEL))
-		goto out_free_buffer_mask;
-
-	cpumask_copy(tracing_buffer_mask, cpu_possible_mask);
-	cpumask_copy(tracing_cpumask, cpu_all_mask);
 
 	/* TODO: make the number of buffers hot pluggable with CPUS */
+	tracing_buffer_mask = cpu_possible_map;
+
 	global_trace.buffer = ring_buffer_alloc(trace_buf_size,
 						   TRACE_BUFFER_FLAGS);
 	if (!global_trace.buffer) {
 		printk(KERN_ERR "tracer: failed to allocate ring buffer!\n");
 		WARN_ON(1);
-		goto out_free_cpumask;
+		return 0;
 	}
 	global_trace.entries = ring_buffer_size(global_trace.buffer);
-
 
 #ifdef CONFIG_TRACER_MAX_TRACE
 	max_tr.buffer = ring_buffer_alloc(trace_buf_size,
@@ -3856,7 +3815,7 @@ __init static int tracer_alloc_buffers(void)
 		printk(KERN_ERR "tracer: failed to allocate max ring buffer!\n");
 		WARN_ON(1);
 		ring_buffer_free(global_trace.buffer);
-		goto out_free_cpumask;
+		return 0;
 	}
 	max_tr.entries = ring_buffer_size(max_tr.buffer);
 	WARN_ON(max_tr.entries != global_trace.entries);
@@ -3886,14 +3845,8 @@ __init static int tracer_alloc_buffers(void)
 				       &trace_panic_notifier);
 
 	register_die_notifier(&trace_die_notifier);
-	ret = 0;
 
-out_free_cpumask:
-	free_cpumask_var(tracing_cpumask);
-out_free_buffer_mask:
-	free_cpumask_var(tracing_buffer_mask);
-out:
-	return ret;
+	return 0;
 }
 early_initcall(tracer_alloc_buffers);
 fs_initcall(tracer_init_debugfs);

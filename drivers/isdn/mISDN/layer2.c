@@ -15,12 +15,10 @@
  *
  */
 
-#include <linux/mISDNif.h>
-#include "core.h"
 #include "fsm.h"
 #include "layer2.h"
 
-static u_int *debug;
+static int *debug;
 
 static
 struct Fsm l2fsm = {NULL, 0, 0, NULL, NULL};
@@ -467,7 +465,7 @@ IsRNR(u_char *data, struct layer2 *l2)
 	    data[0] == RNR : (data[0] & 0xf) == RNR;
 }
 
-static int
+int
 iframe_error(struct layer2 *l2, struct sk_buff *skb)
 {
 	u_int	i;
@@ -485,7 +483,7 @@ iframe_error(struct layer2 *l2, struct sk_buff *skb)
 	return 0;
 }
 
-static int
+int
 super_error(struct layer2 *l2, struct sk_buff *skb)
 {
 	if (skb->len != l2addrsize(l2) +
@@ -494,7 +492,7 @@ super_error(struct layer2 *l2, struct sk_buff *skb)
 	return 0;
 }
 
-static int
+int
 unnum_error(struct layer2 *l2, struct sk_buff *skb, int wantrsp)
 {
 	int rsp = (*skb->data & 0x2) >> 1;
@@ -507,7 +505,7 @@ unnum_error(struct layer2 *l2, struct sk_buff *skb, int wantrsp)
 	return 0;
 }
 
-static int
+int
 UI_error(struct layer2 *l2, struct sk_buff *skb)
 {
 	int rsp = *skb->data & 0x2;
@@ -520,7 +518,7 @@ UI_error(struct layer2 *l2, struct sk_buff *skb)
 	return 0;
 }
 
-static int
+int
 FRMR_error(struct layer2 *l2, struct sk_buff *skb)
 {
 	u_int	headers = l2addrsize(l2) + 1;
@@ -1067,7 +1065,7 @@ l2_st6_dm_release(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
-static void
+void
 enquiry_cr(struct layer2 *l2, u_char typ, u_char cr, u_char pf)
 {
 	struct sk_buff *skb;

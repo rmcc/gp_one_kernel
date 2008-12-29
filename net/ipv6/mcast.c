@@ -303,23 +303,20 @@ static struct inet6_dev *ip6_mc_find_dev(struct net *net,
 		dev = dev_get_by_index(net, ifindex);
 
 	if (!dev)
-		goto nodev;
+		return NULL;
 	idev = in6_dev_get(dev);
-	if (!idev)
-		goto release;
+	if (!idev) {
+		dev_put(dev);
+		return NULL;
+	}
 	read_lock_bh(&idev->lock);
-	if (idev->dead)
-		goto unlock_release;
-
+	if (idev->dead) {
+		read_unlock_bh(&idev->lock);
+		in6_dev_put(idev);
+		dev_put(dev);
+		return NULL;
+	}
 	return idev;
-
-unlock_release:
-	read_unlock_bh(&idev->lock);
-	in6_dev_put(idev);
-release:
-	dev_put(dev);
-nodev:
-	return NULL;
 }
 
 void ipv6_sock_mc_close(struct sock *sk)
@@ -1469,7 +1466,7 @@ static void mld_sendpack(struct sk_buff *skb)
 			 &ipv6_hdr(skb)->saddr, &ipv6_hdr(skb)->daddr,
 			 skb->dev->ifindex);
 
-	err = xfrm_lookup(net, &skb->dst, &fl, NULL, 0);
+	err = xfrm_lookup(&skb->dst, &fl, NULL, 0);
 	if (err)
 		goto err_out;
 
@@ -1820,7 +1817,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 
 	hdr->icmp6_cksum = csum_ipv6_magic(saddr, snd_addr, len,
 					   IPPROTO_ICMPV6,
-					   csum_partial(hdr, len, 0));
+					   csum_partial((__u8 *) hdr, len, 0));
 
 	idev = in6_dev_get(skb->dev);
 
@@ -1834,7 +1831,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 			 &ipv6_hdr(skb)->saddr, &ipv6_hdr(skb)->daddr,
 			 skb->dev->ifindex);
 
-	err = xfrm_lookup(net, &skb->dst, &fl, NULL, 0);
+	err = xfrm_lookup(&skb->dst, &fl, NULL, 0);
 	if (err)
 		goto err_out;
 
@@ -2433,9 +2430,9 @@ static int igmp6_mc_seq_show(struct seq_file *seq, void *v)
 	struct igmp6_mc_iter_state *state = igmp6_mc_seq_private(seq);
 
 	seq_printf(seq,
-		   "%-4d %-15s %pi6 %5d %08X %ld\n",
+		   "%-4d %-15s " NIP6_SEQFMT " %5d %08X %ld\n",
 		   state->dev->ifindex, state->dev->name,
-		   &im->mca_addr,
+		   NIP6(im->mca_addr),
 		   im->mca_users, im->mca_flags,
 		   (im->mca_flags&MAF_TIMER_RUNNING) ?
 		   jiffies_to_clock_t(im->mca_timer.expires-jiffies) : 0);
@@ -2594,10 +2591,10 @@ static int igmp6_mcf_seq_show(struct seq_file *seq, void *v)
 			   "Source Address", "INC", "EXC");
 	} else {
 		seq_printf(seq,
-			   "%3d %6.6s %pi6 %pi6 %6lu %6lu\n",
+			   "%3d %6.6s " NIP6_SEQFMT " " NIP6_SEQFMT " %6lu %6lu\n",
 			   state->dev->ifindex, state->dev->name,
-			   &state->im->mca_addr,
-			   &psf->sf_addr,
+			   NIP6(state->im->mca_addr),
+			   NIP6(psf->sf_addr),
 			   psf->sf_count[MCAST_INCLUDE],
 			   psf->sf_count[MCAST_EXCLUDE]);
 	}

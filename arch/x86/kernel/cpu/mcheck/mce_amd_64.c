@@ -121,7 +121,7 @@ static long threshold_restart_bank(void *_tr)
 }
 
 /* cpu init entry point, called from mce.c with preempt off */
-void mce_amd_feature_init(struct cpuinfo_x86 *c)
+void __cpuinit mce_amd_feature_init(struct cpuinfo_x86 *c)
 {
 	unsigned int bank, block;
 	unsigned int cpu = smp_processor_id();
@@ -248,7 +248,7 @@ asmlinkage void mce_threshold_interrupt(void)
 		}
 	}
 out:
-	inc_irq_stat(irq_threshold_count);
+	add_pda(irq_threshold_count, 1);
 	irq_exit();
 }
 
@@ -462,7 +462,7 @@ out_free:
 	return err;
 }
 
-static __cpuinit long local_allocate_threshold_blocks(void *_bank)
+static long local_allocate_threshold_blocks(void *_bank)
 {
 	unsigned int *bank = _bank;
 

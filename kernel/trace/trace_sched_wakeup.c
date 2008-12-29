@@ -211,7 +211,7 @@ static void wakeup_reset(struct trace_array *tr)
 }
 
 static void
-probe_wakeup(struct rq *rq, struct task_struct *p, int success)
+probe_wakeup(struct rq *rq, struct task_struct *p)
 {
 	int cpu = smp_processor_id();
 	unsigned long flags;
@@ -333,7 +333,6 @@ static void stop_wakeup_tracer(struct trace_array *tr)
 
 static int wakeup_tracer_init(struct trace_array *tr)
 {
-	tracing_max_latency = 0;
 	wakeup_trace = tr;
 	start_wakeup_tracer(tr);
 	return 0;

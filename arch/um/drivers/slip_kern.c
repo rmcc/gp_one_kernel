@@ -19,7 +19,7 @@ static void slip_init(struct net_device *dev, void *data)
 	struct slip_data *spri;
 	struct slip_init *init = data;
 
-	private = netdev_priv(dev);
+	private = dev->priv;
 	spri = (struct slip_data *) private->user;
 
 	memset(spri->name, 0, sizeof(spri->name));

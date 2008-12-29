@@ -34,7 +34,6 @@ static int snd_jack_dev_free(struct snd_device *device)
 	else
 		input_free_device(jack->input_dev);
 
-	kfree(jack->id);
 	kfree(jack);
 
 	return 0;
@@ -47,7 +46,7 @@ static int snd_jack_dev_register(struct snd_device *device)
 	int err;
 
 	snprintf(jack->name, sizeof(jack->name), "%s %s",
-		 card->shortname, jack->id);
+		 card->longname, jack->id);
 	jack->input_dev->name = jack->name;
 
 	/* Default to the sound card device. */
@@ -88,7 +87,7 @@ int snd_jack_new(struct snd_card *card, const char *id, int type,
 	if (jack == NULL)
 		return -ENOMEM;
 
-	jack->id = kstrdup(id, GFP_KERNEL);
+	jack->id = id;
 
 	jack->input_dev = input_allocate_device();
 	if (jack->input_dev == NULL) {
@@ -103,15 +102,9 @@ int snd_jack_new(struct snd_card *card, const char *id, int type,
 	if (type & SND_JACK_HEADPHONE)
 		input_set_capability(jack->input_dev, EV_SW,
 				     SW_HEADPHONE_INSERT);
-	if (type & SND_JACK_LINEOUT)
-		input_set_capability(jack->input_dev, EV_SW,
-				     SW_LINEOUT_INSERT);
 	if (type & SND_JACK_MICROPHONE)
 		input_set_capability(jack->input_dev, EV_SW,
 				     SW_MICROPHONE_INSERT);
-	if (type & SND_JACK_MECHANICAL)
-		input_set_capability(jack->input_dev, EV_SW,
-				     SW_JACK_PHYSICAL_INSERT);
 
 	err = snd_device_new(card, SNDRV_DEV_JACK, jack, &ops);
 	if (err < 0)
@@ -160,15 +153,9 @@ void snd_jack_report(struct snd_jack *jack, int status)
 	if (jack->type & SND_JACK_HEADPHONE)
 		input_report_switch(jack->input_dev, SW_HEADPHONE_INSERT,
 				    status & SND_JACK_HEADPHONE);
-	if (jack->type & SND_JACK_LINEOUT)
-		input_report_switch(jack->input_dev, SW_LINEOUT_INSERT,
-				    status & SND_JACK_LINEOUT);
 	if (jack->type & SND_JACK_MICROPHONE)
 		input_report_switch(jack->input_dev, SW_MICROPHONE_INSERT,
 				    status & SND_JACK_MICROPHONE);
-	if (jack->type & SND_JACK_MECHANICAL)
-		input_report_switch(jack->input_dev, SW_JACK_PHYSICAL_INSERT,
-				    status & SND_JACK_MECHANICAL);
 
 	input_sync(jack->input_dev);
 }

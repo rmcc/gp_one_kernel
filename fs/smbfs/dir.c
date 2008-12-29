@@ -667,7 +667,8 @@ smb_make_node(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
 
 	attr.ia_valid = ATTR_MODE | ATTR_UID | ATTR_GID;
 	attr.ia_mode = mode;
-	current_euid_egid(&attr.ia_uid, &attr.ia_gid);
+	attr.ia_uid = current->euid;
+	attr.ia_gid = current->egid;
 
 	if (!new_valid_dev(dev))
 		return -EINVAL;

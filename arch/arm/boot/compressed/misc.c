@@ -86,8 +86,6 @@ static void putstr(const char *ptr)
 
 #define __ptr_t void *
 
-#define memzero(s,n) __memzero(s,n)
-
 /*
  * Optimised C version of memzero for the ARM.
  */

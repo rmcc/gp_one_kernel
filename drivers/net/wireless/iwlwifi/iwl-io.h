@@ -21,7 +21,7 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  *****************************************************************************/
@@ -55,7 +55,7 @@
  * _iwl_read32.)
  *
  * These declarations are *extremely* useful in quickly isolating code deltas
- * which result in misconfiguration of the hardware I/O.  In combination with
+ * which result in misconfiguring of the hardware I/O.  In combination with
  * git-bisect and the IO debug level you can quickly determine the specific
  * commit which breaks the IO sequence to the hardware.
  *
@@ -87,18 +87,17 @@ static inline u32 __iwl_read32(char *f, u32 l, struct iwl_priv *priv, u32 ofs)
 #define iwl_read32(p, o) _iwl_read32(p, o)
 #endif
 
-#define IWL_POLL_INTERVAL 10	/* microseconds */
 static inline int _iwl_poll_bit(struct iwl_priv *priv, u32 addr,
 				u32 bits, u32 mask, int timeout)
 {
-	int t = 0;
+	int i = 0;
 
 	do {
 		if ((_iwl_read32(priv, addr) & mask) == (bits & mask))
-			return t;
-		udelay(IWL_POLL_INTERVAL);
-		t += IWL_POLL_INTERVAL;
-	} while (t < timeout);
+			return i;
+		mdelay(10);
+		i += 10;
+	} while (i < timeout);
 
 	return -ETIMEDOUT;
 }
@@ -110,7 +109,7 @@ static inline int __iwl_poll_bit(const char *f, u32 l,
 	int ret = _iwl_poll_bit(priv, addr, bits, mask, timeout);
 	IWL_DEBUG_IO("poll_bit(0x%08X, 0x%08X, 0x%08X) - %s- %s %d\n",
 		     addr, bits, mask,
-		     unlikely(ret  == -ETIMEDOUT) ? "timeout" : "", f, l);
+		     unlikely(ret  == -ETIMEDOUT)?"timeout":"", f, l);
 	return ret;
 }
 #define iwl_poll_bit(priv, addr, bits, mask, timeout) \
@@ -270,10 +269,19 @@ static inline void iwl_write_reg_buf(struct iwl_priv *priv,
 	}
 }
 
-static inline int _iwl_poll_direct_bit(struct iwl_priv *priv, u32 addr,
-				       u32 mask, int timeout)
+static inline int _iwl_poll_direct_bit(struct iwl_priv *priv,
+					   u32 addr, u32 mask, int timeout)
 {
-	return _iwl_poll_bit(priv, addr, mask, mask, timeout);
+	int i = 0;
+
+	do {
+		if ((_iwl_read_direct32(priv, addr) & mask) == mask)
+			return i;
+		mdelay(10);
+		i += 10;
+	} while (i < timeout);
+
+	return -ETIMEDOUT;
 }
 
 #ifdef CONFIG_IWLWIFI_DEBUG
@@ -300,7 +308,6 @@ static inline int __iwl_poll_direct_bit(const char *f, u32 l,
 static inline u32 _iwl_read_prph(struct iwl_priv *priv, u32 reg)
 {
 	_iwl_write_direct32(priv, HBUS_TARG_PRPH_RADDR, reg | (3 << 24));
-	rmb();
 	return _iwl_read_direct32(priv, HBUS_TARG_PRPH_RDAT);
 }
 #ifdef CONFIG_IWLWIFI_DEBUG
@@ -323,7 +330,6 @@ static inline void _iwl_write_prph(struct iwl_priv *priv,
 {
 	_iwl_write_direct32(priv, HBUS_TARG_PRPH_WADDR,
 			      ((addr & 0x0000FFFF) | (3 << 24)));
-	wmb();
 	_iwl_write_direct32(priv, HBUS_TARG_PRPH_WDAT, val);
 }
 #ifdef CONFIG_IWLWIFI_DEBUG
@@ -386,14 +392,12 @@ static inline void iwl_clear_bits_prph(struct iwl_priv
 static inline u32 iwl_read_targ_mem(struct iwl_priv *priv, u32 addr)
 {
 	iwl_write_direct32(priv, HBUS_TARG_MEM_RADDR, addr);
-	rmb();
 	return iwl_read_direct32(priv, HBUS_TARG_MEM_RDAT);
 }
 
 static inline void iwl_write_targ_mem(struct iwl_priv *priv, u32 addr, u32 val)
 {
 	iwl_write_direct32(priv, HBUS_TARG_MEM_WADDR, addr);
-	wmb();
 	iwl_write_direct32(priv, HBUS_TARG_MEM_WDAT, val);
 }
 
@@ -401,7 +405,6 @@ static inline void iwl_write_targ_mem_buf(struct iwl_priv *priv, u32 addr,
 					  u32 len, u32 *values)
 {
 	iwl_write_direct32(priv, HBUS_TARG_MEM_WADDR, addr);
-	wmb();
 	for (; 0 < len; len -= sizeof(u32), values++)
 		iwl_write_direct32(priv, HBUS_TARG_MEM_WDAT, *values);
 }

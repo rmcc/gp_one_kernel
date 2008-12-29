@@ -77,7 +77,7 @@ static inline u64 sched_rt_period(struct rt_rq *rt_rq)
 }
 
 #define for_each_leaf_rt_rq(rt_rq, rq) \
-	list_for_each_entry_rcu(rt_rq, &rq->leaf_rt_rq_list, leaf_rt_rq_list)
+	list_for_each_entry(rt_rq, &rq->leaf_rt_rq_list, leaf_rt_rq_list)
 
 static inline struct rq *rq_of_rt_rq(struct rt_rq *rt_rq)
 {
@@ -550,30 +550,28 @@ static void update_curr_rt(struct rq *rq)
 static inline
 void inc_rt_tasks(struct sched_rt_entity *rt_se, struct rt_rq *rt_rq)
 {
-	WARN_ON(!rt_prio(rt_se_prio(rt_se)));
+	int prio = rt_se_prio(rt_se);
+#ifdef CONFIG_SMP
+	struct rq *rq = rq_of_rt_rq(rt_rq);
+#endif
+
+	WARN_ON(!rt_prio(prio));
 	rt_rq->rt_nr_running++;
 #if defined CONFIG_SMP || defined CONFIG_RT_GROUP_SCHED
-	if (rt_se_prio(rt_se) < rt_rq->highest_prio) {
-#ifdef CONFIG_SMP
-		struct rq *rq = rq_of_rt_rq(rt_rq);
-#endif
+	if (prio < rt_rq->highest_prio) {
 
-		rt_rq->highest_prio = rt_se_prio(rt_se);
+		rt_rq->highest_prio = prio;
 #ifdef CONFIG_SMP
 		if (rq->online)
-			cpupri_set(&rq->rd->cpupri, rq->cpu,
-				   rt_se_prio(rt_se));
+			cpupri_set(&rq->rd->cpupri, rq->cpu, prio);
 #endif
 	}
 #endif
 #ifdef CONFIG_SMP
-	if (rt_se->nr_cpus_allowed > 1) {
-		struct rq *rq = rq_of_rt_rq(rt_rq);
-
+	if (rt_se->nr_cpus_allowed > 1)
 		rq->rt.rt_nr_migratory++;
-	}
 
-	update_rt_migration(rq_of_rt_rq(rt_rq));
+	update_rt_migration(rq);
 #endif
 #ifdef CONFIG_RT_GROUP_SCHED
 	if (rt_se_boosted(rt_se))
@@ -590,6 +588,7 @@ static inline
 void dec_rt_tasks(struct sched_rt_entity *rt_se, struct rt_rq *rt_rq)
 {
 #ifdef CONFIG_SMP
+	struct rq *rq = rq_of_rt_rq(rt_rq);
 	int highest_prio = rt_rq->highest_prio;
 #endif
 
@@ -611,20 +610,13 @@ void dec_rt_tasks(struct sched_rt_entity *rt_se, struct rt_rq *rt_rq)
 		rt_rq->highest_prio = MAX_RT_PRIO;
 #endif
 #ifdef CONFIG_SMP
-	if (rt_se->nr_cpus_allowed > 1) {
-		struct rq *rq = rq_of_rt_rq(rt_rq);
+	if (rt_se->nr_cpus_allowed > 1)
 		rq->rt.rt_nr_migratory--;
-	}
 
-	if (rt_rq->highest_prio != highest_prio) {
-		struct rq *rq = rq_of_rt_rq(rt_rq);
+	if (rq->online && rt_rq->highest_prio != highest_prio)
+		cpupri_set(&rq->rd->cpupri, rq->cpu, rt_rq->highest_prio);
 
-		if (rq->online)
-			cpupri_set(&rq->rd->cpupri, rq->cpu,
-				   rt_rq->highest_prio);
-	}
-
-	update_rt_migration(rq_of_rt_rq(rt_rq));
+	update_rt_migration(rq);
 #endif /* CONFIG_SMP */
 #ifdef CONFIG_RT_GROUP_SCHED
 	if (rt_se_boosted(rt_se))
@@ -968,8 +960,8 @@ static inline int pick_optimal_cpu(int this_cpu, cpumask_t *mask)
 	if ((this_cpu != -1) && cpu_isset(this_cpu, *mask))
 		return this_cpu;
 
-	first = cpumask_first(mask);
-	if (first < nr_cpu_ids)
+	first = first_cpu(*mask);
+	if (first != NR_CPUS)
 		return first;
 
 	return -1;
@@ -1383,8 +1375,7 @@ static inline void init_sched_rt_class(void)
 	unsigned int i;
 
 	for_each_possible_cpu(i)
-		alloc_cpumask_var_node(&per_cpu(local_cpu_mask, i),
-					GFP_KERNEL, cpu_to_node(i));
+		alloc_cpumask_var(&per_cpu(local_cpu_mask, i), GFP_KERNEL);
 }
 #endif /* CONFIG_SMP */
 

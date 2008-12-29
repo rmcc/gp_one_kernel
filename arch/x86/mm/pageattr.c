@@ -508,13 +508,18 @@ static int split_large_page(pte_t *kpte, unsigned long address)
 #endif
 
 	/*
-	 * Install the new, split up pagetable.
+	 * Install the new, split up pagetable. Important details here:
 	 *
-	 * We use the standard kernel pagetable protections for the new
-	 * pagetable protections, the actual ptes set above control the
-	 * primary protection behavior:
+	 * On Intel the NX bit of all levels must be cleared to make a
+	 * page executable. See section 4.13.2 of Intel 64 and IA-32
+	 * Architectures Software Developer's Manual).
+	 *
+	 * Mark the entry present. The current mapping might be
+	 * set to not present, which we preserved above.
 	 */
-	__set_pmd_pte(kpte, address, mk_pte(base, __pgprot(_KERNPG_TABLE)));
+	ref_prot = pte_pgprot(pte_mkexec(pte_clrhuge(*kpte)));
+	pgprot_val(ref_prot) |= _PAGE_PRESENT;
+	__set_pmd_pte(kpte, address, mk_pte(base, ref_prot));
 	base = NULL;
 
 out_unlock:
@@ -529,36 +534,6 @@ out_unlock:
 	return 0;
 }
 
-static int __cpa_process_fault(struct cpa_data *cpa, unsigned long vaddr,
-			       int primary)
-{
-	/*
-	 * Ignore all non primary paths.
-	 */
-	if (!primary)
-		return 0;
-
-	/*
-	 * Ignore the NULL PTE for kernel identity mapping, as it is expected
-	 * to have holes.
-	 * Also set numpages to '1' indicating that we processed cpa req for
-	 * one virtual address page and its pfn. TBD: numpages can be set based
-	 * on the initial value and the level returned by lookup_address().
-	 */
-	if (within(vaddr, PAGE_OFFSET,
-		   PAGE_OFFSET + (max_pfn_mapped << PAGE_SHIFT))) {
-		cpa->numpages = 1;
-		cpa->pfn = __pa(vaddr) >> PAGE_SHIFT;
-		return 0;
-	} else {
-		WARN(1, KERN_WARNING "CPA: called for zero pte. "
-			"vaddr = %lx cpa->vaddr = %lx\n", vaddr,
-			*cpa->vaddr);
-
-		return -EFAULT;
-	}
-}
-
 static int __change_page_attr(struct cpa_data *cpa, int primary)
 {
 	unsigned long address;
@@ -570,14 +545,21 @@ static int __change_page_attr(struct cpa_data *cpa, int primary)
 		address = cpa->vaddr[cpa->curpage];
 	else
 		address = *cpa->vaddr;
+
 repeat:
 	kpte = lookup_address(address, &level);
 	if (!kpte)
-		return __cpa_process_fault(cpa, address, primary);
+		return 0;
 
 	old_pte = *kpte;
-	if (!pte_val(old_pte))
-		return __cpa_process_fault(cpa, address, primary);
+	if (!pte_val(old_pte)) {
+		if (!primary)
+			return 0;
+		WARN(1, KERN_WARNING "CPA: called for zero pte. "
+		       "vaddr = %lx cpa->vaddr = %lx\n", address,
+		       *cpa->vaddr);
+		return -EINVAL;
+	}
 
 	if (level == PG_LEVEL_4K) {
 		pte_t new_pte;
@@ -675,7 +657,12 @@ static int cpa_process_alias(struct cpa_data *cpa)
 		vaddr = *cpa->vaddr;
 
 	if (!(within(vaddr, PAGE_OFFSET,
-		    PAGE_OFFSET + (max_pfn_mapped << PAGE_SHIFT)))) {
+		    PAGE_OFFSET + (max_low_pfn_mapped << PAGE_SHIFT))
+#ifdef CONFIG_X86_64
+		|| within(vaddr, PAGE_OFFSET + (1UL<<32),
+		    PAGE_OFFSET + (max_pfn_mapped << PAGE_SHIFT))
+#endif
+	)) {
 
 		alias_cpa = *cpa;
 		temp_cpa_vaddr = (unsigned long) __va(cpa->pfn << PAGE_SHIFT);
@@ -806,13 +793,6 @@ static int change_page_attr_set_clr(unsigned long *addr, int numpages,
 
 	vm_unmap_aliases();
 
-	/*
-	 * If we're called with lazy mmu updates enabled, the
-	 * in-memory pte state may be stale.  Flush pending updates to
-	 * bring them up to date.
-	 */
-	arch_flush_lazy_mmu_mode();
-
 	cpa.vaddr = addr;
 	cpa.numpages = numpages;
 	cpa.mask_set = mask_set;
@@ -854,13 +834,6 @@ static int change_page_attr_set_clr(unsigned long *addr, int numpages,
 			cpa_flush_range(*addr, numpages, cache);
 	} else
 		cpa_flush_all(cache);
-
-	/*
-	 * If we've been called with lazy mmu updates enabled, then
-	 * make sure that everything gets flushed out before we
-	 * return.
-	 */
-	arch_flush_lazy_mmu_mode();
 
 out:
 	return ret;

@@ -1,7 +1,6 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <asm/idle.h>
 #include <linux/smp.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
@@ -180,9 +179,6 @@ void mwait_idle_with_hints(unsigned long ax, unsigned long cx)
 
 	trace_power_start(&it, POWER_CSTATE, (ax>>4)+1);
 	if (!need_resched()) {
-		if (cpu_has(&current_cpu_data, X86_FEATURE_CLFLUSH_MONITOR))
-			clflush((void *)&current_thread_info()->flags);
-
 		__monitor((void *)&current_thread_info()->flags, 0, 0);
 		smp_mb();
 		if (!need_resched())
@@ -197,9 +193,6 @@ static void mwait_idle(void)
 	struct power_trace it;
 	if (!need_resched()) {
 		trace_power_start(&it, POWER_CSTATE, 1);
-		if (cpu_has(&current_cpu_data, X86_FEATURE_CLFLUSH_MONITOR))
-			clflush((void *)&current_thread_info()->flags);
-
 		__monitor((void *)&current_thread_info()->flags, 0, 0);
 		smp_mb();
 		if (!need_resched())
@@ -309,7 +302,7 @@ static void c1e_idle(void)
 		rdmsr(MSR_K8_INT_PENDING_MSG, lo, hi);
 		if (lo & K8_INTP_C1E_ACTIVE_MASK) {
 			c1e_detected = 1;
-			if (!boot_cpu_has(X86_FEATURE_NONSTOP_TSC))
+			if (!boot_cpu_has(X86_FEATURE_CONSTANT_TSC))
 				mark_tsc_unstable("TSC halt in AMD C1E");
 			printk(KERN_INFO "System has AMD C1E enabled\n");
 			set_cpu_cap(&boot_cpu_data, X86_FEATURE_AMDC1E);

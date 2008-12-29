@@ -355,8 +355,7 @@ static struct dasd_ccw_req *dasd_fba_build_cp(struct dasd_device * memdev,
 			recid++;
 		}
 	}
-	if (blk_noretry_request(req) ||
-	    block->base->features & DASD_FEATURE_FAILFAST)
+	if (blk_noretry_request(req))
 		set_bit(DASD_CQR_FLAGS_FAILFAST, &cqr->flags);
 	cqr->startdev = memdev;
 	cqr->memdev = memdev;

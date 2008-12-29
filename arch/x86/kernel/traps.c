@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/ptrace.h>
 #include <linux/string.h>
+#include <linux/unwind.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/kexec.h>
@@ -50,6 +51,7 @@
 #include <asm/debugreg.h>
 #include <asm/atomic.h>
 #include <asm/system.h>
+#include <asm/unwind.h>
 #include <asm/traps.h>
 #include <asm/desc.h>
 #include <asm/i387.h>
@@ -63,6 +65,9 @@
 #else
 #include <asm/processor-flags.h>
 #include <asm/arch_hooks.h>
+#include <asm/nmi.h>
+#include <asm/smp.h>
+#include <asm/io.h>
 #include <asm/traps.h>
 
 #include "cpu/mcheck/mce.h"
@@ -97,12 +102,6 @@ static inline void preempt_conditional_sti(struct pt_regs *regs)
 	inc_preempt_count();
 	if (regs->flags & X86_EFLAGS_IF)
 		local_irq_enable();
-}
-
-static inline void conditional_cli(struct pt_regs *regs)
-{
-	if (regs->flags & X86_EFLAGS_IF)
-		local_irq_disable();
 }
 
 static inline void preempt_conditional_cli(struct pt_regs *regs)
@@ -293,10 +292,8 @@ dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
 	tsk->thread.error_code = error_code;
 	tsk->thread.trap_no = 8;
 
-	/*
-	 * This is always a kernel trap and never fixable (and thus must
-	 * never return).
-	 */
+	/* This is always a kernel trap and never fixable (and thus must
+	   never return). */
 	for (;;)
 		die(str, regs, error_code);
 }
@@ -484,7 +481,11 @@ do_nmi(struct pt_regs *regs, long error_code)
 {
 	nmi_enter();
 
-	inc_irq_stat(__nmi_count);
+#ifdef CONFIG_X86_32
+	{ int cpu; cpu = smp_processor_id(); ++nmi_count(cpu); }
+#else
+	add_pda(__nmi_count, 1);
+#endif
 
 	if (!ignore_nmis)
 		default_do_nmi(regs);
@@ -523,11 +524,9 @@ dotraplinkage void __kprobes do_int3(struct pt_regs *regs, long error_code)
 }
 
 #ifdef CONFIG_X86_64
-/*
- * Help handler running on IST stack to switch back to user stack
- * for scheduling or signal handling. The actual stack switch is done in
- * entry.S
- */
+/* Help handler running on IST stack to switch back to user stack
+   for scheduling or signal handling. The actual stack switch is done in
+   entry.S */
 asmlinkage __kprobes struct pt_regs *sync_regs(struct pt_regs *eregs)
 {
 	struct pt_regs *regs = eregs;
@@ -537,10 +536,8 @@ asmlinkage __kprobes struct pt_regs *sync_regs(struct pt_regs *eregs)
 	/* Exception from user space */
 	else if (user_mode(eregs))
 		regs = task_pt_regs(current);
-	/*
-	 * Exception from kernel and interrupts are enabled. Move to
-	 * kernel process stack.
-	 */
+	/* Exception from kernel and interrupts are enabled. Move to
+	   kernel process stack. */
 	else if (eregs->flags & X86_EFLAGS_IF)
 		regs = (struct pt_regs *)(eregs->sp -= sizeof(struct pt_regs));
 	if (eregs != regs)
@@ -632,10 +629,8 @@ clear_dr7:
 
 #ifdef CONFIG_X86_32
 debug_vm86:
-	/* reenable preemption: handle_vm86_trap() might sleep */
-	dec_preempt_count();
 	handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
-	conditional_cli(regs);
+	preempt_conditional_cli(regs);
 	return;
 #endif
 
@@ -669,7 +664,7 @@ void math_error(void __user *ip)
 {
 	struct task_struct *task;
 	siginfo_t info;
-	unsigned short cwd, swd, err;
+	unsigned short cwd, swd;
 
 	/*
 	 * Save the info for the exception handler and clear the error.
@@ -680,6 +675,7 @@ void math_error(void __user *ip)
 	task->thread.error_code = 0;
 	info.si_signo = SIGFPE;
 	info.si_errno = 0;
+	info.si_code = __SI_FAULT;
 	info.si_addr = ip;
 	/*
 	 * (~cwd & swd) will mask out exceptions that are not set to unmasked
@@ -693,30 +689,34 @@ void math_error(void __user *ip)
 	 */
 	cwd = get_fpu_cwd(task);
 	swd = get_fpu_swd(task);
-
-	err = swd & ~cwd;
-
-	if (err & 0x001) {	/* Invalid op */
+	switch (swd & ~cwd & 0x3f) {
+	case 0x000: /* No unmasked exception */
+#ifdef CONFIG_X86_32
+		return;
+#endif
+	default: /* Multiple exceptions */
+		break;
+	case 0x001: /* Invalid Op */
 		/*
 		 * swd & 0x240 == 0x040: Stack Underflow
 		 * swd & 0x240 == 0x240: Stack Overflow
 		 * User must clear the SF bit (0x40) if set
 		 */
 		info.si_code = FPE_FLTINV;
-	} else if (err & 0x004) { /* Divide by Zero */
-		info.si_code = FPE_FLTDIV;
-	} else if (err & 0x008) { /* Overflow */
-		info.si_code = FPE_FLTOVF;
-	} else if (err & 0x012) { /* Denormal, Underflow */
+		break;
+	case 0x002: /* Denormalize */
+	case 0x010: /* Underflow */
 		info.si_code = FPE_FLTUND;
-	} else if (err & 0x020) { /* Precision */
+		break;
+	case 0x004: /* Zero Divide */
+		info.si_code = FPE_FLTDIV;
+		break;
+	case 0x008: /* Overflow */
+		info.si_code = FPE_FLTOVF;
+		break;
+	case 0x020: /* Precision */
 		info.si_code = FPE_FLTRES;
-	} else {
-		/*
-		 * If we're using IRQ 13, or supposedly even some trap 16
-		 * implementations, it's possible we get a spurious trap...
-		 */
-		return;		/* Spurious trap, no error */
+		break;
 	}
 	force_sig_info(SIGFPE, &info, task);
 }
@@ -904,7 +904,7 @@ asmlinkage void math_state_restore(void)
 EXPORT_SYMBOL_GPL(math_state_restore);
 
 #ifndef CONFIG_MATH_EMULATION
-void math_emulate(struct math_emu_info *info)
+asmlinkage void math_emulate(long arg)
 {
 	printk(KERN_EMERG
 		"math-emulation not enabled and no coprocessor found.\n");
@@ -914,19 +914,16 @@ void math_emulate(struct math_emu_info *info)
 }
 #endif /* CONFIG_MATH_EMULATION */
 
-dotraplinkage void __kprobes do_device_not_available(struct pt_regs regs)
+dotraplinkage void __kprobes
+do_device_not_available(struct pt_regs *regs, long error)
 {
 #ifdef CONFIG_X86_32
 	if (read_cr0() & X86_CR0_EM) {
-		struct math_emu_info info = { };
-
-		conditional_sti(&regs);
-
-		info.regs = &regs;
-		math_emulate(&info);
+		conditional_sti(regs);
+		math_emulate(0);
 	} else {
 		math_state_restore(); /* interrupts still off */
-		conditional_sti(&regs);
+		conditional_sti(regs);
 	}
 #else
 	math_state_restore();

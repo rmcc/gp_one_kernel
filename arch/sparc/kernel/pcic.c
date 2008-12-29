@@ -436,7 +436,7 @@ int pcic_present(void)
 	return pcic0_up;
 }
 
-static int __devinit pdev_to_pnode(struct linux_pbm_info *pbm,
+static int __init pdev_to_pnode(struct linux_pbm_info *pbm, 
 				    struct pci_dev *pdev)
 {
 	struct linux_prom_pci_registers regs[PROMREG_MAX];
@@ -956,7 +956,6 @@ void outsb(unsigned long addr, const void *src, unsigned long count)
 		/* addr += 1; */
 	}
 }
-EXPORT_SYMBOL(outsb);
 
 void outsw(unsigned long addr, const void *src, unsigned long count)
 {
@@ -967,7 +966,6 @@ void outsw(unsigned long addr, const void *src, unsigned long count)
 		/* addr += 2; */
 	}
 }
-EXPORT_SYMBOL(outsw);
 
 void outsl(unsigned long addr, const void *src, unsigned long count)
 {
@@ -978,7 +976,6 @@ void outsl(unsigned long addr, const void *src, unsigned long count)
 		/* addr += 4; */
 	}
 }
-EXPORT_SYMBOL(outsl);
 
 void insb(unsigned long addr, void *dst, unsigned long count)
 {
@@ -989,7 +986,6 @@ void insb(unsigned long addr, void *dst, unsigned long count)
 		/* addr += 1; */
 	}
 }
-EXPORT_SYMBOL(insb);
 
 void insw(unsigned long addr, void *dst, unsigned long count)
 {
@@ -1000,7 +996,6 @@ void insw(unsigned long addr, void *dst, unsigned long count)
 		/* addr += 2; */
 	}
 }
-EXPORT_SYMBOL(insw);
 
 void insl(unsigned long addr, void *dst, unsigned long count)
 {
@@ -1014,6 +1009,5 @@ void insl(unsigned long addr, void *dst, unsigned long count)
 		/* addr += 4; */
 	}
 }
-EXPORT_SYMBOL(insl);
 
 subsys_initcall(pcic_init);

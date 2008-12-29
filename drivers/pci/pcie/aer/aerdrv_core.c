@@ -252,7 +252,7 @@ static void report_resume(struct pci_dev *dev, void *data)
 
 	if (!dev->driver ||
 		!dev->driver->err_handler ||
-		!dev->driver->err_handler->resume)
+		!dev->driver->err_handler->slot_reset)
 		return;
 
 	err_handler = dev->driver->err_handler;

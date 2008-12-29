@@ -1,8 +1,6 @@
 #ifndef _LINUX_DN_H
 #define _LINUX_DN_H
 
-#include <linux/types.h>
-
 /*
 
 	DECnet Data Structures and Constants

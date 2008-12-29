@@ -25,7 +25,7 @@
 /*
  * Access to the ThumbEE Handler Base register
  */
-static inline unsigned long teehbr_read(void)
+static inline unsigned long teehbr_read()
 {
 	unsigned long v;
 	asm("mrc	p14, 6, %0, c1, c0, 0\n" : "=r" (v));

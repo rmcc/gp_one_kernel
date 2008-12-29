@@ -50,10 +50,6 @@ struct kvm_vqconfig {
 #define KVM_S390_VIRTIO_RESET		1
 #define KVM_S390_VIRTIO_SET_STATUS	2
 
-/* The alignment to use between consumer and producer parts of vring.
- * This is pagesize for historical reasons. */
-#define KVM_S390_VIRTIO_RING_ALIGN	4096
-
 #ifdef __KERNEL__
 /* early virtio console setup */
 #ifdef CONFIG_S390_GUEST

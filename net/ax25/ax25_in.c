@@ -200,15 +200,19 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	skb_reset_transport_header(skb);
 
-	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
-		goto free;
+	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL) {
+		kfree_skb(skb);
+		return 0;
+	}
 
 	/*
 	 *	Parse the address header.
 	 */
 
-	if (ax25_addr_parse(skb->data, skb->len, &src, &dest, &dp, &type, &dama) == NULL)
-		goto free;
+	if (ax25_addr_parse(skb->data, skb->len, &src, &dest, &dp, &type, &dama) == NULL) {
+		kfree_skb(skb);
+		return 0;
+	}
 
 	/*
 	 *	Ours perhaps ?
@@ -235,8 +239,10 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 
 		ax25_send_to_raw(&dest, skb, skb->data[1]);
 
-		if (!mine && ax25cmp(&dest, (ax25_address *)dev->broadcast) != 0)
-			goto free;
+		if (!mine && ax25cmp(&dest, (ax25_address *)dev->broadcast) != 0) {
+			kfree_skb(skb);
+			return 0;
+		}
 
 		/* Now we are pointing at the pid byte */
 		switch (skb->data[1]) {
@@ -295,8 +301,10 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 	 *	If not, should we DM the incoming frame (except DMs) or
 	 *	silently ignore them. For now we stay quiet.
 	 */
-	if (ax25_dev->values[AX25_VALUES_CONMODE] == 0)
-		goto free;
+	if (ax25_dev->values[AX25_VALUES_CONMODE] == 0) {
+		kfree_skb(skb);
+		return 0;
+	}
 
 	/* LAPB */
 
@@ -331,7 +339,8 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 		if ((*skb->data & ~AX25_PF) != AX25_DM && mine)
 			ax25_return_dm(dev, &src, &dest, &dp);
 
-		goto free;
+		kfree_skb(skb);
+		return 0;
 	}
 
 	/* b) received SABM(E) */
@@ -363,12 +372,15 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 		sk->sk_ack_backlog++;
 		bh_unlock_sock(sk);
 	} else {
-		if (!mine)
-			goto free;
+		if (!mine) {
+			kfree_skb(skb);
+			return 0;
+		}
 
 		if ((ax25 = ax25_create_cb()) == NULL) {
 			ax25_return_dm(dev, &src, &dest, &dp);
-			goto free;
+			kfree_skb(skb);
+			return 0;
 		}
 
 		ax25_fillin_cb(ax25, ax25_dev);
@@ -424,10 +436,9 @@ static int ax25_rcv(struct sk_buff *skb, struct net_device *dev,
 		if (!sock_flag(sk, SOCK_DEAD))
 			sk->sk_data_ready(sk, skb->len);
 		sock_put(sk);
-	} else {
-free:
+	} else
 		kfree_skb(skb);
-	}
+
 	return 0;
 }
 

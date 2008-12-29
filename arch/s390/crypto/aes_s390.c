@@ -17,9 +17,6 @@
  *
  */
 
-#define KMSG_COMPONENT "aes_s390"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include <crypto/aes.h>
 #include <crypto/algapi.h>
 #include <linux/err.h>
@@ -172,8 +169,7 @@ static int fallback_init_cip(struct crypto_tfm *tfm)
 			CRYPTO_ALG_ASYNC | CRYPTO_ALG_NEED_FALLBACK);
 
 	if (IS_ERR(sctx->fallback.cip)) {
-		pr_err("Allocating AES fallback algorithm %s failed\n",
-		       name);
+		printk(KERN_ERR "Error allocating fallback algo %s\n", name);
 		return PTR_ERR(sctx->fallback.blk);
 	}
 
@@ -353,8 +349,7 @@ static int fallback_init_blk(struct crypto_tfm *tfm)
 			CRYPTO_ALG_ASYNC | CRYPTO_ALG_NEED_FALLBACK);
 
 	if (IS_ERR(sctx->fallback.blk)) {
-		pr_err("Allocating AES fallback algorithm %s failed\n",
-		       name);
+		printk(KERN_ERR "Error allocating fallback algo %s\n", name);
 		return PTR_ERR(sctx->fallback.blk);
 	}
 
@@ -520,8 +515,9 @@ static int __init aes_s390_init(void)
 
 	/* z9 109 and z9 BC/EC only support 128 bit key length */
 	if (keylen_flag == AES_KEYLEN_128)
-		pr_info("AES hardware acceleration is only available for"
-			" 128-bit keys\n");
+		printk(KERN_INFO
+		       "aes_s390: hardware acceleration only available for "
+		       "128 bit keys\n");
 
 	ret = crypto_register_alg(&aes_alg);
 	if (ret)

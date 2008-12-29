@@ -196,19 +196,27 @@ static enum hrtimer_restart stack_trace_timer_fn(struct hrtimer *hrtimer)
 	return HRTIMER_RESTART;
 }
 
-static void start_stack_timer(void *unused)
+static void start_stack_timer(int cpu)
 {
-	struct hrtimer *hrtimer = &__get_cpu_var(stack_trace_hrtimer);
+	struct hrtimer *hrtimer = &per_cpu(stack_trace_hrtimer, cpu);
 
 	hrtimer_init(hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	hrtimer->function = stack_trace_timer_fn;
+	hrtimer->cb_mode = HRTIMER_CB_IRQSAFE_PERCPU;
 
 	hrtimer_start(hrtimer, ns_to_ktime(sample_period), HRTIMER_MODE_REL);
 }
 
 static void start_stack_timers(void)
 {
-	on_each_cpu(start_stack_timer, NULL, 1);
+	cpumask_t saved_mask = current->cpus_allowed;
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		set_cpus_allowed_ptr(current, &cpumask_of_cpu(cpu));
+		start_stack_timer(cpu);
+	}
+	set_cpus_allowed_ptr(current, &saved_mask);
 }
 
 static void stop_stack_timer(int cpu)
@@ -226,10 +234,20 @@ static void stop_stack_timers(void)
 		stop_stack_timer(cpu);
 }
 
+static void stack_reset(struct trace_array *tr)
+{
+	int cpu;
+
+	tr->time_start = ftrace_now(tr->cpu);
+
+	for_each_online_cpu(cpu)
+		tracing_reset(tr, cpu);
+}
+
 static void start_stack_trace(struct trace_array *tr)
 {
 	mutex_lock(&sample_timer_lock);
-	tracing_reset_online_cpus(tr);
+	stack_reset(tr);
 	start_stack_timers();
 	tracer_enabled = 1;
 	mutex_unlock(&sample_timer_lock);

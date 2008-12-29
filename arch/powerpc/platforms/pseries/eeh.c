@@ -21,8 +21,6 @@
  * Please address comments and feedback to Linas Vepstas <linas@austin.ibm.com>
  */
 
-#undef DEBUG
-
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -490,8 +488,10 @@ int eeh_dn_check_failure(struct device_node *dn, struct pci_dev *dev)
 	if (!(pdn->eeh_mode & EEH_MODE_SUPPORTED) ||
 	    pdn->eeh_mode & EEH_MODE_NOCHECK) {
 		ignored_check++;
-		pr_debug("EEH: Ignored check (%x) for %s %s\n",
-			 pdn->eeh_mode, pci_name (dev), dn->full_name);
+#ifdef DEBUG
+		printk ("EEH:ignored check (%x) for %s %s\n", 
+		        pdn->eeh_mode, pci_name (dev), dn->full_name);
+#endif
 		return 0;
 	}
 
@@ -1014,9 +1014,10 @@ static void *early_enable_eeh(struct device_node *dn, void *data)
 			eeh_subsystem_enabled = 1;
 			pdn->eeh_mode |= EEH_MODE_SUPPORTED;
 
-			pr_debug("EEH: %s: eeh enabled, config=%x pe_config=%x\n",
-				 dn->full_name, pdn->eeh_config_addr,
-				 pdn->eeh_pe_config_addr);
+#ifdef DEBUG
+			printk(KERN_DEBUG "EEH: %s: eeh enabled, config=%x pe_config=%x\n",
+			       dn->full_name, pdn->eeh_config_addr, pdn->eeh_pe_config_addr);
+#endif
 		} else {
 
 			/* This device doesn't support EEH, but it may have an
@@ -1160,17 +1161,13 @@ static void eeh_add_device_late(struct pci_dev *dev)
 	if (!dev || !eeh_subsystem_enabled)
 		return;
 
-	pr_debug("EEH: Adding device %s\n", pci_name(dev));
-
-	dn = pci_device_to_OF_node(dev);
-	pdn = PCI_DN(dn);
-	if (pdn->pcidev == dev) {
-		pr_debug("EEH: Already referenced !\n");
-		return;
-	}
-	WARN_ON(pdn->pcidev);
+#ifdef DEBUG
+	printk(KERN_DEBUG "EEH: adding device %s\n", pci_name(dev));
+#endif
 
 	pci_dev_get (dev);
+	dn = pci_device_to_OF_node(dev);
+	pdn = PCI_DN(dn);
 	pdn->pcidev = dev;
 
 	pci_addr_cache_insert_device(dev);
@@ -1209,18 +1206,17 @@ static void eeh_remove_device(struct pci_dev *dev)
 		return;
 
 	/* Unregister the device with the EEH/PCI address search system */
-	pr_debug("EEH: Removing device %s\n", pci_name(dev));
-
-	dn = pci_device_to_OF_node(dev);
-	if (PCI_DN(dn)->pcidev == NULL) {
-		pr_debug("EEH: Not referenced !\n");
-		return;
-	}
-	PCI_DN(dn)->pcidev = NULL;
-	pci_dev_put (dev);
-
+#ifdef DEBUG
+	printk(KERN_DEBUG "EEH: remove device %s\n", pci_name(dev));
+#endif
 	pci_addr_cache_remove_device(dev);
 	eeh_sysfs_remove_device(dev);
+
+	dn = pci_device_to_OF_node(dev);
+	if (PCI_DN(dn)->pcidev) {
+		PCI_DN(dn)->pcidev = NULL;
+		pci_dev_put (dev);
+	}
 }
 
 void eeh_remove_bus_device(struct pci_dev *dev)

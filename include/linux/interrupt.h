@@ -14,6 +14,7 @@
 #include <linux/irqflags.h>
 #include <linux/smp.h>
 #include <linux/percpu.h>
+#include <linux/irqnr.h>
 
 #include <asm/atomic.h>
 #include <asm/ptrace.h>
@@ -108,7 +109,7 @@ extern void enable_irq(unsigned int irq);
 
 #if defined(CONFIG_SMP) && defined(CONFIG_GENERIC_HARDIRQS)
 
-extern cpumask_var_t irq_default_affinity;
+extern cpumask_t irq_default_affinity;
 
 extern int irq_set_affinity(unsigned int irq, const struct cpumask *cpumask);
 extern int irq_can_set_affinity(unsigned int irq);
@@ -252,8 +253,10 @@ enum
 	BLOCK_SOFTIRQ,
 	TASKLET_SOFTIRQ,
 	SCHED_SOFTIRQ,
+#ifdef CONFIG_HIGH_RES_TIMERS
 	HRTIMER_SOFTIRQ,
-	RCU_SOFTIRQ,	/* Preferable RCU should always be the last softirq */
+#endif
+	RCU_SOFTIRQ, 	/* Preferable RCU should always be the last softirq */
 
 	NR_SOFTIRQS
 };
@@ -463,11 +466,5 @@ static inline void init_irq_proc(void)
 #endif
 
 int show_interrupts(struct seq_file *p, void *v);
-
-struct irq_desc;
-
-extern int early_irq_init(void);
-extern int arch_early_irq_init(void);
-extern int arch_init_chip_data(struct irq_desc *desc, int cpu);
 
 #endif

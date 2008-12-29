@@ -161,8 +161,7 @@ void mconsole_proc(struct mc_request *req)
 		goto out_kill;
 	}
 
-	file = dentry_open(nd.path.dentry, nd.path.mnt, O_RDONLY,
-			   current_cred());
+	file = dentry_open(nd.path.dentry, nd.path.mnt, O_RDONLY);
 	if (IS_ERR(file)) {
 		mconsole_reply(req, "Failed to open file", 1, 0);
 		goto out_kill;

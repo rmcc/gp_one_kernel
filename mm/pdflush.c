@@ -172,16 +172,7 @@ static int __pdflush(struct pdflush_work *my_work)
 static int pdflush(void *dummy)
 {
 	struct pdflush_work my_work;
-	cpumask_var_t cpus_allowed;
-
-	/*
-	 * Since the caller doesn't even check kthread_run() worked, let's not
-	 * freak out too much if this fails.
-	 */
-	if (!alloc_cpumask_var(&cpus_allowed, GFP_KERNEL)) {
-		printk(KERN_WARNING "pdflush failed to allocate cpumask\n");
-		return 0;
-	}
+	cpumask_t cpus_allowed;
 
 	/*
 	 * pdflush can spend a lot of time doing encryption via dm-crypt.  We
@@ -196,9 +187,8 @@ static int pdflush(void *dummy)
 	 * This is needed as pdflush's are dynamically created and destroyed.
 	 * The boottime pdflush's are easily placed w/o these 2 lines.
 	 */
-	cpuset_cpus_allowed(current, cpus_allowed);
-	set_cpus_allowed_ptr(current, cpus_allowed);
-	free_cpumask_var(cpus_allowed);
+	cpuset_cpus_allowed(current, &cpus_allowed);
+	set_cpus_allowed_ptr(current, &cpus_allowed);
 
 	return __pdflush(&my_work);
 }

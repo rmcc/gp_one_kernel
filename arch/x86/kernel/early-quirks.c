@@ -17,7 +17,6 @@
 #include <asm/io_apic.h>
 #include <asm/apic.h>
 #include <asm/iommu.h>
-#include <asm/gart.h>
 
 static void __init fix_hypertransport_config(int num, int slot, int func)
 {
@@ -201,12 +200,6 @@ struct chipset {
 	void (*f)(int num, int slot, int func);
 };
 
-/*
- * Only works for devices on the root bus. If you add any devices
- * not on bus 0 readd another loop level in early_quirks(). But
- * be careful because at least the Nvidia quirk here relies on
- * only matching on bus 0.
- */
 static struct chipset early_qrk[] __initdata = {
 	{ PCI_VENDOR_ID_NVIDIA, PCI_ANY_ID,
 	  PCI_CLASS_BRIDGE_PCI, PCI_ANY_ID, QFLAG_APPLY_ONCE, nvidia_bugs },
@@ -273,17 +266,17 @@ static int __init check_dev_quirk(int num, int slot, int func)
 
 void __init early_quirks(void)
 {
-	int slot, func;
+	int num, slot, func;
 
 	if (!early_pci_allowed())
 		return;
 
 	/* Poor man's PCI discovery */
-	/* Only scan the root bus */
-	for (slot = 0; slot < 32; slot++)
-		for (func = 0; func < 8; func++) {
-			/* Only probe function 0 on single fn devices */
-			if (check_dev_quirk(0, slot, func))
-				break;
-		}
+	for (num = 0; num < 32; num++)
+		for (slot = 0; slot < 32; slot++)
+			for (func = 0; func < 8; func++) {
+				/* Only probe function 0 on single fn devices */
+				if (check_dev_quirk(num, slot, func))
+					break;
+			}
 }

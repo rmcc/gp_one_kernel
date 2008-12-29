@@ -23,8 +23,6 @@
 #ifndef LINUX_PHONET_H
 #define LINUX_PHONET_H
 
-#include <linux/types.h>
-
 /* Automatic protocol selection */
 #define PN_PROTO_TRANSPORT	0
 /* Phonet datagram socket */

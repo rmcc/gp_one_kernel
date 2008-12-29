@@ -29,6 +29,8 @@
 
 #include <asm/i8259.h>
 #include <asm/io_apic.h>
+#include <asm/smp.h>
+#include <asm/nmi.h>
 #include <asm/proto.h>
 #include <asm/timer.h>
 
@@ -206,17 +208,12 @@ static int __init setup_nmi_watchdog(char *str)
 		++str;
 	}
 
-	if (!strncmp(str, "lapic", 5))
-		nmi_watchdog = NMI_LOCAL_APIC;
-	else if (!strncmp(str, "ioapic", 6))
-		nmi_watchdog = NMI_IO_APIC;
-	else {
-		get_option(&str, &nmi);
-		if (nmi >= NMI_INVALID)
-			return 0;
-		nmi_watchdog = nmi;
-	}
+	get_option(&str, &nmi);
 
+	if (nmi >= NMI_INVALID)
+		return 0;
+
+	nmi_watchdog = nmi;
 	return 1;
 }
 __setup("nmi_watchdog=", setup_nmi_watchdog);

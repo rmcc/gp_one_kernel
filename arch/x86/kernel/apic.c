@@ -30,12 +30,9 @@
 #include <linux/module.h>
 #include <linux/dmi.h>
 #include <linux/dmar.h>
-#include <linux/ftrace.h>
-#include <linux/smp.h>
-#include <linux/nmi.h>
-#include <linux/timex.h>
 
 #include <asm/atomic.h>
+#include <asm/smp.h>
 #include <asm/mtrr.h>
 #include <asm/mpspec.h>
 #include <asm/desc.h>
@@ -43,11 +40,12 @@
 #include <asm/hpet.h>
 #include <asm/pgalloc.h>
 #include <asm/i8253.h>
+#include <asm/nmi.h>
 #include <asm/idle.h>
 #include <asm/proto.h>
+#include <asm/timex.h>
 #include <asm/apic.h>
 #include <asm/i8259.h>
-#include <asm/smp.h>
 
 #include <mach_apic.h>
 #include <mach_apicdef.h>
@@ -99,8 +97,8 @@ __setup("apicpmtimer", setup_apicpmtimer);
 #ifdef HAVE_X2APIC
 int x2apic;
 /* x2apic enabled before OS handover */
-static int x2apic_preenabled;
-static int disable_x2apic;
+int x2apic_preenabled;
+int disable_x2apic;
 static __init int setup_nox2apic(char *str)
 {
 	disable_x2apic = 1;
@@ -141,7 +139,7 @@ static int lapic_next_event(unsigned long delta,
 			    struct clock_event_device *evt);
 static void lapic_timer_setup(enum clock_event_mode mode,
 			      struct clock_event_device *evt);
-static void lapic_timer_broadcast(const struct cpumask *mask);
+static void lapic_timer_broadcast(const cpumask_t *mask);
 static void apic_pm_activate(void);
 
 /*
@@ -227,7 +225,7 @@ void xapic_icr_write(u32 low, u32 id)
 	apic_write(APIC_ICR, low);
 }
 
-static u64 xapic_icr_read(void)
+u64 xapic_icr_read(void)
 {
 	u32 icr1, icr2;
 
@@ -267,7 +265,7 @@ void x2apic_icr_write(u32 low, u32 id)
 	wrmsrl(APIC_BASE_MSR + (APIC_ICR >> 4), ((__u64) id) << 32 | low);
 }
 
-static u64 x2apic_icr_read(void)
+u64 x2apic_icr_read(void)
 {
 	unsigned long val;
 
@@ -454,7 +452,7 @@ static void lapic_timer_setup(enum clock_event_mode mode,
 /*
  * Local APIC timer broadcast function
  */
-static void lapic_timer_broadcast(const struct cpumask *mask)
+static void lapic_timer_broadcast(const cpumask_t *mask)
 {
 #ifdef CONFIG_SMP
 	send_IPI_mask(mask, LOCAL_TIMER_VECTOR);
@@ -688,7 +686,7 @@ static int __init calibrate_APIC_clock(void)
 		local_irq_enable();
 
 	if (levt->features & CLOCK_EVT_FEAT_DUMMY) {
-		pr_warning("APIC timer disabled due to verification failure\n");
+		pr_warning("APIC timer disabled due to verification failure.\n");
 			return -1;
 	}
 
@@ -777,7 +775,11 @@ static void local_apic_timer_interrupt(void)
 	/*
 	 * the NMI deadlock-detector uses this.
 	 */
-	inc_irq_stat(apic_timer_irqs);
+#ifdef CONFIG_X86_64
+	add_pda(apic_timer_irqs, 1);
+#else
+	per_cpu(irq_stat, cpu).apic_timer_irqs++;
+#endif
 
 	evt->event_handler(evt);
 }
@@ -790,7 +792,7 @@ static void local_apic_timer_interrupt(void)
  * [ if a single-CPU system runs an SMP kernel then we call the local
  *   interrupt as well. Thus we cannot inline the local irq ... ]
  */
-void __irq_entry smp_apic_timer_interrupt(struct pt_regs *regs)
+void smp_apic_timer_interrupt(struct pt_regs *regs)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
@@ -804,7 +806,9 @@ void __irq_entry smp_apic_timer_interrupt(struct pt_regs *regs)
 	 * Besides, if we don't timer interrupts ignore the global
 	 * interrupt lock, which is the WrongThing (tm) to do.
 	 */
+#ifdef CONFIG_X86_64
 	exit_idle();
+#endif
 	irq_enter();
 	local_apic_timer_interrupt();
 	irq_exit();
@@ -862,7 +866,7 @@ void clear_local_APIC(void)
 	}
 
 	/* lets not touch this if we didn't frob it */
-#if defined(CONFIG_X86_MCE_P4THERMAL) || defined(CONFIG_X86_MCE_INTEL)
+#if defined(CONFIG_X86_MCE_P4THERMAL) || defined(X86_MCE_INTEL)
 	if (maxlvt >= 5) {
 		v = apic_read(APIC_LVTTHMR);
 		apic_write(APIC_LVTTHMR, v | APIC_LVT_MASKED);
@@ -894,10 +898,6 @@ void clear_local_APIC(void)
 void disable_local_APIC(void)
 {
 	unsigned int value;
-
-	/* APIC hasn't been mapped yet */
-	if (!apic_phys)
-		return;
 
 	clear_local_APIC();
 
@@ -1436,7 +1436,7 @@ static int __init detect_init_APIC(void)
 	switch (boot_cpu_data.x86_vendor) {
 	case X86_VENDOR_AMD:
 		if ((boot_cpu_data.x86 == 6 && boot_cpu_data.x86_model > 1) ||
-		    (boot_cpu_data.x86 >= 15))
+		    (boot_cpu_data.x86 == 15))
 			break;
 		goto no_apic;
 	case X86_VENDOR_INTEL:
@@ -1666,7 +1666,9 @@ void smp_spurious_interrupt(struct pt_regs *regs)
 {
 	u32 v;
 
+#ifdef CONFIG_X86_64
 	exit_idle();
+#endif
 	irq_enter();
 	/*
 	 * Check if this really is a spurious interrupt and ACK it
@@ -1677,11 +1679,14 @@ void smp_spurious_interrupt(struct pt_regs *regs)
 	if (v & (1 << (SPURIOUS_APIC_VECTOR & 0x1f)))
 		ack_APIC_irq();
 
-	inc_irq_stat(irq_spurious_count);
-
+#ifdef CONFIG_X86_64
+	add_pda(irq_spurious_count, 1);
+#else
 	/* see sw-dev-man vol 3, chapter 7.4.13.5 */
 	pr_info("spurious APIC interrupt on CPU#%d, "
 		"should never happen.\n", smp_processor_id());
+	__get_cpu_var(irq_stat).irq_spurious_count++;
+#endif
 	irq_exit();
 }
 
@@ -1692,7 +1697,9 @@ void smp_error_interrupt(struct pt_regs *regs)
 {
 	u32 v, v1;
 
+#ifdef CONFIG_X86_64
 	exit_idle();
+#endif
 	irq_enter();
 	/* First tickle the hardware, only then report what went on. -- REW */
 	v = apic_read(APIC_ESR);
@@ -1836,11 +1843,6 @@ void __cpuinit generic_processor_info(int apicid, int version)
 
 	num_processors++;
 	cpu = cpumask_next_zero(-1, cpu_present_mask);
-
-	if (version != apic_version[boot_cpu_physical_apicid])
-		WARN_ONCE(1,
-			"ACPI: apic version mismatch, bootcpu: %x cpu %d: %x\n",
-			apic_version[boot_cpu_physical_apicid], cpu, version);
 
 	physid_set(apicid, phys_cpu_present_map);
 	if (apicid == boot_cpu_physical_apicid) {
@@ -2097,12 +2099,14 @@ __cpuinit int apic_is_clustered_box(void)
 		/* are we being called early in kernel startup? */
 		if (bios_cpu_apicid) {
 			id = bios_cpu_apicid[i];
-		} else if (i < nr_cpu_ids) {
+		}
+		else if (i < nr_cpu_ids) {
 			if (cpu_present(i))
 				id = per_cpu(x86_bios_cpu_apicid, i);
 			else
 				continue;
-		} else
+		}
+		else
 			break;
 
 		if (id != BAD_APICID)

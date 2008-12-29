@@ -142,6 +142,9 @@ static void init_evtchn_cpu_bindings(void)
 
 	/* By default all event channels notify CPU#0. */
 	for_each_irq_desc(i, desc) {
+		if (!desc)
+			continue;
+
 		desc->affinity = cpumask_of_cpu(0);
 	}
 #endif
@@ -230,7 +233,6 @@ static void unmask_evtchn(int port)
 static int find_unbound_irq(void)
 {
 	int irq;
-	struct irq_desc *desc;
 
 	/* Only allocate from dynirq range */
 	for (irq = 0; irq < nr_irqs; irq++)
@@ -239,10 +241,6 @@ static int find_unbound_irq(void)
 
 	if (irq == nr_irqs)
 		panic("No available IRQ to bind to: increase nr_irqs!\n");
-
-	desc = irq_to_desc_alloc_cpu(irq, 0);
-	if (WARN_ON(desc == NULL))
-		return -1;
 
 	return irq;
 }

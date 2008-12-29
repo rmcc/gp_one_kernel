@@ -59,7 +59,8 @@ int __init vsyscall_init(void)
 }
 
 /* Setup a VMA at program startup for the vsyscall page */
-int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
+int arch_setup_additional_pages(struct linux_binprm *bprm,
+				int executable_stack)
 {
 	struct mm_struct *mm = current->mm;
 	unsigned long addr;

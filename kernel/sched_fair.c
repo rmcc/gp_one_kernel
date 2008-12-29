@@ -283,7 +283,7 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 						   struct sched_entity,
 						   run_node);
 
-		if (!cfs_rq->curr)
+		if (vruntime == cfs_rq->min_vruntime)
 			vruntime = se->vruntime;
 		else
 			vruntime = min_vruntime(vruntime, se->vruntime);
@@ -386,6 +386,20 @@ int sched_nr_latency_handler(struct ctl_table *table, int write,
 #endif
 
 /*
+ * delta *= P[w / rw]
+ */
+static inline unsigned long
+calc_delta_weight(unsigned long delta, struct sched_entity *se)
+{
+	for_each_sched_entity(se) {
+		delta = calc_delta_mine(delta,
+				se->load.weight, &cfs_rq_of(se)->load);
+	}
+
+	return delta;
+}
+
+/*
  * delta /= w
  */
 static inline unsigned long
@@ -426,23 +440,12 @@ static u64 __sched_period(unsigned long nr_running)
  */
 static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	u64 slice = __sched_period(cfs_rq->nr_running + !se->on_rq);
+	unsigned long nr_running = cfs_rq->nr_running;
 
-	for_each_sched_entity(se) {
-		struct load_weight *load;
+	if (unlikely(!se->on_rq))
+		nr_running++;
 
-		cfs_rq = cfs_rq_of(se);
-		load = &cfs_rq->load;
-
-		if (unlikely(!se->on_rq)) {
-			struct load_weight lw = cfs_rq->load;
-
-			update_load_add(&lw, se->load.weight);
-			load = &lw;
-		}
-		slice = calc_delta_mine(slice, se->load.weight, load);
-	}
-	return slice;
+	return calc_delta_weight(__sched_period(nr_running), se);
 }
 
 /*
@@ -489,8 +492,6 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	 * overflow on 32 bits):
 	 */
 	delta_exec = (unsigned long)(now - curr->exec_start);
-	if (!delta_exec)
-		return;
 
 	__update_curr(cfs_rq, curr, delta_exec);
 	curr->exec_start = now;
@@ -680,13 +681,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 			unsigned long thresh = sysctl_sched_latency;
 
 			/*
-			 * Convert the sleeper threshold into virtual time.
-			 * SCHED_IDLE is a special sub-class.  We care about
-			 * fairness only relative to other SCHED_IDLE tasks,
-			 * all of which have the same weight.
+			 * convert the sleeper threshold into virtual time
 			 */
-			if (sched_feat(NORMALIZED_SLEEPER) &&
-					task_of(se)->policy != SCHED_IDLE)
+			if (sched_feat(NORMALIZED_SLEEPER))
 				thresh = calc_delta_fair(thresh, se);
 
 			vruntime -= thresh;
@@ -719,19 +716,13 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int wakeup)
 		__enqueue_entity(cfs_rq, se);
 }
 
-static void __clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
+static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	if (cfs_rq->last == se)
 		cfs_rq->last = NULL;
 
 	if (cfs_rq->next == se)
 		cfs_rq->next = NULL;
-}
-
-static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
-{
-	for_each_sched_entity(se)
-		__clear_buddies(cfs_rq_of(se), se);
 }
 
 static void
@@ -774,14 +765,8 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 
 	ideal_runtime = sched_slice(cfs_rq, curr);
 	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
-	if (delta_exec > ideal_runtime) {
+	if (delta_exec > ideal_runtime)
 		resched_task(rq_of(cfs_rq)->curr);
-		/*
-		 * The current task ran long enough, ensure it doesn't get
-		 * re-elected due to buddy favours.
-		 */
-		clear_buddies(cfs_rq, curr);
-	}
 }
 
 static void
@@ -1359,18 +1344,14 @@ wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
 
 static void set_last_buddy(struct sched_entity *se)
 {
-	if (likely(task_of(se)->policy != SCHED_IDLE)) {
-		for_each_sched_entity(se)
-			cfs_rq_of(se)->last = se;
-	}
+	for_each_sched_entity(se)
+		cfs_rq_of(se)->last = se;
 }
 
 static void set_next_buddy(struct sched_entity *se)
 {
-	if (likely(task_of(se)->policy != SCHED_IDLE)) {
-		for_each_sched_entity(se)
-			cfs_rq_of(se)->next = se;
-	}
+	for_each_sched_entity(se)
+		cfs_rq_of(se)->next = se;
 }
 
 /*
@@ -1380,11 +1361,12 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int sync)
 {
 	struct task_struct *curr = rq->curr;
 	struct sched_entity *se = &curr->se, *pse = &p->se;
-	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
-
-	update_curr(cfs_rq);
 
 	if (unlikely(rt_prio(p->prio))) {
+		struct cfs_rq *cfs_rq = task_cfs_rq(curr);
+
+		update_rq_clock(rq);
+		update_curr(cfs_rq);
 		resched_task(curr);
 		return;
 	}
@@ -1416,17 +1398,11 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int sync)
 		return;
 
 	/*
-	 * Batch and idle tasks do not preempt (their preemption is driven by
+	 * Batch tasks do not preempt (their preemption is driven by
 	 * the tick):
 	 */
-	if (unlikely(p->policy != SCHED_NORMAL))
+	if (unlikely(p->policy == SCHED_BATCH))
 		return;
-
-	/* Idle tasks are by definition preempted by everybody. */
-	if (unlikely(curr->policy == SCHED_IDLE)) {
-		resched_task(curr);
-		return;
-	}
 
 	if (!sched_feat(WAKEUP_PREEMPT))
 		return;
@@ -1464,11 +1440,6 @@ static struct task_struct *pick_next_task_fair(struct rq *rq)
 
 	do {
 		se = pick_next_entity(cfs_rq);
-		/*
-		 * If se was a buddy, clear it so that it will have to earn
-		 * the favour again.
-		 */
-		__clear_buddies(cfs_rq, se);
 		set_next_entity(cfs_rq, se);
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
@@ -1650,6 +1621,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 		entity_tick(cfs_rq, se, queued);
 	}
 }
+
+#define swap(a, b) do { typeof(a) tmp = (a); (a) = (b); (b) = tmp; } while (0)
 
 /*
  * Share the fairness runtime between parent and child, thus the

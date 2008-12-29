@@ -592,7 +592,7 @@ int setup_profiling_timer(unsigned int multiplier)
 	 * accounting. At that time they also adjust their APIC timers
 	 * accordingly.
 	 */
-	for_each_possible_cpu(i)
+	for (i = 0; i < NR_CPUS; ++i)
 		per_cpu(prof_multiplier, i) = multiplier;
 
 	return 0;

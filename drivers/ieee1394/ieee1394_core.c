@@ -338,7 +338,6 @@ static void build_speed_map(struct hpsb_host *host, int nodecount)
 	u8 cldcnt[nodecount];
 	u8 *map = host->speed_map;
 	u8 *speedcap = host->speed;
-	u8 local_link_speed = host->csr.lnk_spd;
 	struct selfid *sid;
 	struct ext_selfid *esid;
 	int i, j, n;
@@ -374,8 +373,8 @@ static void build_speed_map(struct hpsb_host *host, int nodecount)
 			if (sid->port2 == SELFID_PORT_CHILD) cldcnt[n]++;
 
 			speedcap[n] = sid->speed;
-			if (speedcap[n] > local_link_speed)
-				speedcap[n] = local_link_speed;
+			if (speedcap[n] > host->csr.lnk_spd)
+				speedcap[n] = host->csr.lnk_spd;
 			n--;
 		}
 	}
@@ -408,11 +407,12 @@ static void build_speed_map(struct hpsb_host *host, int nodecount)
 		}
 	}
 
-	/* assume a maximum speed for 1394b PHYs, nodemgr will correct it */
-	if (local_link_speed > SELFID_SPEED_UNKNOWN)
-		for (i = 0; i < nodecount; i++)
-			if (speedcap[i] == SELFID_SPEED_UNKNOWN)
-				speedcap[i] = local_link_speed;
+#if SELFID_SPEED_UNKNOWN != IEEE1394_SPEED_MAX
+	/* assume maximum speed for 1394b PHYs, nodemgr will correct it */
+	for (n = 0; n < nodecount; n++)
+		if (speedcap[n] == SELFID_SPEED_UNKNOWN)
+			speedcap[n] = IEEE1394_SPEED_MAX;
+#endif
 }
 
 
@@ -1314,7 +1314,6 @@ EXPORT_SYMBOL(hpsb_make_lock64packet);
 EXPORT_SYMBOL(hpsb_make_phypacket);
 EXPORT_SYMBOL(hpsb_read);
 EXPORT_SYMBOL(hpsb_write);
-EXPORT_SYMBOL(hpsb_lock);
 EXPORT_SYMBOL(hpsb_packet_success);
 
 /** highlevel.c **/

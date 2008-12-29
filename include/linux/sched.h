@@ -284,6 +284,7 @@ long io_schedule_timeout(long timeout);
 
 extern void cpu_init (void);
 extern void trap_init(void);
+extern void account_process_tick(struct task_struct *task, int user);
 extern void update_process_times(int user);
 extern void scheduler_tick(void);
 
@@ -293,9 +294,6 @@ extern void sched_show_task(struct task_struct *p);
 extern void softlockup_tick(void);
 extern void touch_softlockup_watchdog(void);
 extern void touch_all_softlockup_watchdogs(void);
-extern int proc_dosoftlockup_thresh(struct ctl_table *table, int write,
-				    struct file *filp, void __user *buffer,
-				    size_t *lenp, loff_t *ppos);
 extern unsigned int  softlockup_panic;
 extern unsigned long sysctl_hung_task_check_count;
 extern unsigned long sysctl_hung_task_timeout_secs;
@@ -389,9 +387,6 @@ extern void arch_unmap_area_topdown(struct mm_struct *, unsigned long);
 		(mm)->hiwater_vm = (mm)->total_vm;	\
 } while (0)
 
-#define get_mm_hiwater_rss(mm)	max((mm)->hiwater_rss, get_mm_rss(mm))
-#define get_mm_hiwater_vm(mm)	max((mm)->hiwater_vm, (mm)->total_vm)
-
 extern void set_dumpable(struct mm_struct *mm, int value);
 extern int get_dumpable(struct mm_struct *mm);
 
@@ -459,27 +454,16 @@ struct task_cputime {
 #define virt_exp	utime
 #define sched_exp	sum_exec_runtime
 
-#define INIT_CPUTIME	\
-	(struct task_cputime) {					\
-		.utime = cputime_zero,				\
-		.stime = cputime_zero,				\
-		.sum_exec_runtime = 0,				\
-	}
-
 /**
- * struct thread_group_cputimer - thread group interval timer counts
- * @cputime:		thread group interval timers.
- * @running:		non-zero when there are timers running and
- * 			@cputime receives updates.
- * @lock:		lock for fields in this struct.
+ * struct thread_group_cputime - thread group interval timer counts
+ * @totals:		thread group interval timers; substructure for
+ *			uniprocessor kernel, per-cpu for SMP kernel.
  *
  * This structure contains the version of task_cputime, above, that is
- * used for thread group CPU timer calculations.
+ * used for thread group CPU clock calculations.
  */
-struct thread_group_cputimer {
-	struct task_cputime cputime;
-	int running;
-	spinlock_t lock;
+struct thread_group_cputime {
+	struct task_cputime *totals;
 };
 
 /*
@@ -528,10 +512,10 @@ struct signal_struct {
 	cputime_t it_prof_incr, it_virt_incr;
 
 	/*
-	 * Thread group totals for process CPU timers.
-	 * See thread_group_cputimer(), et al, for details.
+	 * Thread group totals for process CPU clocks.
+	 * See thread_group_cputime(), et al, for details.
 	 */
-	struct thread_group_cputimer cputimer;
+	struct thread_group_cputime cputime;
 
 	/* Earliest-expiration cache. */
 	struct task_cputime cputime_expires;
@@ -568,21 +552,13 @@ struct signal_struct {
 	 * Live threads maintain their own counters and add to these
 	 * in __exit_signal, except for the group leader.
 	 */
-	cputime_t utime, stime, cutime, cstime;
+	cputime_t cutime, cstime;
 	cputime_t gtime;
 	cputime_t cgtime;
 	unsigned long nvcsw, nivcsw, cnvcsw, cnivcsw;
 	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
 	unsigned long inblock, oublock, cinblock, coublock;
 	struct task_io_accounting ioac;
-
-	/*
-	 * Cumulative ns of schedule CPU time fo dead threads in the
-	 * group, not including a zombie group leader, (This only differs
-	 * from jiffies_to_ns(utime + stime) if sched_clock uses something
-	 * other than jiffies.)
-	 */
-	unsigned long long sum_sched_runtime;
 
 	/*
 	 * We don't bother to synchronize most readers of this at all,
@@ -595,6 +571,12 @@ struct signal_struct {
 	 */
 	struct rlimit rlim[RLIM_NLIMITS];
 
+	/* keep the process-shared keyrings here so that they do the right
+	 * thing in threads created with CLONE_THREAD */
+#ifdef CONFIG_KEYS
+	struct key *session_keyring;	/* keyring inherited over fork */
+	struct key *process_keyring;	/* keyring private to this process */
+#endif
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	struct pacct_struct pacct;	/* per-process accounting information */
 #endif
@@ -648,6 +630,7 @@ struct user_struct {
 	atomic_t inotify_devs;	/* How many inotify devs does this user have opened? */
 #endif
 #ifdef CONFIG_EPOLL
+	atomic_t epoll_devs;	/* The number of epoll descriptors currently open */
 	atomic_t epoll_watches;	/* The number of file descriptors currently watched */
 #endif
 #ifdef CONFIG_POSIX_MQUEUE
@@ -664,7 +647,6 @@ struct user_struct {
 	/* Hash table maintenance information */
 	struct hlist_node uidhash_node;
 	uid_t uid;
-	struct user_namespace *user_ns;
 
 #ifdef CONFIG_USER_SCHED
 	struct task_group *tg;
@@ -682,7 +664,6 @@ extern struct user_struct *find_user(uid_t);
 extern struct user_struct root_user;
 #define INIT_USER (&root_user)
 
-
 struct backing_dev_info;
 struct reclaim_state;
 
@@ -690,7 +671,8 @@ struct reclaim_state;
 struct sched_info {
 	/* cumulative counters */
 	unsigned long pcount;	      /* # of times run on this cpu */
-	unsigned long long run_delay; /* time spent waiting on a runqueue */
+	unsigned long long cpu_time,  /* time spent on the cpu */
+			   run_delay; /* time spent waiting on a runqueue */
 
 	/* timestamps */
 	unsigned long long last_arrival,/* when we last ran on a cpu */
@@ -936,6 +918,7 @@ static inline struct cpumask *sched_domain_span(struct sched_domain *sd)
 
 extern void partition_sched_domains(int ndoms_new, struct cpumask *doms_new,
 				    struct sched_domain_attr *dattr_new);
+extern int arch_reinit_sched_domains(void);
 
 /* Test a flag in parent sched domain */
 static inline int test_sd_parent(struct sched_domain *sd, int flag)
@@ -958,7 +941,38 @@ partition_sched_domains(int ndoms_new, struct cpumask *doms_new,
 #endif	/* !CONFIG_SMP */
 
 struct io_context;			/* See blkdev.h */
+#define NGROUPS_SMALL		32
+#define NGROUPS_PER_BLOCK	((unsigned int)(PAGE_SIZE / sizeof(gid_t)))
+struct group_info {
+	int ngroups;
+	atomic_t usage;
+	gid_t small_block[NGROUPS_SMALL];
+	int nblocks;
+	gid_t *blocks[0];
+};
 
+/*
+ * get_group_info() must be called with the owning task locked (via task_lock())
+ * when task != current.  The reason being that the vast majority of callers are
+ * looking at current->group_info, which can not be changed except by the
+ * current task.  Changing current->group_info requires the task lock, too.
+ */
+#define get_group_info(group_info) do { \
+	atomic_inc(&(group_info)->usage); \
+} while (0)
+
+#define put_group_info(group_info) do { \
+	if (atomic_dec_and_test(&(group_info)->usage)) \
+		groups_free(group_info); \
+} while (0)
+
+extern struct group_info *groups_alloc(int gidsetsize);
+extern void groups_free(struct group_info *group_info);
+extern int set_current_groups(struct group_info *group_info);
+extern int groups_search(struct group_info *group_info, gid_t grp);
+/* access the groups "array" with this macro */
+#define GROUP_AT(gi, i) \
+    ((gi)->blocks[(i)/NGROUPS_PER_BLOCK][(i)%NGROUPS_PER_BLOCK])
 
 #ifdef ARCH_HAS_PREFETCH_SWITCH_STACK
 extern void prefetch_stack(struct task_struct *t);
@@ -1214,7 +1228,6 @@ struct task_struct {
 	 * The buffer to hold the BTS data.
 	 */
 	void *bts_buffer;
-	size_t bts_size;
 #endif /* CONFIG_X86_PTRACE_BTS */
 
 	/* PID/PID hash table linkage. */
@@ -1238,12 +1251,17 @@ struct task_struct {
 	struct list_head cpu_timers[3];
 
 /* process credentials */
-	const struct cred *real_cred;	/* objective and real subjective task
-					 * credentials (COW) */
-	const struct cred *cred;	/* effective (overridable) subjective task
-					 * credentials (COW) */
-	struct mutex cred_exec_mutex;	/* execve vs ptrace cred calculation mutex */
-
+	uid_t uid,euid,suid,fsuid;
+	gid_t gid,egid,sgid,fsgid;
+	struct group_info *group_info;
+	kernel_cap_t   cap_effective, cap_inheritable, cap_permitted, cap_bset;
+	struct user_struct *user;
+	unsigned securebits;
+#ifdef CONFIG_KEYS
+	unsigned char jit_keyring;	/* default keyring to attach requested keys to */
+	struct key *request_key_auth;	/* assumed request_key authority */
+	struct key *thread_keyring;	/* keyring private to this thread */
+#endif
 	char comm[TASK_COMM_LEN]; /* executable name excluding path
 				     - access with [gs]et_task_comm (which lock
 				       it with task_lock())
@@ -1280,6 +1298,9 @@ struct task_struct {
 	int (*notifier)(void *priv);
 	void *notifier_data;
 	sigset_t *notifier_mask;
+#ifdef CONFIG_SECURITY
+	void *security;
+#endif
 	struct audit_context *audit_context;
 #ifdef CONFIG_AUDITSYSCALL
 	uid_t loginuid;
@@ -1670,16 +1691,6 @@ static inline int set_cpus_allowed(struct task_struct *p, cpumask_t new_mask)
 	return set_cpus_allowed_ptr(p, &new_mask);
 }
 
-/*
- * Architectures can set this to 1 if they have specified
- * CONFIG_HAVE_UNSTABLE_SCHED_CLOCK in their arch Kconfig,
- * but then during bootup it turns out that sched_clock()
- * is reliable after all:
- */
-#ifdef CONFIG_HAVE_UNSTABLE_SCHED_CLOCK
-extern int sched_clock_stable;
-#endif
-
 extern unsigned long long sched_clock(void);
 
 extern void sched_clock_init(void);
@@ -1737,16 +1748,16 @@ extern void wake_up_idle_cpu(int cpu);
 static inline void wake_up_idle_cpu(int cpu) { }
 #endif
 
+#ifdef CONFIG_SCHED_DEBUG
 extern unsigned int sysctl_sched_latency;
 extern unsigned int sysctl_sched_min_granularity;
 extern unsigned int sysctl_sched_wakeup_granularity;
-extern unsigned int sysctl_sched_shares_ratelimit;
-extern unsigned int sysctl_sched_shares_thresh;
-#ifdef CONFIG_SCHED_DEBUG
 extern unsigned int sysctl_sched_child_runs_first;
 extern unsigned int sysctl_sched_features;
 extern unsigned int sysctl_sched_migration_cost;
 extern unsigned int sysctl_sched_nr_migrate;
+extern unsigned int sysctl_sched_shares_ratelimit;
+extern unsigned int sysctl_sched_shares_thresh;
 
 int sched_nr_latency_handler(struct ctl_table *table, int write,
 		struct file *file, void __user *buffer, size_t *length,
@@ -1846,6 +1857,7 @@ static inline struct user_struct *get_uid(struct user_struct *u)
 	return u;
 }
 extern void free_uid(struct user_struct *);
+extern void switch_uid(struct user_struct *);
 extern void release_uids(struct user_namespace *ns);
 
 #include <asm/current.h>
@@ -1863,6 +1875,9 @@ extern void wake_up_new_task(struct task_struct *tsk,
 #endif
 extern void sched_fork(struct task_struct *p, int clone_flags);
 extern void sched_dead(struct task_struct *p);
+
+extern int in_group_p(gid_t);
+extern int in_egroup_p(gid_t);
 
 extern void proc_caches_init(void);
 extern void flush_signals(struct task_struct *);
@@ -1994,8 +2009,6 @@ static inline unsigned long wait_task_inactive(struct task_struct *p,
 
 #define for_each_process(p) \
 	for (p = &init_task ; (p = next_task(p)) != &init_task ; )
-
-extern bool is_single_threaded(struct task_struct *);
 
 /*
  * Careful: do_each_thread/while_each_thread is a double loop so
@@ -2210,18 +2223,25 @@ static inline int spin_needbreak(spinlock_t *lock)
 /*
  * Thread group CPU time accounting.
  */
-void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times);
-void thread_group_cputimer(struct task_struct *tsk, struct task_cputime *times);
+
+extern int thread_group_cputime_alloc(struct task_struct *);
+extern void thread_group_cputime(struct task_struct *, struct task_cputime *);
 
 static inline void thread_group_cputime_init(struct signal_struct *sig)
 {
-	sig->cputimer.cputime = INIT_CPUTIME;
-	spin_lock_init(&sig->cputimer.lock);
-	sig->cputimer.running = 0;
+	sig->cputime.totals = NULL;
+}
+
+static inline int thread_group_cputime_clone_thread(struct task_struct *curr)
+{
+	if (curr->signal->cputime.totals)
+		return 0;
+	return thread_group_cputime_alloc(curr);
 }
 
 static inline void thread_group_cputime_free(struct signal_struct *sig)
 {
+	free_percpu(sig->cputime.totals);
 }
 
 /*

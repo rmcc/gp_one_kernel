@@ -5,7 +5,7 @@
 #include <linux/sched.h>
 #include <asm/ptrace.h>
 
-/* The system call number is given by the user in R3 */
+/* The system call number is given by the user in %g1 */
 static inline long syscall_get_nr(struct task_struct *task,
 				  struct pt_regs *regs)
 {
@@ -21,10 +21,23 @@ static inline void syscall_rollback(struct task_struct *task,
 	 */
 }
 
+static inline bool syscall_has_error(struct pt_regs *regs)
+{
+	return (regs->sr & 0x1) ? true : false;
+}
+static inline void syscall_set_error(struct pt_regs *regs)
+{
+	regs->sr |= 0x1;
+}
+static inline void syscall_clear_error(struct pt_regs *regs)
+{
+	regs->sr &= ~0x1;
+}
+
 static inline long syscall_get_error(struct task_struct *task,
 				     struct pt_regs *regs)
 {
-	return IS_ERR_VALUE(regs->regs[0]) ? regs->regs[0] : 0;
+	return syscall_has_error(regs) ? regs->regs[0] : 0;
 }
 
 static inline long syscall_get_return_value(struct task_struct *task,
@@ -37,10 +50,13 @@ static inline void syscall_set_return_value(struct task_struct *task,
 					    struct pt_regs *regs,
 					    int error, long val)
 {
-	if (error)
+	if (error) {
+		syscall_set_error(regs);
 		regs->regs[0] = -error;
-	else
+	} else {
+		syscall_clear_error(regs);
 		regs->regs[0] = val;
+	}
 }
 
 static inline void syscall_get_arguments(struct task_struct *task,

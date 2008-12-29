@@ -50,14 +50,12 @@
 #include "xfs_vnodeops.h"
 #include "xfs_quota.h"
 #include "xfs_inode_item.h"
-#include "xfs_export.h"
 
 #include <linux/capability.h>
 #include <linux/dcache.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
 #include <linux/pagemap.h>
-#include <linux/exportfs.h>
 
 /*
  * xfs_find_handle maps from userspace xfs_fsop_handlereq structure to
@@ -70,14 +68,18 @@
  * XFS_IOC_PATH_TO_HANDLE
  *    returns full handle for a path
  */
-int
+STATIC int
 xfs_find_handle(
 	unsigned int		cmd,
-	xfs_fsop_handlereq_t	*hreq)
+	void			__user *arg)
 {
 	int			hsize;
 	xfs_handle_t		handle;
+	xfs_fsop_handlereq_t	hreq;
 	struct inode		*inode;
+
+	if (copy_from_user(&hreq, arg, sizeof(hreq)))
+		return -XFS_ERROR(EFAULT);
 
 	memset((char *)&handle, 0, sizeof(handle));
 
@@ -85,7 +87,7 @@ xfs_find_handle(
 	case XFS_IOC_PATH_TO_FSHANDLE:
 	case XFS_IOC_PATH_TO_HANDLE: {
 		struct path path;
-		int error = user_lpath((const char __user *)hreq->path, &path);
+		int error = user_lpath((const char __user *)hreq.path, &path);
 		if (error)
 			return error;
 
@@ -99,7 +101,7 @@ xfs_find_handle(
 	case XFS_IOC_FD_TO_HANDLE: {
 		struct file	*file;
 
-		file = fget(hreq->fd);
+		file = fget(hreq.fd);
 		if (!file)
 		    return -EBADF;
 
@@ -156,8 +158,8 @@ xfs_find_handle(
 	}
 
 	/* now copy our handle into the user buffer & write out the size */
-	if (copy_to_user(hreq->ohandle, &handle, hsize) ||
-	    copy_to_user(hreq->ohandlen, &hsize, sizeof(__s32))) {
+	if (copy_to_user(hreq.ohandle, &handle, hsize) ||
+	    copy_to_user(hreq.ohandlen, &hsize, sizeof(__s32))) {
 		iput(inode);
 		return -XFS_ERROR(EFAULT);
 	}
@@ -166,94 +168,122 @@ xfs_find_handle(
 	return 0;
 }
 
-/*
- * No need to do permission checks on the various pathname components
- * as the handle operations are privileged.
- */
-STATIC int
-xfs_handle_acceptable(
-	void			*context,
-	struct dentry		*dentry)
-{
-	return 1;
-}
 
 /*
- * Convert userspace handle data into a dentry.
+ * Convert userspace handle data into inode.
+ *
+ * We use the fact that all the fsop_handlereq ioctl calls have a data
+ * structure argument whose first component is always a xfs_fsop_handlereq_t,
+ * so we can pass that sub structure into this handy, shared routine.
+ *
+ * If no error, caller must always iput the returned inode.
  */
-struct dentry *
-xfs_handle_to_dentry(
-	struct file		*parfilp,
-	void __user		*uhandle,
-	u32			hlen)
+STATIC int
+xfs_vget_fsop_handlereq(
+	xfs_mount_t		*mp,
+	struct inode		*parinode,	/* parent inode pointer    */
+	xfs_fsop_handlereq_t	*hreq,
+	struct inode		**inode)
 {
+	void			__user *hanp;
+	size_t			hlen;
+	xfs_fid_t		*xfid;
+	xfs_handle_t		*handlep;
 	xfs_handle_t		handle;
-	struct xfs_fid64	fid;
+	xfs_inode_t		*ip;
+	xfs_ino_t		ino;
+	__u32			igen;
+	int			error;
 
 	/*
 	 * Only allow handle opens under a directory.
 	 */
-	if (!S_ISDIR(parfilp->f_path.dentry->d_inode->i_mode))
-		return ERR_PTR(-ENOTDIR);
+	if (!S_ISDIR(parinode->i_mode))
+		return XFS_ERROR(ENOTDIR);
 
-	if (hlen != sizeof(xfs_handle_t))
-		return ERR_PTR(-EINVAL);
-	if (copy_from_user(&handle, uhandle, hlen))
-		return ERR_PTR(-EFAULT);
-	if (handle.ha_fid.fid_len !=
-	    sizeof(handle.ha_fid) - sizeof(handle.ha_fid.fid_len))
-		return ERR_PTR(-EINVAL);
+	hanp = hreq->ihandle;
+	hlen = hreq->ihandlen;
+	handlep = &handle;
 
-	memset(&fid, 0, sizeof(struct fid));
-	fid.ino = handle.ha_fid.fid_ino;
-	fid.gen = handle.ha_fid.fid_gen;
+	if (hlen < sizeof(handlep->ha_fsid) || hlen > sizeof(*handlep))
+		return XFS_ERROR(EINVAL);
+	if (copy_from_user(handlep, hanp, hlen))
+		return XFS_ERROR(EFAULT);
+	if (hlen < sizeof(*handlep))
+		memset(((char *)handlep) + hlen, 0, sizeof(*handlep) - hlen);
+	if (hlen > sizeof(handlep->ha_fsid)) {
+		if (handlep->ha_fid.fid_len !=
+		    (hlen - sizeof(handlep->ha_fsid) -
+		            sizeof(handlep->ha_fid.fid_len)) ||
+		    handlep->ha_fid.fid_pad)
+			return XFS_ERROR(EINVAL);
+	}
 
-	return exportfs_decode_fh(parfilp->f_path.mnt, (struct fid *)&fid, 3,
-			FILEID_INO32_GEN | XFS_FILEID_TYPE_64FLAG,
-			xfs_handle_acceptable, NULL);
+	/*
+	 * Crack the handle, obtain the inode # & generation #
+	 */
+	xfid = (struct xfs_fid *)&handlep->ha_fid;
+	if (xfid->fid_len == sizeof(*xfid) - sizeof(xfid->fid_len)) {
+		ino  = xfid->fid_ino;
+		igen = xfid->fid_gen;
+	} else {
+		return XFS_ERROR(EINVAL);
+	}
+
+	/*
+	 * Get the XFS inode, building a Linux inode to go with it.
+	 */
+	error = xfs_iget(mp, NULL, ino, 0, XFS_ILOCK_SHARED, &ip, 0);
+	if (error)
+		return error;
+	if (ip == NULL)
+		return XFS_ERROR(EIO);
+	if (ip->i_d.di_gen != igen) {
+		xfs_iput_new(ip, XFS_ILOCK_SHARED);
+		return XFS_ERROR(ENOENT);
+	}
+
+	xfs_iunlock(ip, XFS_ILOCK_SHARED);
+
+	*inode = VFS_I(ip);
+	return 0;
 }
 
-STATIC struct dentry *
-xfs_handlereq_to_dentry(
-	struct file		*parfilp,
-	xfs_fsop_handlereq_t	*hreq)
-{
-	return xfs_handle_to_dentry(parfilp, hreq->ihandle, hreq->ihandlen);
-}
-
-int
+STATIC int
 xfs_open_by_handle(
+	xfs_mount_t		*mp,
+	void			__user *arg,
 	struct file		*parfilp,
-	xfs_fsop_handlereq_t	*hreq)
+	struct inode		*parinode)
 {
-	const struct cred	*cred = current_cred();
 	int			error;
-	int			fd;
+	int			new_fd;
 	int			permflag;
 	struct file		*filp;
 	struct inode		*inode;
 	struct dentry		*dentry;
+	xfs_fsop_handlereq_t	hreq;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -XFS_ERROR(EPERM);
+	if (copy_from_user(&hreq, arg, sizeof(xfs_fsop_handlereq_t)))
+		return -XFS_ERROR(EFAULT);
 
-	dentry = xfs_handlereq_to_dentry(parfilp, hreq);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
-	inode = dentry->d_inode;
+	error = xfs_vget_fsop_handlereq(mp, parinode, &hreq, &inode);
+	if (error)
+		return -error;
 
 	/* Restrict xfs_open_by_handle to directories & regular files. */
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode))) {
-		error = -XFS_ERROR(EPERM);
-		goto out_dput;
+		iput(inode);
+		return -XFS_ERROR(EINVAL);
 	}
 
 #if BITS_PER_LONG != 32
-	hreq->oflags |= O_LARGEFILE;
+	hreq.oflags |= O_LARGEFILE;
 #endif
-
 	/* Put open permission in namei format. */
-	permflag = hreq->oflags;
+	permflag = hreq.oflags;
 	if ((permflag+1) & O_ACCMODE)
 		permflag++;
 	if (permflag & O_TRUNC)
@@ -261,45 +291,49 @@ xfs_open_by_handle(
 
 	if ((!(permflag & O_APPEND) || (permflag & O_TRUNC)) &&
 	    (permflag & FMODE_WRITE) && IS_APPEND(inode)) {
-		error = -XFS_ERROR(EPERM);
-		goto out_dput;
+		iput(inode);
+		return -XFS_ERROR(EPERM);
 	}
 
 	if ((permflag & FMODE_WRITE) && IS_IMMUTABLE(inode)) {
-		error = -XFS_ERROR(EACCES);
-		goto out_dput;
+		iput(inode);
+		return -XFS_ERROR(EACCES);
 	}
 
 	/* Can't write directories. */
-	if (S_ISDIR(inode->i_mode) && (permflag & FMODE_WRITE)) {
-		error = -XFS_ERROR(EISDIR);
-		goto out_dput;
+	if ( S_ISDIR(inode->i_mode) && (permflag & FMODE_WRITE)) {
+		iput(inode);
+		return -XFS_ERROR(EISDIR);
 	}
 
-	fd = get_unused_fd();
-	if (fd < 0) {
-		error = fd;
-		goto out_dput;
+	if ((new_fd = get_unused_fd()) < 0) {
+		iput(inode);
+		return new_fd;
 	}
 
-	filp = dentry_open(dentry, mntget(parfilp->f_path.mnt),
-			   hreq->oflags, cred);
+	dentry = d_obtain_alias(inode);
+	if (IS_ERR(dentry)) {
+		put_unused_fd(new_fd);
+		return PTR_ERR(dentry);
+	}
+
+	/* Ensure umount returns EBUSY on umounts while this file is open. */
+	mntget(parfilp->f_path.mnt);
+
+	/* Create file pointer. */
+	filp = dentry_open(dentry, parfilp->f_path.mnt, hreq.oflags);
 	if (IS_ERR(filp)) {
-		put_unused_fd(fd);
-		return PTR_ERR(filp);
+		put_unused_fd(new_fd);
+		return -XFS_ERROR(-PTR_ERR(filp));
 	}
-
 	if (inode->i_mode & S_IFREG) {
+		/* invisible operation should not change atime */
 		filp->f_flags |= O_NOATIME;
-		filp->f_mode |= FMODE_NOCMTIME;
+		filp->f_op = &xfs_invis_file_operations;
 	}
 
-	fd_install(fd, filp);
-	return fd;
-
- out_dput:
-	dput(dentry);
-	return error;
+	fd_install(new_fd, filp);
+	return new_fd;
 }
 
 /*
@@ -328,74 +362,77 @@ do_readlink(
 }
 
 
-int
+STATIC int
 xfs_readlink_by_handle(
-	struct file		*parfilp,
-	xfs_fsop_handlereq_t	*hreq)
+	xfs_mount_t		*mp,
+	void			__user *arg,
+	struct inode		*parinode)
 {
-	struct dentry		*dentry;
+	struct inode		*inode;
+	xfs_fsop_handlereq_t	hreq;
 	__u32			olen;
 	void			*link;
 	int			error;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -XFS_ERROR(EPERM);
+	if (copy_from_user(&hreq, arg, sizeof(xfs_fsop_handlereq_t)))
+		return -XFS_ERROR(EFAULT);
 
-	dentry = xfs_handlereq_to_dentry(parfilp, hreq);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+	error = xfs_vget_fsop_handlereq(mp, parinode, &hreq, &inode);
+	if (error)
+		return -error;
 
 	/* Restrict this handle operation to symlinks only. */
-	if (!S_ISLNK(dentry->d_inode->i_mode)) {
+	if (!S_ISLNK(inode->i_mode)) {
 		error = -XFS_ERROR(EINVAL);
-		goto out_dput;
+		goto out_iput;
 	}
 
-	if (copy_from_user(&olen, hreq->ohandlen, sizeof(__u32))) {
+	if (copy_from_user(&olen, hreq.ohandlen, sizeof(__u32))) {
 		error = -XFS_ERROR(EFAULT);
-		goto out_dput;
+		goto out_iput;
 	}
 
 	link = kmalloc(MAXPATHLEN+1, GFP_KERNEL);
-	if (!link) {
-		error = -XFS_ERROR(ENOMEM);
-		goto out_dput;
-	}
+	if (!link)
+		goto out_iput;
 
-	error = -xfs_readlink(XFS_I(dentry->d_inode), link);
+	error = -xfs_readlink(XFS_I(inode), link);
 	if (error)
 		goto out_kfree;
-	error = do_readlink(hreq->ohandle, olen, link);
+	error = do_readlink(hreq.ohandle, olen, link);
 	if (error)
 		goto out_kfree;
 
  out_kfree:
 	kfree(link);
- out_dput:
-	dput(dentry);
+ out_iput:
+	iput(inode);
 	return error;
 }
 
 STATIC int
 xfs_fssetdm_by_handle(
-	struct file		*parfilp,
-	void			__user *arg)
+	xfs_mount_t		*mp,
+	void			__user *arg,
+	struct inode		*parinode)
 {
 	int			error;
 	struct fsdmidata	fsd;
 	xfs_fsop_setdm_handlereq_t dmhreq;
-	struct dentry		*dentry;
+	struct inode		*inode;
 
 	if (!capable(CAP_MKNOD))
 		return -XFS_ERROR(EPERM);
 	if (copy_from_user(&dmhreq, arg, sizeof(xfs_fsop_setdm_handlereq_t)))
 		return -XFS_ERROR(EFAULT);
 
-	dentry = xfs_handlereq_to_dentry(parfilp, &dmhreq.hreq);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+	error = xfs_vget_fsop_handlereq(mp, parinode, &dmhreq.hreq, &inode);
+	if (error)
+		return -error;
 
-	if (IS_IMMUTABLE(dentry->d_inode) || IS_APPEND(dentry->d_inode)) {
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
 		error = -XFS_ERROR(EPERM);
 		goto out;
 	}
@@ -405,23 +442,24 @@ xfs_fssetdm_by_handle(
 		goto out;
 	}
 
-	error = -xfs_set_dmattrs(XFS_I(dentry->d_inode), fsd.fsd_dmevmask,
+	error = -xfs_set_dmattrs(XFS_I(inode), fsd.fsd_dmevmask,
 				 fsd.fsd_dmstate);
 
  out:
-	dput(dentry);
+	iput(inode);
 	return error;
 }
 
 STATIC int
 xfs_attrlist_by_handle(
-	struct file		*parfilp,
-	void			__user *arg)
+	xfs_mount_t		*mp,
+	void			__user *arg,
+	struct inode		*parinode)
 {
-	int			error = -ENOMEM;
+	int			error;
 	attrlist_cursor_kern_t	*cursor;
 	xfs_fsop_attrlist_handlereq_t al_hreq;
-	struct dentry		*dentry;
+	struct inode		*inode;
 	char			*kbuf;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -437,16 +475,16 @@ xfs_attrlist_by_handle(
 	if (al_hreq.flags & ~(ATTR_ROOT | ATTR_SECURE))
 		return -XFS_ERROR(EINVAL);
 
-	dentry = xfs_handlereq_to_dentry(parfilp, &al_hreq.hreq);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+	error = xfs_vget_fsop_handlereq(mp, parinode, &al_hreq.hreq, &inode);
+	if (error)
+		goto out;
 
 	kbuf = kmalloc(al_hreq.buflen, GFP_KERNEL);
 	if (!kbuf)
-		goto out_dput;
+		goto out_vn_rele;
 
 	cursor = (attrlist_cursor_kern_t *)&al_hreq.pos;
-	error = -xfs_attr_list(XFS_I(dentry->d_inode), kbuf, al_hreq.buflen,
+	error = xfs_attr_list(XFS_I(inode), kbuf, al_hreq.buflen,
 					al_hreq.flags, cursor);
 	if (error)
 		goto out_kfree;
@@ -456,12 +494,13 @@ xfs_attrlist_by_handle(
 
  out_kfree:
 	kfree(kbuf);
- out_dput:
-	dput(dentry);
-	return error;
+ out_vn_rele:
+	iput(inode);
+ out:
+	return -error;
 }
 
-int
+STATIC int
 xfs_attrmulti_attr_get(
 	struct inode		*inode,
 	char			*name,
@@ -490,7 +529,7 @@ xfs_attrmulti_attr_get(
 	return error;
 }
 
-int
+STATIC int
 xfs_attrmulti_attr_set(
 	struct inode		*inode,
 	char			*name,
@@ -520,7 +559,7 @@ xfs_attrmulti_attr_set(
 	return error;
 }
 
-int
+STATIC int
 xfs_attrmulti_attr_remove(
 	struct inode		*inode,
 	char			*name,
@@ -533,13 +572,15 @@ xfs_attrmulti_attr_remove(
 
 STATIC int
 xfs_attrmulti_by_handle(
+	xfs_mount_t		*mp,
+	void			__user *arg,
 	struct file		*parfilp,
-	void			__user *arg)
+	struct inode		*parinode)
 {
 	int			error;
 	xfs_attr_multiop_t	*ops;
 	xfs_fsop_attrmulti_handlereq_t am_hreq;
-	struct dentry		*dentry;
+	struct inode		*inode;
 	unsigned int		i, size;
 	char			*attr_name;
 
@@ -548,19 +589,19 @@ xfs_attrmulti_by_handle(
 	if (copy_from_user(&am_hreq, arg, sizeof(xfs_fsop_attrmulti_handlereq_t)))
 		return -XFS_ERROR(EFAULT);
 
-	dentry = xfs_handlereq_to_dentry(parfilp, &am_hreq.hreq);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+	error = xfs_vget_fsop_handlereq(mp, parinode, &am_hreq.hreq, &inode);
+	if (error)
+		goto out;
 
 	error = E2BIG;
 	size = am_hreq.opcount * sizeof(xfs_attr_multiop_t);
 	if (!size || size > 16 * PAGE_SIZE)
-		goto out_dput;
+		goto out_vn_rele;
 
 	error = ENOMEM;
 	ops = kmalloc(size, GFP_KERNEL);
 	if (!ops)
-		goto out_dput;
+		goto out_vn_rele;
 
 	error = EFAULT;
 	if (copy_from_user(ops, am_hreq.ops, size))
@@ -582,28 +623,25 @@ xfs_attrmulti_by_handle(
 
 		switch (ops[i].am_opcode) {
 		case ATTR_OP_GET:
-			ops[i].am_error = xfs_attrmulti_attr_get(
-					dentry->d_inode, attr_name,
-					ops[i].am_attrvalue, &ops[i].am_length,
-					ops[i].am_flags);
+			ops[i].am_error = xfs_attrmulti_attr_get(inode,
+					attr_name, ops[i].am_attrvalue,
+					&ops[i].am_length, ops[i].am_flags);
 			break;
 		case ATTR_OP_SET:
 			ops[i].am_error = mnt_want_write(parfilp->f_path.mnt);
 			if (ops[i].am_error)
 				break;
-			ops[i].am_error = xfs_attrmulti_attr_set(
-					dentry->d_inode, attr_name,
-					ops[i].am_attrvalue, ops[i].am_length,
-					ops[i].am_flags);
+			ops[i].am_error = xfs_attrmulti_attr_set(inode,
+					attr_name, ops[i].am_attrvalue,
+					ops[i].am_length, ops[i].am_flags);
 			mnt_drop_write(parfilp->f_path.mnt);
 			break;
 		case ATTR_OP_REMOVE:
 			ops[i].am_error = mnt_want_write(parfilp->f_path.mnt);
 			if (ops[i].am_error)
 				break;
-			ops[i].am_error = xfs_attrmulti_attr_remove(
-					dentry->d_inode, attr_name,
-					ops[i].am_flags);
+			ops[i].am_error = xfs_attrmulti_attr_remove(inode,
+					attr_name, ops[i].am_flags);
 			mnt_drop_write(parfilp->f_path.mnt);
 			break;
 		default:
@@ -617,30 +655,24 @@ xfs_attrmulti_by_handle(
 	kfree(attr_name);
  out_kfree_ops:
 	kfree(ops);
- out_dput:
-	dput(dentry);
+ out_vn_rele:
+	iput(inode);
+ out:
 	return -error;
 }
 
-int
+STATIC int
 xfs_ioc_space(
 	struct xfs_inode	*ip,
 	struct inode		*inode,
 	struct file		*filp,
 	int			ioflags,
 	unsigned int		cmd,
-	xfs_flock64_t		*bf)
+	void			__user *arg)
 {
+	xfs_flock64_t		bf;
 	int			attr_flags = 0;
 	int			error;
-
-	/*
-	 * Only allow the sys admin to reserve space unless
-	 * unwritten extents are enabled.
-	 */
-	if (!xfs_sb_version_hasextflgbit(&ip->i_mount->m_sb) &&
-	    !capable(CAP_SYS_ADMIN))
-		return -XFS_ERROR(EPERM);
 
 	if (inode->i_flags & (S_IMMUTABLE|S_APPEND))
 		return -XFS_ERROR(EPERM);
@@ -651,12 +683,16 @@ xfs_ioc_space(
 	if (!S_ISREG(inode->i_mode))
 		return -XFS_ERROR(EINVAL);
 
+	if (copy_from_user(&bf, arg, sizeof(bf)))
+		return -XFS_ERROR(EFAULT);
+
 	if (filp->f_flags & (O_NDELAY|O_NONBLOCK))
 		attr_flags |= XFS_ATTR_NONBLOCK;
 	if (ioflags & IO_INVIS)
 		attr_flags |= XFS_ATTR_DMI;
 
-	error = xfs_change_file_space(ip, cmd, bf, filp->f_pos, attr_flags);
+	error = xfs_change_file_space(ip, cmd, &bf, filp->f_pos,
+					      NULL, attr_flags);
 	return -error;
 }
 
@@ -971,7 +1007,7 @@ xfs_ioctl_setattr(
 	 * to the file owner ID, except in cases where the
 	 * CAP_FSETID capability is applicable.
 	 */
-	if (current_fsuid() != ip->i_d.di_uid && !capable(CAP_FOWNER)) {
+	if (current->fsuid != ip->i_d.di_uid && !capable(CAP_FOWNER)) {
 		code = XFS_ERROR(EPERM);
 		goto error_return;
 	}
@@ -1068,6 +1104,10 @@ xfs_ioctl_setattr(
 
 	/*
 	 * Change file ownership.  Must be the owner or privileged.
+	 * If the system was configured with the "restricted_chown"
+	 * option, the owner is not permitted to give away the file,
+	 * and can change the group id only to a group of which he
+	 * or she is a member.
 	 */
 	if (mask & FSX_PROJID) {
 		/*
@@ -1096,7 +1136,7 @@ xfs_ioctl_setattr(
 			 * the superblock version number since projids didn't
 			 * exist before DINODE_VERSION_2 and SB_VERSION_NLINK.
 			 */
-			if (ip->i_d.di_version == 1)
+			if (ip->i_d.di_version == XFS_DINODE_VERSION_1)
 				xfs_bump_ino_vers2(tp, ip);
 		}
 
@@ -1215,58 +1255,32 @@ xfs_ioc_setxflags(
 }
 
 STATIC int
-xfs_getbmap_format(void **ap, struct getbmapx *bmv, int *full)
-{
-	struct getbmap __user	*base = *ap;
-
-	/* copy only getbmap portion (not getbmapx) */
-	if (copy_to_user(base, bmv, sizeof(struct getbmap)))
-		return XFS_ERROR(EFAULT);
-
-	*ap += sizeof(struct getbmap);
-	return 0;
-}
-
-STATIC int
 xfs_ioc_getbmap(
 	struct xfs_inode	*ip,
 	int			ioflags,
 	unsigned int		cmd,
 	void			__user *arg)
 {
-	struct getbmapx		bmx;
+	struct getbmap		bm;
+	int			iflags;
 	int			error;
 
-	if (copy_from_user(&bmx, arg, sizeof(struct getbmapx)))
+	if (copy_from_user(&bm, arg, sizeof(bm)))
 		return -XFS_ERROR(EFAULT);
 
-	if (bmx.bmv_count < 2)
+	if (bm.bmv_count < 2)
 		return -XFS_ERROR(EINVAL);
 
-	bmx.bmv_iflags = (cmd == XFS_IOC_GETBMAPA ? BMV_IF_ATTRFORK : 0);
+	iflags = (cmd == XFS_IOC_GETBMAPA ? BMV_IF_ATTRFORK : 0);
 	if (ioflags & IO_INVIS)
-		bmx.bmv_iflags |= BMV_IF_NO_DMAPI_READ;
+		iflags |= BMV_IF_NO_DMAPI_READ;
 
-	error = xfs_getbmap(ip, &bmx, xfs_getbmap_format,
-			    (struct getbmap *)arg+1);
+	error = xfs_getbmap(ip, &bm, (struct getbmap __user *)arg+1, iflags);
 	if (error)
 		return -error;
 
-	/* copy back header - only size of getbmap */
-	if (copy_to_user(arg, &bmx, sizeof(struct getbmap)))
+	if (copy_to_user(arg, &bm, sizeof(bm)))
 		return -XFS_ERROR(EFAULT);
-	return 0;
-}
-
-STATIC int
-xfs_getbmapx_format(void **ap, struct getbmapx *bmv, int *full)
-{
-	struct getbmapx __user	*base = *ap;
-
-	if (copy_to_user(base, bmv, sizeof(struct getbmapx)))
-		return XFS_ERROR(EFAULT);
-
-	*ap += sizeof(struct getbmapx);
 	return 0;
 }
 
@@ -1276,6 +1290,8 @@ xfs_ioc_getbmapx(
 	void			__user *arg)
 {
 	struct getbmapx		bmx;
+	struct getbmap		bm;
+	int			iflags;
 	int			error;
 
 	if (copy_from_user(&bmx, arg, sizeof(bmx)))
@@ -1284,46 +1300,46 @@ xfs_ioc_getbmapx(
 	if (bmx.bmv_count < 2)
 		return -XFS_ERROR(EINVAL);
 
-	if (bmx.bmv_iflags & (~BMV_IF_VALID))
+	/*
+	 * Map input getbmapx structure to a getbmap
+	 * structure for xfs_getbmap.
+	 */
+	GETBMAP_CONVERT(bmx, bm);
+
+	iflags = bmx.bmv_iflags;
+
+	if (iflags & (~BMV_IF_VALID))
 		return -XFS_ERROR(EINVAL);
 
-	error = xfs_getbmap(ip, &bmx, xfs_getbmapx_format,
-			    (struct getbmapx *)arg+1);
+	iflags |= BMV_IF_EXTENDED;
+
+	error = xfs_getbmap(ip, &bm, (struct getbmapx __user *)arg+1, iflags);
 	if (error)
 		return -error;
 
-	/* copy back header */
-	if (copy_to_user(arg, &bmx, sizeof(struct getbmapx)))
+	GETBMAP_CONVERT(bm, bmx);
+
+	if (copy_to_user(arg, &bmx, sizeof(bmx)))
 		return -XFS_ERROR(EFAULT);
 
 	return 0;
 }
 
-/*
- * Note: some of the ioctl's return positive numbers as a
- * byte count indicating success, such as readlink_by_handle.
- * So we don't "sign flip" like most other routines.  This means
- * true errors need to be returned as a negative value.
- */
-long
-xfs_file_ioctl(
+int
+xfs_ioctl(
+	xfs_inode_t		*ip,
 	struct file		*filp,
+	int			ioflags,
 	unsigned int		cmd,
-	unsigned long		p)
+	void			__user *arg)
 {
 	struct inode		*inode = filp->f_path.dentry->d_inode;
-	struct xfs_inode	*ip = XFS_I(inode);
-	struct xfs_mount	*mp = ip->i_mount;
-	void			__user *arg = (void __user *)p;
-	int			ioflags = 0;
+	xfs_mount_t		*mp = ip->i_mount;
 	int			error;
 
-	if (filp->f_mode & FMODE_NOCMTIME)
-		ioflags |= IO_INVIS;
-
-	xfs_itrace_entry(ip);
-
+	xfs_itrace_entry(XFS_I(inode));
 	switch (cmd) {
+
 	case XFS_IOC_ALLOCSP:
 	case XFS_IOC_FREESP:
 	case XFS_IOC_RESVSP:
@@ -1331,13 +1347,17 @@ xfs_file_ioctl(
 	case XFS_IOC_ALLOCSP64:
 	case XFS_IOC_FREESP64:
 	case XFS_IOC_RESVSP64:
-	case XFS_IOC_UNRESVSP64: {
-		xfs_flock64_t		bf;
+	case XFS_IOC_UNRESVSP64:
+		/*
+		 * Only allow the sys admin to reserve space unless
+		 * unwritten extents are enabled.
+		 */
+		if (!xfs_sb_version_hasextflgbit(&mp->m_sb) &&
+		    !capable(CAP_SYS_ADMIN))
+			return -EPERM;
 
-		if (copy_from_user(&bf, arg, sizeof(bf)))
-			return -XFS_ERROR(EFAULT);
-		return xfs_ioc_space(ip, inode, filp, ioflags, cmd, &bf);
-	}
+		return xfs_ioc_space(ip, inode, filp, ioflags, cmd, arg);
+
 	case XFS_IOC_DIOINFO: {
 		struct dioattr	da;
 		xfs_buftarg_t	*target =
@@ -1397,42 +1417,26 @@ xfs_file_ioctl(
 
 	case XFS_IOC_FD_TO_HANDLE:
 	case XFS_IOC_PATH_TO_HANDLE:
-	case XFS_IOC_PATH_TO_FSHANDLE: {
-		xfs_fsop_handlereq_t	hreq;
+	case XFS_IOC_PATH_TO_FSHANDLE:
+		return xfs_find_handle(cmd, arg);
 
-		if (copy_from_user(&hreq, arg, sizeof(hreq)))
-			return -XFS_ERROR(EFAULT);
-		return xfs_find_handle(cmd, &hreq);
-	}
-	case XFS_IOC_OPEN_BY_HANDLE: {
-		xfs_fsop_handlereq_t	hreq;
+	case XFS_IOC_OPEN_BY_HANDLE:
+		return xfs_open_by_handle(mp, arg, filp, inode);
 
-		if (copy_from_user(&hreq, arg, sizeof(xfs_fsop_handlereq_t)))
-			return -XFS_ERROR(EFAULT);
-		return xfs_open_by_handle(filp, &hreq);
-	}
 	case XFS_IOC_FSSETDM_BY_HANDLE:
-		return xfs_fssetdm_by_handle(filp, arg);
+		return xfs_fssetdm_by_handle(mp, arg, inode);
 
-	case XFS_IOC_READLINK_BY_HANDLE: {
-		xfs_fsop_handlereq_t	hreq;
+	case XFS_IOC_READLINK_BY_HANDLE:
+		return xfs_readlink_by_handle(mp, arg, inode);
 
-		if (copy_from_user(&hreq, arg, sizeof(xfs_fsop_handlereq_t)))
-			return -XFS_ERROR(EFAULT);
-		return xfs_readlink_by_handle(filp, &hreq);
-	}
 	case XFS_IOC_ATTRLIST_BY_HANDLE:
-		return xfs_attrlist_by_handle(filp, arg);
+		return xfs_attrlist_by_handle(mp, arg, inode);
 
 	case XFS_IOC_ATTRMULTI_BY_HANDLE:
-		return xfs_attrmulti_by_handle(filp, arg);
+		return xfs_attrmulti_by_handle(mp, arg, filp, inode);
 
 	case XFS_IOC_SWAPEXT: {
-		struct xfs_swapext	sxp;
-
-		if (copy_from_user(&sxp, arg, sizeof(xfs_swapext_t)))
-			return -XFS_ERROR(EFAULT);
-		error = xfs_swapext(&sxp);
+		error = xfs_swapext((struct xfs_swapext __user *)arg);
 		return -error;
 	}
 
@@ -1488,6 +1492,9 @@ xfs_file_ioctl(
 	case XFS_IOC_FSGROWFSDATA: {
 		xfs_growfs_data_t in;
 
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+
 		if (copy_from_user(&in, arg, sizeof(in)))
 			return -XFS_ERROR(EFAULT);
 
@@ -1497,6 +1504,9 @@ xfs_file_ioctl(
 
 	case XFS_IOC_FSGROWFSLOG: {
 		xfs_growfs_log_t in;
+
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 
 		if (copy_from_user(&in, arg, sizeof(in)))
 			return -XFS_ERROR(EFAULT);
@@ -1508,12 +1518,30 @@ xfs_file_ioctl(
 	case XFS_IOC_FSGROWFSRT: {
 		xfs_growfs_rt_t in;
 
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+
 		if (copy_from_user(&in, arg, sizeof(in)))
 			return -XFS_ERROR(EFAULT);
 
 		error = xfs_growfs_rt(mp, &in);
 		return -error;
 	}
+
+	case XFS_IOC_FREEZE:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+
+		if (inode->i_sb->s_frozen == SB_UNFROZEN)
+			freeze_bdev(inode->i_sb->s_bdev);
+		return 0;
+
+	case XFS_IOC_THAW:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		if (inode->i_sb->s_frozen != SB_UNFROZEN)
+			thaw_bdev(inode->i_sb->s_bdev, inode->i_sb);
+		return 0;
 
 	case XFS_IOC_GOINGDOWN: {
 		__uint32_t in;

@@ -46,6 +46,11 @@
 
 #include "hci_uart.h"
 
+#ifndef CONFIG_BT_HCIUART_DEBUG
+#undef  BT_DBG
+#define BT_DBG( A... )
+#endif
+
 #define VERSION "2.2"
 
 static int reset = 0;
@@ -394,8 +399,8 @@ static int hci_uart_register_dev(struct hci_uart *hu)
 
 	hdev->owner = THIS_MODULE;
 
-	if (!reset)
-		set_bit(HCI_QUIRK_NO_RESET, &hdev->quirks);
+	if (reset)
+		set_bit(HCI_QUIRK_RESET_ON_INIT, &hdev->quirks);
 
 	if (hci_register_dev(hdev) < 0) {
 		BT_ERR("Can't register HCI device");

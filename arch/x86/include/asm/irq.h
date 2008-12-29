@@ -31,6 +31,10 @@ static inline int irq_canonicalize(int irq)
 # endif
 #endif
 
+#ifdef CONFIG_IRQBALANCE
+extern int irqbalance_disable(char *str);
+#endif
+
 #ifdef CONFIG_HOTPLUG_CPU
 #include <linux/cpumask.h>
 extern void fixup_irqs(void);
