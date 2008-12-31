@@ -41,7 +41,6 @@
 #include <linux/init.h>
 #include <linux/mutex.h>
 #include <linux/sysfs.h>
-#include <linux/acpi.h>
 #include <asm/io.h>
 
 
@@ -783,10 +782,6 @@ static int __devinit via686a_device_add(unsigned short address)
 		.flags	= IORESOURCE_IO,
 	};
 	int err;
-
-	err = acpi_check_resource_conflict(&res);
-	if (err)
-		goto exit;
 
 	pdev = platform_device_alloc("via686a", address);
 	if (!pdev) {

@@ -93,7 +93,7 @@
 /* category metadata list */
 
 extern catlistitem_t mib_catlist[];
-extern u32 mib_catlist_size;
+extern UINT32 mib_catlist_size;
 
 
 /*================================================================*/

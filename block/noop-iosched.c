@@ -76,7 +76,7 @@ static void *noop_init_queue(struct request_queue *q)
 	return nd;
 }
 
-static void noop_exit_queue(struct elevator_queue *e)
+static void noop_exit_queue(elevator_t *e)
 {
 	struct noop_data *nd = e->elevator_data;
 

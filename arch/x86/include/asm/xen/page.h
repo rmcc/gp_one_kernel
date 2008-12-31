@@ -137,7 +137,7 @@ static inline pte_t mfn_pte(unsigned long page_nr, pgprot_t pgprot)
 	pte_t pte;
 
 	pte.pte = ((phys_addr_t)page_nr << PAGE_SHIFT) |
-			massage_pgprot(pgprot);
+		(pgprot_val(pgprot) & __supported_pte_mask);
 
 	return pte;
 }

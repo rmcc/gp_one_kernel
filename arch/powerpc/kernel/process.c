@@ -33,7 +33,6 @@
 #include <linux/mqueue.h>
 #include <linux/hardirq.h>
 #include <linux/utsname.h>
-#include <linux/kernel_stat.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>

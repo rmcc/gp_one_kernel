@@ -159,7 +159,7 @@ static struct saa7134_tvaudio tvaudio[] = {
 		.mode          = TVAUDIO_FM_MONO,
 	}
 };
-#define TVAUDIO ARRAY_SIZE(tvaudio)
+#define TVAUDIO (sizeof(tvaudio)/sizeof(struct saa7134_tvaudio))
 
 /* ------------------------------------------------------------------ */
 

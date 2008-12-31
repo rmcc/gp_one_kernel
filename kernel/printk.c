@@ -73,6 +73,7 @@ EXPORT_SYMBOL(oops_in_progress);
  * driver system.
  */
 static DECLARE_MUTEX(console_sem);
+static DECLARE_MUTEX(secondary_console_sem);
 struct console *console_drivers;
 EXPORT_SYMBOL_GPL(console_drivers);
 
@@ -381,7 +382,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE3(syslog, int, type, char __user *, buf, int, len)
+asmlinkage long sys_syslog(int type, char __user *buf, int len)
 {
 	return do_syslog(type, buf, len);
 }
@@ -618,7 +619,7 @@ static int acquire_console_semaphore_for_printk(unsigned int cpu)
 static const char recursion_bug_msg [] =
 		KERN_CRIT "BUG: recent printk recursion!\n";
 static int recursion_bug;
-static int new_text_line = 1;
+	static int new_text_line = 1;
 static char printk_buf[1024];
 
 asmlinkage int vprintk(const char *fmt, va_list args)
@@ -661,7 +662,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	if (recursion_bug) {
 		recursion_bug = 0;
 		strcpy(printk_buf, recursion_bug_msg);
-		printed_len = strlen(recursion_bug_msg);
+		printed_len = sizeof(recursion_bug_msg);
 	}
 	/* Emit the output into the temporary buffer */
 	printed_len += vscnprintf(printk_buf + printed_len,
@@ -740,6 +741,11 @@ EXPORT_SYMBOL(printk);
 EXPORT_SYMBOL(vprintk);
 
 #else
+
+asmlinkage long sys_syslog(int type, char __user *buf, int len)
+{
+	return -ENOSYS;
+}
 
 static void call_console_drivers(unsigned start, unsigned end)
 {
@@ -890,14 +896,12 @@ void suspend_console(void)
 	printk("Suspending console(s) (use no_console_suspend to debug)\n");
 	acquire_console_sem();
 	console_suspended = 1;
-	up(&console_sem);
 }
 
 void resume_console(void)
 {
 	if (!console_suspend_enabled)
 		return;
-	down(&console_sem);
 	console_suspended = 0;
 	release_console_sem();
 }
@@ -913,9 +917,11 @@ void resume_console(void)
 void acquire_console_sem(void)
 {
 	BUG_ON(in_interrupt());
-	down(&console_sem);
-	if (console_suspended)
+	if (console_suspended) {
+		down(&secondary_console_sem);
 		return;
+	}
+	down(&console_sem);
 	console_locked = 1;
 	console_may_schedule = 1;
 }
@@ -925,10 +931,6 @@ int try_acquire_console_sem(void)
 {
 	if (down_trylock(&console_sem))
 		return -1;
-	if (console_suspended) {
-		up(&console_sem);
-		return -1;
-	}
 	console_locked = 1;
 	console_may_schedule = 0;
 	return 0;
@@ -982,7 +984,7 @@ void release_console_sem(void)
 	unsigned wake_klogd = 0;
 
 	if (console_suspended) {
-		up(&console_sem);
+		up(&secondary_console_sem);
 		return;
 	}
 

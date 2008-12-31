@@ -4113,7 +4113,7 @@ static int bond_neigh_setup(struct net_device *dev, struct neigh_parms *parms)
 		const struct net_device_ops *slave_ops
 			= slave->dev->netdev_ops;
 		if (slave_ops->ndo_neigh_setup)
-			return slave_ops->ndo_neigh_setup(slave->dev, parms);
+			return slave_ops->ndo_neigh_setup(dev, parms);
 	}
 	return 0;
 }
@@ -4148,7 +4148,7 @@ static int bond_change_mtu(struct net_device *bond_dev, int new_mtu)
 
 	bond_for_each_slave(bond, slave, i) {
 		pr_debug("s %p s->p %p c_m %p\n", slave,
-			slave->prev, slave->dev->netdev_ops->ndo_change_mtu);
+			slave->prev, slave->dev->change_mtu);
 
 		res = dev_set_mtu(slave->dev, new_mtu);
 

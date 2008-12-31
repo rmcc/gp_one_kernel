@@ -2,7 +2,6 @@
 #define _SPARC64_TTABLE_H
 
 #include <asm/utrap.h>
-#include <asm/pil.h>
 
 #ifdef __ASSEMBLY__
 #include <asm/thread_info.h>
@@ -124,7 +123,7 @@
 
 #define TRAP_IRQ(routine, level)			\
 	rdpr	%pil, %g2;				\
-	wrpr	%g0, PIL_NORMAL_MAX, %pil;		\
+	wrpr	%g0, 15, %pil;				\
 	sethi	%hi(1f-4), %g7;				\
 	ba,pt	%xcc, etrap_irq;			\
 	 or	%g7, %lo(1f-4), %g7;			\
@@ -144,7 +143,7 @@
 
 #define TRAP_IRQ(routine, level)			\
 	rdpr	%pil, %g2;				\
-	wrpr	%g0, PIL_NORMAL_MAX, %pil;		\
+	wrpr	%g0, 15, %pil;				\
 	ba,pt	%xcc, etrap_irq;			\
 	 rd	%pc, %g7;				\
 	mov	level, %o0;				\
@@ -153,16 +152,6 @@
 	ba,a,pt	%xcc, rtrap_irq;
 
 #endif
-
-#define TRAP_NMI_IRQ(routine, level)			\
-	rdpr	%pil, %g2;				\
-	wrpr	%g0, PIL_NMI, %pil;			\
-	ba,pt	%xcc, etrap_irq;			\
-	 rd	%pc, %g7;				\
-	mov	level, %o0;				\
-	call	routine;				\
-	 add	%sp, PTREGS_OFF, %o1;			\
-	ba,a,pt	%xcc, rtrap_nmi;
 
 #define TRAP_IVEC TRAP_NOSAVE(do_ivec)
 

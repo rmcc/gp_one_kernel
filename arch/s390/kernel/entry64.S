@@ -177,11 +177,8 @@ _TIF_WORK_INT = (_TIF_SIGPENDING | _TIF_NOTIFY_RESUME | _TIF_NEED_RESCHED | \
 	.if !\sync
 	ni	\psworg+1,0xfd		# clear wait state bit
 	.endif
-	lg	%r14,__LC_VDSO_PER_CPU
-	lmg	%r0,%r13,SP_R0(%r15)	# load gprs 0-13 of user
+	lmg	%r0,%r15,SP_R0(%r15)	# load gprs 0-15 of user
 	stpt	__LC_EXIT_TIMER
-	mvc	__VDSO_ECTG_BASE(16,%r14),__LC_EXIT_TIMER
-	lmg	%r14,%r15,SP_R14(%r15)	# load grps 14-15 of user
 	lpswe	\psworg			# back to caller
 	.endm
 
@@ -562,8 +559,8 @@ kernel_per:
  */
 	.globl io_int_handler
 io_int_handler:
-	stck	__LC_INT_CLOCK
 	stpt	__LC_ASYNC_ENTER_TIMER
+	stck	__LC_INT_CLOCK
 	SAVE_ALL_BASE __LC_SAVE_AREA+32
 	SAVE_ALL_ASYNC __LC_IO_OLD_PSW,__LC_SAVE_AREA+32
 	CREATE_STACK_FRAME __LC_IO_OLD_PSW,__LC_SAVE_AREA+32
@@ -724,8 +721,8 @@ io_notify_resume:
  */
 	.globl	ext_int_handler
 ext_int_handler:
-	stck	__LC_INT_CLOCK
 	stpt	__LC_ASYNC_ENTER_TIMER
+	stck	__LC_INT_CLOCK
 	SAVE_ALL_BASE __LC_SAVE_AREA+32
 	SAVE_ALL_ASYNC __LC_EXT_OLD_PSW,__LC_SAVE_AREA+32
 	CREATE_STACK_FRAME __LC_EXT_OLD_PSW,__LC_SAVE_AREA+32
@@ -749,7 +746,6 @@ __critical_end:
  */
 	.globl mcck_int_handler
 mcck_int_handler:
-	stck	__LC_INT_CLOCK
 	la	%r1,4095		# revalidate r1
 	spt	__LC_CPU_TIMER_SAVE_AREA-4095(%r1)	# revalidate cpu timer
 	lmg	%r0,%r15,__LC_GPREGS_SAVE_AREA-4095(%r1)# revalidate gprs
@@ -983,23 +979,23 @@ cleanup_sysc_return:
 
 cleanup_sysc_leave:
 	clc	8(8,%r12),BASED(cleanup_sysc_leave_insn)
-	je	3f
-	clc	8(8,%r12),BASED(cleanup_sysc_leave_insn+8)
-	jhe	0f
+	je	2f
 	mvc	__LC_EXIT_TIMER(8),__LC_ASYNC_ENTER_TIMER
-0:	mvc	__LC_RETURN_PSW(16),SP_PSW(%r15)
+	clc	8(8,%r12),BASED(cleanup_sysc_leave_insn+8)
+	je	2f
+	mvc	__LC_RETURN_PSW(16),SP_PSW(%r15)
 	cghi	%r12,__LC_MCK_OLD_PSW
-	jne	1f
+	jne	0f
 	mvc	__LC_SAVE_AREA+64(32),SP_R12(%r15)
-	j	2f
-1:	mvc	__LC_SAVE_AREA+32(32),SP_R12(%r15)
-2:	lmg	%r0,%r11,SP_R0(%r15)
+	j	1f
+0:	mvc	__LC_SAVE_AREA+32(32),SP_R12(%r15)
+1:	lmg	%r0,%r11,SP_R0(%r15)
 	lg	%r15,SP_R15(%r15)
-3:	la	%r12,__LC_RETURN_PSW
+2:	la	%r12,__LC_RETURN_PSW
 	br	%r14
 cleanup_sysc_leave_insn:
 	.quad	sysc_done - 4
-	.quad	sysc_done - 16
+	.quad	sysc_done - 8
 
 cleanup_io_return:
 	mvc	__LC_RETURN_PSW(8),0(%r12)
@@ -1009,23 +1005,23 @@ cleanup_io_return:
 
 cleanup_io_leave:
 	clc	8(8,%r12),BASED(cleanup_io_leave_insn)
-	je	3f
-	clc	8(8,%r12),BASED(cleanup_io_leave_insn+8)
-	jhe	0f
+	je	2f
 	mvc	__LC_EXIT_TIMER(8),__LC_ASYNC_ENTER_TIMER
-0:	mvc	__LC_RETURN_PSW(16),SP_PSW(%r15)
+	clc	8(8,%r12),BASED(cleanup_io_leave_insn+8)
+	je	2f
+	mvc	__LC_RETURN_PSW(16),SP_PSW(%r15)
 	cghi	%r12,__LC_MCK_OLD_PSW
-	jne	1f
+	jne	0f
 	mvc	__LC_SAVE_AREA+64(32),SP_R12(%r15)
-	j	2f
-1:	mvc	__LC_SAVE_AREA+32(32),SP_R12(%r15)
-2:	lmg	%r0,%r11,SP_R0(%r15)
+	j	1f
+0:	mvc	__LC_SAVE_AREA+32(32),SP_R12(%r15)
+1:	lmg	%r0,%r11,SP_R0(%r15)
 	lg	%r15,SP_R15(%r15)
-3:	la	%r12,__LC_RETURN_PSW
+2:	la	%r12,__LC_RETURN_PSW
 	br	%r14
 cleanup_io_leave_insn:
 	.quad	io_done - 4
-	.quad	io_done - 16
+	.quad	io_done - 8
 
 /*
  * Integer constants

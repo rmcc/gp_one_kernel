@@ -248,7 +248,7 @@ static void hpet_legacy_clockevent_register(void)
 	 * Start hpet with the boot cpu mask and make it
 	 * global after the IO_APIC has been initialized.
 	 */
-	hpet_clockevent.cpumask = cpumask_of(smp_processor_id());
+	hpet_clockevent.cpumask = cpumask_of_cpu(smp_processor_id());
 	clockevents_register_device(&hpet_clockevent);
 	global_clock_event = &hpet_clockevent;
 	printk(KERN_DEBUG "hpet clockevent registered\n");
@@ -269,8 +269,6 @@ static void hpet_set_mode(enum clock_event_mode mode,
 		now = hpet_readl(HPET_COUNTER);
 		cmp = now + (unsigned long) delta;
 		cfg = hpet_readl(HPET_Tn_CFG(timer));
-		/* Make sure we use edge triggered interrupts */
-		cfg &= ~HPET_TN_LEVEL;
 		cfg |= HPET_TN_ENABLE | HPET_TN_PERIODIC |
 		       HPET_TN_SETVAL | HPET_TN_32BIT;
 		hpet_writel(cfg, HPET_Tn_CFG(timer));
@@ -305,7 +303,7 @@ static void hpet_set_mode(enum clock_event_mode mode,
 			struct hpet_dev *hdev = EVT_TO_HPET_DEV(evt);
 			hpet_setup_msi_irq(hdev->irq);
 			disable_irq(hdev->irq);
-			irq_set_affinity(hdev->irq, cpumask_of(hdev->cpu));
+			irq_set_affinity(hdev->irq, cpumask_of_cpu(hdev->cpu));
 			enable_irq(hdev->irq);
 		}
 		break;
@@ -453,7 +451,7 @@ static int hpet_setup_irq(struct hpet_dev *dev)
 		return -1;
 
 	disable_irq(dev->irq);
-	irq_set_affinity(dev->irq, cpumask_of(dev->cpu));
+	irq_set_affinity(dev->irq, cpumask_of_cpu(dev->cpu));
 	enable_irq(dev->irq);
 
 	printk(KERN_DEBUG "hpet: %s irq %d for MSI\n",
@@ -504,7 +502,7 @@ static void init_one_hpet_msi_clockevent(struct hpet_dev *hdev, int cpu)
 	/* 5 usec minimum reprogramming delta. */
 	evt->min_delta_ns = 5000;
 
-	evt->cpumask = cpumask_of(hdev->cpu);
+	evt->cpumask = cpumask_of_cpu(hdev->cpu);
 	clockevents_register_device(evt);
 }
 
@@ -630,12 +628,11 @@ static int hpet_cpuhp_notify(struct notifier_block *n,
 
 	switch (action & 0xf) {
 	case CPU_ONLINE:
-		INIT_DELAYED_WORK_ON_STACK(&work.work, hpet_work);
+		INIT_DELAYED_WORK(&work.work, hpet_work);
 		init_completion(&work.complete);
 		/* FIXME: add schedule_work_on() */
 		schedule_delayed_work_on(cpu, &work.work, 0);
 		wait_for_completion(&work.complete);
-		destroy_timer_on_stack(&work.work.timer);
 		break;
 	case CPU_DEAD:
 		if (hdev) {
@@ -816,7 +813,7 @@ int __init hpet_enable(void)
 
 out_nohpet:
 	hpet_clear_mapping();
-	hpet_address = 0;
+	boot_hpet_disable = 1;
 	return 0;
 }
 
@@ -839,10 +836,9 @@ static __init int hpet_late_init(void)
 
 		hpet_address = force_hpet_address;
 		hpet_enable();
+		if (!hpet_virt_address)
+			return -ENODEV;
 	}
-
-	if (!hpet_virt_address)
-		return -ENODEV;
 
 	hpet_reserve_platform_timers(hpet_readl(HPET_ID));
 
@@ -899,20 +895,12 @@ static unsigned long hpet_rtc_flags;
 static int hpet_prev_update_sec;
 static struct rtc_time hpet_alarm_time;
 static unsigned long hpet_pie_count;
-static u32 hpet_t1_cmp;
+static unsigned long hpet_t1_cmp;
 static unsigned long hpet_default_delta;
 static unsigned long hpet_pie_delta;
 static unsigned long hpet_pie_limit;
 
 static rtc_irq_handler irq_handler;
-
-/*
- * Check that the hpet counter c1 is ahead of the c2
- */
-static inline int hpet_cnt_ahead(u32 c1, u32 c2)
-{
-	return (s32)(c2 - c1) < 0;
-}
 
 /*
  * Registers a IRQ handler.
@@ -1085,7 +1073,7 @@ static void hpet_rtc_timer_reinit(void)
 		hpet_t1_cmp += delta;
 		hpet_writel(hpet_t1_cmp, HPET_T1_CMP);
 		lost_ints++;
-	} while (!hpet_cnt_ahead(hpet_t1_cmp, hpet_readl(HPET_COUNTER)));
+	} while ((long)(hpet_readl(HPET_COUNTER) - hpet_t1_cmp) > 0);
 
 	if (lost_ints) {
 		if (hpet_rtc_flags & RTC_PIE)

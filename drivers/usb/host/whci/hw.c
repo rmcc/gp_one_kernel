@@ -50,7 +50,6 @@ int whc_do_gencmd(struct whc *whc, u32 cmd, u32 params, void *addr, size_t len)
 	unsigned long flags;
 	dma_addr_t dma_addr;
 	int t;
-	int ret = 0;
 
 	mutex_lock(&whc->mutex);
 
@@ -62,8 +61,7 @@ int whc_do_gencmd(struct whc *whc, u32 cmd, u32 params, void *addr, size_t len)
 		dev_err(&whc->umc->dev, "generic command timeout (%04x/%04x)\n",
 			le_readl(whc->base + WUSBGENCMDSTS),
 			le_readl(whc->base + WUSBGENCMDPARAMS));
-		ret = -ETIMEDOUT;
-		goto out;
+		return -ETIMEDOUT;
 	}
 
 	if (addr) {
@@ -82,23 +80,8 @@ int whc_do_gencmd(struct whc *whc, u32 cmd, u32 params, void *addr, size_t len)
 		  whc->base + WUSBGENCMDSTS);
 
 	spin_unlock_irqrestore(&whc->lock, flags);
-out:
+
 	mutex_unlock(&whc->mutex);
 
-	return ret;
-}
-
-/**
- * whc_hw_error - recover from a hardware error
- * @whc:    the WHCI HC that broke.
- * @reason: a description of the failure.
- *
- * Recover from broken hardware with a full reset.
- */
-void whc_hw_error(struct whc *whc, const char *reason)
-{
-	struct wusbhc *wusbhc = &whc->wusbhc;
-
-	dev_err(&whc->umc->dev, "hardware error: %s\n", reason);
-	wusbhc_reset_all(wusbhc);
+	return 0;
 }

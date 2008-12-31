@@ -148,7 +148,7 @@ static u16 __phy_read(struct gem *gp, int phy_addr, int reg)
 	cmd |= (MIF_FRAME_TAMSB);
 	writel(cmd, gp->regs + MIF_FRAME);
 
-	while (--limit) {
+	while (limit--) {
 		cmd = readl(gp->regs + MIF_FRAME);
 		if (cmd & MIF_FRAME_TALSB)
 			break;
@@ -1157,7 +1157,7 @@ static void gem_pcs_reset(struct gem *gp)
 		if (limit-- <= 0)
 			break;
 	}
-	if (limit < 0)
+	if (limit <= 0)
 		printk(KERN_WARNING "%s: PCS reset bit would not clear.\n",
 		       gp->dev->name);
 }
@@ -1229,7 +1229,7 @@ static void gem_reset(struct gem *gp)
 			break;
 	} while (val & (GREG_SWRST_TXRST | GREG_SWRST_RXRST));
 
-	if (limit < 0)
+	if (limit <= 0)
 		printk(KERN_ERR "%s: SW reset is ghetto.\n", gp->dev->name);
 
 	if (gp->phy_type == phy_serialink || gp->phy_type == phy_serdes)
@@ -2221,8 +2221,6 @@ static int gem_do_start(struct net_device *dev)
 
 	gp->running = 1;
 
-	napi_enable(&gp->napi);
-
 	if (gp->lstate == link_up) {
 		netif_carrier_on(gp->dev);
 		gem_set_link_modes(gp);
@@ -2239,8 +2237,6 @@ static int gem_do_start(struct net_device *dev)
 
 		spin_lock_irqsave(&gp->lock, flags);
 		spin_lock(&gp->tx_lock);
-
-		napi_disable(&gp->napi);
 
 		gp->running =  0;
 		gem_reset(gp);
@@ -2342,6 +2338,8 @@ static int gem_open(struct net_device *dev)
 	if (!gp->asleep)
 		rc = gem_do_start(dev);
 	gp->opened = (rc == 0);
+	if (gp->opened)
+		napi_enable(&gp->napi);
 
 	mutex_unlock(&gp->pm_mutex);
 
@@ -2478,6 +2476,8 @@ static int gem_resume(struct pci_dev *pdev)
 
 		/* Re-attach net device */
 		netif_device_attach(dev);
+
+		napi_enable(&gp->napi);
 	}
 
 	spin_lock_irqsave(&gp->lock, flags);
@@ -2989,19 +2989,6 @@ static void gem_remove_one(struct pci_dev *pdev)
 	}
 }
 
-static const struct net_device_ops gem_netdev_ops = {
-	.ndo_open		= gem_open,
-	.ndo_stop		= gem_close,
-	.ndo_start_xmit		= gem_start_xmit,
-	.ndo_get_stats		= gem_get_stats,
-	.ndo_set_multicast_list = gem_set_multicast,
-	.ndo_do_ioctl		= gem_ioctl,
-	.ndo_tx_timeout		= gem_tx_timeout,
-	.ndo_change_mtu		= gem_change_mtu,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-};
-
 static int __devinit gem_init_one(struct pci_dev *pdev,
 				  const struct pci_device_id *ent)
 {
@@ -3155,10 +3142,17 @@ static int __devinit gem_init_one(struct pci_dev *pdev,
 	if (gem_get_device_address(gp))
 		goto err_out_free_consistent;
 
-	dev->netdev_ops = &gem_netdev_ops;
+	dev->open = gem_open;
+	dev->stop = gem_close;
+	dev->hard_start_xmit = gem_start_xmit;
+	dev->get_stats = gem_get_stats;
+	dev->set_multicast_list = gem_set_multicast;
+	dev->do_ioctl = gem_ioctl;
 	netif_napi_add(dev, &gp->napi, gem_poll, 64);
 	dev->ethtool_ops = &gem_ethtool_ops;
+	dev->tx_timeout = gem_tx_timeout;
 	dev->watchdog_timeo = 5 * HZ;
+	dev->change_mtu = gem_change_mtu;
 	dev->irq = pdev->irq;
 	dev->dma = 0;
 	dev->set_mac_address = gem_set_mac_address;

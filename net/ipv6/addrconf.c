@@ -493,17 +493,15 @@ static void addrconf_forward_change(struct net *net, __s32 newf)
 	read_unlock(&dev_base_lock);
 }
 
-static int addrconf_fixup_forwarding(struct ctl_table *table, int *p, int old)
+static void addrconf_fixup_forwarding(struct ctl_table *table, int *p, int old)
 {
 	struct net *net;
 
 	net = (struct net *)table->extra2;
 	if (p == &net->ipv6.devconf_dflt->forwarding)
-		return 0;
+		return;
 
-	if (!rtnl_trylock())
-		return -ERESTARTSYS;
-
+	rtnl_lock();
 	if (p == &net->ipv6.devconf_all->forwarding) {
 		__s32 newf = net->ipv6.devconf_all->forwarding;
 		net->ipv6.devconf_dflt->forwarding = newf;
@@ -514,7 +512,6 @@ static int addrconf_fixup_forwarding(struct ctl_table *table, int *p, int old)
 
 	if (*p)
 		rt6_purge_dflt_routers(net);
-	return 1;
 }
 #endif
 
@@ -2611,6 +2608,9 @@ static int addrconf_ifdown(struct net_device *dev, int how)
 
 	ASSERT_RTNL();
 
+	if ((dev->flags & IFF_LOOPBACK) && how == 1)
+		how = 0;
+
 	rt6_ifdown(net, dev);
 	neigh_ifdown(&nd_tbl, dev);
 
@@ -3983,7 +3983,7 @@ int addrconf_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
 	ret = proc_dointvec(ctl, write, filp, buffer, lenp, ppos);
 
 	if (write)
-		ret = addrconf_fixup_forwarding(ctl, valp, val);
+		addrconf_fixup_forwarding(ctl, valp, val);
 	return ret;
 }
 
@@ -4019,7 +4019,8 @@ static int addrconf_sysctl_forward_strategy(ctl_table *table,
 	}
 
 	*valp = new;
-	return addrconf_fixup_forwarding(table, valp, val);
+	addrconf_fixup_forwarding(table, valp, val);
+	return 1;
 }
 
 static struct addrconf_sysctl_table
@@ -4249,7 +4250,7 @@ static struct addrconf_sysctl_table
 			.procname	=	"mc_forwarding",
 			.data		=	&ipv6_devconf.mc_forwarding,
 			.maxlen		=	sizeof(int),
-			.mode		=	0444,
+			.mode		=	0644,
 			.proc_handler	=	proc_dointvec,
 		},
 #endif
@@ -4445,6 +4446,25 @@ int unregister_inet6addr_notifier(struct notifier_block *nb)
 
 EXPORT_SYMBOL(unregister_inet6addr_notifier);
 
+static void addrconf_net_exit(struct net *net)
+{
+	struct net_device *dev;
+
+	rtnl_lock();
+	/* clean dev list */
+	for_each_netdev(net, dev) {
+		if (__in6_dev_get(dev) == NULL)
+			continue;
+		addrconf_ifdown(dev, 1);
+	}
+	addrconf_ifdown(net->loopback_dev, 2);
+	rtnl_unlock();
+}
+
+static struct pernet_operations addrconf_net_ops = {
+	.exit = addrconf_net_exit,
+};
+
 /*
  *	Init / cleanup code
  */
@@ -4486,6 +4506,10 @@ int __init addrconf_init(void)
 	if (err)
 		goto errlo;
 
+	err = register_pernet_device(&addrconf_net_ops);
+	if (err)
+		return err;
+
 	register_netdevice_notifier(&ipv6_dev_notf);
 
 	addrconf_verify(0);
@@ -4515,21 +4539,14 @@ errlo:
 void addrconf_cleanup(void)
 {
 	struct inet6_ifaddr *ifa;
-	struct net_device *dev;
 	int i;
 
 	unregister_netdevice_notifier(&ipv6_dev_notf);
+	unregister_pernet_device(&addrconf_net_ops);
+
 	unregister_pernet_subsys(&addrconf_ops);
 
 	rtnl_lock();
-
-	/* clean dev list */
-	for_each_netdev(&init_net, dev) {
-		if (__in6_dev_get(dev) == NULL)
-			continue;
-		addrconf_ifdown(dev, 1);
-	}
-	addrconf_ifdown(init_net.loopback_dev, 2);
 
 	/*
 	 *	Check hash table.
@@ -4551,4 +4568,6 @@ void addrconf_cleanup(void)
 
 	del_timer(&addr_chk_timer);
 	rtnl_unlock();
+
+	unregister_pernet_subsys(&addrconf_net_ops);
 }

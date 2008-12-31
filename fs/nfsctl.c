@@ -38,10 +38,9 @@ static struct file *do_open(char *name, int flags)
 		return ERR_PTR(error);
 
 	if (flags == O_RDWR)
-		error = may_open(&nd.path, MAY_READ|MAY_WRITE,
-					   FMODE_READ|FMODE_WRITE);
+		error = may_open(&nd,MAY_READ|MAY_WRITE,FMODE_READ|FMODE_WRITE);
 	else
-		error = may_open(&nd.path, MAY_WRITE, FMODE_WRITE);
+		error = may_open(&nd, MAY_WRITE, FMODE_WRITE);
 
 	if (!error)
 		return dentry_open(nd.path.dentry, nd.path.mnt, flags,
@@ -86,8 +85,8 @@ static struct {
 	},
 };
 
-SYSCALL_DEFINE3(nfsservctl, int, cmd, struct nfsctl_arg __user *, arg,
-		void __user *, res)
+long
+asmlinkage sys_nfsservctl(int cmd, struct nfsctl_arg __user *arg, void __user *res)
 {
 	struct file *file;
 	void __user *p = &arg->u;

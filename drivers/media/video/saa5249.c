@@ -8,7 +8,7 @@
  *	you can add arbitary multiple teletext devices to Linux video4linux
  *	now (well 32 anyway).
  *
- *	Alan Cox <alan@lxorguk.ukuu.org.uk>
+ *	Alan Cox <Alan.Cox@linux.org>
  *
  *	The original driver was heavily modified to match the i2c interface
  *	It was truncated to use the WinTV boards, too.
@@ -190,7 +190,8 @@ static int i2c_getdata(struct saa5249_device *t, int count, u8 *buf)
  *	Standard character-device-driver functions
  */
 
-static long do_saa5249_ioctl(struct file *file, unsigned int cmd, void *arg)
+static int do_saa5249_ioctl(struct inode *inode, struct file *file,
+			    unsigned int cmd, void *arg)
 {
 	static int virtual_mode = false;
 	struct saa5249_device *t = video_drvdata(file);
@@ -479,20 +480,20 @@ static inline unsigned int vtx_fix_command(unsigned int cmd)
  *	Handle the locking
  */
 
-static long saa5249_ioctl(struct file *file,
+static int saa5249_ioctl(struct inode *inode, struct file *file,
 			 unsigned int cmd, unsigned long arg)
 {
 	struct saa5249_device *t = video_drvdata(file);
-	long err;
+	int err;
 
 	cmd = vtx_fix_command(cmd);
 	mutex_lock(&t->lock);
-	err = video_usercopy(file, cmd, arg, do_saa5249_ioctl);
+	err = video_usercopy(inode,file,cmd,arg,do_saa5249_ioctl);
 	mutex_unlock(&t->lock);
 	return err;
 }
 
-static int saa5249_open(struct file *file)
+static int saa5249_open(struct inode *inode, struct file *file)
 {
 	struct saa5249_device *t = video_drvdata(file);
 	int pgbuf;
@@ -529,7 +530,7 @@ static int saa5249_open(struct file *file)
 
 
 
-static int saa5249_release(struct file *file)
+static int saa5249_release(struct inode *inode, struct file *file)
 {
 	struct saa5249_device *t = video_drvdata(file);
 
@@ -539,11 +540,15 @@ static int saa5249_release(struct file *file)
 	return 0;
 }
 
-static const struct v4l2_file_operations saa_fops = {
+static const struct file_operations saa_fops = {
 	.owner		= THIS_MODULE,
 	.open		= saa5249_open,
 	.release       	= saa5249_release,
 	.ioctl          = saa5249_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= v4l_compat_ioctl32,
+#endif
+	.llseek         = no_llseek,
 };
 
 static struct video_device saa_template =

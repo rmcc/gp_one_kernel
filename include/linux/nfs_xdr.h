@@ -120,14 +120,13 @@ struct nfs_openargs {
 	const struct nfs_fh *	fh;
 	struct nfs_seqid *	seqid;
 	int			open_flags;
-	fmode_t			fmode;
 	__u64                   clientid;
 	__u64                   id;
 	union {
 		struct iattr *  attrs;    /* UNCHECKED, GUARDED */
 		nfs4_verifier   verifier; /* EXCLUSIVE */
 		nfs4_stateid	delegation;		/* CLAIM_DELEGATE_CUR */
-		fmode_t		delegation_type;	/* CLAIM_PREVIOUS */
+		int		delegation_type;	/* CLAIM_PREVIOUS */
 	} u;
 	const struct qstr *	name;
 	const struct nfs_server *server;	 /* Needed for ID mapping */
@@ -144,7 +143,7 @@ struct nfs_openres {
 	struct nfs_fattr *      dir_attr;
 	struct nfs_seqid *	seqid;
 	const struct nfs_server *server;
-	fmode_t			delegation_type;
+	int			delegation_type;
 	nfs4_stateid		delegation;
 	__u32			do_recall;
 	__u64			maxsize;
@@ -172,7 +171,7 @@ struct nfs_closeargs {
 	struct nfs_fh *         fh;
 	nfs4_stateid *		stateid;
 	struct nfs_seqid *	seqid;
-	fmode_t			fmode;
+	int			open_flags;
 	const u32 *		bitmask;
 };
 
@@ -406,8 +405,6 @@ struct nfs3_setaclargs {
 	int			mask;
 	struct posix_acl *	acl_access;
 	struct posix_acl *	acl_default;
-	size_t			len;
-	unsigned int		npages;
 	struct page **		pages;
 };
 

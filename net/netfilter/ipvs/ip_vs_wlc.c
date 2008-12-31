@@ -72,7 +72,6 @@ ip_vs_wlc_schedule(struct ip_vs_service *svc, const struct sk_buff *skb)
 			goto nextstage;
 		}
 	}
-	IP_VS_ERR_RL("WLC: no destination available\n");
 	return NULL;
 
 	/*

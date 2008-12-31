@@ -202,9 +202,9 @@ static sector_t _fat_bmap(struct address_space *mapping, sector_t block)
 	sector_t blocknr;
 
 	/* fat_get_cluster() assumes the requested blocknr isn't truncated. */
-	down_read(&mapping->host->i_alloc_sem);
+	mutex_lock(&mapping->host->i_mutex);
 	blocknr = generic_block_bmap(mapping, block, fat_get_block);
-	up_read(&mapping->host->i_alloc_sem);
+	mutex_unlock(&mapping->host->i_mutex);
 
 	return blocknr;
 }
@@ -749,8 +749,6 @@ static struct dentry *fat_get_parent(struct dentry *child)
 	brelse(bh);
 
 	parent = d_obtain_alias(inode);
-	if (!IS_ERR(parent))
-		parent->d_op = sb->s_root->d_op;
 out:
 	unlock_super(sb);
 

@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 6
-SUBLEVEL = 29
-EXTRAVERSION = -rc8
+SUBLEVEL = 28
+EXTRAVERSION =
 NAME = Erotic Pickled Herring
 
 # *DOCUMENTATION*
@@ -205,16 +205,11 @@ ifeq ($(ARCH),x86_64)
         SRCARCH := x86
 endif
 
-# Additional ARCH settings for sparc
-ifeq ($(ARCH),sparc64)
-       SRCARCH := sparc
-endif
-
 # Where to locate arch specific headers
-hdr-arch  := $(SRCARCH)
-
-ifeq ($(ARCH),m68knommu)
-       hdr-arch  := m68k
+ifeq ($(ARCH),sparc64)
+       hdr-arch  := sparc
+else
+       hdr-arch  := $(SRCARCH)
 endif
 
 KCONFIG_CONFIG	?= .config
@@ -325,8 +320,7 @@ KALLSYMS	= scripts/kallsyms
 PERL		= perl
 CHECK		= sparse
 
-CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
-		  -Wbitwise -Wno-return-void $(CF)
+CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ -Wbitwise $(CF)
 MODFLAGS	= -DMODULE
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
@@ -389,7 +383,6 @@ PHONY += outputmakefile
 # output directory.
 outputmakefile:
 ifneq ($(KBUILD_SRC),)
-	$(Q)ln -fsn $(srctree) source
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/mkmakefile \
 	    $(srctree) $(objtree) $(VERSION) $(PATCHLEVEL)
 endif
@@ -611,20 +604,25 @@ export	INSTALL_PATH ?= /boot
 MODLIB	= $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 export MODLIB
 
-#
-#  INSTALL_MOD_STRIP, if defined, will cause modules to be
-#  stripped after they are installed.  If INSTALL_MOD_STRIP is '1', then
-#  the default option --strip-debug will be used.  Otherwise,
-#  INSTALL_MOD_STRIP will used as the options to the strip command.
+strip-symbols := $(srctree)/scripts/strip-symbols \
+		 $(wildcard $(srctree)/arch/$(ARCH)/scripts/strip-symbols)
 
+#
+# INSTALL_MOD_STRIP, if defined, will cause modules to be stripped while
+# they get installed.  If INSTALL_MOD_STRIP is '1', then the default
+# options (see below) will be used.  Otherwise, INSTALL_MOD_STRIP will
+# be used as the option(s) to the objcopy command.
 ifdef INSTALL_MOD_STRIP
 ifeq ($(INSTALL_MOD_STRIP),1)
-mod_strip_cmd = $(STRIP) --strip-debug
+mod_strip_cmd = $(OBJCOPY) --strip-debug
+ifeq ($(CONFIG_KALLSYMS_ALL),$(CONFIG_KALLSYMS_STRIP_GENERATED))
+mod_strip_cmd += --wildcard $(addprefix --strip-symbols ,$(strip-symbols))
+endif
 else
-mod_strip_cmd = $(STRIP) $(INSTALL_MOD_STRIP)
+mod_strip_cmd = $(OBJCOPY) $(INSTALL_MOD_STRIP)
 endif # INSTALL_MOD_STRIP=1
 else
-mod_strip_cmd = true
+mod_strip_cmd = false
 endif # INSTALL_MOD_STRIP
 export mod_strip_cmd
 
@@ -754,6 +752,7 @@ last_kallsyms := 2
 endif
 
 kallsyms.o := .tmp_kallsyms$(last_kallsyms).o
+kallsyms.h := $(wildcard include/config/kallsyms/*.h) $(wildcard include/config/kallsyms/*/*.h)
 
 define verify_kallsyms
 	$(Q)$(if $($(quiet)cmd_sysmap),                                      \
@@ -778,24 +777,41 @@ endef
 
 # Generate .S file with all kernel symbols
 quiet_cmd_kallsyms = KSYM    $@
-      cmd_kallsyms = $(NM) -n $< | $(KALLSYMS) \
-                     $(if $(CONFIG_KALLSYMS_ALL),--all-symbols) > $@
+      cmd_kallsyms = { test $* -eq 0 || $(NM) -n $<; } \
+		     | $(KALLSYMS) $(if $(CONFIG_KALLSYMS_ALL),--all-symbols) >$@
 
-.tmp_kallsyms1.o .tmp_kallsyms2.o .tmp_kallsyms3.o: %.o: %.S scripts FORCE
+quiet_cmd_kstrip = STRIP   $@
+      cmd_kstrip = $(OBJCOPY) --wildcard $(addprefix --strip$(if $(CONFIG_RELOCATABLE),-unneeded)-symbols ,$(filter %/scripts/strip-symbols,$^)) $< $@
+
+$(foreach n,0 1 2 3,.tmp_kallsyms$(n).o): KBUILD_AFLAGS += -Wa,--strip-local-absolute
+$(foreach n,0 1 2 3,.tmp_kallsyms$(n).o): %.o: %.S scripts FORCE
 	$(call if_changed_dep,as_o_S)
 
-.tmp_kallsyms%.S: .tmp_vmlinux% $(KALLSYMS)
+ifeq ($(CONFIG_KALLSYMS_STRIP_GENERATED),y)
+strip-ext := .stripped
+endif
+
+.tmp_kallsyms%.S: .tmp_vmlinux%$(strip-ext) $(KALLSYMS) $(kallsyms.h)
 	$(call cmd,kallsyms)
 
+# make -jN seems to have problems with intermediate files, see bug #3330.
+.SECONDARY: $(foreach n,1 2 3,.tmp_vmlinux$(n).stripped)
+.tmp_vmlinux%.stripped: .tmp_vmlinux% $(strip-symbols) $(kallsyms.h)
+	$(call cmd,kstrip)
+
+ifneq ($(CONFIG_DEBUG_INFO),y)
+.tmp_vmlinux%: LDFLAGS_vmlinux += -S
+endif
 # .tmp_vmlinux1 must be complete except kallsyms, so update vmlinux version
-.tmp_vmlinux1: $(vmlinux-lds) $(vmlinux-all) FORCE
-	$(call if_changed_rule,ksym_ld)
+.tmp_vmlinux%: $(vmlinux-lds) $(vmlinux-all) FORCE
+	$(if $(filter 1,$*),$(call if_changed_rule,ksym_ld),$(call if_changed,vmlinux__))
 
-.tmp_vmlinux2: $(vmlinux-lds) $(vmlinux-all) .tmp_kallsyms1.o FORCE
-	$(call if_changed,vmlinux__)
+.tmp_vmlinux0$(strip-ext):
+	$(Q)echo "placeholder" >$@
 
-.tmp_vmlinux3: $(vmlinux-lds) $(vmlinux-all) .tmp_kallsyms2.o FORCE
-	$(call if_changed,vmlinux__)
+.tmp_vmlinux1: .tmp_kallsyms0.o
+.tmp_vmlinux2: .tmp_kallsyms1.o
+.tmp_vmlinux3: .tmp_kallsyms2.o
 
 # Needs to visit scripts/ before $(KALLSYMS) can be used.
 $(KALLSYMS): scripts ;
@@ -904,18 +920,12 @@ localver = $(subst $(space),, $(string) \
 # and if the SCM is know a tag from the SCM is appended.
 # The appended tag is determined by the SCM used.
 #
-# .scmversion is used when generating rpm packages so we do not loose
-# the version information from the SCM when we do the build of the kernel
-# from the copied source
+# Currently, only git is supported.
+# Other SCMs can edit scripts/setlocalversion and add the appropriate
+# checks as needed.
 ifdef CONFIG_LOCALVERSION_AUTO
-
-ifeq ($(wildcard .scmversion),)
-        _localver-auto = $(shell $(CONFIG_SHELL) \
-                         $(srctree)/scripts/setlocalversion $(srctree))
-else
-        _localver-auto = $(shell cat .scmversion 2> /dev/null)
-endif
-
+	_localver-auto = $(shell $(CONFIG_SHELL) \
+	                  $(srctree)/scripts/setlocalversion $(srctree))
 	localver-auto  = $(LOCALVERSION)$(_localver-auto)
 endif
 
@@ -996,7 +1006,7 @@ define check-symlink
 endef
 
 # We create the target directory of the symlink if it does
-# not exist so the test in check-symlink works and we have a
+# not exist so the test in chack-symlink works and we have a
 # directory for generated filesas used by some architectures.
 define create-symlink
 	if [ ! -L include/asm ]; then                                      \
@@ -1543,7 +1553,7 @@ quiet_cmd_depmod = DEPMOD  $(KERNELRELEASE)
       cmd_depmod = \
 	if [ -r System.map -a -x $(DEPMOD) ]; then                              \
 		$(DEPMOD) -ae -F System.map                                     \
-		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) )     \
+		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) -r)   \
 		$(KERNELRELEASE);                                               \
 	fi
 

@@ -281,7 +281,7 @@ madvise_vma(struct vm_area_struct *vma, struct vm_area_struct **prev,
  *  -EBADF  - map exists, but area maps something that isn't a file.
  *  -EAGAIN - a kernel resource was temporarily unavailable.
  */
-SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
+asmlinkage long sys_madvise(unsigned long start, size_t len_in, int behavior)
 {
 	unsigned long end, tmp;
 	struct vm_area_struct * vma, *prev;

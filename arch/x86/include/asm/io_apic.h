@@ -198,14 +198,17 @@ extern void restore_IO_APIC_setup(void);
 extern void reinit_intr_remapped_IO_APIC(int);
 #endif
 
-extern void probe_nr_irqs_gsi(void);
+extern int probe_nr_irqs(void);
 
 #else  /* !CONFIG_X86_IO_APIC */
 #define io_apic_assign_pci_irqs 0
 static const int timer_through_8259 = 0;
-static inline void ioapic_init_mappings(void)	{ }
+static inline void ioapic_init_mappings(void) { }
 
-static inline void probe_nr_irqs_gsi(void)	{ }
+static inline int probe_nr_irqs(void)
+{
+	return NR_IRQS;
+}
 #endif
 
 #endif /* _ASM_X86_IO_APIC_H */

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001, 2002 Sistina Software (UK) Limited.
- * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
  *
  * This file is released under the GPL.
  */
@@ -32,7 +32,6 @@ static unsigned int _major = 0;
 
 static DEFINE_SPINLOCK(_minor_lock);
 /*
- * For bio-based dm.
  * One of these is allocated per bio.
  */
 struct dm_io {
@@ -44,7 +43,6 @@ struct dm_io {
 };
 
 /*
- * For bio-based dm.
  * One of these is allocated per target within a bio.  Hopefully
  * this will be simplified out one day.
  */
@@ -55,27 +53,6 @@ struct dm_target_io {
 };
 
 DEFINE_TRACE(block_bio_complete);
-
-/*
- * For request-based dm.
- * One of these is allocated per request.
- */
-struct dm_rq_target_io {
-	struct mapped_device *md;
-	struct dm_target *ti;
-	struct request *orig, clone;
-	int error;
-	union map_info info;
-};
-
-/*
- * For request-based dm.
- * One of these is allocated per bio.
- */
-struct dm_rq_clone_bio_info {
-	struct bio *orig;
-	struct request *rq;
-};
 
 union map_info *dm_get_mapinfo(struct bio *bio)
 {
@@ -167,16 +144,11 @@ struct mapped_device {
 
 	/* forced geometry settings */
 	struct hd_geometry geometry;
-
-	/* sysfs handle */
-	struct kobject kobj;
 };
 
 #define MIN_IOS 256
 static struct kmem_cache *_io_cache;
 static struct kmem_cache *_tio_cache;
-static struct kmem_cache *_rq_tio_cache;
-static struct kmem_cache *_rq_bio_info_cache;
 
 static int __init local_init(void)
 {
@@ -192,17 +164,9 @@ static int __init local_init(void)
 	if (!_tio_cache)
 		goto out_free_io_cache;
 
-	_rq_tio_cache = KMEM_CACHE(dm_rq_target_io, 0);
-	if (!_rq_tio_cache)
-		goto out_free_tio_cache;
-
-	_rq_bio_info_cache = KMEM_CACHE(dm_rq_clone_bio_info, 0);
-	if (!_rq_bio_info_cache)
-		goto out_free_rq_tio_cache;
-
 	r = dm_uevent_init();
 	if (r)
-		goto out_free_rq_bio_info_cache;
+		goto out_free_tio_cache;
 
 	_major = major;
 	r = register_blkdev(_major, _name);
@@ -216,10 +180,6 @@ static int __init local_init(void)
 
 out_uevent_exit:
 	dm_uevent_exit();
-out_free_rq_bio_info_cache:
-	kmem_cache_destroy(_rq_bio_info_cache);
-out_free_rq_tio_cache:
-	kmem_cache_destroy(_rq_tio_cache);
 out_free_tio_cache:
 	kmem_cache_destroy(_tio_cache);
 out_free_io_cache:
@@ -230,8 +190,6 @@ out_free_io_cache:
 
 static void local_exit(void)
 {
-	kmem_cache_destroy(_rq_bio_info_cache);
-	kmem_cache_destroy(_rq_tio_cache);
 	kmem_cache_destroy(_tio_cache);
 	kmem_cache_destroy(_io_cache);
 	unregister_blkdev(_major, _name);
@@ -525,12 +483,9 @@ static int __noflush_suspending(struct mapped_device *md)
 static void dec_pending(struct dm_io *io, int error)
 {
 	unsigned long flags;
-	int io_error;
-	struct bio *bio;
-	struct mapped_device *md = io->md;
 
 	/* Push-back supersedes any I/O errors */
-	if (error && !(io->error > 0 && __noflush_suspending(md)))
+	if (error && !(io->error > 0 && __noflush_suspending(io->md)))
 		io->error = error;
 
 	if (atomic_dec_and_test(&io->io_count)) {
@@ -540,27 +495,24 @@ static void dec_pending(struct dm_io *io, int error)
 			 * This must be handled before the sleeper on
 			 * suspend queue merges the pushback list.
 			 */
-			spin_lock_irqsave(&md->pushback_lock, flags);
-			if (__noflush_suspending(md))
-				bio_list_add(&md->pushback, io->bio);
+			spin_lock_irqsave(&io->md->pushback_lock, flags);
+			if (__noflush_suspending(io->md))
+				bio_list_add(&io->md->pushback, io->bio);
 			else
 				/* noflush suspend was interrupted. */
 				io->error = -EIO;
-			spin_unlock_irqrestore(&md->pushback_lock, flags);
+			spin_unlock_irqrestore(&io->md->pushback_lock, flags);
 		}
 
 		end_io_acct(io);
 
-		io_error = io->error;
-		bio = io->bio;
+		if (io->error != DM_ENDIO_REQUEUE) {
+			trace_block_bio_complete(io->md->queue, io->bio);
 
-		free_io(md, io);
-
-		if (io_error != DM_ENDIO_REQUEUE) {
-			trace_block_bio_complete(md->queue, bio);
-
-			bio_endio(bio, io_error);
+			bio_endio(io->bio, io->error);
 		}
+
+		free_io(io->md, io);
 	}
 }
 
@@ -568,7 +520,6 @@ static void clone_endio(struct bio *bio, int error)
 {
 	int r = 0;
 	struct dm_target_io *tio = bio->bi_private;
-	struct dm_io *io = tio->io;
 	struct mapped_device *md = tio->io->md;
 	dm_endio_fn endio = tio->ti->type->end_io;
 
@@ -592,14 +543,15 @@ static void clone_endio(struct bio *bio, int error)
 		}
 	}
 
+	dec_pending(tio->io, error);
+
 	/*
 	 * Store md for cleanup instead of tio which is about to get freed.
 	 */
 	bio->bi_private = md->bs;
 
-	free_tio(md, tio);
 	bio_put(bio);
-	dec_pending(io, error);
+	free_tio(md, tio);
 }
 
 static sector_t max_io_len(struct mapped_device *md,
@@ -844,11 +796,7 @@ static int __split_bio(struct mapped_device *md, struct bio *bio)
 	ci.map = dm_get_table(md);
 	if (unlikely(!ci.map))
 		return -EIO;
-	if (unlikely(bio_barrier(bio) && !dm_table_barrier_ok(ci.map))) {
-		dm_table_put(ci.map);
-		bio_endio(bio, -EOPNOTSUPP);
-		return 0;
-	}
+
 	ci.md = md;
 	ci.bio = bio;
 	ci.io = alloc_io(md);
@@ -932,6 +880,15 @@ static int dm_request(struct request_queue *q, struct bio *bio)
 	struct mapped_device *md = q->queuedata;
 	int cpu;
 
+	/*
+	 * There is no use in forwarding any barrier request since we can't
+	 * guarantee it is (or can be) handled by the targets correctly.
+	 */
+	if (unlikely(bio_barrier(bio))) {
+		bio_endio(bio, -EOPNOTSUPP);
+		return 0;
+	}
+
 	down_read(&md->io_lock);
 
 	cpu = part_stat_lock();
@@ -986,6 +943,8 @@ static int dm_any_congested(void *congested_data, int bdi_bits)
 	struct mapped_device *md = congested_data;
 	struct dm_table *map;
 
+	atomic_inc(&md->pending);
+
 	if (!test_bit(DMF_BLOCK_IO, &md->flags)) {
 		map = dm_get_table(md);
 		if (map) {
@@ -993,6 +952,10 @@ static int dm_any_congested(void *congested_data, int bdi_bits)
 			dm_table_put(map);
 		}
 	}
+
+	if (!atomic_dec_return(&md->pending))
+		/* nudge anyone waiting on suspend queue */
+		wake_up(&md->wait);
 
 	return r;
 }
@@ -1130,7 +1093,7 @@ static struct mapped_device *alloc_dev(int minor)
 	if (!md->tio_pool)
 		goto bad_tio_pool;
 
-	md->bs = bioset_create(16, 0);
+	md->bs = bioset_create(16, 16);
 	if (!md->bs)
 		goto bad_no_bioset;
 
@@ -1253,12 +1216,10 @@ static int __bind(struct mapped_device *md, struct dm_table *t)
 
 	if (md->suspended_bdev)
 		__set_size(md, size);
-
-	if (!size) {
-		dm_table_destroy(t);
+	if (size == 0)
 		return 0;
-	}
 
+	dm_table_get(t);
 	dm_table_event_callback(t, event_callback, md);
 
 	write_lock(&md->map_lock);
@@ -1280,7 +1241,7 @@ static void __unbind(struct mapped_device *md)
 	write_lock(&md->map_lock);
 	md->map = NULL;
 	write_unlock(&md->map_lock);
-	dm_table_destroy(map);
+	dm_table_put(map);
 }
 
 /*
@@ -1293,8 +1254,6 @@ int dm_create(int minor, struct mapped_device **result)
 	md = alloc_dev(minor);
 	if (!md)
 		return -ENXIO;
-
-	dm_sysfs_init(md);
 
 	*result = md;
 	return 0;
@@ -1371,9 +1330,8 @@ void dm_put(struct mapped_device *md)
 			dm_table_presuspend_targets(map);
 			dm_table_postsuspend_targets(map);
 		}
-		dm_sysfs_exit(md);
-		dm_table_put(map);
 		__unbind(md);
+		dm_table_put(map);
 		free_dev(md);
 	}
 }
@@ -1709,27 +1667,6 @@ void dm_uevent_add(struct mapped_device *md, struct list_head *elist)
 struct gendisk *dm_disk(struct mapped_device *md)
 {
 	return md->disk;
-}
-
-struct kobject *dm_kobject(struct mapped_device *md)
-{
-	return &md->kobj;
-}
-
-/*
- * struct mapped_device should not be exported outside of dm.c
- * so use this check to verify that kobj is part of md structure
- */
-struct mapped_device *dm_get_from_kobject(struct kobject *kobj)
-{
-	struct mapped_device *md;
-
-	md = container_of(kobj, struct mapped_device, kobj);
-	if (&md->kobj != kobj)
-		return NULL;
-
-	dm_get(md);
-	return md;
 }
 
 int dm_suspended(struct mapped_device *md)

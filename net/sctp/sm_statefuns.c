@@ -3163,6 +3163,7 @@ sctp_disposition_t sctp_sf_operr_notify(const struct sctp_endpoint *ep,
 					sctp_cmd_seq_t *commands)
 {
 	struct sctp_chunk *chunk = arg;
+	struct sctp_ulpevent *ev;
 
 	if (!sctp_vtag_verify(chunk, asoc))
 		return sctp_sf_pdiscard(ep, asoc, type, arg, commands);
@@ -3172,10 +3173,21 @@ sctp_disposition_t sctp_sf_operr_notify(const struct sctp_endpoint *ep,
 		return sctp_sf_violation_chunklen(ep, asoc, type, arg,
 						  commands);
 
-	sctp_add_cmd_sf(commands, SCTP_CMD_PROCESS_OPERR,
-			SCTP_CHUNK(chunk));
+	while (chunk->chunk_end > chunk->skb->data) {
+		ev = sctp_ulpevent_make_remote_error(asoc, chunk, 0,
+						     GFP_ATOMIC);
+		if (!ev)
+			goto nomem;
 
+		sctp_add_cmd_sf(commands, SCTP_CMD_EVENT_ULP,
+				SCTP_ULPEVENT(ev));
+		sctp_add_cmd_sf(commands, SCTP_CMD_PROCESS_OPERR,
+				SCTP_CHUNK(chunk));
+	}
 	return SCTP_DISPOSITION_CONSUME;
+
+nomem:
+	return SCTP_DISPOSITION_NOMEM;
 }
 
 /*
@@ -4256,9 +4268,9 @@ nomem:
 
 /*
  * Handle a protocol violation when the chunk length is invalid.
- * "Invalid" length is identified as smaller than the minimal length a
+ * "Invalid" length is identified as smaller then the minimal length a
  * given chunk can be.  For example, a SACK chunk has invalid length
- * if its length is set to be smaller than the size of sctp_sack_chunk_t.
+ * if it's length is set to be smaller then the size of sctp_sack_chunk_t.
  *
  * We inform the other end by sending an ABORT with a Protocol Violation
  * error code.
@@ -4288,7 +4300,7 @@ static sctp_disposition_t sctp_sf_violation_chunklen(
 
 /*
  * Handle a protocol violation when the parameter length is invalid.
- * "Invalid" length is identified as smaller than the minimal length a
+ * "Invalid" length is identified as smaller then the minimal length a
  * given parameter can be.
  */
 static sctp_disposition_t sctp_sf_violation_paramlen(

@@ -32,9 +32,6 @@ struct files_stat_struct files_stat = {
 /* public. Not pretty! */
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(files_lock);
 
-/* SLAB cache for file structures */
-static struct kmem_cache *filp_cachep __read_mostly;
-
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
 
 static inline void file_free_rcu(struct rcu_head *head)
@@ -400,12 +397,7 @@ too_bad:
 void __init files_init(unsigned long mempages)
 { 
 	int n; 
-
-	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
-			SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
-
-	/*
-	 * One file with associated inode and dcache is very roughly 1K.
+	/* One file with associated inode and dcache is very roughly 1K. 
 	 * Per default don't use more than 10% of our memory for files. 
 	 */ 
 

@@ -353,7 +353,8 @@ int iser_send_command(struct iscsi_conn *conn,
 	unsigned long edtl;
 	int err = 0;
 	struct iser_data_buf *data_buf;
-	struct iscsi_cmd *hdr =  (struct iscsi_cmd *)task->hdr;
+
+	struct iscsi_cmd *hdr =  task->hdr;
 	struct scsi_cmnd *sc  =  task->sc;
 
 	if (!iser_conn_state_comp(iser_conn->ib_conn, ISER_CONN_UP)) {
@@ -392,7 +393,7 @@ int iser_send_command(struct iscsi_conn *conn,
 		err = iser_prepare_write_cmd(task,
 					     task->imm_count,
 				             task->imm_count +
-					     task->unsol_r2t.data_length,
+					     task->unsol_count,
 					     edtl);
 		if (err)
 			goto send_command_error;

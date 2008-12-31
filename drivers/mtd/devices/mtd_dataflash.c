@@ -16,7 +16,6 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/err.h>
-#include <linux/math64.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
@@ -129,7 +128,7 @@ static int dataflash_waitready(struct spi_device *spi)
 		status = dataflash_status(spi);
 		if (status < 0) {
 			DEBUG(MTD_DEBUG_LEVEL1, "%s: status %d?\n",
-					dev_name(&spi->dev), status);
+					spi->dev.bus_id, status);
 			status = 0;
 		}
 
@@ -153,20 +152,15 @@ static int dataflash_erase(struct mtd_info *mtd, struct erase_info *instr)
 	struct spi_message	msg;
 	unsigned		blocksize = priv->page_size << 3;
 	uint8_t			*command;
-	uint32_t		rem;
 
-	DEBUG(MTD_DEBUG_LEVEL2, "%s: erase addr=0x%llx len 0x%llx\n",
-	      dev_name(&spi->dev), (long long)instr->addr,
-	      (long long)instr->len);
+	DEBUG(MTD_DEBUG_LEVEL2, "%s: erase addr=0x%x len 0x%x\n",
+			spi->dev.bus_id,
+			instr->addr, instr->len);
 
 	/* Sanity checks */
-	if (instr->addr + instr->len > mtd->size)
-		return -EINVAL;
-	div_u64_rem(instr->len, priv->page_size, &rem);
-	if (rem)
-		return -EINVAL;
-	div_u64_rem(instr->addr, priv->page_size, &rem);
-	if (rem)
+	if ((instr->addr + instr->len) > mtd->size
+			|| (instr->len % priv->page_size) != 0
+			|| (instr->addr % priv->page_size) != 0)
 		return -EINVAL;
 
 	spi_message_init(&msg);
@@ -184,7 +178,7 @@ static int dataflash_erase(struct mtd_info *mtd, struct erase_info *instr)
 		/* Calculate flash page address; use block erase (for speed) if
 		 * we're at a block boundary and need to erase the whole block.
 		 */
-		pageaddr = div_u64(instr->len, priv->page_size);
+		pageaddr = instr->addr / priv->page_size;
 		do_block = (pageaddr & 0x7) == 0 && instr->len >= blocksize;
 		pageaddr = pageaddr << priv->page_offset;
 
@@ -203,7 +197,7 @@ static int dataflash_erase(struct mtd_info *mtd, struct erase_info *instr)
 
 		if (status < 0) {
 			printk(KERN_ERR "%s: erase %x, err %d\n",
-				dev_name(&spi->dev), pageaddr, status);
+				spi->dev.bus_id, pageaddr, status);
 			/* REVISIT:  can retry instr->retries times; or
 			 * giveup and instr->fail_addr = instr->addr;
 			 */
@@ -245,7 +239,7 @@ static int dataflash_read(struct mtd_info *mtd, loff_t from, size_t len,
 	int			status;
 
 	DEBUG(MTD_DEBUG_LEVEL2, "%s: read 0x%x..0x%x\n",
-		dev_name(&priv->spi->dev), (unsigned)from, (unsigned)(from + len));
+		priv->spi->dev.bus_id, (unsigned)from, (unsigned)(from + len));
 
 	*retlen = 0;
 
@@ -294,7 +288,7 @@ static int dataflash_read(struct mtd_info *mtd, loff_t from, size_t len,
 		status = 0;
 	} else
 		DEBUG(MTD_DEBUG_LEVEL1, "%s: read %x..%x --> %d\n",
-			dev_name(&priv->spi->dev),
+			priv->spi->dev.bus_id,
 			(unsigned)from, (unsigned)(from + len),
 			status);
 	return status;
@@ -321,7 +315,7 @@ static int dataflash_write(struct mtd_info *mtd, loff_t to, size_t len,
 	uint8_t			*command;
 
 	DEBUG(MTD_DEBUG_LEVEL2, "%s: write 0x%x..0x%x\n",
-		dev_name(&spi->dev), (unsigned)to, (unsigned)(to + len));
+		spi->dev.bus_id, (unsigned)to, (unsigned)(to + len));
 
 	*retlen = 0;
 
@@ -380,7 +374,7 @@ static int dataflash_write(struct mtd_info *mtd, loff_t to, size_t len,
 			status = spi_sync(spi, &msg);
 			if (status < 0)
 				DEBUG(MTD_DEBUG_LEVEL1, "%s: xfer %u -> %d \n",
-					dev_name(&spi->dev), addr, status);
+					spi->dev.bus_id, addr, status);
 
 			(void) dataflash_waitready(priv->spi);
 		}
@@ -402,7 +396,7 @@ static int dataflash_write(struct mtd_info *mtd, loff_t to, size_t len,
 		spi_transfer_del(x + 1);
 		if (status < 0)
 			DEBUG(MTD_DEBUG_LEVEL1, "%s: pgm %u/%u -> %d \n",
-				dev_name(&spi->dev), addr, writelen, status);
+				spi->dev.bus_id, addr, writelen, status);
 
 		(void) dataflash_waitready(priv->spi);
 
@@ -422,14 +416,14 @@ static int dataflash_write(struct mtd_info *mtd, loff_t to, size_t len,
 		status = spi_sync(spi, &msg);
 		if (status < 0)
 			DEBUG(MTD_DEBUG_LEVEL1, "%s: compare %u -> %d \n",
-				dev_name(&spi->dev), addr, status);
+				spi->dev.bus_id, addr, status);
 
 		status = dataflash_waitready(priv->spi);
 
 		/* Check result of the compare operation */
 		if (status & (1 << 6)) {
 			printk(KERN_ERR "%s: compare page %u, err %d\n",
-				dev_name(&spi->dev), pageaddr, status);
+				spi->dev.bus_id, pageaddr, status);
 			remaining = 0;
 			status = -EIO;
 			break;
@@ -673,8 +667,8 @@ add_dataflash_otp(struct spi_device *spi, char *name,
 	if (revision >= 'c')
 		otp_tag = otp_setup(device, revision);
 
-	dev_info(&spi->dev, "%s (%lld KBytes) pagesize %d bytes%s\n",
-			name, (long long)((device->size + 1023) >> 10),
+	dev_info(&spi->dev, "%s (%d KBytes) pagesize %d bytes%s\n",
+			name, DIV_ROUND_UP(device->size, 1024),
 			pagesize, otp_tag);
 	dev_set_drvdata(&spi->dev, priv);
 
@@ -785,7 +779,7 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 	tmp = spi_write_then_read(spi, &code, 1, id, 3);
 	if (tmp < 0) {
 		DEBUG(MTD_DEBUG_LEVEL0, "%s: error %d reading JEDEC ID\n",
-			dev_name(&spi->dev), tmp);
+			spi->dev.bus_id, tmp);
 		return ERR_PTR(tmp);
 	}
 	if (id[0] != 0x1f)
@@ -821,8 +815,7 @@ static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 					if (!(info->flags & IS_POW2PS))
 						return info;
 				}
-			} else
-				return info;
+			}
 		}
 	}
 
@@ -876,7 +869,7 @@ static int __devinit dataflash_probe(struct spi_device *spi)
 	status = dataflash_status(spi);
 	if (status <= 0 || status == 0xff) {
 		DEBUG(MTD_DEBUG_LEVEL1, "%s: status error %d\n",
-				dev_name(&spi->dev), status);
+				spi->dev.bus_id, status);
 		if (status == 0 || status == 0xff)
 			status = -ENODEV;
 		return status;
@@ -912,13 +905,13 @@ static int __devinit dataflash_probe(struct spi_device *spi)
 	/* obsolete AT45DB1282 not (yet?) supported */
 	default:
 		DEBUG(MTD_DEBUG_LEVEL1, "%s: unsupported device (%x)\n",
-				dev_name(&spi->dev), status & 0x3c);
+				spi->dev.bus_id, status & 0x3c);
 		status = -ENODEV;
 	}
 
 	if (status < 0)
 		DEBUG(MTD_DEBUG_LEVEL1, "%s: add_dataflash --> %d\n",
-				dev_name(&spi->dev), status);
+				spi->dev.bus_id, status);
 
 	return status;
 }
@@ -928,7 +921,7 @@ static int __devexit dataflash_remove(struct spi_device *spi)
 	struct dataflash	*flash = dev_get_drvdata(&spi->dev);
 	int			status;
 
-	DEBUG(MTD_DEBUG_LEVEL1, "%s: remove\n", dev_name(&spi->dev));
+	DEBUG(MTD_DEBUG_LEVEL1, "%s: remove\n", spi->dev.bus_id);
 
 	if (mtd_has_partitions() && flash->partitioned)
 		status = del_mtd_partitions(&flash->mtd);

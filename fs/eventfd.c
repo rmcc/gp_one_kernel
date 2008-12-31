@@ -198,7 +198,7 @@ struct file *eventfd_fget(int fd)
 	return file;
 }
 
-SYSCALL_DEFINE2(eventfd2, unsigned int, count, int, flags)
+asmlinkage long sys_eventfd2(unsigned int count, int flags)
 {
 	int fd;
 	struct eventfd_ctx *ctx;
@@ -228,7 +228,8 @@ SYSCALL_DEFINE2(eventfd2, unsigned int, count, int, flags)
 	return fd;
 }
 
-SYSCALL_DEFINE1(eventfd, unsigned int, count)
+asmlinkage long sys_eventfd(unsigned int count)
 {
 	return sys_eventfd2(count, 0);
 }
+

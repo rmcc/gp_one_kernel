@@ -75,7 +75,6 @@ enum {
 	Opt_acl, Opt_noacl,
 	Opt_rdirplus, Opt_nordirplus,
 	Opt_sharecache, Opt_nosharecache,
-	Opt_resvport, Opt_noresvport,
 
 	/* Mount options that take integer arguments */
 	Opt_port,
@@ -130,8 +129,6 @@ static const match_table_t nfs_mount_option_tokens = {
 	{ Opt_nordirplus, "nordirplus" },
 	{ Opt_sharecache, "sharecache" },
 	{ Opt_nosharecache, "nosharecache" },
-	{ Opt_resvport, "resvport" },
-	{ Opt_noresvport, "noresvport" },
 
 	{ Opt_port, "port=%u" },
 	{ Opt_rsize, "rsize=%u" },
@@ -515,8 +512,7 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 		{ NFS_MOUNT_NONLM, ",nolock", "" },
 		{ NFS_MOUNT_NOACL, ",noacl", "" },
 		{ NFS_MOUNT_NORDIRPLUS, ",nordirplus", "" },
-		{ NFS_MOUNT_UNSHARED, ",nosharecache", "" },
-		{ NFS_MOUNT_NORESVPORT, ",noresvport", "" },
+		{ NFS_MOUNT_UNSHARED, ",nosharecache", ""},
 		{ 0, NULL, NULL }
 	};
 	const struct proc_nfs_info *nfs_infop;
@@ -1037,12 +1033,6 @@ static int nfs_parse_mount_options(char *raw,
 		case Opt_nosharecache:
 			mnt->flags |= NFS_MOUNT_UNSHARED;
 			break;
-		case Opt_resvport:
-			mnt->flags &= ~NFS_MOUNT_NORESVPORT;
-			break;
-		case Opt_noresvport:
-			mnt->flags |= NFS_MOUNT_NORESVPORT;
-			break;
 
 		/*
 		 * options that take numeric values
@@ -1337,14 +1327,8 @@ out_security_failure:
 static int nfs_try_mount(struct nfs_parsed_mount_data *args,
 			 struct nfs_fh *root_fh)
 {
-	struct nfs_mount_request request = {
-		.sap		= (struct sockaddr *)
-						&args->mount_server.address,
-		.dirpath	= args->nfs_server.export_path,
-		.protocol	= args->mount_server.protocol,
-		.fh		= root_fh,
-		.noresvport	= args->flags & NFS_MOUNT_NORESVPORT,
-	};
+	struct sockaddr *sap = (struct sockaddr *)&args->mount_server.address;
+	char *hostname;
 	int status;
 
 	if (args->mount_server.version == 0) {
@@ -1353,38 +1337,42 @@ static int nfs_try_mount(struct nfs_parsed_mount_data *args,
 		else
 			args->mount_server.version = NFS_MNT_VERSION;
 	}
-	request.version = args->mount_server.version;
 
 	if (args->mount_server.hostname)
-		request.hostname = args->mount_server.hostname;
+		hostname = args->mount_server.hostname;
 	else
-		request.hostname = args->nfs_server.hostname;
+		hostname = args->nfs_server.hostname;
 
 	/*
 	 * Construct the mount server's address.
 	 */
 	if (args->mount_server.address.ss_family == AF_UNSPEC) {
-		memcpy(request.sap, &args->nfs_server.address,
+		memcpy(sap, &args->nfs_server.address,
 		       args->nfs_server.addrlen);
 		args->mount_server.addrlen = args->nfs_server.addrlen;
 	}
-	request.salen = args->mount_server.addrlen;
 
 	/*
 	 * autobind will be used if mount_server.port == 0
 	 */
-	nfs_set_port(request.sap, args->mount_server.port);
+	nfs_set_port(sap, args->mount_server.port);
 
 	/*
 	 * Now ask the mount server to map our export path
 	 * to a file handle.
 	 */
-	status = nfs_mount(&request);
+	status = nfs_mount(sap,
+			   args->mount_server.addrlen,
+			   hostname,
+			   args->nfs_server.export_path,
+			   args->mount_server.version,
+			   args->mount_server.protocol,
+			   root_fh);
 	if (status == 0)
 		return 0;
 
 	dfprintk(MOUNT, "NFS: unable to mount server %s, error %d\n",
-			request.hostname, status);
+			hostname, status);
 	return status;
 }
 
@@ -2431,7 +2419,7 @@ static void nfs4_kill_super(struct super_block *sb)
 {
 	struct nfs_server *server = NFS_SB(sb);
 
-	nfs_super_return_all_delegations(sb);
+	nfs_return_all_delegations(sb);
 	kill_anon_super(sb);
 
 	nfs4_renewd_prepare_shutdown(server);

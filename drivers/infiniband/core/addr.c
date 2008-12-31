@@ -128,8 +128,6 @@ int rdma_translate_ip(struct sockaddr *addr, struct rdma_dev_addr *dev_addr)
 		ret = rdma_copy_addr(dev_addr, dev, NULL);
 		dev_put(dev);
 		break;
-
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 	case AF_INET6:
 		for_each_netdev(&init_net, dev) {
 			if (ipv6_chk_addr(&init_net,
@@ -140,7 +138,8 @@ int rdma_translate_ip(struct sockaddr *addr, struct rdma_dev_addr *dev_addr)
 			}
 		}
 		break;
-#endif
+	default:
+		break;
 	}
 	return ret;
 }
@@ -180,11 +179,10 @@ static void addr_send_arp(struct sockaddr *dst_in)
 {
 	struct rtable *rt;
 	struct flowi fl;
+	struct dst_entry *dst;
 
 	memset(&fl, 0, sizeof fl);
-
-	switch (dst_in->sa_family) {
-	case AF_INET:
+	if (dst_in->sa_family == AF_INET)  {
 		fl.nl_u.ip4_u.daddr =
 			((struct sockaddr_in *) dst_in)->sin_addr.s_addr;
 
@@ -193,13 +191,8 @@ static void addr_send_arp(struct sockaddr *dst_in)
 
 		neigh_event_send(rt->u.dst.neighbour, NULL);
 		ip_rt_put(rt);
-		break;
 
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-	case AF_INET6:
-	{
-		struct dst_entry *dst;
-
+	} else {
 		fl.nl_u.ip6_u.daddr =
 			((struct sockaddr_in6 *) dst_in)->sin6_addr;
 
@@ -209,9 +202,6 @@ static void addr_send_arp(struct sockaddr *dst_in)
 
 		neigh_event_send(dst->neighbour, NULL);
 		dst_release(dst);
-		break;
-	}
-#endif
 	}
 }
 
@@ -264,7 +254,6 @@ out:
 	return ret;
 }
 
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 static int addr6_resolve_remote(struct sockaddr_in6 *src_in,
 			       struct sockaddr_in6 *dst_in,
 			       struct rdma_dev_addr *addr)
@@ -293,14 +282,6 @@ static int addr6_resolve_remote(struct sockaddr_in6 *src_in,
 	dst_release(dst);
 	return ret;
 }
-#else
-static int addr6_resolve_remote(struct sockaddr_in6 *src_in,
-			       struct sockaddr_in6 *dst_in,
-			       struct rdma_dev_addr *addr)
-{
-	return -EADDRNOTAVAIL;
-}
-#endif
 
 static int addr_resolve_remote(struct sockaddr *src_in,
 				struct sockaddr *dst_in,
@@ -359,9 +340,7 @@ static int addr_resolve_local(struct sockaddr *src_in,
 	struct net_device *dev;
 	int ret;
 
-	switch (dst_in->sa_family) {
-	case AF_INET:
-	{
+	if (dst_in->sa_family == AF_INET) {
 		__be32 src_ip = ((struct sockaddr_in *) src_in)->sin_addr.s_addr;
 		__be32 dst_ip = ((struct sockaddr_in *) dst_in)->sin_addr.s_addr;
 
@@ -383,12 +362,7 @@ static int addr_resolve_local(struct sockaddr *src_in,
 				memcpy(addr->dst_dev_addr, dev->dev_addr, MAX_ADDR_LEN);
 		}
 		dev_put(dev);
-		break;
-	}
-
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-	case AF_INET6:
-	{
+	} else {
 		struct in6_addr *a;
 
 		for_each_netdev(&init_net, dev)
@@ -416,13 +390,6 @@ static int addr_resolve_local(struct sockaddr *src_in,
 			if (!ret)
 				memcpy(addr->dst_dev_addr, dev->dev_addr, MAX_ADDR_LEN);
 		}
-		break;
-	}
-#endif
-
-	default:
-		ret = -EADDRNOTAVAIL;
-		break;
 	}
 
 	return ret;

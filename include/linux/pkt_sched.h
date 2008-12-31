@@ -1,8 +1,6 @@
 #ifndef __LINUX_PKT_SCHED_H
 #define __LINUX_PKT_SCHED_H
 
-#include <linux/types.h>
-
 /* Logical priority bands not depending on specific packet scheduler.
    Every scheduler will map them to real traffic classes, if it has
    no more precise mechanism to classify packets.
@@ -515,7 +513,7 @@ enum
 
 struct tc_drr_stats
 {
-	__u32	deficit;
+	u32	deficit;
 };
 
 #endif
