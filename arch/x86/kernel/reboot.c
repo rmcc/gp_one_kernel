@@ -14,7 +14,6 @@
 #include <asm/reboot.h>
 #include <asm/pci_x86.h>
 #include <asm/virtext.h>
-#include <asm/cpu.h>
 
 #ifdef CONFIG_X86_32
 # include <linux/dmi.h>
@@ -24,7 +23,7 @@
 # include <asm/iommu.h>
 #endif
 
-#include <asm/genapic.h>
+#include <mach_ipi.h>
 
 /*
  * Power off function, if any
@@ -651,7 +650,7 @@ static int crash_nmi_callback(struct notifier_block *self,
 
 static void smp_send_nmi_allbutself(void)
 {
-	apic->send_IPI_allbutself(NMI_VECTOR);
+	send_IPI_allbutself(NMI_VECTOR);
 }
 
 static struct notifier_block crash_nmi_nb = {

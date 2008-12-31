@@ -1178,9 +1178,10 @@ struct task_struct {
 	pid_t pid;
 	pid_t tgid;
 
+#ifdef CONFIG_CC_STACKPROTECTOR
 	/* Canary value for the -fstack-protector gcc feature */
 	unsigned long stack_canary;
-
+#endif
 	/* 
 	 * pointers to (original) parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with 
@@ -2086,19 +2087,6 @@ static inline int object_is_on_stack(void *obj)
 
 extern void thread_info_cache_init(void);
 
-#ifdef CONFIG_DEBUG_STACK_USAGE
-static inline unsigned long stack_not_used(struct task_struct *p)
-{
-	unsigned long *n = end_of_stack(p);
-
-	do { 	/* Skip over canary */
-		n++;
-	} while (!*n);
-
-	return (unsigned long)n - (unsigned long)end_of_stack(p);
-}
-#endif
-
 /* set thread flags in other task's structures
  * - see asm/thread_info.h for TIF_xxxx flags available
  */
@@ -2303,8 +2291,12 @@ extern long sched_group_rt_runtime(struct task_group *tg);
 extern int sched_group_set_rt_period(struct task_group *tg,
 				      long rt_period_us);
 extern long sched_group_rt_period(struct task_group *tg);
+extern int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk);
 #endif
 #endif
+
+extern int task_can_switch_user(struct user_struct *up,
+					struct task_struct *tsk);
 
 #ifdef CONFIG_TASK_XACCT
 static inline void add_rchar(struct task_struct *tsk, ssize_t amt)

@@ -36,7 +36,6 @@
 #include <asm/proto.h>
 #include <asm/efi.h>
 #include <asm/cacheflush.h>
-#include <asm/fixmap.h>
 
 static pgd_t save_pgd __initdata;
 static unsigned long efi_flags __initdata;

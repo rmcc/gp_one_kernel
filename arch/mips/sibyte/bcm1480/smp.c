@@ -178,10 +178,9 @@ struct plat_smp_ops bcm1480_smp_ops = {
 void bcm1480_mailbox_interrupt(void)
 {
 	int cpu = smp_processor_id();
-	int irq = K_BCM1480_INT_MBOX_0_0;
 	unsigned int action;
 
-	kstat_incr_irqs_this_cpu(irq, irq_to_desc(irq));
+	kstat_this_cpu.irqs[K_BCM1480_INT_MBOX_0_0]++;
 	/* Load the mailbox register to figure out what we're supposed to do */
 	action = (__raw_readq(mailbox_0_regs[cpu]) >> 48) & 0xffff;
 

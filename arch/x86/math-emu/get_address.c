@@ -150,9 +150,11 @@ static long pm_address(u_char FPU_modrm, u_char segment,
 #endif /* PARANOID */
 
 	switch (segment) {
+		/* gs isn't used by the kernel, so it still has its
+		   user-space value. */
 	case PREFIX_GS_ - 1:
-		/* user gs handling can be lazy, use special accessors */
-		addr->selector = get_user_gs(FPU_info->regs);
+		/* N.B. - movl %seg, mem is a 2 byte write regardless of prefix */
+		savesegment(gs, addr->selector);
 		break;
 	default:
 		addr->selector = PM_REG_(segment);

@@ -52,7 +52,6 @@
 #include <asm/irqflags.h>
 #include <asm/paravirt.h>
 #include <asm/ftrace.h>
-#include <asm/percpu.h>
 
 /* Avoid __ASSEMBLER__'ifying <linux/audit.h> just for this.  */
 #include <linux/elf-em.h>
@@ -210,7 +209,7 @@ ENTRY(native_usergs_sysret64)
 
 	/* %rsp:at FRAMEEND */
 	.macro FIXUP_TOP_OF_STACK tmp offset=0
-	movq PER_CPU_VAR(old_rsp),\tmp
+	movq %gs:pda_oldrsp,\tmp
 	movq \tmp,RSP+\offset(%rsp)
 	movq $__USER_DS,SS+\offset(%rsp)
 	movq $__USER_CS,CS+\offset(%rsp)
@@ -221,7 +220,7 @@ ENTRY(native_usergs_sysret64)
 
 	.macro RESTORE_TOP_OF_STACK tmp offset=0
 	movq RSP+\offset(%rsp),\tmp
-	movq \tmp,PER_CPU_VAR(old_rsp)
+	movq \tmp,%gs:pda_oldrsp
 	movq EFLAGS+\offset(%rsp),\tmp
 	movq \tmp,R11+\offset(%rsp)
 	.endm
@@ -337,15 +336,15 @@ ENTRY(save_args)
 	je 1f
 	SWAPGS
 	/*
-	 * irq_count is used to check if a CPU is already on an interrupt stack
+	 * irqcount is used to check if a CPU is already on an interrupt stack
 	 * or not. While this is essentially redundant with preempt_count it is
 	 * a little cheaper to use a separate counter in the PDA (short of
 	 * moving irq_enter into assembly, which would be too much work)
 	 */
-1:	incl PER_CPU_VAR(irq_count)
+1:	incl %gs:pda_irqcount
 	jne 2f
 	popq_cfi %rax			/* move return address... */
-	mov PER_CPU_VAR(irq_stack_ptr),%rsp
+	mov %gs:pda_irqstackptr,%rsp
 	EMPTY_FRAME 0
 	pushq_cfi %rbp			/* backlink for unwinder */
 	pushq_cfi %rax			/* ... to the new stack */
@@ -410,8 +409,6 @@ END(save_paranoid)
 ENTRY(ret_from_fork)
 	DEFAULT_FRAME
 
-	LOCK ; btr $TIF_FORK,TI_flags(%r8)
-
 	push kernel_eflags(%rip)
 	CFI_ADJUST_CFA_OFFSET 8
 	popf					# reset kernel eflags
@@ -471,7 +468,7 @@ END(ret_from_fork)
 ENTRY(system_call)
 	CFI_STARTPROC	simple
 	CFI_SIGNAL_FRAME
-	CFI_DEF_CFA	rsp,KERNEL_STACK_OFFSET
+	CFI_DEF_CFA	rsp,PDA_STACKOFFSET
 	CFI_REGISTER	rip,rcx
 	/*CFI_REGISTER	rflags,r11*/
 	SWAPGS_UNSAFE_STACK
@@ -482,8 +479,8 @@ ENTRY(system_call)
 	 */
 ENTRY(system_call_after_swapgs)
 
-	movq	%rsp,PER_CPU_VAR(old_rsp)
-	movq	PER_CPU_VAR(kernel_stack),%rsp
+	movq	%rsp,%gs:pda_oldrsp
+	movq	%gs:pda_kernelstack,%rsp
 	/*
 	 * No need to follow this irqs off/on section - it's straight
 	 * and short:
@@ -526,7 +523,7 @@ sysret_check:
 	CFI_REGISTER	rip,rcx
 	RESTORE_ARGS 0,-ARG_SKIP,1
 	/*CFI_REGISTER	rflags,r11*/
-	movq	PER_CPU_VAR(old_rsp), %rsp
+	movq	%gs:pda_oldrsp, %rsp
 	USERGS_SYSRET64
 
 	CFI_RESTORE_STATE
@@ -836,11 +833,11 @@ common_interrupt:
 	XCPT_FRAME
 	addq $-0x80,(%rsp)		/* Adjust vector to [-256,-1] range */
 	interrupt do_IRQ
-	/* 0(%rsp): old_rsp-ARGOFFSET */
+	/* 0(%rsp): oldrsp-ARGOFFSET */
 ret_from_intr:
 	DISABLE_INTERRUPTS(CLBR_NONE)
 	TRACE_IRQS_OFF
-	decl PER_CPU_VAR(irq_count)
+	decl %gs:pda_irqcount
 	leaveq
 	CFI_DEF_CFA_REGISTER	rsp
 	CFI_ADJUST_CFA_OFFSET	-8
@@ -985,10 +982,8 @@ apicinterrupt IRQ_MOVE_CLEANUP_VECTOR \
 	irq_move_cleanup_interrupt smp_irq_move_cleanup_interrupt
 #endif
 
-#ifdef CONFIG_X86_UV
 apicinterrupt UV_BAU_MESSAGE \
 	uv_bau_message_intr1 uv_bau_message_interrupt
-#endif
 apicinterrupt LOCAL_TIMER_VECTOR \
 	apic_timer_interrupt smp_apic_timer_interrupt
 
@@ -1078,10 +1073,10 @@ ENTRY(\sym)
 	TRACE_IRQS_OFF
 	movq %rsp,%rdi		/* pt_regs pointer */
 	xorl %esi,%esi		/* no error code */
-	PER_CPU(init_tss, %rbp)
-	subq $EXCEPTION_STKSZ, TSS_ist + (\ist - 1) * 8(%rbp)
+	movq %gs:pda_data_offset, %rbp
+	subq $EXCEPTION_STKSZ, per_cpu__init_tss + TSS_ist + (\ist - 1) * 8(%rbp)
 	call \do_sym
-	addq $EXCEPTION_STKSZ, TSS_ist + (\ist - 1) * 8(%rbp)
+	addq $EXCEPTION_STKSZ, per_cpu__init_tss + TSS_ist + (\ist - 1) * 8(%rbp)
 	jmp paranoid_exit	/* %ebx: no swapgs flag */
 	CFI_ENDPROC
 END(\sym)
@@ -1143,7 +1138,7 @@ ENTRY(native_load_gs_index)
 	CFI_STARTPROC
 	pushf
 	CFI_ADJUST_CFA_OFFSET 8
-	DISABLE_INTERRUPTS(CLBR_ANY & ~CLBR_RDI)
+	DISABLE_INTERRUPTS(CLBR_ANY | ~(CLBR_RDI))
 	SWAPGS
 gs_change:
 	movl %edi,%gs
@@ -1265,14 +1260,14 @@ ENTRY(call_softirq)
 	CFI_REL_OFFSET rbp,0
 	mov  %rsp,%rbp
 	CFI_DEF_CFA_REGISTER rbp
-	incl PER_CPU_VAR(irq_count)
-	cmove PER_CPU_VAR(irq_stack_ptr),%rsp
+	incl %gs:pda_irqcount
+	cmove %gs:pda_irqstackptr,%rsp
 	push  %rbp			# backlink for old unwinder
 	call __do_softirq
 	leaveq
 	CFI_DEF_CFA_REGISTER	rsp
 	CFI_ADJUST_CFA_OFFSET   -8
-	decl PER_CPU_VAR(irq_count)
+	decl %gs:pda_irqcount
 	ret
 	CFI_ENDPROC
 END(call_softirq)
@@ -1302,15 +1297,15 @@ ENTRY(xen_do_hypervisor_callback)   # do_hypervisor_callback(struct *pt_regs)
 	movq %rdi, %rsp            # we don't return, adjust the stack frame
 	CFI_ENDPROC
 	DEFAULT_FRAME
-11:	incl PER_CPU_VAR(irq_count)
+11:	incl %gs:pda_irqcount
 	movq %rsp,%rbp
 	CFI_DEF_CFA_REGISTER rbp
-	cmovzq PER_CPU_VAR(irq_stack_ptr),%rsp
+	cmovzq %gs:pda_irqstackptr,%rsp
 	pushq %rbp			# backlink for old unwinder
 	call xen_evtchn_do_upcall
 	popq %rsp
 	CFI_DEF_CFA_REGISTER rsp
-	decl PER_CPU_VAR(irq_count)
+	decl %gs:pda_irqcount
 	jmp  error_exit
 	CFI_ENDPROC
 END(do_hypervisor_callback)

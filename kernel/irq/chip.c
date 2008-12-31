@@ -46,10 +46,7 @@ void dynamic_irq_init(unsigned int irq)
 	desc->irq_count = 0;
 	desc->irqs_unhandled = 0;
 #ifdef CONFIG_SMP
-	cpumask_setall(desc->affinity);
-#ifdef CONFIG_GENERIC_PENDING_IRQ
-	cpumask_clear(desc->pending_mask);
-#endif
+	cpumask_setall(&desc->affinity);
 #endif
 	spin_unlock_irqrestore(&desc->lock, flags);
 }

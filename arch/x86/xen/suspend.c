@@ -6,7 +6,6 @@
 
 #include <asm/xen/hypercall.h>
 #include <asm/xen/page.h>
-#include <asm/fixmap.h>
 
 #include "xen-ops.h"
 #include "mmu.h"

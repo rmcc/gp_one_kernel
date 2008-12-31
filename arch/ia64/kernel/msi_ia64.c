@@ -75,7 +75,7 @@ static void ia64_set_msi_irq_affinity(unsigned int irq,
 	msg.data = data;
 
 	write_msi_msg(irq, &msg);
-	cpumask_copy(irq_desc[irq].affinity, cpumask_of(cpu));
+	irq_desc[irq].affinity = cpumask_of_cpu(cpu);
 }
 #endif /* CONFIG_SMP */
 
@@ -187,7 +187,7 @@ static void dmar_msi_set_affinity(unsigned int irq, const struct cpumask *mask)
 	msg.address_lo |= MSI_ADDR_DESTID_CPU(cpu_physical_id(cpu));
 
 	dmar_msi_write(irq, &msg);
-	cpumask_copy(irq_desc[irq].affinity, mask);
+	irq_desc[irq].affinity = *mask;
 }
 #endif /* CONFIG_SMP */
 

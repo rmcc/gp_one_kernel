@@ -17,7 +17,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/rculist.h>
 #include <linux/hash.h>
-#include <linux/bootmem.h>
 
 #include "internals.h"
 
@@ -70,7 +69,6 @@ int nr_irqs = NR_IRQS;
 EXPORT_SYMBOL_GPL(nr_irqs);
 
 #ifdef CONFIG_SPARSE_IRQ
-
 static struct irq_desc irq_desc_init = {
 	.irq	    = -1,
 	.status	    = IRQ_DISABLED,
@@ -78,6 +76,9 @@ static struct irq_desc irq_desc_init = {
 	.handle_irq = handle_bad_irq,
 	.depth      = 1,
 	.lock       = __SPIN_LOCK_UNLOCKED(irq_desc_init.lock),
+#ifdef CONFIG_SMP
+	.affinity   = CPU_MASK_ALL
+#endif
 };
 
 void init_kstat_irqs(struct irq_desc *desc, int cpu, int nr)
@@ -112,10 +113,6 @@ static void init_one_irq_desc(int irq, struct irq_desc *desc, int cpu)
 		printk(KERN_ERR "can not alloc kstat_irqs\n");
 		BUG_ON(1);
 	}
-	if (!init_alloc_desc_masks(desc, cpu, false)) {
-		printk(KERN_ERR "can not alloc irq_desc cpumasks\n");
-		BUG_ON(1);
-	}
 	arch_init_chip_data(desc, cpu);
 }
 
@@ -124,7 +121,7 @@ static void init_one_irq_desc(int irq, struct irq_desc *desc, int cpu)
  */
 DEFINE_SPINLOCK(sparse_irq_lock);
 
-struct irq_desc **irq_desc_ptrs __read_mostly;
+struct irq_desc *irq_desc_ptrs[NR_IRQS] __read_mostly;
 
 static struct irq_desc irq_desc_legacy[NR_IRQS_LEGACY] __cacheline_aligned_in_smp = {
 	[0 ... NR_IRQS_LEGACY-1] = {
@@ -134,10 +131,14 @@ static struct irq_desc irq_desc_legacy[NR_IRQS_LEGACY] __cacheline_aligned_in_sm
 		.handle_irq = handle_bad_irq,
 		.depth	    = 1,
 		.lock	    = __SPIN_LOCK_UNLOCKED(irq_desc_init.lock),
+#ifdef CONFIG_SMP
+		.affinity   = CPU_MASK_ALL
+#endif
 	}
 };
 
-static unsigned int *kstat_irqs_legacy;
+/* FIXME: use bootmem alloc ...*/
+static unsigned int kstat_irqs_legacy[NR_IRQS_LEGACY][NR_CPUS];
 
 int __init early_irq_init(void)
 {
@@ -147,30 +148,18 @@ int __init early_irq_init(void)
 
 	init_irq_default_affinity();
 
-	 /* initialize nr_irqs based on nr_cpu_ids */
-	arch_probe_nr_irqs();
-	printk(KERN_INFO "NR_IRQS:%d nr_irqs:%d\n", NR_IRQS, nr_irqs);
-
 	desc = irq_desc_legacy;
 	legacy_count = ARRAY_SIZE(irq_desc_legacy);
 
-	/* allocate irq_desc_ptrs array based on nr_irqs */
-	irq_desc_ptrs = alloc_bootmem(nr_irqs * sizeof(void *));
-
-	/* allocate based on nr_cpu_ids */
-	/* FIXME: invert kstat_irgs, and it'd be a per_cpu_alloc'd thing */
-	kstat_irqs_legacy = alloc_bootmem(NR_IRQS_LEGACY * nr_cpu_ids *
-					  sizeof(int));
-
 	for (i = 0; i < legacy_count; i++) {
 		desc[i].irq = i;
-		desc[i].kstat_irqs = kstat_irqs_legacy + i * nr_cpu_ids;
+		desc[i].kstat_irqs = kstat_irqs_legacy[i];
 		lockdep_set_class(&desc[i].lock, &irq_desc_lock_class);
-		init_alloc_desc_masks(&desc[i], 0, true);
+
 		irq_desc_ptrs[i] = desc + i;
 	}
 
-	for (i = legacy_count; i < nr_irqs; i++)
+	for (i = legacy_count; i < NR_IRQS; i++)
 		irq_desc_ptrs[i] = NULL;
 
 	return arch_early_irq_init();
@@ -178,10 +167,7 @@ int __init early_irq_init(void)
 
 struct irq_desc *irq_to_desc(unsigned int irq)
 {
-	if (irq_desc_ptrs && irq < nr_irqs)
-		return irq_desc_ptrs[irq];
-
-	return NULL;
+	return (irq < NR_IRQS) ? irq_desc_ptrs[irq] : NULL;
 }
 
 struct irq_desc *irq_to_desc_alloc_cpu(unsigned int irq, int cpu)
@@ -190,9 +176,10 @@ struct irq_desc *irq_to_desc_alloc_cpu(unsigned int irq, int cpu)
 	unsigned long flags;
 	int node;
 
-	if (irq >= nr_irqs) {
-		WARN(1, "irq (%d) >= nr_irqs (%d) in irq_to_desc_alloc\n",
-			irq, nr_irqs);
+	if (irq >= NR_IRQS) {
+		printk(KERN_WARNING "irq >= NR_IRQS in irq_to_desc_alloc: %d %d\n",
+				irq, NR_IRQS);
+		WARN_ON(1);
 		return NULL;
 	}
 
@@ -234,6 +221,9 @@ struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned_in_smp = {
 		.handle_irq = handle_bad_irq,
 		.depth = 1,
 		.lock = __SPIN_LOCK_UNLOCKED(irq_desc->lock),
+#ifdef CONFIG_SMP
+		.affinity = CPU_MASK_ALL
+#endif
 	}
 };
 
@@ -245,15 +235,12 @@ int __init early_irq_init(void)
 
 	init_irq_default_affinity();
 
-	printk(KERN_INFO "NR_IRQS:%d\n", NR_IRQS);
-
 	desc = irq_desc;
 	count = ARRAY_SIZE(irq_desc);
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < count; i++)
 		desc[i].irq = i;
-		init_alloc_desc_masks(&desc[i], 0, true);
-	}
+
 	return arch_early_irq_init();
 }
 

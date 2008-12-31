@@ -9,7 +9,6 @@
 #include <asm/e820.h>
 #include <asm/io.h>
 #include <asm/setup.h>
-#include <asm/cpu.h>
 
 void __init pre_intr_init_hook(void)
 {
@@ -57,7 +56,7 @@ void __init trap_init_hook(void)
 
 static struct irqaction irq0 = {
 	.handler = timer_interrupt,
-	.flags = IRQF_DISABLED | IRQF_NOBALANCING | IRQF_IRQPOLL,
+	.flags = IRQF_DISABLED | IRQF_NOBALANCING | IRQF_IRQPOLL | IRQF_TIMER,
 	.mask = CPU_MASK_NONE,
 	.name = "timer"
 };

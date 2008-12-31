@@ -75,7 +75,10 @@ static inline bool invalid_selector(u16 value)
 static unsigned long *pt_regs_access(struct pt_regs *regs, unsigned long regno)
 {
 	BUILD_BUG_ON(offsetof(struct pt_regs, bx) != 0);
-	return &regs->bx + (regno >> 2);
+	regno >>= 2;
+	if (regno > FS)
+		--regno;
+	return &regs->bx + regno;
 }
 
 static u16 get_segment_reg(struct task_struct *task, unsigned long offset)
@@ -87,10 +90,9 @@ static u16 get_segment_reg(struct task_struct *task, unsigned long offset)
 	if (offset != offsetof(struct user_regs_struct, gs))
 		retval = *pt_regs_access(task_pt_regs(task), offset);
 	else {
+		retval = task->thread.gs;
 		if (task == current)
-			retval = get_user_gs(task_pt_regs(task));
-		else
-			retval = task_user_gs(task);
+			savesegment(gs, retval);
 	}
 	return retval;
 }
@@ -124,10 +126,13 @@ static int set_segment_reg(struct task_struct *task,
 		break;
 
 	case offsetof(struct user_regs_struct, gs):
+		task->thread.gs = value;
 		if (task == current)
-			set_user_gs(task_pt_regs(task), value);
-		else
-			task_user_gs(task) = value;
+			/*
+			 * The user-mode %gs is not affected by
+			 * kernel entry, so we must update the CPU.
+			 */
+			loadsegment(gs, value);
 	}
 
 	return 0;
@@ -1383,7 +1388,7 @@ void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs,
 #ifdef CONFIG_X86_32
 # define IS_IA32	1
 #elif defined CONFIG_IA32_EMULATION
-# define IS_IA32	test_thread_flag(TIF_IA32)
+# define IS_IA32	is_compat_task()
 #else
 # define IS_IA32	0
 #endif

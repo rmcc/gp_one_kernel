@@ -24,11 +24,11 @@
 #include <asm/apic.h>
 #include <asm/hpet.h>
 #include <linux/kdebug.h>
-#include <asm/cpu.h>
+#include <asm/smp.h>
 #include <asm/reboot.h>
 #include <asm/virtext.h>
 
-#include <asm/genapic.h>
+#include <mach_ipi.h>
 
 
 #if defined(CONFIG_SMP) && defined(CONFIG_X86_LOCAL_APIC)

@@ -31,8 +31,6 @@
 extern int found_numaq;
 extern int get_memcfg_numaq(void);
 
-extern void *xquad_portio;
-
 /*
  * SYS_CFG_DATA_PRIV_ADDR, struct eachquadmem, and struct sys_cfg_data are the
  */

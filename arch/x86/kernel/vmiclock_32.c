@@ -202,7 +202,7 @@ static irqreturn_t vmi_timer_interrupt(int irq, void *dev_id)
 static struct irqaction vmi_clock_action  = {
 	.name 		= "vmi-timer",
 	.handler 	= vmi_timer_interrupt,
-	.flags 		= IRQF_DISABLED | IRQF_NOBALANCING,
+	.flags 		= IRQF_DISABLED | IRQF_NOBALANCING | IRQF_TIMER,
 	.mask 		= CPU_MASK_ALL,
 };
 
@@ -256,7 +256,7 @@ void __devinit vmi_time_bsp_init(void)
 	 */
 	clockevents_notify(CLOCK_EVT_NOTIFY_SUSPEND, NULL);
 	local_irq_disable();
-#ifdef CONFIG_SMP
+#ifdef CONFIG_X86_SMP
 	/*
 	 * XXX handle_percpu_irq only defined for SMP; we need to switch over
 	 * to using it, since this is a local interrupt, which each CPU must
@@ -283,10 +283,13 @@ void __devinit vmi_time_ap_init(void)
 #endif
 
 /** vmi clocksource */
+static struct clocksource clocksource_vmi;
 
 static cycle_t read_real_cycles(void)
 {
-	return vmi_timer_ops.get_cycle_counter(VMI_CYCLES_REAL);
+	cycle_t ret = (cycle_t)vmi_timer_ops.get_cycle_counter(VMI_CYCLES_REAL);
+	return ret >= clocksource_vmi.cycle_last ?
+		ret : clocksource_vmi.cycle_last;
 }
 
 static struct clocksource clocksource_vmi = {

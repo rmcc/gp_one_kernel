@@ -104,11 +104,6 @@ static struct irq_desc bad_irq_desc = {
 	.lock = __SPIN_LOCK_UNLOCKED(bad_irq_desc.lock),
 };
 
-#ifdef CONFIG_CPUMASK_OFFSTACK
-/* We are not allocating bad_irq_desc.affinity or .pending_mask */
-#error "ARM architecture does not support CONFIG_CPUMASK_OFFSTACK."
-#endif
-
 /*
  * do_IRQ handles all hardware IRQ's.  Decoded IRQs should not
  * come via this function.  Instead, they should provide their
@@ -166,7 +161,7 @@ void __init init_IRQ(void)
 		irq_desc[irq].status |= IRQ_NOREQUEST | IRQ_NOPROBE;
 
 #ifdef CONFIG_SMP
-	cpumask_setall(bad_irq_desc.affinity);
+	bad_irq_desc.affinity = CPU_MASK_ALL;
 	bad_irq_desc.cpu = smp_processor_id();
 #endif
 	init_arch_irq();
@@ -196,16 +191,15 @@ void migrate_irqs(void)
 		struct irq_desc *desc = irq_desc + i;
 
 		if (desc->cpu == cpu) {
-			unsigned int newcpu = cpumask_any_and(desc->affinity,
-							      cpu_online_mask);
-			if (newcpu >= nr_cpu_ids) {
+			unsigned int newcpu = any_online_cpu(desc->affinity);
+
+			if (newcpu == NR_CPUS) {
 				if (printk_ratelimit())
 					printk(KERN_INFO "IRQ%u no longer affine to CPU%u\n",
 					       i, cpu);
 
-				cpumask_setall(desc->affinity);
-				newcpu = cpumask_any_and(desc->affinity,
-							 cpu_online_mask);
+				cpus_setall(desc->affinity);
+				newcpu = any_online_cpu(desc->affinity);
 			}
 
 			route_irq(desc, i, newcpu);
