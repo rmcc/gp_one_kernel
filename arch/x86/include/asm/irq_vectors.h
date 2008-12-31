@@ -105,8 +105,6 @@
 
 #if defined(CONFIG_X86_IO_APIC) && !defined(CONFIG_X86_VOYAGER)
 
-#include <asm/apicnum.h>	/* need MAX_IO_APICS */
-
 #ifndef CONFIG_SPARSE_IRQ
 # if NR_CPUS < MAX_IO_APICS
 #  define NR_IRQS (NR_VECTORS + (32 * NR_CPUS))
@@ -114,12 +112,11 @@
 #  define NR_IRQS (NR_VECTORS + (32 * MAX_IO_APICS))
 # endif
 #else
-
-# define NR_IRQS					\
-	((8 * NR_CPUS) > (32 * MAX_IO_APICS) ?		\
-		(NR_VECTORS + (8 * NR_CPUS)) :		\
-		(NR_VECTORS + (32 * MAX_IO_APICS)))	\
-
+# if (8 * NR_CPUS) > (32 * MAX_IO_APICS)
+#  define NR_IRQS (NR_VECTORS + (8 * NR_CPUS))
+# else
+#  define NR_IRQS (NR_VECTORS + (32 * MAX_IO_APICS))
+# endif
 #endif
 
 #elif defined(CONFIG_X86_VOYAGER)

@@ -52,6 +52,10 @@
 /*================================================================*/
 /* System Includes */
 
+#define __NO_VERSION__		/* prevent the static definition */
+
+
+#include <linux/version.h>
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -66,6 +70,7 @@
 
 #include <asm/byteorder.h>
 
+#include "version.h"
 #include "wlan_compat.h"
 
 /*================================================================*/
@@ -95,8 +100,8 @@
 /*================================================================*/
 /* Local Static Definitions */
 
-static u8	oui_rfc1042[] = {0x00, 0x00, 0x00};
-static u8	oui_8021h[] = {0x00, 0x00, 0xf8};
+static UINT8	oui_rfc1042[] = {0x00, 0x00, 0x00};
+static UINT8	oui_8021h[] = {0x00, 0x00, 0xf8};
 
 /*================================================================*/
 /* Local Function Declarations */
@@ -130,11 +135,11 @@ static u8	oui_8021h[] = {0x00, 0x00, 0xf8};
 * Call context:
 *	May be called in interrupt or non-interrupt context
 ----------------------------------------------------------------*/
-int skb_ether_to_p80211( wlandevice_t *wlandev, u32 ethconv, struct sk_buff *skb, p80211_hdr_t *p80211_hdr, p80211_metawep_t *p80211_wep)
+int skb_ether_to_p80211( wlandevice_t *wlandev, UINT32 ethconv, struct sk_buff *skb, p80211_hdr_t *p80211_hdr, p80211_metawep_t *p80211_wep)
 {
 
-	u16          fc;
-	u16          proto;
+	UINT16          fc;
+	UINT16          proto;
 	wlan_ethhdr_t   e_hdr;
 	wlan_llc_t      *e_llc;
 	wlan_snap_t     *e_snap;
@@ -293,14 +298,14 @@ static void orinoco_spy_gather(wlandevice_t *wlandev, char *mac,
 * Call context:
 *	May be called in interrupt or non-interrupt context
 ----------------------------------------------------------------*/
-int skb_p80211_to_ether( wlandevice_t *wlandev, u32 ethconv, struct sk_buff *skb)
+int skb_p80211_to_ether( wlandevice_t *wlandev, UINT32 ethconv, struct sk_buff *skb)
 {
 	netdevice_t     *netdev = wlandev->netdev;
-	u16          fc;
-	unsigned int            payload_length;
-	unsigned int            payload_offset;
-	u8		daddr[WLAN_ETHADDR_LEN];
-	u8		saddr[WLAN_ETHADDR_LEN];
+	UINT16          fc;
+	UINT            payload_length;
+	UINT            payload_offset;
+	UINT8		daddr[WLAN_ETHADDR_LEN];
+	UINT8		saddr[WLAN_ETHADDR_LEN];
 	p80211_hdr_t    *w_hdr;
 	wlan_ethhdr_t   *e_hdr;
 	wlan_llc_t      *e_llc;
@@ -328,11 +333,11 @@ int skb_p80211_to_ether( wlandevice_t *wlandev, u32 ethconv, struct sk_buff *skb
 		memcpy(saddr, w_hdr->a3.a2, WLAN_ETHADDR_LEN);
 	} else {
 		payload_offset = WLAN_HDR_A4_LEN;
-		if (payload_length < WLAN_HDR_A4_LEN - WLAN_HDR_A3_LEN) {
+		payload_length -= ( WLAN_HDR_A4_LEN - WLAN_HDR_A3_LEN );
+		if (payload_length < 0 ) {
 			WLAN_LOG_ERROR("A4 frame too short!\n");
 			return 1;
 		}
-		payload_length -= (WLAN_HDR_A4_LEN - WLAN_HDR_A3_LEN);
 		memcpy(daddr, w_hdr->a4.a3, WLAN_ETHADDR_LEN);
 		memcpy(saddr, w_hdr->a4.a4, WLAN_ETHADDR_LEN);
 	}
@@ -492,16 +497,8 @@ int skb_p80211_to_ether( wlandevice_t *wlandev, u32 ethconv, struct sk_buff *skb
 
 	}
 
-        /*
-         * Note that eth_type_trans() expects an skb w/ skb->data pointing
-         * at the MAC header, it then sets the following skb members:
-         * skb->mac_header,
-         * skb->data, and
-         * skb->pkt_type.
-         * It then _returns_ the value that _we're_ supposed to stuff in
-         * skb->protocol.  This is nuts.
-         */
 	skb->protocol = eth_type_trans(skb, netdev);
+	skb_reset_mac_header(skb);
 
         /* jkriegl: process signal and noise as set in hfa384x_int_rx() */
 	/* jkriegl: only process signal/noise if requested by iwspy */
@@ -531,7 +528,7 @@ int skb_p80211_to_ether( wlandevice_t *wlandev, u32 ethconv, struct sk_buff *skb
 * Call context:
 *	May be called in interrupt or non-interrupt context
 ----------------------------------------------------------------*/
-int p80211_stt_findproto(u16 proto)
+int p80211_stt_findproto(UINT16 proto)
 {
 	/* Always return found for now.  This is the behavior used by the */
 	/*  Zoom Win95 driver when 802.1h mode is selected */

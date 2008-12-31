@@ -146,7 +146,6 @@ static void __init read_obp_memory(const char *property,
 }
 
 unsigned long *sparc64_valid_addr_bitmap __read_mostly;
-EXPORT_SYMBOL(sparc64_valid_addr_bitmap);
 
 /* Kernel physical address base and size in bytes.  */
 unsigned long kern_base __read_mostly;
@@ -259,16 +258,21 @@ static inline void tsb_insert(struct tsb *ent, unsigned long tag, unsigned long 
 unsigned long _PAGE_ALL_SZ_BITS __read_mostly;
 unsigned long _PAGE_SZBITS __read_mostly;
 
-static void flush_dcache(unsigned long pfn)
+void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t pte)
 {
-	struct page *page;
+	struct mm_struct *mm;
+	struct tsb *tsb;
+	unsigned long tag, flags;
+	unsigned long tsb_index, tsb_hash_shift;
 
-	page = pfn_to_page(pfn);
-	if (page && page_mapping(page)) {
+	if (tlb_type != hypervisor) {
+		unsigned long pfn = pte_pfn(pte);
 		unsigned long pg_flags;
+		struct page *page;
 
-		pg_flags = page->flags;
-		if (pg_flags & (1UL << PG_dcache_dirty)) {
+		if (pfn_valid(pfn) &&
+		    (page = pfn_to_page(pfn), page_mapping(page)) &&
+		    ((pg_flags = page->flags) & (1UL << PG_dcache_dirty))) {
 			int cpu = ((pg_flags >> PG_dcache_cpu_shift) &
 				   PG_dcache_cpu_mask);
 			int this_cpu = get_cpu();
@@ -285,21 +289,6 @@ static void flush_dcache(unsigned long pfn)
 
 			put_cpu();
 		}
-	}
-}
-
-void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t pte)
-{
-	struct mm_struct *mm;
-	struct tsb *tsb;
-	unsigned long tag, flags;
-	unsigned long tsb_index, tsb_hash_shift;
-
-	if (tlb_type != hypervisor) {
-		unsigned long pfn = pte_pfn(pte);
-
-		if (pfn_valid(pfn))
-			flush_dcache(pfn);
 	}
 
 	mm = vma->vm_mm;
@@ -370,7 +359,6 @@ void flush_dcache_page(struct page *page)
 out:
 	put_cpu();
 }
-EXPORT_SYMBOL(flush_dcache_page);
 
 void __kprobes flush_icache_range(unsigned long start, unsigned long end)
 {
@@ -398,7 +386,6 @@ void __kprobes flush_icache_range(unsigned long start, unsigned long end)
 		}
 	}
 }
-EXPORT_SYMBOL(flush_icache_range);
 
 void mmu_info(struct seq_file *m)
 {
@@ -602,7 +589,6 @@ void __flush_dcache_range(unsigned long start, unsigned long end)
 					       "i" (ASI_DCACHE_INVALIDATE));
 	}
 }
-EXPORT_SYMBOL(__flush_dcache_range);
 
 /* get_new_mmu_context() uses "cache + 1".  */
 DEFINE_SPINLOCK(ctx_alloc_lock);
@@ -783,8 +769,8 @@ static int find_node(unsigned long addr)
 	return -1;
 }
 
-static unsigned long long nid_range(unsigned long long start,
-				    unsigned long long end, int *nid)
+static unsigned long nid_range(unsigned long start, unsigned long end,
+			       int *nid)
 {
 	*nid = find_node(start);
 	start += PAGE_SIZE;
@@ -802,8 +788,8 @@ static unsigned long long nid_range(unsigned long long start,
 	return start;
 }
 #else
-static unsigned long long nid_range(unsigned long long start,
-				    unsigned long long end, int *nid)
+static unsigned long nid_range(unsigned long start, unsigned long end,
+			       int *nid)
 {
 	*nid = 0;
 	return end;
@@ -1030,8 +1016,8 @@ static int __init grab_mlgroups(struct mdesc_handle *md)
 		val = mdesc_get_property(md, node, "address-mask", NULL);
 		m->mask = *val;
 
-		numadbg("MLGROUP[%d]: node[%llx] latency[%llx] "
-			"match[%llx] mask[%llx]\n",
+		numadbg("MLGROUP[%d]: node[%lx] latency[%lx] "
+			"match[%lx] mask[%lx]\n",
 			count - 1, m->node, m->latency, m->match, m->mask);
 	}
 
@@ -1070,7 +1056,7 @@ static int __init grab_mblocks(struct mdesc_handle *md)
 					 "address-congruence-offset", NULL);
 		m->offset = *val;
 
-		numadbg("MBLOCK[%d]: base[%llx] size[%llx] offset[%llx]\n",
+		numadbg("MBLOCK[%d]: base[%lx] size[%lx] offset[%lx]\n",
 			count - 1, m->base, m->size, m->offset);
 	}
 
@@ -1141,7 +1127,7 @@ static int __init numa_attach_mlgroup(struct mdesc_handle *md, u64 grp,
 	n->mask = candidate->mask;
 	n->val = candidate->match;
 
-	numadbg("NUMA NODE[%d]: mask[%lx] val[%lx] (latency[%llx])\n",
+	numadbg("NUMA NODE[%d]: mask[%lx] val[%lx] (latency[%lx])\n",
 		index, n->mask, n->val, candidate->latency);
 
 	return 0;

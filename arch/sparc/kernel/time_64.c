@@ -106,7 +106,7 @@ static void tick_init_tick(void)
 	tick_disable_irq();
 }
 
-static unsigned long long tick_get_tick(void)
+static unsigned long tick_get_tick(void)
 {
 	unsigned long ret;
 
@@ -176,7 +176,6 @@ static struct sparc64_tick_ops tick_operations __read_mostly = {
 };
 
 struct sparc64_tick_ops *tick_ops __read_mostly = &tick_operations;
-EXPORT_SYMBOL(tick_ops);
 
 static void stick_disable_irq(void)
 {
@@ -209,7 +208,7 @@ static void stick_init_tick(void)
 	stick_disable_irq();
 }
 
-static unsigned long long stick_get_tick(void)
+static unsigned long stick_get_tick(void)
 {
 	unsigned long ret;
 
@@ -353,7 +352,7 @@ static void hbtick_init_tick(void)
 	hbtick_disable_irq();
 }
 
-static unsigned long long hbtick_get_tick(void)
+static unsigned long hbtick_get_tick(void)
 {
 	return __hbird_read_stick() & ~TICK_PRIV_BIT;
 }
@@ -423,7 +422,7 @@ static int __devinit rtc_probe(struct of_device *op, const struct of_device_id *
 {
 	struct resource *r;
 
-	printk(KERN_INFO "%s: RTC regs at 0x%llx\n",
+	printk(KERN_INFO "%s: RTC regs at 0x%lx\n",
 	       op->node->full_name, op->resource[0].start);
 
 	/* The CMOS RTC driver only accepts IORESOURCE_IO, so cons
@@ -479,7 +478,7 @@ static struct platform_device rtc_bq4802_device = {
 static int __devinit bq4802_probe(struct of_device *op, const struct of_device_id *match)
 {
 
-	printk(KERN_INFO "%s: BQ4802 regs at 0x%llx\n",
+	printk(KERN_INFO "%s: BQ4802 regs at 0x%lx\n",
 	       op->node->full_name, op->resource[0].start);
 
 	rtc_bq4802_device.resource = &op->resource[0];
@@ -543,7 +542,7 @@ static int __devinit mostek_probe(struct of_device *op, const struct of_device_i
 	    strcmp(dp->parent->parent->name, "central") != 0)
 		return -ENODEV;
 
-	printk(KERN_INFO "%s: Mostek regs at 0x%llx\n",
+	printk(KERN_INFO "%s: Mostek regs at 0x%lx\n",
 	       dp->full_name, op->resource[0].start);
 
 	m48t59_rtc.resource = &op->resource[0];
@@ -640,7 +639,6 @@ unsigned long sparc64_get_clock_tick(unsigned int cpu)
 		return ft->clock_tick_ref;
 	return cpu_data(cpu).clock_tick;
 }
-EXPORT_SYMBOL(sparc64_get_clock_tick);
 
 #ifdef CONFIG_CPU_FREQ
 
@@ -729,7 +727,7 @@ void timer_interrupt(int irq, struct pt_regs *regs)
 
 	irq_enter();
 
-	kstat_incr_irqs_this_cpu(0, irq_to_desc(0));
+	kstat_this_cpu.irqs[0]++;
 
 	if (unlikely(!evt->event_handler)) {
 		printk(KERN_WARNING
@@ -765,7 +763,7 @@ void __devinit setup_sparc64_timer(void)
 	sevt = &__get_cpu_var(sparc64_events);
 
 	memcpy(sevt, &sparc64_clockevent, sizeof(*sevt));
-	sevt->cpumask = cpumask_of(smp_processor_id());
+	sevt->cpumask = cpumask_of_cpu(smp_processor_id());
 
 	clockevents_register_device(sevt);
 }

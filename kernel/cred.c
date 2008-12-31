@@ -372,8 +372,7 @@ int commit_creds(struct cred *new)
 	    old->fsuid != new->fsuid ||
 	    old->fsgid != new->fsgid ||
 	    !cap_issubset(new->cap_permitted, old->cap_permitted)) {
-		if (task->mm)
-			set_dumpable(task->mm, suid_dumpable);
+		set_dumpable(task->mm, suid_dumpable);
 		task->pdeath_signal = 0;
 		smp_wmb();
 	}
@@ -507,7 +506,6 @@ struct cred *prepare_kernel_cred(struct task_struct *daemon)
 	else
 		old = get_cred(&init_cred);
 
-	*new = *old;
 	get_uid(new->user);
 	get_group_info(new->group_info);
 
@@ -531,7 +529,6 @@ struct cred *prepare_kernel_cred(struct task_struct *daemon)
 
 error:
 	put_cred(new);
-	put_cred(old);
 	return NULL;
 }
 EXPORT_SYMBOL(prepare_kernel_cred);
