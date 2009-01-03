@@ -46,7 +46,6 @@
 #include <linux/libata.h>
 #include <linux/hdreg.h>
 #include <linux/uaccess.h>
-#include <linux/suspend.h>
 
 #include "libata.h"
 
@@ -415,7 +414,6 @@ int ata_std_bios_param(struct scsi_device *sdev, struct block_device *bdev,
 
 /**
  *	ata_get_identity - Handler for HDIO_GET_IDENTITY ioctl
- *	@ap: target port
  *	@sdev: SCSI device to get identify data for
  *	@arg: User buffer area for identify data
  *
@@ -425,9 +423,9 @@ int ata_std_bios_param(struct scsi_device *sdev, struct block_device *bdev,
  *	RETURNS:
  *	Zero on success, negative errno on error.
  */
-static int ata_get_identity(struct ata_port *ap, struct scsi_device *sdev,
-			    void __user *arg)
+static int ata_get_identity(struct scsi_device *sdev, void __user *arg)
 {
+	struct ata_port *ap = ata_shost_to_port(sdev->host);
 	struct ata_device *dev = ata_scsi_find_dev(ap, sdev);
 	u16 __user *dst = arg;
 	char buf[40];
@@ -647,8 +645,7 @@ int ata_task_ioctl(struct scsi_device *scsidev, void __user *arg)
 	return rc;
 }
 
-int ata_sas_scsi_ioctl(struct ata_port *ap, struct scsi_device *scsidev,
-		     int cmd, void __user *arg)
+int ata_scsi_ioctl(struct scsi_device *scsidev, int cmd, void __user *arg)
 {
 	int val = -EINVAL, rc = -EINVAL;
 
@@ -666,7 +663,7 @@ int ata_sas_scsi_ioctl(struct ata_port *ap, struct scsi_device *scsidev,
 		return 0;
 
 	case HDIO_GET_IDENTITY:
-		return ata_get_identity(ap, scsidev, arg);
+		return ata_get_identity(scsidev, arg);
 
 	case HDIO_DRIVE_CMD:
 		if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO))
@@ -685,14 +682,6 @@ int ata_sas_scsi_ioctl(struct ata_port *ap, struct scsi_device *scsidev,
 
 	return rc;
 }
-EXPORT_SYMBOL_GPL(ata_sas_scsi_ioctl);
-
-int ata_scsi_ioctl(struct scsi_device *scsidev, int cmd, void __user *arg)
-{
-	return ata_sas_scsi_ioctl(ata_shost_to_port(scsidev->host),
-				scsidev, cmd, arg);
-}
-EXPORT_SYMBOL_GPL(ata_scsi_ioctl);
 
 /**
  *	ata_scsi_qc_new - acquire new ata_queued_cmd reference
@@ -1305,17 +1294,6 @@ static unsigned int ata_scsi_start_stop_xlat(struct ata_queued_cmd *qc)
 
 		tf->command = ATA_CMD_VERIFY;	/* READ VERIFY */
 	} else {
-		/* Some odd clown BIOSen issue spindown on power off (ACPI S4
-		 * or S5) causing some drives to spin up and down again.
-		 */
-		if ((qc->ap->flags & ATA_FLAG_NO_POWEROFF_SPINDOWN) &&
-		    system_state == SYSTEM_POWER_OFF)
-			goto skip;
-
-		if ((qc->ap->flags & ATA_FLAG_NO_HIBERNATE_SPINDOWN) &&
-		     system_entering_hibernation())
-			goto skip;
-
 		/* XXX: This is for backward compatibility, will be
 		 * removed.  Read Documentation/feature-removal-schedule.txt
 		 * for more info.
@@ -1339,7 +1317,8 @@ static unsigned int ata_scsi_start_stop_xlat(struct ata_queued_cmd *qc)
 				scmd->scsi_done = qc->scsidone;
 				qc->scsidone = ata_delayed_done;
 			}
-			goto skip;
+			scmd->result = SAM_STAT_GOOD;
+			return 1;
 		}
 
 		/* Issue ATA STANDBY IMMEDIATE command */
@@ -1355,12 +1334,9 @@ static unsigned int ata_scsi_start_stop_xlat(struct ata_queued_cmd *qc)
 
 	return 0;
 
- invalid_fld:
+invalid_fld:
 	ata_scsi_set_sense(scmd, ILLEGAL_REQUEST, 0x24, 0x0);
 	/* "Invalid field in cbd" */
-	return 1;
- skip:
-	scmd->result = SAM_STAT_GOOD;
 	return 1;
 }
 

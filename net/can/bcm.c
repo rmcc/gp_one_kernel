@@ -347,42 +347,16 @@ static void bcm_tx_timeout_tsklet(unsigned long data)
 	struct bcm_op *op = (struct bcm_op *)data;
 	struct bcm_msg_head msg_head;
 
-	if (op->kt_ival1.tv64 && (op->count > 0)) {
+	/* create notification to user */
+	msg_head.opcode  = TX_EXPIRED;
+	msg_head.flags   = op->flags;
+	msg_head.count   = op->count;
+	msg_head.ival1   = op->ival1;
+	msg_head.ival2   = op->ival2;
+	msg_head.can_id  = op->can_id;
+	msg_head.nframes = 0;
 
-		op->count--;
-		if (!op->count && (op->flags & TX_COUNTEVT)) {
-
-			/* create notification to user */
-			msg_head.opcode  = TX_EXPIRED;
-			msg_head.flags   = op->flags;
-			msg_head.count   = op->count;
-			msg_head.ival1   = op->ival1;
-			msg_head.ival2   = op->ival2;
-			msg_head.can_id  = op->can_id;
-			msg_head.nframes = 0;
-
-			bcm_send_to_user(op, &msg_head, NULL, 0);
-		}
-	}
-
-	if (op->kt_ival1.tv64 && (op->count > 0)) {
-
-		/* send (next) frame */
-		bcm_can_tx(op);
-		hrtimer_start(&op->timer,
-			      ktime_add(ktime_get(), op->kt_ival1),
-			      HRTIMER_MODE_ABS);
-
-	} else {
-		if (op->kt_ival2.tv64) {
-
-			/* send (next) frame */
-			bcm_can_tx(op);
-			hrtimer_start(&op->timer,
-				      ktime_add(ktime_get(), op->kt_ival2),
-				      HRTIMER_MODE_ABS);
-		}
-	}
+	bcm_send_to_user(op, &msg_head, NULL, 0);
 }
 
 /*
@@ -391,10 +365,33 @@ static void bcm_tx_timeout_tsklet(unsigned long data)
 static enum hrtimer_restart bcm_tx_timeout_handler(struct hrtimer *hrtimer)
 {
 	struct bcm_op *op = container_of(hrtimer, struct bcm_op, timer);
+	enum hrtimer_restart ret = HRTIMER_NORESTART;
 
-	tasklet_schedule(&op->tsklet);
+	if (op->kt_ival1.tv64 && (op->count > 0)) {
 
-	return HRTIMER_NORESTART;
+		op->count--;
+		if (!op->count && (op->flags & TX_COUNTEVT))
+			tasklet_schedule(&op->tsklet);
+	}
+
+	if (op->kt_ival1.tv64 && (op->count > 0)) {
+
+		/* send (next) frame */
+		bcm_can_tx(op);
+		hrtimer_forward(hrtimer, ktime_get(), op->kt_ival1);
+		ret = HRTIMER_RESTART;
+
+	} else {
+		if (op->kt_ival2.tv64) {
+
+			/* send (next) frame */
+			bcm_can_tx(op);
+			hrtimer_forward(hrtimer, ktime_get(), op->kt_ival2);
+			ret = HRTIMER_RESTART;
+		}
+	}
+
+	return ret;
 }
 
 /*
@@ -636,7 +633,7 @@ static void bcm_rx_handler(struct sk_buff *skb, void *data)
 	hrtimer_cancel(&op->timer);
 
 	if (op->can_id != rxframe->can_id)
-		return;
+		goto rx_freeskb;
 
 	/* save rx timestamp */
 	op->rx_stamp = skb->tstamp;
@@ -648,19 +645,19 @@ static void bcm_rx_handler(struct sk_buff *skb, void *data)
 	if (op->flags & RX_RTR_FRAME) {
 		/* send reply for RTR-request (placed in op->frames[0]) */
 		bcm_can_tx(op);
-		return;
+		goto rx_freeskb;
 	}
 
 	if (op->flags & RX_FILTER_ID) {
 		/* the easiest case */
 		bcm_rx_update_and_send(op, &op->last_frames[0], rxframe);
-		goto rx_starttimer;
+		goto rx_freeskb_starttimer;
 	}
 
 	if (op->nframes == 1) {
 		/* simple compare with index 0 */
 		bcm_rx_cmp_to_index(op, 0, rxframe);
-		goto rx_starttimer;
+		goto rx_freeskb_starttimer;
 	}
 
 	if (op->nframes > 1) {
@@ -681,8 +678,10 @@ static void bcm_rx_handler(struct sk_buff *skb, void *data)
 		}
 	}
 
-rx_starttimer:
+rx_freeskb_starttimer:
 	bcm_rx_starttimer(op);
+rx_freeskb:
+	kfree_skb(skb);
 }
 
 /*

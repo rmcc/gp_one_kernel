@@ -17,7 +17,7 @@
 
 #include <asm/uaccess.h>
 
-SYSCALL_DEFINE3(chown16, const char __user *, filename, old_uid_t, user, old_gid_t, group)
+asmlinkage long sys_chown16(const char __user * filename, old_uid_t user, old_gid_t group)
 {
 	long ret = sys_chown(filename, low2highuid(user), low2highgid(group));
 	/* avoid REGPARM breakage on x86: */
@@ -25,7 +25,7 @@ SYSCALL_DEFINE3(chown16, const char __user *, filename, old_uid_t, user, old_gid
 	return ret;
 }
 
-SYSCALL_DEFINE3(lchown16, const char __user *, filename, old_uid_t, user, old_gid_t, group)
+asmlinkage long sys_lchown16(const char __user * filename, old_uid_t user, old_gid_t group)
 {
 	long ret = sys_lchown(filename, low2highuid(user), low2highgid(group));
 	/* avoid REGPARM breakage on x86: */
@@ -33,7 +33,7 @@ SYSCALL_DEFINE3(lchown16, const char __user *, filename, old_uid_t, user, old_gi
 	return ret;
 }
 
-SYSCALL_DEFINE3(fchown16, unsigned int, fd, old_uid_t, user, old_gid_t, group)
+asmlinkage long sys_fchown16(unsigned int fd, old_uid_t user, old_gid_t group)
 {
 	long ret = sys_fchown(fd, low2highuid(user), low2highgid(group));
 	/* avoid REGPARM breakage on x86: */
@@ -41,7 +41,7 @@ SYSCALL_DEFINE3(fchown16, unsigned int, fd, old_uid_t, user, old_gid_t, group)
 	return ret;
 }
 
-SYSCALL_DEFINE2(setregid16, old_gid_t, rgid, old_gid_t, egid)
+asmlinkage long sys_setregid16(old_gid_t rgid, old_gid_t egid)
 {
 	long ret = sys_setregid(low2highgid(rgid), low2highgid(egid));
 	/* avoid REGPARM breakage on x86: */
@@ -49,7 +49,7 @@ SYSCALL_DEFINE2(setregid16, old_gid_t, rgid, old_gid_t, egid)
 	return ret;
 }
 
-SYSCALL_DEFINE1(setgid16, old_gid_t, gid)
+asmlinkage long sys_setgid16(old_gid_t gid)
 {
 	long ret = sys_setgid(low2highgid(gid));
 	/* avoid REGPARM breakage on x86: */
@@ -57,7 +57,7 @@ SYSCALL_DEFINE1(setgid16, old_gid_t, gid)
 	return ret;
 }
 
-SYSCALL_DEFINE2(setreuid16, old_uid_t, ruid, old_uid_t, euid)
+asmlinkage long sys_setreuid16(old_uid_t ruid, old_uid_t euid)
 {
 	long ret = sys_setreuid(low2highuid(ruid), low2highuid(euid));
 	/* avoid REGPARM breakage on x86: */
@@ -65,7 +65,7 @@ SYSCALL_DEFINE2(setreuid16, old_uid_t, ruid, old_uid_t, euid)
 	return ret;
 }
 
-SYSCALL_DEFINE1(setuid16, old_uid_t, uid)
+asmlinkage long sys_setuid16(old_uid_t uid)
 {
 	long ret = sys_setuid(low2highuid(uid));
 	/* avoid REGPARM breakage on x86: */
@@ -73,7 +73,7 @@ SYSCALL_DEFINE1(setuid16, old_uid_t, uid)
 	return ret;
 }
 
-SYSCALL_DEFINE3(setresuid16, old_uid_t, ruid, old_uid_t, euid, old_uid_t, suid)
+asmlinkage long sys_setresuid16(old_uid_t ruid, old_uid_t euid, old_uid_t suid)
 {
 	long ret = sys_setresuid(low2highuid(ruid), low2highuid(euid),
 				 low2highuid(suid));
@@ -82,7 +82,7 @@ SYSCALL_DEFINE3(setresuid16, old_uid_t, ruid, old_uid_t, euid, old_uid_t, suid)
 	return ret;
 }
 
-SYSCALL_DEFINE3(getresuid16, old_uid_t __user *, ruid, old_uid_t __user *, euid, old_uid_t __user *, suid)
+asmlinkage long sys_getresuid16(old_uid_t __user *ruid, old_uid_t __user *euid, old_uid_t __user *suid)
 {
 	const struct cred *cred = current_cred();
 	int retval;
@@ -94,7 +94,7 @@ SYSCALL_DEFINE3(getresuid16, old_uid_t __user *, ruid, old_uid_t __user *, euid,
 	return retval;
 }
 
-SYSCALL_DEFINE3(setresgid16, old_gid_t, rgid, old_gid_t, egid, old_gid_t, sgid)
+asmlinkage long sys_setresgid16(old_gid_t rgid, old_gid_t egid, old_gid_t sgid)
 {
 	long ret = sys_setresgid(low2highgid(rgid), low2highgid(egid),
 				 low2highgid(sgid));
@@ -103,8 +103,7 @@ SYSCALL_DEFINE3(setresgid16, old_gid_t, rgid, old_gid_t, egid, old_gid_t, sgid)
 	return ret;
 }
 
-
-SYSCALL_DEFINE3(getresgid16, old_gid_t __user *, rgid, old_gid_t __user *, egid, old_gid_t __user *, sgid)
+asmlinkage long sys_getresgid16(old_gid_t __user *rgid, old_gid_t __user *egid, old_gid_t __user *sgid)
 {
 	const struct cred *cred = current_cred();
 	int retval;
@@ -116,7 +115,7 @@ SYSCALL_DEFINE3(getresgid16, old_gid_t __user *, rgid, old_gid_t __user *, egid,
 	return retval;
 }
 
-SYSCALL_DEFINE1(setfsuid16, old_uid_t, uid)
+asmlinkage long sys_setfsuid16(old_uid_t uid)
 {
 	long ret = sys_setfsuid(low2highuid(uid));
 	/* avoid REGPARM breakage on x86: */
@@ -124,7 +123,7 @@ SYSCALL_DEFINE1(setfsuid16, old_uid_t, uid)
 	return ret;
 }
 
-SYSCALL_DEFINE1(setfsgid16, old_gid_t, gid)
+asmlinkage long sys_setfsgid16(old_gid_t gid)
 {
 	long ret = sys_setfsgid(low2highgid(gid));
 	/* avoid REGPARM breakage on x86: */
@@ -162,7 +161,7 @@ static int groups16_from_user(struct group_info *group_info,
 	return 0;
 }
 
-SYSCALL_DEFINE2(getgroups16, int, gidsetsize, old_gid_t __user *, grouplist)
+asmlinkage long sys_getgroups16(int gidsetsize, old_gid_t __user *grouplist)
 {
 	const struct cred *cred = current_cred();
 	int i;
@@ -185,7 +184,7 @@ out:
 	return i;
 }
 
-SYSCALL_DEFINE2(setgroups16, int, gidsetsize, old_gid_t __user *, grouplist)
+asmlinkage long sys_setgroups16(int gidsetsize, old_gid_t __user *grouplist)
 {
 	struct group_info *group_info;
 	int retval;
@@ -210,22 +209,22 @@ SYSCALL_DEFINE2(setgroups16, int, gidsetsize, old_gid_t __user *, grouplist)
 	return retval;
 }
 
-SYSCALL_DEFINE0(getuid16)
+asmlinkage long sys_getuid16(void)
 {
 	return high2lowuid(current_uid());
 }
 
-SYSCALL_DEFINE0(geteuid16)
+asmlinkage long sys_geteuid16(void)
 {
 	return high2lowuid(current_euid());
 }
 
-SYSCALL_DEFINE0(getgid16)
+asmlinkage long sys_getgid16(void)
 {
 	return high2lowgid(current_gid());
 }
 
-SYSCALL_DEFINE0(getegid16)
+asmlinkage long sys_getegid16(void)
 {
 	return high2lowgid(current_egid());
 }

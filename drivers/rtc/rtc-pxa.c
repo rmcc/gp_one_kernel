@@ -27,8 +27,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 
-#include <mach/hardware.h>
-
 #define TIMER_FREQ		CLOCK_TICK_RATE
 #define RTC_DEF_DIVIDER		(32768 - 1)
 #define RTC_DEF_TRIM		0

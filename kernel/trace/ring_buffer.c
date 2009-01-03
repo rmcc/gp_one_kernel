@@ -168,13 +168,7 @@ rb_event_length(struct ring_buffer_event *event)
  */
 unsigned ring_buffer_event_length(struct ring_buffer_event *event)
 {
-	unsigned length = rb_event_length(event);
-	if (event->type != RINGBUF_TYPE_DATA)
-		return length;
-	length -= RB_EVNT_HDR_SIZE;
-	if (length > RB_MAX_SMALL_DATA + sizeof(event->array[0]))
-                length -= sizeof(event->array[0]);
-	return length;
+	return rb_event_length(event);
 }
 EXPORT_SYMBOL_GPL(ring_buffer_event_length);
 
@@ -246,7 +240,7 @@ static inline int test_time_stamp(u64 delta)
 	return 0;
 }
 
-#define BUF_PAGE_SIZE (PAGE_SIZE - offsetof(struct buffer_data_page, data))
+#define BUF_PAGE_SIZE (PAGE_SIZE - sizeof(struct buffer_data_page))
 
 /*
  * head_page == tail_page && head == tail then buffer is empty.
@@ -1025,8 +1019,12 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 		}
 
 		if (next_page == head_page) {
-			if (!(buffer->flags & RB_FL_OVERWRITE))
+			if (!(buffer->flags & RB_FL_OVERWRITE)) {
+				/* reset write */
+				if (tail <= BUF_PAGE_SIZE)
+					local_set(&tail_page->write, tail);
 				goto out_unlock;
+			}
 
 			/* tail_page has not moved yet? */
 			if (tail_page == cpu_buffer->tail_page) {
@@ -1101,10 +1099,6 @@ __rb_reserve_next(struct ring_buffer_per_cpu *cpu_buffer,
 	return event;
 
  out_unlock:
-	/* reset write */
-	if (tail <= BUF_PAGE_SIZE)
-		local_set(&tail_page->write, tail);
-
 	__raw_spin_unlock(&cpu_buffer->lock);
 	local_irq_restore(flags);
 	return NULL;
@@ -2174,9 +2168,6 @@ rb_reset_cpu(struct ring_buffer_per_cpu *cpu_buffer)
 
 	cpu_buffer->overrun = 0;
 	cpu_buffer->entries = 0;
-
-	cpu_buffer->write_stamp = 0;
-	cpu_buffer->read_stamp = 0;
 }
 
 /**

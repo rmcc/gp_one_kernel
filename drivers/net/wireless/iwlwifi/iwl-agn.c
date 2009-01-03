@@ -1719,10 +1719,6 @@ static int iwl_read_ucode(struct iwl_priv *priv)
 	priv->ucode_data_backup.len = data_size;
 	iwl_alloc_fw_desc(priv->pci_dev, &priv->ucode_data_backup);
 
-	if (!priv->ucode_code.v_addr || !priv->ucode_data.v_addr ||
-	    !priv->ucode_data_backup.v_addr)
-		goto err_pci_alloc;
-
 	/* Initialization instructions and data */
 	if (init_size && init_data_size) {
 		priv->ucode_init.len = init_size;
@@ -2486,7 +2482,7 @@ static int iwl_mac_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
 		dev_kfree_skb_any(skb);
 
 	IWL_DEBUG_MACDUMP("leave\n");
-	return NETDEV_TX_OK;
+	return 0;
 }
 
 static int iwl_mac_add_interface(struct ieee80211_hw *hw,
@@ -4042,7 +4038,6 @@ static int iwl_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 		priv->is_open = 1;
 	}
 
-	pci_save_state(pdev);
 	pci_set_power_state(pdev, PCI_D3hot);
 
 	return 0;
@@ -4053,7 +4048,6 @@ static int iwl_pci_resume(struct pci_dev *pdev)
 	struct iwl_priv *priv = pci_get_drvdata(pdev);
 
 	pci_set_power_state(pdev, PCI_D0);
-	pci_restore_state(pdev);
 
 	if (priv->is_open)
 		iwl_mac_start(priv->hw);

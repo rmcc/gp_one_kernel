@@ -22,7 +22,6 @@
 #include <linux/bootmem.h>
 #include <linux/inotify.h>
 #include <linux/mount.h>
-#include <linux/async.h>
 
 /*
  * This is needed for the following functions:

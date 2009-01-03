@@ -1817,10 +1817,8 @@ got_driver:
 		/* check whether we're reopening an existing tty */
 		tty = tty_driver_lookup_tty(driver, inode, index);
 
-		if (IS_ERR(tty)) {
-			mutex_unlock(&tty_mutex);
+		if (IS_ERR(tty))
 			return PTR_ERR(tty);
-		}
 	}
 
 	if (tty) {

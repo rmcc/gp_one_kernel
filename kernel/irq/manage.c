@@ -15,8 +15,16 @@
 
 #include "internals.h"
 
-#if defined(CONFIG_SMP) && defined(CONFIG_GENERIC_HARDIRQS)
+#ifdef CONFIG_SMP
 cpumask_var_t irq_default_affinity;
+
+static int init_irq_default_affinity(void)
+{
+	alloc_cpumask_var(&irq_default_affinity, GFP_KERNEL);
+	cpumask_setall(irq_default_affinity);
+	return 0;
+}
+core_initcall(init_irq_default_affinity);
 
 /**
  *	synchronize_irq - wait for pending IRQ handlers (on other CPUs)
@@ -109,7 +117,7 @@ int irq_set_affinity(unsigned int irq, const struct cpumask *cpumask)
 /*
  * Generic version of the affinity autoselector.
  */
-static int setup_affinity(unsigned int irq, struct irq_desc *desc)
+int do_irq_select_affinity(unsigned int irq, struct irq_desc *desc)
 {
 	if (!irq_can_set_affinity(irq))
 		return 0;
@@ -133,7 +141,7 @@ set_affinity:
 	return 0;
 }
 #else
-static inline int setup_affinity(unsigned int irq, struct irq_desc *d)
+static inline int do_irq_select_affinity(unsigned int irq, struct irq_desc *d)
 {
 	return irq_select_affinity(irq);
 }
@@ -149,14 +157,14 @@ int irq_select_affinity_usr(unsigned int irq)
 	int ret;
 
 	spin_lock_irqsave(&desc->lock, flags);
-	ret = setup_affinity(irq, desc);
+	ret = do_irq_select_affinity(irq, desc);
 	spin_unlock_irqrestore(&desc->lock, flags);
 
 	return ret;
 }
 
 #else
-static inline int setup_affinity(unsigned int irq, struct irq_desc *desc)
+static inline int do_irq_select_affinity(int irq, struct irq_desc *desc)
 {
 	return 0;
 }
@@ -488,7 +496,7 @@ __setup_irq(unsigned int irq, struct irq_desc * desc, struct irqaction *new)
 			desc->status |= IRQ_NO_BALANCING;
 
 		/* Set default affinity mask once everything is setup */
-		setup_affinity(irq, desc);
+		do_irq_select_affinity(irq, desc);
 
 	} else if ((new->flags & IRQF_TRIGGER_MASK)
 			&& (new->flags & IRQF_TRIGGER_MASK)

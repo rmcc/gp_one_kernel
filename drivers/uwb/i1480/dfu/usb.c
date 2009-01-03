@@ -387,7 +387,7 @@ int i1480_usb_probe(struct usb_interface *iface, const struct usb_device_id *id)
 		goto error_create;
 	}
 
-	/* setup the fops and upload the firmware */
+	/* setup the fops and upload the firmare */
 	i1480->pre_fw_name = "i1480-pre-phy-0.0.bin";
 	i1480->mac_fw_name = "i1480-usb-0.0.bin";
 	i1480->mac_fw_name_deprecate = "ptc-0.0.bin";

@@ -1314,7 +1314,7 @@ int rcu_needs_cpu(int cpu)
  * access due to the fact that this CPU cannot possibly have any RCU
  * callbacks in flight yet.
  */
-static void __cpuinit
+static void
 rcu_init_percpu_data(int cpu, struct rcu_state *rsp)
 {
 	unsigned long flags;

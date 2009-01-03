@@ -694,12 +694,7 @@ static int af9015_read_config(struct usb_device *udev)
 
 	/* IR remote controller */
 	req.addr = AF9015_EEPROM_IR_MODE;
-	/* first message will timeout often due to possible hw bug */
-	for (i = 0; i < 4; i++) {
-		ret = af9015_rw_udev(udev, &req);
-		if (!ret)
-			break;
-	}
+	ret = af9015_rw_udev(udev, &req);
 	if (ret)
 		goto error;
 	deb_info("%s: IR mode:%d\n", __func__, val);
@@ -840,19 +835,18 @@ static int af9015_read_config(struct usb_device *udev)
 	if (!dvb_usb_af9015_dual_mode)
 		af9015_config.dual_mode = 0;
 
-	/* Set adapter0 buffer size according to USB port speed, adapter1 buffer
-	   size can be static because it is enabled only USB2.0 */
+	/* set buffer size according to USB port speed */
 	for (i = 0; i < af9015_properties_count; i++) {
 		/* USB1.1 set smaller buffersize and disable 2nd adapter */
 		if (udev->speed == USB_SPEED_FULL) {
-			af9015_properties[i].adapter[0].stream.u.bulk.buffersize
-				= TS_USB11_MAX_PACKET_SIZE;
+			af9015_properties[i].adapter->stream.u.bulk.buffersize =
+				TS_USB11_MAX_PACKET_SIZE;
 			/* disable 2nd adapter because we don't have
 			   PID-filters */
 			af9015_config.dual_mode = 0;
 		} else {
-			af9015_properties[i].adapter[0].stream.u.bulk.buffersize
-				= TS_USB20_MAX_PACKET_SIZE;
+			af9015_properties[i].adapter->stream.u.bulk.buffersize =
+				TS_USB20_MAX_PACKET_SIZE;
 		}
 	}
 
@@ -1260,12 +1254,6 @@ static struct dvb_usb_device_properties af9015_properties[] = {
 					.type = USB_BULK,
 					.count = 6,
 					.endpoint = 0x85,
-					.u = {
-						.bulk = {
-							.buffersize =
-						TS_USB20_MAX_PACKET_SIZE,
-						}
-					}
 				},
 			}
 		},
@@ -1365,12 +1353,6 @@ static struct dvb_usb_device_properties af9015_properties[] = {
 					.type = USB_BULK,
 					.count = 6,
 					.endpoint = 0x85,
-					.u = {
-						.bulk = {
-							.buffersize =
-						TS_USB20_MAX_PACKET_SIZE,
-						}
-					}
 				},
 			}
 		},

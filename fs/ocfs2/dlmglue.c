@@ -1324,7 +1324,7 @@ again:
 			goto out;
 		}
 
-		mlog(0, "lock %s, successful return from ocfs2_dlm_lock\n",
+		mlog(0, "lock %s, successfull return from ocfs2_dlm_lock\n",
 		     lockres->l_name);
 
 		/* At this point we've gone inside the dlm and need to
@@ -2860,10 +2860,6 @@ static void ocfs2_unlock_ast(void *opaque, int error)
 	case OCFS2_UNLOCK_CANCEL_CONVERT:
 		mlog(0, "Cancel convert success for %s\n", lockres->l_name);
 		lockres->l_action = OCFS2_AST_INVALID;
-		/* Downconvert thread may have requeued this lock, we
-		 * need to wake it. */
-		if (lockres->l_flags & OCFS2_LOCK_BLOCKED)
-			ocfs2_wake_downconvert_thread(ocfs2_get_lockres_osb(lockres));
 		break;
 	case OCFS2_UNLOCK_DROP_LOCK:
 		lockres->l_level = DLM_LOCK_IV;
@@ -2955,7 +2951,7 @@ static int ocfs2_drop_lock(struct ocfs2_super *osb,
 		ocfs2_dlm_dump_lksb(&lockres->l_lksb);
 		BUG();
 	}
-	mlog(0, "lock %s, successful return from ocfs2_dlm_unlock\n",
+	mlog(0, "lock %s, successfull return from ocfs2_dlm_unlock\n",
 	     lockres->l_name);
 
 	ocfs2_wait_on_busy_lock(lockres);

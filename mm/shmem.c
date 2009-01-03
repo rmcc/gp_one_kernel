@@ -928,11 +928,7 @@ found:
 	error = 1;
 	if (!inode)
 		goto out;
-	/*
-	 * Charge page using GFP_KERNEL while we can wait.
-	 * Charged back to the user(not to caller) when swap account is used.
-	 * add_to_page_cache() will be called with GFP_NOWAIT.
-	 */
+	/* Precharge page using GFP_KERNEL while we can wait */
 	error = mem_cgroup_cache_charge(page, current->mm, GFP_KERNEL);
 	if (error)
 		goto out;
@@ -1324,19 +1320,15 @@ repeat:
 		} else {
 			shmem_swp_unmap(entry);
 			spin_unlock(&info->lock);
-			if (error == -ENOMEM) {
-				/* allow reclaim from this memory cgroup */
-				error = mem_cgroup_shrink_usage(swappage,
-								current->mm,
-								gfp);
-				if (error) {
-					unlock_page(swappage);
-					page_cache_release(swappage);
-					goto failed;
-				}
-			}
 			unlock_page(swappage);
 			page_cache_release(swappage);
+			if (error == -ENOMEM) {
+				/* allow reclaim from this memory cgroup */
+				error = mem_cgroup_shrink_usage(current->mm,
+								gfp);
+				if (error)
+					goto failed;
+			}
 			goto repeat;
 		}
 	} else if (sgp == SGP_READ && !filepage) {
@@ -1387,7 +1379,7 @@ repeat:
 
 			/* Precharge page while we can wait, compensate after */
 			error = mem_cgroup_cache_charge(filepage, current->mm,
-					GFP_KERNEL);
+							gfp & ~__GFP_HIGHMEM);
 			if (error) {
 				page_cache_release(filepage);
 				shmem_unacct_blocks(info->flags, 1);
@@ -2628,7 +2620,7 @@ struct file *shmem_file_setup(char *name, loff_t size, unsigned long flags)
 		goto close_file;
 
 #ifdef CONFIG_SHMEM
-	SHMEM_I(inode)->flags = (flags & VM_NORESERVE) ? 0 : VM_ACCOUNT;
+	SHMEM_I(inode)->flags = flags & VM_ACCOUNT;
 #endif
 	d_instantiate(dentry, inode);
 	inode->i_size = size;

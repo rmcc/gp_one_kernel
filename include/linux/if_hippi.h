@@ -22,7 +22,6 @@
 #ifndef _LINUX_IF_HIPPI_H
 #define _LINUX_IF_HIPPI_H
 
-#include <linux/types.h>
 #include <asm/byteorder.h>
 
 /*

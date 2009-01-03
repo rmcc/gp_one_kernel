@@ -371,8 +371,7 @@ static inline struct super_block *quotactl_block(const char __user *special)
  * calls. Maybe we need to add the process quotas etc. in the future,
  * but we probably should use rlimits for that.
  */
-SYSCALL_DEFINE4(quotactl, unsigned int, cmd, const char __user *, special,
-		qid_t, id, void __user *, addr)
+asmlinkage long sys_quotactl(unsigned int cmd, const char __user *special, qid_t id, void __user *addr)
 {
 	uint cmds, type;
 	struct super_block *sb = NULL;

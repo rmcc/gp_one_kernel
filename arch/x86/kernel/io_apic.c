@@ -129,6 +129,7 @@ static struct irq_pin_list *get_one_free_irq_2_pin(int cpu)
 	node = cpu_to_node(cpu);
 
 	pin = kzalloc_node(sizeof(*pin), GFP_ATOMIC, node);
+	printk(KERN_DEBUG "  alloc irq_2_pin on cpu %d node %d\n", cpu, node);
 
 	return pin;
 }
@@ -226,6 +227,7 @@ static struct irq_cfg *get_one_free_irq_cfg(int cpu)
 			cpumask_clear(cfg->old_domain);
 		}
 	}
+	printk(KERN_DEBUG "  alloc irq_cfg on cpu %d node %d\n", cpu, node);
 
 	return cfg;
 }
@@ -2528,15 +2530,14 @@ static void irq_complete_move(struct irq_desc **descp)
 
 	vector = ~get_irq_regs()->orig_ax;
 	me = smp_processor_id();
-
-	if (vector == cfg->vector && cpumask_test_cpu(me, cfg->domain)) {
 #ifdef CONFIG_NUMA_MIGRATE_IRQ_DESC
 		*descp = desc = move_irq_desc(desc, me);
 		/* get the new one */
 		cfg = desc->chip_data;
 #endif
+
+	if (vector == cfg->vector && cpumask_test_cpu(me, cfg->domain))
 		send_cleanup_vector(cfg);
-	}
 }
 #else
 static inline void irq_complete_move(struct irq_desc **descp) {}

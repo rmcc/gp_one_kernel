@@ -120,7 +120,7 @@ static int twl4030_rtc_write_u8(u8 data, u8 reg)
 static unsigned char rtc_irq_bits;
 
 /*
- * Enable 1/second update and/or alarm interrupts.
+ * Enable timer and/or alarm interrupts.
  */
 static int set_rtc_irq_bit(unsigned char bit)
 {
@@ -128,7 +128,6 @@ static int set_rtc_irq_bit(unsigned char bit)
 	int ret;
 
 	val = rtc_irq_bits | bit;
-	val &= ~BIT_RTC_INTERRUPTS_REG_EVERY_M;
 	ret = twl4030_rtc_write_u8(val, REG_RTC_INTERRUPTS_REG);
 	if (ret == 0)
 		rtc_irq_bits = val;
@@ -137,7 +136,7 @@ static int set_rtc_irq_bit(unsigned char bit)
 }
 
 /*
- * Disable update and/or alarm interrupts.
+ * Disable timer and/or alarm interrupts.
  */
 static int mask_rtc_irq_bit(unsigned char bit)
 {
@@ -152,7 +151,7 @@ static int mask_rtc_irq_bit(unsigned char bit)
 	return ret;
 }
 
-static int twl4030_rtc_alarm_irq_enable(struct device *dev, unsigned enabled)
+static inline int twl4030_rtc_alarm_irq_set_state(int enabled)
 {
 	int ret;
 
@@ -164,7 +163,7 @@ static int twl4030_rtc_alarm_irq_enable(struct device *dev, unsigned enabled)
 	return ret;
 }
 
-static int twl4030_rtc_update_irq_enable(struct device *dev, unsigned enabled)
+static inline int twl4030_rtc_irq_set_state(int enabled)
 {
 	int ret;
 
@@ -293,7 +292,7 @@ static int twl4030_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	unsigned char alarm_data[ALL_TIME_REGS + 1];
 	int ret;
 
-	ret = twl4030_rtc_alarm_irq_enable(dev, 0);
+	ret = twl4030_rtc_alarm_irq_set_state(0);
 	if (ret)
 		goto out;
 
@@ -313,10 +312,34 @@ static int twl4030_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	}
 
 	if (alm->enabled)
-		ret = twl4030_rtc_alarm_irq_enable(dev, 1);
+		ret = twl4030_rtc_alarm_irq_set_state(1);
 out:
 	return ret;
 }
+
+#ifdef	CONFIG_RTC_INTF_DEV
+
+static int twl4030_rtc_ioctl(struct device *dev, unsigned int cmd,
+			     unsigned long arg)
+{
+	switch (cmd) {
+	case RTC_AIE_OFF:
+		return twl4030_rtc_alarm_irq_set_state(0);
+	case RTC_AIE_ON:
+		return twl4030_rtc_alarm_irq_set_state(1);
+	case RTC_UIE_OFF:
+		return twl4030_rtc_irq_set_state(0);
+	case RTC_UIE_ON:
+		return twl4030_rtc_irq_set_state(1);
+
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
+
+#else
+#define	twl4030_rtc_ioctl	NULL
+#endif
 
 static irqreturn_t twl4030_rtc_interrupt(int irq, void *rtc)
 {
@@ -377,12 +400,11 @@ out:
 }
 
 static struct rtc_class_ops twl4030_rtc_ops = {
+	.ioctl		= twl4030_rtc_ioctl,
 	.read_time	= twl4030_rtc_read_time,
 	.set_time	= twl4030_rtc_set_time,
 	.read_alarm	= twl4030_rtc_read_alarm,
 	.set_alarm	= twl4030_rtc_set_alarm,
-	.alarm_irq_enable = twl4030_rtc_alarm_irq_enable,
-	.update_irq_enable = twl4030_rtc_update_irq_enable,
 };
 
 /*----------------------------------------------------------------------*/
@@ -400,7 +422,7 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 	rtc = rtc_device_register(pdev->name,
 				  &pdev->dev, &twl4030_rtc_ops, THIS_MODULE);
 	if (IS_ERR(rtc)) {
-		ret = PTR_ERR(rtc);
+		ret = -EINVAL;
 		dev_err(&pdev->dev, "can't register RTC device, err %ld\n",
 			PTR_ERR(rtc));
 		goto out0;
@@ -410,6 +432,7 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, rtc);
 
 	ret = twl4030_rtc_read_u8(&rd_reg, REG_RTC_STATUS_REG);
+
 	if (ret < 0)
 		goto out1;
 
@@ -452,6 +475,7 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 
 	return ret;
 
+
 out2:
 	free_irq(irq, rtc);
 out1:
@@ -482,9 +506,8 @@ static int __devexit twl4030_rtc_remove(struct platform_device *pdev)
 
 static void twl4030_rtc_shutdown(struct platform_device *pdev)
 {
-	/* mask timer interrupts, but leave alarm interrupts on to enable
-	   power-on when alarm is triggered */
-	mask_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_TIMER_M);
+	mask_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_TIMER_M |
+			 BIT_RTC_INTERRUPTS_REG_IT_ALARM_M);
 }
 
 #ifdef CONFIG_PM

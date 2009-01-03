@@ -109,6 +109,7 @@ static struct sysfs_ops dev_sysfs_ops = {
 static void device_release(struct kobject *kobj)
 {
 	struct device *dev = to_dev(kobj);
+	struct device_private *p = dev->p;
 
 	if (dev->release)
 		dev->release(dev);
@@ -120,6 +121,7 @@ static void device_release(struct kobject *kobj)
 		WARN(1, KERN_ERR "Device '%s' does not have a release() "
 			"function, it is broken and must be fixed.\n",
 			dev_name(dev));
+	kfree(p);
 }
 
 static struct kobj_type device_ktype = {
@@ -507,14 +509,16 @@ EXPORT_SYMBOL_GPL(device_schedule_callback_owner);
 
 static void klist_children_get(struct klist_node *n)
 {
-	struct device *dev = container_of(n, struct device, knode_parent);
+	struct device_private *p = to_device_private_parent(n);
+	struct device *dev = p->device;
 
 	get_device(dev);
 }
 
 static void klist_children_put(struct klist_node *n)
 {
-	struct device *dev = container_of(n, struct device, knode_parent);
+	struct device_private *p = to_device_private_parent(n);
+	struct device *dev = p->device;
 
 	put_device(dev);
 }
@@ -536,9 +540,15 @@ static void klist_children_put(struct klist_node *n)
  */
 void device_initialize(struct device *dev)
 {
+	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
+	if (!dev->p) {
+		WARN_ON(1);
+		return;
+	}
+	dev->p->device = dev;
 	dev->kobj.kset = devices_kset;
 	kobject_init(&dev->kobj, &device_ktype);
-	klist_init(&dev->klist_children, klist_children_get,
+	klist_init(&dev->p->klist_children, klist_children_get,
 		   klist_children_put);
 	INIT_LIST_HEAD(&dev->dma_pools);
 	init_MUTEX(&dev->sem);
@@ -777,16 +787,10 @@ static void device_remove_class_symlinks(struct device *dev)
 int dev_set_name(struct device *dev, const char *fmt, ...)
 {
 	va_list vargs;
-	char *s;
 
 	va_start(vargs, fmt);
 	vsnprintf(dev->bus_id, sizeof(dev->bus_id), fmt, vargs);
 	va_end(vargs);
-
-	/* ewww... some of these buggers have / in the name... */
-	while ((s = strchr(dev->bus_id, '/')))
-		*s = '!';
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dev_set_name);
@@ -928,7 +932,8 @@ int device_add(struct device *dev)
 	kobject_uevent(&dev->kobj, KOBJ_ADD);
 	bus_attach_device(dev);
 	if (parent)
-		klist_add_tail(&dev->knode_parent, &parent->klist_children);
+		klist_add_tail(&dev->p->knode_parent,
+			       &parent->p->klist_children);
 
 	if (dev->class) {
 		mutex_lock(&dev->class->p->class_mutex);
@@ -1042,7 +1047,7 @@ void device_del(struct device *dev)
 	device_pm_remove(dev);
 	dpm_sysfs_remove(dev);
 	if (parent)
-		klist_del(&dev->knode_parent);
+		klist_del(&dev->p->knode_parent);
 	if (MAJOR(dev->devt)) {
 		device_remove_sys_dev_entry(dev);
 		device_remove_file(dev, &devt_attr);
@@ -1103,7 +1108,14 @@ void device_unregister(struct device *dev)
 static struct device *next_device(struct klist_iter *i)
 {
 	struct klist_node *n = klist_next(i);
-	return n ? container_of(n, struct device, knode_parent) : NULL;
+	struct device *dev = NULL;
+	struct device_private *p;
+
+	if (n) {
+		p = to_device_private_parent(n);
+		dev = p->device;
+	}
+	return dev;
 }
 
 /**
@@ -1125,7 +1137,7 @@ int device_for_each_child(struct device *parent, void *data,
 	struct device *child;
 	int error = 0;
 
-	klist_iter_init(&parent->klist_children, &i);
+	klist_iter_init(&parent->p->klist_children, &i);
 	while ((child = next_device(&i)) && !error)
 		error = fn(child, data);
 	klist_iter_exit(&i);
@@ -1156,7 +1168,7 @@ struct device *device_find_child(struct device *parent, void *data,
 	if (!parent)
 		return NULL;
 
-	klist_iter_init(&parent->klist_children, &i);
+	klist_iter_init(&parent->p->klist_children, &i);
 	while ((child = next_device(&i)))
 		if (match(child, data) && get_device(child))
 			break;
@@ -1280,7 +1292,7 @@ EXPORT_SYMBOL_GPL(__root_device_register);
 
 /**
  * root_device_unregister - unregister and free a root device
- * @dev: device going away
+ * @root: device going away.
  *
  * This function unregisters and cleans up a device that was created by
  * root_device_register().
@@ -1570,9 +1582,10 @@ int device_move(struct device *dev, struct device *new_parent)
 	old_parent = dev->parent;
 	dev->parent = new_parent;
 	if (old_parent)
-		klist_remove(&dev->knode_parent);
+		klist_remove(&dev->p->knode_parent);
 	if (new_parent) {
-		klist_add_tail(&dev->knode_parent, &new_parent->klist_children);
+		klist_add_tail(&dev->p->knode_parent,
+			       &new_parent->p->klist_children);
 		set_dev_node(dev, dev_to_node(new_parent));
 	}
 
@@ -1584,11 +1597,11 @@ int device_move(struct device *dev, struct device *new_parent)
 		device_move_class_links(dev, new_parent, old_parent);
 		if (!kobject_move(&dev->kobj, &old_parent->kobj)) {
 			if (new_parent)
-				klist_remove(&dev->knode_parent);
+				klist_remove(&dev->p->knode_parent);
 			dev->parent = old_parent;
 			if (old_parent) {
-				klist_add_tail(&dev->knode_parent,
-					       &old_parent->klist_children);
+				klist_add_tail(&dev->p->knode_parent,
+					       &old_parent->p->klist_children);
 				set_dev_node(dev, dev_to_node(old_parent));
 			}
 		}

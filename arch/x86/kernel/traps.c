@@ -63,6 +63,9 @@
 #else
 #include <asm/processor-flags.h>
 #include <asm/arch_hooks.h>
+#include <asm/nmi.h>
+#include <asm/smp.h>
+#include <asm/io.h>
 #include <asm/traps.h>
 
 #include "cpu/mcheck/mce.h"

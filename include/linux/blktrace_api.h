@@ -1,7 +1,6 @@
 #ifndef BLKTRACE_H
 #define BLKTRACE_H
 
-#include <linux/types.h>
 #ifdef __KERNEL__
 #include <linux/blkdev.h>
 #include <linux/relay.h>

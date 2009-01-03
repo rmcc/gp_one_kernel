@@ -100,7 +100,7 @@ int do_getitimer(int which, struct itimerval *value)
 	return 0;
 }
 
-SYSCALL_DEFINE2(getitimer, int, which, struct itimerval __user *, value)
+asmlinkage long sys_getitimer(int which, struct itimerval __user *value)
 {
 	int error = -EFAULT;
 	struct itimerval get_buffer;
@@ -260,8 +260,9 @@ unsigned int alarm_setitimer(unsigned int seconds)
 	return it_old.it_value.tv_sec;
 }
 
-SYSCALL_DEFINE3(setitimer, int, which, struct itimerval __user *, value,
-		struct itimerval __user *, ovalue)
+asmlinkage long sys_setitimer(int which,
+			      struct itimerval __user *value,
+			      struct itimerval __user *ovalue)
 {
 	struct itimerval set_buffer, get_buffer;
 	int error;

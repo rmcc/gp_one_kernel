@@ -63,7 +63,13 @@
  *
  * Where A = pin 1, B = pin 2 and so on and pin=0 = default = A.
  * Thus, each swizzle is ((pin-1) + (device#-4)) % 4
+ *
+ * The following code swizzles for exactly one bridge.  
  */
+static inline int bridge_swizzle(int pin, unsigned int slot) 
+{
+	return (pin + slot) & 3;
+}
 
 /*
  * This routine handles multiple bridges.
@@ -75,14 +81,15 @@ static u8 __init integrator_swizzle(struct pci_dev *dev, u8 *pinp)
 	if (pin == 0)
 		pin = 1;
 
+	pin -= 1;
 	while (dev->bus->self) {
-		pin = pci_swizzle_interrupt_pin(dev, pin);
+		pin = bridge_swizzle(pin, PCI_SLOT(dev->devfn));
 		/*
 		 * move up the chain of bridges, swizzling as we go.
 		 */
 		dev = dev->bus->self;
 	}
-	*pinp = pin;
+	*pinp = pin + 1;
 
 	return PCI_SLOT(dev->devfn);
 }

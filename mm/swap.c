@@ -151,26 +151,6 @@ void  rotate_reclaimable_page(struct page *page)
 	}
 }
 
-static void update_page_reclaim_stat(struct zone *zone, struct page *page,
-				     int file, int rotated)
-{
-	struct zone_reclaim_stat *reclaim_stat = &zone->reclaim_stat;
-	struct zone_reclaim_stat *memcg_reclaim_stat;
-
-	memcg_reclaim_stat = mem_cgroup_get_reclaim_stat_from_page(page);
-
-	reclaim_stat->recent_scanned[file]++;
-	if (rotated)
-		reclaim_stat->recent_rotated[file]++;
-
-	if (!memcg_reclaim_stat)
-		return;
-
-	memcg_reclaim_stat->recent_scanned[file]++;
-	if (rotated)
-		memcg_reclaim_stat->recent_rotated[file]++;
-}
-
 /*
  * FIXME: speed this up?
  */
@@ -188,8 +168,10 @@ void activate_page(struct page *page)
 		lru += LRU_ACTIVE;
 		add_page_to_lru_list(zone, page, lru);
 		__count_vm_event(PGACTIVATE);
+		mem_cgroup_move_lists(page, lru);
 
-		update_page_reclaim_stat(zone, page, !!file, 1);
+		zone->recent_rotated[!!file]++;
+		zone->recent_scanned[!!file]++;
 	}
 	spin_unlock_irq(&zone->lru_lock);
 }
@@ -404,14 +386,12 @@ void ____pagevec_lru_add(struct pagevec *pvec, enum lru_list lru)
 {
 	int i;
 	struct zone *zone = NULL;
-
 	VM_BUG_ON(is_unevictable_lru(lru));
 
 	for (i = 0; i < pagevec_count(pvec); i++) {
 		struct page *page = pvec->pages[i];
 		struct zone *pagezone = page_zone(page);
 		int file;
-		int active;
 
 		if (pagezone != zone) {
 			if (zone)
@@ -423,11 +403,12 @@ void ____pagevec_lru_add(struct pagevec *pvec, enum lru_list lru)
 		VM_BUG_ON(PageUnevictable(page));
 		VM_BUG_ON(PageLRU(page));
 		SetPageLRU(page);
-		active = is_active_lru(lru);
 		file = is_file_lru(lru);
-		if (active)
+		zone->recent_scanned[file]++;
+		if (is_active_lru(lru)) {
 			SetPageActive(page);
-		update_page_reclaim_stat(zone, page, file, active);
+			zone->recent_rotated[file]++;
+		}
 		add_page_to_lru_list(zone, page, lru);
 	}
 	if (zone)

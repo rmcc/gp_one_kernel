@@ -32,7 +32,7 @@
 
 /* These are global because they are accessed in tty_io.c */
 #ifdef CONFIG_UNIX98_PTYS
-static struct tty_driver *ptm_driver;
+struct tty_driver *ptm_driver;
 static struct tty_driver *pts_driver;
 #endif
 
@@ -230,7 +230,9 @@ static void pty_set_termios(struct tty_struct *tty,
 /**
  *	pty_do_resize		-	resize event
  *	@tty: tty being resized
- *	@ws: window size being set.
+ *	@real_tty: real tty (not the same as tty if using a pty/tty pair)
+ *	@rows: rows (character)
+ *	@cols: cols (character)
  *
  *	Update the termios variables and send the neccessary signals to
  *	peform a terminal resize correctly

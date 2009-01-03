@@ -876,7 +876,7 @@ static tEplKernel EplSdoAsySeqProcess(unsigned int uiHandle_p,
 				{
 /*
                     PRINTF3("%s scon=%u rcon=%u\n",
-                            __func__,
+                            __FUNCTION__,
                             pRecFrame_p->m_le_bSendSeqNumCon,
                             pRecFrame_p->m_le_bRecSeqNumCon);
 */

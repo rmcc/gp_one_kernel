@@ -18,7 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/hrtimer.h>
 #include <linux/err.h>
-#include <linux/gpio.h>
+#include <asm/arch/gpio.h>
 
 #include "timed_gpio.h"
 
@@ -49,8 +49,7 @@ static ssize_t gpio_enable_show(struct device *dev, struct device_attribute *att
 
 	if (hrtimer_active(&gpio_data->timer)) {
 		ktime_t r = hrtimer_get_remaining(&gpio_data->timer);
-		struct timeval t = ktime_to_timeval(r);
-		remaining = t.tv_sec * 1000 + t.tv_usec;
+		remaining = r.tv.sec * 1000 + r.tv.nsec / 1000000;
 	} else
 		remaining = 0;
 

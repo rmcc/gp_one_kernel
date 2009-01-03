@@ -70,21 +70,16 @@ STATIC void	xlog_recover_check_summary(xlog_t *);
 xfs_buf_t *
 xlog_get_bp(
 	xlog_t		*log,
-	int		nbblks)
+	int		num_bblks)
 {
-	if (nbblks <= 0 || nbblks > log->l_logBBsize) {
-		xlog_warn("XFS: Invalid block length (0x%x) given for buffer", nbblks);
-		XFS_ERROR_REPORT("xlog_get_bp(1)",
-				 XFS_ERRLEVEL_HIGH, log->l_mp);
-		return NULL;
-	}
+	ASSERT(num_bblks > 0);
 
 	if (log->l_sectbb_log) {
-		if (nbblks > 1)
-			nbblks += XLOG_SECTOR_ROUNDUP_BBCOUNT(log, 1);
-		nbblks = XLOG_SECTOR_ROUNDUP_BBCOUNT(log, nbblks);
+		if (num_bblks > 1)
+			num_bblks += XLOG_SECTOR_ROUNDUP_BBCOUNT(log, 1);
+		num_bblks = XLOG_SECTOR_ROUNDUP_BBCOUNT(log, num_bblks);
 	}
-	return xfs_buf_get_noaddr(BBTOB(nbblks), log->l_mp->m_logdev_targp);
+	return xfs_buf_get_noaddr(BBTOB(num_bblks), log->l_mp->m_logdev_targp);
 }
 
 void
@@ -106,13 +101,6 @@ xlog_bread(
 	xfs_buf_t	*bp)
 {
 	int		error;
-
-	if (nbblks <= 0 || nbblks > log->l_logBBsize) {
-		xlog_warn("XFS: Invalid block length (0x%x) given for buffer", nbblks);
-		XFS_ERROR_REPORT("xlog_bread(1)",
-				 XFS_ERRLEVEL_HIGH, log->l_mp);
-		return EFSCORRUPTED;
-	}
 
 	if (log->l_sectbb_log) {
 		blk_no = XLOG_SECTOR_ROUNDDOWN_BLKNO(log, blk_no);
@@ -150,13 +138,6 @@ xlog_bwrite(
 	xfs_buf_t	*bp)
 {
 	int		error;
-
-	if (nbblks <= 0 || nbblks > log->l_logBBsize) {
-		xlog_warn("XFS: Invalid block length (0x%x) given for buffer", nbblks);
-		XFS_ERROR_REPORT("xlog_bwrite(1)",
-				 XFS_ERRLEVEL_HIGH, log->l_mp);
-		return EFSCORRUPTED;
-	}
 
 	if (log->l_sectbb_log) {
 		blk_no = XLOG_SECTOR_ROUNDDOWN_BLKNO(log, blk_no);
