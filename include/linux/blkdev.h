@@ -690,8 +690,6 @@ struct rq_map_data {
 	struct page **pages;
 	int page_order;
 	int nr_entries;
-	unsigned long offset;
-	int null_mapped;
 };
 
 struct req_iterator {

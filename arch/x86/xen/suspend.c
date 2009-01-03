@@ -35,8 +35,7 @@ void xen_post_suspend(int suspend_cancelled)
 			pfn_to_mfn(xen_start_info->console.domU.mfn);
 	} else {
 #ifdef CONFIG_SMP
-		BUG_ON(xen_cpu_initialized_map == NULL);
-		cpumask_copy(xen_cpu_initialized_map, cpu_online_mask);
+		xen_cpu_initialized_map = cpu_online_map;
 #endif
 		xen_vcpu_restore();
 	}

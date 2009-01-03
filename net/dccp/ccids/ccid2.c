@@ -768,9 +768,10 @@ static void ccid2_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
 	}
 }
 
-struct ccid_operations ccid2_ops = {
+static struct ccid_operations ccid2 = {
 	.ccid_id		= DCCPC_CCID2,
 	.ccid_name		= "TCP-like",
+	.ccid_owner		= THIS_MODULE,
 	.ccid_hc_tx_obj_size	= sizeof(struct ccid2_hc_tx_sock),
 	.ccid_hc_tx_init	= ccid2_hc_tx_init,
 	.ccid_hc_tx_exit	= ccid2_hc_tx_exit,
@@ -783,5 +784,22 @@ struct ccid_operations ccid2_ops = {
 
 #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
 module_param(ccid2_debug, bool, 0644);
-MODULE_PARM_DESC(ccid2_debug, "Enable CCID-2 debug messages");
+MODULE_PARM_DESC(ccid2_debug, "Enable debug messages");
 #endif
+
+static __init int ccid2_module_init(void)
+{
+	return ccid_register(&ccid2);
+}
+module_init(ccid2_module_init);
+
+static __exit void ccid2_module_exit(void)
+{
+	ccid_unregister(&ccid2);
+}
+module_exit(ccid2_module_exit);
+
+MODULE_AUTHOR("Andrea Bittau <a.bittau@cs.ucl.ac.uk>");
+MODULE_DESCRIPTION("DCCP TCP-Like (CCID2) CCID");
+MODULE_LICENSE("GPL");
+MODULE_ALIAS("net-dccp-ccid-2");

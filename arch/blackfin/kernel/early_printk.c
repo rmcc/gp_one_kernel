@@ -105,10 +105,10 @@ static struct console * __init earlyserial_init(char *buf)
 		cflag |= CS5;
 		break;
 	case 6:
-		cflag |= CS6;
+		cflag |= CS5;
 		break;
 	case 7:
-		cflag |= CS7;
+		cflag |= CS5;
 		break;
 	default:
 		cflag |= CS8;

@@ -24,7 +24,6 @@
 #include <linux/migrate.h>
 #include <linux/posix-timers.h>
 #include <linux/times.h>
-#include <linux/ptrace.h>
 
 #include <asm/uaccess.h>
 
@@ -230,7 +229,6 @@ asmlinkage long compat_sys_times(struct compat_tms __user *tbuf)
 		if (copy_to_user(tbuf, &tmp, sizeof(tmp)))
 			return -EFAULT;
 	}
-	force_successful_syscall_return();
 	return compat_jiffies_to_clock_t(jiffies);
 }
 
@@ -456,16 +454,16 @@ asmlinkage long compat_sys_waitid(int which, compat_pid_t pid,
 }
 
 static int compat_get_user_cpu_mask(compat_ulong_t __user *user_mask_ptr,
-				    unsigned len, struct cpumask *new_mask)
+				    unsigned len, cpumask_t *new_mask)
 {
 	unsigned long *k;
 
-	if (len < cpumask_size())
-		memset(new_mask, 0, cpumask_size());
-	else if (len > cpumask_size())
-		len = cpumask_size();
+	if (len < sizeof(cpumask_t))
+		memset(new_mask, 0, sizeof(cpumask_t));
+	else if (len > sizeof(cpumask_t))
+		len = sizeof(cpumask_t);
 
-	k = cpumask_bits(new_mask);
+	k = cpus_addr(*new_mask);
 	return compat_get_bitmap(k, user_mask_ptr, len * 8);
 }
 
@@ -473,51 +471,40 @@ asmlinkage long compat_sys_sched_setaffinity(compat_pid_t pid,
 					     unsigned int len,
 					     compat_ulong_t __user *user_mask_ptr)
 {
-	cpumask_var_t new_mask;
+	cpumask_t new_mask;
 	int retval;
 
-	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	retval = compat_get_user_cpu_mask(user_mask_ptr, len, new_mask);
+	retval = compat_get_user_cpu_mask(user_mask_ptr, len, &new_mask);
 	if (retval)
-		goto out;
+		return retval;
 
-	retval = sched_setaffinity(pid, new_mask);
-out:
-	free_cpumask_var(new_mask);
-	return retval;
+	return sched_setaffinity(pid, &new_mask);
 }
 
 asmlinkage long compat_sys_sched_getaffinity(compat_pid_t pid, unsigned int len,
 					     compat_ulong_t __user *user_mask_ptr)
 {
 	int ret;
-	cpumask_var_t mask;
+	cpumask_t mask;
 	unsigned long *k;
-	unsigned int min_length = cpumask_size();
+	unsigned int min_length = sizeof(cpumask_t);
 
-	if (nr_cpu_ids <= BITS_PER_COMPAT_LONG)
+	if (NR_CPUS <= BITS_PER_COMPAT_LONG)
 		min_length = sizeof(compat_ulong_t);
 
 	if (len < min_length)
 		return -EINVAL;
 
-	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	ret = sched_getaffinity(pid, mask);
+	ret = sched_getaffinity(pid, &mask);
 	if (ret < 0)
-		goto out;
+		return ret;
 
-	k = cpumask_bits(mask);
+	k = cpus_addr(mask);
 	ret = compat_put_bitmap(user_mask_ptr, k, min_length * 8);
-	if (ret == 0)
-		ret = min_length;
+	if (ret)
+		return ret;
 
-out:
-	free_cpumask_var(mask);
-	return ret;
+	return min_length;
 }
 
 int get_compat_itimerspec(struct itimerspec *dst,
@@ -896,9 +883,8 @@ asmlinkage long compat_sys_time(compat_time_t __user * tloc)
 
 	if (tloc) {
 		if (put_user(i,tloc))
-			return -EFAULT;
+			i = -EFAULT;
 	}
-	force_successful_syscall_return();
 	return i;
 }
 

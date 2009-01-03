@@ -588,14 +588,11 @@ int acpi_processor_preregister_performance(
 	int count, count_target;
 	int retval = 0;
 	unsigned int i, j;
-	cpumask_var_t covered_cpus;
+	cpumask_t covered_cpus;
 	struct acpi_processor *pr;
 	struct acpi_psd_package *pdomain;
 	struct acpi_processor *match_pr;
 	struct acpi_psd_package *match_pdomain;
-
-	if (!alloc_cpumask_var(&covered_cpus, GFP_KERNEL))
-		return -ENOMEM;
 
 	mutex_lock(&performance_mutex);
 
@@ -620,7 +617,7 @@ int acpi_processor_preregister_performance(
 		}
 
 		pr->performance = percpu_ptr(performance, i);
-		cpumask_set_cpu(i, pr->performance->shared_cpu_map);
+		cpu_set(i, pr->performance->shared_cpu_map);
 		if (acpi_processor_get_psd(pr)) {
 			retval = -EINVAL;
 			continue;
@@ -653,18 +650,18 @@ int acpi_processor_preregister_performance(
 		}
 	}
 
-	cpumask_clear(covered_cpus);
+	cpus_clear(covered_cpus);
 	for_each_possible_cpu(i) {
 		pr = per_cpu(processors, i);
 		if (!pr)
 			continue;
 
-		if (cpumask_test_cpu(i, covered_cpus))
+		if (cpu_isset(i, covered_cpus))
 			continue;
 
 		pdomain = &(pr->performance->domain_info);
-		cpumask_set_cpu(i, pr->performance->shared_cpu_map);
-		cpumask_set_cpu(i, covered_cpus);
+		cpu_set(i, pr->performance->shared_cpu_map);
+		cpu_set(i, covered_cpus);
 		if (pdomain->num_processors <= 1)
 			continue;
 
@@ -702,8 +699,8 @@ int acpi_processor_preregister_performance(
 				goto err_ret;
 			}
 
-			cpumask_set_cpu(j, covered_cpus);
-			cpumask_set_cpu(j, pr->performance->shared_cpu_map);
+			cpu_set(j, covered_cpus);
+			cpu_set(j, pr->performance->shared_cpu_map);
 			count++;
 		}
 
@@ -721,8 +718,8 @@ int acpi_processor_preregister_performance(
 
 			match_pr->performance->shared_type = 
 					pr->performance->shared_type;
-			cpumask_copy(match_pr->performance->shared_cpu_map,
-				     pr->performance->shared_cpu_map);
+			match_pr->performance->shared_cpu_map =
+				pr->performance->shared_cpu_map;
 		}
 	}
 
@@ -734,15 +731,14 @@ err_ret:
 
 		/* Assume no coordination on any error parsing domain info */
 		if (retval) {
-			cpumask_clear(pr->performance->shared_cpu_map);
-			cpumask_set_cpu(i, pr->performance->shared_cpu_map);
+			cpus_clear(pr->performance->shared_cpu_map);
+			cpu_set(i, pr->performance->shared_cpu_map);
 			pr->performance->shared_type = CPUFREQ_SHARED_TYPE_ALL;
 		}
 		pr->performance = NULL; /* Will be set for real in register */
 	}
 
 	mutex_unlock(&performance_mutex);
-	free_cpumask_var(covered_cpus);
 	return retval;
 }
 EXPORT_SYMBOL(acpi_processor_preregister_performance);

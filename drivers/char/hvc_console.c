@@ -318,6 +318,7 @@ static int hvc_open(struct tty_struct *tty, struct file * filp)
 	} /* else count == 0 */
 
 	tty->driver_data = hp;
+	tty->low_latency = 1; /* Makes flushes to ldisc synchronous. */
 
 	hp->tty = tty;
 
@@ -528,7 +529,7 @@ static void hvc_set_winsz(struct work_struct *work)
 	tty = tty_kref_get(hp->tty);
 	spin_unlock_irqrestore(&hp->lock, hvc_flags);
 
-	tty_do_resize(tty, &ws);
+	tty_do_resize(tty, tty, &ws);
 	tty_kref_put(tty);
 }
 
@@ -763,10 +764,12 @@ struct hvc_struct __devinit *hvc_alloc(uint32_t vtermno, int data,
 			return ERR_PTR(err);
 	}
 
-	hp = kzalloc(ALIGN(sizeof(*hp), sizeof(long)) + outbuf_size,
+	hp = kmalloc(ALIGN(sizeof(*hp), sizeof(long)) + outbuf_size,
 			GFP_KERNEL);
 	if (!hp)
 		return ERR_PTR(-ENOMEM);
+
+	memset(hp, 0x00, sizeof(*hp));
 
 	hp->vtermno = vtermno;
 	hp->data = data;
@@ -873,11 +876,8 @@ static int hvc_init(void)
 		goto stop_thread;
 	}
 
-	/*
-	 * Make sure tty is fully registered before allowing it to be
-	 * found by hvc_console_device.
-	 */
-	smp_mb();
+	/* FIXME: This mb() seems completely random.  Remove it. */
+	mb();
 	hvc_driver = drv;
 	return 0;
 

@@ -257,6 +257,9 @@ struct dmfe_board_info {
 	u8 wol_mode;			/* user WOL settings */
 	struct timer_list timer;
 
+	/* System defined statistic counter */
+	struct net_device_stats stats;
+
 	/* Driver defined statistic counter */
 	unsigned long tx_fifo_underrun;
 	unsigned long tx_loss_carrier;
@@ -313,6 +316,7 @@ static u8 SF_mode;		/* Special Function: 1:VLAN, 2:RX Flow Control
 static int dmfe_open(struct DEVICE *);
 static int dmfe_start_xmit(struct sk_buff *, struct DEVICE *);
 static int dmfe_stop(struct DEVICE *);
+static struct net_device_stats * dmfe_get_stats(struct DEVICE *);
 static void dmfe_set_filter_mode(struct DEVICE *);
 static const struct ethtool_ops netdev_ethtool_ops;
 static u16 read_srom_word(long ,int);
@@ -346,19 +350,6 @@ static void dmfe_HPNA_remote_cmd_chk(struct dmfe_board_info * );
 static void dmfe_set_phyxcer(struct dmfe_board_info *);
 
 /* DM910X network board routine ---------------------------- */
-
-static const struct net_device_ops netdev_ops = {
-	.ndo_open 		= dmfe_open,
-	.ndo_stop		= dmfe_stop,
-	.ndo_start_xmit		= dmfe_start_xmit,
-	.ndo_set_multicast_list = dmfe_set_filter_mode,
-	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_set_mac_address	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller	= poll_dmfe,
-#endif
-};
 
 /*
  *	Search DM910X board ,allocate space and register it
@@ -451,7 +442,14 @@ static int __devinit dmfe_init_one (struct pci_dev *pdev,
 	dev->base_addr = db->ioaddr;
 	dev->irq = pdev->irq;
 	pci_set_drvdata(pdev, dev);
-	dev->netdev_ops = &netdev_ops;
+	dev->open = &dmfe_open;
+	dev->hard_start_xmit = &dmfe_start_xmit;
+	dev->stop = &dmfe_stop;
+	dev->get_stats = &dmfe_get_stats;
+	dev->set_multicast_list = &dmfe_set_filter_mode;
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = &poll_dmfe;
+#endif
 	dev->ethtool_ops = &netdev_ethtool_ops;
 	netif_carrier_off(dev);
 	spin_lock_init(&db->lock);
@@ -869,15 +867,15 @@ static void dmfe_free_tx_pkt(struct DEVICE *dev, struct dmfe_board_info * db)
 
 		/* A packet sent completed */
 		db->tx_packet_cnt--;
-		dev->stats.tx_packets++;
+		db->stats.tx_packets++;
 
 		/* Transmit statistic counter */
 		if ( tdes0 != 0x7fffffff ) {
 			/* printk(DRV_NAME ": tdes0=%x\n", tdes0); */
-			dev->stats.collisions += (tdes0 >> 3) & 0xf;
-			dev->stats.tx_bytes += le32_to_cpu(txptr->tdes1) & 0x7ff;
+			db->stats.collisions += (tdes0 >> 3) & 0xf;
+			db->stats.tx_bytes += le32_to_cpu(txptr->tdes1) & 0x7ff;
 			if (tdes0 & TDES0_ERR_MASK) {
-				dev->stats.tx_errors++;
+				db->stats.tx_errors++;
 
 				if (tdes0 & 0x0002) {	/* UnderRun */
 					db->tx_fifo_underrun++;
@@ -971,13 +969,13 @@ static void dmfe_rx_packet(struct DEVICE *dev, struct dmfe_board_info * db)
 			if (rdes0 & 0x8000) {
 				/* This is a error packet */
 				//printk(DRV_NAME ": rdes0: %lx\n", rdes0);
-				dev->stats.rx_errors++;
+				db->stats.rx_errors++;
 				if (rdes0 & 1)
-					dev->stats.rx_fifo_errors++;
+					db->stats.rx_fifo_errors++;
 				if (rdes0 & 2)
-					dev->stats.rx_crc_errors++;
+					db->stats.rx_crc_errors++;
 				if (rdes0 & 0x80)
-					dev->stats.rx_length_errors++;
+					db->stats.rx_length_errors++;
 			}
 
 			if ( !(rdes0 & 0x8000) ||
@@ -1010,8 +1008,8 @@ static void dmfe_rx_packet(struct DEVICE *dev, struct dmfe_board_info * db)
 
 					skb->protocol = eth_type_trans(skb, dev);
 					netif_rx(skb);
-					dev->stats.rx_packets++;
-					dev->stats.rx_bytes += rxlen;
+					db->stats.rx_packets++;
+					db->stats.rx_bytes += rxlen;
 				}
 			} else {
 				/* Reuse SKB buffer when the packet is error */
@@ -1025,6 +1023,20 @@ static void dmfe_rx_packet(struct DEVICE *dev, struct dmfe_board_info * db)
 
 	db->rx_ready_ptr = rxptr;
 }
+
+
+/*
+ *	Get statistics from driver.
+ */
+
+static struct net_device_stats * dmfe_get_stats(struct DEVICE *dev)
+{
+	struct dmfe_board_info *db = netdev_priv(dev);
+
+	DMFE_DBUG(0, "dmfe_get_stats", 0);
+	return &db->stats;
+}
+
 
 /*
  * Set DM910X multicast address
@@ -1149,7 +1161,7 @@ static void dmfe_timer(unsigned long data)
 
 	/* Operating Mode Check */
 	if ( (db->dm910x_chk_mode & 0x1) &&
-		(dev->stats.rx_packets > MAX_CHECK_PACKET) )
+		(db->stats.rx_packets > MAX_CHECK_PACKET) )
 		db->dm910x_chk_mode = 0x4;
 
 	/* Dynamic reset DM910X : system error or transmit time-out */

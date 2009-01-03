@@ -1084,7 +1084,7 @@ dev_t blk_lookup_devt(const char *name, int partno)
 		struct gendisk *disk = dev_to_disk(dev);
 		struct hd_struct *part;
 
-		if (strcmp(dev_name(dev), name))
+		if (strcmp(dev->bus_id, name))
 			continue;
 
 		part = disk_get_part(disk, partno);

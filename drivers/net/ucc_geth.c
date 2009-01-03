@@ -442,30 +442,40 @@ static void magic_packet_detection_enable(struct ucc_geth_private *ugeth)
 {
 	struct ucc_fast_private *uccf;
 	struct ucc_geth __iomem *ug_regs;
+	u32 maccfg2, uccm;
 
 	uccf = ugeth->uccf;
 	ug_regs = ugeth->ug_regs;
 
 	/* Enable interrupts for magic packet detection */
-	setbits32(uccf->p_uccm, UCC_GETH_UCCE_MPD);
+	uccm = in_be32(uccf->p_uccm);
+	uccm |= UCCE_MPD;
+	out_be32(uccf->p_uccm, uccm);
 
 	/* Enable magic packet detection */
-	setbits32(&ug_regs->maccfg2, MACCFG2_MPE);
+	maccfg2 = in_be32(&ug_regs->maccfg2);
+	maccfg2 |= MACCFG2_MPE;
+	out_be32(&ug_regs->maccfg2, maccfg2);
 }
 
 static void magic_packet_detection_disable(struct ucc_geth_private *ugeth)
 {
 	struct ucc_fast_private *uccf;
 	struct ucc_geth __iomem *ug_regs;
+	u32 maccfg2, uccm;
 
 	uccf = ugeth->uccf;
 	ug_regs = ugeth->ug_regs;
 
 	/* Disable interrupts for magic packet detection */
-	clrbits32(uccf->p_uccm, UCC_GETH_UCCE_MPD);
+	uccm = in_be32(uccf->p_uccm);
+	uccm &= ~UCCE_MPD;
+	out_be32(uccf->p_uccm, uccm);
 
 	/* Disable magic packet detection */
-	clrbits32(&ug_regs->maccfg2, MACCFG2_MPE);
+	maccfg2 = in_be32(&ug_regs->maccfg2);
+	maccfg2 &= ~MACCFG2_MPE;
+	out_be32(&ug_regs->maccfg2, maccfg2);
 }
 #endif /* MAGIC_PACKET */
 
@@ -575,8 +585,7 @@ static void get_statistics(struct ucc_geth_private *ugeth,
 
 	/* Hardware only if user handed pointer and driver actually
 	gathers hardware statistics */
-	if (hardware_statistics &&
-	    (in_be32(&uf_regs->upsmr) & UCC_GETH_UPSMR_HSE)) {
+	if (hardware_statistics && (in_be32(&uf_regs->upsmr) & UPSMR_HSE)) {
 		hardware_statistics->tx64 = in_be32(&ug_regs->tx64);
 		hardware_statistics->tx127 = in_be32(&ug_regs->tx127);
 		hardware_statistics->tx255 = in_be32(&ug_regs->tx255);
@@ -1172,7 +1181,9 @@ int init_flow_control_params(u32 automatic_flow_control_mode,
 	out_be32(uempr_register, value);
 
 	/* Set UPSMR register */
-	setbits32(upsmr_register, automatic_flow_control_mode);
+	value = in_be32(upsmr_register);
+	value |= automatic_flow_control_mode;
+	out_be32(upsmr_register, value);
 
 	value = in_be32(maccfg1_register);
 	if (rx_flow_control_enable)
@@ -1189,11 +1200,14 @@ static int init_hw_statistics_gathering_mode(int enable_hardware_statistics,
 					     u32 __iomem *upsmr_register,
 					     u16 __iomem *uescr_register)
 {
+	u32 upsmr_value = 0;
 	u16 uescr_value = 0;
-
 	/* Enable hardware statistics gathering if requested */
-	if (enable_hardware_statistics)
-		setbits32(upsmr_register, UCC_GETH_UPSMR_HSE);
+	if (enable_hardware_statistics) {
+		upsmr_value = in_be32(upsmr_register);
+		upsmr_value |= UPSMR_HSE;
+		out_be32(upsmr_register, upsmr_value);
+	}
 
 	/* Clear hardware statistics counters */
 	uescr_value = in_be16(uescr_register);
@@ -1219,17 +1233,23 @@ static int init_firmware_statistics_gathering_mode(int
 {
 	/* Note: this function does not check if */
 	/* the parameters it receives are NULL   */
+	u16 temoder_value;
+	u32 remoder_value;
 
 	if (enable_tx_firmware_statistics) {
 		out_be32(tx_rmon_base_ptr,
 			 tx_firmware_statistics_structure_address);
-		setbits16(temoder_register, TEMODER_TX_RMON_STATISTICS_ENABLE);
+		temoder_value = in_be16(temoder_register);
+		temoder_value |= TEMODER_TX_RMON_STATISTICS_ENABLE;
+		out_be16(temoder_register, temoder_value);
 	}
 
 	if (enable_rx_firmware_statistics) {
 		out_be32(rx_rmon_base_ptr,
 			 rx_firmware_statistics_structure_address);
-		setbits32(remoder_register, REMODER_RX_RMON_STATISTICS_ENABLE);
+		remoder_value = in_be32(remoder_register);
+		remoder_value |= REMODER_RX_RMON_STATISTICS_ENABLE;
+		out_be32(remoder_register, remoder_value);
 	}
 
 	return 0;
@@ -1296,12 +1316,15 @@ static int init_check_frame_length_mode(int length_check,
 static int init_preamble_length(u8 preamble_length,
 				u32 __iomem *maccfg2_register)
 {
+	u32 value = 0;
+
 	if ((preamble_length < 3) || (preamble_length > 7))
 		return -EINVAL;
 
-	clrsetbits_be32(maccfg2_register, MACCFG2_PREL_MASK,
-			preamble_length << MACCFG2_PREL_SHIFT);
-
+	value = in_be32(maccfg2_register);
+	value &= ~MACCFG2_PREL_MASK;
+	value |= (preamble_length << MACCFG2_PREL_SHIFT);
+	out_be32(maccfg2_register, value);
 	return 0;
 }
 
@@ -1314,19 +1337,19 @@ static int init_rx_parameters(int reject_broadcast,
 	value = in_be32(upsmr_register);
 
 	if (reject_broadcast)
-		value |= UCC_GETH_UPSMR_BRO;
+		value |= UPSMR_BRO;
 	else
-		value &= ~UCC_GETH_UPSMR_BRO;
+		value &= ~UPSMR_BRO;
 
 	if (receive_short_frames)
-		value |= UCC_GETH_UPSMR_RSH;
+		value |= UPSMR_RSH;
 	else
-		value &= ~UCC_GETH_UPSMR_RSH;
+		value &= ~UPSMR_RSH;
 
 	if (promiscuous)
-		value |= UCC_GETH_UPSMR_PRO;
+		value |= UPSMR_PRO;
 	else
-		value &= ~UCC_GETH_UPSMR_PRO;
+		value &= ~UPSMR_PRO;
 
 	out_be32(upsmr_register, value);
 
@@ -1387,27 +1410,26 @@ static int adjust_enet_interface(struct ucc_geth_private *ugeth)
 
 	/*                    Set UPSMR                      */
 	upsmr = in_be32(&uf_regs->upsmr);
-	upsmr &= ~(UCC_GETH_UPSMR_RPM | UCC_GETH_UPSMR_R10M |
-		   UCC_GETH_UPSMR_TBIM | UCC_GETH_UPSMR_RMM);
+	upsmr &= ~(UPSMR_RPM | UPSMR_R10M | UPSMR_TBIM | UPSMR_RMM);
 	if ((ugeth->phy_interface == PHY_INTERFACE_MODE_RMII) ||
 	    (ugeth->phy_interface == PHY_INTERFACE_MODE_RGMII) ||
 	    (ugeth->phy_interface == PHY_INTERFACE_MODE_RGMII_ID) ||
 	    (ugeth->phy_interface == PHY_INTERFACE_MODE_RGMII_RXID) ||
 	    (ugeth->phy_interface == PHY_INTERFACE_MODE_RGMII_TXID) ||
 	    (ugeth->phy_interface == PHY_INTERFACE_MODE_RTBI)) {
-		upsmr |= UCC_GETH_UPSMR_RPM;
+		upsmr |= UPSMR_RPM;
 		switch (ugeth->max_speed) {
 		case SPEED_10:
-			upsmr |= UCC_GETH_UPSMR_R10M;
+			upsmr |= UPSMR_R10M;
 			/* FALLTHROUGH */
 		case SPEED_100:
 			if (ugeth->phy_interface != PHY_INTERFACE_MODE_RTBI)
-				upsmr |= UCC_GETH_UPSMR_RMM;
+				upsmr |= UPSMR_RMM;
 		}
 	}
 	if ((ugeth->phy_interface == PHY_INTERFACE_MODE_TBI) ||
 	    (ugeth->phy_interface == PHY_INTERFACE_MODE_RTBI)) {
-		upsmr |= UCC_GETH_UPSMR_TBIM;
+		upsmr |= UPSMR_TBIM;
 	}
 	out_be32(&uf_regs->upsmr, upsmr);
 
@@ -1495,9 +1517,9 @@ static void adjust_link(struct net_device *dev)
 				    (ugeth->phy_interface == PHY_INTERFACE_MODE_RGMII_TXID) ||
 				    (ugeth->phy_interface == PHY_INTERFACE_MODE_RTBI)) {
 					if (phydev->speed == SPEED_10)
-						upsmr |= UCC_GETH_UPSMR_R10M;
+						upsmr |= UPSMR_R10M;
 					else
-						upsmr &= ~UCC_GETH_UPSMR_R10M;
+						upsmr &= ~(UPSMR_R10M);
 				}
 				break;
 			default:
@@ -1580,8 +1602,10 @@ static int ugeth_graceful_stop_tx(struct ucc_geth_private *ugeth)
 	uccf = ugeth->uccf;
 
 	/* Mask GRACEFUL STOP TX interrupt bit and clear it */
-	clrbits32(uccf->p_uccm, UCC_GETH_UCCE_GRA);
-	out_be32(uccf->p_ucce, UCC_GETH_UCCE_GRA);  /* clear by writing 1 */
+	temp = in_be32(uccf->p_uccm);
+	temp &= ~UCCE_GRA;
+	out_be32(uccf->p_uccm, temp);
+	out_be32(uccf->p_ucce, UCCE_GRA);	/* clear by writing 1 */
 
 	/* Issue host command */
 	cecr_subblock =
@@ -1593,7 +1617,7 @@ static int ugeth_graceful_stop_tx(struct ucc_geth_private *ugeth)
 	do {
 		msleep(10);
 		temp = in_be32(uccf->p_ucce);
-	} while (!(temp & UCC_GETH_UCCE_GRA) && --i);
+	} while (!(temp & UCCE_GRA) && --i);
 
 	uccf->stopped_tx = 1;
 
@@ -1951,9 +1975,12 @@ static void ucc_geth_set_multi(struct net_device *dev)
 	uf_regs = ugeth->uccf->uf_regs;
 
 	if (dev->flags & IFF_PROMISC) {
-		setbits32(&uf_regs->upsmr, UCC_GETH_UPSMR_PRO);
+
+		out_be32(&uf_regs->upsmr, in_be32(&uf_regs->upsmr) | UPSMR_PRO);
+
 	} else {
-		clrbits32(&uf_regs->upsmr, UCC_GETH_UPSMR_PRO);
+
+		out_be32(&uf_regs->upsmr, in_be32(&uf_regs->upsmr)&~UPSMR_PRO);
 
 		p_82xx_addr_filt =
 		    (struct ucc_geth_82xx_address_filtering_pram __iomem *) ugeth->
@@ -1993,6 +2020,7 @@ static void ucc_geth_stop(struct ucc_geth_private *ugeth)
 {
 	struct ucc_geth __iomem *ug_regs = ugeth->ug_regs;
 	struct phy_device *phydev = ugeth->phydev;
+	u32 tempval;
 
 	ugeth_vdbg("%s: IN", __func__);
 
@@ -2009,7 +2037,9 @@ static void ucc_geth_stop(struct ucc_geth_private *ugeth)
 	out_be32(ugeth->uccf->p_ucce, 0xffffffff);
 
 	/* Disable Rx and Tx */
-	clrbits32(&ug_regs->maccfg1, MACCFG1_ENABLE_RX | MACCFG1_ENABLE_TX);
+	tempval = in_be32(&ug_regs->maccfg1);
+	tempval &= ~(MACCFG1_ENABLE_RX | MACCFG1_ENABLE_TX);
+	out_be32(&ug_regs->maccfg1, tempval);
 
 	ucc_geth_memclean(ugeth);
 }
@@ -2123,10 +2153,10 @@ static int ucc_struct_init(struct ucc_geth_private *ugeth)
 	/* Generate uccm_mask for receive */
 	uf_info->uccm_mask = ug_info->eventRegMask & UCCE_OTHER;/* Errors */
 	for (i = 0; i < ug_info->numQueuesRx; i++)
-		uf_info->uccm_mask |= (UCC_GETH_UCCE_RXF0 << i);
+		uf_info->uccm_mask |= (UCCE_RXBF_SINGLE_MASK << i);
 
 	for (i = 0; i < ug_info->numQueuesTx; i++)
-		uf_info->uccm_mask |= (UCC_GETH_UCCE_TXB0 << i);
+		uf_info->uccm_mask |= (UCCE_TXBF_SINGLE_MASK << i);
 	/* Initialize the general fast UCC block. */
 	if (ucc_fast_init(uf_info, &ugeth->uccf)) {
 		if (netif_msg_probe(ugeth))
@@ -2155,7 +2185,7 @@ static int ucc_geth_startup(struct ucc_geth_private *ugeth)
 	struct ucc_geth __iomem *ug_regs;
 	int ret_val = -EINVAL;
 	u32 remoder = UCC_GETH_REMODER_INIT;
-	u32 init_enet_pram_offset, cecr_subblock, command;
+	u32 init_enet_pram_offset, cecr_subblock, command, maccfg1;
 	u32 ifstat, i, j, size, l2qt, l3qt, length;
 	u16 temoder = UCC_GETH_TEMODER_INIT;
 	u16 test;
@@ -2251,7 +2281,10 @@ static int ucc_geth_startup(struct ucc_geth_private *ugeth)
 				 &uf_regs->upsmr,
 				 &ug_regs->uempr, &ug_regs->maccfg1);
 
-	setbits32(&ug_regs->maccfg1, MACCFG1_ENABLE_RX | MACCFG1_ENABLE_TX);
+	maccfg1 = in_be32(&ug_regs->maccfg1);
+	maccfg1 |= MACCFG1_ENABLE_RX;
+	maccfg1 |= MACCFG1_ENABLE_TX;
+	out_be32(&ug_regs->maccfg1, maccfg1);
 
 	/*                    Set IPGIFG                     */
 	/* For more details see the hardware spec.           */
@@ -3241,6 +3274,7 @@ static int ucc_geth_tx(struct net_device *dev, u8 txQ)
 static int ucc_geth_poll(struct napi_struct *napi, int budget)
 {
 	struct ucc_geth_private *ugeth = container_of(napi, struct ucc_geth_private, napi);
+	struct net_device *dev = ugeth->dev;
 	struct ucc_geth_info *ug_info;
 	int howmany, i;
 
@@ -3251,8 +3285,14 @@ static int ucc_geth_poll(struct napi_struct *napi, int budget)
 		howmany += ucc_geth_rx(ugeth, i, budget - howmany);
 
 	if (howmany < budget) {
+		struct ucc_fast_private *uccf;
+		u32 uccm;
+
 		netif_rx_complete(napi);
-		setbits32(ugeth->uccf->p_uccm, UCCE_RX_EVENTS);
+		uccf = ugeth->uccf;
+		uccm = in_be32(uccf->p_uccm);
+		uccm |= UCCE_RX_EVENTS;
+		out_be32(uccf->p_uccm, uccm);
 	}
 
 	return howmany;
@@ -3292,7 +3332,7 @@ static irqreturn_t ucc_geth_irq_handler(int irq, void *info)
 	/* Tx event processing */
 	if (ucce & UCCE_TX_EVENTS) {
 		spin_lock(&ugeth->lock);
-		tx_mask = UCC_GETH_UCCE_TXB0;
+		tx_mask = UCCE_TXBF_SINGLE_MASK;
 		for (i = 0; i < ug_info->numQueuesTx; i++) {
 			if (ucce & tx_mask)
 				ucc_geth_tx(dev, i);
@@ -3304,10 +3344,12 @@ static irqreturn_t ucc_geth_irq_handler(int irq, void *info)
 
 	/* Errors and other events */
 	if (ucce & UCCE_OTHER) {
-		if (ucce & UCC_GETH_UCCE_BSY)
+		if (ucce & UCCE_BSY) {
 			dev->stats.rx_errors++;
-		if (ucce & UCC_GETH_UCCE_TXE)
+		}
+		if (ucce & UCCE_TXE) {
 			dev->stats.tx_errors++;
+		}
 	}
 
 	return IRQ_HANDLED;

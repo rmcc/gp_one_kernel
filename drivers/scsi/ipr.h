@@ -1272,7 +1272,7 @@ struct ipr_dump_entry_header {
 
 struct ipr_dump_location_entry {
 	struct ipr_dump_entry_header hdr;
-	u8 location[20];
+	u8 location[BUS_ID_SIZE];
 }__attribute__((packed));
 
 struct ipr_dump_trace_entry {

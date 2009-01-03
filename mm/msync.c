@@ -28,7 +28,7 @@
  * So by _not_ starting I/O in MS_ASYNC we provide complete flexibility to
  * applications.
  */
-SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
+asmlinkage long sys_msync(unsigned long start, size_t len, int flags)
 {
 	unsigned long end;
 	struct mm_struct *mm = current->mm;
@@ -82,7 +82,7 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 				(vma->vm_flags & VM_SHARED)) {
 			get_file(file);
 			up_read(&mm->mmap_sem);
-			error = vfs_fsync(file, file->f_path.dentry, 0);
+			error = do_fsync(file, 0);
 			fput(file);
 			if (error || start >= end)
 				goto out;

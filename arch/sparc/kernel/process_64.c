@@ -678,7 +678,6 @@ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 			     "g1", "g2", "g3", "o0", "o1", "memory", "cc");
 	return retval;
 }
-EXPORT_SYMBOL(kernel_thread);
 
 typedef struct {
 	union {
@@ -744,7 +743,6 @@ int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs)
 	}
 	return 1;
 }
-EXPORT_SYMBOL(dump_fpu);
 
 /*
  * sparc_execve() executes a new program after the asm stub has set

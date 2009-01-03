@@ -39,18 +39,6 @@
 
 #include "buffer_head_io.h"
 
-/*
- * Bits on bh->b_state used by ocfs2.
- *
- * These MUST be after the JBD2 bits.  Hence, we use BH_JBDPrivateStart.
- */
-enum ocfs2_state_bits {
-	BH_NeedsValidate = BH_JBDPrivateStart,
-};
-
-/* Expand the magic b_state functions */
-BUFFER_FNS(NeedsValidate, needs_validate);
-
 int ocfs2_write_block(struct ocfs2_super *osb, struct buffer_head *bh,
 		      struct inode *inode)
 {
@@ -178,9 +166,7 @@ bail:
 }
 
 int ocfs2_read_blocks(struct inode *inode, u64 block, int nr,
-		      struct buffer_head *bhs[], int flags,
-		      int (*validate)(struct super_block *sb,
-				      struct buffer_head *bh))
+		      struct buffer_head *bhs[], int flags)
 {
 	int status = 0;
 	int i, ignore_cache = 0;
@@ -312,8 +298,6 @@ int ocfs2_read_blocks(struct inode *inode, u64 block, int nr,
 
 			clear_buffer_uptodate(bh);
 			get_bh(bh); /* for end_buffer_read_sync() */
-			if (validate)
-				set_buffer_needs_validate(bh);
 			bh->b_end_io = end_buffer_read_sync;
 			submit_bh(READ, bh);
 			continue;
@@ -343,20 +327,6 @@ int ocfs2_read_blocks(struct inode *inode, u64 block, int nr,
 				put_bh(bh);
 				bhs[i] = NULL;
 				continue;
-			}
-
-			if (buffer_needs_validate(bh)) {
-				/* We never set NeedsValidate if the
-				 * buffer was held by the journal, so
-				 * that better not have changed */
-				BUG_ON(buffer_jbd(bh));
-				clear_buffer_needs_validate(bh);
-				status = validate(inode->i_sb, bh);
-				if (status) {
-					put_bh(bh);
-					bhs[i] = NULL;
-					continue;
-				}
 			}
 		}
 

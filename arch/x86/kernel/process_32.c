@@ -39,12 +39,11 @@
 #include <linux/prctl.h>
 #include <linux/dmi.h>
 #include <linux/ftrace.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
-#include <linux/kdebug.h>
 
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/io.h>
 #include <asm/ldt.h>
 #include <asm/processor.h>
 #include <asm/i387.h>
@@ -57,8 +56,10 @@
 
 #include <asm/tlbflush.h>
 #include <asm/cpu.h>
+#include <asm/kdebug.h>
 #include <asm/idle.h>
 #include <asm/syscalls.h>
+#include <asm/smp.h>
 #include <asm/ds.h>
 
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
@@ -204,7 +205,7 @@ extern void kernel_thread_helper(void);
 /*
  * Create a kernel thread
  */
-int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
 	struct pt_regs regs;
 
@@ -265,7 +266,7 @@ void flush_thread(void)
 	tsk->thread.debugreg3 = 0;
 	tsk->thread.debugreg6 = 0;
 	tsk->thread.debugreg7 = 0;
-	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
+	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));	
 	clear_tsk_thread_flag(tsk, TIF_DEBUG);
 	/*
 	 * Forget coprocessor state..
@@ -292,9 +293,9 @@ void prepare_to_copy(struct task_struct *tsk)
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	unsigned long unused,
-	struct task_struct *p, struct pt_regs *regs)
+	struct task_struct * p, struct pt_regs * regs)
 {
-	struct pt_regs *childregs;
+	struct pt_regs * childregs;
 	struct task_struct *tsk;
 	int err;
 
@@ -346,7 +347,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 void
 start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
 {
-	__asm__("movl %0, %%gs" : : "r"(0));
+	__asm__("movl %0, %%gs" :: "r"(0));
 	regs->fs		= 0;
 	set_fs(USER_DS);
 	regs->ds		= __USER_DS;
@@ -637,7 +638,7 @@ asmlinkage int sys_vfork(struct pt_regs regs)
 asmlinkage int sys_execve(struct pt_regs regs)
 {
 	int error;
-	char *filename;
+	char * filename;
 
 	filename = getname((char __user *) regs.bx);
 	error = PTR_ERR(filename);

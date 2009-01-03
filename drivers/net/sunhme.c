@@ -2607,18 +2607,6 @@ static struct quattro * __devinit quattro_pci_find(struct pci_dev *pdev)
 }
 #endif /* CONFIG_PCI */
 
-static const struct net_device_ops hme_netdev_ops = {
-	.ndo_open		= happy_meal_open,
-	.ndo_stop		= happy_meal_close,
-	.ndo_start_xmit		= happy_meal_start_xmit,
-	.ndo_tx_timeout		= happy_meal_tx_timeout,
-	.ndo_get_stats		= happy_meal_get_stats,
-	.ndo_set_multicast_list = happy_meal_set_multicast,
-	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-};
-
 #ifdef CONFIG_SBUS
 static int __devinit happy_meal_sbus_probe_one(struct of_device *op, int is_qfe)
 {
@@ -2762,7 +2750,12 @@ static int __devinit happy_meal_sbus_probe_one(struct of_device *op, int is_qfe)
 	init_timer(&hp->happy_timer);
 
 	hp->dev = dev;
-	dev->netdev_ops = &hme_netdev_ops;
+	dev->open = &happy_meal_open;
+	dev->stop = &happy_meal_close;
+	dev->hard_start_xmit = &happy_meal_start_xmit;
+	dev->get_stats = &happy_meal_get_stats;
+	dev->set_multicast_list = &happy_meal_set_multicast;
+	dev->tx_timeout = &happy_meal_tx_timeout;
 	dev->watchdog_timeo = 5*HZ;
 	dev->ethtool_ops = &hme_ethtool_ops;
 
@@ -3083,7 +3076,12 @@ static int __devinit happy_meal_pci_probe(struct pci_dev *pdev,
 	init_timer(&hp->happy_timer);
 
 	hp->dev = dev;
-	dev->netdev_ops = &hme_netdev_ops;
+	dev->open = &happy_meal_open;
+	dev->stop = &happy_meal_close;
+	dev->hard_start_xmit = &happy_meal_start_xmit;
+	dev->get_stats = &happy_meal_get_stats;
+	dev->set_multicast_list = &happy_meal_set_multicast;
+	dev->tx_timeout = &happy_meal_tx_timeout;
 	dev->watchdog_timeo = 5*HZ;
 	dev->ethtool_ops = &hme_ethtool_ops;
 	dev->irq = pdev->irq;

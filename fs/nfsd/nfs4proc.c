@@ -946,11 +946,6 @@ encode_op:
 			nfsd4_encode_operation(resp, op);
 			status = op->status;
 		}
-
-		dprintk("nfsv4 compound op %p opcnt %d #%d: %d: status %d\n",
-			args->ops, args->opcnt, resp->opcnt, op->opnum,
-			be32_to_cpu(status));
-
 		if (cstate->replay_owner) {
 			nfs4_put_stateowner(cstate->replay_owner);
 			cstate->replay_owner = NULL;

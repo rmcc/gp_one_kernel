@@ -81,9 +81,6 @@ static struct phy_driver lan83c185_driver = {
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
 
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
-
 	.driver		= { .owner = THIS_MODULE, }
 };
 
@@ -104,9 +101,6 @@ static struct phy_driver lan8187_driver = {
 	/* IRQ related */
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
-
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
 
 	.driver		= { .owner = THIS_MODULE, }
 };
@@ -129,9 +123,6 @@ static struct phy_driver lan8700_driver = {
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
 
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
-
 	.driver		= { .owner = THIS_MODULE, }
 };
 
@@ -152,9 +143,6 @@ static struct phy_driver lan911x_int_driver = {
 	/* IRQ related */
 	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
-
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
 
 	.driver		= { .owner = THIS_MODULE, }
 };

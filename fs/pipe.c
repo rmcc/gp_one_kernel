@@ -1016,7 +1016,10 @@ int do_pipe_flags(int *fd, int flags)
 		goto err_fdr;
 	fdw = error;
 
-	audit_fd_pair(fdr, fdw);
+	error = audit_fd_pair(fdr, fdw);
+	if (error < 0)
+		goto err_fdw;
+
 	fd_install(fdr, fr);
 	fd_install(fdw, fw);
 	fd[0] = fdr;
@@ -1024,6 +1027,8 @@ int do_pipe_flags(int *fd, int flags)
 
 	return 0;
 
+ err_fdw:
+	put_unused_fd(fdw);
  err_fdr:
 	put_unused_fd(fdr);
  err_read_pipe:
@@ -1043,7 +1048,7 @@ int do_pipe(int *fd)
  * sys_pipe() is the normal C calling standard for creating
  * a pipe. It's not the way Unix traditionally does this, though.
  */
-SYSCALL_DEFINE2(pipe2, int __user *, fildes, int, flags)
+asmlinkage long __weak sys_pipe2(int __user *fildes, int flags)
 {
 	int fd[2];
 	int error;
@@ -1059,7 +1064,7 @@ SYSCALL_DEFINE2(pipe2, int __user *, fildes, int, flags)
 	return error;
 }
 
-SYSCALL_DEFINE1(pipe, int __user *, fildes)
+asmlinkage long __weak sys_pipe(int __user *fildes)
 {
 	return sys_pipe2(fildes, 0);
 }

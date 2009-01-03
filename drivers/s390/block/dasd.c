@@ -336,9 +336,6 @@ static int
 dasd_state_ready_to_online(struct dasd_device * device)
 {
 	int rc;
-	struct gendisk *disk;
-	struct disk_part_iter piter;
-	struct hd_struct *part;
 
 	if (device->discipline->ready_to_online) {
 		rc = device->discipline->ready_to_online(device);
@@ -346,14 +343,8 @@ dasd_state_ready_to_online(struct dasd_device * device)
 			return rc;
 	}
 	device->state = DASD_STATE_ONLINE;
-	if (device->block) {
+	if (device->block)
 		dasd_schedule_block_bh(device->block);
-		disk = device->block->bdev->bd_disk;
-		disk_part_iter_init(&piter, disk, DISK_PITER_INCL_PART0);
-		while ((part = disk_part_iter_next(&piter)))
-			kobject_uevent(&part_to_dev(part)->kobj, KOBJ_CHANGE);
-		disk_part_iter_exit(&piter);
-	}
 	return 0;
 }
 
@@ -363,9 +354,6 @@ dasd_state_ready_to_online(struct dasd_device * device)
 static int dasd_state_online_to_ready(struct dasd_device *device)
 {
 	int rc;
-	struct gendisk *disk;
-	struct disk_part_iter piter;
-	struct hd_struct *part;
 
 	if (device->discipline->online_to_ready) {
 		rc = device->discipline->online_to_ready(device);
@@ -373,13 +361,6 @@ static int dasd_state_online_to_ready(struct dasd_device *device)
 			return rc;
 	}
 	device->state = DASD_STATE_READY;
-	if (device->block) {
-		disk = device->block->bdev->bd_disk;
-		disk_part_iter_init(&piter, disk, DISK_PITER_INCL_PART0);
-		while ((part = disk_part_iter_next(&piter)))
-			kobject_uevent(&part_to_dev(part)->kobj, KOBJ_CHANGE);
-		disk_part_iter_exit(&piter);
-	}
 	return 0;
 }
 
