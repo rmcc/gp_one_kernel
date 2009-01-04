@@ -824,7 +824,7 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe,
 	return 0;
 }
 
-static struct dtv_cmds_h dtv_cmds[] = {
+struct dtv_cmds_h dtv_cmds[] = {
 	[DTV_TUNE] = {
 		.name	= "DTV_TUNE",
 		.cmd	= DTV_TUNE,
@@ -962,7 +962,7 @@ static struct dtv_cmds_h dtv_cmds[] = {
 	},
 };
 
-static void dtv_property_dump(struct dtv_property *tvp)
+void dtv_property_dump(struct dtv_property *tvp)
 {
 	int i;
 
@@ -993,7 +993,7 @@ static void dtv_property_dump(struct dtv_property *tvp)
 		dprintk("%s() tvp.u.data = 0x%08x\n", __func__, tvp->u.data);
 }
 
-static int is_legacy_delivery_system(fe_delivery_system_t s)
+int is_legacy_delivery_system(fe_delivery_system_t s)
 {
 	if((s == SYS_UNDEFINED) || (s == SYS_DVBC_ANNEX_AC) ||
 	   (s == SYS_DVBC_ANNEX_B) || (s == SYS_DVBT) || (s == SYS_DVBS) ||
@@ -1007,8 +1007,7 @@ static int is_legacy_delivery_system(fe_delivery_system_t s)
  * drivers can use a single set_frontend tuning function, regardless of whether
  * it's being used for the legacy or new API, reducing code and complexity.
  */
-static void dtv_property_cache_sync(struct dvb_frontend *fe,
-				    struct dvb_frontend_parameters *p)
+void dtv_property_cache_sync(struct dvb_frontend *fe, struct dvb_frontend_parameters *p)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
@@ -1060,7 +1059,7 @@ static void dtv_property_cache_sync(struct dvb_frontend *fe,
 /* Ensure the cached values are set correctly in the frontend
  * legacy tuning structures, for the advanced tuning API.
  */
-static void dtv_property_legacy_params_sync(struct dvb_frontend *fe)
+void dtv_property_legacy_params_sync(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
@@ -1115,7 +1114,7 @@ static void dtv_property_legacy_params_sync(struct dvb_frontend *fe)
 /* Ensure the cached values are set correctly in the frontend
  * legacy tuning structures, for the legacy tuning API.
  */
-static void dtv_property_adv_params_sync(struct dvb_frontend *fe)
+void dtv_property_adv_params_sync(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
@@ -1150,7 +1149,7 @@ static void dtv_property_adv_params_sync(struct dvb_frontend *fe)
 	}
 }
 
-static void dtv_property_cache_submit(struct dvb_frontend *fe)
+void dtv_property_cache_submit(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
@@ -1181,9 +1180,8 @@ static int dvb_frontend_ioctl_legacy(struct inode *inode, struct file *file,
 static int dvb_frontend_ioctl_properties(struct inode *inode, struct file *file,
 			unsigned int cmd, void *parg);
 
-static int dtv_property_process_get(struct dvb_frontend *fe,
-				    struct dtv_property *tvp,
-				    struct inode *inode, struct file *file)
+int dtv_property_process_get(struct dvb_frontend *fe, struct dtv_property *tvp,
+	struct inode *inode, struct file *file)
 {
 	int r = 0;
 
@@ -1255,10 +1253,8 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	return r;
 }
 
-static int dtv_property_process_set(struct dvb_frontend *fe,
-				    struct dtv_property *tvp,
-				    struct inode *inode,
-				    struct file *file)
+int dtv_property_process_set(struct dvb_frontend *fe, struct dtv_property *tvp,
+	struct inode *inode, struct file *file)
 {
 	int r = 0;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
@@ -1289,6 +1285,9 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		fe->dtv_property_cache.state = tvp->cmd;
 		dprintk("%s() Finalised property cache\n", __func__);
 		dtv_property_cache_submit(fe);
+
+		/* Request the search algorithm to search */
+		fepriv->algo_status |= DVBFE_ALGO_SEARCH_AGAIN;
 
 		r |= dvb_frontend_ioctl_legacy(inode, file, FE_SET_FRONTEND,
 			&fepriv->parameters);
@@ -1714,10 +1713,6 @@ static int dvb_frontend_ioctl_legacy(struct inode *inode, struct file *file,
 			fepriv->min_delay = (dvb_override_tune_delay * HZ) / 1000;
 
 		fepriv->state = FESTATE_RETUNE;
-
-		/* Request the search algorithm to search */
-		fepriv->algo_status |= DVBFE_ALGO_SEARCH_AGAIN;
-
 		dvb_frontend_wakeup(fe);
 		dvb_frontend_add_event(fe, 0);
 		fepriv->status = 0;

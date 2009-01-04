@@ -24,6 +24,11 @@
 #include <asm/dma.h>
 #include <asm/mach/dma.h>
 
+#define ISA_DMA_MODE_READ	0x44
+#define ISA_DMA_MODE_WRITE	0x48
+#define ISA_DMA_MODE_CASCADE	0xc0
+#define ISA_DMA_AUTOINIT	0x10
+
 #define ISA_DMA_MASK		0
 #define ISA_DMA_MODE		1
 #define ISA_DMA_CLRFF		2
@@ -44,35 +49,38 @@ static unsigned int isa_dma_port[8][7] = {
 	{  0xd4,  0xd6,  0xd8,  0x48a,  0x08a,  0xcc, 0xce }
 };
 
-static int isa_get_dma_residue(unsigned int chan, dma_t *dma)
+static int isa_get_dma_residue(dmach_t channel, dma_t *dma)
 {
-	unsigned int io_port = isa_dma_port[chan][ISA_DMA_COUNT];
+	unsigned int io_port = isa_dma_port[channel][ISA_DMA_COUNT];
 	int count;
 
 	count = 1 + inb(io_port);
 	count |= inb(io_port) << 8;
 
-	return chan < 4 ? count : (count << 1);
+	return channel < 4 ? count : (count << 1);
 }
 
-static void isa_enable_dma(unsigned int chan, dma_t *dma)
+static void isa_enable_dma(dmach_t channel, dma_t *dma)
 {
 	if (dma->invalid) {
 		unsigned long address, length;
 		unsigned int mode;
 		enum dma_data_direction direction;
 
-		mode = (chan & 3) | dma->dma_mode;
+		mode = channel & 3;
 		switch (dma->dma_mode & DMA_MODE_MASK) {
 		case DMA_MODE_READ:
+			mode |= ISA_DMA_MODE_READ;
 			direction = DMA_FROM_DEVICE;
 			break;
 
 		case DMA_MODE_WRITE:
+			mode |= ISA_DMA_MODE_WRITE;
 			direction = DMA_TO_DEVICE;
 			break;
 
 		case DMA_MODE_CASCADE:
+			mode |= ISA_DMA_MODE_CASCADE;
 			direction = DMA_BIDIRECTIONAL;
 			break;
 
@@ -97,31 +105,34 @@ static void isa_enable_dma(unsigned int chan, dma_t *dma)
 		address = dma->buf.dma_address;
 		length  = dma->buf.length - 1;
 
-		outb(address >> 16, isa_dma_port[chan][ISA_DMA_PGLO]);
-		outb(address >> 24, isa_dma_port[chan][ISA_DMA_PGHI]);
+		outb(address >> 16, isa_dma_port[channel][ISA_DMA_PGLO]);
+		outb(address >> 24, isa_dma_port[channel][ISA_DMA_PGHI]);
 
-		if (chan >= 4) {
+		if (channel >= 4) {
 			address >>= 1;
 			length >>= 1;
 		}
 
-		outb(0, isa_dma_port[chan][ISA_DMA_CLRFF]);
+		outb(0, isa_dma_port[channel][ISA_DMA_CLRFF]);
 
-		outb(address, isa_dma_port[chan][ISA_DMA_ADDR]);
-		outb(address >> 8, isa_dma_port[chan][ISA_DMA_ADDR]);
+		outb(address, isa_dma_port[channel][ISA_DMA_ADDR]);
+		outb(address >> 8, isa_dma_port[channel][ISA_DMA_ADDR]);
 
-		outb(length, isa_dma_port[chan][ISA_DMA_COUNT]);
-		outb(length >> 8, isa_dma_port[chan][ISA_DMA_COUNT]);
+		outb(length, isa_dma_port[channel][ISA_DMA_COUNT]);
+		outb(length >> 8, isa_dma_port[channel][ISA_DMA_COUNT]);
 
-		outb(mode, isa_dma_port[chan][ISA_DMA_MODE]);
+		if (dma->dma_mode & DMA_AUTOINIT)
+			mode |= ISA_DMA_AUTOINIT;
+
+		outb(mode, isa_dma_port[channel][ISA_DMA_MODE]);
 		dma->invalid = 0;
 	}
-	outb(chan & 3, isa_dma_port[chan][ISA_DMA_MASK]);
+	outb(channel & 3, isa_dma_port[channel][ISA_DMA_MASK]);
 }
 
-static void isa_disable_dma(unsigned int chan, dma_t *dma)
+static void isa_disable_dma(dmach_t channel, dma_t *dma)
 {
-	outb(chan | 4, isa_dma_port[chan][ISA_DMA_MASK]);
+	outb(channel | 4, isa_dma_port[channel][ISA_DMA_MASK]);
 }
 
 static struct dma_ops isa_dma_ops = {
@@ -149,12 +160,7 @@ static struct resource dma_resources[] = { {
 	.end	= 0x048f
 } };
 
-static dma_t isa_dma[8];
-
-/*
- * ISA DMA always starts at channel 0
- */
-void __init isa_init_dma(void)
+void __init isa_init_dma(dma_t *dma)
 {
 	/*
 	 * Try to autodetect presence of an ISA DMA controller.
@@ -172,11 +178,11 @@ void __init isa_init_dma(void)
 	outb(0xaa, 0x00);
 
 	if (inb(0) == 0x55 && inb(0) == 0xaa) {
-		unsigned int chan, i;
+		int channel, i;
 
-		for (chan = 0; chan < 8; chan++) {
-			isa_dma[chan].d_ops = &isa_dma_ops;
-			isa_disable_dma(chan, NULL);
+		for (channel = 0; channel < 8; channel++) {
+			dma[channel].d_ops = &isa_dma_ops;
+			isa_disable_dma(channel, NULL);
 		}
 
 		outb(0x40, 0x0b);
@@ -211,12 +217,5 @@ void __init isa_init_dma(void)
 
 		for (i = 0; i < ARRAY_SIZE(dma_resources); i++)
 			request_resource(&ioport_resource, dma_resources + i);
-
-		for (chan = 0; chan < 8; chan++) {
-			int ret = isa_dma_add(chan, &isa_dma[chan]);
-			if (ret)
-				printk(KERN_ERR "ISADMA%u: unable to register: %d\n",
-					chan, ret);
-		}
 	}
 }

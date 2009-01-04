@@ -30,7 +30,7 @@
 #include <linux/timex.h>
 
 #ifdef CONFIG_ARCH_PXA
-#include <mach/regs-ost.h>
+#include <mach/pxa-regs.h>
 #endif
 
 #include <mach/reset.h>

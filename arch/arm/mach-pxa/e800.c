@@ -23,10 +23,11 @@
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
 
-#include <mach/pxa25x.h>
+#include <mach/mfp-pxa25x.h>
+#include <mach/pxa-regs.h>
+#include <mach/hardware.h>
 #include <mach/eseries-gpio.h>
 #include <mach/udc.h>
-#include <mach/irqs.h>
 
 #include "generic.h"
 #include "eseries.h"
@@ -194,7 +195,7 @@ static struct platform_device *devices[] __initdata = {
 
 static void __init e800_init(void)
 {
-	clk_add_alias("CLK_CK3P6MI", e800_tc6393xb_device.name,
+	clk_add_alias("CLK_CK3P6MI", &e800_tc6393xb_device.dev,
 			"GPIO11_CLK", NULL),
 	eseries_get_tmio_gpios();
 	platform_add_devices(devices, ARRAY_SIZE(devices));

@@ -27,7 +27,6 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 #include <linux/spi/corgi_lcd.h>
-#include <linux/mtd/sharpsl.h>
 #include <video/w100fb.h>
 
 #include <asm/setup.h>
@@ -41,7 +40,9 @@
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 
-#include <mach/pxa25x.h>
+#include <mach/pxa-regs.h>
+#include <mach/pxa2xx-regs.h>
+#include <mach/mfp-pxa25x.h>
 #include <mach/i2c.h>
 #include <mach/irda.h>
 #include <mach/mmc.h>
@@ -541,55 +542,6 @@ err_free_1:
 static inline void corgi_init_spi(void) {}
 #endif
 
-static struct mtd_partition sharpsl_nand_partitions[] = {
-	{
-		.name = "System Area",
-		.offset = 0,
-		.size = 7 * 1024 * 1024,
-	},
-	{
-		.name = "Root Filesystem",
-		.offset = 7 * 1024 * 1024,
-		.size = 25 * 1024 * 1024,
-	},
-	{
-		.name = "Home Filesystem",
-		.offset = MTDPART_OFS_APPEND,
-		.size = MTDPART_SIZ_FULL,
-	},
-};
-
-static uint8_t scan_ff_pattern[] = { 0xff, 0xff };
-
-static struct nand_bbt_descr sharpsl_bbt = {
-	.options = 0,
-	.offs = 4,
-	.len = 2,
-	.pattern = scan_ff_pattern
-};
-
-static struct sharpsl_nand_platform_data sharpsl_nand_platform_data = {
-	.badblock_pattern	= &sharpsl_bbt,
-	.partitions		= sharpsl_nand_partitions,
-	.nr_partitions		= ARRAY_SIZE(sharpsl_nand_partitions),
-};
-
-static struct resource sharpsl_nand_resources[] = {
-	{
-		.start	= 0x0C000000,
-		.end	= 0x0C000FFF,
-		.flags	= IORESOURCE_MEM,
-	},
-};
-
-static struct platform_device sharpsl_nand_device = {
-	.name		= "sharpsl-nand",
-	.id		= -1,
-	.resource	= sharpsl_nand_resources,
-	.num_resources	= ARRAY_SIZE(sharpsl_nand_resources),
-	.dev.platform_data	= &sharpsl_nand_platform_data,
-};
-
 static struct mtd_partition sharpsl_rom_parts[] = {
 	{
 		.name	="Boot PROM Filesystem",
@@ -625,7 +577,6 @@ static struct platform_device *devices[] __initdata = {
 	&corgifb_device,
 	&corgikbd_device,
 	&corgiled_device,
-	&sharpsl_nand_device,
 	&sharpsl_rom_device,
 };
 
@@ -635,16 +586,16 @@ static void corgi_poweroff(void)
 		/* Green LED off tells the bootloader to halt */
 		gpio_set_value(CORGI_GPIO_LED_GREEN, 0);
 
-	arm_machine_restart('h', NULL);
+	arm_machine_restart('h');
 }
 
-static void corgi_restart(char mode, const char *cmd)
+static void corgi_restart(char mode)
 {
 	if (!machine_is_corgi())
 		/* Green LED on tells the bootloader to reboot */
 		gpio_set_value(CORGI_GPIO_LED_GREEN, 1);
 
-	arm_machine_restart('h', cmd);
+	arm_machine_restart('h');
 }
 
 static void __init corgi_init(void)
@@ -665,9 +616,6 @@ static void __init corgi_init(void)
 	pxa_set_i2c_info(NULL);
 
 	platform_scoop_config = &corgi_pcmcia_config;
-
-	if (machine_is_husky())
-		sharpsl_nand_partitions[1].size = 53 * 1024 * 1024;
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }

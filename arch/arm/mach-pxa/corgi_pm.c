@@ -24,6 +24,7 @@
 
 #include <mach/sharpsl.h>
 #include <mach/corgi.h>
+#include <mach/pxa-regs.h>
 #include <mach/pxa2xx-regs.h>
 #include <mach/pxa2xx-gpio.h>
 #include "sharpsl.h"

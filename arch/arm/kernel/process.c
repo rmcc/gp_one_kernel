@@ -34,7 +34,6 @@
 #include <asm/processor.h>
 #include <asm/system.h>
 #include <asm/thread_notify.h>
-#include <asm/stacktrace.h>
 #include <asm/mach/time.h>
 
 static const char *processor_modes[] = {
@@ -83,7 +82,7 @@ static int __init hlt_setup(char *__unused)
 __setup("nohlt", nohlt_setup);
 __setup("hlt", hlt_setup);
 
-void arm_machine_restart(char mode, const char *cmd)
+void arm_machine_restart(char mode)
 {
 	/*
 	 * Clean and disable cache, and turn off interrupts
@@ -100,7 +99,7 @@ void arm_machine_restart(char mode, const char *cmd)
 	/*
 	 * Now call the architecture specific reboot code.
 	 */
-	arch_reset(mode, cmd);
+	arch_reset(mode);
 
 	/*
 	 * Whoops - the architecture was unable to reboot.
@@ -120,7 +119,7 @@ EXPORT_SYMBOL(pm_idle);
 void (*pm_power_off)(void);
 EXPORT_SYMBOL(pm_power_off);
 
-void (*arm_pm_restart)(char str, const char *cmd) = arm_machine_restart;
+void (*arm_pm_restart)(char str) = arm_machine_restart;
 EXPORT_SYMBOL_GPL(arm_pm_restart);
 
 
@@ -195,9 +194,9 @@ void machine_power_off(void)
 		pm_power_off();
 }
 
-void machine_restart(char *cmd)
+void machine_restart(char * __unused)
 {
-	arm_pm_restart(reboot_mode, cmd);
+	arm_pm_restart(reboot_mode);
 }
 
 void __show_regs(struct pt_regs *regs)
@@ -373,21 +372,23 @@ EXPORT_SYMBOL(kernel_thread);
 
 unsigned long get_wchan(struct task_struct *p)
 {
-	struct stackframe frame;
+	unsigned long fp, lr;
+	unsigned long stack_start, stack_end;
 	int count = 0;
 	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;
 
-	frame.fp = thread_saved_fp(p);
-	frame.sp = thread_saved_sp(p);
-	frame.lr = 0;			/* recovered from the stack */
-	frame.pc = thread_saved_pc(p);
+	stack_start = (unsigned long)end_of_stack(p);
+	stack_end = (unsigned long)task_stack_page(p) + THREAD_SIZE;
+
+	fp = thread_saved_fp(p);
 	do {
-		int ret = unwind_frame(&frame);
-		if (ret < 0)
+		if (fp < stack_start || fp > stack_end)
 			return 0;
-		if (!in_sched_functions(frame.pc))
-			return frame.pc;
+		lr = ((unsigned long *)fp)[-1];
+		if (!in_sched_functions(lr))
+			return lr;
+		fp = *(unsigned long *) (fp - 12);
 	} while (count ++ < 16);
 	return 0;
 }

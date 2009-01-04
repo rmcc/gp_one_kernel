@@ -55,7 +55,7 @@
 
 static DEFINE_MUTEX(idecd_ref_mutex);
 
-static void ide_cd_release(struct device *);
+static void ide_cd_release(struct kref *);
 
 static struct cdrom_info *ide_cd_get(struct gendisk *disk)
 {
@@ -67,7 +67,7 @@ static struct cdrom_info *ide_cd_get(struct gendisk *disk)
 		if (ide_device_get(cd->drive))
 			cd = NULL;
 		else
-			get_device(&cd->dev);
+			kref_get(&cd->kref);
 
 	}
 	mutex_unlock(&idecd_ref_mutex);
@@ -79,7 +79,7 @@ static void ide_cd_put(struct cdrom_info *cd)
 	ide_drive_t *drive = cd->drive;
 
 	mutex_lock(&idecd_ref_mutex);
-	put_device(&cd->dev);
+	kref_put(&cd->kref, ide_cd_release);
 	ide_device_put(drive);
 	mutex_unlock(&idecd_ref_mutex);
 }
@@ -194,14 +194,6 @@ static void cdrom_analyze_sense_data(ide_drive_t *drive,
 			bio_sectors = max(bio_sectors(failed_command->bio), 4U);
 			sector &= ~(bio_sectors - 1);
 
-			/*
-			 * The SCSI specification allows for the value
-			 * returned by READ CAPACITY to be up to 75 2K
-			 * sectors past the last readable block.
-			 * Therefore, if we hit a medium error within the
-			 * last 75 2K sectors, we decrease the saved size
-			 * value.
-			 */
 			if (sector < get_capacity(info->disk) &&
 			    drive->probed_capacity - sector < 4 * 75)
 				set_capacity(info->disk, sector);
@@ -247,7 +239,7 @@ static void cdrom_queue_request_sense(ide_drive_t *drive, void *sense,
 
 static void cdrom_end_request(ide_drive_t *drive, int uptodate)
 {
-	struct request *rq = drive->hwif->rq;
+	struct request *rq = HWGROUP(drive)->rq;
 	int nsectors = rq->hard_cur_sectors;
 
 	ide_debug_log(IDE_DBG_FUNC, "Call %s, cmd: 0x%x, uptodate: 0x%x, "
@@ -314,7 +306,8 @@ static void ide_dump_status_no_sense(ide_drive_t *drive, const char *msg, u8 st)
 static int cdrom_decode_status(ide_drive_t *drive, int good_stat, int *stat_ret)
 {
 	ide_hwif_t *hwif = drive->hwif;
-	struct request *rq = hwif->rq;
+	ide_hwgroup_t *hwgroup = hwif->hwgroup;
+	struct request *rq = hwgroup->rq;
 	int stat, err, sense_key;
 
 	/* check for errors */
@@ -509,13 +502,113 @@ end_request:
 		blkdev_dequeue_request(rq);
 		spin_unlock_irqrestore(q->queue_lock, flags);
 
-		hwif->rq = NULL;
+		hwgroup->rq = NULL;
 
 		cdrom_queue_request_sense(drive, rq->sense, rq);
 	} else
 		cdrom_end_request(drive, 0);
 
 	return 1;
+}
+
+static ide_startstop_t cdrom_transfer_packet_command(ide_drive_t *);
+static ide_startstop_t cdrom_newpc_intr(ide_drive_t *);
+
+/*
+ * Set up the device registers for transferring a packet command on DEV,
+ * expecting to later transfer XFERLEN bytes.  HANDLER is the routine
+ * which actually transfers the command to the drive.  If this is a
+ * drq_interrupt device, this routine will arrange for HANDLER to be
+ * called when the interrupt from the drive arrives.  Otherwise, HANDLER
+ * will be called immediately after the drive is prepared for the transfer.
+ */
+static ide_startstop_t cdrom_start_packet_command(ide_drive_t *drive)
+{
+	ide_hwif_t *hwif = drive->hwif;
+	struct request *rq = hwif->hwgroup->rq;
+	int xferlen;
+
+	xferlen = ide_cd_get_xferlen(rq);
+
+	ide_debug_log(IDE_DBG_PC, "Call %s, xferlen: %d\n", __func__, xferlen);
+
+	/* FIXME: for Virtual DMA we must check harder */
+	if (drive->dma)
+		drive->dma = !hwif->dma_ops->dma_setup(drive);
+
+	/* set up the controller registers */
+	ide_pktcmd_tf_load(drive, IDE_TFLAG_OUT_NSECT | IDE_TFLAG_OUT_LBAL,
+			   xferlen, drive->dma);
+
+	if (drive->atapi_flags & IDE_AFLAG_DRQ_INTERRUPT) {
+		/* waiting for CDB interrupt, not DMA yet. */
+		if (drive->dma)
+			drive->waiting_for_dma = 0;
+
+		/* packet command */
+		ide_execute_command(drive, ATA_CMD_PACKET,
+				    cdrom_transfer_packet_command,
+				    ATAPI_WAIT_PC, ide_cd_expiry);
+		return ide_started;
+	} else {
+		ide_execute_pkt_cmd(drive);
+
+		return cdrom_transfer_packet_command(drive);
+	}
+}
+
+/*
+ * Send a packet command to DRIVE described by CMD_BUF and CMD_LEN. The device
+ * registers must have already been prepared by cdrom_start_packet_command.
+ * HANDLER is the interrupt handler to call when the command completes or
+ * there's data ready.
+ */
+#define ATAPI_MIN_CDB_BYTES 12
+static ide_startstop_t cdrom_transfer_packet_command(ide_drive_t *drive)
+{
+	ide_hwif_t *hwif = drive->hwif;
+	struct request *rq = hwif->hwgroup->rq;
+	int cmd_len;
+	ide_startstop_t startstop;
+
+	ide_debug_log(IDE_DBG_PC, "Call %s\n", __func__);
+
+	if (drive->atapi_flags & IDE_AFLAG_DRQ_INTERRUPT) {
+		/*
+		 * Here we should have been called after receiving an interrupt
+		 * from the device.  DRQ should how be set.
+		 */
+
+		/* check for errors */
+		if (cdrom_decode_status(drive, ATA_DRQ, NULL))
+			return ide_stopped;
+
+		/* ok, next interrupt will be DMA interrupt */
+		if (drive->dma)
+			drive->waiting_for_dma = 1;
+	} else {
+		/* otherwise, we must wait for DRQ to get set */
+		if (ide_wait_stat(&startstop, drive, ATA_DRQ,
+				  ATA_BUSY, WAIT_READY))
+			return startstop;
+	}
+
+	/* arm the interrupt handler */
+	ide_set_handler(drive, cdrom_newpc_intr, rq->timeout, ide_cd_expiry);
+
+	/* ATAPI commands get padded out to 12 bytes minimum */
+	cmd_len = COMMAND_SIZE(rq->cmd[0]);
+	if (cmd_len < ATAPI_MIN_CDB_BYTES)
+		cmd_len = ATAPI_MIN_CDB_BYTES;
+
+	/* send the command to the device */
+	hwif->tp_ops->output_data(drive, NULL, rq->cmd, cmd_len);
+
+	/* start the DMA if need be */
+	if (drive->dma)
+		hwif->dma_ops->dma_start(drive);
+
+	return ide_started;
 }
 
 /*
@@ -761,7 +854,8 @@ static int cdrom_newpc_intr_dummy_cb(struct request *rq)
 static ide_startstop_t cdrom_newpc_intr(ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = drive->hwif;
-	struct request *rq = hwif->rq;
+	ide_hwgroup_t *hwgroup = hwif->hwgroup;
+	struct request *rq = hwgroup->rq;
 	xfer_func_t *xferfunc;
 	ide_expiry_t *expiry = NULL;
 	int dma_error = 0, dma, stat, thislen, uptodate = 0;
@@ -794,9 +888,6 @@ static ide_startstop_t cdrom_newpc_intr(ide_drive_t *drive)
 			return ide_error(drive, "dma error", stat);
 		if (blk_fs_request(rq)) {
 			ide_end_request(drive, 1, rq->nr_sectors);
-			return ide_stopped;
-		} else if (rq->cmd_type == REQ_TYPE_ATA_PC && !rq->bio) {
-			ide_end_request(drive, 1, 1);
 			return ide_stopped;
 		}
 		goto end_request;
@@ -970,7 +1061,7 @@ end_request:
 		if (blk_end_request(rq, 0, dlen))
 			BUG();
 
-		hwif->rq = NULL;
+		hwgroup->rq = NULL;
 	} else {
 		if (!uptodate)
 			rq->cmd_flags |= REQ_FAILED;
@@ -1092,7 +1183,7 @@ static ide_startstop_t ide_cd_do_request(ide_drive_t *drive, struct request *rq,
 		return ide_stopped;
 	}
 
-	return ide_issue_pc(drive);
+	return cdrom_start_packet_command(drive);
 }
 
 /*
@@ -1798,17 +1889,15 @@ static void ide_cd_remove(ide_drive_t *drive)
 	ide_debug_log(IDE_DBG_FUNC, "Call %s\n", __func__);
 
 	ide_proc_unregister_driver(drive, info->driver);
-	device_del(&info->dev);
+
 	del_gendisk(info->disk);
 
-	mutex_lock(&idecd_ref_mutex);
-	put_device(&info->dev);
-	mutex_unlock(&idecd_ref_mutex);
+	ide_cd_put(info);
 }
 
-static void ide_cd_release(struct device *dev)
+static void ide_cd_release(struct kref *kref)
 {
-	struct cdrom_info *info = to_ide_drv(dev, cdrom_info);
+	struct cdrom_info *info = to_ide_drv(kref, cdrom_info);
 	struct cdrom_device_info *devinfo = &info->devinfo;
 	ide_drive_t *drive = info->drive;
 	struct gendisk *g = info->disk;
@@ -1827,7 +1916,7 @@ static void ide_cd_release(struct device *dev)
 
 static int ide_cd_probe(ide_drive_t *);
 
-static struct ide_driver ide_cdrom_driver = {
+static ide_driver_t ide_cdrom_driver = {
 	.gen_driver = {
 		.owner		= THIS_MODULE,
 		.name		= "ide-cdrom",
@@ -1838,6 +1927,7 @@ static struct ide_driver ide_cdrom_driver = {
 	.version		= IDECD_VERSION,
 	.do_request		= ide_cd_do_request,
 	.end_request		= ide_end_request,
+	.error			= __ide_error,
 #ifdef CONFIG_IDE_PROC_FS
 	.proc_entries		= ide_cd_proc_entries,
 	.proc_devsets		= ide_cd_proc_devsets,
@@ -1992,7 +2082,6 @@ static int ide_cd_probe(ide_drive_t *drive)
 	}
 
 	drive->debug_mask = debug_mask;
-	drive->irq_handler = cdrom_newpc_intr;
 
 	info = kzalloc(sizeof(struct cdrom_info), GFP_KERNEL);
 	if (info == NULL) {
@@ -2007,12 +2096,7 @@ static int ide_cd_probe(ide_drive_t *drive)
 
 	ide_init_disk(g, drive);
 
-	info->dev.parent = &drive->gendev;
-	info->dev.release = ide_cd_release;
-	dev_set_name(&info->dev, dev_name(&drive->gendev));
-
-	if (device_register(&info->dev))
-		goto out_free_disk;
+	kref_init(&info->kref);
 
 	info->drive = drive;
 	info->driver = &ide_cdrom_driver;
@@ -2026,7 +2110,7 @@ static int ide_cd_probe(ide_drive_t *drive)
 	g->driverfs_dev = &drive->gendev;
 	g->flags = GENHD_FL_CD | GENHD_FL_REMOVABLE;
 	if (ide_cdrom_setup(drive)) {
-		put_device(&info->dev);
+		ide_cd_release(&info->kref);
 		goto failed;
 	}
 
@@ -2036,8 +2120,6 @@ static int ide_cd_probe(ide_drive_t *drive)
 	add_disk(g);
 	return 0;
 
-out_free_disk:
-	put_disk(g);
 out_free_cd:
 	kfree(info);
 failed:

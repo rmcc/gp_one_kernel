@@ -14,7 +14,6 @@
 #include <linux/serial_8250.h>
 #include <linux/mbus.h>
 #include <linux/mv643xx_eth.h>
-#include <linux/mv643xx_i2c.h>
 #include <linux/ata_platform.h>
 #include <linux/spi/orion_spi.h>
 #include <net/dsa.h>
@@ -25,7 +24,6 @@
 #include <mach/kirkwood.h>
 #include <plat/cache-feroceon-l2.h>
 #include <plat/ehci-orion.h>
-#include <plat/mvsdio.h>
 #include <plat/mv_xor.h>
 #include <plat/orion_nand.h>
 #include <plat/time.h>
@@ -256,7 +254,7 @@ static struct resource kirkwood_rtc_resource = {
 	.flags	= IORESOURCE_MEM,
 };
 
-static void __init kirkwood_rtc_init(void)
+void __init kirkwood_rtc_init(void)
 {
 	platform_device_register_simple("rtc-mv", -1, &kirkwood_rtc_resource, 1);
 }
@@ -298,50 +296,6 @@ void __init kirkwood_sata_init(struct mv_sata_platform_data *sata_data)
 
 
 /*****************************************************************************
- * SD/SDIO/MMC
- ****************************************************************************/
-static struct resource mvsdio_resources[] = {
-	[0] = {
-		.start	= SDIO_PHYS_BASE,
-		.end	= SDIO_PHYS_BASE + SZ_1K - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	[1] = {
-		.start	= IRQ_KIRKWOOD_SDIO,
-		.end	= IRQ_KIRKWOOD_SDIO,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-static u64 mvsdio_dmamask = 0xffffffffUL;
-
-static struct platform_device kirkwood_sdio = {
-	.name		= "mvsdio",
-	.id		= -1,
-	.dev		= {
-		.dma_mask = &mvsdio_dmamask,
-		.coherent_dma_mask = 0xffffffff,
-	},
-	.num_resources	= ARRAY_SIZE(mvsdio_resources),
-	.resource	= mvsdio_resources,
-};
-
-void __init kirkwood_sdio_init(struct mvsdio_platform_data *mvsdio_data)
-{
-	u32 dev, rev;
-
-	kirkwood_pcie_id(&dev, &rev);
-	if (rev == 0)  /* catch all Kirkwood Z0's */
-		mvsdio_data->clock = 100000000;
-	else
-		mvsdio_data->clock = 200000000;
-	mvsdio_data->dram = &kirkwood_mbus_dram_info;
-	kirkwood_sdio.dev.platform_data = mvsdio_data;
-	platform_device_register(&kirkwood_sdio);
-}
-
-
-/*****************************************************************************
  * SPI
  ****************************************************************************/
 static struct orion_spi_info kirkwood_spi_plat_data = {
@@ -368,45 +322,6 @@ static struct platform_device kirkwood_spi = {
 void __init kirkwood_spi_init()
 {
 	platform_device_register(&kirkwood_spi);
-}
-
-
-/*****************************************************************************
- * I2C
- ****************************************************************************/
-static struct mv64xxx_i2c_pdata kirkwood_i2c_pdata = {
-	.freq_m		= 8, /* assumes 166 MHz TCLK */
-	.freq_n		= 3,
-	.timeout	= 1000, /* Default timeout of 1 second */
-};
-
-static struct resource kirkwood_i2c_resources[] = {
-	{
-		.name	= "i2c",
-		.start	= I2C_PHYS_BASE,
-		.end	= I2C_PHYS_BASE + 0x1f,
-		.flags	= IORESOURCE_MEM,
-	}, {
-		.name	= "i2c",
-		.start	= IRQ_KIRKWOOD_TWSI,
-		.end	= IRQ_KIRKWOOD_TWSI,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device kirkwood_i2c = {
-	.name		= MV64XXX_I2C_CTLR_NAME,
-	.id		= 0,
-	.num_resources	= ARRAY_SIZE(kirkwood_i2c_resources),
-	.resource	= kirkwood_i2c_resources,
-	.dev		= {
-		.platform_data	= &kirkwood_i2c_pdata,
-	},
-};
-
-void __init kirkwood_i2c_init(void)
-{
-	platform_device_register(&kirkwood_i2c);
 }
 
 
@@ -587,7 +502,7 @@ static struct platform_device kirkwood_xor01_channel = {
 	},
 };
 
-static void __init kirkwood_xor0_init(void)
+void __init kirkwood_xor0_init(void)
 {
 	platform_device_register(&kirkwood_xor0_shared);
 
@@ -685,7 +600,7 @@ static struct platform_device kirkwood_xor11_channel = {
 	},
 };
 
-static void __init kirkwood_xor1_init(void)
+void __init kirkwood_xor1_init(void)
 {
 	platform_device_register(&kirkwood_xor1_shared);
 
@@ -783,7 +698,6 @@ void __init kirkwood_init(void)
 	printk(KERN_INFO "Kirkwood: %s, TCLK=%d.\n",
 		kirkwood_id(), kirkwood_tclk);
 	kirkwood_ge00_shared_data.t_clk = kirkwood_tclk;
-	kirkwood_ge01_shared_data.t_clk = kirkwood_tclk;
 	kirkwood_spi_plat_data.tclk = kirkwood_tclk;
 	kirkwood_uart0_data[0].uartclk = kirkwood_tclk;
 	kirkwood_uart1_data[0].uartclk = kirkwood_tclk;
@@ -793,9 +707,4 @@ void __init kirkwood_init(void)
 #ifdef CONFIG_CACHE_FEROCEON_L2
 	kirkwood_l2_init();
 #endif
-
-	/* internal devices that every board has */
-	kirkwood_rtc_init();
-	kirkwood_xor0_init();
-	kirkwood_xor1_init();
 }

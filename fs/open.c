@@ -122,7 +122,7 @@ static int vfs_statfs64(struct dentry *dentry, struct statfs64 *buf)
 	return 0;
 }
 
-SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct statfs __user *, buf)
+asmlinkage long sys_statfs(const char __user *pathname, struct statfs __user * buf)
 {
 	struct path path;
 	int error;
@@ -138,7 +138,8 @@ SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct statfs __user *, b
 	return error;
 }
 
-SYSCALL_DEFINE3(statfs64, const char __user *, pathname, size_t, sz, struct statfs64 __user *, buf)
+
+asmlinkage long sys_statfs64(const char __user *pathname, size_t sz, struct statfs64 __user *buf)
 {
 	struct path path;
 	long error;
@@ -156,7 +157,8 @@ SYSCALL_DEFINE3(statfs64, const char __user *, pathname, size_t, sz, struct stat
 	return error;
 }
 
-SYSCALL_DEFINE2(fstatfs, unsigned int, fd, struct statfs __user *, buf)
+
+asmlinkage long sys_fstatfs(unsigned int fd, struct statfs __user * buf)
 {
 	struct file * file;
 	struct statfs tmp;
@@ -174,7 +176,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE3(fstatfs64, unsigned int, fd, size_t, sz, struct statfs64 __user *, buf)
+asmlinkage long sys_fstatfs64(unsigned int fd, size_t sz, struct statfs64 __user *buf)
 {
 	struct file * file;
 	struct statfs64 tmp;
@@ -287,7 +289,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE2(truncate, const char __user *, path, unsigned long, length)
+asmlinkage long sys_truncate(const char __user * path, unsigned long length)
 {
 	/* on 32-bit boxen it will cut the range 2^31--2^32-1 off */
 	return do_sys_truncate(path, (long)length);
@@ -339,7 +341,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)
+asmlinkage long sys_ftruncate(unsigned int fd, unsigned long length)
 {
 	long ret = do_sys_ftruncate(fd, length, 1);
 	/* avoid REGPARM breakage on x86: */
@@ -349,35 +351,21 @@ SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)
 
 /* LFS versions of truncate are only needed on 32 bit machines */
 #if BITS_PER_LONG == 32
-SYSCALL_DEFINE(truncate64)(const char __user * path, loff_t length)
+asmlinkage long sys_truncate64(const char __user * path, loff_t length)
 {
 	return do_sys_truncate(path, length);
 }
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_truncate64(long path, loff_t length)
-{
-	return SYSC_truncate64((const char __user *) path, length);
-}
-SYSCALL_ALIAS(sys_truncate64, SyS_truncate64);
-#endif
 
-SYSCALL_DEFINE(ftruncate64)(unsigned int fd, loff_t length)
+asmlinkage long sys_ftruncate64(unsigned int fd, loff_t length)
 {
 	long ret = do_sys_ftruncate(fd, length, 0);
 	/* avoid REGPARM breakage on x86: */
 	asmlinkage_protect(2, ret, fd, length);
 	return ret;
 }
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_ftruncate64(long fd, loff_t length)
-{
-	return SYSC_ftruncate64((unsigned int) fd, length);
-}
-SYSCALL_ALIAS(sys_ftruncate64, SyS_ftruncate64);
 #endif
-#endif /* BITS_PER_LONG == 32 */
 
-SYSCALL_DEFINE(fallocate)(int fd, int mode, loff_t offset, loff_t len)
+asmlinkage long sys_fallocate(int fd, int mode, loff_t offset, loff_t len)
 {
 	struct file *file;
 	struct inode *inode;
@@ -424,7 +412,7 @@ SYSCALL_DEFINE(fallocate)(int fd, int mode, loff_t offset, loff_t len)
 	if (((offset + len) > inode->i_sb->s_maxbytes) || ((offset + len) < 0))
 		goto out_fput;
 
-	if (inode->i_op->fallocate)
+	if (inode->i_op && inode->i_op->fallocate)
 		ret = inode->i_op->fallocate(inode, mode, offset, len);
 	else
 		ret = -EOPNOTSUPP;
@@ -434,20 +422,13 @@ out_fput:
 out:
 	return ret;
 }
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_fallocate(long fd, long mode, loff_t offset, loff_t len)
-{
-	return SYSC_fallocate((int)fd, (int)mode, offset, len);
-}
-SYSCALL_ALIAS(sys_fallocate, SyS_fallocate);
-#endif
 
 /*
  * access() needs to use the real uid/gid, not the effective uid/gid.
  * We do this by temporarily clearing all FS-related capabilities and
  * switching the fsuid/fsgid around to the real ones.
  */
-SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+asmlinkage long sys_faccessat(int dfd, const char __user *filename, int mode)
 {
 	const struct cred *old_cred;
 	struct cred *override_cred;
@@ -517,12 +498,12 @@ out:
 	return res;
 }
 
-SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+asmlinkage long sys_access(const char __user *filename, int mode)
 {
 	return sys_faccessat(AT_FDCWD, filename, mode);
 }
 
-SYSCALL_DEFINE1(chdir, const char __user *, filename)
+asmlinkage long sys_chdir(const char __user * filename)
 {
 	struct path path;
 	int error;
@@ -543,7 +524,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE1(fchdir, unsigned int, fd)
+asmlinkage long sys_fchdir(unsigned int fd)
 {
 	struct file *file;
 	struct inode *inode;
@@ -569,7 +550,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE1(chroot, const char __user *, filename)
+asmlinkage long sys_chroot(const char __user * filename)
 {
 	struct path path;
 	int error;
@@ -594,7 +575,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE2(fchmod, unsigned int, fd, mode_t, mode)
+asmlinkage long sys_fchmod(unsigned int fd, mode_t mode)
 {
 	struct inode * inode;
 	struct dentry * dentry;
@@ -628,7 +609,8 @@ out:
 	return err;
 }
 
-SYSCALL_DEFINE3(fchmodat, int, dfd, const char __user *, filename, mode_t, mode)
+asmlinkage long sys_fchmodat(int dfd, const char __user *filename,
+			     mode_t mode)
 {
 	struct path path;
 	struct inode *inode;
@@ -657,7 +639,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE2(chmod, const char __user *, filename, mode_t, mode)
+asmlinkage long sys_chmod(const char __user *filename, mode_t mode)
 {
 	return sys_fchmodat(AT_FDCWD, filename, mode);
 }
@@ -687,7 +669,7 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 	return error;
 }
 
-SYSCALL_DEFINE3(chown, const char __user *, filename, uid_t, user, gid_t, group)
+asmlinkage long sys_chown(const char __user * filename, uid_t user, gid_t group)
 {
 	struct path path;
 	int error;
@@ -706,8 +688,8 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE5(fchownat, int, dfd, const char __user *, filename, uid_t, user,
-		gid_t, group, int, flag)
+asmlinkage long sys_fchownat(int dfd, const char __user *filename, uid_t user,
+			     gid_t group, int flag)
 {
 	struct path path;
 	int error = -EINVAL;
@@ -731,7 +713,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE3(lchown, const char __user *, filename, uid_t, user, gid_t, group)
+asmlinkage long sys_lchown(const char __user * filename, uid_t user, gid_t group)
 {
 	struct path path;
 	int error;
@@ -750,7 +732,8 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE3(fchown, unsigned int, fd, uid_t, user, gid_t, group)
+
+asmlinkage long sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
 	struct file * file;
 	int error = -EBADF;
@@ -1046,7 +1029,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, int mode)
 	return fd;
 }
 
-SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, int, mode)
+asmlinkage long sys_open(const char __user *filename, int flags, int mode)
 {
 	long ret;
 
@@ -1059,8 +1042,8 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, int, mode)
 	return ret;
 }
 
-SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
-		int, mode)
+asmlinkage long sys_openat(int dfd, const char __user *filename, int flags,
+			   int mode)
 {
 	long ret;
 
@@ -1079,7 +1062,7 @@ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-SYSCALL_DEFINE2(creat, const char __user *, pathname, int, mode)
+asmlinkage long sys_creat(const char __user * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
@@ -1115,7 +1098,7 @@ EXPORT_SYMBOL(filp_close);
  * releasing the fd. This ensures that one clone task can't release
  * an fd while another clone is opening it.
  */
-SYSCALL_DEFINE1(close, unsigned int, fd)
+asmlinkage long sys_close(unsigned int fd)
 {
 	struct file * filp;
 	struct files_struct *files = current->files;
@@ -1148,13 +1131,14 @@ out_unlock:
 	spin_unlock(&files->file_lock);
 	return -EBADF;
 }
+
 EXPORT_SYMBOL(sys_close);
 
 /*
  * This routine simulates a hangup on the tty, to arrange that users
  * are given clean terminals at login time.
  */
-SYSCALL_DEFINE0(vhangup)
+asmlinkage long sys_vhangup(void)
 {
 	if (capable(CAP_SYS_TTY_CONFIG)) {
 		tty_vhangup_self();

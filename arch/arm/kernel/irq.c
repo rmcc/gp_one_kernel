@@ -101,7 +101,7 @@ unlock:
 /* Handle bad interrupts */
 static struct irq_desc bad_irq_desc = {
 	.handle_irq = handle_bad_irq,
-	.lock = __SPIN_LOCK_UNLOCKED(bad_irq_desc.lock),
+	.lock = SPIN_LOCK_UNLOCKED
 };
 
 /*

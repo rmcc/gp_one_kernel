@@ -212,9 +212,6 @@ static void lg_notify(struct virtqueue *vq)
 	hcall(LHCALL_NOTIFY, lvq->config.pfn << PAGE_SHIFT, 0, 0);
 }
 
-/* An extern declaration inside a C file is bad form.  Don't do it. */
-extern void lguest_setup_irq(unsigned int irq);
-
 /* This routine finds the first virtqueue described in the configuration of
  * this device and sets it up.
  *
@@ -268,9 +265,6 @@ static struct virtqueue *lg_find_vq(struct virtio_device *vdev,
 		err = -ENOMEM;
 		goto unmap;
 	}
-
-	/* Make sure the interrupt is allocated. */
-	lguest_setup_irq(lvq->config.irq);
 
 	/* Tell the interrupt for this virtqueue to go to the virtio_ring
 	 * interrupt handler. */
@@ -327,7 +321,10 @@ static struct virtio_config_ops lguest_config_ops = {
 
 /* The root device for the lguest virtio devices.  This makes them appear as
  * /sys/devices/lguest/0,1,2 not /sys/devices/0,1,2. */
-static struct device *lguest_root;
+static struct device lguest_root = {
+	.parent = NULL,
+	.bus_id = "lguest",
+};
 
 /*D:120 This is the core of the lguest bus: actually adding a new device.
  * It's a separate function because it's neater that way, and because an
@@ -354,7 +351,7 @@ static void add_lguest_device(struct lguest_device_desc *d,
 	}
 
 	/* This devices' parent is the lguest/ dir. */
-	ldev->vdev.dev.parent = lguest_root;
+	ldev->vdev.dev.parent = &lguest_root;
 	/* We have a unique device index thanks to the dev_index counter. */
 	ldev->vdev.id.device = d->type;
 	/* We have a simple set of routines for querying the device's
@@ -410,8 +407,7 @@ static int __init lguest_devices_init(void)
 	if (strcmp(pv_info.name, "lguest") != 0)
 		return 0;
 
-	lguest_root = root_device_register("lguest");
-	if (IS_ERR(lguest_root))
+	if (device_register(&lguest_root) != 0)
 		panic("Could not register lguest root");
 
 	/* Devices are in a single page above top of "normal" mem */

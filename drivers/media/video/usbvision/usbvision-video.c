@@ -1674,7 +1674,8 @@ static int __devinit usbvision_probe(struct usb_interface *intf,
 		interface = &dev->actconfig->interface[ifnum]->altsetting[0];
 	}
 	endpoint = &interface->endpoint[1].desc;
-	if (!usb_endpoint_xfer_isoc(endpoint)) {
+	if (usb_endpoint_type(endpoint) !=
+	    USB_ENDPOINT_XFER_ISOC) {
 		err("%s: interface %d. has non-ISO endpoint!",
 		    __func__, ifnum);
 		err("%s: Endpoint attributes %d",

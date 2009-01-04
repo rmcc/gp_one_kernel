@@ -43,7 +43,7 @@ static inline void arch_idle(void)
 
 void (*at91_arch_reset)(void);
 
-static inline void arch_reset(char mode, const char *cmd)
+static inline void arch_reset(char mode)
 {
 	/* call the CPU-specific reset function */
 	if (at91_arch_reset)

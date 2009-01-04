@@ -27,7 +27,6 @@
 #include <asm/system.h>
 #include <asm/unistd.h>
 #include <asm/traps.h>
-#include <asm/unwind.h>
 
 #include "ptrace.h"
 #include "signal.h"
@@ -62,7 +61,6 @@ void dump_backtrace_entry(unsigned long where, unsigned long from, unsigned long
 		dump_mem("Exception stack", frame + 4, frame + 4 + sizeof(struct pt_regs));
 }
 
-#ifndef CONFIG_ARM_UNWIND
 /*
  * Stack pointers should always be within the kernels view of
  * physical memory.  If it is not there, then we can't dump
@@ -76,7 +74,6 @@ static int verify_stack(unsigned long sp)
 
 	return 0;
 }
-#endif
 
 /*
  * Dump out the contents of some memory nicely...
@@ -153,33 +150,13 @@ static void dump_instr(struct pt_regs *regs)
 	set_fs(fs);
 }
 
-#ifdef CONFIG_ARM_UNWIND
-static inline void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
-{
-	unwind_backtrace(regs, tsk);
-}
-#else
 static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 {
-	unsigned int fp, mode;
+	unsigned int fp;
 	int ok = 1;
 
 	printk("Backtrace: ");
-
-	if (!tsk)
-		tsk = current;
-
-	if (regs) {
-		fp = regs->ARM_fp;
-		mode = processor_mode(regs);
-	} else if (tsk != current) {
-		fp = thread_saved_fp(tsk);
-		mode = 0x10;
-	} else {
-		asm("mov %0, fp" : "=r" (fp) : : "cc");
-		mode = 0x10;
-	}
-
+	fp = regs->ARM_fp;
 	if (!fp) {
 		printk("no frame pointer");
 		ok = 0;
@@ -191,20 +168,29 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	printk("\n");
 
 	if (ok)
-		c_backtrace(fp, mode);
+		c_backtrace(fp, processor_mode(regs));
 }
-#endif
 
 void dump_stack(void)
 {
-	dump_backtrace(NULL, NULL);
+	__backtrace();
 }
 
 EXPORT_SYMBOL(dump_stack);
 
 void show_stack(struct task_struct *tsk, unsigned long *sp)
 {
-	dump_backtrace(NULL, tsk);
+	unsigned long fp;
+
+	if (!tsk)
+		tsk = current;
+
+	if (tsk != current)
+		fp = thread_saved_fp(tsk);
+	else
+		asm("mov %0, fp" : "=r" (fp) : : "cc");
+
+	c_backtrace(fp, 0x10);
 	barrier();
 }
 

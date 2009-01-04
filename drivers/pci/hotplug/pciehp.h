@@ -111,7 +111,6 @@ struct controller {
 	int cmd_busy;
 	unsigned int no_cmd_complete:1;
 	unsigned int link_active_reporting:1;
-	unsigned int notification_enabled:1;
 };
 
 #define INT_BUTTON_IGNORE		0
@@ -171,7 +170,6 @@ extern int pciehp_configure_device(struct slot *p_slot);
 extern int pciehp_unconfigure_device(struct slot *p_slot);
 extern void pciehp_queue_pushbutton_work(struct work_struct *work);
 struct controller *pcie_init(struct pcie_device *dev);
-int pcie_init_notification(struct controller *ctrl);
 int pciehp_enable_slot(struct slot *p_slot);
 int pciehp_disable_slot(struct slot *p_slot);
 int pcie_enable_notification(struct controller *ctrl);
@@ -219,25 +217,14 @@ struct hpc_ops {
 #ifdef CONFIG_ACPI
 #include <acpi/acpi.h>
 #include <acpi/acpi_bus.h>
+#include <acpi/actypes.h>
 #include <linux/pci-acpi.h>
-
-extern void __init pciehp_acpi_slot_detection_init(void);
-extern int pciehp_acpi_slot_detection_check(struct pci_dev *dev);
-
-static inline void pciehp_firmware_init(void)
-{
-	pciehp_acpi_slot_detection_init();
-}
 
 static inline int pciehp_get_hp_hw_control_from_firmware(struct pci_dev *dev)
 {
-	int retval;
 	u32 flags = (OSC_PCI_EXPRESS_NATIVE_HP_CONTROL |
 		     OSC_PCI_EXPRESS_CAP_STRUCTURE_CONTROL);
-	retval = acpi_get_hp_hw_control_from_firmware(dev, flags);
-	if (retval)
-		return retval;
-	return pciehp_acpi_slot_detection_check(dev);
+	return acpi_get_hp_hw_control_from_firmware(dev, flags);
 }
 
 static inline int pciehp_get_hp_params_from_firmware(struct pci_dev *dev,
@@ -248,7 +235,6 @@ static inline int pciehp_get_hp_params_from_firmware(struct pci_dev *dev,
 	return 0;
 }
 #else
-#define pciehp_firmware_init()				do {} while (0)
 #define pciehp_get_hp_hw_control_from_firmware(dev) 	0
 #define pciehp_get_hp_params_from_firmware(dev, hpp)    (-ENODEV)
 #endif 				/* CONFIG_ACPI */

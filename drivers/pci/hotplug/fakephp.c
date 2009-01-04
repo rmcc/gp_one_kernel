@@ -195,13 +195,13 @@ static void remove_slot_worker(struct work_struct *work)
  * Tries hard not to re-enable already existing devices;
  * also handles scanning of subfunctions.
  */
-static int pci_rescan_slot(struct pci_dev *temp)
+static void pci_rescan_slot(struct pci_dev *temp)
 {
 	struct pci_bus *bus = temp->bus;
 	struct pci_dev *dev;
 	int func;
+	int retval;
 	u8 hdr_type;
-	int count = 0;
 
 	if (!pci_read_config_byte(temp, PCI_HEADER_TYPE, &hdr_type)) {
 		temp->hdr_type = hdr_type & 0x7f;
@@ -213,12 +213,17 @@ static int pci_rescan_slot(struct pci_dev *temp)
 				dbg("New device on %s function %x:%x\n",
 					bus->name, temp->devfn >> 3,
 					temp->devfn & 7);
-				count++;
+				retval = pci_bus_add_device(dev);
+				if (retval)
+					dev_err(&dev->dev, "error adding "
+						"device, continuing.\n");
+				else
+					add_slot(dev);
 			}
 		}
 		/* multifunction device? */
 		if (!(hdr_type & 0x80))
-			return count;
+			return;
 
 		/* continue scanning for other functions */
 		for (func = 1, temp->devfn++; func < 8; func++, temp->devfn++) {
@@ -234,13 +239,16 @@ static int pci_rescan_slot(struct pci_dev *temp)
 					dbg("New device on %s function %x:%x\n",
 						bus->name, temp->devfn >> 3,
 						temp->devfn & 7);
-					count++;
+					retval = pci_bus_add_device(dev);
+					if (retval)
+						dev_err(&dev->dev, "error adding "
+							"device, continuing.\n");
+					else
+						add_slot(dev);
 				}
 			}
 		}
 	}
-
-	return count;
 }
 
 
@@ -254,8 +262,6 @@ static void pci_rescan_bus(const struct pci_bus *bus)
 {
 	unsigned int devfn;
 	struct pci_dev *dev;
-	int retval;
-	int found = 0;
 	dev = alloc_pci_dev();
 	if (!dev)
 		return;
@@ -264,23 +270,7 @@ static void pci_rescan_bus(const struct pci_bus *bus)
 	dev->sysdata = bus->sysdata;
 	for (devfn = 0; devfn < 0x100; devfn += 8) {
 		dev->devfn = devfn;
-		found += pci_rescan_slot(dev);
-	}
-
-	if (found) {
-		pci_bus_assign_resources(bus);
-		list_for_each_entry(dev, &bus->devices, bus_list) {
-			/* Skip already-added devices */
-			if (dev->is_added)
-					continue;
-			retval = pci_bus_add_device(dev);
-			if (retval)
-				dev_err(&dev->dev,
-					"Error adding device, continuing\n");
-			else
-				add_slot(dev);
-		}
-		pci_bus_add_devices(bus);
+		pci_rescan_slot(dev);
 	}
 	kfree(dev);
 }
@@ -334,7 +324,6 @@ static int disable_slot(struct hotplug_slot *slot)
 
 		if (test_and_set_bit(0, &dslot->removed)) {
 			dbg("Slot already scheduled for removal\n");
-			pci_dev_put(dev);
 			return -ENODEV;
 		}
 

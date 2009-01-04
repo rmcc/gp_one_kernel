@@ -30,6 +30,8 @@
 
 #include <asm/mach-types.h>
 #include <mach/tosa.h>
+#include <mach/pxa-regs.h>
+#include <mach/hardware.h>
 #include <mach/audio.h>
 
 #include "../codecs/wm9712.h"

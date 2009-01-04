@@ -46,8 +46,8 @@
 #include <linux/fb.h>
 #include <linux/pci.h>
 #include <linux/init.h>
-#include <linux/io.h>
 
+#include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 
@@ -1425,7 +1425,7 @@ static void cyberpro_common_resume(struct cfb_info *cfb)
 
 #ifdef CONFIG_ARCH_SHARK
 
-#include <mach/framebuffer.h>
+#include <mach/hardware.h>
 
 static int __devinit cyberpro_vl_probe(void)
 {
@@ -1583,7 +1583,8 @@ cyberpro_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		goto failed_release;
 
 	cfb->dev = dev;
-	cfb->region = pci_ioremap_bar(dev, 0);
+	cfb->region = ioremap(pci_resource_start(dev, 0),
+			      pci_resource_len(dev, 0));
 	if (!cfb->region)
 		goto failed_ioremap;
 

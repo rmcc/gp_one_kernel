@@ -12,6 +12,10 @@
 #ifndef __ASM_ARCH_IRQS_H
 #define __ASM_ARCH_IRQS_H __FILE__
 
+#ifndef __ASM_ARM_IRQ_H
+#error "Do not include this directly, instead #include <asm/irq.h>"
+#endif
+
 /* we keep the first set of CPU IRQs out of the range of
  * the ISA space, so that the PC104 has them to itself
  * and we don't end up having to do horrible things to the
@@ -80,7 +84,7 @@
 #define IRQ_EINT22     S3C2410_IRQ(50)
 #define IRQ_EINT23     S3C2410_IRQ(51)
 
-#define IRQ_EINT_BIT(x)	((x) - IRQ_EINT4 + 4)
+
 #define IRQ_EINT(x)    (((x) >= 4) ? (IRQ_EINT4 + (x) - 4) : (IRQ_EINT0 + (x)))
 
 #define IRQ_LCD_FIFO   S3C2410_IRQ(52)

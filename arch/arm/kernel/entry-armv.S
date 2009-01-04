@@ -20,7 +20,6 @@
 #include <asm/vfpmacros.h>
 #include <mach/entry-macro.S>
 #include <asm/thread_notify.h>
-#include <asm/unwind.h>
 
 #include "entry-header.S"
 
@@ -124,8 +123,6 @@ ENDPROC(__und_invalid)
 #endif
 
 	.macro	svc_entry, stack_hole=0
- UNWIND(.fnstart		)
- UNWIND(.save {r0 - pc}		)
 	sub	sp, sp, #(S_FRAME_SIZE + \stack_hole)
  SPFIX(	tst	sp, #4		)
  SPFIX(	bicne	sp, sp, #4	)
@@ -199,7 +196,6 @@ __dabt_svc:
 	ldr	r0, [sp, #S_PSR]
 	msr	spsr_cxsf, r0
 	ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
- UNWIND(.fnend		)
 ENDPROC(__dabt_svc)
 
 	.align	5
@@ -232,7 +228,6 @@ __irq_svc:
 	bleq	trace_hardirqs_on
 #endif
 	ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
- UNWIND(.fnend		)
 ENDPROC(__irq_svc)
 
 	.ltorg
@@ -283,7 +278,6 @@ __und_svc:
 	ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
 	msr	spsr_cxsf, lr
 	ldmia	sp, {r0 - pc}^			@ Restore SVC registers
- UNWIND(.fnend		)
 ENDPROC(__und_svc)
 
 	.align	5
@@ -326,7 +320,6 @@ __pabt_svc:
 	ldr	r0, [sp, #S_PSR]
 	msr	spsr_cxsf, r0
 	ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
- UNWIND(.fnend		)
 ENDPROC(__pabt_svc)
 
 	.align	5
@@ -350,8 +343,6 @@ ENDPROC(__pabt_svc)
 #endif
 
 	.macro	usr_entry
- UNWIND(.fnstart	)
- UNWIND(.cantunwind	)	@ don't unwind the user space
 	sub	sp, sp, #S_FRAME_SIZE
 	stmib	sp, {r1 - r12}
 
@@ -429,7 +420,6 @@ __dabt_usr:
 	mov	r2, sp
 	adr	lr, ret_from_exception
 	b	do_DataAbort
- UNWIND(.fnend		)
 ENDPROC(__dabt_usr)
 
 	.align	5
@@ -460,7 +450,6 @@ __irq_usr:
 
 	mov	why, #0
 	b	ret_to_user
- UNWIND(.fnend		)
 ENDPROC(__irq_usr)
 
 	.ltorg
@@ -495,7 +484,6 @@ __und_usr:
 #else
 	b	__und_usr_unknown
 #endif
- UNWIND(.fnend		)
 ENDPROC(__und_usr)
 
 	@
@@ -662,7 +650,6 @@ ENTRY(fp_enter)
 no_fp:	mov	pc, lr
 
 __und_usr_unknown:
-	enable_irq
 	mov	r0, sp
 	adr	lr, ret_from_exception
 	b	do_undefinstr
@@ -683,18 +670,14 @@ __pabt_usr:
 	enable_irq				@ Enable interrupts
 	mov	r1, sp				@ regs
 	bl	do_PrefetchAbort		@ call abort handler
- UNWIND(.fnend		)
 	/* fall through */
 /*
  * This is the return code to user mode for abort handlers
  */
 ENTRY(ret_from_exception)
- UNWIND(.fnstart	)
- UNWIND(.cantunwind	)
 	get_thread_info tsk
 	mov	why, #0
 	b	ret_to_user
- UNWIND(.fnend		)
 ENDPROC(__pabt_usr)
 ENDPROC(ret_from_exception)
 
@@ -704,8 +687,6 @@ ENDPROC(ret_from_exception)
  * previous and next are guaranteed not to be the same.
  */
 ENTRY(__switch_to)
- UNWIND(.fnstart	)
- UNWIND(.cantunwind	)
 	add	ip, r1, #TI_CPU_SAVE
 	ldr	r3, [r2, #TI_TP_VALUE]
 	stmia	ip!, {r4 - sl, fp, sp, lr}	@ Store most regs on stack
@@ -735,7 +716,6 @@ ENTRY(__switch_to)
 	bl	atomic_notifier_call_chain
 	mov	r0, r5
 	ldmia	r4, {r4 - sl, fp, sp, pc}	@ Load all regs saved previously
- UNWIND(.fnend		)
 ENDPROC(__switch_to)
 
 	__INIT

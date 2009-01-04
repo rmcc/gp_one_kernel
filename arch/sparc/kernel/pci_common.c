@@ -368,7 +368,7 @@ static void pci_register_iommu_region(struct pci_pbm_info *pbm)
 	const u32 *vdma = of_get_property(pbm->op->node, "virtual-dma", NULL);
 
 	if (vdma) {
-		struct resource *rp = kzalloc(sizeof(*rp), GFP_KERNEL);
+		struct resource *rp = kmalloc(sizeof(*rp), GFP_KERNEL);
 
 		if (!rp) {
 			prom_printf("Cannot allocate IOMMU resource.\n");
@@ -457,7 +457,7 @@ void pci_determine_mem_io_space(struct pci_pbm_info *pbm)
 		prom_halt();
 	}
 
-	printk("%s: PCI IO[%llx] MEM[%llx]\n",
+	printk("%s: PCI IO[%lx] MEM[%lx]\n",
 	       pbm->name,
 	       pbm->io_space.start,
 	       pbm->mem_space.start);

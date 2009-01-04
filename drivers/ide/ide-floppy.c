@@ -71,7 +71,7 @@
 static int ide_floppy_end_request(ide_drive_t *drive, int uptodate, int nsecs)
 {
 	struct ide_disk_obj *floppy = drive->driver_data;
-	struct request *rq = drive->hwif->rq;
+	struct request *rq = HWGROUP(drive)->rq;
 	int error;
 
 	ide_debug_log(IDE_DBG_FUNC, "Call %s\n", __func__);
@@ -327,10 +327,8 @@ static ide_startstop_t ide_floppy_do_request(ide_drive_t *drive,
 		return ide_stopped;
 	}
 
-	if (blk_fs_request(rq) || pc->req_xfer) {
-		ide_init_sg_cmd(drive, rq);
-		ide_map_sg(drive, rq);
-	}
+	ide_init_sg_cmd(drive, rq);
+	ide_map_sg(drive, rq);
 
 	pc->sg = hwif->sg_table;
 	pc->sg_cnt = hwif->sg_nents;

@@ -287,7 +287,7 @@ static void zd_op_stop(struct ieee80211_hw *hw)
  * @skb - a sk-buffer
  * @flags: extra flags to set in the TX status info
  * @ackssi: ACK signal strength
- * @success - True for successful transmission of the frame
+ * @success - True for successfull transmission of the frame
  *
  * This information calls ieee80211_tx_status_irqsafe() if required by the
  * control information. It copies the control information into the status
@@ -575,17 +575,13 @@ static int zd_op_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
 
 	r = fill_ctrlset(mac, skb);
 	if (r)
-		goto fail;
+		return r;
 
 	info->rate_driver_data[0] = hw;
 
 	r = zd_usb_tx(&mac->chip.usb, skb);
 	if (r)
-		goto fail;
-	return 0;
-
-fail:
-	dev_kfree_skb(skb);
+		return r;
 	return 0;
 }
 

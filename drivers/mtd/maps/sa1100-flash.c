@@ -12,7 +12,6 @@
 #include <linux/slab.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
-#include <linux/io.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/map.h>
@@ -20,6 +19,7 @@
 #include <linux/mtd/concat.h>
 
 #include <mach/hardware.h>
+#include <asm/io.h>
 #include <asm/sizes.h>
 #include <asm/mach/flash.h>
 
@@ -453,7 +453,7 @@ static struct platform_driver sa1100_mtd_driver = {
 	.resume		= sa1100_mtd_resume,
 	.shutdown	= sa1100_mtd_shutdown,
 	.driver		= {
-		.name	= "sa1100-mtd",
+		.name	= "flash",
 		.owner	= THIS_MODULE,
 	},
 };
@@ -474,4 +474,4 @@ module_exit(sa1100_mtd_exit);
 MODULE_AUTHOR("Nicolas Pitre");
 MODULE_DESCRIPTION("SA1100 CFI map driver");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("platform:sa1100-mtd");
+MODULE_ALIAS("platform:flash");

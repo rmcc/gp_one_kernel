@@ -9,7 +9,7 @@
  *
  * Author: Pavel Emelianov <xemul@openvz.org>
  *
- * See Documentation/cgroups/resource_counter.txt for more
+ * See Documentation/controllers/resource_counter.txt for more
  * info about what this counter is.
  */
 
@@ -43,10 +43,6 @@ struct res_counter {
 	 * the routines below consider this to be IRQ-safe
 	 */
 	spinlock_t lock;
-	/*
-	 * Parent counter, used for hierarchial resource accounting
-	 */
-	struct res_counter *parent;
 };
 
 /**
@@ -91,7 +87,7 @@ enum {
  * helpers for accounting
  */
 
-void res_counter_init(struct res_counter *counter, struct res_counter *parent);
+void res_counter_init(struct res_counter *counter);
 
 /*
  * charge - try to consume more resource.
@@ -107,7 +103,7 @@ void res_counter_init(struct res_counter *counter, struct res_counter *parent);
 int __must_check res_counter_charge_locked(struct res_counter *counter,
 		unsigned long val);
 int __must_check res_counter_charge(struct res_counter *counter,
-		unsigned long val, struct res_counter **limit_fail_at);
+		unsigned long val);
 
 /*
  * uncharge - tell that some portion of the resource is released

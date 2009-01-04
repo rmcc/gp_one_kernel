@@ -15,6 +15,7 @@
 #ifndef __ASM_ARCH_MFP_PXA320_H
 #define __ASM_ARCH_MFP_PXA320_H
 
+#include <mach/mfp.h>
 #include <mach/mfp-pxa3xx.h>
 
 /* GPIO */
@@ -37,7 +38,6 @@
 #define GPIO17_2_GPIO		MFP_CFG(GPIO17_2, AF0)
 
 /* Chip Select */
-#define GPIO3_nCS2		MFP_CFG(GPIO3, AF1)
 #define GPIO4_nCS3		MFP_CFG(GPIO4, AF1)
 
 /* AC97 */

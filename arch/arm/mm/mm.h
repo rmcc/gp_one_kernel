@@ -1,6 +1,7 @@
+/* the upper-most page table pointer */
+
 #ifdef CONFIG_MMU
 
-/* the upper-most page table pointer */
 extern pmd_t *top_pmd;
 
 #define TOP_PTE(x)	pte_offset_kernel(top_pmd, x)

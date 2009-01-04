@@ -481,7 +481,7 @@ monet_swizzle(struct pci_dev *dev, u8 *pinp)
 				slot = PCI_SLOT(dev->devfn);
 				break;
 			}
-			pin = pci_swizzle_interrupt_pin(dev, pin);
+			pin = bridge_swizzle(pin, PCI_SLOT(dev->devfn)) ;
 
 			/* Move up the chain of bridges.  */
 			dev = dev->bus->self;

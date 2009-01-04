@@ -72,7 +72,6 @@ static void uid_hash_insert(struct user_struct *up, struct hlist_head *hashent)
 static void uid_hash_remove(struct user_struct *up)
 {
 	hlist_del_init(&up->uidhash_node);
-	put_user_ns(up->user_ns);
 }
 
 static struct user_struct *uid_hash_find(uid_t uid, struct hlist_head *hashent)
@@ -286,12 +285,14 @@ int __init uids_sysfs_init(void)
 /* work function to remove sysfs directory for a user and free up
  * corresponding structures.
  */
-static void cleanup_user_struct(struct work_struct *w)
+static void remove_user_sysfs_dir(struct work_struct *w)
 {
 	struct user_struct *up = container_of(w, struct user_struct, work);
 	unsigned long flags;
 	int remove_user = 0;
 
+	if (up->user_ns != &init_user_ns)
+		return;
 	/* Make uid_hash_remove() + sysfs_remove_file() + kobject_del()
 	 * atomic.
 	 */
@@ -310,11 +311,9 @@ static void cleanup_user_struct(struct work_struct *w)
 	if (!remove_user)
 		goto done;
 
-	if (up->user_ns == &init_user_ns) {
-		kobject_uevent(&up->kobj, KOBJ_REMOVE);
-		kobject_del(&up->kobj);
-		kobject_put(&up->kobj);
-	}
+	kobject_uevent(&up->kobj, KOBJ_REMOVE);
+	kobject_del(&up->kobj);
+	kobject_put(&up->kobj);
 
 	sched_destroy_user(up);
 	key_put(up->uid_keyring);
@@ -335,7 +334,8 @@ static void free_user(struct user_struct *up, unsigned long flags)
 	atomic_inc(&up->__count);
 	spin_unlock_irqrestore(&uidhash_lock, flags);
 
-	INIT_WORK(&up->work, cleanup_user_struct);
+	put_user_ns(up->user_ns);
+	INIT_WORK(&up->work, remove_user_sysfs_dir);
 	schedule_work(&up->work);
 }
 
@@ -357,27 +357,10 @@ static void free_user(struct user_struct *up, unsigned long flags)
 	sched_destroy_user(up);
 	key_put(up->uid_keyring);
 	key_put(up->session_keyring);
+	put_user_ns(up->user_ns);
 	kmem_cache_free(uid_cachep, up);
 }
 
-#endif
-
-#if defined(CONFIG_RT_GROUP_SCHED) && defined(CONFIG_USER_SCHED)
-/*
- * We need to check if a setuid can take place. This function should be called
- * before successfully completing the setuid.
- */
-int task_can_switch_user(struct user_struct *up, struct task_struct *tsk)
-{
-
-	return sched_rt_can_attach(up->tg, tsk);
-
-}
-#else
-int task_can_switch_user(struct user_struct *up, struct task_struct *tsk)
-{
-	return 1;
-}
 #endif
 
 /*

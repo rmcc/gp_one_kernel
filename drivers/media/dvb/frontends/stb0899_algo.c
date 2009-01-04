@@ -31,8 +31,6 @@ inline u32 stb0899_do_div(u64 n, u32 d)
 	return n;
 }
 
-#if 0
-/* These functions are currently unused */
 /*
  * stb0899_calc_srate
  * Compute symbol rate
@@ -56,7 +54,7 @@ static u32 stb0899_calc_srate(u32 master_clk, u8 *sfr)
  * stb0899_get_srate
  * Get the current symbol rate
  */
-static u32 stb0899_get_srate(struct stb0899_state *state)
+u32 stb0899_get_srate(struct stb0899_state *state)
 {
 	struct stb0899_internal *internal = &state->internal;
 	u8 sfr[3];
@@ -65,7 +63,6 @@ static u32 stb0899_get_srate(struct stb0899_state *state)
 
 	return stb0899_calc_srate(internal->master_clk, sfr);
 }
-#endif
 
 /*
  * stb0899_set_srate
@@ -156,7 +153,7 @@ static void stb0899_first_subrange(struct stb0899_state *state)
 	}
 
 	if (range > 0)
-		internal->sub_range = min(internal->srch_range, range);
+		internal->sub_range = MIN(internal->srch_range, range);
 	else
 		internal->sub_range = 0;
 
@@ -185,7 +182,7 @@ static enum stb0899_status stb0899_check_tmg(struct stb0899_state *state)
 	timing = stb0899_read_reg(state, STB0899_RTF);
 
 	if (lock >= 42) {
-		if ((lock > 48) && (abs(timing) >= 110)) {
+		if ((lock > 48) && (ABS(timing) >= 110)) {
 			internal->status = ANALOGCARRIER;
 			dprintk(state->verbose, FE_DEBUG, 1, "-->ANALOG Carrier !");
 		} else {
@@ -222,7 +219,7 @@ static enum stb0899_status stb0899_search_tmg(struct stb0899_state *state)
 		index++;
 		derot_freq += index * internal->direction * derot_step;	/* next derot zig zag position	*/
 
-		if (abs(derot_freq) > derot_limit)
+		if (ABS(derot_freq) > derot_limit)
 			next_loop--;
 
 		if (next_loop) {
@@ -298,7 +295,7 @@ static enum stb0899_status stb0899_search_carrier(struct stb0899_state *state)
 			last_derot_freq = derot_freq;
 			derot_freq += index * internal->direction * internal->derot_step; /* next zig zag derotator position */
 
-			if(abs(derot_freq) > derot_limit)
+			if(ABS(derot_freq) > derot_limit)
 				next_loop--;
 
 			if (next_loop) {
@@ -400,7 +397,7 @@ static enum stb0899_status stb0899_search_data(struct stb0899_state *state)
 		if ((internal->status != CARRIEROK) || (stb0899_check_data(state) != DATAOK)) {
 
 			derot_freq += index * internal->direction * derot_step;	/* next zig zag derotator position */
-			if (abs(derot_freq) > derot_limit)
+			if (ABS(derot_freq) > derot_limit)
 				next_loop--;
 
 			if (next_loop) {
@@ -467,7 +464,7 @@ static void next_sub_range(struct stb0899_state *state)
 
 	if (internal->sub_dir > 0) {
 		old_sub_range = internal->sub_range;
-		internal->sub_range = min((internal->srch_range / 2) -
+		internal->sub_range = MIN((internal->srch_range / 2) -
 					  (internal->tuner_offst + internal->sub_range / 2),
 					   internal->sub_range);
 
@@ -766,12 +763,12 @@ static void stb0899_dvbs2_config_csm_auto(struct stb0899_state *state)
 	stb0899_write_s2reg(state, STB0899_S2DEMOD, STB0899_BASE_CSM_CNTRL1, STB0899_OFF0_CSM_CNTRL1, reg);
 }
 
-static long Log2Int(int number)
+long Log2Int(int number)
 {
 	int i;
 
 	i = 0;
-	while ((1 << i) <= abs(number))
+	while ((1 << i) <= ABS(number))
 		i++;
 
 	if (number == 0)

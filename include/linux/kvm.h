@@ -7,7 +7,7 @@
  * Note: you must update KVM_API_VERSION if you change this interface.
  */
 
-#include <linux/types.h>
+#include <asm/types.h>
 #include <linux/compiler.h>
 #include <linux/ioctl.h>
 #include <asm/kvm.h>
@@ -58,10 +58,10 @@ struct kvm_irqchip {
 	__u32 pad;
         union {
 		char dummy[512];  /* reserving space */
-#ifdef __KVM_HAVE_PIT
+#ifdef CONFIG_X86
 		struct kvm_pic_state pic;
 #endif
-#ifdef __KVM_HAVE_IOAPIC
+#if defined(CONFIG_X86) || defined(CONFIG_IA64)
 		struct kvm_ioapic_state ioapic;
 #endif
 	} chip;
@@ -384,16 +384,16 @@ struct kvm_trace_rec {
 #define KVM_CAP_MP_STATE 14
 #define KVM_CAP_COALESCED_MMIO 15
 #define KVM_CAP_SYNC_MMU 16  /* Changes to host mmap are reflected in guest */
-#ifdef __KVM_HAVE_DEVICE_ASSIGNMENT
+#if defined(CONFIG_X86)||defined(CONFIG_IA64)
 #define KVM_CAP_DEVICE_ASSIGNMENT 17
 #endif
 #define KVM_CAP_IOMMU 18
-#ifdef __KVM_HAVE_MSI
+#if defined(CONFIG_X86)
 #define KVM_CAP_DEVICE_MSI 20
 #endif
 /* Bug in KVM_SET_USER_MEMORY_REGION fixed: */
 #define KVM_CAP_DESTROY_MEMORY_REGION_WORKS 21
-#ifdef __KVM_HAVE_USER_NMI
+#if defined(CONFIG_X86)
 #define KVM_CAP_USER_NMI 22
 #endif
 

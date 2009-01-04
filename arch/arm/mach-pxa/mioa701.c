@@ -36,15 +36,13 @@
 #include <linux/power_supply.h>
 #include <linux/wm97xx_batt.h>
 #include <linux/mtd/physmap.h>
-#include <linux/usb/gpio_vbus.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-
-#include <mach/pxa27x.h>
-#include <mach/regs-rtc.h>
+#include <mach/mfp-pxa27x.h>
 #include <mach/pxa27x_keypad.h>
 #include <mach/pxafb.h>
+#include <mach/pxa2xx-regs.h>
 #include <mach/mmc.h>
 #include <mach/udc.h>
 #include <mach/pxa27x-udc.h>
@@ -413,6 +411,21 @@ static void gsm_exit(void)
 /*
  * USB UDC
  */
+static void udc_power_command(int cmd)
+{
+	switch (cmd) {
+	case PXA2XX_UDC_CMD_DISCONNECT:
+		gpio_set_value(GPIO22_USB_ENABLE, 0);
+		break;
+	case PXA2XX_UDC_CMD_CONNECT:
+		gpio_set_value(GPIO22_USB_ENABLE, 1);
+		break;
+	default:
+		printk(KERN_INFO "udc_control: unknown command (0x%x)!\n", cmd);
+		break;
+	}
+}
+
 static int is_usb_connected(void)
 {
 	return !gpio_get_value(GPIO13_nUSB_DETECT);
@@ -420,14 +433,23 @@ static int is_usb_connected(void)
 
 static struct pxa2xx_udc_mach_info mioa701_udc_info = {
 	.udc_is_connected = is_usb_connected,
-	.gpio_pullup	  = GPIO22_USB_ENABLE,
+	.udc_command	  = udc_power_command,
 };
 
-struct gpio_vbus_mach_info gpio_vbus_data = {
-	.gpio_vbus = GPIO13_nUSB_DETECT,
-	.gpio_vbus_inverted = 1,
-	.gpio_pullup = -1,
+struct gpio_ress udc_gpios[] = {
+	MIO_GPIO_OUT(GPIO22_USB_ENABLE, 0, "USB Vbus enable")
 };
+
+static int __init udc_init(void)
+{
+	pxa_set_udc_info(&mioa701_udc_info);
+	return mio_gpio_request(ARRAY_AND_SIZE(udc_gpios));
+}
+
+static void udc_exit(void)
+{
+	mio_gpio_free(ARRAY_AND_SIZE(udc_gpios));
+}
 
 /*
  * SDIO/MMC Card controller
@@ -767,7 +789,6 @@ MIO_SIMPLE_DEV(pxa2xx_ac97,	  "pxa2xx-ac97",    NULL)
 MIO_PARENT_DEV(mio_wm9713_codec,  "wm9713-codec",   &pxa2xx_ac97.dev, NULL)
 MIO_SIMPLE_DEV(mioa701_sound,	  "mioa701-wm9713", NULL)
 MIO_SIMPLE_DEV(mioa701_board,	  "mioa701-board",  NULL)
-MIO_SIMPLE_DEV(gpio_vbus,	  "gpio-vbus",      &gpio_vbus_data);
 
 static struct platform_device *devices[] __initdata = {
 	&mioa701_gpio_keys,
@@ -779,8 +800,7 @@ static struct platform_device *devices[] __initdata = {
 	&mioa701_sound,
 	&power_dev,
 	&strataflash,
-	&gpio_vbus,
-	&mioa701_board,
+	&mioa701_board
 };
 
 static void mioa701_machine_exit(void);
@@ -788,13 +808,13 @@ static void mioa701_machine_exit(void);
 static void mioa701_poweroff(void)
 {
 	mioa701_machine_exit();
-	arm_machine_restart('s', NULL);
+	arm_machine_restart('s');
 }
 
-static void mioa701_restart(char c, const char *cmd)
+static void mioa701_restart(char c)
 {
 	mioa701_machine_exit();
-	arm_machine_restart('s', cmd);
+	arm_machine_restart('s');
 }
 
 struct gpio_ress global_gpios[] = {
@@ -817,7 +837,7 @@ static void __init mioa701_machine_init(void)
 	pxa_set_mci_info(&mioa701_mci_info);
 	pxa_set_keypad_info(&mioa701_keypad_info);
 	wm97xx_bat_set_pdata(&mioa701_battery_data);
-	pxa_set_udc_info(&mioa701_udc_info);
+	udc_init();
 	pm_power_off = mioa701_poweroff;
 	arm_pm_restart = mioa701_restart;
 	platform_add_devices(devices, ARRAY_SIZE(devices));
@@ -830,6 +850,7 @@ static void __init mioa701_machine_init(void)
 
 static void mioa701_machine_exit(void)
 {
+	udc_exit();
 	bootstrap_exit();
 	gsm_exit();
 }

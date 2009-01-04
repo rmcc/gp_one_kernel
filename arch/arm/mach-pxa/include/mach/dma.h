@@ -12,10 +12,35 @@
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H
 
-#include <mach/hardware.h>
+/*
+ * Descriptor structure for PXA's DMA engine
+ * Note: this structure must always be aligned to a 16-byte boundary.
+ */
 
-/* DMA Controller Registers Definitions */
-#define DMAC_REGS_VIRT	io_p2v(0x40000000)
+typedef struct pxa_dma_desc {
+	volatile u32 ddadr;	/* Points to the next descriptor + flags */
+	volatile u32 dsadr;	/* DSADR value for the current transfer */
+	volatile u32 dtadr;	/* DTADR value for the current transfer */
+	volatile u32 dcmd;	/* DCMD value for the current transfer */
+} pxa_dma_desc;
 
-#include <plat/dma.h>
+typedef enum {
+	DMA_PRIO_HIGH = 0,
+	DMA_PRIO_MEDIUM = 1,
+	DMA_PRIO_LOW = 2
+} pxa_dma_prio;
+
+/*
+ * DMA registration
+ */
+
+int __init pxa_init_dma(int num_ch);
+
+int pxa_request_dma (char *name,
+			 pxa_dma_prio prio,
+			 void (*irq_handler)(int, void *),
+			 void *data);
+
+void pxa_free_dma (int dma_ch);
+
 #endif /* _ASM_ARCH_DMA_H */

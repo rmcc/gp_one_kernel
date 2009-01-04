@@ -1161,7 +1161,7 @@ static int ext3_write_begin(struct file *file, struct address_space *mapping,
 	to = from + len;
 
 retry:
-	page = grab_cache_page_write_begin(mapping, index, flags);
+	page = __grab_cache_page(mapping, index);
 	if (!page)
 		return -ENOMEM;
 	*pagep = page;

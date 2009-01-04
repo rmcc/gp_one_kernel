@@ -114,14 +114,11 @@ int __ref profile_init(void)
 	if (!slab_is_available()) {
 		prof_buffer = alloc_bootmem(buffer_bytes);
 		alloc_bootmem_cpumask_var(&prof_cpu_mask);
-		cpumask_copy(prof_cpu_mask, cpu_possible_mask);
 		return 0;
 	}
 
 	if (!alloc_cpumask_var(&prof_cpu_mask, GFP_KERNEL))
 		return -ENOMEM;
-
-	cpumask_copy(prof_cpu_mask, cpu_possible_mask);
 
 	prof_buffer = kzalloc(buffer_bytes, GFP_KERNEL);
 	if (prof_buffer)
@@ -448,6 +445,7 @@ void profile_tick(int type)
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
+#include <asm/ptrace.h>
 
 static int prof_cpu_mask_read_proc(char *page, char **start, off_t off,
 			int count, int *eof, void *data)

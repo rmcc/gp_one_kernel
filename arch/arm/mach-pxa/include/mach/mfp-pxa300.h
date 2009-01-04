@@ -15,6 +15,7 @@
 #ifndef __ASM_ARCH_MFP_PXA300_H
 #define __ASM_ARCH_MFP_PXA300_H
 
+#include <mach/mfp.h>
 #include <mach/mfp-pxa3xx.h>
 
 /* GPIO */
@@ -40,7 +41,6 @@
 #endif
 
 /* Chip Select */
-#define GPIO1_nCS2		MFP_CFG(GPIO1,	AF1)
 #define GPIO2_nCS3		MFP_CFG(GPIO2,  AF1)
 
 /* AC97 */

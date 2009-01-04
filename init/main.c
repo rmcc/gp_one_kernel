@@ -50,6 +50,7 @@
 #include <linux/rmap.h>
 #include <linux/mempolicy.h>
 #include <linux/key.h>
+#include <linux/unwind.h>
 #include <linux/buffer_head.h>
 #include <linux/page_cgroup.h>
 #include <linux/debug_locks.h>
@@ -62,7 +63,6 @@
 #include <linux/signal.h>
 #include <linux/idr.h>
 #include <linux/ftrace.h>
-#include <linux/async.h>
 #include <trace/boot.h>
 
 #include <asm/io.h>
@@ -97,7 +97,7 @@ static inline void mark_rodata_ro(void) { }
 extern void tc_init(void);
 #endif
 
-enum system_states system_state __read_mostly;
+enum system_states system_state;
 EXPORT_SYMBOL(system_state);
 
 /*
@@ -108,7 +108,7 @@ EXPORT_SYMBOL(system_state);
 
 extern void time_init(void);
 /* Default late time init is NULL. archs can override this later. */
-void (*__initdata late_time_init)(void);
+void (*late_time_init)(void);
 extern void softirq_init(void);
 
 /* Untouched command line saved by arch-specific code. */
@@ -447,7 +447,7 @@ static void __init setup_command_line(char *command_line)
  * gcc-3.4 accidentally inlines this function, so use noinline.
  */
 
-static noinline void __init_refok rest_init(void)
+static void noinline __init_refok rest_init(void)
 	__releases(kernel_lock)
 {
 	int pid;
@@ -463,7 +463,6 @@ static noinline void __init_refok rest_init(void)
 	 * at least once to get things moving:
 	 */
 	init_idle_bootup_task(current);
-	rcu_scheduler_starting();
 	preempt_enable_no_resched();
 	schedule();
 	preempt_disable();
@@ -538,6 +537,7 @@ asmlinkage void __init start_kernel(void)
 	 * Need to run as early as possible, to initialize the
 	 * lockdep hash:
 	 */
+	unwind_init();
 	lockdep_init();
 	debug_objects_early_init();
 	cgroup_init_early();
@@ -559,6 +559,7 @@ asmlinkage void __init start_kernel(void)
 	setup_arch(&command_line);
 	mm_init_owner(&init_mm, &init_task);
 	setup_command_line(command_line);
+	unwind_setup();
 	setup_per_cpu_areas();
 	setup_nr_cpu_ids();
 	smp_prepare_boot_cpu();	/* arch-specific boot-cpu hooks */
@@ -601,8 +602,7 @@ asmlinkage void __init start_kernel(void)
 	sched_clock_init();
 	profile_init();
 	if (!irqs_disabled())
-		printk(KERN_CRIT "start_kernel(): bug: interrupts were "
-				 "enabled early\n");
+		printk("start_kernel(): bug: interrupts were enabled early\n");
 	early_boot_irqs_on();
 	local_irq_enable();
 
@@ -687,7 +687,7 @@ asmlinkage void __init start_kernel(void)
 	rest_init();
 }
 
-int initcall_debug;
+static int initcall_debug;
 core_param(initcall_debug, initcall_debug, bool, 0644);
 
 int do_one_initcall(initcall_t fn)
@@ -786,10 +786,8 @@ static void run_init_process(char *init_filename)
 /* This is a non __init function. Force it to be noinline otherwise gcc
  * makes it inline to init() and it becomes part of init.text section
  */
-static noinline int init_post(void)
+static int noinline init_post(void)
 {
-	/* need to finish all async __init code before freeing the memory */
-	async_synchronize_full();
 	free_initmem();
 	unlock_kernel();
 	mark_rodata_ro();

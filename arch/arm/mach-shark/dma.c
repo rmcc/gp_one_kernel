@@ -13,11 +13,9 @@
 #include <asm/dma.h>
 #include <asm/mach/dma.h>
 
-static int __init shark_dma_init(void)
+void __init arch_dma_init(dma_t *dma)
 {
 #ifdef CONFIG_ISA_DMA
-	isa_init_dma();
+	isa_init_dma(dma);
 #endif
-	return 0;
 }
-core_initcall(shark_dma_init);

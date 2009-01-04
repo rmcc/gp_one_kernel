@@ -24,8 +24,9 @@
 
 #include <mach/dma.h>
 #include <mach/irda.h>
+#include <mach/hardware.h>
+#include <mach/pxa-regs.h>
 #include <mach/regs-uart.h>
-#include <mach/regs-ost.h>
 
 #define FICP		__REG(0x40800000)  /* Start of FICP area */
 #define ICCR0		__REG(0x40800000)  /* ICP Control Register 0 */
@@ -107,6 +108,7 @@ struct pxa_irda {
 	int			txdma;
 	int			rxdma;
 
+	struct net_device_stats	stats;
 	struct irlap_cb		*irlap;
 	struct qos_info		qos;
 
@@ -256,15 +258,14 @@ static irqreturn_t pxa_irda_sir_irq(int irq, void *dev_id)
 			data = STRBR;
 			if (lsr & (LSR_OE | LSR_PE | LSR_FE | LSR_BI)) {
 				printk(KERN_DEBUG "pxa_ir: sir receiving error\n");
-				dev->stats.rx_errors++;
+				si->stats.rx_errors++;
 				if (lsr & LSR_FE)
-					dev->stats.rx_frame_errors++;
+					si->stats.rx_frame_errors++;
 				if (lsr & LSR_OE)
-					dev->stats.rx_fifo_errors++;
+					si->stats.rx_fifo_errors++;
 			} else {
-				dev->stats.rx_bytes++;
-				async_unwrap_char(dev, &dev->stats,
-						  &si->rx_buff, data);
+				si->stats.rx_bytes++;
+				async_unwrap_char(dev, &si->stats, &si->rx_buff, data);
 			}
 			lsr = STLSR;
 		}
@@ -276,8 +277,8 @@ static irqreturn_t pxa_irda_sir_irq(int irq, void *dev_id)
 
 	case 0x0C: /* Character Timeout Indication */
 	  	do  {
-		    dev->stats.rx_bytes++;
-	            async_unwrap_char(dev, &dev->stats, &si->rx_buff, STRBR);
+		    si->stats.rx_bytes++;
+	            async_unwrap_char(dev, &si->stats, &si->rx_buff, STRBR);
 	  	} while (STLSR & LSR_DR);
 		si->last_oscr = OSCR;
 	  	break;
@@ -289,8 +290,9 @@ static irqreturn_t pxa_irda_sir_irq(int irq, void *dev_id)
 	    	}
 
 		if (si->tx_buff.len == 0) {
-			dev->stats.tx_packets++;
-			dev->stats.tx_bytes += si->tx_buff.data - si->tx_buff.head;
+			si->stats.tx_packets++;
+			si->stats.tx_bytes += si->tx_buff.data -
+					      si->tx_buff.head;
 
                         /* We need to ensure that the transmitter has finished. */
 			while ((STLSR & LSR_TEMT) == 0)
@@ -341,10 +343,10 @@ static void pxa_irda_fir_dma_tx_irq(int channel, void *data)
 	DCSR(channel) = dcsr & ~DCSR_RUN;
 
 	if (dcsr & DCSR_ENDINTR)  {
-		dev->stats.tx_packets++;
-		dev->stats.tx_bytes += si->dma_tx_buff_len;
+		si->stats.tx_packets++;
+		si->stats.tx_bytes += si->dma_tx_buff_len;
 	} else {
-		dev->stats.tx_errors++;
+		si->stats.tx_errors++;
 	}
 
 	while (ICSR1 & ICSR1_TBY)
@@ -390,14 +392,14 @@ static void pxa_irda_fir_irq_eif(struct pxa_irda *si, struct net_device *dev, in
 		data = ICDR;
 
 		if (stat & (ICSR1_CRE | ICSR1_ROR)) {
-			dev->stats.rx_errors++;
+			si->stats.rx_errors++;
 			if (stat & ICSR1_CRE) {
 				printk(KERN_DEBUG "pxa_ir: fir receive CRC error\n");
-				dev->stats.rx_crc_errors++;
+				si->stats.rx_crc_errors++;
 			}
 			if (stat & ICSR1_ROR) {
 				printk(KERN_DEBUG "pxa_ir: fir receive overrun\n");
-				dev->stats.rx_over_errors++;
+				si->stats.rx_over_errors++;
 			}
 		} else	{
 			si->dma_rx_buff[len++] = data;
@@ -413,14 +415,14 @@ static void pxa_irda_fir_irq_eif(struct pxa_irda *si, struct net_device *dev, in
 
 		if (icsr0 & ICSR0_FRE) {
 			printk(KERN_ERR "pxa_ir: dropping erroneous frame\n");
-			dev->stats.rx_dropped++;
+			si->stats.rx_dropped++;
 			return;
 		}
 
 		skb = alloc_skb(len+1,GFP_ATOMIC);
 		if (!skb)  {
 			printk(KERN_ERR "pxa_ir: fir out of memory for receive skb\n");
-			dev->stats.rx_dropped++;
+			si->stats.rx_dropped++;
 			return;
 		}
 
@@ -435,8 +437,8 @@ static void pxa_irda_fir_irq_eif(struct pxa_irda *si, struct net_device *dev, in
 		skb->protocol = htons(ETH_P_IRDA);
 		netif_rx(skb);
 
-		dev->stats.rx_packets++;
-		dev->stats.rx_bytes += len;
+		si->stats.rx_packets++;
+		si->stats.rx_bytes += len;
 	}
 }
 
@@ -455,10 +457,10 @@ static irqreturn_t pxa_irda_fir_irq(int irq, void *dev_id)
 	if (icsr0 & (ICSR0_FRE | ICSR0_RAB)) {
 		if (icsr0 & ICSR0_FRE) {
 		        printk(KERN_DEBUG "pxa_ir: fir receive frame error\n");
-			dev->stats.rx_frame_errors++;
+			si->stats.rx_frame_errors++;
 		} else {
 			printk(KERN_DEBUG "pxa_ir: fir receive abort\n");
-			dev->stats.rx_errors++;
+			si->stats.rx_errors++;
 		}
 		ICSR0 = icsr0 & (ICSR0_FRE | ICSR0_RAB);
 	}
@@ -585,6 +587,12 @@ static int pxa_irda_ioctl(struct net_device *dev, struct ifreq *ifreq, int cmd)
 	}
 
 	return ret;
+}
+
+static struct net_device_stats *pxa_irda_stats(struct net_device *dev)
+{
+	struct pxa_irda *si = netdev_priv(dev);
+	return &si->stats;
 }
 
 static void pxa_irda_startup(struct pxa_irda *si)
@@ -849,6 +857,7 @@ static int pxa_irda_probe(struct platform_device *pdev)
 	dev->open		= pxa_irda_start;
 	dev->stop		= pxa_irda_stop;
 	dev->do_ioctl		= pxa_irda_ioctl;
+	dev->get_stats		= pxa_irda_stats;
 
 	irda_init_max_qos_capabilies(&si->qos);
 

@@ -177,14 +177,6 @@ static int i915_initialize(struct drm_device * dev, drm_i915_init_t * init)
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct drm_i915_master_private *master_priv = dev->primary->master->driver_priv;
 
-	master_priv->sarea = drm_getsarea(dev);
-	if (master_priv->sarea) {
-		master_priv->sarea_priv = (drm_i915_sarea_t *)
-			((u8 *)master_priv->sarea->handle + init->sarea_priv_offset);
-	} else {
-		DRM_DEBUG("sarea not found assuming DRI2 userspace\n");
-	}
-
 	if (init->ring_size != 0) {
 		if (dev_priv->ring.ring_obj != NULL) {
 			i915_dma_cleanup(dev);
@@ -202,7 +194,7 @@ static int i915_initialize(struct drm_device * dev, drm_i915_init_t * init)
 		dev_priv->ring.map.flags = 0;
 		dev_priv->ring.map.mtrr = 0;
 
-		drm_core_ioremap_wc(&dev_priv->ring.map, dev);
+		drm_core_ioremap(&dev_priv->ring.map, dev);
 
 		if (dev_priv->ring.map.handle == NULL) {
 			i915_dma_cleanup(dev);
@@ -731,11 +723,8 @@ static int i915_getparam(struct drm_device *dev, void *data,
 	case I915_PARAM_HAS_GEM:
 		value = dev_priv->has_gem;
 		break;
-	case I915_PARAM_NUM_FENCES_AVAIL:
-		value = dev_priv->num_fence_regs - dev_priv->fence_reg_start;
-		break;
 	default:
-		DRM_DEBUG("Unknown parameter %d\n", param->param);
+		DRM_ERROR("Unknown parameter %d\n", param->param);
 		return -EINVAL;
 	}
 
@@ -767,15 +756,8 @@ static int i915_setparam(struct drm_device *dev, void *data,
 	case I915_SETPARAM_ALLOW_BATCHBUFFER:
 		dev_priv->allow_batchbuffer = param->value;
 		break;
-	case I915_SETPARAM_NUM_USED_FENCES:
-		if (param->value > dev_priv->num_fence_regs ||
-		    param->value < 0)
-			return -EINVAL;
-		/* Userspace can use first N regs */
-		dev_priv->fence_reg_start = param->value;
-		break;
 	default:
-		DRM_DEBUG("unknown parameter %d\n", param->param);
+		DRM_ERROR("unknown parameter %d\n", param->param);
 		return -EINVAL;
 	}
 
@@ -811,7 +793,7 @@ static int i915_set_status_page(struct drm_device *dev, void *data,
 	dev_priv->hws_map.flags = 0;
 	dev_priv->hws_map.mtrr = 0;
 
-	drm_core_ioremap_wc(&dev_priv->hws_map, dev);
+	drm_core_ioremap(&dev_priv->hws_map, dev);
 	if (dev_priv->hws_map.handle == NULL) {
 		i915_dma_cleanup(dev);
 		dev_priv->status_gfx_addr = 0;
@@ -845,7 +827,6 @@ static int i915_probe_agp(struct drm_device *dev, unsigned long *aperture_size,
 	struct pci_dev *bridge_dev;
 	u16 tmp = 0;
 	unsigned long overhead;
-	unsigned long stolen;
 
 	bridge_dev = pci_get_bus_and_slot(0, PCI_DEVFN(0,0));
 	if (!bridge_dev) {
@@ -885,55 +866,36 @@ static int i915_probe_agp(struct drm_device *dev, unsigned long *aperture_size,
 	else
 		overhead = (*aperture_size / 1024) + 4096;
 
-	switch (tmp & INTEL_GMCH_GMS_MASK) {
+	switch (tmp & INTEL_855_GMCH_GMS_MASK) {
+	case INTEL_855_GMCH_GMS_STOLEN_1M:
+		break; /* 1M already */
+	case INTEL_855_GMCH_GMS_STOLEN_4M:
+		*preallocated_size *= 4;
+		break;
+	case INTEL_855_GMCH_GMS_STOLEN_8M:
+		*preallocated_size *= 8;
+		break;
+	case INTEL_855_GMCH_GMS_STOLEN_16M:
+		*preallocated_size *= 16;
+		break;
+	case INTEL_855_GMCH_GMS_STOLEN_32M:
+		*preallocated_size *= 32;
+		break;
+	case INTEL_915G_GMCH_GMS_STOLEN_48M:
+		*preallocated_size *= 48;
+		break;
+	case INTEL_915G_GMCH_GMS_STOLEN_64M:
+		*preallocated_size *= 64;
+		break;
 	case INTEL_855_GMCH_GMS_DISABLED:
 		DRM_ERROR("video memory is disabled\n");
 		return -1;
-	case INTEL_855_GMCH_GMS_STOLEN_1M:
-		stolen = 1 * 1024 * 1024;
-		break;
-	case INTEL_855_GMCH_GMS_STOLEN_4M:
-		stolen = 4 * 1024 * 1024;
-		break;
-	case INTEL_855_GMCH_GMS_STOLEN_8M:
-		stolen = 8 * 1024 * 1024;
-		break;
-	case INTEL_855_GMCH_GMS_STOLEN_16M:
-		stolen = 16 * 1024 * 1024;
-		break;
-	case INTEL_855_GMCH_GMS_STOLEN_32M:
-		stolen = 32 * 1024 * 1024;
-		break;
-	case INTEL_915G_GMCH_GMS_STOLEN_48M:
-		stolen = 48 * 1024 * 1024;
-		break;
-	case INTEL_915G_GMCH_GMS_STOLEN_64M:
-		stolen = 64 * 1024 * 1024;
-		break;
-	case INTEL_GMCH_GMS_STOLEN_128M:
-		stolen = 128 * 1024 * 1024;
-		break;
-	case INTEL_GMCH_GMS_STOLEN_256M:
-		stolen = 256 * 1024 * 1024;
-		break;
-	case INTEL_GMCH_GMS_STOLEN_96M:
-		stolen = 96 * 1024 * 1024;
-		break;
-	case INTEL_GMCH_GMS_STOLEN_160M:
-		stolen = 160 * 1024 * 1024;
-		break;
-	case INTEL_GMCH_GMS_STOLEN_224M:
-		stolen = 224 * 1024 * 1024;
-		break;
-	case INTEL_GMCH_GMS_STOLEN_352M:
-		stolen = 352 * 1024 * 1024;
-		break;
 	default:
 		DRM_ERROR("unexpected GMCH_GMS value: 0x%02x\n",
-			tmp & INTEL_GMCH_GMS_MASK);
+			tmp & INTEL_855_GMCH_GMS_MASK);
 		return -1;
 	}
-	*preallocated_size = stolen - overhead;
+	*preallocated_size -= overhead;
 
 	return 0;
 }
@@ -954,12 +916,11 @@ static int i915_load_modeset_init(struct drm_device *dev)
 	dev->mode_config.fb_base = drm_get_resource_start(dev, fb_bar) &
 		0xff000000;
 
-	if (IS_MOBILE(dev) || IS_I9XX(dev))
+	DRM_DEBUG("*** fb base 0x%08lx\n", dev->mode_config.fb_base);
+
+	if (IS_MOBILE(dev) || (IS_I9XX(dev) && !IS_I965G(dev) && !IS_G33(dev)))
 		dev_priv->cursor_needs_physical = true;
 	else
-		dev_priv->cursor_needs_physical = false;
-
-	if (IS_I965G(dev) || IS_G33(dev))
 		dev_priv->cursor_needs_physical = false;
 
 	ret = i915_probe_agp(dev, &agp_size, &prealloc_size);
@@ -975,6 +936,10 @@ static int i915_load_modeset_init(struct drm_device *dev)
 	ret = i915_gem_init_ringbuffer(dev);
 	if (ret)
 		goto kfree_devname;
+
+        dev_priv->mm.gtt_mapping =
+		io_mapping_create_wc(dev->agp->base,
+				     dev->agp->agp_info.aper_size * 1024*1024);
 
 	/* Allow hardware batchbuffers unless told otherwise.
 	 */
@@ -1087,28 +1052,6 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 		goto free_priv;
 	}
 
-        dev_priv->mm.gtt_mapping =
-		io_mapping_create_wc(dev->agp->base,
-				     dev->agp->agp_info.aper_size * 1024*1024);
-	if (dev_priv->mm.gtt_mapping == NULL) {
-		ret = -EIO;
-		goto out_rmmap;
-	}
-
-	/* Set up a WC MTRR for non-PAT systems.  This is more common than
-	 * one would think, because the kernel disables PAT on first
-	 * generation Core chips because WC PAT gets overridden by a UC
-	 * MTRR if present.  Even if a UC MTRR isn't present.
-	 */
-	dev_priv->mm.gtt_mtrr = mtrr_add(dev->agp->base,
-					 dev->agp->agp_info.aper_size *
-					 1024 * 1024,
-					 MTRR_TYPE_WRCOMB, 1);
-	if (dev_priv->mm.gtt_mtrr < 0) {
-		DRM_INFO("MTRR allocation failed.  Graphics "
-			 "performance may suffer.\n");
-	}
-
 #ifdef CONFIG_HIGHMEM64G
 	/* don't enable GEM on PAE - needs agp + set_memory_* interface fixes */
 	dev_priv->has_gem = 0;
@@ -1117,17 +1060,13 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	dev_priv->has_gem = 1;
 #endif
 
-	dev->driver->get_vblank_counter = i915_get_vblank_counter;
-	if (IS_GM45(dev))
-		dev->driver->get_vblank_counter = gm45_get_vblank_counter;
-
 	i915_gem_load(dev);
 
 	/* Init HWS */
 	if (!I915_NEED_GFX_HWS(dev)) {
 		ret = i915_init_phys_hws(dev);
 		if (ret != 0)
-			goto out_iomapfree;
+			goto out_rmmap;
 	}
 
 	/* On the 945G/GM, the chipset reports the MSI capability on the
@@ -1166,8 +1105,6 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 
 	return 0;
 
-out_iomapfree:
-	io_mapping_free(dev_priv->mm.gtt_mapping);
 out_rmmap:
 	iounmap(dev_priv->regs);
 free_priv:
@@ -1179,14 +1116,8 @@ int i915_driver_unload(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	io_mapping_free(dev_priv->mm.gtt_mapping);
-	if (dev_priv->mm.gtt_mtrr >= 0) {
-		mtrr_del(dev_priv->mm.gtt_mtrr, dev->agp->base,
-			 dev->agp->agp_info.aper_size * 1024 * 1024);
-		dev_priv->mm.gtt_mtrr = -1;
-	}
-
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
+		io_mapping_free(dev_priv->mm.gtt_mapping);
 		drm_irq_uninstall(dev);
 	}
 
@@ -1200,8 +1131,6 @@ int i915_driver_unload(struct drm_device *dev)
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		intel_modeset_cleanup(dev);
-
-		i915_gem_free_all_phys_object(dev);
 
 		mutex_lock(&dev->struct_mutex);
 		i915_gem_cleanup_ringbuffer(dev);

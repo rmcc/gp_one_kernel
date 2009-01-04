@@ -34,7 +34,6 @@
 #include <mach/gpio.h>
 #include <mach/hardware.h>
 #include <mach/mcspi.h>
-#include <mach/usb.h>
 
 #include "mmc-twl4030.h"
 
@@ -54,13 +53,6 @@ static struct twl4030_hsmmc_info omap3pandora_mmc[] = {
 		.gpio_cd	= -EINVAL,
 		.gpio_wp	= 127,
 		.ext_clock	= 1,
-		.transceiver	= true,
-	},
-	{
-		.mmc		= 3,
-		.wires		= 4,
-		.gpio_cd	= -EINVAL,
-		.gpio_wp	= -EINVAL,
 	},
 	{}	/* Terminator */
 };
@@ -118,7 +110,7 @@ static int __init omap3pandora_i2c_init(void)
 
 static void __init omap3pandora_init_irq(void)
 {
-	omap2_init_common_hw(NULL);
+	omap2_init_common_hw();
 	omap_init_irq();
 	omap_gpio_init();
 }
@@ -201,7 +193,6 @@ static void __init omap3pandora_init(void)
 	spi_register_board_info(omap3pandora_spi_board_info,
 			ARRAY_SIZE(omap3pandora_spi_board_info));
 	omap3pandora_ads7846_init();
-	usb_musb_init();
 }
 
 static void __init omap3pandora_map_io(void)

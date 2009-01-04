@@ -1594,7 +1594,7 @@ process:
 #ifdef CONFIG_NET_DMA
 		struct tcp_sock *tp = tcp_sk(sk);
 		if (!tp->ucopy.dma_chan && tp->ucopy.pinned_list)
-			tp->ucopy.dma_chan = dma_find_channel(DMA_MEMCPY);
+			tp->ucopy.dma_chan = get_softnet_dma();
 		if (tp->ucopy.dma_chan)
 			ret = tcp_v4_do_rcv(sk, skb);
 		else
@@ -2443,7 +2443,7 @@ static struct pernet_operations __net_initdata tcp_sk_ops = {
 void __init tcp_v4_init(void)
 {
 	inet_hashinfo_init(&tcp_hashinfo);
-	if (register_pernet_subsys(&tcp_sk_ops))
+	if (register_pernet_device(&tcp_sk_ops))
 		panic("Failed to create the TCP control socket.\n");
 }
 

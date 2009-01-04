@@ -16,6 +16,8 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 
+#include <mach/hardware.h>
+#include <mach/pxa-regs.h>
 #include <mach/eseries-gpio.h>
 
 #include <asm/irq.h>

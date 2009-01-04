@@ -10,8 +10,6 @@
 #ifndef __GFS2_ONDISK_DOT_H__
 #define __GFS2_ONDISK_DOT_H__
 
-#include <linux/types.h>
-
 #define GFS2_MAGIC		0x01161970
 #define GFS2_BASIC_BLOCK	512
 #define GFS2_BASIC_BLOCK_SHIFT	9

@@ -34,6 +34,8 @@
 #include <asm/delay.h>
 
 #include <mach/dma.h>
+#include <mach/hardware.h>
+#include <mach/pxa-regs.h>
 #include <mach/regs-ssp.h>
 #include <mach/ssp.h>
 #include <mach/pxa2xx_spi.h>
@@ -1559,12 +1561,11 @@ out_error_master_alloc:
 static int pxa2xx_spi_remove(struct platform_device *pdev)
 {
 	struct driver_data *drv_data = platform_get_drvdata(pdev);
-	struct ssp_device *ssp;
+	struct ssp_device *ssp = drv_data->ssp;
 	int status = 0;
 
 	if (!drv_data)
 		return 0;
-	ssp = drv_data->ssp;
 
 	/* Remove the queue */
 	status = destroy_queue(drv_data);

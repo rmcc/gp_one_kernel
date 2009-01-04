@@ -427,7 +427,7 @@ int __log_space_left(journal_t *journal)
 }
 
 /*
- * Called under j_state_lock.  Returns true if a transaction commit was started.
+ * Called under j_state_lock.  Returns true if a transaction was started.
  */
 int __log_start_commit(journal_t *journal, tid_t target)
 {
@@ -495,8 +495,7 @@ int journal_force_commit_nested(journal_t *journal)
 
 /*
  * Start a commit of the current running transaction (if any).  Returns true
- * if a transaction is going to be committed (or is currently already
- * committing), and fills its tid in at *ptid
+ * if a transaction was started, and fills its tid in at *ptid
  */
 int journal_start_commit(journal_t *journal, tid_t *ptid)
 {
@@ -506,19 +505,15 @@ int journal_start_commit(journal_t *journal, tid_t *ptid)
 	if (journal->j_running_transaction) {
 		tid_t tid = journal->j_running_transaction->t_tid;
 
-		__log_start_commit(journal, tid);
-		/* There's a running transaction and we've just made sure
-		 * it's commit has been scheduled. */
-		if (ptid)
+		ret = __log_start_commit(journal, tid);
+		if (ret && ptid)
 			*ptid = tid;
-		ret = 1;
-	} else if (journal->j_committing_transaction) {
+	} else if (journal->j_committing_transaction && ptid) {
 		/*
 		 * If ext3_write_super() recently started a commit, then we
 		 * have to wait for completion of that transaction
 		 */
-		if (ptid)
-			*ptid = journal->j_committing_transaction->t_tid;
+		*ptid = journal->j_committing_transaction->t_tid;
 		ret = 1;
 	}
 	spin_unlock(&journal->j_state_lock);

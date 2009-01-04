@@ -166,10 +166,10 @@ struct idetape_bh {
  * to an interrupt or a timer event is stored in the struct defined below.
  */
 typedef struct ide_tape_obj {
-	ide_drive_t		*drive;
-	struct ide_driver	*driver;
-	struct gendisk		*disk;
-	struct device		dev;
+	ide_drive_t	*drive;
+	ide_driver_t	*driver;
+	struct gendisk	*disk;
+	struct kref	kref;
 
 	/*
 	 *	failed_pc points to the last failed packet command, or contains
@@ -267,7 +267,7 @@ static DEFINE_MUTEX(idetape_ref_mutex);
 
 static struct class *idetape_sysfs_class;
 
-static void ide_tape_release(struct device *);
+static void ide_tape_release(struct kref *);
 
 static struct ide_tape_obj *ide_tape_get(struct gendisk *disk)
 {
@@ -279,7 +279,7 @@ static struct ide_tape_obj *ide_tape_get(struct gendisk *disk)
 		if (ide_device_get(tape->drive))
 			tape = NULL;
 		else
-			get_device(&tape->dev);
+			kref_get(&tape->kref);
 	}
 	mutex_unlock(&idetape_ref_mutex);
 	return tape;
@@ -290,7 +290,7 @@ static void ide_tape_put(struct ide_tape_obj *tape)
 	ide_drive_t *drive = tape->drive;
 
 	mutex_lock(&idetape_ref_mutex);
-	put_device(&tape->dev);
+	kref_put(&tape->kref, ide_tape_release);
 	ide_device_put(drive);
 	mutex_unlock(&idetape_ref_mutex);
 }
@@ -308,7 +308,7 @@ static struct ide_tape_obj *ide_tape_chrdev_get(unsigned int i)
 	mutex_lock(&idetape_ref_mutex);
 	tape = idetape_devs[i];
 	if (tape)
-		get_device(&tape->dev);
+		kref_get(&tape->kref);
 	mutex_unlock(&idetape_ref_mutex);
 	return tape;
 }
@@ -479,7 +479,7 @@ static void ide_tape_kfree_buffer(idetape_tape_t *tape)
 
 static int idetape_end_request(ide_drive_t *drive, int uptodate, int nr_sects)
 {
-	struct request *rq = drive->hwif->rq;
+	struct request *rq = HWGROUP(drive)->rq;
 	idetape_tape_t *tape = drive->driver_data;
 	unsigned long flags;
 	int error;
@@ -531,7 +531,7 @@ static void ide_tape_callback(ide_drive_t *drive, int dsc)
 			printk(KERN_ERR "ide-tape: Error in REQUEST SENSE "
 					"itself - Aborting request!\n");
 	} else if (pc->c[0] == READ_6 || pc->c[0] == WRITE_6) {
-		struct request *rq = drive->hwif->rq;
+		struct request *rq = drive->hwif->hwgroup->rq;
 		int blocks = pc->xferred / tape->blk_size;
 
 		tape->avg_size += blocks * tape->blk_size;
@@ -576,7 +576,7 @@ static void ide_tape_callback(ide_drive_t *drive, int dsc)
 
 /*
  * Postpone the current request so that ide.c will be able to service requests
- * from another device on the same port while we are polling for DSC.
+ * from another device on the same hwgroup while we are polling for DSC.
  */
 static void idetape_postpone_request(ide_drive_t *drive)
 {
@@ -584,8 +584,7 @@ static void idetape_postpone_request(ide_drive_t *drive)
 
 	debug_log(DBG_PROCS, "Enter %s\n", __func__);
 
-	tape->postponed_rq = drive->hwif->rq;
-
+	tape->postponed_rq = HWGROUP(drive)->rq;
 	ide_stall_queue(drive, tape->dsc_poll_freq);
 }
 
@@ -2166,7 +2165,7 @@ static const struct ide_proc_devset idetape_settings[] = {
 	__IDE_PROC_DEVSET(speed,	0, 0xffff, NULL, NULL),
 	__IDE_PROC_DEVSET(tdsc,		IDETAPE_DSC_RW_MIN, IDETAPE_DSC_RW_MAX,
 					mulf_tdsc, divf_tdsc),
-	{ NULL },
+	{ 0 },
 };
 #endif
 
@@ -2256,17 +2255,15 @@ static void ide_tape_remove(ide_drive_t *drive)
 	idetape_tape_t *tape = drive->driver_data;
 
 	ide_proc_unregister_driver(drive, tape->driver);
-	device_del(&tape->dev);
+
 	ide_unregister_region(tape->disk);
 
-	mutex_lock(&idetape_ref_mutex);
-	put_device(&tape->dev);
-	mutex_unlock(&idetape_ref_mutex);
+	ide_tape_put(tape);
 }
 
-static void ide_tape_release(struct device *dev)
+static void ide_tape_release(struct kref *kref)
 {
-	struct ide_tape_obj *tape = to_ide_drv(dev, ide_tape_obj);
+	struct ide_tape_obj *tape = to_ide_drv(kref, ide_tape_obj);
 	ide_drive_t *drive = tape->drive;
 	struct gendisk *g = tape->disk;
 
@@ -2315,7 +2312,7 @@ static const struct ide_proc_devset *ide_tape_proc_devsets(ide_drive_t *drive)
 
 static int ide_tape_probe(ide_drive_t *);
 
-static struct ide_driver idetape_driver = {
+static ide_driver_t idetape_driver = {
 	.gen_driver = {
 		.owner		= THIS_MODULE,
 		.name		= "ide-tape",
@@ -2326,6 +2323,7 @@ static struct ide_driver idetape_driver = {
 	.version		= IDETAPE_VERSION,
 	.do_request		= idetape_do_request,
 	.end_request		= idetape_end_request,
+	.error			= __ide_error,
 #ifdef CONFIG_IDE_PROC_FS
 	.proc_entries		= ide_tape_proc_entries,
 	.proc_devsets		= ide_tape_proc_devsets,
@@ -2409,12 +2407,7 @@ static int ide_tape_probe(ide_drive_t *drive)
 
 	ide_init_disk(g, drive);
 
-	tape->dev.parent = &drive->gendev;
-	tape->dev.release = ide_tape_release;
-	dev_set_name(&tape->dev, dev_name(&drive->gendev));
-
-	if (device_register(&tape->dev))
-		goto out_free_disk;
+	kref_init(&tape->kref);
 
 	tape->drive = drive;
 	tape->driver = &idetape_driver;
@@ -2443,8 +2436,6 @@ static int ide_tape_probe(ide_drive_t *drive)
 
 	return 0;
 
-out_free_disk:
-	put_disk(g);
 out_free_tape:
 	kfree(tape);
 failed:

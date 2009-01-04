@@ -31,7 +31,7 @@
 static struct amba_device name##_device = {			\
 	.dev		= {					\
 		.coherent_dma_mask = ~0,			\
-		.init_name = busid,				\
+		.bus_id	= busid,				\
 		.platform_data = plat,				\
 	},							\
 	.res		= {					\
@@ -45,7 +45,6 @@ static struct amba_device name##_device = {			\
 }
 
 extern struct platform_device realview_flash_device;
-extern struct platform_device realview_cf_device;
 extern struct platform_device realview_i2c_device;
 extern struct mmc_platform_data realview_mmc0_plat_data;
 extern struct mmc_platform_data realview_mmc1_plat_data;
@@ -63,6 +62,5 @@ extern void realview_leds_event(led_event_t ledevt);
 extern void realview_timer_init(unsigned int timer_irq);
 extern int realview_flash_register(struct resource *res, u32 num);
 extern int realview_eth_register(const char *name, struct resource *res);
-extern int realview_usb_register(struct resource *res);
 
 #endif

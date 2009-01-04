@@ -22,7 +22,8 @@
 #include <asm/div64.h>
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
-#include <mach/regs-ost.h>
+#include <mach/hardware.h>
+#include <mach/pxa-regs.h>
 
 /*
  * This is PXA's sched_clock implementation. This has a resolution

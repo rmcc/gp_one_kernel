@@ -231,7 +231,7 @@ static const struct ide_proc_devset ide_generic_settings[] = {
 	IDE_PROC_DEVSET(pio_mode, 0, 255),
 	IDE_PROC_DEVSET(unmaskirq, 0, 1),
 	IDE_PROC_DEVSET(using_dma, 0, 1),
-	{ NULL },
+	{ 0 },
 };
 
 static void proc_ide_settings_warn(void)
@@ -439,13 +439,13 @@ static int proc_ide_read_dmodel
 static int proc_ide_read_driver
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
-	ide_drive_t		*drive = (ide_drive_t *)data;
-	struct device		*dev = &drive->gendev;
-	struct ide_driver	*ide_drv;
-	int			len;
+	ide_drive_t	*drive = (ide_drive_t *) data;
+	struct device	*dev = &drive->gendev;
+	ide_driver_t	*ide_drv;
+	int		len;
 
 	if (dev->driver) {
-		ide_drv = to_ide_driver(dev->driver);
+		ide_drv = container_of(dev->driver, ide_driver_t, gen_driver);
 		len = sprintf(page, "%s version %s\n",
 				dev->driver->name, ide_drv->version);
 	} else
@@ -555,7 +555,7 @@ static void ide_remove_proc_entries(struct proc_dir_entry *dir, ide_proc_entry_t
 	}
 }
 
-void ide_proc_register_driver(ide_drive_t *drive, struct ide_driver *driver)
+void ide_proc_register_driver(ide_drive_t *drive, ide_driver_t *driver)
 {
 	mutex_lock(&ide_setting_mtx);
 	drive->settings = driver->proc_devsets(drive);
@@ -577,7 +577,7 @@ EXPORT_SYMBOL(ide_proc_register_driver);
  *	Takes ide_setting_mtx.
  */
 
-void ide_proc_unregister_driver(ide_drive_t *drive, struct ide_driver *driver)
+void ide_proc_unregister_driver(ide_drive_t *drive, ide_driver_t *driver)
 {
 	ide_remove_proc_entries(drive->proc, driver->proc_entries(drive));
 
@@ -593,13 +593,14 @@ EXPORT_SYMBOL(ide_proc_unregister_driver);
 
 void ide_proc_port_register_devices(ide_hwif_t *hwif)
 {
+	int	d;
 	struct proc_dir_entry *ent;
 	struct proc_dir_entry *parent = hwif->proc;
-	ide_drive_t *drive;
 	char name[64];
-	int i;
 
-	ide_port_for_each_dev(i, drive, hwif) {
+	for (d = 0; d < MAX_DRIVES; d++) {
+		ide_drive_t *drive = &hwif->drives[d];
+
 		if ((drive->dev_flags & IDE_DFLAG_PRESENT) == 0 || drive->proc)
 			continue;
 
@@ -652,7 +653,7 @@ void ide_proc_unregister_port(ide_hwif_t *hwif)
 
 static int proc_print_driver(struct device_driver *drv, void *data)
 {
-	struct ide_driver *ide_drv = to_ide_driver(drv);
+	ide_driver_t *ide_drv = container_of(drv, ide_driver_t, gen_driver);
 	struct seq_file *s = data;
 
 	seq_printf(s, "%s version %s\n", drv->name, ide_drv->version);

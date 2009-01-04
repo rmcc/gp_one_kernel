@@ -25,7 +25,7 @@ static void arch_idle(void)
 }
 
 
-static __inline__ void arch_reset(char mode, const char *cmd)
+static __inline__ void arch_reset(char mode)
 {
 	CPU_REG (PMU_BASE, PMU_STAT) |= PMU_WARMRESET;
 }

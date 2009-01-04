@@ -13,6 +13,7 @@
 #include <asm/proc-fns.h>
 #include "hardware.h"
 #include "pxa2xx-regs.h"
+#include "pxa-regs.h"
 
 static inline void arch_idle(void)
 {
@@ -20,4 +21,4 @@ static inline void arch_idle(void)
 }
 
 
-void arch_reset(char mode, const char *cmd);
+void arch_reset(char mode);

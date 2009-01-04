@@ -20,7 +20,7 @@ static inline void arch_idle(void)
 	cpu_do_idle();
 }
 
-static inline void arch_reset(char mode, const char *cmd)
+static inline void arch_reset(char mode)
 {
 #ifdef CONFIG_PROCESSOR_NS9360
 	if (processor_is_ns9360())

@@ -14,39 +14,31 @@
  * Copyright (c) 2004, Luke Kenneth Casson Leighton <lkcl@lkcl.net>
  * Copyright (c) 2004 Red Hat, Inc., James Morris <jmorris@redhat.com>
  *
- * tiny-shmem:
- * Copyright (c) 2004, 2008 Matt Mackall <mpm@selenic.com>
- *
  * This file is released under the GPL.
  */
 
-#include <linux/fs.h>
-#include <linux/init.h>
-#include <linux/vfs.h>
-#include <linux/mount.h>
-#include <linux/file.h>
-#include <linux/mm.h>
-#include <linux/module.h>
-#include <linux/swap.h>
-
-static struct vfsmount *shm_mnt;
-
-#ifdef CONFIG_SHMEM
 /*
  * This virtual memory filesystem is heavily based on the ramfs. It
  * extends ramfs by the ability to use swap and honor resource limits
  * which makes it a completely usable filesystem.
  */
 
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/fs.h>
 #include <linux/xattr.h>
 #include <linux/exportfs.h>
 #include <linux/generic_acl.h>
+#include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/file.h>
+#include <linux/swap.h>
 #include <linux/pagemap.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/backing-dev.h>
 #include <linux/shmem_fs.h>
+#include <linux/mount.h>
 #include <linux/writeback.h>
 #include <linux/vfs.h>
 #include <linux/blkdev.h>
@@ -169,13 +161,13 @@ static inline struct shmem_sb_info *SHMEM_SB(struct super_block *sb)
  */
 static inline int shmem_acct_size(unsigned long flags, loff_t size)
 {
-	return (flags & VM_NORESERVE) ?
-		0 : security_vm_enough_memory_kern(VM_ACCT(size));
+	return (flags & VM_ACCOUNT) ?
+		security_vm_enough_memory_kern(VM_ACCT(size)) : 0;
 }
 
 static inline void shmem_unacct_size(unsigned long flags, loff_t size)
 {
-	if (!(flags & VM_NORESERVE))
+	if (flags & VM_ACCOUNT)
 		vm_unacct_memory(VM_ACCT(size));
 }
 
@@ -187,13 +179,13 @@ static inline void shmem_unacct_size(unsigned long flags, loff_t size)
  */
 static inline int shmem_acct_block(unsigned long flags)
 {
-	return (flags & VM_NORESERVE) ?
-		security_vm_enough_memory_kern(VM_ACCT(PAGE_CACHE_SIZE)) : 0;
+	return (flags & VM_ACCOUNT) ?
+		0 : security_vm_enough_memory_kern(VM_ACCT(PAGE_CACHE_SIZE));
 }
 
 static inline void shmem_unacct_blocks(unsigned long flags, long pages)
 {
-	if (flags & VM_NORESERVE)
+	if (!(flags & VM_ACCOUNT))
 		vm_unacct_memory(pages * VM_ACCT(PAGE_CACHE_SIZE));
 }
 
@@ -928,11 +920,7 @@ found:
 	error = 1;
 	if (!inode)
 		goto out;
-	/*
-	 * Charge page using GFP_KERNEL while we can wait.
-	 * Charged back to the user(not to caller) when swap account is used.
-	 * add_to_page_cache() will be called with GFP_NOWAIT.
-	 */
+	/* Precharge page using GFP_KERNEL while we can wait */
 	error = mem_cgroup_cache_charge(page, current->mm, GFP_KERNEL);
 	if (error)
 		goto out;
@@ -1324,19 +1312,15 @@ repeat:
 		} else {
 			shmem_swp_unmap(entry);
 			spin_unlock(&info->lock);
-			if (error == -ENOMEM) {
-				/* allow reclaim from this memory cgroup */
-				error = mem_cgroup_shrink_usage(swappage,
-								current->mm,
-								gfp);
-				if (error) {
-					unlock_page(swappage);
-					page_cache_release(swappage);
-					goto failed;
-				}
-			}
 			unlock_page(swappage);
 			page_cache_release(swappage);
+			if (error == -ENOMEM) {
+				/* allow reclaim from this memory cgroup */
+				error = mem_cgroup_shrink_usage(current->mm,
+								gfp);
+				if (error)
+					goto failed;
+			}
 			goto repeat;
 		}
 	} else if (sgp == SGP_READ && !filepage) {
@@ -1387,7 +1371,7 @@ repeat:
 
 			/* Precharge page while we can wait, compensate after */
 			error = mem_cgroup_cache_charge(filepage, current->mm,
-					GFP_KERNEL);
+							gfp & ~__GFP_HIGHMEM);
 			if (error) {
 				page_cache_release(filepage);
 				shmem_unacct_blocks(info->flags, 1);
@@ -1460,6 +1444,7 @@ static int shmem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	if (error)
 		return ((error == -ENOMEM) ? VM_FAULT_OOM : VM_FAULT_SIGBUS);
 
+	mark_page_accessed(vmf->page);
 	return ret | VM_FAULT_LOCKED;
 }
 
@@ -1515,8 +1500,8 @@ static int shmem_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static struct inode *shmem_get_inode(struct super_block *sb, int mode,
-					dev_t dev, unsigned long flags)
+static struct inode *
+shmem_get_inode(struct super_block *sb, int mode, dev_t dev)
 {
 	struct inode *inode;
 	struct shmem_inode_info *info;
@@ -1537,7 +1522,6 @@ static struct inode *shmem_get_inode(struct super_block *sb, int mode,
 		info = SHMEM_I(inode);
 		memset(info, 0, (char *)inode - (char *)info);
 		spin_lock_init(&info->lock);
-		info->flags = flags & VM_NORESERVE;
 		INIT_LIST_HEAD(&info->swaplist);
 
 		switch (mode & S_IFMT) {
@@ -1780,10 +1764,9 @@ static int shmem_statfs(struct dentry *dentry, struct kstatfs *buf)
 static int
 shmem_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
 {
-	struct inode *inode;
+	struct inode *inode = shmem_get_inode(dir->i_sb, mode, dev);
 	int error = -ENOSPC;
 
-	inode = shmem_get_inode(dir->i_sb, mode, dev, VM_NORESERVE);
 	if (inode) {
 		error = security_inode_init_security(inode, dir, NULL, NULL,
 						     NULL);
@@ -1922,7 +1905,7 @@ static int shmem_symlink(struct inode *dir, struct dentry *dentry, const char *s
 	if (len > PAGE_CACHE_SIZE)
 		return -ENAMETOOLONG;
 
-	inode = shmem_get_inode(dir->i_sb, S_IFLNK|S_IRWXUGO, 0, VM_NORESERVE);
+	inode = shmem_get_inode(dir->i_sb, S_IFLNK|S_IRWXUGO, 0);
 	if (!inode)
 		return -ENOSPC;
 
@@ -2334,7 +2317,7 @@ static int shmem_fill_super(struct super_block *sb,
 	sb->s_flags |= MS_POSIXACL;
 #endif
 
-	inode = shmem_get_inode(sb, S_IFDIR | sbinfo->mode, 0, VM_NORESERVE);
+	inode = shmem_get_inode(sb, S_IFDIR | sbinfo->mode, 0);
 	if (!inode)
 		goto failed;
 	inode->i_uid = sbinfo->uid;
@@ -2503,6 +2486,7 @@ static struct file_system_type tmpfs_fs_type = {
 	.get_sb		= shmem_get_sb,
 	.kill_sb	= kill_litter_super,
 };
+static struct vfsmount *shm_mnt;
 
 static int __init init_tmpfs(void)
 {
@@ -2541,57 +2525,13 @@ out4:
 	shm_mnt = ERR_PTR(error);
 	return error;
 }
-
-#else /* !CONFIG_SHMEM */
-
-/*
- * tiny-shmem: simple shmemfs and tmpfs using ramfs code
- *
- * This is intended for small system where the benefits of the full
- * shmem code (swap-backed and resource-limited) are outweighed by
- * their complexity. On systems without swap this code should be
- * effectively equivalent, but much lighter weight.
- */
-
-#include <linux/ramfs.h>
-
-static struct file_system_type tmpfs_fs_type = {
-	.name		= "tmpfs",
-	.get_sb		= ramfs_get_sb,
-	.kill_sb	= kill_litter_super,
-};
-
-static int __init init_tmpfs(void)
-{
-	BUG_ON(register_filesystem(&tmpfs_fs_type) != 0);
-
-	shm_mnt = kern_mount(&tmpfs_fs_type);
-	BUG_ON(IS_ERR(shm_mnt));
-
-	return 0;
-}
-
-int shmem_unuse(swp_entry_t entry, struct page *page)
-{
-	return 0;
-}
-
-#define shmem_vm_ops				generic_file_vm_ops
-#define shmem_file_operations			ramfs_file_operations
-#define shmem_get_inode(sb, mode, dev, flags)	ramfs_get_inode(sb, mode, dev)
-#define shmem_acct_size(flags, size)		0
-#define shmem_unacct_size(flags, size)		do {} while (0)
-#define SHMEM_MAX_BYTES				LLONG_MAX
-
-#endif /* CONFIG_SHMEM */
-
-/* common code */
+module_init(init_tmpfs)
 
 /**
  * shmem_file_setup - get an unlinked file living in tmpfs
  * @name: name for dentry (to be seen in /proc/<pid>/maps
  * @size: size to be set for the file
- * @flags: VM_NORESERVE suppresses pre-accounting of the entire object size
+ * @flags: vm_flags
  */
 struct file *shmem_file_setup(char *name, loff_t size, unsigned long flags)
 {
@@ -2625,21 +2565,16 @@ struct file *shmem_file_setup(char *name, loff_t size, unsigned long flags)
 		goto put_dentry;
 
 	error = -ENOSPC;
-	inode = shmem_get_inode(root->d_sb, S_IFREG | S_IRWXUGO, 0, flags);
+	inode = shmem_get_inode(root->d_sb, S_IFREG | S_IRWXUGO, 0);
 	if (!inode)
 		goto close_file;
 
+	SHMEM_I(inode)->flags = flags & VM_ACCOUNT;
 	d_instantiate(dentry, inode);
 	inode->i_size = size;
 	inode->i_nlink = 0;	/* It is unlinked */
 	init_file(file, shm_mnt, dentry, FMODE_WRITE | FMODE_READ,
-		  &shmem_file_operations);
-
-#ifndef CONFIG_MMU
-	error = ramfs_nommu_expand_for_mapping(inode, size);
-	if (error)
-		goto close_file;
-#endif
+			&shmem_file_operations);
 	return file;
 
 close_file:
@@ -2671,5 +2606,3 @@ int shmem_zero_setup(struct vm_area_struct *vma)
 	vma->vm_ops = &shmem_vm_ops;
 	return 0;
 }
-
-module_init(init_tmpfs)

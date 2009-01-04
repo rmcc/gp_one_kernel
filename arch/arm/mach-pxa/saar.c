@@ -25,9 +25,11 @@
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-
-#include <mach/pxa930.h>
+#include <mach/hardware.h>
+#include <mach/pxa3xx-regs.h>
+#include <mach/mfp-pxa930.h>
 #include <mach/i2c.h>
+#include <mach/regs-lcd.h>
 #include <mach/pxafb.h>
 
 #include "devices.h"

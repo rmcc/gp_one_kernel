@@ -27,7 +27,7 @@ static void arch_idle(void)
 
 }
 
-static void arch_reset(char mode, const char *cmd)
+static void arch_reset(char mode)
 {
 	unsigned int reg;
 

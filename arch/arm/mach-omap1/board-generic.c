@@ -62,6 +62,7 @@ static struct omap_uart_config generic_uart_config __initdata = {
 };
 
 static struct omap_board_config_kernel generic_config[] __initdata = {
+	{ OMAP_TAG_USB,		NULL },
 	{ OMAP_TAG_UART,	&generic_uart_config },
 };
 
@@ -69,12 +70,12 @@ static void __init omap_generic_init(void)
 {
 #ifdef CONFIG_ARCH_OMAP15XX
 	if (cpu_is_omap15xx()) {
-		omap_usb_init(&generic1510_usb_config);
+		generic_config[0].data = &generic1510_usb_config;
 	}
 #endif
 #if defined(CONFIG_ARCH_OMAP16XX)
 	if (!cpu_is_omap1510()) {
-		omap_usb_init(&generic1610_usb_config);
+		generic_config[0].data = &generic1610_usb_config;
 	}
 #endif
 

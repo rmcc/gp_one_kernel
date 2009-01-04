@@ -24,11 +24,12 @@
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
 
-#include <mach/pxa25x.h>
+#include <mach/mfp-pxa25x.h>
+#include <mach/pxa-regs.h>
+#include <mach/hardware.h>
 #include <mach/eseries-gpio.h>
 #include <mach/udc.h>
 #include <mach/irda.h>
-#include <mach/irqs.h>
 
 #include "generic.h"
 #include "eseries.h"
@@ -187,7 +188,7 @@ static void __init e740_init(void)
 {
 	pxa2xx_mfp_config(ARRAY_AND_SIZE(e740_pin_config));
 	eseries_register_clks();
-	clk_add_alias("CLK_CK48M", e740_t7l66xb_device.name,
+	clk_add_alias("CLK_CK48M", &e740_t7l66xb_device.dev,
 			"UDCCLK", &pxa25x_device_udc.dev),
 	eseries_get_tmio_gpios();
 	platform_add_devices(devices, ARRAY_SIZE(devices));

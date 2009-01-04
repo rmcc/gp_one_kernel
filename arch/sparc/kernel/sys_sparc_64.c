@@ -23,7 +23,6 @@
 #include <linux/ipc.h>
 #include <linux/personality.h>
 #include <linux/random.h>
-#include <linux/module.h>
 
 #include <asm/uaccess.h>
 #include <asm/utrap.h>
@@ -355,7 +354,6 @@ unsigned long get_fb_unmapped_area(struct file *filp, unsigned long orig_addr, u
 
 	return addr;
 }
-EXPORT_SYMBOL(get_fb_unmapped_area);
 
 /* Essentially the same as PowerPC... */
 void arch_pick_mmap_layout(struct mm_struct *mm)
@@ -399,7 +397,7 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 	}
 }
 
-SYSCALL_DEFINE1(sparc_brk, unsigned long, brk)
+asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
 	/* People could try to be nasty and use ta 0x6d in 32bit programs */
 	if (test_thread_flag(TIF_32BIT) && brk >= STACK_TOP32)
@@ -415,7 +413,7 @@ SYSCALL_DEFINE1(sparc_brk, unsigned long, brk)
  * sys_pipe() is the normal C calling standard for creating
  * a pipe. It's not the way unix traditionally does this, though.
  */
-SYSCALL_DEFINE1(sparc_pipe_real, struct pt_regs *, regs)
+asmlinkage long sparc_pipe(struct pt_regs *regs)
 {
 	int fd[2];
 	int error;
@@ -435,8 +433,8 @@ out:
  * This is really horribly ugly.
  */
 
-SYSCALL_DEFINE6(ipc, unsigned int, call, int, first, unsigned long, second,
-		unsigned long, third, void __user *, ptr, long, fifth)
+asmlinkage long sys_ipc(unsigned int call, int first, unsigned long second,
+			unsigned long third, void __user *ptr, long fifth)
 {
 	long err;
 
@@ -519,7 +517,7 @@ out:
 	return err;
 }
 
-SYSCALL_DEFINE1(sparc64_newuname, struct new_utsname __user *, name)
+asmlinkage long sparc64_newuname(struct new_utsname __user *name)
 {
 	int ret = sys_newuname(name);
 	
@@ -530,7 +528,7 @@ SYSCALL_DEFINE1(sparc64_newuname, struct new_utsname __user *, name)
 	return ret;
 }
 
-SYSCALL_DEFINE1(sparc64_personality, unsigned long, personality)
+asmlinkage long sparc64_personality(unsigned long personality)
 {
 	int ret;
 
@@ -564,9 +562,9 @@ int sparc_mmap_check(unsigned long addr, unsigned long len)
 }
 
 /* Linux version of mmap */
-SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
-		unsigned long, prot, unsigned long, flags, unsigned long, fd,
-		unsigned long, off)
+asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long fd,
+	unsigned long off)
 {
 	struct file * file = NULL;
 	unsigned long retval = -EBADF;
@@ -589,7 +587,7 @@ out:
 	return retval;
 }
 
-SYSCALL_DEFINE2(64_munmap, unsigned long, addr, size_t, len)
+asmlinkage long sys64_munmap(unsigned long addr, size_t len)
 {
 	long ret;
 
@@ -606,9 +604,9 @@ extern unsigned long do_mremap(unsigned long addr,
 	unsigned long old_len, unsigned long new_len,
 	unsigned long flags, unsigned long new_addr);
                 
-SYSCALL_DEFINE5(64_mremap, unsigned long, addr,	unsigned long, old_len,
-		unsigned long, new_len, unsigned long, flags,
-		unsigned long, new_addr)
+asmlinkage unsigned long sys64_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr)
 {
 	unsigned long ret = -EINVAL;
 
@@ -671,7 +669,7 @@ asmlinkage void sparc_breakpoint(struct pt_regs *regs)
 
 extern void check_pending(int signum);
 
-SYSCALL_DEFINE2(getdomainname, char __user *, name, int, len)
+asmlinkage long sys_getdomainname(char __user *name, int len)
 {
         int nlen, err;
 
@@ -694,10 +692,11 @@ out:
 	return err;
 }
 
-SYSCALL_DEFINE5(utrap_install, utrap_entry_t, type,
-		utrap_handler_t, new_p, utrap_handler_t, new_d,
-		utrap_handler_t __user *, old_p,
-		utrap_handler_t __user *, old_d)
+asmlinkage long sys_utrap_install(utrap_entry_t type,
+				  utrap_handler_t new_p,
+				  utrap_handler_t new_d,
+				  utrap_handler_t __user *old_p,
+				  utrap_handler_t __user *old_d)
 {
 	if (type < UT_INSTRUCTION_EXCEPTION || type > UT_TRAP_INSTRUCTION_31)
 		return -EINVAL;
@@ -763,9 +762,11 @@ asmlinkage long sparc_memory_ordering(unsigned long model,
 	return 0;
 }
 
-SYSCALL_DEFINE5(rt_sigaction, int, sig, const struct sigaction __user *, act,
-		struct sigaction __user *, oact, void __user *, restorer,
-		size_t, sigsetsize)
+asmlinkage long sys_rt_sigaction(int sig,
+				 const struct sigaction __user *act,
+				 struct sigaction __user *oact,
+				 void __user *restorer,
+				 size_t sigsetsize)
 {
 	struct k_sigaction new_ka, old_ka;
 	int ret;
@@ -805,8 +806,7 @@ asmlinkage void update_perfctrs(void)
 	reset_pic();
 }
 
-SYSCALL_DEFINE4(perfctr, int, opcode, unsigned long, arg0,
-		unsigned long, arg1, unsigned long, arg2)
+asmlinkage long sys_perfctr(int opcode, unsigned long arg0, unsigned long arg1, unsigned long arg2)
 {
 	int err = 0;
 

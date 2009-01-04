@@ -28,6 +28,7 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
 
+#include <mach/system.h>
 #include <mach/map.h>
 #include <mach/regs-timer.h>
 

@@ -1177,19 +1177,7 @@ EXPORT_SYMBOL_GPL(call_rcu_sched);
  * in -rt this does -not- necessarily result in all currently executing
  * interrupt -handlers- having completed.
  */
-void __synchronize_sched(void)
-{
-	struct rcu_synchronize rcu;
-
-	if (num_online_cpus() == 1)
-		return;  /* blocking is gp if only one CPU! */
-
-	init_completion(&rcu.completion);
-	/* Will wake me after RCU finished. */
-	call_rcu_sched(&rcu.head, wakeme_after_rcu);
-	/* Wait for it. */
-	wait_for_completion(&rcu.completion);
-}
+synchronize_rcu_xxx(__synchronize_sched, call_rcu_sched)
 EXPORT_SYMBOL_GPL(__synchronize_sched);
 
 /*

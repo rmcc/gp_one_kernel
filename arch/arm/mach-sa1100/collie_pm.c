@@ -22,7 +22,6 @@
 #include <linux/interrupt.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
-#include <linux/gpio.h>
 
 #include <asm/irq.h>
 #include <mach/hardware.h>
@@ -59,9 +58,6 @@ static void collie_charger_init(void)
 		return;
 	}
 
-	gpio_request(COLLIE_GPIO_CHARGE_ON, "charge on");
-	gpio_direction_output(COLLIE_GPIO_CHARGE_ON, 1);
-
 	ucb1x00_io_set_dir(ucb, 0, COLLIE_TC35143_GPIO_MBAT_ON | COLLIE_TC35143_GPIO_TMP_ON |
 			           COLLIE_TC35143_GPIO_BBAT_ON);
 	return;
@@ -77,11 +73,17 @@ static void collie_measure_temp(int on)
 
 static void collie_charge(int on)
 {
+	extern struct platform_device colliescoop_device;
+
 	/* Zaurus seems to contain LTC1731; it should know when to
 	 * stop charging itself, so setting charge on should be
 	 * relatively harmless (as long as it is not done too often).
 	 */
-	gpio_set_value(COLLIE_GPIO_CHARGE_ON, on);
+	if (on) {
+		set_scoop_gpio(&colliescoop_device.dev, COLLIE_SCP_CHARGE_ON);
+	} else {
+		reset_scoop_gpio(&colliescoop_device.dev, COLLIE_SCP_CHARGE_ON);
+	}
 }
 
 static void collie_discharge(int on)

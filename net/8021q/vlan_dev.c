@@ -546,18 +546,6 @@ static int vlan_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	return err;
 }
 
-static int vlan_dev_neigh_setup(struct net_device *dev, struct neigh_parms *pa)
-{
-	struct net_device *real_dev = vlan_dev_info(dev)->real_dev;
-	const struct net_device_ops *ops = real_dev->netdev_ops;
-	int err = 0;
-
-	if (netif_device_present(real_dev) && ops->ndo_neigh_setup)
-		err = ops->ndo_neigh_setup(real_dev, pa);
-
-	return err;
-}
-
 static void vlan_dev_change_rx_flags(struct net_device *dev, int change)
 {
 	struct net_device *real_dev = vlan_dev_info(dev)->real_dev;
@@ -639,7 +627,6 @@ static int vlan_dev_init(struct net_device *dev)
 		dev->hard_header_len = real_dev->hard_header_len + VLAN_HLEN;
 		dev->netdev_ops         = &vlan_netdev_ops;
 	}
-	netdev_resync_ops(dev);
 
 	if (is_vlan_dev(real_dev))
 		subclass = 1;
@@ -726,7 +713,6 @@ static const struct net_device_ops vlan_netdev_ops = {
 	.ndo_set_multicast_list	= vlan_dev_set_rx_mode,
 	.ndo_change_rx_flags	= vlan_dev_change_rx_flags,
 	.ndo_do_ioctl		= vlan_dev_ioctl,
-	.ndo_neigh_setup	= vlan_dev_neigh_setup,
 };
 
 static const struct net_device_ops vlan_netdev_accel_ops = {
@@ -742,7 +728,6 @@ static const struct net_device_ops vlan_netdev_accel_ops = {
 	.ndo_set_multicast_list	= vlan_dev_set_rx_mode,
 	.ndo_change_rx_flags	= vlan_dev_change_rx_flags,
 	.ndo_do_ioctl		= vlan_dev_ioctl,
-	.ndo_neigh_setup	= vlan_dev_neigh_setup,
 };
 
 void vlan_setup(struct net_device *dev)

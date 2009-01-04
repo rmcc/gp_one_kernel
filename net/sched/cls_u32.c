@@ -638,9 +638,8 @@ static int u32_change(struct tcf_proto *tp, unsigned long base, u32 handle,
 				break;
 
 		n->next = *ins;
-		tcf_tree_lock(tp);
+		wmb();
 		*ins = n;
-		tcf_tree_unlock(tp);
 
 		*arg = (unsigned long)n;
 		return 0;

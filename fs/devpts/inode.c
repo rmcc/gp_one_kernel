@@ -189,6 +189,8 @@ static int mknod_ptmx(struct super_block *sb)
 	}
 
 	inode->i_ino = 2;
+	inode->i_uid = inode->i_gid = 0;
+	inode->i_blocks = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 
 	mode = S_IFCHR|opts->ptmxmode;
@@ -198,6 +200,9 @@ static int mknod_ptmx(struct super_block *sb)
 
 	fsi->ptmx_dentry = dentry;
 	rc = 0;
+
+	printk(KERN_DEBUG "Created ptmx node in devpts ino %lu\n",
+			inode->i_ino);
 out:
 	mutex_unlock(&root->d_inode->i_mutex);
 	return rc;
@@ -295,6 +300,8 @@ devpts_fill_super(struct super_block *s, void *data, int silent)
 		goto free_fsi;
 	inode->i_ino = 1;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->i_blocks = 0;
+	inode->i_uid = inode->i_gid = 0;
 	inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
 	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &simple_dir_operations;
@@ -365,6 +372,8 @@ static int new_pts_mount(struct file_system_type *fs_type, int flags,
 	int err;
 	struct pts_fs_info *fsi;
 	struct pts_mount_opts *opts;
+
+	printk(KERN_NOTICE "devpts: newinstance mount\n");
 
 	err = get_sb_nodev(fs_type, flags, data, devpts_fill_super, mnt);
 	if (err)

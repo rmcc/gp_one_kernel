@@ -134,7 +134,7 @@ static const struct stb0899_tab stb0899_dvbs2rf_tab[] = {
 };
 
 /* DVB-S2 Es/N0 quant in dB/100 vs read value * 100*/
-static struct stb0899_tab stb0899_quant_tab[] = {
+struct stb0899_tab stb0899_quant_tab[] = {
 	{    0,	    0 },
 	{    0,	  100 },
 	{  600,	  200 },
@@ -177,7 +177,7 @@ static struct stb0899_tab stb0899_quant_tab[] = {
 };
 
 /* DVB-S2 Es/N0 estimate in dB/100 vs read value */
-static struct stb0899_tab stb0899_est_tab[] = {
+struct stb0899_tab stb0899_est_tab[] = {
 	{    0,	     0 },
 	{    0,	     1 },
 	{  301,	     2 },
@@ -217,7 +217,7 @@ static struct stb0899_tab stb0899_est_tab[] = {
 	{ 5721,	526017 },
 };
 
-static int _stb0899_read_reg(struct stb0899_state *state, unsigned int reg)
+int _stb0899_read_reg(struct stb0899_state *state, unsigned int reg)
 {
 	int ret;
 
@@ -794,7 +794,7 @@ static int stb0899_send_diseqc_burst(struct dvb_frontend *fe, fe_sec_mini_cmd_t 
 	reg = stb0899_read_reg(state, STB0899_DISCNTRL1);
 	old_state = reg;
 	/* set to burst mode	*/
-	STB0899_SETFIELD_VAL(DISEQCMODE, reg, 0x03);
+	STB0899_SETFIELD_VAL(DISEQCMODE, reg, 0x02);
 	STB0899_SETFIELD_VAL(DISPRECHARGE, reg, 0x01);
 	stb0899_write_reg(state, STB0899_DISCNTRL1, reg);
 	switch (burst) {

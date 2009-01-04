@@ -142,7 +142,7 @@ static long long get_liability(struct ubifs_info *c)
  *
  * This function is called when an operation cannot be budgeted because there
  * is supposedly no free space. But in most cases there is some free space:
- *   o budgeting is pessimistic, so it always budgets more than it is actually
+ *   o budgeting is pessimistic, so it always budgets more then it is actually
  *     needed, so shrinking the liability is one way to make free space - the
  *     cached data will take less space then it was budgeted for;
  *   o GC may turn some dark space into free space (budgeting treats dark space
@@ -606,7 +606,7 @@ void ubifs_release_budget(struct ubifs_info *c, struct ubifs_budget_req *req)
  * @c: UBIFS file-system description object
  *
  * This function converts budget which was allocated for a new page of data to
- * the budget of changing an existing page of data. The latter is smaller than
+ * the budget of changing an existing page of data. The latter is smaller then
  * the former, so this function only does simple re-calculation and does not
  * involve any write-back.
  */
@@ -689,7 +689,7 @@ long long ubifs_reported_space(const struct ubifs_info *c, long long free)
 }
 
 /**
- * ubifs_get_free_space_nolock - return amount of free space.
+ * ubifs_get_free_space - return amount of free space.
  * @c: UBIFS file-system description object
  *
  * This function calculates amount of free space to report to user-space.
@@ -704,14 +704,16 @@ long long ubifs_reported_space(const struct ubifs_info *c, long long free)
  * traditional file-systems, because they have way less overhead than UBIFS.
  * So, to keep users happy, UBIFS tries to take the overhead into account.
  */
-long long ubifs_get_free_space_nolock(struct ubifs_info *c)
+long long ubifs_get_free_space(struct ubifs_info *c)
 {
-	int rsvd_idx_lebs, lebs;
+	int min_idx_lebs, rsvd_idx_lebs, lebs;
 	long long available, outstanding, free;
 
-	ubifs_assert(c->min_idx_lebs == ubifs_calc_min_idx_lebs(c));
+	spin_lock(&c->space_lock);
+	min_idx_lebs = c->min_idx_lebs;
+	ubifs_assert(min_idx_lebs == ubifs_calc_min_idx_lebs(c));
 	outstanding = c->budg_data_growth + c->budg_dd_growth;
-	available = ubifs_calc_available(c, c->min_idx_lebs);
+	available = ubifs_calc_available(c, min_idx_lebs);
 
 	/*
 	 * When reporting free space to user-space, UBIFS guarantees that it is
@@ -724,36 +726,19 @@ long long ubifs_get_free_space_nolock(struct ubifs_info *c)
 	 * Note, the calculations below are similar to what we have in
 	 * 'do_budget_space()', so refer there for comments.
 	 */
-	if (c->min_idx_lebs > c->lst.idx_lebs)
-		rsvd_idx_lebs = c->min_idx_lebs - c->lst.idx_lebs;
+	if (min_idx_lebs > c->lst.idx_lebs)
+		rsvd_idx_lebs = min_idx_lebs - c->lst.idx_lebs;
 	else
 		rsvd_idx_lebs = 0;
 	lebs = c->lst.empty_lebs + c->freeable_cnt + c->idx_gc_cnt -
 	       c->lst.taken_empty_lebs;
 	lebs -= rsvd_idx_lebs;
 	available += lebs * (c->dark_wm - c->leb_overhead);
+	spin_unlock(&c->space_lock);
 
 	if (available > outstanding)
 		free = ubifs_reported_space(c, available - outstanding);
 	else
 		free = 0;
-	return free;
-}
-
-/**
- * ubifs_get_free_space - return amount of free space.
- * @c: UBIFS file-system description object
- *
- * This function calculates and retuns amount of free space to report to
- * user-space.
- */
-long long ubifs_get_free_space(struct ubifs_info *c)
-{
-	long long free;
-
-	spin_lock(&c->space_lock);
-	free = ubifs_get_free_space_nolock(c);
-	spin_unlock(&c->space_lock);
-
 	return free;
 }

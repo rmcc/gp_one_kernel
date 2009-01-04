@@ -187,8 +187,6 @@ enum {
 	ATA_FLAG_PIO_POLLING	= (1 << 9), /* use polling PIO if LLD
 					     * doesn't handle PIO interrupts */
 	ATA_FLAG_NCQ		= (1 << 10), /* host supports NCQ */
-	ATA_FLAG_NO_POWEROFF_SPINDOWN = (1 << 11), /* don't spindown before poweroff */
-	ATA_FLAG_NO_HIBERNATE_SPINDOWN = (1 << 12), /* don't spindown before hibernation */
 	ATA_FLAG_DEBUGMSG	= (1 << 13),
 	ATA_FLAG_IGN_SIMPLEX	= (1 << 15), /* ignore SIMPLEX */
 	ATA_FLAG_NO_IORDY	= (1 << 16), /* controller lacks iordy */
@@ -241,7 +239,6 @@ enum {
 	/* host set flags */
 	ATA_HOST_SIMPLEX	= (1 << 0),	/* Host is simplex, one DMA channel per host only */
 	ATA_HOST_STARTED	= (1 << 1),	/* Host started */
-	ATA_HOST_PARALLEL_SCAN	= (1 << 2),	/* Ports on this host can be scanned in parallel */
 
 	/* bits 24:31 of host->flags are reserved for LLD specific flags */
 
@@ -275,7 +272,7 @@ enum {
 	 * advised to wait only for the following duration before
 	 * doing SRST.
 	 */
-	ATA_TMOUT_PMP_SRST_WAIT	= 5000,
+	ATA_TMOUT_PMP_SRST_WAIT	= 1000,
 
 	/* ATA bus states */
 	BUS_UNKNOWN		= 0,
@@ -380,7 +377,6 @@ enum {
 	ATA_HORKAGE_ATAPI_MOD16_DMA = (1 << 11), /* use ATAPI DMA for commands
 						    not multiple of 16 bytes */
 	ATA_HORKAGE_FIRMWARE_WARN = (1 << 12),	/* firwmare update warning */
-	ATA_HORKAGE_1_5_GBPS	= (1 << 13),	/* force 1.5 Gbps */
 
 	 /* DMA mask for user DMA control: User visible values; DO NOT
 	    renumber */
@@ -404,14 +400,12 @@ enum {
 				  ATA_TIMING_CYC8B,
 	ATA_TIMING_ACTIVE	= (1 << 4),
 	ATA_TIMING_RECOVER	= (1 << 5),
-	ATA_TIMING_DMACK_HOLD	= (1 << 6),
-	ATA_TIMING_CYCLE	= (1 << 7),
-	ATA_TIMING_UDMA		= (1 << 8),
+	ATA_TIMING_CYCLE	= (1 << 6),
+	ATA_TIMING_UDMA		= (1 << 7),
 	ATA_TIMING_ALL		= ATA_TIMING_SETUP | ATA_TIMING_ACT8B |
 				  ATA_TIMING_REC8B | ATA_TIMING_CYC8B |
 				  ATA_TIMING_ACTIVE | ATA_TIMING_RECOVER |
-				  ATA_TIMING_DMACK_HOLD | ATA_TIMING_CYCLE |
-				  ATA_TIMING_UDMA,
+				  ATA_TIMING_CYCLE | ATA_TIMING_UDMA,
 };
 
 enum ata_xfer_mask {
@@ -530,7 +524,6 @@ struct ata_queued_cmd {
 	unsigned long		flags;		/* ATA_QCFLAG_xxx */
 	unsigned int		tag;
 	unsigned int		n_elem;
-	unsigned int		orig_n_elem;
 
 	int			dma_dir;
 
@@ -582,7 +575,7 @@ struct ata_device {
 	acpi_handle		acpi_handle;
 	union acpi_object	*gtf_cache;
 #endif
-	/* n_sector is CLEAR_BEGIN, read comment above CLEAR_BEGIN */
+	/* n_sector is used as CLEAR_OFFSET, read comment above CLEAR_OFFSET */
 	u64			n_sectors;	/* size of device, if ATA */
 	unsigned int		class;		/* ATA_DEV_xxx */
 	unsigned long		unpark_deadline;
@@ -607,22 +600,20 @@ struct ata_device {
 	u16			heads;		/* Number of heads */
 	u16			sectors;	/* Number of sectors per track */
 
+	/* error history */
+	int			spdn_cnt;
+	struct ata_ering	ering;
+
 	union {
 		u16		id[ATA_ID_WORDS]; /* IDENTIFY xxx DEVICE data */
 		u32		gscr[SATA_PMP_GSCR_DWORDS]; /* PMP GSCR block */
 	};
-
-	/* error history */
-	int			spdn_cnt;
-	/* ering is CLEAR_END, read comment above CLEAR_END */
-	struct ata_ering	ering;
 };
 
-/* Fields between ATA_DEVICE_CLEAR_BEGIN and ATA_DEVICE_CLEAR_END are
- * cleared to zero on ata_dev_init().
+/* Offset into struct ata_device.  Fields above it are maintained
+ * acress device init.  Fields below are zeroed.
  */
-#define ATA_DEVICE_CLEAR_BEGIN		offsetof(struct ata_device, n_sectors)
-#define ATA_DEVICE_CLEAR_END		offsetof(struct ata_device, ering)
+#define ATA_DEVICE_CLEAR_OFFSET		offsetof(struct ata_device, n_sectors)
 
 struct ata_eh_info {
 	struct ata_device	*dev;		/* offending device */
@@ -751,8 +742,7 @@ struct ata_port {
 	acpi_handle		acpi_handle;
 	struct ata_acpi_gtm	__acpi_init_gtm; /* use ata_acpi_init_gtm() */
 #endif
-	/* owned by EH */
-	u8			sector_buf[ATA_SECT_SIZE] ____cacheline_aligned;
+	u8			sector_buf[ATA_SECT_SIZE]; /* owned by EH */
 };
 
 /* The following initializer overrides a method to NULL whether one of
@@ -875,7 +865,6 @@ struct ata_timing {
 	unsigned short cyc8b;		/* t0 for 8-bit I/O */
 	unsigned short active;		/* t2 or tD */
 	unsigned short recover;		/* t2i or tK */
-	unsigned short dmack_hold;	/* tj */
 	unsigned short cycle;		/* t0 */
 	unsigned short udma;		/* t2CYCTYP/2 */
 };
@@ -937,8 +926,6 @@ extern void ata_host_init(struct ata_host *, struct device *,
 extern int ata_scsi_detect(struct scsi_host_template *sht);
 extern int ata_scsi_ioctl(struct scsi_device *dev, int cmd, void __user *arg);
 extern int ata_scsi_queuecmd(struct scsi_cmnd *cmd, void (*done)(struct scsi_cmnd *));
-extern int ata_sas_scsi_ioctl(struct ata_port *ap, struct scsi_device *dev,
-			    int cmd, void __user *arg);
 extern void ata_sas_port_destroy(struct ata_port *);
 extern struct ata_port *ata_sas_port_alloc(struct ata_host *,
 					   struct ata_port_info *, struct Scsi_Host *);
@@ -1531,7 +1518,6 @@ extern void sata_pmp_error_handler(struct ata_port *ap);
 
 extern const struct ata_port_operations ata_sff_port_ops;
 extern const struct ata_port_operations ata_bmdma_port_ops;
-extern const struct ata_port_operations ata_bmdma32_port_ops;
 
 /* PIO only, sg_tablesize and dma_boundary limits can be removed */
 #define ATA_PIO_SHT(drv_name)					\
@@ -1558,8 +1544,6 @@ extern void ata_sff_tf_read(struct ata_port *ap, struct ata_taskfile *tf);
 extern void ata_sff_exec_command(struct ata_port *ap,
 				 const struct ata_taskfile *tf);
 extern unsigned int ata_sff_data_xfer(struct ata_device *dev,
-			unsigned char *buf, unsigned int buflen, int rw);
-extern unsigned int ata_sff_data_xfer32(struct ata_device *dev,
 			unsigned char *buf, unsigned int buflen, int rw);
 extern unsigned int ata_sff_data_xfer_noirq(struct ata_device *dev,
 			unsigned char *buf, unsigned int buflen, int rw);

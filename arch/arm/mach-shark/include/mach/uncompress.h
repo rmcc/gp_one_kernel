@@ -11,7 +11,7 @@
 
 static inline void putc(int c)
 {
-	volatile int t;
+	int t;
 
 	SERIAL_BASE[0] = c;
 	t=0x10000;

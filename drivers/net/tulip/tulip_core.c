@@ -255,7 +255,6 @@ const char tulip_media_cap[32] =
 
 static void tulip_tx_timeout(struct net_device *dev);
 static void tulip_init_ring(struct net_device *dev);
-static void tulip_free_ring(struct net_device *dev);
 static int tulip_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static int tulip_open(struct net_device *dev);
 static int tulip_close(struct net_device *dev);
@@ -503,21 +502,16 @@ tulip_open(struct net_device *dev)
 {
 	int retval;
 
-	tulip_init_ring (dev);
+	if ((retval = request_irq(dev->irq, &tulip_interrupt, IRQF_SHARED, dev->name, dev)))
+		return retval;
 
-	retval = request_irq(dev->irq, &tulip_interrupt, IRQF_SHARED, dev->name, dev);
-	if (retval)
-		goto free_ring;
+	tulip_init_ring (dev);
 
 	tulip_up (dev);
 
 	netif_start_queue (dev);
 
 	return 0;
-
-free_ring:
-	tulip_free_ring (dev);
-	return retval;
 }
 
 
@@ -774,10 +768,22 @@ static void tulip_down (struct net_device *dev)
 	tulip_set_power_state (tp, 0, 1);
 }
 
-static void tulip_free_ring (struct net_device *dev)
+
+static int tulip_close (struct net_device *dev)
 {
 	struct tulip_private *tp = netdev_priv(dev);
+	void __iomem *ioaddr = tp->base_addr;
 	int i;
+
+	netif_stop_queue (dev);
+
+	tulip_down (dev);
+
+	if (tulip_debug > 1)
+		printk (KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
+			dev->name, ioread32 (ioaddr + CSR5));
+
+	free_irq (dev->irq, dev);
 
 	/* Free all the skbuffs in the Rx queue. */
 	for (i = 0; i < RX_RING_SIZE; i++) {
@@ -797,7 +803,6 @@ static void tulip_free_ring (struct net_device *dev)
 			dev_kfree_skb (skb);
 		}
 	}
-
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		struct sk_buff *skb = tp->tx_buffers[i].skb;
 
@@ -809,24 +814,6 @@ static void tulip_free_ring (struct net_device *dev)
 		tp->tx_buffers[i].skb = NULL;
 		tp->tx_buffers[i].mapping = 0;
 	}
-}
-
-static int tulip_close (struct net_device *dev)
-{
-	struct tulip_private *tp = netdev_priv(dev);
-	void __iomem *ioaddr = tp->base_addr;
-
-	netif_stop_queue (dev);
-
-	tulip_down (dev);
-
-	if (tulip_debug > 1)
-		printk (KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
-			dev->name, ioread32 (ioaddr + CSR5));
-
-	free_irq (dev->irq, dev);
-
-	tulip_free_ring (dev);
 
 	return 0;
 }
@@ -1238,22 +1225,6 @@ static int tulip_uli_dm_quirk(struct pci_dev *pdev)
 	return 0;
 }
 
-static const struct net_device_ops tulip_netdev_ops = {
-	.ndo_open		= tulip_open,
-	.ndo_start_xmit		= tulip_start_xmit,
-	.ndo_tx_timeout		= tulip_tx_timeout,
-	.ndo_stop		= tulip_close,
-	.ndo_get_stats		= tulip_get_stats,
-	.ndo_do_ioctl 		= private_ioctl,
-	.ndo_set_multicast_list = set_rx_mode,
-	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_set_mac_address	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller	 = poll_tulip,
-#endif
-};
-
 static int __devinit tulip_init_one (struct pci_dev *pdev,
 				     const struct pci_device_id *ent)
 {
@@ -1630,10 +1601,19 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	}
 
 	/* The Tulip-specific entries in the device structure. */
-	dev->netdev_ops = &tulip_netdev_ops;
+	dev->open = tulip_open;
+	dev->hard_start_xmit = tulip_start_xmit;
+	dev->tx_timeout = tulip_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
 #ifdef CONFIG_TULIP_NAPI
 	netif_napi_add(dev, &tp->napi, tulip_poll, 16);
+#endif
+	dev->stop = tulip_close;
+	dev->get_stats = tulip_get_stats;
+	dev->do_ioctl = private_ioctl;
+	dev->set_multicast_list = set_rx_mode;
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = &poll_tulip;
 #endif
 	SET_ETHTOOL_OPS(dev, &ops);
 

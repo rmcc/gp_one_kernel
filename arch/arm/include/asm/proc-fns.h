@@ -89,14 +89,6 @@
 #   define CPU_NAME cpu_arm922
 #  endif
 # endif
-# ifdef CONFIG_CPU_FA526
-#  ifdef CPU_NAME
-#   undef  MULTI_CPU
-#   define MULTI_CPU
-#  else
-#   define CPU_NAME cpu_fa526
-#  endif
-# endif
 # ifdef CONFIG_CPU_ARM925T
 #  ifdef CPU_NAME
 #   undef  MULTI_CPU
@@ -191,14 +183,6 @@
 #   define MULTI_CPU
 #  else
 #   define CPU_NAME cpu_xsc3
-#  endif
-# endif
-# ifdef CONFIG_CPU_MOHAWK
-#  ifdef CPU_NAME
-#   undef  MULTI_CPU
-#   define MULTI_CPU
-#  else
-#   define CPU_NAME cpu_mohawk
 #  endif
 # endif
 # ifdef CONFIG_CPU_FEROCEON

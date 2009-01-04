@@ -24,59 +24,19 @@
 #include <mach/at91_pio.h>
 #include <mach/gpio.h>
 
-#include <asm/gpio.h>
-
 #include "generic.h"
 
-struct at91_gpio_chip {
-	struct gpio_chip	chip;
-	struct at91_gpio_chip	*next;		/* Bank sharing same clock */
-	struct at91_gpio_bank	*bank;		/* Bank definition */
-	void __iomem		*regbase;	/* Base of register bank */
-};
 
-#define to_at91_gpio_chip(c) container_of(c, struct at91_gpio_chip, chip)
-
-static void at91_gpiolib_dbg_show(struct seq_file *s, struct gpio_chip *chip);
-static void at91_gpiolib_set(struct gpio_chip *chip, unsigned offset, int val);
-static int at91_gpiolib_get(struct gpio_chip *chip, unsigned offset);
-static int at91_gpiolib_direction_output(struct gpio_chip *chip,
-					 unsigned offset, int val);
-static int at91_gpiolib_direction_input(struct gpio_chip *chip,
-					unsigned offset);
-static int at91_gpiolib_request(struct gpio_chip *chip, unsigned offset);
-
-#define AT91_GPIO_CHIP(name, base_gpio, nr_gpio)			\
-	{								\
-		.chip = {						\
-			.label		  = name,			\
-			.request	  = at91_gpiolib_request,	\
-			.direction_input  = at91_gpiolib_direction_input, \
-			.direction_output = at91_gpiolib_direction_output, \
-			.get		  = at91_gpiolib_get,		\
-			.set		  = at91_gpiolib_set,		\
-			.dbg_show	  = at91_gpiolib_dbg_show,	\
-			.base		  = base_gpio,			\
-			.ngpio		  = nr_gpio,			\
-		},							\
-	}
-
-static struct at91_gpio_chip gpio_chip[] = {
-	AT91_GPIO_CHIP("A", 0x00 + PIN_BASE, 32),
-	AT91_GPIO_CHIP("B", 0x20 + PIN_BASE, 32),
-	AT91_GPIO_CHIP("C", 0x40 + PIN_BASE, 32),
-	AT91_GPIO_CHIP("D", 0x60 + PIN_BASE, 32),
-	AT91_GPIO_CHIP("E", 0x80 + PIN_BASE, 32),
-};
-
+static struct at91_gpio_bank *gpio;
 static int gpio_banks;
+
 
 static inline void __iomem *pin_to_controller(unsigned pin)
 {
 	pin -= PIN_BASE;
 	pin /= 32;
 	if (likely(pin < gpio_banks))
-		return gpio_chip[pin].regbase;
+		return gpio[pin].regbase;
 
 	return NULL;
 }
@@ -237,6 +197,39 @@ int __init_or_module at91_set_multi_drive(unsigned pin, int is_on)
 }
 EXPORT_SYMBOL(at91_set_multi_drive);
 
+/*--------------------------------------------------------------------------*/
+
+/* new-style GPIO calls; these expect at91_set_GPIO_periph to have been
+ * called, and maybe at91_set_multi_drive() for putout pins.
+ */
+
+int gpio_direction_input(unsigned pin)
+{
+	void __iomem	*pio = pin_to_controller(pin);
+	unsigned	mask = pin_to_mask(pin);
+
+	if (!pio || !(__raw_readl(pio + PIO_PSR) & mask))
+		return -EINVAL;
+	__raw_writel(mask, pio + PIO_ODR);
+	return 0;
+}
+EXPORT_SYMBOL(gpio_direction_input);
+
+int gpio_direction_output(unsigned pin, int value)
+{
+	void __iomem	*pio = pin_to_controller(pin);
+	unsigned	mask = pin_to_mask(pin);
+
+	if (!pio || !(__raw_readl(pio + PIO_PSR) & mask))
+		return -EINVAL;
+	__raw_writel(mask, pio + (value ? PIO_SODR : PIO_CODR));
+	__raw_writel(mask, pio + PIO_OER);
+	return 0;
+}
+EXPORT_SYMBOL(gpio_direction_output);
+
+/*--------------------------------------------------------------------------*/
+
 /*
  * assuming the pin is muxed as a gpio output, set its value.
  */
@@ -289,7 +282,7 @@ static int gpio_irq_set_wake(unsigned pin, unsigned state)
 	else
 		wakeups[bank] &= ~mask;
 
-	set_irq_wake(gpio_chip[bank].bank->id, state);
+	set_irq_wake(gpio[bank].id, state);
 
 	return 0;
 }
@@ -299,14 +292,14 @@ void at91_gpio_suspend(void)
 	int i;
 
 	for (i = 0; i < gpio_banks; i++) {
-		void __iomem	*pio = gpio_chip[i].regbase;
+		void __iomem	*pio = gpio[i].regbase;
 
 		backups[i] = __raw_readl(pio + PIO_IMR);
 		__raw_writel(backups[i], pio + PIO_IDR);
 		__raw_writel(wakeups[i], pio + PIO_IER);
 
 		if (!wakeups[i])
-			clk_disable(gpio_chip[i].bank->clock);
+			clk_disable(gpio[i].clock);
 		else {
 #ifdef CONFIG_PM_DEBUG
 			printk(KERN_DEBUG "GPIO-%c may wake for %08x\n", 'A'+i, wakeups[i]);
@@ -320,10 +313,10 @@ void at91_gpio_resume(void)
 	int i;
 
 	for (i = 0; i < gpio_banks; i++) {
-		void __iomem	*pio = gpio_chip[i].regbase;
+		void __iomem	*pio = gpio[i].regbase;
 
 		if (!wakeups[i])
-			clk_enable(gpio_chip[i].bank->clock);
+			clk_enable(gpio[i].clock);
 
 		__raw_writel(wakeups[i], pio + PIO_IDR);
 		__raw_writel(backups[i], pio + PIO_IER);
@@ -387,12 +380,12 @@ static void gpio_irq_handler(unsigned irq, struct irq_desc *desc)
 {
 	unsigned	pin;
 	struct irq_desc	*gpio;
-	struct at91_gpio_chip *at91_gpio;
+	struct at91_gpio_bank *bank;
 	void __iomem	*pio;
 	u32		isr;
 
-	at91_gpio = get_irq_chip_data(irq);
-	pio = at91_gpio->regbase;
+	bank = get_irq_chip_data(irq);
+	pio = bank->regbase;
 
 	/* temporarily mask (level sensitive) parent IRQ */
 	desc->chip->ack(irq);
@@ -403,14 +396,14 @@ static void gpio_irq_handler(unsigned irq, struct irq_desc *desc)
 		 */
 		isr = __raw_readl(pio + PIO_ISR) & __raw_readl(pio + PIO_IMR);
 		if (!isr) {
-			if (!at91_gpio->next)
+			if (!bank->next)
 				break;
-			at91_gpio = at91_gpio->next;
-			pio = at91_gpio->regbase;
+			bank = bank->next;
+			pio = bank->regbase;
 			continue;
 		}
 
-		pin = at91_gpio->chip.base;
+		pin = bank->chipbase;
 		gpio = &irq_desc[pin];
 
 		while (isr) {
@@ -497,8 +490,7 @@ postcore_initcall(at91_gpio_debugfs_init);
 
 /*--------------------------------------------------------------------------*/
 
-/*
- * This lock class tells lockdep that GPIO irqs are in a different
+/* This lock class tells lockdep that GPIO irqs are in a different
  * category than their parents, so it won't report false recursion.
  */
 static struct lock_class_key gpio_lock_class;
@@ -509,17 +501,20 @@ static struct lock_class_key gpio_lock_class;
 void __init at91_gpio_irq_setup(void)
 {
 	unsigned		pioc, pin;
-	struct at91_gpio_chip	*this, *prev;
+	struct at91_gpio_bank	*this, *prev;
 
-	for (pioc = 0, pin = PIN_BASE, this = gpio_chip, prev = NULL;
+	for (pioc = 0, pin = PIN_BASE, this = gpio, prev = NULL;
 			pioc++ < gpio_banks;
 			prev = this, this++) {
-		unsigned	id = this->bank->id;
+		unsigned	id = this->id;
 		unsigned	i;
+
+		/* enable PIO controller's clock */
+		clk_enable(this->clock);
 
 		__raw_writel(~0, this->regbase + PIO_IDR);
 
-		for (i = 0, pin = this->chip.base; i < 32; i++, pin++) {
+		for (i = 0, pin = this->chipbase; i < 32; i++, pin++) {
 			lockdep_set_class(&irq_desc[pin].lock, &gpio_lock_class);
 
 			/*
@@ -544,117 +539,25 @@ void __init at91_gpio_irq_setup(void)
 	pr_info("AT91: %d gpio irqs in %d banks\n", pin - PIN_BASE, gpio_banks);
 }
 
-/* gpiolib support */
-static int at91_gpiolib_direction_input(struct gpio_chip *chip,
-					unsigned offset)
-{
-	struct at91_gpio_chip *at91_gpio = to_at91_gpio_chip(chip);
-	void __iomem *pio = at91_gpio->regbase;
-	unsigned mask = 1 << offset;
-
-	__raw_writel(mask, pio + PIO_ODR);
-	return 0;
-}
-
-static int at91_gpiolib_direction_output(struct gpio_chip *chip,
-					 unsigned offset, int val)
-{
-	struct at91_gpio_chip *at91_gpio = to_at91_gpio_chip(chip);
-	void __iomem *pio = at91_gpio->regbase;
-	unsigned mask = 1 << offset;
-
-	__raw_writel(mask, pio + (val ? PIO_SODR : PIO_CODR));
-	__raw_writel(mask, pio + PIO_OER);
-	return 0;
-}
-
-static int at91_gpiolib_get(struct gpio_chip *chip, unsigned offset)
-{
-	struct at91_gpio_chip *at91_gpio = to_at91_gpio_chip(chip);
-	void __iomem *pio = at91_gpio->regbase;
-	unsigned mask = 1 << offset;
-	u32 pdsr;
-
-	pdsr = __raw_readl(pio + PIO_PDSR);
-	return (pdsr & mask) != 0;
-}
-
-static void at91_gpiolib_set(struct gpio_chip *chip, unsigned offset, int val)
-{
-	struct at91_gpio_chip *at91_gpio = to_at91_gpio_chip(chip);
-	void __iomem *pio = at91_gpio->regbase;
-	unsigned mask = 1 << offset;
-
-	__raw_writel(mask, pio + (val ? PIO_SODR : PIO_CODR));
-}
-
-static int at91_gpiolib_request(struct gpio_chip *chip, unsigned offset)
-{
-	unsigned pin = chip->base + offset;
-	void __iomem *pio = pin_to_controller(pin);
-	unsigned mask = pin_to_mask(pin);
-
-	/* Cannot request GPIOs that are in alternate function mode */
-	if (!(__raw_readl(pio + PIO_PSR) & mask))
-		return -EPERM;
-
-	return 0;
-}
-
-static void at91_gpiolib_dbg_show(struct seq_file *s, struct gpio_chip *chip)
-{
-	int i;
-
-	for (i = 0; i < chip->ngpio; i++) {
-		unsigned pin = chip->base + i;
-		void __iomem *pio = pin_to_controller(pin);
-		unsigned mask = pin_to_mask(pin);
-		const char *gpio_label;
-
-		gpio_label = gpiochip_is_requested(chip, i);
-		if (gpio_label) {
-			seq_printf(s, "[%s] GPIO%s%d: ",
-				   gpio_label, chip->label, i);
-			if (__raw_readl(pio + PIO_PSR) & mask)
-				seq_printf(s, "[gpio] %s\n",
-					   at91_get_gpio_value(pin) ?
-					   "set" : "clear");
-			else
-				seq_printf(s, "[periph %s]\n",
-					   __raw_readl(pio + PIO_ABSR) &
-					   mask ? "B" : "A");
-		}
-	}
-}
-
 /*
  * Called from the processor-specific init to enable GPIO pin support.
  */
 void __init at91_gpio_init(struct at91_gpio_bank *data, int nr_banks)
 {
 	unsigned		i;
-	struct at91_gpio_chip *at91_gpio, *last = NULL;
+	struct at91_gpio_bank	*last;
 
 	BUG_ON(nr_banks > MAX_GPIO_BANKS);
 
+	gpio = data;
 	gpio_banks = nr_banks;
 
-	for (i = 0; i < nr_banks; i++) {
-		at91_gpio = &gpio_chip[i];
-
-		at91_gpio->bank = &data[i];
-		at91_gpio->chip.base = PIN_BASE + i * 32;
-		at91_gpio->regbase = at91_gpio->bank->offset +
-			(void __iomem *)AT91_VA_BASE_SYS;
-
-		/* enable PIO controller's clock */
-		clk_enable(at91_gpio->bank->clock);
+	for (i = 0, last = NULL; i < nr_banks; i++, last = data, data++) {
+		data->chipbase = PIN_BASE + i * 32;
+		data->regbase = data->offset + (void __iomem *)AT91_VA_BASE_SYS;
 
 		/* AT91SAM9263_ID_PIOCDE groups PIOC, PIOD, PIOE */
-		if (last && last->bank->id == at91_gpio->bank->id)
-			last->next = at91_gpio;
-		last = at91_gpio;
-
-		gpiochip_add(&at91_gpio->chip);
+		if (last && last->id == data->id)
+			last->next = data;
 	}
 }
