@@ -525,12 +525,11 @@ static int r128_do_init_cce(struct drm_device * dev, drm_r128_init_t * init)
 	} else
 #endif
 	{
-		dev_priv->cce_ring->handle =
-			(void *)(unsigned long)dev_priv->cce_ring->offset;
+		dev_priv->cce_ring->handle = (void *)dev_priv->cce_ring->offset;
 		dev_priv->ring_rptr->handle =
-			(void *)(unsigned long)dev_priv->ring_rptr->offset;
+		    (void *)dev_priv->ring_rptr->offset;
 		dev->agp_buffer_map->handle =
-			(void *)(unsigned long)dev->agp_buffer_map->offset;
+		    (void *)dev->agp_buffer_map->offset;
 	}
 
 #if __OS_HAS_AGP

@@ -37,8 +37,6 @@
 #include "radeon_drv.h"
 #include "r300_reg.h"
 
-#include <asm/unaligned.h>
-
 #define R300_SIMULTANEOUS_CLIPRECTS		4
 
 /* Values for R300_RE_CLIPRECT_CNTL depending on the number of cliprects
@@ -919,7 +917,6 @@ static int r300_scratch(drm_radeon_private_t *dev_priv,
 {
 	u32 *ref_age_base;
 	u32 i, buf_idx, h_pending;
-	u64 ptr_addr;
 	RING_LOCALS;
 
 	if (cmdbuf->bufsz <
@@ -933,8 +930,7 @@ static int r300_scratch(drm_radeon_private_t *dev_priv,
 
 	dev_priv->scratch_ages[header.scratch.reg]++;
 
-	ptr_addr = get_unaligned((u64 *)cmdbuf->buf);
-	ref_age_base = (u32 *)(unsigned long)ptr_addr;
+	ref_age_base =  (u32 *)(unsigned long)*((uint64_t *)cmdbuf->buf);
 
 	cmdbuf->buf += sizeof(u64);
 	cmdbuf->bufsz -= sizeof(u64);

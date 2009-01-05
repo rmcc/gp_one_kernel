@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 6
 SUBLEVEL = 29
-EXTRAVERSION = -rc8
+EXTRAVERSION = -rc7
 NAME = Erotic Pickled Herring
 
 # *DOCUMENTATION*
@@ -904,18 +904,12 @@ localver = $(subst $(space),, $(string) \
 # and if the SCM is know a tag from the SCM is appended.
 # The appended tag is determined by the SCM used.
 #
-# .scmversion is used when generating rpm packages so we do not loose
-# the version information from the SCM when we do the build of the kernel
-# from the copied source
+# Currently, only git is supported.
+# Other SCMs can edit scripts/setlocalversion and add the appropriate
+# checks as needed.
 ifdef CONFIG_LOCALVERSION_AUTO
-
-ifeq ($(wildcard .scmversion),)
-        _localver-auto = $(shell $(CONFIG_SHELL) \
-                         $(srctree)/scripts/setlocalversion $(srctree))
-else
-        _localver-auto = $(shell cat .scmversion 2> /dev/null)
-endif
-
+	_localver-auto = $(shell $(CONFIG_SHELL) \
+	                  $(srctree)/scripts/setlocalversion $(srctree))
 	localver-auto  = $(LOCALVERSION)$(_localver-auto)
 endif
 
@@ -1543,7 +1537,7 @@ quiet_cmd_depmod = DEPMOD  $(KERNELRELEASE)
       cmd_depmod = \
 	if [ -r System.map -a -x $(DEPMOD) ]; then                              \
 		$(DEPMOD) -ae -F System.map                                     \
-		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) )     \
+		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) -r)   \
 		$(KERNELRELEASE);                                               \
 	fi
 

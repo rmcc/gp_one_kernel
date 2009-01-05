@@ -1057,7 +1057,7 @@ void i915_master_destroy(struct drm_device *dev, struct drm_master *master)
 int i915_driver_load(struct drm_device *dev, unsigned long flags)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	resource_size_t base, size;
+	unsigned long base, size;
 	int ret = 0, mmio_bar = IS_I9XX(dev) ? 0 : 1;
 
 	/* i915 has 4 more counters */
@@ -1105,7 +1105,7 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 					 1024 * 1024,
 					 MTRR_TYPE_WRCOMB, 1);
 	if (dev_priv->mm.gtt_mtrr < 0) {
-		DRM_INFO("MTRR allocation failed.  Graphics "
+		DRM_INFO("MTRR allocation failed\n.  Graphics "
 			 "performance may suffer.\n");
 	}
 

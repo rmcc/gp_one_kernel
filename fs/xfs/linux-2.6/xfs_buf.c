@@ -34,12 +34,6 @@
 #include <linux/backing-dev.h>
 #include <linux/freezer.h>
 
-#include "xfs_sb.h"
-#include "xfs_inum.h"
-#include "xfs_ag.h"
-#include "xfs_dmapi.h"
-#include "xfs_mount.h"
-
 static kmem_zone_t *xfs_buf_zone;
 STATIC int xfsbufd(void *);
 STATIC int xfsbufd_wakeup(int, gfp_t);
@@ -1441,12 +1435,10 @@ xfs_unregister_buftarg(
 
 void
 xfs_free_buftarg(
-	struct xfs_mount	*mp,
-	struct xfs_buftarg	*btp)
+	xfs_buftarg_t		*btp)
 {
 	xfs_flush_buftarg(btp, 1);
-	if (mp->m_flags & XFS_MOUNT_BARRIER)
-		xfs_blkdev_issue_flush(btp);
+	xfs_blkdev_issue_flush(btp);
 	xfs_free_bufhash(btp);
 	iput(btp->bt_mapping->host);
 

@@ -46,10 +46,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <linux/debugfs.h>
 #include "drmP.h"
 #include "drm_core.h"
-
 
 static int drm_version(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv);
@@ -180,7 +178,7 @@ int drm_lastclose(struct drm_device * dev)
 
 	/* Clear AGP information */
 	if (drm_core_has_AGP(dev) && dev->agp &&
-			!drm_core_check_feature(dev, DRIVER_MODESET)) {
+	    !drm_core_check_feature(dev, DRIVER_MODESET)) {
 		struct drm_agp_mem *entry, *tempe;
 
 		/* Remove AGP resources, but leave dev->agp
@@ -254,19 +252,15 @@ int drm_lastclose(struct drm_device * dev)
 int drm_init(struct drm_driver *driver)
 {
 	struct pci_dev *pdev = NULL;
-	const struct pci_device_id *pid;
+	struct pci_device_id *pid;
 	int i;
 
 	DRM_DEBUG("\n");
 
 	INIT_LIST_HEAD(&driver->device_list);
 
-	if (driver->driver_features & DRIVER_MODESET)
-		return pci_register_driver(&driver->pci_driver);
-
-	/* If not using KMS, fall back to stealth mode manual scanning. */
 	for (i = 0; driver->pci_driver.id_table[i].vendor != 0; i++) {
-		pid = &driver->pci_driver.id_table[i];
+		pid = (struct pci_device_id *)&driver->pci_driver.id_table[i];
 
 		/* Loop around setting up a DRM device for each PCI device
 		 * matching our ID and device class.  If we had the internal
@@ -291,17 +285,68 @@ int drm_init(struct drm_driver *driver)
 
 EXPORT_SYMBOL(drm_init);
 
+/**
+ * Called via cleanup_module() at module unload time.
+ *
+ * Cleans up all DRM device, calling drm_lastclose().
+ *
+ * \sa drm_init
+ */
+static void drm_cleanup(struct drm_device * dev)
+{
+	struct drm_map_list *r_list, *list_temp;
+	DRM_DEBUG("\n");
+
+	if (!dev) {
+		DRM_ERROR("cleanup called no dev\n");
+		return;
+	}
+
+	drm_vblank_cleanup(dev);
+
+	drm_lastclose(dev);
+
+	if (drm_core_has_MTRR(dev) && drm_core_has_AGP(dev) &&
+	    dev->agp && dev->agp->agp_mtrr >= 0) {
+		int retval;
+		retval = mtrr_del(dev->agp->agp_mtrr,
+				  dev->agp->agp_info.aper_base,
+				  dev->agp->agp_info.aper_size * 1024 * 1024);
+		DRM_DEBUG("mtrr_del=%d\n", retval);
+	}
+
+	if (dev->driver->unload)
+		dev->driver->unload(dev);
+
+	if (drm_core_has_AGP(dev) && dev->agp) {
+		drm_free(dev->agp, sizeof(*dev->agp), DRM_MEM_AGPLISTS);
+		dev->agp = NULL;
+	}
+
+	drm_ht_remove(&dev->map_hash);
+	drm_ctxbitmap_cleanup(dev);
+
+	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head)
+		drm_rmmap(dev, r_list->map);
+
+	if (drm_core_check_feature(dev, DRIVER_MODESET))
+		drm_put_minor(&dev->control);
+
+	if (dev->driver->driver_features & DRIVER_GEM)
+		drm_gem_destroy(dev);
+
+	drm_put_minor(&dev->primary);
+	if (drm_put_dev(dev))
+		DRM_ERROR("Cannot unload module\n");
+}
+
 void drm_exit(struct drm_driver *driver)
 {
 	struct drm_device *dev, *tmp;
 	DRM_DEBUG("\n");
 
-	if (driver->driver_features & DRIVER_MODESET) {
-		pci_unregister_driver(&driver->pci_driver);
-	} else {
-		list_for_each_entry_safe(dev, tmp, &driver->device_list, driver_item)
-			drm_put_dev(dev);
-	}
+	list_for_each_entry_safe(dev, tmp, &driver->device_list, driver_item)
+		drm_cleanup(dev);
 
 	DRM_INFO("Module unloaded\n");
 }
@@ -337,13 +382,6 @@ static int __init drm_core_init(void)
 		goto err_p3;
 	}
 
-	drm_debugfs_root = debugfs_create_dir("dri", NULL);
-	if (!drm_debugfs_root) {
-		DRM_ERROR("Cannot create /debugfs/dri\n");
-		ret = -1;
-		goto err_p3;
-	}
-
 	drm_mem_init();
 
 	DRM_INFO("Initialized %s %d.%d.%d %s\n",
@@ -362,7 +400,6 @@ err_p1:
 static void __exit drm_core_exit(void)
 {
 	remove_proc_entry("dri", NULL);
-	debugfs_remove(drm_debugfs_root);
 	drm_sysfs_destroy();
 
 	unregister_chrdev(DRM_MAJOR, "drm");
@@ -493,7 +530,7 @@ int drm_ioctl(struct inode *inode, struct file *filp,
 
 EXPORT_SYMBOL(drm_ioctl);
 
-struct drm_local_map *drm_getsarea(struct drm_device *dev)
+drm_local_map_t *drm_getsarea(struct drm_device *dev)
 {
 	struct drm_map_list *entry;
 
