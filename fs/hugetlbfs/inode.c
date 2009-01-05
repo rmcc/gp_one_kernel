@@ -108,8 +108,7 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (hugetlb_reserve_pages(inode,
 				vma->vm_pgoff >> huge_page_order(h),
-				len >> huge_page_shift(h), vma,
-				vma->vm_flags))
+				len >> huge_page_shift(h), vma))
 		goto out;
 
 	ret = 0;
@@ -253,7 +252,6 @@ static ssize_t hugetlbfs_read(struct file *filp, char __user *buf,
 	for (;;) {
 		struct page *page;
 		unsigned long nr, ret;
-		int ra;
 
 		/* nr is the maximum number of bytes to copy from this page */
 		nr = huge_page_size(h);
@@ -276,19 +274,16 @@ static ssize_t hugetlbfs_read(struct file *filp, char __user *buf,
 			 */
 			ret = len < nr ? len : nr;
 			if (clear_user(buf, ret))
-				ra = -EFAULT;
-			else
-				ra = 0;
+				ret = -EFAULT;
 		} else {
 			/*
 			 * We have the page, copy it to user space buffer.
 			 */
-			ra = hugetlbfs_read_actor(page, offset, buf, len, nr);
-			ret = ra;
+			ret = hugetlbfs_read_actor(page, offset, buf, len, nr);
 		}
-		if (ra < 0) {
+		if (ret < 0) {
 			if (retval == 0)
-				retval = ra;
+				retval = ret;
 			if (page)
 				page_cache_release(page);
 			goto out;
@@ -948,7 +943,7 @@ static int can_do_hugetlb_shm(void)
 			can_do_mlock());
 }
 
-struct file *hugetlb_file_setup(const char *name, size_t size, int acctflag)
+struct file *hugetlb_file_setup(const char *name, size_t size)
 {
 	int error = -ENOMEM;
 	struct file *file;
@@ -982,8 +977,7 @@ struct file *hugetlb_file_setup(const char *name, size_t size, int acctflag)
 
 	error = -ENOMEM;
 	if (hugetlb_reserve_pages(inode, 0,
-			size >> huge_page_shift(hstate_inode(inode)), NULL,
-			acctflag))
+			size >> huge_page_shift(hstate_inode(inode)), NULL))
 		goto out_inode;
 
 	d_instantiate(dentry, inode);

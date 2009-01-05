@@ -172,8 +172,7 @@ send_msg_to_layer(struct mISDNstack *st, struct sk_buff *skb)
 		else
 			printk(KERN_WARNING
 			    "%s: dev(%s) prim(%x) id(%x) no channel\n",
-			    __func__, dev_name(&st->dev->dev), hh->prim,
-			    hh->id);
+			    __func__, st->dev->name, hh->prim, hh->id);
 	} else if (lm == 0x8) {
 		WARN_ON(lm == 0x8);
 		ch = get_channel4id(st, hh->id);
@@ -182,12 +181,11 @@ send_msg_to_layer(struct mISDNstack *st, struct sk_buff *skb)
 		else
 			printk(KERN_WARNING
 			    "%s: dev(%s) prim(%x) id(%x) no channel\n",
-			    __func__, dev_name(&st->dev->dev), hh->prim,
-			    hh->id);
+			    __func__, st->dev->name, hh->prim, hh->id);
 	} else {
 		/* broadcast not handled yet */
 		printk(KERN_WARNING "%s: dev(%s) prim %x not delivered\n",
-		    __func__, dev_name(&st->dev->dev), hh->prim);
+		    __func__, st->dev->name, hh->prim);
 	}
 	return -ESRCH;
 }
@@ -211,8 +209,7 @@ mISDNStackd(void *data)
 	unlock_kernel();
 #endif
 	if (*debug & DEBUG_MSG_THREAD)
-		printk(KERN_DEBUG "mISDNStackd %s started\n",
-		    dev_name(&st->dev->dev));
+		printk(KERN_DEBUG "mISDNStackd %s started\n", st->dev->name);
 
 	if (st->notify != NULL) {
 		complete(st->notify);
@@ -248,7 +245,7 @@ mISDNStackd(void *data)
 					printk(KERN_DEBUG
 					    "%s: %s prim(%x) id(%x) "
 					    "send call(%d)\n",
-					    __func__, dev_name(&st->dev->dev),
+					    __func__, st->dev->name,
 					    mISDN_HEAD_PRIM(skb),
 					    mISDN_HEAD_ID(skb), err);
 				dev_kfree_skb(skb);
@@ -291,7 +288,7 @@ mISDNStackd(void *data)
 		    mISDN_STACK_ACTION_MASK));
 		if (*debug & DEBUG_MSG_THREAD)
 			printk(KERN_DEBUG "%s: %s wake status %08lx\n",
-			    __func__, dev_name(&st->dev->dev), st->status);
+			    __func__, st->dev->name, st->status);
 		test_and_set_bit(mISDN_STACK_ACTIVE, &st->status);
 
 		test_and_clear_bit(mISDN_STACK_WAKEUP, &st->status);
@@ -306,16 +303,15 @@ mISDNStackd(void *data)
 #ifdef MISDN_MSG_STATS
 	printk(KERN_DEBUG "mISDNStackd daemon for %s proceed %d "
 	    "msg %d sleep %d stopped\n",
-	    dev_name(&st->dev->dev), st->msg_cnt, st->sleep_cnt,
-	    st->stopped_cnt);
+	    st->dev->name, st->msg_cnt, st->sleep_cnt, st->stopped_cnt);
 	printk(KERN_DEBUG
 	    "mISDNStackd daemon for %s utime(%ld) stime(%ld)\n",
-	    dev_name(&st->dev->dev), st->thread->utime, st->thread->stime);
+	    st->dev->name, st->thread->utime, st->thread->stime);
 	printk(KERN_DEBUG
 	    "mISDNStackd daemon for %s nvcsw(%ld) nivcsw(%ld)\n",
-	    dev_name(&st->dev->dev), st->thread->nvcsw, st->thread->nivcsw);
+	    st->dev->name, st->thread->nvcsw, st->thread->nivcsw);
 	printk(KERN_DEBUG "mISDNStackd daemon for %s killed now\n",
-	    dev_name(&st->dev->dev));
+	    st->dev->name);
 #endif
 	test_and_set_bit(mISDN_STACK_KILLED, &st->status);
 	test_and_clear_bit(mISDN_STACK_RUNNING, &st->status);
@@ -405,16 +401,15 @@ create_stack(struct mISDNdevice *dev)
 	newst->own.send = mISDN_queue_message;
 	newst->own.recv = mISDN_queue_message;
 	if (*debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
-		    dev_name(&newst->dev->dev));
+		printk(KERN_DEBUG "%s: st(%s)\n", __func__, newst->dev->name);
 	newst->notify = &done;
 	newst->thread = kthread_run(mISDNStackd, (void *)newst, "mISDN_%s",
-		dev_name(&newst->dev->dev));
+		newst->dev->name);
 	if (IS_ERR(newst->thread)) {
 		err = PTR_ERR(newst->thread);
 		printk(KERN_ERR
 			"mISDN:cannot create kernel thread for %s (%d)\n",
-			dev_name(&newst->dev->dev), err);
+			newst->dev->name, err);
 		delete_teimanager(dev->teimgr);
 		kfree(newst);
 	} else
@@ -433,21 +428,29 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 
 	if (*debug &  DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
-			__func__, dev_name(&dev->dev), protocol, adr->dev,
-			adr->channel, adr->sapi, adr->tei);
+			__func__, dev->name, protocol, adr->dev, adr->channel,
+			 adr->sapi, adr->tei);
 	switch (protocol) {
 	case ISDN_P_NT_S0:
 	case ISDN_P_NT_E1:
 	case ISDN_P_TE_S0:
 	case ISDN_P_TE_E1:
+#ifdef PROTOCOL_CHECK
+		/* this should be enhanced */
+		if (!list_empty(&dev->D.st->layer2)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+		if (!hlist_empty(&dev->D.st->l1sock.head)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+#endif
 		ch->recv = mISDN_queue_message;
 		ch->peer = &dev->D.st->own;
 		ch->st = dev->D.st;
 		rq.protocol = protocol;
-		rq.adr.channel = adr->channel;
+		rq.adr.channel = 0;
 		err = dev->D.ctrl(&dev->D, OPEN_CHANNEL, &rq);
-		printk(KERN_DEBUG "%s: ret %d (dev %d)\n", __func__, err,
-			dev->id);
+		printk(KERN_DEBUG "%s: ret 1 %d\n", __func__, err);
 		if (err)
 			return err;
 		write_lock_bh(&dev->D.st->l1sock.lock);
@@ -470,7 +473,7 @@ connect_Bstack(struct mISDNdevice *dev, struct mISDNchannel *ch,
 
 	if (*debug &  DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
-			__func__, dev_name(&dev->dev), protocol,
+			__func__, dev->name, protocol,
 			adr->dev, adr->channel, adr->sapi,
 			adr->tei);
 	ch->st = dev->D.st;
@@ -526,7 +529,7 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 
 	if (*debug &  DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
-			__func__, dev_name(&dev->dev), protocol,
+			__func__, dev->name, protocol,
 			adr->dev, adr->channel, adr->sapi,
 			adr->tei);
 	rq.protocol = ISDN_P_TE_S0;
@@ -538,6 +541,15 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		if (dev->Dprotocols & (1 << ISDN_P_NT_E1))
 			rq.protocol = ISDN_P_NT_E1;
 	case ISDN_P_LAPD_TE:
+#ifdef PROTOCOL_CHECK
+		/* this should be enhanced */
+		if (!list_empty(&dev->D.st->layer2)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+		if (!hlist_empty(&dev->D.st->l1sock.head)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+#endif
 		ch->recv = mISDN_queue_message;
 		ch->peer = &dev->D.st->own;
 		ch->st = dev->D.st;
@@ -578,7 +590,7 @@ delete_channel(struct mISDNchannel *ch)
 	}
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s) protocol(%x)\n", __func__,
-		    dev_name(&ch->st->dev->dev), ch->protocol);
+		    ch->st->dev->name, ch->protocol);
 	if (ch->protocol >= ISDN_P_B_START) {
 		if (ch->peer) {
 			ch->peer->ctrl(ch->peer, CLOSE_CHANNEL, NULL);
@@ -631,7 +643,7 @@ delete_stack(struct mISDNdevice *dev)
 
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
-		    dev_name(&st->dev->dev));
+		    st->dev->name);
 	if (dev->teimgr)
 		delete_teimanager(dev->teimgr);
 	if (st->thread) {

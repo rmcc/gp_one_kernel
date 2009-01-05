@@ -51,6 +51,13 @@ struct sil24_sge {
 	__le32	flags;
 };
 
+/*
+ * Port multiplier
+ */
+struct sil24_port_multiplier {
+	__le32	diag;
+	__le32	sactive;
+};
 
 enum {
 	SIL24_HOST_BAR		= 0,

@@ -31,7 +31,7 @@ void register_iommu(struct iommu_ops *ops)
 	iommu_ops = ops;
 }
 
-bool iommu_found(void)
+bool iommu_found()
 {
 	return iommu_ops != NULL;
 }

@@ -505,8 +505,7 @@ static void __do_notify(struct mqueue_inode_info *info)
 			sig_i.si_errno = 0;
 			sig_i.si_code = SI_MESGQ;
 			sig_i.si_value = info->notify.sigev_value;
-			sig_i.si_pid = task_tgid_nr_ns(current,
-						ns_of_pid(info->notify_owner));
+			sig_i.si_pid = task_tgid_vnr(current);
 			sig_i.si_uid = current_uid();
 
 			kill_pid_info(info->notify.sigev_signo,
@@ -650,8 +649,8 @@ static struct file *do_open(struct dentry *dentry, int oflag)
 	return dentry_open(dentry, mqueue_mnt, oflag, cred);
 }
 
-SYSCALL_DEFINE4(mq_open, const char __user *, u_name, int, oflag, mode_t, mode,
-		struct mq_attr __user *, u_attr)
+asmlinkage long sys_mq_open(const char __user *u_name, int oflag, mode_t mode,
+				struct mq_attr __user *u_attr)
 {
 	struct dentry *dentry;
 	struct file *filp;
@@ -721,7 +720,7 @@ out_putname:
 	return fd;
 }
 
-SYSCALL_DEFINE1(mq_unlink, const char __user *, u_name)
+asmlinkage long sys_mq_unlink(const char __user *u_name)
 {
 	int err;
 	char *name;
@@ -814,9 +813,9 @@ static inline void pipelined_receive(struct mqueue_inode_info *info)
 	sender->state = STATE_READY;
 }
 
-SYSCALL_DEFINE5(mq_timedsend, mqd_t, mqdes, const char __user *, u_msg_ptr,
-		size_t, msg_len, unsigned int, msg_prio,
-		const struct timespec __user *, u_abs_timeout)
+asmlinkage long sys_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
+	size_t msg_len, unsigned int msg_prio,
+	const struct timespec __user *u_abs_timeout)
 {
 	struct file *filp;
 	struct inode *inode;
@@ -907,9 +906,9 @@ out:
 	return ret;
 }
 
-SYSCALL_DEFINE5(mq_timedreceive, mqd_t, mqdes, char __user *, u_msg_ptr,
-		size_t, msg_len, unsigned int __user *, u_msg_prio,
-		const struct timespec __user *, u_abs_timeout)
+asmlinkage ssize_t sys_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
+	size_t msg_len, unsigned int __user *u_msg_prio,
+	const struct timespec __user *u_abs_timeout)
 {
 	long timeout;
 	ssize_t ret;
@@ -997,8 +996,8 @@ out:
  * and he isn't currently owner of notification, will be silently discarded.
  * It isn't explicitly defined in the POSIX.
  */
-SYSCALL_DEFINE2(mq_notify, mqd_t, mqdes,
-		const struct sigevent __user *, u_notification)
+asmlinkage long sys_mq_notify(mqd_t mqdes,
+				const struct sigevent __user *u_notification)
 {
 	int ret;
 	struct file *filp;
@@ -1123,9 +1122,9 @@ out:
 	return ret;
 }
 
-SYSCALL_DEFINE3(mq_getsetattr, mqd_t, mqdes,
-		const struct mq_attr __user *, u_mqstat,
-		struct mq_attr __user *, u_omqstat)
+asmlinkage long sys_mq_getsetattr(mqd_t mqdes,
+			const struct mq_attr __user *u_mqstat,
+			struct mq_attr __user *u_omqstat)
 {
 	int ret;
 	struct mq_attr mqstat, omqstat;

@@ -53,8 +53,6 @@ obj-$(CONFIG_HOTPLUG) += setup-bus.o
 
 obj-$(CONFIG_PCI_SYSCALL) += syscall.o
 
-obj-$(CONFIG_PCI_STUB) += pci-stub.o
-
 ifeq ($(CONFIG_PCI_DEBUG),y)
 EXTRA_CFLAGS += -DDEBUG
 endif

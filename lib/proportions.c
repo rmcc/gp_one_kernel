@@ -147,7 +147,6 @@ out:
  * this is used to track the active references.
  */
 static struct prop_global *prop_get_global(struct prop_descriptor *pd)
-__acquires(RCU)
 {
 	int index;
 
@@ -161,7 +160,6 @@ __acquires(RCU)
 }
 
 static void prop_put_global(struct prop_descriptor *pd, struct prop_global *pg)
-__releases(RCU)
 {
 	rcu_read_unlock();
 }

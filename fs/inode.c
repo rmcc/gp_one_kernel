@@ -22,7 +22,6 @@
 #include <linux/bootmem.h>
 #include <linux/inotify.h>
 #include <linux/mount.h>
-#include <linux/async.h>
 
 /*
  * This is needed for the following functions:
@@ -111,8 +110,8 @@ static void wake_up_inode(struct inode *inode)
 
 /**
  * inode_init_always - perform inode structure intialisation
- * @sb: superblock inode belongs to
- * @inode: inode to initialise
+ * @sb		- superblock inode belongs to.
+ * @inode	- inode to initialise
  *
  * These are initializations that need to be done on every inode
  * allocation as the fields are not initialised by slab allocation.
@@ -167,7 +166,7 @@ struct inode *inode_init_always(struct super_block *sb, struct inode *inode)
 	mapping->a_ops = &empty_aops;
 	mapping->host = inode;
 	mapping->flags = 0;
-	mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE);
+	mapping_set_gfp_mask(mapping, GFP_HIGHUSER_PAGECACHE);
 	mapping->assoc_mapping = NULL;
 	mapping->backing_dev_info = &default_backing_dev_info;
 	mapping->writeback_index = 0;
@@ -577,8 +576,8 @@ __inode_add_to_lists(struct super_block *sb, struct hlist_head *head,
 
 /**
  * inode_add_to_lists - add a new inode to relevant lists
- * @sb: superblock inode belongs to
- * @inode: inode to mark in use
+ * @sb		- superblock inode belongs to.
+ * @inode	- inode to mark in use
  *
  * When an inode is allocated it needs to be accounted for, added to the in use
  * list, the owning superblock and the inode hash. This needs to be done under
@@ -602,7 +601,7 @@ EXPORT_SYMBOL_GPL(inode_add_to_lists);
  *	@sb: superblock
  *
  *	Allocates a new inode for given superblock. The default gfp_mask
- *	for allocations related to inode->i_mapping is GFP_HIGHUSER_MOVABLE.
+ *	for allocations related to inode->i_mapping is GFP_HIGHUSER_PAGECACHE.
  *	If HIGHMEM pages are unsuitable or it is known that pages allocated
  *	for the page cache are not reclaimable or migratable,
  *	mapping_set_gfp_mask() must be called with suitable flags on the

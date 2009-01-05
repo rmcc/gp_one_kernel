@@ -122,10 +122,14 @@ static void omap_kp_scan_keypad(struct omap_kp *omap_kp, unsigned char *state)
 
 	/* read the keypad status */
 	if (cpu_is_omap24xx()) {
+		int i;
+		for (i = 0; i < omap_kp->rows; i++)
+			disable_irq(OMAP_GPIO_IRQ(row_gpios[i]));
+
 		/* read the keypad status */
 		for (col = 0; col < omap_kp->cols; col++) {
 			set_col_gpio_val(omap_kp, ~(1 << col));
-			state[col] = ~(get_row_gpio_val(omap_kp)) & 0xff;
+			state[col] = ~(get_row_gpio_val(omap_kp)) & 0x3f;
 		}
 		set_col_gpio_val(omap_kp, 0);
 
@@ -279,7 +283,7 @@ static int omap_kp_resume(struct platform_device *dev)
 #define omap_kp_resume	NULL
 #endif
 
-static int __devinit omap_kp_probe(struct platform_device *pdev)
+static int __init omap_kp_probe(struct platform_device *pdev)
 {
 	struct omap_kp *omap_kp;
 	struct input_dev *input_dev;
@@ -422,7 +426,7 @@ err1:
 	return -EINVAL;
 }
 
-static int __devexit omap_kp_remove(struct platform_device *pdev)
+static int omap_kp_remove(struct platform_device *pdev)
 {
 	struct omap_kp *omap_kp = platform_get_drvdata(pdev);
 
@@ -454,7 +458,7 @@ static int __devexit omap_kp_remove(struct platform_device *pdev)
 
 static struct platform_driver omap_kp_driver = {
 	.probe		= omap_kp_probe,
-	.remove		= __devexit_p(omap_kp_remove),
+	.remove		= omap_kp_remove,
 	.suspend	= omap_kp_suspend,
 	.resume		= omap_kp_resume,
 	.driver		= {
@@ -463,7 +467,7 @@ static struct platform_driver omap_kp_driver = {
 	},
 };
 
-static int __init omap_kp_init(void)
+static int __devinit omap_kp_init(void)
 {
 	printk(KERN_INFO "OMAP Keypad Driver\n");
 	return platform_driver_register(&omap_kp_driver);

@@ -18,11 +18,9 @@
  */
 
 #include <linux/device.h>
-#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/wait.h>
-#include <linux/async.h>
 
 #include "base.h"
 #include "power/power.h"
@@ -36,7 +34,7 @@ static void driver_bound(struct device *dev)
 		return;
 	}
 
-	pr_debug("driver: '%s': %s: bound to device '%s'\n", dev_name(dev),
+	pr_debug("driver: '%s': %s: bound to device '%s'\n", dev->bus_id,
 		 __func__, dev->driver->name);
 
 	if (dev->bus)
@@ -106,13 +104,13 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 
 	atomic_inc(&probe_count);
 	pr_debug("bus: '%s': %s: probing driver %s with device %s\n",
-		 drv->bus->name, __func__, drv->name, dev_name(dev));
+		 drv->bus->name, __func__, drv->name, dev->bus_id);
 	WARN_ON(!list_empty(&dev->devres_head));
 
 	dev->driver = drv;
 	if (driver_sysfs_add(dev)) {
 		printk(KERN_ERR "%s: driver_sysfs_add(%s) failed\n",
-			__func__, dev_name(dev));
+			__func__, dev->bus_id);
 		goto probe_failed;
 	}
 
@@ -129,7 +127,7 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 	driver_bound(dev);
 	ret = 1;
 	pr_debug("bus: '%s': %s: bound device %s to driver %s\n",
-		 drv->bus->name, __func__, dev_name(dev), drv->name);
+		 drv->bus->name, __func__, dev->bus_id, drv->name);
 	goto done;
 
 probe_failed:
@@ -141,7 +139,7 @@ probe_failed:
 		/* driver matched but the probe failed */
 		printk(KERN_WARNING
 		       "%s: probe of %s failed with error %d\n",
-		       drv->name, dev_name(dev), ret);
+		       drv->name, dev->bus_id, ret);
 	}
 	/*
 	 * Ignore errors returned by ->probe so that the next driver can try
@@ -166,21 +164,6 @@ int driver_probe_done(void)
 		 atomic_read(&probe_count));
 	if (atomic_read(&probe_count))
 		return -EBUSY;
-	return 0;
-}
-
-/**
- * wait_for_device_probe
- * Wait for device probing to be completed.
- *
- * Note: this function polls at 100 msec intervals.
- */
-int wait_for_device_probe(void)
-{
-	/* wait for the known devices to complete their probing */
-	while (driver_probe_done() != 0)
-		msleep(100);
-	async_synchronize_full();
 	return 0;
 }
 
@@ -211,7 +194,7 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
 		goto done;
 
 	pr_debug("bus: '%s': %s: matched device %s with driver %s\n",
-		 drv->bus->name, __func__, dev_name(dev), drv->name);
+		 drv->bus->name, __func__, dev->bus_id, drv->name);
 
 	ret = really_probe(dev, drv);
 
@@ -315,6 +298,7 @@ static void __device_release_driver(struct device *dev)
 	drv = dev->driver;
 	if (drv) {
 		driver_sysfs_remove(dev);
+		sysfs_remove_link(&dev->kobj, "driver");
 
 		if (dev->bus)
 			blocking_notifier_call_chain(&dev->bus->p->bus_notifier,

@@ -10,6 +10,9 @@
 #include <linux/types.h>
 #include <asm/system.h>
 
+typedef struct { volatile int counter; } atomic_t;
+typedef struct { volatile __s64 counter; } atomic64_t;
+
 #define ATOMIC_INIT(i)		{ (i) }
 #define ATOMIC64_INIT(i)	{ (i) }
 

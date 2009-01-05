@@ -197,9 +197,9 @@ static int autofs4_show_options(struct seq_file *m, struct vfsmount *mnt)
 	seq_printf(m, ",minproto=%d", sbi->min_proto);
 	seq_printf(m, ",maxproto=%d", sbi->max_proto);
 
-	if (autofs_type_offset(sbi->type))
+	if (sbi->type & AUTOFS_TYPE_OFFSET)
 		seq_printf(m, ",offset");
-	else if (autofs_type_direct(sbi->type))
+	else if (sbi->type & AUTOFS_TYPE_DIRECT)
 		seq_printf(m, ",direct");
 	else
 		seq_printf(m, ",indirect");
@@ -284,13 +284,13 @@ static int parse_options(char *options, int *pipefd, uid_t *uid, gid_t *gid,
 			*maxproto = option;
 			break;
 		case Opt_indirect:
-			set_autofs_type_indirect(type);
+			*type = AUTOFS_TYPE_INDIRECT;
 			break;
 		case Opt_direct:
-			set_autofs_type_direct(type);
+			*type = AUTOFS_TYPE_DIRECT;
 			break;
 		case Opt_offset:
-			set_autofs_type_offset(type);
+			*type = AUTOFS_TYPE_OFFSET;
 			break;
 		default:
 			return 1;
@@ -338,7 +338,7 @@ int autofs4_fill_super(struct super_block *s, void *data, int silent)
 	sbi->sb = s;
 	sbi->version = 0;
 	sbi->sub_version = 0;
-	set_autofs_type_indirect(&sbi->type);
+	sbi->type = AUTOFS_TYPE_INDIRECT;
 	sbi->min_proto = 0;
 	sbi->max_proto = 0;
 	mutex_init(&sbi->wq_mutex);
@@ -380,7 +380,7 @@ int autofs4_fill_super(struct super_block *s, void *data, int silent)
 	}
 
 	root_inode->i_fop = &autofs4_root_operations;
-	root_inode->i_op = autofs_type_trigger(sbi->type) ?
+	root_inode->i_op = sbi->type & AUTOFS_TYPE_TRIGGER ?
 			&autofs4_direct_root_inode_operations :
 			&autofs4_indirect_root_inode_operations;
 

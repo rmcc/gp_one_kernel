@@ -134,7 +134,7 @@ static const struct stb0899_tab stb0899_dvbs2rf_tab[] = {
 };
 
 /* DVB-S2 Es/N0 quant in dB/100 vs read value * 100*/
-static struct stb0899_tab stb0899_quant_tab[] = {
+struct stb0899_tab stb0899_quant_tab[] = {
 	{    0,	    0 },
 	{    0,	  100 },
 	{  600,	  200 },
@@ -177,7 +177,7 @@ static struct stb0899_tab stb0899_quant_tab[] = {
 };
 
 /* DVB-S2 Es/N0 estimate in dB/100 vs read value */
-static struct stb0899_tab stb0899_est_tab[] = {
+struct stb0899_tab stb0899_est_tab[] = {
 	{    0,	     0 },
 	{    0,	     1 },
 	{  301,	     2 },
@@ -217,7 +217,7 @@ static struct stb0899_tab stb0899_est_tab[] = {
 	{ 5721,	526017 },
 };
 
-static int _stb0899_read_reg(struct stb0899_state *state, unsigned int reg)
+int _stb0899_read_reg(struct stb0899_state *state, unsigned int reg)
 {
 	int ret;
 

@@ -23,7 +23,9 @@
 #include <linux/debugfs.h>
 #include <linux/scatterlist.h>
 #include <linux/iommu-helper.h>
+#ifdef CONFIG_IOMMU_API
 #include <linux/iommu.h>
+#endif
 #include <asm/proto.h>
 #include <asm/iommu.h>
 #include <asm/gart.h>

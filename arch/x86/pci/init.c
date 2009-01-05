@@ -12,8 +12,7 @@ static __init int pci_arch_init(void)
 	type = pci_direct_probe();
 #endif
 
-	if (!(pci_probe & PCI_PROBE_NOEARLY))
-		pci_mmcfg_early_init();
+	pci_mmcfg_early_init();
 
 #ifdef CONFIG_PCI_OLPC
 	if (!pci_olpc_init())

@@ -106,10 +106,15 @@ struct pci_iommu_arena;
  *   Where A = pin 1, B = pin 2 and so on and pin=0 = default = A.
  *   Thus, each swizzle is ((pin-1) + (device#-4)) % 4
  *
- *   pci_swizzle_interrupt_pin() swizzles for exactly one bridge.  The routine
- *   pci_common_swizzle() handles multiple bridges.  But there are a
- *   couple boards that do strange things.
+ *   The following code swizzles for exactly one bridge.  The routine
+ *   common_swizzle below handles multiple bridges.  But there are a
+ *   couple boards that do strange things, so we define this here.
  */
+
+static inline u8 bridge_swizzle(u8 pin, u8 slot) 
+{
+	return (((pin-1) + slot) % 4) + 1;
+}
 
 
 /* The following macro is used to implement the table-based irq mapping
@@ -179,7 +184,7 @@ extern int pci_probe_only;
 extern unsigned long alpha_agpgart_size;
 
 extern void common_init_pci(void);
-#define common_swizzle pci_common_swizzle
+extern u8 common_swizzle(struct pci_dev *, u8 *);
 extern struct pci_controller *alloc_pci_controller(void);
 extern struct resource *alloc_resource(void);
 

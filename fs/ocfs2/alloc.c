@@ -3868,7 +3868,7 @@ static void ocfs2_split_record(struct inode *inode,
 	struct ocfs2_extent_list *left_el = NULL, *right_el, *insert_el, *el;
 	struct ocfs2_extent_rec *rec, *tmprec;
 
-	right_el = path_leaf_el(right_path);
+	right_el = path_leaf_el(right_path);;
 	if (left_path)
 		left_el = path_leaf_el(left_path);
 
@@ -4796,29 +4796,6 @@ out:
 	return ret;
 }
 
-static int ocfs2_replace_extent_rec(struct inode *inode,
-				    handle_t *handle,
-				    struct ocfs2_path *path,
-				    struct ocfs2_extent_list *el,
-				    int split_index,
-				    struct ocfs2_extent_rec *split_rec)
-{
-	int ret;
-
-	ret = ocfs2_path_bh_journal_access(handle, inode, path,
-					   path_num_items(path) - 1);
-	if (ret) {
-		mlog_errno(ret);
-		goto out;
-	}
-
-	el->l_recs[split_index] = *split_rec;
-
-	ocfs2_journal_dirty(handle, path_leaf_bh(path));
-out:
-	return ret;
-}
-
 /*
  * Mark part or all of the extent record at split_index in the leaf
  * pointed to by path as written. This removes the unwritten
@@ -4908,9 +4885,7 @@ static int __ocfs2_mark_extent_written(struct inode *inode,
 
 	if (ctxt.c_contig_type == CONTIG_NONE) {
 		if (ctxt.c_split_covers_rec)
-			ret = ocfs2_replace_extent_rec(inode, handle,
-						       path, el,
-						       split_index, split_rec);
+			el->l_recs[split_index] = *split_rec;
 		else
 			ret = ocfs2_split_and_insert(inode, handle, path, et,
 						     &last_eb_bh, split_index,
@@ -5414,9 +5389,6 @@ int ocfs2_remove_btree_range(struct inode *inode,
 		mlog_errno(ret);
 		goto out;
 	}
-
-	vfs_dq_free_space_nodirty(inode,
-				  ocfs2_clusters_to_bytes(inode->i_sb, len));
 
 	ret = ocfs2_remove_extent(inode, et, cpos, len, handle, meta_ac,
 				  dealloc);

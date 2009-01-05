@@ -128,7 +128,7 @@ struct spu {
 	int number;
 	unsigned int irqs[3];
 	u32 node;
-	unsigned long flags;
+	u64 flags;
 	u64 class_0_pending;
 	u64 class_0_dar;
 	u64 class_1_dar;

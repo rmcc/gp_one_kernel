@@ -1111,7 +1111,7 @@ int wm8350_read_auxadc(struct wm8350 *wm8350, int channel, int scale, int vref)
 	do {
 		schedule_timeout_interruptible(1);
 		reg = wm8350_reg_read(wm8350, WM8350_DIGITISER_CONTROL_1);
-	} while (--tries && (reg & WM8350_AUXADC_POLL));
+	} while (tries-- && (reg & WM8350_AUXADC_POLL));
 
 	if (!tries)
 		dev_err(wm8350->dev, "adc chn %d read timeout\n", channel);
@@ -1297,29 +1297,14 @@ static void wm8350_client_dev_register(struct wm8350 *wm8350,
 int wm8350_device_init(struct wm8350 *wm8350, int irq,
 		       struct wm8350_platform_data *pdata)
 {
-	int ret;
+	int ret = -EINVAL;
 	u16 id1, id2, mask_rev;
 	u16 cust_id, mode, chip_rev;
 
 	/* get WM8350 revision and config mode */
-	ret = wm8350->read_dev(wm8350, WM8350_RESET_ID, sizeof(id1), &id1);
-	if (ret != 0) {
-		dev_err(wm8350->dev, "Failed to read ID: %d\n", ret);
-		goto err;
-	}
-
-	ret = wm8350->read_dev(wm8350, WM8350_ID, sizeof(id2), &id2);
-	if (ret != 0) {
-		dev_err(wm8350->dev, "Failed to read ID: %d\n", ret);
-		goto err;
-	}
-
-	ret = wm8350->read_dev(wm8350, WM8350_REVISION, sizeof(mask_rev),
-			       &mask_rev);
-	if (ret != 0) {
-		dev_err(wm8350->dev, "Failed to read revision: %d\n", ret);
-		goto err;
-	}
+	wm8350->read_dev(wm8350, WM8350_RESET_ID, sizeof(id1), &id1);
+	wm8350->read_dev(wm8350, WM8350_ID, sizeof(id2), &id2);
+	wm8350->read_dev(wm8350, WM8350_REVISION, sizeof(mask_rev), &mask_rev);
 
 	id1 = be16_to_cpu(id1);
 	id2 = be16_to_cpu(id2);
@@ -1419,12 +1404,14 @@ int wm8350_device_init(struct wm8350 *wm8350, int irq,
 		return ret;
 	}
 
-	wm8350_reg_write(wm8350, WM8350_SYSTEM_INTERRUPTS_MASK, 0xFFFF);
-	wm8350_reg_write(wm8350, WM8350_INT_STATUS_1_MASK, 0xFFFF);
-	wm8350_reg_write(wm8350, WM8350_INT_STATUS_2_MASK, 0xFFFF);
-	wm8350_reg_write(wm8350, WM8350_UNDER_VOLTAGE_INT_STATUS_MASK, 0xFFFF);
-	wm8350_reg_write(wm8350, WM8350_GPIO_INT_STATUS_MASK, 0xFFFF);
-	wm8350_reg_write(wm8350, WM8350_COMPARATOR_INT_STATUS_MASK, 0xFFFF);
+	if (pdata && pdata->init) {
+		ret = pdata->init(wm8350);
+		if (ret != 0) {
+			dev_err(wm8350->dev, "Platform init() failed: %d\n",
+				ret);
+			goto err;
+		}
+	}
 
 	mutex_init(&wm8350->auxadc_mutex);
 	mutex_init(&wm8350->irq_mutex);
@@ -1442,15 +1429,6 @@ int wm8350_device_init(struct wm8350 *wm8350, int irq,
 		goto err;
 	}
 	wm8350->chip_irq = irq;
-
-	if (pdata && pdata->init) {
-		ret = pdata->init(wm8350);
-		if (ret != 0) {
-			dev_err(wm8350->dev, "Platform init() failed: %d\n",
-				ret);
-			goto err;
-		}
-	}
 
 	wm8350_reg_write(wm8350, WM8350_SYSTEM_INTERRUPTS_MASK, 0x0);
 
@@ -1474,9 +1452,6 @@ EXPORT_SYMBOL_GPL(wm8350_device_init);
 void wm8350_device_exit(struct wm8350 *wm8350)
 {
 	int i;
-
-	for (i = 0; i < ARRAY_SIZE(wm8350->pmic.led); i++)
-		platform_device_unregister(wm8350->pmic.led[i].pdev);
 
 	for (i = 0; i < ARRAY_SIZE(wm8350->pmic.pdev); i++)
 		platform_device_unregister(wm8350->pmic.pdev[i]);

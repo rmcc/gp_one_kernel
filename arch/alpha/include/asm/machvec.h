@@ -21,7 +21,6 @@ struct pci_dev;
 struct pci_ops;
 struct pci_controller;
 struct _alpha_agp_info;
-struct rtc_time;
 
 struct alpha_machine_vector
 {
@@ -94,9 +93,6 @@ struct alpha_machine_vector
 	struct pci_ops *pci_ops;
 
 	struct _alpha_agp_info *(*agp_info)(void);
-
-	unsigned int (*rtc_get_time)(struct rtc_time *);
-	int (*rtc_set_time)(struct rtc_time *);
 
 	const char *vector_name;
 
