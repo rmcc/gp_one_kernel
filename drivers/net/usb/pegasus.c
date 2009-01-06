@@ -93,7 +93,6 @@ module_param (msg_level, int, 0);
 MODULE_PARM_DESC (msg_level, "Override default message level");
 
 MODULE_DEVICE_TABLE(usb, pegasus_ids);
-static const struct net_device_ops pegasus_netdev_ops;
 
 static int update_eth_regs_async(pegasus_t *);
 /* Aargh!!! I _really_ hate such tweaks */
@@ -151,8 +150,8 @@ static int get_registers(pegasus_t * pegasus, __u16 indx, __u16 size,
 	pegasus->dr.bRequestType = PEGASUS_REQT_READ;
 	pegasus->dr.bRequest = PEGASUS_REQ_GET_REGS;
 	pegasus->dr.wValue = cpu_to_le16(0);
-	pegasus->dr.wIndex = cpu_to_le16(indx);
-	pegasus->dr.wLength = cpu_to_le16(size);
+	pegasus->dr.wIndex = cpu_to_le16p(&indx);
+	pegasus->dr.wLength = cpu_to_le16p(&size);
 	pegasus->ctrl_urb->transfer_buffer_length = size;
 
 	usb_fill_control_urb(pegasus->ctrl_urb, pegasus->usb,
@@ -209,8 +208,8 @@ static int set_registers(pegasus_t * pegasus, __u16 indx, __u16 size,
 	pegasus->dr.bRequestType = PEGASUS_REQT_WRITE;
 	pegasus->dr.bRequest = PEGASUS_REQ_SET_REGS;
 	pegasus->dr.wValue = cpu_to_le16(0);
-	pegasus->dr.wIndex = cpu_to_le16(indx);
-	pegasus->dr.wLength = cpu_to_le16(size);
+	pegasus->dr.wIndex = cpu_to_le16p(&indx);
+	pegasus->dr.wLength = cpu_to_le16p(&size);
 	pegasus->ctrl_urb->transfer_buffer_length = size;
 
 	usb_fill_control_urb(pegasus->ctrl_urb, pegasus->usb,
@@ -262,7 +261,7 @@ static int set_register(pegasus_t * pegasus, __u16 indx, __u8 data)
 	pegasus->dr.bRequestType = PEGASUS_REQT_WRITE;
 	pegasus->dr.bRequest = PEGASUS_REQ_SET_REG;
 	pegasus->dr.wValue = cpu_to_le16(data);
-	pegasus->dr.wIndex = cpu_to_le16(indx);
+	pegasus->dr.wIndex = cpu_to_le16p(&indx);
 	pegasus->dr.wLength = cpu_to_le16(1);
 	pegasus->ctrl_urb->transfer_buffer_length = 1;
 
@@ -477,7 +476,7 @@ static inline void get_node_id(pegasus_t * pegasus, __u8 * id)
 
 	for (i = 0; i < 3; i++) {
 		read_eprom_word(pegasus, i, &w16);
-		((__le16 *) id)[i] = cpu_to_le16(w16);
+		((__le16 *) id)[i] = cpu_to_le16p(&w16);
 	}
 }
 
@@ -1361,10 +1360,14 @@ static int pegasus_probe(struct usb_interface *intf,
 	pegasus->intf = intf;
 	pegasus->usb = dev;
 	pegasus->net = net;
-
-
+	net->open = pegasus_open;
+	net->stop = pegasus_close;
 	net->watchdog_timeo = PEGASUS_TX_TIMEOUT;
-	net->netdev_ops = &pegasus_netdev_ops;
+	net->tx_timeout = pegasus_tx_timeout;
+	net->do_ioctl = pegasus_ioctl;
+	net->hard_start_xmit = pegasus_start_xmit;
+	net->set_multicast_list = pegasus_set_multicast;
+	net->get_stats = pegasus_netdev_stats;
 	SET_ETHTOOL_OPS(net, &ops);
 	pegasus->mii.dev = net;
 	pegasus->mii.mdio_read = mdio_read;
@@ -1478,16 +1481,6 @@ static int pegasus_resume (struct usb_interface *intf)
 				CARRIER_CHECK_DELAY);
 	return 0;
 }
-
-static const struct net_device_ops pegasus_netdev_ops = {
-	.ndo_open =			pegasus_open,
-	.ndo_stop =			pegasus_close,
-	.ndo_do_ioctl =			pegasus_ioctl,
-	.ndo_start_xmit =		pegasus_start_xmit,
-	.ndo_set_multicast_list =	pegasus_set_multicast,
-	.ndo_get_stats =		pegasus_netdev_stats,
-	.ndo_tx_timeout =		pegasus_tx_timeout,
-};
 
 static struct usb_driver pegasus_driver = {
 	.name = driver_name,

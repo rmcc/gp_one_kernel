@@ -101,7 +101,7 @@ l1m_debug(struct FsmInst *fi, char *fmt, ...)
 	va_list va;
 
 	va_start(va, fmt);
-	printk(KERN_DEBUG "%s: ", dev_name(&l1->dch->dev.dev));
+	printk(KERN_DEBUG "%s: ", l1->dch->dev.name);
 	vprintk(fmt, va);
 	printk("\n");
 	va_end(va);

@@ -806,7 +806,7 @@ static void mpic_end_ipi(unsigned int irq)
 
 #endif /* CONFIG_SMP */
 
-void mpic_set_affinity(unsigned int irq, const struct cpumask *cpumask)
+void mpic_set_affinity(unsigned int irq, cpumask_t cpumask)
 {
 	struct mpic *mpic = mpic_from_irq(irq);
 	unsigned int src = mpic_irq_to_hw(irq);
@@ -818,7 +818,7 @@ void mpic_set_affinity(unsigned int irq, const struct cpumask *cpumask)
 	} else {
 		cpumask_t tmp;
 
-		cpumask_and(&tmp, cpumask, cpu_online_mask);
+		cpus_and(tmp, cpumask, cpu_online_map);
 
 		mpic_irq_write(src, MPIC_INFO(IRQ_DESTINATION),
 			       mpic_physmask(cpus_addr(tmp)[0]));

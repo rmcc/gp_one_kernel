@@ -142,6 +142,9 @@ static void init_evtchn_cpu_bindings(void)
 
 	/* By default all event channels notify CPU#0. */
 	for_each_irq_desc(i, desc) {
+		if (!desc)
+			continue;
+
 		desc->affinity = cpumask_of_cpu(0);
 	}
 #endif
@@ -585,7 +588,7 @@ void rebind_evtchn_irq(int evtchn, int irq)
 	spin_unlock(&irq_mapping_update_lock);
 
 	/* new event channels are always bound to cpu 0 */
-	irq_set_affinity(irq, cpumask_of(0));
+	irq_set_affinity(irq, cpumask_of_cpu(0));
 
 	/* Unmask the event channel. */
 	enable_irq(irq);
@@ -614,9 +617,9 @@ static void rebind_irq_to_cpu(unsigned irq, unsigned tcpu)
 }
 
 
-static void set_affinity_irq(unsigned irq, const struct cpumask *dest)
+static void set_affinity_irq(unsigned irq, cpumask_t dest)
 {
-	unsigned tcpu = cpumask_first(dest);
+	unsigned tcpu = first_cpu(dest);
 	rebind_irq_to_cpu(irq, tcpu);
 }
 

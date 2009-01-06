@@ -159,35 +159,15 @@ found:
 }
 EXPORT_SYMBOL_GPL(wusbhc_mmcie_rm);
 
-static int wusbhc_mmc_start(struct wusbhc *wusbhc)
-{
-	int ret;
-
-	mutex_lock(&wusbhc->mutex);
-	ret = wusbhc->start(wusbhc);
-	if (ret >= 0)
-		wusbhc->active = 1;
-	mutex_unlock(&wusbhc->mutex);
-
-	return ret;
-}
-
-static void wusbhc_mmc_stop(struct wusbhc *wusbhc)
-{
-	mutex_lock(&wusbhc->mutex);
-	wusbhc->active = 0;
-	wusbhc->stop(wusbhc, WUSB_CHANNEL_STOP_DELAY_MS);
-	mutex_unlock(&wusbhc->mutex);
-}
-
 /*
  * wusbhc_start - start transmitting MMCs and accepting connections
  * @wusbhc: the HC to start
+ * @chid: the CHID to use for this host
  *
  * Establishes a cluster reservation, enables device connections, and
  * starts MMCs with appropriate DNTS parameters.
  */
-int wusbhc_start(struct wusbhc *wusbhc)
+int wusbhc_start(struct wusbhc *wusbhc, const struct wusb_ckhdid *chid)
 {
 	int result;
 	struct device *dev = wusbhc->dev;
@@ -201,7 +181,7 @@ int wusbhc_start(struct wusbhc *wusbhc)
 		goto error_rsv_establish;
 	}
 
-	result = wusbhc_devconnect_start(wusbhc);
+	result = wusbhc_devconnect_start(wusbhc, chid);
 	if (result < 0) {
 		dev_err(dev, "error enabling device connections: %d\n", result);
 		goto error_devconnect_start;
@@ -219,12 +199,12 @@ int wusbhc_start(struct wusbhc *wusbhc)
 		dev_err(dev, "Cannot set DNTS parameters: %d\n", result);
 		goto error_set_num_dnts;
 	}
-	result = wusbhc_mmc_start(wusbhc);
+	result = wusbhc->start(wusbhc);
 	if (result < 0) {
 		dev_err(dev, "error starting wusbch: %d\n", result);
 		goto error_wusbhc_start;
 	}
-
+	wusbhc->active = 1;
 	return 0;
 
 error_wusbhc_start:
@@ -239,17 +219,76 @@ error_rsv_establish:
 }
 
 /*
+ * Disconnect all from the WUSB Channel
+ *
+ * Send a Host Disconnect IE in the MMC, wait, don't send it any more
+ */
+static int __wusbhc_host_disconnect_ie(struct wusbhc *wusbhc)
+{
+	int result = -ENOMEM;
+	struct wuie_host_disconnect *host_disconnect_ie;
+	might_sleep();
+	host_disconnect_ie = kmalloc(sizeof(*host_disconnect_ie), GFP_KERNEL);
+	if (host_disconnect_ie == NULL)
+		goto error_alloc;
+	host_disconnect_ie->hdr.bLength       = sizeof(*host_disconnect_ie);
+	host_disconnect_ie->hdr.bIEIdentifier = WUIE_ID_HOST_DISCONNECT;
+	result = wusbhc_mmcie_set(wusbhc, 0, 0, &host_disconnect_ie->hdr);
+	if (result < 0)
+		goto error_mmcie_set;
+
+	/* WUSB1.0[8.5.3.1 & 7.5.2] */
+	msleep(100);
+	wusbhc_mmcie_rm(wusbhc, &host_disconnect_ie->hdr);
+error_mmcie_set:
+	kfree(host_disconnect_ie);
+error_alloc:
+	return result;
+}
+
+/*
  * wusbhc_stop - stop transmitting MMCs
  * @wusbhc: the HC to stop
  *
- * Stops the WUSB channel and removes the cluster reservation.
+ * Send a Host Disconnect IE, wait, remove all the MMCs (stop sending MMCs).
+ *
+ * If we can't allocate a Host Stop IE, screw it, we don't notify the
+ * devices we are disconnecting...
  */
 void wusbhc_stop(struct wusbhc *wusbhc)
 {
-	wusbhc_mmc_stop(wusbhc);
-	wusbhc_sec_stop(wusbhc);
-	wusbhc_devconnect_stop(wusbhc);
-	wusbhc_rsv_terminate(wusbhc);
+	if (wusbhc->active) {
+		wusbhc->active = 0;
+		wusbhc->stop(wusbhc);
+		wusbhc_sec_stop(wusbhc);
+		__wusbhc_host_disconnect_ie(wusbhc);
+		wusbhc_devconnect_stop(wusbhc);
+		wusbhc_rsv_terminate(wusbhc);
+	}
+}
+EXPORT_SYMBOL_GPL(wusbhc_stop);
+
+/*
+ * Change the CHID in a WUSB Channel
+ *
+ * If it is just a new CHID, send a Host Disconnect IE and then change
+ * the CHID IE.
+ */
+static int __wusbhc_chid_change(struct wusbhc *wusbhc,
+				const struct wusb_ckhdid *chid)
+{
+	int result = -ENOSYS;
+	struct device *dev = wusbhc->dev;
+	dev_err(dev, "%s() not implemented yet\n", __func__);
+	return result;
+
+	BUG_ON(wusbhc->wuie_host_info == NULL);
+	__wusbhc_host_disconnect_ie(wusbhc);
+	wusbhc->wuie_host_info->CHID = *chid;
+	result = wusbhc_mmcie_set(wusbhc, 0, 0, &wusbhc->wuie_host_info->hdr);
+	if (result < 0)
+		dev_err(dev, "Can't update Host Info WUSB IE: %d\n", result);
+	return result;
 }
 
 /*
@@ -267,19 +306,16 @@ int wusbhc_chid_set(struct wusbhc *wusbhc, const struct wusb_ckhdid *chid)
 		chid = NULL;
 
 	mutex_lock(&wusbhc->mutex);
-	if (chid) {
-		if (wusbhc->active) {
-			mutex_unlock(&wusbhc->mutex);
-			return -EBUSY;
-		}
-		wusbhc->chid = *chid;
+	if (wusbhc->active) {
+		if (chid)
+			result = __wusbhc_chid_change(wusbhc, chid);
+		else
+			wusbhc_stop(wusbhc);
+	} else {
+		if (chid)
+			wusbhc_start(wusbhc, chid);
 	}
 	mutex_unlock(&wusbhc->mutex);
-
-	if (chid)
-		result = uwb_radio_start(&wusbhc->pal);
-	else
-		uwb_radio_stop(&wusbhc->pal);
 	return result;
 }
 EXPORT_SYMBOL_GPL(wusbhc_chid_set);

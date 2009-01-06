@@ -1949,7 +1949,8 @@ static struct srp_host *srp_add_port(struct srp_device *device, u8 port)
 
 	host->dev.class = &srp_class;
 	host->dev.parent = device->dev->dma_device;
-	dev_set_name(&host->dev, "srp-%s-%d", device->dev->name, port);
+	snprintf(host->dev.bus_id, BUS_ID_SIZE, "srp-%s-%d",
+		 device->dev->name, port);
 
 	if (device_register(&host->dev))
 		goto free_host;

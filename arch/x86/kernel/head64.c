@@ -27,7 +27,7 @@
 #include <asm/trampoline.h>
 
 /* boot cpu pda */
-static struct x8664_pda _boot_cpu_pda;
+static struct x8664_pda _boot_cpu_pda __read_mostly;
 
 #ifdef CONFIG_SMP
 /*

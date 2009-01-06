@@ -74,7 +74,7 @@ do {								\
 	}							\
 } while (0);
 
-static int __init init_sbc82xx_flash(void)
+int __init init_sbc82xx_flash(void)
 {
 	volatile memctl_cpm2_t *mc = &cpm2_immr->im_memctl;
 	int bigflash;

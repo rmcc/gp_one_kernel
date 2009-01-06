@@ -19,7 +19,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -416,8 +415,8 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 	int irq = platform_get_irq(pdev, 0);
 	u8 rd_reg;
 
-	if (irq <= 0)
-		return -EINVAL;
+	if (irq < 0)
+		return irq;
 
 	rtc = rtc_device_register(pdev->name,
 				  &pdev->dev, &twl4030_rtc_ops, THIS_MODULE);

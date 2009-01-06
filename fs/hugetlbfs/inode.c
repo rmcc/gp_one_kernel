@@ -252,7 +252,6 @@ static ssize_t hugetlbfs_read(struct file *filp, char __user *buf,
 	for (;;) {
 		struct page *page;
 		unsigned long nr, ret;
-		int ra;
 
 		/* nr is the maximum number of bytes to copy from this page */
 		nr = huge_page_size(h);
@@ -275,19 +274,16 @@ static ssize_t hugetlbfs_read(struct file *filp, char __user *buf,
 			 */
 			ret = len < nr ? len : nr;
 			if (clear_user(buf, ret))
-				ra = -EFAULT;
-			else
-				ra = 0;
+				ret = -EFAULT;
 		} else {
 			/*
 			 * We have the page, copy it to user space buffer.
 			 */
-			ra = hugetlbfs_read_actor(page, offset, buf, len, nr);
-			ret = ra;
+			ret = hugetlbfs_read_actor(page, offset, buf, len, nr);
 		}
-		if (ra < 0) {
+		if (ret < 0) {
 			if (retval == 0)
-				retval = ra;
+				retval = ret;
 			if (page)
 				page_cache_release(page);
 			goto out;
@@ -510,6 +506,7 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb, uid_t uid,
 		inode->i_mode = mode;
 		inode->i_uid = uid;
 		inode->i_gid = gid;
+		inode->i_blocks = 0;
 		inode->i_mapping->a_ops = &hugetlbfs_aops;
 		inode->i_mapping->backing_dev_info =&hugetlbfs_backing_dev_info;
 		inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;

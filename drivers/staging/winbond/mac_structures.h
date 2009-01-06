@@ -21,7 +21,6 @@
 #ifndef _MAC_Structures_H_
 #define _MAC_Structures_H_
 
-#include <linux/skbuff.h>
 
 //=========================================================
 // Some miscellaneous definitions
@@ -115,6 +114,10 @@
 
 #define WLAN_MAX_PAIRWISE_CIPHER_SUITE_COUNT    ((u16) 6)
 #define WLAN_MAX_AUTH_KEY_MGT_SUITE_LIST_COUNT  ((u16) 2)
+
+#ifdef WB_LINUX
+#define UNALIGNED
+#endif
 
 //========================================================
 typedef enum enum_PowerManagementMode
@@ -461,7 +464,7 @@ struct	RSN_Information_Element
 {
 	u8					Element_ID;
 	u8					Length;
-	SUITE_SELECTOR	OuiWPAAdditional;//WPA version 2.0 additional field, and should be 00:50:F2:01
+	UNALIGNED SUITE_SELECTOR	OuiWPAAdditional;//WPA version 2.0 additional field, and should be 00:50:F2:01
 	u16					Version;
 	SUITE_SELECTOR		GroupKeySuite;
 	u16					PairwiseKeySuiteCount;

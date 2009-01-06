@@ -1269,14 +1269,14 @@ xfs_fs_remount(
  * need to take care of the metadata. Once that's done write a dummy
  * record to dirty the log in case of a crash while frozen.
  */
-STATIC int
-xfs_fs_freeze(
+STATIC void
+xfs_fs_lockfs(
 	struct super_block	*sb)
 {
 	struct xfs_mount	*mp = XFS_M(sb);
 
 	xfs_quiesce_attr(mp);
-	return -xfs_fs_log_dummy(mp);
+	xfs_fs_log_dummy(mp);
 }
 
 STATIC int
@@ -1348,7 +1348,7 @@ xfs_finish_flags(
 {
 	int			ronly = (mp->m_flags & XFS_MOUNT_RDONLY);
 
-	/* Fail a mount where the logbuf is smaller than the log stripe */
+	/* Fail a mount where the logbuf is smaller then the log stripe */
 	if (xfs_sb_version_haslogv2(&mp->m_sb)) {
 		if (mp->m_logbsize <= 0 &&
 		    mp->m_sb.sb_logsunit > XLOG_BIG_RECORD_BSIZE) {
@@ -1557,7 +1557,7 @@ static struct super_operations xfs_super_operations = {
 	.put_super		= xfs_fs_put_super,
 	.write_super		= xfs_fs_write_super,
 	.sync_fs		= xfs_fs_sync_super,
-	.freeze_fs		= xfs_fs_freeze,
+	.write_super_lockfs	= xfs_fs_lockfs,
 	.statfs			= xfs_fs_statfs,
 	.remount_fs		= xfs_fs_remount,
 	.show_options		= xfs_fs_show_options,

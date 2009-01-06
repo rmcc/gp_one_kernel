@@ -16,7 +16,8 @@
 #include <asm/io_apic.h>
 #include <linux/irq.h>
 #include <linux/acpi.h>
-#include <asm/pci_x86.h>
+
+#include "pci.h"
 
 #define PIRQ_SIGNATURE	(('$' << 0) + ('P' << 8) + ('I' << 16) + ('R' << 24))
 #define PIRQ_VERSION 0x0100
@@ -533,7 +534,7 @@ static int pirq_bios_set(struct pci_dev *router, struct pci_dev *dev, int pirq, 
 {
 	struct pci_dev *bridge;
 	int pin = pci_get_interrupt_pin(dev, &bridge);
-	return pcibios_set_irq_routing(bridge, pin - 1, irq);
+	return pcibios_set_irq_routing(bridge, pin, irq);
 }
 
 #endif
@@ -887,6 +888,7 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 		dev_dbg(&dev->dev, "no interrupt pin\n");
 		return 0;
 	}
+	pin = pin - 1;
 
 	/* Find IRQ routing entry */
 
@@ -896,17 +898,17 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	info = pirq_get_info(dev);
 	if (!info) {
 		dev_dbg(&dev->dev, "PCI INT %c not found in routing table\n",
-			'A' + pin - 1);
+			'A' + pin);
 		return 0;
 	}
-	pirq = info->irq[pin - 1].link;
-	mask = info->irq[pin - 1].bitmap;
+	pirq = info->irq[pin].link;
+	mask = info->irq[pin].bitmap;
 	if (!pirq) {
-		dev_dbg(&dev->dev, "PCI INT %c not routed\n", 'A' + pin - 1);
+		dev_dbg(&dev->dev, "PCI INT %c not routed\n", 'A' + pin);
 		return 0;
 	}
 	dev_dbg(&dev->dev, "PCI INT %c -> PIRQ %02x, mask %04x, excl %04x",
-		'A' + pin - 1, pirq, mask, pirq_table->exclusive_irqs);
+		'A' + pin, pirq, mask, pirq_table->exclusive_irqs);
 	mask &= pcibios_irq_mask;
 
 	/* Work around broken HP Pavilion Notebooks which assign USB to
@@ -948,7 +950,7 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 				newirq = i;
 		}
 	}
-	dev_dbg(&dev->dev, "PCI INT %c -> newirq %d", 'A' + pin - 1, newirq);
+	dev_dbg(&dev->dev, "PCI INT %c -> newirq %d", 'A' + pin, newirq);
 
 	/* Check if it is hardcoded */
 	if ((pirq & 0xf0) == 0xf0) {
@@ -976,18 +978,18 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 			return 0;
 		}
 	}
-	dev_info(&dev->dev, "%s PCI INT %c -> IRQ %d\n", msg, 'A' + pin - 1, irq);
+	dev_info(&dev->dev, "%s PCI INT %c -> IRQ %d\n", msg, 'A' + pin, irq);
 
 	/* Update IRQ for all devices with the same pirq value */
 	while ((dev2 = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev2)) != NULL) {
 		pci_read_config_byte(dev2, PCI_INTERRUPT_PIN, &pin);
 		if (!pin)
 			continue;
-
+		pin--;
 		info = pirq_get_info(dev2);
 		if (!info)
 			continue;
-		if (info->irq[pin - 1].link == pirq) {
+		if (info->irq[pin].link == pirq) {
 			/*
 			 * We refuse to override the dev->irq
 			 * information. Give a warning!
@@ -1041,9 +1043,6 @@ static void __init pcibios_fixup_irqs(void)
 	dev = NULL;
 	while ((dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev)) != NULL) {
 		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-		if (!pin)
-			continue;
-
 #ifdef CONFIG_X86_IO_APIC
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC.
@@ -1051,11 +1050,15 @@ static void __init pcibios_fixup_irqs(void)
 		if (io_apic_assign_pci_irqs) {
 			int irq;
 
+			if (!pin)
+				continue;
+
 			/*
 			 * interrupt pins are numbered starting from 1
 			 */
+			pin--;
 			irq = IO_APIC_get_PCI_irq_vector(dev->bus->number,
-				PCI_SLOT(dev->devfn), pin - 1);
+				PCI_SLOT(dev->devfn), pin);
 			/*
 			 * Busses behind bridges are typically not listed in the
 			 * MP-table.  In this case we have to look up the IRQ
@@ -1068,22 +1071,22 @@ static void __init pcibios_fixup_irqs(void)
 				struct pci_dev *bridge = dev->bus->self;
 				int bus;
 
-				pin = pci_swizzle_interrupt_pin(dev, pin);
+				pin = (pin + PCI_SLOT(dev->devfn)) % 4;
 				bus = bridge->bus->number;
 				irq = IO_APIC_get_PCI_irq_vector(bus,
-						PCI_SLOT(bridge->devfn), pin - 1);
+						PCI_SLOT(bridge->devfn), pin);
 				if (irq >= 0)
 					dev_warn(&dev->dev,
 						"using bridge %s INT %c to "
 							"get IRQ %d\n",
 						 pci_name(bridge),
-						 'A' + pin - 1, irq);
+						 'A' + pin, irq);
 			}
 			if (irq >= 0) {
 				dev_info(&dev->dev,
 					"PCI->APIC IRQ transform: INT %c "
 						"-> IRQ %d\n",
-					'A' + pin - 1, irq);
+					'A' + pin, irq);
 				dev->irq = irq;
 			}
 		}
@@ -1091,7 +1094,7 @@ static void __init pcibios_fixup_irqs(void)
 		/*
 		 * Still no IRQ? Try to lookup one...
 		 */
-		if (!dev->irq)
+		if (pin && !dev->irq)
 			pcibios_lookup_irq(dev, 0);
 	}
 }
@@ -1218,10 +1221,12 @@ static int pirq_enable_irq(struct pci_dev *dev)
 	if (pin && !pcibios_lookup_irq(dev, 1) && !dev->irq) {
 		char *msg = "";
 
+		pin--; /* interrupt pins are numbered starting from 1 */
+
 		if (io_apic_assign_pci_irqs) {
 			int irq;
 
-			irq = IO_APIC_get_PCI_irq_vector(dev->bus->number, PCI_SLOT(dev->devfn), pin - 1);
+			irq = IO_APIC_get_PCI_irq_vector(dev->bus->number, PCI_SLOT(dev->devfn), pin);
 			/*
 			 * Busses behind bridges are typically not listed in the MP-table.
 			 * In this case we have to look up the IRQ based on the parent bus,
@@ -1232,20 +1237,20 @@ static int pirq_enable_irq(struct pci_dev *dev)
 			while (irq < 0 && dev->bus->parent) { /* go back to the bridge */
 				struct pci_dev *bridge = dev->bus->self;
 
-				pin = pci_swizzle_interrupt_pin(dev, pin);
+				pin = (pin + PCI_SLOT(dev->devfn)) % 4;
 				irq = IO_APIC_get_PCI_irq_vector(bridge->bus->number,
-						PCI_SLOT(bridge->devfn), pin - 1);
+						PCI_SLOT(bridge->devfn), pin);
 				if (irq >= 0)
 					dev_warn(&dev->dev, "using bridge %s "
 						 "INT %c to get IRQ %d\n",
-						 pci_name(bridge), 'A' + pin - 1,
+						 pci_name(bridge), 'A' + pin,
 						 irq);
 				dev = bridge;
 			}
 			dev = temp_dev;
 			if (irq >= 0) {
 				dev_info(&dev->dev, "PCI->APIC IRQ transform: "
-					 "INT %c -> IRQ %d\n", 'A' + pin - 1, irq);
+					 "INT %c -> IRQ %d\n", 'A' + pin, irq);
 				dev->irq = irq;
 				return 0;
 			} else
@@ -1264,7 +1269,7 @@ static int pirq_enable_irq(struct pci_dev *dev)
 			return 0;
 
 		dev_warn(&dev->dev, "can't find IRQ for PCI INT %c%s\n",
-			 'A' + pin - 1, msg);
+			 'A' + pin, msg);
 	}
 	return 0;
 }

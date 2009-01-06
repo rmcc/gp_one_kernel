@@ -818,6 +818,15 @@ struct tx_doorbell_context {
 };
 
 /* DATA STRUCTURES SHARED WITH HARDWARE. */
+
+struct bq_element {
+	u32 addr_lo;
+#define BQ_END	0x00000001
+#define BQ_CONT	0x00000002
+#define BQ_MASK	0x00000003
+	u32 addr_hi;
+} __attribute((packed));
+
 struct tx_buf_desc {
 	__le64 addr;
 	__le32 len;
@@ -851,8 +860,8 @@ struct ob_mac_iocb_req {
 	__le16 frame_len;
 #define OB_MAC_IOCB_LEN_MASK 0x3ffff
 	__le16 reserved2;
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le32 reserved3;
 	__le16 vlan_tci;
 	__le16 reserved4;
@@ -871,8 +880,8 @@ struct ob_mac_iocb_rsp {
 	u8 flags2;		/* */
 	u8 flags3;		/* */
 #define OB_MAC_IOCB_RSP_B	0x80	/* */
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le32 reserved[13];
 } __attribute((packed));
 
@@ -894,8 +903,8 @@ struct ob_mac_tso_iocb_req {
 #define OB_MAC_TSO_IOCB_V	0x04
 	__le32 reserved1[2];
 	__le32 frame_len;
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le16 total_hdrs_len;
 	__le16 net_trans_offset;
 #define OB_MAC_TRANSPORT_HDR_SHIFT 6
@@ -916,8 +925,8 @@ struct ob_mac_tso_iocb_rsp {
 	u8 flags2;		/* */
 	u8 flags3;		/* */
 #define OB_MAC_TSO_IOCB_RSP_B	0x8000
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le32 reserved2[13];
 } __attribute((packed));
 
@@ -970,11 +979,10 @@ struct ib_mac_iocb_rsp {
 
 	__le16 reserved1;
 	__le32 reserved2[6];
-	u8 reserved3[3];
-	u8 flags4;
-#define IB_MAC_IOCB_RSP_HV	0x20
-#define IB_MAC_IOCB_RSP_HS	0x40
-#define IB_MAC_IOCB_RSP_HL	0x80
+	__le32 flags4;
+#define IB_MAC_IOCB_RSP_HV	0x20000000	/* */
+#define IB_MAC_IOCB_RSP_HS	0x40000000	/* */
+#define IB_MAC_IOCB_RSP_HL	0x80000000	/* */
 	__le32 hdr_len;		/* */
 	__le32 hdr_addr_lo;	/* */
 	__le32 hdr_addr_hi;	/* */
@@ -1118,7 +1126,7 @@ struct map_list {
 struct tx_ring_desc {
 	struct sk_buff *skb;
 	struct ob_mac_iocb_req *queue_entry;
-	u32 index;
+	int index;
 	struct oal oal;
 	struct map_list map[MAX_SKB_FRAGS + 1];
 	int map_cnt;
@@ -1130,8 +1138,8 @@ struct bq_desc {
 		struct page *lbq_page;
 		struct sk_buff *skb;
 	} p;
-	__le64 *addr;
-	u32 index;
+	struct bq_element *bq;
+	int index;
 	 DECLARE_PCI_UNMAP_ADDR(mapaddr);
 	 DECLARE_PCI_UNMAP_LEN(maplen);
 };
@@ -1181,7 +1189,7 @@ struct rx_ring {
 	u32 cq_size;
 	u32 cq_len;
 	u16 cq_id;
-	volatile __le32 *prod_idx_sh_reg;	/* Shadowed producer register. */
+	u32 *prod_idx_sh_reg;	/* Shadowed producer register. */
 	dma_addr_t prod_idx_sh_reg_dma;
 	void __iomem *cnsmr_idx_db_reg;	/* PCI doorbell mem area + 0 */
 	u32 cnsmr_idx;		/* current sw idx */
@@ -1457,6 +1465,21 @@ static inline void ql_write_db_reg(u32 val, void __iomem *addr)
 {
 	writel(val, addr);
 	mmiowb();
+}
+
+/*
+ * Shadow Registers:
+ * Outbound queues have a consumer index that is maintained by the chip.
+ * Inbound queues have a producer index that is maintained by the chip.
+ * For lower overhead, these registers are "shadowed" to host memory
+ * which allows the device driver to track the queue progress without
+ * PCI reads. When an entry is placed on an inbound queue, the chip will
+ * update the relevant index register and then copy the value to the
+ * shadow register in host memory.
+ */
+static inline unsigned int ql_read_sh_reg(const volatile void  *addr)
+{
+	return *(volatile unsigned int __force *)addr;
 }
 
 extern char qlge_driver_name[];

@@ -34,7 +34,7 @@ extern unsigned int mmc_status(struct device *dev);
 static struct amba_device name##_device = {			\
 	.dev		= {					\
 		.coherent_dma_mask = ~0,			\
-		.init_name = busid,				\
+		.bus_id	= busid,				\
 		.platform_data = plat,				\
 	},							\
 	.res		= {					\

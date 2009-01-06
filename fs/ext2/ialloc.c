@@ -565,8 +565,12 @@ got:
 	inode->i_blocks = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME_SEC;
 	memset(ei->i_data, 0, sizeof(ei->i_data));
-	ei->i_flags =
-		ext2_mask_flags(mode, EXT2_I(dir)->i_flags & EXT2_FL_INHERITED);
+	ei->i_flags = EXT2_I(dir)->i_flags & ~EXT2_BTREE_FL;
+	if (S_ISLNK(mode))
+		ei->i_flags &= ~(EXT2_IMMUTABLE_FL|EXT2_APPEND_FL);
+	/* dirsync is only applied to directories */
+	if (!S_ISDIR(mode))
+		ei->i_flags &= ~EXT2_DIRSYNC_FL;
 	ei->i_faddr = 0;
 	ei->i_frag_no = 0;
 	ei->i_frag_size = 0;
@@ -581,10 +585,7 @@ got:
 	spin_lock(&sbi->s_next_gen_lock);
 	inode->i_generation = sbi->s_next_generation++;
 	spin_unlock(&sbi->s_next_gen_lock);
-	if (insert_inode_locked(inode) < 0) {
-		err = -EINVAL;
-		goto fail_drop;
-	}
+	insert_inode_hash(inode);
 
 	if (DQUOT_ALLOC_INODE(inode)) {
 		err = -EDQUOT;
@@ -611,7 +612,6 @@ fail_drop:
 	DQUOT_DROP(inode);
 	inode->i_flags |= S_NOQUOTA;
 	inode->i_nlink = 0;
-	unlock_new_inode(inode);
 	iput(inode);
 	return ERR_PTR(err);
 

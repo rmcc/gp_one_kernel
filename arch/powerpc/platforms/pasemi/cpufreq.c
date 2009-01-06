@@ -112,7 +112,7 @@ static int get_gizmo_latency(void)
 
 static void set_astate(int cpu, unsigned int astate)
 {
-	unsigned long flags;
+	u64 flags;
 
 	/* Return if called before init has run */
 	if (unlikely(!sdcasr_mapbase))
