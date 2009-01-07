@@ -197,7 +197,7 @@ struct device_driver w1_master_driver = {
 struct device w1_master_device = {
 	.parent = NULL,
 	.bus = &w1_bus_type,
-	.init_name = "w1 bus master",
+	.bus_id = "w1 bus master",
 	.driver = &w1_master_driver,
 	.release = &w1_master_release
 };
@@ -211,7 +211,7 @@ static struct device_driver w1_slave_driver = {
 struct device w1_slave_device = {
 	.parent = NULL,
 	.bus = &w1_bus_type,
-	.init_name = "w1 bus slave",
+	.bus_id = "w1 bus slave",
 	.driver = &w1_slave_driver,
 	.release = &w1_slave_release
 };
@@ -573,7 +573,7 @@ static int w1_uevent(struct device *dev, struct kobj_uevent_env *env)
 	}
 
 	dev_dbg(dev, "Hotplug event for %s %s, bus_id=%s.\n",
-			event_owner, name, dev_name(dev));
+			event_owner, name, dev->bus_id);
 
 	if (dev->driver != &w1_slave_driver || !sl)
 		return 0;
@@ -605,7 +605,8 @@ static int __w1_attach_slave_device(struct w1_slave *sl)
 	sl->dev.bus = &w1_bus_type;
 	sl->dev.release = &w1_slave_release;
 
-	dev_set_name(&sl->dev, "%02x-%012llx",
+	snprintf(&sl->dev.bus_id[0], sizeof(sl->dev.bus_id),
+		 "%02x-%012llx",
 		 (unsigned int) sl->reg_num.family,
 		 (unsigned long long) sl->reg_num.id);
 	snprintf(&sl->name[0], sizeof(sl->name),
@@ -614,13 +615,13 @@ static int __w1_attach_slave_device(struct w1_slave *sl)
 		 (unsigned long long) sl->reg_num.id);
 
 	dev_dbg(&sl->dev, "%s: registering %s as %p.\n", __func__,
-		dev_name(&sl->dev), sl);
+		&sl->dev.bus_id[0], sl);
 
 	err = device_register(&sl->dev);
 	if (err < 0) {
 		dev_err(&sl->dev,
 			"Device registration [%s] failed. err=%d\n",
-			dev_name(&sl->dev), err);
+			sl->dev.bus_id, err);
 		return err;
 	}
 
@@ -629,7 +630,7 @@ static int __w1_attach_slave_device(struct w1_slave *sl)
 	if (err < 0) {
 		dev_err(&sl->dev,
 			"sysfs file creation for [%s] failed. err=%d\n",
-			dev_name(&sl->dev), err);
+			sl->dev.bus_id, err);
 		goto out_unreg;
 	}
 
@@ -638,7 +639,7 @@ static int __w1_attach_slave_device(struct w1_slave *sl)
 	if (err < 0) {
 		dev_err(&sl->dev,
 			"sysfs file creation for [%s] failed. err=%d\n",
-			dev_name(&sl->dev), err);
+			sl->dev.bus_id, err);
 		goto out_rem1;
 	}
 
@@ -647,7 +648,7 @@ static int __w1_attach_slave_device(struct w1_slave *sl)
 	    ((err = sl->family->fops->add_slave(sl)) < 0)) {
 		dev_err(&sl->dev,
 			"sysfs file creation for [%s] failed. err=%d\n",
-			dev_name(&sl->dev), err);
+			sl->dev.bus_id, err);
 		goto out_rem2;
 	}
 

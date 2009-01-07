@@ -39,6 +39,7 @@ struct xfs_trans;
 /*
  * Make an inode pointer out of the buffer/offset.
  */
+#define	XFS_MAKE_IPTR(mp,b,o)		xfs_make_iptr(mp,b,o)
 static inline struct xfs_dinode *
 xfs_make_iptr(struct xfs_mount *mp, struct xfs_buf *b, int o)
 {
@@ -49,6 +50,7 @@ xfs_make_iptr(struct xfs_mount *mp, struct xfs_buf *b, int o)
 /*
  * Find a free (set) bit in the inode bitmask.
  */
+#define	XFS_IALLOC_FIND_FREE(fp)	xfs_ialloc_find_free(fp)
 static inline int xfs_ialloc_find_free(xfs_inofree_t *fp)
 {
 	return xfs_lowbit64(*fp);

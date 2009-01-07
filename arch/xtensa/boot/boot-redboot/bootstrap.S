@@ -1,4 +1,4 @@
-#include <variant/core.h>
+#include <asm/variant/core.h>
 #include <asm/regs.h>
 #include <asm/asmmacro.h>
 #include <asm/cacheasm.h>

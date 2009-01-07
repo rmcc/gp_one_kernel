@@ -2157,7 +2157,7 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 
 	/*
 	 * We use cache_chain_mutex to ensure a consistent view of
-	 * cpu_online_mask as well.  Please see cpuup_callback
+	 * cpu_online_map as well.  Please see cpuup_callback
 	 */
 	get_online_cpus();
 	mutex_lock(&cache_chain_mutex);
@@ -4457,4 +4457,3 @@ size_t ksize(const void *objp)
 
 	return obj_size(virt_to_cache(objp));
 }
-EXPORT_SYMBOL(ksize);

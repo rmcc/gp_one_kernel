@@ -299,8 +299,6 @@ static int init_oops_id(void)
 {
 	if (!oops_id)
 		get_random_bytes(&oops_id, sizeof(oops_id));
-	else
-		oops_id++;
 
 	return 0;
 }

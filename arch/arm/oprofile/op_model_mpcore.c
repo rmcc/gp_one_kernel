@@ -260,10 +260,10 @@ static void em_stop(void)
 static void em_route_irq(int irq, unsigned int cpu)
 {
 	struct irq_desc *desc = irq_desc + irq;
-	const struct cpumask *mask = cpumask_of(cpu);
+	cpumask_t mask = cpumask_of_cpu(cpu);
 
 	spin_lock_irq(&desc->lock);
-	desc->affinity = *mask;
+	desc->affinity = mask;
 	desc->chip->set_affinity(irq, mask);
 	spin_unlock_irq(&desc->lock);
 }

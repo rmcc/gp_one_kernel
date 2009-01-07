@@ -95,13 +95,10 @@ static int ext2_commit_chunk(struct page *page, loff_t pos, unsigned len)
 		mark_inode_dirty(dir);
 	}
 
-	if (IS_DIRSYNC(dir)) {
+	if (IS_DIRSYNC(dir))
 		err = write_one_page(page, 1);
-		if (!err)
-			err = ext2_sync_inode(dir);
-	} else {
+	else
 		unlock_page(page);
-	}
 
 	return err;
 }

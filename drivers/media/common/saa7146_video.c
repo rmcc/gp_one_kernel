@@ -576,7 +576,6 @@ static int set_control(struct saa7146_fh *fh, struct v4l2_control *c)
 		vv->vflip = c->value;
 		break;
 	default: {
-		mutex_unlock(&dev->lock);
 		return -EINVAL;
 	}
 	}
@@ -835,14 +834,13 @@ static int video_end(struct saa7146_fh *fh, struct file *file)
  * copying is done already, arg is a kernel pointer.
  */
 
-long saa7146_video_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+int saa7146_video_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 {
 	struct saa7146_fh *fh  = file->private_data;
 	struct saa7146_dev *dev = fh->dev;
 	struct saa7146_vv *vv = dev->vv_data;
 
-	long err = 0;
-	int result = 0, ee = 0;
+	int err = 0, result = 0, ee = 0;
 
 	struct saa7146_use_ops *ops;
 	struct videobuf_queue *q;

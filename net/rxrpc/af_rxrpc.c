@@ -284,13 +284,13 @@ struct rxrpc_call *rxrpc_kernel_begin_call(struct socket *sock,
 		if (IS_ERR(trans)) {
 			call = ERR_CAST(trans);
 			trans = NULL;
-			goto out_notrans;
+			goto out;
 		}
 	} else {
 		trans = rx->trans;
 		if (!trans) {
 			call = ERR_PTR(-ENOTCONN);
-			goto out_notrans;
+			goto out;
 		}
 		atomic_inc(&trans->usage);
 	}
@@ -315,7 +315,6 @@ struct rxrpc_call *rxrpc_kernel_begin_call(struct socket *sock,
 	rxrpc_put_bundle(trans, bundle);
 out:
 	rxrpc_put_transport(trans);
-out_notrans:
 	release_sock(&rx->sk);
 	_leave(" = %p", call);
 	return call;

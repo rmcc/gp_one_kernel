@@ -51,12 +51,16 @@
 #include <linux/audit.h>
 #include <linux/tracehook.h>
 #include <linux/kmod.h>
-#include <linux/fsnotify.h>
 
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 #include "internal.h"
+
+#ifdef __alpha__
+/* for /sbin/loader handling in search_binary_handler() */
+#include <linux/a.out.h>
+#endif
 
 int core_uses_pid;
 char core_pattern[CORENAME_MAX_SIZE] = "core";
@@ -99,7 +103,7 @@ static inline void put_binfmt(struct linux_binfmt * fmt)
  *
  * Also note that we take the address to load from from the file itself.
  */
-SYSCALL_DEFINE1(uselib, const char __user *, library)
+asmlinkage long sys_uselib(const char __user * library)
 {
 	struct file *file;
 	struct nameidata nd;
@@ -123,8 +127,7 @@ SYSCALL_DEFINE1(uselib, const char __user *, library)
 	if (nd.path.mnt->mnt_flags & MNT_NOEXEC)
 		goto exit;
 
-	error = inode_permission(nd.path.dentry->d_inode,
-				 MAY_READ | MAY_EXEC | MAY_OPEN);
+	error = vfs_permission(&nd, MAY_READ | MAY_EXEC | MAY_OPEN);
 	if (error)
 		goto exit;
 
@@ -132,8 +135,6 @@ SYSCALL_DEFINE1(uselib, const char __user *, library)
 	error = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out;
-
-	fsnotify_open(file->f_path.dentry);
 
 	error = -ENOEXEC;
 	if(file->f_op) {
@@ -232,13 +233,13 @@ static void flush_arg_page(struct linux_binprm *bprm, unsigned long pos,
 
 static int __bprm_mm_init(struct linux_binprm *bprm)
 {
-	int err;
+	int err = -ENOMEM;
 	struct vm_area_struct *vma = NULL;
 	struct mm_struct *mm = bprm->mm;
 
 	bprm->vma = vma = kmem_cache_zalloc(vm_area_cachep, GFP_KERNEL);
 	if (!vma)
-		return -ENOMEM;
+		goto err;
 
 	down_write(&mm->mmap_sem);
 	vma->vm_mm = mm;
@@ -251,20 +252,28 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	 */
 	vma->vm_end = STACK_TOP_MAX;
 	vma->vm_start = vma->vm_end - PAGE_SIZE;
+
 	vma->vm_flags = VM_STACK_FLAGS;
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 	err = insert_vm_struct(mm, vma);
-	if (err)
+	if (err) {
+		up_write(&mm->mmap_sem);
 		goto err;
+	}
 
 	mm->stack_vm = mm->total_vm = 1;
 	up_write(&mm->mmap_sem);
+
 	bprm->p = vma->vm_end - sizeof(void *);
+
 	return 0;
+
 err:
-	up_write(&mm->mmap_sem);
-	bprm->vma = NULL;
-	kmem_cache_free(vm_area_cachep, vma);
+	if (vma) {
+		bprm->vma = NULL;
+		kmem_cache_free(vm_area_cachep, vma);
+	}
+
 	return err;
 }
 
@@ -671,15 +680,13 @@ struct file *open_exec(const char *name)
 	if (nd.path.mnt->mnt_flags & MNT_NOEXEC)
 		goto out_path_put;
 
-	err = inode_permission(nd.path.dentry->d_inode, MAY_EXEC | MAY_OPEN);
+	err = vfs_permission(&nd, MAY_EXEC | MAY_OPEN);
 	if (err)
 		goto out_path_put;
 
 	file = nameidata_to_filp(&nd, O_RDONLY|O_LARGEFILE);
 	if (IS_ERR(file))
 		return file;
-
-	fsnotify_open(file->f_path.dentry);
 
 	err = deny_write_access(file);
 	if (err) {
@@ -1049,32 +1056,16 @@ EXPORT_SYMBOL(install_exec_creds);
  * - the caller must hold current->cred_exec_mutex to protect against
  *   PTRACE_ATTACH
  */
-void check_unsafe_exec(struct linux_binprm *bprm, struct files_struct *files)
+void check_unsafe_exec(struct linux_binprm *bprm)
 {
-	struct task_struct *p = current, *t;
-	unsigned long flags;
-	unsigned n_fs, n_files, n_sighand;
+	struct task_struct *p = current;
 
 	bprm->unsafe = tracehook_unsafe_exec(p);
 
-	n_fs = 1;
-	n_files = 1;
-	n_sighand = 1;
-	lock_task_sighand(p, &flags);
-	for (t = next_thread(p); t != p; t = next_thread(t)) {
-		if (t->fs == p->fs)
-			n_fs++;
-		if (t->files == files)
-			n_files++;
-		n_sighand++;
-	}
-
-	if (atomic_read(&p->fs->count) > n_fs ||
-	    atomic_read(&p->files->count) > n_files ||
-	    atomic_read(&p->sighand->count) > n_sighand)
+	if (atomic_read(&p->fs->count) > 1 ||
+	    atomic_read(&p->files->count) > 1 ||
+	    atomic_read(&p->sighand->count) > 1)
 		bprm->unsafe |= LSM_UNSAFE_SHARE;
-
-	unlock_task_sighand(p, &flags);
 }
 
 /* 
@@ -1180,7 +1171,41 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	unsigned int depth = bprm->recursion_depth;
 	int try,retval;
 	struct linux_binfmt *fmt;
+#ifdef __alpha__
+	/* handle /sbin/loader.. */
+	{
+	    struct exec * eh = (struct exec *) bprm->buf;
 
+	    if (!bprm->loader && eh->fh.f_magic == 0x183 &&
+		(eh->fh.f_flags & 0x3000) == 0x3000)
+	    {
+		struct file * file;
+		unsigned long loader;
+
+		allow_write_access(bprm->file);
+		fput(bprm->file);
+		bprm->file = NULL;
+
+		loader = bprm->vma->vm_end - sizeof(void *);
+
+		file = open_exec("/sbin/loader");
+		retval = PTR_ERR(file);
+		if (IS_ERR(file))
+			return retval;
+
+		/* Remember if the application is TASO.  */
+		bprm->taso = eh->ah.entry < 0x100000000UL;
+
+		bprm->file = file;
+		bprm->loader = loader;
+		retval = prepare_binprm(bprm);
+		if (retval<0)
+			return retval;
+		/* should call search_binary_handler recursively here,
+		   but it does not matter */
+	    }
+	}
+#endif
 	retval = security_bprm_check(bprm);
 	if (retval)
 		return retval;
@@ -1289,7 +1314,7 @@ int do_execve(char * filename,
 	bprm->cred = prepare_exec_creds();
 	if (!bprm->cred)
 		goto out_unlock;
-	check_unsafe_exec(bprm, displaced);
+	check_unsafe_exec(bprm);
 
 	file = open_exec(filename);
 	retval = PTR_ERR(file);
@@ -1702,7 +1727,7 @@ int get_dumpable(struct mm_struct *mm)
 	return (ret >= 2) ? 2 : ret;
 }
 
-void do_coredump(long signr, int exit_code, struct pt_regs *regs)
+int do_coredump(long signr, int exit_code, struct pt_regs * regs)
 {
 	struct core_state core_state;
 	char corename[CORENAME_MAX_SIZE + 1];
@@ -1786,11 +1811,6 @@ void do_coredump(long signr, int exit_code, struct pt_regs *regs)
 
  	if (ispipe) {
 		helper_argv = argv_split(GFP_KERNEL, corename+1, &helper_argc);
-		if (!helper_argv) {
-			printk(KERN_WARNING "%s failed to allocate memory\n",
-			       __func__);
-			goto fail_unlock;
-		}
 		/* Terminate the string before the first option */
 		delimit = strchr(corename, ' ');
 		if (delimit)
@@ -1858,5 +1878,5 @@ fail_unlock:
 	put_cred(cred);
 	coredump_finish(mm);
 fail:
-	return;
+	return retval;
 }

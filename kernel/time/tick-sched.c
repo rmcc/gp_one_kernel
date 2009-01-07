@@ -134,7 +134,7 @@ __setup("nohz=", setup_tick_nohz);
  * value. We do this unconditionally on any cpu, as we don't know whether the
  * cpu, which has the update task assigned is in a long sleep.
  */
-static void tick_nohz_update_jiffies(void)
+void tick_nohz_update_jiffies(void)
 {
 	int cpu = smp_processor_id();
 	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
@@ -144,7 +144,7 @@ static void tick_nohz_update_jiffies(void)
 	if (!ts->tick_stopped)
 		return;
 
-	cpumask_clear_cpu(cpu, nohz_cpu_mask);
+	cpu_clear(cpu, nohz_cpu_mask);
 	now = ktime_get();
 	ts->idle_waketime = now;
 
@@ -301,7 +301,7 @@ void tick_nohz_stop_sched_tick(int inidle)
 			tick_do_timer_cpu = TICK_DO_TIMER_NONE;
 
 		if (delta_jiffies > 1)
-			cpumask_set_cpu(cpu, nohz_cpu_mask);
+			cpu_set(cpu, nohz_cpu_mask);
 
 		/* Skip reprogram of event if its not changed */
 		if (ts->tick_stopped && ktime_equal(expires, dev->next_event))
@@ -319,7 +319,7 @@ void tick_nohz_stop_sched_tick(int inidle)
 				/*
 				 * sched tick not stopped!
 				 */
-				cpumask_clear_cpu(cpu, nohz_cpu_mask);
+				cpu_clear(cpu, nohz_cpu_mask);
 				goto out;
 			}
 
@@ -361,7 +361,7 @@ void tick_nohz_stop_sched_tick(int inidle)
 		 * softirq.
 		 */
 		tick_do_update_jiffies64(ktime_get());
-		cpumask_clear_cpu(cpu, nohz_cpu_mask);
+		cpu_clear(cpu, nohz_cpu_mask);
 	}
 	raise_softirq_irqoff(TIMER_SOFTIRQ);
 out:
@@ -419,9 +419,7 @@ void tick_nohz_restart_sched_tick(void)
 {
 	int cpu = smp_processor_id();
 	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
-#ifndef CONFIG_VIRT_CPU_ACCOUNTING
 	unsigned long ticks;
-#endif
 	ktime_t now;
 
 	local_irq_disable();
@@ -441,9 +439,8 @@ void tick_nohz_restart_sched_tick(void)
 	select_nohz_load_balancer(0);
 	now = ktime_get();
 	tick_do_update_jiffies64(now);
-	cpumask_clear_cpu(cpu, nohz_cpu_mask);
+	cpu_clear(cpu, nohz_cpu_mask);
 
-#ifndef CONFIG_VIRT_CPU_ACCOUNTING
 	/*
 	 * We stopped the tick in idle. Update process times would miss the
 	 * time we slept as update_process_times does only a 1 tick
@@ -453,9 +450,12 @@ void tick_nohz_restart_sched_tick(void)
 	/*
 	 * We might be one off. Do not randomly account a huge number of ticks!
 	 */
-	if (ticks && ticks < LONG_MAX)
-		account_idle_ticks(ticks);
-#endif
+	if (ticks && ticks < LONG_MAX) {
+		add_preempt_count(HARDIRQ_OFFSET);
+		account_system_time(current, HARDIRQ_OFFSET,
+				    jiffies_to_cputime(ticks));
+		sub_preempt_count(HARDIRQ_OFFSET);
+	}
 
 	touch_softlockup_watchdog();
 	/*

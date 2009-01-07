@@ -294,7 +294,6 @@ void synchronize_irq(unsigned int irq)
 	while (sparc_irq[cpu_irq].flags & SPARC_IRQ_INPROGRESS)
 		cpu_relax();
 }
-EXPORT_SYMBOL(synchronize_irq);
 #endif /* SMP */
 
 void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
@@ -670,9 +669,7 @@ void __init init_IRQ(void)
 	btfixup();
 }
 
-#ifdef CONFIG_PROC_FS
 void init_irq_proc(void)
 {
 	/* For now, nothing... */
 }
-#endif /* CONFIG_PROC_FS */

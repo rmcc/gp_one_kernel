@@ -1384,7 +1384,7 @@ static int ttusb_dec_boot_dsp(struct ttusb_dec *dec)
 static int ttusb_dec_init_stb(struct ttusb_dec *dec)
 {
 	int result;
-	unsigned int mode = 0, model = 0, version = 0;
+	unsigned int mode, model, version;
 
 	dprintk("%s\n", __func__);
 

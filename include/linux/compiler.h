@@ -36,8 +36,12 @@ extern void __chk_io_ptr(const volatile void __iomem *);
 
 #ifdef __KERNEL__
 
-#ifdef __GNUC__
-#include <linux/compiler-gcc.h>
+#if __GNUC__ >= 4
+# include <linux/compiler-gcc4.h>
+#elif __GNUC__ == 3 && __GNUC_MINOR__ >= 2
+# include <linux/compiler-gcc3.h>
+#else
+# error Sorry, your compiler is too old/not recognized.
 #endif
 
 #define notrace __attribute__((no_instrument_function))

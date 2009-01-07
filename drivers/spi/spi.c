@@ -47,7 +47,7 @@ modalias_show(struct device *dev, struct device_attribute *a, char *buf)
 {
 	const struct spi_device	*spi = to_spi_device(dev);
 
-	return sprintf(buf, "%s\n", spi->modalias);
+	return snprintf(buf, BUS_ID_SIZE + 1, "%s\n", spi->modalias);
 }
 
 static struct device_attribute spi_dev_attrs[] = {
@@ -63,7 +63,7 @@ static int spi_match_device(struct device *dev, struct device_driver *drv)
 {
 	const struct spi_device	*spi = to_spi_device(dev);
 
-	return strcmp(spi->modalias, drv->name) == 0;
+	return strncmp(spi->modalias, drv->name, BUS_ID_SIZE) == 0;
 }
 
 static int spi_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -243,7 +243,8 @@ int spi_add_device(struct spi_device *spi)
 	}
 
 	/* Set the bus ID string */
-	dev_set_name(&spi->dev, "%s.%u", dev_name(&spi->master->dev),
+	snprintf(spi->dev.bus_id, sizeof spi->dev.bus_id,
+			"%s.%u", spi->master->dev.bus_id,
 			spi->chip_select);
 
 
@@ -253,7 +254,7 @@ int spi_add_device(struct spi_device *spi)
 	 */
 	mutex_lock(&spi_add_lock);
 
-	if (bus_find_device_by_name(&spi_bus_type, NULL, dev_name(&spi->dev))
+	if (bus_find_device_by_name(&spi_bus_type, NULL, spi->dev.bus_id)
 			!= NULL) {
 		dev_err(dev, "chipselect %d already in use\n",
 				spi->chip_select);
@@ -268,7 +269,7 @@ int spi_add_device(struct spi_device *spi)
 	status = spi->master->setup(spi);
 	if (status < 0) {
 		dev_err(dev, "can't %s %s, status %d\n",
-				"setup", dev_name(&spi->dev), status);
+				"setup", spi->dev.bus_id, status);
 		goto done;
 	}
 
@@ -276,9 +277,9 @@ int spi_add_device(struct spi_device *spi)
 	status = device_add(&spi->dev);
 	if (status < 0)
 		dev_err(dev, "can't %s %s, status %d\n",
-				"add", dev_name(&spi->dev), status);
+				"add", spi->dev.bus_id, status);
 	else
-		dev_dbg(dev, "registered child %s\n", dev_name(&spi->dev));
+		dev_dbg(dev, "registered child %s\n", spi->dev.bus_id);
 
 done:
 	mutex_unlock(&spi_add_lock);
@@ -503,11 +504,12 @@ int spi_register_master(struct spi_master *master)
 	/* register the device, then userspace will see it.
 	 * registration fails if the bus ID is in use.
 	 */
-	dev_set_name(&master->dev, "spi%u", master->bus_num);
+	snprintf(master->dev.bus_id, sizeof master->dev.bus_id,
+		"spi%u", master->bus_num);
 	status = device_add(&master->dev);
 	if (status < 0)
 		goto done;
-	dev_dbg(dev, "registered master %s%s\n", dev_name(&master->dev),
+	dev_dbg(dev, "registered master %s%s\n", master->dev.bus_id,
 			dynamic ? " (dynamic)" : "");
 
 	/* populate children from any spi device tables */

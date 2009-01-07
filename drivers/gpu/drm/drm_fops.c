@@ -183,10 +183,6 @@ int drm_stub_open(struct inode *inode, struct file *filp)
 
 	old_fops = filp->f_op;
 	filp->f_op = fops_get(&dev->driver->fops);
-	if (filp->f_op == NULL) {
-		filp->f_op = old_fops;
-		goto out;
-	}
 	if (filp->f_op->open && (err = filp->f_op->open(inode, filp))) {
 		fops_put(filp->f_op);
 		filp->f_op = fops_get(old_fops);
@@ -456,9 +452,6 @@ int drm_release(struct inode *inode, struct file *filp)
 
 	if (dev->driver->driver_features & DRIVER_GEM)
 		drm_gem_release(dev, file_priv);
-
-	if (dev->driver->driver_features & DRIVER_MODESET)
-		drm_fb_release(file_priv);
 
 	mutex_lock(&dev->ctxlist_mutex);
 	if (!list_empty(&dev->ctxlist)) {

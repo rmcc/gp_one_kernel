@@ -17,7 +17,7 @@
 #define __LINUX_IF_PPPOX_H
 
 
-#include <linux/types.h>
+#include <asm/types.h>
 #include <asm/byteorder.h>
 
 #ifdef  __KERNEL__

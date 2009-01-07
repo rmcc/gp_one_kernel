@@ -16,6 +16,8 @@
 #include <linux/nfsd/nfsd.h>
 #include <linux/lockd/lockd.h>
 #include <linux/lockd/share.h>
+#include <linux/lockd/sm_inter.h>
+
 
 #define NLMDBG_FACILITY		NLMDBG_CLIENT
 
@@ -449,6 +451,8 @@ static __be32
 nlmsvc_proc_sm_notify(struct svc_rqst *rqstp, struct nlm_reboot *argp,
 					      void	        *resp)
 {
+	struct sockaddr_in	saddr;
+
 	dprintk("lockd: SM_NOTIFY     called\n");
 
 	if (!nlm_privileged_requester(rqstp)) {
@@ -458,7 +462,14 @@ nlmsvc_proc_sm_notify(struct svc_rqst *rqstp, struct nlm_reboot *argp,
 		return rpc_system_err;
 	}
 
-	nlm_host_rebooted(argp);
+	/* Obtain the host pointer for this NFS server and try to
+	 * reclaim all locks we hold on this server.
+	 */
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sin_family = AF_INET;
+	saddr.sin_addr.s_addr = argp->addr;
+	nlm_host_rebooted(&saddr, argp->mon, argp->len, argp->state);
+
 	return rpc_success;
 }
 

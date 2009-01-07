@@ -187,7 +187,8 @@ iscsi_create_endpoint(int dd_size)
 
 	ep->id = id;
 	ep->dev.class = &iscsi_endpoint_class;
-	dev_set_name(&ep->dev, "ep-%llu", (unsigned long long) id);
+	snprintf(ep->dev.bus_id, BUS_ID_SIZE, "ep-%llu",
+		 (unsigned long long) id);
 	err = device_register(&ep->dev);
         if (err)
                 goto free_ep;
@@ -723,7 +724,8 @@ int iscsi_add_session(struct iscsi_cls_session *session, unsigned int target_id)
 	}
 	session->target_id = id;
 
-	dev_set_name(&session->dev, "session%u", session->sid);
+	snprintf(session->dev.bus_id, BUS_ID_SIZE, "session%u",
+		 session->sid);
 	err = device_add(&session->dev);
 	if (err) {
 		iscsi_cls_session_printk(KERN_ERR, session,
@@ -896,7 +898,8 @@ iscsi_create_conn(struct iscsi_cls_session *session, int dd_size, uint32_t cid)
 	if (!get_device(&session->dev))
 		goto free_conn;
 
-	dev_set_name(&conn->dev, "connection%d:%u", session->sid, cid);
+	snprintf(conn->dev.bus_id, BUS_ID_SIZE, "connection%d:%u",
+		 session->sid, cid);
 	conn->dev.parent = &session->dev;
 	conn->dev.release = iscsi_conn_release;
 	err = device_register(&conn->dev);
@@ -1813,7 +1816,7 @@ iscsi_register_transport(struct iscsi_transport *tt)
 		priv->t.create_work_queue = 1;
 
 	priv->dev.class = &iscsi_transport_class;
-	dev_set_name(&priv->dev, "%s", tt->name);
+	snprintf(priv->dev.bus_id, BUS_ID_SIZE, "%s", tt->name);
 	err = device_register(&priv->dev);
 	if (err)
 		goto free_priv;

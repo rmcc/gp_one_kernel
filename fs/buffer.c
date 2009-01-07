@@ -203,25 +203,10 @@ int fsync_bdev(struct block_device *bdev)
  * happen on bdev until thaw_bdev() is called.
  * If a superblock is found on this device, we take the s_umount semaphore
  * on it to make sure nobody unmounts until the snapshot creation is done.
- * The reference counter (bd_fsfreeze_count) guarantees that only the last
- * unfreeze process can unfreeze the frozen filesystem actually when multiple
- * freeze requests arrive simultaneously. It counts up in freeze_bdev() and
- * count down in thaw_bdev(). When it becomes 0, thaw_bdev() will unfreeze
- * actually.
  */
 struct super_block *freeze_bdev(struct block_device *bdev)
 {
 	struct super_block *sb;
-	int error = 0;
-
-	mutex_lock(&bdev->bd_fsfreeze_mutex);
-	if (bdev->bd_fsfreeze_count > 0) {
-		bdev->bd_fsfreeze_count++;
-		sb = get_super(bdev);
-		mutex_unlock(&bdev->bd_fsfreeze_mutex);
-		return sb;
-	}
-	bdev->bd_fsfreeze_count++;
 
 	down(&bdev->bd_mount_sem);
 	sb = get_super(bdev);
@@ -236,24 +221,11 @@ struct super_block *freeze_bdev(struct block_device *bdev)
 
 		sync_blockdev(sb->s_bdev);
 
-		if (sb->s_op->freeze_fs) {
-			error = sb->s_op->freeze_fs(sb);
-			if (error) {
-				printk(KERN_ERR
-					"VFS:Filesystem freeze failed\n");
-				sb->s_frozen = SB_UNFROZEN;
-				drop_super(sb);
-				up(&bdev->bd_mount_sem);
-				bdev->bd_fsfreeze_count--;
-				mutex_unlock(&bdev->bd_fsfreeze_mutex);
-				return ERR_PTR(error);
-			}
-		}
+		if (sb->s_op->write_super_lockfs)
+			sb->s_op->write_super_lockfs(sb);
 	}
 
 	sync_blockdev(bdev);
-	mutex_unlock(&bdev->bd_fsfreeze_mutex);
-
 	return sb;	/* thaw_bdev releases s->s_umount and bd_mount_sem */
 }
 EXPORT_SYMBOL(freeze_bdev);
@@ -265,48 +237,20 @@ EXPORT_SYMBOL(freeze_bdev);
  *
  * Unlocks the filesystem and marks it writeable again after freeze_bdev().
  */
-int thaw_bdev(struct block_device *bdev, struct super_block *sb)
+void thaw_bdev(struct block_device *bdev, struct super_block *sb)
 {
-	int error = 0;
-
-	mutex_lock(&bdev->bd_fsfreeze_mutex);
-	if (!bdev->bd_fsfreeze_count) {
-		mutex_unlock(&bdev->bd_fsfreeze_mutex);
-		return -EINVAL;
-	}
-
-	bdev->bd_fsfreeze_count--;
-	if (bdev->bd_fsfreeze_count > 0) {
-		if (sb)
-			drop_super(sb);
-		mutex_unlock(&bdev->bd_fsfreeze_mutex);
-		return 0;
-	}
-
 	if (sb) {
 		BUG_ON(sb->s_bdev != bdev);
-		if (!(sb->s_flags & MS_RDONLY)) {
-			if (sb->s_op->unfreeze_fs) {
-				error = sb->s_op->unfreeze_fs(sb);
-				if (error) {
-					printk(KERN_ERR
-						"VFS:Filesystem thaw failed\n");
-					sb->s_frozen = SB_FREEZE_TRANS;
-					bdev->bd_fsfreeze_count++;
-					mutex_unlock(&bdev->bd_fsfreeze_mutex);
-					return error;
-				}
-			}
-			sb->s_frozen = SB_UNFROZEN;
-			smp_wmb();
-			wake_up(&sb->s_wait_unfrozen);
-		}
+
+		if (sb->s_op->unlockfs)
+			sb->s_op->unlockfs(sb);
+		sb->s_frozen = SB_UNFROZEN;
+		smp_wmb();
+		wake_up(&sb->s_wait_unfrozen);
 		drop_super(sb);
 	}
 
 	up(&bdev->bd_mount_sem);
-	mutex_unlock(&bdev->bd_fsfreeze_mutex);
-	return 0;
 }
 EXPORT_SYMBOL(thaw_bdev);
 
@@ -777,7 +721,6 @@ static int __set_page_dirty(struct page *page,
 			__inc_zone_page_state(page, NR_FILE_DIRTY);
 			__inc_bdi_stat(mapping->backing_dev_info,
 					BDI_RECLAIMABLE);
-			task_dirty_inc(current);
 			task_io_account_write(PAGE_CACHE_SIZE);
 		}
 		radix_tree_tag_set(&mapping->page_tree,
@@ -2053,7 +1996,7 @@ int block_write_begin(struct file *file, struct address_space *mapping,
 	page = *pagep;
 	if (page == NULL) {
 		ownpage = 1;
-		page = grab_cache_page_write_begin(mapping, index, flags);
+		page = __grab_cache_page(mapping, index);
 		if (!page) {
 			status = -ENOMEM;
 			goto out;
@@ -2079,6 +2022,7 @@ int block_write_begin(struct file *file, struct address_space *mapping,
 			if (pos + len > inode->i_size)
 				vmtruncate(inode, inode->i_size);
 		}
+		goto out;
 	}
 
 out:
@@ -2558,7 +2502,7 @@ int nobh_write_begin(struct file *file, struct address_space *mapping,
 	from = pos & (PAGE_CACHE_SIZE - 1);
 	to = from + len;
 
-	page = grab_cache_page_write_begin(mapping, index, flags);
+	page = __grab_cache_page(mapping, index);
 	if (!page)
 		return -ENOMEM;
 	*pagep = page;
@@ -2689,7 +2633,7 @@ int nobh_write_end(struct file *file, struct address_space *mapping,
 	struct buffer_head *bh;
 	BUG_ON(fsdata != NULL && page_has_buffers(page));
 
-	if (unlikely(copied < len) && head)
+	if (unlikely(copied < len) && !page_has_buffers(page))
 		attach_nobh_buffers(page, head);
 	if (page_has_buffers(page))
 		return generic_write_end(file, mapping, pos, len,
@@ -3109,7 +3053,7 @@ int sync_dirty_buffer(struct buffer_head *bh)
 	if (test_clear_buffer_dirty(bh)) {
 		get_bh(bh);
 		bh->b_end_io = end_buffer_write_sync;
-		ret = submit_bh(WRITE, bh);
+		ret = submit_bh(WRITE_SYNC, bh);
 		wait_on_buffer(bh);
 		if (buffer_eopnotsupp(bh)) {
 			clear_buffer_eopnotsupp(bh);
@@ -3244,7 +3188,7 @@ void block_sync_page(struct page *page)
  * Use of bdflush() is deprecated and will be removed in a future kernel.
  * The `pdflush' kernel threads fully replace bdflush daemons and this call.
  */
-SYSCALL_DEFINE2(bdflush, int, func, long, data)
+asmlinkage long sys_bdflush(int func, long data)
 {
 	static int msg_count;
 

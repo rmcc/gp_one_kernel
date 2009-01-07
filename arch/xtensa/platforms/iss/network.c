@@ -1,6 +1,6 @@
 /*
  *
- * arch/xtensa/platforms/iss/network.c
+ * arch/xtensa/platform-iss/network.c
  *
  * Platform specific initialization.
  *
@@ -33,7 +33,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/platform_device.h>
 
-#include <platform/simcall.h>
+#include <asm/platform/simcall.h>
 
 #define DRIVER_NAME "iss-netdev"
 #define ETH_MAX_PACKET 1500

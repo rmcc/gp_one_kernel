@@ -810,16 +810,12 @@ static void ptrace_bts_untrace(struct task_struct *child)
 
 static void ptrace_bts_detach(struct task_struct *child)
 {
-	/*
-	 * Ptrace_detach() races with ptrace_untrace() in case
-	 * the child dies and is reaped by another thread.
-	 *
-	 * We only do the memory accounting at this point and
-	 * leave the buffer deallocation and the bts tracer
-	 * release to ptrace_bts_untrace() which will be called
-	 * later on with tasklist_lock held.
-	 */
-	release_locked_buffer(child->bts_buffer, child->bts_size);
+	if (unlikely(child->bts)) {
+		ds_release_bts(child->bts);
+		child->bts = NULL;
+
+		ptrace_bts_free_buffer(child);
+	}
 }
 #else
 static inline void ptrace_bts_fork(struct task_struct *tsk) {}
