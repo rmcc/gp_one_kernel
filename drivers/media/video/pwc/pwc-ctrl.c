@@ -1266,9 +1266,9 @@ int pwc_get_cmos_sensor(struct pwc_device *pdev, int *sensor)
 /* copy local variable to arg */
 #define ARG_OUT(ARG_name) /* nothing */
 
-long pwc_ioctl(struct pwc_device *pdev, unsigned int cmd, void *arg)
+int pwc_ioctl(struct pwc_device *pdev, unsigned int cmd, void *arg)
 {
-	long ret = 0;
+	int ret = 0;
 
 	switch(cmd) {
 	case VIDIOCPWCRUSER:

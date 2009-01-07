@@ -122,10 +122,14 @@ static void omap_kp_scan_keypad(struct omap_kp *omap_kp, unsigned char *state)
 
 	/* read the keypad status */
 	if (cpu_is_omap24xx()) {
+		int i;
+		for (i = 0; i < omap_kp->rows; i++)
+			disable_irq(OMAP_GPIO_IRQ(row_gpios[i]));
+
 		/* read the keypad status */
 		for (col = 0; col < omap_kp->cols; col++) {
 			set_col_gpio_val(omap_kp, ~(1 << col));
-			state[col] = ~(get_row_gpio_val(omap_kp)) & 0xff;
+			state[col] = ~(get_row_gpio_val(omap_kp)) & 0x3f;
 		}
 		set_col_gpio_val(omap_kp, 0);
 

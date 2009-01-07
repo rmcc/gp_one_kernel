@@ -40,12 +40,11 @@ struct kmem_cache *stub_priv_cache;
  * remote host.
  */
 #define MAX_BUSID 16
-#define BUSID_SIZE 20
-static char busid_table[MAX_BUSID][BUSID_SIZE];
+static char busid_table[MAX_BUSID][BUS_ID_SIZE];
 static spinlock_t busid_table_lock;
 
 
-int match_busid(const char *busid)
+int match_busid(char *busid)
 {
 	int i;
 
@@ -53,7 +52,7 @@ int match_busid(const char *busid)
 
 	for (i = 0; i < MAX_BUSID; i++)
 		if (busid_table[i][0])
-			if (!strncmp(busid_table[i], busid, BUSID_SIZE)) {
+			if (!strncmp(busid_table[i], busid, BUS_ID_SIZE)) {
 				/* already registerd */
 				spin_unlock(&busid_table_lock);
 				return 0;
@@ -93,7 +92,7 @@ static int add_match_busid(char *busid)
 
 	for (i = 0; i < MAX_BUSID; i++)
 		if (!busid_table[i][0]) {
-			strncpy(busid_table[i], busid, BUSID_SIZE);
+			strncpy(busid_table[i], busid, BUS_ID_SIZE);
 			spin_unlock(&busid_table_lock);
 			return 0;
 		}
@@ -110,9 +109,9 @@ static int del_match_busid(char *busid)
 	spin_lock(&busid_table_lock);
 
 	for (i = 0; i < MAX_BUSID; i++)
-		if (!strncmp(busid_table[i], busid, BUSID_SIZE)) {
+		if (!strncmp(busid_table[i], busid, BUS_ID_SIZE)) {
 			/* found */
-			memset(busid_table[i], 0, BUSID_SIZE);
+			memset(busid_table[i], 0, BUS_ID_SIZE);
 			spin_unlock(&busid_table_lock);
 			return 0;
 		}
@@ -126,19 +125,19 @@ static ssize_t store_match_busid(struct device_driver *dev, const char *buf,
 		size_t count)
 {
 	int len;
-	char busid[BUSID_SIZE];
+	char busid[BUS_ID_SIZE];
 
 	if (count < 5)
 		return -EINVAL;
 
 	/* strnlen() does not include \0 */
-	len = strnlen(buf + 4, BUSID_SIZE);
+	len = strnlen(buf + 4, BUS_ID_SIZE);
 
 	/* busid needs to include \0 termination */
-	if (!(len < BUSID_SIZE))
+	if (!(len < BUS_ID_SIZE))
 		return -EINVAL;
 
-	strncpy(busid, buf + 4, BUSID_SIZE);
+	strncpy(busid, buf + 4, BUS_ID_SIZE);
 
 
 	if (!strncmp(buf, "add ", 4)) {

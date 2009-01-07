@@ -280,7 +280,9 @@ asmlinkage long sys_capset(cap_user_header_t header, const cap_user_data_t data)
 	if (ret < 0)
 		goto error;
 
-	audit_log_capset(pid, new, current_cred());
+	ret = audit_log_capset(pid, new, current_cred());
+	if (ret < 0)
+		return ret;
 
 	return commit_creds(new);
 
@@ -306,7 +308,7 @@ int capable(int cap)
 		BUG();
 	}
 
-	if (security_capable(cap) == 0) {
+	if (has_capability(current, cap)) {
 		current->flags |= PF_SUPERPRIV;
 		return 1;
 	}

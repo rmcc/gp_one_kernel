@@ -63,4 +63,3 @@ endif
 ifeq ($(CONFIG_NET),y)
 obj-$(CONFIG_SYSCTL)		+= sysctl_net.o
 endif
-obj-$(CONFIG_WIMAX)		+= wimax/

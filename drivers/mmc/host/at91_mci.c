@@ -1088,8 +1088,6 @@ static int __init at91_mci_probe(struct platform_device *pdev)
 		goto fail0;
 	}
 
-	setup_timer(&host->timer, at91_timeout_timer, (unsigned long)host);
-
 	platform_set_drvdata(pdev, mmc);
 
 	/*
@@ -1102,6 +1100,8 @@ static int __init at91_mci_probe(struct platform_device *pdev)
 		host->present = -1;
 
 	mmc_add_host(mmc);
+
+	setup_timer(&host->timer, at91_timeout_timer, (unsigned long)host);
 
 	/*
 	 * monitor card insertion/removal if we can

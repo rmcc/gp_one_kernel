@@ -254,24 +254,30 @@ static int cx18_s_fmt_sliced_vbi_cap(struct file *file, void *fh,
 }
 
 static int cx18_g_chip_ident(struct file *file, void *fh,
-				struct v4l2_dbg_chip_ident *chip)
+				struct v4l2_chip_ident *chip)
 {
 	struct cx18 *cx = ((struct cx18_open_id *)fh)->cx;
 
 	chip->ident = V4L2_IDENT_NONE;
 	chip->revision = 0;
-	if (v4l2_chip_match_host(&chip->match)) {
-		chip->ident = V4L2_IDENT_CX23418;
+	if (chip->match_type == V4L2_CHIP_MATCH_HOST) {
+		if (v4l2_chip_match_host(chip->match_type, chip->match_chip))
+			chip->ident = V4L2_IDENT_CX23418;
 		return 0;
 	}
-	cx18_call_i2c_clients(cx, VIDIOC_DBG_G_CHIP_IDENT, chip);
-	return 0;
+	if (chip->match_type == V4L2_CHIP_MATCH_I2C_DRIVER)
+		return cx18_i2c_id(cx, chip->match_chip, VIDIOC_G_CHIP_IDENT,
+					chip);
+	if (chip->match_type == V4L2_CHIP_MATCH_I2C_ADDR)
+		return cx18_call_i2c_client(cx, chip->match_chip,
+						VIDIOC_G_CHIP_IDENT, chip);
+	return -EINVAL;
 }
 
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 static int cx18_cxc(struct cx18 *cx, unsigned int cmd, void *arg)
 {
-	struct v4l2_dbg_register *regs = arg;
+	struct v4l2_register *regs = arg;
 	unsigned long flags;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -280,7 +286,6 @@ static int cx18_cxc(struct cx18 *cx, unsigned int cmd, void *arg)
 		return -EINVAL;
 
 	spin_lock_irqsave(&cx18_cards_lock, flags);
-	regs->size = 4;
 	if (cmd == VIDIOC_DBG_G_REGISTER)
 		regs->val = cx18_read_enc(cx, regs->reg);
 	else
@@ -290,25 +295,31 @@ static int cx18_cxc(struct cx18 *cx, unsigned int cmd, void *arg)
 }
 
 static int cx18_g_register(struct file *file, void *fh,
-				struct v4l2_dbg_register *reg)
+				struct v4l2_register *reg)
 {
 	struct cx18 *cx = ((struct cx18_open_id *)fh)->cx;
 
-	if (v4l2_chip_match_host(&reg->match))
+	if (v4l2_chip_match_host(reg->match_type, reg->match_chip))
 		return cx18_cxc(cx, VIDIOC_DBG_G_REGISTER, reg);
-	cx18_call_i2c_clients(cx, VIDIOC_DBG_G_REGISTER, reg);
-	return 0;
+	if (reg->match_type == V4L2_CHIP_MATCH_I2C_DRIVER)
+		return cx18_i2c_id(cx, reg->match_chip, VIDIOC_DBG_G_REGISTER,
+					reg);
+	return cx18_call_i2c_client(cx, reg->match_chip, VIDIOC_DBG_G_REGISTER,
+					reg);
 }
 
 static int cx18_s_register(struct file *file, void *fh,
-				struct v4l2_dbg_register *reg)
+				struct v4l2_register *reg)
 {
 	struct cx18 *cx = ((struct cx18_open_id *)fh)->cx;
 
-	if (v4l2_chip_match_host(&reg->match))
+	if (v4l2_chip_match_host(reg->match_type, reg->match_chip))
 		return cx18_cxc(cx, VIDIOC_DBG_S_REGISTER, reg);
-	cx18_call_i2c_clients(cx, VIDIOC_DBG_S_REGISTER, reg);
-	return 0;
+	if (reg->match_type == V4L2_CHIP_MATCH_I2C_DRIVER)
+		return cx18_i2c_id(cx, reg->match_chip, VIDIOC_DBG_S_REGISTER,
+					reg);
+	return cx18_call_i2c_client(cx, reg->match_chip, VIDIOC_DBG_S_REGISTER,
+					reg);
 }
 #endif
 
@@ -744,7 +755,7 @@ static int cx18_log_status(struct file *file, void *fh)
 	return 0;
 }
 
-static long cx18_default(struct file *file, void *fh, int cmd, void *arg)
+static int cx18_default(struct file *file, void *fh, int cmd, void *arg)
 {
 	struct cx18 *cx = ((struct cx18_open_id *)fh)->cx;
 
@@ -772,19 +783,19 @@ static long cx18_default(struct file *file, void *fh, int cmd, void *arg)
 	return 0;
 }
 
-long cx18_v4l2_ioctl(struct file *filp, unsigned int cmd,
+int cx18_v4l2_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		    unsigned long arg)
 {
 	struct video_device *vfd = video_devdata(filp);
 	struct cx18_open_id *id = (struct cx18_open_id *)filp->private_data;
 	struct cx18 *cx = id->cx;
-	long res;
+	int res;
 
 	mutex_lock(&cx->serialize_lock);
 
 	if (cx18_debug & CX18_DBGFLG_IOCTL)
 		vfd->debug = V4L2_DEBUG_IOCTL | V4L2_DEBUG_IOCTL_ARG;
-	res = video_ioctl2(filp, cmd, arg);
+	res = video_ioctl2(inode, filp, cmd, arg);
 	vfd->debug = 0;
 	mutex_unlock(&cx->serialize_lock);
 	return res;

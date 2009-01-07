@@ -122,6 +122,7 @@ static int irda_usb_net_open(struct net_device *dev);
 static int irda_usb_net_close(struct net_device *dev);
 static int irda_usb_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static void irda_usb_net_timeout(struct net_device *dev);
+static struct net_device_stats *irda_usb_net_get_stats(struct net_device *dev);
 
 /************************ TRANSMIT ROUTINES ************************/
 /*
@@ -524,13 +525,13 @@ static int irda_usb_hard_xmit(struct sk_buff *skb, struct net_device *netdev)
 	/* Ask USB to send the packet - Irq disabled -> GFP_ATOMIC */
 	if ((res = usb_submit_urb(urb, GFP_ATOMIC))) {
 		IRDA_WARNING("%s(), failed Tx URB\n", __func__);
-		netdev->stats.tx_errors++;
+		self->stats.tx_errors++;
 		/* Let USB recover : We will catch that in the watchdog */
 		/*netif_start_queue(netdev);*/
 	} else {
 		/* Increment packet stats */
-		netdev->stats.tx_packets++;
-                netdev->stats.tx_bytes += skb->len;
+		self->stats.tx_packets++;
+                self->stats.tx_bytes += skb->len;
 		
 		netdev->trans_start = jiffies;
 	}
@@ -676,7 +677,7 @@ static void irda_usb_net_timeout(struct net_device *netdev)
 		IRDA_DEBUG(0, "%s: Tx timed out, urb->status=%d, urb->transfer_flags=0x%04X\n", netdev->name, urb->status, urb->transfer_flags);
 
 		/* Increase error count */
-		netdev->stats.tx_errors++;
+		self->stats.tx_errors++;
 
 #ifdef IU_BUG_KICK_TIMEOUT
 		/* Can't be a bad idea to reset the speed ;-) - Jean II */
@@ -825,7 +826,7 @@ static void irda_usb_receive(struct urb *urb)
 	if (urb->status != 0) {
 		switch (urb->status) {
 		case -EILSEQ:
-			self->netdev->stats.rx_crc_errors++;
+			self->stats.rx_crc_errors++;	
 			/* Also precursor to a hot-unplug on UHCI. */
 			/* Fallthrough... */
 		case -ECONNRESET:
@@ -838,7 +839,7 @@ static void irda_usb_receive(struct urb *urb)
 		case -ETIME:
 			/* Usually precursor to a hot-unplug on OHCI. */
 		default:
-			self->netdev->stats.rx_errors++;
+			self->stats.rx_errors++;
 			IRDA_DEBUG(0, "%s(), RX status %d, transfer_flags 0x%04X \n", __func__, urb->status, urb->transfer_flags);
 			break;
 		}
@@ -889,7 +890,7 @@ static void irda_usb_receive(struct urb *urb)
 				       IRDA_SKB_MAX_MTU);
 
 	if (!newskb)  {
-		self->netdev->stats.rx_dropped++;
+		self->stats.rx_dropped++;
 		/* We could deliver the current skb, but this would stall
 		 * the Rx path. Better drop the packet... Jean II */
 		goto done;  
@@ -926,8 +927,8 @@ static void irda_usb_receive(struct urb *urb)
 	netif_rx(dataskb);
 
 	/* Keep stats up to date */
-	self->netdev->stats.rx_bytes += len;
-	self->netdev->stats.rx_packets++;
+	self->stats.rx_bytes += len;
+	self->stats.rx_packets++;
 
 done:
 	/* Note : at this point, the URB we've just received (urb)
@@ -1341,6 +1342,14 @@ static int irda_usb_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 }
 
 /*------------------------------------------------------------------*/
+/*
+ * Get device stats (for /proc/net/dev and ifconfig)
+ */
+static struct net_device_stats *irda_usb_net_get_stats(struct net_device *dev)
+{
+	struct irda_usb_cb *self = netdev_priv(dev);
+	return &self->stats;
+}
 
 /********************* IRDA CONFIG SUBROUTINES *********************/
 /*
@@ -1419,6 +1428,7 @@ static inline int irda_usb_open(struct irda_usb_cb *self)
 	netdev->watchdog_timeo  = 250*HZ/1000;	/* 250 ms > USB timeout */
 	netdev->open            = irda_usb_net_open;
 	netdev->stop            = irda_usb_net_close;
+	netdev->get_stats	= irda_usb_net_get_stats;
 	netdev->do_ioctl        = irda_usb_net_ioctl;
 
 	return register_netdev(netdev);

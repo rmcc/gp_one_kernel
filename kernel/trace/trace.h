@@ -368,7 +368,7 @@ struct trace_iterator {
 	loff_t			pos;
 	long			idx;
 
-	cpumask_var_t		started;
+	cpumask_t		started;
 };
 
 int tracing_is_enabled(void);

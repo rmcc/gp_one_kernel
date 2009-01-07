@@ -31,7 +31,6 @@
 
 #include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
-#include <media/v4l2-ioctl.h>
 
 #define VIDEO_NUM_DEVICES	256
 #define VIDEO_NAME              "video4linux"
@@ -183,7 +182,7 @@ static int v4l2_ioctl(struct inode *inode, struct file *filp,
 		return -ENOTTY;
 	/* Allow ioctl to continue even if the device was unregistered.
 	   Things like dequeueing buffers might still be useful. */
-	return vdev->fops->ioctl(filp, cmd, arg);
+	return vdev->fops->ioctl(inode, filp, cmd, arg);
 }
 
 static long v4l2_unlocked_ioctl(struct file *filp,
@@ -197,6 +196,20 @@ static long v4l2_unlocked_ioctl(struct file *filp,
 	   Things like dequeueing buffers might still be useful. */
 	return vdev->fops->unlocked_ioctl(filp, cmd, arg);
 }
+
+#ifdef CONFIG_COMPAT
+static long v4l2_compat_ioctl(struct file *filp,
+		unsigned int cmd, unsigned long arg)
+{
+	struct video_device *vdev = video_devdata(filp);
+
+	if (!vdev->fops->compat_ioctl)
+		return -ENOIOCTLCMD;
+	/* Allow ioctl to continue even if the device was unregistered.
+	   Things like dequeueing buffers might still be useful. */
+	return vdev->fops->compat_ioctl(filp, cmd, arg);
+}
+#endif
 
 static int v4l2_mmap(struct file *filp, struct vm_area_struct *vm)
 {
@@ -226,7 +239,7 @@ static int v4l2_open(struct inode *inode, struct file *filp)
 	/* and increase the device refcount */
 	video_get(vdev);
 	mutex_unlock(&videodev_lock);
-	ret = vdev->fops->open(filp);
+	ret = vdev->fops->open(inode, filp);
 	/* decrease the refcount in case of an error */
 	if (ret)
 		video_put(vdev);
@@ -237,7 +250,7 @@ static int v4l2_open(struct inode *inode, struct file *filp)
 static int v4l2_release(struct inode *inode, struct file *filp)
 {
 	struct video_device *vdev = video_devdata(filp);
-	int ret = vdev->fops->release(filp);
+	int ret = vdev->fops->release(inode, filp);
 
 	/* decrease the refcount unconditionally since the release()
 	   return value is ignored. */
@@ -253,7 +266,7 @@ static const struct file_operations v4l2_unlocked_fops = {
 	.mmap = v4l2_mmap,
 	.unlocked_ioctl = v4l2_unlocked_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl = v4l2_compat_ioctl32,
+	.compat_ioctl = v4l2_compat_ioctl,
 #endif
 	.release = v4l2_release,
 	.poll = v4l2_poll,
@@ -268,7 +281,7 @@ static const struct file_operations v4l2_fops = {
 	.mmap = v4l2_mmap,
 	.ioctl = v4l2_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl = v4l2_compat_ioctl32,
+	.compat_ioctl = v4l2_compat_ioctl,
 #endif
 	.release = v4l2_release,
 	.poll = v4l2_poll,

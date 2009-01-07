@@ -112,21 +112,18 @@ static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
 {
 	void __iomem	*epio = ep->regs;
 	u16		csr;
-	u16		lastcsr = 0;
 	int		retries = 1000;
 
 	csr = musb_readw(epio, MUSB_TXCSR);
 	while (csr & MUSB_TXCSR_FIFONOTEMPTY) {
-		if (csr != lastcsr)
-			DBG(3, "Host TX FIFONOTEMPTY csr: %02x\n", csr);
-		lastcsr = csr;
+		DBG(5, "Host TX FIFONOTEMPTY csr: %02x\n", csr);
 		csr |= MUSB_TXCSR_FLUSHFIFO;
 		musb_writew(epio, MUSB_TXCSR, csr);
 		csr = musb_readw(epio, MUSB_TXCSR);
-		if (WARN(retries-- < 1,
-				"Could not flush host TX%d fifo: csr: %04x\n",
-				ep->epnum, csr))
+		if (retries-- < 1) {
+			ERR("Could not flush host TX fifo: csr: %04x\n", csr);
 			return;
+		}
 		mdelay(1);
 	}
 }
@@ -271,7 +268,7 @@ __musb_giveback(struct musb *musb, struct urb *urb, int status)
 __releases(musb->lock)
 __acquires(musb->lock)
 {
-	DBG(({ int level; switch (status) {
+	DBG(({ int level; switch (urb->status) {
 				case 0:
 					level = 4;
 					break;
@@ -286,8 +283,8 @@ __acquires(musb->lock)
 					level = 2;
 					break;
 				}; level; }),
-			"complete %p %pF (%d), dev%d ep%d%s, %d/%d\n",
-			urb, urb->complete, status,
+			"complete %p (%d), dev%d ep%d%s, %d/%d\n",
+			urb, urb->status,
 			usb_pipedevice(urb->pipe),
 			usb_pipeendpoint(urb->pipe),
 			usb_pipein(urb->pipe) ? "in" : "out",
@@ -596,10 +593,12 @@ musb_rx_reinit(struct musb *musb, struct musb_qh *qh, struct musb_hw_ep *ep)
 
 	/* target addr and (for multipoint) hub addr/port */
 	if (musb->is_multipoint) {
-		musb_write_rxfunaddr(ep->target_regs, qh->addr_reg);
-		musb_write_rxhubaddr(ep->target_regs, qh->h_addr_reg);
-		musb_write_rxhubport(ep->target_regs, qh->h_port_reg);
-
+		musb_writeb(ep->target_regs, MUSB_RXFUNCADDR,
+			qh->addr_reg);
+		musb_writeb(ep->target_regs, MUSB_RXHUBADDR,
+			qh->h_addr_reg);
+		musb_writeb(ep->target_regs, MUSB_RXHUBPORT,
+			qh->h_port_reg);
 	} else
 		musb_writeb(musb->mregs, MUSB_FADDR, qh->addr_reg);
 
@@ -713,9 +712,15 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 
 		/* target addr and (for multipoint) hub addr/port */
 		if (musb->is_multipoint) {
-			musb_write_txfunaddr(mbase, epnum, qh->addr_reg);
-			musb_write_txhubaddr(mbase, epnum, qh->h_addr_reg);
-			musb_write_txhubport(mbase, epnum, qh->h_port_reg);
+			musb_writeb(mbase,
+				MUSB_BUSCTL_OFFSET(epnum, MUSB_TXFUNCADDR),
+				qh->addr_reg);
+			musb_writeb(mbase,
+				MUSB_BUSCTL_OFFSET(epnum, MUSB_TXHUBADDR),
+				qh->h_addr_reg);
+			musb_writeb(mbase,
+				MUSB_BUSCTL_OFFSET(epnum, MUSB_TXHUBPORT),
+				qh->h_port_reg);
 /* FIXME if !epnum, do the same for RX ... */
 		} else
 			musb_writeb(mbase, MUSB_FADDR, qh->addr_reg);
@@ -983,10 +988,8 @@ static bool musb_h_ep0_continue(struct musb *musb, u16 len, struct urb *urb)
 		if (fifo_count) {
 			fifo_dest = (u8 *) (urb->transfer_buffer
 					+ urb->actual_length);
-			DBG(3, "Sending %d byte%s to ep0 fifo %p\n",
-					fifo_count,
-					(fifo_count == 1) ? "" : "s",
-					fifo_dest);
+			DBG(3, "Sending %d bytes to %p\n",
+					fifo_count, fifo_dest);
 			musb_write_fifo(hw_ep, fifo_count, fifo_dest);
 
 			urb->actual_length += fifo_count;

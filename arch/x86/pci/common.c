@@ -14,7 +14,8 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 #include <asm/smp.h>
-#include <asm/pci_x86.h>
+
+#include "pci.h"
 
 unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2 |
 				PCI_PROBE_MMCONF;
@@ -551,23 +552,15 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
 	if ((err = pci_enable_resources(dev, mask)) < 0)
 		return err;
 
-	if (!pci_dev_msi_enabled(dev))
+	if (!dev->msi_enabled)
 		return pcibios_enable_irq(dev);
 	return 0;
 }
 
 void pcibios_disable_device (struct pci_dev *dev)
 {
-	if (!pci_dev_msi_enabled(dev) && pcibios_disable_irq)
+	if (!dev->msi_enabled && pcibios_disable_irq)
 		pcibios_disable_irq(dev);
-}
-
-int pci_ext_cfg_avail(struct pci_dev *dev)
-{
-	if (raw_pci_ext_ops)
-		return 1;
-	else
-		return 0;
 }
 
 struct pci_bus * __devinit pci_scan_bus_on_node(int busno, struct pci_ops *ops, int node)

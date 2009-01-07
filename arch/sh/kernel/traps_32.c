@@ -13,7 +13,6 @@
  */
 #include <linux/kernel.h>
 #include <linux/ptrace.h>
-#include <linux/hardirq.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>

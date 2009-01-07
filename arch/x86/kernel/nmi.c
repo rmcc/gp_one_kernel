@@ -29,6 +29,8 @@
 
 #include <asm/i8259.h>
 #include <asm/io_apic.h>
+#include <asm/smp.h>
+#include <asm/nmi.h>
 #include <asm/proto.h>
 #include <asm/timer.h>
 

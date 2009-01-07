@@ -1313,7 +1313,13 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 		goto out_fd1;
 	}
 
-	audit_fd_pair(fd1, fd2);
+	err = audit_fd_pair(fd1, fd2);
+	if (err < 0) {
+		fput(newfile1);
+		fput(newfile2);
+		goto out_fd;
+	}
+
 	fd_install(fd1, newfile1);
 	fd_install(fd2, newfile2);
 	/* fd1 and fd2 may be already another descriptors.
@@ -1343,6 +1349,7 @@ out_fd2:
 out_fd1:
 	put_filp(newfile2);
 	sock_release(sock2);
+out_fd:
 	put_unused_fd(fd1);
 	put_unused_fd(fd2);
 	goto out;
@@ -2058,7 +2065,9 @@ asmlinkage long sys_socketcall(int call, unsigned long __user *args)
 	if (copy_from_user(a, args, nargs[call]))
 		return -EFAULT;
 
-	audit_socketcall(nargs[call] / sizeof(unsigned long), a);
+	err = audit_socketcall(nargs[call] / sizeof(unsigned long), a);
+	if (err)
+		return err;
 
 	a0 = a[0];
 	a1 = a[1];

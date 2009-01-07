@@ -636,11 +636,10 @@ static void tenxpress_phy_fini(struct efx_nic *efx)
 {
 	int reg;
 
-	if (efx->phy_type == PHY_TYPE_SFT9001B)
+	if (efx->phy_type == PHY_TYPE_SFT9001B) {
 		device_remove_file(&efx->pci_dev->dev,
 				   &dev_attr_phy_short_reach);
-
-	if (efx->phy_type == PHY_TYPE_SFX7101) {
+	} else {
 		/* Power down the LNPGA */
 		reg = (1 << PMA_PMD_LNPGA_POWERDOWN_LBN);
 		mdio_clause45_write(efx, efx->mii.phy_id, MDIO_MMD_PMAPMD,

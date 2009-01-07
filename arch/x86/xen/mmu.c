@@ -1082,7 +1082,7 @@ static void drop_other_mm_ref(void *info)
 
 static void xen_drop_mm_ref(struct mm_struct *mm)
 {
-	cpumask_var_t mask;
+	cpumask_t mask;
 	unsigned cpu;
 
 	if (current->active_mm == mm) {
@@ -1094,16 +1094,7 @@ static void xen_drop_mm_ref(struct mm_struct *mm)
 	}
 
 	/* Get the "official" set of cpus referring to our pagetable. */
-	if (!alloc_cpumask_var(&mask, GFP_ATOMIC)) {
-		for_each_online_cpu(cpu) {
-			if (!cpumask_test_cpu(cpu, &mm->cpu_vm_mask)
-			    && per_cpu(xen_current_cr3, cpu) != __pa(mm->pgd))
-				continue;
-			smp_call_function_single(cpu, drop_other_mm_ref, mm, 1);
-		}
-		return;
-	}
-	cpumask_copy(mask, &mm->cpu_vm_mask);
+	mask = mm->cpu_vm_mask;
 
 	/* It's possible that a vcpu may have a stale reference to our
 	   cr3, because its in lazy mode, and it hasn't yet flushed
@@ -1112,12 +1103,11 @@ static void xen_drop_mm_ref(struct mm_struct *mm)
 	   if needed. */
 	for_each_online_cpu(cpu) {
 		if (per_cpu(xen_current_cr3, cpu) == __pa(mm->pgd))
-			cpumask_set_cpu(cpu, mask);
+			cpu_set(cpu, mask);
 	}
 
-	if (!cpumask_empty(mask))
-		smp_call_function_many(mask, drop_other_mm_ref, mm, 1);
-	free_cpumask_var(mask);
+	if (!cpus_empty(mask))
+		smp_call_function_mask(mask, drop_other_mm_ref, mm, 1);
 }
 #else
 static void xen_drop_mm_ref(struct mm_struct *mm)

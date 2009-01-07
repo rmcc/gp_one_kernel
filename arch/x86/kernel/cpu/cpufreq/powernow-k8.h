@@ -53,7 +53,7 @@ struct powernow_k8_data {
 	/* we need to keep track of associated cores, but let cpufreq
 	 * handle hotplug events - so just point at cpufreq pol->cpus
 	 * structure */
-	struct cpumask *available_cores;
+	cpumask_t *available_cores;
 };
 
 

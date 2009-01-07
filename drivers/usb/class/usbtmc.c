@@ -21,7 +21,6 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/kref.h>
@@ -483,6 +482,7 @@ static ssize_t usbtmc_write(struct file *filp, const char __user *buf,
 	int retval;
 	int actual;
 	unsigned long int n_bytes;
+	int n;
 	int remaining;
 	int done;
 	int this_part;
@@ -526,8 +526,11 @@ static ssize_t usbtmc_write(struct file *filp, const char __user *buf,
 			goto exit;
 		}
 
-		n_bytes = roundup(12 + this_part, 4);
-		memset(buffer + 12 + this_part, 0, n_bytes - (12 + this_part));
+		n_bytes = 12 + this_part;
+		if (this_part % 4)
+			n_bytes += 4 - this_part % 4;
+			for (n = 12 + this_part; n < n_bytes; n++)
+				buffer[n] = 0;
 
 		retval = usb_bulk_msg(data->usb_dev,
 				      usb_sndbulkpipe(data->usb_dev,

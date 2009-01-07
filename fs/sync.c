@@ -75,39 +75,14 @@ int file_fsync(struct file *filp, struct dentry *dentry, int datasync)
 	return ret;
 }
 
-/**
- * vfs_fsync - perform a fsync or fdatasync on a file
- * @file:		file to sync
- * @dentry:		dentry of @file
- * @data:		only perform a fdatasync operation
- *
- * Write back data and metadata for @file to disk.  If @datasync is
- * set only metadata needed to access modified file data is written.
- *
- * In case this function is called from nfsd @file may be %NULL and
- * only @dentry is set.  This can only happen when the filesystem
- * implements the export_operations API.
- */
-int vfs_fsync(struct file *file, struct dentry *dentry, int datasync)
+long do_fsync(struct file *file, int datasync)
 {
-	const struct file_operations *fop;
-	struct address_space *mapping;
-	int err, ret;
+	int ret;
+	int err;
+	struct address_space *mapping = file->f_mapping;
 
-	/*
-	 * Get mapping and operations from the file in case we have
-	 * as file, or get the default values for them in case we
-	 * don't have a struct file available.  Damn nfsd..
-	 */
-	if (file) {
-		mapping = file->f_mapping;
-		fop = file->f_op;
-	} else {
-		mapping = dentry->d_inode->i_mapping;
-		fop = dentry->d_inode->i_fop;
-	}
-
-	if (!fop || !fop->fsync) {
+	if (!file->f_op || !file->f_op->fsync) {
+		/* Why?  We can still call filemap_fdatawrite */
 		ret = -EINVAL;
 		goto out;
 	}
@@ -119,7 +94,7 @@ int vfs_fsync(struct file *file, struct dentry *dentry, int datasync)
 	 * livelocks in fsync_buffers_list().
 	 */
 	mutex_lock(&mapping->host->i_mutex);
-	err = fop->fsync(file, dentry, datasync);
+	err = file->f_op->fsync(file, file->f_path.dentry, datasync);
 	if (!ret)
 		ret = err;
 	mutex_unlock(&mapping->host->i_mutex);
@@ -129,16 +104,15 @@ int vfs_fsync(struct file *file, struct dentry *dentry, int datasync)
 out:
 	return ret;
 }
-EXPORT_SYMBOL(vfs_fsync);
 
-static int do_fsync(unsigned int fd, int datasync)
+static long __do_fsync(unsigned int fd, int datasync)
 {
 	struct file *file;
 	int ret = -EBADF;
 
 	file = fget(fd);
 	if (file) {
-		ret = vfs_fsync(file, file->f_path.dentry, datasync);
+		ret = do_fsync(file, datasync);
 		fput(file);
 	}
 	return ret;
@@ -146,12 +120,12 @@ static int do_fsync(unsigned int fd, int datasync)
 
 asmlinkage long sys_fsync(unsigned int fd)
 {
-	return do_fsync(fd, 0);
+	return __do_fsync(fd, 0);
 }
 
 asmlinkage long sys_fdatasync(unsigned int fd)
 {
-	return do_fsync(fd, 1);
+	return __do_fsync(fd, 1);
 }
 
 /*
@@ -295,7 +269,7 @@ int do_sync_mapping_range(struct address_space *mapping, loff_t offset,
 
 	if (flags & SYNC_FILE_RANGE_WRITE) {
 		ret = __filemap_fdatawrite_range(mapping, offset, endbyte,
-						WB_SYNC_ALL);
+						WB_SYNC_NONE);
 		if (ret < 0)
 			goto out;
 	}

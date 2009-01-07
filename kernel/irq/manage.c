@@ -16,15 +16,8 @@
 #include "internals.h"
 
 #ifdef CONFIG_SMP
-cpumask_var_t irq_default_affinity;
 
-static int init_irq_default_affinity(void)
-{
-	alloc_cpumask_var(&irq_default_affinity, GFP_KERNEL);
-	cpumask_setall(irq_default_affinity);
-	return 0;
-}
-core_initcall(init_irq_default_affinity);
+cpumask_t irq_default_affinity = CPU_MASK_ALL;
 
 /**
  *	synchronize_irq - wait for pending IRQ handlers (on other CPUs)
@@ -86,7 +79,7 @@ int irq_can_set_affinity(unsigned int irq)
  *	@cpumask:	cpumask
  *
  */
-int irq_set_affinity(unsigned int irq, const struct cpumask *cpumask)
+int irq_set_affinity(unsigned int irq, cpumask_t cpumask)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
 	unsigned long flags;
@@ -98,14 +91,14 @@ int irq_set_affinity(unsigned int irq, const struct cpumask *cpumask)
 
 #ifdef CONFIG_GENERIC_PENDING_IRQ
 	if (desc->status & IRQ_MOVE_PCNTXT || desc->status & IRQ_DISABLED) {
-		cpumask_copy(&desc->affinity, cpumask);
+		desc->affinity = cpumask;
 		desc->chip->set_affinity(irq, cpumask);
 	} else {
 		desc->status |= IRQ_MOVE_PENDING;
-		cpumask_copy(&desc->pending_mask, cpumask);
+		desc->pending_mask = cpumask;
 	}
 #else
-	cpumask_copy(&desc->affinity, cpumask);
+	desc->affinity = cpumask;
 	desc->chip->set_affinity(irq, cpumask);
 #endif
 	desc->status |= IRQ_AFFINITY_SET;
@@ -119,24 +112,26 @@ int irq_set_affinity(unsigned int irq, const struct cpumask *cpumask)
  */
 int do_irq_select_affinity(unsigned int irq, struct irq_desc *desc)
 {
+	cpumask_t mask;
+
 	if (!irq_can_set_affinity(irq))
 		return 0;
+
+	cpus_and(mask, cpu_online_map, irq_default_affinity);
 
 	/*
 	 * Preserve an userspace affinity setup, but make sure that
 	 * one of the targets is online.
 	 */
 	if (desc->status & (IRQ_AFFINITY_SET | IRQ_NO_BALANCING)) {
-		if (cpumask_any_and(&desc->affinity, cpu_online_mask)
-		    < nr_cpu_ids)
-			goto set_affinity;
+		if (cpus_intersects(desc->affinity, cpu_online_map))
+			mask = desc->affinity;
 		else
 			desc->status &= ~IRQ_AFFINITY_SET;
 	}
 
-	cpumask_and(&desc->affinity, cpu_online_mask, irq_default_affinity);
-set_affinity:
-	desc->chip->set_affinity(irq, &desc->affinity);
+	desc->affinity = mask;
+	desc->chip->set_affinity(irq, mask);
 
 	return 0;
 }

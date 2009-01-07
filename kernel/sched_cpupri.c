@@ -67,21 +67,24 @@ static int convert_prio(int prio)
  * Returns: (int)bool - CPUs were found
  */
 int cpupri_find(struct cpupri *cp, struct task_struct *p,
-		struct cpumask *lowest_mask)
+		cpumask_t *lowest_mask)
 {
 	int                  idx      = 0;
 	int                  task_pri = convert_prio(p->prio);
 
 	for_each_cpupri_active(cp->pri_active, idx) {
 		struct cpupri_vec *vec  = &cp->pri_to_cpu[idx];
+		cpumask_t mask;
 
 		if (idx >= task_pri)
 			break;
 
-		if (cpumask_any_and(&p->cpus_allowed, vec->mask) >= nr_cpu_ids)
+		cpus_and(mask, p->cpus_allowed, vec->mask);
+
+		if (cpus_empty(mask))
 			continue;
 
-		cpumask_and(lowest_mask, &p->cpus_allowed, vec->mask);
+		*lowest_mask = mask;
 		return 1;
 	}
 
@@ -123,7 +126,7 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 		vec->count--;
 		if (!vec->count)
 			clear_bit(oldpri, cp->pri_active);
-		cpumask_clear_cpu(cpu, vec->mask);
+		cpu_clear(cpu, vec->mask);
 
 		spin_unlock_irqrestore(&vec->lock, flags);
 	}
@@ -133,7 +136,7 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 
 		spin_lock_irqsave(&vec->lock, flags);
 
-		cpumask_set_cpu(cpu, vec->mask);
+		cpu_set(cpu, vec->mask);
 		vec->count++;
 		if (vec->count == 1)
 			set_bit(newpri, cp->pri_active);
@@ -147,11 +150,10 @@ void cpupri_set(struct cpupri *cp, int cpu, int newpri)
 /**
  * cpupri_init - initialize the cpupri structure
  * @cp: The cpupri context
- * @bootmem: true if allocations need to use bootmem
  *
- * Returns: -ENOMEM if memory fails.
+ * Returns: (void)
  */
-int __init_refok cpupri_init(struct cpupri *cp, bool bootmem)
+void cpupri_init(struct cpupri *cp)
 {
 	int i;
 
@@ -162,30 +164,11 @@ int __init_refok cpupri_init(struct cpupri *cp, bool bootmem)
 
 		spin_lock_init(&vec->lock);
 		vec->count = 0;
-		if (bootmem)
-			alloc_bootmem_cpumask_var(&vec->mask);
-		else if (!alloc_cpumask_var(&vec->mask, GFP_KERNEL))
-			goto cleanup;
+		cpus_clear(vec->mask);
 	}
 
 	for_each_possible_cpu(i)
 		cp->cpu_to_pri[i] = CPUPRI_INVALID;
-	return 0;
-
-cleanup:
-	for (i--; i >= 0; i--)
-		free_cpumask_var(cp->pri_to_cpu[i].mask);
-	return -ENOMEM;
 }
 
-/**
- * cpupri_cleanup - clean up the cpupri structure
- * @cp: The cpupri context
- */
-void cpupri_cleanup(struct cpupri *cp)
-{
-	int i;
 
-	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++)
-		free_cpumask_var(cp->pri_to_cpu[i].mask);
-}

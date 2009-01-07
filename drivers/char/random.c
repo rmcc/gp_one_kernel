@@ -407,7 +407,7 @@ struct entropy_store {
 	/* read-write data: */
 	spinlock_t lock;
 	unsigned add_ptr;
-	int entropy_count;
+	int entropy_count;	/* Must at no time exceed ->POOLBITS! */
 	int input_rotate;
 };
 
@@ -559,40 +559,7 @@ struct timer_rand_state {
 };
 
 #ifndef CONFIG_SPARSE_IRQ
-
-static struct timer_rand_state *irq_timer_state[NR_IRQS];
-
-static struct timer_rand_state *get_timer_rand_state(unsigned int irq)
-{
-	return irq_timer_state[irq];
-}
-
-static void set_timer_rand_state(unsigned int irq,
-				 struct timer_rand_state *state)
-{
-	irq_timer_state[irq] = state;
-}
-
-#else
-
-static struct timer_rand_state *get_timer_rand_state(unsigned int irq)
-{
-	struct irq_desc *desc;
-
-	desc = irq_to_desc(irq);
-
-	return desc->timer_rand_state;
-}
-
-static void set_timer_rand_state(unsigned int irq,
-				 struct timer_rand_state *state)
-{
-	struct irq_desc *desc;
-
-	desc = irq_to_desc(irq);
-
-	desc->timer_rand_state = state;
-}
+struct timer_rand_state *irq_timer_state[NR_IRQS];
 #endif
 
 static struct timer_rand_state input_timer_state;
@@ -767,10 +734,11 @@ static size_t account(struct entropy_store *r, size_t nbytes, int min,
 {
 	unsigned long flags;
 
+	BUG_ON(r->entropy_count > r->poolinfo->POOLBITS);
+
 	/* Hold lock while accounting */
 	spin_lock_irqsave(&r->lock, flags);
 
-	BUG_ON(r->entropy_count > r->poolinfo->POOLBITS);
 	DEBUG_ENT("trying to extract %d bits from %s\n",
 		  nbytes * 8, r->name);
 
@@ -950,6 +918,11 @@ module_init(rand_initialize);
 void rand_initialize_irq(int irq)
 {
 	struct timer_rand_state *state;
+
+#ifndef CONFIG_SPARSE_IRQ
+	if (irq >= nr_irqs)
+		return;
+#endif
 
 	state = get_timer_rand_state(irq);
 

@@ -28,7 +28,6 @@
 #include <mach/hardware.h>
 #include <mach/eseries-gpio.h>
 #include <mach/udc.h>
-#include <mach/irqs.h>
 
 #include "generic.h"
 #include "eseries.h"
