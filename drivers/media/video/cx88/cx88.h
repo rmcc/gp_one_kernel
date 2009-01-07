@@ -302,7 +302,6 @@ struct cx88_dmaqueue {
 	struct btcx_riscmem    stopper;
 	u32                    count;
 };
-struct cx88_core;
 
 struct cx88_core {
 	struct list_head           devlist;
@@ -335,8 +334,7 @@ struct cx88_core {
 
 	/* config info -- dvb */
 #if defined(CONFIG_VIDEO_CX88_DVB) || defined(CONFIG_VIDEO_CX88_DVB_MODULE)
-	int 			   (*prev_set_voltage)(struct dvb_frontend *fe, fe_sec_voltage_t voltage);
-	void			   (*gate_ctrl)(struct cx88_core  *core, int open);
+	int 			   (*prev_set_voltage)(struct dvb_frontend* fe, fe_sec_voltage_t voltage);
 #endif
 
 	/* state info */

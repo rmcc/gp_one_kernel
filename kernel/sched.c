@@ -3728,13 +3728,8 @@ redo:
 		}
 
 		double_unlock_balance(this_rq, busiest);
-		/*
-		 * Should not call ttwu while holding a rq->lock
-		 */
-		spin_unlock(&this_rq->lock);
 		if (active_balance)
 			wake_up_process(busiest->migration_thread);
-		spin_lock(&this_rq->lock);
 
 	} else
 		sd->nr_balance_failed = 0;
@@ -6962,7 +6957,7 @@ static void rq_attach_root(struct rq *rq, struct root_domain *rd)
 	spin_unlock_irqrestore(&rq->lock, flags);
 }
 
-static int __init_refok init_rootdomain(struct root_domain *rd, bool bootmem)
+static int init_rootdomain(struct root_domain *rd, bool bootmem)
 {
 	memset(rd, 0, sizeof(*rd));
 
@@ -6975,7 +6970,7 @@ static int __init_refok init_rootdomain(struct root_domain *rd, bool bootmem)
 	}
 
 	if (!alloc_cpumask_var(&rd->span, GFP_KERNEL))
-		goto out;
+		goto free_rd;
 	if (!alloc_cpumask_var(&rd->online, GFP_KERNEL))
 		goto free_span;
 	if (!alloc_cpumask_var(&rd->rto_mask, GFP_KERNEL))
@@ -6991,7 +6986,8 @@ free_online:
 	free_cpumask_var(rd->online);
 free_span:
 	free_cpumask_var(rd->span);
-out:
+free_rd:
+	kfree(rd);
 	return -ENOMEM;
 }
 
@@ -7991,7 +7987,7 @@ match2:
 }
 
 #if defined(CONFIG_SCHED_MC) || defined(CONFIG_SCHED_SMT)
-static void arch_reinit_sched_domains(void)
+int arch_reinit_sched_domains(void)
 {
 	get_online_cpus();
 
@@ -8000,10 +7996,13 @@ static void arch_reinit_sched_domains(void)
 
 	rebuild_sched_domains();
 	put_online_cpus();
+
+	return 0;
 }
 
 static ssize_t sched_power_savings_store(const char *buf, size_t count, int smt)
 {
+	int ret;
 	unsigned int level = 0;
 
 	if (sscanf(buf, "%u", &level) != 1)
@@ -8024,9 +8023,9 @@ static ssize_t sched_power_savings_store(const char *buf, size_t count, int smt)
 	else
 		sched_mc_power_savings = level;
 
-	arch_reinit_sched_domains();
+	ret = arch_reinit_sched_domains();
 
-	return count;
+	return ret ? ret : count;
 }
 
 #ifdef CONFIG_SCHED_MC
@@ -8061,7 +8060,7 @@ static SYSDEV_CLASS_ATTR(sched_smt_power_savings, 0644,
 		   sched_smt_power_savings_store);
 #endif
 
-int __init sched_create_sysfs_power_savings_entries(struct sysdev_class *cls)
+int sched_create_sysfs_power_savings_entries(struct sysdev_class *cls)
 {
 	int err = 0;
 

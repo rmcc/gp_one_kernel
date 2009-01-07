@@ -232,13 +232,13 @@ static void flush_arg_page(struct linux_binprm *bprm, unsigned long pos,
 
 static int __bprm_mm_init(struct linux_binprm *bprm)
 {
-	int err;
+	int err = -ENOMEM;
 	struct vm_area_struct *vma = NULL;
 	struct mm_struct *mm = bprm->mm;
 
 	bprm->vma = vma = kmem_cache_zalloc(vm_area_cachep, GFP_KERNEL);
 	if (!vma)
-		return -ENOMEM;
+		goto err;
 
 	down_write(&mm->mmap_sem);
 	vma->vm_mm = mm;
@@ -251,20 +251,28 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	 */
 	vma->vm_end = STACK_TOP_MAX;
 	vma->vm_start = vma->vm_end - PAGE_SIZE;
+
 	vma->vm_flags = VM_STACK_FLAGS;
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 	err = insert_vm_struct(mm, vma);
-	if (err)
+	if (err) {
+		up_write(&mm->mmap_sem);
 		goto err;
+	}
 
 	mm->stack_vm = mm->total_vm = 1;
 	up_write(&mm->mmap_sem);
+
 	bprm->p = vma->vm_end - sizeof(void *);
+
 	return 0;
+
 err:
-	up_write(&mm->mmap_sem);
-	bprm->vma = NULL;
-	kmem_cache_free(vm_area_cachep, vma);
+	if (vma) {
+		bprm->vma = NULL;
+		kmem_cache_free(vm_area_cachep, vma);
+	}
+
 	return err;
 }
 
@@ -1686,7 +1694,7 @@ int get_dumpable(struct mm_struct *mm)
 	return (ret >= 2) ? 2 : ret;
 }
 
-void do_coredump(long signr, int exit_code, struct pt_regs *regs)
+int do_coredump(long signr, int exit_code, struct pt_regs * regs)
 {
 	struct core_state core_state;
 	char corename[CORENAME_MAX_SIZE + 1];
@@ -1770,11 +1778,6 @@ void do_coredump(long signr, int exit_code, struct pt_regs *regs)
 
  	if (ispipe) {
 		helper_argv = argv_split(GFP_KERNEL, corename+1, &helper_argc);
-		if (!helper_argv) {
-			printk(KERN_WARNING "%s failed to allocate memory\n",
-			       __func__);
-			goto fail_unlock;
-		}
 		/* Terminate the string before the first option */
 		delimit = strchr(corename, ' ');
 		if (delimit)
@@ -1842,5 +1845,5 @@ fail_unlock:
 	put_cred(cred);
 	coredump_finish(mm);
 fail:
-	return;
+	return retval;
 }

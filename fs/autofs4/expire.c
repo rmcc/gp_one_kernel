@@ -63,7 +63,7 @@ static int autofs4_mount_busy(struct vfsmount *mnt, struct dentry *dentry)
 		struct autofs_sb_info *sbi = autofs4_sbi(dentry->d_sb);
 
 		/* This is an autofs submount, we can't expire it */
-		if (autofs_type_indirect(sbi->type))
+		if (sbi->type == AUTOFS_TYPE_INDIRECT)
 			goto done;
 
 		/*
@@ -490,7 +490,7 @@ int autofs4_expire_multi(struct super_block *sb, struct vfsmount *mnt,
 	if (arg && get_user(do_now, arg))
 		return -EFAULT;
 
-	if (autofs_type_trigger(sbi->type))
+	if (sbi->type & AUTOFS_TYPE_TRIGGER)
 		dentry = autofs4_expire_direct(sb, mnt, sbi, do_now);
 	else
 		dentry = autofs4_expire_indirect(sb, mnt, sbi, do_now);

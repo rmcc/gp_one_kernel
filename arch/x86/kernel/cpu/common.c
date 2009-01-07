@@ -40,26 +40,6 @@
 
 #include "cpu.h"
 
-#ifdef CONFIG_X86_64
-
-/* all of these masks are initialized in setup_cpu_local_masks() */
-cpumask_var_t cpu_callin_mask;
-cpumask_var_t cpu_callout_mask;
-cpumask_var_t cpu_initialized_mask;
-
-/* representing cpus for which sibling maps can be computed */
-cpumask_var_t cpu_sibling_setup_mask;
-
-#else /* CONFIG_X86_32 */
-
-cpumask_t cpu_callin_map;
-cpumask_t cpu_callout_map;
-cpumask_t cpu_initialized;
-cpumask_t cpu_sibling_setup_map;
-
-#endif /* CONFIG_X86_32 */
-
-
 static struct cpu_dev *this_cpu __cpuinitdata;
 
 #ifdef CONFIG_X86_64
@@ -876,6 +856,8 @@ static __init int setup_disablecpuid(char *arg)
 }
 __setup("clearcpuid=", setup_disablecpuid);
 
+cpumask_t cpu_initialized __cpuinitdata = CPU_MASK_NONE;
+
 #ifdef CONFIG_X86_64
 struct x8664_pda **_cpu_pda __read_mostly;
 EXPORT_SYMBOL(_cpu_pda);
@@ -994,7 +976,7 @@ void __cpuinit cpu_init(void)
 
 	me = current;
 
-	if (cpumask_test_and_set_cpu(cpu, cpu_initialized_mask))
+	if (cpu_test_and_set(cpu, cpu_initialized))
 		panic("CPU#%d already initialized!\n", cpu);
 
 	printk(KERN_INFO "Initializing CPU#%d\n", cpu);
@@ -1103,7 +1085,7 @@ void __cpuinit cpu_init(void)
 	struct tss_struct *t = &per_cpu(init_tss, cpu);
 	struct thread_struct *thread = &curr->thread;
 
-	if (cpumask_test_and_set_cpu(cpu, cpu_initialized_mask)) {
+	if (cpu_test_and_set(cpu, cpu_initialized)) {
 		printk(KERN_WARNING "CPU#%d already initialized!\n", cpu);
 		for (;;) local_irq_enable();
 	}

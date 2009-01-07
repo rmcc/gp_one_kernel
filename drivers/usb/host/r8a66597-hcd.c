@@ -2275,6 +2275,7 @@ static int __init_or_module r8a66597_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#define resource_len(r) (((r)->end - (r)->start) + 1)
 static int __init r8a66597_probe(struct platform_device *pdev)
 {
 #if defined(CONFIG_SUPERH_ON_CHIP_R8A66597) && defined(CONFIG_HAVE_CLK)
@@ -2295,10 +2296,11 @@ static int __init r8a66597_probe(struct platform_device *pdev)
 		goto clean_up;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+					   (char *)hcd_name);
 	if (!res) {
 		ret = -ENODEV;
-		dev_err(&pdev->dev, "platform_get_resource error.\n");
+		dev_err(&pdev->dev, "platform_get_resource_byname error.\n");
 		goto clean_up;
 	}
 
@@ -2313,7 +2315,7 @@ static int __init r8a66597_probe(struct platform_device *pdev)
 	irq = ires->start;
 	irq_trigger = ires->flags & IRQF_TRIGGER_MASK;
 
-	reg = ioremap(res->start, resource_size(res));
+	reg = ioremap(res->start, resource_len(res));
 	if (reg == NULL) {
 		ret = -ENOMEM;
 		dev_err(&pdev->dev, "ioremap error.\n");

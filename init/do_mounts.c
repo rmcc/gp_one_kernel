@@ -13,7 +13,6 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/initrd.h>
-#include <linux/async.h>
 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_fs_sb.h>
@@ -221,10 +220,10 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 
 	sys_chdir("/root");
 	ROOT_DEV = current->fs->pwd.mnt->mnt_sb->s_dev;
-	printk("VFS: Mounted root (%s filesystem)%s on device %u:%u.\n",
+	printk("VFS: Mounted root (%s filesystem)%s.\n",
 	       current->fs->pwd.mnt->mnt_sb->s_type->name,
 	       current->fs->pwd.mnt->mnt_sb->s_flags & MS_RDONLY ?
-	       " readonly" : "", MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
+	       " readonly" : "");
 	return 0;
 }
 
@@ -373,7 +372,6 @@ void __init prepare_namespace(void)
 	/* wait for the known devices to complete their probing */
 	while (driver_probe_done() != 0)
 		msleep(100);
-	async_synchronize_full();
 
 	md_run_setup();
 

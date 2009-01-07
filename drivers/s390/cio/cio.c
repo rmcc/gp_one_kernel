@@ -379,7 +379,7 @@ int cio_commit_config(struct subchannel *sch)
 		if (ccode < 0) /* -EIO if msch gets a program check. */
 			return ccode;
 		switch (ccode) {
-		case 0: /* successful */
+		case 0: /* successfull */
 			if (stsch(sch->schid, &schib) ||
 			    !css_sch_is_valid(&schib))
 				return -ENODEV;

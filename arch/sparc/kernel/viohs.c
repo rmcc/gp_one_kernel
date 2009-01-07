@@ -337,10 +337,8 @@ static int process_ver_nack(struct vio_driver_state *vio,
 	viodbg(HS, "GOT VERSION NACK maj[%u] min[%u] devclass[%u]\n",
 	       pkt->major, pkt->minor, pkt->dev_class);
 
-	if (pkt->major == 0 && pkt->minor == 0)
-		return handshake_failure(vio);
-	nver = find_by_major(vio, pkt->major);
-	if (!nver)
+	if ((pkt->major == 0 && pkt->minor == 0) ||
+	    !(nver = find_by_major(vio, pkt->major)))
 		return handshake_failure(vio);
 
 	if (send_version(vio, nver->major, nver->minor) < 0)

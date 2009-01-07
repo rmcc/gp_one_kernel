@@ -1,8 +1,7 @@
 #!/usr/bin/perl -w
 # (c) 2001, Dave Jones. <davej@redhat.com> (the file handling bit)
 # (c) 2005, Joel Schopp <jschopp@austin.ibm.com> (the ugly bit)
-# (c) 2007,2008, Andy Whitcroft <apw@uk.ibm.com> (new conditions, test suite)
-# (c) 2008, Andy Whitcroft <apw@canonical.com>
+# (c) 2007, Andy Whitcroft <apw@uk.ibm.com> (new conditions, test suite, etc)
 # Licensed under the terms of the GNU GPL License version 2
 
 use strict;
@@ -10,7 +9,7 @@ use strict;
 my $P = $0;
 $P =~ s@.*/@@g;
 
-my $V = '0.26';
+my $V = '0.24';
 
 use Getopt::Long qw(:config no_auto_abbrev);
 
@@ -69,9 +68,7 @@ my $dbg_possible = 0;
 my $dbg_type = 0;
 my $dbg_attr = 0;
 for my $key (keys %debug) {
-	## no critic
-	eval "\${dbg_$key} = '$debug{$key}';";
-	die "$@" if ($@);
+	eval "\${dbg_$key} = '$debug{$key}';"
 }
 
 if ($terse) {
@@ -119,8 +116,7 @@ our $Attribute	= qr{
 			__(?:mem|cpu|dev|)(?:initdata|init)|
 			____cacheline_aligned|
 			____cacheline_aligned_in_smp|
-			____cacheline_internodealigned_in_smp|
-			__weak
+			____cacheline_internodealigned_in_smp
 		  }x;
 our $Modifier;
 our $Inline	= qr{inline|__always_inline|noinline};
@@ -129,7 +125,6 @@ our $Lval	= qr{$Ident(?:$Member)*};
 
 our $Constant	= qr{(?:[0-9]+|0x[0-9a-fA-F]+)[UL]*};
 our $Assignment	= qr{(?:\*\=|/=|%=|\+=|-=|<<=|>>=|&=|\^=|\|=|=)};
-our $Compare    = qr{<=|>=|==|!=|<|>};
 our $Operators	= qr{
 			<=|>=|==|!=|
 			=>|->|<<|>>|<|>|!|~|
@@ -195,7 +190,7 @@ sub build_types {
 		  }x;
 	$Type	= qr{
 			$NonptrType
-			(?:[\s\*]+\s*const|[\s\*]+|(?:\s*\[\s*\])+)?
+			(?:\s*\*+\s*const|\s*\*+|(?:\s*\[\s*\])+)?
 			(?:\s+$Inline|\s+$Modifier)*
 		  }x;
 	$Declare	= qr{(?:$Storage\s+)?$Type};
@@ -208,9 +203,9 @@ my @dep_includes = ();
 my @dep_functions = ();
 my $removal = "Documentation/feature-removal-schedule.txt";
 if ($tree && -f "$root/$removal") {
-	open(my $REMOVE, '<', "$root/$removal") ||
+	open(REMOVE, "<$root/$removal") ||
 				die "$P: $removal: open failed - $!\n";
-	while (<$REMOVE>) {
+	while (<REMOVE>) {
 		if (/^Check:\s+(.*\S)/) {
 			for my $entry (split(/[, ]+/, $1)) {
 				if ($entry =~ m@include/(.*)@) {
@@ -222,21 +217,17 @@ if ($tree && -f "$root/$removal") {
 			}
 		}
 	}
-	close($REMOVE);
 }
 
 my @rawlines = ();
 my @lines = ();
 my $vname;
 for my $filename (@ARGV) {
-	my $FILE;
 	if ($file) {
-		open($FILE, '-|', "diff -u /dev/null $filename") ||
+		open(FILE, "diff -u /dev/null $filename|") ||
 			die "$P: $filename: diff failed - $!\n";
-	} elsif ($filename eq '-') {
-		open($FILE, '<&STDIN');
 	} else {
-		open($FILE, '<', "$filename") ||
+		open(FILE, "<$filename") ||
 			die "$P: $filename: open failed - $!\n";
 	}
 	if ($filename eq '-') {
@@ -244,11 +235,11 @@ for my $filename (@ARGV) {
 	} else {
 		$vname = $filename;
 	}
-	while (<$FILE>) {
+	while (<FILE>) {
 		chomp;
 		push(@rawlines, $_);
 	}
-	close($FILE);
+	close(FILE);
 	if (!process($filename)) {
 		$exit = 1;
 	}
@@ -375,7 +366,7 @@ sub sanitise_line {
 			}
 		}
 
-		#print "c<$c> SQ<$sanitise_quote>\n";
+		#print "SQ:$sanitise_quote\n";
 		if ($off != 0 && $sanitise_quote eq '*/' && $c ne "\t") {
 			substr($res, $off, 1, $;);
 		} elsif ($off != 0 && $sanitise_quote && $c ne "\t") {
@@ -411,7 +402,6 @@ sub ctx_statement_block {
 
 	my $type = '';
 	my $level = 0;
-	my @stack = ([$type, $level]);
 	my $p;
 	my $c;
 	my $len = 0;
@@ -443,16 +433,6 @@ sub ctx_statement_block {
 		$remainder = substr($blk, $off);
 
 		#warn "CSB: c<$c> type<$type> level<$level> remainder<$remainder> coff_set<$coff_set>\n";
-
-		# Handle nested #if/#else.
-		if ($remainder =~ /^#\s*(?:ifndef|ifdef|if)\s/) {
-			push(@stack, [ $type, $level ]);
-		} elsif ($remainder =~ /^#\s*(?:else|elif)\b/) {
-			($type, $level) = @{$stack[$#stack - 1]};
-		} elsif ($remainder =~ /^#\s*endif\b/) {
-			($type, $level) = @{pop(@stack)};
-		}
-
 		# Statement ends at the ';' or a close '}' at the
 		# outermost level.
 		if ($level == 0 && $c eq ';') {
@@ -599,22 +579,11 @@ sub ctx_block_get {
 	my @res = ();
 
 	my $level = 0;
-	my @stack = ($level);
 	for ($line = $start; $remain > 0; $line++) {
 		next if ($rawlines[$line] =~ /^-/);
 		$remain--;
 
 		$blk .= $rawlines[$line];
-
-		# Handle nested #if/#else.
-		if ($rawlines[$line] =~ /^.\s*#\s*(?:ifndef|ifdef|if)\s/) {
-			push(@stack, $level);
-		} elsif ($rawlines[$line] =~ /^.\s*#\s*(?:else|elif)\b/) {
-			$level = $stack[$#stack - 1];
-		} elsif ($rawlines[$line] =~ /^.\s*#\s*endif\b/) {
-			$level = pop(@stack);
-		}
-
 		foreach my $c (split(//, $rawlines[$line])) {
 			##print "C<$c>L<$level><$open$close>O<$off>\n";
 			if ($off > 0) {
@@ -874,11 +843,11 @@ sub annotate_values {
 			$type = 'V';
 			$av_pending = 'V';
 
-		} elsif ($cur =~ /^($Ident\s*):(?:\s*\d+\s*(,|=|;))?/) {
-			if (defined $2 && $type eq 'C' || $type eq 'T') {
-				$av_pend_colon = 'B';
-			} elsif ($type eq 'E') {
+		} elsif ($cur =~ /^($Ident\s*):/) {
+			if ($type eq 'E') {
 				$av_pend_colon = 'L';
+			} elsif ($type eq 'T') {
+				$av_pend_colon = 'B';
 			}
 			print "IDENT_COLON($1,$type>$av_pend_colon)\n" if ($dbg_values > 1);
 			$type = 'V';
@@ -896,10 +865,6 @@ sub annotate_values {
 			$type = 'E';
 			$av_pend_colon = 'O';
 
-		} elsif ($cur =~/^(,)/) {
-			print "COMMA($1)\n" if ($dbg_values > 1);
-			$type = 'C';
-
 		} elsif ($cur =~ /^(\?)/o) {
 			print "QUESTION($1)\n" if ($dbg_values > 1);
 			$type = 'N';
@@ -915,7 +880,7 @@ sub annotate_values {
 			}
 			$av_pend_colon = 'O';
 
-		} elsif ($cur =~ /^(\[)/o) {
+		} elsif ($cur =~ /^(;|\[)/o) {
 			print "CLOSE($1)\n" if ($dbg_values > 1);
 			$type = 'N';
 
@@ -1086,7 +1051,6 @@ sub process {
 	my $in_comment = 0;
 	my $comment_edge = 0;
 	my $first_line = 0;
-	my $p1_prefix = '';
 
 	my $prev_values = 'E';
 
@@ -1133,12 +1097,9 @@ sub process {
 					 $rawlines[$ln - 1] =~ /^-/);
 				$cnt--;
 				#print "RAW<$rawlines[$ln - 1]>\n";
-				last if (!defined $rawlines[$ln - 1]);
-				if ($rawlines[$ln - 1] =~ m@(/\*|\*/)@ &&
-				    $rawlines[$ln - 1] !~ m@"[^"]*(?:/\*|\*/)[^"]*"@) {
-					($edge) = $1;
-					last;
-				}
+				($edge) = (defined $rawlines[$ln - 1] &&
+					$rawlines[$ln - 1] =~ m@(/\*|\*/)@);
+				last if (defined $edge);
 			}
 			if (defined $edge && $edge eq '*/') {
 				$in_comment = 1;
@@ -1148,7 +1109,7 @@ sub process {
 			# is the start of a diff block and this line starts
 			# ' *' then it is very likely a comment.
 			if (!defined $edge &&
-			    $rawlines[$linenr] =~ m@^.\s*(?:\*\*+| \*)(?:\s|$)@)
+			    $rawlines[$linenr] =~ m@^.\s* \*(?:\s|$)@)
 			{
 				$in_comment = 1;
 			}
@@ -1235,12 +1196,7 @@ sub process {
 		# extract the filename as it passes
 		if ($line=~/^\+\+\+\s+(\S+)/) {
 			$realfile = $1;
-			$realfile =~ s@^([^/]*)/@@;
-
-			$p1_prefix = $1;
-			if ($tree && $p1_prefix ne '' && -e "$root/$p1_prefix") {
-				WARN("patch prefix '$p1_prefix' exists, appears to be a -p0 patch\n");
-			}
+			$realfile =~ s@^[^/]*/@@;
 
 			if ($realfile =~ m@^include/asm/@) {
 				ERROR("do not modify files in include/asm, change architecture specific files in include/asm-<architecture>\n" . "$here$rawline\n");
@@ -1380,7 +1336,7 @@ sub process {
 			}
 
 			# any (foo ... *) is a pointer cast, and foo is a type
-			while ($s =~ /\(($Ident)(?:\s+$Sparse)*[\s\*]+\s*\)/sg) {
+			while ($s =~ /\(($Ident)(?:\s+$Sparse)*\s*\*+\s*\)/sg) {
 				possible($1, "C:" . $s);
 			}
 
@@ -1638,7 +1594,7 @@ sub process {
 				$herecurr);
 		}
 # check for static initialisers.
-		if ($line =~ /\bstatic\s.*=\s*(0|NULL|false)\s*;/) {
+		if ($line =~ /\s*static\s.*=\s*(0|NULL|false)\s*;/) {
 			ERROR("do not initialise statics to 0 or NULL\n" .
 				$herecurr);
 		}
@@ -1646,7 +1602,7 @@ sub process {
 # check for new typedefs, only function parameters and sparse annotations
 # make sense.
 		if ($line =~ /\btypedef\s/ &&
-		    $line !~ /\btypedef\s+$Type\s*\(\s*\*?$Ident\s*\)\s*\(/ &&
+		    $line !~ /\btypedef\s+$Type\s+\(\s*\*?$Ident\s*\)\s*\(/ &&
 		    $line !~ /\btypedef\s+$Type\s+$Ident\s*\(/ &&
 		    $line !~ /\b$typeTypedefs\b/ &&
 		    $line !~ /\b__bitwise(?:__|)\b/) {
@@ -1654,39 +1610,21 @@ sub process {
 		}
 
 # * goes on variable not on type
-		# (char*[ const])
-		if ($line =~ m{\($NonptrType(\s*\*[\s\*]*(?:$Modifier\s*)*)\)}) {
-			my ($from, $to) = ($1, $1);
+		if ($line =~ m{\($NonptrType(\*+)(?:\s+const)?\)}) {
+			ERROR("\"(foo$1)\" should be \"(foo $1)\"\n" .
+				$herecurr);
 
-			# Should start with a space.
-			$to =~ s/^(\S)/ $1/;
-			# Should not end with a space.
-			$to =~ s/\s+$//;
-			# '*'s should not have spaces between.
-			while ($to =~ s/(.)\s\*/$1\*/) {
-			}
+		} elsif ($line =~ m{\($NonptrType\s+(\*+)(?!\s+const)\s+\)}) {
+			ERROR("\"(foo $1 )\" should be \"(foo $1)\"\n" .
+				$herecurr);
 
-			#print "from<$from> to<$to>\n";
-			if ($from ne $to) {
-				ERROR("\"(foo$from)\" should be \"(foo$to)\"\n" .  $herecurr);
-			}
-		} elsif ($line =~ m{\b$NonptrType(\s*\*[\s\*]*(?:$Modifier\s*)?)($Ident)}) {
-			my ($from, $to, $ident) = ($1, $1, $2);
+		} elsif ($line =~ m{\b$NonptrType(\*+)(?:\s+(?:$Attribute|$Sparse))?\s+[A-Za-z\d_]+}) {
+			ERROR("\"foo$1 bar\" should be \"foo $1bar\"\n" .
+				$herecurr);
 
-			# Should start with a space.
-			$to =~ s/^(\S)/ $1/;
-			# Should not end with a space.
-			$to =~ s/\s+$//;
-			# '*'s should not have spaces between.
-			while ($to =~ s/(.)\s\*/$1\*/) {
-			}
-			# Modifiers should have spaces.
-			$to =~ s/(\b$Modifier$)/$1 /;
-
-			#print "from<$from> to<$to>\n";
-			if ($from ne $to) {
-				ERROR("\"foo${from}bar\" should be \"foo${to}bar\"\n" .  $herecurr);
-			}
+		} elsif ($line =~ m{\b$NonptrType\s+(\*+)(?!\s+(?:$Attribute|$Sparse))\s+[A-Za-z\d_]+}) {
+			ERROR("\"foo $1 bar\" should be \"foo $1bar\"\n" .
+				$herecurr);
 		}
 
 # # no BUG() or BUG_ON()
@@ -1821,7 +1759,7 @@ sub process {
 					$c = 'C' if ($elements[$n + 2] =~ /^$;/);
 					$c = 'B' if ($elements[$n + 2] =~ /^(\)|\]|;)/);
 					$c = 'O' if ($elements[$n + 2] eq '');
-					$c = 'E' if ($elements[$n + 2] =~ /^\s*\\$/);
+					$c = 'E' if ($elements[$n + 2] =~ /\s*\\$/);
 				} else {
 					$c = 'E';
 				}
@@ -2012,9 +1950,9 @@ sub process {
 			my $spacing = $1;
 			my $value = $2;
 
-			# Flatten any parentheses
+			# Flatten any parentheses and braces
 			$value =~ s/\)\(/\) \(/g;
-			while ($value !~ /(?:$Ident|-?$Constant)\s*$Compare\s*(?:$Ident|-?$Constant)/ && $value =~ s/\([^\(\)]*\)/1/) {
+			while ($value =~ s/\([^\(\)]*\)/1/) {
 			}
 
 			if ($value =~ /^(?:$Ident|-?$Constant)$/) {
@@ -2054,7 +1992,7 @@ sub process {
 		    $line =~ /\b(?:if|while|for)\s*\(/ && $line !~ /^.\s*#/) {
 			my ($s, $c) = ($stat, $cond);
 
-			if ($c =~ /\bif\s*\(.*[^<>!=]=[^=].*/s) {
+			if ($c =~ /\bif\s*\(.*[^<>!=]=[^=].*/) {
 				ERROR("do not use assignment in if condition\n" . $herecurr);
 			}
 
@@ -2229,10 +2167,9 @@ sub process {
 				MODULE_PARAM_DESC|
 				DECLARE_PER_CPU|
 				DEFINE_PER_CPU|
-				__typeof__\(|
-				\.$Ident\s*=\s*
+				__typeof__\(
 			}x;
-			#print "REST<$rest> dstat<$dstat>\n";
+			#print "REST<$rest>\n";
 			if ($rest ne '') {
 				if ($rest !~ /while\s*\(/ &&
 				    $dstat !~ /$exceptions/)
@@ -2250,15 +2187,6 @@ sub process {
 					ERROR("Macros with complex values should be enclosed in parenthesis\n" . "$here\n$ctx\n");
 				}
 			}
-		}
-
-# make sure symbols are always wrapped with VMLINUX_SYMBOL() ...
-# all assignments may have only one of the following with an assignment:
-#	.
-#	ALIGN(...)
-#	VMLINUX_SYMBOL(...)
-		if ($realfile eq 'vmlinux.lds.h' && $line =~ /(?:(?:^|\s)$Ident\s*=|=\s*$Ident(?:\s|$))/) {
-			WARN("vmlinux.lds.h needs VMLINUX_SYMBOL() around C-visible symbols\n" . $herecurr);
 		}
 
 # check for redundant bracing round if etc
@@ -2515,11 +2443,6 @@ sub process {
 		if ($line =~ /^.\s*__initcall\s*\(/) {
 			WARN("please use device_initcall() instead of __initcall()\n" . $herecurr);
 		}
-# check for struct file_operations, ensure they are const.
-		if ($line =~ /\bstruct\s+file_operations\b/ &&
-		    $line !~ /\bconst\b/) {
-			WARN("struct file_operations should normally be const\n" . $herecurr);
-		}
 
 # use of NR_CPUS is usually wrong
 # ignore definitions of NR_CPUS and usage to define arrays as likely right
@@ -2541,15 +2464,6 @@ sub process {
 			if ($string =~ /(?<!%)%L[udi]/) {
 				WARN("\%Ld/%Lu are not-standard C, use %lld/%llu\n" . $herecurr);
 				last;
-			}
-		}
-
-# whine mightly about in_atomic
-		if ($line =~ /\bin_atomic\s*\(/) {
-			if ($realfile =~ m@^drivers/@) {
-				ERROR("do not use in_atomic in drivers\n" . $herecurr);
-			} else {
-				WARN("use of in_atomic() is incorrect outside core kernel code\n" . $herecurr);
 			}
 		}
 	}

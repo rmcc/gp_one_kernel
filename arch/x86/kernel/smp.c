@@ -128,23 +128,16 @@ void native_send_call_func_single_ipi(int cpu)
 
 void native_send_call_func_ipi(const struct cpumask *mask)
 {
-	cpumask_var_t allbutself;
+	cpumask_t allbutself;
 
-	if (!alloc_cpumask_var(&allbutself, GFP_ATOMIC)) {
-		send_IPI_mask(mask, CALL_FUNCTION_VECTOR);
-		return;
-	}
+	allbutself = cpu_online_map;
+	cpu_clear(smp_processor_id(), allbutself);
 
-	cpumask_copy(allbutself, cpu_online_mask);
-	cpumask_clear_cpu(smp_processor_id(), allbutself);
-
-	if (cpumask_equal(mask, allbutself) &&
-	    cpumask_equal(cpu_online_mask, cpu_callout_mask))
+	if (cpus_equal(*mask, allbutself) &&
+	    cpus_equal(cpu_online_map, cpu_callout_map))
 		send_IPI_allbutself(CALL_FUNCTION_VECTOR);
 	else
 		send_IPI_mask(mask, CALL_FUNCTION_VECTOR);
-
-	free_cpumask_var(allbutself);
 }
 
 /*

@@ -17,56 +17,113 @@
 //============================================================================
 #include "os_common.h"
 
-#include "mds_f.h"
+void MLMEResetTxRx(PWB32_ADAPTER Adapter)
+{
+	s32     i;
+
+	// Reset the interface between MDS and MLME
+	for (i = 0; i < MAX_NUM_TX_MMPDU; i++)
+		Adapter->sMlmeFrame.TxMMPDUInUse[i] = FALSE;
+	for (i = 0; i < MAX_NUM_RX_MMPDU; i++)
+		Adapter->sMlmeFrame.SaveRxBufSlotInUse[i] = FALSE;
+
+	Adapter->sMlmeFrame.wNumRxMMPDUInMLME   = 0;
+	Adapter->sMlmeFrame.wNumRxMMPDUDiscarded = 0;
+	Adapter->sMlmeFrame.wNumRxMMPDU          = 0;
+	Adapter->sMlmeFrame.wNumTxMMPDUDiscarded = 0;
+	Adapter->sMlmeFrame.wNumTxMMPDU          = 0;
+	Adapter->sLocalPara.boCCAbusy    = FALSE;
+	Adapter->sLocalPara.iPowerSaveMode     = PWR_ACTIVE;     // Power active
+}
 
 //=============================================================================
-u8 MLMESendFrame(struct wbsoft_priv * adapter, u8 *pMMPDU, u16 len, u8 DataType)
+//	Function:
+//    MLMEGetMMPDUBuffer()
+//
+//	Description:
+//    Return the pointer to an available data buffer with
+//    the size MAX_MMPDU_SIZE for a MMPDU.
+//
+//  Arguments:
+//    Adapter   - pointer to the miniport adapter context.
+//
+//	Return value:
+//    NULL     : No available data buffer available
+//    Otherwise: Pointer to the data buffer
+//=============================================================================
+
+/* FIXME: Should this just be replaced with kmalloc() and kfree()? */
+u8 *MLMEGetMMPDUBuffer(PWB32_ADAPTER Adapter)
+{
+	s32 i;
+	u8 *returnVal;
+
+	for (i = 0; i< MAX_NUM_TX_MMPDU; i++) {
+		if (Adapter->sMlmeFrame.TxMMPDUInUse[i] == FALSE)
+			break;
+	}
+	if (i >= MAX_NUM_TX_MMPDU) return NULL;
+
+	returnVal = (u8 *)&(Adapter->sMlmeFrame.TxMMPDU[i]);
+	Adapter->sMlmeFrame.TxMMPDUInUse[i] = TRUE;
+
+	return returnVal;
+}
+
+//=============================================================================
+u8 MLMESendFrame(PWB32_ADAPTER Adapter, u8 *pMMPDU, u16 len, u8 DataType)
 /*	DataType : FRAME_TYPE_802_11_MANAGEMENT, FRAME_TYPE_802_11_MANAGEMENT_CHALLENGE,
 				FRAME_TYPE_802_11_DATA */
 {
-	if (adapter->sMlmeFrame.IsInUsed != PACKET_FREE_TO_USE) {
-		adapter->sMlmeFrame.wNumTxMMPDUDiscarded++;
-		return false;
+	if (Adapter->sMlmeFrame.IsInUsed != PACKET_FREE_TO_USE) {
+		Adapter->sMlmeFrame.wNumTxMMPDUDiscarded++;
+		return FALSE;
 	}
-	adapter->sMlmeFrame.IsInUsed = PACKET_COME_FROM_MLME;
+	Adapter->sMlmeFrame.IsInUsed = PACKET_COME_FROM_MLME;
 
 	// Keep information for sending
-	adapter->sMlmeFrame.pMMPDU = pMMPDU;
-	adapter->sMlmeFrame.DataType = DataType;
+	Adapter->sMlmeFrame.pMMPDU = pMMPDU;
+	Adapter->sMlmeFrame.DataType = DataType;
 	// len must be the last setting due to QUERY_SIZE_SECOND of Mds
-	adapter->sMlmeFrame.len = len;
-	adapter->sMlmeFrame.wNumTxMMPDU++;
+	Adapter->sMlmeFrame.len = len;
+	Adapter->sMlmeFrame.wNumTxMMPDU++;
 
 	// H/W will enter power save by set the register. S/W don't send null frame
 	//with PWRMgt bit enbled to enter power save now.
 
 	// Transmit NDIS packet
-	Mds_Tx(adapter);
-	return true;
+	Mds_Tx(Adapter);
+	return TRUE;
 }
 
-void MLME_GetNextPacket(struct wbsoft_priv *adapter, PDESCRIPTOR desc)
+void
+MLME_GetNextPacket(PADAPTER Adapter, PDESCRIPTOR pDes)
 {
-	desc->InternalUsed = desc->buffer_start_index + desc->buffer_number;
-	desc->InternalUsed %= MAX_DESCRIPTOR_BUFFER_INDEX;
-	desc->buffer_address[desc->InternalUsed] = adapter->sMlmeFrame.pMMPDU;
-	desc->buffer_size[desc->InternalUsed] = adapter->sMlmeFrame.len;
-	desc->buffer_total_size += adapter->sMlmeFrame.len;
-	desc->buffer_number++;
-	desc->Type = adapter->sMlmeFrame.DataType;
+#define DESCRIPTOR_ADD_BUFFER( _D, _A, _S ) \
+{\
+	_D->InternalUsed = _D->buffer_start_index + _D->buffer_number; \
+	_D->InternalUsed %= MAX_DESCRIPTOR_BUFFER_INDEX; \
+	_D->buffer_address[ _D->InternalUsed ] = _A; \
+	_D->buffer_size[ _D->InternalUsed ] = _S; \
+	_D->buffer_total_size += _S; \
+	_D->buffer_number++;\
 }
 
-static void MLMEfreeMMPDUBuffer(struct wbsoft_priv *adapter, s8 *pData)
+	DESCRIPTOR_ADD_BUFFER( pDes, Adapter->sMlmeFrame.pMMPDU, Adapter->sMlmeFrame.len );
+	pDes->Type = Adapter->sMlmeFrame.DataType;
+}
+
+void MLMEfreeMMPDUBuffer(PWB32_ADAPTER Adapter, s8 *pData)
 {
 	int i;
 
 	// Reclaim the data buffer
 	for (i = 0; i < MAX_NUM_TX_MMPDU; i++) {
-		if (pData == (s8 *)&(adapter->sMlmeFrame.TxMMPDU[i]))
+		if (pData == (s8 *)&(Adapter->sMlmeFrame.TxMMPDU[i]))
 			break;
 	}
-	if (adapter->sMlmeFrame.TxMMPDUInUse[i])
-		adapter->sMlmeFrame.TxMMPDUInUse[i] = false;
+	if (Adapter->sMlmeFrame.TxMMPDUInUse[i])
+		Adapter->sMlmeFrame.TxMMPDUInUse[i] = FALSE;
 	else  {
 		// Something wrong
 		// PD43 Add debug code here???
@@ -74,19 +131,19 @@ static void MLMEfreeMMPDUBuffer(struct wbsoft_priv *adapter, s8 *pData)
 }
 
 void
-MLME_SendComplete(struct wbsoft_priv * adapter, u8 PacketID, unsigned char SendOK)
+MLME_SendComplete(PADAPTER Adapter, u8 PacketID, unsigned char SendOK)
 {
 	MLME_TXCALLBACK	TxCallback;
 
     // Reclaim the data buffer
-	adapter->sMlmeFrame.len = 0;
-	MLMEfreeMMPDUBuffer( adapter, adapter->sMlmeFrame.pMMPDU );
+	Adapter->sMlmeFrame.len = 0;
+	MLMEfreeMMPDUBuffer( Adapter, Adapter->sMlmeFrame.pMMPDU );
 
 
 	TxCallback.bResult = MLME_SUCCESS;
 
 	// Return resource
-	adapter->sMlmeFrame.IsInUsed = PACKET_FREE_TO_USE;
+	Adapter->sMlmeFrame.IsInUsed = PACKET_FREE_TO_USE;
 }
 
 

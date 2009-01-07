@@ -2,8 +2,15 @@
 # Makefile for the Linux ACPI interpreter
 #
 
-ccflags-y			:= -Os
-ccflags-$(CONFIG_ACPI_DEBUG)	+= -DACPI_DEBUG_OUTPUT
+export ACPI_CFLAGS
+
+ACPI_CFLAGS	:= -Os
+
+ifdef CONFIG_ACPI_DEBUG
+  ACPI_CFLAGS	+= -DACPI_DEBUG_OUTPUT
+endif
+
+EXTRA_CFLAGS	+= $(ACPI_CFLAGS)
 
 #
 # ACPI Boot-Time Table Parsing
@@ -15,13 +22,9 @@ obj-$(CONFIG_X86)		+= blacklist.o
 # ACPI Core Subsystem (Interpreter)
 #
 obj-y				+= osl.o utils.o reboot.o\
-					acpica/
-
-# sleep related files
-obj-y				+= wakeup.o
-obj-y				+= main.o
-obj-$(CONFIG_ACPI_SLEEP)	+= proc.o
-
+				   dispatcher/ events/ executer/ hardware/ \
+				   namespace/ parser/ resources/ tables/ \
+				   utilities/
 
 #
 # ACPI Bus and Device Drivers
@@ -32,6 +35,7 @@ ifdef CONFIG_CPU_FREQ
 processor-objs	+= processor_perflib.o
 endif
 
+obj-y				+= sleep/
 obj-y				+= bus.o glue.o
 obj-y				+= scan.o
 # Keep EC driver first. Initialization of others depend on it.
@@ -55,6 +59,9 @@ obj-y				+= power.o
 obj-$(CONFIG_ACPI_SYSTEM)	+= system.o event.o
 obj-$(CONFIG_ACPI_DEBUG)	+= debug.o
 obj-$(CONFIG_ACPI_NUMA)		+= numa.o
+obj-$(CONFIG_ACPI_WMI)		+= wmi.o
+obj-$(CONFIG_ACPI_ASUS)		+= asus_acpi.o
+obj-$(CONFIG_ACPI_TOSHIBA)	+= toshiba_acpi.o
 obj-$(CONFIG_ACPI_HOTPLUG_MEMORY)	+= acpi_memhotplug.o
 obj-$(CONFIG_ACPI_PROCFS_POWER)	+= cm_sbs.o
 obj-$(CONFIG_ACPI_SBS)		+= sbshc.o

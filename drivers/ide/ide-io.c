@@ -88,7 +88,7 @@ static int __ide_end_request(ide_drive_t *drive, struct request *rq,
 		ret = 0;
 
 	if (ret == 0 && dequeue)
-		drive->hwif->rq = NULL;
+		drive->hwif->hwgroup->rq = NULL;
 
 	return ret;
 }
@@ -107,7 +107,7 @@ static int __ide_end_request(ide_drive_t *drive, struct request *rq,
 int ide_end_request (ide_drive_t *drive, int uptodate, int nr_sectors)
 {
 	unsigned int nr_bytes = nr_sectors << 9;
-	struct request *rq = drive->hwif->rq;
+	struct request *rq = drive->hwif->hwgroup->rq;
 
 	if (!nr_bytes) {
 		if (blk_pc_request(rq))
@@ -160,8 +160,8 @@ EXPORT_SYMBOL_GPL(ide_end_dequeued_request);
  
 void ide_end_drive_cmd (ide_drive_t *drive, u8 stat, u8 err)
 {
-	ide_hwif_t *hwif = drive->hwif;
-	struct request *rq = hwif->rq;
+	ide_hwgroup_t *hwgroup = drive->hwif->hwgroup;
+	struct request *rq = hwgroup->rq;
 
 	if (rq->cmd_type == REQ_TYPE_ATA_TASKFILE) {
 		ide_task_t *task = (ide_task_t *)rq->special;
@@ -186,7 +186,7 @@ void ide_end_drive_cmd (ide_drive_t *drive, u8 stat, u8 err)
 		return;
 	}
 
-	hwif->rq = NULL;
+	hwgroup->rq = NULL;
 
 	rq->errors = err;
 
@@ -199,9 +199,9 @@ EXPORT_SYMBOL(ide_end_drive_cmd);
 static void ide_kill_rq(ide_drive_t *drive, struct request *rq)
 {
 	if (rq->rq_disk) {
-		struct ide_driver *drv;
+		ide_driver_t *drv;
 
-		drv = *(struct ide_driver **)rq->rq_disk->private_data;
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
 		drv->end_request(drive, 0, 0);
 	} else
 		ide_end_request(drive, 0, 0);
@@ -291,13 +291,15 @@ static ide_startstop_t ide_atapi_error(ide_drive_t *drive, struct request *rq, u
 	return ide_stopped;
 }
 
-static ide_startstop_t
+ide_startstop_t
 __ide_error(ide_drive_t *drive, struct request *rq, u8 stat, u8 err)
 {
 	if (drive->media == ide_disk)
 		return ide_ata_error(drive, rq, stat, err);
 	return ide_atapi_error(drive, rq, stat, err);
 }
+
+EXPORT_SYMBOL_GPL(__ide_error);
 
 /**
  *	ide_error	-	handle an error on the IDE
@@ -319,8 +321,7 @@ ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, u8 stat)
 
 	err = ide_dump_status(drive, msg, stat);
 
-	rq = drive->hwif->rq;
-	if (rq == NULL)
+	if ((rq = HWGROUP(drive)->rq) == NULL)
 		return ide_stopped;
 
 	/* retry only "normal" I/O: */
@@ -330,8 +331,15 @@ ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, u8 stat)
 		return ide_stopped;
 	}
 
-	return __ide_error(drive, rq, stat, err);
+	if (rq->rq_disk) {
+		ide_driver_t *drv;
+
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
+		return drv->error(drive, rq, stat, err);
+	} else
+		return __ide_error(drive, rq, stat, err);
 }
+
 EXPORT_SYMBOL_GPL(ide_error);
 
 static void ide_tf_set_specify_cmd(ide_drive_t *drive, struct ide_taskfile *tf)
@@ -454,7 +462,7 @@ EXPORT_SYMBOL_GPL(ide_init_sg_cmd);
 static ide_startstop_t execute_drive_cmd (ide_drive_t *drive,
 		struct request *rq)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	ide_task_t *task = rq->special;
 
 	if (task) {
@@ -578,7 +586,7 @@ static ide_startstop_t start_request (ide_drive_t *drive, struct request *rq)
 
 #ifdef DEBUG
 	printk("%s: start_request: current=0x%08lx\n",
-		drive->hwif->name, (unsigned long) rq);
+		HWIF(drive)->name, (unsigned long) rq);
 #endif
 
 	/* bail early if we've exceeded max_failures */
@@ -597,7 +605,7 @@ static ide_startstop_t start_request (ide_drive_t *drive, struct request *rq)
 		return startstop;
 	}
 	if (!drive->special.all) {
-		struct ide_driver *drv;
+		ide_driver_t *drv;
 
 		/*
 		 * We reset the drive so we need to issue a SETFEATURES.
@@ -630,7 +638,7 @@ static ide_startstop_t start_request (ide_drive_t *drive, struct request *rq)
 			 */
 			return ide_special_rq(drive, rq);
 
-		drv = *(struct ide_driver **)rq->rq_disk->private_data;
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
 
 		return drv->do_request(drive, rq, rq->sector);
 	}
@@ -646,7 +654,7 @@ kill_rq:
  *	@timeout: time to stall for (jiffies)
  *
  *	ide_stall_queue() can be used by a drive to give excess bandwidth back
- *	to the port by sleeping for timeout jiffies.
+ *	to the hwgroup by sleeping for timeout jiffies.
  */
  
 void ide_stall_queue (ide_drive_t *drive, unsigned long timeout)
@@ -658,53 +666,45 @@ void ide_stall_queue (ide_drive_t *drive, unsigned long timeout)
 }
 EXPORT_SYMBOL(ide_stall_queue);
 
-static inline int ide_lock_port(ide_hwif_t *hwif)
-{
-	if (hwif->busy)
-		return 1;
-
-	hwif->busy = 1;
-
-	return 0;
-}
-
-static inline void ide_unlock_port(ide_hwif_t *hwif)
-{
-	hwif->busy = 0;
-}
-
-static inline int ide_lock_host(struct ide_host *host, ide_hwif_t *hwif)
-{
-	int rc = 0;
-
-	if (host->host_flags & IDE_HFLAG_SERIALIZE) {
-		rc = test_and_set_bit_lock(IDE_HOST_BUSY, &host->host_busy);
-		if (rc == 0) {
-			/* for atari only */
-			ide_get_lock(ide_intr, hwif);
-		}
-	}
-	return rc;
-}
-
-static inline void ide_unlock_host(struct ide_host *host)
-{
-	if (host->host_flags & IDE_HFLAG_SERIALIZE) {
-		/* for atari only */
-		ide_release_lock();
-		clear_bit_unlock(IDE_HOST_BUSY, &host->host_busy);
-	}
-}
-
 /*
- * Issue a new request to a device.
+ * Issue a new request to a drive from hwgroup
+ *
+ * A hwgroup is a serialized group of IDE interfaces.  Usually there is
+ * exactly one hwif (interface) per hwgroup, but buggy controllers (eg. CMD640)
+ * may have both interfaces in a single hwgroup to "serialize" access.
+ * Or possibly multiple ISA interfaces can share a common IRQ by being grouped
+ * together into one hwgroup for serialized access.
+ *
+ * Note also that several hwgroups can end up sharing a single IRQ,
+ * possibly along with many other devices.  This is especially common in
+ * PCI-based systems with off-board IDE controller cards.
+ *
+ * The IDE driver uses a per-hwgroup lock to protect the hwgroup->busy flag.
+ *
+ * The first thread into the driver for a particular hwgroup sets the
+ * hwgroup->busy flag to indicate that this hwgroup is now active,
+ * and then initiates processing of the top request from the request queue.
+ *
+ * Other threads attempting entry notice the busy setting, and will simply
+ * queue their new requests and exit immediately.  Note that hwgroup->busy
+ * remains set even when the driver is merely awaiting the next interrupt.
+ * Thus, the meaning is "this hwgroup is busy processing a request".
+ *
+ * When processing of a request completes, the completing thread or IRQ-handler
+ * will start the next request from the queue.  If no more work remains,
+ * the driver will clear the hwgroup->busy flag and exit.
+ *
+ * The per-hwgroup spinlock is used to protect all access to the
+ * hwgroup->busy flag, but is otherwise not needed for most processing in
+ * the driver.  This makes the driver much more friendlier to shared IRQs
+ * than previous designs, while remaining 100% (?) SMP safe and capable.
  */
 void do_ide_request(struct request_queue *q)
 {
 	ide_drive_t	*drive = q->queuedata;
 	ide_hwif_t	*hwif = drive->hwif;
-	struct ide_host *host = hwif->host;
-	struct request	*rq = NULL;
+	ide_hwgroup_t	*hwgroup = hwif->hwgroup;
+	struct request	*rq;
 	ide_startstop_t	startstop;
 
 	/*
@@ -721,40 +721,32 @@ void do_ide_request(struct request_queue *q)
 		blk_remove_plug(q);
 
 	spin_unlock_irq(q->queue_lock);
+	spin_lock_irq(&hwgroup->lock);
 
-	if (ide_lock_host(host, hwif))
-		goto plug_device_2;
-
-	spin_lock_irq(&hwif->lock);
-
-	if (!ide_lock_port(hwif)) {
-		ide_hwif_t *prev_port;
+	if (!ide_lock_hwgroup(hwgroup)) {
 repeat:
-		prev_port = hwif->host->cur_port;
-		hwif->rq = NULL;
+		hwgroup->rq = NULL;
 
 		if (drive->dev_flags & IDE_DFLAG_SLEEPING) {
 			if (time_before(drive->sleep, jiffies)) {
-				ide_unlock_port(hwif);
+				ide_unlock_hwgroup(hwgroup);
 				goto plug_device;
 			}
 		}
 
-		if ((hwif->host->host_flags & IDE_HFLAG_SERIALIZE) &&
-		    hwif != prev_port) {
+		if (hwif != hwgroup->hwif) {
 			/*
-			 * set nIEN for previous port, drives in the
+			 * set nIEN for previous hwif, drives in the
 			 * quirk_list may not like intr setups/cleanups
 			 */
-			if (prev_port && prev_port->cur_dev->quirk_list == 0)
-				prev_port->tp_ops->set_irq(prev_port, 0);
-
-			hwif->host->cur_port = hwif;
+			if (drive->quirk_list == 0)
+				hwif->tp_ops->set_irq(hwif, 0);
 		}
-		hwif->cur_dev = drive;
+		hwgroup->hwif = hwif;
+		hwgroup->drive = drive;
 		drive->dev_flags &= ~(IDE_DFLAG_SLEEPING | IDE_DFLAG_PARKED);
 
-		spin_unlock_irq(&hwif->lock);
+		spin_unlock_irq(&hwgroup->lock);
 		spin_lock_irq(q->queue_lock);
 		/*
 		 * we know that the queue isn't empty, but this can happen
@@ -762,10 +754,10 @@ repeat:
 		 */
 		rq = elv_next_request(drive->queue);
 		spin_unlock_irq(q->queue_lock);
-		spin_lock_irq(&hwif->lock);
+		spin_lock_irq(&hwgroup->lock);
 
 		if (!rq) {
-			ide_unlock_port(hwif);
+			ide_unlock_hwgroup(hwgroup);
 			goto out;
 		}
 
@@ -786,31 +778,27 @@ repeat:
 		    blk_pm_request(rq) == 0 &&
 		    (rq->cmd_flags & REQ_PREEMPT) == 0) {
 			/* there should be no pending command at this point */
-			ide_unlock_port(hwif);
+			ide_unlock_hwgroup(hwgroup);
 			goto plug_device;
 		}
 
-		hwif->rq = rq;
+		hwgroup->rq = rq;
 
-		spin_unlock_irq(&hwif->lock);
+		spin_unlock_irq(&hwgroup->lock);
 		startstop = start_request(drive, rq);
-		spin_lock_irq(&hwif->lock);
+		spin_lock_irq(&hwgroup->lock);
 
 		if (startstop == ide_stopped)
 			goto repeat;
 	} else
 		goto plug_device;
 out:
-	spin_unlock_irq(&hwif->lock);
-	if (rq == NULL)
-		ide_unlock_host(host);
+	spin_unlock_irq(&hwgroup->lock);
 	spin_lock_irq(q->queue_lock);
 	return;
 
 plug_device:
-	spin_unlock_irq(&hwif->lock);
-	ide_unlock_host(host);
-plug_device_2:
+	spin_unlock_irq(&hwgroup->lock);
 	spin_lock_irq(q->queue_lock);
 
 	if (!elv_queue_empty(q))
@@ -818,13 +806,13 @@ plug_device_2:
 }
 
 /*
- * un-busy the port etc, and clear any pending DMA status. we want to
+ * un-busy the hwgroup etc, and clear any pending DMA status. we want to
  * retry the current request in pio mode instead of risking tossing it
  * all away
  */
 static ide_startstop_t ide_dma_timeout_retry(ide_drive_t *drive, int error)
 {
-	ide_hwif_t *hwif = drive->hwif;
+	ide_hwif_t *hwif = HWIF(drive);
 	struct request *rq;
 	ide_startstop_t ret = ide_stopped;
 
@@ -852,14 +840,15 @@ static ide_startstop_t ide_dma_timeout_retry(ide_drive_t *drive, int error)
 	ide_dma_off_quietly(drive);
 
 	/*
-	 * un-busy drive etc and make sure request is sane
+	 * un-busy drive etc (hwgroup->busy is cleared on return) and
+	 * make sure request is sane
 	 */
+	rq = HWGROUP(drive)->rq;
 
-	rq = hwif->rq;
 	if (!rq)
 		goto out;
 
-	hwif->rq = NULL;
+	HWGROUP(drive)->rq = NULL;
 
 	rq->errors = 0;
 
@@ -887,7 +876,7 @@ static void ide_plug_device(ide_drive_t *drive)
 
 /**
  *	ide_timer_expiry	-	handle lack of an IDE interrupt
- *	@data: timer callback magic (hwif)
+ *	@data: timer callback magic (hwgroup)
  *
  *	An IDE command has timed out before the expected drive return
  *	occurred. At this point we attempt to clean up the current
@@ -901,18 +890,18 @@ static void ide_plug_device(ide_drive_t *drive)
  
 void ide_timer_expiry (unsigned long data)
 {
-	ide_hwif_t	*hwif = (ide_hwif_t *)data;
+	ide_hwgroup_t	*hwgroup = (ide_hwgroup_t *) data;
 	ide_drive_t	*uninitialized_var(drive);
 	ide_handler_t	*handler;
+	ide_expiry_t	*expiry;
 	unsigned long	flags;
 	unsigned long	wait = -1;
 	int		plug_device = 0;
 
-	spin_lock_irqsave(&hwif->lock, flags);
+	spin_lock_irqsave(&hwgroup->lock, flags);
 
-	handler = hwif->handler;
-
-	if (handler == NULL || hwif->req_gen != hwif->req_gen_timer) {
+	if (((handler = hwgroup->handler) == NULL) ||
+	    (hwgroup->req_gen != hwgroup->req_gen_timer)) {
 		/*
 		 * Either a marginal timeout occurred
 		 * (got the interrupt just as timer expired),
@@ -920,68 +909,72 @@ void ide_timer_expiry (unsigned long data)
 		 * Either way, we don't really want to complain about anything.
 		 */
 	} else {
-		ide_expiry_t *expiry = hwif->expiry;
-		ide_startstop_t startstop = ide_stopped;
+		drive = hwgroup->drive;
+		if (!drive) {
+			printk(KERN_ERR "ide_timer_expiry: hwgroup->drive was NULL\n");
+			hwgroup->handler = NULL;
+		} else {
+			ide_hwif_t *hwif;
+			ide_startstop_t startstop = ide_stopped;
 
-		drive = hwif->cur_dev;
-
-		if (expiry) {
-			wait = expiry(drive);
-			if (wait > 0) { /* continue */
-				/* reset timer */
-				hwif->timer.expires = jiffies + wait;
-				hwif->req_gen_timer = hwif->req_gen;
-				add_timer(&hwif->timer);
-				spin_unlock_irqrestore(&hwif->lock, flags);
-				return;
+			if ((expiry = hwgroup->expiry) != NULL) {
+				/* continue */
+				if ((wait = expiry(drive)) > 0) {
+					/* reset timer */
+					hwgroup->timer.expires  = jiffies + wait;
+					hwgroup->req_gen_timer = hwgroup->req_gen;
+					add_timer(&hwgroup->timer);
+					spin_unlock_irqrestore(&hwgroup->lock, flags);
+					return;
+				}
+			}
+			hwgroup->handler = NULL;
+			/*
+			 * We need to simulate a real interrupt when invoking
+			 * the handler() function, which means we need to
+			 * globally mask the specific IRQ:
+			 */
+			spin_unlock(&hwgroup->lock);
+			hwif  = HWIF(drive);
+			/* disable_irq_nosync ?? */
+			disable_irq(hwif->irq);
+			/* local CPU only,
+			 * as if we were handling an interrupt */
+			local_irq_disable();
+			if (hwgroup->polling) {
+				startstop = handler(drive);
+			} else if (drive_is_ready(drive)) {
+				if (drive->waiting_for_dma)
+					hwif->dma_ops->dma_lost_irq(drive);
+				(void)ide_ack_intr(hwif);
+				printk(KERN_WARNING "%s: lost interrupt\n", drive->name);
+				startstop = handler(drive);
+			} else {
+				if (drive->waiting_for_dma) {
+					startstop = ide_dma_timeout_retry(drive, wait);
+				} else
+					startstop =
+					ide_error(drive, "irq timeout",
+						  hwif->tp_ops->read_status(hwif));
+			}
+			spin_lock_irq(&hwgroup->lock);
+			enable_irq(hwif->irq);
+			if (startstop == ide_stopped) {
+				ide_unlock_hwgroup(hwgroup);
+				plug_device = 1;
 			}
 		}
-		hwif->handler = NULL;
-		/*
-		 * We need to simulate a real interrupt when invoking
-		 * the handler() function, which means we need to
-		 * globally mask the specific IRQ:
-		 */
-		spin_unlock(&hwif->lock);
-		/* disable_irq_nosync ?? */
-		disable_irq(hwif->irq);
-		/* local CPU only, as if we were handling an interrupt */
-		local_irq_disable();
-		if (hwif->polling) {
-			startstop = handler(drive);
-		} else if (drive_is_ready(drive)) {
-			if (drive->waiting_for_dma)
-				hwif->dma_ops->dma_lost_irq(drive);
-			(void)ide_ack_intr(hwif);
-			printk(KERN_WARNING "%s: lost interrupt\n",
-				drive->name);
-			startstop = handler(drive);
-		} else {
-			if (drive->waiting_for_dma)
-				startstop = ide_dma_timeout_retry(drive, wait);
-			else
-				startstop = ide_error(drive, "irq timeout",
-					hwif->tp_ops->read_status(hwif));
-		}
-		spin_lock_irq(&hwif->lock);
-		enable_irq(hwif->irq);
-		if (startstop == ide_stopped) {
-			ide_unlock_port(hwif);
-			plug_device = 1;
-		}
 	}
-	spin_unlock_irqrestore(&hwif->lock, flags);
+	spin_unlock_irqrestore(&hwgroup->lock, flags);
 
-	if (plug_device) {
-		ide_unlock_host(hwif->host);
+	if (plug_device)
 		ide_plug_device(drive);
-	}
 }
 
 /**
  *	unexpected_intr		-	handle an unexpected IDE interrupt
  *	@irq: interrupt line
- *	@hwif: port being processed
+ *	@hwgroup: hwgroup being processed
  *
  *	There's nothing really useful we can do with an unexpected interrupt,
  *	other than reading the status register (to clear it), and logging it.
@@ -1005,38 +998,52 @@ void ide_timer_expiry (unsigned long data)
  *	before completing the issuance of any new drive command, so we will not
  *	be accidentally invoked as a result of any valid command completion
  *	interrupt.
+ *
+ *	Note that we must walk the entire hwgroup here. We know which hwif
+ *	is doing the current command, but we don't know which hwif burped
+ *	mysteriously.
  */
-
-static void unexpected_intr(int irq, ide_hwif_t *hwif)
+ 
+static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 {
-	u8 stat = hwif->tp_ops->read_status(hwif);
+	u8 stat;
+	ide_hwif_t *hwif = hwgroup->hwif;
 
-	if (!OK_STAT(stat, ATA_DRDY, BAD_STAT)) {
-		/* Try to not flood the console with msgs */
-		static unsigned long last_msgtime, count;
-		++count;
+	/*
+	 * handle the unexpected interrupt
+	 */
+	do {
+		if (hwif->irq == irq) {
+			stat = hwif->tp_ops->read_status(hwif);
 
-		if (time_after(jiffies, last_msgtime + HZ)) {
-			last_msgtime = jiffies;
-			printk(KERN_ERR "%s: unexpected interrupt, "
-				"status=0x%02x, count=%ld\n",
-				hwif->name, stat, count);
+			if (!OK_STAT(stat, ATA_DRDY, BAD_STAT)) {
+				/* Try to not flood the console with msgs */
+				static unsigned long last_msgtime, count;
+				++count;
+				if (time_after(jiffies, last_msgtime + HZ)) {
+					last_msgtime = jiffies;
+					printk(KERN_ERR "%s%s: unexpected interrupt, "
+						"status=0x%02x, count=%ld\n",
+						hwif->name,
+						(hwif->next==hwgroup->hwif) ? "" : "(?)", stat, count);
+				}
+			}
 		}
-	}
+	} while ((hwif = hwif->next) != hwgroup->hwif);
 }
 
 /**
  *	ide_intr	-	default IDE interrupt handler
  *	@irq: interrupt number
- *	@dev_id: hwif
+ *	@dev_id: hwif group
  *	@regs: unused weirdness from the kernel irq layer
  *
  *	This is the default IRQ handler for the IDE layer. You should
  *	not need to override it. If you do be aware it is subtle in
  *	places
  *
- *	hwif is the interface in the group currently performing
- *	a command. hwif->cur_dev is the drive and hwif->handler is
+ *	hwgroup->hwif is the interface in the group currently performing
+ *	a command. hwgroup->drive is the drive and hwgroup->handler is
  *	the IRQ handler to call. As we issue a command the handlers
  *	step through multiple states, reassigning the handler to the
  *	next step in the process. Unlike a smart SCSI controller IDE
@@ -1047,32 +1054,26 @@ static void unexpected_intr(int irq, ide_hwif_t *hwif)
  *
  *	The handler eventually returns ide_stopped to indicate the
  *	request completed. At this point we issue the next request
- *	on the port and the process begins again.
+ *	on the hwgroup and the process begins again.
  */
-
+ 
 irqreturn_t ide_intr (int irq, void *dev_id)
 {
-	ide_hwif_t *hwif = (ide_hwif_t *)dev_id;
+	unsigned long flags;
+	ide_hwgroup_t *hwgroup = (ide_hwgroup_t *)dev_id;
+	ide_hwif_t *hwif = hwgroup->hwif;
 	ide_drive_t *uninitialized_var(drive);
 	ide_handler_t *handler;
-	unsigned long flags;
 	ide_startstop_t startstop;
 	irqreturn_t irq_ret = IRQ_NONE;
 	int plug_device = 0;
 
-	if (hwif->host->host_flags & IDE_HFLAG_SERIALIZE) {
-		if (hwif != hwif->host->cur_port)
-			goto out_early;
-	}
-
-	spin_lock_irqsave(&hwif->lock, flags);
+	spin_lock_irqsave(&hwgroup->lock, flags);
 
 	if (!ide_ack_intr(hwif))
 		goto out;
 
-	handler = hwif->handler;
-
-	if (handler == NULL || hwif->polling) {
+	if ((handler = hwgroup->handler) == NULL || hwgroup->polling) {
 		/*
 		 * Not expecting an interrupt from this drive.
 		 * That means this could be:
@@ -1096,7 +1097,7 @@ irqreturn_t ide_intr (int irq, void *dev_id)
 			 * Probably not a shared PCI interrupt,
 			 * so we can safely try to do something about it:
 			 */
-			unexpected_intr(irq, hwif);
+			unexpected_intr(irq, hwgroup);
 #ifdef CONFIG_BLK_DEV_IDEPCI
 		} else {
 			/*
@@ -1109,7 +1110,16 @@ irqreturn_t ide_intr (int irq, void *dev_id)
 		goto out;
 	}
 
-	drive = hwif->cur_dev;
+	drive = hwgroup->drive;
+	if (!drive) {
+		/*
+		 * This should NEVER happen, and there isn't much
+		 * we could do about it here.
+		 *
+		 * [Note - this can occur if the drive is hot unplugged]
+		 */
+		goto out_handled;
+	}
 
 	if (!drive_is_ready(drive))
 		/*
@@ -1121,10 +1131,10 @@ irqreturn_t ide_intr (int irq, void *dev_id)
 		 */
 		goto out;
 
-	hwif->handler = NULL;
-	hwif->req_gen++;
-	del_timer(&hwif->timer);
-	spin_unlock(&hwif->lock);
+	hwgroup->handler = NULL;
+	hwgroup->req_gen++;
+	del_timer(&hwgroup->timer);
+	spin_unlock(&hwgroup->lock);
 
 	if (hwif->port_ops && hwif->port_ops->clear_irq)
 		hwif->port_ops->clear_irq(drive);
@@ -1135,7 +1145,7 @@ irqreturn_t ide_intr (int irq, void *dev_id)
 	/* service this interrupt, may set handler for next interrupt */
 	startstop = handler(drive);
 
-	spin_lock_irq(&hwif->lock);
+	spin_lock_irq(&hwgroup->lock);
 	/*
 	 * Note that handler() may have set things up for another
 	 * interrupt to occur soon, but it cannot happen until
@@ -1144,18 +1154,20 @@ irqreturn_t ide_intr (int irq, void *dev_id)
 	 * won't allow another of the same (on any CPU) until we return.
 	 */
 	if (startstop == ide_stopped) {
-		BUG_ON(hwif->handler);
-		ide_unlock_port(hwif);
-		plug_device = 1;
+		if (hwgroup->handler == NULL) {	/* paranoia */
+			ide_unlock_hwgroup(hwgroup);
+			plug_device = 1;
+		} else
+			printk(KERN_ERR "%s: %s: huh? expected NULL handler "
+					"on exit\n", __func__, drive->name);
 	}
+out_handled:
 	irq_ret = IRQ_HANDLED;
 out:
-	spin_unlock_irqrestore(&hwif->lock, flags);
-out_early:
-	if (plug_device) {
-		ide_unlock_host(hwif->host);
+	spin_unlock_irqrestore(&hwgroup->lock, flags);
+
+	if (plug_device)
 		ide_plug_device(drive);
-	}
 
 	return irq_ret;
 }
@@ -1177,13 +1189,15 @@ out_early:
 
 void ide_do_drive_cmd(ide_drive_t *drive, struct request *rq)
 {
+	ide_hwgroup_t *hwgroup = drive->hwif->hwgroup;
 	struct request_queue *q = drive->queue;
 	unsigned long flags;
 
-	drive->hwif->rq = NULL;
+	hwgroup->rq = NULL;
 
 	spin_lock_irqsave(q->queue_lock, flags);
 	__elv_add_request(q, rq, ELEVATOR_INSERT_FRONT, 0);
+	blk_start_queueing(q);
 	spin_unlock_irqrestore(q->queue_lock, flags);
 }
 EXPORT_SYMBOL(ide_do_drive_cmd);

@@ -136,7 +136,7 @@ static int stutter_pause_test = 0;
 #endif
 int rcutorture_runnable = RCUTORTURE_RUNNABLE_INIT;
 
-#define FULLSTOP_SHUTDOWN 1	/* Bail due to system shutdown/panic. */
+#define FULLSTOP_SIGNALED 1	/* Bail due to signal. */
 #define FULLSTOP_CLEANUP  2	/* Orderly shutdown. */
 static int fullstop;		/* stop generating callbacks at test end. */
 DEFINE_MUTEX(fullstop_mutex);	/* protect fullstop transitions and */
@@ -151,10 +151,12 @@ rcutorture_shutdown_notify(struct notifier_block *unused1,
 {
 	if (fullstop)
 		return NOTIFY_DONE;
-	mutex_lock(&fullstop_mutex);
-	if (!fullstop)
-		fullstop = FULLSTOP_SHUTDOWN;
-	mutex_unlock(&fullstop_mutex);
+	if (signal_pending(current)) {
+		mutex_lock(&fullstop_mutex);
+		if (!ACCESS_ONCE(fullstop))
+			fullstop = FULLSTOP_SIGNALED;
+		mutex_unlock(&fullstop_mutex);
+	}
 	return NOTIFY_DONE;
 }
 
@@ -622,7 +624,7 @@ rcu_torture_writer(void *arg)
 		rcu_stutter_wait();
 	} while (!kthread_should_stop() && !fullstop);
 	VERBOSE_PRINTK_STRING("rcu_torture_writer task stopping");
-	while (!kthread_should_stop() && fullstop != FULLSTOP_SHUTDOWN)
+	while (!kthread_should_stop() && fullstop != FULLSTOP_SIGNALED)
 		schedule_timeout_uninterruptible(1);
 	return 0;
 }
@@ -647,7 +649,7 @@ rcu_torture_fakewriter(void *arg)
 	} while (!kthread_should_stop() && !fullstop);
 
 	VERBOSE_PRINTK_STRING("rcu_torture_fakewriter task stopping");
-	while (!kthread_should_stop() && fullstop != FULLSTOP_SHUTDOWN)
+	while (!kthread_should_stop() && fullstop != FULLSTOP_SIGNALED)
 		schedule_timeout_uninterruptible(1);
 	return 0;
 }
@@ -757,7 +759,7 @@ rcu_torture_reader(void *arg)
 	VERBOSE_PRINTK_STRING("rcu_torture_reader task stopping");
 	if (irqreader && cur_ops->irqcapable)
 		del_timer_sync(&t);
-	while (!kthread_should_stop() && fullstop != FULLSTOP_SHUTDOWN)
+	while (!kthread_should_stop() && fullstop != FULLSTOP_SIGNALED)
 		schedule_timeout_uninterruptible(1);
 	return 0;
 }

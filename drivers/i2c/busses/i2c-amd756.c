@@ -380,9 +380,8 @@ static int __devinit amd756_probe(struct pci_dev *pdev,
 	/* set up the sysfs linkage to our parent device */
 	amd756_smbus.dev.parent = &pdev->dev;
 
-	snprintf(amd756_smbus.name, sizeof(amd756_smbus.name),
-		 "SMBus %s adapter at %04x", chipname[id->driver_data],
-		 amd756_ioport);
+	sprintf(amd756_smbus.name, "SMBus %s adapter at %04x",
+		chipname[id->driver_data], amd756_ioport);
 
 	error = i2c_add_adapter(&amd756_smbus);
 	if (error) {
