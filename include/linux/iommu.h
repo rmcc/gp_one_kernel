@@ -21,15 +21,12 @@
 
 #define IOMMU_READ	(1)
 #define IOMMU_WRITE	(2)
-#define IOMMU_CACHE	(4) /* DMA cache coherency */
 
 struct device;
 
 struct iommu_domain {
 	void *priv;
 };
-
-#define IOMMU_CAP_CACHE_COHERENCY	0x1
 
 struct iommu_ops {
 	int (*domain_init)(struct iommu_domain *domain);
@@ -42,8 +39,6 @@ struct iommu_ops {
 		      size_t size);
 	phys_addr_t (*iova_to_phys)(struct iommu_domain *domain,
 				    unsigned long iova);
-	int (*domain_has_cap)(struct iommu_domain *domain,
-			      unsigned long cap);
 };
 
 #ifdef CONFIG_IOMMU_API
@@ -62,8 +57,6 @@ extern void iommu_unmap_range(struct iommu_domain *domain, unsigned long iova,
 			      size_t size);
 extern phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain,
 				      unsigned long iova);
-extern int iommu_domain_has_cap(struct iommu_domain *domain,
-				unsigned long cap);
 
 #else /* CONFIG_IOMMU_API */
 
@@ -110,12 +103,6 @@ static inline void iommu_unmap_range(struct iommu_domain *domain,
 
 static inline phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain,
 					     unsigned long iova)
-{
-	return 0;
-}
-
-static inline int domain_has_cap(struct iommu_domain *domain,
-				 unsigned long cap)
 {
 	return 0;
 }

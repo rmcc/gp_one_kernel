@@ -60,10 +60,6 @@ else
 	FN=.config
 fi
 
-if [ "$1" = "" ] ; then
-	usage
-fi
-
 while [ "$1" != "" ] ; do
 	CMD="$1"
 	shift
