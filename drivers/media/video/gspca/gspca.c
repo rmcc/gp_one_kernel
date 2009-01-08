@@ -423,8 +423,7 @@ static void destroy_urbs(struct gspca_dev *gspca_dev)
 			break;
 
 		gspca_dev->urb[i] = NULL;
-		if (!gspca_dev->present)
-			usb_kill_urb(urb);
+		usb_kill_urb(urb);
 		if (urb->transfer_buffer != NULL)
 			usb_buffer_free(gspca_dev->dev,
 					urb->transfer_buffer_length,
@@ -1951,6 +1950,7 @@ void gspca_disconnect(struct usb_interface *intf)
 	struct gspca_dev *gspca_dev = usb_get_intfdata(intf);
 
 	gspca_dev->present = 0;
+	gspca_dev->streaming = 0;
 
 	usb_set_intfdata(intf, NULL);
 

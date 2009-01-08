@@ -50,8 +50,8 @@
 /* OF Platform device Usage :
  *
  * This driver is only used for PSCs configured in uart mode.  The device
- * tree will have a node for each PSC with "mpc52xx-psc-uart" in the compatible
- * list.
+ * tree will have a node for each PSC in uart mode w/ device_type = "serial"
+ * and "mpc52xx-psc-uart" in the compatible string
  *
  * By default, PSC devices are enumerated in the order they are found.  However
  * a particular PSC number can be forces by adding 'device_no = <port#>'
@@ -522,7 +522,7 @@ mpc52xx_uart_startup(struct uart_port *port)
 
 	/* Request IRQ */
 	ret = request_irq(port->irq, mpc52xx_uart_int,
-		IRQF_DISABLED | IRQF_SAMPLE_RANDOM,
+		IRQF_DISABLED | IRQF_SAMPLE_RANDOM | IRQF_SHARED,
 		"mpc52xx_psc_uart", port);
 	if (ret)
 		return ret;
@@ -1212,18 +1212,30 @@ mpc52xx_uart_of_resume(struct of_device *op)
 #endif
 
 static void
-mpc52xx_uart_of_assign(struct device_node *np)
+mpc52xx_uart_of_assign(struct device_node *np, int idx)
 {
+	int free_idx = -1;
 	int i;
 
-	/* Find the first free PSC number */
+	/* Find the first free node */
 	for (i = 0; i < MPC52xx_PSC_MAXNUM; i++) {
 		if (mpc52xx_uart_nodes[i] == NULL) {
-			of_node_get(np);
-			mpc52xx_uart_nodes[i] = np;
-			return;
+			free_idx = i;
+			break;
 		}
 	}
+
+	if ((idx < 0) || (idx >= MPC52xx_PSC_MAXNUM))
+		idx = free_idx;
+
+	if (idx < 0)
+		return; /* No free slot; abort */
+
+	of_node_get(np);
+	/* If the slot is already occupied, then swap slots */
+	if (mpc52xx_uart_nodes[idx] && (free_idx != -1))
+		mpc52xx_uart_nodes[free_idx] = mpc52xx_uart_nodes[idx];
+	mpc52xx_uart_nodes[idx] = np;
 }
 
 static void
@@ -1231,17 +1243,23 @@ mpc52xx_uart_of_enumerate(void)
 {
 	static int enum_done;
 	struct device_node *np;
+	const unsigned int *devno;
 	const struct  of_device_id *match;
 	int i;
 
 	if (enum_done)
 		return;
 
-	/* Assign index to each PSC in device tree */
-	for_each_matching_node(np, mpc52xx_uart_of_match) {
+	for_each_node_by_type(np, "serial") {
 		match = of_match_node(mpc52xx_uart_of_match, np);
+		if (!match)
+			continue;
+
 		psc_ops = match->data;
-		mpc52xx_uart_of_assign(np);
+
+		/* Is a particular device number requested? */
+		devno = of_get_property(np, "port-number", NULL);
+		mpc52xx_uart_of_assign(np, devno ? *devno : -1);
 	}
 
 	enum_done = 1;

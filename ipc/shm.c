@@ -368,14 +368,14 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 		file = hugetlb_file_setup(name, size);
 		shp->mlock_user = current_user();
 	} else {
-		int acctflag = 0;
+		int acctflag = VM_ACCOUNT;
 		/*
 		 * Do not allow no accounting for OVERCOMMIT_NEVER, even
 	 	 * if it's asked for.
 		 */
 		if  ((shmflg & SHM_NORESERVE) &&
 				sysctl_overcommit_memory != OVERCOMMIT_NEVER)
-			acctflag = VM_NORESERVE;
+			acctflag = 0;
 		file = shmem_file_setup(name, size, acctflag);
 	}
 	error = PTR_ERR(file);
