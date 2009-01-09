@@ -692,13 +692,6 @@ M:	kernel@wantstofly.org
 L:	linux-arm-kernel@lists.arm.linux.org.uk (subscribers-only)
 S:	Maintained
 
-ARM/NUVOTON W90X900 ARM ARCHITECTURE
-P:      Wan ZongShun
-M:      mcuos.com@gmail.com
-L:      linux-arm-kernel@lists.arm.linux.org.uk (subscribers-only)
-W:      http://www.mcuos.com
-S:      Maintained
-
 ARPD SUPPORT
 P:	Jonathan Layes
 L:	netdev@vger.kernel.org
@@ -1469,6 +1462,8 @@ L:	linux-acpi@vger.kernel.org
 S:	Supported
 
 DOCUMENTATION (/Documentation directory)
+P:	Michael Kerrisk
+M:	mtk.manpages@gmail.com
 P:	Randy Dunlap
 M:	rdunlap@xenotime.net
 L:	linux-doc@vger.kernel.org
@@ -1910,10 +1905,10 @@ W:	http://gigaset307x.sourceforge.net/
 S:	Maintained
 
 HARD DRIVE ACTIVE PROTECTION SYSTEM (HDAPS) DRIVER
-P:	Frank Seidel
-M:	frank@f-seidel.de
-L:	lm-sensors@lm-sensors.org
-W:	http://www.kernel.org/pub/linux/kernel/people/fseidel/hdaps/
+P:	Robert Love
+M:	rlove@rlove.org
+M:	linux-kernel@vger.kernel.org
+W:	http://www.kernel.org/pub/linux/kernel/people/rml/hdaps/
 S:	Maintained
 
 GSPCA FINEPIX SUBDRIVER
@@ -2006,7 +2001,7 @@ S:	Maintained
 
 HIBERNATION (aka Software Suspend, aka swsusp)
 P:	Pavel Machek
-M:	pavel@ucw.cz
+M:	pavel@suse.cz
 P:	Rafael J. Wysocki
 M:	rjw@sisk.pl
 L:	linux-pm@lists.linux-foundation.org
@@ -2462,7 +2457,7 @@ S:	Maintained
 
 ISDN SUBSYSTEM
 P:	Karsten Keil
-M:	isdn@linux-pingi.de
+M:	kkeil@suse.de
 L:	isdn4linux@listserv.isdn4linux.de (subscribers-only)
 W:	http://www.isdn4linux.de
 T:	git kernel.org:/pub/scm/linux/kernel/kkeil/isdn-2.6.git
@@ -2877,7 +2872,7 @@ P:	Michael Kerrisk
 M:	mtk.manpages@gmail.com
 W:	http://www.kernel.org/doc/man-pages
 L:	linux-man@vger.kernel.org
-S:	Maintained
+S:	Supported
 
 MARVELL LIBERTAS WIRELESS DRIVER
 P:	Dan Williams
@@ -3332,8 +3327,8 @@ P:	Jeremy Fitzhardinge
 M:	jeremy@xensource.com
 P:	Chris Wright
 M:	chrisw@sous-sol.org
-P:	Alok Kataria
-M:	akataria@vmware.com
+P:	Zachary Amsden
+M:	zach@vmware.com
 P:	Rusty Russell
 M:	rusty@rustcorp.com.au
 L:	virtualization@lists.osdl.org
@@ -3350,8 +3345,10 @@ S:	Maintained
 PARISC ARCHITECTURE
 P:	Kyle McMartin
 M:	kyle@mcmartin.ca
-P:	Helge Deller
-M:	deller@gmx.de
+P:	Matthew Wilcox
+M:	matthew@wil.cx
+P:	Grant Grundler
+M:	grundler@parisc-linux.org
 L:	linux-parisc@vger.kernel.org
 W:	http://www.parisc-linux.org/
 T:	git kernel.org:/pub/scm/linux/kernel/git/kyle/parisc-2.6.git
@@ -3876,15 +3873,6 @@ L:	linux-ide@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/jgarzik/libata-dev.git
 S:	Supported
 
-SERVER ENGINES 10Gbps NIC - BladeEngine 2 DRIVER
-P:	Sathya Perla
-M:	sathyap@serverengines.com
-P:      Subbu Seetharaman
-M:      subbus@serverengines.com
-L:      netdev@vger.kernel.org
-W:      http://www.serverengines.com
-S:      Supported
-
 SFC NETWORK DRIVER
 P:	Steve Hodgson
 P:	Ben Hutchings
@@ -4184,7 +4172,7 @@ SUSPEND TO RAM
 P:	Len Brown
 M:	len.brown@intel.com
 P:	Pavel Machek
-M:	pavel@ucw.cz
+M:	pavel@suse.cz
 P:	Rafael J. Wysocki
 M:	rjw@sisk.pl
 L:	linux-pm@lists.linux-foundation.org
@@ -4936,11 +4924,11 @@ L:	zd1211-devs@lists.sourceforge.net (subscribers-only)
 S:	Maintained
 
 ZR36067 VIDEO FOR LINUX DRIVER
+P:	Ronald Bultje
+M:	rbultje@ronald.bitfreak.net
 L:	mjpeg-users@lists.sourceforge.net
-L:	linux-media@vger.kernel.org
 W:	http://mjpeg.sourceforge.net/driver-zoran/
-T:	Mercurial http://linuxtv.org/hg/v4l-dvb
-S:	Odd Fixes
+S:	Maintained
 
 ZS DECSTATION Z85C30 SERIAL DRIVER
 P:	Maciej W. Rozycki

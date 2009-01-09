@@ -3868,7 +3868,7 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	err = iwl_eeprom_check_version(priv);
 	if (err)
-		goto out_free_eeprom;
+		goto out_iounmap;
 
 	/* extract MAC Address */
 	iwl_eeprom_get_mac(priv, priv->mac_addr);
@@ -3945,8 +3945,6 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 
  out_remove_sysfs:
-	destroy_workqueue(priv->workqueue);
-	priv->workqueue = NULL;
 	sysfs_remove_group(&pdev->dev.kobj, &iwl_attribute_group);
  out_uninit_drv:
 	iwl_uninit_drv(priv);
@@ -3955,8 +3953,8 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  out_iounmap:
 	pci_iounmap(pdev, priv->hw_base);
  out_pci_release_regions:
-	pci_set_drvdata(pdev, NULL);
 	pci_release_regions(pdev);
+	pci_set_drvdata(pdev, NULL);
  out_pci_disable_device:
 	pci_disable_device(pdev);
  out_ieee80211_free_hw:

@@ -1157,7 +1157,8 @@ static int __cpuinit powernowk8_cpu_init(struct cpufreq_policy *pol)
 	data->cpu = pol->cpu;
 	data->currpstate = HW_PSTATE_INVALID;
 
-	if (powernow_k8_cpu_init_acpi(data)) {
+	rc = powernow_k8_cpu_init_acpi(data);
+	if (rc) {
 		/*
 		 * Use the PSB BIOS structure. This is only availabe on
 		 * an UP version, and is deprecated by AMD.
@@ -1175,20 +1176,17 @@ static int __cpuinit powernowk8_cpu_init(struct cpufreq_policy *pol)
 			       "ACPI maintainers and complain to your BIOS "
 			       "vendor.\n");
 #endif
-			kfree(data);
-			return -ENODEV;
+			goto err_out;
 		}
 		if (pol->cpu != 0) {
 			printk(KERN_ERR FW_BUG PFX "No ACPI _PSS objects for "
 			       "CPU other than CPU0. Complain to your BIOS "
 			       "vendor.\n");
-			kfree(data);
-			return -ENODEV;
+			goto err_out;
 		}
 		rc = find_psb_table(data);
 		if (rc) {
-			kfree(data);
-			return -ENODEV;
+			goto err_out;
 		}
 		/* Take a crude guess here.
 		 * That guess was in microseconds, so multiply with 1000 */
