@@ -1,6 +1,6 @@
 /* bnx2x_main.c: Broadcom Everest network driver.
  *
- * Copyright (c) 2007-2008 Broadcom Corporation
+ * Copyright (c) 2007-2009 Broadcom Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,8 +57,8 @@
 #include "bnx2x.h"
 #include "bnx2x_init.h"
 
-#define DRV_MODULE_VERSION	"1.45.23"
-#define DRV_MODULE_RELDATE	"2008/11/03"
+#define DRV_MODULE_VERSION	"1.45.24"
+#define DRV_MODULE_RELDATE	"2009/01/14"
 #define BNX2X_BC_VER		0x040200
 
 /* Time in jiffies before concluding the transmitter is hung */
@@ -69,7 +69,7 @@ static char version[] __devinitdata =
 	DRV_MODULE_NAME " " DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")\n";
 
 MODULE_AUTHOR("Eliezer Tamir");
-MODULE_DESCRIPTION("Broadcom NetXtreme II BCM57710 Driver");
+MODULE_DESCRIPTION("Broadcom NetXtreme II BCM57710/57711/57711E Driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_MODULE_VERSION);
 
@@ -732,6 +732,17 @@ static u16 bnx2x_ack_int(struct bnx2x *bp)
 /*
  * fast path service functions
  */
+
+static inline int bnx2x_has_tx_work(struct bnx2x_fastpath *fp)
+{
+	u16 tx_cons_sb;
+
+	/* Tell compiler that status block fields can change */
+	barrier();
+	tx_cons_sb = le16_to_cpu(*fp->tx_cons_sb);
+	return ((fp->tx_pkt_prod != tx_cons_sb) ||
+		(fp->tx_pkt_prod != fp->tx_pkt_cons));
+}
 
 /* free skb in the packet ring at pos idx
  * return idx of last bd freed
@@ -6144,7 +6155,7 @@ static void bnx2x_set_mac_addr_e1(struct bnx2x *bp, int set)
 	 * multicast 64-127:port0 128-191:port1
 	 */
 	config->hdr.length_6b = 2;
-	config->hdr.offset = port ? 31 : 0;
+	config->hdr.offset = port ? 32 : 0;
 	config->hdr.client_id = BP_CL_ID(bp);
 	config->hdr.reserved1 = 0;
 
@@ -6684,13 +6695,16 @@ static int bnx2x_nic_unload(struct bnx2x *bp, int unload_mode)
 		 (DRV_PULSE_ALWAYS_ALIVE | bp->fw_drv_pulse_wr_seq));
 	bnx2x_stats_handle(bp, STATS_EVENT_STOP);
 
+	/* Release IRQs */
+	bnx2x_free_irq(bp);
+
 	/* Wait until tx fast path tasks complete */
 	for_each_queue(bp, i) {
 		struct bnx2x_fastpath *fp = &bp->fp[i];
 
 		cnt = 1000;
 		smp_rmb();
-		while (BNX2X_HAS_TX_WORK(fp)) {
+		while (bnx2x_has_tx_work(fp)) {
 
 			bnx2x_tx_int(fp, 1000);
 			if (!cnt) {
@@ -6710,9 +6724,6 @@ static int bnx2x_nic_unload(struct bnx2x *bp, int unload_mode)
 	}
 	/* Give HW time to discard old tx messages */
 	msleep(1);
-
-	/* Release IRQs */
-	bnx2x_free_irq(bp);
 
 	if (CHIP_IS_E1(bp)) {
 		struct mac_configuration_cmd *config =
@@ -6874,16 +6885,15 @@ static void __devinit bnx2x_undi_unload(struct bnx2x *bp)
 		 */
 		bnx2x_acquire_hw_lock(bp, HW_LOCK_RESOURCE_UNDI);
 		val = REG_RD(bp, DORQ_REG_NORM_CID_OFST);
-		if (val == 0x7)
-			REG_WR(bp, DORQ_REG_NORM_CID_OFST, 0);
-		bnx2x_release_hw_lock(bp, HW_LOCK_RESOURCE_UNDI);
-
 		if (val == 0x7) {
 			u32 reset_code = DRV_MSG_CODE_UNLOAD_REQ_WOL_DIS;
 			/* save our func */
 			int func = BP_FUNC(bp);
 			u32 swap_en;
 			u32 swap_val;
+
+			/* clear the UNDI indication */
+			REG_WR(bp, DORQ_REG_NORM_CID_OFST, 0);
 
 			BNX2X_DEV_INFO("UNDI is active! reset device\n");
 
@@ -6909,6 +6919,9 @@ static void __devinit bnx2x_undi_unload(struct bnx2x *bp)
 
 				bnx2x_fw_command(bp, reset_code);
 			}
+
+			/* now it's safe to release the lock */
+			bnx2x_release_hw_lock(bp, HW_LOCK_RESOURCE_UNDI);
 
 			REG_WR(bp, (BP_PORT(bp) ? HC_REG_CONFIG_1 :
 				    HC_REG_CONFIG_0), 0x1000);
@@ -6954,7 +6967,9 @@ static void __devinit bnx2x_undi_unload(struct bnx2x *bp)
 			bp->fw_seq =
 			       (SHMEM_RD(bp, func_mb[bp->func].drv_mb_header) &
 				DRV_MSG_SEQ_NUMBER_MASK);
-		}
+
+		} else
+			bnx2x_release_hw_lock(bp, HW_LOCK_RESOURCE_UNDI);
 	}
 }
 
@@ -6971,7 +6986,7 @@ static void __devinit bnx2x_get_common_hwinfo(struct bnx2x *bp)
 	id |= ((val & 0xf) << 12);
 	val = REG_RD(bp, MISC_REG_CHIP_METAL);
 	id |= ((val & 0xff) << 4);
-	REG_RD(bp, MISC_REG_BOND_ID);
+	val = REG_RD(bp, MISC_REG_BOND_ID);
 	id |= (val & 0xf);
 	bp->common.chip_id = id;
 	bp->link_params.chip_id = bp->common.chip_id;
@@ -8103,6 +8118,9 @@ static int bnx2x_get_eeprom(struct net_device *dev,
 	struct bnx2x *bp = netdev_priv(dev);
 	int rc;
 
+	if (!netif_running(dev))
+		return -EAGAIN;
+
 	DP(BNX2X_MSG_NVM, "ethtool_eeprom: cmd %d\n"
 	   DP_LEVEL "  magic 0x%x  offset 0x%x (%d)  len 0x%x (%d)\n",
 	   eeprom->cmd, eeprom->magic, eeprom->offset, eeprom->offset,
@@ -8906,7 +8924,10 @@ static int bnx2x_test_intr(struct bnx2x *bp)
 		return -ENODEV;
 
 	config->hdr.length_6b = 0;
-	config->hdr.offset = 0;
+	if (CHIP_IS_E1(bp))
+		config->hdr.offset = (BP_PORT(bp) ? 32 : 0);
+	else
+		config->hdr.offset = BP_FUNC(bp);
 	config->hdr.client_id = BP_CL_ID(bp);
 	config->hdr.reserved1 = 0;
 
@@ -9271,6 +9292,18 @@ static int bnx2x_set_power_state(struct bnx2x *bp, pci_power_t state)
 	return 0;
 }
 
+static inline int bnx2x_has_rx_work(struct bnx2x_fastpath *fp)
+{
+	u16 rx_cons_sb;
+
+	/* Tell compiler that status block fields can change */
+	barrier();
+	rx_cons_sb = le16_to_cpu(*fp->rx_cons_sb);
+	if ((rx_cons_sb & MAX_RCQ_DESC_CNT) == MAX_RCQ_DESC_CNT)
+		rx_cons_sb++;
+	return (fp->rx_comp_cons != rx_cons_sb);
+}
+
 /*
  * net_device service functions
  */
@@ -9281,7 +9314,6 @@ static int bnx2x_poll(struct napi_struct *napi, int budget)
 						 napi);
 	struct bnx2x *bp = fp->bp;
 	int work_done = 0;
-	u16 rx_cons_sb;
 
 #ifdef BNX2X_STOP_ON_ERROR
 	if (unlikely(bp->panic))
@@ -9294,19 +9326,12 @@ static int bnx2x_poll(struct napi_struct *napi, int budget)
 
 	bnx2x_update_fpsb_idx(fp);
 
-	if (BNX2X_HAS_TX_WORK(fp))
+	if (bnx2x_has_tx_work(fp))
 		bnx2x_tx_int(fp, budget);
 
-	rx_cons_sb = le16_to_cpu(*fp->rx_cons_sb);
-	if ((rx_cons_sb & MAX_RCQ_DESC_CNT) == MAX_RCQ_DESC_CNT)
-		rx_cons_sb++;
-	if (BNX2X_HAS_RX_WORK(fp))
+	if (bnx2x_has_rx_work(fp))
 		work_done = bnx2x_rx_int(fp, budget);
-
 	rmb(); /* BNX2X_HAS_WORK() reads the status block */
-	rx_cons_sb = le16_to_cpu(*fp->rx_cons_sb);
-	if ((rx_cons_sb & MAX_RCQ_DESC_CNT) == MAX_RCQ_DESC_CNT)
-		rx_cons_sb++;
 
 	/* must not complete if we consumed full budget */
 	if ((work_done < budget) && !BNX2X_HAS_WORK(fp)) {
@@ -9417,6 +9442,7 @@ static inline u32 bnx2x_xmit_type(struct bnx2x *bp, struct sk_buff *skb)
 	return rc;
 }
 
+#if (MAX_SKB_FRAGS >= MAX_FETCH_BD - 3)
 /* check if packet requires linearization (packet is too fragmented) */
 static int bnx2x_pkt_req_lin(struct bnx2x *bp, struct sk_buff *skb,
 			     u32 xmit_type)
@@ -9494,6 +9520,7 @@ exit_lbl:
 
 	return to_copy;
 }
+#endif
 
 /* called with netif_tx_lock
  * bnx2x_tx_int() runs without netif_tx_lock unless it needs to call
@@ -9534,6 +9561,7 @@ static int bnx2x_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	   skb->ip_summed, skb->protocol, ipv6_hdr(skb)->nexthdr,
 	   ip_hdr(skb)->protocol, skb_shinfo(skb)->gso_type, xmit_type);
 
+#if (MAX_SKB_FRAGS >= MAX_FETCH_BD - 3)
 	/* First, check if we need to linearize the skb
 	   (due to FW restrictions) */
 	if (bnx2x_pkt_req_lin(bp, skb, xmit_type)) {
@@ -9546,6 +9574,7 @@ static int bnx2x_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			return NETDEV_TX_OK;
 		}
 	}
+#endif
 
 	/*
 	Please read carefully. First we use one BD which we mark as start,
@@ -9859,7 +9888,7 @@ static void bnx2x_set_rx_mode(struct net_device *dev)
 				for (; i < old; i++) {
 					if (CAM_IS_INVALID(config->
 							   config_table[i])) {
-						i--; /* already invalidated */
+						/* already invalidated */
 						break;
 					}
 					/* invalidate */
@@ -10269,17 +10298,15 @@ static int __devinit bnx2x_init_one(struct pci_dev *pdev,
 		return rc;
 	}
 
-	rc = register_netdev(dev);
-	if (rc) {
-		dev_err(&pdev->dev, "Cannot register net device\n");
-		goto init_one_exit;
-	}
-
 	pci_set_drvdata(pdev, dev);
 
 	rc = bnx2x_init_bp(bp);
+	if (rc)
+		goto init_one_exit;
+
+	rc = register_netdev(dev);
 	if (rc) {
-		unregister_netdev(dev);
+		dev_err(&pdev->dev, "Cannot register net device\n");
 		goto init_one_exit;
 	}
 
