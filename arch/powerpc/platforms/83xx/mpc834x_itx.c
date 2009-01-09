@@ -42,7 +42,6 @@
 static struct of_device_id __initdata mpc834x_itx_ids[] = {
 	{ .compatible = "fsl,pq2pro-localbus", },
 	{ .compatible = "simple-bus", },
-	{ .compatible = "gianfar", },
 	{},
 };
 

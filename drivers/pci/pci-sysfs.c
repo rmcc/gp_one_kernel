@@ -71,11 +71,11 @@ static ssize_t broken_parity_status_store(struct device *dev,
 static ssize_t local_cpus_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {		
-	const struct cpumask *mask;
+	cpumask_t mask;
 	int len;
 
-	mask = cpumask_of_pcibus(to_pci_dev(dev)->bus);
-	len = cpumask_scnprintf(buf, PAGE_SIZE-2, mask);
+	mask = pcibus_to_cpumask(to_pci_dev(dev)->bus);
+	len = cpumask_scnprintf(buf, PAGE_SIZE-2, &mask);
 	buf[len++] = '\n';
 	buf[len] = '\0';
 	return len;
@@ -85,11 +85,11 @@ static ssize_t local_cpus_show(struct device *dev,
 static ssize_t local_cpulist_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	const struct cpumask *mask;
+	cpumask_t mask;
 	int len;
 
-	mask = cpumask_of_pcibus(to_pci_dev(dev)->bus);
-	len = cpulist_scnprintf(buf, PAGE_SIZE-2, mask);
+	mask = pcibus_to_cpumask(to_pci_dev(dev)->bus);
+	len = cpulist_scnprintf(buf, PAGE_SIZE-2, &mask);
 	buf[len++] = '\n';
 	buf[len] = '\0';
 	return len;
@@ -768,8 +768,8 @@ pci_read_rom(struct kobject *kobj, struct bin_attribute *bin_attr,
 		return -EINVAL;
 	
 	rom = pci_map_rom(pdev, &size);	/* size starts out as PCI window size */
-	if (!rom || !size)
-		return -EIO;
+	if (!rom)
+		return 0;
 		
 	if (off >= size)
 		count = 0;

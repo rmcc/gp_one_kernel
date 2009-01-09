@@ -217,7 +217,6 @@
 			codec-handle = <&cs4270>;
 			fsl,playback-dma = <&dma00>;
 			fsl,capture-dma = <&dma01>;
-			fsl,fifo-depth = <8>;
 		};
 
 		ssi@16100 {
@@ -226,7 +225,6 @@
 			reg = <0x16100 0x100>;
 			interrupt-parent = <&mpic>;
 			interrupts = <63 2>;
-			fsl,fifo-depth = <8>;
 		};
 
 		dma@21300 {

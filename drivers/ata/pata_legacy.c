@@ -283,10 +283,9 @@ static void pdc20230_set_piomode(struct ata_port *ap, struct ata_device *adev)
 static unsigned int pdc_data_xfer_vlb(struct ata_device *dev,
 			unsigned char *buf, unsigned int buflen, int rw)
 {
-	int slop = buflen & 3;
-	/* 32bit I/O capable *and* we need to write a whole number of dwords */
-	if (ata_id_has_dword_io(dev->id) && (slop == 0 || slop == 3)) {
+	if (ata_id_has_dword_io(dev->id)) {
 		struct ata_port *ap = dev->link->ap;
+		int slop = buflen & 3;
 		unsigned long flags;
 
 		local_irq_save(flags);
@@ -736,7 +735,7 @@ static unsigned int vlb32_data_xfer(struct ata_device *adev, unsigned char *buf,
 	struct ata_port *ap = adev->link->ap;
 	int slop = buflen & 3;
 
-	if (ata_id_has_dword_io(adev->id) && (slop == 0 || slop == 3)) {
+	if (ata_id_has_dword_io(adev->id)) {
 		if (rw == WRITE)
 			iowrite32_rep(ap->ioaddr.data_addr, buf, buflen >> 2);
 		else

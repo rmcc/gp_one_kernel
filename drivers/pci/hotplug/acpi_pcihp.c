@@ -33,6 +33,7 @@
 #include <linux/pci-acpi.h>
 #include <acpi/acpi.h>
 #include <acpi/acpi_bus.h>
+#include <acpi/actypes.h>
 
 #define MY_NAME	"acpi_pcihp"
 

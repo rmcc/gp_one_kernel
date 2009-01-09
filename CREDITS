@@ -2166,6 +2166,7 @@ D: Initial implementation of VC's, pty's and select()
 
 N: Pavel Machek
 E: pavel@ucw.cz
+E: pavel@suse.cz
 D: Softcursor for vga, hypertech cdrom support, vcsa bugfix, nbd
 D: sun4/330 port, capabilities for elf, speedup for rm on ext2, USB,
 D: work on suspend-to-ram/disk, killing duplicates from ioctl32
@@ -3738,7 +3739,7 @@ S: 93149 Nittenau
 S: Germany
 
 N: Gertjan van Wingerde
-E: gwingerde@gmail.com
+E: gwingerde@home.nl
 D: Ralink rt2x00 WLAN driver
 D: Minix V2 file-system
 D: Misc fixes
@@ -3785,11 +3786,14 @@ S: The Netherlands
 
 N: David Woodhouse
 E: dwmw2@infradead.org
-D: JFFS2 file system, Memory Technology Device subsystem,
+D: ARCnet stuff, Applicom board driver, SO_BINDTODEVICE,
+D: some Alpha platform porting from 2.0, Memory Technology Devices,
+D: Acquire watchdog timer, PC speaker driver maintenance,
 D: various other stuff that annoyed me by not working.
-S: c/o Intel Corporation
-S: Pipers Way
-S: Swindon. SN3 1RJ
+S: c/o Red Hat Engineering
+S: Rustat House
+S: 60 Clifton Road
+S: Cambridge. CB1 7EG
 S: England
 
 N: Chris Wright

@@ -28,6 +28,7 @@
 #define BUS_ID_SIZE		20
 
 struct device;
+struct device_private;
 struct device_driver;
 struct driver_private;
 struct class;
@@ -147,8 +148,6 @@ extern void put_driver(struct device_driver *drv);
 extern struct device_driver *driver_find(const char *name,
 					 struct bus_type *bus);
 extern int driver_probe_done(void);
-extern int wait_for_device_probe(void);
-
 
 /* sysfs interface for exporting driver attributes */
 
@@ -367,11 +366,9 @@ struct device_dma_parameters {
 };
 
 struct device {
-	struct klist		klist_children;
-	struct klist_node	knode_parent;	/* node in sibling list */
-	struct klist_node	knode_driver;
-	struct klist_node	knode_bus;
 	struct device		*parent;
+
+	struct device_private	*p;
 
 	struct kobject kobj;
 	char	bus_id[BUS_ID_SIZE];	/* position on parent bus */

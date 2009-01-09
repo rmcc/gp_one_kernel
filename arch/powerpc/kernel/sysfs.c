@@ -134,23 +134,44 @@ void ppc_enable_pmcs(void)
 }
 EXPORT_SYMBOL(ppc_enable_pmcs);
 
+#if defined(CONFIG_6xx) || defined(CONFIG_PPC64)
+/* XXX convert to rusty's on_one_cpu */
+static unsigned long run_on_cpu(unsigned long cpu,
+			        unsigned long (*func)(unsigned long),
+				unsigned long arg)
+{
+	cpumask_t old_affinity = current->cpus_allowed;
+	unsigned long ret;
+
+	/* should return -EINVAL to userspace */
+	if (set_cpus_allowed(current, cpumask_of_cpu(cpu)))
+		return 0;
+
+	ret = func(arg);
+
+	set_cpus_allowed(current, old_affinity);
+
+	return ret;
+}
+#endif
+
 #define SYSFS_PMCSETUP(NAME, ADDRESS) \
-static void read_##NAME(void *val) \
+static unsigned long read_##NAME(unsigned long junk) \
 { \
-	*(unsigned long *)val = mfspr(ADDRESS);	\
+	return mfspr(ADDRESS); \
 } \
-static void write_##NAME(void *val) \
+static unsigned long write_##NAME(unsigned long val) \
 { \
 	ppc_enable_pmcs(); \
-	mtspr(ADDRESS, *(unsigned long *)val);	\
+	mtspr(ADDRESS, val); \
+	return 0; \
 } \
 static ssize_t show_##NAME(struct sys_device *dev, \
 			struct sysdev_attribute *attr, \
 			char *buf) \
 { \
 	struct cpu *cpu = container_of(dev, struct cpu, sysdev); \
-	unsigned long val; \
-	smp_call_function_single(cpu->sysdev.id, read_##NAME, &val, 1);	\
+	unsigned long val = run_on_cpu(cpu->sysdev.id, read_##NAME, 0); \
 	return sprintf(buf, "%lx\n", val); \
 } \
 static ssize_t __used \
@@ -162,7 +183,7 @@ static ssize_t __used \
 	int ret = sscanf(buf, "%lx", &val); \
 	if (ret != 1) \
 		return -EINVAL; \
-	smp_call_function_single(cpu->sysdev.id, write_##NAME, &val, 1); \
+	run_on_cpu(cpu->sysdev.id, write_##NAME, val); \
 	return count; \
 }
 

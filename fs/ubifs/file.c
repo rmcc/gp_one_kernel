@@ -432,6 +432,7 @@ static int ubifs_write_begin(struct file *file, struct address_space *mapping,
 	int uninitialized_var(err), appending = !!(pos + len > inode->i_size);
 	struct page *page;
 
+
 	ubifs_assert(ubifs_inode(inode)->ui_size == inode->i_size);
 
 	if (unlikely(c->ro_media))
@@ -1540,7 +1541,7 @@ static int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-const struct address_space_operations ubifs_file_address_operations = {
+struct address_space_operations ubifs_file_address_operations = {
 	.readpage       = ubifs_readpage,
 	.writepage      = ubifs_writepage,
 	.write_begin    = ubifs_write_begin,
@@ -1550,7 +1551,7 @@ const struct address_space_operations ubifs_file_address_operations = {
 	.releasepage    = ubifs_releasepage,
 };
 
-const struct inode_operations ubifs_file_inode_operations = {
+struct inode_operations ubifs_file_inode_operations = {
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_getattr,
 #ifdef CONFIG_UBIFS_FS_XATTR
@@ -1561,14 +1562,14 @@ const struct inode_operations ubifs_file_inode_operations = {
 #endif
 };
 
-const struct inode_operations ubifs_symlink_inode_operations = {
+struct inode_operations ubifs_symlink_inode_operations = {
 	.readlink    = generic_readlink,
 	.follow_link = ubifs_follow_link,
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_getattr,
 };
 
-const struct file_operations ubifs_file_operations = {
+struct file_operations ubifs_file_operations = {
 	.llseek         = generic_file_llseek,
 	.read           = do_sync_read,
 	.write          = do_sync_write,

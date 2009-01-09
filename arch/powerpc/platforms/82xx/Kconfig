@@ -1,6 +1,6 @@
 menuconfig PPC_82xx
 	bool "82xx-based boards (PQ II)"
-	depends on 6xx
+	depends on 6xx && PPC_MULTIPLATFORM
 
 if PPC_82xx
 

@@ -14,7 +14,6 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
-#include <linux/of.h>
 
 #include <asm/io.h>
 #include <asm/prom.h>
@@ -211,7 +210,7 @@ int mpc837x_usb_cfg(void)
 	int ret = 0;
 
 	np = of_find_compatible_node(NULL, NULL, "fsl-usb2-dr");
-	if (!np || !of_device_is_available(np))
+	if (!np)
 		return -ENODEV;
 	prop = of_get_property(np, "phy_type", NULL);
 

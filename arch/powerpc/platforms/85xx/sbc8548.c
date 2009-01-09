@@ -154,7 +154,6 @@ static struct of_device_id __initdata of_bus_ids[] = {
 	{ .name = "soc", },
 	{ .type = "soc", },
 	{ .compatible = "simple-bus", },
-	{ .compatible = "gianfar", },
 	{},
 };
 

@@ -84,7 +84,6 @@ static struct __initdata of_device_id sbc834x_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
 	{ .compatible = "simple-bus", },
-	{ .compatible = "gianfar", },
 	{},
 };
 

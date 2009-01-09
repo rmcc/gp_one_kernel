@@ -10,8 +10,6 @@
 #ifndef __LINUX_IF_ADDRLABEL_H
 #define __LINUX_IF_ADDRLABEL_H
 
-#include <linux/types.h>
-
 struct ifaddrlblmsg
 {
 	__u8		ifal_family;		/* Address family */

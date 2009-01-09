@@ -209,8 +209,6 @@ fw_card_bm_work(struct work_struct *work)
 	unsigned long flags;
 	int root_id, new_root_id, irm_id, gap_count, generation, grace, rcode;
 	bool do_reset = false;
-	bool root_device_is_running;
-	bool root_device_is_cmc;
 	__be32 lock_data[2];
 
 	spin_lock_irqsave(&card->lock, flags);
@@ -226,13 +224,12 @@ fw_card_bm_work(struct work_struct *work)
 
 	generation = card->generation;
 	root_device = root_node->data;
-	root_device_is_running = root_device &&
-			atomic_read(&root_device->state) == FW_DEVICE_RUNNING;
-	root_device_is_cmc = root_device && root_device->cmc;
+	if (root_device)
+		fw_device_get(root_device);
 	root_id = root_node->node_id;
 	grace = time_after(jiffies, card->reset_jiffies + DIV_ROUND_UP(HZ, 10));
 
-	if (is_next_generation(generation, card->bm_generation) ||
+	if (card->bm_generation + 1 == generation ||
 	    (card->bm_generation != generation && grace)) {
 		/*
 		 * This first step is to figure out who is IRM and
@@ -311,14 +308,14 @@ fw_card_bm_work(struct work_struct *work)
 		 * config rom.  In either case, pick another root.
 		 */
 		new_root_id = local_node->node_id;
-	} else if (!root_device_is_running) {
+	} else if (atomic_read(&root_device->state) != FW_DEVICE_RUNNING) {
 		/*
 		 * If we haven't probed this device yet, bail out now
 		 * and let's try again once that's done.
 		 */
 		spin_unlock_irqrestore(&card->lock, flags);
 		goto out;
-	} else if (root_device_is_cmc) {
+	} else if (root_device->cmc) {
 		/*
 		 * FIXME: I suppose we should set the cmstr bit in the
 		 * STATE_CLEAR register of this node, as described in
@@ -365,6 +362,8 @@ fw_card_bm_work(struct work_struct *work)
 		fw_core_initiate_bus_reset(card, 1);
 	}
  out:
+	if (root_device)
+		fw_device_put(root_device);
 	fw_node_put(root_node);
 	fw_node_put(local_node);
  out_put_card:
@@ -412,7 +411,6 @@ fw_card_add(struct fw_card *card,
 {
 	u32 *config_rom;
 	size_t length;
-	int err;
 
 	card->max_receive = max_receive;
 	card->link_speed = link_speed;
@@ -423,13 +421,7 @@ fw_card_add(struct fw_card *card,
 	list_add_tail(&card->link, &card_list);
 	mutex_unlock(&card_mutex);
 
-	err = card->driver->enable(card, config_rom, length);
-	if (err < 0) {
-		mutex_lock(&card_mutex);
-		list_del(&card->link);
-		mutex_unlock(&card_mutex);
-	}
-	return err;
+	return card->driver->enable(card, config_rom, length);
 }
 EXPORT_SYMBOL(fw_card_add);
 
@@ -519,7 +511,7 @@ fw_core_remove_card(struct fw_card *card)
 	fw_core_initiate_bus_reset(card, 1);
 
 	mutex_lock(&card_mutex);
-	list_del_init(&card->link);
+	list_del(&card->link);
 	mutex_unlock(&card_mutex);
 
 	/* Set up the dummy driver. */

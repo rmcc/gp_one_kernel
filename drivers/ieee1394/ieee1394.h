@@ -54,7 +54,9 @@
 #define IEEE1394_SPEED_800	0x03
 #define IEEE1394_SPEED_1600	0x04
 #define IEEE1394_SPEED_3200	0x05
-#define IEEE1394_SPEED_MAX	IEEE1394_SPEED_3200
+
+/* The current highest tested speed supported by the subsystem */
+#define IEEE1394_SPEED_MAX	IEEE1394_SPEED_800
 
 /* Maps speed values above to a string representation */
 extern const char *hpsb_speedto_str[];

@@ -45,7 +45,6 @@
 #include <asm/asm-offsets.h>
 #include <asm/dma.h>
 #include <asm/fixed_code.h>
-#include <asm/cacheflush.h>
 #include <asm/mem_map.h>
 
 #define TEXT_OFFSET 0
@@ -161,15 +160,15 @@ put_reg(struct task_struct *task, int regno, unsigned long data)
 static inline int is_user_addr_valid(struct task_struct *child,
 				     unsigned long start, unsigned long len)
 {
-	struct vm_area_struct *vma;
+	struct vm_list_struct *vml;
 	struct sram_list_struct *sraml;
 
 	/* overflow */
 	if (start + len < start)
 		return -EIO;
 
-	vma = find_vma(child->mm, start);
-	if (vma && start >= vma->vm_start && start + len <= vma->vm_end)
+	for (vml = child->mm->context.vmlist; vml; vml = vml->next)
+		if (start >= vml->vma->vm_start && start + len < vml->vma->vm_end)
 			return 0;
 
 	for (sraml = child->mm->context.sram_list; sraml; sraml = sraml->next)
@@ -241,7 +240,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 
 			} else if (addr >= FIXED_CODE_START
 			    && addr + sizeof(tmp) <= FIXED_CODE_END) {
-				copy_from_user_page(0, 0, 0, &tmp, (const void *)(addr), sizeof(tmp));
+				memcpy(&tmp, (const void *)(addr), sizeof(tmp));
 				copied = sizeof(tmp);
 
 			} else
@@ -321,7 +320,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 
 			} else if (addr >= FIXED_CODE_START
 			    && addr + sizeof(data) <= FIXED_CODE_END) {
-				copy_to_user_page(0, 0, 0, (void *)(addr), &data, sizeof(data));
+				memcpy((void *)(addr), &data, sizeof(data));
 				copied = sizeof(data);
 
 			} else

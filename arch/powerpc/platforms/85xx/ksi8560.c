@@ -106,6 +106,8 @@ static void __init ksi8560_pic_init(void)
 	cpm2_pic_init(np);
 	of_node_put(np);
 	set_irq_chained_handler(irq, cpm2_cascade);
+
+	setup_irq(0, NULL);
 #endif
 }
 
@@ -219,7 +221,6 @@ static struct of_device_id __initdata of_bus_ids[] = {
 	{ .type = "simple-bus", },
 	{ .name = "cpm", },
 	{ .name = "localbus", },
-	{ .compatible = "gianfar", },
 	{},
 };
 

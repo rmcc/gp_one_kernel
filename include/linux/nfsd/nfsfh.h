@@ -14,8 +14,9 @@
 #ifndef _LINUX_NFSD_FH_H
 #define _LINUX_NFSD_FH_H
 
-# include <linux/types.h>
+#include <asm/types.h>
 #ifdef __KERNEL__
+# include <linux/types.h>
 # include <linux/string.h>
 # include <linux/fs.h>
 #endif

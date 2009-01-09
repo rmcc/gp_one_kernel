@@ -18,7 +18,6 @@
 #include <asm/udbg.h>
 
 void (*udbg_putc)(char c);
-void (*udbg_flush)(void);
 int (*udbg_getc)(void);
 int (*udbg_getc_poll)(void);
 
@@ -77,9 +76,6 @@ void udbg_puts(const char *s)
 			while ((c = *s++) != '\0')
 				udbg_putc(c);
 		}
-
-		if (udbg_flush)
-			udbg_flush();
 	}
 #if 0
 	else {
@@ -101,9 +97,6 @@ int udbg_write(const char *s, int n)
 			udbg_putc(c);
 		}
 	}
-
-	if (udbg_flush)
-		udbg_flush();
 
 	return n - remain;
 }

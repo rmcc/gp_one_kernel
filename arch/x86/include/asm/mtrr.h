@@ -23,7 +23,6 @@
 #ifndef _ASM_X86_MTRR_H
 #define _ASM_X86_MTRR_H
 
-#include <linux/types.h>
 #include <linux/ioctl.h>
 #include <linux/errno.h>
 
@@ -59,15 +58,15 @@ struct mtrr_gentry {
 #endif /* !__i386__ */
 
 struct mtrr_var_range {
-	__u32 base_lo;
-	__u32 base_hi;
-	__u32 mask_lo;
-	__u32 mask_hi;
+	u32 base_lo;
+	u32 base_hi;
+	u32 mask_lo;
+	u32 mask_hi;
 };
 
 /* In the Intel processor's MTRR interface, the MTRR type is always held in
    an 8 bit field: */
-typedef __u8 mtrr_type;
+typedef u8 mtrr_type;
 
 #define MTRR_NUM_FIXED_RANGES 88
 #define MTRR_MAX_VAR_RANGES 256

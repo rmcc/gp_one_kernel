@@ -219,6 +219,11 @@ void *__symbol_get_gpl(const char *symbol);
 
 #endif
 
+struct module_ref
+{
+	local_t count;
+} ____cacheline_aligned;
+
 enum module_state
 {
 	MODULE_STATE_LIVE,
@@ -339,11 +344,8 @@ struct module
 	/* Destruction function. */
 	void (*exit)(void);
 
-#ifdef CONFIG_SMP
-	char *refptr;
-#else
-	local_t ref;
-#endif
+	/* Reference counts */
+	struct module_ref ref[NR_CPUS];
 #endif
 };
 #ifndef MODULE_ARCH_INIT
@@ -393,21 +395,13 @@ void __symbol_put(const char *symbol);
 #define symbol_put(x) __symbol_put(MODULE_SYMBOL_PREFIX #x)
 void symbol_put_addr(void *addr);
 
-static inline local_t *__module_ref_addr(struct module *mod, int cpu)
-{
-#ifdef CONFIG_SMP
-	return (local_t *) (mod->refptr + per_cpu_offset(cpu));
-#else
-	return &mod->ref;
-#endif
-}
-
 /* Sometimes we know we already have a refcount, and it's easier not
    to handle the error case (which only happens with rmmod --wait). */
 static inline void __module_get(struct module *module)
 {
 	if (module) {
-		local_inc(__module_ref_addr(module, get_cpu()));
+		BUG_ON(module_refcount(module) == 0);
+		local_inc(&module->ref[get_cpu()].count);
 		put_cpu();
 	}
 }
@@ -419,7 +413,7 @@ static inline int try_module_get(struct module *module)
 	if (module) {
 		unsigned int cpu = get_cpu();
 		if (likely(module_is_live(module)))
-			local_inc(__module_ref_addr(module, cpu));
+			local_inc(&module->ref[cpu].count);
 		else
 			ret = 0;
 		put_cpu();

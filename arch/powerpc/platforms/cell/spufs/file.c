@@ -568,17 +568,16 @@ spufs_regs_write(struct file *file, const char __user *buffer,
 	struct spu_lscsa *lscsa = ctx->csa.lscsa;
 	int ret;
 
-	if (*pos >= sizeof(lscsa->gprs))
+	size = min_t(ssize_t, sizeof lscsa->gprs - *pos, size);
+	if (size <= 0)
 		return -EFBIG;
-
-	size = min_t(ssize_t, sizeof(lscsa->gprs) - *pos, size);
 	*pos += size;
 
 	ret = spu_acquire_saved(ctx);
 	if (ret)
 		return ret;
 
-	ret = copy_from_user((char *)lscsa->gprs + *pos - size,
+	ret = copy_from_user(lscsa->gprs + *pos - size,
 			     buffer, size) ? -EFAULT : size;
 
 	spu_release_saved(ctx);
@@ -624,10 +623,9 @@ spufs_fpcr_write(struct file *file, const char __user * buffer,
 	struct spu_lscsa *lscsa = ctx->csa.lscsa;
 	int ret;
 
-	if (*pos >= sizeof(lscsa->fpcr))
-		return -EFBIG;
-
 	size = min_t(ssize_t, sizeof(lscsa->fpcr) - *pos, size);
+	if (size <= 0)
+		return -EFBIG;
 
 	ret = spu_acquire_saved(ctx);
 	if (ret)
@@ -1656,7 +1654,7 @@ out:
 
 static int spufs_check_valid_dma(struct mfc_dma_command *cmd)
 {
-	pr_debug("queueing DMA %x %llx %x %x %x\n", cmd->lsa,
+	pr_debug("queueing DMA %x %lx %x %x %x\n", cmd->lsa,
 		 cmd->ea, cmd->size, cmd->tag, cmd->cmd);
 
 	switch (cmd->cmd) {
@@ -1673,7 +1671,7 @@ static int spufs_check_valid_dma(struct mfc_dma_command *cmd)
 	}
 
 	if ((cmd->lsa & 0xf) != (cmd->ea &0xf)) {
-		pr_debug("invalid DMA alignment, ea %llx lsa %x\n",
+		pr_debug("invalid DMA alignment, ea %lx lsa %x\n",
 				cmd->ea, cmd->lsa);
 		return -EIO;
 	}
@@ -2635,7 +2633,7 @@ static int spufs_show_ctx(struct seq_file *s, void *private)
 	}
 
 	seq_printf(s, "%c flgs(%lx) sflgs(%lx) pri(%d) ts(%d) spu(%02d)"
-		" %c %llx %llx %llx %llx %x %x\n",
+		" %c %lx %lx %lx %lx %x %x\n",
 		ctx->state == SPU_STATE_SAVED ? 'S' : 'R',
 		ctx->flags,
 		ctx->sched_flags,
@@ -2667,7 +2665,7 @@ static const struct file_operations spufs_ctx_fops = {
 	.release        = single_release,
 };
 
-const struct spufs_tree_descr spufs_dir_contents[] = {
+struct spufs_tree_descr spufs_dir_contents[] = {
 	{ "capabilities", &spufs_caps_fops, 0444, },
 	{ "mem",  &spufs_mem_fops,  0666, LS_SIZE, },
 	{ "regs", &spufs_regs_fops,  0666, sizeof(struct spu_reg128[128]), },
@@ -2708,7 +2706,7 @@ const struct spufs_tree_descr spufs_dir_contents[] = {
 	{},
 };
 
-const struct spufs_tree_descr spufs_dir_nosched_contents[] = {
+struct spufs_tree_descr spufs_dir_nosched_contents[] = {
 	{ "capabilities", &spufs_caps_fops, 0444, },
 	{ "mem",  &spufs_mem_fops,  0666, LS_SIZE, },
 	{ "mbox", &spufs_mbox_fops, 0444, },
@@ -2733,12 +2731,12 @@ const struct spufs_tree_descr spufs_dir_nosched_contents[] = {
 	{},
 };
 
-const struct spufs_tree_descr spufs_dir_debug_contents[] = {
+struct spufs_tree_descr spufs_dir_debug_contents[] = {
 	{ ".ctx", &spufs_ctx_fops, 0444, },
 	{},
 };
 
-const struct spufs_coredump_reader spufs_coredump_read[] = {
+struct spufs_coredump_reader spufs_coredump_read[] = {
 	{ "regs", __spufs_regs_read, NULL, sizeof(struct spu_reg128[128])},
 	{ "fpcr", __spufs_fpcr_read, NULL, sizeof(struct spu_reg128) },
 	{ "lslr", NULL, spufs_lslr_get, 19 },

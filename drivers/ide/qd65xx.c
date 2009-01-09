@@ -16,7 +16,7 @@
 
 /*
  * Rewritten from the work of Colten Edwards <pje120@cs.usask.ca> by
- * Samuel Thibault <samuel.thibault@ens-lyon.org>
+ * Samuel Thibault <samuel.thibault@fnac.net>
  */
 
 #include <linux/module.h>

@@ -226,7 +226,6 @@ static struct of_device_id __initdata of_bus_ids[] = {
 	{ .name = "cpm", },
 	{ .name = "localbus", },
 	{ .compatible = "simple-bus", },
-	{ .compatible = "gianfar", },
 	{},
 };
 

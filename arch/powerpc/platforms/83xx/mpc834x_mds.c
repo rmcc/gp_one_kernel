@@ -112,7 +112,6 @@ static struct of_device_id mpc834x_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
 	{ .compatible = "simple-bus", },
-	{ .compatible = "gianfar", },
 	{},
 };
 

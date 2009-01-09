@@ -82,9 +82,6 @@ extern int percpu_pagelist_fraction;
 extern int compat_log;
 extern int latencytop_enabled;
 extern int sysctl_nr_open_min, sysctl_nr_open_max;
-#ifndef CONFIG_MMU
-extern int sysctl_nr_trim_pages;
-#endif
 #ifdef CONFIG_RCU_TORTURE_TEST
 extern int rcutorture_runnable;
 #endif /* #ifdef CONFIG_RCU_TORTURE_TEST */
@@ -101,7 +98,6 @@ static int two = 2;
 
 static int zero;
 static int one = 1;
-static unsigned long one_ul = 1;
 static int one_hundred = 100;
 
 /* this is needed for the proc_dointvec_minmax for [fs_]overflow UID and GID */
@@ -145,7 +141,6 @@ extern int acct_parm[];
 
 #ifdef CONFIG_IA64
 extern int no_unaligned_warning;
-extern int unaligned_dump_stack;
 #endif
 
 #ifdef CONFIG_RT_MUTEXES
@@ -783,14 +778,6 @@ static struct ctl_table kern_table[] = {
 	 	.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
 	},
-	{
-		.ctl_name	= CTL_UNNUMBERED,
-		.procname	= "unaligned-dump-stack",
-		.data		= &unaligned_dump_stack,
-		.maxlen		= sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= &proc_dointvec,
-	},
 #endif
 #ifdef CONFIG_DETECT_SOFTLOCKUP
 	{
@@ -810,7 +797,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &softlockup_thresh,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= &proc_dosoftlockup_thresh,
+		.proc_handler	= &proc_dointvec_minmax,
 		.strategy	= &sysctl_intvec,
 		.extra1		= &neg_one,
 		.extra2		= &sixty,
@@ -975,7 +962,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &dirty_background_bytes_handler,
 		.strategy	= &sysctl_intvec,
-		.extra1		= &one_ul,
+		.extra1		= &one,
 	},
 	{
 		.ctl_name	= VM_DIRTY_RATIO,
@@ -996,7 +983,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &dirty_bytes_handler,
 		.strategy	= &sysctl_intvec,
-		.extra1		= &one_ul,
+		.extra1		= &one,
 	},
 	{
 		.procname	= "dirty_writeback_centisecs",
@@ -1114,17 +1101,6 @@ static struct ctl_table vm_table[] = {
 		.maxlen		= sizeof(sysctl_max_map_count),
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec
-	},
-#else
-	{
-		.ctl_name	= CTL_UNNUMBERED,
-		.procname	= "nr_trim_pages",
-		.data		= &sysctl_nr_trim_pages,
-		.maxlen		= sizeof(sysctl_nr_trim_pages),
-		.mode		= 0644,
-		.proc_handler	= &proc_dointvec_minmax,
-		.strategy	= &sysctl_intvec,
-		.extra1		= &zero,
 	},
 #endif
 	{
@@ -1698,7 +1674,7 @@ int do_sysctl(int __user *name, int nlen, void __user *oldval, size_t __user *ol
 	return error;
 }
 
-SYSCALL_DEFINE1(sysctl, struct __sysctl_args __user *, args)
+asmlinkage long sys_sysctl(struct __sysctl_args __user *args)
 {
 	struct __sysctl_args tmp;
 	int error;
@@ -2999,7 +2975,7 @@ int sysctl_ms_jiffies(struct ctl_table *table,
 #else /* CONFIG_SYSCTL_SYSCALL */
 
 
-SYSCALL_DEFINE1(sysctl, struct __sysctl_args __user *, args)
+asmlinkage long sys_sysctl(struct __sysctl_args __user *args)
 {
 	struct __sysctl_args tmp;
 	int error;
