@@ -267,8 +267,7 @@ EXPORT_SYMBOL(drm_irq_install);
  */
 int drm_irq_uninstall(struct drm_device * dev)
 {
-	unsigned long irqflags;
-	int irq_enabled, i;
+	int irq_enabled;
 
 	if (!drm_core_check_feature(dev, DRIVER_HAVE_IRQ))
 		return -EINVAL;
@@ -277,16 +276,6 @@ int drm_irq_uninstall(struct drm_device * dev)
 	irq_enabled = dev->irq_enabled;
 	dev->irq_enabled = 0;
 	mutex_unlock(&dev->struct_mutex);
-
-	/*
-	 * Wake up any waiters so they don't hang.
-	 */
-	spin_lock_irqsave(&dev->vbl_lock, irqflags);
-	for (i = 0; i < dev->num_crtcs; i++) {
-		DRM_WAKEUP(&dev->vbl_queue[i]);
-		dev->vblank_enabled[i] = 0;
-	}
-	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
 
 	if (!irq_enabled)
 		return -EINVAL;
@@ -663,9 +652,8 @@ int drm_wait_vblank(struct drm_device *dev, void *data,
 			  vblwait->request.sequence, crtc);
 		dev->last_vblank_wait[crtc] = vblwait->request.sequence;
 		DRM_WAIT_ON(ret, dev->vbl_queue[crtc], 3 * DRM_HZ,
-			    (((drm_vblank_count(dev, crtc) -
-			       vblwait->request.sequence) <= (1 << 23)) ||
-			     !dev->irq_enabled));
+			    ((drm_vblank_count(dev, crtc)
+			      - vblwait->request.sequence) <= (1 << 23)));
 
 		if (ret != -EINTR) {
 			struct timeval now;

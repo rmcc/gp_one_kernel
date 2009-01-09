@@ -670,7 +670,8 @@ static int atmel_spi_transfer(struct spi_device *spi, struct spi_message *msg)
 	dev_dbg(controller, "new message %p submitted for %s\n",
 			msg, spi->dev.bus_id);
 
-	if (unlikely(list_empty(&msg->transfers)))
+	if (unlikely(list_empty(&msg->transfers)
+			|| !spi->max_speed_hz))
 		return -EINVAL;
 
 	if (as->stopping)

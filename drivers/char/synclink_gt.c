@@ -1,4 +1,6 @@
 /*
+ * $Id: synclink_gt.c,v 4.50 2007/07/25 19:29:25 paulkf Exp $
+ *
  * Device driver for Microgate SyncLink GT serial adapters.
  *
  * written by Paul Fulghum for Microgate Corporation
@@ -89,6 +91,7 @@
  * module identification
  */
 static char *driver_name     = "SyncLink GT";
+static char *driver_version  = "$Revision: 4.50 $";
 static char *tty_driver_name = "synclink_gt";
 static char *tty_dev_prefix  = "ttySLG";
 MODULE_LICENSE("GPL");
@@ -1306,7 +1309,7 @@ static int read_proc(char *page, char **start, off_t off, int count,
 	off_t	begin = 0;
 	struct slgt_info *info;
 
-	len += sprintf(page, "synclink_gt driver\n");
+	len += sprintf(page, "synclink_gt driver:%s\n", driver_version);
 
 	info = slgt_device_list;
 	while( info ) {
@@ -2438,7 +2441,7 @@ static void program_hw(struct slgt_info *info)
 	info->ri_chkcount = 0;
 	info->dsr_chkcount = 0;
 
-	slgt_irq_on(info, IRQ_DCD | IRQ_CTS | IRQ_DSR | IRQ_RI);
+	slgt_irq_on(info, IRQ_DCD | IRQ_CTS | IRQ_DSR);
 	get_signals(info);
 
 	if (info->netcount ||
@@ -3573,7 +3576,7 @@ static void slgt_cleanup(void)
 	struct slgt_info *info;
 	struct slgt_info *tmp;
 
-	printk(KERN_INFO "unload %s\n", driver_name);
+	printk("unload %s %s\n", driver_name, driver_version);
 
 	if (serial_driver) {
 		for (info=slgt_device_list ; info != NULL ; info=info->next_device)
@@ -3616,7 +3619,7 @@ static int __init slgt_init(void)
 {
 	int rc;
 
-	printk(KERN_INFO "%s\n", driver_name);
+ 	printk("%s %s\n", driver_name, driver_version);
 
 	serial_driver = alloc_tty_driver(MAX_DEVICES);
 	if (!serial_driver) {
@@ -3647,8 +3650,9 @@ static int __init slgt_init(void)
 		goto error;
 	}
 
-	printk(KERN_INFO "%s, tty major#%d\n",
-	       driver_name, serial_driver->major);
+ 	printk("%s %s, tty major#%d\n",
+		driver_name, driver_version,
+		serial_driver->major);
 
 	slgt_device_count = 0;
 	if ((rc = pci_register_driver(&pci_driver)) < 0) {

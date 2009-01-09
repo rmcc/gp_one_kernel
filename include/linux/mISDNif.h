@@ -559,10 +559,7 @@ extern void	mISDN_unregister_clock(struct mISDNclock *);
 
 static inline struct mISDNdevice *dev_to_mISDN(struct device *dev)
 {
-	if (dev)
-		return dev_get_drvdata(dev);
-	else
-		return NULL;
+	return dev_get_drvdata(dev);
 }
 
 extern void	set_channel_address(struct mISDNchannel *, u_int, u_int);
