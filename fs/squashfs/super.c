@@ -35,7 +35,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/zlib.h>
-#include <linux/magic.h>
 
 #include "squashfs_fs.h"
 #include "squashfs_fs_sb.h"
@@ -389,7 +388,7 @@ static int __init init_squashfs_fs(void)
 		return err;
 	}
 
-	printk(KERN_INFO "squashfs: version 4.0 (2009/01/31) "
+	printk(KERN_INFO "squashfs: version 4.0 (2009/01/03) "
 		"Phillip Lougher\n");
 
 	return 0;
