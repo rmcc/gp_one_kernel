@@ -30,7 +30,7 @@
 #ifdef CONFIG_X86_PAT
 int __read_mostly pat_enabled = 1;
 
-void __cpuinit pat_disable(const char *reason)
+void __cpuinit pat_disable(char *reason)
 {
 	pat_enabled = 0;
 	printk(KERN_INFO "%s\n", reason);
@@ -42,11 +42,6 @@ static int __init nopat(char *str)
 	return 0;
 }
 early_param("nopat", nopat);
-#else
-static inline void pat_disable(const char *reason)
-{
-	(void)reason;
-}
 #endif
 
 
@@ -83,20 +78,16 @@ void pat_init(void)
 	if (!pat_enabled)
 		return;
 
-	if (!cpu_has_pat) {
-		if (!boot_pat_state) {
-			pat_disable("PAT not supported by CPU.");
-			return;
-		} else {
-			/*
-			 * If this happens we are on a secondary CPU, but
-			 * switched to PAT on the boot CPU. We have no way to
-			 * undo PAT.
-			 */
-			printk(KERN_ERR "PAT enabled, "
-			       "but not supported by secondary CPU\n");
-			BUG();
-		}
+	/* Paranoia check. */
+	if (!cpu_has_pat && boot_pat_state) {
+		/*
+		 * If this happens we are on a secondary CPU, but
+		 * switched to PAT on the boot CPU. We have no way to
+		 * undo PAT.
+		 */
+		printk(KERN_ERR "PAT enabled, "
+		       "but not supported by secondary CPU\n");
+		BUG();
 	}
 
 	/* Set PWT to Write-Combining. All other bits stay the same */
@@ -610,13 +601,12 @@ void unmap_devmem(unsigned long pfn, unsigned long size, pgprot_t vma_prot)
  * Reserved non RAM regions only and after successful reserve_memtype,
  * this func also keeps identity mapping (if any) in sync with this new prot.
  */
-static int reserve_pfn_range(u64 paddr, unsigned long size, pgprot_t *vma_prot,
-				int strict_prot)
+static int reserve_pfn_range(u64 paddr, unsigned long size, pgprot_t vma_prot)
 {
 	int is_ram = 0;
 	int id_sz, ret;
 	unsigned long flags;
-	unsigned long want_flags = (pgprot_val(*vma_prot) & _PAGE_CACHE_MASK);
+	unsigned long want_flags = (pgprot_val(vma_prot) & _PAGE_CACHE_MASK);
 
 	is_ram = pagerange_is_ram(paddr, paddr + size);
 
@@ -635,24 +625,15 @@ static int reserve_pfn_range(u64 paddr, unsigned long size, pgprot_t *vma_prot,
 		return ret;
 
 	if (flags != want_flags) {
-		if (strict_prot || !is_new_memtype_allowed(want_flags, flags)) {
-			free_memtype(paddr, paddr + size);
-			printk(KERN_ERR "%s:%d map pfn expected mapping type %s"
-				" for %Lx-%Lx, got %s\n",
-				current->comm, current->pid,
-				cattr_name(want_flags),
-				(unsigned long long)paddr,
-				(unsigned long long)(paddr + size),
-				cattr_name(flags));
-			return -EINVAL;
-		}
-		/*
-		 * We allow returning different type than the one requested in
-		 * non strict case.
-		 */
-		*vma_prot = __pgprot((pgprot_val(*vma_prot) &
-				      (~_PAGE_CACHE_MASK)) |
-				     flags);
+		free_memtype(paddr, paddr + size);
+		printk(KERN_ERR
+		"%s:%d map pfn expected mapping type %s for %Lx-%Lx, got %s\n",
+			current->comm, current->pid,
+			cattr_name(want_flags),
+			(unsigned long long)paddr,
+			(unsigned long long)(paddr + size),
+			cattr_name(flags));
+		return -EINVAL;
 	}
 
 	/* Need to keep identity mapping in sync */
@@ -708,7 +689,6 @@ int track_pfn_vma_copy(struct vm_area_struct *vma)
 	unsigned long vma_start = vma->vm_start;
 	unsigned long vma_end = vma->vm_end;
 	unsigned long vma_size = vma_end - vma_start;
-	pgprot_t pgprot;
 
 	if (!pat_enabled)
 		return 0;
@@ -722,8 +702,7 @@ int track_pfn_vma_copy(struct vm_area_struct *vma)
 			WARN_ON_ONCE(1);
 			return -EINVAL;
 		}
-		pgprot = __pgprot(prot);
-		return reserve_pfn_range(paddr, vma_size, &pgprot, 1);
+		return reserve_pfn_range(paddr, vma_size, __pgprot(prot));
 	}
 
 	/* reserve entire vma page by page, using pfn and prot from pte */
@@ -731,8 +710,7 @@ int track_pfn_vma_copy(struct vm_area_struct *vma)
 		if (follow_phys(vma, vma_start + i, 0, &prot, &paddr))
 			continue;
 
-		pgprot = __pgprot(prot);
-		retval = reserve_pfn_range(paddr, PAGE_SIZE, &pgprot, 1);
+		retval = reserve_pfn_range(paddr, PAGE_SIZE, __pgprot(prot));
 		if (retval)
 			goto cleanup_ret;
 	}
@@ -763,7 +741,7 @@ cleanup_ret:
  * Note that this function can be called with caller trying to map only a
  * subrange/page inside the vma.
  */
-int track_pfn_vma_new(struct vm_area_struct *vma, pgprot_t *prot,
+int track_pfn_vma_new(struct vm_area_struct *vma, pgprot_t prot,
 			unsigned long pfn, unsigned long size)
 {
 	int retval = 0;
@@ -780,14 +758,14 @@ int track_pfn_vma_new(struct vm_area_struct *vma, pgprot_t *prot,
 	if (is_linear_pfn_mapping(vma)) {
 		/* reserve the whole chunk starting from vm_pgoff */
 		paddr = (resource_size_t)vma->vm_pgoff << PAGE_SHIFT;
-		return reserve_pfn_range(paddr, vma_size, prot, 0);
+		return reserve_pfn_range(paddr, vma_size, prot);
 	}
 
 	/* reserve page by page using pfn and size */
 	base_paddr = (resource_size_t)pfn << PAGE_SHIFT;
 	for (i = 0; i < size; i += PAGE_SIZE) {
 		paddr = base_paddr + i;
-		retval = reserve_pfn_range(paddr, PAGE_SIZE, prot, 0);
+		retval = reserve_pfn_range(paddr, PAGE_SIZE, prot);
 		if (retval)
 			goto cleanup_ret;
 	}

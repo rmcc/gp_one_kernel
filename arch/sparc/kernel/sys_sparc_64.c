@@ -23,7 +23,6 @@
 #include <linux/ipc.h>
 #include <linux/personality.h>
 #include <linux/random.h>
-#include <linux/module.h>
 
 #include <asm/uaccess.h>
 #include <asm/utrap.h>
@@ -355,7 +354,6 @@ unsigned long get_fb_unmapped_area(struct file *filp, unsigned long orig_addr, u
 
 	return addr;
 }
-EXPORT_SYMBOL(get_fb_unmapped_area);
 
 /* Essentially the same as PowerPC... */
 void arch_pick_mmap_layout(struct mm_struct *mm)

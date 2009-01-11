@@ -241,7 +241,7 @@ struct dio_driver {
 
 extern int dio_find(int deviceid);
 extern unsigned long dio_scodetophysaddr(int scode);
-extern int dio_create_sysfs_dev_files(struct dio_dev *);
+extern void dio_create_sysfs_dev_files(struct dio_dev *);
 
 /* New-style probing */
 extern int dio_register_driver(struct dio_driver *);

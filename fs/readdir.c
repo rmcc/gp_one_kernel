@@ -102,8 +102,7 @@ efault:
 	return -EFAULT;
 }
 
-SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
-		struct old_linux_dirent __user *, dirent, unsigned int, count)
+asmlinkage long old_readdir(unsigned int fd, struct old_linux_dirent __user * dirent, unsigned int count)
 {
 	int error;
 	struct file * file;
@@ -188,8 +187,7 @@ efault:
 	return -EFAULT;
 }
 
-SYSCALL_DEFINE3(getdents, unsigned int, fd,
-		struct linux_dirent __user *, dirent, unsigned int, count)
+asmlinkage long sys_getdents(unsigned int fd, struct linux_dirent __user * dirent, unsigned int count)
 {
 	struct file * file;
 	struct linux_dirent __user * lastdirent;
@@ -270,8 +268,7 @@ efault:
 	return -EFAULT;
 }
 
-SYSCALL_DEFINE3(getdents64, unsigned int, fd,
-		struct linux_dirent64 __user *, dirent, unsigned int, count)
+asmlinkage long sys_getdents64(unsigned int fd, struct linux_dirent64 __user * dirent, unsigned int count)
 {
 	struct file * file;
 	struct linux_dirent64 __user * lastdirent;

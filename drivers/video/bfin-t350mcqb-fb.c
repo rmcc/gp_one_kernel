@@ -254,20 +254,7 @@ static int bfin_t350mcqb_fb_check_var(struct fb_var_screeninfo *var,
 				   struct fb_info *info)
 {
 
-	switch (var->bits_per_pixel) {
-	case 24:/* TRUECOLOUR, 16m */
-		var->red.offset = 0;
-		var->green.offset = 8;
-		var->blue.offset = 16;
-		var->red.length = var->green.length = var->blue.length = 8;
-		var->transp.offset = 0;
-		var->transp.length = 0;
-		var->transp.msb_right = 0;
-		var->red.msb_right = 0;
-		var->green.msb_right = 0;
-		var->blue.msb_right = 0;
-		break;
-	default:
+	if (var->bits_per_pixel != LCD_BPP) {
 		pr_debug("%s: depth not supported: %u BPP\n", __func__,
 			 var->bits_per_pixel);
 		return -EINVAL;
