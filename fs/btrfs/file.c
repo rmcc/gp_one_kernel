@@ -29,6 +29,7 @@
 #include <linux/writeback.h>
 #include <linux/statfs.h>
 #include <linux/compat.h>
+#include <linux/version.h>
 #include "ctree.h"
 #include "disk-io.h"
 #include "transaction.h"
@@ -1214,15 +1215,15 @@ int btrfs_sync_file(struct file *file, struct dentry *dentry, int datasync)
 	}
 	mutex_unlock(&root->fs_info->trans_mutex);
 
-	root->log_batch++;
+	root->fs_info->tree_log_batch++;
 	filemap_fdatawrite(inode->i_mapping);
 	btrfs_wait_ordered_range(inode, 0, (u64)-1);
-	root->log_batch++;
+	root->fs_info->tree_log_batch++;
 
 	/*
 	 * ok we haven't committed the transaction yet, lets do a commit
 	 */
-	if (file && file->private_data)
+	if (file->private_data)
 		btrfs_ioctl_trans_end(file);
 
 	trans = btrfs_start_transaction(root, 1);
@@ -1231,7 +1232,7 @@ int btrfs_sync_file(struct file *file, struct dentry *dentry, int datasync)
 		goto out;
 	}
 
-	ret = btrfs_log_dentry_safe(trans, root, dentry);
+	ret = btrfs_log_dentry_safe(trans, root, file->f_dentry);
 	if (ret < 0)
 		goto out;
 
@@ -1245,7 +1246,7 @@ int btrfs_sync_file(struct file *file, struct dentry *dentry, int datasync)
 	 * file again, but that will end up using the synchronization
 	 * inside btrfs_sync_log to keep things safe.
 	 */
-	mutex_unlock(&dentry->d_inode->i_mutex);
+	mutex_unlock(&file->f_dentry->d_inode->i_mutex);
 
 	if (ret > 0) {
 		ret = btrfs_commit_transaction(trans, root);
@@ -1253,7 +1254,7 @@ int btrfs_sync_file(struct file *file, struct dentry *dentry, int datasync)
 		btrfs_sync_log(trans, root);
 		ret = btrfs_end_transaction(trans, root);
 	}
-	mutex_lock(&dentry->d_inode->i_mutex);
+	mutex_lock(&file->f_dentry->d_inode->i_mutex);
 out:
 	return ret > 0 ? EIO : ret;
 }

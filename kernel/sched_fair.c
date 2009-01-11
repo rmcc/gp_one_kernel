@@ -386,20 +386,6 @@ int sched_nr_latency_handler(struct ctl_table *table, int write,
 #endif
 
 /*
- * delta *= P[w / rw]
- */
-static inline unsigned long
-calc_delta_weight(unsigned long delta, struct sched_entity *se)
-{
-	for_each_sched_entity(se) {
-		delta = calc_delta_mine(delta,
-				se->load.weight, &cfs_rq_of(se)->load);
-	}
-
-	return delta;
-}
-
-/*
  * delta /= w
  */
 static inline unsigned long
@@ -440,12 +426,20 @@ static u64 __sched_period(unsigned long nr_running)
  */
 static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	unsigned long nr_running = cfs_rq->nr_running;
+	u64 slice = __sched_period(cfs_rq->nr_running + !se->on_rq);
 
-	if (unlikely(!se->on_rq))
-		nr_running++;
+	for_each_sched_entity(se) {
+		struct load_weight *load = &cfs_rq->load;
 
-	return calc_delta_weight(__sched_period(nr_running), se);
+		if (unlikely(!se->on_rq)) {
+			struct load_weight lw = cfs_rq->load;
+
+			update_load_add(&lw, se->load.weight);
+			load = &lw;
+		}
+		slice = calc_delta_mine(slice, se->load.weight, load);
+	}
+	return slice;
 }
 
 /*
@@ -492,6 +486,8 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	 * overflow on 32 bits):
 	 */
 	delta_exec = (unsigned long)(now - curr->exec_start);
+	if (!delta_exec)
+		return;
 
 	__update_curr(cfs_rq, curr, delta_exec);
 	curr->exec_start = now;
@@ -1361,12 +1357,11 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int sync)
 {
 	struct task_struct *curr = rq->curr;
 	struct sched_entity *se = &curr->se, *pse = &p->se;
+	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
+
+	update_curr(cfs_rq);
 
 	if (unlikely(rt_prio(p->prio))) {
-		struct cfs_rq *cfs_rq = task_cfs_rq(curr);
-
-		update_rq_clock(rq);
-		update_curr(cfs_rq);
 		resched_task(curr);
 		return;
 	}
@@ -1621,8 +1616,6 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 		entity_tick(cfs_rq, se, queued);
 	}
 }
-
-#define swap(a, b) do { typeof(a) tmp = (a); (a) = (b); (b) = tmp; } while (0)
 
 /*
  * Share the fairness runtime between parent and child, thus the

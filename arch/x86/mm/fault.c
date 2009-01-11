@@ -393,7 +393,7 @@ static void show_fault_oops(struct pt_regs *regs, unsigned long error_code,
 		if (pte && pte_present(*pte) && !pte_exec(*pte))
 			printk(KERN_CRIT "kernel tried to execute "
 				"NX-protected page - exploit attempt? "
-				"(uid: %d)\n", current->uid);
+				"(uid: %d)\n", current_uid());
 	}
 #endif
 
@@ -667,7 +667,6 @@ void __kprobes do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	if (unlikely(in_atomic() || !mm))
 		goto bad_area_nosemaphore;
 
-again:
 	/*
 	 * When running in the kernel we expect faults to occur only to
 	 * addresses in user space.  All other faults represent errors in the
@@ -859,25 +858,14 @@ no_context:
 	oops_end(flags, regs, sig);
 #endif
 
-/*
- * We ran out of memory, or some other thing happened to us that made
- * us unable to handle the page fault gracefully.
- */
 out_of_memory:
+	/*
+	 * We ran out of memory, call the OOM killer, and return the userspace
+	 * (which will retry the fault, or kill us if we got oom-killed).
+	 */
 	up_read(&mm->mmap_sem);
-	if (is_global_init(tsk)) {
-		yield();
-		/*
-		 * Re-lookup the vma - in theory the vma tree might
-		 * have changed:
-		 */
-		goto again;
-	}
-
-	printk("VM: killing process %s\n", tsk->comm);
-	if (error_code & PF_USER)
-		do_group_exit(SIGKILL);
-	goto no_context;
+	pagefault_out_of_memory();
+	return;
 
 do_sigbus:
 	up_read(&mm->mmap_sem);
