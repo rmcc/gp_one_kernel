@@ -10,6 +10,7 @@
 #include <asm/errno.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
+#include <linux/miscdevice.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/init.h>

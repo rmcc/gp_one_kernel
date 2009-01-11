@@ -98,6 +98,12 @@ struct dataflash {
 	struct mtd_info		mtd;
 };
 
+#ifdef CONFIG_MTD_PARTITIONS
+#define	mtd_has_partitions()	(1)
+#else
+#define	mtd_has_partitions()	(0)
+#endif
+
 /* ......................................................................... */
 
 /*
@@ -664,8 +670,6 @@ add_dataflash_otp(struct spi_device *spi, char *name,
 	device->write = dataflash_write;
 	device->priv = priv;
 
-	device->dev.parent = &spi->dev;
-
 	if (revision >= 'c')
 		otp_tag = otp_setup(device, revision);
 
@@ -678,13 +682,11 @@ add_dataflash_otp(struct spi_device *spi, char *name,
 		struct mtd_partition	*parts;
 		int			nr_parts = 0;
 
-		if (mtd_has_cmdlinepart()) {
-			static const char *part_probes[]
-					= { "cmdlinepart", NULL, };
+#ifdef CONFIG_MTD_CMDLINE_PARTS
+		static const char *part_probes[] = { "cmdlinepart", NULL, };
 
-			nr_parts = parse_mtd_partitions(device,
-					part_probes, &parts, 0);
-		}
+		nr_parts = parse_mtd_partitions(device, part_probes, &parts, 0);
+#endif
 
 		if (nr_parts <= 0 && pdata && pdata->parts) {
 			parts = pdata->parts;

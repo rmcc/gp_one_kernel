@@ -286,7 +286,6 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 	gd->private_data = new;
 	new->blkcore_priv = gd;
 	gd->queue = tr->blkcore_priv->rq;
-	gd->driverfs_dev = new->mtd->dev.parent;
 
 	if (new->readonly)
 		set_disk_ro(gd, 1);
@@ -383,12 +382,11 @@ int register_mtd_blktrans(struct mtd_blktrans_ops *tr)
 	tr->blkcore_priv->thread = kthread_run(mtd_blktrans_thread, tr,
 			"%sd", tr->name);
 	if (IS_ERR(tr->blkcore_priv->thread)) {
-		int ret = PTR_ERR(tr->blkcore_priv->thread);
 		blk_cleanup_queue(tr->blkcore_priv->rq);
 		unregister_blkdev(tr->major, tr->name);
 		kfree(tr->blkcore_priv);
 		mutex_unlock(&mtd_table_mutex);
-		return ret;
+		return PTR_ERR(tr->blkcore_priv->thread);
 	}
 
 	INIT_LIST_HEAD(&tr->devs);
