@@ -29,6 +29,7 @@
 #include <linux/writeback.h>
 #include <linux/statfs.h>
 #include <linux/compat.h>
+#include <linux/version.h>
 #include "ctree.h"
 #include "disk-io.h"
 #include "transaction.h"
@@ -1214,10 +1215,10 @@ int btrfs_sync_file(struct file *file, struct dentry *dentry, int datasync)
 	}
 	mutex_unlock(&root->fs_info->trans_mutex);
 
-	root->log_batch++;
+	root->fs_info->tree_log_batch++;
 	filemap_fdatawrite(inode->i_mapping);
 	btrfs_wait_ordered_range(inode, 0, (u64)-1);
-	root->log_batch++;
+	root->fs_info->tree_log_batch++;
 
 	/*
 	 * ok we haven't committed the transaction yet, lets do a commit
