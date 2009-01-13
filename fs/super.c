@@ -831,8 +831,7 @@ int get_sb_bdev(struct file_system_type *fs_type,
 		bdev->bd_super = s;
 	}
 
-	simple_set_mnt(mnt, s);
-	return 0;
+	return simple_set_mnt(mnt, s);
 
 error_s:
 	error = PTR_ERR(s);
@@ -878,8 +877,7 @@ int get_sb_nodev(struct file_system_type *fs_type,
 		return error;
 	}
 	s->s_flags |= MS_ACTIVE;
-	simple_set_mnt(mnt, s);
-	return 0;
+	return simple_set_mnt(mnt, s);
 }
 
 EXPORT_SYMBOL(get_sb_nodev);
@@ -911,8 +909,7 @@ int get_sb_single(struct file_system_type *fs_type,
 		s->s_flags |= MS_ACTIVE;
 	}
 	do_remount_sb(s, flags, data, 0);
-	simple_set_mnt(mnt, s);
-	return 0;
+	return simple_set_mnt(mnt, s);
 }
 
 EXPORT_SYMBOL(get_sb_single);

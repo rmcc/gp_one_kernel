@@ -699,7 +699,7 @@ cifs_d_revalidate(struct dentry *direntry, struct nameidata *nd)
 	return rc;
 }     */
 
-const struct dentry_operations cifs_dentry_ops = {
+struct dentry_operations cifs_dentry_ops = {
 	.d_revalidate = cifs_d_revalidate,
 /* d_delete:       cifs_d_delete,      */ /* not needed except for debugging */
 };
@@ -737,7 +737,7 @@ static int cifs_ci_compare(struct dentry *dentry, struct qstr *a,
 	return 1;
 }
 
-const struct dentry_operations cifs_ci_dentry_ops = {
+struct dentry_operations cifs_ci_dentry_ops = {
 	.d_revalidate = cifs_d_revalidate,
 	.d_hash = cifs_ci_hash,
 	.d_compare = cifs_ci_compare,

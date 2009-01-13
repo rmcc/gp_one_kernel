@@ -81,16 +81,13 @@ static int get_sb_mtd_aux(struct file_system_type *fs_type, int flags,
 
 	/* go */
 	sb->s_flags |= MS_ACTIVE;
-	simple_set_mnt(mnt, sb);
-
-	return 0;
+	return simple_set_mnt(mnt, sb);
 
 	/* new mountpoint for an already mounted superblock */
 already_mounted:
 	DEBUG(1, "MTDSB: Device %d (\"%s\") is already mounted\n",
 	      mtd->index, mtd->name);
-	simple_set_mnt(mnt, sb);
-	ret = 0;
+	ret = simple_set_mnt(mnt, sb);
 	goto out_put;
 
 out_error:

@@ -397,10 +397,11 @@ static void __mnt_unmake_readonly(struct vfsmount *mnt)
 	spin_unlock(&vfsmount_lock);
 }
 
-void simple_set_mnt(struct vfsmount *mnt, struct super_block *sb)
+int simple_set_mnt(struct vfsmount *mnt, struct super_block *sb)
 {
 	mnt->mnt_sb = sb;
 	mnt->mnt_root = dget(sb->s_root);
+	return 0;
 }
 
 EXPORT_SYMBOL(simple_set_mnt);

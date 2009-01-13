@@ -35,7 +35,7 @@
 /*
  * forward references
  */
-const struct dentry_operations jfs_ci_dentry_operations;
+struct dentry_operations jfs_ci_dentry_operations;
 
 static s64 commitZeroLink(tid_t, struct inode *);
 
@@ -1595,7 +1595,7 @@ out:
 	return result;
 }
 
-const struct dentry_operations jfs_ci_dentry_operations =
+struct dentry_operations jfs_ci_dentry_operations =
 {
 	.d_hash = jfs_ci_hash,
 	.d_compare = jfs_ci_compare,

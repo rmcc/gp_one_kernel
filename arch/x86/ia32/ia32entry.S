@@ -557,7 +557,7 @@ ia32_sys_call_table:
 	.quad sys32_olduname
 	.quad sys_umask		/* 60 */
 	.quad sys_chroot
-	.quad compat_sys_ustat
+	.quad sys32_ustat
 	.quad sys_dup2
 	.quad sys_getppid
 	.quad sys_getpgrp		/* 65 */

@@ -2034,8 +2034,7 @@ static int ubifs_get_sb(struct file_system_type *fs_type, int flags,
 	/* 'fill_super()' opens ubi again so we must close it here */
 	ubi_close_volume(ubi);
 
-	simple_set_mnt(mnt, sb);
-	return 0;
+	return simple_set_mnt(mnt, sb);
 
 out_deact:
 	up_write(&sb->s_umount);

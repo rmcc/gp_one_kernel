@@ -89,7 +89,7 @@ static void ecryptfs_d_release(struct dentry *dentry)
 	return;
 }
 
-const struct dentry_operations ecryptfs_dops = {
+struct dentry_operations ecryptfs_dops = {
 	.d_revalidate = ecryptfs_d_revalidate,
 	.d_release = ecryptfs_d_release,
 };

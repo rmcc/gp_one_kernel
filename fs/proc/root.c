@@ -83,8 +83,7 @@ static int proc_get_sb(struct file_system_type *fs_type,
 		ns->proc_mnt = mnt;
 	}
 
-	simple_set_mnt(mnt, sb);
-	return 0;
+	return simple_set_mnt(mnt, sb);
 }
 
 static void proc_kill_sb(struct super_block *sb)

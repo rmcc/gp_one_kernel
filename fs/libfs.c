@@ -44,7 +44,7 @@ static int simple_delete_dentry(struct dentry *dentry)
  */
 struct dentry *simple_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 {
-	static const struct dentry_operations simple_dentry_operations = {
+	static struct dentry_operations simple_dentry_operations = {
 		.d_delete = simple_delete_dentry,
 	};
 
@@ -242,8 +242,7 @@ int get_sb_pseudo(struct file_system_type *fs_type, char *name,
 	d_instantiate(dentry, root);
 	s->s_root = dentry;
 	s->s_flags |= MS_ACTIVE;
-	simple_set_mnt(mnt, s);
-	return 0;
+	return simple_set_mnt(mnt, s);
 
 Enomem:
 	up_write(&s->s_umount);

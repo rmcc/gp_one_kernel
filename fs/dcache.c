@@ -1247,18 +1247,15 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 	struct dentry *found;
 	struct dentry *new;
 
-	/*
-	 * First check if a dentry matching the name already exists,
-	 * if not go ahead and create it now.
-	 */
+	/* Does a dentry matching the name exist already? */
 	found = d_hash_and_lookup(dentry->d_parent, name);
+	/* If not, create it now and return */
 	if (!found) {
 		new = d_alloc(dentry->d_parent, name);
 		if (!new) {
 			error = -ENOMEM;
 			goto err_out;
 		}
-
 		found = d_splice_alias(inode, new);
 		if (found) {
 			dput(new);
@@ -1266,46 +1263,61 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 		}
 		return new;
 	}
-
-	/*
-	 * If a matching dentry exists, and it's not negative use it.
-	 *
-	 * Decrement the reference count to balance the iget() done
-	 * earlier on.
-	 */
+	/* Matching dentry exists, check if it is negative. */
 	if (found->d_inode) {
 		if (unlikely(found->d_inode != inode)) {
 			/* This can't happen because bad inodes are unhashed. */
 			BUG_ON(!is_bad_inode(inode));
 			BUG_ON(!is_bad_inode(found->d_inode));
 		}
+		/*
+		 * Already have the inode and the dentry attached, decrement
+		 * the reference count to balance the iget() done
+		 * earlier on.  We found the dentry using d_lookup() so it
+		 * cannot be disconnected and thus we do not need to worry
+		 * about any NFS/disconnectedness issues here.
+		 */
 		iput(inode);
 		return found;
 	}
-
 	/*
 	 * Negative dentry: instantiate it unless the inode is a directory and
-	 * already has a dentry.
+	 * has a 'disconnected' dentry (i.e. IS_ROOT and DCACHE_DISCONNECTED),
+	 * in which case d_move() that in place of the found dentry.
 	 */
+	if (!S_ISDIR(inode->i_mode)) {
+		/* Not a directory; everything is easy. */
+		d_instantiate(found, inode);
+		return found;
+	}
 	spin_lock(&dcache_lock);
-	if (!S_ISDIR(inode->i_mode) || list_empty(&inode->i_dentry)) {
+	if (list_empty(&inode->i_dentry)) {
+		/*
+		 * Directory without a 'disconnected' dentry; we need to do
+		 * d_instantiate() by hand because it takes dcache_lock which
+		 * we already hold.
+		 */
 		__d_instantiate(found, inode);
 		spin_unlock(&dcache_lock);
 		security_d_instantiate(found, inode);
 		return found;
 	}
-
 	/*
-	 * In case a directory already has a (disconnected) entry grab a
-	 * reference to it, move it in place and use it.
+	 * Directory with a 'disconnected' dentry; get a reference to the
+	 * 'disconnected' dentry.
 	 */
 	new = list_entry(inode->i_dentry.next, struct dentry, d_alias);
 	dget_locked(new);
 	spin_unlock(&dcache_lock);
+	/* Do security vodoo. */
 	security_d_instantiate(found, inode);
+	/* Move new in place of found. */
 	d_move(new, found);
+	/* Balance the iget() we did above. */
 	iput(inode);
+	/* Throw away found. */
 	dput(found);
+	/* Use new as the actual dentry. */
 	return new;
 
 err_out:
