@@ -146,7 +146,7 @@
 
 #define MAX_RX_BUFFER_LENGTH		1760
 #define MAX_RX_JUMBO_BUFFER_LENGTH 	8062
-#define MAX_RX_LRO_BUFFER_LENGTH	(8062)
+#define MAX_RX_LRO_BUFFER_LENGTH	((48*1024)-512)
 #define RX_DMA_MAP_LEN			(MAX_RX_BUFFER_LENGTH - 2)
 #define RX_JUMBO_DMA_MAP_LEN	\
 	(MAX_RX_JUMBO_BUFFER_LENGTH - 2)
@@ -207,11 +207,11 @@
 
 #define MAX_CMD_DESCRIPTORS		4096
 #define MAX_RCV_DESCRIPTORS		16384
-#define MAX_CMD_DESCRIPTORS_HOST	1024
-#define MAX_RCV_DESCRIPTORS_1G		2048
-#define MAX_RCV_DESCRIPTORS_10G		4096
+#define MAX_CMD_DESCRIPTORS_HOST	(MAX_CMD_DESCRIPTORS / 4)
+#define MAX_RCV_DESCRIPTORS_1G		(MAX_RCV_DESCRIPTORS / 4)
+#define MAX_RCV_DESCRIPTORS_10G		8192
 #define MAX_JUMBO_RCV_DESCRIPTORS	1024
-#define MAX_LRO_RCV_DESCRIPTORS		8
+#define MAX_LRO_RCV_DESCRIPTORS		64
 #define MAX_RCVSTATUS_DESCRIPTORS	MAX_RCV_DESCRIPTORS
 #define MAX_JUMBO_RCV_DESC	MAX_JUMBO_RCV_DESCRIPTORS
 #define MAX_RCV_DESC		MAX_RCV_DESCRIPTORS
@@ -1203,7 +1203,7 @@ typedef struct {
 #define NETXEN_IS_MSI_FAMILY(adapter) \
 	((adapter)->flags & (NETXEN_NIC_MSI_ENABLED | NETXEN_NIC_MSIX_ENABLED))
 
-#define MSIX_ENTRIES_PER_ADAPTER	1
+#define MSIX_ENTRIES_PER_ADAPTER	8
 #define NETXEN_MSIX_TBL_SPACE		8192
 #define NETXEN_PCI_REG_MSIX_TBL		0x44
 
@@ -1595,6 +1595,7 @@ dma_watchdog_wakeup(struct netxen_adapter *adapter)
 }
 
 
+int netxen_is_flash_supported(struct netxen_adapter *adapter);
 int netxen_get_flash_mac_addr(struct netxen_adapter *adapter, __le64 *mac);
 int netxen_p3_get_mac_addr(struct netxen_adapter *adapter, __le64 *mac);
 extern void netxen_change_ringparam(struct netxen_adapter *adapter);

@@ -1,6 +1,6 @@
 /* Tom Kelly's Scalable TCP
  *
- * See http://www.deneholme.net/tom/scalable/
+ * See htt://www-lce.eng.cam.ac.uk/~ctk21/scalable/
  *
  * John Heffner <jheffner@sc.edu>
  */
