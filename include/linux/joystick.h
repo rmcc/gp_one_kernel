@@ -27,7 +27,7 @@
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
 
-#include <linux/types.h>
+#include <asm/types.h>
 #include <linux/input.h>
 
 /*

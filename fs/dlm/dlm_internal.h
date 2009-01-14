@@ -105,7 +105,7 @@ struct dlm_dirtable {
 struct dlm_rsbtable {
 	struct list_head	list;
 	struct list_head	toss;
-	spinlock_t		lock;
+	rwlock_t		lock;
 };
 
 struct dlm_lkbtable {
