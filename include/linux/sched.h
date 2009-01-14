@@ -977,7 +977,6 @@ struct sched_class {
 			      struct rq *busiest, struct sched_domain *sd,
 			      enum cpu_idle_type idle);
 	void (*pre_schedule) (struct rq *this_rq, struct task_struct *task);
-	int (*needs_post_schedule) (struct rq *this_rq);
 	void (*post_schedule) (struct rq *this_rq);
 	void (*task_wake_up) (struct rq *this_rq, struct task_struct *task);
 
@@ -1046,6 +1045,9 @@ struct sched_entity {
 	u64			block_max;
 	u64			exec_max;
 	u64			slice_max;
+
+	u64			start_runtime;
+	u64			avg_wakeup;
 
 	u64			nr_migrations;
 	u64			nr_migrations_cold;
@@ -1144,7 +1146,6 @@ struct task_struct {
 #endif
 
 	struct list_head tasks;
-	struct plist_node pushable_tasks;
 
 	struct mm_struct *mm, *active_mm;
 
