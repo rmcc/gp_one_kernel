@@ -567,7 +567,7 @@ static void __init report_platform_properties(void)
 			max_cpu = NR_CPUS;
 		}
 		for (i = 0; i < max_cpu; i++)
-			set_cpu_possible(i, true);
+			cpu_set(i, cpu_possible_map);
 	}
 #endif
 

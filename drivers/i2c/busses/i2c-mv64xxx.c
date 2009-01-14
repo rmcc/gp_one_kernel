@@ -482,7 +482,7 @@ mv64xxx_i2c_map_regs(struct platform_device *pd,
 	return 0;
 }
 
-static void
+static void __devexit
 mv64xxx_i2c_unmap_regs(struct mv64xxx_i2c_data *drv_data)
 {
 	if (drv_data->reg_base) {
@@ -527,6 +527,7 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 		goto exit_unmap_regs;
 	}
 	drv_data->adapter.dev.parent = &pd->dev;
+	drv_data->adapter.id = I2C_HW_MV64XXX;
 	drv_data->adapter.algo = &mv64xxx_i2c_algo;
 	drv_data->adapter.owner = THIS_MODULE;
 	drv_data->adapter.class = I2C_CLASS_HWMON | I2C_CLASS_SPD;
@@ -577,7 +578,7 @@ mv64xxx_i2c_remove(struct platform_device *dev)
 
 static struct platform_driver mv64xxx_i2c_driver = {
 	.probe	= mv64xxx_i2c_probe,
-	.remove	= __devexit_p(mv64xxx_i2c_remove),
+	.remove	= mv64xxx_i2c_remove,
 	.driver	= {
 		.owner	= THIS_MODULE,
 		.name	= MV64XXX_I2C_CTLR_NAME,

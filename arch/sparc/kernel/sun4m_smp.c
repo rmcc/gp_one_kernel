@@ -113,7 +113,7 @@ void __cpuinit smp4m_callin(void)
 
 	local_irq_enable();
 
-	set_cpu_online(cpuid, true);
+	cpu_set(cpuid, cpu_online_map);
 }
 
 /*
@@ -186,9 +186,11 @@ void __init smp4m_smp_done(void)
 	/* setup cpu list for irq rotation */
 	first = 0;
 	prev = &first;
-	for_each_online_cpu(i) {
-		*prev = i;
-		prev = &cpu_data(i).next;
+	for (i = 0; i < NR_CPUS; i++) {
+		if (cpu_online(i)) {
+			*prev = i;
+			prev = &cpu_data(i).next;
+		}
 	}
 	*prev = first;
 	local_flush_cache_all();

@@ -24,7 +24,7 @@
  * must be owner or have write permission.
  * Else, update from *times, must be owner or super user.
  */
-SYSCALL_DEFINE2(utime, char __user *, filename, struct utimbuf __user *, times)
+asmlinkage long sys_utime(char __user *filename, struct utimbuf __user *times)
 {
 	struct timespec tv[2];
 
@@ -170,8 +170,7 @@ out:
 	return error;
 }
 
-SYSCALL_DEFINE4(utimensat, int, dfd, char __user *, filename,
-		struct timespec __user *, utimes, int, flags)
+asmlinkage long sys_utimensat(int dfd, char __user *filename, struct timespec __user *utimes, int flags)
 {
 	struct timespec tstimes[2];
 
@@ -188,8 +187,7 @@ SYSCALL_DEFINE4(utimensat, int, dfd, char __user *, filename,
 	return do_utimes(dfd, filename, utimes ? tstimes : NULL, flags);
 }
 
-SYSCALL_DEFINE3(futimesat, int, dfd, char __user *, filename,
-		struct timeval __user *, utimes)
+asmlinkage long sys_futimesat(int dfd, char __user *filename, struct timeval __user *utimes)
 {
 	struct timeval times[2];
 	struct timespec tstimes[2];
@@ -216,8 +214,7 @@ SYSCALL_DEFINE3(futimesat, int, dfd, char __user *, filename,
 	return do_utimes(dfd, filename, utimes ? tstimes : NULL, 0);
 }
 
-SYSCALL_DEFINE2(utimes, char __user *, filename,
-		struct timeval __user *, utimes)
+asmlinkage long sys_utimes(char __user *filename, struct timeval __user *utimes)
 {
 	return sys_futimesat(AT_FDCWD, filename, utimes);
 }

@@ -653,7 +653,7 @@ static void __cpuinit dr_cpu_data(struct ds_info *dp,
 		if (cpu_list[i] == CPU_SENTINEL)
 			continue;
 
-		if (cpu_list[i] < nr_cpu_ids)
+		if (cpu_list[i] < NR_CPUS)
 			cpu_set(cpu_list[i], mask);
 	}
 

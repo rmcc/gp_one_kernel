@@ -48,10 +48,6 @@ static struct usb_device_id rtl8187_table[] __devinitdata = {
 	{USB_DEVICE(0x0bda, 0x8189), .driver_info = DEVICE_RTL8187B},
 	{USB_DEVICE(0x0bda, 0x8197), .driver_info = DEVICE_RTL8187B},
 	{USB_DEVICE(0x0bda, 0x8198), .driver_info = DEVICE_RTL8187B},
-	/* Surecom */
-	{USB_DEVICE(0x0769, 0x11F2), .driver_info = DEVICE_RTL8187},
-	/* Logitech */
-	{USB_DEVICE(0x0789, 0x010C), .driver_info = DEVICE_RTL8187},
 	/* Netgear */
 	{USB_DEVICE(0x0846, 0x6100), .driver_info = DEVICE_RTL8187},
 	{USB_DEVICE(0x0846, 0x6a00), .driver_info = DEVICE_RTL8187},
@@ -61,16 +57,8 @@ static struct usb_device_id rtl8187_table[] __devinitdata = {
 	/* Sitecom */
 	{USB_DEVICE(0x0df6, 0x000d), .driver_info = DEVICE_RTL8187},
 	{USB_DEVICE(0x0df6, 0x0028), .driver_info = DEVICE_RTL8187B},
-	/* Sphairon Access Systems GmbH */
-	{USB_DEVICE(0x114B, 0x0150), .driver_info = DEVICE_RTL8187},
-	/* Dick Smith Electronics */
-	{USB_DEVICE(0x1371, 0x9401), .driver_info = DEVICE_RTL8187},
 	/* Abocom */
 	{USB_DEVICE(0x13d1, 0xabe6), .driver_info = DEVICE_RTL8187},
-	/* Qcom */
-	{USB_DEVICE(0x18E8, 0x6232), .driver_info = DEVICE_RTL8187},
-	/* AirLive */
-	{USB_DEVICE(0x1b75, 0x8187), .driver_info = DEVICE_RTL8187},
 	{}
 };
 
@@ -225,7 +213,7 @@ static int rtl8187_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!urb) {
 		kfree_skb(skb);
-		return NETDEV_TX_OK;
+		return -ENOMEM;
 	}
 
 	flags = skb->len;
@@ -285,7 +273,6 @@ static int rtl8187_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 
 	usb_fill_bulk_urb(urb, priv->udev, usb_sndbulkpipe(priv->udev, ep),
 			  buf, skb->len, rtl8187_tx_cb, skb);
-	urb->transfer_flags |= URB_ZERO_PACKET;
 	usb_anchor_urb(urb, &priv->anchored);
 	rc = usb_submit_urb(urb, GFP_ATOMIC);
 	if (rc < 0) {
@@ -294,7 +281,7 @@ static int rtl8187_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 	}
 	usb_free_urb(urb);
 
-	return NETDEV_TX_OK;
+	return rc;
 }
 
 static void rtl8187_rx_cb(struct urb *urb)
@@ -1484,7 +1471,6 @@ static void __devexit rtl8187_disconnect(struct usb_interface *intf)
 	ieee80211_unregister_hw(dev);
 
 	priv = dev->priv;
-	usb_reset_device(priv->udev);
 	usb_put_dev(interface_to_usbdev(intf));
 	ieee80211_free_hw(dev);
 }

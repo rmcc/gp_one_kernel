@@ -1610,16 +1610,6 @@ static void orinoco_rx_isr_tasklet(unsigned long data)
 	struct orinoco_rx_data *rx_data, *temp;
 	struct hermes_rx_descriptor *desc;
 	struct sk_buff *skb;
-	unsigned long flags;
-
-	/* orinoco_rx requires the driver lock, and we also need to
-	 * protect priv->rx_list, so just hold the lock over the
-	 * lot.
-	 *
-	 * If orinoco_lock fails, we've unplugged the card. In this
-	 * case just abort. */
-	if (orinoco_lock(priv, &flags) != 0)
-		return;
 
 	/* extract desc and skb from queue */
 	list_for_each_entry_safe(rx_data, temp, &priv->rx_list, list) {
@@ -1632,8 +1622,6 @@ static void orinoco_rx_isr_tasklet(unsigned long data)
 
 		kfree(desc);
 	}
-
-	orinoco_unlock(priv, &flags);
 }
 
 /********************************************************************/
@@ -1673,7 +1661,7 @@ static void print_linkstatus(struct net_device *dev, u16 status)
 		s = "UNKNOWN";
 	}
 	
-	printk(KERN_DEBUG "%s: New link status: %s (%04x)\n",
+	printk(KERN_INFO "%s: New link status: %s (%04x)\n",
 	       dev->name, s, status);
 }
 
@@ -3157,20 +3145,8 @@ static int orinoco_pm_notifier(struct notifier_block *notifier,
 
 	return NOTIFY_DONE;
 }
-
-static void orinoco_register_pm_notifier(struct orinoco_private *priv)
-{
-	priv->pm_notifier.notifier_call = orinoco_pm_notifier;
-	register_pm_notifier(&priv->pm_notifier);
-}
-
-static void orinoco_unregister_pm_notifier(struct orinoco_private *priv)
-{
-	unregister_pm_notifier(&priv->pm_notifier);
-}
 #else /* !PM_SLEEP || HERMES_CACHE_FW_ON_INIT */
-#define orinoco_register_pm_notifier(priv) do { } while(0)
-#define orinoco_unregister_pm_notifier(priv) do { } while(0)
+#define orinoco_pm_notifier NULL
 #endif
 
 /********************************************************************/
@@ -3660,7 +3636,8 @@ struct net_device
 	priv->cached_fw = NULL;
 
 	/* Register PM notifiers */
-	orinoco_register_pm_notifier(priv);
+	priv->pm_notifier.notifier_call = orinoco_pm_notifier;
+	register_pm_notifier(&priv->pm_notifier);
 
 	return dev;
 }
@@ -3668,23 +3645,13 @@ struct net_device
 void free_orinocodev(struct net_device *dev)
 {
 	struct orinoco_private *priv = netdev_priv(dev);
-	struct orinoco_rx_data *rx_data, *temp;
 
-	/* If the tasklet is scheduled when we call tasklet_kill it
-	 * will run one final time. However the tasklet will only
-	 * drain priv->rx_list if the hw is still available. */
+	/* No need to empty priv->rx_list: if the tasklet is scheduled
+	 * when we call tasklet_kill it will run one final time,
+	 * emptying the list */
 	tasklet_kill(&priv->rx_tasklet);
 
-	/* Explicitly drain priv->rx_list */
-	list_for_each_entry_safe(rx_data, temp, &priv->rx_list, list) {
-		list_del(&rx_data->list);
-
-		dev_kfree_skb(rx_data->skb);
-		kfree(rx_data->desc);
-		kfree(rx_data);
-	}
-
-	orinoco_unregister_pm_notifier(priv);
+	unregister_pm_notifier(&priv->pm_notifier);
 	orinoco_uncache_fw(priv);
 
 	priv->wpa_ie_len = 0;
@@ -5079,29 +5046,32 @@ static int orinoco_ioctl_set_genie(struct net_device *dev,
 	struct orinoco_private *priv = netdev_priv(dev);
 	u8 *buf;
 	unsigned long flags;
+	int err = 0;
 
 	/* cut off at IEEE80211_MAX_DATA_LEN */
 	if ((wrqu->data.length > IEEE80211_MAX_DATA_LEN) ||
 	    (wrqu->data.length && (extra == NULL)))
 		return -EINVAL;
 
+	if (orinoco_lock(priv, &flags) != 0)
+		return -EBUSY;
+
 	if (wrqu->data.length) {
 		buf = kmalloc(wrqu->data.length, GFP_KERNEL);
-		if (buf == NULL)
-			return -ENOMEM;
+		if (buf == NULL) {
+			err = -ENOMEM;
+			goto out;
+		}
 
 		memcpy(buf, extra, wrqu->data.length);
-	} else
-		buf = NULL;
-
-	if (orinoco_lock(priv, &flags) != 0) {
-		kfree(buf);
-		return -EBUSY;
+		kfree(priv->wpa_ie);
+		priv->wpa_ie = buf;
+		priv->wpa_ie_len = wrqu->data.length;
+	} else {
+		kfree(priv->wpa_ie);
+		priv->wpa_ie = NULL;
+		priv->wpa_ie_len = 0;
 	}
-
-	kfree(priv->wpa_ie);
-	priv->wpa_ie = buf;
-	priv->wpa_ie_len = wrqu->data.length;
 
 	if (priv->wpa_ie) {
 		/* Looks like wl_lkm wants to check the auth alg, and
@@ -5111,8 +5081,9 @@ static int orinoco_ioctl_set_genie(struct net_device *dev,
 		 */
 	}
 
+out:
 	orinoco_unlock(priv, &flags);
-	return 0;
+	return err;
 }
 
 static int orinoco_ioctl_get_genie(struct net_device *dev,

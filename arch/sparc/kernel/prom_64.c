@@ -518,8 +518,8 @@ void __init of_fill_in_cpu_data(void)
 		}
 
 #ifdef CONFIG_SMP
-		set_cpu_present(cpuid, true);
-		set_cpu_possible(cpuid, true);
+		cpu_set(cpuid, cpu_present_map);
+		cpu_set(cpuid, cpu_possible_map);
 #endif
 	}
 
