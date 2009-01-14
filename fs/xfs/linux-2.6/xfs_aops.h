@@ -21,6 +21,8 @@
 extern struct workqueue_struct *xfsdatad_workqueue;
 extern mempool_t *xfs_ioend_pool;
 
+typedef void (*xfs_ioend_func_t)(void *);
+
 /*
  * xfs_ioend struct manages large extent writes for XFS.
  * It can manage several multi-page bio's at once.

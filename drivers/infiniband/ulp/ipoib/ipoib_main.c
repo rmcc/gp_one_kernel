@@ -106,17 +106,23 @@ int ipoib_open(struct net_device *dev)
 
 	ipoib_dbg(priv, "bringing up interface\n");
 
-	if (!test_and_set_bit(IPOIB_FLAG_ADMIN_UP, &priv->flags))
-		napi_enable(&priv->napi);
+	set_bit(IPOIB_FLAG_ADMIN_UP, &priv->flags);
 
 	if (ipoib_pkey_dev_delay_open(dev))
 		return 0;
 
-	if (ipoib_ib_dev_open(dev))
-		goto err_disable;
+	napi_enable(&priv->napi);
 
-	if (ipoib_ib_dev_up(dev))
-		goto err_stop;
+	if (ipoib_ib_dev_open(dev)) {
+		napi_disable(&priv->napi);
+		return -EINVAL;
+	}
+
+	if (ipoib_ib_dev_up(dev)) {
+		ipoib_ib_dev_stop(dev, 1);
+		napi_disable(&priv->napi);
+		return -EINVAL;
+	}
 
 	if (!test_bit(IPOIB_FLAG_SUBINTERFACE, &priv->flags)) {
 		struct ipoib_dev_priv *cpriv;
@@ -138,15 +144,6 @@ int ipoib_open(struct net_device *dev)
 	netif_start_queue(dev);
 
 	return 0;
-
-err_stop:
-	ipoib_ib_dev_stop(dev, 1);
-
-err_disable:
-	napi_disable(&priv->napi);
-	clear_bit(IPOIB_FLAG_ADMIN_UP, &priv->flags);
-
-	return -EINVAL;
 }
 
 static int ipoib_stop(struct net_device *dev)
@@ -714,26 +711,26 @@ static int ipoib_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		neigh = *to_ipoib_neigh(skb->dst->neighbour);
 
-		if (unlikely((memcmp(&neigh->dgid.raw,
-				     skb->dst->neighbour->ha + 4,
-				     sizeof(union ib_gid))) ||
-			     (neigh->dev != dev))) {
-			spin_lock_irqsave(&priv->lock, flags);
-			/*
-			 * It's safe to call ipoib_put_ah() inside
-			 * priv->lock here, because we know that
-			 * path->ah will always hold one more reference,
-			 * so ipoib_put_ah() will never do more than
-			 * decrement the ref count.
-			 */
-			if (neigh->ah)
+		if (neigh->ah)
+			if (unlikely((memcmp(&neigh->dgid.raw,
+					    skb->dst->neighbour->ha + 4,
+					    sizeof(union ib_gid))) ||
+					 (neigh->dev != dev))) {
+				spin_lock_irqsave(&priv->lock, flags);
+				/*
+				 * It's safe to call ipoib_put_ah() inside
+				 * priv->lock here, because we know that
+				 * path->ah will always hold one more reference,
+				 * so ipoib_put_ah() will never do more than
+				 * decrement the ref count.
+				 */
 				ipoib_put_ah(neigh->ah);
-			list_del(&neigh->list);
-			ipoib_neigh_free(dev, neigh);
-			spin_unlock_irqrestore(&priv->lock, flags);
-			ipoib_path_lookup(skb, dev);
-			return NETDEV_TX_OK;
-		}
+				list_del(&neigh->list);
+				ipoib_neigh_free(dev, neigh);
+				spin_unlock_irqrestore(&priv->lock, flags);
+				ipoib_path_lookup(skb, dev);
+				return NETDEV_TX_OK;
+			}
 
 		if (ipoib_cm_get(neigh)) {
 			if (ipoib_cm_up(neigh)) {

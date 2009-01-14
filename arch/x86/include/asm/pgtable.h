@@ -240,78 +240,64 @@ static inline int pmd_large(pmd_t pte)
 		(_PAGE_PSE | _PAGE_PRESENT);
 }
 
-static inline pte_t pte_set_flags(pte_t pte, pteval_t set)
-{
-	pteval_t v = native_pte_val(pte);
-
-	return native_make_pte(v | set);
-}
-
-static inline pte_t pte_clear_flags(pte_t pte, pteval_t clear)
-{
-	pteval_t v = native_pte_val(pte);
-
-	return native_make_pte(v & ~clear);
-}
-
 static inline pte_t pte_mkclean(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_DIRTY);
+	return __pte(pte_val(pte) & ~_PAGE_DIRTY);
 }
 
 static inline pte_t pte_mkold(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_ACCESSED);
+	return __pte(pte_val(pte) & ~_PAGE_ACCESSED);
 }
 
 static inline pte_t pte_wrprotect(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_RW);
+	return __pte(pte_val(pte) & ~_PAGE_RW);
 }
 
 static inline pte_t pte_mkexec(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_NX);
+	return __pte(pte_val(pte) & ~_PAGE_NX);
 }
 
 static inline pte_t pte_mkdirty(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_DIRTY);
+	return __pte(pte_val(pte) | _PAGE_DIRTY);
 }
 
 static inline pte_t pte_mkyoung(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_ACCESSED);
+	return __pte(pte_val(pte) | _PAGE_ACCESSED);
 }
 
 static inline pte_t pte_mkwrite(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_RW);
+	return __pte(pte_val(pte) | _PAGE_RW);
 }
 
 static inline pte_t pte_mkhuge(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_PSE);
+	return __pte(pte_val(pte) | _PAGE_PSE);
 }
 
 static inline pte_t pte_clrhuge(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_PSE);
+	return __pte(pte_val(pte) & ~_PAGE_PSE);
 }
 
 static inline pte_t pte_mkglobal(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_GLOBAL);
+	return __pte(pte_val(pte) | _PAGE_GLOBAL);
 }
 
 static inline pte_t pte_clrglobal(pte_t pte)
 {
-	return pte_clear_flags(pte, _PAGE_GLOBAL);
+	return __pte(pte_val(pte) & ~_PAGE_GLOBAL);
 }
 
 static inline pte_t pte_mkspecial(pte_t pte)
 {
-	return pte_set_flags(pte, _PAGE_SPECIAL);
+	return __pte(pte_val(pte) | _PAGE_SPECIAL);
 }
 
 extern pteval_t __supported_pte_mask;
@@ -354,25 +340,6 @@ static inline pgprot_t pgprot_modify(pgprot_t oldprot, pgprot_t newprot)
 #define pte_pgprot(x) __pgprot(pte_flags(x) & PTE_FLAGS_MASK)
 
 #define canon_pgprot(p) __pgprot(pgprot_val(p) & __supported_pte_mask)
-
-static inline int is_new_memtype_allowed(unsigned long flags,
-						unsigned long new_flags)
-{
-	/*
-	 * Certain new memtypes are not allowed with certain
-	 * requested memtype:
-	 * - request is uncached, return cannot be write-back
-	 * - request is write-combine, return cannot be write-back
-	 */
-	if ((flags == _PAGE_CACHE_UC_MINUS &&
-	     new_flags == _PAGE_CACHE_WB) ||
-	    (flags == _PAGE_CACHE_WC &&
-	     new_flags == _PAGE_CACHE_WB)) {
-		return 0;
-	}
-
-	return 1;
-}
 
 #ifndef __ASSEMBLY__
 /* Indicate that x86 has its own track and untrack pfn vma functions */
