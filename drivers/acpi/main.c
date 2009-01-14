@@ -101,13 +101,26 @@ void __init acpi_old_suspend_ordering(void)
  * cases.
  */
 static bool set_sci_en_on_resume;
+/*
+ * The ACPI specification wants us to save NVS memory regions during hibernation
+ * and to restore them during the subsequent resume.  However, it is not certain
+ * if this mechanism is going to work on all machines, so we allow the user to
+ * disable this mechanism using the 'acpi_sleep=s4_nonvs' kernel command line
+ * option.
+ */
+static bool s4_no_nvs;
+
+void __init acpi_s4_no_nvs(void)
+{
+	s4_no_nvs = true;
+}
 
 /**
  *	acpi_pm_disable_gpes - Disable the GPEs.
  */
 static int acpi_pm_disable_gpes(void)
 {
-	acpi_hw_disable_all_gpes();
+	acpi_disable_all_gpes();
 	return 0;
 }
 
@@ -135,7 +148,7 @@ static int acpi_pm_prepare(void)
 	int error = __acpi_pm_prepare();
 
 	if (!error)
-		acpi_hw_disable_all_gpes();
+		acpi_disable_all_gpes();
 	return error;
 }
 
@@ -267,7 +280,7 @@ static int acpi_suspend_enter(suspend_state_t pm_state)
 	 * (like wakeup GPE) haven't handler, this can avoid such GPE misfire.
 	 * acpi_leave_sleep_state will reenable specific GPEs later
 	 */
-	acpi_hw_disable_all_gpes();
+	acpi_disable_all_gpes();
 
 	local_irq_restore(flags);
 	printk(KERN_DEBUG "Back to C!\n");
@@ -394,9 +407,25 @@ void __init acpi_no_s4_hw_signature(void)
 
 static int acpi_hibernation_begin(void)
 {
-	acpi_target_sleep_state = ACPI_STATE_S4;
-	acpi_sleep_tts_switch(acpi_target_sleep_state);
-	return 0;
+	int error;
+
+	error = s4_no_nvs ? 0 : hibernate_nvs_alloc();
+	if (!error) {
+		acpi_target_sleep_state = ACPI_STATE_S4;
+		acpi_sleep_tts_switch(acpi_target_sleep_state);
+	}
+
+	return error;
+}
+
+static int acpi_hibernation_pre_snapshot(void)
+{
+	int error = acpi_pm_prepare();
+
+	if (!error)
+		hibernate_nvs_save();
+
+	return error;
 }
 
 static int acpi_hibernation_enter(void)
@@ -417,6 +446,12 @@ static int acpi_hibernation_enter(void)
 	return ACPI_SUCCESS(status) ? 0 : -EFAULT;
 }
 
+static void acpi_hibernation_finish(void)
+{
+	hibernate_nvs_free();
+	acpi_pm_finish();
+}
+
 static void acpi_hibernation_leave(void)
 {
 	/*
@@ -432,18 +467,20 @@ static void acpi_hibernation_leave(void)
 			"cannot resume!\n");
 		panic("ACPI S4 hardware signature mismatch");
 	}
+	/* Restore the NVS memory area */
+	hibernate_nvs_restore();
 }
 
 static void acpi_pm_enable_gpes(void)
 {
-	acpi_hw_enable_all_runtime_gpes();
+	acpi_enable_all_runtime_gpes();
 }
 
 static struct platform_hibernation_ops acpi_hibernation_ops = {
 	.begin = acpi_hibernation_begin,
 	.end = acpi_pm_end,
-	.pre_snapshot = acpi_pm_prepare,
-	.finish = acpi_pm_finish,
+	.pre_snapshot = acpi_hibernation_pre_snapshot,
+	.finish = acpi_hibernation_finish,
 	.prepare = acpi_pm_prepare,
 	.enter = acpi_hibernation_enter,
 	.leave = acpi_hibernation_leave,
@@ -469,8 +506,22 @@ static int acpi_hibernation_begin_old(void)
 
 	error = acpi_sleep_prepare(ACPI_STATE_S4);
 
+	if (!error) {
+		if (!s4_no_nvs)
+			error = hibernate_nvs_alloc();
+		if (!error)
+			acpi_target_sleep_state = ACPI_STATE_S4;
+	}
+	return error;
+}
+
+static int acpi_hibernation_pre_snapshot_old(void)
+{
+	int error = acpi_pm_disable_gpes();
+
 	if (!error)
-		acpi_target_sleep_state = ACPI_STATE_S4;
+		hibernate_nvs_save();
+
 	return error;
 }
 
@@ -481,8 +532,8 @@ static int acpi_hibernation_begin_old(void)
 static struct platform_hibernation_ops acpi_hibernation_ops_old = {
 	.begin = acpi_hibernation_begin_old,
 	.end = acpi_pm_end,
-	.pre_snapshot = acpi_pm_disable_gpes,
-	.finish = acpi_pm_finish,
+	.pre_snapshot = acpi_hibernation_pre_snapshot_old,
+	.finish = acpi_hibernation_finish,
 	.prepare = acpi_pm_disable_gpes,
 	.enter = acpi_hibernation_enter,
 	.leave = acpi_hibernation_leave,
@@ -622,7 +673,7 @@ static void acpi_power_off_prepare(void)
 {
 	/* Prepare to power off the system */
 	acpi_sleep_prepare(ACPI_STATE_S5);
-	acpi_hw_disable_all_gpes();
+	acpi_disable_all_gpes();
 }
 
 static void acpi_power_off(void)
@@ -671,7 +722,7 @@ int __init acpi_sleep_init(void)
 		sleep_states[ACPI_STATE_S4] = 1;
 		printk(" S4");
 		if (!nosigcheck) {
-			acpi_get_table_by_index(ACPI_TABLE_INDEX_FACS,
+			acpi_get_table(ACPI_SIG_FACS, 1,
 				(struct acpi_table_header **)&facs);
 			if (facs)
 				s4_hardware_signature =
