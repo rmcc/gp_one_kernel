@@ -109,8 +109,7 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 /* Stubs for the routines in pci_iommu.c: */
 
 void *
-__pci_alloc_consistent(struct pci_dev *pdev, size_t size,
-		       dma_addr_t *dma_addrp, gfp_t gfp)
+pci_alloc_consistent(struct pci_dev *pdev, size_t size, dma_addr_t *dma_addrp)
 {
 	return NULL;
 }

@@ -197,9 +197,7 @@ extern int usbnet_nway_reset(struct net_device *net);
 #define devdbg(usbnet, fmt, arg...) \
 	printk(KERN_DEBUG "%s: " fmt "\n" , (usbnet)->net->name , ## arg)
 #else
-#define devdbg(usbnet, fmt, arg...) \
-	({ if (0) printk(KERN_DEBUG "%s: " fmt "\n" , (usbnet)->net->name , \
-		## arg); 0; })
+#define devdbg(usbnet, fmt, arg...) do {} while(0)
 #endif
 
 #define deverr(usbnet, fmt, arg...) \

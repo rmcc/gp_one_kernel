@@ -308,8 +308,7 @@ void buffer_assertion_failure(struct buffer_head *bh);
 		int val = (expr);					     \
 		if (!val) {						     \
 			printk(KERN_ERR					     \
-			       "JBD2 unexpected failure: %s: %s;\n",	     \
-			       __func__, #expr);			     \
+				"EXT3-fs unexpected failure: %s;\n",# expr); \
 			printk(KERN_ERR why "\n");			     \
 		}							     \
 		val;							     \

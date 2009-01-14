@@ -371,11 +371,7 @@ xfs_quiesce_attr(
 	/* flush inodes and push all remaining buffers out to disk */
 	xfs_quiesce_fs(mp);
 
-	/*
-	 * Just warn here till VFS can correctly support
-	 * read-only remount without racing.
-	 */
-	WARN_ON(atomic_read(&mp->m_active_trans) != 0);
+	ASSERT_ALWAYS(atomic_read(&mp->m_active_trans) == 0);
 
 	/* Push the superblock and write an unmount record */
 	error = xfs_log_sbcount(mp, 1);
