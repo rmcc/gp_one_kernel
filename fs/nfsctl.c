@@ -86,8 +86,8 @@ static struct {
 	},
 };
 
-SYSCALL_DEFINE3(nfsservctl, int, cmd, struct nfsctl_arg __user *, arg,
-		void __user *, res)
+long
+asmlinkage sys_nfsservctl(int cmd, struct nfsctl_arg __user *arg, void __user *res)
 {
 	struct file *file;
 	void __user *p = &arg->u;
