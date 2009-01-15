@@ -311,6 +311,22 @@ static const struct snd_kcontrol_new aic3x_snd_controls[] = {
 	SOC_ENUM("ADC HPF Cut-off", aic3x_enum[ADC_HPF_ENUM]),
 };
 
+/* add non dapm controls */
+static int aic3x_add_controls(struct snd_soc_codec *codec)
+{
+	int err, i;
+
+	for (i = 0; i < ARRAY_SIZE(aic3x_snd_controls); i++) {
+		err = snd_ctl_add(codec->card,
+				  snd_soc_cnew(&aic3x_snd_controls[i],
+					       codec, NULL));
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+
 /* Left DAC Mux */
 static const struct snd_kcontrol_new aic3x_left_dac_mux_controls =
 SOC_DAPM_ENUM("Route", aic3x_enum[LDAC_ENUM]);
@@ -727,7 +743,7 @@ static int aic3x_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	struct aic3x_priv *aic3x = codec->private_data;
 	int codec_clk = 0, bypass_pll = 0, fsref, last_clk = 0;
 	u8 data, r, p, pll_q, pll_p = 1, pll_r = 1, pll_j = 1;
@@ -1079,7 +1095,7 @@ EXPORT_SYMBOL_GPL(aic3x_dai);
 static int aic3x_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	aic3x_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
@@ -1089,7 +1105,7 @@ static int aic3x_suspend(struct platform_device *pdev, pm_message_t state)
 static int aic3x_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int i;
 	u8 data[2];
 	u8 *cache = codec->reg_cache;
@@ -1112,7 +1128,7 @@ static int aic3x_resume(struct platform_device *pdev)
  */
 static int aic3x_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	struct aic3x_setup_data *setup = socdev->codec_data;
 	int reg, ret = 0;
 
@@ -1208,8 +1224,7 @@ static int aic3x_init(struct snd_soc_device *socdev)
 	aic3x_write(codec, AIC3X_GPIO1_REG, (setup->gpio_func[0] & 0xf) << 4);
 	aic3x_write(codec, AIC3X_GPIO2_REG, (setup->gpio_func[1] & 0xf) << 4);
 
-	snd_soc_add_controls(codec, aic3x_snd_controls,
-				ARRAY_SIZE(aic3x_snd_controls));
+	aic3x_add_controls(codec);
 	aic3x_add_widgets(codec);
 	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
@@ -1243,7 +1258,7 @@ static int aic3x_i2c_probe(struct i2c_client *i2c,
 			   const struct i2c_device_id *id)
 {
 	struct snd_soc_device *socdev = aic3x_socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int ret;
 
 	i2c_set_clientdata(i2c, codec);
@@ -1348,7 +1363,7 @@ static int aic3x_probe(struct platform_device *pdev)
 	}
 
 	codec->private_data = aic3x;
-	socdev->card->codec = codec;
+	socdev->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -1374,7 +1389,7 @@ static int aic3x_probe(struct platform_device *pdev)
 static int aic3x_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	/* power down chip */
 	if (codec->control_data)

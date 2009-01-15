@@ -231,6 +231,21 @@ SOC_SINGLE("Mono Playback Volume", WM8750_MOUTV, 0, 127, 0),
 
 };
 
+/* add non dapm controls */
+static int wm8750_add_controls(struct snd_soc_codec *codec)
+{
+	int err, i;
+
+	for (i = 0; i < ARRAY_SIZE(wm8750_snd_controls); i++) {
+		err = snd_ctl_add(codec->card,
+				snd_soc_cnew(&wm8750_snd_controls[i],
+						codec, NULL));
+		if (err < 0)
+			return err;
+	}
+	return 0;
+}
+
 /*
  * DAPM Controls
  */
@@ -604,7 +619,7 @@ static int wm8750_pcm_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	struct wm8750_priv *wm8750 = codec->private_data;
 	u16 iface = wm8750_read_reg_cache(codec, WM8750_IFACE) & 0x1f3;
 	u16 srate = wm8750_read_reg_cache(codec, WM8750_SRATE) & 0x1c0;
@@ -712,7 +727,7 @@ static void wm8750_work(struct work_struct *work)
 static int wm8750_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	wm8750_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -721,7 +736,7 @@ static int wm8750_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8750_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -754,7 +769,7 @@ static int wm8750_resume(struct platform_device *pdev)
  */
 static int wm8750_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int reg, ret = 0;
 
 	codec->name = "WM8750";
@@ -801,8 +816,7 @@ static int wm8750_init(struct snd_soc_device *socdev)
 	reg = wm8750_read_reg_cache(codec, WM8750_RINVOL);
 	wm8750_write(codec, WM8750_RINVOL, reg | 0x0100);
 
-	snd_soc_add_controls(codec, wm8750_snd_controls,
-				ARRAY_SIZE(wm8750_snd_controls));
+	wm8750_add_controls(codec);
 	wm8750_add_widgets(codec);
 	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
@@ -836,7 +850,7 @@ static int wm8750_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
 	struct snd_soc_device *socdev = wm8750_socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int ret;
 
 	i2c_set_clientdata(i2c, codec);
@@ -917,7 +931,7 @@ err_driver:
 static int __devinit wm8750_spi_probe(struct spi_device *spi)
 {
 	struct snd_soc_device *socdev = wm8750_socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int ret;
 
 	codec->control_data = spi;
@@ -989,7 +1003,7 @@ static int wm8750_probe(struct platform_device *pdev)
 	}
 
 	codec->private_data = wm8750;
-	socdev->card->codec = codec;
+	socdev->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -1043,7 +1057,7 @@ static int run_delayed_work(struct delayed_work *dwork)
 static int wm8750_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
 		wm8750_set_bias_level(codec, SND_SOC_BIAS_OFF);

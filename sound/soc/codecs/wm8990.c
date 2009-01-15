@@ -116,7 +116,7 @@ static inline unsigned int wm8990_read_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg)
 {
 	u16 *cache = codec->reg_cache;
-	BUG_ON(reg >= ARRAY_SIZE(wm8990_reg));
+	BUG_ON(reg > (ARRAY_SIZE(wm8990_reg)) - 1);
 	return cache[reg];
 }
 
@@ -129,7 +129,7 @@ static inline void wm8990_write_reg_cache(struct snd_soc_codec *codec,
 	u16 *cache = codec->reg_cache;
 
 	/* Reset register and reserved registers are uncached */
-	if (reg == 0 || reg >= ARRAY_SIZE(wm8990_reg))
+	if (reg == 0 || reg > ARRAY_SIZE(wm8990_reg) - 1)
 		return;
 
 	cache[reg] = value;
@@ -416,6 +416,21 @@ SOC_SINGLE("RIN34 Mute Switch", WM8990_RIGHT_LINE_INPUT_3_4_VOLUME,
 	WM8990_RI34MUTE_BIT, 1, 0),
 
 };
+
+/* add non dapm controls */
+static int wm8990_add_controls(struct snd_soc_codec *codec)
+{
+	int err, i;
+
+	for (i = 0; i < ARRAY_SIZE(wm8990_snd_controls); i++) {
+		err = snd_ctl_add(codec->card,
+				snd_soc_cnew(&wm8990_snd_controls[i], codec,
+					NULL));
+		if (err < 0)
+			return err;
+	}
+	return 0;
+}
 
 /*
  * _DAPM_ Controls
@@ -1162,7 +1177,7 @@ static int wm8990_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	u16 audio1 = wm8990_read_reg_cache(codec, WM8990_AUDIO_INTERFACE_1);
 
 	audio1 &= ~WM8990_AIF_WL_MASK;
@@ -1361,7 +1376,7 @@ EXPORT_SYMBOL_GPL(wm8990_dai);
 static int wm8990_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	/* we only need to suspend if we are a valid card */
 	if (!codec->card)
@@ -1374,7 +1389,7 @@ static int wm8990_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8990_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -1402,7 +1417,7 @@ static int wm8990_resume(struct platform_device *pdev)
  */
 static int wm8990_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	u16 reg;
 	int ret = 0;
 
@@ -1445,8 +1460,7 @@ static int wm8990_init(struct snd_soc_device *socdev)
 	wm8990_write(codec, WM8990_LEFT_OUTPUT_VOLUME, 0x50 | (1<<8));
 	wm8990_write(codec, WM8990_RIGHT_OUTPUT_VOLUME, 0x50 | (1<<8));
 
-	snd_soc_add_controls(codec, wm8990_snd_controls,
-				ARRAY_SIZE(wm8990_snd_controls));
+	wm8990_add_controls(codec);
 	wm8990_add_widgets(codec);
 	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
@@ -1480,7 +1494,7 @@ static int wm8990_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
 	struct snd_soc_device *socdev = wm8990_socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int ret;
 
 	i2c_set_clientdata(i2c, codec);
@@ -1579,7 +1593,7 @@ static int wm8990_probe(struct platform_device *pdev)
 	}
 
 	codec->private_data = wm8990;
-	socdev->card->codec = codec;
+	socdev->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -1605,7 +1619,7 @@ static int wm8990_probe(struct platform_device *pdev)
 static int wm8990_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
 		wm8990_set_bias_level(codec, SND_SOC_BIAS_OFF);

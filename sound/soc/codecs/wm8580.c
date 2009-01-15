@@ -200,7 +200,7 @@ static inline unsigned int wm8580_read_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg)
 {
 	u16 *cache = codec->reg_cache;
-	BUG_ON(reg >= ARRAY_SIZE(wm8580_reg));
+	BUG_ON(reg > ARRAY_SIZE(wm8580_reg));
 	return cache[reg];
 }
 
@@ -223,7 +223,7 @@ static int wm8580_write(struct snd_soc_codec *codec, unsigned int reg,
 {
 	u8 data[2];
 
-	BUG_ON(reg >= ARRAY_SIZE(wm8580_reg));
+	BUG_ON(reg > ARRAY_SIZE(wm8580_reg));
 
 	/* Registers are 9 bits wide */
 	value &= 0x1ff;
@@ -330,6 +330,20 @@ SOC_DOUBLE("ADC Mute Switch", WM8580_ADC_CONTROL1, 0, 1, 1, 0),
 SOC_SINGLE("ADC High-Pass Filter Switch", WM8580_ADC_CONTROL1, 4, 1, 0),
 };
 
+/* Add non-DAPM controls */
+static int wm8580_add_controls(struct snd_soc_codec *codec)
+{
+	int err, i;
+
+	for (i = 0; i < ARRAY_SIZE(wm8580_snd_controls); i++) {
+		err = snd_ctl_add(codec->card,
+				  snd_soc_cnew(&wm8580_snd_controls[i],
+					       codec, NULL));
+		if (err < 0)
+			return err;
+	}
+	return 0;
+}
 static const struct snd_soc_dapm_widget wm8580_dapm_widgets[] = {
 SND_SOC_DAPM_DAC("DAC1", "Playback", WM8580_PWRDN1, 2, 1),
 SND_SOC_DAPM_DAC("DAC2", "Playback", WM8580_PWRDN1, 3, 1),
@@ -539,7 +553,7 @@ static int wm8580_paif_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	u16 paifb = wm8580_read(codec, WM8580_PAIF3 + dai->id);
 
 	paifb &= ~WM8580_AIF_LENGTH_MASK;
@@ -816,7 +830,7 @@ EXPORT_SYMBOL_GPL(wm8580_dai);
  */
 static int wm8580_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int ret = 0;
 
 	codec->name = "WM8580";
@@ -852,8 +866,7 @@ static int wm8580_init(struct snd_soc_device *socdev)
 		goto pcm_err;
 	}
 
-	snd_soc_add_controls(codec, wm8580_snd_controls,
-				ARRAY_SIZE(wm8580_snd_controls));
+	wm8580_add_controls(codec);
 	wm8580_add_widgets(codec);
 
 	ret = snd_soc_init_card(socdev);
@@ -888,7 +901,7 @@ static int wm8580_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
 	struct snd_soc_device *socdev = wm8580_socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int ret;
 
 	i2c_set_clientdata(i2c, codec);
@@ -986,7 +999,7 @@ static int wm8580_probe(struct platform_device *pdev)
 	}
 
 	codec->private_data = wm8580;
-	socdev->card->codec = codec;
+	socdev->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -1007,7 +1020,7 @@ static int wm8580_probe(struct platform_device *pdev)
 static int wm8580_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
 		wm8580_set_bias_level(codec, SND_SOC_BIAS_OFF);
