@@ -202,7 +202,6 @@ pcg_default_flags[NR_CHARGE_TYPE] = {
 
 static void mem_cgroup_get(struct mem_cgroup *mem);
 static void mem_cgroup_put(struct mem_cgroup *mem);
-static struct mem_cgroup *parent_mem_cgroup(struct mem_cgroup *mem);
 
 static void mem_cgroup_charge_statistics(struct mem_cgroup *mem,
 					 struct page_cgroup *pc,
@@ -359,10 +358,6 @@ void mem_cgroup_rotate_lru_list(struct page *page, enum lru_list lru)
 		return;
 
 	pc = lookup_page_cgroup(page);
-	/*
-	 * Used bit is set without atomic ops but after smp_wmb().
-	 * For making pc->mem_cgroup visible, insert smp_rmb() here.
-	 */
 	smp_rmb();
 	/* unused page is not rotated. */
 	if (!PageCgroupUsed(pc))
@@ -379,10 +374,7 @@ void mem_cgroup_add_lru_list(struct page *page, enum lru_list lru)
 	if (mem_cgroup_disabled())
 		return;
 	pc = lookup_page_cgroup(page);
-	/*
-	 * Used bit is set without atomic ops but after smp_wmb().
-	 * For making pc->mem_cgroup visible, insert smp_rmb() here.
-	 */
+	/* barrier to sync with "charge" */
 	smp_rmb();
 	if (!PageCgroupUsed(pc))
 		return;
@@ -567,14 +559,6 @@ mem_cgroup_get_reclaim_stat_from_page(struct page *page)
 		return NULL;
 
 	pc = lookup_page_cgroup(page);
-	/*
-	 * Used bit is set without atomic ops but after smp_wmb().
-	 * For making pc->mem_cgroup visible, insert smp_rmb() here.
-	 */
-	smp_rmb();
-	if (!PageCgroupUsed(pc))
-		return NULL;
-
 	mz = page_cgroup_zoneinfo(pc);
 	if (!mz)
 		return NULL;
@@ -634,7 +618,7 @@ unsigned long mem_cgroup_isolate_pages(unsigned long nr_to_scan,
  * called with hierarchy_mutex held
  */
 static struct mem_cgroup *
-__mem_cgroup_get_next_node(struct mem_cgroup *curr, struct mem_cgroup *root_mem)
+mem_cgroup_get_next_node(struct mem_cgroup *curr, struct mem_cgroup *root_mem)
 {
 	struct cgroup *cgroup, *curr_cgroup, *root_cgroup;
 
@@ -645,16 +629,19 @@ __mem_cgroup_get_next_node(struct mem_cgroup *curr, struct mem_cgroup *root_mem)
 		/*
 		 * Walk down to children
 		 */
+		mem_cgroup_put(curr);
 		cgroup = list_entry(curr_cgroup->children.next,
 						struct cgroup, sibling);
 		curr = mem_cgroup_from_cont(cgroup);
+		mem_cgroup_get(curr);
 		goto done;
 	}
 
 visit_parent:
 	if (curr_cgroup == root_cgroup) {
-		/* caller handles NULL case */
-		curr = NULL;
+		mem_cgroup_put(curr);
+		curr = root_mem;
+		mem_cgroup_get(curr);
 		goto done;
 	}
 
@@ -662,9 +649,11 @@ visit_parent:
 	 * Goto next sibling
 	 */
 	if (curr_cgroup->sibling.next != &curr_cgroup->parent->children) {
+		mem_cgroup_put(curr);
 		cgroup = list_entry(curr_cgroup->sibling.next, struct cgroup,
 						sibling);
 		curr = mem_cgroup_from_cont(cgroup);
+		mem_cgroup_get(curr);
 		goto done;
 	}
 
@@ -675,6 +664,7 @@ visit_parent:
 	goto visit_parent;
 
 done:
+	root_mem->last_scanned_child = curr;
 	return curr;
 }
 
@@ -684,46 +674,40 @@ done:
  * that to reclaim free pages from.
  */
 static struct mem_cgroup *
-mem_cgroup_get_next_node(struct mem_cgroup *root_mem)
+mem_cgroup_get_first_node(struct mem_cgroup *root_mem)
 {
 	struct cgroup *cgroup;
-	struct mem_cgroup *orig, *next;
+	struct mem_cgroup *ret;
 	bool obsolete;
+
+	obsolete = mem_cgroup_is_obsolete(root_mem->last_scanned_child);
 
 	/*
 	 * Scan all children under the mem_cgroup mem
 	 */
 	mutex_lock(&mem_cgroup_subsys.hierarchy_mutex);
-
-	orig = root_mem->last_scanned_child;
-	obsolete = mem_cgroup_is_obsolete(orig);
-
 	if (list_empty(&root_mem->css.cgroup->children)) {
-		/*
-		 * root_mem might have children before and last_scanned_child
-		 * may point to one of them. We put it later.
-		 */
-		if (orig)
-			VM_BUG_ON(!obsolete);
-		next = NULL;
+		ret = root_mem;
 		goto done;
 	}
 
-	if (!orig || obsolete) {
+	if (!root_mem->last_scanned_child || obsolete) {
+
+		if (obsolete && root_mem->last_scanned_child)
+			mem_cgroup_put(root_mem->last_scanned_child);
+
 		cgroup = list_first_entry(&root_mem->css.cgroup->children,
 				struct cgroup, sibling);
-		next = mem_cgroup_from_cont(cgroup);
+		ret = mem_cgroup_from_cont(cgroup);
+		mem_cgroup_get(ret);
 	} else
-		next = __mem_cgroup_get_next_node(orig, root_mem);
+		ret = mem_cgroup_get_next_node(root_mem->last_scanned_child,
+						root_mem);
 
 done:
-	if (next)
-		mem_cgroup_get(next);
-	root_mem->last_scanned_child = next;
-	if (orig)
-		mem_cgroup_put(orig);
+	root_mem->last_scanned_child = ret;
 	mutex_unlock(&mem_cgroup_subsys.hierarchy_mutex);
-	return (next) ? next : root_mem;
+	return ret;
 }
 
 static bool mem_cgroup_check_under_limit(struct mem_cgroup *mem)
@@ -774,25 +758,28 @@ static int mem_cgroup_hierarchical_reclaim(struct mem_cgroup *root_mem,
 	 * but there might be left over accounting, even after children
 	 * have left.
 	 */
-	ret += try_to_free_mem_cgroup_pages(root_mem, gfp_mask, noswap,
+	ret = try_to_free_mem_cgroup_pages(root_mem, gfp_mask, noswap,
 					   get_swappiness(root_mem));
 	if (mem_cgroup_check_under_limit(root_mem))
-		return 1;	/* indicate reclaim has succeeded */
+		return 0;
 	if (!root_mem->use_hierarchy)
 		return ret;
 
-	next_mem = mem_cgroup_get_next_node(root_mem);
+	next_mem = mem_cgroup_get_first_node(root_mem);
 
 	while (next_mem != root_mem) {
 		if (mem_cgroup_is_obsolete(next_mem)) {
-			next_mem = mem_cgroup_get_next_node(root_mem);
+			mem_cgroup_put(next_mem);
+			next_mem = mem_cgroup_get_first_node(root_mem);
 			continue;
 		}
-		ret += try_to_free_mem_cgroup_pages(next_mem, gfp_mask, noswap,
+		ret = try_to_free_mem_cgroup_pages(next_mem, gfp_mask, noswap,
 						   get_swappiness(next_mem));
 		if (mem_cgroup_check_under_limit(root_mem))
-			return 1;	/* indicate reclaim has succeeded */
-		next_mem = mem_cgroup_get_next_node(root_mem);
+			return 0;
+		mutex_lock(&mem_cgroup_subsys.hierarchy_mutex);
+		next_mem = mem_cgroup_get_next_node(next_mem, root_mem);
+		mutex_unlock(&mem_cgroup_subsys.hierarchy_mutex);
 	}
 	return ret;
 }
@@ -876,8 +863,6 @@ static int __mem_cgroup_try_charge(struct mm_struct *mm,
 
 		ret = mem_cgroup_hierarchical_reclaim(mem_over_limit, gfp_mask,
 							noswap);
-		if (ret)
-			continue;
 
 		/*
 		 * try_to_free_mem_cgroup_pages() might not give us a full
@@ -994,15 +979,14 @@ static int mem_cgroup_move_account(struct page_cgroup *pc,
 	if (pc->mem_cgroup != from)
 		goto out;
 
+	css_put(&from->css);
 	res_counter_uncharge(&from->res, PAGE_SIZE);
 	mem_cgroup_charge_statistics(from, pc, false);
 	if (do_swap_account)
 		res_counter_uncharge(&from->memsw, PAGE_SIZE);
-	css_put(&from->css);
-
-	css_get(&to->css);
 	pc->mem_cgroup = to;
 	mem_cgroup_charge_statistics(to, pc, true);
+	css_get(&to->css);
 	ret = 0;
 out:
 	unlock_page_cgroup(pc);
@@ -1035,10 +1019,8 @@ static int mem_cgroup_move_parent(struct page_cgroup *pc,
 	if (ret || !parent)
 		return ret;
 
-	if (!get_page_unless_zero(page)) {
-		ret = -EBUSY;
-		goto uncharge;
-	}
+	if (!get_page_unless_zero(page))
+		return -EBUSY;
 
 	ret = isolate_lru_page(page);
 
@@ -1047,23 +1029,19 @@ static int mem_cgroup_move_parent(struct page_cgroup *pc,
 
 	ret = mem_cgroup_move_account(pc, child, parent);
 
+	/* drop extra refcnt by try_charge() (move_account increment one) */
+	css_put(&parent->css);
 	putback_lru_page(page);
 	if (!ret) {
 		put_page(page);
-		/* drop extra refcnt by try_charge() */
-		css_put(&parent->css);
 		return 0;
 	}
-
-cancel:
-	put_page(page);
-uncharge:
-	/* drop extra refcnt by try_charge() */
-	css_put(&parent->css);
 	/* uncharge if move fails */
+cancel:
 	res_counter_uncharge(&parent->res, PAGE_SIZE);
 	if (do_swap_account)
 		res_counter_uncharge(&parent->memsw, PAGE_SIZE);
+	put_page(page);
 	return ret;
 }
 
@@ -1685,7 +1663,7 @@ move_account:
 		/* This is for making all *used* pages to be on LRU. */
 		lru_add_drain_all();
 		ret = 0;
-		for_each_node_state(node, N_HIGH_MEMORY) {
+		for_each_node_state(node, N_POSSIBLE) {
 			for (zid = 0; !ret && zid < MAX_NR_ZONES; zid++) {
 				enum lru_list l;
 				for_each_lru(l) {
@@ -1993,7 +1971,6 @@ static int mem_cgroup_swappiness_write(struct cgroup *cgrp, struct cftype *cft,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_cont(cgrp);
 	struct mem_cgroup *parent;
-
 	if (val > 100)
 		return -EINVAL;
 
@@ -2001,21 +1978,14 @@ static int mem_cgroup_swappiness_write(struct cgroup *cgrp, struct cftype *cft,
 		return -EINVAL;
 
 	parent = mem_cgroup_from_cont(cgrp->parent);
-
-	cgroup_lock();
-
 	/* If under hierarchy, only empty-root can set this value */
 	if ((parent->use_hierarchy) ||
-	    (memcg->use_hierarchy && !list_empty(&cgrp->children))) {
-		cgroup_unlock();
+	    (memcg->use_hierarchy && !list_empty(&cgrp->children)))
 		return -EINVAL;
-	}
 
 	spin_lock(&memcg->reclaim_param_lock);
 	memcg->swappiness = val;
 	spin_unlock(&memcg->reclaim_param_lock);
-
-	cgroup_unlock();
 
 	return 0;
 }
@@ -2194,23 +2164,10 @@ static void mem_cgroup_get(struct mem_cgroup *mem)
 
 static void mem_cgroup_put(struct mem_cgroup *mem)
 {
-	if (atomic_dec_and_test(&mem->refcnt)) {
-		struct mem_cgroup *parent = parent_mem_cgroup(mem);
+	if (atomic_dec_and_test(&mem->refcnt))
 		__mem_cgroup_free(mem);
-		if (parent)
-			mem_cgroup_put(parent);
-	}
 }
 
-/*
- * Returns the parent mem_cgroup in memcgroup hierarchy with hierarchy enabled.
- */
-static struct mem_cgroup *parent_mem_cgroup(struct mem_cgroup *mem)
-{
-	if (!mem->res.parent)
-		return NULL;
-	return mem_cgroup_from_res_counter(mem->res.parent, res);
-}
 
 #ifdef CONFIG_CGROUP_MEM_RES_CTLR_SWAP
 static void __init enable_swap_cgroup(void)
@@ -2224,7 +2181,7 @@ static void __init enable_swap_cgroup(void)
 }
 #endif
 
-static struct cgroup_subsys_state * __ref
+static struct cgroup_subsys_state *
 mem_cgroup_create(struct cgroup_subsys *ss, struct cgroup *cont)
 {
 	struct mem_cgroup *mem, *parent;
@@ -2249,13 +2206,6 @@ mem_cgroup_create(struct cgroup_subsys *ss, struct cgroup *cont)
 	if (parent && parent->use_hierarchy) {
 		res_counter_init(&mem->res, &parent->res);
 		res_counter_init(&mem->memsw, &parent->memsw);
-		/*
-		 * We increment refcnt of the parent to ensure that we can
-		 * safely access it on res_counter_charge/uncharge.
-		 * This refcnt will be decremented when freeing this
-		 * mem_cgroup(see mem_cgroup_put).
-		 */
-		mem_cgroup_get(parent);
 	} else {
 		res_counter_init(&mem->res, NULL);
 		res_counter_init(&mem->memsw, NULL);
@@ -2282,14 +2232,7 @@ static void mem_cgroup_pre_destroy(struct cgroup_subsys *ss,
 static void mem_cgroup_destroy(struct cgroup_subsys *ss,
 				struct cgroup *cont)
 {
-	struct mem_cgroup *mem = mem_cgroup_from_cont(cont);
-	struct mem_cgroup *last_scanned_child = mem->last_scanned_child;
-
-	if (last_scanned_child) {
-		VM_BUG_ON(!mem_cgroup_is_obsolete(last_scanned_child));
-		mem_cgroup_put(last_scanned_child);
-	}
-	mem_cgroup_put(mem);
+	mem_cgroup_put(mem_cgroup_from_cont(cont));
 }
 
 static int mem_cgroup_populate(struct cgroup_subsys *ss,

@@ -99,7 +99,6 @@ static inline bool css_tryget(struct cgroup_subsys_state *css)
 	while (!atomic_inc_not_zero(&css->refcnt)) {
 		if (test_bit(CSS_REMOVED, &css->flags))
 			return false;
-		cpu_relax();
 	}
 	return true;
 }

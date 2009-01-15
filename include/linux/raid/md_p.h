@@ -15,8 +15,6 @@
 #ifndef _MD_P_H
 #define _MD_P_H
 
-#include <linux/types.h>
-
 /*
  * RAID superblock.
  *
