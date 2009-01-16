@@ -36,10 +36,10 @@
 #include <linux/clocksource.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
-#include <linux/irq.h>
 
 #include <asm/oplib.h>
 #include <asm/timer.h>
+#include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/starfire.h>
@@ -176,6 +176,7 @@ static struct sparc64_tick_ops tick_operations __read_mostly = {
 };
 
 struct sparc64_tick_ops *tick_ops __read_mostly = &tick_operations;
+EXPORT_SYMBOL(tick_ops);
 
 static void stick_disable_irq(void)
 {
@@ -639,6 +640,7 @@ unsigned long sparc64_get_clock_tick(unsigned int cpu)
 		return ft->clock_tick_ref;
 	return cpu_data(cpu).clock_tick;
 }
+EXPORT_SYMBOL(sparc64_get_clock_tick);
 
 #ifdef CONFIG_CPU_FREQ
 
