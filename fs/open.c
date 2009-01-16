@@ -273,7 +273,7 @@ static long do_sys_truncate(const char __user *pathname, loff_t length)
 	if (!error)
 		error = security_path_truncate(&path, length, 0);
 	if (!error) {
-		vfs_dq_init(inode);
+		DQUOT_INIT(inode);
 		error = do_truncate(path.dentry, length, 0, NULL);
 	}
 

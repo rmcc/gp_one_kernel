@@ -121,8 +121,8 @@ void ext2_free_inode (struct inode * inode)
 	if (!is_bad_inode(inode)) {
 		/* Quota is already initialized in iput() */
 		ext2_xattr_delete_inode(inode);
-		vfs_dq_free_inode(inode);
-		vfs_dq_drop(inode);
+	    	DQUOT_FREE_INODE(inode);
+		DQUOT_DROP(inode);
 	}
 
 	es = EXT2_SB(sb)->s_es;
@@ -586,7 +586,7 @@ got:
 		goto fail_drop;
 	}
 
-	if (vfs_dq_alloc_inode(inode)) {
+	if (DQUOT_ALLOC_INODE(inode)) {
 		err = -EDQUOT;
 		goto fail_drop;
 	}
@@ -605,10 +605,10 @@ got:
 	return inode;
 
 fail_free_drop:
-	vfs_dq_free_inode(inode);
+	DQUOT_FREE_INODE(inode);
 
 fail_drop:
-	vfs_dq_drop(inode);
+	DQUOT_DROP(inode);
 	inode->i_flags |= S_NOQUOTA;
 	inode->i_nlink = 0;
 	unlock_new_inode(inode);

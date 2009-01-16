@@ -642,7 +642,7 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 				ea_bdebug(new_bh, "reusing block");
 
 				error = -EDQUOT;
-				if (vfs_dq_alloc_block(inode, 1)) {
+				if (DQUOT_ALLOC_BLOCK(inode, 1)) {
 					unlock_buffer(new_bh);
 					goto cleanup;
 				}
@@ -699,7 +699,7 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 		 * as if nothing happened and cleanup the unused block */
 		if (error && error != -ENOSPC) {
 			if (new_bh && new_bh != old_bh)
-				vfs_dq_free_block(inode, 1);
+				DQUOT_FREE_BLOCK(inode, 1);
 			goto cleanup;
 		}
 	} else
@@ -731,7 +731,7 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 			le32_add_cpu(&HDR(old_bh)->h_refcount, -1);
 			if (ce)
 				mb_cache_entry_release(ce);
-			vfs_dq_free_block(inode, 1);
+			DQUOT_FREE_BLOCK(inode, 1);
 			mark_buffer_dirty(old_bh);
 			ea_bdebug(old_bh, "refcount now=%d",
 				le32_to_cpu(HDR(old_bh)->h_refcount));
@@ -794,7 +794,7 @@ ext2_xattr_delete_inode(struct inode *inode)
 		mark_buffer_dirty(bh);
 		if (IS_SYNC(inode))
 			sync_dirty_buffer(bh);
-		vfs_dq_free_block(inode, 1);
+		DQUOT_FREE_BLOCK(inode, 1);
 	}
 	EXT2_I(inode)->i_file_acl = 0;
 

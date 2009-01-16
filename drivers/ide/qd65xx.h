@@ -4,7 +4,7 @@
 
 /*
  * Authors:	Petr Soucek <petr@ryston.cz>
- * 		Samuel Thibault <samuel.thibault@ens-lyon.org>
+ * 		Samuel Thibault <samuel.thibault@fnac.net>
  */
 
 /* truncates a in [b,c] */

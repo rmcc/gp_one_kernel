@@ -188,7 +188,7 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 	struct ext4_group_desc *gdp;
 	struct ext4_super_block *es;
 	struct ext4_sb_info *sbi;
-	int fatal = 0, err, count, cleared;
+	int fatal = 0, err, count;
 	ext4_group_t flex_group;
 
 	if (atomic_read(&inode->i_count) > 1) {
@@ -220,10 +220,10 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 	 * Note: we must free any quota before locking the superblock,
 	 * as writing the quota to disk may need the lock as well.
 	 */
-	vfs_dq_init(inode);
+	DQUOT_INIT(inode);
 	ext4_xattr_delete_inode(handle, inode);
-	vfs_dq_free_inode(inode);
-	vfs_dq_drop(inode);
+	DQUOT_FREE_INODE(inode);
+	DQUOT_DROP(inode);
 
 	is_directory = S_ISDIR(inode->i_mode);
 
@@ -248,10 +248,8 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 		goto error_return;
 
 	/* Ok, now we can actually update the inode bitmaps.. */
-	spin_lock(sb_bgl_lock(sbi, block_group));
-	cleared = ext4_clear_bit(bit, bitmap_bh->b_data);
-	spin_unlock(sb_bgl_lock(sbi, block_group));
-	if (!cleared)
+	if (!ext4_clear_bit_atomic(sb_bgl_lock(sbi, block_group),
+					bit, bitmap_bh->b_data))
 		ext4_error(sb, "ext4_free_inode",
 			   "bit already cleared for inode %lu", ino);
 	else {
@@ -698,7 +696,6 @@ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, int mode)
 	struct inode *ret;
 	ext4_group_t i;
 	int free = 0;
-	static int once = 1;
 	ext4_group_t flex_group;
 
 	/* Cannot create files in a deleted directory */
@@ -718,14 +715,6 @@ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, int mode)
 
 	if (sbi->s_log_groups_per_flex) {
 		ret2 = find_group_flex(sb, dir, &group);
-		if (ret2 == -1) {
-			ret2 = find_group_other(sb, dir, &group);
-			if (ret2 == 0 && once)
-				once = 0;
-				printk(KERN_NOTICE "ext4: find_group_flex "
-				       "failed, fallback succeeded dir %lu\n",
-				       dir->i_ino);
-		}
 		goto got_group;
 	}
 
@@ -915,7 +904,7 @@ got:
 	ei->i_extra_isize = EXT4_SB(sb)->s_want_extra_isize;
 
 	ret = inode;
-	if (vfs_dq_alloc_inode(inode)) {
+	if (DQUOT_ALLOC_INODE(inode)) {
 		err = -EDQUOT;
 		goto fail_drop;
 	}
@@ -956,10 +945,10 @@ really_out:
 	return ret;
 
 fail_free_drop:
-	vfs_dq_free_inode(inode);
+	DQUOT_FREE_INODE(inode);
 
 fail_drop:
-	vfs_dq_drop(inode);
+	DQUOT_DROP(inode);
 	inode->i_flags |= S_NOQUOTA;
 	inode->i_nlink = 0;
 	unlock_new_inode(inode);

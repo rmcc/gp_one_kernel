@@ -36,7 +36,7 @@
 extern unsigned int idt_cpu_freq;
 
 static struct uart_port rb532_uart = {
-	.flags = UPF_BOOT_AUTOCONF,
+	.type = PORT_16550A,
 	.line = 0,
 	.irq = UART0_IRQ,
 	.iotype = UPIO_MEM,

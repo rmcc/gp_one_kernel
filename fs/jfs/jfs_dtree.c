@@ -381,10 +381,10 @@ static u32 add_index(tid_t tid, struct inode *ip, s64 bn, int slot)
 		 * It's time to move the inline table to an external
 		 * page and begin to build the xtree
 		 */
-		if (vfs_dq_alloc_block(ip, sbi->nbperpage))
+		if (DQUOT_ALLOC_BLOCK(ip, sbi->nbperpage))
 			goto clean_up;
 		if (dbAlloc(ip, 0, sbi->nbperpage, &xaddr)) {
-			vfs_dq_free_block(ip, sbi->nbperpage);
+			DQUOT_FREE_BLOCK(ip, sbi->nbperpage);
 			goto clean_up;
 		}
 
@@ -408,7 +408,7 @@ static u32 add_index(tid_t tid, struct inode *ip, s64 bn, int slot)
 			memcpy(&jfs_ip->i_dirtable, temp_table,
 			       sizeof (temp_table));
 			dbFree(ip, xaddr, sbi->nbperpage);
-			vfs_dq_free_block(ip, sbi->nbperpage);
+			DQUOT_FREE_BLOCK(ip, sbi->nbperpage);
 			goto clean_up;
 		}
 		ip->i_size = PSIZE;
@@ -1027,7 +1027,7 @@ static int dtSplitUp(tid_t tid,
 			n = xlen;
 
 		/* Allocate blocks to quota. */
-		if (vfs_dq_alloc_block(ip, n)) {
+		if (DQUOT_ALLOC_BLOCK(ip, n)) {
 			rc = -EDQUOT;
 			goto extendOut;
 		}
@@ -1308,7 +1308,7 @@ static int dtSplitUp(tid_t tid,
 
 	/* Rollback quota allocation */
 	if (rc && quota_allocation)
-		vfs_dq_free_block(ip, quota_allocation);
+		DQUOT_FREE_BLOCK(ip, quota_allocation);
 
       dtSplitUp_Exit:
 
@@ -1369,7 +1369,7 @@ static int dtSplitPage(tid_t tid, struct inode *ip, struct dtsplit * split,
 		return -EIO;
 
 	/* Allocate blocks to quota. */
-	if (vfs_dq_alloc_block(ip, lengthPXD(pxd))) {
+	if (DQUOT_ALLOC_BLOCK(ip, lengthPXD(pxd))) {
 		release_metapage(rmp);
 		return -EDQUOT;
 	}
@@ -1916,7 +1916,7 @@ static int dtSplitRoot(tid_t tid,
 	rp = rmp->data;
 
 	/* Allocate blocks to quota. */
-	if (vfs_dq_alloc_block(ip, lengthPXD(pxd))) {
+	if (DQUOT_ALLOC_BLOCK(ip, lengthPXD(pxd))) {
 		release_metapage(rmp);
 		return -EDQUOT;
 	}
@@ -2287,7 +2287,7 @@ static int dtDeleteUp(tid_t tid, struct inode *ip,
 	xlen = lengthPXD(&fp->header.self);
 
 	/* Free quota allocation. */
-	vfs_dq_free_block(ip, xlen);
+	DQUOT_FREE_BLOCK(ip, xlen);
 
 	/* free/invalidate its buffer page */
 	discard_metapage(fmp);
@@ -2363,7 +2363,7 @@ static int dtDeleteUp(tid_t tid, struct inode *ip,
 				xlen = lengthPXD(&p->header.self);
 
 				/* Free quota allocation */
-				vfs_dq_free_block(ip, xlen);
+				DQUOT_FREE_BLOCK(ip, xlen);
 
 				/* free/invalidate its buffer page */
 				discard_metapage(mp);

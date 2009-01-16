@@ -20,7 +20,6 @@
 #include <linux/blkdev.h>
 #include <linux/magic.h>
 #include <linux/jbd2.h>
-#include <linux/quota.h>
 #include "ext4_i.h"
 
 /*
@@ -869,7 +868,7 @@ static inline unsigned ext4_rec_len_from_disk(__le16 dlen)
 {
 	unsigned len = le16_to_cpu(dlen);
 
-	if (len == EXT4_MAX_REC_LEN || len == 0)
+	if (len == EXT4_MAX_REC_LEN)
 		return 1 << 16;
 	return len;
 }
@@ -1099,7 +1098,6 @@ extern int ext4_chunk_trans_blocks(struct inode *, int nrblocks);
 extern int ext4_block_truncate_page(handle_t *handle,
 		struct address_space *mapping, loff_t from);
 extern int ext4_page_mkwrite(struct vm_area_struct *vma, struct page *page);
-extern qsize_t ext4_get_reserved_space(struct inode *inode);
 
 /* ioctl.c */
 extern long ext4_ioctl(struct file *, unsigned int, unsigned long);
@@ -1208,11 +1206,8 @@ static inline void ext4_r_blocks_count_set(struct ext4_super_block *es,
 
 static inline loff_t ext4_isize(struct ext4_inode *raw_inode)
 {
-	if (S_ISREG(le16_to_cpu(raw_inode->i_mode)))
-		return ((loff_t)le32_to_cpu(raw_inode->i_size_high) << 32) |
-			le32_to_cpu(raw_inode->i_size_lo);
-	else
-		return (loff_t) le32_to_cpu(raw_inode->i_size_lo);
+	return ((loff_t)le32_to_cpu(raw_inode->i_size_high) << 32) |
+		le32_to_cpu(raw_inode->i_size_lo);
 }
 
 static inline void ext4_isize_set(struct ext4_inode *raw_inode, loff_t i_size)

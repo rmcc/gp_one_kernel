@@ -137,7 +137,7 @@ static void cn_test_timer_func(unsigned long __data)
 
 		memcpy(m + 1, data, m->len);
 
-		cn_netlink_send(m, 0, GFP_ATOMIC);
+		cn_netlink_send(m, 0, gfp_any());
 		kfree(m);
 	}
 
@@ -160,8 +160,10 @@ static int cn_test_init(void)
 		goto err_out;
 	}
 
-	setup_timer(&cn_test_timer, cn_test_timer_func, 0);
+	init_timer(&cn_test_timer);
+	cn_test_timer.function = cn_test_timer_func;
 	cn_test_timer.expires = jiffies + HZ;
+	cn_test_timer.data = 0;
 	add_timer(&cn_test_timer);
 
 	return 0;

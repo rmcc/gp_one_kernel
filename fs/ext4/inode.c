@@ -47,10 +47,8 @@
 static inline int ext4_begin_ordered_truncate(struct inode *inode,
 					      loff_t new_size)
 {
-	return jbd2_journal_begin_ordered_truncate(
-					EXT4_SB(inode->i_sb)->s_journal,
-					&EXT4_I(inode)->jinode,
-					new_size);
+	return jbd2_journal_begin_ordered_truncate(&EXT4_I(inode)->jinode,
+						   new_size);
 }
 
 static void ext4_invalidatepage(struct page *page, unsigned long offset);
@@ -362,9 +360,9 @@ static int ext4_block_to_path(struct inode *inode,
 		final = ptrs;
 	} else {
 		ext4_warning(inode->i_sb, "ext4_block_to_path",
-				"block %lu > max in inode %lu",
+				"block %lu > max",
 				i_block + direct_blocks +
-				indirect_blocks + double_blocks, inode->i_ino);
+				indirect_blocks + double_blocks);
 	}
 	if (boundary)
 		*boundary = final - 1 - (i_block & (ptrs - 1));
@@ -975,17 +973,6 @@ out:
 	return err;
 }
 
-qsize_t ext4_get_reserved_space(struct inode *inode)
-{
-	unsigned long long total;
-
-	spin_lock(&EXT4_I(inode)->i_block_reservation_lock);
-	total = EXT4_I(inode)->i_reserved_data_blocks +
-		EXT4_I(inode)->i_reserved_meta_blocks;
-	spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
-
-	return total;
-}
 /*
  * Calculate the number of metadata blocks need to reserve
  * to allocate @blocks for non extent file based file
@@ -1047,14 +1034,8 @@ static void ext4_da_update_reserve_space(struct inode *inode, int used)
 	/* update per-inode reservations */
 	BUG_ON(used  > EXT4_I(inode)->i_reserved_data_blocks);
 	EXT4_I(inode)->i_reserved_data_blocks -= used;
+
 	spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
-
-	/*
-	 * free those over-booking quota for metadata blocks
-	 */
-
-	if (mdb_free)
-		vfs_dq_release_reservation_block(inode, mdb_free);
 }
 
 /*
@@ -1385,10 +1366,6 @@ retry:
 		goto out;
 	}
 
-	/* We cannot recurse into the filesystem as the transaction is already
-	 * started */
-	flags |= AOP_FLAG_NOFS;
-
 	page = grab_cache_page_write_begin(mapping, index, flags);
 	if (!page) {
 		ext4_journal_stop(handle);
@@ -1398,7 +1375,7 @@ retry:
 	*pagep = page;
 
 	ret = block_write_begin(file, mapping, pos, len, flags, pagep, fsdata,
-				ext4_get_block);
+							ext4_get_block);
 
 	if (!ret && ext4_should_journal_data(inode)) {
 		ret = walk_page_buffers(handle, page_buffers(page),
@@ -1570,8 +1547,8 @@ static int ext4_journalled_write_end(struct file *file,
 static int ext4_da_reserve_space(struct inode *inode, int nrblocks)
 {
 	int retries = 0;
-	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
-	unsigned long md_needed, mdblocks, total = 0;
+       struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
+       unsigned long md_needed, mdblocks, total = 0;
 
 	/*
 	 * recalculate the amount of metadata blocks to reserve
@@ -1587,23 +1564,12 @@ repeat:
 	md_needed = mdblocks - EXT4_I(inode)->i_reserved_meta_blocks;
 	total = md_needed + nrblocks;
 
-	/*
-	 * Make quota reservation here to prevent quota overflow
-	 * later. Real quota accounting is done at pages writeout
-	 * time.
-	 */
-	if (vfs_dq_reserve_block(inode, total)) {
-		spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
-		return -EDQUOT;
-	}
-
 	if (ext4_claim_free_blocks(sbi, total)) {
 		spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
 		if (ext4_should_retry_alloc(inode->i_sb, &retries)) {
 			yield();
 			goto repeat;
 		}
-		vfs_dq_release_reservation_block(inode, total);
 		return -ENOSPC;
 	}
 	EXT4_I(inode)->i_reserved_data_blocks += nrblocks;
@@ -1657,8 +1623,6 @@ static void ext4_da_release_space(struct inode *inode, int to_free)
 	BUG_ON(mdb > EXT4_I(inode)->i_reserved_meta_blocks);
 	EXT4_I(inode)->i_reserved_meta_blocks = mdb;
 	spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
-
-	vfs_dq_release_reservation_block(inode, release);
 }
 
 static void ext4_da_page_release_reservation(struct page *page,
@@ -2473,7 +2437,6 @@ static int ext4_da_writepages(struct address_space *mapping,
 	int no_nrwrite_index_update;
 	int pages_written = 0;
 	long pages_skipped;
-	int range_cyclic, cycled = 1, io_done = 0;
 	int needed_blocks, ret = 0, nr_to_writebump = 0;
 	struct ext4_sb_info *sbi = EXT4_SB(mapping->host->i_sb);
 
@@ -2525,15 +2488,9 @@ static int ext4_da_writepages(struct address_space *mapping,
 	if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
 		range_whole = 1;
 
-	range_cyclic = wbc->range_cyclic;
-	if (wbc->range_cyclic) {
+	if (wbc->range_cyclic)
 		index = mapping->writeback_index;
-		if (index)
-			cycled = 0;
-		wbc->range_start = index << PAGE_CACHE_SHIFT;
-		wbc->range_end  = LLONG_MAX;
-		wbc->range_cyclic = 0;
-	} else
+	else
 		index = wbc->range_start >> PAGE_CACHE_SHIFT;
 
 	mpd.wbc = wbc;
@@ -2547,7 +2504,6 @@ static int ext4_da_writepages(struct address_space *mapping,
 	wbc->no_nrwrite_index_update = 1;
 	pages_skipped = wbc->pages_skipped;
 
-retry:
 	while (!ret && wbc->nr_to_write > 0) {
 
 		/*
@@ -2574,7 +2530,7 @@ retry:
 
 		ext4_journal_stop(handle);
 
-		if ((mpd.retval == -ENOSPC) && sbi->s_journal) {
+		if (mpd.retval == -ENOSPC) {
 			/* commit the transaction which would
 			 * free blocks released in the transaction
 			 * and try again
@@ -2590,7 +2546,6 @@ retry:
 			pages_written += mpd.pages_written;
 			wbc->pages_skipped = pages_skipped;
 			ret = 0;
-			io_done = 1;
 		} else if (wbc->nr_to_write)
 			/*
 			 * There is no more writeout needed
@@ -2599,13 +2554,6 @@ retry:
 			 */
 			break;
 	}
-	if (!io_done && !cycled) {
-		cycled = 1;
-		index = 0;
-		wbc->range_start = index << PAGE_CACHE_SHIFT;
-		wbc->range_end  = mapping->writeback_index - 1;
-		goto retry;
-	}
 	if (pages_skipped != wbc->pages_skipped)
 		printk(KERN_EMERG "This should not happen leaving %s "
 				"with nr_to_write = %ld ret = %d\n",
@@ -2613,7 +2561,6 @@ retry:
 
 	/* Update index */
 	index += pages_written;
-	wbc->range_cyclic = range_cyclic;
 	if (wbc->range_cyclic || (range_whole && wbc->nr_to_write > 0))
 		/*
 		 * set the writeback_index so that range_cyclic
@@ -2701,9 +2648,6 @@ retry:
 		ret = PTR_ERR(handle);
 		goto out;
 	}
-	/* We cannot recurse into the filesystem as the transaction is already
-	 * started */
-	flags |= AOP_FLAG_NOFS;
 
 	page = grab_cache_page_write_begin(mapping, index, flags);
 	if (!page) {
@@ -2876,6 +2820,9 @@ static sector_t ext4_bmap(struct address_space *mapping, sector_t block)
 		 */
 		filemap_write_and_wait(mapping);
 	}
+
+	BUG_ON(!EXT4_JOURNAL(inode) &&
+	       EXT4_I(inode)->i_state & EXT4_STATE_JDATA);
 
 	if (EXT4_JOURNAL(inode) && EXT4_I(inode)->i_state & EXT4_STATE_JDATA) {
 		/*
@@ -3675,7 +3622,7 @@ static void ext4_free_data(handle_t *handle, struct inode *inode,
 		 * block pointed to itself, it would have been detached when
 		 * the block was cleared. Check for this instead of OOPSing.
 		 */
-		if ((EXT4_JOURNAL(inode) == NULL) || bh2jh(this_bh))
+		if (bh2jh(this_bh))
 			ext4_handle_dirty_metadata(handle, inode, this_bh);
 		else
 			ext4_error(inode->i_sb, __func__,
@@ -4642,7 +4589,7 @@ int ext4_setattr(struct dentry *dentry, struct iattr *attr)
 			error = PTR_ERR(handle);
 			goto err_out;
 		}
-		error = vfs_dq_transfer(inode, attr) ? -EDQUOT : 0;
+		error = DQUOT_TRANSFER(inode, attr) ? -EDQUOT : 0;
 		if (error) {
 			ext4_journal_stop(handle);
 			return error;
@@ -5021,7 +4968,7 @@ int ext4_mark_inode_dirty(handle_t *handle, struct inode *inode)
  * i_size has been changed by generic_commit_write() and we thus need
  * to include the updated inode in the current transaction.
  *
- * Also, vfs_dq_alloc_block() will always dirty the inode when blocks
+ * Also, DQUOT_ALLOC_SPACE() will always dirty the inode when blocks
  * are allocated to the file.
  *
  * If the inode is marked synchronous, we don't honour that here - doing

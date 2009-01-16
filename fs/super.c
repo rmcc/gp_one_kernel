@@ -82,22 +82,7 @@ static struct super_block *alloc_super(struct file_system_type *type)
 		 * lock ordering than usbfs:
 		 */
 		lockdep_set_class(&s->s_lock, &type->s_lock_key);
-		/*
-		 * sget() can have s_umount recursion.
-		 *
-		 * When it cannot find a suitable sb, it allocates a new
-		 * one (this one), and tries again to find a suitable old
-		 * one.
-		 *
-		 * In case that succeeds, it will acquire the s_umount
-		 * lock of the old one. Since these are clearly distrinct
-		 * locks, and this object isn't exposed yet, there's no
-		 * risk of deadlocks.
-		 *
-		 * Annotate this by putting this lock in a different
-		 * subclass.
-		 */
-		down_write_nested(&s->s_umount, SINGLE_DEPTH_NESTING);
+		down_write(&s->s_umount);
 		s->s_count = S_BIAS;
 		atomic_set(&s->s_active, 1);
 		mutex_init(&s->s_vfs_rename_mutex);
@@ -197,7 +182,7 @@ void deactivate_super(struct super_block *s)
 	if (atomic_dec_and_lock(&s->s_active, &sb_lock)) {
 		s->s_count -= S_BIAS-1;
 		spin_unlock(&sb_lock);
-		vfs_dq_off(s, 0);
+		DQUOT_OFF(s, 0);
 		down_write(&s->s_umount);
 		fs->kill_sb(s);
 		put_filesystem(fs);
@@ -266,7 +251,7 @@ EXPORT_SYMBOL(unlock_super);
 void __fsync_super(struct super_block *sb)
 {
 	sync_inodes_sb(sb, 0);
-	vfs_dq_sync(sb);
+	DQUOT_SYNC(sb);
 	lock_super(sb);
 	if (sb->s_dirt && sb->s_op->write_super)
 		sb->s_op->write_super(sb);
@@ -316,7 +301,7 @@ void generic_shutdown_super(struct super_block *sb)
 		/*
 		 * wait for asynchronous fs operations to finish before going further
 		 */
-		async_synchronize_full_domain(&sb->s_async_list);
+		async_synchronize_full_special(&sb->s_async_list);
 
 		/* bad name - it should be evict_inodes() */
 		invalidate_inodes(sb);
@@ -371,10 +356,8 @@ retry:
 				continue;
 			if (!grab_super(old))
 				goto retry;
-			if (s) {
-				up_write(&s->s_umount);
+			if (s)
 				destroy_super(s);
-			}
 			return old;
 		}
 	}
@@ -389,7 +372,6 @@ retry:
 	err = set(s, data);
 	if (err) {
 		spin_unlock(&sb_lock);
-		up_write(&s->s_umount);
 		destroy_super(s);
 		return ERR_PTR(err);
 	}
@@ -488,7 +470,7 @@ restart:
 		sb->s_count++;
 		spin_unlock(&sb_lock);
 		down_read(&sb->s_umount);
-		async_synchronize_full_domain(&sb->s_async_list);
+		async_synchronize_full_special(&sb->s_async_list);
 		if (sb->s_root && (wait || sb->s_dirt))
 			sb->s_op->sync_fs(sb, wait);
 		up_read(&sb->s_umount);
@@ -655,7 +637,7 @@ int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
 			mark_files_ro(sb);
 		else if (!fs_may_remount_ro(sb))
 			return -EBUSY;
-		retval = vfs_dq_off(sb, 1);
+		retval = DQUOT_OFF(sb, 1);
 		if (retval < 0 && retval != -ENOSYS)
 			return -EBUSY;
 	}
@@ -670,7 +652,7 @@ int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
 	}
 	sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) | (flags & MS_RMT_MASK);
 	if (remount_rw)
-		vfs_dq_quota_on_remount(sb);
+		DQUOT_ON_REMOUNT(sb);
 	return 0;
 }
 
