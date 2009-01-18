@@ -2,6 +2,7 @@
 #define _ASM_STACKPROTECTOR_H 1
 
 #include <asm/tsc.h>
+#include <asm/pda.h>
 
 /*
  * Initialize the stackprotector canary value.
