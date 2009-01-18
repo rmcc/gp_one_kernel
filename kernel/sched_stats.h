@@ -296,21 +296,20 @@ sched_info_switch(struct task_struct *prev, struct task_struct *next)
 static inline void account_group_user_time(struct task_struct *tsk,
 					   cputime_t cputime)
 {
-	struct thread_group_cputimer *cputimer;
+	struct signal_struct *sig;
 
 	/* tsk == current, ensure it is safe to use ->signal */
 	if (unlikely(tsk->exit_state))
 		return;
 
-	cputimer = &tsk->signal->cputimer;
+	sig = tsk->signal;
+	if (sig->cputime.totals) {
+		struct task_cputime *times;
 
-	if (!cputimer->running)
-		return;
-
-	spin_lock(&cputimer->lock);
-	cputimer->cputime.utime =
-		cputime_add(cputimer->cputime.utime, cputime);
-	spin_unlock(&cputimer->lock);
+		times = per_cpu_ptr(sig->cputime.totals, get_cpu());
+		times->utime = cputime_add(times->utime, cputime);
+		put_cpu_no_resched();
+	}
 }
 
 /**
@@ -326,21 +325,20 @@ static inline void account_group_user_time(struct task_struct *tsk,
 static inline void account_group_system_time(struct task_struct *tsk,
 					     cputime_t cputime)
 {
-	struct thread_group_cputimer *cputimer;
+	struct signal_struct *sig;
 
 	/* tsk == current, ensure it is safe to use ->signal */
 	if (unlikely(tsk->exit_state))
 		return;
 
-	cputimer = &tsk->signal->cputimer;
+	sig = tsk->signal;
+	if (sig->cputime.totals) {
+		struct task_cputime *times;
 
-	if (!cputimer->running)
-		return;
-
-	spin_lock(&cputimer->lock);
-	cputimer->cputime.stime =
-		cputime_add(cputimer->cputime.stime, cputime);
-	spin_unlock(&cputimer->lock);
+		times = per_cpu_ptr(sig->cputime.totals, get_cpu());
+		times->stime = cputime_add(times->stime, cputime);
+		put_cpu_no_resched();
+	}
 }
 
 /**
@@ -356,7 +354,6 @@ static inline void account_group_system_time(struct task_struct *tsk,
 static inline void account_group_exec_runtime(struct task_struct *tsk,
 					      unsigned long long ns)
 {
-	struct thread_group_cputimer *cputimer;
 	struct signal_struct *sig;
 
 	sig = tsk->signal;
@@ -365,12 +362,11 @@ static inline void account_group_exec_runtime(struct task_struct *tsk,
 	if (unlikely(!sig))
 		return;
 
-	cputimer = &sig->cputimer;
+	if (sig->cputime.totals) {
+		struct task_cputime *times;
 
-	if (!cputimer->running)
-		return;
-
-	spin_lock(&cputimer->lock);
-	cputimer->cputime.sum_exec_runtime += ns;
-	spin_unlock(&cputimer->lock);
+		times = per_cpu_ptr(sig->cputime.totals, get_cpu());
+		times->sum_exec_runtime += ns;
+		put_cpu_no_resched();
+	}
 }

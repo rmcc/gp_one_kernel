@@ -698,10 +698,8 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	pte_t *pte;
 	int ret = 1;
 
-	if (mem_cgroup_try_charge_swapin(vma->vm_mm, page, GFP_KERNEL, &ptr)) {
+	if (mem_cgroup_try_charge_swapin(vma->vm_mm, page, GFP_KERNEL, &ptr))
 		ret = -ENOMEM;
-		goto out_nolock;
-	}
 
 	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	if (unlikely(!pte_same(*pte, swp_entry_to_pte(entry)))) {
@@ -725,7 +723,6 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	activate_page(page);
 out:
 	pte_unmap_unlock(pte, ptl);
-out_nolock:
 	return ret;
 }
 
@@ -1380,7 +1377,7 @@ out:
 	return ret;
 }
 
-SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
+asmlinkage long sys_swapoff(const char __user * specialfile)
 {
 	struct swap_info_struct * p = NULL;
 	unsigned short *swap_map;
@@ -1636,7 +1633,7 @@ late_initcall(max_swapfiles_check);
  *
  * The swapon system call
  */
-SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
+asmlinkage long sys_swapon(const char __user * specialfile, int swap_flags)
 {
 	struct swap_info_struct * p;
 	char *name = NULL;

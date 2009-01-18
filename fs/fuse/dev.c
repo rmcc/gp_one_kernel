@@ -281,8 +281,7 @@ __releases(&fc->lock)
 			fc->blocked = 0;
 			wake_up_all(&fc->blocked_waitq);
 		}
-		if (fc->num_background == FUSE_CONGESTION_THRESHOLD &&
-		    fc->connected) {
+		if (fc->num_background == FUSE_CONGESTION_THRESHOLD) {
 			clear_bdi_congested(&fc->bdi, READ);
 			clear_bdi_congested(&fc->bdi, WRITE);
 		}
@@ -826,21 +825,16 @@ static int fuse_notify_poll(struct fuse_conn *fc, unsigned int size,
 			    struct fuse_copy_state *cs)
 {
 	struct fuse_notify_poll_wakeup_out outarg;
-	int err = -EINVAL;
+	int err;
 
 	if (size != sizeof(outarg))
-		goto err;
+		return -EINVAL;
 
 	err = fuse_copy_one(cs, &outarg, sizeof(outarg));
 	if (err)
-		goto err;
+		return err;
 
-	fuse_copy_finish(cs);
 	return fuse_notify_poll_wakeup(fc, &outarg);
-
-err:
-	fuse_copy_finish(cs);
-	return err;
 }
 
 static int fuse_notify(struct fuse_conn *fc, enum fuse_notify_code code,
@@ -851,7 +845,6 @@ static int fuse_notify(struct fuse_conn *fc, enum fuse_notify_code code,
 		return fuse_notify_poll(fc, size, cs);
 
 	default:
-		fuse_copy_finish(cs);
 		return -EINVAL;
 	}
 }
@@ -930,6 +923,7 @@ static ssize_t fuse_dev_write(struct kiocb *iocb, const struct iovec *iov,
 	 */
 	if (!oh.unique) {
 		err = fuse_notify(fc, oh.error, nbytes - sizeof(oh), &cs);
+		fuse_copy_finish(&cs);
 		return err ? err : nbytes;
 	}
 

@@ -136,9 +136,11 @@ netxen_nic_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 
 		ecmd->port = PORT_TP;
 
-		ecmd->speed = adapter->link_speed;
-		ecmd->duplex = adapter->link_duplex;
-		ecmd->autoneg = adapter->link_autoneg;
+		if (netif_running(dev)) {
+			ecmd->speed = adapter->link_speed;
+			ecmd->duplex = adapter->link_duplex;
+			ecmd->autoneg = adapter->link_autoneg;
+		}
 
 	} else if (adapter->ahw.board_type == NETXEN_NIC_XGBE) {
 		u32 val;
@@ -169,7 +171,7 @@ netxen_nic_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	} else
 		return -EIO;
 
-	ecmd->phy_address = adapter->physical_port;
+	ecmd->phy_address = adapter->portnum;
 	ecmd->transceiver = XCVR_EXTERNAL;
 
 	switch ((netxen_brdtype_t) boardinfo->board_type) {
@@ -178,13 +180,13 @@ netxen_nic_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	case NETXEN_BRDTYPE_P3_REF_QG:
 	case NETXEN_BRDTYPE_P3_4_GB:
 	case NETXEN_BRDTYPE_P3_4_GB_MM:
+	case NETXEN_BRDTYPE_P3_10000_BASE_T:
 
 		ecmd->supported |= SUPPORTED_Autoneg;
 		ecmd->advertising |= ADVERTISED_Autoneg;
 	case NETXEN_BRDTYPE_P2_SB31_10G_CX4:
 	case NETXEN_BRDTYPE_P3_10G_CX4:
 	case NETXEN_BRDTYPE_P3_10G_CX4_LP:
-	case NETXEN_BRDTYPE_P3_10000_BASE_T:
 		ecmd->supported |= SUPPORTED_TP;
 		ecmd->advertising |= ADVERTISED_TP;
 		ecmd->port = PORT_TP;
@@ -202,32 +204,15 @@ netxen_nic_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 		ecmd->port = PORT_FIBRE;
 		ecmd->autoneg = AUTONEG_DISABLE;
 		break;
+	case NETXEN_BRDTYPE_P2_SB31_10G:
 	case NETXEN_BRDTYPE_P3_10G_SFP_PLUS:
 	case NETXEN_BRDTYPE_P3_10G_SFP_CT:
 	case NETXEN_BRDTYPE_P3_10G_SFP_QT:
-		ecmd->advertising |= ADVERTISED_TP;
-		ecmd->supported |= SUPPORTED_TP;
-	case NETXEN_BRDTYPE_P2_SB31_10G:
 	case NETXEN_BRDTYPE_P3_10G_XFP:
 		ecmd->supported |= SUPPORTED_FIBRE;
 		ecmd->advertising |= ADVERTISED_FIBRE;
 		ecmd->port = PORT_FIBRE;
 		ecmd->autoneg = AUTONEG_DISABLE;
-		break;
-	case NETXEN_BRDTYPE_P3_10G_TP:
-		if (adapter->ahw.board_type == NETXEN_NIC_XGBE) {
-			ecmd->autoneg = AUTONEG_DISABLE;
-			ecmd->supported |= (SUPPORTED_FIBRE | SUPPORTED_TP);
-			ecmd->advertising |=
-				(ADVERTISED_FIBRE | ADVERTISED_TP);
-			ecmd->port = PORT_FIBRE;
-		} else {
-			ecmd->autoneg = AUTONEG_ENABLE;
-			ecmd->supported |= (SUPPORTED_TP |SUPPORTED_Autoneg);
-			ecmd->advertising |=
-				(ADVERTISED_TP | ADVERTISED_Autoneg);
-			ecmd->port = PORT_TP;
-		}
 		break;
 	default:
 		printk(KERN_ERR "netxen-nic: Unsupported board model %d\n",
@@ -561,10 +546,7 @@ netxen_nic_get_ringparam(struct net_device *dev, struct ethtool_ringparam *ring)
 	}
 	ring->tx_pending = adapter->max_tx_desc_count;
 
-	if (adapter->ahw.board_type == NETXEN_NIC_GBE)
-		ring->rx_max_pending = MAX_RCV_DESCRIPTORS_1G;
-	else
-		ring->rx_max_pending = MAX_RCV_DESCRIPTORS_10G;
+	ring->rx_max_pending = MAX_RCV_DESCRIPTORS;
 	ring->tx_max_pending = MAX_CMD_DESCRIPTORS_HOST;
 	ring->rx_jumbo_max_pending = MAX_JUMBO_RCV_DESCRIPTORS;
 	ring->rx_mini_max_pending = 0;

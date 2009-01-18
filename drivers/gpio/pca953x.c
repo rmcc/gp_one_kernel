@@ -202,10 +202,8 @@ static int __devinit pca953x_probe(struct i2c_client *client,
 	int ret;
 
 	pdata = client->dev.platform_data;
-	if (pdata == NULL) {
-		dev_dbg(&client->dev, "no platform data\n");
-		return -EINVAL;
-	}
+	if (pdata == NULL)
+		return -ENODEV;
 
 	chip = kzalloc(sizeof(struct pca953x_chip), GFP_KERNEL);
 	if (chip == NULL)
