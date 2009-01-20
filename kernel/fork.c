@@ -817,17 +817,17 @@ static void posix_cpu_timers_init_group(struct signal_struct *sig)
 static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 {
 	struct signal_struct *sig;
+	int ret;
 
 	if (clone_flags & CLONE_THREAD) {
-		atomic_inc(&current->signal->count);
-		atomic_inc(&current->signal->live);
-		return 0;
+		ret = thread_group_cputime_clone_thread(current);
+		if (likely(!ret)) {
+			atomic_inc(&current->signal->count);
+			atomic_inc(&current->signal->live);
+		}
+		return ret;
 	}
 	sig = kmem_cache_alloc(signal_cachep, GFP_KERNEL);
-
-	if (sig)
-		posix_cpu_timers_init_group(sig);
-
 	tsk->signal = sig;
 	if (!sig)
 		return -ENOMEM;
@@ -864,6 +864,8 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	memcpy(sig->rlim, current->signal->rlim, sizeof sig->rlim);
 	task_unlock(current->group_leader);
 
+	posix_cpu_timers_init_group(sig);
+
 	acct_init_pacct(&sig->pacct);
 
 	tty_audit_fork(sig);
@@ -899,7 +901,7 @@ static void copy_flags(unsigned long clone_flags, struct task_struct *p)
 	clear_freeze_flag(p);
 }
 
-SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
+asmlinkage long sys_set_tid_address(int __user *tidptr)
 {
 	current->clear_child_tid = tidptr;
 
@@ -1601,7 +1603,7 @@ static int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp
  * constructed. Here we are modifying the current, active,
  * task_struct.
  */
-SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
+asmlinkage long sys_unshare(unsigned long unshare_flags)
 {
 	int err = 0;
 	struct fs_struct *fs, *new_fs = NULL;

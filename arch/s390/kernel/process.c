@@ -39,7 +39,6 @@
 #include <linux/tick.h>
 #include <linux/elfcore.h>
 #include <linux/kernel_stat.h>
-#include <linux/syscalls.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -226,13 +225,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long new_stackp,
         return 0;
 }
 
-SYSCALL_DEFINE0(fork)
+asmlinkage long sys_fork(void)
 {
 	struct pt_regs *regs = task_pt_regs(current);
 	return do_fork(SIGCHLD, regs->gprs[15], regs, 0, NULL, NULL);
 }
 
-SYSCALL_DEFINE0(clone)
+asmlinkage long sys_clone(void)
 {
 	struct pt_regs *regs = task_pt_regs(current);
 	unsigned long clone_flags;
@@ -259,7 +258,7 @@ SYSCALL_DEFINE0(clone)
  * do not have enough call-clobbered registers to hold all
  * the information you need.
  */
-SYSCALL_DEFINE0(vfork)
+asmlinkage long sys_vfork(void)
 {
 	struct pt_regs *regs = task_pt_regs(current);
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD,
@@ -279,7 +278,7 @@ asmlinkage void execve_tail(void)
 /*
  * sys_execve() executes a new program.
  */
-SYSCALL_DEFINE0(execve)
+asmlinkage long sys_execve(void)
 {
 	struct pt_regs *regs = task_pt_regs(current);
 	char *filename;

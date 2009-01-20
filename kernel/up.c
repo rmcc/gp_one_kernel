@@ -2,7 +2,6 @@
  * Uniprocessor-only support functions.  The counterpart to kernel/smp.c
  */
 
-#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/smp.h>

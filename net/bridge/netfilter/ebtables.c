@@ -79,7 +79,7 @@ static inline int ebt_do_match (struct ebt_entry_match *m,
 {
 	par->match     = m->u.match;
 	par->matchinfo = m->data;
-	return m->u.match->match(skb, par) ? EBT_MATCH : EBT_NOMATCH;
+	return m->u.match->match(skb, par);
 }
 
 static inline int ebt_dev_check(char *entry, const struct net_device *device)

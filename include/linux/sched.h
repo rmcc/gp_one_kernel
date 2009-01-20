@@ -293,9 +293,6 @@ extern void sched_show_task(struct task_struct *p);
 extern void softlockup_tick(void);
 extern void touch_softlockup_watchdog(void);
 extern void touch_all_softlockup_watchdogs(void);
-extern int proc_dosoftlockup_thresh(struct ctl_table *table, int write,
-				    struct file *filp, void __user *buffer,
-				    size_t *lenp, loff_t *ppos);
 extern unsigned int  softlockup_panic;
 extern unsigned long sysctl_hung_task_check_count;
 extern unsigned long sysctl_hung_task_timeout_secs;
@@ -453,7 +450,6 @@ struct task_cputime {
 	cputime_t utime;
 	cputime_t stime;
 	unsigned long long sum_exec_runtime;
-	spinlock_t lock;
 };
 /* Alternate field names when used to cache expirations. */
 #define prof_exp	stime
@@ -469,7 +465,7 @@ struct task_cputime {
  * used for thread group CPU clock calculations.
  */
 struct thread_group_cputime {
-	struct task_cputime totals;
+	struct task_cputime *totals;
 };
 
 /*
@@ -2184,30 +2180,24 @@ static inline int spin_needbreak(spinlock_t *lock)
  * Thread group CPU time accounting.
  */
 
-static inline
-void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times)
-{
-	struct task_cputime *totals = &tsk->signal->cputime.totals;
-	unsigned long flags;
-
-	spin_lock_irqsave(&totals->lock, flags);
-	*times = *totals;
-	spin_unlock_irqrestore(&totals->lock, flags);
-}
+extern int thread_group_cputime_alloc(struct task_struct *);
+extern void thread_group_cputime(struct task_struct *, struct task_cputime *);
 
 static inline void thread_group_cputime_init(struct signal_struct *sig)
 {
-	sig->cputime.totals = (struct task_cputime){
-		.utime = cputime_zero,
-		.stime = cputime_zero,
-		.sum_exec_runtime = 0,
-	};
+	sig->cputime.totals = NULL;
+}
 
-	spin_lock_init(&sig->cputime.totals.lock);
+static inline int thread_group_cputime_clone_thread(struct task_struct *curr)
+{
+	if (curr->signal->cputime.totals)
+		return 0;
+	return thread_group_cputime_alloc(curr);
 }
 
 static inline void thread_group_cputime_free(struct signal_struct *sig)
 {
+	free_percpu(sig->cputime.totals);
 }
 
 /*
