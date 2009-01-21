@@ -61,24 +61,27 @@ void ax25_protocol_release(unsigned int pid)
 
 	write_lock_bh(&protocol_list_lock);
 	protocol = protocol_list;
-	if (protocol == NULL)
-		goto out;
+	if (protocol == NULL) {
+		write_unlock_bh(&protocol_list_lock);
+		return;
+	}
 
 	if (protocol->pid == pid) {
 		protocol_list = protocol->next;
-		goto out;
+		write_unlock_bh(&protocol_list_lock);
+		return;
 	}
 
 	while (protocol != NULL && protocol->next != NULL) {
 		if (protocol->next->pid == pid) {
 			s = protocol->next;
 			protocol->next = protocol->next->next;
-			goto out;
+			write_unlock_bh(&protocol_list_lock);
+			return;
 		}
 
 		protocol = protocol->next;
 	}
-out:
 	write_unlock_bh(&protocol_list_lock);
 }
 

@@ -298,7 +298,7 @@ poll_some_more:
 		int more = 0;
 
 		spin_lock_irq(&ep->rx_lock);
-		__napi_complete(napi);
+		__netif_rx_complete(napi);
 		wrl(ep, REG_INTEN, REG_INTEN_TX | REG_INTEN_RX);
 		if (ep93xx_have_more_rx(ep)) {
 			wrl(ep, REG_INTEN, REG_INTEN_TX);
@@ -307,7 +307,7 @@ poll_some_more:
 		}
 		spin_unlock_irq(&ep->rx_lock);
 
-		if (more && napi_reschedule(napi))
+		if (more && netif_rx_reschedule(napi))
 			goto poll_some_more;
 	}
 
@@ -415,9 +415,9 @@ static irqreturn_t ep93xx_irq(int irq, void *dev_id)
 
 	if (status & REG_INTSTS_RX) {
 		spin_lock(&ep->rx_lock);
-		if (likely(napi_schedule_prep(&ep->napi))) {
+		if (likely(netif_rx_schedule_prep(&ep->napi))) {
 			wrl(ep, REG_INTEN, REG_INTEN_TX);
-			__napi_schedule(&ep->napi);
+			__netif_rx_schedule(&ep->napi);
 		}
 		spin_unlock(&ep->rx_lock);
 	}

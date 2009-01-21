@@ -46,6 +46,7 @@ struct b43_dfsentry {
 	struct b43_dfs_file file_mmio16write;
 	struct b43_dfs_file file_mmio32read;
 	struct b43_dfs_file file_mmio32write;
+	struct b43_dfs_file file_tsf;
 	struct b43_dfs_file file_txstat;
 	struct b43_dfs_file file_txpower_g;
 	struct b43_dfs_file file_restart;
@@ -71,7 +72,7 @@ struct b43_dfsentry {
 	struct dentry *dyn_debug_dentries[__B43_NR_DYNDBG];
 };
 
-bool b43_debug(struct b43_wldev *dev, enum b43_dyndbg feature);
+int b43_debug(struct b43_wldev *dev, enum b43_dyndbg feature);
 
 void b43_debugfs_init(void);
 void b43_debugfs_exit(void);
@@ -82,7 +83,7 @@ void b43_debugfs_log_txstat(struct b43_wldev *dev,
 
 #else /* CONFIG_B43_DEBUG */
 
-static inline bool b43_debug(struct b43_wldev *dev, enum b43_dyndbg feature)
+static inline int b43_debug(struct b43_wldev *dev, enum b43_dyndbg feature)
 {
 	return 0;
 }

@@ -108,6 +108,9 @@ static int pppox_create(struct net *net, struct socket *sock, int protocol)
 {
 	int rc = -EPROTOTYPE;
 
+	if (net != &init_net)
+		return -EAFNOSUPPORT;
+
 	if (protocol < 0 || protocol > PX_MAX_PROTO)
 		goto out;
 

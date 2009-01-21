@@ -88,6 +88,7 @@ MODULE_LICENSE("GPL");
  */
 static __be16 type_trans(struct sk_buff *skb, struct net_device *dev)
 {
+	struct arcnet_local *lp = netdev_priv(dev);
 	struct archdr *pkt = (struct archdr *) skb->data;
 	struct arc_rfc1051 *soft = &pkt->soft.rfc1051;
 	int hdr_size = ARC_HDR_SIZE + RFC1051_HDR_SIZE;
@@ -111,8 +112,8 @@ static __be16 type_trans(struct sk_buff *skb, struct net_device *dev)
 		return htons(ETH_P_ARP);
 
 	default:
-		dev->stats.rx_errors++;
-		dev->stats.rx_crc_errors++;
+		lp->stats.rx_errors++;
+		lp->stats.rx_crc_errors++;
 		return 0;
 	}
 
@@ -139,7 +140,7 @@ static void rx(struct net_device *dev, int bufnum,
 	skb = alloc_skb(length + ARC_HDR_SIZE, GFP_ATOMIC);
 	if (skb == NULL) {
 		BUGMSG(D_NORMAL, "Memory squeeze, dropping packet.\n");
-		dev->stats.rx_dropped++;
+		lp->stats.rx_dropped++;
 		return;
 	}
 	skb_put(skb, length + ARC_HDR_SIZE);
@@ -167,6 +168,7 @@ static void rx(struct net_device *dev, int bufnum,
 static int build_header(struct sk_buff *skb, struct net_device *dev,
 			unsigned short type, uint8_t daddr)
 {
+	struct arcnet_local *lp = netdev_priv(dev);
 	int hdr_size = ARC_HDR_SIZE + RFC1051_HDR_SIZE;
 	struct archdr *pkt = (struct archdr *) skb_push(skb, hdr_size);
 	struct arc_rfc1051 *soft = &pkt->soft.rfc1051;
@@ -182,8 +184,8 @@ static int build_header(struct sk_buff *skb, struct net_device *dev,
 	default:
 		BUGMSG(D_NORMAL, "RFC1051: I don't understand protocol %d (%Xh)\n",
 		       type, type);
-		dev->stats.tx_errors++;
-		dev->stats.tx_aborted_errors++;
+		lp->stats.tx_errors++;
+		lp->stats.tx_aborted_errors++;
 		return 0;
 	}
 

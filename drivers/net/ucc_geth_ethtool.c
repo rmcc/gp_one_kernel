@@ -39,6 +39,7 @@
 #include <asm/types.h>
 
 #include "ucc_geth.h"
+#include "ucc_geth_mii.h"
 
 static char hw_stat_gstrings[][ETH_GSTRING_LEN] = {
 	"tx-64-frames",

@@ -183,7 +183,7 @@ static int __init sonic_probe1(struct net_device *dev)
 
 	if (lp->descriptors == NULL) {
 		printk(KERN_ERR "%s: couldn't alloc DMA memory for "
-				" descriptors.\n", dev_name(lp->device));
+				" descriptors.\n", lp->device->bus_id);
 		goto out;
 	}
 

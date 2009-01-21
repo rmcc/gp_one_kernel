@@ -1763,16 +1763,9 @@ static void hdlcdev_rx(struct slgt_info *info, char *buf, int size)
 	dev->stats.rx_bytes += size;
 
 	netif_rx(skb);
-}
 
-static const struct net_device_ops hdlcdev_ops = {
-	.ndo_open       = hdlcdev_open,
-	.ndo_stop       = hdlcdev_close,
-	.ndo_change_mtu = hdlc_change_mtu,
-	.ndo_start_xmit = hdlc_start_xmit,
-	.ndo_do_ioctl   = hdlcdev_ioctl,
-	.ndo_tx_timeout = hdlcdev_tx_timeout,
-};
+	dev->last_rx = jiffies;
+}
 
 /**
  * called by device driver when adding device instance
@@ -1801,8 +1794,11 @@ static int hdlcdev_init(struct slgt_info *info)
 	dev->irq       = info->irq_level;
 
 	/* network layer callbacks and settings */
-	dev->netdev_ops	    = &hdlcdev_ops;
-	dev->watchdog_timeo = 10 * HZ;
+	dev->do_ioctl       = hdlcdev_ioctl;
+	dev->open           = hdlcdev_open;
+	dev->stop           = hdlcdev_close;
+	dev->tx_timeout     = hdlcdev_tx_timeout;
+	dev->watchdog_timeo = 10*HZ;
 	dev->tx_queue_len   = 50;
 
 	/* generic HDLC layer callbacks and settings */

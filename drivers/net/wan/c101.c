@@ -296,13 +296,7 @@ static void c101_destroy_card(card_t *card)
 	kfree(card);
 }
 
-static const struct net_device_ops c101_ops = {
-	.ndo_open       = c101_open,
-	.ndo_stop       = c101_close,
-	.ndo_change_mtu = hdlc_change_mtu,
-	.ndo_start_xmit = hdlc_start_xmit,
-	.ndo_do_ioctl   = c101_ioctl,
-};
+
 
 static int __init c101_run(unsigned long irq, unsigned long winbase)
 {
@@ -373,7 +367,9 @@ static int __init c101_run(unsigned long irq, unsigned long winbase)
 	dev->mem_start = winbase;
 	dev->mem_end = winbase + C101_MAPPED_RAM_SIZE - 1;
 	dev->tx_queue_len = 50;
-	dev->netdev_ops = &c101_ops;
+	dev->do_ioctl = c101_ioctl;
+	dev->open = c101_open;
+	dev->stop = c101_close;
 	hdlc->attach = sca_attach;
 	hdlc->xmit = sca_xmit;
 	card->settings.clock_type = CLOCK_EXT;

@@ -1095,7 +1095,11 @@ static void ndisc_ra_useropt(struct sk_buff *ra, struct nd_opt_hdr *opt)
 		&ipv6_hdr(ra)->saddr);
 	nlmsg_end(skb, nlh);
 
-	rtnl_notify(skb, net, 0, RTNLGRP_ND_USEROPT, NULL, GFP_ATOMIC);
+	err = rtnl_notify(skb, net, 0, RTNLGRP_ND_USEROPT, NULL,
+			  GFP_ATOMIC);
+	if (err < 0)
+		goto errout;
+
 	return;
 
 nla_put_failure:
@@ -1534,10 +1538,13 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	if (rt->rt6i_flags & RTF_GATEWAY) {
 		ND_PRINTK2(KERN_WARNING
 			   "ICMPv6 Redirect: destination is not a neighbour.\n");
-		goto release;
+		dst_release(dst);
+		return;
 	}
-	if (!xrlim_allow(dst, 1*HZ))
-		goto release;
+	if (!xrlim_allow(dst, 1*HZ)) {
+		dst_release(dst);
+		return;
+	}
 
 	if (dev->addr_len) {
 		read_lock_bh(&neigh->lock);
@@ -1563,7 +1570,8 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 		ND_PRINTK0(KERN_ERR
 			   "ICMPv6 Redirect: %s() failed to allocate an skb.\n",
 			   __func__);
-		goto release;
+		dst_release(dst);
+		return;
 	}
 
 	skb_reserve(buff, LL_RESERVED_SPACE(dev));
@@ -1623,10 +1631,6 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 
 	if (likely(idev != NULL))
 		in6_dev_put(idev);
-	return;
-
-release:
-	dst_release(dst);
 }
 
 static void pndisc_redo(struct sk_buff *skb)

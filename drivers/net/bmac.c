@@ -1062,6 +1062,7 @@ static int miscintcount;
 static irqreturn_t bmac_misc_intr(int irq, void *dev_id)
 {
 	struct net_device *dev = (struct net_device *) dev_id;
+	struct bmac_data *bp = netdev_priv(dev);
 	unsigned int status = bmread(dev, STATUS);
 	if (miscintcount++ < 10) {
 		XXDEBUG(("bmac_misc_intr\n"));
@@ -1239,7 +1240,7 @@ static void bmac_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *inf
 {
 	struct bmac_data *bp = netdev_priv(dev);
 	strcpy(info->driver, "bmac");
-	strcpy(info->bus_info, dev_name(&bp->mdev->ofdev.dev));
+	strcpy(info->bus_info, bp->mdev->ofdev.dev.bus_id);
 }
 
 static const struct ethtool_ops bmac_ethtool_ops = {

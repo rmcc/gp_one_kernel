@@ -75,9 +75,6 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 
 #define SO_MARK			36
 
-#define SO_TIMESTAMPING		37
-#define SCM_TIMESTAMPING	SO_TIMESTAMPING
-
 #ifdef __KERNEL__
 
 /** sock_type - Socket types

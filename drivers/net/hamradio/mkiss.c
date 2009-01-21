@@ -59,6 +59,8 @@ struct mkiss {
 	unsigned char		*xhead;	/* pointer to next byte to XMIT */
 	int			xleft;	/* bytes left in XMIT queue     */
 
+	struct net_device_stats	stats;
+
 	/* Detailed SLIP statistics. */
 	int		mtu;		/* Our mtu (to spot changes!)   */
 	int		buffsize;	/* Max buffers sizes            */
@@ -251,7 +253,7 @@ static void ax_bump(struct mkiss *ax)
 	if (ax->rbuff[0] > 0x0f) {
 		if (ax->rbuff[0] & 0x80) {
 			if (check_crc_16(ax->rbuff, ax->rcount) < 0) {
-				ax->dev->stats.rx_errors++;
+				ax->stats.rx_errors++;
 				spin_unlock_bh(&ax->buflock);
 
 				return;
@@ -266,7 +268,7 @@ static void ax_bump(struct mkiss *ax)
 			*ax->rbuff &= ~0x80;
 		} else if (ax->rbuff[0] & 0x20)  {
 			if (check_crc_flex(ax->rbuff, ax->rcount) < 0) {
-				ax->dev->stats.rx_errors++;
+				ax->stats.rx_errors++;
 				spin_unlock_bh(&ax->buflock);
 				return;
 			}
@@ -293,7 +295,7 @@ static void ax_bump(struct mkiss *ax)
 	if ((skb = dev_alloc_skb(count)) == NULL) {
 		printk(KERN_ERR "mkiss: %s: memory squeeze, dropping packet.\n",
 		       ax->dev->name);
-		ax->dev->stats.rx_dropped++;
+		ax->stats.rx_dropped++;
 		spin_unlock_bh(&ax->buflock);
 		return;
 	}
@@ -301,8 +303,8 @@ static void ax_bump(struct mkiss *ax)
 	memcpy(skb_put(skb,count), ax->rbuff, count);
 	skb->protocol = ax25_type_trans(skb, ax->dev);
 	netif_rx(skb);
-	ax->dev->stats.rx_packets++;
-	ax->dev->stats.rx_bytes += count;
+	ax->stats.rx_packets++;
+	ax->stats.rx_bytes += count;
 	spin_unlock_bh(&ax->buflock);
 }
 
@@ -342,7 +344,7 @@ static void kiss_unesc(struct mkiss *ax, unsigned char s)
 			return;
 		}
 
-		ax->dev->stats.rx_over_errors++;
+		ax->stats.rx_over_errors++;
 		set_bit(AXF_ERROR, &ax->flags);
 	}
 	spin_unlock_bh(&ax->buflock);
@@ -404,7 +406,7 @@ static void ax_changedmtu(struct mkiss *ax)
 			memcpy(ax->xbuff, ax->xhead, ax->xleft);
 		} else  {
 			ax->xleft = 0;
-			dev->stats.tx_dropped++;
+			ax->stats.tx_dropped++;
 		}
 	}
 
@@ -415,7 +417,7 @@ static void ax_changedmtu(struct mkiss *ax)
 			memcpy(ax->rbuff, orbuff, ax->rcount);
 		} else  {
 			ax->rcount = 0;
-			dev->stats.rx_over_errors++;
+			ax->stats.rx_over_errors++;
 			set_bit(AXF_ERROR, &ax->flags);
 		}
 	}
@@ -442,7 +444,7 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 	if (len > ax->mtu) {		/* Sigh, shouldn't occur BUT ... */
 		len = ax->mtu;
 		printk(KERN_ERR "mkiss: %s: truncating oversized transmit packet!\n", ax->dev->name);
-		dev->stats.tx_dropped++;
+		ax->stats.tx_dropped++;
 		netif_start_queue(dev);
 		return;
 	}
@@ -516,8 +518,8 @@ static void ax_encaps(struct net_device *dev, unsigned char *icp, int len)
 
 	set_bit(TTY_DO_WRITE_WAKEUP, &ax->tty->flags);
 	actual = ax->tty->ops->write(ax->tty, ax->xbuff, count);
-	dev->stats.tx_packets++;
-	dev->stats.tx_bytes += actual;
+	ax->stats.tx_packets++;
+	ax->stats.tx_bytes += actual;
 
 	ax->dev->trans_start = jiffies;
 	ax->xleft = count - actual;
@@ -662,28 +664,32 @@ static int ax_close(struct net_device *dev)
 	return 0;
 }
 
+static struct net_device_stats *ax_get_stats(struct net_device *dev)
+{
+	struct mkiss *ax = netdev_priv(dev);
+
+	return &ax->stats;
+}
+
 static const struct header_ops ax_header_ops = {
 	.create    = ax_header,
 	.rebuild   = ax_rebuild_header,
-};
-
-static const struct net_device_ops ax_netdev_ops = {
-	.ndo_open            = ax_open_dev,
-	.ndo_stop            = ax_close,
-	.ndo_start_xmit	     = ax_xmit,
-	.ndo_set_mac_address = ax_set_mac_address,
 };
 
 static void ax_setup(struct net_device *dev)
 {
 	/* Finish setting up the DEVICE info. */
 	dev->mtu             = AX_MTU;
+	dev->hard_start_xmit = ax_xmit;
+	dev->open            = ax_open_dev;
+	dev->stop            = ax_close;
+	dev->get_stats	     = ax_get_stats;
+	dev->set_mac_address = ax_set_mac_address;
 	dev->hard_header_len = 0;
 	dev->addr_len        = 0;
 	dev->type            = ARPHRD_AX25;
 	dev->tx_queue_len    = 10;
 	dev->header_ops      = &ax_header_ops;
-	dev->netdev_ops	     = &ax_netdev_ops;
 
 
 	memcpy(dev->broadcast, &ax25_bcast, AX25_ADDR_LEN);
@@ -923,7 +929,7 @@ static void mkiss_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	while (count--) {
 		if (fp != NULL && *fp++) {
 			if (!test_and_set_bit(AXF_ERROR, &ax->flags))
-				ax->dev->stats.rx_errors++;
+				ax->stats.rx_errors++;
 			cp++;
 			continue;
 		}
@@ -976,9 +982,9 @@ static struct tty_ldisc_ops ax_ldisc = {
 	.write_wakeup	= mkiss_write_wakeup
 };
 
-static const char banner[] __initdata = KERN_INFO \
+static char banner[] __initdata = KERN_INFO \
 	"mkiss: AX.25 Multikiss, Hans Albas PE1AYX\n";
-static const char msg_regfail[] __initdata = KERN_ERR \
+static char msg_regfail[] __initdata = KERN_ERR \
 	"mkiss: can't register line discipline (err = %d)\n";
 
 static int __init mkiss_init_driver(void)
@@ -987,9 +993,8 @@ static int __init mkiss_init_driver(void)
 
 	printk(banner);
 
-	status = tty_register_ldisc(N_AX25, &ax_ldisc);
-	if (status != 0)
-		printk(msg_regfail, status);
+	if ((status = tty_register_ldisc(N_AX25, &ax_ldisc)) != 0)
+		printk(msg_regfail);
 
 	return status;
 }

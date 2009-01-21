@@ -235,7 +235,11 @@ int acpi_bus_generate_netlink_event(const char *device_class,
 		return result;
 	}
 
-	genlmsg_multicast(skb, 0, acpi_event_mcgrp.id, GFP_ATOMIC);
+	result =
+	    genlmsg_multicast(skb, 0, acpi_event_mcgrp.id, GFP_ATOMIC);
+	if (result)
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
+				  "Failed to send a Genetlink message!\n"));
 	return 0;
 }
 

@@ -334,7 +334,7 @@ static irqreturn_t korina_rx_dma_interrupt(int irq, void *dev_id)
 				DMA_STAT_HALT | DMA_STAT_ERR),
 				&lp->rx_dma_regs->dmasm);
 
-		napi_schedule(&lp->napi);
+		netif_rx_schedule(&lp->napi);
 
 		if (dmas & DMA_STAT_ERR)
 			printk(KERN_ERR DRV_NAME "%s: DMA error\n", dev->name);
@@ -468,7 +468,7 @@ static int korina_poll(struct napi_struct *napi, int budget)
 
 	work_done = korina_rx(dev, budget);
 	if (work_done < budget) {
-		napi_complete(napi);
+		netif_rx_complete(napi);
 
 		writel(readl(&lp->rx_dma_regs->dmasm) &
 			~(DMA_STAT_DONE | DMA_STAT_HALT | DMA_STAT_ERR),

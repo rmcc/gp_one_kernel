@@ -148,7 +148,8 @@ struct ath5k_softc {
 	u8			bssidmask[ETH_ALEN];
 
 	unsigned int		led_pin,	/* GPIO pin for driving LED */
-				led_on;		/* pin setting for LED on */
+				led_on,		/* pin setting for LED on */
+				led_off;	/* off time for current blink */
 
 	struct tasklet_struct	restq;		/* reset tasklet */
 
@@ -169,7 +170,6 @@ struct ath5k_softc {
 	struct ath5k_led	tx_led;		/* tx led */
 
 	spinlock_t		block;		/* protects beacon */
-	struct tasklet_struct	beacontq;	/* beacon intr tasklet */
 	struct ath5k_buf	*bbuf;		/* beacon buffer */
 	unsigned int		bhalq,		/* SW q for outgoing beacons */
 				bmisscount,	/* missed beacon transmits */

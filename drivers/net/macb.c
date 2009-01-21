@@ -211,10 +211,10 @@ static int macb_mii_probe(struct net_device *dev)
 
 	/* attach the mac to the phy */
 	if (pdata && pdata->is_rmii) {
-		phydev = phy_connect(dev, dev_name(&phydev->dev),
+		phydev = phy_connect(dev, phydev->dev.bus_id,
 			&macb_handle_link_change, 0, PHY_INTERFACE_MODE_RMII);
 	} else {
-		phydev = phy_connect(dev, dev_name(&phydev->dev),
+		phydev = phy_connect(dev, phydev->dev.bus_id,
 			&macb_handle_link_change, 0, PHY_INTERFACE_MODE_MII);
 	}
 
@@ -513,6 +513,7 @@ static int macb_rx(struct macb *bp, int budget)
 static int macb_poll(struct napi_struct *napi, int budget)
 {
 	struct macb *bp = container_of(napi, struct macb, napi);
+	struct net_device *dev = bp->dev;
 	int work_done;
 	u32 status;
 
@@ -526,7 +527,7 @@ static int macb_poll(struct napi_struct *napi, int budget)
 		 * this function was called last time, and no packets
 		 * have been received since.
 		 */
-		napi_complete(napi);
+		netif_rx_complete(napi);
 		goto out;
 	}
 
@@ -537,13 +538,13 @@ static int macb_poll(struct napi_struct *napi, int budget)
 		dev_warn(&bp->pdev->dev,
 			 "No RX buffers complete, status = %02lx\n",
 			 (unsigned long)status);
-		napi_complete(napi);
+		netif_rx_complete(napi);
 		goto out;
 	}
 
 	work_done = macb_rx(bp, budget);
 	if (work_done < budget)
-		napi_complete(napi);
+		netif_rx_complete(napi);
 
 	/*
 	 * We've done what we can to clean the buffers. Make sure we
@@ -578,7 +579,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 		}
 
 		if (status & MACB_RX_INT_FLAGS) {
-			if (napi_schedule_prep(&bp->napi)) {
+			if (netif_rx_schedule_prep(&bp->napi)) {
 				/*
 				 * There's no point taking any more interrupts
 				 * until we have processed the buffers
@@ -586,7 +587,7 @@ static irqreturn_t macb_interrupt(int irq, void *dev_id)
 				macb_writel(bp, IDR, MACB_RX_INT_FLAGS);
 				dev_dbg(&bp->pdev->dev,
 					"scheduling RX softirq\n");
-				__napi_schedule(&bp->napi);
+				__netif_rx_schedule(&bp->napi);
 			}
 		}
 
@@ -1076,7 +1077,7 @@ static void macb_get_drvinfo(struct net_device *dev,
 
 	strcpy(info->driver, bp->pdev->dev.driver->name);
 	strcpy(info->version, "$Revision: 1.14 $");
-	strcpy(info->bus_info, dev_name(&bp->pdev->dev));
+	strcpy(info->bus_info, bp->pdev->dev.bus_id);
 }
 
 static struct ethtool_ops macb_ethtool_ops = {
@@ -1233,8 +1234,8 @@ static int __init macb_probe(struct platform_device *pdev)
 
 	phydev = bp->phy_dev;
 	printk(KERN_INFO "%s: attached PHY driver [%s] "
-		"(mii_bus:phy_addr=%s, irq=%d)\n", dev->name,
-		phydev->drv->name, dev_name(&phydev->dev), phydev->irq);
+		"(mii_bus:phy_addr=%s, irq=%d)\n",
+		dev->name, phydev->drv->name, phydev->dev.bus_id, phydev->irq);
 
 	return 0;
 

@@ -23,7 +23,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
-#include <asm/byteorder.h>
 
 #include "prismcompat.h"
 #include "isl_38xx.h"
@@ -231,8 +230,8 @@ islpci_eth_transmit(struct sk_buff *skb, struct net_device *ndev)
 
 	/* set the transmission time */
 	ndev->trans_start = jiffies;
-	ndev->stats.tx_packets++;
-	ndev->stats.tx_bytes += skb->len;
+	priv->statistics.tx_packets++;
+	priv->statistics.tx_bytes += skb->len;
 
 	/* trigger the device */
 	islpci_trigger(priv);
@@ -243,7 +242,7 @@ islpci_eth_transmit(struct sk_buff *skb, struct net_device *ndev)
 	return 0;
 
       drop_free:
-	ndev->stats.tx_dropped++;
+	priv->statistics.tx_dropped++;
 	spin_unlock_irqrestore(&priv->slock, flags);
 	dev_kfree_skb(skb);
 	return err;
@@ -408,8 +407,8 @@ islpci_eth_receive(islpci_private *priv)
 		skb->protocol = eth_type_trans(skb, ndev);
 	}
 	skb->ip_summed = CHECKSUM_NONE;
-	ndev->stats.rx_packets++;
-	ndev->stats.rx_bytes += size;
+	priv->statistics.rx_packets++;
+	priv->statistics.rx_bytes += size;
 
 	/* deliver the skb to the network layer */
 #ifdef ISLPCI_ETH_DEBUG
@@ -472,8 +471,8 @@ islpci_eth_receive(islpci_private *priv)
 		wmb();
 
 		/* increment the driver read pointer */
-		le32_add_cpu(&control_block->
-			     driver_curr_frag[ISL38XX_CB_RX_DATA_LQ], 1);
+		add_le32p(&control_block->
+			  driver_curr_frag[ISL38XX_CB_RX_DATA_LQ], 1);
 	}
 
 	/* trigger the device */
@@ -497,9 +496,10 @@ void
 islpci_eth_tx_timeout(struct net_device *ndev)
 {
 	islpci_private *priv = netdev_priv(ndev);
+	struct net_device_stats *statistics = &priv->statistics;
 
 	/* increment the transmit error counter */
-	ndev->stats.tx_errors++;
+	statistics->tx_errors++;
 
 	if (!priv->reset_task_pending) {
 		printk(KERN_WARNING

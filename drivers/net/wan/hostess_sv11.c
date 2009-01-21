@@ -173,14 +173,6 @@ static int hostess_attach(struct net_device *dev, unsigned short encoding,
  *	Description block for a Comtrol Hostess SV11 card
  */
 
-static const struct net_device_ops hostess_ops = {
-	.ndo_open       = hostess_open,
-	.ndo_stop       = hostess_close,
-	.ndo_change_mtu = hdlc_change_mtu,
-	.ndo_start_xmit = hdlc_start_xmit,
-	.ndo_do_ioctl   = hostess_ioctl,
-};
-
 static struct z8530_dev *sv11_init(int iobase, int irq)
 {
 	struct z8530_dev *sv;
@@ -275,7 +267,9 @@ static struct z8530_dev *sv11_init(int iobase, int irq)
 
 	dev_to_hdlc(netdev)->attach = hostess_attach;
 	dev_to_hdlc(netdev)->xmit = hostess_queue_xmit;
-	netdev->netdev_ops = &hostess_ops;
+	netdev->open = hostess_open;
+	netdev->stop = hostess_close;
+	netdev->do_ioctl = hostess_ioctl;
 	netdev->base_addr = iobase;
 	netdev->irq = irq;
 
