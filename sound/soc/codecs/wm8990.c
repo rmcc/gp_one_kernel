@@ -2,7 +2,8 @@
  * wm8990.c  --  WM8990 ALSA Soc Audio driver
  *
  * Copyright 2008 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         lg@opensource.wolfsonmicro.com or linux@wolfsonmicro.com
  *
  *  This program is free software; you can redistribute  it and/or modify it
  *  under  the terms of  the GNU General  Public License as published by the
@@ -176,9 +177,7 @@ static int wm899x_outpga_put_volsw_vu(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *)kcontrol->private_value;
-	int reg = mc->reg;
+	int reg = kcontrol->private_value & 0xff;
 	int ret;
 	u16 val;
 

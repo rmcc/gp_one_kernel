@@ -23,6 +23,8 @@
  */
 static inline void aout_dump_thread(struct pt_regs *regs, struct user *dump)
 {
+	u16 gs;
+
 /* changed the size calculations - should hopefully work better. lbt */
 	dump->magic = CMAGIC;
 	dump->start_code = 0;
@@ -55,7 +57,7 @@ static inline void aout_dump_thread(struct pt_regs *regs, struct user *dump)
 	dump->regs.ds = (u16)regs->ds;
 	dump->regs.es = (u16)regs->es;
 	dump->regs.fs = (u16)regs->fs;
-	savesegment(gs, dump->regs.gs);
+	savesegment(gs, gs);
 	dump->regs.orig_ax = regs->orig_ax;
 	dump->regs.ip = regs->ip;
 	dump->regs.cs = (u16)regs->cs;

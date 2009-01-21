@@ -82,14 +82,13 @@ struct ocfs2_xattr_set_ctxt {
 
 #define OCFS2_XATTR_ROOT_SIZE	(sizeof(struct ocfs2_xattr_def_value_root))
 #define OCFS2_XATTR_INLINE_SIZE	80
-#define OCFS2_XATTR_HEADER_GAP	4
 #define OCFS2_XATTR_FREE_IN_IBODY	(OCFS2_MIN_XATTR_INLINE_SIZE \
 					 - sizeof(struct ocfs2_xattr_header) \
-					 - OCFS2_XATTR_HEADER_GAP)
+					 - sizeof(__u32))
 #define OCFS2_XATTR_FREE_IN_BLOCK(ptr)	((ptr)->i_sb->s_blocksize \
 					 - sizeof(struct ocfs2_xattr_block) \
 					 - sizeof(struct ocfs2_xattr_header) \
-					 - OCFS2_XATTR_HEADER_GAP)
+					 - sizeof(__u32))
 
 static struct ocfs2_xattr_def_value_root def_xv = {
 	.xv.xr_list.l_count = cpu_to_le16(1),
@@ -275,12 +274,10 @@ static int ocfs2_read_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 			       bucket->bu_blocks, bucket->bu_bhs, 0,
 			       NULL);
 	if (!rc) {
-		spin_lock(&OCFS2_SB(bucket->bu_inode->i_sb)->osb_xattr_lock);
 		rc = ocfs2_validate_meta_ecc_bhs(bucket->bu_inode->i_sb,
 						 bucket->bu_bhs,
 						 bucket->bu_blocks,
 						 &bucket_xh(bucket)->xh_check);
-		spin_unlock(&OCFS2_SB(bucket->bu_inode->i_sb)->osb_xattr_lock);
 		if (rc)
 			mlog_errno(rc);
 	}
@@ -313,11 +310,9 @@ static void ocfs2_xattr_bucket_journal_dirty(handle_t *handle,
 {
 	int i;
 
-	spin_lock(&OCFS2_SB(bucket->bu_inode->i_sb)->osb_xattr_lock);
 	ocfs2_compute_meta_ecc_bhs(bucket->bu_inode->i_sb,
 				   bucket->bu_bhs, bucket->bu_blocks,
 				   &bucket_xh(bucket)->xh_check);
-	spin_unlock(&OCFS2_SB(bucket->bu_inode->i_sb)->osb_xattr_lock);
 
 	for (i = 0; i < bucket->bu_blocks; i++)
 		ocfs2_journal_dirty(handle, bucket->bu_bhs[i]);
@@ -1512,7 +1507,7 @@ static int ocfs2_xattr_set_entry(struct inode *inode,
 		last += 1;
 	}
 
-	free = min_offs - ((void *)last - xs->base) - OCFS2_XATTR_HEADER_GAP;
+	free = min_offs - ((void *)last - xs->base) - sizeof(__u32);
 	if (free < 0)
 		return -EIO;
 
@@ -2195,7 +2190,7 @@ static int ocfs2_xattr_can_be_in_inode(struct inode *inode,
 		last += 1;
 	}
 
-	free = min_offs - ((void *)last - xs->base) - OCFS2_XATTR_HEADER_GAP;
+	free = min_offs - ((void *)last - xs->base) - sizeof(__u32);
 	if (free < 0)
 		return 0;
 
@@ -2597,9 +2592,8 @@ static int __ocfs2_xattr_set_handle(struct inode *inode,
 
 	if (!ret) {
 		/* Update inode ctime. */
-		ret = ocfs2_journal_access_di(ctxt->handle, inode,
-					      xis->inode_bh,
-					      OCFS2_JOURNAL_ACCESS_WRITE);
+		ret = ocfs2_journal_access(ctxt->handle, inode, xis->inode_bh,
+					   OCFS2_JOURNAL_ACCESS_WRITE);
 		if (ret) {
 			mlog_errno(ret);
 			goto out;
@@ -4735,6 +4729,13 @@ static int ocfs2_xattr_bucket_value_truncate(struct inode *inode,
 	vb.vb_xv = (struct ocfs2_xattr_value_root *)
 		(vb.vb_bh->b_data + offset % blocksize);
 
+	ret = ocfs2_xattr_bucket_journal_access(ctxt->handle, bucket,
+						OCFS2_JOURNAL_ACCESS_WRITE);
+	if (ret) {
+		mlog_errno(ret);
+		goto out;
+	}
+
 	/*
 	 * From here on out we have to dirty the bucket.  The generic
 	 * value calls only modify one of the bucket's bhs, but we need
@@ -4747,18 +4748,12 @@ static int ocfs2_xattr_bucket_value_truncate(struct inode *inode,
 	ret = ocfs2_xattr_value_truncate(inode, &vb, len, ctxt);
 	if (ret) {
 		mlog_errno(ret);
-		goto out;
-	}
-
-	ret = ocfs2_xattr_bucket_journal_access(ctxt->handle, bucket,
-						OCFS2_JOURNAL_ACCESS_WRITE);
-	if (ret) {
-		mlog_errno(ret);
-		goto out;
+		goto out_dirty;
 	}
 
 	xe->xe_value_size = cpu_to_le64(len);
 
+out_dirty:
 	ocfs2_xattr_bucket_journal_dirty(ctxt->handle, bucket);
 
 out:
@@ -5066,8 +5061,8 @@ try_again:
 	xh_free_start = le16_to_cpu(xh->xh_free_start);
 	header_size = sizeof(struct ocfs2_xattr_header) +
 			count * sizeof(struct ocfs2_xattr_entry);
-	max_free = OCFS2_XATTR_BUCKET_SIZE - header_size -
-		le16_to_cpu(xh->xh_name_value_len) - OCFS2_XATTR_HEADER_GAP;
+	max_free = OCFS2_XATTR_BUCKET_SIZE -
+		le16_to_cpu(xh->xh_name_value_len) - header_size;
 
 	mlog_bug_on_msg(header_size > blocksize, "bucket %llu has header size "
 			"of %u which exceed block size\n",
@@ -5100,7 +5095,7 @@ try_again:
 			need = 0;
 	}
 
-	free = xh_free_start - header_size - OCFS2_XATTR_HEADER_GAP;
+	free = xh_free_start - header_size;
 	/*
 	 * We need to make sure the new name/value pair
 	 * can exist in the same block.
@@ -5133,8 +5128,7 @@ try_again:
 			}
 
 			xh_free_start = le16_to_cpu(xh->xh_free_start);
-			free = xh_free_start - header_size
-				- OCFS2_XATTR_HEADER_GAP;
+			free = xh_free_start - header_size;
 			if (xh_free_start % blocksize < need)
 				free -= xh_free_start % blocksize;
 

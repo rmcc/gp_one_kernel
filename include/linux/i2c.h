@@ -151,7 +151,7 @@ struct i2c_driver {
 	 * has been dynamically allocated by the driver in the function above,
 	 * it must be freed here.  (LEGACY I2C DRIVERS ONLY)
 	 */
-	int (*detach_client)(struct i2c_client *) __deprecated;
+	int (*detach_client)(struct i2c_client *);
 
 	/* Standard driver model interfaces, for "new style" i2c drivers.
 	 * With the driver model, device enumeration is NEVER done by drivers;
@@ -361,7 +361,7 @@ struct i2c_adapter {
 	struct mutex bus_lock;
 	struct mutex clist_lock;
 
-	int timeout;			/* in jiffies */
+	int timeout;
 	int retries;
 	struct device dev;		/* the adapter device */
 
@@ -429,10 +429,8 @@ static inline int i2c_add_driver(struct i2c_driver *driver)
 	return i2c_register_driver(THIS_MODULE, driver);
 }
 
-/* These are deprecated, your driver should use the standard .probe()
- * and .remove() methods instead. */
-extern int __deprecated i2c_attach_client(struct i2c_client *);
-extern int __deprecated i2c_detach_client(struct i2c_client *);
+extern int i2c_attach_client(struct i2c_client *);
+extern int i2c_detach_client(struct i2c_client *);
 
 extern struct i2c_client *i2c_use_client(struct i2c_client *client);
 extern void i2c_release_client(struct i2c_client *client);
