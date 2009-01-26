@@ -487,6 +487,7 @@ int /*__devinit*/ snd_hda_bus_new(struct snd_card *card,
 {
 	struct hda_bus *bus;
 	int err;
+	char qname[8];
 	static struct snd_device_ops dev_ops = {
 		.dev_register = snd_hda_bus_dev_register,
 		.dev_free = snd_hda_bus_dev_free,
@@ -516,12 +517,10 @@ int /*__devinit*/ snd_hda_bus_new(struct snd_card *card,
 	mutex_init(&bus->cmd_mutex);
 	INIT_LIST_HEAD(&bus->codec_list);
 
-	snprintf(bus->workq_name, sizeof(bus->workq_name),
-		 "hd-audio%d", card->number);
-	bus->workq = create_singlethread_workqueue(bus->workq_name);
+	snprintf(qname, sizeof(qname), "hda%d", card->number);
+	bus->workq = create_workqueue(qname);
 	if (!bus->workq) {
-		snd_printk(KERN_ERR "cannot create workqueue %s\n",
-			   bus->workq_name);
+		snd_printk(KERN_ERR "cannot create workqueue %s\n", qname);
 		kfree(bus);
 		return -ENOMEM;
 	}
@@ -3087,16 +3086,6 @@ int snd_hda_multi_out_dig_prepare(struct hda_codec *codec,
 	return 0;
 }
 EXPORT_SYMBOL_HDA(snd_hda_multi_out_dig_prepare);
-
-int snd_hda_multi_out_dig_cleanup(struct hda_codec *codec,
-				  struct hda_multi_out *mout)
-{
-	mutex_lock(&codec->spdif_mutex);
-	cleanup_dig_out_stream(codec, mout->dig_out_nid);
-	mutex_unlock(&codec->spdif_mutex);
-	return 0;
-}
-EXPORT_SYMBOL_HDA(snd_hda_multi_out_dig_cleanup);
 
 /*
  * release the digital out

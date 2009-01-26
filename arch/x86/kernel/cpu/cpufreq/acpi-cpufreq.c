@@ -145,14 +145,13 @@ typedef union {
 
 struct drv_cmd {
 	unsigned int type;
-	const struct cpumask *mask;
+	cpumask_var_t mask;
 	drv_addr_union addr;
 	u32 val;
 };
 
-static long do_drv_read(void *_cmd)
+static void do_drv_read(struct drv_cmd *cmd)
 {
-	struct drv_cmd *cmd = _cmd;
 	u32 h;
 
 	switch (cmd->type) {
@@ -167,12 +166,10 @@ static long do_drv_read(void *_cmd)
 	default:
 		break;
 	}
-	return 0;
 }
 
-static long do_drv_write(void *_cmd)
+static void do_drv_write(struct drv_cmd *cmd)
 {
-	struct drv_cmd *cmd = _cmd;
 	u32 lo, hi;
 
 	switch (cmd->type) {
@@ -189,23 +186,30 @@ static long do_drv_write(void *_cmd)
 	default:
 		break;
 	}
-	return 0;
 }
 
 static void drv_read(struct drv_cmd *cmd)
 {
+	cpumask_t saved_mask = current->cpus_allowed;
 	cmd->val = 0;
 
-	work_on_cpu(cpumask_any(cmd->mask), do_drv_read, cmd);
+	set_cpus_allowed_ptr(current, cmd->mask);
+	do_drv_read(cmd);
+	set_cpus_allowed_ptr(current, &saved_mask);
 }
 
 static void drv_write(struct drv_cmd *cmd)
 {
+	cpumask_t saved_mask = current->cpus_allowed;
 	unsigned int i;
 
 	for_each_cpu(i, cmd->mask) {
-		work_on_cpu(i, do_drv_write, cmd);
+		set_cpus_allowed_ptr(current, cpumask_of(i));
+		do_drv_write(cmd);
 	}
+
+	set_cpus_allowed_ptr(current, &saved_mask);
+	return;
 }
 
 static u32 get_cur_val(const struct cpumask *mask)
@@ -231,7 +235,8 @@ static u32 get_cur_val(const struct cpumask *mask)
 		return 0;
 	}
 
-	cmd.mask = mask;
+	cpumask_copy(cmd.mask, mask);
+
 	drv_read(&cmd);
 
 	dprintk("get_cur_val = %u\n", cmd.val);
@@ -363,7 +368,7 @@ static unsigned int get_cur_freq_on_cpu(unsigned int cpu)
 	return freq;
 }
 
-static unsigned int check_freqs(const struct cpumask *mask, unsigned int freq,
+static unsigned int check_freqs(const cpumask_t *mask, unsigned int freq,
 				struct acpi_cpufreq_data *data)
 {
 	unsigned int cur_freq;
@@ -397,6 +402,9 @@ static int acpi_cpufreq_target(struct cpufreq_policy *policy,
 	     data->acpi_data == NULL || data->freq_table == NULL)) {
 		return -ENODEV;
 	}
+
+	if (unlikely(!alloc_cpumask_var(&cmd.mask, GFP_KERNEL)))
+		return -ENOMEM;
 
 	perf = data->acpi_data;
 	result = cpufreq_frequency_table_target(policy,
@@ -442,9 +450,9 @@ static int acpi_cpufreq_target(struct cpufreq_policy *policy,
 
 	/* cpufreq holds the hotplug lock, so we are safe from here on */
 	if (policy->shared_type != CPUFREQ_SHARED_TYPE_ANY)
-		cmd.mask = policy->cpus;
+		cpumask_and(cmd.mask, cpu_online_mask, policy->cpus);
 	else
-		cmd.mask = cpumask_of(policy->cpu);
+		cpumask_copy(cmd.mask, cpumask_of(policy->cpu));
 
 	freqs.old = perf->states[perf->state].core_frequency * 1000;
 	freqs.new = data->freq_table[next_state].frequency;
@@ -471,6 +479,7 @@ static int acpi_cpufreq_target(struct cpufreq_policy *policy,
 	perf->state = next_perf_state;
 
 out:
+	free_cpumask_var(cmd.mask);
 	return result;
 }
 
