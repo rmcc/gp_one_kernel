@@ -582,7 +582,7 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 {
 	struct btrfs_ioctl_vol_args *vol;
 	struct btrfs_fs_devices *fs_devices;
-	int ret = -ENOTTY;
+	int ret = 0;
 	int len;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -594,7 +594,6 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		goto out;
 	}
 	len = strnlen(vol->name, BTRFS_PATH_NAME_MAX);
-
 	switch (cmd) {
 	case BTRFS_IOC_SCAN_DEV:
 		ret = btrfs_scan_one_device(vol->name, FMODE_READ,

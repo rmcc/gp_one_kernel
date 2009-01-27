@@ -41,7 +41,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/if_vlan.h>
 #include <net/ip.h>
-#include <linux/ipv6.h>
 
 MODULE_DESCRIPTION("NetXen Multi port (1/10) Gigabit Network Driver");
 MODULE_LICENSE("GPL");
@@ -1005,10 +1004,8 @@ static void __devexit netxen_nic_remove(struct pci_dev *pdev)
 
 	iounmap(adapter->ahw.db_base);
 	iounmap(adapter->ahw.pci_base0);
-	if (adapter->ahw.pci_base1 != NULL)
-		iounmap(adapter->ahw.pci_base1);
-	if (adapter->ahw.pci_base2 != NULL)
-		iounmap(adapter->ahw.pci_base2);
+	iounmap(adapter->ahw.pci_base1);
+	iounmap(adapter->ahw.pci_base2);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
