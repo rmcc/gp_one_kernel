@@ -710,11 +710,10 @@ static struct sk_buff *p54_find_tx_entry(struct ieee80211_hw *dev,
 					   __le32 req_id)
 {
 	struct p54_common *priv = dev->priv;
-	struct sk_buff *entry;
+	struct sk_buff *entry = priv->tx_queue.next;
 	unsigned long flags;
 
 	spin_lock_irqsave(&priv->tx_queue.lock, flags);
-	entry = priv->tx_queue.next;
 	while (entry != (struct sk_buff *)&priv->tx_queue) {
 		struct p54_hdr *hdr = (struct p54_hdr *) entry->data;
 
@@ -733,7 +732,7 @@ static void p54_rx_frame_sent(struct ieee80211_hw *dev, struct sk_buff *skb)
 	struct p54_common *priv = dev->priv;
 	struct p54_hdr *hdr = (struct p54_hdr *) skb->data;
 	struct p54_frame_sent *payload = (struct p54_frame_sent *) hdr->data;
-	struct sk_buff *entry;
+	struct sk_buff *entry = (struct sk_buff *) priv->tx_queue.next;
 	u32 addr = le32_to_cpu(hdr->req_id) - priv->headroom;
 	struct memrecord *range = NULL;
 	u32 freed = 0;
@@ -742,7 +741,6 @@ static void p54_rx_frame_sent(struct ieee80211_hw *dev, struct sk_buff *skb)
 	int count, idx;
 
 	spin_lock_irqsave(&priv->tx_queue.lock, flags);
-	entry = (struct sk_buff *) priv->tx_queue.next;
 	while (entry != (struct sk_buff *)&priv->tx_queue) {
 		struct ieee80211_tx_info *info = IEEE80211_SKB_CB(entry);
 		struct p54_hdr *entry_hdr;
@@ -978,7 +976,7 @@ static int p54_assign_address(struct ieee80211_hw *dev, struct sk_buff *skb,
 			       struct p54_hdr *data, u32 len)
 {
 	struct p54_common *priv = dev->priv;
-	struct sk_buff *entry;
+	struct sk_buff *entry = priv->tx_queue.next;
 	struct sk_buff *target_skb = NULL;
 	struct ieee80211_tx_info *info;
 	struct memrecord *range;
@@ -1016,7 +1014,6 @@ static int p54_assign_address(struct ieee80211_hw *dev, struct sk_buff *skb,
 		}
 	}
 
-	entry = priv->tx_queue.next;
 	while (left--) {
 		u32 hole_size;
 		info = IEEE80211_SKB_CB(entry);

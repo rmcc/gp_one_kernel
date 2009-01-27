@@ -754,9 +754,7 @@ static int ocfs2_mark_dquot_dirty(struct dquot *dquot)
 	if (dquot->dq_flags & mask)
 		sync = 1;
 	spin_unlock(&dq_data_lock);
-	/* This is a slight hack but we can't afford getting global quota
-	 * lock if we already have a transaction started. */
-	if (!sync || journal_current_handle()) {
+	if (!sync) {
 		status = ocfs2_write_dquot(dquot);
 		goto out;
 	}

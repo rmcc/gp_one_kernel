@@ -208,7 +208,7 @@ again:
 	offs = 0;
 
 out:
-	err = ubifs_wbuf_seek_nolock(wbuf, lnum, offs, wbuf->dtype);
+	err = ubifs_wbuf_seek_nolock(wbuf, lnum, offs, UBI_SHORTTERM);
 	if (err)
 		goto out_unlock;
 
