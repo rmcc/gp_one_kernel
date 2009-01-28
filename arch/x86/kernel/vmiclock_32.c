@@ -283,13 +283,10 @@ void __devinit vmi_time_ap_init(void)
 #endif
 
 /** vmi clocksource */
-static struct clocksource clocksource_vmi;
 
 static cycle_t read_real_cycles(void)
 {
-	cycle_t ret = (cycle_t)vmi_timer_ops.get_cycle_counter(VMI_CYCLES_REAL);
-	return ret >= clocksource_vmi.cycle_last ?
-		ret : clocksource_vmi.cycle_last;
+	return vmi_timer_ops.get_cycle_counter(VMI_CYCLES_REAL);
 }
 
 static struct clocksource clocksource_vmi = {

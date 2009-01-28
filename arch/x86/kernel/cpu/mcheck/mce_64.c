@@ -295,11 +295,11 @@ void do_machine_check(struct pt_regs * regs, long error_code)
 		 * If we know that the error was in user space, send a
 		 * SIGBUS.  Otherwise, panic if tolerance is low.
 		 *
-		 * force_sig() takes an awful lot of locks and has a slight
+		 * do_exit() takes an awful lot of locks and has a slight
 		 * risk of deadlocking.
 		 */
 		if (user_space) {
-			force_sig(SIGBUS, current);
+			do_exit(SIGBUS);
 		} else if (panic_on_oops || tolerant < 2) {
 			mce_panic("Uncorrected machine check",
 				&panicm, mcestart);
@@ -734,7 +734,6 @@ __setup("mce=", mcheck_enable);
 static int mce_resume(struct sys_device *dev)
 {
 	mce_init(NULL);
-	mce_cpu_features(&current_cpu_data);
 	return 0;
 }
 

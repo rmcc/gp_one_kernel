@@ -47,10 +47,8 @@
 static inline int ext4_begin_ordered_truncate(struct inode *inode,
 					      loff_t new_size)
 {
-	return jbd2_journal_begin_ordered_truncate(
-					EXT4_SB(inode->i_sb)->s_journal,
-					&EXT4_I(inode)->jinode,
-					new_size);
+	return jbd2_journal_begin_ordered_truncate(&EXT4_I(inode)->jinode,
+						   new_size);
 }
 
 static void ext4_invalidatepage(struct page *page, unsigned long offset);
@@ -362,9 +360,9 @@ static int ext4_block_to_path(struct inode *inode,
 		final = ptrs;
 	} else {
 		ext4_warning(inode->i_sb, "ext4_block_to_path",
-				"block %lu > max in inode %lu",
+				"block %lu > max",
 				i_block + direct_blocks +
-				indirect_blocks + double_blocks, inode->i_ino);
+				indirect_blocks + double_blocks);
 	}
 	if (boundary)
 		*boundary = final - 1 - (i_block & (ptrs - 1));
@@ -2439,7 +2437,6 @@ static int ext4_da_writepages(struct address_space *mapping,
 	int no_nrwrite_index_update;
 	int pages_written = 0;
 	long pages_skipped;
-	int range_cyclic, cycled = 1, io_done = 0;
 	int needed_blocks, ret = 0, nr_to_writebump = 0;
 	struct ext4_sb_info *sbi = EXT4_SB(mapping->host->i_sb);
 
@@ -2491,15 +2488,9 @@ static int ext4_da_writepages(struct address_space *mapping,
 	if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
 		range_whole = 1;
 
-	range_cyclic = wbc->range_cyclic;
-	if (wbc->range_cyclic) {
+	if (wbc->range_cyclic)
 		index = mapping->writeback_index;
-		if (index)
-			cycled = 0;
-		wbc->range_start = index << PAGE_CACHE_SHIFT;
-		wbc->range_end  = LLONG_MAX;
-		wbc->range_cyclic = 0;
-	} else
+	else
 		index = wbc->range_start >> PAGE_CACHE_SHIFT;
 
 	mpd.wbc = wbc;
@@ -2513,7 +2504,6 @@ static int ext4_da_writepages(struct address_space *mapping,
 	wbc->no_nrwrite_index_update = 1;
 	pages_skipped = wbc->pages_skipped;
 
-retry:
 	while (!ret && wbc->nr_to_write > 0) {
 
 		/*
@@ -2556,7 +2546,6 @@ retry:
 			pages_written += mpd.pages_written;
 			wbc->pages_skipped = pages_skipped;
 			ret = 0;
-			io_done = 1;
 		} else if (wbc->nr_to_write)
 			/*
 			 * There is no more writeout needed
@@ -2565,13 +2554,6 @@ retry:
 			 */
 			break;
 	}
-	if (!io_done && !cycled) {
-		cycled = 1;
-		index = 0;
-		wbc->range_start = index << PAGE_CACHE_SHIFT;
-		wbc->range_end  = mapping->writeback_index - 1;
-		goto retry;
-	}
 	if (pages_skipped != wbc->pages_skipped)
 		printk(KERN_EMERG "This should not happen leaving %s "
 				"with nr_to_write = %ld ret = %d\n",
@@ -2579,7 +2561,6 @@ retry:
 
 	/* Update index */
 	index += pages_written;
-	wbc->range_cyclic = range_cyclic;
 	if (wbc->range_cyclic || (range_whole && wbc->nr_to_write > 0))
 		/*
 		 * set the writeback_index so that range_cyclic
@@ -2839,6 +2820,9 @@ static sector_t ext4_bmap(struct address_space *mapping, sector_t block)
 		 */
 		filemap_write_and_wait(mapping);
 	}
+
+	BUG_ON(!EXT4_JOURNAL(inode) &&
+	       EXT4_I(inode)->i_state & EXT4_STATE_JDATA);
 
 	if (EXT4_JOURNAL(inode) && EXT4_I(inode)->i_state & EXT4_STATE_JDATA) {
 		/*
@@ -3638,7 +3622,7 @@ static void ext4_free_data(handle_t *handle, struct inode *inode,
 		 * block pointed to itself, it would have been detached when
 		 * the block was cleared. Check for this instead of OOPSing.
 		 */
-		if ((EXT4_JOURNAL(inode) == NULL) || bh2jh(this_bh))
+		if (bh2jh(this_bh))
 			ext4_handle_dirty_metadata(handle, inode, this_bh);
 		else
 			ext4_error(inode->i_sb, __func__,

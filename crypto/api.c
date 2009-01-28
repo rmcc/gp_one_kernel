@@ -557,34 +557,34 @@ err:
 	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(crypto_alloc_tfm);
-
+ 
 /*
- *	crypto_destroy_tfm - Free crypto transform
- *	@mem: Start of tfm slab
+ *	crypto_free_tfm - Free crypto transform
  *	@tfm: Transform to free
  *
- *	This function frees up the transform and any associated resources,
+ *	crypto_free_tfm() frees up the transform and any associated resources,
  *	then drops the refcount on the associated algorithm.
  */
-void crypto_destroy_tfm(void *mem, struct crypto_tfm *tfm)
+void crypto_free_tfm(struct crypto_tfm *tfm)
 {
 	struct crypto_alg *alg;
 	int size;
 
-	if (unlikely(!mem))
+	if (unlikely(!tfm))
 		return;
 
 	alg = tfm->__crt_alg;
-	size = ksize(mem);
+	size = sizeof(*tfm) + alg->cra_ctxsize;
 
 	if (!tfm->exit && alg->cra_exit)
 		alg->cra_exit(tfm);
 	crypto_exit_ops(tfm);
 	crypto_mod_put(alg);
-	memset(mem, 0, size);
-	kfree(mem);
+	memset(tfm, 0, size);
+	kfree(tfm);
 }
-EXPORT_SYMBOL_GPL(crypto_destroy_tfm);
+
+EXPORT_SYMBOL_GPL(crypto_free_tfm);
 
 int crypto_has_alg(const char *name, u32 type, u32 mask)
 {

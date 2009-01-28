@@ -455,7 +455,6 @@ static int spurious_fault(unsigned long address,
 	pud_t *pud;
 	pmd_t *pmd;
 	pte_t *pte;
-	int ret;
 
 	/* Reserved-bit violation or user access to kernel space? */
 	if (error_code & (PF_USER | PF_RSVD))
@@ -483,17 +482,7 @@ static int spurious_fault(unsigned long address,
 	if (!pte_present(*pte))
 		return 0;
 
-	ret = spurious_fault_check(error_code, pte);
-	if (!ret)
-		return 0;
-
-	/*
-	 * Make sure we have permissions in PMD
-	 * If not, then there's a bug in the page tables.
-	 */
-	ret = spurious_fault_check(error_code, (pte_t *) pmd);
-	WARN_ONCE(!ret, "PMD has incorrect permission bits\n");
-	return ret;
+	return spurious_fault_check(error_code, pte);
 }
 
 /*
@@ -614,6 +603,8 @@ void __kprobes do_page_fault(struct pt_regs *regs, unsigned long error_code)
 
 	si_code = SEGV_MAPERR;
 
+	if (notify_page_fault(regs))
+		return;
 	if (unlikely(kmmio_fault(regs, address)))
 		return;
 
@@ -643,9 +634,6 @@ void __kprobes do_page_fault(struct pt_regs *regs, unsigned long error_code)
 		if (spurious_fault(address, error_code))
 			return;
 
-		/* kprobes don't want to hook the spurious faults. */
-		if (notify_page_fault(regs))
-			return;
 		/*
 		 * Don't take the mm semaphore here. If we fixup a prefetch
 		 * fault we could otherwise deadlock.
@@ -653,9 +641,6 @@ void __kprobes do_page_fault(struct pt_regs *regs, unsigned long error_code)
 		goto bad_area_nosemaphore;
 	}
 
-	/* kprobes don't want to hook the spurious faults. */
-	if (notify_page_fault(regs))
-		return;
 
 	/*
 	 * It's safe to allow irq's after cr2 has been saved and the

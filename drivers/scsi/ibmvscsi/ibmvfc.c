@@ -1322,9 +1322,7 @@ static int ibmvfc_map_sg_data(struct scsi_cmnd *scmd,
 					       &evt->ext_list_token);
 
 		if (!evt->ext_list) {
-			scsi_dma_unmap(scmd);
-			if (vhost->log_level > IBMVFC_DEFAULT_LOG_LEVEL)
-				scmd_printk(KERN_ERR, scmd, "Can't allocate memory for scatterlist\n");
+			scmd_printk(KERN_ERR, scmd, "Can't allocate memory for scatterlist\n");
 			return -ENOMEM;
 		}
 	}
