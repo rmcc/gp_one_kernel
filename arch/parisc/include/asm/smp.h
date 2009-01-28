@@ -29,8 +29,7 @@ extern void smp_send_reschedule(int cpu);
 extern void smp_send_all_nop(void);
 
 extern void arch_send_call_function_single_ipi(int cpu);
-extern void arch_send_call_function_ipi_mask(const struct cpumask *mask);
-#define arch_send_call_function_ipi_mask arch_send_call_function_ipi_mask
+extern void arch_send_call_function_ipi(cpumask_t mask);
 
 #endif /* !ASSEMBLY */
 

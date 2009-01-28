@@ -113,7 +113,7 @@ halt_processor(void)
 {
 	/* REVISIT : redirect I/O Interrupts to another CPU? */
 	/* REVISIT : does PM *know* this CPU isn't available? */
-	set_cpu_online(smp_processor_id(), false);
+	cpu_clear(smp_processor_id(), cpu_online_map);
 	local_irq_disable();
 	for (;;)
 		;
@@ -214,11 +214,11 @@ ipi_send(int cpu, enum ipi_message_type op)
 }
 
 static void
-send_IPI_mask(const struct cpumask *mask, enum ipi_message_type op)
+send_IPI_mask(cpumask_t mask, enum ipi_message_type op)
 {
 	int cpu;
 
-	for_each_cpu(cpu, mask)
+	for_each_cpu_mask(cpu, mask)
 		ipi_send(cpu, op);
 }
 
@@ -257,7 +257,7 @@ smp_send_all_nop(void)
 	send_IPI_allbutself(IPI_NOP);
 }
 
-void arch_send_call_function_ipi_mask(const struct cpumask *mask)
+void arch_send_call_function_ipi(cpumask_t mask)
 {
 	send_IPI_mask(mask, IPI_CALL_FUNC);
 }
@@ -296,14 +296,13 @@ smp_cpu_init(int cpunum)
 	mb();
 
 	/* Well, support 2.4 linux scheme as well. */
-	if (cpu_isset(cpunum, cpu_online_map))
+	if (cpu_test_and_set(cpunum, cpu_online_map))
 	{
 		extern void machine_halt(void); /* arch/parisc.../process.c */
 
 		printk(KERN_CRIT "CPU#%d already initialized!\n", cpunum);
 		machine_halt();
 	}  
-	set_cpu_online(cpunum, true);
 
 	/* Initialise the idle task for this CPU */
 	atomic_inc(&init_mm.mm_count);
@@ -425,8 +424,8 @@ void __init smp_prepare_boot_cpu(void)
 	/* Setup BSP mappings */
 	printk(KERN_INFO "SMP: bootstrap CPU ID is %d\n", bootstrap_processor);
 
-	set_cpu_online(bootstrap_processor, true);
-	set_cpu_present(bootstrap_processor, true);
+	cpu_set(bootstrap_processor, cpu_online_map);
+	cpu_set(bootstrap_processor, cpu_present_map);
 }
 
 
@@ -437,7 +436,8 @@ void __init smp_prepare_boot_cpu(void)
 */
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
-	init_cpu_present(cpumask_of(0));
+	cpus_clear(cpu_present_map);
+	cpu_set(0, cpu_present_map);
 
 	parisc_max_cpus = max_cpus;
 	if (!max_cpus)
