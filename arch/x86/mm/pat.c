@@ -333,23 +333,11 @@ int reserve_memtype(u64 start, u64 end, unsigned long req_type,
 					      req_type & _PAGE_CACHE_MASK);
 	}
 
-	if (new_type)
-		*new_type = actual_type;
-
-	/*
-	 * For legacy reasons, some parts of the physical address range in the
-	 * legacy 1MB region is treated as non-RAM (even when listed as RAM in
-	 * the e820 tables).  So we will track the memory attributes of this
-	 * legacy 1MB region using the linear memtype_list always.
-	 */
-	if (end >= ISA_END_ADDRESS) {
-		is_range_ram = pagerange_is_ram(start, end);
-		if (is_range_ram == 1)
-			return reserve_ram_pages_type(start, end, req_type,
-						      new_type);
-		else if (is_range_ram < 0)
-			return -EINVAL;
-	}
+	is_range_ram = pagerange_is_ram(start, end);
+	if (is_range_ram == 1)
+		return reserve_ram_pages_type(start, end, req_type, new_type);
+	else if (is_range_ram < 0)
+		return -EINVAL;
 
 	new  = kmalloc(sizeof(struct memtype), GFP_KERNEL);
 	if (!new)
@@ -358,6 +346,9 @@ int reserve_memtype(u64 start, u64 end, unsigned long req_type,
 	new->start	= start;
 	new->end	= end;
 	new->type	= actual_type;
+
+	if (new_type)
+		*new_type = actual_type;
 
 	spin_lock(&memtype_lock);
 
@@ -446,19 +437,11 @@ int free_memtype(u64 start, u64 end)
 	if (is_ISA_range(start, end - 1))
 		return 0;
 
-	/*
-	 * For legacy reasons, some parts of the physical address range in the
-	 * legacy 1MB region is treated as non-RAM (even when listed as RAM in
-	 * the e820 tables).  So we will track the memory attributes of this
-	 * legacy 1MB region using the linear memtype_list always.
-	 */
-	if (end >= ISA_END_ADDRESS) {
-		is_range_ram = pagerange_is_ram(start, end);
-		if (is_range_ram == 1)
-			return free_ram_pages_type(start, end);
-		else if (is_range_ram < 0)
-			return -EINVAL;
-	}
+	is_range_ram = pagerange_is_ram(start, end);
+	if (is_range_ram == 1)
+		return free_ram_pages_type(start, end);
+	else if (is_range_ram < 0)
+		return -EINVAL;
 
 	spin_lock(&memtype_lock);
 	list_for_each_entry(entry, &memtype_list, nd) {

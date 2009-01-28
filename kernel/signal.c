@@ -909,9 +909,7 @@ static void print_fatal_signal(struct pt_regs *regs, int signr)
 	}
 #endif
 	printk("\n");
-	preempt_disable();
 	show_regs(regs);
-	preempt_enable();
 }
 
 static int __init setup_print_fatal_signals(char *str)

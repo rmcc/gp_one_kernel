@@ -2,7 +2,8 @@
  * wm8990.c  --  WM8990 ALSA Soc Audio driver
  *
  * Copyright 2008 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <lrg@slimlogic.co.uk>
+ * Author: Liam Girdwood
+ *         lg@opensource.wolfsonmicro.com or linux@wolfsonmicro.com
  *
  *  This program is free software; you can redistribute  it and/or modify it
  *  under  the terms of  the GNU General  Public License as published by the
