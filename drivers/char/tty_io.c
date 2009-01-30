@@ -2162,12 +2162,13 @@ static int fionbio(struct file *file, int __user *p)
 	if (get_user(nonblock, p))
 		return -EFAULT;
 
-	spin_lock(&file->f_lock);
+	/* file->f_flags is still BKL protected in the fs layer - vomit */
+	lock_kernel();
 	if (nonblock)
 		file->f_flags |= O_NONBLOCK;
 	else
 		file->f_flags &= ~O_NONBLOCK;
-	spin_unlock(&file->f_lock);
+	unlock_kernel();
 	return 0;
 }
 

@@ -1917,7 +1917,12 @@ static struct sonypi_compat_s sonypi_compat = {
 
 static int sonypi_misc_fasync(int fd, struct file *filp, int on)
 {
-	return fasync_helper(fd, filp, on, &sonypi_compat.fifo_async);
+	int retval;
+
+	retval = fasync_helper(fd, filp, on, &sonypi_compat.fifo_async);
+	if (retval < 0)
+		return retval;
+	return 0;
 }
 
 static int sonypi_misc_release(struct inode *inode, struct file *file)

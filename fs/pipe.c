@@ -667,7 +667,10 @@ pipe_read_fasync(int fd, struct file *filp, int on)
 	retval = fasync_helper(fd, filp, on, &inode->i_pipe->fasync_readers);
 	mutex_unlock(&inode->i_mutex);
 
-	return retval;
+	if (retval < 0)
+		return retval;
+
+	return 0;
 }
 
 
@@ -681,7 +684,10 @@ pipe_write_fasync(int fd, struct file *filp, int on)
 	retval = fasync_helper(fd, filp, on, &inode->i_pipe->fasync_writers);
 	mutex_unlock(&inode->i_mutex);
 
-	return retval;
+	if (retval < 0)
+		return retval;
+
+	return 0;
 }
 
 
@@ -693,14 +699,18 @@ pipe_rdwr_fasync(int fd, struct file *filp, int on)
 	int retval;
 
 	mutex_lock(&inode->i_mutex);
+
 	retval = fasync_helper(fd, filp, on, &pipe->fasync_readers);
-	if (retval >= 0) {
+
+	if (retval >= 0)
 		retval = fasync_helper(fd, filp, on, &pipe->fasync_writers);
-		if (retval < 0) /* this can happen only if on == T */
-			fasync_helper(-1, filp, 0, &pipe->fasync_readers);
-	}
+
 	mutex_unlock(&inode->i_mutex);
-	return retval;
+
+	if (retval < 0)
+		return retval;
+
+	return 0;
 }
 
 

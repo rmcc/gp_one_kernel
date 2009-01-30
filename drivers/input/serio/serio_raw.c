@@ -58,8 +58,10 @@ static unsigned int serio_raw_no;
 static int serio_raw_fasync(int fd, struct file *file, int on)
 {
 	struct serio_raw_list *list = file->private_data;
+	int retval;
 
-	return fasync_helper(fd, file, on, &list->fasync);
+	retval = fasync_helper(fd, file, on, &list->fasync);
+	return retval < 0 ? retval : 0;
 }
 
 static struct serio_raw *serio_raw_locate(int minor)

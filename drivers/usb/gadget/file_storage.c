@@ -1711,9 +1711,7 @@ static int do_write(struct fsg_dev *fsg)
 		curlun->sense_data = SS_WRITE_PROTECTED;
 		return -EINVAL;
 	}
-	spin_lock(&curlun->filp->f_lock);
 	curlun->filp->f_flags &= ~O_SYNC;	// Default is not to wait
-	spin_unlock(&curlun->filp->f_lock);
 
 	/* Get the starting Logical Block Address and check that it's
 	 * not too big */
@@ -1730,11 +1728,8 @@ static int do_write(struct fsg_dev *fsg)
 			curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
 			return -EINVAL;
 		}
-		if (fsg->cmnd[1] & 0x08) {	// FUA
-			spin_lock(&curlun->filp->f_lock);
+		if (fsg->cmnd[1] & 0x08)	// FUA
 			curlun->filp->f_flags |= O_SYNC;
-			spin_unlock(&curlun->filp->f_lock);
-		}
 	}
 	if (lba >= curlun->num_sectors) {
 		curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
@@ -3884,11 +3879,7 @@ static int __init check_parameters(struct fsg_dev *fsg)
 	mod_data.protocol_type = USB_SC_SCSI;
 	mod_data.protocol_name = "Transparent SCSI";
 
-	/* Some peripheral controllers are known not to be able to
-	 * halt bulk endpoints correctly.  If one of them is present,
-	 * disable stalls.
-	 */
-	if (gadget_is_sh(fsg->gadget) || gadget_is_at91(fsg->gadget))
+	if (gadget_is_sh(fsg->gadget))
 		mod_data.can_stall = 0;
 
 	if (mod_data.release == 0xffff) {	// Parameter wasn't set

@@ -1078,7 +1078,7 @@ sg_ioctl(struct inode *inode, struct file *filp,
 	case BLKTRACESETUP:
 		return blk_trace_setup(sdp->device->request_queue,
 				       sdp->disk->disk_name,
-				       MKDEV(SCSI_GENERIC_MAJOR, sdp->index),
+				       sdp->device->sdev_gendev.devt,
 				       (char *)arg);
 	case BLKTRACESTART:
 		return blk_trace_startstop(sdp->device->request_queue, 1);
@@ -1154,6 +1154,7 @@ sg_poll(struct file *filp, poll_table * wait)
 static int
 sg_fasync(int fd, struct file *filp, int mode)
 {
+	int retval;
 	Sg_device *sdp;
 	Sg_fd *sfp;
 
@@ -1162,7 +1163,8 @@ sg_fasync(int fd, struct file *filp, int mode)
 	SCSI_LOG_TIMEOUT(3, printk("sg_fasync: %s, mode=%d\n",
 				   sdp->disk->disk_name, mode));
 
-	return fasync_helper(fd, filp, mode, &sfp->async_qp);
+	retval = fasync_helper(fd, filp, mode, &sfp->async_qp);
+	return (retval < 0) ? retval : 0;
 }
 
 static int

@@ -227,9 +227,12 @@ void hiddev_report_event(struct hid_device *hid, struct hid_report *report)
  */
 static int hiddev_fasync(int fd, struct file *file, int on)
 {
+	int retval;
 	struct hiddev_list *list = file->private_data;
 
-	return fasync_helper(fd, file, on, &list->fasync);
+	retval = fasync_helper(fd, file, on, &list->fasync);
+
+	return retval < 0 ? retval : 0;
 }
 
 
