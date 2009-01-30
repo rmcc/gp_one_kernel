@@ -340,7 +340,6 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	struct file * file;
 	char name[13];
 	int id;
-	int acctflag = 0;
 
 	if (size < SHMMIN || size > ns->shm_ctlmax)
 		return -EINVAL;
@@ -365,19 +364,18 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 
 	sprintf (name, "SYSV%08x", key);
 	if (shmflg & SHM_HUGETLB) {
-		/* hugetlb_file_setup applies strict accounting */
-		if (shmflg & SHM_NORESERVE)
-			acctflag = VM_NORESERVE;
-		file = hugetlb_file_setup(name, size, acctflag);
+		/* hugetlb_file_setup takes care of mlock user accounting */
+		file = hugetlb_file_setup(name, size);
 		shp->mlock_user = current_user();
 	} else {
+		int acctflag = VM_ACCOUNT;
 		/*
 		 * Do not allow no accounting for OVERCOMMIT_NEVER, even
 	 	 * if it's asked for.
 		 */
 		if  ((shmflg & SHM_NORESERVE) &&
 				sysctl_overcommit_memory != OVERCOMMIT_NEVER)
-			acctflag = VM_NORESERVE;
+			acctflag = 0;
 		file = shmem_file_setup(name, size, acctflag);
 	}
 	error = PTR_ERR(file);
@@ -567,15 +565,11 @@ static void shm_get_stat(struct ipc_namespace *ns, unsigned long *rss,
 			struct hstate *h = hstate_file(shp->shm_file);
 			*rss += pages_per_huge_page(h) * mapping->nrpages;
 		} else {
-#ifdef CONFIG_SHMEM
 			struct shmem_inode_info *info = SHMEM_I(inode);
 			spin_lock(&info->lock);
 			*rss += inode->i_mapping->nrpages;
 			*swp += info->swapped;
 			spin_unlock(&info->lock);
-#else
-			*rss += inode->i_mapping->nrpages;
-#endif
 		}
 
 		total++;

@@ -1,7 +1,6 @@
 #ifndef __LINUX_ATALK_H__
 #define __LINUX_ATALK_H__
 
-#include <linux/types.h>
 #include <asm/byteorder.h>
 
 /*

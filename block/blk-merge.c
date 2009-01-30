@@ -38,84 +38,72 @@ void blk_recalc_rq_sectors(struct request *rq, int nsect)
 	}
 }
 
-static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
-					     struct bio *bio,
-					     unsigned int *seg_size_ptr)
+void blk_recalc_rq_segments(struct request *rq)
 {
+	int nr_phys_segs;
 	unsigned int phys_size;
 	struct bio_vec *bv, *bvprv = NULL;
-	int cluster, i, high, highprv = 1;
-	unsigned int seg_size, nr_phys_segs;
-	struct bio *fbio;
+	int seg_size;
+	int cluster;
+	struct req_iterator iter;
+	int high, highprv = 1;
+	struct request_queue *q = rq->q;
 
-	if (!bio)
-		return 0;
+	if (!rq->bio)
+		return;
 
-	fbio = bio;
 	cluster = test_bit(QUEUE_FLAG_CLUSTER, &q->queue_flags);
 	seg_size = 0;
 	phys_size = nr_phys_segs = 0;
-	for_each_bio(bio) {
-		bio_for_each_segment(bv, bio, i) {
-			/*
-			 * the trick here is making sure that a high page is
-			 * never considered part of another segment, since that
-			 * might change with the bounce page.
-			 */
-			high = page_to_pfn(bv->bv_page) > q->bounce_pfn;
-			if (high || highprv)
+	rq_for_each_segment(bv, rq, iter) {
+		/*
+		 * the trick here is making sure that a high page is never
+		 * considered part of another segment, since that might
+		 * change with the bounce page.
+		 */
+		high = page_to_pfn(bv->bv_page) > q->bounce_pfn;
+		if (high || highprv)
+			goto new_segment;
+		if (cluster) {
+			if (seg_size + bv->bv_len > q->max_segment_size)
 				goto new_segment;
-			if (cluster) {
-				if (seg_size + bv->bv_len > q->max_segment_size)
-					goto new_segment;
-				if (!BIOVEC_PHYS_MERGEABLE(bvprv, bv))
-					goto new_segment;
-				if (!BIOVEC_SEG_BOUNDARY(q, bvprv, bv))
-					goto new_segment;
+			if (!BIOVEC_PHYS_MERGEABLE(bvprv, bv))
+				goto new_segment;
+			if (!BIOVEC_SEG_BOUNDARY(q, bvprv, bv))
+				goto new_segment;
 
-				seg_size += bv->bv_len;
-				bvprv = bv;
-				continue;
-			}
-new_segment:
-			if (nr_phys_segs == 1 && seg_size >
-			    fbio->bi_seg_front_size)
-				fbio->bi_seg_front_size = seg_size;
-
-			nr_phys_segs++;
+			seg_size += bv->bv_len;
 			bvprv = bv;
-			seg_size = bv->bv_len;
-			highprv = high;
+			continue;
 		}
+new_segment:
+		if (nr_phys_segs == 1 && seg_size > rq->bio->bi_seg_front_size)
+			rq->bio->bi_seg_front_size = seg_size;
+
+		nr_phys_segs++;
+		bvprv = bv;
+		seg_size = bv->bv_len;
+		highprv = high;
 	}
 
-	if (seg_size_ptr)
-		*seg_size_ptr = seg_size;
-
-	return nr_phys_segs;
-}
-
-void blk_recalc_rq_segments(struct request *rq)
-{
-	unsigned int seg_size = 0, phys_segs;
-
-	phys_segs = __blk_recalc_rq_segments(rq->q, rq->bio, &seg_size);
-
-	if (phys_segs == 1 && seg_size > rq->bio->bi_seg_front_size)
+	if (nr_phys_segs == 1 && seg_size > rq->bio->bi_seg_front_size)
 		rq->bio->bi_seg_front_size = seg_size;
 	if (seg_size > rq->biotail->bi_seg_back_size)
 		rq->biotail->bi_seg_back_size = seg_size;
 
-	rq->nr_phys_segments = phys_segs;
+	rq->nr_phys_segments = nr_phys_segs;
 }
 
 void blk_recount_segments(struct request_queue *q, struct bio *bio)
 {
+	struct request rq;
 	struct bio *nxt = bio->bi_next;
-
+	rq.q = q;
+	rq.bio = rq.biotail = bio;
 	bio->bi_next = NULL;
-	bio->bi_phys_segments = __blk_recalc_rq_segments(q, bio, NULL);
+	blk_recalc_rq_segments(&rq);
 	bio->bi_next = nxt;
+	bio->bi_phys_segments = rq.nr_phys_segments;
 	bio->bi_flags |= (1 << BIO_SEG_VALID);
 }
 EXPORT_SYMBOL(blk_recount_segments);

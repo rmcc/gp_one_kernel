@@ -1,7 +1,6 @@
 #ifndef __LINUX_TC_EM_CMP_H
 #define __LINUX_TC_EM_CMP_H
 
-#include <linux/types.h>
 #include <linux/pkt_cls.h>
 
 struct tcf_em_cmp

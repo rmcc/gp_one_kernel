@@ -1196,53 +1196,82 @@ zoran_close_end_session (struct file *file)
  *   Open a zoran card. Right now the flags stuff is just playing
  */
 
-static int zoran_open(struct file *file)
+static int
+zoran_open(struct file  *file)
 {
-	struct zoran *zr = video_drvdata(file);
+	unsigned int minor = video_devdata(file)->minor;
+	struct zoran *zr = NULL;
 	struct zoran_fh *fh;
-	int res, first_open = 0;
-
-	dprintk(2, KERN_INFO "%s: zoran_open(%s, pid=[%d]), users(-)=%d\n",
-		ZR_DEVNAME(zr), current->comm, task_pid_nr(current), zr->user + 1);
+	int i, res, first_open = 0, have_module_locks = 0;
 
 	lock_kernel();
+	/* find the device */
+	for (i = 0; i < zoran_num; i++) {
+		if (zoran[i]->video_dev->minor == minor) {
+			zr = zoran[i];
+			break;
+		}
+	}
+
+	if (!zr) {
+		dprintk(1, KERN_ERR "%s: device not found!\n", ZORAN_NAME);
+		res = -ENODEV;
+		goto open_unlock_and_return;
+	}
 
 	/* see fs/device.c - the kernel already locks during open(),
 	 * so locking ourselves only causes deadlocks */
 	/*mutex_lock(&zr->resource_lock);*/
-
-	if (zr->user >= 2048) {
-		dprintk(1, KERN_ERR "%s: too many users (%d) on device\n",
-			ZR_DEVNAME(zr), zr->user);
-		res = -EBUSY;
-		goto fail_unlock;
-	}
 
 	if (!zr->decoder) {
 		dprintk(1,
 			KERN_ERR "%s: no TV decoder loaded for device!\n",
 			ZR_DEVNAME(zr));
 		res = -EIO;
-		goto fail_unlock;
+		goto open_unlock_and_return;
 	}
 
+	/* try to grab a module lock */
+	if (!try_module_get(THIS_MODULE)) {
+		dprintk(1,
+			KERN_ERR
+			"%s: failed to acquire my own lock! PANIC!\n",
+			ZR_DEVNAME(zr));
+		res = -ENODEV;
+		goto open_unlock_and_return;
+	}
 	if (!try_module_get(zr->decoder->driver->driver.owner)) {
 		dprintk(1,
 			KERN_ERR
-			"%s: failed to grab ownership of video decoder\n",
+			"%s: failed to grab ownership of i2c decoder\n",
 			ZR_DEVNAME(zr));
 		res = -EIO;
-		goto fail_unlock;
+		module_put(THIS_MODULE);
+		goto open_unlock_and_return;
 	}
 	if (zr->encoder &&
 	    !try_module_get(zr->encoder->driver->driver.owner)) {
 		dprintk(1,
 			KERN_ERR
-			"%s: failed to grab ownership of video encoder\n",
+			"%s: failed to grab ownership of i2c encoder\n",
 			ZR_DEVNAME(zr));
 		res = -EIO;
-		goto fail_decoder;
+		module_put(zr->decoder->driver->driver.owner);
+		module_put(THIS_MODULE);
+		goto open_unlock_and_return;
 	}
+
+	have_module_locks = 1;
+
+	if (zr->user >= 2048) {
+		dprintk(1, KERN_ERR "%s: too many users (%d) on device\n",
+			ZR_DEVNAME(zr), zr->user);
+		res = -EBUSY;
+		goto open_unlock_and_return;
+	}
+
+	dprintk(1, KERN_INFO "%s: zoran_open(%s, pid=[%d]), users(-)=%d\n",
+		ZR_DEVNAME(zr), current->comm, task_pid_nr(current), zr->user);
 
 	/* now, create the open()-specific file_ops struct */
 	fh = kzalloc(sizeof(struct zoran_fh), GFP_KERNEL);
@@ -1252,7 +1281,7 @@ static int zoran_open(struct file *file)
 			"%s: zoran_open() - allocation of zoran_fh failed\n",
 			ZR_DEVNAME(zr));
 		res = -ENOMEM;
-		goto fail_encoder;
+		goto open_unlock_and_return;
 	}
 	/* used to be BUZ_MAX_WIDTH/HEIGHT, but that gives overflows
 	 * on norm-change! */
@@ -1263,8 +1292,9 @@ static int zoran_open(struct file *file)
 			KERN_ERR
 			"%s: zoran_open() - allocation of overlay_mask failed\n",
 			ZR_DEVNAME(zr));
+		kfree(fh);
 		res = -ENOMEM;
-		goto fail_fh;
+		goto open_unlock_and_return;
 	}
 
 	if (zr->user++ == 0)
@@ -1289,18 +1319,21 @@ static int zoran_open(struct file *file)
 
 	return 0;
 
-fail_fh:
-	kfree(fh);
-fail_encoder:
-	if (zr->encoder)
-		module_put(zr->encoder->driver->driver.owner);
-fail_decoder:
-	module_put(zr->decoder->driver->driver.owner);
-fail_unlock:
-	unlock_kernel();
+open_unlock_and_return:
+	/* if we grabbed locks, release them accordingly */
+	if (have_module_locks) {
+		module_put(zr->decoder->driver->driver.owner);
+		if (zr->encoder) {
+			module_put(zr->encoder->driver->driver.owner);
+		}
+		module_put(THIS_MODULE);
+	}
 
-	dprintk(2, KERN_INFO "%s: open failed (%d), users(-)=%d\n",
-		ZR_DEVNAME(zr), res, zr->user);
+	/* if there's no device found, we didn't obtain the lock either */
+	if (zr) {
+		/*mutex_unlock(&zr->resource_lock);*/
+	}
+	unlock_kernel();
 
 	return res;
 }
@@ -1311,8 +1344,8 @@ zoran_close(struct file  *file)
 	struct zoran_fh *fh = file->private_data;
 	struct zoran *zr = fh->zr;
 
-	dprintk(2, KERN_INFO "%s: zoran_close(%s, pid=[%d]), users(+)=%d\n",
-		ZR_DEVNAME(zr), current->comm, task_pid_nr(current), zr->user - 1);
+	dprintk(1, KERN_INFO "%s: zoran_close(%s, pid=[%d]), users(+)=%d\n",
+		ZR_DEVNAME(zr), current->comm, task_pid_nr(current), zr->user);
 
 	/* kernel locks (fs/device.c), so don't do that ourselves
 	 * (prevents deadlocks) */
@@ -1358,8 +1391,10 @@ zoran_close(struct file  *file)
 
 	/* release locks on the i2c modules */
 	module_put(zr->decoder->driver->driver.owner);
-	if (zr->encoder)
-		module_put(zr->encoder->driver->driver.owner);
+	if (zr->encoder) {
+		 module_put(zr->encoder->driver->driver.owner);
+	}
+	module_put(THIS_MODULE);
 
 	/*mutex_unlock(&zr->resource_lock);*/
 
