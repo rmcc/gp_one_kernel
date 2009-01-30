@@ -665,7 +665,7 @@ static inline int cpu_of(struct rq *rq)
 #define task_rq(p)		cpu_rq(task_cpu(p))
 #define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
 
-inline void update_rq_clock(struct rq *rq)
+static inline void update_rq_clock(struct rq *rq)
 {
 	rq->clock = sched_clock_cpu(cpu_of(rq));
 }
@@ -974,26 +974,6 @@ static struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
 			return rq;
 		spin_unlock_irqrestore(&rq->lock, *flags);
 	}
-}
-
-void curr_rq_lock_irq_save(unsigned long *flags)
-	__acquires(rq->lock)
-{
-	struct rq *rq;
-
-	local_irq_save(*flags);
-	rq = cpu_rq(smp_processor_id());
-	spin_lock(&rq->lock);
-}
-
-void curr_rq_unlock_irq_restore(unsigned long *flags)
-	__releases(rq->lock)
-{
-	struct rq *rq;
-
-	rq = cpu_rq(smp_processor_id());
-	spin_unlock(&rq->lock);
-	local_irq_restore(*flags);
 }
 
 void task_rq_unlock_wait(struct task_struct *p)
@@ -1902,14 +1882,12 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 		p->se.sleep_start -= clock_offset;
 	if (p->se.block_start)
 		p->se.block_start -= clock_offset;
-#endif
 	if (old_cpu != new_cpu) {
-		p->se.nr_migrations++;
-#ifdef CONFIG_SCHEDSTATS
+		schedstat_inc(p, se.nr_migrations);
 		if (task_hot(p, old_rq->clock, NULL))
 			schedstat_inc(p, se.nr_forced2_migrations);
-#endif
 	}
+#endif
 	p->se.vruntime -= old_cfsrq->min_vruntime -
 					 new_cfsrq->min_vruntime;
 
@@ -2261,27 +2239,6 @@ static int sched_balance_self(int cpu, int flag)
 
 #endif /* CONFIG_SMP */
 
-/**
- * task_oncpu_function_call - call a function on the cpu on which a task runs
- * @p:		the task to evaluate
- * @func:	the function to be called
- * @info:	the function call argument
- *
- * Calls the function @func when the task is currently running. This might
- * be on the current CPU, which just calls the function directly
- */
-void task_oncpu_function_call(struct task_struct *p,
-			      void (*func) (void *info), void *info)
-{
-	int cpu;
-
-	preempt_disable();
-	cpu = task_cpu(p);
-	if (task_curr(p))
-		smp_call_function_single(cpu, func, info, 1);
-	preempt_enable();
-}
-
 /***
  * try_to_wake_up - wake up a thread
  * @p: the to-be-woken-up thread
@@ -2424,7 +2381,6 @@ static void __sched_fork(struct task_struct *p)
 	p->se.exec_start		= 0;
 	p->se.sum_exec_runtime		= 0;
 	p->se.prev_sum_exec_runtime	= 0;
-	p->se.nr_migrations		= 0;
 	p->se.last_wakeup		= 0;
 	p->se.avg_overlap		= 0;
 
@@ -2645,7 +2601,6 @@ static void finish_task_switch(struct rq *rq, struct task_struct *prev)
 	 */
 	prev_state = prev->state;
 	finish_arch_switch(prev);
-	perf_counter_task_sched_in(current, cpu_of(rq));
 	finish_lock_switch(rq, prev);
 #ifdef CONFIG_SMP
 	if (current->sched_class->post_schedule)
@@ -4174,29 +4129,6 @@ EXPORT_PER_CPU_SYMBOL(kstat);
  * Return any ns on the sched_clock that have not yet been banked in
  * @p in case that task is currently running.
  */
-unsigned long long __task_delta_exec(struct task_struct *p, int update)
-{
-	s64 delta_exec;
-	struct rq *rq;
-
-	rq = task_rq(p);
-	WARN_ON_ONCE(!runqueue_is_locked());
-	WARN_ON_ONCE(!task_current(rq, p));
-
-	if (update)
-		update_rq_clock(rq);
-
-	delta_exec = rq->clock - p->se.exec_start;
-
-	WARN_ON_ONCE(delta_exec < 0);
-
-	return delta_exec;
-}
-
-/*
- * Return any ns on the sched_clock that have not yet been banked in
- * @p in case that task is currently running.
- */
 unsigned long long task_delta_exec(struct task_struct *p)
 {
 	unsigned long flags;
@@ -4456,7 +4388,6 @@ void scheduler_tick(void)
 	update_rq_clock(rq);
 	update_cpu_load(rq);
 	curr->sched_class->task_tick(rq, curr, 0);
-	perf_counter_task_tick(curr, cpu);
 	spin_unlock(&rq->lock);
 
 #ifdef CONFIG_SMP
@@ -4652,7 +4583,6 @@ need_resched_nonpreemptible:
 
 	if (likely(prev != next)) {
 		sched_info_switch(prev, next);
-		perf_counter_task_sched_out(prev, cpu);
 
 		rq->nr_switches++;
 		rq->curr = next;

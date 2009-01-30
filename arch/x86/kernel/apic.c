@@ -35,7 +35,6 @@
 #include <linux/nmi.h>
 #include <linux/timex.h>
 
-#include <asm/perf_counter.h>
 #include <asm/atomic.h>
 #include <asm/mtrr.h>
 #include <asm/mpspec.h>
@@ -1135,7 +1134,6 @@ void __cpuinit setup_local_APIC(void)
 		apic_write(APIC_ESR, 0);
 	}
 #endif
-	perf_counters_lapic_init(0);
 
 	preempt_disable();
 

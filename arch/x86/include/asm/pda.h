@@ -30,7 +30,6 @@ struct x8664_pda {
 	short isidle;
 	struct mm_struct *active_mm;
 	unsigned apic_timer_irqs;
-	unsigned apic_perf_irqs;
 	unsigned irq0_irqs;
 	unsigned irq_resched_count;
 	unsigned irq_call_count;
