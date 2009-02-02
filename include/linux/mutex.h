@@ -50,10 +50,8 @@ struct mutex {
 	atomic_t		count;
 	spinlock_t		wait_lock;
 	struct list_head	wait_list;
-#if defined(CONFIG_DEBUG_MUTEXES) || defined(CONFIG_SMP)
-	struct thread_info	*owner;
-#endif
 #ifdef CONFIG_DEBUG_MUTEXES
+	struct thread_info	*owner;
 	const char 		*name;
 	void			*magic;
 #endif
@@ -70,6 +68,7 @@ struct mutex_waiter {
 	struct list_head	list;
 	struct task_struct	*task;
 #ifdef CONFIG_DEBUG_MUTEXES
+	struct mutex		*lock;
 	void			*magic;
 #endif
 };

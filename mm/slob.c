@@ -464,8 +464,6 @@ void *__kmalloc_node(size_t size, gfp_t gfp, int node)
 	unsigned int *m;
 	int align = max(ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 
-	lockdep_trace_alloc(gfp);
-
 	if (size < PAGE_SIZE - align) {
 		if (!size)
 			return ZERO_SIZE_PTR;
@@ -523,6 +521,7 @@ size_t ksize(const void *block)
 	} else
 		return sp->page.private;
 }
+EXPORT_SYMBOL(ksize);
 
 struct kmem_cache {
 	unsigned int size, align;

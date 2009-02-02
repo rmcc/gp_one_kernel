@@ -36,13 +36,13 @@
 #include <linux/vmalloc.h>
 #include "drmP.h"
 
-unsigned long drm_get_resource_start(struct drm_device *dev, unsigned int resource)
+resource_size_t drm_get_resource_start(struct drm_device *dev, unsigned int resource)
 {
 	return pci_resource_start(dev->pdev, resource);
 }
 EXPORT_SYMBOL(drm_get_resource_start);
 
-unsigned long drm_get_resource_len(struct drm_device *dev, unsigned int resource)
+resource_size_t drm_get_resource_len(struct drm_device *dev, unsigned int resource)
 {
 	return pci_resource_len(dev->pdev, resource);
 }
@@ -420,7 +420,7 @@ int drm_rmmap_locked(struct drm_device *dev, drm_local_map_t *map)
 				dev->sigdata.lock = NULL;
 			master->lock.hw_lock = NULL;   /* SHM removed */
 			master->lock.file_priv = NULL;
-			wake_up_interruptible(&master->lock.lock_queue);
+			wake_up_interruptible_all(&master->lock.lock_queue);
 		}
 		break;
 	case _DRM_AGP:

@@ -3318,8 +3318,6 @@ __cache_alloc_node(struct kmem_cache *cachep, gfp_t flags, int nodeid,
 	unsigned long save_flags;
 	void *ptr;
 
-	lockdep_trace_alloc(flags);
-
 	if (slab_should_failslab(cachep, flags))
 		return NULL;
 
@@ -3395,8 +3393,6 @@ __cache_alloc(struct kmem_cache *cachep, gfp_t flags, void *caller)
 {
 	unsigned long save_flags;
 	void *objp;
-
-	lockdep_trace_alloc(flags);
 
 	if (slab_should_failslab(cachep, flags))
 		return NULL;
@@ -4461,3 +4457,4 @@ size_t ksize(const void *objp)
 
 	return obj_size(virt_to_cache(objp));
 }
+EXPORT_SYMBOL(ksize);

@@ -1173,10 +1173,10 @@ extern int drm_freebufs(struct drm_device *dev, void *data,
 extern int drm_mapbufs(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv);
 extern int drm_order(unsigned long size);
-extern unsigned long drm_get_resource_start(struct drm_device *dev,
+extern resource_size_t drm_get_resource_start(struct drm_device *dev,
+					      unsigned int resource);
+extern resource_size_t drm_get_resource_len(struct drm_device *dev,
 					    unsigned int resource);
-extern unsigned long drm_get_resource_len(struct drm_device *dev,
-					  unsigned int resource);
 
 				/* DMA support (drm_dma.h) */
 extern int drm_dma_setup(struct drm_device *dev);
@@ -1321,6 +1321,8 @@ void drm_gem_object_free(struct kref *kref);
 struct drm_gem_object *drm_gem_object_alloc(struct drm_device *dev,
 					    size_t size);
 void drm_gem_object_handle_free(struct kref *kref);
+void drm_gem_vm_open(struct vm_area_struct *vma);
+void drm_gem_vm_close(struct vm_area_struct *vma);
 int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
 
 static inline void
