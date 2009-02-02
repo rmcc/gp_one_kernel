@@ -2,9 +2,6 @@
 # Library configuration
 #
 
-config BINARY_PRINTF
-	def_bool n
-
 menu "Library routines"
 
 config BITREVERSE
