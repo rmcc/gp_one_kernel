@@ -30,8 +30,7 @@
 
 extern int debug_msgs;
 
-extern void __ntfs_debug(const char *file, int line, const char *function,
-	const char *format, ...) __attribute__ ((format (printf, 4, 5)));
+#if 0 /* Fool kernel-doc since it doesn't do macros yet */
 /**
  * ntfs_debug - write a debug level message to syslog
  * @f:		a printf format string containing the message
@@ -40,6 +39,11 @@ extern void __ntfs_debug(const char *file, int line, const char *function,
  * ntfs_debug() writes a DEBUG level message to the syslog but only if the
  * driver was compiled with -DDEBUG. Otherwise, the call turns into a NOP.
  */
+static void ntfs_debug(const char *f, ...);
+#endif
+
+extern void __ntfs_debug (const char *file, int line, const char *function,
+	const char *format, ...) __attribute__ ((format (printf, 4, 5)));
 #define ntfs_debug(f, a...)						\
 	__ntfs_debug(__FILE__, __LINE__, __func__, f, ##a)
 

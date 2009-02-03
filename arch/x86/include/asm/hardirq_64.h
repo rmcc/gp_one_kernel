@@ -11,8 +11,6 @@
 
 #define __ARCH_IRQ_STAT 1
 
-#define inc_irq_stat(member)	add_pda(member, 1)
-
 #define local_softirq_pending() read_pda(__softirq_pending)
 
 #define __ARCH_SET_SOFTIRQ_PENDING 1

@@ -24,7 +24,6 @@
 #include <linux/amba/bus.h>
 #include <linux/amba/clcd.h>
 #include <linux/clk.h>
-#include <linux/hardirq.h>
 
 #include <asm/sizes.h>
 
@@ -344,14 +343,14 @@ static int clcdfb_register(struct clcd_fb *fb)
 {
 	int ret;
 
-	fb->clk = clk_get(&fb->dev->dev, NULL);
+	fb->clk = clk_get(&fb->dev->dev, "CLCDCLK");
 	if (IS_ERR(fb->clk)) {
 		ret = PTR_ERR(fb->clk);
 		goto out;
 	}
 
 	fb->fb.fix.mmio_start	= fb->dev->res.start;
-	fb->fb.fix.mmio_len	= 4096;
+	fb->fb.fix.mmio_len	= SZ_4K;
 
 	fb->regs = ioremap(fb->fb.fix.mmio_start, fb->fb.fix.mmio_len);
 	if (!fb->regs) {

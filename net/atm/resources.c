@@ -195,39 +195,20 @@ static int fetch_stats(struct atm_dev *dev, struct atm_dev_stats __user *arg, in
 }
 
 
-int atm_dev_ioctl(unsigned int cmd, void __user *arg, int compat)
+int atm_dev_ioctl(unsigned int cmd, void __user *arg)
 {
 	void __user *buf;
 	int error, len, number, size = 0;
 	struct atm_dev *dev;
 	struct list_head *p;
 	int *tmp_buf, *tmp_p;
-	int __user *sioc_len;
-	int __user *iobuf_len;
-
-#ifndef CONFIG_COMPAT
-	compat = 0; /* Just so the compiler _knows_ */
-#endif
-
+	struct atm_iobuf __user *iobuf = arg;
+	struct atmif_sioc __user *sioc = arg;
 	switch (cmd) {
 		case ATM_GETNAMES:
-
-			if (compat) {
-#ifdef CONFIG_COMPAT
-				struct compat_atm_iobuf __user *ciobuf = arg;
-				compat_uptr_t cbuf;
-				iobuf_len = &ciobuf->length;
-				if (get_user(cbuf, &ciobuf->buffer))
-					return -EFAULT;
-				buf = compat_ptr(cbuf);
-#endif
-			} else {
-				struct atm_iobuf __user *iobuf = arg;
-				iobuf_len = &iobuf->length;
-				if (get_user(buf, &iobuf->buffer))
-					return -EFAULT;
-			}
-			if (get_user(len, iobuf_len))
+			if (get_user(buf, &iobuf->buffer))
+				return -EFAULT;
+			if (get_user(len, &iobuf->length))
 				return -EFAULT;
 			mutex_lock(&atm_dev_mutex);
 			list_for_each(p, &atm_devs)
@@ -248,7 +229,7 @@ int atm_dev_ioctl(unsigned int cmd, void __user *arg, int compat)
 			}
 			mutex_unlock(&atm_dev_mutex);
 			error = ((copy_to_user(buf, tmp_buf, size)) ||
-					put_user(size, iobuf_len))
+					put_user(size, &iobuf->length))
 						? -EFAULT : 0;
 			kfree(tmp_buf);
 			return error;
@@ -256,32 +237,13 @@ int atm_dev_ioctl(unsigned int cmd, void __user *arg, int compat)
 			break;
 	}
 
-	if (compat) {
-#ifdef CONFIG_COMPAT
-		struct compat_atmif_sioc __user *csioc = arg;
-		compat_uptr_t carg;
+	if (get_user(buf, &sioc->arg))
+		return -EFAULT;
+	if (get_user(len, &sioc->length))
+		return -EFAULT;
+	if (get_user(number, &sioc->number))
+		return -EFAULT;
 
-		sioc_len = &csioc->length;
-		if (get_user(carg, &csioc->arg))
-			return -EFAULT;
-		buf = compat_ptr(carg);
-
-		if (get_user(len, &csioc->length))
-			return -EFAULT;
-		if (get_user(number, &csioc->number))
-			return -EFAULT;
-#endif
-	} else {
-		struct atmif_sioc __user *sioc = arg;
-
-		sioc_len = &sioc->length;
-		if (get_user(buf, &sioc->arg))
-			return -EFAULT;
-		if (get_user(len, &sioc->length))
-			return -EFAULT;
-		if (get_user(number, &sioc->number))
-			return -EFAULT;
-	}
 	if (!(dev = try_then_request_module(atm_dev_lookup(number),
 					    "atm-device-%d", number)))
 		return -ENODEV;
@@ -396,7 +358,7 @@ int atm_dev_ioctl(unsigned int cmd, void __user *arg, int compat)
 			size = error;
 			/* may return 0, but later on size == 0 means "don't
 			   write the length" */
-			error = put_user(size, sioc_len)
+			error = put_user(size, &sioc->length)
 				? -EFAULT : 0;
 			goto done;
 		case ATM_SETLOOP:
@@ -418,21 +380,11 @@ int atm_dev_ioctl(unsigned int cmd, void __user *arg, int compat)
 			}
 			/* fall through */
 		default:
-			if (compat) {
-#ifdef CONFIG_COMPAT
-				if (!dev->ops->compat_ioctl) {
-					error = -EINVAL;
-					goto done;
-				}
-				size = dev->ops->compat_ioctl(dev, cmd, buf);
-#endif
-			} else {
-				if (!dev->ops->ioctl) {
-					error = -EINVAL;
-					goto done;
-				}
-				size = dev->ops->ioctl(dev, cmd, buf);
+			if (!dev->ops->ioctl) {
+				error = -EINVAL;
+				goto done;
 			}
+			size = dev->ops->ioctl(dev, cmd, buf);
 			if (size < 0) {
 				error = (size == -ENOIOCTLCMD ? -EINVAL : size);
 				goto done;
@@ -440,7 +392,7 @@ int atm_dev_ioctl(unsigned int cmd, void __user *arg, int compat)
 	}
 
 	if (size)
-		error = put_user(size, sioc_len)
+		error = put_user(size, &sioc->length)
 			? -EFAULT : 0;
 	else
 		error = 0;

@@ -33,6 +33,7 @@
 #include <linux/interrupt.h>
 #include <linux/crc32.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 #include <linux/serial_core.h>
 #include <linux/io.h>
 
@@ -75,13 +76,11 @@ static struct sleep_save core_save[] = {
 	SAVE_ITEM(S3C2410_BANKCON4),
 	SAVE_ITEM(S3C2410_BANKCON5),
 
-#ifndef CONFIG_CPU_FREQ
 	SAVE_ITEM(S3C2410_CLKDIVN),
 	SAVE_ITEM(S3C2410_MPLLCON),
-	SAVE_ITEM(S3C2410_REFRESH),
-#endif
 	SAVE_ITEM(S3C2410_UPLLCON),
 	SAVE_ITEM(S3C2410_CLKSLOW),
+	SAVE_ITEM(S3C2410_REFRESH),
 };
 
 static struct gpio_sleep {

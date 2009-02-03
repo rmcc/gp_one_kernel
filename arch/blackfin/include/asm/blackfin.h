@@ -6,6 +6,11 @@
 #ifndef _BLACKFIN_H_
 #define _BLACKFIN_H_
 
+#define LO(con32) ((con32) & 0xFFFF)
+#define lo(con32) ((con32) & 0xFFFF)
+#define HI(con32) (((con32) >> 16) & 0xFFFF)
+#define hi(con32) (((con32) >> 16) & 0xFFFF)
+
 #include <mach/anomaly.h>
 
 #ifndef __ASSEMBLY__
@@ -59,11 +64,6 @@ static inline void CSYNC(void)
 }
 
 #else  /* __ASSEMBLY__ */
-
-#define LO(con32) ((con32) & 0xFFFF)
-#define lo(con32) ((con32) & 0xFFFF)
-#define HI(con32) (((con32) >> 16) & 0xFFFF)
-#define hi(con32) (((con32) >> 16) & 0xFFFF)
 
 /* SSYNC & CSYNC implementations for assembly files */
 

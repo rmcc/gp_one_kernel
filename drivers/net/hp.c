@@ -59,6 +59,8 @@ static unsigned int hppclan_portlist[] __initdata =
 
 static int hp_probe1(struct net_device *dev, int ioaddr);
 
+static int hp_open(struct net_device *dev);
+static int hp_close(struct net_device *dev);
 static void hp_reset_8390(struct net_device *dev);
 static void hp_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 					int ring_page);
@@ -125,6 +127,7 @@ static int __init hp_probe1(struct net_device *dev, int ioaddr)
 	int i, retval, board_id, wordmode;
 	const char *name;
 	static unsigned version_printed;
+	DECLARE_MAC_BUF(mac);
 
 	if (!request_region(ioaddr, HP_IO_EXTENT, DRV_NAME))
 		return -EBUSY;
@@ -158,7 +161,7 @@ static int __init hp_probe1(struct net_device *dev, int ioaddr)
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
 		dev->dev_addr[i] = inb(ioaddr + i);
 
-	printk(" %pM", dev->dev_addr);
+	printk(" %s", print_mac(mac, dev->dev_addr));
 
 	/* Snarf the interrupt now.  Someday this could be moved to open(). */
 	if (dev->irq < 2) {
@@ -196,7 +199,11 @@ static int __init hp_probe1(struct net_device *dev, int ioaddr)
 
 	/* Set the base address to point to the NIC, not the "real" base! */
 	dev->base_addr = ioaddr + NIC_OFFSET;
-	dev->netdev_ops = &eip_netdev_ops;
+	dev->open = &hp_open;
+	dev->stop = &hp_close;
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = eip_poll;
+#endif
 
 	ei_status.name = name;
 	ei_status.word16 = wordmode;
@@ -219,6 +226,20 @@ out1:
 out:
 	release_region(ioaddr, HP_IO_EXTENT);
 	return retval;
+}
+
+static int
+hp_open(struct net_device *dev)
+{
+	eip_open(dev);
+	return 0;
+}
+
+static int
+hp_close(struct net_device *dev)
+{
+	eip_close(dev);
+	return 0;
 }
 
 static void

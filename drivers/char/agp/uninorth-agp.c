@@ -27,7 +27,7 @@
 static int uninorth_rev;
 static int is_u3;
 
-static char *aperture = NULL;
+static char __devinitdata *aperture = NULL;
 
 static int uninorth_fetch_size(void)
 {

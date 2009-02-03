@@ -35,7 +35,6 @@
 #include <linux/hwmon-vid.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
-#include <linux/acpi.h>
 #include <asm/io.h>
 
 static int force_addr;
@@ -894,10 +893,6 @@ static int __devinit vt8231_device_add(unsigned short address)
 		.flags	= IORESOURCE_IO,
 	};
 	int err;
-
-	err = acpi_check_resource_conflict(&res);
-	if (err)
-		goto exit;
 
 	pdev = platform_device_alloc("vt8231", address);
 	if (!pdev) {

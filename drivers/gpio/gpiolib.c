@@ -789,7 +789,6 @@ int gpio_request(unsigned gpio, const char *label)
 	} else {
 		status = -EBUSY;
 		module_put(chip->owner);
-		goto done;
 	}
 
 	if (chip->request) {
@@ -1135,7 +1134,7 @@ static void gpiolib_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 			continue;
 
 		is_out = test_bit(FLAG_IS_OUT, &gdesc->flags);
-		seq_printf(s, " gpio-%-3d (%-20.20s) %s %s",
+		seq_printf(s, " gpio-%-3d (%-12s) %s %s",
 			gpio, gdesc->label,
 			is_out ? "out" : "in ",
 			chip->get
@@ -1214,7 +1213,7 @@ static int gpiolib_show(struct seq_file *s, void *unused)
 		if (dev)
 			seq_printf(s, ", %s/%s",
 				dev->bus ? dev->bus->name : "no-bus",
-				dev_name(dev));
+				dev->bus_id);
 		if (chip->label)
 			seq_printf(s, ", %s", chip->label);
 		if (chip->can_sleep)

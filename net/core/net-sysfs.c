@@ -270,6 +270,7 @@ static ssize_t netstat_show(const struct device *d,
 			    unsigned long offset)
 {
 	struct net_device *dev = to_net_dev(d);
+	struct net_device_stats *stats;
 	ssize_t ret = -EINVAL;
 
 	WARN_ON(offset > sizeof(struct net_device_stats) ||
@@ -277,7 +278,7 @@ static ssize_t netstat_show(const struct device *d,
 
 	read_lock(&dev_base_lock);
 	if (dev_isalive(dev)) {
-		const struct net_device_stats *stats = dev_get_stats(dev);
+		stats = dev->get_stats(dev);
 		ret = sprintf(buf, fmt_ulong,
 			      *(unsigned long *)(((u8 *) stats) + offset));
 	}
@@ -427,9 +428,6 @@ static int netdev_uevent(struct device *d, struct kobj_uevent_env *env)
 	struct net_device *dev = to_net_dev(d);
 	int retval;
 
-	if (!net_eq(dev_net(dev), &init_net))
-		return 0;
-
 	/* pass interface to uevent. */
 	retval = add_uevent_var(env, "INTERFACE=%s", dev->name);
 	if (retval)
@@ -478,10 +476,6 @@ void netdev_unregister_kobject(struct net_device * net)
 	struct device *dev = &(net->dev);
 
 	kobject_get(&dev->kobj);
-
-	if (dev_net(net) != &init_net)
-		return;
-
 	device_del(dev);
 }
 
@@ -496,7 +490,7 @@ int netdev_register_kobject(struct net_device *net)
 	dev->groups = groups;
 
 	BUILD_BUG_ON(BUS_ID_SIZE < IFNAMSIZ);
-	dev_set_name(dev, net->name);
+	strlcpy(dev->bus_id, net->name, BUS_ID_SIZE);
 
 #ifdef CONFIG_SYSFS
 	*groups++ = &netstat_group;
@@ -506,9 +500,6 @@ int netdev_register_kobject(struct net_device *net)
 		*groups++ = &wireless_group;
 #endif
 #endif /* CONFIG_SYSFS */
-
-	if (dev_net(net) != &init_net)
-		return 0;
 
 	return device_add(dev);
 }

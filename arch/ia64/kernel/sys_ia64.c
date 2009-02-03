@@ -154,7 +154,7 @@ out:
  * and r9) as this is faster than doing a copy_to_user().
  */
 asmlinkage long
-sys_ia64_pipe (void)
+sys_pipe (void)
 {
 	struct pt_regs *regs = task_pt_regs(current);
 	int fd[2];

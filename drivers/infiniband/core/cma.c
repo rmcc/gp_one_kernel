@@ -42,7 +42,6 @@
 #include <linux/inetdevice.h>
 
 #include <net/tcp.h>
-#include <net/ipv6.h>
 
 #include <rdma/rdma_cm.h>
 #include <rdma/rdma_cm_ib.h>
@@ -637,12 +636,7 @@ static inline int cma_zero_addr(struct sockaddr *addr)
 
 static inline int cma_loopback_addr(struct sockaddr *addr)
 {
-	if (addr->sa_family == AF_INET)
-		return ipv4_is_loopback(
-			((struct sockaddr_in *) addr)->sin_addr.s_addr);
-	else
-		return ipv6_addr_loopback(
-			&((struct sockaddr_in6 *) addr)->sin6_addr);
+	return ipv4_is_loopback(((struct sockaddr_in *) addr)->sin_addr.s_addr);
 }
 
 static inline int cma_any_addr(struct sockaddr *addr)
@@ -1473,10 +1467,10 @@ static void cma_listen_on_all(struct rdma_id_private *id_priv)
 
 static int cma_bind_any(struct rdma_cm_id *id, sa_family_t af)
 {
-	struct sockaddr_storage addr_in;
+	struct sockaddr_in addr_in;
 
 	memset(&addr_in, 0, sizeof addr_in);
-	addr_in.ss_family = af;
+	addr_in.sin_family = af;
 	return rdma_bind_addr(id, (struct sockaddr *) &addr_in);
 }
 
@@ -2079,7 +2073,7 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 	struct rdma_id_private *id_priv;
 	int ret;
 
-	if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
+	if (addr->sa_family != AF_INET)
 		return -EAFNOSUPPORT;
 
 	id_priv = container_of(id, struct rdma_id_private, id);
@@ -2119,59 +2113,31 @@ EXPORT_SYMBOL(rdma_bind_addr);
 static int cma_format_hdr(void *hdr, enum rdma_port_space ps,
 			  struct rdma_route *route)
 {
+	struct sockaddr_in *src4, *dst4;
 	struct cma_hdr *cma_hdr;
 	struct sdp_hh *sdp_hdr;
 
-	if (route->addr.src_addr.ss_family == AF_INET) {
-		struct sockaddr_in *src4, *dst4;
+	src4 = (struct sockaddr_in *) &route->addr.src_addr;
+	dst4 = (struct sockaddr_in *) &route->addr.dst_addr;
 
-		src4 = (struct sockaddr_in *) &route->addr.src_addr;
-		dst4 = (struct sockaddr_in *) &route->addr.dst_addr;
-
-		switch (ps) {
-		case RDMA_PS_SDP:
-			sdp_hdr = hdr;
-			if (sdp_get_majv(sdp_hdr->sdp_version) != SDP_MAJ_VERSION)
-				return -EINVAL;
-			sdp_set_ip_ver(sdp_hdr, 4);
-			sdp_hdr->src_addr.ip4.addr = src4->sin_addr.s_addr;
-			sdp_hdr->dst_addr.ip4.addr = dst4->sin_addr.s_addr;
-			sdp_hdr->port = src4->sin_port;
-			break;
-		default:
-			cma_hdr = hdr;
-			cma_hdr->cma_version = CMA_VERSION;
-			cma_set_ip_ver(cma_hdr, 4);
-			cma_hdr->src_addr.ip4.addr = src4->sin_addr.s_addr;
-			cma_hdr->dst_addr.ip4.addr = dst4->sin_addr.s_addr;
-			cma_hdr->port = src4->sin_port;
-			break;
-		}
-	} else {
-		struct sockaddr_in6 *src6, *dst6;
-
-		src6 = (struct sockaddr_in6 *) &route->addr.src_addr;
-		dst6 = (struct sockaddr_in6 *) &route->addr.dst_addr;
-
-		switch (ps) {
-		case RDMA_PS_SDP:
-			sdp_hdr = hdr;
-			if (sdp_get_majv(sdp_hdr->sdp_version) != SDP_MAJ_VERSION)
-				return -EINVAL;
-			sdp_set_ip_ver(sdp_hdr, 6);
-			sdp_hdr->src_addr.ip6 = src6->sin6_addr;
-			sdp_hdr->dst_addr.ip6 = dst6->sin6_addr;
-			sdp_hdr->port = src6->sin6_port;
-			break;
-		default:
-			cma_hdr = hdr;
-			cma_hdr->cma_version = CMA_VERSION;
-			cma_set_ip_ver(cma_hdr, 6);
-			cma_hdr->src_addr.ip6 = src6->sin6_addr;
-			cma_hdr->dst_addr.ip6 = dst6->sin6_addr;
-			cma_hdr->port = src6->sin6_port;
-			break;
-		}
+	switch (ps) {
+	case RDMA_PS_SDP:
+		sdp_hdr = hdr;
+		if (sdp_get_majv(sdp_hdr->sdp_version) != SDP_MAJ_VERSION)
+			return -EINVAL;
+		sdp_set_ip_ver(sdp_hdr, 4);
+		sdp_hdr->src_addr.ip4.addr = src4->sin_addr.s_addr;
+		sdp_hdr->dst_addr.ip4.addr = dst4->sin_addr.s_addr;
+		sdp_hdr->port = src4->sin_port;
+		break;
+	default:
+		cma_hdr = hdr;
+		cma_hdr->cma_version = CMA_VERSION;
+		cma_set_ip_ver(cma_hdr, 4);
+		cma_hdr->src_addr.ip4.addr = src4->sin_addr.s_addr;
+		cma_hdr->dst_addr.ip4.addr = dst4->sin_addr.s_addr;
+		cma_hdr->port = src4->sin_port;
+		break;
 	}
 	return 0;
 }

@@ -36,12 +36,12 @@
 #include <linux/backlight.h>
 #include <linux/thermal.h>
 #include <linux/video_output.h>
-#include <linux/sort.h>
 #include <asm/uaccess.h>
 
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
 
+#define ACPI_VIDEO_COMPONENT		0x08000000
 #define ACPI_VIDEO_CLASS		"video"
 #define ACPI_VIDEO_BUS_NAME		"Video Bus"
 #define ACPI_VIDEO_DEVICE_NAME		"Video Device"
@@ -482,7 +482,6 @@ acpi_video_device_lcd_set_level(struct acpi_video_device *device, int level)
 	int status = AE_OK;
 	union acpi_object arg0 = { ACPI_TYPE_INTEGER };
 	struct acpi_object_list args = { 1, &arg0 };
-	int state;
 
 
 	arg0.integer.value = level;
@@ -491,10 +490,6 @@ acpi_video_device_lcd_set_level(struct acpi_video_device *device, int level)
 		status = acpi_evaluate_object(device->dev->handle, "_BCM",
 					      &args, NULL);
 	device->brightness->curr = level;
-	for (state = 2; state < device->brightness->count; state++)
-		if (level == device->brightness->levels[state])
-			device->backlight->props.brightness = state - 2;
-
 	return status;
 }
 
@@ -632,16 +627,6 @@ acpi_video_bus_DOS(struct acpi_video_bus *video, int bios_flag, int lcd_flag)
 }
 
 /*
- * Simple comparison function used to sort backlight levels.
- */
-
-static int
-acpi_video_cmp_level(const void *a, const void *b)
-{
-	return *(int *)a - *(int *)b;
-}
-
-/*
  *  Arg:	
  *  	device	: video output device (LCD, CRT, ..)
  *
@@ -691,10 +676,6 @@ acpi_video_init_brightness(struct acpi_video_device *device)
 			max_level = br->levels[count];
 		count++;
 	}
-
-	/* don't sort the first two brightness levels */
-	sort(&br->levels[2], count - 2, sizeof(br->levels[2]),
-		acpi_video_cmp_level, NULL);
 
 	if (count < 2)
 		goto out_free_levels;
@@ -758,8 +739,7 @@ static void acpi_video_device_find_cap(struct acpi_video_device *device)
 		device->cap._DSS = 1;
 	}
 
-	if (acpi_video_backlight_support())
-		max_level = acpi_video_init_brightness(device);
+	max_level = acpi_video_init_brightness(device);
 
 	if (device->cap._BCL && device->cap._BCM && max_level > 0) {
 		int result;
@@ -805,21 +785,18 @@ static void acpi_video_device_find_cap(struct acpi_video_device *device)
 			printk(KERN_ERR PREFIX "Create sysfs link\n");
 
 	}
-
-	if (acpi_video_display_switch_support()) {
-
-		if (device->cap._DCS && device->cap._DSS) {
-			static int count;
-			char *name;
-			name = kzalloc(MAX_NAME_LEN, GFP_KERNEL);
-			if (!name)
-				return;
-			sprintf(name, "acpi_video%d", count++);
-			device->output_dev = video_output_register(name,
-					NULL, device, &acpi_output_properties);
-			kfree(name);
-		}
+	if (device->cap._DCS && device->cap._DSS){
+		static int count = 0;
+		char *name;
+		name = kzalloc(MAX_NAME_LEN, GFP_KERNEL);
+		if (!name)
+			return;
+		sprintf(name, "acpi_video%d", count++);
+		device->output_dev = video_output_register(name,
+				NULL, device, &acpi_output_properties);
+		kfree(name);
 	}
+	return;
 }
 
 /*
@@ -865,15 +842,10 @@ static void acpi_video_bus_find_cap(struct acpi_video_bus *video)
 static int acpi_video_bus_check(struct acpi_video_bus *video)
 {
 	acpi_status status = -ENOENT;
-	struct device *dev;
+
 
 	if (!video)
 		return -EINVAL;
-
-	dev = acpi_get_physical_pci_device(video->device->handle);
-	if (!dev)
-		return -ENODEV;
-	put_device(dev);
 
 	/* Since there is no HID, CID and so on for VGA driver, we have
 	 * to check well known required nodes.
@@ -1020,7 +992,7 @@ acpi_video_device_brightness_seq_show(struct seq_file *seq, void *offset)
 	}
 
 	seq_printf(seq, "levels: ");
-	for (i = 2; i < dev->brightness->count; i++)
+	for (i = 0; i < dev->brightness->count; i++)
 		seq_printf(seq, " %d", dev->brightness->levels[i]);
 	seq_printf(seq, "\ncurrent: %d\n", dev->brightness->curr);
 
@@ -1059,7 +1031,7 @@ acpi_video_device_write_brightness(struct file *file,
 		return -EFAULT;
 
 	/* validate through the list of available levels */
-	for (i = 2; i < dev->brightness->count; i++)
+	for (i = 0; i < dev->brightness->count; i++)
 		if (level == dev->brightness->levels[i]) {
 			if (ACPI_SUCCESS
 			    (acpi_video_device_lcd_set_level(dev, level)))
@@ -1260,7 +1232,7 @@ static int acpi_video_bus_POST_info_seq_show(struct seq_file *seq, void *offset)
 			printk(KERN_WARNING PREFIX
 			       "This indicates a BIOS bug. Please contact the manufacturer.\n");
 		}
-		printk(KERN_WARNING "%llx\n", options);
+		printk("%llx\n", options);
 		seq_printf(seq, "can POST: <integrated video>");
 		if (options & 2)
 			seq_printf(seq, " <PCI video>");
@@ -1712,7 +1684,7 @@ acpi_video_get_next_level(struct acpi_video_device *device,
 	max = max_below = 0;
 	min = min_above = 255;
 	/* Find closest level to level_current */
-	for (i = 2; i < device->brightness->count; i++) {
+	for (i = 0; i < device->brightness->count; i++) {
 		l = device->brightness->levels[i];
 		if (abs(l - level_current) < abs(delta)) {
 			delta = l - level_current;
@@ -1722,7 +1694,7 @@ acpi_video_get_next_level(struct acpi_video_device *device,
 	}
 	/* Ajust level_current to closest available level */
 	level_current += delta;
-	for (i = 2; i < device->brightness->count; i++) {
+	for (i = 0; i < device->brightness->count; i++) {
 		l = device->brightness->levels[i];
 		if (l < min)
 			min = l;
@@ -2006,12 +1978,6 @@ static int acpi_video_bus_add(struct acpi_device *device)
 			device->pnp.bus_id[3] = '0' + instance;
 		instance ++;
 	}
-	/* a hack to fix the duplicate name "VGA" problem on Pa 3553 */
-	if (!strcmp(device->pnp.bus_id, "VGA")) {
-		if (instance)
-			device->pnp.bus_id[3] = '0' + instance;
-		instance++;
-	}
 
 	video->device = device;
 	strcpy(acpi_device_name(device), ACPI_VIDEO_BUS_NAME);
@@ -2127,6 +2093,12 @@ static int acpi_video_bus_remove(struct acpi_device *device, int type)
 static int __init acpi_video_init(void)
 {
 	int result = 0;
+
+
+	/*
+	   acpi_dbg_level = 0xFFFFFFFF;
+	   acpi_dbg_layer = 0x08000000;
+	 */
 
 	acpi_video_dir = proc_mkdir(ACPI_VIDEO_CLASS, acpi_root_dir);
 	if (!acpi_video_dir)

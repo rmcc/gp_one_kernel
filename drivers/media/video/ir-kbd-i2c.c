@@ -385,10 +385,10 @@ static int ir_attach(struct i2c_adapter *adap, int addr,
 		goto err_out_detach;
 	}
 
-	/* Phys addr can only be set after attaching (for ir->c.dev) */
+	/* Phys addr can only be set after attaching (for ir->c.dev.bus_id) */
 	snprintf(ir->phys, sizeof(ir->phys), "%s/%s/ir0",
-		 dev_name(&ir->c.adapter->dev),
-		 dev_name(&ir->c.dev));
+		 ir->c.adapter->dev.bus_id,
+		 ir->c.dev.bus_id);
 
 	/* init + register input device */
 	ir_input_init(input_dev, &ir->ir, ir_type, ir->ir_codes);

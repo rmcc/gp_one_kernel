@@ -38,7 +38,7 @@ struct atmel_lcdfb_info {
 	spinlock_t		lock;
 	struct fb_info		*info;
 	void __iomem		*mmio;
-	int			irq_base;
+	unsigned long		irq_base;
 	struct work_struct	task;
 
 	unsigned int		guard_time;

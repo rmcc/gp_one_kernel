@@ -16,7 +16,7 @@
 
 #include <asm-generic/vmlinux.lds.h>
 
-#include <variant/core.h>
+#include <asm/variant/core.h>
 OUTPUT_ARCH(xtensa)
 ENTRY(_start)
 

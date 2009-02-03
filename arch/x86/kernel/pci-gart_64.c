@@ -5,7 +5,7 @@
  * This allows to use PCI devices that only support 32bit addresses on systems
  * with more than 4GB.
  *
- * See Documentation/PCI/PCI-DMA-mapping.txt for the interface specification.
+ * See Documentation/DMA-mapping.txt for the interface specification.
  *
  * Copyright 2002 Andi Kleen, SuSE Labs.
  * Subject to the GNU General Public License v2 only.
@@ -52,7 +52,7 @@ static u32 *iommu_gatt_base;		/* Remapping table */
  * to trigger bugs with some popular PCI cards, in particular 3ware (but
  * has been also also seen with Qlogic at least).
  */
-static int iommu_fullflush = 1;
+int iommu_fullflush = 1;
 
 /* Allocation bitmap for the remapping area: */
 static DEFINE_SPINLOCK(iommu_bitmap_lock);
@@ -123,8 +123,6 @@ static void free_iommu(unsigned long offset, int size)
 
 	spin_lock_irqsave(&iommu_bitmap_lock, flags);
 	iommu_area_free(iommu_gart_bitmap, offset, size);
-	if (offset >= next_bit)
-		next_bit = offset + size;
 	spin_unlock_irqrestore(&iommu_bitmap_lock, flags);
 }
 
@@ -745,8 +743,10 @@ void __init gart_iommu_init(void)
 	unsigned long scratch;
 	long i;
 
-	if (cache_k8_northbridges() < 0 || num_k8_northbridges == 0)
+	if (cache_k8_northbridges() < 0 || num_k8_northbridges == 0) {
+		printk(KERN_INFO "PCI-GART: No AMD GART found.\n");
 		return;
+	}
 
 #ifndef CONFIG_AGP_AMD64
 	no_agp = 1;

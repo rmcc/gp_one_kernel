@@ -160,7 +160,7 @@ ENDPROC(_cache_grab_lock)
  * R0 - Which way to be locked
  */
 
-ENTRY(_bfin_cache_lock)
+ENTRY(_cache_lock)
 
 	[--SP]=( R7:0,P5:0 );
 
@@ -184,7 +184,7 @@ ENTRY(_bfin_cache_lock)
 
 	( R7:0,P5:0 ) = [SP++];
 	RTS;
-ENDPROC(_bfin_cache_lock)
+ENDPROC(_cache_lock)
 
 /* Invalidate the Entire Instruction cache by
  * disabling IMC bit

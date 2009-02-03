@@ -184,20 +184,9 @@ static void freezer_fork(struct cgroup_subsys *ss, struct task_struct *task)
 {
 	struct freezer *freezer;
 
-	/*
-	 * No lock is needed, since the task isn't on tasklist yet,
-	 * so it can't be moved to another cgroup, which means the
-	 * freezer won't be removed and will be valid during this
-	 * function call.
-	 */
+	task_lock(task);
 	freezer = task_freezer(task);
-
-	/*
-	 * The root cgroup is non-freezable, so we can skip the
-	 * following check.
-	 */
-	if (!freezer->css.cgroup->parent)
-		return;
+	task_unlock(task);
 
 	spin_lock_irq(&freezer->lock);
 	BUG_ON(freezer->state == CGROUP_FROZEN);
@@ -342,7 +331,7 @@ static int freezer_write(struct cgroup *cgroup,
 	else if (strcmp(buffer, freezer_state_strs[CGROUP_FROZEN]) == 0)
 		goal_state = CGROUP_FROZEN;
 	else
-		return -EINVAL;
+		return -EIO;
 
 	if (!cgroup_lock_live_group(cgroup))
 		return -ENODEV;
@@ -361,8 +350,6 @@ static struct cftype files[] = {
 
 static int freezer_populate(struct cgroup_subsys *ss, struct cgroup *cgroup)
 {
-	if (!cgroup->parent)
-		return 0;
 	return cgroup_add_files(cgroup, ss, files, ARRAY_SIZE(files));
 }
 

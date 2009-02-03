@@ -54,6 +54,7 @@
  *                      DWA).
  */
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
@@ -62,12 +63,16 @@
 #include "../wusbcore/wa-hc.h"
 #include "../wusbcore/wusbhc.h"
 
+#define D_LOCAL 0
+#include <linux/uwb/debug.h>
+
 struct hwahc {
 	struct wusbhc wusbhc;	/* has to be 1st */
 	struct wahc wa;
+	u8 buffer[16];		/* for misc usb transactions */
 };
 
-/*
+/**
  * FIXME should be wusbhc
  *
  * NOTE: we need to cache the Cluster ID because later...there is no
@@ -121,6 +126,7 @@ static int hwahc_op_reset(struct usb_hcd *usb_hcd)
 	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
 	struct device *dev = &hwahc->wa.usb_iface->dev;
 
+	d_fnstart(4, dev, "(hwahc %p)\n", hwahc);
 	mutex_lock(&wusbhc->mutex);
 	wa_nep_disarm(&hwahc->wa);
 	result = __wa_set_feature(&hwahc->wa, WA_RESET);
@@ -128,6 +134,7 @@ static int hwahc_op_reset(struct usb_hcd *usb_hcd)
 		dev_err(dev, "error commanding HC to reset: %d\n", result);
 		goto error_unlock;
 	}
+	d_printf(3, dev, "reset: waiting for device to change state\n");
 	result = __wa_wait_status(&hwahc->wa, WA_STATUS_RESETTING, 0);
 	if (result < 0) {
 		dev_err(dev, "error waiting for HC to reset: %d\n", result);
@@ -135,6 +142,7 @@ static int hwahc_op_reset(struct usb_hcd *usb_hcd)
 	}
 error_unlock:
 	mutex_unlock(&wusbhc->mutex);
+	d_fnend(4, dev, "(hwahc %p) = %d\n", hwahc, result);
 	return result;
 }
 
@@ -147,9 +155,15 @@ static int hwahc_op_start(struct usb_hcd *usb_hcd)
 	int result;
 	struct wusbhc *wusbhc = usb_hcd_to_wusbhc(usb_hcd);
 	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
+	struct device *dev = &hwahc->wa.usb_iface->dev;
 
+	/* Set up a Host Info WUSB Information Element */
+	d_fnstart(4, dev, "(hwahc %p)\n", hwahc);
 	result = -ENOSPC;
 	mutex_lock(&wusbhc->mutex);
+	/* Start the numbering from the top so that the bottom
+	 * range of the unauth addr space is used for devices,
+	 * the top for HCs; use 0xfe - RC# */
 	addr = wusb_cluster_id_get();
 	if (addr == 0)
 		goto error_cluster_id_get;
@@ -157,19 +171,60 @@ static int hwahc_op_start(struct usb_hcd *usb_hcd)
 	if (result < 0)
 		goto error_set_cluster_id;
 
+	result = wa_nep_arm(&hwahc->wa, GFP_KERNEL);
+	if (result < 0) {
+		dev_err(dev, "cannot listen to notifications: %d\n", result);
+		goto error_stop;
+	}
 	usb_hcd->uses_new_polling = 1;
 	usb_hcd->poll_rh = 1;
 	usb_hcd->state = HC_STATE_RUNNING;
 	result = 0;
 out:
 	mutex_unlock(&wusbhc->mutex);
+	d_fnend(4, dev, "(hwahc %p) = %d\n", hwahc, result);
 	return result;
 
+error_stop:
+	__wa_stop(&hwahc->wa);
 error_set_cluster_id:
 	wusb_cluster_id_put(wusbhc->cluster_id);
 error_cluster_id_get:
 	goto out;
 
+}
+
+/*
+ * FIXME: break this function up
+ */
+static int __hwahc_op_wusbhc_start(struct wusbhc *wusbhc)
+{
+	int result;
+	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
+	struct device *dev = &hwahc->wa.usb_iface->dev;
+
+	/* Set up a Host Info WUSB Information Element */
+	d_fnstart(4, dev, "(hwahc %p)\n", hwahc);
+	result = -ENOSPC;
+
+	result = __wa_set_feature(&hwahc->wa, WA_ENABLE);
+	if (result < 0) {
+		dev_err(dev, "error commanding HC to start: %d\n", result);
+		goto error_stop;
+	}
+	result = __wa_wait_status(&hwahc->wa, WA_ENABLE, WA_ENABLE);
+	if (result < 0) {
+		dev_err(dev, "error waiting for HC to start: %d\n", result);
+		goto error_stop;
+	}
+	result = 0;
+out:
+	d_fnend(4, dev, "(hwahc %p) = %d\n", hwahc, result);
+	return result;
+
+error_stop:
+	result = __wa_clear_feature(&hwahc->wa, WA_ENABLE);
+	goto out;
 }
 
 static int hwahc_op_suspend(struct usb_hcd *usb_hcd, pm_message_t msg)
@@ -191,6 +246,18 @@ static int hwahc_op_resume(struct usb_hcd *usb_hcd)
 	return -ENOSYS;
 }
 
+static void __hwahc_op_wusbhc_stop(struct wusbhc *wusbhc)
+{
+	int result;
+	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
+	struct device *dev = &hwahc->wa.usb_iface->dev;
+
+	d_fnstart(4, dev, "(hwahc %p)\n", hwahc);
+	/* Nothing for now */
+	d_fnend(4, dev, "(hwahc %p) = %d\n", hwahc, result);
+	return;
+}
+
 /*
  * No need to abort pipes, as when this is called, all the children
  * has been disconnected and that has done it [through
@@ -199,11 +266,21 @@ static int hwahc_op_resume(struct usb_hcd *usb_hcd)
  */
 static void hwahc_op_stop(struct usb_hcd *usb_hcd)
 {
+	int result;
 	struct wusbhc *wusbhc = usb_hcd_to_wusbhc(usb_hcd);
+	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
+	struct wahc *wa = &hwahc->wa;
+	struct device *dev = &wa->usb_iface->dev;
 
+	d_fnstart(4, dev, "(hwahc %p)\n", hwahc);
 	mutex_lock(&wusbhc->mutex);
+	wusbhc_stop(wusbhc);
+	wa_nep_disarm(&hwahc->wa);
+	result = __wa_stop(&hwahc->wa);
 	wusb_cluster_id_put(wusbhc->cluster_id);
 	mutex_unlock(&wusbhc->mutex);
+	d_fnend(4, dev, "(hwahc %p) = %d\n", hwahc, result);
+	return;
 }
 
 static int hwahc_op_get_frame_number(struct usb_hcd *usb_hcd)
@@ -246,54 +323,6 @@ static void hwahc_op_endpoint_disable(struct usb_hcd *usb_hcd,
 	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
 
 	rpipe_ep_disable(&hwahc->wa, ep);
-}
-
-static int __hwahc_op_wusbhc_start(struct wusbhc *wusbhc)
-{
-	int result;
-	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
-	struct device *dev = &hwahc->wa.usb_iface->dev;
-
-	result = __wa_set_feature(&hwahc->wa, WA_ENABLE);
-	if (result < 0) {
-		dev_err(dev, "error commanding HC to start: %d\n", result);
-		goto error_stop;
-	}
-	result = __wa_wait_status(&hwahc->wa, WA_ENABLE, WA_ENABLE);
-	if (result < 0) {
-		dev_err(dev, "error waiting for HC to start: %d\n", result);
-		goto error_stop;
-	}
-	result = wa_nep_arm(&hwahc->wa, GFP_KERNEL);
-	if (result < 0) {
-		dev_err(dev, "cannot listen to notifications: %d\n", result);
-		goto error_stop;
-	}
-	return result;
-
-error_stop:
-	__wa_clear_feature(&hwahc->wa, WA_ENABLE);
-	return result;
-}
-
-static void __hwahc_op_wusbhc_stop(struct wusbhc *wusbhc, int delay)
-{
-	struct hwahc *hwahc = container_of(wusbhc, struct hwahc, wusbhc);
-	struct wahc *wa = &hwahc->wa;
-	u8 iface_no = wa->usb_iface->cur_altsetting->desc.bInterfaceNumber;
-	int ret;
-
-	ret = usb_control_msg(wa->usb_dev, usb_sndctrlpipe(wa->usb_dev, 0),
-			      WUSB_REQ_CHAN_STOP,
-			      USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-			      delay * 1000,
-			      iface_no,
-			      NULL, 0, 1000 /* FIXME: arbitrary */);
-	if (ret == 0)
-		msleep(delay);
-
-	wa_nep_disarm(&hwahc->wa);
-	__wa_stop(&hwahc->wa);
 }
 
 /*
@@ -552,11 +581,11 @@ static int wa_fill_descr(struct wahc *wa)
 	itr_size = le16_to_cpu(usb_dev->actconfig->desc.wTotalLength);
 	while (itr_size >= sizeof(*hdr)) {
 		hdr = (struct usb_descriptor_header *) itr;
-		dev_dbg(dev, "Extra device descriptor: "
-			"type %02x/%u bytes @ %zu (%zu left)\n",
-			hdr->bDescriptorType, hdr->bLength,
-			(itr - usb_dev->rawdescriptors[actconfig_idx]),
-			itr_size);
+		d_printf(3, dev, "Extra device descriptor: "
+			 "type %02x/%u bytes @ %zu (%zu left)\n",
+			 hdr->bDescriptorType, hdr->bLength,
+			 (itr - usb_dev->rawdescriptors[actconfig_idx]),
+			 itr_size);
 		if (hdr->bDescriptorType == USB_DT_WIRE_ADAPTER)
 			goto found;
 		itr += hdr->bLength;
@@ -765,6 +794,7 @@ static void hwahc_destroy(struct hwahc *hwahc)
 {
 	struct wusbhc *wusbhc = &hwahc->wusbhc;
 
+	d_fnstart(1, NULL, "(hwahc %p)\n", hwahc);
 	mutex_lock(&wusbhc->mutex);
 	__wa_destroy(&hwahc->wa);
 	wusbhc_destroy(&hwahc->wusbhc);
@@ -774,6 +804,7 @@ static void hwahc_destroy(struct hwahc *hwahc)
 	usb_put_intf(hwahc->wa.usb_iface);
 	usb_put_dev(hwahc->wa.usb_dev);
 	mutex_unlock(&wusbhc->mutex);
+	d_fnend(1, NULL, "(hwahc %p) = void\n", hwahc);
 }
 
 static void hwahc_init(struct hwahc *hwahc)
@@ -790,6 +821,7 @@ static int hwahc_probe(struct usb_interface *usb_iface,
 	struct hwahc *hwahc;
 	struct device *dev = &usb_iface->dev;
 
+	d_fnstart(4, dev, "(%p, %p)\n", usb_iface, id);
 	result = -ENOMEM;
 	usb_hcd = usb_create_hcd(&hwahc_hc_driver, &usb_iface->dev, "wusb-hwa");
 	if (usb_hcd == NULL) {
@@ -816,6 +848,7 @@ static int hwahc_probe(struct usb_interface *usb_iface,
 		dev_err(dev, "Cannot setup phase B of WUSBHC: %d\n", result);
 		goto error_wusbhc_b_create;
 	}
+	d_fnend(4, dev, "(%p, %p) = 0\n", usb_iface, id);
 	return 0;
 
 error_wusbhc_b_create:
@@ -825,6 +858,7 @@ error_add_hcd:
 error_hwahc_create:
 	usb_put_hcd(usb_hcd);
 error_alloc:
+	d_fnend(4, dev, "(%p, %p) = %d\n", usb_iface, id, result);
 	return result;
 }
 
@@ -838,12 +872,16 @@ static void hwahc_disconnect(struct usb_interface *usb_iface)
 	wusbhc = usb_hcd_to_wusbhc(usb_hcd);
 	hwahc = container_of(wusbhc, struct hwahc, wusbhc);
 
+	d_fnstart(1, NULL, "(hwahc %p [usb_iface %p])\n", hwahc, usb_iface);
 	wusbhc_b_destroy(&hwahc->wusbhc);
 	usb_remove_hcd(usb_hcd);
 	hwahc_destroy(hwahc);
 	usb_put_hcd(usb_hcd);
+	d_fnend(1, NULL, "(hwahc %p [usb_iface %p]) = void\n", hwahc,
+		usb_iface);
 }
 
+/** USB device ID's that we handle */
 static struct usb_device_id hwahc_id_table[] = {
 	/* FIXME: use class labels for this */
 	{ USB_INTERFACE_INFO(0xe0, 0x02, 0x01), },
@@ -860,7 +898,18 @@ static struct usb_driver hwahc_driver = {
 
 static int __init hwahc_driver_init(void)
 {
-	return usb_register(&hwahc_driver);
+	int result;
+	result = usb_register(&hwahc_driver);
+	if (result < 0) {
+		printk(KERN_ERR "WA-CDS: Cannot register USB driver: %d\n",
+		       result);
+		goto error_usb_register;
+	}
+	return 0;
+
+error_usb_register:
+	return result;
+
 }
 module_init(hwahc_driver_init);
 

@@ -4,7 +4,6 @@
 #include <linux/preempt.h>
 #include <linux/smp_lock.h>
 #include <linux/lockdep.h>
-#include <linux/ftrace_irq.h>
 #include <asm/hardirq.h>
 #include <asm/system.h>
 
@@ -119,17 +118,13 @@ static inline void account_system_vtime(struct task_struct *tsk)
 }
 #endif
 
-#if defined(CONFIG_NO_HZ) && !defined(CONFIG_CLASSIC_RCU)
+#if defined(CONFIG_PREEMPT_RCU) && defined(CONFIG_NO_HZ)
 extern void rcu_irq_enter(void);
 extern void rcu_irq_exit(void);
-extern void rcu_nmi_enter(void);
-extern void rcu_nmi_exit(void);
 #else
 # define rcu_irq_enter() do { } while (0)
 # define rcu_irq_exit() do { } while (0)
-# define rcu_nmi_enter() do { } while (0)
-# define rcu_nmi_exit() do { } while (0)
-#endif /* #if defined(CONFIG_NO_HZ) && !defined(CONFIG_CLASSIC_RCU) */
+#endif /* CONFIG_PREEMPT_RCU */
 
 /*
  * It is safe to do non-atomic ops on ->hardirq_context,
@@ -139,6 +134,7 @@ extern void rcu_nmi_exit(void);
  */
 #define __irq_enter()					\
 	do {						\
+		rcu_irq_enter();			\
 		account_system_vtime(current);		\
 		add_preempt_count(HARDIRQ_OFFSET);	\
 		trace_hardirq_enter();			\
@@ -157,6 +153,7 @@ extern void irq_enter(void);
 		trace_hardirq_exit();			\
 		account_system_vtime(current);		\
 		sub_preempt_count(HARDIRQ_OFFSET);	\
+		rcu_irq_exit();				\
 	} while (0)
 
 /*
@@ -164,20 +161,7 @@ extern void irq_enter(void);
  */
 extern void irq_exit(void);
 
-#define nmi_enter()				\
-	do {					\
-		ftrace_nmi_enter();		\
-		lockdep_off();			\
-		rcu_nmi_enter();		\
-		__irq_enter();			\
-	} while (0)
-
-#define nmi_exit()				\
-	do {					\
-		__irq_exit();			\
-		rcu_nmi_exit();			\
-		lockdep_on();			\
-		ftrace_nmi_exit();		\
-	} while (0)
+#define nmi_enter()		do { lockdep_off(); __irq_enter(); } while (0)
+#define nmi_exit()		do { __irq_exit(); lockdep_on(); } while (0)
 
 #endif /* LINUX_HARDIRQ_H */

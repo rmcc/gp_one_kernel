@@ -29,7 +29,7 @@ static struct device_driver gru_driver = {
 };
 
 static struct device gru_device = {
-	.init_name = "",
+	.bus_id = {0},
 	.driver = &gru_driver,
 };
 

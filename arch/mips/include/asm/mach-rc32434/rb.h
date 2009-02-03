@@ -40,14 +40,12 @@
 #define BTCS		0x010040
 #define BTCOMPARE	0x010044
 #define GPIOBASE	0x050000
-/* Offsets relative to GPIOBASE */
-#define GPIOFUNC	0x00
-#define GPIOCFG		0x04
-#define GPIOD		0x08
-#define GPIOILEVEL	0x0C
-#define GPIOISTAT	0x10
-#define GPIONMIEN	0x14
-#define IMASK6		0x38
+#define GPIOCFG		0x050004
+#define GPIOD		0x050008
+#define GPIOILEVEL	0x05000C
+#define GPIOISTAT	0x050010
+#define GPIONMIEN	0x050014
+#define IMASK6		0x038038
 #define LO_WPX		(1 << 0)
 #define LO_ALE		(1 << 1)
 #define LO_CLE		(1 << 2)
@@ -82,8 +80,5 @@ struct mpmc_device {
 	spinlock_t	lock;
 	void __iomem 	*base;
 };
-
-extern void set_latch_u5(unsigned char or_mask, unsigned char nand_mask);
-extern unsigned char get_latch_u5(void);
 
 #endif  /* __ASM_RC32434_RB_H */

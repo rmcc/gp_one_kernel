@@ -663,7 +663,7 @@ static int __init mwave_init(void)
 #if 0
 	/* sysfs */
 	memset(&mwave_device, 0, sizeof (struct device));
-	dev_set_name(&mwave_device, "mwave");
+	snprintf(mwave_device.bus_id, BUS_ID_SIZE, "mwave");
 
 	if (device_register(&mwave_device))
 		goto cleanup_error;

@@ -18,7 +18,6 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
-#include <linux/spinlock.h>
 #include <linux/module.h>
 
 #include <asm/irq.h>
@@ -26,6 +25,9 @@
 #include <asm/immap_qe.h>
 #include <asm/qe.h>
 #include <asm/ucc.h>
+
+DEFINE_SPINLOCK(cmxgcr_lock);
+EXPORT_SYMBOL(cmxgcr_lock);
 
 int ucc_set_qe_mux_mii_mng(unsigned int ucc_num)
 {

@@ -21,8 +21,6 @@
 #include <linux/amba/clcd.h>
 #include <linux/io.h>
 
-#include <asm/clkdev.h>
-#include <mach/clkdev.h>
 #include <mach/hardware.h>
 #include <asm/irq.h>
 #include <asm/setup.h>
@@ -40,6 +38,7 @@
 #include <asm/mach/time.h>
 
 #include "common.h"
+#include "clock.h"
 
 #define INTCP_PA_MMC_BASE		0x1c000000
 #define INTCP_PA_AACI_BASE		0x1d000000
@@ -290,16 +289,15 @@ static void cp_auxvco_set(struct clk *clk, struct icst525_vco vco)
 	writel(0, CM_LOCK);
 }
 
-static struct clk cp_auxclk = {
+static struct clk cp_clcd_clk = {
+	.name	= "CLCDCLK",
 	.params	= &cp_auxvco_params,
 	.setvco = cp_auxvco_set,
 };
 
-static struct clk_lookup cp_lookups[] = {
-	{	/* CLCD */
-		.dev_id		= "mb:c0",
-		.clk		= &cp_auxclk,
-	},
+static struct clk cp_mmci_clk = {
+	.name	= "MCLK",
+	.rate	= 14745600,
 };
 
 /*
@@ -407,7 +405,7 @@ static struct mmc_platform_data mmc_data = {
 
 static struct amba_device mmc_device = {
 	.dev		= {
-		.init_name = "mb:1c",
+		.bus_id	= "mb:1c",
 		.platform_data = &mmc_data,
 	},
 	.res		= {
@@ -421,7 +419,7 @@ static struct amba_device mmc_device = {
 
 static struct amba_device aaci_device = {
 	.dev		= {
-		.init_name = "mb:1d",
+		.bus_id	= "mb:1d",
 	},
 	.res		= {
 		.start	= INTCP_PA_AACI_BASE,
@@ -532,7 +530,7 @@ static struct clcd_board clcd_data = {
 
 static struct amba_device clcd_device = {
 	.dev		= {
-		.init_name = "mb:c0",
+		.bus_id	= "mb:c0",
 		.coherent_dma_mask = ~0,
 		.platform_data = &clcd_data,
 	},
@@ -556,8 +554,8 @@ static void __init intcp_init(void)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(cp_lookups); i++)
-		clkdev_add(&cp_lookups[i]);
+	clk_register(&cp_clcd_clk);
+	clk_register(&cp_mmci_clk);
 
 	platform_add_devices(intcp_devs, ARRAY_SIZE(intcp_devs));
 

@@ -659,6 +659,8 @@ u32 tfrc_calc_x(u16 s, u32 R, u32 p)
 	return scaled_div32(result, f);
 }
 
+EXPORT_SYMBOL_GPL(tfrc_calc_x);
+
 /**
  *  tfrc_calc_x_reverse_lookup  -  try to find p given f(p)
  *
@@ -691,3 +693,5 @@ u32 tfrc_calc_x_reverse_lookup(u32 fvalue)
 	index = tfrc_binsearch(fvalue, 0);
 	return (index + 1) * 1000000 / TFRC_CALC_X_ARRSIZE;
 }
+
+EXPORT_SYMBOL_GPL(tfrc_calc_x_reverse_lookup);

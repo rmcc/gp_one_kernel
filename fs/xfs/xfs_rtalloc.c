@@ -85,6 +85,7 @@ xfs_growfs_rt_alloc(
 {
 	xfs_fileoff_t	bno;		/* block number in file */
 	xfs_buf_t	*bp;		/* temporary buffer for zeroing */
+	int		cancelflags;	/* flags for xfs_trans_cancel */
 	int		committed;	/* transaction committed flag */
 	xfs_daddr_t	d;		/* disk block address */
 	int		error;		/* error return value */
@@ -95,16 +96,15 @@ xfs_growfs_rt_alloc(
 	xfs_bmbt_irec_t	map;		/* block map output */
 	int		nmap;		/* number of block maps */
 	int		resblks;	/* space reservation */
+	xfs_trans_t	*tp;		/* transaction pointer */
 
 	/*
 	 * Allocate space to the file, as necessary.
 	 */
 	while (oblocks < nblocks) {
-		int		cancelflags = 0;
-		xfs_trans_t	*tp;
-
 		tp = xfs_trans_alloc(mp, XFS_TRANS_GROWFSRT_ALLOC);
 		resblks = XFS_GROWFSRT_SPACE_RES(mp, nblocks - oblocks);
+		cancelflags = 0;
 		/*
 		 * Reserve space & log for one extent added to the file.
 		 */
@@ -120,7 +120,7 @@ xfs_growfs_rt_alloc(
 		if ((error = xfs_trans_iget(mp, tp, ino, 0,
 						XFS_ILOCK_EXCL, &ip)))
 			goto error_cancel;
-		xfs_bmap_init(&flist, &firstblock);
+		XFS_BMAP_INIT(&flist, &firstblock);
 		/*
 		 * Allocate blocks to the bitmap file.
 		 */
@@ -171,9 +171,7 @@ xfs_growfs_rt_alloc(
 				mp->m_bsize, 0);
 			if (bp == NULL) {
 				error = XFS_ERROR(EIO);
-error_cancel:
-				xfs_trans_cancel(tp, cancelflags);
-				goto error;
+				goto error_cancel;
 			}
 			memset(XFS_BUF_PTR(bp), 0, mp->m_sb.sb_blocksize);
 			xfs_trans_log_buf(tp, bp, 0, mp->m_sb.sb_blocksize - 1);
@@ -190,6 +188,8 @@ error_cancel:
 		oblocks = map.br_startoff + map.br_blockcount;
 	}
 	return 0;
+error_cancel:
+	xfs_trans_cancel(tp, cancelflags);
 error:
 	return error;
 }
@@ -1856,6 +1856,7 @@ xfs_growfs_rt(
 {
 	xfs_rtblock_t	bmbno;		/* bitmap block number */
 	xfs_buf_t	*bp;		/* temporary buffer */
+	int		cancelflags;	/* flags for xfs_trans_cancel */
 	int		error;		/* error return value */
 	xfs_inode_t	*ip;		/* bitmap inode, used as lock */
 	xfs_mount_t	*nmp;		/* new (fake) mount structure */
@@ -1871,13 +1872,13 @@ xfs_growfs_rt(
 	xfs_extlen_t	rsumblocks;	/* current number of rt summary blks */
 	xfs_sb_t	*sbp;		/* old superblock */
 	xfs_fsblock_t	sumbno;		/* summary block number */
+	xfs_trans_t	*tp;		/* transaction pointer */
 
 	sbp = &mp->m_sb;
+	cancelflags = 0;
 	/*
 	 * Initial error checking.
 	 */
-	if (!capable(CAP_SYS_ADMIN))
-		return XFS_ERROR(EPERM);
 	if (mp->m_rtdev_targp == NULL || mp->m_rbmip == NULL ||
 	    (nrblocks = in->newblocks) <= sbp->sb_rblocks ||
 	    (sbp->sb_rblocks && (in->extsize != sbp->sb_rextsize)))
@@ -1941,9 +1942,6 @@ xfs_growfs_rt(
 		     ((sbp->sb_rextents & ((1 << mp->m_blkbit_log) - 1)) != 0);
 	     bmbno < nrbmblocks;
 	     bmbno++) {
-		xfs_trans_t	*tp;
-		int		cancelflags = 0;
-
 		*nmp = *mp;
 		nsbp = &nmp->m_sb;
 		/*
@@ -1969,15 +1967,16 @@ xfs_growfs_rt(
 		 * Start a transaction, get the log reservation.
 		 */
 		tp = xfs_trans_alloc(mp, XFS_TRANS_GROWFSRT_FREE);
+		cancelflags = 0;
 		if ((error = xfs_trans_reserve(tp, 0,
 				XFS_GROWRTFREE_LOG_RES(nmp), 0, 0, 0)))
-			goto error_cancel;
+			break;
 		/*
 		 * Lock out other callers by grabbing the bitmap inode lock.
 		 */
 		if ((error = xfs_trans_iget(mp, tp, mp->m_sb.sb_rbmino, 0,
 						XFS_ILOCK_EXCL, &ip)))
-			goto error_cancel;
+			break;
 		ASSERT(ip == mp->m_rbmip);
 		/*
 		 * Update the bitmap inode's size.
@@ -1991,7 +1990,7 @@ xfs_growfs_rt(
 		 */
 		if ((error = xfs_trans_iget(mp, tp, mp->m_sb.sb_rsumino, 0,
 						XFS_ILOCK_EXCL, &ip)))
-			goto error_cancel;
+			break;
 		ASSERT(ip == mp->m_rsumip);
 		/*
 		 * Update the summary inode's size.
@@ -2006,7 +2005,7 @@ xfs_growfs_rt(
 		    mp->m_rsumlevels != nmp->m_rsumlevels) {
 			error = xfs_rtcopy_summary(mp, nmp, tp);
 			if (error)
-				goto error_cancel;
+				break;
 		}
 		/*
 		 * Update superblock fields.
@@ -2032,11 +2031,8 @@ xfs_growfs_rt(
 		bp = NULL;
 		error = xfs_rtfree_range(nmp, tp, sbp->sb_rextents,
 			nsbp->sb_rextents - sbp->sb_rextents, &bp, &sumbno);
-		if (error) {
-error_cancel:
-			xfs_trans_cancel(tp, cancelflags);
+		if (error)
 			break;
-		}
 		/*
 		 * Mark more blocks free in the superblock.
 		 */
@@ -2049,9 +2045,14 @@ error_cancel:
 		mp->m_rsumsize = nrsumsize;
 
 		error = xfs_trans_commit(tp, 0);
-		if (error)
+		if (error) {
+			tp = NULL;
 			break;
+		}
 	}
+
+	if (error && tp)
+		xfs_trans_cancel(tp, cancelflags);
 
 	/*
 	 * Free the fake mp structure.

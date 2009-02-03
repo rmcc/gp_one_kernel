@@ -15,6 +15,11 @@
 #error "Do not include directly."
 #endif
 
+/*!
+ * defines the hardware clock tick rate
+ */
+#define CLOCK_TICK_RATE		16625000
+
 /*
  * MX31 memory map:
  *
@@ -239,6 +244,9 @@
 #define PCMCIA_IO_ADDRESS(x) \
 	(((x) - X_MEMC_BASE_ADDR) + X_MEMC_BASE_ADDR_VIRT)
 
+/* Start of physical RAM - On many MX31 platforms, this is the first SDRAM bank (CSD0) */
+#define PHYS_OFFSET             CSD0_BASE_ADDR
+
 /*
  * Interrupt numbers
  */
@@ -306,6 +314,23 @@
 #define MXC_INT_EXT_SENSOR61	61
 #define MXC_INT_EXT_WDOG	62
 #define MXC_INT_EXT_TV		63
+
+#define MXC_MAX_INT_LINES	64
+
+#define MXC_GPIO_INT_BASE	MXC_MAX_INT_LINES
+#define MXC_MAX_GPIO_LINES      (GPIO_NUM_PIN * GPIO_PORT_NUM)
+#define MXC_MAX_VIRTUAL_INTS	16
+
+#define NR_IRQS (MXC_MAX_INT_LINES + MXC_MAX_GPIO_LINES + MXC_MAX_VIRTUAL_INTS)
+
+/*!
+ * Number of GPIO port as defined in the IC Spec
+ */
+#define GPIO_PORT_NUM		3
+/*!
+ * Number of GPIO pins per port
+ */
+#define GPIO_NUM_PIN		32
 
 #define PROD_SIGNATURE		0x1	/* For MX31 */
 

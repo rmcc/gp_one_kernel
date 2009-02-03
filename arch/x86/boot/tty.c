@@ -74,7 +74,7 @@ static int kbd_pending(void)
 {
 	u8 pending;
 	asm volatile("int $0x16; setnz %0"
-		     : "=qm" (pending)
+		     : "=rm" (pending)
 		     : "a" (0x0100));
 	return pending;
 }

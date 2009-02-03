@@ -353,13 +353,13 @@ void scom_clear_int(ADAPTER * a)
 /*------------------------------------------------------------------*/
 /* return code handler                                              */
 /*------------------------------------------------------------------*/
-static byte isdn_rc(ADAPTER *a,
-		    byte Rc,
-		    byte Id,
-		    byte Ch,
-		    word Ref,
-		    dword extended_info_type,
-		    dword extended_info)
+byte isdn_rc(ADAPTER * a,
+             byte Rc,
+             byte Id,
+             byte Ch,
+             word Ref,
+             dword extended_info_type,
+             dword extended_info)
 {
   ENTITY  * this;
   byte e_no;
@@ -555,13 +555,13 @@ static byte isdn_rc(ADAPTER *a,
 /*------------------------------------------------------------------*/
 /* indication handler                                               */
 /*------------------------------------------------------------------*/
-static byte isdn_ind(ADAPTER *a,
-		     byte Ind,
-		     byte Id,
-		     byte Ch,
-		     PBUFFER *RBuffer,
-		     byte MInd,
-		     word MLength)
+byte isdn_ind(ADAPTER * a,
+              byte Ind,
+              byte Id,
+              byte Ch,
+              PBUFFER * RBuffer,
+              byte MInd,
+              word MLength)
 {
   ENTITY  * this;
   word clength;

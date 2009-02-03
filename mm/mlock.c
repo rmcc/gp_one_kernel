@@ -66,10 +66,14 @@ void __clear_page_mlock(struct page *page)
 		putback_lru_page(page);
 	} else {
 		/*
-		 * We lost the race. the page already moved to evictable list.
+		 * Page not on the LRU yet.  Flush all pagevecs and retry.
 		 */
-		if (PageUnevictable(page))
+		lru_add_drain_all();
+		if (!isolate_lru_page(page))
+			putback_lru_page(page);
+		else if (PageUnevictable(page))
 			count_vm_event(UNEVICTABLE_PGSTRANDED);
+
 	}
 }
 
@@ -162,7 +166,7 @@ static long __mlock_vma_pages_range(struct vm_area_struct *vma,
 	unsigned long addr = start;
 	struct page *pages[16]; /* 16 gives a reasonable batch */
 	int nr_pages = (end - start) / PAGE_SIZE;
-	int ret = 0;
+	int ret;
 	int gup_flags = 0;
 
 	VM_BUG_ON(start & ~PAGE_MASK);
@@ -173,16 +177,17 @@ static long __mlock_vma_pages_range(struct vm_area_struct *vma,
 		  (atomic_read(&mm->mm_users) != 0));
 
 	/*
-	 * mlock:   don't page populate if vma has PROT_NONE permission.
-	 * munlock: always do munlock although the vma has PROT_NONE
-	 *          permission, or SIGKILL is pending.
+	 * mlock:   don't page populate if page has PROT_NONE permission.
+	 * munlock: the pages always do munlock althrough
+	 *          its has PROT_NONE permission.
 	 */
 	if (!mlock)
-		gup_flags |= GUP_FLAGS_IGNORE_VMA_PERMISSIONS |
-			     GUP_FLAGS_IGNORE_SIGKILL;
+		gup_flags |= GUP_FLAGS_IGNORE_VMA_PERMISSIONS;
 
 	if (vma->vm_flags & VM_WRITE)
 		gup_flags |= GUP_FLAGS_WRITE;
+
+	lru_add_drain_all();	/* push cached pages to LRU */
 
 	while (nr_pages > 0) {
 		int i;
@@ -246,6 +251,8 @@ static long __mlock_vma_pages_range(struct vm_area_struct *vma,
 		ret = 0;
 	}
 
+	lru_add_drain_all();	/* to update stats */
+
 	return ret;	/* count entire vma as locked_vm */
 }
 
@@ -294,10 +301,14 @@ static inline int __mlock_posix_error_return(long retval)
  *
  * return number of pages [> 0] to be removed from locked_vm on success
  * of "special" vmas.
+ *
+ * return negative error if vma spanning @start-@range disappears while
+ * mmap semaphore is dropped.  Unlikely?
  */
 long mlock_vma_pages_range(struct vm_area_struct *vma,
 			unsigned long start, unsigned long end)
 {
+	struct mm_struct *mm = vma->vm_mm;
 	int nr_pages = (end - start) / PAGE_SIZE;
 	BUG_ON(!(vma->vm_flags & VM_LOCKED));
 
@@ -310,11 +321,20 @@ long mlock_vma_pages_range(struct vm_area_struct *vma,
 	if (!((vma->vm_flags & (VM_DONTEXPAND | VM_RESERVED)) ||
 			is_vm_hugetlb_page(vma) ||
 			vma == get_gate_vma(current))) {
+		long error;
+		downgrade_write(&mm->mmap_sem);
 
-		__mlock_vma_pages_range(vma, start, end, 1);
+		error = __mlock_vma_pages_range(vma, start, end, 1);
 
-		/* Hide errors from mmap() and other callers */
-		return 0;
+		up_read(&mm->mmap_sem);
+		/* vma can change or disappear */
+		down_write(&mm->mmap_sem);
+		vma = find_vma(mm, start);
+		/* non-NULL vma must contain @start, but need to check @end */
+		if (!vma ||  end > vma->vm_end)
+			return -ENOMEM;
+
+		return 0;	/* hide other errors from mmap(), et al */
 	}
 
 	/*
@@ -425,14 +445,41 @@ success:
 	vma->vm_flags = newflags;
 
 	if (lock) {
+		/*
+		 * mmap_sem is currently held for write.  Downgrade the write
+		 * lock to a read lock so that other faults, mmap scans, ...
+		 * while we fault in all pages.
+		 */
+		downgrade_write(&mm->mmap_sem);
+
 		ret = __mlock_vma_pages_range(vma, start, end, 1);
 
-		if (ret > 0) {
+		/*
+		 * Need to reacquire mmap sem in write mode, as our callers
+		 * expect this.  We have no support for atomically upgrading
+		 * a sem to write, so we need to check for ranges while sem
+		 * is unlocked.
+		 */
+		up_read(&mm->mmap_sem);
+		/* vma can change or disappear */
+		down_write(&mm->mmap_sem);
+		*prev = find_vma(mm, start);
+		/* non-NULL *prev must contain @start, but need to check @end */
+		if (!(*prev) || end > (*prev)->vm_end)
+			ret = -ENOMEM;
+		else if (ret > 0) {
 			mm->locked_vm -= ret;
 			ret = 0;
 		} else
 			ret = __mlock_posix_error_return(ret); /* translate if needed */
 	} else {
+		/*
+		 * TODO:  for unlocking, pages will already be resident, so
+		 * we don't need to wait for allocations/reclaim/pagein, ...
+		 * However, unlocking a very large region can still take a
+		 * while.  Should we downgrade the semaphore for both lock
+		 * AND unlock ?
+		 */
 		__mlock_vma_pages_range(vma, start, end, 0);
 	}
 
@@ -490,7 +537,7 @@ static int do_mlock(unsigned long start, size_t len, int on)
 	return error;
 }
 
-SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
+asmlinkage long sys_mlock(unsigned long start, size_t len)
 {
 	unsigned long locked;
 	unsigned long lock_limit;
@@ -498,8 +545,6 @@ SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
 
 	if (!can_do_mlock())
 		return -EPERM;
-
-	lru_add_drain_all();	/* flush pagevec */
 
 	down_write(&current->mm->mmap_sem);
 	len = PAGE_ALIGN(len + (start & ~PAGE_MASK));
@@ -518,7 +563,7 @@ SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
 	return error;
 }
 
-SYSCALL_DEFINE2(munlock, unsigned long, start, size_t, len)
+asmlinkage long sys_munlock(unsigned long start, size_t len)
 {
 	int ret;
 
@@ -555,7 +600,7 @@ out:
 	return 0;
 }
 
-SYSCALL_DEFINE1(mlockall, int, flags)
+asmlinkage long sys_mlockall(int flags)
 {
 	unsigned long lock_limit;
 	int ret = -EINVAL;
@@ -566,8 +611,6 @@ SYSCALL_DEFINE1(mlockall, int, flags)
 	ret = -EPERM;
 	if (!can_do_mlock())
 		goto out;
-
-	lru_add_drain_all();	/* flush pagevec */
 
 	down_write(&current->mm->mmap_sem);
 
@@ -583,7 +626,7 @@ out:
 	return ret;
 }
 
-SYSCALL_DEFINE0(munlockall)
+asmlinkage long sys_munlockall(void)
 {
 	int ret;
 
@@ -627,49 +670,4 @@ void user_shm_unlock(size_t size, struct user_struct *user)
 	user->locked_shm -= (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	spin_unlock(&shmlock_user_lock);
 	free_uid(user);
-}
-
-void *alloc_locked_buffer(size_t size)
-{
-	unsigned long rlim, vm, pgsz;
-	void *buffer = NULL;
-
-	pgsz = PAGE_ALIGN(size) >> PAGE_SHIFT;
-
-	down_write(&current->mm->mmap_sem);
-
-	rlim = current->signal->rlim[RLIMIT_AS].rlim_cur >> PAGE_SHIFT;
-	vm   = current->mm->total_vm + pgsz;
-	if (rlim < vm)
-		goto out;
-
-	rlim = current->signal->rlim[RLIMIT_MEMLOCK].rlim_cur >> PAGE_SHIFT;
-	vm   = current->mm->locked_vm + pgsz;
-	if (rlim < vm)
-		goto out;
-
-	buffer = kzalloc(size, GFP_KERNEL);
-	if (!buffer)
-		goto out;
-
-	current->mm->total_vm  += pgsz;
-	current->mm->locked_vm += pgsz;
-
- out:
-	up_write(&current->mm->mmap_sem);
-	return buffer;
-}
-
-void free_locked_buffer(void *buffer, size_t size)
-{
-	unsigned long pgsz = PAGE_ALIGN(size) >> PAGE_SHIFT;
-
-	down_write(&current->mm->mmap_sem);
-
-	current->mm->total_vm  -= pgsz;
-	current->mm->locked_vm -= pgsz;
-
-	up_write(&current->mm->mmap_sem);
-
-	kfree(buffer);
 }

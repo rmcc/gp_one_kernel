@@ -12,8 +12,6 @@
 #include <asm/proto.h>
 #include <asm/reboot_fixups.h>
 #include <asm/reboot.h>
-#include <asm/pci_x86.h>
-#include <asm/virtext.h>
 
 #ifdef CONFIG_X86_32
 # include <linux/dmi.h>
@@ -24,6 +22,7 @@
 #endif
 
 #include <mach_ipi.h>
+
 
 /*
  * Power off function, if any
@@ -40,16 +39,7 @@ int reboot_force;
 static int reboot_cpu = -1;
 #endif
 
-/* This is set if we need to go through the 'emergency' path.
- * When machine_emergency_restart() is called, we may be on
- * an inconsistent state and won't be able to do a clean cleanup
- */
-static int reboot_emergency;
-
-/* This is set by the PCI code if either type 1 or type 2 PCI is detected */
-bool port_cf9_safe = false;
-
-/* reboot=b[ios] | s[mp] | t[riple] | k[bd] | e[fi] [, [w]arm | [c]old] | p[ci]
+/* reboot=b[ios] | s[mp] | t[riple] | k[bd] | e[fi] [, [w]arm | [c]old]
    warm   Don't set the cold reboot flag
    cold   Set the cold reboot flag
    bios   Reboot by jumping through the BIOS (only for X86_32)
@@ -58,7 +48,6 @@ bool port_cf9_safe = false;
    kbd    Use the keyboard controller. cold reset (default)
    acpi   Use the RESET_REG in the FADT
    efi    Use efi reset_system runtime service
-   pci    Use the so-called "PCI reset register", CF9
    force  Avoid anything that could hang.
  */
 static int __init reboot_setup(char *str)
@@ -93,7 +82,6 @@ static int __init reboot_setup(char *str)
 		case 'k':
 		case 't':
 		case 'e':
-		case 'p':
 			reboot_type = *str;
 			break;
 
@@ -182,15 +170,6 @@ static struct dmi_system_id __initdata reboot_dmi_table[] = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 745"),
 			DMI_MATCH(DMI_BOARD_NAME, "0KW626"),
-		},
-	},
-	{   /* Handle problems with rebooting on Dell Optiplex 330 with 0KP561 */
-		.callback = set_bios_reboot,
-		.ident = "Dell OptiPlex 330",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 330"),
-			DMI_MATCH(DMI_BOARD_NAME, "0KP561"),
 		},
 	},
 	{	/* Handle problems with rebooting on Dell 2400's */
@@ -375,48 +354,6 @@ static inline void kb_wait(void)
 	}
 }
 
-static void vmxoff_nmi(int cpu, struct die_args *args)
-{
-	cpu_emergency_vmxoff();
-}
-
-/* Use NMIs as IPIs to tell all CPUs to disable virtualization
- */
-static void emergency_vmx_disable_all(void)
-{
-	/* Just make sure we won't change CPUs while doing this */
-	local_irq_disable();
-
-	/* We need to disable VMX on all CPUs before rebooting, otherwise
-	 * we risk hanging up the machine, because the CPU ignore INIT
-	 * signals when VMX is enabled.
-	 *
-	 * We can't take any locks and we may be on an inconsistent
-	 * state, so we use NMIs as IPIs to tell the other CPUs to disable
-	 * VMX and halt.
-	 *
-	 * For safety, we will avoid running the nmi_shootdown_cpus()
-	 * stuff unnecessarily, but we don't have a way to check
-	 * if other CPUs have VMX enabled. So we will call it only if the
-	 * CPU we are running on has VMX enabled.
-	 *
-	 * We will miss cases where VMX is not enabled on all CPUs. This
-	 * shouldn't do much harm because KVM always enable VMX on all
-	 * CPUs anyway. But we can miss it on the small window where KVM
-	 * is still enabling VMX.
-	 */
-	if (cpu_has_vmx() && cpu_vmx_enabled()) {
-		/* Disable VMX on this CPU.
-		 */
-		cpu_vmxoff();
-
-		/* Halt and disable VMX on the other CPUs */
-		nmi_shootdown_cpus(vmxoff_nmi);
-
-	}
-}
-
-
 void __attribute__((weak)) mach_reboot_fixups(void)
 {
 }
@@ -424,9 +361,6 @@ void __attribute__((weak)) mach_reboot_fixups(void)
 static void native_machine_emergency_restart(void)
 {
 	int i;
-
-	if (reboot_emergency)
-		emergency_vmx_disable_all();
 
 	/* Tell the BIOS if we want cold or warm reboot */
 	*((unsigned short *)__va(0x472)) = reboot_mode;
@@ -464,27 +398,12 @@ static void native_machine_emergency_restart(void)
 			reboot_type = BOOT_KBD;
 			break;
 
+
 		case BOOT_EFI:
 			if (efi_enabled)
-				efi.reset_system(reboot_mode ?
-						 EFI_RESET_WARM :
-						 EFI_RESET_COLD,
+				efi.reset_system(reboot_mode ? EFI_RESET_WARM : EFI_RESET_COLD,
 						 EFI_SUCCESS, 0, NULL);
-			reboot_type = BOOT_KBD;
-			break;
 
-		case BOOT_CF9:
-			port_cf9_safe = true;
-			/* fall through */
-
-		case BOOT_CF9_COND:
-			if (port_cf9_safe) {
-				u8 cf9 = inb(0xcf9) & ~6;
-				outb(cf9|2, 0xcf9); /* Request hard reset */
-				udelay(50);
-				outb(cf9|6, 0xcf9); /* Actually do the reset */
-				udelay(50);
-			}
 			reboot_type = BOOT_KBD;
 			break;
 		}
@@ -501,7 +420,7 @@ void native_machine_shutdown(void)
 
 #ifdef CONFIG_X86_32
 	/* See if there has been given a command line override */
-	if ((reboot_cpu != -1) && (reboot_cpu < nr_cpu_ids) &&
+	if ((reboot_cpu != -1) && (reboot_cpu < NR_CPUS) &&
 		cpu_online(reboot_cpu))
 		reboot_cpu_id = reboot_cpu;
 #endif
@@ -511,7 +430,7 @@ void native_machine_shutdown(void)
 		reboot_cpu_id = smp_processor_id();
 
 	/* Make certain I only run on the appropriate processor */
-	set_cpus_allowed_ptr(current, cpumask_of(reboot_cpu_id));
+	set_cpus_allowed_ptr(current, &cpumask_of_cpu(reboot_cpu_id));
 
 	/* O.K Now that I'm on the appropriate processor,
 	 * stop all of the others.
@@ -534,28 +453,17 @@ void native_machine_shutdown(void)
 #endif
 }
 
-static void __machine_emergency_restart(int emergency)
-{
-	reboot_emergency = emergency;
-	machine_ops.emergency_restart();
-}
-
 static void native_machine_restart(char *__unused)
 {
 	printk("machine restart\n");
 
 	if (!reboot_force)
 		machine_shutdown();
-	__machine_emergency_restart(0);
+	machine_emergency_restart();
 }
 
 static void native_machine_halt(void)
 {
-	/* stop other cpus and apics */
-	machine_shutdown();
-
-	/* stop this cpu */
-	stop_this_cpu(NULL);
 }
 
 static void native_machine_power_off(void)
@@ -590,7 +498,7 @@ void machine_shutdown(void)
 
 void machine_emergency_restart(void)
 {
-	__machine_emergency_restart(1);
+	machine_ops.emergency_restart();
 }
 
 void machine_restart(char *cmd)
@@ -650,7 +558,10 @@ static int crash_nmi_callback(struct notifier_block *self,
 
 static void smp_send_nmi_allbutself(void)
 {
-	send_IPI_allbutself(NMI_VECTOR);
+	cpumask_t mask = cpu_online_map;
+	cpu_clear(safe_smp_processor_id(), mask);
+	if (!cpus_empty(mask))
+		send_IPI_mask(mask, NMI_VECTOR);
 }
 
 static struct notifier_block crash_nmi_nb = {

@@ -205,7 +205,6 @@ static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 
 	tmp = hcd->irq;
 
-	ehci_shutdown(hcd);
 	usb_remove_hcd(hcd);
 
 	ps3_system_bus_set_driver_data(dev, NULL);

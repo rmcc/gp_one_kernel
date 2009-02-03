@@ -99,7 +99,7 @@ long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			goto flags_out;
 		}
 		if (IS_SYNC(inode))
-			ext4_handle_sync(handle);
+			handle->h_sync = 1;
 		err = ext4_reserve_inode_write(handle, inode, &iloc);
 		if (err)
 			goto flags_err;

@@ -68,8 +68,8 @@ static int tcf_nat_init(struct nlattr *nla, struct nlattr *est,
 	if (!pc) {
 		pc = tcf_hash_create(parm->index, est, a, sizeof(*p), bind,
 				     &nat_idx_gen, &nat_hash_info);
-		if (IS_ERR(pc))
-		    return PTR_ERR(pc);
+		if (unlikely(!pc))
+			return -ENOMEM;
 		p = to_tcf_nat(pc);
 		ret = ACT_P_CREATED;
 	} else {

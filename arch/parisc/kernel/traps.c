@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/console.h>
+#include <linux/kallsyms.h>
 #include <linux/bug.h>
 
 #include <asm/assembly.h>
@@ -50,7 +51,7 @@
 DEFINE_SPINLOCK(pa_dbit_lock);
 #endif
 
-static void parisc_show_stack(struct task_struct *task, unsigned long *sp,
+void parisc_show_stack(struct task_struct *t, unsigned long *sp,
 	struct pt_regs *regs);
 
 static int printbinary(char *buf, unsigned long x, int nbits)
@@ -120,19 +121,18 @@ static void print_fr(char *level, struct pt_regs *regs)
 
 void show_regs(struct pt_regs *regs)
 {
-	int i, user;
+	int i;
 	char *level;
 	unsigned long cr30, cr31;
 
-	user = user_mode(regs);
-	level = user ? KERN_DEBUG : KERN_CRIT;
+	level = user_mode(regs) ? KERN_DEBUG : KERN_CRIT;
 
 	print_gr(level, regs);
 
 	for (i = 0; i < 8; i += 4)
 		PRINTREGS(level, regs->sr, "sr", RFMT, i);
 
-	if (user)
+	if (user_mode(regs))
 		print_fr(level, regs);
 
 	cr30 = mfctl(30);
@@ -145,18 +145,14 @@ void show_regs(struct pt_regs *regs)
 	printk("%s CPU: %8d   CR30: " RFMT " CR31: " RFMT "\n",
 	       level, current_thread_info()->cpu, cr30, cr31);
 	printk("%s ORIG_R28: " RFMT "\n", level, regs->orig_r28);
+	printk(level);
+	print_symbol(" IAOQ[0]: %s\n", regs->iaoq[0]);
+	printk(level);
+	print_symbol(" IAOQ[1]: %s\n", regs->iaoq[1]);
+	printk(level);
+	print_symbol(" RP(r2): %s\n", regs->gr[2]);
 
-	if (user) {
-		printk("%s IAOQ[0]: " RFMT "\n", level, regs->iaoq[0]);
-		printk("%s IAOQ[1]: " RFMT "\n", level, regs->iaoq[1]);
-		printk("%s RP(r2): " RFMT "\n", level, regs->gr[2]);
-	} else {
-		printk("%s IAOQ[0]: %pS\n", level, (void *) regs->iaoq[0]);
-		printk("%s IAOQ[1]: %pS\n", level, (void *) regs->iaoq[1]);
-		printk("%s RP(r2): %pS\n", level, (void *) regs->gr[2]);
-
-		parisc_show_stack(current, NULL, regs);
-	}
+	parisc_show_stack(current, NULL, regs);
 }
 
 
@@ -177,15 +173,20 @@ static void do_show_stack(struct unwind_frame_info *info)
 			break;
 
 		if (__kernel_text_address(info->ip)) {
-			printk(KERN_CRIT " [<" RFMT ">] %pS\n",
-				info->ip, (void *) info->ip);
+			printk("%s [<" RFMT ">] ", (i&0x3)==1 ? KERN_CRIT : "", info->ip);
+#ifdef CONFIG_KALLSYMS
+			print_symbol("%s\n", info->ip);
+#else
+			if ((i & 0x03) == 0)
+				printk("\n");
+#endif
 			i++;
 		}
 	}
-	printk(KERN_CRIT "\n");
+	printk("\n");
 }
 
-static void parisc_show_stack(struct task_struct *task, unsigned long *sp,
+void parisc_show_stack(struct task_struct *task, unsigned long *sp,
 	struct pt_regs *regs)
 {
 	struct unwind_frame_info info;
@@ -745,10 +746,6 @@ void handle_interruption(int code, struct pt_regs *regs)
 		/* Fall Through */
 	case 27: 
 		/* Data memory protection ID trap */
-		if (code == 27 && !user_mode(regs) &&
-			fixup_exception(regs))
-			return;
-
 		die_if_kernel("Protection id trap", regs, code);
 		si.si_code = SEGV_MAPERR;
 		si.si_signo = SIGSEGV;
@@ -825,8 +822,8 @@ void handle_interruption(int code, struct pt_regs *regs)
 
 int __init check_ivt(void *iva)
 {
-	extern u32 os_hpmc_size;
 	extern const u32 os_hpmc[];
+	extern const u32 os_hpmc_end[];
 
 	int i;
 	u32 check = 0;
@@ -843,7 +840,8 @@ int __init check_ivt(void *iva)
 	    *ivap++ = 0;
 
 	/* Compute Checksum for HPMC handler */
-	length = os_hpmc_size;
+
+	length = os_hpmc_end - os_hpmc;
 	ivap[7] = length;
 
 	hpmcp = (u32 *)os_hpmc;

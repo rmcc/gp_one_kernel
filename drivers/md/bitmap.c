@@ -208,30 +208,26 @@ static void bitmap_checkfree(struct bitmap *bitmap, unsigned long page)
  */
 
 /* IO operations when bitmap is stored near all superblocks */
-static struct page *read_sb_page(mddev_t *mddev, long offset,
-				 struct page *page,
-				 unsigned long index, int size)
+static struct page *read_sb_page(mddev_t *mddev, long offset, unsigned long index)
 {
 	/* choose a good rdev and read the page from there */
 
 	mdk_rdev_t *rdev;
+	struct list_head *tmp;
+	struct page *page = alloc_page(GFP_KERNEL);
 	sector_t target;
 
 	if (!page)
-		page = alloc_page(GFP_KERNEL);
-	if (!page)
 		return ERR_PTR(-ENOMEM);
 
-	list_for_each_entry(rdev, &mddev->disks, same_set) {
+	rdev_for_each(rdev, tmp, mddev) {
 		if (! test_bit(In_sync, &rdev->flags)
 		    || test_bit(Faulty, &rdev->flags))
 			continue;
 
 		target = rdev->sb_start + offset + index * (PAGE_SIZE/512);
 
-		if (sync_page_io(rdev->bdev, target,
-				 roundup(size, bdev_hardsect_size(rdev->bdev)),
-				 page, READ)) {
+		if (sync_page_io(rdev->bdev, target, PAGE_SIZE, page, READ)) {
 			page->index = index;
 			attach_page_buffers(page, NULL); /* so that free_buffer will
 							  * quietly no-op */
@@ -548,9 +544,7 @@ static int bitmap_read_sb(struct bitmap *bitmap)
 
 		bitmap->sb_page = read_page(bitmap->file, 0, bitmap, bytes);
 	} else {
-		bitmap->sb_page = read_sb_page(bitmap->mddev, bitmap->offset,
-					       NULL,
-					       0, sizeof(bitmap_super_t));
+		bitmap->sb_page = read_sb_page(bitmap->mddev, bitmap->offset, 0);
 	}
 	if (IS_ERR(bitmap->sb_page)) {
 		err = PTR_ERR(bitmap->sb_page);
@@ -963,18 +957,11 @@ static int bitmap_init_from_disk(struct bitmap *bitmap, sector_t start)
 				 */
 				page = bitmap->sb_page;
 				offset = sizeof(bitmap_super_t);
-				if (!file)
-					read_sb_page(bitmap->mddev,
-						     bitmap->offset,
-						     page,
-						     index, count);
 			} else if (file) {
 				page = read_page(file, index, bitmap, count);
 				offset = 0;
 			} else {
-				page = read_sb_page(bitmap->mddev, bitmap->offset,
-						    NULL,
-						    index, count);
+				page = read_sb_page(bitmap->mddev, bitmap->offset, index);
 				offset = 0;
 			}
 			if (IS_ERR(page)) { /* read error */

@@ -111,7 +111,6 @@ EXPORT_SYMBOL(dma_alloc_coherent);
 void dma_free_noncoherent(struct device *dev, size_t size, void *vaddr,
 	dma_addr_t dma_handle)
 {
-	plat_unmap_dma_mem(dev, dma_handle);
 	free_pages((unsigned long) vaddr, get_order(size));
 }
 
@@ -121,8 +120,6 @@ void dma_free_coherent(struct device *dev, size_t size, void *vaddr,
 	dma_addr_t dma_handle)
 {
 	unsigned long addr = (unsigned long) vaddr;
-
-	plat_unmap_dma_mem(dev, dma_handle);
 
 	if (!plat_device_is_coherent(dev))
 		addr = CAC_ADDR(addr);
@@ -173,7 +170,7 @@ void dma_unmap_single(struct device *dev, dma_addr_t dma_addr, size_t size,
 		__dma_sync(dma_addr_to_virt(dma_addr), size,
 		           direction);
 
-	plat_unmap_dma_mem(dev, dma_addr);
+	plat_unmap_dma_mem(dma_addr);
 }
 
 EXPORT_SYMBOL(dma_unmap_single);
@@ -229,7 +226,7 @@ void dma_unmap_page(struct device *dev, dma_addr_t dma_address, size_t size,
 		dma_cache_wback_inv(addr, size);
 	}
 
-	plat_unmap_dma_mem(dev, dma_address);
+	plat_unmap_dma_mem(dma_address);
 }
 
 EXPORT_SYMBOL(dma_unmap_page);
@@ -249,7 +246,7 @@ void dma_unmap_sg(struct device *dev, struct scatterlist *sg, int nhwentries,
 			if (addr)
 				__dma_sync(addr, sg->length, direction);
 		}
-		plat_unmap_dma_mem(dev, sg->dma_address);
+		plat_unmap_dma_mem(sg->dma_address);
 	}
 }
 
@@ -275,7 +272,6 @@ void dma_sync_single_for_device(struct device *dev, dma_addr_t dma_handle,
 {
 	BUG_ON(direction == DMA_NONE);
 
-	plat_extra_sync_for_device(dev);
 	if (!plat_device_is_coherent(dev)) {
 		unsigned long addr;
 
@@ -306,7 +302,6 @@ void dma_sync_single_range_for_device(struct device *dev, dma_addr_t dma_handle,
 {
 	BUG_ON(direction == DMA_NONE);
 
-	plat_extra_sync_for_device(dev);
 	if (!plat_device_is_coherent(dev)) {
 		unsigned long addr;
 
@@ -353,14 +348,22 @@ EXPORT_SYMBOL(dma_sync_sg_for_device);
 
 int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
-	return plat_dma_mapping_error(dev, dma_addr);
+	return 0;
 }
 
 EXPORT_SYMBOL(dma_mapping_error);
 
 int dma_supported(struct device *dev, u64 mask)
 {
-	return plat_dma_supported(dev, mask);
+	/*
+	 * we fall back to GFP_DMA when the mask isn't all 1s,
+	 * so we can't guarantee allocations that must be
+	 * within a tighter range than GFP_DMA..
+	 */
+	if (mask < DMA_BIT_MASK(24))
+		return 0;
+
+	return 1;
 }
 
 EXPORT_SYMBOL(dma_supported);
@@ -377,7 +380,6 @@ void dma_cache_sync(struct device *dev, void *vaddr, size_t size,
 {
 	BUG_ON(direction == DMA_NONE);
 
-	plat_extra_sync_for_device(dev);
 	if (!plat_device_is_coherent(dev))
 		__dma_sync((unsigned long)vaddr, size, direction);
 }

@@ -23,6 +23,7 @@
 #else
 #include <asm/macintosh.h>
 #include <asm/macints.h>
+#include <asm/machw.h>
 #include <asm/mac_via.h>
 #endif
 #include <asm/io.h>

@@ -34,6 +34,7 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <mach/hardware.h>
+#include <asm/dma.h>
 #include <mach/dma-mx1-mx2.h>
 
 #define DMA_DCR     0x00		/* Control Register */
@@ -113,7 +114,7 @@ struct imx_dma_channel {
 	void (*err_handler) (int, void *, int errcode);
 	void (*prog_handler) (int, void *, struct scatterlist *);
 	void *data;
-	unsigned int  dma_mode;
+	dmamode_t  dma_mode;
 	struct scatterlist *sg;
 	unsigned int resbytes;
 	int dma_num;
@@ -192,7 +193,7 @@ static inline int imx_dma_sg_next(int channel, struct scatterlist *sg)
 int
 imx_dma_setup_single(int channel, dma_addr_t dma_address,
 		     unsigned int dma_length, unsigned int dev_addr,
-		     unsigned int dmamode)
+		     dmamode_t dmamode)
 {
 	struct imx_dma_channel *imxdma = &imx_dma_channels[channel];
 
@@ -287,7 +288,7 @@ int
 imx_dma_setup_sg(int channel,
 		 struct scatterlist *sg, unsigned int sgcount,
 		 unsigned int dma_length, unsigned int dev_addr,
-		 unsigned int dmamode)
+		 dmamode_t dmamode)
 {
 	struct imx_dma_channel *imxdma = &imx_dma_channels[channel];
 
@@ -511,7 +512,6 @@ void imx_dma_disable(int channel)
 }
 EXPORT_SYMBOL(imx_dma_disable);
 
-#ifdef CONFIG_ARCH_MX2
 static void imx_dma_watchdog(unsigned long chno)
 {
 	struct imx_dma_channel *imxdma = &imx_dma_channels[chno];
@@ -523,7 +523,6 @@ static void imx_dma_watchdog(unsigned long chno)
 	if (imxdma->err_handler)
 		imxdma->err_handler(chno, imxdma->data, IMX_DMA_ERR_TIMEOUT);
 }
-#endif
 
 static irqreturn_t dma_err_handler(int irq, void *dev_id)
 {
@@ -676,7 +675,7 @@ int imx_dma_request(int channel, const char *name)
 {
 	struct imx_dma_channel *imxdma = &imx_dma_channels[channel];
 	unsigned long flags;
-	int ret = 0;
+	int ret;
 
 	/* basic sanity checks */
 	if (!name)
@@ -698,7 +697,6 @@ int imx_dma_request(int channel, const char *name)
 	ret = request_irq(MXC_INT_DMACH0 + channel, dma_irq_handler, 0, "DMA",
 			NULL);
 	if (ret) {
-		local_irq_restore(flags);
 		printk(KERN_CRIT "Can't register IRQ %d for DMA channel %d\n",
 				MXC_INT_DMACH0 + channel, channel);
 		return ret;
@@ -715,7 +713,7 @@ int imx_dma_request(int channel, const char *name)
 	imxdma->sg = NULL;
 
 	local_irq_restore(flags);
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(imx_dma_request);
 

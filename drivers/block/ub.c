@@ -1546,6 +1546,8 @@ static void ub_top_sense_done(struct ub_dev *sc, struct ub_scsi_cmd *scmd)
 
 /*
  * Reset management
+ * XXX Move usb_reset_device to khubd. Hogging kevent is not a good thing.
+ * XXX Make usb_sync_reset asynchronous.
  */
 
 static void ub_reset_enter(struct ub_dev *sc, int try)
@@ -1579,7 +1581,7 @@ static void ub_reset_task(struct work_struct *work)
 	struct ub_dev *sc = container_of(work, struct ub_dev, reset_work);
 	unsigned long flags;
 	struct ub_lun *lun;
-	int rc;
+	int lkr, rc;
 
 	if (!sc->reset) {
 		printk(KERN_WARNING "%s: Running reset unrequested\n",
@@ -1597,11 +1599,10 @@ static void ub_reset_task(struct work_struct *work)
 	} else if (sc->dev->actconfig->desc.bNumInterfaces != 1) {
 		;
 	} else {
-		rc = usb_lock_device_for_reset(sc->dev, sc->intf);
-		if (rc < 0) {
+		if ((lkr = usb_lock_device_for_reset(sc->dev, sc->intf)) < 0) {
 			printk(KERN_NOTICE
 			    "%s: usb_lock_device_for_reset failed (%d)\n",
-			    sc->name, rc);
+			    sc->name, lkr);
 		} else {
 			rc = usb_reset_device(sc->dev);
 			if (rc < 0) {
@@ -1609,7 +1610,9 @@ static void ub_reset_task(struct work_struct *work)
 				    "usb_lock_device_for_reset failed (%d)\n",
 				    sc->name, rc);
 			}
-			usb_unlock_device(sc->dev);
+
+			if (lkr)
+				usb_unlock_device(sc->dev);
 		}
 	}
 
@@ -1627,22 +1630,6 @@ static void ub_reset_task(struct work_struct *work)
 	}
 	wake_up(&sc->reset_wait);
 	spin_unlock_irqrestore(sc->lock, flags);
-}
-
-/*
- * XXX Reset brackets are too much hassle to implement, so just stub them
- * in order to prevent forced unbinding (which deadlocks solid when our
- * ->disconnect method waits for the reset to complete and this kills keventd).
- *
- * XXX Tell Alan to move usb_unlock_device inside of usb_reset_device,
- * or else the post_reset is invoked, and restats I/O on a locked device.
- */
-static int ub_pre_reset(struct usb_interface *iface) {
-	return 0;
-}
-
-static int ub_post_reset(struct usb_interface *iface) {
-	return 0;
 }
 
 /*
@@ -2459,8 +2446,6 @@ static struct usb_driver ub_driver = {
 	.probe =	ub_probe,
 	.disconnect =	ub_disconnect,
 	.id_table =	ub_usb_ids,
-	.pre_reset =	ub_pre_reset,
-	.post_reset =	ub_post_reset,
 };
 
 static int __init ub_init(void)

@@ -23,6 +23,7 @@
 /*
  * nfsd version
  */
+#define NFSD_VERSION		"0.5"
 #define NFSD_SUPPORTED_MINOR_VERSION	0
 
 /*

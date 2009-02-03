@@ -597,9 +597,7 @@ static int spidev_probe(struct spi_device *spi)
 	}
 	mutex_unlock(&device_list_lock);
 
-	if (status == 0)
-		spi_set_drvdata(spi, spidev);
-	else
+	if (status != 0)
 		kfree(spidev);
 
 	return status;

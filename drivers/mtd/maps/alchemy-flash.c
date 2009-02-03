@@ -111,7 +111,7 @@ static struct mtd_partition alchemy_partitions[] = {
 
 static struct mtd_info *mymtd;
 
-static int __init alchemy_mtd_init(void)
+int __init alchemy_mtd_init(void)
 {
 	struct mtd_partition *parts;
 	int nb_parts = 0;

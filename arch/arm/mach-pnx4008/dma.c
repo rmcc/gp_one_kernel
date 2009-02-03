@@ -25,8 +25,9 @@
 
 #include <asm/system.h>
 #include <mach/hardware.h>
-#include <mach/dma.h>
+#include <asm/dma.h>
 #include <asm/dma-mapping.h>
+#include <asm/mach/dma.h>
 #include <mach/clock.h>
 
 static struct dma_channel {

@@ -33,6 +33,7 @@
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
 
+#define ACPI_BUTTON_COMPONENT		0x00080000
 #define ACPI_BUTTON_CLASS		"button"
 #define ACPI_BUTTON_FILE_INFO		"info"
 #define ACPI_BUTTON_FILE_STATE		"state"
@@ -478,7 +479,7 @@ static int acpi_button_add(struct acpi_device *device)
 				  device->wakeup.gpe_number,
 				  ACPI_GPE_TYPE_WAKE_RUN);
 		acpi_enable_gpe(device->wakeup.gpe_device,
-				device->wakeup.gpe_number);
+				device->wakeup.gpe_number, ACPI_NOT_ISR);
 		device->wakeup.state.enabled = 1;
 	}
 

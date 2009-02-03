@@ -226,7 +226,7 @@ static inline struct fw_ohci *fw_ohci(struct fw_card *card)
 #define CONTEXT_DEAD	0x0800
 #define CONTEXT_ACTIVE	0x0400
 
-#define OHCI1394_MAX_AT_REQ_RETRIES	0xf
+#define OHCI1394_MAX_AT_REQ_RETRIES	0x2
 #define OHCI1394_MAX_AT_RESP_RETRIES	0x2
 #define OHCI1394_MAX_PHYS_RESP_RETRIES	0x8
 
@@ -896,11 +896,11 @@ static void context_stop(struct context *ctx)
 	for (i = 0; i < 10; i++) {
 		reg = reg_read(ctx->ohci, CONTROL_SET(ctx->regs));
 		if ((reg & CONTEXT_ACTIVE) == 0)
-			return;
+			break;
 
+		fw_notify("context_stop: still active (0x%08x)\n", reg);
 		mdelay(1);
 	}
-	fw_error("Error: DMA context still active (0x%08x)\n", reg);
 }
 
 struct driver_data {
@@ -974,7 +974,6 @@ at_context_queue_packet(struct context *ctx, struct fw_packet *packet)
 			packet->ack = RCODE_SEND_ERROR;
 			return -1;
 		}
-		packet->payload_bus = payload_bus;
 
 		d[2].req_count    = cpu_to_le16(packet->payload_length);
 		d[2].data_address = cpu_to_le32(payload_bus);
@@ -1026,6 +1025,7 @@ static int handle_at_packet(struct context *context,
 	struct driver_data *driver_data;
 	struct fw_packet *packet;
 	struct fw_ohci *ohci = context->ohci;
+	dma_addr_t payload_bus;
 	int evt;
 
 	if (last->transfer_status == 0)
@@ -1038,8 +1038,9 @@ static int handle_at_packet(struct context *context,
 		/* This packet was cancelled, just continue. */
 		return 1;
 
-	if (packet->payload_bus)
-		dma_unmap_single(ohci->card.device, packet->payload_bus,
+	payload_bus = le32_to_cpu(last->data_address);
+	if (payload_bus != 0)
+		dma_unmap_single(ohci->card.device, payload_bus,
 				 packet->payload_length, DMA_TO_DEVICE);
 
 	evt = le16_to_cpu(last->transfer_status) & 0x1f;
@@ -1695,10 +1696,6 @@ static int ohci_cancel_packet(struct fw_card *card, struct fw_packet *packet)
 
 	if (packet->ack != 0)
 		goto out;
-
-	if (packet->payload_bus)
-		dma_unmap_single(ohci->card.device, packet->payload_bus,
-				 packet->payload_length, DMA_TO_DEVICE);
 
 	log_ar_at_event('T', packet->speed, packet->header, 0x20);
 	driver_data->packet = NULL;

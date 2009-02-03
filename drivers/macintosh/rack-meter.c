@@ -288,7 +288,7 @@ static void __devexit rackmeter_stop_cpu_sniffer(struct rackmeter *rm)
 	cancel_rearming_delayed_work(&rm->cpu[1].sniffer);
 }
 
-static int __devinit rackmeter_setup(struct rackmeter *rm)
+static int rackmeter_setup(struct rackmeter *rm)
 {
 	pr_debug("rackmeter: setting up i2s..\n");
 	rackmeter_setup_i2s(rm);
@@ -582,12 +582,12 @@ static struct of_device_id rackmeter_match[] = {
 	{ }
 };
 
-static struct macio_driver rackmeter_driver = {
+static struct macio_driver rackmeter_drv = {
 	.name = "rackmeter",
 	.owner = THIS_MODULE,
 	.match_table = rackmeter_match,
 	.probe = rackmeter_probe,
-	.remove = __devexit_p(rackmeter_remove),
+	.remove = rackmeter_remove,
 	.shutdown = rackmeter_shutdown,
 };
 
@@ -596,14 +596,14 @@ static int __init rackmeter_init(void)
 {
 	pr_debug("rackmeter_init()\n");
 
-	return macio_register_driver(&rackmeter_driver);
+	return macio_register_driver(&rackmeter_drv);
 }
 
 static void __exit rackmeter_exit(void)
 {
 	pr_debug("rackmeter_exit()\n");
 
-	macio_unregister_driver(&rackmeter_driver);
+	macio_unregister_driver(&rackmeter_drv);
 }
 
 module_init(rackmeter_init);

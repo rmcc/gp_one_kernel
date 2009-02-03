@@ -44,15 +44,13 @@
 #include <linux/list.h>
 #include <linux/sysdev.h>
 
+#include <asm/xen/hypervisor.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 #include <asm/tlb.h>
 
-#include <asm/xen/hypervisor.h>
-#include <asm/xen/hypercall.h>
-#include <xen/interface/xen.h>
 #include <xen/interface/memory.h>
 #include <xen/xenbus.h>
 #include <xen/features.h>
@@ -124,7 +122,14 @@ static struct timer_list balloon_timer;
 static void scrub_page(struct page *page)
 {
 #ifdef CONFIG_XEN_SCRUB_PAGES
-	clear_highpage(page);
+	if (PageHighMem(page)) {
+		void *v = kmap(page);
+		clear_page(v);
+		kunmap(v);
+	} else {
+		void *v = page_address(page);
+		clear_page(v);
+	}
 #endif
 }
 
@@ -298,14 +303,6 @@ static int decrease_reservation(unsigned long nr_pages)
 		frame_list[i] = pfn_to_mfn(pfn);
 
 		scrub_page(page);
-
-		if (!PageHighMem(page)) {
-			ret = HYPERVISOR_update_va_mapping(
-				(unsigned long)__va(pfn << PAGE_SHIFT),
-				__pte_ma(0), 0);
-			BUG_ON(ret);
-                }
-
 	}
 
 	/* Ensure that ballooned highmem pages don't have kmaps. */
@@ -498,7 +495,7 @@ static ssize_t store_target_kb(struct sys_device *dev,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	target_bytes = simple_strtoull(buf, &endchar, 0) * 1024;
+	target_bytes = memparse(buf, &endchar);
 
 	balloon_set_new_target(target_bytes >> PAGE_SHIFT);
 
@@ -508,39 +505,8 @@ static ssize_t store_target_kb(struct sys_device *dev,
 static SYSDEV_ATTR(target_kb, S_IRUGO | S_IWUSR,
 		   show_target_kb, store_target_kb);
 
-
-static ssize_t show_target(struct sys_device *dev, struct sysdev_attribute *attr,
-			      char *buf)
-{
-	return sprintf(buf, "%llu\n",
-		       (u64)balloon_stats.target_pages << PAGE_SHIFT);
-}
-
-static ssize_t store_target(struct sys_device *dev,
-			    struct sysdev_attribute *attr,
-			    const char *buf,
-			    size_t count)
-{
-	char *endchar;
-	unsigned long long target_bytes;
-
-	if (!capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	target_bytes = memparse(buf, &endchar);
-
-	balloon_set_new_target(target_bytes >> PAGE_SHIFT);
-
-	return count;
-}
-
-static SYSDEV_ATTR(target, S_IRUGO | S_IWUSR,
-		   show_target, store_target);
-
-
 static struct sysdev_attribute *balloon_attrs[] = {
 	&attr_target_kb,
-	&attr_target,
 };
 
 static struct attribute *balloon_info_attrs[] = {

@@ -6,9 +6,6 @@
  * Copyright IBM Corporation 2002, 2008
  */
 
-#define KMSG_COMPONENT "zfcp"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include "zfcp_ext.h"
 
 /**
@@ -106,6 +103,10 @@ static int zfcp_ccw_set_online(struct ccw_device *ccw_device)
 	if (retval)
 		goto out;
 
+	retval = zfcp_adapter_scsi_register(adapter);
+	if (retval)
+		goto out_scsi_register;
+
 	/* initialize request counter */
 	BUG_ON(!zfcp_reqlist_isempty(adapter));
 	adapter->req_no = 0;
@@ -115,10 +116,10 @@ static int zfcp_ccw_set_online(struct ccw_device *ccw_device)
 	zfcp_erp_adapter_reopen(adapter, ZFCP_STATUS_COMMON_ERP_FAILED, 85,
 				NULL);
 	zfcp_erp_wait(adapter);
-	up(&zfcp_data.config_sema);
-	flush_work(&adapter->scan_work);
-	return 0;
+	goto out;
 
+ out_scsi_register:
+	zfcp_erp_thread_kill(adapter);
  out:
 	up(&zfcp_data.config_sema);
 	return retval;

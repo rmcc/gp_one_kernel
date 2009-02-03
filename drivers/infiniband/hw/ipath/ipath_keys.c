@@ -132,7 +132,6 @@ int ipath_lkey_ok(struct ipath_qp *qp, struct ipath_sge *isge,
 	 * (see ipath_get_dma_mr and ipath_dma.c).
 	 */
 	if (sge->lkey == 0) {
-		/* always a kernel port, no locking needed */
 		struct ipath_pd *pd = to_ipd(qp->ibqp.pd);
 
 		if (pd->user) {
@@ -212,7 +211,6 @@ int ipath_rkey_ok(struct ipath_qp *qp, struct ipath_sge_state *ss,
 	 * (see ipath_get_dma_mr and ipath_dma.c).
 	 */
 	if (rkey == 0) {
-		/* always a kernel port, no locking needed */
 		struct ipath_pd *pd = to_ipd(qp->ibqp.pd);
 
 		if (pd->user) {

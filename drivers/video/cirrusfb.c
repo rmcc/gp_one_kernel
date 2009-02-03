@@ -2462,7 +2462,8 @@ static int __init cirrusfb_init(void)
 
 #ifndef MODULE
 static int __init cirrusfb_setup(char *options) {
-	char *this_opt;
+	char *this_opt, s[32];
+	int i;
 
 	DPRINTK("ENTER\n");
 

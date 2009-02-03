@@ -3,7 +3,7 @@
  *
  *	(C) Copyright 1996 Linus Torvalds
  *
- *	Address space accounting code	<alan@lxorguk.ukuu.org.uk>
+ *	Address space accounting code	<alan@redhat.com>
  *	(C) Copyright 2002 Red Hat Inc, All Rights Reserved
  */
 
@@ -420,9 +420,9 @@ out_nc:
 	return ret;
 }
 
-SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
-		unsigned long, new_len, unsigned long, flags,
-		unsigned long, new_addr)
+asmlinkage unsigned long sys_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr)
 {
 	unsigned long ret;
 

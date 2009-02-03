@@ -87,9 +87,7 @@ SECTIONS
 	/* The dummy segment contents for the bug workaround mentioned above
 	   near PHDRS.  */
 	.dummy : AT(ADDR(.dummy) - LOAD_OFFSET) {
-		LONG(0)
-		LONG(0)
-		LONG(0)
+		LONG(0xf177)
 	} :kernel :dummy
 
 /*
@@ -152,12 +150,6 @@ SECTIONS
 		__start___ftr_fixup = .;
 		*(__ftr_fixup)
 		__stop___ftr_fixup = .;
-	}
-	. = ALIGN(8);
-	__mmu_ftr_fixup : AT(ADDR(__mmu_ftr_fixup) - LOAD_OFFSET) {
-		__start___mmu_ftr_fixup = .;
-		*(__mmu_ftr_fixup)
-		__stop___mmu_ftr_fixup = .;
 	}
 	. = ALIGN(8);
 	__lwsync_fixup : AT(ADDR(__lwsync_fixup) - LOAD_OFFSET) {

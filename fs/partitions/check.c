@@ -334,7 +334,6 @@ void delete_partition(struct gendisk *disk, int partno)
 
 	blk_free_devt(part_devt(part));
 	rcu_assign_pointer(ptbl->part[partno], NULL);
-	rcu_assign_pointer(ptbl->last_lookup, NULL);
 	kobject_put(part->holder_dir);
 	device_del(part_to_dev(part));
 
@@ -349,8 +348,8 @@ static ssize_t whole_disk_show(struct device *dev,
 static DEVICE_ATTR(whole_disk, S_IRUSR | S_IRGRP | S_IROTH,
 		   whole_disk_show, NULL);
 
-struct hd_struct *add_partition(struct gendisk *disk, int partno,
-				sector_t start, sector_t len, int flags)
+int add_partition(struct gendisk *disk, int partno,
+		  sector_t start, sector_t len, int flags)
 {
 	struct hd_struct *p;
 	dev_t devt = MKDEV(0, 0);
@@ -362,15 +361,15 @@ struct hd_struct *add_partition(struct gendisk *disk, int partno,
 
 	err = disk_expand_part_tbl(disk, partno);
 	if (err)
-		return ERR_PTR(err);
+		return err;
 	ptbl = disk->part_tbl;
 
 	if (ptbl->part[partno])
-		return ERR_PTR(-EBUSY);
+		return -EBUSY;
 
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
-		return ERR_PTR(-EBUSY);
+		return -ENOMEM;
 
 	if (!init_part_stats(p)) {
 		err = -ENOMEM;
@@ -385,9 +384,9 @@ struct hd_struct *add_partition(struct gendisk *disk, int partno,
 
 	dname = dev_name(ddev);
 	if (isdigit(dname[strlen(dname) - 1]))
-		dev_set_name(pdev, "%sp%d", dname, partno);
+		snprintf(pdev->bus_id, BUS_ID_SIZE, "%sp%d", dname, partno);
 	else
-		dev_set_name(pdev, "%s%d", dname, partno);
+		snprintf(pdev->bus_id, BUS_ID_SIZE, "%s%d", dname, partno);
 
 	device_initialize(pdev);
 	pdev->class = &block_class;
@@ -396,7 +395,7 @@ struct hd_struct *add_partition(struct gendisk *disk, int partno,
 
 	err = blk_alloc_devt(p, &devt);
 	if (err)
-		goto out_free_stats;
+		goto out_free;
 	pdev->devt = devt;
 
 	/* delay uevent until 'holders' subdir is created */
@@ -425,20 +424,18 @@ struct hd_struct *add_partition(struct gendisk *disk, int partno,
 	if (!ddev->uevent_suppress)
 		kobject_uevent(&pdev->kobj, KOBJ_ADD);
 
-	return p;
+	return 0;
 
-out_free_stats:
-	free_part_stats(p);
 out_free:
 	kfree(p);
-	return ERR_PTR(err);
+	return err;
 out_del:
 	kobject_put(p->holder_dir);
 	device_del(pdev);
 out_put:
 	put_device(pdev);
 	blk_free_devt(devt);
-	return ERR_PTR(err);
+	return err;
 }
 
 /* Not exported, helper to add_disk(). */
@@ -448,11 +445,16 @@ void register_disk(struct gendisk *disk)
 	struct block_device *bdev;
 	struct disk_part_iter piter;
 	struct hd_struct *part;
+	char *s;
 	int err;
 
 	ddev->parent = disk->driverfs_dev;
 
-	dev_set_name(ddev, disk->disk_name);
+	strlcpy(ddev->bus_id, disk->disk_name, BUS_ID_SIZE);
+	/* ewww... some of these buggers have / in the name... */
+	s = strchr(ddev->bus_id, '/');
+	if (s)
+		*s = '!';
 
 	/* delay uevents, until we scanned partition table */
 	ddev->uevent_suppress = 1;
@@ -564,16 +566,15 @@ int rescan_partitions(struct gendisk *disk, struct block_device *bdev)
 			       disk->disk_name, p, (unsigned long long) size);
 			size = get_capacity(disk) - from;
 		}
-		part = add_partition(disk, p, from, size,
-				     state->parts[p].flags);
-		if (IS_ERR(part)) {
-			printk(KERN_ERR " %s: p%d could not be added: %ld\n",
-			       disk->disk_name, p, -PTR_ERR(part));
+		res = add_partition(disk, p, from, size, state->parts[p].flags);
+		if (res) {
+			printk(KERN_ERR " %s: p%d could not be added: %d\n",
+				disk->disk_name, p, -res);
 			continue;
 		}
 #ifdef CONFIG_BLK_DEV_MD
 		if (state->parts[p].flags & ADDPART_FLAG_RAID)
-			md_autodetect_dev(part_to_dev(part)->devt);
+			md_autodetect_dev(bdev->bd_dev+p);
 #endif
 	}
 	kfree(state);

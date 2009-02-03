@@ -15,8 +15,15 @@
 #include <linux/sched.h>
 #include "smack.h"
 
-struct smack_known smack_known_huh = {
+struct smack_known smack_known_unset = {
 	.smk_next	= NULL,
+	.smk_known	= "UNSET",
+	.smk_secid	= 1,
+	.smk_cipso	= NULL,
+};
+
+struct smack_known smack_known_huh = {
+	.smk_next	= &smack_known_unset,
 	.smk_known	= "?",
 	.smk_secid	= 2,
 	.smk_cipso	= NULL,
@@ -50,14 +57,7 @@ struct smack_known smack_known_invalid = {
 	.smk_cipso	= NULL,
 };
 
-struct smack_known smack_known_web = {
-	.smk_next	= &smack_known_invalid,
-	.smk_known	= "@",
-	.smk_secid	= 7,
-	.smk_cipso	= NULL,
-};
-
-struct smack_known *smack_known = &smack_known_web;
+struct smack_known *smack_known = &smack_known_invalid;
 
 /*
  * The initial value needs to be bigger than any of the
@@ -98,16 +98,6 @@ int smk_access(char *subject_label, char *object_label, int request)
 	if (subject_label == smack_known_star.smk_known ||
 	    strcmp(subject_label, smack_known_star.smk_known) == 0)
 		return -EACCES;
-	/*
-	 * An internet object can be accessed by any subject.
-	 * Tasks cannot be assigned the internet label.
-	 * An internet subject can access any object.
-	 */
-	if (object_label == smack_known_web.smk_known ||
-	    subject_label == smack_known_web.smk_known ||
-	    strcmp(object_label, smack_known_web.smk_known) == 0 ||
-	    strcmp(subject_label, smack_known_web.smk_known) == 0)
-		return 0;
 	/*
 	 * A star object can be accessed by any subject.
 	 */
@@ -174,7 +164,7 @@ int smk_curacc(char *obj_label, u32 mode)
 {
 	int rc;
 
-	rc = smk_access(current_security(), obj_label, mode);
+	rc = smk_access(current->security, obj_label, mode);
 	if (rc == 0)
 		return 0;
 
@@ -183,7 +173,7 @@ int smk_curacc(char *obj_label, u32 mode)
 	 * only one that gets privilege and current does not
 	 * have that label.
 	 */
-	if (smack_onlycap != NULL && smack_onlycap != current->cred->security)
+	if (smack_onlycap != NULL && smack_onlycap != current->security)
 		return rc;
 
 	if (capable(CAP_MAC_OVERRIDE))

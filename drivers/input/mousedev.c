@@ -878,7 +878,8 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 	mousedev->handle.handler = handler;
 	mousedev->handle.private = mousedev;
 
-	dev_set_name(&mousedev->dev, mousedev->name);
+	strlcpy(mousedev->dev.bus_id, mousedev->name,
+		sizeof(mousedev->dev.bus_id));
 	mousedev->dev.class = &input_class;
 	if (dev)
 		mousedev->dev.parent = &dev->dev;

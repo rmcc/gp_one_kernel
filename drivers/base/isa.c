@@ -11,7 +11,7 @@
 #include <linux/isa.h>
 
 static struct device isa_bus = {
-	.init_name	= "isa"
+	.bus_id		= "isa"
 };
 
 struct isa_dev {
@@ -135,8 +135,9 @@ int isa_register_driver(struct isa_driver *isa_driver, unsigned int ndev)
 		isa_dev->dev.parent	= &isa_bus;
 		isa_dev->dev.bus	= &isa_bus_type;
 
-		dev_set_name(&isa_dev->dev, "%s.%u",
-			     isa_driver->driver.name, id);
+		snprintf(isa_dev->dev.bus_id, BUS_ID_SIZE, "%s.%u",
+				isa_driver->driver.name, id);
+
 		isa_dev->dev.platform_data	= isa_driver;
 		isa_dev->dev.release		= isa_dev_release;
 		isa_dev->id			= id;

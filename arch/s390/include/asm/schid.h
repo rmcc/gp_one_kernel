@@ -1,8 +1,6 @@
 #ifndef ASM_SCHID_H
 #define ASM_SCHID_H
 
-#include <linux/types.h>
-
 struct subchannel_id {
 	__u32 cssid : 8;
 	__u32 : 4;

@@ -333,7 +333,7 @@ static int match_name(struct device *dev, void *data)
 {
 	const char *name = data;
 
-	return sysfs_streq(name, dev_name(dev));
+	return sysfs_streq(name, dev->bus_id);
 }
 
 /**
@@ -461,12 +461,12 @@ int bus_add_device(struct device *dev)
 	int error = 0;
 
 	if (bus) {
-		pr_debug("bus: '%s': add device %s\n", bus->name, dev_name(dev));
+		pr_debug("bus: '%s': add device %s\n", bus->name, dev->bus_id);
 		error = device_add_attrs(bus, dev);
 		if (error)
 			goto out_put;
 		error = sysfs_create_link(&bus->p->devices_kset->kobj,
-						&dev->kobj, dev_name(dev));
+						&dev->kobj, dev->bus_id);
 		if (error)
 			goto out_id;
 		error = sysfs_create_link(&dev->kobj,
@@ -482,7 +482,7 @@ int bus_add_device(struct device *dev)
 out_deprecated:
 	sysfs_remove_link(&dev->kobj, "subsystem");
 out_subsys:
-	sysfs_remove_link(&bus->p->devices_kset->kobj, dev_name(dev));
+	sysfs_remove_link(&bus->p->devices_kset->kobj, dev->bus_id);
 out_id:
 	device_remove_attrs(bus, dev);
 out_put:
@@ -526,13 +526,13 @@ void bus_remove_device(struct device *dev)
 		sysfs_remove_link(&dev->kobj, "subsystem");
 		remove_deprecated_bus_links(dev);
 		sysfs_remove_link(&dev->bus->p->devices_kset->kobj,
-				  dev_name(dev));
+				  dev->bus_id);
 		device_remove_attrs(dev->bus, dev);
 		if (klist_node_attached(&dev->knode_bus))
 			klist_del(&dev->knode_bus);
 
 		pr_debug("bus: '%s': remove device %s\n",
-			 dev->bus->name, dev_name(dev));
+			 dev->bus->name, dev->bus_id);
 		device_release_driver(dev);
 		bus_put(dev->bus);
 	}

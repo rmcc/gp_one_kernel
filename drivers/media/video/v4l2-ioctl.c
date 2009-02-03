@@ -8,7 +8,7 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  *
- * Authors:	Alan Cox, <alan@lxorguk.ukuu.org.uk> (version 1)
+ * Authors:	Alan Cox, <alan@redhat.com> (version 1)
  *              Mauro Carvalho Chehab <mchehab@infradead.org> (version 2)
  */
 
@@ -266,7 +266,7 @@ static const char *v4l2_ioctls[] = {
 	[_IOC_NR(VIDIOC_DBG_S_REGISTER)]   = "VIDIOC_DBG_S_REGISTER",
 	[_IOC_NR(VIDIOC_DBG_G_REGISTER)]   = "VIDIOC_DBG_G_REGISTER",
 
-	[_IOC_NR(VIDIOC_DBG_G_CHIP_IDENT)] = "VIDIOC_DBG_G_CHIP_IDENT",
+	[_IOC_NR(VIDIOC_G_CHIP_IDENT)]     = "VIDIOC_G_CHIP_IDENT",
 	[_IOC_NR(VIDIOC_S_HW_FREQ_SEEK)]   = "VIDIOC_S_HW_FREQ_SEEK",
 #endif
 };
@@ -392,14 +392,16 @@ video_fix_command(unsigned int cmd)
 /*
  * Obsolete usercopy function - Should be removed soon
  */
-long
-video_usercopy(struct file *file, unsigned int cmd, unsigned long arg,
-		v4l2_kioctl func)
+int
+video_usercopy(struct inode *inode, struct file *file,
+	       unsigned int cmd, unsigned long arg,
+	       int (*func)(struct inode *inode, struct file *file,
+			   unsigned int cmd, void *arg))
 {
 	char	sbuf[128];
 	void    *mbuf = NULL;
 	void	*parg = NULL;
-	long	err  = -EINVAL;
+	int	err  = -EINVAL;
 	int     is_ext_ctrl;
 	size_t  ctrls_size = 0;
 	void __user *user_ptr = NULL;
@@ -456,7 +458,7 @@ video_usercopy(struct file *file, unsigned int cmd, unsigned long arg,
 	}
 
 	/* call driver */
-	err = func(file, cmd, parg);
+	err = func(inode, file, cmd, parg);
 	if (err == -ENOIOCTLCMD)
 		err = -EINVAL;
 	if (is_ext_ctrl) {
@@ -623,13 +625,13 @@ static int check_fmt(const struct v4l2_ioctl_ops *ops, enum v4l2_buf_type type)
 	return -EINVAL;
 }
 
-static long __video_do_ioctl(struct file *file,
+static int __video_do_ioctl(struct file *file,
 		unsigned int cmd, void *arg)
 {
 	struct video_device *vfd = video_devdata(file);
 	const struct v4l2_ioctl_ops *ops = vfd->ioctl_ops;
 	void *fh = file->private_data;
-	long ret = -EINVAL;
+	int ret = -EINVAL;
 
 	if ((vfd->debug & V4L2_DEBUG_IOCTL) &&
 				!(vfd->debug & V4L2_DEBUG_IOCTL_ARG)) {
@@ -1479,15 +1481,9 @@ static long __video_do_ioctl(struct file *file,
 	case VIDIOC_G_CROP:
 	{
 		struct v4l2_crop *p = arg;
-		__u32 type;
 
 		if (!ops->vidioc_g_crop)
 			break;
-
-		type = p->type;
-		memset(p, 0, sizeof(*p));
-		p->type = type;
-
 		dbgarg(cmd, "type=%s\n", prt_names(p->type, v4l2_type_names));
 		ret = ops->vidioc_g_crop(file, fh, p);
 		if (!ret)
@@ -1508,16 +1504,10 @@ static long __video_do_ioctl(struct file *file,
 	case VIDIOC_CROPCAP:
 	{
 		struct v4l2_cropcap *p = arg;
-		__u32 type;
 
 		/*FIXME: Should also show v4l2_fract pixelaspect */
 		if (!ops->vidioc_cropcap)
 			break;
-
-		type = p->type;
-		memset(p, 0, sizeof(*p));
-		p->type = type;
-
 		dbgarg(cmd, "type=%s\n", prt_names(p->type, v4l2_type_names));
 		ret = ops->vidioc_cropcap(file, fh, p);
 		if (!ret) {
@@ -1532,9 +1522,6 @@ static long __video_do_ioctl(struct file *file,
 
 		if (!ops->vidioc_g_jpegcomp)
 			break;
-
-		memset(p, 0, sizeof(*p));
-
 		ret = ops->vidioc_g_jpegcomp(file, fh, p);
 		if (!ret)
 			dbgarg(cmd, "quality=%d, APPn=%d, "
@@ -1720,7 +1707,7 @@ static long __video_do_ioctl(struct file *file,
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 	case VIDIOC_DBG_G_REGISTER:
 	{
-		struct v4l2_dbg_register *p = arg;
+		struct v4l2_register *p = arg;
 
 		if (!capable(CAP_SYS_ADMIN))
 			ret = -EPERM;
@@ -1730,7 +1717,7 @@ static long __video_do_ioctl(struct file *file,
 	}
 	case VIDIOC_DBG_S_REGISTER:
 	{
-		struct v4l2_dbg_register *p = arg;
+		struct v4l2_register *p = arg;
 
 		if (!capable(CAP_SYS_ADMIN))
 			ret = -EPERM;
@@ -1739,9 +1726,9 @@ static long __video_do_ioctl(struct file *file,
 		break;
 	}
 #endif
-	case VIDIOC_DBG_G_CHIP_IDENT:
+	case VIDIOC_G_CHIP_IDENT:
 	{
-		struct v4l2_dbg_chip_ident *p = arg;
+		struct v4l2_chip_ident *p = arg;
 
 		if (!ops->vidioc_g_chip_ident)
 			break;
@@ -1750,11 +1737,6 @@ static long __video_do_ioctl(struct file *file,
 			dbgarg(cmd, "chip_ident=%u, revision=0x%x\n", p->ident, p->revision);
 		break;
 	}
-	case VIDIOC_G_CHIP_IDENT_OLD:
-		printk(KERN_ERR "VIDIOC_G_CHIP_IDENT has been deprecated and will disappear in 2.6.30.\n");
-		printk(KERN_ERR "It is a debugging ioctl and must not be used in applications!\n");
-		return -EINVAL;
-
 	case VIDIOC_S_HW_FREQ_SEEK:
 	{
 		struct v4l2_hw_freq_seek *p = arg;
@@ -1767,77 +1749,6 @@ static long __video_do_ioctl(struct file *file,
 		ret = ops->vidioc_s_hw_freq_seek(file, fh, p);
 		break;
 	}
-	case VIDIOC_ENUM_FRAMESIZES:
-	{
-		struct v4l2_frmsizeenum *p = arg;
-
-		if (!ops->vidioc_enum_framesizes)
-			break;
-
-		memset(p, 0, sizeof(*p));
-
-		ret = ops->vidioc_enum_framesizes(file, fh, p);
-		dbgarg(cmd,
-			"index=%d, pixelformat=%d, type=%d ",
-			p->index, p->pixel_format, p->type);
-		switch (p->type) {
-		case V4L2_FRMSIZE_TYPE_DISCRETE:
-			dbgarg2("width = %d, height=%d\n",
-				p->discrete.width, p->discrete.height);
-			break;
-		case V4L2_FRMSIZE_TYPE_STEPWISE:
-			dbgarg2("min %dx%d, max %dx%d, step %dx%d\n",
-				p->stepwise.min_width,  p->stepwise.min_height,
-				p->stepwise.step_width, p->stepwise.step_height,
-				p->stepwise.max_width,  p->stepwise.max_height);
-			break;
-		case V4L2_FRMSIZE_TYPE_CONTINUOUS:
-			dbgarg2("continuous\n");
-			break;
-		default:
-			dbgarg2("- Unknown type!\n");
-		}
-
-		break;
-	}
-	case VIDIOC_ENUM_FRAMEINTERVALS:
-	{
-		struct v4l2_frmivalenum *p = arg;
-
-		if (!ops->vidioc_enum_frameintervals)
-			break;
-
-		memset(p, 0, sizeof(*p));
-
-		ret = ops->vidioc_enum_frameintervals(file, fh, p);
-		dbgarg(cmd,
-			"index=%d, pixelformat=%d, width=%d, height=%d, type=%d ",
-			p->index, p->pixel_format,
-			p->width, p->height, p->type);
-		switch (p->type) {
-		case V4L2_FRMIVAL_TYPE_DISCRETE:
-			dbgarg2("fps=%d/%d\n",
-				p->discrete.numerator,
-				p->discrete.denominator);
-			break;
-		case V4L2_FRMIVAL_TYPE_STEPWISE:
-			dbgarg2("min=%d/%d, max=%d/%d, step=%d/%d\n",
-				p->stepwise.min.numerator,
-				p->stepwise.min.denominator,
-				p->stepwise.max.numerator,
-				p->stepwise.max.denominator,
-				p->stepwise.step.numerator,
-				p->stepwise.step.denominator);
-			break;
-		case V4L2_FRMIVAL_TYPE_CONTINUOUS:
-			dbgarg2("continuous\n");
-			break;
-		default:
-			dbgarg2("- Unknown type!\n");
-		}
-		break;
-	}
-
 	default:
 	{
 		if (!ops->vidioc_default)
@@ -1850,20 +1761,20 @@ static long __video_do_ioctl(struct file *file,
 	if (vfd->debug & V4L2_DEBUG_IOCTL_ARG) {
 		if (ret < 0) {
 			v4l_print_ioctl(vfd->name, cmd);
-			printk(KERN_CONT " error %ld\n", ret);
+			printk(KERN_CONT " error %d\n", ret);
 		}
 	}
 
 	return ret;
 }
 
-long video_ioctl2(struct file *file,
+int __video_ioctl2(struct file *file,
 	       unsigned int cmd, unsigned long arg)
 {
 	char	sbuf[128];
 	void    *mbuf = NULL;
 	void	*parg = NULL;
-	long	err  = -EINVAL;
+	int	err  = -EINVAL;
 	int     is_ext_ctrl;
 	size_t  ctrls_size = 0;
 	void __user *user_ptr = NULL;
@@ -1948,5 +1859,12 @@ out_ext_ctrl:
 out:
 	kfree(mbuf);
 	return err;
+}
+EXPORT_SYMBOL(__video_ioctl2);
+
+int video_ioctl2(struct inode *inode, struct file *file,
+	       unsigned int cmd, unsigned long arg)
+{
+	return __video_ioctl2(file, cmd, arg);
 }
 EXPORT_SYMBOL(video_ioctl2);

@@ -22,12 +22,12 @@ static struct clocksource clocksource_mips = {
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
-int __init init_r4k_clocksource(void)
+int __init init_mips_clocksource(void)
 {
 	if (!cpu_has_counter || !mips_hpt_frequency)
 		return -ENXIO;
 
-	/* Calculate a somewhat reasonable rating value */
+	/* Calclate a somewhat reasonable rating value */
 	clocksource_mips.rating = 200 + mips_hpt_frequency / 10000000;
 
 	clocksource_set_clock(&clocksource_mips, mips_hpt_frequency);

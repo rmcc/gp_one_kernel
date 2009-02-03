@@ -59,8 +59,7 @@ static int finish_range(handle_t *handle, struct inode *inode,
 	/*
 	 * Make sure the credit we accumalated is not really high
 	 */
-	if (needed && ext4_handle_has_enough_credits(handle,
-						EXT4_RESERVE_TRANS_BLOCKS)) {
+	if (needed && handle->h_buffer_credits >= EXT4_RESERVE_TRANS_BLOCKS) {
 		retval = ext4_journal_restart(handle, needed);
 		if (retval)
 			goto err_out;
@@ -230,7 +229,7 @@ static int extend_credit_for_blkdel(handle_t *handle, struct inode *inode)
 {
 	int retval = 0, needed;
 
-	if (ext4_handle_has_enough_credits(handle, EXT4_RESERVE_TRANS_BLOCKS+1))
+	if (handle->h_buffer_credits > EXT4_RESERVE_TRANS_BLOCKS)
 		return 0;
 	/*
 	 * We are freeing a blocks. During this we touch
@@ -459,13 +458,13 @@ int ext4_ext_migrate(struct inode *inode)
 	struct list_blocks_struct lb;
 	unsigned long max_entries;
 
-	/*
-	 * If the filesystem does not support extents, or the inode
-	 * already is extent-based, error out.
-	 */
-	if (!EXT4_HAS_INCOMPAT_FEATURE(inode->i_sb,
-				       EXT4_FEATURE_INCOMPAT_EXTENTS) ||
-	    (EXT4_I(inode)->i_flags & EXT4_EXTENTS_FL))
+	if (!test_opt(inode->i_sb, EXTENTS))
+		/*
+		 * if mounted with noextents we don't allow the migrate
+		 */
+		return -EINVAL;
+
+	if ((EXT4_I(inode)->i_flags & EXT4_EXTENTS_FL))
 		return -EINVAL;
 
 	if (S_ISLNK(inode->i_mode) && inode->i_blocks == 0)

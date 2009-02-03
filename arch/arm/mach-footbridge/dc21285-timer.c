@@ -7,7 +7,6 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/spinlock.h>
 
 #include <asm/irq.h>
 

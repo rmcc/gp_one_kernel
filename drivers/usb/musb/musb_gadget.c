@@ -874,10 +874,10 @@ static int musb_gadget_enable(struct usb_ep *ep,
 		status = -EBUSY;
 		goto fail;
 	}
-	musb_ep->type = usb_endpoint_type(desc);
+	musb_ep->type = desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
 
 	/* check direction and (later) maxpacket size against endpoint */
-	if (usb_endpoint_num(desc) != epnum)
+	if ((desc->bEndpointAddress & USB_ENDPOINT_NUMBER_MASK) != epnum)
 		goto fail;
 
 	/* REVISIT this rules out high bandwidth periodic transfers */
@@ -890,7 +890,7 @@ static int musb_gadget_enable(struct usb_ep *ep,
 	 * packet size (or fail), set the mode, clear the fifo
 	 */
 	musb_ep_select(mbase, epnum);
-	if (usb_endpoint_dir_in(desc)) {
+	if (desc->bEndpointAddress & USB_DIR_IN) {
 		u16 int_txe = musb_readw(mbase, MUSB_INTRTXE);
 
 		if (hw_ep->is_shared_fifo)
@@ -1633,7 +1633,7 @@ int __init musb_gadget_setup(struct musb *musb)
 	musb->g.speed = USB_SPEED_UNKNOWN;
 
 	/* this "gadget" abstracts/virtualizes the controller */
-	dev_set_name(&musb->g.dev, "gadget");
+	strcpy(musb->g.dev.bus_id, "gadget");
 	musb->g.dev.parent = musb->controller;
 	musb->g.dev.dma_mask = musb->controller->dma_mask;
 	musb->g.dev.release = musb_gadget_release;

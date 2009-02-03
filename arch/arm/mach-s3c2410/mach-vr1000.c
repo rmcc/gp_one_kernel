@@ -47,7 +47,6 @@
 #include <plat/clock.h>
 #include <plat/devs.h>
 #include <plat/cpu.h>
-#include <plat/iic.h>
 
 #include "usb-simtec.h"
 #include "nor-simtec.h"
@@ -335,7 +334,7 @@ static struct platform_device *vr1000_devices[] __initdata = {
 	&s3c_device_usb,
 	&s3c_device_lcd,
 	&s3c_device_wdt,
-	&s3c_device_i2c0,
+	&s3c_device_i2c,
 	&s3c_device_adc,
 	&serial_device,
 	&vr1000_dm9k0,
@@ -385,7 +384,6 @@ static void __init vr1000_map_io(void)
 
 static void __init vr1000_init(void)
 {
-	s3c_i2c0_set_platdata(NULL);
 	platform_add_devices(vr1000_devices, ARRAY_SIZE(vr1000_devices));
 
 	i2c_register_board_info(0, vr1000_i2c_devs,

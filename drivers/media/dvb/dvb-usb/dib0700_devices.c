@@ -38,7 +38,6 @@ static struct mt2060_config bristol_mt2060_config[2] = {
 	}
 };
 
-
 static struct dibx000_agc_config bristol_dib3000p_mt2060_agc_config = {
 	.band_caps = BAND_VHF | BAND_UHF,
 	.setup     = (1 << 8) | (5 << 5) | (0 << 4) | (0 << 3) | (0 << 2) | (2 << 0),
@@ -446,19 +445,14 @@ static int stk7700ph_tuner_attach(struct dvb_usb_adapter *adap)
 		== NULL ? -ENODEV : 0;
 }
 
-#define DEFAULT_RC_INTERVAL 50
+#define DEFAULT_RC_INTERVAL 150
 
 static u8 rc_request[] = { REQUEST_POLL_RC, 0 };
 
 /* Number of keypresses to ignore before start repeating */
-#define RC_REPEAT_DELAY 6
-#define RC_REPEAT_DELAY_V1_20 10
+#define RC_REPEAT_DELAY 2
 
-
-
-/* Used by firmware versions < 1.20 (deprecated) */
-static int dib0700_rc_query_legacy(struct dvb_usb_device *d, u32 *event,
-				   int *state)
+static int dib0700_rc_query(struct dvb_usb_device *d, u32 *event, int *state)
 {
 	u8 key[4];
 	int i;
@@ -533,137 +527,6 @@ static int dib0700_rc_query_legacy(struct dvb_usb_device *d, u32 *event,
 	err("Unknown remote controller key: %2X %2X %2X %2X", (int) key[3-2], (int) key[3-3], (int) key[3-1], (int) key[3]);
 	d->last_event = 0;
 	return 0;
-}
-
-/* This is the structure of the RC response packet starting in firmware 1.20 */
-struct dib0700_rc_response {
-	u8 report_id;
-	u8 data_state;
-	u8 system_msb;
-	u8 system_lsb;
-	u8 data;
-	u8 not_data;
-};
-
-/* This supports the new IR response format for firmware v1.20 */
-static int dib0700_rc_query_v1_20(struct dvb_usb_device *d, u32 *event,
-				  int *state)
-{
-	struct dvb_usb_rc_key *keymap = d->props.rc_key_map;
-	struct dib0700_state *st = d->priv;
-	struct dib0700_rc_response poll_reply;
-	u8 buf[6];
-	int i;
-	int status;
-	int actlen;
-	int found = 0;
-
-	/* Set initial results in case we exit the function early */
-	*event = 0;
-	*state = REMOTE_NO_KEY_PRESSED;
-
-	/* Firmware v1.20 provides RC data via bulk endpoint 1 */
-	status = usb_bulk_msg(d->udev, usb_rcvbulkpipe(d->udev, 1), buf,
-			      sizeof(buf), &actlen, 50);
-	if (status < 0) {
-		/* No data available (meaning no key press) */
-		return 0;
-	}
-
-	if (actlen != sizeof(buf)) {
-		/* We didn't get back the 6 byte message we expected */
-		err("Unexpected RC response size [%d]", actlen);
-		return -1;
-	}
-
-	poll_reply.report_id  = buf[0];
-	poll_reply.data_state = buf[1];
-	poll_reply.system_msb = buf[2];
-	poll_reply.system_lsb = buf[3];
-	poll_reply.data       = buf[4];
-	poll_reply.not_data   = buf[5];
-
-	/*
-	info("rid=%02x ds=%02x sm=%02x sl=%02x d=%02x nd=%02x\n",
-	     poll_reply.report_id, poll_reply.data_state,
-	     poll_reply.system_msb, poll_reply.system_lsb,
-	     poll_reply.data, poll_reply.not_data);
-	*/
-
-	if ((poll_reply.data + poll_reply.not_data) != 0xff) {
-		/* Key failed integrity check */
-		err("key failed integrity check: %02x %02x %02x %02x",
-		    poll_reply.system_msb, poll_reply.system_lsb,
-		    poll_reply.data, poll_reply.not_data);
-		return -1;
-	}
-
-	/* Find the key in the map */
-	for (i = 0; i < d->props.rc_key_map_size; i++) {
-		if (keymap[i].custom == poll_reply.system_lsb &&
-		    keymap[i].data == poll_reply.data) {
-			*event = keymap[i].event;
-			found = 1;
-			break;
-		}
-	}
-
-	if (found == 0) {
-		err("Unknown remote controller key: %02x %02x %02x %02x",
-		    poll_reply.system_msb, poll_reply.system_lsb,
-		    poll_reply.data, poll_reply.not_data);
-		d->last_event = 0;
-		return 0;
-	}
-
-	if (poll_reply.data_state == 1) {
-		/* New key hit */
-		st->rc_counter = 0;
-		*event = keymap[i].event;
-		*state = REMOTE_KEY_PRESSED;
-		d->last_event = keymap[i].event;
-	} else if (poll_reply.data_state == 2) {
-		/* Key repeated */
-		st->rc_counter++;
-
-		/* prevents unwanted double hits */
-		if (st->rc_counter > RC_REPEAT_DELAY_V1_20) {
-			*event = d->last_event;
-			*state = REMOTE_KEY_PRESSED;
-			st->rc_counter = RC_REPEAT_DELAY_V1_20;
-		}
-	} else {
-		err("Unknown data state [%d]", poll_reply.data_state);
-	}
-
-	return 0;
-}
-
-static int dib0700_rc_query(struct dvb_usb_device *d, u32 *event, int *state)
-{
-	struct dib0700_state *st = d->priv;
-
-	/* Because some people may have improperly named firmware files,
-	   let's figure out whether to use the new firmware call or the legacy
-	   call based on the firmware version embedded in the file */
-	if (st->rc_func_version == 0) {
-		u32 hwver, romver, ramver, fwtype;
-		int ret = dib0700_get_version(d, &hwver, &romver, &ramver,
-					      &fwtype);
-		if (ret < 0) {
-			err("Could not determine version info");
-			return -1;
-		}
-		if (ramver < 0x10200)
-			st->rc_func_version = 1;
-		else
-			st->rc_func_version = 2;
-	}
-
-	if (st->rc_func_version == 2)
-		return dib0700_rc_query_v1_20(d, event, state);
-	else
-		return dib0700_rc_query_legacy(d, event, state);
 }
 
 static struct dvb_usb_rc_key dib0700_rc_keys[] = {
@@ -1393,9 +1256,6 @@ struct usb_device_id dib0700_usb_id_table[] = {
 	{ USB_DEVICE(USB_VID_ASUS,	USB_PID_ASUS_U3000H) },
 /* 40 */{ USB_DEVICE(USB_VID_PINNACLE,  USB_PID_PINNACLE_PCTV801E) },
 	{ USB_DEVICE(USB_VID_PINNACLE,  USB_PID_PINNACLE_PCTV801E_SE) },
-	{ USB_DEVICE(USB_VID_TERRATEC,	USB_PID_TERRATEC_CINERGY_T_EXPRESS) },
-	{ USB_DEVICE(USB_VID_TERRATEC,
-			USB_PID_TERRATEC_CINERGY_DT_XS_DIVERSITY_2) },
 	{ 0 }		/* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, dib0700_usb_id_table);
@@ -1540,8 +1400,7 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 			{   "DiBcom STK7700D reference design",
 				{ &dib0700_usb_id_table[14], NULL },
 				{ NULL },
-			},
-
+			}
 		},
 
 		.rc_interval      = DEFAULT_RC_INTERVAL,
@@ -1561,7 +1420,7 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 			},
 		},
 
-		.num_device_descs = 3,
+		.num_device_descs = 2,
 		.devices = {
 			{   "ASUS My Cinema U3000 Mini DVBT Tuner",
 				{ &dib0700_usb_id_table[23], NULL },
@@ -1569,10 +1428,6 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 			},
 			{   "Yuan EC372S",
 				{ &dib0700_usb_id_table[31], NULL },
-				{ NULL },
-			},
-			{   "Terratec Cinergy T Express",
-				{ &dib0700_usb_id_table[42], NULL },
 				{ NULL },
 			}
 		},
@@ -1661,7 +1516,7 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 			}
 		},
 
-		.num_device_descs = 5,
+		.num_device_descs = 4,
 		.devices = {
 			{   "DiBcom STK7070PD reference design",
 				{ &dib0700_usb_id_table[17], NULL },
@@ -1677,10 +1532,6 @@ struct dvb_usb_device_properties dib0700_devices[] = {
 			},
 			{   "Hauppauge Nova-TD-500 (84xxx)",
 				{ &dib0700_usb_id_table[36], NULL },
-				{ NULL },
-			},
-			{  "Terratec Cinergy DT USB XS Diversity",
-				{ &dib0700_usb_id_table[43], NULL },
 				{ NULL },
 			}
 		}

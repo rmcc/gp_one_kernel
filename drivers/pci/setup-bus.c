@@ -536,8 +536,9 @@ static void pci_bus_dump_res(struct pci_bus *bus)
                 if (!res)
                         continue;
 
-		dev_printk(KERN_DEBUG, &bus->dev, "resource %d %s %pR\n", i,
-			   (res->flags & IORESOURCE_IO) ? "io: " : "mem:", res);
+		printk(KERN_INFO "bus: %02x index %x %s: %pR\n",
+		       bus->number, i,
+		       (res->flags & IORESOURCE_IO) ? "io port" : "mmio", res);
         }
 }
 

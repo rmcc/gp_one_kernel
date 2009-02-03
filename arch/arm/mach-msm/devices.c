@@ -16,7 +16,6 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 
-#include <mach/irqs.h>
 #include <mach/msm_iomap.h>
 #include "devices.h"
 

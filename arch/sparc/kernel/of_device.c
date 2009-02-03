@@ -563,9 +563,9 @@ build_resources:
 	op->dev.parent = parent;
 	op->dev.bus = &of_platform_bus_type;
 	if (!parent)
-		dev_set_name(&op->dev, "root");
+		strcpy(op->dev.bus_id, "root");
 	else
-		dev_set_name(&op->dev, "%08x", dp->node);
+		sprintf(op->dev.bus_id, "%08x", dp->node);
 
 	if (of_device_register(op)) {
 		printk("%s: Could not register of device.\n",

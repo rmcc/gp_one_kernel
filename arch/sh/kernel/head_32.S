@@ -80,14 +80,8 @@ ENTRY(_stext)
 	mov.l	7f, r0
 	ldc	r0, r7_bank	! ... and initial thread_info
 #endif
-
-#ifndef CONFIG_SH_NO_BSS_INIT
-	/*
-	 * Don't clear BSS if running on slow platforms such as an RTL simulation,
-	 * remote memory via SHdebug link, etc.  For these the memory can be guaranteed
-	 * to be all zero on boot anyway.
-	 */
-				! Clear BSS area
+	
+	!			Clear BSS area
 #ifdef CONFIG_SMP	
 	mov.l	3f, r0
 	cmp/eq	#0, r0		! skip clear if set to zero
@@ -103,8 +97,6 @@ ENTRY(_stext)
 	 mov.l	r0,@-r2
 
 10:		
-#endif
-
 	!			Additional CPU initialization
 	mov.l	6f, r0
 	jsr	@r0

@@ -186,6 +186,12 @@ int pcmcia_register_socket(struct pcmcia_socket *socket)
 
 	spin_lock_init(&socket->lock);
 
+	if (socket->resource_ops->init) {
+		ret = socket->resource_ops->init(socket);
+		if (ret)
+			return (ret);
+	}
+
 	/* try to obtain a socket number [yes, it gets ugly if we
 	 * register more than 2^sizeof(unsigned int) pcmcia
 	 * sockets... but the socket number is deprecated
@@ -220,7 +226,7 @@ int pcmcia_register_socket(struct pcmcia_socket *socket)
 	/* set proper values in socket->dev */
 	dev_set_drvdata(&socket->dev, socket);
 	socket->dev.class = &pcmcia_socket_class;
-	dev_set_name(&socket->dev, "pcmcia_socket%u", socket->sock);
+	snprintf(socket->dev.bus_id, BUS_ID_SIZE, "pcmcia_socket%u", socket->sock);
 
 	/* base address = 0, map = 0 */
 	socket->cis_mem.flags = 0;
@@ -232,12 +238,6 @@ int pcmcia_register_socket(struct pcmcia_socket *socket)
 	init_completion(&socket->thread_done);
 	mutex_init(&socket->skt_mutex);
 	spin_lock_init(&socket->thread_lock);
-
-	if (socket->resource_ops->init) {
-		ret = socket->resource_ops->init(socket);
-		if (ret)
-			goto err;
-	}
 
 	tsk = kthread_run(pccardd, socket, "pccardd");
 	if (IS_ERR(tsk)) {

@@ -28,11 +28,11 @@
        } while (0)
 
 #define QLGE_VENDOR_ID    0x1077
-#define QLGE_DEVICE_ID    0x8012
+#define QLGE_DEVICE_ID1    0x8012
+#define QLGE_DEVICE_ID   0x8000
 
-#define MAX_CPUS 8
-#define MAX_TX_RINGS MAX_CPUS
-#define MAX_RX_RINGS ((MAX_CPUS * 2) + 1)
+#define MAX_RX_RINGS 128
+#define MAX_TX_RINGS 128
 
 #define NUM_TX_RING_ENTRIES	256
 #define NUM_RX_RING_ENTRIES	256
@@ -45,7 +45,6 @@
 #define MAX_SPLIT_SIZE 1023
 #define QLGE_SB_PAD 32
 
-#define MAX_CQ 128
 #define DFLT_COALESCE_WAIT 100	/* 100 usec wait for coalescing */
 #define MAX_INTER_FRAME_WAIT 10	/* 10 usec max interframe-wait for coalescing */
 #define DFLT_INTER_FRAME_WAIT (MAX_INTER_FRAME_WAIT/2)
@@ -787,12 +786,12 @@ struct mbox_params {
 
 struct flash_params {
 	u8 dev_id_str[4];
-	__le16 size;
-	__le16 csum;
-	__le16 ver;
-	__le16 sub_dev_id;
+	u16 size;
+	u16 csum;
+	u16 ver;
+	u16 sub_dev_id;
 	u8 mac_addr[6];
-	__le16 res;
+	u16 res;
 };
 
 
@@ -819,6 +818,15 @@ struct tx_doorbell_context {
 };
 
 /* DATA STRUCTURES SHARED WITH HARDWARE. */
+
+struct bq_element {
+	u32 addr_lo;
+#define BQ_END	0x00000001
+#define BQ_CONT	0x00000002
+#define BQ_MASK	0x00000003
+	u32 addr_hi;
+} __attribute((packed));
+
 struct tx_buf_desc {
 	__le64 addr;
 	__le32 len;
@@ -852,8 +860,8 @@ struct ob_mac_iocb_req {
 	__le16 frame_len;
 #define OB_MAC_IOCB_LEN_MASK 0x3ffff
 	__le16 reserved2;
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le32 reserved3;
 	__le16 vlan_tci;
 	__le16 reserved4;
@@ -872,8 +880,8 @@ struct ob_mac_iocb_rsp {
 	u8 flags2;		/* */
 	u8 flags3;		/* */
 #define OB_MAC_IOCB_RSP_B	0x80	/* */
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le32 reserved[13];
 } __attribute((packed));
 
@@ -895,8 +903,8 @@ struct ob_mac_tso_iocb_req {
 #define OB_MAC_TSO_IOCB_V	0x04
 	__le32 reserved1[2];
 	__le32 frame_len;
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le16 total_hdrs_len;
 	__le16 net_trans_offset;
 #define OB_MAC_TRANSPORT_HDR_SHIFT 6
@@ -917,8 +925,8 @@ struct ob_mac_tso_iocb_rsp {
 	u8 flags2;		/* */
 	u8 flags3;		/* */
 #define OB_MAC_TSO_IOCB_RSP_B	0x8000
-	u32 tid;
-	u32 txq_idx;
+	__le32 tid;
+	__le32 txq_idx;
 	__le32 reserved2[13];
 } __attribute((packed));
 
@@ -962,7 +970,8 @@ struct ib_mac_iocb_rsp {
 #define IB_MAC_IOCB_RSP_DS	0x40	/* data is in small buffer */
 #define IB_MAC_IOCB_RSP_DL	0x80	/* data is in large buffer */
 	__le32 data_len;	/* */
-	__le64 data_addr;	/* */
+	__le32 data_addr_lo;	/* */
+	__le32 data_addr_hi;	/* */
 	__le32 rss;		/* */
 	__le16 vlan_id;		/* 12 bits */
 #define IB_MAC_IOCB_RSP_C	0x1000	/* VLAN CFI bit */
@@ -970,13 +979,13 @@ struct ib_mac_iocb_rsp {
 
 	__le16 reserved1;
 	__le32 reserved2[6];
-	u8 reserved3[3];
-	u8 flags4;
-#define IB_MAC_IOCB_RSP_HV	0x20
-#define IB_MAC_IOCB_RSP_HS	0x40
-#define IB_MAC_IOCB_RSP_HL	0x80
+	__le32 flags4;
+#define IB_MAC_IOCB_RSP_HV	0x20000000	/* */
+#define IB_MAC_IOCB_RSP_HS	0x40000000	/* */
+#define IB_MAC_IOCB_RSP_HL	0x80000000	/* */
 	__le32 hdr_len;		/* */
-	__le64 hdr_addr;	/* */
+	__le32 hdr_addr_lo;	/* */
+	__le32 hdr_addr_hi;	/* */
 } __attribute((packed));
 
 struct ib_ae_iocb_rsp {
@@ -1041,8 +1050,10 @@ struct wqicb {
 	__le16 cq_id_rss;
 #define Q_CQ_ID_RSS_RV 0x8000
 	__le16 rid;
-	__le64 addr;
-	__le64 cnsmr_idx_addr;
+	__le32 addr_lo;
+	__le32 addr_hi;
+	__le32 cnsmr_idx_addr_lo;
+	__le32 cnsmr_idx_addr_hi;
 } __attribute((packed));
 
 /*
@@ -1067,14 +1078,18 @@ struct cqicb {
 #define LEN_CPP_64	0x0002
 #define LEN_CPP_128	0x0003
 	__le16 rid;
-	__le64 addr;
-	__le64 prod_idx_addr;
+	__le32 addr_lo;
+	__le32 addr_hi;
+	__le32 prod_idx_addr_lo;
+	__le32 prod_idx_addr_hi;
 	__le16 pkt_delay;
 	__le16 irq_delay;
-	__le64 lbq_addr;
+	__le32 lbq_addr_lo;
+	__le32 lbq_addr_hi;
 	__le16 lbq_buf_size;
 	__le16 lbq_len;		/* entry count */
-	__le64 sbq_addr;
+	__le32 sbq_addr_lo;
+	__le32 sbq_addr_hi;
 	__le16 sbq_buf_size;
 	__le16 sbq_len;		/* entry count */
 } __attribute((packed));
@@ -1111,7 +1126,7 @@ struct map_list {
 struct tx_ring_desc {
 	struct sk_buff *skb;
 	struct ob_mac_iocb_req *queue_entry;
-	u32 index;
+	int index;
 	struct oal oal;
 	struct map_list map[MAX_SKB_FRAGS + 1];
 	int map_cnt;
@@ -1123,8 +1138,8 @@ struct bq_desc {
 		struct page *lbq_page;
 		struct sk_buff *skb;
 	} p;
-	__le64 *addr;
-	u32 index;
+	struct bq_element *bq;
+	int index;
 	 DECLARE_PCI_UNMAP_ADDR(mapaddr);
 	 DECLARE_PCI_UNMAP_LEN(maplen);
 };
@@ -1138,7 +1153,7 @@ struct tx_ring {
 	struct wqicb wqicb;	/* structure used to inform chip of new queue */
 	void *wq_base;		/* pci_alloc:virtual addr for tx */
 	dma_addr_t wq_base_dma;	/* pci_alloc:dma addr for tx */
-	__le32 *cnsmr_idx_sh_reg;	/* shadow copy of consumer idx */
+	u32 *cnsmr_idx_sh_reg;	/* shadow copy of consumer idx */
 	dma_addr_t cnsmr_idx_sh_reg_dma;	/* dma-shadow copy of consumer */
 	u32 wq_size;		/* size in bytes of queue area */
 	u32 wq_len;		/* number of entries in queue */
@@ -1174,7 +1189,7 @@ struct rx_ring {
 	u32 cq_size;
 	u32 cq_len;
 	u16 cq_id;
-	__le32 *prod_idx_sh_reg;	/* Shadowed producer register. */
+	u32 *prod_idx_sh_reg;	/* Shadowed producer register. */
 	dma_addr_t prod_idx_sh_reg_dma;
 	void __iomem *cnsmr_idx_db_reg;	/* PCI doorbell mem area + 0 */
 	u32 cnsmr_idx;		/* current sw idx */
@@ -1395,11 +1410,9 @@ struct ql_adapter {
 	int rx_ring_count;
 	int ring_mem_size;
 	void *ring_mem;
-
-	struct rx_ring rx_ring[MAX_RX_RINGS];
-	struct tx_ring tx_ring[MAX_TX_RINGS];
-
+	struct rx_ring *rx_ring;
 	int rx_csum;
+	struct tx_ring *tx_ring;
 	u32 default_rx_queue;
 
 	u16 rx_coalesce_usecs;	/* cqicb->int_delay */
@@ -1464,12 +1477,9 @@ static inline void ql_write_db_reg(u32 val, void __iomem *addr)
  * update the relevant index register and then copy the value to the
  * shadow register in host memory.
  */
-static inline u32 ql_read_sh_reg(__le32  *addr)
+static inline unsigned int ql_read_sh_reg(const volatile void  *addr)
 {
-	u32 reg;
-	reg =  le32_to_cpu(*addr);
-	rmb();
-	return reg;
+	return *(volatile unsigned int __force *)addr;
 }
 
 extern char qlge_driver_name[];

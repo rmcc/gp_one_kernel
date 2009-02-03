@@ -190,12 +190,10 @@ static void iuu_rxcmd(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	int result;
-	int status = urb->status;
-
 	dbg("%s - enter", __func__);
 
-	if (status) {
-		dbg("%s - status = %d", __func__, status);
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -247,12 +245,10 @@ static void iuu_update_status_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	u8 *st;
-	int status = urb->status;
-
 	dbg("%s - enter", __func__);
 
-	if (status) {
-		dbg("%s - status = %d", __func__, status);
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -278,9 +274,9 @@ static void iuu_status_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	int result;
-	int status = urb->status;
+	dbg("%s - enter", __func__);
 
-	dbg("%s - status = %d", __func__, status);
+	dbg("%s - urb->status = %d", __func__, urb->status);
 	usb_fill_bulk_urb(port->read_urb, port->serial->dev,
 			  usb_rcvbulkpipe(port->serial->dev,
 					  port->bulk_in_endpointAddress),
@@ -622,12 +618,11 @@ static void read_buf_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
 	struct tty_struct *tty;
-	int status = urb->status;
+	dbg("%s - urb->status = %d", __func__, urb->status);
 
-	dbg("%s - status = %d", __func__, status);
-
-	if (status) {
-		if (status == -EPROTO) {
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
+		if (urb->status == -EPROTO) {
 			/* reschedule needed */
 		}
 		return;
@@ -700,7 +695,7 @@ static void iuu_uart_read_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
-	int status = urb->status;
+	int status;
 	int error = 0;
 	int len = 0;
 	unsigned char *data = urb->transfer_buffer;
@@ -708,8 +703,8 @@ static void iuu_uart_read_callback(struct urb *urb)
 
 	dbg("%s - enter", __func__);
 
-	if (status) {
-		dbg("%s - status = %d", __func__, status);
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}
@@ -787,11 +782,12 @@ static void read_rxcmd_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	int result;
-	int status = urb->status;
+	dbg("%s - enter", __func__);
 
-	dbg("%s - status = %d", __func__, status);
+	dbg("%s - urb->status = %d", __func__, urb->status);
 
-	if (status) {
+	if (urb->status) {
+		dbg("%s - urb->status = %d", __func__, urb->status);
 		/* error stop all */
 		return;
 	}

@@ -6,9 +6,6 @@
  * Copyright IBM Corporation 2002, 2008
  */
 
-#define KMSG_COMPONENT "zfcp"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include "zfcp_ext.h"
 #include <asm/atomic.h>
 
@@ -27,10 +24,14 @@ char *zfcp_get_fcp_sns_info_ptr(struct fcp_rsp_iu *fcp_rsp_iu)
 static void zfcp_scsi_slave_destroy(struct scsi_device *sdpnt)
 {
 	struct zfcp_unit *unit = (struct zfcp_unit *) sdpnt->hostdata;
-	atomic_clear_mask(ZFCP_STATUS_UNIT_REGISTERED, &unit->status);
-	unit->device = NULL;
-	zfcp_erp_unit_failed(unit, 12, NULL);
-	zfcp_unit_put(unit);
+	WARN_ON(!unit);
+	if (unit) {
+		atomic_clear_mask(ZFCP_STATUS_UNIT_REGISTERED, &unit->status);
+		sdpnt->hostdata = NULL;
+		unit->device = NULL;
+		zfcp_erp_unit_failed(unit, 12, NULL);
+		zfcp_unit_put(unit);
+	}
 }
 
 static int zfcp_scsi_slave_configure(struct scsi_device *sdp)
@@ -91,7 +92,7 @@ static int zfcp_scsi_queuecommand(struct scsi_cmnd *scpnt,
 	ret = zfcp_fsf_send_fcp_command_task(adapter, unit, scpnt, 0,
 					     ZFCP_REQ_AUTO_CLEANUP);
 	if (unlikely(ret == -EBUSY))
-		return SCSI_MLQUEUE_DEVICE_BUSY;
+		zfcp_scsi_command_fail(scpnt, DID_NO_CONNECT);
 	else if (unlikely(ret < 0))
 		return SCSI_MLQUEUE_HOST_BUSY;
 

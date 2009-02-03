@@ -543,7 +543,7 @@ out_kfree:
 	return ret;
 }
 
-static int jfs_freeze(struct super_block *sb)
+static void jfs_write_super_lockfs(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 	struct jfs_log *log = sbi->log;
@@ -553,10 +553,9 @@ static int jfs_freeze(struct super_block *sb)
 		lmLogShutdown(log);
 		updateSuper(sb, FM_CLEAN);
 	}
-	return 0;
 }
 
-static int jfs_unfreeze(struct super_block *sb)
+static void jfs_unlockfs(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 	struct jfs_log *log = sbi->log;
@@ -569,7 +568,6 @@ static int jfs_unfreeze(struct super_block *sb)
 		else
 			txResume(sb);
 	}
-	return 0;
 }
 
 static int jfs_get_sb(struct file_system_type *fs_type,
@@ -737,8 +735,8 @@ static const struct super_operations jfs_super_operations = {
 	.delete_inode	= jfs_delete_inode,
 	.put_super	= jfs_put_super,
 	.sync_fs	= jfs_sync_fs,
-	.freeze_fs	= jfs_freeze,
-	.unfreeze_fs	= jfs_unfreeze,
+	.write_super_lockfs = jfs_write_super_lockfs,
+	.unlockfs       = jfs_unlockfs,
 	.statfs		= jfs_statfs,
 	.remount_fs	= jfs_remount,
 	.show_options	= jfs_show_options,

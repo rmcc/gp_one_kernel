@@ -28,8 +28,6 @@
 
 #include <asm/desc.h>
 
-#include <asm/virtext.h>
-
 #define __ex(x) __kvm_handle_fault_on_reboot(x)
 
 MODULE_AUTHOR("Qumranet");
@@ -247,19 +245,34 @@ static void skip_emulated_instruction(struct kvm_vcpu *vcpu)
 
 static int has_svm(void)
 {
-	const char *msg;
+	uint32_t eax, ebx, ecx, edx;
 
-	if (!cpu_has_svm(&msg)) {
-		printk(KERN_INFO "has_svn: %s\n", msg);
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD) {
+		printk(KERN_INFO "has_svm: not amd\n");
 		return 0;
 	}
 
+	cpuid(0x80000000, &eax, &ebx, &ecx, &edx);
+	if (eax < SVM_CPUID_FUNC) {
+		printk(KERN_INFO "has_svm: can't execute cpuid_8000000a\n");
+		return 0;
+	}
+
+	cpuid(0x80000001, &eax, &ebx, &ecx, &edx);
+	if (!(ecx & (1 << SVM_CPUID_FEATURE_SHIFT))) {
+		printk(KERN_DEBUG "has_svm: svm not available\n");
+		return 0;
+	}
 	return 1;
 }
 
 static void svm_hardware_disable(void *garbage)
 {
-	cpu_svm_disable();
+	uint64_t efer;
+
+	wrmsrl(MSR_VM_HSAVE_PA, 0);
+	rdmsrl(MSR_EFER, efer);
+	wrmsrl(MSR_EFER, efer & ~MSR_EFER_SVME_MASK);
 }
 
 static void svm_hardware_enable(void *garbage)
@@ -759,22 +772,6 @@ static void svm_get_segment(struct kvm_vcpu *vcpu,
 	var->l = (s->attrib >> SVM_SELECTOR_L_SHIFT) & 1;
 	var->db = (s->attrib >> SVM_SELECTOR_DB_SHIFT) & 1;
 	var->g = (s->attrib >> SVM_SELECTOR_G_SHIFT) & 1;
-
-	/*
-	 * SVM always stores 0 for the 'G' bit in the CS selector in
-	 * the VMCB on a VMEXIT. This hurts cross-vendor migration:
-	 * Intel's VMENTRY has a check on the 'G' bit.
-	 */
-	if (seg == VCPU_SREG_CS)
-		var->g = s->limit > 0xfffff;
-
-	/*
-	 * Work around a bug where the busy flag in the tr selector
-	 * isn't exposed
-	 */
-	if (seg == VCPU_SREG_TR)
-		var->type |= 0x2;
-
 	var->unusable = !var->present;
 }
 
@@ -1102,7 +1099,6 @@ static int io_interception(struct vcpu_svm *svm, struct kvm_run *kvm_run)
 	rep = (io_info & SVM_IOIO_REP_MASK) != 0;
 	down = (svm->vmcb->save.rflags & X86_EFLAGS_DF) != 0;
 
-	skip_emulated_instruction(&svm->vcpu);
 	return kvm_emulate_pio(&svm->vcpu, kvm_run, in, size, port);
 }
 
@@ -1916,11 +1912,6 @@ static int get_npt_level(void)
 #endif
 }
 
-static int svm_get_mt_mask_shift(void)
-{
-	return 0;
-}
-
 static struct kvm_x86_ops svm_x86_ops = {
 	.cpu_has_kvm_support = has_svm,
 	.disabled_by_bios = is_disabled,
@@ -1976,7 +1967,6 @@ static struct kvm_x86_ops svm_x86_ops = {
 
 	.set_tss_addr = svm_set_tss_addr,
 	.get_tdp_level = get_npt_level,
-	.get_mt_mask_shift = svm_get_mt_mask_shift,
 };
 
 static int __init svm_init(void)

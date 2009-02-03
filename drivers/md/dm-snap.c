@@ -9,7 +9,6 @@
 #include <linux/blkdev.h>
 #include <linux/ctype.h>
 #include <linux/device-mapper.h>
-#include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kdev_t.h>
@@ -21,7 +20,6 @@
 #include <linux/log2.h>
 #include <linux/dm-kcopyd.h>
 
-#include "dm-exception-store.h"
 #include "dm-snap.h"
 #include "dm-bio-list.h"
 
@@ -430,13 +428,8 @@ out:
 	list_add(&new_e->hash_list, e ? &e->hash_list : l);
 }
 
-/*
- * Callback used by the exception stores to load exceptions when
- * initialising.
- */
-static int dm_add_exception(void *context, chunk_t old, chunk_t new)
+int dm_add_exception(struct dm_snapshot *s, chunk_t old, chunk_t new)
 {
-	struct dm_snapshot *s = context;
 	struct dm_snap_exception *e;
 
 	e = alloc_exception();
@@ -665,7 +658,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	spin_lock_init(&s->tracked_chunk_lock);
 
 	/* Metadata must only be loaded into one table at once */
-	r = s->store.read_metadata(&s->store, dm_add_exception, (void *)s);
+	r = s->store.read_metadata(&s->store);
 	if (r < 0) {
 		ti->error = "Failed to read snapshot metadata";
 		goto bad_load_and_register;
@@ -742,7 +735,7 @@ static void snapshot_dtr(struct dm_target *ti)
 	unregister_snapshot(s);
 
 	while (atomic_read(&s->pending_exceptions_count))
-		msleep(1);
+		yield();
 	/*
 	 * Ensure instructions in mempool_destroy aren't reordered
 	 * before atomic_read.
@@ -895,10 +888,10 @@ static void pending_complete(struct dm_snap_pending_exception *pe, int success)
 
 	/*
 	 * Check for conflicting reads. This is extremely improbable,
-	 * so msleep(1) is sufficient and there is no need for a wait queue.
+	 * so yield() is sufficient and there is no need for a wait queue.
 	 */
 	while (__chunk_is_tracked(s, pe->e.old_chunk))
-		msleep(1);
+		yield();
 
 	/*
 	 * Add a proper exception, and remove the
@@ -1411,12 +1404,6 @@ static int __init dm_snapshot_init(void)
 {
 	int r;
 
-	r = dm_exception_store_init();
-	if (r) {
-		DMERR("Failed to initialize exception stores");
-		return r;
-	}
-
 	r = dm_register_target(&snapshot_target);
 	if (r) {
 		DMERR("snapshot target register failed %d", r);
@@ -1465,34 +1452,39 @@ static int __init dm_snapshot_init(void)
 
 	return 0;
 
-bad_pending_pool:
+      bad_pending_pool:
 	kmem_cache_destroy(tracked_chunk_cache);
-bad5:
+      bad5:
 	kmem_cache_destroy(pending_cache);
-bad4:
+      bad4:
 	kmem_cache_destroy(exception_cache);
-bad3:
+      bad3:
 	exit_origin_hash();
-bad2:
+      bad2:
 	dm_unregister_target(&origin_target);
-bad1:
+      bad1:
 	dm_unregister_target(&snapshot_target);
 	return r;
 }
 
 static void __exit dm_snapshot_exit(void)
 {
+	int r;
+
 	destroy_workqueue(ksnapd);
 
-	dm_unregister_target(&snapshot_target);
-	dm_unregister_target(&origin_target);
+	r = dm_unregister_target(&snapshot_target);
+	if (r)
+		DMERR("snapshot unregister failed %d", r);
+
+	r = dm_unregister_target(&origin_target);
+	if (r)
+		DMERR("origin unregister failed %d", r);
 
 	exit_origin_hash();
 	kmem_cache_destroy(pending_cache);
 	kmem_cache_destroy(exception_cache);
 	kmem_cache_destroy(tracked_chunk_cache);
-
-	dm_exception_store_exit();
 }
 
 /* Module hooks */

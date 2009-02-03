@@ -119,7 +119,7 @@ SECTIONS
 #endif
 
 	.data : AT(__data_loc) {
-		_data = .;		/* address in memory */
+		__data_start = .;	/* address in memory */
 
 		/*
 		 * first, the init task union, aligned
