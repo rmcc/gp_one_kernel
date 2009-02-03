@@ -164,11 +164,6 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 
 
-static bool ata_sstatus_online(u32 sstatus)
-{
-	return (sstatus & 0xf) == 0x3;
-}
-
 /**
  *	ata_link_next - link iteration helper
  *	@link: the previous link, NULL to start
@@ -1018,6 +1013,18 @@ static const char *sata_spd_string(unsigned int spd)
 	if (spd == 0 || (spd - 1) >= ARRAY_SIZE(spd_str))
 		return "<unknown>";
 	return spd_str[spd - 1];
+}
+
+void ata_dev_disable(struct ata_device *dev)
+{
+	if (ata_dev_enabled(dev)) {
+		if (ata_msg_drv(dev->link->ap))
+			ata_dev_printk(dev, KERN_WARNING, "disabled\n");
+		ata_acpi_on_disable(dev);
+		ata_down_xfermask_limit(dev, ATA_DNXFER_FORCE_PIO0 |
+					     ATA_DNXFER_QUIET);
+		dev->class++;
+	}
 }
 
 static int ata_dev_set_dipm(struct ata_device *dev, enum link_pm policy)
@@ -2232,40 +2239,6 @@ retry:
 	return rc;
 }
 
-static int ata_do_link_spd_horkage(struct ata_device *dev)
-{
-	struct ata_link *plink = ata_dev_phys_link(dev);
-	u32 target, target_limit;
-
-	if (!sata_scr_valid(plink))
-		return 0;
-
-	if (dev->horkage & ATA_HORKAGE_1_5_GBPS)
-		target = 1;
-	else
-		return 0;
-
-	target_limit = (1 << target) - 1;
-
-	/* if already on stricter limit, no need to push further */
-	if (plink->sata_spd_limit <= target_limit)
-		return 0;
-
-	plink->sata_spd_limit = target_limit;
-
-	/* Request another EH round by returning -EAGAIN if link is
-	 * going faster than the target speed.  Forward progress is
-	 * guaranteed by setting sata_spd_limit to target_limit above.
-	 */
-	if (plink->sata_spd > target) {
-		ata_dev_printk(dev, KERN_INFO,
-			       "applying link speed limit horkage to %s\n",
-			       sata_spd_string(target));
-		return -EAGAIN;
-	}
-	return 0;
-}
-
 static inline u8 ata_dev_knobble(struct ata_device *dev)
 {
 	struct ata_port *ap = dev->link->ap;
@@ -2355,10 +2328,6 @@ int ata_dev_configure(struct ata_device *dev)
 		ata_dev_disable(dev);
 		return 0;
 	}
-
-	rc = ata_do_link_spd_horkage(dev);
-	if (rc)
-		return rc;
 
 	/* let ACPI work its magic */
 	rc = ata_acpi_on_devcfg(dev);
@@ -2815,7 +2784,7 @@ int ata_bus_probe(struct ata_port *ap)
 			/* This is the last chance, better to slow
 			 * down than lose it.
 			 */
-			sata_down_spd_limit(&ap->link, 0);
+			sata_down_spd_limit(&ap->link);
 			ata_down_xfermask_limit(dev, ATA_DNXFER_PIO);
 		}
 	}
@@ -2911,16 +2880,10 @@ void ata_port_disable(struct ata_port *ap)
 /**
  *	sata_down_spd_limit - adjust SATA spd limit downward
  *	@link: Link to adjust SATA spd limit for
- *	@spd_limit: Additional limit
  *
  *	Adjust SATA spd limit of @link downward.  Note that this
  *	function only adjusts the limit.  The change must be applied
  *	using sata_set_spd().
- *
- *	If @spd_limit is non-zero, the speed is limited to equal to or
- *	lower than @spd_limit if such speed is supported.  If
- *	@spd_limit is slower than any supported speed, only the lowest
- *	supported speed is allowed.
  *
  *	LOCKING:
  *	Inherited from caller.
@@ -2928,10 +2891,10 @@ void ata_port_disable(struct ata_port *ap)
  *	RETURNS:
  *	0 on success, negative errno on failure
  */
-int sata_down_spd_limit(struct ata_link *link, u32 spd_limit)
+int sata_down_spd_limit(struct ata_link *link)
 {
 	u32 sstatus, spd, mask;
-	int rc, bit;
+	int rc, highbit;
 
 	if (!sata_scr_valid(link))
 		return -EOPNOTSUPP;
@@ -2940,7 +2903,7 @@ int sata_down_spd_limit(struct ata_link *link, u32 spd_limit)
 	 * If not, use cached value in link->sata_spd.
 	 */
 	rc = sata_scr_read(link, SCR_STATUS, &sstatus);
-	if (rc == 0 && ata_sstatus_online(sstatus))
+	if (rc == 0)
 		spd = (sstatus >> 4) & 0xf;
 	else
 		spd = link->sata_spd;
@@ -2950,8 +2913,8 @@ int sata_down_spd_limit(struct ata_link *link, u32 spd_limit)
 		return -EINVAL;
 
 	/* unconditionally mask off the highest bit */
-	bit = fls(mask) - 1;
-	mask &= ~(1 << bit);
+	highbit = fls(mask) - 1;
+	mask &= ~(1 << highbit);
 
 	/* Mask off all speeds higher than or equal to the current
 	 * one.  Force 1.5Gbps if current SPD is not available.
@@ -2964,15 +2927,6 @@ int sata_down_spd_limit(struct ata_link *link, u32 spd_limit)
 	/* were we already at the bottom? */
 	if (!mask)
 		return -EINVAL;
-
-	if (spd_limit) {
-		if (mask & ((1 << spd_limit) - 1))
-			mask &= (1 << spd_limit) - 1;
-		else {
-			bit = ffs(mask) - 1;
-			mask = 1 << bit;
-		}
-	}
 
 	link->sata_spd_limit = mask;
 
@@ -4261,9 +4215,6 @@ static const struct ata_blacklist_entry ata_device_blacklist [] = {
 	/* Devices that do not need bridging limits applied */
 	{ "MTRON MSP-SATA*",		NULL,	ATA_HORKAGE_BRIDGE_OK, },
 
-	/* Devices which aren't very happy with higher link speeds */
-	{ "WD My Book",			NULL,	ATA_HORKAGE_1_5_GBPS, },
-
 	/* End Marker */
 	{ }
 };
@@ -4758,7 +4709,8 @@ void swap_buf_le16(u16 *buf, unsigned int buf_words)
 
 /**
  *	ata_qc_new - Request an available ATA command, for queueing
- *	@ap: target port
+ *	@ap: Port associated with device @dev
+ *	@dev: Device from whom we request an available command structure
  *
  *	LOCKING:
  *	None.
@@ -5223,7 +5175,7 @@ bool ata_phys_link_online(struct ata_link *link)
 	u32 sstatus;
 
 	if (sata_scr_read(link, SCR_STATUS, &sstatus) == 0 &&
-	    ata_sstatus_online(sstatus))
+	    (sstatus & 0xf) == 0x3)
 		return true;
 	return false;
 }
@@ -5247,7 +5199,7 @@ bool ata_phys_link_offline(struct ata_link *link)
 	u32 sstatus;
 
 	if (sata_scr_read(link, SCR_STATUS, &sstatus) == 0 &&
-	    !ata_sstatus_online(sstatus))
+	    (sstatus & 0xf) != 0x3)
 		return true;
 	return false;
 }
@@ -5460,8 +5412,8 @@ void ata_dev_init(struct ata_device *dev)
 	dev->horkage = 0;
 	spin_unlock_irqrestore(ap->lock, flags);
 
-	memset((void *)dev + ATA_DEVICE_CLEAR_BEGIN, 0,
-	       ATA_DEVICE_CLEAR_END - ATA_DEVICE_CLEAR_BEGIN);
+	memset((void *)dev + ATA_DEVICE_CLEAR_OFFSET, 0,
+	       sizeof(*dev) - ATA_DEVICE_CLEAR_OFFSET);
 	dev->pio_mask = UINT_MAX;
 	dev->mwdma_mask = UINT_MAX;
 	dev->udma_mask = UINT_MAX;

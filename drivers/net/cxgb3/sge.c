@@ -2276,7 +2276,8 @@ no_mem:
 		} else if ((len = ntohl(r->len_cq)) != 0) {
 			struct sge_fl *fl;
 
-			lro &= eth && is_eth_tcp(rss_hi);
+			if (eth)
+				lro = qs->lro_enabled && is_eth_tcp(rss_hi);
 
 			fl = (len & F_RSPD_FLQ) ? &qs->fl[1] : &qs->fl[0];
 			if (fl->use_pages) {
