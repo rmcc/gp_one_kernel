@@ -125,10 +125,6 @@ static void kvmppc_free_vcpus(struct kvm *kvm)
 	}
 }
 
-void kvm_arch_sync_events(struct kvm *kvm)
-{
-}
-
 void kvm_arch_destroy_vm(struct kvm *kvm)
 {
 	kvmppc_free_vcpus(kvm);
