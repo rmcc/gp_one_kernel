@@ -639,9 +639,6 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 
 	tsk->min_flt = tsk->maj_flt = 0;
 	tsk->nvcsw = tsk->nivcsw = 0;
-#ifdef CONFIG_DETECT_HUNG_TASK
-	tsk->last_switch_count = tsk->nvcsw + tsk->nivcsw;
-#endif
 
 	tsk->mm = NULL;
 	tsk->active_mm = NULL;
@@ -854,14 +851,13 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	sig->tty_old_pgrp = NULL;
 	sig->tty = NULL;
 
-	sig->utime = sig->stime = sig->cutime = sig->cstime = cputime_zero;
+	sig->cutime = sig->cstime = cputime_zero;
 	sig->gtime = cputime_zero;
 	sig->cgtime = cputime_zero;
 	sig->nvcsw = sig->nivcsw = sig->cnvcsw = sig->cnivcsw = 0;
 	sig->min_flt = sig->maj_flt = sig->cmin_flt = sig->cmaj_flt = 0;
 	sig->inblock = sig->oublock = sig->cinblock = sig->coublock = 0;
 	task_io_accounting_init(&sig->ioac);
-	sig->sum_sched_runtime = 0;
 	taskstats_tgid_init(sig);
 
 	task_lock(current->group_leader);
@@ -1044,6 +1040,11 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	p->default_timer_slack_ns = current->timer_slack_ns;
 
+#ifdef CONFIG_DETECT_SOFTLOCKUP
+	p->last_switch_count = 0;
+	p->last_switch_timestamp = 0;
+#endif
+
 	task_io_accounting_init(&p->ioac);
 	acct_clear_integrals(p);
 
@@ -1093,7 +1094,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 #ifdef CONFIG_DEBUG_MUTEXES
 	p->blocked_on = NULL; /* not blocked yet */
 #endif
-	if (unlikely(current->ptrace))
+	if (unlikely(ptrace_reparented(current)))
 		ptrace_fork(p, clone_flags);
 
 	/* Perform scheduler related setup. Assign this task to a CPU. */

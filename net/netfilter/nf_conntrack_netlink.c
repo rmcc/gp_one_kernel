@@ -434,7 +434,7 @@ static int ctnetlink_conntrack_event(struct notifier_block *this,
 	} else
 		return NOTIFY_DONE;
 
-	if (!item->report && !nfnetlink_has_listeners(group))
+	if (!nfnetlink_has_listeners(group))
 		return NOTIFY_DONE;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_ATOMIC);
@@ -1215,16 +1215,6 @@ ctnetlink_create_conntrack(struct nlattr *cda[],
 		}
 	}
 
-#ifdef CONFIG_NF_NAT_NEEDED
-	if (cda[CTA_NAT_SEQ_ADJ_ORIG] || cda[CTA_NAT_SEQ_ADJ_REPLY]) {
-		err = ctnetlink_change_nat_seq_adj(ct, cda);
-		if (err < 0) {
-			rcu_read_unlock();
-			goto err;
-		}
-	}
-#endif
-
 	if (cda[CTA_PROTOINFO]) {
 		err = ctnetlink_change_protoinfo(ct, cda);
 		if (err < 0) {
@@ -1502,8 +1492,7 @@ static int ctnetlink_expect_event(struct notifier_block *this,
 	} else
 		return NOTIFY_DONE;
 
-	if (!item->report &&
-	    !nfnetlink_has_listeners(NFNLGRP_CONNTRACK_EXP_NEW))
+	if (!nfnetlink_has_listeners(NFNLGRP_CONNTRACK_EXP_NEW))
 		return NOTIFY_DONE;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_ATOMIC);

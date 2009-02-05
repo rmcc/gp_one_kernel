@@ -896,7 +896,7 @@ asmlinkage void math_state_restore(void)
 EXPORT_SYMBOL_GPL(math_state_restore);
 
 #ifndef CONFIG_MATH_EMULATION
-void math_emulate(struct math_emu_info *info)
+asmlinkage void math_emulate(long arg)
 {
 	printk(KERN_EMERG
 		"math-emulation not enabled and no coprocessor found.\n");
@@ -906,19 +906,16 @@ void math_emulate(struct math_emu_info *info)
 }
 #endif /* CONFIG_MATH_EMULATION */
 
-dotraplinkage void __kprobes do_device_not_available(struct pt_regs regs)
+dotraplinkage void __kprobes
+do_device_not_available(struct pt_regs *regs, long error)
 {
 #ifdef CONFIG_X86_32
 	if (read_cr0() & X86_CR0_EM) {
-		struct math_emu_info info = { };
-
-		conditional_sti(&regs);
-
-		info.regs = &regs;
-		math_emulate(&info);
+		conditional_sti(regs);
+		math_emulate(0);
 	} else {
 		math_state_restore(); /* interrupts still off */
-		conditional_sti(&regs);
+		conditional_sti(regs);
 	}
 #else
 	math_state_restore();

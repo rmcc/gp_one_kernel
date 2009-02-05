@@ -1530,7 +1530,8 @@ again:
 			 * for higher level blocks, try not to allocate blocks
 			 * with the block and the parent locks held.
 			 */
-			if (level > 0 && !prealloc_block.objectid) {
+			if (level > 0 && !prealloc_block.objectid &&
+			    btrfs_path_lock_waiting(p, level)) {
 				u32 size = b->len;
 				u64 hint = b->start;
 
