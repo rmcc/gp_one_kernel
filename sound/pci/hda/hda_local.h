@@ -26,10 +26,8 @@
 /*
  * for mixer controls
  */
-#define HDA_COMPOSE_AMP_VAL_OFS(nid,chs,idx,dir,ofs)		\
-	((nid) | ((chs)<<16) | ((dir)<<18) | ((idx)<<19) | ((ofs)<<23))
 #define HDA_COMPOSE_AMP_VAL(nid,chs,idx,dir) \
-	HDA_COMPOSE_AMP_VAL_OFS(nid, chs, idx, dir, 0)
+	((nid) | ((chs)<<16) | ((dir)<<18) | ((idx)<<19))
 /* mono volume with index (index=0,1,...) (channel=1,2) */
 #define HDA_CODEC_VOLUME_MONO_IDX(xname, xcidx, nid, channel, xindex, direction) \
 	{ .iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, .index = xcidx,  \
@@ -229,7 +227,6 @@ struct hda_multi_out {
 	hda_nid_t hp_nid;	/* optional DAC for HP, 0 when not exists */
 	hda_nid_t extra_out_nid[3];	/* optional DACs, 0 when not exists */
 	hda_nid_t dig_out_nid;	/* digital out audio widget */
-	hda_nid_t *slave_dig_outs;
 	int max_channels;	/* currently supported analog channels */
 	int dig_out_used;	/* current usage of digital out (HDA_DIG_XXX) */
 	int no_share_stream;	/* don't share a stream with multiple pins */
@@ -358,8 +355,6 @@ struct auto_pin_cfg {
 	hda_nid_t dig_out_pin;
 	hda_nid_t dig_in_pin;
 	hda_nid_t mono_out_pin;
-	int dig_out_type; /* HDA_PCM_TYPE_XXX */
-	int dig_in_type; /* HDA_PCM_TYPE_XXX */
 };
 
 #define get_defcfg_connect(cfg) \
@@ -461,7 +456,6 @@ int snd_hda_check_amp_list_power(struct hda_codec *codec,
 #define get_amp_channels(kc)	(((kc)->private_value >> 16) & 0x3)
 #define get_amp_direction(kc)	(((kc)->private_value >> 18) & 0x1)
 #define get_amp_index(kc)	(((kc)->private_value >> 19) & 0xf)
-#define get_amp_offset(kc)	(((kc)->private_value >> 23) & 0x3f)
 
 /*
  * CEA Short Audio Descriptor data

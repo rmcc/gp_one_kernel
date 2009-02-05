@@ -487,6 +487,7 @@ int /*__devinit*/ snd_hda_bus_new(struct snd_card *card,
 {
 	struct hda_bus *bus;
 	int err;
+	char qname[8];
 	static struct snd_device_ops dev_ops = {
 		.dev_register = snd_hda_bus_dev_register,
 		.dev_free = snd_hda_bus_dev_free,
@@ -516,12 +517,10 @@ int /*__devinit*/ snd_hda_bus_new(struct snd_card *card,
 	mutex_init(&bus->cmd_mutex);
 	INIT_LIST_HEAD(&bus->codec_list);
 
-	snprintf(bus->workq_name, sizeof(bus->workq_name),
-		 "hd-audio%d", card->number);
-	bus->workq = create_singlethread_workqueue(bus->workq_name);
+	snprintf(qname, sizeof(qname), "hda%d", card->number);
+	bus->workq = create_workqueue(qname);
 	if (!bus->workq) {
-		snd_printk(KERN_ERR "cannot create workqueue %s\n",
-			   bus->workq_name);
+		snd_printk(KERN_ERR "cannot create workqueue %s\n", qname);
 		kfree(bus);
 		return -ENOMEM;
 	}
@@ -1120,7 +1119,6 @@ int snd_hda_mixer_amp_volume_info(struct snd_kcontrol *kcontrol,
 	u16 nid = get_amp_nid(kcontrol);
 	u8 chs = get_amp_channels(kcontrol);
 	int dir = get_amp_direction(kcontrol);
-	unsigned int ofs = get_amp_offset(kcontrol);
 	u32 caps;
 
 	caps = query_amp_caps(codec, nid, dir);
@@ -1132,8 +1130,6 @@ int snd_hda_mixer_amp_volume_info(struct snd_kcontrol *kcontrol,
 		       kcontrol->id.name);
 		return -EINVAL;
 	}
-	if (ofs < caps)
-		caps -= ofs;
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 	uinfo->count = chs == 3 ? 2 : 1;
 	uinfo->value.integer.min = 0;
@@ -1141,32 +1137,6 @@ int snd_hda_mixer_amp_volume_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 EXPORT_SYMBOL_HDA(snd_hda_mixer_amp_volume_info);
-
-
-static inline unsigned int
-read_amp_value(struct hda_codec *codec, hda_nid_t nid,
-	       int ch, int dir, int idx, unsigned int ofs)
-{
-	unsigned int val;
-	val = snd_hda_codec_amp_read(codec, nid, ch, dir, idx);
-	val &= HDA_AMP_VOLMASK;
-	if (val >= ofs)
-		val -= ofs;
-	else
-		val = 0;
-	return val;
-}
-
-static inline int
-update_amp_value(struct hda_codec *codec, hda_nid_t nid,
-		 int ch, int dir, int idx, unsigned int ofs,
-		 unsigned int val)
-{
-	if (val > 0)
-		val += ofs;
-	return snd_hda_codec_amp_update(codec, nid, ch, dir, idx,
-					HDA_AMP_VOLMASK, val);
-}
 
 int snd_hda_mixer_amp_volume_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
@@ -1176,13 +1146,14 @@ int snd_hda_mixer_amp_volume_get(struct snd_kcontrol *kcontrol,
 	int chs = get_amp_channels(kcontrol);
 	int dir = get_amp_direction(kcontrol);
 	int idx = get_amp_index(kcontrol);
-	unsigned int ofs = get_amp_offset(kcontrol);
 	long *valp = ucontrol->value.integer.value;
 
 	if (chs & 1)
-		*valp++ = read_amp_value(codec, nid, 0, dir, idx, ofs);
+		*valp++ = snd_hda_codec_amp_read(codec, nid, 0, dir, idx)
+			& HDA_AMP_VOLMASK;
 	if (chs & 2)
-		*valp = read_amp_value(codec, nid, 1, dir, idx, ofs);
+		*valp = snd_hda_codec_amp_read(codec, nid, 1, dir, idx)
+			& HDA_AMP_VOLMASK;
 	return 0;
 }
 EXPORT_SYMBOL_HDA(snd_hda_mixer_amp_volume_get);
@@ -1195,17 +1166,18 @@ int snd_hda_mixer_amp_volume_put(struct snd_kcontrol *kcontrol,
 	int chs = get_amp_channels(kcontrol);
 	int dir = get_amp_direction(kcontrol);
 	int idx = get_amp_index(kcontrol);
-	unsigned int ofs = get_amp_offset(kcontrol);
 	long *valp = ucontrol->value.integer.value;
 	int change = 0;
 
 	snd_hda_power_up(codec);
 	if (chs & 1) {
-		change = update_amp_value(codec, nid, 0, dir, idx, ofs, *valp);
+		change = snd_hda_codec_amp_update(codec, nid, 0, dir, idx,
+						  0x7f, *valp);
 		valp++;
 	}
 	if (chs & 2)
-		change |= update_amp_value(codec, nid, 1, dir, idx, ofs, *valp);
+		change |= snd_hda_codec_amp_update(codec, nid, 1, dir, idx,
+						   0x7f, *valp);
 	snd_hda_power_down(codec);
 	return change;
 }
@@ -1217,7 +1189,6 @@ int snd_hda_mixer_amp_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 	struct hda_codec *codec = snd_kcontrol_chip(kcontrol);
 	hda_nid_t nid = get_amp_nid(kcontrol);
 	int dir = get_amp_direction(kcontrol);
-	unsigned int ofs = get_amp_offset(kcontrol);
 	u32 caps, val1, val2;
 
 	if (size < 4 * sizeof(unsigned int))
@@ -1226,7 +1197,6 @@ int snd_hda_mixer_amp_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 	val2 = (caps & AC_AMPCAP_STEP_SIZE) >> AC_AMPCAP_STEP_SIZE_SHIFT;
 	val2 = (val2 + 1) * 25;
 	val1 = -((caps & AC_AMPCAP_OFFSET) >> AC_AMPCAP_OFFSET_SHIFT);
-	val1 += ofs;
 	val1 = ((int)val1) * ((int)val2);
 	if (put_user(SNDRV_CTL_TLVT_DB_SCALE, _tlv))
 		return -EFAULT;
@@ -1984,8 +1954,6 @@ int snd_hda_create_spdif_in_ctls(struct hda_codec *codec, hda_nid_t nid)
 	}
 	for (dig_mix = dig_in_ctls; dig_mix->name; dig_mix++) {
 		kctl = snd_ctl_new1(dig_mix, codec);
-		if (!kctl)
-			return -ENOMEM;
 		kctl->private_value = nid;
 		err = snd_hda_ctl_add(codec, kctl);
 		if (err < 0)
@@ -2645,7 +2613,7 @@ int snd_hda_codec_build_pcms(struct hda_codec *codec)
 		int dev;
 
 		if (!cpcm->stream[0].substreams && !cpcm->stream[1].substreams)
-			continue; /* no substreams assigned */
+			return 0; /* no substreams assigned */
 
 		if (!cpcm->pcm) {
 			dev = get_empty_pcm_device(codec->bus, cpcm->pcm_type);
@@ -3422,20 +3390,10 @@ int snd_hda_parse_pin_def_config(struct hda_codec *codec,
 			cfg->input_pins[AUTO_PIN_AUX] = nid;
 			break;
 		case AC_JACK_SPDIF_OUT:
-		case AC_JACK_DIG_OTHER_OUT:
 			cfg->dig_out_pin = nid;
-			if (loc == AC_JACK_LOC_HDMI)
-				cfg->dig_out_type = HDA_PCM_TYPE_HDMI;
-			else
-				cfg->dig_out_type = HDA_PCM_TYPE_SPDIF;
 			break;
 		case AC_JACK_SPDIF_IN:
-		case AC_JACK_DIG_OTHER_IN:
 			cfg->dig_in_pin = nid;
-			if (loc == AC_JACK_LOC_HDMI)
-				cfg->dig_in_type = HDA_PCM_TYPE_HDMI;
-			else
-				cfg->dig_in_type = HDA_PCM_TYPE_SPDIF;
 			break;
 		}
 	}
@@ -3541,8 +3499,6 @@ int snd_hda_parse_pin_def_config(struct hda_codec *codec,
 		   cfg->hp_pins[1], cfg->hp_pins[2],
 		   cfg->hp_pins[3], cfg->hp_pins[4]);
 	snd_printd("   mono: mono_out=0x%x\n", cfg->mono_out_pin);
-	if (cfg->dig_out_pin)
-		snd_printd("   dig-out=0x%x\n", cfg->dig_out_pin);
 	snd_printd("   inputs: mic=0x%x, fmic=0x%x, line=0x%x, fline=0x%x,"
 		   " cd=0x%x, aux=0x%x\n",
 		   cfg->input_pins[AUTO_PIN_MIC],
@@ -3551,8 +3507,6 @@ int snd_hda_parse_pin_def_config(struct hda_codec *codec,
 		   cfg->input_pins[AUTO_PIN_FRONT_LINE],
 		   cfg->input_pins[AUTO_PIN_CD],
 		   cfg->input_pins[AUTO_PIN_AUX]);
-	if (cfg->dig_out_pin)
-		snd_printd("   dig-in=0x%x\n", cfg->dig_in_pin);
 
 	return 0;
 }

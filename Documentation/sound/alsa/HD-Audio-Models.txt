@@ -56,7 +56,6 @@ ALC262
   sony-assamd	Sony ASSAMD
   toshiba-s06	Toshiba S06
   toshiba-rx1	Toshiba RX1
-  tyan		Tyan Thunder n6650W (S2915-E)
   ultra		Samsung Q1 Ultra Vista model
   lenovo-3000	Lenovo 3000 y410
   nec		NEC Versa S9100
@@ -286,7 +285,6 @@ STAC9205/9254
   dell-m42	Dell (unknown)
   dell-m43	Dell Precision
   dell-m44	Dell Inspiron
-  eapd		Keep EAPD on (e.g. Gateway T1616)
 
 STAC9220/9221
 =============
@@ -355,4 +353,5 @@ STAC92HD83*
 
 STAC9872
 ========
-  N/A
+  vaio		Setup for VAIO FE550G/SZ110
+  vaio-ar Setup for VAIO AR
