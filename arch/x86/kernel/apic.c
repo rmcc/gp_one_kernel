@@ -535,8 +535,7 @@ static void __init lapic_cal_handler(struct clock_event_device *dev)
 	}
 }
 
-static int __init
-calibrate_by_pmtimer(long deltapm, long *delta, long *deltatsc)
+static int __init calibrate_by_pmtimer(long deltapm, long *delta)
 {
 	const long pm_100ms = PMTMR_TICKS_PER_SEC / 10;
 	const long pm_thresh = pm_100ms / 100;
@@ -547,7 +546,7 @@ calibrate_by_pmtimer(long deltapm, long *delta, long *deltatsc)
 	return -1;
 #endif
 
-	apic_printk(APIC_VERBOSE, "... PM-Timer delta = %ld\n", deltapm);
+	apic_printk(APIC_VERBOSE, "... PM timer delta = %ld\n", deltapm);
 
 	/* Check, if the PM timer is available */
 	if (!deltapm)
@@ -557,30 +556,19 @@ calibrate_by_pmtimer(long deltapm, long *delta, long *deltatsc)
 
 	if (deltapm > (pm_100ms - pm_thresh) &&
 	    deltapm < (pm_100ms + pm_thresh)) {
-		apic_printk(APIC_VERBOSE, "... PM-Timer result ok\n");
-		return 0;
-	}
-
-	res = (((u64)deltapm) *  mult) >> 22;
-	do_div(res, 1000000);
-	pr_warning("APIC calibration not consistent "
-		   "with PM-Timer: %ldms instead of 100ms\n",(long)res);
-
-	/* Correct the lapic counter value */
-	res = (((u64)(*delta)) * pm_100ms);
-	do_div(res, deltapm);
-	pr_info("APIC delta adjusted to PM-Timer: "
-		"%lu (%ld)\n", (unsigned long)res, *delta);
-	*delta = (long)res;
-
-	/* Correct the tsc counter value */
-	if (cpu_has_tsc) {
-		res = (((u64)(*deltatsc)) * pm_100ms);
+		apic_printk(APIC_VERBOSE, "... PM timer result ok\n");
+	} else {
+		res = (((u64)deltapm) *  mult) >> 22;
+		do_div(res, 1000000);
+		pr_warning("APIC calibration not consistent "
+			"with PM Timer: %ldms instead of 100ms\n",
+			(long)res);
+		/* Correct the lapic counter value */
+		res = (((u64)(*delta)) * pm_100ms);
 		do_div(res, deltapm);
-		apic_printk(APIC_VERBOSE, "TSC delta adjusted to "
-					  "PM-Timer: %lu (%ld) \n",
-					(unsigned long)res, *deltatsc);
-		*deltatsc = (long)res;
+		pr_info("APIC delta adjusted to PM-Timer: "
+			"%lu (%ld)\n", (unsigned long)res, *delta);
+		*delta = (long)res;
 	}
 
 	return 0;
@@ -591,7 +579,7 @@ static int __init calibrate_APIC_clock(void)
 	struct clock_event_device *levt = &__get_cpu_var(lapic_events);
 	void (*real_handler)(struct clock_event_device *dev);
 	unsigned long deltaj;
-	long delta, deltatsc;
+	long delta;
 	int pm_referenced = 0;
 
 	local_irq_disable();
@@ -621,11 +609,9 @@ static int __init calibrate_APIC_clock(void)
 	delta = lapic_cal_t1 - lapic_cal_t2;
 	apic_printk(APIC_VERBOSE, "... lapic delta = %ld\n", delta);
 
-	deltatsc = (long)(lapic_cal_tsc2 - lapic_cal_tsc1);
-
 	/* we trust the PM based calibration if possible */
 	pm_referenced = !calibrate_by_pmtimer(lapic_cal_pm2 - lapic_cal_pm1,
-					&delta, &deltatsc);
+					&delta);
 
 	/* Calculate the scaled math multiplication factor */
 	lapic_clockevent.mult = div_sc(delta, TICK_NSEC * LAPIC_CAL_LOOPS,
@@ -643,10 +629,11 @@ static int __init calibrate_APIC_clock(void)
 		    calibration_result);
 
 	if (cpu_has_tsc) {
+		delta = (long)(lapic_cal_tsc2 - lapic_cal_tsc1);
 		apic_printk(APIC_VERBOSE, "..... CPU clock speed is "
 			    "%ld.%04ld MHz.\n",
-			    (deltatsc / LAPIC_CAL_LOOPS) / (1000000 / HZ),
-			    (deltatsc / LAPIC_CAL_LOOPS) % (1000000 / HZ));
+			    (delta / LAPIC_CAL_LOOPS) / (1000000 / HZ),
+			    (delta / LAPIC_CAL_LOOPS) % (1000000 / HZ));
 	}
 
 	apic_printk(APIC_VERBOSE, "..... host bus clock speed is "
