@@ -33,6 +33,8 @@
 #include <asm/traps.h>
 #include <asm/blackfin.h>
 
+#include "../oprofile/op_blackfin.h"
+
 #ifdef CONFIG_DEBUG_ICACHE_CHECK
 #define L1_ICACHE_START 0xffa10000
 #define L1_ICACHE_END   0xffa13fff
@@ -132,3 +134,13 @@ asmlinkage void irq_panic(int reason, struct pt_regs *regs)
 #endif
 
 }
+
+#ifdef CONFIG_HARDWARE_PM
+/*
+ * call the handler of Performance overflow
+ */
+asmlinkage void pm_overflow(int irq, struct pt_regs *regs)
+{
+	pm_overflow_handler(irq, regs);
+}
+#endif

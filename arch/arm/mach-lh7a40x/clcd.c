@@ -207,7 +207,7 @@ static struct clcd_board clcd_platform_data = {
 static struct amba_device name##_device = {			\
 	.dev = {						\
 		.coherent_dma_mask = ~0,			\
-		.init_name = busid,				\
+		.bus_id	= busid,				\
 		.platform_data = plat,				\
 		},						\
 	.res = {						\

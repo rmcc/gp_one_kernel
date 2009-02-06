@@ -41,7 +41,6 @@
 #endif
 
 /* Chip Select */
-#define GPIO1_nCS2		MFP_CFG(GPIO1,	AF1)
 #define GPIO2_nCS3		MFP_CFG(GPIO2,  AF1)
 
 /* AC97 */

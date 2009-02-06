@@ -101,7 +101,7 @@ xfs_qm_dqinit(
 	if (brandnewdquot) {
 		dqp->dq_flnext = dqp->dq_flprev = dqp;
 		mutex_init(&dqp->q_qlock);
-		init_waitqueue_head(&dqp->q_pinwait);
+		sv_init(&dqp->q_pinwait, SV_DEFAULT, "pdq");
 
 		/*
 		 * Because we want to use a counting completion, complete
@@ -131,7 +131,7 @@ xfs_qm_dqinit(
 		 dqp->q_res_bcount = 0;
 		 dqp->q_res_icount = 0;
 		 dqp->q_res_rtbcount = 0;
-		 atomic_set(&dqp->q_pincount, 0);
+		 dqp->q_pincount = 0;
 		 dqp->q_hash = NULL;
 		 ASSERT(dqp->dq_flnext == dqp->dq_flprev);
 
@@ -1221,14 +1221,16 @@ xfs_qm_dqflush(
 	xfs_dqtrace_entry(dqp, "DQFLUSH");
 
 	/*
-	 * If not dirty, or it's pinned and we are not supposed to
-	 * block, nada.
+	 * If not dirty, nada.
 	 */
-	if (!XFS_DQ_IS_DIRTY(dqp) ||
-	    (!(flags & XFS_QMOPT_SYNC) && atomic_read(&dqp->q_pincount) > 0)) {
+	if (!XFS_DQ_IS_DIRTY(dqp)) {
 		xfs_dqfunlock(dqp);
-		return 0;
+		return (0);
 	}
+
+	/*
+	 * Cant flush a pinned dquot. Wait for it.
+	 */
 	xfs_qm_dqunpin_wait(dqp);
 
 	/*
@@ -1272,8 +1274,10 @@ xfs_qm_dqflush(
 	dqp->dq_flags &= ~(XFS_DQ_DIRTY);
 	mp = dqp->q_mount;
 
-	xfs_trans_ail_copy_lsn(mp->m_ail, &dqp->q_logitem.qli_flush_lsn,
-					&dqp->q_logitem.qli_item.li_lsn);
+	/* lsn is 64 bits */
+	spin_lock(&mp->m_ail_lock);
+	dqp->q_logitem.qli_flush_lsn = dqp->q_logitem.qli_item.li_lsn;
+	spin_unlock(&mp->m_ail_lock);
 
 	/*
 	 * Attach an iodone routine so that we can remove this dquot from the
@@ -1319,10 +1323,8 @@ xfs_qm_dqflush_done(
 	xfs_dq_logitem_t	*qip)
 {
 	xfs_dquot_t		*dqp;
-	struct xfs_ail		*ailp;
 
 	dqp = qip->qli_dquot;
-	ailp = qip->qli_item.li_ailp;
 
 	/*
 	 * We only want to pull the item from the AIL if its
@@ -1335,12 +1337,15 @@ xfs_qm_dqflush_done(
 	if ((qip->qli_item.li_flags & XFS_LI_IN_AIL) &&
 	    qip->qli_item.li_lsn == qip->qli_flush_lsn) {
 
-		/* xfs_trans_ail_delete() drops the AIL lock. */
-		spin_lock(&ailp->xa_lock);
+		spin_lock(&dqp->q_mount->m_ail_lock);
+		/*
+		 * xfs_trans_delete_ail() drops the AIL lock.
+		 */
 		if (qip->qli_item.li_lsn == qip->qli_flush_lsn)
-			xfs_trans_ail_delete(ailp, (xfs_log_item_t*)qip);
+			xfs_trans_delete_ail(dqp->q_mount,
+					     (xfs_log_item_t*)qip);
 		else
-			spin_unlock(&ailp->xa_lock);
+			spin_unlock(&dqp->q_mount->m_ail_lock);
 	}
 
 	/*
@@ -1370,7 +1375,7 @@ xfs_dqunlock(
 	mutex_unlock(&(dqp->q_qlock));
 	if (dqp->q_logitem.qli_dquot == dqp) {
 		/* Once was dqp->q_mount, but might just have been cleared */
-		xfs_trans_unlocked_item(dqp->q_logitem.qli_item.li_ailp,
+		xfs_trans_unlocked_item(dqp->q_logitem.qli_item.li_mountp,
 					(xfs_log_item_t*)&(dqp->q_logitem));
 	}
 }
@@ -1484,7 +1489,7 @@ xfs_qm_dqpurge(
 				"xfs_qm_dqpurge: dquot %p flush failed", dqp);
 		xfs_dqflock(dqp);
 	}
-	ASSERT(atomic_read(&dqp->q_pincount) == 0);
+	ASSERT(dqp->q_pincount == 0);
 	ASSERT(XFS_FORCED_SHUTDOWN(mp) ||
 	       !(dqp->q_logitem.qli_item.li_flags & XFS_LI_IN_AIL));
 

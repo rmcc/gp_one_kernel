@@ -72,8 +72,3 @@
     S_(NULL)
     S_("peer")
     S_("capability2")
-    S_(NULL)
-    S_(NULL)
-    S_(NULL)
-    S_(NULL)
-    S_("kernel_service")

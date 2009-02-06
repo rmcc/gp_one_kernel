@@ -13,6 +13,7 @@
 
 struct ns_cgroup {
 	struct cgroup_subsys_state css;
+	spinlock_t lock;
 };
 
 struct cgroup_subsys ns_subsys;
@@ -83,6 +84,7 @@ static struct cgroup_subsys_state *ns_create(struct cgroup_subsys *ss,
 	ns_cgroup = kzalloc(sizeof(*ns_cgroup), GFP_KERNEL);
 	if (!ns_cgroup)
 		return ERR_PTR(-ENOMEM);
+	spin_lock_init(&ns_cgroup->lock);
 	return &ns_cgroup->css;
 }
 

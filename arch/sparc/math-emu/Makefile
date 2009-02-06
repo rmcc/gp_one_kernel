@@ -2,7 +2,7 @@
 # Makefile for the FPU instruction emulation.
 #
 
-# supress all warnings - as math.c produces a lot!
-ccflags-y := -w
+obj-y    := math.o
 
-obj-y    := math_$(BITS).o
+EXTRA_AFLAGS := -ansi
+EXTRA_CFLAGS = -I. -Iinclude/math-emu -w

@@ -29,10 +29,6 @@ enum symbol_type {
 	SYM_NORMAL, SYM_TYPEDEF, SYM_ENUM, SYM_STRUCT, SYM_UNION
 };
 
-enum symbol_status {
-	STATUS_UNCHANGED, STATUS_DEFINED, STATUS_MODIFIED
-};
-
 struct string_list {
 	struct string_list *next;
 	enum symbol_type tag;
@@ -47,9 +43,6 @@ struct symbol {
 	struct symbol *expansion_trail;
 	struct symbol *visited;
 	int is_extern;
-	int is_declared;
-	enum symbol_status status;
-	int is_override;
 };
 
 typedef struct string_list **yystype;

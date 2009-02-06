@@ -635,16 +635,13 @@ static void zcrypt_pcixcc_receive(struct ap_device *ap_dev,
 	};
 	struct response_type *resp_type =
 		(struct response_type *) msg->private;
-	struct type86x_reply *t86r;
+	struct type86x_reply *t86r = reply->message;
 	int length;
 
 	/* Copy the reply message to the request message buffer. */
-	if (IS_ERR(reply)) {
+	if (IS_ERR(reply))
 		memcpy(msg->message, &error_reply, sizeof(error_reply));
-		goto out;
-	}
-	t86r = reply->message;
-	if (t86r->hdr.type == TYPE86_RSP_CODE &&
+	else if (t86r->hdr.type == TYPE86_RSP_CODE &&
 		 t86r->cprbx.cprb_ver_id == 0x02) {
 		switch (resp_type->type) {
 		case PCIXCC_RESPONSE_TYPE_ICA:
@@ -663,7 +660,6 @@ static void zcrypt_pcixcc_receive(struct ap_device *ap_dev,
 		}
 	} else
 		memcpy(msg->message, reply->message, sizeof error_reply);
-out:
 	complete(&(resp_type->work));
 }
 

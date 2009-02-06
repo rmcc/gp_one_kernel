@@ -311,7 +311,9 @@ static int i82875p_setup_overfl_dev(struct pci_dev *pdev,
 	}
 
 	/* cache is irrelevant for PCI bus reads/writes */
-	window = pci_ioremap_bar(dev, 0);
+	window = ioremap_nocache(pci_resource_start(dev, 0),
+				 pci_resource_len(dev, 0));
+
 	if (window == NULL) {
 		i82875p_printk(KERN_ERR, "%s(): Failed to ioremap bar6\n",
 			__func__);

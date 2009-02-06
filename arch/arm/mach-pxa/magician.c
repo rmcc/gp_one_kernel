@@ -336,7 +336,8 @@ static struct pxafb_mach_info toppoly_info = {
 	.modes           = toppoly_modes,
 	.num_modes       = 1,
 	.fixed_modes     = 1,
-	.lcd_conn	= LCD_COLOR_TFT_16BPP,
+	.lccr0           = LCCR0_Color | LCCR0_Sngl | LCCR0_Act,
+	.lccr3           = LCCR3_PixRsEdg,
 	.pxafb_lcd_power = toppoly_lcd_power,
 };
 
@@ -344,8 +345,8 @@ static struct pxafb_mach_info samsung_info = {
 	.modes           = samsung_modes,
 	.num_modes       = 1,
 	.fixed_modes     = 1,
-	.lcd_conn	 = LCD_COLOR_TFT_16BPP | LCD_PCLK_EDGE_FALL |\
-			   LCD_ALTERNATE_MAPPING,
+	.lccr0           = LCCR0_LDDALT | LCCR0_Color | LCCR0_Sngl | LCCR0_Act,
+	.lccr3           = LCCR3_PixFlEdg,
 	.pxafb_lcd_power = samsung_lcd_power,
 };
 

@@ -1,4 +1,4 @@
-#include <variant/core.h>
+#include <asm/variant/core.h>
 OUTPUT_ARCH(xtensa)
 ENTRY(_ResetVector)
 

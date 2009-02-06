@@ -200,18 +200,18 @@ static int generic_suspend(struct usb_device *udev, pm_message_t msg)
 	 * interfaces manually by doing a bus (or "global") suspend.
 	 */
 	if (!udev->parent)
-		rc = hcd_bus_suspend(udev, msg);
+		rc = hcd_bus_suspend(udev);
 
 	/* Non-root devices don't need to do anything for FREEZE or PRETHAW */
 	else if (msg.event == PM_EVENT_FREEZE || msg.event == PM_EVENT_PRETHAW)
 		rc = 0;
 	else
-		rc = usb_port_suspend(udev, msg);
+		rc = usb_port_suspend(udev);
 
 	return rc;
 }
 
-static int generic_resume(struct usb_device *udev, pm_message_t msg)
+static int generic_resume(struct usb_device *udev)
 {
 	int rc;
 
@@ -221,9 +221,9 @@ static int generic_resume(struct usb_device *udev, pm_message_t msg)
 	 * interfaces manually by doing a bus (or "global") resume.
 	 */
 	if (!udev->parent)
-		rc = hcd_bus_resume(udev, msg);
+		rc = hcd_bus_resume(udev);
 	else
-		rc = usb_port_resume(udev, msg);
+		rc = usb_port_resume(udev);
 	return rc;
 }
 

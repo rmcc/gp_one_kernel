@@ -17,7 +17,7 @@
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
  */
 
-static const char *verstr = "20081215";
+static const char *verstr = "20080504";
 
 #include <linux/module.h>
 
@@ -182,16 +182,18 @@ static struct scsi_tape **scsi_tapes = NULL;
 
 static int modes_defined;
 
+static struct st_buffer *new_tape_buffer(int, int, int);
 static int enlarge_buffer(struct st_buffer *, int, int);
 static void clear_buffer(struct st_buffer *);
 static void normalize_buffer(struct st_buffer *);
 static int append_to_buffer(const char __user *, struct st_buffer *, int);
 static int from_buffer(struct st_buffer *, char __user *, int);
 static void move_buffer_data(struct st_buffer *, int);
+static void buf_to_sg(struct st_buffer *, unsigned int);
 
-static int sgl_map_user_pages(struct st_buffer *, const unsigned int,
+static int sgl_map_user_pages(struct scatterlist *, const unsigned int, 
 			      unsigned long, size_t, int);
-static int sgl_unmap_user_pages(struct st_buffer *, const unsigned int, int);
+static int sgl_unmap_user_pages(struct scatterlist *, const unsigned int, int);
 
 static int st_probe(struct device *);
 static int st_remove(struct device *);
@@ -433,85 +435,30 @@ static int st_chk_result(struct scsi_tape *STp, struct st_request * SRpnt)
 	return (-EIO);
 }
 
-static struct st_request *st_allocate_request(struct scsi_tape *stp)
+
+/* Wakeup from interrupt */
+static void st_sleep_done(void *data, char *sense, int result, int resid)
 {
-	struct st_request *streq;
+	struct st_request *SRpnt = data;
+	struct scsi_tape *STp = SRpnt->stp;
 
-	streq = kzalloc(sizeof(*streq), GFP_KERNEL);
-	if (streq)
-		streq->stp = stp;
-	else {
-		DEBC(printk(KERN_ERR "%s: Can't get SCSI request.\n",
-			    tape_name(stp)););
-		if (signal_pending(current))
-			stp->buffer->syscall_result = -EINTR;
-		else
-			stp->buffer->syscall_result = -EBUSY;
-	}
+	memcpy(SRpnt->sense, sense, SCSI_SENSE_BUFFERSIZE);
+	(STp->buffer)->cmdstat.midlevel_result = SRpnt->result = result;
+	(STp->buffer)->cmdstat.residual = resid;
+	DEB( STp->write_pending = 0; )
 
-	return streq;
+	if (SRpnt->waiting)
+		complete(SRpnt->waiting);
+}
+
+static struct st_request *st_allocate_request(void)
+{
+	return kzalloc(sizeof(struct st_request), GFP_KERNEL);
 }
 
 static void st_release_request(struct st_request *streq)
 {
 	kfree(streq);
-}
-
-static void st_scsi_execute_end(struct request *req, int uptodate)
-{
-	struct st_request *SRpnt = req->end_io_data;
-	struct scsi_tape *STp = SRpnt->stp;
-
-	STp->buffer->cmdstat.midlevel_result = SRpnt->result = req->errors;
-	STp->buffer->cmdstat.residual = req->data_len;
-
-	if (SRpnt->waiting)
-		complete(SRpnt->waiting);
-
-	blk_rq_unmap_user(SRpnt->bio);
-	__blk_put_request(req->q, req);
-}
-
-static int st_scsi_execute(struct st_request *SRpnt, const unsigned char *cmd,
-			   int data_direction, void *buffer, unsigned bufflen,
-			   int timeout, int retries)
-{
-	struct request *req;
-	struct rq_map_data *mdata = &SRpnt->stp->buffer->map_data;
-	int err = 0;
-	int write = (data_direction == DMA_TO_DEVICE);
-
-	req = blk_get_request(SRpnt->stp->device->request_queue, write,
-			      GFP_KERNEL);
-	if (!req)
-		return DRIVER_ERROR << 24;
-
-	req->cmd_type = REQ_TYPE_BLOCK_PC;
-	req->cmd_flags |= REQ_QUIET;
-
-	mdata->null_mapped = 1;
-
-	if (bufflen) {
-		err = blk_rq_map_user(req->q, req, mdata, NULL, bufflen,
-				      GFP_KERNEL);
-		if (err) {
-			blk_put_request(req);
-			return DRIVER_ERROR << 24;
-		}
-	}
-
-	SRpnt->bio = req->bio;
-	req->cmd_len = COMMAND_SIZE(cmd[0]);
-	memset(req->cmd, 0, BLK_MAX_CDB);
-	memcpy(req->cmd, cmd, req->cmd_len);
-	req->sense = SRpnt->sense;
-	req->sense_len = 0;
-	req->timeout = timeout;
-	req->retries = retries;
-	req->end_io_data = SRpnt;
-
-	blk_execute_rq_nowait(req->q, NULL, req, 1, st_scsi_execute_end);
-	return 0;
 }
 
 /* Do the scsi command. Waits until command performed if do_wait is true.
@@ -522,8 +469,6 @@ st_do_scsi(struct st_request * SRpnt, struct scsi_tape * STp, unsigned char *cmd
 	   int bytes, int direction, int timeout, int retries, int do_wait)
 {
 	struct completion *waiting;
-	struct rq_map_data *mdata = &STp->buffer->map_data;
-	int ret;
 
 	/* if async, make sure there's no command outstanding */
 	if (!do_wait && ((STp->buffer)->last_SRpnt)) {
@@ -536,10 +481,18 @@ st_do_scsi(struct st_request * SRpnt, struct scsi_tape * STp, unsigned char *cmd
 		return NULL;
 	}
 
-	if (!SRpnt) {
-		SRpnt = st_allocate_request(STp);
-		if (!SRpnt)
+	if (SRpnt == NULL) {
+		SRpnt = st_allocate_request();
+		if (SRpnt == NULL) {
+			DEBC( printk(KERN_ERR "%s: Can't get SCSI request.\n",
+				     tape_name(STp)); );
+			if (signal_pending(current))
+				(STp->buffer)->syscall_result = (-EINTR);
+			else
+				(STp->buffer)->syscall_result = (-EBUSY);
 			return NULL;
+		}
+		SRpnt->stp = STp;
 	}
 
 	/* If async IO, set last_SRpnt. This ptr tells write_behind_check
@@ -551,27 +504,21 @@ st_do_scsi(struct st_request * SRpnt, struct scsi_tape * STp, unsigned char *cmd
 	init_completion(waiting);
 	SRpnt->waiting = waiting;
 
-	if (STp->buffer->do_dio) {
-		mdata->nr_entries = STp->buffer->sg_segs;
-		mdata->pages = STp->buffer->mapped_pages;
-	} else {
-		mdata->nr_entries =
-			DIV_ROUND_UP(bytes, PAGE_SIZE << mdata->page_order);
-		STp->buffer->map_data.pages = STp->buffer->reserved_pages;
-		STp->buffer->map_data.offset = 0;
-	}
+	if (!STp->buffer->do_dio)
+		buf_to_sg(STp->buffer, bytes);
 
 	memcpy(SRpnt->cmd, cmd, sizeof(SRpnt->cmd));
 	STp->buffer->cmdstat.have_sense = 0;
 	STp->buffer->syscall_result = 0;
 
-	ret = st_scsi_execute(SRpnt, cmd, direction, NULL, bytes, timeout,
-			      retries);
-	if (ret) {
+	if (scsi_execute_async(STp->device, cmd, COMMAND_SIZE(cmd[0]), direction,
+			&((STp->buffer)->sg[0]), bytes, (STp->buffer)->sg_segs,
+			       timeout, retries, SRpnt, st_sleep_done, GFP_KERNEL)) {
 		/* could not allocate the buffer or request was too large */
 		(STp->buffer)->syscall_result = (-EBUSY);
 		(STp->buffer)->last_SRpnt = NULL;
-	} else if (do_wait) {
+	}
+	else if (do_wait) {
 		wait_for_completion(waiting);
 		SRpnt->waiting = NULL;
 		(STp->buffer)->syscall_result = st_chk_result(STp, SRpnt);
@@ -666,8 +613,7 @@ static int cross_eof(struct scsi_tape * STp, int forward)
 		   tape_name(STp), forward ? "forward" : "backward"));
 
 	SRpnt = st_do_scsi(NULL, STp, cmd, 0, DMA_NONE,
-			   STp->device->request_queue->rq_timeout,
-			   MAX_RETRIES, 1);
+			   STp->device->timeout, MAX_RETRIES, 1);
 	if (!SRpnt)
 		return (STp->buffer)->syscall_result;
 
@@ -711,8 +657,7 @@ static int st_flush_write_buffer(struct scsi_tape * STp)
 		cmd[4] = blks;
 
 		SRpnt = st_do_scsi(NULL, STp, cmd, transfer, DMA_TO_DEVICE,
-				   STp->device->request_queue->rq_timeout,
-				   MAX_WRITE_RETRIES, 1);
+				   STp->device->timeout, MAX_WRITE_RETRIES, 1);
 		if (!SRpnt)
 			return (STp->buffer)->syscall_result;
 
@@ -1042,8 +987,7 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 		cmd[0] = READ_BLOCK_LIMITS;
 
 		SRpnt = st_do_scsi(SRpnt, STp, cmd, 6, DMA_FROM_DEVICE,
-				   STp->device->request_queue->rq_timeout,
-				   MAX_READY_RETRIES, 1);
+				   STp->device->timeout, MAX_READY_RETRIES, 1);
 		if (!SRpnt) {
 			retval = (STp->buffer)->syscall_result;
 			goto err_out;
@@ -1070,8 +1014,7 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 	cmd[4] = 12;
 
 	SRpnt = st_do_scsi(SRpnt, STp, cmd, 12, DMA_FROM_DEVICE,
-			   STp->device->request_queue->rq_timeout,
-			   MAX_READY_RETRIES, 1);
+			STp->device->timeout, MAX_READY_RETRIES, 1);
 	if (!SRpnt) {
 		retval = (STp->buffer)->syscall_result;
 		goto err_out;
@@ -1304,8 +1247,7 @@ static int st_flush(struct file *filp, fl_owner_t id)
 		cmd[4] = 1 + STp->two_fm;
 
 		SRpnt = st_do_scsi(NULL, STp, cmd, 0, DMA_NONE,
-				   STp->device->request_queue->rq_timeout,
-				   MAX_WRITE_RETRIES, 1);
+				   STp->device->timeout, MAX_WRITE_RETRIES, 1);
 		if (!SRpnt) {
 			result = (STp->buffer)->syscall_result;
 			goto out;
@@ -1472,8 +1414,8 @@ static int setup_buffering(struct scsi_tape *STp, const char __user *buf,
 
 	if (i && ((unsigned long)buf & queue_dma_alignment(
 					STp->device->request_queue)) == 0) {
-		i = sgl_map_user_pages(STbp, STbp->use_sg, (unsigned long)buf,
-				       count, (is_read ? READ : WRITE));
+		i = sgl_map_user_pages(&(STbp->sg[0]), STbp->use_sg,
+				      (unsigned long)buf, count, (is_read ? READ : WRITE));
 		if (i > 0) {
 			STbp->do_dio = i;
 			STbp->buffer_bytes = 0;   /* can be used as transfer counter */
@@ -1481,6 +1423,7 @@ static int setup_buffering(struct scsi_tape *STp, const char __user *buf,
 		else
 			STbp->do_dio = 0;  /* fall back to buffering with any error */
 		STbp->sg_segs = STbp->do_dio;
+		STbp->frp_sg_current = 0;
 		DEB(
 		     if (STbp->do_dio) {
 			STp->nbr_dio++;
@@ -1526,7 +1469,7 @@ static void release_buffering(struct scsi_tape *STp, int is_read)
 
 	STbp = STp->buffer;
 	if (STbp->do_dio) {
-		sgl_unmap_user_pages(STbp, STbp->do_dio, is_read);
+		sgl_unmap_user_pages(&(STbp->sg[0]), STbp->do_dio, is_read);
 		STbp->do_dio = 0;
 		STbp->sg_segs = 0;
 	}
@@ -1691,8 +1634,7 @@ st_write(struct file *filp, const char __user *buf, size_t count, loff_t * ppos)
 		cmd[4] = blks;
 
 		SRpnt = st_do_scsi(SRpnt, STp, cmd, transfer, DMA_TO_DEVICE,
-				   STp->device->request_queue->rq_timeout,
-				   MAX_WRITE_RETRIES, !async_write);
+				   STp->device->timeout, MAX_WRITE_RETRIES, !async_write);
 		if (!SRpnt) {
 			retval = STbp->syscall_result;
 			goto out;
@@ -1862,8 +1804,7 @@ static long read_tape(struct scsi_tape *STp, long count,
 
 	SRpnt = *aSRpnt;
 	SRpnt = st_do_scsi(SRpnt, STp, cmd, bytes, DMA_FROM_DEVICE,
-			   STp->device->request_queue->rq_timeout,
-			   MAX_RETRIES, 1);
+			   STp->device->timeout, MAX_RETRIES, 1);
 	release_buffering(STp, 1);
 	*aSRpnt = SRpnt;
 	if (!SRpnt)
@@ -2272,8 +2213,7 @@ static int st_set_options(struct scsi_tape *STp, long options)
 			DEBC( printk(KERN_INFO "%s: Long timeout set to %d seconds.\n", name,
 			       (value & ~MT_ST_SET_LONG_TIMEOUT)));
 		} else {
-			blk_queue_rq_timeout(STp->device->request_queue,
-					     value * HZ);
+			STp->device->timeout = value * HZ;
 			DEBC( printk(KERN_INFO "%s: Normal timeout set to %d seconds.\n",
 				name, value) );
 		}
@@ -2371,7 +2311,7 @@ static int st_set_options(struct scsi_tape *STp, long options)
 static int read_mode_page(struct scsi_tape *STp, int page, int omit_block_descs)
 {
 	unsigned char cmd[MAX_COMMAND_SIZE];
-	struct st_request *SRpnt;
+	struct st_request *SRpnt = NULL;
 
 	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SENSE;
@@ -2380,14 +2320,14 @@ static int read_mode_page(struct scsi_tape *STp, int page, int omit_block_descs)
 	cmd[2] = page;
 	cmd[4] = 255;
 
-	SRpnt = st_do_scsi(NULL, STp, cmd, cmd[4], DMA_FROM_DEVICE,
-			   STp->device->request_queue->rq_timeout, 0, 1);
+	SRpnt = st_do_scsi(SRpnt, STp, cmd, cmd[4], DMA_FROM_DEVICE,
+			   STp->device->timeout, 0, 1);
 	if (SRpnt == NULL)
 		return (STp->buffer)->syscall_result;
 
 	st_release_request(SRpnt);
 
-	return STp->buffer->syscall_result;
+	return (STp->buffer)->syscall_result;
 }
 
 
@@ -2397,8 +2337,7 @@ static int write_mode_page(struct scsi_tape *STp, int page, int slow)
 {
 	int pgo;
 	unsigned char cmd[MAX_COMMAND_SIZE];
-	struct st_request *SRpnt;
-	int timeout;
+	struct st_request *SRpnt = NULL;
 
 	memset(cmd, 0, MAX_COMMAND_SIZE);
 	cmd[0] = MODE_SELECT;
@@ -2412,16 +2351,14 @@ static int write_mode_page(struct scsi_tape *STp, int page, int slow)
 	(STp->buffer)->b_data[MH_OFF_DEV_SPECIFIC] &= ~MH_BIT_WP;
 	(STp->buffer)->b_data[pgo + MP_OFF_PAGE_NBR] &= MP_MSK_PAGE_NBR;
 
-	timeout = slow ?
-		STp->long_timeout : STp->device->request_queue->rq_timeout;
-	SRpnt = st_do_scsi(NULL, STp, cmd, cmd[4], DMA_TO_DEVICE,
-			   timeout, 0, 1);
+	SRpnt = st_do_scsi(SRpnt, STp, cmd, cmd[4], DMA_TO_DEVICE,
+			   (slow ? STp->long_timeout : STp->device->timeout), 0, 1);
 	if (SRpnt == NULL)
 		return (STp->buffer)->syscall_result;
 
 	st_release_request(SRpnt);
 
-	return STp->buffer->syscall_result;
+	return (STp->buffer)->syscall_result;
 }
 
 
@@ -2527,7 +2464,7 @@ static int do_load_unload(struct scsi_tape *STp, struct file *filp, int load_cod
 	}
 	if (STp->immediate) {
 		cmd[1] = 1;	/* Don't wait for completion */
-		timeout = STp->device->request_queue->rq_timeout;
+		timeout = STp->device->timeout;
 	}
 	else
 		timeout = STp->long_timeout;
@@ -2701,7 +2638,7 @@ static int st_int_ioctl(struct scsi_tape *STp, unsigned int cmd_in, unsigned lon
 		cmd[2] = (arg >> 16);
 		cmd[3] = (arg >> 8);
 		cmd[4] = arg;
-		timeout = STp->device->request_queue->rq_timeout;
+		timeout = STp->device->timeout;
                 DEBC(
                      if (cmd_in == MTWEOF)
                                printk(ST_DEB_MSG "%s: Writing %d filemarks.\n", name,
@@ -2719,7 +2656,7 @@ static int st_int_ioctl(struct scsi_tape *STp, unsigned int cmd_in, unsigned lon
 		cmd[0] = REZERO_UNIT;
 		if (STp->immediate) {
 			cmd[1] = 1;	/* Don't wait for completion */
-			timeout = STp->device->request_queue->rq_timeout;
+			timeout = STp->device->timeout;
 		}
                 DEBC(printk(ST_DEB_MSG "%s: Rewinding tape.\n", name));
 		fileno = blkno = at_sm = 0;
@@ -2732,7 +2669,7 @@ static int st_int_ioctl(struct scsi_tape *STp, unsigned int cmd_in, unsigned lon
 		cmd[0] = START_STOP;
 		if (STp->immediate) {
 			cmd[1] = 1;	/* Don't wait for completion */
-			timeout = STp->device->request_queue->rq_timeout;
+			timeout = STp->device->timeout;
 		}
 		cmd[4] = 3;
                 DEBC(printk(ST_DEB_MSG "%s: Retensioning tape.\n", name));
@@ -2765,7 +2702,7 @@ static int st_int_ioctl(struct scsi_tape *STp, unsigned int cmd_in, unsigned lon
 		cmd[1] = (arg ? 1 : 0);	/* Long erase with non-zero argument */
 		if (STp->immediate) {
 			cmd[1] |= 2;	/* Don't wait for completion */
-			timeout = STp->device->request_queue->rq_timeout;
+			timeout = STp->device->timeout;
 		}
 		else
 			timeout = STp->long_timeout * 8;
@@ -2817,7 +2754,7 @@ static int st_int_ioctl(struct scsi_tape *STp, unsigned int cmd_in, unsigned lon
 		(STp->buffer)->b_data[9] = (ltmp >> 16);
 		(STp->buffer)->b_data[10] = (ltmp >> 8);
 		(STp->buffer)->b_data[11] = ltmp;
-		timeout = STp->device->request_queue->rq_timeout;
+		timeout = STp->device->timeout;
                 DEBC(
 			if (cmd_in == MTSETBLK || cmd_in == SET_DENS_AND_BLK)
 				printk(ST_DEB_MSG
@@ -3007,8 +2944,7 @@ static int get_location(struct scsi_tape *STp, unsigned int *block, int *partiti
 			scmd[1] = 1;
 	}
 	SRpnt = st_do_scsi(NULL, STp, scmd, 20, DMA_FROM_DEVICE,
-			   STp->device->request_queue->rq_timeout,
-			   MAX_READY_RETRIES, 1);
+			STp->device->timeout, MAX_READY_RETRIES, 1);
 	if (!SRpnt)
 		return (STp->buffer)->syscall_result;
 
@@ -3109,7 +3045,7 @@ static int set_location(struct scsi_tape *STp, unsigned int block, int partition
 	}
 	if (STp->immediate) {
 		scmd[1] |= 1;		/* Don't wait for completion */
-		timeout = STp->device->request_queue->rq_timeout;
+		timeout = STp->device->timeout;
 	}
 
 	SRpnt = st_do_scsi(NULL, STp, scmd, 0, DMA_NONE,
@@ -3669,34 +3605,38 @@ static long st_compat_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
 /* Try to allocate a new tape buffer. Calling function must not hold
    dev_arr_lock. */
-static struct st_buffer *new_tape_buffer(int need_dma, int max_sg)
+static struct st_buffer *
+ new_tape_buffer(int from_initialization, int need_dma, int max_sg)
 {
+	int i, got = 0;
+	gfp_t priority;
 	struct st_buffer *tb;
 
-	tb = kzalloc(sizeof(struct st_buffer), GFP_ATOMIC);
+	if (from_initialization)
+		priority = GFP_ATOMIC;
+	else
+		priority = GFP_KERNEL;
+
+	i = sizeof(struct st_buffer) + (max_sg - 1) * sizeof(struct scatterlist) +
+		max_sg * sizeof(struct st_buf_fragment);
+	tb = kzalloc(i, priority);
 	if (!tb) {
 		printk(KERN_NOTICE "st: Can't allocate new tape buffer.\n");
 		return NULL;
 	}
-	tb->frp_segs = 0;
+	tb->frp_segs = tb->orig_frp_segs = 0;
 	tb->use_sg = max_sg;
-	tb->dma = need_dma;
-	tb->buffer_size = 0;
+	tb->frp = (struct st_buf_fragment *)(&(tb->sg[0]) + max_sg);
 
-	tb->reserved_pages = kzalloc(max_sg * sizeof(struct page *),
-				     GFP_ATOMIC);
-	if (!tb->reserved_pages) {
-		kfree(tb);
-		return NULL;
-	}
+	tb->dma = need_dma;
+	tb->buffer_size = got;
+	sg_init_table(tb->sg, max_sg);
 
 	return tb;
 }
 
 
 /* Try to allocate enough space in the tape buffer */
-#define ST_MAX_ORDER 6
-
 static int enlarge_buffer(struct st_buffer * STbuffer, int new_size, int need_dma)
 {
 	int segs, nbr, max_segs, b_size, order, got;
@@ -3716,45 +3656,33 @@ static int enlarge_buffer(struct st_buffer * STbuffer, int new_size, int need_dm
 	priority = GFP_KERNEL | __GFP_NOWARN;
 	if (need_dma)
 		priority |= GFP_DMA;
-
-	if (STbuffer->cleared)
-		priority |= __GFP_ZERO;
-
-	if (STbuffer->frp_segs) {
-		order = STbuffer->map_data.page_order;
-		b_size = PAGE_SIZE << order;
-	} else {
-		for (b_size = PAGE_SIZE, order = 0;
-		     order < ST_MAX_ORDER && b_size < new_size;
-		     order++, b_size *= 2)
-			;  /* empty */
-	}
-	if (max_segs * (PAGE_SIZE << order) < new_size) {
-		if (order == ST_MAX_ORDER)
-			return 0;
-		normalize_buffer(STbuffer);
-		return enlarge_buffer(STbuffer, new_size, need_dma);
-	}
+	for (b_size = PAGE_SIZE, order=0; order <= 6 &&
+	     b_size < new_size - STbuffer->buffer_size;
+	     order++, b_size *= 2)
+		;  /* empty */
 
 	for (segs = STbuffer->frp_segs, got = STbuffer->buffer_size;
 	     segs < max_segs && got < new_size;) {
-		struct page *page;
-
-		page = alloc_pages(priority, order);
-		if (!page) {
+		STbuffer->frp[segs].page = alloc_pages(priority, order);
+		if (STbuffer->frp[segs].page == NULL) {
+			if (new_size - got <= (max_segs - segs) * b_size / 2) {
+				b_size /= 2; /* Large enough for the rest of the buffers */
+				order--;
+				continue;
+			}
 			DEB(STbuffer->buffer_size = got);
 			normalize_buffer(STbuffer);
 			return 0;
 		}
-
+		STbuffer->frp[segs].length = b_size;
 		STbuffer->frp_segs += 1;
 		got += b_size;
 		STbuffer->buffer_size = got;
-		STbuffer->reserved_pages[segs] = page;
+		if (STbuffer->cleared)
+			memset(page_address(STbuffer->frp[segs].page), 0, b_size);
 		segs++;
 	}
-	STbuffer->b_data = page_address(STbuffer->reserved_pages[0]);
-	STbuffer->map_data.page_order = order;
+	STbuffer->b_data = page_address(STbuffer->frp[0].page);
 
 	return 1;
 }
@@ -3766,8 +3694,7 @@ static void clear_buffer(struct st_buffer * st_bp)
 	int i;
 
 	for (i=0; i < st_bp->frp_segs; i++)
-		memset(page_address(st_bp->reserved_pages[i]), 0,
-		       PAGE_SIZE << st_bp->map_data.page_order);
+		memset(page_address(st_bp->frp[i].page), 0, st_bp->frp[i].length);
 	st_bp->cleared = 1;
 }
 
@@ -3775,16 +3702,16 @@ static void clear_buffer(struct st_buffer * st_bp)
 /* Release the extra buffer */
 static void normalize_buffer(struct st_buffer * STbuffer)
 {
-	int i, order = STbuffer->map_data.page_order;
+	int i, order;
 
-	for (i = 0; i < STbuffer->frp_segs; i++) {
-		__free_pages(STbuffer->reserved_pages[i], order);
-		STbuffer->buffer_size -= (PAGE_SIZE << order);
+	for (i = STbuffer->orig_frp_segs; i < STbuffer->frp_segs; i++) {
+		order = get_order(STbuffer->frp[i].length);
+		__free_pages(STbuffer->frp[i].page, order);
+		STbuffer->buffer_size -= STbuffer->frp[i].length;
 	}
-	STbuffer->frp_segs = 0;
+	STbuffer->frp_segs = STbuffer->orig_frp_segs;
+	STbuffer->frp_sg_current = 0;
 	STbuffer->sg_segs = 0;
-	STbuffer->map_data.page_order = 0;
-	STbuffer->map_data.offset = 0;
 }
 
 
@@ -3793,19 +3720,18 @@ static void normalize_buffer(struct st_buffer * STbuffer)
 static int append_to_buffer(const char __user *ubp, struct st_buffer * st_bp, int do_count)
 {
 	int i, cnt, res, offset;
-	int length = PAGE_SIZE << st_bp->map_data.page_order;
 
 	for (i = 0, offset = st_bp->buffer_bytes;
-	     i < st_bp->frp_segs && offset >= length; i++)
-		offset -= length;
+	     i < st_bp->frp_segs && offset >= st_bp->frp[i].length; i++)
+		offset -= st_bp->frp[i].length;
 	if (i == st_bp->frp_segs) {	/* Should never happen */
 		printk(KERN_WARNING "st: append_to_buffer offset overflow.\n");
 		return (-EIO);
 	}
 	for (; i < st_bp->frp_segs && do_count > 0; i++) {
-		struct page *page = st_bp->reserved_pages[i];
-		cnt = length - offset < do_count ? length - offset : do_count;
-		res = copy_from_user(page_address(page) + offset, ubp, cnt);
+		cnt = st_bp->frp[i].length - offset < do_count ?
+		    st_bp->frp[i].length - offset : do_count;
+		res = copy_from_user(page_address(st_bp->frp[i].page) + offset, ubp, cnt);
 		if (res)
 			return (-EFAULT);
 		do_count -= cnt;
@@ -3825,19 +3751,18 @@ static int append_to_buffer(const char __user *ubp, struct st_buffer * st_bp, in
 static int from_buffer(struct st_buffer * st_bp, char __user *ubp, int do_count)
 {
 	int i, cnt, res, offset;
-	int length = PAGE_SIZE << st_bp->map_data.page_order;
 
 	for (i = 0, offset = st_bp->read_pointer;
-	     i < st_bp->frp_segs && offset >= length; i++)
-		offset -= length;
+	     i < st_bp->frp_segs && offset >= st_bp->frp[i].length; i++)
+		offset -= st_bp->frp[i].length;
 	if (i == st_bp->frp_segs) {	/* Should never happen */
 		printk(KERN_WARNING "st: from_buffer offset overflow.\n");
 		return (-EIO);
 	}
 	for (; i < st_bp->frp_segs && do_count > 0; i++) {
-		struct page *page = st_bp->reserved_pages[i];
-		cnt = length - offset < do_count ? length - offset : do_count;
-		res = copy_to_user(ubp, page_address(page) + offset, cnt);
+		cnt = st_bp->frp[i].length - offset < do_count ?
+		    st_bp->frp[i].length - offset : do_count;
+		res = copy_to_user(ubp, page_address(st_bp->frp[i].page) + offset, cnt);
 		if (res)
 			return (-EFAULT);
 		do_count -= cnt;
@@ -3858,7 +3783,6 @@ static void move_buffer_data(struct st_buffer * st_bp, int offset)
 {
 	int src_seg, dst_seg, src_offset = 0, dst_offset;
 	int count, total;
-	int length = PAGE_SIZE << st_bp->map_data.page_order;
 
 	if (offset == 0)
 		return;
@@ -3866,32 +3790,56 @@ static void move_buffer_data(struct st_buffer * st_bp, int offset)
 	total=st_bp->buffer_bytes - offset;
 	for (src_seg=0; src_seg < st_bp->frp_segs; src_seg++) {
 		src_offset = offset;
-		if (src_offset < length)
+		if (src_offset < st_bp->frp[src_seg].length)
 			break;
-		offset -= length;
+		offset -= st_bp->frp[src_seg].length;
 	}
 
 	st_bp->buffer_bytes = st_bp->read_pointer = total;
 	for (dst_seg=dst_offset=0; total > 0; ) {
-		struct page *dpage = st_bp->reserved_pages[dst_seg];
-		struct page *spage = st_bp->reserved_pages[src_seg];
-
-		count = min(length - dst_offset, length - src_offset);
-		memmove(page_address(dpage) + dst_offset,
-			page_address(spage) + src_offset, count);
+		count = min(st_bp->frp[dst_seg].length - dst_offset,
+			    st_bp->frp[src_seg].length - src_offset);
+		memmove(page_address(st_bp->frp[dst_seg].page) + dst_offset,
+			page_address(st_bp->frp[src_seg].page) + src_offset, count);
 		src_offset += count;
-		if (src_offset >= length) {
+		if (src_offset >= st_bp->frp[src_seg].length) {
 			src_seg++;
 			src_offset = 0;
 		}
 		dst_offset += count;
-		if (dst_offset >= length) {
+		if (dst_offset >= st_bp->frp[dst_seg].length) {
 			dst_seg++;
 			dst_offset = 0;
 		}
 		total -= count;
 	}
 }
+
+
+/* Fill the s/g list up to the length required for this transfer */
+static void buf_to_sg(struct st_buffer *STbp, unsigned int length)
+{
+	int i;
+	unsigned int count;
+	struct scatterlist *sg;
+	struct st_buf_fragment *frp;
+
+	if (length == STbp->frp_sg_current)
+		return;   /* work already done */
+
+	sg = &(STbp->sg[0]);
+	frp = STbp->frp;
+	for (i=count=0; count < length; i++) {
+		if (length - count > frp[i].length)
+			sg_set_page(&sg[i], frp[i].page, frp[i].length, 0);
+		else
+			sg_set_page(&sg[i], frp[i].page, length - count, 0);
+		count += sg[i].length;
+	}
+	STbp->sg_segs = i;
+	STbp->frp_sg_current = length;
+}
+
 
 /* Validate the options from command line or module parameters */
 static void validate_options(void)
@@ -3987,7 +3935,7 @@ static int st_probe(struct device *dev)
 		SDp->request_queue->max_phys_segments);
 	if (st_max_sg_segs < i)
 		i = st_max_sg_segs;
-	buffer = new_tape_buffer((SDp->host)->unchecked_isa_dma, i);
+	buffer = new_tape_buffer(1, (SDp->host)->unchecked_isa_dma, i);
 	if (buffer == NULL) {
 		printk(KERN_ERR
 		       "st: Can't allocate new tape buffer. Device not attached.\n");
@@ -4081,7 +4029,7 @@ static int st_probe(struct device *dev)
 	tpnt->partition = 0;
 	tpnt->new_partition = 0;
 	tpnt->nbr_partitions = 0;
-	blk_queue_rq_timeout(tpnt->device->request_queue, ST_TIMEOUT);
+	tpnt->device->timeout = ST_TIMEOUT;
 	tpnt->long_timeout = ST_LONG_TIMEOUT;
 	tpnt->try_dio = try_direct_io && !SDp->host->unchecked_isa_dma;
 
@@ -4241,8 +4189,8 @@ static void scsi_tape_release(struct kref *kref)
 	tpnt->device = NULL;
 
 	if (tpnt->buffer) {
+		tpnt->buffer->orig_frp_segs = 0;
 		normalize_buffer(tpnt->buffer);
-		kfree(tpnt->buffer->reserved_pages);
 		kfree(tpnt->buffer);
 	}
 
@@ -4528,16 +4476,14 @@ out:
 }
 
 /* The following functions may be useful for a larger audience. */
-static int sgl_map_user_pages(struct st_buffer *STbp,
-			      const unsigned int max_pages, unsigned long uaddr,
-			      size_t count, int rw)
+static int sgl_map_user_pages(struct scatterlist *sgl, const unsigned int max_pages, 
+			      unsigned long uaddr, size_t count, int rw)
 {
 	unsigned long end = (uaddr + count + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	unsigned long start = uaddr >> PAGE_SHIFT;
 	const int nr_pages = end - start;
 	int res, i, j;
 	struct page **pages;
-	struct rq_map_data *mdata = &STbp->map_data;
 
 	/* User attempted Overflow! */
 	if ((uaddr + count) < uaddr)
@@ -4579,11 +4525,24 @@ static int sgl_map_user_pages(struct st_buffer *STbp,
 		flush_dcache_page(pages[i]);
         }
 
-	mdata->offset = uaddr & ~PAGE_MASK;
-	mdata->page_order = 0;
-	STbp->mapped_pages = pages;
+	/* Populate the scatter/gather list */
+	sg_set_page(&sgl[0], pages[0], 0, uaddr & ~PAGE_MASK);
+	if (nr_pages > 1) {
+		sgl[0].length = PAGE_SIZE - sgl[0].offset;
+		count -= sgl[0].length;
+		for (i=1; i < nr_pages ; i++) {
+			sg_set_page(&sgl[i], pages[i],
+				    count < PAGE_SIZE ? count : PAGE_SIZE, 0);;
+			count -= PAGE_SIZE;
+		}
+	}
+	else {
+		sgl[0].length = count;
+	}
 
+	kfree(pages);
 	return nr_pages;
+
  out_unmap:
 	if (res > 0) {
 		for (j=0; j < res; j++)
@@ -4596,13 +4555,13 @@ static int sgl_map_user_pages(struct st_buffer *STbp,
 
 
 /* And unmap them... */
-static int sgl_unmap_user_pages(struct st_buffer *STbp,
-				const unsigned int nr_pages, int dirtied)
+static int sgl_unmap_user_pages(struct scatterlist *sgl, const unsigned int nr_pages,
+				int dirtied)
 {
 	int i;
 
 	for (i=0; i < nr_pages; i++) {
-		struct page *page = STbp->mapped_pages[i];
+		struct page *page = sg_page(&sgl[i]);
 
 		if (dirtied)
 			SetPageDirty(page);
@@ -4611,8 +4570,6 @@ static int sgl_unmap_user_pages(struct st_buffer *STbp,
 		 */
 		page_cache_release(page);
 	}
-	kfree(STbp->mapped_pages);
-	STbp->mapped_pages = NULL;
 
 	return 0;
 }

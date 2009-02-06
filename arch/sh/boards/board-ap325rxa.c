@@ -197,10 +197,6 @@ static struct resource lcdc_resources[] = {
 		.end	= 0xfe941fff,
 		.flags	= IORESOURCE_MEM,
 	},
-	[1] = {
-		.start	= 28,
-		.flags	= IORESOURCE_IRQ,
-	},
 };
 
 static struct platform_device lcdc_device = {
@@ -307,7 +303,6 @@ static struct resource ceu_resources[] = {
 
 static struct platform_device ceu_device = {
 	.name		= "sh_mobile_ceu",
-	.id             = 0, /* "ceu0" clock */
 	.num_resources	= ARRAY_SIZE(ceu_resources),
 	.resource	= ceu_resources,
 	.dev		= {
@@ -349,6 +344,7 @@ static int __init ap325rxa_devices_setup(void)
 	gpio_export(GPIO_PTF7, 0);
 
 	/* LCDC */
+	clk_always_enable("mstp200");
 	gpio_request(GPIO_FN_LCDD15, NULL);
 	gpio_request(GPIO_FN_LCDD14, NULL);
 	gpio_request(GPIO_FN_LCDD13, NULL);
@@ -379,6 +375,7 @@ static int __init ap325rxa_devices_setup(void)
 	gpio_direction_output(GPIO_PTS3, 1);
 
 	/* CEU */
+	clk_always_enable("mstp203");
 	gpio_request(GPIO_FN_VIO_CLK2, NULL);
 	gpio_request(GPIO_FN_VIO_VD2, NULL);
 	gpio_request(GPIO_FN_VIO_HD2, NULL);

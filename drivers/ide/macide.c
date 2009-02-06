@@ -18,6 +18,7 @@
 #include <linux/delay.h>
 #include <linux/ide.h>
 
+#include <asm/machw.h>
 #include <asm/macintosh.h>
 #include <asm/macints.h>
 #include <asm/mac_baboon.h>

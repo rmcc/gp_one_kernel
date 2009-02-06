@@ -15,10 +15,9 @@
 #include <linux/ata_platform.h>
 #include <linux/input.h>
 #include <linux/smc91x.h>
-#include <mach-se/mach/se7722.h>
-#include <mach-se/mach/mrshpc.h>
 #include <asm/machvec.h>
 #include <asm/clock.h>
+#include <mach-se/mach/se7722.h>
 #include <asm/io.h>
 #include <asm/heartbeat.h>
 #include <asm/sh_keysc.h>
@@ -131,7 +130,6 @@ static struct resource sh_keysc_resources[] = {
 
 static struct platform_device sh_keysc_device = {
 	.name           = "sh_keysc",
-	.id             = 0, /* "keysc0" clock */
 	.num_resources  = ARRAY_SIZE(sh_keysc_resources),
 	.resource       = sh_keysc_resources,
 	.dev	= {
@@ -148,8 +146,10 @@ static struct platform_device *se7722_devices[] __initdata = {
 
 static int __init se7722_devices_setup(void)
 {
-	mrshpc_setup_windows();
-	return platform_add_devices(se7722_devices, ARRAY_SIZE(se7722_devices));
+	clk_always_enable("mstp214"); /* KEYSC */
+
+	return platform_add_devices(se7722_devices,
+		ARRAY_SIZE(se7722_devices));
 }
 device_initcall(se7722_devices_setup);
 

@@ -185,6 +185,7 @@ static void nsc_ircc_init_dongle_interface (int iobase, int dongle_id);
 static int  nsc_ircc_net_open(struct net_device *dev);
 static int  nsc_ircc_net_close(struct net_device *dev);
 static int  nsc_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
+static struct net_device_stats *nsc_ircc_net_get_stats(struct net_device *dev);
 
 /* Globals */
 static int pnp_registered;
@@ -372,7 +373,7 @@ static int __init nsc_ircc_open(chipio_t *info)
 		return -ENOMEM;
 	}
 
-	self = netdev_priv(dev);
+	self = dev->priv;
 	self->netdev = dev;
 	spin_lock_init(&self->lock);
    
@@ -445,6 +446,7 @@ static int __init nsc_ircc_open(chipio_t *info)
 	dev->open            = nsc_ircc_net_open;
 	dev->stop            = nsc_ircc_net_close;
 	dev->do_ioctl        = nsc_ircc_net_ioctl;
+	dev->get_stats	     = nsc_ircc_net_get_stats;
 
 	err = register_netdev(dev);
 	if (err) {
@@ -1352,7 +1354,7 @@ static int nsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
 	__s32 speed;
 	__u8 bank;
 	
-	self = netdev_priv(dev);
+	self = (struct nsc_ircc_cb *) dev->priv;
 
 	IRDA_ASSERT(self != NULL, return 0;);
 
@@ -1399,7 +1401,7 @@ static int nsc_ircc_hard_xmit_sir(struct sk_buff *skb, struct net_device *dev)
 	self->tx_buff.len = async_wrap_skb(skb, self->tx_buff.data, 
 					   self->tx_buff.truesize);
 
-	dev->stats.tx_bytes += self->tx_buff.len;
+	self->stats.tx_bytes += self->tx_buff.len;
 	
 	/* Add interrupt on tx low level (will fire immediately) */
 	switch_bank(iobase, BANK0);
@@ -1425,7 +1427,7 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct net_device *dev)
 	__u8 bank;
 	int mtt, diff;
 	
-	self = netdev_priv(dev);
+	self = (struct nsc_ircc_cb *) dev->priv;
 	iobase = self->io.fir_base;
 
 	netif_stop_queue(dev);
@@ -1471,7 +1473,7 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct net_device *dev)
 	self->tx_fifo.queue[self->tx_fifo.free].len = skb->len;
 	self->tx_fifo.tail += skb->len;
 
-	dev->stats.tx_bytes += skb->len;
+	self->stats.tx_bytes += skb->len;
 
 	skb_copy_from_linear_data(skb, self->tx_fifo.queue[self->tx_fifo.free].start,
 		      skb->len);
@@ -1650,13 +1652,13 @@ static int nsc_ircc_dma_xmit_complete(struct nsc_ircc_cb *self)
 	
 	/* Check for underrrun! */
 	if (inb(iobase+ASCR) & ASCR_TXUR) {
-		self->netdev->stats.tx_errors++;
-		self->netdev->stats.tx_fifo_errors++;
+		self->stats.tx_errors++;
+		self->stats.tx_fifo_errors++;
 		
 		/* Clear bit, by writing 1 into it */
 		outb(ASCR_TXUR, iobase+ASCR);
 	} else {
-		self->netdev->stats.tx_packets++;
+		self->stats.tx_packets++;
 	}
 
 	/* Finished with this frame, so prepare for next */
@@ -1791,28 +1793,28 @@ static int nsc_ircc_dma_receive_complete(struct nsc_ircc_cb *self, int iobase)
 		if (status & FRM_ST_ERR_MSK) {
 			if (status & FRM_ST_LOST_FR) {
 				/* Add number of lost frames to stats */
-				self->netdev->stats.rx_errors += len;
+				self->stats.rx_errors += len;	
 			} else {
 				/* Skip frame */
-				self->netdev->stats.rx_errors++;
+				self->stats.rx_errors++;
 				
 				self->rx_buff.data += len;
 			
 				if (status & FRM_ST_MAX_LEN)
-					self->netdev->stats.rx_length_errors++;
+					self->stats.rx_length_errors++;
 				
 				if (status & FRM_ST_PHY_ERR) 
-					self->netdev->stats.rx_frame_errors++;
+					self->stats.rx_frame_errors++;
 				
 				if (status & FRM_ST_BAD_CRC) 
-					self->netdev->stats.rx_crc_errors++;
+					self->stats.rx_crc_errors++;
 			}
 			/* The errors below can be reported in both cases */
 			if (status & FRM_ST_OVR1)
-				self->netdev->stats.rx_fifo_errors++;
+				self->stats.rx_fifo_errors++;		       
 			
 			if (status & FRM_ST_OVR2)
-				self->netdev->stats.rx_fifo_errors++;
+				self->stats.rx_fifo_errors++;
 		} else {
 			/*  
 			 * First we must make sure that the frame we
@@ -1861,7 +1863,7 @@ static int nsc_ircc_dma_receive_complete(struct nsc_ircc_cb *self, int iobase)
 				IRDA_WARNING("%s(), memory squeeze, "
 					     "dropping frame.\n",
 					     __func__);
-				self->netdev->stats.rx_dropped++;
+				self->stats.rx_dropped++;
 
 				/* Restore bank register */
 				outb(bank, iobase+BSR);
@@ -1887,13 +1889,14 @@ static int nsc_ircc_dma_receive_complete(struct nsc_ircc_cb *self, int iobase)
 
 			/* Move to next frame */
 			self->rx_buff.data += len;
-			self->netdev->stats.rx_bytes += len;
-			self->netdev->stats.rx_packets++;
+			self->stats.rx_bytes += len;
+			self->stats.rx_packets++;
 
 			skb->dev = self->netdev;
 			skb_reset_mac_header(skb);
 			skb->protocol = htons(ETH_P_IRDA);
 			netif_rx(skb);
+			self->netdev->last_rx = jiffies;
 		}
 	}
 	/* Restore bank register */
@@ -1918,8 +1921,8 @@ static void nsc_ircc_pio_receive(struct nsc_ircc_cb *self)
 	/*  Receive all characters in Rx FIFO */
 	do {
 		byte = inb(iobase+RXD);
-		async_unwrap_char(self->netdev, &self->netdev->stats,
-				  &self->rx_buff, byte);
+		async_unwrap_char(self->netdev, &self->stats, &self->rx_buff, 
+				  byte);
 	} while (inb(iobase+LSR) & LSR_RXDA); /* Data available */	
 }
 
@@ -1950,7 +1953,7 @@ static void nsc_ircc_sir_interrupt(struct nsc_ircc_cb *self, int eir)
 			self->ier = IER_TXLDL_IE;
 		else { 
 
-			self->netdev->stats.tx_packets++;
+			self->stats.tx_packets++;
 			netif_wake_queue(self->netdev);
 			self->ier = IER_TXEMP_IE;
 		}
@@ -2082,7 +2085,7 @@ static irqreturn_t nsc_ircc_interrupt(int irq, void *dev_id)
 	__u8 bsr, eir;
 	int iobase;
 
-	self = netdev_priv(dev);
+	self = dev->priv;
 
 	spin_lock(&self->lock);	
 
@@ -2163,7 +2166,7 @@ static int nsc_ircc_net_open(struct net_device *dev)
 	IRDA_DEBUG(4, "%s()\n", __func__);
 	
 	IRDA_ASSERT(dev != NULL, return -1;);
-	self = netdev_priv(dev);
+	self = (struct nsc_ircc_cb *) dev->priv;
 	
 	IRDA_ASSERT(self != NULL, return 0;);
 	
@@ -2226,7 +2229,7 @@ static int nsc_ircc_net_close(struct net_device *dev)
 	
 	IRDA_ASSERT(dev != NULL, return -1;);
 
-	self = netdev_priv(dev);
+	self = (struct nsc_ircc_cb *) dev->priv;
 	IRDA_ASSERT(self != NULL, return 0;);
 
 	/* Stop device */
@@ -2272,7 +2275,7 @@ static int nsc_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	IRDA_ASSERT(dev != NULL, return -1;);
 
-	self = netdev_priv(dev);
+	self = dev->priv;
 
 	IRDA_ASSERT(self != NULL, return -1;);
 
@@ -2303,6 +2306,13 @@ static int nsc_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		ret = -EOPNOTSUPP;
 	}
 	return ret;
+}
+
+static struct net_device_stats *nsc_ircc_net_get_stats(struct net_device *dev)
+{
+	struct nsc_ircc_cb *self = (struct nsc_ircc_cb *) dev->priv;
+	
+	return &self->stats;
 }
 
 static int nsc_ircc_suspend(struct platform_device *dev, pm_message_t state)

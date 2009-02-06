@@ -712,6 +712,7 @@ static inline struct ring_descr *ring_get(struct vlsi_ring *r)
 
 typedef struct vlsi_irda_dev {
 	struct pci_dev		*pdev;
+	struct net_device_stats	stats;
 
 	struct irlap_cb		*irlap;
 

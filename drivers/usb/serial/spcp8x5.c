@@ -709,20 +709,21 @@ static void spcp8x5_read_bulk_callback(struct urb *urb)
 	unsigned char *data = urb->transfer_buffer;
 	unsigned long flags;
 	int i;
-	int result = urb->status;
-	u8 status;
+	int result;
+	u8 status = 0;
 	char tty_flag;
 
-	dev_dbg(&port->dev, "start, result = %d, urb->actual_length = %d\n,",
-		result, urb->actual_length);
+	dev_dbg(&port->dev, "start, urb->status = %d, "
+		"urb->actual_length = %d\n,", urb->status, urb->actual_length);
 
 	/* check the urb status */
-	if (result) {
+	if (urb->status) {
 		if (!port->port.count)
 			return;
-		if (result == -EPROTO) {
+		if (urb->status == -EPROTO) {
 			/* spcp8x5 mysteriously fails with -EPROTO */
 			/* reschedule the read */
+			urb->status = 0;
 			urb->dev = port->serial->dev;
 			result = usb_submit_urb(urb , GFP_ATOMIC);
 			if (result)
@@ -832,9 +833,8 @@ static void spcp8x5_write_bulk_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	struct spcp8x5_private *priv = usb_get_serial_port_data(port);
 	int result;
-	int status = urb->status;
 
-	switch (status) {
+	switch (urb->status) {
 	case 0:
 		/* success */
 		break;
@@ -843,14 +843,14 @@ static void spcp8x5_write_bulk_callback(struct urb *urb)
 	case -ESHUTDOWN:
 		/* this urb is terminated, clean up */
 		dev_dbg(&port->dev, "urb shutting down with status: %d\n",
-			status);
+			urb->status);
 		priv->write_urb_in_use = 0;
 		return;
 	default:
 		/* error in the urb, so we have to resubmit it */
 		dbg("%s - Overflow in write", __func__);
 		dbg("%s - nonzero write bulk status received: %d",
-			__func__, status);
+			__func__, urb->status);
 		port->write_urb->transfer_buffer_length = 1;
 		port->write_urb->dev = port->serial->dev;
 		result = usb_submit_urb(port->write_urb, GFP_ATOMIC);

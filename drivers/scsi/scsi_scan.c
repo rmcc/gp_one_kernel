@@ -32,7 +32,6 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/spinlock.h>
-#include <linux/async.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -180,8 +179,6 @@ int scsi_complete_async_scans(void)
 	spin_unlock(&async_scan_lock);
 
 	kfree(data);
-	/* Synchronize async operations globally */
-	async_synchronize_full();
 	return 0;
 }
 
@@ -219,7 +216,7 @@ static void scsi_unlock_floptical(struct scsi_device *sdev,
 	scsi_cmd[4] = 0x2a;     /* size */
 	scsi_cmd[5] = 0;
 	scsi_execute_req(sdev, scsi_cmd, DMA_FROM_DEVICE, result, 0x2a, NULL,
-			 SCSI_TIMEOUT, 3, NULL);
+			 SCSI_TIMEOUT, 3);
 }
 
 /**
@@ -414,7 +411,8 @@ static struct scsi_target *scsi_alloc_target(struct device *parent,
 	device_initialize(dev);
 	starget->reap_ref = 1;
 	dev->parent = get_device(parent);
-	dev_set_name(dev, "target%d:%d:%d", shost->host_no, channel, id);
+	sprintf(dev->bus_id, "target%d:%d:%d",
+		shost->host_no, channel, id);
 #ifndef CONFIG_SYSFS_DEPRECATED
 	dev->bus = &scsi_bus_type;
 #endif
@@ -575,8 +573,6 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 
 	/* Each pass gets up to three chances to ignore Unit Attention */
 	for (count = 0; count < 3; ++count) {
-		int resid;
-
 		memset(scsi_cmd, 0, 6);
 		scsi_cmd[0] = INQUIRY;
 		scsi_cmd[4] = (unsigned char) try_inquiry_len;
@@ -585,8 +581,7 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 
 		result = scsi_execute_req(sdev,  scsi_cmd, DMA_FROM_DEVICE,
 					  inq_result, try_inquiry_len, &sshdr,
-					  HZ / 2 + HZ * scsi_inq_timeout, 3,
-					  &resid);
+					  HZ / 2 + HZ * scsi_inq_timeout, 3);
 
 		SCSI_LOG_SCAN_BUS(3, printk(KERN_INFO "scsi scan: INQUIRY %s "
 				"with code 0x%x\n",
@@ -607,14 +602,6 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 				    (sshdr.ascq == 0))
 					continue;
 			}
-		} else {
-			/*
-			 * if nothing was transferred, we try
-			 * again. It's a workaround for some USB
-			 * devices.
-			 */
-			if (resid == try_inquiry_len)
-				continue;
 		}
 		break;
 	}
@@ -1023,7 +1010,7 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 		if (rescan || !scsi_device_created(sdev)) {
 			SCSI_LOG_SCAN_BUS(3, printk(KERN_INFO
 				"scsi scan: device exists on %s\n",
-				dev_name(&sdev->sdev_gendev)));
+				sdev->sdev_gendev.bus_id));
 			if (sdevp)
 				*sdevp = sdev;
 			else
@@ -1162,7 +1149,7 @@ static void scsi_sequential_lun_scan(struct scsi_target *starget,
 	struct Scsi_Host *shost = dev_to_shost(starget->dev.parent);
 
 	SCSI_LOG_SCAN_BUS(3, printk(KERN_INFO "scsi scan: Sequential scan of"
-				    "%s\n", dev_name(&starget->dev)));
+				    "%s\n", starget->dev.bus_id));
 
 	max_dev_lun = min(max_scsi_luns, shost->max_lun);
 	/*
@@ -1403,7 +1390,7 @@ static int scsi_report_lun_scan(struct scsi_target *starget, int bflags,
 
 		result = scsi_execute_req(sdev, scsi_cmd, DMA_FROM_DEVICE,
 					  lun_data, length, &sshdr,
-					  SCSI_TIMEOUT + 4 * HZ, 3, NULL);
+					  SCSI_TIMEOUT + 4 * HZ, 3);
 
 		SCSI_LOG_SCAN_BUS(3, printk (KERN_INFO "scsi scan: REPORT LUNS"
 				" %s (try %d) result 0x%x\n", result

@@ -630,22 +630,27 @@ static int mpc85xx_l2_err_remove(struct of_device *op)
 }
 
 static struct of_device_id mpc85xx_l2_err_of_match[] = {
-/* deprecate the fsl,85.. forms in the future, 2.6.30? */
-	{ .compatible = "fsl,8540-l2-cache-controller", },
-	{ .compatible = "fsl,8541-l2-cache-controller", },
-	{ .compatible = "fsl,8544-l2-cache-controller", },
-	{ .compatible = "fsl,8548-l2-cache-controller", },
-	{ .compatible = "fsl,8555-l2-cache-controller", },
-	{ .compatible = "fsl,8568-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8536-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8540-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8541-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8544-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8548-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8555-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8560-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8568-l2-cache-controller", },
-	{ .compatible = "fsl,mpc8572-l2-cache-controller", },
+	{
+	 .compatible = "fsl,8540-l2-cache-controller",
+	 },
+	{
+	 .compatible = "fsl,8541-l2-cache-controller",
+	 },
+	{
+	 .compatible = "fsl,8544-l2-cache-controller",
+	 },
+	{
+	 .compatible = "fsl,8548-l2-cache-controller",
+	 },
+	{
+	 .compatible = "fsl,8555-l2-cache-controller",
+	 },
+	{
+	 .compatible = "fsl,8568-l2-cache-controller",
+	 },
+	{
+	 .compatible = "fsl,mpc8572-l2-cache-controller",
+	 },
 	{},
 };
 
@@ -962,22 +967,27 @@ static int mpc85xx_mc_err_remove(struct of_device *op)
 }
 
 static struct of_device_id mpc85xx_mc_err_of_match[] = {
-/* deprecate the fsl,85.. forms in the future, 2.6.30? */
-	{ .compatible = "fsl,8540-memory-controller", },
-	{ .compatible = "fsl,8541-memory-controller", },
-	{ .compatible = "fsl,8544-memory-controller", },
-	{ .compatible = "fsl,8548-memory-controller", },
-	{ .compatible = "fsl,8555-memory-controller", },
-	{ .compatible = "fsl,8568-memory-controller", },
-	{ .compatible = "fsl,mpc8536-memory-controller", },
-	{ .compatible = "fsl,mpc8540-memory-controller", },
-	{ .compatible = "fsl,mpc8541-memory-controller", },
-	{ .compatible = "fsl,mpc8544-memory-controller", },
-	{ .compatible = "fsl,mpc8548-memory-controller", },
-	{ .compatible = "fsl,mpc8555-memory-controller", },
-	{ .compatible = "fsl,mpc8560-memory-controller", },
-	{ .compatible = "fsl,mpc8568-memory-controller", },
-	{ .compatible = "fsl,mpc8572-memory-controller", },
+	{
+	 .compatible = "fsl,8540-memory-controller",
+	 },
+	{
+	 .compatible = "fsl,8541-memory-controller",
+	 },
+	{
+	 .compatible = "fsl,8544-memory-controller",
+	 },
+	{
+	 .compatible = "fsl,8548-memory-controller",
+	 },
+	{
+	 .compatible = "fsl,8555-memory-controller",
+	 },
+	{
+	 .compatible = "fsl,8568-memory-controller",
+	 },
+	{
+	 .compatible = "fsl,mpc8572-memory-controller",
+	 },
 	{},
 };
 

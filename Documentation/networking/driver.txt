@@ -13,7 +13,7 @@ Transmit path guidelines:
 	static int drv_hard_start_xmit(struct sk_buff *skb,
 		   		       struct net_device *dev)
 	{
-		struct drv *dp = netdev_priv(dev);
+		struct drv *dp = dev->priv;
 
 		lock_tx(dp);
 		...

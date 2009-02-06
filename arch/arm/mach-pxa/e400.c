@@ -28,7 +28,6 @@
 #include <mach/eseries-gpio.h>
 #include <mach/pxafb.h>
 #include <mach/udc.h>
-#include <mach/irqs.h>
 
 #include "generic.h"
 #include "eseries.h"
@@ -53,7 +52,7 @@ static struct pxafb_mode_info e400_pxafb_mode_info = {
 static struct pxafb_mach_info e400_pxafb_mach_info = {
 	.modes          = &e400_pxafb_mode_info,
 	.num_modes      = 1,
-	.lcd_conn	= LCD_COLOR_TFT_16BPP,
+	.lccr0          = LCCR0_Color | LCCR0_Sngl | LCCR0_Act,
 	.lccr3          = 0,
 	.pxafb_backlight_power  = NULL,
 };

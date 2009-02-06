@@ -745,10 +745,6 @@ void handle_interruption(int code, struct pt_regs *regs)
 		/* Fall Through */
 	case 27: 
 		/* Data memory protection ID trap */
-		if (code == 27 && !user_mode(regs) &&
-			fixup_exception(regs))
-			return;
-
 		die_if_kernel("Protection id trap", regs, code);
 		si.si_code = SEGV_MAPERR;
 		si.si_signo = SIGSEGV;
@@ -825,8 +821,8 @@ void handle_interruption(int code, struct pt_regs *regs)
 
 int __init check_ivt(void *iva)
 {
-	extern u32 os_hpmc_size;
 	extern const u32 os_hpmc[];
+	extern const u32 os_hpmc_end[];
 
 	int i;
 	u32 check = 0;
@@ -843,7 +839,8 @@ int __init check_ivt(void *iva)
 	    *ivap++ = 0;
 
 	/* Compute Checksum for HPMC handler */
-	length = os_hpmc_size;
+
+	length = os_hpmc_end - os_hpmc;
 	ivap[7] = length;
 
 	hpmcp = (u32 *)os_hpmc;

@@ -159,8 +159,7 @@ static void fw_device_release(struct device *dev)
 
 	/*
 	 * Take the card lock so we don't set this to NULL while a
-	 * FW_NODE_UPDATED callback is being handled or while the
-	 * bus manager work looks at this node.
+	 * FW_NODE_UPDATED callback is being handled.
 	 */
 	spin_lock_irqsave(&card->lock, flags);
 	device->node->data = NULL;
@@ -618,7 +617,7 @@ static int shutdown_unit(struct device *device, void *data)
  */
 DECLARE_RWSEM(fw_device_rwsem);
 
-DEFINE_IDR(fw_device_idr);
+static DEFINE_IDR(fw_device_idr);
 int fw_cdev_major;
 
 struct fw_device *fw_device_get_by_devt(dev_t devt)
@@ -690,19 +689,18 @@ static void fw_device_init(struct work_struct *work)
 			fw_notify("giving up on config rom for node id %x\n",
 				  device->node_id);
 			if (device->node == device->card->root_node)
-				fw_schedule_bm_work(device->card, 0);
+				schedule_delayed_work(&device->card->work, 0);
 			fw_device_release(&device->device);
 		}
 		return;
 	}
 
-	device_initialize(&device->device);
+	err = -ENOMEM;
 
 	fw_device_get(device);
 	down_write(&fw_device_rwsem);
-	err = idr_pre_get(&fw_device_idr, GFP_KERNEL) ?
-	      idr_get_new(&fw_device_idr, device, &minor) :
-	      -ENOMEM;
+	if (idr_pre_get(&fw_device_idr, GFP_KERNEL))
+		err = idr_get_new(&fw_device_idr, device, &minor);
 	up_write(&fw_device_rwsem);
 
 	if (err < 0)
@@ -760,7 +758,7 @@ static void fw_device_init(struct work_struct *work)
 	 * pretty harmless.
 	 */
 	if (device->node == device->card->root_node)
-		fw_schedule_bm_work(device->card, 0);
+		schedule_delayed_work(&device->card->work, 0);
 
 	return;
 
@@ -894,7 +892,7 @@ static void fw_device_refresh(struct work_struct *work)
 	fw_device_shutdown(work);
  out:
 	if (node_id == card->root_node->node_id)
-		fw_schedule_bm_work(card, 0);
+		schedule_delayed_work(&card->work, 0);
 }
 
 void fw_node_event(struct fw_card *card, struct fw_node *node, int event)
@@ -913,14 +911,13 @@ void fw_node_event(struct fw_card *card, struct fw_node *node, int event)
 
 		/*
 		 * Do minimal intialization of the device here, the
-		 * rest will happen in fw_device_init().
-		 *
-		 * Attention:  A lot of things, even fw_device_get(),
-		 * cannot be done before fw_device_init() finished!
-		 * You can basically just check device->state and
-		 * schedule work until then, but only while holding
-		 * card->lock.
+		 * rest will happen in fw_device_init().  We need the
+		 * card and node so we can read the config rom and we
+		 * need to do device_initialize() now so
+		 * device_for_each_child() in FW_NODE_UPDATED is
+		 * doesn't freak out.
 		 */
+		device_initialize(&device->device);
 		atomic_set(&device->state, FW_DEVICE_INITIALIZING);
 		device->card = fw_card_get(card);
 		device->node = fw_node_get(node);

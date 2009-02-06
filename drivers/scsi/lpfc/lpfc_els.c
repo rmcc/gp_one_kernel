@@ -221,11 +221,7 @@ lpfc_prep_els_iocb(struct lpfc_vport *vport, uint8_t expectRsp,
 		/* For ELS_REQUEST64_CR, use the VPI by default */
 		icmd->ulpContext = vport->vpi;
 		icmd->ulpCt_h = 0;
-		/* The CT field must be 0=INVALID_RPI for the ECHO cmd */
-		if (elscmd == ELS_CMD_ECHO)
-			icmd->ulpCt_l = 0; /* context = invalid RPI */
-		else
-			icmd->ulpCt_l = 1; /* context = VPI */
+		icmd->ulpCt_l = 1;
 	}
 
 	bpl = (struct ulp_bde64 *) pbuflist->virt;
@@ -275,8 +271,7 @@ lpfc_prep_els_iocb(struct lpfc_vport *vport, uint8_t expectRsp,
 	return elsiocb;
 
 els_iocb_free_pbuf_exit:
-	if (expectRsp)
-		lpfc_mbuf_free(phba, prsp->virt, prsp->phys);
+	lpfc_mbuf_free(phba, prsp->virt, prsp->phys);
 	kfree(pbuflist);
 
 els_iocb_free_prsp_exit:
@@ -2473,15 +2468,6 @@ lpfc_els_retry(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 	case IOSTAT_LOCAL_REJECT:
 		switch ((irsp->un.ulpWord[4] & 0xff)) {
 		case IOERR_LOOP_OPEN_FAILURE:
-			if (cmd == ELS_CMD_FLOGI) {
-				if (PCI_DEVICE_ID_HORNET ==
-					phba->pcidev->device) {
-					phba->fc_topology = TOPOLOGY_LOOP;
-					phba->pport->fc_myDID = 0;
-					phba->alpa_map[0] = 0;
-					phba->alpa_map[1] = 0;
-				}
-			}
 			if (cmd == ELS_CMD_PLOGI && cmdiocb->retry == 0)
 				delay = 1000;
 			retry = 1;
@@ -3837,21 +3823,27 @@ lpfc_rscn_payload_check(struct lpfc_vport *vport, uint32_t did)
 		while (payload_len) {
 			rscn_did.un.word = be32_to_cpu(*lp++);
 			payload_len -= sizeof(uint32_t);
-			switch (rscn_did.un.b.resv & RSCN_ADDRESS_FORMAT_MASK) {
-			case RSCN_ADDRESS_FORMAT_PORT:
+			switch (rscn_did.un.b.resv) {
+			case 0:	/* Single N_Port ID effected */
 				if (ns_did.un.word == rscn_did.un.word)
 					goto return_did_out;
 				break;
-			case RSCN_ADDRESS_FORMAT_AREA:
+			case 1:	/* Whole N_Port Area effected */
 				if ((ns_did.un.b.domain == rscn_did.un.b.domain)
 				    && (ns_did.un.b.area == rscn_did.un.b.area))
 					goto return_did_out;
 				break;
-			case RSCN_ADDRESS_FORMAT_DOMAIN:
+			case 2:	/* Whole N_Port Domain effected */
 				if (ns_did.un.b.domain == rscn_did.un.b.domain)
 					goto return_did_out;
 				break;
-			case RSCN_ADDRESS_FORMAT_FABRIC:
+			default:
+				/* Unknown Identifier in RSCN node */
+				lpfc_printf_vlog(vport, KERN_ERR, LOG_DISCOVERY,
+						 "0217 Unknown Identifier in "
+						 "RSCN payload Data: x%x\n",
+						 rscn_did.un.word);
+			case 3:	/* Whole Fabric effected */
 				goto return_did_out;
 			}
 		}
@@ -3892,49 +3884,6 @@ lpfc_rscn_recovery_check(struct lpfc_vport *vport)
 		lpfc_cancel_retry_delay_tmo(vport, ndlp);
 	}
 	return 0;
-}
-
-/**
- * lpfc_send_rscn_event: Send an RSCN event to management application.
- * @vport: pointer to a host virtual N_Port data structure.
- * @cmdiocb: pointer to lpfc command iocb data structure.
- *
- * lpfc_send_rscn_event sends an RSCN netlink event to management
- * applications.
- */
-static void
-lpfc_send_rscn_event(struct lpfc_vport *vport,
-		struct lpfc_iocbq *cmdiocb)
-{
-	struct lpfc_dmabuf *pcmd;
-	struct Scsi_Host *shost = lpfc_shost_from_vport(vport);
-	uint32_t *payload_ptr;
-	uint32_t payload_len;
-	struct lpfc_rscn_event_header *rscn_event_data;
-
-	pcmd = (struct lpfc_dmabuf *) cmdiocb->context2;
-	payload_ptr = (uint32_t *) pcmd->virt;
-	payload_len = be32_to_cpu(*payload_ptr & ~ELS_CMD_MASK);
-
-	rscn_event_data = kmalloc(sizeof(struct lpfc_rscn_event_header) +
-		payload_len, GFP_KERNEL);
-	if (!rscn_event_data) {
-		lpfc_printf_vlog(vport, KERN_ERR, LOG_ELS,
-			"0147 Failed to allocate memory for RSCN event\n");
-		return;
-	}
-	rscn_event_data->event_type = FC_REG_RSCN_EVENT;
-	rscn_event_data->payload_length = payload_len;
-	memcpy(rscn_event_data->rscn_payload, payload_ptr,
-		payload_len);
-
-	fc_host_post_vendor_event(shost,
-		fc_get_event_number(),
-		sizeof(struct lpfc_els_event_header) + payload_len,
-		(char *)rscn_event_data,
-		LPFC_NL_VENDOR_ID);
-
-	kfree(rscn_event_data);
 }
 
 /**
@@ -3984,10 +3933,6 @@ lpfc_els_rcv_rscn(struct lpfc_vport *vport, struct lpfc_iocbq *cmdiocb,
 			 "0214 RSCN received Data: x%x x%x x%x x%x\n",
 			 vport->fc_flag, payload_len, *lp,
 			 vport->fc_rscn_id_cnt);
-
-	/* Send an RSCN event to the management application */
-	lpfc_send_rscn_event(vport, cmdiocb);
-
 	for (i = 0; i < payload_len/sizeof(uint32_t); i++)
 		fc_host_post_event(shost, fc_get_event_number(),
 			FCH_EVT_RSCN, lp[i]);
@@ -4939,6 +4884,10 @@ lpfc_els_timeout_handler(struct lpfc_vport *vport)
 	uint32_t timeout;
 	uint32_t remote_ID = 0xffffffff;
 
+	/* If the timer is already canceled do nothing */
+	if ((vport->work_port_events & WORKER_ELS_TMO) == 0) {
+		return;
+	}
 	spin_lock_irq(&phba->hbalock);
 	timeout = (uint32_t)(phba->fc_ratov << 1);
 
@@ -5179,7 +5128,7 @@ lpfc_send_els_failure_event(struct lpfc_hba *phba,
 			fc_get_event_number(),
 			sizeof(lsrjt_event),
 			(char *)&lsrjt_event,
-			LPFC_NL_VENDOR_ID);
+			SCSI_NL_VID_TYPE_PCI | PCI_VENDOR_ID_EMULEX);
 		return;
 	}
 	if ((rspiocbp->iocb.ulpStatus == IOSTAT_NPORT_BSY) ||
@@ -5197,7 +5146,7 @@ lpfc_send_els_failure_event(struct lpfc_hba *phba,
 			fc_get_event_number(),
 			sizeof(fabric_event),
 			(char *)&fabric_event,
-			LPFC_NL_VENDOR_ID);
+			SCSI_NL_VID_TYPE_PCI | PCI_VENDOR_ID_EMULEX);
 		return;
 	}
 
@@ -5215,68 +5164,32 @@ lpfc_send_els_failure_event(struct lpfc_hba *phba,
 static void
 lpfc_send_els_event(struct lpfc_vport *vport,
 		    struct lpfc_nodelist *ndlp,
-		    uint32_t *payload)
+		    uint32_t cmd)
 {
-	struct lpfc_els_event_header *els_data = NULL;
-	struct lpfc_logo_event *logo_data = NULL;
+	struct lpfc_els_event_header els_data;
 	struct Scsi_Host *shost = lpfc_shost_from_vport(vport);
 
-	if (*payload == ELS_CMD_LOGO) {
-		logo_data = kmalloc(sizeof(struct lpfc_logo_event), GFP_KERNEL);
-		if (!logo_data) {
-			lpfc_printf_vlog(vport, KERN_ERR, LOG_ELS,
-				"0148 Failed to allocate memory "
-				"for LOGO event\n");
-			return;
-		}
-		els_data = &logo_data->header;
-	} else {
-		els_data = kmalloc(sizeof(struct lpfc_els_event_header),
-			GFP_KERNEL);
-		if (!els_data) {
-			lpfc_printf_vlog(vport, KERN_ERR, LOG_ELS,
-				"0149 Failed to allocate memory "
-				"for ELS event\n");
-			return;
-		}
-	}
-	els_data->event_type = FC_REG_ELS_EVENT;
-	switch (*payload) {
+	els_data.event_type = FC_REG_ELS_EVENT;
+	switch (cmd) {
 	case ELS_CMD_PLOGI:
-		els_data->subcategory = LPFC_EVENT_PLOGI_RCV;
+		els_data.subcategory = LPFC_EVENT_PLOGI_RCV;
 		break;
 	case ELS_CMD_PRLO:
-		els_data->subcategory = LPFC_EVENT_PRLO_RCV;
+		els_data.subcategory = LPFC_EVENT_PRLO_RCV;
 		break;
 	case ELS_CMD_ADISC:
-		els_data->subcategory = LPFC_EVENT_ADISC_RCV;
-		break;
-	case ELS_CMD_LOGO:
-		els_data->subcategory = LPFC_EVENT_LOGO_RCV;
-		/* Copy the WWPN in the LOGO payload */
-		memcpy(logo_data->logo_wwpn, &payload[2],
-			sizeof(struct lpfc_name));
+		els_data.subcategory = LPFC_EVENT_ADISC_RCV;
 		break;
 	default:
 		return;
 	}
-	memcpy(els_data->wwpn, &ndlp->nlp_portname, sizeof(struct lpfc_name));
-	memcpy(els_data->wwnn, &ndlp->nlp_nodename, sizeof(struct lpfc_name));
-	if (*payload == ELS_CMD_LOGO) {
-		fc_host_post_vendor_event(shost,
-			fc_get_event_number(),
-			sizeof(struct lpfc_logo_event),
-			(char *)logo_data,
-			LPFC_NL_VENDOR_ID);
-		kfree(logo_data);
-	} else {
-		fc_host_post_vendor_event(shost,
-			fc_get_event_number(),
-			sizeof(struct lpfc_els_event_header),
-			(char *)els_data,
-			LPFC_NL_VENDOR_ID);
-		kfree(els_data);
-	}
+	memcpy(els_data.wwpn, &ndlp->nlp_portname, sizeof(struct lpfc_name));
+	memcpy(els_data.wwnn, &ndlp->nlp_nodename, sizeof(struct lpfc_name));
+	fc_host_post_vendor_event(shost,
+		fc_get_event_number(),
+		sizeof(els_data),
+		(char *)&els_data,
+		SCSI_NL_VID_TYPE_PCI | PCI_VENDOR_ID_EMULEX);
 
 	return;
 }
@@ -5383,7 +5296,7 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 		phba->fc_stat.elsRcvPLOGI++;
 		ndlp = lpfc_plogi_confirm_nport(phba, payload, ndlp);
 
-		lpfc_send_els_event(vport, ndlp, payload);
+		lpfc_send_els_event(vport, ndlp, cmd);
 		if (vport->port_state < LPFC_DISC_AUTH) {
 			if (!(phba->pport->fc_flag & FC_PT2PT) ||
 				(phba->pport->fc_flag & FC_PT2PT_PLOGI)) {
@@ -5421,7 +5334,6 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 			did, vport->port_state, ndlp->nlp_flag);
 
 		phba->fc_stat.elsRcvLOGO++;
-		lpfc_send_els_event(vport, ndlp, payload);
 		if (vport->port_state < LPFC_DISC_AUTH) {
 			rjt_err = LSRJT_UNABLE_TPC;
 			break;
@@ -5434,7 +5346,7 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 			did, vport->port_state, ndlp->nlp_flag);
 
 		phba->fc_stat.elsRcvPRLO++;
-		lpfc_send_els_event(vport, ndlp, payload);
+		lpfc_send_els_event(vport, ndlp, cmd);
 		if (vport->port_state < LPFC_DISC_AUTH) {
 			rjt_err = LSRJT_UNABLE_TPC;
 			break;
@@ -5452,7 +5364,7 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 			"RCV ADISC:       did:x%x/ste:x%x flg:x%x",
 			did, vport->port_state, ndlp->nlp_flag);
 
-		lpfc_send_els_event(vport, ndlp, payload);
+		lpfc_send_els_event(vport, ndlp, cmd);
 		phba->fc_stat.elsRcvADISC++;
 		if (vport->port_state < LPFC_DISC_AUTH) {
 			rjt_err = LSRJT_UNABLE_TPC;

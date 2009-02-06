@@ -63,6 +63,12 @@ enum {
 };
 
 enum {
+	MLX4_EQ_ASYNC,
+	MLX4_EQ_COMP,
+	MLX4_NUM_EQ
+};
+
+enum {
 	MLX4_NUM_PDS		= 1 << 15
 };
 
@@ -199,11 +205,10 @@ struct mlx4_cq_table {
 
 struct mlx4_eq_table {
 	struct mlx4_bitmap	bitmap;
-	char		       *irq_names;
 	void __iomem	       *clr_int;
-	void __iomem	      **uar_map;
+	void __iomem	       *uar_map[(MLX4_NUM_EQ + 6) / 4];
 	u32			clr_mask;
-	struct mlx4_eq	       *eq;
+	struct mlx4_eq		eq[MLX4_NUM_EQ];
 	u64			icm_virt;
 	struct page	       *icm_page;
 	dma_addr_t		icm_dma;
@@ -322,9 +327,6 @@ int mlx4_bitmap_init(struct mlx4_bitmap *bitmap, u32 num, u32 mask,
 void mlx4_bitmap_cleanup(struct mlx4_bitmap *bitmap);
 
 int mlx4_reset(struct mlx4_dev *dev);
-
-int mlx4_alloc_eq_table(struct mlx4_dev *dev);
-void mlx4_free_eq_table(struct mlx4_dev *dev);
 
 int mlx4_init_pd_table(struct mlx4_dev *dev);
 int mlx4_init_uar_table(struct mlx4_dev *dev);

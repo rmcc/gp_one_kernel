@@ -43,11 +43,14 @@
  * 	wlp_wss_release()
  * 		wlp_wss_reset()
  */
+
 #include <linux/etherdevice.h> /* for is_valid_ether_addr */
 #include <linux/skbuff.h>
 #include <linux/wlp.h>
-
+#define D_LOCAL 5
+#include <linux/uwb/debug.h>
 #include "wlp-internal.h"
+
 
 size_t wlp_wss_key_print(char *buf, size_t bufsize, u8 *key)
 {
@@ -113,6 +116,9 @@ struct uwb_mac_addr wlp_wss_sel_bcast_addr(struct wlp_wss *wss)
  */
 void wlp_wss_reset(struct wlp_wss *wss)
 {
+	struct wlp *wlp = container_of(wss, struct wlp, wss);
+	struct device *dev = &wlp->rc->uwb_dev.dev;
+	d_fnstart(5, dev, "wss (%p) \n", wss);
 	memset(&wss->wssid, 0, sizeof(wss->wssid));
 	wss->hash = 0;
 	memset(&wss->name[0], 0, sizeof(wss->name));
@@ -121,6 +127,7 @@ void wlp_wss_reset(struct wlp_wss *wss)
 	memset(&wss->master_key[0], 0, sizeof(wss->master_key));
 	wss->tag = 0;
 	wss->state = WLP_WSS_STATE_NONE;
+	d_fnend(5, dev, "wss (%p) \n", wss);
 }
 
 /**
@@ -138,6 +145,7 @@ int wlp_wss_sysfs_add(struct wlp_wss *wss, char *wssid_str)
 	struct device *dev = &wlp->rc->uwb_dev.dev;
 	int result;
 
+	d_fnstart(5, dev, "wss (%p), wssid: %s\n", wss, wssid_str);
 	result = kobject_set_name(&wss->kobj, "wss-%s", wssid_str);
 	if (result < 0)
 		return result;
@@ -154,6 +162,7 @@ int wlp_wss_sysfs_add(struct wlp_wss *wss, char *wssid_str)
 			result);
 		goto error_sysfs_create_group;
 	}
+	d_fnend(5, dev, "Completed. result = %d \n", result);
 	return 0;
 error_sysfs_create_group:
 
@@ -205,14 +214,22 @@ int wlp_wss_enroll_target(struct wlp_wss *wss, struct wlp_uuid *wssid,
 	struct wlp *wlp = container_of(wss, struct wlp, wss);
 	struct device *dev = &wlp->rc->uwb_dev.dev;
 	struct wlp_neighbor_e *neighbor;
+	char buf[WLP_WSS_UUID_STRSIZE];
 	int result = -ENXIO;
 	struct uwb_dev_addr *dev_addr;
 
+	wlp_wss_uuid_print(buf, sizeof(buf), wssid);
+	d_fnstart(5, dev, "wss %p, wssid %s, registrar %02x:%02x \n",
+		  wss, buf, dest->data[1], dest->data[0]);
 	mutex_lock(&wlp->nbmutex);
 	list_for_each_entry(neighbor, &wlp->neighbors, node) {
 		dev_addr = &neighbor->uwb_dev->dev_addr;
 		if (!memcmp(dest, dev_addr, sizeof(*dest))) {
-			result = wlp_enroll_neighbor(wlp, neighbor, wss, wssid);
+			d_printf(5, dev, "Neighbor %02x:%02x is valid, "
+				 "enrolling. \n",
+				 dev_addr->data[1], dev_addr->data[0]);
+			result = wlp_enroll_neighbor(wlp, neighbor, wss,
+						     wssid);
 			break;
 		}
 	}
@@ -220,6 +237,8 @@ int wlp_wss_enroll_target(struct wlp_wss *wss, struct wlp_uuid *wssid,
 		dev_err(dev, "WLP: Cannot find neighbor %02x:%02x. \n",
 			dest->data[1], dest->data[0]);
 	mutex_unlock(&wlp->nbmutex);
+	d_fnend(5, dev, "wss %p, wssid %s, registrar %02x:%02x, result %d \n",
+		  wss, buf, dest->data[1], dest->data[0], result);
 	return result;
 }
 
@@ -241,11 +260,16 @@ int wlp_wss_enroll_discovered(struct wlp_wss *wss, struct wlp_uuid *wssid)
 	char buf[WLP_WSS_UUID_STRSIZE];
 	int result = -ENXIO;
 
-
+	wlp_wss_uuid_print(buf, sizeof(buf), wssid);
+	d_fnstart(5, dev, "wss %p, wssid %s \n", wss, buf);
 	mutex_lock(&wlp->nbmutex);
 	list_for_each_entry(neighbor, &wlp->neighbors, node) {
 		list_for_each_entry(wssid_e, &neighbor->wssid, node) {
 			if (!memcmp(wssid, &wssid_e->wssid, sizeof(*wssid))) {
+				d_printf(5, dev, "Found WSSID %s in neighbor "
+					 "%02x:%02x cache. \n", buf,
+					 neighbor->uwb_dev->dev_addr.data[1],
+					 neighbor->uwb_dev->dev_addr.data[0]);
 				result = wlp_enroll_neighbor(wlp, neighbor,
 							     wss, wssid);
 				if (result == 0) /* enrollment success */
@@ -255,11 +279,10 @@ int wlp_wss_enroll_discovered(struct wlp_wss *wss, struct wlp_uuid *wssid)
 		}
 	}
 out:
-	if (result == -ENXIO) {
-		wlp_wss_uuid_print(buf, sizeof(buf), wssid);
+	if (result == -ENXIO)
 		dev_err(dev, "WLP: Cannot find WSSID %s in cache. \n", buf);
-	}
 	mutex_unlock(&wlp->nbmutex);
+	d_fnend(5, dev, "wss %p, wssid %s, result %d \n", wss, buf, result);
 	return result;
 }
 
@@ -284,22 +307,27 @@ int wlp_wss_enroll(struct wlp_wss *wss, struct wlp_uuid *wssid,
 	struct uwb_dev_addr bcast = {.data = {0xff, 0xff} };
 
 	wlp_wss_uuid_print(buf, sizeof(buf), wssid);
-
 	if (wss->state != WLP_WSS_STATE_NONE) {
 		dev_err(dev, "WLP: Already enrolled in WSS %s.\n", buf);
 		result = -EEXIST;
 		goto error;
 	}
-	if (!memcmp(&bcast, devaddr, sizeof(bcast)))
+	if (!memcmp(&bcast, devaddr, sizeof(bcast))) {
+		d_printf(5, dev, "Request to enroll in discovered WSS "
+			 "with WSSID %s \n", buf);
 		result = wlp_wss_enroll_discovered(wss, wssid);
-	else
+	} else {
+		d_printf(5, dev, "Request to enroll in WSSID %s with "
+			 "registrar %02x:%02x\n", buf, devaddr->data[1],
+			 devaddr->data[0]);
 		result = wlp_wss_enroll_target(wss, wssid, devaddr);
+	}
 	if (result < 0) {
 		dev_err(dev, "WLP: Unable to enroll into WSS %s, result %d \n",
 			buf, result);
 		goto error;
 	}
-	dev_dbg(dev, "Successfully enrolled into WSS %s \n", buf);
+	d_printf(2, dev, "Successfully enrolled into WSS %s \n", buf);
 	result = wlp_wss_sysfs_add(wss, buf);
 	if (result < 0) {
 		dev_err(dev, "WLP: Unable to set up sysfs for WSS kobject.\n");
@@ -335,6 +363,7 @@ int wlp_wss_activate(struct wlp_wss *wss)
 		u8 hash; /* only include one hash */
 	} ie_data;
 
+	d_fnstart(5, dev, "Activating WSS %p. \n", wss);
 	BUG_ON(wss->state != WLP_WSS_STATE_ENROLLED);
 	wss->hash = wlp_wss_comp_wssid_hash(&wss->wssid);
 	wss->tag = wss->hash;
@@ -353,6 +382,7 @@ int wlp_wss_activate(struct wlp_wss *wss)
 	wss->state = WLP_WSS_STATE_ACTIVE;
 	result = 0;
 error_wlp_ie:
+	d_fnend(5, dev, "Activating WSS %p, result = %d \n", wss, result);
 	return result;
 }
 
@@ -375,6 +405,7 @@ int wlp_wss_enroll_activate(struct wlp_wss *wss, struct wlp_uuid *wssid,
 	int result = 0;
 	char buf[WLP_WSS_UUID_STRSIZE];
 
+	d_fnstart(5, dev, "Enrollment and activation requested. \n");
 	mutex_lock(&wss->mutex);
 	result = wlp_wss_enroll(wss, wssid, devaddr);
 	if (result < 0) {
@@ -393,6 +424,7 @@ int wlp_wss_enroll_activate(struct wlp_wss *wss, struct wlp_uuid *wssid,
 error_activate:
 error_enroll:
 	mutex_unlock(&wss->mutex);
+	d_fnend(5, dev, "Completed. result = %d \n", result);
 	return result;
 }
 
@@ -415,9 +447,11 @@ int wlp_wss_create_activate(struct wlp_wss *wss, struct wlp_uuid *wssid,
 	struct device *dev = &wlp->rc->uwb_dev.dev;
 	int result = 0;
 	char buf[WLP_WSS_UUID_STRSIZE];
-
+	d_fnstart(5, dev, "Request to create new WSS.\n");
 	result = wlp_wss_uuid_print(buf, sizeof(buf), wssid);
-
+	d_printf(5, dev, "Request to create WSS: WSSID=%s, name=%s, "
+		 "sec_status=%u, accepting enrollment=%u \n",
+		 buf, name, sec_status, accept);
 	if (!mutex_trylock(&wss->mutex)) {
 		dev_err(dev, "WLP: WLP association session in progress.\n");
 		return -EBUSY;
@@ -464,6 +498,7 @@ int wlp_wss_create_activate(struct wlp_wss *wss, struct wlp_uuid *wssid,
 	result = 0;
 out:
 	mutex_unlock(&wss->mutex);
+	d_fnend(5, dev, "Completed. result = %d \n", result);
 	return result;
 }
 
@@ -485,12 +520,16 @@ int wlp_wss_is_active(struct wlp *wlp, struct wlp_wss *wss,
 {
 	int result = 0;
 	struct device *dev = &wlp->rc->uwb_dev.dev;
+	char buf[WLP_WSS_UUID_STRSIZE];
 	DECLARE_COMPLETION_ONSTACK(completion);
 	struct wlp_session session;
 	struct sk_buff  *skb;
 	struct wlp_frame_assoc *resp;
 	struct wlp_uuid wssid;
 
+	wlp_wss_uuid_print(buf, sizeof(buf), &wss->wssid);
+	d_fnstart(5, dev, "wlp %p, wss %p (wssid %s), neighbor %02x:%02x \n",
+		  wlp, wss, buf, dev_addr->data[1], dev_addr->data[0]);
 	mutex_lock(&wlp->mutex);
 	/* Send C1 association frame */
 	result = wlp_send_assoc_frame(wlp, wss, dev_addr, WLP_ASSOC_C1);
@@ -526,6 +565,8 @@ int wlp_wss_is_active(struct wlp *wlp, struct wlp_wss *wss,
 	/* Parse message in session->data: it will be either C2 or F0 */
 	skb = session.data;
 	resp = (void *) skb->data;
+	d_printf(5, dev, "Received response to C1 frame. \n");
+	d_dump(5, dev, skb->data, skb->len > 72 ? 72 : skb->len);
 	if (resp->type == WLP_ASSOC_F0) {
 		result = wlp_parse_f0(wlp, skb);
 		if (result < 0)
@@ -543,9 +584,11 @@ int wlp_wss_is_active(struct wlp *wlp, struct wlp_wss *wss,
 		result = 0;
 		goto error_resp_parse;
 	}
-	if (!memcmp(&wssid, &wss->wssid, sizeof(wssid)))
+	if (!memcmp(&wssid, &wss->wssid, sizeof(wssid))) {
+		d_printf(5, dev, "WSSID in C2 frame matches local "
+			 "active WSS.\n");
 		result = 1;
-	else {
+	} else {
 		dev_err(dev, "WLP: Received a C2 frame without matching "
 			"WSSID.\n");
 		result = 0;
@@ -555,6 +598,8 @@ error_resp_parse:
 out:
 	wlp->session = NULL;
 	mutex_unlock(&wlp->mutex);
+	d_fnend(5, dev, "wlp %p, wss %p (wssid %s), neighbor %02x:%02x \n",
+		  wlp, wss, buf, dev_addr->data[1], dev_addr->data[0]);
 	return result;
 }
 
@@ -575,8 +620,16 @@ int wlp_wss_activate_connection(struct wlp *wlp, struct wlp_wss *wss,
 {
 	struct device *dev = &wlp->rc->uwb_dev.dev;
 	int result = 0;
+	char buf[WLP_WSS_UUID_STRSIZE];
+	wlp_wss_uuid_print(buf, sizeof(buf), wssid);
+	d_fnstart(5, dev, "wlp %p, wss %p, wssid %s, tag %u, virtual "
+		  "%02x:%02x:%02x:%02x:%02x:%02x \n", wlp, wss, buf, *tag,
+		  virt_addr->data[0], virt_addr->data[1], virt_addr->data[2],
+		  virt_addr->data[3], virt_addr->data[4], virt_addr->data[5]);
 
 	if (!memcmp(wssid, &wss->wssid, sizeof(*wssid))) {
+		d_printf(5, dev, "WSSID from neighbor frame matches local "
+			 "active WSS.\n");
 		/* Update EDA cache */
 		result = wlp_eda_update_node(&wlp->eda, dev_addr, wss,
 					     (void *) virt_addr->data, *tag,
@@ -585,9 +638,18 @@ int wlp_wss_activate_connection(struct wlp *wlp, struct wlp_wss *wss,
 			dev_err(dev, "WLP: Unable to update EDA cache "
 				"with new connected neighbor information.\n");
 	} else {
-		dev_err(dev, "WLP: Neighbor does not have matching WSSID.\n");
+		dev_err(dev, "WLP: Neighbor does not have matching "
+			"WSSID.\n");
 		result = -EINVAL;
 	}
+
+	d_fnend(5, dev, "wlp %p, wss %p, wssid %s, tag %u, virtual "
+		  "%02x:%02x:%02x:%02x:%02x:%02x, result = %d \n",
+		  wlp, wss, buf, *tag,
+		  virt_addr->data[0], virt_addr->data[1], virt_addr->data[2],
+		  virt_addr->data[3], virt_addr->data[4], virt_addr->data[5],
+		  result);
+
 	return result;
 }
 
@@ -603,6 +665,7 @@ int wlp_wss_connect_neighbor(struct wlp *wlp, struct wlp_wss *wss,
 {
 	int result;
 	struct device *dev = &wlp->rc->uwb_dev.dev;
+	char buf[WLP_WSS_UUID_STRSIZE];
 	struct wlp_uuid wssid;
 	u8 tag;
 	struct uwb_mac_addr virt_addr;
@@ -611,6 +674,9 @@ int wlp_wss_connect_neighbor(struct wlp *wlp, struct wlp_wss *wss,
 	struct wlp_frame_assoc *resp;
 	struct sk_buff *skb;
 
+	wlp_wss_uuid_print(buf, sizeof(buf), &wss->wssid);
+	d_fnstart(5, dev, "wlp %p, wss %p (wssid %s), neighbor %02x:%02x \n",
+		  wlp, wss, buf, dev_addr->data[1], dev_addr->data[0]);
 	mutex_lock(&wlp->mutex);
 	/* Send C3 association frame */
 	result = wlp_send_assoc_frame(wlp, wss, dev_addr, WLP_ASSOC_C3);
@@ -645,6 +711,8 @@ int wlp_wss_connect_neighbor(struct wlp *wlp, struct wlp_wss *wss,
 	/* Parse message in session->data: it will be either C4 or F0 */
 	skb = session.data;
 	resp = (void *) skb->data;
+	d_printf(5, dev, "Received response to C3 frame. \n");
+	d_dump(5, dev, skb->data, skb->len > 72 ? 72 : skb->len);
 	if (resp->type == WLP_ASSOC_F0) {
 		result = wlp_parse_f0(wlp, skb);
 		if (result < 0)
@@ -676,6 +744,8 @@ out:
 					  WLP_WSS_CONNECT_FAILED);
 	wlp->session = NULL;
 	mutex_unlock(&wlp->mutex);
+	d_fnend(5, dev, "wlp %p, wss %p (wssid %s), neighbor %02x:%02x \n",
+		  wlp, wss, buf, dev_addr->data[1], dev_addr->data[0]);
 	return result;
 }
 
@@ -710,8 +780,12 @@ void wlp_wss_connect_send(struct work_struct *ws)
 	struct wlp_wss *wss = &wlp->wss;
 	int result;
 	struct device *dev = &wlp->rc->uwb_dev.dev;
+	char buf[WLP_WSS_UUID_STRSIZE];
 
 	mutex_lock(&wss->mutex);
+	wlp_wss_uuid_print(buf, sizeof(buf), &wss->wssid);
+	d_fnstart(5, dev, "wlp %p, wss %p (wssid %s), neighbor %02x:%02x \n",
+		  wlp, wss, buf, dev_addr->data[1], dev_addr->data[0]);
 	if (wss->state < WLP_WSS_STATE_ACTIVE) {
 		if (printk_ratelimit())
 			dev_err(dev, "WLP: Attempting to connect with "
@@ -762,6 +836,7 @@ out:
 	BUG_ON(wlp->start_queue == NULL);
 	wlp->start_queue(wlp);
 	mutex_unlock(&wss->mutex);
+	d_fnend(5, dev, "wlp %p, wss %p (wssid %s)\n", wlp, wss, buf);
 }
 
 /**
@@ -780,6 +855,7 @@ int wlp_wss_prep_hdr(struct wlp *wlp, struct wlp_eda_node *eda_entry,
 	struct sk_buff *skb = _skb;
 	struct wlp_frame_std_abbrv_hdr *std_hdr;
 
+	d_fnstart(6, dev, "wlp %p \n", wlp);
 	if (eda_entry->state == WLP_WSS_CONNECTED) {
 		/* Add WLP header */
 		BUG_ON(skb_headroom(skb) < sizeof(*std_hdr));
@@ -797,6 +873,7 @@ int wlp_wss_prep_hdr(struct wlp *wlp, struct wlp_eda_node *eda_entry,
 				dev_addr->data[0]);
 		result = -EINVAL;
 	}
+	d_fnend(6, dev, "wlp %p \n", wlp);
 	return result;
 }
 
@@ -816,9 +893,16 @@ int wlp_wss_connect_prep(struct wlp *wlp, struct wlp_eda_node *eda_entry,
 {
 	int result = 0;
 	struct device *dev = &wlp->rc->uwb_dev.dev;
+	struct uwb_dev_addr *dev_addr = &eda_entry->dev_addr;
+	unsigned char *eth_addr = eda_entry->eth_addr;
 	struct sk_buff *skb = _skb;
 	struct wlp_assoc_conn_ctx *conn_ctx;
 
+	d_fnstart(5, dev, "wlp %p\n", wlp);
+	d_printf(5, dev, "To neighbor %02x:%02x with eth "
+		  "%02x:%02x:%02x:%02x:%02x:%02x\n", dev_addr->data[1],
+		  dev_addr->data[0], eth_addr[0], eth_addr[1], eth_addr[2],
+		  eth_addr[3], eth_addr[4], eth_addr[5]);
 	if (eda_entry->state == WLP_WSS_UNCONNECTED) {
 		/* We don't want any more packets while we set up connection */
 		BUG_ON(wlp->stop_queue == NULL);
@@ -845,9 +929,12 @@ int wlp_wss_connect_prep(struct wlp *wlp, struct wlp_eda_node *eda_entry,
 			 "previously. Not retrying. \n");
 		result = -ENONET;
 		goto out;
-	} else /* eda_entry->state == WLP_WSS_CONNECTED */
+	} else { /* eda_entry->state == WLP_WSS_CONNECTED */
+		d_printf(5, dev, "Neighbor is connected, preparing frame.\n");
 		result = wlp_wss_prep_hdr(wlp, eda_entry, skb);
+	}
 out:
+	d_fnend(5, dev, "wlp %p, result = %d \n", wlp, result);
 	return result;
 }
 
@@ -870,6 +957,8 @@ int wlp_wss_send_copy(struct wlp *wlp, struct wlp_eda_node *eda_entry,
 	struct sk_buff *copy;
 	struct uwb_dev_addr *dev_addr = &eda_entry->dev_addr;
 
+	d_fnstart(5, dev, "to neighbor %02x:%02x, skb (%p) \n",
+		  dev_addr->data[1], dev_addr->data[0], skb);
 	copy = skb_copy(skb, GFP_ATOMIC);
 	if (copy == NULL) {
 		if (printk_ratelimit())
@@ -899,6 +988,8 @@ int wlp_wss_send_copy(struct wlp *wlp, struct wlp_eda_node *eda_entry,
 		dev_kfree_skb_irq(copy);/*we need to free if tx fails */
 	}
 out:
+	d_fnend(5, dev, "to neighbor %02x:%02x \n", dev_addr->data[1],
+		  dev_addr->data[0]);
 	return result;
 }
 
@@ -914,7 +1005,7 @@ int wlp_wss_setup(struct net_device *net_dev, struct wlp_wss *wss)
 	struct wlp *wlp = container_of(wss, struct wlp, wss);
 	struct device *dev = &wlp->rc->uwb_dev.dev;
 	int result = 0;
-
+	d_fnstart(5, dev, "wss (%p) \n", wss);
 	mutex_lock(&wss->mutex);
 	wss->kobj.parent = &net_dev->dev.kobj;
 	if (!is_valid_ether_addr(net_dev->dev_addr)) {
@@ -927,6 +1018,7 @@ int wlp_wss_setup(struct net_device *net_dev, struct wlp_wss *wss)
 	       sizeof(wss->virtual_addr.data));
 out:
 	mutex_unlock(&wss->mutex);
+	d_fnend(5, dev, "wss (%p) \n", wss);
 	return result;
 }
 EXPORT_SYMBOL_GPL(wlp_wss_setup);
@@ -943,7 +1035,8 @@ EXPORT_SYMBOL_GPL(wlp_wss_setup);
 void wlp_wss_remove(struct wlp_wss *wss)
 {
 	struct wlp *wlp = container_of(wss, struct wlp, wss);
-
+	struct device *dev = &wlp->rc->uwb_dev.dev;
+	d_fnstart(5, dev, "wss (%p) \n", wss);
 	mutex_lock(&wss->mutex);
 	if (wss->state == WLP_WSS_STATE_ACTIVE)
 		uwb_rc_ie_rm(wlp->rc, UWB_IE_WLP);
@@ -957,5 +1050,6 @@ void wlp_wss_remove(struct wlp_wss *wss)
 	wlp_eda_release(&wlp->eda);
 	wlp_eda_init(&wlp->eda);
 	mutex_unlock(&wss->mutex);
+	d_fnend(5, dev, "wss (%p) \n", wss);
 }
 EXPORT_SYMBOL_GPL(wlp_wss_remove);

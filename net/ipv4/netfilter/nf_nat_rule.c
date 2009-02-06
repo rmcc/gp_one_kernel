@@ -86,6 +86,25 @@ ipt_snat_target(struct sk_buff *skb, const struct xt_target_param *par)
 	return nf_nat_setup_info(ct, &mr->range[0], IP_NAT_MANIP_SRC);
 }
 
+/* Before 2.6.11 we did implicit source NAT if required. Warn about change. */
+static void warn_if_extra_mangle(struct net *net, __be32 dstip, __be32 srcip)
+{
+	static int warned = 0;
+	struct flowi fl = { .nl_u = { .ip4_u = { .daddr = dstip } } };
+	struct rtable *rt;
+
+	if (ip_route_output_key(net, &rt, &fl) != 0)
+		return;
+
+	if (rt->rt_src != srcip && !warned) {
+		printk("NAT: no longer support implicit source local NAT\n");
+		printk("NAT: packet src %u.%u.%u.%u -> dst %u.%u.%u.%u\n",
+		       NIPQUAD(srcip), NIPQUAD(dstip));
+		warned = 1;
+	}
+	ip_rt_put(rt);
+}
+
 static unsigned int
 ipt_dnat_target(struct sk_buff *skb, const struct xt_target_param *par)
 {
@@ -100,6 +119,11 @@ ipt_dnat_target(struct sk_buff *skb, const struct xt_target_param *par)
 
 	/* Connection must be valid and new. */
 	NF_CT_ASSERT(ct && (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED));
+
+	if (par->hooknum == NF_INET_LOCAL_OUT &&
+	    mr->range[0].flags & IP_NAT_RANGE_MAP_IPS)
+		warn_if_extra_mangle(dev_net(par->out), ip_hdr(skb)->daddr,
+				     mr->range[0].min_ip);
 
 	return nf_nat_setup_info(ct, &mr->range[0], IP_NAT_MANIP_DST);
 }
@@ -142,7 +166,8 @@ alloc_null_binding(struct nf_conn *ct, unsigned int hooknum)
 	struct nf_nat_range range
 		= { IP_NAT_RANGE_MAP_IPS, ip, ip, { 0 }, { 0 } };
 
-	pr_debug("Allocating NULL binding for %p (%pI4)\n", ct, &ip);
+	pr_debug("Allocating NULL binding for %p (%u.%u.%u.%u)\n",
+		 ct, NIPQUAD(ip));
 	return nf_nat_setup_info(ct, &range, HOOK2MANIP(hooknum));
 }
 

@@ -23,7 +23,7 @@ static const struct ethtool_ops netdev_ethtool_ops;
 static int el_debug = EL_DEBUG;
 
 /*
- *	Board-specific info in netdev_priv(dev).
+ *	Board-specific info in dev->priv.
  */
 
 struct net_local

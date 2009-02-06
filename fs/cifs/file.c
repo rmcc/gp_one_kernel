@@ -644,10 +644,10 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 	__u64 length;
 	bool wait_flag = false;
 	struct cifs_sb_info *cifs_sb;
-	struct cifsTconInfo *tcon;
+	struct cifsTconInfo *pTcon;
 	__u16 netfid;
 	__u8 lockType = LOCKING_ANDX_LARGE_FILES;
-	bool posix_locking = 0;
+	bool posix_locking;
 
 	length = 1 + pfLock->fl_end - pfLock->fl_start;
 	rc = -EACCES;
@@ -698,7 +698,7 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 		cFYI(1, ("Unknown type of lock"));
 
 	cifs_sb = CIFS_SB(file->f_path.dentry->d_sb);
-	tcon = cifs_sb->tcon;
+	pTcon = cifs_sb->tcon;
 
 	if (file->private_data == NULL) {
 		FreeXid(xid);
@@ -706,10 +706,9 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 	}
 	netfid = ((struct cifsFileInfo *)file->private_data)->netfid;
 
-	if ((tcon->ses->capabilities & CAP_UNIX) &&
-	    (CIFS_UNIX_FCNTL_CAP & le64_to_cpu(tcon->fsUnixInfo.Capability)) &&
-	    ((cifs_sb->mnt_cifs_flags & CIFS_MOUNT_NOPOSIXBRL) == 0))
-		posix_locking = 1;
+	posix_locking = (cifs_sb->tcon->ses->capabilities & CAP_UNIX) &&
+			(CIFS_UNIX_FCNTL_CAP & le64_to_cpu(cifs_sb->tcon->fsUnixInfo.Capability));
+
 	/* BB add code here to normalize offset and length to
 	account for negative length which we can not accept over the
 	wire */
@@ -720,7 +719,7 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 				posix_lock_type = CIFS_RDLCK;
 			else
 				posix_lock_type = CIFS_WRLCK;
-			rc = CIFSSMBPosixLock(xid, tcon, netfid, 1 /* get */,
+			rc = CIFSSMBPosixLock(xid, pTcon, netfid, 1 /* get */,
 					length,	pfLock,
 					posix_lock_type, wait_flag);
 			FreeXid(xid);
@@ -728,10 +727,10 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 		}
 
 		/* BB we could chain these into one lock request BB */
-		rc = CIFSSMBLock(xid, tcon, netfid, length, pfLock->fl_start,
+		rc = CIFSSMBLock(xid, pTcon, netfid, length, pfLock->fl_start,
 				 0, 1, lockType, 0 /* wait flag */ );
 		if (rc == 0) {
-			rc = CIFSSMBLock(xid, tcon, netfid, length,
+			rc = CIFSSMBLock(xid, pTcon, netfid, length,
 					 pfLock->fl_start, 1 /* numUnlock */ ,
 					 0 /* numLock */ , lockType,
 					 0 /* wait flag */ );
@@ -768,7 +767,7 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 		if (numUnlock == 1)
 			posix_lock_type = CIFS_UNLCK;
 
-		rc = CIFSSMBPosixLock(xid, tcon, netfid, 0 /* set */,
+		rc = CIFSSMBPosixLock(xid, pTcon, netfid, 0 /* set */,
 				      length, pfLock,
 				      posix_lock_type, wait_flag);
 	} else {
@@ -776,7 +775,7 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 			(struct cifsFileInfo *)file->private_data;
 
 		if (numLock) {
-			rc = CIFSSMBLock(xid, tcon, netfid, length,
+			rc = CIFSSMBLock(xid, pTcon, netfid, length,
 					pfLock->fl_start,
 					0, numLock, lockType, wait_flag);
 
@@ -797,7 +796,7 @@ int cifs_lock(struct file *file, int cmd, struct file_lock *pfLock)
 				if (pfLock->fl_start <= li->offset &&
 						(pfLock->fl_start + length) >=
 						(li->offset + li->length)) {
-					stored_rc = CIFSSMBLock(xid, tcon,
+					stored_rc = CIFSSMBLock(xid, pTcon,
 							netfid,
 							li->length, li->offset,
 							1, 0, li->type, false);
@@ -2074,7 +2073,7 @@ static int cifs_write_begin(struct file *file, struct address_space *mapping,
 
 	cFYI(1, ("write_begin from %lld len %d", (long long)pos, len));
 
-	page = grab_cache_page_write_begin(mapping, index, flags);
+	page = __grab_cache_page(mapping, index);
 	if (!page) {
 		rc = -ENOMEM;
 		goto out;

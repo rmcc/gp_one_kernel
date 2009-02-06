@@ -535,7 +535,7 @@ static int wacom_intuos_irq(struct wacom_wac *wacom, void *wcombo)
 	return 1;
 }
 
-static int wacom_tpc_irq(struct wacom_wac *wacom, void *wcombo)
+int wacom_tpc_irq(struct wacom_wac *wacom, void *wcombo)
 {
 	char *data = wacom->data;
 	int prox = 0, pressure;

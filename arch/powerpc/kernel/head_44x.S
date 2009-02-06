@@ -69,17 +69,6 @@ _ENTRY(_start);
 	li	r24,0		/* CPU number */
 
 /*
- * In case the firmware didn't do it, we apply some workarounds
- * that are good for all 440 core variants here
- */
-	mfspr	r3,SPRN_CCR0
-	rlwinm	r3,r3,0,0,27	/* disable icache prefetch */
-	isync
-	mtspr	SPRN_CCR0,r3
-	isync
-	sync
-
-/*
  * Set up the initial MMU state
  *
  * We are still executing code at the virtual address
@@ -402,14 +391,12 @@ interrupt_base:
 	rlwimi	r13,r12,10,30,30
 
 	/* Load the PTE */
-	/* Compute pgdir/pmd offset */
-	rlwinm  r12, r10, PPC44x_PGD_OFF_SHIFT, PPC44x_PGD_OFF_MASK_BIT, 29
+	rlwinm 	r12, r10, 13, 19, 29	/* Compute pgdir/pmd offset */
 	lwzx	r11, r12, r11		/* Get pgd/pmd entry */
 	rlwinm.	r12, r11, 0, 0, 20	/* Extract pt base address */
 	beq	2f			/* Bail if no table */
 
-	/* Compute pte address */
-	rlwimi  r12, r10, PPC44x_PTE_ADD_SHIFT, PPC44x_PTE_ADD_MASK_BIT, 28
+	rlwimi	r12, r10, 23, 20, 28	/* Compute pte address */
 	lwz	r11, 0(r12)		/* Get high word of pte entry */
 	lwz	r12, 4(r12)		/* Get low word of pte entry */
 
@@ -498,14 +485,12 @@ tlb_44x_patch_hwater_D:
 	/* Make up the required permissions */
 	li	r13,_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_HWEXEC
 
-	/* Compute pgdir/pmd offset */
-	rlwinm 	r12, r10, PPC44x_PGD_OFF_SHIFT, PPC44x_PGD_OFF_MASK_BIT, 29
+	rlwinm	r12, r10, 13, 19, 29	/* Compute pgdir/pmd offset */
 	lwzx	r11, r12, r11		/* Get pgd/pmd entry */
 	rlwinm.	r12, r11, 0, 0, 20	/* Extract pt base address */
 	beq	2f			/* Bail if no table */
 
-	/* Compute pte address */
-	rlwimi	r12, r10, PPC44x_PTE_ADD_SHIFT, PPC44x_PTE_ADD_MASK_BIT, 28
+	rlwimi	r12, r10, 23, 20, 28	/* Compute pte address */
 	lwz	r11, 0(r12)		/* Get high word of pte entry */
 	lwz	r12, 4(r12)		/* Get low word of pte entry */
 
@@ -569,16 +554,15 @@ tlb_44x_patch_hwater_I:
  */
 finish_tlb_load:
 	/* Combine RPN & ERPN an write WS 0 */
-	rlwimi	r11,r12,0,0,31-PAGE_SHIFT
+	rlwimi	r11,r12,0,0,19
 	tlbwe	r11,r13,PPC44x_TLB_XLAT
 
 	/*
 	 * Create WS1. This is the faulting address (EPN),
 	 * page size, and valid flag.
 	 */
-	li	r11,PPC44x_TLB_VALID | PPC44x_TLBE_SIZE
-	/* Insert valid and page size */
-	rlwimi	r10,r11,0,PPC44x_PTE_ADD_MASK_BIT,31
+	li	r11,PPC44x_TLB_VALID | PPC44x_TLB_4K
+	rlwimi	r10,r11,0,20,31			/* Insert valid and page size*/
 	tlbwe	r10,r13,PPC44x_TLB_PAGEID	/* Write PAGEID */
 
 	/* And WS 2 */
@@ -650,12 +634,12 @@ _GLOBAL(set_context)
  * goes at the beginning of the data segment, which is page-aligned.
  */
 	.data
-	.align	PAGE_SHIFT
+	.align	12
 	.globl	sdata
 sdata:
 	.globl	empty_zero_page
 empty_zero_page:
-	.space	PAGE_SIZE
+	.space	4096
 
 /*
  * To support >32-bit physical addresses, we use an 8KB pgdir.

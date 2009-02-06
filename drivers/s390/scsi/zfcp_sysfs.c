@@ -6,9 +6,6 @@
  * Copyright IBM Corporation 2008
  */
 
-#define KMSG_COMPONENT "zfcp"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
-
 #include "zfcp_ext.h"
 
 #define ZFCP_DEV_ATTR(_feat, _name, _mode, _show, _store) \

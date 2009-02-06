@@ -26,6 +26,7 @@
 #include "selftest.h"
 #include "boards.h"
 #include "workarounds.h"
+#include "mac.h"
 #include "spi.h"
 #include "falcon_io.h"
 #include "mdio_10g.h"
@@ -104,11 +105,9 @@ static int efx_test_mii(struct efx_nic *efx, struct efx_self_tests *tests)
 		goto out;
 	}
 
-	if (EFX_IS10G(efx)) {
-		rc = mdio_clause45_check_mmds(efx, efx->phy_op->mmds, 0);
-		if (rc)
-			goto out;
-	}
+	rc = mdio_clause45_check_mmds(efx, efx->phy_op->mmds, 0);
+	if (rc)
+		goto out;
 
 out:
 	mutex_unlock(&efx->mac_lock);
@@ -247,20 +246,17 @@ static int efx_test_eventq_irq(struct efx_channel *channel,
 	return 0;
 }
 
-static int efx_test_phy(struct efx_nic *efx, struct efx_self_tests *tests,
-			unsigned flags)
+static int efx_test_phy(struct efx_nic *efx, struct efx_self_tests *tests)
 {
 	int rc;
 
-	if (!efx->phy_op->run_tests)
+	if (!efx->phy_op->test)
 		return 0;
 
-	EFX_BUG_ON_PARANOID(efx->phy_op->num_tests == 0 ||
-			    efx->phy_op->num_tests > EFX_MAX_PHY_TESTS);
-
 	mutex_lock(&efx->mac_lock);
-	rc = efx->phy_op->run_tests(efx, tests->phy, flags);
+	rc = efx->phy_op->test(efx);
 	mutex_unlock(&efx->mac_lock);
+	tests->phy = rc ? -1 : 1;
 	return rc;
 }
 
@@ -567,7 +563,8 @@ efx_test_loopback(struct efx_tx_queue *tx_queue,
 	return 0;
 }
 
-static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
+static int efx_test_loopbacks(struct efx_nic *efx, struct ethtool_cmd ecmd,
+			      struct efx_self_tests *tests,
 			      unsigned int loopback_modes)
 {
 	enum efx_loopback_mode mode;
@@ -596,14 +593,12 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 		efx->loopback_mode = mode;
 		efx_reconfigure_port(efx);
 
-		/* Wait for the PHY to signal the link is up. Interrupts
-		 * are enabled for PHY's using LASI, otherwise we poll()
-		 * quickly */
+		/* Wait for the PHY to signal the link is up */
 		count = 0;
 		do {
 			struct efx_channel *channel = &efx->channel[0];
 
-			efx->phy_op->poll(efx);
+			falcon_check_xmac(efx);
 			schedule_timeout_uninterruptible(HZ / 10);
 			if (channel->work_pending)
 				efx_process_channel_now(channel);
@@ -611,12 +606,13 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 			flush_workqueue(efx->workqueue);
 			rmb();
 
-			/* We need both the phy and xaui links to be ok.
-			 * rather than relying on the falcon_xmac irq/poll
-			 * regime, just poll xaui directly */
+			/* efx->link_up can be 1 even if the XAUI link is down,
+			 * (bug5762). Usually, it's not worth bothering with the
+			 * difference, but for selftests, we need that extra
+			 * guarantee that the link is really, really, up.
+			 */
 			link_up = efx->link_up;
-			if (link_up && EFX_IS10G(efx) &&
-			    !falcon_xaui_link_ok(efx))
+			if (!falcon_xaui_link_ok(efx))
 				link_up = false;
 
 		} while ((++count < 20) && !link_up);
@@ -656,48 +652,47 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 
 /**************************************************************************
  *
- * Entry point
+ * Entry points
  *
  *************************************************************************/
 
-int efx_selftest(struct efx_nic *efx, struct efx_self_tests *tests,
-		 unsigned flags)
+/* Online (i.e. non-disruptive) testing
+ * This checks interrupt generation, event delivery and PHY presence. */
+int efx_online_test(struct efx_nic *efx, struct efx_self_tests *tests)
 {
-	enum efx_loopback_mode loopback_mode = efx->loopback_mode;
-	int phy_mode = efx->phy_mode;
-	struct ethtool_cmd ecmd;
 	struct efx_channel *channel;
-	int rc_test = 0, rc_reset = 0, rc;
-
-	/* Online (i.e. non-disruptive) testing
-	 * This checks interrupt generation, event delivery and PHY presence. */
+	int rc, rc2 = 0;
 
 	rc = efx_test_mii(efx, tests);
-	if (rc && !rc_test)
-		rc_test = rc;
+	if (rc && !rc2)
+		rc2 = rc;
 
 	rc = efx_test_nvram(efx, tests);
-	if (rc && !rc_test)
-		rc_test = rc;
+	if (rc && !rc2)
+		rc2 = rc;
 
 	rc = efx_test_interrupts(efx, tests);
-	if (rc && !rc_test)
-		rc_test = rc;
+	if (rc && !rc2)
+		rc2 = rc;
 
 	efx_for_each_channel(channel, efx) {
 		rc = efx_test_eventq_irq(channel, tests);
-		if (rc && !rc_test)
-			rc_test = rc;
+		if (rc && !rc2)
+			rc2 = rc;
 	}
 
-	if (rc_test)
-		return rc_test;
+	return rc2;
+}
 
-	if (!(flags & ETH_TEST_FL_OFFLINE))
-		return efx_test_phy(efx, tests, flags);
-
-	/* Offline (i.e. disruptive) testing
-	 * This checks MAC and PHY loopback on the specified port. */
+/* Offline (i.e. disruptive) testing
+ * This checks MAC and PHY loopback on the specified port. */
+int efx_offline_test(struct efx_nic *efx,
+		     struct efx_self_tests *tests, unsigned int loopback_modes)
+{
+	enum efx_loopback_mode loopback_mode = efx->loopback_mode;
+	int phy_mode = efx->phy_mode;
+	struct ethtool_cmd ecmd, ecmd_test;
+	int rc, rc2 = 0;
 
 	/* force the carrier state off so the kernel doesn't transmit during
 	 * the loopback test, and the watchdog timeout doesn't fire. Also put
@@ -705,15 +700,8 @@ int efx_selftest(struct efx_nic *efx, struct efx_self_tests *tests,
 	 */
 	mutex_lock(&efx->mac_lock);
 	efx->port_inhibited = true;
-	if (efx->loopback_modes) {
-		/* We need the 312 clock from the PHY to test the XMAC
-		 * registers, so move into XGMII loopback if available */
-		if (efx->loopback_modes & (1 << LOOPBACK_XGMII))
-			efx->loopback_mode = LOOPBACK_XGMII;
-		else
-			efx->loopback_mode = __ffs(efx->loopback_modes);
-	}
-
+	if (efx->loopback_modes)
+		efx->loopback_mode = __ffs(efx->loopback_modes);
 	__efx_reconfigure_port(efx);
 	mutex_unlock(&efx->mac_lock);
 
@@ -721,34 +709,39 @@ int efx_selftest(struct efx_nic *efx, struct efx_self_tests *tests,
 	efx_reset_down(efx, &ecmd);
 
 	rc = efx_test_chip(efx, tests);
-	if (rc && !rc_test)
-		rc_test = rc;
+	if (rc && !rc2)
+		rc2 = rc;
 
 	/* reset the chip to recover from the register test */
-	rc_reset = falcon_reset_hw(efx, RESET_TYPE_ALL);
+	rc = falcon_reset_hw(efx, RESET_TYPE_ALL);
 
-	/* Ensure that the phy is powered and out of loopback
-	 * for the bist and loopback tests */
-	efx->phy_mode &= ~PHY_MODE_LOW_POWER;
+	/* Modify the saved ecmd so that when efx_reset_up() restores the phy
+	 * state, AN is disabled, and the phy is powered, and out of loopback */
+	memcpy(&ecmd_test, &ecmd, sizeof(ecmd_test));
+	if (ecmd_test.autoneg == AUTONEG_ENABLE) {
+		ecmd_test.autoneg = AUTONEG_DISABLE;
+		ecmd_test.duplex = DUPLEX_FULL;
+		ecmd_test.speed = SPEED_10000;
+	}
 	efx->loopback_mode = LOOPBACK_NONE;
 
-	rc = efx_reset_up(efx, &ecmd, rc_reset == 0);
-	if (rc && !rc_reset)
-		rc_reset = rc;
-
-	if (rc_reset) {
+	rc = efx_reset_up(efx, &ecmd_test, rc == 0);
+	if (rc) {
 		EFX_ERR(efx, "Unable to recover from chip test\n");
 		efx_schedule_reset(efx, RESET_TYPE_DISABLE);
-		return rc_reset;
+		return rc;
 	}
 
-	rc = efx_test_phy(efx, tests, flags);
-	if (rc && !rc_test)
-		rc_test = rc;
+	tests->loopback_speed = ecmd_test.speed;
+	tests->loopback_full_duplex = ecmd_test.duplex;
 
-	rc = efx_test_loopbacks(efx, tests, efx->loopback_modes);
-	if (rc && !rc_test)
-		rc_test = rc;
+	rc = efx_test_phy(efx, tests);
+	if (rc && !rc2)
+		rc2 = rc;
+
+	rc = efx_test_loopbacks(efx, ecmd_test, tests, loopback_modes);
+	if (rc && !rc2)
+		rc2 = rc;
 
 	/* restore the PHY to the previous state */
 	efx->loopback_mode = loopback_mode;
@@ -756,6 +749,6 @@ int efx_selftest(struct efx_nic *efx, struct efx_self_tests *tests,
 	efx->port_inhibited = false;
 	efx_ethtool_set_settings(efx->net_dev, &ecmd);
 
-	return rc_test;
+	return rc2;
 }
 

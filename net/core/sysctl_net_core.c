@@ -12,6 +12,7 @@
 #include <linux/netdevice.h>
 #include <linux/init.h>
 #include <net/sock.h>
+#include <net/xfrm.h>
 
 static struct ctl_table net_core_table[] = {
 #ifdef CONFIG_NET
@@ -21,7 +22,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &sysctl_wmem_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_RMEM_MAX,
@@ -29,7 +30,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &sysctl_rmem_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_WMEM_DEFAULT,
@@ -37,7 +38,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &sysctl_wmem_default,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_RMEM_DEFAULT,
@@ -45,7 +46,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &sysctl_rmem_default,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_DEV_WEIGHT,
@@ -53,7 +54,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &weight_p,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_MAX_BACKLOG,
@@ -61,7 +62,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &netdev_max_backlog,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_MSG_COST,
@@ -69,8 +70,8 @@ static struct ctl_table net_core_table[] = {
 		.data		= &net_ratelimit_state.interval,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_jiffies,
-		.strategy	= sysctl_jiffies,
+		.proc_handler	= &proc_dointvec_jiffies,
+		.strategy	= &sysctl_jiffies,
 	},
 	{
 		.ctl_name	= NET_CORE_MSG_BURST,
@@ -78,7 +79,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &net_ratelimit_state.burst,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= &proc_dointvec,
 	},
 	{
 		.ctl_name	= NET_CORE_OPTMEM_MAX,
@@ -86,8 +87,42 @@ static struct ctl_table net_core_table[] = {
 		.data		= &sysctl_optmem_max,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
+#ifdef CONFIG_XFRM
+	{
+		.ctl_name	= NET_CORE_AEVENT_ETIME,
+		.procname	= "xfrm_aevent_etime",
+		.data		= &sysctl_xfrm_aevent_etime,
+		.maxlen		= sizeof(u32),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
+	},
+	{
+		.ctl_name	= NET_CORE_AEVENT_RSEQTH,
+		.procname	= "xfrm_aevent_rseqth",
+		.data		= &sysctl_xfrm_aevent_rseqth,
+		.maxlen		= sizeof(u32),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
+	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "xfrm_larval_drop",
+		.data		= &sysctl_xfrm_larval_drop,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
+	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "xfrm_acq_expires",
+		.data		= &sysctl_xfrm_acq_expires,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
+	},
+#endif /* CONFIG_XFRM */
 #endif /* CONFIG_NET */
 	{
 		.ctl_name	= NET_CORE_BUDGET,
@@ -95,7 +130,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &netdev_budget,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{
 		.ctl_name	= NET_CORE_WARNINGS,
@@ -103,7 +138,7 @@ static struct ctl_table net_core_table[] = {
 		.data		= &net_msg_warn,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{ .ctl_name = 0 }
 };
@@ -115,12 +150,12 @@ static struct ctl_table netns_core_table[] = {
 		.data		= &init_net.core.sysctl_somaxconn,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= &proc_dointvec
 	},
 	{ .ctl_name = 0 }
 };
 
-__net_initdata struct ctl_path net_core_path[] = {
+static __net_initdata struct ctl_path net_core_path[] = {
 	{ .procname = "net", .ctl_name = CTL_NET, },
 	{ .procname = "core", .ctl_name = NET_CORE, },
 	{ },
@@ -172,11 +207,8 @@ static __net_initdata struct pernet_operations sysctl_core_ops = {
 
 static __init int sysctl_core_init(void)
 {
-	static struct ctl_table empty[1];
-
-	register_sysctl_paths(net_core_path, empty);
 	register_net_sysctl_rotable(net_core_path, net_core_table);
 	return register_pernet_subsys(&sysctl_core_ops);
 }
 
-fs_initcall(sysctl_core_init);
+__initcall(sysctl_core_init);

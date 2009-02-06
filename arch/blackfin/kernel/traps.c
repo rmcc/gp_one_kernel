@@ -32,7 +32,6 @@
 #include <linux/module.h>
 #include <linux/kallsyms.h>
 #include <linux/fs.h>
-#include <linux/rbtree.h>
 #include <asm/traps.h>
 #include <asm/cacheflush.h>
 #include <asm/cplb.h>
@@ -76,6 +75,16 @@ void __init trap_init(void)
 	CSYNC();
 }
 
+/*
+ * Used to save the RETX, SEQSTAT, I/D CPLB FAULT ADDR
+ * values across the transition from exception to IRQ5.
+ * We put these in L1, so they are going to be in a valid
+ * location during exception context
+ */
+__attribute__((l1_data))
+unsigned long saved_retx, saved_seqstat,
+	saved_icplb_fault_addr, saved_dcplb_fault_addr;
+
 static void decode_address(char *buf, unsigned long address)
 {
 #ifdef CONFIG_DEBUG_VERBOSE
@@ -84,7 +93,6 @@ static void decode_address(char *buf, unsigned long address)
 	struct mm_struct *mm;
 	unsigned long flags, offset;
 	unsigned char in_atomic = (bfin_read_IPEND() & 0x10) || in_atomic();
-	struct rb_node *n;
 
 #ifdef CONFIG_KALLSYMS
 	unsigned long symsize;
@@ -130,10 +138,9 @@ static void decode_address(char *buf, unsigned long address)
 		if (!mm)
 			continue;
 
-		for (n = rb_first(&mm->mm_rb); n; n = rb_next(n)) {
-			struct vm_area_struct *vma;
-
-			vma = rb_entry(n, struct vm_area_struct, vm_rb);
+		vml = mm->context.vmlist;
+		while (vml) {
+			struct vm_area_struct *vma = vml->vma;
 
 			if (address >= vma->vm_start && address < vma->vm_end) {
 				char _tmpbuf[256];
@@ -179,6 +186,8 @@ static void decode_address(char *buf, unsigned long address)
 
 				goto done;
 			}
+
+			vml = vml->next;
 		}
 		if (!in_atomic)
 			mmput(mm);
@@ -202,18 +211,18 @@ asmlinkage void double_fault_c(struct pt_regs *fp)
 	printk(KERN_EMERG "\n" KERN_EMERG "Double Fault\n");
 #ifdef CONFIG_DEBUG_DOUBLEFAULT_PRINT
 	if (((long)fp->seqstat &  SEQSTAT_EXCAUSE) == VEC_UNCOV) {
-		unsigned int cpu = smp_processor_id();
 		char buf[150];
-		decode_address(buf, cpu_pda[cpu].retx);
+		decode_address(buf, saved_retx);
 		printk(KERN_EMERG "While handling exception (EXCAUSE = 0x%x) at %s:\n",
-			(unsigned int)cpu_pda[cpu].seqstat & SEQSTAT_EXCAUSE, buf);
-		decode_address(buf, cpu_pda[cpu].dcplb_fault_addr);
+			(int)saved_seqstat & SEQSTAT_EXCAUSE, buf);
+		decode_address(buf, saved_dcplb_fault_addr);
 		printk(KERN_NOTICE "   DCPLB_FAULT_ADDR: %s\n", buf);
-		decode_address(buf, cpu_pda[cpu].icplb_fault_addr);
+		decode_address(buf, saved_icplb_fault_addr);
 		printk(KERN_NOTICE "   ICPLB_FAULT_ADDR: %s\n", buf);
 
 		decode_address(buf, fp->retx);
-		printk(KERN_NOTICE "The instruction at %s caused a double exception\n", buf);
+		printk(KERN_NOTICE "The instruction at %s caused a double exception\n",
+			buf);
 	} else
 #endif
 	{
@@ -230,9 +239,6 @@ asmlinkage void trap_c(struct pt_regs *fp)
 {
 #ifdef CONFIG_DEBUG_BFIN_HWTRACE_ON
 	int j;
-#endif
-#ifdef CONFIG_DEBUG_HUNT_FOR_ZERO
-	unsigned int cpu = smp_processor_id();
 #endif
 	int sig = 0;
 	siginfo_t info;
@@ -411,7 +417,7 @@ asmlinkage void trap_c(struct pt_regs *fp)
 		info.si_code = ILL_CPLB_MULHIT;
 		sig = SIGSEGV;
 #ifdef CONFIG_DEBUG_HUNT_FOR_ZERO
-		if (cpu_pda[cpu].dcplb_fault_addr < FIXED_CODE_START)
+		if (saved_dcplb_fault_addr < FIXED_CODE_START)
 			verbose_printk(KERN_NOTICE "NULL pointer access\n");
 		else
 #endif
@@ -465,7 +471,7 @@ asmlinkage void trap_c(struct pt_regs *fp)
 		info.si_code = ILL_CPLB_MULHIT;
 		sig = SIGSEGV;
 #ifdef CONFIG_DEBUG_HUNT_FOR_ZERO
-		if (cpu_pda[cpu].icplb_fault_addr < FIXED_CODE_START)
+		if (saved_icplb_fault_addr < FIXED_CODE_START)
 			verbose_printk(KERN_NOTICE "Jump to NULL address\n");
 		else
 #endif
@@ -578,15 +584,10 @@ asmlinkage void trap_c(struct pt_regs *fp)
 		}
 	}
 
-#ifdef CONFIG_IPIPE
-	if (!ipipe_trap_notify(fp->seqstat & 0x3f, fp))
-#endif
-	{
-		info.si_signo = sig;
-		info.si_errno = 0;
-		info.si_addr = (void __user *)fp->pc;
-		force_sig_info(sig, &info, current);
-	}
+	info.si_signo = sig;
+	info.si_errno = 0;
+	info.si_addr = (void __user *)fp->pc;
+	force_sig_info(sig, &info, current);
 
 	trace_buffer_restore(j);
 	return;
@@ -655,13 +656,13 @@ static bool get_instruction(unsigned short *val, unsigned short *address)
 	return false;
 }
 
-/*
+/* 
  * decode the instruction if we are printing out the trace, as it
  * makes things easier to follow, without running it through objdump
  * These are the normal instructions which cause change of flow, which
  * would be at the source of the trace buffer
  */
-#if defined(CONFIG_DEBUG_VERBOSE) && defined(CONFIG_DEBUG_BFIN_HWTRACE_ON)
+#ifdef CONFIG_DEBUG_VERBOSE
 static void decode_instruction(unsigned short *address)
 {
 	unsigned short opcode;
@@ -845,7 +846,7 @@ void show_stack(struct task_struct *task, unsigned long *stack)
 	}
 	if (fp) {
 		frame = fp;
-		printk(KERN_NOTICE " FP: (0x%p)\n", fp);
+		printk(" FP: (0x%p)\n", fp);
 	} else
 		frame = 0;
 
@@ -959,7 +960,6 @@ void dump_bfin_process(struct pt_regs *fp)
 		else
 			verbose_printk(KERN_NOTICE "COMM= invalid\n");
 
-		printk(KERN_NOTICE "CPU = %d\n", current_thread_info()->cpu);
 		if (!((unsigned long)current->mm & 0x3) && (unsigned long)current->mm >= FIXED_CODE_START)
 			verbose_printk(KERN_NOTICE  "TEXT = 0x%p-0x%p        DATA = 0x%p-0x%p\n"
 				KERN_NOTICE " BSS = 0x%p-0x%p  USER-STACK = 0x%p\n"
@@ -1053,7 +1053,6 @@ void show_regs(struct pt_regs *fp)
 	struct irqaction *action;
 	unsigned int i;
 	unsigned long flags;
-	unsigned int cpu = smp_processor_id();
 
 	verbose_printk(KERN_NOTICE "\n" KERN_NOTICE "SEQUENCER STATUS:\t\t%s\n", print_tainted());
 	verbose_printk(KERN_NOTICE " SEQSTAT: %08lx  IPEND: %04lx  SYSCFG: %04lx\n",
@@ -1113,9 +1112,9 @@ unlock:
 
 	if (((long)fp->seqstat &  SEQSTAT_EXCAUSE) &&
 	    (((long)fp->seqstat & SEQSTAT_EXCAUSE) != VEC_HWERR)) {
-		decode_address(buf, cpu_pda[cpu].dcplb_fault_addr);
+		decode_address(buf, saved_dcplb_fault_addr);
 		verbose_printk(KERN_NOTICE "DCPLB_FAULT_ADDR: %s\n", buf);
-		decode_address(buf, cpu_pda[cpu].icplb_fault_addr);
+		decode_address(buf, saved_icplb_fault_addr);
 		verbose_printk(KERN_NOTICE "ICPLB_FAULT_ADDR: %s\n", buf);
 	}
 
@@ -1154,21 +1153,20 @@ unlock:
 asmlinkage int sys_bfin_spinlock(int *spinlock)__attribute__((l1_text));
 #endif
 
-static DEFINE_SPINLOCK(bfin_spinlock_lock);
-
-asmlinkage int sys_bfin_spinlock(int *p)
+asmlinkage int sys_bfin_spinlock(int *spinlock)
 {
-	int ret, tmp = 0;
+	int ret = 0;
+	int tmp = 0;
 
-	spin_lock(&bfin_spinlock_lock);	/* This would also hold kernel preemption. */
-	ret = get_user(tmp, p);
-	if (likely(ret == 0)) {
-		if (unlikely(tmp))
+	local_irq_disable();
+	ret = get_user(tmp, spinlock);
+	if (ret == 0) {
+		if (tmp)
 			ret = 1;
-		else
-			put_user(1, p);
+		tmp = 1;
+		put_user(tmp, spinlock);
 	}
-	spin_unlock(&bfin_spinlock_lock);
+	local_irq_enable();
 	return ret;
 }
 

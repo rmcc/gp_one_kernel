@@ -28,8 +28,6 @@ void disable_noexec(struct mm_struct *, struct task_struct *);
 
 static inline void clear_table(unsigned long *s, unsigned long val, size_t n)
 {
-	typedef struct { char _[n]; } addrtype;
-
 	*s = val;
 	n = (n / 256) - 1;
 	asm volatile(
@@ -41,8 +39,7 @@ static inline void clear_table(unsigned long *s, unsigned long val, size_t n)
 		"0:	mvc	256(256,%0),0(%0)\n"
 		"	la	%0,256(%0)\n"
 		"	brct	%1,0b\n"
-		: "+a" (s), "+d" (n), "=m" (*(addrtype *) s)
-		: "m" (*(addrtype *) s));
+		: "+a" (s), "+d" (n));
 }
 
 static inline void crst_table_init(unsigned long *crst, unsigned long entry)

@@ -19,7 +19,7 @@ exit:
 	return status;
 }
 
-static int ql_get_mb_sts(struct ql_adapter *qdev, struct mbox_params *mbcp)
+int ql_get_mb_sts(struct ql_adapter *qdev, struct mbox_params *mbcp)
 {
 	int i, status;
 

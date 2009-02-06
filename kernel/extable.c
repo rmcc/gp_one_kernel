@@ -17,7 +17,6 @@
 */
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/ftrace.h>
 #include <asm/uaccess.h>
 #include <asm/sections.h>
 
@@ -41,7 +40,7 @@ const struct exception_table_entry *search_exception_tables(unsigned long addr)
 	return e;
 }
 
-__notrace_funcgraph int core_kernel_text(unsigned long addr)
+int core_kernel_text(unsigned long addr)
 {
 	if (addr >= (unsigned long)_stext &&
 	    addr <= (unsigned long)_etext)
@@ -54,7 +53,7 @@ __notrace_funcgraph int core_kernel_text(unsigned long addr)
 	return 0;
 }
 
-__notrace_funcgraph int __kernel_text_address(unsigned long addr)
+int __kernel_text_address(unsigned long addr)
 {
 	if (core_kernel_text(addr))
 		return 1;
@@ -63,22 +62,6 @@ __notrace_funcgraph int __kernel_text_address(unsigned long addr)
 
 int kernel_text_address(unsigned long addr)
 {
-	if (core_kernel_text(addr))
-		return 1;
-	return module_text_address(addr) != NULL;
-}
-
-/*
- * On some architectures (PPC64, IA64) function pointers
- * are actually only tokens to some data that then holds the
- * real function address. As a result, to find if a function
- * pointer is part of the kernel text, we need to do some
- * special dereferencing first.
- */
-int func_ptr_is_kernel_text(void *ptr)
-{
-	unsigned long addr;
-	addr = (unsigned long) dereference_function_descriptor(ptr);
 	if (core_kernel_text(addr))
 		return 1;
 	return module_text_address(addr) != NULL;

@@ -327,31 +327,6 @@ static struct uvc_menu_info exposure_auto_controls[] = {
 	{ 8, "Aperture Priority Mode" },
 };
 
-static __s32 uvc_ctrl_get_zoom(struct uvc_control_mapping *mapping,
-	__u8 query, const __u8 *data)
-{
-	__s8 zoom = (__s8)data[0];
-
-	switch (query) {
-	case GET_CUR:
-		return (zoom == 0) ? 0 : (zoom > 0 ? data[2] : -data[2]);
-
-	case GET_MIN:
-	case GET_MAX:
-	case GET_RES:
-	case GET_DEF:
-	default:
-		return data[2];
-	}
-}
-
-static void uvc_ctrl_set_zoom(struct uvc_control_mapping *mapping,
-	__s32 value, __u8 *data)
-{
-	data[0] = value == 0 ? 0 : (value > 0) ? 1 : 0xff;
-	data[2] = min(abs(value), 0xff);
-}
-
 static struct uvc_control_mapping uvc_ctrl_mappings[] = {
 	{
 		.id		= V4L2_CID_BRIGHTNESS,
@@ -557,38 +532,6 @@ static struct uvc_control_mapping uvc_ctrl_mappings[] = {
 		.v4l2_type	= V4L2_CTRL_TYPE_BOOLEAN,
 		.data_type	= UVC_CTRL_DATA_TYPE_BOOLEAN,
 	},
-	{
-		.id		= V4L2_CID_ZOOM_ABSOLUTE,
-		.name		= "Zoom, Absolute",
-		.entity		= UVC_GUID_UVC_CAMERA,
-		.selector	= CT_ZOOM_ABSOLUTE_CONTROL,
-		.size		= 16,
-		.offset		= 0,
-		.v4l2_type	= V4L2_CTRL_TYPE_INTEGER,
-		.data_type	= UVC_CTRL_DATA_TYPE_UNSIGNED,
-	},
-	{
-		.id		= V4L2_CID_ZOOM_CONTINUOUS,
-		.name		= "Zoom, Continuous",
-		.entity		= UVC_GUID_UVC_CAMERA,
-		.selector	= CT_ZOOM_RELATIVE_CONTROL,
-		.size		= 0,
-		.offset		= 0,
-		.v4l2_type	= V4L2_CTRL_TYPE_INTEGER,
-		.data_type	= UVC_CTRL_DATA_TYPE_SIGNED,
-		.get		= uvc_ctrl_get_zoom,
-		.set		= uvc_ctrl_set_zoom,
-	},
-	{
-		.id		= V4L2_CID_PRIVACY,
-		.name		= "Privacy",
-		.entity		= UVC_GUID_UVC_CAMERA,
-		.selector	= CT_PRIVACY_CONTROL,
-		.size		= 1,
-		.offset		= 0,
-		.v4l2_type	= V4L2_CTRL_TYPE_BOOLEAN,
-		.data_type	= UVC_CTRL_DATA_TYPE_BOOLEAN,
-	},
 };
 
 /* ------------------------------------------------------------------------
@@ -600,14 +543,9 @@ static inline __u8 *uvc_ctrl_data(struct uvc_control *ctrl, int id)
 	return ctrl->data + id * ctrl->info->size;
 }
 
-static inline int uvc_test_bit(const __u8 *data, int bit)
+static inline int uvc_get_bit(const __u8 *data, int bit)
 {
 	return (data[bit >> 3] >> (bit & 7)) & 1;
-}
-
-static inline void uvc_clear_bit(__u8 *data, int bit)
-{
-	data[bit >> 3] &= ~(1 << (bit & 7));
 }
 
 /* Extract the bit string specified by mapping->offset and mapping->size
@@ -615,8 +553,8 @@ static inline void uvc_clear_bit(__u8 *data, int bit)
  * a signed 32bit integer. Sign extension will be performed if the mapping
  * references a signed data type.
  */
-static __s32 uvc_get_le_value(struct uvc_control_mapping *mapping,
-	__u8 query, const __u8 *data)
+static __s32 uvc_get_le_value(const __u8 *data,
+	struct uvc_control_mapping *mapping)
 {
 	int bits = mapping->size;
 	int offset = mapping->offset;
@@ -645,8 +583,8 @@ static __s32 uvc_get_le_value(struct uvc_control_mapping *mapping,
 /* Set the bit string specified by mapping->offset and mapping->size
  * in the little-endian data stored at 'data' to the value 'value'.
  */
-static void uvc_set_le_value(struct uvc_control_mapping *mapping,
-	__s32 value, __u8 *data)
+static void uvc_set_le_value(__s32 value, __u8 *data,
+	struct uvc_control_mapping *mapping)
 {
 	int bits = mapping->size;
 	int offset = mapping->offset;
@@ -798,7 +736,7 @@ int uvc_query_v4l2_ctrl(struct uvc_video_device *video,
 				video->dev->intfnum, ctrl->info->selector,
 				data, ctrl->info->size)) < 0)
 			goto out;
-		v4l2_ctrl->default_value = mapping->get(mapping, GET_DEF, data);
+		v4l2_ctrl->default_value = uvc_get_le_value(data, mapping);
 	}
 
 	switch (mapping->v4l2_type) {
@@ -834,21 +772,21 @@ int uvc_query_v4l2_ctrl(struct uvc_video_device *video,
 				video->dev->intfnum, ctrl->info->selector,
 				data, ctrl->info->size)) < 0)
 			goto out;
-		v4l2_ctrl->minimum = mapping->get(mapping, GET_MIN, data);
+		v4l2_ctrl->minimum = uvc_get_le_value(data, mapping);
 	}
 	if (ctrl->info->flags & UVC_CONTROL_GET_MAX) {
 		if ((ret = uvc_query_ctrl(video->dev, GET_MAX, ctrl->entity->id,
 				video->dev->intfnum, ctrl->info->selector,
 				data, ctrl->info->size)) < 0)
 			goto out;
-		v4l2_ctrl->maximum = mapping->get(mapping, GET_MAX, data);
+		v4l2_ctrl->maximum = uvc_get_le_value(data, mapping);
 	}
 	if (ctrl->info->flags & UVC_CONTROL_GET_RES) {
 		if ((ret = uvc_query_ctrl(video->dev, GET_RES, ctrl->entity->id,
 				video->dev->intfnum, ctrl->info->selector,
 				data, ctrl->info->size)) < 0)
 			goto out;
-		v4l2_ctrl->step = mapping->get(mapping, GET_RES, data);
+		v4l2_ctrl->step = uvc_get_le_value(data, mapping);
 	}
 
 	ret = 0;
@@ -985,8 +923,8 @@ int uvc_ctrl_get(struct uvc_video_device *video,
 		ctrl->loaded = 1;
 	}
 
-	xctrl->value = mapping->get(mapping, GET_CUR,
-		uvc_ctrl_data(ctrl, UVC_CTRL_DATA_CURRENT));
+	xctrl->value = uvc_get_le_value(
+		uvc_ctrl_data(ctrl, UVC_CTRL_DATA_CURRENT), mapping);
 
 	if (mapping->v4l2_type == V4L2_CTRL_TYPE_MENU) {
 		menu = mapping->menu_info;
@@ -1042,8 +980,8 @@ int uvc_ctrl_set(struct uvc_video_device *video,
 		       ctrl->info->size);
 	}
 
-	mapping->set(mapping, value,
-		uvc_ctrl_data(ctrl, UVC_CTRL_DATA_CURRENT));
+	uvc_set_le_value(value,
+		uvc_ctrl_data(ctrl, UVC_CTRL_DATA_CURRENT), mapping);
 
 	ctrl->dirty = 1;
 	ctrl->modified = 1;
@@ -1319,11 +1257,6 @@ int uvc_ctrl_add_mapping(struct uvc_control_mapping *mapping)
 	struct uvc_control_mapping *map;
 	int ret = -EINVAL;
 
-	if (mapping->get == NULL)
-		mapping->get = uvc_get_le_value;
-	if (mapping->set == NULL)
-		mapping->set = uvc_set_le_value;
-
 	if (mapping->id & ~V4L2_CTRL_ID_MASK) {
 		uvc_trace(UVC_TRACE_CONTROL, "Can't add mapping '%s' with "
 			"invalid control id 0x%08x\n", mapping->name,
@@ -1373,51 +1306,6 @@ end:
 }
 
 /*
- * Prune an entity of its bogus controls. This currently includes processing
- * unit auto controls for which no corresponding manual control is available.
- * Such auto controls make little sense if any, and are known to crash at
- * least the SiGma Micro webcam.
- */
-static void
-uvc_ctrl_prune_entity(struct uvc_entity *entity)
-{
-	static const struct {
-		u8 idx_manual;
-		u8 idx_auto;
-	} blacklist[] = {
-		{ 2, 11 }, /* Hue */
-		{ 6, 12 }, /* White Balance Temperature */
-		{ 7, 13 }, /* White Balance Component */
-	};
-
-	u8 *controls;
-	unsigned int size;
-	unsigned int i;
-
-	if (UVC_ENTITY_TYPE(entity) != VC_PROCESSING_UNIT)
-		return;
-
-	controls = entity->processing.bmControls;
-	size = entity->processing.bControlSize;
-
-	for (i = 0; i < ARRAY_SIZE(blacklist); ++i) {
-		if (blacklist[i].idx_auto >= 8 * size ||
-		    blacklist[i].idx_manual >= 8 * size)
-			continue;
-
-		if (!uvc_test_bit(controls, blacklist[i].idx_auto) ||
-		     uvc_test_bit(controls, blacklist[i].idx_manual))
-			continue;
-
-		uvc_trace(UVC_TRACE_CONTROL, "Auto control %u/%u has no "
-			"matching manual control, removing it.\n", entity->id,
-			blacklist[i].idx_auto);
-
-		uvc_clear_bit(controls, blacklist[i].idx_auto);
-	}
-}
-
-/*
  * Initialize device controls.
  */
 int uvc_ctrl_init_device(struct uvc_device *dev)
@@ -1443,9 +1331,6 @@ int uvc_ctrl_init_device(struct uvc_device *dev)
 			bControlSize = entity->camera.bControlSize;
 		}
 
-		if (dev->quirks & UVC_QUIRK_PRUNE_CONTROLS)
-			uvc_ctrl_prune_entity(entity);
-
 		for (i = 0; i < bControlSize; ++i)
 			ncontrols += hweight8(bmControls[i]);
 
@@ -1460,7 +1345,7 @@ int uvc_ctrl_init_device(struct uvc_device *dev)
 
 		ctrl = entity->controls;
 		for (i = 0; i < bControlSize * 8; ++i) {
-			if (uvc_test_bit(bmControls, i) == 0)
+			if (uvc_get_bit(bmControls, i) == 0)
 				continue;
 
 			ctrl->entity = entity;

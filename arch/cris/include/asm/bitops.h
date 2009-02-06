@@ -148,7 +148,6 @@ static inline int test_and_change_bit(int nr, volatile unsigned long *addr)
 #define ffs kernel_ffs
 
 #include <asm-generic/bitops/fls.h>
-#include <asm-generic/bitops/__fls.h>
 #include <asm-generic/bitops/fls64.h>
 #include <asm-generic/bitops/hweight.h>
 #include <asm-generic/bitops/find.h>

@@ -24,6 +24,7 @@
 #include <asm/kvm_virtio.h>
 #include <asm/setup.h>
 #include <asm/s390_ext.h>
+#include <asm/s390_rdev.h>
 
 #define VIRTIO_SUBCODE_64 0x0D00
 
@@ -187,13 +188,11 @@ static struct virtqueue *kvm_find_vq(struct virtio_device *vdev,
 	config = kvm_vq_config(kdev->desc)+index;
 
 	err = vmem_add_mapping(config->address,
-			       vring_size(config->num,
-					  KVM_S390_VIRTIO_RING_ALIGN));
+			       vring_size(config->num, PAGE_SIZE));
 	if (err)
 		goto out;
 
-	vq = vring_new_virtqueue(config->num, KVM_S390_VIRTIO_RING_ALIGN,
-				 vdev, (void *) config->address,
+	vq = vring_new_virtqueue(config->num, vdev, (void *) config->address,
 				 kvm_notify, callback);
 	if (!vq) {
 		err = -ENOMEM;
@@ -210,8 +209,7 @@ static struct virtqueue *kvm_find_vq(struct virtio_device *vdev,
 	return vq;
 unmap:
 	vmem_remove_mapping(config->address,
-			    vring_size(config->num,
-				       KVM_S390_VIRTIO_RING_ALIGN));
+			    vring_size(config->num, PAGE_SIZE));
 out:
 	return ERR_PTR(err);
 }
@@ -222,8 +220,7 @@ static void kvm_del_vq(struct virtqueue *vq)
 
 	vring_del_virtqueue(vq);
 	vmem_remove_mapping(config->address,
-			    vring_size(config->num,
-				       KVM_S390_VIRTIO_RING_ALIGN));
+			    vring_size(config->num, PAGE_SIZE));
 }
 
 /*
@@ -298,29 +295,13 @@ static void scan_devices(void)
  */
 static void kvm_extint_handler(u16 code)
 {
-	struct virtqueue *vq;
-	u16 subcode;
-	int config_changed;
+	void *data = (void *) *(long *) __LC_PFAULT_INTPARM;
+	u16 subcode = S390_lowcore.cpu_addr;
 
-	subcode = S390_lowcore.cpu_addr;
 	if ((subcode & 0xff00) != VIRTIO_SUBCODE_64)
 		return;
 
-	/* The LSB might be overloaded, we have to mask it */
-	vq = (struct virtqueue *) ((*(long *) __LC_PFAULT_INTPARM) & ~1UL);
-
-	/* We use the LSB of extparam, to decide, if this interrupt is a config
-	 * change or a "standard" interrupt */
-	config_changed =  (*(int *)  __LC_EXT_PARAMS & 1);
-
-	if (config_changed) {
-		struct virtio_driver *drv;
-		drv = container_of(vq->vdev->dev.driver,
-				   struct virtio_driver, driver);
-		if (drv->config_changed)
-			drv->config_changed(vq->vdev);
-	} else
-		vring_interrupt(0, vq);
+	vring_interrupt(0, data);
 }
 
 /*
@@ -334,7 +315,7 @@ static int __init kvm_devices_init(void)
 	if (!MACHINE_IS_KVM)
 		return -ENODEV;
 
-	kvm_root = root_device_register("kvm_s390");
+	kvm_root = s390_root_dev_register("kvm_s390");
 	if (IS_ERR(kvm_root)) {
 		rc = PTR_ERR(kvm_root);
 		printk(KERN_ERR "Could not register kvm_s390 root device");
@@ -343,7 +324,7 @@ static int __init kvm_devices_init(void)
 
 	rc = vmem_add_mapping(real_memory_size, PAGE_SIZE);
 	if (rc) {
-		root_device_unregister(kvm_root);
+		s390_root_dev_unregister(kvm_root);
 		return rc;
 	}
 

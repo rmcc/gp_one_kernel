@@ -24,7 +24,6 @@
 #include <linux/amba/bus.h>
 #include <linux/amba/clcd.h>
 #include <linux/clk.h>
-#include <linux/hardirq.h>
 
 #include <asm/sizes.h>
 

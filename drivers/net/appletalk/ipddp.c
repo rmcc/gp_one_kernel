@@ -48,18 +48,12 @@ static int ipddp_mode = IPDDP_DECAP;
 
 /* Index to functions, as function prototypes. */
 static int ipddp_xmit(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats *ipddp_get_stats(struct net_device *dev);
 static int ipddp_create(struct ipddp_route *new_rt);
 static int ipddp_delete(struct ipddp_route *rt);
 static struct ipddp_route* ipddp_find_route(struct ipddp_route *rt);
 static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 
-static const struct net_device_ops ipddp_netdev_ops = {
-	.ndo_start_xmit		= ipddp_xmit,
-	.ndo_do_ioctl   	= ipddp_ioctl,
-	.ndo_change_mtu		= eth_change_mtu,
-	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
-};
 
 static struct net_device * __init ipddp_init(void)
 {
@@ -67,7 +61,7 @@ static struct net_device * __init ipddp_init(void)
 	struct net_device *dev;
 	int err;
 
-	dev = alloc_etherdev(0);
+	dev = alloc_etherdev(sizeof(struct net_device_stats));
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
@@ -77,7 +71,9 @@ static struct net_device * __init ipddp_init(void)
                 printk(version);
 
 	/* Initalize the device structure. */
-	dev->netdev_ops = &ipddp_netdev_ops;
+        dev->hard_start_xmit = ipddp_xmit;
+        dev->get_stats      = ipddp_get_stats;
+        dev->do_ioctl       = ipddp_ioctl;
 
         dev->type = ARPHRD_IPDDP;       	/* IP over DDP tunnel */
         dev->mtu = 585;
@@ -107,6 +103,13 @@ static struct net_device * __init ipddp_init(void)
         return dev;
 }
 
+/*
+ * Get the current statistics. This may be called with the card open or closed.
+ */
+static struct net_device_stats *ipddp_get_stats(struct net_device *dev)
+{
+        return dev->priv;
+}
 
 /*
  * Transmit LLAP/ELAP frame using aarp_send_ddp.
@@ -167,8 +170,8 @@ static int ipddp_xmit(struct sk_buff *skb, struct net_device *dev)
 
         skb->protocol = htons(ETH_P_ATALK);     /* Protocol has changed */
 
-	dev->stats.tx_packets++;
-	dev->stats.tx_bytes += skb->len;
+	((struct net_device_stats *) dev->priv)->tx_packets++;
+        ((struct net_device_stats *) dev->priv)->tx_bytes+=skb->len;
 
         if(aarp_send_ddp(rt->dev, skb, &rt->at, NULL) < 0)
                 dev_kfree_skb(skb);

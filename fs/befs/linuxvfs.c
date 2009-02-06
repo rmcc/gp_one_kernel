@@ -378,8 +378,7 @@ static struct inode *befs_iget(struct super_block *sb, unsigned long ino)
 		inode->i_size = 0;
 		inode->i_blocks = befs_sb->block_size / VFS_BLOCK_SIZE;
 		strncpy(befs_ino->i_data.symlink, raw_inode->data.symlink,
-			BEFS_SYMLINK_LEN - 1);
-		befs_ino->i_data.symlink[BEFS_SYMLINK_LEN - 1] = '\0';
+			BEFS_SYMLINK_LEN);
 	} else {
 		int num_blks;
 
@@ -478,8 +477,6 @@ befs_follow_link(struct dentry *dentry, struct nameidata *nd)
 			kfree(link);
 			befs_error(sb, "Failed to read entire long symlink");
 			link = ERR_PTR(-EIO);
-		} else {
-			link[len - 1] = '\0';
 		}
 	} else {
 		link = befs_ino->i_data.symlink;

@@ -447,23 +447,19 @@ static void zcrypt_pcicc_receive(struct ap_device *ap_dev,
 		.type = TYPE82_RSP_CODE,
 		.reply_code = REP82_ERROR_MACHINE_FAILURE,
 	};
-	struct type86_reply *t86r;
+	struct type86_reply *t86r = reply->message;
 	int length;
 
 	/* Copy the reply message to the request message buffer. */
-	if (IS_ERR(reply)) {
+	if (IS_ERR(reply))
 		memcpy(msg->message, &error_reply, sizeof(error_reply));
-		goto out;
-	}
-	t86r = reply->message;
-	if (t86r->hdr.type == TYPE86_RSP_CODE &&
+	else if (t86r->hdr.type == TYPE86_RSP_CODE &&
 		 t86r->cprb.cprb_ver_id == 0x01) {
 		length = sizeof(struct type86_reply) + t86r->length - 2;
 		length = min(PCICC_MAX_RESPONSE_SIZE, length);
 		memcpy(msg->message, reply->message, length);
 	} else
 		memcpy(msg->message, reply->message, sizeof error_reply);
-out:
 	complete((struct completion *) msg->private);
 }
 

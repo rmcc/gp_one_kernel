@@ -61,7 +61,7 @@ static void chsc_subchannel_irq(struct subchannel *sch)
 	}
 	private->request = NULL;
 	memcpy(&request->irb, irb, sizeof(*irb));
-	cio_update_schib(sch);
+	stsch(sch->schid, &sch->schib);
 	complete(&request->completion);
 	put_device(&sch->dev);
 }

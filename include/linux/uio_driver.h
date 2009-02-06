@@ -38,24 +38,6 @@ struct uio_mem {
 
 #define MAX_UIO_MAPS	5
 
-struct uio_portio;
-
-/**
- * struct uio_port - description of a UIO port region
- * @start:		start of port region
- * @size:		size of port region
- * @porttype:		type of port (see UIO_PORT_* below)
- * @portio:		for use by the UIO core only.
- */
-struct uio_port {
-	unsigned long		start;
-	unsigned long		size;
-	int			porttype;
-	struct uio_portio	*portio;
-};
-
-#define MAX_UIO_PORT_REGIONS	5
-
 struct uio_device;
 
 /**
@@ -64,7 +46,6 @@ struct uio_device;
  * @name:		device name
  * @version:		device driver version
  * @mem:		list of mappable memory regions, size==0 for end of list
- * @port:		list of port regions, size==0 for end of list
  * @irq:		interrupt number or UIO_IRQ_CUSTOM
  * @irq_flags:		flags for request_irq()
  * @priv:		optional private data
@@ -76,10 +57,9 @@ struct uio_device;
  */
 struct uio_info {
 	struct uio_device	*uio_dev;
-	const char		*name;
-	const char		*version;
+	char			*name;
+	char			*version;
 	struct uio_mem		mem[MAX_UIO_MAPS];
-	struct uio_port		port[MAX_UIO_PORT_REGIONS];
 	long			irq;
 	unsigned long		irq_flags;
 	void			*priv;
@@ -111,11 +91,5 @@ extern void uio_event_notify(struct uio_info *info);
 #define UIO_MEM_PHYS	1
 #define UIO_MEM_LOGICAL	2
 #define UIO_MEM_VIRTUAL 3
-
-/* defines for uio_port->porttype */
-#define UIO_PORT_NONE	0
-#define UIO_PORT_X86	1
-#define UIO_PORT_GPIO	2
-#define UIO_PORT_OTHER	3
 
 #endif /* _LINUX_UIO_DRIVER_H_ */

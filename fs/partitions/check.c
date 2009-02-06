@@ -334,7 +334,6 @@ void delete_partition(struct gendisk *disk, int partno)
 
 	blk_free_devt(part_devt(part));
 	rcu_assign_pointer(ptbl->part[partno], NULL);
-	rcu_assign_pointer(ptbl->last_lookup, NULL);
 	kobject_put(part->holder_dir);
 	device_del(part_to_dev(part));
 
@@ -385,9 +384,9 @@ struct hd_struct *add_partition(struct gendisk *disk, int partno,
 
 	dname = dev_name(ddev);
 	if (isdigit(dname[strlen(dname) - 1]))
-		dev_set_name(pdev, "%sp%d", dname, partno);
+		snprintf(pdev->bus_id, BUS_ID_SIZE, "%sp%d", dname, partno);
 	else
-		dev_set_name(pdev, "%s%d", dname, partno);
+		snprintf(pdev->bus_id, BUS_ID_SIZE, "%s%d", dname, partno);
 
 	device_initialize(pdev);
 	pdev->class = &block_class;
@@ -448,11 +447,16 @@ void register_disk(struct gendisk *disk)
 	struct block_device *bdev;
 	struct disk_part_iter piter;
 	struct hd_struct *part;
+	char *s;
 	int err;
 
 	ddev->parent = disk->driverfs_dev;
 
-	dev_set_name(ddev, disk->disk_name);
+	strlcpy(ddev->bus_id, disk->disk_name, BUS_ID_SIZE);
+	/* ewww... some of these buggers have / in the name... */
+	s = strchr(ddev->bus_id, '/');
+	if (s)
+		*s = '!';
 
 	/* delay uevents, until we scanned partition table */
 	ddev->uevent_suppress = 1;

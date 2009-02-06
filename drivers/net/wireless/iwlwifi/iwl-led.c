@@ -19,7 +19,7 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ * James P. Ketrenos <ipw2100-admin@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  *****************************************************************************/
@@ -41,6 +41,7 @@
 #include "iwl-dev.h"
 #include "iwl-core.h"
 #include "iwl-io.h"
+#include "iwl-helpers.h"
 
 #ifdef CONFIG_IWLWIFI_DEBUG
 static const char *led_type_str[] = {
@@ -277,7 +278,7 @@ static int iwl_get_blink_rate(struct iwl_priv *priv)
 	/* FIXME: + priv->rx_stats[2].bytes; */
 	s64 tpt = current_tpt - priv->led_tpt;
 
-	if (tpt < 0) /* wraparound */
+	if (tpt < 0) /* wrapparound */
 		tpt = -tpt;
 
 	IWL_DEBUG_LED("tpt %lld current_tpt %llu\n",
@@ -292,7 +293,7 @@ static int iwl_get_blink_rate(struct iwl_priv *priv)
 			if (tpt  > (blink_tbl[i].tpt * IWL_1MB_RATE))
 				break;
 
-	IWL_DEBUG_LED("LED BLINK IDX=%d\n", i);
+	IWL_DEBUG_LED("LED BLINK IDX=%d", i);
 	return i;
 }
 

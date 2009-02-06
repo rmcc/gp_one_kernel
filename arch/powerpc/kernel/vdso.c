@@ -184,7 +184,8 @@ static void dump_vdso_pages(struct vm_area_struct * vma)
  * This is called from binfmt_elf, we create the special vma for the
  * vDSO and insert it into the mm struct tree
  */
-int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
+int arch_setup_additional_pages(struct linux_binprm *bprm,
+				int executable_stack)
 {
 	struct mm_struct *mm = current->mm;
 	struct page **vdso_pagelist;
@@ -566,11 +567,6 @@ static __init int vdso_fixup_features(struct lib32_elfinfo *v32,
 		do_feature_fixups(cur_cpu_spec->cpu_features,
 				  start64, start64 + size64);
 
-	start64 = find_section64(v64->hdr, "__mmu_ftr_fixup", &size64);
-	if (start64)
-		do_feature_fixups(cur_cpu_spec->mmu_features,
-				  start64, start64 + size64);
-
 	start64 = find_section64(v64->hdr, "__fw_ftr_fixup", &size64);
 	if (start64)
 		do_feature_fixups(powerpc_firmware_features,
@@ -585,11 +581,6 @@ static __init int vdso_fixup_features(struct lib32_elfinfo *v32,
 	start32 = find_section32(v32->hdr, "__ftr_fixup", &size32);
 	if (start32)
 		do_feature_fixups(cur_cpu_spec->cpu_features,
-				  start32, start32 + size32);
-
-	start32 = find_section32(v32->hdr, "__mmu_ftr_fixup", &size32);
-	if (start32)
-		do_feature_fixups(cur_cpu_spec->mmu_features,
 				  start32, start32 + size32);
 
 #ifdef CONFIG_PPC64

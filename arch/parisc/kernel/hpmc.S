@@ -80,7 +80,6 @@ END(hpmc_pim_data)
 
 	.import intr_save, code
 ENTRY(os_hpmc)
-.os_hpmc:
 
 	/*
 	 * registers modified:
@@ -296,10 +295,5 @@ os_hpmc_6:
 	b .
 	nop
 ENDPROC(os_hpmc)
-.os_hpmc_end:
+ENTRY(os_hpmc_end)	/* this label used to compute os_hpmc checksum */
 	nop
-.data
-.align 4
-	.export os_hpmc_size
-os_hpmc_size:
-	.word .os_hpmc_end-.os_hpmc

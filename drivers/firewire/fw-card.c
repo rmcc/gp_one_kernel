@@ -75,7 +75,7 @@ generate_config_rom(struct fw_card *card, size_t *config_rom_length)
 	 * controller, block reads to the config rom accesses the host
 	 * memory, but quadlet read access the hardware bus info block
 	 * registers.  That's just crack, but it means we should make
-	 * sure the contents of bus info block in host memory matches
+	 * sure the contents of bus info block in host memory mathces
 	 * the version stored in the OHCI registers.
 	 */
 
@@ -189,17 +189,6 @@ static const char gap_count_table[] = {
 	63, 5, 7, 8, 10, 13, 16, 18, 21, 24, 26, 29, 32, 35, 37, 40
 };
 
-void
-fw_schedule_bm_work(struct fw_card *card, unsigned long delay)
-{
-	int scheduled;
-
-	fw_card_get(card);
-	scheduled = schedule_delayed_work(&card->work, delay);
-	if (!scheduled)
-		fw_card_put(card);
-}
-
 static void
 fw_card_bm_work(struct work_struct *work)
 {
@@ -209,8 +198,6 @@ fw_card_bm_work(struct work_struct *work)
 	unsigned long flags;
 	int root_id, new_root_id, irm_id, gap_count, generation, grace, rcode;
 	bool do_reset = false;
-	bool root_device_is_running;
-	bool root_device_is_cmc;
 	__be32 lock_data[2];
 
 	spin_lock_irqsave(&card->lock, flags);
@@ -219,16 +206,15 @@ fw_card_bm_work(struct work_struct *work)
 
 	if (local_node == NULL) {
 		spin_unlock_irqrestore(&card->lock, flags);
-		goto out_put_card;
+		return;
 	}
 	fw_node_get(local_node);
 	fw_node_get(root_node);
 
 	generation = card->generation;
 	root_device = root_node->data;
-	root_device_is_running = root_device &&
-			atomic_read(&root_device->state) == FW_DEVICE_RUNNING;
-	root_device_is_cmc = root_device && root_device->cmc;
+	if (root_device)
+		fw_device_get(root_device);
 	root_id = root_node->node_id;
 	grace = time_after(jiffies, card->reset_jiffies + DIV_ROUND_UP(HZ, 10));
 
@@ -294,7 +280,7 @@ fw_card_bm_work(struct work_struct *work)
 		 * this task 100ms from now.
 		 */
 		spin_unlock_irqrestore(&card->lock, flags);
-		fw_schedule_bm_work(card, DIV_ROUND_UP(HZ, 10));
+		schedule_delayed_work(&card->work, DIV_ROUND_UP(HZ, 10));
 		goto out;
 	}
 
@@ -311,14 +297,14 @@ fw_card_bm_work(struct work_struct *work)
 		 * config rom.  In either case, pick another root.
 		 */
 		new_root_id = local_node->node_id;
-	} else if (!root_device_is_running) {
+	} else if (atomic_read(&root_device->state) != FW_DEVICE_RUNNING) {
 		/*
 		 * If we haven't probed this device yet, bail out now
 		 * and let's try again once that's done.
 		 */
 		spin_unlock_irqrestore(&card->lock, flags);
 		goto out;
-	} else if (root_device_is_cmc) {
+	} else if (root_device->cmc) {
 		/*
 		 * FIXME: I suppose we should set the cmstr bit in the
 		 * STATE_CLEAR register of this node, as described in
@@ -365,10 +351,10 @@ fw_card_bm_work(struct work_struct *work)
 		fw_core_initiate_bus_reset(card, 1);
 	}
  out:
+	if (root_device)
+		fw_device_put(root_device);
 	fw_node_put(root_node);
 	fw_node_put(local_node);
- out_put_card:
-	fw_card_put(card);
 }
 
 static void
@@ -524,6 +510,7 @@ fw_core_remove_card(struct fw_card *card)
 	fw_card_put(card);
 	wait_for_completion(&card->done);
 
+	cancel_delayed_work_sync(&card->work);
 	WARN_ON(!list_empty(&card->transaction_list));
 	del_timer_sync(&card->flush_timer);
 }

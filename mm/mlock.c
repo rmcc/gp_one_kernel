@@ -173,13 +173,12 @@ static long __mlock_vma_pages_range(struct vm_area_struct *vma,
 		  (atomic_read(&mm->mm_users) != 0));
 
 	/*
-	 * mlock:   don't page populate if vma has PROT_NONE permission.
-	 * munlock: always do munlock although the vma has PROT_NONE
-	 *          permission, or SIGKILL is pending.
+	 * mlock:   don't page populate if page has PROT_NONE permission.
+	 * munlock: the pages always do munlock althrough
+	 *          its has PROT_NONE permission.
 	 */
 	if (!mlock)
-		gup_flags |= GUP_FLAGS_IGNORE_VMA_PERMISSIONS |
-			     GUP_FLAGS_IGNORE_SIGKILL;
+		gup_flags |= GUP_FLAGS_IGNORE_VMA_PERMISSIONS;
 
 	if (vma->vm_flags & VM_WRITE)
 		gup_flags |= GUP_FLAGS_WRITE;
@@ -530,7 +529,7 @@ static int do_mlock(unsigned long start, size_t len, int on)
 	return error;
 }
 
-SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
+asmlinkage long sys_mlock(unsigned long start, size_t len)
 {
 	unsigned long locked;
 	unsigned long lock_limit;
@@ -558,7 +557,7 @@ SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
 	return error;
 }
 
-SYSCALL_DEFINE2(munlock, unsigned long, start, size_t, len)
+asmlinkage long sys_munlock(unsigned long start, size_t len)
 {
 	int ret;
 
@@ -595,7 +594,7 @@ out:
 	return 0;
 }
 
-SYSCALL_DEFINE1(mlockall, int, flags)
+asmlinkage long sys_mlockall(int flags)
 {
 	unsigned long lock_limit;
 	int ret = -EINVAL;
@@ -623,7 +622,7 @@ out:
 	return ret;
 }
 
-SYSCALL_DEFINE0(munlockall)
+asmlinkage long sys_munlockall(void)
 {
 	int ret;
 
@@ -667,49 +666,4 @@ void user_shm_unlock(size_t size, struct user_struct *user)
 	user->locked_shm -= (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	spin_unlock(&shmlock_user_lock);
 	free_uid(user);
-}
-
-void *alloc_locked_buffer(size_t size)
-{
-	unsigned long rlim, vm, pgsz;
-	void *buffer = NULL;
-
-	pgsz = PAGE_ALIGN(size) >> PAGE_SHIFT;
-
-	down_write(&current->mm->mmap_sem);
-
-	rlim = current->signal->rlim[RLIMIT_AS].rlim_cur >> PAGE_SHIFT;
-	vm   = current->mm->total_vm + pgsz;
-	if (rlim < vm)
-		goto out;
-
-	rlim = current->signal->rlim[RLIMIT_MEMLOCK].rlim_cur >> PAGE_SHIFT;
-	vm   = current->mm->locked_vm + pgsz;
-	if (rlim < vm)
-		goto out;
-
-	buffer = kzalloc(size, GFP_KERNEL);
-	if (!buffer)
-		goto out;
-
-	current->mm->total_vm  += pgsz;
-	current->mm->locked_vm += pgsz;
-
- out:
-	up_write(&current->mm->mmap_sem);
-	return buffer;
-}
-
-void free_locked_buffer(void *buffer, size_t size)
-{
-	unsigned long pgsz = PAGE_ALIGN(size) >> PAGE_SHIFT;
-
-	down_write(&current->mm->mmap_sem);
-
-	current->mm->total_vm  -= pgsz;
-	current->mm->locked_vm -= pgsz;
-
-	up_write(&current->mm->mmap_sem);
-
-	kfree(buffer);
 }

@@ -88,9 +88,11 @@ static inline int isowbuf_startwrite(struct isowbuf_t *iwb)
 			__func__);
 		return 0;
 	}
+#ifdef CONFIG_GIGASET_DEBUG
 	gig_dbg(DEBUG_ISO,
 		"%s: acquired iso write semaphore, data[write]=%02x, nbits=%d",
 		__func__, iwb->data[iwb->write], iwb->wbits);
+#endif
 	return 1;
 }
 
@@ -171,13 +173,13 @@ int gigaset_isowbuf_getbytes(struct isowbuf_t *iwb, int size)
 		__func__, read, write, limit);
 #ifdef CONFIG_GIGASET_DEBUG
 	if (unlikely(size < 0 || size > BAS_OUTBUFPAD)) {
-		pr_err("invalid size %d\n", size);
+		err("invalid size %d", size);
 		return -EINVAL;
 	}
 	src = iwb->read;
 	if (unlikely(limit > BAS_OUTBUFSIZE + BAS_OUTBUFPAD ||
 		     (read < src && limit >= src))) {
-		pr_err("isoc write buffer frame reservation violated\n");
+		err("isoc write buffer frame reservation violated");
 		return -EFAULT;
 	}
 #endif

@@ -191,7 +191,7 @@ static int irtty_do_write(struct sir_dev *dev, const unsigned char *ptr, size_t 
 	tty = priv->tty;
 	if (!tty->ops->write)
 		return 0;
-	set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+	tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
 	writelen = tty_write_room(tty);
 	if (writelen > len)
 		writelen = len;
@@ -263,7 +263,8 @@ static void irtty_write_wakeup(struct tty_struct *tty)
 	IRDA_ASSERT(priv != NULL, return;);
 	IRDA_ASSERT(priv->magic == IRTTY_MAGIC, return;);
 
-	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+	tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
+
 	if (priv->dev)
 		sirdev_write_complete(priv->dev);
 }
@@ -521,7 +522,7 @@ static void irtty_close(struct tty_struct *tty)
 
 	/* Stop tty */
 	irtty_stop_receiver(tty, TRUE);
-	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+	tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	if (tty->ops->stop)
 		tty->ops->stop(tty);
 

@@ -38,13 +38,11 @@
 #include <linux/percpu.h>
 #include <linux/prctl.h>
 #include <linux/dmi.h>
-#include <linux/ftrace.h>
-#include <linux/uaccess.h>
-#include <linux/io.h>
-#include <linux/kdebug.h>
 
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/io.h>
 #include <asm/ldt.h>
 #include <asm/processor.h>
 #include <asm/i387.h>
@@ -57,9 +55,10 @@
 
 #include <asm/tlbflush.h>
 #include <asm/cpu.h>
+#include <asm/kdebug.h>
 #include <asm/idle.h>
 #include <asm/syscalls.h>
-#include <asm/ds.h>
+#include <asm/smp.h>
 
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
@@ -204,7 +203,7 @@ extern void kernel_thread_helper(void);
 /*
  * Create a kernel thread
  */
-int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
 	struct pt_regs regs;
 
@@ -251,8 +250,14 @@ void exit_thread(void)
 		tss->x86_tss.io_bitmap_base = INVALID_IO_BITMAP_OFFSET;
 		put_cpu();
 	}
-
-	ds_exit_thread(current);
+#ifdef CONFIG_X86_DS
+	/* Free any DS contexts that have not been properly released. */
+	if (unlikely(current->thread.ds_ctx)) {
+		/* we clear debugctl to make sure DS is not used. */
+		update_debugctlmsr(0);
+		ds_free(current->thread.ds_ctx);
+	}
+#endif /* CONFIG_X86_DS */
 }
 
 void flush_thread(void)
@@ -265,7 +270,7 @@ void flush_thread(void)
 	tsk->thread.debugreg3 = 0;
 	tsk->thread.debugreg6 = 0;
 	tsk->thread.debugreg7 = 0;
-	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
+	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));	
 	clear_tsk_thread_flag(tsk, TIF_DEBUG);
 	/*
 	 * Forget coprocessor state..
@@ -292,9 +297,9 @@ void prepare_to_copy(struct task_struct *tsk)
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	unsigned long unused,
-	struct task_struct *p, struct pt_regs *regs)
+	struct task_struct * p, struct pt_regs * regs)
 {
-	struct pt_regs *childregs;
+	struct pt_regs * childregs;
 	struct task_struct *tsk;
 	int err;
 
@@ -334,19 +339,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		kfree(p->thread.io_bitmap_ptr);
 		p->thread.io_bitmap_max = 0;
 	}
-
-	ds_copy_thread(p, current);
-
-	clear_tsk_thread_flag(p, TIF_DEBUGCTLMSR);
-	p->thread.debugctlmsr = 0;
-
 	return err;
 }
 
 void
 start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
 {
-	__asm__("movl %0, %%gs" : : "r"(0));
+	__asm__("movl %0, %%gs" :: "r"(0));
 	regs->fs		= 0;
 	set_fs(USER_DS);
 	regs->ds		= __USER_DS;
@@ -420,19 +419,48 @@ int set_tsc_mode(unsigned int val)
 	return 0;
 }
 
+#ifdef CONFIG_X86_DS
+static int update_debugctl(struct thread_struct *prev,
+			struct thread_struct *next, unsigned long debugctl)
+{
+	unsigned long ds_prev = 0;
+	unsigned long ds_next = 0;
+
+	if (prev->ds_ctx)
+		ds_prev = (unsigned long)prev->ds_ctx->ds;
+	if (next->ds_ctx)
+		ds_next = (unsigned long)next->ds_ctx->ds;
+
+	if (ds_next != ds_prev) {
+		/* we clear debugctl to make sure DS
+		 * is not in use when we change it */
+		debugctl = 0;
+		update_debugctlmsr(0);
+		wrmsr(MSR_IA32_DS_AREA, ds_next, 0);
+	}
+	return debugctl;
+}
+#else
+static int update_debugctl(struct thread_struct *prev,
+			struct thread_struct *next, unsigned long debugctl)
+{
+	return debugctl;
+}
+#endif /* CONFIG_X86_DS */
+
 static noinline void
 __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		 struct tss_struct *tss)
 {
 	struct thread_struct *prev, *next;
+	unsigned long debugctl;
 
 	prev = &prev_p->thread;
 	next = &next_p->thread;
 
-	if (test_tsk_thread_flag(next_p, TIF_DS_AREA_MSR) ||
-	    test_tsk_thread_flag(prev_p, TIF_DS_AREA_MSR))
-		ds_switch_to(prev_p, next_p);
-	else if (next->debugctlmsr != prev->debugctlmsr)
+	debugctl = update_debugctl(prev, next, prev->debugctlmsr);
+
+	if (next->debugctlmsr != debugctl)
 		update_debugctlmsr(next->debugctlmsr);
 
 	if (test_tsk_thread_flag(next_p, TIF_DEBUG)) {
@@ -453,6 +481,15 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		else
 			hard_enable_TSC();
 	}
+
+#ifdef CONFIG_X86_PTRACE_BTS
+	if (test_tsk_thread_flag(prev_p, TIF_BTS_TRACE_TS))
+		ptrace_bts_take_timestamp(prev_p, BTS_TASK_DEPARTS);
+
+	if (test_tsk_thread_flag(next_p, TIF_BTS_TRACE_TS))
+		ptrace_bts_take_timestamp(next_p, BTS_TASK_ARRIVES);
+#endif /* CONFIG_X86_PTRACE_BTS */
+
 
 	if (!test_tsk_thread_flag(next_p, TIF_IO_BITMAP)) {
 		/*
@@ -511,8 +548,7 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
  * the task-switch, and shows up in ret_from_fork in entry.S,
  * for example.
  */
-__notrace_funcgraph struct task_struct *
-__switch_to(struct task_struct *prev_p, struct task_struct *next_p)
+struct task_struct * __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
 	struct thread_struct *prev = &prev_p->thread,
 				 *next = &next_p->thread;
@@ -637,7 +673,7 @@ asmlinkage int sys_vfork(struct pt_regs regs)
 asmlinkage int sys_execve(struct pt_regs regs)
 {
 	int error;
-	char *filename;
+	char * filename;
 
 	filename = getname((char __user *) regs.bx);
 	error = PTR_ERR(filename);

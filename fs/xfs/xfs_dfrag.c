@@ -49,8 +49,9 @@
  */
 int
 xfs_swapext(
-	xfs_swapext_t	*sxp)
+	xfs_swapext_t	__user *sxu)
 {
+	xfs_swapext_t	*sxp;
 	xfs_inode_t     *ip, *tip;
 	struct file	*file, *target_file;
 	int		error = 0;
@@ -59,6 +60,11 @@ xfs_swapext(
 	if (!sxp) {
 		error = XFS_ERROR(ENOMEM);
 		goto out;
+	}
+
+	if (copy_from_user(sxp, sxu, sizeof(xfs_swapext_t))) {
+		error = XFS_ERROR(EFAULT);
+		goto out_free_sxp;
 	}
 
 	/* Pull information for the target fd */

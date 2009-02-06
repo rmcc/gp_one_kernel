@@ -39,7 +39,6 @@
 #include <linux/prctl.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
-#include <linux/ftrace.h>
 
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -53,7 +52,6 @@
 #include <asm/ia32.h>
 #include <asm/idle.h>
 #include <asm/syscalls.h>
-#include <asm/ds.h>
 
 asmlinkage extern void ret_from_fork(void);
 
@@ -237,8 +235,14 @@ void exit_thread(void)
 		t->io_bitmap_max = 0;
 		put_cpu();
 	}
-
-	ds_exit_thread(current);
+#ifdef CONFIG_X86_DS
+	/* Free any DS contexts that have not been properly released. */
+	if (unlikely(t->ds_ctx)) {
+		/* we clear debugctl to make sure DS is not used. */
+		update_debugctlmsr(0);
+		ds_free(t->ds_ctx);
+	}
+#endif /* CONFIG_X86_DS */
 }
 
 void flush_thread(void)
@@ -368,12 +372,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		if (err)
 			goto out;
 	}
-
-	ds_copy_thread(p, me);
-
-	clear_tsk_thread_flag(p, TIF_DEBUGCTLMSR);
-	p->thread.debugctlmsr = 0;
-
 	err = 0;
 out:
 	if (err && p->thread.io_bitmap_ptr) {
@@ -472,14 +470,35 @@ static inline void __switch_to_xtra(struct task_struct *prev_p,
 				    struct tss_struct *tss)
 {
 	struct thread_struct *prev, *next;
+	unsigned long debugctl;
 
 	prev = &prev_p->thread,
 	next = &next_p->thread;
 
-	if (test_tsk_thread_flag(next_p, TIF_DS_AREA_MSR) ||
-	    test_tsk_thread_flag(prev_p, TIF_DS_AREA_MSR))
-		ds_switch_to(prev_p, next_p);
-	else if (next->debugctlmsr != prev->debugctlmsr)
+	debugctl = prev->debugctlmsr;
+
+#ifdef CONFIG_X86_DS
+	{
+		unsigned long ds_prev = 0, ds_next = 0;
+
+		if (prev->ds_ctx)
+			ds_prev = (unsigned long)prev->ds_ctx->ds;
+		if (next->ds_ctx)
+			ds_next = (unsigned long)next->ds_ctx->ds;
+
+		if (ds_next != ds_prev) {
+			/*
+			 * We clear debugctl to make sure DS
+			 * is not in use when we change it:
+			 */
+			debugctl = 0;
+			update_debugctlmsr(0);
+			wrmsrl(MSR_IA32_DS_AREA, ds_next);
+		}
+	}
+#endif /* CONFIG_X86_DS */
+
+	if (next->debugctlmsr != debugctl)
 		update_debugctlmsr(next->debugctlmsr);
 
 	if (test_tsk_thread_flag(next_p, TIF_DEBUG)) {
@@ -514,6 +533,14 @@ static inline void __switch_to_xtra(struct task_struct *prev_p,
 		 */
 		memset(tss->io_bitmap, 0xff, prev->io_bitmap_max);
 	}
+
+#ifdef CONFIG_X86_PTRACE_BTS
+	if (test_tsk_thread_flag(prev_p, TIF_BTS_TRACE_TS))
+		ptrace_bts_take_timestamp(prev_p, BTS_TASK_DEPARTS);
+
+	if (test_tsk_thread_flag(next_p, TIF_BTS_TRACE_TS))
+		ptrace_bts_take_timestamp(next_p, BTS_TASK_ARRIVES);
+#endif /* CONFIG_X86_PTRACE_BTS */
 }
 
 /*
@@ -524,9 +551,8 @@ static inline void __switch_to_xtra(struct task_struct *prev_p,
  * - could test fs/gs bitsliced
  *
  * Kprobes not supported here. Set the probe on schedule instead.
- * Function graph tracer not supported too.
  */
-__notrace_funcgraph struct task_struct *
+struct task_struct *
 __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
 	struct thread_struct *prev = &prev_p->thread;

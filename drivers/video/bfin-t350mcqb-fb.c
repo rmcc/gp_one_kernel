@@ -254,21 +254,8 @@ static int bfin_t350mcqb_fb_check_var(struct fb_var_screeninfo *var,
 				   struct fb_info *info)
 {
 
-	switch (var->bits_per_pixel) {
-	case 24:/* TRUECOLOUR, 16m */
-		var->red.offset = 0;
-		var->green.offset = 8;
-		var->blue.offset = 16;
-		var->red.length = var->green.length = var->blue.length = 8;
-		var->transp.offset = 0;
-		var->transp.length = 0;
-		var->transp.msb_right = 0;
-		var->red.msb_right = 0;
-		var->green.msb_right = 0;
-		var->blue.msb_right = 0;
-		break;
-	default:
-		pr_debug("%s: depth not supported: %u BPP\n", __func__,
+	if (var->bits_per_pixel != LCD_BPP) {
+		pr_debug("%s: depth not supported: %u BPP\n", __FUNCTION__,
 			 var->bits_per_pixel);
 		return -EINVAL;
 	}
@@ -277,7 +264,7 @@ static int bfin_t350mcqb_fb_check_var(struct fb_var_screeninfo *var,
 	    info->var.xres_virtual != var->xres_virtual ||
 	    info->var.yres_virtual != var->yres_virtual) {
 		pr_debug("%s: Resolution not supported: X%u x Y%u \n",
-			 __func__, var->xres, var->yres);
+			 __FUNCTION__, var->xres, var->yres);
 		return -EINVAL;
 	}
 
@@ -287,7 +274,7 @@ static int bfin_t350mcqb_fb_check_var(struct fb_var_screeninfo *var,
 
 	if ((info->fix.line_length * var->yres_virtual) > info->fix.smem_len) {
 		pr_debug("%s: Memory Limit requested yres_virtual = %u\n",
-			 __func__, var->yres_virtual);
+			 __FUNCTION__, var->yres_virtual);
 		return -ENOMEM;
 	}
 

@@ -34,14 +34,9 @@ int gdb_bfin_vector = -1;
 #error change the definition of slavecpulocks
 #endif
 
-#define IN_MEM(addr, size, l1_addr, l1_size) \
-({ \
-	unsigned long __addr = (unsigned long)(addr); \
-	(l1_size && __addr >= l1_addr && __addr + (size) <= l1_addr + l1_size); \
-})
-#define ASYNC_BANK_SIZE \
-	(ASYNC_BANK0_SIZE + ASYNC_BANK1_SIZE + \
-	 ASYNC_BANK2_SIZE + ASYNC_BANK3_SIZE)
+#ifdef CONFIG_BFIN_WDT
+# error "Please unselect blackfin watchdog driver before build KGDB."
+#endif
 
 void pt_regs_to_gdb_regs(unsigned long *gdb_regs, struct pt_regs *regs)
 {
@@ -110,7 +105,7 @@ void pt_regs_to_gdb_regs(unsigned long *gdb_regs, struct pt_regs *regs)
  * Extracts ebp, esp and eip values understandable by gdb from the values
  * saved by switch_to.
  * thread.esp points to ebp. flags and ebp are pushed in switch_to hence esp
- * prior to entering switch_to is 8 greater than the value that is saved.
+ * prior to entering switch_to is 8 greater then the value that is saved.
  * If switch_to changes, change following code appropriately.
  */
 void sleeping_thread_to_gdb_regs(unsigned long *gdb_regs, struct task_struct *p)
@@ -224,7 +219,6 @@ int bfin_set_hw_break(unsigned long addr, int len, enum kgdb_bptype type)
 		if (bfin_type == breakinfo[breakno].type
 			&& !breakinfo[breakno].occupied) {
 			breakinfo[breakno].occupied = 1;
-			breakinfo[breakno].skip = 0;
 			breakinfo[breakno].enabled = 1;
 			breakinfo[breakno].addr = addr;
 			breakinfo[breakno].dataacc = dataacc;
@@ -369,12 +363,12 @@ void kgdb_passive_cpu_callback(void *info)
 
 void kgdb_roundup_cpus(unsigned long flags)
 {
-	smp_call_function(kgdb_passive_cpu_callback, NULL, 0);
+	smp_call_function(kgdb_passive_cpu_callback, NULL, 0, 0);
 }
 
 void kgdb_roundup_cpu(int cpu, unsigned long flags)
 {
-	smp_call_function_single(cpu, kgdb_passive_cpu_callback, NULL, 0);
+	smp_call_function_single(cpu, kgdb_passive_cpu_callback, NULL, 0, 0);
 }
 #endif
 
@@ -391,8 +385,10 @@ int kgdb_arch_handle_exception(int vector, int signo,
 			       struct pt_regs *regs)
 {
 	long addr;
+	long breakno;
 	char *ptr;
 	int newPC;
+	int wp_status;
 	int i;
 
 	switch (remcom_in_buffer[0]) {
@@ -428,6 +424,17 @@ int kgdb_arch_handle_exception(int vector, int signo,
 			 * kgdb_single_step > 0 means in single step mode
 			 */
 			kgdb_single_step = i + 1;
+		}
+
+		if (vector == VEC_WATCH) {
+			wp_status = bfin_read_WPSTAT();
+			for (breakno = 0; breakno < HW_WATCHPOINT_NUM; breakno++) {
+				if (wp_status & (1 << breakno)) {
+					breakinfo->skip = 1;
+					break;
+				}
+			}
+			bfin_write_WPSTAT(0);
 		}
 
 		bfin_correct_hw_break();
@@ -471,32 +478,57 @@ static int validate_memory_access_address(unsigned long addr, int size)
 		return 0;
 	if (addr >= SYSMMR_BASE)
 		return 0;
-	if (IN_MEM(addr, size, ASYNC_BANK0_BASE, ASYNC_BANK_SIZE))
+	if (addr >= ASYNC_BANK0_BASE
+	   && addr + size <= ASYNC_BANK3_BASE + ASYNC_BANK3_SIZE)
 		return 0;
 	if (cpu == 0) {
-		if (IN_MEM(addr, size, L1_SCRATCH_START, L1_SCRATCH_LENGTH))
+		if (addr >= L1_SCRATCH_START
+		   && (addr + size <= L1_SCRATCH_START + L1_SCRATCH_LENGTH))
 			return 0;
-		if (IN_MEM(addr, size, L1_CODE_START, L1_CODE_LENGTH))
+#if L1_CODE_LENGTH != 0
+		if (addr >= L1_CODE_START
+		   && (addr + size <= L1_CODE_START + L1_CODE_LENGTH))
 			return 0;
-		if (IN_MEM(addr, size, L1_DATA_A_START, L1_DATA_A_LENGTH))
+#endif
+#if L1_DATA_A_LENGTH != 0
+		if (addr >= L1_DATA_A_START
+		   && (addr + size <= L1_DATA_A_START + L1_DATA_A_LENGTH))
 			return 0;
-		if (IN_MEM(addr, size, L1_DATA_B_START, L1_DATA_B_LENGTH))
+#endif
+#if L1_DATA_B_LENGTH != 0
+		if (addr >= L1_DATA_B_START
+		   && (addr + size <= L1_DATA_B_START + L1_DATA_B_LENGTH))
 			return 0;
+#endif
 #ifdef CONFIG_SMP
 	} else if (cpu == 1) {
-		if (IN_MEM(addr, size, COREB_L1_SCRATCH_START, L1_SCRATCH_LENGTH))
+		if (addr >= COREB_L1_SCRATCH_START
+		   && (addr + size <= COREB_L1_SCRATCH_START
+		   + L1_SCRATCH_LENGTH))
 			return 0;
-		if (IN_MEM(addr, size, COREB_L1_CODE_START, L1_CODE_LENGTH))
+# if L1_CODE_LENGTH != 0
+		if (addr >= COREB_L1_CODE_START
+		   && (addr + size <= COREB_L1_CODE_START + L1_CODE_LENGTH))
 			return 0;
-		if (IN_MEM(addr, size, COREB_L1_DATA_A_START, L1_DATA_A_LENGTH))
+# endif
+# if L1_DATA_A_LENGTH != 0
+		if (addr >= COREB_L1_DATA_A_START
+		   && (addr + size <= COREB_L1_DATA_A_START + L1_DATA_A_LENGTH))
 			return 0;
-		if (IN_MEM(addr, size, COREB_L1_DATA_B_START, L1_DATA_B_LENGTH))
+# endif
+# if L1_DATA_B_LENGTH != 0
+		if (addr >= COREB_L1_DATA_B_START
+		   && (addr + size <= COREB_L1_DATA_B_START + L1_DATA_B_LENGTH))
 			return 0;
+# endif
 #endif
 	}
 
-	if (IN_MEM(addr, size, L2_START, L2_LENGTH))
+#if L2_LENGTH != 0
+	if (addr >= L2_START
+	   && addr + size <= L2_START + L2_LENGTH)
 		return 0;
+#endif
 
 	return EFAULT;
 }
@@ -550,9 +582,12 @@ int kgdb_mem2hex(char *mem, char *buf, int count)
 		default:
 			err = EFAULT;
 		}
-	} else if ((cpu == 0 && IN_MEM(mem, count, L1_CODE_START, L1_CODE_LENGTH))
+	} else if (cpu == 0 && (unsigned int)mem >= L1_CODE_START &&
+		(unsigned int)(mem + count) <= L1_CODE_START + L1_CODE_LENGTH
 #ifdef CONFIG_SMP
-		|| (cpu == 1 && IN_MEM(mem, count, COREB_L1_CODE_START, L1_CODE_LENGTH))
+		|| cpu == 1 && (unsigned int)mem >= COREB_L1_CODE_START &&
+		(unsigned int)(mem + count) <=
+		COREB_L1_CODE_START + L1_CODE_LENGTH
 #endif
 		) {
 		/* access L1 instruction SRAM*/
@@ -623,9 +658,12 @@ int kgdb_ebin2mem(char *buf, char *mem, int count)
 		default:
 			return EFAULT;
 		}
-	} else if ((cpu == 0 && IN_MEM(mem, count, L1_CODE_START, L1_CODE_LENGTH))
+	} else if (cpu == 0 && (unsigned int)mem >= L1_CODE_START &&
+		(unsigned int)(mem + count) < L1_CODE_START + L1_CODE_LENGTH
 #ifdef CONFIG_SMP
-		|| (cpu == 1 && IN_MEM(mem, count, COREB_L1_CODE_START, L1_CODE_LENGTH))
+		|| cpu == 1 && (unsigned int)mem >= COREB_L1_CODE_START &&
+		(unsigned int)(mem + count) <=
+		COREB_L1_CODE_START + L1_CODE_LENGTH
 #endif
 		) {
 		/* access L1 instruction SRAM */
@@ -685,9 +723,12 @@ int kgdb_hex2mem(char *buf, char *mem, int count)
 		default:
 			return EFAULT;
 		}
-	} else if ((cpu == 0 && IN_MEM(mem, count, L1_CODE_START, L1_CODE_LENGTH))
+	} else if (cpu == 0 && (unsigned int)mem >= L1_CODE_START &&
+		(unsigned int)(mem + count) <= L1_CODE_START + L1_CODE_LENGTH
 #ifdef CONFIG_SMP
-		|| (cpu == 1 && IN_MEM(mem, count, COREB_L1_CODE_START, L1_CODE_LENGTH))
+		|| cpu == 1 && (unsigned int)mem >= COREB_L1_CODE_START &&
+		(unsigned int)(mem + count) <=
+		COREB_L1_CODE_START + L1_CODE_LENGTH
 #endif
 		) {
 		/* access L1 instruction SRAM */
@@ -704,16 +745,24 @@ int kgdb_validate_break_address(unsigned long addr)
 
 	if (addr >= 0x1000 && (addr + BREAK_INSTR_SIZE) <= physical_mem_end)
 		return 0;
-	if (IN_MEM(addr, BREAK_INSTR_SIZE, ASYNC_BANK0_BASE, ASYNC_BANK_SIZE))
+	if (addr >= ASYNC_BANK0_BASE
+	   && addr + BREAK_INSTR_SIZE <= ASYNC_BANK3_BASE + ASYNC_BANK3_BASE)
 		return 0;
-	if (cpu == 0 && IN_MEM(addr, BREAK_INSTR_SIZE, L1_CODE_START, L1_CODE_LENGTH))
+#if L1_CODE_LENGTH != 0
+	if (cpu == 0 && addr >= L1_CODE_START
+	   && addr + BREAK_INSTR_SIZE <= L1_CODE_START + L1_CODE_LENGTH)
 		return 0;
-#ifdef CONFIG_SMP
-	else if (cpu == 1 && IN_MEM(addr, BREAK_INSTR_SIZE, COREB_L1_CODE_START, L1_CODE_LENGTH))
+# ifdef CONFIG_SMP
+	else if (cpu == 1 && addr >= COREB_L1_CODE_START
+	   && addr + BREAK_INSTR_SIZE <= COREB_L1_CODE_START + L1_CODE_LENGTH)
+		return 0;
+# endif
+#endif
+#if L2_LENGTH != 0
+	if (addr >= L2_START
+	   && addr + BREAK_INSTR_SIZE <= L2_START + L2_LENGTH)
 		return 0;
 #endif
-	if (IN_MEM(addr, BREAK_INSTR_SIZE, L2_START, L2_LENGTH))
-		return 0;
 
 	return EFAULT;
 }
@@ -723,9 +772,13 @@ int kgdb_arch_set_breakpoint(unsigned long addr, char *saved_instr)
 	int err;
 	int cpu = raw_smp_processor_id();
 
-	if ((cpu == 0 && IN_MEM(addr, BREAK_INSTR_SIZE, L1_CODE_START, L1_CODE_LENGTH))
+	if ((cpu == 0 && (unsigned int)addr >= L1_CODE_START
+		&& (unsigned int)(addr + BREAK_INSTR_SIZE)
+		< L1_CODE_START + L1_CODE_LENGTH)
 #ifdef CONFIG_SMP
-		|| (cpu == 1 && IN_MEM(addr, BREAK_INSTR_SIZE, COREB_L1_CODE_START, L1_CODE_LENGTH))
+		|| (cpu == 1 && (unsigned int)addr >= COREB_L1_CODE_START
+		&& (unsigned int)(addr + BREAK_INSTR_SIZE)
+		< COREB_L1_CODE_START + L1_CODE_LENGTH)
 #endif
 		) {
 		/* access L1 instruction SRAM */
@@ -751,7 +804,9 @@ int kgdb_arch_set_breakpoint(unsigned long addr, char *saved_instr)
 
 int kgdb_arch_remove_breakpoint(unsigned long addr, char *bundle)
 {
-	if (IN_MEM(addr, BREAK_INSTR_SIZE, L1_CODE_START, L1_CODE_LENGTH)) {
+	if ((unsigned int)addr >= L1_CODE_START &&
+		(unsigned int)(addr + BREAK_INSTR_SIZE) <
+			L1_CODE_START + L1_CODE_LENGTH) {
 		/* access L1 instruction SRAM */
 		if (dma_memcpy((void *)addr, bundle, BREAK_INSTR_SIZE) == NULL)
 			return -EFAULT;

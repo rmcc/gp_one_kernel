@@ -1493,10 +1493,8 @@ static void intelfb_fillrect (struct fb_info *info,
 	DBG_MSG("intelfb_fillrect\n");
 #endif
 
-	if (!ACCEL(dinfo, info) || dinfo->depth == 4) {
-		cfb_fillrect(info, rect);
-		return;
-	}
+	if (!ACCEL(dinfo, info) || dinfo->depth == 4)
+		return cfb_fillrect(info, rect);
 
 	if (rect->rop == ROP_COPY)
 		rop = PAT_ROP_GXCOPY;
@@ -1523,10 +1521,8 @@ static void intelfb_copyarea(struct fb_info *info,
 	DBG_MSG("intelfb_copyarea\n");
 #endif
 
-	if (!ACCEL(dinfo, info) || dinfo->depth == 4) {
-		cfb_copyarea(info, region);
-		return;
-	}
+	if (!ACCEL(dinfo, info) || dinfo->depth == 4)
+		return cfb_copyarea(info, region);
 
 	intelfbhw_do_bitblt(dinfo, region->sx, region->sy, region->dx,
 			    region->dy, region->width, region->height,
@@ -1544,10 +1540,8 @@ static void intelfb_imageblit(struct fb_info *info,
 #endif
 
 	if (!ACCEL(dinfo, info) || dinfo->depth == 4
-	    || image->depth != 1) {
-		cfb_imageblit(info, image);
-		return;
-	}
+	    || image->depth != 1)
+		return cfb_imageblit(info, image);
 
 	if (dinfo->depth != 8) {
 		fgcolor = dinfo->pseudo_palette[image->fg_color];
@@ -1560,10 +1554,8 @@ static void intelfb_imageblit(struct fb_info *info,
 	if (!intelfbhw_do_drawglyph(dinfo, fgcolor, bgcolor, image->width,
 				    image->height, image->data,
 				    image->dx, image->dy,
-				    dinfo->pitch, info->var.bits_per_pixel)) {
-		cfb_imageblit(info, image);
-		return;
-	}
+				    dinfo->pitch, info->var.bits_per_pixel))
+		return cfb_imageblit(info, image);
 }
 
 static int intelfb_cursor(struct fb_info *info, struct fb_cursor *cursor)

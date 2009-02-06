@@ -93,14 +93,13 @@ void ia64_account_on_switch(struct task_struct *prev, struct task_struct *next)
 	now = ia64_get_itc();
 
 	delta_stime = cycle_to_cputime(pi->ac_stime + (now - pi->ac_stamp));
-	if (idle_task(smp_processor_id()) != prev)
-		account_system_time(prev, 0, delta_stime, delta_stime);
-	else
-		account_idle_time(delta_stime);
+	account_system_time(prev, 0, delta_stime);
+	account_system_time_scaled(prev, delta_stime);
 
 	if (pi->ac_utime) {
 		delta_utime = cycle_to_cputime(pi->ac_utime);
-		account_user_time(prev, delta_utime, delta_utime);
+		account_user_time(prev, delta_utime);
+		account_user_time_scaled(prev, delta_utime);
 	}
 
 	pi->ac_stamp = ni->ac_stamp = now;
@@ -123,10 +122,8 @@ void account_system_vtime(struct task_struct *tsk)
 	now = ia64_get_itc();
 
 	delta_stime = cycle_to_cputime(ti->ac_stime + (now - ti->ac_stamp));
-	if (irq_count() || idle_task(smp_processor_id()) != tsk)
-		account_system_time(tsk, 0, delta_stime, delta_stime);
-	else
-		account_idle_time(delta_stime);
+	account_system_time(tsk, 0, delta_stime);
+	account_system_time_scaled(tsk, delta_stime);
 	ti->ac_stime = 0;
 
 	ti->ac_stamp = now;
@@ -146,7 +143,8 @@ void account_process_tick(struct task_struct *p, int user_tick)
 
 	if (ti->ac_utime) {
 		delta_utime = cycle_to_cputime(ti->ac_utime);
-		account_user_time(p, delta_utime, delta_utime);
+		account_user_time(p, delta_utime);
+		account_user_time_scaled(p, delta_utime);
 		ti->ac_utime = 0;
 	}
 }

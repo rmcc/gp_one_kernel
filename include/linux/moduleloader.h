@@ -13,9 +13,6 @@ int module_frob_arch_sections(Elf_Ehdr *hdr,
 			      char *secstrings,
 			      struct module *mod);
 
-/* Additional bytes needed by arch in front of individual sections */
-unsigned int arch_mod_section_prepend(struct module *mod, unsigned int section);
-
 /* Allocator used for allocating struct module, core sections and init
    sections.  Returns NULL on failure. */
 void *module_alloc(unsigned long size);

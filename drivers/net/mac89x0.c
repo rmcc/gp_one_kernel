@@ -181,6 +181,7 @@ struct net_device * __init mac89x0_probe(int unit)
 	unsigned long ioaddr;
 	unsigned short sig;
 	int err = -ENODEV;
+	DECLARE_MAC_BUF(mac);
 
 	if (!MACH_IS_MAC)
 		return ERR_PTR(-ENODEV);
@@ -278,7 +279,8 @@ struct net_device * __init mac89x0_probe(int unit)
 
 	/* print the IRQ and ethernet address. */
 
-	printk(" IRQ %d ADDR %pM\n", dev->irq, dev->dev_addr);
+	printk(" IRQ %d ADDR %s\n",
+	       dev->irq, print_mac(mac, dev->dev_addr));
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
@@ -516,6 +518,7 @@ net_rx(struct net_device *dev)
 
         skb->protocol=eth_type_trans(skb,dev);
 	netif_rx(skb);
+	dev->last_rx = jiffies;
 	lp->stats.rx_packets++;
 	lp->stats.rx_bytes += length;
 }
@@ -625,3 +628,14 @@ cleanup_module(void)
 	free_netdev(dev_cs89x0);
 }
 #endif /* MODULE */
+
+/*
+ * Local variables:
+ *  compile-command: "m68k-linux-gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -ffixed-a2 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o mac89x0.o mac89x0.c"
+ *  version-control: t
+ *  kept-new-versions: 5
+ *  c-indent-level: 8
+ *  tab-width: 8
+ * End:
+ *
+ */

@@ -22,7 +22,6 @@
 #include <linux/serial.h>
 #include <linux/gpio.h>
 #include <mach/hardware.h>
-#include <mach/irqs.h>
 #include <mach/imx-uart.h>
 
 static struct resource uart0[] = {

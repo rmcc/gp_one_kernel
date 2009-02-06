@@ -33,6 +33,7 @@
 #include <linux/mqueue.h>
 #include <linux/fs.h>
 
+static struct fs_struct init_fs = INIT_FS;
 static struct signal_struct init_signals = INIT_SIGNALS(init_signals);
 static struct sighand_struct init_sighand = INIT_SIGHAND(init_sighand);
 

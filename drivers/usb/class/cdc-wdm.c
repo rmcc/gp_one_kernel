@@ -764,8 +764,7 @@ static int wdm_suspend(struct usb_interface *intf, pm_message_t message)
 
 	mutex_lock(&desc->plock);
 #ifdef CONFIG_PM
-	if ((message.event & PM_EVENT_AUTO) &&
-			test_bit(WDM_IN_USE, &desc->flags)) {
+	if (interface_to_usbdev(desc->intf)->auto_pm && test_bit(WDM_IN_USE, &desc->flags)) {
 		rv = -EBUSY;
 	} else {
 #endif

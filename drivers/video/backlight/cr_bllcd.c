@@ -259,18 +259,22 @@ static int __init cr_backlight_init(void)
 {
 	int ret = platform_driver_register(&cr_backlight_driver);
 
-	if (ret)
-		return ret;
+	if (!ret) {
+		crp = platform_device_alloc("cr_backlight", -1);
+		if (!crp)
+			return -ENOMEM;
 
-	crp = platform_device_register_simple("cr_backlight", -1, NULL, 0);
-	if (IS_ERR(crp)) {
-		platform_driver_unregister(&cr_backlight_driver);
-		return PTR_ERR(crp);
+		ret = platform_device_add(crp);
+
+		if (ret) {
+			platform_device_put(crp);
+			platform_driver_unregister(&cr_backlight_driver);
+		}
 	}
 
 	printk("Carillo Ranch Backlight Driver Initialized.\n");
 
-	return 0;
+	return ret;
 }
 
 static void __exit cr_backlight_exit(void)

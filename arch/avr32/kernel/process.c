@@ -18,7 +18,6 @@
 
 #include <asm/sysreg.h>
 #include <asm/ocd.h>
-#include <asm/syscalls.h>
 
 #include <mach/pm.h>
 

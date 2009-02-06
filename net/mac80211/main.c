@@ -41,8 +41,6 @@
  */
 struct ieee80211_tx_status_rtap_hdr {
 	struct ieee80211_radiotap_header hdr;
-	u8 rate;
-	u8 padding_for_rate;
 	__le16 tx_flags;
 	u8 data_retries;
 } __attribute__ ((packed));
@@ -171,13 +169,19 @@ int ieee80211_if_config(struct ieee80211_sub_if_data *sdata, u32 changed)
 	conf.changed = changed;
 
 	if (sdata->vif.type == NL80211_IFTYPE_STATION ||
-	    sdata->vif.type == NL80211_IFTYPE_ADHOC)
+	    sdata->vif.type == NL80211_IFTYPE_ADHOC) {
 		conf.bssid = sdata->u.sta.bssid;
-	else if (sdata->vif.type == NL80211_IFTYPE_AP)
+		conf.ssid = sdata->u.sta.ssid;
+		conf.ssid_len = sdata->u.sta.ssid_len;
+	} else if (sdata->vif.type == NL80211_IFTYPE_AP) {
 		conf.bssid = sdata->dev->dev_addr;
-	else if (ieee80211_vif_is_mesh(&sdata->vif)) {
+		conf.ssid = sdata->u.ap.ssid;
+		conf.ssid_len = sdata->u.ap.ssid_len;
+	} else if (ieee80211_vif_is_mesh(&sdata->vif)) {
 		u8 zero[ETH_ALEN] = { 0 };
 		conf.bssid = zero;
+		conf.ssid = zero;
+		conf.ssid_len = 0;
 	} else {
 		WARN_ON(1);
 		return -EINVAL;
@@ -186,73 +190,136 @@ int ieee80211_if_config(struct ieee80211_sub_if_data *sdata, u32 changed)
 	if (WARN_ON(!conf.bssid && (changed & IEEE80211_IFCC_BSSID)))
 		return -EINVAL;
 
+	if (WARN_ON(!conf.ssid && (changed & IEEE80211_IFCC_SSID)))
+		return -EINVAL;
+
 	return local->ops->config_interface(local_to_hw(local),
 					    &sdata->vif, &conf);
 }
 
-int ieee80211_hw_config(struct ieee80211_local *local, u32 changed)
+int ieee80211_hw_config(struct ieee80211_local *local)
 {
 	struct ieee80211_channel *chan;
 	int ret = 0;
-	int power;
-	enum nl80211_channel_type channel_type;
 
-	might_sleep();
-
-	if (local->sw_scanning) {
+	if (local->sw_scanning)
 		chan = local->scan_channel;
-		channel_type = NL80211_CHAN_NO_HT;
-	} else {
+	else
 		chan = local->oper_channel;
-		channel_type = local->oper_channel_type;
-	}
 
-	if (chan != local->hw.conf.channel ||
-	    channel_type != local->hw.conf.ht.channel_type) {
-		local->hw.conf.channel = chan;
-		local->hw.conf.ht.channel_type = channel_type;
-		switch (channel_type) {
-		case NL80211_CHAN_NO_HT:
-			local->hw.conf.ht.enabled = false;
-			break;
-		case NL80211_CHAN_HT20:
-		case NL80211_CHAN_HT40MINUS:
-		case NL80211_CHAN_HT40PLUS:
-			local->hw.conf.ht.enabled = true;
-			break;
-		}
-		changed |= IEEE80211_CONF_CHANGE_CHANNEL;
-	}
+	local->hw.conf.channel = chan;
 
 	if (!local->hw.conf.power_level)
-		power = chan->max_power;
+		local->hw.conf.power_level = chan->max_power;
 	else
-		power = min(chan->max_power, local->hw.conf.power_level);
-	if (local->hw.conf.power_level != power) {
-		changed |= IEEE80211_CONF_CHANGE_POWER;
-		local->hw.conf.power_level = power;
-	}
+		local->hw.conf.power_level = min(chan->max_power,
+					       local->hw.conf.power_level);
 
-	if (changed && local->open_count) {
-		ret = local->ops->config(local_to_hw(local), changed);
-		/*
-		 * Goal:
-		 * HW reconfiguration should never fail, the driver has told
-		 * us what it can support so it should live up to that promise.
-		 *
-		 * Current status:
-		 * rfkill is not integrated with mac80211 and a
-		 * configuration command can thus fail if hardware rfkill
-		 * is enabled
-		 *
-		 * FIXME: integrate rfkill with mac80211 and then add this
-		 * WARN_ON() back
-		 *
-		 */
-		/* WARN_ON(ret); */
-	}
+	local->hw.conf.max_antenna_gain = chan->max_antenna_gain;
+
+#ifdef CONFIG_MAC80211_VERBOSE_DEBUG
+	printk(KERN_DEBUG "%s: HW CONFIG: freq=%d\n",
+	       wiphy_name(local->hw.wiphy), chan->center_freq);
+#endif
+
+	if (local->open_count)
+		ret = local->ops->config(local_to_hw(local), &local->hw.conf);
 
 	return ret;
+}
+
+/**
+ * ieee80211_handle_ht should be used only after legacy configuration
+ * has been determined namely band, as ht configuration depends upon
+ * the hardware's HT abilities for a _specific_ band.
+ */
+u32 ieee80211_handle_ht(struct ieee80211_local *local, int enable_ht,
+			   struct ieee80211_ht_info *req_ht_cap,
+			   struct ieee80211_ht_bss_info *req_bss_cap)
+{
+	struct ieee80211_conf *conf = &local->hw.conf;
+	struct ieee80211_supported_band *sband;
+	struct ieee80211_ht_info ht_conf;
+	struct ieee80211_ht_bss_info ht_bss_conf;
+	u32 changed = 0;
+	int i;
+	u8 max_tx_streams = IEEE80211_HT_CAP_MAX_STREAMS;
+	u8 tx_mcs_set_cap;
+
+	sband = local->hw.wiphy->bands[conf->channel->band];
+
+	memset(&ht_conf, 0, sizeof(struct ieee80211_ht_info));
+	memset(&ht_bss_conf, 0, sizeof(struct ieee80211_ht_bss_info));
+
+	/* HT is not supported */
+	if (!sband->ht_info.ht_supported) {
+		conf->flags &= ~IEEE80211_CONF_SUPPORT_HT_MODE;
+		goto out;
+	}
+
+	/* disable HT */
+	if (!enable_ht) {
+		if (conf->flags & IEEE80211_CONF_SUPPORT_HT_MODE)
+			changed |= BSS_CHANGED_HT;
+		conf->flags &= ~IEEE80211_CONF_SUPPORT_HT_MODE;
+		conf->ht_conf.ht_supported = 0;
+		goto out;
+	}
+
+
+	if (!(conf->flags & IEEE80211_CONF_SUPPORT_HT_MODE))
+		changed |= BSS_CHANGED_HT;
+
+	conf->flags |= IEEE80211_CONF_SUPPORT_HT_MODE;
+	ht_conf.ht_supported = 1;
+
+	ht_conf.cap = req_ht_cap->cap & sband->ht_info.cap;
+	ht_conf.cap &= ~(IEEE80211_HT_CAP_SM_PS);
+	ht_conf.cap |= sband->ht_info.cap & IEEE80211_HT_CAP_SM_PS;
+	ht_bss_conf.primary_channel = req_bss_cap->primary_channel;
+	ht_bss_conf.bss_cap = req_bss_cap->bss_cap;
+	ht_bss_conf.bss_op_mode = req_bss_cap->bss_op_mode;
+
+	ht_conf.ampdu_factor = req_ht_cap->ampdu_factor;
+	ht_conf.ampdu_density = req_ht_cap->ampdu_density;
+
+	/* Bits 96-100 */
+	tx_mcs_set_cap = sband->ht_info.supp_mcs_set[12];
+
+	/* configure suppoerted Tx MCS according to requested MCS
+	 * (based in most cases on Rx capabilities of peer) and self
+	 * Tx MCS capabilities (as defined by low level driver HW
+	 * Tx capabilities) */
+	if (!(tx_mcs_set_cap & IEEE80211_HT_CAP_MCS_TX_DEFINED))
+		goto check_changed;
+
+	/* Counting from 0 therfore + 1 */
+	if (tx_mcs_set_cap & IEEE80211_HT_CAP_MCS_TX_RX_DIFF)
+		max_tx_streams = ((tx_mcs_set_cap &
+				IEEE80211_HT_CAP_MCS_TX_STREAMS) >> 2) + 1;
+
+	for (i = 0; i < max_tx_streams; i++)
+		ht_conf.supp_mcs_set[i] =
+			sband->ht_info.supp_mcs_set[i] &
+					req_ht_cap->supp_mcs_set[i];
+
+	if (tx_mcs_set_cap & IEEE80211_HT_CAP_MCS_TX_UEQM)
+		for (i = IEEE80211_SUPP_MCS_SET_UEQM;
+		     i < IEEE80211_SUPP_MCS_SET_LEN; i++)
+			ht_conf.supp_mcs_set[i] =
+				sband->ht_info.supp_mcs_set[i] &
+					req_ht_cap->supp_mcs_set[i];
+
+check_changed:
+	/* if bss configuration changed store the new one */
+	if (memcmp(&conf->ht_conf, &ht_conf, sizeof(ht_conf)) ||
+	    memcmp(&conf->ht_bss_conf, &ht_bss_conf, sizeof(ht_bss_conf))) {
+		changed |= BSS_CHANGED_HT;
+		memcpy(&conf->ht_conf, &ht_conf, sizeof(ht_conf));
+		memcpy(&conf->ht_bss_conf, &ht_bss_conf, sizeof(ht_bss_conf));
+	}
+out:
+	return changed;
 }
 
 void ieee80211_bss_info_change_notify(struct ieee80211_sub_if_data *sdata,
@@ -269,18 +336,15 @@ void ieee80211_bss_info_change_notify(struct ieee80211_sub_if_data *sdata,
 	if (local->ops->bss_info_changed)
 		local->ops->bss_info_changed(local_to_hw(local),
 					     &sdata->vif,
-					     &sdata->vif.bss_conf,
+					     &sdata->bss_conf,
 					     changed);
 }
 
 u32 ieee80211_reset_erp_info(struct ieee80211_sub_if_data *sdata)
 {
-	sdata->vif.bss_conf.use_cts_prot = false;
-	sdata->vif.bss_conf.use_short_preamble = false;
-	sdata->vif.bss_conf.use_short_slot = false;
-	return BSS_CHANGED_ERP_CTS_PROT |
-	       BSS_CHANGED_ERP_PREAMBLE |
-	       BSS_CHANGED_ERP_SLOT;
+	sdata->bss_conf.use_cts_prot = 0;
+	sdata->bss_conf.use_short_preamble = 0;
+	return BSS_CHANGED_ERP_CTS_PROT | BSS_CHANGED_ERP_PREAMBLE;
 }
 
 void ieee80211_tx_status_irqsafe(struct ieee80211_hw *hw,
@@ -341,8 +405,7 @@ static void ieee80211_tasklet_handler(unsigned long data)
 			dev_kfree_skb(skb);
 			break ;
 		default:
-			WARN(1, "mac80211: Packet is of unknown type %d\n",
-			     skb->pkt_type);
+			WARN_ON(1);
 			dev_kfree_skb(skb);
 			break;
 		}
@@ -403,6 +466,8 @@ static void ieee80211_handle_filtered_frame(struct ieee80211_local *local,
 					    struct sta_info *sta,
 					    struct sk_buff *skb)
 {
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+
 	sta->tx_filtered_count++;
 
 	/*
@@ -449,9 +514,10 @@ static void ieee80211_handle_filtered_frame(struct ieee80211_local *local,
 		return;
 	}
 
-	if (!test_sta_flags(sta, WLAN_STA_PS) && !skb->requeue) {
+	if (!test_sta_flags(sta, WLAN_STA_PS) &&
+	    !(info->flags & IEEE80211_TX_CTL_REQUEUE)) {
 		/* Software retry the packet once */
-		skb->requeue = 1;
+		info->flags |= IEEE80211_TX_CTL_REQUEUE;
 		ieee80211_remove_tx_extra(local, sta->key, skb);
 		dev_queue_xmit(skb);
 		return;
@@ -481,28 +547,13 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	struct ieee80211_sub_if_data *sdata;
 	struct net_device *prev_dev = NULL;
 	struct sta_info *sta;
-	int retry_count = -1, i;
-
-	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
-		/* the HW cannot have attempted that rate */
-		if (i >= hw->max_rates) {
-			info->status.rates[i].idx = -1;
-			info->status.rates[i].count = 0;
-		}
-
-		retry_count += info->status.rates[i].count;
-	}
-	if (retry_count < 0)
-		retry_count = 0;
 
 	rcu_read_lock();
-
-	sband = local->hw.wiphy->bands[info->band];
 
 	sta = sta_info_get(local, hdr->addr1);
 
 	if (sta) {
-		if (!(info->flags & IEEE80211_TX_STAT_ACK) &&
+		if (info->status.excessive_retries &&
 		    test_sta_flags(sta, WLAN_STA_PS)) {
 			/*
 			 * The STA is in power save mode, so assume
@@ -533,11 +584,12 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 			rcu_read_unlock();
 			return;
 		} else {
-			if (!(info->flags & IEEE80211_TX_STAT_ACK))
+			if (info->status.excessive_retries)
 				sta->tx_retry_failed++;
-			sta->tx_retry_count += retry_count;
+			sta->tx_retry_count += info->status.retry_count;
 		}
 
+		sband = local->hw.wiphy->bands[info->band];
 		rate_control_tx_status(local, sband, sta, skb);
 	}
 
@@ -558,9 +610,9 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 			local->dot11TransmittedFrameCount++;
 			if (is_multicast_ether_addr(hdr->addr1))
 				local->dot11MulticastTransmittedFrameCount++;
-			if (retry_count > 0)
+			if (info->status.retry_count > 0)
 				local->dot11RetryCount++;
-			if (retry_count > 1)
+			if (info->status.retry_count > 1)
 				local->dot11MultipleRetryCount++;
 		}
 
@@ -604,30 +656,19 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	rthdr->hdr.it_len = cpu_to_le16(sizeof(*rthdr));
 	rthdr->hdr.it_present =
 		cpu_to_le32((1 << IEEE80211_RADIOTAP_TX_FLAGS) |
-			    (1 << IEEE80211_RADIOTAP_DATA_RETRIES) |
-			    (1 << IEEE80211_RADIOTAP_RATE));
+			    (1 << IEEE80211_RADIOTAP_DATA_RETRIES));
 
 	if (!(info->flags & IEEE80211_TX_STAT_ACK) &&
 	    !is_multicast_ether_addr(hdr->addr1))
 		rthdr->tx_flags |= cpu_to_le16(IEEE80211_RADIOTAP_F_TX_FAIL);
 
-	/*
-	 * XXX: Once radiotap gets the bitmap reset thing the vendor
-	 *	extensions proposal contains, we can actually report
-	 *	the whole set of tries we did.
-	 */
-	if ((info->status.rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS) ||
-	    (info->status.rates[0].flags & IEEE80211_TX_RC_USE_CTS_PROTECT))
+	if ((info->flags & IEEE80211_TX_CTL_USE_RTS_CTS) &&
+	    (info->flags & IEEE80211_TX_CTL_USE_CTS_PROTECT))
 		rthdr->tx_flags |= cpu_to_le16(IEEE80211_RADIOTAP_F_TX_CTS);
-	else if (info->status.rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS)
+	else if (info->flags & IEEE80211_TX_CTL_USE_RTS_CTS)
 		rthdr->tx_flags |= cpu_to_le16(IEEE80211_RADIOTAP_F_TX_RTS);
-	if (info->status.rates[0].idx >= 0 &&
-	    !(info->status.rates[0].flags & IEEE80211_TX_RC_MCS))
-		rthdr->rate = sband->bitrates[
-				info->status.rates[0].idx].bitrate / 5;
 
-	/* for now report the total retry_count */
-	rthdr->data_retries = retry_count;
+	rthdr->data_retries = info->status.retry_count;
 
 	/* XXX: is this sufficient for BPF? */
 	skb_set_mac_header(skb, 0);
@@ -712,29 +753,19 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 	BUG_ON(!ops->configure_filter);
 	local->ops = ops;
 
-	/* set up some defaults */
-	local->hw.queues = 1;
-	local->hw.max_rates = 1;
+	local->hw.queues = 1; /* default */
+
 	local->rts_threshold = IEEE80211_MAX_RTS_THRESHOLD;
 	local->fragmentation_threshold = IEEE80211_MAX_FRAG_THRESHOLD;
-	local->hw.conf.long_frame_max_tx_count = 4;
-	local->hw.conf.short_frame_max_tx_count = 7;
-	local->hw.conf.radio_enabled = true;
+	local->short_retry_limit = 7;
+	local->long_retry_limit = 4;
+	local->hw.conf.radio_enabled = 1;
 
 	INIT_LIST_HEAD(&local->interfaces);
 
 	spin_lock_init(&local->key_lock);
 
-	spin_lock_init(&local->queue_stop_reason_lock);
-
 	INIT_DELAYED_WORK(&local->scan_work, ieee80211_scan_work);
-
-	INIT_WORK(&local->dynamic_ps_enable_work,
-		  ieee80211_dynamic_ps_enable_work);
-	INIT_WORK(&local->dynamic_ps_disable_work,
-		  ieee80211_dynamic_ps_disable_work);
-	setup_timer(&local->dynamic_ps_timer,
-		    ieee80211_dynamic_ps_timer, (unsigned long) local);
 
 	sta_info_init(local);
 
@@ -757,6 +788,7 @@ EXPORT_SYMBOL(ieee80211_alloc_hw);
 int ieee80211_register_hw(struct ieee80211_hw *hw)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
+	const char *name;
 	int result;
 	enum ieee80211_band band;
 	struct net_device *mdev;
@@ -821,8 +853,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	mdev->header_ops = &ieee80211_header_ops;
 	mdev->set_multicast_list = ieee80211_master_set_multicast_list;
 
-	local->hw.workqueue =
-		create_freezeable_workqueue(wiphy_name(local->hw.wiphy));
+	name = wiphy_dev(local->hw.wiphy)->driver->name;
+	local->hw.workqueue = create_freezeable_workqueue(name);
 	if (!local->hw.workqueue) {
 		result = -ENOMEM;
 		goto fail_workqueue;
@@ -889,14 +921,12 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 
 	local->mdev->select_queue = ieee80211_select_queue;
 
-	/* add one default STA interface if supported */
-	if (local->hw.wiphy->interface_modes & BIT(NL80211_IFTYPE_STATION)) {
-		result = ieee80211_if_add(local, "wlan%d", NULL,
-					  NL80211_IFTYPE_STATION, NULL);
-		if (result)
-			printk(KERN_WARNING "%s: Failed to add default virtual iface\n",
-			       wiphy_name(local->hw.wiphy));
-	}
+	/* add one default STA interface */
+	result = ieee80211_if_add(local, "wlan%d", NULL,
+				  NL80211_IFTYPE_STATION, NULL);
+	if (result)
+		printk(KERN_WARNING "%s: Failed to add default virtual iface\n",
+		       wiphy_name(local->hw.wiphy));
 
 	rtnl_unlock();
 
@@ -983,7 +1013,7 @@ static int __init ieee80211_init(void)
 
 	BUILD_BUG_ON(sizeof(struct ieee80211_tx_info) > sizeof(skb->cb));
 	BUILD_BUG_ON(offsetof(struct ieee80211_tx_info, driver_data) +
-		     IEEE80211_TX_INFO_DRIVER_DATA_SIZE > sizeof(skb->cb));
+	             IEEE80211_TX_INFO_DRIVER_DATA_SIZE > sizeof(skb->cb));
 
 	ret = rc80211_minstrel_init();
 	if (ret)

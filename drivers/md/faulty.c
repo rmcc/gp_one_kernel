@@ -283,6 +283,7 @@ static int reconfig(mddev_t *mddev, int layout, int chunk_size)
 static int run(mddev_t *mddev)
 {
 	mdk_rdev_t *rdev;
+	struct list_head *tmp;
 	int i;
 
 	conf_t *conf = kmalloc(sizeof(*conf), GFP_KERNEL);
@@ -295,7 +296,7 @@ static int run(mddev_t *mddev)
 	}
 	conf->nfaults = 0;
 
-	list_for_each_entry(rdev, &mddev->disks, same_set)
+	rdev_for_each(rdev, tmp, mddev)
 		conf->rdev = rdev;
 
 	mddev->array_sectors = mddev->size * 2;

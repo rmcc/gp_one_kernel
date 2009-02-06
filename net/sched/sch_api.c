@@ -97,9 +97,10 @@ static int tclass_notify(struct sk_buff *oskb, struct nlmsghdr *n,
 
    Auxiliary routines:
 
-   ---peek
+   ---requeue
 
-   like dequeue but without removing a packet from the queue
+   requeues once dequeued packet. It is used for non-standard or
+   just buggy devices, which can defer output even if netif_queue_stopped()=0.
 
    ---reset
 
@@ -146,14 +147,8 @@ int register_qdisc(struct Qdisc_ops *qops)
 
 	if (qops->enqueue == NULL)
 		qops->enqueue = noop_qdisc_ops.enqueue;
-	if (qops->peek == NULL) {
-		if (qops->dequeue == NULL) {
-			qops->peek = noop_qdisc_ops.peek;
-		} else {
-			rc = -EINVAL;
-			goto out;
-		}
-	}
+	if (qops->requeue == NULL)
+		qops->requeue = noop_qdisc_ops.requeue;
 	if (qops->dequeue == NULL)
 		qops->dequeue = noop_qdisc_ops.dequeue;
 
@@ -189,7 +184,7 @@ EXPORT_SYMBOL(unregister_qdisc);
    (root qdisc, all its children, children of children etc.)
  */
 
-static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
+struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 {
 	struct Qdisc *q;
 
@@ -204,16 +199,28 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 	return NULL;
 }
 
+/*
+ * This lock is needed until some qdiscs stop calling qdisc_tree_decrease_qlen()
+ * without rtnl_lock(); currently hfsc_dequeue(), netem_dequeue(), tbf_dequeue()
+ */
+static DEFINE_SPINLOCK(qdisc_list_lock);
+
 static void qdisc_list_add(struct Qdisc *q)
 {
-	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS))
+	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS)) {
+		spin_lock_bh(&qdisc_list_lock);
 		list_add_tail(&q->list, &qdisc_root_sleeping(q)->list);
+		spin_unlock_bh(&qdisc_list_lock);
+	}
 }
 
 void qdisc_list_del(struct Qdisc *q)
 {
-	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS))
+	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS)) {
+		spin_lock_bh(&qdisc_list_lock);
 		list_del(&q->list);
+		spin_unlock_bh(&qdisc_list_lock);
+	}
 }
 EXPORT_SYMBOL(qdisc_list_del);
 
@@ -222,17 +229,22 @@ struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 	unsigned int i;
 	struct Qdisc *q;
 
+	spin_lock_bh(&qdisc_list_lock);
+
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		struct netdev_queue *txq = netdev_get_tx_queue(dev, i);
 		struct Qdisc *txq_root = txq->qdisc_sleeping;
 
 		q = qdisc_match_from_root(txq_root, handle);
 		if (q)
-			goto out;
+			goto unlock;
 	}
 
 	q = qdisc_match_from_root(dev->rx_queue.qdisc_sleeping, handle);
-out:
+
+unlock:
+	spin_unlock_bh(&qdisc_list_lock);
+
 	return q;
 }
 
@@ -450,6 +462,7 @@ static enum hrtimer_restart qdisc_watchdog(struct hrtimer *timer)
 						 timer);
 
 	wd->qdisc->flags &= ~TCQ_F_THROTTLED;
+	smp_wmb();
 	__netif_schedule(qdisc_root(wd->qdisc));
 
 	return HRTIMER_NORESTART;
@@ -879,12 +892,9 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca)
 	sch->stab = stab;
 
 	if (tca[TCA_RATE])
-		/* NB: ignores errors from replace_estimator
-		   because change can't be undone. */
 		gen_replace_estimator(&sch->bstats, &sch->rate_est,
-					    qdisc_root_sleeping_lock(sch),
-					    tca[TCA_RATE]);
-
+				      qdisc_root_sleeping_lock(sch),
+				      tca[TCA_RATE]);
 	return 0;
 }
 
