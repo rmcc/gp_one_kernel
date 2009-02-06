@@ -3,7 +3,6 @@
 
 #include <linux/linkage.h>
 #include <linux/hardirq.h>
-#include <linux/irqreturn.h>
 #include <linux/spinlock_types.h>
 
 /*
@@ -81,7 +80,7 @@ struct pt_regs;
  * interrupt source (if it supports chaining).
  */
 typedef struct irq_node {
-	irqreturn_t	(*handler)(int, void *);
+	int		(*handler)(int, void *);
 	void		*dev_id;
 	struct irq_node *next;
 	unsigned long	flags;

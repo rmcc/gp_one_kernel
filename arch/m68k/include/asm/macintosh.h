@@ -34,7 +34,6 @@ struct mac_model
 	char scc_type;
 	char ether_type;
 	char nubus_type;
-	char floppy_type;
 };
 
 #define MAC_ADB_NONE		0
@@ -71,12 +70,6 @@ struct mac_model
 
 #define MAC_NO_NUBUS		0
 #define MAC_NUBUS		1
-
-#define MAC_FLOPPY_IWM		0
-#define MAC_FLOPPY_SWIM_ADDR1	1
-#define MAC_FLOPPY_SWIM_ADDR2	2
-#define MAC_FLOPPY_SWIM_IOP	3
-#define MAC_FLOPPY_AV		4
 
 /*
  *	Gestalt numbers

@@ -117,6 +117,3 @@ endif
 
 archclean:
 	rm -f vmlinux.gz vmlinux.bz2
-
-install:
-	sh $(srctree)/arch/m68k/install.sh $(KERNELRELEASE) vmlinux.gz System.map "$(INSTALL_PATH)"
