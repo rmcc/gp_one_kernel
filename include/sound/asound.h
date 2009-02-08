@@ -23,10 +23,9 @@
 #ifndef __SOUND_ASOUND_H
 #define __SOUND_ASOUND_H
 
-#include <linux/types.h>
-
 #ifdef __KERNEL__
 #include <linux/ioctl.h>
+#include <linux/types.h>
 #include <linux/time.h>
 #include <asm/byteorder.h>
 
@@ -343,7 +342,7 @@ struct snd_interval {
 #define SNDRV_MASK_MAX	256
 
 struct snd_mask {
-	__u32 bits[(SNDRV_MASK_MAX+31)/32];
+	u_int32_t bits[(SNDRV_MASK_MAX+31)/32];
 };
 
 struct snd_pcm_hw_params {
@@ -386,7 +385,7 @@ struct snd_pcm_sw_params {
 
 struct snd_pcm_channel_info {
 	unsigned int channel;
-	__kernel_off_t offset;		/* mmap offset */
+	off_t offset;			/* mmap offset */
 	unsigned int first;		/* offset to first sample in bits */
 	unsigned int step;		/* samples distance in bits */
 };
@@ -790,7 +789,7 @@ struct snd_ctl_elem_info {
 	snd_ctl_elem_type_t type;	/* R: value type - SNDRV_CTL_ELEM_TYPE_* */
 	unsigned int access;		/* R: value access (bitmask) - SNDRV_CTL_ELEM_ACCESS_* */
 	unsigned int count;		/* count of values */
-	__kernel_pid_t owner;		/* owner's PID of this control */
+	pid_t owner;			/* owner's PID of this control */
 	union {
 		struct {
 			long min;		/* R: minimum value */

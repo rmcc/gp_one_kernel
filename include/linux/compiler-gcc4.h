@@ -3,10 +3,8 @@
 #endif
 
 /* GCC 4.1.[01] miscompiles __weak */
-#ifdef __KERNEL__
-# if __GNUC_MINOR__ == 1 && __GNUC_PATCHLEVEL__ <= 1
-#  error Your version of gcc miscompiles the __weak directive
-# endif
+#if __GNUC_MINOR__ == 1 && __GNUC_PATCHLEVEL__ <= 1
+# error Your version of gcc miscompiles the __weak directive
 #endif
 
 #define __used			__attribute__((__used__))

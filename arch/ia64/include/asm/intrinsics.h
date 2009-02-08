@@ -10,7 +10,6 @@
 
 #ifndef __ASSEMBLY__
 
-#include <linux/types.h>
 /* include compiler specific intrinsics */
 #include <asm/ia64regs.h>
 #ifdef __INTEL_COMPILER

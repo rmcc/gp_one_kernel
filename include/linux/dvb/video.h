@@ -132,12 +132,12 @@ struct video_command {
 #define VIDEO_VSYNC_FIELD_PROGRESSIVE	(3)
 
 struct video_event {
-	__s32 type;
+	int32_t type;
 #define VIDEO_EVENT_SIZE_CHANGED	1
 #define VIDEO_EVENT_FRAME_RATE_CHANGED	2
 #define VIDEO_EVENT_DECODER_STOPPED 	3
 #define VIDEO_EVENT_VSYNC 		4
-	__kernel_time_t timestamp;
+	time_t timestamp;
 	union {
 		video_size_t size;
 		unsigned int frame_rate;	/* in frames per 1000sec */
@@ -157,25 +157,25 @@ struct video_status {
 
 struct video_still_picture {
 	char __user *iFrame;        /* pointer to a single iframe in memory */
-	__s32 size;
+	int32_t size;
 };
 
 
 typedef
 struct video_highlight {
 	int     active;      /*    1=show highlight, 0=hide highlight */
-	__u8    contrast1;   /*    7- 4  Pattern pixel contrast */
+	uint8_t contrast1;   /*    7- 4  Pattern pixel contrast */
 			     /*    3- 0  Background pixel contrast */
-	__u8    contrast2;   /*    7- 4  Emphasis pixel-2 contrast */
+	uint8_t contrast2;   /*    7- 4  Emphasis pixel-2 contrast */
 			     /*    3- 0  Emphasis pixel-1 contrast */
-	__u8    color1;      /*    7- 4  Pattern pixel color */
+	uint8_t color1;      /*    7- 4  Pattern pixel color */
 			     /*    3- 0  Background pixel color */
-	__u8    color2;      /*    7- 4  Emphasis pixel-2 color */
+	uint8_t color2;      /*    7- 4  Emphasis pixel-2 color */
 			     /*    3- 0  Emphasis pixel-1 color */
-	__u32    ypos;       /*   23-22  auto action mode */
+	uint32_t ypos;       /*   23-22  auto action mode */
 			     /*   21-12  start y */
 			     /*    9- 0  end y */
-	__u32    xpos;       /*   23-22  button color number */
+	uint32_t xpos;       /*   23-22  button color number */
 			     /*   21-12  start x */
 			     /*    9- 0  end x */
 } video_highlight_t;
@@ -189,17 +189,17 @@ typedef struct video_spu {
 
 typedef struct video_spu_palette {      /* SPU Palette information */
 	int length;
-	__u8 __user *palette;
+	uint8_t __user *palette;
 } video_spu_palette_t;
 
 
 typedef struct video_navi_pack {
 	int length;          /* 0 ... 1024 */
-	__u8 data[1024];
+	uint8_t data[1024];
 } video_navi_pack_t;
 
 
-typedef __u16 video_attributes_t;
+typedef uint16_t video_attributes_t;
 /*   bits: descr. */
 /*   15-14 Video compression mode (0=MPEG-1, 1=MPEG-2) */
 /*   13-12 TV system (0=525/60, 1=625/50) */

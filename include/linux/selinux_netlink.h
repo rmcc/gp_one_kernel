@@ -12,8 +12,6 @@
 #ifndef _LINUX_SELINUX_NETLINK_H
 #define _LINUX_SELINUX_NETLINK_H
 
-#include <linux/types.h>
-
 /* Message types. */
 #define SELNL_MSG_BASE 0x10
 enum {
@@ -40,11 +38,11 @@ enum selinux_nlgroups {
 
 /* Message structures */
 struct selnl_msg_setenforce {
-	__s32		val;
+	int32_t		val;
 };
 
 struct selnl_msg_policyload {
-	__u32	seqno;
+	u_int32_t	seqno;
 };
 
 #endif /* _LINUX_SELINUX_NETLINK_H */

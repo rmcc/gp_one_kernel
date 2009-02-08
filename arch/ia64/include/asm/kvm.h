@@ -21,12 +21,9 @@
  *
  */
 
-#include <linux/types.h>
-#include <linux/ioctl.h>
+#include <asm/types.h>
 
-/* Select x86 specific features in <linux/kvm.h> */
-#define __KVM_HAVE_IOAPIC
-#define __KVM_HAVE_DEVICE_ASSIGNMENT
+#include <linux/ioctl.h>
 
 /* Architectural interrupt line count. */
 #define KVM_NR_INTERRUPTS 256

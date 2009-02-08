@@ -19,7 +19,6 @@
 #ifndef _ASM_POWERPC_PS3FB_H_
 #define _ASM_POWERPC_PS3FB_H_
 
-#include <linux/types.h>
 #include <linux/ioctl.h>
 
 /* ioctl */

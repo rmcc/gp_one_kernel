@@ -9,8 +9,6 @@
 #ifndef _DLM_NETLINK_H
 #define _DLM_NETLINK_H
 
-#include <linux/types.h>
-
 enum {
 	DLM_STATUS_WAITING = 1,
 	DLM_STATUS_GRANTED = 2,
@@ -20,16 +18,16 @@ enum {
 #define DLM_LOCK_DATA_VERSION 1
 
 struct dlm_lock_data {
-	__u16 version;
-	__u32 lockspace_id;
+	uint16_t version;
+	uint32_t lockspace_id;
 	int nodeid;
 	int ownpid;
-	__u32 id;
-	__u32 remid;
-	__u64 xid;
-	__s8 status;
-	__s8 grmode;
-	__s8 rqmode;
+	uint32_t id;
+	uint32_t remid;
+	uint64_t xid;
+	int8_t status;
+	int8_t grmode;
+	int8_t rqmode;
 	unsigned long timestamp;
 	int resource_namelen;
 	char resource_name[DLM_RESNAME_MAXLEN];

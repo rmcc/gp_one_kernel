@@ -117,9 +117,9 @@
 struct flock {
 	short	l_type;
 	short	l_whence;
-	__kernel_off_t	l_start;
-	__kernel_off_t	l_len;
-	__kernel_pid_t	l_pid;
+	off_t	l_start;
+	off_t	l_len;
+	pid_t	l_pid;
 	__ARCH_FLOCK_PAD
 };
 #endif
@@ -140,9 +140,9 @@ struct flock {
 struct flock64 {
 	short  l_type;
 	short  l_whence;
-	__kernel_loff_t l_start;
-	__kernel_loff_t l_len;
-	__kernel_pid_t  l_pid;
+	loff_t l_start;
+	loff_t l_len;
+	pid_t  l_pid;
 	__ARCH_FLOCK64_PAD
 };
 #endif

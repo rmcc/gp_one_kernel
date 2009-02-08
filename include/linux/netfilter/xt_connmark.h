@@ -1,8 +1,6 @@
 #ifndef _XT_CONNMARK_H
 #define _XT_CONNMARK_H
 
-#include <linux/types.h>
-
 /* Copyright (C) 2002,2004 MARA Systems AB <http://www.marasystems.com>
  * by Henrik Nordstrom <hno@marasystems.com>
  *
@@ -14,12 +12,12 @@
 
 struct xt_connmark_info {
 	unsigned long mark, mask;
-	__u8 invert;
+	u_int8_t invert;
 };
 
 struct xt_connmark_mtinfo1 {
-	__u32 mark, mask;
-	__u8 invert;
+	u_int32_t mark, mask;
+	u_int8_t invert;
 };
 
 #endif /*_XT_CONNMARK_H*/

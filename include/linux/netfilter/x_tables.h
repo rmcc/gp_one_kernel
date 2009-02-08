@@ -1,8 +1,6 @@
 #ifndef _X_TABLES_H
 #define _X_TABLES_H
 
-#include <linux/types.h>
-
 #define XT_FUNCTION_MAXNAMELEN 30
 #define XT_TABLE_MAXNAMELEN 32
 
@@ -10,22 +8,22 @@ struct xt_entry_match
 {
 	union {
 		struct {
-			__u16 match_size;
+			u_int16_t match_size;
 
 			/* Used by userspace */
 			char name[XT_FUNCTION_MAXNAMELEN-1];
 
-			__u8 revision;
+			u_int8_t revision;
 		} user;
 		struct {
-			__u16 match_size;
+			u_int16_t match_size;
 
 			/* Used inside the kernel */
 			struct xt_match *match;
 		} kernel;
 
 		/* Total length */
-		__u16 match_size;
+		u_int16_t match_size;
 	} u;
 
 	unsigned char data[0];
@@ -35,22 +33,22 @@ struct xt_entry_target
 {
 	union {
 		struct {
-			__u16 target_size;
+			u_int16_t target_size;
 
 			/* Used by userspace */
 			char name[XT_FUNCTION_MAXNAMELEN-1];
 
-			__u8 revision;
+			u_int8_t revision;
 		} user;
 		struct {
-			__u16 target_size;
+			u_int16_t target_size;
 
 			/* Used inside the kernel */
 			struct xt_target *target;
 		} kernel;
 
 		/* Total length */
-		__u16 target_size;
+		u_int16_t target_size;
 	} u;
 
 	unsigned char data[0];
@@ -76,7 +74,7 @@ struct xt_get_revision
 {
 	char name[XT_FUNCTION_MAXNAMELEN-1];
 
-	__u8 revision;
+	u_int8_t revision;
 };
 
 /* CONTINUE verdict for targets */
@@ -92,10 +90,10 @@ struct xt_get_revision
  */
 struct _xt_align
 {
-	__u8 u8;
-	__u16 u16;
-	__u32 u32;
-	__u64 u64;
+	u_int8_t u8;
+	u_int16_t u16;
+	u_int32_t u32;
+	u_int64_t u64;
 };
 
 #define XT_ALIGN(s) (((s) + (__alignof__(struct _xt_align)-1)) 	\
@@ -111,7 +109,7 @@ struct _xt_align
 
 struct xt_counters
 {
-	__u64 pcnt, bcnt;			/* Packet and byte counters */
+	u_int64_t pcnt, bcnt;			/* Packet and byte counters */
 };
 
 /* The argument to IPT_SO_ADD_COUNTERS. */

@@ -14,7 +14,7 @@
 #ifndef __ASMARM_SETUP_H
 #define __ASMARM_SETUP_H
 
-#include <linux/types.h>
+#include <asm/types.h>
 
 #define COMMAND_LINE_SIZE 1024
 

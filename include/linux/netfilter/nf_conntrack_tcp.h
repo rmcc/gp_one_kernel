@@ -2,8 +2,6 @@
 #define _NF_CONNTRACK_TCP_H
 /* TCP tracking. */
 
-#include <linux/types.h>
-
 /* This is exposed to userspace (ctnetlink) */
 enum tcp_conntrack {
 	TCP_CONNTRACK_NONE,
@@ -36,8 +34,8 @@ enum tcp_conntrack {
 #define IP_CT_TCP_FLAG_DATA_UNACKNOWLEDGED	0x10
 
 struct nf_ct_tcp_flags {
-	__u8 flags;
-	__u8 mask;
+	u_int8_t flags;
+	u_int8_t mask;
 };
 
 #ifdef __KERNEL__

@@ -1,8 +1,6 @@
 #ifndef _XT_PHYSDEV_H
 #define _XT_PHYSDEV_H
 
-#include <linux/types.h>
-
 #ifdef __KERNEL__
 #include <linux/if.h>
 #endif
@@ -19,8 +17,8 @@ struct xt_physdev_info {
 	char in_mask[IFNAMSIZ];
 	char physoutdev[IFNAMSIZ];
 	char out_mask[IFNAMSIZ];
-	__u8 invert;
-	__u8 bitmask;
+	u_int8_t invert;
+	u_int8_t bitmask;
 };
 
 #endif /*_XT_PHYSDEV_H*/

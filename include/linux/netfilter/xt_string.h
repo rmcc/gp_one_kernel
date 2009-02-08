@@ -1,8 +1,6 @@
 #ifndef _XT_STRING_H
 #define _XT_STRING_H
 
-#include <linux/types.h>
-
 #define XT_STRING_MAX_PATTERN_SIZE 128
 #define XT_STRING_MAX_ALGO_NAME_SIZE 16
 
@@ -13,18 +11,18 @@ enum {
 
 struct xt_string_info
 {
-	__u16 from_offset;
-	__u16 to_offset;
+	u_int16_t from_offset;
+	u_int16_t to_offset;
 	char	  algo[XT_STRING_MAX_ALGO_NAME_SIZE];
 	char 	  pattern[XT_STRING_MAX_PATTERN_SIZE];
-	__u8  patlen;
+	u_int8_t  patlen;
 	union {
 		struct {
-			__u8  invert;
+			u_int8_t  invert;
 		} v0;
 
 		struct {
-			__u8  flags;
+			u_int8_t  flags;
 		} v1;
 	} u;
 

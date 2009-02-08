@@ -20,7 +20,7 @@
 #ifndef __LINUX_KVM_POWERPC_H
 #define __LINUX_KVM_POWERPC_H
 
-#include <linux/types.h>
+#include <asm/types.h>
 
 struct kvm_regs {
 	__u64 pc;

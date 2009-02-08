@@ -11,7 +11,7 @@
 #ifndef _ASM_SWAB_H
 #define _ASM_SWAB_H
 
-#include <linux/types.h>
+#include <asm/types.h>
 
 #ifdef __GNUC__
 
