@@ -41,6 +41,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/if_vlan.h>
 #include <net/ip.h>
+#include <linux/ipv6.h>
 
 MODULE_DESCRIPTION("NetXen Multi port (1/10) Gigabit Network Driver");
 MODULE_LICENSE("GPL");
@@ -734,17 +735,18 @@ netxen_nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	SET_ETHTOOL_OPS(netdev, &netxen_nic_ethtool_ops);
 
-	/* ScatterGather support */
-	netdev->features = NETIF_F_SG;
-	netdev->features |= NETIF_F_IP_CSUM;
-	netdev->features |= NETIF_F_TSO;
+	netdev->features |= (NETIF_F_SG | NETIF_F_IP_CSUM | NETIF_F_TSO);
+	netdev->vlan_features |= (NETIF_F_SG | NETIF_F_IP_CSUM | NETIF_F_TSO);
+
 	if (NX_IS_REVISION_P3(revision_id)) {
-		netdev->features |= NETIF_F_IPV6_CSUM;
-		netdev->features |= NETIF_F_TSO6;
+		netdev->features |= (NETIF_F_IPV6_CSUM | NETIF_F_TSO6);
+		netdev->vlan_features |= (NETIF_F_IPV6_CSUM | NETIF_F_TSO6);
 	}
 
-	if (adapter->pci_using_dac)
+	if (adapter->pci_using_dac) {
 		netdev->features |= NETIF_F_HIGHDMA;
+		netdev->vlan_features |= NETIF_F_HIGHDMA;
+	}
 
 	/*
 	 * Set the CRB window to invalid. If any register in window 0 is
@@ -1004,8 +1006,10 @@ static void __devexit netxen_nic_remove(struct pci_dev *pdev)
 
 	iounmap(adapter->ahw.db_base);
 	iounmap(adapter->ahw.pci_base0);
-	iounmap(adapter->ahw.pci_base1);
-	iounmap(adapter->ahw.pci_base2);
+	if (adapter->ahw.pci_base1 != NULL)
+		iounmap(adapter->ahw.pci_base1);
+	if (adapter->ahw.pci_base2 != NULL)
+		iounmap(adapter->ahw.pci_base2);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
@@ -1163,6 +1167,14 @@ static bool netxen_tso_check(struct net_device *netdev,
 {
 	bool tso = false;
 	u8 opcode = TX_ETHER_PKT;
+	__be16 protocol = skb->protocol;
+	u16 flags = 0;
+
+	if (protocol == __constant_htons(ETH_P_8021Q)) {
+		struct vlan_ethhdr *vh = (struct vlan_ethhdr *)skb->data;
+		protocol = vh->h_vlan_encapsulated_proto;
+		flags = FLAGS_VLAN_TAGGED;
+	}
 
 	if ((netdev->features & (NETIF_F_TSO | NETIF_F_TSO6)) &&
 			skb_shinfo(skb)->gso_size > 0) {
@@ -1171,21 +1183,21 @@ static bool netxen_tso_check(struct net_device *netdev,
 		desc->total_hdr_length =
 			skb_transport_offset(skb) + tcp_hdrlen(skb);
 
-		opcode = (skb->protocol == htons(ETH_P_IPV6)) ?
+		opcode = (protocol == __constant_htons(ETH_P_IPV6)) ?
 				TX_TCP_LSO6 : TX_TCP_LSO;
 		tso = true;
 
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		u8 l4proto;
 
-		if (skb->protocol == htons(ETH_P_IP)) {
+		if (protocol == __constant_htons(ETH_P_IP)) {
 			l4proto = ip_hdr(skb)->protocol;
 
 			if (l4proto == IPPROTO_TCP)
 				opcode = TX_TCP_PKT;
 			else if(l4proto == IPPROTO_UDP)
 				opcode = TX_UDP_PKT;
-		} else if (skb->protocol == htons(ETH_P_IPV6)) {
+		} else if (protocol == __constant_htons(ETH_P_IPV6)) {
 			l4proto = ipv6_hdr(skb)->nexthdr;
 
 			if (l4proto == IPPROTO_TCP)
@@ -1196,7 +1208,7 @@ static bool netxen_tso_check(struct net_device *netdev,
 	}
 	desc->tcp_hdr_offset = skb_transport_offset(skb);
 	desc->ip_hdr_offset = skb_network_offset(skb);
-	netxen_set_tx_flags_opcode(desc, 0, opcode);
+	netxen_set_tx_flags_opcode(desc, flags, opcode);
 	return tso;
 }
 
