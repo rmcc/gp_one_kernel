@@ -79,8 +79,6 @@ static unsigned char shared_bank[NR_BANKS] = {
 
 static DEFINE_PER_CPU(unsigned char, bank_map);	/* see which banks are on */
 
-static void amd_threshold_interrupt(void);
-
 /*
  * CPU Initialization
  */
@@ -123,7 +121,7 @@ static long threshold_restart_bank(void *_tr)
 }
 
 /* cpu init entry point, called from mce.c with preempt off */
-void mce_amd_feature_init(struct cpuinfo_x86 *c)
+void __cpuinit mce_amd_feature_init(struct cpuinfo_x86 *c)
 {
 	unsigned int bank, block;
 	unsigned int cpu = smp_processor_id();
@@ -176,8 +174,6 @@ void mce_amd_feature_init(struct cpuinfo_x86 *c)
 			tr.reset = 0;
 			tr.old_limit = 0;
 			threshold_restart_bank(&tr);
-
-			mce_threshold_vector = amd_threshold_interrupt;
 		}
 	}
 }
@@ -191,13 +187,19 @@ void mce_amd_feature_init(struct cpuinfo_x86 *c)
  * the interrupt goes off when error_count reaches threshold_limit.
  * the handler will simply log mcelog w/ software defined bank number.
  */
-static void amd_threshold_interrupt(void)
+asmlinkage void mce_threshold_interrupt(void)
 {
 	unsigned int bank, block;
 	struct mce m;
 	u32 low = 0, high = 0, address = 0;
 
-	mce_setup(&m);
+	ack_APIC_irq();
+	exit_idle();
+	irq_enter();
+
+	memset(&m, 0, sizeof(m));
+	rdtscll(m.tsc);
+	m.cpu = smp_processor_id();
 
 	/* assume first bank caused it */
 	for (bank = 0; bank < NR_BANKS; ++bank) {
@@ -231,8 +233,7 @@ static void amd_threshold_interrupt(void)
 
 			/* Log the machine check that caused the threshold
 			   event. */
-			machine_check_poll(MCP_TIMESTAMP,
-					&__get_cpu_var(mce_poll_banks));
+			do_machine_check(NULL, 0);
 
 			if (high & MASK_OVERFLOW_HI) {
 				rdmsrl(address, m.misc);
@@ -242,10 +243,13 @@ static void amd_threshold_interrupt(void)
 				       + bank * NR_BLOCKS
 				       + block;
 				mce_log(&m);
-				return;
+				goto out;
 			}
 		}
 	}
+out:
+	inc_irq_stat(irq_threshold_count);
+	irq_exit();
 }
 
 /*

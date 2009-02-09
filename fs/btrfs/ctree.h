@@ -43,7 +43,11 @@ struct btrfs_ordered_sum;
 
 #define BTRFS_ACL_NOT_CACHED    ((void *)-1)
 
-#define BTRFS_MAX_LEVEL 8
+#ifdef CONFIG_LOCKDEP
+# define BTRFS_MAX_LEVEL 7
+#else
+# define BTRFS_MAX_LEVEL 8
+#endif
 
 /* holds pointers to all of the tree roots */
 #define BTRFS_ROOT_TREE_OBJECTID 1ULL
@@ -1711,8 +1715,7 @@ struct extent_buffer *btrfs_alloc_free_block(struct btrfs_trans_handle *trans,
 					     u64 empty_size);
 struct extent_buffer *btrfs_init_new_buffer(struct btrfs_trans_handle *trans,
 					    struct btrfs_root *root,
-					    u64 bytenr, u32 blocksize,
-					    int level);
+					    u64 bytenr, u32 blocksize);
 int btrfs_alloc_extent(struct btrfs_trans_handle *trans,
 		       struct btrfs_root *root,
 		       u64 num_bytes, u64 parent, u64 min_bytes,
@@ -1831,7 +1834,9 @@ int btrfs_realloc_node(struct btrfs_trans_handle *trans,
 void btrfs_release_path(struct btrfs_root *root, struct btrfs_path *p);
 struct btrfs_path *btrfs_alloc_path(void);
 void btrfs_free_path(struct btrfs_path *p);
+void btrfs_init_path(struct btrfs_path *p);
 void btrfs_set_path_blocking(struct btrfs_path *p);
+void btrfs_clear_path_blocking(struct btrfs_path *p);
 void btrfs_unlock_up_safe(struct btrfs_path *p, int level);
 
 int btrfs_del_items(struct btrfs_trans_handle *trans, struct btrfs_root *root,

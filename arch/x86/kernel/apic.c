@@ -48,7 +48,6 @@
 #include <asm/apic.h>
 #include <asm/i8259.h>
 #include <asm/smp.h>
-#include <asm/mce.h>
 
 #include <mach_apic.h>
 #include <mach_apicdef.h>
@@ -863,20 +862,12 @@ void clear_local_APIC(void)
 	}
 
 	/* lets not touch this if we didn't frob it */
-#if defined(CONFIG_X86_MCE_P4THERMAL) || defined(CONFIG_X86_MCE_INTEL)
+#if defined(CONFIG_X86_MCE_P4THERMAL) || defined(X86_MCE_INTEL)
 	if (maxlvt >= 5) {
 		v = apic_read(APIC_LVTTHMR);
 		apic_write(APIC_LVTTHMR, v | APIC_LVT_MASKED);
 	}
 #endif
-#ifdef CONFIG_X86_MCE_INTEL
-	if (maxlvt >= 6) {
-		v = apic_read(APIC_LVTCMCI);
-		if (!(v & APIC_LVT_MASKED))
-			apic_write(APIC_LVTCMCI, v | APIC_LVT_MASKED);
-	}
-#endif
-
 	/*
 	 * Clean APIC state for other OSs:
 	 */
@@ -1271,12 +1262,6 @@ void __cpuinit setup_local_APIC(void)
 	apic_write(APIC_LVT1, value);
 
 	preempt_enable();
-
-#ifdef CONFIG_X86_MCE_INTEL
-	/* Recheck CMCI information after local APIC is up on CPU #0 */
-	if (smp_processor_id() == 0)
-		cmci_recheck();
-#endif
 }
 
 void __cpuinit end_local_APIC_setup(void)

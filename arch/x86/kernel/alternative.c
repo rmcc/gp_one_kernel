@@ -414,17 +414,9 @@ void __init alternative_instructions(void)
 	   that might execute the to be patched code.
 	   Other CPUs are not running. */
 	stop_nmi();
-
-	/*
-	 * Don't stop machine check exceptions while patching.
-	 * MCEs only happen when something got corrupted and in this
-	 * case we must do something about the corruption.
-	 * Ignoring it is worse than a unlikely patching race.
-	 * Also machine checks tend to be broadcast and if one CPU
-	 * goes into machine check the others follow quickly, so we don't
-	 * expect a machine check to cause undue problems during to code
-	 * patching.
-	 */
+#ifdef CONFIG_X86_MCE
+	stop_mce();
+#endif
 
 	apply_alternatives(__alt_instructions, __alt_instructions_end);
 
@@ -464,6 +456,9 @@ void __init alternative_instructions(void)
 				(unsigned long)__smp_locks_end);
 
 	restart_nmi();
+#ifdef CONFIG_X86_MCE
+	restart_mce();
+#endif
 }
 
 /**
