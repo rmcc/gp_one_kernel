@@ -296,21 +296,19 @@ sched_info_switch(struct task_struct *prev, struct task_struct *next)
 static inline void account_group_user_time(struct task_struct *tsk,
 					   cputime_t cputime)
 {
-	struct thread_group_cputimer *cputimer;
+	struct task_cputime *times;
+	struct signal_struct *sig;
 
 	/* tsk == current, ensure it is safe to use ->signal */
 	if (unlikely(tsk->exit_state))
 		return;
 
-	cputimer = &tsk->signal->cputimer;
+	sig = tsk->signal;
+	times = &sig->cputime.totals;
 
-	if (!cputimer->running)
-		return;
-
-	spin_lock(&cputimer->lock);
-	cputimer->cputime.utime =
-		cputime_add(cputimer->cputime.utime, cputime);
-	spin_unlock(&cputimer->lock);
+	spin_lock(&times->lock);
+	times->utime = cputime_add(times->utime, cputime);
+	spin_unlock(&times->lock);
 }
 
 /**
@@ -326,21 +324,19 @@ static inline void account_group_user_time(struct task_struct *tsk,
 static inline void account_group_system_time(struct task_struct *tsk,
 					     cputime_t cputime)
 {
-	struct thread_group_cputimer *cputimer;
+	struct task_cputime *times;
+	struct signal_struct *sig;
 
 	/* tsk == current, ensure it is safe to use ->signal */
 	if (unlikely(tsk->exit_state))
 		return;
 
-	cputimer = &tsk->signal->cputimer;
+	sig = tsk->signal;
+	times = &sig->cputime.totals;
 
-	if (!cputimer->running)
-		return;
-
-	spin_lock(&cputimer->lock);
-	cputimer->cputime.stime =
-		cputime_add(cputimer->cputime.stime, cputime);
-	spin_unlock(&cputimer->lock);
+	spin_lock(&times->lock);
+	times->stime = cputime_add(times->stime, cputime);
+	spin_unlock(&times->lock);
 }
 
 /**
@@ -356,7 +352,7 @@ static inline void account_group_system_time(struct task_struct *tsk,
 static inline void account_group_exec_runtime(struct task_struct *tsk,
 					      unsigned long long ns)
 {
-	struct thread_group_cputimer *cputimer;
+	struct task_cputime *times;
 	struct signal_struct *sig;
 
 	sig = tsk->signal;
@@ -365,12 +361,9 @@ static inline void account_group_exec_runtime(struct task_struct *tsk,
 	if (unlikely(!sig))
 		return;
 
-	cputimer = &sig->cputimer;
+	times = &sig->cputime.totals;
 
-	if (!cputimer->running)
-		return;
-
-	spin_lock(&cputimer->lock);
-	cputimer->cputime.sum_exec_runtime += ns;
-	spin_unlock(&cputimer->lock);
+	spin_lock(&times->lock);
+	times->sum_exec_runtime += ns;
+	spin_unlock(&times->lock);
 }

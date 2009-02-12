@@ -311,10 +311,7 @@ long mlock_vma_pages_range(struct vm_area_struct *vma,
 			is_vm_hugetlb_page(vma) ||
 			vma == get_gate_vma(current))) {
 
-		__mlock_vma_pages_range(vma, start, end, 1);
-
-		/* Hide errors from mmap() and other callers */
-		return 0;
+		return __mlock_vma_pages_range(vma, start, end, 1);
 	}
 
 	/*

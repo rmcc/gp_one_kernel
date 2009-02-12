@@ -175,10 +175,9 @@ static int omap_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct omap_runtime_data *prtd = runtime->private_data;
-	unsigned long flags;
 	int ret = 0;
 
-	spin_lock_irqsave(&prtd->lock, flags);
+	spin_lock_irq(&prtd->lock);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
@@ -196,7 +195,7 @@ static int omap_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	default:
 		ret = -EINVAL;
 	}
-	spin_unlock_irqrestore(&prtd->lock, flags);
+	spin_unlock_irq(&prtd->lock);
 
 	return ret;
 }

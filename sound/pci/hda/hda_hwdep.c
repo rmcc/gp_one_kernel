@@ -175,7 +175,7 @@ static int reconfig_codec(struct hda_codec *codec)
 	err = snd_hda_codec_build_controls(codec);
 	if (err < 0)
 		return err;
-	return snd_card_register(codec->bus->card);
+	return 0;
 }
 
 /*
@@ -277,19 +277,18 @@ static ssize_t init_verbs_store(struct device *dev,
 {
 	struct snd_hwdep *hwdep = dev_get_drvdata(dev);
 	struct hda_codec *codec = hwdep->private_data;
-	struct hda_verb *v;
-	int nid, verb, param;
+	char *p;
+	struct hda_verb verb, *v;
 
-	if (sscanf(buf, "%i %i %i", &nid, &verb, &param) != 3)
-		return -EINVAL;
-	if (!nid || !verb)
+	verb.nid = simple_strtoul(buf, &p, 0);
+	verb.verb = simple_strtoul(p, &p, 0);
+	verb.param = simple_strtoul(p, &p, 0);
+	if (!verb.nid || !verb.verb || !verb.param)
 		return -EINVAL;
 	v = snd_array_new(&codec->init_verbs);
 	if (!v)
 		return -ENOMEM;
-	v->nid = nid;
-	v->verb = verb;
-	v->param = param;
+	*v = verb;
 	return count;
 }
 

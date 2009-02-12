@@ -80,7 +80,7 @@ static struct buffer_head *get_block_length(struct super_block *sb,
  * generated a larger block - this does occasionally happen with zlib).
  */
 int squashfs_read_data(struct super_block *sb, void **buffer, u64 index,
-			int length, u64 *next_index, int srclength, int pages)
+			int length, u64 *next_index, int srclength)
 {
 	struct squashfs_sb_info *msblk = sb->s_fs_info;
 	struct buffer_head **bh;
@@ -185,14 +185,6 @@ int squashfs_read_data(struct super_block *sb, void **buffer, u64 index,
 			}
 
 			if (msblk->stream.avail_out == 0) {
-				if (page == pages) {
-					ERROR("zlib_inflate tried to "
-						"decompress too much data, "
-						"expected %d bytes.  Zlib "
-						"data probably corrupt\n",
-						srclength);
-					goto release_mutex;
-				}
 				msblk->stream.next_out = buffer[page++];
 				msblk->stream.avail_out = PAGE_CACHE_SIZE;
 			}
@@ -276,8 +268,7 @@ block_release:
 		put_bh(bh[k]);
 
 read_failure:
-	ERROR("squashfs_read_data failed to read block 0x%llx\n",
-					(unsigned long long) index);
+	ERROR("sb_bread failed reading block 0x%llx\n", cur_index);
 	kfree(bh);
 	return -EIO;
 }
