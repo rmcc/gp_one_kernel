@@ -78,6 +78,7 @@ void dynamic_irq_cleanup(unsigned int irq)
 	desc->handle_irq = handle_bad_irq;
 	desc->chip = &no_irq_chip;
 	desc->name = NULL;
+	clear_kstat_irqs(desc);
 	spin_unlock_irqrestore(&desc->lock, flags);
 }
 
@@ -384,6 +385,7 @@ handle_level_irq(unsigned int irq, struct irq_desc *desc)
 out_unlock:
 	spin_unlock(&desc->lock);
 }
+EXPORT_SYMBOL_GPL(handle_level_irq);
 
 /**
  *	handle_fasteoi_irq - irq handler for transparent controllers
@@ -595,6 +597,7 @@ __set_irq_handler(unsigned int irq, irq_flow_handler_t handle, int is_chained,
 	}
 	spin_unlock_irqrestore(&desc->lock, flags);
 }
+EXPORT_SYMBOL_GPL(__set_irq_handler);
 
 void
 set_irq_chip_and_handler(unsigned int irq, struct irq_chip *chip,
