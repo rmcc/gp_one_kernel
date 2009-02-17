@@ -3606,18 +3606,16 @@ static int __devinit cciss_init_one(struct pci_dev *pdev,
 		if (cciss_hard_reset_controller(pdev) || cciss_reset_msi(pdev))
 			return -ENODEV;
 
-		/* Now try to get the controller to respond to a no-op. Some
-		   devices (notably the HP Smart Array 5i Controller) need
-		   up to 30 seconds to respond. */
-		for (i=0; i<30; i++) {
+		/* Some devices (notably the HP Smart Array 5i Controller)
+		   need a little pause here */
+		schedule_timeout_uninterruptible(30*HZ);
+
+		/* Now try to get the controller to respond to a no-op */
+		for (i=0; i<12; i++) {
 			if (cciss_noop(pdev) == 0)
 				break;
-
-			schedule_timeout_uninterruptible(HZ);
-		}
-		if (i == 30) {
-			printk(KERN_ERR "cciss: controller seems dead\n");
-			return -EBUSY;
+			else
+				printk("cciss: no-op failed%s\n", (i < 11 ? "; re-trying" : ""));
 		}
 	}
 

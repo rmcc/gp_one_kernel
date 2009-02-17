@@ -11,7 +11,6 @@
 #include <linux/bootmem.h>
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/gfp.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
@@ -869,7 +868,6 @@ pgprot_t pgprot_writecombine(pgprot_t prot)
 	else
 		return pgprot_noncached(prot);
 }
-EXPORT_SYMBOL_GPL(pgprot_writecombine);
 
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_X86_PAT)
 
