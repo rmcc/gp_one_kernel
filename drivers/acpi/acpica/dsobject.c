@@ -565,7 +565,7 @@ acpi_ds_create_node(struct acpi_walk_state *walk_state,
 
 	/* Re-type the object according to its argument */
 
-	node->type = obj_desc->common.type;
+	node->type = ACPI_GET_OBJECT_TYPE(obj_desc);
 
 	/* Attach obj to node */
 
@@ -619,7 +619,7 @@ acpi_ds_init_object_from_op(struct acpi_walk_state *walk_state,
 
 	/* Perform per-object initialization */
 
-	switch (obj_desc->common.type) {
+	switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 	case ACPI_TYPE_BUFFER:
 
 		/*
@@ -803,7 +803,7 @@ acpi_ds_init_object_from_op(struct acpi_walk_state *walk_state,
 	default:
 
 		ACPI_ERROR((AE_INFO, "Unimplemented data type: %X",
-			    obj_desc->common.type));
+			    ACPI_GET_OBJECT_TYPE(obj_desc)));
 
 		status = AE_AML_OPERAND_TYPE;
 		break;

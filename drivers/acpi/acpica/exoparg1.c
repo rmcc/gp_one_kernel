@@ -807,9 +807,11 @@ acpi_status acpi_ex_opcode_1A_0T_1R(struct acpi_walk_state *walk_state)
 							 acpi_namespace_node *)
 							operand[0]);
 			if (temp_desc
-			    && ((temp_desc->common.type == ACPI_TYPE_STRING)
-				|| (temp_desc->common.type ==
-				    ACPI_TYPE_LOCAL_REFERENCE))) {
+			    &&
+			    ((ACPI_GET_OBJECT_TYPE(temp_desc) ==
+			      ACPI_TYPE_STRING)
+			     || (ACPI_GET_OBJECT_TYPE(temp_desc) ==
+				 ACPI_TYPE_LOCAL_REFERENCE))) {
 				operand[0] = temp_desc;
 				acpi_ut_add_reference(temp_desc);
 			} else {
@@ -817,7 +819,7 @@ acpi_status acpi_ex_opcode_1A_0T_1R(struct acpi_walk_state *walk_state)
 				goto cleanup;
 			}
 		} else {
-			switch ((operand[0])->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(operand[0])) {
 			case ACPI_TYPE_LOCAL_REFERENCE:
 				/*
 				 * This is a deref_of (local_x | arg_x)
@@ -875,7 +877,8 @@ acpi_status acpi_ex_opcode_1A_0T_1R(struct acpi_walk_state *walk_state)
 
 		if (ACPI_GET_DESCRIPTOR_TYPE(operand[0]) !=
 		    ACPI_DESC_TYPE_NAMED) {
-			if ((operand[0])->common.type == ACPI_TYPE_STRING) {
+			if (ACPI_GET_OBJECT_TYPE(operand[0]) ==
+			    ACPI_TYPE_STRING) {
 				/*
 				 * This is a deref_of (String). The string is a reference
 				 * to a named ACPI object.

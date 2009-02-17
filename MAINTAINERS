@@ -1393,11 +1393,6 @@ P:	Doug Warzecha
 M:	Douglas_Warzecha@dell.com
 S:	Maintained
 
-DELL WMI EXTRAS DRIVER
-P:	Matthew Garrett
-M:	mjg59@srcf.ucam.org
-S:	Maintained
-
 DEVICE NUMBER REGISTRY
 P:	Torben Mathiasen
 M:	device@lanana.org
@@ -1474,6 +1469,8 @@ L:	linux-acpi@vger.kernel.org
 S:	Supported
 
 DOCUMENTATION (/Documentation directory)
+P:	Michael Kerrisk
+M:	mtk.manpages@gmail.com
 P:	Randy Dunlap
 M:	rdunlap@xenotime.net
 L:	linux-doc@vger.kernel.org
@@ -2467,7 +2464,7 @@ S:	Maintained
 
 ISDN SUBSYSTEM
 P:	Karsten Keil
-M:	isdn@linux-pingi.de
+M:	kkeil@suse.de
 L:	isdn4linux@listserv.isdn4linux.de (subscribers-only)
 W:	http://www.isdn4linux.de
 T:	git kernel.org:/pub/scm/linux/kernel/kkeil/isdn-2.6.git
@@ -2882,7 +2879,7 @@ P:	Michael Kerrisk
 M:	mtk.manpages@gmail.com
 W:	http://www.kernel.org/doc/man-pages
 L:	linux-man@vger.kernel.org
-S:	Maintained
+S:	Supported
 
 MARVELL LIBERTAS WIRELESS DRIVER
 P:	Dan Williams
@@ -3337,8 +3334,8 @@ P:	Jeremy Fitzhardinge
 M:	jeremy@xensource.com
 P:	Chris Wright
 M:	chrisw@sous-sol.org
-P:	Alok Kataria
-M:	akataria@vmware.com
+P:	Zachary Amsden
+M:	zach@vmware.com
 P:	Rusty Russell
 M:	rusty@rustcorp.com.au
 L:	virtualization@lists.osdl.org
@@ -3355,8 +3352,10 @@ S:	Maintained
 PARISC ARCHITECTURE
 P:	Kyle McMartin
 M:	kyle@mcmartin.ca
-P:	Helge Deller
-M:	deller@gmx.de
+P:	Matthew Wilcox
+M:	matthew@wil.cx
+P:	Grant Grundler
+M:	grundler@parisc-linux.org
 L:	linux-parisc@vger.kernel.org
 W:	http://www.parisc-linux.org/
 T:	git kernel.org:/pub/scm/linux/kernel/git/kyle/parisc-2.6.git
@@ -3881,15 +3880,6 @@ L:	linux-ide@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/jgarzik/libata-dev.git
 S:	Supported
 
-SERVER ENGINES 10Gbps NIC - BladeEngine 2 DRIVER
-P:	Sathya Perla
-M:	sathyap@serverengines.com
-P:      Subbu Seetharaman
-M:      subbus@serverengines.com
-L:      netdev@vger.kernel.org
-W:      http://www.serverengines.com
-S:      Supported
-
 SFC NETWORK DRIVER
 P:	Steve Hodgson
 P:	Ben Hutchings
@@ -4291,7 +4281,10 @@ W:	http://sourceforge.net/projects/tlan/
 S:	Maintained
 
 TOSHIBA ACPI EXTRAS DRIVER
-S:	Orphan
+P:	John Belmonte
+M:	toshiba_acpi@memebeam.org
+W:	http://memebeam.org/toys/ToshibaAcpiDriver
+S:	Maintained
 
 TOSHIBA SMM DRIVER
 P:	Jonathan Buzzard

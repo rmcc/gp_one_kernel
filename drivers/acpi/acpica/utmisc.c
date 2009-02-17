@@ -938,7 +938,8 @@ acpi_ut_walk_package_tree(union acpi_operand_object * source_object,
 		if ((!this_source_obj) ||
 		    (ACPI_GET_DESCRIPTOR_TYPE(this_source_obj) !=
 		     ACPI_DESC_TYPE_OPERAND)
-		    || (this_source_obj->common.type != ACPI_TYPE_PACKAGE)) {
+		    || (ACPI_GET_OBJECT_TYPE(this_source_obj) !=
+			ACPI_TYPE_PACKAGE)) {
 			status =
 			    walk_callback(ACPI_COPY_TYPE_SIMPLE,
 					  this_source_obj, state, context);

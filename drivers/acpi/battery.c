@@ -30,7 +30,6 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/jiffies.h>
-#include <linux/async.h>
 
 #ifdef CONFIG_ACPI_PROCFS_POWER
 #include <linux/proc_fs.h>
@@ -93,7 +92,7 @@ struct acpi_battery {
 #endif
 	struct acpi_device *device;
 	unsigned long update_time;
-	int rate_now;
+	int current_now;
 	int capacity_now;
 	int voltage_now;
 	int design_capacity;
@@ -139,29 +138,6 @@ static int acpi_battery_technology(struct acpi_battery *battery)
 
 static int acpi_battery_get_state(struct acpi_battery *battery);
 
-static int acpi_battery_is_charged(struct acpi_battery *battery)
-{
-	/* either charging or discharging */
-	if (battery->state != 0)
-		return 0;
-
-	/* battery not reporting charge */
-	if (battery->capacity_now == ACPI_BATTERY_VALUE_UNKNOWN ||
-	    battery->capacity_now == 0)
-		return 0;
-
-	/* good batteries update full_charge as the batteries degrade */
-	if (battery->full_charge_capacity == battery->capacity_now)
-		return 1;
-
-	/* fallback to using design values for broken batteries */
-	if (battery->design_capacity == battery->capacity_now)
-		return 1;
-
-	/* we don't do any sort of metric based on percentages */
-	return 0;
-}
-
 static int acpi_battery_get_property(struct power_supply *psy,
 				     enum power_supply_property psp,
 				     union power_supply_propval *val)
@@ -179,7 +155,7 @@ static int acpi_battery_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		else if (battery->state & 0x02)
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
-		else if (acpi_battery_is_charged(battery))
+		else if (battery->state == 0)
 			val->intval = POWER_SUPPLY_STATUS_FULL;
 		else
 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
@@ -197,8 +173,7 @@ static int acpi_battery_get_property(struct power_supply *psy,
 		val->intval = battery->voltage_now * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-	case POWER_SUPPLY_PROP_POWER_NOW:
-		val->intval = battery->rate_now * 1000;
+		val->intval = battery->current_now * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 	case POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN:
@@ -249,7 +224,6 @@ static enum power_supply_property energy_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_POWER_NOW,
 	POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN,
 	POWER_SUPPLY_PROP_ENERGY_FULL,
 	POWER_SUPPLY_PROP_ENERGY_NOW,
@@ -276,7 +250,7 @@ struct acpi_offsets {
 
 static struct acpi_offsets state_offsets[] = {
 	{offsetof(struct acpi_battery, state), 0},
-	{offsetof(struct acpi_battery, rate_now), 0},
+	{offsetof(struct acpi_battery, current_now), 0},
 	{offsetof(struct acpi_battery, capacity_now), 0},
 	{offsetof(struct acpi_battery, voltage_now), 0},
 };
@@ -608,11 +582,11 @@ static int acpi_battery_print_state(struct seq_file *seq, int result)
 	else
 		seq_printf(seq, "charging state:          charged\n");
 
-	if (battery->rate_now == ACPI_BATTERY_VALUE_UNKNOWN)
+	if (battery->current_now == ACPI_BATTERY_VALUE_UNKNOWN)
 		seq_printf(seq, "present rate:            unknown\n");
 	else
 		seq_printf(seq, "present rate:            %d %s\n",
-			   battery->rate_now, acpi_battery_units(battery));
+			   battery->current_now, acpi_battery_units(battery));
 
 	if (battery->capacity_now == ACPI_BATTERY_VALUE_UNKNOWN)
 		seq_printf(seq, "remaining capacity:      unknown\n");
@@ -743,7 +717,7 @@ DECLARE_FILE_FUNCTIONS(alarm);
 static struct battery_file {
 	struct file_operations ops;
 	mode_t mode;
-	const char *name;
+	char *name;
 } acpi_battery_file[] = {
 	FILE_DESCRIPTION_RO(info),
 	FILE_DESCRIPTION_RO(state),
@@ -904,27 +878,21 @@ static struct acpi_driver acpi_battery_driver = {
 		},
 };
 
-static void __init acpi_battery_init_async(void *unused, async_cookie_t cookie)
+static int __init acpi_battery_init(void)
 {
 	if (acpi_disabled)
-		return;
+		return -ENODEV;
 #ifdef CONFIG_ACPI_PROCFS_POWER
 	acpi_battery_dir = acpi_lock_battery_dir();
 	if (!acpi_battery_dir)
-		return;
+		return -ENODEV;
 #endif
 	if (acpi_bus_register_driver(&acpi_battery_driver) < 0) {
 #ifdef CONFIG_ACPI_PROCFS_POWER
 		acpi_unlock_battery_dir(acpi_battery_dir);
 #endif
-		return;
+		return -ENODEV;
 	}
-	return;
-}
-
-static int __init acpi_battery_init(void)
-{
-	async_schedule(acpi_battery_init_async, NULL);
 	return 0;
 }
 

@@ -286,8 +286,10 @@ static int acpi_platform_notify_remove(struct device *dev)
 	return 0;
 }
 
-int __init init_acpi_device_notify(void)
+static int __init init_acpi_device_notify(void)
 {
+	if (acpi_disabled)
+		return 0;
 	if (platform_notify || platform_notify_remove) {
 		printk(KERN_ERR PREFIX "Can't use platform_notify\n");
 		return 0;
@@ -296,3 +298,5 @@ int __init init_acpi_device_notify(void)
 	platform_notify_remove = acpi_platform_notify_remove;
 	return 0;
 }
+
+arch_initcall(init_acpi_device_notify);

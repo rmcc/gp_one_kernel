@@ -76,7 +76,8 @@ struct acpi_namespace_node *acpi_ns_create_node(u32 name)
 	ACPI_MEM_TRACKING(acpi_gbl_ns_node_list->total_allocated++);
 
 #ifdef ACPI_DBG_TRACK_ALLOCATIONS
-	temp = acpi_gbl_ns_node_list->total_allocated -
+	temp =
+	    acpi_gbl_ns_node_list->total_allocated -
 	    acpi_gbl_ns_node_list->total_freed;
 	if (temp > acpi_gbl_ns_node_list->max_occupied) {
 		acpi_gbl_ns_node_list->max_occupied = temp;
@@ -144,8 +145,9 @@ void acpi_ns_delete_node(struct acpi_namespace_node *node)
 
 	ACPI_MEM_TRACKING(acpi_gbl_ns_node_list->total_freed++);
 
-	/* Detach an object if there is one, then delete the node */
-
+	/*
+	 * Detach an object if there is one, then delete the node
+	 */
 	acpi_ns_detach_object(node);
 	(void)acpi_os_release_object(acpi_gbl_namespace_cache, node);
 	return_VOID;
@@ -181,8 +183,9 @@ void acpi_ns_install_node(struct acpi_walk_state *walk_state, struct acpi_namesp
 	ACPI_FUNCTION_TRACE(ns_install_node);
 
 	/*
-	 * Get the owner ID from the Walk state. The owner ID is used to track
-	 * table deletion and deletion of objects created by methods.
+	 * Get the owner ID from the Walk state
+	 * The owner ID is used to track table deletion and
+	 * deletion of objects created by methods
 	 */
 	if (walk_state) {
 		owner_id = walk_state->owner_id;
@@ -257,8 +260,9 @@ void acpi_ns_delete_children(struct acpi_namespace_node *parent_node)
 		return_VOID;
 	}
 
-	/* Deallocate all children at this level */
-
+	/*
+	 * Deallocate all children at this level
+	 */
 	do {
 
 		/* Get the things we need */
@@ -281,8 +285,9 @@ void acpi_ns_delete_children(struct acpi_namespace_node *parent_node)
 				  "Object %p, Remaining %X\n", child_node,
 				  acpi_gbl_current_node_count));
 
-		/* Detach an object if there is one, then free the child node */
-
+		/*
+		 * Detach an object if there is one, then free the child node
+		 */
 		acpi_ns_detach_object(child_node);
 
 		/* Now we can delete the node */
@@ -299,6 +304,7 @@ void acpi_ns_delete_children(struct acpi_namespace_node *parent_node)
 	/* Clear the parent's child pointer */
 
 	parent_node->child = NULL;
+
 	return_VOID;
 }
 

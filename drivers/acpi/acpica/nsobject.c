@@ -209,7 +209,8 @@ void acpi_ns_detach_object(struct acpi_namespace_node *node)
 
 	obj_desc = node->object;
 
-	if (!obj_desc || (obj_desc->common.type == ACPI_TYPE_LOCAL_DATA)) {
+	if (!obj_desc ||
+	    (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_DATA)) {
 		return_VOID;
 	}
 
@@ -219,7 +220,8 @@ void acpi_ns_detach_object(struct acpi_namespace_node *node)
 	if (ACPI_GET_DESCRIPTOR_TYPE(obj_desc) == ACPI_DESC_TYPE_OPERAND) {
 		node->object = obj_desc->common.next_object;
 		if (node->object &&
-		    ((node->object)->common.type != ACPI_TYPE_LOCAL_DATA)) {
+		    (ACPI_GET_OBJECT_TYPE(node->object) !=
+		     ACPI_TYPE_LOCAL_DATA)) {
 			node->object = node->object->common.next_object;
 		}
 	}
@@ -265,7 +267,7 @@ union acpi_operand_object *acpi_ns_get_attached_object(struct
 	    ((ACPI_GET_DESCRIPTOR_TYPE(node->object) != ACPI_DESC_TYPE_OPERAND)
 	     && (ACPI_GET_DESCRIPTOR_TYPE(node->object) !=
 		 ACPI_DESC_TYPE_NAMED))
-	    || ((node->object)->common.type == ACPI_TYPE_LOCAL_DATA)) {
+	    || (ACPI_GET_OBJECT_TYPE(node->object) == ACPI_TYPE_LOCAL_DATA)) {
 		return_PTR(NULL);
 	}
 
@@ -292,9 +294,9 @@ union acpi_operand_object *acpi_ns_get_secondary_object(union
 	ACPI_FUNCTION_TRACE_PTR(ns_get_secondary_object, obj_desc);
 
 	if ((!obj_desc) ||
-	    (obj_desc->common.type == ACPI_TYPE_LOCAL_DATA) ||
+	    (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_DATA) ||
 	    (!obj_desc->common.next_object) ||
-	    ((obj_desc->common.next_object)->common.type ==
+	    (ACPI_GET_OBJECT_TYPE(obj_desc->common.next_object) ==
 	     ACPI_TYPE_LOCAL_DATA)) {
 		return_PTR(NULL);
 	}
@@ -329,7 +331,7 @@ acpi_ns_attach_data(struct acpi_namespace_node *node,
 	prev_obj_desc = NULL;
 	obj_desc = node->object;
 	while (obj_desc) {
-		if ((obj_desc->common.type == ACPI_TYPE_LOCAL_DATA) &&
+		if ((ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_DATA) &&
 		    (obj_desc->data.handler == handler)) {
 			return (AE_ALREADY_EXISTS);
 		}
@@ -383,7 +385,7 @@ acpi_ns_detach_data(struct acpi_namespace_node * node,
 	prev_obj_desc = NULL;
 	obj_desc = node->object;
 	while (obj_desc) {
-		if ((obj_desc->common.type == ACPI_TYPE_LOCAL_DATA) &&
+		if ((ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_DATA) &&
 		    (obj_desc->data.handler == handler)) {
 			if (prev_obj_desc) {
 				prev_obj_desc->common.next_object =
@@ -426,7 +428,7 @@ acpi_ns_get_attached_data(struct acpi_namespace_node * node,
 
 	obj_desc = node->object;
 	while (obj_desc) {
-		if ((obj_desc->common.type == ACPI_TYPE_LOCAL_DATA) &&
+		if ((ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_DATA) &&
 		    (obj_desc->data.handler == handler)) {
 			*data = obj_desc->data.pointer;
 			return (AE_OK);

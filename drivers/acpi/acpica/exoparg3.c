@@ -161,8 +161,9 @@ acpi_status acpi_ex_opcode_3A_1T_1R(struct acpi_walk_state *walk_state)
 		 * Create the return object.  The Source operand is guaranteed to be
 		 * either a String or a Buffer, so just use its type.
 		 */
-		return_desc = acpi_ut_create_internal_object((operand[0])->
-							     common.type);
+		return_desc =
+		    acpi_ut_create_internal_object(ACPI_GET_OBJECT_TYPE
+						   (operand[0]));
 		if (!return_desc) {
 			status = AE_NO_MEMORY;
 			goto cleanup;
@@ -190,7 +191,7 @@ acpi_status acpi_ex_opcode_3A_1T_1R(struct acpi_walk_state *walk_state)
 
 		/* Strings always have a sub-pointer, not so for buffers */
 
-		switch ((operand[0])->common.type) {
+		switch (ACPI_GET_OBJECT_TYPE(operand[0])) {
 		case ACPI_TYPE_STRING:
 
 			/* Always allocate a new buffer for the String */

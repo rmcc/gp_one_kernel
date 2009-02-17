@@ -138,10 +138,11 @@ acpi_ds_get_predicate_value(struct acpi_walk_state *walk_state,
 		goto cleanup;
 	}
 
-	if (local_obj_desc->common.type != ACPI_TYPE_INTEGER) {
+	if (ACPI_GET_OBJECT_TYPE(local_obj_desc) != ACPI_TYPE_INTEGER) {
 		ACPI_ERROR((AE_INFO,
 			    "Bad predicate (not an integer) ObjDesc=%p State=%p Type=%X",
-			    obj_desc, walk_state, obj_desc->common.type));
+			    obj_desc, walk_state,
+			    ACPI_GET_OBJECT_TYPE(obj_desc)));
 
 		status = AE_AML_OPERAND_TYPE;
 		goto cleanup;

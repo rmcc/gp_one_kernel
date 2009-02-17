@@ -79,9 +79,7 @@ acpi_ns_check_package(char *pathname,
 static acpi_status
 acpi_ns_check_package_elements(char *pathname,
 			       union acpi_operand_object **elements,
-			       u8 type1,
-			       u32 count1,
-			       u8 type2, u32 count2, u32 start_index);
+			       u8 type1, u32 count1, u8 type2, u32 count2);
 
 static acpi_status
 acpi_ns_check_object_type(char *pathname,
@@ -223,7 +221,7 @@ acpi_ns_check_predefined_names(struct acpi_namespace_node *node,
 
 	/* For returned Package objects, check the type of all sub-objects */
 
-	if (return_object->common.type == ACPI_TYPE_PACKAGE) {
+	if (ACPI_GET_OBJECT_TYPE(return_object) == ACPI_TYPE_PACKAGE) {
 		status =
 		    acpi_ns_check_package(pathname, return_object_ptr,
 					  predefined);
@@ -304,8 +302,7 @@ acpi_ns_check_parameter_count(char *pathname,
 		if ((user_param_count != required_params_current) &&
 		    (user_param_count != required_params_old)) {
 			ACPI_WARNING((AE_INFO,
-				      "%s: Parameter count mismatch - "
-				      "caller passed %d, ACPI requires %d",
+				      "%s: Parameter count mismatch - caller passed %d, ACPI requires %d",
 				      pathname, user_param_count,
 				      required_params_current));
 		}
@@ -475,7 +472,7 @@ acpi_ns_check_package(char *pathname,
 							package->ret_info.
 							object_type2,
 							package->ret_info.
-							count2, 0);
+							count2);
 		if (ACPI_FAILURE(status)) {
 			return (status);
 		}
@@ -626,7 +623,7 @@ acpi_ns_check_package(char *pathname,
 								   object_type2,
 								   package->
 								   ret_info.
-								   count2, 0);
+								   count2);
 				if (ACPI_FAILURE(status)) {
 					return (status);
 				}
@@ -675,8 +672,7 @@ acpi_ns_check_package(char *pathname,
 								   object_type1,
 								   sub_package->
 								   package.
-								   count, 0, 0,
-								   0);
+								   count, 0, 0);
 				if (ACPI_FAILURE(status)) {
 					return (status);
 				}
@@ -714,8 +710,7 @@ acpi_ns_check_package(char *pathname,
 								   ret_info.
 								   object_type1,
 								   (expected_count
-								    - 1), 0, 0,
-								   1);
+								    - 1), 0, 0);
 				if (ACPI_FAILURE(status)) {
 					return (status);
 				}
@@ -763,7 +758,6 @@ acpi_ns_check_package(char *pathname,
  *              Count1          - Count for first group
  *              Type2           - Object type for second group
  *              Count2          - Count for second group
- *              start_index     - Start of the first group of elements
  *
  * RETURN:      Status
  *
@@ -775,9 +769,7 @@ acpi_ns_check_package(char *pathname,
 static acpi_status
 acpi_ns_check_package_elements(char *pathname,
 			       union acpi_operand_object **elements,
-			       u8 type1,
-			       u32 count1,
-			       u8 type2, u32 count2, u32 start_index)
+			       u8 type1, u32 count1, u8 type2, u32 count2)
 {
 	union acpi_operand_object **this_element = elements;
 	acpi_status status;
@@ -790,7 +782,7 @@ acpi_ns_check_package_elements(char *pathname,
 	 */
 	for (i = 0; i < count1; i++) {
 		status = acpi_ns_check_object_type(pathname, this_element,
-						   type1, i + start_index);
+						   type1, i);
 		if (ACPI_FAILURE(status)) {
 			return (status);
 		}
@@ -799,8 +791,7 @@ acpi_ns_check_package_elements(char *pathname,
 
 	for (i = 0; i < count2; i++) {
 		status = acpi_ns_check_object_type(pathname, this_element,
-						   type2,
-						   (i + count1 + start_index));
+						   type2, (i + count1));
 		if (ACPI_FAILURE(status)) {
 			return (status);
 		}
@@ -867,7 +858,7 @@ acpi_ns_check_object_type(char *pathname,
 	 * from all of the predefined names (including elements of returned
 	 * packages)
 	 */
-	switch (return_object->common.type) {
+	switch (ACPI_GET_OBJECT_TYPE(return_object)) {
 	case ACPI_TYPE_INTEGER:
 		return_btype = ACPI_RTYPE_INTEGER;
 		break;
@@ -910,7 +901,7 @@ acpi_ns_check_object_type(char *pathname,
 
 	/* For reference objects, check that the reference type is correct */
 
-	if (return_object->common.type == ACPI_TYPE_LOCAL_REFERENCE) {
+	if (ACPI_GET_OBJECT_TYPE(return_object) == ACPI_TYPE_LOCAL_REFERENCE) {
 		status = acpi_ns_check_reference(pathname, return_object);
 	}
 
@@ -983,8 +974,7 @@ acpi_ns_check_reference(char *pathname,
 	}
 
 	ACPI_WARNING((AE_INFO,
-		      "%s: Return type mismatch - "
-		      "unexpected reference object type [%s] %2.2X",
+		      "%s: Return type mismatch - unexpected reference object type [%s] %2.2X",
 		      pathname, acpi_ut_get_reference_name(return_object),
 		      return_object->reference.class));
 
@@ -1016,7 +1006,7 @@ acpi_ns_repair_object(u32 expected_btypes,
 	union acpi_operand_object *new_object;
 	acpi_size length;
 
-	switch (return_object->common.type) {
+	switch (ACPI_GET_OBJECT_TYPE(return_object)) {
 	case ACPI_TYPE_BUFFER:
 
 		if (!(expected_btypes & ACPI_RTYPE_STRING)) {

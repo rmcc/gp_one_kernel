@@ -33,6 +33,10 @@
 
 #define _COMPONENT		ACPI_SYSTEM_COMPONENT
 ACPI_MODULE_NAME("system");
+#ifdef MODULE_PARAM_PREFIX
+#undef MODULE_PARAM_PREFIX
+#endif
+#define MODULE_PARAM_PREFIX "acpi."
 
 #define ACPI_SYSTEM_CLASS		"system"
 #define ACPI_SYSTEM_DEVICE_NAME		"System"
@@ -58,7 +62,6 @@ module_param_call(acpica_version, NULL, param_get_acpica_version, NULL, 0444);
    -------------------------------------------------------------------------- */
 static LIST_HEAD(acpi_table_attr_list);
 static struct kobject *tables_kobj;
-static struct kobject *dynamic_tables_kobj;
 
 struct acpi_table_attr {
 	struct bin_attribute attr;
@@ -125,40 +128,6 @@ static void acpi_table_attr_init(struct acpi_table_attr *table_attr,
 	return;
 }
 
-static acpi_status
-acpi_sysfs_table_handler(u32 event, void *table, void *context)
-{
-	struct acpi_table_attr *table_attr;
-
-	switch (event) {
-	case ACPI_TABLE_EVENT_LOAD:
-		table_attr =
-			kzalloc(sizeof(struct acpi_table_attr), GFP_KERNEL);
-		if (!table_attr)
-			return AE_NO_MEMORY;
-
-		acpi_table_attr_init(table_attr, table);
-		if (sysfs_create_bin_file(dynamic_tables_kobj,
-					&table_attr->attr)) {
-			kfree(table_attr);
-			return AE_ERROR;
-		} else
-			list_add_tail(&table_attr->node,
-					&acpi_table_attr_list);
-		break;
-	case ACPI_TABLE_EVENT_UNLOAD:
-		/*
-		 * we do not need to do anything right now
-		 * because the table is not deleted from the
-		 * global table list when unloading it.
-		 */
-		break;
-	default:
-		return AE_BAD_PARAMETER;
-	}
-	return AE_OK;
-}
-
 static int acpi_system_sysfs_init(void)
 {
 	struct acpi_table_attr *table_attr;
@@ -168,11 +137,7 @@ static int acpi_system_sysfs_init(void)
 
 	tables_kobj = kobject_create_and_add("tables", acpi_kobj);
 	if (!tables_kobj)
-		goto err;
-
-	dynamic_tables_kobj = kobject_create_and_add("dynamic", tables_kobj);
-	if (!dynamic_tables_kobj)
-		goto err_dynamic_tables;
+		return -ENOMEM;
 
 	do {
 		result = acpi_get_table_by_index(table_index, &table_header);
@@ -197,14 +162,8 @@ static int acpi_system_sysfs_init(void)
 		}
 	} while (!result);
 	kobject_uevent(tables_kobj, KOBJ_ADD);
-	kobject_uevent(dynamic_tables_kobj, KOBJ_ADD);
-	result = acpi_install_table_handler(acpi_sysfs_table_handler, NULL);
 
-	return result == AE_OK ? 0 : -EINVAL;
-err_dynamic_tables:
-	kobject_put(tables_kobj);
-err:
-	return -ENOMEM;
+	return 0;
 }
 
 /*
@@ -612,9 +571,12 @@ static int acpi_system_procfs_init(void)
 }
 #endif
 
-int __init acpi_system_init(void)
+static int __init acpi_system_init(void)
 {
-	int result;
+	int result = 0;
+
+	if (acpi_disabled)
+		return 0;
 
 	result = acpi_system_procfs_init();
 	if (result)
@@ -624,3 +586,5 @@ int __init acpi_system_init(void)
 
 	return result;
 }
+
+subsys_initcall(acpi_system_init);

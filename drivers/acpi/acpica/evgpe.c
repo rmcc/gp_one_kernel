@@ -88,10 +88,10 @@ acpi_ev_set_gpe_type(struct acpi_gpe_event_info *gpe_event_info, u8 type)
 
 	status = acpi_ev_disable_gpe(gpe_event_info);
 
-	/* Clear the type bits and insert the new Type */
+	/* Type was validated above */
 
-	gpe_event_info->flags &= ~ACPI_GPE_TYPE_MASK;
-	gpe_event_info->flags |= type;
+	gpe_event_info->flags &= ~ACPI_GPE_TYPE_MASK;	/* Clear type bits */
+	gpe_event_info->flags |= type;	/* Insert type */
 	return_ACPI_STATUS(status);
 }
 
@@ -122,7 +122,6 @@ acpi_ev_update_gpe_enable_masks(struct acpi_gpe_event_info *gpe_event_info,
 	if (!gpe_register_info) {
 		return_ACPI_STATUS(AE_NOT_EXIST);
 	}
-
 	register_bit = (u8)
 	    (1 <<
 	     (gpe_event_info->gpe_number - gpe_register_info->base_gpe_number));

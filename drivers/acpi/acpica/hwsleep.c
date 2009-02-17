@@ -90,7 +90,6 @@ acpi_set_firmware_waking_vector(u32 physical_address)
 
 ACPI_EXPORT_SYMBOL(acpi_set_firmware_waking_vector)
 
-#if ACPI_MACHINE_WIDTH == 64
 /*******************************************************************************
  *
  * FUNCTION:    acpi_set_firmware_waking_vector64
@@ -101,8 +100,7 @@ ACPI_EXPORT_SYMBOL(acpi_set_firmware_waking_vector)
  * RETURN:      Status
  *
  * DESCRIPTION: Sets the 64-bit X_firmware_waking_vector field of the FACS, if
- *              it exists in the table. This function is intended for use with
- *              64-bit host operating systems.
+ *              it exists in the table.
  *
  ******************************************************************************/
 acpi_status
@@ -126,7 +124,6 @@ acpi_set_firmware_waking_vector64(u64 physical_address)
 }
 
 ACPI_EXPORT_SYMBOL(acpi_set_firmware_waking_vector64)
-#endif
 
 /*******************************************************************************
  *
@@ -150,8 +147,9 @@ acpi_status acpi_enter_sleep_state_prep(u8 sleep_state)
 
 	ACPI_FUNCTION_TRACE(acpi_enter_sleep_state_prep);
 
-	/* _PSW methods could be run here to enable wake-on keyboard, LAN, etc. */
-
+	/*
+	 * _PSW methods could be run here to enable wake-on keyboard, LAN, etc.
+	 */
 	status = acpi_get_sleep_type_data(sleep_state,
 					  &acpi_gbl_sleep_type_a,
 					  &acpi_gbl_sleep_type_b);
@@ -225,8 +223,8 @@ ACPI_EXPORT_SYMBOL(acpi_enter_sleep_state_prep)
  ******************************************************************************/
 acpi_status asmlinkage acpi_enter_sleep_state(u8 sleep_state)
 {
-	u32 pm1a_control;
-	u32 pm1b_control;
+	u32 PM1Acontrol;
+	u32 PM1Bcontrol;
 	struct acpi_bit_register_info *sleep_type_reg_info;
 	struct acpi_bit_register_info *sleep_enable_reg_info;
 	u32 in_value;
@@ -244,14 +242,13 @@ acpi_status asmlinkage acpi_enter_sleep_state(u8 sleep_state)
 	}
 
 	sleep_type_reg_info =
-	    acpi_hw_get_bit_register_info(ACPI_BITREG_SLEEP_TYPE);
+	    acpi_hw_get_bit_register_info(ACPI_BITREG_SLEEP_TYPE_A);
 	sleep_enable_reg_info =
 	    acpi_hw_get_bit_register_info(ACPI_BITREG_SLEEP_ENABLE);
 
 	/* Clear wake status */
 
-	status =
-	    acpi_write_bit_register(ACPI_BITREG_WAKE_STATUS, ACPI_CLEAR_STATUS);
+	status = acpi_set_register(ACPI_BITREG_WAKE_STATUS, 1);
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
@@ -292,25 +289,24 @@ acpi_status asmlinkage acpi_enter_sleep_state(u8 sleep_state)
 
 	/* Get current value of PM1A control */
 
-	status = acpi_hw_register_read(ACPI_REGISTER_PM1_CONTROL,
-				       &pm1a_control);
+	status = acpi_hw_register_read(ACPI_REGISTER_PM1_CONTROL, &PM1Acontrol);
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 	ACPI_DEBUG_PRINT((ACPI_DB_INIT,
 			  "Entering sleep state [S%d]\n", sleep_state));
 
-	/* Clear the SLP_EN and SLP_TYP fields */
+	/* Clear SLP_EN and SLP_TYP fields */
 
-	pm1a_control &= ~(sleep_type_reg_info->access_bit_mask |
-			  sleep_enable_reg_info->access_bit_mask);
-	pm1b_control = pm1a_control;
+	PM1Acontrol &= ~(sleep_type_reg_info->access_bit_mask |
+			 sleep_enable_reg_info->access_bit_mask);
+	PM1Bcontrol = PM1Acontrol;
 
-	/* Insert the SLP_TYP bits */
+	/* Insert SLP_TYP bits */
 
-	pm1a_control |=
+	PM1Acontrol |=
 	    (acpi_gbl_sleep_type_a << sleep_type_reg_info->bit_position);
-	pm1b_control |=
+	PM1Bcontrol |=
 	    (acpi_gbl_sleep_type_b << sleep_type_reg_info->bit_position);
 
 	/*
@@ -318,25 +314,37 @@ acpi_status asmlinkage acpi_enter_sleep_state(u8 sleep_state)
 	 * poorly implemented hardware.
 	 */
 
-	/* Write #1: write the SLP_TYP data to the PM1 Control registers */
+	/* Write #1: fill in SLP_TYP data */
 
-	status = acpi_hw_write_pm1_control(pm1a_control, pm1b_control);
+	status = acpi_hw_register_write(ACPI_REGISTER_PM1A_CONTROL,
+					PM1Acontrol);
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
 
-	/* Insert the sleep enable (SLP_EN) bit */
+	status = acpi_hw_register_write(ACPI_REGISTER_PM1B_CONTROL,
+					PM1Bcontrol);
+	if (ACPI_FAILURE(status)) {
+		return_ACPI_STATUS(status);
+	}
 
-	pm1a_control |= sleep_enable_reg_info->access_bit_mask;
-	pm1b_control |= sleep_enable_reg_info->access_bit_mask;
+	/* Insert SLP_ENABLE bit */
 
-	/* Flush caches, as per ACPI specification */
+	PM1Acontrol |= sleep_enable_reg_info->access_bit_mask;
+	PM1Bcontrol |= sleep_enable_reg_info->access_bit_mask;
+
+	/* Write #2: SLP_TYP + SLP_EN */
 
 	ACPI_FLUSH_CPU_CACHE();
 
-	/* Write #2: Write both SLP_TYP + SLP_EN */
+	status = acpi_hw_register_write(ACPI_REGISTER_PM1A_CONTROL,
+					PM1Acontrol);
+	if (ACPI_FAILURE(status)) {
+		return_ACPI_STATUS(status);
+	}
 
-	status = acpi_hw_write_pm1_control(pm1a_control, pm1b_control);
+	status = acpi_hw_register_write(ACPI_REGISTER_PM1B_CONTROL,
+					PM1Bcontrol);
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
@@ -349,8 +357,8 @@ acpi_status asmlinkage acpi_enter_sleep_state(u8 sleep_state)
 		 * Wait ten seconds, then try again. This is to get S4/S5 to work on
 		 * all machines.
 		 *
-		 * We wait so long to allow chipsets that poll this reg very slowly
-		 * to still read the right value. Ideally, this block would go
+		 * We wait so long to allow chipsets that poll this reg very slowly to
+		 * still read the right value. Ideally, this block would go
 		 * away entirely.
 		 */
 		acpi_os_stall(10000000);
@@ -366,7 +374,7 @@ acpi_status asmlinkage acpi_enter_sleep_state(u8 sleep_state)
 	/* Wait until we enter sleep state */
 
 	do {
-		status = acpi_read_bit_register(ACPI_BITREG_WAKE_STATUS,
+		status = acpi_get_register_unlocked(ACPI_BITREG_WAKE_STATUS,
 						    &in_value);
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
@@ -400,10 +408,7 @@ acpi_status asmlinkage acpi_enter_sleep_state_s4bios(void)
 
 	ACPI_FUNCTION_TRACE(acpi_enter_sleep_state_s4bios);
 
-	/* Clear the wake status bit (PM1) */
-
-	status =
-	    acpi_write_bit_register(ACPI_BITREG_WAKE_STATUS, ACPI_CLEAR_STATUS);
+	status = acpi_set_register(ACPI_BITREG_WAKE_STATUS, 1);
 	if (ACPI_FAILURE(status)) {
 		return_ACPI_STATUS(status);
 	}
@@ -430,13 +435,12 @@ acpi_status asmlinkage acpi_enter_sleep_state_s4bios(void)
 
 	ACPI_FLUSH_CPU_CACHE();
 
-	status = acpi_hw_write_port(acpi_gbl_FADT.smi_command,
+	status = acpi_os_write_port(acpi_gbl_FADT.smi_command,
 				    (u32) acpi_gbl_FADT.S4bios_request, 8);
 
 	do {
 		acpi_os_stall(1000);
-		status =
-		    acpi_read_bit_register(ACPI_BITREG_WAKE_STATUS, &in_value);
+		status = acpi_get_register(ACPI_BITREG_WAKE_STATUS, &in_value);
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}
@@ -467,8 +471,8 @@ acpi_status acpi_leave_sleep_state_prep(u8 sleep_state)
 	acpi_status status;
 	struct acpi_bit_register_info *sleep_type_reg_info;
 	struct acpi_bit_register_info *sleep_enable_reg_info;
-	u32 pm1a_control;
-	u32 pm1b_control;
+	u32 PM1Acontrol;
+	u32 PM1Bcontrol;
 
 	ACPI_FUNCTION_TRACE(acpi_leave_sleep_state_prep);
 
@@ -482,34 +486,38 @@ acpi_status acpi_leave_sleep_state_prep(u8 sleep_state)
 					  &acpi_gbl_sleep_type_b);
 	if (ACPI_SUCCESS(status)) {
 		sleep_type_reg_info =
-		    acpi_hw_get_bit_register_info(ACPI_BITREG_SLEEP_TYPE);
+		    acpi_hw_get_bit_register_info(ACPI_BITREG_SLEEP_TYPE_A);
 		sleep_enable_reg_info =
 		    acpi_hw_get_bit_register_info(ACPI_BITREG_SLEEP_ENABLE);
 
 		/* Get current value of PM1A control */
 
 		status = acpi_hw_register_read(ACPI_REGISTER_PM1_CONTROL,
-					       &pm1a_control);
+					       &PM1Acontrol);
 		if (ACPI_SUCCESS(status)) {
 
-			/* Clear the SLP_EN and SLP_TYP fields */
+			/* Clear SLP_EN and SLP_TYP fields */
 
-			pm1a_control &= ~(sleep_type_reg_info->access_bit_mask |
-					  sleep_enable_reg_info->
-					  access_bit_mask);
-			pm1b_control = pm1a_control;
+			PM1Acontrol &= ~(sleep_type_reg_info->access_bit_mask |
+					 sleep_enable_reg_info->
+					 access_bit_mask);
+			PM1Bcontrol = PM1Acontrol;
 
-			/* Insert the SLP_TYP bits */
+			/* Insert SLP_TYP bits */
 
-			pm1a_control |= (acpi_gbl_sleep_type_a <<
-					 sleep_type_reg_info->bit_position);
-			pm1b_control |= (acpi_gbl_sleep_type_b <<
-					 sleep_type_reg_info->bit_position);
+			PM1Acontrol |=
+			    (acpi_gbl_sleep_type_a << sleep_type_reg_info->
+			     bit_position);
+			PM1Bcontrol |=
+			    (acpi_gbl_sleep_type_b << sleep_type_reg_info->
+			     bit_position);
 
-			/* Write the control registers and ignore any errors */
+			/* Just ignore any errors */
 
-			(void)acpi_hw_write_pm1_control(pm1a_control,
-							pm1b_control);
+			(void)acpi_hw_register_write(ACPI_REGISTER_PM1A_CONTROL,
+						     PM1Acontrol);
+			(void)acpi_hw_register_write(ACPI_REGISTER_PM1B_CONTROL,
+						     PM1Bcontrol);
 		}
 	}
 
@@ -595,21 +603,19 @@ acpi_status acpi_leave_sleep_state(u8 sleep_state)
 	 * it to determine whether the system is rebooting or resuming. Clear
 	 * it for compatibility.
 	 */
-	acpi_write_bit_register(ACPI_BITREG_WAKE_STATUS, 1);
+	acpi_set_register(ACPI_BITREG_WAKE_STATUS, 1);
 
 	acpi_gbl_system_awake_and_running = TRUE;
 
 	/* Enable power button */
 
 	(void)
-	    acpi_write_bit_register(acpi_gbl_fixed_event_info
-			      [ACPI_EVENT_POWER_BUTTON].
-			      enable_register_id, ACPI_ENABLE_EVENT);
+	    acpi_set_register(acpi_gbl_fixed_event_info
+			      [ACPI_EVENT_POWER_BUTTON].enable_register_id, 1);
 
 	(void)
-	    acpi_write_bit_register(acpi_gbl_fixed_event_info
-			      [ACPI_EVENT_POWER_BUTTON].
-			      status_register_id, ACPI_CLEAR_STATUS);
+	    acpi_set_register(acpi_gbl_fixed_event_info
+			      [ACPI_EVENT_POWER_BUTTON].status_register_id, 1);
 
 	arg.integer.value = ACPI_SST_WORKING;
 	status = acpi_evaluate_object(NULL, METHOD_NAME__SST, &arg_list, NULL);

@@ -84,7 +84,7 @@ acpi_ex_read_data_from_field(struct acpi_walk_state *walk_state,
 		return_ACPI_STATUS(AE_BAD_PARAMETER);
 	}
 
-	if (obj_desc->common.type == ACPI_TYPE_BUFFER_FIELD) {
+	if (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_BUFFER_FIELD) {
 		/*
 		 * If the buffer_field arguments have not been previously evaluated,
 		 * evaluate them now and save the results.
@@ -95,8 +95,9 @@ acpi_ex_read_data_from_field(struct acpi_walk_state *walk_state,
 				return_ACPI_STATUS(status);
 			}
 		}
-	} else if ((obj_desc->common.type == ACPI_TYPE_LOCAL_REGION_FIELD) &&
-		   (obj_desc->field.region_obj->region.space_id ==
+	} else
+	    if ((ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_REGION_FIELD)
+		&& (obj_desc->field.region_obj->region.space_id ==
 		    ACPI_ADR_SPACE_SMBUS)) {
 		/*
 		 * This is an SMBus read.  We must create a buffer to hold the data
@@ -162,7 +163,7 @@ acpi_ex_read_data_from_field(struct acpi_walk_state *walk_state,
 
 	ACPI_DEBUG_PRINT((ACPI_DB_BFIELD,
 			  "FieldRead [TO]:   Obj %p, Type %X, Buf %p, ByteLen %X\n",
-			  obj_desc, obj_desc->common.type, buffer,
+			  obj_desc, ACPI_GET_OBJECT_TYPE(obj_desc), buffer,
 			  (u32) length));
 	ACPI_DEBUG_PRINT((ACPI_DB_BFIELD,
 			  "FieldRead [FROM]: BitLen %X, BitOff %X, ByteOff %X\n",
@@ -221,7 +222,7 @@ acpi_ex_write_data_to_field(union acpi_operand_object *source_desc,
 		return_ACPI_STATUS(AE_AML_NO_OPERAND);
 	}
 
-	if (obj_desc->common.type == ACPI_TYPE_BUFFER_FIELD) {
+	if (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_BUFFER_FIELD) {
 		/*
 		 * If the buffer_field arguments have not been previously evaluated,
 		 * evaluate them now and save the results.
@@ -232,8 +233,9 @@ acpi_ex_write_data_to_field(union acpi_operand_object *source_desc,
 				return_ACPI_STATUS(status);
 			}
 		}
-	} else if ((obj_desc->common.type == ACPI_TYPE_LOCAL_REGION_FIELD) &&
-		   (obj_desc->field.region_obj->region.space_id ==
+	} else
+	    if ((ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_LOCAL_REGION_FIELD)
+		&& (obj_desc->field.region_obj->region.space_id ==
 		    ACPI_ADR_SPACE_SMBUS)) {
 		/*
 		 * This is an SMBus write.  We will bypass the entire field mechanism
@@ -241,7 +243,7 @@ acpi_ex_write_data_to_field(union acpi_operand_object *source_desc,
 		 *
 		 * Source must be a buffer of sufficient size (ACPI_SMBUS_BUFFER_SIZE).
 		 */
-		if (source_desc->common.type != ACPI_TYPE_BUFFER) {
+		if (ACPI_GET_OBJECT_TYPE(source_desc) != ACPI_TYPE_BUFFER) {
 			ACPI_ERROR((AE_INFO,
 				    "SMBus write requires Buffer, found type %s",
 				    acpi_ut_get_object_type_name(source_desc)));
@@ -289,7 +291,7 @@ acpi_ex_write_data_to_field(union acpi_operand_object *source_desc,
 
 	/* Get a pointer to the data to be written */
 
-	switch (source_desc->common.type) {
+	switch (ACPI_GET_OBJECT_TYPE(source_desc)) {
 	case ACPI_TYPE_INTEGER:
 		buffer = &source_desc->integer.value;
 		length = sizeof(source_desc->integer.value);
@@ -312,14 +314,15 @@ acpi_ex_write_data_to_field(union acpi_operand_object *source_desc,
 	ACPI_DEBUG_PRINT((ACPI_DB_BFIELD,
 			  "FieldWrite [FROM]: Obj %p (%s:%X), Buf %p, ByteLen %X\n",
 			  source_desc,
-			  acpi_ut_get_type_name(source_desc->common.type),
-			  source_desc->common.type, buffer, length));
+			  acpi_ut_get_type_name(ACPI_GET_OBJECT_TYPE
+						(source_desc)),
+			  ACPI_GET_OBJECT_TYPE(source_desc), buffer, length));
 
 	ACPI_DEBUG_PRINT((ACPI_DB_BFIELD,
 			  "FieldWrite [TO]:   Obj %p (%s:%X), BitLen %X, BitOff %X, ByteOff %X\n",
 			  obj_desc,
-			  acpi_ut_get_type_name(obj_desc->common.type),
-			  obj_desc->common.type,
+			  acpi_ut_get_type_name(ACPI_GET_OBJECT_TYPE(obj_desc)),
+			  ACPI_GET_OBJECT_TYPE(obj_desc),
 			  obj_desc->common_field.bit_length,
 			  obj_desc->common_field.start_field_bit_offset,
 			  obj_desc->common_field.base_byte_offset));

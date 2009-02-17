@@ -212,7 +212,7 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			/* ACPI internal object */
 
-			object_type = obj_desc->common.type;
+			object_type = ACPI_GET_OBJECT_TYPE(obj_desc);
 
 			/* Check for bad acpi_object_type */
 
@@ -287,7 +287,8 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			if ((ACPI_GET_DESCRIPTOR_TYPE(obj_desc) ==
 			     ACPI_DESC_TYPE_OPERAND)
-			    && (obj_desc->common.type == ACPI_TYPE_STRING)) {
+			    && (ACPI_GET_OBJECT_TYPE(obj_desc) ==
+				ACPI_TYPE_STRING)) {
 				/*
 				 * String found - the string references a named object and
 				 * must be resolved to a node
@@ -335,7 +336,7 @@ acpi_ex_resolve_operands(u16 opcode,
 			 * -- All others must be resolved below.
 			 */
 			if ((opcode == AML_STORE_OP) &&
-			    ((*stack_ptr)->common.type ==
+			    (ACPI_GET_OBJECT_TYPE(*stack_ptr) ==
 			     ACPI_TYPE_LOCAL_REFERENCE)
 			    && ((*stack_ptr)->reference.class == ACPI_REFCLASS_INDEX)) {
 				goto next_operand;
@@ -489,7 +490,7 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			/* Need an operand of type INTEGER, STRING or BUFFER */
 
-			switch (obj_desc->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 			case ACPI_TYPE_INTEGER:
 			case ACPI_TYPE_STRING:
 			case ACPI_TYPE_BUFFER:
@@ -511,7 +512,7 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			/* Need an operand of type STRING or BUFFER */
 
-			switch (obj_desc->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 			case ACPI_TYPE_STRING:
 			case ACPI_TYPE_BUFFER:
 
@@ -552,7 +553,7 @@ acpi_ex_resolve_operands(u16 opcode,
 			 * The only reference allowed here is a direct reference to
 			 * a namespace node.
 			 */
-			switch (obj_desc->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 			case ACPI_TYPE_PACKAGE:
 			case ACPI_TYPE_STRING:
 			case ACPI_TYPE_BUFFER:
@@ -575,7 +576,7 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			/* Need a buffer or package or (ACPI 2.0) String */
 
-			switch (obj_desc->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 			case ACPI_TYPE_PACKAGE:
 			case ACPI_TYPE_STRING:
 			case ACPI_TYPE_BUFFER:
@@ -597,7 +598,7 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			/* Need an operand of type REGION or a BUFFER (which could be a resolved region field) */
 
-			switch (obj_desc->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 			case ACPI_TYPE_BUFFER:
 			case ACPI_TYPE_REGION:
 
@@ -618,7 +619,7 @@ acpi_ex_resolve_operands(u16 opcode,
 
 			/* Used by the Store() operator only */
 
-			switch (obj_desc->common.type) {
+			switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 			case ACPI_TYPE_INTEGER:
 			case ACPI_TYPE_PACKAGE:
 			case ACPI_TYPE_STRING:
@@ -676,8 +677,8 @@ acpi_ex_resolve_operands(u16 opcode,
 		 * required object type (Simple cases only).
 		 */
 		status = acpi_ex_check_object_type(type_needed,
-						   (*stack_ptr)->common.type,
-						   *stack_ptr);
+						   ACPI_GET_OBJECT_TYPE
+						   (*stack_ptr), *stack_ptr);
 		if (ACPI_FAILURE(status)) {
 			return_ACPI_STATUS(status);
 		}

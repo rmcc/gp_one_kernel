@@ -13,6 +13,11 @@
 #define _COMPONENT		ACPI_SYSTEM_COMPONENT
 ACPI_MODULE_NAME("debug");
 
+#ifdef MODULE_PARAM_PREFIX
+#undef MODULE_PARAM_PREFIX
+#endif
+#define MODULE_PARAM_PREFIX "acpi."
+
 struct acpi_dlayer {
 	const char *name;
 	unsigned long value;
@@ -292,14 +297,16 @@ acpi_system_write_debug(struct file *file,
 
 	return count;
 }
-#endif
 
-int __init acpi_debug_init(void)
+static int __init acpi_debug_init(void)
 {
-#ifdef CONFIG_ACPI_PROCFS
 	struct proc_dir_entry *entry;
 	int error = 0;
 	char *name;
+
+
+	if (acpi_disabled)
+		return 0;
 
 	/* 'debug_layer' [R/W] */
 	name = ACPI_SYSTEM_FILE_DEBUG_LAYER;
@@ -331,7 +338,7 @@ int __init acpi_debug_init(void)
 	remove_proc_entry(ACPI_SYSTEM_FILE_DEBUG_LAYER, acpi_root_dir);
 	error = -ENODEV;
 	goto Done;
-#else
-	return 0;
-#endif
 }
+
+subsys_initcall(acpi_debug_init);
+#endif

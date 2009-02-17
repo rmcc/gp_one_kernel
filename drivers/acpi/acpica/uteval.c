@@ -59,35 +59,26 @@ acpi_ut_translate_one_cid(union acpi_operand_object *obj_desc,
 
 /*
  * Strings supported by the _OSI predefined (internal) method.
- *
- * March 2009: Removed "Linux" as this host no longer wants to respond true
- * for this string. Basically, the only safe OS strings are windows-related
- * and in many or most cases represent the only test path within the
- * BIOS-provided ASL code.
- *
- * The second element of each entry is used to track the newest version of
- * Windows that the BIOS has requested.
  */
-static struct acpi_interface_info acpi_interfaces_supported[] = {
+static char *acpi_interfaces_supported[] = {
 	/* Operating System Vendor Strings */
 
-	{"Windows 2000", ACPI_OSI_WIN_2000},	/* Windows 2000 */
-	{"Windows 2001", ACPI_OSI_WIN_XP},	/* Windows XP */
-	{"Windows 2001 SP1", ACPI_OSI_WIN_XP_SP1},	/* Windows XP SP1 */
-	{"Windows 2001.1", ACPI_OSI_WINSRV_2003},	/* Windows Server 2003 */
-	{"Windows 2001 SP2", ACPI_OSI_WIN_XP_SP2},	/* Windows XP SP2 */
-	{"Windows 2001.1 SP1", ACPI_OSI_WINSRV_2003_SP1},	/* Windows Server 2003 SP1 - Added 03/2006 */
-	{"Windows 2006", ACPI_OSI_WIN_VISTA},	/* Windows Vista - Added 03/2006 */
+	"Windows 2000",		/* Windows 2000 */
+	"Windows 2001",		/* Windows XP */
+	"Windows 2001 SP1",	/* Windows XP SP1 */
+	"Windows 2001 SP2",	/* Windows XP SP2 */
+	"Windows 2001.1",	/* Windows Server 2003 */
+	"Windows 2001.1 SP1",	/* Windows Server 2003 SP1 - Added 03/2006 */
+	"Windows 2006",		/* Windows Vista - Added 03/2006 */
 
 	/* Feature Group Strings */
 
-	{"Extended Address Space Descriptor", 0}
-
-	/*
-	 * All "optional" feature group strings (features that are implemented
-	 * by the host) should be implemented in the host version of
-	 * acpi_os_validate_interface and should not be added here.
-	 */
+	"Extended Address Space Descriptor"
+	    /*
+	     * All "optional" feature group strings (features that are implemented
+	     * by the host) should be implemented in the host version of
+	     * acpi_os_validate_interface and should not be added here.
+	     */
 };
 
 /*******************************************************************************
@@ -107,7 +98,6 @@ acpi_status acpi_ut_osi_implementation(struct acpi_walk_state *walk_state)
 	acpi_status status;
 	union acpi_operand_object *string_desc;
 	union acpi_operand_object *return_desc;
-	u32 return_value;
 	u32 i;
 
 	ACPI_FUNCTION_TRACE(ut_osi_implementation);
@@ -126,28 +116,19 @@ acpi_status acpi_ut_osi_implementation(struct acpi_walk_state *walk_state)
 		return_ACPI_STATUS(AE_NO_MEMORY);
 	}
 
-	/* Default return value is 0, NOT SUPPORTED */
+	/* Default return value is 0, NOT-SUPPORTED */
 
-	return_value = 0;
+	return_desc->integer.value = 0;
+	walk_state->return_desc = return_desc;
 
 	/* Compare input string to static table of supported interfaces */
 
 	for (i = 0; i < ACPI_ARRAY_LENGTH(acpi_interfaces_supported); i++) {
-		if (!ACPI_STRCMP(string_desc->string.pointer,
-				 acpi_interfaces_supported[i].name)) {
-			/*
-			 * The interface is supported.
-			 * Update the osi_data if necessary. We keep track of the latest
-			 * version of Windows that has been requested by the BIOS.
-			 */
-			if (acpi_interfaces_supported[i].value >
-			    acpi_gbl_osi_data) {
-				acpi_gbl_osi_data =
-				    acpi_interfaces_supported[i].value;
-			}
-
-			return_value = ACPI_UINT32_MAX;
-			goto exit;
+		if (!ACPI_STRCMP
+		    (string_desc->string.pointer,
+		     acpi_interfaces_supported[i])) {
+			return_desc->integer.value = ACPI_UINT32_MAX;
+			goto done;
 		}
 	}
 
@@ -158,22 +139,15 @@ acpi_status acpi_ut_osi_implementation(struct acpi_walk_state *walk_state)
 	 */
 	status = acpi_os_validate_interface(string_desc->string.pointer);
 	if (ACPI_SUCCESS(status)) {
-
-		/* The interface is supported */
-
-		return_value = ACPI_UINT32_MAX;
+		return_desc->integer.value = ACPI_UINT32_MAX;
 	}
 
-exit:
-	ACPI_DEBUG_PRINT_RAW ((ACPI_DB_INFO,
-		"ACPI: BIOS _OSI(%s) is %ssupported\n",
-		string_desc->string.pointer, return_value == 0 ? "not " : ""));
+done:
+	ACPI_DEBUG_PRINT_RAW((ACPI_DB_INFO, "ACPI: BIOS _OSI(%s) %ssupported\n",
+		string_desc->string.pointer,
+		return_desc->integer.value == 0 ? "not-" : ""));
 
-	/* Complete the return value */
-
-	return_desc->integer.value = return_value;
-	walk_state->return_desc = return_desc;
-	return_ACPI_STATUS (AE_OK);
+	return_ACPI_STATUS(AE_OK);
 }
 
 /*******************************************************************************
@@ -193,8 +167,8 @@ acpi_status acpi_osi_invalidate(char *interface)
 	int i;
 
 	for (i = 0; i < ACPI_ARRAY_LENGTH(acpi_interfaces_supported); i++) {
-		if (!ACPI_STRCMP(interface, acpi_interfaces_supported[i].name)) {
-			*acpi_interfaces_supported[i].name = '\0';
+		if (!ACPI_STRCMP(interface, acpi_interfaces_supported[i])) {
+			*acpi_interfaces_supported[i] = '\0';
 			return AE_OK;
 		}
 	}
@@ -274,7 +248,7 @@ acpi_ut_evaluate_object(struct acpi_namespace_node *prefix_node,
 
 	/* Map the return object type to the bitmapped type */
 
-	switch ((info->return_object)->common.type) {
+	switch (ACPI_GET_OBJECT_TYPE(info->return_object)) {
 	case ACPI_TYPE_INTEGER:
 		return_btype = ACPI_BTYPE_INTEGER;
 		break;
@@ -444,7 +418,7 @@ acpi_ut_execute_HID(struct acpi_namespace_node *device_node,
 		return_ACPI_STATUS(status);
 	}
 
-	if (obj_desc->common.type == ACPI_TYPE_INTEGER) {
+	if (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_INTEGER) {
 
 		/* Convert the Numeric HID to string */
 
@@ -485,7 +459,7 @@ acpi_ut_translate_one_cid(union acpi_operand_object *obj_desc,
 			  struct acpi_compatible_id *one_cid)
 {
 
-	switch (obj_desc->common.type) {
+	switch (ACPI_GET_OBJECT_TYPE(obj_desc)) {
 	case ACPI_TYPE_INTEGER:
 
 		/* Convert the Numeric CID to string */
@@ -553,7 +527,7 @@ acpi_ut_execute_CID(struct acpi_namespace_node * device_node,
 	/* Get the number of _CIDs returned */
 
 	count = 1;
-	if (obj_desc->common.type == ACPI_TYPE_PACKAGE) {
+	if (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_PACKAGE) {
 		count = obj_desc->package.count;
 	}
 
@@ -581,7 +555,7 @@ acpi_ut_execute_CID(struct acpi_namespace_node * device_node,
 
 	/* The _CID object can be either a single CID or a package (list) of CIDs */
 
-	if (obj_desc->common.type == ACPI_TYPE_PACKAGE) {
+	if (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_PACKAGE) {
 
 		/* Translate each package element */
 
@@ -646,7 +620,7 @@ acpi_ut_execute_UID(struct acpi_namespace_node *device_node,
 		return_ACPI_STATUS(status);
 	}
 
-	if (obj_desc->common.type == ACPI_TYPE_INTEGER) {
+	if (ACPI_GET_OBJECT_TYPE(obj_desc) == ACPI_TYPE_INTEGER) {
 
 		/* Convert the Numeric UID to string */
 

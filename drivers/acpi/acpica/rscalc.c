@@ -557,9 +557,9 @@ acpi_rs_get_pci_routing_table_length(union acpi_operand_object *package_object,
 		     table_index++) {
 			if (*sub_object_list &&	/* Null object allowed */
 			    ((ACPI_TYPE_STRING ==
-			      (*sub_object_list)->common.type) ||
+			      ACPI_GET_OBJECT_TYPE(*sub_object_list)) ||
 			     ((ACPI_TYPE_LOCAL_REFERENCE ==
-			       (*sub_object_list)->common.type) &&
+			       ACPI_GET_OBJECT_TYPE(*sub_object_list)) &&
 			      ((*sub_object_list)->reference.class ==
 			       ACPI_REFCLASS_NAME)))) {
 				name_found = TRUE;
@@ -575,7 +575,8 @@ acpi_rs_get_pci_routing_table_length(union acpi_operand_object *package_object,
 		/* Was a String type found? */
 
 		if (name_found) {
-			if ((*sub_object_list)->common.type == ACPI_TYPE_STRING) {
+			if (ACPI_GET_OBJECT_TYPE(*sub_object_list) ==
+			    ACPI_TYPE_STRING) {
 				/*
 				 * The length String.Length field does not include the
 				 * terminating NULL, add 1
