@@ -268,7 +268,12 @@ static long list_size;
 
 static void domain_remove_dev_info(struct dmar_domain *domain);
 
-int dmar_disabled;
+#ifdef CONFIG_DMAR_DEFAULT_ON
+int dmar_disabled = 0;
+#else
+int dmar_disabled = 1;
+#endif /*CONFIG_DMAR_DEFAULT_ON*/
+
 static int __initdata dmar_map_gfx = 1;
 static int dmar_forcedac;
 static int intel_iommu_strict;
@@ -284,9 +289,12 @@ static int __init intel_iommu_setup(char *str)
 	if (!str)
 		return -EINVAL;
 	while (*str) {
-		if (!strncmp(str, "off", 3)) {
+		if (!strncmp(str, "on", 2)) {
+			dmar_disabled = 0;
+			printk(KERN_INFO "Intel-IOMMU: enabled\n");
+		} else if (!strncmp(str, "off", 3)) {
 			dmar_disabled = 1;
-			printk(KERN_INFO"Intel-IOMMU: disabled\n");
+			printk(KERN_INFO "Intel-IOMMU: disabled\n");
 		} else if (!strncmp(str, "igfx_off", 8)) {
 			dmar_map_gfx = 0;
 			printk(KERN_INFO
@@ -438,7 +446,8 @@ static struct intel_iommu *device_to_iommu(u8 bus, u8 devfn)
 			continue;
 
 		for (i = 0; i < drhd->devices_cnt; i++)
-			if (drhd->devices[i]->bus->number == bus &&
+			if (drhd->devices[i] &&
+			    drhd->devices[i]->bus->number == bus &&
 			    drhd->devices[i]->devfn == devfn)
 				return drhd->iommu;
 
