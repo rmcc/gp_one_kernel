@@ -374,8 +374,14 @@ static struct track *get_track(struct kmem_cache *s, void *object,
 static void set_track(struct kmem_cache *s, void *object,
 			enum track_item alloc, unsigned long addr)
 {
-	struct track *p = get_track(s, object, alloc);
+	struct track *p;
 
+	if (s->offset)
+		p = object + s->offset + sizeof(void *);
+	else
+		p = object + s->inuse;
+
+	p += alloc;
 	if (addr) {
 		p->addr = addr;
 		p->cpu = smp_processor_id();
@@ -1329,7 +1335,7 @@ static struct page *get_any_partial(struct kmem_cache *s, gfp_t flags)
 		n = get_node(s, zone_to_nid(zone));
 
 		if (n && cpuset_zone_allowed_hardwall(zone, flags) &&
-				n->nr_partial > n->min_partial) {
+				n->nr_partial > s->min_partial) {
 			page = get_partial_node(n);
 			if (page)
 				return page;
@@ -1381,7 +1387,7 @@ static void unfreeze_slab(struct kmem_cache *s, struct page *page, int tail)
 		slab_unlock(page);
 	} else {
 		stat(c, DEACTIVATE_EMPTY);
-		if (n->nr_partial < n->min_partial) {
+		if (n->nr_partial < s->min_partial) {
 			/*
 			 * Adding an empty slab to the partial slabs in order
 			 * to avoid page allocator overhead. This slab needs
@@ -1718,7 +1724,7 @@ static __always_inline void slab_free(struct kmem_cache *s,
 	c = get_cpu_slab(s, smp_processor_id());
 	debug_check_no_locks_freed(object, c->objsize);
 	if (!(s->flags & SLAB_DEBUG_OBJECTS))
-		debug_check_no_obj_freed(object, c->objsize);
+		debug_check_no_obj_freed(object, s->objsize);
 	if (likely(page == c->page && c->node >= 0)) {
 		object[c->offset] = c->freelist;
 		c->freelist = object;
@@ -1922,17 +1928,6 @@ static void
 init_kmem_cache_node(struct kmem_cache_node *n, struct kmem_cache *s)
 {
 	n->nr_partial = 0;
-
-	/*
-	 * The larger the object size is, the more pages we want on the partial
-	 * list to avoid pounding the page allocator excessively.
-	 */
-	n->min_partial = ilog2(s->size);
-	if (n->min_partial < MIN_PARTIAL)
-		n->min_partial = MIN_PARTIAL;
-	else if (n->min_partial > MAX_PARTIAL)
-		n->min_partial = MAX_PARTIAL;
-
 	spin_lock_init(&n->list_lock);
 	INIT_LIST_HEAD(&n->partial);
 #ifdef CONFIG_SLUB_DEBUG
@@ -1990,7 +1985,7 @@ static struct kmem_cache_cpu *alloc_kmem_cache_cpu(struct kmem_cache *s,
 static void free_kmem_cache_cpu(struct kmem_cache_cpu *c, int cpu)
 {
 	if (c < per_cpu(kmem_cache_cpu, cpu) ||
-			c > per_cpu(kmem_cache_cpu, cpu) + NR_KMEM_CACHE_CPU) {
+			c >= per_cpu(kmem_cache_cpu, cpu) + NR_KMEM_CACHE_CPU) {
 		kfree(c);
 		return;
 	}
@@ -2175,6 +2170,15 @@ static int init_kmem_cache_nodes(struct kmem_cache *s, gfp_t gfpflags)
 }
 #endif
 
+static void calculate_min_partial(struct kmem_cache *s, unsigned long min)
+{
+	if (min < MIN_PARTIAL)
+		min = MIN_PARTIAL;
+	else if (min > MAX_PARTIAL)
+		min = MAX_PARTIAL;
+	s->min_partial = min;
+}
+
 /*
  * calculate_sizes() determines the order and the distribution of data within
  * a slab object.
@@ -2313,6 +2317,11 @@ static int kmem_cache_open(struct kmem_cache *s, gfp_t gfpflags,
 	if (!calculate_sizes(s, -1))
 		goto error;
 
+	/*
+	 * The larger the object size is, the more pages we want on the partial
+	 * list to avoid pounding the page allocator excessively.
+	 */
+	calculate_min_partial(s, ilog2(s->size));
 	s->refcount = 1;
 #ifdef CONFIG_NUMA
 	s->remote_node_defrag_ratio = 1000;
