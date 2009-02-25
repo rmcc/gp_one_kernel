@@ -41,14 +41,6 @@ const struct exception_table_entry *search_exception_tables(unsigned long addr)
 	return e;
 }
 
-static inline int init_kernel_text(unsigned long addr)
-{
-	if (addr >= (unsigned long)_sinittext &&
-	    addr <= (unsigned long)_einittext)
-		return 1;
-	return 0;
-}
-
 __notrace_funcgraph int core_kernel_text(unsigned long addr)
 {
 	if (addr >= (unsigned long)_stext &&
@@ -56,7 +48,8 @@ __notrace_funcgraph int core_kernel_text(unsigned long addr)
 		return 1;
 
 	if (system_state == SYSTEM_BOOTING &&
-	    init_kernel_text(addr))
+	    addr >= (unsigned long)_sinittext &&
+	    addr <= (unsigned long)_einittext)
 		return 1;
 	return 0;
 }
@@ -65,19 +58,7 @@ __notrace_funcgraph int __kernel_text_address(unsigned long addr)
 {
 	if (core_kernel_text(addr))
 		return 1;
-	if (__module_text_address(addr))
-		return 1;
-	/*
-	 * There might be init symbols in saved stacktraces.
-	 * Give those symbols a chance to be printed in
-	 * backtraces (such as lockdep traces).
-	 *
-	 * Since we are after the module-symbols check, there's
-	 * no danger of address overlap:
-	 */
-	if (init_kernel_text(addr))
-		return 1;
-	return 0;
+	return __module_text_address(addr) != NULL;
 }
 
 int kernel_text_address(unsigned long addr)
