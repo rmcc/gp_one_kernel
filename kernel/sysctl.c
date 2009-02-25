@@ -101,7 +101,6 @@ static int two = 2;
 
 static int zero;
 static int one = 1;
-static unsigned long one_ul = 1;
 static int one_hundred = 100;
 
 /* this is needed for the proc_dointvec_minmax for [fs_]overflow UID and GID */
@@ -810,7 +809,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &softlockup_thresh,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= &proc_dosoftlockup_thresh,
+		.proc_handler	= &proc_dointvec_minmax,
 		.strategy	= &sysctl_intvec,
 		.extra1		= &neg_one,
 		.extra2		= &sixty,
@@ -975,7 +974,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &dirty_background_bytes_handler,
 		.strategy	= &sysctl_intvec,
-		.extra1		= &one_ul,
+		.extra1		= &one,
 	},
 	{
 		.ctl_name	= VM_DIRTY_RATIO,
@@ -996,7 +995,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &dirty_bytes_handler,
 		.strategy	= &sysctl_intvec,
-		.extra1		= &one_ul,
+		.extra1		= &one,
 	},
 	{
 		.procname	= "dirty_writeback_centisecs",

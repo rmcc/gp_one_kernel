@@ -77,9 +77,7 @@ static ssize_t netdev_store(struct device *dev, struct device_attribute *attr,
 	if (endp == buf)
 		goto err;
 
-	if (!rtnl_trylock())
-		return -ERESTARTSYS;
-
+	rtnl_lock();
 	if (dev_isalive(net)) {
 		if ((ret = (*set)(net, new)) == 0)
 			ret = len;

@@ -33,7 +33,6 @@
 #ifndef _IF_PPP_H_
 #define _IF_PPP_H_
 
-#include <linux/types.h>
 #include <linux/compiler.h>
 
 /*

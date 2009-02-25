@@ -1,8 +1,6 @@
 #ifndef AGNX_H_
 #define AGNX_H_
 
-#include <linux/io.h>
-
 #include "xmit.h"
 
 #define PFX				KBUILD_MODNAME ": "

@@ -45,6 +45,7 @@
 #include "xfs_fsops.h"
 #include "xfs_utils.h"
 
+STATIC int	xfs_mount_log_sb(xfs_mount_t *, __int64_t);
 STATIC int	xfs_uuid_mount(xfs_mount_t *);
 STATIC void	xfs_unmountfs_wait(xfs_mount_t *);
 
@@ -681,7 +682,7 @@ xfs_initialize_perag_data(xfs_mount_t *mp, xfs_agnumber_t agcount)
  * Update alignment values based on mount options and sb values
  */
 STATIC int
-xfs_update_alignment(xfs_mount_t *mp)
+xfs_update_alignment(xfs_mount_t *mp, __uint64_t *update_flags)
 {
 	xfs_sb_t	*sbp = &(mp->m_sb);
 
@@ -735,11 +736,11 @@ xfs_update_alignment(xfs_mount_t *mp)
 		if (xfs_sb_version_hasdalign(sbp)) {
 			if (sbp->sb_unit != mp->m_dalign) {
 				sbp->sb_unit = mp->m_dalign;
-				mp->m_update_flags |= XFS_SB_UNIT;
+				*update_flags |= XFS_SB_UNIT;
 			}
 			if (sbp->sb_width != mp->m_swidth) {
 				sbp->sb_width = mp->m_swidth;
-				mp->m_update_flags |= XFS_SB_WIDTH;
+				*update_flags |= XFS_SB_WIDTH;
 			}
 		}
 	} else if ((mp->m_flags & XFS_MOUNT_NOALIGN) != XFS_MOUNT_NOALIGN &&
@@ -904,6 +905,7 @@ xfs_mountfs(
 	xfs_sb_t	*sbp = &(mp->m_sb);
 	xfs_inode_t	*rip;
 	__uint64_t	resblks;
+	__int64_t	update_flags = 0LL;
 	uint		quotamount, quotaflags;
 	int		uuid_mounted = 0;
 	int		error = 0;
@@ -931,7 +933,7 @@ xfs_mountfs(
 			"XFS: correcting sb_features alignment problem");
 		sbp->sb_features2 |= sbp->sb_bad_features2;
 		sbp->sb_bad_features2 = sbp->sb_features2;
-		mp->m_update_flags |= XFS_SB_FEATURES2 | XFS_SB_BAD_FEATURES2;
+		update_flags |= XFS_SB_FEATURES2 | XFS_SB_BAD_FEATURES2;
 
 		/*
 		 * Re-check for ATTR2 in case it was found in bad_features2
@@ -945,11 +947,11 @@ xfs_mountfs(
 	if (xfs_sb_version_hasattr2(&mp->m_sb) &&
 	   (mp->m_flags & XFS_MOUNT_NOATTR2)) {
 		xfs_sb_version_removeattr2(&mp->m_sb);
-		mp->m_update_flags |= XFS_SB_FEATURES2;
+		update_flags |= XFS_SB_FEATURES2;
 
 		/* update sb_versionnum for the clearing of the morebits */
 		if (!sbp->sb_features2)
-			mp->m_update_flags |= XFS_SB_VERSIONNUM;
+			update_flags |= XFS_SB_VERSIONNUM;
 	}
 
 	/*
@@ -958,7 +960,7 @@ xfs_mountfs(
 	 * allocator alignment is within an ag, therefore ag has
 	 * to be aligned at stripe boundary.
 	 */
-	error = xfs_update_alignment(mp);
+	error = xfs_update_alignment(mp, &update_flags);
 	if (error)
 		goto error1;
 
@@ -1135,12 +1137,10 @@ xfs_mountfs(
 	}
 
 	/*
-	 * If this is a read-only mount defer the superblock updates until
-	 * the next remount into writeable mode.  Otherwise we would never
-	 * perform the update e.g. for the root filesystem.
+	 * If fs is not mounted readonly, then update the superblock changes.
 	 */
-	if (mp->m_update_flags && !(mp->m_flags & XFS_MOUNT_RDONLY)) {
-		error = xfs_mount_log_sb(mp, mp->m_update_flags);
+	if (update_flags && !(mp->m_flags & XFS_MOUNT_RDONLY)) {
+		error = xfs_mount_log_sb(mp, update_flags);
 		if (error) {
 			cmn_err(CE_WARN, "XFS: failed to write sb changes");
 			goto error4;
@@ -1820,7 +1820,7 @@ xfs_uuid_mount(
  * be altered by the mount options, as well as any potential sb_features2
  * fixup. Only the first superblock is updated.
  */
-int
+STATIC int
 xfs_mount_log_sb(
 	xfs_mount_t	*mp,
 	__int64_t	fields)

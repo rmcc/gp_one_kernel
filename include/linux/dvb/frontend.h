@@ -26,7 +26,8 @@
 #ifndef _DVBFRONTEND_H_
 #define _DVBFRONTEND_H_
 
-#include <linux/types.h>
+#include <asm/types.h>
+
 
 typedef enum fe_type {
 	FE_QPSK,

@@ -59,7 +59,6 @@ struct blackfin_pda {			/* Per-processor Data Area */
 	unsigned long icplb_fault_addr;
 	unsigned long retx;
 	unsigned long seqstat;
-	unsigned int __nmi_count;	/* number of times NMI asserted on this CPU */
 };
 
 extern struct blackfin_pda cpu_pda[];

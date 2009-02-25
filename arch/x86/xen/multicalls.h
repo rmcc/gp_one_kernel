@@ -19,10 +19,8 @@ DECLARE_PER_CPU(unsigned long, xen_mc_irq_flags);
    paired with xen_mc_issue() */
 static inline void xen_mc_batch(void)
 {
-	unsigned long flags;
 	/* need to disable interrupts until this entry is complete */
-	local_irq_save(flags);
-	__get_cpu_var(xen_mc_irq_flags) = flags;
+	local_irq_save(__get_cpu_var(xen_mc_irq_flags));
 }
 
 static inline struct multicall_space xen_mc_entry(size_t args)

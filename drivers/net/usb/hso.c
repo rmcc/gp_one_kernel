@@ -455,7 +455,6 @@ static const struct usb_device_id hso_ids[] = {
 	{icon321_port_device(0x0af0, 0xd033)},	/* Icon-322 */
 	{USB_DEVICE(0x0af0, 0x7301)},		/* GE40x */
 	{USB_DEVICE(0x0af0, 0x7361)},		/* GE40x */
-	{USB_DEVICE(0x0af0, 0x7381)},		/* GE40x */
 	{USB_DEVICE(0x0af0, 0x7401)},		/* GI 0401 */
 	{USB_DEVICE(0x0af0, 0x7501)},		/* GTM 382 */
 	{USB_DEVICE(0x0af0, 0x7601)},		/* GE40x */
@@ -463,8 +462,7 @@ static const struct usb_device_id hso_ids[] = {
 	{USB_DEVICE(0x0af0, 0x7801)},
 	{USB_DEVICE(0x0af0, 0x7901)},
 	{USB_DEVICE(0x0af0, 0x7361)},
-	{USB_DEVICE(0x0af0, 0xd057)},
-	{USB_DEVICE(0x0af0, 0xd055)},
+	{icon321_port_device(0x0af0, 0xd051)},
 	{}
 };
 MODULE_DEVICE_TABLE(usb, hso_ids);

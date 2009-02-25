@@ -1,6 +1,6 @@
 /* bnx2x.h: Broadcom Everest network driver.
  *
- * Copyright (c) 2007-2009 Broadcom Corporation
+ * Copyright (c) 2007-2008 Broadcom Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -152,7 +152,7 @@ struct sw_rx_page {
 #define PAGES_PER_SGE			(1 << PAGES_PER_SGE_SHIFT)
 #define SGE_PAGE_SIZE			PAGE_SIZE
 #define SGE_PAGE_SHIFT			PAGE_SHIFT
-#define SGE_PAGE_ALIGN(addr)		PAGE_ALIGN((typeof(PAGE_SIZE))addr)
+#define SGE_PAGE_ALIGN(addr)		PAGE_ALIGN(addr)
 
 #define BCM_RX_ETH_PAYLOAD_ALIGN	64
 
@@ -271,7 +271,14 @@ struct bnx2x_fastpath {
 
 #define bnx2x_fp(bp, nr, var)		(bp->fp[nr].var)
 
-#define BNX2X_HAS_WORK(fp)	(bnx2x_has_rx_work(fp) || bnx2x_has_tx_work(fp))
+#define BNX2X_HAS_TX_WORK(fp) \
+			((fp->tx_pkt_prod != le16_to_cpu(*fp->tx_cons_sb)) || \
+			 (fp->tx_pkt_prod != fp->tx_pkt_cons))
+
+#define BNX2X_HAS_RX_WORK(fp) \
+			(fp->rx_comp_cons != rx_cons_sb)
+
+#define BNX2X_HAS_WORK(fp)	(BNX2X_HAS_RX_WORK(fp) || BNX2X_HAS_TX_WORK(fp))
 
 
 /* MC hsi */
