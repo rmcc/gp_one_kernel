@@ -5,7 +5,7 @@
 # Released under the terms of the GNU GPL
 #
 # Generate a cpio packed initramfs. It uses gen_init_cpio to generate
-# the cpio archive, and then compresses it.
+# the cpio archive, and gzip to pack it.
 # The script may also be used to generate the inputfile used for gen_init_cpio
 # This script assumes that gen_init_cpio is located in usr/ directory
 
@@ -16,8 +16,8 @@ usage() {
 cat << EOF
 Usage:
 $0 [-o <file>] [-u <uid>] [-g <gid>] {-d | <cpio_source>} ...
-	-o <file>      Create compressed initramfs file named <file> using
-		       gen_init_cpio and compressor depending on the extension
+	-o <file>      Create gzipped initramfs file named <file> using
+		       gen_init_cpio and gzip
 	-u <uid>       User ID to map to user ID 0 (root).
 		       <uid> is only meaningful if <cpio_source> is a
 		       directory.  "squash" forces all files to uid 0.
@@ -225,7 +225,6 @@ cpio_list=
 output="/dev/stdout"
 output_file=""
 is_cpio_compressed=
-compr="gzip -9 -f"
 
 arg="$1"
 case "$arg" in
@@ -234,15 +233,11 @@ case "$arg" in
 		echo "deps_initramfs := \\"
 		shift
 		;;
-	"-o")	# generate compressed cpio image named $1
+	"-o")	# generate gzipped cpio image named $1
 		shift
 		output_file="$1"
 		cpio_list="$(mktemp ${TMPDIR:-/tmp}/cpiolist.XXXXXX)"
 		output=${cpio_list}
-		echo "$output_file" | grep -q "\.gz$" && compr="gzip -9 -f"
-		echo "$output_file" | grep -q "\.bz2$" && compr="bzip2 -9 -f"
-		echo "$output_file" | grep -q "\.lzma$" && compr="lzma -9 -f"
-		echo "$output_file" | grep -q "\.cpio$" && compr="cat"
 		shift
 		;;
 esac
@@ -279,7 +274,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-# If output_file is set we will generate cpio archive and compress it
+# If output_file is set we will generate cpio archive and gzip it
 # we are carefull to delete tmp files
 if [ ! -z ${output_file} ]; then
 	if [ -z ${cpio_file} ]; then
@@ -292,8 +287,7 @@ if [ ! -z ${output_file} ]; then
 	if [ "${is_cpio_compressed}" = "compressed" ]; then
 		cat ${cpio_tfile} > ${output_file}
 	else
-		(cat ${cpio_tfile} | ${compr}  - > ${output_file}) \
-		|| (rm -f ${output_file} ; false)
+		cat ${cpio_tfile} | gzip -f -9 - > ${output_file}
 	fi
 	[ -z ${cpio_file} ] && rm ${cpio_tfile}
 fi
