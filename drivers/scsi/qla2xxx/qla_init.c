@@ -1308,12 +1308,8 @@ qla2x00_init_rings(scsi_qla_host_t *vha)
 
 	DEBUG(printk("scsi(%ld): Issue init firmware.\n", vha->host_no));
 
-	if (ha->flags.npiv_supported) {
-		if (ha->operating_mode == LOOP)
-			ha->max_npiv_vports = MIN_MULTI_ID_FABRIC - 1;
+	if (ha->flags.npiv_supported)
 		mid_init_cb->count = cpu_to_le16(ha->max_npiv_vports);
-	}
-
 
 	mid_init_cb->options = __constant_cpu_to_le16(BIT_1);
 
@@ -2614,7 +2610,6 @@ qla2x00_find_all_fabric_devs(scsi_qla_host_t *vha,
 	port_id_t	wrap, nxt_d_id;
 	struct qla_hw_data *ha = vha->hw;
 	struct scsi_qla_host *vp, *base_vha = pci_get_drvdata(ha->pdev);
-	struct scsi_qla_host *tvp;
 
 	rval = QLA_SUCCESS;
 
@@ -2714,7 +2709,7 @@ qla2x00_find_all_fabric_devs(scsi_qla_host_t *vha,
 		/* Bypass virtual ports of the same host. */
 		found = 0;
 		if (ha->num_vhosts) {
-			list_for_each_entry_safe(vp, tvp, &ha->vp_list, list) {
+			list_for_each_entry(vp, &ha->vp_list, list) {
 				if (new_fcport->d_id.b24 == vp->d_id.b24) {
 					found = 1;
 					break;
@@ -2837,7 +2832,6 @@ qla2x00_find_new_loop_id(scsi_qla_host_t *vha, fc_port_t *dev)
 	uint16_t first_loop_id;
 	struct qla_hw_data *ha = vha->hw;
 	struct scsi_qla_host *vp;
-	struct scsi_qla_host *tvp;
 
 	rval = QLA_SUCCESS;
 
@@ -2862,7 +2856,7 @@ qla2x00_find_new_loop_id(scsi_qla_host_t *vha, fc_port_t *dev)
 		/* Check for loop ID being already in use. */
 		found = 0;
 		fcport = NULL;
-		list_for_each_entry_safe(vp, tvp, &ha->vp_list, list) {
+		list_for_each_entry(vp, &ha->vp_list, list) {
 			list_for_each_entry(fcport, &vp->vp_fcports, list) {
 				if (fcport->loop_id == dev->loop_id &&
 								fcport != dev) {
@@ -3297,7 +3291,6 @@ qla2x00_abort_isp(scsi_qla_host_t *vha)
 	uint8_t        status = 0;
 	struct qla_hw_data *ha = vha->hw;
 	struct scsi_qla_host *vp;
-	struct scsi_qla_host *tvp;
 	struct req_que *req = ha->req_q_map[0];
 
 	if (vha->flags.online) {
@@ -3313,7 +3306,7 @@ qla2x00_abort_isp(scsi_qla_host_t *vha)
 		if (atomic_read(&vha->loop_state) != LOOP_DOWN) {
 			atomic_set(&vha->loop_state, LOOP_DOWN);
 			qla2x00_mark_all_devices_lost(vha, 0);
-			list_for_each_entry_safe(vp, tvp, &ha->vp_list, list)
+			list_for_each_entry(vp, &ha->vp_list, list)
 			       qla2x00_mark_all_devices_lost(vp, 0);
 		} else {
 			if (!atomic_read(&vha->loop_down_timer))
@@ -3410,7 +3403,7 @@ qla2x00_abort_isp(scsi_qla_host_t *vha)
 		DEBUG(printk(KERN_INFO
 				"qla2x00_abort_isp(%ld): succeeded.\n",
 				vha->host_no));
-		list_for_each_entry_safe(vp, tvp, &ha->vp_list, list) {
+		list_for_each_entry(vp, &ha->vp_list, list) {
 			if (vp->vp_idx)
 				qla2x00_vp_abort_isp(vp);
 		}
@@ -3435,7 +3428,7 @@ qla2x00_abort_isp(scsi_qla_host_t *vha)
 static int
 qla2x00_restart_isp(scsi_qla_host_t *vha)
 {
-	int status = 0;
+	uint8_t		status = 0;
 	uint32_t wait_time;
 	struct qla_hw_data *ha = vha->hw;
 	struct req_que *req = ha->req_q_map[0];

@@ -1419,9 +1419,6 @@ struct task_struct {
 #endif
 };
 
-/* Future-safe accessor for struct task_struct's cpus_allowed. */
-#define tsk_cpumask(tsk) (&(tsk)->cpus_allowed)
-
 /*
  * Priority of a process goes from 0..MAX_PRIO-1, valid RT
  * priority is 0..MAX_RT_PRIO-1, and SCHED_NORMAL/SCHED_BATCH
@@ -1672,6 +1669,16 @@ static inline int set_cpus_allowed(struct task_struct *p, cpumask_t new_mask)
 {
 	return set_cpus_allowed_ptr(p, &new_mask);
 }
+
+/*
+ * Architectures can set this to 1 if they have specified
+ * CONFIG_HAVE_UNSTABLE_SCHED_CLOCK in their arch Kconfig,
+ * but then during bootup it turns out that sched_clock()
+ * is reliable after all:
+ */
+#ifdef CONFIG_HAVE_UNSTABLE_SCHED_CLOCK
+extern int sched_clock_stable;
+#endif
 
 extern unsigned long long sched_clock(void);
 
@@ -2294,12 +2301,8 @@ extern long sched_group_rt_runtime(struct task_group *tg);
 extern int sched_group_set_rt_period(struct task_group *tg,
 				      long rt_period_us);
 extern long sched_group_rt_period(struct task_group *tg);
-extern int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk);
 #endif
 #endif
-
-extern int task_can_switch_user(struct user_struct *up,
-					struct task_struct *tsk);
 
 #ifdef CONFIG_TASK_XACCT
 static inline void add_rchar(struct task_struct *tsk, ssize_t amt)
