@@ -294,11 +294,7 @@ static int  option_send_setup(struct tty_struct *tty, struct usb_serial_port *po
 
 /* Ericsson products */
 #define ERICSSON_VENDOR_ID			0x0bdb
-#define ERICSSON_PRODUCT_F3507G_1		0x1900
-#define ERICSSON_PRODUCT_F3507G_2		0x1902
-
-#define BENQ_VENDOR_ID				0x04a5
-#define BENQ_PRODUCT_H10			0x4068
+#define ERICSSON_PRODUCT_F3507G			0x1900
 
 static struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_COLT) },
@@ -513,10 +509,7 @@ static struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(ZTE_VENDOR_ID, ZTE_PRODUCT_MF626) },
 	{ USB_DEVICE(ZTE_VENDOR_ID, ZTE_PRODUCT_MF628) },
 	{ USB_DEVICE(ZTE_VENDOR_ID, ZTE_PRODUCT_CDMA_TECH) },
-	{ USB_DEVICE(ERICSSON_VENDOR_ID, ERICSSON_PRODUCT_F3507G_1) },
-	{ USB_DEVICE(ERICSSON_VENDOR_ID, ERICSSON_PRODUCT_F3507G_2) },
-	{ USB_DEVICE(BENQ_VENDOR_ID, BENQ_PRODUCT_H10) },
-	{ USB_DEVICE(0x1da5, 0x4515) }, /* BenQ H20 */
+	{ USB_DEVICE(ERICSSON_VENDOR_ID, ERICSSON_PRODUCT_F3507G) },
 	{ } /* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, option_ids);
