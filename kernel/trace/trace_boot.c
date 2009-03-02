@@ -11,7 +11,6 @@
 #include <linux/kallsyms.h>
 
 #include "trace.h"
-#include "trace_output.h"
 
 static struct trace_array *boot_trace;
 static bool pre_initcalls_finished;
@@ -28,13 +27,13 @@ void start_boot_trace(void)
 
 void enable_boot_trace(void)
 {
-	if (boot_trace && pre_initcalls_finished)
+	if (pre_initcalls_finished)
 		tracing_start_sched_switch_record();
 }
 
 void disable_boot_trace(void)
 {
-	if (boot_trace && pre_initcalls_finished)
+	if (pre_initcalls_finished)
 		tracing_stop_sched_switch_record();
 }
 
@@ -42,9 +41,6 @@ static int boot_trace_init(struct trace_array *tr)
 {
 	int cpu;
 	boot_trace = tr;
-
-	if (!tr)
-		return 0;
 
 	for_each_cpu(cpu, cpu_possible_mask)
 		tracing_reset(tr, cpu);
@@ -132,9 +128,10 @@ void trace_boot_call(struct boot_trace_call *bt, initcall_t fn)
 {
 	struct ring_buffer_event *event;
 	struct trace_boot_call *entry;
+	unsigned long irq_flags;
 	struct trace_array *tr = boot_trace;
 
-	if (!tr || !pre_initcalls_finished)
+	if (!pre_initcalls_finished)
 		return;
 
 	/* Get its name now since this function could
@@ -143,13 +140,18 @@ void trace_boot_call(struct boot_trace_call *bt, initcall_t fn)
 	sprint_symbol(bt->func, (unsigned long)fn);
 	preempt_disable();
 
-	event = trace_buffer_lock_reserve(tr, TRACE_BOOT_CALL,
-					  sizeof(*entry), 0, 0);
+	event = ring_buffer_lock_reserve(tr->buffer, sizeof(*entry),
+					 &irq_flags);
 	if (!event)
 		goto out;
 	entry	= ring_buffer_event_data(event);
+	tracing_generic_entry_update(&entry->ent, 0, 0);
+	entry->ent.type = TRACE_BOOT_CALL;
 	entry->boot_call = *bt;
-	trace_buffer_unlock_commit(tr, event, 0, 0);
+	ring_buffer_unlock_commit(tr->buffer, event, irq_flags);
+
+	trace_wake_up();
+
  out:
 	preempt_enable();
 }
@@ -158,21 +160,27 @@ void trace_boot_ret(struct boot_trace_ret *bt, initcall_t fn)
 {
 	struct ring_buffer_event *event;
 	struct trace_boot_ret *entry;
+	unsigned long irq_flags;
 	struct trace_array *tr = boot_trace;
 
-	if (!tr || !pre_initcalls_finished)
+	if (!pre_initcalls_finished)
 		return;
 
 	sprint_symbol(bt->func, (unsigned long)fn);
 	preempt_disable();
 
-	event = trace_buffer_lock_reserve(tr, TRACE_BOOT_RET,
-					  sizeof(*entry), 0, 0);
+	event = ring_buffer_lock_reserve(tr->buffer, sizeof(*entry),
+					 &irq_flags);
 	if (!event)
 		goto out;
 	entry	= ring_buffer_event_data(event);
+	tracing_generic_entry_update(&entry->ent, 0, 0);
+	entry->ent.type = TRACE_BOOT_RET;
 	entry->boot_ret = *bt;
-	trace_buffer_unlock_commit(tr, event, 0, 0);
+	ring_buffer_unlock_commit(tr->buffer, event, irq_flags);
+
+	trace_wake_up();
+
  out:
 	preempt_enable();
 }

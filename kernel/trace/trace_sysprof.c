@@ -88,7 +88,7 @@ static void backtrace_address(void *data, unsigned long addr, int reliable)
 	}
 }
 
-static const struct stacktrace_ops backtrace_ops = {
+const static struct stacktrace_ops backtrace_ops = {
 	.warning		= backtrace_warning,
 	.warning_symbol		= backtrace_warning_symbol,
 	.stack			= backtrace_stack,
@@ -226,6 +226,15 @@ static void stop_stack_timers(void)
 		stop_stack_timer(cpu);
 }
 
+static void start_stack_trace(struct trace_array *tr)
+{
+	mutex_lock(&sample_timer_lock);
+	tracing_reset_online_cpus(tr);
+	start_stack_timers();
+	tracer_enabled = 1;
+	mutex_unlock(&sample_timer_lock);
+}
+
 static void stop_stack_trace(struct trace_array *tr)
 {
 	mutex_lock(&sample_timer_lock);
@@ -238,18 +247,12 @@ static int stack_trace_init(struct trace_array *tr)
 {
 	sysprof_trace = tr;
 
-	tracing_start_cmdline_record();
-
-	mutex_lock(&sample_timer_lock);
-	start_stack_timers();
-	tracer_enabled = 1;
-	mutex_unlock(&sample_timer_lock);
+	start_stack_trace(tr);
 	return 0;
 }
 
 static void stack_trace_reset(struct trace_array *tr)
 {
-	tracing_stop_cmdline_record();
 	stop_stack_trace(tr);
 }
 
@@ -327,5 +330,5 @@ void init_tracer_sysprof_debugfs(struct dentry *d_tracer)
 			d_tracer, NULL, &sysprof_sample_fops);
 	if (entry)
 		return;
-	pr_warning("Could not create debugfs 'sysprof_sample_period' entry\n");
+	pr_warning("Could not create debugfs 'dyn_ftrace_total_info' entry\n");
 }

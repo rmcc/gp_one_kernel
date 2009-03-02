@@ -4404,7 +4404,10 @@ void scheduler_tick(void)
 #endif
 }
 
-unsigned long get_parent_ip(unsigned long addr)
+#if defined(CONFIG_PREEMPT) && (defined(CONFIG_DEBUG_PREEMPT) || \
+				defined(CONFIG_PREEMPT_TRACER))
+
+static inline unsigned long get_parent_ip(unsigned long addr)
 {
 	if (in_lock_functions(addr)) {
 		addr = CALLER_ADDR2;
@@ -4413,9 +4416,6 @@ unsigned long get_parent_ip(unsigned long addr)
 	}
 	return addr;
 }
-
-#if defined(CONFIG_PREEMPT) && (defined(CONFIG_DEBUG_PREEMPT) || \
-				defined(CONFIG_PREEMPT_TRACER))
 
 void __kprobes add_preempt_count(int val)
 {
