@@ -466,10 +466,7 @@ static int build_via_table(struct viadev *dev, struct snd_pcm_substream *substre
 					flag = VIA_TBL_BIT_FLAG; /* period boundary */
 			} else
 				flag = 0; /* period continues to the next */
-			/*
-			printk(KERN_DEBUG "via: tbl %d: at %d  size %d "
-			       "(rest %d)\n", idx, ofs, r, rest);
-			*/
+			// printk("via: tbl %d: at %d  size %d (rest %d)\n", idx, ofs, r, rest);
 			((u32 *)dev->table.area)[(idx<<1) + 1] = cpu_to_le32(r | flag);
 			dev->idx_table[idx].offset = ofs;
 			dev->idx_table[idx].size = r;

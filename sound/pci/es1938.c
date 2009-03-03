@@ -1673,22 +1673,18 @@ static irqreturn_t snd_es1938_interrupt(int irq, void *dev_id)
 
 	status = inb(SLIO_REG(chip, IRQCONTROL));
 #if 0
-	printk(KERN_DEBUG "Es1938debug - interrupt status: =0x%x\n", status);
+	printk("Es1938debug - interrupt status: =0x%x\n", status);
 #endif
 	
 	/* AUDIO 1 */
 	if (status & 0x10) {
 #if 0
-                printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 1 interrupt\n");
-		printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 1 DMAC DMA count: %u\n",
+                printk("Es1938debug - AUDIO channel 1 interrupt\n");
+		printk("Es1938debug - AUDIO channel 1 DMAC DMA count: %u\n",
 		       inw(SLDM_REG(chip, DMACOUNT)));
-		printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 1 DMAC DMA base: %u\n",
+		printk("Es1938debug - AUDIO channel 1 DMAC DMA base: %u\n",
 		       inl(SLDM_REG(chip, DMAADDR)));
-		printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 1 DMAC DMA status: 0x%x\n",
+		printk("Es1938debug - AUDIO channel 1 DMAC DMA status: 0x%x\n",
 		       inl(SLDM_REG(chip, DMASTATUS)));
 #endif
 		/* clear irq */
@@ -1703,13 +1699,10 @@ static irqreturn_t snd_es1938_interrupt(int irq, void *dev_id)
 	/* AUDIO 2 */
 	if (status & 0x20) {
 #if 0
-                printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 2 interrupt\n");
-		printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 2 DMAC DMA count: %u\n",
+                printk("Es1938debug - AUDIO channel 2 interrupt\n");
+		printk("Es1938debug - AUDIO channel 2 DMAC DMA count: %u\n",
 		       inw(SLIO_REG(chip, AUDIO2DMACOUNT)));
-		printk(KERN_DEBUG
-		       "Es1938debug - AUDIO channel 2 DMAC DMA base: %u\n",
+		printk("Es1938debug - AUDIO channel 2 DMAC DMA base: %u\n",
 		       inl(SLIO_REG(chip, AUDIO2DMAADDR)));
 
 #endif
