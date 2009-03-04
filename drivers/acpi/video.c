@@ -358,36 +358,32 @@ static struct output_properties acpi_output_properties = {
 
 
 /* thermal cooling device callbacks */
-static int video_get_max_state(struct thermal_cooling_device *cdev, unsigned
-			       long *state)
+static int video_get_max_state(struct thermal_cooling_device *cdev, char *buf)
 {
 	struct acpi_device *device = cdev->devdata;
 	struct acpi_video_device *video = acpi_driver_data(device);
 
-	*state = video->brightness->count - 3;
-	return 0;
+	return sprintf(buf, "%d\n", video->brightness->count - 3);
 }
 
-static int video_get_cur_state(struct thermal_cooling_device *cdev, unsigned
-			       long *state)
+static int video_get_cur_state(struct thermal_cooling_device *cdev, char *buf)
 {
 	struct acpi_device *device = cdev->devdata;
 	struct acpi_video_device *video = acpi_driver_data(device);
 	unsigned long long level;
-	int offset;
+	int state;
 
 	acpi_video_device_lcd_get_level_current(video, &level);
-	for (offset = 2; offset < video->brightness->count; offset++)
-		if (level == video->brightness->levels[offset]) {
-			*state = video->brightness->count - offset - 1;
-			return 0;
-		}
+	for (state = 2; state < video->brightness->count; state++)
+		if (level == video->brightness->levels[state])
+			return sprintf(buf, "%d\n",
+				       video->brightness->count - state - 1);
 
 	return -EINVAL;
 }
 
 static int
-video_set_cur_state(struct thermal_cooling_device *cdev, unsigned long state)
+video_set_cur_state(struct thermal_cooling_device *cdev, unsigned int state)
 {
 	struct acpi_device *device = cdev->devdata;
 	struct acpi_video_device *video = acpi_driver_data(device);
