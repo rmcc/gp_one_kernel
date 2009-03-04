@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 6
 SUBLEVEL = 29
-EXTRAVERSION = -rc5
+EXTRAVERSION = -rc8
 NAME = Erotic Pickled Herring
 
 # *DOCUMENTATION*
@@ -389,6 +389,7 @@ PHONY += outputmakefile
 # output directory.
 outputmakefile:
 ifneq ($(KBUILD_SRC),)
+	$(Q)ln -fsn $(srctree) source
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/mkmakefile \
 	    $(srctree) $(objtree) $(VERSION) $(PATCHLEVEL)
 endif
@@ -564,6 +565,9 @@ KBUILD_CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
 
 # disable pointer signed / unsigned warnings in gcc 4.0
 KBUILD_CFLAGS += $(call cc-option,-Wno-pointer-sign,)
+
+# disable invalid "can't wrap" optimzations for signed / pointers
+KBUILD_CFLAGS	+= $(call cc-option,-fwrapv)
 
 # Add user supplied CPPFLAGS, AFLAGS and CFLAGS as the last assignments
 # But warn user when we do so
@@ -903,12 +907,18 @@ localver = $(subst $(space),, $(string) \
 # and if the SCM is know a tag from the SCM is appended.
 # The appended tag is determined by the SCM used.
 #
-# Currently, only git is supported.
-# Other SCMs can edit scripts/setlocalversion and add the appropriate
-# checks as needed.
+# .scmversion is used when generating rpm packages so we do not loose
+# the version information from the SCM when we do the build of the kernel
+# from the copied source
 ifdef CONFIG_LOCALVERSION_AUTO
-	_localver-auto = $(shell $(CONFIG_SHELL) \
-	                  $(srctree)/scripts/setlocalversion $(srctree))
+
+ifeq ($(wildcard .scmversion),)
+        _localver-auto = $(shell $(CONFIG_SHELL) \
+                         $(srctree)/scripts/setlocalversion $(srctree))
+else
+        _localver-auto = $(shell cat .scmversion 2> /dev/null)
+endif
+
 	localver-auto  = $(LOCALVERSION)$(_localver-auto)
 endif
 
@@ -946,7 +956,6 @@ ifneq ($(KBUILD_SRC),)
 	    mkdir -p include2;                                          \
 	    ln -fsn $(srctree)/include/asm-$(SRCARCH) include2/asm;     \
 	fi
-	ln -fsn $(srctree) source
 endif
 
 # prepare2 creates a makefile if using a separate output directory
@@ -1537,7 +1546,7 @@ quiet_cmd_depmod = DEPMOD  $(KERNELRELEASE)
       cmd_depmod = \
 	if [ -r System.map -a -x $(DEPMOD) ]; then                              \
 		$(DEPMOD) -ae -F System.map                                     \
-		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) -r)   \
+		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) )     \
 		$(KERNELRELEASE);                                               \
 	fi
 
