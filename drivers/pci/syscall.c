@@ -14,8 +14,10 @@
 #include <asm/uaccess.h>
 #include "pci.h"
 
-SYSCALL_DEFINE5(pciconfig_read, unsigned long, bus, unsigned long, dfn,
-		unsigned long, off, unsigned long, len, void __user *, buf)
+asmlinkage long
+sys_pciconfig_read(unsigned long bus, unsigned long dfn,
+		   unsigned long off, unsigned long len,
+		   void __user *buf)
 {
 	struct pci_dev *dev;
 	u8 byte;
@@ -84,8 +86,10 @@ error:
 	return err;
 }
 
-SYSCALL_DEFINE5(pciconfig_write, unsigned long, bus, unsigned long, dfn,
-		unsigned long, off, unsigned long, len, void __user *, buf)
+asmlinkage long
+sys_pciconfig_write(unsigned long bus, unsigned long dfn,
+		    unsigned long off, unsigned long len,
+		    void __user *buf)
 {
 	struct pci_dev *dev;
 	u8 byte;

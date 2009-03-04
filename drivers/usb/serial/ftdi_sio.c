@@ -2030,7 +2030,7 @@ static void ftdi_process_read(struct work_struct *work)
 			spin_unlock_irqrestore(&priv->rx_lock, flags);
 			dbg("%s - deferring remainder until unthrottled",
 					__func__);
-			goto out;
+			return;
 		}
 		spin_unlock_irqrestore(&priv->rx_lock, flags);
 		/* if the port is closed stop trying to read */

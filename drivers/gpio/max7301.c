@@ -217,10 +217,8 @@ static int __devinit max7301_probe(struct spi_device *spi)
 	int i, ret;
 
 	pdata = spi->dev.platform_data;
-	if (!pdata || !pdata->base) {
-		dev_dbg(&spi->dev, "incorrect or missing platform data\n");
-		return -EINVAL;
-	}
+	if (!pdata || !pdata->base)
+		return -ENODEV;
 
 	/*
 	 * bits_per_word cannot be configured in platform data

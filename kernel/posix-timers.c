@@ -477,9 +477,10 @@ static void release_posix_timer(struct k_itimer *tmr, int it_id_set)
 
 /* Create a POSIX.1b interval timer. */
 
-SYSCALL_DEFINE3(timer_create, const clockid_t, which_clock,
-		struct sigevent __user *, timer_event_spec,
-		timer_t __user *, created_timer_id)
+asmlinkage long
+sys_timer_create(const clockid_t which_clock,
+		 struct sigevent __user *timer_event_spec,
+		 timer_t __user * created_timer_id)
 {
 	struct k_itimer *new_timer;
 	int error, new_timer_id;
@@ -660,8 +661,8 @@ common_timer_get(struct k_itimer *timr, struct itimerspec *cur_setting)
 }
 
 /* Get the time remaining on a POSIX.1b interval timer. */
-SYSCALL_DEFINE2(timer_gettime, timer_t, timer_id,
-		struct itimerspec __user *, setting)
+asmlinkage long
+sys_timer_gettime(timer_t timer_id, struct itimerspec __user *setting)
 {
 	struct k_itimer *timr;
 	struct itimerspec cur_setting;
@@ -690,7 +691,8 @@ SYSCALL_DEFINE2(timer_gettime, timer_t, timer_id,
  * the call back to do_schedule_next_timer().  So all we need to do is
  * to pick up the frozen overrun.
  */
-SYSCALL_DEFINE1(timer_getoverrun, timer_t, timer_id)
+asmlinkage long
+sys_timer_getoverrun(timer_t timer_id)
 {
 	struct k_itimer *timr;
 	int overrun;
@@ -758,9 +760,10 @@ common_timer_set(struct k_itimer *timr, int flags,
 }
 
 /* Set a POSIX.1b interval timer */
-SYSCALL_DEFINE4(timer_settime, timer_t, timer_id, int, flags,
-		const struct itimerspec __user *, new_setting,
-		struct itimerspec __user *, old_setting)
+asmlinkage long
+sys_timer_settime(timer_t timer_id, int flags,
+		  const struct itimerspec __user *new_setting,
+		  struct itimerspec __user *old_setting)
 {
 	struct k_itimer *timr;
 	struct itimerspec new_spec, old_spec;
@@ -813,7 +816,8 @@ static inline int timer_delete_hook(struct k_itimer *timer)
 }
 
 /* Delete a POSIX.1b interval timer. */
-SYSCALL_DEFINE1(timer_delete, timer_t, timer_id)
+asmlinkage long
+sys_timer_delete(timer_t timer_id)
 {
 	struct k_itimer *timer;
 	unsigned long flags;
@@ -899,8 +903,8 @@ int do_posix_clock_nonanosleep(const clockid_t clock, int flags,
 }
 EXPORT_SYMBOL_GPL(do_posix_clock_nonanosleep);
 
-SYSCALL_DEFINE2(clock_settime, const clockid_t, which_clock,
-		const struct timespec __user *, tp)
+asmlinkage long sys_clock_settime(const clockid_t which_clock,
+				  const struct timespec __user *tp)
 {
 	struct timespec new_tp;
 
@@ -912,8 +916,8 @@ SYSCALL_DEFINE2(clock_settime, const clockid_t, which_clock,
 	return CLOCK_DISPATCH(which_clock, clock_set, (which_clock, &new_tp));
 }
 
-SYSCALL_DEFINE2(clock_gettime, const clockid_t, which_clock,
-		struct timespec __user *,tp)
+asmlinkage long
+sys_clock_gettime(const clockid_t which_clock, struct timespec __user *tp)
 {
 	struct timespec kernel_tp;
 	int error;
@@ -929,8 +933,8 @@ SYSCALL_DEFINE2(clock_gettime, const clockid_t, which_clock,
 
 }
 
-SYSCALL_DEFINE2(clock_getres, const clockid_t, which_clock,
-		struct timespec __user *, tp)
+asmlinkage long
+sys_clock_getres(const clockid_t which_clock, struct timespec __user *tp)
 {
 	struct timespec rtn_tp;
 	int error;
@@ -959,9 +963,10 @@ static int common_nsleep(const clockid_t which_clock, int flags,
 				 which_clock);
 }
 
-SYSCALL_DEFINE4(clock_nanosleep, const clockid_t, which_clock, int, flags,
-		const struct timespec __user *, rqtp,
-		struct timespec __user *, rmtp)
+asmlinkage long
+sys_clock_nanosleep(const clockid_t which_clock, int flags,
+		    const struct timespec __user *rqtp,
+		    struct timespec __user *rmtp)
 {
 	struct timespec t;
 

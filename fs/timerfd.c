@@ -177,7 +177,7 @@ static struct file *timerfd_fget(int fd)
 	return file;
 }
 
-SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
+asmlinkage long sys_timerfd_create(int clockid, int flags)
 {
 	int ufd;
 	struct timerfd_ctx *ctx;
@@ -208,9 +208,9 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 	return ufd;
 }
 
-SYSCALL_DEFINE4(timerfd_settime, int, ufd, int, flags,
-		const struct itimerspec __user *, utmr,
-		struct itimerspec __user *, otmr)
+asmlinkage long sys_timerfd_settime(int ufd, int flags,
+				    const struct itimerspec __user *utmr,
+				    struct itimerspec __user *otmr)
 {
 	struct file *file;
 	struct timerfd_ctx *ctx;
@@ -265,7 +265,7 @@ SYSCALL_DEFINE4(timerfd_settime, int, ufd, int, flags,
 	return 0;
 }
 
-SYSCALL_DEFINE2(timerfd_gettime, int, ufd, struct itimerspec __user *, otmr)
+asmlinkage long sys_timerfd_gettime(int ufd, struct itimerspec __user *otmr)
 {
 	struct file *file;
 	struct timerfd_ctx *ctx;

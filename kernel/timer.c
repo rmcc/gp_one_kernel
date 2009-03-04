@@ -1129,7 +1129,7 @@ void do_timer(unsigned long ticks)
  * For backwards compatibility?  This can be done in libc so Alpha
  * and all newer ports shouldn't need it.
  */
-SYSCALL_DEFINE1(alarm, unsigned int, seconds)
+asmlinkage unsigned long sys_alarm(unsigned int seconds)
 {
 	return alarm_setitimer(seconds);
 }
@@ -1152,7 +1152,7 @@ SYSCALL_DEFINE1(alarm, unsigned int, seconds)
  *
  * This is SMP safe as current->tgid does not change.
  */
-SYSCALL_DEFINE0(getpid)
+asmlinkage long sys_getpid(void)
 {
 	return task_tgid_vnr(current);
 }
@@ -1163,7 +1163,7 @@ SYSCALL_DEFINE0(getpid)
  * value of ->real_parent under rcu_read_lock(), see
  * release_task()->call_rcu(delayed_put_task_struct).
  */
-SYSCALL_DEFINE0(getppid)
+asmlinkage long sys_getppid(void)
 {
 	int pid;
 
@@ -1174,25 +1174,25 @@ SYSCALL_DEFINE0(getppid)
 	return pid;
 }
 
-SYSCALL_DEFINE0(getuid)
+asmlinkage long sys_getuid(void)
 {
 	/* Only we change this so SMP safe */
 	return current_uid();
 }
 
-SYSCALL_DEFINE0(geteuid)
+asmlinkage long sys_geteuid(void)
 {
 	/* Only we change this so SMP safe */
 	return current_euid();
 }
 
-SYSCALL_DEFINE0(getgid)
+asmlinkage long sys_getgid(void)
 {
 	/* Only we change this so SMP safe */
 	return current_gid();
 }
 
-SYSCALL_DEFINE0(getegid)
+asmlinkage long sys_getegid(void)
 {
 	/* Only we change this so SMP safe */
 	return  current_egid();
@@ -1308,7 +1308,7 @@ signed long __sched schedule_timeout_uninterruptible(signed long timeout)
 EXPORT_SYMBOL(schedule_timeout_uninterruptible);
 
 /* Thread ID - the internal kernel "pid" */
-SYSCALL_DEFINE0(gettid)
+asmlinkage long sys_gettid(void)
 {
 	return task_pid_vnr(current);
 }
@@ -1400,7 +1400,7 @@ out:
 	return 0;
 }
 
-SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
+asmlinkage long sys_sysinfo(struct sysinfo __user *info)
 {
 	struct sysinfo val;
 

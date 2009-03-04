@@ -156,7 +156,7 @@ static volatile int fdc_busy = -1;
 static volatile int fdc_nested;
 static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
  
-static DECLARE_COMPLETION(motor_on_completion);
+static DECLARE_WAIT_QUEUE_HEAD(motor_wait);
 
 static volatile int selected = -1;	/* currently selected drive */
 
@@ -184,7 +184,8 @@ static unsigned char mfmencode[16]={
 static unsigned char mfmdecode[128];
 
 /* floppy internal millisecond timer stuff */
-static DECLARE_COMPLETION(ms_wait_completion);
+static volatile int ms_busy = -1;
+static DECLARE_WAIT_QUEUE_HEAD(ms_wait);
 #define MS_TICKS ((amiga_eclock+50)/1000)
 
 /*
@@ -210,7 +211,8 @@ static int fd_device[4] = { 0, 0, 0, 0 };
 
 static irqreturn_t ms_isr(int irq, void *dummy)
 {
-	complete(&ms_wait_completion);
+	ms_busy = -1;
+	wake_up(&ms_wait);
 	return IRQ_HANDLED;
 }
 
@@ -218,17 +220,19 @@ static irqreturn_t ms_isr(int irq, void *dummy)
    A more generic routine would do a schedule a la timer.device */
 static void ms_delay(int ms)
 {
+	unsigned long flags;
 	int ticks;
-	static DEFINE_MUTEX(mutex);
-
 	if (ms > 0) {
-		mutex_lock(&mutex);
+		local_irq_save(flags);
+		while (ms_busy == 0)
+			sleep_on(&ms_wait);
+		ms_busy = 0;
+		local_irq_restore(flags);
 		ticks = MS_TICKS*ms-1;
 		ciaa.tblo=ticks%256;
 		ciaa.tbhi=ticks/256;
 		ciaa.crb=0x19; /*count eclock, force load, one-shoot, start */
-		wait_for_completion(&ms_wait_completion);
-		mutex_unlock(&mutex);
+		sleep_on(&ms_wait);
 	}
 }
 
@@ -250,7 +254,8 @@ static void get_fdc(int drive)
 	printk("get_fdc: drive %d  fdc_busy %d  fdc_nested %d\n",drive,fdc_busy,fdc_nested);
 #endif
 	local_irq_save(flags);
-	wait_event(fdc_wait, try_fdc(drive));
+	while (!try_fdc(drive))
+		sleep_on(&fdc_wait);
 	fdc_busy = drive;
 	fdc_nested++;
 	local_irq_restore(flags);
@@ -325,7 +330,7 @@ static void fd_deselect (int drive)
 static void motor_on_callback(unsigned long nr)
 {
 	if (!(ciaa.pra & DSKRDY) || --on_attempts == 0) {
-		complete_all(&motor_on_completion);
+		wake_up (&motor_wait);
 	} else {
 		motor_on_timer.expires = jiffies + HZ/10;
 		add_timer(&motor_on_timer);
@@ -342,12 +347,11 @@ static int fd_motor_on(int nr)
 		unit[nr].motor = 1;
 		fd_select(nr);
 
-		INIT_COMPLETION(motor_on_completion);
 		motor_on_timer.data = nr;
 		mod_timer(&motor_on_timer, jiffies + HZ/2);
 
 		on_attempts = 10;
-		wait_for_completion(&motor_on_completion);
+		sleep_on (&motor_wait);
 		fd_deselect(nr);
 	}
 
@@ -578,7 +582,8 @@ static void raw_read(int drive)
 {
 	drive&=3;
 	get_fdc(drive);
-	wait_event(wait_fd_block, !block_flag);
+	while (block_flag)
+		sleep_on(&wait_fd_block);
 	fd_select(drive);
 	/* setup adkcon bits correctly */
 	custom.adkcon = ADK_MSBSYNC;
@@ -593,7 +598,8 @@ static void raw_read(int drive)
 
 	block_flag = 1;
 
-	wait_event(wait_fd_block, !block_flag);
+	while (block_flag)
+		sleep_on (&wait_fd_block);
 
 	custom.dsklen = 0;
 	fd_deselect(drive);
@@ -610,7 +616,8 @@ static int raw_write(int drive)
 		rel_fdc();
 		return 0;
 	}
-	wait_event(wait_fd_block, !block_flag);
+	while (block_flag)
+		sleep_on(&wait_fd_block);
 	fd_select(drive);
 	/* clear adkcon bits */
 	custom.adkcon = ADK_PRECOMP1|ADK_PRECOMP0|ADK_WORDSYNC|ADK_MSBSYNC;
@@ -1287,7 +1294,8 @@ static int non_int_flush_track (unsigned long nr)
 			writepending = 0;
 			return 0;
 		}
-		wait_event(wait_fd_block, block_flag != 2);
+		while (block_flag == 2)
+			sleep_on (&wait_fd_block);
 	}
 	else {
 		local_irq_restore(flags);

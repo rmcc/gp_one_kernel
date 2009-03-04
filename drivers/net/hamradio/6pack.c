@@ -717,12 +717,11 @@ static int sixpack_ioctl(struct tty_struct *tty, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
 	struct sixpack *sp = sp_get(tty);
-	struct net_device *dev;
+	struct net_device *dev = sp->dev;
 	unsigned int tmp, err;
 
 	if (!sp)
 		return -ENXIO;
-	dev = sp->dev;
 
 	switch(cmd) {
 	case SIOCGIFNAME:

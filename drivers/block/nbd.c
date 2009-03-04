@@ -406,7 +406,6 @@ static int nbd_do_it(struct nbd_device *lo)
 	ret = sysfs_create_file(&disk_to_dev(lo->disk)->kobj, &pid_attr.attr);
 	if (ret) {
 		printk(KERN_ERR "nbd: sysfs_create_file failed!");
-		lo->pid = 0;
 		return ret;
 	}
 
@@ -414,7 +413,6 @@ static int nbd_do_it(struct nbd_device *lo)
 		nbd_end_request(req);
 
 	sysfs_remove_file(&disk_to_dev(lo->disk)->kobj, &pid_attr.attr);
-	lo->pid = 0;
 	return 0;
 }
 
@@ -650,8 +648,6 @@ static int nbd_ioctl(struct block_device *bdev, fmode_t mode,
 		set_capacity(lo->disk, lo->bytesize >> 9);
 		return 0;
 	case NBD_DO_IT:
-		if (lo->pid)
-			return -EBUSY;
 		if (!lo->file)
 			return -EINVAL;
 		thread = kthread_create(nbd_thread, lo, lo->disk->disk_name);

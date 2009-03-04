@@ -35,7 +35,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/zlib.h>
-#include <linux/magic.h>
 
 #include "squashfs_fs.h"
 #include "squashfs_fs_sb.h"

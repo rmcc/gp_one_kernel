@@ -58,11 +58,11 @@ static struct ctl_table_header *brnf_sysctl_header;
 static int brnf_call_iptables __read_mostly = 1;
 static int brnf_call_ip6tables __read_mostly = 1;
 static int brnf_call_arptables __read_mostly = 1;
-static int brnf_filter_vlan_tagged __read_mostly = 0;
-static int brnf_filter_pppoe_tagged __read_mostly = 0;
+static int brnf_filter_vlan_tagged __read_mostly = 1;
+static int brnf_filter_pppoe_tagged __read_mostly = 1;
 #else
-#define brnf_filter_vlan_tagged 0
-#define brnf_filter_pppoe_tagged 0
+#define brnf_filter_vlan_tagged 1
+#define brnf_filter_pppoe_tagged 1
 #endif
 
 static inline __be16 vlan_proto(const struct sk_buff *skb)
@@ -686,11 +686,8 @@ static unsigned int br_nf_forward_ip(unsigned int hook, struct sk_buff *skb,
 	if (skb->protocol == htons(ETH_P_IP) || IS_VLAN_IP(skb) ||
 	    IS_PPPOE_IP(skb))
 		pf = PF_INET;
-	else if (skb->protocol == htons(ETH_P_IPV6) || IS_VLAN_IPV6(skb) ||
-		 IS_PPPOE_IPV6(skb))
-		pf = PF_INET6;
 	else
-		return NF_ACCEPT;
+		pf = PF_INET6;
 
 	nf_bridge_pull_encap_header(skb);
 
@@ -831,11 +828,8 @@ static unsigned int br_nf_post_routing(unsigned int hook, struct sk_buff *skb,
 	if (skb->protocol == htons(ETH_P_IP) || IS_VLAN_IP(skb) ||
 	    IS_PPPOE_IP(skb))
 		pf = PF_INET;
-	else if (skb->protocol == htons(ETH_P_IPV6) || IS_VLAN_IPV6(skb) ||
-		 IS_PPPOE_IPV6(skb))
-		pf = PF_INET6;
 	else
-		return NF_ACCEPT;
+		pf = PF_INET6;
 
 #ifdef CONFIG_NETFILTER_DEBUG
 	if (skb->dst == NULL) {

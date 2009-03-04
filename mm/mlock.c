@@ -530,7 +530,7 @@ static int do_mlock(unsigned long start, size_t len, int on)
 	return error;
 }
 
-SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
+asmlinkage long sys_mlock(unsigned long start, size_t len)
 {
 	unsigned long locked;
 	unsigned long lock_limit;
@@ -558,7 +558,7 @@ SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
 	return error;
 }
 
-SYSCALL_DEFINE2(munlock, unsigned long, start, size_t, len)
+asmlinkage long sys_munlock(unsigned long start, size_t len)
 {
 	int ret;
 
@@ -595,7 +595,7 @@ out:
 	return 0;
 }
 
-SYSCALL_DEFINE1(mlockall, int, flags)
+asmlinkage long sys_mlockall(int flags)
 {
 	unsigned long lock_limit;
 	int ret = -EINVAL;
@@ -623,7 +623,7 @@ out:
 	return ret;
 }
 
-SYSCALL_DEFINE0(munlockall)
+asmlinkage long sys_munlockall(void)
 {
 	int ret;
 

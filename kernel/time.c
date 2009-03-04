@@ -60,7 +60,7 @@ EXPORT_SYMBOL(sys_tz);
  * why not move it into the appropriate arch directory (for those
  * architectures that need it).
  */
-SYSCALL_DEFINE1(time, time_t __user *, tloc)
+asmlinkage long sys_time(time_t __user * tloc)
 {
 	time_t i = get_seconds();
 
@@ -79,7 +79,7 @@ SYSCALL_DEFINE1(time, time_t __user *, tloc)
  * architectures that need it).
  */
 
-SYSCALL_DEFINE1(stime, time_t __user *, tptr)
+asmlinkage long sys_stime(time_t __user *tptr)
 {
 	struct timespec tv;
 	int err;
@@ -99,8 +99,8 @@ SYSCALL_DEFINE1(stime, time_t __user *, tptr)
 
 #endif /* __ARCH_WANT_SYS_TIME */
 
-SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
-		struct timezone __user *, tz)
+asmlinkage long sys_gettimeofday(struct timeval __user *tv,
+				 struct timezone __user *tz)
 {
 	if (likely(tv != NULL)) {
 		struct timeval ktv;
@@ -184,8 +184,8 @@ int do_sys_settimeofday(struct timespec *tv, struct timezone *tz)
 	return 0;
 }
 
-SYSCALL_DEFINE2(settimeofday, struct timeval __user *, tv,
-		struct timezone __user *, tz)
+asmlinkage long sys_settimeofday(struct timeval __user *tv,
+				struct timezone __user *tz)
 {
 	struct timeval user_tv;
 	struct timespec	new_ts;
@@ -205,7 +205,7 @@ SYSCALL_DEFINE2(settimeofday, struct timeval __user *, tv,
 	return do_sys_settimeofday(tv ? &new_ts : NULL, tz ? &new_tz : NULL);
 }
 
-SYSCALL_DEFINE1(adjtimex, struct timex __user *, txc_p)
+asmlinkage long sys_adjtimex(struct timex __user *txc_p)
 {
 	struct timex txc;		/* Local copy of parameter */
 	int ret;

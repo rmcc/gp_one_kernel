@@ -10,7 +10,7 @@ use strict;
 my $P = $0;
 $P =~ s@.*/@@g;
 
-my $V = '0.27';
+my $V = '0.26';
 
 use Getopt::Long qw(:config no_auto_abbrev);
 
@@ -411,15 +411,13 @@ sub ctx_statement_block {
 
 	my $type = '';
 	my $level = 0;
-	my @stack = ();
+	my @stack = ([$type, $level]);
 	my $p;
 	my $c;
 	my $len = 0;
 
 	my $remainder;
 	while (1) {
-		@stack = (['', 0]) if ($#stack == -1);
-
 		#warn "CSB: blk<$blk> remain<$remain>\n";
 		# If we are about to drop off the end, pull in more
 		# context.
@@ -1665,7 +1663,7 @@ sub process {
 			# Should not end with a space.
 			$to =~ s/\s+$//;
 			# '*'s should not have spaces between.
-			while ($to =~ s/\*\s+\*/\*\*/) {
+			while ($to =~ s/(.)\s\*/$1\*/) {
 			}
 
 			#print "from<$from> to<$to>\n";
@@ -1680,7 +1678,7 @@ sub process {
 			# Should not end with a space.
 			$to =~ s/\s+$//;
 			# '*'s should not have spaces between.
-			while ($to =~ s/\*\s+\*/\*\*/) {
+			while ($to =~ s/(.)\s\*/$1\*/) {
 			}
 			# Modifiers should have spaces.
 			$to =~ s/(\b$Modifier$)/$1 /;
@@ -2016,11 +2014,7 @@ sub process {
 
 			# Flatten any parentheses
 			$value =~ s/\)\(/\) \(/g;
-			while ($value =~ s/\[[^\{\}]*\]/1/ ||
-			       $value !~ /(?:$Ident|-?$Constant)\s*
-					     $Compare\s*
-					     (?:$Ident|-?$Constant)/x &&
-			       $value =~ s/\([^\(\)]*\)/1/) {
+			while ($value !~ /(?:$Ident|-?$Constant)\s*$Compare\s*(?:$Ident|-?$Constant)/ && $value =~ s/\([^\(\)]*\)/1/) {
 			}
 
 			if ($value =~ /^(?:$Ident|-?$Constant)$/) {
@@ -2107,11 +2101,6 @@ sub process {
 			if ($s !~ /^\s*(?:\sif|(?:{|)\s*\\?\s*$)/) {
 				ERROR("trailing statements should be on next line\n" . $herecurr);
 			}
-		}
-# if should not continue a brace
-		if ($line =~ /}\s*if\b/) {
-			ERROR("trailing statements should be on next line\n" .
-				$herecurr);
 		}
 # case and default should not have general statements after them
 		if ($line =~ /^.\s*(?:case\s*.*|default\s*):/g &&
@@ -2527,10 +2516,9 @@ sub process {
 			WARN("please use device_initcall() instead of __initcall()\n" . $herecurr);
 		}
 # check for struct file_operations, ensure they are const.
-		if ($line !~ /\bconst\b/ &&
-		    $line =~ /\bstruct\s+(file_operations|seq_operations)\b/) {
-			WARN("struct $1 should normally be const\n" .
-				$herecurr);
+		if ($line =~ /\bstruct\s+file_operations\b/ &&
+		    $line !~ /\bconst\b/) {
+			WARN("struct file_operations should normally be const\n" . $herecurr);
 		}
 
 # use of NR_CPUS is usually wrong

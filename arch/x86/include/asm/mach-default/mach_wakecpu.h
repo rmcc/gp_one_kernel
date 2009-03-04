@@ -24,13 +24,7 @@ static inline void restore_NMI_vector(unsigned short *high, unsigned short *low)
 {
 }
 
-#ifdef CONFIG_SMP
 extern void __inquire_remote_apic(int apicid);
-#else /* CONFIG_SMP */
-static inline void __inquire_remote_apic(int apicid)
-{
-}
-#endif /* CONFIG_SMP */
 
 static inline void inquire_remote_apic(int apicid)
 {

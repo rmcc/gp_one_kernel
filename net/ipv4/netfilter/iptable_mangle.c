@@ -132,8 +132,12 @@ ipt_local_hook(unsigned int hook,
 
 	/* root is playing with raw sockets. */
 	if (skb->len < sizeof(struct iphdr)
-	    || ip_hdrlen(skb) < sizeof(struct iphdr))
+	    || ip_hdrlen(skb) < sizeof(struct iphdr)) {
+		if (net_ratelimit())
+			printk("iptable_mangle: ignoring short SOCK_RAW "
+			       "packet.\n");
 		return NF_ACCEPT;
+	}
 
 	/* Save things which could affect route */
 	mark = skb->mark;

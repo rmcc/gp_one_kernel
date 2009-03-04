@@ -46,7 +46,6 @@
 #include <asm/io.h>
 #include <asm/hwrpb.h>
 #include <asm/8253pit.h>
-#include <asm/rtc.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/time.h>
@@ -181,15 +180,6 @@ common_init_rtc(void)
 	init_rtc_irq();
 }
 
-unsigned int common_get_rtc_time(struct rtc_time *time)
-{
-	return __get_rtc_time(time);
-}
-
-int common_set_rtc_time(struct rtc_time *time)
-{
-	return __set_rtc_time(time);
-}
 
 /* Validate a computed cycle counter result against the known bounds for
    the given processor core.  There's too much brokenness in the way of
