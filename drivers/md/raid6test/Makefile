@@ -5,7 +5,7 @@
 
 CC	 = gcc
 OPTFLAGS = -O2			# Adjust as desired
-CFLAGS	 = -I.. -I ../../../include -g $(OPTFLAGS)
+CFLAGS	 = -I.. -g $(OPTFLAGS)
 LD	 = ld
 PERL	 = perl
 AR	 = ar

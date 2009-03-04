@@ -5,7 +5,7 @@
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
  *   the Free Software Foundation, Inc., 53 Temple Place Ste 330,
- *   Boston MA 02111-1307, USA; either version 2 of the License, or
+ *   Bostom MA 02111-1307, USA; either version 2 of the License, or
  *   (at your option) any later version; incorporated herein by reference.
  *
  * ----------------------------------------------------------------------- */
@@ -18,7 +18,7 @@
  * the syndrome.)
  */
 
-#include <linux/raid/pq.h>
+#include "raid6.h"
 
 /* Recover two failed data blocks. */
 void raid6_2data_recov(int disks, size_t bytes, int faila, int failb,
@@ -63,7 +63,9 @@ void raid6_2data_recov(int disks, size_t bytes, int faila, int failb,
 		p++; q++;
 	}
 }
-EXPORT_SYMBOL_GPL(raid6_2data_recov);
+
+
+
 
 /* Recover failure of one data block plus the P block */
 void raid6_datap_recov(int disks, size_t bytes, int faila, void **ptrs)
@@ -95,10 +97,9 @@ void raid6_datap_recov(int disks, size_t bytes, int faila, void **ptrs)
 		q++; dq++;
 	}
 }
-EXPORT_SYMBOL_GPL(raid6_datap_recov);
 
-#ifndef __KERNEL__
-/* Testing only */
+
+#ifndef __KERNEL__		/* Testing only */
 
 /* Recover two failed blocks. */
 void raid6_dual_recov(int disks, size_t bytes, int faila, int failb, void **ptrs)

@@ -16,11 +16,7 @@
    Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
 */
 
-#include <linux/blkdev.h>
-#include <linux/raid/md_u.h>
-#include <linux/seq_file.h>
-#include "md.h"
-#include "linear.h"
+#include <linux/raid/linear.h>
 
 /*
  * find which device holds a particular offset 
@@ -101,16 +97,6 @@ static int linear_congested(void *data, int bits)
 	return ret;
 }
 
-static sector_t linear_size(mddev_t *mddev, sector_t sectors, int raid_disks)
-{
-	linear_conf_t *conf = mddev_to_conf(mddev);
-
-	WARN_ONCE(sectors || raid_disks,
-		  "%s does not support generic reshape\n", __func__);
-
-	return conf->array_sectors;
-}
-
 static linear_conf_t *linear_conf(mddev_t *mddev, int raid_disks)
 {
 	linear_conf_t *conf;
@@ -149,8 +135,8 @@ static linear_conf_t *linear_conf(mddev_t *mddev, int raid_disks)
 		    mddev->queue->max_sectors > (PAGE_SIZE>>9))
 			blk_queue_max_sectors(mddev->queue, PAGE_SIZE>>9);
 
-		disk->num_sectors = rdev->sectors;
-		conf->array_sectors += rdev->sectors;
+		disk->num_sectors = rdev->size * 2;
+		conf->array_sectors += rdev->size * 2;
 
 		cnt++;
 	}
@@ -263,7 +249,7 @@ static int linear_run (mddev_t *mddev)
 	if (!conf)
 		return 1;
 	mddev->private = conf;
-	md_set_array_sectors(mddev, linear_size(mddev, 0, 0));
+	mddev->array_sectors = conf->array_sectors;
 
 	blk_queue_merge_bvec(mddev->queue, linear_mergeable_bvec);
 	mddev->queue->unplug_fn = linear_unplug;
@@ -297,7 +283,7 @@ static int linear_add(mddev_t *mddev, mdk_rdev_t *rdev)
 	newconf->prev = mddev_to_conf(mddev);
 	mddev->private = newconf;
 	mddev->raid_disks++;
-	md_set_array_sectors(mddev, linear_size(mddev, 0, 0));
+	mddev->array_sectors = newconf->array_sectors;
 	set_capacity(mddev->gendisk, mddev->array_sectors);
 	return 0;
 }
@@ -395,7 +381,6 @@ static struct mdk_personality linear_personality =
 	.stop		= linear_stop,
 	.status		= linear_status,
 	.hot_add_disk	= linear_add,
-	.size		= linear_size,
 };
 
 static int __init linear_init (void)
