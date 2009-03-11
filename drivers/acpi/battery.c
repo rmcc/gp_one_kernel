@@ -30,7 +30,6 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/jiffies.h>
-#include <linux/async.h>
 
 #ifdef CONFIG_ACPI_PROCFS_POWER
 #include <linux/proc_fs.h>
@@ -902,27 +901,21 @@ static struct acpi_driver acpi_battery_driver = {
 		},
 };
 
-static void __init acpi_battery_init_async(void *unused, async_cookie_t cookie)
+static int __init acpi_battery_init(void)
 {
 	if (acpi_disabled)
-		return;
+		return -ENODEV;
 #ifdef CONFIG_ACPI_PROCFS_POWER
 	acpi_battery_dir = acpi_lock_battery_dir();
 	if (!acpi_battery_dir)
-		return;
+		return -ENODEV;
 #endif
 	if (acpi_bus_register_driver(&acpi_battery_driver) < 0) {
 #ifdef CONFIG_ACPI_PROCFS_POWER
 		acpi_unlock_battery_dir(acpi_battery_dir);
 #endif
-		return;
+		return -ENODEV;
 	}
-	return;
-}
-
-static int __init acpi_battery_init(void)
-{
-	async_schedule(acpi_battery_init_async, NULL);
 	return 0;
 }
 
