@@ -455,7 +455,7 @@ struct request_queue
 
 #define QUEUE_FLAG_DEFAULT	((1 << QUEUE_FLAG_IO_STAT) |		\
 				 (1 << QUEUE_FLAG_CLUSTER) |		\
-				  1 << QUEUE_FLAG_STACKABLE)
+				 (1 << QUEUE_FLAG_STACKABLE))
 
 static inline int queue_is_locked(struct request_queue *q)
 {
@@ -708,6 +708,8 @@ struct req_iterator {
 };
 
 /* This should not be used directly - use rq_for_each_segment */
+#define for_each_bio(_bio)		\
+	for (; _bio; _bio = _bio->bi_next)
 #define __rq_for_each_bio(_bio, rq)	\
 	if ((rq->bio))			\
 		for (_bio = (rq)->bio; _bio; _bio = _bio->bi_next)

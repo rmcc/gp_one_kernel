@@ -369,7 +369,6 @@ static int metapage_writepage(struct page *page, struct writeback_control *wbc)
 	unsigned long bio_bytes = 0;
 	unsigned long bio_offset = 0;
 	int offset;
-	int bad_blocks = 0;
 
 	page_start = (sector_t)page->index <<
 		     (PAGE_CACHE_SHIFT - inode->i_blkbits);
@@ -395,7 +394,6 @@ static int metapage_writepage(struct page *page, struct writeback_control *wbc)
 		}
 
 		clear_bit(META_dirty, &mp->flag);
-		set_bit(META_io, &mp->flag);
 		block_offset = offset >> inode->i_blkbits;
 		lblock = page_start + block_offset;
 		if (bio) {
@@ -404,6 +402,7 @@ static int metapage_writepage(struct page *page, struct writeback_control *wbc)
 				len = min(xlen, blocks_per_mp);
 				xlen -= len;
 				bio_bytes += len << inode->i_blkbits;
+				set_bit(META_io, &mp->flag);
 				continue;
 			}
 			/* Not contiguous */
@@ -425,14 +424,12 @@ static int metapage_writepage(struct page *page, struct writeback_control *wbc)
 		xlen = (PAGE_CACHE_SIZE - offset) >> inode->i_blkbits;
 		pblock = metapage_get_blocks(inode, lblock, &xlen);
 		if (!pblock) {
+			/* Need better error handling */
 			printk(KERN_ERR "JFS: metapage_get_blocks failed\n");
-			/*
-			 * We already called inc_io(), but can't cancel it
-			 * with dec_io() until we're done with the page
-			 */
-			bad_blocks++;
+			dec_io(page, last_write_complete);
 			continue;
 		}
+		set_bit(META_io, &mp->flag);
 		len = min(xlen, (int)JFS_SBI(inode->i_sb)->nbperpage);
 
 		bio = bio_alloc(GFP_NOFS, 1);
@@ -462,9 +459,6 @@ static int metapage_writepage(struct page *page, struct writeback_control *wbc)
 
 	unlock_page(page);
 
-	if (bad_blocks)
-		goto err_out;
-
 	if (nr_underway == 0)
 		end_page_writeback(page);
 
@@ -480,9 +474,7 @@ skip:
 	bio_put(bio);
 	unlock_page(page);
 	dec_io(page, last_write_complete);
-err_out:
-	while (bad_blocks--)
-		dec_io(page, last_write_complete);
+
 	return -EIO;
 }
 

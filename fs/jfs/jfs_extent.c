@@ -362,12 +362,11 @@ exit:
 int extHint(struct inode *ip, s64 offset, xad_t * xp)
 {
 	struct super_block *sb = ip->i_sb;
-	int nbperpage = JFS_SBI(sb)->nbperpage;
+	struct xadlist xadl;
+	struct lxdlist lxdl;
+	lxd_t lxd;
 	s64 prev;
-	int rc = 0;
-	s64 xaddr;
-	int xlen;
-	int xflag;
+	int rc, nbperpage = JFS_SBI(sb)->nbperpage;
 
 	/* init the hint as "no hint provided" */
 	XADaddress(xp, 0);
@@ -377,30 +376,46 @@ int extHint(struct inode *ip, s64 offset, xad_t * xp)
 	 */
 	prev = ((offset & ~POFFSET) >> JFS_SBI(sb)->l2bsize) - nbperpage;
 
-	/* if the offset is in the first page of the file, no hint provided.
+	/* if the offsets in the first page of the file,
+	 * no hint provided.
 	 */
 	if (prev < 0)
-		goto out;
+		return (0);
 
-	rc = xtLookup(ip, prev, nbperpage, &xflag, &xaddr, &xlen, 0);
+	/* prepare to lookup the previous page's extent info */
+	lxdl.maxnlxd = 1;
+	lxdl.nlxd = 1;
+	lxdl.lxd = &lxd;
+	LXDoffset(&lxd, prev)
+	LXDlength(&lxd, nbperpage);
 
-	if ((rc == 0) && xlen) {
-		if (xlen != nbperpage) {
-			jfs_error(ip->i_sb, "extHint: corrupt xtree");
-			rc = -EIO;
-		}
-		XADaddress(xp, xaddr);
-		XADlength(xp, xlen);
-		/*
-		 * only preserve the abnr flag within the xad flags
-		 * of the returned hint.
-		 */
-		xp->flag  = xflag & XAD_NOTRECORDED;
-	} else
-		rc = 0;
+	xadl.maxnxad = 1;
+	xadl.nxad = 0;
+	xadl.xad = xp;
 
-out:
-	return (rc);
+	/* perform the lookup */
+	if ((rc = xtLookupList(ip, &lxdl, &xadl, 0)))
+		return (rc);
+
+	/* check if no extent exists for the previous page.
+	 * this is possible for sparse files.
+	 */
+	if (xadl.nxad == 0) {
+//		assert(ISSPARSE(ip));
+		return (0);
+	}
+
+	/* only preserve the abnr flag within the xad flags
+	 * of the returned hint.
+	 */
+	xp->flag &= XAD_NOTRECORDED;
+
+	if(xadl.nxad != 1 || lengthXAD(xp) != nbperpage) {
+		jfs_error(ip->i_sb, "extHint: corrupt xtree");
+		return -EIO;
+	}
+
+	return (0);
 }
 
 

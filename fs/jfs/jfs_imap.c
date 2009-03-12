@@ -57,6 +57,12 @@
 #include "jfs_debug.h"
 
 /*
+ * __mark_inode_dirty expects inodes to be hashed.  Since we don't want
+ * special inodes in the fileset inode space, we make them appear hashed,
+ * but do not put on any lists.
+ */
+
+/*
  * imap locks
  */
 /* iag free list lock */
@@ -491,9 +497,7 @@ struct inode *diReadSpecial(struct super_block *sb, ino_t inum, int secondary)
 	release_metapage(mp);
 
 	/*
-	 * __mark_inode_dirty expects inodes to be hashed.  Since we don't
-	 * want special inodes in the fileset inode space, we make them
-	 * appear hashed, but do not put on any lists.  hlist_del()
+	 * that will look hashed, but won't be on any list; hlist_del()
 	 * will work fine and require no locking.
 	 */
 	ip->i_hash.pprev = &ip->i_hash.next;
