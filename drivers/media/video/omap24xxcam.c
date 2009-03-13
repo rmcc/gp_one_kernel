@@ -80,17 +80,17 @@ static int omap24xxcam_clock_get(struct omap24xxcam_device *cam)
 {
 	int rval = 0;
 
-	cam->fck = clk_get(cam->dev, "fck");
+	cam->fck = clk_get(cam->dev, "cam_fck");
 	if (IS_ERR(cam->fck)) {
-		dev_err(cam->dev, "can't get camera fck");
+		dev_err(cam->dev, "can't get cam_fck");
 		rval = PTR_ERR(cam->fck);
 		omap24xxcam_clock_put(cam);
 		return rval;
 	}
 
-	cam->ick = clk_get(cam->dev, "ick");
+	cam->ick = clk_get(cam->dev, "cam_ick");
 	if (IS_ERR(cam->ick)) {
-		dev_err(cam->dev, "can't get camera ick");
+		dev_err(cam->dev, "can't get cam_ick");
 		rval = PTR_ERR(cam->ick);
 		omap24xxcam_clock_put(cam);
 	}

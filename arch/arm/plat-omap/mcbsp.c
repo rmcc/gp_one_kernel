@@ -214,6 +214,7 @@ EXPORT_SYMBOL(omap_mcbsp_set_io_type);
 int omap_mcbsp_request(unsigned int id)
 {
 	struct omap_mcbsp *mcbsp;
+	int i;
 	int err;
 
 	if (!omap_mcbsp_check_valid_id(id)) {
@@ -222,22 +223,22 @@ int omap_mcbsp_request(unsigned int id)
 	}
 	mcbsp = id_to_mcbsp_ptr(id);
 
+	if (mcbsp->pdata && mcbsp->pdata->ops && mcbsp->pdata->ops->request)
+		mcbsp->pdata->ops->request(id);
+
+	for (i = 0; i < mcbsp->num_clks; i++)
+		clk_enable(mcbsp->clks[i]);
+
 	spin_lock(&mcbsp->lock);
 	if (!mcbsp->free) {
 		dev_err(mcbsp->dev, "McBSP%d is currently in use\n",
 			mcbsp->id);
 		spin_unlock(&mcbsp->lock);
-		return -EBUSY;
+		return -1;
 	}
 
 	mcbsp->free = 0;
 	spin_unlock(&mcbsp->lock);
-
-	if (mcbsp->pdata && mcbsp->pdata->ops && mcbsp->pdata->ops->request)
-		mcbsp->pdata->ops->request(id);
-
-	clk_enable(mcbsp->iclk);
-	clk_enable(mcbsp->fclk);
 
 	/*
 	 * Make sure that transmitter, receiver and sample-rate generator are
@@ -277,6 +278,7 @@ EXPORT_SYMBOL(omap_mcbsp_request);
 void omap_mcbsp_free(unsigned int id)
 {
 	struct omap_mcbsp *mcbsp;
+	int i;
 
 	if (!omap_mcbsp_check_valid_id(id)) {
 		printk(KERN_ERR "%s: Invalid id (%d)\n", __func__, id + 1);
@@ -287,14 +289,8 @@ void omap_mcbsp_free(unsigned int id)
 	if (mcbsp->pdata && mcbsp->pdata->ops && mcbsp->pdata->ops->free)
 		mcbsp->pdata->ops->free(id);
 
-	clk_disable(mcbsp->fclk);
-	clk_disable(mcbsp->iclk);
-
-	if (mcbsp->io_type == OMAP_MCBSP_IRQ_IO) {
-		/* Free IRQs */
-		free_irq(mcbsp->rx_irq, (void *)mcbsp);
-		free_irq(mcbsp->tx_irq, (void *)mcbsp);
-	}
+	for (i = mcbsp->num_clks - 1; i >= 0; i--)
+		clk_disable(mcbsp->clks[i]);
 
 	spin_lock(&mcbsp->lock);
 	if (mcbsp->free) {
@@ -306,6 +302,12 @@ void omap_mcbsp_free(unsigned int id)
 
 	mcbsp->free = 1;
 	spin_unlock(&mcbsp->lock);
+
+	if (mcbsp->io_type == OMAP_MCBSP_IRQ_IO) {
+		/* Free IRQs */
+		free_irq(mcbsp->rx_irq, (void *)mcbsp);
+		free_irq(mcbsp->tx_irq, (void *)mcbsp);
+	}
 }
 EXPORT_SYMBOL(omap_mcbsp_free);
 
@@ -874,6 +876,7 @@ static int __devinit omap_mcbsp_probe(struct platform_device *pdev)
 	struct omap_mcbsp_platform_data *pdata = pdev->dev.platform_data;
 	struct omap_mcbsp *mcbsp;
 	int id = pdev->id - 1;
+	int i;
 	int ret = 0;
 
 	if (!pdata) {
@@ -896,6 +899,7 @@ static int __devinit omap_mcbsp_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto exit;
 	}
+	mcbsp_ptr[id] = mcbsp;
 
 	spin_lock_init(&mcbsp->lock);
 	mcbsp->id = id + 1;
@@ -917,32 +921,39 @@ static int __devinit omap_mcbsp_probe(struct platform_device *pdev)
 	mcbsp->dma_rx_sync = pdata->dma_rx_sync;
 	mcbsp->dma_tx_sync = pdata->dma_tx_sync;
 
-	mcbsp->iclk = clk_get(&pdev->dev, "ick");
-	if (IS_ERR(mcbsp->iclk)) {
-		ret = PTR_ERR(mcbsp->iclk);
-		dev_err(&pdev->dev, "unable to get ick: %d\n", ret);
-		goto err_iclk;
-	}
+	if (pdata->num_clks) {
+		mcbsp->num_clks = pdata->num_clks;
+		mcbsp->clks = kzalloc(mcbsp->num_clks * sizeof(struct clk *),
+					GFP_KERNEL);
+		if (!mcbsp->clks) {
+			ret = -ENOMEM;
+			goto exit;
+		}
+		for (i = 0; i < mcbsp->num_clks; i++) {
+			mcbsp->clks[i] = clk_get(&pdev->dev, pdata->clk_names[i]);
+			if (IS_ERR(mcbsp->clks[i])) {
+				dev_err(&pdev->dev,
+					"Invalid %s configuration for McBSP%d.\n",
+					pdata->clk_names[i], mcbsp->id);
+				ret = PTR_ERR(mcbsp->clks[i]);
+				goto err_clk;
+			}
+		}
 
-	mcbsp->fclk = clk_get(&pdev->dev, "fck");
-	if (IS_ERR(mcbsp->fclk)) {
-		ret = PTR_ERR(mcbsp->fclk);
-		dev_err(&pdev->dev, "unable to get fck: %d\n", ret);
-		goto err_fclk;
 	}
 
 	mcbsp->pdata = pdata;
 	mcbsp->dev = &pdev->dev;
-	mcbsp_ptr[id] = mcbsp;
 	platform_set_drvdata(pdev, mcbsp);
 	return 0;
 
-err_fclk:
-	clk_put(mcbsp->iclk);
-err_iclk:
+err_clk:
+	while (i--)
+		clk_put(mcbsp->clks[i]);
+	kfree(mcbsp->clks);
 	iounmap(mcbsp->io_base);
 err_ioremap:
-	kfree(mcbsp);
+	mcbsp->free = 0;
 exit:
 	return ret;
 }
@@ -950,6 +961,7 @@ exit:
 static int __devexit omap_mcbsp_remove(struct platform_device *pdev)
 {
 	struct omap_mcbsp *mcbsp = platform_get_drvdata(pdev);
+	int i;
 
 	platform_set_drvdata(pdev, NULL);
 	if (mcbsp) {
@@ -958,15 +970,18 @@ static int __devexit omap_mcbsp_remove(struct platform_device *pdev)
 				mcbsp->pdata->ops->free)
 			mcbsp->pdata->ops->free(mcbsp->id);
 
-		clk_disable(mcbsp->fclk);
-		clk_disable(mcbsp->iclk);
-		clk_put(mcbsp->fclk);
-		clk_put(mcbsp->iclk);
+		for (i = mcbsp->num_clks - 1; i >= 0; i--) {
+			clk_disable(mcbsp->clks[i]);
+			clk_put(mcbsp->clks[i]);
+		}
 
 		iounmap(mcbsp->io_base);
 
-		mcbsp->fclk = NULL;
-		mcbsp->iclk = NULL;
+		if (mcbsp->num_clks) {
+			kfree(mcbsp->clks);
+			mcbsp->clks = NULL;
+			mcbsp->num_clks = 0;
+		}
 		mcbsp->free = 0;
 		mcbsp->dev = NULL;
 	}
@@ -987,3 +1002,4 @@ int __init omap_mcbsp_init(void)
 	/* Register the McBSP driver */
 	return platform_driver_register(&omap_mcbsp_driver);
 }
+
