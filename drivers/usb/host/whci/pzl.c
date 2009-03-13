@@ -183,17 +183,12 @@ void pzl_stop(struct whc *whc)
 void pzl_update(struct whc *whc, uint32_t wusbcmd)
 {
 	struct wusbhc *wusbhc = &whc->wusbhc;
-	long t;
 
 	mutex_lock(&wusbhc->mutex);
 	if (wusbhc->active) {
 		whc_write_wusbcmd(whc, wusbcmd, wusbcmd);
-		t = wait_event_timeout(
-			whc->periodic_list_wq,
-			(le_readl(whc->base + WUSBCMD) & WUSBCMD_PERIODIC_UPDATED) == 0,
-			msecs_to_jiffies(1000));
-		if (t == 0)
-			whc_hw_error(whc, "PZL update timeout");
+		wait_event(whc->periodic_list_wq,
+			   (le_readl(whc->base + WUSBCMD) & WUSBCMD_PERIODIC_UPDATED) == 0);
 	}
 	mutex_unlock(&wusbhc->mutex);
 }
@@ -255,13 +250,13 @@ void scan_periodic_work(struct work_struct *work)
 	 * Now that the PZL is updated, complete the removal of any
 	 * removed qsets.
 	 */
-	spin_lock_irq(&whc->lock);
+	spin_lock(&whc->lock);
 
 	list_for_each_entry_safe(qset, t, &whc->periodic_removed_list, list_node) {
 		qset_remove_complete(whc, qset);
 	}
 
-	spin_unlock_irq(&whc->lock);
+	spin_unlock(&whc->lock);
 }
 
 /**

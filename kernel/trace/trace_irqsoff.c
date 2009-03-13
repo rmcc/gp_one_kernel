@@ -380,7 +380,6 @@ static void stop_irqsoff_tracer(struct trace_array *tr)
 
 static void __irqsoff_tracer_init(struct trace_array *tr)
 {
-	tracing_max_latency = 0;
 	irqsoff_trace = tr;
 	/* make sure that the tracer is visible */
 	smp_wmb();

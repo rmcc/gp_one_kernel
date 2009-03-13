@@ -361,6 +361,8 @@ struct radeonfb_info {
 #ifdef CONFIG_FB_RADEON_I2C
 	struct radeon_i2c_chan 	i2c[4];
 #endif
+
+	u32			cfg_save[64];
 };
 
 

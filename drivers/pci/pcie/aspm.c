@@ -718,9 +718,9 @@ void pcie_aspm_exit_link_state(struct pci_dev *pdev)
 
 	/*
 	 * All PCIe functions are in one slot, remove one function will remove
-	 * the whole slot, so just wait until we are the last function left.
+	 * the the whole slot, so just wait
 	 */
-	if (!list_is_last(&pdev->bus_list, &parent->subordinate->devices))
+	if (!list_empty(&parent->subordinate->devices))
 		goto out;
 
 	/* All functions are removed, so just disable ASPM for the link */

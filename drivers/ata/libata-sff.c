@@ -773,32 +773,18 @@ unsigned int ata_sff_data_xfer32(struct ata_device *dev, unsigned char *buf,
 	else
 		iowrite32_rep(data_addr, buf, words);
 
-	/* Transfer trailing bytes, if any */
 	if (unlikely(slop)) {
-		unsigned char pad[4];
-
-		/* Point buf to the tail of buffer */
-		buf += buflen - slop;
-
-		/*
-		 * Use io*_rep() accessors here as well to avoid pointlessly
-		 * swapping bytes to and fro on the big endian machines...
-		 */
+		__le32 pad;
 		if (rw == READ) {
-			if (slop < 3)
-				ioread16_rep(data_addr, pad, 1);
-			else
-				ioread32_rep(data_addr, pad, 1);
-			memcpy(buf, pad, slop);
+			pad = cpu_to_le32(ioread32(ap->ioaddr.data_addr));
+			memcpy(buf + buflen - slop, &pad, slop);
 		} else {
-			memcpy(pad, buf, slop);
-			if (slop < 3)
-				iowrite16_rep(data_addr, pad, 1);
-			else
-				iowrite32_rep(data_addr, pad, 1);
+			memcpy(&pad, buf + buflen - slop, slop);
+			iowrite32(le32_to_cpu(pad), ap->ioaddr.data_addr);
 		}
+		words++;
 	}
-	return (buflen + 1) & ~1;
+	return words << 2;
 }
 EXPORT_SYMBOL_GPL(ata_sff_data_xfer32);
 
@@ -1336,7 +1322,7 @@ fsm_start:
 					 * condition.  Mark hint.
 					 */
 					ata_ehi_push_desc(ehi, "ST-ATA: "
-						"DRQ=0 without device error, "
+						"DRQ=1 with device error, "
 						"dev_stat 0x%X", status);
 					qc->err_mask |= AC_ERR_HSM |
 							AC_ERR_NODEV_HINT;
@@ -1371,16 +1357,6 @@ fsm_start:
 						"dev_stat 0x%X", status);
 					qc->err_mask |= AC_ERR_HSM;
 				}
-
-				/* There are oddball controllers with
-				 * status register stuck at 0x7f and
-				 * lbal/m/h at zero which makes it
-				 * pass all other presence detection
-				 * mechanisms we have.  Set NODEV_HINT
-				 * for it.  Kernel bz#7241.
-				 */
-				if (status == 0x7f)
-					qc->err_mask |= AC_ERR_NODEV_HINT;
 
 				/* ata_pio_sectors() might change the
 				 * state to HSM_ST_LAST. so, the state

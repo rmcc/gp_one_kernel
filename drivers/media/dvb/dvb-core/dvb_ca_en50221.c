@@ -93,9 +93,6 @@ struct dvb_ca_slot {
 	/* current state of the CAM */
 	int slot_state;
 
-	/* mutex used for serializing access to one CI slot */
-	struct mutex slot_lock;
-
 	/* Number of CAMCHANGES that have occurred since last processing */
 	atomic_t camchange_count;
 
@@ -714,20 +711,14 @@ static int dvb_ca_en50221_write_data(struct dvb_ca_private *ca, int slot, u8 * b
 	dprintk("%s\n", __func__);
 
 
-	/* sanity check */
+	// sanity check
 	if (bytes_write > ca->slot_info[slot].link_buf_size)
 		return -EINVAL;
 
-	/* it is possible we are dealing with a single buffer implementation,
-	   thus if there is data available for read or if there is even a read
-	   already in progress, we do nothing but awake the kernel thread to
-	   process the data if necessary. */
+	/* check if interface is actually waiting for us to read from it, or if a read is in progress */
 	if ((status = ca->pub->read_cam_control(ca->pub, slot, CTRLIF_STATUS)) < 0)
 		goto exitnowrite;
 	if (status & (STATUSREG_DA | STATUSREG_RE)) {
-		if (status & STATUSREG_DA)
-			dvb_ca_en50221_thread_wakeup(ca);
-
 		status = -EAGAIN;
 		goto exitnowrite;
 	}
@@ -996,8 +987,6 @@ static int dvb_ca_en50221_thread(void *data)
 		/* go through all the slots processing them */
 		for (slot = 0; slot < ca->slot_count; slot++) {
 
-			mutex_lock(&ca->slot_info[slot].slot_lock);
-
 			// check the cam status + deal with CAMCHANGEs
 			while (dvb_ca_en50221_check_camstatus(ca, slot)) {
 				/* clear down an old CI slot if necessary */
@@ -1133,7 +1122,7 @@ static int dvb_ca_en50221_thread(void *data)
 
 			case DVB_CA_SLOTSTATE_RUNNING:
 				if (!ca->open)
-					break;
+					continue;
 
 				// poll slots for data
 				pktcount = 0;
@@ -1157,8 +1146,6 @@ static int dvb_ca_en50221_thread(void *data)
 				}
 				break;
 			}
-
-			mutex_unlock(&ca->slot_info[slot].slot_lock);
 		}
 	}
 
@@ -1194,7 +1181,6 @@ static int dvb_ca_en50221_io_do_ioctl(struct inode *inode, struct file *file,
 	switch (cmd) {
 	case CA_RESET:
 		for (slot = 0; slot < ca->slot_count; slot++) {
-			mutex_lock(&ca->slot_info[slot].slot_lock);
 			if (ca->slot_info[slot].slot_state != DVB_CA_SLOTSTATE_NONE) {
 				dvb_ca_en50221_slot_shutdown(ca, slot);
 				if (ca->flags & DVB_CA_EN50221_FLAG_IRQ_CAMCHANGE)
@@ -1202,7 +1188,6 @@ static int dvb_ca_en50221_io_do_ioctl(struct inode *inode, struct file *file,
 								     slot,
 								     DVB_CA_EN50221_CAMCHANGE_INSERTED);
 			}
-			mutex_unlock(&ca->slot_info[slot].slot_lock);
 		}
 		ca->next_read_slot = 0;
 		dvb_ca_en50221_thread_wakeup(ca);
@@ -1323,9 +1308,7 @@ static ssize_t dvb_ca_en50221_io_write(struct file *file,
 				goto exit;
 			}
 
-			mutex_lock(&ca->slot_info[slot].slot_lock);
 			status = dvb_ca_en50221_write_data(ca, slot, fragbuf, fraglen + 2);
-			mutex_unlock(&ca->slot_info[slot].slot_lock);
 			if (status == (fraglen + 2)) {
 				written = 1;
 				break;
@@ -1681,7 +1664,6 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 		ca->slot_info[i].slot_state = DVB_CA_SLOTSTATE_NONE;
 		atomic_set(&ca->slot_info[i].camchange_count, 0);
 		ca->slot_info[i].camchange_type = DVB_CA_EN50221_CAMCHANGE_REMOVED;
-		mutex_init(&ca->slot_info[i].slot_lock);
 	}
 
 	if (signal_pending(current)) {

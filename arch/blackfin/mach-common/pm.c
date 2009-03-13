@@ -82,9 +82,10 @@ void bfin_pm_suspend_standby_enter(void)
 
 	bfin_pm_standby_restore();
 
-#ifdef SIC_IWR0
+#if defined(CONFIG_BF54x) || defined(CONFIG_BF52x)  || defined(CONFIG_BF561) || \
+	defined(CONFIG_BF538) || defined(CONFIG_BF539) || defined(CONFIG_BF51x)
 	bfin_write_SIC_IWR0(IWR_DISABLE_ALL);
-# ifdef SIC_IWR1
+#if defined(CONFIG_BF52x) || defined(CONFIG_BF51x)
 	/* BF52x system reset does not properly reset SIC_IWR1 which
 	 * will screw up the bootrom as it relies on MDMA0/1 waking it
 	 * up from IDLE instructions.  See this report for more info:
@@ -94,8 +95,10 @@ void bfin_pm_suspend_standby_enter(void)
 		bfin_write_SIC_IWR1(IWR_ENABLE(10) | IWR_ENABLE(11));
 	else
 		bfin_write_SIC_IWR1(IWR_DISABLE_ALL);
-# endif
-# ifdef SIC_IWR2
+#else
+	bfin_write_SIC_IWR1(IWR_DISABLE_ALL);
+#endif
+# ifdef CONFIG_BF54x
 	bfin_write_SIC_IWR2(IWR_DISABLE_ALL);
 # endif
 #else

@@ -124,7 +124,6 @@ int blkcipher_walk_done(struct blkcipher_desc *desc,
 	scatterwalk_done(&walk->in, 0, nbytes);
 	scatterwalk_done(&walk->out, 1, nbytes);
 
-err:
 	walk->total = nbytes;
 	walk->nbytes = nbytes;
 
@@ -133,6 +132,7 @@ err:
 		return blkcipher_walk_next(desc, walk);
 	}
 
+err:
 	if (walk->iv != desc->info)
 		memcpy(desc->info, walk->iv, crypto_blkcipher_ivsize(tfm));
 	if (walk->buffer != walk->page)

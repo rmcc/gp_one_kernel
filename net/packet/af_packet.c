@@ -77,7 +77,6 @@
 #include <linux/poll.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/mutex.h>
 
 #ifdef CONFIG_INET
 #include <net/inet_common.h>
@@ -176,7 +175,6 @@ struct packet_sock {
 #endif
 	struct packet_type	prot_hook;
 	spinlock_t		bind_lock;
-	struct mutex		pg_vec_lock;
 	unsigned int		running:1,	/* prot_hook is attached*/
 				auxdata:1,
 				origdev:1;
@@ -222,13 +220,13 @@ static void *packet_lookup_frame(struct packet_sock *po, unsigned int position,
 	h.raw = po->pg_vec[pg_vec_pos] + (frame_offset * po->frame_size);
 	switch (po->tp_version) {
 	case TPACKET_V1:
-		if (status != (h.h1->tp_status ? TP_STATUS_USER :
-						TP_STATUS_KERNEL))
+		if (status != h.h1->tp_status ? TP_STATUS_USER :
+						TP_STATUS_KERNEL)
 			return NULL;
 		break;
 	case TPACKET_V2:
-		if (status != (h.h2->tp_status ? TP_STATUS_USER :
-						TP_STATUS_KERNEL))
+		if (status != h.h2->tp_status ? TP_STATUS_USER :
+						TP_STATUS_KERNEL)
 			return NULL;
 		break;
 	}
@@ -1071,7 +1069,6 @@ static int packet_create(struct net *net, struct socket *sock, int protocol)
 	 */
 
 	spin_lock_init(&po->bind_lock);
-	mutex_init(&po->pg_vec_lock);
 	po->prot_hook.func = packet_rcv;
 
 	if (sock->type == SOCK_PACKET)
@@ -1868,7 +1865,6 @@ static int packet_set_ring(struct sock *sk, struct tpacket_req *req, int closing
 	synchronize_net();
 
 	err = -EBUSY;
-	mutex_lock(&po->pg_vec_lock);
 	if (closing || atomic_read(&po->mapped) == 0) {
 		err = 0;
 #define XC(a, b) ({ __typeof__ ((a)) __t; __t = (a); (a) = (b); __t; })
@@ -1890,7 +1886,6 @@ static int packet_set_ring(struct sock *sk, struct tpacket_req *req, int closing
 		if (atomic_read(&po->mapped))
 			printk(KERN_DEBUG "packet_mmap: vma is busy: %d\n", atomic_read(&po->mapped));
 	}
-	mutex_unlock(&po->pg_vec_lock);
 
 	spin_lock(&po->bind_lock);
 	if (was_running && !po->running) {
@@ -1923,7 +1918,7 @@ static int packet_mmap(struct file *file, struct socket *sock, struct vm_area_st
 
 	size = vma->vm_end - vma->vm_start;
 
-	mutex_lock(&po->pg_vec_lock);
+	lock_sock(sk);
 	if (po->pg_vec == NULL)
 		goto out;
 	if (size != po->pg_vec_len*po->pg_vec_pages*PAGE_SIZE)
@@ -1946,7 +1941,7 @@ static int packet_mmap(struct file *file, struct socket *sock, struct vm_area_st
 	err = 0;
 
 out:
-	mutex_unlock(&po->pg_vec_lock);
+	release_sock(sk);
 	return err;
 }
 #endif

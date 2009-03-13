@@ -14,7 +14,6 @@
 #include <asm/firmware.h>
 #include <asm/machdep.h>
 #include <asm/pSeries_reconfig.h>
-#include <asm/sparsemem.h>
 
 static int pseries_remove_lmb(unsigned long base, unsigned int lmb_size)
 {

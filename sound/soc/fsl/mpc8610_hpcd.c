@@ -183,6 +183,16 @@ static struct snd_soc_ops mpc8610_hpcd_ops = {
 };
 
 /**
+ * mpc8610_hpcd_machine: ASoC machine data
+ */
+static struct snd_soc_card mpc8610_hpcd_machine = {
+	.probe = mpc8610_hpcd_machine_probe,
+	.remove = mpc8610_hpcd_machine_remove,
+	.name = "MPC8610 HPCD",
+	.num_links = 1,
+};
+
+/**
  * mpc8610_hpcd_probe: OF probe function for the fabric driver
  *
  * This function gets called when an SSI node is found in the device tree.
@@ -445,11 +455,7 @@ static int mpc8610_hpcd_probe(struct of_device *ofdev,
 	machine_data->dai.codec_dai = &cs4270_dai; /* The codec_dai we want */
 	machine_data->dai.ops = &mpc8610_hpcd_ops;
 
-	machine_data->machine.probe = mpc8610_hpcd_machine_probe;
-	machine_data->machine.remove = mpc8610_hpcd_machine_remove;
-	machine_data->machine.name = "MPC8610 HPCD";
-	machine_data->machine.num_links = 1;
-	machine_data->machine.dai_link = &machine_data->dai;
+	mpc8610_hpcd_machine.dai_link = &machine_data->dai;
 
 	/* Allocate a new audio platform device structure */
 	sound_device = platform_device_alloc("soc-audio", -1);
@@ -459,7 +465,7 @@ static int mpc8610_hpcd_probe(struct of_device *ofdev,
 		goto error;
 	}
 
-	machine_data->sound_devdata.card = &machine_data->machine;
+	machine_data->sound_devdata.card = &mpc8610_hpcd_machine;
 	machine_data->sound_devdata.codec_dev = &soc_codec_device_cs4270;
 	machine_data->machine.platform = &fsl_soc_platform;
 

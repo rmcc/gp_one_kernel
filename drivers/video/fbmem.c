@@ -1013,139 +1013,132 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	struct fb_var_screeninfo var;
 	struct fb_fix_screeninfo fix;
 	struct fb_con2fbmap con2fb;
-	struct fb_cmap cmap_from;
 	struct fb_cmap_user cmap;
 	struct fb_event event;
 	void __user *argp = (void __user *)arg;
 	long ret = 0;
 
+	fb = info->fbops;
+	if (!fb)
+		return -ENODEV;
+
 	switch (cmd) {
 	case FBIOGET_VSCREENINFO:
-		if (!lock_fb_info(info))
-			return -ENODEV;
-		var = info->var;
-		unlock_fb_info(info);
-
-		ret = copy_to_user(argp, &var, sizeof(var)) ? -EFAULT : 0;
+		ret = copy_to_user(argp, &info->var,
+				    sizeof(var)) ? -EFAULT : 0;
 		break;
 	case FBIOPUT_VSCREENINFO:
-		if (copy_from_user(&var, argp, sizeof(var)))
-			return -EFAULT;
-		if (!lock_fb_info(info))
-			return -ENODEV;
+		if (copy_from_user(&var, argp, sizeof(var))) {
+			ret =  -EFAULT;
+			break;
+		}
 		acquire_console_sem();
 		info->flags |= FBINFO_MISC_USEREVENT;
 		ret = fb_set_var(info, &var);
 		info->flags &= ~FBINFO_MISC_USEREVENT;
 		release_console_sem();
-		unlock_fb_info(info);
-		if (!ret && copy_to_user(argp, &var, sizeof(var)))
+		if (ret == 0 && copy_to_user(argp, &var, sizeof(var)))
 			ret = -EFAULT;
 		break;
 	case FBIOGET_FSCREENINFO:
-		if (!lock_fb_info(info))
-			return -ENODEV;
-		fix = info->fix;
-		unlock_fb_info(info);
-
-		ret = copy_to_user(argp, &fix, sizeof(fix)) ? -EFAULT : 0;
+		ret = copy_to_user(argp, &info->fix,
+				    sizeof(fix)) ? -EFAULT : 0;
 		break;
 	case FBIOPUTCMAP:
 		if (copy_from_user(&cmap, argp, sizeof(cmap)))
-			return -EFAULT;
-		ret = fb_set_user_cmap(&cmap, info);
+			ret = -EFAULT;
+		else
+			ret = fb_set_user_cmap(&cmap, info);
 		break;
 	case FBIOGETCMAP:
 		if (copy_from_user(&cmap, argp, sizeof(cmap)))
-			return -EFAULT;
-		if (!lock_fb_info(info))
-			return -ENODEV;
-		cmap_from = info->cmap;
-		unlock_fb_info(info);
-		ret = fb_cmap_to_user(&cmap_from, &cmap);
+			ret = -EFAULT;
+		else
+			ret = fb_cmap_to_user(&info->cmap, &cmap);
 		break;
 	case FBIOPAN_DISPLAY:
-		if (copy_from_user(&var, argp, sizeof(var)))
-			return -EFAULT;
-		if (!lock_fb_info(info))
-			return -ENODEV;
+		if (copy_from_user(&var, argp, sizeof(var))) {
+			ret = -EFAULT;
+			break;
+		}
 		acquire_console_sem();
 		ret = fb_pan_display(info, &var);
 		release_console_sem();
-		unlock_fb_info(info);
 		if (ret == 0 && copy_to_user(argp, &var, sizeof(var)))
-			return -EFAULT;
+			ret = -EFAULT;
 		break;
 	case FBIO_CURSOR:
 		ret = -EINVAL;
 		break;
 	case FBIOGET_CON2FBMAP:
 		if (copy_from_user(&con2fb, argp, sizeof(con2fb)))
-			return -EFAULT;
-		if (con2fb.console < 1 || con2fb.console > MAX_NR_CONSOLES)
-			return -EINVAL;
-		con2fb.framebuffer = -1;
-		event.data = &con2fb;
-
-		if (!lock_fb_info(info))
-			return -ENODEV;
-		event.info = info;
-		fb_notifier_call_chain(FB_EVENT_GET_CONSOLE_MAP, &event);
-		unlock_fb_info(info);
-
-		ret = copy_to_user(argp, &con2fb, sizeof(con2fb)) ? -EFAULT : 0;
+			ret = -EFAULT;
+		else if (con2fb.console < 1 || con2fb.console > MAX_NR_CONSOLES)
+			ret = -EINVAL;
+		else {
+			con2fb.framebuffer = -1;
+			event.info = info;
+			event.data = &con2fb;
+			fb_notifier_call_chain(FB_EVENT_GET_CONSOLE_MAP,
+								&event);
+			ret = copy_to_user(argp, &con2fb,
+				    sizeof(con2fb)) ? -EFAULT : 0;
+		}
 		break;
 	case FBIOPUT_CON2FBMAP:
-		if (copy_from_user(&con2fb, argp, sizeof(con2fb)))
-			return -EFAULT;
-		if (con2fb.console < 1 || con2fb.console > MAX_NR_CONSOLES)
-			return -EINVAL;
-		if (con2fb.framebuffer < 0 || con2fb.framebuffer >= FB_MAX)
-			return -EINVAL;
+		if (copy_from_user(&con2fb, argp, sizeof(con2fb))) {
+			ret = -EFAULT;
+			break;
+		}
+		if (con2fb.console < 1 || con2fb.console > MAX_NR_CONSOLES) {
+			ret = -EINVAL;
+			break;
+		}
+		if (con2fb.framebuffer < 0 || con2fb.framebuffer >= FB_MAX) {
+			ret = -EINVAL;
+			break;
+		}
 		if (!registered_fb[con2fb.framebuffer])
 			request_module("fb%d", con2fb.framebuffer);
 		if (!registered_fb[con2fb.framebuffer]) {
 			ret = -EINVAL;
 			break;
 		}
-		event.data = &con2fb;
-		if (!lock_fb_info(info))
-			return -ENODEV;
 		event.info = info;
+		event.data = &con2fb;
 		ret = fb_notifier_call_chain(FB_EVENT_SET_CONSOLE_MAP,
 					      &event);
-		unlock_fb_info(info);
 		break;
 	case FBIOBLANK:
-		if (!lock_fb_info(info))
-			return -ENODEV;
 		acquire_console_sem();
 		info->flags |= FBINFO_MISC_USEREVENT;
 		ret = fb_blank(info, arg);
 		info->flags &= ~FBINFO_MISC_USEREVENT;
 		release_console_sem();
-		unlock_fb_info(info);
-		break;
+		break;;
 	default:
-		if (!lock_fb_info(info))
-			return -ENODEV;
-		fb = info->fbops;
-		if (fb->fb_ioctl)
-			ret = fb->fb_ioctl(info, cmd, arg);
-		else
+		if (fb->fb_ioctl == NULL)
 			ret = -ENOTTY;
-		unlock_fb_info(info);
+		else
+			ret = fb->fb_ioctl(info, cmd, arg);
 	}
 	return ret;
 }
 
 static long fb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+__acquires(&info->lock)
+__releases(&info->lock)
 {
 	struct inode *inode = file->f_path.dentry->d_inode;
 	int fbidx = iminor(inode);
-	struct fb_info *info = registered_fb[fbidx];
+	struct fb_info *info;
+	long ret;
 
-	return do_fb_ioctl(info, cmd, arg);
+	info = registered_fb[fbidx];
+	mutex_lock(&info->lock);
+	ret = do_fb_ioctl(info, cmd, arg);
+	mutex_unlock(&info->lock);
+	return ret;
 }
 
 #ifdef CONFIG_COMPAT
@@ -1264,6 +1257,8 @@ static int fb_get_fscreeninfo(struct fb_info *info, unsigned int cmd,
 
 static long fb_compat_ioctl(struct file *file, unsigned int cmd,
 			    unsigned long arg)
+__acquires(&info->lock)
+__releases(&info->lock)
 {
 	struct inode *inode = file->f_path.dentry->d_inode;
 	int fbidx = iminor(inode);
@@ -1271,6 +1266,7 @@ static long fb_compat_ioctl(struct file *file, unsigned int cmd,
 	struct fb_ops *fb = info->fbops;
 	long ret = -ENOIOCTLCMD;
 
+	mutex_lock(&info->lock);
 	switch(cmd) {
 	case FBIOGET_VSCREENINFO:
 	case FBIOPUT_VSCREENINFO:
@@ -1296,6 +1292,7 @@ static long fb_compat_ioctl(struct file *file, unsigned int cmd,
 			ret = fb->fb_compat_ioctl(info, cmd, arg);
 		break;
 	}
+	mutex_unlock(&info->lock);
 	return ret;
 }
 #endif

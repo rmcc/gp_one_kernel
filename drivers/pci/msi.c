@@ -103,14 +103,6 @@ static void msix_set_enable(struct pci_dev *dev, int enable)
 	}
 }
 
-static inline __attribute_const__ u32 msi_mask(unsigned x)
-{
-	/* Don't shift by >= width of type */
-	if (x >= 5)
-		return 0xffffffff;
-	return (1 << (1 << x)) - 1;
-}
-
 static void msix_flush_writes(struct irq_desc *desc)
 {
 	struct msi_desc *entry;
@@ -406,18 +398,21 @@ static int msi_capability_init(struct pci_dev *dev)
 	entry->msi_attrib.masked = 1;
 	entry->msi_attrib.default_irq = dev->irq;	/* Save IOAPIC IRQ */
 	entry->msi_attrib.pos = pos;
+	if (entry->msi_attrib.maskbit) {
+		entry->mask_base = (void __iomem *)(long)msi_mask_bits_reg(pos,
+				entry->msi_attrib.is_64);
+	}
 	entry->dev = dev;
 	if (entry->msi_attrib.maskbit) {
-		unsigned int base, maskbits, temp;
-
-		base = msi_mask_bits_reg(pos, entry->msi_attrib.is_64);
-		entry->mask_base = (void __iomem *)(long)base;
-
+		unsigned int maskbits, temp;
 		/* All MSIs are unmasked by default, Mask them all */
-		pci_read_config_dword(dev, base, &maskbits);
-		temp = msi_mask((control & PCI_MSI_FLAGS_QMASK) >> 1);
+		pci_read_config_dword(dev,
+			msi_mask_bits_reg(pos, entry->msi_attrib.is_64),
+			&maskbits);
+		temp = (1 << multi_msi_capable(control));
+		temp = ((temp - 1) & ~temp);
 		maskbits |= temp;
-		pci_write_config_dword(dev, base, maskbits);
+		pci_write_config_dword(dev, entry->msi_attrib.is_64, maskbits);
 		entry->msi_attrib.maskbits_mask = temp;
 	}
 	list_add_tail(&entry->list, &dev->msi_list);

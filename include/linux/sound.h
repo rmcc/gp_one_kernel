@@ -25,7 +25,6 @@
 #define SND_DEV_AMIDI		13	/* Like /dev/midi (obsolete) */
 #define SND_DEV_ADMMIDI		14	/* Like /dev/dmmidi (onsolete) */
 
-#ifdef __KERNEL__
 /*
  *	Sound core interface functions
  */
@@ -41,4 +40,3 @@ extern void unregister_sound_special(int unit);
 extern void unregister_sound_mixer(int unit);
 extern void unregister_sound_midi(int unit);
 extern void unregister_sound_dsp(int unit);
-#endif /* __KERNEL__ */

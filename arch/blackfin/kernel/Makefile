@@ -15,8 +15,6 @@ else
     obj-y += time.o
 endif
 
-CFLAGS_kgdb_test.o := -mlong-calls -O0
-
 obj-$(CONFIG_IPIPE)                  += ipipe.o
 obj-$(CONFIG_IPIPE_TRACE_MCOUNT)     += mcount.o
 obj-$(CONFIG_BFIN_GPTIMERS)          += gptimers.o

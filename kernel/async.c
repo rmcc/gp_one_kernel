@@ -54,7 +54,6 @@ asynchronous and synchronous parts of the kernel.
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
-#include <linux/delay.h>
 #include <asm/atomic.h>
 
 static async_cookie_t next_cookie = 1;
@@ -133,23 +132,21 @@ static void run_one_entry(void)
 	entry = list_first_entry(&async_pending, struct async_entry, list);
 
 	/* 2) move it to the running queue */
-	list_move_tail(&entry->list, entry->running);
+	list_del(&entry->list);
+	list_add_tail(&entry->list, &async_running);
 	spin_unlock_irqrestore(&async_lock, flags);
 
 	/* 3) run it (and print duration)*/
 	if (initcall_debug && system_state == SYSTEM_BOOTING) {
-		printk("calling  %lli_%pF @ %i\n", (long long)entry->cookie,
-			entry->func, task_pid_nr(current));
+		printk("calling  %lli_%pF @ %i\n", entry->cookie, entry->func, task_pid_nr(current));
 		calltime = ktime_get();
 	}
 	entry->func(entry->data, entry->cookie);
 	if (initcall_debug && system_state == SYSTEM_BOOTING) {
 		rettime = ktime_get();
 		delta = ktime_sub(rettime, calltime);
-		printk("initcall %lli_%pF returned 0 after %lld usecs\n",
-			(long long)entry->cookie,
-			entry->func,
-			(long long)ktime_to_ns(delta) >> 10);
+		printk("initcall %lli_%pF returned 0 after %lld usecs\n", entry->cookie,
+			entry->func, ktime_to_ns(delta) >> 10);
 	}
 
 	/* 4) remove it from the running queue */
@@ -208,44 +205,18 @@ static async_cookie_t __async_schedule(async_func_ptr *ptr, void *data, struct l
 	return newcookie;
 }
 
-/**
- * async_schedule - schedule a function for asynchronous execution
- * @ptr: function to execute asynchronously
- * @data: data pointer to pass to the function
- *
- * Returns an async_cookie_t that may be used for checkpointing later.
- * Note: This function may be called from atomic or non-atomic contexts.
- */
 async_cookie_t async_schedule(async_func_ptr *ptr, void *data)
 {
-	return __async_schedule(ptr, data, &async_running);
+	return __async_schedule(ptr, data, &async_pending);
 }
 EXPORT_SYMBOL_GPL(async_schedule);
 
-/**
- * async_schedule_domain - schedule a function for asynchronous execution within a certain domain
- * @ptr: function to execute asynchronously
- * @data: data pointer to pass to the function
- * @running: running list for the domain
- *
- * Returns an async_cookie_t that may be used for checkpointing later.
- * @running may be used in the async_synchronize_*_domain() functions
- * to wait within a certain synchronization domain rather than globally.
- * A synchronization domain is specified via the running queue @running to use.
- * Note: This function may be called from atomic or non-atomic contexts.
- */
-async_cookie_t async_schedule_domain(async_func_ptr *ptr, void *data,
-				     struct list_head *running)
+async_cookie_t async_schedule_special(async_func_ptr *ptr, void *data, struct list_head *running)
 {
 	return __async_schedule(ptr, data, running);
 }
-EXPORT_SYMBOL_GPL(async_schedule_domain);
+EXPORT_SYMBOL_GPL(async_schedule_special);
 
-/**
- * async_synchronize_full - synchronize all asynchronous function calls
- *
- * This function waits until all asynchronous function calls have been done.
- */
 void async_synchronize_full(void)
 {
 	do {
@@ -254,30 +225,13 @@ void async_synchronize_full(void)
 }
 EXPORT_SYMBOL_GPL(async_synchronize_full);
 
-/**
- * async_synchronize_full_domain - synchronize all asynchronous function within a certain domain
- * @list: running list to synchronize on
- *
- * This function waits until all asynchronous function calls for the
- * synchronization domain specified by the running list @list have been done.
- */
-void async_synchronize_full_domain(struct list_head *list)
+void async_synchronize_full_special(struct list_head *list)
 {
-	async_synchronize_cookie_domain(next_cookie, list);
+	async_synchronize_cookie_special(next_cookie, list);
 }
-EXPORT_SYMBOL_GPL(async_synchronize_full_domain);
+EXPORT_SYMBOL_GPL(async_synchronize_full_special);
 
-/**
- * async_synchronize_cookie_domain - synchronize asynchronous function calls within a certain domain with cookie checkpointing
- * @cookie: async_cookie_t to use as checkpoint
- * @running: running list to synchronize on
- *
- * This function waits until all asynchronous function calls for the
- * synchronization domain specified by the running list @list submitted
- * prior to @cookie have been done.
- */
-void async_synchronize_cookie_domain(async_cookie_t cookie,
-				     struct list_head *running)
+void async_synchronize_cookie_special(async_cookie_t cookie, struct list_head *running)
 {
 	ktime_t starttime, delta, endtime;
 
@@ -293,22 +247,14 @@ void async_synchronize_cookie_domain(async_cookie_t cookie,
 		delta = ktime_sub(endtime, starttime);
 
 		printk("async_continuing @ %i after %lli usec\n",
-			task_pid_nr(current),
-			(long long)ktime_to_ns(delta) >> 10);
+			task_pid_nr(current), ktime_to_ns(delta) >> 10);
 	}
 }
-EXPORT_SYMBOL_GPL(async_synchronize_cookie_domain);
+EXPORT_SYMBOL_GPL(async_synchronize_cookie_special);
 
-/**
- * async_synchronize_cookie - synchronize asynchronous function calls with cookie checkpointing
- * @cookie: async_cookie_t to use as checkpoint
- *
- * This function waits until all asynchronous function calls prior to @cookie
- * have been done.
- */
 void async_synchronize_cookie(async_cookie_t cookie)
 {
-	async_synchronize_cookie_domain(cookie, &async_running);
+	async_synchronize_cookie_special(cookie, &async_running);
 }
 EXPORT_SYMBOL_GPL(async_synchronize_cookie);
 
@@ -369,11 +315,7 @@ static int async_manager_thread(void *unused)
 		ec = atomic_read(&entry_count);
 
 		while (tc < ec && tc < MAX_THREADS) {
-			if (IS_ERR(kthread_run(async_thread, NULL, "async/%i",
-					       tc))) {
-				msleep(100);
-				continue;
-			}
+			kthread_run(async_thread, NULL, "async/%i", tc);
 			atomic_inc(&thread_count);
 			tc++;
 		}
@@ -388,9 +330,7 @@ static int async_manager_thread(void *unused)
 static int __init async_init(void)
 {
 	if (async_enabled)
-		if (IS_ERR(kthread_run(async_manager_thread, NULL,
-				       "async/mgr")))
-			async_enabled = 0;
+		kthread_run(async_manager_thread, NULL, "async/mgr");
 	return 0;
 }
 

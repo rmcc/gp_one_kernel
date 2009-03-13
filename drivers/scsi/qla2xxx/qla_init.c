@@ -1226,8 +1226,9 @@ qla24xx_config_rings(struct scsi_qla_host *vha)
 			icb->firmware_options_2 |=
 				__constant_cpu_to_le32(BIT_18);
 
-		icb->firmware_options_2 &= __constant_cpu_to_le32(~BIT_22);
+		icb->firmware_options_2 |= __constant_cpu_to_le32(BIT_22);
 		icb->firmware_options_2 |= __constant_cpu_to_le32(BIT_23);
+		ha->rsp_q_map[0]->options = icb->firmware_options_2;
 
 		WRT_REG_DWORD(&reg->isp25mq.req_q_in, 0);
 		WRT_REG_DWORD(&reg->isp25mq.req_q_out, 0);
@@ -3492,7 +3493,7 @@ qla25xx_init_queues(struct qla_hw_data *ha)
 		rsp = ha->rsp_q_map[i];
 		if (rsp) {
 			rsp->options &= ~BIT_0;
-			ret = qla25xx_init_rsp_que(base_vha, rsp);
+			ret = qla25xx_init_rsp_que(base_vha, rsp, rsp->options);
 			if (ret != QLA_SUCCESS)
 				DEBUG2_17(printk(KERN_WARNING
 					"%s Rsp que:%d init failed\n", __func__,
@@ -3506,7 +3507,7 @@ qla25xx_init_queues(struct qla_hw_data *ha)
 		if (req) {
 		/* Clear outstanding commands array. */
 			req->options &= ~BIT_0;
-			ret = qla25xx_init_req_que(base_vha, req);
+			ret = qla25xx_init_req_que(base_vha, req, req->options);
 			if (ret != QLA_SUCCESS)
 				DEBUG2_17(printk(KERN_WARNING
 					"%s Req que:%d init failed\n", __func__,
@@ -3561,9 +3562,6 @@ qla24xx_reset_adapter(scsi_qla_host_t *vha)
 	WRT_REG_DWORD(&reg->hccr, HCCRX_REL_RISC_PAUSE);
 	RD_REG_DWORD(&reg->hccr);
 	spin_unlock_irqrestore(&ha->hardware_lock, flags);
-
-	if (IS_NOPOLLING_TYPE(ha))
-		ha->isp_ops->enable_intrs(ha);
 }
 
 /* On sparc systems, obtain port and node WWN from firmware
@@ -3849,10 +3847,6 @@ qla24xx_load_risc_flash(scsi_qla_host_t *vha, uint32_t *srisc_addr)
 	uint32_t i;
 	struct qla_hw_data *ha = vha->hw;
 	struct req_que *req = ha->req_q_map[0];
-
-	qla_printk(KERN_INFO, ha,
-	    "FW: Loading from flash (%x)...\n", ha->flt_region_fw);
-
 	rval = QLA_SUCCESS;
 
 	segments = FA_RISC_CODE_SEGMENTS;
@@ -4028,8 +4022,8 @@ fail_fw_integrity:
 	return QLA_FUNCTION_FAILED;
 }
 
-static int
-qla24xx_load_risc_blob(scsi_qla_host_t *vha, uint32_t *srisc_addr)
+int
+qla24xx_load_risc(scsi_qla_host_t *vha, uint32_t *srisc_addr)
 {
 	int	rval;
 	int	segments, fragment;
@@ -4049,11 +4043,11 @@ qla24xx_load_risc_blob(scsi_qla_host_t *vha, uint32_t *srisc_addr)
 		qla_printk(KERN_ERR, ha, "Firmware images can be retrieved "
 		    "from: " QLA_FW_URL ".\n");
 
-		return QLA_FUNCTION_FAILED;
+		/* Try to load RISC code from flash. */
+		qla_printk(KERN_ERR, ha, "Attempting to load (potentially "
+		    "outdated) firmware from flash.\n");
+		return qla24xx_load_risc_flash(vha, srisc_addr);
 	}
-
-	qla_printk(KERN_INFO, ha,
-	    "FW: Loading via request-firmware...\n");
 
 	rval = QLA_SUCCESS;
 
@@ -4137,40 +4131,6 @@ qla24xx_load_risc_blob(scsi_qla_host_t *vha, uint32_t *srisc_addr)
 
 fail_fw_integrity:
 	return QLA_FUNCTION_FAILED;
-}
-
-int
-qla24xx_load_risc(scsi_qla_host_t *vha, uint32_t *srisc_addr)
-{
-	int rval;
-
-	/*
-	 * FW Load priority:
-	 * 1) Firmware via request-firmware interface (.bin file).
-	 * 2) Firmware residing in flash.
-	 */
-	rval = qla24xx_load_risc_blob(vha, srisc_addr);
-	if (rval == QLA_SUCCESS)
-		return rval;
-
-	return qla24xx_load_risc_flash(vha, srisc_addr);
-}
-
-int
-qla81xx_load_risc(scsi_qla_host_t *vha, uint32_t *srisc_addr)
-{
-	int rval;
-
-	/*
-	 * FW Load priority:
-	 * 1) Firmware residing in flash.
-	 * 2) Firmware via request-firmware interface (.bin file).
-	 */
-	rval = qla24xx_load_risc_flash(vha, srisc_addr);
-	if (rval == QLA_SUCCESS)
-		return rval;
-
-	return qla24xx_load_risc_blob(vha, srisc_addr);
 }
 
 void

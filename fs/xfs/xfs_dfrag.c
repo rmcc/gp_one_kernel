@@ -55,11 +55,17 @@ xfs_swapext(
 	struct file	*file, *target_file;
 	int		error = 0;
 
+	sxp = kmem_alloc(sizeof(xfs_swapext_t), KM_MAYFAIL);
+	if (!sxp) {
+		error = XFS_ERROR(ENOMEM);
+		goto out;
+	}
+
 	/* Pull information for the target fd */
 	file = fget((int)sxp->sx_fdtarget);
 	if (!file) {
 		error = XFS_ERROR(EINVAL);
-		goto out;
+		goto out_free_sxp;
 	}
 
 	if (!(file->f_mode & FMODE_WRITE) || (file->f_flags & O_APPEND)) {
@@ -103,6 +109,8 @@ xfs_swapext(
 	fput(target_file);
  out_put_file:
 	fput(file);
+ out_free_sxp:
+	kmem_free(sxp);
  out:
 	return error;
 }

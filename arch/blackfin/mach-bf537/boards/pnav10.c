@@ -198,13 +198,8 @@ static struct platform_device isp1362_hcd_device = {
 #endif
 
 #if defined(CONFIG_BFIN_MAC) || defined(CONFIG_BFIN_MAC_MODULE)
-static struct platform_device bfin_mii_bus = {
-	.name = "bfin_mii_bus",
-};
-
 static struct platform_device bfin_mac_device = {
 	.name = "bfin_mac",
-	.dev.platform_data = &bfin_mii_bus,
 };
 #endif
 
@@ -534,7 +529,6 @@ static struct platform_device *stamp_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_BFIN_MAC) || defined(CONFIG_BFIN_MAC_MODULE)
-	&bfin_mii_bus,
 	&bfin_mac_device,
 #endif
 
@@ -564,7 +558,7 @@ static struct platform_device *stamp_devices[] __initdata = {
 #endif
 };
 
-static int __init pnav_init(void)
+static int __init stamp_init(void)
 {
 	printk(KERN_INFO "%s(): registering device resources\n", __func__);
 	platform_add_devices(stamp_devices, ARRAY_SIZE(stamp_devices));
@@ -575,7 +569,7 @@ static int __init pnav_init(void)
 	return 0;
 }
 
-arch_initcall(pnav_init);
+arch_initcall(stamp_init);
 
 void bfin_get_ether_addr(char *addr)
 {

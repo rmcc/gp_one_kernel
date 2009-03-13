@@ -556,23 +556,23 @@ no_space:
 }
 
 /**
- * next_pnode_to_dirty - find next pnode to dirty.
+ * next_pnode - find next pnode.
  * @c: UBIFS file-system description object
  * @pnode: pnode
  *
- * This function returns the next pnode to dirty or %NULL if there are no more
- * pnodes.  Note that pnodes that have never been written (lnum == 0) are
- * skipped.
+ * This function returns the next pnode or %NULL if there are no more pnodes.
  */
-static struct ubifs_pnode *next_pnode_to_dirty(struct ubifs_info *c,
-					       struct ubifs_pnode *pnode)
+static struct ubifs_pnode *next_pnode(struct ubifs_info *c,
+				      struct ubifs_pnode *pnode)
 {
 	struct ubifs_nnode *nnode;
 	int iip;
 
 	/* Try to go right */
 	nnode = pnode->parent;
-	for (iip = pnode->iip + 1; iip < UBIFS_LPT_FANOUT; iip++) {
+	iip = pnode->iip + 1;
+	if (iip < UBIFS_LPT_FANOUT) {
+		/* We assume here that LEB zero is never an LPT LEB */
 		if (nnode->nbranch[iip].lnum)
 			return ubifs_get_pnode(c, nnode, iip);
 	}
@@ -583,11 +583,8 @@ static struct ubifs_pnode *next_pnode_to_dirty(struct ubifs_info *c,
 		nnode = nnode->parent;
 		if (!nnode)
 			return NULL;
-		for (; iip < UBIFS_LPT_FANOUT; iip++) {
-			if (nnode->nbranch[iip].lnum)
-				break;
-		}
-       } while (iip >= UBIFS_LPT_FANOUT);
+		/* We assume here that LEB zero is never an LPT LEB */
+	} while (iip >= UBIFS_LPT_FANOUT || !nnode->nbranch[iip].lnum);
 
 	/* Go right */
 	nnode = ubifs_get_nnode(c, nnode, iip);
@@ -596,29 +593,12 @@ static struct ubifs_pnode *next_pnode_to_dirty(struct ubifs_info *c,
 
 	/* Go down to level 1 */
 	while (nnode->level > 1) {
-		for (iip = 0; iip < UBIFS_LPT_FANOUT; iip++) {
-			if (nnode->nbranch[iip].lnum)
-				break;
-		}
-		if (iip >= UBIFS_LPT_FANOUT) {
-			/*
-			 * Should not happen, but we need to keep going
-			 * if it does.
-			 */
-			iip = 0;
-		}
-		nnode = ubifs_get_nnode(c, nnode, iip);
+		nnode = ubifs_get_nnode(c, nnode, 0);
 		if (IS_ERR(nnode))
 			return (void *)nnode;
 	}
 
-	for (iip = 0; iip < UBIFS_LPT_FANOUT; iip++)
-		if (nnode->nbranch[iip].lnum)
-			break;
-	if (iip >= UBIFS_LPT_FANOUT)
-		/* Should not happen, but we need to keep going if it does */
-		iip = 0;
-	return ubifs_get_pnode(c, nnode, iip);
+	return ubifs_get_pnode(c, nnode, 0);
 }
 
 /**
@@ -708,7 +688,7 @@ static int make_tree_dirty(struct ubifs_info *c)
 	pnode = pnode_lookup(c, 0);
 	while (pnode) {
 		do_make_pnode_dirty(c, pnode);
-		pnode = next_pnode_to_dirty(c, pnode);
+		pnode = next_pnode(c, pnode);
 		if (IS_ERR(pnode))
 			return PTR_ERR(pnode);
 	}

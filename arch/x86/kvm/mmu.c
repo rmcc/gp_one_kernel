@@ -1698,13 +1698,8 @@ static int set_spte(struct kvm_vcpu *vcpu, u64 *shadow_pte,
 	if (largepage)
 		spte |= PT_PAGE_SIZE_MASK;
 	if (mt_mask) {
-		if (!kvm_is_mmio_pfn(pfn)) {
-			mt_mask = get_memory_type(vcpu, gfn) <<
-				kvm_x86_ops->get_mt_mask_shift();
-			mt_mask |= VMX_EPT_IGMT_BIT;
-		} else
-			mt_mask = MTRR_TYPE_UNCACHABLE <<
-				kvm_x86_ops->get_mt_mask_shift();
+		mt_mask = get_memory_type(vcpu, gfn) <<
+			  kvm_x86_ops->get_mt_mask_shift();
 		spte |= mt_mask;
 	}
 

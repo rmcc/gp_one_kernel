@@ -650,7 +650,6 @@ ENTRY(fp_enter)
 no_fp:	mov	pc, lr
 
 __und_usr_unknown:
-	enable_irq
 	mov	r0, sp
 	adr	lr, ret_from_exception
 	b	do_undefinstr

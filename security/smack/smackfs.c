@@ -334,7 +334,7 @@ static ssize_t smk_write_load(struct file *file, const char __user *buf,
 		break;
 	case 'a':
 	case 'A':
-		rule.smk_access |= MAY_APPEND;
+		rule.smk_access |= MAY_READ;
 		break;
 	default:
 		goto out;

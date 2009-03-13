@@ -21,7 +21,6 @@
 #include <linux/slab.h>
 #include <linux/rwsem.h>
 #include <linux/xattr.h>
-#include <linux/security.h>
 #include "ctree.h"
 #include "btrfs_inode.h"
 #include "transaction.h"
@@ -46,11 +45,8 @@ ssize_t __btrfs_getxattr(struct inode *inode, const char *name,
 	/* lookup the xattr by name */
 	di = btrfs_lookup_xattr(NULL, root, path, inode->i_ino, name,
 				strlen(name), 0);
-	if (!di) {
+	if (!di || IS_ERR(di)) {
 		ret = -ENODATA;
-		goto out;
-	} else if (IS_ERR(di)) {
-		ret = PTR_ERR(di);
 		goto out;
 	}
 
@@ -66,14 +62,6 @@ ssize_t __btrfs_getxattr(struct inode *inode, const char *name,
 		ret = -ERANGE;
 		goto out;
 	}
-
-	/*
-	 * The way things are packed into the leaf is like this
-	 * |struct btrfs_dir_item|name|data|
-	 * where name is the xattr name, so security.foo, and data is the
-	 * content of the xattr.  data_ptr points to the location in memory
-	 * where the data starts in the in memory leaf
-	 */
 	data_ptr = (unsigned long)((char *)(di + 1) +
 				   btrfs_dir_name_len(leaf, di));
 	read_extent_buffer(leaf, buffer, data_ptr,
@@ -98,7 +86,7 @@ int __btrfs_setxattr(struct inode *inode, const char *name,
 	if (!path)
 		return -ENOMEM;
 
-	trans = btrfs_join_transaction(root, 1);
+	trans = btrfs_start_transaction(root, 1);
 	btrfs_set_trans_block_group(trans, inode);
 
 	/* first lets see if we already have this xattr */
@@ -188,6 +176,7 @@ ssize_t btrfs_listxattr(struct dentry *dentry, char *buffer, size_t size)
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 	if (ret < 0)
 		goto err;
+	ret = 0;
 	advance = 0;
 	while (1) {
 		leaf = path->nodes[0];
@@ -330,35 +319,4 @@ int btrfs_removexattr(struct dentry *dentry, const char *name)
 	if (!btrfs_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 	return __btrfs_setxattr(dentry->d_inode, name, NULL, 0, XATTR_REPLACE);
-}
-
-int btrfs_xattr_security_init(struct inode *inode, struct inode *dir)
-{
-	int err;
-	size_t len;
-	void *value;
-	char *suffix;
-	char *name;
-
-	err = security_inode_init_security(inode, dir, &suffix, &value, &len);
-	if (err) {
-		if (err == -EOPNOTSUPP)
-			return 0;
-		return err;
-	}
-
-	name = kmalloc(XATTR_SECURITY_PREFIX_LEN + strlen(suffix) + 1,
-		       GFP_NOFS);
-	if (!name) {
-		err = -ENOMEM;
-	} else {
-		strcpy(name, XATTR_SECURITY_PREFIX);
-		strcpy(name + XATTR_SECURITY_PREFIX_LEN, suffix);
-		err = __btrfs_setxattr(inode, name, value, len, 0);
-		kfree(name);
-	}
-
-	kfree(suffix);
-	kfree(value);
-	return err;
 }

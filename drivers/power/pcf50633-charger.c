@@ -199,8 +199,7 @@ static int adapter_get_property(struct power_supply *psy,
 			enum power_supply_property psp,
 			union power_supply_propval *val)
 {
-	struct pcf50633_mbc *mbc = container_of(psy,
-				struct pcf50633_mbc, adapter);
+	struct pcf50633_mbc *mbc = container_of(psy, struct pcf50633_mbc, usb);
 	int ret = 0;
 
 	switch (psp) {

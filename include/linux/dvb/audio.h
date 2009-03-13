@@ -24,7 +24,12 @@
 #ifndef _DVBAUDIO_H_
 #define _DVBAUDIO_H_
 
+#ifdef __KERNEL__
 #include <linux/types.h>
+#else
+#include <stdint.h>
+#endif
+
 
 typedef enum {
 	AUDIO_SOURCE_DEMUX, /* Select the demux as the main source */

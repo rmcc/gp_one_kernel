@@ -663,10 +663,8 @@ int relay_late_setup_files(struct rchan *chan,
 
 	mutex_lock(&relay_channels_mutex);
 	/* Is chan already set up? */
-	if (unlikely(chan->has_base_filename)) {
-		mutex_unlock(&relay_channels_mutex);
+	if (unlikely(chan->has_base_filename))
 		return -EEXIST;
-	}
 	chan->has_base_filename = 1;
 	chan->parent = parent;
 	curr_cpu = get_cpu();

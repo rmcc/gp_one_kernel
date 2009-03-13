@@ -292,7 +292,6 @@ static void fuse_put_super(struct super_block *sb)
 	list_del(&fc->entry);
 	fuse_ctl_remove_conn(fc);
 	mutex_unlock(&fuse_mutex);
-	bdi_destroy(&fc->bdi);
 	fuse_conn_put(fc);
 }
 
@@ -533,6 +532,7 @@ void fuse_conn_put(struct fuse_conn *fc)
 		if (fc->destroy_req)
 			fuse_request_free(fc->destroy_req);
 		mutex_destroy(&fc->inst_mutex);
+		bdi_destroy(&fc->bdi);
 		fc->release(fc);
 	}
 }
@@ -805,18 +805,16 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	int err;
 	int is_bdev = sb->s_bdev != NULL;
 
-	err = -EINVAL;
 	if (sb->s_flags & MS_MANDLOCK)
-		goto err;
+		return -EINVAL;
 
 	if (!parse_fuse_opt((char *) data, &d, is_bdev))
-		goto err;
+		return -EINVAL;
 
 	if (is_bdev) {
 #ifdef CONFIG_BLOCK
-		err = -EINVAL;
 		if (!sb_set_blocksize(sb, d.blksize))
-			goto err;
+			return -EINVAL;
 #endif
 	} else {
 		sb->s_blocksize = PAGE_CACHE_SIZE;
@@ -828,22 +826,20 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_export_op = &fuse_export_operations;
 
 	file = fget(d.fd);
-	err = -EINVAL;
 	if (!file)
-		goto err;
+		return -EINVAL;
 
 	if (file->f_op != &fuse_dev_operations)
-		goto err_fput;
+		return -EINVAL;
 
 	fc = kmalloc(sizeof(*fc), GFP_KERNEL);
-	err = -ENOMEM;
 	if (!fc)
-		goto err_fput;
+		return -ENOMEM;
 
 	err = fuse_conn_init(fc, sb);
 	if (err) {
 		kfree(fc);
-		goto err_fput;
+		return err;
 	}
 
 	fc->release = fuse_free_conn;
@@ -858,12 +854,12 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	err = -ENOMEM;
 	root = fuse_get_root_inode(sb, d.rootmode);
 	if (!root)
-		goto err_put_conn;
+		goto err;
 
 	root_dentry = d_alloc_root(root);
 	if (!root_dentry) {
 		iput(root);
-		goto err_put_conn;
+		goto err;
 	}
 
 	init_req = fuse_request_alloc();
@@ -907,11 +903,9 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	fuse_request_free(init_req);
  err_put_root:
 	dput(root_dentry);
- err_put_conn:
-	fuse_conn_put(fc);
- err_fput:
-	fput(file);
  err:
+	fput(file);
+	fuse_conn_put(fc);
 	return err;
 }
 

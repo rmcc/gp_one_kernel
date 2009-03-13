@@ -418,9 +418,9 @@ ENTRY(ia32_syscall)
 	orl   $TS_COMPAT,TI_status(%r10)
 	testl $_TIF_WORK_SYSCALL_ENTRY,TI_flags(%r10)
 	jnz ia32_tracesys
+ia32_do_syscall:	
 	cmpl $(IA32_NR_syscalls-1),%eax
-	ja ia32_badsys
-ia32_do_call:
+	ja  int_ret_from_sys_call	/* ia32_tracesys has set RAX(%rsp) */
 	IA32_ARG_FIXUP
 	call *ia32_sys_call_table(,%rax,8) # xxx: rip relative
 ia32_sysret:
@@ -435,9 +435,7 @@ ia32_tracesys:
 	call syscall_trace_enter
 	LOAD_ARGS32 ARGOFFSET  /* reload args from stack in case ptrace changed it */
 	RESTORE_REST
-	cmpl $(IA32_NR_syscalls-1),%eax
-	ja  int_ret_from_sys_call	/* ia32_tracesys has set RAX(%rsp) */
-	jmp ia32_do_call
+	jmp ia32_do_syscall
 END(ia32_syscall)
 
 ia32_badsys:

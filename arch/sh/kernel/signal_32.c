@@ -510,6 +510,7 @@ handle_syscall_restart(unsigned long save_r0, struct pt_regs *regs,
 		case -ERESTARTNOHAND:
 		no_system_call_restart:
 			regs->regs[0] = -EINTR;
+			regs->sr |= 1;
 			break;
 
 		case -ERESTARTSYS:
@@ -588,7 +589,8 @@ static void do_signal(struct pt_regs *regs, unsigned int save_r0)
 
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
-		handle_syscall_restart(save_r0, regs, &ka.sa);
+		if (regs->sr & 1)
+			handle_syscall_restart(save_r0, regs, &ka.sa);
 
 		/* Whee!  Actually deliver the signal.  */
 		if (handle_signal(signr, &ka, &info, oldset,
