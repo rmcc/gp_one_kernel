@@ -784,7 +784,14 @@ struct btrfs_fs_info {
 	struct list_head dirty_cowonly_roots;
 
 	struct btrfs_fs_devices *fs_devices;
+
+	/*
+	 * the space_info list is almost entirely read only.  It only changes
+	 * when we add a new raid type to the FS, and that happens
+	 * very rarely.  RCU is used to protect it.
+	 */
 	struct list_head space_info;
+
 	spinlock_t delalloc_lock;
 	spinlock_t new_trans_lock;
 	u64 delalloc_bytes;
@@ -1797,6 +1804,8 @@ int btrfs_cleanup_reloc_trees(struct btrfs_root *root);
 int btrfs_reloc_clone_csums(struct inode *inode, u64 file_pos, u64 len);
 u64 btrfs_reduce_alloc_profile(struct btrfs_root *root, u64 flags);
 void btrfs_set_inode_space_info(struct btrfs_root *root, struct inode *ionde);
+void btrfs_clear_space_info_full(struct btrfs_fs_info *info);
+
 int btrfs_check_metadata_free_space(struct btrfs_root *root);
 int btrfs_check_data_free_space(struct btrfs_root *root, struct inode *inode,
 				u64 bytes);
@@ -1829,7 +1838,7 @@ int btrfs_search_forward(struct btrfs_root *root, struct btrfs_key *min_key,
 int btrfs_cow_block(struct btrfs_trans_handle *trans,
 		    struct btrfs_root *root, struct extent_buffer *buf,
 		    struct extent_buffer *parent, int parent_slot,
-		    struct extent_buffer **cow_ret, u64 prealloc_dest);
+		    struct extent_buffer **cow_ret);
 int btrfs_copy_root(struct btrfs_trans_handle *trans,
 		      struct btrfs_root *root,
 		      struct extent_buffer *buf,

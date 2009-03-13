@@ -161,9 +161,7 @@ EXPORT_SYMBOL_GPL(svc_xprt_init);
 
 static struct svc_xprt *__svc_xpo_create(struct svc_xprt_class *xcl,
 					 struct svc_serv *serv,
-					 const int family,
-					 const unsigned short port,
-					 int flags)
+					 unsigned short port, int flags)
 {
 	struct sockaddr_in sin = {
 		.sin_family		= AF_INET,
@@ -178,12 +176,12 @@ static struct svc_xprt *__svc_xpo_create(struct svc_xprt_class *xcl,
 	struct sockaddr *sap;
 	size_t len;
 
-	switch (family) {
-	case PF_INET:
+	switch (serv->sv_family) {
+	case AF_INET:
 		sap = (struct sockaddr *)&sin;
 		len = sizeof(sin);
 		break;
-	case PF_INET6:
+	case AF_INET6:
 		sap = (struct sockaddr *)&sin6;
 		len = sizeof(sin6);
 		break;
@@ -194,8 +192,7 @@ static struct svc_xprt *__svc_xpo_create(struct svc_xprt_class *xcl,
 	return xcl->xcl_ops->xpo_create(serv, sap, len, flags);
 }
 
-int svc_create_xprt(struct svc_serv *serv, const char *xprt_name,
-		    const int family, const unsigned short port,
+int svc_create_xprt(struct svc_serv *serv, char *xprt_name, unsigned short port,
 		    int flags)
 {
 	struct svc_xprt_class *xcl;
@@ -212,7 +209,7 @@ int svc_create_xprt(struct svc_serv *serv, const char *xprt_name,
 			goto err;
 
 		spin_unlock(&svc_xprt_class_lock);
-		newxprt = __svc_xpo_create(xcl, serv, family, port, flags);
+		newxprt = __svc_xpo_create(xcl, serv, port, flags);
 		if (IS_ERR(newxprt)) {
 			module_put(xcl->xcl_owner);
 			return PTR_ERR(newxprt);
@@ -1036,13 +1033,7 @@ static struct svc_deferred_req *svc_deferred_dequeue(struct svc_xprt *xprt)
 	return dr;
 }
 
-/**
- * svc_find_xprt - find an RPC transport instance
- * @serv: pointer to svc_serv to search
- * @xcl_name: C string containing transport's class name
- * @af: Address family of transport's local address
- * @port: transport's IP port number
- *
+/*
  * Return the transport instance pointer for the endpoint accepting
  * connections/peer traffic from the specified transport class,
  * address family and port.
@@ -1051,14 +1042,14 @@ static struct svc_deferred_req *svc_deferred_dequeue(struct svc_xprt *xprt)
  * wild-card, and will result in matching the first transport in the
  * service's list that has a matching class name.
  */
-struct svc_xprt *svc_find_xprt(struct svc_serv *serv, const char *xcl_name,
-			       const sa_family_t af, const unsigned short port)
+struct svc_xprt *svc_find_xprt(struct svc_serv *serv, char *xcl_name,
+			       int af, int port)
 {
 	struct svc_xprt *xprt;
 	struct svc_xprt *found = NULL;
 
 	/* Sanity check the args */
-	if (serv == NULL || xcl_name == NULL)
+	if (!serv || !xcl_name)
 		return found;
 
 	spin_lock_bh(&serv->sv_lock);
@@ -1067,7 +1058,7 @@ struct svc_xprt *svc_find_xprt(struct svc_serv *serv, const char *xcl_name,
 			continue;
 		if (af != AF_UNSPEC && af != xprt->xpt_local.ss_family)
 			continue;
-		if (port != 0 && port != svc_xprt_local_port(xprt))
+		if (port && port != svc_xprt_local_port(xprt))
 			continue;
 		found = xprt;
 		svc_xprt_get(xprt);

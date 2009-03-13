@@ -193,6 +193,14 @@ static void nfs4_setup_readdir(u64 cookie, __be32 *verifier, struct dentry *dent
 	kunmap_atomic(start, KM_USER0);
 }
 
+static int nfs4_wait_bit_killable(void *word)
+{
+	if (fatal_signal_pending(current))
+		return -ERESTARTSYS;
+	schedule();
+	return 0;
+}
+
 static int nfs4_wait_clnt_recover(struct nfs_client *clp)
 {
 	int res;
@@ -200,7 +208,7 @@ static int nfs4_wait_clnt_recover(struct nfs_client *clp)
 	might_sleep();
 
 	res = wait_on_bit(&clp->cl_state, NFS4CLNT_MANAGER_RUNNING,
-			nfs_wait_bit_killable, TASK_KILLABLE);
+			nfs4_wait_bit_killable, TASK_KILLABLE);
 	return res;
 }
 
@@ -1431,7 +1439,7 @@ int nfs4_do_close(struct path *path, struct nfs4_state *state, int wait)
 	if (calldata->arg.seqid == NULL)
 		goto out_free_calldata;
 	calldata->arg.fmode = 0;
-	calldata->arg.bitmask = server->cache_consistency_bitmask;
+	calldata->arg.bitmask = server->attr_bitmask;
 	calldata->res.fattr = &calldata->fattr;
 	calldata->res.seqid = calldata->arg.seqid;
 	calldata->res.server = server;
@@ -1572,15 +1580,6 @@ out_drop:
 	return 0;
 }
 
-void nfs4_close_context(struct nfs_open_context *ctx, int is_sync)
-{
-	if (ctx->state == NULL)
-		return;
-	if (is_sync)
-		nfs4_close_sync(&ctx->path, ctx->state, ctx->mode);
-	else
-		nfs4_close_state(&ctx->path, ctx->state, ctx->mode);
-}
 
 static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *fhandle)
 {
@@ -1601,9 +1600,6 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 			server->caps |= NFS_CAP_HARDLINKS;
 		if (res.has_symlinks != 0)
 			server->caps |= NFS_CAP_SYMLINKS;
-		memcpy(server->cache_consistency_bitmask, res.attr_bitmask, sizeof(server->cache_consistency_bitmask));
-		server->cache_consistency_bitmask[0] &= FATTR4_WORD0_CHANGE|FATTR4_WORD0_SIZE;
-		server->cache_consistency_bitmask[1] &= FATTR4_WORD1_TIME_METADATA|FATTR4_WORD1_TIME_MODIFY;
 		server->acl_bitmask = res.acl_bitmask;
 	}
 	return status;
@@ -2083,7 +2079,7 @@ static void nfs4_proc_unlink_setup(struct rpc_message *msg, struct inode *dir)
 	struct nfs_removeargs *args = msg->rpc_argp;
 	struct nfs_removeres *res = msg->rpc_resp;
 
-	args->bitmask = server->cache_consistency_bitmask;
+	args->bitmask = server->attr_bitmask;
 	res->server = server;
 	msg->rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_REMOVE];
 }
@@ -2327,7 +2323,7 @@ static int _nfs4_proc_readdir(struct dentry *dentry, struct rpc_cred *cred,
 		.pages = &page,
 		.pgbase = 0,
 		.count = count,
-		.bitmask = NFS_SERVER(dentry->d_inode)->cache_consistency_bitmask,
+		.bitmask = NFS_SERVER(dentry->d_inode)->attr_bitmask,
 	};
 	struct nfs4_readdir_res res;
 	struct rpc_message msg = {
@@ -2556,7 +2552,7 @@ static void nfs4_proc_write_setup(struct nfs_write_data *data, struct rpc_messag
 {
 	struct nfs_server *server = NFS_SERVER(data->inode);
 
-	data->args.bitmask = server->cache_consistency_bitmask;
+	data->args.bitmask = server->attr_bitmask;
 	data->res.server = server;
 	data->timestamp   = jiffies;
 
@@ -2579,7 +2575,7 @@ static void nfs4_proc_commit_setup(struct nfs_write_data *data, struct rpc_messa
 {
 	struct nfs_server *server = NFS_SERVER(data->inode);
 	
-	data->args.bitmask = server->cache_consistency_bitmask;
+	data->args.bitmask = server->attr_bitmask;
 	data->res.server = server;
 	msg->rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_COMMIT];
 }
@@ -3682,19 +3678,6 @@ ssize_t nfs4_listxattr(struct dentry *dentry, char *buf, size_t buflen)
 	return len;
 }
 
-static void nfs_fixup_referral_attributes(struct nfs_fattr *fattr)
-{
-	if (!((fattr->valid & NFS_ATTR_FATTR_FILEID) &&
-		(fattr->valid & NFS_ATTR_FATTR_FSID) &&
-		(fattr->valid & NFS_ATTR_FATTR_V4_REFERRAL)))
-		return;
-
-	fattr->valid |= NFS_ATTR_FATTR_TYPE | NFS_ATTR_FATTR_MODE |
-		NFS_ATTR_FATTR_NLINK;
-	fattr->mode = S_IFDIR | S_IRUGO | S_IXUGO;
-	fattr->nlink = 2;
-}
-
 int nfs4_proc_fs_locations(struct inode *dir, const struct qstr *name,
 		struct nfs4_fs_locations *fs_locations, struct page *page)
 {
@@ -3721,7 +3704,6 @@ int nfs4_proc_fs_locations(struct inode *dir, const struct qstr *name,
 	fs_locations->server = server;
 	fs_locations->nlocations = 0;
 	status = rpc_call_sync(server->client, &msg, 0);
-	nfs_fixup_referral_attributes(&fs_locations->fattr);
 	dprintk("%s: returned status = %d\n", __func__, status);
 	return status;
 }
@@ -3785,7 +3767,6 @@ const struct nfs_rpc_ops nfs_v4_clientops = {
 	.commit_done	= nfs4_commit_done,
 	.lock		= nfs4_proc_lock,
 	.clear_acl_cache = nfs4_zap_acl_attr,
-	.close_context  = nfs4_close_context,
 };
 
 /*

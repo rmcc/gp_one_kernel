@@ -91,15 +91,19 @@
 /*
  * Map file type to S_IFMT bits
  */
-static const umode_t nfs_type2fmt[] = {
-	[NF3BAD] = 0,
-	[NF3REG] = S_IFREG,
-	[NF3DIR] = S_IFDIR,
-	[NF3BLK] = S_IFBLK,
-	[NF3CHR] = S_IFCHR,
-	[NF3LNK] = S_IFLNK,
-	[NF3SOCK] = S_IFSOCK,
-	[NF3FIFO] = S_IFIFO,
+static struct {
+	unsigned int	mode;
+	unsigned int	nfs2type;
+} nfs_type2fmt[] = {
+      { 0,		NFNON	},
+      { S_IFREG,	NFREG	},
+      { S_IFDIR,	NFDIR	},
+      { S_IFBLK,	NFBLK	},
+      { S_IFCHR,	NFCHR	},
+      { S_IFLNK,	NFLNK	},
+      { S_IFSOCK,	NFSOCK	},
+      { S_IFIFO,	NFFIFO	},
+      { 0,		NFBAD	}
 };
 
 /*
@@ -144,12 +148,13 @@ static __be32 *
 xdr_decode_fattr(__be32 *p, struct nfs_fattr *fattr)
 {
 	unsigned int	type, major, minor;
-	umode_t		fmode;
+	int		fmode;
 
 	type = ntohl(*p++);
-	if (type > NF3FIFO)
-		type = NF3NON;
-	fmode = nfs_type2fmt[type];
+	if (type >= NF3BAD)
+		type = NF3BAD;
+	fmode = nfs_type2fmt[type].mode;
+	fattr->type = nfs_type2fmt[type].nfs2type;
 	fattr->mode = (ntohl(*p++) & ~S_IFMT) | fmode;
 	fattr->nlink = ntohl(*p++);
 	fattr->uid = ntohl(*p++);
@@ -172,7 +177,7 @@ xdr_decode_fattr(__be32 *p, struct nfs_fattr *fattr)
 	p = xdr_decode_time3(p, &fattr->ctime);
 
 	/* Update the mode bits */
-	fattr->valid |= NFS_ATTR_FATTR_V3;
+	fattr->valid |= (NFS_ATTR_FATTR | NFS_ATTR_FATTR_V3);
 	return p;
 }
 
@@ -228,9 +233,7 @@ xdr_decode_wcc_attr(__be32 *p, struct nfs_fattr *fattr)
 	p = xdr_decode_hyper(p, &fattr->pre_size);
 	p = xdr_decode_time3(p, &fattr->pre_mtime);
 	p = xdr_decode_time3(p, &fattr->pre_ctime);
-	fattr->valid |= NFS_ATTR_FATTR_PRESIZE
-		| NFS_ATTR_FATTR_PREMTIME
-		| NFS_ATTR_FATTR_PRECTIME;
+	fattr->valid |= NFS_ATTR_WCC;
 	return p;
 }
 

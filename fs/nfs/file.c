@@ -64,7 +64,11 @@ const struct file_operations nfs_file_operations = {
 	.write		= do_sync_write,
 	.aio_read	= nfs_file_read,
 	.aio_write	= nfs_file_write,
+#ifdef CONFIG_MMU
 	.mmap		= nfs_file_mmap,
+#else
+	.mmap		= generic_file_mmap,
+#endif
 	.open		= nfs_file_open,
 	.flush		= nfs_file_flush,
 	.release	= nfs_file_release,
@@ -137,6 +141,9 @@ nfs_file_release(struct inode *inode, struct file *filp)
 			dentry->d_parent->d_name.name,
 			dentry->d_name.name);
 
+	/* Ensure that dirty pages are flushed out with the right creds */
+	if (filp->f_mode & FMODE_WRITE)
+		nfs_wb_all(dentry->d_inode);
 	nfs_inc_stats(inode, NFSIOS_VFSRELEASE);
 	return nfs_release(inode, filp);
 }
@@ -228,6 +235,7 @@ nfs_file_flush(struct file *file, fl_owner_t id)
 	struct nfs_open_context *ctx = nfs_file_open_context(file);
 	struct dentry	*dentry = file->f_path.dentry;
 	struct inode	*inode = dentry->d_inode;
+	int		status;
 
 	dprintk("NFS: flush(%s/%s)\n",
 			dentry->d_parent->d_name.name,
@@ -237,8 +245,11 @@ nfs_file_flush(struct file *file, fl_owner_t id)
 		return 0;
 	nfs_inc_stats(inode, NFSIOS_VFSFLUSH);
 
-	/* Flush writes to the server and return any errors */
-	return nfs_do_fsync(ctx, inode);
+	/* Ensure that data+attribute caches are up to date after close() */
+	status = nfs_do_fsync(ctx, inode);
+	if (!status)
+		nfs_revalidate_inode(NFS_SERVER(inode), inode);
+	return status;
 }
 
 static ssize_t
@@ -293,13 +304,11 @@ nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
 	dprintk("NFS: mmap(%s/%s)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	/* Note: generic_file_mmap() returns ENOSYS on nommu systems
-	 *       so we call that before revalidating the mapping
-	 */
-	status = generic_file_mmap(file, vma);
+	status = nfs_revalidate_mapping(inode, file->f_mapping);
 	if (!status) {
 		vma->vm_ops = &nfs_file_vm_ops;
-		status = nfs_revalidate_mapping(inode, file->f_mapping);
+		vma->vm_flags |= VM_CAN_NONLINEAR;
+		file_accessed(file);
 	}
 	return status;
 }
@@ -344,15 +353,6 @@ static int nfs_write_begin(struct file *file, struct address_space *mapping,
 		file->f_path.dentry->d_parent->d_name.name,
 		file->f_path.dentry->d_name.name,
 		mapping->host->i_ino, len, (long long) pos);
-
-	/*
-	 * Prevent starvation issues if someone is doing a consistency
-	 * sync-to-disk
-	 */
-	ret = wait_on_bit(&NFS_I(mapping->host)->flags, NFS_INO_FLUSHING,
-			nfs_wait_bit_killable, TASK_KILLABLE);
-	if (ret)
-		return ret;
 
 	page = grab_cache_page_write_begin(mapping, index, flags);
 	if (!page)
