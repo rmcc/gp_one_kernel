@@ -29,43 +29,6 @@ struct tree_balance *cur_tb = NULL;	/* detects whether more than one
 					   is interrupting do_balance */
 #endif
 
-static inline void buffer_info_init_left(struct tree_balance *tb,
-                                         struct buffer_info *bi)
-{
-	bi->tb          = tb;
-	bi->bi_bh       = tb->L[0];
-	bi->bi_parent   = tb->FL[0];
-	bi->bi_position = get_left_neighbor_position(tb, 0);
-}
-
-static inline void buffer_info_init_right(struct tree_balance *tb,
-                                          struct buffer_info *bi)
-{
-	bi->tb          = tb;
-	bi->bi_bh       = tb->R[0];
-	bi->bi_parent   = tb->FR[0];
-	bi->bi_position = get_right_neighbor_position(tb, 0);
-}
-
-static inline void buffer_info_init_tbS0(struct tree_balance *tb,
-                                         struct buffer_info *bi)
-{
-	bi->tb          = tb;
-	bi->bi_bh        = PATH_PLAST_BUFFER(tb->tb_path);
-	bi->bi_parent   = PATH_H_PPARENT(tb->tb_path, 0);
-	bi->bi_position = PATH_H_POSITION(tb->tb_path, 1);
-}
-
-static inline void buffer_info_init_bh(struct tree_balance *tb,
-                                       struct buffer_info *bi,
-                                       struct buffer_head *bh)
-{
-	bi->tb          = tb;
-	bi->bi_bh       = bh;
-	bi->bi_parent   = NULL;
-	bi->bi_position = 0;
-}
-
 inline void do_balance_mark_leaf_dirty(struct tree_balance *tb,
 				       struct buffer_head *bh, int flag)
 {
@@ -76,21 +39,21 @@ inline void do_balance_mark_leaf_dirty(struct tree_balance *tb,
 #define do_balance_mark_internal_dirty do_balance_mark_leaf_dirty
 #define do_balance_mark_sb_dirty do_balance_mark_leaf_dirty
 
-/* summary:
+/* summary: 
  if deleting something ( tb->insert_size[0] < 0 )
    return(balance_leaf_when_delete()); (flag d handled here)
  else
    if lnum is larger than 0 we put items into the left node
    if rnum is larger than 0 we put items into the right node
    if snum1 is larger than 0 we put items into the new node s1
-   if snum2 is larger than 0 we put items into the new node s2
+   if snum2 is larger than 0 we put items into the new node s2 
 Note that all *num* count new items being created.
 
 It would be easier to read balance_leaf() if each of these summary
 lines was a separate procedure rather than being inlined.  I think
 that there are many passages here and in balance_leaf_when_delete() in
 which two calls to one procedure can replace two passages, and it
-might save cache space and improve software maintenance costs to do so.
+might save cache space and improve software maintenance costs to do so.  
 
 Vladimir made the perceptive comment that we should offload most of
 the decision making in this function into fix_nodes/check_balance, and
@@ -123,7 +86,6 @@ static int balance_leaf_when_delete(struct tree_balance *tb, int flag)
 	       "PAP-12010: tree can not be empty");
 
 	ih = B_N_PITEM_HEAD(tbS0, item_pos);
-	buffer_info_init_tbS0(tb, &bi);
 
 	/* Delete or truncate the item */
 
@@ -134,6 +96,10 @@ static int balance_leaf_when_delete(struct tree_balance *tb, int flag)
 		       "vs-12013: mode Delete, insert size %d, ih to be deleted %h",
 		       -tb->insert_size[0], ih);
 
+		bi.tb = tb;
+		bi.bi_bh = tbS0;
+		bi.bi_parent = PATH_H_PPARENT(tb->tb_path, 0);
+		bi.bi_position = PATH_H_POSITION(tb->tb_path, 1);
 		leaf_delete_items(&bi, 0, item_pos, 1, -1);
 
 		if (!item_pos && tb->CFL[0]) {
@@ -155,6 +121,10 @@ static int balance_leaf_when_delete(struct tree_balance *tb, int flag)
 		break;
 
 	case M_CUT:{		/* cut item in S[0] */
+			bi.tb = tb;
+			bi.bi_bh = tbS0;
+			bi.bi_parent = PATH_H_PPARENT(tb->tb_path, 0);
+			bi.bi_position = PATH_H_POSITION(tb->tb_path, 1);
 			if (is_direntry_le_ih(ih)) {
 
 				/* UFS unlink semantics are such that you can only delete one directory entry at a time. */
@@ -183,8 +153,8 @@ static int balance_leaf_when_delete(struct tree_balance *tb, int flag)
 
 	default:
 		print_cur_tb("12040");
-		reiserfs_panic(tb->tb_sb, "PAP-12040",
-			       "unexpected mode: %s(%d)",
+		reiserfs_panic(tb->tb_sb,
+			       "PAP-12040: balance_leaf_when_delete: unexpectable mode: %s(%d)",
 			       (flag ==
 				M_PASTE) ? "PASTE" : ((flag ==
 						       M_INSERT) ? "INSERT" :
@@ -288,15 +258,15 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
     )
 {
 	struct buffer_head *tbS0 = PATH_PLAST_BUFFER(tb->tb_path);
-	int item_pos = PATH_LAST_POSITION(tb->tb_path);	/*  index into the array of item headers in S[0]
+	int item_pos = PATH_LAST_POSITION(tb->tb_path);	/*  index into the array of item headers in S[0] 
 							   of the affected item */
 	struct buffer_info bi;
 	struct buffer_head *S_new[2];	/* new nodes allocated to hold what could not fit into S */
 	int snum[2];		/* number of items that will be placed
 				   into S_new (includes partially shifted
 				   items) */
-	int sbytes[2];		/* if an item is partially shifted into S_new then
-				   if it is a directory item
+	int sbytes[2];		/* if an item is partially shifted into S_new then 
+				   if it is a directory item 
 				   it is the number of entries from the item that are shifted into S_new
 				   else
 				   it is the number of bytes from the item that are shifted into S_new
@@ -355,7 +325,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					       ih_item_len(ih));
 
 					/* Insert new item into L[0] */
-					buffer_info_init_left(tb, &bi);
+					bi.tb = tb;
+					bi.bi_bh = tb->L[0];
+					bi.bi_parent = tb->FL[0];
+					bi.bi_position =
+					    get_left_neighbor_position(tb, 0);
 					leaf_insert_into_buf(&bi,
 							     n + item_pos -
 							     ret_val, ih, body,
@@ -395,7 +369,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					    leaf_shift_left(tb, tb->lnum[0] - 1,
 							    tb->lbytes);
 					/* Insert new item into L[0] */
-					buffer_info_init_left(tb, &bi);
+					bi.tb = tb;
+					bi.bi_bh = tb->L[0];
+					bi.bi_parent = tb->FL[0];
+					bi.bi_position =
+					    get_left_neighbor_position(tb, 0);
 					leaf_insert_into_buf(&bi,
 							     n + item_pos -
 							     ret_val, ih, body,
@@ -451,7 +429,13 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							}
 
 							/* Append given directory entry to directory item */
-							buffer_info_init_left(tb, &bi);
+							bi.tb = tb;
+							bi.bi_bh = tb->L[0];
+							bi.bi_parent =
+							    tb->FL[0];
+							bi.bi_position =
+							    get_left_neighbor_position
+							    (tb, 0);
 							leaf_paste_in_buffer
 							    (&bi,
 							     n + item_pos -
@@ -465,7 +449,8 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							/* when we have merge directory item, pos_in_item has been changed too */
 
 							/* paste new directory entry. 1 is entry number */
-							leaf_paste_entries(&bi,
+							leaf_paste_entries(bi.
+									   bi_bh,
 									   n +
 									   item_pos
 									   -
@@ -539,7 +524,13 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 									     (tbS0,
 									      item_pos)));
 							/* Append to body of item in L[0] */
-							buffer_info_init_left(tb, &bi);
+							bi.tb = tb;
+							bi.bi_bh = tb->L[0];
+							bi.bi_parent =
+							    tb->FL[0];
+							bi.bi_position =
+							    get_left_neighbor_position
+							    (tb, 0);
 							leaf_paste_in_buffer
 							    (&bi,
 							     n + item_pos -
@@ -690,7 +681,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					    leaf_shift_left(tb, tb->lnum[0],
 							    tb->lbytes);
 					/* Append to body of item in L[0] */
-					buffer_info_init_left(tb, &bi);
+					bi.tb = tb;
+					bi.bi_bh = tb->L[0];
+					bi.bi_parent = tb->FL[0];
+					bi.bi_position =
+					    get_left_neighbor_position(tb, 0);
 					leaf_paste_in_buffer(&bi,
 							     n + item_pos -
 							     ret_val,
@@ -704,7 +699,7 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							   n + item_pos -
 							   ret_val);
 					if (is_direntry_le_ih(pasted))
-						leaf_paste_entries(&bi,
+						leaf_paste_entries(bi.bi_bh,
 								   n +
 								   item_pos -
 								   ret_val,
@@ -727,9 +722,8 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 				}
 				break;
 			default:	/* cases d and t */
-				reiserfs_panic(tb->tb_sb, "PAP-12130",
-					       "lnum > 0: unexpected mode: "
-					       " %s(%d)",
+				reiserfs_panic(tb->tb_sb,
+					       "PAP-12130: balance_leaf: lnum > 0: unexpectable mode: %s(%d)",
 					       (flag ==
 						M_DELETE) ? "DELETE" : ((flag ==
 									 M_CUT)
@@ -782,7 +776,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					set_le_ih_k_offset(ih, offset);
 					put_ih_item_len(ih, tb->rbytes);
 					/* Insert part of the item into R[0] */
-					buffer_info_init_right(tb, &bi);
+					bi.tb = tb;
+					bi.bi_bh = tb->R[0];
+					bi.bi_parent = tb->FR[0];
+					bi.bi_position =
+					    get_right_neighbor_position(tb, 0);
 					if ((old_len - tb->rbytes) > zeros_num) {
 						r_zeros_number = 0;
 						r_body =
@@ -819,7 +817,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							     tb->rnum[0] - 1,
 							     tb->rbytes);
 					/* Insert new item into R[0] */
-					buffer_info_init_right(tb, &bi);
+					bi.tb = tb;
+					bi.bi_bh = tb->R[0];
+					bi.bi_parent = tb->FR[0];
+					bi.bi_position =
+					    get_right_neighbor_position(tb, 0);
 					leaf_insert_into_buf(&bi,
 							     item_pos - n +
 							     tb->rnum[0] - 1,
@@ -879,14 +881,21 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							    pos_in_item -
 							    entry_count +
 							    tb->rbytes - 1;
-							buffer_info_init_right(tb, &bi);
+							bi.tb = tb;
+							bi.bi_bh = tb->R[0];
+							bi.bi_parent =
+							    tb->FR[0];
+							bi.bi_position =
+							    get_right_neighbor_position
+							    (tb, 0);
 							leaf_paste_in_buffer
 							    (&bi, 0,
 							     paste_entry_position,
 							     tb->insert_size[0],
 							     body, zeros_num);
 							/* paste entry */
-							leaf_paste_entries(&bi,
+							leaf_paste_entries(bi.
+									   bi_bh,
 									   0,
 									   paste_entry_position,
 									   1,
@@ -1010,7 +1019,12 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 						    (tb, tb->CFR[0], 0);
 
 						/* Append part of body into R[0] */
-						buffer_info_init_right(tb, &bi);
+						bi.tb = tb;
+						bi.bi_bh = tb->R[0];
+						bi.bi_parent = tb->FR[0];
+						bi.bi_position =
+						    get_right_neighbor_position
+						    (tb, 0);
 						if (n_rem > zeros_num) {
 							r_zeros_number = 0;
 							r_body =
@@ -1057,7 +1071,12 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							     tb->rbytes);
 					/* append item in R[0] */
 					if (pos_in_item >= 0) {
-						buffer_info_init_right(tb, &bi);
+						bi.tb = tb;
+						bi.bi_bh = tb->R[0];
+						bi.bi_parent = tb->FR[0];
+						bi.bi_position =
+						    get_right_neighbor_position
+						    (tb, 0);
 						leaf_paste_in_buffer(&bi,
 								     item_pos -
 								     n +
@@ -1077,7 +1096,7 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							   tb->rnum[0]);
 					if (is_direntry_le_ih(pasted)
 					    && pos_in_item >= 0) {
-						leaf_paste_entries(&bi,
+						leaf_paste_entries(bi.bi_bh,
 								   item_pos -
 								   n +
 								   tb->rnum[0],
@@ -1117,8 +1136,8 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 			}
 			break;
 		default:	/* cases d and t */
-			reiserfs_panic(tb->tb_sb, "PAP-12175",
-				       "rnum > 0: unexpected mode: %s(%d)",
+			reiserfs_panic(tb->tb_sb,
+				       "PAP-12175: balance_leaf: rnum > 0: unexpectable mode: %s(%d)",
 				       (flag ==
 					M_DELETE) ? "DELETE" : ((flag ==
 								 M_CUT) ? "CUT"
@@ -1148,8 +1167,8 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 		   not set correctly */
 		if (tb->CFL[0]) {
 			if (!tb->CFR[0])
-				reiserfs_panic(tb->tb_sb, "vs-12195",
-					       "CFR not initialized");
+				reiserfs_panic(tb->tb_sb,
+					       "vs-12195: balance_leaf: CFR not initialized");
 			copy_key(B_N_PDELIM_KEY(tb->CFL[0], tb->lkey[0]),
 				 B_N_PDELIM_KEY(tb->CFR[0], tb->rkey[0]));
 			do_balance_mark_internal_dirty(tb, tb->CFL[0], 0);
@@ -1213,7 +1232,10 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					put_ih_item_len(ih, sbytes[i]);
 
 					/* Insert part of the item into S_new[i] before 0-th item */
-					buffer_info_init_bh(tb, &bi, S_new[i]);
+					bi.tb = tb;
+					bi.bi_bh = S_new[i];
+					bi.bi_parent = NULL;
+					bi.bi_position = 0;
 
 					if ((old_len - sbytes[i]) > zeros_num) {
 						r_zeros_number = 0;
@@ -1245,7 +1267,10 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							S_new[i]);
 
 					/* Insert new item into S_new[i] */
-					buffer_info_init_bh(tb, &bi, S_new[i]);
+					bi.tb = tb;
+					bi.bi_bh = S_new[i];
+					bi.bi_parent = NULL;
+					bi.bi_position = 0;
 					leaf_insert_into_buf(&bi,
 							     item_pos - n +
 							     snum[i] - 1, ih,
@@ -1302,7 +1327,10 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							     sbytes[i] - 1,
 							     S_new[i]);
 							/* Paste given directory entry to directory item */
-							buffer_info_init_bh(tb, &bi, S_new[i]);
+							bi.tb = tb;
+							bi.bi_bh = S_new[i];
+							bi.bi_parent = NULL;
+							bi.bi_position = 0;
 							leaf_paste_in_buffer
 							    (&bi, 0,
 							     pos_in_item -
@@ -1311,7 +1339,8 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							     tb->insert_size[0],
 							     body, zeros_num);
 							/* paste new directory entry */
-							leaf_paste_entries(&bi,
+							leaf_paste_entries(bi.
+									   bi_bh,
 									   0,
 									   pos_in_item
 									   -
@@ -1372,7 +1401,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 						if (n_rem < 0)
 							n_rem = 0;
 						/* Append part of body into S_new[0] */
-						buffer_info_init_bh(tb, &bi, S_new[i]);
+						bi.tb = tb;
+						bi.bi_bh = S_new[i];
+						bi.bi_parent = NULL;
+						bi.bi_position = 0;
+
 						if (n_rem > zeros_num) {
 							r_zeros_number = 0;
 							r_body =
@@ -1442,10 +1475,7 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					    && (pos_in_item != ih_item_len(ih_check)
 						|| tb->insert_size[0] <= 0))
 						reiserfs_panic(tb->tb_sb,
-							     "PAP-12235",
-							     "pos_in_item "
-							     "must be equal "
-							     "to ih_item_len");
+							       "PAP-12235: balance_leaf: pos_in_item must be equal to ih_item_len");
 #endif				/* CONFIG_REISERFS_CHECK */
 
 					leaf_mi =
@@ -1459,7 +1489,10 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 					       leaf_mi);
 
 					/* paste into item */
-					buffer_info_init_bh(tb, &bi, S_new[i]);
+					bi.tb = tb;
+					bi.bi_bh = S_new[i];
+					bi.bi_parent = NULL;
+					bi.bi_position = 0;
 					leaf_paste_in_buffer(&bi,
 							     item_pos - n +
 							     snum[i],
@@ -1472,7 +1505,7 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							   item_pos - n +
 							   snum[i]);
 					if (is_direntry_le_ih(pasted)) {
-						leaf_paste_entries(&bi,
+						leaf_paste_entries(bi.bi_bh,
 								   item_pos -
 								   n + snum[i],
 								   pos_in_item,
@@ -1502,8 +1535,8 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 			}
 			break;
 		default:	/* cases d and t */
-			reiserfs_panic(tb->tb_sb, "PAP-12245",
-				       "blknum > 2: unexpected mode: %s(%d)",
+			reiserfs_panic(tb->tb_sb,
+				       "PAP-12245: balance_leaf: blknum > 2: unexpectable mode: %s(%d)",
 				       (flag ==
 					M_DELETE) ? "DELETE" : ((flag ==
 								 M_CUT) ? "CUT"
@@ -1526,7 +1559,10 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 
 		switch (flag) {
 		case M_INSERT:	/* insert item into S[0] */
-			buffer_info_init_tbS0(tb, &bi);
+			bi.tb = tb;
+			bi.bi_bh = tbS0;
+			bi.bi_parent = PATH_H_PPARENT(tb->tb_path, 0);
+			bi.bi_position = PATH_H_POSITION(tb->tb_path, 1);
 			leaf_insert_into_buf(&bi, item_pos, ih, body,
 					     zeros_num);
 
@@ -1553,7 +1589,14 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 						       "PAP-12260: insert_size is 0 already");
 
 						/* prepare space */
-						buffer_info_init_tbS0(tb, &bi);
+						bi.tb = tb;
+						bi.bi_bh = tbS0;
+						bi.bi_parent =
+						    PATH_H_PPARENT(tb->tb_path,
+								   0);
+						bi.bi_position =
+						    PATH_H_POSITION(tb->tb_path,
+								    1);
 						leaf_paste_in_buffer(&bi,
 								     item_pos,
 								     pos_in_item,
@@ -1563,7 +1606,7 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 								     zeros_num);
 
 						/* paste entry */
-						leaf_paste_entries(&bi,
+						leaf_paste_entries(bi.bi_bh,
 								   item_pos,
 								   pos_in_item,
 								   1,
@@ -1601,7 +1644,14 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 						RFALSE(tb->insert_size[0] <= 0,
 						       "PAP-12275: insert size must not be %d",
 						       tb->insert_size[0]);
-						buffer_info_init_tbS0(tb, &bi);
+						bi.tb = tb;
+						bi.bi_bh = tbS0;
+						bi.bi_parent =
+						    PATH_H_PPARENT(tb->tb_path,
+								   0);
+						bi.bi_position =
+						    PATH_H_POSITION(tb->tb_path,
+								    1);
 						leaf_paste_in_buffer(&bi,
 								     item_pos,
 								     pos_in_item,
@@ -1631,11 +1681,10 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 							print_cur_tb("12285");
 							reiserfs_panic(tb->
 								       tb_sb,
-							    "PAP-12285",
-							    "insert_size "
-							    "must be 0 "
-							    "(%d)",
-							    tb->insert_size[0]);
+								       "PAP-12285: balance_leaf: insert_size must be 0 (%d)",
+								       tb->
+								       insert_size
+								       [0]);
 						}
 					}
 #endif				/* CONFIG_REISERFS_CHECK */
@@ -1648,10 +1697,11 @@ static int balance_leaf(struct tree_balance *tb, struct item_head *ih,	/* item h
 	if (flag == M_PASTE && tb->insert_size[0]) {
 		print_cur_tb("12290");
 		reiserfs_panic(tb->tb_sb,
-			       "PAP-12290", "insert_size is still not 0 (%d)",
+			       "PAP-12290: balance_leaf: insert_size is still not 0 (%d)",
 			       tb->insert_size[0]);
 	}
 #endif				/* CONFIG_REISERFS_CHECK */
+
 	return 0;
 }				/* Leaf level of the tree is balanced (end of balance_leaf) */
 
@@ -1674,6 +1724,7 @@ void make_empty_node(struct buffer_info *bi)
 struct buffer_head *get_FEB(struct tree_balance *tb)
 {
 	int i;
+	struct buffer_head *first_b;
 	struct buffer_info bi;
 
 	for (i = 0; i < MAX_FEB_SIZE; i++)
@@ -1681,15 +1732,19 @@ struct buffer_head *get_FEB(struct tree_balance *tb)
 			break;
 
 	if (i == MAX_FEB_SIZE)
-		reiserfs_panic(tb->tb_sb, "vs-12300", "FEB list is empty");
+		reiserfs_panic(tb->tb_sb,
+			       "vs-12300: get_FEB: FEB list is empty");
 
-	buffer_info_init_bh(tb, &bi, tb->FEB[i]);
+	bi.tb = tb;
+	bi.bi_bh = first_b = tb->FEB[i];
+	bi.bi_parent = NULL;
+	bi.bi_position = 0;
 	make_empty_node(&bi);
-	set_buffer_uptodate(tb->FEB[i]);
-	tb->used[i] = tb->FEB[i];
+	set_buffer_uptodate(first_b);
 	tb->FEB[i] = NULL;
+	tb->used[i] = first_b;
 
-	return tb->used[i];
+	return (first_b);
 }
 
 /* This is now used because reiserfs_free_block has to be able to
@@ -1700,16 +1755,15 @@ static void store_thrown(struct tree_balance *tb, struct buffer_head *bh)
 	int i;
 
 	if (buffer_dirty(bh))
-		reiserfs_warning(tb->tb_sb, "reiserfs-12320",
-				 "called with dirty buffer");
+		reiserfs_warning(tb->tb_sb,
+				 "store_thrown deals with dirty buffer");
 	for (i = 0; i < ARRAY_SIZE(tb->thrown); i++)
 		if (!tb->thrown[i]) {
 			tb->thrown[i] = bh;
 			get_bh(bh);	/* free_thrown puts this */
 			return;
 		}
-	reiserfs_warning(tb->tb_sb, "reiserfs-12321",
-			 "too many thrown buffers");
+	reiserfs_warning(tb->tb_sb, "store_thrown: too many thrown buffers");
 }
 
 static void free_thrown(struct tree_balance *tb)
@@ -1720,8 +1774,8 @@ static void free_thrown(struct tree_balance *tb)
 		if (tb->thrown[i]) {
 			blocknr = tb->thrown[i]->b_blocknr;
 			if (buffer_dirty(tb->thrown[i]))
-				reiserfs_warning(tb->tb_sb, "reiserfs-12322",
-						 "called with dirty buffer %d",
+				reiserfs_warning(tb->tb_sb,
+						 "free_thrown deals with dirty buffer %d",
 						 blocknr);
 			brelse(tb->thrown[i]);	/* incremented in store_thrown */
 			reiserfs_free_block(tb->transaction_handle, NULL,
@@ -1819,19 +1873,20 @@ static void check_internal_node(struct super_block *s, struct buffer_head *bh,
 	for (i = 0; i <= B_NR_ITEMS(bh); i++, dc++) {
 		if (!is_reusable(s, dc_block_number(dc), 1)) {
 			print_cur_tb(mes);
-			reiserfs_panic(s, "PAP-12338",
-				       "invalid child pointer %y in %b",
+			reiserfs_panic(s,
+				       "PAP-12338: check_internal_node: invalid child pointer %y in %b",
 				       dc, bh);
 		}
 	}
 }
 
-static int locked_or_not_in_tree(struct tree_balance *tb,
-				  struct buffer_head *bh, char *which)
+static int locked_or_not_in_tree(struct buffer_head *bh, char *which)
 {
 	if ((!buffer_journal_prepared(bh) && buffer_locked(bh)) ||
 	    !B_IS_IN_TREE(bh)) {
-		reiserfs_warning(tb->tb_sb, "vs-12339", "%s (%b)", which, bh);
+		reiserfs_warning(NULL,
+				 "vs-12339: locked_or_not_in_tree: %s (%b)",
+				 which, bh);
 		return 1;
 	}
 	return 0;
@@ -1842,28 +1897,26 @@ static int check_before_balancing(struct tree_balance *tb)
 	int retval = 0;
 
 	if (cur_tb) {
-		reiserfs_panic(tb->tb_sb, "vs-12335", "suspect that schedule "
-			       "occurred based on cur_tb not being null at "
-			       "this point in code. do_balance cannot properly "
-			       "handle schedule occurring while it runs.");
+		reiserfs_panic(tb->tb_sb, "vs-12335: check_before_balancing: "
+			       "suspect that schedule occurred based on cur_tb not being null at this point in code. "
+			       "do_balance cannot properly handle schedule occurring while it runs.");
 	}
 
 	/* double check that buffers that we will modify are unlocked. (fix_nodes should already have
 	   prepped all of these for us). */
 	if (tb->lnum[0]) {
-		retval |= locked_or_not_in_tree(tb, tb->L[0], "L[0]");
-		retval |= locked_or_not_in_tree(tb, tb->FL[0], "FL[0]");
-		retval |= locked_or_not_in_tree(tb, tb->CFL[0], "CFL[0]");
+		retval |= locked_or_not_in_tree(tb->L[0], "L[0]");
+		retval |= locked_or_not_in_tree(tb->FL[0], "FL[0]");
+		retval |= locked_or_not_in_tree(tb->CFL[0], "CFL[0]");
 		check_leaf(tb->L[0]);
 	}
 	if (tb->rnum[0]) {
-		retval |= locked_or_not_in_tree(tb, tb->R[0], "R[0]");
-		retval |= locked_or_not_in_tree(tb, tb->FR[0], "FR[0]");
-		retval |= locked_or_not_in_tree(tb, tb->CFR[0], "CFR[0]");
+		retval |= locked_or_not_in_tree(tb->R[0], "R[0]");
+		retval |= locked_or_not_in_tree(tb->FR[0], "FR[0]");
+		retval |= locked_or_not_in_tree(tb->CFR[0], "CFR[0]");
 		check_leaf(tb->R[0]);
 	}
-	retval |= locked_or_not_in_tree(tb, PATH_PLAST_BUFFER(tb->tb_path),
-					"S[0]");
+	retval |= locked_or_not_in_tree(PATH_PLAST_BUFFER(tb->tb_path), "S[0]");
 	check_leaf(PATH_PLAST_BUFFER(tb->tb_path));
 
 	return retval;
@@ -1877,8 +1930,8 @@ static void check_after_balance_leaf(struct tree_balance *tb)
 		    dc_size(B_N_CHILD
 			    (tb->FL[0], get_left_neighbor_position(tb, 0)))) {
 			print_cur_tb("12221");
-			reiserfs_panic(tb->tb_sb, "PAP-12355",
-				       "shift to left was incorrect");
+			reiserfs_panic(tb->tb_sb,
+				       "PAP-12355: check_after_balance_leaf: shift to left was incorrect");
 		}
 	}
 	if (tb->rnum[0]) {
@@ -1887,8 +1940,8 @@ static void check_after_balance_leaf(struct tree_balance *tb)
 		    dc_size(B_N_CHILD
 			    (tb->FR[0], get_right_neighbor_position(tb, 0)))) {
 			print_cur_tb("12222");
-			reiserfs_panic(tb->tb_sb, "PAP-12360",
-				       "shift to right was incorrect");
+			reiserfs_panic(tb->tb_sb,
+				       "PAP-12360: check_after_balance_leaf: shift to right was incorrect");
 		}
 	}
 	if (PATH_H_PBUFFER(tb->tb_path, 1) &&
@@ -1902,7 +1955,7 @@ static void check_after_balance_leaf(struct tree_balance *tb)
 					       PATH_H_POSITION(tb->tb_path,
 							       1))));
 		print_cur_tb("12223");
-		reiserfs_warning(tb->tb_sb, "reiserfs-12363",
+		reiserfs_warning(tb->tb_sb,
 				 "B_FREE_SPACE (PATH_H_PBUFFER(tb->tb_path,0)) = %d; "
 				 "MAX_CHILD_SIZE (%d) - dc_size( %y, %d ) [%d] = %d",
 				 left,
@@ -1913,7 +1966,8 @@ static void check_after_balance_leaf(struct tree_balance *tb)
 					 (PATH_H_PBUFFER(tb->tb_path, 1),
 					  PATH_H_POSITION(tb->tb_path, 1))),
 				 right);
-		reiserfs_panic(tb->tb_sb, "PAP-12365", "S is incorrect");
+		reiserfs_panic(tb->tb_sb,
+			       "PAP-12365: check_after_balance_leaf: S is incorrect");
 	}
 }
 
@@ -1983,7 +2037,7 @@ static inline void do_balance_starts(struct tree_balance *tb)
 	/* store_print_tb (tb); */
 
 	/* do not delete, just comment it out */
-/*    print_tb(flag, PATH_LAST_POSITION(tb->tb_path), tb->tb_path->pos_in_item, tb,
+/*    print_tb(flag, PATH_LAST_POSITION(tb->tb_path), tb->tb_path->pos_in_item, tb, 
 	     "check");*/
 	RFALSE(check_before_balancing(tb), "PAP-12340: locked buffers in TB");
 #ifdef CONFIG_REISERFS_CHECK
@@ -2048,13 +2102,14 @@ void do_balance(struct tree_balance *tb,	/* tree_balance structure */
 	tb->need_balance_dirty = 0;
 
 	if (FILESYSTEM_CHANGED_TB(tb)) {
-		reiserfs_panic(tb->tb_sb, "clm-6000", "fs generation has "
-			       "changed");
+		reiserfs_panic(tb->tb_sb,
+			       "clm-6000: do_balance, fs generation has changed\n");
 	}
 	/* if we have no real work to do  */
 	if (!tb->insert_size[0]) {
-		reiserfs_warning(tb->tb_sb, "PAP-12350",
-				 "insert_size == 0, mode == %c", flag);
+		reiserfs_warning(tb->tb_sb,
+				 "PAP-12350: do_balance: insert_size == 0, mode == %c",
+				 flag);
 		unfix_nodes(tb);
 		return;
 	}
