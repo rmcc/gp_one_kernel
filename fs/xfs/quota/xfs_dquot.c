@@ -804,7 +804,7 @@ xfs_qm_dqlookup(
 	uint			flist_locked;
 	xfs_dquot_t		*d;
 
-	ASSERT(mutex_is_locked(&qh->qh_lock));
+	ASSERT(XFS_DQ_IS_HASH_LOCKED(qh));
 
 	flist_locked = B_FALSE;
 
@@ -877,7 +877,7 @@ xfs_qm_dqlookup(
 			/*
 			 * move the dquot to the front of the hashchain
 			 */
-			ASSERT(mutex_is_locked(&qh->qh_lock));
+			ASSERT(XFS_DQ_IS_HASH_LOCKED(qh));
 			if (dqp->HL_PREVP != &qh->qh_next) {
 				xfs_dqtrace_entry(dqp,
 						  "DQLOOKUP: HASH MOVETOFRONT");
@@ -892,13 +892,13 @@ xfs_qm_dqlookup(
 			}
 			xfs_dqtrace_entry(dqp, "LOOKUP END");
 			*O_dqpp = dqp;
-			ASSERT(mutex_is_locked(&qh->qh_lock));
+			ASSERT(XFS_DQ_IS_HASH_LOCKED(qh));
 			return (0);
 		}
 	}
 
 	*O_dqpp = NULL;
-	ASSERT(mutex_is_locked(&qh->qh_lock));
+	ASSERT(XFS_DQ_IS_HASH_LOCKED(qh));
 	return (1);
 }
 
@@ -956,7 +956,7 @@ xfs_qm_dqget(
 			ASSERT(ip->i_gdquot == NULL);
 	}
 #endif
-	mutex_lock(&h->qh_lock);
+	XFS_DQ_HASH_LOCK(h);
 
 	/*
 	 * Look in the cache (hashtable).
@@ -971,7 +971,7 @@ xfs_qm_dqget(
 		 */
 		ASSERT(*O_dqpp);
 		ASSERT(XFS_DQ_IS_LOCKED(*O_dqpp));
-		mutex_unlock(&h->qh_lock);
+		XFS_DQ_HASH_UNLOCK(h);
 		xfs_dqtrace_entry(*O_dqpp, "DQGET DONE (FROM CACHE)");
 		return (0);	/* success */
 	}
@@ -991,7 +991,7 @@ xfs_qm_dqget(
 	 * we don't keep the lock across a disk read
 	 */
 	version = h->qh_version;
-	mutex_unlock(&h->qh_lock);
+	XFS_DQ_HASH_UNLOCK(h);
 
 	/*
 	 * Allocate the dquot on the kernel heap, and read the ondisk
@@ -1056,7 +1056,7 @@ xfs_qm_dqget(
 	/*
 	 * Hashlock comes after ilock in lock order
 	 */
-	mutex_lock(&h->qh_lock);
+	XFS_DQ_HASH_LOCK(h);
 	if (version != h->qh_version) {
 		xfs_dquot_t *tmpdqp;
 		/*
@@ -1072,7 +1072,7 @@ xfs_qm_dqget(
 			 * and start over.
 			 */
 			xfs_qm_dqput(tmpdqp);
-			mutex_unlock(&h->qh_lock);
+			XFS_DQ_HASH_UNLOCK(h);
 			xfs_qm_dqdestroy(dqp);
 			XQM_STATS_INC(xqmstats.xs_qm_dquot_dups);
 			goto again;
@@ -1083,7 +1083,7 @@ xfs_qm_dqget(
 	 * Put the dquot at the beginning of the hash-chain and mp's list
 	 * LOCK ORDER: hashlock, freelistlock, mplistlock, udqlock, gdqlock ..
 	 */
-	ASSERT(mutex_is_locked(&h->qh_lock));
+	ASSERT(XFS_DQ_IS_HASH_LOCKED(h));
 	dqp->q_hash = h;
 	XQM_HASHLIST_INSERT(h, dqp);
 
@@ -1102,7 +1102,7 @@ xfs_qm_dqget(
 	XQM_MPLIST_INSERT(&(XFS_QI_MPL_LIST(mp)), dqp);
 
 	xfs_qm_mplist_unlock(mp);
-	mutex_unlock(&h->qh_lock);
+	XFS_DQ_HASH_UNLOCK(h);
  dqret:
 	ASSERT((ip == NULL) || xfs_isilocked(ip, XFS_ILOCK_EXCL));
 	xfs_dqtrace_entry(dqp, "DQGET DONE");
@@ -1440,7 +1440,7 @@ xfs_qm_dqpurge(
 	xfs_mount_t	*mp = dqp->q_mount;
 
 	ASSERT(XFS_QM_IS_MPLIST_LOCKED(mp));
-	ASSERT(mutex_is_locked(&dqp->q_hash->qh_lock));
+	ASSERT(XFS_DQ_IS_HASH_LOCKED(dqp->q_hash));
 
 	xfs_dqlock(dqp);
 	/*
@@ -1453,7 +1453,7 @@ xfs_qm_dqpurge(
 	 */
 	if (dqp->q_nrefs != 0) {
 		xfs_dqunlock(dqp);
-		mutex_unlock(&dqp->q_hash->qh_lock);
+		XFS_DQ_HASH_UNLOCK(dqp->q_hash);
 		return (1);
 	}
 
@@ -1517,7 +1517,7 @@ xfs_qm_dqpurge(
 	memset(&dqp->q_core, 0, sizeof(dqp->q_core));
 	xfs_dqfunlock(dqp);
 	xfs_dqunlock(dqp);
-	mutex_unlock(&thishash->qh_lock);
+	XFS_DQ_HASH_UNLOCK(thishash);
 	return (0);
 }
 

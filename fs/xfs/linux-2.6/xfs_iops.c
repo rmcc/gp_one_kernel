@@ -211,13 +211,8 @@ xfs_vn_mknod(
 	 * Irix uses Missed'em'V split, but doesn't want to see
 	 * the upper 5 bits of (14bit) major.
 	 */
-	if (S_ISCHR(mode) || S_ISBLK(mode)) {
-		if (unlikely(!sysv_valid_dev(rdev) || MAJOR(rdev) & ~0x1ff))
-			return -EINVAL;
-		rdev = sysv_encode_dev(rdev);
-	} else {
-		rdev = 0;
-	}
+	if (unlikely(!sysv_valid_dev(rdev) || MAJOR(rdev) & ~0x1ff))
+		return -EINVAL;
 
 	if (test_default_acl && test_default_acl(dir)) {
 		if (!_ACL_ALLOC(default_acl)) {
@@ -229,11 +224,28 @@ xfs_vn_mknod(
 		}
 	}
 
+	xfs_dentry_to_name(&name, dentry);
+
 	if (IS_POSIXACL(dir) && !default_acl)
 		mode &= ~current->fs->umask;
 
-	xfs_dentry_to_name(&name, dentry);
-	error = xfs_create(XFS_I(dir), &name, mode, rdev, &ip, NULL);
+	switch (mode & S_IFMT) {
+	case S_IFCHR:
+	case S_IFBLK:
+	case S_IFIFO:
+	case S_IFSOCK:
+		rdev = sysv_encode_dev(rdev);
+	case S_IFREG:
+		error = xfs_create(XFS_I(dir), &name, mode, rdev, &ip, NULL);
+		break;
+	case S_IFDIR:
+		error = xfs_mkdir(XFS_I(dir), &name, mode, &ip, NULL);
+		break;
+	default:
+		error = EINVAL;
+		break;
+	}
+
 	if (unlikely(error))
 		goto out_free_acl;
 

@@ -136,6 +136,7 @@ typedef int	(*xfs_dqvopchownresv_t)(struct xfs_trans *, struct xfs_inode *,
 			struct xfs_dquot *, struct xfs_dquot *, uint);
 typedef void	(*xfs_dqstatvfs_t)(struct xfs_inode *, struct kstatfs *);
 typedef int	(*xfs_dqsync_t)(struct xfs_mount *, int flags);
+typedef int	(*xfs_quotactl_t)(struct xfs_mount *, int, int, xfs_caddr_t);
 
 typedef struct xfs_qmops {
 	xfs_qminit_t		xfs_qminit;
@@ -153,6 +154,7 @@ typedef struct xfs_qmops {
 	xfs_dqvopchownresv_t	xfs_dqvopchownresv;
 	xfs_dqstatvfs_t		xfs_dqstatvfs;
 	xfs_dqsync_t		xfs_dqsync;
+	xfs_quotactl_t		xfs_quotactl;
 	struct xfs_dqtrxops	*xfs_dqtrxops;
 } xfs_qmops_t;
 
@@ -186,6 +188,8 @@ typedef struct xfs_qmops {
 	(*(ip)->i_mount->m_qm_ops->xfs_dqstatvfs)(ip, statp)
 #define XFS_QM_DQSYNC(mp, flags) \
 	(*(mp)->m_qm_ops->xfs_dqsync)(mp, flags)
+#define XFS_QM_QUOTACTL(mp, cmd, id, addr) \
+	(*(mp)->m_qm_ops->xfs_quotactl)(mp, cmd, id, addr)
 
 #ifdef HAVE_PERCPU_SB
 
@@ -269,7 +273,7 @@ typedef struct xfs_mount {
 	uint			m_inobt_mnr[2];	/* min inobt btree records */
 	uint			m_ag_maxlevels;	/* XFS_AG_MAXLEVELS */
 	uint			m_bm_maxlevels[2]; /* XFS_BM_MAXLEVELS */
-	uint			m_in_maxlevels;	/* max inobt btree levels. */
+	uint			m_in_maxlevels;	/* XFS_IN_MAXLEVELS */
 	struct xfs_perag	*m_perag;	/* per-ag accounting info */
 	struct rw_semaphore	m_peraglock;	/* lock for m_perag (pointer) */
 	struct mutex		m_growlock;	/* growfs mutex */
@@ -495,6 +499,9 @@ typedef struct xfs_mod_sb {
 	xfs_sb_field_t	msb_field;	/* Field to modify, see below */
 	int64_t		msb_delta;	/* Change to make to specified field */
 } xfs_mod_sb_t;
+
+#define	XFS_MOUNT_ILOCK(mp)	mutex_lock(&((mp)->m_ilock))
+#define	XFS_MOUNT_IUNLOCK(mp)	mutex_unlock(&((mp)->m_ilock))
 
 extern int	xfs_log_sbcount(xfs_mount_t *, uint);
 extern int	xfs_mountfs(xfs_mount_t *mp);

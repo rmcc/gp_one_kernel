@@ -68,6 +68,7 @@
 #include <linux/freezer.h>
 #include <linux/parser.h>
 
+static struct quotactl_ops xfs_quotactl_operations;
 static struct super_operations xfs_super_operations;
 static kmem_zone_t *xfs_ioend_zone;
 mempool_t *xfs_ioend_pool;
@@ -179,7 +180,7 @@ xfs_parseargs(
 	int			dswidth = 0;
 	int			iosize = 0;
 	int			dmapi_implies_ikeep = 1;
-	__uint8_t		iosizelog = 0;
+	uchar_t			iosizelog = 0;
 
 	/*
 	 * Copy binary VFS mount flags we are interested in.
@@ -633,7 +634,7 @@ xfs_max_file_offset(
 	return (((__uint64_t)pagefactor) << bitshift) - 1;
 }
 
-STATIC int
+int
 xfs_blkdev_get(
 	xfs_mount_t		*mp,
 	const char		*name,
@@ -650,7 +651,7 @@ xfs_blkdev_get(
 	return -error;
 }
 
-STATIC void
+void
 xfs_blkdev_put(
 	struct block_device	*bdev)
 {
@@ -871,7 +872,7 @@ xfsaild_wakeup(
 	wake_up_process(ailp->xa_task);
 }
 
-STATIC int
+int
 xfsaild(
 	void	*data)
 {
@@ -989,57 +990,26 @@ xfs_fs_write_inode(
 	int			sync)
 {
 	struct xfs_inode	*ip = XFS_I(inode);
-	struct xfs_mount	*mp = ip->i_mount;
 	int			error = 0;
+	int			flags = 0;
 
 	xfs_itrace_entry(ip);
-
-	if (XFS_FORCED_SHUTDOWN(mp))
-		return XFS_ERROR(EIO);
-
 	if (sync) {
 		error = xfs_wait_on_pages(ip, 0, -1);
 		if (error)
-			goto out;
+			goto out_error;
+		flags |= FLUSH_SYNC;
 	}
+	error = xfs_inode_flush(ip, flags);
 
-	/*
-	 * Bypass inodes which have already been cleaned by
-	 * the inode flush clustering code inside xfs_iflush
-	 */
-	if (xfs_inode_clean(ip))
-		goto out;
-
-	/*
-	 * We make this non-blocking if the inode is contended, return
-	 * EAGAIN to indicate to the caller that they did not succeed.
-	 * This prevents the flush path from blocking on inodes inside
-	 * another operation right now, they get caught later by xfs_sync.
-	 */
-	if (sync) {
-		xfs_ilock(ip, XFS_ILOCK_SHARED);
-		xfs_iflock(ip);
-
-		error = xfs_iflush(ip, XFS_IFLUSH_SYNC);
-	} else {
-		error = EAGAIN;
-		if (!xfs_ilock_nowait(ip, XFS_ILOCK_SHARED))
-			goto out;
-		if (xfs_ipincount(ip) || !xfs_iflock_nowait(ip))
-			goto out_unlock;
-
-		error = xfs_iflush(ip, XFS_IFLUSH_ASYNC_NOBLOCK);
-	}
-
- out_unlock:
-	xfs_iunlock(ip, XFS_ILOCK_SHARED);
- out:
+out_error:
 	/*
 	 * if we failed to write out the inode then mark
 	 * it dirty again so we'll try again later.
 	 */
 	if (error)
 		xfs_mark_inode_dirty_sync(ip);
+
 	return -error;
 }
 
@@ -1332,6 +1302,57 @@ xfs_fs_show_options(
 	return -xfs_showargs(XFS_M(mnt->mnt_sb), m);
 }
 
+STATIC int
+xfs_fs_quotasync(
+	struct super_block	*sb,
+	int			type)
+{
+	return -XFS_QM_QUOTACTL(XFS_M(sb), Q_XQUOTASYNC, 0, NULL);
+}
+
+STATIC int
+xfs_fs_getxstate(
+	struct super_block	*sb,
+	struct fs_quota_stat	*fqs)
+{
+	return -XFS_QM_QUOTACTL(XFS_M(sb), Q_XGETQSTAT, 0, (caddr_t)fqs);
+}
+
+STATIC int
+xfs_fs_setxstate(
+	struct super_block	*sb,
+	unsigned int		flags,
+	int			op)
+{
+	return -XFS_QM_QUOTACTL(XFS_M(sb), op, 0, (caddr_t)&flags);
+}
+
+STATIC int
+xfs_fs_getxquota(
+	struct super_block	*sb,
+	int			type,
+	qid_t			id,
+	struct fs_disk_quota	*fdq)
+{
+	return -XFS_QM_QUOTACTL(XFS_M(sb),
+				 (type == USRQUOTA) ? Q_XGETQUOTA :
+				  ((type == GRPQUOTA) ? Q_XGETGQUOTA :
+				   Q_XGETPQUOTA), id, (caddr_t)fdq);
+}
+
+STATIC int
+xfs_fs_setxquota(
+	struct super_block	*sb,
+	int			type,
+	qid_t			id,
+	struct fs_disk_quota	*fdq)
+{
+	return -XFS_QM_QUOTACTL(XFS_M(sb),
+				 (type == USRQUOTA) ? Q_XSETQLIM :
+				  ((type == GRPQUOTA) ? Q_XSETGQLIM :
+				   Q_XSETPQLIM), id, (caddr_t)fdq);
+}
+
 /*
  * This function fills in xfs_mount_t fields based on mount args.
  * Note: the superblock _has_ now been read in.
@@ -1414,9 +1435,7 @@ xfs_fs_fill_super(
 	sb_min_blocksize(sb, BBSIZE);
 	sb->s_xattr = xfs_xattr_handlers;
 	sb->s_export_op = &xfs_export_operations;
-#ifdef CONFIG_XFS_QUOTA
 	sb->s_qcop = &xfs_quotactl_operations;
-#endif
 	sb->s_op = &xfs_super_operations;
 
 	error = xfs_dmops_get(mp);
@@ -1557,6 +1576,14 @@ static struct super_operations xfs_super_operations = {
 	.statfs			= xfs_fs_statfs,
 	.remount_fs		= xfs_fs_remount,
 	.show_options		= xfs_fs_show_options,
+};
+
+static struct quotactl_ops xfs_quotactl_operations = {
+	.quota_sync		= xfs_fs_quotasync,
+	.get_xstate		= xfs_fs_getxstate,
+	.set_xstate		= xfs_fs_setxstate,
+	.get_xquota		= xfs_fs_getxquota,
+	.set_xquota		= xfs_fs_setxquota,
 };
 
 static struct file_system_type xfs_fs_type = {

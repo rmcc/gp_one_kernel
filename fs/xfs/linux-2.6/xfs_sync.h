@@ -19,7 +19,6 @@
 #define XFS_SYNC_H 1
 
 struct xfs_mount;
-struct xfs_perag;
 
 typedef struct bhv_vfs_sync_work {
 	struct list_head	w_list;

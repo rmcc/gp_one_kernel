@@ -886,6 +886,8 @@ xfs_check_sizes(xfs_mount_t *mp)
 }
 
 /*
+ * xfs_mountfs
+ *
  * This function does the following on an initial mount of a file system:
  *	- reads the superblock from disk and init the mount struct
  *	- if we're a 32-bit kernel, do a size check on the superblock
@@ -903,6 +905,7 @@ xfs_mountfs(
 	xfs_inode_t	*rip;
 	__uint64_t	resblks;
 	uint		quotamount, quotaflags;
+	int		uuid_mounted = 0;
 	int		error = 0;
 
 	xfs_mount_common(mp, sbp);
@@ -957,7 +960,7 @@ xfs_mountfs(
 	 */
 	error = xfs_update_alignment(mp);
 	if (error)
-		goto out;
+		goto error1;
 
 	xfs_alloc_compute_maxlevels(mp);
 	xfs_bmap_compute_maxlevels(mp, XFS_DATA_FORK);
@@ -974,11 +977,12 @@ xfs_mountfs(
 	 * since a single partition filesystem is identical to a single
 	 * partition volume/filesystem.
 	 */
-	if (!(mp->m_flags & XFS_MOUNT_NOUUID)) {
+	if ((mp->m_flags & XFS_MOUNT_NOUUID) == 0) {
 		if (xfs_uuid_mount(mp)) {
 			error = XFS_ERROR(EINVAL);
-			goto out;
+			goto error1;
 		}
+		uuid_mounted=1;
 	}
 
 	/*
@@ -1003,7 +1007,7 @@ xfs_mountfs(
 	 */
 	error = xfs_check_sizes(mp);
 	if (error)
-		goto out_remove_uuid;
+		goto error1;
 
 	/*
 	 * Initialize realtime fields in the mount structure
@@ -1011,7 +1015,7 @@ xfs_mountfs(
 	error = xfs_rtmount_init(mp);
 	if (error) {
 		cmn_err(CE_WARN, "XFS: RT mount failed");
-		goto out_remove_uuid;
+		goto error1;
 	}
 
 	/*
@@ -1041,26 +1045,26 @@ xfs_mountfs(
 	mp->m_perag = kmem_zalloc(sbp->sb_agcount * sizeof(xfs_perag_t),
 				  KM_MAYFAIL);
 	if (!mp->m_perag)
-		goto out_remove_uuid;
+		goto error1;
 
 	mp->m_maxagi = xfs_initialize_perag(mp, sbp->sb_agcount);
-
-	if (!sbp->sb_logblocks) {
-		cmn_err(CE_WARN, "XFS: no log defined");
-		XFS_ERROR_REPORT("xfs_mountfs", XFS_ERRLEVEL_LOW, mp);
-		error = XFS_ERROR(EFSCORRUPTED);
-		goto out_free_perag;
-	}
 
 	/*
 	 * log's mount-time initialization. Perform 1st part recovery if needed
 	 */
-	error = xfs_log_mount(mp, mp->m_logdev_targp,
-			      XFS_FSB_TO_DADDR(mp, sbp->sb_logstart),
-			      XFS_FSB_TO_BB(mp, sbp->sb_logblocks));
-	if (error) {
-		cmn_err(CE_WARN, "XFS: log mount failed");
-		goto out_free_perag;
+	if (likely(sbp->sb_logblocks > 0)) {	/* check for volume case */
+		error = xfs_log_mount(mp, mp->m_logdev_targp,
+				      XFS_FSB_TO_DADDR(mp, sbp->sb_logstart),
+				      XFS_FSB_TO_BB(mp, sbp->sb_logblocks));
+		if (error) {
+			cmn_err(CE_WARN, "XFS: log mount failed");
+			goto error2;
+		}
+	} else {	/* No log has been defined */
+		cmn_err(CE_WARN, "XFS: no log defined");
+		XFS_ERROR_REPORT("xfs_mountfs_int(1)", XFS_ERRLEVEL_LOW, mp);
+		error = XFS_ERROR(EFSCORRUPTED);
+		goto error2;
 	}
 
 	/*
@@ -1082,14 +1086,15 @@ xfs_mountfs(
 	 * If we are currently making the filesystem, the initialisation will
 	 * fail as the perag data is in an undefined state.
 	 */
+
 	if (xfs_sb_version_haslazysbcount(&mp->m_sb) &&
 	    !XFS_LAST_UNMOUNT_WAS_CLEAN(mp) &&
 	     !mp->m_sb.sb_inprogress) {
 		error = xfs_initialize_perag_data(mp, sbp->sb_agcount);
-		if (error)
-			goto out_free_perag;
+		if (error) {
+			goto error2;
+		}
 	}
-
 	/*
 	 * Get and sanity-check the root inode.
 	 * Save the pointer to it in the mount structure.
@@ -1097,7 +1102,7 @@ xfs_mountfs(
 	error = xfs_iget(mp, NULL, sbp->sb_rootino, 0, XFS_ILOCK_EXCL, &rip, 0);
 	if (error) {
 		cmn_err(CE_WARN, "XFS: failed to read root inode");
-		goto out_log_dealloc;
+		goto error3;
 	}
 
 	ASSERT(rip != NULL);
@@ -1111,7 +1116,7 @@ xfs_mountfs(
 		XFS_ERROR_REPORT("xfs_mountfs_int(2)", XFS_ERRLEVEL_LOW,
 				 mp);
 		error = XFS_ERROR(EFSCORRUPTED);
-		goto out_rele_rip;
+		goto error4;
 	}
 	mp->m_rootip = rip;	/* save it */
 
@@ -1126,7 +1131,7 @@ xfs_mountfs(
 		 * Free up the root inode.
 		 */
 		cmn_err(CE_WARN, "XFS: failed to read RT inodes");
-		goto out_rele_rip;
+		goto error4;
 	}
 
 	/*
@@ -1138,7 +1143,7 @@ xfs_mountfs(
 		error = xfs_mount_log_sb(mp, mp->m_update_flags);
 		if (error) {
 			cmn_err(CE_WARN, "XFS: failed to write sb changes");
-			goto out_rtunmount;
+			goto error4;
 		}
 	}
 
@@ -1147,7 +1152,7 @@ xfs_mountfs(
 	 */
 	error = XFS_QM_INIT(mp, &quotamount, &quotaflags);
 	if (error)
-		goto out_rtunmount;
+		goto error4;
 
 	/*
 	 * Finish recovering the file system.  This part needed to be
@@ -1157,7 +1162,7 @@ xfs_mountfs(
 	error = xfs_log_mount_finish(mp);
 	if (error) {
 		cmn_err(CE_WARN, "XFS: log mount finish failed");
-		goto out_rtunmount;
+		goto error4;
 	}
 
 	/*
@@ -1165,7 +1170,7 @@ xfs_mountfs(
 	 */
 	error = XFS_QM_MOUNT(mp, quotamount, quotaflags);
 	if (error)
-		goto out_rtunmount;
+		goto error4;
 
 	/*
 	 * Now we are mounted, reserve a small amount of unused space for
@@ -1189,18 +1194,18 @@ xfs_mountfs(
 
 	return 0;
 
- out_rtunmount:
-	xfs_rtunmount_inodes(mp);
- out_rele_rip:
+ error4:
+	/*
+	 * Free up the root inode.
+	 */
 	IRELE(rip);
- out_log_dealloc:
-	xfs_log_unmount(mp);
- out_free_perag:
+ error3:
+	xfs_log_unmount_dealloc(mp);
+ error2:
 	xfs_free_perag(mp);
- out_remove_uuid:
-	if (!(mp->m_flags & XFS_MOUNT_NOUUID))
+ error1:
+	if (uuid_mounted)
 		uuid_table_remove(&mp->m_sb.sb_uuid);
- out:
 	return error;
 }
 
@@ -1221,7 +1226,10 @@ xfs_unmountfs(
 	 */
 	XFS_QM_UNMOUNT(mp);
 
-	xfs_rtunmount_inodes(mp);
+	if (mp->m_rbmip)
+		IRELE(mp->m_rbmip);
+	if (mp->m_rsumip)
+		IRELE(mp->m_rsumip);
 	IRELE(mp->m_rootip);
 
 	/*
@@ -1280,8 +1288,7 @@ xfs_unmountfs(
 				"Freespace may not be correct on next mount.");
 	xfs_unmountfs_writesb(mp);
 	xfs_unmountfs_wait(mp); 		/* wait for async bufs */
-	xfs_log_unmount_write(mp);
-	xfs_log_unmount(mp);
+	xfs_log_unmount(mp);			/* Done! No more fs ops. */
 
 	if ((mp->m_flags & XFS_MOUNT_NOUUID) == 0)
 		uuid_table_remove(&mp->m_sb.sb_uuid);

@@ -3876,15 +3876,6 @@ L:	linux-ide@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/jgarzik/libata-dev.git
 S:	Supported
 
-SERVER ENGINES 10Gbps NIC - BladeEngine 2 DRIVER
-P:	Sathya Perla
-M:	sathyap@serverengines.com
-P:      Subbu Seetharaman
-M:      subbus@serverengines.com
-L:      netdev@vger.kernel.org
-W:      http://www.serverengines.com
-S:      Supported
-
 SFC NETWORK DRIVER
 P:	Steve Hodgson
 P:	Ben Hutchings
@@ -4885,8 +4876,7 @@ S:	Supported
 
 XFS FILESYSTEM
 P:	Silicon Graphics Inc
-P:	Felix Blyakher
-M:	felixb@sgi.com
+P:	Bill O'Donnell
 M:	xfs-masters@oss.sgi.com
 L:	xfs@oss.sgi.com
 W:	http://oss.sgi.com/projects/xfs
