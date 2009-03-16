@@ -1,8 +1,8 @@
 /*
  * drivers/pci/slot.c
  * Copyright (C) 2006 Matthew Wilcox <matthew@wil.cx>
- * Copyright (C) 2006-2009 Hewlett-Packard Development Company, L.P.
- *	Alex Chiang <achiang@hp.com>
+ * Copyright (C) 2006-2008 Hewlett-Packard Development Company, L.P.
+ * 	Alex Chiang <achiang@hp.com>
  */
 
 #include <linux/kobject.h>
@@ -52,8 +52,8 @@ static void pci_slot_release(struct kobject *kobj)
 	struct pci_dev *dev;
 	struct pci_slot *slot = to_pci_slot(kobj);
 
-	dev_dbg(&slot->bus->dev, "dev %02x, released physical slot %s\n",
-		slot->number, pci_slot_name(slot));
+	pr_debug("%s: releasing pci_slot on %x:%d\n", __func__,
+		 slot->bus->number, slot->number);
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list)
 		if (PCI_SLOT(dev->devfn) == slot->number)
@@ -248,8 +248,9 @@ placeholder:
 		if (PCI_SLOT(dev->devfn) == slot_nr)
 			dev->slot = slot;
 
-	dev_dbg(&parent->dev, "dev %02x, created physical slot %s\n",
-		slot_nr, pci_slot_name(slot));
+	/* Don't care if debug printk has a -1 for slot_nr */
+	pr_debug("%s: created pci_slot on %04x:%02x:%02x\n",
+		 __func__, pci_domain_nr(parent), parent->number, slot_nr);
 
 out:
 	kfree(slot_name);
@@ -298,8 +299,9 @@ EXPORT_SYMBOL_GPL(pci_renumber_slot);
  */
 void pci_destroy_slot(struct pci_slot *slot)
 {
-	dev_dbg(&slot->bus->dev, "dev %02x, dec refcount to %d\n",
-		slot->number, atomic_read(&slot->kobj.kref.refcount) - 1);
+	pr_debug("%s: dec refcount to %d on %04x:%02x:%02x\n", __func__,
+		 atomic_read(&slot->kobj.kref.refcount) - 1,
+		 pci_domain_nr(slot->bus), slot->bus->number, slot->number);
 
 	down_write(&pci_bus_sem);
 	kobject_put(&slot->kobj);

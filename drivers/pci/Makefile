@@ -29,8 +29,6 @@ obj-$(CONFIG_DMAR) += dmar.o iova.o intel-iommu.o
 
 obj-$(CONFIG_INTR_REMAP) += dmar.o intr_remapping.o
 
-obj-$(CONFIG_PCI_IOV) += iov.o
-
 #
 # Some architectures use the generic PCI setup functions
 #

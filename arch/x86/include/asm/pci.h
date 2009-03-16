@@ -86,9 +86,6 @@ static inline void early_quirks(void) { }
 
 extern void pci_iommu_alloc(void);
 
-/* MSI arch hook */
-#define arch_setup_msi_irqs arch_setup_msi_irqs
-
 #endif  /* __KERNEL__ */
 
 #ifdef CONFIG_X86_32

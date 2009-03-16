@@ -290,7 +290,8 @@ fs_initcall(pci_iommu_init);
 static __devinit void via_no_dac(struct pci_dev *dev)
 {
 	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_PCI && forbid_dac == 0) {
-		dev_info(&dev->dev, "disabling DAC on VIA PCI bridge\n");
+		printk(KERN_INFO
+			"PCI: VIA PCI bridge detected. Disabling DAC.\n");
 		forbid_dac = 1;
 	}
 }

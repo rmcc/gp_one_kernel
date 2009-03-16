@@ -112,18 +112,13 @@ static struct pci_raw_ops pci_mmcfg = {
 static void __iomem * __init mcfg_ioremap(struct acpi_mcfg_allocation *cfg)
 {
 	void __iomem *addr;
-	u64 start, size;
+	u32 size;
 
-	start = cfg->start_bus_number;
-	start <<= 20;
-	start += cfg->address;
-	size = cfg->end_bus_number + 1 - cfg->start_bus_number;
-	size <<= 20;
-	addr = ioremap_nocache(start, size);
+	size = (cfg->end_bus_number + 1) << 20;
+	addr = ioremap_nocache(cfg->address, size);
 	if (addr) {
 		printk(KERN_INFO "PCI: Using MMCONFIG at %Lx - %Lx\n",
-		       start, start + size - 1);
-		addr -= cfg->start_bus_number << 20;
+		       cfg->address, cfg->address + size - 1);
 	}
 	return addr;
 }
@@ -162,7 +157,7 @@ void __init pci_mmcfg_arch_free(void)
 
 	for (i = 0; i < pci_mmcfg_config_num; ++i) {
 		if (pci_mmcfg_virt[i].virt) {
-			iounmap(pci_mmcfg_virt[i].virt + (pci_mmcfg_virt[i].cfg->start_bus_number << 20));
+			iounmap(pci_mmcfg_virt[i].virt);
 			pci_mmcfg_virt[i].virt = NULL;
 			pci_mmcfg_virt[i].cfg = NULL;
 		}

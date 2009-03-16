@@ -46,10 +46,10 @@ extern int pciehp_force;
 extern struct workqueue_struct *pciehp_wq;
 
 #define dbg(format, arg...)						\
-do {									\
-	if (pciehp_debug)						\
-		printk(KERN_DEBUG "%s: " format, MY_NAME , ## arg);	\
-} while (0)
+	do {								\
+		if (pciehp_debug)					\
+			printk("%s: " format, MY_NAME , ## arg);	\
+	} while (0)
 #define err(format, arg...)						\
 	printk(KERN_ERR "%s: " format, MY_NAME , ## arg)
 #define info(format, arg...)						\
@@ -60,7 +60,7 @@ do {									\
 #define ctrl_dbg(ctrl, format, arg...)					\
 	do {								\
 		if (pciehp_debug)					\
-			dev_printk(KERN_DEBUG, &ctrl->pcie->device,	\
+			dev_printk(, &ctrl->pcie->device,		\
 					format, ## arg);		\
 	} while (0)
 #define ctrl_err(ctrl, format, arg...)					\
@@ -108,11 +108,10 @@ struct controller {
 	u32 slot_cap;
 	u8 cap_base;
 	struct timer_list poll_timer;
-	unsigned int cmd_busy:1;
+	int cmd_busy;
 	unsigned int no_cmd_complete:1;
 	unsigned int link_active_reporting:1;
 	unsigned int notification_enabled:1;
-	unsigned int power_fault_detected;
 };
 
 #define INT_BUTTON_IGNORE		0
