@@ -1335,7 +1335,7 @@ static struct page *get_any_partial(struct kmem_cache *s, gfp_t flags)
 		n = get_node(s, zone_to_nid(zone));
 
 		if (n && cpuset_zone_allowed_hardwall(zone, flags) &&
-				n->nr_partial > s->min_partial) {
+				n->nr_partial > n->min_partial) {
 			page = get_partial_node(n);
 			if (page)
 				return page;
@@ -1387,7 +1387,7 @@ static void unfreeze_slab(struct kmem_cache *s, struct page *page, int tail)
 		slab_unlock(page);
 	} else {
 		stat(c, DEACTIVATE_EMPTY);
-		if (n->nr_partial < s->min_partial) {
+		if (n->nr_partial < n->min_partial) {
 			/*
 			 * Adding an empty slab to the partial slabs in order
 			 * to avoid page allocator overhead. This slab needs
@@ -1928,6 +1928,17 @@ static void
 init_kmem_cache_node(struct kmem_cache_node *n, struct kmem_cache *s)
 {
 	n->nr_partial = 0;
+
+	/*
+	 * The larger the object size is, the more pages we want on the partial
+	 * list to avoid pounding the page allocator excessively.
+	 */
+	n->min_partial = ilog2(s->size);
+	if (n->min_partial < MIN_PARTIAL)
+		n->min_partial = MIN_PARTIAL;
+	else if (n->min_partial > MAX_PARTIAL)
+		n->min_partial = MAX_PARTIAL;
+
 	spin_lock_init(&n->list_lock);
 	INIT_LIST_HEAD(&n->partial);
 #ifdef CONFIG_SLUB_DEBUG
@@ -2170,15 +2181,6 @@ static int init_kmem_cache_nodes(struct kmem_cache *s, gfp_t gfpflags)
 }
 #endif
 
-static void set_min_partial(struct kmem_cache *s, unsigned long min)
-{
-	if (min < MIN_PARTIAL)
-		min = MIN_PARTIAL;
-	else if (min > MAX_PARTIAL)
-		min = MAX_PARTIAL;
-	s->min_partial = min;
-}
-
 /*
  * calculate_sizes() determines the order and the distribution of data within
  * a slab object.
@@ -2317,11 +2319,6 @@ static int kmem_cache_open(struct kmem_cache *s, gfp_t gfpflags,
 	if (!calculate_sizes(s, -1))
 		goto error;
 
-	/*
-	 * The larger the object size is, the more pages we want on the partial
-	 * list to avoid pounding the page allocator excessively.
-	 */
-	set_min_partial(s, ilog2(s->size));
 	s->refcount = 1;
 #ifdef CONFIG_NUMA
 	s->remote_node_defrag_ratio = 1000;
@@ -3838,26 +3835,6 @@ static ssize_t order_show(struct kmem_cache *s, char *buf)
 }
 SLAB_ATTR(order);
 
-static ssize_t min_partial_show(struct kmem_cache *s, char *buf)
-{
-	return sprintf(buf, "%lu\n", s->min_partial);
-}
-
-static ssize_t min_partial_store(struct kmem_cache *s, const char *buf,
-				 size_t length)
-{
-	unsigned long min;
-	int err;
-
-	err = strict_strtoul(buf, 10, &min);
-	if (err)
-		return err;
-
-	set_min_partial(s, min);
-	return length;
-}
-SLAB_ATTR(min_partial);
-
 static ssize_t ctor_show(struct kmem_cache *s, char *buf)
 {
 	if (s->ctor) {
@@ -4173,7 +4150,6 @@ static struct attribute *slab_attrs[] = {
 	&object_size_attr.attr,
 	&objs_per_slab_attr.attr,
 	&order_attr.attr,
-	&min_partial_attr.attr,
 	&objects_attr.attr,
 	&objects_partial_attr.attr,
 	&total_objects_attr.attr,
