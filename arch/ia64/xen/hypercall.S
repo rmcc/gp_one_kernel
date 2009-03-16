@@ -9,7 +9,6 @@
 #include <asm/intrinsics.h>
 #include <asm/xen/privop.h>
 
-#ifdef __INTEL_COMPILER
 /*
  * Hypercalls without parameter.
  */
@@ -73,7 +72,6 @@ GLOBAL_ENTRY(xen_set_rr0_to_rr4)
 	br.ret.sptk.many rp
 	;;
 END(xen_set_rr0_to_rr4)
-#endif
 
 GLOBAL_ENTRY(xen_send_ipi)
 	mov r14=r32
