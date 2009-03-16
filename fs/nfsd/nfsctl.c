@@ -60,7 +60,6 @@ enum {
 	NFSD_FO_UnlockFS,
 	NFSD_Threads,
 	NFSD_Pool_Threads,
-	NFSD_Pool_Stats,
 	NFSD_Versions,
 	NFSD_Ports,
 	NFSD_MaxBlkSize,
@@ -167,16 +166,6 @@ static int exports_open(struct inode *inode, struct file *file)
 
 static const struct file_operations exports_operations = {
 	.open		= exports_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= seq_release,
-	.owner		= THIS_MODULE,
-};
-
-extern int nfsd_pool_stats_open(struct inode *inode, struct file *file);
-
-static struct file_operations pool_stats_operations = {
-	.open		= nfsd_pool_stats_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= seq_release,
@@ -792,9 +781,8 @@ out_free:
 static ssize_t __write_versions(struct file *file, char *buf, size_t size)
 {
 	char *mesg = buf;
-	char *vers, *minorp, sign;
+	char *vers, sign;
 	int len, num;
-	unsigned minor;
 	ssize_t tlen = 0;
 	char *sep;
 
@@ -815,20 +803,9 @@ static ssize_t __write_versions(struct file *file, char *buf, size_t size)
 		do {
 			sign = *vers;
 			if (sign == '+' || sign == '-')
-				num = simple_strtol((vers+1), &minorp, 0);
+				num = simple_strtol((vers+1), NULL, 0);
 			else
-				num = simple_strtol(vers, &minorp, 0);
-			if (*minorp == '.') {
-				if (num < 4)
-					return -EINVAL;
-				minor = simple_strtoul(minorp+1, NULL, 0);
-				if (minor == 0)
-					return -EINVAL;
-				if (nfsd_minorversion(minor, sign == '-' ?
-						     NFSD_CLEAR : NFSD_SET) < 0)
-					return -EINVAL;
-				goto next;
-			}
+				num = simple_strtol(vers, NULL, 0);
 			switch(num) {
 			case 2:
 			case 3:
@@ -838,7 +815,6 @@ static ssize_t __write_versions(struct file *file, char *buf, size_t size)
 			default:
 				return -EINVAL;
 			}
-		next:
 			vers += len + 1;
 			tlen += len;
 		} while ((len = qword_get(&mesg, vers, size)) > 0);
@@ -857,13 +833,6 @@ static ssize_t __write_versions(struct file *file, char *buf, size_t size)
 				       num);
 			sep = " ";
 		}
-	if (nfsd_vers(4, NFSD_AVAIL))
-		for (minor = 1; minor <= NFSD_SUPPORTED_MINOR_VERSION; minor++)
-			len += sprintf(buf+len, " %c4.%u",
-					(nfsd_vers(4, NFSD_TEST) &&
-					 nfsd_minorversion(minor, NFSD_TEST)) ?
-						'+' : '-',
-					minor);
 	len += sprintf(buf+len, "\n");
 	return len;
 }
@@ -1277,7 +1246,6 @@ static int nfsd_fill_super(struct super_block * sb, void * data, int silent)
 		[NFSD_Fh] = {"filehandle", &transaction_ops, S_IWUSR|S_IRUSR},
 		[NFSD_Threads] = {"threads", &transaction_ops, S_IWUSR|S_IRUSR},
 		[NFSD_Pool_Threads] = {"pool_threads", &transaction_ops, S_IWUSR|S_IRUSR},
-		[NFSD_Pool_Stats] = {"pool_stats", &pool_stats_operations, S_IRUGO},
 		[NFSD_Versions] = {"versions", &transaction_ops, S_IWUSR|S_IRUSR},
 		[NFSD_Ports] = {"portlist", &transaction_ops, S_IWUSR|S_IRUGO},
 		[NFSD_MaxBlkSize] = {"max_block_size", &transaction_ops, S_IWUSR|S_IRUGO},

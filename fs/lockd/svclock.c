@@ -426,15 +426,8 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 			ret = nlm_granted;
 			goto out;
 		case -EAGAIN:
-			/*
-			 * If this is a blocking request for an
-			 * already pending lock request then we need
-			 * to put it back on lockd's block list
-			 */
-			if (wait)
-				break;
 			ret = nlm_lck_denied;
-			goto out;
+			break;
 		case FILE_LOCK_DEFERRED:
 			if (wait)
 				break;
@@ -449,6 +442,10 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 			ret = nlm_lck_denied_nolocks;
 			goto out;
 	}
+
+	ret = nlm_lck_denied;
+	if (!wait)
+		goto out;
 
 	ret = nlm_lck_blocked;
 

@@ -366,9 +366,8 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
 	}
 
 	/* Revoke setuid/setgid on chown */
-	if (!S_ISDIR(inode->i_mode) &&
-	    (((iap->ia_valid & ATTR_UID) && iap->ia_uid != inode->i_uid) ||
-	     ((iap->ia_valid & ATTR_GID) && iap->ia_gid != inode->i_gid))) {
+	if (((iap->ia_valid & ATTR_UID) && iap->ia_uid != inode->i_uid) ||
+	    ((iap->ia_valid & ATTR_GID) && iap->ia_gid != inode->i_gid)) {
 		iap->ia_valid |= ATTR_KILL_PRIV;
 		if (iap->ia_valid & ATTR_MODE) {
 			/* we're setting mode too, just clear the s*id bits */
@@ -961,7 +960,7 @@ static void kill_suid(struct dentry *dentry)
 static __be32
 nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 				loff_t offset, struct kvec *vec, int vlen,
-				unsigned long *cnt, int *stablep)
+	   			unsigned long cnt, int *stablep)
 {
 	struct svc_export	*exp;
 	struct dentry		*dentry;
@@ -975,7 +974,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 	err = nfserr_perm;
 
 	if ((fhp->fh_export->ex_flags & NFSEXP_MSNFS) &&
-		(!lock_may_write(file->f_path.dentry->d_inode, offset, *cnt)))
+		(!lock_may_write(file->f_path.dentry->d_inode, offset, cnt)))
 		goto out;
 #endif
 
@@ -1007,7 +1006,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 	host_err = vfs_writev(file, (struct iovec __user *)vec, vlen, &offset);
 	set_fs(oldfs);
 	if (host_err >= 0) {
-		nfsdstats.io_write += host_err;
+		nfsdstats.io_write += cnt;
 		fsnotify_modify(file->f_path.dentry);
 	}
 
@@ -1052,10 +1051,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 	}
 
 	dprintk("nfsd: write complete host_err=%d\n", host_err);
-	if (host_err >= 0) {
+	if (host_err >= 0)
 		err = 0;
-		*cnt = host_err;
-	} else
+	else 
 		err = nfserrno(host_err);
 out:
 	return err;
@@ -1097,7 +1095,7 @@ out:
  */
 __be32
 nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
-		loff_t offset, struct kvec *vec, int vlen, unsigned long *cnt,
+		loff_t offset, struct kvec *vec, int vlen, unsigned long cnt,
 		int *stablep)
 {
 	__be32			err = 0;
@@ -1176,21 +1174,6 @@ nfsd_create_setattr(struct svc_rqst *rqstp, struct svc_fh *resfhp,
 	if (iap->ia_valid)
 		return nfsd_setattr(rqstp, resfhp, iap, 0, (time_t)0);
 	return 0;
-}
-
-/* HPUX client sometimes creates a file in mode 000, and sets size to 0.
- * setting size to 0 may fail for some specific file systems by the permission
- * checking which requires WRITE permission but the mode is 000.
- * we ignore the resizing(to 0) on the just new created file, since the size is
- * 0 after file created.
- *
- * call this only after vfs_create() is called.
- * */
-static void
-nfsd_check_ignore_resizing(struct iattr *iap)
-{
-	if ((iap->ia_valid & ATTR_SIZE) && (iap->ia_size == 0))
-		iap->ia_valid &= ~ATTR_SIZE;
 }
 
 /*
@@ -1288,8 +1271,6 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	switch (type) {
 	case S_IFREG:
 		host_err = vfs_create(dirp, dchild, iap->ia_mode, NULL);
-		if (!host_err)
-			nfsd_check_ignore_resizing(iap);
 		break;
 	case S_IFDIR:
 		host_err = vfs_mkdir(dirp, dchild, iap->ia_mode);
@@ -1442,8 +1423,6 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		err = nfserrno(nfsd_sync_dir(dentry));
 		/* setattr will sync the child (or not) */
 	}
-
-	nfsd_check_ignore_resizing(iap);
 
 	if (createmode == NFS3_CREATE_EXCLUSIVE) {
 		/* Cram the verifier into atime/mtime */
