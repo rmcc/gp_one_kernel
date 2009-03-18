@@ -455,74 +455,74 @@ static void amd_clear_fifo(struct pci_dev *pdev)
 static int amd_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	static const struct ata_port_info info[10] = {
-		{	/* 0: AMD 7401 - no swdma */
+		{	/* 0: AMD 7401 */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA2,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,	/* No SWDMA */
+			.udma_mask = 0x07,	/* UDMA 33 */
 			.port_ops = &amd33_port_ops
 		},
 		{	/* 1: Early AMD7409 - no swdma */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA4,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA4,	/* UDMA 66 */
 			.port_ops = &amd66_port_ops
 		},
-		{	/* 2: AMD 7409 */
+		{	/* 2: AMD 7409, no swdma errata */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA4,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA4,	/* UDMA 66 */
 			.port_ops = &amd66_port_ops
 		},
 		{	/* 3: AMD 7411 */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA5,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA5,	/* UDMA 100 */
 			.port_ops = &amd100_port_ops
 		},
 		{	/* 4: AMD 7441 */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA5,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA5,	/* UDMA 100 */
 			.port_ops = &amd100_port_ops
 		},
-		{	/* 5: AMD 8111 - no swdma */
+		{	/* 5: AMD 8111*/
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA6,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA6,	/* UDMA 133, no swdma */
 			.port_ops = &amd133_port_ops
 		},
-		{	/* 6: AMD 8111 UDMA 100 (Serenade) - no swdma */
+		{	/* 6: AMD 8111 UDMA 100 (Serenade) */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA5,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA5,	/* UDMA 100, no swdma */
 			.port_ops = &amd133_port_ops
 		},
 		{	/* 7: Nvidia Nforce */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA5,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA5,	/* UDMA 100 */
 			.port_ops = &nv100_port_ops
 		},
-		{	/* 8: Nvidia Nforce2 and later - no swdma */
+		{	/* 8: Nvidia Nforce2 and later */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA6,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA6,	/* UDMA 133, no swdma */
 			.port_ops = &nv133_port_ops
 		},
 		{	/* 9: AMD CS5536 (Geode companion) */
 			.flags = ATA_FLAG_SLAVE_POSS,
-			.pio_mask = ATA_PIO4,
-			.mwdma_mask = ATA_MWDMA2,
-			.udma_mask = ATA_UDMA5,
+			.pio_mask = 0x1f,
+			.mwdma_mask = 0x07,
+			.udma_mask = ATA_UDMA5,	/* UDMA 100 */
 			.port_ops = &amd100_port_ops
 		}
 	};
