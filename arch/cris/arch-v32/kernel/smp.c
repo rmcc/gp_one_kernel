@@ -98,9 +98,9 @@ void __devinit smp_prepare_boot_cpu(void)
 	SUPP_BANK_SEL(2);
 	SUPP_REG_WR(RW_MM_TLB_PGD, pgd);
 
-	set_cpu_online(0, true);
+	cpu_set(0, cpu_online_map);
 	cpu_set(0, phys_cpu_present_map);
-	set_cpu_possible(0, true);
+	cpu_set(0, cpu_possible_map);
 }
 
 void __init smp_cpus_done(unsigned int max_cpus)
@@ -232,7 +232,7 @@ void flush_tlb_common(struct mm_struct* mm, struct vm_area_struct* vma, unsigned
 	cpumask_t cpu_mask;
 
 	spin_lock_irqsave(&tlbstate_lock, flags);
-	cpu_mask = (mm == FLUSH_ALL ? cpu_all_mask : *mm_cpumask(mm));
+	cpu_mask = (mm == FLUSH_ALL ? CPU_MASK_ALL : mm->cpu_vm_mask);
 	cpu_clear(smp_processor_id(), cpu_mask);
 	flush_mm = mm;
 	flush_vma = vma;
@@ -252,8 +252,8 @@ void flush_tlb_mm(struct mm_struct *mm)
 	__flush_tlb_mm(mm);
 	flush_tlb_common(mm, FLUSH_ALL, 0);
 	/* No more mappings in other CPUs */
-	cpumask_clear(mm_cpumask(mm));
-	cpumask_set_cpu(smp_processor_id(), mm_cpumask(mm));
+	cpus_clear(mm->cpu_vm_mask);
+	cpu_set(smp_processor_id(), mm->cpu_vm_mask);
 }
 
 void flush_tlb_page(struct vm_area_struct *vma,
