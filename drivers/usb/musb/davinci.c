@@ -377,8 +377,18 @@ int __init musb_platform_init(struct musb *musb)
 	u32		revision;
 
 	musb->mregs += DAVINCI_BASE_OFFSET;
+#if 0
+	/* REVISIT there's something odd about clocking, this
+	 * didn't appear do the job ...
+	 */
+	musb->clock = clk_get(pDevice, "usb");
+	if (IS_ERR(musb->clock))
+		return PTR_ERR(musb->clock);
 
-	clk_enable(musb->clock);
+	status = clk_enable(musb->clock);
+	if (status < 0)
+		return -ENODEV;
+#endif
 
 	/* returns zero if e.g. not clocked */
 	revision = musb_readl(tibase, DAVINCI_USB_VERSION_REG);
@@ -443,8 +453,5 @@ int musb_platform_exit(struct musb *musb)
 	}
 
 	phy_off();
-
-	clk_disable(musb->clock);
-
 	return 0;
 }

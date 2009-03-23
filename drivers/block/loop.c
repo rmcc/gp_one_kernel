@@ -392,7 +392,8 @@ lo_splice_actor(struct pipe_inode_info *pipe, struct pipe_buffer *buf,
 	struct loop_device *lo = p->lo;
 	struct page *page = buf->page;
 	sector_t IV;
-	int size, ret;
+	size_t size;
+	int ret;
 
 	ret = buf->ops->confirm(pipe, buf);
 	if (unlikely(ret))

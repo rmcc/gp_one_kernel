@@ -361,7 +361,7 @@ struct i2c_adapter {
 	struct mutex bus_lock;
 	struct mutex clist_lock;
 
-	int timeout;			/* in jiffies */
+	int timeout;
 	int retries;
 	struct device dev;		/* the adapter device */
 
