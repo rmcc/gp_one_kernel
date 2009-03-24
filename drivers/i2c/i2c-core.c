@@ -841,7 +841,7 @@ int i2c_attach_client(struct i2c_client *client)
 
 	if (client->driver && !is_newstyle_driver(client->driver)) {
 		client->dev.release = i2c_client_release;
-		dev_set_uevent_suppress(&client->dev, 1);
+		client->dev.uevent_suppress = 1;
 	} else
 		client->dev.release = i2c_client_dev_release;
 

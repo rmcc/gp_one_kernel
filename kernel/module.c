@@ -822,7 +822,7 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	mutex_lock(&module_mutex);
 	/* Store the name of the last unloaded module for diagnostic purposes */
 	strlcpy(last_unloaded_module, mod->name, sizeof(last_unloaded_module));
-	ddebug_remove_module(mod->name);
+	unregister_dynamic_debug_module(mod->name);
 	free_module(mod);
 
  out:
@@ -1827,13 +1827,19 @@ static inline void add_kallsyms(struct module *mod,
 }
 #endif /* CONFIG_KALLSYMS */
 
-static void dynamic_debug_setup(struct _ddebug *debug, unsigned int num)
+static void dynamic_printk_setup(struct mod_debug *debug, unsigned int num)
 {
-#ifdef CONFIG_DYNAMIC_DEBUG
-	if (ddebug_add_module(debug, num, debug->modname))
-		printk(KERN_ERR "dynamic debug error adding module: %s\n",
-					debug->modname);
-#endif
+#ifdef CONFIG_DYNAMIC_PRINTK_DEBUG
+	unsigned int i;
+
+	for (i = 0; i < num; i++) {
+		register_dynamic_debug_module(debug[i].modname,
+					      debug[i].type,
+					      debug[i].logical_modname,
+					      debug[i].flag_names,
+					      debug[i].hash, debug[i].hash2);
+	}
+#endif /* CONFIG_DYNAMIC_PRINTK_DEBUG */
 }
 
 static void *module_alloc_update_bounds(unsigned long size)
@@ -2207,13 +2213,12 @@ static noinline struct module *load_module(void __user *umod,
 	add_kallsyms(mod, sechdrs, symindex, strindex, secstrings);
 
 	if (!mod->taints) {
-		struct _ddebug *debug;
+		struct mod_debug *debug;
 		unsigned int num_debug;
 
 		debug = section_objs(hdr, sechdrs, secstrings, "__verbose",
 				     sizeof(*debug), &num_debug);
-		if (debug)
-			dynamic_debug_setup(debug, num_debug);
+		dynamic_printk_setup(debug, num_debug);
 	}
 
 	/* sechdrs[0].sh_size is always zero */

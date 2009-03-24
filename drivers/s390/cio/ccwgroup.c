@@ -104,9 +104,8 @@ ccwgroup_ungroup_store(struct device *dev, struct device_attribute *attr, const 
 	rc = device_schedule_callback(dev, ccwgroup_ungroup_callback);
 out:
 	if (rc) {
-		if (rc != -EAGAIN)
-			/* Release onoff "lock" when ungrouping failed. */
-			atomic_set(&gdev->onoff, 0);
+		/* Release onoff "lock" when ungrouping failed. */
+		atomic_set(&gdev->onoff, 0);
 		return rc;
 	}
 	return count;
