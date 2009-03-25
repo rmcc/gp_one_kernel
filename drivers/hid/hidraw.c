@@ -181,17 +181,9 @@ static int hidraw_open(struct inode *inode, struct file *file)
 
 	dev = hidraw_table[minor];
 	if (!dev->open++) {
-		if (dev->hid->ll_driver->power) {
-			err = dev->hid->ll_driver->power(dev->hid, PM_HINT_FULLON);
-			if (err < 0)
-				goto out_unlock;
-		}
 		err = dev->hid->ll_driver->open(dev->hid);
-		if (err < 0) {
-			if (dev->hid->ll_driver->power)
-				dev->hid->ll_driver->power(dev->hid, PM_HINT_NORMAL);
+		if (err < 0)
 			dev->open--;
-		}
 	}
 
 out_unlock:
@@ -217,13 +209,10 @@ static int hidraw_release(struct inode * inode, struct file * file)
 	list_del(&list->node);
 	dev = hidraw_table[minor];
 	if (!--dev->open) {
-		if (list->hidraw->exist) {
-			if (dev->hid->ll_driver->power)
-				dev->hid->ll_driver->power(dev->hid, PM_HINT_NORMAL);
+		if (list->hidraw->exist)
 			dev->hid->ll_driver->close(dev->hid);
-		} else {
+		else
 			kfree(list->hidraw);
-		}
 	}
 
 	kfree(list);

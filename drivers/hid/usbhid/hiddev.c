@@ -249,12 +249,10 @@ static int hiddev_release(struct inode * inode, struct file * file)
 	spin_unlock_irqrestore(&list->hiddev->list_lock, flags);
 
 	if (!--list->hiddev->open) {
-		if (list->hiddev->exist) {
+		if (list->hiddev->exist)
 			usbhid_close(list->hiddev->hid);
-			usbhid_put_power(list->hiddev->hid);
-		} else {
+		else
 			kfree(list->hiddev);
-		}
 	}
 
 	kfree(list);
@@ -305,21 +303,10 @@ static int hiddev_open(struct inode *inode, struct file *file)
 	list_add_tail(&list->node, &hiddev_table[i]->list);
 	spin_unlock_irq(&list->hiddev->list_lock);
 
-	if (!list->hiddev->open++)
-		if (list->hiddev->exist) {
-			struct hid_device *hid = hiddev_table[i]->hid;
-			res = usbhid_get_power(hid);
-			if (res < 0) {
-				res = -EIO;
-				goto bail;
-			}
-			usbhid_open(hid);
-		}
-
 	return 0;
 bail:
 	file->private_data = NULL;
-	kfree(list);
+	kfree(list->hiddev);
 	return res;
 }
 
@@ -336,7 +323,7 @@ static ssize_t hiddev_write(struct file * file, const char __user * buffer, size
  */
 static ssize_t hiddev_read(struct file * file, char __user * buffer, size_t count, loff_t *ppos)
 {
-	DEFINE_WAIT(wait);
+	DECLARE_WAITQUEUE(wait, current);
 	struct hiddev_list *list = file->private_data;
 	int event_size;
 	int retval;
