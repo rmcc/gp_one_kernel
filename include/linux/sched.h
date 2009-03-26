@@ -998,7 +998,6 @@ struct sched_class {
 			      struct rq *busiest, struct sched_domain *sd,
 			      enum cpu_idle_type idle);
 	void (*pre_schedule) (struct rq *this_rq, struct task_struct *task);
-	int (*needs_post_schedule) (struct rq *this_rq);
 	void (*post_schedule) (struct rq *this_rq);
 	void (*task_wake_up) (struct rq *this_rq, struct task_struct *task);
 
@@ -1053,10 +1052,6 @@ struct sched_entity {
 	u64			last_wakeup;
 	u64			avg_overlap;
 
-	u64			start_runtime;
-	u64			avg_wakeup;
-	u64			nr_migrations;
-
 #ifdef CONFIG_SCHEDSTATS
 	u64			wait_start;
 	u64			wait_max;
@@ -1072,6 +1067,7 @@ struct sched_entity {
 	u64			exec_max;
 	u64			slice_max;
 
+	u64			nr_migrations;
 	u64			nr_migrations_cold;
 	u64			nr_failed_migrations_affine;
 	u64			nr_failed_migrations_running;
@@ -1168,7 +1164,6 @@ struct task_struct {
 #endif
 
 	struct list_head tasks;
-	struct plist_node pushable_tasks;
 
 	struct mm_struct *mm, *active_mm;
 
@@ -1677,16 +1672,6 @@ static inline int set_cpus_allowed(struct task_struct *p, cpumask_t new_mask)
 {
 	return set_cpus_allowed_ptr(p, &new_mask);
 }
-
-/*
- * Architectures can set this to 1 if they have specified
- * CONFIG_HAVE_UNSTABLE_SCHED_CLOCK in their arch Kconfig,
- * but then during bootup it turns out that sched_clock()
- * is reliable after all:
- */
-#ifdef CONFIG_HAVE_UNSTABLE_SCHED_CLOCK
-extern int sched_clock_stable;
-#endif
 
 extern unsigned long long sched_clock(void);
 

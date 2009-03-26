@@ -966,6 +966,7 @@ config SLABINFO
 
 config RT_MUTEXES
 	boolean
+	select PLIST
 
 config BASE_SMALL
 	int
