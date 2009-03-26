@@ -32,6 +32,7 @@
 #include <linux/module.h>
 #include <linux/binfmts.h>
 #include <linux/security.h>
+#include <linux/syscalls.h>
 #include <linux/compat.h>
 #include <linux/vfs.h>
 #include <linux/ipc.h>
