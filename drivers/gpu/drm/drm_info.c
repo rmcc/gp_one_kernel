@@ -72,7 +72,7 @@ int drm_vm_info(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
 	struct drm_device *dev = node->minor->dev;
-	struct drm_local_map *map;
+	struct drm_map *map;
 	struct drm_map_list *r_list;
 
 	/* Hardcoded from _DRM_FRAME_BUFFER,
@@ -94,9 +94,9 @@ int drm_vm_info(struct seq_file *m, void *data)
 		else
 			type = types[map->type];
 
-		seq_printf(m, "%4d 0x%016llx 0x%08lx %4.4s  0x%02x 0x%08lx ",
+		seq_printf(m, "%4d 0x%08lx 0x%08lx %4.4s  0x%02x 0x%08lx ",
 			   i,
-			   (unsigned long long)map->offset,
+			   map->offset,
 			   map->size, type, map->flags,
 			   (unsigned long) r_list->user_token);
 		if (map->mtrr < 0)
@@ -286,9 +286,9 @@ int drm_vma_info(struct seq_file *m, void *data)
 #endif
 
 	mutex_lock(&dev->struct_mutex);
-	seq_printf(m, "vma use count: %d, high_memory = %p, 0x%08lx\n",
+	seq_printf(m, "vma use count: %d, high_memory = %p, 0x%08llx\n",
 		   atomic_read(&dev->vma_count),
-		   high_memory, virt_to_phys(high_memory));
+		   high_memory, (u64)virt_to_phys(high_memory));
 
 	list_for_each_entry(pt, &dev->vmalist, head) {
 		vma = pt->vma;
