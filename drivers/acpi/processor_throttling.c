@@ -783,9 +783,11 @@ static int acpi_get_throttling_state(struct acpi_processor *pr,
 		    (struct acpi_processor_tx_tss *)&(pr->throttling.
 						      states_tss[i]);
 		if (tx->control == value)
-			return i;
+			break;
 	}
-	return -1;
+	if (i > pr->throttling.state_count)
+		i = -1;
+	return i;
 }
 
 static int acpi_get_throttling_value(struct acpi_processor *pr,
