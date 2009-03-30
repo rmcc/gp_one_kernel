@@ -2284,13 +2284,11 @@ error:
 	return 0;
 }
 
-static dma_addr_t intel_map_page(struct device *dev, struct page *page,
-				 unsigned long offset, size_t size,
-				 enum dma_data_direction dir,
-				 struct dma_attrs *attrs)
+dma_addr_t intel_map_single(struct device *hwdev, phys_addr_t paddr,
+			    size_t size, int dir)
 {
-	return __intel_map_single(dev, page_to_phys(page) + offset, size,
-				  dir, to_pci_dev(dev)->dma_mask);
+	return __intel_map_single(hwdev, paddr, size, dir,
+				  to_pci_dev(hwdev)->dma_mask);
 }
 
 static void flush_unmaps(void)
@@ -2354,9 +2352,8 @@ static void add_unmap(struct dmar_domain *dom, struct iova *iova)
 	spin_unlock_irqrestore(&async_umap_flush_lock, flags);
 }
 
-static void intel_unmap_page(struct device *dev, dma_addr_t dev_addr,
-			     size_t size, enum dma_data_direction dir,
-			     struct dma_attrs *attrs)
+void intel_unmap_single(struct device *dev, dma_addr_t dev_addr, size_t size,
+			int dir)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct dmar_domain *domain;
@@ -2400,14 +2397,8 @@ static void intel_unmap_page(struct device *dev, dma_addr_t dev_addr,
 	}
 }
 
-static void intel_unmap_single(struct device *dev, dma_addr_t dev_addr, size_t size,
-			       int dir)
-{
-	intel_unmap_page(dev, dev_addr, size, dir, NULL);
-}
-
-static void *intel_alloc_coherent(struct device *hwdev, size_t size,
-				  dma_addr_t *dma_handle, gfp_t flags)
+void *intel_alloc_coherent(struct device *hwdev, size_t size,
+			   dma_addr_t *dma_handle, gfp_t flags)
 {
 	void *vaddr;
 	int order;
@@ -2430,8 +2421,8 @@ static void *intel_alloc_coherent(struct device *hwdev, size_t size,
 	return NULL;
 }
 
-static void intel_free_coherent(struct device *hwdev, size_t size, void *vaddr,
-				dma_addr_t dma_handle)
+void intel_free_coherent(struct device *hwdev, size_t size, void *vaddr,
+			 dma_addr_t dma_handle)
 {
 	int order;
 
@@ -2444,9 +2435,8 @@ static void intel_free_coherent(struct device *hwdev, size_t size, void *vaddr,
 
 #define SG_ENT_VIRT_ADDRESS(sg)	(sg_virt((sg)))
 
-static void intel_unmap_sg(struct device *hwdev, struct scatterlist *sglist,
-			   int nelems, enum dma_data_direction dir,
-			   struct dma_attrs *attrs)
+void intel_unmap_sg(struct device *hwdev, struct scatterlist *sglist,
+		    int nelems, int dir)
 {
 	int i;
 	struct pci_dev *pdev = to_pci_dev(hwdev);
@@ -2503,8 +2493,8 @@ static int intel_nontranslate_map_sg(struct device *hddev,
 	return nelems;
 }
 
-static int intel_map_sg(struct device *hwdev, struct scatterlist *sglist, int nelems,
-			enum dma_data_direction dir, struct dma_attrs *attrs)
+int intel_map_sg(struct device *hwdev, struct scatterlist *sglist, int nelems,
+		 int dir)
 {
 	void *addr;
 	int i;
@@ -2584,19 +2574,13 @@ static int intel_map_sg(struct device *hwdev, struct scatterlist *sglist, int ne
 	return nelems;
 }
 
-static int intel_mapping_error(struct device *dev, dma_addr_t dma_addr)
-{
-	return !dma_addr;
-}
-
-struct dma_map_ops intel_dma_ops = {
+static struct dma_mapping_ops intel_dma_ops = {
 	.alloc_coherent = intel_alloc_coherent,
 	.free_coherent = intel_free_coherent,
+	.map_single = intel_map_single,
+	.unmap_single = intel_unmap_single,
 	.map_sg = intel_map_sg,
 	.unmap_sg = intel_unmap_sg,
-	.map_page = intel_map_page,
-	.unmap_page = intel_unmap_page,
-	.mapping_error = intel_mapping_error,
 };
 
 static inline int iommu_domain_cache_init(void)

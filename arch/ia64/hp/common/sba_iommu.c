@@ -36,7 +36,6 @@
 #include <linux/bitops.h>         /* hweight64() */
 #include <linux/crash_dump.h>
 #include <linux/iommu-helper.h>
-#include <linux/dma-mapping.h>
 
 #include <asm/delay.h>		/* ia64_get_itc() */
 #include <asm/io.h>
@@ -909,13 +908,11 @@ sba_mark_invalid(struct ioc *ioc, dma_addr_t iova, size_t byte_cnt)
  *
  * See Documentation/PCI/PCI-DMA-mapping.txt
  */
-static dma_addr_t sba_map_page(struct device *dev, struct page *page,
-			       unsigned long poff, size_t size,
-			       enum dma_data_direction dir,
-			       struct dma_attrs *attrs)
+dma_addr_t
+sba_map_single_attrs(struct device *dev, void *addr, size_t size, int dir,
+		     struct dma_attrs *attrs)
 {
 	struct ioc *ioc;
-	void *addr = page_address(page) + poff;
 	dma_addr_t iovp;
 	dma_addr_t offset;
 	u64 *pdir_start;
@@ -993,14 +990,7 @@ static dma_addr_t sba_map_page(struct device *dev, struct page *page,
 #endif
 	return SBA_IOVA(ioc, iovp, offset);
 }
-
-static dma_addr_t sba_map_single_attrs(struct device *dev, void *addr,
-				       size_t size, enum dma_data_direction dir,
-				       struct dma_attrs *attrs)
-{
-	return sba_map_page(dev, virt_to_page(addr),
-			    (unsigned long)addr & ~PAGE_MASK, size, dir, attrs);
-}
+EXPORT_SYMBOL(sba_map_single_attrs);
 
 #ifdef ENABLE_MARK_CLEAN
 static SBA_INLINE void
@@ -1036,8 +1026,8 @@ sba_mark_clean(struct ioc *ioc, dma_addr_t iova, size_t size)
  *
  * See Documentation/PCI/PCI-DMA-mapping.txt
  */
-static void sba_unmap_page(struct device *dev, dma_addr_t iova, size_t size,
-			   enum dma_data_direction dir, struct dma_attrs *attrs)
+void sba_unmap_single_attrs(struct device *dev, dma_addr_t iova, size_t size,
+			    int dir, struct dma_attrs *attrs)
 {
 	struct ioc *ioc;
 #if DELAYED_RESOURCE_CNT > 0
@@ -1104,12 +1094,7 @@ static void sba_unmap_page(struct device *dev, dma_addr_t iova, size_t size,
 	spin_unlock_irqrestore(&ioc->res_lock, flags);
 #endif /* DELAYED_RESOURCE_CNT == 0 */
 }
-
-void sba_unmap_single_attrs(struct device *dev, dma_addr_t iova, size_t size,
-			    enum dma_data_direction dir, struct dma_attrs *attrs)
-{
-	sba_unmap_page(dev, iova, size, dir, attrs);
-}
+EXPORT_SYMBOL(sba_unmap_single_attrs);
 
 /**
  * sba_alloc_coherent - allocate/map shared mem for DMA
@@ -1119,7 +1104,7 @@ void sba_unmap_single_attrs(struct device *dev, dma_addr_t iova, size_t size,
  *
  * See Documentation/PCI/PCI-DMA-mapping.txt
  */
-static void *
+void *
 sba_alloc_coherent (struct device *dev, size_t size, dma_addr_t *dma_handle, gfp_t flags)
 {
 	struct ioc *ioc;
@@ -1182,8 +1167,7 @@ sba_alloc_coherent (struct device *dev, size_t size, dma_addr_t *dma_handle, gfp
  *
  * See Documentation/PCI/PCI-DMA-mapping.txt
  */
-static void sba_free_coherent (struct device *dev, size_t size, void *vaddr,
-			       dma_addr_t dma_handle)
+void sba_free_coherent (struct device *dev, size_t size, void *vaddr, dma_addr_t dma_handle)
 {
 	sba_unmap_single_attrs(dev, dma_handle, size, 0, NULL);
 	free_pages((unsigned long) vaddr, get_order(size));
@@ -1438,9 +1422,8 @@ sba_coalesce_chunks(struct ioc *ioc, struct device *dev,
  *
  * See Documentation/PCI/PCI-DMA-mapping.txt
  */
-static int sba_map_sg_attrs(struct device *dev, struct scatterlist *sglist,
-			    int nents, enum dma_data_direction dir,
-			    struct dma_attrs *attrs)
+int sba_map_sg_attrs(struct device *dev, struct scatterlist *sglist, int nents,
+		     int dir, struct dma_attrs *attrs)
 {
 	struct ioc *ioc;
 	int coalesced, filled = 0;
@@ -1519,6 +1502,7 @@ static int sba_map_sg_attrs(struct device *dev, struct scatterlist *sglist,
 
 	return filled;
 }
+EXPORT_SYMBOL(sba_map_sg_attrs);
 
 /**
  * sba_unmap_sg_attrs - unmap Scatter/Gather list
@@ -1530,9 +1514,8 @@ static int sba_map_sg_attrs(struct device *dev, struct scatterlist *sglist,
  *
  * See Documentation/PCI/PCI-DMA-mapping.txt
  */
-static void sba_unmap_sg_attrs(struct device *dev, struct scatterlist *sglist,
-			       int nents, enum dma_data_direction dir,
-			       struct dma_attrs *attrs)
+void sba_unmap_sg_attrs(struct device *dev, struct scatterlist *sglist,
+			int nents, int dir, struct dma_attrs *attrs)
 {
 #ifdef ASSERT_PDIR_SANITY
 	struct ioc *ioc;
@@ -1568,6 +1551,7 @@ static void sba_unmap_sg_attrs(struct device *dev, struct scatterlist *sglist,
 #endif
 
 }
+EXPORT_SYMBOL(sba_unmap_sg_attrs);
 
 /**************************************************************
 *
@@ -2080,8 +2064,6 @@ static struct acpi_driver acpi_sba_ioc_driver = {
 	},
 };
 
-extern struct dma_map_ops swiotlb_dma_ops;
-
 static int __init
 sba_init(void)
 {
@@ -2095,7 +2077,6 @@ sba_init(void)
 	 * a successful kdump kernel boot is to use the swiotlb.
 	 */
 	if (is_kdump_kernel()) {
-		dma_ops = &swiotlb_dma_ops;
 		if (swiotlb_late_init_with_default_size(64 * (1<<20)) != 0)
 			panic("Unable to initialize software I/O TLB:"
 				  " Try machvec=dig boot option");
@@ -2111,7 +2092,6 @@ sba_init(void)
 		 * If we didn't find something sba_iommu can claim, we
 		 * need to setup the swiotlb and switch to the dig machvec.
 		 */
-		dma_ops = &swiotlb_dma_ops;
 		if (swiotlb_late_init_with_default_size(64 * (1<<20)) != 0)
 			panic("Unable to find SBA IOMMU or initialize "
 			      "software I/O TLB: Try machvec=dig boot option");
@@ -2158,13 +2138,15 @@ nosbagart(char *str)
 	return 1;
 }
 
-static int sba_dma_supported (struct device *dev, u64 mask)
+int
+sba_dma_supported (struct device *dev, u64 mask)
 {
 	/* make sure it's at least 32bit capable */
 	return ((mask & 0xFFFFFFFFUL) == 0xFFFFFFFFUL);
 }
 
-static int sba_dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
+int
+sba_dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
 	return 0;
 }
@@ -2194,22 +2176,7 @@ sba_page_override(char *str)
 
 __setup("sbapagesize=",sba_page_override);
 
-struct dma_map_ops sba_dma_ops = {
-	.alloc_coherent		= sba_alloc_coherent,
-	.free_coherent		= sba_free_coherent,
-	.map_page		= sba_map_page,
-	.unmap_page		= sba_unmap_page,
-	.map_sg			= sba_map_sg_attrs,
-	.unmap_sg		= sba_unmap_sg_attrs,
-	.sync_single_for_cpu	= machvec_dma_sync_single,
-	.sync_sg_for_cpu	= machvec_dma_sync_sg,
-	.sync_single_for_device	= machvec_dma_sync_single,
-	.sync_sg_for_device	= machvec_dma_sync_sg,
-	.dma_supported		= sba_dma_supported,
-	.mapping_error		= sba_dma_mapping_error,
-};
-
-void sba_dma_init(void)
-{
-	dma_ops = &sba_dma_ops;
-}
+EXPORT_SYMBOL(sba_dma_mapping_error);
+EXPORT_SYMBOL(sba_dma_supported);
+EXPORT_SYMBOL(sba_alloc_coherent);
+EXPORT_SYMBOL(sba_free_coherent);

@@ -25,18 +25,18 @@ check_addr(char *name, struct device *hwdev, dma_addr_t bus, size_t size)
 	return 1;
 }
 
-static dma_addr_t nommu_map_page(struct device *dev, struct page *page,
-				 unsigned long offset, size_t size,
-				 enum dma_data_direction dir,
-				 struct dma_attrs *attrs)
+static dma_addr_t
+nommu_map_single(struct device *hwdev, phys_addr_t paddr, size_t size,
+	       int direction)
 {
-	dma_addr_t bus = page_to_phys(page) + offset;
+	dma_addr_t bus = paddr;
 	WARN_ON(size == 0);
-	if (!check_addr("map_single", dev, bus, size))
-		return bad_dma_address;
+	if (!check_addr("map_single", hwdev, bus, size))
+				return bad_dma_address;
 	flush_write_buffers();
 	return bus;
 }
+
 
 /* Map a set of buffers described by scatterlist in streaming
  * mode for DMA.  This is the scatter-gather version of the
@@ -54,8 +54,7 @@ static dma_addr_t nommu_map_page(struct device *dev, struct page *page,
  * the same here.
  */
 static int nommu_map_sg(struct device *hwdev, struct scatterlist *sg,
-			int nents, enum dma_data_direction dir,
-			struct dma_attrs *attrs)
+	       int nents, int direction)
 {
 	struct scatterlist *s;
 	int i;
@@ -79,11 +78,11 @@ static void nommu_free_coherent(struct device *dev, size_t size, void *vaddr,
 	free_pages((unsigned long)vaddr, get_order(size));
 }
 
-struct dma_map_ops nommu_dma_ops = {
+struct dma_mapping_ops nommu_dma_ops = {
 	.alloc_coherent = dma_generic_alloc_coherent,
 	.free_coherent = nommu_free_coherent,
+	.map_single = nommu_map_single,
 	.map_sg = nommu_map_sg,
-	.map_page = nommu_map_page,
 	.is_phys = 1,
 };
 
