@@ -1,11 +1,5 @@
-/* This handles the memory map.. */
-
-#ifdef CONFIG_MMU
-#ifndef CONFIG_SUN3
-#define PAGE_OFFSET_RAW		0x00000000
+#ifdef __uClinux__
+#include "page_offset_no.h"
 #else
-#define PAGE_OFFSET_RAW		0x0E000000
-#endif
-#else
-#define	PAGE_OFFSET_RAW		CONFIG_RAMBASE
+#include "page_offset_mm.h"
 #endif

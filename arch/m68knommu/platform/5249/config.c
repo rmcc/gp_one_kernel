@@ -32,8 +32,7 @@ static struct mcf_platform_uart m5249_uart_platform[] = {
 	{
 		.mapbase 	= MCF_MBAR + MCFUART_BASE2,
 		.irq		= 74,
-	},
-	{ },
+	}
 };
 
 static struct platform_device m5249_uart = {
@@ -51,12 +50,12 @@ static struct platform_device *m5249_devices[] __initdata = {
 static void __init m5249_uart_init_line(int line, int irq)
 {
 	if (line == 0) {
-		writeb(MCFSIM_ICR_LEVEL6 | MCFSIM_ICR_PRI1, MCF_MBAR + MCFSIM_UART1ICR);
-		writeb(irq, MCF_MBAR + MCFUART_BASE1 + MCFUART_UIVR);
+		writel(MCFSIM_ICR_LEVEL6 | MCFSIM_ICR_PRI1, MCF_MBAR + MCFSIM_UART1ICR);
+		writeb(irq, MCFUART_BASE1 + MCFUART_UIVR);
 		mcf_setimr(mcf_getimr() & ~MCFSIM_IMR_UART1);
 	} else if (line == 1) {
-		writeb(MCFSIM_ICR_LEVEL6 | MCFSIM_ICR_PRI2, MCF_MBAR + MCFSIM_UART2ICR);
-		writeb(irq, MCF_MBAR + MCFUART_BASE2 + MCFUART_UIVR);
+		writel(MCFSIM_ICR_LEVEL6 | MCFSIM_ICR_PRI2, MCF_MBAR + MCFSIM_UART2ICR);
+		writeb(irq, MCFUART_BASE2 + MCFUART_UIVR);
 		mcf_setimr(mcf_getimr() & ~MCFSIM_IMR_UART2);
 	}
 }
