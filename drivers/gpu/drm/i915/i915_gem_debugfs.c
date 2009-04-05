@@ -69,10 +69,13 @@ static int i915_gem_object_list_info(struct seq_file *m, void *data)
 	struct drm_device *dev = node->minor->dev;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	struct drm_i915_gem_object *obj_priv;
+	spinlock_t *lock = NULL;
 
 	switch (list) {
 	case ACTIVE_LIST:
 		seq_printf(m, "Active:\n");
+		lock = &dev_priv->mm.active_list_lock;
+		spin_lock(lock);
 		head = &dev_priv->mm.active_list;
 		break;
 	case INACTIVE_LIST:
@@ -104,6 +107,9 @@ static int i915_gem_object_list_info(struct seq_file *m, void *data)
 			seq_printf(m, " (fence: %d\n", obj_priv->fence_reg);
 		seq_printf(m, "\n");
 	}
+
+	if (lock)
+	    spin_unlock(lock);
 	return 0;
 }
 
@@ -192,7 +198,7 @@ static int i915_gem_fence_regs_info(struct seq_file *m, void *data)
 
 			obj_priv = obj->driver_private;
 			seq_printf(m, "Fenced object[%2d] = %p: %s "
-				   "%08x %08x %08x %s %08x %08x %d",
+				   "%08x %08zx %08x %s %08x %08x %d",
 				   i, obj, get_pin_flag(obj_priv),
 				   obj_priv->gtt_offset,
 				   obj->size, obj_priv->stride,
