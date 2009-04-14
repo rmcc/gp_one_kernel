@@ -16,12 +16,6 @@
    (ie, 32-bit PAE). */
 #define PHYSICAL_PAGE_MASK	(((signed long)PAGE_MASK) & __PHYSICAL_MASK)
 
-/* PTE_PFN_MASK extracts the PFN from a (pte|pmd|pud|pgd)val_t */
-#define PTE_PFN_MASK		((pteval_t)PHYSICAL_PAGE_MASK)
-
-/* PTE_FLAGS_MASK extracts the flags from a (pte|pmd|pud|pgd)val_t */
-#define PTE_FLAGS_MASK		(~PTE_PFN_MASK)
-
 #define PMD_PAGE_SIZE		(_AC(1, UL) << PMD_SHIFT)
 #define PMD_PAGE_MASK		(~(PMD_PAGE_SIZE-1))
 
@@ -46,14 +40,8 @@
 
 #ifndef __ASSEMBLY__
 
-struct pgprot;
-
 extern int page_is_ram(unsigned long pagenr);
 extern int devmem_is_allowed(unsigned long pagenr);
-extern void map_devmem(unsigned long pfn, unsigned long size,
-		       struct pgprot vma_prot);
-extern void unmap_devmem(unsigned long pfn, unsigned long size,
-			 struct pgprot vma_prot);
 
 extern unsigned long max_low_pfn_mapped;
 extern unsigned long max_pfn_mapped;

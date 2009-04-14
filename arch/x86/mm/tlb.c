@@ -14,7 +14,6 @@
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate)
 			= { &init_mm, 0, };
 
-#include <asm/genapic.h>
 /*
  *	Smarter SMP flushing macros.
  *		c/o Linus Torvalds.
@@ -187,11 +186,6 @@ static void flush_tlb_others_ipi(const struct cpumask *cpumask,
 	cpumask_andnot(to_cpumask(f->flush_cpumask),
 		       cpumask, cpumask_of(smp_processor_id()));
 
-	/*
-	 * Make the above memory operations globally visible before
-	 * sending the IPI.
-	 */
-	smp_mb();
 	/*
 	 * We have to send the IPI only to
 	 * CPUs affected.

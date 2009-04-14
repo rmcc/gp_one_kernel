@@ -19,14 +19,14 @@ struct cpu_workqueue_stats {
 /* Useful to know if we print the cpu headers */
 	bool		            first_entry;
 	int		            cpu;
-	pid_t 			    pid;
+	pid_t			    pid;
 /* Can be inserted from interrupt or user context, need to be atomic */
-	atomic_t 	            inserted;
+	atomic_t	            inserted;
 /*
  *  Don't need to be atomic, works are serialized in a single workqueue thread
  *  on a single CPU.
  */
-	unsigned int 	 	    executed;
+	unsigned int		    executed;
 };
 
 /* List of workqueue threads on one cpu */
@@ -91,7 +91,7 @@ static void probe_workqueue_creation(struct task_struct *wq_thread, int cpu)
 	struct cpu_workqueue_stats *cws;
 	unsigned long flags;
 
-	WARN_ON(cpu < 0 || cpu >= num_possible_cpus());
+	WARN_ON(cpu < 0);
 
 	/* Workqueues are sometimes created in atomic context */
 	cws = kzalloc(sizeof(struct cpu_workqueue_stats), GFP_ATOMIC);
@@ -99,8 +99,6 @@ static void probe_workqueue_creation(struct task_struct *wq_thread, int cpu)
 		pr_warning("trace_workqueue: not enough memory\n");
 		return;
 	}
-	tracing_record_cmdline(wq_thread);
-
 	INIT_LIST_HEAD(&cws->list);
 	cws->cpu = cpu;
 
@@ -177,12 +175,12 @@ static void *workqueue_stat_next(void *prev, int idx)
 	spin_lock_irqsave(&workqueue_cpu_stat(cpu)->lock, flags);
 	if (list_is_last(&prev_cws->list, &workqueue_cpu_stat(cpu)->list)) {
 		spin_unlock_irqrestore(&workqueue_cpu_stat(cpu)->lock, flags);
-		for (++cpu ; cpu < num_possible_cpus(); cpu++) {
-			ret = workqueue_stat_start_cpu(cpu);
-			if (ret)
-				return ret;
-		}
-		return NULL;
+		do {
+			cpu = cpumask_next(cpu, cpu_possible_mask);
+			if (cpu >= nr_cpu_ids)
+				return NULL;
+		} while (!(ret = workqueue_stat_start_cpu(cpu)));
+		return ret;
 	}
 	spin_unlock_irqrestore(&workqueue_cpu_stat(cpu)->lock, flags);
 
@@ -195,16 +193,25 @@ static int workqueue_stat_show(struct seq_file *s, void *p)
 	struct cpu_workqueue_stats *cws = p;
 	unsigned long flags;
 	int cpu = cws->cpu;
-
-	seq_printf(s, "%3d %6d     %6u       %s\n", cws->cpu,
-		   atomic_read(&cws->inserted),
-		   cws->executed,
-		   trace_find_cmdline(cws->pid));
+	struct pid *pid;
+	struct task_struct *tsk;
 
 	spin_lock_irqsave(&workqueue_cpu_stat(cpu)->lock, flags);
 	if (&cws->list == workqueue_cpu_stat(cpu)->list.next)
 		seq_printf(s, "\n");
 	spin_unlock_irqrestore(&workqueue_cpu_stat(cpu)->lock, flags);
+
+	pid = find_get_pid(cws->pid);
+	if (pid) {
+		tsk = get_pid_task(pid, PIDTYPE_PID);
+		if (tsk) {
+			seq_printf(s, "%3d %6d     %6u       %s\n", cws->cpu,
+				   atomic_read(&cws->inserted), cws->executed,
+				   tsk->comm);
+			put_task_struct(tsk);
+		}
+		put_pid(pid);
+	}
 
 	return 0;
 }
@@ -212,7 +219,7 @@ static int workqueue_stat_show(struct seq_file *s, void *p)
 static int workqueue_stat_headers(struct seq_file *s)
 {
 	seq_printf(s, "# CPU  INSERTED  EXECUTED   NAME\n");
-	seq_printf(s, "# |      |         |          |\n\n");
+	seq_printf(s, "# |      |         |          |\n");
 	return 0;
 }
 
