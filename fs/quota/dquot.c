@@ -823,11 +823,11 @@ static void add_dquot_ref(struct super_block *sb, int type)
 
 	spin_lock(&inode_lock);
 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+		if (inode->i_state & (I_FREEING|I_CLEAR|I_WILL_FREE|I_NEW))
+			continue;
 		if (!atomic_read(&inode->i_writecount))
 			continue;
 		if (!dqinit_needed(inode, type))
-			continue;
-		if (inode->i_state & (I_FREEING|I_WILL_FREE))
 			continue;
 
 		__iget(inode);
@@ -915,6 +915,12 @@ static void remove_dquot_ref(struct super_block *sb, int type,
 
 	spin_lock(&inode_lock);
 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+		/*
+		 *  We have to scan also I_NEW inodes because they can already
+		 *  have quota pointer initialized. Luckily, we need to touch
+		 *  only quota pointers and these have separate locking
+		 *  (dqptr_sem).
+		 */
 		if (!IS_NOQUOTA(inode))
 			remove_inode_dquot_ref(inode, type, tofree_head);
 	}
@@ -1124,10 +1130,7 @@ static void send_warning(const struct dquot *dquot, const char warntype)
 		goto attr_err_out;
 	genlmsg_end(skb, msg_head);
 
-	ret = genlmsg_multicast(skb, 0, quota_genl_family.id, GFP_NOFS);
-	if (ret < 0 && ret != -ESRCH)
-		printk(KERN_ERR
-			"VFS: Failed to send notification message: %d\n", ret);
+	genlmsg_multicast(skb, 0, quota_genl_family.id, GFP_NOFS);
 	return;
 attr_err_out:
 	printk(KERN_ERR "VFS: Not enough space to compose quota message!\n");

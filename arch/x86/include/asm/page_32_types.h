@@ -33,13 +33,16 @@
 /* 44=32+12, the limit we can fit into an unsigned long pfn */
 #define __PHYSICAL_MASK_SHIFT	44
 #define __VIRTUAL_MASK_SHIFT	32
-#define PAGETABLE_LEVELS	3
 
 #else  /* !CONFIG_X86_PAE */
 #define __PHYSICAL_MASK_SHIFT	32
 #define __VIRTUAL_MASK_SHIFT	32
-#define PAGETABLE_LEVELS	2
 #endif	/* CONFIG_X86_PAE */
+
+/*
+ * Kernel image size is limited to 512 MB (see in arch/x86/kernel/head_32.S)
+ */
+#define KERNEL_IMAGE_SIZE	(512 * 1024 * 1024)
 
 #ifndef __ASSEMBLY__
 
