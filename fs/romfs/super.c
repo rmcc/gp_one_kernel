@@ -240,8 +240,8 @@ static struct dentry *romfs_lookup(struct inode *dir, struct dentry *dentry,
 			goto error;
 
 		/* try to match the first 16 bytes of name */
-		ret = romfs_dev_strncmp(dir->i_sb, offset + ROMFH_SIZE, name,
-					len);
+		ret = romfs_dev_strcmp(dir->i_sb, offset + ROMFH_SIZE, name,
+				       len);
 		if (ret < 0)
 			goto error;
 		if (ret == 1)
@@ -298,7 +298,8 @@ static struct inode *romfs_iget(struct super_block *sb, unsigned long pos)
 	struct romfs_inode ri;
 	struct inode *i;
 	unsigned long nlen;
-	unsigned nextfh, ret;
+	unsigned nextfh;
+	int ret;
 	umode_t mode;
 
 	/* we might have to traverse a chain of "hard link" file entries to get
@@ -408,12 +409,17 @@ static void romfs_destroy_inode(struct inode *inode)
  */
 static int romfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
+	struct super_block *sb = dentry->d_sb;
+	u64 id = huge_encode_dev(sb->s_bdev->bd_dev);
+
 	buf->f_type = ROMFS_MAGIC;
 	buf->f_namelen = ROMFS_MAXFN;
 	buf->f_bsize = ROMBSIZE;
 	buf->f_bfree = buf->f_bavail = buf->f_ffree;
 	buf->f_blocks =
 		(romfs_maxsize(dentry->d_sb) + ROMBSIZE - 1) >> ROMBSBITS;
+	buf->f_fsid.val[0] = (u32)id;
+	buf->f_fsid.val[1] = (u32)(id >> 32);
 	return 0;
 }
 
