@@ -84,12 +84,17 @@ union cpuid10_edx {
 #define MSR_ARCH_PERFMON_FIXED_CTR2			0x30b
 #define X86_PMC_IDX_FIXED_BUS_CYCLES			(X86_PMC_IDX_FIXED + 2)
 
+extern void set_perf_counter_pending(void);
+
+#define clear_perf_counter_pending()	do { } while (0)
+#define test_perf_counter_pending()	(0)
+
 #ifdef CONFIG_PERF_COUNTERS
 extern void init_hw_perf_counters(void);
-extern void perf_counters_lapic_init(int nmi);
+extern void perf_counters_lapic_init(void);
 #else
 static inline void init_hw_perf_counters(void)		{ }
-static inline void perf_counters_lapic_init(int nmi)	{ }
+static inline void perf_counters_lapic_init(void)	{ }
 #endif
 
 #endif /* _ASM_X86_PERF_COUNTER_H */
