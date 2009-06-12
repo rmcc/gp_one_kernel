@@ -19,6 +19,8 @@
 #define PM_PMC_MSK	0xf
 #define PM_UNIT_SH	8	/* TTMMUX number and setting - unit select */
 #define PM_UNIT_MSK	0xf
+#define PM_SPCSEL_SH	6
+#define PM_SPCSEL_MSK	3
 #define PM_BYTE_SH	4	/* Byte number of event bus to use */
 #define PM_BYTE_MSK	3
 #define PM_PMCSEL_MSK	0xf
@@ -88,8 +90,11 @@ static short mmcr1_adder_bits[8] = {
  * Layout of constraint bits:
  * 6666555555555544444444443333333333222222222211111111110000000000
  * 3210987654321098765432109876543210987654321098765432109876543210
- *                 <><>[  >[  >[  ><  ><  ><  ><  ><><><><><><><><>
- *                 T0T1 UC  PS1 PS2 B0  B1  B2  B3 P1P2P3P4P5P6P7P8
+ *               <><><>[  >[  >[  ><  ><  ><  ><  ><><><><><><><><>
+ *               SPT0T1 UC  PS1 PS2 B0  B1  B2  B3 P1P2P3P4P5P6P7P8
+ *
+ * SP - SPCSEL constraint
+ *     48-49: SPCSEL value 0x3_0000_0000_0000
  *
  * T0 - TTM0 constraint
  *     46-47: TTM0SEL value (0=FPU, 2=IFU, 3=VPU) 0xC000_0000_0000
@@ -126,6 +131,57 @@ static short mmcr1_adder_bits[8] = {
  *     0-13: Count of events needing PMC2..PMC8
  */
 
+static unsigned char direct_marked_event[8] = {
+	(1<<2) | (1<<3),	/* PMC1: PM_MRK_GRP_DISP, PM_MRK_ST_CMPL */
+	(1<<3) | (1<<5),	/* PMC2: PM_THRESH_TIMEO, PM_MRK_BRU_FIN */
+	(1<<3) | (1<<5),	/* PMC3: PM_MRK_ST_CMPL_INT, PM_MRK_VMX_FIN */
+	(1<<4) | (1<<5),	/* PMC4: PM_MRK_GRP_CMPL, PM_MRK_CRU_FIN */
+	(1<<4) | (1<<5),	/* PMC5: PM_GRP_MRK, PM_MRK_GRP_TIMEO */
+	(1<<3) | (1<<4) | (1<<5),
+		/* PMC6: PM_MRK_ST_STS, PM_MRK_FXU_FIN, PM_MRK_GRP_ISSUED */
+	(1<<4) | (1<<5),	/* PMC7: PM_MRK_FPU_FIN, PM_MRK_INST_FIN */
+	(1<<4)			/* PMC8: PM_MRK_LSU_FIN */
+};
+
+/*
+ * Returns 1 if event counts things relating to marked instructions
+ * and thus needs the MMCRA_SAMPLE_ENABLE bit set, or 0 if not.
+ */
+static int p970_marked_instr_event(u64 event)
+{
+	int pmc, psel, unit, byte, bit;
+	unsigned int mask;
+
+	pmc = (event >> PM_PMC_SH) & PM_PMC_MSK;
+	psel = event & PM_PMCSEL_MSK;
+	if (pmc) {
+		if (direct_marked_event[pmc - 1] & (1 << psel))
+			return 1;
+		if (psel == 0)		/* add events */
+			bit = (pmc <= 4)? pmc - 1: 8 - pmc;
+		else if (psel == 7 || psel == 13)	/* decode events */
+			bit = 4;
+		else
+			return 0;
+	} else
+		bit = psel;
+
+	byte = (event >> PM_BYTE_SH) & PM_BYTE_MSK;
+	unit = (event >> PM_UNIT_SH) & PM_UNIT_MSK;
+	mask = 0;
+	switch (unit) {
+	case PM_VPU:
+		mask = 0x4c;		/* byte 0 bits 2,3,6 */
+	case PM_LSU0:
+		/* byte 2 bits 0,2,3,4,6; all of byte 1 */
+		mask = 0x085dff00;
+	case PM_LSU1L:
+		mask = 0x50 << 24;	/* byte 3 bits 4,6 */
+		break;
+	}
+	return (mask >> (byte * 8 + bit)) & 1;
+}
+
 /* Masks and values for using events from the various units */
 static u64 unit_cons[PM_LASTUNIT+1][2] = {
 	[PM_FPU] =   { 0xc80000000000ull, 0x040000000000ull },
@@ -136,9 +192,9 @@ static u64 unit_cons[PM_LASTUNIT+1][2] = {
 	[PM_STS] =   { 0x380000000000ull, 0x310000000000ull },
 };
 
-static int p970_get_constraint(unsigned int event, u64 *maskp, u64 *valp)
+static int p970_get_constraint(u64 event, u64 *maskp, u64 *valp)
 {
-	int pmc, byte, unit, sh;
+	int pmc, byte, unit, sh, spcsel;
 	u64 mask = 0, value = 0;
 	int grp = -1;
 
@@ -177,12 +233,17 @@ static int p970_get_constraint(unsigned int event, u64 *maskp, u64 *valp)
 		mask  |= 0x800000000ull;
 		value |= 0x100000000ull;
 	}
+	spcsel = (event >> PM_SPCSEL_SH) & PM_SPCSEL_MSK;
+	if (spcsel) {
+		mask  |= 3ull << 48;
+		value |= (u64)spcsel << 48;
+	}
 	*maskp = mask;
 	*valp = value;
 	return 0;
 }
 
-static int p970_get_alternatives(unsigned int event, unsigned int alt[])
+static int p970_get_alternatives(u64 event, unsigned int flags, u64 alt[])
 {
 	alt[0] = event;
 
@@ -195,7 +256,7 @@ static int p970_get_alternatives(unsigned int event, unsigned int alt[])
 	return 1;
 }
 
-static int p970_compute_mmcr(unsigned int event[], int n_ev,
+static int p970_compute_mmcr(u64 event[], int n_ev,
 			     unsigned int hwc[], u64 mmcr[])
 {
 	u64 mmcr0 = 0, mmcr1 = 0, mmcra = 0;
@@ -209,6 +270,7 @@ static int p970_compute_mmcr(unsigned int event[], int n_ev,
 	unsigned char ttmuse[2];
 	unsigned char pmcsel[8];
 	int i;
+	int spcsel;
 
 	if (n_ev > 8)
 		return -1;
@@ -316,6 +378,10 @@ static int p970_compute_mmcr(unsigned int event[], int n_ev,
 		}
 		pmcsel[pmc] = psel;
 		hwc[i] = pmc;
+		spcsel = (event[i] >> PM_SPCSEL_SH) & PM_SPCSEL_MSK;
+		mmcr1 |= spcsel;
+		if (p970_marked_instr_event(event[i]))
+			mmcra |= MMCRA_SAMPLE_ENABLE;
 	}
 	for (pmc = 0; pmc < 2; ++pmc)
 		mmcr0 |= pmcsel[pmc] << (MMCR0_PMC1SEL_SH - 7 * pmc);
@@ -353,12 +419,52 @@ static void p970_disable_pmc(unsigned int pmc, u64 mmcr[])
 }
 
 static int ppc970_generic_events[] = {
-	[PERF_COUNT_CPU_CYCLES] = 7,
-	[PERF_COUNT_INSTRUCTIONS] = 1,
-	[PERF_COUNT_CACHE_REFERENCES] = 0x8810,		/* PM_LD_REF_L1 */
-	[PERF_COUNT_CACHE_MISSES] = 0x3810,		/* PM_LD_MISS_L1 */
-	[PERF_COUNT_BRANCH_INSTRUCTIONS] = 0x431,	/* PM_BR_ISSUED */
-	[PERF_COUNT_BRANCH_MISSES] = 0x327,		/* PM_GRP_BR_MPRED */
+	[PERF_COUNT_HW_CPU_CYCLES]		= 7,
+	[PERF_COUNT_HW_INSTRUCTIONS]		= 1,
+	[PERF_COUNT_HW_CACHE_REFERENCES]	= 0x8810, /* PM_LD_REF_L1 */
+	[PERF_COUNT_HW_CACHE_MISSES]		= 0x3810, /* PM_LD_MISS_L1 */
+	[PERF_COUNT_HW_BRANCH_INSTRUCTIONS]	= 0x431,  /* PM_BR_ISSUED */
+	[PERF_COUNT_HW_BRANCH_MISSES] 		= 0x327,  /* PM_GRP_BR_MPRED */
+};
+
+#define C(x)	PERF_COUNT_HW_CACHE_##x
+
+/*
+ * Table of generalized cache-related events.
+ * 0 means not supported, -1 means nonsensical, other values
+ * are event codes.
+ */
+static int ppc970_cache_events[C(MAX)][C(OP_MAX)][C(RESULT_MAX)] = {
+	[C(L1D)] = {		/* 	RESULT_ACCESS	RESULT_MISS */
+		[C(OP_READ)] = {	0x8810,		0x3810	},
+		[C(OP_WRITE)] = {	0x7810,		0x813	},
+		[C(OP_PREFETCH)] = {	0x731,		0	},
+	},
+	[C(L1I)] = {		/* 	RESULT_ACCESS	RESULT_MISS */
+		[C(OP_READ)] = {	0,		0	},
+		[C(OP_WRITE)] = {	-1,		-1	},
+		[C(OP_PREFETCH)] = {	0,		0	},
+	},
+	[C(LL)] = {		/* 	RESULT_ACCESS	RESULT_MISS */
+		[C(OP_READ)] = {	0,		0	},
+		[C(OP_WRITE)] = {	0,		0	},
+		[C(OP_PREFETCH)] = {	0x733,		0	},
+	},
+	[C(DTLB)] = {		/* 	RESULT_ACCESS	RESULT_MISS */
+		[C(OP_READ)] = {	0,		0x704	},
+		[C(OP_WRITE)] = {	-1,		-1	},
+		[C(OP_PREFETCH)] = {	-1,		-1	},
+	},
+	[C(ITLB)] = {		/* 	RESULT_ACCESS	RESULT_MISS */
+		[C(OP_READ)] = {	0,		0x700	},
+		[C(OP_WRITE)] = {	-1,		-1	},
+		[C(OP_PREFETCH)] = {	-1,		-1	},
+	},
+	[C(BPU)] = {		/* 	RESULT_ACCESS	RESULT_MISS */
+		[C(OP_READ)] = {	0x431,		0x327	},
+		[C(OP_WRITE)] = {	-1,		-1	},
+		[C(OP_PREFETCH)] = {	-1,		-1	},
+	},
 };
 
 struct power_pmu ppc970_pmu = {
@@ -372,4 +478,5 @@ struct power_pmu ppc970_pmu = {
 	.disable_pmc = p970_disable_pmc,
 	.n_generic = ARRAY_SIZE(ppc970_generic_events),
 	.generic_events = ppc970_generic_events,
+	.cache_events = &ppc970_cache_events,
 };
