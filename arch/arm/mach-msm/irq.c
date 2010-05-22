@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/irq.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -531,7 +531,7 @@ void msm_fiq_select(int irq)
 	writel(msm_irq_shadow_reg[index].int_select, reg);
 	local_irq_restore(flags);
 }
-
+/* FIH_ADQ, 6370 { */
 void msm_fiq_unselect(int irq)
 {
 	void __iomem *reg = VIC_INT_SELECT0 + ((irq & 32) ? 4 : 0);
@@ -544,6 +544,7 @@ void msm_fiq_unselect(int irq)
 	writel(msm_irq_shadow_reg[index].int_select, reg);
 	local_irq_restore(flags);
 }
+/* FIH_ADQ, 6370 { */
 /* set_fiq_handler originally from arch/arm/kernel/fiq.c */
 static void set_fiq_handler(void *start, unsigned int length)
 {

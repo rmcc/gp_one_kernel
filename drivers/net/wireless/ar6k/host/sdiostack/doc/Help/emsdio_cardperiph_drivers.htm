@@ -1,0 +1,113 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Card Function Drivers</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->        Card
+    Function Drivers<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+
+<OBJECT type="application/x-oleobject" classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+	<param name="Keyword" value="Card Function Drivers">
+</OBJECT>
+<p class="HEADING3">SDIO Functions</p>
+<p class="BODYTEXT">The SDIO stack at the top most level consists of function
+  specific software modules, hereafter called SDIO function drivers. A single
+  SDIO card can have
+  one or more functions with each driver operating independently and in most
+  cases not
+  aware of the &quot;other&quot; functions. This feature of the stack allows card vendors
+  to
+  mix and match I/O functions and reuse drivers without modification. The embedded
+  stack's flexible plug and play architecture makes this possible. SDIO function
+  drivers utilize the SDIO Core's function driver interface to control their
+  respective function.</p>
+<p class="HEADING3">SDIO Plug and Play</p>
+<p class="BODYTEXT">
+SDIO is a “plug and play” architecture with methods for an operating system to
+load appropriate control software based on information located in the card’s
+common register set or Card Information Structure (CIS). The CIS is a non-volatile
+memory region, accessible byte-wide, containing card or function specific meta-data.
+Each card has a common CIS along with one function specific CIS for each function
+on the card. The SDIO Core plug and play manager deals with information in the
+common
+CIS
+for
+manufacturer/card ID and power capabilities. For cards that support SDIO specification
+1.10,
+the
+SDIO
+core
+will
+read
+manufacturer/card
+identifiers
+from the function CIS. A
+  function driver may be interested in the function CIS for application specific
+  parameters
+  (i.e.
+  MAC address, function capabilities, etc.). The SDIO core enumerates card functions
+and notifies function drivers when a compatible function is detected. more information
+on this mechanism can be found in the <a href="peripheral_development_overview.htm">Developing
+Card Function Drivers</a> section.</p>
+<p class="BODYTEXT">Control software can also be pre-installed into
+    a non-volatile memory portion on the card called the CSA (Code Storage Area)
+  on the card, however due to the different operating systems
+  that
+  a card
+  may encounter,
+  this
+  feature
+  is
+  not
+  supported.    </p>
+<p class="BODYTEXT">SDIO defines standard device classes that expose a known
+  register set and card behavior
+      for
+      control software (drivers). An operating system can support standard devices
+      from a range of card manufacturers using a single class driver. The embedded
+      stack provides class drivers for SD Memory, GPS and Bluetooth.</p>
+<p class="BODYTEXT"><br>
+</p>
+<p><br>
+</p>
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

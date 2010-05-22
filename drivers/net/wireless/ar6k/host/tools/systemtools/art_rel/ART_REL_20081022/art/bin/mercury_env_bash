@@ -1,0 +1,6 @@
+#! /bin/bash
+export WORKAREA=`pwd`
+export ATH_PLATFORM=LOCAL_i686-SDIO
+export LD_LIBRARY_PATH=.:${LD_LIBRARY_PATH}
+#export NETIF=eth2
+#export XTALFREQ=19200000

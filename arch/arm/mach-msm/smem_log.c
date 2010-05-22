@@ -1,60 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
- *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
- *
- * START
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- */
 /*
+ * Copyright (c) 2008 QUALCOMM USA, INC.
+ *
+ * All source code in this file is licensed under the following license
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
+ *
  * Shared memory logging implementation.
  */
 
@@ -68,7 +28,6 @@
 #include <linux/remote_spinlock.h>
 #include <linux/debugfs.h>
 #include <linux/io.h>
-#include <linux/string.h>
 
 #include <mach/msm_iomap.h>
 #include <mach/smem_log.h>
@@ -97,7 +56,7 @@ do { \
 #define D(x...) do {} while (0)
 #endif
 
-#define TIMESTAMP_ADDR (MSM_CSR_BASE + 0x04)
+#define TIMESTAMP_ADDR (MSM_CSR_BASE + 0x14)
 
 struct smem_log_item {
 	uint32_t identifier;
@@ -125,6 +84,10 @@ static struct smem_log_item __iomem *smem_log_static_events;
 static uint32_t __iomem *smem_log_static_idx;
 static remote_spinlock_t remote_spinlock_static;
 
+// added by henry.wang
+static struct smem_log_item __iomem *smem_log_RPC_events;
+static uint32_t __iomem *smem_log_RPC_idx;
+
 struct smem_log_inst {
 	struct smem_log_item __iomem *smem_log_cur_events;
 	uint32_t __iomem *smem_log_cur_idx;
@@ -141,6 +104,11 @@ struct sym {
 	char *str;
 	struct hlist_node node;
 };
+
+#define ID_SYM 0
+#define BASE_SYM 1
+#define EVENT_SYM 2
+#define ONCRPC_SYM 3
 
 struct sym id_syms[] = {
 	{ SMEM_LOG_PROC_ID_MODEM, "MODM" },
@@ -161,46 +129,6 @@ struct sym base_syms[] = {
 };
 
 struct sym event_syms[] = {
-#if defined(CONFIG_MSM_N_WAY_SMSM)
-	{ DEM_SMSM_ISR, "SMSM_ISR" },
-	{ DEM_STATE_CHANGE, "STATE_CHANGE" },
-	{ DEM_STATE_MACHINE_ENTER, "STATE_MACHINE_ENTER" },
-	{ DEM_ENTER_SLEEP, "ENTER_SLEEP" },
-	{ DEM_END_SLEEP, "END_SLEEP" },
-	{ DEM_SETUP_SLEEP, "SETUP_SLEEP" },
-	{ DEM_SETUP_POWER_COLLAPSE, "SETUP_POWER_COLLAPSE" },
-	{ DEM_SETUP_SUSPEND, "SETUP_SUSPEND" },
-	{ DEM_EARLY_EXIT, "EARLY_EXIT" },
-	{ DEM_WAKEUP_REASON, "WAKEUP_REASON" },
-	{ DEM_DETECT_WAKEUP, "DETECT_WAKEUP" },
-	{ DEM_DETECT_RESET, "DETECT_RESET" },
-	{ DEM_DETECT_SLEEPEXIT, "DETECT_SLEEPEXIT" },
-	{ DEM_DETECT_RUN, "DETECT_RUN" },
-	{ DEM_APPS_SWFI, "APPS_SWFI" },
-	{ DEM_SEND_WAKEUP, "SEND_WAKEUP" },
-	{ DEM_ASSERT_OKTS, "ASSERT_OKTS" },
-	{ DEM_NEGATE_OKTS, "NEGATE_OKTS" },
-	{ DEM_PROC_COMM_CMD, "PROC_COMM_CMD" },
-	{ DEM_REMOVE_PROC_PWR, "REMOVE_PROC_PWR" },
-	{ DEM_RESTORE_PROC_PWR, "RESTORE_PROC_PWR" },
-	{ DEM_SMI_CLK_DISABLED, "SMI_CLK_DISABLED" },
-	{ DEM_SMI_CLK_ENABLED, "SMI_CLK_ENABLED" },
-	{ DEM_MAO_INTS, "MAO_INTS" },
-	{ DEM_APPS_WAKEUP_INT, "APPS_WAKEUP_INT" },
-	{ DEM_PROC_WAKEUP, "PROC_WAKEUP" },
-	{ DEM_PROC_POWERUP, "PROC_POWERUP" },
-	{ DEM_TIMER_EXPIRED, "TIMER_EXPIRED" },
-	{ DEM_SEND_BATTERY_INFO, "SEND_BATTERY_INFO" },
-	{ DEM_REMOTE_PWR_CB, "REMOTE_PWR_CB" },
-	{ DEM_TIME_SYNC_START, "TIME_SYNC_START" },
-	{ DEM_TIME_SYNC_SEND_VALUE, "TIME_SYNC_SEND_VALUE" },
-	{ DEM_TIME_SYNC_DONE, "TIME_SYNC_DONE" },
-	{ DEM_TIME_SYNC_REQUEST, "TIME_SYNC_REQUEST" },
-	{ DEM_TIME_SYNC_POLL, "TIME_SYNC_POLL" },
-	{ DEM_TIME_SYNC_INIT, "TIME_SYNC_INIT" },
-	{ DEM_INIT, "INIT" },
-#else
-
 	{ DEM_NO_SLEEP, "NO_SLEEP" },
 	{ DEM_INSUF_TIME, "INSUF_TIME" },
 	{ DEMAPPS_ENTER_SLEEP, "APPS_ENTER_SLEEP" },
@@ -242,23 +170,7 @@ struct sym event_syms[] = {
 	{ DEMAPPS_SETUP_APPS_SUSPEND, "APPS_SETUP_APPS_SUSPEND" },
 	{ DEM_RPC_EARLY_EXIT, "RPC_EARLY_EXIT" },
 	{ DEMAPPS_WAKEUP_REASON, "APPS_WAKEUP_REASON" },
-	{ DEM_INIT, "INIT" },
-#endif
 	{ DEMMOD_UMTS_BASE, "MOD_UMTS_BASE" },
-	{ DEMMOD_GL1_GO_TO_SLEEP, "GL1_GO_TO_SLEEP" },
-	{ DEMMOD_GL1_SLEEP_START, "GL1_SLEEP_START" },
-	{ DEMMOD_GL1_AFTER_GSM_CLK_ON, "GL1_AFTER_GSM_CLK_ON" },
-	{ DEMMOD_GL1_BEFORE_RF_ON, "GL1_BEFORE_RF_ON" },
-	{ DEMMOD_GL1_AFTER_RF_ON, "GL1_AFTER_RF_ON" },
-	{ DEMMOD_GL1_FRAME_TICK, "GL1_FRAME_TICK" },
-	{ DEMMOD_GL1_WCDMA_START, "GL1_WCDMA_START" },
-	{ DEMMOD_GL1_WCDMA_ENDING, "GL1_WCDMA_ENDING" },
-	{ DEMMOD_UMTS_NOT_OKTS, "UMTS_NOT_OKTS" },
-	{ DEMMOD_UMTS_START_TCXO_SHUTDOWN, "UMTS_START_TCXO_SHUTDOWN" },
-	{ DEMMOD_UMTS_END_TCXO_SHUTDOWN, "UMTS_END_TCXO_SHUTDOWN" },
-	{ DEMMOD_UMTS_START_ARM_HALT, "UMTS_START_ARM_HALT" },
-	{ DEMMOD_UMTS_END_ARM_HALT, "UMTS_END_ARM_HALT" },
-	{ DEMMOD_UMTS_NEXT_WAKEUP_SCLK, "UMTS_NEXT_WAKEUP_SCLK" },
 	{ TIME_REMOTE_LOG_EVENT_START, "START" },
 	{ TIME_REMOTE_LOG_EVENT_GOTO_WAIT,
 	  "GOTO_WAIT" },
@@ -611,242 +523,6 @@ struct sym oncrpc_syms[] = {
 	{ 0X3100ffff, "RPC_ROUTER_SERVER_PROGRAM CB" },
 };
 
-struct sym wakeup_syms[] = {
-	{ 0x00000040, "OTHER" },
-	{ 0x00000020, "RESET" },
-	{ 0x00000010, "ALARM" },
-	{ 0x00000008, "TIMER" },
-	{ 0x00000004, "GPIO" },
-	{ 0x00000002, "INT" },
-	{ 0x00000001, "RPC" },
-	{ 0x00000000, "NONE" },
-};
-
-struct sym wakeup_int_syms[] = {
-	{ 0, "MDDI_EXT" },
-	{ 1, "MDDI_PRI" },
-	{ 2, "MDDI_CLIENT"},
-	{ 3, "USB_OTG" },
-	{ 4, "I2CC" },
-	{ 5, "SDC1_0" },
-	{ 6, "SDC1_1" },
-	{ 7, "SDC2_0" },
-	{ 8, "SDC2_1" },
-	{ 9, "ADSP_A9A11" },
-	{ 10, "UART1" },
-	{ 11, "UART2" },
-	{ 12, "UART3" },
-	{ 13, "DP_RX_DATA" },
-	{ 14, "DP_RX_DATA2" },
-	{ 15, "DP_RX_DATA3" },
-	{ 16, "DM_UART" },
-	{ 17, "DM_DP_RX_DATA" },
-	{ 18, "KEYSENSE" },
-	{ 19, "HSSD" },
-	{ 20, "NAND_WR_ER_DONE" },
-	{ 21, "NAND_OP_DONE" },
-	{ 22, "TCHSCRN1" },
-	{ 23, "TCHSCRN2" },
-	{ 24, "TCHSCRN_SSBI" },
-	{ 25, "USB_HS" },
-	{ 26, "UART2_DM_RX" },
-	{ 27, "UART2_DM" },
-	{ 28, "SDC4_1" },
-	{ 29, "SDC4_0" },
-	{ 30, "SDC3_1" },
-	{ 31, "SDC3_0" },
-};
-
-struct sym smsm_syms[] = {
-	{ 0x80000000, "UN" },
-	{ 0x7F000000, "ERR" },
-	{ 0x00800000, "SMLP" },
-	{ 0x00400000, "ADWN" },
-	{ 0x00200000, "PWRS" },
-	{ 0x00100000, "DWLD" },
-	{ 0x00080000, "SRBT" },
-	{ 0x00040000, "SDWN" },
-	{ 0x00020000, "ARBT" },
-	{ 0x00010000, "REL" },
-	{ 0x00008000, "SLE" },
-	{ 0x00004000, "SLP" },
-	{ 0x00002000, "WFPI" },
-	{ 0x00001000, "EEX" },
-	{ 0x00000800, "TIN" },
-	{ 0x00000400, "TWT" },
-	{ 0x00000200, "PWRC" },
-	{ 0x00000100, "RUN" },
-	{ 0x00000080, "SA" },
-	{ 0x00000040, "RES" },
-	{ 0x00000020, "RIN" },
-	{ 0x00000010, "RWT" },
-	{ 0x00000008, "SIN" },
-	{ 0x00000004, "SWT" },
-	{ 0x00000002, "OE" },
-	{ 0x00000001, "I" },
-};
-
-/* never reorder */
-struct sym voter_d2_syms[] = {
-	{ 0x00000001, NULL },
-	{ 0x00000002, NULL },
-	{ 0x00000004, NULL },
-	{ 0x00000008, NULL },
-	{ 0x00000010, NULL },
-	{ 0x00000020, NULL },
-	{ 0x00000040, NULL },
-	{ 0x00000080, NULL },
-	{ 0x00000100, NULL },
-	{ 0x00000200, NULL },
-	{ 0x00000400, NULL },
-	{ 0x00000800, NULL },
-	{ 0x00001000, NULL },
-	{ 0x00002000, NULL },
-	{ 0x00004000, NULL },
-	{ 0x00008000, NULL },
-	{ 0x00010000, NULL },
-	{ 0x00020000, NULL },
-	{ 0x00040000, NULL },
-	{ 0x00080000, NULL },
-	{ 0x00100000, NULL },
-	{ 0x00200000, NULL },
-	{ 0x00400000, NULL },
-	{ 0x00800000, NULL },
-	{ 0x01000000, NULL },
-	{ 0x02000000, NULL },
-	{ 0x04000000, NULL },
-	{ 0x08000000, NULL },
-	{ 0x10000000, NULL },
-	{ 0x20000000, NULL },
-	{ 0x40000000, NULL },
-	{ 0x80000000, NULL },
-};
-
-/* never reorder */
-struct sym voter_d3_syms[] = {
-	{ 0x00000001, NULL },
-	{ 0x00000002, NULL },
-	{ 0x00000004, NULL },
-	{ 0x00000008, NULL },
-	{ 0x00000010, NULL },
-	{ 0x00000020, NULL },
-	{ 0x00000040, NULL },
-	{ 0x00000080, NULL },
-	{ 0x00000100, NULL },
-	{ 0x00000200, NULL },
-	{ 0x00000400, NULL },
-	{ 0x00000800, NULL },
-	{ 0x00001000, NULL },
-	{ 0x00002000, NULL },
-	{ 0x00004000, NULL },
-	{ 0x00008000, NULL },
-	{ 0x00010000, NULL },
-	{ 0x00020000, NULL },
-	{ 0x00040000, NULL },
-	{ 0x00080000, NULL },
-	{ 0x00100000, NULL },
-	{ 0x00200000, NULL },
-	{ 0x00400000, NULL },
-	{ 0x00800000, NULL },
-	{ 0x01000000, NULL },
-	{ 0x02000000, NULL },
-	{ 0x04000000, NULL },
-	{ 0x08000000, NULL },
-	{ 0x10000000, NULL },
-	{ 0x20000000, NULL },
-	{ 0x40000000, NULL },
-	{ 0x80000000, NULL },
-};
-
-struct sym dem_state_master_syms[] = {
-	{ 0, "INIT" },
-	{ 1, "RUN" },
-	{ 2, "SLEEP_WAIT" },
-	{ 3, "SLEEP_CONFIRMED" },
-	{ 4, "SLEEP_EXIT" },
-	{ 5, "RSA" },
-	{ 6, "EARLY_EXIT" },
-	{ 7, "RSA_DELAYED" },
-	{ 8, "RSA_CHECK_INTS" },
-	{ 9, "RSA_CONFIRMED" },
-	{ 10, "RSA_WAKING" },
-	{ 11, "RSA_RESTORE" },
-	{ 12, "RESET" },
-};
-
-struct sym dem_state_slave_syms[] = {
-	{ 0, "INIT" },
-	{ 1, "RUN" },
-	{ 2, "SLEEP_WAIT" },
-	{ 3, "SLEEP_EXIT" },
-	{ 4, "SLEEP_RUN_PENDING" },
-	{ 5, "POWER_COLLAPSE" },
-	{ 6, "CHECK_INTERRUPTS" },
-	{ 7, "SWFI" },
-	{ 8, "WFPI" },
-	{ 9, "EARLY_EXIT" },
-	{ 10, "RESET_RECOVER" },
-	{ 11, "RESET_ACKNOWLEDGE" },
-	{ 12, "ERROR" },
-};
-
-struct sym smsm_entry_type_syms[] = {
-	{ 0, "SMSM_APPS_STATE" },
-	{ 1, "SMSM_MODEM_STATE" },
-	{ 2, "SMSM_Q6_STATE" },
-	{ 3, "SMSM_APPS_DEM" },
-	{ 4, "SMSM_MODEM_DEM" },
-	{ 5, "SMSM_Q6_DEM" },
-	{ 6, "SMSM_POWER_MASTER_DEM" },
-	{ 7, "SMSM_TIME_MASTER_DEM" },
-};
-
-struct sym smsm_state_syms[] = {
-	{ 0x00000001, "INIT" },
-	{ 0x00000002, "OSENTERED" },
-	{ 0x00000004, "SMDWAIT" },
-	{ 0x00000008, "SMDINIT" },
-	{ 0x00000010, "RPCWAIT" },
-	{ 0x00000020, "RPCINIT" },
-	{ 0x00000040, "RESET" },
-	{ 0x00000080, "RSA" },
-	{ 0x00000100, "RUN" },
-	{ 0x00000200, "PWRC" },
-	{ 0x00000400, "TIMEWAIT" },
-	{ 0x00000800, "TIMEINIT" },
-	{ 0x00001000, "PWRC_EARLY_EXIT" },
-	{ 0x00002000, "WFPI" },
-	{ 0x00004000, "SLEEP" },
-	{ 0x00008000, "SLEEPEXIT" },
-	{ 0x00010000, "OEMSBL_RELEASE" },
-	{ 0x00020000, "APPS_REBOOT" },
-	{ 0x00040000, "SYSTEM_POWER_DOWN" },
-	{ 0x00080000, "SYSTEM_REBOOT" },
-	{ 0x00100000, "SYSTEM_DOWNLOAD" },
-	{ 0x00200000, "PWRC_SUSPEND" },
-	{ 0x00400000, "APPS_SHUTDOWN" },
-	{ 0x00800000, "SMD_LOOPBACK" },
-	{ 0x01000000, "RUN_QUIET" },
-	{ 0x02000000, "MODEM_WAIT" },
-	{ 0x04000000, "MODEM_BREAK" },
-	{ 0x08000000, "MODEM_CONTINUE" },
-	{ 0x80000000, "UNKNOWN" },
-};
-
-#define ID_SYM 0
-#define BASE_SYM 1
-#define EVENT_SYM 2
-#define ONCRPC_SYM 3
-#define WAKEUP_SYM 4
-#define WAKEUP_INT_SYM 5
-#define SMSM_SYM 6
-#define VOTER_D2_SYM 7
-#define VOTER_D3_SYM 8
-#define DEM_STATE_MASTER_SYM 9
-#define DEM_STATE_SLAVE_SYM 10
-#define SMSM_ENTRY_TYPE_SYM 11
-#define SMSM_STATE_SYM 12
-
 static struct sym_tbl {
 	struct sym *data;
 	int size;
@@ -855,46 +531,12 @@ static struct sym_tbl {
 	{ id_syms, ARRAY_SIZE(id_syms) },
 	{ base_syms, ARRAY_SIZE(base_syms) },
 	{ event_syms, ARRAY_SIZE(event_syms) },
-	{ oncrpc_syms, ARRAY_SIZE(oncrpc_syms) },
-	{ wakeup_syms, ARRAY_SIZE(wakeup_syms) },
-	{ wakeup_int_syms, ARRAY_SIZE(wakeup_int_syms) },
-	{ smsm_syms, ARRAY_SIZE(smsm_syms) },
-	{ voter_d2_syms, ARRAY_SIZE(voter_d2_syms) },
-	{ voter_d3_syms, ARRAY_SIZE(voter_d3_syms) },
-	{ dem_state_master_syms, ARRAY_SIZE(dem_state_master_syms) },
-	{ dem_state_slave_syms, ARRAY_SIZE(dem_state_slave_syms) },
-	{ smsm_entry_type_syms, ARRAY_SIZE(smsm_entry_type_syms) },
-	{ smsm_state_syms, ARRAY_SIZE(smsm_state_syms) },
+	{ oncrpc_syms, ARRAY_SIZE(oncrpc_syms) }
 };
-
-static void find_voters(void)
-{
-	void *x, *next;
-	unsigned size;
-	int i = 0, j = 0;
-
-	x = smem_get_entry(SMEM_SLEEP_STATIC, &size);
-	next = x;
-	while (next && (next < (x + size)) &&
-	       ((i + j) < (ARRAY_SIZE(voter_d3_syms) +
-			   ARRAY_SIZE(voter_d2_syms)))) {
-
-		if (i < ARRAY_SIZE(voter_d3_syms)) {
-			voter_d3_syms[i].str = (char *) next;
-			i++;
-		} else if (i >= ARRAY_SIZE(voter_d3_syms) &&
-			   j < ARRAY_SIZE(voter_d2_syms)) {
-			voter_d2_syms[j].str = (char *) next;
-			j++;
-		}
-
-		next += 9;
-	}
-}
 
 #define hash(val) (val % HSIZE)
 
-static void init_syms(void)
+static void init_tbl(void)
 {
 	int i;
 	int j;
@@ -903,12 +545,13 @@ static void init_syms(void)
 		for (j = 0; j < HSIZE; ++j)
 			INIT_HLIST_HEAD(&tbl[i].hlist[j]);
 
-	for (i = 0; i < ARRAY_SIZE(tbl); ++i)
+	for (i = 0; i < ARRAY_SIZE(tbl); ++i) {
 		for (j = 0; j < tbl[i].size; ++j) {
 			INIT_HLIST_NODE(&tbl[i].data[j].node);
 			hlist_add_head(&tbl[i].data[j].node,
 				       &tbl[i].hlist[hash(tbl[i].data[j].val)]);
 		}
+	}
 }
 
 static char *find_sym(uint32_t id, uint32_t val)
@@ -924,9 +567,8 @@ static char *find_sym(uint32_t id, uint32_t val)
 
 	return 0;
 }
-
 #else
-static void init_syms(void) {}
+static void init_tbl(void) {}
 #endif
 
 static inline unsigned int read_timestamp(void)
@@ -973,8 +615,6 @@ static void smem_log_event_from_user(struct smem_log_inst *inst,
 					identifier;
 				timetick = read_timestamp();
 				first = 0;
-			} else {
-				identifier |= SMEM_LOG_CONT;
 			}
 			inst->smem_log_cur_events[idx].identifier =
 				identifier;
@@ -1075,7 +715,12 @@ static void _smem_log_event6(
 void smem_log_event(uint32_t id, uint32_t data1, uint32_t data2,
 		    uint32_t data3)
 {
+	// RPC router ...
 	_smem_log_event(smem_log_events, smem_log_idx,
+			&remote_spinlock, SMEM_LOG_NUM_ENTRIES,
+			id, data1, data2, data3);
+	
+	_smem_log_event(smem_log_RPC_events, smem_log_RPC_idx,
 			&remote_spinlock, SMEM_LOG_NUM_ENTRIES,
 			id, data1, data2, data3);
 }
@@ -1084,7 +729,12 @@ void smem_log_event6(uint32_t id, uint32_t data1, uint32_t data2,
 		     uint32_t data3, uint32_t data4, uint32_t data5,
 		     uint32_t data6)
 {
+	// RPC
 	_smem_log_event6(smem_log_events, smem_log_idx,
+			 &remote_spinlock, SMEM_LOG_NUM_ENTRIES,
+			 id, data1, data2, data3, data4, data5, data6);
+	
+	_smem_log_event6(smem_log_RPC_events, smem_log_RPC_idx,
 			 &remote_spinlock, SMEM_LOG_NUM_ENTRIES,
 			 id, data1, data2, data3, data4, data5, data6);
 }
@@ -1119,6 +769,16 @@ static int _smem_log_init(void)
 		return -EIO;
 	}
 
+	// +++ FIH_ADQ +++, added by henry.wang
+	printk(KERN_INFO "FIH DEBUG:  smem_log_events = 0x%x, smem_log_idx = 0x%x\r\n", (unsigned int)smem_log_events, (unsigned int)smem_log_idx);
+	
+	smem_log_RPC_events = (struct smem_log_item *)(smem_alloc( SMEM_ID_VENDOR2, 
+                  sizeof(struct smem_log_item ) * (SMEM_LOG_NUM_ENTRIES + 1) ) );
+	smem_log_RPC_idx  = ( uint32_t *)(smem_log_RPC_events + SMEM_LOG_NUM_ENTRIES);
+
+ 	printk(KERN_INFO "FIH DEBUG:  smem_log_RPC_events = 0x%x, smem_log_RPC_idx = 0x%x\r\n", (unsigned int)smem_log_RPC_events, (unsigned int)smem_log_RPC_idx);
+	// --- FIH_ADQ ---, ended by henry.wang
+		
 	smem_log_static_events =
 		(struct smem_log_item *)
 		smem_alloc(SMEM_SMEM_STATIC_LOG_EVENTS,
@@ -1135,7 +795,7 @@ static int _smem_log_init(void)
 	remote_spin_lock_init(&remote_spinlock_static,
 			      SMEM_SPINLOCK_STATIC_LOG);
 
-	init_syms();
+	init_tbl();
 
 	return 0;
 }
@@ -1252,9 +912,21 @@ static ssize_t smem_log_read(struct file *fp, char __user *buf,
 static ssize_t smem_log_write_bin(struct file *fp, const char __user *buf,
 			 size_t count, loff_t *pos)
 {
+	struct smem_log_inst *inst;
+	
 	if (count < sizeof(struct smem_log_item))
 		return -EINVAL;
 
+	smem_log_event_from_user(fp->private_data, buf,
+				 sizeof(struct smem_log_item),
+				 count / sizeof(struct smem_log_item));
+
+	// added by store to backup region
+	inst = fp->private_data;
+	
+	inst->smem_log_cur_idx = smem_log_RPC_idx;
+	inst->smem_log_cur_events = smem_log_RPC_events;
+	
 	smem_log_event_from_user(fp->private_data, buf,
 				 sizeof(struct smem_log_item),
 				 count / sizeof(struct smem_log_item));
@@ -1444,7 +1116,7 @@ static struct miscdevice smem_log_dev = {
 
 static int debug_dump(char *buf, int max)
 {
-	unsigned int idx;
+	int idx;
 	int orig_idx;
 	unsigned long flags;
 	int i = 0;
@@ -1455,18 +1127,15 @@ static int debug_dump(char *buf, int max)
 	idx = orig_idx;
 
 	while (1) {
-		idx++;
-		if (idx > SMEM_LOG_NUM_ENTRIES - 1)
-			idx = 0;
+		idx--;
+		if (idx < 0)
+			idx = SMEM_LOG_NUM_ENTRIES - 1;
 		if (idx == orig_idx)
 			break;
 
 		if (idx < SMEM_LOG_NUM_ENTRIES) {
-			if (!smem_log_events[idx].identifier)
-				continue;
-
 			i += scnprintf(buf + i, max - i,
-			       "%08x %08x %08x %08x %08x\n",
+			       "0x%x 0x%x 0x%x 0x%x 0x%x\n",
 			       smem_log_events[idx].identifier,
 			       smem_log_events[idx].timetick,
 			       smem_log_events[idx].data1,
@@ -1482,7 +1151,7 @@ static int debug_dump(char *buf, int max)
 
 static int debug_dump_sym(char *buf, int max)
 {
-	unsigned int idx;
+	int idx;
 	int orig_idx;
 	unsigned long flags;
 	int i = 0;
@@ -1490,9 +1159,10 @@ static int debug_dump_sym(char *buf, int max)
 	char *proc;
 	char *sub;
 	char *id;
-	char *sym = NULL;
+	char *oncrpc;
 
-	uint32_t data[3];
+	uint32_t more[3];
+	char cont = 0;
 
 	uint32_t proc_val = 0;
 	uint32_t sub_val = 0;
@@ -1502,35 +1172,20 @@ static int debug_dump_sym(char *buf, int max)
 	uint32_t data2 = 0;
 	uint32_t data3 = 0;
 
-	int k;
-
-	find_voters(); /* need to call each time in case voters come and go */
-
-	i += scnprintf(buf + i, max - i, "Voters:\n");
-	for (k = 0; k < ARRAY_SIZE(voter_d3_syms); ++k)
-		if (voter_d3_syms[k].str)
-			i += scnprintf(buf + i, max - i, "%s ",
-				       voter_d3_syms[k].str);
-	for (k = 0; k < ARRAY_SIZE(voter_d2_syms); ++k)
-		if (voter_d2_syms[k].str)
-			i += scnprintf(buf + i, max - i, "%s ",
-				       voter_d2_syms[k].str);
-	i += scnprintf(buf + i, max - i, "\n");
-
 	remote_spin_lock_irqsave(&remote_spinlock, flags);
 
 	orig_idx = *smem_log_idx;
 	idx = orig_idx;
 
 	while (1) {
-		idx++;
-		if (idx > SMEM_LOG_NUM_ENTRIES - 1)
-			idx = 0;
-		if (idx == orig_idx) {
-			i += scnprintf(buf + i, max - i, "\n");
+		idx--;
+		if (idx < 0)
+			idx = SMEM_LOG_NUM_ENTRIES - 1;
+		if (idx == orig_idx)
 			break;
-		}
+
 		if (idx < SMEM_LOG_NUM_ENTRIES) {
+
 			if (!smem_log_events[idx].identifier)
 				continue;
 
@@ -1542,367 +1197,241 @@ static int debug_dump_sym(char *buf, int max)
 			data2 = smem_log_events[idx].data2;
 			data3 = smem_log_events[idx].data3;
 
-			if (!(proc_val & SMEM_LOG_CONT)) {
-				i += scnprintf(buf + i, max - i, "\n");
+			if (proc_val == 0x10000000
+			    && cont == 0) {
+				more[0] = data1;
+				more[1] = data2;
+				more[2] = data3;
+
+				cont = 1;
+
+				continue;
+			}
 
 				proc = find_sym(ID_SYM, proc_val);
 
 				if (proc)
 					i += scnprintf(buf + i, max - i,
-						       "%4s: ",
+					       "%s: ",
 						       proc);
 				else
 					i += scnprintf(buf + i, max - i,
-						       "%04x: ",
+					       "0x%x ",
 						       PROC &
-						       smem_log_events[idx].
-						       identifier);
+					       smem_log_events[idx].identifier);
 
 				i += scnprintf(buf + i, max - i,
-					       "%10u ",
+				       "%d ",
 					       smem_log_events[idx].timetick);
 
 				sub = find_sym(BASE_SYM, sub_val);
 
 				if (sub)
 					i += scnprintf(buf + i, max - i,
-						       "%9s: ",
+					       "%s: ",
 						       sub);
 				else
 					i += scnprintf(buf + i, max - i,
-						       "%08x: ",
+					       "0x%x ",
 						       sub_val);
 
 				id = find_sym(EVENT_SYM, id_val);
 
 				if (id)
 					i += scnprintf(buf + i, max - i,
-						       "%11s: ",
+					       "%s: ",
 						       id);
 				else
 					i += scnprintf(buf + i, max - i,
-						       "%08x: ",
+					       "0x%x ",
 						       id_only_val);
-			}
 
-			if ((proc_val & SMEM_LOG_CONT) &&
-			    (id_val == ONCRPC_LOG_EVENT_STD_CALL ||
-			     id_val == ONCRPC_LOG_EVENT_STD_REPLY)) {
-				data[0] = data1;
-				data[1] = data2;
-				data[2] = data3;
-				i += scnprintf(buf + i, max - i,
-					       " %.16s",
-					       (char *) data);
-			} else if (proc_val & SMEM_LOG_CONT) {
-				i += scnprintf(buf + i, max - i,
-					       " %08x %08x %08x",
-					       data1,
-					       data2,
-					       data3);
-			} else if (id_val == ONCRPC_LOG_EVENT_STD_CALL) {
-				sym = find_sym(ONCRPC_SYM, data2);
+			if (id_val == ONCRPC_LOG_EVENT_STD_CALL) {
+				oncrpc = find_sym(ONCRPC_SYM, data2);
 
-				if (sym)
+				if (oncrpc)
 					i += scnprintf(buf + i, max - i,
-						       "xid:%4i %8s proc:%3i",
+						       "0x%x %s proc:%i",
 						       data1,
-						       sym,
+						       oncrpc,
 						       data3);
 				else
 					i += scnprintf(buf + i, max - i,
-						       "xid:%4i %08x proc:%3i",
+						       "0x%x 0x%x 0x%x",
 						       data1,
 						       data2,
 						       data3);
-#if defined(CONFIG_MSM_N_WAY_SMSM)
-			} else if (id_val == DEM_STATE_CHANGE) {
-				if (data1 == 1) {
-					i += scnprintf(buf + i,
-						       max - i,
-						       "MASTER: ");
-					sym = find_sym(DEM_STATE_MASTER_SYM,
-						       data2);
-				} else if (data1 == 0) {
-					i += scnprintf(buf + i,
-						       max - i,
-						       " SLAVE: ");
-					sym = find_sym(DEM_STATE_SLAVE_SYM,
-						       data2);
-				} else {
-					i += scnprintf(buf + i,
-						       max - i,
-						       "%x: ",
-						       data1);
-					sym = NULL;
-				}
-				if (sym)
-					i += scnprintf(buf + i,
-						       max - i,
-						       "from:%s ",
-						       sym);
-				else
-					i += scnprintf(buf + i,
-						       max - i,
-						       "from:0x%x ",
-						       data2);
 
-				if (data1 == 1)
-					sym = find_sym(DEM_STATE_MASTER_SYM,
-						       data3);
-				else if (data1 == 0)
-					sym = find_sym(DEM_STATE_SLAVE_SYM,
-						       data3);
-				else
-					sym = NULL;
-				if (sym)
-					i += scnprintf(buf + i,
-						       max - i,
-						       "to:%s ",
-						       sym);
-				else
-					i += scnprintf(buf + i,
-						       max - i,
-						       "to:0x%x ",
-						       data3);
-
-			} else if (id_val == DEM_STATE_MACHINE_ENTER) {
-				i += scnprintf(buf + i,
-					       max - i,
-					       "swfi:%i timer:%i manexit:%i",
-					       data1, data2, data3);
-
-			} else if (id_val == DEM_TIME_SYNC_REQUEST ||
-				   id_val == DEM_TIME_SYNC_POLL ||
-				   id_val == DEM_TIME_SYNC_INIT) {
-				sym = find_sym(SMSM_ENTRY_TYPE_SYM,
-					       data1);
-				if (sym)
-					i += scnprintf(buf + i,
-						       max - i,
-						       "hostid:%s",
-						       sym);
-				else
-					i += scnprintf(buf + i,
-						       max - i,
-						       "hostid:%x",
-						       data1);
-
-			} else if (id_val == DEM_TIME_SYNC_START ||
-				   id_val == DEM_TIME_SYNC_SEND_VALUE) {
-				unsigned mask = 0x1;
-				unsigned tmp = 0;
-				if (id_val == DEM_TIME_SYNC_START)
-					i += scnprintf(buf + i,
-						       max - i,
-						       "req:");
-				else
-					i += scnprintf(buf + i,
-						       max - i,
-						       "pol:");
-				while (mask) {
-					if (mask & data1) {
-						sym = find_sym(
-							SMSM_ENTRY_TYPE_SYM,
-							tmp);
-						if (sym)
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%s ",
-								       sym);
-						else
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%i ",
-								       tmp);
-					}
-					mask <<= 1;
-					tmp++;
-				}
-				if (id_val == DEM_TIME_SYNC_SEND_VALUE)
-					i += scnprintf(buf + i,
-						       max - i,
-						       "tick:%x",
-						       data2);
-			} else if (id_val == DEM_SMSM_ISR) {
-				unsigned vals[] = {data2, data3};
-				unsigned j;
-				unsigned mask;
-				unsigned tmp;
-				unsigned once;
-				sym = find_sym(SMSM_ENTRY_TYPE_SYM,
-					       data1);
-				if (sym)
-					i += scnprintf(buf + i,
-						       max - i,
-						       "%s ",
-						       sym);
-				else
-					i += scnprintf(buf + i,
-						       max - i,
-						       "%x ",
-						       data1);
-
-				for (j = 0; j < ARRAY_SIZE(vals); ++j) {
-					i += scnprintf(buf + i, max - i, "[");
-					mask = 0x80000000;
-					once = 0;
-					while (mask) {
-						tmp = vals[j] & mask;
-						mask >>= 1;
-						if (!tmp)
-							continue;
-						sym = find_sym(SMSM_STATE_SYM,
-							       tmp);
-
-						if (once)
-							i += scnprintf(buf + i,
-								       max - i,
-								       " ");
-						if (sym)
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%s",
-								       sym);
-						else
-							i += scnprintf(buf + i,
-								       max - i,
-								       "0x%x",
-								       tmp);
-						once = 1;
-					}
-					i += scnprintf(buf + i, max - i, "] ");
-				}
-#else
-			} else if (id_val == DEMAPPS_WAKEUP_REASON) {
-				unsigned mask = 0x80000000;
-				unsigned tmp = 0;
-				while (mask) {
-					tmp = data1 & mask;
-					mask >>= 1;
-					if (!tmp)
-						continue;
-					sym = find_sym(WAKEUP_SYM, tmp);
-					if (sym)
-						i += scnprintf(buf + i,
-							       max - i,
-							       "%s ",
-							       sym);
-					else
-						i += scnprintf(buf + i,
-							       max - i,
-							       "%08x ",
-							       tmp);
-				}
-				i += scnprintf(buf + i, max - i,
-					       "%08x %08x",
-					       data2,
-					       data3);
-			} else if (id_val == DEMMOD_APPS_WAKEUP_INT) {
-				sym = find_sym(WAKEUP_INT_SYM, data1);
-
-				if (sym)
-					i += scnprintf(buf + i, max - i,
-						       "%s %08x %08x",
-						       sym,
-						       data2,
-						       data3);
-				else
-					i += scnprintf(buf + i, max - i,
-						       "%08x %08x %08x",
-						       data1,
-						       data2,
-						       data3);
-			} else if (id_val == DEM_NO_SLEEP ||
-				   id_val == NO_SLEEP_NEW) {
-				unsigned vals[] = {data3, data2};
-				unsigned j;
-				unsigned mask;
-				unsigned tmp;
-				unsigned once;
-				i += scnprintf(buf + i, max - i, "%08x ",
-					       data1);
-				i += scnprintf(buf + i, max - i, "[");
-				once = 0;
-				for (j = 0; j < ARRAY_SIZE(vals); ++j) {
-					mask = 0x00000001;
-					while (mask) {
-						tmp = vals[j] & mask;
-						mask <<= 1;
-						if (!tmp)
-							continue;
-						if (j == 0)
-							sym = find_sym(
-								VOTER_D3_SYM,
-								tmp);
-						else
-							sym = find_sym(
-								VOTER_D2_SYM,
-								tmp);
-
-						if (once)
-							i += scnprintf(buf + i,
-								       max - i,
-								       " ");
-						if (sym)
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%s",
-								       sym);
-						else
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%08x",
-								       tmp);
-						once = 1;
-					}
-				}
-				i += scnprintf(buf + i, max - i, "] ");
-#endif
-			} else if (id_val == SMEM_LOG_EVENT_CB) {
-				unsigned vals[] = {data2, data3};
-				unsigned j;
-				unsigned mask;
-				unsigned tmp;
-				unsigned once;
-				i += scnprintf(buf + i, max - i, "%08x ",
-					       data1);
-				for (j = 0; j < ARRAY_SIZE(vals); ++j) {
-					i += scnprintf(buf + i, max - i, "[");
-					mask = 0x80000000;
-					once = 0;
-					while (mask) {
-						tmp = vals[j] & mask;
-						mask >>= 1;
-						if (!tmp)
-							continue;
-						sym = find_sym(SMSM_SYM, tmp);
-
-						if (once)
-							i += scnprintf(buf + i,
-								       max - i,
-								       " ");
-						if (sym)
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%s",
-								       sym);
-						else
-							i += scnprintf(buf + i,
-								       max - i,
-								       "%08x",
-								       tmp);
-						once = 1;
-					}
-					i += scnprintf(buf + i, max - i, "] ");
-				}
 			} else {
 				i += scnprintf(buf + i, max - i,
-					       "%08x %08x %08x",
+					       "0x%x 0x%x 0x%x",
+					       data1,
+					       data2,
+						       data3);
+			}
+
+			if (cont &&
+			    (id_val == ONCRPC_LOG_EVENT_STD_CALL ||
+			     id_val == ONCRPC_LOG_EVENT_STD_REPLY))
+				i += scnprintf(buf + i, max - i,
+					       " %.16s",
+					       (char *) more);
+			else if (cont)
+				i += scnprintf(buf + i, max - i,
+					       " 0x%x 0x%x 0x%x",
+					       more[0],
+					       more[1],
+					       more[2]);
+
+			cont = 0;
+
+			i += scnprintf(buf + i, max - i, "\n");
+					}
+				}
+
+	remote_spin_unlock_irqrestore(&remote_spinlock, flags);
+
+	return i;
+}
+
+// added by henry.wang, 2009/08/03 to dump backup region
+static int debug_dump_sym_backup(char *buf, int max)
+{
+	int idx;
+	int orig_idx;
+	unsigned long flags;
+	int i = 0;
+
+	char *proc;
+	char *sub;
+	char *id;
+	char *oncrpc;
+
+	uint32_t more[3];
+	char cont = 0;
+
+	uint32_t proc_val = 0;
+	uint32_t sub_val = 0;
+	uint32_t id_val = 0;
+	uint32_t id_only_val = 0;
+	uint32_t data1 = 0;
+	uint32_t data2 = 0;
+	uint32_t data3 = 0;
+
+	remote_spin_lock_irqsave(&remote_spinlock, flags);
+
+	orig_idx = *smem_log_RPC_idx;
+	idx = orig_idx;
+
+	while (1) {
+		idx--;
+		if (idx < 0)
+			idx = SMEM_LOG_NUM_ENTRIES - 1;
+		if (idx == orig_idx)
+			break;
+
+		if (idx < SMEM_LOG_NUM_ENTRIES) {
+
+			if (!smem_log_RPC_events[idx].identifier)
+				continue;
+
+			proc_val = PROC & smem_log_RPC_events[idx].identifier;
+			sub_val = SUB & smem_log_RPC_events[idx].identifier;
+			id_val = (SUB | ID) & smem_log_RPC_events[idx].identifier;
+			id_only_val = ID & smem_log_RPC_events[idx].identifier;
+			data1 = smem_log_RPC_events[idx].data1;
+			data2 = smem_log_RPC_events[idx].data2;
+			data3 = smem_log_RPC_events[idx].data3;
+
+			if (proc_val == 0x10000000
+			    && cont == 0) {
+				more[0] = data1;
+				more[1] = data2;
+				more[2] = data3;
+
+				cont = 1;
+
+						continue;
+				}
+
+			proc = find_sym(ID_SYM, proc_val);
+
+			if (proc)
+				i += scnprintf(buf + i, max - i,
+					       "%s: ",
+					       proc);
+			else
+				i += scnprintf(buf + i, max - i,
+					       "0x%x ",
+					       PROC &
+					       smem_log_RPC_events[idx].identifier);
+
+					i += scnprintf(buf + i, max - i,
+				       "%d ",
+				       smem_log_RPC_events[idx].timetick);
+
+			sub = find_sym(BASE_SYM, sub_val);
+
+			if (sub)
+				i += scnprintf(buf + i, max - i,
+					       "%s: ",
+					       sub);
+			else
+				i += scnprintf(buf + i, max - i,
+					       "0x%x ",
+					       sub_val);
+
+			id = find_sym(EVENT_SYM, id_val);
+
+			if (id)
+				i += scnprintf(buf + i, max - i,
+					       "%s: ",
+					       id);
+			else
+				i += scnprintf(buf + i, max - i,
+					       "0x%x ",
+					       id_only_val);
+
+			if (id_val == ONCRPC_LOG_EVENT_STD_CALL) {
+				oncrpc = find_sym(ONCRPC_SYM, data2);
+
+				if (oncrpc)
+					i += scnprintf(buf + i, max - i,
+						       "0x%x %s proc:%i",
+						       data1,
+						       oncrpc,
+						       data3);
+				else
+					i += scnprintf(buf + i, max - i,
+						       "0x%x 0x%x 0x%x",
+						       data1,
+						       data2,
+						       data3);
+
+			} else {
+				i += scnprintf(buf + i, max - i,
+					       "0x%x 0x%x 0x%x",
 					       data1,
 					       data2,
 					       data3);
 			}
+
+			if (cont &&
+			    (id_val == ONCRPC_LOG_EVENT_STD_CALL ||
+			     id_val == ONCRPC_LOG_EVENT_STD_REPLY))
+				i += scnprintf(buf + i, max - i,
+					       " %.16s",
+					       (char *) more);
+			else if (cont)
+				i += scnprintf(buf + i, max - i,
+					       " 0x%x 0x%x 0x%x",
+					       more[0],
+					       more[1],
+					       more[2]);
+
+			cont = 0;
+
+			i += scnprintf(buf + i, max - i, "\n");
 		}
 	}
 
@@ -1910,10 +1439,11 @@ static int debug_dump_sym(char *buf, int max)
 
 	return i;
 }
+// --- FIH_ADQ ---, added by henry.wang
 
 static int debug_dump_static(char *buf, int max)
 {
-	unsigned int idx;
+	int idx;
 	int orig_idx;
 	unsigned long flags;
 	int i = 0;
@@ -1924,18 +1454,15 @@ static int debug_dump_static(char *buf, int max)
 	idx = orig_idx;
 
 	while (1) {
-		idx++;
-		if (idx > SMEM_LOG_NUM_ENTRIES - 1)
-			idx = 0;
+		idx--;
+		if (idx < 0)
+			idx = SMEM_LOG_NUM_STATIC_ENTRIES - 1;
 		if (idx == orig_idx)
 			break;
 
 		if (idx < SMEM_LOG_NUM_STATIC_ENTRIES) {
-			if (!smem_log_static_events[idx].identifier)
-				continue;
-
 			i += scnprintf(buf + i, max - i,
-			       "%08x %08x %08x %08x %08x\n",
+			       "0x%x 0x%x 0x%x 0x%x 0x%x\n",
 			       smem_log_static_events[idx].identifier,
 			       smem_log_static_events[idx].timetick,
 			       smem_log_static_events[idx].data1,
@@ -1949,7 +1476,8 @@ static int debug_dump_static(char *buf, int max)
 	return i;
 }
 
-#define SMEM_LOG_ITEM_PRINT_SIZE 160
+#define SMEM_LOG_ITEM_PRINT_SIZE \
+((sizeof(struct smem_log_item) / sizeof(uint32_t)) * 12)
 
 #define SMEM_LOG_CUR_EVENTS_PRINT_SIZE \
 (SMEM_LOG_ITEM_PRINT_SIZE * SMEM_LOG_NUM_ENTRIES)
@@ -1994,6 +1522,10 @@ static void smem_log_debugfs_init(void)
 	debug_create("dump", 0444, dent, debug_dump);
 	debug_create("dump_sym", 0444, dent, debug_dump_sym);
 	debug_create("dump_static", 0444, dent, debug_dump_static);
+	
+	// +++FIH_ADQ +++, added by henry.wang, 2009/08/03 added for debug init second region
+	debug_create("dump_sym_backup", 0444, dent, debug_dump_sym_backup);
+	// --- FIH_ADQ ---
 }
 #else
 static void smem_log_debugfs_init(void) {}

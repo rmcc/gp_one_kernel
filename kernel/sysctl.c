@@ -76,7 +76,9 @@ extern int suid_dumpable;
 extern char core_pattern[];
 extern int pid_max;
 extern int min_free_kbytes;
+/* FIH_ADQ, 6370 { */
 extern int min_free_order_shift;
+/* } FIH_ADQ, 6370 */
 extern int pid_max_min, pid_max_max;
 extern int sysctl_drop_caches;
 extern int percpu_pagelist_fraction;
@@ -1024,6 +1026,7 @@ static struct ctl_table vm_table[] = {
 		.strategy	= &sysctl_intvec,
 		.extra1		= &zero,
 	},
+/* FIH_ADQ, 6370 { */
 	{
 		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "min_free_order_shift",
@@ -1032,6 +1035,7 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec
 	},
+/* } FIH_ADQ, 6370 */	
 	{
 		.ctl_name	= VM_PERCPU_PAGELIST_FRACTION,
 		.procname	= "percpu_pagelist_fraction",

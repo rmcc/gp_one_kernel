@@ -384,7 +384,9 @@ struct fb_cursor {
 
 #ifdef CONFIG_FB_BACKLIGHT
 /* Settings for the generic backlight code */
-#define FB_BACKLIGHT_LEVELS	128
+/* FIH_ADQ  added by Guorui*/	
+#define FB_BACKLIGHT_LEVELS	256
+/* FIH_ADQ  */	
 #define FB_BACKLIGHT_MAX	0xFF
 #endif
 

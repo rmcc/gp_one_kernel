@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/pm.h>
 #include <linux/init.h>
+#include <linux/marker.h>
 
 #include <asm/auxio.h>
 #include <asm/oplib.h>
@@ -673,6 +674,7 @@ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 			     "i" (__NR_clone), "r" (flags | CLONE_VM | CLONE_UNTRACED),
 			     "i" (__NR_exit),  "r" (fn), "r" (arg) :
 			     "g1", "g2", "g3", "o0", "o1", "memory", "cc");
+	trace_mark(kernel_arch_kthread_create, "pid %ld fn %p", retval, fn);
 	return retval;
 }
 

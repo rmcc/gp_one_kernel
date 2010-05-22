@@ -1,7 +1,6 @@
 /* arch/arm/mach-msm/qdsp5/adsp_driver.c
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  * Author: Iliyan Malchev <ibm@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -416,7 +415,7 @@ end:
 	kfree(data);
 	return rc;
 }
-
+//FIH_ADQ,JOE HSU,Update to 6375
 static int adsp_pmem_del(struct msm_adsp_module *module)
 {
 	struct hlist_node *node, *tmp;
@@ -477,7 +476,7 @@ static long adsp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		adev->abort = 1;
 		wake_up(&adev->event_wait);
 		break;
-
+//FIH_ADQ,JOE HSU,Update to 6375
 	case ADSP_IOCTL_UNREGISTER_PMEM:
 		return adsp_pmem_del(adev->module);
 
@@ -487,6 +486,7 @@ static long adsp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return -EINVAL;
 }
 
+//FIH_ADQ,JOE HSU,Update to 6375
 static int adsp_release(struct inode *inode, struct file *filp)
 {
 	struct adsp_device *adev = filp->private_data;

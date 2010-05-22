@@ -2,8 +2,8 @@
  *
  * Verificion code for aDSP VDEC packets from userspace.
  *
+ * Copyright (c) 2008 QUALCOMM Incorporated
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -71,7 +71,7 @@ static int pmem_fixup_high_low(unsigned short *high,
 		*size = phys_size;
 	return 0;
 }
-
+//FIH_ADQ,JOE HSU,Update to 6375
 static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 			       void *cmd_data, size_t cmd_size)
 {

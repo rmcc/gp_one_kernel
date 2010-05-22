@@ -1,0 +1,27 @@
+!if 0
+------------------------------------------------------------------------------
+ <copyright file="sources" company="Atheros">
+    Copyright (c) 2005-2008 Atheros Corporation.  All rights reserved.
+ $ATH_LICENSE_HOSTSDK0_C$
+------------------------------------------------------------------------------
+==============================================================================
+ Author(s): ="Atheros"
+==============================================================================
+!endif
+
+TARGETNAME= ar6k_htc
+TARGETTYPE= LIBRARY
+
+SOURCES= \
+    ..\htc.c \
+    ..\htc_recv.c \
+    ..\htc_services.c \
+    ar6k_events.c \
+    ar6k.c \
+    ..\htc_send.c
+    
+
+AR6K_PROJ_ROOT=..\..\..
+
+!INCLUDE $(AR6K_PROJ_ROOT)\sources.inc
+

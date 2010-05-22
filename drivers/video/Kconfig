@@ -181,8 +181,6 @@ config FB_MSM
 	tristate "MSM Frame Buffer support"
 	depends on FB  && (ARCH_MSM || ARCH_QSD)
 	select FB_BACKLIGHT if FB_MSM_BACKLIGHT
-	select NEW_LEDS
-	select LEDS_CLASS
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
@@ -193,7 +191,7 @@ if FB_MSM
 
 config FB_MSM_BACKLIGHT
 	bool "Support for backlight control"
-	default y
+	default n
 	---help---
 	  Say Y here if you want to control the backlight of your display.
 
@@ -234,122 +232,125 @@ endchoice
 config FB_MSM_EBI2
 	bool
 	default n
-
-config FB_MSM_MDDI
-	bool
-	default n
+#FIH_ADQ,JOE HSU
+#config FB_MSM_MDDI
+#	bool
+#	default n
 
 config FB_MSM_LCDC
 	bool
+	depends on FB_MSM
 	default n
+#FIH_ADQ,JOE HSU
+#config FB_MSM_EXTMDDI
+#	bool
+#	default n
 
-config FB_MSM_EXTMDDI
-	bool
-	default n
+#config FB_MSM_TVOUT
+#	bool
+#	default n
 
-config FB_MSM_TVOUT
-	bool
-	default n
+#config FB_MSM_MDDI_TOSHIBA_COMMON
+#	bool
+#	select FB_MSM_MDDI
+#	default n
 
-config FB_MSM_MDDI_TOSHIBA_COMMON
-	bool
-	select FB_MSM_MDDI
-	default n
+#config FB_MSM_MDDI_TOSHIBA_COMMON_VGA
+#	bool
+#	select FB_MSM_MDDI_TOSHIBA_COMMON
+#	default n
 
-config FB_MSM_MDDI_TOSHIBA_COMMON_VGA
-	bool
-	select FB_MSM_MDDI_TOSHIBA_COMMON
-	default n
-
-config FB_MSM_MDDI_AUTO_DETECT
-	bool
-	select FB_MSM_MDDI
-	default n
+#config FB_MSM_MDDI_AUTO_DETECT
+#	bool
+#	select FB_MSM_MDDI
+#	default n
 
 config FB_MSM_LCDC_PANEL
 	bool
 	select FB_MSM_LCDC
 	default n
 
-config FB_MSM_LCDC_PRISM_WVGA
-	bool
-	select FB_MSM_LCDC_PANEL
-	default n
+#FIH_ADQ,JOE HSU -----
+#config FB_MSM_LCDC_PRISM_WVGA
+#	bool
+#	select FB_MSM_LCDC_PANEL
+#	default n
 
-config FB_MSM_LCDC_GORDN_VGA
+config FB_MSM_LCDC_HX8352
 	bool
 	select FB_MSM_LCDC_PANEL
-	default n
+	default y
 
 choice 
 	prompt "LCD Panel"
-	default FB_MSM_MDDI_AUTO_DETECT
+	default FB_MSM_LCDC_HX8352
+#FIH_ADQ,JOE HSU
+#config FB_MSM_LCDC_PRISM_WVGA_PANEL
+#	depends on FB_MSM_LCDC_HW
+#	bool "LCDC Prism WVGA Panel"
+#	select FB_MSM_LCDC_PRISM_WVGA
+#	---help---
+#	  Support for LCDC Prism WVGA (800x480) panel
 
-config FB_MSM_LCDC_PRISM_WVGA_PANEL
-	depends on FB_MSM_LCDC_HW
-	bool "LCDC Prism WVGA Panel"
-	select FB_MSM_LCDC_PRISM_WVGA
-	---help---
-	  Support for LCDC Prism WVGA (800x480) panel
-
-config FB_MSM_LCDC_GORDON_VGA_PANEL
+config FB_MSM_LCDC_HX8352_PANEL
         depends on FB_MSM_LCDC_HW
-        bool "LCDC Gordon VGA Panel"
-        select FB_MSM_LCDC_GORDON_VGA
-         ---help---
-          Support for LCDC Gordon VGA (480x640) panel
-
-config FB_MSM_TRY_MDDI_CATCH_LCDC_PRISM
-	depends on FB_MSM_LCDC_HW
-	bool "MDDI Panel Auto Detect + LCDC Prism WVGA"
-	select FB_MSM_MDDI_AUTO_DETECT
-	select FB_MSM_LCDC_PRISM_WVGA
-	select FB_MSM_LCDC_GORDON_VGA
+        bool "LCDC HX8352 Panel"
+	select FB_MSM_LCDC_HX8352	
 	---help---
-	  Support for MDDI panel auto detect.
-	  If it can't find any MDDI panel, it will load LCDC Prism WVGA panel.
+          Support for LCDC HX8352 (240x400) panel
+#FIH_ADQ,JOE HSU	  
+#config FB_MSM_TRY_MDDI_CATCH_LCDC_PRISM
+#	depends on FB_MSM_LCDC_HW
+#	bool "MDDI Panel Auto Detect + LCDC Prism WVGA"
+#	select FB_MSM_MDDI_AUTO_DETECT
+#	select FB_MSM_LCDC_PRISM_WVGA
+#	---help---
+#	  Support for MDDI panel auto detect.
+#	  If it can't find any MDDI panel, it will load LCDC Prism WVGA panel.
 
-config FB_MSM_MDDI_PANEL_AUTO_DETECT
-	bool "MDDI Panel Auto Detect"
-	select FB_MSM_MDDI_AUTO_DETECT
-	---help---
-	  Support for MDDI panel auto detect
+#FIH_ADQ,JOE HSU +++++
 
-config FB_MSM_MDDI_PRISM_WVGA
-	bool "MDDI Prism WVGA Panel"
-	select FB_MSM_MDDI
-	---help---
-	  Support for MDDI Prism WVGA (800x480) panel
+#config FB_MSM_MDDI_PANEL_AUTO_DETECT
+#	bool "MDDI Panel Auto Detect"
+#	select FB_MSM_MDDI_AUTO_DETECT
+#	---help---
+#	  Support for MDDI panel auto detect
 
-config FB_MSM_MDDI_TOSHIBA_WVGA_PORTRAIT
-	bool "MDDI Toshiba WVGA Portrait Panel"
-	select FB_MSM_MDDI_TOSHIBA_COMMON
-	---help---
-	  Support for MDDI Toshiba WVGA (480x800) panel
+#config FB_MSM_MDDI_PRISM_WVGA
+#	bool "MDDI Prism WVGA Panel"
+#	select FB_MSM_MDDI
+#	---help---
+#	  Support for MDDI Prism WVGA (800x480) panel
 
-config FB_MSM_MDDI_TOSHIBA_VGA
-	bool "MDDI Toshiba VGA Panel"
-	select FB_MSM_MDDI_TOSHIBA_COMMON_VGA
-	---help---
-	  Support for MDDI Toshiba VGA (480x640) and QCIF (176x220) panel
+#config FB_MSM_MDDI_TOSHIBA_WVGA_PORTRAIT
+#	bool "MDDI Toshiba WVGA Portrait Panel"
+#	select FB_MSM_MDDI_TOSHIBA_COMMON
+#	---help---
+#	  Support for MDDI Toshiba WVGA (480x800) panel
 
-config FB_MSM_MDDI_TOSHIBA_WVGA
-	bool "MDDI Toshiba WVGA panel"
-	select FB_MSM_MDDI_TOSHIBA_COMMON
-	---help---
-	  Support for MDDI Tohsiba (800x480) WVGA panel
+#config FB_MSM_MDDI_TOSHIBA_VGA
+#	bool "MDDI Toshiba VGA Panel"
+#	select FB_MSM_MDDI_TOSHIBA_COMMON_VGA
+#	---help---
+#	  Support for MDDI Toshiba VGA (480x640) and QCIF (176x220) panel
 
-config FB_MSM_MDDI_SHARP_QVGA_128x128
-	bool "MDDI Sharp QVGA Dual Panel"
-	select FB_MSM_MDDI
-	---help---
-	  Support for MDDI Sharp QVGA (240x320) and 128x128 dual panel
+#config FB_MSM_MDDI_TOSHIBA_WVGA
+#	bool "MDDI Toshiba WVGA panel"
+#	select FB_MSM_MDDI_TOSHIBA_COMMON
+#	---help---
+#	  Support for MDDI Tohsiba (800x480) WVGA panel
 
-config FB_MSM_EBI2_TMD_QVGA_EPSON_QCIF
-	bool "EBI2 TMD QVGA Epson QCIF Dual Panel"
-	select FB_MSM_EBI2
-	---help---
-	  Support for EBI2 TMD QVGA (240x320) and Epson QCIF (176x220) panel
+#config FB_MSM_MDDI_SHARP_QVGA_128x128
+#	bool "MDDI Sharp QVGA Dual Panel"
+#	select FB_MSM_MDDI
+#	---help---
+#	  Support for MDDI Sharp QVGA (240x320) and 128x128 dual panel
+
+#config FB_MSM_EBI2_TMD_QVGA_EPSON_QCIF
+#	bool "EBI2 TMD QVGA Epson QCIF Dual Panel"
+#	select FB_MSM_EBI2
+#	---help---
+#	  Support for EBI2 TMD QVGA (240x320) and Epson QCIF (176x220) panel
 
 config FB_MSM_PANEL_NONE
 	bool "NONE"
@@ -426,22 +427,23 @@ config FB_MSM_TVOUT_NONE
 	  This will disable TV Out functionality.		    
 endchoice
 
+#FIH_ADQ,JOE HSU
 choice 
-	depends on  FB_MSM_MDP22
-	prompt "External MDDI"
-	default FB_MSM_EXTMDDI_SVGA
+#	depends on  FB_MSM_MDP22
+#	prompt "External MDDI"
+#	default FB_MSM_EXTMDDI_SVGA
 
-config FB_MSM_EXTMDDI_SVGA
-	bool "External MDDI SVGA"
-	select FB_MSM_MDDI
-	select FB_MSM_EXTMDDI
-	---help---
-	  Support for MSM SVGA (800x600) external MDDI panel 
+#config FB_MSM_EXTMDDI_SVGA
+#	bool "External MDDI SVGA"
+#	select FB_MSM_MDDI
+#	select FB_MSM_EXTMDDI
+#	---help---
+#	  Support for MSM SVGA (800x600) external MDDI panel 
 
-config FB_MSM_EXTMDDI_NONE
-	bool "NONE"
-	---help---
-	  This will disable External MDDI functionality.	 	   	 
+#config FB_MSM_EXTMDDI_NONE
+#	bool "NONE"
+#	---help---
+#	  This will disable External MDDI functionality.	 	   	 
 endchoice
 
 endif
@@ -675,14 +677,14 @@ config FB_CYBER2000
 config FB_APOLLO
 	bool
 	depends on (FB = y) && APOLLO
-	default y
+	default n
 	select FB_CFB_FILLRECT
 	select FB_CFB_IMAGEBLIT
 
 config FB_Q40
 	bool
 	depends on (FB = y) && Q40
-	default y
+	default n
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
@@ -874,7 +876,7 @@ config FB_STI
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
-	default y
+	default n
 	---help---
 	  STI refers to the HP "Standard Text Interface" which is a set of
 	  BIOS routines contained in a ROM chip in HP PA-RISC based machines.
@@ -900,7 +902,7 @@ config FB_HP300
 	bool
 	depends on (FB = y) && DIO
 	select FB_CFB_IMAGEBLIT
-	default y
+	default n
 
 config FB_TGA
 	tristate "TGA/SFB+ framebuffer support"
@@ -1268,7 +1270,7 @@ config FB_NVIDIA_DEBUG
 config FB_NVIDIA_BACKLIGHT
 	bool "Support for backlight control"
 	depends on FB_NVIDIA
-	default y
+	default n
 	help
 	  Say Y here if you want to control the backlight of your display.
 
@@ -1315,7 +1317,7 @@ config FB_RIVA_DEBUG
 config FB_RIVA_BACKLIGHT
 	bool "Support for backlight control"
 	depends on FB_RIVA
-	default y
+	default n
 	help
 	  Say Y here if you want to control the backlight of your display.
 
@@ -1422,7 +1424,7 @@ config FB_INTEL_I2C
 	bool "DDC/I2C for Intel framebuffer support"
 	depends on FB_INTEL
 	select FB_DDC
-	default y
+	default n
 	help
 	  Say Y here if you want DDC/I2C support for your on-board Intel graphics.
 
@@ -1594,14 +1596,14 @@ config FB_RADEON_I2C
 	bool "DDC/I2C for ATI Radeon support"
 	depends on FB_RADEON
 	select FB_DDC
-	default y
+	default n
 	help
 	  Say Y here if you want DDC/I2C support for your Radeon board. 
 
 config FB_RADEON_BACKLIGHT
 	bool "Support for backlight control"
 	depends on FB_RADEON
-	default y
+	default n
 	help
 	  Say Y here if you want to control the backlight of your display.
 
@@ -1633,7 +1635,7 @@ config FB_ATY128
 config FB_ATY128_BACKLIGHT
 	bool "Support for backlight control"
 	depends on FB_ATY128
-	default y
+	default n
 	help
 	  Say Y here if you want to control the backlight of your display.
 
@@ -1655,7 +1657,7 @@ config FB_ATY
 config FB_ATY_CT
 	bool "Mach64 CT/VT/GT/LT (incl. 3D RAGE) support"
 	depends on PCI && FB_ATY
-	default y if SPARC64 && PCI
+	default n if SPARC64 && PCI
 	help
 	  Say Y here to support use of ATI's 64-bit Rage boards (or other
 	  boards based on the Mach64 CT, VT, GT, and LT chipsets) as a
@@ -1672,7 +1674,7 @@ config FB_ATY_GENERIC_LCD
 config FB_ATY_GX
 	bool "Mach64 GX support" if PCI
 	depends on FB_ATY
-	default y if ATARI
+	default n if ATARI
 	help
 	  Say Y here to support use of the ATI Mach64 Graphics Expression
 	  board (or other boards based on the Mach64 GX chipset) as a
@@ -1683,7 +1685,7 @@ config FB_ATY_GX
 config FB_ATY_BACKLIGHT
 	bool "Support for backlight control"
 	depends on FB_ATY
-	default y
+	default n
 	help
 	  Say Y here if you want to control the backlight of your display.
 
@@ -2304,7 +2306,7 @@ config XEN_FBDEV_FRONTEND
 	select FB_SYS_IMAGEBLIT
 	select FB_SYS_FOPS
 	select FB_DEFERRED_IO
-	default y
+	default n
 	help
 	  This driver implements the front-end of the Xen virtual
 	  frame buffer driver.  It communicates with a back-end

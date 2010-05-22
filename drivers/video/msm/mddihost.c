@@ -1,58 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* drivers/video/msm/src/drv/mddi/mddihost.c
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 
 #include <linux/module.h>
@@ -114,7 +76,7 @@ void mddi_init(void)
 		mddi_host_init(MDDI_HOST_PRIM);
 		mddi_host_powered = TRUE;
 		up(&mddi_host_mutex);
-		mdelay(10);
+		msleep(100);
 	}
 }
 
@@ -361,7 +323,7 @@ boolean mddi_host_register_write_int
 
 void mddi_wait(uint16 time_ms)
 {
-	mdelay(time_ms);
+	msleep_interruptible(time_ms);
 }
 
 void mddi_client_lcd_vsync_detected(boolean detected)
@@ -400,4 +362,30 @@ void mddi_window_adjust(struct msm_fb_data_type *mfd,
 			uint16 x1, uint16 x2, uint16 y1, uint16 y2)
 {
 	mddi_window_adjust_ext(mfd, x1, x2, y1, y2, NULL);
+}
+
+void mddi_host_clock_config(struct msm_fb_data_type *mfd, struct clk *this_clk)
+{
+	static boolean mddi_host_ioclock_rate_set = FALSE;
+
+	if (!mddi_host_ioclock_rate_set) {
+		if (clk_set_max_rate(this_clk, mfd->panel_info.clk_max) < 0) {
+			if (clk_set_rate(this_clk,
+					mfd->panel_info.clk_rate) < 0)
+				goto err_mddi_clk_set;
+		} else if (clk_set_min_rate(this_clk,
+					mfd->panel_info.clk_min) < 0)
+				goto err_mddi_clk_set;
+
+		mddi_host_ioclock_rate_set = TRUE;
+	}
+
+	return;
+
+err_mddi_clk_set:
+	printk(KERN_ERR
+		"%s: can't set mddi io clk targate rate = %d min=%d max=%d\n",
+		__func__, mfd->panel_info.clk_rate,
+		mfd->panel_info.clk_min,
+		mfd->panel_info.clk_max);
 }

@@ -1,0 +1,5004 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="FUNC_Probe"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#previous#"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_Remove"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL (*pProbe)(struct _SDFUNCTION *pFunction, struct _SDDEVICE *pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">This function is called by the Busdriver when a device is inserted that can be supported by this function driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure that was passed to Busdriver
+                       via the SDIO_RegisterFunction.
+        <br>
+  pDevice   - the description of the newly inserted device.            
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE  - this function driver will suport this device
+           FALSE - this function driver will not support this device
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The Busdriver calls the Probe function of a function driver to inform it that device is
+          available for the function driver to control. The function driver should initialize the 
+          device and be pepared to acceopt any interrupts from the device before returning.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of typical Probe function callback:</font>
+  static BOOL Probe(PSDFUNCTION pFunction, PSDDEVICE pDevice) { 
+       <font face="Arial, Helvetica, sans-serif" color="#999999">...get the our context info passed into the SDIO_RegisterFunction
+</font>    PSDXXX_DRIVER_CONTEXT pFunctionContext = 
+                                (PSDXXX_DRIVER_CONTEXT)pFunction-&gt;pContext;
+    SDIO_STATUS status;
+       <font face="Arial, Helvetica, sans-serif" color="#999999">//test the identification of this device and ensure we want to support it
+</font>       <font face="Arial, Helvetica, sans-serif" color="#999999">// we can test based on class, or use more specific tests on SDIO_ManufacturerID, etc.
+</font>    if (pDevice-&gt;pId[0].SDIO_FunctionClass == XXX) {
+        DBG_PRINT(SDDBG_TRACE, ("SDIO XXX Function: Probe - card matched (0x%X/0x%X/0x%X)\n",
+                                pDevice-&gt;pId[0].SDIO_ManufacturerID,
+                                pDevice-&gt;pId[0].SDIO_ManufacturerCode,
+                                pDevice-&gt;pId[0].SDIO_FunctionNo));
+        ..
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_RegisterFunction">
+SDIO_RegisterFunction
+        </a>
+<br>
+<a href="#FUNC_Remove">
+Remove
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_Remove"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_Probe"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_BUS_MODE_CTRL"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void (*pRemove)(struct _SDFUNCTION *pFunction, struct _SDDEVICE *pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">This function is called by the Busdriver when a device controlled by this function              function driver is removed.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure that was passed to Busdriver
+                       via the SDIO_RegisterFunction.
+        <br>
+  pDevice   - the description of the device being removed.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The Busdriver calls the Remove function of a function driver to inform it that device it
+          was supporting has been removed. The device has already been removed, so no further I/O
+          to the device can be performed.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of typical Remove function callback:</font>
+    void Remove(PSDFUNCTION pFunction, PSDDEVICE pDevice) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// get the our context info passed into the SDIO_RegisterFunction
+</font>        PSDXXX_DRIVER_CONTEXT pFunctionContext = 
+                             (PSDXXX_DRIVER_CONTEXT)pFunction-&gt;pContext;
+           <font face="Arial, Helvetica, sans-serif" color="#999999">...free any acquired resources</font>s
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_RegisterFunction">
+SDIO_RegisterFunction
+        </a>
+<br>
+<a href="#FUNC_Probe">
+Probe
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_BUS_MODE_CTRL"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_Remove"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_ACK_IRQ"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_BUS_MODE_CTRL
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Set the bus mode for the SD/SDIO card.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+     This command code is used in the SDLIB_IssueConfig() API.  The command
+          alters the card's bus mode (width and clock rate) to a driver specified
+          value.  The driver must read the current bus mode flags, modify if necessary
+          and pass the value in the SDCONFIG_BUS_MODE_DATA structure. 
+              If the bus width is changed (1 or 4 bit) the caller must adjust the mode flags 
+          for the new width. Cards cannot be switched between 1/4 bit and SPI mode.  
+          Switching to or from SPI mode requires a power cycle. Adjustments to the clock 
+          rate is immediate on the next bus transaction.  The actual clock rate value is
+          limited by the host controller and is reported in the ClockRate field when the
+          command completes successfully.          
+              The bus mode change is card wide and may affect other SDIO functions on 
+          multi-function cards. Use this feature with caution. This feature should NOT be
+          used to dynamically control clock rates during runtime and should only be used
+          at card initialization.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of changing the clock rate:</font>
+    SDCONFIG_BUS_MODE_DATA  busSettings;
+    ZERO_OBJECT(busSettings);
+       <font face="Arial, Helvetica, sans-serif" color="#999999">// get current bus flags and keep the same bus width
+</font>    busSettings.BusModeFlags = SDDEVICE_GET_BUSMODE_FLAGS(pInstance-&gt;pDevice);
+    busSettings.ClockRate = 8000000;  <font face="Arial, Helvetica, sans-serif" color="#999999">// adjust clock to 8 Mhz
+</font>       <font face="Arial, Helvetica, sans-serif" color="#999999">// issue config request to override clock rate
+</font>    status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                               SDCONFIG_BUS_MODE_CTRL
+                               &amp;busSettings
+                               sizeof(SDCONFIG_BUS_MODE_DATA));
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_BUSMODE_FLAGS">
+SDDEVICE_GET_BUSMODE_FLAGS
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_ACK_IRQ"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_BUS_MODE_CTRL"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_ALLOC_SLOT_CURRENT"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_ACK_IRQ 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Acknowledge that the function's IRQ has been handled</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          indicates to the bus driver that the function driver has handled the 
+          interrupt.  The bus driver will notify the host controller to unmask the
+          interrupt source.  SDIO interrupts are level triggered and are masked at the
+          host controller level until all function drivers have indicated that they 
+          have handled their respective interrupt. This command can be issued in either
+          the IRQ handler or asynchronous IRQ handler.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of acknowledging an interrupt :</font>
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_ACK_IRQ,
+                                   NULL,
+                                   0)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_ALLOC_SLOT_CURRENT"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_ACK_IRQ"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_ENABLE_DISABLE"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_ALLOC_SLOT_CURRENT
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Allocate slot current for a card function.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  SDCONFIG_FUNC_SLOT_CURRENT_DATA
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ SDCONFIG_FUNC_SLOT_CURRENT_DATA
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          requests an allocation of slot current to satisfy the power requirements
+          of the function.  The command uses the SDCONFIG_FUNC_SLOT_CURRENT_DATA 
+          data structure to pass the required current in mA. Slot current allocation
+          is not cummulative and this command should only be issued once by each function
+          driver with the worse case slot current usage.
+          The command returns SDIO_STATUS_NO_RESOURCES if the
+          requirement cannot be met by the host hardware.  The SlotCurrent field will 
+          contain the remaining current available to the slot.  The slot current should 
+          be allocated before the function is enabled using SDCONFIG_FUNC_ENABLE_DISABLE.
+          When a function driver is unloaded it should free the slot current allocation
+          by using the SDCONFIG_FUNC_FREE_SLOT_CURRENT command.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of allocating slot current:</font>
+        slotCurrent.SlotCurrent = 150;  <font face="Arial, Helvetica, sans-serif" color="#999999">// 150 mA
+</font>        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_ALLOC_SLOT_CURRENT,
+                                   &amp;slotCurrent,
+                                   sizeof(slotCurrent))
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDCONFIG_FUNC_FREE_SLOT_CURRENT">
+SDCONFIG_FUNC_FREE_SLOT_CURRENT
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_ENABLE_DISABLE"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_ALLOC_SLOT_CURRENT"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_FREE_SLOT_CURRENT"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_ENABLE_DISABLE 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Enable or Disable the SDIO Function</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  SDCONFIG_FUNC_ENABLE_DISABLE_DATA - Enable Data structure
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          uses the SDCONFIG_FUNC_ENABLE_DISABLE_DATA structure.  The caller must set the
+          EnableFlags and specify the TimeOut value in milliseconds.   The TimeOut
+          value is used for polling the I/O ready bit.  This command returns a status
+          of SDIO_STATUS_FUNC_ENABLE_TIMEOUT if the ready bit was not set/cleared 
+          by the card within the timeout period.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of enabling an I/O function:</font>
+        fData.EnableFlags = SDCONFIG_ENABLE_FUNC;
+        fData.TimeOut = 500; 
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_ENABLE_DISABLE,
+                                   &amp;fData,
+                                   sizeof(fData))
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_FREE_SLOT_CURRENT"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_ENABLE_DISABLE"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_MASK_IRQ"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_FREE_SLOT_CURRENT
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Free slot current for a card function.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          frees the allocated current for a card function.  This command should be 
+          issued only once (per function) and only after an allocation was successfully made.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of freeing slot current:</font>
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_FREE_SLOT_CURRENT,
+                                   NULL,
+                                   0)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDCONFIG_FUNC_ALLOC_SLOT_CURRENT">
+SDCONFIG_FUNC_ALLOC_SLOT_CURRENT
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_MASK_IRQ"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_FREE_SLOT_CURRENT"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_MASK_IRQ 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Mask the function's IRQ</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          masks the IRQ for the I/O function.  
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of unmasking interrupt :</font>
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_MASK_IRQ,
+                                   NULL,
+                                   0)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDCONFIG_FUNC_UNMASK_IRQ">
+SDCONFIG_FUNC_UNMASK_IRQ
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_MASK_IRQ"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Disable SD/MMC/SDIO card CRC checking.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          issues CMD59 to disable SPI-CRC checking and requests the host controller 
+          driver to stop checking the CRC. This is typically used in systems where 
+          CRC checking is not required and performance is improved if the CRC checking
+          is ommitted (i.e. SPI implementations without hardware CRC support).
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of disabling SPI CRC checking:</font>
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC,
+                                   NULL,
+                                   0)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC">
+SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDCONFIG_FUNC_UNMASK_IRQ"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Enable SD/MMC/SDIO card CRC checking.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          issues CMD59 to enable SPI-CRC checking and requests the host controller 
+          driver to generate valid CRCs for commands and data as well as
+          check the CRC in responses and incomming data blocks. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of enabling SPI CRC checking:</font>
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC,
+                                   NULL,
+                                   0)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC">
+SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDCONFIG_FUNC_UNMASK_IRQ"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_CALL_CONFIG_FUNC"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDCONFIG_FUNC_UNMASK_IRQ 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Unmask the function's IRQ</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This command code is used in the SDLIB_IssueConfig() API.  The command
+          unmasks the IRQ for the I/O function. This request sets the function's
+          interrupt enable bit in the INTENABLE register in the
+          common register space.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of unmasking interrupt :</font>
+        status = SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                                   SDCONFIG_FUNC_UNMASK_IRQ,
+                                   NULL,
+                                   0)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDCONFIG_FUNC_MASK_IRQ">
+SDCONFIG_FUNC_MASK_IRQ
+        </a>
+<br>
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_CALL_CONFIG_FUNC"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDCONFIG_FUNC_UNMASK_IRQ"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_CALL_REQUEST_FUNC"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDDEVICE_CALL_CONFIG_FUNC(PSDDEVICE pDevice, PSDCONFIG pConfigure)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Send configuration to a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pConfigure - configuration request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Sends a configuration request to the specified device. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of sending a request to a device:</font>
+        SDCONFIG  configHdr; 
+        SDCONFIG_FUNC_ENABLE_DISABLE_DATA fData;
+        fData.EnableFlags = SDCONFIG_ENABLE_FUNC;
+        fData.TimeOut = 500;
+        SET_SDCONFIG_CMD_INFO(&amp;configHdr, SDCONFIG_FUNC_ENABLE_DISABLE, fData, sizeof(fData));
+        return SDDEVICE_CALL_CONFIG_FUNC(pDevice, &amp;configHdr)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_CALL_REQUEST_FUNC"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_CALL_CONFIG_FUNC"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_BUSMODE_FLAGS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDDEVICE_CALL_REQUEST_FUNC(PSDDEVICE pDevice, PSDREQUEST pRequest)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Send a request to a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pRequest  - the request to be sent
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Sends a request to the specified device. If the request is successfully sent, then
+          the response flags can be checked to detemine the result of the request.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of sending a request to a device:</font>
+    PSDREQUEST  pReq = NULL;
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//allocate a request
+</font>    pReq = SDDeviceAllocRequest(pDevice);
+    if (NULL == pReq) {
+        return SDIO_STATUS_NO_RESOURCES;    
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//initialize the request
+</font>    SDLIB_SetupCMD52Request(FuncNo, Address, Write, *pData, pReq);
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//send the request to the target
+</font>    status = SDDEVICE_CALL_REQUEST_FUNC(pDevice,pReq);
+    if (!SDIO_SUCCESS(status)) {
+        break;   
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//check the request response (based on the request type)
+</font>    if (SD_R5_GET_RESP_FLAGS(pReq-&gt;Response) &amp; SD_R5_ERRORS) {
+        <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>    }
+    if (!Write) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// store the byte
+</font>        *pData =  SD_R5_GET_READ_DATA(pReq-&gt;Response);
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//free the request
+</font>    SDDeviceFreeRequest(pDevice,pReq);
+    ..
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDeviceAllocRequest">
+SDDeviceAllocRequest
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_CALL_CONFIG_FUNC">
+SDDEVICE_CALL_CONFIG_FUNC
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_BUSMODE_FLAGS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_CALL_REQUEST_FUNC"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_BUSWIDTH"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SD_BUSMODE_FLAGS SDDEVICE_GET_BUSMODE_FLAGS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the bus mode flags</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ 
+        
+<br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.  This function returns the raw bus mode flags.  This
+          is useful for function drivers that wish to override the bus clock without
+          modifying the current bus mode.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_BUSWIDTH">
+SDDEVICE_GET_BUSWIDTH
+        </a>
+<br>
+<a href="#FUNC_SDCONFIG_BUS_MODE_CTRL">
+SDCONFIG_BUS_MODE_CTRL
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_BUSWIDTH"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_BUSMODE_FLAGS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_CARD_FLAGS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_BUSWIDTH(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the bus width.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+  bus width: SDCONFIG_BUS_WIDTH_SPI, SDCONFIG_BUS_WIDTH_1_BIT, SDCONFIG_BUS_WIDTH_4_BIT
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_IS_BUSMODE_SPI">
+SDDEVICE_IS_BUSMODE_SPI
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_CARD_FLAGS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_BUSWIDTH"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_CARD_RCA"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ CARD_INFO_FLAGS SDDEVICE_GET_CARD_FLAGS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the card flags</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ flags
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Get card type:</font>
+        CARD_INFO_FLAGS flags;
+        flags = SDDEVICE_GET_CARD_FLAGS(pDevice);
+        switch(GET_CARD_TYPE(flags)) {
+            case CARD_MMC: <font face="Arial, Helvetica, sans-serif" color="#999999">// Multi-media card
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">... 
+</font>            case CARD_SD:  <font face="Arial, Helvetica, sans-serif" color="#999999">// SD-Memory present
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>            case CARD_SDIO: <font face="Arial, Helvetica, sans-serif" color="#999999">// SDIO card present
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>            case CARD_COMBO: <font face="Arial, Helvetica, sans-serif" color="#999999">//SDIO card with SD
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>        }
+        if (flags &amp; CARD_SD_WP) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">...SD write protect on
+</font>        
+        
+</pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_CARD_CAPS">
+SDDEVICE_GET_SDIO_CARD_CAPS
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_CARD_RCA"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_CARD_FLAGS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_CARDCSD"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_CARD_RCA(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the Relative Card Address register</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ register address
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Refer to SDIO spec for decoding.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_CARDCSD"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_CARD_RCA"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_MAX_BLOCK_LEN"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ PUINT8 SDDEVICE_GET_CARDCSD(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the Card Specific Data Register.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+  UINT8 CardCSD[MAX_CARD_RESPONSE_BYTES] array of CSD data.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_MAX_BLOCK_LEN"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_CARDCSD"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_MAX_BLOCKS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_MAX_BLOCK_LEN(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get maximum block length.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size in bytes
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Use SDDEVICE_GET_OPER_BLOCK_LEN to obtain
+          the current block length.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_OPER_BLOCK_LEN">
+SDDEVICE_GET_OPER_BLOCK_LEN
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_MAX_BLOCKS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_MAX_BLOCK_LEN"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_MAX_CLOCK"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_MAX_BLOCKS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get maximum block count.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ maximum number of blocks per transaction.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Use SDDEVICE_GET_OPER_BLOCKS to obtain
+          the current block count.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_OPER_BLOCKS">
+SDDEVICE_GET_OPER_BLOCKS
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_MAX_CLOCK"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_MAX_BLOCKS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_OPER_BLOCK_LEN"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SD_BUSCLOCK_RATE SDDEVICE_GET_MAX_CLOCK(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get maximum bus clock</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ clock rate
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ To obtain the current maximum clock rate use SDDEVICE_GET_OPER_CLOCK().
+          This rate my be lower than the host controllers maximum obtained using
+          SDDEVICE_GET_MAX_CLOCK().
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_OPER_CLOCK">
+SDDEVICE_GET_OPER_CLOCK
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_OPER_BLOCK_LEN"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_MAX_CLOCK"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_OPER_BLOCKS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_OPER_BLOCK_LEN(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get operational maximum block length.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size in bytes
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the maximum current block length. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_MAX_BLOCK_LEN">
+SDDEVICE_GET_MAX_BLOCK_LEN
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_OPER_BLOCKS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_OPER_BLOCK_LEN"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_OPER_CLOCK"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_OPER_BLOCKS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get operational maximum block count.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ maximum number of blocks per transaction.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the maximum current block count. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_MAX_BLOCK_LEN">
+SDDEVICE_GET_MAX_BLOCK_LEN
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_OPER_CLOCK"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_OPER_BLOCKS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_CARD_CAPS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SD_BUSCLOCK_RATE SDDEVICE_GET_OPER_CLOCK(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get operational bus clock</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ clock rate
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the current bus clock rate. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_MAX_CLOCK">
+SDDEVICE_GET_MAX_CLOCK
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_CARD_CAPS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_OPER_CLOCK"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_COMMON_CISPTR"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIO_CARD_CAPS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the card capabilities</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ 8-bit card capabilities register
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Refer to SDIO spec for decoding.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_CARD_FLAGS">
+SDDEVICE_GET_CARD_FLAGS
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_GET_SDIOCARD_CAPS">
+SDDEVICE_GET_SDIOCARD_CAPS
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_COMMON_CISPTR"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_CARD_CAPS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CISPTR"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT32 SDDEVICE_GET_SDIO_COMMON_CISPTR(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the common Card Information Structure pointer</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ Common CIS Address (in SDIO address space)
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CSAPTR">
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_FUNC_CISPTR"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_COMMON_CISPTR"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CLASS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT32 SDDEVICE_GET_SDIO_FUNC_CISPTR(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's Card Information Structure pointer</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ CIS offset
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CSAPTR">
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_GET_SDIO_COMMON_CISPTR">
+SDDEVICE_GET_SDIO_COMMON_CISPTR
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_FUNC_CLASS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CISPTR"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CSAPTR"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIO_FUNC_CLASS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's class</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ class number
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_FUNCNO">
+SDDEVICE_GET_SDIO_FUNCNO
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_FUNC_CSAPTR"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CLASS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT32 SDDEVICE_GET_SDIO_FUNC_CSAPTR(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's Code Stoarge Area pointer</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ CSA offset
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CISPTR">
+SDDEVICE_GET_SDIO_FUNC_CISPTR
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CSAPTR"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNCNO"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's maximum reported block size</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+
+        
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIO_FUNCNO"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SDIOCARD_CAPS"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIO_FUNCNO(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the device's function number</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ function number
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_FUNC_CLASS">
+SDDEVICE_GET_SDIO_FUNC_CLASS
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SDIOCARD_CAPS"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIO_FUNCNO"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_GET_SLOT_VOLTAGE_MASK"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIOCARD_CAPS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the SDIO capabilities rgeister.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SD capabilities
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ See SD specification for decoding of these capabilities.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_SDIO_CARD_CAPS">
+SDDEVICE_GET_SDIO_CARD_CAPS
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_GET_SLOT_VOLTAGE_MASK"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SDIOCARD_CAPS"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_IS_BUSMODE_SPI"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SLOT_VOLTAGE_MASK SDDEVICE_GET_SLOT_VOLTAGE_MASK(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get applied slot voltage</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ slot voltage mask
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This function returns the applied voltage on the slot. The voltage value is a 
+          mask having the following values:
+          SLOT_POWER_3_3V   
+          SLOT_POWER_3_0V  
+          SLOT_POWER_2_8V  
+          SLOT_POWER_2_0V  
+          SLOT_POWER_1_8V  
+          SLOT_POWER_1_6V              
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_IS_BUSMODE_SPI"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_GET_SLOT_VOLTAGE_MASK"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_IS_CARD_WP_ON"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_BUSMODE_SPI(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Is bus in SPI mode.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+  TRUE, SPI mode.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_GET_BUSWIDTH">
+SDDEVICE_GET_BUSWIDTH
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_IS_CARD_WP_ON"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_IS_BUSMODE_SPI"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_IS_MMC_REV_GTEQ_4_0"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_CARD_WP_ON(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test for write protect enabled</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if device is write protected.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_IS_MMC_REV_GTEQ_4_0"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_IS_CARD_WP_ON"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_IS_SD_REV_GTEQ_1_10"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_MMC_REV_GTEQ_4_0(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test the MMC revision for greater than or equal to 4.0</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if the revision is greater than or equal to 4.0
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_IS_SDIO_REV_GTEQ_1_10">
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_IS_SD_REV_GTEQ_1_10">
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_IS_SD_REV_GTEQ_1_10"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_IS_MMC_REV_GTEQ_4_0"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_IS_SDIO_REV_GTEQ_1_10"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_SD_REV_GTEQ_1_10(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test the SD revision for greater than or equal to 1.10</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if the revision is greater than or equal to 1.10
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_IS_SDIO_REV_GTEQ_1_10">
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_IS_MMC_REV_GTEQ_4_0">
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_IS_SDIO_REV_GTEQ_1_10"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_IS_SD_REV_GTEQ_1_10"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_SET_ASYNC_IRQ_HANDLER"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_SDIO_REV_GTEQ_1_10(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test the SDIO revision for greater than or equal to 1.10</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if the revision is greater than or equal to 1.10
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_IS_SD_REV_GTEQ_1_10">
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_IS_MMC_REV_GTEQ_4_0">
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_SET_ASYNC_IRQ_HANDLER"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_IS_SDIO_REV_GTEQ_1_10"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDEVICE_SET_IRQ_HANDLER"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDDEVICE_SET_ASYNC_IRQ_HANDLER(PSDDEVICE pDevice, 
+                                            void (*pIrqAsyncFunction)(PVOID pContext),
+                                            PVOID pContext)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register an asynchronous interrupt handler for a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pIrqAsyncFunction  - the interrupt function to execute.
+        <br>
+  pContext  - context value passed into interrupt routine.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The registered routine will be called upon each card interrupt.
+          The interrupt function should acknowledge the interrupt when it is
+          ready to handle more interrupts using:
+          SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_ACK_IRQ, NULL, 0);
+          The interrupt handler can not perform any synchronous request calls.
+          Using this call provides a faster interrupt dispatch, but limits all
+          requests to asynchronous mode.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_SET_IRQ_HANDLER">
+SDDEVICE_SET_IRQ_HANDLER
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDEVICE_SET_IRQ_HANDLER"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_SET_ASYNC_IRQ_HANDLER"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDeviceAllocRequest"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDDEVICE_SET_IRQ_HANDLER(PSDDEVICE pDevice, 
+                                            void (*pIrqFunction)(PVOID pContext),
+                                            PVOID pContext)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register an interrupt handler for a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pIrqFunction  - the interrupt function to execute.
+        <br>
+  pContext  - context value passed into interrupt routine.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The registered routine will be called upon each card interrupt.
+          The interrupt function should acknowledge the interrupt when it is
+          ready to handle more interrupts using:
+          SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_ACK_IRQ, NULL, 0);
+          The interrupt handler can perform synchronous request calls.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_SET_ASYNC_IRQ_HANDLER">
+SDDEVICE_SET_ASYNC_IRQ_HANDLER
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDeviceAllocRequest"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDEVICE_SET_IRQ_HANDLER"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDDeviceFreeRequest"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ PSDREQUEST SDDeviceAllocRequest(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Allocate a request structure.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ request pointer or NULL if not avialable.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_CALL_REQUEST_FUNC">
+SDDEVICE_CALL_REQUEST_FUNC
+        </a>
+<br>
+<a href="#FUNC_SDDeviceFreeRequest">
+SDDeviceFreeRequest
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDDeviceFreeRequest"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDeviceAllocRequest"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDIO_RegisterFunction"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDDeviceFreeRequest(PSDDEVICE pDevice, PSDREQUEST pRequest)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Free a request structure.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pRequest  - request allocated by SDDeviceAllocRequest().
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDDEVICE_CALL_REQUEST_FUNC">
+SDDEVICE_CALL_REQUEST_FUNC
+        </a>
+<br>
+<a href="#FUNC_SDDeviceAllocRequest">
+SDDeviceAllocRequest
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDIO_RegisterFunction"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDDeviceFreeRequest"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDIO_UnregisterFunction"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDIO_RegisterFunction(PSDFUNCTION pFunction) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register a function driver with the bus driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when succesful.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Each function driver must register with the bus driver once upon loading.
+          The calling function must be prepared to receive a Probe callback before
+          this function returns. This will occur when an perpheral device is already
+          pluugged in that is supported by this function.
+          The function driver should unregister itself when exiting.
+          The bus driver checks for possible function drivers to support a device
+          in reverse registration order.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Registering a function driver:</font>
+            <font face="Arial, Helvetica, sans-serif" color="#999999">//list of devices supported by this function driver
+</font>       static SD_PNP_INFO Ids[] = {
+            {.SDIO_ManufacturerID = 0xaa55,  
+             .SDIO_ManufacturerCode = 0x5555, 
+             .SDIO_FunctionNo = 1},
+            {}                      <font face="Arial, Helvetica, sans-serif" color="#999999">//list is null termintaed
+</font>        };
+        static GENERIC_FUNCTION_CONTEXT FunctionContext = {
+            .Function.pName    = "sdio_generic", <font face="Arial, Helvetica, sans-serif" color="#999999">//name of the device
+</font>            .Function.Version  = CT_SDIO_STACK_VERSION_CODE, <font face="Arial, Helvetica, sans-serif" color="#999999">// set stack version
+</font>            .Function.MaxDevices = 1,    <font face="Arial, Helvetica, sans-serif" color="#999999">//maximum number of devices supported by this driver
+</font>            .Function.NumDevices = 0,    <font face="Arial, Helvetica, sans-serif" color="#999999">//current number of devices, always zero to start
+</font>            .Function.pIds     = Ids,    <font face="Arial, Helvetica, sans-serif" color="#999999">//the list of devices supported by this device
+</font>            .Function.pProbe   = Probe,  <font face="Arial, Helvetica, sans-serif" color="#999999">//pointer to the function drivers Probe function
+</font>                                         <font face="Arial, Helvetica, sans-serif" color="#999999">//  that will be called when a possibly supported device
+</font>                                         <font face="Arial, Helvetica, sans-serif" color="#999999">//  is inserted.
+</font>            .Function.pRemove  = Remove, <font face="Arial, Helvetica, sans-serif" color="#999999">//pointer to the function drivers Remove function
+</font>                                         /  that will be called when a device is removed.
+            .Function.pContext = &amp;FunctionContext, <font face="Arial, Helvetica, sans-serif" color="#999999">//data value that will be passed into Probe and
+</font>                                         <font face="Arial, Helvetica, sans-serif" color="#999999">//  Remove callbacks. 
+</font>        }; 
+        SDIO_STATUS status;
+        status = SDIO_RegisterFunction(&amp;FunctionContext.Function)
+        if (!SDIO_SUCCESS(status)) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">...failed to register
+</font>        
+        
+</pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_UnregisterFunction">
+SDIO_UnregisterFunction
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDIO_UnregisterFunction"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDIO_RegisterFunction"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDLIB_FindTuple"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDIO_UnregisterFunction(PSDFUNCTION pFunction) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Unregister a function driver with the bus driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when succesful.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Each function driver must unregister from the bus driver when the function driver
+          exits.
+          A function driver must disconnect from any interrupts before calling this function.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Unregistering a function driver:</font>
+        SDIO_UnregisterFunction(&amp;FunctionContext.Function)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_RegisterFunction">
+SDIO_RegisterFunction
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDLIB_FindTuple"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDIO_UnregisterFunction"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDLIB_GetDefaultOpCurrent"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDLIB_FindTuple(PSDDEVICE  pDevice,
+                                          UINT8      Tuple,
+                                          UINT32     *pTupleScanAddress,
+                                          PUINT8     pBuffer,
+                                          UINT8      *pLength)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Find a device's tuple.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pDevice - the device that is the target of the command.
+        <br>
+ Tuple - 8-bit ID of tuple to find          
+        <br>
+ pTupleScanAddress - On entry pTupleScanAddress is the adddress to start scanning
+        <br>
+ pLength - length of pBuffer 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pBuffer - storage for tuple
+        <br>
+ pTupleScanAddress - address of the next tuple 
+        <br>
+ pLength - length of tuple read
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ It is possible to have the same tuple ID multiple times with different lengths. This function
+          blocks and is fully synchronous.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDLIB_GetDefaultOpCurrent"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDLIB_FindTuple"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDLIB_IssueCMD52"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDLIB_GetDefaultOpCurrent(PSDDEVICE  pDevice, SD_SLOT_CURRENT *pOpCurrent)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get default operational current</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pDevice - the device that is the target of the command.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pOpCurrent - operational current in mA.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  This routine reads the function's CISTPL_FUNCE tuple for the default operational
+           current. For SDIO 1.0 devices this value is read from the 8-bit TPLFE_OP_MAX_PWR
+           field.  For SDIO 1.1 devices, the HP MAX power field is used only if the device is
+           operating in HIPWR mode. Otherwise the 8-bit TPLFE_OP_MAX_PWR field is used. 
+           Some systems may restrict high power/current mode and force cards to operate in a 
+           legacy (&lt; 200mA) mode.  This function is fully synchronous and will block the caller.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Getting the default operational current for this function:</font>
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// get default operational current
+</font>       status = SDLIB_GetDefaultOpCurrent(pDevice, &amp;slotCurrent);
+       if (!SDIO_SUCCESS(status)) {
+           .. failed
+       
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDLIB_IssueCMD52"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDLIB_GetDefaultOpCurrent"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDLIB_IssueConfig"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDLIB_IssueCMD52(PSDDEVICE     pDevice,
+                                           UINT8         FuncNo,
+                                           UINT32        Address,
+                                           PUINT8        pData,
+                                           INT           ByteCount,
+                                           BOOL          Write)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Issue a CMD52 to read or write a register</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pDevice - the device that is the target of the command.
+        <br>
+ FunctionNo - function number of the target.
+        <br>
+ Address - 17-bit register address.
+        <br>
+ ByteCount - number of bytes to read or write,
+        <br>
+ Write - TRUE if a write operation, FALSE for reads.
+        <br>
+ pData - data buffer for writes.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pData - data buffer for writes.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  This function will allocate a request and issue multiple byte reads or writes
+           to satisfy the ByteCount requested.  This function is fully synchronous and will block
+           the caller.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDLIB_SetupCMD52Request">
+SDLIB_SetupCMD52Request
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDLIB_IssueConfig"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDLIB_IssueCMD52"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDLIB_SetFunctionBlockSize"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS _SDLIB_IssueConfig(PSDDEVICE        pDevice,
+                                             SDCONFIG_COMMAND Command,
+                                             PVOID            pData,
+                                             INT              Length)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Issue an SDIO configuration command.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice - the device that is the target of the command.
+        <br>
+  Command - command to send, see example.
+        <br>
+  pData - command's data
+        <br>
+  Length length of pData
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pData - updated on commands that return data.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Command and data pairs:</font>
+            Type                               Data
+            SDCONFIG_GET_WP             SDCONFIG_WP_VALUE 
+            SDCONFIG_SEND_INIT_CLOCKS   none 
+            SDCONFIG_SDIO_INT_CTRL      SDCONFIG_SDIO_INT_CTRL_DATA
+            SDCONFIG_SDIO_REARM_INT     none 
+            SDCONFIG_BUS_MODE_CTRL      SDCONFIG_BUS_MODE_DATA
+            SDCONFIG_POWER_CTRL         SDCONFIG_POWER_CTRL_DAT
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDLIB_SetFunctionBlockSize"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDLIB_IssueConfig"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDLIB_SetupCMD52Request"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDLIB_SetFunctionBlockSize(PSDDEVICE        pDevice,
+                                                     UINT16           BlockSize)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Set function block size</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice - the device that is the target of the command.
+        <br>
+  BlockSize - block size to set in function 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  Issues CMD52 to set the block size.  This function is fully synchronous and may
+           block.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDLIB_SetupCMD52Request"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDLIB_SetFunctionBlockSize"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#next#"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDLIB_SetupCMD52Request(UINT8         FuncNo,
+                                           UINT32        Address,
+                                           BOOL          Write,
+                                           UINT8         WriteData,                                    
+                                           PSDREQUEST    pRequest)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Setup cmd52 requests</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  FunctionNo - function number.
+        <br>
+  Address - I/O address, 17-bit register address.
+        <br>
+  Write  - TRUE if a write operation, FALSE for reads.
+        <br>
+  WriteData - write data, byte to write if write operation.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pRequest - request is updated with cmd52 parameters
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This function does not perform any I/O. For register reads, the completion 
+          routine can use the SD_R5_GET_READ_DATA() macro to extract the register value. 
+          The routine should also extract the response flags using the SD_R5_GET_RESP_FLAGS()
+          macro and check the flags with the SD_R5_ERRORS mask.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Getting the register value from the completion routine:</font> 
+          flags = SD_R5_GET_RESP_FLAGS(pRequest-&gt;Response);
+          if (flags &amp; SD_R5_ERRORS) {
+             <font face="Arial, Helvetica, sans-serif" color="#999999">... errors
+</font>          } else {          
+             registerValue = SD_R5_GET_READ_DATA(pRequest-&gt;Response);
+          } 
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDLIB_IssueCMD52">
+SDLIB_IssueCMD52
+        </a>
+<br>
+<a href="#FUNC_SDDEVICE_CALL_REQUEST_FUNC">
+SDDEVICE_CALL_REQUEST_FUNC
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong></font><a target="_blank" href="http://www.codetelligence.com"><font face="Arial, Helvetica, sans-serif" color="#FFFFFF">www.codetelligence.com</font></a></td>
+</tr>
+</table>
+</body>
+</html>

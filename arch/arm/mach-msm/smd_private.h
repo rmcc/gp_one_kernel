@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_private.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -156,6 +156,9 @@ int smsm_change_state(uint32_t smsm_entry,
 uint32_t smsm_get_state(uint32_t smsm_entry);
 void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 	uint32_t irq_mask, uint32_t wakeup_reason, uint32_t pending_irqs);
+/* FIH_ADQ, Kenny { */
+void smsm_pmlog_sleep_info(uint32_t wakeup_reason);
+/* } FIH_ADQ, Kenny */
 void smsm_reset_modem(unsigned mode);
 void smsm_reset_modem_cont(void);
 void smd_sleep_exit(void);
@@ -235,16 +238,7 @@ enum {
 	SMEM_CLKREGIM_BSP,
 	SMEM_CLKREGIM_SOURCES,
 	SMEM_SMD_FIFO_BASE_ID,
-	SMEM_USABLE_RAM_PARTITION_TABLE = SMEM_SMD_FIFO_BASE_ID +
-						SMEM_NUM_SMD_STREAM_CHANNELS,
-	SMEM_POWER_ON_STATUS_INFO,
-	SMEM_DAL_AREA,
-	SMEM_SMEM_LOG_POWER_IDX,
-	SMEM_SMEM_LOG_POWER_WRAP,
-	SMEM_SMEM_LOG_POWER_EVENTS,
-	SMEM_ERR_CRASH_LOG,
-	SMEM_ERR_F3_TRACE_LOG,
-	SMEM_NUM_ITEMS,
+	SMEM_NUM_ITEMS = SMEM_SMD_FIFO_BASE_ID + SMEM_NUM_SMD_STREAM_CHANNELS,
 };
 
 #endif

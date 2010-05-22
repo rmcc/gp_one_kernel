@@ -37,6 +37,7 @@
 #include <linux/kdebug.h>
 #include <linux/tick.h>
 #include <linux/prctl.h>
+#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -53,6 +54,9 @@
 #include <asm/idle.h>
 
 asmlinkage extern void ret_from_fork(void);
+
+asmlinkage long kernel_thread_asm(int (*fn)(void *), void * arg,
+	 unsigned long flags);
 
 unsigned long kernel_thread_flags = CLONE_VM | CLONE_UNTRACED;
 
@@ -856,4 +860,12 @@ unsigned long arch_randomize_brk(struct mm_struct *mm)
 {
 	unsigned long range_end = mm->brk + 0x02000000;
 	return randomize_range(mm->brk, range_end, 0) ? : mm->brk;
+}
+
+asmlinkage int kernel_thread(int (*fn)(void *), void * arg,
+	 unsigned long flags)
+{
+	int pid = kernel_thread_asm(fn, arg, flags);
+	trace_mark(kernel_arch_kthread_create, "pid %d fn %p", pid, fn);
+	return pid;
 }

@@ -32,6 +32,7 @@
 #ifdef CONFIG_PPC32
 #include <linux/module.h>
 #endif
+#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 #include <asm/page.h>
@@ -1021,6 +1022,9 @@ long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	long ret = 0;
 
+	trace_mark(kernel_arch_syscall_entry, "syscall_id %d ip #p%ld",
+		(int)regs->gpr[0], instruction_pointer(regs));
+
 	secure_computing(regs->gpr[0]);
 
 	if (test_thread_flag(TIF_SYSCALL_TRACE) &&
@@ -1055,6 +1059,8 @@ long do_syscall_trace_enter(struct pt_regs *regs)
 void do_syscall_trace_leave(struct pt_regs *regs)
 {
 	int step;
+
+	trace_mark(kernel_arch_syscall_exit, "ret %ld", regs->result);
 
 	if (unlikely(current->audit_context))
 		audit_syscall_exit((regs->ccr&0x10000000)?AUDITSC_FAILURE:AUDITSC_SUCCESS,

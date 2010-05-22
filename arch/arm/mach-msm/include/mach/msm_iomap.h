@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/include/mach/msm_iomap.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -99,8 +99,19 @@
 #define MSM_SCPLL_BASE        IOMEM(0xE1007000)
 #define MSM_SCPLL_PHYS        0xA8800000
 #define MSM_SCPLL_SIZE        SZ_4K
-
-#define MSM_SHARED_RAM_BASE   IOMEM(0xE0100000)
+///+++FIH_ADQ+++
+#define MSM_SHARED_RAM_BASE   IOMEM(0xE0200000)
+///#define MSM_SHARED_RAM_BASE   IOMEM(0xE0100000)
+///---FIH_ADQ---
+#ifdef CONFIG_MSM_STACKED_MEMORY
+#ifdef CONFIG_ARCH_QSD
+#define MSM_SHARED_RAM_PHYS   0x00100000
+#else
+#define MSM_SHARED_RAM_PHYS   0x01F00000
+#endif
+#else
+#define MSM_SHARED_RAM_PHYS   0x07F00000
+#endif
 #define MSM_SHARED_RAM_SIZE   SZ_1M
 
 #define MSM_UART1_PHYS        0xA9A00000
@@ -128,7 +139,6 @@
 #define MSM_I2C_SIZE          SZ_4K
 
 #define MSM_HSUSB_PHYS        0xA0800000
-#define MSM_HSUSB_BASE        IOMEM(0xE0009000)
 #define MSM_HSUSB_SIZE        SZ_4K
 
 #define MSM_MDC_BASE	      IOMEM(0xE0200000)
@@ -139,12 +149,13 @@
 #define MSM_AD5_PHYS          0xAC000000
 #define MSM_AD5_SIZE          (SZ_1M*13)
 
-#define MSM_SSBI_BASE         IOMEM(0xE1004000)
-#define MSM_SSBI_PHYS         0xA8100000
-#define MSM_SSBI_SIZE         SZ_4K
+#define MSM_UART1DM_PHYS      0xA0200000
+#define MSM_UART2DM_PHYS      0xA0300000
 
-#define MSM_TSSC_BASE         IOMEM(0xE1005000)
-#define MSM_TSSC_PHYS         0xAA300000
-#define MSM_TSSC_SIZE         SZ_4K
+//FIH_ADQ+
+#define MSM_PLOG_BASE          IOMEM(0xE2000000)
+#define MSM_PLOG_PHYS          0x01F00000
+#define MSM_PLOG_SIZE          SZ_1M
+//FIH_ADQ-
 
 #endif

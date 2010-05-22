@@ -1,0 +1,92 @@
+MDK_ROOT := $(WORKAREA)/host/tools/systemtools
+CP  :=  cp -f
+SIM	?= 0
+
+ifeq ($(SIM),0)
+	OUTDIR := Linux_cust
+else
+	OUTDIR := Linux-Sim
+endif
+
+LD	:= ld 
+CC	:= g++ 
+
+CFLAGS	:=	-I.  -I../common/include -I../art -I$(MDK_ROOT)/src2/include -I./ar5210 -I./ar5211 -I./ar5212 -I./ar2413 -I./ar6000 -I./ar5513 -I./Linuxini -DLINUX -DCUSTOMER_REL -DLinux -D_cplusplus -I./linux_gpib 
+
+
+
+ifeq ($(DEBUG),1)
+    CFLAGS += -D_DEBUG -g
+else
+#    CFLAGS += -DNO_LIB_PRINT
+endif
+
+ifeq ($(GDB),1)
+    CFLAGS += -g
+endif
+
+ifeq ($(PREDATOR_BUILD),1)
+    CFLAGS += -DPREDATOR_BUILD
+endif
+
+ifeq ($(THIN_CLIENT_BUILD),1)
+    CFLAGS += -DTHIN_CLIENT_BUILD
+endif
+
+ifeq ($(SIM),1)
+	CFLAGS += -DSIM
+endif
+
+#ifeq ($(TARGET), AR6002)
+	CFLAGS +=-DAR6002
+#else
+#	CFLAGS +=-DAR6001
+#endif
+
+#ifeq ($(EMULATION),1)
+#    CFLAGS += -DMERCURY_EMULATION
+#    MERC_CFG := merc_eagle.cfg
+#else
+    MERC_CFG := mercury1_0_lna1.cfg 
+#endif
+
+LDFLAGS	:= -L./linux_gpib -shared -lgpibenet 
+
+ifeq ($(INCLUDE_DRIVER_CODE),1)
+    CFLAGS += -I../commoninit/ -DINCLUDE_DRIVER_CODE
+endif
+
+VPATH	:= $(MDK_ROOT)/common
+EXTRA_SRCS := 
+SRCS	:= 	artEar.c art_ani.c athreg.c mAlloc.c mCal.c mConfig.c mCont.c mData.c mDevtbl.c mEeprom.c mMask.c mMaskMath.c mMaskPhys.c ar5210/mCfg210.c ar5210/mData210.c ar5210/mEEP210.c ar5211/mCfg211.c ar5211/mData211.c ar5211/mEEP211.c ar5212/mData212.c ar5212/mCfg212.c ar5212/mCfg212d.c ar2413/mCfg413.c ar6000/mCfg6000.c ar6000/mEep6000.c ar5513/mCfg513.c ar5513/mData513.c ar5212/mEEPROM_d.c ar5212/mAni212.c ar2413/mEEPROM_g.c stats_routines.c rate_constants.c $(EXTRA_SRCS)
+
+ifeq ($(SIM),0) 
+	SRCS += mInst.c
+endif
+OBJS	:=	$(patsubst %.c,$(OUTDIR)/%.o,$(SRCS))
+
+LIB		   := $(OUTDIR)/libdevlib.so
+
+all: $(LIB)	
+
+dirs:
+	mkdir -p $(OUTDIR)
+	mkdir -p $(OUTDIR)/ar5210
+	mkdir -p $(OUTDIR)/ar5211
+	mkdir -p $(OUTDIR)/ar5212
+	mkdir -p $(OUTDIR)/ar2413
+	mkdir -p $(OUTDIR)/ar6000
+	mkdir -p $(OUTDIR)/ar5513
+
+$(LIB): $(OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)	
+
+$(OUTDIR)/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -rf $(OBJS) $(LIB)
+	rm -rf $(OUTDIR)
+
+.PHONY:
+	clean

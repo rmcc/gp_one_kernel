@@ -434,7 +434,9 @@ static void rfkill_release(struct device *dev)
 	module_put(THIS_MODULE);
 }
 
+//#if 0//misty mark
 #ifdef CONFIG_RFKILL_PM
+//#error "has defined CONFIG_RFKILL_PM"
 static int rfkill_suspend(struct device *dev, pm_message_t state)
 {
 	struct rfkill *rfkill = to_rfkill(dev);
@@ -444,10 +446,10 @@ static int rfkill_suspend(struct device *dev, pm_message_t state)
 			/* Stop transmitter, keep state, no notifies */
 			update_rfkill_state(rfkill);
 
-			mutex_lock(&rfkill->mutex);
-			rfkill->toggle_radio(rfkill->data,
-						RFKILL_STATE_SOFT_BLOCKED);
-			mutex_unlock(&rfkill->mutex);
+			//misty mark 
+			//mutex_lock(&rfkill->mutex);
+			//rfkill->toggle_radio(rfkill->data,RFKILL_STATE_SOFT_BLOCKED);
+			//mutex_unlock(&rfkill->mutex);
 		}
 
 		dev->power.power_state = state;

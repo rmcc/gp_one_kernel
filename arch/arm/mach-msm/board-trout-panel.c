@@ -16,7 +16,9 @@
 
 #include <mach/msm_fb.h>
 #include <mach/vreg.h>
-#include <mach/htc_pwrsink.h>
+#ifdef CONFIG_TROUT_PWRSINK
+#include <mach/trout_pwrsink.h>
+#endif
 
 #include "board-trout.h"
 #include "proc_comm.h"
@@ -33,7 +35,9 @@ static DEFINE_MUTEX(trout_backlight_lock);
 
 static void trout_set_backlight_level(uint8_t level)
 {
+#ifdef CONFIG_TROUT_PWRSINK
 	unsigned percent = ((int)level * 100) / 255;
+#endif
 
 	if (trout_new_backlight) {
 		unsigned long flags;
@@ -83,7 +87,9 @@ static void trout_set_backlight_level(uint8_t level)
 			clk_disable(gp_clk);
 		}
 	}
-	htc_pwrsink_set(PWRSINK_BACKLIGHT, percent);
+#ifdef CONFIG_TROUT_PWRSINK
+	trout_pwrsink_set(PWRSINK_BACKLIGHT, percent);
+#endif
 }
 
 #define MDDI_CLIENT_CORE_BASE  0x108000
@@ -564,8 +570,6 @@ struct msm_mddi_bridge_platform_data toshiba_client_data = {
 	.fb_data = {
 		.xres = 320,
 		.yres = 480,
-		.width = 45,
-		.height = 67,
 		.output_format = 0,
 	},
 };

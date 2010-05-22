@@ -1,57 +1,20 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/*
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -67,8 +30,6 @@
 #include <mach/qdsp6/msm8k_cad_rpc.h>
 #include <mach/qdsp6/msm8k_ard_q6.h>
 #include <mach/qdsp6/msm8k_ard_helper.h>
-#include <mach/qdsp6/msm8k_cad_q6dec_drvi.h>
-#include <mach/qdsp6/msm8k_cad_q6enc_drvi.h>
 
 static struct ard_session_info_struct_type	ard_session
 							[ARD_AUDIO_MAX_CLIENT];
@@ -223,7 +184,7 @@ s32 ard_open(s32 session_id, struct cad_open_struct_type *open_param)
 	rc = dal_rc = CAD_RES_SUCCESS;
 	open_parm_len = 0;
 
-	D("ARD ard_open()\n");
+	D("ARD ard_open %d\n");
 
 	for (i = 0; i < ARD_AUDIO_MAX_CLIENT; i++) {
 		if (ard_session[i].available == ARD_FALSE)
@@ -291,7 +252,7 @@ s32 ard_open(s32 session_id, struct cad_open_struct_type *open_param)
 
 	mutex_unlock(&ardsession[session_id]->session_mutex);
 
-	D("ARD Opened session_id %d, sess_opn_info(cadr) = %p\n",
+	D("ARD Opened session_id %d, sess_opn_info(cadr) = 0x%x\n",
 		session_id, op);
 
 	print_data(session_id);
@@ -320,7 +281,7 @@ s32 ard_close(s32 session_id)
 	cadr = ardsession[session_id]->sess_open_info;
 	strm_dev = &cadr->cad_device;
 
-	D("ARD close ses_id %d, sess_opn_info(cadr) = %p, strm_dev = %p\n",
+	D("ARD close ses_id %d, sess_opn_info(cadr) = 0x%x, strm_dev = 0x%x\n",
 		session_id, cadr, strm_dev);
 
 	print_data(session_id);
@@ -396,14 +357,16 @@ s32 ard_close(s32 session_id)
 	cadr_config = &cadr->cad_config;
 	cadr_stream = &cadr->cad_stream;
 
+	/* Delete command buffers that were allocated */
+	kfree(cadr_strm_device->device);
 	cadr_strm_device->device = NULL;
 
-	D("ARD Session %d, App Type = %d, Strm Ptr = %p\n",
+	D("ARD Session %d, App Type = %d, Strm Ptr = 0x%x\n",
 		session_id, cadr_stream->app_type, cadr_stream);
 
 	if (cadr_stream->app_type != CAD_STREAM_APP_VOICE) {
 		if (ardsession[session_id]->local_format_block) {
-			D("ARD Freeing PMEM Session %d, Ptr = %p\n",
+			D("ARD Freeing PMEM Session %d, Ptr = 0x%x\n",
 				session_id,
 				ardsession[session_id]->local_format_block);
 			kfree(ardsession[session_id]->local_format_block);
@@ -438,7 +401,7 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 
 	rc = dal_rc = CAD_RES_SUCCESS;
 
-	D("ARD ard_IOCTL ses %d, cmd 0X%x\n", session_id, cmd_code);
+	D("ARD ard_IOCTL ses %d, cmd 0X%x\n", session_id, cmdCode);
 
 	local_ard_state = &ard_state;
 
@@ -629,8 +592,8 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 	case CAD_IOCTL_CMD_STREAM_START:
 		if (ardsession[session_id]->session_type != STREAM_TYPE) {
 			/* Log Error and do nothing */
-			D("STREAM_START called for device session"
-				" ses: %d\n", session_id);
+			pr_err("STREAM_START not supported in dev ctrl"
+				" ses %d\n", session_id);
 			rc = qdsp6_open(session_id);
 			if (rc != CAD_RES_SUCCESS)
 				pr_err("ARD DAL RPC OPEN FAILED %d\n",
@@ -645,7 +608,8 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 		cadr = ardsession[session_id]->sess_open_info;
 		strm_dev = &(cadr->cad_device);
 
-		D("ard_ioctl START cadr %p, strm_dev %p\n", cadr, strm_dev);
+		D("ard_ioctl START ses %d, cadr 0x%x, strm_dev 0x%x\n",
+			session_id, cadr, strm_dev);
 
 		D("ARD STREAM START IOCTL, sess %d, num devices = %d\n",
 			session_id, strm_dev->device_len);
@@ -740,7 +704,7 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 			}
 		}
 
-		D("ard_ioctl STARTED ses %d, cadr = %p, strm_dev = %p\n",
+		D("ard_ioctl STARTED ses %d, cadr = 0x%x, strm_dev = 0x%x\n",
 			session_id, cadr, strm_dev);
 
 		print_data(session_id);
@@ -754,12 +718,8 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 		cadr = ardsession[session_id]->sess_open_info;
 		cadr_strm_device = &(cadr->cad_device);
 		strm_dev = (struct cad_stream_device_struct_type *)cmd_buf;
-		cadr_strm_device->device = (u32 *)(g_audio_mem + session_id *
-			sizeof(struct cad_stream_device_struct_type) + 4096 +
-			(Q6_ENC_BUF_PER_SESSION *
-			Q6_ENC_BUF_MAX_SIZE + 4096) +
-			(Q6_DEC_BUFFER_NUM_PER_STREAM *
-			Q6_DEC_BUFFER_SIZE_MAX + 4096));
+		cadr_strm_device->device = kmalloc((sizeof(u32) *
+			strm_dev->device_len), GFP_KERNEL);
 
 		/* Save the cmdbuff passed in */
 		if ((cmd_buf != NULL) && (cadr_strm_device->device != NULL)) {
@@ -773,8 +733,8 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 			rc = CAD_RES_FAILURE;
 		}
 
-		D("ard_ioctl STRM DEV SET ses %d, cadr = %p, strm_dev = %p\n",
-			session_id, cadr, cadr_strm_device);
+		D("ard_ioctl STRM DEV SET ses %d, cadr = 0x%x, strm_dev "
+			"= 0x%x\n", session_id, cadr, cadr_strm_device);
 
 		print_data(session_id);
 		break;
@@ -794,8 +754,8 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 			rc = CAD_RES_FAILURE;
 		}
 
-		D("ard_ioctl STRM INFO SET ses %d, sess_opn_info(cadr) = %p\n",
-			session_id, cadr);
+		D("ard_ioctl STRM INFO SET ses %d, sess_opn_info(cadr)"
+			" = 0x%x\n", session_id, cadr);
 
 		print_data(session_id);
 		break;
@@ -812,14 +772,14 @@ s32 ard_ioctl(s32 session_id, u32 cmd_code, void *cmd_buf, u32 cmd_len)
 						+ CAD_FORMAT_BLK_OFFSET);
 		memcpy(config_format_block, cmd_buf, cmd_len);
 
-		D("ard_ioctl STRM CFG SET ses %d, sess_opn_info(cadr) = %p\n",
-			session_id, cadr);
+		D("ard_ioctl STRM CFG SET ses %d, sess_opn_info(cadr)"
+			 " = 0x%x\n", session_id, cadr);
 
 		print_data(session_id);
 		break;
 
 	default:
-		/* Just silently succeed unrecognized IOCTLs. */
+		pr_err("ARD Unsupported IOCTL cmd %d\n", session_id);
 		break;
 	}
 
@@ -1213,7 +1173,8 @@ void print_data(u32 session_id)
 		cad_open->format);
 
 	cadr_config = &(cadr->cad_config);
-	D("ARD session_id %d cadr_config %p\n", session_id, cadr_config);
+	D("ARD session_id %d cadr_config 0x%x\n", session_id,
+		cadr_config);
 
 	cadr_stream = &(cadr->cad_stream);
 	D("ARD session_id %d cadr_stream->app_type %d\n",
@@ -1226,7 +1187,7 @@ void print_data(u32 session_id)
 		session_id, cadr_stream->priority);
 
 	strm_dev = &(cadr->cad_device);
-	D("ARD session_id %d strm_dev->device %p\n", session_id,
+	D("ARD session_id %d strm_dev->device 0x%x\n", session_id,
 		strm_dev->device);
 	D("ARD session_id %d strm_dev->device_len %d\n", session_id,
 		strm_dev->device_len);

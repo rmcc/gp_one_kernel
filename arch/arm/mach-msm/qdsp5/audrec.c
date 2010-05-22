@@ -2,7 +2,7 @@
  *
  * common code to deal with the AUDREC dsp task (audio recording)
  *
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * Based on the audpp layer in arch/arm/mach-msm/qdsp5/audpp.c
  *
@@ -38,6 +38,8 @@
 #include "audmgr.h"
 /* for queue ids - should be relative to module number*/
 #include "adsp.h"
+
+#define LOG_CMCS 0 //karen test
 
 #ifdef DEBUG
 #define dprintk(format, arg...) \
@@ -97,6 +99,8 @@ static void audrectask_dsp_event(void *data, unsigned id, size_t len,
 	uint16_t msg[5]; /* Max size of message */
 	getevent(msg, len);
 
+	if (LOG_CMCS) pr_info("audrec: audrectask_dsp_event(id=%d)\n", id);
+	
 	switch (id) {
 	case AUDREC_MSG_CMD_CFG_DONE_MSG: {
 		dprintk(" %s : CMD CFG DONE %x\n", __func__, msg[1]);
@@ -206,6 +210,9 @@ int audrectask_enable(unsigned enc_type, audrec_event_func func, void *private)
 	struct audrec_state *audrec = &the_audrec_state;
 	int cnt, rc = 0;
 
+	if (LOG_CMCS) pr_info("audrec: audrectask_enable()\n");
+	
+
 	mutex_lock(audrec->lock);
 
 	if (audrec->enc_count++ == 0) {
@@ -260,6 +267,9 @@ EXPORT_SYMBOL(audrectask_enable);
 void audrectask_disable(unsigned enc_type, void *private)
 {
 	struct audrec_state *audrec = &the_audrec_state;
+
+	if (LOG_CMCS) pr_info("audrec: audrectask_disable()\n");
+	
 
 	mutex_lock(audrec->lock);
 

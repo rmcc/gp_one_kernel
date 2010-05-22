@@ -1,0 +1,18 @@
+01,QoS Data,Con,M_K,0,00
+02,QoS Data,STA,APTS_CONFIRM,0,01
+03,QoS Data,STA,APTS_CK_VO,2,01
+04,QoS Null,AP,,1,
+05,QoS Data,STA,APTS_CK_VI,2,01
+06,QoS Null,AP,,1,
+07,QoS Data,STA,APTS_CK_BE,2,01
+08,QoS Data,STA,APTS_CK_BK,2,01
+09,QoS Data,STA,APTS_TX,2,03       # step 5
+10,QoS Null,AP,,1,                 # step 6
+11,QoS Data,STA,APTS_TX,2,04       # step 7
+12,Beacon,AP,,0,01,,,,             # step 9  frame buffered
+13,PS Poll,STA,,,,                 # step 9
+14,QoS Data,Con,APTS_TX,1,03
+15,QoS Data,STA,APTS_TX,2,05
+16,QoS Data,Con,APTS_TX,1,04
+17,QoS Data,STA,APTS_TX,2,06
+18,QoS Data,Con,APTS_STOP,1,01

@@ -47,6 +47,7 @@
 #include <linux/memcontrol.h>
 #include <linux/debugobjects.h>
 #include <linux/mem_notify.h>
+#include <trace/page_alloc.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -527,6 +528,8 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 	int i;
 	int reserved = 0;
 
+	trace_page_free(page, order);
+
 	for (i = 0 ; i < (1 << order) ; ++i)
 		reserved += free_pages_check(page + i);
 	if (reserved)
@@ -986,6 +989,8 @@ static void free_hot_cold_page(struct page *page, int cold)
 	struct zone *zone = page_zone(page);
 	struct per_cpu_pages *pcp;
 	unsigned long flags;
+
+	trace_page_free(page, 0);
 
 	if (PageAnon(page))
 		page->mapping = NULL;
@@ -1651,6 +1656,7 @@ nopage:
 		show_mem();
 	}
 got_pg:
+	trace_page_alloc(page, order);
 	return page;
 }
 EXPORT_SYMBOL(__alloc_pages_internal);
@@ -4106,7 +4112,11 @@ void __init set_dma_reserve(unsigned long new_dma_reserve)
 }
 
 #ifndef CONFIG_NEED_MULTIPLE_NODES
-struct pglist_data __refdata contig_page_data = { .bdata = &bootmem_node_data[0] };
+/* FIH_ADQ, Ming { */
+/* Fix Section Mismatch Warning */
+///struct pglist_data __refdata contig_page_data = { .bdata = &bootmem_node_data[0] };
+struct pglist_data contig_page_data = { .bootmem_node_id = 0 };
+/* } FIH_ADQ, Ming */
 EXPORT_SYMBOL(contig_page_data);
 #endif
 

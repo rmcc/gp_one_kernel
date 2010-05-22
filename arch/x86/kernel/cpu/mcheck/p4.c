@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/smp.h>
+#include <trace/irq.h>
 
 #include <asm/processor.h>
 #include <asm/system.h>
@@ -60,8 +61,14 @@ static void (*vendor_thermal_interrupt)(struct pt_regs *regs) = unexpected_therm
 void smp_thermal_interrupt(struct pt_regs *regs)
 {
 	irq_enter();
+
+	trace_irq_entry(THERMAL_APIC_VECTOR, regs);
+
 	vendor_thermal_interrupt(regs);
 	__get_cpu_var(irq_stat).irq_thermal_count++;
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 }
 

@@ -2,7 +2,6 @@
  * drivers/serial/msm_serial.c - driver for msm7k serial device and console
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  * Author: Robert Love <rlove@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -489,7 +488,7 @@ static void msm_init_clock(struct uart_port *port)
 	msm_write(port, 0x7D, UART_DREG);
 	msm_write(port, 0x1C, UART_MNDREG);
 }
-
+/* FIH_ADQ, 6360 { */
 static void msm_deinit_clock(struct uart_port *port)
 {
 	struct msm_port *msm_port = UART_TO_MSM(port);
@@ -503,6 +502,7 @@ static void msm_deinit_clock(struct uart_port *port)
 #endif
 
 }
+/* } FIH_ADQ, 6360  */
 static int msm_startup(struct uart_port *port)
 {
 	struct msm_port *msm_port = UART_TO_MSM(port);
@@ -543,12 +543,12 @@ static int msm_startup(struct uart_port *port)
 	msm_reset(port);
 
 	msm_write(port, 0x05, UART_CR);	/* enable TX & RX */
-
+/* FIH_ADQ, 6360 Fix this bug*/
 	/* turn on RX and CTS interrupts */
 	msm_port->imr = UART_IMR_RXLEV | UART_IMR_RXSTALE |
 			UART_IMR_CURRENT_CTS;
 	msm_write(port, msm_port->imr, UART_IMR);
-
+/* } FIH_ADQ, 6360  */
 #ifdef CONFIG_SERIAL_MSM_RX_WAKEUP
 	/* Apply the RX GPIO wake irq workaround to the bluetooth uart */
 	if (port->line == 0) {  /* BT is serial device 0 */
@@ -580,8 +580,9 @@ static void msm_shutdown(struct uart_port *port)
 	if (port->line == 0)
 		free_irq(MSM_GPIO_TO_INT(45), port);
 #endif
+/* FIH_ADQ, 6360 { */
 	msm_deinit_clock(port);
-
+/* } FIH_ADQ, 6360  */
 }
 
 static void msm_set_termios(struct uart_port *port, struct ktermios *termios,
@@ -903,9 +904,9 @@ static int __init msm_console_setup(struct console *co, char *options)
 	msm_set_baud_rate(port, baud);
 
 	msm_reset(port);
-
+/* FIH_ADQ, 6360 { */
 	msm_deinit_clock(port);
-
+/* } FIH_ADQ, 6360 */
 	printk(KERN_INFO "msm_serial: console setup on port #%d\n", port->line);
 
 	return uart_set_options(port, co, baud, parity, bits, flow);
@@ -995,7 +996,7 @@ static int __devexit msm_serial_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
+/* FIH_ADQ, 6360 { */
 #ifdef CONFIG_PM
 static int msm_serial_suspend(struct platform_device *pdev, pm_message_t state)
 {
@@ -1022,12 +1023,14 @@ static int msm_serial_resume(struct platform_device *pdev)
 #define msm_serial_suspend NULL
 #define msm_serial_resume NULL
 #endif
-
+/* } FIH_ADQ, 6360  */
 static struct platform_driver msm_platform_driver = {
 	.probe = msm_serial_probe,
 	.remove = msm_serial_remove,
+/* FIH_ADQ, 6360 { */
 	.suspend = msm_serial_suspend,
 	.resume = msm_serial_resume,
+/* FIH_ADQ, 6360 { */	
 	.driver = {
 		.name = "msm_serial",
 		.owner = THIS_MODULE,

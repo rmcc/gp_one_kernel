@@ -23,9 +23,17 @@
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
 #include <linux/time.h>
+#include <trace/block.h>
 #include <asm/uaccess.h>
 
 static unsigned int blktrace_seq __read_mostly = 1;
+
+/* Global reference count of probes */
+static DEFINE_MUTEX(blk_probe_mutex);
+static int blk_probes_ref;
+
+static int register_tracepoints(void);
+static void unregister_tracepoints(void);
 
 /*
  * Send out a notify message.
@@ -133,7 +141,7 @@ static u32 bio_act[9] __read_mostly = { 0, BLK_TC_ACT(BLK_TC_BARRIER), BLK_TC_AC
  * The worker for the various blk_add_trace*() types. Fills out a
  * blk_io_trace structure and places it in a per-cpu subbuffer.
  */
-void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
+static void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 		     int rw, u32 what, int error, int pdu_len, void *pdu_data)
 {
 	struct task_struct *tsk = current;
@@ -189,8 +197,6 @@ void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 
 	local_irq_restore(flags);
 }
-
-EXPORT_SYMBOL_GPL(__blk_add_trace);
 
 static struct dentry *blk_tree_root;
 static DEFINE_MUTEX(blk_tree_mutex);
@@ -250,6 +256,10 @@ static void blk_trace_cleanup(struct blk_trace *bt)
 	free_percpu(bt->sequence);
 	free_percpu(bt->msg_data);
 	kfree(bt);
+	mutex_lock(&blk_probe_mutex);
+	if (--blk_probes_ref == 0)
+		unregister_tracepoints();
+	mutex_unlock(&blk_probe_mutex);
 }
 
 int blk_trace_remove(struct request_queue *q)
@@ -440,6 +450,14 @@ int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 	bt->pid = buts->pid;
 	bt->trace_state = Blktrace_setup;
 
+	mutex_lock(&blk_probe_mutex);
+	if (!blk_probes_ref++) {
+		ret = register_tracepoints();
+		if (ret)
+			goto probe_err;
+	}
+	mutex_unlock(&blk_probe_mutex);
+
 	ret = -EBUSY;
 	old_bt = xchg(&q->blk_trace, bt);
 	if (old_bt) {
@@ -448,6 +466,9 @@ int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 	}
 
 	return 0;
+probe_err:
+	--blk_probes_ref;
+	mutex_unlock(&blk_probe_mutex);
 err:
 	if (dir)
 		blk_remove_tree(dir);
@@ -573,4 +594,166 @@ void blk_trace_shutdown(struct request_queue *q)
 		blk_trace_startstop(q, 0);
 		blk_trace_remove(q);
 	}
+}
+
+/*
+ * blktrace probes
+ */
+
+/**
+ * blk_add_trace_rq - Add a trace for a request oriented action
+ * @q:		queue the io is for
+ * @rq:		the source request
+ * @what:	the action
+ *
+ * Description:
+ *     Records an action against a request. Will log the bio offset + size.
+ *
+ **/
+static void blk_add_trace_rq(struct request_queue *q, struct request *rq,
+				    u32 what)
+{
+	struct blk_trace *bt = q->blk_trace;
+	int rw = rq->cmd_flags & 0x03;
+
+	if (likely(!bt))
+		return;
+
+	if (blk_pc_request(rq)) {
+		what |= BLK_TC_ACT(BLK_TC_PC);
+		__blk_add_trace(bt, 0, rq->data_len, rw, what, rq->errors, sizeof(rq->cmd), rq->cmd);
+	} else  {
+		what |= BLK_TC_ACT(BLK_TC_FS);
+		__blk_add_trace(bt, rq->hard_sector, rq->hard_nr_sectors << 9, rw, what, rq->errors, 0, NULL);
+	}
+}
+
+/**
+ * blk_add_trace_bio - Add a trace for a bio oriented action
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @what:	the action
+ *
+ * Description:
+ *     Records an action against a bio. Will log the bio offset + size.
+ *
+ **/
+static void blk_add_trace_bio(struct request_queue *q, struct bio *bio,
+				     u32 what)
+{
+	struct blk_trace *bt = q->blk_trace;
+
+	if (likely(!bt))
+		return;
+
+	__blk_add_trace(bt, bio->bi_sector, bio->bi_size, bio->bi_rw, what, !bio_flagged(bio, BIO_UPTODATE), 0, NULL);
+}
+
+/**
+ * blk_add_trace_generic - Add a trace for a generic action
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @rw:		the data direction
+ * @what:	the action
+ *
+ * Description:
+ *     Records a simple trace
+ *
+ **/
+static void blk_add_trace_generic(struct request_queue *q,
+					 struct bio *bio, int rw, u32 what)
+{
+	struct blk_trace *bt = q->blk_trace;
+
+	if (likely(!bt))
+		return;
+
+	if (bio)
+		blk_add_trace_bio(q, bio, what);
+	else
+		__blk_add_trace(bt, 0, 0, rw, what, 0, 0, NULL);
+}
+
+/**
+ * blk_add_trace_pdu_int - Add a trace for a bio with an integer payload
+ * @q:		queue the io is for
+ * @what:	the action
+ * @bio:	the source bio
+ * @pdu:	the integer payload
+ *
+ * Description:
+ *     Adds a trace with some integer payload. This might be an unplug
+ *     option given as the action, with the depth at unplug time given
+ *     as the payload
+ *
+ **/
+static void blk_add_trace_pdu_int(struct request_queue *q, u32 what,
+					 struct bio *bio, unsigned int pdu)
+{
+	struct blk_trace *bt = q->blk_trace;
+	__be64 rpdu = cpu_to_be64(pdu);
+
+	if (likely(!bt))
+		return;
+
+	if (bio)
+		__blk_add_trace(bt, bio->bi_sector, bio->bi_size, bio->bi_rw, what, !bio_flagged(bio, BIO_UPTODATE), sizeof(rpdu), &rpdu);
+	else
+		__blk_add_trace(bt, 0, 0, 0, what, 0, sizeof(rpdu), &rpdu);
+}
+
+/**
+ * blk_add_trace_remap - Add a trace for a remap operation
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @dev:	target device
+ * @from:	source sector
+ * @to:		target sector
+ *
+ * Description:
+ *     Device mapper or raid target sometimes need to split a bio because
+ *     it spans a stripe (or similar). Add a trace for that action.
+ *
+ **/
+static void blk_add_trace_remap(struct request_queue *q, struct bio *bio,
+				       dev_t dev, sector_t from, sector_t to)
+{
+	struct blk_trace *bt = q->blk_trace;
+	struct blk_io_trace_remap r;
+
+	if (likely(!bt))
+		return;
+
+	r.device = cpu_to_be32(dev);
+	r.device_from = cpu_to_be32(bio->bi_bdev->bd_dev);
+	r.sector = cpu_to_be64(to);
+
+	__blk_add_trace(bt, from, bio->bi_size, bio->bi_rw, BLK_TA_REMAP, !bio_flagged(bio, BIO_UPTODATE), sizeof(r), &r);
+}
+
+static int register_tracepoints(void)
+{
+	int ret;
+
+	ret = register_trace_block_rq(blk_add_trace_rq);
+	WARN_ON(ret);
+	ret = register_trace_block_bio(blk_add_trace_bio);
+	WARN_ON(ret);
+	ret = register_trace_block_generic(blk_add_trace_generic);
+	WARN_ON(ret);
+	ret = register_trace_block_pdu_int(blk_add_trace_pdu_int);
+	WARN_ON(ret);
+	ret = register_trace_block_remap(blk_add_trace_remap);
+	WARN_ON(ret);
+	return 0;
+}
+
+static void unregister_tracepoints(void)
+{
+	unregister_trace_block_remap(blk_add_trace_remap);
+	unregister_trace_block_pdu_int(blk_add_trace_pdu_int);
+	unregister_trace_block_generic(blk_add_trace_generic);
+	unregister_trace_block_bio(blk_add_trace_bio);
+	unregister_trace_block_rq(blk_add_trace_rq);
+	tracepoint_synchronize_unregister();
 }

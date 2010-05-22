@@ -26,6 +26,7 @@ obj-$(CONFIG_MODULES) += module.o
 obj-$(CONFIG_US3_FREQ) += us3_cpufreq.o
 obj-$(CONFIG_US2E_FREQ) += us2e_cpufreq.o
 obj-$(CONFIG_KPROBES) += kprobes.o
+obj-$(USE_IMMEDIATE) += immediate.o
 obj-$(CONFIG_SUN_LDOMS) += ldc.o vio.o viohs.o ds.o
 obj-$(CONFIG_AUDIT) += audit.o
 obj-$(CONFIG_AUDIT)$(CONFIG_COMPAT) += compat_audit.o

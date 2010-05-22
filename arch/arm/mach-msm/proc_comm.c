@@ -1,7 +1,6 @@
 /* arch/arm/mach-msm/proc_comm.c
  *
  * Copyright (C) 2007-2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -131,3 +130,100 @@ again:
 	return ret;
 }
 EXPORT_SYMBOL(msm_proc_comm);
+
+/* FIH_ADQ, Ming { */
+int msm_proc_comm_oem(unsigned cmd, unsigned *data1, unsigned *data2, unsigned *cmd_parameter)
+{
+	unsigned base = MSM_SHARED_RAM_BASE;
+	unsigned long flags;
+	int ret;
+	
+	smem_oem_cmd_data *cmd_buf;
+	cmd_buf = (smem_oem_cmd_data *)(base + 0x2210);  // physical: 0x07F02210
+
+	spin_lock_irqsave(&proc_comm_lock, flags);
+
+again:
+	if (proc_comm_wait_for(base + MDM_STATUS, PCOM_READY))
+		goto again;
+
+	writel(cmd, base + APP_COMMAND);
+	writel(data1 ? *data1 : 0, base + APP_DATA1);
+	writel(data2 ? *data2 : 0, base + APP_DATA2);
+
+	// Set the parameter of OEM_CMD1
+	cmd_buf->cmd_data.check_flag = smem_oem_locked_flag;
+	cmd_buf->cmd_data.cmd_parameter[0] = cmd_parameter[0];
+
+	notify_other_proc_comm();
+
+	if (proc_comm_wait_for(base + APP_COMMAND, PCOM_CMD_DONE))
+		goto again;
+
+	if (readl(base + APP_STATUS) == PCOM_CMD_SUCCESS) {
+		if (data1)
+			*data1 = readl(base + APP_DATA1);
+		if (data2)
+			*data2 = readl(base + APP_DATA2);
+		ret = 0;
+	} else {
+		ret = -EIO;
+	}
+
+	writel(PCOM_CMD_IDLE, base + APP_COMMAND);
+
+	spin_unlock_irqrestore(&proc_comm_lock, flags);
+	return ret;
+}
+EXPORT_SYMBOL(msm_proc_comm_oem);
+/* } FIH_ADQ, Ming */
+
+/* FIH_ADQ, Kenny { */
+int msm_proc_comm_oem_rw128b(unsigned cmd, unsigned *data1, unsigned *data2, unsigned *cmd_parameter)
+{
+	unsigned base = MSM_SHARED_RAM_BASE;
+	unsigned long flags;
+	int ret;
+	int i;
+	
+	smem_oem_cmd_data *cmd_buf;
+	cmd_buf = (smem_oem_cmd_data *)(base + 0x2210);  // physical: 0x07F02210
+
+	spin_lock_irqsave(&proc_comm_lock, flags);
+
+again:
+	if (proc_comm_wait_for(base + MDM_STATUS, PCOM_READY))
+		goto again;
+
+	writel(cmd, base + APP_COMMAND);
+	writel(data1 ? *data1 : 0, base + APP_DATA1);
+	writel(data2 ? *data2 : 0, base + APP_DATA2);
+
+	// Set the parameter of OEM_CMD1
+	cmd_buf->cmd_data.check_flag = smem_oem_locked_flag;
+	cmd_buf->cmd_data.cmd_parameter[0] = cmd_parameter[0];
+
+	notify_other_proc_comm();
+
+	if (proc_comm_wait_for(base + APP_COMMAND, PCOM_CMD_DONE))
+		goto again;
+
+	if (readl(base + APP_STATUS) == PCOM_CMD_SUCCESS) {
+		if (data1)
+			*data1 = readl(base + APP_DATA1);
+		if (data2)
+			*data2 = readl(base + APP_DATA2);
+		ret = 0;
+	} else {
+		ret = -EIO;
+	}
+	for(i = 0;i < 32; i++){
+		cmd_parameter[i] = cmd_buf->return_data.return_value[i];
+	}
+	writel(PCOM_CMD_IDLE, base + APP_COMMAND);
+
+	spin_unlock_irqrestore(&proc_comm_lock, flags);
+	return ret;
+}
+EXPORT_SYMBOL(msm_proc_comm_oem_rw128b);
+/* } FIH_ADQ, Kenny */

@@ -41,7 +41,43 @@ static inline cpumask_t node_to_cpumask(int node)
 
 #define pcibus_to_cpumask(bus)	(cpu_online_map)
 
+struct pci_bus;
+
+static inline int parent_node(int node)
+{
+	return node;
+}
+
+static inline int pcibus_to_node(struct pci_bus *bus)
+{
+	return -1;
+}
+
+static inline cpumask_t pcibus_to_cpumask(struct pci_bus *bus)
+{
+	return pcibus_to_node(bus) == -1 ?
+		CPU_MASK_ALL :
+		node_to_cpumask(pcibus_to_node(bus));
+}
+
+/* returns pointer to cpumask for specified node */
+#define	node_to_cpumask_ptr(v, node) 					\
+		cpumask_t _##v = node_to_cpumask(node);			\
+		const cpumask_t *v = &_##v
+
+#define node_to_cpumask_ptr_next(v, node)				\
+			  _##v = node_to_cpumask(node)
+
+static inline int node_to_first_cpu(int node)
+{
+	node_to_cpumask_ptr(mask, node);
+	return first_cpu(*mask);
+}
+
+#else
+
+#include <asm-generic/topology.h>
+
 #endif /* !CONFIG_NUMA */
-# include <asm-generic/topology.h>
 
 #endif /* _ASM_ALPHA_TOPOLOGY_H */

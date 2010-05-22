@@ -1,58 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* drivers/video/msm/src/drv/mdp/mdp_ppp_v31.c
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 
 #include <linux/module.h>
@@ -499,7 +461,7 @@ void mdp_set_scale(MDPIBUF * iBuf,
 	uint32 dst_roi_height_scale;
 	struct phase_val pval;
 	boolean use_pr;
-	uint32 ppp_scale_config = BIT(6);
+	uint32 ppp_scale_config = 0;
 
 	if (iBuf->mdpImg.mdpOp & MDPOP_ASCALE) {
 		if (iBuf->mdpImg.mdpOp & MDPOP_ROT90) {
@@ -511,8 +473,7 @@ void mdp_set_scale(MDPIBUF * iBuf,
 		}
 
 		if ((dst_roi_width_scale != iBuf->roi.width) ||
-		    (dst_roi_height_scale != iBuf->roi.height) ||
-			(iBuf->mdpImg.mdpOp & MDPOP_SHARPENING)) {
+		    (dst_roi_height_scale != iBuf->roi.height)) {
 			*pppop_reg_ptr |=
 			    (PPP_OP_SCALE_Y_ON | PPP_OP_SCALE_X_ON);
 
@@ -759,12 +720,6 @@ void mdp_set_scale(MDPIBUF * iBuf,
 				ppp_scale_config |= (SCALE_D0_SET << 4);
 			}
 
-			if (iBuf->mdpImg.mdpOp & MDPOP_SHARPENING) {
-				ppp_scale_config |= BIT(7);
-				MDP_OUTP(MDP_BASE + 0x50020,
-						iBuf->mdpImg.sp_value);
-			}
-
 			MDP_OUTP(MDP_BASE + 0x10230, ppp_scale_config);
 		} else {
 			iBuf->mdpImg.mdpOp &= ~(MDPOP_ASCALE);
@@ -789,14 +744,6 @@ void mdp_adjust_start_addr(uint8 **src0,
 		break;
 
 	case 1:
-		/* MDP 3.1 HW bug workaround */
-		if (iBuf->ibuf_type == MDP_YCRYCB_H2V1) {
-			*src0 += (x + y * width) * bpp;
-			x = y = 0;
-			width = iBuf->roi.dst_width;
-			height = iBuf->roi.dst_height;
-		}
-
 		MDP_OUTP(MDP_CMD_DEBUG_ACCESS_BASE + 0x0204, (y << 16) | (x));
 		MDP_OUTP(MDP_CMD_DEBUG_ACCESS_BASE + 0x020c,
 			 (height << 16) | (width));

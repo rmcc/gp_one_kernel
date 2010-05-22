@@ -15,7 +15,7 @@ REFERENCES
 EXTERNALIZED FUNCTIONS
   None
 
-Copyright (c) 1992-2009, Code Aurora Forum. All rights reserved.
+Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
@@ -299,23 +299,6 @@ typedef struct {
 	unsigned short					stereo_cfg;
 	unsigned short 					block_size;
 } __attribute__((packed)) audpp_cmd_cfg_adec_params_adpcm;
-
-/*
- * Command Structure to configure Per decoder Parameters (WMA)
- */
-
-#define AUDPP_CMD_CFG_ADEC_PARAMS_WMA_LEN	\
-	sizeof(struct audpp_cmd_cfg_adec_params_wma)
-
-struct audpp_cmd_cfg_adec_params_wma {
-	audpp_cmd_cfg_adec_params_common    common;
-	unsigned short 	armdatareqthr;
-	unsigned short 	channelsdecoded;
-	unsigned short 	wmabytespersec;
-	unsigned short	wmasamplingfreq;
-	unsigned short	wmaencoderopts;
-} __attribute__((packed));
-
 
 /*
  * Command Structure to configure Per decoder Parameters (MP3)

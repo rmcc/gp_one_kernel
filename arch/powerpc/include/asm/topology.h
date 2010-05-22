@@ -77,6 +77,14 @@ extern void __init dump_numa_cpu_topology(void);
 extern int sysfs_add_device_to_node(struct sys_device *dev, int nid);
 extern void sysfs_remove_device_from_node(struct sys_device *dev, int nid);
 
+/* returns pointer to cpumask for specified node */
+#define	node_to_cpumask_ptr(v, node) 					\
+		cpumask_t _##v = node_to_cpumask(node);			\
+		const cpumask_t *v = &_##v
+
+#define node_to_cpumask_ptr_next(v, node)				\
+			  _##v = node_to_cpumask(node)
+
 #else
 
 static inline int of_node_to_nid(struct device_node *device)
@@ -96,9 +104,9 @@ static inline void sysfs_remove_device_from_node(struct sys_device *dev,
 {
 }
 
-#endif /* CONFIG_NUMA */
-
 #include <asm-generic/topology.h>
+
+#endif /* CONFIG_NUMA */
 
 #ifdef CONFIG_SMP
 #include <asm/cputable.h>

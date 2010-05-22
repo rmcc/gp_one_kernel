@@ -1,8 +1,8 @@
 /*
  * Idle processing for ARMv7-based Qualcomm SoCs.
  *
+ * Copyright (c) 2007-2009 QUALCOMM USA, INC.
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -17,7 +17,6 @@
 
 #include <linux/linkage.h>
 #include <asm/assembler.h>
-#include <asm/vfpmacros.h>
 
 ENTRY(msm_pm_collapse)
 	ldr     r0, =saved_state
@@ -27,12 +26,12 @@ ENTRY(msm_pm_collapse)
 	mrc     p15, 0, r3, c3, c0, 0 /* dacr */
 	mrc     p15, 0, ip, c13, c0, 1 /* context ID */
 	stmia   r0!, {r1-r3, ip}
-#ifdef CONFIG_VFP
-	VFPFSTMIA r0, r1              /* Save VFP working registers */
-	fmrx    r1, fpexc
-	fmrx    r2, fpscr
-	stmia   r0!, {r1, r2}         /* Save VFP state registers */
+	/* fall though */
+ENTRY(msm_arch_idle)
+#if defined(CONFIG_MSM_FIQ_SUPPORT)
+	cpsid   f
 #endif
+
 	stmfd   sp!, {r4-r5, r7, r9-r11, lr}
 	bl      v7_flush_dcache_all
 	ldmfd   sp!, {r4-r5, r7, r9-r11, lr}
@@ -41,16 +40,16 @@ ENTRY(msm_pm_collapse)
 	bic     r0, r1, #(1 << 2)        /* clear dcache bit   */
 	bic     r0, r0, #(1 << 12)       /* clear icache bit   */
 	mcr     p15, 0, r0, c1, c0, 0    /* disable d/i cache  */
-	/* fall though */
-ENTRY(msm_arch_idle)
-#if defined(CONFIG_MSM_FIQ_SUPPORT)
-	cpsid   f
-#endif
+
 	mov     r0, #0                   /* prepare wfi value
 					  * also used as return value from
 					  * msm_pm_collapse */
+
+	dsb
 	wfi
 
+	mcr     p15, 0, r1, c1, c0, 0    /* restore d/i cache  */
+	isb
 #if defined(CONFIG_MSM_FIQ_SUPPORT)
 	cpsie   f
 #endif
@@ -71,23 +70,6 @@ ENTRY(msm_pm_collapse_exit)
 	adr     r3, msm_pm_collapse_exit
 	add     r1, r1, r3
 	sub     r1, r1, r2
-#ifdef CONFIG_VFP
-	mrc     p15, 0, r2, c1, c0, 2 /* Read CP Access Control Register */
-	orr     r2, r2, #0x00F00000   /* Enable full access for p10,11 */
-	mcr     p15, 0, r2, c1, c0, 2 /* Write CPACR */
-	isb
-	mov     r2, #0x40000000       /* Enable VFP */
-	fmxr    fpexc, r2
-	isb
-	ldmdb   r1!, {r2, r3}         /* Read saved VFP state registers */
-	sub     r1, r1, #32*8         /* Jump to start of vfp regs area */
-	VFPFLDMIA r1, r4              /* Restore VFP working registers,
-				       * r1 incremented to end of vfp
-				       * regs area */
-	sub     r1, r1, #32*8         /* Jump back to start of vfp regs area */
-	fmxr    fpscr, r3             /* Restore FPSCR */
-	fmxr    fpexc, r2             /* Restore FPEXC last */
-#endif
 	ldmdb   r1!, {r2-r5}
 	mcr     p15, 0, r4, c3, c0, 0 /* dacr */
 	mcr     p15, 0, r3, c2, c0, 0 /* ttb */
@@ -140,9 +122,5 @@ msm_pm_pa_to_va:
 saved_state:
 	.space  4 * 11 /* r4-14 */
 	.space  4 * 4  /* cp15 */
-#ifdef CONFIG_VFP
-	.space  8 * 32 /* VFP working registers */
-	.space  4 * 2  /* VFP state registers */
-#endif
 saved_state_end:
 

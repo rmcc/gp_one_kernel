@@ -60,12 +60,15 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/idr.h>
+#include <linux/immediate.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
 #include <asm/setup.h>
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
+
+#include <mach/msm_smd.h>
 
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
@@ -100,6 +103,11 @@ static inline void mark_rodata_ro(void) { }
 
 #ifdef CONFIG_TC
 extern void tc_init(void);
+#endif
+#ifdef USE_IMMEDIATE
+extern void imv_init_complete(void);
+#else
+static inline void imv_init_complete(void) { }
 #endif
 
 enum system_states system_state;
@@ -551,6 +559,7 @@ asmlinkage void __init start_kernel(void)
 	lockdep_init();
 	debug_objects_early_init();
 	cgroup_init_early();
+	core_imv_update();
 
 	local_irq_disable();
 	early_boot_irqs_off();
@@ -678,10 +687,14 @@ asmlinkage void __init start_kernel(void)
 #ifdef CONFIG_PROC_FS
 	proc_root_init();
 #endif
+
+	printk(KERN_INFO "Poweron cause:0x%08x\n", FIH_READ_POWEER_ON_CAUSE_FROM_SMEM());
+
 	cgroup_init();
 	cpuset_init();
 	taskstats_init_early();
 	delayacct_init();
+	imv_init_complete();
 
 	check_bugs();
 
@@ -794,6 +807,7 @@ static void run_init_process(char *init_filename)
  */
 static int noinline init_post(void)
 {
+	imv_unref_core_init();
 	free_initmem();
 	unlock_kernel();
 	mark_rodata_ro();

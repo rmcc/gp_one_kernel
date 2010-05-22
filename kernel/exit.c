@@ -47,6 +47,7 @@
 #include <linux/blkdev.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/tracehook.h>
+#include <trace/sched.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -149,7 +150,10 @@ static void __exit_signal(struct task_struct *tsk)
 
 static void delayed_put_task_struct(struct rcu_head *rhp)
 {
-	put_task_struct(container_of(rhp, struct task_struct, rcu));
+	struct task_struct *tsk = container_of(rhp, struct task_struct, rcu);
+
+	trace_sched_process_free(tsk);
+	put_task_struct(tsk);
 }
 
 
@@ -505,6 +509,8 @@ struct files_struct *get_files_struct(struct task_struct *task)
 	return files;
 }
 
+EXPORT_SYMBOL(get_files_struct);
+
 void put_files_struct(struct files_struct *files)
 {
 	struct fdtable *fdt;
@@ -523,6 +529,8 @@ void put_files_struct(struct files_struct *files)
 		free_fdtable(fdt);
 	}
 }
+
+EXPORT_SYMBOL(put_files_struct);
 
 void reset_files_struct(struct files_struct *files)
 {
@@ -1074,6 +1082,8 @@ NORET_TYPE void do_exit(long code)
 
 	if (group_dead)
 		acct_process();
+	trace_sched_process_exit(tsk);
+
 	exit_sem(tsk);
 	exit_files(tsk);
 	exit_fs(tsk);
@@ -1121,6 +1131,8 @@ NORET_TYPE void do_exit(long code)
 
 	if (tsk->splice_pipe)
 		__free_pipe_info(tsk->splice_pipe);
+
+	exit_user_markers(tsk);
 
 	preempt_disable();
 	/* causes final put_task_struct in finish_task_switch(). */
@@ -1674,6 +1686,8 @@ static long do_wait(enum pid_type type, struct pid *pid, int options,
 	DECLARE_WAITQUEUE(wait, current);
 	struct task_struct *tsk;
 	int retval;
+
+	trace_sched_process_wait(pid);
 
 	add_wait_queue(&current->signal->wait_chldexit,&wait);
 repeat:

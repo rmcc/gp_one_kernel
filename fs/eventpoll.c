@@ -654,8 +654,14 @@ out_unlock:
  * This is the callback that is used to add our wait queue to the
  * target file wakeup lists.
  */
+/* FIH_ADQ, 6370 { */ 
+/*
+static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
+				 poll_table *pt)
+*/
 static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 				 poll_table *pt, int exclusive)
+/* } FIH_ADQ, 6370 */				 
 {
 	struct epitem *epi = ep_item_from_epqueue(pt);
 	struct eppoll_entry *pwq;
@@ -664,9 +670,11 @@ static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 		init_waitqueue_func_entry(&pwq->wait, ep_poll_callback);
 		pwq->whead = whead;
 		pwq->base = epi;
+/* FIH_ADQ, 6370 { */
 		if (exclusive)
 			add_wait_queue_exclusive(whead, &pwq->wait);
 		else
+/* } FIH_ADQ, 6370 */		
 			add_wait_queue(whead, &pwq->wait);
 		list_add_tail(&pwq->llink, &epi->pwqlist);
 		epi->nwait++;

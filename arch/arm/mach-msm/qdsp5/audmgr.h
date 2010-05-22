@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/qdsp5/audmgr.h
  *
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -150,7 +150,6 @@ struct rpc_audmgr_enable_client_args {
 #define AUDMGR_PROG 0x30000013
 #define AUDMGR_VERS 0x7feccbff
 #define AUDMGR_VERS_COMP 0x00010001
-#define AUDMGR_VERS_COMP_VER2 0x00020001
 
 struct rpc_audmgr_cb_func_ptr {
 	uint32_t cb_id;

@@ -25,6 +25,7 @@
 #include <linux/security.h>
 #include <linux/audit.h>
 #include <linux/seccomp.h>
+#include <linux/marker.h>
 
 #include <asm/byteorder.h>
 #include <asm/cpu.h>
@@ -466,6 +467,13 @@ static inline int audit_arch(void)
  */
 asmlinkage void do_syscall_trace(struct pt_regs *regs, int entryexit)
 {
+	if (!entryexit)
+		trace_mark(kernel_arch_syscall_entry, "syscall_id %d ip #p%ld",
+			(int)regs->regs[2], instruction_pointer(regs));
+	else
+		trace_mark(kernel_arch_syscall_exit, "ret %ld",
+			regs->regs[2]);
+
 	/* do the secure computing check first */
 	if (!entryexit)
 		secure_computing(regs->regs[0]);

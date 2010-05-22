@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
+<xsl:output method="html"></xsl:output>
+<xsl:template match="/">
+    <html>
+    <head>
+        <title>Atheros Communications, Inc.</title>
+        <link rel="stylesheet" type="text/css" href="../xmlTree.css"/>
+        <script type="text/javascript" src="../xmlTree.js"></script>
+    </head>
+    <xsl:apply-templates/>
+    </html>
+</xsl:template>
+
+<xsl:template match="HTML/BODY">
+    <body>
+        <xsl:apply-templates/>
+    </body>
+</xsl:template>
+
+<xsl:template match="BRANCH">
+    <xsl:variable name="id" select="generate-id()"/>
+    <span class="trigger">
+        <xsl:attribute name="onClick">
+            showBranch('<xsl:value-of select="$id"/>');
+        </xsl:attribute>
+        <img src="closed.gif">
+            <xsl:attribute name="id">I<xsl:value-of select="$id"/></xsl:attribute>
+        </img>
+        <b>
+            <xsl:value-of select="OBJECT/param[@name='Name']/@value"/>
+        </b>
+    </span>
+    <span class="branch">
+        <xsl:attribute name="id">
+            <xsl:value-of select="$id"/>
+        </xsl:attribute>
+        <xsl:apply-templates />
+    </span>
+</xsl:template>
+
+<xsl:template match="OBJECT">
+    <img src="doc.gif"/>
+    <a>
+        <xsl:attribute name="href" >
+            <xsl:value-of select="param[@name='Local']/@value"/>
+        </xsl:attribute>
+        <xsl:attribute name="target" >mainFrame</xsl:attribute>
+        <xsl:value-of select="param[@name='Name']/@value"/>
+    </a><br/>
+    <xsl:apply-templates />
+</xsl:template>
+
+<!-- avoid output of text node with default template -->
+<!--xsl:template match="branchText"/-->
+
+</xsl:stylesheet>

@@ -1,58 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* drivers/char/diag/diagfwd.c */
+
+/* Copyright (c) 2008 QUALCOMM USA, INC. 
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org 
  */
 
 #include <linux/init.h>
@@ -68,6 +30,13 @@
 #include "diagfwd.h"
 #include "diagchar_hdlc.h"
 
+// FIH +++
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/rtc.h>
+// FIH ---
 
 MODULE_DESCRIPTION("Diag Char Driver");
 MODULE_LICENSE("GPL v2");
@@ -84,8 +53,85 @@ MODULE_VERSION("1.0");
    one time. */
 #define MAX_DIAG_USB_REQUESTS 12
 
-#define CHK_OVERFLOW(bufStart, start, end, length) \
-((bufStart <= start) && (end - start >= length)) ? 1 : 0
+// FIH +++
+#define MAX_W_BUF_SIZE 65535
+#define SAFE_W_BUF_SIZE 50000
+
+static DEFINE_SPINLOCK(smd_lock);
+static DECLARE_WAIT_QUEUE_HEAD(diag_wait_queue);
+
+static unsigned char *pBuf = NULL;
+static unsigned char *pBuf_Curr = NULL;
+
+static int gBuf_Size = 0;
+
+static struct file *gLog_filp = NULL;
+static struct file *gFilter_filp = NULL;
+
+static struct task_struct *kLogTsk;
+static struct task_struct *kLoadFilterTsk;
+
+static char gPath[] = "/sdcard/log/";
+static char gLogFilePath[64];
+static char gFilterFileName[] = "filter.bin";
+
+static int bCaptureFilter = 0;
+static int bLogStart = 0;
+static int gTotalWrite = 0;
+static int bWriteSD = 0;
+static int bGetRespNow = 0;
+
+static void diag_start_log(void);
+static void diag_stop_log(void);
+static int open_qxdm_filter_file(void);
+static int close_qxdm_filter_file(void);
+
+static void diag_log_smd_read(void)
+{
+	int sz;
+	void *buf;
+	unsigned long flags;
+	
+	for (;;) {
+		sz = smd_cur_packet_size(driver->ch);
+		if (sz == 0)
+			break;
+		if (sz > smd_read_avail(driver->ch)) {
+			printk(KERN_INFO "[diagfwd.c][WARNING] sz > smd_read_avail(), sz = %d\n", sz);
+			break;
+		}
+		if (sz > USB_MAX_BUF) {
+			printk(KERN_INFO "[diagfwd.c][ERROR] sz > USB_MAX_BUF, sz = %d\n", sz);
+			smd_read(driver->ch, 0, sz);
+			continue;
+		}
+		
+		buf = driver->usb_buf_in;
+		
+		if (!buf) {
+			printk(KERN_INFO "Out of diagmem for a9\n");
+			break;
+		}
+
+		if (smd_read(driver->ch, buf, sz) != sz) {
+			printk(KERN_INFO "[diagfwd.c][WARNING] not enough data?!\n");
+			continue;
+		}
+		
+		spin_lock_irqsave(&smd_lock, flags);
+		memcpy(pBuf_Curr, buf, sz);
+		pBuf_Curr += sz;
+		gBuf_Size += sz;
+		spin_unlock_irqrestore(&smd_lock, flags);
+		
+		if ((gBuf_Size >= SAFE_W_BUF_SIZE) || bGetRespNow) {
+			wake_up_interruptible(&diag_wait_queue);
+		}
+		
+		gTotalWrite += sz;
+	}
+}
+// FIH ---
 
 static void diag_smd_send_req(void)
 {
@@ -167,9 +213,6 @@ static void diag_update_msg_mask(int start, int end , uint8_t *buf)
 	int first;
 	int last;
 	uint8_t *ptr = driver->msg_masks;
-	uint8_t *ptr_buffer_start = &(*(driver->msg_masks));
-	uint8_t *ptr_buffer_end = &(*(driver->msg_masks)) + MSG_MASK_SIZE;
-
 	mutex_lock(&driver->diagchar_mutex);
 	/* First SSID can be zero : So check that last is non-zero */
 
@@ -181,17 +224,11 @@ static void diag_update_msg_mask(int start, int end , uint8_t *buf)
 		if (start >= first && start <= last) {
 			ptr += (start - first)*4;
 			if (end <= last)
-				if (CHK_OVERFLOW(ptr_buffer_start, ptr,
-						  ptr_buffer_end,
-						  (((end - start)+1)*4)))
-					memcpy(ptr, buf , ((end - start)+1)*4);
-				else
-					printk(KERN_CRIT "Not enough"
-							 " buffer space for"
-							 " MSG_MASK \n");
+					memcpy(ptr, buf ,
+						   (((end - start)+1)*4));
 			else
-				printk(KERN_INFO "Unable to copy"
-						 " mask change \n");
+				printk(KERN_INFO "Unable to copy mask "
+						 "change \n");
 
 			found = 1;
 			break;
@@ -201,16 +238,12 @@ static void diag_update_msg_mask(int start, int end , uint8_t *buf)
 	}
 	/* Entry was not found - add new table */
 	if (!found) {
-		if (CHK_OVERFLOW(ptr_buffer_start, ptr, ptr_buffer_end,
-				  8 + ((end - start) + 1)*4)) {
 			memcpy(ptr, &(start) , 4);
 			ptr += 4;
 			memcpy(ptr, &(end), 4);
 			ptr += 4;
 			memcpy(ptr, buf , ((end - start) + 1)*4);
-		} else
-			printk(KERN_CRIT " Not enough buffer"
-					 " space for MSG_MASK \n");
+
 	}
 	mutex_unlock(&driver->diagchar_mutex);
 	diag_print_mask_table();
@@ -226,13 +259,7 @@ static void diag_update_event_mask(uint8_t *buf, int toggle, int num_bits)
 	if (!toggle)
 		memset(ptr, 0 , EVENT_MASK_SIZE);
 	else
-		if (CHK_OVERFLOW(ptr, ptr,
-				 ptr+EVENT_MASK_SIZE,
-				  num_bits/8 + 1))
 			memcpy(ptr, temp , num_bits/8 + 1);
-		else
-			printk(KERN_CRIT "Not enough buffer space "
-					 "for EVENT_MASK \n");
 	mutex_unlock(&driver->diagchar_mutex);
 }
 
@@ -242,11 +269,7 @@ static void diag_update_log_mask(uint8_t *buf, int num_items)
 	uint8_t *temp = buf;
 
 	mutex_lock(&driver->diagchar_mutex);
-	if (CHK_OVERFLOW(ptr, ptr, ptr + LOG_MASK_SIZE,
-				  (num_items+7)/8))
 		memcpy(ptr, temp , (num_items+7)/8);
-	else
-		printk(KERN_CRIT " Not enough buffer space for LOG_MASK \n");
 	mutex_unlock(&driver->diagchar_mutex);
 }
 
@@ -256,10 +279,7 @@ static void diag_update_pkt_buffer(unsigned char *buf)
 	unsigned char *temp = buf;
 
 	mutex_lock(&driver->diagchar_mutex);
-	if (CHK_OVERFLOW(ptr, ptr, ptr + PKT_SIZE, driver->pkt_length))
 		memcpy(ptr, temp , driver->pkt_length);
-	else
-		printk(KERN_CRIT " Not enough buffer space for PKT_RESP \n");
 	mutex_unlock(&driver->diagchar_mutex);
 }
 
@@ -396,7 +416,7 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 static void diag_process_hdlc(void *data, unsigned len)
 {
 	struct diag_hdlc_decode_type hdlc;
-	int ret, type = 0;
+	int ret, type;
 
 	hdlc.dest_ptr = driver->hdlc_buf;
 	hdlc.dest_size = USB_MAX_BUF;
@@ -472,13 +492,53 @@ static struct diag_operations diagfwdops = {
 
 static void diag_smd_notify(void *ctxt, unsigned event)
 {
+	if (bLogStart) {
+		if (event != SMD_EVENT_DATA)
+			return;
+		diag_log_smd_read();
+	}else {
 	diag_smd_send_req();
+	}
 }
 
 static void diag_smd_qdsp_notify(void *ctxt, unsigned event)
 {
 	diag_smd_qdsp_send_req();
 }
+
+// FIH +++
+static ssize_t qxdm2sd_run(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned LogRun;
+	
+	sscanf(buf, "%1d\n", &LogRun);
+	
+	dev_dbg(dev, "%s: %d %d\n", __func__, count, LogRun);
+
+	if (LogRun == 1)
+	{
+		// Open log file and start capture
+		diag_start_log();
+	}
+	else if (LogRun == 0)
+	{
+		// Close log file and stop capture
+		diag_stop_log();
+	}
+	else if (LogRun == 2)
+	{
+		open_qxdm_filter_file();
+	}
+	else if (LogRun == 3)
+	{
+		close_qxdm_filter_file();
+	}
+	
+	return count;
+}
+
+DEVICE_ATTR(qxdm2sd, 0644, NULL, qxdm2sd_run);
+// FIH ---
 
 static int diag_smd_probe(struct platform_device *pdev)
 {
@@ -509,7 +569,14 @@ static int diag_smd_probe(struct platform_device *pdev)
 	}
 #endif
 	printk(KERN_INFO "diag opened SMD port ; r = %d\n", r);
+// FIH +++
+	r = device_create_file(&pdev->dev, &dev_attr_qxdm2sd);
 
+	if (r < 0)
+	{
+		dev_err(&pdev->dev, "%s: Create qxdm2sd attribute \"qxdm2sd\" failed!! <%d>", __func__, r);
+	}
+// FIH ---
 err:
 	return 0;
 }
@@ -525,9 +592,497 @@ static struct platform_driver msm_smd_ch1_driver = {
 
 void diag_read_work_fn(struct work_struct *work)
 {
+// FIH +++
+	unsigned char *head = NULL;
+// FIH ---
 	diag_process_hdlc(driver->usb_buf_out, driver->read_len);
 	diag_read(driver->usb_buf_out, USB_MAX_BUF);
+// FIH +++
+	if (bCaptureFilter)
+	{
+		if (gFilter_filp != NULL)
+		{
+			head = driver->usb_buf_out;
+
+			if (head[0] != 0x4b && head[1] != 0x04)
+			{
+				gFilter_filp->f_op->write(gFilter_filp, (unsigned char __user *)driver->usb_buf_out, driver->read_len, &gFilter_filp->f_pos);
+
+				printk(KERN_INFO "Filter string capture (%d).\n", driver->read_len);
+			}
+			
+		}
+	}
+// FIH ---
 }
+
+// FIH +++
+void diag_close_log_file_work_fn(struct work_struct *work)
+{
+	if (gLog_filp != NULL)
+	{
+		do_fsync(gLog_filp, 1);
+		filp_close(gLog_filp, NULL);
+		gLog_filp = NULL;
+		
+		kfree(pBuf);
+
+		printk(KERN_INFO "[diagfwd.c][DEBUG] Log file %s (%d) is closed.\n", gLogFilePath, gTotalWrite);
+	}
+	
+	if (gFilter_filp != NULL)
+	{
+		// Close filter file
+		do_fsync(gFilter_filp, 1);
+		filp_close(gFilter_filp, NULL);
+		gFilter_filp = NULL;
+		
+		printk(KERN_INFO "Filter file %s closed.\n", gFilterFileName);
+	}
+}
+
+static int diag_check_response(unsigned char *str1, unsigned char *str2, int len1, int len2)
+{
+	int i = 0;
+	int bPass = 0;
+	unsigned char *buf1 = str1;
+	unsigned char *buf2 = str2;
+	unsigned char *buf3 = NULL;
+
+	unsigned char *pos = NULL;
+
+	if (*buf1 == 0x7d)
+	{
+		buf3 = kzalloc(7, GFP_KERNEL);
+		memcpy(buf3, buf1, 7);
+		
+		for (i=0;i<len2;i++)
+		{
+			if (*buf2 == 0x7d)
+			{
+				if (memcmp(buf2, buf3, 7) == 0)
+				{
+					if (*(buf2+7) == 0x01)
+					{
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter SUCCESS!\n");
+						bPass = 1;
+						break;
+					}
+					else
+					{
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter FAIL!\n");
+						bPass = 0;
+						// +++ Debug +++
+						pos = buf1;
+						printk(KERN_INFO "==============================> Send\n");
+						while(1) {
+							printk(KERN_INFO "%.2x ", *pos);
+							if (*pos == 0x7e) break;
+							pos++;
+						}
+						printk(KERN_INFO "\n");
+						
+						pos = buf2;
+						printk(KERN_INFO "==============================> Return\n");
+						while(1) {
+							printk(KERN_INFO "%.2x ", *pos);
+							if (*pos == 0x7e) break;
+							pos++;
+						}
+						printk(KERN_INFO "\n");
+						// --- Debug ---
+						break;
+					}
+				}
+			}
+			
+			buf2++;
+		}
+		
+		kfree(buf3);
+	}
+	
+	if (*buf1 == 0x73)
+	{
+		buf3 = kzalloc(5, GFP_KERNEL);
+		memcpy(buf3, buf1, 5);
+
+		for (i=0;i<len2;i++)
+		{
+			if (*buf2 == 0x73)
+			{
+				if (memcmp(buf2, buf3, 5) == 0)
+				{
+					if (*(buf2+5) == 0 && *(buf2+6) == 0 && *(buf2+7) == 0 && *(buf2+8) == 0)
+					{
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter SUCCESS!\n");
+						bPass = 1;
+						break;
+					}
+					else
+					{
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter FAIL!\n");
+						bPass = 0;
+						// +++ Debug +++
+						pos = buf1;
+						printk(KERN_INFO "==============================> Send\n");
+						while(1) {
+							printk(KERN_INFO "%.2x ", *pos);
+							if (*pos == 0x7e) break;
+							pos++;
+						}
+						printk(KERN_INFO "\n");
+						
+						pos = buf2;
+						printk(KERN_INFO "==============================> Return\n");
+						while(1) {
+							printk(KERN_INFO "%.2x ", *pos);
+							if (*pos == 0x7e) break;
+							pos++;
+						}
+						printk(KERN_INFO "\n");
+						// --- Debug ---
+						break;
+					}
+				}
+			}
+			
+			buf2++;
+		}
+		
+		kfree(buf3);
+	}
+	
+	if (*buf1 == 0x82)
+	{
+		buf3 = kzalloc(4, GFP_KERNEL);
+		memcpy(buf3, (buf1+2), 4);
+
+		for (i=0;i<len2;i++)
+		{
+			if (*buf2 == 0x82)
+			{
+				if (memcmp((buf2+2), buf3, 4) == 0)
+				{
+					if (*(buf2+1) == 0)
+					{
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter SUCCESS!\n");
+						bPass = 1;
+						break;
+					}
+					else
+					{
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter FAIL!\n");
+						bPass = 0;
+						// +++ Debug +++
+						pos = buf1;
+						printk(KERN_INFO "==============================> Send\n");
+						while(1) {
+							printk(KERN_INFO "%.2x ", *pos);
+							if (*pos == 0x7e) break;
+							pos++;
+						}
+						printk(KERN_INFO "\n");
+						
+						pos = buf2;
+						printk(KERN_INFO "==============================> Return\n");
+						while(1) {
+							printk(KERN_INFO "%.2x ", *pos);
+							if (*pos == 0x7e) break;
+							pos++;
+						}
+						printk(KERN_INFO "\n");
+						// --- Debug ---
+						break;
+					}
+				}
+			}
+			
+			buf2++;
+		}
+		
+		kfree(buf3);
+	}
+	
+	return bPass;
+}
+
+static int diag_write_filter_thread(void *__unused)
+{
+	unsigned long flags;
+	struct file *Filter_filp = NULL;
+	char FilterFile[64];
+	unsigned char w_buf[512];
+	unsigned char *p = NULL;
+	unsigned char *r_buf = NULL;
+	int nRead = 0;
+	int w_size = 0;
+	int r_size = 0;
+	int bEOF = 0;
+	int bSuccess = 0;
+	int rt = 0;
+
+	// Open filter.bin
+	sprintf(FilterFile, "%s%s", gPath, gFilterFileName);
+		
+	Filter_filp = filp_open(FilterFile, O_RDONLY|O_LARGEFILE, 0);
+	
+	if (IS_ERR(Filter_filp))
+	{
+		Filter_filp = NULL;
+		printk(KERN_ERR "[diagfwd.c][ERROR] Open filter file %s error!\n", FilterFile);
+		goto err;
+	}
+
+	bGetRespNow = 1;
+
+	// Read filter.bin
+	r_buf = kzalloc(MAX_W_BUF_SIZE, GFP_KERNEL);
+
+	p = kmalloc(1, GFP_KERNEL);
+
+	for (;;) {
+		w_size = 0;
+		memset(w_buf, 0 , 512);
+		
+		do{
+			nRead = Filter_filp->f_op->read(Filter_filp, (unsigned char __user *)p, 1, &Filter_filp->f_pos);
+
+			if (nRead != 1) {
+				bEOF = 1;
+				break;
+			}
+			
+			w_buf[w_size++] = *p;
+		}while (*p != 0x7e);
+		
+		if (bEOF) break;
+		
+		// Ignore filter except MSG, LOG, EVENT
+		if (w_buf[0] != 0x7d  && w_buf[0] != 0x73 && w_buf[0] != 0x82) {
+			continue;
+		}
+		
+		bSuccess = 0;
+		rt = 5;
+		
+		switch (w_buf[0])
+		{
+			case 0x7d:
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set MSG filter string (%d).\n", w_size);
+						break;
+			case 0x73:
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set LOG filter string (%d).\n", w_size);
+						break;
+			case 0x82:
+						printk(KERN_INFO "[diagfwd.c][DEBUG] Set EVENT filter string (%d).\n", w_size);
+						break;
+		}
+
+		while (!bSuccess && rt--)
+		{
+			diag_process_hdlc(w_buf, w_size);
+
+			wait_event_interruptible(diag_wait_queue, gBuf_Size && !bWriteSD);
+
+			spin_lock_irqsave(&smd_lock, flags);
+
+			r_size = gBuf_Size;
+			memcpy(r_buf, pBuf, MAX_W_BUF_SIZE);
+			gBuf_Size = 0;
+			pBuf_Curr = pBuf;
+			spin_unlock_irqrestore(&smd_lock, flags);
+
+			bSuccess = diag_check_response(w_buf, r_buf, w_size, r_size);
+			
+			if (!bSuccess) {
+				printk(KERN_INFO "[diagfwd.c][DEBUG] Try again.\n");
+				msleep(100);
+			}
+		}
+
+		if (rt <= 0) {
+			printk(KERN_INFO "[diagfwd.c][DEBUG] Set filter FAIL!\n");
+		}
+	}
+
+	// Close filter.bin
+	kfree(r_buf);
+	kfree(p);
+	filp_close(Filter_filp, NULL);
+	Filter_filp = NULL;
+
+	bGetRespNow = 0;
+	bWriteSD = 1;
+	
+	printk(KERN_INFO "[diagfwd.c][DEBUG] Load filter.bin is finished.\n");
+
+err:
+	return 0;
+}
+
+static int diag_log_write_thread(void *__unused)
+{
+	unsigned long flags;
+	unsigned char *buf = NULL;
+	int buf_size = 0;
+	
+	if ((buf = kzalloc(MAX_W_BUF_SIZE, GFP_KERNEL)) == NULL){
+		printk(KERN_ERR "[diagfwd.c][ERROR] kzalloc fail!\n");
+		return 0;
+	}
+	
+	while (!kthread_should_stop())
+	{
+		wait_event_interruptible(diag_wait_queue, (gBuf_Size && bWriteSD) || kthread_should_stop());
+		
+		spin_lock_irqsave(&smd_lock, flags);
+
+//		printk(KERN_INFO "[diagfwd.c][DEBUG] Buffer write to SD %d\n", gBuf_Size);
+
+		buf_size = gBuf_Size;
+		memcpy(buf, pBuf, MAX_W_BUF_SIZE);
+		gBuf_Size = 0;
+		pBuf_Curr = pBuf;
+		spin_unlock_irqrestore(&smd_lock, flags);
+		
+		gLog_filp->f_op->write(gLog_filp, (unsigned char __user *)buf, buf_size, &gLog_filp->f_pos);
+	}
+	
+	kfree(buf);
+	return 0;
+}
+
+void diag_open_log_file_work_fn(struct work_struct *work)
+{
+	struct timespec ts;
+	struct rtc_time tm;
+
+	// Create log file
+	if (gLog_filp == NULL)
+	{
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
+
+		sprintf(gLogFilePath,
+		"%sQXDM-%d-%02d-%02d-%02d-%02d-%02d.bin",
+			gPath,
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+		gLog_filp = filp_open(gLogFilePath, O_CREAT|O_WRONLY|O_LARGEFILE, 0);
+		
+		if (IS_ERR(gLog_filp))
+		{
+			gLog_filp = NULL;
+			printk(KERN_ERR "[diagfwd.c][ERROR] Create log file %s error!\n", gLogFilePath);
+			goto err;
+		}
+	}
+	
+	printk(KERN_INFO "[diagfwd.c][DEBUG] Log file %s is created.\n", gLogFilePath);
+	
+err:
+	return;
+}
+
+static void diag_start_log(void)
+{
+	if (bLogStart) goto err;
+	
+	// Open log file
+	schedule_work(&(driver->diag_open_log_file_work));
+
+	// Allocate write buffer
+	if ((pBuf = kzalloc(MAX_W_BUF_SIZE, GFP_KERNEL)) == NULL) {
+		printk(KERN_ERR "[diagfwd.c][ERROR] kzalloc fail!\n");
+		goto err;
+	}
+	
+	memset(pBuf, 0, MAX_W_BUF_SIZE);
+	
+	pBuf_Curr = pBuf;
+	gBuf_Size = 0;
+	gTotalWrite = 0;
+	bLogStart = 1;
+	bWriteSD = 0;
+
+	// Start thread for write log to SD
+	kLogTsk = kthread_create(diag_log_write_thread, NULL, "Write QXDM Log To File");
+	
+	if (!IS_ERR(kLogTsk)) {
+		wake_up_process(kLogTsk);
+	}else {
+		printk(KERN_ERR "[diagfwd.c][ERROR] Start write log thread error.\n");
+		goto err;
+	}
+	
+	// Load filter
+	kLoadFilterTsk = kthread_create(diag_write_filter_thread, NULL, "Load filter");
+
+	if (!IS_ERR(kLoadFilterTsk)) {
+		wake_up_process(kLoadFilterTsk);
+	}else {
+		printk(KERN_ERR "[diagfwd.c][ERROR] Start load filter thread error.\n");
+		goto err;
+	}
+
+err:
+	return;
+}
+
+static void diag_stop_log(void)
+{
+	if (bLogStart)
+	{
+		// Stop thread
+		kthread_stop(kLogTsk);
+
+		// Clear flag
+		bLogStart = 0;
+
+		// Close file
+		schedule_work(&(driver->diag_close_log_file_work));
+	}
+}
+
+static int open_qxdm_filter_file(void)
+{
+	char FilterFilePath[64];
+	
+	if (gFilter_filp == NULL)
+	{
+		sprintf(FilterFilePath, "%s%s", gPath, gFilterFileName);
+		
+		gFilter_filp = filp_open(FilterFilePath, O_CREAT|O_WRONLY|O_LARGEFILE, 0);
+		
+		if (IS_ERR(gFilter_filp))
+		{
+			gFilter_filp = NULL;
+			printk(KERN_ERR "Create filter file %s error.\n", FilterFilePath);
+			goto err;
+		}
+
+		bCaptureFilter = 1;
+
+		printk(KERN_INFO "Create filter file %s success.\n", FilterFilePath);
+	}
+
+err:
+	return 0;
+}
+
+static int close_qxdm_filter_file(void)
+{
+	if (bCaptureFilter)
+	{
+		bCaptureFilter = 0;
+		schedule_work(&(driver->diag_close_log_file_work));
+	}
+
+	return 0;
+}
+// FIH ---
 
 void diagfwd_init(void)
 {
@@ -569,6 +1124,10 @@ void diagfwd_init(void)
 
 	driver->diag_wq = create_singlethread_workqueue("diag_wq");
 	INIT_WORK(&(driver->diag_read_work), diag_read_work_fn);
+// FIH +++
+	INIT_WORK(&(driver->diag_close_log_file_work), diag_close_log_file_work_fn);
+	INIT_WORK(&(driver->diag_open_log_file_work), diag_open_log_file_work_fn);
+// FIH ---
 
 	diag_usb_register(&diagfwdops);
 

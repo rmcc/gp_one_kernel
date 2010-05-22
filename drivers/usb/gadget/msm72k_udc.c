@@ -39,12 +39,12 @@
 #include <mach/board.h>
 #include <mach/msm_hsusb.h>
 #include <linux/device.h>
-#include <mach/msm_hsusb_hw.h>
 
 static const char driver_name[] = "msm72k_udc";
 
 /* #define DEBUG */
 /* #define VERBOSE */
+#include "msm72k_udc.h"
 
 #define MSM_USB_BASE ((unsigned) ui->addr)
 
@@ -184,7 +184,6 @@ struct usb_info {
 static const struct usb_ep_ops msm72k_ep_ops;
 
 
-static int msm72k_pullup(struct usb_gadget *_gadget, int is_active);
 static int msm72k_set_halt(struct usb_ep *_ep, int value);
 static void flush_endpoint(struct msm_endpoint *ept);
 
@@ -936,13 +935,13 @@ static void usb_suspend_phy(struct usb_info *ui)
 	ulpi_write(ui, (1 << 1) | (1 << 3), 0x12);
 	/* disable interface protect circuit to drop current consumption */
 	ulpi_write(ui, (1 << 7), 0x08);
+	/* clear the SuspendM bit -> suspend the PHY */
+	ulpi_write(ui, 1 << 6, 0x06);
 }
 
 static void usb_reset(struct usb_info *ui)
 {
 	unsigned long flags;
-	unsigned otgsc;
-
 	INFO("msm72k_udc: reset controller\n");
 
 	spin_lock_irqsave(&ui->lock, flags);
@@ -954,8 +953,6 @@ static void usb_reset(struct usb_info *ui)
 	writel(0xffffffff, USB_ENDPTFLUSH);
 	msleep(2);
 #endif
-
-	otgsc = readl(USB_OTGSC);
 
 	/* RESET */
 	writel(2, USB_USBCMD);
@@ -992,11 +989,10 @@ static void usb_reset(struct usb_info *ui)
 	}
 
 	/* enable interrupts */
-	writel(otgsc, USB_OTGSC);
 	writel(STS_URI | STS_SLI | STS_UI | STS_PCI, USB_USBINTR);
 
 	/* go to RUN mode (D+ pullup enable) */
-	msm72k_pullup(&ui->gadget, 1);
+	writel(0x00080001, USB_USBCMD);
 
 	spin_lock_irqsave(&ui->lock, flags);
 	ui->running = 1;
@@ -1087,7 +1083,6 @@ static void usb_do_work(struct work_struct *w)
 				spin_lock_irqsave(&ui->lock, iflags);
 				ui->running = 0;
 				ui->online = 0;
-				msm72k_pullup(&ui->gadget, 0);
 				spin_unlock_irqrestore(&ui->lock, iflags);
 
 				/* terminate any transactions, etc */
@@ -1483,10 +1478,9 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 {
 	struct usb_info *ui = container_of(_gadget, struct usb_info, gadget);
 
-	if (is_active) {
-		if (vbus && ui->driver)
+	if (is_active)
 			writel(0x00080001, USB_USBCMD);
-	} else
+	else
 		writel(0x00080000, USB_USBCMD);
 
 	return 0;
@@ -1523,17 +1517,6 @@ static const struct usb_gadget_ops msm72k_ops = {
 	.pullup		= msm72k_pullup,
 	.wakeup		= msm72k_wakeup,
 };
-
-static ssize_t usb_remote_wakeup(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct usb_info *ui = the_usb_info;
-
-	msm72k_wakeup(&ui->gadget);
-
-	return count;
-}
-static DEVICE_ATTR(wakeup, S_IWUSR, 0, usb_remote_wakeup);
 
 static int msm72k_probe(struct platform_device *pdev)
 {
@@ -1653,11 +1636,6 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 		goto fail;
 	}
 
-	/* create sysfs node for remote wakeup */
-	retval = device_create_file(&ui->gadget.dev, &dev_attr_wakeup);
-	if (retval != 0)
-		INFO("failed to create sysfs entry: (wakeup) error: (%d)\n",
-					retval);
 	INFO("msm72k_udc: registered gadget driver '%s'\n",
 			driver->driver.name);
 	usb_start(ui);
@@ -1680,7 +1658,6 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 	if (!driver || driver != dev->driver || !driver->unbind)
 		return -EINVAL;
 
-	device_remove_file(&dev->gadget.dev, &dev_attr_wakeup);
 	driver->unbind(&dev->gadget);
 	dev->gadget.dev.driver = NULL;
 	dev->driver = NULL;

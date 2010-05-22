@@ -27,6 +27,7 @@
 #include <linux/clockchips.h>
 #include <linux/acpi_pmtmr.h>
 #include <linux/module.h>
+#include <trace/irq.h>
 
 #include <asm/atomic.h>
 #include <asm/smp.h>
@@ -489,7 +490,9 @@ void smp_apic_timer_interrupt(struct pt_regs *regs)
 	 */
 	exit_idle();
 	irq_enter();
+	trace_irq_entry(LOCAL_TIMER_VECTOR, regs);
 	local_apic_timer_interrupt();
+	trace_irq_exit(IRQ_HANDLED);
 	irq_exit();
 	set_irq_regs(old_regs);
 }
@@ -959,6 +962,9 @@ asmlinkage void smp_spurious_interrupt(void)
 	unsigned int v;
 	exit_idle();
 	irq_enter();
+
+	trace_irq_entry(SPURIOUS_APIC_VECTOR, NULL);
+
 	/*
 	 * Check if this really is a spurious interrupt and ACK it
 	 * if it is a vectored one.  Just in case...
@@ -969,6 +975,9 @@ asmlinkage void smp_spurious_interrupt(void)
 		ack_APIC_irq();
 
 	add_pda(irq_spurious_count, 1);
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 }
 
@@ -981,6 +990,9 @@ asmlinkage void smp_error_interrupt(void)
 
 	exit_idle();
 	irq_enter();
+
+	trace_irq_entry(ERROR_APIC_VECTOR, NULL);
+
 	/* First tickle the hardware, only then report what went on. -- REW */
 	v = apic_read(APIC_ESR);
 	apic_write(APIC_ESR, 0);
@@ -1000,6 +1012,9 @@ asmlinkage void smp_error_interrupt(void)
 	*/
 	printk(KERN_DEBUG "APIC error on CPU%d: %02x(%02x)\n",
 		smp_processor_id(), v , v1);
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 }
 

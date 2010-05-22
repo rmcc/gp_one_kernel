@@ -112,6 +112,18 @@ config SENSORS_PCF8591
 	  These devices are hard to detect and rarely found on mainstream
 	  hardware.  If unsure, say N.
 
+config ISP1301_OMAP
+	tristate "Philips ISP1301 with OMAP OTG"
+	depends on ARCH_OMAP_OTG
+	help
+	  If you say yes here you get support for the Philips ISP1301
+	  USB-On-The-Go transceiver working with the OMAP OTG controller.
+	  The ISP1301 is used in products including H2 and H3 development
+	  boards for Texas Instruments OMAP processors.
+	  
+	  This driver can also be built as a module.  If so, the module
+	  will be called isp1301_omap.
+
 config TPS65010
 	tristate "TPS6501x Power Management chips"
 	depends on GPIOLIB
@@ -160,6 +172,13 @@ config MENELAUS
 	  and other features that are often used in portable devices like
 	  cell phones and PDAs.
 
+# +++ FIH_ADQ +++
+config BACKLIGHT_LED_MAX7302
+	tristate "Max7302 backlight led controller"
+	depends on I2C=y && ARCH_MSM
+	help
+# --- FIH_ADQ ---
+
 config SENSORS_AKM8976
 	tristate "AKM8976 Compass Driver"
 	depends on I2C
@@ -183,5 +202,17 @@ config SENSORS_MT9T013
 	help
 	 MT9T013 Camera Driver implemented by HTC.
 
+###+FIH_ADQ
+###AudiPCHuang@FIH 09.03.30: EVT2 or later version nLeds driver.
+config BACKLIGHT_LED_TCA6507
+	tristate "TCA6507 backlight led controller"
+	depends on I2C=y && ARCH_MSM
+	help
+	
+config BACKLIGHT_LED_MAX8831
+	tristate "MAX8831 backlight led controller"
+	depends on I2C=y && ARCH_MSM
+	help
+###-FIH_ADQ
 
 endmenu

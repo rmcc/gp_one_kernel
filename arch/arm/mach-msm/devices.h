@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/devices.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -48,9 +48,6 @@ extern unsigned msm_num_clocks_7x01a;
 
 extern struct clk msm_clocks_7x25[];
 extern unsigned msm_num_clocks_7x25;
-
-extern struct clk msm_clocks_7x27[];
-extern unsigned msm_num_clocks_7x27;
 
 extern struct clk msm_clocks_8x50[];
 extern unsigned msm_num_clocks_8x50;

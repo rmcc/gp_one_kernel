@@ -32,6 +32,7 @@
 #include <linux/bug.h>
 #include <linux/nmi.h>
 #include <linux/mm.h>
+#include <linux/marker.h>
 
 #if defined(CONFIG_EDAC)
 #include <linux/edac.h>
@@ -518,6 +519,10 @@ void __kprobes oops_end(unsigned long flags, struct pt_regs *regs, int signr)
 		oops_exit();
 		return;
 	}
+	if (in_nmi())
+		panic("Fatal exception in non-maskable interrupt");
+	if (in_interrupt())
+		panic("Fatal exception in interrupt");
 	if (panic_on_oops)
 		panic("Fatal exception");
 	oops_exit();
@@ -597,6 +602,9 @@ do_trap(int trapnr, int signr, char *str, struct pt_regs *regs,
 {
 	struct task_struct *tsk = current;
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld", trapnr,
+		instruction_pointer(regs));
+
 	if (!user_mode(regs))
 		goto kernel_trap;
 
@@ -626,6 +634,7 @@ do_trap(int trapnr, int signr, char *str, struct pt_regs *regs,
 		force_sig_info(signr, info, tsk);
 	else
 		force_sig(signr, tsk);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 
 kernel_trap:
@@ -634,6 +643,7 @@ kernel_trap:
 		tsk->thread.trap_no = trapnr;
 		die(str, regs, error_code);
 	}
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 }
 
@@ -724,7 +734,10 @@ do_general_protection(struct pt_regs *regs, long error_code)
 		printk("\n");
 	}
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld", 13,
+		instruction_pointer(regs));
 	force_sig(SIGSEGV, tsk);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 
 gp_in_kernel:
@@ -799,6 +812,9 @@ asmlinkage notrace __kprobes void default_do_nmi(struct pt_regs *regs)
 	unsigned char reason = 0;
 	int cpu;
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
+		2, instruction_pointer(regs));
+
 	cpu = smp_processor_id();
 
 	/* Only the BSP gets external NMIs from the system. */
@@ -808,26 +824,28 @@ asmlinkage notrace __kprobes void default_do_nmi(struct pt_regs *regs)
 	if (!(reason & 0xc0)) {
 		if (notify_die(DIE_NMI_IPI, "nmi_ipi", regs, reason, 2, SIGINT)
 								== NOTIFY_STOP)
-			return;
+			goto end;
 		/*
 		 * Ok, so this is none of the documented NMI sources,
 		 * so it must be the NMI watchdog.
 		 */
 		if (nmi_watchdog_tick(regs, reason))
-			return;
+			goto end;
 		if (!do_nmi_callback(regs, cpu))
 			unknown_nmi_error(reason, regs);
 
-		return;
+		goto end;
 	}
 	if (notify_die(DIE_NMI, "nmi", regs, reason, 2, SIGINT) == NOTIFY_STOP)
-		return;
+		goto end;
 
 	/* AK: following checks seem to be broken on modern chipsets. FIXME */
 	if (reason & 0x80)
 		mem_parity_error(reason, regs);
 	if (reason & 0x40)
 		io_check_error(reason, regs);
+end:
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 asmlinkage notrace __kprobes void
@@ -938,7 +956,10 @@ asmlinkage void __kprobes do_debug(struct pt_regs * regs,
 	info.si_errno = 0;
 	info.si_code = TRAP_BRKPT;
 	info.si_addr = user_mode(regs) ? (void __user *)regs->ip : NULL;
+	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
+		1, instruction_pointer(regs));
 	force_sig_info(SIGTRAP, &info, tsk);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 
 clear_dr7:
 	set_debugreg(0, 7);
@@ -1094,6 +1115,10 @@ asmlinkage void do_simd_coprocessor_error(struct pt_regs *regs)
 
 asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs)
 {
+	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
+		16, instruction_pointer(regs));
+
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 asmlinkage void __attribute__((weak)) smp_thermal_interrupt(void)
@@ -1103,6 +1128,21 @@ asmlinkage void __attribute__((weak)) smp_thermal_interrupt(void)
 asmlinkage void __attribute__((weak)) mce_threshold_interrupt(void)
 {
 }
+
+void ltt_dump_idt_table(void *call_data)
+{
+	int i;
+	char namebuf[KSYM_NAME_LEN];
+
+	for (i = 0; i < IDT_ENTRIES; i++) {
+		unsigned long address = gate_offset(idt_table[i]);
+		sprint_symbol(namebuf, address);
+		__trace_mark(0, statedump_idt_table, call_data,
+			"irq %d address %p symbol %s",
+			i, (void *)address, namebuf);
+	}
+}
+EXPORT_SYMBOL_GPL(ltt_dump_idt_table);
 
 /*
  * 'math_state_restore()' saves the current math information in the

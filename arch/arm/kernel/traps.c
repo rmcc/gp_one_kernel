@@ -2,7 +2,6 @@
  *  linux/arch/arm/kernel/traps.c
  *
  *  Copyright (C) 1995-2002 Russell King
- *  Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *  Fragments that appear the same as linux/arch/i386/kernel/traps.c (C) Linus Torvalds
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
+#include <linux/marker.h>
 
 #include <asm/atomic.h>
 #include <asm/cacheflush.h>
@@ -262,7 +262,14 @@ void arm_notify_die(const char *str, struct pt_regs *regs,
 		current->thread.error_code = err;
 		current->thread.trap_no = trap;
 
+		trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld",
+			current->thread.trap_no,
+			instruction_pointer(regs));
+
 		force_sig_info(info->si_signo, info, current);
+
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
+
 	} else {
 		die(str, regs, err);
 	}

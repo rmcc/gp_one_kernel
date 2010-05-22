@@ -1,58 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* drivers/char/diag/diagchar_core.c */
+
+/* Copyright (c) 2008 QUALCOMM USA, INC. 
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org 
  */
 
 #include <linux/init.h>
@@ -78,7 +40,10 @@ MODULE_VERSION("1.0");
 struct diagchar_dev *driver;
 
 /* The following variables can be specified by module options */
+// +++ FIH +++
+//static unsigned int itemsize = 512; /*Size of item in the mempool*/
 static unsigned int itemsize = 2512; /*Size of item in the mempool*/
+// --- FIH ---
 static unsigned int poolsize = 10;  /*Number of items in the mempool*/
 /* This is the maximum number of user-space clients supported */
 static unsigned int max_clients = 5;
@@ -146,6 +111,7 @@ static int diagchar_close(struct inode *inode, struct file *file)
 static int diagchar_ioctl(struct inode *inode, struct file *filp,
 			   unsigned int iocmd, unsigned long ioarg)
 {
+// +++ FIH +++
 	int i, count_entries = 0;
 	struct bindpkt_params_per_process *pkt_params =
 			 (struct bindpkt_params_per_process *) ioarg;
@@ -170,6 +136,30 @@ static int diagchar_ioctl(struct inode *inode, struct file *filp,
 			}
 		}
 	}
+/*
+	int i;
+
+	for (i = 0; i < REG_TABLE_SIZE; i++) {
+		if (driver->table[i].process_id == 0) {
+			driver->table[i].cmd_code =
+				 ((struct bindpkt_params_per_process *)
+						     ioarg)->params->cmd_code;
+			driver->table[i].subsys_id =
+				 ((struct bindpkt_params_per_process *)
+				  ioarg)->params->subsys_id;
+			driver->table[i].cmd_code_lo =
+				 ((struct bindpkt_params_per_process *)
+				  ioarg)->params->cmd_code_hi;
+			driver->table[i].cmd_code_hi =
+				 ((struct bindpkt_params_per_process *)
+				  ioarg)->params->cmd_code_lo;
+			driver->table[i].process_id = current->tgid;
+			break;
+		}
+	}
+
+*/
+// --- FIH ---
 	return -EINVAL;
 }
 
@@ -273,10 +263,14 @@ static int diagchar_write(struct file *file, const char __user *buf,
 			      size_t count, loff_t *ppos)
 {
 	int err;
+// +++ FIH +++
+//	int used, length = 0;
+//	int ret = 0, i;
 	int used, ret = 0;
-#ifdef DIAG_DEBUG
+	#ifdef MASK_DEBUG
 	int length = 0, i;
-#endif
+	#endif
+// --- FIH ---
 	struct diag_send_desc_type send = { NULL, NULL, DIAG_STATE_START, 0 };
 	struct diag_hdlc_dest_type enc = { NULL, NULL, 0 };
 	void *buf_copy;
@@ -303,11 +297,10 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		ret = -EFAULT;
 		goto fail_free_copy;
 	}
-#ifdef DIAG_DEBUG
-	printk(KERN_DEBUG "data is --> \n");
+	#ifdef MASK_DEBUG
 	for (i = 0; i < payload_size; i++)
-		printk(KERN_DEBUG "\t %x \t", *(((unsigned char *)buf_copy)+i));
-#endif
+		printk(KERN_INFO "\t %x \t", *(((unsigned char *)buf_copy)+i));
+	#endif
 	send.state = DIAG_STATE_START;
 	send.pkt = buf_copy;
 	send.last = (void *)(buf_copy + payload_size - 1);
@@ -329,14 +322,14 @@ static int diagchar_write(struct file *file, const char __user *buf,
 	used = (uint32_t) enc.dest - (uint32_t) buf_hdlc;
 
 	diagmem_free(driver, buf_copy);
-#ifdef DIAG_DEBUG
-	printk(KERN_DEBUG "hdlc encoded data is --> \n");
+	#ifdef MASK_DEBUG
+	printk(KERN_INFO "\n hdlc encoded data is --> \n");
 	for (i = 0; i < payload_size + 8; i++) {
-		printk(KERN_DEBUG "\t %x \t", *(((unsigned char *)buf_hdlc)+i));
+		printk(KERN_INFO "\t %x \t", *(((unsigned char *)buf_hdlc)+i));
 		if (*(((unsigned char *)buf_hdlc)+i) != 0x7e)
 			length++;
 	}
-#endif
+	#endif
 	err = diag_write(buf_hdlc, used);
 	if (err) {
 		/*Free the buffer right away if write failed */

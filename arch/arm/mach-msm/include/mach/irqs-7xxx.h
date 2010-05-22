@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  */
 

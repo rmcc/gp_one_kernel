@@ -1,8 +1,9 @@
 /* arch/arm/mach-msm/include/mach/board.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
+ *
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -29,23 +30,29 @@ struct msm_acpu_clock_platform_data {
 	unsigned long power_collapse_khz;
 	unsigned long wait_for_irq_khz;
 	unsigned int max_axi_khz;
+/* FIH_ADQ, 6370 { */
 	unsigned int max_vdd;
 	int (*acpu_set_vdd) (int mvolts);
+/* } FIH_ADQ, 6370 */	
 };
-
+/* FIH_ADQ, 6370 { */
 enum msm_camera_flash_t {
   MSM_CAMERA_FLASH_NONE,
   MSM_CAMERA_FLASH_LED
 };
-
+/* } FIH_ADQ, 6370 */
 struct msm_camera_sensor_info {
 	int sensor_reset;
 	int sensor_pwd;
 	int vcm_pwd;
+/* FIH_ADQ, 6370 { */	
 	int mclk;
+/* } FIH_ADQ, 6370 */
 	const char *sensor_name;
+/* FIH_ADQ, 6370 { */
 	enum msm_camera_flash_t flash_type;
 	int (*sensor_probe)(void *, void *);
+/* } FIH_ADQ, 6370 */	
 };
 
 struct msm_camera_io_ext {
@@ -61,8 +68,10 @@ struct msm_camera_device_platform_data{
 	uint8_t snum;
 	struct msm_camera_sensor_info *sinfo;
 	struct msm_camera_io_ext ioext;
+/* FIH_ADQ, 6370 { */
 	void (*config_gpio_on) (void);
 	void (*config_gpio_off)(void);
+/* } FIH_ADQ, 6370 */	
 };
 
 struct clk;
@@ -78,12 +87,16 @@ struct msm_snd_endpoints {
 };
 
 struct msm_panel_common_pdata {
+/* FIH_ADQ, 6370 { */
 	int gpio;
+/* } FIH_ADQ, 6370 */
 	int (*backlight_level)(int level);
 	int (*pmic_backlight)(int level);
 	int (*panel_num)(void);
+/* FIH_ADQ, 6370 { */
 	void (*panel_config_gpio)(int);
 	int *gpio_num;
+/* } FIH_ADQ, 6370 */
 };
 
 struct lcdc_platform_data {
@@ -98,7 +111,7 @@ struct mddi_platform_data {
 	void (*mddi_power_save)(int on);
 	int (*mddi_sel_clk)(u32 *clk_rate);
 };
-
+/* FIH_ADQ, 6360 { */
 struct msm_fb_platform_data {
 	int (*detect_client)(const char *name);
 };
@@ -106,7 +119,7 @@ struct msm_fb_platform_data {
 struct msm_i2c_platform_data {
 	int clk_freq;
 };
-
+/*} FIH_ADQ, 6360  */
 /* common init routines for use by arch/arm/mach-msm/board-*.c */
 
 void __init msm_add_devices(void);
@@ -126,7 +139,13 @@ void msm_hsusb_set_vbus_state(int online);
 #else
 static inline void msm_hsusb_set_vbus_state(int online) {}
 #endif
-
+/* FIH_ADQ, 6370 { */
 extern int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
+/* } FIH_ADQ, 6370 */
+//+++FIH_ADQ+++ , added by simonsschang
+void acpuclk_set_lcdcoff_wait_for_irq(int on);
 
+///+FIH_ADQ
+///struct input_dev *msm_keypad_get_input_dev(void);
+///-FIH_ADQ
 #endif

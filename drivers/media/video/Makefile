@@ -134,7 +134,6 @@ obj-$(CONFIG_VIDEO_VIVI) += vivi.o
 obj-$(CONFIG_VIDEO_CX23885) += cx23885/
 
 obj-$(CONFIG_MSM_CAMERA) += msm_camera.o
-obj-$(CONFIG_MSM_CAMERA) += msm_camera_probe.o
 obj-$(CONFIG_MSM_CAMERA) += msm_v4l2.o
 obj-$(CONFIG_MSM_CAMERA) += msm/
 

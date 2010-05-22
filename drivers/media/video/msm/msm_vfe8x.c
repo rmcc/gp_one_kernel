@@ -1,70 +1,28 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/*
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <mach/irqs.h>
+#include <mach/msm_camio.h>
 #include "msm_vfe8x_proc.h"
 
 #define ON  1
 #define OFF 0
-
-struct mutex vfe_lock;
-static uint32_t vfe_inuse;
-static void     *vfe_syncdata;
 
 static int vfe_enable(struct camera_enable_cmd_t *enable)
 {
@@ -87,11 +45,6 @@ static void vfe_release(struct platform_device *dev)
 {
 	msm_camio_disable(dev);
 	vfe_cmd_release(dev);
-
-	mutex_lock(&vfe_lock);
-	vfe_inuse = 0;
-	vfe_syncdata = NULL;
-	mutex_unlock(&vfe_lock);
 }
 
 static void vfe_config_axi(enum vfeoutput_mode_t mode,
@@ -171,8 +124,7 @@ static int vfe_proc_general(struct msm_vfe_command_8k *cmd)
 			(void __user *) cmd->value, cmd->length))
 			rc = -EFAULT;
 
-		/* msm_camio_camif_pad_reg_reset_2(); */
-		msm_camio_camif_pad_reg_reset();
+		msm_camio_camif_pad_reg_reset_2();
 		vfe_start(&start);
 	}
 		break;
@@ -791,7 +743,7 @@ static int vfe_init(struct msm_vfe_resp *presp,
 {
 	int rc = 0;
 
-	rc = vfe_cmd_init(presp, dev, vfe_syncdata);
+	rc = vfe_cmd_init(presp, dev);
 	if (rc < 0)
 		return rc;
 
@@ -799,34 +751,12 @@ static int vfe_init(struct msm_vfe_resp *presp,
 	return msm_camio_enable(dev);
 }
 
-void msm_camvfe_fn_init(struct msm_camvfe_fn_t *fptr)
+void msm_camvfe_init(struct msm_camvfe_fn_t *fptr,
+	struct platform_device *dev)
 {
 	fptr->vfe_init    = vfe_init;
 	fptr->vfe_enable  = vfe_enable;
 	fptr->vfe_config  = vfe_config;
 	fptr->vfe_disable = vfe_disable;
 	fptr->vfe_release = vfe_release;
-}
-
-int msm_camvfe_check(void *data)
-{
-	int rc = 0;
-
-	mutex_lock(&vfe_lock);
-	if (!vfe_inuse) {
-		vfe_inuse++;
-		vfe_syncdata = data;
-	} else if (data != vfe_syncdata) {
-		rc = -EBUSY;
-	}
-	mutex_unlock(&vfe_lock);
-
-	return rc;
-}
-
-void msm_camvfe_init(void)
-{
-	mutex_init(&vfe_lock);
-	vfe_inuse = 0;
-	vfe_syncdata = NULL;
 }

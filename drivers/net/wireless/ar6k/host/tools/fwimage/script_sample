@@ -1,0 +1,78 @@
+#
+# Sample script to create AR6002 firmware image for
+# in-driver loader
+# 
+# This sample script assumes target to be AR6002
+#
+trr  0x180c0
+rs   1         # register 1 keeps 'old_options
+r|   0x8
+trw  0x180c0
+#
+trr  0x40c4
+rs   2         # register 2 keeps 'old_sleep
+r|   0x1
+trw  0x40c4
+#
+# Assume register 'e' preloaded with target type
+# and register 'f' preloaded with target version
+# (to verify )
+rl   f
+cmpi 0x20000188
+jne  not_ar6002_rev2
+# AR6002 REV2 clock setup
+ri   0x0
+trw  0x4020
+trr  0x50047c      # read ext_clk_detected
+jne  ext_clk_nonzero
+ri   0x100000
+trw  0x40e0
+!ext_clk_nonzero
+#
+!not_ar6002_rev2
+#
+# Patch. Len, can we get rid of it in it's current form now?
+#
+#lp   target/AR6002/hw2.0/bin/patch.rpdf
+#
+rl   f
+cmpi 0x20000188
+jne  again_not_rev2
+ri   0x502400
+lb   target/AR6002/hw2.0/bin/eeprom.data
+ri   0x515000
+lb   target/AR6002/hw2.0/bin/eeprom.bin
+ri   0x0
+trw  0x915000   
+!again_not_rev2
+# 
+# Load application
+#
+ri   0x502400
+lb   target/AR6002/hw2.0/bin/athwlan.bin
+#
+# WLAN Initialization DataSets
+#
+rl   f
+cmpi 0x20000188
+jne  no_need_4_dsets
+ri   0x52d8bc
+lb   target/AR6002/hw2.0/bin/data.patch.hw2_0.bin
+ri   0x52d8bc
+trw  0x500418
+!no_need_4_dsets
+#
+# Restore System sleep
+#
+ri   2
+trw  0x40c4
+ri   1
+trw  0x180c0
+#
+# Enable HI_OPTION_TIMER_WAR (timerwar)
+#
+trr  0x500410
+r|   0x1
+trw  0x500410
+#
+tdone

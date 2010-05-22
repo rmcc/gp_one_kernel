@@ -1,0 +1,435 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+
+<title>Host Driver</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->Host
+		Controller&nbsp;Driver Structure <!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><A href="#previous#"><img
+			src="Images/leftarrow.gif" width="27" height="32" border="0" alt=""></A>
+		<!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><A href="#next#"><img
+			src="Images/rightarrow.gif" width="27" height="32" border="0" alt=""></A>
+		<!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+
+		<p class="BODYTEXT">A&nbsp;host controller driver is typically
+		partitioned into  OS independent and dependent portions. The
+		independent portion deals with the SDIO Core (bus driver) interfaces;
+		primarily the SDIO configuration and SD request processing. The
+		OS-dependent portion deals with host driver registration, hardware
+		resources and OS-specific interfaces (ex. module
+		registration,&nbsp;interrupt handling and interrupt
+		synchronization).&nbsp; Some hardware access can be performed in the
+		OS-independent portion as shown in&nbsp;some of the sample
+		drivers.&nbsp;</p>
+
+		<p class="BODYTEXT">HCDs are software modules, loaded by the operating
+		system,&nbsp;that registers with the SDIO core using the <font
+			face="Courier New"><a href="HD_Reference.htm#FUNC_SDIO_RegisterHostController">SDIO_RegisterHostController</a></font>()
+		API.&nbsp;
+		HCDs are drivers in themselves and are subordinate to the bus in which
+		their controller resides on (local bus, PCI bus).&nbsp;&nbsp; Each
+		operating system will require the HCD to perform some amount of
+		registration and resource acquisition.&nbsp; The HCD should register
+		with the&nbsp;SDIO core only after it has successfully
+		performed&nbsp;all the necessary&nbsp;initialization tasks&nbsp;and
+		should expect&nbsp;configuration and SD&nbsp;bus requests before the <font
+			face="Courier New"><a href="HD_Reference.htm#FUNC_SDIO_RegisterHostController">SDIO_RegisterHostController()</a></font> function
+		returns.&nbsp; An HCD can deregister itself (for unloading purposes)
+		using the <font face="Courier New"><a href="HD_Reference.htm#FUNC_SDIO_UnregisterHostController">SDIO_UnregisterHostController()</a></font>
+		function.&nbsp;</p>
+
+		<p class="BODYTEXT">The SDIO stack can accept an unlimited number of
+		host controller drivers&nbsp;with each host registering a
+		separate&nbsp;<font face="Courier New">SDHCD</font> structure
+		.&nbsp;&nbsp;The SDIO stack supports a point-to-point&nbsp;bus
+		implementation where only&nbsp;one card can be present in any
+		given&nbsp;electrical interface.&nbsp; &nbsp;In a multi-slot
+		implementation a host interface exists on each slot that contains a
+		separate clock, command/data signals and power control.&nbsp;&nbsp;If
+		a controller implements multiple
+		and&nbsp;electrically&nbsp;independent slot interfaces (i.e. Standard
+		Host Controller), the HCD must report and register each slot as a separate
+		host	controller instance, even if all slots share the same
+		capabilities.&nbsp;&nbsp; The SDIO core uses a 1-to-1 relationship
+		between cards and host controller instances.&nbsp;</p>
+        <p class="BODYTEXT"><a name="SDHCDStruct"><strong>SDHCD Structure:</strong></a><strong>
+		</strong></p>
+<p class="BODYTEXT">The <font face="Courier New">SDHCD</font>
+		structure&nbsp;is allocated by the HCD and registered with
+		the&nbsp;SDIO core.&nbsp;The structure&nbsp;contains flags and fields
+		describing&nbsp;the host controller hardware capabilities
+		and&nbsp;callbacks for configuration and request processing.&nbsp;The
+		key fields of the <font face="Courier New, Courier, mono">SDHCD</font> structure are described in the following table:</p>
+
+		<table style="WIDTH: 635px; HEIGHT: 386px" cellspacing="1"
+			cellpadding="1" width="635" border="1">
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><strong>Field</strong></font></p>
+				</td>
+
+				<td><strong>Description</strong></td>
+			</tr>
+            <tr>
+				<td>
+				<p><font face="Courier New" size="2">Version</font></p>
+				</td>
+
+				<td><font face="Arial">SDIO Stack version code, the driver should set this
+				    to the value of <font face="Courier New, Courier, mono">CT_SDIO_STACK_VERSION_CODE</font>
+				    from the supplied header files. The bus driver only accepts
+				    host controller drivers with the same MAJOR version number
+				    and MINOR numbers that are less than or equal to the busdriver's
+				    MINOR version number.</font></td>
+			</tr>
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">Attributes</font></p>
+				</td>
+
+				<td><font face="Arial">Host Controller attribute flags.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">MaxBytesPerBlock</font></p>
+				</td>
+
+				<td><font face="Arial">Maximum number of bytes per block for
+				read/write transactions.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">MaxBlocksPerTrans</font></p>
+				</td>
+
+				<td><font face="Arial">Maximum number of blocks per SD bus request.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">MaxSlotCurrent</font></font></p>
+				</td>
+
+				<td><font face="Arial">Maximum slot current (in mA).</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">MaxClockRate</font></font></p>
+				</td>
+
+				<td><font face="Arial">Maximum SD/SDIO bus clock rate.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">SlotVoltageCaps</font></font></p>
+				</td>
+
+				<td><font face="Arial">Slot voltage capabilities mask.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">SlotVoltagePreferred</font></font></p>
+				</td>
+
+				<td><font face="Arial">Preferred slot voltage.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">pContext</font></font></p>
+				</td>
+
+				<td><font face="Arial">Driver specific context for this host
+				controller structure instance.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">pRequest</font></font></p>
+				</td>
+
+				<td><font face="Arial">SD Bus request callback function pointer.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2"><font size="2">pConfigure</font></font></p>
+				</td>
+
+				<td><font face="Arial">HCD configuration callback function pointer.</font></td>
+			</tr>
+			<tr>
+			  <td><font size="2" face="Courier New, Courier, mono">pDmaDescription</font></td>
+			  <td><font face="Arial, Helvetica, sans-serif">Pointer to an OS-dependent
+			      DMA description structure (see DMA section)</font></td>
+		  </tr>
+		</table>
+		<br>
+		<br>
+
+
+		<p class="BODYTEXT"><strong>Host Controller Attributes:</strong></p>
+
+		<p class="BODYTEXT">The SDIO stack can interface to host drivers
+		with&nbsp;varying hardware capabilities.&nbsp; Most hardware
+		capabilities are reported as a set of flags in the <font
+			face="Courier New">Attributes</font> field.&nbsp; The following table
+		of attribute flags can be OR'd together :</p>
+
+		<table style="WIDTH: 628px; HEIGHT: 279px" cellspacing="1"
+			cellpadding="1" width="628" border="1">
+			<tr>
+				<td><strong>Flag</strong></td>
+
+				<td><strong>Description</strong></td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_SUPPORTS_POWER</font></p>
+				</td>
+
+				<td>Host controller supports power management.</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_BUS_1BIT</font></p>
+				</td>
+
+				<td>Host supports 1-bit mode (CMD/1-bit Data)</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_BUS_4BIT</font></p>
+				</td>
+
+				<td>Host supports 4-bit mode (CMD/4-bit data), this applies to SD, SDIO and
+				  MMC (4.0 or higher) cards.</td>
+			</tr>
+		<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_BUS_MMC8BIT</font></p>
+				</td>
+
+				<td>Host supports 8-bit mode (CMD/8-bit data), 
+				  this applies to MMC (4.0 or higher) cards.</td>
+		  </tr>
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_BUS_SPI</font></p>
+				</td>
+
+				<td>Host supports SPI mode.</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_READ_WAIT</font></p>
+				</td>
+
+				<td>Host supports Read-Wait protocol (see SDIO spec).</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_MULTI_BLK_IRQ</font></p>
+				</td>
+
+				<td>Host supports detecting interrupts during mult-block
+				transactions.</td>
+			</tr>
+
+			
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_SLOT_POLLING</font></p>
+				</td>
+
+				<td>Host requires slot polling for the detection of cards. The core
+				uses a helper task/thread that will periodically issue SD/SDIO
+				commands to the slot (roughly 1 second).&nbsp; A successful response
+				to any command indicates the presence of a card.&nbsp; Once a card
+				is initialized, the helper issues a command (roughly every 1
+				second)&nbsp;to poll the card's presence.&nbsp;</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_POWER_SWITCH</font></p>
+				</td>
+
+				<td>Host supports power cycling (power FET switch
+				control).&nbsp;This flag indicates that the host can&nbsp;cycle
+				power to the slot.&nbsp; This is useful for entering/leaving SPI
+				mode operation. Cycling to SPI mode dynamically&nbsp;is reserved for
+				future use.</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_NO_SPI_CRC</font></p>
+				</td>
+
+				<td>Host operates SPI mode without CRC checking.&nbsp; This enhances
+				host performance in generic SPI mode implementations.</td>
+			</tr>
+
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_AUTO_CMD12</font></p>
+				</td>
+
+				<td>Host can issue CMD12 automatically to stop transmission during
+				multi-block reads/writes.</td>
+			</tr>
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_NO_4BIT_IRQ</font></p>
+				</td>
+
+				<td>Host can support SD memory cards in 4 bit mode however, SDIO cards must
+				  operate in 1 bit mode due to the lack of clock control for
+				  interrupt detection in 4 bit mode.</td>
+			</tr>
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_SD_HIGH_SPEED</font></p>
+				</td>
+
+				<td>Host supports SD Physical Specification 1.10 high speed mode. </td>
+			</tr>
+			<tr>
+				<td>
+
+				<p><font face="Courier New" size="2">SDHCD_ATTRIB_MMC_HIGH_SPEED</font></p>
+				</td>
+
+				<td>Host supports MMC high speed mode. In most cases, the host controller
+				  can simply set his bit and let the busdriver use the higher
+				  reported clock rates (up to 52Mhz). Only hosts that can
+				  support the tighter I/O timming requirements for high speed
+				  operation should set this bit.</td>
+			</tr>
+		</table>
+		<br>
+		<br>
+
+
+		<p class="BODYTEXT"><br>
+		<strong>SD/SDIO Bus Electrical&nbsp;Interface :</strong></p>
+
+		<p class="BODYTEXT">The HCD can report limitations to it's bus
+		interface.&nbsp; This includes limitations such as maximum clock rate
+		support and data transfer parameters such as bytes allowed per block
+		and blocks per transaction.&nbsp; Peripheral drivers can obtain these
+		limits and behave accordingly&nbsp;and not exceed the hardware's
+		capabilities.&nbsp; The host controller also indicates electrical
+		parameters (voltage, current)&nbsp;that require configuration by the
+		SDIO core and peripheral drivers.&nbsp;&nbsp; The host controller's
+		advertised <font face="Courier New">SlotVoltageCaps</font> is a bit
+		mask of supported voltage levels.&nbsp; The SD/SDIO initialization
+		sequence&nbsp;allows a host to negotiate an optimal slot voltage based
+		on card and host voltage capabilities.&nbsp;The host's &nbsp;<font
+			face="Courier New">SlotVoltagePreferred</font>, offers the SDIO core
+		a "hint"&nbsp; to a preferred voltage for maximum efficiency.&nbsp;
+		Each host controller can set a maximum slot current budget (<font
+			face="Courier New">MaxSlotCurrent</font>)&nbsp;that is managed by the
+		SDIO core&nbsp;.&nbsp; All SD/SDIO function drivers&nbsp;must allocate
+		slot current from this "pool" and can only proceed&nbsp;after the
+		request is satisfied.</p>
+
+		<p class="BODYTEXT">The following code demonstrates how the HCD
+		structure is initialized and registered:</p>
+		<pre>
+       
+        SET_SDIO_STACK_VERSION(&amp;pDeviceContext-&gt;Hcd);
+        pDeviceContext-&gt;Hcd.Attributes = SDHCD_ATTRIB_BUS_1BIT      | 
+                                         SDHCD_ATTRIB_BUS_4BIT      | 
+                                         SDHCD_ATTRIB_MULTI_BLK_IRQ | 
+                                         SDHCD_ATTRIB_AUTO_CMD12    | 
+                                         SDHCD_ATTRIB_POWER_SWITCH ;
+        pDeviceContext-&gt;Hcd.SlotNumber = 0;
+        pDeviceContext-&gt;Hcd.MaxBlocksPerTrans = 1023;
+        pDeviceContext-&gt;Hcd.MaxBytesPerBlock = 2048;
+        pDeviceContext-&gt;Hcd.MaxSlotCurrent = 300;  // 300 mA
+        pDeviceContext-&gt;Hcd.MaxClockRate = 24000000; // 24Mhz
+        pDeviceContext-&gt;Hcd.SlotVoltageCaps = SLOT_POWER_3_3V | SLOT_POWER_1_8V;
+        pDeviceContext-&gt;Hcd.SlotVoltagePreferred = SLOT_POWER_3_3V;
+             // set our instance context
+        pDeviceContext-&gt;Hcd.pContext = pDeviceContext;
+             // setup callback pointers
+        pDeviceContext-&gt;Hcd.pRequest = HcdRequest;
+        pDeviceContext-&gt;Hcd.pConfigure = HcdConfig;
+        pDeviceContext-&gt;Hcd.pDevice = &amp;pPCIdevice-&gt;dev;
+         
+        // initialize hardware.....
+        
+        // register host 
+       
+        if (!SDIO_SUCCESS((status = SDIO_RegisterHostController(&amp;pDeviceContext-&gt;Hcd)))) {
+            .. failed
+        } 
+</pre>
+
+		<p><!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

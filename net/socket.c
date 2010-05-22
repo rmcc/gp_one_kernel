@@ -96,6 +96,7 @@
 
 #include <net/sock.h>
 #include <linux/netfilter.h>
+#include <trace/socket.h>
 
 #ifdef CONFIG_UID_STAT
 #include <linux/uid_stat.h>
@@ -568,7 +569,7 @@ static inline int __sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 	err = sock->ops->sendmsg(iocb, sock, msg, size);
 #ifdef CONFIG_UID_STAT
 	if (err > 0)
-		update_tcp_snd(current_uid(), err);
+		update_tcp_snd(current->uid, err);
 #endif
 	return err;
 }
@@ -584,6 +585,7 @@ int sock_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	ret = __sock_sendmsg(&iocb, sock, msg, size);
 	if (-EIOCBQUEUED == ret)
 		ret = wait_on_sync_kiocb(&iocb);
+	trace_socket_sendmsg(sock, msg, size, ret);
 	return ret;
 }
 
@@ -655,7 +657,7 @@ static inline int __sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	err = sock->ops->recvmsg(iocb, sock, msg, size, flags);
 #ifdef CONFIG_UID_STAT
 	if (err > 0)
-		update_tcp_rcv(current_uid(), err);
+		update_tcp_rcv(current->uid, err);
 #endif
 	return err;
 }
@@ -672,6 +674,7 @@ int sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	ret = __sock_recvmsg(&iocb, sock, msg, size, flags);
 	if (-EIOCBQUEUED == ret)
 		ret = wait_on_sync_kiocb(&iocb);
+	trace_socket_recvmsg(sock, msg, size, flags, ret);
 	return ret;
 }
 
@@ -1258,6 +1261,7 @@ asmlinkage long sys_socket(int family, int type, int protocol)
 	if (retval < 0)
 		goto out_release;
 
+	trace_socket_create(sock, retval);
 out:
 	/* It may be already another descriptor 8) Not kernel problem. */
 	return retval;
@@ -2143,6 +2147,8 @@ asmlinkage long sys_socketcall(int call, unsigned long __user *args)
 
 	a0 = a[0];
 	a1 = a[1];
+
+	trace_socket_call(call, a0);
 
 	switch (call) {
 	case SYS_SOCKET:

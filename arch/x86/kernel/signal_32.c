@@ -20,6 +20,7 @@
 #include <linux/elf.h>
 #include <linux/smp.h>
 #include <linux/mm.h>
+#include <linux/marker.h>
 
 #include <asm/processor.h>
 #include <asm/ucontext.h>
@@ -660,6 +661,21 @@ do_notify_resume(struct pt_regs *regs, void *unused, __u32 thread_info_flags)
 	/* deal with pending signal delivery */
 	if (thread_info_flags & _TIF_SIGPENDING)
 		do_signal(regs);
+
+#ifdef CONFIG_MARKERS_USERSPACE
+	/* Pending marker update ? */
+	if (thread_info_flags & _TIF_MARKER_PENDING) {
+		/*
+		 * marker_update_process can sleep because it writes to
+		 * userspace and because it takes a mutex. While locking could
+		 * be changed to a non-blocking scheme, it is good do do not
+		 * fail on userspace page faults.
+		 */
+		local_irq_enable();
+		marker_update_process();
+		local_irq_disable();
+	}
+#endif
 
 	clear_thread_flag(TIF_IRET);
 }

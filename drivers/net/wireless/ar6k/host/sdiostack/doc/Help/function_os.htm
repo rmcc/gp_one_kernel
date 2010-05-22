@@ -1,0 +1,1430 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="TopTopic"></a><a name="FUNC__DBG_ASSERT"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#previous#"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__DBG_PRINT"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void DBG_ASSERT(test)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Evaluate the expression and throw an
+  assertion if false.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  test   - boolean expression
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ 
+        
+<br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This function can be conditionally compiled using the c-define DEBUG.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Assert test:</font>
+        count--;
+        DBG_ASSERT(count &gt;= 0);
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+DBG_PRINT
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__DBG_PRINT"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__DBG_ASSERT"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__REL_PRINT"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void DBG_PRINT(INT Level, string)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Print a string to the debugger or console</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  Level - debug level for the print
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ 
+        
+<br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ If Level is less than the current debug level, the print will be
+          issued.  This function can be conditionally compiled using the c-define DEBUG.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> DBG_PRINT(MY_DBG_LEVEL, ("Return Status:</font> %d\r\n",status));
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+REL_PRINT
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__REL_PRINT"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__DBG_PRINT"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__CriticalSectionInit"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void REL_PRINT(INT Level, string)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Print a string to the debugger or console</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  Level - debug level for the print
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ 
+        
+<br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ If Level is less than the current debug level, the print will be
+          issued. This print cannot be conditionally compiled.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+DBG_PRINT
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__CriticalSectionInit"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__REL_PRINT"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__CriticalSectionAcquire"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS CriticalSectionInit(POS_CRITICALSECTION pCrit)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Initialize a critical section object.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pCrit - pointer to critical section to initialize
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  CriticalSectionDelete() must be called to cleanup any resources
+           associated with the critical section.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> To initialize a critical section:</font>        
+        status = CriticalSectionInit(&amp;pDevice-&gt;ListLock);
+        if (!SDIO_SUCCESS(status)) {
+                .. failed
+            return status;
+        }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+CriticalSectionDelete, CriticalSectionAcquire, CriticalSectionRelease
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__CriticalSectionAcquire"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__CriticalSectionInit"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__CriticalSectionRelease"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS CriticalSectionAcquire(POS_CRITICALSECTION pCrit)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Acquire a critical section lock.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pCrit - pointer to critical section to initialize
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  The critical section lock is acquired when this function returns 
+           SDIO_STATUS_SUCCESS.  Use CriticalSectionRelease() to release
+           the critical section lock.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> To acquire a critical section lock:</font>        
+        status = CriticalSectionAcquire(&amp;pDevice-&gt;ListLock);
+        if (!SDIO_SUCCESS(status)) {
+                .. failed
+            return status;
+        }
+        <font face="Arial, Helvetica, sans-serif" color="#999999">... access protected data</font>a
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+CriticalSectionRelease
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__CriticalSectionRelease"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__CriticalSectionAcquire"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__CriticalSectionDelete"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS CriticalSectionRelease(POS_CRITICALSECTION pCrit)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Release a critical section lock.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pCrit - pointer to critical section to initialize
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  The critical section lock is released when this function returns 
+           SDIO_STATUS_SUCCESS. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+        
+</pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+CriticalSectionAcquire
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__CriticalSectionDelete"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__CriticalSectionRelease"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SemaphoreInitialize"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void CriticalSectionDelete(POS_CRITICALSECTION pCrit)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Clean up a critical section object</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pCrit - an initialized critical section object
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+CriticalSectionInit, CriticalSectionAcquire, CriticalSectionRelease
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SemaphoreInitialize"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__CriticalSectionDelete"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SemaphoreDelete"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SemaphoreInitialize(POS_SEMAPHORE pSem, UINT value)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Initialize a semaphore object.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  value - initial value of the semaphore
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pSem - pointer to a semaphore object to initialize
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  SemaphoreDelete() must be called to cleanup any resources
+           associated with the semaphore
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> To initialize a semaphore:</font>        
+        status = SemaphoreInitialize(&amp;pDevice-&gt;ResourceSem,1);
+        if (!SDIO_SUCCESS(status)) {
+                .. failed
+            return status;
+        }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SemaphoreDelete, SemaphorePend, SemaphorePendInterruptable
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SemaphoreDelete"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SemaphoreInitialize"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SemaphorePend"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SemaphoreDelete(POS_SEMAPHORE pSem)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Clean up a semaphore object.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pSem - pointer to a semaphore object to cleanup
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+
+        
+<br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SemaphoreInitialize
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SemaphorePend"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SemaphoreDelete"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SemaphorePendInterruptable"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SemaphorePend(POS_SEMAPHORE pSem)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Acquire the semaphore or pend if the resource is not available</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pSem - pointer to an initialized semaphore object
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ If the semaphore count is zero this function blocks until the count
+          becomes non-zero, otherwise the count is decremented and execution 
+          continues. While waiting, the task/thread cannot be interrupted. 
+          If the task or thread should be interruptible, use SemaphorePendInterruptible.
+          On some OSes SemaphorePend and SemaphorePendInterruptible behave the same.<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> To wait for a resource using a semaphore:</font>        
+        status = SemaphorePend(&amp;pDevice-&gt;ResourceSem);
+        if (!SDIO_SUCCESS(status)) {
+                .. failed
+            return status;
+        }   
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SemaphorePendInterruptable, SemaphorePost
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SemaphorePendInterruptable"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SemaphorePend"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SemaphorePost"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SemaphorePendInterruptable(POS_SEMAPHORE pSem)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Acquire the semaphore or pend if the resource is not available</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pSem - pointer to an initialized semaphore object
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ If the semaphore count is zero this function blocks until the count
+          becomes non-zero, otherwise the count is decremented and execution 
+          continues. While waiting, the task/thread can be interrupted. 
+          If the task or thread should not be interruptible, use SemaphorePend.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> To wait for a resource using a semaphore:</font>        
+        status = SemaphorePendInterruptable(&amp;pDevice-&gt;ResourceSem);
+        if (!SDIO_SUCCESS(status)) {
+                .. failed, could have been interrupted
+            return status;
+        }   
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SemaphorePend, SemaphorePost
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SemaphorePost"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SemaphorePendInterruptable"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__KernelAlloc"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SemaphorePost(POS_SEMAPHORE pSem)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Post a semaphore.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pSem - pointer to an initialized semaphore object
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS on success.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ This function increments the semaphore count.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Posting a semaphore:</font>        
+        status = SemaphorePendInterruptable(&amp;pDevice-&gt;ResourceSem);
+        if (!SDIO_SUCCESS(status)) {
+                .. failed, could have been interrupted
+            return status;
+        }   
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SemaphorePend, SemaphorePendInterruptable.
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__KernelAlloc"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SemaphorePost"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__KernelFree"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ PVOID KernelAlloc(UINT size)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Allocate a block of kernel accessible memory</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ size - size of memory block to allocate
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ pointer to the allocated memory, NULL if allocation failed
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ For operating systems that use paging, the allocated memory is always
+          non-paged memory.  Caller should only use KernelFree() to release the
+          block of memory
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> allocating memory:</font>        
+        pBlock = KernelAlloc(1024);
+        if (pBlock == NULL)) {
+                .. failed, no memory
+            return SDIO_STATUS_INSUFFICIENT_RESOURCES;
+        }   
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+KernelFree
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__KernelFree"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__KernelAlloc"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__OSSleep"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void KernelFree(PVOID ptr)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Free a block of kernel accessible memory.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ ptr - pointer memory allocated with KernelAlloc()
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ 
+        
+<br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Caller should only use KernelFree() to release memory that was allocated
+          with KernelAlloc().
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+ KernelFree(pBlock);
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+KernelAllock
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__OSSleep"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO Stack<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__KernelFree"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#next#"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_misc.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS OSSleep(INT SleepInterval)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Sleep or delay the execution context for a number of milliseconds.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ SleepInterval - time in milliseconds to put the execution context to sleep
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS_SUCCESS if sleep succeeded.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Caller should be in a context that allows it to sleep or block.  The 
+  minimum duration of sleep may be greater than 1 MS on some platforms and OSes.   
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+ Using sleep to delay
+        EnableSlotPower(pSlot);
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// wait for power to settle
+</font>        status = OSSleep(100);
+        if (!SDIO_SUCCESS(status)){
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// failed..
+</font>        }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+OSSleep
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004-2005  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong><a target="_blank" href="http://www.codetelligence.com">www.codetelligence.com</a></font></td>
+</tr>
+</table>
+</body>
+</html>

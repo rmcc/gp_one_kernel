@@ -11,6 +11,8 @@ config SUPERH
 	select HAVE_CLK
 	select HAVE_IDE
 	select HAVE_OPROFILE
+	select HAVE_LTT_CLOCK
+	select HAVE_LTT_SYNTHETIC_TSC
 	select HAVE_GENERIC_DMA_COHERENT
 	help
 	  The SuperH is a RISC processor targeted for use in embedded systems

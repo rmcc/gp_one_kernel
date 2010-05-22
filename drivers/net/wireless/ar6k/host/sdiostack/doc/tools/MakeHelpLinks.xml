@@ -1,0 +1,52 @@
+<Device version="1.0.0" versionIncrement="0">
+    <Name>HelpLinks</Name>
+    <Description>
+        <!--Create next/previous help links-->
+    </Description>
+    <Prologue>
+        <Description>
+            <!--Creates help previous and next links-->
+        </Description>
+        <Help topic="">
+          </Help>
+        <Action type="OutputDirectory" data="FileOutDir"/>
+     </Prologue>
+    <Epilogue >
+        <Action type="LaunchImmediate" data="_modLinks.xml" filetype="file://"/>
+        
+        <Description/>
+        <Help topic="">
+          </Help>
+    </Epilogue>
+    <Functions>
+    <Function>
+            <Name>CreateHelpLinks</Name>
+            <Type>Global</Type>
+            <SubType>SW</SubType>
+            <Description>Select working directory.</Description>
+            <Help/>
+            <Parameters>
+        <Selections>
+                    <VarName displayType="EDIT_BOX" title="Enter the file name of the link index file(TableOfContents.xml):" directory="2">FileName</VarName>
+                    <Value/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">FileOutDir</VarName>
+                    <Value type="fileDirectory" parameter0="FileName" parameter1="''" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+           <!-- Now create the wizard to make the changes to the actual files.-->
+               <XslTransform filename="'_modLinks.xml'" filename_dir="'.'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/MakeHelpLinks.xslt'" xmlfile="FileName">
+                    <FileParameters>
+                        <FileParameter name="'inPath'" value="FileOutDir"/>
+                    </FileParameters>
+                </XslTransform>
+        </Solution> 
+        </Function>
+    </Functions>
+</Device>

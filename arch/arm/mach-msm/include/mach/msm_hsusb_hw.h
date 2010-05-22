@@ -1,7 +1,9 @@
- /*
+/* drivers/usb/function/msm_hsusb_hw.h
+ *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
+ *
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -14,37 +16,8 @@
  *
  */
 
-#ifndef __LINUX_USB_GADGET_MSM72K_UDC_H__
-#define __LINUX_USB_GADGET_MSM72K_UDC_H__
-
-/*-------------------------------------------------------------------------*/
-
-#define xprintk(level, fmt, args...) \
-	printk(level "%s: " fmt , driver_name , ## args)
-
-#ifdef DEBUG
-#undef DEBUG
-#define DEBUG(fmt, args...) \
-	xprintk(KERN_DEBUG , fmt , ## args)
-#else
-#define DEBUG(fmt,args...) \
-	do { } while (0)
-#endif /* DEBUG */
-
-#ifdef VERBOSE
-#define VDEBUG DEBUG
-#else
-#define VDEBUG(fmt,args...) \
-	do { } while (0)
-#endif	/* VERBOSE */
-
-#define ERROR(fmt,args...) \
-	xprintk(KERN_ERR , fmt , ## args)
-#define INFO(fmt,args...) \
-	xprintk(KERN_INFO , fmt , ## args)
-
-/*-------------------------------------------------------------------------*/
-
+#ifndef _USB_FUNCTION_MSM_HSUSB_HW_H
+#define _USB_FUNCTION_MSM_HSUSB_HW_H
 
 #define USB_ID               (MSM_USB_BASE + 0x0000)
 #define USB_HWGENERAL        (MSM_USB_BASE + 0x0004)
@@ -55,7 +28,6 @@
 #define USB_AHB_BURST        (MSM_USB_BASE + 0x0090)
 #define USB_AHB_MODE         (MSM_USB_BASE + 0x0098)
 #define USB_ROC_AHB_MODE     (MSM_USB_BASE + 0x0090)
-#define USB_SBUSCFG          (MSM_USB_BASE + 0x0090)
 
 #define USB_CAPLENGTH        (MSM_USB_BASE + 0x0100) /* 8 bit */
 #define USB_HCIVERSION       (MSM_USB_BASE + 0x0102) /* 16 bit */

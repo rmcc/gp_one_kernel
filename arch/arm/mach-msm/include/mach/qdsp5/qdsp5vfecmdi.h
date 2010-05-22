@@ -15,7 +15,7 @@ REFERENCES
 EXTERNALIZED FUNCTIONS
   None
 
-Copyright (c) 1992-2009, Code Aurora Forum. All rights reserved.
+Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
@@ -382,7 +382,7 @@ typedef struct {
  * Command to program the black level module
  */
 
-#define	VFE_CMD_BLACK_LVL_CFG		0x0005
+#define	VFE_CMD_BLACK_LVL_CFG		0x000a //0x0005 //FIH_ADQ,JOE HSU
 #define	VFE_CMD_BLACK_LVL_CFG_LEN	sizeof(vfe_cmd_black_lvl_cfg)
 
 #define	VFE_CMD_BL_SEL_MANUAL		0x0000
@@ -399,7 +399,7 @@ typedef struct {
  * Command to program the active region by cropping the region of interest
  */
 
-#define	VFE_CMD_ACTIVE_REGION_CFG	0x0006
+#define	VFE_CMD_ACTIVE_REGION_CFG	0x0005 //0x0006 //FIH_ADQ,JOE HSU
 #define	VFE_CMD_ACTIVE_REGION_CFG_LEN	\
 	sizeof(vfe_cmd_active_region_cfg)
 
@@ -417,7 +417,7 @@ typedef struct {
  * adaptive bayer filter (ABF) and demosaic modules
  */
 
-#define	VFE_CMD_DEMOSAIC_CFG		0x0007
+#define	VFE_CMD_DEMOSAIC_CFG		0x0006 //0x0007 //FIH_ADQ,JOE HSU
 #define	VFE_CMD_DEMOSAIC_CFG_LEN	sizeof(vfe_cmd_demosaic_cfg)
 
 #define	VFE_CMD_DEMOSAIC_PART1_ABF_EN_DIS	0x0000
@@ -448,7 +448,7 @@ typedef struct {
  * Command to program the ip format
  */
 
-#define	VFE_CMD_IP_FORMAT_CFG		0x0008
+#define	VFE_CMD_IP_FORMAT_CFG		0x0007 //0x0008 //FIH_ADQ,JOE HSU
 #define	VFE_CMD_IP_FORMAT_CFG_LEN	\
 	sizeof(vfe_cmd_ip_format_cfg)
 
@@ -477,7 +477,7 @@ typedef struct {
  * Command to program max and min allowed op values
  */
 
-#define	VFE_CMD_OP_CLAMP_CFG		0x0009
+#define	VFE_CMD_OP_CLAMP_CFG		0x0008 //0x0009 //FIH_ADQ,JOE HSU
 #define	VFE_CMD_OP_CLAMP_CFG_LEN	\
 	sizeof(vfe_cmd_op_clamp_cfg)
 
@@ -492,7 +492,7 @@ typedef struct {
  * Command to program chroma sub sample module
  */
 
-#define	VFE_CMD_CHROMA_SUBSAMPLE_CFG		0x000A
+#define	VFE_CMD_CHROMA_SUBSAMPLE_CFG		0x0009 //0x000A //FIH_ADQ,JOE HSU
 #define	VFE_CMD_CHROMA_SUBSAMPLE_CFG_LEN	\
 	sizeof(vfe_cmd_chroma_subsample_cfg)
 
@@ -770,7 +770,7 @@ typedef struct {
  * Command to configure, enable or disable synchronous timer1
  */
 
-#define	VFE_CMD_SYNC_TIMER1_CFG		0x0019
+#define	VFE_CMD_SYNC_TIMER1_CFG		0x001A //0x0019 //FIH_ADQ,JOE HSU
 #define	VFE_CMD_SYNC_TIMER1_CFG_LEN	\
 	sizeof(vfe_cmd_sync_timer1_cfg)
 
@@ -792,7 +792,7 @@ typedef struct {
  * Command to configure, enable or disable synchronous timer1
  */
 
-#define	VFE_CMD_SYNC_TIMER2_CFG		0x001A
+#define	VFE_CMD_SYNC_TIMER2_CFG		0x001B //0x001A //FIH_ADQ,JOE HSU
 #define	VFE_CMD_SYNC_TIMER2_CFG_LEN	\
 	sizeof(vfe_cmd_sync_timer2_cfg)
 
@@ -814,7 +814,7 @@ typedef struct {
  * Command to configure and start asynchronous timer1
  */
 
-#define	VFE_CMD_ASYNC_TIMER1_START	0x001B
+#define	VFE_CMD_ASYNC_TIMER1_START	0x001C //0x001B //FIH_ADQ,JOE HSU
 #define	VFE_CMD_ASYNC_TIMER1_START_LEN	\
 	sizeof(vfe_cmd_async_timer1_start)
 
@@ -835,7 +835,7 @@ typedef struct {
  * Command to configure and start asynchronous timer2
  */
 
-#define	VFE_CMD_ASYNC_TIMER2_START	0x001C
+#define	VFE_CMD_ASYNC_TIMER2_START	0x001D //0x001C //FIH_ADQ,JOE HSU
 #define	VFE_CMD_ASYNC_TIMER2_START_LEN	\
 	sizeof(vfe_cmd_async_timer2_start)
 
@@ -856,7 +856,7 @@ typedef struct {
  * Command to program partial configurations of auto focus(af)
  */
 
-#define	VFE_CMD_STATS_AF_UPDATE		0x001D
+#define	VFE_CMD_STATS_AF_UPDATE		0x001E //0x001D //FIH_ADQ,JOE HSU
 #define	VFE_CMD_STATS_AF_UPDATE_LEN	\
 	sizeof(vfe_cmd_stats_af_update)
 
@@ -874,7 +874,7 @@ typedef struct {
  * Command to program partial cfg of wb and exp
  */
 
-#define	VFE_CMD_STATS_WB_EXP_UPDATE	0x001E
+#define	VFE_CMD_STATS_WB_EXP_UPDATE	0x001F //0x001E //FIH_ADQ,JOE HSU
 #define	VFE_CMD_STATS_WB_EXP_UPDATE_LEN	\
 	sizeof(vfe_cmd_stats_wb_exp_update)
 
@@ -897,7 +897,7 @@ typedef struct {
  * Command to re program the CAMIF FRAME CONFIG settings
  */
 
-#define	VFE_CMD_UPDATE_CAMIF_FRAME_CFG		0x001F
+#define	VFE_CMD_UPDATE_CAMIF_FRAME_CFG		0x0019 //0x001F //FIH_ADQ,JOE HSU
 #define	VFE_CMD_UPDATE_CAMIF_FRAME_CFG_LEN	\
 	sizeof(vfe_cmd_update_camif_frame_cfg)
 

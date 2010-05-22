@@ -38,12 +38,14 @@
 #include <mach/qdsp5/qdsp5audppcmdi.h>
 #include <mach/qdsp5/qdsp5audppmsg.h>
 
-#include <mach/htc_pwrsink.h>
+#include <mach/trout_pwrsink.h>
 
 #include "evlog.h"
 
 #define LOG_AUDIO_EVENTS 1
 #define LOG_AUDIO_FAULTS 0
+
+#define LOG_CMCS 0 //karen test
 
 enum {
 	EV_NULL,
@@ -198,6 +200,8 @@ struct audio {
 
 static void audio_prevent_sleep(struct audio *audio)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_prevent_sleep()\n");
+
 	printk(KERN_INFO "++++++++++++++++++++++++++++++\n");
 	wake_lock(&audio->wakelock);
 	wake_lock(&audio->idlelock);
@@ -205,6 +209,8 @@ static void audio_prevent_sleep(struct audio *audio)
 
 static void audio_allow_sleep(struct audio *audio)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_allow_sleep()\n");
+
 	wake_unlock(&audio->wakelock);
 	wake_unlock(&audio->idlelock);
 	printk(KERN_INFO "------------------------------\n");
@@ -223,6 +229,8 @@ static int audio_enable(struct audio *audio)
 {
 	struct audmgr_config cfg;
 	int rc;
+
+	if (LOG_CMCS) pr_info("audio_out: audio_enable()\n");
 
 	pr_info("audio_enable()\n");
 
@@ -260,13 +268,16 @@ static int audio_enable(struct audio *audio)
 	}
 
 	audio->enabled = 1;
-	htc_pwrsink_set(PWRSINK_AUDIO, 100);
+	trout_pwrsink_set(PWRSINK_AUDIO, 100);
 	return 0;
 }
 
 /* must be called with audio->lock held */
 static int audio_disable(struct audio *audio)
 {
+
+	if (LOG_CMCS) pr_info("audio_out: audio_disable()\n");
+
 	pr_info("audio_disable()\n");
 	if (audio->enabled) {
 		audio->enabled = 0;
@@ -288,6 +299,8 @@ static void audio_dsp_event(void *private, unsigned id, uint16_t *msg)
 	struct audio *audio = private;
 	struct buffer *frame;
 	unsigned long flags;
+
+	if (LOG_CMCS) pr_info("audio_out: audio_dsp_event(id =%d)\n", id);
 
 	LOG(EV_DSP_EVENT, id);
 	switch (id) {
@@ -354,6 +367,8 @@ static int audio_dsp_out_enable(struct audio *audio, int yes)
 {
 	audpp_cmd_pcm_intf cmd;
 
+	if (LOG_CMCS) pr_info("audio_out: audio_dsp_out_enable()\n");
+
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd_id	= AUDPP_CMD_PCM_INTF_2; 
 	cmd.object_num	= AUDPP_CMD_PCM_INTF_OBJECT_NUM;
@@ -382,6 +397,8 @@ static int audio_dsp_send_buffer(struct audio *audio, unsigned idx, unsigned len
 {
 	audpp_cmd_pcm_intf_send_buffer cmd;
 	
+	if (LOG_CMCS) pr_info("audio_out: audio_dsp_send_buffer()\n");
+	
 	cmd.cmd_id		= AUDPP_CMD_PCM_INTF_2;
 	cmd.host_pcm_object	= AUDPP_CMD_PCM_INTF_OBJECT_NUM;
 	cmd.config		= AUDPP_CMD_PCM_INTF_BUFFER_CMD_V;
@@ -397,6 +414,8 @@ static int audio_dsp_send_buffer(struct audio *audio, unsigned idx, unsigned len
 static int audio_dsp_set_adrc(struct audio *audio)
 {
 	audpp_cmd_cfg_object_params_adrc cmd;
+
+	if (LOG_CMCS) pr_info("audio_out: audio_dsp_set_adrc()\n");
 
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.common.comman_cfg = AUDPP_CMD_CFG_OBJ_UPDATE;
@@ -422,6 +441,8 @@ static int audio_dsp_set_eq(struct audio *audio)
 {
 	audpp_cmd_cfg_object_params_eq cmd;
 
+	if (LOG_CMCS) pr_info("audio_out: audio_dsp_set_eq()\n");
+
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.common.comman_cfg = AUDPP_CMD_CFG_OBJ_UPDATE;
 	cmd.common.command_type = AUDPP_CMD_EQUALIZER;
@@ -440,6 +461,8 @@ static int audio_dsp_set_eq(struct audio *audio)
 static int audio_dsp_set_rx_iir(struct audio *audio)
 {
 	audpp_cmd_cfg_object_params_rx_iir cmd;
+
+	if (LOG_CMCS) pr_info("audio_out: audio_dsp_set_rx_iir()\n");
 
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.common.comman_cfg = AUDPP_CMD_CFG_OBJ_UPDATE;
@@ -461,6 +484,8 @@ static int audio_dsp_set_rx_iir(struct audio *audio)
 
 static int audio_enable_adrc(struct audio *audio, int enable)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_enable_eq()\n");
+
 	if (audio->adrc_enable != enable) {
 		audio->adrc_enable = enable;
 		if (audio->running)
@@ -471,6 +496,8 @@ static int audio_enable_adrc(struct audio *audio, int enable)
 
 static int audio_enable_eq(struct audio *audio, int enable)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_enable_eq()\n");
+
 	if (audio->eq_enable != enable) {
 		audio->eq_enable = enable;
 		if (audio->running)
@@ -481,6 +508,8 @@ static int audio_enable_eq(struct audio *audio, int enable)
 
 static int audio_enable_rx_iir(struct audio *audio, int enable)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_enable_rx_iir()\n");
+
 	if (audio->rx_iir_enable != enable) {
 		audio->rx_iir_enable = enable;
 		if (audio->running)
@@ -491,6 +520,8 @@ static int audio_enable_rx_iir(struct audio *audio, int enable)
 
 static void audio_flush(struct audio *audio)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_flush()\n");
+
 	audio->out[0].used = 0;
 	audio->out[1].used = 0;
 	audio->out_head = 0;
@@ -502,6 +533,8 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct audio *audio = file->private_data;
 	int rc;
+
+	if (LOG_CMCS) pr_info("audio_out: audio_ioctl(cmd = %d)\n", cmd);
 
 	if (cmd == AUDIO_GET_STATS) {
 		struct msm_audio_stats stats;
@@ -590,11 +623,15 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 static ssize_t audio_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_read()\n");
+
 	return -EINVAL;
 }
 
 static inline int rt_policy(int policy)
 {
+	if (LOG_CMCS) pr_info("audio_out: rt_policy()\n");
+
 	if (unlikely(policy == SCHED_FIFO) || unlikely(policy == SCHED_RR))
 		return 1;
 	return 0;
@@ -602,6 +639,8 @@ static inline int rt_policy(int policy)
 
 static inline int task_has_rt_policy(struct task_struct *p)
 {
+	if (LOG_CMCS) pr_info("audio_out: task_has_rt_policy()\n");
+
 	return rt_policy(p->policy);
 }
 
@@ -619,13 +658,14 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 	int cap_nice = cap_raised(current->cap_effective, CAP_SYS_NICE);
 	int rc = 0;
 
+	if (LOG_CMCS) pr_info("audio_out: audio_write()\n");
+
 	LOG(EV_WRITE, count | (audio->running << 28) | (audio->stopped << 24));
 
 	/* just for this write, set us real-time */
 	if (!task_has_rt_policy(current)) {
 		cap_raise(current->cap_effective, CAP_SYS_NICE);
-		if ((sched_setscheduler(current, SCHED_RR, &s)) < 0)
-                    pr_err("audio: sched_setscheduler failed\n");
+		sched_setscheduler(current, SCHED_RR, &s);
 	}
 
 	mutex_lock(&audio->write_lock);
@@ -669,8 +709,7 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 	/* restore scheduling policy and priority */
 	if (!rt_policy(old_policy)) {
 		struct sched_param v = { .sched_priority = old_prio };
-		if ((sched_setscheduler(current, old_policy, &v)) < 0)
-                   pr_err("audio: sched_setscheduler failed\n");
+		sched_setscheduler(current, old_policy, &v);
 		if (likely(!cap_nice))
 			cap_lower(current->cap_effective, CAP_SYS_NICE);
 	}
@@ -685,13 +724,15 @@ static int audio_release(struct inode *inode, struct file *file)
 {
 	struct audio *audio = file->private_data;
 
+	if (LOG_CMCS) pr_info("audio_out: audio_release()\n");
+
 	LOG(EV_OPEN, 0);
 	mutex_lock(&audio->lock);
 	audio_disable(audio);
 	audio_flush(audio);
 	audio->opened = 0;
 	mutex_unlock(&audio->lock);
-	htc_pwrsink_set(PWRSINK_AUDIO, 0);
+	trout_pwrsink_set(PWRSINK_AUDIO, 0);
 	return 0;
 }
 
@@ -701,6 +742,8 @@ static int audio_open(struct inode *inode, struct file *file)
 {
 	struct audio *audio = &the_audio;
 	int rc;
+
+	if (LOG_CMCS) pr_info("audio_out: audio_open()\n");
 
 	mutex_lock(&audio->lock);
 
@@ -756,6 +799,8 @@ static long audpp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int rc = 0, enable;
 	uint16_t enable_mask;
 
+	if (LOG_CMCS) pr_info("audio_out: audpp_ioctl(cmd = %d)\n", cmd);
+
 	mutex_lock(&audio->lock);
 	switch (cmd) {
 	case AUDIO_ENABLE_AUDPP:
@@ -802,6 +847,8 @@ static int audpp_open(struct inode *inode, struct file *file)
 {
 	struct audio *audio = &the_audio;
 
+	if (LOG_CMCS) pr_info("audio_out: audpp_open()\n");
+
 	file->private_data = audio;
 	return 0;
 }
@@ -835,6 +882,8 @@ struct miscdevice audpp_misc = {
 
 static int __init audio_init(void)
 {
+	if (LOG_CMCS) pr_info("audio_out: audio_init()\n");
+
 	mutex_init(&the_audio.lock);
 	mutex_init(&the_audio.write_lock);
 	spin_lock_init(&the_audio.dsp_lock);

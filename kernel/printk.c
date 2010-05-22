@@ -32,8 +32,14 @@
 #include <linux/security.h>
 #include <linux/bootmem.h>
 #include <linux/syscalls.h>
+#include <trace/kernel.h>
 
 #include <asm/uaccess.h>
+
+//FIH_ADQ+
+#include <mach/msm_iomap.h>
+#include <linux/io.h>
+//FIH_ADQ-
 
 /*
  * Architectures can override it:
@@ -63,6 +69,7 @@ int console_printk[4] = {
 	MINIMUM_CONSOLE_LOGLEVEL,	/* minimum_console_loglevel */
 	DEFAULT_CONSOLE_LOGLEVEL,	/* default_console_loglevel */
 };
+EXPORT_SYMBOL_GPL(console_printk);
 
 /*
  * Low level drivers may need that to know if they can schedule in
@@ -138,6 +145,62 @@ static char __log_buf[__LOG_BUF_LEN];
 static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
+
+
+//FIH_ADQ +
+static bool ENABLE_PLOGBUF = false;
+
+#define PLOG_SIZE ((1 << CONFIG_LOG_BUF_SHIFT) + SZ_4K)
+#define PLOGBUFTEMP (MSM_PLOG_BASE)
+#define PLOGBUFSTORE (MSM_PLOG_BASE + PLOG_SIZE)
+#define PLOG_BUFFER_SIZE (1 << CONFIG_LOG_BUF_SHIFT)
+
+struct plog_buf_s {
+	int     level;
+	unsigned log_start;	/* Index into log_buf: next char to be read by syslog() */
+	unsigned con_start;	/* Index into log_buf: next char to be sent to consoles */
+	unsigned log_end;	/* Index into log_buf: most-recently-written-char + 1 */
+	unsigned logged_chars;
+	char	buf[PLOG_BUFFER_SIZE];
+};
+static struct plog_buf_s * plogbuf_temp = (struct plog_buf_s *) PLOGBUFTEMP;
+static struct plog_buf_s * plogbuf_store = (struct plog_buf_s *) PLOGBUFSTORE;	 	
+
+#define PLOG_TEMP_BUF(idx) (plogbuf_temp->buf[(idx) & LOG_BUF_MASK])
+#define PLOG_STORE_BUF(idx) (plogbuf_store->buf[(idx) & LOG_BUF_MASK])
+
+void clear_plogbuf()
+{
+	memset(plogbuf_temp, 0, sizeof(plogbuf_temp));
+	plogbuf_temp->level = -1;
+	plogbuf_temp->log_start = 0;
+	plogbuf_temp->con_start = 0;
+	plogbuf_temp->log_end = 0;
+	plogbuf_temp->logged_chars = 0;
+}
+EXPORT_SYMBOL(clear_plogbuf);
+
+void set_plogbuf_state(bool state)
+{
+	ENABLE_PLOGBUF = state;
+
+	if(ENABLE_PLOGBUF)
+	{
+		plogbuf_temp->log_start = log_start;
+		plogbuf_temp->con_start = con_start;
+		plogbuf_temp->log_end = log_end;
+		plogbuf_temp->logged_chars = logged_chars;
+		memcpy(plogbuf_temp->buf, log_buf, PLOG_BUFFER_SIZE);
+	}
+	else
+	{
+		clear_plogbuf();
+	}
+}
+
+EXPORT_SYMBOL(set_plogbuf_state);
+//FIH_ADQ-
+
 
 static int __init log_buf_len_setup(char *str)
 {
@@ -273,6 +336,31 @@ int log_buf_copy(char *dest, int idx, int len)
 
 	return ret;
 }
+
+//FIH_ADQ+
+int plog_buf_copy(char *dest, int idx, int len)
+{
+	int ret, max = 0;
+	max = plogbuf_store->logged_chars;
+
+	if(max > PLOG_BUFFER_SIZE)
+		return -1;
+
+	if (idx < 0 || idx >= max) {
+		ret = -1;
+	} else {
+		if (len > max - idx)
+			len = max - idx;
+		ret = len;
+		idx += (plogbuf_store->log_end - max);
+		while (len-- > 0)
+			dest[len] = PLOG_STORE_BUF(idx + len);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(plog_buf_copy);
+//FIH_ADQ-
+
 
 /*
  * Commands to do_syslog:
@@ -526,13 +614,26 @@ static void call_console_drivers(unsigned start, unsigned end)
 static void emit_log_char(char c)
 {
 	LOG_BUF(log_end) = c;
+
+	if(ENABLE_PLOGBUF)
+		PLOG_TEMP_BUF(log_end) = c;
+
 	log_end++;
+	
 	if (log_end - log_start > log_buf_len)
 		log_start = log_end - log_buf_len;
 	if (log_end - con_start > log_buf_len)
 		con_start = log_end - log_buf_len;
 	if (logged_chars < log_buf_len)
 		logged_chars++;
+
+	if(ENABLE_PLOGBUF)
+	{
+		plogbuf_temp->log_end = log_end;
+		plogbuf_temp->log_start = log_start;
+		plogbuf_temp->con_start = con_start;	
+		plogbuf_temp->logged_chars = logged_chars;
+	}
 }
 
 /*
@@ -604,6 +705,7 @@ asmlinkage int printk(const char *fmt, ...)
 	int r;
 
 	va_start(args, fmt);
+	_trace_kernel_printk(_RET_IP_);
 	r = vprintk(fmt, args);
 	va_end(args);
 
@@ -672,7 +774,9 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	unsigned long flags;
 	int this_cpu;
 	char *p;
-
+//FIH_ADQ+ Debug Level	
+	//char *nn;
+//FIH_ADQ-
 	boot_delay_msec();
 
 	preempt_disable();
@@ -711,6 +815,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+	_trace_kernel_vprintk(_RET_IP_, printk_buf, printed_len);
 
 #ifdef	CONFIG_DEBUG_LL
 	printascii(printk_buf);
@@ -722,6 +827,12 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	 */
 	for (p = printk_buf; *p; p++) {
 		if (new_text_line) {
+
+//FIH_ADQ+ Debug Level	
+			//find next new_text_line
+			//nn = strchr(p, '\n');				
+//FIH_ADQ-
+
 			/* If a token, set current_log_level and skip over */
 			if (p[0] == '<' && p[1] >= '0' && p[1] <= '7' &&
 			    p[2] == '>') {
@@ -729,6 +840,14 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				p += 3;
 				printed_len -= 3;
 			}
+
+//FIH_ADQ+ Debug Level	
+			//if(current_log_level > console_loglevel)
+			//{
+			//	p+= (nn - p);
+			//	continue;
+			//}
+//FIH_ADQ- 	
 
 			/* Always output the token */
 			emit_log_char('<');
@@ -838,6 +957,16 @@ static int __init console_setup(char *str)
 	char buf[sizeof(console_cmdline[0].name) + 4]; /* 4 for index */
 	char *s, *options, *brl_options = NULL;
 	int idx;
+
+//FIH_ADQ+
+	plogbuf_store->log_start = plogbuf_temp->log_start;
+	plogbuf_store->con_start = plogbuf_temp->con_start;
+	plogbuf_store->log_end = plogbuf_temp->log_end;
+	plogbuf_store->logged_chars = plogbuf_temp->logged_chars;		
+	memcpy((char *)plogbuf_store->buf, (char *)plogbuf_temp->buf, PLOG_BUFFER_SIZE);
+
+	set_plogbuf_state(true);
+//FIH_ADQ-
 
 #ifdef CONFIG_A11Y_BRAILLE_CONSOLE
 	if (!memcmp(str, "brl,", 4)) {

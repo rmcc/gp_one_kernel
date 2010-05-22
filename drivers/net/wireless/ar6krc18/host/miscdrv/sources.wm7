@@ -1,0 +1,23 @@
+!if 0
+------------------------------------------------------------------------------
+ <copyright file="sources" company="Atheros">
+    Copyright (c) 2005-2008 Atheros Corporation.  All rights reserved.
+ $ATH_LICENSE_HOSTSDK0_C$
+------------------------------------------------------------------------------
+==============================================================================
+ Author(s): ="Atheros"
+==============================================================================
+!endif
+
+TARGETNAME= ar6k_misc
+TARGETTYPE= LIBRARY
+
+SOURCES= \
+    common_drv.c \
+    credit_dist.c
+
+AR6K_PROJ_ROOT = ..\..
+
+!INCLUDE $(AR6K_PROJ_ROOT)\sources.inc
+
+      

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -39,7 +39,6 @@ extern void register_cb(void *);
 #define USE_RATE_MAX            48000
 #define MAX_BUFFER_SIZE         (4096*4)
 #define MAX_PERIOD_SIZE         4096
-#define MIN_PERIOD_SIZE         40
 #define USE_PERIODS_MAX         1024
 #define USE_PERIODS_MIN         1
 
@@ -53,7 +52,6 @@ struct qsd_ctl {
 	int16_t pan;
 	uint16_t capture_device; /* Device parameter */
 	uint16_t playback_device; /* Device  parameter */
-	uint16_t mute;		 /* Mute  parameter */
 };
 
 extern struct audio_locks the_locks;

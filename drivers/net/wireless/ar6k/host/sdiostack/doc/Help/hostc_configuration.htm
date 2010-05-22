@@ -1,0 +1,189 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+
+<title>Host Configuration</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->
+		Host&nbsp;Driver Configuration<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><A href="#previous#"><img
+			src="Images/leftarrow.gif" width="27" height="32" border="0" alt=""></A>
+		<!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><A href="#next#"><img
+			src="Images/rightarrow.gif" width="27" height="32" border="0" alt=""></A>
+		<!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" --> <OBJECT
+			type="application/x-oleobject"
+			classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+			<PARAM name="Keyword" value="Host Configuration">
+		</OBJECT>
+
+		<p class="BODYTEXT">The SDIO Core issues  requests through the
+		  <font face="Courier New, Courier, mono"><a href="HD_Reference.htm#FUNC_Configure">pConfigure</a></font> callback function.
+		  The SDIO stack defines a set of standard commands that can handle
+		  the majority of SD/SDIO bus configurations. Commands are encapsulated
+		  in an <font face="Courier New, Courier, mono">SDCONFIG</font> structure consisting of the command code and a pointer
+		  to the command specific data.</p>
+
+		<p class="BODYTEXT">The following table lists the standard commands:</p>
+		<table width="100%" border="1">
+		  <tr>
+		    <td ><div align="center"><font face="Arial, Helvetica, sans-serif"><strong>Command</strong></font></div></td>
+		    <td ><div align="center"><font face="Arial, Helvetica, sans-serif"><strong>In/Out</strong></font></div></td>
+		    <td ><div align="center"><font face="Arial, Helvetica, sans-serif"><strong>Command Data</strong></font></div></td>
+		    <td ><div align="center"><font face="Arial, Helvetica, sans-serif"><strong>Notes</strong></font></div></td>
+	      </tr>
+		  <tr>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_SEND_INIT_CLOCKS </font></td>
+		    <td><div align="center"><font face="Arial, Helvetica, sans-serif"><font size="-1">In</font></font></div></td>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_INIT_CLOCKS_DATA</font></td>
+		    <td><font size="-1" face="Arial, Helvetica, sans-serif"> The <font face="Courier New, Courier, mono">NumberOfClocks</font> field contains the number of initialization clocks
+		      to send to the card.</font></td>
+	      </tr>
+		  <tr>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_SDIO_INT_CTRL </font></td>
+		    <td><div align="center"><font face="Arial, Helvetica, sans-serif"><font size="-1">In</font></font></div></td>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_SDIO_INT_CTRL_DATA</font></td>
+		    <td><font size="-1" face="Arial, Helvetica, sans-serif">The command data
+		        contains a <font face="Courier New, Courier, mono">SlotIRQEnable</font> field to indicate whether the slot interrupt
+		        detection hardware should be enabled. The <font face="Courier New, Courier, mono">IRQDetectMode</font> contains
+		        a set of flags to enable additional IRQ detection options (i.e.
+		        mult-block support).</font></td>
+	      </tr>
+		  <tr>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_SDIO_REARM_INT </font></td>
+		    <td><div align="center"><font face="Arial, Helvetica, sans-serif"><font size="-1">None</font></font></div></td>
+		    <td><font size="-1" face="Courier New, Courier, mono">None</font></td>
+		    <td><font size="-1" face="Arial, Helvetica, sans-serif">A pending SDIO
+		        slot interrupt requires that the host disable (mask) the interrupt
+		        source on the controller until software handles the interrupt.
+		        This command is issued when interrupt processing is complete
+		        and the HCD can
+		        safely unmask the interrupt detection hardware.</font></td>
+	      </tr>
+		  <tr>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_BUS_MODE_CTRL </font></td>
+		    <td><div align="center"><font face="Arial, Helvetica, sans-serif"><font size="-1">In/Out</font></font></div></td>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_BUS_MODE_DATA</font></td>
+		    <td><font size="-1" face="Arial, Helvetica, sans-serif">The command data
+		        contains settings for the bus mode (bus widths: spi,1,4,8-bit),
+		        additional bus flags (i.e. SD/MMC high speed modes) and a desired
+		        clock rate value
+		        (in Hz). The HCD should fill in the <font face="Courier New, Courier, mono">ActualClockRate</font>	        field
+		        with the closest matching clock value that the hardware can handle.</font></td>
+	      </tr>
+		  <tr>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_POWER_CTRL </font></td>
+		    <td><div align="center"><font size="-1" face="Arial, Helvetica, sans-serif">In</font></div></td>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_POWER_CTRL_DATA</font></td>
+		    <td><font size="-1" face="Arial, Helvetica, sans-serif">The command data
+		        contains a <font face="Courier New, Courier, mono">SlotPowerEnable</font> flag
+		        and a <font face="Courier New, Courier, mono">SlotPowerVoltageMask</font>
+		        value. The slot voltage is initially set to 3.3V during initialization.
+		        If the host and card support  lower than 3.3V the
+		        SDIO core will issue a change in power to accomodate the card
+		        and system. The HCD should list it's preferred voltage to a value
+		        lower than 3.3V in this case.</font></td>
+	      </tr>
+		  <tr>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_GET_WP </font></td>
+		    <td><div align="center"><font size="-1" face="Arial, Helvetica, sans-serif">Out</font></div></td>
+		    <td><font size="-1" face="Courier New, Courier, mono">SDCONFIG_WP_VALUE</font></td>
+		    <td><font size="-1" face="Arial, Helvetica, sans-serif">The HCD should
+		        return a value of &quot;1&quot; if the write protect switch (SD Memory
+		        only) is &quot;on&quot; otherwise the HCD should return &quot;0&quot;.</font></td>
+	      </tr>
+	    </table>
+		<p class="BODYTEXT">The SDIO core issues only one configuration request at
+		  a time. The HCD must complete the request before the callback returns.
+		  All requests with the exception of <font face="Courier New, Courier, mono">SDCONFIG_REARM_INT</font> execute
+		  in a pre-emptible context. The HCD can sleep or delay execution if
+	  necessary within this context. The bus driver guarantees that configuration
+		  requests are mutually exclusive  with SD bus requests. An internal
+		  queue is used to serialize configuration and SD bus requests.</p>
+		<p class="BODYTEXT">The following example demonstrates how to  process a <font face="Courier New, Courier, mono">SDCONFIG_BUS_MODE_CTRL</font> request:</p>
+		<p class="BODYTEXT">
+		<pre>
+SDIO_STATUS HcdConfig(PSDHCD pHcd, PSDCONFIG pConfig) 
+{
+    PSDHCD_DEVICE pDevice = (PSDHCD_DEVICE)pHcd->pContext; 
+    SDIO_STATUS status = SDIO_STATUS_SUCCESS;
+    UINT16      command;
+    PSDCONFIG_BUS_MODE_DATA pMode;
+
+    command = GET_SDCONFIG_CMD(pConfig);
+        
+    switch (command){
+        case SDCONFIG_BUS_MODE_CTRL:
+            pMode = (PSDCONFIG_BUS_MODE_DATA)(pConfig->pData);
+            switch (SDCONFIG_GET_BUSWIDTH(pMode->BusModeFlags)) {
+                case SDCONFIG_BUS_WIDTH_1_BIT:
+                    /* setup 1 bit mode */
+                    break;        
+                case SDCONFIG_BUS_WIDTH_4_BIT:
+                    /* setup 4 bit mode */
+                    break;
+                case SDCONFIG_BUS_WIDTH_MMC8_BIT:
+                    /* setup 8 bit MMC mode */
+                    break;    
+                default:
+                    DBG_ASSERT(FALSE);
+                    break;
+            }
+            if (pMode->BusModeFlags & SDCONFIG_BUS_MODE_SD_HS) { 
+                /* switch to SD High Speed mode */
+            }
+            if (pMode->BusModeFlags & SDCONFIG_BUS_MODE_MMC_HS) { 
+                /* switch to MMC High Speed mode */
+            }
+                /* set clock rate */
+            pMode->ActualClockRate = SetControllerClock(pMode->ClockRate);
+            break;
+            ..... other config requests that the driver handles.....
+    }
+    
+    return status;
+} 	
+		</pre>
+		
+		</p>
+		<p class="BODYTEXT">Refer to the sample host controller drivers for code examples
+		  on handling other standard configuration requests.</p>
+	  <!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

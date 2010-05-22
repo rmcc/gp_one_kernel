@@ -46,6 +46,14 @@
 
 #include "hci_uart.h"
 
+//---[ADQ.B-1422] BT/WIFI coexistence
+#ifdef CONFIG_BT_FILTER
+#include "cmcs_btfilter.h"
+#endif
+
+//+++++++++++++++++++++++++++++misty
+//#define CONFIG_BT_HCIUART_DEBUG
+//-----------------------------misty
 #ifndef CONFIG_BT_HCIUART_DEBUG
 #undef  BT_DBG
 #define BT_DBG( A... )
@@ -81,6 +89,12 @@ static int h4_open(struct hci_uart *hu)
 	skb_queue_head_init(&h4->txq);
 
 	hu->priv = h4;
+
+    //---[ADQ.B-1422] BT/WIFI coexistence
+    #ifdef CONFIG_BT_FILTER
+    BTFilter_Init();
+    #endif    
+
 	return 0;
 }
 
@@ -112,6 +126,11 @@ static int h4_close(struct hci_uart *hu)
 
 	hu->priv = NULL;
 	kfree(h4);
+
+    //---[ADQ.B-1422] BT/WIFI coexistence
+    #ifdef CONFIG_BT_FILTER
+    BTFilter_Deinit();
+    #endif
 
 	return 0;
 }
@@ -180,6 +199,12 @@ static int h4_recv(struct hci_uart *hu, void *data, int count)
 			switch (h4->rx_state) {
 			case H4_W4_DATA:
 				BT_DBG("Complete data");
+
+                //---[ADQ.B-1422] BT/WIFI coexistence
+                #ifdef CONFIG_BT_FILTER
+                if(bt_cb(h4->rx_skb)->pkt_type == HCI_EVENT_PKT)
+                   BTFilter_HCIEvent(h4->rx_skb->data,eh->plen + HCI_ACL_HDR_SIZE);
+                #endif
 
 				hci_recv_frame(h4->rx_skb);
 
@@ -265,7 +290,20 @@ static int h4_recv(struct hci_uart *hu, void *data, int count)
 static struct sk_buff *h4_dequeue(struct hci_uart *hu)
 {
 	struct h4_struct *h4 = hu->priv;
+
+//---[ADQ.B-1422] BT/WIFI coexistence
+#ifdef CONFIG_BT_FILTER
+    struct sk_buff *skb;
+    
+    skb = skb_dequeue(&h4->txq);
+    if(skb && bt_cb(skb)->pkt_type == HCI_COMMAND_PKT) {
+        BTFilter_HCICommand(skb->data+1, skb->len-1);
+    }
+
+    return skb;        
+#else
 	return skb_dequeue(&h4->txq);
+#endif
 }
 
 static struct hci_uart_proto h4p = {

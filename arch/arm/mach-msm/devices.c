@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/devices.c
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -89,14 +89,6 @@ struct platform_device msm_device_uart3 = {
 	.num_resources	= ARRAY_SIZE(resources_uart3),
 	.resource	= resources_uart3,
 };
-
-#if defined(CONFIG_ARCH_QSD)
-#define MSM_UART1DM_PHYS      0xA0200000
-#define MSM_UART2DM_PHYS      0xA0900000
-#else
-#define MSM_UART1DM_PHYS      0xA0200000
-#define MSM_UART2DM_PHYS      0xA0300000
-#endif
 
 static struct resource msm_uart1_dm_resources[] = {
 	{
@@ -404,7 +396,10 @@ struct platform_device msm_device_sdc1 = {
 };
 
 struct platform_device msm_device_sdc2 = {
+    ///FIH+++
 	.name		= "msm_sdcc",
+    //.name		= "msm_sdcc_wlan",      //atheros sdio stack
+    ///FIH---
 	.id		= 2,
 	.num_resources	= ARRAY_SIZE(resources_sdc2),
 	.resource	= resources_sdc2,
@@ -571,6 +566,16 @@ static struct platform_device msm_tvenc_device = {
 	.resource       = msm_tvenc_resources,
 };
 
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+static struct platform_device goldfish_battery_device = {
+	.name		= "goldfish-battery",
+	.id		  = -1,
+};
+///-FIH_ADQ
+/* } FIH_ADQ, Penho, 2009/03/13 */
+
 static void __init msm_register_device(struct platform_device *pdev, void *data)
 {
 	int ret;
@@ -598,6 +603,13 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_tvenc_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+	else if (!strncmp(name, "batt", 4))
+		msm_register_device(&goldfish_battery_device, data);
+///-FIH_ADQ
+/* } FIH_ADQ, Penho, 2009/03/13 */
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
 }
@@ -619,10 +631,10 @@ void __init msm_camera_register_device(void *res, uint32_t num,
 struct clk msm_clocks_7x01a[] = {
 	CLOCK("adm_clk",	ADM_CLK,	NULL, 0),
 	CLOCK("adsp_clk",	ADSP_CLK,	NULL, 0),
-	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
+	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, 0),
 	CLOCK("ebi2_clk",	EBI2_CLK,	NULL, 0),
 	CLOCK("ecodec_clk",	ECODEC_CLK,	NULL, 0),
-	CLOCK("emdh_clk",	EMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLOCK("emdh_clk",	EMDH_CLK,	NULL, OFF),
 	CLOCK("gp_clk",		GP_CLK,		NULL, 0),
 	CLOCK("grp_clk",	GRP_CLK,	NULL, OFF),
 	CLOCK("i2c_clk",	I2C_CLK,	&msm_device_i2c.dev, 0),
@@ -631,9 +643,9 @@ struct clk msm_clocks_7x01a[] = {
 	CLOCK("imem_clk",	IMEM_CLK,	NULL, OFF),
 	CLOCK("mdc_clk",	MDC_CLK,	NULL, 0),
 	CLOCK("mdp_clk",	MDP_CLK,	NULL, OFF),
-	CLOCK("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
+	CLOCK("pbus_clk",	PBUS_CLK,	NULL, 0),
 	CLOCK("pcm_clk",	PCM_CLK,	NULL, 0),
-	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF),
 	CLOCK("sdac_clk",	SDAC_CLK,	NULL, OFF),
 	CLOCK("sdc_clk",	SDC1_CLK,	&msm_device_sdc1.dev, OFF),
 	CLOCK("sdc_pclk",	SDC1_PCLK,	&msm_device_sdc1.dev, OFF),
@@ -655,7 +667,7 @@ struct clk msm_clocks_7x01a[] = {
 	CLOCK("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
 	CLOCK("usb_hs_pclk",	USB_HS_PCLK,	NULL, OFF),
 	CLOCK("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
+	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF),
 	CLOCK("vfe_clk",	VFE_CLK,	NULL, OFF),
 	CLOCK("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
 };
@@ -665,7 +677,7 @@ unsigned msm_num_clocks_7x01a = ARRAY_SIZE(msm_clocks_7x01a);
 struct clk msm_clocks_7x25[] = {
 	CLOCK("adm_clk",	ADM_CLK,	NULL, 0),
 	CLOCK("adsp_clk",	ADSP_CLK,	NULL, 0),
-	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
+	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, 0),
 	CLOCK("ebi2_clk",	EBI2_CLK,	NULL, 0),
 	CLOCK("ecodec_clk",	ECODEC_CLK,	NULL, 0),
 	CLOCK("gp_clk",		GP_CLK,		NULL, 0),
@@ -674,13 +686,16 @@ struct clk msm_clocks_7x25[] = {
 	CLOCK("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
 	CLOCK("imem_clk",	IMEM_CLK,	NULL, OFF),
 	CLOCK("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLOCK("mdp_clk",	MDP_CLK,	NULL, OFF),
+/* FIH_ADQ, Ming { */
+///	CLOCK("mdp_clk",	MDP_CLK,	NULL, OFF),
+    CLOCK("mdp_clk",	MDP_CLK,	NULL, 0),  // do not auto-off
+/* } FIH_ADQ, Ming */
 	CLOCK("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
 	CLOCK("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
 	CLOCK("mdp_vsync_clk",  MDP_VSYNC_CLK,  NULL, 0),
-	CLOCK("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
+	CLOCK("pbus_clk",	PBUS_CLK,	NULL, 0),
 	CLOCK("pcm_clk",	PCM_CLK,	NULL, 0),
-	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF),
 	CLOCK("sdac_clk",	SDAC_CLK,	NULL, OFF),
 	CLOCK("sdc_clk",	SDC1_CLK,	&msm_device_sdc1.dev, OFF),
 	CLOCK("sdc_pclk",	SDC1_PCLK,	&msm_device_sdc1.dev, OFF),
@@ -698,63 +713,19 @@ struct clk msm_clocks_7x25[] = {
 	CLOCK("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
 	CLOCK("usb_hs_pclk",	USB_HS_PCLK,	NULL, OFF),
 	CLOCK("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
+	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF),
 	CLOCK("vfe_clk",	VFE_CLK,	NULL, OFF),
 	CLOCK("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
 };
 
 unsigned msm_num_clocks_7x25 = ARRAY_SIZE(msm_clocks_7x25);
 
-struct clk msm_clocks_7x27[] = {
-	CLOCK("adm_clk",	ADM_CLK,	NULL, 0),
-	CLOCK("adsp_clk",	ADSP_CLK,	NULL, 0),
-	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
-	CLOCK("ebi2_clk",	EBI2_CLK,	NULL, 0),
-	CLOCK("ecodec_clk",	ECODEC_CLK,	NULL, 0),
-	CLOCK("gp_clk",		GP_CLK,		NULL, 0),
-	CLOCK("grp_clk",	GRP_CLK,	NULL, 0),
-	CLOCK("i2c_clk",	I2C_CLK,	&msm_device_i2c.dev, 0),
-	CLOCK("icodec_rx_clk",	ICODEC_RX_CLK,	NULL, 0),
-	CLOCK("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
-	CLOCK("imem_clk",	IMEM_CLK,	NULL, OFF),
-	CLOCK("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLOCK("mdp_clk",	MDP_CLK,	NULL, OFF),
-	CLOCK("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
-	CLOCK("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
-	CLOCK("mdp_vsync_clk",  MDP_VSYNC_CLK,  NULL, 0),
-	CLOCK("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
-	CLOCK("pcm_clk",	PCM_CLK,	NULL, 0),
-	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
-	CLOCK("sdac_clk",	SDAC_CLK,	NULL, OFF),
-	CLOCK("sdc_clk",	SDC1_CLK,	&msm_device_sdc1.dev, OFF),
-	CLOCK("sdc_pclk",	SDC1_PCLK,	&msm_device_sdc1.dev, OFF),
-	CLOCK("sdc_clk",	SDC2_CLK,	&msm_device_sdc2.dev, OFF),
-	CLOCK("sdc_pclk",	SDC2_PCLK,	&msm_device_sdc2.dev, OFF),
-	CLOCK("sdc_clk",	SDC3_CLK,	&msm_device_sdc3.dev, OFF),
-	CLOCK("sdc_pclk",	SDC3_PCLK,	&msm_device_sdc3.dev, OFF),
-	CLOCK("sdc_clk",	SDC4_CLK,	&msm_device_sdc4.dev, OFF),
-	CLOCK("sdc_pclk",	SDC4_PCLK,	&msm_device_sdc4.dev, OFF),
-	CLOCK("uart_clk",	UART1_CLK,	&msm_device_uart1.dev, OFF),
-	CLOCK("uart_clk",	UART2_CLK,	&msm_device_uart2.dev, 0),
-	CLOCK("uart_clk",	UART3_CLK,	&msm_device_uart3.dev, OFF),
-	CLOCK("uartdm_clk",	UART1DM_CLK,	&msm_device_uart_dm1.dev, OFF),
-	CLOCK("uartdm_clk",	UART2DM_CLK,	&msm_device_uart_dm2.dev, 0),
-	CLOCK("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
-	CLOCK("usb_hs_pclk",	USB_HS_PCLK,	NULL, OFF),
-	CLOCK("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
-	CLOCK("vfe_clk",	VFE_CLK,	NULL, OFF),
-	CLOCK("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
-};
-
-unsigned msm_num_clocks_7x27 = ARRAY_SIZE(msm_clocks_7x27);
-
 struct clk msm_clocks_8x50[] = {
 	CLOCK("adm_clk",	ADM_CLK,	NULL, 0),
-	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
+	CLOCK("ebi1_clk",	EBI1_CLK,	NULL, 0),
 	CLOCK("ebi2_clk",	EBI2_CLK,	NULL, 0),
 	CLOCK("ecodec_clk",	ECODEC_CLK,	NULL, 0),
-	CLOCK("emdh_clk",	EMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLOCK("emdh_clk",	EMDH_CLK,	NULL, OFF),
 	CLOCK("gp_clk",		GP_CLK,		NULL, 0),
 	CLOCK("grp_clk",	GRP_CLK,	NULL, 0),
 	CLOCK("i2c_clk",	I2C_CLK,	&msm_device_i2c.dev, 0),
@@ -762,14 +733,16 @@ struct clk msm_clocks_8x50[] = {
 	CLOCK("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
 	CLOCK("imem_clk",	IMEM_CLK,	NULL, OFF),
 	CLOCK("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLOCK("mddi_clk",	PMDH_CLK,	NULL, OFF),
 	CLOCK("mdp_clk",	MDP_CLK,	NULL, OFF),
 	CLOCK("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
 	CLOCK("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
 	CLOCK("mdp_vsync_clk",	MDP_VSYNC_CLK,	NULL, 0),
-	CLOCK("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
+	CLOCK("pbus_clk",	PBUS_CLK,	NULL, 0),
 	CLOCK("pcm_clk",	PCM_CLK,	NULL, 0),
+/* sdac_clk does not work on 8k currently
 	CLOCK("sdac_clk",	SDAC_CLK,	NULL, OFF),
+*/
 	CLOCK("sdc_clk",	SDC1_CLK,	&msm_device_sdc1.dev, OFF),
 	CLOCK("sdc_pclk",	SDC1_PCLK,	&msm_device_sdc1.dev, OFF),
 	CLOCK("sdc_clk",	SDC2_CLK,	&msm_device_sdc2.dev, OFF),
@@ -791,7 +764,7 @@ struct clk msm_clocks_8x50[] = {
 	CLOCK("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
 	CLOCK("usb_hs_pclk",	USB_HS_PCLK,	NULL, OFF),
 	CLOCK("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
+	CLOCK("vdc_clk",	VDC_CLK,	NULL, OFF),
 	CLOCK("vfe_clk",	VFE_CLK,	NULL, OFF),
 	CLOCK("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
 	CLOCK("vfe_axi_clk",	VFE_AXI_CLK,	NULL, OFF),

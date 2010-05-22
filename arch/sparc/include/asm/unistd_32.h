@@ -338,8 +338,10 @@
 #define __NR_dup3		320
 #define __NR_pipe2		321
 #define __NR_inotify_init1	322
+#define __NR_marker		323
+#define __NR_trace		324
 
-#define NR_SYSCALLS		323
+#define NR_SYSCALLS		325
 
 /* Sparc 32-bit only has the "setresuid32", "getresuid32" variants,
  * it never had the plain ones and there is no value to adding those

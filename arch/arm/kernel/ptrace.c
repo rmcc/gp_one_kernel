@@ -18,6 +18,7 @@
 #include <linux/security.h>
 #include <linux/init.h>
 #include <linux/signal.h>
+#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -788,6 +789,12 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 asmlinkage int syscall_trace(int why, struct pt_regs *regs, int scno)
 {
 	unsigned long ip;
+
+	if (!why)
+		trace_mark(kernel_arch_syscall_entry, "syscall_id %d ip #p%ld",
+			scno, instruction_pointer(regs));
+	else
+		trace_mark(kernel_arch_syscall_exit, MARK_NOARGS);
 
 	if (!test_thread_flag(TIF_SYSCALL_TRACE))
 		return scno;

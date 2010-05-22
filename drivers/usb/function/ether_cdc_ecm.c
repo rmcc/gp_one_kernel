@@ -1,12 +1,12 @@
 /*
  * ether_cdc_ecm.c -- Ethernet Function driver, with CDC
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
- *
  * This file has been derived from gadget/ether.c
  *
  * Copyright (C) 2003-2005 David Brownell
  * Copyright (C) 2003-2004 Robert Schwebel, Benedikt Spranger
+ *
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.

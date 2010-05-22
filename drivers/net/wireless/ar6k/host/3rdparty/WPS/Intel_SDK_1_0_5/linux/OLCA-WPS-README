@@ -1,0 +1,125 @@
+_______________________________________________________________________________________________________
+ 
+      \\\\       \\\\\\\\\\  \\        \\  \\\\\\\\\\  \\\\\\\\\\\       \\\\\\        \\\\\\\\  
+     \\ \\\          \\      \\        \\  \\          \\        \\    \\      \\    \\        \\
+     \   \\\         \\      \\        \\  \\          \\        \   \\          \\  \\          
+    \\    \\\        \\      \\\\\\\\\\\\  \\\\\\\\\\  \\\\\\\\\\\   \\          \\    \\\\      
+   \\      \\\       \\      \\        \\  \\          \\    \\\     \\          \\        \\\\  
+  \\\\\\\\\\\\\      \\      \\        \\  \\          \\     \\\    \\          \\            \\
+ \\          \\\     \\      \\        \\  \\          \\      \\\     \\      \\    \\        \\
+ \            \\\    \\      \\        \\  \\\\\\\\\\  \\       \\\      \\\\\\        \\\\\\\\  
+
+_______________________________________________________________________________________________________
+
+		Wi-Fi Simple Config - Atheros
+		   OLCA 2.0 - LINUX - X86
+_______________________________________________________________________________________________________		
+
+The code contained in this package is used to run Client 
+(Enrollee) functionality. The following scenarios are currently supported:
+
+(1) Adding an Enrollee to AP+Registrar
+(2) Adding an Enrollee with external wired Registrar(ETH)
+(3) Adding an Enrollee with external wireless Registrar(WiFi)
+
+Building the WSC code
+---------------------
+You will need to be root to run the application.
+Note: Lines prefixed with '#' indicate commands that are to be run.
+
+1. # cd host\3rdparty\WPS\Intel_SDK_1_0_5\linux
+2. The application can be built in either debug or release modes.
+   To build the debug version:
+   # make
+   To build the release version:
+   # make BLDTYPE=release
+   Note: You may have to download and install latest version of OpenSSL.
+         Please follow the directions in the next section.
+3. Successful completion of the build process should result in creation 
+   of the executable "wsccmd".
+4. Copy the configuration files wsc_config.txt.* to the same 
+   directory as wsccmd.
+
+
+Instructions to update OpenSSL
+------------------------------
+- Download OpenSSL 0.9.8a or latest from http://www.openssl.org/
+- Build and Install new OpenSSL
+	- ./config --prefix=/usr/local --openssldir=/usr/local/openssl
+	- make
+	- make test
+	- make install
+- Remove old OpenSSL include files
+	- rm -rf /usr/include/openssl
+	- OR (mv /usr/include/openssl /usr/include/old-openssl)
+
+
+Running the WSC command-line application (wsccmd)
+-----------------------------------------------------
+To run the application:
+# ./wsccmd -i eth2 2>wscapp.log
+or
+# ./wsccmd 2>wscapp.log
+If -i option is not given, by default it will use eth1.
+The application generates trace messages for debugging purposes, and this
+will cause all such messages to be written out to file wscapp.log. 
+
+Similarly supplicant also generates trace messages for debugging purposes,
+which can be found in supplicant.log file, generated in the same directory.
+
+
+Running the Scenarios
+---------------------
+
+(1) Adding an Enrollee to AP+Registrar (EAP)
+------------------------------------------------------------------------------
+
+   [AP+Registrar]<----EAP--->[Client]
+
+-  Start wsccmd on both [AP+Registrar] and [Client].
+-  [AP+Registrar] Select ("PBC") or ("PIN")
+-  [AP+Registrar] Enter enrollee's PIN when prompted. If PIN method selected.
+-  [Client] Select ("PBC") or ("PIN")
+-  The registration process will begin, and the application will display
+   the result of the process on completion.
+
+   If the registration is successful, wpa_supplicant on the client will
+   be re-configured with the new parameters, and will connect to the AP
+   with these new parameters.
+
+(2) Adding an Enrollee with external wired Registrar (UPnP(ETH)/EAP)
+------------------------------------------------------------------------------
+
+   [Registrar]<----UPnP--->[AP]<---EAP--->[Client]
+
+-  Make sure that AP and Registrar are connected through ethernet and pings.
+-  Start wsccmd on [Registrar], [AP] and [Client].
+-  [Registrar] Select ("PBC") or ("PIN")
+-  [Registrar] Enter enrollee's PIN when prompted. If PIN method selected.
+-  [AP] Nothing to be selected.
+-  [Client] Select ("PBC") or ("PIN")
+-  The registration process will begin, and the application will display
+   the result of the process on completion.
+
+   If the registration is successful, wpa_supplicant on the client will
+   be re-configured with the new parameters, and will connect to the AP
+   with these new parameters.
+
+(3) Adding an Enrollee with external wireless Registrar (UPnP(WiFi)/EAP)
+------------------------------------------------------------------------------
+
+   [Registrar]<----UPnP--->[AP]<---EAP--->[Client]
+
+-  Make sure that AP and Registrar are connected through Wi-Fi and pings.
+-  Start wsccmd on [Registrar], [AP] and [Client].
+-  [Registrar] Select ("PBC") or ("PIN")
+-  [Registrar] Enter enrollee's PIN when prompted. If PIN method selected.
+-  [AP] Nothing to be selected.
+-  [Client] Select ("PBC") or ("PIN")
+-  The registration process will begin, and the application will display
+   the result of the process on completion.
+
+   If the registration is successful, wpa_supplicant on the client will
+   be re-configured with the new parameters, and will connect to the AP
+   with these new parameters.
+

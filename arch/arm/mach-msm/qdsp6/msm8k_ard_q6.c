@@ -1,57 +1,20 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/*
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -62,14 +25,7 @@
 #include <mach/qdsp6/msm8k_cad_itypes.h>
 #include <mach/qdsp6/msm8k_cad_devices.h>
 #include <mach/qdsp6/msm8k_cad_rpc.h>
-#include <mach/qdsp6/msm8k_cad_q6dec_drvi.h>
-#include <mach/qdsp6/msm8k_cad_q6enc_drvi.h>
 
-#if 0
-#define D(fmt, args...) printk(KERN_INFO "msm8k_cad: " fmt, ##args)
-#else
-#define D(fmt, args...) do {} while (0)
-#endif
 
 s32 qdsp6_open(s32 session_id)
 {
@@ -80,6 +36,7 @@ s32 qdsp6_open(s32 session_id)
 
 	struct cadi_open_struct_type		*cadr = NULL;
 	struct cadi_evt_struct_type		*evt_buf = NULL;
+	struct cad_stream_device_struct_type	*cadr_device = NULL;
 
 	rc = dal_rc = CAD_RES_SUCCESS;
 
@@ -89,7 +46,7 @@ s32 qdsp6_open(s32 session_id)
 	ref_cadr_device = &(ref_cadr->cad_device);
 
 	if (ref_cadr_stream->app_type == CAD_STREAM_APP_VOICE) {
-		D("ARD Q6 OPEN VOICE Session, so do nothing %d\n",
+		pr_err("ARD Q6 OPEN VOICE Session, so do nothing %d\n",
 			session_id);
 		goto done;
 	}
@@ -116,18 +73,19 @@ s32 qdsp6_open(s32 session_id)
 	memset(cadr, 0, sizeof(struct cadi_open_struct_type));
 	memcpy(cadr, ref_cadr, sizeof(struct cadi_open_struct_type));
 
-	/* reference the stream dev pointer */
-	if (cadr->cad_device.device != NULL)
-		cadr->cad_device.device = (u32 *)(g_audio_base + session_id *
-			sizeof(struct cad_stream_device_struct_type) + 4096 +
-			(Q6_ENC_BUF_PER_SESSION *
-			Q6_ENC_BUF_MAX_SIZE + 4096) +
-			(Q6_DEC_BUFFER_NUM_PER_STREAM *
-			Q6_DEC_BUFFER_SIZE_MAX + 4096));
+	/* Copy the stream dev pointer */
+	cadr_device = &(cadr->cad_device);
+	cadr_device->device = kmalloc((sizeof(u32) *
+		ref_cadr_device->device_len), GFP_KERNEL);
+
+	memcpy(cadr_device->device, ref_cadr_device->device,
+		(sizeof(u32) * ref_cadr_device->device_len));
+
+	cadr_device->device_len = ref_cadr_device->device_len;
 
 	if (ardsession[session_id]->qdsp6_opened == ARD_FALSE) {
 		/* Only ARD will open a session with Q6 */
-		D("ARD Sending RPC Open, session %d\n", session_id);
+		pr_err("ARD Sending RPC Open, session %d\n", session_id);
 		dal_rc = cad_rpc_open(session_id, 1, cadr, evt_buf);
 
 		if (dal_rc != CAD_RES_SUCCESS) {
@@ -142,12 +100,13 @@ s32 qdsp6_open(s32 session_id)
 			(evt_buf->cad_event_header.status != CAD_RES_SUCCESS)) {
 
 			rc = CAD_RES_FAILURE;
-			pr_err("ARD Open RPC failed for ses: %d, status %d\n",
+			pr_err("ARD Open RPC failed for session%d, status %d\n",
 				session_id, evt_buf->cad_event_header.status);
 			goto done;
 		}
 	}
 	kfree(evt_buf);
+	kfree(cadr_device->device);
 	kfree(cadr);
 
 done:
@@ -169,7 +128,7 @@ s32 qdsp6_start(s32 session_id)
 	cadr_stream = &(cadr->cad_stream);
 
 	if (cadr_stream->app_type == CAD_STREAM_APP_VOICE) {
-		D("ARD Q6 START VOICE Session, so do nothing %d\n",
+		pr_err("ARD Q6 START VOICE Session, so do nothing %d\n",
 			session_id);
 		goto done;
 	}
@@ -184,7 +143,7 @@ s32 qdsp6_start(s32 session_id)
 		goto done;
 	}
 
-	D("ARD Sending RPC CADI_IOCTL_CMD_DSP_START, session %d\n",
+	pr_err("ARD Sending RPC CADI_IOCTL_CMD_DSP_START, session %d\n",
 		session_id);
 
 	/* Send START IOCTL CMD - This command has no payload */
@@ -227,7 +186,7 @@ s32 qdsp6_close(s32 session_id)
 	cadr_stream = &(cadr->cad_stream);
 
 	if (cadr_stream->app_type == CAD_STREAM_APP_VOICE) {
-		D("ARD Q6 CLOSE VOICE Session, so do nothing %d\n",
+		pr_err("ARD Q6 CLOSE VOICE Session, so do nothing %d\n",
 			session_id);
 		goto done;
 	}
@@ -328,7 +287,7 @@ s32 qdsp6_devchg_notify(s32 session_id, u32 dev_id)
 	dev_chg.cad_old_device = local_ard_state->ard_device[dev_id]
 					.device_inuse;
 
-	D("ARD Sending RPC CADI_IOCTL_CMD_DSP_PREP_DEV_CHG, session %d\n",
+	pr_err("ARD Sending RPC CADI_IOCTL_CMD_DSP_PREP_DEV_CHG, session %d\n",
 		session_id);
 
 	dal_rc = cad_rpc_ioctl(session_id, 1, CADI_IOCTL_CMD_DSP_PREP_DEV_CHG,
@@ -373,7 +332,7 @@ s32 qdsp6_standby(s32 session_id)
 		qdsp6_open(session_id);
 
 	if (cadr_stream->app_type == CAD_STREAM_APP_VOICE) {
-		D("ARD Q6 Standby VOICE Session, so do nothing %d\n",
+		pr_err("ARD Q6 Standby VOICE Session, so do nothing %d\n",
 			session_id);
 		goto done;
 	}
@@ -389,7 +348,7 @@ s32 qdsp6_standby(s32 session_id)
 	}
 
 	if (ardsession[session_id]->session_type == DEVICE_CTRL_TYPE) {
-		D("ARD Sending RPC CADI_IOCTL_CMD_DSP_STANDBY,"
+		pr_err("ARD Sending RPC CADI_IOCTL_CMD_DSP_STANDBY,"
 			" session %d\n", session_id);
 
 		/* Send START IOCTL CMD - This command has no payload */

@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -28,7 +28,6 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/termios.h>
-#include <linux/ctype.h>
 #include <mach/msm_smd.h>
 #include <mach/msm_iomap.h>
 #include <mach/system.h>
@@ -38,9 +37,13 @@
 #include "proc_comm.h"
 #include "modem_notifier.h"
 
+/* FIH_ADQ, Kenny { */
+#include "linux/pmlog.h"
+/* } FIH_ADQ, Kenny */
+
 #define MODULE_NAME "msm_smd"
 #define SMEM_VERSION 0x000B
-#define SMD_VERSION 0x00020000
+#define SMD_VERSION 0x00010000
 
 enum {
 	MSM_SMD_DEBUG = 1U << 0,
@@ -113,29 +116,22 @@ static void notify_other_smsm(uint32_t smsm_entry,
 	}
 }
 
-static inline void notify_other_smd(uint32_t ch_type)
+static inline void notify_other_smd(uint32_t ctype)
 {
-	if (ch_type == SMD_APPS_MODEM)
+	if (ctype == SMD_APPS_MODEM)
 		writel(1, MSM_A2M_INT(0));
-	else if (ch_type == SMD_APPS_QDSP_I)
+	else if (ctype == SMD_APPS_QDSP_I)
 		writel(1, MSM_A2M_INT(8));
 }
 
 void smd_diag(void)
 {
 	char *x;
-	int size;
 
 	x = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG);
 	if (x != 0) {
 		x[SZ_DIAG_ERR_MSG - 1] = 0;
 		printk("smem: DIAG '%s'\n", x);
-	}
-
-	x = smem_get_entry(SMEM_ERR_CRASH_LOG, &size);
-	if (x != 0) {
-		x[size - 1] = 0;
-		printk(KERN_ERR "smem: CRASH LOG\n'%s'\n", x);
 	}
 }
 
@@ -196,21 +192,24 @@ static DEFINE_MUTEX(smd_creation_mutex);
 
 static int smd_initialized = 0;
 
-/* 'type' field of smd_alloc_elm structure
- * has the following breakup
- * bits 0-7   -> channel type
- * bits 8-11  -> xfer type
- * bits 12-31 -> reserved
- */
+#if defined(CONFIG_MSM_SMD_PKG4)
 struct smd_alloc_elm {
 	char name[20];
 	uint32_t cid;
-	uint32_t type;
+	uint32_t ctype;
+	uint32_t cprotocol;
 	uint32_t ref_count;
 };
-
-#define SMD_CHANNEL_TYPE(x) ((x) & 0x000000FF)
-#define SMD_XFER_TYPE(x)    (((x) & 0x00000F00) >> 8)
+#elif defined(CONFIG_MSM_SMD_PKG3)
+struct smd_alloc_elm {
+	char name[20];
+	uint32_t cid;
+	uint32_t ctype;
+	uint32_t ref_count;
+};
+#else
+#error No SMD Package Specified; aborting
+#endif
 
 struct smd_half_channel
 {
@@ -261,7 +260,7 @@ static LIST_HEAD(smd_ch_list);
 static unsigned char smd_ch_allocated[64];
 static struct work_struct probe_work;
 
-static void smd_alloc_channel(struct smd_alloc_elm *alloc_elm);
+static void smd_alloc_channel(const char *name, uint32_t cid, uint32_t type);
 static void *_smem_find(unsigned id, unsigned *size);
 
 static void smd_channel_probe_worker(struct work_struct *work)
@@ -277,14 +276,16 @@ static void smd_channel_probe_worker(struct work_struct *work)
 
 		/* channel should be allocated only if APPS
 		   processor is involved */
-		if (SMD_CHANNEL_TYPE(shared[n].type) == SMD_MODEM_QDSP_I)
+		if (shared[n].ctype == SMD_MODEM_QDSP_I)
 			continue;
 		if (!shared[n].ref_count)
 			continue;
 		if (!shared[n].name[0])
 			continue;
 
-		smd_alloc_channel(&shared[n]);
+		smd_alloc_channel(shared[n].name,
+				  shared[n].cid,
+				  shared[n].ctype);
 		smd_ch_allocated[n] = 1;
 	}
 }
@@ -624,18 +625,14 @@ void smd_sleep_exit(void)
 	}
 }
 
-static int smd_is_packet(struct smd_alloc_elm *alloc_elm)
+static int smd_is_packet(struct smd_channel *ch)
 {
-	if (SMD_XFER_TYPE(alloc_elm->type) == 1)
-		return 0;
-	else if (SMD_XFER_TYPE(alloc_elm->type) == 2)
-		return 1;
-
-	/* for cases where xfer type is 0 */
-	if (!strncmp(alloc_elm->name, "DAL", 3))
+	/* temporary fix to open some ports in streaming mode,
+	 * protocol change is needed for proper fix */
+	if (!strncmp(ch->name, "DAL", 3))
 		return 0;
 
-	if (alloc_elm->cid > 4 || alloc_elm->cid == 1) {
+	if (ch->n > 4 || ch->n == 1) {
 		return 1;
 	} else {
 		return 0;
@@ -823,7 +820,7 @@ static struct smd_channel *_smd_alloc_channel_v2(uint32_t cid)
 	return ch;
 }
 
-static void smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
+static void smd_alloc_channel(const char *name, uint32_t cid, uint32_t type)
 {
 	struct smd_channel *ch;
 	uint32_t *smd_ver;
@@ -831,18 +828,18 @@ static void smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 	smd_ver = smem_alloc(SMEM_VERSION_SMD, 32 * sizeof(uint32_t));
 
 	if (smd_ver && ((smd_ver[VERSION_MODEM] >> 16) >= 1))
-		ch = _smd_alloc_channel_v2(alloc_elm->cid);
+		ch = _smd_alloc_channel_v2(cid);
 	else
-		ch = _smd_alloc_channel_v1(alloc_elm->cid);
+		ch = _smd_alloc_channel_v1(cid);
 
 	if (ch == 0)
 		return;
 
-	ch->type = SMD_CHANNEL_TYPE(alloc_elm->type);
-	memcpy(ch->name, alloc_elm->name, 20);
+	ch->type = type;
+	memcpy(ch->name, name, 20);
 	ch->name[19] = 0;
 
-	if (smd_is_packet(alloc_elm)) {
+	if (smd_is_packet(ch)) {
 		ch->read = smd_packet_read;
 		ch->write = smd_packet_write;
 		ch->read_avail = smd_packet_read_avail;
@@ -859,7 +856,7 @@ static void smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 	}
 
 	ch->pdev.name = ch->name;
-	ch->pdev.id = ch->type;
+	ch->pdev.id = type;
 
 	pr_info("smd_alloc_channel() '%s' cid=%d\n",
 		ch->name, ch->n);
@@ -1360,6 +1357,42 @@ void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 	spin_unlock_irqrestore(&smem_lock, flags);
 }
 
+/* FIH_ADQ, Kenny { */
+/*
+ * Print pmlog information on shared memory sleep variables
+ */
+void smsm_pmlog_sleep_info(uint32_t wakeup_reason)
+{
+	unsigned long flags;
+	struct tramp_gpio_smem *gpio;
+
+	spin_lock_irqsave(&smem_lock, flags);
+    
+    if(wakeup_reason & SMSM_WKUP_REASON_RPC)
+        pmlog("msm_sleep(): wakeup by RPC\n");
+	if(wakeup_reason & SMSM_WKUP_REASON_INT)
+	    pmlog("msm_sleep(): wakeup by interrupt\n");
+    if(wakeup_reason & SMSM_WKUP_REASON_TIMER)
+        pmlog("msm_sleep(): wakeup by timer\n");
+	if(wakeup_reason & SMSM_WKUP_REASON_ALARM)
+	    pmlog("msm_sleep(): wakeup by alarm\n");    
+	if(wakeup_reason & SMSM_WKUP_REASON_RESET)
+	    pmlog("msm_sleep(): wakeup by reset\n");
+    if(wakeup_reason & SMSM_WKUP_REASON_GPIO){
+        gpio = smem_alloc( SMEM_GPIO_INT, sizeof(*gpio)); 
+    	if (gpio) {
+    	    int i;
+    		for(i = 0; i < GPIO_SMEM_NUM_GROUPS; i++) {			
+    			if(gpio->num_fired[i]){
+    		        pmlog("msm_sleep(): wakeup by GPIO(%d)\n", gpio->fired[i][0]);
+    			}
+    		}
+    	}
+    }
+	spin_unlock_irqrestore(&smem_lock, flags);
+}
+/* FIH_ADQ, Kenny */
+
 int smd_core_init(void)
 {
 	int r;
@@ -1386,6 +1419,8 @@ int smd_core_init(void)
 		printk(KERN_ERR "smd_core_init: "
 		       "enable_irq_wake failed for INT_A9_M2A_5\n");
 
+	// +++ FIH_ADQ +++, modified by henry.wang
+	/*
 	r = request_irq(INT_ADSP_A11, smd_irq_handler,
 			IRQF_TRIGGER_RISING | IRQF_SHARED, "smd_dev",
 			smd_irq_handler);
@@ -1404,6 +1439,8 @@ int smd_core_init(void)
 	if (r < 0)
 		printk(KERN_ERR "smd_core_init: "
 		       "enable_irq_wake failed for INT_ADSP_A11\n");
+	*/
+	// --- FIH_ADQ ---
 
 	/* we may have missed a signal while booting -- fake
 	 * an interrupt to make sure we process any existing
@@ -1417,137 +1454,6 @@ int smd_core_init(void)
 }
 
 #if defined(CONFIG_DEBUG_FS)
-
-static int debug_f3(char *buf, int max)
-{
-	char *x;
-	int size;
-	int i = 0, j = 0;
-	unsigned cols = 0;
-	char str[4*sizeof(unsigned)+1] = {0};
-
-	i += scnprintf(buf + i, max - i,
-		       "Printing to log\n");
-
-	x = smem_get_entry(SMEM_ERR_F3_TRACE_LOG, &size);
-	if (x != 0) {
-		printk(KERN_ERR "smem: F3 TRACE LOG\n");
-		while (size > 0) {
-			if (size >= sizeof(unsigned)) {
-				printk(KERN_ERR "%08x", *((unsigned *) x));
-				for (j = 0; j < sizeof(unsigned); ++j)
-					if (isprint(*(x+j)))
-						str[cols*sizeof(unsigned) + j]
-							= *(x+j);
-					else
-						str[cols*sizeof(unsigned) + j]
-							= '-';
-				x += sizeof(unsigned);
-				size -= sizeof(unsigned);
-			} else {
-				while (size-- > 0)
-					printk(KERN_ERR "%02x",
-					       (unsigned) *x++);
-				break;
-			}
-			if (cols == 3) {
-				cols = 0;
-				str[4*sizeof(unsigned)] = 0;
-				printk(KERN_ERR " %s\n", str);
-				str[0] = 0;
-			} else {
-				cols++;
-				printk(KERN_ERR " ");
-			}
-		}
-		printk(KERN_ERR "\n");
-	}
-
-	return max;
-}
-
-static int debug_diag(char *buf, int max)
-{
-	int i = 0;
-
-	i += scnprintf(buf + i, max - i,
-		       "Printing to log\n");
-	smd_diag();
-
-	return i;
-}
-
-static int debug_modem_err_f3(char *buf, int max)
-{
-	char *x;
-	int size;
-	int i = 0, j = 0;
-	unsigned cols = 0;
-	char str[4*sizeof(unsigned)+1] = {0};
-
-	x = smem_get_entry(SMEM_ERR_F3_TRACE_LOG, &size);
-	if (x != 0) {
-		printk(KERN_ERR "smem: F3 TRACE LOG\n");
-		while (size > 0 && max - i) {
-			if (size >= sizeof(unsigned)) {
-				i += scnprintf(buf + i, max - i, "%08x",
-					       *((unsigned *) x));
-				for (j = 0; j < sizeof(unsigned); ++j)
-					if (isprint(*(x+j)))
-						str[cols*sizeof(unsigned) + j]
-							= *(x+j);
-					else
-						str[cols*sizeof(unsigned) + j]
-							= '-';
-				x += sizeof(unsigned);
-				size -= sizeof(unsigned);
-			} else {
-				while (size-- > 0 && max - i)
-					i += scnprintf(buf + i, max - i,
-						       "%02x",
-						       (unsigned) *x++);
-				break;
-			}
-			if (cols == 3) {
-				cols = 0;
-				str[4*sizeof(unsigned)] = 0;
-				i += scnprintf(buf + i, max - i, " %s\n",
-					       str);
-				str[0] = 0;
-			} else {
-				cols++;
-				i += scnprintf(buf + i, max - i, " ");
-			}
-		}
-		i += scnprintf(buf + i, max - i, "\n");
-	}
-
-	return i;
-}
-
-static int debug_modem_err(char *buf, int max)
-{
-	char *x;
-	int size;
-	int i = 0;
-
-	x = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG);
-	if (x != 0) {
-		x[SZ_DIAG_ERR_MSG - 1] = 0;
-		i += scnprintf(buf + i, max - i,
-			       "smem: DIAG '%s'\n", x);
-	}
-
-	x = smem_get_entry(SMEM_ERR_CRASH_LOG, &size);
-	if (x != 0) {
-		x[size - 1] = 0;
-		i += scnprintf(buf + i, max - i,
-			       "smem: CRASH LOG\n'%s'\n", x);
-	}
-	i += scnprintf(buf + i, max - i, "\n");
-
-	return i;
-}
 
 static int dump_ch(char *buf, int max, int n,
 		  struct smd_half_channel *s,
@@ -1687,6 +1593,7 @@ static int debug_read_smd_version(char *buf, int max)
 	return i;
 }
 
+#if defined(CONFIG_MSM_SMD_PKG4)
 static int debug_read_alloc_tbl(char *buf, int max)
 {
 	struct smd_alloc_elm *shared;
@@ -1696,17 +1603,39 @@ static int debug_read_alloc_tbl(char *buf, int max)
 
 	for (n = 0; n < 64; n++) {
 		i += scnprintf(buf + i, max - i,
-				"name=%s cid=%d ch type=%d "
-				"xfer type=%d ref_count=%d\n",
+				"name=%s cid=%d ctype=%d "
+				"cprotocol=%d ref_count=%d\n",
 				shared[n].name,
 				shared[n].cid,
-				SMD_CHANNEL_TYPE(shared[n].type),
-				SMD_XFER_TYPE(shared[n].type),
+				shared[n].ctype,
+				shared[n].cprotocol,
 				shared[n].ref_count);
 	}
 
 	return i;
 }
+#elif defined(CONFIG_MSM_SMD_PKG3)
+static int debug_read_alloc_tbl(char *buf, int max)
+{
+	struct smd_alloc_elm *shared;
+	int n, i = 0;
+
+	shared = smem_find(ID_CH_ALLOC_TBL, sizeof(struct smd_alloc_elm[64]));
+
+	for (n = 0; n < 64; n++) {
+		i += scnprintf(buf + i, max - i,
+			       "name=%s cid=%d ctype=%d ref_count=%d\n",
+			       shared[n].name,
+			       shared[n].cid,
+			       shared[n].ctype,
+			       shared[n].ref_count);
+	}
+
+	return i;
+}
+#else
+#error No SMD Package Specified; aborting
+#endif
 
 static int debug_read_smsm_state(char *buf, int max)
 {
@@ -1811,10 +1740,6 @@ static void smd_debugfs_init(void)
 	debug_create("mem", 0444, dent, debug_read_mem);
 	debug_create("version", 0444, dent, debug_read_smd_version);
 	debug_create("tbl", 0444, dent, debug_read_alloc_tbl);
-	debug_create("modem_err", 0444, dent, debug_modem_err);
-	debug_create("modem_err_f3", 0444, dent, debug_modem_err_f3);
-	debug_create("print_diag", 0444, dent, debug_diag);
-	debug_create("print_f3", 0444, dent, debug_f3);
 }
 
 static void smsm_debugfs_init(void)

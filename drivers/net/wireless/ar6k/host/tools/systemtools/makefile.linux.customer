@@ -1,0 +1,30 @@
+
+
+ifneq ($(filter Fedora, $(shell cat /etc/redhat-release 2>/dev/null)),)
+FEDORA := 1
+else
+FEDORA := 0
+endif
+
+export FEDORA
+
+all:
+	echo $(FEDORA)
+	$(MAKE) -f makefile.linux.customer devlib
+	$(MAKE) -f makefile.linux.customer art 
+
+devlib:
+	$(MAKE) -C ./devlib -f makefile.linux.customer dirs
+	$(MAKE) -C ./devlib -f makefile.linux.customer
+
+art:
+	$(MAKE) -C ./art -f makefile.linux.customer dirs
+	$(MAKE) -C ./art -f makefile.linux.customer
+
+clean:
+	$(MAKE) -C ./devlib -f makefile.linux.customer clean
+	$(MAKE) -C ./art -f makefile.linux.customer clean
+
+.PHONY: all devlib art clean
+
+

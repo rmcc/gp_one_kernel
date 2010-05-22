@@ -1,7 +1,6 @@
 /* arch/arm/mach-msm/include/mach/memory.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -26,8 +25,12 @@
 #endif
 
 #else
-
-#define PHYS_OFFSET		UL(0x00200000)
+/* FIH_ADQ */
+/* #define PHYS_OFFSET		UL(0x00200000) */
+/* Move kernel to the 2nd RAM */
+/* #define PHYS_OFFSET		UL(0x20000000) */
+/* Move kernel to pseudo address 0x1A000000 map to actual address 0x02000000 */
+#define PHYS_OFFSET		UL(0x1A000000)
 
 #endif
 
@@ -37,10 +40,9 @@
 
 #define HAS_ARCH_IO_REMAP_PFN_RANGE
 
-#ifndef __ASSEMBLY__
-void *alloc_bootmem_aligned(unsigned long size, unsigned long alignment);
-
 #ifdef CONFIG_ARCH_MSM
+
+#ifndef __ASSEMBLY__
 void write_to_strongly_ordered_memory(void);
 
 #include <asm/mach-types.h>
@@ -51,5 +53,8 @@ void write_to_strongly_ordered_memory(void);
 	} while(0)
 #endif
 #endif
-
+/* FIH_ADQ, Ming { */
+/* NodeSize = 25 bits = 32M */
+#define NODE_MEM_SIZE_BITS	25
+/* } FIH_ADQ, Ming */
 #endif

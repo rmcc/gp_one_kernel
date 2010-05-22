@@ -20,6 +20,7 @@
 #include <linux/audit.h>
 #include <linux/seccomp.h>
 #include <linux/signal.h>
+#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -1426,6 +1427,9 @@ asmregparm long syscall_trace_enter(struct pt_regs *regs)
 	if (test_thread_flag(TIF_SINGLESTEP))
 		regs->flags |= X86_EFLAGS_TF;
 
+	trace_mark(kernel_arch_syscall_entry, "syscall_id %d ip #p%ld",
+			(int)regs->orig_ax, instruction_pointer(regs));
+
 	/* do the secure computing check first */
 	secure_computing(regs->orig_ax);
 
@@ -1455,6 +1459,8 @@ asmregparm long syscall_trace_enter(struct pt_regs *regs)
 
 asmregparm void syscall_trace_leave(struct pt_regs *regs)
 {
+	trace_mark(kernel_arch_syscall_exit, "ret %ld", regs->ax);
+
 	if (unlikely(current->audit_context))
 		audit_syscall_exit(AUDITSC_RESULT(regs->ax), regs->ax);
 

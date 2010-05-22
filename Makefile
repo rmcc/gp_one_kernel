@@ -540,6 +540,11 @@ ifdef CONFIG_FTRACE
 KBUILD_CFLAGS	+= -pg
 endif
 
+# arch Makefile detects if the compiler permits use of immediate values
+ifdef USE_IMMEDIATE
+KBUILD_CFLAGS	+= -DUSE_IMMEDIATE
+endif
+
 # We trigger additional mismatches with less inlining
 ifdef CONFIG_DEBUG_SECTION_MISMATCH
 KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
@@ -619,7 +624,7 @@ export mod_strip_cmd
 
 
 ifeq ($(KBUILD_EXTMOD),)
-core-y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/
+core-y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/ ltt/
 
 vmlinux-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(init-m) \
 		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \

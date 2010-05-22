@@ -1,0 +1,108 @@
+#!/bin/sh
+# automated build scripts building help
+# invoke example  ./cpemdocs.scp HEAD /cygdrive/f/work/doc_output 
+
+EMSDIOBASE=
+
+printusage() {
+  echo "command line example: ./cpemdocs.scp HEAD /cygdrive/f/work/doc_output "
+}
+
+if [ -z "$1" ]; then
+   echo "Missing CVS branch"
+   printusage
+   exit
+fi
+if [ -z "$2" ]; then
+   echo "Missing output path"
+   printusage
+   exit
+fi
+
+BRANCH_LEVEL=$1
+OUTPUT=$2
+EMSDIOBASE=$OUTPUT/$BRANCH_LEVEL/EMSDIO
+
+cleanup() {
+    rm -f -r $1
+}
+
+removefiles() {
+    rm  -f $1
+}
+
+preparepdkdocs() {
+   removefiles $1/doc/Help/hostc_callbacks.htm
+   removefiles $1/doc/Help/hostc_configuration.htm
+   removefiles $1/doc/Help/hostc_development_overview.htm
+   removefiles $1/doc/Help/hostc_events.htm
+   removefiles $1/doc/Help/hostc_sd_requests.htm
+   removefiles $1/doc/Help/hostc_structure.htm
+   removefiles $1/doc/Help/emsdio_hdk.hhp 
+   removefiles $1/doc/Help/faq_hdk.htm 
+   removefiles $1/doc/Help/reference_top.htm
+}
+
+preparehdkdocs() {
+   removefiles $1/doc/Help/emsdio_pdk.hhp 
+   removefiles $1/doc/Help/reference_top_pdk.htm
+}
+ 
+preparedoctree() {
+   mkdir $1
+   mkdir $1/doc
+   cp  -r $EMSDIOBASE/doc/Help         $1/doc
+   cp $EMSDIOBASE/doc/Help-browser/*.* $1/doc
+
+   removefiles $1/doc/*.txt
+   removefiles $1/doc/Help/*.xml  
+   removefiles $1/doc/Help/emsdio.hhp 
+   removefiles $1/doc/Help/*.hhc
+   removefiles $1/doc/Help/*.chm
+   removefiles $1/doc/Help/PD_reference.htm
+   removefiles $1/doc/Help/HD_reference.htm   
+   removefiles $1/doc/Help/PD_reference_overview.htm
+   removefiles $1/doc/Help/HD_reference_overview.htm
+   removefiles $1/doc/Help/Support_reference.htm
+   removefiles $1/doc/Help/Support_reference_overview.htm
+   removefiles $1/doc/Help/build_linux_drivers.htm
+   removefiles $1/doc/Help/build_linux_overview.htm
+   removefiles $1/doc/Help/build_overview.htm
+   removefiles $1/doc/Help/build_qnx_overview.htm
+   removefiles $1/doc/Help/reference_host.htm
+   removefiles $1/doc/Help/reference_misc.htm
+   removefiles $1/doc/Help/reference_periph.htm
+   removefiles $1/doc/Help/function_os.htm
+   removefiles $1/doc/Help/function_driver.htm
+   removefiles $1/doc/Help/function_driver_target.htm
+   removefiles $1/doc/Help/library.htm
+   rm  -f -r $1/doc/Help/CVS
+   rm  -f -r $1/doc/Help/Images/CVS
+   rm  -f -r $1/doc/Help/Templates
+}
+
+getcvsdir() {
+   cvs -Q -d :pserver:$CVSROOT export -r $BRANCH_LEVEL EMSDIO/$1
+}
+
+export CVSROOT=seungyi@codetserv:/usr/local/cvsroot
+
+
+cleanup $OUTPUT/$BRANCH_LEVEL
+mkdir   $OUTPUT/$BRANCH_LEVEL
+pushd .
+cd      $OUTPUT/$BRANCH_LEVEL
+getcvsdir src	
+getcvsdir doc
+popd
+
+cleanup         $OUTPUT/help_hdk_final
+cleanup         $OUTPUT/help_pdk_final
+preparedoctree  $OUTPUT/help_pdk_final
+preparedoctree  $OUTPUT/help_hdk_final
+preparepdkdocs  $OUTPUT/help_pdk_final 
+preparehdkdocs  $OUTPUT/help_hdk_final
+
+
+
+

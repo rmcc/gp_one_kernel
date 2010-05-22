@@ -1,6 +1,6 @@
 /* linux/sound/soc/msm/qsd8k.c
  *
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.
@@ -144,6 +144,9 @@ static int snd_qsd_route_put(struct snd_kcontrol *kcontrol,
 {
 	int rc = 0;
 	int device, direction;
+	int cad_device_handle = 0;
+	struct cad_open_struct_type cos;
+	struct cad_device_struct_type cad_dev;
 
 	device = ucontrol->value.integer.value[0];
 	direction = snd_get_device_type(device);
@@ -151,12 +154,26 @@ static int snd_qsd_route_put(struct snd_kcontrol *kcontrol,
 	if (direction < 0)
 		return direction;
 
-	rc = audio_switch_device(device);
+	cad_dev.device = device;
+	cad_dev.reserved = direction;
+	cos.format = CAD_FORMAT_PCM;
+	cos.op_code = CAD_OPEN_OP_DEVICE_CTRL;
+
+	cad_device_handle = cad_open(&cos);
+	if (!cad_device_handle) {
+		printk(KERN_ERR "Could not open cad interface \n");
+		return -ENODEV;
+	}
+	rc = cad_ioctl(cad_device_handle,
+			CAD_IOCTL_CMD_DEVICE_SET_GLOBAL_DEFAULT,
+			&cad_dev,
+			sizeof(struct cad_device_struct_type));
+
+	cad_close(cad_device_handle);
 	if (rc < 0) {
-		printk(KERN_ERR "audio_switch_device  failed\n");
+		printk(KERN_ERR "cad ioctl  failed\n");
 		return rc;
 	}
-
 	if (CAD_RX_DEVICE == direction)
 		qsd_glb_ctl.playback_device = device;
 	else /* CAD_TX_DEVICE */
@@ -186,43 +203,44 @@ static int snd_vol_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
 	int rc = 0;
+	int cad_device_handle = 0;
+	struct cad_open_struct_type cos;
+	struct cad_flt_cfg_dev_vol cad_dev_volume;
+	struct cad_stream_filter_struct_type cad_stream_filter;
 
-	rc = audio_set_device_volume(ucontrol->value.integer.value[0]);
-	if (rc)
-		printk(KERN_ERR "audio_set_device_volume failed\n");
-	else
-		qsd_glb_ctl.volume = ucontrol->value.integer.value[0];
+	qsd_glb_ctl.volume = ucontrol->value.integer.value[1];
 
-	return rc;
-}
+	cos.format = CAD_FORMAT_PCM;
+	cos.op_code = CAD_OPEN_OP_DEVICE_CTRL;
 
-static int snd_mute_info(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_info *uinfo)
-{
-	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-	uinfo->count = 1; /* MUTE */
-	uinfo->value.integer.min = 0;
-	uinfo->value.integer.max = 1;
-	return 0;
-}
+	cad_device_handle = cad_open(&cos);
+	if (!cad_device_handle) {
+		printk(KERN_ERR "Could not open cad interface \n");
+		return -ENODEV;
+	}
 
-static int snd_mute_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	ucontrol->value.integer.value[0] = (uint32_t) qsd_glb_ctl.mute;
-	return 0;
-}
+	memset(&cad_dev_volume, 0,
+		sizeof(struct cad_flt_cfg_dev_vol));
+	cad_dev_volume.volume = qsd_glb_ctl.volume;
+	cad_dev_volume.path = 0;
+	cad_dev_volume.device_id = ucontrol->value.integer.value[0];
+	cad_stream_filter.filter_type =
+		CAD_FILTER_CONFIG_DEVICE_VOLUME;
+	cad_stream_filter.format_block = &cad_dev_volume;
+	cad_stream_filter.format_block_len =
+		sizeof(struct cad_flt_cfg_dev_vol);
 
-static int snd_mute_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-	int rc = 0;
+	rc = cad_ioctl(cad_device_handle,
+		CAD_IOCTL_CMD_SET_DEVICE_FILTER_CONFIG,
+		&cad_stream_filter,
+		sizeof(struct cad_stream_filter_struct_type));
 
-	rc = audio_set_device_mute(ucontrol->value.integer.value[0]);
-	if (rc)
-		printk(KERN_ERR "audio_set_device_mute failed\n");
-	else
-		qsd_glb_ctl.mute = ucontrol->value.integer.value[0];
+	cad_close(cad_device_handle);
+	if (rc) {
+		printk(KERN_ERR "cad_ioctl() set volume failed\n");
+		return -EIO;
+	}
+
 	return rc;
 }
 
@@ -240,8 +258,6 @@ static struct snd_kcontrol_new snd_qsd_controls[] = {
 			 snd_qsd_route_get, snd_qsd_route_put, 0),
 	QSD_EXT("Master Volume", 2, snd_vol_info, \
 			 snd_vol_get, snd_vol_put, 0),
-	QSD_EXT("Master Mute", 3, snd_mute_info, \
-			 snd_mute_get, snd_mute_put, 0),
 };
 
 static int qsd_new_mixer(struct snd_card *card)
@@ -302,7 +318,7 @@ static int qsd_pcm_probe(struct platform_device *devptr)
 
 	qsd_glb_ctl.playback_device = CAD_HW_DEVICE_ID_DEFAULT_RX;
 	qsd_glb_ctl.capture_device = CAD_HW_DEVICE_ID_DEFAULT_TX;
-	qsd_glb_ctl.volume = 50;
+	qsd_glb_ctl.volume = 0;
 
 	return 0;
 
@@ -385,5 +401,6 @@ static void __exit qsd_audio_exit(void)
 module_init(qsd_audio_init);
 module_exit(qsd_audio_exit);
 
+MODULE_AUTHOR("QUALCOMM-QCT");
 MODULE_DESCRIPTION("PCM module");
 MODULE_LICENSE("GPL v2");

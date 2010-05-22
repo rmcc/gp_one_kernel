@@ -1,0 +1,67 @@
+This file describes the format of a ROM Patch Distribution Format (RPDF).
+
+An RPDF file contains a SET of patches that have been collectively
+applied to some version of ROM and have been integration tested.
+The RPDF file is the only proper method to disseminate ROM patches.
+
+A ROM Patch Distribution is self-contained -- a new RPDF file REPLACES
+and obsoletes all previous RPDF files.  Simultaneous installation of
+multiple RPDF files may result in undefined behavior.
+
+A ROM Patch Distribution File is generally suffixed with ".rpdf" and
+has this format:
+ Patch Distribution Header
+ Patch Specification 1
+ Patch Specification 2
+ Patch Specification 3
+    .
+    .
+
+The Patch Distribution Header in a ROM Patch Distribution File has this format:
+ 32-bit Patch Distribution Identification
+ 32-bit Patch Distribution Checksum
+ 32-bit Count of the number of Patch Specifications in this Patch Distribution
+
+Each Patch Specification has this format:
+  32-bit Patch Installation RPDF Command
+  32-bit hardware remap length (usually same as patch size, rounded up to pwr 2)
+  32-bit ROM Address
+  32-bit RAM Address
+  32-bit Count of bytes actually in the patch data (below); may be 0
+  actual patch bytes (little-endian words; must be a multiple of 4)
+
+A Patch Installation RPDF Command in a Patch Specification in a
+ROM Patch Distribution File is either:
+  1-->INSTALL ONLY (install this patch, but do not yet activate it)
+  2-->INSTALL/ACTIVATE (install this patch and then activate this patch and
+      all previous patches that have not yet been activated, if any)
+
+
+Examples:
+sample1.rpdf is a small sample Patch Distribution with ID=0x00000001.
+It consists of a single Patch Specification which installs and activates
+one patch which remaps ROM Target locations 0xa1001230..0xa100123f to
+RAM location 0xa0013ff0..0xa0013fff after it loads data into RAM that
+looks like this: 0x11 22 33 44 .. 0x88 0x99 0x00.
+
+You can run "fwpatch --notarg --verbose --file=sample1.rpdf" to see the
+metadata in this Patch Distribution without affecting the Target.  If
+you leave out the --notarg option, you'll find that 16 bytes starting
+at ROM location 0xa1001230 have been modified as above.
+
+For instance, you may try this experiment while running from Flash
+or RAM:
+  bmiloader --read --address=0xa1001230 --length=16 --file=before
+  fwpatch --verbose --file=sample1.rpdf
+  bmiloader --read --address=0xa1001230 --length=16 --file=after
+  od -x before
+  od -x after
+
+
+sample2.rpdf is identified as Patch Distribution 0x00000002. It consists
+of two Patch Specifications.  The SECOND Patch Specification is for the
+same patch that was applied by sample1.rpdf.  The FIRST Patch Spec loads
+48 bytes (of 0x12345678 repeated 12 times) into RAM starting at 0xa0013fa0,
+and it remaps 32 bytes starting at ROM address 0xa1001200 to the first
+32 bytes of that RAM patch.  The two patches are atomically activated by the
+second Patch Specification.

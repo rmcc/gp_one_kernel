@@ -622,6 +622,9 @@ asmlinkage long sys_timerfd_gettime(int ufd, struct itimerspec __user *otmr);
 asmlinkage long sys_eventfd(unsigned int count);
 asmlinkage long sys_eventfd2(unsigned int count, int flags);
 asmlinkage long sys_fallocate(int fd, int mode, loff_t offset, loff_t len);
+asmlinkage long sys_marker(char __user *name, char __user *format,
+			   char __user *state, int reg);
+asmlinkage long sys_trace(int type, uint16_t id, char __user *ubuf);
 
 int kernel_execve(const char *filename, char *const argv[], char *const envp[]);
 

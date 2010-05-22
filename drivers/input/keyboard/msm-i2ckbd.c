@@ -1,64 +1,24 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
- *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
- *
- * START
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- */
 /*
  *
  *  Driver for QWERTY keyboard with I/O communications via
  *  the I2C Interface. The keyboard hardware is a reference design supporting
  *  the standard XT/PS2 scan codes (sets 1&2).
+ *
+ *  Copyright (c) 2008-2009 QUALCOMM USA, INC.
+ *
+ *  All source code in this file is licensed under the following license
+ *
+ *  This program is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License
+ *  version 2 as published by the Free Software Foundation.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ *  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -84,7 +44,6 @@ enum qkbd_protocol {
 	QKBD_CMD_SREP   = 0xF3,		/* set keyboard autorepeat */
 	QKBD_CMD_SLSET  = 0xF0,		/* select scan set         */
 	QKBD_CMD_READID = 0xF2,		/* read keyboard id info   */
-	QKBD_CMD_SLED   = 0xED,		/* set/reset status leds   */
 	QKBD_RSP_ACK    = 0xFA		/* keyboard acknowledge    */
 };
 
@@ -136,8 +95,6 @@ struct i2ckybd_record {
 	char	physinfo[QKBD_PHYSLEN];
 	int     mclrpin;
 	int     irqpin;
-	int     (*extpin_setup) (void);
-	void    (*extpin_teardown)(void);
 	uint8_t cmd;
 	uint8_t noargs;
 	uint8_t cargs[2];
@@ -323,13 +280,14 @@ static int qi2ckybd_irqsetup(struct i2ckybd_record *kbdrec)
 
 static int qi2ckybd_release_gpio(struct i2ckybd_record *kbrec)
 {
-	if (kbrec == NULL)
-		return -EINVAL;
+	int kbd_irqpin  = kbrec->irqpin;
+	int kbd_mclrpin = kbrec->mclrpin;
 
 	dev_info(&kbrec->mykeyboard->dev,
 		 "releasing keyboard gpio pins %d,%d\n",
-		 kbrec->irqpin, kbrec->mclrpin);
-	kbrec->extpin_teardown();
+		 kbd_irqpin, kbd_mclrpin);
+	gpio_free(kbd_irqpin);
+	gpio_free(kbd_mclrpin);
 	return 0;
 }
 
@@ -339,10 +297,40 @@ static int qi2ckybd_release_gpio(struct i2ckybd_record *kbrec)
  */
 static int qi2ckybd_config_gpio(struct i2ckybd_record *kbrec)
 {
-	if (kbrec == NULL)
-		return -EINVAL;
+	int rc;
+	struct device *kbdev = &kbrec->mykeyboard->dev;
+	int kbd_irqpin  = kbrec->irqpin;
+	int kbd_mclrpin = kbrec->mclrpin;
 
-	return kbrec->extpin_setup();
+	rc = gpio_request(kbd_irqpin, "gpio_keybd_irq");
+	if (rc) {
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
+			kbd_irqpin, rc);
+		goto err_gpioconfig;
+	}
+	rc = gpio_request(kbd_mclrpin, "gpio_keybd_reset");
+	if (rc) {
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
+			kbd_mclrpin, rc);
+		goto err_gpioconfig;
+	}
+	rc = gpio_direction_input(kbd_irqpin);
+	if (rc) {
+		dev_err(kbdev, "gpio_direction_input failed on "
+		       "pin %d (rc=%d)\n", kbd_irqpin, rc);
+		goto err_gpioconfig;
+	}
+	rc = gpio_direction_output(kbd_mclrpin, 1);
+	if (rc) {
+		dev_err(kbdev, "gpio_direction_output failed on "
+		       "pin %d (rc=%d)\n", kbd_mclrpin, rc);
+		goto err_gpioconfig;
+	}
+	return rc;
+
+err_gpioconfig:
+	qi2ckybd_release_gpio(kbrec);
+	return rc;
 }
 
 /* read keyboard via i2c address + register offset, return # bytes read */
@@ -510,7 +498,7 @@ static int qi2ckybd_getkbinfo(struct i2c_client *kbd, int *info)
 		*info = rdat[1] << 8 | rdat[0];
 		rc = 0;
 
-		dev_info(&kbd->dev, "Received keyboard ID info: "
+		dev_dbg(&kbd->dev, "Received keyboard ID info: "
 			"MSB: 0x%x LSB 0x%x\n", rdat[1], rdat[0]);
 	}
 	return rc;
@@ -524,7 +512,6 @@ static void qi2ckybd_recoverkbd(struct work_struct *work)
 		container_of(work, struct i2ckybd_record, kb_cmdq.work);
 	struct i2c_client *kbd = kbdrec->mykeyboard;
 
-	INIT_DELAYED_WORK(&kbdrec->kb_cmdq, qi2ckybd_submitcmd);
 	dev_info(&kbd->dev, "keyboard recovery requested\n");
 
 	rc = qi2ckybd_enablekybd(kbd);
@@ -781,8 +768,6 @@ static int qi2ckybd_eventcb(struct input_dev *dev, unsigned int type,
 	struct i2ckybd_record *kbdrec = input_get_drvdata(dev);
 	struct device *kbdev = &kbdrec->mykeyboard->dev;
 
-	if (!kbdrec->kybd_connected)
-		return rc;
 	switch (type) {
 	case EV_MSC:
 		/* raw events are forwarded to keyboard handler */
@@ -793,6 +778,8 @@ static int qi2ckybd_eventcb(struct input_dev *dev, unsigned int type,
 			kbdrec->noargs = 1;
 			kbdrec->cargs[0] = (dev->rep[REP_PERIOD] & 0x1F) |
 				((dev->rep[REP_DELAY]/250)<<5);
+			INIT_DELAYED_WORK(&kbdrec->kb_cmdq,
+					  qi2ckybd_submitcmd);
 			schedule_delayed_work(&kbdrec->kb_cmdq,
 					      msecs_to_jiffies(600));
 			rc = 0;
@@ -801,19 +788,7 @@ static int qi2ckybd_eventcb(struct input_dev *dev, unsigned int type,
 				 "but hw autorepeat not enabled\n");
 		break;
 	case EV_LED:
-		if ((kbdrec->product_info & 0xFF) > 0x10) {
-			kbdrec->cmd = QKBD_CMD_SLED;
-			kbdrec->noargs = 1;
-			kbdrec->cargs[0] =
-				(test_bit(LED_SCROLLL, dev->led) ? 1 : 0) |
-				(test_bit(LED_NUML,  dev->led) ? 2 : 0) |
-				(test_bit(LED_CAPSL, dev->led) ? 4 : 0);
-			schedule_delayed_work(&kbdrec->kb_cmdq,
-					      msecs_to_jiffies(10));
-			dev_dbg(kbdev, "submitted set LEDs cmd\n");
-			rc = 0;
-		}
-
+		dev_warn(kbdev, "attempt to set LEDs not supported\n");
 		break;
 	default:
 		dev_warn(kbdev, "rcv'd unrecognized command (%d)\n", type);
@@ -876,12 +851,9 @@ static struct input_dev *create_inputdev_instance(struct i2ckybd_record *kbdrec)
 		idev->keycodesize = sizeof(uint8_t);
 		idev->keycodemax = QKBD_IN_MXKYEVTS;
 		if (kbdrec->hwrep_enabled)
-			idev->evbit[0] = BIT(EV_KEY) | BIT(EV_LED);
+			idev->evbit[0] = BIT(EV_KEY);
 		else
-			idev->evbit[0] = BIT(EV_KEY) | BIT(EV_LED) |
-				BIT(EV_REP);
-		idev->ledbit[0] = BIT(LED_SCROLLL) | BIT(LED_NUML) |
-			BIT(LED_CAPSL);
+			idev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP);
 		memset(idev->keycode, 0, QKBD_IN_MXKYEVTS);
 
 		if (kbdrec->scanset == 1) {
@@ -944,8 +916,6 @@ static void qi2ckybd_connect2inputsys(struct work_struct *work)
 			dev_err(dev, "Failed to register with"
 				" input system\n");
 			input_free_device(kbdrec->i2ckbd_idev);
-		} else {
-			INIT_DELAYED_WORK(&kbdrec->kb_cmdq, qi2ckybd_submitcmd);
 		}
 	}
 }
@@ -1068,8 +1038,6 @@ static int __devinit qi2ckybd_probe(struct i2c_client *client,
 	rd->hwrep_enabled = setup_data->hwrepeat ? 1 : 0;
 	rd->mclrpin       = setup_data->gpioreset;
 	rd->irqpin        = setup_data->gpioirq;
-	rd->extpin_setup  = setup_data->gpio_setup;
-	rd->extpin_teardown  = setup_data->gpio_shutdown;
 
 	rc = qi2ckybd_config_gpio(rd);
 	if (rc)

@@ -680,6 +680,14 @@ config FAULT_INJECTION_STACKTRACE_FILTER
 	help
 	  Provide stacktrace filter for fault-injection capabilities
 
+config HAVE_PSRWLOCK_ASM_CALL
+	def_bool n
+
+config PSRWLOCK_LATENCY_TEST
+	boolean "Testing API for psrwlock latency test"
+	depends on HAVE_GET_CYCLES
+	help
+
 config LATENCYTOP
 	bool "Latency measuring infrastructure"
 	select FRAME_POINTER if !MIPS && !PPC

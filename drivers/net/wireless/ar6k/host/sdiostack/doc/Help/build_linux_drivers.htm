@@ -1,0 +1,122 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Building the Driver</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" --> Building the
+        Driver<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+<object type="application/x-oleobject" classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+    <param name="Keyword" value="Linux - Drivers">
+</object>
+<p class="HEADING1">Overview</p>
+	<p class="BODYTEXT">&lt;discuss linux driver model briefly&gt;</p>
+	<p class="BODYTEXT">&lt;discuss linux modules&gt;</p>
+	<p class="HEADING1">Preparing the Platform</p>
+	<p class="BODYTEXT">&lt;Discuss building the linux kernel and how modules are built
+	  (command line)&gt;</p>
+	<p align="center" class="BODYTEXT"><img src="Images/pbconfigurations.jpg" width="696" height="600"></p>
+	<p class="BODYTEXT">Building both configuration types places all
+	            the necessary system libraries required for both retail
+	            and
+	            debug builds of the driver
+	            and application. After switching to the desired platform configuration
+	     type (release, debug), you can open a CE build window shown below:</p>
+	<p align="center" class="BODYTEXT"><img src="Images/pbbuildwindow.jpg" width="513" height="438"></p>
+	<p class="BODYTEXT">A command window will appear and the path set to the flat
+	    release directory. To build the source, navigate to the location of the
+	    driver and at the top level enter <font face="Courier New, Courier, mono">build
+	    -c</font>.  This builds the driver cleanly.  Simply typing <font face="Courier New, Courier, mono">build</font> with
+	    no arguments will use dependency checking and only compile source files
+	    if necessary. If the current configuration was &quot;Release&quot;, the driver
+	    will be compiled as a retail DLL and is not very useful for debugging.
+	    To compile the
+	    driver as debug, it is not
+	    necessary to switch to the &quot;debug&quot; configuration, you can simply set
+	    the debug enviroment <font face="Courier New, Courier, mono">WINCEDEBUG</font> to &quot;debug&quot; as
+	    shown below.</p>
+	<p class="BODYTEXT"><img src="Images/pbcmdline.jpg" width="637" height="271"></p>
+	<p class="BODYTEXT">One final setting must be made to redirect the compiled
+	    DLL to the flat release directory. The purpose of this is to place the
+	    DLL in a location where Platform Builder can transfer it to the target
+	    platform when the target kernel loads the DLL on demand.
+	    To automatically copy the DLL to the flat release directory, set the
+	    environment variable
+	    <font face="Courier New, Courier, mono">WINCEREL</font> to a value of 1.</p>
+	<p class="HEADING1">Summary</p>
+	<p class="BODYTEXT">The following steps summarizes the techniques used above in building the driver:
+	<ol>
+	<li>
+	Create Platform Workspace (specifying CPU and Board support package ) and
+	    configure platform (OS features, default drivers).
+	</li>
+	<li>
+	Build Platform for both Release and Debug configurations.
+	</li>
+    <li>
+	Set Active configuration to desired image type (<font face="Courier New, Courier, mono">Release</font> recommended).
+	</li>
+	<li>
+	Open a build release directory (Build-&gt;Open Build Release Directory).
+	</li>
+	<li>
+	Navigate to driver source, set environment variables: <font face="Courier New, Courier, mono">WINCEREL=1</font> and <font face="Courier New, Courier, mono">WINCEDEBUG=debug</font>.
+	</li>
+	<li>
+	Compile sources using <font face="Courier New, Courier, mono">build</font>.
+	</li></ol></p>
+	<p class="BODYTEXT">In order to debug the driver, the device manager or bus
+	    driver (or driver loader) needs to have the driver registry settings
+	    in the platform image. To add the driver registry keys, edit the project's<font face="Courier New, Courier, mono"> project.reg</font> file
+	    and copy the keys from the wizard generated driver's registry file.
+	    If the driver DLL will be demand loaded over the kernel transport, the
+	    driver's wizard generated BIB (binary image builder) settings do not
+	    need to be incorporated into the project's BIB file. After the settings
+	    have
+	    been entered, the platform image must be rebuilt. You can simply perform
+	    a makeimage step using Build-&gt;MakeImage.</p>
+	<p class="BODYTEXT">With the driver now in the flat release directory and the
+	    driver registry parameters in the image, you are now ready to debug the
+	    driver.</p>
+	<p><br>
+</p>
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

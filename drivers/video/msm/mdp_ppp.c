@@ -1,7 +1,7 @@
 /* drivers/video/msm/src/drv/mdp/mdp_ppp.c
  *
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and

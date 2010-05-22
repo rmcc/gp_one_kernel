@@ -1301,6 +1301,16 @@ struct task_struct {
 	int latency_record_count;
 	struct latency_record latency_record[LT_SAVECOUNT];
 #endif
+#ifdef CONFIG_MARKERS_USERSPACE
+	/*
+	 * user_markers and user_markers_sequence updates are protected
+	 * by the per process user_markers_mutex nested in the markers_mutex.
+	 * Taking one of these mutexes is enough to insure coherent read.
+	 */
+	struct mutex user_markers_mutex;
+	struct hlist_head user_markers;
+	unsigned long user_markers_sequence;
+#endif
 };
 
 /*
@@ -2218,6 +2228,9 @@ static inline void mm_init_owner(struct mm_struct *mm, struct task_struct *p)
 #endif /* CONFIG_MM_OWNER */
 
 #define TASK_STATE_TO_CHAR_STR "RSDTtZX"
+
+extern void clear_kernel_trace_flag_all_tasks(void);
+extern void set_kernel_trace_flag_all_tasks(void);
 
 #endif /* __KERNEL__ */
 

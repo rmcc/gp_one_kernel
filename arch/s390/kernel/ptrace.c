@@ -35,6 +35,7 @@
 #include <linux/signal.h>
 #include <linux/elf.h>
 #include <linux/regset.h>
+#include <linux/marker.h>
 
 #include <asm/segment.h>
 #include <asm/page.h>
@@ -642,6 +643,12 @@ long compat_arch_ptrace(struct task_struct *child, compat_long_t request,
 asmlinkage void
 syscall_trace(struct pt_regs *regs, int entryexit)
 {
+	if (!entryexit)
+		trace_mark(kernel_arch_syscall_entry, "syscall_id %d ip #p%ld",
+			(int)regs->gprs[2], instruction_pointer(regs));
+	else
+		trace_mark(kernel_arch_syscall_exit, "ret %ld", regs->gprs[2]);
+
 	if (unlikely(current->audit_context) && entryexit)
 		audit_syscall_exit(AUDITSC_RESULT(regs->gprs[2]), regs->gprs[2]);
 

@@ -1,58 +1,19 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/*
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 
 #include <linux/kernel.h>
@@ -64,8 +25,6 @@
 #include <linux/usb/mass_storage_function.h>
 #include <linux/i2c.h>
 #include <linux/spi/spi.h>
-#include <linux/delay.h>
-#include <linux/mfd/tps65023.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -80,34 +39,24 @@
 #include <mach/msm_serial_hs.h>
 #include <mach/msm_touchpad.h>
 #include <mach/msm_i2ckbd.h>
-#include <mach/pmic.h>
-#include <mach/camera.h>
-#include <mach/memory.h>
 
 #include "devices.h"
 #include "timer.h"
+#include "keypad-surf-ffa.h"
 #include "socinfo.h"
-#include "msm-keypad-devices.h"
-#include "pm.h"
-
-#define TOUCHPAD_SUSPEND 	34
-#define TOUCHPAD_IRQ 		38
 
 #define MSM_PMEM_MDP_SIZE	0x800000
-#define MSM_PMEM_CAMERA_SIZE   0xa00000
 #define MSM_PMEM_ADSP_SIZE	0x1100000
 #define MSM_PMEM_GPU1_SIZE	0x800000
 #define MSM_FB_SIZE             0x500000
 #define MSM_AUDIO_SIZE		0x200000
-#define MSM_GPU_PHYS_SIZE 	SZ_2M
 
 #define MSM_SMI_BASE		0x2b00000
 #define MSM_SMI_SIZE		0x1500000
 
 #define MSM_FB_BASE		MSM_SMI_BASE
-#define MSM_GPU_PHYS_BASE 	(MSM_FB_BASE + MSM_FB_SIZE)
-#define MSM_PMEM_GPU0_BASE	(MSM_GPU_PHYS_BASE + MSM_GPU_PHYS_SIZE)
-#define MSM_PMEM_GPU0_SIZE	(MSM_SMI_SIZE - MSM_FB_SIZE - MSM_GPU_PHYS_SIZE)
+#define MSM_PMEM_GPU0_BASE	(MSM_FB_BASE + MSM_FB_SIZE)
+#define MSM_PMEM_GPU0_SIZE	(MSM_SMI_SIZE - MSM_FB_SIZE)
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -167,11 +116,6 @@ static struct usb_composition usb_func_composition[] = {
 	},
 
 	{
-		.product_id         = 0x9015,
-		.functions	    = 0x12, /* 10010 */
-	},
-
-	{
 		.product_id         = 0x9016,
 		.functions	    = 0xD, /* 01101 */
 	},
@@ -196,10 +140,6 @@ static struct usb_composition usb_func_composition[] = {
 		.functions	    = 0x1F, /* 011111 */
 	},
 
-	{
-		.product_id         = 0x901A,
-		.functions	    = 0x0F, /* 01111 */
-	},
 };
 static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.version	= 0x0100,
@@ -233,21 +173,14 @@ static struct android_pmem_platform_data android_pmem_gpu0_pdata = {
 	.name = "pmem_gpu0",
 	.start = MSM_PMEM_GPU0_BASE,
 	.size = MSM_PMEM_GPU0_SIZE,
-	.no_allocator = 0,
+	.no_allocator = 1,
 	.cached = 0,
 };
 
 static struct android_pmem_platform_data android_pmem_gpu1_pdata = {
 	.name = "pmem_gpu1",
-	.no_allocator = 0,
-	.cached = 0,
-};
-
-static struct android_pmem_platform_data android_pmem_camera_pdata = {
-	.name = "pmem_camera",
-	.size = MSM_PMEM_CAMERA_SIZE,
 	.no_allocator = 1,
-	.cached = 1,
+	.cached = 0,
 };
 
 static struct platform_device android_pmem_device = {
@@ -273,11 +206,6 @@ static struct platform_device android_pmem_gpu1_device = {
 	.id = 3,
 	.dev = { .platform_data = &android_pmem_gpu1_pdata },
 };
-static struct platform_device android_pmem_camera_device = {
-	.name = "android_pmem",
-	.id = 4,
-	.dev = { .platform_data = &android_pmem_camera_pdata },
-	};
 
 static struct resource msm_fb_resources[] = {
 	{
@@ -285,32 +213,11 @@ static struct resource msm_fb_resources[] = {
 	}
 };
 
-static int msm_fb_detect_panel(const char *name)
-{
-	int ret = -EPERM;
-
-	if (machine_is_qsd8x50_ffa()) {
-		if (!strncmp(name, "mddi_toshiba_wvga_pt", 20))
-			ret = 0;
-		else
-			ret = -ENODEV;
-	}
-
-	return ret;
-}
-
-static struct msm_fb_platform_data msm_fb_pdata = {
-	.detect_client = msm_fb_detect_panel,
-};
-
 static struct platform_device msm_fb_device = {
 	.name   = "msm_fb",
 	.id     = 0,
 	.num_resources  = ARRAY_SIZE(msm_fb_resources),
 	.resource       = msm_fb_resources,
-	.dev    = {
-		.platform_data = &msm_fb_pdata,
-	}
 };
 
 static struct resource qsd_spi_resources[] = {
@@ -394,93 +301,53 @@ static struct spi_board_info msm_spi_board_info[] __initdata = {
 	}
 };
 
-static int mddi_toshiba_pmic_bl(int level)
-{
-	int ret = -EPERM;
-
-	if (machine_is_qsd8x50_ffa()) {
-		ret = set_led_intensity(LED_LCD, level);
-
-		if (ret)
-			printk(KERN_WARNING "%s: can't set lcd backlight!\n",
-						__func__);
-	}
-
-	return ret;
-}
-
-static struct msm_panel_common_pdata mddi_toshiba_pdata = {
-	.pmic_backlight = mddi_toshiba_pmic_bl,
+static u32 mddi_clk_list[] = {
+	61440,
+	81920,
+	96000,
+	122880,
+	153600,
+	192000,
+	245760,
+	288000,
+	384000
 };
-
-static struct platform_device mddi_toshiba_device = {
-	.name   = "mddi_toshiba",
-	.id     = 0,
-	.dev    = {
-		.platform_data = &mddi_toshiba_pdata,
-	}
-};
-
-static void msm_fb_vreg_config(const char *name, int on)
-{
-	struct vreg *vreg;
-	int ret = 0;
-
-	vreg = vreg_get(NULL, name);
-	if (IS_ERR(vreg)) {
-		printk(KERN_ERR "%s: vreg_get(%s) failed (%ld)\n",
-		__func__, name, PTR_ERR(vreg));
-		return;
-	}
-
-	ret = (on) ? vreg_enable(vreg) : vreg_disable(vreg);
-	if (ret)
-		printk(KERN_ERR "%s: %s(%s) failed!\n",
-			__func__, (on) ? "vreg_enable" : "vreg_disable", name);
-}
-
-#define MDDI_RST_OUT_GPIO 100
-
-static void msm_fb_mddi_power_save(int on)
-{
-	int flag_on = !!on;
-
-	if (!flag_on && machine_is_qsd8x50_ffa()) {
-		gpio_set_value(MDDI_RST_OUT_GPIO, 0);
-		mdelay(1);
-	}
-
-	msm_fb_vreg_config("gp5", flag_on);
-	msm_fb_vreg_config("msme2", !flag_on);
-	msm_fb_vreg_config("boost", flag_on);
-
-	if (flag_on && machine_is_qsd8x50_ffa()) {
-		gpio_set_value(MDDI_RST_OUT_GPIO, 0);
-		mdelay(1);
-		gpio_set_value(MDDI_RST_OUT_GPIO, 1);
-		gpio_set_value(MDDI_RST_OUT_GPIO, 1);
-		mdelay(1);
-	}
-}
 
 static int msm_fb_mddi_sel_clk(u32 *clk_rate)
 {
-	*clk_rate *= 2;
+	u32 rate = *clk_rate;
+	int i;
+	int last_idx = ARRAY_SIZE(mddi_clk_list)-1;
+
+	rate = (rate/1000)*2;
+
+	for (i = 0 ; i < ARRAY_SIZE(mddi_clk_list) ; i++)
+		if (mddi_clk_list[i] == rate) {
+			*clk_rate = mddi_clk_list[i]*1000;
+			return 0;
+	}
+
+	if (rate > mddi_clk_list[last_idx]) {
+		*clk_rate = mddi_clk_list[last_idx]*1000;
+		return 0;
+	}
+
+	for (i = last_idx ; i > 0 ; i--)
+		if ((rate < mddi_clk_list[i]) && (rate > mddi_clk_list[i-1])) {
+			*clk_rate = mddi_clk_list[i-1]*1000;
 	return 0;
+		}
+
+	return -EINVAL;
 }
 
 static struct mddi_platform_data mddi_pdata = {
-	.mddi_power_save = msm_fb_mddi_power_save,
 	.mddi_sel_clk = msm_fb_mddi_sel_clk,
-};
-
-static struct msm_panel_common_pdata mdp_pdata = {
-	.gpio = 98,
 };
 
 static void __init msm_fb_add_devices(void)
 {
-	msm_fb_register_device("mdp", &mdp_pdata);
+	msm_fb_register_device("mdp", 0);
 	msm_fb_register_device("pmdh", &mddi_pdata);
 	msm_fb_register_device("emdh", &mddi_pdata);
 	msm_fb_register_device("tvenc", 0);
@@ -515,72 +382,19 @@ static struct resource msm_audio_resources[] = {
 		.end    = 71,
 		.flags  = IORESOURCE_IO,
 	},
-	{
-		.name   = "sdac_din",
-		.start  = 144,
-		.end    = 144,
-		.flags  = IORESOURCE_IO,
-	},
-	{
-		.name   = "sdac_dout",
-		.start  = 145,
-		.end    = 145,
-		.flags  = IORESOURCE_IO,
-	},
-	{
-		.name   = "sdac_wsout",
-		.start  = 143,
-		.end    = 143,
-		.flags  = IORESOURCE_IO,
-	},
-	{
-		.name   = "cc_i2s_clk",
-		.start  = 142,
-		.end    = 142,
-		.flags  = IORESOURCE_IO,
-	},
-	{
-		.name   = "audio_master_clkout",
-		.start  = 146,
-		.end    = 146,
-		.flags  = IORESOURCE_IO,
-	},
-
 };
-
-static unsigned audio_gpio_on[] = {
-	GPIO_CFG(68, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* PCM_DOUT */
-	GPIO_CFG(69, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* PCM_DIN */
-	GPIO_CFG(70, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* PCM_SYNC */
-	GPIO_CFG(71, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* PCM_CLK */
-	GPIO_CFG(142, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* CC_I2S_CLK */
-	GPIO_CFG(143, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* SADC_WSOUT */
-	GPIO_CFG(144, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* SADC_DIN */
-	GPIO_CFG(145, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* SDAC_DOUT */
-	GPIO_CFG(146, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* MA_CLK_OUT */
-};
-
-static void __init audio_gpio_init(void)
-{
-	int pin, rc;
-
-	for (pin = 0; pin < ARRAY_SIZE(audio_gpio_on); pin++) {
-		rc = gpio_tlmm_config(audio_gpio_on[pin],
-			GPIO_ENABLE);
-		if (rc) {
-			printk(KERN_ERR
-				"%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, audio_gpio_on[pin], rc);
-			return;
-		}
-	}
-}
 
 static struct platform_device msm_audio_device = {
 	.name   = "msm_audio",
 	.id     = 0,
 	.num_resources  = ARRAY_SIZE(msm_audio_resources),
 	.resource       = msm_audio_resources,
+};
+
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+	.wakeup_irq = MSM_GPIO_TO_INT(45),
+	.inject_rx_on_wakeup = 1,
+	.rx_to_inject = 0x32,
 };
 
 static struct resource bluesleep_resources[] = {
@@ -640,6 +454,10 @@ static unsigned bt_config_power_on[] = {
 	GPIO_CFG(44, 2, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* CTS */
 	GPIO_CFG(45, 2, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* Rx */
 	GPIO_CFG(46, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* Tx */
+	GPIO_CFG(68, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* PCM_DOUT */
+	GPIO_CFG(69, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* PCM_DIN */
+	GPIO_CFG(70, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* PCM_SYNC */
+	GPIO_CFG(71, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* PCM_CLK */
 };
 static unsigned bt_config_power_off[] = {
 	GPIO_CFG(18, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* SYSRST */
@@ -650,6 +468,10 @@ static unsigned bt_config_power_off[] = {
 	GPIO_CFG(44, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* CTS */
 	GPIO_CFG(45, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* Rx */
 	GPIO_CFG(46, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* Tx */
+	GPIO_CFG(68, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_DOUT */
+	GPIO_CFG(69, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_DIN */
+	GPIO_CFG(70, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_SYNC */
+	GPIO_CFG(71, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_CLK */
 };
 
 static int bluetooth_power(int on)
@@ -701,41 +523,8 @@ static void __init bt_power_init(void)
 #define bt_power_init(x) do {} while (0)
 #endif
 
-static struct resource kgsl_resources[] = {
-       {
-		.name  = "kgsl_reg_memory",
-		.start = 0xA0000000,
-		.end = 0xA001ffff,
-		.flags = IORESOURCE_MEM,
-       },
-       {
-		.name   = "kgsl_phys_memory",
-		.start = MSM_GPU_PHYS_BASE,
-		.end = MSM_GPU_PHYS_BASE + MSM_GPU_PHYS_SIZE - 1,
-		.flags = IORESOURCE_MEM,
-       },
-       {
-		.start = INT_GRAPHICS,
-		.end = INT_GRAPHICS,
-		.flags = IORESOURCE_IRQ,
-       },
-};
-
-static struct platform_device msm_device_kgsl = {
-       .name = "kgsl",
-       .id = -1,
-       .num_resources = ARRAY_SIZE(kgsl_resources),
-       .resource = kgsl_resources,
-};
-
-static struct platform_device msm_device_pmic_leds = {
-	.name	= "pmic-leds",
-	.id	= -1,
-};
-
 static struct platform_device *devices[] __initdata = {
 	&msm_fb_device,
-	&mddi_toshiba_device,
 	&smc91x_device,
 	&msm_device_smd,
 	&android_pmem_device,
@@ -750,7 +539,6 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_hsusb_peripheral,
 	&mass_storage_device,
 	&msm_device_tssc,
-	&android_pmem_camera_device,
 	&msm_audio_device,
 	&msm_device_uart_dm1,
 	&msm_bluesleep_device,
@@ -760,38 +548,7 @@ static struct platform_device *devices[] __initdata = {
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart3,
 #endif
-	&msm_device_pmic_leds,
-	&msm_device_kgsl,
 };
-
-/* The TPS65023 PMIC outputs 1.225V as default at boot */
-#define TPS65023_DEFAULT_DCDC1	1225
-#ifdef CONFIG_QSD_SVS
-#define TPS65023_MAX_DCDC1	1600
-#else
-#define TPS65023_MAX_DCDC1	TPS65023_DEFAULT_DCDC1
-#endif
-
-static int qsd8x50_tps65023_set_dcdc1(int mVolts)
-{
-	int rc = 0;
-#ifdef CONFIG_QSD_SVS
-	rc = tps65023_set_dcdc1_level(mVolts);
-	/* By default the TPS65023 will be initialized to 1.225V.
-	 * So we can safely switch to any frequency within this
-	 * voltage even if the device is not probed/ready.
-	 */
-	if (rc == -ENODEV && mVolts <= TPS65023_DEFAULT_DCDC1)
-		rc = 0;
-#else
-	/* Disallow frequencies not supported in the default PMIC
-	 * output voltage.
-	 */
-	if (mVolts > TPS65023_DEFAULT_DCDC1)
-		rc = -EFAULT;
-#endif
-	return rc;
-}
 
 static struct msm_acpu_clock_platform_data qsd8x50_clock_data = {
 	.acpu_switch_time_us = 20,
@@ -799,150 +556,37 @@ static struct msm_acpu_clock_platform_data qsd8x50_clock_data = {
 	.vdd_switch_time_us = 62,
 	.power_collapse_khz = 128000000,
 	.wait_for_irq_khz = 128000000,
-	.max_vdd = TPS65023_MAX_DCDC1,
-	.acpu_set_vdd = qsd8x50_tps65023_set_dcdc1,
 };
-
-
-static void touchpad_gpio_release(void)
-{
-	gpio_free(TOUCHPAD_IRQ);
-	gpio_free(TOUCHPAD_SUSPEND);
-}
-
-static int touchpad_gpio_setup(void)
-{
-	int rc;
-	int suspend_pin = TOUCHPAD_SUSPEND;
-	int irq_pin = TOUCHPAD_IRQ;
-	unsigned suspend_cfg =
-		GPIO_CFG(suspend_pin, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA);
-	unsigned irq_cfg =
-		GPIO_CFG(irq_pin, 1, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA);
-
-	rc = gpio_request(irq_pin, "msm_touchpad_irq");
-	if (rc) {
-		pr_err("gpio_request failed on pin %d (rc=%d)\n",
-		       irq_pin, rc);
-		goto err_gpioconfig;
-	}
-	rc = gpio_request(suspend_pin, "msm_touchpad_suspend");
-	if (rc) {
-		pr_err("gpio_request failed on pin %d (rc=%d)\n",
-		       suspend_pin, rc);
-		goto err_gpioconfig;
-	}
-	rc = gpio_tlmm_config(suspend_cfg, GPIO_ENABLE);
-	if (rc) {
-		pr_err("gpio_tlmm_config failed on pin %d (rc=%d)\n",
-		       suspend_pin, rc);
-		goto err_gpioconfig;
-	}
-	rc = gpio_tlmm_config(irq_cfg, GPIO_ENABLE);
-	if (rc) {
-		pr_err("gpio_tlmm_config failed on pin %d (rc=%d)\n",
-		       irq_pin, rc);
-		goto err_gpioconfig;
-	}
-	return rc;
-
-err_gpioconfig:
-	touchpad_gpio_release();
-	return rc;
-}
 
 static struct msm_touchpad_platform_data msm_touchpad_data = {
-	.gpioirq     = TOUCHPAD_IRQ,
-	.gpiosuspend = TOUCHPAD_SUSPEND,
-	.gpio_setup  = touchpad_gpio_setup,
-	.gpio_shutdown = touchpad_gpio_release
+	.gpioirq     = 38,
+	.gpiosuspend = 34,
 };
-
-#define KBD_RST 35
-#define KBD_IRQ 36
-
-static void kbd_gpio_release(void)
-{
-	gpio_free(KBD_IRQ);
-	gpio_free(KBD_RST);
-}
-
-static int kbd_gpio_setup(void)
-{
-	int rc;
-	int respin = KBD_RST;
-	int irqpin = KBD_IRQ;
-	unsigned rescfg =
-		GPIO_CFG(respin, 0, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA);
-	unsigned irqcfg =
-		GPIO_CFG(irqpin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA);
-
-	rc = gpio_request(irqpin, "gpio_keybd_irq");
-	if (rc) {
-		pr_err("gpio_request failed on pin %d (rc=%d)\n",
-		       irqpin, rc);
-		goto err_gpioconfig;
-	}
-	rc = gpio_request(respin, "gpio_keybd_reset");
-	if (rc) {
-		pr_err("gpio_request failed on pin %d (rc=%d)\n",
-		       respin, rc);
-		goto err_gpioconfig;
-	}
-	rc = gpio_tlmm_config(rescfg, GPIO_ENABLE);
-	if (rc) {
-		pr_err("gpio_tlmm_config failed on pin %d (rc=%d)\n",
-		       respin, rc);
-		goto err_gpioconfig;
-	}
-	rc = gpio_tlmm_config(irqcfg, GPIO_ENABLE);
-	if (rc) {
-		pr_err("gpio_tlmm_config failed on pin %d (rc=%d)\n",
-		       irqpin, rc);
-		goto err_gpioconfig;
-	}
-	return rc;
-
-err_gpioconfig:
-	kbd_gpio_release();
-	return rc;
-}
 
 static struct msm_i2ckbd_platform_data msm_kybd_data = {
 	.hwrepeat = 0,
 	.scanset1 = 1,
-	.gpioreset = KBD_RST,
-	.gpioirq = KBD_IRQ,
-	.gpio_setup = kbd_gpio_setup,
-	.gpio_shutdown = kbd_gpio_release,
+	.gpioreset = 35,
+	.gpioirq = 36,
 };
 
 static struct i2c_board_info msm_i2c_board_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("glidesensor", 0x2A),
-		.irq           =  MSM_GPIO_TO_INT(TOUCHPAD_IRQ),
+		.irq           =  MSM_GPIO_TO_INT(38),
 		.platform_data = &msm_touchpad_data
 	},
 	{
 		I2C_BOARD_INFO("msm-i2ckbd", 0x3A),
 		.type           = "msm-i2ckbd",
-		.irq           =  MSM_GPIO_TO_INT(KBD_IRQ),
+		.irq           =  MSM_GPIO_TO_INT(36),
 		.platform_data  = &msm_kybd_data
 	},
 	{
 		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
 	},
 	{
-		I2C_BOARD_INFO("s5k3e2fx", 0x20 >> 1),
-	},
-	{
-		I2C_BOARD_INFO("mt9p012", 0x6C >> 1),
-	},
-	{
 		I2C_BOARD_INFO("mt9t013", 0x6C),
-	},
-	{
-		I2C_BOARD_INFO("tps65023", 0x48),
 	},
 };
 
@@ -1011,55 +655,25 @@ static void config_camera_off_gpios(void)
 		ARRAY_SIZE(camera_off_gpio_table));
 }
 
-#define MSM_PROBE_INIT(name) name##_probe_init
-static struct msm_camera_sensor_info msm_camera_sensor[] = {
+static struct msm_camera_sensor_info msm_camera_sensor[2] = {
 	{
 		.sensor_reset   = 17,
 		.sensor_pwd	  = 85,
 		.vcm_pwd      = 0,
 		.sensor_name  = "mt9d112",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(mt9d112),
-#endif
-	},
-	{
-		.sensor_reset   = 17,
-		.sensor_pwd	  = 85,
-		.vcm_pwd      = 0,
-		.sensor_name  = "s5k3e2fx",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(s5k3e2fx),
-#endif
-	},
-	{
-		.sensor_reset = 17,
-		.sensor_pwd   = 85,
-		.vcm_pwd      = 0,
-		.sensor_name  = "mt9p012",
-		.flash_type		= MSM_CAMERA_FLASH_LED,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(mt9p012),
-#endif
 	},
 	{
 		.sensor_reset   = 17,
 		.sensor_pwd	= 85,
 		.vcm_pwd      = 0,
 		.sensor_name  = "mt9t013",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(mt9t013),
-#endif
 	},
 };
-#undef MSM_PROBE_INIT
 
 static struct msm_camera_device_platform_data msm_camera_device_data = {
 	.camera_gpio_on  = config_camera_on_gpios,
 	.camera_gpio_off = config_camera_off_gpios,
-	.snum = ARRAY_SIZE(msm_camera_sensor),
+	.snum = 2,
 	.sinfo = &msm_camera_sensor[0],
 	.ioext.mdcphy = MSM_MDC_PHYS,
 	.ioext.mdcsz  = MSM_MDC_SIZE,
@@ -1097,7 +711,6 @@ static void __init qsd8x50_init_irq(void)
 static void sdcc_gpio_init(void)
 {
 	/* SDC1 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	if (gpio_request(51, "sdc1_data_3"))
 		pr_err("failed to request gpio sdc1_data_3\n");
 	if (gpio_request(52, "sdc1_data_2"))
@@ -1110,13 +723,8 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc1_cmd\n");
 	if (gpio_request(56, "sdc1_clk"))
 		pr_err("failed to request gpio sdc1_clk\n");
-#endif
-
-	if (machine_is_qsd8x50_ffa())
-		return;
 
 	/* SDC2 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 	if (gpio_request(62, "sdc2_clk"))
 		pr_err("failed to request gpio sdc2_clk\n");
 	if (gpio_request(63, "sdc2_cmd"))
@@ -1129,10 +737,8 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc2_data_1\n");
 	if (gpio_request(67, "sdc2_data_0"))
 		pr_err("failed to request gpio sdc2_data_0\n");
-#endif
 
 	/* SDC3 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 	if (gpio_request(88, "sdc3_clk"))
 		pr_err("failed to request gpio sdc3_clk\n");
 	if (gpio_request(89, "sdc3_cmd"))
@@ -1145,10 +751,8 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc3_data_1\n");
 	if (gpio_request(93, "sdc3_data_0"))
 		pr_err("failed to request gpio sdc3_data_0\n");
-#endif
 
 	/* SDC4 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 	if (gpio_request(142, "sdc4_clk"))
 		pr_err("failed to request gpio sdc4_clk\n");
 	if (gpio_request(143, "sdc4_cmd"))
@@ -1161,9 +765,9 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc4_data_2\n");
 	if (gpio_request(147, "sdc4_data_3"))
 		pr_err("failed to request gpio sdc4_data_3\n");
-#endif
 }
 
+static unsigned int vreg_enabled;
 static unsigned sdcc_cfg_data[][6] = {
 	/* SDC1 configs */
 	{
@@ -1203,21 +807,9 @@ static unsigned sdcc_cfg_data[][6] = {
 	}
 };
 
-static unsigned long vreg_sts, gpio_sts;
-static struct vreg *vreg_mmc;
-
-static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
+static int msm_sdcc_setup_gpio(int dev_id, unsigned enable)
 {
 	int i, rc;
-
-	if (!(test_bit(dev_id, &gpio_sts)^enable))
-		return;
-
-	if (enable)
-		set_bit(dev_id, &gpio_sts);
-	else
-		clear_bit(dev_id, &gpio_sts);
-
 	for (i = 0; i < ARRAY_SIZE(sdcc_cfg_data[dev_id - 1]); i++) {
 		rc = gpio_tlmm_config(sdcc_cfg_data[dev_id - 1][i],
 			enable ? GPIO_ENABLE : GPIO_DISABLE);
@@ -1225,76 +817,72 @@ static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
 			printk(KERN_ERR "%s: gpio_tlmm_config(%#x)=%d\n",
 				__func__, sdcc_cfg_data[dev_id - 1][i], rc);
 	}
+	return rc;
 }
 
-static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
+static int msm_sdcc_setup_power(int dev_id, int on)
 {
 	int rc = 0;
-	struct platform_device *pdev;
+	struct vreg *vreg_mmc;
+	struct mpp *mpp_mmc;
 
-	pdev = container_of(dv, struct platform_device, dev);
-	msm_sdcc_setup_gpio(pdev->id, !!vdd);
+	rc = msm_sdcc_setup_gpio(dev_id, on);
+	if (rc)
+		return -EIO;
 
-	if (vdd == 0) {
-		if (!vreg_sts)
+	if (on == vreg_enabled)
 			return 0;
 
-		clear_bit(pdev->id, &vreg_sts);
-
-		if (!vreg_sts) {
-			rc = vreg_disable(vreg_mmc);
-			if (rc)
-				printk(KERN_ERR "%s: return val: %d \n",
-					__func__, rc);
+	if (machine_is_qsd8x50_ffa()) {
+		mpp_mmc = mpp_get(NULL, "mpp3");
+		if (!mpp_mmc) {
+			printk(KERN_ERR "%s: mpp get failed\n", __func__);
+			return -EIO;
 		}
-		return 0;
+
+		rc = mpp_config_digital_out(mpp_mmc,
+		     MPP_CFG(MPP_DLOGIC_LVL_MSMP,
+		     on ? MPP_DLOGIC_OUT_CTRL_HIGH : MPP_DLOGIC_OUT_CTRL_LOW));
+		if (rc) {
+			printk(KERN_ERR
+				"%s: Failed to configure mpp (%d)\n",
+					__func__, rc);
+			return rc;
+		}
+	} else {
+		vreg_mmc = vreg_get(NULL, "gp5");
+		if (IS_ERR(vreg_mmc)) {
+			printk(KERN_ERR "%s: vreg get failed (%ld)\n",
+			       __func__, PTR_ERR(vreg_mmc));
+			return PTR_ERR(vreg_mmc);
 	}
 
-	if (!vreg_sts) {
-		rc = vreg_set_level(vreg_mmc, 2850);
-		if (!rc)
-			rc = vreg_enable(vreg_mmc);
-		if (rc)
-			printk(KERN_ERR "%s: return val: %d \n",
+		rc = on ? vreg_enable(vreg_mmc) : vreg_disable(vreg_mmc);
+		if (rc) {
+			printk(KERN_ERR "%s: Failed to configure vreg (%d)\n",
 					__func__, rc);
+			return rc;
 	}
-	set_bit(pdev->id, &vreg_sts);
+	}
+
+	vreg_enabled = on;
 	return 0;
 }
 
 static struct mmc_platform_data qsd8x50_sdcc_data = {
 	.ocr_mask	= MMC_VDD_27_28 | MMC_VDD_28_29,
-	.translate_vdd	= msm_sdcc_setup_power,
+	.setup_power	= msm_sdcc_setup_power,
 };
 
 static void __init qsd8x50_init_mmc(void)
 {
-	if (machine_is_qsd8x50_ffa())
-		vreg_mmc = vreg_get(NULL, "gp6");
-	else
-		vreg_mmc = vreg_get(NULL, "gp5");
-
-	if (IS_ERR(vreg_mmc)) {
-		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
-		       __func__, PTR_ERR(vreg_mmc));
-		return;
-	}
-
 	sdcc_gpio_init();
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	msm_add_sdcc(1, &qsd8x50_sdcc_data);
-#endif
 
 	if (machine_is_qsd8x50_surf()) {
-#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 		msm_add_sdcc(2, &qsd8x50_sdcc_data);
-#endif
-#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 		msm_add_sdcc(3, &qsd8x50_sdcc_data);
-#endif
-#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 		msm_add_sdcc(4, &qsd8x50_sdcc_data);
-#endif
 	}
 
 }
@@ -1326,83 +914,32 @@ static void __init qsd8x50_cfg_smc91x(void)
 	else printk(KERN_ERR "%s: running on invalid machine type\n", __func__);
 }
 
-static struct msm_i2c_platform_data msm_i2c_pdata = {
-	.clk_freq = 100000,
-};
-
-static void __init msm_device_i2c_init(void)
-{
-	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
-}
-
-static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR] = {
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].supported = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].suspend_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].idle_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].latency = 16000,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].residency = 20000,
-
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].supported = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].suspend_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].idle_enabled = 1,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].latency = 12000,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].residency = 20000,
-
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].supported = 1,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].suspend_enabled
-		= 1,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].idle_enabled = 0,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency = 2000,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].residency = 10000,
-
-	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].supported = 1,
-	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].suspend_enabled = 1,
-	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].idle_enabled = 1,
-	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].latency = 500,
-	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].residency = 0,
-};
-
 static void __init qsd8x50_init(void)
 {
-	if (socinfo_init() < 0)
-		printk(KERN_ERR "%s: socinfo_init() failed!\n",
-		       __func__);
+	socinfo_init();
 	qsd8x50_cfg_smc91x();
 	msm_acpu_clock_init(&qsd8x50_clock_data);
 	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
 	msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata;
+	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	msm_fb_add_devices();
 	msm_camera_add_device();
+#if defined(CONFIG_QSD_GPIO_KEYPAD)
+	init_surf_ffa_keypad(machine_is_qsd8x50_ffa());
+#endif
 	qsd8x50_init_mmc();
 	bt_power_init();
-	audio_gpio_init();
-	msm_device_i2c_init();
 	i2c_register_board_info(0, msm_i2c_board_info,
 				ARRAY_SIZE(msm_i2c_board_info));
 	spi_register_board_info(msm_spi_board_info,
 				ARRAY_SIZE(msm_spi_board_info));
-	msm_pm_set_platform_data(msm_pm_data);
-
-#ifdef CONFIG_SURF_FFA_GPIO_KEYPAD
-	if (machine_is_qsd8x50_ffa())
-		platform_device_register(&keypad_device_8k_ffa);
-	else
-		platform_device_register(&keypad_device_surf);
-#endif
 }
 
 static void __init qsd8x50_allocate_memory_regions(void)
 {
-	void *addr;
+	void *addr, *addr_1m_aligned;
 	unsigned long size;
-
-	size = MSM_PMEM_CAMERA_SIZE;
-	addr = alloc_bootmem(size);
-	android_pmem_camera_pdata.start = __pa(addr);
-	android_pmem_camera_pdata.size = size;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-		"for camera pmem\n", size, addr, __pa(addr));
 
 	size = MSM_PMEM_MDP_SIZE;
 	addr = alloc_bootmem(size);
@@ -1418,12 +955,19 @@ static void __init qsd8x50_allocate_memory_regions(void)
 	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
 	       "for adsp pmem\n", size, addr, __pa(addr));
 
+	/* The GPU1 area must be aligned to a 1M boundary */
+	/* XXX For now allocate an extra 1M, use the aligned part, */
+	/* waste the extra memory */
+	size = MSM_PMEM_GPU1_SIZE + 0x100000 - PAGE_SIZE;
+	addr = alloc_bootmem(size);
+	addr_1m_aligned =
+		(void *)(((unsigned int)addr + 0x100000) & 0xfff00000);
 	size = MSM_PMEM_GPU1_SIZE;
-	addr = alloc_bootmem_aligned(size, 0x100000);
-	android_pmem_gpu1_pdata.start = __pa(addr);
+	android_pmem_gpu1_pdata.start = __pa(addr_1m_aligned);
 	android_pmem_gpu1_pdata.size = size;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	       "for gpu1 pmem\n", size, addr, __pa(addr));
+	printk(KERN_INFO
+		"allocating %lu bytes at %p (%lx physical) for gpu1 pmem\n",
+		size, addr_1m_aligned, __pa(addr_1m_aligned));
 
 	size = MSM_FB_SIZE;
 	addr = MSM_FB_BASE;
@@ -1446,6 +990,18 @@ static void __init qsd8x50_map_io(void)
 	qsd8x50_allocate_memory_regions();
 	msm_clock_init(msm_clocks_8x50, msm_num_clocks_8x50);
 }
+
+MACHINE_START(SWORDFISH, "swordfish")
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io  = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
+	.boot_params = 0x16000100,
+	.map_io = qsd8x50_map_io,
+	.init_irq = qsd8x50_init_irq,
+	.init_machine = qsd8x50_init,
+	.timer = &msm_timer,
+MACHINE_END
 
 MACHINE_START(QSD8X50_SURF, "QCT QSD8X50 SURF")
 #ifdef CONFIG_MSM_DEBUG_UART

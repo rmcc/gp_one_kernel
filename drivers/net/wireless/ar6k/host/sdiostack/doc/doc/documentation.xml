@@ -1,0 +1,1227 @@
+<documentationPackage>
+<documentation name="F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src/busdriver/sdio_function.c">
+    <notes>
+ This file supports the interface between SDIO function drivers and the bus driver.
+    </notes>
+    <file>
+ sdio_function.c
+    </file>
+    <abstract>
+ OS independent bus driver support for function drivers
+    </abstract>
+    <notice>
+ Copyright (c), 2004 Atheros Communications, Inc.
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    </notice>
+    <function description='Register a function driver with the bus driver.'>
+        <input>
+  pFunction - the function definition structure.
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when succesful.
+        </return>
+        <notes>
+ Each function driver must register with the bus driver once upon loading.
+          The calling function must be prepared to receive a Probe callback before
+          this function returns. This will occur when an perpheral device is already
+          pluugged in that is supported by this function.
+          The function driver should unregister itself when exiting.
+        </notes>
+        <seeAlso>
+SDIO_UnregisterFunction
+        </seeAlso>
+        <example>
+<title> Registering a function driver:</title>
+            <comment>//list of devices supported by this function driver
+</comment>       static SD_PNP_INFO Ids[] = {
+            {.SDIO_ManufacturerID = 0xaa55,  
+             .SDIO_ManufacturerCode = 0x5555, 
+             .SDIO_FunctionNo = 1},
+            {}                      <comment>//list is null termintaed
+</comment>        };
+        static GENERIC_FUNCTION_CONTEXT FunctionContext = {
+            .Function.pName    = &quot;sdio_generic&quot;, <comment>//name of the device
+</comment>            .Function.MaxDevices = 1,    <comment>//maximum number of devices supported by this driver
+</comment>            .Function.NumDevices = 0,    <comment>//current number of devices, always zero to start
+</comment>            .Function.pIds     = Ids,    <comment>//the list of devices supported by this device
+</comment>            .Function.pProbe   = Probe,  <comment>//pointer to the function drivers Probe function
+</comment>                                         <comment>//  that will be called when a possibly supported device
+</comment>                                         <comment>//  is inserted.
+</comment>            .Function.pRemove  = Remove, <comment>//pointer to the function drivers Remove function
+</comment>                                         /  that will be called when a device is removed.
+            .Function.pContext = &amp;FunctionContext, <comment>//data value that will be passed into Probe and
+</comment>                                         <comment>//  Remove callbacks. 
+</comment>        }; 
+        SDIO_STATUS status;
+        status = <functionReference>SDIO_RegisterFunction</functionReference>(&amp;FunctionContext.Function)
+        if (!<functionReference>SDIO_SUCCESS</functionReference>(status)) {
+            <comment>...failed to register
+</comment>        }
+        </example>
+
+            
+<prototype>SDIO_STATUS _SDIO_RegisterFunction(PSDFUNCTION pFunction) 
+</prototype>        
+<functionName>_SDIO_RegisterFunction</functionName></function>
+    <function description='Unregister a function driver with the bus driver.'>
+        <input>
+  pFunction - the function definition structure.
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when succesful.
+        </return>
+        <notes>
+ Each function driver must unregister from the bus driver when the function driver
+          exits.
+          A function driver must disconnect from any interrupts before calling this function.
+        </notes>
+        <seeAlso>
+SDIO_RegisterFunction
+        </seeAlso>
+        <example>
+<title> Unregistering a function driver:</title>
+        <functionReference>SDIO_UnregisterFunction</functionReference>(&amp;FunctionContext.Function);
+        </example>
+
+            
+<prototype>SDIO_STATUS _SDIO_UnregisterFunction(PSDFUNCTION pFunction) </prototype>        
+<functionName>_SDIO_UnregisterFunction</functionName></function>
+    <function description='This function is called by the Busdriver when a device is inserted that can be supported by this function driver.'>
+        <functionName>
+Probe
+        </functionName>
+        <prototype>
+ BOOL (*pProbe)(struct _SDFUNCTION *pFunction, struct _SDDEVICE *pDevice)
+        </prototype>
+        <input>
+  pFunction - the function definition structure that was passed to Busdriver
+                       via the SDIO_RegisterFunction.
+        </input>
+        <input>
+  pDevice   - the description of the newly inserted device.            
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ TRUE  - this function driver will suport this device
+           FALSE - this function driver will not support this device
+        </return>
+        <notes>
+ The Busdriver calls the Probe function of a function driver to inform it that device is
+          available for the function driver to control. The function driver should initialize the 
+          device and be pepared to acceopt any interrupts from the device before returning.
+        </notes>
+        <seeAlso>
+SDIO_RegisterFunction
+        </seeAlso>
+        <seeAlso>
+Remove
+        </seeAlso>
+        <example>
+<title> Example of typical Probe function callback:</title>
+  static BOOL <functionReference>Probe</functionReference>(PSDFUNCTION pFunction, PSDDEVICE pDevice) { 
+       <comment>...get the our context info passed into the SDIO_RegisterFunction
+</comment>    PSDXXX_DRIVER_CONTEXT pFunctionContext = 
+                                (PSDXXX_DRIVER_CONTEXT)pFunction-&gt;pContext;
+    SDIO_STATUS status;
+       <comment>//test the identification of this device and ensure we want to support it
+</comment>       <comment>// we can test based on class, or use more specific tests on SDIO_ManufacturerID, etc.
+</comment>    if (pDevice-&gt;pId[0].SDIO_FunctionClass == XXX) {
+        <functionReference>DBG_PRINT</functionReference>(SDDBG_TRACE, (&quot;SDIO XXX Function: Probe - card matched (0x%X/0x%X/0x%X)\n&quot;,
+                                pDevice-&gt;pId[0].SDIO_ManufacturerID,
+                                pDevice-&gt;pId[0].SDIO_ManufacturerCode,
+                                pDevice-&gt;pId[0].SDIO_FunctionNo));
+        <comment>...</comment>.
+        </example>
+
+    </function>
+    <function description='This function is called by the Busdriver when a device controlled by this function
+             function driver is removed.'>
+        <functionName>
+Remove
+        </functionName>
+        <prototype>
+ void (*pRemove)(struct _SDFUNCTION *pFunction, struct _SDDEVICE *pDevice)
+        </prototype>
+        <input>
+  pFunction - the function definition structure that was passed to Busdriver
+                       via the SDIO_RegisterFunction.
+        </input>
+        <input>
+  pDevice   - the description of the device being removed.
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ none
+        </return>
+        <notes>
+ The Busdriver calls the Remove function of a function driver to inform it that device it
+          was supporting has been removed. The device has already been removed, so no further I/O
+          to the device can be performed.
+        </notes>
+        <seeAlso>
+SDIO_RegisterFunction
+        </seeAlso>
+        <seeAlso>
+Probe
+        </seeAlso>
+        <example>
+<title> Example of typical Remove function callback:</title>
+    void <functionReference>Remove</functionReference>(PSDFUNCTION pFunction, PSDDEVICE pDevice) {
+            <comment>// get the our context info passed into the SDIO_RegisterFunction
+</comment>        PSDXXX_DRIVER_CONTEXT pFunctionContext = 
+                             (PSDXXX_DRIVER_CONTEXT)pFunction-&gt;pContext;
+           <comment>...free any acquired resources.</comment>.
+        </example>
+
+    </function>
+</documentation>
+<documentation name="F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src/lib/sdio_lib_c.c">
+    <notes>
+ Support functions for device I/O 
+    </notes>
+    <file>
+ sdio_lib_c.c
+    </file>
+    <abstract>
+ OS independent SDIO library functions
+    </abstract>
+    <notice>
+ Copyright (c), 2004 Atheros Communications, Inc.
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    </notice>
+    <function description='Setup cmd52 requests'>
+        <input>
+  FunctionNo - function number.
+        </input>
+        <input>
+  Address - I/O address, 17-bit register address.
+        </input>
+        <input>
+  Write  - TRUE if a write operation, FALSE for reads.
+        </input>
+        <input>
+  WriteData - write data, byte to write if write operation.
+        </input>
+        <output>
+ pRequest - request is updated with cmd52 parameters
+        </output>
+        <return>
+ none
+        </return>
+        <notes>
+ this function does not perform any I/O. 
+        </notes>
+        <seeAlso>
+SDLIB_IssueCMD52
+        </seeAlso>
+
+            
+<prototype>void _SDLIB_SetupCMD52Request(UINT8         FuncNo,
+                              UINT32        Address,
+                              BOOL          Write,
+                              UINT8         WriteData,                                    
+                              PSDREQUEST    pRequest)
+</prototype>        
+<functionName>_SDLIB_SetupCMD52Request</functionName></function>
+    <function description='Issue a CMD52 to read or write a register'>
+        <input>
+ pDevice - the device that is the target of the command.
+        </input>
+        <input>
+ FunctionNo - function number of the target.
+        </input>
+        <input>
+ Address - 17-bit register address.
+        </input>
+        <input>
+ ByteCount - number of bytes to read or write,
+        </input>
+        <input>
+ Write - TRUE if a write operation, FALSE for reads.
+        </input>
+        <input>
+ pData - data buffer for writes.
+        </input>
+        <output>
+ pData - data buffer for writes.
+        </output>
+        <return>
+ SDIO Status
+        </return>
+        <notes>
+  This function will allocate a request and issue multiple byte reads or writes
+           to satisfy the ByteCount requested.
+        </notes>
+        <seeAlso>
+SDLIB_SetupCMD52Request
+        </seeAlso>
+
+            
+<prototype>SDIO_STATUS _SDLIB_IssueCMD52(PSDDEVICE     pDevice,
+                              UINT8         FuncNo,
+                              UINT32        Address,
+                              PUINT8        pData,
+                              INT           ByteCount,
+                              BOOL          Write)
+</prototype>        
+<functionName>_SDLIB_IssueCMD52</functionName></function>
+    <function description='Find a device&apos;s tuple.'>
+        <input>
+ pDevice - the device that is the target of the command.
+        </input>
+        <input>
+ Tuple - 8-bit ID of tuple to find          
+        </input>
+        <input>
+ pTupleScanAddress - On entry pTupleScanAddress is the adddress to start scanning
+        </input>
+        <input>
+ pLength - length of pBuffer 
+        </input>
+        <output>
+ pBuffer - storage for tuple
+        </output>
+        <output>
+ pTupleScanAddress - address of the next tuple 
+        </output>
+        <output>
+ pLength - length of tuple read
+        </output>
+        <return>
+ status
+        </return>
+        <notes>
+ It is possible to have the same tuple ID multiple times with different lengths.
+        </notes>
+
+            
+<prototype>SDIO_STATUS _SDLIB_FindTuple(PSDDEVICE  pDevice,
+                             UINT8      Tuple,
+                             UINT32     *pTupleScanAddress,
+                             PUINT8     pBuffer,
+                             UINT8      *pLength)
+</prototype>        
+<functionName>_SDLIB_FindTuple</functionName></function>
+    <function description='Issue an SDIO configuration command.'>
+        <input>
+  pDevice - the device that is the target of the command.
+        </input>
+        <input>
+  Command - command to send, see example.
+        </input>
+        <input>
+  pData - command&apos;s data
+        </input>
+        <input>
+  Length length of pData
+        </input>
+        <output>
+ pData - updated on commands that return data.
+        </output>
+        <return>
+ SDIO Status
+        </return>
+        <notes>
+ 
+        </notes>
+        <example>
+<title> Command and data pairs:</title>
+            Type                               Data
+            SDCONFIG_GET_WP             SDCONFIG_WP_VALUE 
+            SDCONFIG_SEND_INIT_CLOCKS   none 
+            SDCONFIG_SDIO_INT_CTRL      SDCONFIG_SDIO_INT_CTRL_DATA
+            SDCONFIG_SDIO_REARM_INT     none 
+            SDCONFIG_BUS_MODE_CTRL      SDCONFIG_BUS_MODE_DATA
+            SDCONFIG_POWER_CTRL         SDCONFIG_POWER_CTRL_DATA
+        </example>
+
+            
+<prototype>SDIO_STATUS _SDLIB_IssueConfig(PSDDEVICE        pDevice,
+                               SDCONFIG_COMMAND Command,
+                               PVOID            pData,
+                               INT              Length)
+</prototype>        
+<functionName>_SDLIB_IssueConfig</functionName></function>
+    <function description='Set function block size'>
+        <input>
+  pDevice - the device that is the target of the command.
+        </input>
+        <input>
+  BlockSize - block size to set in function 
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ SDIO Status
+        </return>
+        <notes>
+  Issues CMD52 to set the block size.
+        </notes>
+
+            
+<prototype>SDIO_STATUS _SDLIB_SetFunctionBlockSize(PSDDEVICE        pDevice,
+                                        UINT16           BlockSize)
+</prototype>        
+<functionName>_SDLIB_SetFunctionBlockSize</functionName></function>
+    <function description='Print a buffer on the standrad output'>
+        <input>
+  pBuffer - Hex buffer to be printed.
+        </input>
+        <input>
+  Length - length of pBuffer.
+        </input>
+        <input>
+  pDescription - String title to be printed above the dump.
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ none
+        </return>
+        <notes>
+  Prints the buffer by converting to ASCII and using REL_PRINT() with 16 
+           bytes per line.
+        </notes>
+
+            
+<prototype>void _SDLIB_PrintBuffer(PUCHAR pBuffer, INT Length, PTEXT pDescription)
+</prototype>        
+<functionName>_SDLIB_PrintBuffer</functionName></function>
+</documentation>
+<documentation name="F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src/include/sdio_busdriver.h">
+    <file>
+ sdio_busdriver.h
+    </file>
+    <abstract>
+ include file for registration of SDIO function drivers
+  and SDIO host controller bus drivers.
+    </abstract>
+    <notice>
+ Copyright (c), 2004 Atheros Communications, Inc.
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    </notice>
+    <function description='Test the SDIO revision for greater than or equal to 1.10'>
+        <functionName>
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        </functionName>
+        <prototype>
+ BOOL SDDEVICE_IS_SDIO_REV_GTEQ_1_10(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ TRUE if the revision is greater than or equal to 1.10
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        </seeAlso>
+        <seeAlso>
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        </seeAlso>
+
+    </function>
+    <function description='Test the SD revision for greater than or equal to 1.10'>
+        <functionName>
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        </functionName>
+        <prototype>
+ BOOL SDDEVICE_IS_SD_REV_GTEQ_1_10(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ TRUE if the revision is greater than or equal to 1.10
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        </seeAlso>
+        <seeAlso>
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        </seeAlso>
+
+    </function>
+    <function description='Test the MMC revision for greater than or equal to 4.0'>
+        <functionName>
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        </functionName>
+        <prototype>
+ BOOL SDDEVICE_IS_MMC_REV_GTEQ_4_0(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ TRUE if the revision is greater than or equal to 4.0
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        </seeAlso>
+        <seeAlso>
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        </seeAlso>
+
+    </function>
+    <function description='Test for write protect enabled'>
+        <functionName>
+SDDEVICE_IS_CARD_WP_ON
+        </functionName>
+        <prototype>
+ BOOL SDDEVICE_IS_CARD_WP_ON(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ TRUE if device is write protected.
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+
+    </function>
+    <function description='Get the device&apos;s function number'>
+        <functionName>
+SDDEVICE_GET_SDIO_FUNCNO
+        </functionName>
+        <prototype>
+ UINT8 SDDEVICE_GET_SDIO_FUNCNO(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ function number
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_FUNC_CLASS
+        </seeAlso>
+
+    </function>
+    <function description='Get the functions&apos;s class'>
+        <functionName>
+SDDEVICE_GET_SDIO_FUNC_CLASS
+        </functionName>
+        <prototype>
+ UINT8 SDDEVICE_GET_SDIO_FUNC_CLASS(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ class number
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_FUNCNO
+        </seeAlso>
+
+    </function>
+    <function description='Get the functions&apos;s Card Information Structure pointer'>
+        <functionName>
+SDDEVICE_GET_SDIO_FUNC_CISPTR
+        </functionName>
+        <prototype>
+ UINT32 SDDEVICE_GET_SDIO_FUNC_CISPTR(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ CIS offset
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        </seeAlso>
+        <seeAlso>
+SDDEVICE_GET_SDIO_COMMON_CISPTR
+        </seeAlso>
+
+    </function>
+    <function description='Get the functions&apos;s Code Stoarge Area pointer'>
+        <functionName>
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        </functionName>
+        <prototype>
+ UINT32 SDDEVICE_GET_SDIO_FUNC_CSAPTR(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ CSA offset
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_FUNC_CISPTR
+        </seeAlso>
+
+    </function>
+    <function description='Get the functions&apos;s maximum reported block size'>
+        <functionName>
+SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE
+        </functionName>
+        <prototype>
+ UINT16 SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ block size
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+
+        </seeAlso>
+
+    </function>
+    <function description='Get the common Card Information Structure pointer'>
+        <functionName>
+SDDEVICE_GET_SDIO_COMMON_CISPTR
+        </functionName>
+        <prototype>
+ UINT32 SDDEVICE_GET_SDIO_COMMON_CISPTR(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ block size
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        </seeAlso>
+
+    </function>
+    <function description='Get the card capabilities'>
+        <functionName>
+SDDEVICE_GET_SDIO_CARD_CAPS
+        </functionName>
+        <prototype>
+ UINT8 SDDEVICE_GET_SDIO_CARD_CAPS(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ block size
+        </return>
+        <notes>
+ Implemented as a macro. Refer to SDIO spec for decoding.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_CARD_FLAGS
+        </seeAlso>
+        <seeAlso>
+SDDEVICE_GET_SDIOCARD_CAPS
+        </seeAlso>
+
+    </function>
+    <function description='Get the card flags'>
+        <functionName>
+SDDEVICE_GET_CARD_FLAGS
+        </functionName>
+        <prototype>
+ CARD_INFO_FLAGS SDDEVICE_GET_CARD_FLAGS(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ flags
+        </return>
+        <notes>
+ Implemented as a macro. 
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_CARD_CAPS
+        </seeAlso>
+        <example>
+<title> Get card type:</title>
+        CARD_INFO_FLAGS flags;
+        flags = <functionReference>SDDEVICE_GET_CARD_FLAGS</functionReference>(pDevice);
+        <functionReference>switch</functionReference>(<functionReference>GET_CARD_TYPE</functionReference>(flags)) {
+            case CARD_MMC: <comment>// Multi-media card
+</comment>                <comment>... 
+</comment>            case CARD_SD:  <comment>// SD-Memory present
+</comment>                <comment>...
+</comment>            case CARD_SDIO: <comment>// SDIO card present
+</comment>                <comment>...
+</comment>            case CARD_COMBO: <comment>//SDIO card with SD
+</comment>                <comment>...
+</comment>        }
+        if (flags &amp; CARD_SD_WP) {
+            <comment>...SD write protect on
+</comment>        }
+        </example>
+
+    </function>
+    <function description='Get the Relative Card Address register'>
+        <functionName>
+SDDEVICE_GET_CARD_RCA
+        </functionName>
+        <prototype>
+ UINT16 SDDEVICE_GET_CARD_RCA(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ register address
+        </return>
+        <notes>
+ Implemented as a macro. Refer to SDIO spec for decoding.
+        </notes>
+
+    </function>
+    <function description='Get operational bus clock'>
+        <functionName>
+SDDEVICE_GET_OPER_CLOCK
+        </functionName>
+        <prototype>
+ SD_BUSCLOCK_RATE SDDEVICE_GET_OPER_CLOCK(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ clock rate
+        </return>
+        <notes>
+ Implemented as a macro. Returns the maximum current bus clock rate. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_MAX_CLOCK
+        </seeAlso>
+
+    </function>
+    <function description='Get maximum bus clock'>
+        <functionName>
+SDDEVICE_GET_MAX_CLOCK
+        </functionName>
+        <prototype>
+ SD_BUSCLOCK_RATE SDDEVICE_GET_MAX_CLOCK(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ clock rate
+        </return>
+        <notes>
+ To obtain the current maximum clock rate use SDDEVICE_GET_OPER_CLOCK().
+          This rate my be lower than the host controllers maximum obtained using
+          SDDEVICE_GET_MAX_CLOCK().
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_OPER_CLOCK
+        </seeAlso>
+
+    </function>
+    <function description='Get operational maximum block length.'>
+        <functionName>
+SDDEVICE_GET_OPER_BLOCK_LEN
+        </functionName>
+        <prototype>
+ UINT16 SDDEVICE_GET_OPER_BLOCK_LEN(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ block size in bytes
+        </return>
+        <notes>
+ Implemented as a macro. Returns the maximum current block length. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_MAX_BLOCK_LEN
+        </seeAlso>
+
+    </function>
+    <function description='Get maximum block length.'>
+        <functionName>
+SDDEVICE_GET_MAX_BLOCK_LEN
+        </functionName>
+        <prototype>
+ UINT16 SDDEVICE_GET_MAX_BLOCK_LEN(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ block size in bytes
+        </return>
+        <notes>
+ Implemented as a macro. Use SDDEVICE_GET_OPER_BLOCK_LEN to obtain
+          the current block length.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_OPER_BLOCK_LEN
+        </seeAlso>
+
+    </function>
+    <function description='Get operational maximum block count.'>
+        <functionName>
+SDDEVICE_GET_OPER_BLOCKS
+        </functionName>
+        <prototype>
+ UINT16 SDDEVICE_GET_OPER_BLOCKS(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ maximum number of blocks per transaction.
+        </return>
+        <notes>
+ Implemented as a macro. Returns the maximum current block count. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_MAX_BLOCK_LEN
+        </seeAlso>
+
+    </function>
+    <function description='Get maximum block count.'>
+        <functionName>
+SDDEVICE_GET_MAX_BLOCKS
+        </functionName>
+        <prototype>
+ UINT16 SDDEVICE_GET_MAX_BLOCKS(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ maximum number of blocks per transaction.
+        </return>
+        <notes>
+ Implemented as a macro. Use SDDEVICE_GET_OPER_BLOCKS to obtain
+          the current block count.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_OPER_BLOCKS
+        </seeAlso>
+
+    </function>
+    <function description='Get the Card Specific Data Register.'>
+        <functionName>
+SDDEVICE_GET_CARDCSD
+        </functionName>
+        <prototype>
+ PUINT8 SDDEVICE_GET_CARDCSD(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+  UINT8 CardCSD[MAX_CARD_RESPONSE_BYTES] array of CSD data.
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+
+    </function>
+    <function description='Get the bus width.'>
+        <functionName>
+SDDEVICE_GET_BUSWIDTH
+        </functionName>
+        <prototype>
+ UINT8 SDDEVICE_GET_BUSWIDTH(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+  bus width: SDCONFIG_BUS_WIDTH_SPI, SDCONFIG_BUS_WIDTH_1_BIT, SDCONFIG_BUS_WIDTH_4_BIT
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_IS_BUSMODE_SPI
+        </seeAlso>
+
+    </function>
+    <function description='Is bus in SPI mode.'>
+        <functionName>
+SDDEVICE_IS_BUSMODE_SPI
+        </functionName>
+        <prototype>
+ BOOL SDDEVICE_IS_BUSMODE_SPI(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+  TRUE, SPI mode.
+        </return>
+        <notes>
+ Implemented as a macro.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_BUSWIDTH
+        </seeAlso>
+
+    </function>
+    <function description='Send a request to a device.'>
+        <functionName>
+SDDEVICE_CALL_REQUEST_FUNC
+        </functionName>
+        <prototype>
+ SDIO_STATUS SDDEVICE_CALL_REQUEST_FUNC(PSDDEVICE pDevice, PSDREQUEST pRequest)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <input>
+  pRequest  - the request to be sent
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ SDIO_STATUS 
+        </return>
+        <notes>
+ Sends a request to the specified device. If the request is successfully sent, then
+          the response flags can be checked for to detemine the result of the request.
+        </notes>
+        <seeAlso>
+SDDeviceAllocRequest
+        </seeAlso>
+        <seeAlso>
+SDDEVICE_CALL_CONFIG_FUNC
+        </seeAlso>
+        <example>
+<title> Example of sending a request to a device:</title>
+    PSDREQUEST  pReq = NULL;
+    <comment>//allocate a request
+</comment>    pReq = <functionReference>SDDeviceAllocRequest</functionReference>(pDevice);
+    if (NULL == pReq) {
+        return SDIO_STATUS_NO_RESOURCES;    
+    }
+    <comment>//initialize the request
+</comment>    <functionReference>SDLIB_SetupCMD52Request</functionReference>(FuncNo, Address, Write, *pData, pReq);
+    <comment>//send the request to the target
+</comment>    status = <functionReference>SDDEVICE_CALL_REQUEST_FUNC</functionReference>(pDevice,pReq);
+    if (!<functionReference>SDIO_SUCCESS</functionReference>(status)) {
+        break;   
+    }
+    <comment>//check the request response (based on the request type)
+</comment>    if (<functionReference>SD_R5_GET_RESP_FLAGS</functionReference>(pReq-&gt;Response) &amp; SD_R5_ERRORS) {
+        <comment>...
+</comment>    }
+    if (!Write) {
+            <comment>// store the byte
+</comment>        *pData =  <functionReference>SD_R5_GET_READ_DATA</functionReference>(pReq-&gt;Response);
+    }
+    <comment>//free the request
+</comment>    <functionReference>SDDeviceFreeRequest</functionReference>(pDevice,pReq);
+    <comment>...</comment>.
+        </example>
+
+    </function>
+    <function description='Send configuration to a device.'>
+        <functionName>
+SDDEVICE_CALL_CONFIG_FUNC
+        </functionName>
+        <prototype>
+ SDIO_STATUS SDDEVICE_CALL_CONFIG_FUNC(PSDDEVICE pDevice, PSDCONFIG pConfigure)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <input>
+  pConfigure - configuration request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ SDIO_STATUS 
+        </return>
+        <notes>
+ Sends a configuration request to the specified device. 
+        </notes>
+        <seeAlso>
+SDLIB_IssueConfig
+        </seeAlso>
+        <example>
+<title> Example of sending a request to a device:</title>
+        SDCONFIG  configHdr; 
+        SDCONFIG_FUNC_ENABLE_DISABLE_DATA fData;
+        fData.EnableFlags = SDCONFIG_ENABLE_FUNC;
+        fData.TimeOut = 500;
+        <functionReference>SET_SDCONFIG_CMD_INFO</functionReference>(&amp;configHdr, SDCONFIG_FUNC_ENABLE_DISABLE, fData, <functionReference>sizeof</functionReference>(fData));
+        return <functionReference>SDDEVICE_CALL_CONFIG_FUNC</functionReference>(pDevice, &amp;configHdr);
+        </example>
+
+    </function>
+    <function description='Allocate a request structure.'>
+        <functionName>
+SDDeviceAllocRequest
+        </functionName>
+        <prototype>
+ PSDREQUEST SDDeviceAllocRequest(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ request pointer or NULL if not avialable.
+        </return>
+        <notes>
+ 
+        </notes>
+        <seeAlso>
+SDDEVICE_CALL_REQUEST_FUNC
+        </seeAlso>
+        <seeAlso>
+SDDeviceFreeRequest
+        </seeAlso>
+
+    </function>
+    <function description='Free a request structure.'>
+        <functionName>
+SDDeviceFreeRequest
+        </functionName>
+        <prototype>
+ void SDDeviceFreeRequest(PSDDEVICE pDevice, PSDREQUEST pRequest)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <input>
+  pRequest  - request allocated by SDDeviceAllocRequest().
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ none
+        </return>
+        <notes>
+ 
+        </notes>
+        <seeAlso>
+SDDEVICE_CALL_REQUEST_FUNC
+        </seeAlso>
+        <seeAlso>
+SDDeviceAllocRequest
+        </seeAlso>
+
+    </function>
+    <function description='Register an interrupt handler for a device.'>
+        <functionName>
+SDDEVICE_SET_IRQ_HANDLER
+        </functionName>
+        <prototype>
+ void SDDEVICE_SET_IRQ_HANDLER(PSDDEVICE pDevice, 
+                                            void (*pIrqFunction)(PVOID pContext),
+                                            PVOID pContext)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <input>
+  pIrqFunction  - the interrupt function to execute.
+        </input>
+        <input>
+  pContext  - context value passed into interrupt routine.
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ none
+        </return>
+        <notes>
+ The registered routine will be called upon each card interrupt.
+          The interrupt function should acknowledge the interrupt when it is
+          ready to handle more interrupts using:
+          SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_ACK_IRQ, NULL, 0);
+          The interrupt handler can perform synchronous request calls.
+        </notes>
+        <seeAlso>
+SDDEVICE_SET_ASYNC_IRQ_HANDLER
+        </seeAlso>
+
+    </function>
+    <function description='Register an asynchronous interrupt handler for a device.'>
+        <functionName>
+SDDEVICE_SET_ASYNC_IRQ_HANDLER
+        </functionName>
+        <prototype>
+ void SDDEVICE_SET_ASYNC_IRQ_HANDLER(PSDDEVICE pDevice, 
+                                            void (*pIrqAsyncFunction)(PVOID pContext),
+                                            PVOID pContext)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <input>
+  pIrqAsyncFunction  - the interrupt function to execute.
+        </input>
+        <input>
+  pContext  - context value passed into interrupt routine.
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ none
+        </return>
+        <notes>
+ The registered routine will be called upon each card interrupt.
+          The interrupt function should acknowledge the interrupt when it is
+          ready to handle more interrupts using:
+          SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_ACK_IRQ, NULL, 0);
+          The interrupt handler can not perform any synchronous request calls.
+          Using this call provides a faster interrupt dispatch, but limits all
+          requests to asynchronous mode.
+        </notes>
+        <seeAlso>
+SDDEVICE_SET_IRQ_HANDLER
+        </seeAlso>
+
+    </function>
+    <function description='Get the SDIO capabilities rgeister.'>
+        <functionName>
+SDDEVICE_GET_SDIOCARD_CAPS
+        </functionName>
+        <prototype>
+ UINT8 SDDEVICE_GET_SDIOCARD_CAPS(PSDDEVICE pDevice)
+        </prototype>
+        <input>
+  pDevice   - the target device for this request
+        </input>
+        <output>
+ none
+        </output>
+        <return>
+ SD capabilities
+        </return>
+        <notes>
+ See SD specification for decoding of these capabilities.
+        </notes>
+        <seeAlso>
+SDDEVICE_GET_SDIO_CARD_CAPS
+        </seeAlso>
+
+    </function>
+</documentation>
+</documentationPackage>

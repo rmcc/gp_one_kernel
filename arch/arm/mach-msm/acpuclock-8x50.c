@@ -1,58 +1,19 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/*
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 
 #include <linux/kernel.h>
@@ -82,7 +43,6 @@
 #define SCPLL_FSM_CTL_EXT_ADDR (MSM_SCPLL_BASE + 0x10)
 
 struct clkctl_acpu_speed {
-	unsigned int     use_for_scaling;
 	unsigned int     a11clk_khz;
 	int              pll;
 	unsigned int     a11clk_src_sel;
@@ -92,69 +52,46 @@ struct clkctl_acpu_speed {
 	unsigned int     sc_core_src_sel_mask;
 	unsigned int     sc_l_value;
 	int              vdd;
-	unsigned long    lpj; /* loops_per_jiffy */
 };
 
 struct clkctl_acpu_speed acpu_freq_tbl[] = {
-	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 0, 0, 0, 0, 1000},
-	{ 0, 48000, ACPU_PLL_1, 1, 0xF, 0, 0, 0, 0, 1000},
-	{ 0, 64000, ACPU_PLL_1, 1, 0xB, 0, 0, 0, 0, 1000},
-	{ 0, 96000, ACPU_PLL_1, 1, 7, 0, 0, 0, 0, 1000},
-	{ 0, 128000, ACPU_PLL_1, 1, 5, 0, 0, 2, 0, 1000},
-	{ 0, 192000, ACPU_PLL_1, 1, 3, 0, 0, 0, 0, 1000},
-	/* 235.93 on CDMA only. */
-	{ 1, 245000, ACPU_PLL_0, 4, 0, 0, 0, 0, 0, 1000},
-	{ 0, 256000, ACPU_PLL_1, 1, 2, 0, 0, 0, 0, 1000},
-	{ 1, 384000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xA, 1000},
-	{ 0, 422400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xB, 1000},
-	{ 0, 460800, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xC, 1000},
-	{ 0, 499200, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xD, 1025},
-	{ 0, 537600, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xE, 1050},
-	{ 1, 576000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xF, 1050},
-	{ 0, 614400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x10, 1075},
-	{ 0, 652800, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x11, 1100},
-	{ 0, 691200, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x12, 1125},
-	{ 0, 729600, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x13, 1150},
-	{ 1, 768000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x14, 1150},
-	{ 0, 806400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x15, 1175},
-	{ 0, 844800, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x16, 1200},
-	{ 0, 883200, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x17, 1225},
-	{ 0, 921600, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x18, 1250},
-	{ 0, 960000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x19, 1250},
-	{ 1, 998400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x1A, 1250},
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ 19200, ACPU_PLL_TCXO, 0, 0, 0, 0, 0, 0, 0},
+	{ 48000, ACPU_PLL_1, 1, 0xF, 0, 0, 0, 0, 0},
+	{ 64000, ACPU_PLL_1, 1, 0xB, 0, 0, 0, 0, 0},
+	{ 96000, ACPU_PLL_1, 1, 7, 0, 0, 0, 0, 0},
+	{ 128000, ACPU_PLL_1, 1, 5, 0, 0, 2, 0, 0},
+	{ 192000, ACPU_PLL_1, 1, 3, 0, 0, 0, 0, 0},
+	{ 245000, ACPU_PLL_0, 4, 0, 0, 0, 0, 0, 0}, /* 235.93 on CDMA */
+	{ 256000, ACPU_PLL_1, 1, 2, 0, 0, 0, 0, 0},
+	{ 384000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xA, 0},
+	{ 422400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xB, 0},
+	{ 460800, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xC, 0},
+	{ 499200, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xD, 0},
+	{ 537600, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xE, 0},
+	{ 576000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0xF, 0},
+	{ 614400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x10, 0},
+	{ 652800, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x11, 0},
+	{ 691200, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x12, 0},
+	{ 729600, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x13, 0},
+	{ 768000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x14, 0},
+	{ 806400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x15, 0},
+	{ 844800, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x16, 0},
+	{ 883200, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x17, 0},
+	{ 921600, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x18, 0},
+	{ 960000, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x19, 0},
+	{ 998400, ACPU_PLL_3, 0, 0, 0, 0, 1, 0x1A, 0},
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
 #ifdef CONFIG_CPU_FREQ_MSM
-static struct cpufreq_frequency_table freq_table[20];
-
-static void __init cpufreq_table_init(void)
-{
-	unsigned int i;
-	unsigned int freq_cnt = 0;
-
-	/* Construct the freq_table table from acpu_freq_tbl since the
-	 * freq_table values need to match frequencies specified in
-	 * acpu_freq_tbl and acpu_freq_tbl needs to be fixed up during init.
-	 */
-	for (i = 0; acpu_freq_tbl[i].a11clk_khz != 0
-			&& freq_cnt < ARRAY_SIZE(freq_table)-1; i++) {
-		if (acpu_freq_tbl[i].use_for_scaling) {
-			freq_table[freq_cnt].index = freq_cnt;
-			freq_table[freq_cnt].frequency
-				= acpu_freq_tbl[i].a11clk_khz;
-			freq_cnt++;
-		}
-	}
-
-	/* freq_table not big enough to store all usable freqs. */
-	BUG_ON(acpu_freq_tbl[i].a11clk_khz != 0);
-
-	freq_table[freq_cnt].index = freq_cnt;
-	freq_table[freq_cnt].frequency = CPUFREQ_TABLE_END;
-
-	pr_info("%d scaling frequencies supported.\n", freq_cnt);
-}
+static struct cpufreq_frequency_table freq_table[] = {
+	{ 0, 245000 },
+	{ 1, 384000 },
+	{ 2, 576000 },
+	{ 3, 768000 },
+	{ 4, 998400 },
+	{ 5, CPUFREQ_TABLE_END },
+};
 #endif
 
 struct clock_state {
@@ -165,8 +102,6 @@ struct clock_state {
 	uint32_t			vdd_switch_time_us;
 	unsigned long			power_collapse_khz;
 	unsigned long			wait_for_irq_khz;
-	unsigned int			max_vdd;
-	int (*acpu_set_vdd) (int mvolts);
 };
 
 static struct clock_state drv_state = { 0 };
@@ -330,22 +265,9 @@ void config_switching_pll(void)
 	writel(regval, SPSS_CLK_SEL_ADDR);
 }
 
-static int acpuclk_set_vdd_level(int vdd)
-{
-	if (drv_state.acpu_set_vdd)
-		return drv_state.acpu_set_vdd(vdd);
-	else {
-		/* Assume that the PMIC supports scaling the processor
-		 * to its maximum frequency at its default voltage.
-		 */
-		return 0;
-	}
-}
-
-int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
+int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 {
 	struct clkctl_acpu_speed *tgt_s, *strt_s;
-	int rc = 0;
 
 	strt_s = drv_state.current_speed;
 
@@ -360,20 +282,8 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 	if (tgt_s->a11clk_khz == 0)
 		return -EINVAL;
 
-	if (reason == SETRATE_CPUFREQ) {
+	if (!for_power_collapse)
 		mutex_lock(&drv_state.lock);
-
-		/* Increase VDD if needed. */
-		if (tgt_s->vdd > strt_s->vdd) {
-			rc = acpuclk_set_vdd_level(tgt_s->vdd);
-			if (rc) {
-				printk(KERN_ERR
-					"acpuclock: Unable to increase ACPU "
-					"vdd.\n");
-				goto out;
-			}
-		}
-	}
 
 	if (strt_s->pll != ACPU_PLL_3 && tgt_s->pll != ACPU_PLL_3) {
 		config_pll(tgt_s);
@@ -391,25 +301,10 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 	/* Update the driver state with the new clock freq */
 	drv_state.current_speed = tgt_s;
 
-	/* Re-adjust lpj for the new clock speed. */
-	loops_per_jiffy = tgt_s->lpj;
-
-	/* Nothing else to do for power collapse or SWFI. */
-	if (reason != SETRATE_CPUFREQ)
-		return 0;
-
-	/* Drop VDD level if we can. */
-	if (tgt_s->vdd < strt_s->vdd) {
-		rc = acpuclk_set_vdd_level(tgt_s->vdd);
-		if (rc)
-			printk(KERN_ERR
-				"acpuclock: Unable to drop ACPU vdd.\n");
-	}
-out:
-	if (reason == SETRATE_CPUFREQ)
+	if (!for_power_collapse)
 		mutex_unlock(&drv_state.lock);
 
-	return rc;
+	return 0;
 }
 
 static void __init acpuclk_init(void)
@@ -469,6 +364,8 @@ static void __init acpuclk_init(void)
 	drv_state.current_speed = speed;
 
 	printk(KERN_INFO "ACPU running at %d KHz\n", speed->a11clk_khz);
+
+	acpuclk_set_rate(998400000, 0);
 }
 
 unsigned long acpuclk_get_rate(void)
@@ -484,86 +381,15 @@ uint32_t acpuclk_get_switch_time(void)
 unsigned long acpuclk_power_collapse(void)
 {
 	int ret = acpuclk_get_rate();
-	acpuclk_set_rate(drv_state.power_collapse_khz, SETRATE_PC);
+	acpuclk_set_rate(drv_state.power_collapse_khz, 1);
 	return ret * 1000;
 }
 
 unsigned long acpuclk_wait_for_irq(void)
 {
 	int ret = acpuclk_get_rate();
-	acpuclk_set_rate(drv_state.wait_for_irq_khz, SETRATE_SWFI);
+	acpuclk_set_rate(drv_state.wait_for_irq_khz, 1);
 	return ret * 1000;
-}
-
-/* Spare register populated with efuse data on max ACPU freq. */
-#define CT_CSR_PHYS		0xA8700000
-#define TCSR_SPARE2_ADDR	(ct_csr_base + 0x60)
-
-static void __init acpu_freq_tbl_fixup(void)
-{
-	void __iomem *ct_csr_base;
-	uint32_t tcsr_spare2;
-	unsigned int max_acpu_khz;
-	unsigned int i;
-
-	ct_csr_base = ioremap(CT_CSR_PHYS, PAGE_SIZE);
-	BUG_ON(ct_csr_base == NULL);
-
-	tcsr_spare2 = readl(TCSR_SPARE2_ADDR);
-
-	/* Check if the register is supported and meaningful. */
-	if ((tcsr_spare2 & 0xFF00) != 0xA500) {
-		pr_info("Efuse data on Max ACPU freq not present.\n");
-		goto skip_efuse_fixup;
-	}
-
-	switch (tcsr_spare2 & 0xF0) {
-	case 0x30:
-		max_acpu_khz = 768000;
-		break;
-	case 0x20:
-	case 0x00:
-		max_acpu_khz = 998400;
-		break;
-	case 0x10:
-		max_acpu_khz = 1267200;
-		break;
-	default:
-		pr_warning("Invalid efuse data (%x) on Max ACPU freq!\n",
-				tcsr_spare2);
-		goto skip_efuse_fixup;
-	}
-
-	pr_info("Max ACPU freq from efuse data is %d KHz\n", max_acpu_khz);
-
-	for (i = 0; acpu_freq_tbl[i].a11clk_khz != 0; i++) {
-		if (acpu_freq_tbl[i].a11clk_khz > max_acpu_khz) {
-			acpu_freq_tbl[i].a11clk_khz = 0;
-			break;
-		}
-	}
-
-skip_efuse_fixup:
-	iounmap(ct_csr_base);
-	BUG_ON(drv_state.max_vdd == 0);
-	for (i = 0; acpu_freq_tbl[i].a11clk_khz != 0; i++) {
-		if (acpu_freq_tbl[i].vdd > drv_state.max_vdd) {
-			acpu_freq_tbl[i].a11clk_khz = 0;
-			break;
-		}
-	}
-}
-
-/* Initalize the lpj field in the acpu_freq_tbl. */
-static void __init lpj_init(void)
-{
-	int i;
-	const struct clkctl_acpu_speed *base_clk = drv_state.current_speed;
-	for (i = 0; acpu_freq_tbl[i].a11clk_khz; i++) {
-		acpu_freq_tbl[i].lpj = cpufreq_scale(loops_per_jiffy,
-						base_clk->a11clk_khz,
-						acpu_freq_tbl[i].a11clk_khz);
-	}
 }
 
 void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
@@ -575,14 +401,9 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	drv_state.vdd_switch_time_us = clkdata->vdd_switch_time_us;
 	drv_state.power_collapse_khz = clkdata->power_collapse_khz;
 	drv_state.wait_for_irq_khz = clkdata->wait_for_irq_khz;
-	drv_state.max_vdd = clkdata->max_vdd;
-	drv_state.acpu_set_vdd = clkdata->acpu_set_vdd;
 
-	acpu_freq_tbl_fixup();
 	acpuclk_init();
-	lpj_init();
 #ifdef CONFIG_CPU_FREQ_MSM
-	cpufreq_table_init();
 	cpufreq_frequency_table_get_attr(freq_table, smp_processor_id());
 #endif
 

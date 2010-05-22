@@ -3078,7 +3078,10 @@ static int bind_con_driver(const struct consw *csw, int first, int last,
 
 		if (k >= 0) {
 			vc = vc_cons[k].d;
+/* FIH_ADQ, Ming { */
+/* Keep bootloader image displaying */
 			update_screen(vc);
+/* } FIH_ADQ, Ming */
 		}
 	} else
 		printk("to %s\n", desc);

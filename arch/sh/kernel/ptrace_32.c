@@ -22,6 +22,7 @@
 #include <linux/audit.h>
 #include <linux/seccomp.h>
 #include <linux/tracehook.h>
+#include <linux/marker.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -232,6 +233,9 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	long ret = 0;
 
+	trace_mark(kernel_arch_syscall_entry, "syscall_id %d ip #p%ld",
+		regs->regs[3], instruction_pointer(regs));
+
 	secure_computing(regs->regs[0]);
 
 	if (test_thread_flag(TIF_SYSCALL_TRACE) &&
@@ -254,6 +258,8 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 asmlinkage void do_syscall_trace_leave(struct pt_regs *regs)
 {
 	int step;
+
+	trace_mark(kernel_arch_syscall_exit, MARK_NOARGS);
 
 	if (unlikely(current->audit_context))
 		audit_syscall_exit(AUDITSC_RESULT(regs->regs[0]),

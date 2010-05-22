@@ -59,6 +59,7 @@ obj-$(CONFIG_HIBERNATION)	+= swsusp.o suspend.o \
 obj64-$(CONFIG_HIBERNATION)	+= swsusp_asm64.o
 obj-$(CONFIG_MODULES)		+= module.o module_$(CONFIG_WORD_SIZE).o
 obj-$(CONFIG_44x)		+= cpu_setup_44x.o
+obj-$(USE_IMMEDIATE)		+= immediate.o
 
 extra-$(CONFIG_PPC_STD_MMU)	:= head_32.o
 extra-$(CONFIG_PPC64)		:= head_64.o

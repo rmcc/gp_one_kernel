@@ -264,7 +264,9 @@ sysc_do_restart:
 	larl	%r10,sys_call_table_emu  # use 31 bit emulation system calls
 sysc_noemu:
 #endif
-	tm	__TI_flags+7(%r9),(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT)
+	l	%r8,__TI_flags+7(%r9)
+	n	%r8,BASED(.Lc_tif_syscall_trace_or_audit_or_kernel_trace)
+	ltr	%r8,%r8
 	lgf	%r8,0(%r7,%r10) # load address of system call routine
 	jnz	sysc_tracesys
 	basr	%r14,%r8	# call sys_xxxx
@@ -388,7 +390,9 @@ sysc_tracego:
 	basr	%r14,%r8		# call sys_xxx
 	stg	%r2,SP_R2(%r15)		# store return value
 sysc_tracenogo:
-	tm	__TI_flags+7(%r9),(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT)
+	l	%r8,__TI_flags+7(%r9)
+	n	%r8,BASED(.Lc_tif_syscall_trace_or_audit_or_kernel_trace)
+	ltr	%r8,%r8
 	jz	sysc_return
 	la	%r2,SP_PTREGS(%r15)	# load pt_regs
 	la	%r3,1
@@ -1049,6 +1053,8 @@ cleanup_io_leave_insn:
 		.align	4
 .Lconst:
 .Lnr_syscalls:	.long	NR_syscalls
+.Lc_tif_syscall_trace_or_audit_or_kernel_trace:
+		.long	_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT|_TIF_KERNEL_TRACE
 .L0x0130:	.short	0x130
 .L0x0140:	.short	0x140
 .L0x0150:	.short	0x150

@@ -2592,6 +2592,13 @@ L:	linux-security-module@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/chrisw/lsm-2.6.git
 S:	Supported
 
+LINUX TRACE TOOLKIT NEXT GENERATION
+P:	Mathieu Desnoyers
+M:	mathieu.desnoyers@polymtl.ca
+L:	ltt-dev@listserv.shafik.org
+W:	http://ltt.polymtl.ca
+S:	Maintained
+
 LM83 HARDWARE MONITOR DRIVER
 P:	Jean Delvare
 M:	khali@linux-fr.org

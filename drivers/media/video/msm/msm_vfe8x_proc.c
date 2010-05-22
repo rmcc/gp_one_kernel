@@ -1,59 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
- *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
- *
- * START
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- */
+/*
+* Copyright (c) 2008-2009 QUALCOMM USA, INC.
+* 
+* All source code in this file is licensed under the following license
+* 
+* This program is free software; you can redistribute it and/or
+* modify it under the terms of the GNU General Public License
+* version 2 as published by the Free Software Foundation.
+* 
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* See the GNU General Public License for more details.
+* 
+* You should have received a copy of the GNU General Public License
+* along with this program; if not, you can find it at http://www.fsf.org
+*/
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
@@ -127,8 +88,6 @@ struct msm_vfe8x_ctrl_t {
 
 	int vfeirq;
 	void __iomem *vfebase;
-
-	void *syncdata;
 };
 static struct msm_vfe8x_ctrl_t *ctrl;
 static irqreturn_t vfe_parse_irq(int irq_num, void *data);
@@ -457,15 +416,13 @@ static void vfe_write_lens_roll_off_table(
 
 	/* first pack and write init table */
 	for (i = 0; i < VFE_ROLL_OFF_INIT_TABLE_SIZE; i++) {
-		data = (((uint32_t)(*initR)) & 0x0000FFFF) |
-			(((uint32_t)(*initGr)) << 16);
+		data = ((uint32_t)(*initR)) | (((uint32_t)(*initGr)) << 16);
 		initR++;
 		initGr++;
 
 		writel(data, ctrl->vfebase + VFE_DMI_DATA_LO);
 
-		data = (((uint32_t)(*initB)) & 0x0000FFFF) |
-			(((uint32_t)(*initGr))<<16);
+		data = ((uint32_t)(*initB)) | (((uint32_t)(*initGr))<<16);
 		initB++;
 		initGb++;
 
@@ -479,15 +436,13 @@ static void vfe_write_lens_roll_off_table(
 
 	/* pack and write delta table */
 	for (i = 0; i < VFE_ROLL_OFF_DELTA_TABLE_SIZE; i++) {
-		data = (((int32_t)(*pDeltaR)) & 0x0000FFFF) |
-			(((int32_t)(*pDeltaGr))<<16);
+		data = ((uint32_t)(*pDeltaR)) | (((uint32_t)(*pDeltaGr))<<16);
 		pDeltaR++;
 		pDeltaGr++;
 
 		writel(data, ctrl->vfebase + VFE_DMI_DATA_LO);
 
-		data = (((int32_t)(*pDeltaB)) & 0x0000FFFF) |
-			(((int32_t)(*pDeltaGb))<<16);
+		data = ((uint32_t)(*pDeltaB)) | (((uint32_t)(*pDeltaGb))<<16);
 		pDeltaB++;
 		pDeltaGb++;
 
@@ -864,7 +819,7 @@ vfe_proc_ops(enum VFE_MESSAGE_ID id, void *msg, size_t len)
 		break;
 	}
 
-	ctrl->resp->vfe_resp(rp, MSM_CAM_Q_VFE_MSG, ctrl->syncdata);
+	ctrl->resp->vfe_resp(rp, MSM_CAM_Q_VFE_MSG);
 }
 
 static void vfe_send_msg_no_payload(enum VFE_MESSAGE_ID id)
@@ -1971,7 +1926,7 @@ static irqreturn_t vfe_parse_irq(int irq_num, void *data)
 }
 
 int vfe_cmd_init(struct msm_vfe_resp *presp,
-	struct platform_device *pdev, void *sdata)
+	struct platform_device *pdev)
 {
 	struct resource	*vfemem, *vfeirq, *vfeio;
 	int rc;
@@ -2039,7 +1994,6 @@ int vfe_cmd_init(struct msm_vfe_resp *presp,
 	spin_lock_init(&ctrl->tasklet_lock);
 	INIT_LIST_HEAD(&ctrl->tasklet_q);
 
-	ctrl->syncdata = sdata;
 	return 0;
 
 cmd_init_failed3:

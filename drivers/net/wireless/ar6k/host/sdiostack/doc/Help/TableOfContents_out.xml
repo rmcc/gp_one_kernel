@@ -1,0 +1,417 @@
+<!-- DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN" -->
+<HTML>
+<HEAD>
+<meta name="GENERATOR" content="Microsoft&amp;reg; HTML Help Workshop 4.1"/>
+<!-- Sitemap 1.0 -->
+</HEAD><BODY>
+<UL>
+	<LI/> <OBJECT type="text/sitemap">
+		<param name="Name" value="Welcome"/>
+		<param name="Local" value="Welcome.htm"/>
+		<param name="ImageNumber" value="13"/>
+		</OBJECT>
+	<LI/> <OBJECT type="text/sitemap">
+		<param name="Name" value="List of Tables and Figures"/>
+		<param name="Local" value="ListOfTablesAndFigures.htm"/>
+		<param name="ImageNumber" value="13"/>
+		</OBJECT>
+	<LI/> <OBJECT type="text/sitemap">
+		<param name="Name" value="QuickStart Guide"/>
+		<param name="Local" value="quickstart.htm"/>
+		</OBJECT>
+	<UL>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="SDIO Function Drivers"/>
+			<param name="Local" value="sdio_peripheral_qs.htm"/>
+			<param name="ImageNumber" value="41"/>
+			</OBJECT>
+	</UL>
+	<LI/> <OBJECT type="text/sitemap">
+		<param name="Name" value="Embedded SDIO Stack"/>
+		<param name="Local" value="emsdio_overview.htm"/>
+		</OBJECT>
+	<UL>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="SD/SDIO Overview"/>
+			<param name="Local" value="emsdio_sdsdio_overview.htm"/>
+			<param name="ImageNumber" value="17"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Stack Architecture "/>
+			<param name="Local" value="emsdio_architecture.htm"/>
+			<param name="ImageNumber" value="17"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Card Function Drivers"/>
+			<param name="Local" value="emsdio_cardperiph_drivers.htm"/>
+			<param name="ImageNumber" value="17"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Host Controller Drivers"/>
+			<param name="Local" value="emsdio_hostcontroller_drivers.htm"/>
+			<param name="ImageNumber" value="17"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Developing Card Function Drivers"/>
+			<param name="Local" value="peripheral_development_overview.htm"/>
+			</OBJECT>
+		<UL>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Driver Structure"/>
+				<param name="Local" value="periph_structure.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Driver Callbacks"/>
+				<param name="Local" value="periph_callbacks.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="I/O Requests"/>
+				<param name="Local" value="periph_io_requests.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Using Interrupts"/>
+				<param name="Local" value="periph_using_irqs.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+		</UL>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Driver Support Routines"/>
+			<param name="Local" value="misc_support_routines.htm"/>
+			</OBJECT>
+		<UL>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Memory Allocation"/>
+				<param name="Local" value="misc_memory.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Debugging"/>
+				<param name="Local" value="misc_debugging.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Synchronization "/>
+				<param name="Local" value="misc_synchronization.htm"/>
+				<param name="ImageNumber" value="17"/>
+				</OBJECT>
+		</UL>
+	</UL>
+	<LI/> <OBJECT type="text/sitemap">
+		<param name="Name" value="Reference"/>
+		<param name="Local" value="reference_top.htm"/>
+		</OBJECT>
+	<UL>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Function Driver Interface"/>
+			<param name="Local" value="reference_periph.htm"/>
+			</OBJECT>
+		<UL>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDIO_RegisterFunction()"/>
+				<param name="Local" value="function_driver.htm#FUNC__SDIO_RegisterFunction"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDIO_UnregisterFunction()"/>
+				<param name="Local" value="function_driver.htm#FUNC__SDIO_UnregisterFunction"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Probe()"/>
+				<param name="Local" value="function_driver.htm#func_probe"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="Remove()"/>
+				<param name="Local" value="function_driver.htm#func_remove"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_IS_SDIO_REV_GTEQ_1_10"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_IS_SDIO_REV_GTEQ_1_10"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_IS_SD_REV_GTEQ_1_10"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_IS_SD_REV_GTEQ_1_10"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_IS_MMC_REV_GTEQ_4_0"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_IS_MMC_REV_GTEQ_4_0"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_IS_CARD_WP_ON"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_IS_CARD_WP_ON"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_FUNCNO"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNCNO"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_FUNC_CLASS"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_CLASS"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_FUNC_CISPTR"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_CISPTR"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_FUNC_CSAPTR"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_CSAPTR"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_COMMON_CISPTR"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_COMMON_CISPTR"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIO_CARD_CAPS"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_CARD_CAPS"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_CARD_FLAGS"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_CARD_FLAGS"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_CARD_RCA"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_CARD_RCA"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_OPER_CLOCK"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_OPER_CLOCK"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_MAX_CLOCK"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_MAX_CLOCK"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_OPER_BLOCK_LEN"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_OPER_BLOCK_LEN"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_MAX_BLOCK_LEN"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_MAX_BLOCK_LEN"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_OPER_BLOCKS"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_OPER_BLOCKS"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_MAX_BLOCKS"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_MAX_BLOCKS"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_CARDCSD"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_CARDCSD"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_BUSWIDTH"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_BUSWIDTH"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_IS_BUSMODE_SPI"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_IS_BUSMODE_SPI"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_CALL_REQUEST_FUNC"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_CALL_REQUEST_FUNC"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_CALL_CONFIG_FUNC"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_CALL_CONFIG_FUNC"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDeviceAllocRequest"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDeviceAllocRequest"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDeviceFreeRequest"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDeviceFreeRequest"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_SET_IRQ_HANDLER"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_SET_IRQ_HANDLER"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_SET_ASYNC_IRQ_HANDLER"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_SET_ASYNC_IRQ_HANDLER"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDDEVICE_GET_SDIOCARD_CAPS"/>
+				<param name="Local" value="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIOCARD_CAPS"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDLIB_SetupCMD52Request"/>
+				<param name="Local" value="library.htm#FUNC__SDLIB_SetupCMD52Request"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDLIB_IssueCMD52"/>
+				<param name="Local" value="library.htm#FUNC__SDLIB_IssueCMD52"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDLIB_FindTuple"/>
+				<param name="Local" value="library.htm#FUNC__SDLIB_FindTuple"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDLIB_IssueConfig"/>
+				<param name="Local" value="library.htm#FUNC__SDLIB_IssueConfig"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDLIB_SetFunctionBlockSize"/>
+				<param name="Local" value="library.htm#FUNC__SDLIB_SetFunctionBlockSize"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SDLIB_PrintBuffer"/>
+				<param name="Local" value="library.htm#FUNC__SDLIB_PrintBuffer"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+		</UL>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Driver Support Routines"/>
+			<param name="Local" value="reference_misc.htm"/>
+			</OBJECT>
+		<UL>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="DBG_ASSERT"/>
+				<param name="Local" value="function_os.htm#FUNC__DBG_ASSERT"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="DBG_PRINT"/>
+				<param name="Local" value="function_os.htm#FUNC__DBG_PRINT"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="REL_PRINT"/>
+				<param name="Local" value="function_os.htm#FUNC__REL_PRINT"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="CriticalSectionInit"/>
+				<param name="Local" value="function_os.htm#FUNC__CriticalSectionInit"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="CriticalSectionAcquire"/>
+				<param name="Local" value="function_os.htm"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="CriticalSectionRelease"/>
+				<param name="Local" value="function_os.htm#FUNC__CriticalSectionRelease"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="CriticalSectionDelete"/>
+				<param name="Local" value="function_os.htm#FUNC__CriticalSectionDelete"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SemaphoreInitialize"/>
+				<param name="Local" value="function_os.htm#FUNC__SemaphoreInitialize"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SemaphoreDelete"/>
+				<param name="Local" value="function_os.htm#FUNC__SemaphoreDelete"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SemaphorePend"/>
+				<param name="Local" value="function_os.htm#FUNC__SemaphorePend"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SemaphorePendInterruptable"/>
+				<param name="Local" value="function_os.htm#FUNC__SemaphorePendInterruptable"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="SemaphorePost"/>
+				<param name="Local" value="function_os.htm#FUNC__SemaphorePost"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="KernelAlloc"/>
+				<param name="Local" value="function_os.htm#FUNC__KernelAlloc"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="KernelFree"/>
+				<param name="Local" value="function_os.htm#FUNC__KernelFree"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+			<LI/> <OBJECT type="text/sitemap">
+				<param name="Name" value="OSSleep"/>
+				<param name="Local" value="function_os.htm#FUNC__OSSleep"/>
+				<param name="ImageNumber" value="11"/>
+				</OBJECT>
+		</UL>
+	</UL>
+	<LI/> <OBJECT type="text/sitemap">
+		<param name="Name" value="Appendix"/>
+		<param name="Local" value="Appendix.htm"/>
+		</OBJECT>
+	<UL>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="FAQ"/>
+			<param name="Local" value="faq.htm"/>
+			<param name="ImageNumber" value="37"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Contact Information"/>
+			<param name="Local" value="contact.htm"/>
+			<param name="ImageNumber" value="11"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="Technical Support"/>
+			<param name="Local" value="TechSupport.htm"/>
+			<param name="ImageNumber" value="11"/>
+			</OBJECT>
+		<LI/> <OBJECT type="text/sitemap">
+			<param name="Name" value="License Agreement"/>
+			<param name="Local" value="license.htm"/>
+			<param name="ImageNumber" value="11"/>
+			</OBJECT>
+	</UL>
+</UL>
+</BODY></HTML>

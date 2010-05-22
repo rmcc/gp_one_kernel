@@ -1,0 +1,199 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Frequently Asked Questions</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->Frequently
+        Asked Questions<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" -->
+	<a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a>
+      <!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+<a name="BackToTop"></a>
+<p class="BODYTEXT"> <strong>General Topics:</strong>
+<table width="70%" border="0">
+    <tr>
+      <td><a href="#console">How do I redirect debug prints to a serial
+          port console on Linux?</a></td>
+    
+	</tr>
+	<tr>
+	 <td><a href="#debuglevel">What debug prints does the SDIO core/busdriver output, and 
+	 how do I set the debug level under Linux?</a></td></tr>
+	<tr>
+	  <td><a href="#pnpKconfig">The busdriver does not load because of the missing export : pnp_register_protocol.</a> </td>
+	  </tr>
+	<tr>
+	  <td><a href="#faq1">Does the stack support multi-slot hosts where each slot operates in a bussed configuration? </a> </td>
+	  </tr>
+	<tr>
+	  <td><a href="#faq2">
+Concerning my SOCKET Bluetooth card, how do I go about testing this Bluetooth CARD ? </a> </td>
+	  </tr>
+	<!-- <tr>
+	  <td><a href="#faq3">ques3</a> </td>
+	  </tr> -->
+	  </table>
+</p>
+<p class="HEADING3"><strong><a name="console"></a>How do I redirect debug prints to a serial
+          port console on Linux?</strong></p>
+<p class="BODYTEXT">For a standard PC platform, you can set up a default console
+  for the serial port using the kernel boot arguments: &quot;console=ttyS0,115200n8&quot;.
+  On most PCs ttyS0 is assigned to COM1 and ttyS1 is COM2. The syslog daemon
+   may also output duplicate debug messages to the console as the kernel also
+  buffers messages to a RAM buffer. To stop syslog from logging these extraneous
+  messages,
+  edit <font face="Courier New, Courier, mono">/etc/syslog.conf</font> and
+  comment
+  out
+  any entries that direct kernel messages (<font face="Courier New, Courier, mono">kern.*</font>) to<font face="Courier New, Courier, mono"> /dev/console</font>.</p>
+<blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="debuglevel"></a>What debug prints does the SDIO core/busdriver output, and 
+	 how do I set the debug level under Linux?</strong></p>
+<p class="BODYTEXT">The SDIO bus driver outputs errors and warnings by default.
+  Additional debug messages can be enabled by changing the default debug level.
+  The higher the debug level, the more verbose the outputs. The following debug
+  levels are used in the bus driver:
+<p class="BODYTEXT">
+<table width="70%" border="2" cellspacing="2" cellpadding="0">
+  <tr>
+        <td><strong>Level</strong></td>
+        <td><strong>Description</strong></td>
+    </tr>
+<tr>
+        <td>3</td>
+        <td>Errors</td>
+    </tr>
+<tr>
+        <td>4</td>
+        <td>Warnings</td>
+    </tr>
+ <tr>
+        <td>7</td>
+        <td>Stack startup/shutdown, function enumeration.</td>
+    </tr>
+ <tr>
+        <td>8</td>
+        <td>Function SDIO IRQ processing</td>
+    </tr>
+ <tr>
+        <td>9</td>
+        <td>SDIO Bus Requests</td>
+    </tr>
+ <tr>
+        <td>10</td>
+        <td>Card detect timer (for HCs that use polling)</td>
+    </tr>
+ <tr>
+        <td>11</td>
+        <td>Host controller events</td>
+    </tr>	
+</table>
+<p class="BODYTEXT"><br>
+      <br>
+      To set the debug level of the SDIO bus
+    driver, add the following parameter on
+    the <font face="Courier New, Courier, mono">insmod</font> command
+    line
+    after
+    the
+  name of the bus driver (<font face="Courier New, Courier, mono">sdio_busdriver.ko</font>):<br/> 
+  <font face="Courier New, Courier, mono">debuglevel=x , </font>where 'x' is
+  the debug
+  level number.
+  <p class="BODYTEXT">For example: <font face="Courier New, Courier, mono">insmod -f sdio_busdriver.lo debuglevel=7</font>
+<blockquote>
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="pnpKconfig"></a>The busdriver does not load because of the missing export : pnp_register_protocol.</strong></p>
+<p class="BODYTEXT">For linux kernels 2.6 or higher the SDIO bus driver uses
+  the PnP subsystem to register device instances. In order to enable
+  the PnP subsystem on non-x86 platforms, you must modify the <font face="Courier New, Courier, mono">Kconfig</font> file
+  located in <font face="Courier New, Courier, mono">/drivers/pnp</font>.
+  Comment
+  out the line: &quot;<font face="Courier New, Courier, mono"> depends on ISA</font>&quot;.
+  You will then need to run &quot;<font face="Courier New, Courier, mono">make
+  menuconfig</font>&quot;
+  and select &quot;<font face="Courier New, Courier, mono">Plug and Play Support</font>&quot;.
+  You do not need to enable &quot;<font face="Courier New, Courier, mono">ISA
+  Plug and Play</font>&quot; or &quot;<font face="Courier New, Courier, mono">PnP
+  Debug Messages</font>&quot;.</p>
+<blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="faq1"></a>Does the stack support multi-slot hosts where each slot operates in a bussed configuration?</strong></p>
+<p class="BODYTEXT">The stack supports a multi-slot host with independent SDIO
+  buses.  It does not support a controller that uses slots in a bussed configuration
+  (shared CMD, DAT, CLK lines). 
+Sharing a common clock is not a good design as some SD cards have different clocking
+  requirements.  Although you can usually switch the clock to the correct bus
+  rates on EVERY transaction 
+ there might be issues when you have a 4-bit SDIO card that needs the clock "always" on
+ in order for SDIO interrupts to operate.  There also electrical issues with
+ live removal/insertion of cards.</p>
+<blockquote>  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="faq2"></a>
+Concerning my SOCKET Bluetooth card, how do I go about testing this Bluetooth CARD? </strong></p>
+<p class="BODYTEXT">The bluetooth card requires that your kernel configuration includes bluetooth support.  This will build the HCI and L2CAP
+layers into the kernel.  To fully use the Bluetooth card you should setup the BlueZ stack tools for configuration and connection tasks.
+These are user mode tools that can be scripted or executed from a console.   
+Here is a link to the stack: (http://www.bluez.org/). </p>
+<blockquote>  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<!-- <p class="HEADING3"><strong><a name="faq3"></a>topic 3</strong></p>
+<p class="BODYTEXT"> </p>
+ <blockquote>  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote> -->
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

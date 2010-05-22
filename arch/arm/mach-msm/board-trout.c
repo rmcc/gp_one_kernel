@@ -1,7 +1,6 @@
 /* arch/arm/mach-msm/board-trout.c
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -29,6 +28,12 @@
 #include <linux/akm8976.h>
 #include <linux/sysdev.h>
 #include <linux/android_pmem.h>
+#ifdef CONFIG_USB_FUNCTION
+#include <linux/usb/mass_storage_function.h>
+#endif
+#ifdef CONFIG_USB_ANDROID
+#include <linux/usb/android.h>
+#endif
 
 #include <linux/delay.h>
 
@@ -57,15 +62,11 @@
 #include "board-trout.h"
 
 #include "gpio_chip.h"
-#include "pm.h"
 
 #include <mach/board.h>
-#include <mach/board_htc.h>
+#include <mach/msm_hsusb.h>
 #include <mach/msm_serial_hs.h>
-#include <mach/htc_pwrsink.h>
-#ifdef CONFIG_HTC_HEADSET
-#include <mach/htc_headset.h>
-#endif
+#include <mach/trout_pwrsink.h>
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 #include <linux/wifi_tiwlan.h>
 #endif
@@ -229,7 +230,6 @@ static int trout_ts_power(int on)
 	}
 	else {
 		gpio_set_value(tp_ls_gpio, 0);
-		udelay(50);
 		gpio_set_value(TROUT_GPIO_TP_EN, 0);
 		gpio_set_value(TROUT_GPIO_TP_I2C_PULL, 0);
 	}
@@ -291,6 +291,78 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("mt9t013", 0x6C >> 1),
 		/* .irq = TROUT_GPIO_TO_INT(TROUT_GPIO_CAM_BTN_STEP1_N), */
 	},
+};
+
+static struct android_pmem_platform_data android_pmem_pdata = {
+	.name = "pmem",
+	.start = MSM_PMEM_MDP_BASE,
+	.size = MSM_PMEM_MDP_SIZE,
+	.no_allocator = 1,
+	.cached = 1,
+};
+
+static struct android_pmem_platform_data android_pmem_adsp_pdata = {
+	.name = "pmem_adsp",
+	.start = MSM_PMEM_ADSP_BASE,
+	.size = MSM_PMEM_ADSP_SIZE,
+	.no_allocator = 0,
+	.cached = 0,
+};
+
+static struct android_pmem_platform_data android_pmem_camera_pdata = {
+	.name = "pmem_camera",
+	.start = MSM_PMEM_CAMERA_BASE,
+	.size = MSM_PMEM_CAMERA_SIZE,
+	.no_allocator = 0,
+	.cached = 0,
+};
+
+static struct android_pmem_platform_data android_pmem_gpu0_pdata = {
+	.name = "pmem_gpu0",
+	.start = MSM_PMEM_GPU0_BASE,
+	.size = MSM_PMEM_GPU0_SIZE,
+	.no_allocator = 1,
+	.cached = 0,
+	.buffered = 1,
+};
+
+static struct android_pmem_platform_data android_pmem_gpu1_pdata = {
+	.name = "pmem_gpu1",
+	.start = MSM_PMEM_GPU1_BASE,
+	.size = MSM_PMEM_GPU1_SIZE,
+	.no_allocator = 1,
+	.cached = 0,
+	.buffered = 1,
+};
+
+static struct platform_device android_pmem_device = {
+	.name = "android_pmem",
+	.id = 0,
+	.dev = { .platform_data = &android_pmem_pdata },
+};
+
+static struct platform_device android_pmem_adsp_device = {
+	.name = "android_pmem",
+	.id = 1,
+	.dev = { .platform_data = &android_pmem_adsp_pdata },
+};
+
+static struct platform_device android_pmem_gpu0_device = {
+	.name = "android_pmem",
+	.id = 2,
+	.dev = { .platform_data = &android_pmem_gpu0_pdata },
+};
+
+static struct platform_device android_pmem_gpu1_device = {
+	.name = "android_pmem",
+	.id = 3,
+	.dev = { .platform_data = &android_pmem_gpu1_pdata },
+};
+
+static struct platform_device android_pmem_camera_device = {
+	.name = "android_pmem",
+	.id = 4,
+	.dev = { .platform_data = &android_pmem_camera_pdata },
 };
 
 static struct timed_gpio timed_gpios[] = {
@@ -362,46 +434,8 @@ static struct platform_device sd_door_switch = {
 	},
 };
 
-#ifdef CONFIG_HTC_HEADSET
-static void h2w_config_cpld(int route)
-{
-	switch (route) {
-	case H2W_UART3:
-		gpio_set_value(TROUT_GPIO_H2W_SEL0, 0);
-		gpio_set_value(TROUT_GPIO_H2W_SEL1, 1);
-		break;
-	case H2W_GPIO:
-		gpio_set_value(TROUT_GPIO_H2W_SEL0, 0);
-		gpio_set_value(TROUT_GPIO_H2W_SEL1, 0);
-		break;
-	}
-}
-
-static void h2w_init_cpld(void)
-{
-	h2w_config_cpld(H2W_UART3);
-	gpio_set_value(TROUT_GPIO_H2W_CLK_DIR, 0);
-	gpio_set_value(TROUT_GPIO_H2W_DAT_DIR, 0);
-}
-
-static struct h2w_platform_data trout_h2w_data = {
-	.cable_in1		= TROUT_GPIO_CABLE_IN1,
-	.cable_in2		= TROUT_GPIO_CABLE_IN2,
-	.h2w_clk		= TROUT_GPIO_H2W_CLK_GPI,
-	.h2w_data		= TROUT_GPIO_H2W_DAT_GPI,
-	.debug_uart 		= H2W_UART3,
-	.config_cpld 		= h2w_config_cpld,
-	.init_cpld 		= h2w_init_cpld,
-};
-
-static struct platform_device trout_h2w = {
-	.name		= "h2w",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &trout_h2w_data,
-	},
-};
-#endif
+/* adjust eye diagram, disable vbusvalid interrupts */
+static int trout_phy_init_seq[] = { 0x40, 0x31, 0x1D, 0x0D, 0x1D, 0x10, -1 };
 
 static void trout_phy_reset(void)
 {
@@ -411,14 +445,102 @@ static void trout_phy_reset(void)
 	mdelay(10);
 }
 
-static void config_camera_on_gpios(void);
-static void config_camera_off_gpios(void);
+#ifdef CONFIG_USB_FUNCTION
+static char *trout_usb_functions[] = {
+#if defined(CONFIG_USB_FUNCTION_MASS_STORAGE) || defined(CONFIG_USB_FUNCTION_UMS)
+	"usb_mass_storage",
+#endif
+#ifdef CONFIG_USB_FUNCTION_ADB
+	"adb",
+#endif
+};
+
+static struct msm_hsusb_product trout_usb_products[] = {
+	{
+		.product_id     = 0x0c01,
+		.functions      = 0x00000001, /* "usb_mass_storage" only */
+	},
+	{
+		.product_id     = 0x0c02,
+		.functions      = 0x00000003, /* "usb_mass_storage" and "adb" */
+	},
+};
+#endif
+
+static struct msm_hsusb_platform_data msm_hsusb_pdata = {
+	.phy_reset	= trout_phy_reset,
+	.phy_init_seq	= trout_phy_init_seq,
+#ifdef CONFIG_USB_FUNCTION
+	.vendor_id	= 0x0bb4,
+	.product_id	= 0x0c02,
+	.version	= 0x0100,
+	.product_name	= "Android Phone",
+	.manufacturer_name = "HTC",
+
+	.functions = trout_usb_functions,
+	.num_functions = ARRAY_SIZE(trout_usb_functions),
+	.products  = trout_usb_products,
+	.num_products = ARRAY_SIZE(trout_usb_products),
+#endif
+};
+
+#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.buf_size	= 16384,
+	.vendor		= "HTC     ",
+	.product	= "Android Phone   ",
+	.release	= 0x0100,
+};
+
+static struct platform_device usb_mass_storage_device = {
+	.name	= "usb_mass_storage",
+	.id		= -1,
+	.dev		= {
+		.platform_data = &mass_storage_pdata,
+	},
+};
+#endif
+
+#ifdef CONFIG_USB_ANDROID
+static struct android_usb_platform_data android_usb_pdata = {
+	.vendor_id	= 0x0bb4,
+	.product_id	= 0x0c01,
+	.adb_product_id	= 0x0c02,
+	.version	= 0x0100,
+	.product_name	= "Android Phone",
+	.manufacturer_name = "HTC",
+	.nluns = 1,
+};
+
+static struct platform_device android_usb_device = {
+	.name	= "android_usb",
+	.id		= -1,
+	.dev		= {
+		.platform_data = &android_usb_pdata,
+	},
+};
+#endif
+
+static struct resource trout_ram_console_resource[] = {
+	{
+		.start	= MSM_RAM_CONSOLE_BASE,
+		.end	= MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device trout_ram_console_device = {
+	.name = "ram_console",
+	.id = -1,
+	.num_resources  = ARRAY_SIZE(trout_ram_console_resource),
+	.resource       = trout_ram_console_resource,
+};
+
 static struct msm_camera_device_platform_data msm_camera_device = {
 	.sensor_reset	= 108,
 	.sensor_pwd	= 85,
 	.vcm_pwd	= TROUT_GPIO_VCM_PWDN,
-	.config_gpio_on = config_camera_on_gpios,
-	.config_gpio_off = config_camera_off_gpios,
 };
 
 static struct platform_device trout_camera = {
@@ -479,14 +601,10 @@ static struct pwr_sink trout_pwrsink_table[] = {
 static struct pwr_sink_platform_data trout_pwrsink_data = {
 	.num_sinks	= ARRAY_SIZE(trout_pwrsink_table),
 	.sinks		= trout_pwrsink_table,
-	.suspend_late	= NULL,
-	.resume_early	= NULL,
-	.suspend_early	= NULL,
-	.resume_late	= NULL,
 };
 
 static struct platform_device trout_pwr_sink = {
-	.name = "htc_pwrsink",
+	.name = "trout_pwrsink",
 	.id = -1,
 	.dev	= {
 		.platform_data = &trout_pwrsink_data,
@@ -496,21 +614,6 @@ static struct platform_device trout_pwr_sink = {
 static struct platform_device trout_rfkill = {
 	.name = "trout_rfkill",
 	.id = -1,
-};
-
-static struct msm_pmem_setting pmem_setting = {
-	.pmem_start = MSM_PMEM_MDP_BASE,
-	.pmem_size = MSM_PMEM_MDP_SIZE,
-	.pmem_adsp_start = MSM_PMEM_ADSP_BASE,
-	.pmem_adsp_size = MSM_PMEM_ADSP_SIZE,
-	.pmem_gpu0_start = MSM_PMEM_GPU0_BASE,
-	.pmem_gpu0_size = MSM_PMEM_GPU0_SIZE,
-	.pmem_gpu1_start = MSM_PMEM_GPU1_BASE,
-	.pmem_gpu1_size = MSM_PMEM_GPU1_SIZE,
-	.pmem_camera_start = MSM_PMEM_CAMERA_BASE,
-	.pmem_camera_size = MSM_PMEM_CAMERA_SIZE,
-	.ram_console_start = MSM_RAM_CONSOLE_BASE,
-	.ram_console_size = MSM_RAM_CONSOLE_SIZE,
 };
 
 #ifdef CONFIG_WIFI_CONTROL_FUNC
@@ -596,20 +699,30 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_SERIAL_MSM_HS
 	&msm_device_uart_dm1,
 #endif
+	&msm_device_hsusb,
+#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
+	&usb_mass_storage_device,
+#endif
+#ifdef CONFIG_USB_ANDROID
+	&android_usb_device,
+#endif
 	&trout_nav_device,
 	&trout_reset_keys_device,
 	&android_leds,
 	&sd_door_switch,
 	&android_timed_gpios,
+	&android_pmem_device,
+	&android_pmem_adsp_device,
+	&android_pmem_gpu0_device,
+	&android_pmem_gpu1_device,
+	&android_pmem_camera_device,
+	&trout_ram_console_device,
 	&trout_camera,
 	&trout_rfkill,
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	&trout_wifi,
 #endif
-#ifdef CONFIG_HTC_HEADSET
-	&trout_h2w,
-#endif
-#ifdef CONFIG_HTC_PWRSINK
+#if defined(CONFIG_TROUT_PWRSINK)
 	&trout_pwr_sink,
 #endif
 	&trout_snd,
@@ -626,6 +739,19 @@ static void __init trout_init_irq(void)
 static uint opt_disable_uart3;
 
 module_param_named(disable_uart3, opt_disable_uart3, uint, 0);
+
+static int __init trout_serialno_setup(char *str)
+{
+#ifdef CONFIG_USB_FUNCTION
+	msm_hsusb_pdata.serial_number = str;
+#endif
+#ifdef CONFIG_USB_ANDROID
+	android_usb_pdata.serial_number = str;
+#endif
+	return 1;
+}
+
+__setup("androidboot.serialno=", trout_serialno_setup);
 
 static void trout_reset(void)
 {
@@ -694,13 +820,13 @@ static void config_gpio_table(uint32_t *table, int len)
 	}
 }
 
-static void config_camera_on_gpios(void)
+void config_camera_on_gpios(void)
 {
 	config_gpio_table(camera_on_gpio_table,
 		ARRAY_SIZE(camera_on_gpio_table));
 }
 
-static void config_camera_off_gpios(void)
+void config_camera_off_gpios(void)
 {
 	config_gpio_table(camera_off_gpio_table,
 		ARRAY_SIZE(camera_off_gpio_table));
@@ -731,12 +857,6 @@ static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
 };
 #endif
 
-static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR] = {
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].latency = 16000,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].latency = 12000,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency = 2000,
-};
-
 static void __init trout_init(void)
 {
 	int rc;
@@ -749,9 +869,6 @@ static void __init trout_init(void)
 	config_gpios();
 
 	msm_hw_reset_hook = trout_reset;
-
-	gpio_direction_output(system_rev < 5 ?
-			TROUT_4_TP_LS_EN : TROUT_5_TP_LS_EN, 0);
 
 	msm_acpu_clock_init(&trout_clock_data);
 
@@ -772,12 +889,11 @@ static void __init trout_init(void)
 		trout_y_axis.info.gpio = trout_4_y_axis_gpios;
 	}
 
+	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
+
 #ifdef CONFIG_SERIAL_MSM_HS
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
-	msm_add_usb_devices(trout_phy_reset);
-
-	msm_add_mem_devices(&pmem_setting);
 
 	rc = trout_init_mmc(system_rev);
 	if (rc)
@@ -791,7 +907,6 @@ static void __init trout_init(void)
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
-	msm_pm_set_platform_data(msm_pm_data);
 
 	/* SD card door should wake the device */
 	set_irq_wake(TROUT_GPIO_TO_INT(TROUT_GPIO_SD_DOOR_N), 1);
@@ -817,8 +932,6 @@ static void __init trout_fixup(struct machine_desc *desc, struct tag *tags,
 
 static void __init trout_map_io(void)
 {
-	msm_shared_ram_phys = 0x01F00000;
-
 	msm_map_common_io();
 	iotable_init(trout_io_desc, ARRAY_SIZE(trout_io_desc));
 	msm_clock_init(msm_clocks_7x01a, msm_num_clocks_7x01a);

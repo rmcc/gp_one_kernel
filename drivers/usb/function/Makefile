@@ -1,5 +1,12 @@
+power_supply-objs := power_supply_core.o
 
-obj-$(CONFIG_USB_MSM_OTG)		+= msm_otg.o
+ifeq ($(CONFIG_SYSFS),y)
+power_supply-objs += power_supply_sysfs.o
+endif
+
+ifeq ($(CONFIG_LEDS_TRIGGERS),y)
+power_supply-objs += power_supply_leds.o
+endif
 obj-$(CONFIG_USB_FUNCTION_MSM_HSUSB)	+= msm_hsusb.o
 obj-$(CONFIG_USB_FUNCTION_NULL)		+= null.o
 obj-$(CONFIG_USB_FUNCTION_NULL)		+= zero.o

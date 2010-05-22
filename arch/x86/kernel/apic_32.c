@@ -28,6 +28,7 @@
 #include <linux/acpi_pmtmr.h>
 #include <linux/module.h>
 #include <linux/dmi.h>
+#include <linux/marker.h>
 
 #include <asm/atomic.h>
 #include <asm/smp.h>
@@ -42,6 +43,9 @@
 #include <mach_apic.h>
 #include <mach_apicdef.h>
 #include <mach_ipi.h>
+
+#include <trace/irq.h>
+
 
 /*
  * Sanity check
@@ -630,7 +634,13 @@ void smp_apic_timer_interrupt(struct pt_regs *regs)
 	 * interrupt lock, which is the WrongThing (tm) to do.
 	 */
 	irq_enter();
+
+	trace_irq_entry(LOCAL_TIMER_VECTOR, regs);
+
 	local_apic_timer_interrupt();
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 
 	set_irq_regs(old_regs);
@@ -1275,6 +1285,9 @@ void smp_spurious_interrupt(struct pt_regs *regs)
 	unsigned long v;
 
 	irq_enter();
+
+	trace_irq_entry(SPURIOUS_APIC_VECTOR, regs);
+
 	/*
 	 * Check if this really is a spurious interrupt and ACK it
 	 * if it is a vectored one.  Just in case...
@@ -1288,6 +1301,9 @@ void smp_spurious_interrupt(struct pt_regs *regs)
 	printk(KERN_INFO "spurious APIC interrupt on CPU#%d, "
 	       "should never happen.\n", smp_processor_id());
 	__get_cpu_var(irq_stat).irq_spurious_count++;
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 }
 
@@ -1299,6 +1315,9 @@ void smp_error_interrupt(struct pt_regs *regs)
 	unsigned long v, v1;
 
 	irq_enter();
+
+	trace_irq_entry(ERROR_APIC_VECTOR, regs);
+
 	/* First tickle the hardware, only then report what went on. -- REW */
 	v = apic_read(APIC_ESR);
 	apic_write(APIC_ESR, 0);
@@ -1318,6 +1337,9 @@ void smp_error_interrupt(struct pt_regs *regs)
 	*/
 	printk(KERN_DEBUG "APIC error on CPU%d: %02lx(%02lx)\n",
 		smp_processor_id(), v , v1);
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 }
 

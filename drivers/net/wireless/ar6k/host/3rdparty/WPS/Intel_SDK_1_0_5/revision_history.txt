@@ -1,0 +1,350 @@
+11/17/06 Anand
+- Updated wireless support to conform to new spec version 1.0h
+Modified files include:
+
+wpa_supplicant:
+	common.h
+	config.c
+	config_file.c
+	driver_madwifi.c
+	events.c
+	wpa_supplicant.c
+	wsc_ie.c
+
+hostapd
+          ap.h
+          driver_madwifi.c
+          ieee802_1x.c
+          Makefile
+          wpa.c
+The Makefile is included so that the appropriate compiler flags are set to 
+enable new WSC-specific changes in this release.
+ 
+wsccmd
+          common/InbWlan/InbWlan.cpp (under compiler flag PROVISION_IE) 
+This adds the IE from Microsoft's Wireless Provisioning Service that is used
+to suppress XP clients from sending EAPOL-Start, especially for WEP networks.
+If you are updating an older release, be sure to enable this flag in the Makefile
+if you want this functionality.
+
+madwifi
+          madwifi-ng-1497/net80211/ieee80211_wireless.c
+          madwifi-ng-1497/tools/wireless_copy.h
+
+
+11/15/06 Vic
+Transport.cpp
+- Added size check on input data to ProcessMessage.
+RegProtoMsgs.cpp
+- Updated Key Wrap Authenticator processing so it will ignore 
+any padding at the end of the encrypted settings.
+
+11/10/06 Vic
+RegistrarSM.cpp
+- Added logic for AP to shut down EAP connection if it sees a WSC_NACK from an enrollee.
+
+11/9/06 Vic
+MasterControl.cpp
+- Fixed bug in setting EAP identity (in 1.0.3 was always indicating identity of wireless Registrar)
+
+11/1/06 Vic
+EnrolleeSM.cpp
+RegistrarSM.cpp
+- Added code to send NACKs in response to errors
+WscError.h
+- Added #defines for WSC message processing error codes
+
+9/21/06 Vic
+EnrolleeSM.cpp
+- Changed M2D timeout value to 15 seconds.
+WSCHeaders.h
+- Re-ordered fields in Probe Response structure and added RF Band field.
+MasterControl.cpp
+- Modifed Probe Response message handling to comply with spec version 1.0e.
+  Changed beacon IE processing logic so beacons will continue being sent up 
+  by the driver until an unconfigured AP is found.
+
+9/5/06  Anand
+madwifi-ng-1497/tools/wireless_copy.h
+    Changed #define IW_SCAN_MAX_DATA 4096 to
+    #define IW_SCAN_MAX_DATA 16384
+
+    Added new file madwifi-ng-1497-intel-changes.tar.gz for this change.
+
+8/24/06 Laura
+InbUPnPDev.cpp
+InbUPnPDev.h
+Added using MAC address get from UPnPWFAWLANConfig_PutWLANResponse, not hard coded one.
+
+8/22/06 Laura
+Info.cpp
+Info.h
+Added GetMac address routine, not using fake MAC address anymore.
+
+8/21/06 Laura
+InbWlan.cpp
+InbWlan.h
+Added a buffer for Beacon IE and Probe Response after the PORT is set
+
+MasterControl.cpp
+Enabled Beacon IE and Probe Response for client.
+
+
+8/10/06 Vic
+InbWlan.cpp
+- Increased buffer size length given to ReadData (and eventually to udp_read) 
+so that it matches the actual buffer size. 
+
+8/09/06 Laura
+MasterControl.cpp
+Fixed nwKey len problem and setBeaconIE for 2a (4.1.1) case.
+
+8/8/06 Vic
+RegProtocol.cpp
+Modified version check to only compare the high-order nibble, so minor version updates won't be rejected.
+
+7/27/06 Anand
+--------------------------Intel_1_0_3 release here
+7/26/06 Vic
+MasterControl.cpp
+Turned on useIE functionality all the time.
+WscCmd.cpp
+Removed menu option for get configured using IEs
+
+7/25/06 Vic
+
+driver_madwifi.c and MasterControl.cpp
+Fixed beacon IE processing problem
+
+WscCmd.cpp
+Updated version string
+
+EnrolleeSM.cpp
+Added code to send ACK in response to a late M2D message.
+
+---------------------
+7/20/06 anand
+- Intel_1_0_2 Release here
+
+7/20/06 anand
+- reverted hostapd to 1_0_1 version
+- wpa_supplicant changes (Vic) to process beacon logic
+
+
+7/18/06 Vic
+MasterControl.cpp
+Added code to automatically remove SetSelectedRegistrar data from AP after 120 seconds.
+
+7/17/06 Vic
+RegistrarSM.cpp
+Added logic for AP to send EAP_FAIL after M2D if no external Registars are subscribed to events.
+
+7/13/06 Vic
+WscCmd.cpp
+Added support for Registrar OOB Device Password file on UFD.
+
+7/13/06 Vic
+MasterControl.cpp
+Fixed problem in using correct SSID after configuring AP.
+Updated UFD support to match 1.0c spec, but still no support for Encrypted Settings.
+
+7/12/06 Vic
+RegistrarSM.cpp
+Put check on transport type so ACK message after Done is only sent over EAP transport.
+
+6/30/06 Vic
+MasterControl.cpp, InbWlan.cpp, InbWlan.h
+- Enabled probe request/response code, updated to match latest Atheros driver
+
+hostapd-0.4.8, files defconfig, driver_madwifi.c, eap-wsc.c, hostapd.eap_user,
+Makefile, template.conf, and wsc_ie.h
+- Updated with latest files from Atheros.
+
+6/29/06 Vic
+RegProtoMsgs.cpp
+- Added logic to skip unknown attributes in encrypted settings
+
+RegProtoTlv.cpp, RegProtoTlv.h, 
+- Updated Credential parsing logic to support optional Network Key Index and make code more easily
+  extensible to support multiple network keys (currently code is limited to only handling one key)
+- Updated Credential TLVs to support Key Provided Automatically and 802.1X Enabled.
+
+6/28/06 Vic
+MasterControl.cpp, MasterControl.h, RegProtocolTlv.h,RegProtocol.cpp, WscHeaders.h, WscCommon.h
+- Copied new SSID into settings for Registrar after configuring AP
+- Updated message processing to correspond to version 1.0b of spec
+
+6/26/06 Vic
+RegProtocol.cpp
+- Added check that M1's DevicePasswordId is a supported type
+
+InbUPnPCp.cpp
+- Put correct WLAN Event Type in PutWLANResponse message
+- Added statement on line 149 to make sure response is sent over the UPnP transport.
+
+InbUPnPDev.cpp
+- Initialized the WLANEvent state variable to a bogus ACK message
+
+6/5/06 Vic
+InbUPnPCp.cpp
+- Added proposed fix to state machine problem
+
+05/24/06  Vic
+RegProtoTlv.h
+- Fixed value of WSC_ID_SEL_REG_CFG_METHODS
+ 
+
+05/23/06  Vic
+RegProtocol.h
+RegProtocol.cpp
+- Added writeGenericCredentials method to output credential to UFD with all-zero MAC address
+MasterControl.cpp
+- Added call to writeGenericCredentials for unencrypted mode of UFD
+
+05/22/06	anand
+    - linux/OobUfd/OobUfd.cpp 
+      Bug Fix. Removed 'A' from directory name written onto USB.
+
+========== Release 1.0.1 Here  ===============================================
+5/17/06  Vic
+InbWlan.cpp
+- Fixed ieHdr.length field of OUI attribute of WSC IE (4 bytes)
+
+=========  Release 1.0.0 Here  =================================================
+5/15/06  Vic
+- Added copyright and license header comment in file headers.
+UdpLib.cpp 
+- Modified first parameter to select() call to be fd + 1.
+
+05/12/06 	anand
+- Cleaned up (MasterControl.cpp, WscCmd.cpp)
+
+05/11/06 Vic
+InbUPnPDev.cpp
+- Modified UPnP Event handler for type WLANEvent to include header with "fake" MAC address
+
+InbUPnPCp.cpp
+- Modified UPnP Event handler for type WLANEvent to ignore event header with type and "fake" MAC address
+
+UPnPMicroStack.c
+- Modified device descriptor tables to advertise the correct UPnP Service ID.
+
+05/11/06 	anand
+  README - Added documentation (cases 2b and 3b) about configuring client
+           using UFD.
+
+05/11/06 	anand
+anand - Added code to start supplicant after unencrypted settings are read
+from the USB key.
+WscCmd.cpp
+  - Moved code in CB_MAIN_START_WPA_SUPP case to a separate StartSupplicant
+    function.
+  - CB_MAIN_RESET_WPASUPP does not bail out if supplicant is NOT running.
+    calls StartSupplicant() if it is NOT running.
+MasterControl.cpp
+  - Do callback with CB_MAIN_RESET_WPASUPP after unencrypted settings are 
+    read from USB key.
+
+05/09/06 	anand
+  RegistrarSM.cpp
+    - Modified code to call SendStartMessage for UPNP_CP transport type also.
+05/09/06 	anand
+  Added code to avoid prompting for PIN when it has been read already
+  from the USB key.
+  MasterControl.h 
+  MasterControl.cpp 
+    - Added IsPinEntered() function, mb_pinEntered variable.
+  WscCmd.cpp 
+    - Logic to check if PIN had been entrered already thru USB key.
+
+05/09/06 	anand
+  OobUfd.cpp
+    - Changed USB filename for PIN read/write to be 00000000.WFA (not the last
+	  4 bytes of the MAC as done before).
+
+05/09/06 	anand
+  Info.cpp
+    - Modified to generate appropriate comment for USB_KEY ("PIN" -->
+      "PIN/Credential").
+
+05/08/06 Vic
+InbEap.h
+InbEap.cpp
+- Changed Vendor-Id to WFA SMI code 0x00372a
+
+InbWlan.h
+InbWlan.cpp
+- Modified OUI field in beacon and probe message headers to be 00 50 f2 04.
+
+RegProtocol.cpp
+- Made Manufacturer field up to 64 bytes in M2D message.
+
+05/08/06  rsnarjal
+WscCommon.h
+- Add uuid to S_CB_MAIN_REQUEST_PWD
+
+MasterControl.cpp
+- Handler for CB_SM: Pass uuid in CB_MAIN_REQUEST_PWD callback to WscCmd
+- SetDevicePassword: Pass uuid in SendSetSelRegistrar()
+- SendSetSelRegistrar: Replace CTlvEnrolleeNonce with CTlvUuid
+- Handler for CB_TRUPNP_DEV_SSR: Extract devPwdId, selRegCfgMethods, uuid and send to SetBeaconIE(). Also add call to SetProbeRespIE() with these params.
+- Updated calls to SetBeaconIE() and SetProbeRespIE() to match new argument list
+- SetBeaconIE(): Added devPwdId, selRegCfgMethods and uuid
+- SetProbeRespIE(): Added devPwdId, selRegCfgMethods and uuid
+
+MasterControl.h
+- Add uuid to SetDevicePassword(), SendSetSelRegistrar() 
+- Add devPwdId, selRegCfgMethods, uuid to SetBEaconIE(), SetProbeRespIE()
+
+WscCmd.h
+- Add uuid to S_LCB_MENU_REQUEST_PWD
+
+WscCmd.cpp
+- Handler for LCB_MENU_REQUEST_PWD: Send uuid to MC in SetDevicePassword()
+
+
+05/07/06   anand       Tag:anand_050706_1
+ 	. Added function WriteOobData() to handle writing PIN as well as 
+	unencrypted settings.
+	. Modified ReadOobData() function to choose filename based on what 
+	is being read (PIN, encrypted/unencrypted setting).
+	. USB_KEY parameter in the config files now means USB transport 
+	will be used (not just reading/writing PIN any more). Modified comment 
+	in the sample config files to reflect this.
+	. Tested on USB (only on linux)
+	. May have to fix compilation on Windows due to these changes.
+ Modified Files:
+ 	src/common/wsc_config_1a_ap.txt 
+ 	src/common/wsc_config_1a_reg.txt 
+ 	src/common/wsc_config_1b_ap.txt 
+ 	src/common/wsc_config_1b_reg.txt 
+ 	src/common/wsc_config_2a_ap.txt 
+ 	src/common/wsc_config_2a_cli.txt 
+ 	src/common/wsc_config_3a_ap.txt 
+ 	src/common/wsc_config_3a_cli.txt 
+ 	src/common/wsc_config_3a_reg.txt 
+ 	src/common/wsc_config_4a_ap.txt 
+ 	src/common/wsc_config_4a_cli.txt 
+ 	src/common/wsc_config_4a_reg.txt 
+ 	src/common/MasterControl/MasterControl.cpp 
+ 	src/common/Transport/Transport.cpp 
+ 	src/common/WscCmd/WscCmd.cpp src/common/inc/MasterControl.h 
+ 	src/common/inc/OobUfd.h src/common/inc/Transport.h 
+ 	src/common/inc/TransportBase.h src/linux/OobUfd/OobUfd.cpp 
+
+ 05/05/06	anand 		Tag:anand_050506.1
+ 	Added code to read/write unencrypted settings from the USB key.
+ Modified Files:
+ 	common/MasterControl/MasterControl.cpp 
+ 	common/TlvBase/WscTlvBase.cpp
+	common/Transport/Transport.cpp 
+ 	common/WscCmd/WscCmd.cpp
+	common/WscCmd/WscCmd.h 
+ 	common/inc/MasterControl.h
+	common/inc/OobUfd.h 
+ 	common/inc/RegProtoMsgs.h
+	common/inc/Transport.h 
+ 	common/inc/TransportBase.h
+	common/inc/WscCommon.h 
+ 	common/inc/WscTlvBase.h
+	linux/OobUfd/OobUfd.cpp 

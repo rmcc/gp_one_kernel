@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/clock.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007 QUALCOMM Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -23,7 +23,6 @@
 #include <linux/clk.h>
 #include <linux/spinlock.h>
 #include <linux/debugfs.h>
-#include <linux/ctype.h>
 #include <mach/clk.h>
 
 #include "clock.h"
@@ -312,17 +311,9 @@ static int clock_debug_rate_set(void *data, u64 val)
 	struct clk *clock = data;
 	int ret;
 
-	/* Only increases to max rate will succeed, but that's actually good
-	 * for debugging purposes. So we don't check for error. */
-	if (clock->flags & CLK_MAX)
-		clk_set_max_rate(clock, val);
-	if (clock->flags & CLK_MIN)
-		ret = clk_set_min_rate(clock, val);
-	else
 		ret = clk_set_rate(clock, val);
 	if (ret != 0)
-		printk(KERN_ERR "clk_set%s_rate failed (%d)\n",
-			(clock->flags & CLK_MIN) ? "_min" : "", ret);
+		printk(KERN_ERR "clk_set_rate failed (%d)\n", ret);
 	return ret;
 }
 
@@ -366,7 +357,6 @@ static int __init clock_debug_init(void)
 	struct dentry *dent_enable;
 	struct clk *clock;
 	unsigned n = 0;
-	char temp[50], *ptr;
 
 	dent_rate = debugfs_create_dir("clk_rate", 0);
 	if (IS_ERR(dent_rate))
@@ -377,12 +367,9 @@ static int __init clock_debug_init(void)
 		return PTR_ERR(dent_enable);
 
 	while ((clock = msm_clock_get_nth(n++)) != 0) {
-		strncpy(temp, clock->dbg_name, ARRAY_SIZE(temp)-1);
-		for (ptr = temp; *ptr; ptr++)
-			*ptr = tolower(*ptr);
-		debugfs_create_file(temp, 0644, dent_rate,
+		debugfs_create_file(clock->name, 0644, dent_rate,
 				    clock, &clock_rate_fops);
-		debugfs_create_file(temp, 0644, dent_enable,
+		debugfs_create_file(clock->name, 0644, dent_enable,
 				    clock, &clock_enable_fops);
 	}
 	return 0;

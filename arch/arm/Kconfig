@@ -531,6 +531,9 @@ config ARCH_OMAP
 
 config ARCH_MSM
 	bool "Qualcomm MSM"
+# ++ FIH_ADQ, Ming ++ #
+	select ARCH_DISCONTIGMEM_ENABLE
+# -- FIH_ADQ, Ming -- #
 	select GENERIC_GPIO
 	select HAVE_CLK
 	select GENERIC_TIME
@@ -847,6 +850,9 @@ config ARCH_SELECT_MEMORY_MODEL
 config NODES_SHIFT
 	int
 	default "4" if ARCH_LH7A40X
+# ++ FIH_ADQ, Ming ++ #
+	default "4" if ARCH_MSM
+# -- FIH_ADQ, Ming -- #
 	default "2"
 	depends on NEED_MULTIPLE_NODES
 

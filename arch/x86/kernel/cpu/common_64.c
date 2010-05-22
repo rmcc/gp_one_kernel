@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/smp.h>
 #include <linux/percpu.h>
+#include <linux/marker.h>
 #include <asm/i387.h>
 #include <asm/msr.h>
 #include <asm/io.h>
@@ -587,6 +588,7 @@ unsigned long kernel_eflags;
  * debugging, no special alignment required.
  */
 DEFINE_PER_CPU(struct orig_ist, orig_ist);
+EXPORT_PER_CPU_SYMBOL_GPL(orig_ist);
 
 /*
  * cpu_init() initializes state that is per-CPU. Some data is already

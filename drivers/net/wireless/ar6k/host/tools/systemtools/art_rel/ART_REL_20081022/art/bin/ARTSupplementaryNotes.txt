@@ -1,0 +1,622 @@
+                           Supplementary Notes for
+                 	    AR6002 (Mercury) ART
+
+                             October 29, 2009
+
+Introduction
+
+        This is a supplementary document to the released ART
+        documentation (see References). It lists the fields in eep files 
+        the customer will likely modify for various Mercury configuration.
+  
+        (Moving forward, this will be the template for release notes
+        accompanying every ART release.)
+
+References
+        AR6000 Family Atheros Radio Test Reference Guide
+        AR6000 Family Sample Manufacturing Test Flow
+        AR6000 Family EEPROM Device Configuration Guide
+      
+--------------------------------------------------------------------------
+
+Interoperating With Previous Releases
+
+    1.  <TBD>
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071004, October 4, 2007.
+AR6002 Release: 2.1.2
+Platform: Linux
+Customer: General public
+Upgrade suggestion: User should upgrade given this is the first formal
+    release. 
+
+Major new functionality in ART_REL_20071004
+
+    CONFIGURATIONS AR6002 SUPPORT
+
+	    AR6002 supports three configurations: front end, 0RBOM and 
+            front end without XPA. (There is also a customer configuration
+            similar to front end without XPA.)
+       
+            The subsystem IDs for these configurations are:
+                0x6041 -- front end, ar6002_sd21g.eep
+                0x6042 -- 0RBOM,     ar6002_sd21g_lna1.eep
+                0x6043 -- front end without XPA, ar6002_sd21g_noxpa.eep
+                0x6044 -- front end with 19.2 crystal, ar6002_sd21g_19p2.eep
+                0x6045 -- front end with 24, ar6002_sd21g_24.eep
+                0x6046 -- front end with 38.4, ar6002_sd21g_38p4.eep
+                0x6047 -- front end with 40, ar6002_sd21g_40.eep
+                0x6048 -- front end with 52, ar6002_sd21g_52.eep
+                0x6099 -- cus99, ar6002_cus99g.eep
+
+            To set the crystal speed, on the linux platform, set environment
+            variable, XTALFREQ, e.g. setenv XTALFREQ 19200000 for 19.2MHz.
+            Refer to mercury_env_csh/bsh.
+            For XP, modify dkdownload2.sh in client folder to point to the 
+            correct crystal file, e.g. ref_clock_19p2.bin.
+
+            The configuration field, LNA2_FRONTEND determines which configuration
+            and their respective register field settings (in Mercury 1.1).
+
+                LNA2_FRONTEND        Configuration       sellna     selintpd
+                    0                0RBOM                 0           1
+                    1                front end             1           0
+                    2                front end wo xpa      1           1
+
+
+    EEP FIELDS CUSTOMER LIKELY TO MODIFY FOR A CONFIGURATION
+
+        Calibration Section
+
+            LNA2_FRONTEND: determines which of the three configurations. 
+                The same configuration settings are in the individual fields, i.e.
+                an_sellna, an_selintpd. Watch for Mercury 2.0 release notes where
+                this field may change. For Mercury 1.1, this field is used.
+
+            PCDAC_OFFSET: 0 for front end, and 20 for 0RBOM.
+
+            INITIAL_PWR0: first calibration starting power               
+            INITIAL_PWR1: second starting power             
+            PWR_DELTA0: first power calibration step               
+            PWR_DELTA1: second power calibration step              
+
+            CCK_OFDM_DELTA: adjust CCK power in 0.5dB steps. Front end board
+                defaults to 1dB, and 0dB for 0rbom configuration.
+
+
+        Configuration Section (also refer to relevant document)
+
+            an_sellna: select LNA, (will be stored in EEPROM).
+            an_selintpd: select internal power detector, (will be stored in EEPROM)
+
+            an_ob: analog output stage bias, stored as ob in EEPROM.
+            an_db: analog drive stage bias, stored as db in EEPROM.
+
+            an_level: bias level for external PA, stored as xpaBiasLvl in EEPROM.
+
+            an_enable_pca: (will be stored in EEPROM).
+            an_enable_pcb: (will be stored in EEPROM).
+            
+            bb_switch_table_r1x2: antenna switch table control, stored in EEPROM.
+            bb_switch_table_r1x1
+            bb_switch_table_r1
+            bb_switch_table_t1
+            bb_switch_table_r2x2
+            bb_switch_table_r2x1
+            bb_switch_table_r2
+            bb_switch_table_t2
+
+            bb_switch_settling                
+
+            bb_xatten2_margin 
+            bb_xatten1_margin 
+            bb_xatten2_db
+            bb_xatten1_db
+
+            bb_pd_gain_setting1: two xpd gain setting              
+            bb_pd_gain_setting2             
+
+
+Minor new functionality in ART_REL_20071004
+ 
+        This is the first AR6002 ART release.
+
+	#<CL#> **
+	    <TBD>
+
+
+Bugs fixed in ART_REL_20071004
+
+        This is the first AR6002 ART release.
+
+	#<CL> **
+	    <TBD>
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071004, October 30, 2007.
+AR6002 Release: 2.1.2
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Internal release only.
+ 
+This is not a release.
+The new Linux driver is added to this package for the AE to address SEMCO issue.
+Tests in the lab showed the improved performance in bmi loading.
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071113, November 13, 2007
+AR6002 Release: 2.1.4  (2.1.3 was given to Litepoint as source release)
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Internal release only.
+Olca Build: olcaMain.378
+
+Major new functionality 
+
+Minor new functionality
+ 
+        <324188>
+            Sync'ed with s/w Build_olcaMain.378. Changed Mercury target RAM
+            address to 502400.
+
+        <323479>
+            Added the capability to loadART.sh to set different crystal clock,
+            e.g. setenv XTALFREQ 19200000
+
+        <321446>
+            Pulled in power control evaluation option from Merlin for debug.
+
+	<316619>
+            Added the testing capability to toggle BT and WiFi antenna for BT
+              coexistence testing, under 'U'tility menu.
+
+        <314146>
+            Added negPwrOffset to eeprom.
+
+        <311745>
+            Utilized ART build string in eeprom.
+
+        <310032, etc.>
+            Added other crystal support, 19.2, 24, 38.4, 40, 52, (besides 26).
+
+        <311308>
+            Added various Mercury configuration related fields to EEPROM, e.g.
+              sellna, selintpd, etc.
+
+        <315437, etc.>
+            Various ART configuration files (eep) and setup files update, too
+              many to enumerate.
+
+        <309470, 312244, etc.>
+            Added the CUS99 support.
+
+Bugs fixed 
+
+	<317931>
+	    Removed the single carrier over other modes in continuous TX.
+
+	<317965, 316621>
+	    Fixed xpdGain(index) display in close loop power control in 
+              continuous TX.
+
+        <315604>
+            Pulled in Dragon bug fix 24829.
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071116, November 16, 2007
+AR6002 Release: 2.1.5
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Yes, this release the workaround for tx power fluctuation.
+   It also contains ART_REL20071113 which has fixes and enhancement since
+   ART_REL_20071004.
+Olca Build: olcaMain.378
+
+Major new functionality 
+
+Minor new functionality
+ 
+Bugs fixed 
+
+	<324827>
+	    A workaround for BB bug 31437. Extending the duration between
+              tx_frame to a2_tx_on, dac_on, and a2_rx_off to 5 (500ns) allows
+              enough time for the short shift to be availabe to apply any
+              tx gain table entry.
+
+        <324842, 324848>
+            Update .eep files for both 0rBOM and front end configurations.
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071204, December 4, 2007
+AR6002 Release: 2.1.6
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Yes
+Olca Build: olcaMain.397
+
+Major new functionality 
+
+Minor new functionality
+ 
+        <328009>
+           Added a few EEPROM releted functions to Mercury ART:         
+           1. Restoring EEPROM file now verifies the checksum and warns
+              if not valid.
+           2. Fixed the checksum verification function. 
+           3. The checksum re-calculation. Now you can back up to an EEPROM 
+              file, modify it and restore it.
+           4. The function to add a label to existing EEPROM data.
+           5. Individual EEPROM offset read and write.
+
+        <332077, 331966, 331944>
+           A number of XP platform enhancements such as dkdownload.sh for
+           various configuration during bmiloader similar to Linux platform.
+
+        <333376>
+           For easy record keeping purpose, the calibration data is backed up to
+           calData_<label>.txt (if labelScheme is enabled) or appended to a file specified 
+           in calsetup.txt. 
+
+        <335782>
+           Align ART load script with the s/w one.
+
+Bugs fixed 
+
+        <328953>
+           Added a fix in the sdio driver for the 32kHz clock Mercury issue 
+           for XP platform. With the fix, the bmi download seems much better.
+
+        <331298>
+           Included the latest Linux driver to improve the bmiloader success rate 
+           (a workaround for the internal 32kHz problem causing chip not
+           waking up long enough for bmiloader and subsequent operation).
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071210, December 10, 2007
+AR6002 Release: 2.1.7
+Platform: XP
+Customer: General public
+Upgrade suggestion: Yes
+Olca Build: olcaMain.397
+
+Major new functionality 
+
+Minor new functionality
+ 
+Bugs fixed 
+
+        <337946>
+           Pulled in s/w workaround (AR6002_war1.sh) for the XP platform.
+           This workaround fixed the internal 32kHz, thus also fixed the eeprom
+           writing failure problem on some boards. 
+
+        <337673, etc.>
+           Fixed 0dBm power control fluctuation problem by sync up with Olca
+           (and ART dragon branch as well).
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20071212, December 12, 2007
+AR6002 Release: 2.1.8
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Yes. This is basically the equivalent of XP build 2.1.7.
+Olca Build: olcaMain.397
+
+Major new functionality 
+  
+        <339071>
+           Include Mercury 2.0 config file and runtime chip revision detection.
+
+Minor new functionality
+ 
+Bugs fixed 
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+
+Release ART_REL_20080117, January 17, 2008
+AR6002 Release: 2.2.1
+Platform: Linux/XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: olcaMain.442
+
+Major new functionality 
+  
+        Mercury 2.0 support. 
+
+        Moved from Mercury branch into Olca branch.
+
+Minor new functionality
+  
+        <343403, etc.>
+           Adjust parameters in .eep files.
+
+        <341381>
+           Update tx_gain_table_16 for better stability at 15dBm on SD21_050
+boards.
+ 
+Bugs fixed 
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release ART_REL_20080205, Feburary 5, 2008
+AR6002 Release: 2.2.3
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: olcaMain.465
+
+Major new functionality 
+  
+Minor new functionality
+  
+        <348795>
+           Accept SD23 label.
+ 
+        <349160, etc.>
+           A quite few CLs to integrate ART into olca beta release, still work
+           in progress.
+
+Bugs fixed 
+
+        <350025>
+           Load the correct RX gain table based on subsystem ID. There was a
+           problem when eeprom was loaded, the RX gain entries were not
+           properly set.
+
+        <350237>
+           Set CPU_CLOCK_RTC (0x4020) to 0x0. 
+
+Known problems
+        This release should NOT be used to calibrate SD23 boards, but it can
+        be used for testing all boards. We are working to resolve the problem.
+        (There is no problem calbrating boards other than SD23.)
+        
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release win_release_20080211, Feburary 11, 2008
+AR6002 Release: 2.2.4
+Platform: XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: olcaMain.465
+
+Major new functionality 
+  
+Minor new functionality
+  
+        This is mainly a "catch-up" release to Linux ART_REL_20080205 with
+        the power calibration fix (see Bugs fixed below).
+        Since ART has been included in olca build since olcaMain.471
+        (CL350672), separate ART Linux build may not be required any more.
+
+Bugs fixed 
+
+        <350954>
+           Fixed the power calibration problem in SD23, documented as known
+           problems in ART_REL_20080205. Actually the same problem is also
+           in SD21 and 0rbom calibration (with different symptoms).
+ 
+        <350673>
+           Added LNA2 ini/mod files to Linuxini for XP ART build.
+
+Known problems
+        
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release: ART_REL_20080214, Feburary 14, 2008
+AR6002 Release: 2.2.5
+Platform: Linux
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: olcaMain.475
+
+Major new functionality 
+  
+Minor new functionality
+  
+Bugs fixed 
+
+        <351583>
+           Fixed the switch card problem, and at the end of calibration and
+           testing.
+           As a result, loadTgt and unloadTgt are no longer required as 
+           separate steps. They are called within ART.
+ 
+        <351607, 351585, etc.>
+           Added files, which are required when running ART, to ART release
+           package, based on user feedback. Now the ART release is more
+           self contained. 
+
+Known problems
+        
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release: March 10, 2008
+AR6002 Release: 2.2.8
+Platform: Linux/XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: 
+
+Major new functionality 
+  
+Minor new functionality
+
+        <356126>
+           Increase CCK power based on board configuration using eep file
+           parameter, CCK_OFDM_DELTA.
+  
+        <355517, 356690, etc.>
+           Add support to various labels.
+
+        <354803>
+           Add Quicksilver support.
+
+Bugs fixed 
+
+Known problems
+
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release: May 5, 2008
+AR6002 Release: 2.3.1
+Platform: Linux/XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: (accomanying olca nightly build)
+
+Major new functionality 
+  
+Minor new functionality
+
+        <372503>
+           Fix the power calibration when the minimum calibrated power is 
+           not 0dBm. This issue came with the 11A (sd22 board) calibration.
+  
+        <371725>
+           Added init_tx_gain_setting to eeprom and as a parameter in the
+           .eep file.
+           The limitation is that this value can NOT be 0.
+
+        <371722, 371222, etc.>
+           Various changes from the 11a board testing and calibration. Note
+           there was a version 2.3.0 built for internal use that already
+           have the 11a changes.
+
+Bugs fixed 
+
+        <371033>
+           Update the tx gain table for instability due to entry 17 and 18 not
+           having the correct gain difference.
+
+        <371822>
+           Fix the bug in the close loop power control when transitioning
+           out of single carrier mode.
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release: June 2, 2008
+AR6002 Release: 2.3.3
+Platform: Linux/XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: (accomanying olca nightly build)
+
+Major new functionality 
+  
+Minor new functionality
+  
+        <380480>
+           Enable bb filter CAL.
+
+        <380230>
+           Store TX gain table in eeprom, so customers can change the tx gain
+           table entries for their designs.
+
+        <378978, 379800, etc.>
+           Run ART without physical eeprom. CAL data is output to files.
+
+Bugs fixed 
+
+        <373447, 374647>
+           Disable UART by default.
+
+        <374646, 377292>
+           Fix manufacturing test problem for 52MHz crystal settings.
+
+        <378529>
+           Set voltage scaling during sleep mode.
+
+        <378567>
+           Disconnect EEPROM for power consumption during sleep.
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release: June ?, 2008
+AR6002 Release: 2.3.4
+Platform: Linux/XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: (accomanying olca nightly build)
+
+Major new functionality 
+  
+Minor new functionality
+  
+        <384825, 385613>
+           Enable CCK mask in 11g mode, by doCCKin11g in calsetup.txt, and
+           enable 11b CCK mask in *.eep.
+
+Bugs fixed 
+
+Known problems
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+
+Release: June 19, 2008
+AR6002 Release: 2.3.7
+Platform: Linux/XP
+Customer: General public
+Upgrade suggestion: Yes. 
+Olca Build: (accomanying olca nightly build)
+
+Major new functionality 
+  
+Minor new functionality
+
+Bugs fixed
+
+	<388333>
+	Change "w" and "b" to "wb" and "rb" when fopen binary calData*.bin files
+
+
+Known problems

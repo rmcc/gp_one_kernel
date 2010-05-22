@@ -1,7 +1,6 @@
 /* linux/include/asm-arm/arch-msm/msm_smd.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -122,5 +121,48 @@ enum
 
 int smd_named_open_on_edge(const char *name, uint32_t edge, smd_channel_t **_ch,
 			   void *priv, void (*notify)(void *, unsigned));
+
+// +++ FIH_ADQ +++
+typedef enum 
+{
+    CMCS_HW_VER_EVB1=0,  
+    CMCS_HW_VER_EVB2,    //20k resister
+    CMCS_HW_VER_EVB3,
+    CMCS_HW_VER_EVB4,
+    CMCS_HW_VER_EVB5,
+    CMCS_HW_VER_EVB6,
+    CMCS_HW_VER_EVB7,
+    CMCS_HW_VER_EVB8,
+    CMCS_HW_VER_EVB9,
+    CMCS_HW_VER_IVT,     //10k resister
+    CMCS_HW_VER_EVT1,    //30k resister    
+    CMCS_HW_VER_EVT2,    //40k resister
+    CMCS_HW_VER_EVT3,
+    CMCS_HW_VER_EVT4,
+    CMCS_HW_VER_EVT5,
+    CMCS_HW_VER_DVT1,    //68.2k resister, ZEUS_CR_1199
+    CMCS_HW_VER_DVT2,
+    CMCS_HW_VER_DVT3,
+    CMCS_HW_VER_DVT4,
+    CMCS_HW_VER_DVT5,
+    CMCS_HW_VER_PVT,
+    CMCS_HW_VER_MP,
+    CMCS_HW_VER_MAX    
+}cmcs_hw_version_type;
+
+#ifdef MSM_SHARED_RAM_BASE
+/* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
+#define FIH_READ_RESTART_REASON()    (*((unsigned int *)((MSM_SHARED_RAM_BASE + 0x21C8))))
+/* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */
+#define FIH_READ_HWID_FROM_SMEM()	(*((int *)(MSM_SHARED_RAM_BASE + 0x2200)))
+
+#define FIH_READ_POWEER_ON_CAUSE_FROM_SMEM()	(*((int *)(MSM_SHARED_RAM_BASE + 0x2208)))
+#endif
+/* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
+#define RESTART_REASON_USB_PID    0x22685511
+/* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */
+// --- FIH_ADQ ---
+
+
 
 #endif

@@ -3,8 +3,9 @@
  * Driver for HighSpeed USB Client Controller in MSM7K
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
+ *
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -43,8 +44,25 @@
 #include <mach/msm_hsusb_hw.h>
 #include <mach/msm_otg.h>
 #include <linux/wakelock.h>
-#include <linux/pm_qos_params.h>
+///+++ T_FIH +++
+#include <linux/power_supply.h>
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.07
+#include <mach/msm_iomap.h>
+#include <mach/msm_smd.h>
 
+///--- FIH_ADQ --- Sung Chuan 2009.05.07
+///+++ FIH_ADQ +++ Sung Chuan 2009.07.29
+#include <linux/reboot.h>
+///--- FIH_ADQ --- Sung Chuan 2009.07.29
+///--- T_FIH ---
+///++++FIH_ADQ++++
+#define USBSET 97
+#define CHR_EN 33
+#define CHR_1A 57
+///+++ FIH_ADQ +++ Sung Chuan 2009.09.22
+#define GPIO_CHR_DET 39
+///--- FIH_ADQ --- Sung Chuan 2009.09.22
+///----FIH_ADQ----
 #define MSM_USB_BASE ((unsigned) ui->addr)
 
 #include "usb_function.h"
@@ -65,9 +83,39 @@
 #define TRUE			1
 #define FALSE			0
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
-
 static int vbus;
-static int pid = 0x9018;
+//+++FIH_ADQ+++
+int check_USB_type =0;
+unsigned long fih_modem_status;
+char apn_name[36];
+int modem_discon=0;
+int OS_Type=0;       ///0:No OS 1:plug-in USB first run SC_TEST_UNIT_READY 2:Mac OS 3:Microsoft OS
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+bool Dynamic_switch=false;
+bool Linux_Mass=false;
+bool is_switch=false;
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */
+
+//---FIH_ADQ---
+// +++ FIH_ADQ +++ , modified by henry.wang, 2009.06.01, added FIH VID/PID supported
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+static int upid = 0xC000;
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */
+//static int pid = 0xF101;
+///static int pid = 0xD00D;
+// --- FIH_ADQ ---
+
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.12
+int fih_enable = 0;
+int pid_port_change = 0;
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+bool switch_enable=false;
+unsigned int *smem_pid = 0xE02FFFF8;
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */
+unsigned num_funcs_backup;
+struct usb_function_map *functions_map_backup;
+///--- FIH_ADQ --- Sung Chuan 2009.06.12
+
 static int usb_init_err;
 
 struct usb_fi_ept {
@@ -102,6 +150,31 @@ static unsigned char str_lang_desc[] = {4,
 				(unsigned char)LANGUAGE_ID,
 				(unsigned char)(LANGUAGE_ID >> 8)};
 
+///+++ FIH_ADQ +++ 
+struct goldfish_usb_data {
+	uint32_t reg_base;
+	int irq;
+	spinlock_t lock;
+	struct power_supply usb;
+	struct power_supply ac;
+};
+static struct goldfish_usb_data *usb_data;
+
+
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.17
+static struct power_supply * g_ps_usb,* g_ps_ac;
+///--- FIH_ADQ --- Sung Chuan 2009.04.17
+
+static enum power_supply_property fih_goldfish_power_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+};
+
+int USB_Connect=0;
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+int backup_USB_Connect=0;
+
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */
+///--- FIH_ADQ ---
 #define to_msm_request(r) container_of(r, struct msm_request, req)
 static int usb_hw_reset(struct usb_info *ui);
 static void usb_vbus_online(struct usb_info *);
@@ -117,10 +190,13 @@ int (*usb_lpm_config_gpio)(int);
 static void usb_enable_pullup(struct usb_info *ui);
 static void usb_disable_pullup(struct usb_info *ui);
 
-static struct workqueue_struct *usb_work;;
+static struct workqueue_struct *usb_work;
 static void usb_chg_stop(struct work_struct *w);
 static int usb_chg_detect_type(struct usb_info *ui);
 static void usb_chg_set_type(struct usb_info *ui);
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+void usb_chg_pid(bool usb_switch);
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */
 
 #define USB_STATE_IDLE    0
 #define USB_STATE_ONLINE  1
@@ -133,18 +209,23 @@ static void usb_chg_set_type(struct usb_info *ui);
 #define USB_FLAG_SUSPEND	0x0010
 #define USB_FLAG_CONFIGURE	0x0020
 #define USB_FLAG_RESUME	0x0040
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.07
 #define USB_FLAG_REG_OTG 0x0080
+///--- FIH_ADQ --- Sung Chuan 2009.04.07
 
 #define USB_MSC_ONLY_FUNC_MAP	0x10
+///+++ 6370 +++
 #define DRIVER_NAME		"msm_hsusb_peripheral"
-
+///--- 6370 ---
 struct lpm_info {
 	unsigned int rs_rw;
 	unsigned int pmic_h_disabled;
 	struct work_struct detach_int_h;
 	struct work_struct wakeup_phy;
 };
+/// +++ FIH_ADQ +++  SungSCLee 2009.04.07
 
+///--- FIH_ADQ --- Sung Chuan 2009.04.07
 enum charger_type {
 	CHG_HOST_PC,
 	CHG_WALL = 2,
@@ -227,7 +308,7 @@ struct usb_info {
 	char **strdesc;
 	int strdesc_index;
 
-	u16 test_mode;
+	unsigned char test_mode;
 	struct wake_lock wlock;
 	struct msm_otg_transceiver *xceiv;
 	int active;
@@ -264,23 +345,47 @@ struct usb_device_descriptor desc_device = {
 	.iSerialNumber = 0,
 	.bNumConfigurations = 1,
 };
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
+int  modem_enable = 0;
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
 static void flush_endpoint(struct usb_endpoint *ept);
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.09.22
+static void Power_off_charging()
+{
+	struct usb_info *ui = the_usb_info;
+	usb_disable_pullup(ui);
+	gpio_direction_output(GPIO_CHR_DET,0);
+	while(1)
+  {			
+	if(gpio_get_value(GPIO_CHR_DET))
+    machine_power_off();		
+	msleep(500);
+  }
+}
+///--- FIH_ADQ --- Sung Chuan 2009.09.22
 static int usb_chg_detect_type(struct usb_info *ui)
 {
 	int ret = CHG_UNDEFINED;
-
+    int i   = 1;
 	msleep(10);
 	switch (PHY_TYPE(ui->phy_info)) {
-	case USB_PHY_EXTERNAL:
-		if (ulpi_write(ui, 0x30, 0x3A))
-			return ret;
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
+///	case USB_PHY_EXTERNAL:
+	case USB_PHY_INTEGRATED:	
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
+    while(i){
+		if (!ulpi_write(ui, 0x30, 0x3A))
+			 i = 0;
+		else	 
+      printk("usb_chg_detect_type fail!!! \n");
+		}
 
 		/* 50ms is requried for charging circuit to powerup
 		 * and start functioning
 		 */
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
 		msleep(50);
+///--- FIH_ADQ --- Sung Chuan 2009.05.25		
 		if ((readl(USB_PORTSC) & PORTSC_LS) == PORTSC_LS)
 			ret = CHG_WALL;
 		else
@@ -288,7 +393,10 @@ static int usb_chg_detect_type(struct usb_info *ui)
 
 		ulpi_write(ui, 0x30, 0x3B);
 		break;
-	case USB_PHY_INTEGRATED:
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25		
+	case USB_PHY_EXTERNAL:		
+///	case USB_PHY_INTEGRATED:
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
 	{
 		unsigned int i;
 		unsigned int extchgctrl = 0;
@@ -759,9 +867,10 @@ static void usb_ept_start(struct usb_endpoint *ept)
 	/* link the hw queue head to the request's transaction item */
 	ept->head->next = req->item_dma;
 	ept->head->info = 0;
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.03 
 	/* memory barrier to flush the data before priming endpoint*/
 	dmb();
+///--- FIH_ADQ --- Sung Chuan 2009.04.03 	
 	/* start the endpoint */
 	writel(1 << ept->bit, USB_ENDPTPRIME);
 
@@ -785,15 +894,16 @@ int usb_ept_queue_xfer(struct usb_endpoint *ept, struct usb_request *_req)
 		return -EMSGSIZE;
 
 	if (ui->in_lpm) {
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.15	
 		req->req.status = usb_remote_wakeup();
-		if (req->req.status) {
-			pr_debug("%s:RWakeup generation failed, EP = %x\n",
-							__func__, ept->bit);
-			return req->req.status;
-		}
+///--- FIH_ADQ --- Sung Chuan 2009.05.15
+		req->req.status = -ENODEV;		
+		pr_debug("%s: USB is in LPM, ep = %x\n", __func__, ept->bit);
+		return -ENODEV;
 	}
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.08
 	spin_lock_irqsave(&ui->lock, flags);
+///--- FIH_ADQ --- Sung Chuan 2009.04.08
 
 	if (req->busy) {
 		req->req.status = -EBUSY;
@@ -1162,7 +1272,7 @@ static void handle_setup(struct usb_info *ui)
 			} else if (ctl.wValue == USB_DEVICE_TEST_MODE) {
 				if (ctl.wIndex & 0x0f)
 					break;
-				ui->test_mode = ctl.wIndex;
+				ui->test_mode = (ctl.wIndex >> 8);
 				ep0_setup_ack(ui);
 				return;
 			}
@@ -1448,13 +1558,13 @@ static void flush_all_endpoints(struct usb_info *ui)
 }
 
 #define HW_DELAY_FOR_LPM msecs_to_jiffies(1000)
-#define DELAY_FOR_USB_VBUS_STABILIZE msecs_to_jiffies(100)
+#define DELAY_FOR_USB_VBUS_STABILIZE msecs_to_jiffies(500)
 static irqreturn_t usb_interrupt(int irq, void *data)
 {
 	struct usb_info *ui = data;
 	unsigned n;
 	unsigned speed;
-
+       int rc;
 	if (!ui->active)
 		return IRQ_HANDLED;
 
@@ -1471,6 +1581,9 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 		return IRQ_HANDLED;
 
 	if (n & STS_PCI) {
+///+++ FIH_ADQ +++  SungSCLee 2009.04.07
+		printk(KERN_INFO "usb: portchange\n");
+///--- FIH_ADQ --- Sung Chuan 2009.04.07	
 		if (!(readl(USB_PORTSC) & PORTSC_PORT_RESET)) {
 			speed = (readl(USB_PORTSC) & PORTSC_PORT_SPEED_MASK);
 			switch (speed) {
@@ -1550,13 +1663,29 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			 */
 			queue_delayed_work(usb_work, &ui->work,
 						DELAY_FOR_USB_VBUS_STABILIZE);
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.14
+     USB_Connect = 1;
+     power_supply_changed(g_ps_usb);   	
+		 pr_err("usb cable connected\n");
+///--- FIH_ADQ ---	Sung Chuan 2009.04.14			
 		} else {
 			int i;
-
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+           Dynamic_switch = false;
+           Linux_Mass = false;
+           is_switch = false;
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */		   
+			ui->usb_state = USB_STATE_NOTATTACHED;			
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.14
+                        USB_Connect = 0;
+                   if (ui->chg_type == CHG_WALL)
+                       power_supply_changed(g_ps_ac);
+                   else
+  	                power_supply_changed(g_ps_usb);
+///--- FIH_ADQ --- Sung Chuan 2009.04.14	
+			OS_Type = 0;            
 			usb_disable_pullup(ui);
 
-			printk(KERN_INFO "usb cable disconnected\n");
-			ui->usb_state = USB_STATE_NOTATTACHED;
 			for (i = 0; i < ui->num_funcs; i++) {
 				struct usb_function_info *fi = ui->func[i];
 				if (!fi ||
@@ -1568,15 +1697,45 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			}
 			ui->flags = USB_FLAG_VBUS_OFFLINE;
 			queue_delayed_work(usb_work, &ui->work, 0);
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
+    if(modem_enable == 1){	
+	      USB_Connect = 4;  ///Disconnect modem
+        power_supply_changed(g_ps_usb);
+	  }
+///--- FIH_ADQ --- Sung Chuan 2009.05.25				
+///+++ FIH_ADQ +++ 
+	pr_info("Set the charging current to 100mA\n");	
+	//Set the charging current to 100mA
+	rc = gpio_request(USBSET, "USBSET");
+	if (rc)	printk(KERN_ERR "%s: USBSET setting failed! rc = %d\n", __func__, rc);
+	gpio_set_value(USBSET,0);
+	gpio_free(USBSET);
+        //Turn off Charger IC
+	rc = gpio_request(33, "CHR_EN");
+	if (rc)	printk(KERN_ERR "%s: CHR_EN setting failed! rc = %d\n", __func__, rc);
+	gpio_set_value(33,1);////gpio_direction_output(33,1);
+	gpio_free(33);
+///+++ FIH_ADQ +++
+    check_USB_type =0;
+///+++ FIH_ADQ +++ Sung Chuan 2009.07.02    
+    memset(apn_name, 0, 36);
+///--- FIH_ADQ --- Sung Chuan 2009.07.02     
+    pr_err("usb cable disconnected\n");	
+///+++ FIH_ADQ +++ Sung Chuan 2009.07.29	
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+    if (smem_pid[0] == 0xffff)    ///In recovery mode Chargering remove USB Cable power off deviced
+        machine_power_off();
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */			
+///--- FIH_ADQ --- Sung Chuan 2009.07.29		
 		}
 	}
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.03 
 	if (readl(USB_OTGSC) & OTGSC_IDIS) {
 		writel((OTGSC_IDIS | readl(USB_OTGSC)), USB_OTGSC);
 		ui->flags = USB_FLAG_SUSPEND;
 		queue_delayed_work(usb_work, &ui->work, 0);
 	}
-
+///--- FIH_ADQ --- Sung Chuan 2009.04.03
 	return IRQ_HANDLED;
 }
 
@@ -1651,21 +1810,41 @@ static int usb_suspend_phy(struct usb_info *ui)
 	if (usb_is_online(ui))
 		return -1;
 
-	/* spec talks about following bits in LPM for external phy.
-	 * But they are ignored because
+	switch (PHY_TYPE(ui->phy_info)) {
+	case USB_PHY_EXTERNAL:
+		/* clear VBusValid and SessionEnd rising interrupts */
+		ulpi_write(ui, (1 << 1) | (1 << 3), 0x0f);
+		/* clear VBusValid and SessionEnd falling interrupts */
+		ulpi_write(ui, (1 << 1) | (1 << 3), 0x12);
+
+		/* spec talks about following bits in LPM but they are ignored
+		 * because
 	 * 1. disabling interface protection circuit: by disabling
 	 * interface protection curcuit we cannot come out
 	 * of lpm as async interrupts would be disabled
 	 * 2. setting the suspendM bit: this bit would be set by usb
 	 * controller once we set phcd bit.
 	 */
-	switch (PHY_TYPE(ui->phy_info)) {
+///+++ FIH_ADQ +++ SungSCLee 2009.04.07		 
+         pr_err("%s: USB_PHY_EXTERNAL\n", __func__);
+///--- FIH_ADQ --- SungSCLee 2009.04.07			 
+		break;
+
 	case USB_PHY_INTEGRATED:
+///+++ FIH_ADQ +++ SungSCLee 2009.06.02
+		/* clear VBusValid and SessionEnd rising interrupts */
+		ulpi_write(ui, (1 << 1) | (1 << 3), 0x0f);
+		/* clear VBusValid and SessionEnd falling interrupts */
+		ulpi_write(ui, (1 << 1) | (1 << 3), 0x12);		
+///--- FIH_ADQ --- SungSCLee 2009.06.02			
 		/* clearing latch register, keeping phy comparators ON and
 		   turning off PLL are done because of h/w bugs */
 		ulpi_read(ui, 0x14);/* clear PHY interrupt latch register */
 		ulpi_write(ui, 0x01, 0x30);/* PHY comparators on in LPM */
 		ulpi_write(ui, 0x08, 0x09);/* turn off PLL on integrated phy */
+///+++ FIH_ADQ +++ SungSCLee 2009.04.07			
+		pr_err("%s: USB_PHY_INTEGRATED\n", __func__);
+///+++ FIH_ADQ +++ SungSCLee 2009.04.07			
 		break;
 
 	case USB_PHY_UNDEFINED:
@@ -1725,14 +1904,16 @@ static int usb_hw_reset(struct usb_info *ui)
 
 	pdata = ui->pdev->dev.platform_data;
 
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.22	
 	/* reset the phy before resetting link */
 	if (readl(USB_PORTSC) & PORTSC_PHCD)
 		usb_wakeup_phy(ui);
 
 	/* rpc call for phy_reset */
 	msm_hsusb_phy_reset();
-	/* Give some delay to settle phy after reset */
+///+++ FIH_ADQ +++ for phy reset time
 	msleep(100);
+///--- FIH_ADQ ---	
 
 	/* RESET */
 	writel(USBCMD_RESET, USB_USBCMD);
@@ -1756,18 +1937,23 @@ static int usb_hw_reset(struct usb_info *ui)
 	/* If composition contains mass storage only function, decrease USB
 	 * interrupt latency to zero to increase usb mass storage performance
 	 */
-	if (ui->composition->functions == USB_MSC_ONLY_FUNC_MAP)
+///+++ FIH_ADQ +++ SungSCLee 2009.04.08	 
+/*	if (ui->composition->functions == USB_MSC_ONLY_FUNC_MAP)
 		writel((readl(USB_USBCMD) & ~USBCMD_ITC_MASK) | USBCMD_ITC(0),
 								USB_USBCMD);
 	else
 		writel((readl(USB_USBCMD) & ~USBCMD_ITC_MASK) | USBCMD_ITC(8),
-								USB_USBCMD);
-
+								USB_USBCMD);*/
+///--- FIH_ADQ --- SungSCLee 2009.04.08
 	/* If the target is 7x01 and roc version is > 1.2, set
 	 * the AHB mode to 2 for maximum performance, else set
 	 * it to 1, to bypass the AHB transactor for stability.
 	 */
 	if (PHY_TYPE(ui->phy_info) == USB_PHY_EXTERNAL) {
+///+++ FIH_ADQ +++ SungSCLee 2009.04.07
+		/* SW workaround, Issue#2 */
+		ulpi_write(ui, 0x31, 0x0C);
+///--- FIH_ADQ ---
 		if (pdata->soc_version >= SOC_ROC_2_0)
 			writel(0x02, USB_ROC_AHB_MODE);
 		else
@@ -1878,8 +2064,10 @@ void usb_start(struct usb_info *ui)
 
 	ui->xceiv = msm_otg_get_transceiver();
 	if (ui->xceiv) {
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.07	
 		ui->flags = USB_FLAG_REG_OTG;
 		queue_delayed_work(usb_work, &ui->work, 0);
+///--- FIH_ADQ --- Sung Chuan 2009.04.07
 	} else {
 		ui->active = 1;
 		ui->flags |= (USB_FLAG_START | USB_FLAG_RESET);
@@ -2210,19 +2398,6 @@ static int usb_free(struct usb_info *ui, int ret)
 	return ret;
 }
 
-static void usb_do_work_check_vbus(struct usb_info *ui)
-{
-	unsigned long iflags;
-
-	spin_lock_irqsave(&ui->lock, iflags);
-	if (vbus)
-		ui->flags |= USB_FLAG_VBUS_ONLINE;
-	else
-		ui->flags |= USB_FLAG_VBUS_OFFLINE;
-
-	spin_unlock_irqrestore(&ui->lock, iflags);
-}
-
 static int usb_vbus_is_on(struct usb_info *ui)
 {
 	unsigned tmp;
@@ -2232,7 +2407,7 @@ static int usb_vbus_is_on(struct usb_info *ui)
 	ulpi_write(ui, ULPI_SESSION_VALID_FALL, ULPI_USBINTR_ENABLE_FALLING_C);
 
 	tmp = ulpi_read(ui, ULPI_USBINTR_STATUS);
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.22	
 	/* enable session valid raising and falling interrupts */
 	ulpi_write(ui, ULPI_SESSION_VALID_RAISE, ULPI_USBINTR_ENABLE_RASING_S);
 	ulpi_write(ui, ULPI_SESSION_VALID_FALL, ULPI_USBINTR_ENABLE_FALLING_S);
@@ -2245,13 +2420,14 @@ static void usb_do_work(struct work_struct *w)
 {
 	struct usb_info *ui = container_of(w, struct usb_info, work.work);
 	unsigned long iflags;
-	unsigned long flags, _vbus, ret;
+	unsigned long flags,  ret;
+        int rc;
 
 	for (;;) {
 		spin_lock_irqsave(&ui->lock, iflags);
 		flags = ui->flags;
 		ui->flags = 0;
-		_vbus = vbus;
+
 		spin_unlock_irqrestore(&ui->lock, iflags);
 
 		/* give up if we have nothing to do */
@@ -2260,6 +2436,7 @@ static void usb_do_work(struct work_struct *w)
 
 		switch (ui->state) {
 		case USB_STATE_IDLE:
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.07		
 			if (flags & USB_FLAG_REG_OTG) {
 				ret = ui->xceiv->set_peripheral(ui->xceiv,
 								&dcd_ops);
@@ -2268,6 +2445,7 @@ static void usb_do_work(struct work_struct *w)
 						"driver with OTG", __func__);
 				break;
 			}
+///--- FIH_ADQ --- Sung Chuan 2009.04.07			
 			if ((flags & USB_FLAG_START) ||
 					(flags & USB_FLAG_RESET)) {
 				usb_clk_enable(ui);
@@ -2279,32 +2457,46 @@ static void usb_do_work(struct work_struct *w)
 				 */
 				if (usb_vbus_is_on(ui)) {
 					ui->usb_state = USB_STATE_POWERED;
+					ui->usb_state = USB_STATE_CONFIGURED;
 					wake_lock(&ui->wlock);
-					pm_qos_update_requirement(
-							PM_QOS_CPU_DMA_LATENCY,
-							  DRIVER_NAME, 0);
 					ui->state = USB_STATE_ONLINE;
 					usb_enable_pullup(ui);
 					usb_chg_set_type(ui);
 					if (ui->chg_type == CHG_WALL) {
+#if 1			
+				  writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);				  
+#else		///USB PHY External		 						
 						usb_disable_pullup(ui);
 						msleep(500);
 						usb_lpm_enter(ui);
+#endif						
 					}
 					pr_info("hsusb: IDLE -> ONLINE\n");
 				} else {
 					ui->usb_state = USB_STATE_NOTATTACHED;
 					ui->state = USB_STATE_OFFLINE;
+					disable_irq(ui->irq);
+                                        /*+++FIH_ADQ+++*/
+                                        //Turn off Charger IC
+					rc = gpio_request(CHR_EN, "CHR_EN");
+					if (rc)	printk(KERN_ERR "%s: CHR_EN setting failed! rc = %d\n", __func__, rc);
+					gpio_set_value(CHR_EN,1);////gpio_direction_output(33,1);
+					gpio_free(CHR_EN); 
+                                        /*---FIH_ADQ---*/
+					enable_irq(ui->irq);
 					msleep(500);
 					usb_lpm_enter(ui);
 					pr_info("hsusb: IDLE -> OFFLINE\n");
+                                        
 				}
 			}
 			break;
 		case USB_STATE_ONLINE:
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.22			
 			if (flags & USB_FLAG_VBUS_ONLINE) {
 				pr_info("hsusb: OFFLINE -> ONLINE\n");
 				disable_irq(ui->irq);
+				ui->usb_state = USB_STATE_CONFIGURED;
 				ui->state = USB_STATE_ONLINE;
 				if (ui->in_lpm)
 					usb_lpm_exit(ui);
@@ -2313,12 +2505,17 @@ static void usb_do_work(struct work_struct *w)
 				enable_irq(ui->irq);
 				usb_chg_set_type(ui);
 				if (ui->chg_type == CHG_WALL) {
+#if 1					
+				  writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
+#else		///USB PHY External		 					
 					usb_disable_pullup(ui);
 					msleep(500);
 					usb_lpm_enter(ui);
+#endif					
 				}
 				break;
 			}
+///--- FIH_ADQ --- Sung Chuan 2009.04.22				
 			/* If at any point when we were online, we received
 			 * the signal to go offline, we must honor it
 			 */
@@ -2327,12 +2524,17 @@ static void usb_do_work(struct work_struct *w)
 				ui->chg_type = CHG_UNDEFINED;
 				msm_chg_usb_charger_disconnected();
 
-				/* reset usb core and usb phy */
-				disable_irq(ui->irq);
+
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.22					
 				if (ui->in_lpm)
 					usb_lpm_exit(ui);
+///--- FIH_ADQ --- Sung Chuan 2009.04.22	
+					
 				usb_vbus_offline(ui);
 				usb_lpm_enter(ui);
+              /* reset usb core and usb phy */
+				disable_irq(ui->irq);
+				ui->usb_state = USB_STATE_NOTATTACHED;
 				ui->state = USB_STATE_OFFLINE;
 				enable_irq(ui->irq);
 				pr_info("hsusb: ONLINE -> OFFLINE\n");
@@ -2342,9 +2544,6 @@ static void usb_do_work(struct work_struct *w)
 				ui->usb_state = USB_STATE_SUSPENDED;
 				usb_lpm_enter(ui);
 				wake_lock(&ui->wlock);
-				pm_qos_update_requirement(
-						PM_QOS_CPU_DMA_LATENCY,
-						DRIVER_NAME, 0);
 				break;
 			}
 			if ((flags & USB_FLAG_RESUME) ||
@@ -2372,22 +2571,31 @@ static void usb_do_work(struct work_struct *w)
 			/* If we were signaled to go online and vbus is still
 			 * present when we received the signal, go online.
 			 */
-			if ((flags & USB_FLAG_VBUS_ONLINE) && _vbus) {
+			if ((flags & USB_FLAG_VBUS_ONLINE)) {
 				disable_irq(ui->irq);
+				ui->usb_state = USB_STATE_CONFIGURED;
 				ui->state = USB_STATE_ONLINE;
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.22				
 				if (ui->in_lpm)
 					usb_lpm_exit(ui);
+///--- FIH_ADQ --- Sung Chuan 2009.04.22								
 				usb_vbus_online(ui);
 				usb_enable_pullup(ui);
 				enable_irq(ui->irq);
 				usb_chg_set_type(ui);
 				if (ui->chg_type == CHG_WALL) {
+#if 1					
+				  writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
+#else		///USB PHY External		  
 					usb_disable_pullup(ui);
 					msleep(500);
 					usb_lpm_enter(ui);
+#endif 					
 				}
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.22				
 				pr_info("hsusb: OFFLINE -> ONLINE\n");
 				break;
+///--- FIH_ADQ --- Sung Chuan 2009.04.22				
 			}
 			if (flags & USB_FLAG_RESET) {
 				ui->flags |= USB_FLAG_RESET;
@@ -2395,13 +2603,15 @@ static void usb_do_work(struct work_struct *w)
 				pr_info("hsusb: OFFLINE -> IDLE\n");
 				break;
 			}
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.07			
 			if (flags & USB_FLAG_SUSPEND) {
 				usb_lpm_enter(ui);
 				wake_unlock(&ui->wlock);
+				pr_info("hsusb: OFFLINE -> SUSPEND\n");
 				break;
 			}
+///--- FIH_ADQ --- Sung Chuan 2009.04.07			
 			break;
-
 		default:
 			pr_err("UNDEFINED State\n");
 		}
@@ -2500,7 +2710,6 @@ static void usb_lpm_exit(struct usb_info *ui)
 			ui->xceiv->set_suspend(0);
 	}
 	wake_lock(&ui->wlock);
-	pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME, 0);
 	pr_info("%s(): USB exited from low power mode\n", __func__);
 }
 
@@ -2508,6 +2717,9 @@ static int usb_lpm_enter(struct usb_info *ui)
 {
 	unsigned long flags;
 	unsigned connected;
+///+++ FIH_ADQ ++++	SungSCLee 2009.04.07
+	int i,j=0;
+///--- FIH_ADQ ---
 
 	spin_lock_irqsave(&ui->lock, flags);
 	if (ui->in_lpm) {
@@ -2515,12 +2727,18 @@ static int usb_lpm_enter(struct usb_info *ui)
 		pr_debug("already in lpm, nothing to do\n");
 		return 0;
 	}
-
+///+++ FIH_ADQ ++++	SungSCLee 2009.04.22	
 	if (usb_is_online(ui)) {
+		msleep(10);
+		if (usb_is_online(ui)){
 		spin_unlock_irqrestore(&ui->lock, flags);
 		pr_info("%s: lpm procedure aborted\n", __func__);
 		return -1;
 	}
+	    else
+	     pr_err("%s: lpm procedure OK \n",__func__); 
+    }
+///--- FIH_ADQ ---	SungSCLee 2009.04.22	
 
 	ui->in_lpm = 1;
 	if (ui->xceiv)
@@ -2529,13 +2747,34 @@ static int usb_lpm_enter(struct usb_info *ui)
 	spin_unlock_irqrestore(&ui->lock, flags);
 
 	if (usb_suspend_phy(ui)) {
+///+++ FIH_ADQ +++ SungSCLee 2009.04.07
+		pr_err("%s: Phy suspend failed, lpm procedure aborted\n",
+				__func__);
+		i = 1;		
+		while(i)
+        {
+		 if(!usb_suspend_phy(ui))	
+		 	{
+		 		i=0;
+		 		pr_err("%s: phy suspend OK!!!\n",
+				__func__);
+		 	}
+		 	else{		 		
+		 		pr_err("%s: phy suspend failed time %d, lpm procedure aborted\n",
+				__func__,j++);
+				if(j == 5){
+					i = 0;
 		ui->in_lpm = 0;
 		enable_irq(ui->irq);
-		pr_err("%s: phy suspend failed, lpm procedure aborted\n",
-				__func__);
 		return -1;
 	}
-
+			}
+		}			
+		///ui->in_lpm = 0;
+		//enable_irq(ui->irq);				
+		///return -1;
+	}
+///--- FIH_ADQ --- SungSCLee 2009.04.07
 	/* enable async interrupt */
 	writel(readl(USB_USBCMD) | ASYNC_INTR_CTRL, USB_USBCMD);
 	connected = readl(USB_USBCMD) & USBCMD_RS;
@@ -2565,10 +2804,14 @@ static int usb_lpm_enter(struct usb_info *ui)
 	}
 
 	enable_irq(ui->irq);
-	pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME,
-							PM_QOS_DEFAULT_VALUE);
-	wake_lock_timeout(&ui->wlock, HZ / 2);
+	wake_unlock(&ui->wlock);
 	pr_info("%s: usb in low power mode\n", __func__);
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */	
+	if (smem_pid[0] == 0xffff) {
+    if(ui->chg_type != CHG_WALL)
+	  ui->usb_state = USB_STATE_NOTATTACHED;
+	}
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */	  
 	return 0;
 }
 
@@ -2610,20 +2853,80 @@ static void usb_chg_stop(struct work_struct *w)
 
 static void usb_chg_set_type(struct usb_info *ui)
 {
+     /*+++FIH_ADQ+++*/
+      int rc;
+     /*---FIH_ADQ---*/
 	ui->chg_type = usb_chg_detect_type(ui);
+	/*+++FIH_ADQ+++*/
+        //Turn on Charger IC
+	rc = gpio_request(CHR_EN, "CHR_EN");
+	if (rc)	printk(KERN_ERR "%s: CHR_EN setting failed! rc = %d\n", __func__, rc);
+	gpio_set_value(CHR_EN,0);
+	rc = gpio_request(USBSET, "USBSET");
+	if (rc)	printk(KERN_ERR "%s: USBSET setting failed! rc = %d\n", __func__, rc);
+	rc = gpio_request(CHR_1A, "CHR_1A");
+	if (rc)	printk(KERN_ERR "%s: CHR_1A setting failed! rc = %d\n", __func__, rc);
+	/*---FIH_ADQ---*/
 	switch (ui->chg_type) {
 	case CHG_WALL:
 		pr_info("\n*********** Charger Type: WALL CHARGER\n\n");
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */			
+		if (smem_pid[0] == 0xffff) 
+		ui->usb_state = USB_STATE_CONFIGURED;
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */		
+//+++FIH_ADQ+++ 
+        check_USB_type = 2;      
+        USB_Connect = 1;                
+        power_supply_changed(g_ps_ac);                
+//---FIH_ADQ---		
+		/*+++FIH_ADQ+++*/
+		pr_info("Set the charging current to 1A\n");
+    		gpio_set_value(USBSET,1);
+		gpio_set_value(CHR_1A,1);
+		/*---FIH_ADQ---*/
 		msm_chg_usb_charger_connected(CHG_WALL);
 		msm_chg_usb_i_is_available(1500);
+		if (smem_pid[0] == 0xffff)
+          Power_off_charging();
 		break;
 	case CHG_HOST_PC:
 		pr_info("\n*********** Charger Type: HOST PC\n\n");
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */		
+		if (smem_pid[0] == 0xffff) {
+         ui->usb_state = USB_STATE_CONFIGURED;
+		  rc = gpio_request(97, "USBSET");
+		  if (rc)	printk(KERN_ERR "%s: USBSET setting failed! rc = %d\n", __func__, rc);
+		  rc = gpio_request(57, "CHR_1A");
+		  if (rc)	printk(KERN_ERR "%s: CHR_1A setting failed! rc = %d\n", __func__, rc);
+		  gpio_set_value(97,1);
+		  gpio_set_value(57,0);
+		  gpio_free(97);
+		  gpio_free(57);
+		  
+		  Power_off_charging();  
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */			   
+//+++FIH_ADQ+++
+       }else {
+        check_USB_type = 1;    
+        USB_Connect = 1;
+        power_supply_changed(g_ps_usb);                  
+//---FIH_ADQ---		
+		/*+++FIH_ADQ+++*/
+		//Set the charging current to 100mA
+		gpio_set_value(USBSET,0);
+		gpio_set_value(CHR_1A,0);
+		/*---FIH_ADQ---*/
 		msm_chg_usb_charger_connected(CHG_HOST_PC);
+	  }
 		break;
 	default:
 		pr_err("%s:undefned charger type", __func__);
 	}
+	/*+++FIH_ADQ+++*/
+        gpio_free(CHR_EN);
+	gpio_free(USBSET);
+	gpio_free(CHR_1A);
+	/*---FIH_ADQ---*/
 }
 
 static void usb_vbus_online(struct usb_info *ui)
@@ -2655,11 +2958,17 @@ static void usb_vbus_offline(struct usb_info *ui)
 	 * of h/w bugs and to flush any resource that
 	 * h/w might be holding
 	 */
+///+++ FIH_ADQ +++ SungSCLee 2009.04.22	
+	///writel(USBCMD_RESET, USB_USBCMD);
+	///msleep(10);
+///--- FIH_ADQ --- SungSCLee 2009.04.22
 	if (readl(USB_PORTSC) & PORTSC_PHCD)
 		usb_wakeup_phy(ui);
 	msm_hsusb_phy_reset();
-	/* Give some delay to settle phy after reset */
+///+++ FIH_ADQ +++ SungSCLee 2009.04.22	
+///+++ FIH_ADQ +++ for phy reset
 	msleep(100);
+///-- FIH_ADQ --- 	
 
 	writel(USBCMD_RESET, USB_USBCMD);
 	timeout = jiffies + USB_LINK_RESET_TIMEOUT;
@@ -2739,6 +3048,10 @@ void usb_function_reenumerate(void)
 	pr_info("hsusb: disable pullup\n");
 	usb_disable_pullup(ui);
 
+///+++ FIH_ADQ +++ SungSCLee 2009.04.07
+	/* S/W workaround, Issue#1 */
+	ulpi_write(ui, 0x48, 0x04);
+///--- FIH_ADQ ---
 	msleep(10);
 
 	pr_info("hsusb: enable pullup\n");
@@ -2880,6 +3193,58 @@ static void usb_debugfs_uninit()
 static void usb_debugfs_init(struct usb_info *ui) {}
 static void usb_debugfs_uninit() {}
 #endif
+///+++ FIH_ADQ +++
+static int goldfish_power_get_property(struct power_supply *psy,
+				 enum power_supply_property psp,
+				 union power_supply_propval *val)
+{
+	int ret = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */	
+        if(switch_enable){     
+             val->intval = USB_Connect;
+             USB_Connect = backup_USB_Connect;
+        }
+        else if (psy->type == POWER_SUPPLY_TYPE_MAINS){
+	         if(check_USB_type == 2)
+                    val->intval = 1;
+             else if(check_USB_type == 1)            
+       	            val->intval = 0;
+             else	 
+                    val->intval = 0;    
+        }else if (psy->type == POWER_SUPPLY_TYPE_USB){
+/* --- FIH_ADQ --- , SungSCLee 2009.09.02{ */		
+		   if(check_USB_type == 2)
+                     val->intval = 0;
+                   else if(check_USB_type == 1)            
+       	             val->intval = USB_Connect;
+            else{
+       	        if(USB_Connect == 4)         
+       	     	 {
+       	     	      val->intval = USB_Connect;
+          	      modem_enable = 0;
+		  if(modem_discon == 1){   ///Send two times u-event 
+                       USB_Connect  = 0;
+		       modem_discon = 0;
+		     }
+		   else
+		       modem_discon ++;				 
+       	          }
+       	        else	
+                   val->intval = 0;    
+            }
+         }
+        //---FIH_ADQ---
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+///--- FIH_ADQ ---
 
 static void usb_configure_device_descriptor(struct usb_info *ui)
 {
@@ -2931,6 +3296,8 @@ static ssize_t msm_hsusb_store_func_enable(struct device *dev,
 	usb_function_enable(name, enable);
 	return size;
 }
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
+
 static ssize_t msm_hsusb_show_compswitch(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -2962,6 +3329,101 @@ static ssize_t msm_hsusb_store_compswitch(struct device *dev,
 
 	return size;
 }
+
+///--- FIH_ADQ --- Sung Chuan 2009.06.10
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.12
+static ssize_t msm_hsusb_store_change_pid(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+		      struct usb_info *ui = the_usb_info;
+		      
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */	   		
+  	if (!strncmp(buf, "diag", strlen("diag"))) {
+             fih_enable = 1;
+             usb_chg_pid(true);		
+	     pr_info("%s: msm_hsusb_store_change_pid \n", __func__);
+		
+	  }else if (!strncmp(buf, "hidden", strlen("hidden"))) {
+             fih_enable = 2;
+             usb_chg_pid(true);		
+	     pr_info("%s: msm_hsusb_store_change_pid \n", __func__);
+		
+	  }else if (!strncmp(buf, "ethernet", strlen("ethernet"))) {
+             fih_enable = 3;
+             usb_chg_pid(true);	
+	     pr_info("%s: msm_hsusb_store_change_pid \n", __func__);
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */		
+	  }  
+	   else
+		  pr_info("%s:  msm_hsusb_store_change_pid failed buf==%s\n", __func__,buf);
+
+	return size;
+}
+///--- FIH_ADQ --- Sung Chuan 2009.06.12
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
+static ssize_t msm_hsusb_store_modem_status(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+	if (!strict_strtoul(buf, 4, &fih_modem_status)) {
+		pr_info("%s:modem_status = %lx\n", __func__, fih_modem_status);
+		
+	} else
+		pr_info("%s: modem status failed\n", __func__);
+
+	return size;
+}
+///--- FIH_ADQ --- Sung Chuan 2009.06.10
+///+++ FIH_ADQ +++ Sung Chuan 2009.07.02
+static ssize_t msm_hsusb_store_apn_name(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+  	strcpy(apn_name,buf);
+		pr_info("%s: apn_name failed %s\n", __func__,apn_name);
+
+	return size;
+}
+
+///--- FIH_ADQ --- Sung Chuan 2009.07.02
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
+static ssize_t msm_hsusb_store_modem_connect(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+	struct usb_info *ui = the_usb_info;
+	unsigned long flags;
+    modem_enable = 1;
+	  USB_Connect = 3;
+    power_supply_changed(g_ps_usb);
+	return size;
+}
+static ssize_t msm_hsusb_store_modem_disconnect(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+	struct usb_info *ui = the_usb_info;
+	unsigned long flags;
+
+	USB_Connect = 4;
+    power_supply_changed(g_ps_usb);
+	return size;
+}
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
+/* FIH, SungSCLee, 2009/04/27 { */	
+static ssize_t msm_hsusb_store_hs_connect(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+	struct usb_info *ui = the_usb_info;
+	unsigned long flags;
+
+	USB_Connect = 2;
+  power_supply_changed(g_ps_usb);
+	return size;
+}
+#if 0
 static ssize_t msm_hsusb_store_autoresume(struct device *dev,
 					  struct device_attribute *attr,
 					  const char *buf, size_t size)
@@ -2970,7 +3432,10 @@ static ssize_t msm_hsusb_store_autoresume(struct device *dev,
 
 	return size;
 }
-
+#endif
+/* } FIH, SungSCLee, 2009/04/27 */	
+///+++ 6370 +++
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
 static ssize_t msm_hsusb_show_state(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -2985,9 +3450,22 @@ static ssize_t msm_hsusb_show_state(struct device *dev,
 	};
 
 	i = scnprintf(buf, PAGE_SIZE, "%s\n", state[ui->usb_state]);
+    if (smem_pid[0] == 0xffff)
+        printk("[USB]Read hsusb_show_state %s\n",buf);
 	return i;
 }
-
+///+++ FIH_ADQ +++ Sung Chuan 2009.07.29 Insert USB chargering then press Power key
+static ssize_t msm_hsusb_store_reboot(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t size)
+{   
+    if (!strncmp(buf, "1", strlen("1"))) {
+        kernel_restart("usb_reboot");
+    }
+   	return size; 
+}
+///--- FIH_ADQ --- Sung Chuan 2009.07.29
+#if 0
 static ssize_t msm_hsusb_show_lpm(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -3011,24 +3489,73 @@ static ssize_t msm_hsusb_show_speed(struct device *dev,
 	i = scnprintf(buf, PAGE_SIZE, "%s\n", speed[ui->speed]);
 	return i;
 }
+#endif
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */	///For port_bridge to switch mass storage
+static ssize_t msm_hsusb_show_switch_enable(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+    	struct usb_info *ui = the_usb_info;
+    	int i;
 
+        if(Dynamic_switch)
+	        i = scnprintf(buf, PAGE_SIZE, "true");
+        else
+          i = scnprintf(buf, PAGE_SIZE, "false");
+	    return i;
+}
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */	
+///--- FIH_ADQ --- Sung Chuan 2009.06.10
+///--- 6370 ---
 static DEVICE_ATTR(composition, 0664,
 		msm_hsusb_show_compswitch, msm_hsusb_store_compswitch);
 static DEVICE_ATTR(func_enable, S_IWUSR,
 		NULL, msm_hsusb_store_func_enable);
-static DEVICE_ATTR(autoresume, S_IWUSR,
-		NULL, msm_hsusb_store_autoresume);
+/* FIH, SungSCLee, 2009/04/27 { */	
+static DEVICE_ATTR(hs_connect, 0664,
+		NULL, msm_hsusb_store_hs_connect);
+///static DEVICE_ATTR(autoresume, S_IWUSR,
+///		NULL, msm_hsusb_store_autoresume);	
+///++++ 6370 +++
 static DEVICE_ATTR(state, 0664, msm_hsusb_show_state, NULL);
-static DEVICE_ATTR(lpm, 0664, msm_hsusb_show_lpm, NULL);
-static DEVICE_ATTR(speed, 0664, msm_hsusb_show_speed, NULL);
-
+///static DEVICE_ATTR(lpm, 0664, msm_hsusb_show_lpm, NULL);
+///static DEVICE_ATTR(speed, 0664, msm_hsusb_show_speed, NULL);
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25			
+static DEVICE_ATTR(modem_connect, 0664,NULL, msm_hsusb_store_modem_connect);	
+static DEVICE_ATTR(modem_disconnect, 0664,NULL, msm_hsusb_store_modem_disconnect);
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
+static DEVICE_ATTR(modem_status, 0664,NULL, msm_hsusb_store_modem_status);
+static DEVICE_ATTR(switch, 0664,NULL, msm_hsusb_store_change_pid);
+static DEVICE_ATTR(apn_name, 0664,NULL, msm_hsusb_store_apn_name);
+static DEVICE_ATTR(reboot, 0664,NULL, msm_hsusb_store_reboot);
+static DEVICE_ATTR(switch_enable, 0664,msm_hsusb_show_switch_enable, NULL);
+///--- FIH_ADQ --- Sung Chuan 2009.06.10
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
+/* } FIH, SungSCLee, 2009/04/27 */	
 static struct attribute *msm_hsusb_attrs[] = {
 	&dev_attr_composition.attr,
 	&dev_attr_func_enable.attr,
-	&dev_attr_autoresume.attr,
+/* FIH, SungSCLee, 2009/04/27 { */	
+	&dev_attr_hs_connect.attr,
+///	&dev_attr_autoresume.attr,	
+///+++ 6370	
 	&dev_attr_state.attr,
-	&dev_attr_lpm.attr,
-	&dev_attr_speed.attr,
+///	&dev_attr_lpm.attr,
+///	&dev_attr_speed.attr,	
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
+	&dev_attr_modem_connect.attr,	
+	&dev_attr_modem_disconnect.attr,
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.10	
+	&dev_attr_modem_status.attr,
+	&dev_attr_switch.attr,
+	&dev_attr_apn_name.attr,
+	&dev_attr_reboot.attr,
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */	
+    &dev_attr_switch_enable.attr,
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */		
+///--- FIH_ADQ --- Sung Chuan 2009.06.10	
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
+/* } FIH, SungSCLee, 2009/04/27 */	
 	NULL,
 };
 static struct attribute_group msm_hsusb_attr_grp = {
@@ -3042,7 +3569,43 @@ static int __init usb_probe(struct platform_device *pdev)
 	int irq;
 	int ret;
 	int i;
+////+++ FIH_ADQ +++	
+	struct goldfish_usb_data *data;
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.12
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
 
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */		
+///--- FIH_ADQ --- Sung Chuan 2009.06.12	
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (data == NULL) {
+		ret = -ENOMEM;
+		return usb_init_err;
+	}
+	spin_lock_init(&data->lock);
+	data->usb.properties = fih_goldfish_power_props;
+	data->usb.num_properties = ARRAY_SIZE(fih_goldfish_power_props);
+	data->usb.get_property = goldfish_power_get_property;
+	data->usb.name = "usb";
+	data->usb.type = POWER_SUPPLY_TYPE_USB;
+	ret = power_supply_register(&pdev->dev, &data->usb);
+	
+	platform_set_drvdata(pdev, data);
+	usb_data = data;
+	g_ps_usb = &(data->usb);
+
+	data->ac.properties = fih_goldfish_power_props;
+	data->ac.num_properties = ARRAY_SIZE(fih_goldfish_power_props);
+	data->ac.get_property = goldfish_power_get_property;
+	data->ac.name = "ac";
+	data->ac.type = POWER_SUPPLY_TYPE_MAINS;
+	ret = power_supply_register(&pdev->dev, &data->ac);
+
+		
+	platform_set_drvdata(pdev, data);
+	usb_data = data;
+	g_ps_ac = &(data->ac);
+
+///--- FIH_ADQ ---	
 	ui = kzalloc(sizeof(struct usb_info), GFP_KERNEL);
 	if (!ui)
 		return -ENOMEM;
@@ -3057,8 +3620,6 @@ static int __init usb_probe(struct platform_device *pdev)
 
 	spin_lock_init(&ui->lock);
 	wake_lock_init(&ui->wlock, WAKE_LOCK_SUSPEND, "usb_bus_active");
-	pm_qos_add_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME,
-							PM_QOS_DEFAULT_VALUE);
 	the_usb_info = ui;
 
 	ui->functions_map = ui->pdata->function_map;
@@ -3080,7 +3641,23 @@ static int __init usb_probe(struct platform_device *pdev)
 		return usb_init_err;
 	}
 
-	if (!usb_set_composition(pid)) {
+
+/* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
+// +++ FIH_ADQ +++, modified by henry.wang, 2009.06.01, added FIH VID/PID supported
+	if (smem_pid[0] == 0xc000)	       ///5 ports
+		upid = 0xc004;				    /// Default :Mass Storage
+	else if (smem_pid[0] == 0xc001)    /// enable this port for modem debug (No Diagnostic Port 4 ports 0xf101;)
+		upid = 0xc004;			  		/// Default :Mass Storage	  
+///+++ FIH_ADQ +++ Sung Chuan 2009.07.29		
+	else if (smem_pid[0] == 0xffff)    ///One Port-> Mass Storage
+	    upid = 0xc004;
+///--- FIH_ADQ --- Sung Chuan 2009.07.29			
+	else    
+		upid = 0xc002;				  /// 1 port Diagnostic
+/* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */
+
+
+	if (!usb_set_composition(upid)) {
 		usb_init_err = -ENODEV;
 		return usb_init_err;
 	}
@@ -3151,6 +3728,7 @@ static int __init usb_probe(struct platform_device *pdev)
 		usb_init_err = PTR_ERR(ui->pclk);
 		return usb_init_err;
 	}
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.03 	
 	/* memory barrier initialization in non-interrupt context */
 	dmb();
 
@@ -3238,11 +3816,27 @@ no_gpios:
 
 	usb_prepare(ui);
 	msm_hsusb_set_vbus_state(1);
+        /*+++FIH_ADQ+++*/
+        gpio_tlmm_config(GPIO_CFG(33, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE); 
+	gpio_tlmm_config(GPIO_CFG(97, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(57, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+        /*+++FIH_ADQ+++*/
+        return 0;
+}
+///+++ FIH_ADQ +++
+static int usb_probe_remove(struct platform_device *pdev)
+{
+	struct goldfish_usb_data *data = platform_get_drvdata(pdev);
+	
+	power_supply_unregister(&data->usb);
+	kfree(data);
+	usb_data = NULL;
 
 	return 0;
 }
+///--- FIH_ADQ ---
 
-#ifdef CONFIG_PM
+///#ifdef CONFIG_PM
 static int usb_platform_suspend(struct platform_device *pdev,
 		pm_message_t state)
 {
@@ -3250,39 +3844,68 @@ static int usb_platform_suspend(struct platform_device *pdev,
 	unsigned long flags;
 	int ret = 0;
 
-	spin_lock_irqsave(&ui->lock, flags);
 
+	   USB_Connect = 0;     
+    if (ui->chg_type == CHG_WALL)
+         power_supply_changed(g_ps_ac);
+    else
+  	     power_supply_changed(g_ps_usb);
+  	
+	spin_lock_irqsave(&ui->lock, flags);
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.07
 	if (!ui->active) {
 		spin_unlock_irqrestore(&ui->lock, flags);
 		pr_info("%s: peripheral mode is not active"
 				"nothing to be done\n", __func__);
 		return 0;
 	}
-
+///--- FIH_ADQ --- Sung Chuan 2009.04.07
 	if (ui->in_lpm) {
 		spin_unlock_irqrestore(&ui->lock, flags);
 		pr_info("%s: we are already in lpm, nothing to be done\n",
 					__func__);
 		return 0;
 	}
-	spin_unlock_irqrestore(&ui->lock, flags);
+///+++ FIH_ADQ +++ Sung Chuan 2009.04.08
+	/* stopping controller by disabling pullup on D+ */
+	///writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
+	/* S/W workaround, Issue#1 */
+	///ulpi_write(ui, 0x48, 0x04);
+///--- FIH_ADQ --- Sung Chuan 2009.04.08
 
+	spin_unlock_irqrestore(&ui->lock, flags);
+///+++ FIH_ADQ +++ Sung Chuan 2009.09.22	
+    if(check_USB_type == 2)
+  	   return 0;
+    else
+    	{	
 	ret = usb_lpm_enter(ui);
 	if (ret)
 		pr_err("%s: failed to enter lpm\n", __func__);
+		}
+///--- FIH_ADQ --- Sung Chuan 2009.09.22		
+///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
+    if(modem_enable == 1){  	
+  	   USB_Connect = 4;  ///Disconnect modem
+       power_supply_changed(g_ps_usb);
+	  }
+///--- FIH_ADQ --- Sung Chuan 2009.05.25
 
 	return ret;
 }
-#else
-static int usb_platform_suspend(struct platform_device *pdev,
-		pm_message_t state)
-{
-}
-#endif
+///#else
+///static int usb_platform_suspend(struct platform_device *pdev,
+///		pm_message_t state)
+///{
+///}
+///#endif
 
 static struct platform_driver usb_driver = {
 	.probe = usb_probe,
 	.suspend = usb_platform_suspend,
+///+++ FIH_ADQ +++
+	.remove		= usb_probe_remove,	
+///--- FIH_ADQ ---	
 	.driver = { .name = DRIVER_NAME, },
 };
 
@@ -3345,7 +3968,6 @@ static void usb_exit(void)
 	cancel_work_sync(&ui->li.wakeup_phy);
 
 	destroy_workqueue(usb_work);
-	pm_qos_remove_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME);
 	/* free the usb_info structure */
 	free_usb_info();
 	sysfs_remove_group(&ui->pdev->dev.kobj, &msm_hsusb_attr_grp);
@@ -3359,9 +3981,37 @@ static void __exit usb_module_exit(void)
 {
 	usb_exit();
 }
-
-module_param(pid, int, 0);
-MODULE_PARM_DESC(pid, "Product ID of the desired composition");
+/* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */
+void usb_chg_pid(bool usb_switch) 
+{
+  struct usb_info *ui = the_usb_info;
+  int i;
+  struct file			*gMD_filp = NULL;               
+  char temp[10];
+  switch_enable = true;
+  backup_USB_Connect = USB_Connect;
+  if(usb_switch){
+       Dynamic_switch = true;
+      if (smem_pid[0] == 0xc000 || fih_enable == 1){
+         upid = 0xc000;
+         USB_Connect = 5;
+         power_supply_changed(g_ps_usb);
+      }else if (smem_pid[0] == 0xc001 || fih_enable == 2){
+         upid = 0xc001;
+         USB_Connect = 6;
+         power_supply_changed(g_ps_usb);
+      }else if(fih_enable == 3){
+         upid = 0xc003;
+         USB_Connect = 7;
+         power_supply_changed(g_ps_usb);
+      }
+  }
+   fih_enable = 0;
+   switch_enable = false;
+}
+/* }--- FIH_ADQ --- , SungSCLee 2009.09.02 */
+module_param(upid, int, 0);
+MODULE_PARM_DESC(upid, "Product ID of the desired composition");
 
 module_init(usb_module_init);
 module_exit(usb_module_exit);

@@ -5,6 +5,7 @@
 #include <linux/init.h>
 #include <linux/cpumask.h>
 #include <linux/cache.h>
+#include <linux/immediate.h>
 
 #include <asm/errno.h>
 
@@ -32,7 +33,7 @@ enum profile_type {
 
 #ifdef CONFIG_PROFILING
 
-extern int prof_on __read_mostly;
+DECLARE_IMV(char, prof_on) __read_mostly;
 
 /* init basic kernel profiler */
 void __init profile_init(void);
@@ -51,7 +52,7 @@ static inline void profile_hit(int type, void *ip)
 	/*
 	 * Speedup for the common (no profiling enabled) case:
 	 */
-	if (unlikely(prof_on == type))
+	if (unlikely(imv_read(prof_on) == type))
 		profile_hits(type, ip, 1);
 }
 

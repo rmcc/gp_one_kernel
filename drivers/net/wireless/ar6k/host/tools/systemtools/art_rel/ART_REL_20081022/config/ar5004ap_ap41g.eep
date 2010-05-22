@@ -1,0 +1,87 @@
+#$Id: //depot/sw/releases/olca2.1-RC/host/tools/systemtools/bringup/ar5k/config/ar5004ap_ap41g.eep#1 $
+
+
+@cal_section_begin          		# begin @cal section
+
+TARGET_POWER_FILENAME      =  calTrgtPwr_ar5004ap_ap41g.txt ; # target power file for calibration
+SUBSYSTEM_ID	           =  0xa041;   # Subsystem ID in hex
+EEPROM_MAP_TYPE		   =  1;	# Flag indicating eeprom layout type
+TURBO_DISABLE	    	   =  0;   	# Prevents software from using TURBO modes
+RF_SILENT		   =  0;   	# Cards enabled with RFSilent can be easily silenced
+DEVICE_TYPE		   =  4;   	# 1=>Cardbus, 2=>PCI, 3=>miniPCI, 4=>AP
+TURBO_MAXPOWER_5G	   =  16.0;   	# Recommended max power in turbo mode to consume less than 2W.
+TURBO_MAXPOWER_2p5G	   =  16.0;   	# Recommended max power in turbo mode at 2.5 GHz to consume less than 2W.
+A_MODE		           =  0;   	# Whether the adapter supports 802.11a functionality
+B_MODE		           =  1;   	# Whether the adapter supports 802.11b functionality
+G_MODE		           =  1;   	# Whether the adapter supports 802.11g functionality
+ANTENNA_GAIN_5G	           =  4;	# Antenna gain at 5.5GHz. 8-bit signed val in 0.5dB steps.
+ANTENNA_GAIN_2p5G          =  1.5;	# Antenna gain at 2.5GHz. 8-bit signed val in 0.5dB steps.
+XLNA_GAIN		   =  13;  	# xLNA gain in dB (per AS 6/14/02)
+NOISE_FLOOR_THRESHOLD	   = -54; 	# noise floor threshold value (per JHfmn 6/14/02)
+11b_XLNA_GAIN		   =  13;  	# xLNA gain in dB
+11b_NOISE_FLOOR_THRESHOLD  = -1; 	# noise floor threshold value
+11g_XLNA_GAIN		   =  13;  	# xLNA gain in dB
+11g_NOISE_FLOOR_THRESHOLD  = -1; 	# noise floor threshold value
+11a_FALSE_DETECT_BACKOFF   =  0;	# in dB. only affects channels w/ clock harmonic overlap.
+11b_FALSE_DETECT_BACKOFF   =  0;	# in dB. only affects channels w/ clock harmonic overlap.
+11g_FALSE_DETECT_BACKOFF   =  0;	# in dB. only affects channels w/ clock harmonic overlap.
+CCK_OFDM_DELTA		   =  1;	# in dB with 0.1dB resolution. In 11g, delta in output power for 1mbps and 6mbps
+					# for any given pcdac.
+CH14_FILTER_CCK_DELTA	   =  1.5;	# in dB with 0.1dB resolution. In 11g & 11b, delta in output power for ch14 and ch1 - ch13
+					# for any given pcdac. This delta arises due to special filter requirement for ch14 (2484).
+ENABLE_32KHZ               =  0;	# Flag indicating the presence of the 32kHz sleep crystal
+NUM_ETHERNET_PORTS	   =  1;	# number of ethernet ports.
+START_ETHERNET_PORT        =  1;        # Starting index of enabled ethernet ports (zero based)
+
+MODE_MASK_FOR_RADIO_0      =  0;
+MODE_MASK_FOR_RADIO_1      =  1;
+
+@cal_section_end            		# end @cal section	
+
+
+@config_section_begin       		# begin @config section
+
+#Antenna Switch Table
+#6 bit (msb:lsb) value are mapped to [atten5, atten2, antD, antC, antB, antA]
+#----------------------------------------------------------------------------------
+@MODE: MODE_SPECIFIC             11a   11a_turbo        11b         11g    11g_tubo
+#----------------------------------------------------------------------------------
+bb_switch_table_r1x12              0           0        0x02       0x02      0x02 #(AntCtl 5)
+bb_switch_table_r1x2               0           0        0x02       0x02      0x02 #(AntCtl 4)
+bb_switch_table_r1x1               0           0        0x02       0x02      0x02 #(AntCtl 3)
+bb_switch_table_r1                 0           0        0x06       0x06      0x06 #(AntCtl 2)
+bb_switch_table_t1                 0           0        0x01       0x01      0x01 #(AntCtl 1)
+
+bb_switch_table_r2x12              0           0        0x01       0x01      0x01 #(AntCtl 10)
+bb_switch_table_r2x2               0           0        0x01       0x01      0x01 #(AntCtl 9)
+bb_switch_table_r2x1               0           0        0x01       0x01      0x01 #(AntCtl 8)
+bb_switch_table_r2                 0           0        0x05       0x05      0x05 #(AntCtl 7)
+bb_switch_table_t2                 0           0        0x02       0x02      0x02 #(AntCtl 6)
+
+
+bb_rxtx_margin_2ghz                0           0          27         27	       27
+bb_switch_settling                 0           0        0x31       0x31      0x31
+bb_txrxatten                       0           0          30         30        30
+bb_pga_desired_size                0           0         -80        -80       -80
+bb_adc_desired_size                0           0         -38        -32       -32
+rf_ob                              0           0           2          2         2
+rf_db                              0           0           2          2         2
+rf_b_ob                            0           0           2          2         2
+rf_b_db                            0           0           2          2         2
+rf_xpdsel			               0           0           1          1	        1
+rf_pdgain_lo			           0	       0	     0x0	    0x0       0x0
+rf_pdgain_hi			           0	       0	     0x0	    0x0       0x0
+#rf_pdgain_hi			           0	       0	     0x3	    0x3       0x3
+bb_thresh62		                   0           0	      28	     28        28
+bb_tx_end_to_xpab_off              0           0           0          0         0
+bb_tx_end_to_xpaa_off              0           0           0          0         0
+bb_tx_frame_to_xpab_on		       0           0         0x7        0xe       0xe
+bb_tx_frame_to_xpaa_on		       0           0         0x7        0xe       0xe
+bb_tx_end_to_xlna_on               0           0           2          2         2
+
+rf_gain_I                          0           0        0x0a       0x0a      0x0a
+
+@config_section_end         # end @config section
+
+
+

@@ -1,0 +1,15 @@
+#!/bin/sh --verbose
+echo "loading driver"
+cd sdio_driver
+./load
+echo "Wait for few seconds"
+sleep 10
+echo "Download client"
+cd ../client/
+./dkdownload.sh
+echo "execute art"
+cd ../art/bin
+./art.out \\remote=sdio \\id=0x6022
+cd sdio_driver
+./unload
+cd ..

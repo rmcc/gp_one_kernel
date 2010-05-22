@@ -1,6 +1,6 @@
 /* ehci-msm.c - HSUSB Host Controller Driver Implementation
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * Partly derived from ehci-fsl.c and ehci-hcd.c
  * Copyright (c) 2000-2004 by David Brownell
@@ -44,8 +44,6 @@ struct msm_hc_device {
 	unsigned phy_info;
 	unsigned in_lpm;
 	struct work_struct lpm_exit_work;
-	struct work_struct xceiv_work;
-	struct completion suspend_done;
 	spinlock_t lock;
 	unsigned int soc_version;
 	unsigned active;
@@ -270,12 +268,6 @@ void usb_lpm_exit_w(struct work_struct *work)
 		return;
 	}
 
-	/* If resume signalling finishes before lpm exit, PCD is not set in
-	 * USBSTS register. Drive resume signal to the downstream device now
-	 * so that EHCI can process the upcoming port change interrupt.*/
-
-	writel(readl(USB_PORTSC) | PORTSC_FPR, USB_PORTSC);
-
 	if (msm_hc_dev.xceiv)
 		msm_hc_dev.xceiv->set_suspend(0);
 	if (device_may_wakeup(dev))
@@ -307,15 +299,6 @@ static irqreturn_t ehci_msm_irq(struct usb_hcd *hcd)
 		usb_lpm_exit(hcd);
 		return IRQ_HANDLED;
 	}
-
-	if (readl(USB_OTGSC) & OTGSC_IDIS) {
-		writel((OTGSC_IDIS | readl(USB_OTGSC)), USB_OTGSC);
-		if (!(readl(USB_USBSTS) & CMD_RUN))
-			usb_hcd_resume_root_hub(hcd);
-		return IRQ_HANDLED;
-	}
-
-
 	return ehci_irq(hcd);
 }
 
@@ -325,11 +308,11 @@ static int ehci_msm_bus_suspend(struct usb_hcd *hcd)
 {
 	int rc;
 
+	if (!msm_hc_dev.active)
+		return 0;
 	rc = ehci_bus_suspend(hcd);
-	if (!msm_hc_dev.active) {
-		complete(&msm_hc_dev.suspend_done);
+	if (rc)
 		return rc;
-	}
 	rc = usb_lpm_enter(hcd);
 	if (rc)
 		return ehci_bus_resume(hcd);
@@ -339,7 +322,7 @@ static int ehci_msm_bus_suspend(struct usb_hcd *hcd)
 static int ehci_msm_bus_resume(struct usb_hcd *hcd)
 {
 	if (!msm_hc_dev.active)
-		return ehci_bus_resume(hcd);
+		return 0;
 	usb_lpm_exit(hcd);
 	if (cancel_work_sync(&(msm_hc_dev.lpm_exit_work)))
 		usb_lpm_exit_w(NULL);
@@ -371,6 +354,11 @@ static int ehci_msm_init(struct ehci_hcd *ehci)
 	/* set hostmode */
 	ehci_writel(ehci, (USBMODE_VBUS | USBMODE_CM_HC |
 				USBMODE_SDIS), reg_ptr);
+
+	command |= CMD_RUN;
+	ehci_writel(ehci, command, &ehci->regs->command);
+
+	ehci_to_hcd(ehci)->state = HC_STATE_RUNNING;
 
 	return 0;
 }
@@ -426,6 +414,12 @@ static int ehci_msm_run(struct usb_hcd *hcd)
 
 	hcd->uses_new_polling = 1;
 	hcd->poll_rh = 0;
+
+	retval = ehci_halt(ehci);
+	if (retval) {
+		ehci_mem_cleanup(ehci);
+		return retval;
+	}
 
 	/* EHCI spec section 4.1 */
 	retval = ehci_reset(ehci);
@@ -558,10 +552,8 @@ static void ehci_msm_enable(int enable)
 		msm_hc_dev.active = 1;
 	} else {
 		msm_hc_dev.active = 0;
-		msm_hsusb_vbus_shutdown();
-		if (hcd->state != HC_STATE_SUSPENDED)
-			wait_for_completion(&msm_hc_dev.suspend_done);
 		msm_vbus_offline();
+		msm_hsusb_vbus_shutdown();
 	}
 }
 
@@ -569,16 +561,6 @@ static struct msm_otg_ops hcd_ops = {
 	.status_change = ehci_msm_enable,
 };
 
-void usb_xceiv_work(struct work_struct *work)
-{
-	int retval;
-
-	retval = msm_hc_dev.xceiv->set_host(msm_hc_dev.xceiv,
-			&hcd_ops);
-	if (retval)
-		pr_err("%s: Can't register Host driver with OTG",
-				__func__);
-}
 static int __init ehci_msm_probe(struct platform_device *pdev)
 {
 	struct usb_hcd *hcd;
@@ -673,10 +655,6 @@ static int __init ehci_msm_probe(struct platform_device *pdev)
 
 	/* enable IDpullup to start ID pin sampling */
 	ulpi_write(hcd, ULPI_IDPU, ULPI_OTG_CTRL);
-	/* Disable VbusValid and SessionEnd comparators */
-	ulpi_write(hcd, ULPI_VBUS_VALID | ULPI_SESS_END, ULPI_INT_RISE_CLR);
-	ulpi_write(hcd, ULPI_VBUS_VALID | ULPI_SESS_END, ULPI_INT_FALL_CLR);
-
 
 	/* reset hc core */
 	writel((readl(USB_USBCMD) | CMD_RESET), USB_USBCMD);
@@ -704,16 +682,7 @@ static int __init ehci_msm_probe(struct platform_device *pdev)
 	msm_hc_dev.in_lpm = 0;
 	spin_lock_init(&msm_hc_dev.lock);
 	INIT_WORK(&(msm_hc_dev.lpm_exit_work), usb_lpm_exit_w);
-	INIT_WORK(&(msm_hc_dev.xceiv_work), usb_xceiv_work);
-	init_completion(&msm_hc_dev.suspend_done);
 	device_init_wakeup(&pdev->dev, 1);
-	msm_hc_dev.active = 1;
-
-	/* disable interrupts before requesting irq */
-	msm_vbus_online();
-	writel(0, USB_USBINTR);
-	writel(readl(USB_OTGSC) & ~OTGSC_INTR_MASK, USB_OTGSC);
-	msm_vbus_offline();
 
 	retval = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (retval != 0)
@@ -724,9 +693,14 @@ static int __init ehci_msm_probe(struct platform_device *pdev)
 	msm_hc_dev.xceiv = msm_otg_get_transceiver();
 	if (msm_hc_dev.xceiv) {
 		msm_hc_dev.active = 0;
-		schedule_work(&(msm_hc_dev.xceiv_work));
+		retval = msm_hc_dev.xceiv->set_host(msm_hc_dev.xceiv,
+							&hcd_ops);
+		if (retval)
+			pr_err("%s: Can't register Host driver with OTG",
+					__func__);
 	} else {
 		msm_hsusb_vbus_powerup();
+		msm_hc_dev.active = 1;
 	}
 
 	return retval;

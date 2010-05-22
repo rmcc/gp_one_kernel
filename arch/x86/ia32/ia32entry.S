@@ -832,4 +832,6 @@ ia32_sys_call_table:
 	.quad sys_dup3			/* 330 */
 	.quad sys_pipe2
 	.quad sys_inotify_init1
+	.quad sys_marker
+	.quad sys_trace
 ia32_syscall_end:

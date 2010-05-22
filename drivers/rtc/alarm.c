@@ -23,6 +23,17 @@
 #include <linux/sysdev.h>
 #include <linux/wakelock.h>
 
+//test Auto Tool +++++++
+#include <linux/msm_rpcrouter.h>
+#include <mach/msm_rpcrouter.h>
+
+#define ONCRPC_TIME_ALARM_SET_PROC 3
+// FIH_ADQ + // make version number is compatible with modem side version 1.3.40
+#define TIMEREMOTE_PROG_VER 0x915823fc
+// FIH ADQ -
+#define TIMEREMOTE_PROG_NUMBER 0x30000048
+//test Auto tool --------
+
 #define ANDROID_ALARM_PRINT_ERRORS (1U << 0)
 #define ANDROID_ALARM_PRINT_INIT_STATUS (1U << 1)
 #define ANDROID_ALARM_PRINT_INFO (1U << 2)
@@ -88,6 +99,9 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int rv = 0;
 	unsigned long flags;
 	int i;
+	//add for auto test tool ++++ 
+static struct msm_rpc_endpoint *ep;
+	//add for auto test tool -----		
 	struct timespec new_alarm_time;
 	struct timespec new_rtc_time;
 	struct timespec tmp_time;
@@ -102,7 +116,10 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if ((file->f_flags & O_ACCMODE) == O_RDONLY)
 			return -EPERM;
 		if (file->private_data == NULL &&
-		    cmd != ANDROID_ALARM_SET_RTC) {
+//auto tool +++++
+		    cmd != ANDROID_ALARM_SET_RTC && cmd != ANDROID_ALARM_SET_TO_POWER_ON) {
+//auto tool -----
+
 			spin_lock_irqsave(&alarm_slock, flags);
 			if (alarm_opened) {
 				spin_unlock_irqrestore(&alarm_slock, flags);
@@ -158,6 +175,59 @@ from_old_alarm_set:
 		    && cmd != ANDROID_ALARM_SET_AND_WAIT_OLD)
 			break;
 		/* fall though */
+	//add for auto test tool ++++ 
+	case ANDROID_ALARM_SET_TO_POWER_ON:
+	{
+		struct timeremote_set_alarm_req {
+			struct rpc_request_hdr hdr;
+			uint32_t expiration;
+		} req;
+
+		struct timeremote_set_alarm_rep {
+			struct rpc_reply_hdr hdr;
+		} rep;
+		int rc =0;
+		printk(KERN_ERR "Auto tool (RTC alarm) Start \r\n");
+ 	       printk(KERN_ERR "before copy_from_user\r\n");	
+		if (copy_from_user(&(req.expiration), (void __user *)arg,
+				    sizeof(uint32_t))) {
+					rv = -EFAULT;
+					printk(KERN_DEBUG "copy_from_user fail\r\n");	
+					goto Exit;
+				}		   
+	       printk(KERN_ERR "before msm_rpc_connect_compatible\r\n");	
+		ep = msm_rpc_connect_compatible(TIMEREMOTE_PROG_NUMBER, TIMEREMOTE_PROG_VER, 0);
+		if (IS_ERR(ep)) {
+			printk(KERN_ERR "%s: init rpc failed! rc = %ld\n",
+			       __func__, PTR_ERR(ep));
+			goto Exit;
+		}
+		
+		printk(KERN_ERR "[%s][%s]:before cpu_to_be32 expiration=%d \r \n",
+			__FILE__,__func__, req.expiration);			
+		
+//		req.expiration = cpu_to_be32(10000);
+		req.expiration = cpu_to_be32(req.expiration);
+
+		printk(KERN_ERR "[%s][%s]: Befor msm_rpc_call_reply ONCRPC_TIME_ALARM_SET_PROC\r \n",
+			__FILE__,__func__);
+		printk(KERN_ERR "[%s][%s]:after cpu_to_be32 expiration=%d \r \n",
+			__FILE__,__func__, req.expiration);
+		
+		rc = msm_rpc_call_reply(ep, ONCRPC_TIME_ALARM_SET_PROC ,
+					&req, sizeof(req),
+					&rep, sizeof(rep),
+					5 * HZ);
+		
+		printk(KERN_ERR "[%s][%s]: After msm_rpc_call_reply ONCRPC_TIME_ALARM_SET_PROC\r \n",
+			__FILE__,__func__);
+		printk(KERN_ERR "[%s][%s]: rc = %d\r \n",
+			__FILE__,__func__, rc);	
+			
+		Exit:
+			break;
+		}
+	//add for auto test tool -----		
 	case ANDROID_ALARM_WAIT:
 		spin_lock_irqsave(&alarm_slock, flags);
 		ANDROID_ALARM_DPRINTF(ANDROID_ALARM_PRINT_IO, "alarm wait\n");
@@ -264,7 +334,10 @@ static int alarm_release(struct inode *inode, struct file *file)
 
 	spin_lock_irqsave(&alarm_slock, flags);
 	if (file->private_data != 0) {
-		for (i = 0; i < ANDROID_ALARM_TYPE_COUNT; i++) {
+        // +++ fix the fatal error bug +++
+        for (i = 0; i < (ANDROID_ALARM_SYSTEMTIME+1); i++) {
+		//for (i = 0; i < ANDROID_ALARM_TYPE_COUNT; i++) {
+        // --- fix the fatal error bug ---
 			uint32_t alarm_type_mask = 1U << i;
 			if (alarm_enabled & alarm_type_mask) {
 				ANDROID_ALARM_DPRINTF(ANDROID_ALARM_PRINT_INFO,

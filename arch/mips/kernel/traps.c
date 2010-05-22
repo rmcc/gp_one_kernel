@@ -25,6 +25,7 @@
 #include <linux/ptrace.h>
 #include <linux/kgdb.h>
 #include <linux/kdebug.h>
+#include <linux/marker.h>
 
 #include <asm/bootinfo.h>
 #include <asm/branch.h>
@@ -306,7 +307,7 @@ static void __show_regs(const struct pt_regs *regs)
 
 	printk("Cause : %08x\n", cause);
 
-	cause = (cause & CAUSEF_EXCCODE) >> CAUSEB_EXCCODE;
+	cause = CAUSE_EXCCODE(cause);
 	if (1 <= cause && cause <= 5)
 		printk("BadVA : %0*lx\n", field, regs->cp0_badvaddr);
 
@@ -637,6 +638,8 @@ asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 		return;
 	die_if_kernel("FP exception in kernel code", regs);
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %lu ip #p%ld",
+		CAUSE_EXCCODE(regs->cp0_cause), instruction_pointer(regs));
 	if (fcr31 & FPU_CSR_UNI_X) {
 		int sig;
 
@@ -844,6 +847,9 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 	unsigned int cpid;
 	int status;
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %lu ip #p%ld",
+		CAUSE_EXCCODE(regs->cp0_cause), instruction_pointer(regs));
+
 	die_if_kernel("do_cpu invoked from kernel context!", regs);
 
 	cpid = (regs->cp0_cause >> CAUSEB_CE) & 3;
@@ -855,8 +861,10 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 		opcode = 0;
 		status = -1;
 
-		if (unlikely(compute_return_epc(regs) < 0))
+		if (unlikely(compute_return_epc(regs) < 0)) {
+			trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 			return;
+		}
 
 		if (unlikely(get_user(opcode, epc) < 0))
 			status = SIGSEGV;
@@ -874,7 +882,7 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 			regs->cp0_epc = old_epc;	/* Undo skip-over.  */
 			force_sig(status, current);
 		}
-
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 
 	case 1:
@@ -894,7 +902,7 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 			else
 				mt_ase_fp_affinity();
 		}
-
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 
 	case 2:
@@ -903,6 +911,7 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 	}
 
 	force_sig(SIGILL, current);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 asmlinkage void do_mdmx(struct pt_regs *regs)

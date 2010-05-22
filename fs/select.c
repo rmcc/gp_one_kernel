@@ -24,6 +24,7 @@
 #include <linux/fdtable.h>
 #include <linux/fs.h>
 #include <linux/rcupdate.h>
+#include <trace/fs.h>
 
 #include <asm/uaccess.h>
 
@@ -48,8 +49,14 @@ struct poll_table_page {
  * as all select/poll functions have to call it to add an entry to the
  * poll table.
  */
+/* FIH_ADQ, 6370 { */ 
+/*
+static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
+		       poll_table *p);
+*/			   
 static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
 		       poll_table *p, int exclusive);
+/* FIH_ADQ, 6370 { */			   
 
 void poll_initwait(struct poll_wqueues *pwq)
 {
@@ -117,8 +124,14 @@ static struct poll_table_entry *poll_get_entry(poll_table *_p)
 }
 
 /* Add a new entry */
+/* FIH_ADQ, 6370 { */
+/*
+static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
+				poll_table *p)
+*/
 static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
 		       poll_table *p, int exclusive)
+/* } FIH_ADQ, 6370 */				
 {
 	struct poll_table_entry *entry = poll_get_entry(p);
 	if (!entry)
@@ -127,9 +140,11 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
 	entry->filp = filp;
 	entry->wait_address = wait_address;
 	init_waitqueue_entry(&entry->wait, current);
+/* FIH_ADQ, 6370 { */
 	if (exclusive)
 		add_wait_queue_exclusive(wait_address, &entry->wait);
 	else
+/* } FIH_ADQ, 6370 */	
 		add_wait_queue(wait_address, &entry->wait);
 }
 
@@ -235,6 +250,7 @@ int do_select(int n, fd_set_bits *fds, s64 *timeout)
 				file = fget_light(i, &fput_needed);
 				if (file) {
 					f_op = file->f_op;
+					trace_fs_select(i, *timeout);
 					mask = DEFAULT_POLLMASK;
 					if (f_op && f_op->poll)
 						mask = (*f_op->poll)(file, retval ? NULL : wait);
@@ -563,6 +579,7 @@ static inline unsigned int do_pollfd(struct pollfd *pollfd, poll_table *pwait)
 		file = fget_light(fd, &fput_needed);
 		mask = POLLNVAL;
 		if (file != NULL) {
+			trace_fs_poll(fd);
 			mask = DEFAULT_POLLMASK;
 			if (file->f_op && file->f_op->poll)
 				mask = file->f_op->poll(file, pwait);

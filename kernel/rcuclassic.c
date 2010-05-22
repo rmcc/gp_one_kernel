@@ -47,6 +47,7 @@
 #include <linux/notifier.h>
 #include <linux/cpu.h>
 #include <linux/mutex.h>
+#include <trace/rcu.h>
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 static struct lock_class_key rcu_lock_key;
@@ -138,6 +139,7 @@ void call_rcu(struct rcu_head *head,
 	head->func = func;
 	head->next = NULL;
 	local_irq_save(flags);
+	trace_rcu_classic_call_rcu(head, _RET_IP_);
 	rdp = &__get_cpu_var(rcu_data);
 	*rdp->nxttail = head;
 	rdp->nxttail = &head->next;
@@ -174,6 +176,7 @@ void call_rcu_bh(struct rcu_head *head,
 	head->func = func;
 	head->next = NULL;
 	local_irq_save(flags);
+	trace_rcu_classic_call_rcu_bh(head, _RET_IP_);
 	rdp = &__get_cpu_var(rcu_bh_data);
 	*rdp->nxttail = head;
 	rdp->nxttail = &head->next;
@@ -232,6 +235,7 @@ static void rcu_do_batch(struct rcu_data *rdp)
 	while (list) {
 		next = list->next;
 		prefetch(next);
+		trace_rcu_classic_callback(list);
 		list->func(list);
 		list = next;
 		if (++count >= rdp->blimit)

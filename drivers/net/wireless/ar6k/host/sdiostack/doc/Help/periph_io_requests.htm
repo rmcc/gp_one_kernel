@@ -1,0 +1,436 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Function Driver IO requests</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" --> Function
+    Driver IO requests<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td><!-- InstanceBeginEditable name="Help Content" -->
+<OBJECT type="application/x-oleobject" classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+	<param name="Keyword" value="Function Driver IO requests">
+</OBJECT>
+<p class="BODYTEXT">Function drivers issue bus requests through the SDIO
+  core whose job is to serialize the request and route the request to the proper
+  host controller slot. The SDIO core provides an interface for function drivers
+  to build card-specific bus requests as well as a set of functions to build
+  and send standard requests. The interface allows for both blocking and non-blocking
+  I/O. The
+   basic operation for issuing a bus request can be described in the following
+  steps:</p>
+<p class="BODYTEXT">1. Allocate a bus request structure.<br>
+2. Set the SD command and Argument fields (specific to the command)
+<br>
+3. Set the bus flags for the transaction (flags include synch or asynch, read
+or write
+data present)<br>
+4. If the transaction involves data (read or write) set the buffer pointer,
+block
+size
+and
+length.
+<br>5. If the transaction is non-blocking (asynchronous) set a completion routine.<br>
+6. Once the request completes a new request can be issued using the same request
+structure
+or it can be returned back to the core.<br>
+<p class="BODYTEXT"><a name="KeyBusRequestFields"></a>Key fields of the <font face="Courier New, Courier, mono">SDREQUEST</font>   structure are described below:
+<table style="WIDTH: 635px; HEIGHT: 386px" cellspacing="1"
+			cellpadding="1" width="635" border="1">
+			<tr>
+				<td width="161">
+				<p><font face="Courier New" size="2"><strong>Field</strong></font></p>
+				</td>
+
+				<td width="461"><strong>Description</strong></td>
+			</tr>
+            <tr>
+				<td>
+				<p><font face="Courier New" size="2">Flags</font></p>
+				</td>
+
+				<td><font face="Arial">Bus request flags that define the response type (if
+				    any), the I/O mode (synchronous, asychronous) and other
+				    processing flags.</font></td>
+			</tr>
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">Argument</font></p>
+				</td>
+
+				<td><font face="Arial">The 32 bit argument that is sent in the SD/MMC/SDIO
+				    command packet.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">Command</font></p>
+				</td>
+
+				<td><font face="Arial">The 8-bit command sent in the command packet.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">Response</font></p>
+				</td>
+
+				<td><font face="Arial">A buffer containing the response returned from the
+				    card (if any). This buffer has enough space for all standard
+				    responses (SD/SDIO/MMC).</font></td>
+			</tr>
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">BlockCount</font></p>
+				</td>
+
+				<td><font face="Arial">If the request requires a data transfer phase, this
+				    is the number of blocks to transfer. </font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">BlockLen</font></p>
+				</td>
+
+				<td><font face="Arial">If the request requires a data transfer phase, this
+				    is the number of bytes per block.</font></td>
+			</tr>
+
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">pDataBuffer</font></p>
+				</td>
+
+				<td><font face="Arial">Input/output buffer for a data transfer phase. The
+				    length of this buffer must be at least (<font face="Courier New, Courier, mono">BlockCount</font> x <font face="Courier New, Courier, mono">BlockLen</font>)
+				    bytes. When DMA is used, this points to a DMA descriptor
+				    list instead of a buffer (see <a href="#DMAOperation">Direct
+				    Memory Access</a>).</font></td>
+			</tr>
+<tr>
+				<td>
+				<p><font size="2" face="Courier New">DescriptorCount</font></p>
+				</td>
+
+				<td><font face="Arial">If  DMA is used, this is the  number
+				    of entries in the DMA descriptor list pointed to by <font face="Courier New, Courier, mono">pDataBuffer</font>.</font></td>
+		</tr>
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">pCompletion</font></p>
+				</td>
+
+				<td><font face="Arial">A completion routine provided by the function driver
+				    when this request is submitted asynchronously.</font></td>
+			</tr>
+<tr>
+				<td>
+				<p><font face="Courier New" size="2">pCompleteContext</font></p>
+				</td>
+
+				<td><font face="Arial">A context for the completion routine, if this is an
+				    asynchronous , non-blocking request.</font></td>
+		</tr>
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">Status</font></p>
+				</td>
+
+				<td><font face="Arial">This value represents the final completion status
+				    of the request.</font></td>
+			</tr>
+			<tr>
+				<td>
+				<p><font face="Courier New" size="2">RetryCount</font></p>
+				</td>
+
+				<td><font face="Arial">A function driver can set a non-zero retry count to
+				    direct the bus driver to retry the bus request on CRC
+				    or response timeout errors. Function drivers should not set
+				    this value for requests containing a data transfer phase.
+				    Most cards require special handling when data transfers fail
+				    (with CRC or timeout) such as issuing CMD12 (stop) or issuing
+				    an I/O abort operation (SDIO).</font></td>
+			</tr>
+			
+	  </table>
+
+</p>
+<p class="BODYTEXT">Specific examples of this process can be found in the generic
+  driver sample(s) provided in this SDK.</p>
+<p class="HEADING3">Synchronous I/O:</p>
+<p class="BODYTEXT">
+    The SD Core by default processes all SDIO request synchronously. The call
+          to <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDDEVICE_CALL_REQUEST_FUNC">SDDEVICE_CALL_REQUEST_FUNC()</a></font> blocks
+          and returns only when the entire transaction completes with success
+          or failure. The driver should process the response and/or data and
+          either
+          reuse the allocated request for the next transaction or recycle it
+          back to the SDIO core. The completion status of the request is returned
+          by the function.</p>
+<p class="HEADING3">Asynchronous I/O:</p>
+<p class="BODYTEXT">Asynchronous
+          mode is typically used when a function driver must issue a bus request
+          in a non-blocking context. Some OS's require that certain operations
+  are performed in non-blocking contexts. For example, a network driver may be
+  restricted in the way it issues transmit packets and  may be required to return
+  from it's TX handler while the packet is transmitting. With regards to SDIO
+  request, the driver can set a completion routine, issue the request and return
+  immediately. An asynchronous request is assembled much like a synchronous request
+  with the exception that the <font face="Courier New, Courier, mono">SDREQ_FLAGS_TRANS_ASYNC,</font>completion
+  routine and completion routine context are set. The call to <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDDEVICE_CALL_REQUEST_FUNC">SDDEVICE_CALL_REQUEST_FUNC()</a></font>will
+  always return <font face="Courier New, Courier, mono">SDIO_STATUS_PENDING</font> when
+  the request is flagged for asynchronous operation. The completion routine will
+  be called whether the request succeeded or failed. Under some circumstances
+  the completion routine may be called in the same context where the request
+  was
+  issued.
+  This can occur if the request fails during some portion of the transaction
+  setup and before the request was actually submitted to the host controller.
+  Additionally, a host controller could complete a request immediately (success
+  or failure) without requiring a context switch. In this situation the completion
+  routine is called
+  in the current context to process the  request immediately. This was
+  designed to improve system performance. The developer should be aware that
+  issuing another request in a completion routine could cause a recursion, if
+  that request was completed immediately. The SDIO core, however, will take
+  some
+  measures
+  to
+  break the
+  recursion cycle and prevent a stack overflow.</p>
+<p class="BODYTEXT">The completion routine for an asynchronous
+              transaction could be called from a non-preemptible
+              context. The driver should only issue asynchronous requests
+    and make calls to non-blocking API's. Drivers can safely recycle the bus
+  request back to the SDIO core in this context.</p>
+<p class="HEADING3">SDIO CMD52 and CMD53:</p>
+<p class="BODYTEXT">The SDIO core provides convenient methods for setting up
+  and issuing SDIO register read/write (CMD52) and extended read/write (CMD52)
+  commands. The core provides <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDLIB_IssueCMD52">SDLIB_IssueCMD52()</a>,</font> a
+  synchronous I/O method, that internally allocates a bus request, sets the
+  proper argument and flags, issues the
+  command, waits
+  for completion,
+  and processes the response. This reduces a handful of lines of code to a single
+  function call. If the request must be submitted asynchronously, the core provides
+  the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDLIB_SetupCMD52Request">SDLIB_SetupCMD52Request()</a></font> which
+  initializes all the request fields except the completion routine and context.
+  The request can then be submitted as a generic raw request asynchronously.</p>
+<p class="BODYTEXT">Using SDIO extended commands (CMD53) requires that the driver
+  allocate a request, fill in parameters and set the argument
+  using the <font face="Courier New, Courier, mono">SET_SDIO_CMD53_ARG()</font> macro.
+  The request must be sent as a raw request and the driver must specify  the
+  presence of data and the direction (read or write). The driver must also set
+  the data
+  buffer pointer and set the number of blocks
+  and the block length. When using CMD53 in bytes transfer mode the
+  block count is always 1 with a maximum block length of 512 bytes. When using
+  CMD53
+  in
+  block transfer mode, the driver must set it's function block length register
+  to the
+  size of
+  each
+  block
+  and
+  specify
+  that
+  value
+  in the bus request. The SDIO core does not support CMD53's &quot;infinite&quot; block
+  mode.</p>
+<p class="HEADING3">Block Count and Size Limitations:</p>
+<p class="BODYTEXT">Some host controllers impose a per-transaction block count
+  and block size limits. The bus driver may also limit the number of blocks and
+  size of
+  each block per transaction to manage bandwidth among multiple functions on
+  a single card. A driver should check its operational limits using the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_OPER_BLOCK">SDDEVICE_GET_OPER_BLOCK()</a></font> and
+  <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_OPER_BLOCK_LEN">SDDEVICE_GET_OPER_BLOCK_LEN()</a></font> and
+  limit its block transfer requests accordingly.</p>
+  <p class="HEADING3">Short Data Transfers</p>
+<p class="BODYTEXT">A function driver may provide a hint to a  host controller
+  driver (HCD) to optimize a short (and fast) data transfer. This optimization
+  can improve performance by allowing the HCD to poll the controller for completion
+  instead of waiting for data completion interrupts. A short data transfer is
+  indicated using the <font face="Courier New, Courier, mono">SDREQ_FLAGS_SHORT_DATA_TRANSFER</font> flag
+  in the
+  request.The
+  function
+  driver must guarantee that the transfer can be completed in a reasonable amount
+  of time  without detriment to overall system response. A short data transfer
+  should meet the following requirements to
+  qualify for
+  this
+  optimization:
+<ul>
+  <li>The data transfer should be short, consisting of only 1 block and usually
+    less than 8 bytes
+in
+length.</li>
+  <li>If the transfer is a read operation, the data start bit  must
+    occur within a very short period, usually  several clocks. The SD/SDIO
+    spec allows for a significant delay before the arrival of the start bit.
+    If a significant delay can occur, the function
+    driver should avoid this technique.</li>
+  <li>If the transfer is a write operation, the  program done signal should occur
+    within several clock cycles. The SD/SDIO spec allows for a significant delay
+    before program done is asserted. If a significant delay can occur, the function
+    driver should avoid this technique.</li>
+  </ul></p>
+<p class="BODYTEXT"">
+Short transfer optimizations are optional  and the host can choose to
+ignore
+this flag entirely and process data transfers with interrupts.
+</p>
+<p class="BODYTEXT""><a name="DMAOperation"></a><strong>Direct Memory Access:</strong></p>
+<p class="BODYTEXT"">Function drivers can optionally submit data transfer requests
+  using buffers that can be directly accessed by host controller hardware. This
+  can
+  improve throughput and significantly
+reduce overhead for large data transfers. Direct memory access is  optional
+  and all host controller drivers will continue to accept data buffers for  programmed
+  I/O operation.</p>
+<p class="BODYTEXT"">Function drivers are
+  responsible for managing DMA buffers in an OS-dependent
+  way. Function drivers may allocate  buffers  internally  or utilize buffers
+  passed down from subsystems (i.e. files systems, network stacks)
+  or
+  user mode
+  applications. These buffers may or may not be suitable for DMA operations.
+  Function drivers must insure that the DMA requirements for the platform, operating
+  system
+    (or subsystem) and host controller driver (HCD) are
+  met, if it chooses to submit DMA buffers in bus requests. Function drivers
+  can obtain the DMA restrictions for the platform/HCD via the macro: <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDGET_DMA_DESCRIPTION">SDGET_DMA_DESCRIPTION()</a></font>.
+  If
+  this macro returns NULL, then the HCD or platform does not support
+  DMA and the driver should be prepared to transfer the buffer using normal bus
+  requests. Otherwise a pointer to an OS-dependent <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> structure
+  is returned. Each  operating system  will define its own <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> structure.
+  The structure reflects the capabilities of the platform, host controller and
+  version of the operating system. It will contain information for the 
+  allocation of coherent (cache-coherent)
+  and properly aligned buffers. This information can be used to allocate internal
+  buffers or passed to subsystems (filesystem, network stack) that are capable
+  of creating these buffers. Most
+  platforms will require the function driver to adhere to physical address and
+  transfer
+  length
+  alignment
+  restrictions. For each OS supported, the <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> provides
+  enough information for the function driver to allocate
+  DMA-friendly buffers or pass the DMA requirements  to the owners
+  of these buffers (i.e.
+  subsystems). </p>
+<p class="BODYTEXT"">Function drivers must provide  a DMA descriptor
+  list (array of <font face="Courier New, Courier, mono">SDDMA_DESCRIPTORs</font>)
+  for the DMA buffer used in a bus request. A descriptor list consists of one
+  or more descriptors (<font face="Courier New, Courier, mono">SDDMA_DESCRIPTOR</font>)
+  that provide OS-specific information on each
+    block
+    or page
+    of physical
+    memory assigned to this buffer. The blocks/pages that are described can be
+  non-contiguous. If a buffer was provided by a subsystem (filesystem, network
+  stack) or user-mode
+  application,
+  the function
+  driver
+  may be required to create a descriptor list or request the subsystem to prepare
+    one. If the buffer
+    allocation  is outside the control of the function driver, the
+    driver
+    must
+    always
+    check
+    DMA
+    restrictions
+    and if necessary transfer the buffer without DMA.</p>
+<p class="BODYTEXT"">If
+  a data buffer meets the DMA
+  requirements of the platform/HCD and the driver was able to create a DMA descriptor
+  list, then the function driver can set the flag: <font face="Courier New, Courier, mono">SDREQ_FLAGS_DATA_DMA</font> in
+  the bus request. 
+  When the flag is set, the <font face="Courier New, Courier, mono">pDataBuffer</font> member
+  of the request must point to an array (list)
+  of <font face="Courier New, Courier, mono">SDDMA_DESCRIPTOR</font>  structures
+   and the <font face="Courier New, Courier, mono">DescriptorCount</font> field
+  is set to the number of array elements. Function drivers must adhere
+  to the maximum number of  descriptors 
+  allowed per transfer and the maximum number of bytes that can be processed
+   per descriptor. This information is provided in the <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> structure.
+  Function drivers can submit  DMA-prepared bus requests  just like any
+  other request (i.e. synchronous or asynchronous submission).</p>
+<p class="BODYTEXT"">Refer to the SDIO sample drivers for   OS-specific usage
+  of the <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> and <font face="Courier New, Courier, mono">SDDMA_DESCRIPTOR</font> structures.
+  Refer to  the <font face="Courier New, Courier, mono">ctsystem_xxxx.h</font>  header
+  file (ex. <font face="Courier New, Courier, mono">ctsystem_linux.h</font>)
+  for the definition of these structures.</p>
+<p class="BODYTEXT""><em>Note on Scatter Gather DMA:</em></p>
+<p class="BODYTEXT"">Scatter gather DMA is a technique in which an entire DMA
+  descriptor list of potentially non-contiguous pages/blocks can be translated
+  and programmed into a controller. The controller will traverse
+  this list (typically 
+  in host
+  memory as well)
+  and read (gather) or write (scatter) from/to these pages.
+  This technique (within the scope of SD/SDIO) can be used to move a very large
+  amount
+  of data with very little
+  CPU intervention. The use of scatter gather DMA is host
+  controller dependent. As noted earlier the <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> structure
+  typically contains a field for the maximum number of descriptors per bus request.
+   A value greater than 1 does NOT always imply that the host will use scatter
+  gather. In some hardware implementations the host controller may simply process
+  the
+  next DMA descriptor at each DMA completion event. Setting the max descriptor
+  count greater than one is provided as an optimization for transfers with many
+  descriptors and a host merely  &quot;emulates&quot; scatter gather behavior. In more
+  advanced host controllers, the entire descriptor list may be processed in one
+  DMA operation
+  using a true scatter gather engine. This provides the highest performance and
+  the least amount of CPU utilization. Some OS implementations will provide a
+  &quot;hint&quot; that the host controller implements true
+  scatter gather DMA
+  using
+  a set
+  of flags.</p>
+<!-- InstanceEndEditable -->
+&nbsp;<br/>
+</table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

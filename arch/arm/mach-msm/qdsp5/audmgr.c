@@ -3,7 +3,6 @@
  * interface to "audmgr" service on the baseband cpu
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -27,6 +26,8 @@
 
 #include "audmgr.h"
 
+//#include <mach/gpio.h> //karen test
+
 #define STATE_CLOSED    0
 #define STATE_DISABLED  1
 #define STATE_ENABLING  2
@@ -34,9 +35,13 @@
 #define STATE_DISABLING 4
 #define STATE_ERROR	5
 
+#define LOG_CMCS 0 //karen test
+
 static void rpc_ack(struct msm_rpc_endpoint *ept, uint32_t xid)
 {
 	uint32_t rep[6];
+
+	if (LOG_CMCS) pr_info("audmgr: rpc_ack()\n");
 
 	rep[0] = cpu_to_be32(xid);
 	rep[1] = cpu_to_be32(1);
@@ -52,6 +57,8 @@ static void process_audmgr_callback(struct audmgr *am,
 				   struct rpc_audmgr_cb_func_ptr *args,
 				   int len)
 {
+	if (LOG_CMCS) pr_info("audmgr: process_audmgr_callback(status = %d)\n", be32_to_cpu(args->status));
+	
 	if (len < (sizeof(uint32_t) * 3))
 		return;
 	if (be32_to_cpu(args->set_to_one) != 1)
@@ -61,7 +68,7 @@ static void process_audmgr_callback(struct audmgr *am,
 	case RPC_AUDMGR_STATUS_READY:
 		if (len < sizeof(uint32_t) * 4)
 			break;
-		am->handle = be32_to_cpu(args->u.handle);
+		am->handle = args->u.handle;
 		pr_info("audmgr: rpc READY handle=0x%08x\n", am->handle);
 		break;
 	case RPC_AUDMGR_STATUS_CODEC_CONFIG: {
@@ -107,6 +114,8 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 	struct audmgr *am = private;
 	uint32_t *x = data;
 
+	if (LOG_CMCS) pr_info("audmgr: process_rpc_request()\n");
+	
 	if (0) {
 		int n = len / 4;
 		pr_info("rpc_call proc %d:", proc);
@@ -139,6 +148,8 @@ static int audmgr_rpc_thread(void *data)
 	uint32_t type;
 	int len;
 
+	if (LOG_CMCS) pr_info("audmgr: audmgr_rpc_thread()\n");
+	
 	pr_info("audmgr_rpc_thread() start\n");
 
 	while (!kthread_should_stop()) {
@@ -204,32 +215,23 @@ int audmgr_open(struct audmgr *am)
 {
 	int rc;
 
+	if (LOG_CMCS) pr_info("audmgr: audmgr_open()\n");
+
 	if (am->state != STATE_CLOSED)
 		return 0;
 
-	am->ept = msm_rpc_connect_compatible(AUDMGR_PROG,
-			AUDMGR_VERS_COMP_VER2,
+	am->ept = msm_rpc_connect(AUDMGR_PROG, AUDMGR_VERS,
 			MSM_RPC_UNINTERRUPTIBLE);
 
 	if (IS_ERR(am->ept)) {
 		printk(KERN_ERR "%s: connect failed with current VERS = %x, \
-			trying again with another API\n",
-			__func__, AUDMGR_VERS_COMP_VER2);
+			trying again with connect_compatible API\n",
+			__func__, AUDMGR_VERS);
 		am->ept = msm_rpc_connect_compatible(AUDMGR_PROG,
-				AUDMGR_VERS_COMP,
-				MSM_RPC_UNINTERRUPTIBLE);
-		if (IS_ERR(am->ept)) {
-			printk(KERN_ERR "%s: connect failed with current \
-			VERS = %x, trying again with another API\n",
-			__func__, AUDMGR_VERS_COMP);
-			am->ept = msm_rpc_connect(AUDMGR_PROG,
-					AUDMGR_VERS,
-					MSM_RPC_UNINTERRUPTIBLE);
-			am->rpc_version = AUDMGR_VERS;
-		} else
+				AUDMGR_VERS_COMP, MSM_RPC_UNINTERRUPTIBLE);
 		am->rpc_version = AUDMGR_VERS_COMP;
 	} else
-		am->rpc_version = AUDMGR_VERS_COMP_VER2;
+		am->rpc_version = AUDMGR_VERS;
 
 	init_waitqueue_head(&am->wait);
 
@@ -256,6 +258,8 @@ EXPORT_SYMBOL(audmgr_open);
 
 int audmgr_close(struct audmgr *am)
 {
+	if (LOG_CMCS) pr_info("audmgr: audmgr_close()\n");
+
 	return -EBUSY;
 }
 EXPORT_SYMBOL(audmgr_close);
@@ -265,9 +269,14 @@ int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg)
 	struct audmgr_enable_msg msg;
 	int rc;
 
+	if (LOG_CMCS) pr_info("audmgr: audmgr_enable()\n");
+	
 	if (am->state == STATE_ENABLED)
 		return 0;
+	if (am->state == STATE_ENABLING)
+		goto wait_for_it;
 
+try_again:
 	if (am->state == STATE_DISABLING)
 		pr_err("audmgr: state is DISABLING in enable?\n");
 	am->state = STATE_ENABLING;
@@ -288,14 +297,22 @@ int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg)
 	if (rc < 0)
 		return rc;
 
+wait_for_it:
 	rc = wait_event_timeout(am->wait, am->state != STATE_ENABLING, 15 * HZ);
 	if (rc == 0) {
-		pr_err("audmgr_enable: ARM9 did not reply to RPC am->state = %d\n", am->state);
-		BUG();
+		pr_err("audmgr: ARM9 did not reply to RPC\n");
+		// +++ FIH_ADQ, modified by henry.wang
+		//BUG();
+		pr_info("audmgr enabling wait_event_timeout, try again\r\n");
+		goto try_again;
+		// --- FIH_ADQ ---
 	}
 	if (am->state == STATE_ENABLED)
 		return 0;
-
+	if (am->state == STATE_DISABLED) {
+		pr_err("audmgr: DISABLED WHILE ENABLING. retrying...\n");
+		goto try_again;
+	}
 	pr_err("audmgr: unexpected state %d while enabling?!\n", am->state);
 	return -ENODEV;
 }
@@ -306,12 +323,16 @@ int audmgr_disable(struct audmgr *am)
 	struct audmgr_disable_msg msg;
 	int rc;
 
+	if (LOG_CMCS) pr_info("audmgr: audmgr_disable()\n");
+	
 	if (am->state == STATE_DISABLED)
+		return 0;
+	if (am->state == STATE_DISABLING)
 		return 0;
 
 	msm_rpc_setup_req(&msg.hdr, AUDMGR_PROG, am->rpc_version,
 			  AUDMGR_DISABLE_CLIENT);
-	msg.handle = cpu_to_be32(am->handle);
+	msg.handle = am->handle;
 
 	am->state = STATE_DISABLING;
 
@@ -319,16 +340,6 @@ int audmgr_disable(struct audmgr *am)
 	if (rc < 0)
 		return rc;
 
-	rc = wait_event_timeout(am->wait, am->state != STATE_DISABLING, 15 * HZ);
-	if (rc == 0) {
-		pr_err("audmgr_disable: ARM9 did not reply to RPC am->state = %d\n", am->state);
-		BUG();
-	}
-
-	if (am->state == STATE_DISABLED)
 		return 0;
-
-	pr_err("audmgr: unexpected state %d while disabling?!\n", am->state);
-	return -ENODEV;
 }
 EXPORT_SYMBOL(audmgr_disable);

@@ -1,0 +1,456 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+		<%@page Language=jscript debug=true%>
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="TopTopic"></a><a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC__SDIO_RegisterFunction"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC__SDIO_UnregisterFunction"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">SDIO_STATUS _SDIO_RegisterFunction(PSDFUNCTION pFunction) 
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register a function driver with the bus driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when succesful.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Each function driver must register with the bus driver once upon loading.
+          The calling function must be prepared to receive a Probe callback before
+          this function returns. This will occur when an perpheral device is already
+          pluugged in that is supported by this function.
+          The function driver should unregister itself when exiting.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Registering a function driver:</font>
+            <font face="Arial, Helvetica, sans-serif" color="#999999">//list of devices supported by this function driver
+</font>       static SD_PNP_INFO Ids[] = {
+            {.SDIO_ManufacturerID = 0xaa55,  
+             .SDIO_ManufacturerCode = 0x5555, 
+             .SDIO_FunctionNo = 1},
+            {}                      <font face="Arial, Helvetica, sans-serif" color="#999999">//list is null termintaed
+</font>        };
+        static GENERIC_FUNCTION_CONTEXT FunctionContext = {
+            .Function.pName    = "sdio_generic", <font face="Arial, Helvetica, sans-serif" color="#999999">//name of the device
+</font>            .Function.MaxDevices = 1,    <font face="Arial, Helvetica, sans-serif" color="#999999">//maximum number of devices supported by this driver
+</font>            .Function.NumDevices = 0,    <font face="Arial, Helvetica, sans-serif" color="#999999">//current number of devices, always zero to start
+</font>            .Function.pIds     = Ids,    <font face="Arial, Helvetica, sans-serif" color="#999999">//the list of devices supported by this device
+</font>            .Function.pProbe   = Probe,  <font face="Arial, Helvetica, sans-serif" color="#999999">//pointer to the function drivers Probe function
+</font>                                         <font face="Arial, Helvetica, sans-serif" color="#999999">//  that will be called when a possibly supported device
+</font>                                         <font face="Arial, Helvetica, sans-serif" color="#999999">//  is inserted.
+</font>            .Function.pRemove  = Remove, <font face="Arial, Helvetica, sans-serif" color="#999999">//pointer to the function drivers Remove function
+</font>                                         /  that will be called when a device is removed.
+            .Function.pContext = &amp;FunctionContext, <font face="Arial, Helvetica, sans-serif" color="#999999">//data value that will be passed into Probe and
+</font>                                         <font face="Arial, Helvetica, sans-serif" color="#999999">//  Remove callbacks. 
+</font>        }; 
+        SDIO_STATUS status;
+        status = SDIO_RegisterFunction(&amp;FunctionContext.Function)
+        if (!SDIO_SUCCESS(status)) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">...failed to register
+</font>        }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDIO_UnregisterFunction
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC__SDIO_UnregisterFunction"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC__SDIO_RegisterFunction"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC_%0D%0AProbe%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">SDIO_STATUS _SDIO_UnregisterFunction(PSDFUNCTION pFunction) </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Unregister a function driver with the bus driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when succesful.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Each function driver must unregister from the bus driver when the function driver
+          exits.
+          A function driver must disconnect from any interrupts before calling this function.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Unregistering a function driver:</font>
+        SDIO_UnregisterFunction(&amp;FunctionContext.Function);
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDIO_RegisterFunction
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC_%0D%0AProbe%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC__SDIO_UnregisterFunction"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC_%0D%0ARemove%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL (*pProbe)(struct _SDFUNCTION *pFunction, struct _SDDEVICE *pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">This function is called by the Busdriver when a device is inserted that can be supported by this function driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure that was passed to Busdriver
+                       via the SDIO_RegisterFunction.
+        <br>
+  pDevice   - the description of the newly inserted device.            
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE  - this function driver will suport this device
+           FALSE - this function driver will not support this device
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The Busdriver calls the Probe function of a function driver to inform it that device is
+          available for the function driver to control. The function driver should initialize the 
+          device and be pepared to acceopt any interrupts from the device before returning.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of typical Probe function callback:</font>
+  static BOOL Probe(PSDFUNCTION pFunction, PSDDEVICE pDevice) { 
+       <font face="Arial, Helvetica, sans-serif" color="#999999">...get the our context info passed into the SDIO_RegisterFunction
+</font>    PSDXXX_DRIVER_CONTEXT pFunctionContext = 
+                                (PSDXXX_DRIVER_CONTEXT)pFunction-&gt;pContext;
+    SDIO_STATUS status;
+       <font face="Arial, Helvetica, sans-serif" color="#999999">//test the identification of this device and ensure we want to support it
+</font>       <font face="Arial, Helvetica, sans-serif" color="#999999">// we can test based on class, or use more specific tests on SDIO_ManufacturerID, etc.
+</font>    if (pDevice-&gt;pId[0].SDIO_FunctionClass == XXX) {
+        DBG_PRINT(SDDBG_TRACE, ("SDIO XXX Function: Probe - card matched (0x%X/0x%X/0x%X)\n",
+                                pDevice-&gt;pId[0].SDIO_ManufacturerID,
+                                pDevice-&gt;pId[0].SDIO_ManufacturerCode,
+                                pDevice-&gt;pId[0].SDIO_FunctionNo));
+        <font face="Arial, Helvetica, sans-serif" color="#999999">...</font>.
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDIO_RegisterFunction
+        <br>
+Remove
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC_%0D%0ARemove%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_busdriver_sdio_function_cFUNC_%0D%0AProbe%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="sdio_lib_c_c.htm#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_lib_sdio_lib_c_cFUNC__SDLIB_SetupCMD52Request"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void (*pRemove)(struct _SDFUNCTION *pFunction, struct _SDDEVICE *pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">This function is called by the Busdriver when a device controlled by this function              function driver is removed.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pFunction - the function definition structure that was passed to Busdriver
+                       via the SDIO_RegisterFunction.
+        <br>
+  pDevice   - the description of the device being removed.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The Busdriver calls the Remove function of a function driver to inform it that device it
+          was supporting has been removed. The device has already been removed, so no further I/O
+          to the device can be performed.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of typical Remove function callback:</font>
+    void Remove(PSDFUNCTION pFunction, PSDDEVICE pDevice) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// get the our context info passed into the SDIO_RegisterFunction
+</font>        PSDXXX_DRIVER_CONTEXT pFunctionContext = 
+                             (PSDXXX_DRIVER_CONTEXT)pFunction-&gt;pContext;
+           <font face="Arial, Helvetica, sans-serif" color="#999999">...free any acquired resources.</font>.
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDIO_RegisterFunction
+        <br>
+Probe
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong></font><a target="_blank" href="http://www.codetelligence.com"><font face="Arial, Helvetica, sans-serif" color="#FFFFFF">www.codetelligence.com</font></a></td>
+</tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<Device version="1.0.0" versionIncrement="0">
+    <Name>Create SDIO Documentation</Name>
+    <Description>
+        <!--Create SDIO Documentation-->
+    </Description>
+    <Prologue>
+        <Image type="functionList" data=""/>
+        <Description>
+            <!--Embedded SDIO Documentation Generation-->
+        </Description>
+        <Help topic="">
+          </Help>
+    </Prologue>
+    <Epilogue>
+        <Image type="functionList" data=""/>
+        <Description>
+            <!--Create output files-->
+        </Description>
+                    
+                    
+        <Help topic="">
+          </Help>
+    </Epilogue>
+    <Functions>
+    <Function>
+            <Name>TypeSel</Name>
+            <Type>Global</Type>
+            <SubType>SW</SubType>
+            <Description>Select help files to build.</Description>
+            <Image type="functionList" data=""/>
+            <Help/>
+            <Parameters>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Input 'src' directory:" directory="1">TypeSel_BaseDir</VarName>
+                    <Validate nonblank="1" message="Input directory must be specified."/>
+                    <Value initialValue="_ExternalParam0_"/>
+                    <Selection title="" value=""/>
+                    <Help>
+                        <!--The input directory path for the files that will be scanned to create the output files.-->
+                    </Help>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CHECK_BOX" title="Create Function Driver documentation?">TypeSel_FunctionDocs</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help/>
+                </Selections>
+            <Selections dependsOn="TypeSel_BaseDir" dependsOnValue="5" dependsOnTest="==">
+                    <VarName displayType="CHECK_BOX" title="Create host controller driver documentation?">TypeSel_HcdDoc</VarName>
+                    <Value>0</Value>
+                    <Selection current="0"/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_XMLFile</VarName>
+                    <Value type="concat" parameter0="_OutputDirectory_" parameter1="'/doc/documentation.xml'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_BUSDRIVER_H</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/include/sdio_busdriver.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_FUNCTION</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/busdriver/sdio_function.c'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_DEFS</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/include/_sdio_defs.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_LIB</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/lib/sdio_lib_c.c'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+              <DocumentationTransform position="1" filename="'documentation.xml'" filename_dir="'doc'">
+                <FileParameters>
+                    <FileParameter name="'file'" value="TypeSel_SDIO_FUNCTION" optional="'1'"/>
+                    <FileParameter name="'file'" value="TypeSel_SDIO_LIB" optional="'1'"/>
+                    <FileParameter name="'file'" value="TypeSel_SDIO_BUSDRIVER_H" optional="'1'"/>                    
+                </FileParameters>
+            </DocumentationTransform>
+            <XslTransform position="3" filename="'function_driver.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" >
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationSection'" value="TypeSel_SDIO_FUNCTION"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'function_driver_overview.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" >
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationSection'" value="TypeSel_SDIO_FUNCTION"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            
+            <XslTransform position="3" filename="'function_driver_target.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" >
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationSection'" value="TypeSel_SDIO_BUSDRIVER_H"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'function_driver_target_overview.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" >
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationSection'" value="TypeSel_SDIO_BUSDRIVER_H"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'library.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" >
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationSection'" value="TypeSel_SDIO_LIB"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'library_overview.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" >
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationSection'" value="TypeSel_SDIO_LIB"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+ 
+            </Solution>
+        </Function>
+    </Functions>
+</Device>

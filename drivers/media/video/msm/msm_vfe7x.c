@@ -1,66 +1,26 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/*
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 
 #include <linux/msm_adsp.h>
 #include <linux/uaccess.h>
 #include <linux/android_pmem.h>
 #include <mach/msm_adsp.h>
-#include <linux/delay.h>
-#include <linux/wait.h>
+#include <mach/msm_camio.h>
 #include "msm_vfe7x.h"
 
 #define QDSP_CMDQUEUE 25
@@ -86,7 +46,7 @@ static struct msm_adsp_module *vfe_mod;
 static struct msm_vfe_resp *resp;
 static void *extdata;
 static uint32_t extlen;
-
+//FIH_ADQ,JOE HSU
 struct mutex vfe_lock;
 static uint32_t vfe_inuse;
 static void     *vfe_syncdata;
@@ -155,7 +115,7 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 		rp->evt_msg.len    = 0;
 		rp->evt_msg.msg_id = evt_buf[0];
 
-		resp->vfe_resp(rp, MSM_CAM_Q_VFE_EVT, vfe_syncdata);
+		resp->vfe_resp(rp, MSM_CAM_Q_VFE_EVT, vfe_syncdata);//FIH_ADQ,JOE HSU
 	} else {
 		/* messages */
 
@@ -204,7 +164,7 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 
 			CDBG("MSG_STATS_WE: phy = 0x%x\n", rp->phy.sbuf_phy);
 			break;
-
+//FIH_ADQ,JOE HSU
 		case MSG_STOP_ACK:
 			rp->type = VFE_MSG_GENERAL;
 			stopevent.state = 1;
@@ -217,7 +177,7 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 			break;
 		}
 
-		resp->vfe_resp(rp, MSM_CAM_Q_VFE_MSG, vfe_syncdata);
+		resp->vfe_resp(rp, MSM_CAM_Q_VFE_MSG, vfe_syncdata);//FIH_ADQ,JOE HSU
 	}
 }
 
@@ -249,7 +209,7 @@ static int vfe_7x_disable(struct camera_enable_cmd_t *enable,
 
 	return rc;
 }
-
+//FIH_ADQ,JOE HSU
 static int vfe_7x_stop(void)
 {
 	int rc = 0;
@@ -268,8 +228,10 @@ static int vfe_7x_stop(void)
 	return rc;
 }
 
+
 static void vfe_7x_release(struct platform_device *dev)
 {
+//FIH_ADQ,JOE HSU
 	mutex_lock(&vfe_lock);
 	vfe_inuse = 0;
 	vfe_syncdata = NULL;
@@ -427,6 +389,8 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd_t *cmd, void *data)
 	void   *cmd_data_alloc = NULL;
 	long rc = 0;
 	struct msm_vfe_command_7k *vfecmd;
+
+//	static uint8_t vfestopped;
 
 	vfecmd =
 			kmalloc(sizeof(struct msm_vfe_command_7k),
@@ -633,13 +597,15 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd_t *cmd, void *data)
 			switch (*(uint32_t *)cmd_data) {
 			case VFE_RESET_CMD:
 				msm_camio_vfe_blk_reset();
+				//FIH_ADQ,JOE HSU
+				//msm_camio_camif_pad_reg_reset_2();
 				vfestopped = 0;
 				break;
 
 			case VFE_START_CMD:
-				msm_camio_camif_pad_reg_reset_2();
+				msm_camio_camif_pad_reg_reset_2();//FIH_ADQ,JOE HSU,Update patch
 				vfestopped = 0;
-				msm_camio_camif_pad_reg_reset_2();
+				msm_camio_camif_pad_reg_reset_2();//FIH_ADQ,JOE HSU,Update to 6380,,Update patch
 				break;
 
 			case VFE_STOP_CMD:
@@ -751,6 +717,7 @@ config_failure:
 	return rc;
 }
 
+//FIH_ADQ,JOE HSU
 void msm_camvfe_fn_init(struct msm_camvfe_fn_t *fptr)
 {
 	fptr->vfe_init    = vfe_7x_init;

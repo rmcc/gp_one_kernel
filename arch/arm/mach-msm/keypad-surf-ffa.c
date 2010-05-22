@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -14,13 +14,21 @@
  *
  */
 
+#include <asm/mach-types.h>
 #include <linux/platform_device.h>
 #include <linux/gpio_event.h>
 
-#include <asm/mach-types.h>
-
 /* don't turn this on without updating the ffa support */
 #define SCAN_FUNCTION_KEYS 0
+
+static unsigned int keypad_row_gpios[] = {
+	31, 32, 33, 34, 35, 41
+#if SCAN_FUNCTION_KEYS
+	, 42
+#endif
+};
+
+static unsigned int keypad_col_gpios[] = { 36, 37, 38, 39, 40 };
 
 /* FFA:
  36: KEYSENSE_N(0)
@@ -37,23 +45,9 @@
  41: KYPD_MEMO
 */
 
-static unsigned int keypad_row_gpios[] = {
-	31, 32, 33, 34, 35, 41
-#if SCAN_FUNCTION_KEYS
-	, 42
-#endif
-};
-
-static unsigned int keypad_col_gpios[] = { 36, 37, 38, 39, 40 };
-
-static unsigned int keypad_row_gpios_8k_ffa[] = {31, 32, 33, 34, 35, 36};
-static unsigned int keypad_col_gpios_8k_ffa[] = {38, 39, 40, 41, 42};
-
 #define KEYMAP_INDEX(row, col) ((row)*ARRAY_SIZE(keypad_col_gpios) + (col))
-#define FFA_8K_KEYMAP_INDEX(row, col) ((row)* \
-				ARRAY_SIZE(keypad_col_gpios_8k_ffa) + (col))
 
-static const unsigned short keypad_keymap_surf[ARRAY_SIZE(keypad_col_gpios) *
+static const unsigned short keypad_keymap[ARRAY_SIZE(keypad_col_gpios) *
 					  ARRAY_SIZE(keypad_row_gpios)] = {
 	[KEYMAP_INDEX(0, 0)] = KEY_5,
 	[KEYMAP_INDEX(0, 1)] = KEY_9,
@@ -139,48 +133,6 @@ static const unsigned short keypad_keymap_ffa[ARRAY_SIZE(keypad_col_gpios) *
 	[KEYMAP_INDEX(5, 4)] = KEY_7,
 };
 
-#define QSD8x50_FFA_KEYMAP_SIZE (ARRAY_SIZE(keypad_col_gpios_8k_ffa) * \
-			ARRAY_SIZE(keypad_row_gpios_8k_ffa))
-
-static const unsigned short keypad_keymap_8k_ffa[QSD8x50_FFA_KEYMAP_SIZE] = {
-
-	[FFA_8K_KEYMAP_INDEX(0, 0)] = KEY_VOLUMEDOWN,
-	/*[KEYMAP_INDEX(0, 1)] = ,*/
-	[FFA_8K_KEYMAP_INDEX(0, 2)] = KEY_DOWN,
-	[FFA_8K_KEYMAP_INDEX(0, 3)] = KEY_8,
-	[FFA_8K_KEYMAP_INDEX(0, 4)] = KEY_5,
-
-	[FFA_8K_KEYMAP_INDEX(1, 0)] = KEY_UP,
-	[FFA_8K_KEYMAP_INDEX(1, 1)] = KEY_CLEAR,
-	[FFA_8K_KEYMAP_INDEX(1, 2)] = KEY_4,
-	/*[KEYMAP_INDEX(1, 3)] = ,*/
-	[FFA_8K_KEYMAP_INDEX(1, 4)] = KEY_2,
-
-	[FFA_8K_KEYMAP_INDEX(2, 0)] = KEY_HOME,      /* A */
-	[FFA_8K_KEYMAP_INDEX(2, 1)] = KEY_BACK,      /* B */
-	[FFA_8K_KEYMAP_INDEX(2, 2)] = KEY_0,
-	[FFA_8K_KEYMAP_INDEX(2, 3)] = 228,           /* KEY_SHARP */
-	[FFA_8K_KEYMAP_INDEX(2, 4)] = KEY_9,
-
-	[FFA_8K_KEYMAP_INDEX(3, 0)] = KEY_3,
-	[FFA_8K_KEYMAP_INDEX(3, 1)] = KEY_RIGHT,
-	[FFA_8K_KEYMAP_INDEX(3, 2)] = KEY_VOLUMEUP,
-	/*[KEYMAP_INDEX(3, 3)] = ,*/
-	[FFA_8K_KEYMAP_INDEX(3, 4)] = KEY_6,
-
-	[FFA_8K_KEYMAP_INDEX(4, 0)] = 232,		/* OK */
-	[FFA_8K_KEYMAP_INDEX(4, 1)] = KEY_SOUND,
-	[FFA_8K_KEYMAP_INDEX(4, 2)] = KEY_1,
-	[FFA_8K_KEYMAP_INDEX(4, 3)] = KEY_SEND,
-	[FFA_8K_KEYMAP_INDEX(4, 4)] = KEY_LEFT,
-
-	/*[KEYMAP_INDEX(5, 0)] = ,*/
-	[FFA_8K_KEYMAP_INDEX(5, 1)] = 227,           /* KEY_STAR */
-	[FFA_8K_KEYMAP_INDEX(5, 2)] = 230, /*SOFT2*/ /* 2 */
-	[FFA_8K_KEYMAP_INDEX(5, 3)] = KEY_MENU,      /* 1 */
-	[FFA_8K_KEYMAP_INDEX(5, 4)] = KEY_7,
-};
-
 static const unsigned short keypad_virtual_keys[] = {
 	KEY_END,
 	KEY_POWER
@@ -190,10 +142,9 @@ static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
 					  struct gpio_event_info *info,
 					  void **data, int func);
 
-/* SURF keypad platform device information */
-static struct gpio_event_matrix_info surf_keypad_matrix_info = {
+static struct gpio_event_matrix_info keypad_matrix_info = {
 	.info.func	= keypad_gpio_event_matrix_func,
-	.keymap		= keypad_keymap_surf,
+	.keymap		= keypad_keymap,
 	.output_gpios	= keypad_row_gpios,
 	.input_gpios	= keypad_col_gpios,
 	.noutputs	= ARRAY_SIZE(keypad_row_gpios),
@@ -204,85 +155,21 @@ static struct gpio_event_matrix_info surf_keypad_matrix_info = {
 			  GPIOKPF_PRINT_UNMAPPED_KEYS
 };
 
-static struct gpio_event_info *surf_keypad_info[] = {
-	&surf_keypad_matrix_info.info
+struct gpio_event_info *keypad_info[] = {
+	&keypad_matrix_info.info
 };
 
-static struct gpio_event_platform_data surf_keypad_data = {
-	.name		= "surf_keypad",
-	.info		= surf_keypad_info,
-	.info_count	= ARRAY_SIZE(surf_keypad_info)
+static struct gpio_event_platform_data keypad_data = {
+	.name		= "surf_ffa_keypad",
+	.info		= keypad_info,
+	.info_count	= ARRAY_SIZE(keypad_info)
 };
 
-struct platform_device keypad_device_surf = {
+static struct platform_device keypad_device = {
 	.name	= GPIO_EVENT_DEV_NAME,
 	.id	= -1,
 	.dev	= {
-		.platform_data	= &surf_keypad_data,
-	},
-};
-
-/* 8k FFA keypad platform device information */
-static struct gpio_event_matrix_info keypad_matrix_info_8k_ffa = {
-	.info.func	= keypad_gpio_event_matrix_func,
-	.keymap		= keypad_keymap_8k_ffa,
-	.output_gpios	= keypad_row_gpios_8k_ffa,
-	.input_gpios	= keypad_col_gpios_8k_ffa,
-	.noutputs	= ARRAY_SIZE(keypad_row_gpios_8k_ffa),
-	.ninputs	= ARRAY_SIZE(keypad_col_gpios_8k_ffa),
-	.settle_time.tv.nsec = 0,
-	.poll_time.tv.nsec = 20 * NSEC_PER_MSEC,
-	.flags		= GPIOKPF_LEVEL_TRIGGERED_IRQ | GPIOKPF_DRIVE_INACTIVE |
-			  GPIOKPF_PRINT_UNMAPPED_KEYS
-};
-
-static struct gpio_event_info *keypad_info_8k_ffa[] = {
-	&keypad_matrix_info_8k_ffa.info
-};
-
-static struct gpio_event_platform_data keypad_data_8k_ffa = {
-	.name		= "8k_ffa_keypad",
-	.info		= keypad_info_8k_ffa,
-	.info_count	= ARRAY_SIZE(keypad_info_8k_ffa)
-};
-
-struct platform_device keypad_device_8k_ffa = {
-	.name	= GPIO_EVENT_DEV_NAME,
-	.id	= -1,
-	.dev	= {
-		.platform_data	= &keypad_data_8k_ffa,
-	},
-};
-
-/* 7k FFA keypad platform device information */
-static struct gpio_event_matrix_info keypad_matrix_info_7k_ffa = {
-	.info.func	= keypad_gpio_event_matrix_func,
-	.keymap		= keypad_keymap_ffa,
-	.output_gpios	= keypad_row_gpios,
-	.input_gpios	= keypad_col_gpios,
-	.noutputs	= ARRAY_SIZE(keypad_row_gpios),
-	.ninputs	= ARRAY_SIZE(keypad_col_gpios),
-	.settle_time.tv.nsec = 0,
-	.poll_time.tv.nsec = 20 * NSEC_PER_MSEC,
-	.flags		= GPIOKPF_LEVEL_TRIGGERED_IRQ | GPIOKPF_DRIVE_INACTIVE |
-			  GPIOKPF_PRINT_UNMAPPED_KEYS
-};
-
-static struct gpio_event_info *keypad_info_7k_ffa[] = {
-	&keypad_matrix_info_7k_ffa.info
-};
-
-static struct gpio_event_platform_data keypad_data_7k_ffa = {
-	.name		= "7k_ffa_keypad",
-	.info		= keypad_info_7k_ffa,
-	.info_count	= ARRAY_SIZE(keypad_info_7k_ffa)
-};
-
-struct platform_device keypad_device_7k_ffa = {
-	.name	= GPIO_EVENT_DEV_NAME,
-	.id	= -1,
-	.dev	= {
-		.platform_data	= &keypad_data_7k_ffa,
+		.platform_data	= &keypad_data,
 	},
 };
 
@@ -314,3 +201,9 @@ struct input_dev *msm_keypad_get_input_dev(void)
 	return keypad_dev;
 }
 
+int init_surf_ffa_keypad(int ffa)
+{
+	if (ffa)
+		keypad_matrix_info.keymap = keypad_keymap_ffa;
+	return platform_device_register(&keypad_device);
+}

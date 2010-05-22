@@ -1,0 +1,1412 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="FUNC_Configure"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#previous#"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_GET_CURRENT_REQUEST"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS (*pConfigure) (struct _SDHCD *pHcd, PSDCONFIG pConfig)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">The bus driver calls the configure callback to set various options              and modes in the host controller hardware.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - the host controller structure that was registered
+        <br>
+  pConfig - configuration request structure
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  
+          The host controller driver recieves configuration requests for options
+          such as slot voltage, bus width, clock rates and interrupt detection.
+          The bus driver guarantees that only one configuration option request 
+          can be issued at a time.  
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of a typical configure callback:</font>
+  SDIO_STATUS HcdConfig(PSDHCD pHcd, PSDCONFIG pConfig) 
+  {
+    SDIO_STATUS status = SDIO_STATUS_SUCCESS;
+    PSDHCD_DRIVER_CONTEXT pHct = (PSDHCD_DRIVER_CONTEXT)pHcd-&gt;pContext;
+    UINT16      command;
+        <font face="Arial, Helvetica, sans-serif" color="#999999">// get command
+</font>    command = GET_SDCONFIG_CMD(pConfig);
+        <font face="Arial, Helvetica, sans-serif" color="#999999">// decode command
+</font>    switch (command){
+        case SDCONFIG_GET_WP:
+            if (GetGpioPinLevel(pHct,SDIO_CARD_WP_GPIO) == WP_POLARITY) {
+                *((SDCONFIG_WP_VALUE *)pConfig-&gt;pData) = 1;
+            } else {
+                *((SDCONFIG_WP_VALUE *)pConfig-&gt;pData) = 0;  
+            }            
+            break;
+        case SDCONFIG_SEND_INIT_CLOCKS:
+            ClockStartStop(pHct,CLOCK_ON);
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// sleep a little, should be at least 80 clocks at our lowest clock setting
+</font>            status = OSSleep(100);
+            ClockStartStop(pHct,CLOCK_OFF);          
+            break;
+        case SDCONFIG_SDIO_INT_CTRL:
+            if (GET_SDCONFIG_CMD_DATA(PSDCONFIG_SDIO_INT_CTRL_DATA,pConfig)-&gt;SlotIRQEnable) {
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// request to enable IRQ detection
+</font>            } else {
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// request to disable IRQ detectioon
+</font>            }
+            break;
+        case SDCONFIG_SDIO_REARM_INT:
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// request to re-arm the card IRQ detection logic
+</font>            break;
+        case SDCONFIG_BUS_MODE_CTRL:
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// request to set bus mode
+</font>            {
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// get bus mode data structure
+</font>               PSDCONFIG_BUS_MODE_DATA pBusMode = 
+                      GET_SDCONFIG_CMD_DATA(PSDCONFIG_SDIO_INT_CTRL_DATA,pConfig);
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// set bus mode based on settings in bus mode structure
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">// bus mode   :  pBusMode-&gt;BusModeFlags
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">// clock rate :  pBusMode-&gt;ClockRate 
+</font>            }
+            break;
+        case SDCONFIG_POWER_CTRL:
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// request to set power/voltage 
+</font>            {
+                PSDCONFIG_POWER_CTRL_DATA pPowerSetting = 
+                       GET_SDCONFIG_CMD_DATA(PSDCONFIG_POWER_CTRL_DATA,pConfig);                       
+                if (pPowerSetting-&gt;SlotPowerEnable) {
+                    <font face="Arial, Helvetica, sans-serif" color="#999999">// turn on slot power
+</font>                    <font face="Arial, Helvetica, sans-serif" color="#999999">//
+</font>                } else {
+                    <font face="Arial, Helvetica, sans-serif" color="#999999">// turn off slot power
+</font>                }       
+                DBG_PRINT(PXA_TRACE_CONFIG, ("SDIO PXA255 PwrControl: En:%d, VCC:0x%X \n",
+                      pPowerSetting-&gt;SlotPowerEnable,
+                      pPowerSetting-&gt;SlotPowerVoltageMask));
+            }
+            break;
+        default:
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// unsupported
+</font>            status = SDIO_STATUS_INVALID_PARAMETER;
+    }
+    return status;
+ }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_GET_CURRENT_REQUEST"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_Configure"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_GET_SDCONFIG_CMD"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ PSDREQUEST GET_CURRENT_REQUEST (PSDHCD pHcd) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get a pointer to the current bus request for a host controller</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - host structure
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ current SD/SDIO bus request being worked on
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. This macro returns the current SD request that is
+          being worked on.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> getting the current request:</font> 
+          pReq = GET_CURRENT_REQUEST(&amp;pHct-&gt;Hcd)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_GET_SDCONFIG_CMD"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_GET_CURRENT_REQUEST"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_GET_SDCONFIG_CMD_DATA"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UNIT16 GET_SDCONFIG_CMD (PSDCONFIG pCommand) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get a pointer to the configuration command data.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pCommand - config command structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ command code
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. This macro returns the command code for this
+          configuration request.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> getting the command code:</font> 
+    cmd = GET_SDCONFIG_CMD(pConfig);
+    switch (cmd) {
+        case SDCONFIG_GET_WP:
+             .. get write protect switch position
+           break;
+        <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>    
+        
+</pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+GET_SDCONFIG_CMD_LEN, GET_SDCONFIG_CMD_DATA
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_GET_SDCONFIG_CMD_DATA"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_GET_SDCONFIG_CMD"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_GET_SDCONFIG_CMD_LEN"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ (casted ptr) GET_SDCONFIG_CMD_DATA (type, PSDCONFIG pCommand) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get a pointer to the configuration command data.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  type - pointer type to cast the returned pointer to.
+           pCommand - config command structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ type-casted pointer to the command's data
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.  Host controller drivers can use this macro to extract 
+          a pointer to the command specific data in an HCD configuration request.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> getting the pointer:</font> 
+        <font face="Arial, Helvetica, sans-serif" color="#999999">// get interrupt control data
+</font>    pIntControl = GET_SDCONFIG_CMD_DATA(PSDCONFIG_SDIO_INT_CTRL_DATA,pConfig);
+    if (pIntControl-&gt;SlotIRQEnable) {
+       <font face="Arial, Helvetica, sans-serif" color="#999999">... enable slot IRQ detection
+</font>    }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+GET_SDCONFIG_CMD, GET_SDCONFIG_CMD_LEN
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_GET_SDCONFIG_CMD_LEN"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_GET_SDCONFIG_CMD_DATA"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_IS_HCD_BUS_MODE_SPI"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ INT GET_SDCONFIG_CMD_LEN (PSDCONFIG pCommand) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get a pointer to the configuration command data.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pCommand - config command structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ length of config command data
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Host controller drivers can use this macro to extract 
+          the number of bytes of command specific data. This can be used to validate the
+          config data buffer size.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> getting the data length:</font> 
+    length = GET_SDCONFIG_CMD_LEN(pConfig);
+    if (length &lt; CUSTOM_COMMAND_XXX_SIZE) {
+       <font face="Arial, Helvetica, sans-serif" color="#999999">... invalid length
+</font>    }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+GET_SDCONFIG_CMD, GET_SDCONFIG_CMD_DATA
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_IS_HCD_BUS_MODE_SPI"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_GET_SDCONFIG_CMD_LEN"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_IS_HCD_BUS_MODE_SPI_NO_CRC"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL IS_HCD_BUS_MODE_SPI (PSDHCD pHcd) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Is host controller operating in SPI mode</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - host structure
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if in SPI mode
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Host controllers that operate in SPI mode
+          dynamically can use this macro to check for SPI operation.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> testing for SPI mode:</font> 
+          if (IS_HCD_BUS_MODE_SPI(&amp;pHct-&gt;Hcd)) {
+             .. in spi mode
+          
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_IS_HCD_BUS_MODE_SPI_NO_CRC"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_IS_HCD_BUS_MODE_SPI"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_Request"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL IS_HCD_BUS_MODE_SPI_NO_CRC(PSDHCD pHcd) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Is host controller using SPI in non-CRC mode</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - host structure
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if CRC mode is off
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. SPI-capable cards and systems can operate in 
+          non-CRC protected mode.  In this mode the host controller should ignore
+          CRC fields and/or disable CRC generation when issuing command or data
+          packets.  This option is useful for software based SPI mode where CRC
+          should be turned off in order to reduce processing overhead.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> test for non-CRC SPI mode:</font> 
+          if (IS_HCD_BUS_MODE_SPI_NO_CRC(&amp;pHct-&gt;Hcd)) {
+             .. disable CRC checking in hardware.
+          
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_Request"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_IS_HCD_BUS_MODE_SPI_NO_CRC"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDHCD_GET_OPER_CLOCK"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS (*pRequest) (struct _SDHCD *pHcd)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">The bus driver calls the request callback to start an SDIO bus transaction.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - the host controller structure that was registered
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  
+          The bus driver maintains an internal queue of SDREQUEST structures submited by function
+          drivers. The driver should use request macros to obtain a pointer to the current SDREQUEST 
+          at the head of the queue.  The driver can access the fields of the current request in order
+          to program hardware appropriately.   Once the request completes, the driver should update
+          the current request information (final status, response bytes and/or data) and call
+          SDIO_HandleHcdEvent() with the event type of EVENT_HCD_TRANSFER_DONE.
+          The bus driver will remove the current request from the head of the queue and start the next
+          request.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of a typical Request callback:</font>
+  SDIO_STATUS HcdRequest(PSDHCD pHcd) 
+  {
+    SDIO_STATUS status = SDIO_STATUS_SUCCESS;
+    PSDHCD_DRIVER_CONTEXT pHct = (PSDHCD_DRIVER_CONTEXT)pHcd-&gt;pContext;
+    UINT32                temp = 0;
+    PSDREQUEST            pReq;
+       <font face="Arial, Helvetica, sans-serif" color="#999999">// get the current request
+</font>    pReq = GET_CURRENT_REQUEST(pHcd);
+    DBG_ASSERT(pReq != NULL);   
+       <font face="Arial, Helvetica, sans-serif" color="#999999">// get controller settings based on response type
+</font>    switch (GET_SDREQ_RESP_TYPE(pReq-&gt;Flags)) {    
+        case SDREQ_FLAGS_NO_RESP:
+            break;
+        case SDREQ_FLAGS_RESP_R1:
+        case SDREQ_FLAGS_RESP_MMC_R4:        
+        case SDREQ_FLAGS_RESP_MMC_R5:
+        case SDREQ_FLAGS_RESP_R6:     
+        case SDREQ_FLAGS_RESP_SDIO_R5:  
+            temp |= CMDDAT_RES_R1_R4_R5;
+            break;
+        case SDREQ_FLAGS_RESP_R1B:
+            temp |= (CMDDAT_RES_R1_R4_R5 | CMDAT_RES_BUSY);
+            break;
+        case SDREQ_FLAGS_RESP_R2:
+            temp |= CMDDAT_RES_R2;
+            break;
+        case SDREQ_FLAGS_RESP_R3:
+        case SDREQ_FLAGS_RESP_SDIO_R4:
+            temp |= CMDDAT_RES_R3;
+            break;
+    }   
+        <font face="Arial, Helvetica, sans-serif" color="#999999">// check for data    
+</font>    if (pReq-&gt;Flags &amp; SDREQ_FLAGS_DATA_TRANS){
+        temp |= CMDDAT_DATA_EN; 
+        <font face="Arial, Helvetica, sans-serif" color="#999999">// set data remaining count
+</font>        pReq-&gt;DataRemaining = pReq-&gt;BlockLen * pReq-&gt;BlockCount;
+        DBG_PRINT(TRACE_DATA, ("SDIO %s Data Transfer, Blocks:%d, BlockLen:%d, Total:%d \n",
+                    IS_SDREQ_WRITE_DATA(pReq-&gt;Flags) ? "TX":"RX",
+                    pReq-&gt;BlockCount, pReq-&gt;BlockLen, pReq-&gt;DataRemaining));
+        if (IS_SDREQ_WRITE_DATA(pReq-&gt;Flags)) {
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// write operation
+</font>        }
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">// .... program hardware, interrupt handler will complete request
+</font>    return SDIO_STATUS_PENDING;
+  
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_HandleHcdEvent">
+SDIO_HandleHcdEvent
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDHCD_GET_OPER_CLOCK"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_Request"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDIO_CheckResponse"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SD_BUSCLOCK_RATE SDHCD_GET_OPER_CLOCK(PSDHCD pHcd)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get host controller's current operational bus clock</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd   - the registered host structure
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ clock rate
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the current bus clock rate. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDIO_CheckResponse"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDHCD_GET_OPER_CLOCK"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDIO_HandleHcdEvent"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDIO_CheckResponse(PSDHCD pHcd, PSDREQUEST pReq, SDHCD_RESPONSE_CHECK_MODE CheckMode)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Check an SD/MMC/SDIO response.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - the host controller definition structure.
+        <br>
+  pReq - request containing the response
+        <br>
+  CheckMode - mode
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Host controller drivers must call into this function to validate various command 
+          responses before continuing with data transfers or for decoding received SPI tokens.
+          The CheckMode option determines the type of validation to perform.  
+          if (CheckMode == SDHCD_CHECK_DATA_TRANS_OK) : 
+             The host controller must check the card response to determine whether it
+          is safe to perform a data transfer.  This API only checks commands that
+          involve data transfers and checks various status fields in the command response.
+          If the card cannot accept data, this function will return a non-successful status that 
+          should be treated as a request failure.  The host driver should complete the request with the
+          returned status. Host controller should only call this function in preparation for a
+          data transfer.    
+          if (CheckMode == SDHCD_CHECK_SPI_TOKEN) : 
+             This API checks the SPI token and returns a timeout status if the illegal command bit is
+          set.  This simulates the behavior of SD 1/4 bit operation where illegal commands result in 
+          a command timeout.  A driver that supports SPI mode should pass every response to this 
+          function to determine the appropriate error status to complete the request with.  If the 
+          API returns success, the response indicates that the card accepted the command. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Checking the response before starting the data transfer :</font>
+        if (SDIO_SUCCESS(status) &amp;&amp; (pReq-&gt;Flags &amp; SDREQ_FLAGS_DATA_TRANS)) {
+                <font face="Arial, Helvetica, sans-serif" color="#999999">// check the response to see if we should continue with data
+</font>            status = SDIO_CheckResponse(pHcd, pReq, SDHCD_CHECK_DATA_TRANS_OK);
+            if (SDIO_SUCCESS(status)) {
+                <font face="Arial, Helvetica, sans-serif" color="#999999">.... start data transfer phase 
+</font>            } else {
+               <font face="Arial, Helvetica, sans-serif" color="#999999">... card response indicates that the card cannot handle data
+</font>                  <font face="Arial, Helvetica, sans-serif" color="#999999">// set completion status
+</font>               pRequest-&gt;Status = status;               
+            }
+        
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDIO_HandleHcdEvent"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDIO_CheckResponse"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDIO_RegisterHostController"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDIO_HandleHcdEvent(PSDHCD pHcd, HCD_EVENT Event) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Indicate to the SDIO bus driver (core) of an event in the host controller              driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - the host controller structure that was registered
+           HCD_EVENT - event code
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  
+          The host controller driver can indicate asynchronous events by calling this 
+          function with an appropriate event code. Refer to the HDK help manual for
+          more information on the event types
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of indicating a card insertion event:</font>
+            SDIO_HandleHcdEvent(&amp;Hcd, EVENT_HCD_ATTACH)
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDIO_RegisterHostController"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDIO_HandleHcdEvent"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC_SDIO_UnregisterHostController"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDIO_RegisterHostController (PSDHCD pHcd) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register a host controller driver with the bus driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - the host controller definition structure.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when successful.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Each host controller driver must register with the bus driver when loaded. 
+          The driver registers an SDHCD structure initialized with hardware properties 
+          and callback functions for bus requests and configuration.  On multi-slot 
+          hardware ,each slot should be registered with a separate SDHCD structure.
+          The bus driver views each slot as a seperate host controller object.
+          The driver should be prepared to receive configuration requests before 
+          this call returns. The host controller driver must unregister itself when 
+          shutting down.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Registering a host controller driver:</font>  
+    static SDHCD Hcd = {
+       .pName = "sdio_custom_hcd",
+       .Version = CT_SDIO_STACK_VERSION_CODE,  <font face="Arial, Helvetica, sans-serif" color="#999999">// set stack version code
+</font>       .SlotNumber = 0,                        <font face="Arial, Helvetica, sans-serif" color="#999999">// only one slot starting at 0
+</font>       .Attributes = SDHCD_ATTRIB_BUS_1BIT | SDHCD_ATTRIB_BUS_4BIT | SDHCD_ATTRIB_MULTI_BLK_IRQ
+                     SDHCD_ATTRIB_AUTO_CMD12 ,
+       .MaxBytesPerBlock = 2048     <font face="Arial, Helvetica, sans-serif" color="#999999">// each data block can be up to 2048 bytes
+</font>       .MaxBlocksPerTrans = 1024,   <font face="Arial, Helvetica, sans-serif" color="#999999">// each data transaction can consist of 1024 blocks
+</font>       .MaxSlotCurrent = 500,       <font face="Arial, Helvetica, sans-serif" color="#999999">// max FET switch current rating
+</font>       .SlotVoltageCaps = SLOT_POWER_3_3V,      <font face="Arial, Helvetica, sans-serif" color="#999999">// only 3.3V operation
+</font>       .SlotVoltagePreferred = SLOT_POWER_3_3V,  
+       .MaxClockRate = 24000000,   <font face="Arial, Helvetica, sans-serif" color="#999999">// 24 Mhz max operation
+</font>       .pContext = &amp;HcdContext,    <font face="Arial, Helvetica, sans-serif" color="#999999">// set our driver context
+</font>       .pRequest = HcdRequest,     <font face="Arial, Helvetica, sans-serif" color="#999999">// set SDIO bus request callback
+</font>       .pConfigure = HcdConfig,    <font face="Arial, Helvetica, sans-serif" color="#999999">// set SDIO bus configuration callback
+</font>    };    
+    if (!SDIO_SUCCESS((status = SDIO_RegisterHostController(&amp;Hcd)))) {
+         DBG_PRINT(SDDBG_ERROR, ("SDIO HCD - failed to register with host, status =%d\n",
+                                    status));
+    }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_UnregisterHostController">
+SDIO_UnregisterHostController
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC_SDIO_UnregisterHostController"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Host Controller Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC_SDIO_RegisterHostController"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#next#"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDIO_UnregisterHostController (PSDHCD pHcd) 
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Unregister a host controller driver with the bus driver.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pHcd - the host controller definition structure that was registered.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS - SDIO_STATUS_SUCCESS when successful.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Each host controller driver must unregister with the bus driver when 
+          unloading. The driver is responsible for halting any outstanding I/O 
+          operations.  The bus driver will automatically unload function drivers
+          that may be attached assigned to cards inserted into slots.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Unregistering a host controller driver:</font> 
+    if (!SDIO_SUCCESS((status = SDIO_UnregisterHostController(&amp;Hcd)))) {
+         DBG_PRINT(SDDBG_ERROR, ("SDIO HCD - failed to unregister with host, status =%d\n",
+                                    status));
+    }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+<a href="#FUNC_SDIO_RegisterHostController">
+SDIO_RegisterHostController
+        </a>
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong></font><a target="_blank" href="http://www.codetelligence.com"><font face="Arial, Helvetica, sans-serif" color="#FFFFFF">www.codetelligence.com</font></a></td>
+</tr>
+</table>
+</body>
+</html>

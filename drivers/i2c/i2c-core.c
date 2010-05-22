@@ -998,7 +998,11 @@ module_exit(i2c_exit);
  * Note that there is no requirement that each message be sent to
  * the same slave address, although that is the most common model.
  */
+#ifdef __TRACE_I2C_FAIL__
+int _i2c_transfer(struct i2c_adapter * adap, struct i2c_msg *msgs, int num)
+#else	// __TRACE_I2C_FAIL__
 int i2c_transfer(struct i2c_adapter * adap, struct i2c_msg *msgs, int num)
+#endif	// __TRACE_I2C_FAIL__
 {
 	int ret;
 
@@ -1047,7 +1051,47 @@ int i2c_transfer(struct i2c_adapter * adap, struct i2c_msg *msgs, int num)
 		return -EOPNOTSUPP;
 	}
 }
+#ifdef __TRACE_I2C_FAIL__
+EXPORT_SYMBOL(_i2c_transfer);
+#else	// __TRACE_I2C_FAIL__
 EXPORT_SYMBOL(i2c_transfer);
+#endif	// __TRACE_I2C_FAIL__
+
+int get_i2c_bus(struct i2c_adapter * adap)
+{
+	int ret;
+
+	if (adap->algo->master_xfer) {
+
+		if (in_atomic() || irqs_disabled()) {
+			ret = mutex_trylock(&adap->bus_lock);
+			if (!ret)
+				/* I2C activity is ongoing. */
+				return -EAGAIN;
+		} else {
+			mutex_lock_nested(&adap->bus_lock, adap->level);
+		}
+
+		return 0;
+	} else {
+		dev_dbg(&adap->dev, "I2C level transfers not supported\n");
+		return -EOPNOTSUPP;
+	}
+}
+
+int send_i2c_package(struct i2c_adapter * adap, struct i2c_msg *msgs, int num)
+{
+	return adap->algo->master_xfer(adap,msgs,num);
+}
+
+void release_i2c_bus(struct i2c_adapter * adap)
+{
+	mutex_unlock(&adap->bus_lock);
+}
+
+EXPORT_SYMBOL(get_i2c_bus);
+EXPORT_SYMBOL(send_i2c_package);
+EXPORT_SYMBOL(release_i2c_bus);
 
 /**
  * i2c_master_send - issue a single I2C message in master transmit mode

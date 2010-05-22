@@ -1,7 +1,6 @@
 /* drivers/android/pmem.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -823,6 +822,16 @@ void flush_pmem_file(struct file *file, unsigned long offset, unsigned long len)
 	struct pmem_region_node *region_node;
 	struct list_head *elt;
 	void *flush_start, *flush_end;
+
+    /* FIH_ADQ { */
+    /* Prevent from NULL pointer */
+    /*
+    if (unlikely(!file)) {
+        printk(KERN_ERR "pmem: has NULL pointer on 1st parameter of flush_pmem_file() \n");
+        return;
+    }
+    */
+    /* } FIH_ADQ */
 
 	if (!is_pmem_file(file) || !has_allocation(file)) {
 		return;

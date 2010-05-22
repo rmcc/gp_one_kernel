@@ -1,0 +1,17 @@
+01,QoS Data,Con,M_V,0,00
+02,QoS Data,STA,APTS_CONFIRM,0,01
+03,QoS Data,STA,APTS_CK_VO,2,01
+04,QoS Null,AP,,1,
+05,QoS Data,STA,APTS_CK_VI,2,01
+06,QoS Null,AP,,1,
+07,QoS Data,STA,APTS_CK_BE,2,01
+08,QoS Data,STA,APTS_CK_BK,2,01
+09,Beacon,AP,,0,01,,,,             #step  4  PVB=0
+10,QoS Data,STA,APTS_TX,2,03,      #step  7  trigger
+11,QoS Null,AP,,1,
+12,QoS Data,STA,APTS_TX,2,03,      #step  7  trigger
+13,Beacon,AP,,0,01,,,,             #step 10  AID0 Broadcast frame buffered
+14,PS Poll,STA,,2,03,      #step  7  trigger
+15,QoS Data,STA,APTS_TX,2,03,      #step  7  trigger
+16,QoS Data,Con,APTS_TX,2,01,   #step  7  response 
+17,QoS Data,Con,APTS_STOP,1,01

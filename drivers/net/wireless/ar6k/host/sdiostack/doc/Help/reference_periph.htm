@@ -1,0 +1,239 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Reference : Function Driver Interface</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" --> Function
+    Driver Interface<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+<p class="BODYTEXT">
+  <OBJECT type="application/x-oleobject" classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+    <param name="Keyword" value="Function Driver Interface">
+  </OBJECT>
+</p>
+<p class="BODYTEXT"><br>
+This section details the software interface between the SDIO function drivers
+  and the bus driver (SDIO Core). </p>
+<p class="BODYTEXT">&nbsp;</p>
+<table cellpadding="2" cellspacing="5" border="2" width="100%">
+<tr>
+<td><a href="function_driver.htm#FUNC__SDIO_RegisterFunction">SDIO_RegisterFunction</a></td><td>Register a function driver with the bus driver.</td>
+</tr>
+<tr>
+<td><a href="function_driver.htm#FUNC__SDIO_UnregisterFunction">SDIO_UnregisterFunction</a></td><td>Unregister a function driver with the bus driver.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver.htm#func_probe">Probe</a></td><td>This function is called by the Busdriver when a device is inserted that can be supported by this function driver.</td>
+</tr>
+<tr>
+<td><a href="function_driver.htm#func_remove">Remove</a></td><td>This function is called by the Busdriver when a device controlled by this function              function driver is removed.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_IS_SDIO_REV_GTEQ_1_10">SDDEVICE_IS_SDIO_REV_GTEQ_1_10</a>
+        </td><td>Test the SDIO revision for greater than or equal to 1.10</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_IS_SD_REV_GTEQ_1_10">SDDEVICE_IS_SD_REV_GTEQ_1_10</a>
+        </td><td>Test the SD revision for greater than or equal to 1.10</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_IS_MMC_REV_GTEQ_4_0">SDDEVICE_IS_MMC_REV_GTEQ_4_0</a>
+        </td><td>Test the MMC revision for greater than or equal to 4.0</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_IS_CARD_WP_ON">SDDEVICE_IS_CARD_WP_ON</a>
+        </td><td>Test for write protect enabled</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNCNO">SDDEVICE_GET_SDIO_FUNCNO</a>
+        </td><td>Get the device's function number</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_CLASS">SDDEVICE_GET_SDIO_FUNC_CLASS</a>
+        </td><td>Get the functions's class</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_CISPTR">SDDEVICE_GET_SDIO_FUNC_CISPTR</a>
+        </td><td>Get the functions's Card Information Structure pointer</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_CSAPTR">SDDEVICE_GET_SDIO_FUNC_CSAPTR</a>
+        </td><td>Get the functions's Code Stoarge Area pointer</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE">SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE</a>
+        </td><td>Get the functions's maximum reported block size</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_COMMON_CISPTR">SDDEVICE_GET_SDIO_COMMON_CISPTR</a>
+        </td><td>Get the common Card Information Structure pointer</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIO_CARD_CAPS">SDDEVICE_GET_SDIO_CARD_CAPS</a>
+        </td><td>Get the card capabilities</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_CARD_FLAGS">SDDEVICE_GET_CARD_FLAGS</a>
+        </td><td>Get the card flags</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_CARD_RCA">SDDEVICE_GET_CARD_RCA</a>
+        </td><td>Get the Relative Card Address register</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_OPER_CLOCK">SDDEVICE_GET_OPER_CLOCK</a>
+        </td><td>Get operational bus clock</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_MAX_CLOCK">SDDEVICE_GET_MAX_CLOCK</a>
+        </td><td>Get maximum bus clock</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_OPER_BLOCK_LEN">SDDEVICE_GET_OPER_BLOCK_LEN</a>
+        </td><td>Get operational maximum block length.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_MAX_BLOCK_LEN">SDDEVICE_GET_MAX_BLOCK_LEN</a>
+        </td><td>Get maximum block length.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_OPER_BLOCKS">SDDEVICE_GET_OPER_BLOCKS</a>
+        </td><td>Get operational maximum block count.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_MAX_BLOCKS">SDDEVICE_GET_MAX_BLOCKS</a>
+        </td><td>Get maximum block count.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_CARDCSD">SDDEVICE_GET_CARDCSD</a>
+        </td><td>Get the Card Specific Data Register.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_BUSWIDTH">SDDEVICE_GET_BUSWIDTH</a>
+        </td><td>Get the bus width.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_IS_BUSMODE_SPI">SDDEVICE_IS_BUSMODE_SPI</a>
+        </td><td>Is bus in SPI mode.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_CALL_REQUEST_FUNC">SDDEVICE_CALL_REQUEST_FUNC</a>
+        </td><td>Send a request to a device.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_CALL_CONFIG_FUNC">SDDEVICE_CALL_CONFIG_FUNC</a>
+        </td><td>Send configuration to a device.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDeviceAllocRequest">SDDeviceAllocRequest</a>
+        </td><td>Allocate a request structure.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDeviceFreeRequest">SDDeviceFreeRequest</a>
+        </td><td>Free a request structure.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_SET_IRQ_HANDLER">SDDEVICE_SET_IRQ_HANDLER</a>
+        </td><td>Register an interrupt handler for a device.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_SET_ASYNC_IRQ_HANDLER">SDDEVICE_SET_ASYNC_IRQ_HANDLER</a>
+        </td><td>Register an asynchronous interrupt handler for a device.</td>
+</tr>
+<tr>
+<td>
+<a href="function_driver_target.htm#FUNC__SDDEVICE_GET_SDIOCARD_CAPS">SDDEVICE_GET_SDIOCARD_CAPS</a>
+        </td>
+<td>Get the SDIO capabilities register.</td>
+</tr>
+<tr>
+<td><a href="library.htm#FUNC__SDLIB_SetupCMD52Request">SDLIB_SetupCMD52Request</a></td><td>Setup cmd52 requests</td>
+</tr>
+<tr>
+<td><a href="library.htm#FUNC__SDLIB_IssueCMD52">SDLIB_IssueCMD52</a></td><td>Issue a CMD52 to read or write a register</td>
+</tr>
+<tr>
+<td><a href="library.htm#FUNC__SDLIB_FindTuple">SDLIB_FindTuple</a></td>
+<td>Find a function tuple in common or function CIS.</td>
+</tr>
+<tr>
+<td><a href="library.htm#FUNC__SDLIB_IssueConfig">SDLIB_IssueConfig</a></td><td>Issue an SDIO configuration command.</td>
+</tr>
+<tr>
+<td><a href="library.htm#FUNC__SDLIB_SetFunctionBlockSize">SDLIB_SetFunctionBlockSize</a></td><td>Set function block size</td>
+</tr>
+<tr>
+<td><a href="library.htm#FUNC__SDLIB_PrintBuffer">SDLIB_PrintBuffer</a></td>
+<td>Print a buffer on the standard output</td>
+</tr>
+</table>
+</p>
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

@@ -653,7 +653,10 @@ __SYSCALL(__NR_dup3, sys_dup3)
 __SYSCALL(__NR_pipe2, sys_pipe2)
 #define __NR_inotify_init1			294
 __SYSCALL(__NR_inotify_init1, sys_inotify_init1)
-
+#define __NR_marker				295
+__SYSCALL(__NR_marker, sys_marker)
+#define __NR_trace				296
+__SYSCALL(__NR_trace, sys_trace)
 
 #ifndef __NO_STUBS
 #define __ARCH_WANT_OLD_READDIR

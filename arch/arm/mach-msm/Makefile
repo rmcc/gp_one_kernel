@@ -2,7 +2,6 @@ obj-y += io.o irq.o timer.o dma.o memory.o
 obj-y += devices.o
 obj-y += proc_comm.o
 obj-y += vreg.o mpp.o
-obj-y += vreg.o
 obj-y += clock.o
 obj-y += gpio.o generic_gpio.o
 obj-y += nand_partitions.o
@@ -10,10 +9,12 @@ obj-y += remote_spinlock.o modem_notifier.o
 obj-y += rpc_hsusb.o
 obj-y += socinfo.o
 obj-y += cpufreq.o
-obj-y += nohlt.o
+###+FIH_ADQ
+###AudiPCHuang@FIH, 09.03.30: Create proc entry for reading device infomation.
+obj-y += adq_info.o
+###-FIH_ADQ
 
 obj-$(CONFIG_ARCH_MSM) += acpuclock.o
-obj-$(CONFIG_ARCH_MSM) += pmic.o
 obj-$(CONFIG_ARCH_QSD) += acpuclock-8x50.o sirc.o
 obj-$(CONFIG_ARCH_QSD) += pmic.o
 obj-$(CONFIG_CPU_V6) += idle-v6.o
@@ -40,20 +41,29 @@ else
 	obj-$(CONFIG_PM) += pm.o
 endif
 obj-$(CONFIG_MSM_DMA_TEST) += dma_test.o
-obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 
-obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o
-obj-$(CONFIG_MACH_MSM7201A_FFA) += board-halibut.o
+obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o keypad-surf-ffa.o
+obj-$(CONFIG_MACH_MSM7201A_FFA) += board-halibut.o keypad-surf-ffa.o
 obj-$(CONFIG_MACH_TROUT) += board-trout.o board-trout-gpio.o
 obj-$(CONFIG_MACH_TROUT) += board-trout-keypad.o board-trout-panel.o
 obj-$(CONFIG_MACH_TROUT) += htc_akm_cal.o htc_wifi_nvs.o htc_acoustic.o
 obj-$(CONFIG_MACH_TROUT) += board-trout-mmc.o board-trout-wifi.o
-obj-$(CONFIG_MACH_QSD8X50_SURF) += board-qsd8x50.o
-obj-$(CONFIG_MACH_QSD8X50_FFA) += board-qsd8x50.o
-obj-$(CONFIG_MACH_QSD8X50_COMET) += board-comet.o
+obj-$(CONFIG_MACH_QSD8X50_SURF) += board-qsd8x50.o keypad-surf-ffa.o
+obj-$(CONFIG_MACH_QSD8X50_FFA) += board-qsd8x50.o keypad-surf-ffa.o
+obj-$(CONFIG_MACH_COMET) += board-comet.o keypad-surf-ffa.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 obj-$(CONFIG_TROUT_PWRSINK) += htc_pwrsink.o
+###+FIH_ADQ
+###AudiPCHuang@FIH, 09.03.31: Remove QC default keypad driver.
+#obj-$(CONFIG_MACH_MSM7X25_SURF) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_MSM7X25_FFA) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_QST1500_SURF) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_QST1500_FFA) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_QST1600_SURF) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_QST1600_FFA) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_MSM7X27_SURF) += board-msm7x25.o keypad-surf-ffa.o
+#obj-$(CONFIG_MACH_MSM7X27_FFA) += board-msm7x25.o keypad-surf-ffa.o
 obj-$(CONFIG_MACH_MSM7X25_SURF) += board-msm7x25.o
 obj-$(CONFIG_MACH_MSM7X25_FFA) += board-msm7x25.o
 obj-$(CONFIG_MACH_QST1500_SURF) += board-msm7x25.o
@@ -62,15 +72,13 @@ obj-$(CONFIG_MACH_QST1600_SURF) += board-msm7x25.o
 obj-$(CONFIG_MACH_QST1600_FFA) += board-msm7x25.o
 obj-$(CONFIG_MACH_MSM7X27_SURF) += board-msm7x25.o
 obj-$(CONFIG_MACH_MSM7X27_FFA) += board-msm7x25.o
+###-FIH_ADQ
+
 
 obj-$(CONFIG_QSD_AUDIO) += qdsp6/
 
-obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
-obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
-obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-mmc.o board-sapphire-wifi.o
-obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-rfkill.o msm_vibrator.o
-
-obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
-
-obj-$(CONFIG_HTC_PWRSINK) += htc_pwrsink.o
-obj-$(CONFIG_HTC_HEADSET) += htc_headset.o
+###+FIH_ADQ
+###AudiPCHuang@FIH, 09.05.13: Vibrator Driver
+obj-y += rpc_pmic.o
+obj-y += msm_vibrator.o
+###-FIH_ADQ

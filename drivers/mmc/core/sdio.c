@@ -488,6 +488,7 @@ int sdio_reset_comm(struct mmc_card *card)
  err:
 	printk("%s: Error resetting SDIO communications (%d)\n",
 	       mmc_hostname(host), err);
+	mmc_release_host(host);
 	return err;
 }
 EXPORT_SYMBOL(sdio_reset_comm);

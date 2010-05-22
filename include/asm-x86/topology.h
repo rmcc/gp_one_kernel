@@ -38,6 +38,8 @@
 /* Node not present */
 #define NUMA_NO_NODE	(-1)
 
+struct pci_bus;
+
 #ifdef CONFIG_NUMA
 #include <linux/cpumask.h>
 #include <asm/mpspec.h>
@@ -116,7 +118,6 @@ static inline cpumask_t node_to_cpumask(int node)
 
 #endif /* !CONFIG_DEBUG_PER_CPU_MAPS */
 
-/* Replace default node_to_cpumask_ptr with optimized version */
 #define node_to_cpumask_ptr(v, node)		\
 		const cpumask_t *v = _node_to_cpumask_ptr(node)
 
@@ -129,8 +130,14 @@ static inline cpumask_t node_to_cpumask(int node)
  * Returns the number of the node containing Node 'node'. This
  * architecture is flat, so it is a pretty simple function!
  */
-#define parent_node(node) (node)
+static inline int parent_node(int node)
+{
+	return node;
+}
 
+/*
+ * Leave those as defines so we don't have to include linux/pci.h.
+ */
 #define pcibus_to_node(bus) __pcibus_to_node(bus)
 #define pcibus_to_cpumask(bus) __pcibus_to_cpumask(bus)
 
@@ -180,16 +187,33 @@ extern int __node_distance(int, int);
 #define node_distance(a, b) __node_distance(a, b)
 #endif
 
+/* Returns the number of the first CPU on Node 'node'. */
+static inline int node_to_first_cpu(int node)
+{
+	node_to_cpumask_ptr(mask, node);
+	return first_cpu(*mask);
+}
+
 #else /* !CONFIG_NUMA */
 
-#define numa_node_id()		0
-#define	cpu_to_node(cpu)	0
-#define	early_cpu_to_node(cpu)	0
-
-static inline const cpumask_t *_node_to_cpumask_ptr(int node)
+static inline int numa_node_id(void)
 {
-	return &cpu_online_map;
+	return 0;
 }
+
+/*
+ * We override asm-generic/topology.h.
+ */
+static inline int cpu_to_node(int cpu)
+{
+	return 0;
+}
+
+static inline int parent_node(int node)
+{
+	return 0;
+}
+
 static inline cpumask_t node_to_cpumask(int node)
 {
 	return cpu_online_map;
@@ -199,23 +223,30 @@ static inline int node_to_first_cpu(int node)
 	return first_cpu(cpu_online_map);
 }
 
+static inline int pcibus_to_node(struct pci_bus *bus)
+{
+	return -1;
+}
+
+static inline cpumask_t pcibus_to_cpumask(struct pci_bus *bus)
+{
+	return pcibus_to_node(bus) == -1 ?
+		CPU_MASK_ALL :
+		node_to_cpumask(pcibus_to_node(bus));
+}
+
+static inline const cpumask_t *_node_to_cpumask_ptr(int node)
+{
+	return &cpu_online_map;
+}
+
 /* Replace default node_to_cpumask_ptr with optimized version */
 #define node_to_cpumask_ptr(v, node)		\
 		const cpumask_t *v = _node_to_cpumask_ptr(node)
 
 #define node_to_cpumask_ptr_next(v, node)	\
 			   v = _node_to_cpumask_ptr(node)
-#endif
 
-#include <asm-generic/topology.h>
-
-#ifdef CONFIG_NUMA
-/* Returns the number of the first CPU on Node 'node'. */
-static inline int node_to_first_cpu(int node)
-{
-	node_to_cpumask_ptr(mask, node);
-	return first_cpu(*mask);
-}
 #endif
 
 extern cpumask_t cpu_coregroup_map(int cpu);

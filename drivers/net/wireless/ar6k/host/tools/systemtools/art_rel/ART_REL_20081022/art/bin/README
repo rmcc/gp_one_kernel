@@ -1,0 +1,69 @@
+/* This README is work-in-progress. 
+ */
+
+Updated on 2/19/2008 
+====================================
+- Get the ART release package from <package>/host/tools/systemtools/art_rel.
+- Unzip the ART_REL_<date>.tar.gz, e.g.
+  tar zxvf ART_REL_<date>.tar.gz
+- cd ART_REL_<date>/art/bin
+- source mercury_env_bash (or mercury_env_csh)
+- run art, e.g.
+  ./art.out \\remote=sdio \\id=6041
+
+Notes: 
+1. If ART host target interface is not eth1 by default, set environment variable NETIF,
+   e.g. setenv NETIF eth2
+   Refer to mercury_env_bash(csh).
+2. To set a different crytal clock (from the default 26MHz), set environment variable XTALFREQ,
+   e.g. setenv XTALFREQ 19200000
+   Refer to mercury_env_bash(csh).
+2a. To unset a crytal freq
+   e.g. unsetenv XTALFREQ 19200000
+3. Loading target is no longer required. It's called when ART starts up.
+   (Obsolete: load the target,
+    ./loadTgt.sh ) 
+   Note: if sudo fails, you may need to add your username to /etc/sudoers.
+4. Unloading target is no longer required. It's called when ART exits.
+   (Obsolete: unload the target,
+    ./unloadTgt.sh )
+
+
+How to run XP version
+=====================
+- Unzip the package, win_release_<data>.zip, using WinZip to a directory (e.g. win_release_<date>).
+- cd win_release_<date>/art/bin
+- run ART, e.g.
+  art \remote=sdio \id=6041
+
+Notes:
+1. Various configurations are set in dkdownload.sh (for Mercury 2.0/2.1, use dkdownload2.sh), 
+e.g. ref_clock_19p2.bin for 19.2MHz, and uncomment
+out the line #$BMILOADER -w -a 0x500478 -f ref_clock.bin.
+
+
+How to build Linux ART from the packaged source code
+====================================================
+- Locate the released package directory, e.g. AR6kSDK.build_sw.27, 
+  cd host/tools/systemtools
+- Build the customer release,
+  ./makeART_customer.sh
+- The executables are in the following directories:
+  art.out from art/Linux_cust, and 
+  libdevlib.so from devlib/Linux_cust.
+- Replace the above two files in the official ART release with the newly built ones.
+
+
+How to build XP ART from the packaged source code
+=================================================
+- XP ART is built using Microsoft Visual C++ 6.0.
+- Locate the released package directory, e.g. AR6kSDK.build_sw.27. 
+- In Visual C++, open workspace art_rel.dsw in the released package directory,
+  AR6kSDK.build_sw.27\host\tools\systemtools\art
+- Build the XP customer release by selecting from the menu,
+  Build\Rebuild All
+- The executables are in the following directories:
+  art.exe from art\customerRel
+  devlib.dll from devlib\customerRel.
+- Replace the above two files in the official ART release with the newly built ones.
+

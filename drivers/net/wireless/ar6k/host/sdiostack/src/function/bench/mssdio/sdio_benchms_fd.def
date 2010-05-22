@@ -1,0 +1,15 @@
+NAME sdio_benchms_fd.dll
+EXPORTS
+DllEntry
+SBM_Close
+SBM_Deinit
+SBM_Init
+SBM_IOControl
+SBM_Open
+SBM_PowerDown
+SBM_PowerUp
+SBM_Read
+SBM_Seek
+SBM_Write
+
+

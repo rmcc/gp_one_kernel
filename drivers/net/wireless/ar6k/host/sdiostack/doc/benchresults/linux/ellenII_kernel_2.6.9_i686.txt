@@ -1,0 +1,265 @@
+Copyright 2006 Atheros Communications, Inc.
+
+Test Date: 2/24/2006
+HCD:       PCI Ellen II
+Platform:  PC - Pentium III 733 Mhz (i686 linux 2.6 kernel)
+Test Card: MARS II
+
+Output:
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD52 Test (Fixed Address, READ-SYNC) Addr:0x0, Count:65536
+----> SDIO Test Stats (Fixed Address, READ-SYNC) : Total Ops : 65536, time:934 MS
+      (70167 Ops/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD52 Test (Fixed Address, READ-ASYNC) Addr:0x0, Count:65536
+----> SDIO Test Stats (Fixed Address, READ-ASYNC) : Total Ops : 65536, time:914 MS
+      (71702 Ops/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, PIO Mode, READ-SYNC) Addr:0x0, Count:65536
+      Blocks:32, BytesPerBlock:2048
+----> SDIO Test Stats (BLOCK Basis, PIO Mode, READ-SYNC) : Total Bytes : 6553600, time:1243 MS
+      (5272405 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, PIO Mode, WRITE-SYNC) Addr:0x0, Count:65536
+      Blocks:32, BytesPerBlock:2048
+----> SDIO Test Stats (BLOCK Basis, PIO Mode, WRITE-SYNC) : Total Bytes : 6553600, time:422 MS
+      (15529857 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, PIO Mode, READ-SYNC) Addr:0x0, Count:65536
+      Blocks:128, BytesPerBlock:512
+----> SDIO Test Stats (BYTE Basis, PIO Mode, READ-SYNC) : Total Bytes : 6553600, time:2268 MS
+      (2889594 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, PIO Mode, WRITE-SYNC) Addr:0x0, Count:65536
+      Blocks:128, BytesPerBlock:512
+----> SDIO Test Stats (BYTE Basis, PIO Mode, WRITE-SYNC) : Total Bytes : 6553600, time:1429 MS
+      (4586144 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer non-optimized, READ-SYNC) Addr:0x0, Count:65536
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer non-optimized, READ-SYNC) : Total Bytes : 6553600, time:6510 MS
+      (1006697 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer non-optimized, WRITE-SYNC) Addr:0x0, Count:65536
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer non-optimized, WRITE-SYNC) : Total Bytes : 6553600, time:5976 MS
+      (1096653 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer optimized, READ-SYNC) Addr:0x0, Count:65536
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer optimized, READ-SYNC) : Total Bytes : 6553600, time:3109 MS
+      (2107944 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer optimized, WRITE-SYNC) Addr:0x0, Count:65536
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer optimized, WRITE-SYNC) : Total Bytes : 6553600, time:3208 MS
+      (2042892 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, DMA Mode, READ-SYNC) Addr:0x0, Count:65536
+      Blocks:32, BytesPerBlock:2048
+----> SDIO Test Stats (BLOCK Basis, DMA Mode, READ-SYNC) : Total Bytes : 6553600, time:423 MS
+      (15493144 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, DMA Mode, WRITE-SYNC) Addr:0x0, Count:65536
+      Blocks:32, BytesPerBlock:2048
+----> SDIO Test Stats (BLOCK Basis, DMA Mode, WRITE-SYNC) : Total Bytes : 6553600, time:415 MS
+      (15791807 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:3, Blocks:10922 Total:32766 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32766, time:141 MS
+      (232382 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32766, time:45 MS
+      (728133 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:5, Blocks:6553 Total:32765 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32765, time:86 MS
+      (380988 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32765, time:31 MS
+      (1056935 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:16, Blocks:2048 Total:32768 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:27 MS
+      (1213629 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:13 MS
+      (2520615 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:37, Blocks:885 Total:32745 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32745, time:13 MS
+      (2518846 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32745, time:10 MS
+      (3274500 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:128, Blocks:256 Total:32768 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:5 MS
+      (6553600 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:7 MS
+      (4681142 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:230, Blocks:142 Total:32660 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32660, time:3 MS
+      (10886666 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32660, time:7 MS
+      (4665714 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:256, Blocks:128 Total:32768 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:4 MS
+      (8192000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:6 MS
+      (5461333 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:333, Blocks:98 Total:32634 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32634, time:2 MS
+      (16317000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32634, time:6 MS
+      (5439000 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:455, Blocks:72 Total:32760 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32760, time:2 MS
+      (16380000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32760, time:7 MS
+      (4680000 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:500, Blocks:65 Total:32500 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32500, time:2 MS
+      (16250000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32500, time:6 MS
+      (5416666 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:1 (blocks:32768,residue:0)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:1146 MS
+      (28593 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:1293 MS
+      (25342 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:4 (blocks:8192,residue:0)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:296 MS
+      (110702 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:324 MS
+      (101135 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:16 (blocks:2048,residue:0)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:78 MS
+      (420102 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:86 MS
+      (381023 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:33 (blocks:992,residue:32)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:45 MS
+      (728177 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:45 MS
+      (728177 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:88 (blocks:372,residue:32)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:19 MS
+      (1724631 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:24 MS
+      (1365333 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:95 (blocks:344,residue:88)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:18 MS
+      (1820444 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:22 MS
+      (1489454 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:233 (blocks:140,residue:148)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:14 MS
+      (2340571 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:300 (blocks:109,residue:68)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:9 MS
+      (3640888 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:13 MS
+      (2520615 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode, Total:32768 bytes, BlockSizeLimit:512 (blocks:64,residue:0)
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:7 MS
+      (4681142 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:11 MS
+      (2978909 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:32, Blocks:1024 Total:32768 bytes
+SDIO BenchMark Function: Address 0xEB3FE0 is not aligned (requires 0xFFF)
+*** SDIO CMD53 Data Verify Mode:(Block Mode) was SKIPPED
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:64, Blocks:512 Total:32768 bytes
+SDIO BenchMark Function: Address 0xEB7FC0 is not aligned (requires 0xFFF)
+*** SDIO CMD53 Data Verify Mode:(Block Mode) was SKIPPED
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:512, Blocks:64 Total:32768 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:2 MS
+      (16384000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:3 MS
+      (10922666 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:1024, Blocks:32 Total:32768 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:2 MS
+      (16384000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:2 MS
+      (16384000 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:2048, Blocks:16 Total:32768 bytes
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:2 MS
+      (16384000 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:2 MS
+      (16384000 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@

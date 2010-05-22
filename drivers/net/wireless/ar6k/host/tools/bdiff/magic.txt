@@ -1,0 +1,5 @@
+#------------------------------------------------------------------------------
+# bdiff:  file(1) magic for bdiff binary file patches
+# bdiff was written by Giuliano Pochini (pochini@shiny.it)
+0       string          BDIFF           bdiff patch data
+>5      byte            97              (v1.0)

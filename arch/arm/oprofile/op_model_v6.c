@@ -32,10 +32,17 @@
 static int irqs[] = {
 #ifdef CONFIG_ARCH_OMAP2
 	3,
+///+++ FIH_ADQ +++ 6375		
 #elif defined(CONFIG_ARCH_MSM) 
 	INT_ARM11_PMU,
 #endif
 };
+///--- FIH_ADQ --- 6375	
+/*#endif
+#ifdef CONFIG_ARCH_MSM
+        42,
+#endif
+};*/
 
 static void armv6_pmu_stop(void)
 {

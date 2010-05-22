@@ -1,0 +1,13 @@
+# rules for SDIO software stack
+
+#mmc memory card
+BUS="sdio", SYSFS{type}="mmc", NAME="%k" SYMLINK="sdmem%d"
+
+#sd memory card
+BUS="sdio", SYSFS{type}="sd", NAME="%k" SYMLINK="sdmem%d"
+
+#sdio GPS card
+BUS="sdio", SYSFS{class}="0x4", KERNEL="ttyGPS? ",  NAME="%k"
+
+#bluetooth
+

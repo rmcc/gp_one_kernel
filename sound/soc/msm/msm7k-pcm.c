@@ -1,6 +1,6 @@
 /* linux/sound/soc/msm/msm7k-pcm.c
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.
@@ -197,10 +197,6 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	prtd->channel_mode = (runtime->channels - 1);
 	prtd->buffer_size = prtd->channel_mode ? STEREO_DATA_SIZE : \
 							MONO_DATA_SIZE;
-
-	if (prtd->enabled == 1)
-		return 0;
-
 	prtd->type = AUDREC_CMD_TYPE_0_INDEX_WAV;
 
 	cfg.tx_rate = convert_samp_rate(runtime->rate);
@@ -366,18 +362,18 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 
 	fbytes = frames_to_bytes(runtime, frames);
 	rc = audio_send_buffer(prtd, buf, fbytes, NULL);
-	++copy_count;
 	prtd->pcm_buf_pos += fbytes;
 	if (copy_count == 1) {
 		mutex_lock(&the_locks.lock);
 		audio_configure(prtd);
 		mutex_unlock(&the_locks.lock);
 	}
-	if ((prtd->running) && (msm_vol_ctl.update)) {
+	if ((copy_count >= 1) && (msm_vol_ctl.update)) {
 		rc = msm_audio_volume_update(PCMPLAYBACK_DECODERID,
 				msm_vol_ctl.volume, msm_vol_ctl.pan);
 		msm_vol_ctl.update = 0;
 	}
+	++copy_count;
 
 	return  rc;
 }
@@ -464,5 +460,6 @@ struct snd_pcm_ops msm_pcm_ops = {
 };
 EXPORT_SYMBOL_GPL(msm_pcm_ops);
 
+MODULE_AUTHOR("QUALCOMM-QCT");
 MODULE_DESCRIPTION("PCM module platform driver");
 MODULE_LICENSE("GPL v2");

@@ -3,7 +3,7 @@
  * MSM architecture clock driver
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009 QUALCOMM USA, INC.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -111,15 +111,15 @@ struct clkctl_acpu_speed {
  */
 #if (1)
 static struct clkctl_acpu_speed  acpu_freq_tbl[] = {
-	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 30720, 0, 0, 8 },
+	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0,128000, 0, 0, 8 },     //+++FIH_ADQ+++ , change by simonsschang AXI from 30720 to 128000
 	{ 0, 61440, ACPU_PLL_0,  4, 3, 61440,  0, 0, 30720,  0, 0, 8 },
 	{ 0, 81920, ACPU_PLL_0,  4, 2, 40960,  1, 0, 61440,  0, 0, 8 },
 	{ 0, 96000, ACPU_PLL_1,  1, 7, 48000,  1, 0, 61440,  0, 0, 9 },
-	{ 1, 122880, ACPU_PLL_0, 4, 1, 61440,  1, 3, 61440,  0, 0, 8 },
-	{ 0, 128000, ACPU_PLL_1, 1, 5, 64000,  1, 3, 61440,  0, 0, 12 },
-	{ 0, 176000, ACPU_PLL_2, 2, 5, 88000,  1, 3, 61440,  0, 0, 11 },
+	{ 1, 122880, ACPU_PLL_0, 4, 1, 61440,  1, 3, 128000, 0, 0, 8 },     //+++FIH_ADQ+++ , change by simonsschang AXI from 61440 to 128000
+	{ 0, 128000, ACPU_PLL_1, 1, 5, 64000,  1, 3, 128000, 0, 0, 12 },    //+++FIH_ADQ+++ , change by simonsschang AXI from 61440 to 128000
+	{ 0, 176000, ACPU_PLL_2, 2, 5, 88000,  1, 3, 128000, 0, 0, 11 },    //+++FIH_ADQ+++ , change by simonsschang AXI from 61440 to 128000
 	{ 0, 192000, ACPU_PLL_1, 1, 3, 64000,  2, 3, 61440,  0, 0, 12 },
-	{ 1, 245760, ACPU_PLL_0, 4, 0, 81920,  2, 4, 61440,  0, 0, 12 },
+	{ 1, 245760, ACPU_PLL_0, 4, 0, 81920,  2, 4, 128000, 0, 0, 12 },    //+++FIH_ADQ+++ , change by simonsschang AXI from 61440 to 128000
 	{ 1, 256000, ACPU_PLL_1, 1, 2, 128000, 1, 5, 128000, 0, 0, 12 },
 	{ 0, 264000, ACPU_PLL_2, 2, 3, 88000,  2, 5, 128000, 0, 6, 13 },
 	{ 0, 352000, ACPU_PLL_2, 2, 2, 88000,  3, 5, 128000, 0, 6, 13 },
@@ -231,14 +231,43 @@ static int pc_pll_request(unsigned id, unsigned on)
 
 unsigned long acpuclk_power_collapse(void) {
 	int ret = acpuclk_get_rate();
-	acpuclk_set_rate(drv_state.power_collapse_khz, SETRATE_PC);
+	acpuclk_set_rate(drv_state.power_collapse_khz, 1);
 	return ret * 1000;
 }
 
 unsigned long acpuclk_wait_for_irq(void) {
 	int ret = acpuclk_get_rate();
-	acpuclk_set_rate(drv_state.wait_for_irq_khz, SETRATE_SWFI);
+	acpuclk_set_rate(drv_state.wait_for_irq_khz, 1);
 	return ret * 1000;
+}
+
+//+++FIH_ADQ+++ , added by simonsschang
+void acpuclk_set_lcdcoff_wait_for_irq(int on)
+{
+    mutex_lock(&drv_state.lock);
+    if(on)
+    {
+        drv_state.wait_for_irq_khz = 528000000;
+        //[+++]FIH_ADQ ChiaYuan add for increasing battery life
+	 	acpu_freq_tbl[0].axiclk_khz = 128000;
+	 	acpu_freq_tbl[4].axiclk_khz = 128000;
+	 	acpu_freq_tbl[5].axiclk_khz = 128000;
+	 	acpu_freq_tbl[6].axiclk_khz = 128000;
+	 	acpu_freq_tbl[8].axiclk_khz = 128000;
+	 	//[---]FIH_ADQ ChiaYuan add for increasing battery life
+    }
+    else
+    {
+        drv_state.wait_for_irq_khz = 19200000;
+        //[+++]FIH_ADQ ChiaYuan add for increasing battery life
+	 	acpu_freq_tbl[0].axiclk_khz = 30720;
+	 	acpu_freq_tbl[4].axiclk_khz = 61440;
+	 	acpu_freq_tbl[5].axiclk_khz = 61440;
+	 	acpu_freq_tbl[6].axiclk_khz = 61440;
+	 	acpu_freq_tbl[8].axiclk_khz = 61440;
+	 	//[---]FIH_ADQ ChiaYuan add for increasing battery life
+    }
+    mutex_unlock(&drv_state.lock);        
 }
 
 static int acpuclk_set_vdd_level(int vdd)
@@ -268,48 +297,73 @@ static int acpuclk_set_vdd_level(int vdd)
 
 /* Set proper dividers for the given clock speed. */
 static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
-	uint32_t reg_clkctl, reg_clksel, clk_div, src_sel;
-
-	reg_clksel = readl(A11S_CLK_SEL_ADDR);
+	uint32_t reg_clkctl, reg_clksel, clk_div;
 
 	/* AHB_CLK_DIV */
-	clk_div = (reg_clksel >> 1) & 0x03;
-	/* CLK_SEL_SRC1NO */
-	src_sel = reg_clksel & 1;
-
+	clk_div = (readl(A11S_CLK_SEL_ADDR) >> 1) & 0x03;
 	/*
 	 * If the new clock divider is higher than the previous, then
 	 * program the divider before switching the clock
 	 */
 	if (hunt_s->ahbclk_div > clk_div) {
+		reg_clksel = readl(A11S_CLK_SEL_ADDR);
 		reg_clksel &= ~(0x3 << 1);
 		reg_clksel |= (hunt_s->ahbclk_div << 1);
 		writel(reg_clksel, A11S_CLK_SEL_ADDR);
 	}
+	if ((readl(A11S_CLK_SEL_ADDR) & 0x01) == 0) {
+		/* SRC0 */
 
-	/* Program clock source and divider */
+		/* Program clock source */
+		reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
+		reg_clkctl &= ~(0x07 << 4);
+		reg_clkctl |= (hunt_s->a11clk_src_sel << 4);
+		writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
+
+		/* Program clock divider */
+		reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
+		reg_clkctl &= ~0xf;
+		reg_clkctl |= hunt_s->a11clk_src_div;
+		writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
+
+		/* Program clock source selection */
+		reg_clksel = readl(A11S_CLK_SEL_ADDR);
+		reg_clksel |= 1; /* CLK_SEL_SRC1NO  == SRC1 */
+		writel(reg_clksel, A11S_CLK_SEL_ADDR);
+	} else {
+		/* SRC1 */
+
+		/* Program clock source */
 	reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
-	reg_clkctl &= ~(0xFF << (8 * src_sel));
-	reg_clkctl |= hunt_s->a11clk_src_sel << (4 + 8 * src_sel);
-	reg_clkctl |= hunt_s->a11clk_src_div << (0 + 8 * src_sel);
+		reg_clkctl &= ~(0x07 << 12);
+		reg_clkctl |= (hunt_s->a11clk_src_sel << 12);
+		writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
+
+		/* Program clock divider */
+		reg_clkctl = readl(A11S_CLK_CNTL_ADDR);
+		reg_clkctl &= ~(0xf << 8);
+		reg_clkctl |= (hunt_s->a11clk_src_div << 8);
 	writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
 
 	/* Program clock source selection */
-	reg_clksel ^= 1;
+		reg_clksel = readl(A11S_CLK_SEL_ADDR);
+		reg_clksel &= ~1; /* CLK_SEL_SRC1NO  == SRC0 */
 	writel(reg_clksel, A11S_CLK_SEL_ADDR);
+	}
 
 	/*
 	 * If the new clock divider is lower than the previous, then
 	 * program the divider after switching the clock
 	 */
 	if (hunt_s->ahbclk_div < clk_div) {
+		reg_clksel = readl(A11S_CLK_SEL_ADDR);
 		reg_clksel &= ~(0x3 << 1);
 		reg_clksel |= (hunt_s->ahbclk_div << 1);
 		writel(reg_clksel, A11S_CLK_SEL_ADDR);
 	}
 }
 
-int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
+int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 {
 	uint32_t reg_clkctl;
 	struct clkctl_acpu_speed *cur_s, *tgt_s, *strt_s;
@@ -333,9 +387,8 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 	if (tgt_s->a11clk_khz == 0)
 		return -EINVAL;
 
-	/* Choose the highest speed at or below 'rate' with same PLL. */
-	if (reason != SETRATE_CPUFREQ
-	    && tgt_s->a11clk_khz < cur_s->a11clk_khz) {
+	/* Choose the highest speed speed at or below 'rate' with same PLL. */
+	if (for_power_collapse && tgt_s->a11clk_khz < cur_s->a11clk_khz) {
 		while (tgt_s->pll != ACPU_PLL_TCXO && tgt_s->pll != cur_s->pll)
 			tgt_s--;
 	}
@@ -343,7 +396,7 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 	if (strt_s->pll != ACPU_PLL_TCXO)
 		plls_enabled |= 1 << strt_s->pll;
 
-	if (reason == SETRATE_CPUFREQ) {
+	if (!for_power_collapse) {
 		mutex_lock(&drv_state.lock);
 		if (strt_s->pll != tgt_s->pll && tgt_s->pll != ACPU_PLL_TCXO) {
 			rc = pc_pll_request(tgt_s->pll, 1);
@@ -369,8 +422,13 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 	writel(reg_clkctl, A11S_CLK_CNTL_ADDR);
 
 #if PERF_SWITCH_DEBUG
+//+++FIH_ADQ+++ , add by simonsschang
+    if(printk_ratelimit())
+    {
+        printk(KERN_INFO "rate = %u for_power_collapse = %d\n",(unsigned int)rate, for_power_collapse);
 	printk(KERN_INFO "acpuclock: Switching from ACPU rate %u -> %u\n",
 	       strt_s->a11clk_khz * 1000, tgt_s->a11clk_khz * 1000);
+    }
 #endif
 
 	while (cur_s != tgt_s) {
@@ -416,19 +474,23 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 		udelay(drv_state.acpu_switch_time_us);
 	}
 
-	/* Nothing else to do for SWFI. */
-	if (reason == SETRATE_SWFI)
-		return 0;
-
 	/* Change the AXI bus frequency if we can. */
 	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
 		rc = pc_clk_set_min_rate(EBI1_CLK, tgt_s->axiclk_khz * 1000);
 		if (rc < 0)
 			pr_err("Setting AXI min rate failed!\n");
+//+++FIH_ADQ+++ , add by simonsschang
+#if PERF_SWITCH_DEBUG
+        if(printk_ratelimit())
+        {
+	        printk(KERN_INFO "acpuclock: Switching from AXI rate %u -> %u\n",
+	         strt_s->axiclk_khz * 1000, tgt_s->axiclk_khz * 1000);
+        }  
+#endif        
 	}
 
 	/* Nothing else to do for power collapse. */
-	if (reason == SETRATE_PC)
+	if (for_power_collapse)
 		return 0;
 
 	/* Disable PLLs we are not using anymore. */
@@ -452,7 +514,7 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 	printk(KERN_DEBUG "%s: ACPU speed change complete\n", __FUNCTION__);
 #endif
 out:
-	if (reason == SETRATE_CPUFREQ)
+	if (!for_power_collapse)
 		mutex_unlock(&drv_state.lock);
 	return rc;
 }
@@ -894,15 +956,21 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	drv_state.power_collapse_khz = clkdata->power_collapse_khz;
 	drv_state.wait_for_irq_khz = clkdata->wait_for_irq_khz;
 	drv_state.max_axi_khz = clkdata->max_axi_khz;
-	acpu_freq_tbl_fixup();
+/*+++FIH_ADQ+++	*/
+///	acpu_freq_tbl_fixup();
+/*---FIH_ADQ---*/
 	precompute_stepping();
 	acpuclk_init();
 	lpj_init();
 	print_acpu_freq_tbl();
-	if (cpu_is_msm7x25())
+/*+++FIH_ADQ+++	*/
+///	if (cpu_is_msm7x25())
+/*---FIH_ADQ---*/
 		msm7x25_acpu_pll_hw_bug_fix();
-	if (cpu_is_msm7x27())
-		shared_pll_control_init();
+/*+++FIH_ADQ+++	*/
+///	if (cpu_is_msm7x27())
+///		shared_pll_control_init();
+/*---FIH_ADQ---*/
 #ifdef CONFIG_CPU_FREQ_MSM
 	cpufreq_table_init();
 	cpufreq_frequency_table_get_attr(freq_table, smp_processor_id());

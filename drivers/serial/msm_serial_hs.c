@@ -51,9 +51,11 @@
 #include <mach/hardware.h>
 #include <mach/dma.h>
 #include <mach/msm_serial_hs.h>
+#include <linux/proc_fs.h>
+#include <linux/uaccess.h>
 
 #include "msm_serial_hs_hwreg.h"
-
+#define BT_CurrentReduce
 enum flush_reason {
 	FLUSH_NONE,
 	FLUSH_DATA_READY,
@@ -95,6 +97,7 @@ struct msm_hs_rx {
 	struct dma_pool *pool;
 	struct wake_lock wake_lock;
 	struct work_struct work;
+	struct tasklet_struct rx_tasklet;
 };
 
 /* optional low power wakeup, typically on a GPIO RX irq */
@@ -136,6 +139,7 @@ static struct msm_hs_port q_uart_port[UARTDM_NR];
 static struct platform_driver msm_serial_hs_platform_driver;
 static struct uart_driver msm_hs_driver;
 static struct uart_ops msm_hs_ops;
+struct proc_dir_entry *status_dir;
 
 #define UARTDM_TO_MSM(uart_port) \
 	container_of((uart_port), struct msm_hs_port, uport)
@@ -205,6 +209,7 @@ static int __devexit msm_hs_remove(struct platform_device *pdev)
 	/* Free the rx resources */
 	kfree(msm_uport->rx.command_ptr);
 	kfree(msm_uport->rx.command_ptr_ptr);
+	tasklet_kill(&msm_uport->rx.rx_tasklet);
 
 	iounmap(msm_uport->uport.membase);
 
@@ -483,6 +488,7 @@ static void msm_hs_stop_tx_locked(struct uart_port *uport)
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
 	msm_uport->tx.tx_ready_int_en = 0;
+	//printk(KERN_INFO "stx\n");
 }
 
 /*
@@ -577,14 +583,36 @@ static void msm_hs_start_rx_locked(struct uart_port *uport)
 	msm_uport->imr_reg |= UARTDM_ISR_RXLEV_BMSK;
 	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
 }
+static void msm_serial_hs_rx_tasklet(unsigned long data)
+{
+	struct uart_port *uport = (struct uart_port *)data;
+	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	unsigned int flush;
+	unsigned long flags;
+	
+	flush = msm_uport->rx.flush;
+	if (flush == FLUSH_STOP) {
+		msm_uport->rx.flush = FLUSH_SHUTDOWN;
+		wake_up(&msm_uport->rx.wait);
+		return;
+	}
+	
+	spin_lock_irqsave(&uport->lock, flags);
+	msm_hs_start_rx_locked(uport);
+	spin_unlock_irqrestore(&uport->lock, flags);
+}
 
+#if 0
 static void msm_serial_hs_rx_work(struct work_struct *w)
 {
+	unsigned long flags;
 	struct uart_port *uport;
 	struct msm_hs_port *msm_uport;
 	unsigned int flush;
 
 	msm_uport = container_of(w, struct msm_hs_port, rx.work);
+	uport = &msm_uport->uport;
+	
 
 	flush = msm_uport->rx.flush;
 	if (flush == FLUSH_STOP) {
@@ -592,22 +620,34 @@ static void msm_serial_hs_rx_work(struct work_struct *w)
 		wake_up(&msm_uport->rx.wait);
 		return;
 	}
-	uport = &msm_uport->uport;
+	spin_lock_irqsave(&uport->lock, flags);
 	msm_hs_start_rx_locked(uport);
+	spin_unlock_irqrestore(&uport->lock, flags);
 }
-
+#endif//#if 0
 /* Enable the transmitter Interrupt */
 static void msm_hs_start_tx_locked(struct uart_port *uport )
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	//struct circ_buf *tx_buf = &msm_uport->uport.info->xmit;
 
 	clk_enable(msm_uport->clk);
 
-	if (msm_uport->tx.tx_ready_int_en == 0) {
+	if ((msm_uport->tx.tx_ready_int_en == 0)) {
 		msm_uport->tx.tx_ready_int_en = 1;
 		msm_hs_submit_tx_locked(uport);
 	}
+/*
+	else
+	{
+	    if(uart_circ_chars_pending(tx_buf)>2000)
+	    {
+		    printk(KERN_INFO "no tx start(tx_ready_int_en:%d,imr_reg:0x%x)\n",msm_uport->tx.tx_ready_int_en,msm_uport->imr_reg);
+		    printk(KERN_INFO "no tx start(SR:0x%x,ISR:0x%x,MISR:0x%x)\n",msm_hs_read(&msm_uport->uport, UARTDM_SR_ADDR),msm_hs_read(&msm_uport->uport, UARTDM_ISR_ADDR),msm_hs_read(&msm_uport->uport, UARTDM_MISR_ADDR));   
+		}
 
+    }
+*/
 	clk_disable(msm_uport->clk);
 }
 
@@ -622,10 +662,13 @@ static void msm_hs_dmov_tx_callback(struct msm_dmov_cmd *cmd_ptr,
 					unsigned int result,
 					struct msm_dmov_errdata *err)
 {
+	//unsigned long flags;
 	struct msm_hs_port *msm_uport;
+	struct uart_port *uport;
 
 	WARN_ON(result != 0x80000002);  /* DMA did not finish properly */
 	msm_uport = container_of(cmd_ptr, struct msm_hs_port, tx.xfer);
+	uport = &msm_uport->uport;
 
 	clk_enable(msm_uport->clk);
 
@@ -646,6 +689,7 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 					unsigned int result,
 					struct msm_dmov_errdata *err)
 {
+	//unsigned long flags;
 	int retval;
 	int rx_count;
 	unsigned long status;
@@ -689,8 +733,10 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 		msm_hs_write(uport, UARTDM_CR_ADDR, RESET_ERROR_STATUS);
 
 	flush = msm_uport->rx.flush;
-	if (flush == FLUSH_IGNORE)
-		schedule_work(&msm_uport->rx.work);
+	if (flush == FLUSH_IGNORE) {
+	    tasklet_schedule(&msm_uport->rx.rx_tasklet);
+		//schedule_work(&msm_uport->rx.work);
+	}
 	if (flush == FLUSH_STOP) {
 		msm_uport->rx.flush = FLUSH_SHUTDOWN;
 		wake_up(&msm_uport->rx.wait);
@@ -706,14 +752,18 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 		BUG_ON(retval != rx_count);
 	}
 
-	schedule_work(&msm_uport->rx.work);
+	//schedule_work(&msm_uport->rx.work);
+	tasklet_schedule(&msm_uport->rx.rx_tasklet);
 
 out:
 	clk_disable(msm_uport->clk);
 	/* release wakelock in 500ms, not immediately, because higher layers
 	 * don't always take wakelocks when they should */
+#ifdef BT_CurrentReduce
+	wake_unlock(&msm_uport->rx.wake_lock);
+#else
 	wake_lock_timeout(&msm_uport->rx.wake_lock, HZ / 2);
-
+#endif
 	if (flush < FLUSH_DATA_INVALID)
 		tty_flip_buffer_push(tty);
 }
@@ -943,6 +993,8 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 		uport->icount.tx += tx->tx_count;
 		if (tx->tx_ready_int_en)
 			msm_hs_submit_tx_locked(uport);
+		else
+			printk(KERN_INFO "isr, no tx(%d)\n",tx->tx_ready_int_en);
 
 		if (uart_circ_chars_pending(tx_buf) < WAKEUP_CHARS)
 			uart_write_wakeup(uport);
@@ -1195,7 +1247,9 @@ static int uartdm_init_port(struct uart_port *uport)
 
 	init_waitqueue_head(&rx->wait);
 	wake_lock_init(&rx->wake_lock, WAKE_LOCK_SUSPEND, "msm_serial_hs_rx");
-	INIT_WORK(&rx->work, msm_serial_hs_rx_work);
+//	INIT_WORK(&rx->work, msm_serial_hs_rx_work);
+	/* initialize rx tasklet */
+	tasklet_init(&rx->rx_tasklet, msm_serial_hs_rx_tasklet, (unsigned long)uport);
 
 	rx->pool = dma_pool_create("rx_buffer_pool", uport->dev,
 				   UARTDM_RX_BUF_SIZE, 16, 0);
@@ -1228,6 +1282,35 @@ static int uartdm_init_port(struct uart_port *uport)
 	return 0;
 }
 
+static int hsuart_read_proc_status(char *page, char **start, off_t offset,
+					int count, int *eof, void *data)
+{
+	unsigned long flags;
+	struct msm_hs_port *msm_uport = (struct msm_hs_port *)data;
+	struct uart_port *uport = &msm_uport->uport;
+	struct circ_buf *tx_buf = &uport->info->xmit;
+	struct msm_hs_tx *tx = &msm_uport->tx;
+	
+	printk(KERN_INFO "SR(0x%x), ISR(0x%x), MISR(0x%x), tx_ready_int_en(%u), pending(%lu), imr(%lu)\n",msm_hs_read(uport, UARTDM_SR_ADDR),msm_hs_read(uport, UARTDM_ISR_ADDR),msm_hs_read(uport, UARTDM_MISR_ADDR),tx->tx_ready_int_en,uart_circ_chars_pending(tx_buf),msm_uport->imr_reg);
+	
+	spin_lock_irqsave(&uport->lock, flags);
+	
+	if((msm_uport->imr_reg & UARTDM_ISR_TX_READY_BMSK) == 0)
+	{
+		printk(KERN_INFO "set txready to test!\n");
+		clk_enable(msm_uport->clk);
+
+		msm_uport->imr_reg |= UARTDM_ISR_TX_READY_BMSK;
+		msm_hs_write(&msm_uport->uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
+
+		clk_disable(msm_uport->clk);
+	}
+	
+	spin_unlock_irqrestore(&uport->lock, flags);
+	
+	*eof = 1;
+	return sprintf(page, "SR(0x%x), ISR(0x%x), MISR(0x%x), tx_ready_int_en(%u), pending(%lu), imr(%lu)\n", msm_hs_read(uport, UARTDM_SR_ADDR),msm_hs_read(uport, UARTDM_ISR_ADDR),msm_hs_read(uport, UARTDM_MISR_ADDR),tx->tx_ready_int_en,uart_circ_chars_pending(tx_buf),msm_uport->imr_reg);
+}
 static int __init msm_hs_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -1313,6 +1396,18 @@ static int __init msm_hs_probe(struct platform_device *pdev)
 	msm_uport->clk_off_delay = ktime_set(0, 1000000);  /* 1ms */
 
 	uport->line = pdev->id;
+	status_dir = proc_mkdir("hsuart", NULL);
+	if (status_dir == NULL) {
+		printk(KERN_ERR "Unable to create /proc/hsuart directory\n");
+		return -ENOMEM;
+	}
+	
+	/* read only proc entries */
+	if (create_proc_read_entry("status", 0,
+			status_dir, hsuart_read_proc_status, msm_uport) == NULL) {
+		printk(KERN_ERR "Unable to create /proc/hsuart/status entry\n");
+		return -ENOMEM;
+	}
 	return uart_add_one_port(&msm_hs_driver, uport);
 }
 

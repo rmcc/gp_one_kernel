@@ -1,0 +1,111 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Welcome</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->Welcome<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+<p class="HEADING3">Version 2.0:</p>
+<p class="BODYTEXT">This document contains help information for the Codetelligence
+  Embedded SDIO Stack and Driver Kits (PDK or HDK). </p>
+<p class="BODYTEXT">Before using the software please read the <a href="license.htm">end
+    user license agreement</a>.</p>
+<p class="HEADING3">Target System Requirements:</p>
+<blockquote>
+  <p class="HEADING3">Linux:</p>
+  <blockquote>
+    <p class="BODYTEXT">
+        x86 PC Platform running Fedora Core 3 (Kernel 2.6.9)<br>Tokyo Electron PCI-based "Ellen" Host Controller
+    </p>
+    <p class="BODYTEXT">        PXA255 (XScale) Gumstix Platform (1-bit only)
+      running Gumstix Distribution (Kernel 2.6.9RC1)</p>
+    <p class="BODYTEXT">OMAP 1610 H2 Development Platform (Kernel 2.6.9 or Kernel
+      2.4.20)</p>
+    <p class="BODYTEXT">PXA270 (XScale) SandGate IIp Development platform from
+      Sophia Systems, (Kernel 2.6.9 w/ Sandgate IIp patches)</p>
+  </blockquote>
+<p class="BODYTEXT"><strong>For other embedded operating systems, contact Codetelligence
+    Sales (sales@codetelligence.com)</strong></p>
+  </blockquote>
+
+
+<p class="HEADING3">Development System Requirements:</p>
+<blockquote>
+  <p class="HEADING3">Linux Development:</p>
+  <blockquote>
+    <p class="BODYTEXT"> x86 :<br>
+      Fedora Core 3 with GNU gcc 3.4.2. <br>
+      Fedora Core
+       3 Linux Kernel Source.</p>
+    <p class="BODYTEXT">PXA255:<br>
+      Gumstix Build Environment (see <a href="http://www.gumstix.com" target="_blank">www.gumstix.com</a>) (kernel 2.6.9RC1)</p>
+    <p class="BODYTEXT">OMAP:<br>
+	 2.6.9  kernel source for OMAP16xx  (<a href="http://linux.omap.com" target="_blank">linux.omap.com</a>)
+	 , requires gcc 3.3.2<br>
+	2.4.20
+kernel	development requires MontaVista CEE 3.1 (OMAP1610H2)</p>
+	 <p class="BODYTEXT">PXA270:<br>
+	Linux 2.6.9 kernel source w/ patches for SandGate IIp (contact Sophia Systems, <a href="http://www.sophia.com" target="_blank">www.sophia.com</a>),
+	  requires gcc 3.4.3</p>
+  </blockquote>
+  </blockquote>
+ <p class="BODYTEXT"><strong>IMPORTANT NOTE: For Linux 2.6 or higher kernels,
+     the kernel must be configured with Plug and Play support in order for the
+     bus driver to load. This requires a modification of the <font face="Courier New, Courier, mono">Kconfig</font> file
+     in <font face="Courier New, Courier, mono">\drivers\pnp</font>.
+     Refer to the <a href="faq.htm#pnpKconfig">FAQ</a> for
+     more information</strong></p>
+ <p class="BODYTEXT">It is highly recommended that you maximize the web browser
+  or help application window when viewing the on-line users manual.<br>
+    Where numbers are used a 0x prefix indicates a hexadecimal number. Binary numbers
+        are post-fixed with the letter 'b' as in 10000001b.<br>
+    Code samples and function names are displayed in a <font face="Courier New, Courier, mono">courier</font> font.<br>
+    </p>
+<p class="BODYTEXT">The help manual can be navigated using the table of contents
+    or by using the left<img src="Images/leftarrow.gif" width="27" height="32"> and
+    right<img src="Images/rightarrow.gif" width="27" height="32"> arrows on each
+    topic. The left arrow switches to the previous topic in the fixed chain
+    of topics, while the right arrow moves to the next topic.</p>
+<p class="BODYTEXT""><font size="-1">Code<em>telligence</em> is a 
+        trademark of Atheros Communications, Inc. Linux is a registered trademark
+      of Linus Torvalds.  QNX is a registered trade mark of QNX Systems, Inc.</font></p>
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

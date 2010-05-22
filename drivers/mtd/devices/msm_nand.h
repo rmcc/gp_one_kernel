@@ -1,6 +1,6 @@
 /* drivers/mtd/devices/msm_nand.h
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  * Copyright (C) 2007 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public

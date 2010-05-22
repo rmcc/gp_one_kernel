@@ -1,0 +1,22 @@
+01,QoS Data,Con,M_D,0,00
+02,QoS Data,STA,APTS_CONFIRM,0,01
+03,QoS Data,STA,APTS_CK_VO,2,01
+04,QoS Data,STA,APTS_CK_VI,2,01
+05,QoS Data,STA,APTS_CK_BE,2,01
+06,QoS Data,STA,APTS_CK_BK,2,01
+07,QoS Data,STA,APTS_TX,2,03
+08,PS Poll,STA,0,03
+09,QoS Data,Con,APTS_TX,1,03
+10,QoS Data,STA,APTS_TX,2,05
+11,PS Poll,STA,0,03
+12,QoS Data,Con,APTS_TX,1,04
+13,QoS Data,STA,APTS_TX,2,06
+14,PS Poll,STA,0,03
+15,QoS Data,Con,APTS_TX,1,05
+16,QoS Data,STA,APTS_TX,2,07
+17,PS Poll,STA,0,03
+18,QoS Data,Con,APTS_TX,1,06
+19,QoS Data,STA,APTS_TX,2,08
+20,PS Poll,STA,0,03
+21,QoS Data,Con,APTS_STOP,1,01
+num, frame type, Source Address, APTS command, eosp, APTS message number

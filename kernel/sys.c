@@ -43,6 +43,8 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
+#include <asm-generic/bug.h>
+
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a,b)	(-EINVAL)
 #endif
@@ -292,6 +294,7 @@ void kernel_restart_prepare(char *cmd)
  */
 void kernel_restart(char *cmd)
 {
+	__WARN_printf("who calls this function, 'kernel_restart'\n");
 	kernel_restart_prepare(cmd);
 	if (!cmd)
 		printk(KERN_EMERG "Restarting system.\n");

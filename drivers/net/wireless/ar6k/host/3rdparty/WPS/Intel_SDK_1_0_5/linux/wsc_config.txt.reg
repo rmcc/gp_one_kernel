@@ -1,0 +1,30 @@
+# Simple Config configuration file
+#
+# Mode: 1=Unconfigured AP, 2=Client, 3=Registrar, 4=AP with Proxy, 5=AP with Proxy and Registrar
+CONFIGURED_MODE=3
+# Is the standalone Registrar (mode 3) wireless-enabled
+REGISTRAR_WIRELESS=1
+# Should UPnP be used (for modes 1 and 3)
+USE_UPNP=1
+UUID=0x332102030405060708090A0B0C0D0E0F
+VERSION=0x10
+DEVICE_NAME=Registrar
+# Primary Device Categories: Please refer to the SC spec for 
+# values for the following types
+PRI_DEV_CATEGORY=1
+PRI_DEV_OUI=0x0050F204
+PRI_DEV_SUB_CATEGORY=1
+MANUFACTURER=Intel
+MODEL_NAME=Sample String 1
+MODEL_NUMBER=1234
+SERIAL_NUMBER=5678
+CONFIG_METHODS=0x0001
+AUTH_TYPE_FLAGS=0x0001
+ENCR_TYPE_FLAGS=0x0004
+CONN_TYPE_FLAGS=0x01
+RF_BAND=1
+OS_VER=0x80000000
+FEATURE_ID=0x80000000
+
+KEY_MGMT=IEEE8021X
+

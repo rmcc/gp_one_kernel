@@ -1,0 +1,609 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="TopTopic"></a><a name="FUNC__SDLIB_SetupCMD52Request"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO SDK<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#previous#"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SDLIB_IssueCMD52"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_periph.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">void SDLIB_SetupCMD52Request(UINT8         FuncNo,
+                              UINT32        Address,
+                              BOOL          Write,
+                              UINT8         WriteData,                                    
+                              PSDREQUEST    pRequest)
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Setup cmd52 requests</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  FunctionNo - function number.
+        <br>
+  Address - I/O address, 17-bit register address.
+        <br>
+  Write  - TRUE if a write operation, FALSE for reads.
+        <br>
+  WriteData - write data, byte to write if write operation.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pRequest - request is updated with cmd52 parameters
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ this function does not perform any I/O. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDLIB_IssueCMD52
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SDLIB_IssueCMD52"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO SDK<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SDLIB_SetupCMD52Request"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SDLIB_FindTuple"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_periph.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">SDIO_STATUS SDLIB_IssueCMD52(PSDDEVICE     pDevice,
+                              UINT8         FuncNo,
+                              UINT32        Address,
+                              PUINT8        pData,
+                              INT           ByteCount,
+                              BOOL          Write)
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Issue a CMD52 to read or write a register</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pDevice - the device that is the target of the command.
+        <br>
+ FunctionNo - function number of the target.
+        <br>
+ Address - 17-bit register address.
+        <br>
+ ByteCount - number of bytes to read or write,
+        <br>
+ Write - TRUE if a write operation, FALSE for reads.
+        <br>
+ pData - data buffer for writes.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pData - data buffer for writes.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  This function will allocate a request and issue multiple byte reads or writes
+           to satisfy the ByteCount requested.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDLIB_SetupCMD52Request
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SDLIB_FindTuple"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO SDK<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SDLIB_IssueCMD52"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SDLIB_IssueConfig"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_periph.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">SDIO_STATUS SDLIB_FindTuple(PSDDEVICE  pDevice,
+                             UINT8      Tuple,
+                             UINT32     *pTupleScanAddress,
+                             PUINT8     pBuffer,
+                             UINT8      *pLength)
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Find a device's tuple.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pDevice - the device that is the target of the command.
+        <br>
+ Tuple - 8-bit ID of tuple to find          
+        <br>
+ pTupleScanAddress - On entry pTupleScanAddress is the adddress to start scanning
+        <br>
+ pLength - length of pBuffer 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pBuffer - storage for tuple
+        <br>
+ pTupleScanAddress - address of the next tuple 
+        <br>
+ pLength - length of tuple read
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ It is possible to have the same tuple ID multiple times with different lengths.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SDLIB_IssueConfig"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO SDK<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SDLIB_FindTuple"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SDLIB_SetFunctionBlockSize"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_periph.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">SDIO_STATUS SDLIB_IssueConfig(PSDDEVICE        pDevice,
+                               SDCONFIG_COMMAND Command,
+                               PVOID            pData,
+                               INT              Length)
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Issue an SDIO configuration command.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice - the device that is the target of the command.
+        <br>
+  Command - command to send, see example.
+        <br>
+  pData - command's data
+        <br>
+  Length length of pData
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ pData - updated on commands that return data.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Command and data pairs:</font>
+            Type                               Data
+            SDCONFIG_GET_WP             SDCONFIG_WP_VALUE 
+            SDCONFIG_SEND_INIT_CLOCKS   none 
+            SDCONFIG_SDIO_INT_CTRL      SDCONFIG_SDIO_INT_CTRL_DATA
+            SDCONFIG_SDIO_REARM_INT     none 
+            SDCONFIG_BUS_MODE_CTRL      SDCONFIG_BUS_MODE_DATA
+            SDCONFIG_POWER_CTRL         SDCONFIG_POWER_CTRL_DATA
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SDLIB_SetFunctionBlockSize"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO SDK<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SDLIB_IssueConfig"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#FUNC__SDLIB_PrintBuffer"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_periph.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">SDIO_STATUS SDLIB_SetFunctionBlockSize(PSDDEVICE        pDevice,
+                                        UINT16           BlockSize)
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Set function block size</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice - the device that is the target of the command.
+        <br>
+  BlockSize - block size to set in function 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO Status
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  Issues CMD52 to set the block size.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="FUNC__SDLIB_PrintBuffer"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Embedded SDIO SDK<br>Function Driver Interface</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#FUNC__SDLIB_SetFunctionBlockSize"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#next#"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="reference_periph.htm">Back to Index</a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">void SDLIB_PrintBuffer(PUCHAR pBuffer, INT Length, PTEXT pDescription)
+</span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Print a buffer on the standrad output</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pBuffer - Hex buffer to be printed.
+        <br>
+  Length - length of pBuffer.
+        <br>
+  pDescription - String title to be printed above the dump.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+  Prints the buffer by converting to ASCII and using REL_PRINT() with 16 
+           bytes per line.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004-2005  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong></font><a target="_blank" href="http://www.codetelligence.com"><font face="Arial, Helvetica, sans-serif" color="#FFFFFF">www.codetelligence.com</font></a></td>
+</tr>
+</table>
+</body>
+</html>

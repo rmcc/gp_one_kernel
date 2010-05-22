@@ -1,0 +1,2710 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+		<%@page Language=jscript debug=true%>
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="TopTopic"></a><a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_SDIO_REV_GTEQ_1_10%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="sdio_lib_c_c.htm#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_lib_sdio_lib_c_cFUNC__SDLIB_PrintBuffer"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_SD_REV_GTEQ_1_10%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_SDIO_REV_GTEQ_1_10(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test the SDIO revision for greater than or equal to 1.10</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if the revision is greater than or equal to 1.10
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        <br>
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_SD_REV_GTEQ_1_10%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_SDIO_REV_GTEQ_1_10%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_MMC_REV_GTEQ_4_0%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_SD_REV_GTEQ_1_10(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test the SD revision for greater than or equal to 1.10</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if the revision is greater than or equal to 1.10
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        <br>
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_MMC_REV_GTEQ_4_0%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_SD_REV_GTEQ_1_10%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_CARD_WP_ON%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_MMC_REV_GTEQ_4_0(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test the MMC revision for greater than or equal to 4.0</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if the revision is greater than or equal to 4.0
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        <br>
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_CARD_WP_ON%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_MMC_REV_GTEQ_4_0%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNCNO%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_CARD_WP_ON(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Test for write protect enabled</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ TRUE if device is write protected.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNCNO%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_CARD_WP_ON%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CLASS%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIO_FUNCNO(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the device's function number</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ function number
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_FUNC_CLASS
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CLASS%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNCNO%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CISPTR%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIO_FUNC_CLASS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's class</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ class number
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_FUNCNO
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CISPTR%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CLASS%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CSAPTR%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT32 SDDEVICE_GET_SDIO_FUNC_CISPTR(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's Card Information Structure pointer</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ CIS offset
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        <br>
+SDDEVICE_GET_SDIO_COMMON_CISPTR
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CSAPTR%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CISPTR%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT32 SDDEVICE_GET_SDIO_FUNC_CSAPTR(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's Code Stoarge Area pointer</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ CSA offset
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_FUNC_CISPTR
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_CSAPTR%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_COMMON_CISPTR%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the functions's maximum reported block size</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+
+        
+<br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_COMMON_CISPTR%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_CARD_CAPS%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT32 SDDEVICE_GET_SDIO_COMMON_CISPTR(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the common Card Information Structure pointer</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_CARD_CAPS%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_COMMON_CISPTR%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARD_FLAGS%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIO_CARD_CAPS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the card capabilities</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Refer to SDIO spec for decoding.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_CARD_FLAGS
+        <br>
+SDDEVICE_GET_SDIOCARD_CAPS
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARD_FLAGS%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIO_CARD_CAPS%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARD_RCA%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ CARD_INFO_FLAGS SDDEVICE_GET_CARD_FLAGS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the card flags</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ flags
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Get card type:</font>
+        CARD_INFO_FLAGS flags;
+        flags = SDDEVICE_GET_CARD_FLAGS(pDevice);
+        switch(GET_CARD_TYPE(flags)) {
+            case CARD_MMC: <font face="Arial, Helvetica, sans-serif" color="#999999">// Multi-media card
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">... 
+</font>            case CARD_SD:  <font face="Arial, Helvetica, sans-serif" color="#999999">// SD-Memory present
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>            case CARD_SDIO: <font face="Arial, Helvetica, sans-serif" color="#999999">// SDIO card present
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>            case CARD_COMBO: <font face="Arial, Helvetica, sans-serif" color="#999999">//SDIO card with SD
+</font>                <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>        }
+        if (flags &amp; CARD_SD_WP) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">...SD write protect on
+</font>        }
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_CARD_CAPS
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARD_RCA%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARD_FLAGS%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_CLOCK%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_CARD_RCA(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the Relative Card Address register</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ register address
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Refer to SDIO spec for decoding.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_CLOCK%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARD_RCA%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_CLOCK%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SD_BUSCLOCK_RATE SDDEVICE_GET_OPER_CLOCK(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get operational bus clock</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ clock rate
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the maximum current bus clock rate. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_MAX_CLOCK
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_CLOCK%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_CLOCK%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_BLOCK_LEN%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SD_BUSCLOCK_RATE SDDEVICE_GET_MAX_CLOCK(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get maximum bus clock</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ clock rate
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ To obtain the current maximum clock rate use SDDEVICE_GET_OPER_CLOCK().
+          This rate my be lower than the host controllers maximum obtained using
+          SDDEVICE_GET_MAX_CLOCK().
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_OPER_CLOCK
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_BLOCK_LEN%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_CLOCK%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_BLOCK_LEN%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_OPER_BLOCK_LEN(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get operational maximum block length.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size in bytes
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the maximum current block length. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_MAX_BLOCK_LEN
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_BLOCK_LEN%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_BLOCK_LEN%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_BLOCKS%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_MAX_BLOCK_LEN(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get maximum block length.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ block size in bytes
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Use SDDEVICE_GET_OPER_BLOCK_LEN to obtain
+          the current block length.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_OPER_BLOCK_LEN
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_BLOCKS%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_BLOCK_LEN%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_BLOCKS%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_OPER_BLOCKS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get operational maximum block count.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ maximum number of blocks per transaction.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Returns the maximum current block count. 
+          This may be lower than reported by the card due to Host Controller,
+          Bus driver, or power management limitations.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_MAX_BLOCK_LEN
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_BLOCKS%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_OPER_BLOCKS%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARDCSD%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT16 SDDEVICE_GET_MAX_BLOCKS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get maximum block count.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ maximum number of blocks per transaction.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro. Use SDDEVICE_GET_OPER_BLOCKS to obtain
+          the current block count.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_OPER_BLOCKS
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARDCSD%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_MAX_BLOCKS%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_BUSWIDTH%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ PUINT8 SDDEVICE_GET_CARDCSD(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the Card Specific Data Register.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+  UINT8 CardCSD[MAX_CARD_RESPONSE_BYTES] array of CSD data.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT"></p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_BUSWIDTH%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_CARDCSD%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_BUSMODE_SPI%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_BUSWIDTH(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the bus width.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+  bus width: SDCONFIG_BUS_WIDTH_SPI, SDCONFIG_BUS_WIDTH_1_BIT, SDCONFIG_BUS_WIDTH_4_BIT
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_IS_BUSMODE_SPI
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_BUSMODE_SPI%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_BUSWIDTH%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_CALL_REQUEST_FUNC%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ BOOL SDDEVICE_IS_BUSMODE_SPI(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Is bus in SPI mode.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+  TRUE, SPI mode.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Implemented as a macro.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_BUSWIDTH
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_CALL_REQUEST_FUNC%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_IS_BUSMODE_SPI%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_CALL_CONFIG_FUNC%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDDEVICE_CALL_REQUEST_FUNC(PSDDEVICE pDevice, PSDREQUEST pRequest)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Send a request to a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pRequest  - the request to be sent
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Sends a request to the specified device. If the request is successfully sent, then
+          the response flags can be checked for to detemine the result of the request.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of sending a request to a device:</font>
+    PSDREQUEST  pReq = NULL;
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//allocate a request
+</font>    pReq = SDDeviceAllocRequest(pDevice);
+    if (NULL == pReq) {
+        return SDIO_STATUS_NO_RESOURCES;    
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//initialize the request
+</font>    SDLIB_SetupCMD52Request(FuncNo, Address, Write, *pData, pReq);
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//send the request to the target
+</font>    status = SDDEVICE_CALL_REQUEST_FUNC(pDevice,pReq);
+    if (!SDIO_SUCCESS(status)) {
+        break;   
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//check the request response (based on the request type)
+</font>    if (SD_R5_GET_RESP_FLAGS(pReq-&gt;Response) &amp; SD_R5_ERRORS) {
+        <font face="Arial, Helvetica, sans-serif" color="#999999">...
+</font>    }
+    if (!Write) {
+            <font face="Arial, Helvetica, sans-serif" color="#999999">// store the byte
+</font>        *pData =  SD_R5_GET_READ_DATA(pReq-&gt;Response);
+    }
+    <font face="Arial, Helvetica, sans-serif" color="#999999">//free the request
+</font>    SDDeviceFreeRequest(pDevice,pReq);
+    <font face="Arial, Helvetica, sans-serif" color="#999999">...</font>.
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDeviceAllocRequest
+        <br>
+SDDEVICE_CALL_CONFIG_FUNC
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_CALL_CONFIG_FUNC%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_CALL_REQUEST_FUNC%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDeviceAllocRequest%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ SDIO_STATUS SDDEVICE_CALL_CONFIG_FUNC(PSDDEVICE pDevice, PSDCONFIG pConfigure)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Send configuration to a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pConfigure - configuration request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SDIO_STATUS 
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ Sends a configuration request to the specified device. 
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre>
+
+<font face="Arial, Helvetica, sans-serif" color="#FF00FF"> Example of sending a request to a device:</font>
+        SDCONFIG  configHdr; 
+        SDCONFIG_FUNC_ENABLE_DISABLE_DATA fData;
+        fData.EnableFlags = SDCONFIG_ENABLE_FUNC;
+        fData.TimeOut = 500;
+        SET_SDCONFIG_CMD_INFO(&amp;configHdr, SDCONFIG_FUNC_ENABLE_DISABLE, fData, sizeof(fData));
+        return SDDEVICE_CALL_CONFIG_FUNC(pDevice, &amp;configHdr);
+        </pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDLIB_IssueConfig
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDeviceAllocRequest%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_CALL_CONFIG_FUNC%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDeviceFreeRequest%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ PSDREQUEST SDDeviceAllocRequest(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Allocate a request structure.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ request pointer or NULL if not avialable.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_CALL_REQUEST_FUNC
+        <br>
+SDDeviceFreeRequest
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDeviceFreeRequest%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDeviceAllocRequest%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_SET_IRQ_HANDLER%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDDeviceFreeRequest(PSDDEVICE pDevice, PSDREQUEST pRequest)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Free a request structure.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pRequest  - request allocated by SDDeviceAllocRequest().
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ 
+        
+<br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_CALL_REQUEST_FUNC
+        <br>
+SDDeviceAllocRequest
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_SET_IRQ_HANDLER%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDeviceFreeRequest%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_SET_ASYNC_IRQ_HANDLER%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDDEVICE_SET_IRQ_HANDLER(PSDDEVICE pDevice, 
+                                            void (*pIrqFunction)(PVOID pContext),
+                                            PVOID pContext)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register an interrupt handler for a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pIrqFunction  - the interrupt function to execute.
+        <br>
+  pContext  - context value passed into interrupt routine.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The registered routine will be called upon each card interrupt.
+          The interrupt function should acknowledge the interrupt when it is
+          ready to handle more interrupts using:
+          SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_ACK_IRQ, NULL, 0);
+          The interrupt handler can perform synchronous request calls.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_SET_ASYNC_IRQ_HANDLER
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_SET_ASYNC_IRQ_HANDLER%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_SET_IRQ_HANDLER%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIOCARD_CAPS%0D%0A        "><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ void SDDEVICE_SET_ASYNC_IRQ_HANDLER(PSDDEVICE pDevice, 
+                                            void (*pIrqAsyncFunction)(PVOID pContext),
+                                            PVOID pContext)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Register an asynchronous interrupt handler for a device.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+  pIrqAsyncFunction  - the interrupt function to execute.
+        <br>
+  pContext  - context value passed into interrupt routine.
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ The registered routine will be called upon each card interrupt.
+          The interrupt function should acknowledge the interrupt when it is
+          ready to handle more interrupts using:
+          SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_ACK_IRQ, NULL, 0);
+          The interrupt handler can not perform any synchronous request calls.
+          Using this call provides a faster interrupt dispatch, but limits all
+          requests to asynchronous mode.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_SET_IRQ_HANDLER
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>
+<a name="PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_GET_SDIOCARD_CAPS%0D%0A        "></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#PAGE_F:\Paul\Eclipse\SharedWorkSpace\EMSDIO\src_include_sdio_busdriver_hFUNC_%0D%0ASDDEVICE_SET_ASYNC_IRQ_HANDLER%0D%0A        "><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td></td></td>
+</tr>
+</table>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><a href="ReadMe.htm"><img border="0" height="29" width="90" name="image" src="Images/readmeback.jpg"></a><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<pre>
+<span class="FUNCPROTOTYPE">
+ UINT8 SDDEVICE_GET_SDIOCARD_CAPS(PSDDEVICE pDevice)
+        </span>
+</pre>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Description:</p>
+<blockquote>
+<p class="BODYTEXT">Get the SDIO capabilities rgeister.</p>
+</blockquote>
+<p class="FUNCHEADINGS">Parameters:</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Inputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+  pDevice   - the target device for this request
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Outputs:</p>
+<blockquote>
+<p class="BODYTEXT">
+ none
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="BODYTEXT">
+<blockquote>
+<p class="BODYTEXT">Returns:</p>
+<blockquote>
+<p class="BODYCODE">
+ SD capabilities
+        <br>
+</p>
+</blockquote>
+</blockquote>
+</p>
+<p class="FUNCHEADINGS">Notes:</p>
+<blockquote>
+<p class="BODYTEXT">
+ See SD specification for decoding of these capabilities.
+        <br>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">Example: </p>
+<blockquote>
+<p class="BODYCODE">
+<pre></pre>
+</p>
+</blockquote>
+<p class="FUNCHEADINGS">See also:</p>
+<blockquote>
+<p class="BODYTEXT">
+SDDEVICE_GET_SDIO_CARD_CAPS
+        <br>
+</p>
+</blockquote>
+</td>
+</tr>
+</table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong></font><a target="_blank" href="http://www.codetelligence.com"><font face="Arial, Helvetica, sans-serif" color="#FFFFFF">www.codetelligence.com</font></a></td>
+</tr>
+</table>
+</body>
+</html>

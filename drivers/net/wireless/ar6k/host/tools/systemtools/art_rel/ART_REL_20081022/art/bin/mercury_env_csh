@@ -1,0 +1,6 @@
+#! /bin/csh
+setenv WORKAREA `pwd`
+setenv ATH_PLATFORM LOCAL_i686-SDIO
+setenv LD_LIBRARY_PATH .:${LD_LIBRARY_PATH}
+#setenv NETIF eth2
+#setenv XTALFREQ 19200000

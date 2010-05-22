@@ -1,0 +1,13 @@
+ 
+ 
+[HKEY_LOCAL_MACHINE\Drivers\CT_SDIO\SDIOBench]
+   "Cmd52FixedAddress"=dword:xx  ; set fixed address
+    
+; Registry (REG) file for: sdio benchmarking driver
+[HKEY_LOCAL_MACHINE\Drivers\SDCARD\ClientDrivers\Class\SDIO_Class\2]
+   "DLL"="sdio_benchms_fd.dll"
+   "Prefix"="SBM"
+
+[HKEY_LOCAL_MACHINE\Drivers\SDCARD\ClientDrivers\Class\SDIO_Class\3]
+   "DLL"="sdio_benchms_fd.dll"
+   "Prefix"="SBM"

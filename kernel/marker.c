@@ -24,6 +24,10 @@
 #include <linux/marker.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/immediate.h>
+#include <linux/sched.h>
+#include <linux/uaccess.h>
+#include <linux/user_marker.h>
 
 extern struct marker __start___markers[];
 extern struct marker __stop___markers[];
@@ -32,8 +36,8 @@ extern struct marker __stop___markers[];
 static const int marker_debug;
 
 /*
- * markers_mutex nests inside module_mutex. Markers mutex protects the builtin
- * and module markers and the hash table.
+ * markers_mutex nests inside module_psrwlock preemptable read lock. Markers
+ * mutex protects the builtin and module markers and the hash table.
  */
 static DEFINE_MUTEX(markers_mutex);
 
@@ -43,6 +47,7 @@ static DEFINE_MUTEX(markers_mutex);
  */
 #define MARKER_HASH_BITS 6
 #define MARKER_TABLE_SIZE (1 << MARKER_HASH_BITS)
+static struct hlist_head marker_table[MARKER_TABLE_SIZE];
 
 /*
  * Note about RCU :
@@ -62,12 +67,19 @@ struct marker_entry {
 	int refcount;	/* Number of times armed. 0 if disarmed. */
 	struct rcu_head rcu;
 	void *oldptr;
-	unsigned char rcu_pending:1;
+	int rcu_pending;
 	unsigned char ptype:1;
+	unsigned char format_allocated:1;
 	char name[0];	/* Contains name'\0'format'\0' */
 };
 
-static struct hlist_head marker_table[MARKER_TABLE_SIZE];
+#ifdef CONFIG_MARKERS_USERSPACE
+static void marker_update_processes(void);
+#else
+static void marker_update_processes(void)
+{
+}
+#endif
 
 /**
  * __mark_empty_function - Empty probe callback
@@ -81,7 +93,7 @@ static struct hlist_head marker_table[MARKER_TABLE_SIZE];
  * though the function pointer change and the marker enabling are two distinct
  * operations that modifies the execution flow of preemptible code.
  */
-void __mark_empty_function(void *probe_private, void *call_private,
+notrace void __mark_empty_function(void *probe_private, void *call_private,
 	const char *fmt, va_list *args)
 {
 }
@@ -97,17 +109,18 @@ EXPORT_SYMBOL_GPL(__mark_empty_function);
  * need to put a full smp_rmb() in this branch. This is why we do not use
  * rcu_dereference() for the pointer read.
  */
-void marker_probe_cb(const struct marker *mdata, void *call_private, ...)
+notrace void marker_probe_cb(const struct marker *mdata,
+		void *call_private, ...)
 {
 	va_list args;
 	char ptype;
 
 	/*
-	 * preempt_disable does two things : disabling preemption to make sure
-	 * the teardown of the callbacks can be done correctly when they are in
-	 * modules and they insure RCU read coherency.
+	 * rcu_read_lock_sched does two things : disabling preemption to make
+	 * sure the teardown of the callbacks can be done correctly when they
+	 * are in modules and they insure RCU read coherency.
 	 */
-	preempt_disable();
+	rcu_read_lock_sched_notrace();
 	ptype = mdata->ptype;
 	if (likely(!ptype)) {
 		marker_probe_func *func;
@@ -145,7 +158,7 @@ void marker_probe_cb(const struct marker *mdata, void *call_private, ...)
 			va_end(args);
 		}
 	}
-	preempt_enable();
+	rcu_read_unlock_sched_notrace();
 }
 EXPORT_SYMBOL_GPL(marker_probe_cb);
 
@@ -157,12 +170,13 @@ EXPORT_SYMBOL_GPL(marker_probe_cb);
  *
  * Should be connected to markers "MARK_NOARGS".
  */
-void marker_probe_cb_noarg(const struct marker *mdata, void *call_private, ...)
+static notrace void marker_probe_cb_noarg(const struct marker *mdata,
+		void *call_private, ...)
 {
 	va_list args;	/* not initialized */
 	char ptype;
 
-	preempt_disable();
+	rcu_read_lock_sched_notrace();
 	ptype = mdata->ptype;
 	if (likely(!ptype)) {
 		marker_probe_func *func;
@@ -195,9 +209,8 @@ void marker_probe_cb_noarg(const struct marker *mdata, void *call_private, ...)
 			multi[i].func(multi[i].probe_private, call_private,
 				mdata->format, &args);
 	}
-	preempt_enable();
+	rcu_read_unlock_sched_notrace();
 }
-EXPORT_SYMBOL_GPL(marker_probe_cb_noarg);
 
 static void free_old_closure(struct rcu_head *head)
 {
@@ -416,6 +429,7 @@ static struct marker_entry *add_marker(const char *name, const char *format)
 	e->single.probe_private = NULL;
 	e->multi = NULL;
 	e->ptype = 0;
+	e->format_allocated = 0;
 	e->refcount = 0;
 	e->rcu_pending = 0;
 	hlist_add_head(&e->hlist, head);
@@ -447,6 +461,8 @@ static int remove_marker(const char *name)
 	if (e->single.func != __mark_empty_function)
 		return -EBUSY;
 	hlist_del(&e->hlist);
+	if (e->format_allocated)
+		kfree(e->format);
 	/* Make sure the call_rcu has been executed */
 	if (e->rcu_pending)
 		rcu_barrier_sched();
@@ -457,57 +473,34 @@ static int remove_marker(const char *name)
 /*
  * Set the mark_entry format to the format found in the element.
  */
-static int marker_set_format(struct marker_entry **entry, const char *format)
+static int marker_set_format(struct marker_entry *entry, const char *format)
 {
-	struct marker_entry *e;
-	size_t name_len = strlen((*entry)->name) + 1;
-	size_t format_len = strlen(format) + 1;
-
-
-	e = kmalloc(sizeof(struct marker_entry) + name_len + format_len,
-			GFP_KERNEL);
-	if (!e)
+	entry->format = kstrdup(format, GFP_KERNEL);
+	if (!entry->format)
 		return -ENOMEM;
-	memcpy(&e->name[0], (*entry)->name, name_len);
-	e->format = &e->name[name_len];
-	memcpy(e->format, format, format_len);
-	if (strcmp(e->format, MARK_NOARGS) == 0)
-		e->call = marker_probe_cb_noarg;
-	else
-		e->call = marker_probe_cb;
-	e->single = (*entry)->single;
-	e->multi = (*entry)->multi;
-	e->ptype = (*entry)->ptype;
-	e->refcount = (*entry)->refcount;
-	e->rcu_pending = 0;
-	hlist_add_before(&e->hlist, &(*entry)->hlist);
-	hlist_del(&(*entry)->hlist);
-	/* Make sure the call_rcu has been executed */
-	if ((*entry)->rcu_pending)
-		rcu_barrier_sched();
-	kfree(*entry);
-	*entry = e;
+	entry->format_allocated = 1;
+
 	trace_mark(core_marker_format, "name %s format %s",
-			e->name, e->format);
+			entry->name, entry->format);
 	return 0;
 }
 
 /*
  * Sets the probe callback corresponding to one marker.
  */
-static int set_marker(struct marker_entry **entry, struct marker *elem,
+static int set_marker(struct marker_entry *entry, struct marker *elem,
 		int active)
 {
-	int ret;
-	WARN_ON(strcmp((*entry)->name, elem->name) != 0);
+	int ret = 0;
+	WARN_ON(strcmp(entry->name, elem->name) != 0);
 
-	if ((*entry)->format) {
-		if (strcmp((*entry)->format, elem->format) != 0) {
+	if (entry->format) {
+		if (strcmp(entry->format, elem->format) != 0) {
 			printk(KERN_NOTICE
 				"Format mismatch for probe %s "
 				"(%s), marker (%s)\n",
-				(*entry)->name,
-				(*entry)->format,
+				entry->name,
+				entry->format,
 				elem->format);
 			return -EPERM;
 		}
@@ -523,49 +516,73 @@ static int set_marker(struct marker_entry **entry, struct marker *elem,
 	 * pass from a "safe" callback (with argument) to an "unsafe"
 	 * callback (does not set arguments).
 	 */
-	elem->call = (*entry)->call;
+	elem->call = entry->call;
 	/*
 	 * Sanity check :
 	 * We only update the single probe private data when the ptr is
 	 * set to a _non_ single probe! (0 -> 1 and N -> 1, N != 1)
 	 */
 	WARN_ON(elem->single.func != __mark_empty_function
-		&& elem->single.probe_private
-		!= (*entry)->single.probe_private &&
-		!elem->ptype);
-	elem->single.probe_private = (*entry)->single.probe_private;
+		&& elem->single.probe_private != entry->single.probe_private
+		&& !elem->ptype);
+	elem->single.probe_private = entry->single.probe_private;
 	/*
 	 * Make sure the private data is valid when we update the
 	 * single probe ptr.
 	 */
 	smp_wmb();
-	elem->single.func = (*entry)->single.func;
+	elem->single.func = entry->single.func;
 	/*
 	 * We also make sure that the new probe callbacks array is consistent
 	 * before setting a pointer to it.
 	 */
-	rcu_assign_pointer(elem->multi, (*entry)->multi);
+	rcu_assign_pointer(elem->multi, entry->multi);
 	/*
 	 * Update the function or multi probe array pointer before setting the
 	 * ptype.
 	 */
 	smp_wmb();
-	elem->ptype = (*entry)->ptype;
-	elem->state = active;
+	elem->ptype = entry->ptype;
 
-	return 0;
+	if (elem->tp_name && (active ^ _imv_read(elem->state))) {
+		WARN_ON(!elem->tp_cb);
+		/*
+		 * It is ok to directly call the probe registration because type
+		 * checking has been done in the __trace_mark_tp() macro.
+		 */
+		if (active)
+			ret = tracepoint_probe_register(elem->tp_name,
+				elem->tp_cb);
+		else
+			ret = tracepoint_probe_unregister(elem->tp_name,
+				elem->tp_cb);
+	}
+	elem->state__imv = active;
+
+	return ret;
 }
 
 /*
  * Disable a marker and its probe callback.
  * Note: only waiting an RCU period after setting elem->call to the empty
  * function insures that the original callback is not used anymore. This insured
- * by preempt_disable around the call site.
+ * by rcu_read_lock_sched around the call site.
  */
 static void disable_marker(struct marker *elem)
 {
+	int ret;
+
 	/* leave "call" as is. It is known statically. */
-	elem->state = 0;
+	if (elem->tp_name && _imv_read(elem->state)) {
+		WARN_ON(!elem->tp_cb);
+		/*
+		 * It is ok to directly call the probe registration because type
+		 * checking has been done in the __trace_mark_tp() macro.
+		 */
+		ret = tracepoint_probe_unregister(elem->tp_name, elem->tp_cb);
+		WARN_ON(ret);
+	}
+	elem->state__imv = 0;
 	elem->single.func = __mark_empty_function;
 	/* Update the function before setting the ptype */
 	smp_wmb();
@@ -594,8 +611,7 @@ void marker_update_probe_range(struct marker *begin,
 	for (iter = begin; iter < end; iter++) {
 		mark_entry = get_marker(iter->name);
 		if (mark_entry) {
-			set_marker(&mark_entry, iter,
-					!!mark_entry->refcount);
+			set_marker(mark_entry, iter, !!mark_entry->refcount);
 			/*
 			 * ignore error, continue
 			 */
@@ -629,6 +645,10 @@ static void marker_update_probes(void)
 	marker_update_probe_range(__start___markers, __stop___markers);
 	/* Markers in modules. */
 	module_update_markers();
+	/* Update immediate values */
+	core_imv_update();
+	module_imv_update();
+	marker_update_processes();
 }
 
 /**
@@ -653,11 +673,17 @@ int marker_probe_register(const char *name, const char *format,
 	entry = get_marker(name);
 	if (!entry) {
 		entry = add_marker(name, format);
-		if (IS_ERR(entry)) {
+		if (IS_ERR(entry))
 			ret = PTR_ERR(entry);
-			goto end;
-		}
+	} else if (format) {
+		if (!entry->format)
+			ret = marker_set_format(entry, format);
+		else if (strcmp(entry->format, format))
+			ret = -EPERM;
 	}
+	if (ret)
+		goto end;
+
 	/*
 	 * If we detect that a call_rcu is pending for this marker,
 	 * make sure it's executed now.
@@ -674,6 +700,8 @@ int marker_probe_register(const char *name, const char *format,
 	mutex_lock(&markers_mutex);
 	entry = get_marker(name);
 	WARN_ON(!entry);
+	if (entry->rcu_pending)
+		rcu_barrier_sched();
 	entry->oldptr = old;
 	entry->rcu_pending = 1;
 	/* write rcu_pending before calling the RCU callback */
@@ -717,6 +745,8 @@ int marker_probe_unregister(const char *name,
 	entry = get_marker(name);
 	if (!entry)
 		goto end;
+	if (entry->rcu_pending)
+		rcu_barrier_sched();
 	entry->oldptr = old;
 	entry->rcu_pending = 1;
 	/* write rcu_pending before calling the RCU callback */
@@ -795,6 +825,8 @@ int marker_probe_unregister_private_data(marker_probe_func *probe,
 	mutex_lock(&markers_mutex);
 	entry = get_marker_from_private_data(probe, probe_private);
 	WARN_ON(!entry);
+	if (entry->rcu_pending)
+		rcu_barrier_sched();
 	entry->oldptr = old;
 	entry->rcu_pending = 1;
 	/* write rcu_pending before calling the RCU callback */
@@ -854,3 +886,310 @@ void *marker_get_private_data(const char *name, marker_probe_func *probe,
 	return ERR_PTR(-ENOENT);
 }
 EXPORT_SYMBOL_GPL(marker_get_private_data);
+
+/**
+ * marker_get_iter_range - Get a next marker iterator given a range.
+ * @marker: current markers (in), next marker (out)
+ * @begin: beginning of the range
+ * @end: end of the range
+ *
+ * Returns whether a next marker has been found (1) or not (0).
+ * Will return the first marker in the range if the input marker is NULL.
+ */
+int marker_get_iter_range(struct marker **marker, struct marker *begin,
+	struct marker *end)
+{
+	if (!*marker && begin != end) {
+		*marker = begin;
+		return 1;
+	}
+	if (*marker >= begin && *marker < end)
+		return 1;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(marker_get_iter_range);
+
+static void marker_get_iter(struct marker_iter *iter)
+{
+	int found = 0;
+
+	/* Core kernel markers */
+	if (!iter->module) {
+		found = marker_get_iter_range(&iter->marker,
+				__start___markers, __stop___markers);
+		if (found)
+			goto end;
+	}
+	/* Markers in modules. */
+	found = module_get_iter_markers(iter);
+end:
+	if (!found)
+		marker_iter_reset(iter);
+}
+
+void marker_iter_start(struct marker_iter *iter)
+{
+	marker_get_iter(iter);
+}
+EXPORT_SYMBOL_GPL(marker_iter_start);
+
+void marker_iter_next(struct marker_iter *iter)
+{
+	iter->marker++;
+	/*
+	 * iter->marker may be invalid because we blindly incremented it.
+	 * Make sure it is valid by marshalling on the markers, getting the
+	 * markers from following modules if necessary.
+	 */
+	marker_get_iter(iter);
+}
+EXPORT_SYMBOL_GPL(marker_iter_next);
+
+void marker_iter_stop(struct marker_iter *iter)
+{
+}
+EXPORT_SYMBOL_GPL(marker_iter_stop);
+
+void marker_iter_reset(struct marker_iter *iter)
+{
+	iter->module = NULL;
+	iter->marker = NULL;
+}
+EXPORT_SYMBOL_GPL(marker_iter_reset);
+
+#ifdef CONFIG_MARKERS_USERSPACE
+/*
+ * must be called with current->user_markers_mutex held
+ */
+static void free_user_marker(char __user *state, struct hlist_head *head)
+{
+	struct user_marker *umark;
+	struct hlist_node *pos, *n;
+
+	hlist_for_each_entry_safe(umark, pos, n, head, hlist) {
+		if (umark->state == state) {
+			hlist_del(&umark->hlist);
+			kfree(umark);
+		}
+	}
+}
+
+asmlinkage long sys_marker(char __user *name, char __user *format,
+		char __user *state, int reg)
+{
+	struct user_marker *umark;
+	long len;
+	struct marker_entry *entry;
+	int ret = 0;
+
+	printk(KERN_DEBUG "Program %s %s marker [%p, %p]\n",
+		current->comm, reg ? "registers" : "unregisters",
+		name, state);
+	if (reg) {
+		umark = kmalloc(sizeof(struct user_marker), GFP_KERNEL);
+		umark->name[MAX_USER_MARKER_NAME_LEN - 1] = '\0';
+		umark->format[MAX_USER_MARKER_FORMAT_LEN - 1] = '\0';
+		umark->state = state;
+		len = strncpy_from_user(umark->name, name,
+			MAX_USER_MARKER_NAME_LEN - 1);
+		if (len < 0) {
+			ret = -EFAULT;
+			goto error;
+		}
+		len = strncpy_from_user(umark->format, format,
+			MAX_USER_MARKER_FORMAT_LEN - 1);
+		if (len < 0) {
+			ret = -EFAULT;
+			goto error;
+		}
+		printk(KERN_DEBUG "Marker name : %s, format : %s", umark->name,
+			umark->format);
+		mutex_lock(&markers_mutex);
+		entry = get_marker(umark->name);
+		if (entry) {
+			if (entry->format &&
+				strcmp(entry->format, umark->format) != 0) {
+				printk(" error, wrong format in process %s",
+					current->comm);
+				ret = -EPERM;
+				goto error_unlock;
+			}
+			printk(" %s", !!entry->refcount
+					? "enabled" : "disabled");
+			if (put_user(!!entry->refcount, state)) {
+				ret = -EFAULT;
+				goto error_unlock;
+			}
+			printk("\n");
+		} else {
+			printk(" disabled\n");
+			if (put_user(0, umark->state)) {
+				printk(KERN_WARNING
+					"Marker in %s caused a fault\n",
+					current->comm);
+				goto error_unlock;
+			}
+		}
+		mutex_lock(&current->group_leader->user_markers_mutex);
+		hlist_add_head(&umark->hlist,
+			&current->group_leader->user_markers);
+		current->group_leader->user_markers_sequence++;
+		mutex_unlock(&current->group_leader->user_markers_mutex);
+		mutex_unlock(&markers_mutex);
+	} else {
+		mutex_lock(&current->group_leader->user_markers_mutex);
+		free_user_marker(state,
+			&current->group_leader->user_markers);
+		current->group_leader->user_markers_sequence++;
+		mutex_unlock(&current->group_leader->user_markers_mutex);
+	}
+	goto end;
+error_unlock:
+	mutex_unlock(&markers_mutex);
+error:
+	kfree(umark);
+end:
+	return ret;
+}
+
+/*
+ * Types :
+ * string : 0
+ */
+asmlinkage long sys_trace(int type, uint16_t id,
+		char __user *ubuf)
+{
+	long ret = -EPERM;
+	char *page;
+	int len;
+
+	switch (type) {
+	case 0:	/* String */
+		ret = -ENOMEM;
+		page = (char *)__get_free_page(GFP_TEMPORARY);
+		if (!page)
+			goto string_out;
+		len = strncpy_from_user(page, ubuf, PAGE_SIZE);
+		if (len < 0) {
+			ret = -EFAULT;
+			goto string_err;
+		}
+		trace_mark(userspace_string, "string %s", page);
+string_err:
+		free_page((unsigned long) page);
+string_out:
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+
+static void marker_update_processes(void)
+{
+	struct task_struct *g, *t;
+
+	/*
+	 * markers_mutex is taken to protect the p->user_markers read.
+	 */
+	mutex_lock(&markers_mutex);
+	read_lock(&tasklist_lock);
+	for_each_process(g) {
+		WARN_ON(!thread_group_leader(g));
+		if (hlist_empty(&g->user_markers))
+			continue;
+		if (strcmp(g->comm, "testprog") == 0)
+			printk(KERN_DEBUG "set update pending for testprog\n");
+		t = g;
+		do {
+			/* TODO : implement this thread flag in each arch. */
+			set_tsk_thread_flag(t, TIF_MARKER_PENDING);
+		} while ((t = next_thread(t)) != g);
+	}
+	read_unlock(&tasklist_lock);
+	mutex_unlock(&markers_mutex);
+}
+
+/*
+ * Update current process.
+ * Note that we have to wait a whole scheduler period before we are sure that
+ * every running userspace threads have their markers updated.
+ * (synchronize_sched() can be used to insure this).
+ */
+void marker_update_process(void)
+{
+	struct user_marker *umark;
+	struct hlist_node *pos;
+	struct marker_entry *entry;
+
+	mutex_lock(&markers_mutex);
+	mutex_lock(&current->group_leader->user_markers_mutex);
+	if (strcmp(current->comm, "testprog") == 0)
+		printk(KERN_DEBUG "do update pending for testprog\n");
+	hlist_for_each_entry(umark, pos,
+			&current->group_leader->user_markers, hlist) {
+		printk(KERN_DEBUG "Updating marker %s in %s\n",
+			umark->name, current->comm);
+		entry = get_marker(umark->name);
+		if (entry) {
+			if (entry->format &&
+				strcmp(entry->format, umark->format) != 0) {
+				printk(KERN_WARNING
+					" error, wrong format in process %s\n",
+					current->comm);
+				break;
+			}
+			if (put_user(!!entry->refcount, umark->state)) {
+				printk(KERN_WARNING
+					"Marker in %s caused a fault\n",
+					current->comm);
+				break;
+			}
+		} else {
+			if (put_user(0, umark->state)) {
+				printk(KERN_WARNING
+					"Marker in %s caused a fault\n",
+					current->comm);
+				break;
+			}
+		}
+	}
+	clear_thread_flag(TIF_MARKER_PENDING);
+	mutex_unlock(&current->group_leader->user_markers_mutex);
+	mutex_unlock(&markers_mutex);
+}
+
+/*
+ * Called at process exit and upon do_execve().
+ * We assume that when the leader exits, no more references can be done to the
+ * leader structure by the other threads.
+ */
+void exit_user_markers(struct task_struct *p)
+{
+	struct user_marker *umark;
+	struct hlist_node *pos, *n;
+
+	if (thread_group_leader(p)) {
+		mutex_lock(&markers_mutex);
+		mutex_lock(&p->user_markers_mutex);
+		hlist_for_each_entry_safe(umark, pos, n, &p->user_markers,
+			hlist)
+		    kfree(umark);
+		INIT_HLIST_HEAD(&p->user_markers);
+		p->user_markers_sequence++;
+		mutex_unlock(&p->user_markers_mutex);
+		mutex_unlock(&markers_mutex);
+	}
+}
+
+int is_marker_enabled(const char *name)
+{
+	struct marker_entry *entry;
+
+	mutex_lock(&markers_mutex);
+	entry = get_marker(name);
+	mutex_unlock(&markers_mutex);
+
+	return entry && !!entry->refcount;
+}
+#endif

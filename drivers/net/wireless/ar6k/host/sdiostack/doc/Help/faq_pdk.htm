@@ -1,0 +1,180 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>Frequently Asked Questions</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->Frequently
+        Asked Questions - PDK<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" -->
+	<a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a>
+      <!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+<a name="BackToTop"></a>
+<p class="BODYTEXT"> <strong>PDK Topics:</strong>
+<table width="70%" border="0">
+    <tr>
+      <td><a href="#pdkfaq1">Is it ok to issue a synchronous CMD53 in the pProbe context?</a></td>
+    
+	</tr>
+	<tr>
+	 <td><a href="#pdkfaq2">I am hitting this assert : SDIO Bus Driver: IssueRequestToHCD - request already in use...what is going?</a></td></tr>
+	<tr>
+	  <td><a href="#pdkfaq3">Can I use SDCONFIG_FUNC_MASK_IRQ and SDCONFIG_FUNC_UNMASK_IRQ to synchronize with interrupts?
+</a> </td>
+	  </tr>
+	<tr>
+	  <td><a href="#pdkfaq4">Can we have more than one outstanding CMD53/CMD52 requests to the driver. 
+We are issuing a mixture of synchronous and asynchronous calls to the driver 
+without waiting for the previous commands to complete. Is that ok to do?</a></td>
+	  </tr>
+	<tr>
+	  <td><a href="#pdkfaq5">The linux kernel disables interrupts before it calls into my driver.  What can I do if I cannot use
+synchronous calls?</a></td>
+	  </tr>
+	<tr>
+	  <td><a href="#pdkfaq6">What can I do Linux Kernel Timer Callback?</a></td>
+	  </tr>
+	<!-- <tr>
+	  <td><a href="#pdkfaq7">ques7</a></td>
+	  </tr>
+	<tr> -->
+	 	
+	  </table>
+</p>
+<p class="HEADING3"><strong><a name="pdkfaq1"></a>Is it ok to issue a synchronous CMD53 in the pProbe context?</strong></p>
+<p class="BODYTEXT">You can allocate and submit CMD53 requests safely (synch or asynch) from your pProbe callback. <blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="pdkfaq2"></a>I am hitting this assert : SDIO Bus Driver: IssueRequestToHCD - request already in use...what is going?</strong></p>
+<p class="BODYTEXT">
+The assert indicates the reuse of a <font face="Courier New, Courier, mono">SDREQUEST</font> packet
+before it was finished. For example,  if you allocate a request and submit it
+asynchronously and then at a later time re-use
+the request before
+the completion routine was called. 
+The request should not be used until the completion routine has been called.
+<blockquote>
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="pdkfaq3"></a>Can I use SDCONFIG_FUNC_MASK_IRQ and SDCONFIG_FUNC_UNMASK_IRQ to synchronize with interrupts?</strong></p>
+<p class="BODYTEXT">These two config requests should not be used to synchronize
+  with the IRQ handlers (see : <a href="periph_using_irqs.htm#EnableDisableIrq"> Enabling
+  Disabling IRQ</a>).
+  Typically the I/O function should implement its own interrupt mask register
+  in it's function
+  I/O space
+  and not
+  rely too
+  heavily
+  on masking/unmasking
+  the interrupt register that is present in the common I/O space.  The SDCONFIG_FUNC_(UN)MASK_IRQ
+   request should only used for enabling IRQ detection at initialization and
+  masking them off when removing and instance. 
+ As an example, the Bluetooth class has a separate function register for enabling/disabling
+  interrupts.  This obviates the need to call a bus driver API that has to make
+  the atomic operation to clear/set the IRQ enable register bits.
+</p>
+<blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="pdkfaq4"></a>Can we have more than one outstanding CMD53/CMD52 requests to the driver. 
+We are issuing a mixture of synchronous and asynchronous calls to the driver 
+without waiting for the previous commands to complete. Is that ok to do?</strong></p>
+<p class="BODYTEXT">Yes, you can have as many requests outstanding in the driver.
+  They have to be unique bus request structures of course.  The HCD will only
+  process one at a time. The bus driver serializes all requests through an internal
+  queue. 
+A synchronous call will simply block until its request (which could be stuck
+  in the queue) is pulled out of the queue,  started and completed. As for asynch
+  requests, the request will not start until it reaches the front of the queue.
+   So mixing synch and asynch before either operation completes is safe to do.
+  
+    Developers have to make sure that the request
+  structures that you allocate are NOT 
+shared between these operations.
+</p>
+<blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="pdkfaq5"></a>The linux kernel disables interrupts before it calls into my driver.  What can I do if I cannot use
+synchronous calls?</strong></p>
+<p class="BODYTEXT">Some driver models in the linux kernel disable interrupts before a driver callback is invoked.  If your driver model uses such a technique you 
+should pre-allocate a list of bus requests because allocation of a bus request may invoke a kernel allocation which is not allowed if 
+interrupts are disabled. You can only submit bus requests asynchronously under these conditions.  Avoid calling any bus configuration requests as some may be synchronous
+or require a pre-emptible context.
+</p>
+<blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<p class="HEADING3"><strong><a name="pdkfaq6"></a>What can I do Linux Kernel Timer Callback?</strong></p>
+<p class="BODYTEXT">Firstly, avoid doing any SDIO requests in a linux timer callback,
+  you should queue a work item to get the actual work done. For synchronization
+you should disable local bottom halves as spin-locks will not guard against a
+  timer callback. If you must issue a request from a kernel timer callback, preallocate
+  your bus request structure ahead of time and only use asynchronous requests.
+If you choose to use a work item you may allocate a bus request and then submit
+  the request asynchronously. 
+While executing in the context of a work item , you can synchronize using normal
+  spin locks and semaphores with other parts of 
+your driver.
+</p>
+<blockquote>
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote>
+<!-- <p class="HEADING3"><strong><a name="pdkfaq7"></a>topic7</strong></p>
+<p class="BODYTEXT"> answer
+</p>
+<blockquote>
+  
+      <a href="#BackToTop">Back
+    to top.</a></p>
+</blockquote> -->
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

@@ -1,6 +1,6 @@
 /* linux/sound/soc/msm/msm7201.c
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.
@@ -167,7 +167,7 @@ static int snd_msm_device_get(struct snd_kcontrol *kcontrol,
 int msm_snd_init_rpc_ids(void)
 {
 	snd_rpc_ids.prog	= 0x30000002;
-	snd_rpc_ids.vers	= 0x00020001;
+	snd_rpc_ids.vers	= 0x00010001;
 	/*
 	 * The magic number 2 corresponds to the rpc call
 	 * index for snd_set_device
@@ -506,5 +506,6 @@ static void __exit msm_audio_exit(void)
 module_init(msm_audio_init);
 module_exit(msm_audio_exit);
 
+MODULE_AUTHOR("QUALCOMM-QCT");
 MODULE_DESCRIPTION("PCM module");
 MODULE_LICENSE("GPL v2");

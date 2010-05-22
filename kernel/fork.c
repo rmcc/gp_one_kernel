@@ -58,6 +58,8 @@
 #include <linux/tty.h>
 #include <linux/proc_fs.h>
 #include <linux/blkdev.h>
+#include <linux/user_marker.h>
+#include <trace/sched.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -77,6 +79,7 @@ int max_threads;		/* tunable limit on nr_threads */
 DEFINE_PER_CPU(unsigned long, process_counts) = 0;
 
 __cacheline_aligned DEFINE_RWLOCK(tasklist_lock);  /* outer */
+EXPORT_SYMBOL(tasklist_lock);
 
 int nr_processes(void)
 {
@@ -1156,6 +1159,46 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	cgroup_fork_callbacks(p);
 	cgroup_callbacks_done = 1;
 
+#ifdef CONFIG_MARKERS_USERSPACE
+	mutex_init(&p->user_markers_mutex);
+	if (strcmp(p->comm, "testprog") == 0)
+		printk(KERN_DEBUG "initializing process and hlist\n");
+	INIT_HLIST_HEAD(&p->user_markers);
+	p->user_markers_sequence = 0;
+
+	if (!(clone_flags & CLONE_THREAD)) {
+		struct user_marker *cur_umark, *new_umark;
+		struct hlist_node *pos;
+
+		mutex_lock(&current->group_leader->user_markers_mutex);
+		/* Markers list is kept in thread group leaders, only
+		 * copy it if this new process is one */
+		if (strcmp(p->comm, "testprog") == 0)
+			printk(KERN_DEBUG "copying hlist\n");
+		hlist_for_each_entry(cur_umark, pos,
+			&current->group_leader->user_markers, hlist) {
+			new_umark = kmalloc(sizeof(struct user_marker),
+				GFP_KERNEL);
+			if (!new_umark) {
+				retval = -ENOMEM;
+				/*
+				 * We can fail without removing our
+				 * entry from the thread group list
+				 * because we are the thread group
+				 * leader.
+				 */
+				mutex_unlock(
+				&current->group_leader->user_markers_mutex);
+				goto bad_fork_no_mem;
+			}
+			memcpy(new_umark, cur_umark,
+				sizeof(struct user_marker));
+			hlist_add_head(&new_umark->hlist, &p->user_markers);
+		}
+		mutex_unlock(&current->group_leader->user_markers_mutex);
+	}
+#endif
+
 	/* Need tasklist lock for parent etc handling! */
 	write_lock_irq(&tasklist_lock);
 
@@ -1173,6 +1216,22 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	if (unlikely(!cpu_isset(task_cpu(p), p->cpus_allowed) ||
 			!cpu_online(task_cpu(p))))
 		set_task_cpu(p, smp_processor_id());
+
+	/*
+	 * The state of the parent's TIF_KTRACE flag may have changed
+	 * since it was copied in dup_task_struct() so we re-copy it here.
+	 */
+	if (test_thread_flag(TIF_KERNEL_TRACE))
+		set_tsk_thread_flag(p, TIF_KERNEL_TRACE);
+	else
+		clear_tsk_thread_flag(p, TIF_KERNEL_TRACE);
+
+#ifdef CONFIG_MARKERS_USERSPACE
+	if (test_thread_flag(TIF_MARKER_PENDING))
+		set_tsk_thread_flag(p, TIF_MARKER_PENDING);
+	else
+		clear_tsk_thread_flag(p, TIF_MARKER_PENDING);
+#endif
 
 	/* CLONE_PARENT re-uses the old parent */
 	if (clone_flags & (CLONE_PARENT|CLONE_THREAD))
@@ -1249,6 +1308,9 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 bad_fork_free_pid:
 	if (pid != &init_struct_pid)
 		free_pid(pid);
+#ifdef CONFIG_MARKERS_USERSPACE
+bad_fork_no_mem:
+#endif
 bad_fork_cleanup_io:
 	put_io_context(p->io_context);
 bad_fork_cleanup_namespaces:
@@ -1360,6 +1422,8 @@ long do_fork(unsigned long clone_flags,
 	 */
 	if (!IS_ERR(p)) {
 		struct completion vfork;
+
+		trace_sched_process_fork(current, p);
 
 		nr = task_pid_vnr(p);
 

@@ -1,57 +1,20 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/*
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -67,13 +30,6 @@
 
 struct cad_device_volume_cache
 		qdsp6_volume_cache_tbl[QDSP6VOLUME_MAX_DEVICE_COUNT];
-
-
-#if 0
-#define D(fmt, args...) printk(KERN_INFO "msm8k_cad: " fmt, ##args)
-#else
-#define D(fmt, args...) do {} while (0)
-#endif
 
 
 /* This computes linear mapping device volume. */
@@ -133,7 +89,7 @@ s32 qdsp6_volume_ioctl(s32 session_id, u32 cmd_code,
 	/* Not handle request other than the following two. */
 	if (cmd_code != CAD_IOCTL_CMD_SET_STREAM_FILTER_CONFIG &&
 		cmd_code != CAD_IOCTL_CMD_SET_DEVICE_FILTER_CONFIG) {
-		/* Just silently succeed unrecognized IOCTLs. */
+		pr_err("%s: unsupported ioctl\n", __func__);
 		return CAD_RES_SUCCESS;
 	}
 
@@ -181,7 +137,7 @@ s32 qdsp6_volume_ioctl(s32 session_id, u32 cmd_code,
 	/* Handle volume control command. */
 	switch (strm_flt->filter_type) {
 	case CAD_FILTER_CONFIG_DEVICE_VOLUME:
-		D("CAD:VOL: Device Volume\n");
+		pr_err("CAD:VOL: Device Volume\n");
 
 		/* For volume != 0%: send unmute command. */
 		if (dev_vol_buf->volume != 0) {
@@ -272,7 +228,7 @@ s32 qdsp6_volume_ioctl(s32 session_id, u32 cmd_code,
 
 		break;
 	case CAD_FILTER_CONFIG_DEVICE_MUTE:
-		D("CAD:VOL: Device Mute\n");
+		pr_err("CAD:VOL: Device Mute\n");
 
 		qdsp6_volume_cache_tbl[dev_mute_buf->device_id].mute =
 			dev_mute_buf->mute;
@@ -296,7 +252,7 @@ s32 qdsp6_volume_ioctl(s32 session_id, u32 cmd_code,
 
 		break;
 	case CAD_FILTER_CONFIG_STREAM_VOLUME:
-		D("CAD:VOL: Stream Volume\n");
+		pr_err("CAD:VOL: Stream Volume\n");
 
 		/* For volume != min: send unmute command. */
 		if (stream_vol_buf->volume != CAD_STREAM_MIN_GAIN) {
@@ -361,7 +317,7 @@ s32 qdsp6_volume_ioctl(s32 session_id, u32 cmd_code,
 
 		break;
 	case CAD_FILTER_CONFIG_STREAM_MUTE:
-		D("CAD:VOL: Stream Mute\n");
+		pr_err("CAD:VOL: Stream Mute\n");
 
 		/* Construct QDSP6 stream mute command. */
 		/* 1. Allocate memory for command buffer. */
@@ -394,7 +350,7 @@ s32 qdsp6_volume_ioctl(s32 session_id, u32 cmd_code,
 	if (rc != CAD_RES_SUCCESS)
 		pr_err("%s: cad_rpc_ioctl() failure\n", __func__);
 
-	D("%s: ioctl() processed.\n", __func__);
+	pr_err("%s: ioctl() processed.\n", __func__);
 
 	kfree(q6_set_dev_vol);
 	kfree(q6_set_strm_vol);

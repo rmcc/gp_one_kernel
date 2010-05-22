@@ -1,4 +1,4 @@
-obj-y := msm_fb.o
+obj-y := msm_fb.o #hx8352.o #T_FIH,ADQ,JOE HSU
 
 ifeq ($(CONFIG_FB_MSM_LOGO),y)
 obj-y += logo.o
@@ -50,8 +50,6 @@ ifeq ($(CONFIG_FB_MSM_MDDI_AUTO_DETECT),y)
 obj-y += mddi_prism.o
 obj-y += mddi_toshiba.o
 obj-y += mddi_toshiba_vga.o
-obj-y += mddi_toshiba_wvga_pt.o
-obj-y += mddi_toshiba_wvga.o
 obj-y += mddi_sharp.o
 else
 obj-$(CONFIG_FB_MSM_MDDI_PRISM_WVGA) += mddi_prism.o
@@ -65,7 +63,9 @@ endif
 obj-$(CONFIG_FB_MSM_LCDC_PANEL) += lcdc_panel.o
 obj-$(CONFIG_FB_MSM_LCDC_PRISM_WVGA) += lcdc_prism.o
 obj-$(CONFIG_FB_MSM_LCDC_EXTERNAL_SVGA) += lcdc_external.o
-obj-$(CONFIG_FB_MSM_LCDC_GORDON_VGA) += lcdc_gordon.o
+
+#T_FIH,ADQ,JOE HSU
+obj-$(CONFIG_FB_MSM_LCDC_HX8352) += hx8352.o #lcdc_hx8352.o
 
 obj-$(CONFIG_FB_MSM_TVOUT_NTSC) += tv_ntsc.o
 obj-$(CONFIG_FB_MSM_TVOUT_PAL) += tv_pal.o

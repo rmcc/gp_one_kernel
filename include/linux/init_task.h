@@ -113,6 +113,16 @@ extern struct group_info init_groups;
 # define CAP_INIT_BSET  CAP_INIT_EFF_SET
 #endif
 
+#ifdef CONFIG_MARKERS_USERSPACE
+#define INIT_MARKERS_USERSPACE(tsk)					\
+	.user_markers_mutex =						\
+		__MUTEX_INITIALIZER(tsk.user_markers_mutex),		\
+	.user_markers = HLIST_HEAD_INIT,				\
+	.user_markers_sequence = 0,
+#else
+#define INIT_MARKERS_USERSPACE(tsk)
+#endif
+
 /*
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
@@ -176,6 +186,7 @@ extern struct group_info init_groups;
 		[PIDTYPE_SID]  = INIT_PID_LINK(PIDTYPE_SID),		\
 	},								\
 	.dirties = INIT_PROP_LOCAL_SINGLE(dirties),			\
+	INIT_MARKERS_USERSPACE(tsk)					\
 	INIT_IDS							\
 	INIT_TRACE_IRQFLAGS						\
 	INIT_LOCKDEP							\

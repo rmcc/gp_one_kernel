@@ -12,9 +12,11 @@
  * See the file COPYING for more details.
  */
 
+#include <linux/immediate.h>
 #include <linux/types.h>
 
 struct module;
+struct task_struct;
 struct marker;
 
 /**
@@ -42,19 +44,19 @@ struct marker {
 	const char *format;	/* Marker format string, describing the
 				 * variable argument list.
 				 */
-	char state;		/* Marker state. */
+	DEFINE_IMV(char, state);/* Immediate value state. */
 	char ptype;		/* probe type : 0 : single, 1 : multi */
 				/* Probe wrapper */
 	void (*call)(const struct marker *mdata, void *call_private, ...);
 	struct marker_probe_closure single;
 	struct marker_probe_closure *multi;
+	const char *tp_name;	/* Optional tracepoint name */
+	void *tp_cb;		/* Optional tracepoint callback */
 } __attribute__((aligned(8)));
 
 #ifdef CONFIG_MARKERS
 
 /*
- * Note : the empty asm volatile with read constraint is used here instead of a
- * "used" attribute to fix a gcc 4.1.x bug.
  * Make sure the alignment of the structure in the __markers section will
  * not add unwanted padding between the beginning of the section and the
  * structure. Force alignment to the same alignment as the section start.
@@ -72,12 +74,41 @@ struct marker {
 		__attribute__((section("__markers"), aligned(8))) =	\
 		{ __mstrtab_##name, &__mstrtab_##name[sizeof(#name)],	\
 		0, 0, marker_probe_cb,					\
-		{ __mark_empty_function, NULL}, NULL };			\
+		{ __mark_empty_function, NULL}, NULL, NULL, NULL };	\
 		__mark_check_format(format, ## args);			\
-		if (unlikely(__mark_##name.state)) {			\
+		if (!generic) {						\
+			if (unlikely(imv_cond(__mark_##name.state))) {	\
+				imv_cond_end();				\
 			(*__mark_##name.call)				\
-				(&__mark_##name, call_private, ## args);\
+					(&__mark_##name, call_private,	\
+					## args);			\
+			} else						\
+				imv_cond_end();				\
+		} else {						\
+			if (unlikely(_imv_read(__mark_##name.state)))	\
+				(*__mark_##name.call)			\
+					(&__mark_##name, call_private,	\
+					## args);			\
 		}							\
+	} while (0)
+
+#define __trace_mark_tp(name, call_private, tp_name, tp_cb, format, args...) \
+	do {								\
+		void __check_tp_type(void)				\
+		{							\
+			register_trace_##tp_name(tp_cb);		\
+		}							\
+		static const char __mstrtab_##name[]			\
+		__attribute__((section("__markers_strings")))		\
+		= #name "\0" format;					\
+		static struct marker __mark_##name			\
+		__attribute__((section("__markers"), aligned(8))) =	\
+		{ __mstrtab_##name, &__mstrtab_##name[sizeof(#name)],	\
+		0, 0, marker_probe_cb,					\
+		{ __mark_empty_function, NULL}, NULL, #tp_name, tp_cb };\
+		__mark_check_format(format, ## args);			\
+		(*__mark_##name.call)(&__mark_##name, call_private,	\
+					## args);			\
 	} while (0)
 
 extern void marker_update_probe_range(struct marker *begin,
@@ -85,6 +116,14 @@ extern void marker_update_probe_range(struct marker *begin,
 #else /* !CONFIG_MARKERS */
 #define __trace_mark(generic, name, call_private, format, args...) \
 		__mark_check_format(format, ## args)
+#define __trace_mark_tp(name, call_private, tp_name, tp_cb, format, args...) \
+	do {								\
+		void __check_tp_type(void)				\
+		{							\
+			register_trace_##tp_name(tp_cb);		\
+		}							\
+		__mark_check_format(format, ## args);			\
+	} while (0)
 static inline void marker_update_probe_range(struct marker *begin,
 	struct marker *end)
 { }
@@ -117,6 +156,20 @@ static inline void marker_update_probe_range(struct marker *begin,
 	__trace_mark(1, name, NULL, format, ## args)
 
 /**
+ * trace_mark_tp - Marker in a tracepoint callback
+ * @name: marker name, not quoted.
+ * @tp_name: tracepoint name, not quoted.
+ * @tp_cb: tracepoint callback. Should have an associated global symbol so it
+ *         is not optimized away by the compiler (should not be static).
+ * @format: format string
+ * @args...: variable argument list
+ *
+ * Places a marker in a tracepoint callback.
+ */
+#define trace_mark_tp(name, tp_name, tp_cb, format, args...)	\
+	__trace_mark_tp(name, NULL, tp_name, tp_cb, format, ## args)
+
+/**
  * MARK_NOARGS - Format string for a marker with no argument.
  */
 #define MARK_NOARGS " "
@@ -135,8 +188,6 @@ static inline void __printf(1, 2) ___mark_check_format(const char *fmt, ...)
 extern marker_probe_func __mark_empty_function;
 
 extern void marker_probe_cb(const struct marker *mdata,
-	void *call_private, ...);
-extern void marker_probe_cb_noarg(const struct marker *mdata,
 	void *call_private, ...);
 
 /*
@@ -159,5 +210,35 @@ extern int marker_probe_unregister_private_data(marker_probe_func *probe,
 
 extern void *marker_get_private_data(const char *name, marker_probe_func *probe,
 	int num);
+
+/*
+ * marker_synchronize_unregister must be called between the last marker probe
+ * unregistration and the end of module exit to make sure there is no caller
+ * executing a probe when it is freed.
+ */
+#define marker_synchronize_unregister() synchronize_sched()
+
+struct marker_iter {
+	struct module *module;
+	struct marker *marker;
+};
+
+extern void marker_iter_start(struct marker_iter *iter);
+extern void marker_iter_next(struct marker_iter *iter);
+extern void marker_iter_stop(struct marker_iter *iter);
+extern void marker_iter_reset(struct marker_iter *iter);
+extern int marker_get_iter_range(struct marker **marker, struct marker *begin,
+	struct marker *end);
+
+extern void marker_update_process(void);
+extern int is_marker_enabled(const char *name);
+
+#ifdef CONFIG_MARKERS_USERSPACE
+extern void exit_user_markers(struct task_struct *p);
+#else
+static inline void exit_user_markers(struct task_struct *p)
+{
+}
+#endif
 
 #endif

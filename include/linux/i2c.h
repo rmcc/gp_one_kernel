@@ -58,7 +58,14 @@ extern int i2c_master_recv(struct i2c_client *,char* ,int);
 
 /* Transfer num messages.
  */
+#define __TRACE_I2C_FAIL__
+#ifdef __TRACE_I2C_FAIL__
+extern int _i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num);
+#define i2c_transfer(adap, msgs, num) \
+	({int __i; if (__i = _i2c_transfer(adap, msgs, num)) printk(KERN_ERR "<i2c> fail in %s - %d of %s : %d\n", __func__, __LINE__, __FILE__, __i); __i;})
+#else	// __TRACE_I2C_FAIL__
 extern int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num);
+#endif	// __TRACE_I2C_FAIL__
 
 
 /* This is the very generalized SMBus access routine. You probably do not

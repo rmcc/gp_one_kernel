@@ -3,7 +3,6 @@
  * interface to "snd" service on the baseband cpu
  *
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -29,6 +28,8 @@
 #include <mach/board.h>
 #include <mach/msm_rpcrouter.h>
 
+#define LOG_CMCS 0 //karen test
+
 struct snd_ctxt {
 	struct mutex lock;
 	int opened;
@@ -38,10 +39,19 @@ struct snd_ctxt {
 
 static struct snd_ctxt the_snd;
 
+// +++ FIH_ADQ +++, added by henry.wang
+#define RPC_SND_PROG	0x30000002
+#define RPC_SND_VERS         0x00010001
+/*
 #define RPC_SND_PROG	0x30000002
 #define RPC_SND_CB_PROG	0x31000002
-
-#define RPC_SND_VERS                    0x00020001
+#if CONFIG_MSM_AMSS_VERSION == 6210
+#define RPC_SND_VERS                    0x94756085
+#elif (CONFIG_MSM_AMSS_VERSION == 6220) || (CONFIG_MSM_AMSS_VERSION == 6225)
+#define RPC_SND_VERS                    0xaa2b1a44
+#endif
+*/
+// --- FIH_ADQ ---
 
 #define SND_SET_DEVICE_PROC 2
 #define SND_SET_VOLUME_PROC 3
@@ -76,8 +86,22 @@ struct snd_set_volume_msg {
 
 struct snd_endpoint *get_snd_endpoints(int *size);
 
+static inline int check_device(struct snd_ctxt *snd, int device)
+{
+	int cnt;
+
+	if (LOG_CMCS) pr_info("snd: check_device()\n");
+	
+	for (cnt = 0; cnt < snd->snd_epts->num; cnt++)
+		if (device == snd->snd_epts->endpoints[cnt].id)
+			return 0;
+	return -EINVAL;
+}
+
 static inline int check_mute(int mute)
 {
+	if (LOG_CMCS) pr_info("snd: check_mute()\n");
+	
 	return (mute == SND_MUTE_MUTED ||
 		mute == SND_MUTE_UNMUTED) ? 0 : -EINVAL;
 }
@@ -87,6 +111,8 @@ static int get_endpoint(struct snd_ctxt *snd, unsigned long arg)
 	int rc = 0, index;
 	struct msm_snd_endpoint ept;
 
+	if (LOG_CMCS) pr_info("snd: get_endpoint()\n");
+	
 	if (copy_from_user(&ept, (void __user *)arg, sizeof(ept))) {
 		pr_err("snd_ioctl get endpoint: invalid read pointer.\n");
 		return -EFAULT;
@@ -120,12 +146,22 @@ static long snd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct snd_ctxt *snd = file->private_data;
 	int rc = 0;
 
+	if (LOG_CMCS) pr_info("snd: snd_ioctl(cmd=%d)\n", cmd);
+	
 	mutex_lock(&snd->lock);
 	switch (cmd) {
 	case SND_SET_DEVICE:
 		if (copy_from_user(&dev, (void __user *) arg, sizeof(dev))) {
 			pr_err("snd_ioctl set device: invalid pointer.\n");
 			rc = -EFAULT;
+			break;
+		}
+
+
+		rc = check_device(snd, dev.device);
+		if (rc < 0) {
+			pr_err("snd_ioctl set device: invalid device.\n");
+			rc = -EINVAL;
 			break;
 		}
 
@@ -153,6 +189,13 @@ static long snd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&vol, (void __user *) arg, sizeof(vol))) {
 			pr_err("snd_ioctl set volume: invalid pointer.\n");
 			rc = -EFAULT;
+			break;
+		}
+
+		rc = check_device(snd, vol.device);
+		if (rc < 0) {
+			pr_err("snd_ioctl set volume: invalid device.\n");
+			rc = -EINVAL;
 			break;
 		}
 
@@ -201,13 +244,10 @@ static long snd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 static int snd_release(struct inode *inode, struct file *file)
 {
 	struct snd_ctxt *snd = file->private_data;
-	int rc;
+
+	if (LOG_CMCS) pr_info("snd: snd_release()\n");
 
 	mutex_lock(&snd->lock);
-	rc = msm_rpc_close(snd->ept);
-	if (rc < 0)
-		pr_err("snd_release: msm_rpc_close failed\n");
-	snd->ept = NULL;
 	snd->opened = 0;
 	mutex_unlock(&snd->lock);
 	return 0;
@@ -218,11 +258,13 @@ static int snd_open(struct inode *inode, struct file *file)
 	struct snd_ctxt *snd = &the_snd;
 	int rc = 0;
 
+	if (LOG_CMCS) pr_info("snd: snd_open()\n");
+	
 	mutex_lock(&snd->lock);
 	if (snd->opened == 0) {
 		if (snd->ept == NULL) {
-			snd->ept = msm_rpc_connect_compatible(RPC_SND_PROG,
-					RPC_SND_VERS, 0);
+			snd->ept = msm_rpc_connect(RPC_SND_PROG, RPC_SND_VERS,
+						MSM_RPC_UNINTERRUPTIBLE);
 			if (IS_ERR(snd->ept)) {
 				rc = PTR_ERR(snd->ept);
 				snd->ept = NULL;
@@ -257,6 +299,8 @@ struct miscdevice snd_misc = {
 
 static int snd_probe(struct platform_device *pdev)
 {
+	if (LOG_CMCS) pr_info("snd: snd_probe()\n");
+	
 	struct snd_ctxt *snd = &the_snd;
 	mutex_init(&snd->lock);
 	snd->snd_epts = (struct msm_snd_endpoints *)pdev->dev.platform_data;
@@ -273,6 +317,8 @@ static struct platform_driver snd_plat_driver = {
 
 static int __init snd_init(void)
 {
+	if (LOG_CMCS) pr_info("snd: snd_init()\n");
+	
 	return platform_driver_register(&snd_plat_driver);
 }
 

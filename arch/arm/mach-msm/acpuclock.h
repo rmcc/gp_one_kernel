@@ -3,7 +3,7 @@
  * MSM architecture clock driver header
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009 QUALCOMM USA, INC.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -43,13 +43,7 @@ enum {
 	ACPU_PLL_END,
 };
 
-enum setrate_reason {
-	SETRATE_CPUFREQ = 0,
-	SETRATE_SWFI,
-	SETRATE_PC,
-};
-
-int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason);
+int acpuclk_set_rate(unsigned long rate, int for_power_collapse);
 unsigned long acpuclk_get_rate(void);
 uint32_t acpuclk_get_switch_time(void);
 unsigned long acpuclk_wait_for_irq(void);

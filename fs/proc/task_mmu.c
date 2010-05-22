@@ -553,9 +553,9 @@ static u64 swap_pte_to_pagemap_entry(pte_t pte)
 	return swp_type(e) | (swp_offset(e) << MAX_SWAPFILES_SHIFT);
 }
 
-static u64 pte_to_pagemap_entry(pte_t pte)
+static unsigned long pte_to_pagemap_entry(pte_t pte)
 {
-	u64 pme = 0;
+	unsigned long pme = 0;
 	if (is_swap_pte(pte))
 		pme = PM_PFRAME(swap_pte_to_pagemap_entry(pte))
 			| PM_PSHIFT(PAGE_SHIFT) | PM_SWAP;

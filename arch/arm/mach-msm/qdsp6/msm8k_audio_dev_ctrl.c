@@ -1,57 +1,20 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/*
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -70,6 +33,21 @@
 #include <mach/qdsp6/msm8k_cad_volume.h>
 
 
+#define HANDSET_MIC			0x01
+#define HANDSET_SPKR			0x02
+#define HEADSET_MIC			0x03
+#define HEADSET_SPKR_MONO		0x04
+#define HEADSET_SPKR_STEREO		0x05
+#define SPKR_PHONE_MIC			0x06
+#define SPKR_PHONE_MONO			0x07
+#define SPKR_PHONE_STEREO		0x08
+#define BT_SCO_MIC			0x09
+#define BT_SCO_SPKR			0x0A
+#define BT_A2DP_SPKR			0x0B
+#define TTY_HEADSET_MIC			0x0C
+#define TTY_HEADSET_SPKR		0x0D
+
+
 #if 0
 #define D(fmt, args...) printk(KERN_INFO "msm8k_audio_dev_ctrl: " fmt, ##args)
 #else
@@ -82,9 +60,8 @@
 
 struct msm8k_audio_dev_ctrl {
 	u32 cad_ctrl_handle;
-	u32 current_volume;
-	int current_rx_device;
-	int current_tx_device;
+	u32 volume;
+	int current_device;
 };
 
 struct msm8k_audio_dev_ctrl g_ctrl;
@@ -122,15 +99,25 @@ static ssize_t msm8k_audio_dev_ctrl_write(struct file *f,
 	return -EINVAL;
 }
 
-int audio_switch_device(int new_device)
+static int msm8k_audio_dev_ctrl_ioctl(struct inode *inode, struct file *f,
+		unsigned int cmd, unsigned long arg)
 {
 	int rc;
-	struct msm8k_audio_dev_ctrl *ctrl = &g_ctrl;
+	struct msm8k_audio_dev_ctrl *ctrl = f->private_data;
 	struct cad_device_struct_type cad_dev;
+	u32 new_device;
+	struct cad_flt_cfg_dev_vol cad_dev_volume;
+	struct cad_stream_filter_struct_type cad_stream_filter;
 
 	D("%s\n", __func__);
 
 	memset(&cad_dev, 0, sizeof(struct cad_device_struct_type));
+
+	switch (cmd) {
+	case AUDIO_SWITCH_DEVICE:
+		if (copy_from_user(&new_device, (void *)arg,
+				sizeof(new_device)))
+			return CAD_RES_FAILURE;
 
 	switch (new_device) {
 	case HANDSET_MIC:
@@ -155,7 +142,7 @@ int audio_switch_device(int new_device)
 		break;
 	case SPKR_PHONE_MIC:
 		cad_dev.device = CAD_HW_DEVICE_ID_SPKR_PHONE_MIC;
-		cad_dev.reserved = CAD_TX_DEVICE;
+			cad_dev.reserved = CAD_RX_DEVICE;
 		break;
 	case SPKR_PHONE_MONO:
 		cad_dev.device = CAD_HW_DEVICE_ID_SPKR_PHONE_MONO;
@@ -185,158 +172,44 @@ int audio_switch_device(int new_device)
 		cad_dev.device = CAD_HW_DEVICE_ID_TTY_HEADSET_SPKR;
 		cad_dev.reserved = CAD_RX_DEVICE;
 		break;
-	case I2S_RX:
-		cad_dev.device = CAD_HW_DEVICE_ID_I2S_RX;
-		cad_dev.reserved = CAD_RX_DEVICE;
-		break;
-	case I2S_TX:
-		cad_dev.device = CAD_HW_DEVICE_ID_I2S_TX;
-		cad_dev.reserved = CAD_TX_DEVICE;
-		break;
 	default:
 		return -ENODEV;
 	}
 
-	if (cad_dev.reserved == CAD_RX_DEVICE)
-		ctrl->current_rx_device = cad_dev.device;
-	else
-		ctrl->current_tx_device = cad_dev.device;
+		ctrl->current_device = cad_dev.device;
 
 	rc = cad_ioctl(ctrl->cad_ctrl_handle,
 			CAD_IOCTL_CMD_DEVICE_SET_GLOBAL_DEFAULT,
 			&cad_dev,
 			sizeof(struct cad_device_struct_type));
-	if (rc)
+		if (rc) {
 		pr_err("cad_ioctl() SET_GLOBAL_DEFAULT failed\n");
-
-	return rc;
-}
-EXPORT_SYMBOL(audio_switch_device);
-
-
-int audio_set_device_volume(int vol)
-{
-	int rc;
-	struct cad_flt_cfg_dev_vol cad_dev_volume;
-	struct cad_stream_filter_struct_type strm_flt;
-	struct msm8k_audio_dev_ctrl *ctrl = &g_ctrl;
-
-	D("%s\n", __func__);
-
-	if ((vol < 0) || (vol > 100)) {
-		D("invalid volume value\n");
-		return -EINVAL;
+			break;
 	}
 
-	memset(&strm_flt, 0,
-		sizeof(struct cad_stream_filter_struct_type));
+		break;
+	case AUDIO_SET_VOLUME:
+		rc = copy_from_user(&ctrl->volume, (void *)arg, sizeof(u32));
+
 	memset(&cad_dev_volume, 0,
 			sizeof(struct cad_flt_cfg_dev_vol));
-	ctrl->current_volume = vol;
-	cad_dev_volume.volume = ctrl->current_volume;
+		cad_dev_volume.volume = ctrl->volume;
 	cad_dev_volume.path = 0;
-	cad_dev_volume.device_id = ctrl->current_rx_device;
-	strm_flt.filter_type =
+		cad_dev_volume.device_id = ctrl->current_device;
+		cad_stream_filter.filter_type =
 				CAD_FILTER_CONFIG_DEVICE_VOLUME;
-	strm_flt.format_block = &cad_dev_volume;
-	strm_flt.format_block_len =
+		cad_stream_filter.format_block = &cad_dev_volume;
+		cad_stream_filter.format_block_len =
 				sizeof(struct cad_flt_cfg_dev_vol);
 
 	rc = cad_ioctl(ctrl->cad_ctrl_handle,
 		CAD_IOCTL_CMD_SET_DEVICE_FILTER_CONFIG,
-		&strm_flt,
+			&cad_stream_filter,
 		sizeof(struct cad_stream_filter_struct_type));
-	if (rc)
-		pr_err("cad_ioctl() set volume failed\n");
-
-	return rc;
-}
-EXPORT_SYMBOL(audio_set_device_volume);
-
-
-int audio_set_device_mute(int mute_info)
-{
-	int rc;
-	struct cad_stream_filter_struct_type strm_flt;
-	struct cad_flt_cfg_dev_mute dev_mute_buf;
-	struct msm8k_audio_dev_ctrl *ctrl = &g_ctrl;
-	int mute;
-	int path;
-
-	D("%s\n", __func__);
-
-	/* Lower word is mute/unmute, upper is path. */
-	mute = mute_info & 0x0000FFFF;
-	path = (mute_info & 0xFFFF0000) >> 16;
-
-	if ((path != 0) && (path != 1)) {
-		pr_err("%s: invalid path\n", __func__);
-		return -1;
-	}
-
-	memset(&strm_flt, 0,
-		sizeof(struct cad_stream_filter_struct_type));
-	memset(&dev_mute_buf, 0,
-		sizeof(struct cad_flt_cfg_dev_mute));
-
-	dev_mute_buf.ver_id = CAD_FILTER_CONFIG_DEVICE_VOLUME_VERID;
-
-	if (path == 0)
-		dev_mute_buf.device_id = ctrl->current_rx_device;
-	else
-		dev_mute_buf.device_id = ctrl->current_tx_device;
-
-	dev_mute_buf.path = path;
-	dev_mute_buf.mute = mute;
-
-	strm_flt.filter_type = CAD_FILTER_CONFIG_DEVICE_MUTE;
-	strm_flt.format_block_len =
-		sizeof(struct cad_flt_cfg_dev_mute);
-	strm_flt.format_block = &dev_mute_buf;
-	rc = cad_ioctl(ctrl->cad_ctrl_handle,
-		CAD_IOCTL_CMD_SET_DEVICE_FILTER_CONFIG,
-		&strm_flt,
-		sizeof(struct cad_stream_filter_struct_type));
-	if (rc)
-		pr_err("cad_ioctl() set mute failed\n");
-
-	return rc;
-}
-EXPORT_SYMBOL(audio_set_device_mute);
-
-
-static int msm8k_audio_dev_ctrl_ioctl(struct inode *inode, struct file *f,
-		unsigned int cmd, unsigned long arg)
-{
-	int rc;
-	u32 uparam;
-
-	D("%s\n", __func__);
-
-	switch (cmd) {
-	case AUDIO_SWITCH_DEVICE:
-		if (copy_from_user(&uparam, (void *)arg,
-				sizeof(uparam)))
-			return CAD_RES_FAILURE;
-
-		rc = audio_switch_device(uparam);
-		break;
-	case AUDIO_SET_VOLUME:
-		if (copy_from_user(&uparam, (void *)arg,
-				sizeof(uparam)))
-			return CAD_RES_FAILURE;
-
-		rc = audio_set_device_volume(uparam);
-
-		break;
-	case AUDIO_SET_MUTE:
-		rc = copy_from_user(&uparam, (void *)arg, sizeof(u32));
 		if (rc) {
-			pr_err("AUDIO_SET_MUTE copy from user failed\n");
+			pr_err("cad_ioctl() set volume failed\n");
 			break;
 		}
-
-		rc = audio_set_device_mute(uparam);
 
 		break;
 	default:
@@ -392,8 +265,7 @@ static int __init msm8k_audio_dev_ctrl_init(void)
 	cos.format = 0;
 	cos.op_code = CAD_OPEN_OP_DEVICE_CTRL;
 	ctrl->cad_ctrl_handle = cad_open(&cos);
-	ctrl->current_rx_device = CAD_HW_DEVICE_ID_HANDSET_SPKR;
-	ctrl->current_tx_device = CAD_HW_DEVICE_ID_HANDSET_MIC;
+	ctrl->current_device = CAD_HW_DEVICE_ID_DEFAULT_RX;
 
 	if (ctrl->cad_ctrl_handle < 0) {
 		pr_err("Dev CTRL handle < 0\n");

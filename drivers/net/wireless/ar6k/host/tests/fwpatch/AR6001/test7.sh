@@ -1,0 +1,31 @@
+
+NETIF=${NETIF:-eth1}
+
+after=/tmp/test7.after
+
+echo Running test7
+
+# Clear RAM
+bmiloader -i $NETIF --write --length=64 --file=test7.zeros --address=0xa0013040
+
+fwpatch --ifname=$NETIF --verbose --file=test7.rpdf
+
+bmiloader -i $NETIF --read --file=$after --length=32 --address=0xa1030000
+cmp --silent $after test7.expected.1
+if [ "$?" -ne 0 ]
+then
+  echo "ERROR: test7 patches not applied"
+  exit 1
+fi
+
+# verify that all RAM bytes were written properly
+bmiloader -i $NETIF --read --file=$after --length=32 --address=0xa0013040
+cmp --silent $after test7.expected.2
+if [ "$?" -ne 0 ]
+then
+  echo "ERROR: test7 RAM not written"
+  exit 1
+fi
+
+rm $after
+exit 0

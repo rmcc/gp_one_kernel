@@ -1,0 +1,111 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+<title>SDIO Card IRQs</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" --> SDIO Card
+    IRQs<!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><a href="#previous#"><img src="Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><a href="#next#"><img src="Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" -->
+<object type="application/x-oleobject" classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+    <param name="Keyword" value="SDIO Card IRQs">
+</object>
+<p class="BODYTEXT">A function driver registers an interrupt request (IRQ) handler
+  with the following form:</p>
+<p class="BODYTEXT"><font face="Courier New, Courier, mono">void IrqHandler(PVOID
+    pContext);</font></p>
+<p class="BODYTEXT">The driver can register a handler that allows synchronous
+  I/O requests or a handler that requires the use of asynchronous I/O requests.
+  Only one handler of either type is allowed for each <font face="Courier New, Courier, mono">PSDDEVICE</font> instance.
+  In a multi-function card, the interrupt request signal is shared between all
+  I/O functions and one or more function drivers may each set a separate IRQ
+  handler for each <font face="Courier New, Courier, mono">PSDDEVICE</font>.
+  SDIO cards implement a card-wide IRQ pending register to relay to
+  the host which functions are interrupting. The function driver's interrupt
+  handler is  called only if its interrupt
+  status bit is set in the IRQ pending
+  register.</p>
+<p class="BODYTEXT"><strong>Synchronous IRQ processing:</strong></p>
+<p class="BODYTEXT">Most drivers can use the synchronous mode of processing and
+  a handler can be set using the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDDEVICE_SET_IRQ_HANDLER">SDDEVICE_SET_IRQ_HANDLER()</a></font> macro.
+  This mode allows
+  the
+  handler  to make blocking (synchronous) I/O requests. This can greatly simplify
+  IRQ processing at the consequence of blocking all other interrupt handlers
+   on a multi-function card. The interrupt handler must issue a configuration
+  request to the SDIO core using the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_ACK_IRQ">SDCONFIG_FUNC_ACK_IRQ</a></font> to
+  acknowledge that it has completed its IRQ processing.</p>
+<p class="BODYTEXT"><strong>Asynchronous IRQ processing:</strong></p>
+<p class="BODYTEXT">Asynchronous IRQ handlers may be called in a non-premptible
+  context and called before all synchronous IRQ handlers. The handler  typically
+  runs in a higher priority (relative to synchronous IRQ) execution
+  context and can process interrupts with lower latency. The consequence of
+  using this
+  mode
+  is that
+  only
+  asynchronous
+  (non-blocking) I/O
+  requests are
+  allowed
+  and can make the interrupt processing more complex. A
+  driver can use the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDDEVICE_SET_ASYNC_IRQ_HANDLER">SDDEVICE_SET_ASYNC_IRQ_HANDLER()</a></font>  macro
+  to set this type of handler.  The interrupt handler must issue a configuration
+  request to the SDIO core using the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_ACK_IRQ">SDCONFIG_FUNC_ACK_IRQ</a></font> to
+  acknowledge that it has completed its IRQ processing.</p>
+<p class="BODYTEXT"><strong><a name="EnableDisableIrq"></a>Enabling/Disabling IRQ:</strong></p>
+<p class="BODYTEXT">The driver enables/unmasks and disables/masks its function
+  interrupt using the <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_UNMASK_IRQ">SDCONFIG_FUNC_UNMASK_IRQ</a></font> and <font face="Courier New, Courier, mono"><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_MASK_IRQ">SDCONFIG_FUNC_MASK_IRQ</a></font>configuration
+  requests. The driver must set up a handler prior to unmasking its IRQ.  These
+  configuration requests may not occur immediately and may be deferred
+  depending on the state of the host controller driver. 
+  A function driver should not assume that unmasking or masking it's IRQ
+  is immediate.  Consequently, masking/unmasking configuration requests are inadequate
+  for synchronizing with a registered interrupt handler (async or sync). If synchronization
+  is required, the driver should use a synchronization primitive such as a semaphore
+  to guard
+  against a synchronous IRQ handler, or a critical section for asynchronous IRQ
+  handlers. If a critical section is used to block an asynchronous IRQ handler,
+  the driver should not hold the lock if a synchronous bus
+  request is submitted. This will result in a deadlock.</p>
+<p><br>
+</p>
+<!-- InstanceEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

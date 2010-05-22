@@ -29,6 +29,7 @@
 #include <linux/personality.h>
 #include <linux/unistd.h>
 #include <linux/ipc.h>
+#include <linux/marker.h>
 #include <asm/uaccess.h>
 #include "entry.h"
 
@@ -132,6 +133,8 @@ asmlinkage long sys_ipc(uint call, int first, unsigned long second,
 {
         struct ipc_kludge tmp;
 	int ret;
+
+        trace_mark(ipc_call, "call %u first %d", call, first);
 
         switch (call) {
         case SEMOP:

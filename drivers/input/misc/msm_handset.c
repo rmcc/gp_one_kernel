@@ -3,7 +3,7 @@
  *
  * Driver for MSM handset events driver.
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -78,8 +78,7 @@ static int __init hs_probe(struct platform_device *pdev)
 	ip_dev->id.product	= 1;
 	ip_dev->id.version	= 1;
 
-	ip_dev->evbit[0] = BIT(EV_SW) | BIT(EV_KEY);
-	ip_dev->keybit[BIT_WORD(KEY_MEDIA)] = BIT_MASK(KEY_MEDIA);
+	ip_dev->evbit[0] = BIT(EV_SW);
 	/* TODO: set this based on switchmap/keymap coming
 	 * from board files.
 	 */

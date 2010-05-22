@@ -1,0 +1,68 @@
+#!/bin/sh
+# automated build scripts building help
+# invoke example  ./packemdocs.scp HEAD /cygdrive/f/work/doc_output 
+
+printusage() {
+  echo "command line example: ./packemdocs.scp HEAD /cygdrive/f/work/doc_output "
+}
+
+if [ -z "$1" ]; then
+   echo "Missing CVS branch"
+   printusage
+   exit
+fi
+if [ -z "$2" ]; then
+   echo "Missing output path"
+   printusage
+   exit
+fi
+
+BRANCH_LEVEL=$1
+OUTPUT=$2
+EMSDIOBASE=$OUTPUT/$BRANCH_LEVEL/EMSDIO
+
+
+
+cleanup() {
+    rm -f -r $1
+}
+
+removefiles() {
+    rm  -f $1
+}
+ 
+preparedocs() {
+   mkdir $2
+   cp  -r $1/doc $2
+   pushd .
+   cd  $2/doc/Help
+   hhc $3
+   popd
+   removefiles $2/doc/Help/*.hhc  
+   removefiles $2/doc/Help/*.hhk 
+   removefiles $2/doc/Help/*.hhp
+   removefiles $2/doc/Help/documentation.xml
+}
+
+makearchive() {
+   pushd .
+   cd $1
+   tar -cf $1.tar doc
+   popd
+}
+
+cleanup      $OUTPUT/help_hdk
+cleanup      $OUTPUT/help_pdk
+
+preparedocs  $OUTPUT/help_pdk_final $OUTPUT/help_pdk emsdio_pdk.hhp
+preparedocs  $OUTPUT/help_hdk_final $OUTPUT/help_hdk emsdio_hdk.hhp
+
+makearchive  $OUTPUT/help_hdk
+makearchive  $OUTPUT/help_pdk
+
+cleanup      $OUTPUT/help_hdk
+cleanup      $OUTPUT/help_pdk
+
+
+
+

@@ -1,57 +1,20 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/*
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -93,14 +56,6 @@ struct cad_aux_pcm_gpios {
 	int	clkin_a;
 };
 
-struct cad_i2s_gpios {
-	s32	sdac_din;
-	s32	sdac_dout;
-	s32	sdac_wsout;
-	s32	cc_i2s_clk;
-	s32	audio_master_clkout;
-};
-
 struct cad_state_struct_type {
 	struct mutex			sync;
 	struct cad_func_tbl_type	*resource_alloc;
@@ -115,7 +70,6 @@ struct cad_state_struct_type {
 
 	struct cad_session_info_struct_type session_info[CAD_MAX_SESSION];
 	struct cad_aux_pcm_gpios	aux_pcm;
-	struct cad_i2s_gpios		i2s_gpios;
 };
 
 struct cad_singleton_info_struct_type {
@@ -133,7 +87,6 @@ u32 g_audio_base;
 u32 g_audio_size;
 
 static s32 get_gpios(struct platform_device *pdev);
-static s32 get_i2s_gpios(struct platform_device *pdev);
 static u8 add_ref_count(void);
 static u8 release_ref_count(void);
 
@@ -175,47 +128,59 @@ static int __init cad_probe(struct platform_device *pdev)
 	rc = get_gpios(pdev);
 	if (rc != CAD_RES_SUCCESS) {
 		pr_err("GPIO configuration failed\n");
-		rc = CAD_RES_FAILURE;
-		goto done;
+		return rc;
 	}
 
 	rc = cad_audio_dec_init(&cad.audiodec);
 	if (rc != CAD_RES_SUCCESS) {
 		pr_err("cad_audio_dec_init failed\n");
-		rc = CAD_RES_FAILURE;
-		goto done;
+		return rc;
 	}
 
 	rc = cad_audio_enc_init(&cad.audioenc);
 	if (rc != CAD_RES_SUCCESS) {
 		pr_err("cad_audio_enc_init failed\n");
-		rc = CAD_RES_FAILURE;
-		goto done;
+		return rc;
 	}
 
 	rc = cad_ard_init(&cad.ard);
 	if (rc != CAD_RES_SUCCESS) {
 		pr_err("cad_ard_init failed\n");
-		rc = CAD_RES_FAILURE;
-		goto done;
+		return rc;
 	}
 
 	rc = cad_volume_init(&cad.volume);
 	if (rc != CAD_RES_SUCCESS) {
 		pr_err("cad_volume_init failed\n");
-		rc = CAD_RES_FAILURE;
-		goto done;
+		return rc;
 	}
 
-	rc = cad_dtmf_init(&cad.dtmf);
-	if (rc != CAD_RES_SUCCESS) {
-		pr_err("cad_dtmf_init failed\n");
-		rc = CAD_RES_FAILURE;
-		goto done;
-	}
 done:
 	return rc;
 }
+
+s32 cad_switch_bt_sco(int on)
+{
+	s32 rc;
+	int val;
+	rc = CAD_RES_SUCCESS;
+
+	D("%s: %s called\n", MODULE_NAME, __func__);
+
+	if (on)
+		val = 1;
+	else
+		val = 0;
+
+	gpio_set_value(cad.aux_pcm.dout, val);
+	gpio_set_value(cad.aux_pcm.din, val);
+	gpio_set_value(cad.aux_pcm.syncout, val);
+	gpio_set_value(cad.aux_pcm.clkin_a, val);
+
+	return rc;
+}
+EXPORT_SYMBOL(cad_switch_bt_sco);
+
 
 
 s32 cad_open(struct cad_open_struct_type *open_param)
@@ -235,23 +200,15 @@ s32 cad_open(struct cad_open_struct_type *open_param)
 	if (open_param != NULL) {
 		for (handle_temp = 1; handle_temp < CAD_MAX_SESSION;
 				handle_temp++) {
-			if (cad.session_info[handle_temp].status ==
-					CAD_SESSION_FREE) {
-				if (open_param->op_code == CAD_OPEN_OP_READ) {
+			if (CAD_SESSION_FREE ==
+					cad.session_info[handle_temp].status) {
+				if (CAD_OPEN_OP_READ == open_param->op_code)
 					cad.session_info[handle_temp].hw_accel
 							= cad.audioenc;
-				} else if (open_param->op_code ==
-					CAD_OPEN_OP_WRITE) {
-
-					if (open_param->format !=
-						CAD_FORMAT_DTMF)
-
-						cad.session_info[handle_temp].
-							hw_accel = cad.audiodec;
-					else
-						cad.session_info[handle_temp].
-							hw_accel = cad.dtmf;
-				}
+				else if (CAD_OPEN_OP_WRITE ==
+							open_param->op_code)
+					cad.session_info[handle_temp].hw_accel
+							= cad.audiodec;
 				rc = CAD_RES_SUCCESS;
 				break;
 			}
@@ -387,7 +344,7 @@ s32 cad_read(s32 driver_handle, struct cad_buf_struct_type *buf)
 		data_read = cad.session_info[driver_handle].hw_accel->
 					read(driver_handle, buf);
 
-	return buf->max_size;
+	return data_read;
 }
 EXPORT_SYMBOL(cad_read);
 
@@ -404,6 +361,9 @@ s32 cad_write(s32 driver_handle, struct cad_buf_struct_type *buf)
 		cad.session_info[driver_handle].hw_accel->write)
 		data_written = cad.session_info[driver_handle].hw_accel->
 			write(driver_handle, buf);
+
+	else if (cad.ard && cad.ard->write)
+		data_written = cad.ard->write(driver_handle, buf);
 
 	return data_written;
 }
@@ -424,7 +384,7 @@ s32 cad_ioctl(s32 driver_handle, u32 cmd_code, void *cmd_buf, u32 cmd_buf_len)
 		ret_val = cad.ard->ioctl(driver_handle, cmd_code, cmd_buf,
 								cmd_buf_len);
 
-	if ((ret_val == CAD_RES_SUCCESS) && cad.volume && cad.volume->ioctl)
+	if (ret_val == CAD_RES_SUCCESS && cad.volume && cad.volume->ioctl)
 		ret_val = cad.volume->ioctl(driver_handle, cmd_code, cmd_buf,
 								cmd_buf_len);
 
@@ -477,7 +437,6 @@ static void __exit cad_exit(void)
 		(void)cad_audio_enc_dinit();
 		(void)cad_ard_dinit();
 		(void)cad_volume_dinit();
-		(void)cad_dtmf_dinit();
 
 		iounmap(g_audio_mem);
 
@@ -485,12 +444,6 @@ static void __exit cad_exit(void)
 		gpio_free(cad.aux_pcm.din);
 		gpio_free(cad.aux_pcm.syncout);
 		gpio_free(cad.aux_pcm.clkin_a);
-
-		gpio_free(cad.i2s_gpios.sdac_din);
-		gpio_free(cad.i2s_gpios.sdac_dout);
-		gpio_free(cad.i2s_gpios.sdac_wsout);
-		gpio_free(cad.i2s_gpios.cc_i2s_clk);
-		gpio_free(cad.i2s_gpios.audio_master_clkout);
 	} else {
 		pr_err("CAD not De-Initialized as cad_ref_ct = %d\n",
 			cad_singleton.cad_ref_ct);
@@ -505,7 +458,6 @@ static s32 get_gpios(struct platform_device *pdev)
 
 	rc = CAD_RES_SUCCESS;
 
-	get_i2s_gpios(pdev);
 
 	/* Claim all of the GPIOs. */
 	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
@@ -569,96 +521,6 @@ static s32 get_gpios(struct platform_device *pdev)
 }
 
 
-static s32 get_i2s_gpios(struct platform_device *pdev)
-{
-	s32			rc;
-	struct resource		*res;
-
-	rc = CAD_RES_SUCCESS;
-
-	/* sdac_din - data in line*/
-	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
-		"sdac_din");
-
-	if  (!res) {
-		pr_err("Failed to get gpio SDAC DIN\n");
-		return -ENODEV;
-	}
-
-	cad.i2s_gpios.sdac_din = res->start;
-	rc = gpio_request(res->start, "SDAC DIN");
-	if (rc) {
-		pr_err("GPIO request for SDAC DIN failed\n");
-		return rc;
-	}
-
-	/* sdac_dout - data out line*/
-	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
-		"sdac_dout");
-
-	if  (!res) {
-		pr_err("Failed to get gpio SDAC DOUT\n");
-		return -ENODEV;
-	}
-
-	cad.i2s_gpios.sdac_dout = res->start;
-	rc = gpio_request(res->start, "SDAC DOUT");
-	if (rc) {
-		pr_err("GPIO request for SDAC DOUT failed\n");
-		return rc;
-	}
-
-	/* sdac_wsout - word select for SADC*/
-	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
-		"sdac_wsout");
-
-	if  (!res) {
-		pr_err("Failed to get gpio SDAC WSOUT\n");
-		return -ENODEV;
-	}
-
-	cad.i2s_gpios.sdac_wsout = res->start;
-	rc = gpio_request(res->start, "SDAC WSOUT");
-	if (rc) {
-		pr_err("GPIO request for SDAC WSOUT failed\n");
-		return rc;
-	}
-
-	/* cc_i2s_clk - */
-	/* bit clock comes from outside since MSM is slave */
-	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
-		"cc_i2s_clk");
-
-	if  (!res) {
-		pr_err("Failed to get gpio CC I2S CLK\n");
-		return -ENODEV;
-	}
-
-	cad.i2s_gpios.cc_i2s_clk = res->start;
-	rc = gpio_request(res->start, "CC I2S CLK");
-	if (rc) {
-		pr_err("GPIO request for CC I2S CLK failed\n");
-		return rc;
-	}
-
-	/* audio_master_clkout - slave*/
-	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
-		"audio_master_clkout");
-
-	if  (!res) {
-		pr_err("Failed to get gpio AUDIO MASTER CLKOUT\n");
-		return -ENODEV;
-	}
-
-	cad.i2s_gpios.audio_master_clkout = res->start;
-	rc = gpio_request(res->start, "AUDIO MASTER CLKOUT");
-	if (rc) {
-		pr_err("GPIO request for AUDIO MASTER CLKOUT failed\n");
-		return rc;
-	}
-
-	return rc;
-}
 
 u8 add_ref_count(void)
 {

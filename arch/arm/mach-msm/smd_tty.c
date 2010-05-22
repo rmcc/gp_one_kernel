@@ -1,7 +1,6 @@
 /* arch/arm/mach-msm/smd_tty.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -21,7 +20,6 @@
 #include <linux/device.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
-#include <linux/wakelock.h>
 
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
@@ -37,7 +35,6 @@ static DEFINE_MUTEX(smd_tty_lock);
 struct smd_tty_info {
 	smd_channel_t *ch;
 	struct tty_struct *tty;
-	struct wake_lock wake_lock;
 	int open_count;
 	struct work_struct tty_work;
 };
@@ -142,7 +139,6 @@ static void smd_tty_work_func(struct work_struct *work)
 		}
 		mutex_unlock(&smd_tty_lock);
 
-		wake_lock_timeout(&info->wake_lock, HZ / 2);
 		tty_flip_buffer_push(tty);
 	}
 
@@ -172,7 +168,6 @@ static int smd_tty_open(struct tty_struct *tty, struct file *f)
 	info = smd_tty + n;
 
 	mutex_lock(&smd_tty_lock);
-	wake_lock_init(&info->wake_lock, WAKE_LOCK_SUSPEND, tty_map_tbl[n]);
 	tty->driver_data = info;
 
 	if (info->open_count++ == 0) {
@@ -187,8 +182,6 @@ static int smd_tty_open(struct tty_struct *tty, struct file *f)
 				smsm_change_state(SMSM_APPS_STATE,
 						  0, SMSM_SMD_LOOPBACK);
 				msleep(100);
-			} else if (strncmp(tty_map_tbl[n], "DS", 3) == 0) {
-				tty->low_latency = 1;
 			}
 			res = smd_open(tty_map_tbl[n], &info->ch, info,
 				       smd_tty_notify);
@@ -210,7 +203,6 @@ static void smd_tty_close(struct tty_struct *tty, struct file *f)
 	if (--info->open_count == 0) {
 		info->tty = 0;
 		tty->driver_data = 0;
-		wake_lock_destroy(&info->wake_lock);
 		if (info->ch) {
 			smd_close(info->ch);
 			info->ch = 0;

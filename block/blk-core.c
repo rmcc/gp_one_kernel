@@ -30,6 +30,7 @@
 #include <linux/cpu.h>
 #include <linux/blktrace_api.h>
 #include <linux/fault-inject.h>
+#include <trace/block.h>
 
 #include "blk.h"
 
@@ -207,7 +208,7 @@ void blk_plug_device(struct request_queue *q)
 
 	if (!queue_flag_test_and_set(QUEUE_FLAG_PLUGGED, q)) {
 		mod_timer(&q->unplug_timer, jiffies + q->unplug_delay);
-		blk_add_trace_generic(q, NULL, 0, BLK_TA_PLUG);
+		trace_block_generic(q, NULL, 0, BLK_TA_PLUG);
 	}
 }
 EXPORT_SYMBOL(blk_plug_device);
@@ -295,7 +296,7 @@ void blk_unplug_work(struct work_struct *work)
 	struct request_queue *q =
 		container_of(work, struct request_queue, unplug_work);
 
-	blk_add_trace_pdu_int(q, BLK_TA_UNPLUG_IO, NULL,
+	trace_block_pdu_int(q, BLK_TA_UNPLUG_IO, NULL,
 				q->rq.count[READ] + q->rq.count[WRITE]);
 
 	q->unplug_fn(q);
@@ -305,7 +306,7 @@ void blk_unplug_timeout(unsigned long data)
 {
 	struct request_queue *q = (struct request_queue *)data;
 
-	blk_add_trace_pdu_int(q, BLK_TA_UNPLUG_TIMER, NULL,
+	trace_block_pdu_int(q, BLK_TA_UNPLUG_TIMER, NULL,
 				q->rq.count[READ] + q->rq.count[WRITE]);
 
 	kblockd_schedule_work(&q->unplug_work);
@@ -317,7 +318,7 @@ void blk_unplug(struct request_queue *q)
 	 * devices don't necessarily have an ->unplug_fn defined
 	 */
 	if (q->unplug_fn) {
-		blk_add_trace_pdu_int(q, BLK_TA_UNPLUG_IO, NULL,
+		trace_block_pdu_int(q, BLK_TA_UNPLUG_IO, NULL,
 					q->rq.count[READ] + q->rq.count[WRITE]);
 
 		q->unplug_fn(q);
@@ -806,7 +807,7 @@ rq_starved:
 	if (ioc_batching(q, ioc))
 		ioc->nr_batch_requests--;
 
-	blk_add_trace_generic(q, bio, rw, BLK_TA_GETRQ);
+	trace_block_generic(q, bio, rw, BLK_TA_GETRQ);
 out:
 	return rq;
 }
@@ -832,7 +833,7 @@ static struct request *get_request_wait(struct request_queue *q, int rw_flags,
 		prepare_to_wait_exclusive(&rl->wait[rw], &wait,
 				TASK_UNINTERRUPTIBLE);
 
-		blk_add_trace_generic(q, bio, rw, BLK_TA_SLEEPRQ);
+		trace_block_generic(q, bio, rw, BLK_TA_SLEEPRQ);
 
 		__generic_unplug_device(q);
 		spin_unlock_irq(q->queue_lock);
@@ -907,7 +908,7 @@ EXPORT_SYMBOL(blk_start_queueing);
  */
 void blk_requeue_request(struct request_queue *q, struct request *rq)
 {
-	blk_add_trace_rq(q, rq, BLK_TA_REQUEUE);
+	trace_block_rq(q, rq, BLK_TA_REQUEUE);
 
 	if (blk_rq_tagged(rq))
 		blk_queue_end_tag(q, rq);
@@ -1132,7 +1133,7 @@ static int __make_request(struct request_queue *q, struct bio *bio)
 		if (!ll_back_merge_fn(q, req, bio))
 			break;
 
-		blk_add_trace_bio(q, bio, BLK_TA_BACKMERGE);
+		trace_block_bio(q, bio, BLK_TA_BACKMERGE);
 
 		req->biotail->bi_next = bio;
 		req->biotail = bio;
@@ -1149,7 +1150,7 @@ static int __make_request(struct request_queue *q, struct bio *bio)
 		if (!ll_front_merge_fn(q, req, bio))
 			break;
 
-		blk_add_trace_bio(q, bio, BLK_TA_FRONTMERGE);
+		trace_block_bio(q, bio, BLK_TA_FRONTMERGE);
 
 		bio->bi_next = req->bio;
 		req->bio = bio;
@@ -1228,7 +1229,7 @@ static inline void blk_partition_remap(struct bio *bio)
 		bio->bi_sector += p->start_sect;
 		bio->bi_bdev = bdev->bd_contains;
 
-		blk_add_trace_remap(bdev_get_queue(bio->bi_bdev), bio,
+		trace_block_remap(bdev_get_queue(bio->bi_bdev), bio,
 				    bdev->bd_dev, bio->bi_sector,
 				    bio->bi_sector - p->start_sect);
 	}
@@ -1399,10 +1400,10 @@ end_io:
 			goto end_io;
 
 		if (old_sector != -1)
-			blk_add_trace_remap(q, bio, old_dev, bio->bi_sector,
+			trace_block_remap(q, bio, old_dev, bio->bi_sector,
 					    old_sector);
 
-		blk_add_trace_bio(q, bio, BLK_TA_QUEUE);
+		trace_block_bio(q, bio, BLK_TA_QUEUE);
 
 		old_sector = bio->bi_sector;
 		old_dev = bio->bi_bdev->bd_dev;
@@ -1504,12 +1505,11 @@ void submit_bio(int rw, struct bio *bio)
 
 		if (unlikely(block_dump)) {
 			char b[BDEVNAME_SIZE];
-			printk(KERN_DEBUG "%s(%d): %s block %Lu on %s (%u sectors)\n",
+			printk(KERN_DEBUG "%s(%d): %s block %Lu on %s\n",
 			current->comm, task_pid_nr(current),
 				(rw & WRITE) ? "WRITE" : "READ",
 				(unsigned long long)bio->bi_sector,
-				bdevname(bio->bi_bdev, b),
-				count);
+				bdevname(bio->bi_bdev, b));
 		}
 	}
 
@@ -1537,7 +1537,7 @@ static int __end_that_request_first(struct request *req, int error,
 	int total_bytes, bio_nbytes, next_idx = 0;
 	struct bio *bio;
 
-	blk_add_trace_rq(req->q, req, BLK_TA_COMPLETE);
+	trace_block_rq(req->q, req, BLK_TA_COMPLETE);
 
 	/*
 	 * for a REQ_BLOCK_PC request, we want to carry any eventual

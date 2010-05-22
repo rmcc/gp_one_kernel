@@ -73,6 +73,7 @@ obj-$(CONFIG_X86_SUMMIT_NUMA)	+= summit_32.o
 obj-y				+= vsmp_64.o
 obj-$(CONFIG_KPROBES)		+= kprobes.o
 obj-$(CONFIG_MODULES)		+= module_$(BITS).o
+obj-$(USE_IMMEDIATE)		+= immediate.o
 obj-$(CONFIG_EFI) 		+= efi.o efi_$(BITS).o efi_stub_$(BITS).o
 obj-$(CONFIG_DOUBLEFAULT) 	+= doublefault_32.o
 obj-$(CONFIG_KGDB)		+= kgdb.o
@@ -98,6 +99,9 @@ obj-$(CONFIG_SCx200)		+= scx200.o
 scx200-y			+= scx200_32.o
 
 obj-$(CONFIG_OLPC)		+= olpc.o
+
+obj-$(CONFIG_HAVE_PSRWLOCK_ASM_CALL)	+= call_64.o
+obj-$(CONFIG_HAVE_PSRWLOCK_ASM_CALL)	+= call_export_64.o
 
 ###
 # 64 bit specific files

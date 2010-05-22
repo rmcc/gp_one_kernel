@@ -52,6 +52,7 @@
 #include <linux/jiffies.h>
 #include <linux/posix-timers.h>
 #include <linux/irq.h>
+#include <linux/marker.h>
 
 #include <asm/io.h>
 #include <asm/processor.h>
@@ -570,6 +571,9 @@ void timer_interrupt(struct pt_regs * regs)
 	 * some CPUs will continuue to take decrementer exceptions */
 	set_dec(DECREMENTER_MAX);
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld", regs->trap,
+		instruction_pointer(regs));
+
 #ifdef CONFIG_PPC32
 	if (atomic_read(&ppc_n_lost_interrupts) != 0)
 		do_IRQ(regs);
@@ -611,6 +615,8 @@ void timer_interrupt(struct pt_regs * regs)
 
 	irq_exit();
 	set_irq_regs(old_regs);
+
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 void wakeup_decrementer(void)

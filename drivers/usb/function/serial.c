@@ -2,7 +2,7 @@
  * serial.c -- USB Serial Function driver
  *
  * Copyright 2003 (C) Al Borchers (alborchers@steinerpoint.com)
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This code is based in part on the Gadget Zero driver, which
  * is Copyright (C) 2003 by David Brownell, all rights reserved.
@@ -102,8 +102,10 @@ static int instances = 2;
 #define GS_CLOSE_TIMEOUT		15
 
 #define GS_DEFAULT_USE_ACM		0
-
-#define GS_DEFAULT_DTE_RATE		9600
+///+++ FIH_ADQ +++ 2009.09.02 Sung Chuan
+///#define GS_DEFAULT_DTE_RATE		9600
+#define GS_DEFAULT_DTE_RATE		384000
+///--- FIH_ADQ --- 2009.09.02 Sung Chuan
 #define GS_DEFAULT_DATA_BITS		8
 #define GS_DEFAULT_PARITY		USB_CDC_NO_PARITY
 #define GS_DEFAULT_CHAR_FORMAT		USB_CDC_1_STOP_BITS
@@ -228,13 +230,13 @@ static int gs_open(struct tty_struct *tty, struct file *file);
 static void gs_close(struct tty_struct *tty, struct file *file);
 static int gs_write(struct tty_struct *tty,
 		    const unsigned char *buf, int count);
-static void gs_put_char(struct tty_struct *tty, unsigned char ch);
+static int gs_put_char(struct tty_struct *tty, unsigned char ch);
 static void gs_flush_chars(struct tty_struct *tty);
 static int gs_write_room(struct tty_struct *tty);
 static int gs_chars_in_buffer(struct tty_struct *tty);
 static void gs_throttle(struct tty_struct *tty);
 static void gs_unthrottle(struct tty_struct *tty);
-static void gs_break(struct tty_struct *tty, int break_state);
+static int gs_break(struct tty_struct *tty, int break_state);
 static int gs_ioctl(struct tty_struct *tty, struct file *file,
 		    unsigned int cmd, unsigned long arg);
 static void gs_set_termios(struct tty_struct *tty, struct ktermios *old);
@@ -872,14 +874,15 @@ exit:
 /*
  * gs_put_char
  */
-static void gs_put_char(struct tty_struct *tty, unsigned char ch)
+static int gs_put_char(struct tty_struct *tty, unsigned char ch)
 {
 	unsigned long flags;
+	int ret = 0;
 	struct gs_port *port = tty->driver_data;
 
 	if (port == NULL) {
 		printk(KERN_ERR "gs_put_char: NULL port pointer\n");
-		return;
+		goto out;
 	}
 
 	gs_debug("gs_put_char: (%d,%p) char=0x%x, called from %p, %p, %p\n",
@@ -891,19 +894,21 @@ static void gs_put_char(struct tty_struct *tty, unsigned char ch)
 	if (port->port_dev == NULL) {
 		printk(KERN_ERR "gs_put_char: (%d,%p) port is not connected\n",
 		       port->port_num, tty);
-		goto exit;
+		goto exit_unlock;
 	}
 
 	if (port->port_open_count == 0) {
 		printk(KERN_ERR "gs_put_char: (%d,%p) port is closed\n",
 		       port->port_num, tty);
-		goto exit;
+		goto exit_unlock;
 	}
 
-	gs_buf_put(port->port_write_buf, &ch, 1);
+	ret = gs_buf_put(port->port_write_buf, &ch, 1);
 
-exit:
+exit_unlock:
 	spin_unlock_irqrestore(&port->port_lock, flags);
+out:
+	return ret;
 }
 
 /*
@@ -1022,8 +1027,9 @@ static void gs_unthrottle(struct tty_struct *tty)
 /*
  * gs_break
  */
-static void gs_break(struct tty_struct *tty, int break_state)
+static int gs_break(struct tty_struct *tty, int break_state)
 {
+	return 0;
 }
 
 /*

@@ -50,6 +50,7 @@
 #include <linux/cn_proc.h>
 #include <linux/audit.h>
 #include <linux/tracehook.h>
+#include <trace/fs.h>
 
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1223,6 +1224,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			if (!try_module_get(fmt->module))
 				continue;
 			read_unlock(&binfmt_lock);
+			/* Le changement d'image se fait par cet appel */
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
 				tracehook_report_exec(fmt, bprm, regs);
@@ -1337,8 +1339,10 @@ int do_execve(char * filename,
 		goto out;
 
 	current->flags &= ~PF_KTHREAD;
+	exit_user_markers(current);
 	retval = search_binary_handler(bprm,regs);
 	if (retval >= 0) {
+		trace_fs_exec(filename);
 		/* execve success */
 		security_bprm_free(bprm);
 		acct_update_integrals(current);

@@ -338,6 +338,10 @@
 #define __NR_dup3		330
 #define __NR_pipe2		331
 #define __NR_inotify_init1	332
+#define __NR_marker		333
+#define __NR_trace		334
+
+#define NR_syscalls		335
 
 #ifdef __KERNEL__
 

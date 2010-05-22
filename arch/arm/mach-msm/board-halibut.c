@@ -1,8 +1,9 @@
 /* linux/arch/arm/mach-msm/board-halibut.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
+ *
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -27,7 +28,6 @@
 #include <linux/mtd/partitions.h>
 
 #include <mach/hardware.h>
-#include <mach/irqs.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -44,8 +44,6 @@
 #include <mach/msm_hsusb.h>
 #include <mach/vreg.h>
 #include <mach/msm_rpcrouter.h>
-#include <mach/memory.h>
-#include <mach/camera.h>
 
 #ifdef CONFIG_USB_FUNCTION
 #include <linux/usb/mass_storage_function.h>
@@ -56,9 +54,8 @@
 #endif
 
 #include "devices.h"
+#include "keypad-surf-ffa.h"
 #include "socinfo.h"
-#include "msm-keypad-devices.h"
-#include "pm.h"
 
 #ifdef CONFIG_MSM_STACKED_MEMORY
 #define MSM_SMI_BASE		0x100000
@@ -72,7 +69,7 @@
 #define MSM_PMEM_CAMERA_SIZE	0xa00000
 #define MSM_PMEM_ADSP_SIZE	0x800000
 #define MSM_PMEM_GPU1_SIZE	0x800000
-#define MSM_FB_SIZE		0x200000
+#define MSM_FB_SIZE		0x800000
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -248,11 +245,6 @@ static struct usb_composition usb_func_composition[] = {
 	},
 
 	{
-		.product_id         = 0x9015,
-		.functions          = 0x12, /* 10010 */
-	},
-
-	{
 		.product_id         = 0x9016,
 		.functions	    = 0xD, /* 01101 */
 	},
@@ -275,11 +267,6 @@ static struct usb_composition usb_func_composition[] = {
 	{
 		.product_id         = 0x9018,
 		.functions	    = 0x1F, /* 011111 */
-	},
-
-	{
-		.product_id         = 0x901A,
-		.functions          = 0x0F, /* 01111 */
 	},
 
 };
@@ -316,13 +303,10 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 #define SND(desc, num) { .name = #desc, .id = num }
 static struct snd_endpoint snd_endpoints_list[] = {
 	SND(HANDSET, 0),
-	SND(MONO_HEADSET, 2),
-	SND(HEADSET, 3),
+	SND(HEADSET, 2),
 	SND(SPEAKER, 6),
 	SND(BT, 12),
-	SND(IN_S_SADC_OUT_HANDSET, 16),
-	SND(IN_S_SADC_OUT_SPEAKER_PHONE, 25),
-	SND(CURRENT, 27),
+	SND(CURRENT, 25),
 };
 #undef SND
 
@@ -405,6 +389,12 @@ static struct platform_device android_pmem_gpu1_device = {
 	.dev = { .platform_data = &android_pmem_gpu1_pdata },
 };
 
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+	.wakeup_irq = MSM_GPIO_TO_INT(45),
+	.inject_rx_on_wakeup = 1,
+	.rx_to_inject = 0x32,
+};
+
 static char *msm_fb_vreg[] = {
         "gp5"           
 };              
@@ -482,7 +472,7 @@ static int mddi_toshiba_backlight_level(int level)
 			out_val = 0x00001387;
 			break;
 		case 1:
-			out_val = 3500;
+			out_val = 3700;
 			break;
 		case 2:
 			out_val = 3200;
@@ -764,9 +754,6 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
 	},
 	{
-		I2C_BOARD_INFO("s5k3e2fx", 0x20 >> 1),
-	},
-	{
 		I2C_BOARD_INFO("mt9p012", 0x6C >> 1),
 	},
 	{
@@ -839,50 +826,26 @@ static void config_camera_off_gpios(void)
 		ARRAY_SIZE(camera_off_gpio_table));
 }
 
-#define MSM_PROBE_INIT(name) name##_probe_init
 static struct msm_camera_sensor_info msm_camera_sensor[] = {
 	{
 		.sensor_reset = 89,
 		.sensor_pwd   = 85,
 		.vcm_pwd      = 0,
 		.sensor_name  = "mt9d112",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(mt9d112),
-#endif
 	},
 	{
 		.sensor_reset = 89,
-		.sensor_pwd   = 85,
-		.vcm_pwd      = 0,
-		.sensor_name  = "s5k3e2fx",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(s5k3e2fx),
-#endif
-	},
-	{
-		.sensor_reset = 89,
-		.sensor_pwd   = 85,
+		.sensor_pwd   = 88,
 		.vcm_pwd      = 88,
 		.sensor_name  = "mt9p012",
-		.flash_type		= MSM_CAMERA_FLASH_LED,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(mt9p012),
-#endif
 	},
 	{
 		.sensor_reset = 89,
 		.sensor_pwd   = 85,
 		.vcm_pwd      = 0,
 		.sensor_name  = "mt9t013",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-#ifdef CONFIG_MSM_CAMERA
-		.sensor_probe = MSM_PROBE_INIT(mt9t013),
-#endif
 	},
 };
-#undef MSM_PROBE_INIT
 
 static struct msm_camera_device_platform_data msm_camera_device_data = {
 	.camera_gpio_on  = config_camera_on_gpios,
@@ -919,18 +882,7 @@ void msm_serial_debug_init(unsigned int base, int irq,
 				struct device *clk_device, int signal_irq);
 static void sdcc_gpio_init(void)
 {
-#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
-	int rc = 0;
-	if (gpio_request(49, "sdc1_status_irq"))
-		pr_err("failed to request gpio sdc1_status_irq\n");
-	rc = gpio_tlmm_config(GPIO_CFG(49, 0, GPIO_INPUT, GPIO_PULL_UP,
-				GPIO_2MA), GPIO_ENABLE);
-	if (rc)
-		printk(KERN_ERR "%s: Failed to configure GPIO %d\n",
-				__func__, rc);
-#endif
 	/* SDC1 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	if (gpio_request(51, "sdc1_data_3"))
 		pr_err("failed to request gpio sdc1_data_3\n");
 	if (gpio_request(52, "sdc1_data_2"))
@@ -943,13 +895,8 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc1_cmd\n");
 	if (gpio_request(56, "sdc1_clk"))
 		pr_err("failed to request gpio sdc1_clk\n");
-#endif
-
-	if (machine_is_msm7201a_ffa())
-		return;
 
 	/* SDC2 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 	if (gpio_request(62, "sdc2_clk"))
 		pr_err("failed to request gpio sdc2_clk\n");
 	if (gpio_request(63, "sdc2_cmd"))
@@ -962,10 +909,8 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc2_data_1\n");
 	if (gpio_request(67, "sdc2_data_0"))
 		pr_err("failed to request gpio sdc2_data_0\n");
-#endif
 
 	/* SDC4 GPIOs */
-#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 	if (gpio_request(19, "sdc4_data_3"))
 		pr_err("failed to request gpio sdc4_data_3\n");
 	if (gpio_request(20, "sdc4_data_2"))
@@ -978,9 +923,9 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc4_data_0\n");
 	if (gpio_request(109, "sdc4_clk"))
 		pr_err("failed to request gpio sdc4_clk\n");
-#endif
 }
 
+static unsigned int vreg_enabled;
 static unsigned sdcc_cfg_data[][6] = {
 	/* SDC1 configs */
 	{
@@ -1014,22 +959,9 @@ static unsigned sdcc_cfg_data[][6] = {
 	}
 };
 
-static unsigned long vreg_sts, gpio_sts;
-static struct mpp *mpp_mmc;
-static struct vreg *vreg_mmc;
-
-static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
+static int msm_sdcc_setup_gpio(int dev_id, unsigned enable)
 {
 	int i, rc;
-
-	if (!(test_bit(dev_id, &gpio_sts)^enable))
-		return;
-
-	if (enable)
-		set_bit(dev_id, &gpio_sts);
-	else
-		clear_bit(dev_id, &gpio_sts);
-
 	for (i = 0; i < ARRAY_SIZE(sdcc_cfg_data[dev_id - 1]); i++) {
 		rc = gpio_tlmm_config(sdcc_cfg_data[dev_id - 1][i],
 			enable ? GPIO_ENABLE : GPIO_DISABLE);
@@ -1038,136 +970,86 @@ static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
 				__func__, sdcc_cfg_data[dev_id - 1][i], rc);
 		}
 	}
+	return rc;
 }
 
-static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
+static int msm_sdcc_setup_power(int dev_id, int on)
 {
 	int rc = 0;
-	struct platform_device *pdev;
+	struct mpp *mpp_mmc;
+	struct vreg *vreg_mmc;
 
-	pdev = container_of(dv, struct platform_device, dev);
-	msm_sdcc_setup_gpio(pdev->id, !!vdd);
+	rc = msm_sdcc_setup_gpio(dev_id, on);
+	if (rc)
+		return -EIO;
 
-	if (vdd == 0) {
-		if (!vreg_sts)
+	if ((on && vreg_enabled) || (!on && !vreg_enabled))
 			return 0;
 
-		clear_bit(pdev->id, &vreg_sts);
-
-		if (!vreg_sts) {
-			if (machine_is_msm7201a_ffa())
-				rc = mpp_config_digital_out(mpp_mmc,
-				     MPP_CFG(MPP_DLOGIC_LVL_MSMP,
-				     MPP_DLOGIC_OUT_CTRL_LOW));
-			else
-				rc = vreg_disable(vreg_mmc);
-			if (rc)
-				printk(KERN_ERR "%s: return val: %d \n",
-					__func__, rc);
-		}
-		return 0;
-	}
-
-	if (!vreg_sts) {
-		if (machine_is_msm7201a_ffa())
-			rc = mpp_config_digital_out(mpp_mmc,
-			     MPP_CFG(MPP_DLOGIC_LVL_MSMP,
-			     MPP_DLOGIC_OUT_CTRL_HIGH));
-		else {
-			rc = vreg_set_level(vreg_mmc, 2850);
-			if (!rc)
-				rc = vreg_enable(vreg_mmc);
-		}
-		if (rc)
-			printk(KERN_ERR "%s: return val: %d \n",
-					__func__, rc);
-	}
-	set_bit(pdev->id, &vreg_sts);
-	return 0;
-}
-
-#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
-static unsigned int halibut_sdcc_slot_status(struct device *dev)
-{
-	return (unsinged int) gpio_get_value(49);
-}
-#endif
-
-static struct mmc_platform_data halibut_sdcc_data = {
-	.ocr_mask	= MMC_VDD_28_29,
-	.translate_vdd	= msm_sdcc_setup_power,
-#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
-	.status         = halibut_sdcc_slot_status,
-	.status_irq	= MSM_GPIO_TO_INT(49),
-	.irq_flags      = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-#endif
-};
-
-static void __init halibut_init_mmc(void)
-{
 	if (machine_is_msm7201a_ffa()) {
 		mpp_mmc = mpp_get(NULL, "mpp3");
 		if (!mpp_mmc) {
-			printk(KERN_ERR "%s: mpp get failed (%ld)\n",
-			       __func__, PTR_ERR(vreg_mmc));
-			return;
+			printk(KERN_ERR "%s: mpp get failed\n", __func__);
+			return -EIO;
+		}
+
+				rc = mpp_config_digital_out(mpp_mmc,
+				     MPP_CFG(MPP_DLOGIC_LVL_MSMP,
+		     on ? MPP_DLOGIC_OUT_CTRL_HIGH : MPP_DLOGIC_OUT_CTRL_LOW));
+		if (rc) {
+			printk(KERN_ERR
+				"%s: Failed to configure mpp (%d)\n",
+					__func__, rc);
+			return rc;
 		}
 	} else {
 		vreg_mmc = vreg_get(NULL, "mmc");
 		if (IS_ERR(vreg_mmc)) {
 			printk(KERN_ERR "%s: vreg get failed (%ld)\n",
 			       __func__, PTR_ERR(vreg_mmc));
-			return;
-		}
+			return PTR_ERR(vreg_mmc);
 	}
 
+		rc = on ? vreg_enable(vreg_mmc) : vreg_disable(vreg_mmc);
+		if (rc) {
+			printk(KERN_ERR "%s: Failed to configure vreg (%d)\n",
+					__func__, rc);
+			return rc;
+		}
+	}
+	vreg_enabled = on;
+	return 0;
+}
+
+static struct mmc_platform_data halibut_sdcc_data = {
+	.ocr_mask	= MMC_VDD_28_29,
+	.setup_power	= msm_sdcc_setup_power,
+};
+
+static void __init halibut_init_mmc(void)
+{
 	sdcc_gpio_init();
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	msm_add_sdcc(1, &halibut_sdcc_data);
-#endif
 
 	if (machine_is_msm7201a_surf()) {
-#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 		msm_add_sdcc(2, &halibut_sdcc_data);
-#endif
-#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 		msm_add_sdcc(4, &halibut_sdcc_data);
-#endif
 	}
 }
 
-static struct msm_panel_common_pdata mdp_pdata = {
-	.gpio = 97,
-};
-
 static void __init msm_fb_add_devices(void)
 {
-	msm_fb_register_device("mdp", &mdp_pdata);
+        msm_fb_register_device("mdp", 0);
         msm_fb_register_device("ebi2", 0);
         msm_fb_register_device("pmdh", &mddi_pdata);
         msm_fb_register_device("emdh", 0);
         msm_fb_register_device("tvenc", &tvenc_pdata);
 }
 
-static struct msm_i2c_platform_data msm_i2c_pdata = {
-	.clk_freq = 100000,
-};
-
-static void __init msm_device_i2c_init(void)
-{
-	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
-}
-
-static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR] = {
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE].latency = 16000,
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN].latency = 12000,
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency = 2000,
-};
 
 static void __init halibut_init(void)
 {
-	if (socinfo_init() < 0)
-		BUG();
+	socinfo_init();
 
 	if (machine_is_msm7201a_ffa()) {
 		smc91x_resources[0].start = 0x98000300;
@@ -1188,20 +1070,13 @@ static void __init halibut_init(void)
 #endif
 	msm_hsusb_pdata.soc_version = socinfo_get_version();
 	msm_acpu_clock_init(&halibut_clock_data);
+	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata,
 	msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata,
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	msm_camera_add_device();
-	msm_device_i2c_init();
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
-
-#ifdef CONFIG_SURF_FFA_GPIO_KEYPAD
-	if (machine_is_msm7201a_ffa())
-		platform_device_register(&keypad_device_7k_ffa);
-	else
-		platform_device_register(&keypad_device_surf);
-#endif
-
+	init_surf_ffa_keypad(machine_is_msm7201a_ffa());
 	halibut_init_mmc();
 #ifdef CONFIG_USB_FUNCTION
 	hsusb_gpio_init();
@@ -1212,12 +1087,11 @@ static void __init halibut_init(void)
 	msm_hsusb_rpc_connect();
 	msm_hsusb_set_vbus_state(1) ;
 #endif
-	msm_pm_set_platform_data(msm_pm_data);
 }
 
 static void __init msm_halibut_allocate_memory_regions(void)
 {
-	void *addr;
+	void *addr, *addr_1m_aligned;
 	unsigned long size;
 
 	size = MSM_PMEM_MDP_SIZE;
@@ -1241,12 +1115,19 @@ static void __init msm_halibut_allocate_memory_regions(void)
 	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
 	       "for adsp pmem\n", size, addr, __pa(addr));
 
+	/* The GPU1 area must be aligned to a 1M boundary */
+	/* XXX For now allocate an extra 1M, use the aligned part,
+	 * waste the extra memory */
+	size = MSM_PMEM_GPU1_SIZE + 0x100000 - PAGE_SIZE;
+	addr = alloc_bootmem(size);
+	addr_1m_aligned = (void *)(((unsigned int)addr + 0x100000) &
+				   0xfff00000);
 	size = MSM_PMEM_GPU1_SIZE;
-	addr = alloc_bootmem_aligned(size, 0x100000);
-	android_pmem_gpu1_pdata.start = __pa(addr);
+	android_pmem_gpu1_pdata.start = __pa(addr_1m_aligned);
 	android_pmem_gpu1_pdata.size = size;
 	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	       "for gpu1 pmem\n", size, addr, __pa(addr));
+	       "for gpu1 pmem\n", size, addr_1m_aligned,
+	       __pa(addr_1m_aligned));
 
 	size = MSM_FB_SIZE;
 	addr = alloc_bootmem(size);
@@ -1259,8 +1140,6 @@ static void __init msm_halibut_allocate_memory_regions(void)
 
 static void __init halibut_map_io(void)
 {
-	msm_shared_ram_phys = 0x01F00000;
-
 	msm_map_common_io();
 	msm_clock_init(msm_clocks_7x01a, msm_num_clocks_7x01a);
 	msm_halibut_allocate_memory_regions();
@@ -1290,7 +1169,7 @@ MACHINE_START(MSM7201A_FFA, "QCT FFA7201A Board")
 	.timer		= &msm_timer,
 MACHINE_END
 
-MACHINE_START(MSM7201A_SURF, "QCT SURF7201A Board")
+MACHINE_START(MSM7201A_SURF, "Halibut Board (QCT SURF7200A)")
 #ifdef CONFIG_MSM_DEBUG_UART
 	.phys_io        = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,

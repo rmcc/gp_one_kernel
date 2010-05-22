@@ -323,6 +323,16 @@ config CPUSETS
 config HAVE_UNSTABLE_SCHED_CLOCK
 	bool
 
+#
+# Architectures with a 64-bits get_cycles() should select this.
+# They should also define
+# get_cycles_barrier() : instruction synchronization barrier if required
+# get_cycles_rate() : cycle counter rate, in HZ. If 0, TSC are not synchronized
+# across CPUs or their frequency may vary due to frequency scaling.
+#
+config HAVE_GET_CYCLES
+	def_bool n
+
 config GROUP_SCHED
 	bool "Group CPU scheduler"
 	depends on EXPERIMENTAL
@@ -786,11 +796,34 @@ config PROFILING
 	  Say Y here to enable the extended profiling support mechanisms used
 	  by profilers such as OProfile.
 
+config TRACEPOINTS
+	bool "Activate tracepoints"
+	default y
+	help
+	  Place an empty function call at each tracepoint site. Can be
+	  dynamically changed for a probe function.
+
 config MARKERS
 	bool "Activate markers"
+	depends on TRACEPOINTS
 	help
 	  Place an empty function call at each marker site. Can be
 	  dynamically changed for a probe function.
+
+config MARKERS_USERSPACE
+	bool "Activate userspace markers ABI"
+	depends on MARKERS
+	depends on HAVE_MARKERS_ABI
+	help
+	  Allow userspace to register markers through sys_marker. Allows
+	  system-wide userspace library tracing, early boot (init) tracing. List
+	  of markers available through /proc/PID/markers. Activation through
+	  /proc/ltt.
+
+config HAVE_MARKERS_ABI
+	def_bool n
+
+source "ltt/Kconfig"
 
 source "arch/Kconfig"
 
@@ -803,6 +836,24 @@ config PROC_PAGE_MONITOR
 	  /proc/pid/smaps, /proc/pid/clear_refs, /proc/pid/pagemap,
 	  /proc/kpagecount, and /proc/kpageflags. Disabling these
           interfaces will reduce the size of the kernel by approximately 4kb.
+
+config HAVE_IMMEDIATE
+	def_bool n
+
+config IMMEDIATE
+	default y
+	depends on HAVE_IMMEDIATE
+	bool "Immediate value optimization" if EMBEDDED
+	help
+	  Immediate values are used as read-mostly variables that are rarely
+	  updated. They use code patching to modify the values inscribed in the
+	  instruction stream. It provides a way to save precious cache lines
+	  that would otherwise have to be used by these variables. They can be
+	  disabled through the EMBEDDED menu.
+
+	  It consumes slightly more memory and modifies the instruction stream
+	  each time any specially-marked variable is updated. Should really be
+	  disabled for embedded systems with read-only text.
 
 endmenu		# General setup
 

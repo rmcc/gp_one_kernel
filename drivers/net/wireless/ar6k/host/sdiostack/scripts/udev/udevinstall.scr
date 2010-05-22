@@ -1,0 +1,21 @@
+#!/bin/sh
+#install udev scripts for sdio-udev
+# 
+#uses current directory
+
+#put udev in /sbin
+cp udev /sbin
+
+#. set it as the hotplug program
+echo "/sbin/udev" > /proc/sys/kernel/hotplug
+
+# make directories
+mkdir /etc/udev
+mkdir /etc/udev/rules.d
+
+# copy udev rules (change leading number to re-order rule scanning)
+cp sdio-udev.rules /etc/udev/rules.d/10-sdio-udev.rules
+
+# create directory where udev will create device nodes
+mkdir /udev
+

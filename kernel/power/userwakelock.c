@@ -34,6 +34,9 @@ static DEFINE_MUTEX(tree_lock);
 struct user_wake_lock {
 	struct rb_node		node;
 	struct wake_lock	wake_lock;
+///+FIH_ADQ
+	char			userwakelocknametag;
+///-FIH_ADQ
 	char			name[0];
 };
 struct rb_root user_wake_locks;
@@ -110,10 +113,16 @@ static struct user_wake_lock *lookup_wake_lock_name(
 				"memory for %.*s\n", name_len, buf);
 		return ERR_PTR(-ENOMEM);
 	}
+///+FIH_ADQ
+	l->userwakelocknametag = '#';
+///-FIH_ADQ
 	memcpy(l->name, buf, name_len);
 	if (debug_mask & DEBUG_NEW)
 		pr_info("lookup_wake_lock_name: new wake lock %s\n", l->name);
-	wake_lock_init(&l->wake_lock, WAKE_LOCK_SUSPEND, l->name);
+///+FIH_ADQ
+//	wake_lock_init(&l->wake_lock, WAKE_LOCK_SUSPEND, l->name);
+	wake_lock_init(&l->wake_lock, WAKE_LOCK_SUSPEND, &(l->userwakelocknametag));
+///-FIH_ADQ
 	rb_link_node(&l->node, parent, p);
 	rb_insert_color(&l->node, &user_wake_locks);
 	return l;

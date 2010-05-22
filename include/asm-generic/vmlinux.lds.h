@@ -52,7 +52,13 @@
 	. = ALIGN(8);							\
 	VMLINUX_SYMBOL(__start___markers) = .;				\
 	*(__markers)							\
-	VMLINUX_SYMBOL(__stop___markers) = .;
+	VMLINUX_SYMBOL(__stop___markers) = .;				\
+	VMLINUX_SYMBOL(__start___tracepoints) = .;			\
+	*(__tracepoints)						\
+	VMLINUX_SYMBOL(__stop___tracepoints) = .;			\
+	VMLINUX_SYMBOL(__start___imv) = .;				\
+	*(__imv)		/* Immediate values: pointers */	\
+	VMLINUX_SYMBOL(__stop___imv) = .;
 
 #define RO_DATA(align)							\
 	. = ALIGN((align));						\
@@ -60,7 +66,12 @@
 		VMLINUX_SYMBOL(__start_rodata) = .;			\
 		*(.rodata) *(.rodata.*)					\
 		*(__vermagic)		/* Kernel version magic */	\
+		. = ALIGN(8);						\
+		VMLINUX_SYMBOL(__start___imv_cond_end) = .;		\
+		*(__imv_cond_end) /* Immediate condition end pointers */\
+		VMLINUX_SYMBOL(__stop___imv_cond_end) = .;		\
 		*(__markers_strings)	/* Markers: strings */		\
+		*(__tracepoints_strings)/* Tracepoints: strings */	\
 	}								\
 									\
 	.rodata1          : AT(ADDR(.rodata1) - LOAD_OFFSET) {		\

@@ -22,6 +22,12 @@
 #include <linux/workqueue.h>
 
 #include "power.h"
+/* FIH_ADQ, Kenny { */
+#include <linux/gasgauge_bridge.h>
+/* } FIH_ADQ, Kenny */
+///+FIH_ADQ
+#include "linux/pmlog.h"
+///-FIH_ADQ
 
 enum {
 	DEBUG_USER_STATE = 1U << 0,
@@ -43,6 +49,10 @@ enum {
 	SUSPEND_REQUESTED_AND_SUSPENDED = SUSPEND_REQUESTED | SUSPENDED,
 };
 static int state;
+
+/* FIH_ADQ, Kenny { */
+extern int check_USB_type;
+/* } FIH_ADQ, Kenny */
 
 void register_early_suspend(struct early_suspend *handler)
 {
@@ -75,6 +85,10 @@ static void early_suspend(struct work_struct *work)
 	struct early_suspend *pos;
 	unsigned long irqflags;
 	int abort = 0;
+	/* FIH_ADQ, Kenny { */
+    int buf;
+    int ret = 0;
+    /* } FIH_ADQ, Kenny */
 
 	mutex_lock(&early_suspend_lock);
 	spin_lock_irqsave(&state_lock, irqflags);
@@ -93,10 +107,31 @@ static void early_suspend(struct work_struct *work)
 
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("early_suspend: call handlers\n");
+	
+	/* FIH_ADQ, Kenny { */
+    ret = GetBatteryInfo(BATT_ACR_REGISTER, &buf);
+    if(ret < 0)
+        buf = -1;
+    pmlog("early_suspend(): batt capacity=%dmAh, usb charging type=%d\n", (buf*3125)/10000, check_USB_type);
+    /* } FIH_ADQ, Kenny */
+    
 	list_for_each_entry(pos, &early_suspend_handlers, link) {
 		if (pos->suspend != NULL)
 			pos->suspend(pos);
 	}
+///+FIH_ADQ
+#ifdef __FIH_PM_STATISTICS__
+	if (g_pms_run.pre)
+		g_pms_run.time += ((g_pms_bkrun.pre = get_seconds()) - g_pms_run.pre);
+	else
+		g_pms_bkrun.pre = get_seconds();
+	g_pms_bkrun.cnt++;
+#ifdef __FIH_DBG_PM_STATISTICS__
+	g_pms_resume.pre = get_seconds();
+	g_pms_resume.npre = get_nseconds();
+#endif		// __FIH_DBG_PM_STATISTICS__
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
 	mutex_unlock(&early_suspend_lock);
 
 	if (debug_mask & DEBUG_SUSPEND)
@@ -115,6 +150,10 @@ static void late_resume(struct work_struct *work)
 	struct early_suspend *pos;
 	unsigned long irqflags;
 	int abort = 0;
+	/* FIH_ADQ, Kenny { */
+    int buf;
+    int ret = 0;
+    /* } FIH_ADQ, Kenny */
 
 	mutex_lock(&early_suspend_lock);
 	spin_lock_irqsave(&state_lock, irqflags);
@@ -136,6 +175,27 @@ static void late_resume(struct work_struct *work)
 			pos->resume(pos);
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("late_resume: done\n");
+	
+	/* FIH_ADQ, Kenny { */
+    ret = GetBatteryInfo(BATT_ACR_REGISTER, &buf);
+    if(ret < 0)
+        buf = -1;
+    pmlog("late_resume(): batt capacity=%dmAh, usb charging type=%d\n", (buf*3125)/10000, check_USB_type);
+    /* } FIH_ADQ, Kenny */
+///+FIH_ADQ
+#ifdef __FIH_PM_STATISTICS__
+	g_pms_bkrun.time += ((g_pms_run.pre = get_seconds()) - g_pms_bkrun.pre);
+	g_pms_run.cnt++;
+#ifdef __FIH_DBG_PM_STATISTICS__
+	{
+		unsigned long l = get_seconds() - g_pms_resume.pre;
+		g_pms_resume.ntime += ((l) ? (l--, (NSEC_PER_SEC - g_pms_resume.npre + get_nseconds())) : (get_nseconds() - g_pms_resume.npre));
+		g_pms_resume.time += (l + (g_pms_resume.ntime / NSEC_PER_SEC));
+		g_pms_resume.ntime %= NSEC_PER_SEC;
+	}
+#endif		// __FIH_DBG_PM_STATISTICS__
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
 abort:
 	mutex_unlock(&early_suspend_lock);
 }

@@ -7,6 +7,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mc146818rtc.h>
 #include <linux/interrupt.h>
+#include <trace/irq.h>
 
 #include <asm/mtrr.h>
 #include <asm/pgalloc.h>
@@ -142,6 +143,8 @@ asmlinkage void smp_invalidate_interrupt(struct pt_regs *regs)
 		 * BUG();
 		 */
 
+	trace_irq_entry(sender, regs);
+
 	if (f->flush_mm == read_pda(active_mm)) {
 		if (read_pda(mmu_state) == TLBSTATE_OK) {
 			if (f->flush_va == TLB_FLUSH_ALL)
@@ -155,6 +158,7 @@ out:
 	ack_APIC_irq();
 	cpu_clear(cpu, f->flush_cpumask);
 	add_pda(irq_tlb_count, 1);
+	trace_irq_exit(IRQ_HANDLED);
 }
 
 void native_flush_tlb_others(const cpumask_t *cpumaskp, struct mm_struct *mm,

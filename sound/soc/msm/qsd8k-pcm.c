@@ -1,6 +1,6 @@
 /* linux/sound/soc/msm/qsd8k-pcm.c
  *
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.
@@ -83,7 +83,7 @@ static struct snd_pcm_hardware qsd_pcm_playback_hardware = {
 	.channels_min = USE_CHANNELS_MIN,
 	.channels_max = USE_CHANNELS_MAX,
 	.buffer_bytes_max = MAX_BUFFER_SIZE,
-	.period_bytes_min = MIN_PERIOD_SIZE,
+	.period_bytes_min = MAX_PERIOD_SIZE,
 	.period_bytes_max = MAX_PERIOD_SIZE,
 	.periods_min = USE_PERIODS_MIN,
 	.periods_max = USE_PERIODS_MAX,
@@ -99,7 +99,7 @@ static struct snd_pcm_hardware qsd_pcm_capture_hardware = {
 	.channels_min = USE_CHANNELS_MIN,
 	.channels_max = USE_CHANNELS_MAX,
 	.buffer_bytes_max = MAX_BUFFER_SIZE,
-	.period_bytes_min = MIN_PERIOD_SIZE,
+	.period_bytes_min = MAX_PERIOD_SIZE,
 	.period_bytes_max = MAX_PERIOD_SIZE,
 	.periods_min = USE_PERIODS_MIN,
 	.periods_max = USE_PERIODS_MAX,
@@ -127,9 +127,6 @@ static int qsd_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	struct cad_write_pcm_format_struct_type cad_write_pcm_fmt;
 	u32 stream_device[1];
 
-	if (prtd->enabled)
-		return 0;
-
 	prtd->pcm_size = snd_pcm_lib_buffer_bytes(substream);
 	prtd->pcm_count = snd_pcm_lib_period_bytes(substream);
 	prtd->pcm_irq_pos = 0;
@@ -138,7 +135,7 @@ static int qsd_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	cad_stream_info.app_type = CAD_STREAM_APP_PLAYBACK;
 	cad_stream_info.priority = 0;
 	cad_stream_info.buf_mem_type = CAD_STREAM_BUF_MEM_HEAP;
-	cad_stream_info.ses_buf_max_size = prtd->pcm_count;
+	cad_stream_info.ses_buf_max_size = 1024 * 16;
 
 	mutex_lock(&the_locks.lock);
 	rc = cad_ioctl(prtd->cad_w_handle, CAD_IOCTL_CMD_SET_STREAM_INFO,
@@ -181,8 +178,6 @@ static int qsd_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	mutex_unlock(&the_locks.lock);
 	if (rc)
 		printk(KERN_ERR "cad ioctl failed\n");
-	else
-		prtd->enabled = 1;
 
 	return rc;
 }
@@ -222,7 +217,7 @@ void alsa_event_cb_playback(void)
 {
 	if (runtime_dummy) {
 		struct qsd_audio *prtd = runtime_dummy->private_data;
-		prtd->pcm_irq_pos += prtd->pcm_count;
+		prtd->pcm_irq_pos += 4096;
 		snd_pcm_period_elapsed(prtd->playback_substream);
 	}
 }
@@ -371,11 +366,10 @@ static int qsd_pcm_capture_copy(struct snd_pcm_substream *substream, int a,
 	mutex_unlock(&the_locks.lock);
 
 	prtd->pcm_buf_pos += fbytes;
-
-	if (xfer < fbytes)
-		return -EIO;
-
+	if (!xfer)
 	return 0;
+	else
+		return -EIO ;
 }
 
 static snd_pcm_uframes_t
@@ -427,7 +421,7 @@ static int qsd_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	cad_stream_info.app_type = CAD_STREAM_APP_RECORD;
 	cad_stream_info.priority = 0;
 	cad_stream_info.buf_mem_type = CAD_STREAM_BUF_MEM_HEAP;
-	cad_stream_info.ses_buf_max_size = prtd->pcm_count;
+	cad_stream_info.ses_buf_max_size = 1024 * 16 ;
 
 	if (prtd->enabled)
 		return 0;
@@ -544,5 +538,6 @@ struct snd_pcm_ops qsd_pcm_ops = {
 };
 EXPORT_SYMBOL_GPL(qsd_pcm_ops);
 
+MODULE_AUTHOR("QUALCOMM-QCT");
 MODULE_DESCRIPTION("PCM module platform driver for 8k");
 MODULE_LICENSE("GPL v2");

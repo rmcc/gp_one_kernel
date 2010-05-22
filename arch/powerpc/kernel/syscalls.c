@@ -36,6 +36,7 @@
 #include <linux/file.h>
 #include <linux/init.h>
 #include <linux/personality.h>
+#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 #include <asm/syscalls.h>
@@ -54,6 +55,8 @@ int sys_ipc(uint call, int first, unsigned long second, long third,
 
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
+
+	trace_mark(kernel_arch_ipc_call, "call %u first %d", call, first);
 
 	ret = -ENOSYS;
 	switch (call) {

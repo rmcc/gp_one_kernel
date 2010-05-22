@@ -64,14 +64,6 @@ config MACH_HALIBUT
 	help
 	  Support for the Qualcomm SURF7201A eval board.
 
-config MACH_MSM7201A_SURF
-	depends on ARCH_MSM
-	depends on MSM_STACKED_MEMORY
-	default y
-	bool "MSM7201A SURF"
-	help
-	  Support for the Qualcomm MSM7201A SURF eval board.
-
 config MACH_MSM7201A_FFA
 	depends on ARCH_MSM
 	depends on MSM_STACKED_MEMORY
@@ -150,14 +142,7 @@ config MACH_QST1600_FFA
 	help
 	  Support for the Qualcomm FFA QST1600 eval board.
 
-# config TROUT_H2W
-
-config MACH_SAPPHIRE
-	depends on ARCH_MSM
-	default n
-	bool "Sapphire"
-
-config HTC_HEADSET
+config TROUT_H2W
 	tristate "HTC 2 Wire detection driver"
 	default n
 	help
@@ -170,13 +155,21 @@ config TROUT_BATTCHG
 	default y
 	bool "Trout battery / charger driver"
 
-config HTC_PWRSINK
+config TROUT_PWRSINK
 	depends on MSM_SMD
-	default n
-	bool "HTC Power Sink Driver"
+	default y
+	bool "Trout Power Sink Driver"
 
 comment "QSD Board Type"
 	depends on ARCH_QSD
+
+config MACH_SWORDFISH
+	depends on ARCH_QSD
+	depends on MSM_STACKED_MEMORY
+	default y
+	bool "Swordfish Board (QCT SURF8x50)"
+	help
+	  Support for the Qualcomm SURF8x50 eval board.
 
 config MACH_QSD8X50_SURF
 	depends on ARCH_QSD
@@ -194,11 +187,11 @@ config MACH_QSD8X50_FFA
 	help
 	  Support for the Qualcomm QSD8x50 FFA eval board.
 
-config MACH_QSD8X50_COMET
+config MACH_COMET
 	depends on ARCH_QSD
 	depends on MSM_STACKED_MEMORY
 	default n
-	bool "QSD8x50 Comet"
+	bool "Comet Board (QCT 8x50)"
 	help
 	  Support for the Qualcomm Comet eval board.
 
@@ -300,6 +293,36 @@ config MSM7X00A_IDLE_SPIN_TIME
 	  Spin time in nanoseconds before ramping down cpu clock and entering
 	  any low power state.
 
+config MSM_SWFI_LATENCY
+	int "SWFI latency"
+	default 5000
+	help
+	  Latency in microseconds for recovering from SWFI (standby wait
+	  for interrupt).  It must be no more than
+	  MSM_APPS_SLEEP_LATENCY.
+
+config MSM_APPS_SLEEP_LATENCY
+	int "Apps sleep latency"
+	default 50000
+	help
+	  Latency in microseconds for recovering from Apps sleep.  It
+	  must be no more than MSM_POWER_COLLAPSE_LATENCY.
+
+config MSM_POWER_COLLAPSE_LATENCY
+	int "Power collapse latency"
+	default 100000
+	help
+	  Latency in microseconds for recovering from power collapse.  It
+	  must be no less than MSM_SWFI_LATENCY.
+
+config MSM_TCXO_SHUTDOWN_LATENCY
+	int "TCXO shutdown latency"
+	default 150000
+	help
+	  Latency in microseconds for recovering from power collapse with
+	  TCXO shutdown.  It must be no less than
+	  MSM_POWER_COLLAPSE_LATENCY.
+
 menuconfig MSM_IDLE_STATS
 	bool "Collect idle statistics"
 	default y
@@ -330,14 +353,6 @@ config MSM_SUSPEND_STATS_FIRST_BUCKET
 	  histogram.  This is for collecting statistics on suspend.
 
 endif # MSM_IDLE_STATS
-
-config QSD_SVS
-	bool "QSD Static Voltage Scaling"
-	depends on (MACH_QSD8X50_SURF || MACH_QSD8X50_FFA || MACH_QSD8X50_COMET)
-	default y
-	select TPS65023
-	help
-	  Enables static voltage scaling using the TPS65023 PMIC.
 
 config MSM_FIQ_SUPPORT
 	default y
@@ -537,23 +552,9 @@ config QSD_AUDIO
 	help
 	  Provides PCM, MP3, and AAC audio playback.
 
-config AUDIO_AAC_PLUS
-	depends on (MSM_ADSP || QSD_AUDIO)
-	bool "AAC+ Audio"
-	default y
-	help
-	  Provides AAC+ decoding
-
-config AUDIO_ENHANCED_AAC_PLUS
-	depends on AUDIO_AAC_PLUS
-	bool "Enhanced AAC+ Audio"
-	default y
-	help
-	  Provides Enhanced AAC+ decoding
-
-config SURF_FFA_GPIO_KEYPAD
-	bool "MSM SURF/FFA GPIO keypad"
-	depends on (ARCH_QSD || ARCH_MSM) && INPUT_GPIO = "y"
+config QSD_GPIO_KEYPAD
+	bool "QSD GPIO keypad"
+	depends on ARCH_QSD
 	default y
 	help
 	  Select if the GPIO keypad is attached.

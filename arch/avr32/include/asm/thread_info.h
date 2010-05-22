@@ -66,7 +66,7 @@ static inline struct thread_info *current_thread_info(void)
 
 #endif /* !__ASSEMBLY__ */
 
-#define PREEMPT_ACTIVE		0x40000000
+#define PREEMPT_ACTIVE		0x10000000
 
 /*
  * Thread information flags
@@ -84,6 +84,7 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_MEMDIE		6
 #define TIF_RESTORE_SIGMASK	7	/* restore signal mask in do_signal */
 #define TIF_CPU_GOING_TO_SLEEP	8	/* CPU is entering sleep 0 mode */
+#define TIF_KERNEL_TRACE	9	/* kernel trace active */
 #define TIF_FREEZE		29
 #define TIF_DEBUG		30	/* debugging enabled */
 #define TIF_USERSPACE		31      /* true if FS sets userspace */
@@ -96,6 +97,7 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_MEMDIE		(1 << TIF_MEMDIE)
 #define _TIF_RESTORE_SIGMASK	(1 << TIF_RESTORE_SIGMASK)
 #define _TIF_CPU_GOING_TO_SLEEP (1 << TIF_CPU_GOING_TO_SLEEP)
+#define _TIF_KERNEL_TRACE	(1 << TIF_KERNEL_TRACE)
 
 /* Note: The masks below must never span more than 16 bits! */
 
@@ -108,7 +110,7 @@ static inline struct thread_info *current_thread_info(void)
 	 | (1 << TIF_RESTORE_SIGMASK))
 
 /* work to do on any return to userspace */
-#define _TIF_ALLWORK_MASK	(_TIF_WORK_MASK | (1 << TIF_SYSCALL_TRACE))
+#define _TIF_ALLWORK_MASK	(_TIF_WORK_MASK | _TIF_SYSCALL_TRACE | _TIF_KERNEL_TRACE)
 /* work to do on return from debug mode */
 #define _TIF_DBGWORK_MASK	(_TIF_WORK_MASK & ~(1 << TIF_BREAKPOINT))
 

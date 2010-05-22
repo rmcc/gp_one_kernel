@@ -3,7 +3,7 @@
  * MSM architecture cpufreq driver
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007, 2009 QUALCOMM USA, INC.
  * Author: Mike A. Chan <mikechan@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -22,18 +22,15 @@
 #include <linux/cpufreq.h>
 #include "acpuclock.h"
 
-#define dprintk(msg...) \
-		cpufreq_debug_printk(CPUFREQ_DEBUG_DRIVER, "cpufreq-msm", msg)
-
 #ifdef CONFIG_MSM_CPU_FREQ_SCREEN
 static void msm_early_suspend(struct early_suspend *handler)
 {
-       acpuclk_set_rate(CONFIG_MSM_CPU_FREQ_SCREEN_OFF * 1000, SETRATE_CPUFREQ);
+       acpuclk_set_rate(CONFIG_MSM_CPU_FREQ_SCREEN_OFF * 1000, 0);
 }
 
 static void msm_late_resume(struct early_suspend *handler)
 {
-       acpuclk_set_rate(CONFIG_MSM_CPU_FREQ_SCREEN_ON * 1000, SETRATE_CPUFREQ);
+       acpuclk_set_rate(CONFIG_MSM_CPU_FREQ_SCREEN_ON * 1000, 0);
 }
 
 static struct early_suspend msm_power_suspend = {
@@ -66,14 +63,14 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 	}
 
 #ifdef CONFIG_CPU_FREQ_DEBUG
-	dprintk("target %d r %d (%d-%d) selected %d\n", target_freq,
+	printk("msm_cpufreq_target %d r %d (%d-%d) selected %d\n", target_freq,
 		relation, policy->min, policy->max, table[index].frequency);
 #endif
 	freqs.old = policy->cur;
 	freqs.new = table[index].frequency;
 	freqs.cpu = smp_processor_id();
 	cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
-	acpuclk_set_rate(table[index].frequency * 1000, SETRATE_CPUFREQ);
+	acpuclk_set_rate(table[index].frequency * 1000, 0);
 	cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
 	return 0;
 }

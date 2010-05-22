@@ -1,6 +1,6 @@
 /* linux/include/mach/rpc_hsusb.h
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.

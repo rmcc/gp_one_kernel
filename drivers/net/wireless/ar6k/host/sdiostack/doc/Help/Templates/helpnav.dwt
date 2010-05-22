@@ -1,0 +1,54 @@
+<html>
+<head>
+<!-- TemplateBeginEditable name="doctitle" -->
+<title>PSOC Help</title>
+<!-- TemplateEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- TemplateBeginEditable name="head" -->
+<!-- TemplateEndEditable -->
+<!-- TemplateParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- TemplateParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- TemplateParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- TemplateParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="../CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="@@(BodyBackgroundColor)@@" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="@@(HeaderColor)@@"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="@@(HeaderColor)@@">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- TemplateBeginEditable name="SubTemplate" --> Topic
+<!-- TemplateEndEditable --> </p>
+</font></td>
+    <td><!-- TemplateBeginEditable name="NavBack" --><a href="#previous#"><img src="../Images/leftarrow.gif" width="27" height="32" border="0"></a><!-- TemplateEndEditable --></td><td><!-- TemplateBeginEditable name="Nav" --><a href="#next#"><img src="../Images/rightarrow.gif" width="27" height="32" border="0"></a><!-- TemplateEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- TemplateBeginEditable name="Help Content" -->
+<OBJECT type="application/x-oleobject" classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+	<param name="Keyword" value="xxxx">
+</OBJECT>
+<p class="BODYTEXT">&nbsp; </p>
+<p><br>
+</p>
+<!-- TemplateEndEditable -->
+&nbsp;<br/></table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="@@(FooterColor)@@"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+</html>

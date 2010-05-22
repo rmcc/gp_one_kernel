@@ -15,7 +15,9 @@
 #include <linux/stringify.h>
 #include <linux/kobject.h>
 #include <linux/moduleparam.h>
+#include <linux/immediate.h>
 #include <linux/marker.h>
+#include <linux/tracepoint.h>
 #include <asm/local.h>
 
 #include <asm/module.h>
@@ -327,9 +329,20 @@ struct module
 	/* The command line arguments (may be mangled).  People like
 	   keeping pointers to this stuff */
 	char *args;
+#ifdef USE_IMMEDIATE
+	struct __imv *immediate;
+	unsigned int num_immediate;
+	unsigned long *immediate_cond_end;
+	unsigned int num_immediate_cond_end;
+#endif
 #ifdef CONFIG_MARKERS
 	struct marker *markers;
 	unsigned int num_markers;
+#endif
+
+#ifdef CONFIG_TRACEPOINTS
+	struct tracepoint *tracepoints;
+	unsigned int num_tracepoints;
 #endif
 
 #ifdef CONFIG_MODULE_UNLOAD
@@ -451,8 +464,13 @@ int register_module_notifier(struct notifier_block * nb);
 int unregister_module_notifier(struct notifier_block * nb);
 
 extern void print_modules(void);
+extern void list_modules(void *call_data);
 
 extern void module_update_markers(void);
+extern int module_get_iter_markers(struct marker_iter *iter);
+
+extern void module_update_tracepoints(void);
+extern int module_get_iter_tracepoints(struct tracepoint_iter *iter);
 
 #else /* !CONFIG_MODULES... */
 #define EXPORT_SYMBOL(sym)
@@ -554,11 +572,48 @@ static inline void print_modules(void)
 {
 }
 
+static inline void list_modules(void *call_data)
+{
+}
+
 static inline void module_update_markers(void)
 {
 }
 
+static inline int module_get_iter_markers(struct marker_iter *iter)
+{
+	return 0;
+}
+
+static inline void module_update_tracepoints(void)
+{
+}
+
+static inline int module_get_iter_tracepoints(struct tracepoint_iter *iter)
+{
+	return 0;
+}
+
 #endif /* CONFIG_MODULES */
+
+#if defined(CONFIG_MODULES) && defined(USE_IMMEDIATE)
+extern void _module_imv_update(void);
+extern void module_imv_update(void);
+extern int is_imv_cond_end_module(unsigned long addr1, unsigned long addr2);
+#else
+static inline void _module_imv_update(void)
+{
+}
+
+static inline void module_imv_update(void)
+{
+}
+static inline int is_imv_cond_end_module(unsigned long addr1,
+		unsigned long addr2)
+{
+	return 0;
+}
+#endif
 
 struct device_driver;
 #ifdef CONFIG_SYSFS

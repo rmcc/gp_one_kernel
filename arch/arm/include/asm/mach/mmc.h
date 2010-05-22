@@ -22,7 +22,10 @@ struct mmc_platform_data {
 	unsigned int status_irq;
 	struct embedded_sdio_data *embedded_sdio;
 	int (*register_status_notify)(void (*callback)(int card_present, void *dev_id), void *dev_id);
-	unsigned long irq_flags;
+	int (*setup_power)(int, int);
+    //FIH
+    int (*sdio_suspend)(int devId);
+    int (*sdio_resume)(int  devId);
 };
 
 #endif

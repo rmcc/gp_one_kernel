@@ -1214,8 +1214,13 @@ static void fbcon_init(struct vc_data *vc, int init)
 		vc->vc_rows = new_rows;
 	}
 
+/* FIH_ADQ, Ming { */
+/* Keep bootloader image displaying */
+/*
 	if (logo)
 		fbcon_prepare_logo(vc, info, cols, rows, new_cols, new_rows);
+*/
+/* } FOH_ADQ, Ming */
 
 	if (vc == svc && softback_buf)
 		fbcon_update_softback(vc);

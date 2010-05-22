@@ -29,6 +29,7 @@
 #include <linux/compiler.h>
 #include <linux/module.h>
 #include <linux/ipc.h>
+#include <linux/marker.h>
 
 #include <asm/branch.h>
 #include <asm/cachectl.h>
@@ -333,6 +334,8 @@ asmlinkage int sys_ipc(unsigned int call, int first, int second,
 
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
+
+	trace_mark(kernel_arch_ipc_call, "call %u first %d", call, first);
 
 	switch (call) {
 	case SEMOP:

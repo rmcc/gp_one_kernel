@@ -2,7 +2,6 @@
  . smc911x.h - macros for SMSC's LAN911{5,6,7,8} single-chip Ethernet device.
  .
  . Copyright (C) 2005 Sensoria Corp.
- . Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  . Derived from the unified SMC91x driver by Nicolas Pitre
  .
  . This program is free software; you can redistribute it and/or modify

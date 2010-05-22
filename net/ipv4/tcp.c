@@ -264,6 +264,7 @@
 #include <linux/cache.h>
 #include <linux/err.h>
 #include <linux/crypto.h>
+#include <linux/syscalls.h>
 
 #include <net/icmp.h>
 #include <net/tcp.h>
@@ -1751,12 +1752,73 @@ void tcp_shutdown(struct sock *sk, int how)
 	}
 }
 
+// +++ FIH_ADQ, added by henry.wang 2009/7/30, print process pid and its name
+static int proc_pid_cmdline(struct task_struct *task, char * buffer)
+{
+	int res = 0;
+	unsigned int len;
+	struct mm_struct *mm = get_task_mm(task);
+	if (!mm)
+		goto out;
+	if (!mm->arg_end)
+		goto out_mm;	/* Shh! No looking before we're done */
+
+ 	len = mm->arg_end - mm->arg_start;
+ 
+	if (len > PAGE_SIZE)
+		len = PAGE_SIZE;
+ 
+	res = access_process_vm(task, mm->arg_start, buffer, len, 0);
+
+	// If the nul at the end of args has been overwritten, then
+	// assume application is using setproctitle(3).
+	if (res > 0 && buffer[res-1] != '\0' && len < PAGE_SIZE) {
+		len = strnlen(buffer, res);
+		if (len < res) {
+		    res = len;
+		} else {
+			len = mm->env_end - mm->env_start;
+			if (len > PAGE_SIZE - res)
+				len = PAGE_SIZE - res;
+			res += access_process_vm(task, mm->env_start, buffer+res, len, 0);
+			res = strnlen(buffer, res);
+		}
+	}
+out_mm:
+	mmput(mm);
+out:
+	return res;
+}
+
+static char * pidname(int pid)
+{
+	struct task_struct *p = NULL;
+	static char cmdline[256];
+	memset(cmdline, 0, sizeof(cmdline));
+	p  = find_task_by_vpid (pid);
+
+	if(p != NULL)
+		proc_pid_cmdline(p, cmdline);
+	else
+		sprintf(cmdline, "Error: can't find the task_strct of pid:%d", pid);
+	
+	return cmdline;	
+}
+// --- FIH_ADQ ---
+
+extern int tcp_connection_num;
 void tcp_close(struct sock *sk, long timeout)
 {
 	struct sk_buff *skb;
 	int data_was_unread = 0;
 	int state;
 
+	// +++ FIH_ADQ, added by henry.wang 2009/7/30, print who establish TCP connections
+	printk(KERN_INFO "FIH DEBUG : tcp_close pid = %d, pid name = %s\r\n", (int)sys_getpid(), pidname(sys_getpid()));
+	tcp_connection_num--;
+	printk(KERN_INFO "FIH DEBUG : tcp_connection number = %d\r\n", tcp_connection_num);
+	// --- FIH_ADQ ---
+	
 	lock_sock(sk);
 	sk->sk_shutdown = SHUTDOWN_MASK;
 

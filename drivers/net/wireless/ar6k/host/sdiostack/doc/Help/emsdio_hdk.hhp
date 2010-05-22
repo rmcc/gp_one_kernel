@@ -1,0 +1,19 @@
+[OPTIONS]
+Auto Index=Yes
+Compatibility=1.1 or later
+Compiled file=emsdio_hdk.chm
+Contents file=TableOfContents.hhc
+Default Window=PSOC Wizard Help
+Default topic=welcome.htm
+Display compile progress=No
+Full-text search=Yes
+Index file=Index.hhk
+Language=0x409 English (United States)
+Title=Embedded SDIO Driver Kit Help
+
+[WINDOWS]
+PSOC Wizard Help=,"TableOfContents.hhc","Index.hhk","welcome.htm",,"http://www.codetelligence.com","Codetelligence",,,0x42520,,0x300e,[262,291,1023,675],0xb0000,,,,,,0
+
+
+[INFOTYPES]
+

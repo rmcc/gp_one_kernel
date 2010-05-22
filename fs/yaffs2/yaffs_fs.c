@@ -722,7 +722,14 @@ static int yaffs_commit_write(struct file *f, struct page *pg, unsigned offset,
 	loff_t pos = (((loff_t) pg->index) << PAGE_CACHE_SHIFT) + offset;
 	int nBytes = to - offset;
 	int nWritten;
+/* FIH_ADQ, 6370 { */
+/*
+	unsigned spos = pos;
+	unsigned saddr = (unsigned)addr;
 
+	kva=kmap(pg);
+	addr = kva + offset;
+*/
 	unsigned spos = pos;
 	unsigned saddr;
 	
@@ -730,6 +737,7 @@ static int yaffs_commit_write(struct file *f, struct page *pg, unsigned offset,
 	addr = kva + offset;
 
 	saddr = (unsigned)addr;
+/* } FIH_ADQ, 6370 */	
 
 	T(YAFFS_TRACE_OS,
 	  (KERN_DEBUG "yaffs_commit_write addr %x pos %x nBytes %d\n", saddr,

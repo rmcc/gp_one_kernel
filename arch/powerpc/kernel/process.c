@@ -33,6 +33,7 @@
 #include <linux/mqueue.h>
 #include <linux/hardirq.h>
 #include <linux/utsname.h>
+#include <linux/marker.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -539,6 +540,17 @@ void show_regs(struct pt_regs * regs)
 	show_stack(current, (unsigned long *) regs->gpr[1]);
 	if (!user_mode(regs))
 		show_instructions(regs);
+}
+
+long original_kernel_thread(int (*fn) (void *), void *arg, unsigned long flags);
+
+long kernel_thread(int (fn) (void *), void *arg, unsigned long flags)
+{
+	long retval;
+
+	retval = original_kernel_thread(fn, arg, flags);
+	trace_mark(kernel_arch_kthread_create, "pid %ld fn %p", retval, fn);
+	return retval;
 }
 
 void exit_thread(void)

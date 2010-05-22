@@ -1,13 +1,5 @@
 menu "USB Function Support"
 
-config USB_MSM_OTG
-	bool "OTG support for Qualcomm on-chip USB controller"
-	depends on USB && USB_FUNCTION && USB_EHCI_MSM
-	help
-	  USB OTG driver.
-	  This driver is required if you want to use USB in
-	  Host mode and Device mode.
-
 config USB_FUNCTION
 	boolean "Support for USB Function Drivers"
 	help

@@ -1,0 +1,62 @@
+MDK_ROOT := $(WORKAREA)/host/tools/systemtools
+CLIENT_ROOT := $(WORKAREA)/target/ram/apps/systemtools
+
+LD	:= ld 
+CC	:= g++
+
+CFLAGS	:=	-I. -I../common/include -I../devlib -I../devlib/ar5212 -I../devlib/ar5211  -I../devlib/ar2413 -I../devlib/ar6000 -DCUSTOMER_REL -DART_BUILD -DLINUX -DLinux -D_MLD -DNO_LIB_PRINT -I../mdk -I$(MDK_ROOT)/src2/include -I../include -I$(CLIENT_ROOT)/include -I../devlib -I$(CLIENT_ROOT)/sta/Linux/Driver/include  
+
+# host HTC raw driver
+CFLAGS += -I$(WORKAREA)/host/include -I$(WORKAREA)/host/os/linux/include -I$(WORKAREA)/include -I$(WORKAREA)/include/AR6002 -DHTC_RAW_INTERFACE
+
+ifeq ($(DEBUG),1)
+    CFLAGS += -D_DEBUG -g
+endif
+
+ifeq ($(GDB),1)
+    CFLAGS += -g
+endif
+
+
+ifeq ($(PREDATOR_BUILD),1)
+    CFLAGS += -DPREDATOR_BUILD
+endif
+
+#ifeq ($(TARGET),AR6002)
+    CFLAGS += -DAR6002
+#endif
+#ifeq ($(TARGET),AR6001)
+#    CFLAGS += -DAR6001
+#endif
+
+LDFLAGS	:= -L../devlib/Linux_cust -L../devlib/linux_gpib -lm -lgpibenet -ldevlib  -lpthread
+
+
+
+VPATH   := $(MDK_ROOT)/common:$(CLIENT_ROOT)
+
+EXTRA_SRCS = linux_ansi.c
+
+SRCS	:= 	art_if.c cal_com.c dynArray.c eeprom.c maui_cal.c hw_routines.c linux_hw.c MLIBif.c parse.c osWrap_linux.c test.c rssi_power.c mathRoutines.c nrutil.c art_comms.c dynamic_optimizations.c cmdTest.c cal_gen3.c cal_gen5.c cal_gen6.c parseLoadEar.c dk_mem.c misc_routines.c $(EXTRA_SRCS)
+
+OBJS	:=	$(patsubst %.c,Linux_cust/%.o,$(SRCS))
+
+BIN		:=  Linux_cust/art.out
+
+all:	$(BIN)
+
+dirs:
+		mkdir -p Linux_cust
+	
+$(BIN): $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS)	
+
+Linux_cust/%.o : %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -rf $(OBJS) art.out 
+	rm -rf Linux_cust
+
+.PHONY:
+	clean all

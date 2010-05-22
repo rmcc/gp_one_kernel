@@ -1,58 +1,22 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* drivers/char/msm_q6vdec.c
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * Q6 video decoder driver
  */
 
 #include <linux/delay.h>
@@ -64,19 +28,9 @@
 #include <linux/android_pmem.h>
 #include <linux/msm_q6vdec.h>
 #include <mach/dal.h>
-#include <linux/file.h>
 
 #define DALDEVICEID_VDEC_DEVICE         0x02000026
 #define DALDEVICEID_VDEC_PORTNAME	"DAL_AQ_VID"
-
-#define VDEC_INTERFACE_VERSION		0x00010000
-
-#define MAJOR_MASK 0xFFFF0000
-#define MINOR_MASK 0x0000FFFF
-
-#define VDEC_GET_MAJOR_VERSION(version) (((version)&MAJOR_MASK)>>16)
-
-#define VDEC_GET_MINOR_VERSION(version) ((version)&MINOR_MASK)
 
 enum {
 	VDEC_DALRPC_INITIALIZE = DALDEVICE_FIRST_DEVICE_API_IDX,
@@ -110,7 +64,6 @@ struct vdec_mem_info {
 	u32 id;
 	u32 phys_addr;
 	u32 len;
-	struct file *file;
 };
 
 struct vdec_data {
@@ -123,7 +76,6 @@ struct vdec_data {
 	struct mutex vdec_list_lock;
 	struct vdec_mem_info mem;
 	int running;
-	int close_decode;
 };
 
 static struct class *driver_class;
@@ -131,15 +83,6 @@ static dev_t vdec_device_no;
 static struct cdev vdec_cdev;
 static int vdec_ref;
 
-static inline int vdec_check_version(u32 client, u32 server)
-{
-	int ret = -EINVAL;
-	if ((VDEC_GET_MAJOR_VERSION(client) == VDEC_GET_MAJOR_VERSION(server))
-	    && (VDEC_GET_MINOR_VERSION(client) <=
-			VDEC_GET_MINOR_VERSION(server)))
-		ret = 0;
-	return ret;
-}
 
 static int vdec_get_msg(struct vdec_data *vd, void *msg)
 {
@@ -160,9 +103,6 @@ static int vdec_get_msg(struct vdec_data *vd, void *msg)
 		break;
 	}
 	mutex_unlock(&vd->vdec_list_lock);
-
-	if (vd->close_decode)
-		ret = 1;
 
 	return ret;
 }
@@ -243,14 +183,12 @@ static int vdec_initialize(struct vdec_data *vd, void *argp)
 		    copy_to_user(((struct vdec_init *)argp)->
 				 buf_req, &vdec_buf_req, sizeof(vdec_buf_req));
 
-	vd->close_decode = 0;
 	return ret;
 }
 
 static int vdec_setbuffers(struct vdec_data *vd, void *argp)
 {
 	struct vdec_memory vmem;
-	unsigned long vstart;
 	int ret = 0;
 
 	vd->mem.initialized = 0;
@@ -263,11 +201,9 @@ static int vdec_setbuffers(struct vdec_data *vd, void *argp)
 
 	vd->mem.id = vmem.id;
 
-	ret = get_pmem_file(vd->mem.id,
+	ret = get_pmem_fd(vd->mem.id,
 			    (unsigned long *)&vd->mem.phys_addr,
-			    &vstart,
-			    (unsigned long *)&vd->mem.len,
-			    &vd->mem.file);
+			  (unsigned long *)&vd->mem.len);
 
 	if (ret) {
 		printk(KERN_ERR "%s: get_pmem_fd failed\n", __func__);
@@ -422,18 +358,9 @@ static long vdec_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case VDEC_IOCTL_GETMSG:
 		wait_event_interruptible(vd->vdec_msg_evt,
 					 vdec_get_msg(vd, argp));
-
-		if (vd->close_decode)
-			ret = -EINTR;
 		break;
 
 	case VDEC_IOCTL_CLOSE:
-		vd->close_decode = 1;
-		wake_up(&vd->vdec_msg_evt);
-
-		if (vd->mem.initialized)
-			put_pmem_file(vd->mem.file);
-
 		ret = daldevice_close(vd->vdec_handle);
 
 		if (ret)
@@ -513,7 +440,6 @@ static int vdec_open(struct inode *inode, struct file *file)
 	int i;
 	struct vdec_msg_list *l;
 	struct vdec_data *vd;
-	struct daldevice_info_t deviceinfo;
 
 	vd = kmalloc(sizeof(struct vdec_data), GFP_KERNEL);
 	if (!vd) {
@@ -547,22 +473,6 @@ static int vdec_open(struct inode *inode, struct file *file)
 		printk(KERN_ERR "%s: failed to attach (%d)\n", __func__, ret);
 		ret = -EIO;
 		goto vdec_open_err_handle_list;
-	}
-
-	ret = daldevice_info(vd->vdec_handle,
-			     &deviceinfo, sizeof(deviceinfo));
-
-	if (ret) {
-		printk(KERN_ERR "%s: failed to get the version info (%d)\n",
-			 __func__, ret);
-		ret = -EIO;
-		goto vdec_open_err_handle_daldetach;
-	}
-
-	if (vdec_check_version(VDEC_INTERFACE_VERSION, deviceinfo.version)) {
-		printk(KERN_ERR "%s: failed version mismatch \n", __func__);
-		ret = -EIO;
-		goto vdec_open_err_handle_daldetach;
 	}
 
 	vd->vdec_reuse_frame_evt_cb =
@@ -699,6 +609,7 @@ static void __exit vdec_exit(void)
 }
 
 MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("QUALCOMM Inc");
 MODULE_DESCRIPTION("video decoder driver for QSD platform");
 MODULE_VERSION("1.01");
 

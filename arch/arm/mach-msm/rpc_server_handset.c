@@ -1,6 +1,6 @@
 /* arch/arm/mach-msm/rpc_server_handset.c
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -21,8 +21,7 @@
 #include <mach/msm_handset.h>
 #include <mach/msm_rpcrouter.h>
 #include <mach/board.h>
-
-#include "keypad-surf-ffa.h"
+#include <linux/reboot.h>
 
 #define HS_SERVER_PROG 0x30000062
 #define HS_SERVER_VERS 0x00010001
@@ -34,21 +33,32 @@
 #define HS_PWR_K		0x6F	/* Power key */
 #define HS_END_K		0x51	/* End key or Power key */
 #define HS_STEREO_HEADSET_K	0x82
-#define HS_HEADSET_SWITCH_K	0x84
 #define HS_REL_K		0xFF	/* key release */
 
 #define KEY(hs_key, input_key) ((hs_key << 24) | input_key)
 
 static const uint32_t hs_key_map[] = {
-	KEY(HS_PWR_K, KEY_POWER),
-	KEY(HS_END_K, KEY_END),
+///+FIH_ADQ
+	//KEY(HS_PWR_K, KEY_POWER),
+	//KEY(HS_END_K, KEY_END), //Default
+	KEY(HS_PWR_K, KEY_RESERVED),
+	KEY(HS_END_K, KEY_POWER), //For ADQ
+///-FIH_ADQ
 	KEY(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT),
-	KEY(HS_HEADSET_SWITCH_K, KEY_MEDIA),
 	0
 };
 
 static struct input_dev *kpdev;
 static struct input_dev *hsdev;
+
+///+FIH_ADQ
+///AudiPCHuang@FIH, 09.03.31: For getting keypad input device pointer.
+extern struct input_dev *msm_keypad_get_input_dev(void);
+///-FIH_ADQ
+
+// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+struct delayed_work detect_release_work;
+// --- FIH_ADQ ---
 
 static int hs_find_key(uint32_t hscode)
 {
@@ -70,35 +80,37 @@ report_headset_switch(struct input_dev *dev, int key, int value)
 
 	input_report_switch(dev, key, value);
 	switch_set_state(&hs->sdev, value);
-	input_sync(dev);
 }
 
-/*
- * tuple format: (key_code, key_param)
- *
- * old-architecture:
- * key-press = (key_code, 0)
- * key-release = (0xff, key_code)
- *
- * new-architecutre:
- * key-press = (key_code, 0)
- * key-release = (key_code, 0xff)
- */
 static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 {
-	int key, temp_key_code;
+	int key;
+
+	// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+	if(key_code == HS_REL_K)
+	{
+		cancel_delayed_work_sync(&detect_release_work);
+	}
+	else if(key_code == HS_PWR_K)
+	{
+		schedule_delayed_work(&detect_release_work, msecs_to_jiffies(15 * 1000));
+	}
+	// --- FIH_ADQ ---
 
 	if (key_code == HS_REL_K)
+	{
 		key = hs_find_key(key_parm);
+	}
 	else
+	{
 		key = hs_find_key(key_code);
-
-	temp_key_code = key_code;
-
-	if (key_parm == HS_REL_K)
-		key_code = key_parm;
+	}
 
 	switch (key) {
+	///+FIH_ADQ
+	case KEY_RESERVED:
+		break;
+	///-fIH_ADQ
 	case KEY_POWER:
 	case KEY_END:
 		if (!kpdev) {
@@ -107,7 +119,6 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 			return;
 		}
 		input_report_key(kpdev, key, (key_code != HS_REL_K));
-		input_sync(kpdev);
 		break;
 	case SW_HEADPHONE_INSERT:
 		if (!hsdev) {
@@ -117,18 +128,9 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 		}
 		report_headset_switch(hsdev, key, (key_code != HS_REL_K));
 		break;
-	case KEY_MEDIA:
-		if (!hsdev) {
-			printk(KERN_ERR "%s: No input device for reporting "
-					"handset events\n", __func__);
-			return;
-		}
-		input_report_key(hsdev, key, (key_code != HS_REL_K));
-		input_sync(hsdev);
-		break;
 	case -1:
 		printk(KERN_ERR "%s: No mapping for remote handset event %d\n",
-				 __func__, temp_key_code);
+				 __func__, key_code);
 		break;
 	default:
 		printk(KERN_ERR "%s: Unhandled handset key %d\n", __func__,
@@ -181,8 +183,20 @@ static struct msm_rpc_server hs_rpc_server = {
 	.rpc_call	= handle_hs_rpc_call,
 };
 
+// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+static void detect_release_request(struct work_struct *work)
+{
+	emergency_restart();
+}
+// --- FIH_ADQ ---
+
 static int __init hs_rpc_server_init(void)
 {
+	// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+	INIT_DELAYED_WORK(&detect_release_work,
+					  detect_release_request);
+	// --- FIH_ADQ ---
+					  
 	return msm_rpc_create_server(&hs_rpc_server);
 }
 module_init(hs_rpc_server_init);

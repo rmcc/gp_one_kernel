@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/percpu.h>
+#include <trace/irq.h>
 #include <asm/processor.h>
 #include <asm/msr.h>
 #include <asm/mce.h>
@@ -22,11 +23,16 @@ asmlinkage void smp_thermal_interrupt(void)
 	exit_idle();
 	irq_enter();
 
+	trace_irq_entry(THERMAL_APIC_VECTOR, NULL);
+
 	rdmsrl(MSR_IA32_THERM_STATUS, msr_val);
 	if (therm_throt_process(msr_val & 1))
 		mce_log_therm_throt_event(smp_processor_id(), msr_val);
 
 	add_pda(irq_thermal_count, 1);
+
+	trace_irq_exit(IRQ_HANDLED);
+
 	irq_exit();
 }
 

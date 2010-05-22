@@ -15,7 +15,7 @@ REFERENCES
 EXTERNALIZED FUNCTIONS
   None
 
-Copyright (c) 1992-2009, Code Aurora Forum. All rights reserved.
+Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
@@ -58,7 +58,7 @@ typedef struct {
  * Message to acknowledge CMD_VFE_START command
  */
 
-#define	VFE_MSG_START_ACK	0x0001
+#define	VFE_MSG_START_ACK	0x0004 //0x0001 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_START_ACK_LEN	sizeof(vfe_msg_start_ack)
 
 typedef struct {
@@ -68,7 +68,7 @@ typedef struct {
  * Message to acknowledge CMD_VFE_STOP	command
  */
 
-#define	VFE_MSG_STOP_ACK	0x0002
+#define	VFE_MSG_STOP_ACK	0x0001 //0x0002 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_STOP_ACK_LEN	sizeof(vfe_msg_stop_ack)
 
 typedef struct {
@@ -79,7 +79,7 @@ typedef struct {
  * Message to acknowledge CMD_VFE_UPDATE command
  */
 
-#define	VFE_MSG_UPDATE_ACK	0x0003
+#define	VFE_MSG_UPDATE_ACK	0x0005 //0x0003 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_UPDATE_ACK_LEN	sizeof(vfe_msg_update_ack)
 
 typedef struct {
@@ -91,7 +91,7 @@ typedef struct {
  * and that the VFE is now STATE_VFE_IDLE
  */
 
-#define	VFE_MSG_SNAPSHOT_DONE		0x0004
+#define	VFE_MSG_SNAPSHOT_DONE		0x0002 //0x0004 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_SNAPSHOT_DONE_LEN	\
 	sizeof(vfe_msg_snapshot_done)
 
@@ -105,7 +105,7 @@ typedef struct {
  * system is in the IDLE state
  */
 
-#define	VFE_MSG_ILLEGAL_CMD	0x0005
+#define	VFE_MSG_ILLEGAL_CMD	0x0003 //0x0005 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_ILLEGAL_CMD_LEN	\
 	sizeof(vfe_msg_illegal_cmd)
 
@@ -212,7 +212,7 @@ typedef struct {
  * Message to notify the ARM that sync timer1 op is completed
  */
 
-#define	VFE_MSG_SYNC_T1_DONE		0x000D
+#define	VFE_MSG_SYNC_T1_DONE		0x000E //0x000D //FIH_ADQ,JOE HSU
 #define	VFE_MSG_SYNC_T1_DONE_LEN	sizeof(vfe_msg_sync_t1_done)
 
 typedef struct {
@@ -223,7 +223,7 @@ typedef struct {
  * Message to notify the ARM that sync timer2 op is completed
  */
 
-#define	VFE_MSG_SYNC_T2_DONE		0x000E
+#define	VFE_MSG_SYNC_T2_DONE		0x000F //0x000E //FIH_ADQ,JOE HSU
 #define	VFE_MSG_SYNC_T2_DONE_LEN	sizeof(vfe_msg_sync_t2_done)
 
 typedef struct {
@@ -234,7 +234,7 @@ typedef struct {
  * Message to notify the ARM that async t1 operation completed
  */
 
-#define	VFE_MSG_ASYNC_T1_DONE		0x000F
+#define	VFE_MSG_ASYNC_T1_DONE		0x0010 //0x000F //FIH_ADQ,JOE HSU
 #define	VFE_MSG_ASYNC_T1_DONE_LEN	sizeof(vfe_msg_async_t1_done)
 
 typedef struct {
@@ -246,7 +246,7 @@ typedef struct {
  * Message to notify the ARM that async t2 operation completed
  */
 
-#define	VFE_MSG_ASYNC_T2_DONE		0x0010
+#define	VFE_MSG_ASYNC_T2_DONE		0x0011 //0x0010 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_ASYNC_T2_DONE_LEN	sizeof(vfe_msg_async_t2_done)
 
 typedef struct {
@@ -258,7 +258,7 @@ typedef struct {
  * Message to notify the ARM that an error has occurred
  */
 
-#define	VFE_MSG_ERROR		0x0011
+#define	VFE_MSG_ERROR		0x000D //0x0011 //FIH_ADQ,JOE HSU
 #define	VFE_MSG_ERROR_LEN	sizeof(vfe_msg_error)
 
 #define	VFE_MSG_ERR_COND_NO_CAMIF_ERR		0x0000

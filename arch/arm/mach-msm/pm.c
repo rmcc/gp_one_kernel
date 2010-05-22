@@ -3,7 +3,7 @@
  * MSM Power Management Routines
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008, 2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -31,10 +31,6 @@
 #include <mach/system.h>
 #include <asm/io.h>
 
-#ifdef CONFIG_HAS_WAKELOCK
-#include <linux/wakelock.h>
-#endif
-
 #include "smd_private.h"
 #include "acpuclock.h"
 #include "clock.h"
@@ -43,7 +39,12 @@
 #include "irq.h"
 #include "gpio.h"
 #include "timer.h"
-#include "pm.h"
+#ifdef CONFIG_HAS_WAKELOCK
+#include <linux/wakelock.h>
+#endif
+/* FIH_ADQ, Kenny { */
+#include "linux/pmlog.h"
+/* } FIH_ADQ, Kenny */
 
 enum {
 	MSM_PM_DEBUG_SUSPEND = 1U << 0,
@@ -56,13 +57,20 @@ enum {
 };
 static int msm_pm_debug_mask;
 module_param_named(debug_mask, msm_pm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
-
+///+++ FIH_ADQ +++ 6360
 #ifdef CONFIG_MSM_SLEEP_TIME_OVERRIDE
 static int msm_pm_sleep_time_override;
 module_param_named(sleep_time_override,
 	msm_pm_sleep_time_override, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #endif
-
+///--- FIH_ADQ --- 6360
+enum {
+	MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND,
+	MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+	MSM_PM_SLEEP_MODE_APPS_SLEEP,
+	MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT,
+	MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT,
+};
 static int msm_pm_sleep_mode = CONFIG_MSM7X00A_SLEEP_MODE;
 module_param_named(sleep_mode, msm_pm_sleep_mode, int, S_IRUGO | S_IWUSR | S_IWGRP);
 static int msm_pm_idle_sleep_mode = CONFIG_MSM7X00A_IDLE_SLEEP_MODE;
@@ -100,8 +108,8 @@ static struct msm_pm_smem_addr_t {
 } msm_pm_sma;
 
 static uint32_t *msm_pm_reset_vector;
+
 static uint32_t msm_pm_max_sleep_time;
-static struct msm_pm_platform_data *msm_pm_modes;
 
 #ifdef CONFIG_MSM_IDLE_STATS
 enum msm_pm_time_stats_id {
@@ -201,7 +209,7 @@ msm_pm_wait_state(uint32_t wait_state_all_set, uint32_t wait_state_all_clear,
 	int i;
 	uint32_t state;
 
-	for (i = 0; i < 2000000; i++) {
+	for (i = 0; i < 100000; i++) {
 		state = smsm_get_state(SMSM_MODEM_STATE);
 		if (((state & wait_state_all_set) == wait_state_all_set) &&
 		    ((~state & wait_state_all_clear) == wait_state_all_clear) &&
@@ -285,12 +293,10 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay,
 		}
 		ret = msm_pm_wait_state(enter_wait_set, enter_wait_clear, 0, 0);
 		if (ret) {
-			printk(KERN_EMERG "msm_sleep(): power collapse entry "
-				"timed out waiting for Modem's response "
-				"-- resetting chip\n");
-			msm_proc_comm(PCOM_RESET_CHIP_IMM, NULL, NULL);
-			for (;;)
-				;
+			printk(KERN_INFO "msm_sleep(): "
+			       "msm_pm_wait_state failed, %x\n",
+			       smsm_get_state(SMSM_MODEM_STATE));
+			goto enter_failed;
 		}
 	}
 	if (msm_irq_enter_sleep2(!!enter_state, from_idle))
@@ -371,7 +377,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay,
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_CLOCK)
 			printk(KERN_INFO "msm_sleep(): exit power collapse %ld"
 			       "\n", pm_saved_acpu_clk_rate);
-		if (acpuclk_set_rate(pm_saved_acpu_clk_rate, SETRATE_PC) < 0)
+		if (acpuclk_set_rate(pm_saved_acpu_clk_rate, 1) < 0)
 			printk(KERN_ERR "msm_sleep(): clk_set_rate %ld "
 			       "failed\n", pm_saved_acpu_clk_rate);
 	}
@@ -389,20 +395,21 @@ enter_failed:
 		writel(0x00, A11S_CLK_SLEEP_EN);
 		writel(0, A11S_PWRDOWN);
 		smsm_change_state(SMSM_APPS_STATE, enter_state, exit_state);
-		if (msm_pm_wait_state(exit_wait_set, exit_wait_clear, 0, 0)) {
-			printk(KERN_EMERG "msm_sleep(): power collapse exit "
-				"timed out waiting for Modem's response "
-				"-- resetting chip\n");
-			msm_proc_comm(PCOM_RESET_CHIP_IMM, NULL, NULL);
-			for (;;)
-				;
-		}
+		msm_pm_wait_state(exit_wait_set, exit_wait_clear, 0, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "
 			       "smsm_get_state %x\n", readl(A11S_CLK_SLEEP_EN),
 			       readl(A11S_PWRDOWN),
 			       smsm_get_state(SMSM_MODEM_STATE));
+	    
+	    /* FIH_ADQ, Kenny { */
+	    if ((sleep_mode < MSM_PM_SLEEP_MODE_APPS_SLEEP) && (from_idle == 0) && (collapsed >= 0) ) {
+	        pmlog("msm_sleep(): msm_pm_collapse=%d\n", collapsed);
+	        smsm_pmlog_sleep_info(msm_pm_sma.int_info->aArm_wakeup_reason);
+	    }
+	    /* } FIH_ADQ, Kenny */
+	    
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_SMSM_STATE)
 			smsm_print_sleep_info(*msm_pm_sma.sleep_delay,
 				*msm_pm_sma.limit_sleep,
@@ -415,6 +422,7 @@ enter_failed:
 		msm_pm_sma.int_info->aArm_interrupts_pending);
 	if (enter_state) {
 		smsm_change_state(SMSM_APPS_STATE, exit_state, SMSM_RUN);
+		msm_pm_wait_state(SMSM_RUN, 0, 0, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "
@@ -458,7 +466,6 @@ void arch_idle(void)
 	int spin;
 	int64_t sleep_time;
 	int low_power = 0;
-	struct msm_pm_platform_data *mode;
 #ifdef CONFIG_MSM_IDLE_STATS
 	DECLARE_BITMAP(clk_ids, NR_CLKS);
 	int64_t t1;
@@ -485,24 +492,15 @@ void arch_idle(void)
 	msm_pm_add_stat(MSM_PM_STAT_REQUESTED_IDLE, sleep_time);
 #endif
 
-	mode = &msm_pm_modes[MSM_PM_SLEEP_MODE_POWER_COLLAPSE];
-	if (mode->latency >= latency_qos)
+	if (CONFIG_MSM_TCXO_SHUTDOWN_LATENCY < latency_qos) {
+		sleep_limit = SLEEP_LIMIT_NONE;
+	} else if (CONFIG_MSM_POWER_COLLAPSE_LATENCY < latency_qos) {
 		sleep_limit = SLEEP_LIMIT_NO_TCXO_SHUTDOWN;
-
-	mode = &msm_pm_modes[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN];
-	if (mode->latency >= latency_qos)
+	} else if (CONFIG_MSM_SWFI_LATENCY < latency_qos) {
 		allow_sleep = false;
-
-	mode = &msm_pm_modes[
-		MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT];
-	if (mode->latency >= latency_qos) {
+	} else {
 		/* no time even for SWFI */
-		while (!msm_irq_pending())
-			udelay(1);
-#ifdef CONFIG_MSM_IDLE_STATS
-		exit_stat = MSM_PM_STAT_IDLE_SPIN;
-#endif
-		goto abort_idle;
+		return;
 	}
 
 	if (msm_pm_debug_mask & MSM_PM_DEBUG_IDLE)
@@ -539,8 +537,7 @@ void arch_idle(void)
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_CLOCK)
 			printk(KERN_DEBUG "msm_sleep: clk swfi -> %ld\n",
 				saved_rate);
-		if (saved_rate
-		    && acpuclk_set_rate(saved_rate, SETRATE_SWFI) < 0)
+		if (saved_rate && acpuclk_set_rate(saved_rate, 1) < 0)
 			printk(KERN_ERR "msm_sleep(): clk_set_rate %ld "
 			       "failed\n", saved_rate);
   	} else {
@@ -616,7 +613,7 @@ static int msm_pm_enter(suspend_state_t state)
 #else
 	sleep_limit = SLEEP_LIMIT_NONE;
 #endif
-
+///+++ FIH_ADQ +++ 6360
 #ifdef CONFIG_MSM_SLEEP_TIME_OVERRIDE
 	if (msm_pm_sleep_time_override > 0) {
 		int64_t ns = NSEC_PER_SEC * (int64_t)msm_pm_sleep_time_override;
@@ -624,7 +621,7 @@ static int msm_pm_enter(suspend_state_t state)
 		msm_pm_sleep_time_override = 0;
 	}
 #endif
-
+///--- FIH_ADQ --- 6360
 	ret = msm_sleep(msm_pm_sleep_mode,
 		msm_pm_max_sleep_time, sleep_limit, 0);
 
@@ -660,8 +657,51 @@ static int msm_pm_enter(suspend_state_t state)
 	return 0;
 }
 
+///+FIH_ADQ
+/* FIH_ADQ, Kenny { */
+//#include "linux/pmlog.h"
+/* } FIH_ADQ, Kenny */
+
+#ifdef __FIH_PM_STATISTICS__
+static int _msm_pm_enter(suspend_state_t state)
+{
+	int i;
+
+	g_pms_suspend.pre = get_seconds();
+	g_pms_suspend.npre = get_nseconds();
+#ifdef __FIH_DBG_PM_STATISTICS__
+	if (g_secupdatereq) g_timelose++;
+	{
+		unsigned long l = get_seconds() - g_pms_resume.pre;
+		g_pms_resume.ntime += ((l) ? (l--, (NSEC_PER_SEC - g_pms_resume.npre + get_nseconds())) : (get_nseconds() - g_pms_resume.npre));
+		g_pms_resume.time += (l + (g_pms_resume.ntime / NSEC_PER_SEC));
+		g_pms_resume.ntime %= NSEC_PER_SEC;
+	}
+#endif		// __FIH_DBG_PM_STATISTICS__
+
+	i = msm_pm_enter(state);
+
+	//g_pms_suspend.time += (get_seconds() - g_pms_suspend.pre);
+#ifdef __FIH_DBG_PM_STATISTICS__
+	g_secupdatereq = 3;
+#else		// __FIH_DBG_PM_STATISTICS__
+	g_secupdatereq = 4;
+#endif		// __FIH_DBG_PM_STATISTICS__
+	g_pms_suspend.cnt++;
+
+	return i;
+}
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
+
 static struct platform_suspend_ops msm_pm_ops = {
+///+FIH_ADQ
+#ifdef __FIH_PM_STATISTICS__
+	.enter		= _msm_pm_enter,
+#else	// __FIH_PM_STATISTICS__
 	.enter		= msm_pm_enter,
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
 	.valid		= suspend_valid_only_mem,
 };
 
@@ -686,6 +726,10 @@ static void msm_pm_restart(char str)
 		msm_proc_comm(PCOM_RESET_CHIP, &restart_reason, 0);
 	}
 #endif
+	/* FIH_ADQ, Ming { */
+	uint32_t oem_cmd = SMEM_PROC_COMM_OEM_RESET_CHIP_EBOOT;
+	msm_proc_comm_oem(PCOM_CUSTOMER_CMD1, &oem_cmd, 0, &restart_reason);
+	/* } FIH_ADQ, Ming */
 	for (;;) ;
 }
 
@@ -702,6 +746,15 @@ static int msm_reboot_call(struct notifier_block *this, unsigned long code, void
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned code = simple_strtoul(cmd + 4, 0, 16) & 0xff;
 			restart_reason = 0x6f656d00 | code;
+	/* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
+		} else if (!strcmp(cmd, "usb_pid")) {
+			restart_reason = 0x22685511;	
+	/* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */			
+    /*+++ FIH_ADQ --- Sung Chuan 2009.07.29 { */				
+	    } else if (!strcmp(cmd, "usb_reboot")) {
+			restart_reason = 0x22692922;	
+    /* }--- FIH_ADQ --- Sung Chuan 2009.07.29 */
+
 		} else {
 			restart_reason = 0x77665501;
 		}
@@ -918,8 +971,6 @@ static int __init msm_pm_init(void)
 	}
 #endif /* CONFIG_ARCH_QSD */
 
-	BUG_ON(msm_pm_modes == NULL);
-
 	atomic_set(&msm_pm_init_done, 1);
 	suspend_set_ops(&msm_pm_ops);
 
@@ -934,11 +985,6 @@ static int __init msm_pm_init(void)
 #endif
 
 	return 0;
-}
-
-void __init msm_pm_set_platform_data(struct msm_pm_platform_data *data)
-{
-	msm_pm_modes = data;
 }
 
 late_initcall(msm_pm_init);

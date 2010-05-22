@@ -37,7 +37,7 @@ drivers-$(CONFIG_OPROFILE)	+= arch/sparc/oprofile/
 # Renaming is done to avoid confusing pattern matching rules in 2.5.45 (multy-)
 INIT_Y		:= $(patsubst %/, %/built-in.o, $(init-y))
 CORE_Y		:= $(core-y)
-CORE_Y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/
+CORE_Y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/ ltt/
 CORE_Y		:= $(patsubst %/, %/built-in.o, $(CORE_Y))
 DRIVERS_Y	:= $(patsubst %/, %/built-in.o, $(drivers-y))
 NET_Y		:= $(patsubst %/, %/built-in.o, $(net-y))

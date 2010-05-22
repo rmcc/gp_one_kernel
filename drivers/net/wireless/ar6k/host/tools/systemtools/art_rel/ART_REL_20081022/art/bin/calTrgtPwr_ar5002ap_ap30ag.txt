@@ -1,0 +1,133 @@
+# target power file for AR5002AP 802.11a/b/g AP Reference Design
+
+# 11a Target Power table : 
+#	 Rules:
+#		1. up to a maximum of 8 test frequencies
+#		2. test frequencies DO NOT need to cover the entire range of 5180-5850. It
+#		   is allowed to provide data for a smaller range. for all channels
+#		   outside of test frequencies range, target power will be assumed 0dB.
+#		3. specify mask/PER limited target power for various rates
+#
+#BEGIN_11a_TARGET_POWER_TABLE  
+#  test_frequencies   6-24_target  36_target 48_target   54_target  
+								    
+   5170			20             20             18            17    
+   5320			20	       20             18            17    
+   5470			20	       20             18            17    
+   5720			20	       20             18            17    
+   5725			20	       19             18            16    
+   5825			20	       19             18            16    
+   5850			20	       19             18            16    
+											         
+
+#END_11a_TARGET_POWER_TABLE
+
+
+# 11b Target Power table : 
+#	 Rules:
+#		1. Need to define exactly 2 test frequencies in 2.412 - 2.484 G range. 
+#		2. test frequencies DO NOT need to cover the entire range of 2412-2484. It
+#		   is allowed to provide data for a smaller range. for all channels
+#		   outside of test frequencies range, target power will be assumed 0dB.
+#		3. specify mask/PER limited target power for various rates
+#
+#BEGIN_11b_TARGET_POWER_TABLE  
+#  test_frequencies   1_target   2_target 5.5_target 11_target  
+							       
+   2412			20	    20	     20	       20      
+   2484			20	    20	     20	       20         
+
+#END_11b_TARGET_POWER_TABLE
+
+# ofdm@2p4 Target Power table : 
+#	 Rules:
+#		1. up to a maximum of 3 test frequencies in 2.412 - 2.484 G range
+#		2. test frequencies DO NOT need to cover the entire range of 2412-2484. It
+#		   is allowed to provide data for a smaller range. for all channels
+#		   outside of test frequencies range, target power will be assumed 0dB.
+#		3. specify mask/PER limited target power for various rates
+#
+#BEGIN_11g_TARGET_POWER_TABLE  
+#  test_frequencies   6-24_target  36_target 48_target   54_target
+								  
+   2412			20	    20		18           17
+   2447			20	    20		18           17
+   2472			20	    20		18           17
+
+
+#END_11g_TARGET_POWER_TABLE
+
+
+
+# Test Groups :
+#      Rules:
+#		1. Specify up to 8 band edges for each test group.
+#		2. If no backoff desired at a band edge, give a large number (e.g, 30) so
+#		   that the driver determined limit becomes the target power.
+#
+
+#BEGIN_TEST_GROUPS
+
+
+# Test Group 1: US and CANADA (FCC)
+#	test_group_code	BE1	BE2	BE3	BE4	BE5	BE6	BE7
+	0x10		5180	5240	5260	5320	5745	5765	5825
+			15	15	20	17	20	20	20  # Band Edge Max Power
+			0	0	0	0	0	1	0   # in-band flag
+
+# Test Group 2: US and CANADA (FCC) 802.11a TURBO mode CTL
+#	test_group_code	BE1	BE2	BE3	BE4	BE5	BE6     BE7     BE8     
+	0x13		5200	5210	5250	5280	5290	5760    5765    5805    
+			17	17	17	20	20	20      20      20      # Band Edge Max Power
+			0	1	0	0	0	0       1       0       # in-band flag
+
+# Test Group 3: US and CANADA (FCC) 802.11b mode CTL
+#	test_group_code	BE1	BE2	BE3	
+	0x11		2412	2417	2462		
+			20	20	20	# Band Edge Max Power
+			0	1	0	# in-band flag
+
+# Test Group 4: US and CANADA (FCC) 802.11g mode CTL
+#	test_group_code	BE1	BE2	BE3	BE4	
+	0x12		2412	2417	2457	2462		
+			16.5	20	20	17	# Band Edge Max Power
+			0	1	1	0	# in-band flag
+
+# Test Group 5: US and CANADA (FCC) 802.11g TURBO mode CTL
+#	test_group_code	BE1	BE2	
+	0x14		2437	2437		
+			20	20	# Band Edge Max Power
+			0	0	# in-band flag
+
+# Test Group 6: JAPAN (MKK)
+#	test_group_code	BE1	BE2	
+	0x40		5170	5230	
+			30	30	  # Band Edge Max Power
+			0	0	  # in-band flag
+
+
+# Test Group 7: EUROPE (ETSI)
+#	test_group_code	BE1	BE2	BE3	BE4	BE5	BE6	BE7	
+	0x30		5180	5320	5500	5700    5745    5765	5825	  
+			18	18	20	20      30      30	30	# Band Edge Max Power
+			0	0	0	0	0	1	0	# in-band flag
+
+# Test Group 8: EUROPE (ETSI) 802.11b mode CTL
+#	test_group_code	BE1	BE2	BE3	
+	0x31		2412	2417	2472		
+			16	16	16	# Band Edge Max Power
+			0	1	0	# in-band flag
+
+# Test Group 9: EUROPE (ETSI) 802.11g mode CTL
+#	test_group_code	BE1	BE2	BE3	
+	0x32		2412	2417	2472		
+			14.5	14.5	14.5	# Band Edge Max Power
+			0	1	0	# in-band flag
+
+# Test Group 10: EUROPE (ETSI) 802.11g TURBO mode CTL 
+#	test_group_code	BE1	BE2	
+	0x34		2437	2437		
+			15.5	15.5	# Band Edge Max Power
+			0	0	# in-band flag
+
+#END_TEST_GROUPS

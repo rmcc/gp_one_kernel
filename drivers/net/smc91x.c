@@ -7,7 +7,6 @@
  *	Developed by Simple Network Magic Corporation
  * Copyright (C) 2003 Monta Vista Software, Inc.
  *	Unified SMC91x driver by Nicolas Pitre
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

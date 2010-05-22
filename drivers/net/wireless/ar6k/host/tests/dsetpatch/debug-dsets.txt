@@ -1,0 +1,44 @@
+
+# This file is used by flashup.sh in order to write DataSets into flash.
+# Blank lines and lines beginning with # are ignored.
+# Other lines consist of:
+#    DataSet ID (which is generally found in dsetid.h)
+#    Start address of the DataSet in Target flash
+#    Host file name that contains DataSet Data
+#    DataSet version, which should be left blank if not currently used
+#
+
+
+#DsetID	Address(Ignored)		File						Version
+
+# Regulatory Database(0x400 + 2)
+1026	0xa2041000	/tmp/diffile
+
+# Analog Config ("bank6") DataSets
+# Usually, only one of these -- the one that matches crystal speed -- is
+# programmed into flash.  We default to 40MHz.
+
+# Analog Config for 19.2 MHz
+#5	0xa2042000	$WORKAREA/host/support/analogconfig/AR6K19_2M.bin
+
+# Analog Config for 26   MHz
+#6	0xa2042000	$WORKAREA/host/support/analogconfig/AR6K26M.bin
+
+# Analog Config for 40   MHz
+#7	0xa2042000	$WORKAREA/host/support/analogconfig/AR6K40M.bin
+
+# Analog Config for 52   MHz
+#8	0xa2042000	$WORKAREA/host/support/analogconfig/AR6K52M.bin
+
+# Analog Config for 38.4 MHz
+#9	0xa2042000	$WORKAREA/host/support/analogconfig/AR6K38_4M.bin
+
+# Analog Config for 24   MHz
+#10	0xa2042000	$WORKAREA/host/support/analogconfig/AR6K24M.bin
+
+#Data set overide for bluetooth co-existence.
+#40 0xa2043000  $WORKAREA/host/support/phyregs.bin
+
+#Data set for WOW.
+#144      0xa2043000      $WORKAREA/host/tools/wlan-dset/wow.bin
+

@@ -5,6 +5,7 @@
  *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com)
  *               Ulrich Weigand (uweigand@de.ibm.com)
+ *  Portions added by T. Halloran: (C) Copyright 2002 IBM Poughkeepsie, IBM Corporation
  *
  *  Derived from "arch/i386/mm/fault.c"
  *    Copyright (C) 1995  Linus Torvalds
@@ -29,6 +30,7 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/hugetlb.h>
+#include <linux/marker.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/s390_ext.h>
@@ -169,6 +171,7 @@ static void do_no_context(struct pt_regs *regs, unsigned long error_code,
 	fixup = search_exception_tables(regs->psw.addr & __FIXUP_MASK);
 	if (fixup) {
 		regs->psw.addr = fixup->fixup | PSW_ADDR_AMODE;
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 	}
 
@@ -329,6 +332,9 @@ do_exception(struct pt_regs *regs, unsigned long error_code, int write)
 	 */
 	local_irq_enable();
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%lu",
+		error_code & 0xffff, instruction_pointer(regs));
+
 	down_read(&mm->mmap_sem);
 
 	si_code = SEGV_MAPERR;
@@ -412,6 +418,7 @@ bad_area:
 		tsk->thread.prot_addr = address;
 		tsk->thread.trap_no = error_code;
 		do_sigsegv(regs, error_code, si_code, address);
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 	}
 

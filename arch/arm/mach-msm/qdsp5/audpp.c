@@ -4,7 +4,6 @@
  * common code to deal with the AUDPP dsp task (audio postproc)
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -36,6 +35,7 @@
 
 #include "evlog.h"
 
+#define LOG_CMCS 0 //karen test
 
 enum {
 	EV_NULL,
@@ -89,6 +89,8 @@ struct audpp_state the_audpp_state = {
 
 int audpp_send_queue1(void *cmd, unsigned len)
 {
+	if (LOG_CMCS) pr_info("audpp: audpp_send_queue1()\n");
+
 	return msm_adsp_write(the_audpp_state.mod,
 			      QDSP_uPAudPPCmd1Queue, cmd, len);
 }
@@ -96,6 +98,8 @@ EXPORT_SYMBOL(audpp_send_queue1);
 
 int audpp_send_queue2(void *cmd, unsigned len)
 {
+	if (LOG_CMCS) pr_info("audpp: audpp_send_queue2()\n");
+
 	return msm_adsp_write(the_audpp_state.mod,
 			      QDSP_uPAudPPCmd2Queue, cmd, len);
 }
@@ -103,6 +107,8 @@ EXPORT_SYMBOL(audpp_send_queue2);
 
 int audpp_send_queue3(void *cmd, unsigned len)
 {
+	if (LOG_CMCS) pr_info("audpp: audpp_send_queue3()\n");
+
 	return msm_adsp_write(the_audpp_state.mod,
 			      QDSP_uPAudPPCmd3Queue, cmd, len);
 }
@@ -111,6 +117,8 @@ EXPORT_SYMBOL(audpp_send_queue3);
 static int audpp_dsp_config(int enable)
 {
 	audpp_cmd_cfg cmd;
+
+	if (LOG_CMCS) pr_info("audpp: audpp_dsp_config()\n");
 
 	cmd.cmd_id = AUDPP_CMD_CFG;
 	cmd.cfg = enable ? AUDPP_CMD_CFG_ENABLE : AUDPP_CMD_CFG_SLEEP;
@@ -122,6 +130,9 @@ static void audpp_broadcast(struct audpp_state *audpp, unsigned id,
 			    uint16_t *msg)
 {
 	unsigned n;
+
+	if (LOG_CMCS) pr_info("audpp: audpp_broadcast()\n");
+	
 	for (n = 0; n < AUDPP_CLNT_MAX_COUNT; n++) {
 		if (audpp->func[n])
 			audpp->func[n] (audpp->private[n], id, msg);
@@ -131,20 +142,10 @@ static void audpp_broadcast(struct audpp_state *audpp, unsigned id,
 static void audpp_notify_clnt(struct audpp_state *audpp, unsigned clnt_id,
 			      unsigned id, uint16_t *msg)
 {
+	if (LOG_CMCS) pr_info("audpp: audpp_notify_clnt()\n");
+
 	if (clnt_id < AUDPP_CLNT_MAX_COUNT && audpp->func[clnt_id])
 		audpp->func[clnt_id] (audpp->private[clnt_id], id, msg);
-}
-
-static void audpp_handle_pcmdmamiss(struct audpp_state *audpp,
-	uint16_t bit_mask)
-{
-	 uint8_t b_index;
-
-	for (b_index = 0; b_index < AUDPP_CLNT_MAX_COUNT; b_index++) {
-		if (bit_mask & (0x1 << b_index))
-			audpp->func[b_index] (audpp->private[b_index],
-				AUDPP_MSG_PCMDMAMISSED, &bit_mask);
-	}
 }
 
 static void audpp_dsp_event(void *data, unsigned id, size_t len,
@@ -152,6 +153,8 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 {
 	struct audpp_state *audpp = data;
 	uint16_t msg[8];
+
+	if (LOG_CMCS) pr_info("audpp: audpp_dsp_event(id = %d)\n", id);
 
 	if (id == AUDPP_MSG_AVSYNC_MSG) {
 		getevent(audpp->avsync, sizeof(audpp->avsync));
@@ -184,7 +187,7 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 			audpp->func[5] (audpp->private[5], id, msg);
 		break;
 	case AUDPP_MSG_PCMDMAMISSED:
-		audpp_handle_pcmdmamiss(audpp, msg[0]);
+		pr_err("audpp: DMA missed obj=%x\n", msg[0]);
 		break;
 	case AUDPP_MSG_CFG_MSG:
 		if (msg[0] == AUDPP_MSG_ENA_ENA) {
@@ -219,6 +222,9 @@ static void audpp_fake_event(struct audpp_state *audpp, int id,
 			     unsigned event, unsigned arg)
 {
 	uint16_t msg[1];
+
+	if (LOG_CMCS) pr_info("audpp: audpp_fake_event()\n");
+	
 	msg[0] = arg;
 	audpp->func[id] (audpp->private[id], event, msg);
 }
@@ -227,6 +233,8 @@ int audpp_enable(int id, audpp_event_func func, void *private)
 {
 	struct audpp_state *audpp = &the_audpp_state;
 	int res = 0;
+
+	if (LOG_CMCS) pr_info("audpp: audpp_enable()\n");
 
 	if (id < -1 || id > 4)
 		return -EINVAL;
@@ -278,6 +286,8 @@ void audpp_disable(int id, void *private)
 	struct audpp_state *audpp = &the_audpp_state;
 	unsigned long flags;
 
+	if (LOG_CMCS) pr_info("audpp: audpp_disable()\n");
+
 	if (id < -1 || id > 4)
 		return;
 
@@ -317,6 +327,8 @@ void audpp_avsync(int id, unsigned rate)
 	unsigned long flags;
 	audpp_cmd_avsync cmd;
 
+	if (LOG_CMCS) pr_info("audpp: audpp_avsync()\n");
+
 	if (BAD_ID(id))
 		return;
 
@@ -343,6 +355,8 @@ unsigned audpp_avsync_sample_count(int id)
 	unsigned long flags;
 	unsigned mask;
 
+	if (LOG_CMCS) pr_info("audpp: audpp_avsync_sample_count()\n");
+
 	if (BAD_ID(id))
 		return 0;
 	
@@ -365,6 +379,8 @@ unsigned audpp_avsync_byte_count(int id)
 	unsigned val;
 	unsigned long flags;
 	unsigned mask;
+
+	if (LOG_CMCS) pr_info("audpp: audpp_avsync_byte_count()\n");
 
 	if (BAD_ID(id))
 		return 0;
@@ -390,6 +406,8 @@ int audpp_set_volume_and_pan(unsigned id, unsigned volume, int pan)
 	/* cmd, obj_cfg[7], cmd_type, volume, pan */
 	uint16_t cmd[11];
 	
+	if (LOG_CMCS) pr_info("audpp: audpp_set_volume_and_pan()\n");
+	
 	if (id > 6)
 		return -EINVAL;
 
@@ -408,6 +426,8 @@ int audpp_pause(unsigned id, int pause)
 {
 	/* pause 1 = pause 0 = resume */
 	u16 pause_cmd[AUDPP_CMD_DEC_CTRL_LEN / sizeof(unsigned short)];
+
+	if (LOG_CMCS) pr_info("audpp: audpp_pause()\n");
 
 	if (id >= CH_COUNT)
 		return -EINVAL;
@@ -429,6 +449,8 @@ EXPORT_SYMBOL(audpp_pause);
 int audpp_flush(unsigned id)
 {
 	u16 flush_cmd[AUDPP_CMD_DEC_CTRL_LEN / sizeof(unsigned short)];
+
+	if (LOG_CMCS) pr_info("audpp: audpp_flush()\n");
 
 	if (id >= CH_COUNT)
 		return -EINVAL;

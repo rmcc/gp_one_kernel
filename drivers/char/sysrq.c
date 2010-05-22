@@ -351,6 +351,34 @@ static struct sysrq_key_op sysrq_unrt_op = {
 	.enable_mask	= SYSRQ_ENABLE_RTNICE,
 };
 
+//FIH_ADQ+
+extern void set_plogbuf_state(bool state);
+static void sysrq_handle_clearplogbuf(int key, struct tty_struct *tty)
+{
+	set_plogbuf_state(true);
+}
+
+static struct sysrq_key_op sysrq_clearplogbuf_op = {
+	.handler	= sysrq_handle_clearplogbuf,
+	.help_msg	= "start-plog",
+	.action_msg	= "START PLOG",
+	.enable_mask	= SYSRQ_ENABLE_LOG,
+};
+
+extern void flush_plogbuf();
+static void sysrq_handle_flush_plogbuf(int key, struct tty_struct *tty)
+{
+	set_plogbuf_state(false);
+}
+
+static struct sysrq_key_op sysrq_warnprint_op = {
+	.handler	= sysrq_handle_flush_plogbuf,
+	.help_msg	= "stop-plog",
+	.action_msg	= "STOP PLOG",
+	.enable_mask	= SYSRQ_ENABLE_LOG,
+};
+//FIH_ADQ-
+
 /* Key Operations table and lock */
 static DEFINE_SPINLOCK(sysrq_key_table_lock);
 
@@ -403,8 +431,10 @@ static struct sysrq_key_op *sysrq_key_table[36] = {
 	/* x: May be registered on ppc/powerpc for xmon */
 	NULL,				/* x */
 	/* y: May be registered on sparc64 for global register dump */
-	NULL,				/* y */
-	NULL				/* z */
+//FIH_ADQ+
+	&sysrq_clearplogbuf_op,		/* y */
+	&sysrq_warnprint_op		/* z */
+//FIH_ADQ-
 };
 
 /* key2index calculation, -1 on invalid index */

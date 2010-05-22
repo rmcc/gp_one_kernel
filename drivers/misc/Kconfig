@@ -508,11 +508,6 @@ config LOGGER
 	bool "High-speed in-kernel logging driver"
 	default y
 
-config KERNEL_LOGGER_TEST
-	tristate "Simple module to test kernel API for logger"
-	depends on LOGGER
-	default m
-
 config UID_STAT
 	bool "UID based statistics tracking exported to /proc/uid_stat"
 	default n
@@ -530,7 +525,6 @@ menuconfig ANDROID_RAM_CONSOLE_ERROR_CORRECTION
         bool "Enable error correction"
         default n
         depends on ANDROID_RAM_CONSOLE
-        depends on !ANDROID_RAM_CONSOLE_EARLY_INIT
         select REED_SOLOMON
         select REED_SOLOMON_ENC8
         select REED_SOLOMON_DEC8

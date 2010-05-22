@@ -1,0 +1,320 @@
+<html><!-- InstanceBegin template="/Templates/helpnav.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<!-- InstanceBeginEditable name="doctitle" -->
+
+<title>Host Driver SD Request Processing</title>
+<!-- InstanceEndEditable -->
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<!-- InstanceBeginEditable name="head" -->
+<!-- InstanceEndEditable -->
+<!-- InstanceParam name="HeaderColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="FooterColor" type="color" value="#0000FF" -->
+<!-- InstanceParam name="NavBackgroundColor" type="color" value="#FFFFFF" -->
+<!-- InstanceParam name="BodyBackgroundColor" type="color" value="#FFFFFF" -->
+<link href="CodeTHelp.css" rel="stylesheet" type="text/css">
+</head><a name="TopTopic"></a>
+<body bgcolor="#FFFFFF" leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+<table width="100%" border="0" cellspacing="0" cellpadding="4">
+  <tr> 
+    <td width="40%" rowspan="2" bgcolor="#0000FF"><a href="http://www.codetelligence.com"><img src="Images/codetelligence_lrg.gif" name="image" width="252" height="40" border="0"></a></td>
+    <td width="60%" height="62" bgcolor="#0000FF">
+     <font color="#FFFFFF" size="5" face="Arial, Helvetica, sans-serif"><strong>Embedded SDIO Driver Kit Help </strong></font></td>
+  </tr>
+</table>
+
+<table width="100%" border="0" cellspacing="10" cellpadding="0">
+  <tr>
+    <td width="93%"><font face="Arial, Helvetica, sans-serif">
+<p class="Topic"><!-- InstanceBeginEditable name="SubTemplate" -->Host&nbsp;Driver
+		SD Request Processing <!-- InstanceEndEditable --> </p>
+</font></td>
+    <td><!-- InstanceBeginEditable name="NavBack" --><A href="#previous#"><img
+			src="Images/leftarrow.gif" width="27" height="32" border="0" alt=""></A>
+		<!-- InstanceEndEditable --></td><td><!-- InstanceBeginEditable name="Nav" --><A href="#next#"><img
+			src="Images/rightarrow.gif" width="27" height="32" border="0" alt=""></A>
+		<!-- InstanceEndEditable --></td>
+  </tr>
+</table>
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="15">
+<tr><td>
+<!-- InstanceBeginEditable name="Help Content" --> <OBJECT
+			type="application/x-oleobject"
+			classid="clsid:1e2a7bd0-dab9-11d0-b93a-00c04fc99f9e">
+			<PARAM name="Keyword" value="Host Driver SD Request Processing"
+				name="">
+		</OBJECT>
+
+		<p class="BODYTEXT">The SDIO core and peripheral drivers allocate,
+		assemble and issue <font face="Courier New">SDREQUEST</font>
+		structures to host controller drivers. Each request provides
+		information for all phases of an SD/SDIO bus transaction.&nbsp; This
+		includes the command, response and data transfer phases&nbsp; The
+		content of a bus request is card/function specific&nbsp;and can
+		consist of any&nbsp; combination of command code, command
+		argument,&nbsp;standard response types and the presence of data (read
+		or write).&nbsp; The HCD is unaware of the purpose and nature of each
+		command.&nbsp; An HCD is only concerned by the value of the command
+		code,&nbsp;the 32-bit value of the&nbsp;argument, the expected
+		response type and the block transfer parameters (number of blocks,
+		bytes per block).&nbsp;&nbsp; The HCD relies on upper layer software
+		to properly assemble the request that is appropriate (or
+		legal)&nbsp;for the card.&nbsp; The HCD is only concerned about the
+		basic parameters of the&nbsp;request and not whether the response
+		and/or argument is appropriate for the command.&nbsp; This is left for
+		upper layer software.&nbsp; This technique of breaking down a bus
+		request into it's&nbsp;basic&nbsp;parameters allow the stack to
+		handle&nbsp;future&nbsp;commands&nbsp;without a change in the host
+		controller driver. A quick reference to the key fields of a bus request
+		can be found here: <a href="periph_io_requests.htm#KeyBusRequestFields">Function Driver I/O Request</a>.</p>
+
+		<p class="BODYTEXT"><strong>Command and Responses:</strong></p>
+
+		<p class="BODYTEXT">All bus requests consist of a command and response
+		phase.&nbsp; Each bus request contains the command code and 32-bit
+		command argument to be issued.&nbsp; The response type is also encoded
+		in each bus request structure.&nbsp; The HCD should decode the
+		response type and setup hardware appropriately.&nbsp; The HCD should
+		start the command/response transaction in hardware and wait for
+		completion.&nbsp; An HCD request callback typically enables a &quot;command
+		done&quot; interrupt
+		and immediately returns <font face="Courier New, Courier, mono">SDIO_STATUS_PENDING</font>.
+		At	some point in the future the interrupt will signal and the ISR will
+		process the results. Most	HCDs	can	poll	for	command/response
+		completion	as	the	SD/SDIO	specifications	defines	a maximum	timeout
+		period	which	is relatively short compared to typical interrupt processing
+		overhead.&nbsp; Polling however, should only be used when the clock
+		rate is high.&nbsp; At lower clock rates (low speed devices) the
+		polling operation can affect system responsiveness.&nbsp; When completing a
+		request	without interrupts, the HCD can return from the request callback
+		with	the completion status of the request. There are however restrictions
+		on returning a non-pending status (see <A href="#CompleteRequest">Completing
+		Requests Immediately</A>). </p>
+		<p class="BODYTEXT">On	successful transmission of the command and reception
+		of	a response, the HCD	should	move	the	response	data	into
+		the <font face="Courier New">Response[]</font> array of bytes in the <font face="Courier New">SDREQUEST</font> structure.&nbsp; The&nbsp;HCD must also set&nbsp;the completion status
+		in the <font face="Courier New">Status</font> field. The following
+		code demonstrates this:</p>
+		<pre> 
+        if (!(hwStatus &amp; HW_ERRORS)) { 
+            pReq-&gt;Status = SDIO_STATUS_SUCCESS; 
+		    // move data from FIFO into read buffer, this
+		    // aligns the data correctly
+           for (ii = 0; ii &lt; dwordCount; ii++)  { 
+                   readBuffer[ii] = READ_HOST_REG32(pDevice, HOST_REG_RESPONSE+(ii*4));  
+           } 
+               // copy to response 
+           memcpy(&amp;pReq-&gt;Response[1],readBuffer,byteCount); 
+        } else {
+		       // set appropriate status 
+           pRequest->Status = SDIO_STATUS_xxxx;    
+        }
+        </pre>
+
+
+		<p class="BODYTEXT">The response data should be copied into the
+		response buffer starting at byte index 1.&nbsp; Byte index 0 is a
+		place holder for the CRC and not used.&nbsp; SPI mode requires a
+		different response format.&nbsp; Response bytes received in SPI mode
+		are stored into the response buffer at byte 0.&nbsp; The SDIO stack
+		converts SPI responses to SD/SDIO responses allowing most peripheral
+		drivers to operate in 1/4 bit mode or SPI mode&nbsp;without
+		modification.&nbsp; Under SPI mode, the HCD must submit the bus
+		request to the <font face="Courier New"><a href="HD_Reference.htm#FUNC_SDIO_CheckResponse">SDIO_CheckResponse()</a></font>
+		API , using the <font face="Courier New, Courier, mono">SDHCD_CHECK_SPI_TOKEN</font> option
+		to determine the appropriate	completion	status.&nbsp; This
+		function filters the SPI mode response and returns <font
+			face="Courier New">SDIO_STATUS_TIMEOUT</font> for SPI responses that
+		have the illegal cmd bit set.&nbsp; This will simulate SD 1/4 bit
+		behavior for commands that are not allowed for a card type.&nbsp;</p>
+
+		<p class="BODYTEXT">A non-data transfer bus request that completes
+		with failure or success can be completed using the <font
+			face="Courier New"><a href="HD_Reference.htm#FUNC_SDIO_HandleHcdEvent">SDIO_HandleHcdEvent()</a></font> API
+		with the event	code of <font face="Courier New">EVENT_HCD_TRANSFER_DONE</font>.&nbsp;
+		Under most operating systems this should NOT be called from an interrupt
+		service routine (ISR). The ISR should queue a deferred procedure or work
+		item that makes the actual indication. The <font face="Courier New">EVENT_HCD_TRANSFER_DONE</font> indication
+		should not be made	under	any circumstances	from	within	the <font face="Courier New, Courier, mono">pRequest</font>		callback. </p>
+		<p class="BODYTEXT"><font
+			face="Courier New">SDIO_HandleHcdEvent()</font> will	remove	the	current
+		request	and start	the	next	request	in	the	queue.&nbsp; The
+		bus	request	callback	may	be	called	in	the same	context as the
+		call	to <font face="Courier New">SDIO_HandleHcdEvent</font> .&nbsp;See <a href="hostc_events.htm">Host Driver Events</a> for
+		more	information on transfer completion events.</p>
+		<p class="HEADING3">Data Transfers:</p>
+
+		<p class="BODYTEXT">A bus request contains data if the <font
+			face="Courier New">Flags</font> field of the request has the <font
+			face="Courier New">SDREQ_FLAGS_DATA_TRANS</font> bit set.&nbsp; The
+		data transfer is a write operation if <font face="Courier New">SDREQ_FLAGS_DATA_WRITE</font>
+		bit is set, otherwise it is a read operation.&nbsp; The HCD should
+		submit the bus request (with received response) to the <font
+			face="Courier New"><a href="HD_Reference.htm#FUNC_SDIO_CheckResponse">SDIO_CheckResponse()</a></font> API&nbsp;&nbsp;to
+		determine whether the card status indicates that the data transfer can
+		proceed.&nbsp; This API filters the request for certain command codes
+		and responses and returns <font face="Courier New">SDIO_STATUS_SUCCESS</font>
+		if the data transaction can start.&nbsp; The function filters all
+		SD/MMC memory read/write commands and SDIO CMD53 responses.</p>
+
+		<p class="BODYTEXT">A bus request that&nbsp;requires read/write data
+		will contain block parameters describing&nbsp;the
+		manner&nbsp;in&nbsp;which a&nbsp;buffer of data is transferred to/from
+		a&nbsp;card.&nbsp; The HCD does not need to decode the command
+		arguments for&nbsp;block parameters.&nbsp;The <font face="Courier New">BlockCount</font>
+		and <font face="Courier New">BlockLen</font> parameters
+		indicate&nbsp;how many blocks and the number of bytes per
+		block&nbsp;the transaction will consist of.&nbsp; These parameters are
+		setup by the peripheral driver and&nbsp;specific to
+		the&nbsp;card/function.&nbsp;&nbsp;The <font face="Courier New">pDataBuffer</font>
+		field will point to an HCD-accessible buffer to retrieve/store data
+		for the transaction.&nbsp; The HCD should not assume any specific
+		data-type alignment to this buffer.</p>
+
+		<p class="BODYTEXT">The HCD can use the <font face="Courier New">DataRemaining</font>
+		and <font face="Courier New">pHcdContext</font> fields of the request
+		to keep track of the data&nbsp;transfer progress. The HCD should use
+		interrupt operation to transfer all blocks as read/write timeouts can
+		be considerably long.&nbsp; The exception to this  is when a transfer 
+		has been marked as a short transfer (see <a href="#shorttransfers">Short Transfers</a>).
+		Upon completion	(success	or	failure)&nbsp;the
+		HCD	should	indicate	the <font face="Courier New">EVENT_HCD_TRANSFER_DONE
+		<font face="Arial">event</font>.&nbsp;</font></p>
+		<p class="BODYTEXT"><a name="CompleteRequest"></a><strong>Completing Requests Immediately:</strong></p>
+		<p class="BODYTEXT"">HCDs that  complete bus transactions within the request
+		  callback (general failure, polling command completion, etc..) can return
+		  a completion status other than <font face="Courier New, Courier, mono">SDIO_STATUS_PENDING</font>.
+		  This will indicate to the SDIO core that the request was completed
+		  immediately (inline) and higher-level request processing is required.
+		  Under some circumstances the SDIO core will flag the HCD to complete
+		  the request in a separate context using either a deferred procedure
+		  or work item. This forces the HCD to handle the request as if the request
+		  was processed in an interrupt service routine. The purpose of this
+		  action is to break a recursive string of bus request that could result
+		  in a stack overflow. The HCD must check the bus request flags
+		  for the
+		  <font face="Courier New, Courier, mono">SDREQ_FLAGS_FORCE_DEFERRED_COMPLETION</font> before
+		  returning from the request callback. If set the HCD must make the 
+		  <font face="Courier New, Courier, mono"><a href="HD_Reference.htm#FUNC_SDIO_HandleHcdEvent">SDIO_HandleHcdEvent</a></font> indication
+		  in a separate work item  and return <font face="Courier New, Courier, mono">SDIO_STATUS_PENDING</font> from
+		  the request callback. The request must be completed in this manner
+		  regardless of whether the request was processed by hardware. For example,
+		  if a
+		  request failed
+		  to acquire some resource
+		  or	contained an invalid settings, the driver must always check this
+		  flag and may be forced into processing it in a deferred context. The
+		  follow code demonstrates this:</p>
+		<p class="BODYTEXT"">
+	<pre>
+  ... set up request
+  // check status
+if (status != SDIO_STATUS_PENDING) {
+   // request was completed inline or failed for whatever reason
+   if (pRequest->Flags & SDREQ_FLAGS_FORCE_DEFERRED_COMPLETE) {
+       // queue a work item to make the indication
+	   QueueBusRequestCompleteWorkItem(pHct);
+	       // always return status pending
+	   return SDIO_STATUS_PENDING;
+   } 
+   // fall through and return completion status, we completed this in-line  
+}
+    
+return status;</pre></p>
+	  <p class="BODYTEXT""><a name="shorttransfers"></a><strong>Short Data Transfers:</strong>
+	  </p>
+	  <p class="BODYTEXT"">A function driver may provide a hint to the host controller
+	    that a data transfer is short. This hint will allow the HCD to process
+	    a data transfer immediately without employing interrupts. This can improve
+	    overall throughput by reducing interrupt context switching. The following
+	    guideline is used by function driver to determine whether a short transfer
+	    operation shouldbe attempted:</p>
+	  <p class="BODYTEXT""><ul>
+  <li>The data transfer will be short consisting of 1 block and usually less
+    than 8 bytes
+in
+length.</li>
+  <li>If the transfer is a read operation, the  start bit  will occur within
+    several clocks. The card will not introduce any significant delay to the
+    start bit of read data.</li>
+  <li>If the transfer is a write operation, the  program done signal will occur
+    within several clock cycles. The card will not introduce any significant
+    delay for program done.</li>
+  </ul></p>
+	  <p class="BODYTEXT"">If a short data transfer optimization is requested, the
+	    function driver will set the <font face="Courier New, Courier, mono">SDREQ_FLAGS_DATA_SHORT_TRANSFER</font> flag
+	    in the request. Implementing any optimation for short data transfers
+	    is optional and the HCD can safely ignore this flag
+	    and process
+	    the request
+	    as a normal
+	    data
+	    transfer (with interrupts). </p>
+	  <p class="BODYTEXT""><strong>Direct Memory Access:</strong></p>
+	  <p class="BODYTEXT"">Function drivers can indicate that data buffers associated
+	    with
+	    a bus request reside in address spaces that can be directly handled
+	    by the system DMA controller or external bus master. The request flag,
+	    <font face="Courier New, Courier, mono">SDREQ_FLAGS_DATA_DMA</font> has
+	    been added for this purpose. As an additional reference the description
+	    of DMA operations, from a function driver point of view, is provided
+	    in the PDK help under: <a href="periph_io_requests.htm#DMAOperation">Function
+	    Driver I/O Requests : Direct Memory Access</a>.</p>
+	  <p class="BODYTEXT"">Function drivers will guarantee that the
+	    data buffer for this request meets the
+	    DMA requirements for this HCD and platform. While the <font face="Courier New, Courier, mono">SDREQ_FLAGS_DATA_DMA</font> flag
+	    is only informational for the HCD, the data pointer of a request is handled
+	    differently
+	    when it is set. . When set, the <font face="Courier New, Courier, mono">pDataBuffer</font> member
+	    of the request points to a list of <font face="Courier New, Courier, mono">SDDMA_DESCRIPTOR</font> structures.
+	    The number of elements in this list is set in the <font face="Courier New, Courier, mono">DescriptorCount</font> field
+	    of the
+	    request. The descriptor count will be less
+	    than the maximum number of descriptors per bus request that is reported
+	    in the <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> provided
+	    by each HCD. The <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> and <font face="Courier New, Courier, mono">SDDMA_DESCRIPTOR</font> structures
+	    are OS dependent and contain DMA pertinent information about the platform
+	    capabilties and data buffers, respectively. The <font face="Courier New, Courier, mono"><a href="hostc_structure.htm#SDHCDStruct" >SDHCD</a></font> structure
+	    contains the <font face="Courier New, Courier, mono">pDmaDescription</font> member
+	    that is set by DMA-capable HCDs before they register with the bus driver.
+	    If the HCD does not support DMA, then it should set this
+	    member to NULL. In this case, the HCD will never see a bus request with
+	    the
+	    <font face="Courier New, Courier, mono">SDREQ_FLAGS_DATA_DMA</font> set.</p>
+	  <p class="BODYTEXT"">The <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> structure
+	      is operating system dependent. It typically contains fields that define
+	      the
+	      highest address the device can DMA to/from, the maximum number of DMA
+	      descriptor entries per request, the maximum number of bytes  that
+	      can be processed for each descriptor and various address/length alignment
+	      requirements. If the DMA controller does not support scatter gather
+	    DMA (it may use
+	      a single set
+	      of hardware
+	      registers in a DMA channel) the HCD can choose to set the maximum number
+	      of DMA descriptors to one.  Alternatively, the HCD can set this value
+	      greater than 1 and emulate scatter gather behavior by
+      loading the next DMA descriptor on each DMA completion interrupt.  On some
+	      OS implementations the HCD can provide a hint to the function drivers
+	      that the DMA controller implements true scatter gather functionality.</p>
+	  <p class="BODYTEXT"">Refer to the SDIO HCD samples for OS-specific
+	    usage of the <font face="Courier New, Courier, mono">SDDMA_DESCRIPTION</font> and <font face="Courier New, Courier, mono">SDDMA_DESCRIPTOR</font> structures.
+	     Refer to the <font face="Courier New, Courier, mono">ctsystem_xxxx.h</font> header
+	    file (ex. <font face="Courier New, Courier, mono">ctsystem_linux.h</font>)
+	    for the definition of these structures. The sample HCDs  cover a range of
+	    DMA implementations/restrictions and techniques (scatter gather or simple
+	    DMA).<br>
+&nbsp;</p>
+	  <!-- InstanceEndEditable -->
+&nbsp;<br/>
+</table></td></tr>
+<table width="100%" border="0" cellspacing="0" cellpadding="2" >
+  <tr> <td><div align="right"><a href="#TopTopic">Back to top</a></div></td></tr>
+  <tr bgcolor="#0000FF"> 
+    <td> 
+      <font color="#FFFFFF"face="Arial, Helvetica, sans-serif"><strong>©2004-2005  </strong></font><font color="#FFFFFF" face="Arial, Helvetica, sans-serif"><strong>Code<em>telligence</em>,
+      Inc.   </strong></font><a href="http://www.codetelligence.com" target="_blank"><font color="#FFFFFF" face="Arial, Helvetica, sans-serif">www.codetelligence.com</font></a></td>
+  </tr>
+</table>
+</body>
+<!-- InstanceEnd --></html>

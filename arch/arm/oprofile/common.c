@@ -79,18 +79,22 @@ static void op_arm_stop(void)
 #ifdef CONFIG_PM
 static int op_arm_suspend(struct sys_device *dev, pm_message_t state)
 {
+    if (!irqs_disabled())   //FIH_ADQ +++
 	mutex_lock(&op_arm_mutex);
 	if (op_arm_enabled)
 		op_arm_model->stop();
+    if (!irqs_disabled())   //FIH_ADQ +++
 	mutex_unlock(&op_arm_mutex);
 	return 0;
 }
 
 static int op_arm_resume(struct sys_device *dev)
 {
+    if (!irqs_disabled())   //FIH_ADQ +++
 	mutex_lock(&op_arm_mutex);
 	if (op_arm_enabled && op_arm_model->start())
 		op_arm_enabled = 0;
+	if (!irqs_disabled())   //FIH_ADQ +++
 	mutex_unlock(&op_arm_mutex);
 	return 0;
 }

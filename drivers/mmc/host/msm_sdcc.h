@@ -2,7 +2,6 @@
  *  linux/drivers/mmc/host/msmsdcc.h - QCT MSM7K SDC Controller
  *
  *  Copyright (C) 2008 Google, All Rights Reserved.
- *  Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -107,14 +106,30 @@
 #define MCI_SDIOINTRCLR		(1 << 22)
 #define MCI_PROGDONECLR		(1 << 23)
 #define MCI_ATACMDCOMPLCLR	(1 << 24)
+/* ATHENV */
+#ifdef ATH_PATCH
+#define MCI_SDIOINTROPECLR	(1 << 25)
+#endif
+/* ATHENV */
 #define MCI_CCSTIMEOUTCLR 	(1 << 26)
 
+/* ATHENV */
+#ifdef ATH_PATCH
+#define MCI_CLEAR_STATIC_MASK	\
+	(MCI_CMDCRCFAILCLR|MCI_DATACRCFAILCLR|MCI_CMDTIMEOUTCLR|\
+	MCI_DATATIMEOUTCLR|MCI_TXUNDERRUNCLR|MCI_RXOVERRUNCLR|  \
+	MCI_CMDRESPENDCLR|MCI_CMDSENTCLR|MCI_DATAENDCLR|		  \
+	MCI_STARTBITERRCLR|MCI_DATABLOCKENDCLR|MCI_SDIOINTRCLR|MCI_SDIOINTROPECLR| \
+	MCI_PROGDONECLR|MCI_ATACMDCOMPLCLR|MCI_CCSTIMEOUTCLR)
+#else
 #define MCI_CLEAR_STATIC_MASK	\
 	(MCI_CMDCRCFAILCLR|MCI_DATACRCFAILCLR|MCI_CMDTIMEOUTCLR|\
 	MCI_DATATIMEOUTCLR|MCI_TXUNDERRUNCLR|MCI_RXOVERRUNCLR|  \
 	MCI_CMDRESPENDCLR|MCI_CMDSENTCLR|MCI_DATAENDCLR|	\
 	MCI_STARTBITERRCLR|MCI_DATABLOCKENDCLR|MCI_SDIOINTRCLR| \
 	MCI_PROGDONECLR|MCI_ATACMDCOMPLCLR|MCI_CCSTIMEOUTCLR)
+#endif
+/* ATHENV */
 
 #define MMCIMASK0		0x03c
 #define MCI_CMDCRCFAILMASK	(1 << 0)
@@ -235,7 +250,20 @@ struct msmsdcc_host {
 
 	struct msmsdcc_dma_data	dma;
 	struct msmsdcc_pio_data	pio;
+/* ATHENV */
+#ifdef ATH_PATCH
+	unsigned int		pre_cmd_with_data;
+	unsigned int		mci_irqenable;
+#endif
+/* ATHENV */
 
+    //FIH
+    bool    bSdioResume;
+///+++ FIH_ADQ +++ 6380
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	struct early_suspend early_suspend;
+#endif
+///--- FIH_ADQ ---6380
 #ifdef CONFIG_MMC_MSM7X00A_RESUME_IN_WQ
 	struct work_struct	resume_task;
 #endif

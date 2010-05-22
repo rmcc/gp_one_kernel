@@ -1,0 +1,1936 @@
+<Device version="1.0.0" versionIncrement="0">
+    <Name>SDIO Peripheral Driver Wizard</Name>
+    <Description>
+        <!--This wizard generates the basic framework for an SDIO peripheral driver.-->
+    </Description>
+    <Prologue>
+        <Image type="image" data="sdiostackfd.gif"/>    
+        <Description>
+            <!--Use this Wizard to create the framework for an SDIO function driver. 
+            Function drivers sit above the SDIO bus driver and control a single function on an
+            SDIO peripheral (card or module).<br/><br/> Select Next to begin the Wizard.-->
+        </Description>
+        <Help topic="">
+          </Help>
+    </Prologue>
+    <Epilogue>
+        <Image type="functionList" data=""/>
+        <Description>
+            <!--All Wizard parameters have been processed.<br/><font size='2'>Select <i>Finish</i> to generate the output files listed in the table.</font>-->
+        </Description>
+        <Help topic="">
+          <!--Select the output directory (or use the default). Driver files will be generated in sub-directories of this directory. -->
+        </Help>
+        <Action type="DisplayFileOptional" data="doc/readme.htm" title="Display ReadMe.htm after it is created?" filetype="html" current="1"/>
+    </Epilogue>
+    <Functions>
+    
+    <Function>
+            <Name>Driver Settings</Name>
+            <Type>Global</Type>
+            <SubType>SDIO Peripheral Driver Settings</SubType>
+            <Description>SDIO Peripheral Driver Settings</Description>
+            <Image type="functionList" data=""/>
+            <Help/>
+            <Parameters>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Driver Module Name: ">g_ModuleName</VarName>
+                    <Validate nonblank="1" type="name" message="Please enter a valid name that only contains alphanumeric characters: a-z,A-Z,0-9 and/or underscores.."/>
+                    <Value>sdio_mydriver_fd</Value>
+                    <Selection/>
+                    <Help topic="110">
+                        <!--Enter the name of the driver module.  This name should only contain alphanumeric characters: a-z,A-Z,0-9 and/or underscores. -->
+                    </Help>
+                </Selections>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Enter the short name of the driver used for data naming:">g_DriverName</VarName>
+                    <Validate minlength="3" message="Enter a name that is at least 3 characters long."/>
+                    <Value>MYDRIVER</Value>
+                    <Selection/>
+                    <Help topic="120">
+                        <!--Enter a name used for data and function naming within the code.-->
+                    </Help>
+                </Selections>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Driver description:">g_Description</VarName>
+                    <Value/>
+                    <Selection/>
+                    <Help topic="130">
+                        <!--A brief description of the driver.-->
+                    </Help>
+                </Selections>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Company name:">g_Companyname</VarName>
+                    <Value/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections dependsOn="_Date_" dependsOnValue="5" dependsOnTest="==">
+                    <VarName displayType="DROP_BOX" title="Select the target operating system:">g_OSType</VarName>
+                    <Value>1</Value>
+                    <Selection value="1" current="1" title="Linux 2.6"/>
+                    <Selection value="2" current="0" title="Linux 2.4"/>
+                    <Selection value="3" current="0" title="QNX Neutrino 6.3"/>
+                    <Help topic="140">
+                        <!--Function drivers contain two portions. One section is OS independent, the other is OS dependent. You must select the target OS that this driver is being built for. -->
+                    </Help>
+                </Selections>
+                <Selections hideCue="2">  
+                    <VarName displayType="CONSTANT" title="">g_Start_Copyright</VarName>
+                    <Value>Portions Copyright (c), 2005 Atheros Communications, Inc.
+PORTIONS OF THIS SOFTWARE ARE OWNED BY Atheros Communications, Inc., AND ALL USE OF THIS SOFTWARE 
+IS SUBJECT  TO THE CODETELLIGENCE SOFTWARE LICENSE AGREEMENT. UNAUTHORIZED USE OF THE SOFTWARE
+VIOLATES COPYRIGHT LAWS OF THE UNITED STATES AND OTHER JURISDICTIONS. IF YOU OBTAINED
+THIS SOFTWARE FROM SOMEONE OTHER THAN CODETELLIGENCE AND/OR IF YOU HAVE NOT ENTERED
+INTO A BINDING SOFTWARE LICENSE AGREEMENT WITH CODETELLIGENCE, YOU MAY NOT USE THIS
+SOFTWARE.
+IN ADDITION, AND WITHOUT LIMITATION, YOU ACKNOWLEDGE AND AGREE THAT YOU ARE SOLELY
+RESPONSIBLE FOR ALL USE AND DISTRIBUTION OF ALL CODE GENERATED BY THE SOFTWARE LICENSED
+TO YOU, AND YOU HEREBY WAIVE ANY CLAIM AGAINST, OR OTHER RIGHT IN RELATION TO, 
+CODETELLIGENCE WITH RESPECT TO SUCH CODE, AND FURTHER AGREE TO INDEMNIFY CODETELLIGENCE
+AGAINST ANY LOSS, CLAIM OR LIABILITY IN RELATION THERETO. 
+IF YOU DO NOT AGREE TO THE ABOVE TERMS, YOU MAY NOT INSTALL OR USE THE SOFTWARE IN ANY
+MANNER, AND MUST IMMEDIATELY RETURN THE SOFTWARE TO CODETELLIGENCE FOR A FULL REFUND.
+                    </Value>
+                <Selection/>                
+                </Selections>
+                
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_DriverNameLC</VarName>
+                    <Value type="toLower" parameter0="g_DriverName" parameter1="''" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_DriverNameUC</VarName>
+                    <Value type="toUpper" parameter0="g_DriverName" parameter1="''" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_driver_c</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'.c'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_driver_h</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_driver_os_c</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_os.c'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_driver_os_h</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_os.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">g_driver_app_h</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_app.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            </Parameters>
+                
+            <Solution space="preserve">
+ 
+        </Solution>
+        </Function>
+    <Function>
+            <Name>Card Settings</Name>
+            <Type>SW</Type>
+            <SubType>SW</SubType>
+            <Description>Describe the SDIO peripheral function</Description>
+            <Image type="functionList" data=""/>
+            <Help topic="150">
+                <!--Enter the peripheral function identification and description.-->
+            </Help>
+            <Parameters>
+                <Selections>
+                    <VarName displayType="RADIO_BOX" title="How will this device be identified:">CARD_IdType</VarName>
+                    <Value>1</Value>
+                    <Selection title="Manufacturer ID and Code" current="1"/>
+                    <Selection title="Device Class" current="0"/>
+                    <Help topic="160">
+                        <!--Peripheral drivers can identify their devices by the card's (or function's) Manufacturer ID and Manufacturer Code. Alternatively, drivers can supply an SDIO Class code such as GPS, Bluetooth, PHS, etc..-->
+                    </Help>
+                </Selections>
+                <Selections dependsOn="CARD_IdType" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="EDIT_BOX" title="Manufactuer ID:">CARD_Id</VarName>
+                    <Validate type="hex" minlength="1" maxlength="4" message="Enter hex value, no leading 0x."/>
+                    <Value>0000</Value>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections dependsOn="CARD_IdType" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="EDIT_BOX" title="Manufacturer Code:">CARD_Code</VarName>
+                    <Validate type="hex" minlength="1" maxlength="4" message="Enter hex value, no leading 0x."/>
+                    <Value>0000</Value>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections dependsOn="CARD_IdType" dependsOnValue="2" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="EDIT_BOX" title="Class code:">CARD_Class</VarName>
+                    <Validate type="hex" minlength="1" maxlength="2" message="Enter hex value, no leading 0x."/>
+                    <Value>0</Value>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections dependsOn="CARD_IdType" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="EDIT_BOX" title="Enter the function number for this device:">CARD_Function</VarName>
+                    <Validate type="numeric" minlength="1" maxlength="1" message="Enter numeric value."/>
+                    <Value>1</Value>
+                    <Selection/>
+                    <Help topic="170">
+                        <!--SDIO cards can have 1 to 7 functions. Enter the function number for your device. If your driver can support a device on any function, then set the function number to 0.-->
+                    </Help>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+            </Solution>
+        </Function>
+        <Function>
+            <Name>I/O Settings</Name>
+            <Type>SW</Type>
+            <SubType>SW</SubType>
+            <Description>Describe the I/O for this peripheral.</Description>
+            <Image type="functionList" data=""/>
+            <Help topic="200">
+                <!--This page of the Wizard defines the peripheral's I/O interface that will be controlled by the driver.-->
+            </Help>
+            <Parameters>
+                <Selections>
+                    <VarName displayType="RADIO_BOX" title="Type of I/O this driver will use:">IO_Type</VarName>
+                    <Value>1</Value>
+                    <Selection title="synchronous" current="1"/>
+                    <Selection title="asynchronous" current="0"/>
+                    <Selection title="both" current="0"/>
+                    <Help topic="210">
+                        <!--The driver can send requests to the device synchronously or asynchronously. Synchronous I/O is simplier to code. -->
+                    </Help>
+                </Selections>
+                <Selections>
+                    <VarName displayType="CHECK_BOX" title="Include command 53 buffer read/write support?">IO_cmd53</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help topic="215">
+                        <!--The Wizard can add code to implement buffer reads and writes via SDIO command 53 requests.  The sample code will issue byte-mode (1 block) CMD53 requests using the non-incrementing address mode-->
+                    </Help>
+                </Selections>
+                <Selections>
+                    <VarName displayType="CHECK_BOX" title="Will this driver support interrupts?">IO_Interrupts</VarName>
+                    <Value>0</Value>
+                    <Selection current="0"/>
+                    <Help topic="220">
+                        <!--SDIO devices may use interrupts to notify the host of events.-->
+                    </Help>
+                </Selections>
+            <Selections dependsOn="IO_Interrupts" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="RADIO_BOX" title="Type of interrupt processing:">IO_InterruptType</VarName>
+                    <Value>1</Value>
+                    <Selection title="synchronous" current="1"/>
+                    <Selection title="asynchronous" current="0"/>
+                    <Help topic="230">
+                        <!--All interrupts occur asynchronously. The interrupt handling can occur in a synchronous or asynchronous context. When interrupts are handled in an asynchronous context, only asynchronous I/O requests can be used. Due to optimizations in the bus driver, synchronous interrupt contexts are usually as fast as asynchronous and are easier to code for. -->
+                    </Help>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CHECK_BOX" title="Does the device require special low current handling?">IO_lowpower</VarName>
+                    <Value>0</Value>
+                    <Selection current="0"/>
+                    <Help topic="240">
+                        <!--If the card supports the SDIO 1.10 specification the driver can check the SPS bit in the configuration and then optionally set the device into low current mode.<br/>Most devices will not require this.-->
+                    </Help>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+<Code position="1" filename="g_driver_h" filename_dir="g_DriverNameLC">/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@file: <Pname name="g_driver_h"/>
+
+@abstract: OS independent include for SDIO <Pname name="g_DriverName"/> function driver
+  
+@notice: <Pname name="g_Start_Copyright"/>
+        
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+#ifndef __<Pname name="g_DriverNameUC"/>_H__
+#define __<Pname name="g_DriverNameUC"/>_H__
+<If argLeft="g_OSType" argTest="'&lt;='" argRight="'2'">
+#if defined(LINUX) || defined(__linux__)
+#include "linux/<Pname name="g_DriverNameLC"/>_os.h"
+#endif /* LINUX */
+</If>
+<If argLeft="g_OSType" argTest="'=='" argRight="'3'">
+#ifdef QNX
+#include "nto/<Pname name="g_DriverNameLC"/>_qnx.h"
+#endif /* QNX Neutrino */
+</If>
+typedef struct _<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE {
+    SDLIST         SDList;      /* link in the instance list */
+    PSDDEVICE      pDevice;     /* bus driver's device we are supporting */
+    <Pname name="g_DriverNameUC"/>_CONFIG  Config;      /* OS specific config  */
+}<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE, *P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE;
+
+typedef struct _<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT {
+    SDFUNCTION      Function;       /* function description for bus driver */ 
+    OS_SEMAPHORE    InstanceSem;    /* instance lock */
+    SDLIST          InstanceList;    /* list of instances */
+    SD_BUSCLOCK_RATE ClockOverride;  /* clock rate override */
+}<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT, *P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT;
+<If argLeft="IO_Type" argTest="'&gt;'" argRight="'1'">
+/* asynchronous buffer I/O support structure */
+typedef struct _ASYNCREQUEST {
+    UINT32 Register;        /* register address */
+    PUINT8 pBuffer;         /* buffer outputing */
+    UINT32 Length;          /* length of buffer */
+    UINT32 Position;        /* current position within buffer */
+    POS_SEMAPHORE pSemaphore; /* semaphore to be set when complete */
+    SDIO_STATUS Status;     /* status of result */
+    PSDDEVICE pDevice;      /* device target */
+}ASYNCREQUEST, *PASYNCREQUEST;
+</If>
+
+/* prototypes */
+P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE InitializeInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext, PSDDEVICE pDevice);
+void DeleteInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext, P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE  pInstance);
+P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE FindInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext, PSDDEVICE pDevice);
+P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE FindInstanceByIndex(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext, UINT Index);
+SDIO_STATUS AddInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext, P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE  pInstance);
+void CleanupFunctionContext(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext);
+SDIO_STATUS InitFunctionContext(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext);
+<If argLeft="IO_cmd53" argTest="'=='" argRight="'1'">SDIO_STATUS PutArray(P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance, UINT32 Register, PUINT8 pBuffer, UINT32 Length);
+SDIO_STATUS GetArray(P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance, UINT32 Register, PUINT8 pBuffer, UINT32 Length);
+</If>
+<If argLeft="IO_Type" argTest="'&gt;'" argRight="'1'">SDIO_STATUS WriteBufferAsync(P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance, PASYNCREQUEST pReqContext);
+</If>
+#endif /* __<Pname name="g_DriverNameUC"/>_H__ */
+</Code> 
+
+<Code position="1" filename="g_driver_c" filename_dir="g_DriverNameLC">/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@file: <Pname name="g_driver_c"/>
+
+@abstract: OS independent code for SDIO <Pname name="g_DriverName"/> function driver
+  
+@notice: <Pname name="g_Start_Copyright"/>
+        
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+#include "../../include/ctsystem.h"
+
+#include "../../include/sdio_busdriver.h"
+#include "../../include/_sdio_defs.h"
+#include "../../include/sdio_lib.h"
+
+#include "<Pname name="g_driver_h"/>"
+<If argLeft="IO_Interrupts" argTest="'=='" argRight="'1'">
+static void IRQHandler(PVOID pContext); 
+</If>
+</Code>
+
+<!-- place functions in this section-->
+<Code position="20" filename="g_driver_c" filename_dir="g_DriverNameLC">
+/*@TODO: sample I/O requests */
+/* example of command 52 synchronous byte write
+    status = SDLIB_IssueCMD52(pInstance-&gt;pDevice, SDDEVICE_GET_SDIO_FUNCNO(pInstance-&gt;pDevice),
+                              Register, pBuffer, 1, TRUE); */
+/* example of command 52 synchronous byte read  
+    status =  SDLIB_IssueCMD52(pInstance-&gt;pDevice, SDDEVICE_GET_SDIO_FUNCNO(pInstance-&gt;pDevice),
+                               Register, pBuffer, 1, FALSE); */
+                            
+                             
+
+
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: Create a <Pname name="g_DriverName"/> instance 
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  pDevice - the device being created
+  
+  @output: none
+
+  @return: The instance structure for this device
+  
+  @notes: Called once on the creatation of a new device handled by this driver.
+  
+  @see also: DeleteInstance
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE InitializeInstance(
+                                P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext,
+                                PSDDEVICE pDevice)
+{
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance = NULL;
+    SDCONFIG_FUNC_ENABLE_DISABLE_DATA fData;
+    SDCONFIG_FUNC_SLOT_CURRENT_DATA   slotCurrent;
+    SDIO_STATUS status = SDIO_STATUS_SUCCESS;
+    struct SDIO_FUNC_EXT_FUNCTION_TPL_1_1 funcTuple;
+    UINT32          nextTpl;
+    UINT8           tplLength;
+    ZERO_OBJECT(fData);
+    ZERO_OBJECT(slotCurrent);
+        
+    do {
+        /* allocate the instance data */                                                                                        
+        pInstance = (P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE)KernelAlloc(sizeof(<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE));
+        if (NULL == pInstance) {
+            status = SDIO_STATUS_NO_RESOURCES;
+            break;   
+        }
+        ZERO_POBJECT(pInstance);
+        SDLIST_INIT(&amp;pInstance-&gt;SDList);
+        
+        pInstance-&gt;pDevice = pDevice;  
+        /* dump the configuration information for this device */      
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/> Function Instance: 0x%X \n",(INT)pInstance));
+        DBG_PRINT(SDDBG_TRACE, (" Card Flags:   0x%X \n",SDDEVICE_GET_CARD_FLAGS(pDevice)));     
+        DBG_PRINT(SDDBG_TRACE, (" Card RCA:     0x%X \n",SDDEVICE_GET_CARD_RCA(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Oper Clock:   %d Hz \n",SDDEVICE_GET_OPER_CLOCK(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Max Clock:    %d Hz \n",SDDEVICE_GET_MAX_CLOCK(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Oper BlklenLim:  %d bytes \n",SDDEVICE_GET_OPER_BLOCK_LEN(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Max  BlkLen:     %d bytes\n",SDDEVICE_GET_MAX_BLOCK_LEN(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Oper BlksLim:    %d blocks per trans \n",SDDEVICE_GET_OPER_BLOCKS(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Max  Blks:       %d blocks per trans \n",SDDEVICE_GET_MAX_BLOCKS(pDevice)));
+        DBG_PRINT(SDDBG_TRACE, (" Slot Voltage Mask:  0x%X \n",SDDEVICE_GET_SLOT_VOLTAGE_MASK(pDevice)));
+        
+            /* handle case where clock rate will be overridden */            
+        if (pFuncContext-&gt;ClockOverride != 0) {            
+            SDCONFIG_BUS_MODE_DATA  busSettings;
+            ZERO_OBJECT(busSettings);
+            busSettings.BusModeFlags = SDDEVICE_GET_BUSMODE_FLAGS(pInstance-&gt;pDevice);
+            busSettings.ClockRate = pFuncContext-&gt;ClockOverride;  /* adjust to new clock */
+            status = SDLIB_IssueConfig(pDevice,
+                                       SDCONFIG_BUS_MODE_CTRL,
+                                       &amp;busSettings,
+                                       sizeof(SDCONFIG_BUS_MODE_DATA));
+            if (!SDIO_SUCCESS(status)) {
+                break;   
+            } 
+            DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverName"/>: New Oper Clock:   %d Hz \n",SDDEVICE_GET_OPER_CLOCK(pDevice)));
+        }
+ 
+        if ((SDDEVICE_GET_CARD_FLAGS(pDevice) &amp; CARD_SDIO) &amp;&amp;
+            (SDDEVICE_GET_SDIO_FUNCNO(pDevice) != 0)) {
+            DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/> SDIO Func:  %d\n",SDDEVICE_GET_SDIO_FUNCNO(pDevice)));
+            DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/> CIS PTR:    0x%X \n",SDDEVICE_GET_SDIO_FUNC_CISPTR(pDevice)));
+            DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/> CSA PTR:    0x%X \n",SDDEVICE_GET_SDIO_FUNC_CSAPTR(pDevice)));
+        }      
+        
+        /* allocate slot current (in mA), the value should be read from the FUNC Extension TPL 
+         * if the slot current must be adjusted based on voltage, check the Slot voltage Mask
+         * using SDDEVICE_GET_SLOT_VOLTAGE_MASK().  The actual current is hardware specific.
+         * For SDIO 1.10 or greater, the current value should be the MAX operational power value in the
+         * FUNCE TPL since SDIO functions default to high current mode when they are enabled.  
+         
+         * NOTE: you can also use the SDLIB_GetDefaultOpCurrent() function which 
+         * performs the tuple query and parsing automatically and returns the default current.
+         *   EXAMPLE: 
+         *          status = SDLIB_GetDefaultOpCurrent(pDevice, &amp;slotCurrent.SlotCurrent); */
+         
+        nextTpl = SDDEVICE_GET_SDIO_FUNC_CISPTR(pDevice);
+        tplLength = sizeof(funcTuple); 
+            /* go get the function Extension tuple */
+        status = SDLIB_FindTuple(pDevice,
+                                 CISTPL_FUNCE,
+                                 &amp;nextTpl,
+                                 (PUINT8)&amp;funcTuple,
+                                 &amp;tplLength);
+        
+        if (!SDIO_SUCCESS(status)) {
+            DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: Failed to get FuncE Tuple: %d \n", status));
+            break;    
+        }        
+            /* use the operational power (8-bit) value of current in mA as default*/
+        slotCurrent.SlotCurrent = funcTuple.CommonInfo.OpMaxPwr;            
+        if (tplLength &gt; sizeof(funcTuple.CommonInfo)) {
+                /* we have a 1.1 tuple */         
+            DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/>: 1.1 Tuple Found \n"));  
+                 /* check for HIPWR mode */
+            if (SDDEVICE_GET_CARD_FLAGS(pDevice) &amp; CARD_HIPWR) {        
+                    /* use the maximum operational power (16 bit ) from the tuple */
+                slotCurrent.SlotCurrent = CT_LE16_TO_CPU_ENDIAN(funcTuple.HiPwrMaxPwr); 
+            }
+        }
+        
+        if (slotCurrent.SlotCurrent == 0) {
+            DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverName"/>: FUNCE tuple indicates greater than 200ma OpMaxPwr current! \n"));
+                /* try something higher than 200ma */
+            slotCurrent.SlotCurrent = 300;  
+        }
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/>: Allocating Slot current: %d mA\n", slotCurrent.SlotCurrent));         
+        status = SDLIB_IssueConfig(pDevice,
+                                   SDCONFIG_FUNC_ALLOC_SLOT_CURRENT,
+                                   &amp;slotCurrent,
+                                   sizeof(slotCurrent));
+        if (!SDIO_SUCCESS((status))) {
+            DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: failed to allocate slot current %d\n",
+                                    status));
+            if (status == SDIO_STATUS_NO_RESOURCES) {
+                DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: Remaining Slot Current: %d mA\n",
+                                    slotCurrent.SlotCurrent));  
+            }
+            break;
+        }
+        
+        /* enable the card */
+        fData.EnableFlags = SDCONFIG_ENABLE_FUNC;
+        fData.TimeOut = 500;
+        status = SDLIB_IssueConfig(pDevice,
+                                   SDCONFIG_FUNC_ENABLE_DISABLE,
+                                   &amp;fData,
+                                   sizeof(fData));
+        if (!SDIO_SUCCESS((status))) {
+            DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: Initialize, failed to enable function %d\n",
+                                    status));
+            break;
+        }
+<If argLeft="IO_lowpower" argTest="'=='" argRight="'1'">        
+            
+        if (SDDEVICE_IS_SDIO_REV_GTEQ_1_10(pDevice)) {
+            /* if the card is 1.10 we can check the SPS bit and optionally
+             * set for low current mode. */ 
+            UCHAR temp;
+            UINT32 address = FBR_FUNC_POWER_SELECT_OFFSET(
+                                CalculateFBROffset(SDDEVICE_GET_SDIO_FUNCNO(pDevice)));  
+            status = Cmd52ReadByteCommon(pDevice,
+                                         address,
+                                         &amp;temp);                                  
+            if (!SDIO_SUCCESS(status)) {
+                 DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: Failed to get power select, Err:%d", status));
+                 break;   
+            }  
+             
+            if (temp &amp; FUNC_POWER_SELECT_SPS) {
+                temp |= FUNC_POWER_SELECT_EPS;
+                status = Cmd52WriteByteCommon(pDevice,
+                                          address,
+                                          &amp;temp);                                  
+                 if (!SDIO_SUCCESS(status)) {
+                     DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: Failed to set power select, Err:%d", status));
+                     break;   
+                 }       
+            } 
+        }</If>
+        
+        /* @TODO: add specific card initialization here */
+<If argLeft="IO_Interrupts" argTest="'=='" argRight="'1'">
+<If argLeft="IO_InterruptType" argTest="'=='" argRight="'1'">
+            /* register interrupt with synchronous handler 
+            * passing into it our device as the context */ 
+        SDDEVICE_SET_IRQ_HANDLER(pDevice, IRQHandler, pInstance);
+            /* unmask our interrupt on the card */
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/>: unmasking IRQ \n"));
+        status = SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_UNMASK_IRQ, NULL, 0);  
+        if (!SDIO_SUCCESS((status))) {
+            DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: failed to unmask IRQ %d\n",
+                                    status));
+        }
+<Else>            /* register interrupt with asynchronous handler 
+            * passing into it our device as the context */ 
+        SDDEVICE_SET_ASYNC_IRQ_HANDLER(pDevice, IRQHandler, pInstance);
+            /* unmask our interrupt on the card */
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/>: unmasking IRQ \n"));
+        status = SDLIB_IssueConfig(pDevice, SDCONFIG_FUNC_UNMASK_IRQ, NULL, 0);  
+        if (!SDIO_SUCCESS((status))) {
+            DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverName"/>: failed to unmask IRQ %d\n",
+                                    status));
+        }</Else>
+</If>
+                    </If>              
+    } while (FALSE);
+
+    if (!SDIO_SUCCESS(status) &amp;&amp;
+        (pInstance != NULL)) {
+        KernelFree(pInstance);
+        pInstance = NULL;       
+    }
+    
+    return pInstance;
+}
+
+<If argLeft="IO_Interrupts" argTest="'=='" argRight="'1'">
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: Handle device interrupt
+ 
+  @input:  pContext - the device context
+  
+  @output: none
+
+  @return: none
+  
+  @notes: <If argLeft="IO_InterruptType" argTest="'=='" argRight="'2'" dependsOn="IO_Interrupts" dependsOnTest="==" dependsOnValue="1">This is an asynchronous interrupt handler, therefor only asynchronous I/O calls can be made.<Else>This is a synchronous interrupt handler, therefor synchronous or asynchronous I/O calls can be made.</Else>
+                    </If>
+  
+  @see also: 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+static void IRQHandler(PVOID pContext) 
+{
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance;
+    SDIO_STATUS   status = SDIO_STATUS_DEVICE_ERROR;
+    
+    pInstance = (P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE)pContext;
+
+    /*@TODO:    ...handle the device's needs */
+         
+    /* acknowledge the interrupt, only the next one */
+    status = SDLIB_IssueConfig(pInstance-&gt;pDevice, SDCONFIG_FUNC_ACK_IRQ,NULL,0);  
+}</If>
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: Delete a device instance
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  pInstance - the instance to delete
+  
+  @output: none
+  
+  @return: none
+  
+  @notes: 
+  
+  @see also: InitializeInstance
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void DeleteInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT   pFuncContext,
+                    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE  pInstance)
+{
+    SDCONFIG_FUNC_ENABLE_DISABLE_DATA fData;
+                                   
+    if (!SDIO_SUCCESS(SemaphorePendInterruptable(&amp;pFuncContext-&gt;InstanceSem))) {
+        return; 
+    }
+        /* pull it out of the list, while protected by list semaphore */
+    SDListRemove(&amp;pInstance-&gt;SDList);
+    SemaphorePost(&amp;pFuncContext-&gt;InstanceSem);
+   
+    ZERO_OBJECT(fData);    
+        /* try to disable the function */
+    fData.EnableFlags = SDCONFIG_DISABLE_FUNC;
+    fData.TimeOut = 500;
+    SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                      SDCONFIG_FUNC_ENABLE_DISABLE,
+                      &amp;fData,
+                      sizeof(fData));
+                                    
+        /* free slot current if we allocated any */    
+    SDLIB_IssueConfig(pInstance-&gt;pDevice,
+                      SDCONFIG_FUNC_FREE_SLOT_CURRENT,
+                      NULL,
+                      0);
+   
+         /* @TODO: handle other device cleanup */
+         
+    KernelFree(pInstance);
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: find an instance associated with the SD device
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  pDevice - the device to find
+  
+  @output: none
+  
+  @return: the instance or NULL if not found.
+  
+  @notes: 
+  
+  @see also: InitializeInstance
+  @see also: DeleteInstance
+  @see also: FindInstanceByIndex
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE FindInstance(
+                            P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext,
+                            PSDDEVICE pDevice)
+{
+    SDIO_STATUS status;
+    PSDLIST     pItem;
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance = NULL;
+    
+    status = SemaphorePendInterruptable(&amp;pFuncContext-&gt;InstanceSem);
+    if (!SDIO_SUCCESS(status)) {
+        return NULL; 
+    }
+        /* walk the list and find our instance, while protected by list semaphore */
+    SDITERATE_OVER_LIST(&amp;pFuncContext-&gt;InstanceList, pItem) {
+        pInstance = CONTAINING_STRUCT(pItem, <Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE, SDList);
+        if (pInstance-&gt;pDevice == pDevice) {
+                /* found it */
+            break;   
+        }
+        pInstance = NULL;  
+    }    
+    
+    SemaphorePost(&amp;pFuncContext-&gt;InstanceSem);
+    return pInstance;
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: find an instance associated with an index
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  Index - zero based index of device to find
+  
+  @output: none
+  
+  @return: the instance or NULL if not found.
+  
+  @notes: 
+  
+  @see also: InitializeInstance
+  @see also: DeleteInstance
+  @see also: FindInstance
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE FindInstanceByIndex(
+                            P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext,
+                            UINT Index)
+{
+    SDIO_STATUS status;
+    PSDLIST     pItem;
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance = NULL;
+    UINT ii = 0;
+    
+    status = SemaphorePendInterruptable(&amp;pFuncContext-&gt;InstanceSem);
+    if (!SDIO_SUCCESS(status)) {
+        return NULL; 
+    }
+        /* walk the list and find our instance, while protected by list semaphore */
+    SDITERATE_OVER_LIST(&amp;pFuncContext-&gt;InstanceList, pItem) {
+        pInstance = CONTAINING_STRUCT(pItem, <Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE, SDList);
+        if (ii == Index) {
+                /* found it */
+            break;   
+        }
+        pInstance = NULL;
+        ii++;  
+    }    
+    
+    SemaphorePost(&amp;pFuncContext-&gt;InstanceSem);
+    return pInstance;
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: add and instance to device list 
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  pInstance - device instance to add
+  
+  @output: none
+  
+  @return: status of add, SDIO_STATUS_SUCCESS on success
+  
+  @notes: 
+  
+  @see also: InitializeInstance
+  @see also: DeleteInstance
+  @see also: FindInstance
+  @see also: FindInstanceByIndex
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+SDIO_STATUS AddInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT  pFuncContext,
+                        P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance)
+{
+    SDIO_STATUS status;
+    
+    status = SemaphorePendInterruptable(&amp;pFuncContext-&gt;InstanceSem);
+    if (!SDIO_SUCCESS(status)) {
+        return status; 
+    }
+  
+    SDListAdd(&amp;pFuncContext-&gt;InstanceList,&amp;pInstance-&gt;SDList);  
+    SemaphorePost(&amp;pFuncContext-&gt;InstanceSem);
+    
+    return SDIO_STATUS_SUCCESS;
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: cleanup the function context 
+ 
+  @input:  pFuncContext - the function context for this driver
+  
+  @output: none
+  
+  @return: none
+  
+  @notes: 
+  
+  @see also: InitFunctionContext
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void CleanupFunctionContext(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext)
+{
+    SemaphoreDelete(&amp;pFuncContext-&gt;InstanceSem);  
+    
+    /*@TODO: add any additional cleanup for the function driver here*/
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: initialize the function context 
+ 
+  @input:  pFuncContext - the function context for this driver
+  
+  @output: none
+  
+  @return: status - status of initialization, SDIO_STATUS_SUCCESS if OK.
+  
+  @notes: 
+  
+  @see also: CleanupFunctionContext
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+SDIO_STATUS InitFunctionContext(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFuncContext)
+{
+    SDIO_STATUS status;
+    SDLIST_INIT(&amp;pFuncContext-&gt;InstanceList); 
+   
+    status = SemaphoreInitialize(&amp;pFuncContext-&gt;InstanceSem, 1);    
+    if (!SDIO_SUCCESS(status)) {
+        return status;
+    }
+    
+    /*@TODO:  add any aditional function driver wide initialization here*/
+    
+    return SDIO_STATUS_SUCCESS;
+}
+
+<If argLeft="IO_cmd53" argTest="'=='" argRight="'1'">
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: use CMD53 to write a buffer 
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  Register - register to write to
+  @input:  pBuffer - buffer to write
+  @input:  Length -length of buffer  
+  
+  @output: none
+  
+  @return: status - status of transfer, SDIO_STATUS_SUCCESS if OK.
+  
+  @notes: 
+  
+  @see also: GetArray
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+SDIO_STATUS PutArray(P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance,
+                     UINT32 Register,
+                     PUINT8 pBuffer,
+                     UINT32 Length)
+{
+    PSDREQUEST  pReq = NULL;
+    SDIO_STATUS status;
+    
+    /* allocate request to send to host controller */
+    pReq = SDDeviceAllocRequest(pInstance-&gt;pDevice);
+    if (NULL == pReq) {
+        return SDIO_STATUS_NO_RESOURCES;    
+    }
+    
+    if (Length &gt; SDIO_MAX_LENGTH_BYTE_BASIS) {
+        SDDeviceFreeRequest(pInstance-&gt;pDevice, pReq);
+        return SDIO_STATUS_INVALID_PARAMETER; 
+    }
+    
+    /* initialize the command argument bits, see CMD53 SDIO spec. */
+    SDIO_SET_CMD53_ARG(pReq-&gt;Argument,
+                       CMD53_WRITE,             /* write */ 
+                       SDDEVICE_GET_SDIO_FUNCNO(pInstance-&gt;pDevice), /* function number */
+                       CMD53_BYTE_BASIS,       /* set to byte mode */
+                       CMD53_FIXED_ADDRESS,    /*  fixed address */
+                       Register,               /* 17-bit register address */
+                       CMD53_CONVERT_BYTE_BASIS_BLK_LENGTH_PARAM(Length)  /* bytes */
+                       );
+    pReq-&gt;pDataBuffer = pBuffer;
+    pReq-&gt;Command = CMD53;
+    pReq-&gt;Flags = SDREQ_FLAGS_RESP_SDIO_R5 | SDREQ_FLAGS_DATA_TRANS | 
+                  SDREQ_FLAGS_DATA_WRITE;
+    pReq-&gt;BlockCount = 1;    /* byte mode is always 1 block */
+    pReq-&gt;BlockLen = Length;
+    
+    /* send the CMD53 out synchronously */                       
+    status = SDDEVICE_CALL_REQUEST_FUNC(pInstance-&gt;pDevice, pReq);
+    if (!SDIO_SUCCESS(status)) {
+       DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverName"/>: Synch CMD53 write failed %d \n", 
+                               status));
+    } 
+        // free the request
+    SDDeviceFreeRequest(pInstance-&gt;pDevice, pReq);
+    return status;
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: use CMD53 to read a buffer 
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  Register - register to write to
+  @input:  pBuffer - buffer to write
+  @input:  Length -length of buffer  
+  
+  @output: none
+  
+  @return: status - status of transfer, SDIO_STATUS_SUCCESS if OK.
+  
+  @notes: 
+  
+  @see also: PutArray
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+SDIO_STATUS GetArray(P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance,
+                     UINT32 Register,
+                     PUINT8 pBuffer,
+                     UINT32 Length)
+{
+    PSDREQUEST  pReq = NULL;
+    SDIO_STATUS status;
+
+    /* allocate request to send to host controller */
+    pReq = SDDeviceAllocRequest(pInstance-&gt;pDevice);
+    if (NULL == pReq) {
+        return SDIO_STATUS_NO_RESOURCES;    
+    }
+
+    if (Length &gt; SDIO_MAX_LENGTH_BYTE_BASIS) {
+        SDDeviceFreeRequest(pInstance-&gt;pDevice, pReq);
+        return SDIO_STATUS_INVALID_PARAMETER; 
+    }
+    
+    /* initialize the command bits, see CMD53 SDIO spec. */
+    SDIO_SET_CMD53_ARG(pReq-&gt;Argument,
+                       CMD53_READ,             /* read */ 
+                       SDDEVICE_GET_SDIO_FUNCNO(pInstance-&gt;pDevice), /* function number */
+                       CMD53_BYTE_BASIS,       /* set to byte mode */
+                       CMD53_FIXED_ADDRESS,    /* fixed address, or use CMD53_INCR_ADDRESS */
+                       Register,               /* 17-bit register address */
+                       CMD53_CONVERT_BYTE_BASIS_BLK_LENGTH_PARAM(Length)  /* bytes */
+                       );
+    pReq-&gt;pDataBuffer = pBuffer;
+    pReq-&gt;Command = CMD53;
+    pReq-&gt;Flags = SDREQ_FLAGS_RESP_SDIO_R5 | SDREQ_FLAGS_DATA_TRANS;
+    pReq-&gt;BlockCount = 1;    
+    pReq-&gt;BlockLen = Length;
+
+    /* send the CMD53 out synchronously */                       
+    status = SDDEVICE_CALL_REQUEST_FUNC(pInstance-&gt;pDevice, pReq);
+    if (!SDIO_SUCCESS(status)) {
+       DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverName"/>: Synch CMD53 read failed %d \n", 
+                               status));
+    } 
+        // free the request
+    SDDeviceFreeRequest(pInstance-&gt;pDevice,pReq);
+    return status;
+}
+</If>
+<If argLeft="IO_Type" argTest="'&gt;'" argRight="'1'">
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: completion routine for asynchronous write
+ 
+  @input:  pRequest - request being processed
+  
+  @output: none
+  
+  @return: none
+  
+  @notes: 
+  
+  @see also: WriteBufferAsync
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+static void WriteBufferAsyncCompletion(PSDREQUEST pRequest)
+{
+    PASYNCREQUEST pReqContext = (PASYNCREQUEST)pRequest-&gt;pCompleteContext;
+    
+    DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverName"/>: WriteBufferAsyncCompletion, Status:%d \n",
+            pRequest-&gt;Status));
+    pReqContext-&gt;Status = pRequest-&gt;Status; 
+    if ((++(pReqContext-&gt;Position) &lt; pReqContext-&gt;Length) &amp;&amp;
+        (SDIO_SUCCESS(pReqContext-&gt;Status))) {
+            /* output next buffer item */
+        SDLIB_SetupCMD52RequestAsync(SDDEVICE_GET_SDIO_FUNCNO(pReqContext-&gt;pDevice),
+                                     pReqContext-&gt;Register,
+                                     TRUE,
+                                     pReqContext-&gt;pBuffer[pReqContext-&gt;Position],
+                                     pRequest);
+            /* send the request */
+        SDDEVICE_CALL_REQUEST_FUNC(pReqContext-&gt;pDevice, pRequest);
+    } else {
+        /* we are complete */
+        if (NULL != pReqContext-&gt;pSemaphore) {
+                /* tell the caller we done */
+            SemaphorePost(pReqContext-&gt;pSemaphore);              
+        }
+    }
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: sample of asynchronous writes using completion routines 
+ 
+  @input:  pFuncContext - the function context for this driver
+  @input:  pReqContext: Register - register to write to
+                        pBuffer - buffer to write
+                        Length -length of buffer  
+                        pSemaphore - optional semaphore to be set when operation complete
+                        pDevice - used internally
+  
+  @output: none
+  
+  @return: status - status of transfer, SDIO_STATUS_PENDING if OK.
+  
+  @notes: This function can be called from a context that does not allow blocking.
+          The pBuffer must remain valid until the operation is complete.
+          The calling application can pend on the pSempahore for the completion
+          of the request. The status ofthe request is in Status.
+  
+  @see also: WriteBufferAsyncCompletion
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+SDIO_STATUS WriteBufferAsync(P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance,
+                             PASYNCREQUEST pReqContext)
+{
+    PSDREQUEST   pRequest;
+    
+        /* allocate a request to work with */
+    pRequest = SDDeviceAllocRequest(pInstance-&gt;pDevice);
+    if (NULL == pRequest) {
+        return SDIO_STATUS_NO_RESOURCES; 
+    }
+        /* initialize the context */
+    pReqContext-&gt;Position = 0;
+    pReqContext-&gt;pDevice = pInstance-&gt;pDevice;
+    
+        /* setup CMD52 arguments */
+    SDLIB_SetupCMD52RequestAsync(SDDEVICE_GET_SDIO_FUNCNO(pInstance-&gt;pDevice),
+                                 pReqContext-&gt;Register,
+                                 TRUE,
+                                 pReqContext-&gt;pBuffer[0],
+                                 pRequest);
+        /* setup completion routine */                             
+    pRequest-&gt;pCompletion = WriteBufferAsyncCompletion; 
+    pRequest-&gt;pCompleteContext = (PVOID)pReqContext;  
+
+        /* send the request */
+    SDDEVICE_CALL_REQUEST_FUNC(pInstance-&gt;pDevice, pRequest);
+
+    return SDIO_STATUS_PENDING;
+}
+</If>
+</Code>
+ 
+            </Solution>
+        </Function>
+    <Function dependsOn="g_OSType" dependsOnValue="2" dependsOnTest="&lt;=">
+            <Name>Linux</Name>
+            <Type>SW</Type>
+            <SubType>SW</SubType>
+            <Description>Linux OS specific items.</Description>
+            <Image type="functionList" data=""/>
+            <Help topic="400">
+                <!--Enter the Linux specific items.-->
+            </Help>
+            <Parameters>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Maximum number of devices supported by this driver:">LINUX_NumDevices</VarName>
+                    <Validate type="numeric" minlength="1" maxlength="2" message="Value must be numeric"/>
+                    <Value>4</Value>
+                    <Selection/>
+                    <Help topic="410">
+                        <!--Peripheral drivers can support multiple cards simultaneously. Select the maximum number of cards supported at one time.-->
+                    </Help>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CHECK_BOX" title="Create character driver interface?">LINUX_CharDriver</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help topic="415">
+                        <!--The Wizard can create a character stream interface for the driver. This can be accessed from user mode by applications. Alternately, you can manually create any interface you prefer (e.g. block device).-->
+                    </Help>
+                </Selections>
+            <Selections dependsOn="LINUX_CharDriver" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="EDIT_BOX" title="Enter the major number for this device:">LINUX_Major</VarName>
+                    <Validate type="numeric" minlength="1" maxlength="3" message="Value must be numeric."/>
+                    <Value>0</Value>
+                    <Selection/>
+                    <Help topic="420">
+                        <!--The Wizard will create a character driver interface for this driver. The major number of the character device can be set explicitly here, or if left at 0 will be assigned by the OS.-->
+                    </Help>
+                </Selections>
+            <Selections dependsOn="LINUX_CharDriver" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="EDIT_BOX" title="Enter the base name of the character device">LINUX_BaseName</VarName>
+                    <Validate nonblank="1"/>
+                    <Value initialValue="g_DriverName"/>
+                    <Selection/>
+                    <Help topic="430">
+                        <!--Enter the base portion ofthe device name. A numeric value will be post-pended to the name for each device. For example, if the base name is sam, then the devices will be sam0, sam1, etc.-->
+                    </Help>
+                </Selections>
+            <Selections dependsOn="LINUX_CharDriver" dependsOnValue="1" dependsOnTest="==" hideCue="1">
+                    <VarName displayType="CHECK_BOX" title="Create a test application?">LINUX_userApp</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help topic="440">
+                        <!--The Wizard can create a user mode test aplication that opens a handle to the character device and sends commands.-->
+                    </Help>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">LINUX_dir</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'/linux'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">LINUX_testappdir</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'/linux/testapp'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">LINUX_ioctlchar</VarName>
+                    <Value type="substring" parameter0="g_DriverNameLC" parameter1="'1'" parameter2="'1'"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+<Code position="1" filename="g_driver_os_h" filename_dir="LINUX_dir">/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@file: <Pname name="g_driver_os_h"/>
+
+@abstract: OS dependent include for SDIO <Pname name="g_DriverName"/> function driver
+  
+@notice: <Pname name="g_Start_Copyright"/>
+        
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+#ifndef __<Pname name="g_DriverNameUC"/>_OS_H__
+#define __<Pname name="g_DriverNameUC"/>_OS_H__
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">
+#define SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_MAJOR <Pname name="LINUX_Major"/>
+
+typedef struct _<Pname name="g_DriverNameUC"/>_CONFIG {
+    BOOL CharRegistered;    /* char device was registered */
+    UINT Major;             /* device major number */ 
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">    TEXT DeviceName[20];</If>
+    
+    /* @TODO: add any OS specific data items here */
+}<Pname name="g_DriverNameUC"/>_CONFIG, *P<Pname name="g_DriverNameUC"/>_CONFIG;<Else>
+typedef struct _<Pname name="g_DriverNameUC"/>_CONFIG {
+                            /* @TODO: add any OS specific data items here */
+}<Pname name="g_DriverNameUC"/>_CONFIG, *P<Pname name="g_DriverNameUC"/>_CONFIG;</Else>
+                    </If>
+#endif /* __<Pname name="g_DriverNameUC"/>_OS_H__ */
+</Code> 
+
+<Code position="1" filename="g_driver_os_c" filename_dir="LINUX_dir">/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@file: <Pname name="g_driver_os_c"/>
+
+@abstract: Linux implementation module for SDIO <Pname name="g_DriverName"/> function driver
+
+@notes: includes module load and unload functions
+  
+@notice: <Pname name="g_Start_Copyright"/>
+        
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+/* debug level for this module*/
+#define DBG_DECLARE 7;
+#include "../../../include/ctsystem.h"
+
+#include &lt;linux/module.h&gt;
+#include &lt;linux/init.h&gt;
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">#include &lt;linux/fs.h&gt;
+#include &lt;asm/uaccess.h&gt;
+</If>
+
+#include "../../../include/sdio_busdriver.h"
+#include "../../../include/sdio_lib.h"
+#include "../<Pname name="g_driver_h"/>"
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">#include "<Pname name="g_driver_app_h"/>"
+</If>
+#define DESCRIPTION "<Pname name="g_Description"/>"
+#define AUTHOR "<Pname name="g_Companyname"/>"
+
+/* module param defaults, non-zero is an override */
+static int sdio_manfID = 0;
+static int sdio_manfcode = 0;
+static int sdio_funcno = 0;
+static int sdio_class = 0;
+static int clockoverride = 0;
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">static int sdio_major = SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_MAJOR;</If>
+/* debug print parameter */
+module_param(debuglevel, int, 0644);
+MODULE_PARM_DESC(debuglevel,"debuglevel 0-7, controls debug prints");
+
+module_param(sdio_manfID, int, 0644);
+MODULE_PARM_DESC(sdio_manfID,"SDIO manufacturer ID override");
+
+module_param(sdio_manfcode, int, 0644);
+MODULE_PARM_DESC(sdio_manfcode,"SDIO manufacturer Code overide");
+
+module_param(sdio_funcno, int, 0644);
+MODULE_PARM_DESC(sdio_funcno,"SDIO function number override");
+
+module_param(sdio_class, int, 0644);
+MODULE_PARM_DESC(sdio_class,"SDIO function class override");
+
+module_param(clockoverride, int, 0644);
+MODULE_PARM_DESC(clockoverride,"SDIO card clock override");
+
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">module_param(sdio_major, int, 0644);
+MODULE_PARM_DESC(sdio_major,"The major number for driver.");</If>
+
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">/* device base name */
+#define SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_BASE "<Pname name="LINUX_BaseName"/>"</If>
+#define SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_MAX_DEVICES <Pname name="LINUX_NumDevices"/>
+
+BOOL Probe(PSDFUNCTION pFunction, PSDDEVICE pDevice);
+void Remove(PSDFUNCTION pFunction, PSDDEVICE pDevice);
+static void CleanupInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT  pFunctionContext,
+                            P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance);
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">int sdio_function_open(struct inode *inode, struct file *filp);
+int sdio_function_release(struct inode *inode, struct file *filp);
+int sdio_function_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg);
+</If>
+/* devices we support, null terminated */
+/* @TODO: additional devices can be entered in this list */
+static SD_PNP_INFO Ids[] = {<If argLeft="CARD_IdType" argTest="'=='" argRight="'1'">
+    {.SDIO_ManufacturerID = 0x<Pname name="CARD_Id"/>,    /* specific SDIO card */
+     .SDIO_ManufacturerCode = 0x<Pname name="CARD_Code"/>, 
+     .SDIO_FunctionNo = 0x<Pname name="CARD_Function"/>},<Else>
+    {.SDIO_FunctionClass = 0x<Pname name="CARD_Class"/>},</Else>
+                    </If>
+    {}
+};
+
+
+/* driver wide data */
+static <Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT FunctionContext = {
+    .Function.pName    = "sdio_<Pname name="g_DriverNameLC"/>",
+    .Function.Version  = CT_SDIO_STACK_VERSION_CODE,
+    .Function.MaxDevices = SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_MAX_DEVICES,
+    .Function.NumDevices = 0,
+    .Function.pIds     = Ids,
+    .Function.pProbe   = Probe,
+    .Function.pRemove  = Remove,
+    .Function.pSuspend = NULL,
+    .Function.pResume  = NULL,
+    .Function.pWake    = NULL,
+    .Function.pContext = &amp;FunctionContext, 
+}; 
+
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">/* char drivers functions */
+static struct file_operations sdio_function_fops_dev = {
+    .ioctl      = sdio_function_ioctl,
+    .open       = sdio_function_open,
+    .release    = sdio_function_release,
+};</If>
+</Code>
+
+<!-- place functions in this section-->
+<Code position="20" filename="g_driver_os_c" filename_dir="LINUX_dir">
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: probe to determine if we support the new device
+ 
+  @input:  pFunction - the function context for this driver
+  @input:  pDevice - the new device
+  
+  @output: none
+  
+  @return: TRUE device handled by this driver.
+  
+  @notes: Probe is called when the bus driver has located a card for us to support.
+          We accept the new device by returning TRUE.
+  
+  @see also: Remove
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+BOOL Probe(PSDFUNCTION pFunction, PSDDEVICE pDevice) {
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFunctionContext = 
+                                (P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT)pFunction-&gt;pContext;
+    SYSTEM_STATUS err = 0;
+    BOOL          accept;
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pNewInstance = NULL;
+    DBG_PRINT(SDDBG_TRACE, ("+SDIO <Pname name="g_DriverNameUC"/> Function: Probe\n"));
+    
+    accept = FALSE;
+            
+<If argLeft="CARD_IdType" argTest="'=='" argRight="'1'">        /* make sure this is a device we can handle 
+         * the card must match the manufacturer and card ID */
+    if ((pDevice-&gt;pId[0].SDIO_ManufacturerID == 
+         pFunctionContext-&gt;Function.pIds[0].SDIO_ManufacturerID) &amp;&amp;
+         (pDevice-&gt;pId[0].SDIO_ManufacturerCode == 
+          pFunctionContext-&gt;Function.pIds[0].SDIO_ManufacturerCode)){
+            /* check the function number */
+        if (pFunctionContext-&gt;Function.pIds[0].SDIO_FunctionNo != 0) {
+            if (pDevice-&gt;pId[0].SDIO_FunctionNo == 
+                pFunctionContext-&gt;Function.pIds[0].SDIO_FunctionNo) {
+                accept = TRUE;
+            } else {
+                accept = FALSE;
+            }
+        } else {
+            accept = TRUE;
+        }
+    }
+<Else>
+        /* check for matching class  */
+    if (pFunctionContext-&gt;Function.pIds[0].SDIO_FunctionClass != 0) {
+        if (pDevice-&gt;pId[0].SDIO_FunctionClass == 
+             pFunctionContext-&gt;Function.pIds[0].SDIO_FunctionClass) {
+            accept = TRUE;            
+        }
+    }
+ </Else>
+                    </If>          
+    
+    if (!accept) {
+         DBG_PRINT(SDDBG_TRACE, ("-SDIO <Pname name="g_DriverNameUC"/> Function: Probe - not our card (0x%X/0x%X/0x%X/0x%X)\n",
+                            pDevice-&gt;pId[0].SDIO_ManufacturerID,
+                            pDevice-&gt;pId[0].SDIO_ManufacturerCode,
+                            pDevice-&gt;pId[0].SDIO_FunctionNo,                            
+                            pDevice-&gt;pId[0].SDIO_FunctionClass));
+        return FALSE; 
+    }
+    
+    DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: Probe - card matched (0x%X/0x%X/0x%X/0x%X)\n",
+                            pDevice-&gt;pId[0].SDIO_ManufacturerID,
+                            pDevice-&gt;pId[0].SDIO_ManufacturerCode,
+                            pDevice-&gt;pId[0].SDIO_FunctionNo,
+                            pDevice-&gt;pId[0].SDIO_FunctionClass));
+    accept = FALSE;
+    do {
+        /* create a new instance of a device and iniinitialize the device */
+        pNewInstance = InitializeInstance(pFunctionContext, pDevice);
+        if (NULL == pNewInstance) {
+            break;    
+        }
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">        
+            /* create a character device name */  
+        snprintf(pNewInstance-&gt;Config.DeviceName, sizeof(pNewInstance-&gt;Config.DeviceName), 
+                 SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_BASE"%d", 
+                 pDevice-&gt;pHcd-&gt;SlotNumber);
+        pNewInstance-&gt;Config.Major = sdio_major;    
+        err = register_chrdev(pNewInstance-&gt;Config.Major, 
+                              pNewInstance-&gt;Config.DeviceName, 
+                              &amp;sdio_function_fops_dev);
+        if (err &lt; 0) {
+            DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverNameUC"/> Function: Probe - could not register device, %d\n", err));
+            pNewInstance-&gt;Config.CharRegistered = FALSE;
+            break;            
+        }
+        pNewInstance-&gt;Config.CharRegistered = TRUE;     
+        
+        if (pNewInstance-&gt;Config.Major == 0) {
+            pNewInstance-&gt;Config.Major =  err; /* save dynamically assigned major number for cleanup*/
+            pNewInstance-&gt;Config.Major = err; 
+        }
+</If>           /* add it to the list */
+        if (!SDIO_SUCCESS(AddInstance(pFunctionContext, pNewInstance))) {
+            break;               
+        }
+        accept = TRUE;
+    } while (FALSE); 
+    
+    if (!accept &amp;&amp; (pNewInstance != NULL)) {
+        CleanupInstance(pFunctionContext, pNewInstance);
+    }
+        
+    DBG_PRINT(SDDBG_TRACE, ("-SDIO <Pname name="g_DriverNameUC"/> Function: Probe\n"));
+    return accept;
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: handle device is being removed
+ 
+  @input:  pFunction - the function context for this driver
+  @input:  pDevice - the new device
+  
+  @output: none
+  
+  @return: none
+  
+  @notes: 
+  
+  @see also: Probe
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void Remove(PSDFUNCTION pFunction, PSDDEVICE pDevice) 
+{
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT pFunctionContext = 
+                                (P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT)pFunction-&gt;pContext;
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance;
+    
+    DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: Remove\n"));
+   
+    pInstance = FindInstance(pFunctionContext, pDevice);
+    
+    if (pInstance != NULL) {
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: Removing instance: 0x%X From Remove()\n",
+                                (INT)pInstance));
+        CleanupInstance(pFunctionContext, pInstance);    
+    } else {
+        DBG_PRINT(SDDBG_ERROR, ("SDIO <Pname name="g_DriverNameUC"/> Function: could not find matching instance!\n"));
+    }    
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: clean up a disappearing device instance
+ 
+  @input:  pFunction - the function context for this driver
+  @input:  pInstance - the instance to clean up
+  
+  @output: none
+  
+  @return: none
+  
+  @notes: 
+  
+  @see also: 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+static void CleanupInstance(P<Pname name="g_DriverNameUC"/>_FUNCTION_CONTEXT  pFunctionContext,
+                            P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pInstance)
+{
+    
+    if (pInstance-&gt;Config.CharRegistered) {  
+            /* unregister char driver */ 
+        unregister_chrdev(pInstance-&gt;Config.Major, pInstance-&gt;Config.DeviceName);
+    }
+    DeleteInstance(pFunctionContext, pInstance);     
+}
+<If argLeft="LINUX_CharDriver" argTest="'=='" argRight="'1'">
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: handle the open request
+ 
+  @input:  inode - file inode
+  @input:  filp - file pointer
+  
+  @output: none
+  
+  @return: status
+  
+  @notes: 
+  
+  @see also: sdio_function_release
+  @see also: sdio_function_ioctl
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+int sdio_function_open(struct inode *inode, struct file *filp)
+{
+    unsigned int minor = MINOR(inode-&gt;i_rdev);
+    //unsigned int major = MAJOR(inode-&gt;i_rdev);
+    DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: sdio_function_open\n"));
+        
+    if (minor &gt;= SDIO_<Pname name="g_DriverNameUC"/>_FUNCTION_MAX_DEVICES) {
+        DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: sdio_function_open - minor type too large\n"));
+        return -ENODEV;
+    }
+    
+    /* find our device based on the minor number */
+    filp-&gt;private_data = FindInstanceByIndex(&amp;FunctionContext, minor);
+    if (filp-&gt;private_data == NULL) {
+        return -ENODEV;
+    }
+    
+    /* reference this module */
+    try_module_get(THIS_MODULE);
+
+    return 0;          /* success */
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: handle the close request
+ 
+  @input:  inode - file inode
+  @input:  filp - file pointer
+  
+  @output: none
+  
+  @return: status
+  
+  @notes: undo what we did in the open.
+  
+  @see also: sdio_function_open
+  @see also: sdio_function_ioctl
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+int sdio_function_release(struct inode *inode, struct file *filp)
+{
+    module_put(THIS_MODULE);
+    return 0;
+}
+ 
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: handle ioctls
+ 
+  @input:  inode - file inode
+  @input:  filp - file pointer
+  
+  @output: none
+  
+  @return: status
+  
+  @notes: 
+  
+  @see also: sdio_function_open
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+int sdio_function_ioctl(struct inode *inode, struct file *filp,
+                        unsigned int cmd, unsigned long arg) {
+    P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE pDeviceInstance = 
+                                (P<Pname name="g_DriverNameUC"/>_FUNCTION_INSTANCE)filp-&gt;private_data;
+    SDIO_STATUS status;
+    
+    DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: sdio_function_ioctl\n"));
+    
+    /* @TODO: change these commands to real IOCTLs for your driver */
+    switch(cmd) {
+      /* CMD52 byte write*/
+      case SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_PUT_CMD: {
+        struct sdio_<Pname name="g_DriverNameLC"/>_args args; 
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_PUT_CMD \n"));
+        /* get the user argument */
+        if (copy_from_user(&amp;args, (void *)arg, sizeof(args)) != 0) {
+            DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_PUT_CMD - bad ioctl buffer\n"));
+            return -EFAULT;
+        }
+        /* send the data out */
+        status = SDLIB_IssueCMD52(pDeviceInstance-&gt;pDevice, SDDEVICE_GET_SDIO_FUNCNO(pDeviceInstance-&gt;pDevice),
+                              args.reg, &amp;args.argument, 1, TRUE); 
+        return SDIOErrorToOSError(status);
+        break;
+      }  
+      /* CMD52 byte read */
+      case SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD: {
+        struct sdio_<Pname name="g_DriverNameLC"/>_args args;        
+        DBG_PRINT(SDDBG_TRACE, ("SDIO <Pname name="g_DriverNameUC"/> Function: SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD \n"));
+        /* get the user argument */
+        if (copy_from_user(&amp;args, (void *)arg, sizeof(args)) != 0) {
+            DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD - bad ioctl buffer\n"));
+            return -EFAULT;
+        }
+        status =  SDLIB_IssueCMD52(pDeviceInstance-&gt;pDevice, SDDEVICE_GET_SDIO_FUNCNO(pDeviceInstance-&gt;pDevice),
+                                   args.reg, &amp;args.argument, 1, FALSE);
+        /* set response to user */
+        if (copy_to_user((void *)arg, &amp;args,  sizeof(args)) != 0) {
+            DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD - bad ioctl buffer\n"));
+            return -EFAULT;
+        }
+        return SDIOErrorToOSError(status);
+        break;
+      }
+    }
+    return -ENODEV;
+}</If>
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: module init
+ 
+  @input:  none
+  
+  @output: none
+  
+  @return: status
+  
+  @notes: 
+  
+  @see also: sdio_function_cleanup
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+static int __init sdio_function_init(void) {
+    SDIO_STATUS status;
+    REL_PRINT(SDDBG_TRACE, ("+SDIO <Pname name="g_DriverNameUC"/> Function - load\n"));
+   
+        /* process any module parameter overrides */
+    if (sdio_manfID != 0) {
+        Ids[0].SDIO_ManufacturerID = (UINT16)sdio_manfID;  
+        DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: Override MANFID: 0x%x \n",sdio_manfID)); 
+    }
+    if (sdio_manfcode != 0) {
+        Ids[0].SDIO_ManufacturerCode = (UINT16)sdio_manfcode; 
+         DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: Override MANFCODE: 0x%x \n",sdio_manfcode)); 
+    }
+    if (sdio_funcno != 0) {
+        Ids[0].SDIO_FunctionNo =  (UINT8)sdio_funcno;
+        DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: Override FuncNo: 0x%x \n",sdio_funcno)); 
+    }
+    if (sdio_class != 0) {
+        Ids[0].SDIO_FunctionClass = (UINT8)sdio_class;
+        DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: Override Class: 0x%x \n",sdio_class)); 
+    }
+    
+    status = InitFunctionContext(&amp;FunctionContext);
+    if (!SDIO_SUCCESS(status)) {
+        return SDIOErrorToOSError(status);       
+    }
+    
+    if (clockoverride != 0) {
+        FunctionContext.ClockOverride = (SD_BUSCLOCK_RATE)clockoverride;
+        DBG_PRINT(SDDBG_WARN, ("SDIO <Pname name="g_DriverNameUC"/> Function: Override Clock: %d \n",clockoverride)); 
+    }
+    
+    DBG_PRINT(SDDBG_TRACE, ("-SDIO <Pname name="g_DriverNameUC"/> Function - load\n"));
+    /* register with bus driver core */
+    return SDIOErrorToOSError(SDIO_RegisterFunction(&amp;FunctionContext.Function));
+}
+
+/**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  @function: module cleanup
+ 
+  @input:  none
+  
+  @output: none
+  
+  @return: status
+  
+  @notes: 
+  
+  @see also: sdio_function_init
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+static void __exit sdio_function_cleanup(void) {
+    
+    REL_PRINT(SDDBG_TRACE, ("+SDIO <Pname name="g_DriverNameUC"/> Function - unload\n"));
+        /* unregister, this will call Remove() for each device */
+    SDIO_UnregisterFunction(&amp;FunctionContext.Function);
+    CleanupFunctionContext(&amp;FunctionContext);
+    REL_PRINT(SDDBG_TRACE, ("-SDIO <Pname name="g_DriverNameUC"/> Function - unload\n"));
+}
+
+
+MODULE_LICENSE("Proprietary");
+MODULE_DESCRIPTION(DESCRIPTION);
+MODULE_AUTHOR(AUTHOR);
+module_init(sdio_function_init);
+module_exit(sdio_function_cleanup);
+</Code> 
+<Code position="1" filename="'Makefile'" filename_dir="g_DriverNameLC">
+ifeq ($(CT_OS_TYPE),linux)
+obj-m += <Pname name="g_ModuleName"/>.o
+<Pname name="g_ModuleName"/>-objs := <Pname name="g_DriverNameLC"/>.o linux/<Pname name="g_DriverNameLC"/>_os.o
+endif
+
+ifeq ($(CT_OS_TYPE),qnx)
+##QNX
+LIST=CPU
+ifndef QRECURSE
+QRECURSE=recurse.mk
+ifdef QCONFIG
+QRDIR=$(dir $(QCONFIG))
+endif
+endif
+include $(QRDIR)$(QRECURSE)
+endif
+</Code>
+<Code position="1" filename="g_driver_app_h" filename_dir="LINUX_dir" dependsOn="LINUX_CharDriver" dependsOnTest="==" dependsOnValue="1">
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@file: <Pname name="g_driver_app_h"/>
+
+@abstract: SDIO <Pname name="g_DriverName"/> Function Driver - ioctl definitions
+
+#notes: 
+ 
+@notice: <Pname name="g_Start_Copyright"/>
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+#ifndef __SDIO_<Pname name="g_DriverNameUC"/>_APP_H___
+#define __SDIO_<Pname name="g_DriverNameUC"/>_APP_H___
+
+/* example structures for data transfer */
+struct sdio_<Pname name="g_DriverNameLC"/>_args {
+    unsigned int  reg;          /* register to read/write */
+    unsigned char argument;     /* data argument */
+};
+
+
+#define SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_BASE     '<Pname name="LINUX_ioctlchar"/>'
+// PUT/GET CMD52
+#define SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_PUT_CMD _IOW(SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_BASE,  1, struct sdio_<Pname name="g_DriverNameLC"/>_args)
+#define SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD _IOR(SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_BASE,  2, struct sdio_<Pname name="g_DriverNameLC"/>_args)
+
+
+#endif  /* __SDIO_<Pname name="g_DriverNameUC"/>_APP_H___ */
+</Code>
+<Code position="1" filename="'testapp.c'" filename_dir="LINUX_testappdir" dependsOn="LINUX_userApp" dependsOnTest="==" dependsOnValue="1">/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+@file: testapp.c
+
+@abstract: sample test application for <Pname name="g_DriverName"/> SDIO function driver.
+  
+#notes: 
+ * simple test application to pass commands to sample function driver 
+ * 
+ * Requires a dev entry of /dev/<Pname name="LINUX_BaseName"/>0
+ *  after the device is found, run: cat /proc/devices
+ *  look for major number for <Pname name="LINUX_BaseName"/>
+ *  mknod /dev/<Pname name="LINUX_BaseName"/>0 c majornumber 0
+ *      (alternately udev can be setup to handle this automatically)
+ * 
+  
+@notice: <Pname name="g_Start_Copyright"/>
+        
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+#include &lt;stdio.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;errno.h&gt;
+#include &lt;sys/ioctl.h&gt;
+
+#include "../<Pname name="g_driver_app_h"/>"
+
+#define DEVICE_NAME "/dev/<Pname name="LINUX_BaseName"/>0"
+
+static void argHelp(void);
+
+
+int main(int argc, char * argv[])
+{
+    int fd;
+    int err;
+    char arg;
+    
+    if( argc &lt; 3 ) {
+        argHelp();
+        exit(-1);
+    }
+    arg = argv[1][1];
+    
+    fd = open(DEVICE_NAME,  O_RDWR | O_NOCTTY);
+
+    if (fd &lt; 0) {
+        perror("Could not open device: " DEVICE_NAME);
+        exit(-1);
+    }
+    
+    switch(arg) {    
+      case 'r': {   /* read byte */ 
+        struct sdio_<Pname name="g_DriverNameLC"/>_args data;
+        memset (&amp;data, 0, sizeof(data));
+        sscanf(argv[2], "%d", &amp;data.reg);
+        err = ioctl(fd, SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD, &amp;data);
+        if (err &lt; 0) {
+            perror("SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_GET_CMD failed: ");
+            exit(-1);
+        }
+        printf("register %d = %d\n", data.reg, (unsigned int)data.argument); 
+        break;
+      }
+      case 'w': {   /* write byte */ 
+        struct sdio_<Pname name="g_DriverNameLC"/>_args data;
+        memset (&amp;data, 0, sizeof(data));
+        if( argc &lt; 4 ) {
+            argHelp();
+            exit(-1);
+        }
+        sscanf(argv[2], "%d", &amp;data.reg);
+        sscanf(argv[3], "%d", &amp;data.argument);
+        err = ioctl(fd, SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_PUT_CMD, &amp;data);
+        if (err &lt; 0) {
+            perror("SDIO_IOCTL_<Pname name="g_DriverNameUC"/>_PUT_CMD failed: ");
+            exit(-1);
+        }
+        printf("register %d, %d written\n", data.reg, (unsigned int)data.argument); 
+        break;
+      }
+
+      default:
+        argHelp();
+        
+    }
+    printf(".\n");
+    exit(0);
+}
+
+static void argHelp(void) 
+{
+    fprintf(stderr, "Arguments, -r register  - read byte from register\n"
+                    "           -w register data  - write byte to register\n"
+                    "       All input data is decimal.  \n");
+}
+</Code>
+<!-- make sure you leave the tab before gcc below -->
+<Code position="1" filename="'Makefile'" filename_dir="LINUX_testappdir" dependsOn="LINUX_userApp" dependsOnTest="==" dependsOnValue="1">
+all:
+	gcc testapp.c -o testapp
+</Code>
+            </Solution>
+        </Function>
+    <Function>
+            <Name>Documentation</Name>
+            <Type>SW</Type>
+            <SubType>SW</SubType>
+            <Description>Create HTML documentation for generated driver source code.</Description>
+            <Image type="functionList" data=""/>
+            <Help/>
+            <Parameters>
+                <Selections dependsOn="_Date_" dependsOnValue="5" dependsOnTest="==">
+                <!-- force create documentation checkbox to grey out, but still enabled -->
+                    <VarName displayType="CHECK_BOX" title="Create HTML documentation files?">Documentation_Create</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help topic="tools_codepalette_usingsrc.htm">
+                    <!--The wizard can generate HTML-based documentation for the driver.  This includes overviews of each source file, a reference for all C functions and a list of TODOs in each source file.-->
+                    </Help>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_XMLFile</VarName>
+                    <Value type="concat" parameter0="_OutputDirectory_" parameter1="'/doc/documentation.xml'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvCFileName</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'/'" parameter2="g_driver_c"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvCFileNameHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_c.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvCFileNameOverviewHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_c_overview.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHFileName</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'/'" parameter2="g_driver_h"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHFileNameOverviewHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_h_overview.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvCOSFileName</VarName>
+                    <Value type="concat" parameter0="LINUX_dir" parameter1="'/'" parameter2="g_driver_os_c"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvCOSFileNameHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_os_c.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvCOSFileNameOverviewHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_os_c_overview.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHOSFileName</VarName>
+                    <Value type="concat" parameter0="LINUX_dir" parameter1="'/'" parameter2="g_driver_os_h"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHOSFileNameOverHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_os_h_overview.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHOSFileNameOverviewHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_os_h_overview.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections dependsOn="LINUX_CharDriver" dependsOnValue="1" dependsOnTest="==" hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHAppFileName</VarName>
+                    <Value type="concat" parameter0="LINUX_dir" parameter1="'/'" parameter2="g_driver_app_h"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+                <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_DrvHAppFileNameOverviewHtml</VarName>
+                    <Value type="concat" parameter0="g_DriverNameLC" parameter1="'_app_h_overview.htm'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+              <DocumentationTransform position="1" filename="'documentation.xml'" filename_dir="'doc'" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'file'" value="Documentation_DrvCFileName" inOutputDir="'1'"/>                    
+                    <FileParameter name="'file'" value="Documentation_DrvHFileName" inOutputDir="'1'"/>
+                    <FileParameter name="'file'" value="Documentation_DrvCOSFileName" inOutputDir="'1'" optional="'1'"/>
+                    <FileParameter name="'file'" value="Documentation_DrvHOSFileName" inOutputDir="'1'" optional="'1'"/>
+                    <FileParameter name="'file'" value="Documentation_DrvHAppFileName" inOutputDir="'1'" optional="'1'"/> 
+                </FileParameters>
+            </DocumentationTransform>
+           <If argLeft="g_OSType" argTest="'=='" argRight="'1'">
+                <XslTransform position="12" filename="'readme.htm'" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docReadMe.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                    <FileParameters>
+                        <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                        <FileParameter name="'title2'" value="'PDK Read Me'"/>
+                        <FileParameter name="'helpFile'" value="_ExternalParam0_"/>
+                        <FileParameter name="'companyName'" value="g_Companyname"/>
+                        <FileParameter name="'companyProductName'" value="g_Description"/>
+                        <FileParameter name="'version'" value="_Version_"/>
+                        <FileParameter name="'versionIncrement'" value="_VersionIncrement_"/>
+                        <FileParameter name="'targetOSversion'" value="'Target OS: Linux 2.6'"/>
+                        <FileParameter name="'copyrightyear'" value="'2005'"/>
+                    </FileParameters>
+                </XslTransform>
+           </If> 
+           <XslTransform position="4" filename="Documentation_DrvCFileNameHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvCFileName"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="4" filename="Documentation_DrvCFileNameOverviewHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvCFileName"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="4" filename="Documentation_DrvHFileNameOverviewHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvHFileName"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="4" filename="Documentation_DrvCOSFileNameHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvCOSFileName"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="4" filename="Documentation_DrvCOSFileNameOverviewHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvCOSFileName"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="4" filename="Documentation_DrvHOSFileNameOverHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvHOSFileName"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="4" filename="Documentation_DrvHAppFileNameOverviewHtml" filename_dir="'doc'" xslfile="'res://$dirapp/Wizards/xsl/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="Documentation_Create" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Read Me'"/>
+                    <FileParameter name="'documentationSection'" value="Documentation_DrvHAppFileName"/>
+                </FileParameters>
+            </XslTransform>
+            <FileOperation filename="'leftarrow.gif'" filename_dir="'doc/Images'" operation="'copy'">
+                    <FileParameter name="'file'" value="'Wizards/xsl/Images/leftarrow.gif'"/>
+            </FileOperation>
+            <FileOperation filename="'rightarrow.gif'" filename_dir="'doc/Images'" operation="'copy'">
+                    <FileParameter name="'file'" value="'Wizards/xsl/Images/rightarrow.gif'"/>
+            </FileOperation>
+            <FileOperation filename="'codetelligence_lrg.gif'" filename_dir="'doc/Images'" operation="'copy'">
+                    <FileParameter name="'file'" value="'Wizards/xsl/Images/codetelligence_lrg.gif'"/>
+            </FileOperation>
+            <FileOperation filename="'CodeTHelp.css'" filename_dir="'doc'" operation="'copy'">
+                    <FileParameter name="'file'" value="'Wizards/xsl/CodeTHelp.css'"/>
+            </FileOperation>
+            <FileOperation filename="'readmeback.jpg'" filename_dir="'doc/Images'" operation="'copy'">
+                    <FileParameter name="'file'" value="'Wizards/xsl/Images/readmeback.jpg'"/>
+            </FileOperation>
+        </Solution>
+        </Function>
+    </Functions>
+</Device>

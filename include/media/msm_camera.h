@@ -1,58 +1,19 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/*
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * All source code in this file is licensed under the following license
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * START
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 #ifndef __LINUX_MSM_CAMERA_H
 #define __LINUX_MSM_CAMERA_H
@@ -60,18 +21,30 @@
 #ifdef __KERNEL__
 #include <linux/types.h>
 #include <asm/sizes.h>
-#include <linux/ioctl.h>
 #else
 #include <stdint.h>
-#include <stdio.h>
-#include <sys/ioctl.h>
 #endif
+#include <linux/ioctl.h>
 #include <linux/msm_adsp.h>
+
+#undef CDBG
+#ifdef __KERNEL__
+//FIH_ADQ,JOE HSU
+//#define CDBG(fmt, args...) printk(KERN_INFO "msm_camera: " fmt, ##args)
+#define CDBG(fmt, args...) do {} while(0)
+#else
+#ifdef LOG_DEBUG
+#include <utils/Log.h>
+#define CDBG(fmt, args...) LOGI(fmt, ##args)
+#else
+#define CDBG(fmt, args...) fprintf(stderr, fmt, ##args)
+#endif
+#endif
 
 #define MSM_CAM_IOCTL_MAGIC 'm'
 
 #define MSM_CAM_IOCTL_GET_SENSOR_INFO \
-	_IOR(MSM_CAM_IOCTL_MAGIC, 1, struct msm_camsensor_info_t *)
+	_IOR(MSM_CAM_IOCTL_MAGIC, 1, struct sensor_info_t)
 
 #define MSM_CAM_IOCTL_REGISTER_PMEM \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 2, struct msm_pmem_info_t *)
@@ -107,7 +80,7 @@
 	_IOW(MSM_CAM_IOCTL_MAGIC, 12, struct camera_enable_cmd_t *)
 
 #define MSM_CAM_IOCTL_VFE_APPS_RESET \
-	_IOW(MSM_CAM_IOCTL_MAGIC, 13, struct camera_enable_cmd_t *)
+	_IOW(MSM_CAM_IOCTL_MAGIC, 13, struct camera_enable_cmd_t)
 
 #define MSM_CAM_IOCTL_RELEASE_FRAMEE_BUFFER \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 14, struct camera_enable_cmd_t *)
@@ -125,19 +98,16 @@
 	_IOW(MSM_CAM_IOCTL_MAGIC, 18, struct crop_info_t *)
 
 #define MSM_CAM_IOCTL_PICT_PP \
-	_IOW(MSM_CAM_IOCTL_MAGIC, 19, uint8_t *)
+	_IOW(MSM_CAM_IOCTL_MAGIC, 19, unsigned)
 
 #define MSM_CAM_IOCTL_PICT_PP_DONE \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 20, struct msm_snapshot_pp_status_t *)
 
-#define MSM_CAM_IOCTL_SENSOR_IO_CFG \
-	_IOW(MSM_CAM_IOCTL_MAGIC, 21, struct sensor_cfg_data_t *)
-
-#define MSM_CAM_IOCTL_FLASH_LED_CFG \
-	_IOW(MSM_CAM_IOCTL_MAGIC, 22, enum msm_camera_led_state_t *)
-
-#define MAX_SENSOR_NUM  3
-#define MAX_SENSOR_NAME 32
+	//FIH_ADQ,JOE HSU,Update patch
+#define MSM_CAM_IOCTL_AF_CTRL \
+	_IOR(MSM_CAM_IOCTL_MAGIC, 23, struct msm_camera_ctrl_cmd_t *)
+#define MSM_CAM_IOCTL_AF_CTRL_DONE \
+	_IOW(MSM_CAM_IOCTL_MAGIC, 24, struct msm_camera_ctrl_cmd_t *)
 
 /*****************************************************
  *  enum
@@ -287,7 +257,8 @@ enum vfeoutput_mode_t {
 	CAMIF_TO_AXI_VIA_OUTPUT_2,
 	OUTPUT_1_AND_CAMIF_TO_AXI_VIA_OUTPUT_2,
 	OUTPUT_2_AND_CAMIF_TO_AXI_VIA_OUTPUT_1,
-	LAST_AXI_OUTPUT_MODE_ENUM = OUTPUT_2_AND_CAMIF_TO_AXI_VIA_OUTPUT_1
+	LAST_AXI_OUTPUT_MODE_ENUM
+	= OUTPUT_2_AND_CAMIF_TO_AXI_VIA_OUTPUT_1
 };
 
 enum msm_frame_path {
@@ -346,136 +317,5 @@ struct msm_postproc_t {
 
 struct msm_snapshot_pp_status_t {
 	void *status;
-};
-
-enum sensor_cfg_t {
-	CFG_SET_MODE,
-	CFG_SET_EFFECT,
-	CFG_START,
-	CFG_PWR_UP,
-	CFG_PWR_DOWN,
-	CFG_WRITE_EXPOSURE_GAIN,
-	CFG_SET_DEFAULT_FOCUS,
-	CFG_MOVE_FOCUS,
-	CFG_REGISTER_TO_REAL_GAIN,
-	CFG_REAL_TO_REGISTER_GAIN,
-	CFG_SET_FPS,
-	CFG_SET_PICT_FPS,
-	CFG_SET_BRIGHTNESS,
-	CFG_SET_CONTRAST,
-	CFG_SET_ZOOM,
-	CFG_SET_EXPOSURE_MODE,
-	CFG_SET_WB,
-	CFG_SET_ANTIBANDING,
-	CFG_SET_EXP_GAIN,
-	CFG_SET_PICT_EXP_GAIN,
-	CFG_SET_LENS_SHADING,
-
-	CFG_GET_PICT_FPS,
-	CFG_GET_PREV_L_PF,
-	CFG_GET_PREV_P_PL,
-	CFG_GET_PICT_L_PF,
-	CFG_GET_PICT_P_PL,
-
-	CFG_GET_PICT_MAX_EXP_LC,
-
-	CFG_MAX
-};
-
-enum sensor_move_focus_t {
-  MOVE_NEAR,
-  MOVE_FAR
-};
-
-enum sensor_mode_t {
-	SENSOR_PREVIEW_MODE,
-	SENSOR_SNAPSHOT_MODE,
-	SENSOR_RAW_SNAPSHOT_MODE
-};
-
-enum sensor_resolution_t {
-	SENSOR_QTR_SIZE,
-	SENSOR_FULL_SIZE,
-	SENSOR_INVALID_SIZE,
-};
-
-enum camera_effect_t {
-	CAMERA_EFFECT_MIN_MINUS_1,
-	CAMERA_EFFECT_OFF = 1,  /* This list must match aeecamera.h */
-	CAMERA_EFFECT_MONO,
-	CAMERA_EFFECT_NEGATIVE,
-	CAMERA_EFFECT_SOLARIZE,
-	CAMERA_EFFECT_PASTEL,
-	CAMERA_EFFECT_MOSAIC,
-	CAMERA_EFFECT_RESIZE,
-	CAMERA_EFFECT_SEPIA,
-	CAMERA_EFFECT_POSTERIZE,
-	CAMERA_EFFECT_WHITEBOARD,
-	CAMERA_EFFECT_BLACKBOARD,
-	CAMERA_EFFECT_AQUA,
-	CAMERA_EFFECT_MAX_PLUS_1
-};
-
-struct sensor_pict_fps {
-	uint16_t prevfps;
-	uint16_t pictfps;
-};
-
-struct exp_gain_cfg {
-	uint16_t gain;
-	uint32_t line;
-};
-
-struct focus_cfg {
-	int32_t steps;
-	enum sensor_move_focus_t dir;
-};
-
-struct fps_cfg {
-	uint16_t f_mult;
-	uint16_t fps_div;
-	uint32_t pict_fps_div;
-};
-
-enum msm_camera_led_state_t {
-  MSM_LED_OFF,
-  MSM_LED_LOW,
-  MSM_LED_HIGH
-};
-
-struct sensor_cfg_data_t {
-	enum sensor_cfg_t  cfgtype;
-	enum sensor_mode_t mode;
-	enum sensor_resolution_t rs;
-
-	union {
-		int8_t effect;
-		uint8_t lens_shading;
-		uint16_t prevl_pf;
-		uint16_t prevp_pl;
-		uint16_t pictl_pf;
-		uint16_t pictp_pl;
-		uint32_t pict_max_exp_lc;
-		uint16_t p_fps;
-		struct sensor_pict_fps gfps;
-		struct exp_gain_cfg    exp_gain;
-		struct focus_cfg       focus;
-		struct fps_cfg	       fps;
-	} cfg;
-};
-
-enum sensor_get_info_t {
-	GET_NAME,
-	GET_PREVIEW_LINE_PER_FRAME,
-	GET_PREVIEW_PIXELS_PER_LINE,
-	GET_SNAPSHOT_LINE_PER_FRAME,
-	GET_SNAPSHOT_PIXELS_PER_LINE,
-	GET_SNAPSHOT_FPS,
-	GET_SNAPSHOT_MAX_EP_LINE_CNT,
-};
-
-struct msm_camsensor_info_t {
-	char name[MAX_SENSOR_NAME];
-  int8_t flash_enabled;
 };
 #endif /* __LINUX_MSM_CAMERA_H */

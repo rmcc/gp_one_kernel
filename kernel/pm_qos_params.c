@@ -25,8 +25,6 @@
  * pointer or exits the pm_qos_object will get an opportunity to clean up.
  *
  * Mark Gross <mgross@linux.intel.com>
- *
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  */
 
 #include <linux/pm_qos_params.h>

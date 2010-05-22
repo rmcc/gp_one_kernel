@@ -104,6 +104,23 @@ void build_cpu_to_node_map(void);
 	.nr_balance_failed	= 0,			\
 }
 
+#define pcibus_to_cpumask(bus)	(pcibus_to_node(bus) == -1 ? \
+					CPU_MASK_ALL : \
+					node_to_cpumask(pcibus_to_node(bus)) \
+				)
+
+/* returns pointer to cpumask for specified node */
+#define	node_to_cpumask_ptr(v, node) 					\
+		cpumask_t _##v = node_to_cpumask(node);			\
+		const cpumask_t *v = &_##v
+
+#define node_to_cpumask_ptr_next(v, node)				\
+			  _##v = node_to_cpumask(node)
+
+#else
+
+#include <asm-generic/topology.h>
+
 #endif /* CONFIG_NUMA */
 
 #ifdef CONFIG_SMP
@@ -115,12 +132,5 @@ void build_cpu_to_node_map(void);
 #endif
 
 extern void arch_fix_phys_package_id(int num, u32 slot);
-
-#define pcibus_to_cpumask(bus)	(pcibus_to_node(bus) == -1 ? \
-					CPU_MASK_ALL : \
-					node_to_cpumask(pcibus_to_node(bus)) \
-				)
-
-#include <asm-generic/topology.h>
 
 #endif /* _ASM_IA64_TOPOLOGY_H */

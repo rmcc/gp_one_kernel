@@ -1,0 +1,50 @@
+.HEADING1 {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: larger;
+	font-weight: bold;
+	font-style: normal;
+	line-height: normal;
+	font-variant: normal;
+	color: #000000;
+
+}
+.HEADING2 {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: large;
+	font-style: normal;
+	font-weight: bold;
+}
+.HEADING3 {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: medium;
+	font-style: normal;
+	font-weight: bold;
+}
+.BODYTEXT {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: small;
+	font-style: normal;
+	font-weight: normal;
+}
+.BODYCODE {
+	font-family: "Courier New", Courier, mono;
+	font-size: small;
+	font-style: normal;
+}
+.FUNCPROTOTYPE {
+	font-family: "Courier New", Courier, mono;
+	font-size: medium;
+	font-style: normal;
+	font-weight: normal;
+}
+.FUNCHEADINGS {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: medium;
+	font-style: normal;
+	font-weight: bold;
+}
+.Topic {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: medium;
+	font-weight: bold;
+}

@@ -1,6 +1,6 @@
 /* arch/arm/mach-msm/audio_evrc.c
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This code also borrows from audio_aac.c, which is
  * Copyright (C) 2008 Google, Inc.
@@ -26,10 +26,8 @@
 #include <linux/kthread.h>
 #include <linux/wait.h>
 #include <linux/dma-mapping.h>
-#include <linux/debugfs.h>
 #include <linux/delay.h>
-#include <linux/list.h>
-#include <linux/earlysuspend.h>
+
 #include <asm/atomic.h>
 #include <asm/ioctls.h>
 #include <mach/msm_adsp.h>
@@ -76,20 +74,6 @@ struct buffer {
 	unsigned size;
 	unsigned used;		/* Input usage actual DSP produced PCM size  */
 	unsigned addr;
-	int      eos; /* non-tunnel EOS purpose */
-};
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-struct audevrc_suspend_ctl {
-	struct early_suspend node;
-	struct audio *audio;
-};
-#endif
-
-struct audevrc_event{
-	struct list_head list;
-	int event_type;
-	union msm_audio_event_payload payload;
 };
 
 struct audio {
@@ -133,21 +117,10 @@ struct audio {
 	uint8_t stopped:1;	/* set when stopped, cleared on flush */
 	uint8_t pcm_feedback:1;
 	uint8_t buf_refresh:1;
-	int teos; /* valid only if tunnel mode & no data left for decoder */
 
 	unsigned volume;
 	uint16_t dec_id;
 	uint32_t read_ptr_offset;
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	struct audevrc_suspend_ctl suspend_ctl;
-#endif
-
-	struct list_head event_queue;
-	wait_queue_head_t event_wait;
-	spinlock_t event_queue_lock;
-	struct mutex get_event_lock;
-	int event_abort;
 };
 static struct audio the_evrc_audio;
 
@@ -158,8 +131,6 @@ static void audevrc_send_data(struct audio *audio, unsigned needed);
 static void audevrc_dsp_event(void *private, unsigned id, uint16_t *msg);
 static void audevrc_config_hostpcm(struct audio *audio);
 static void audevrc_buffer_refresh(struct audio *audio);
-static void audevrc_post_event(struct audio *audio, int type,
-		union msm_audio_event_payload payload);
 
 /* must be called with audio->lock held */
 static int audevrc_enable(struct audio *audio)
@@ -234,10 +205,6 @@ static void audevrc_update_pcm_buf_entry(struct audio *audio,
 				audio->fill_next);
 			audio->in[audio->fill_next].used =
 				payload[3 + index * 2];
-			if (audio->in[audio->fill_next].used == 0) {
-				dprintk("%s: EOS signaled\n", __func__);
-				audio->in[audio->fill_next].eos = 1;
-			}
 			if ((++audio->fill_next) == audio->pcm_buf_count)
 				audio->fill_next = 0;
 
@@ -249,8 +216,7 @@ static void audevrc_update_pcm_buf_entry(struct audio *audio,
 			break;
 		}
 	}
-	if (audio->in[audio->fill_next].used == 0 &&
-		!audio->in[audio->fill_next].eos) {
+	if (audio->in[audio->fill_next].used == 0) {
 		audevrc_buffer_refresh(audio);
 	} else {
 		dprintk("audevrc_update_pcm_buf_entry: read cannot keep up\n");
@@ -339,14 +305,8 @@ static void audevrc_dsp_event(void *private, unsigned id, uint16_t *msg)
 		dprintk("%s: FLUSH_ACK\n", __func__);
 		audio->wflush = 0;
 		audio->rflush = 0;
-		wake_up(&audio->write_wait);
 		if (audio->pcm_feedback)
 			audevrc_buffer_refresh(audio);
-		break;
-	case AUDPP_MSG_PCMDMAMISSED:
-		dprintk("%s: PCMDMAMISSED\n", __func__);
-		audio->teos = 1;
-		wake_up(&audio->write_wait);
 		break;
 	default:
 		pr_err("audevrc_dsp_event: UNKNOWN (%d)\n", id);
@@ -416,19 +376,6 @@ static int audplay_dsp_send_data_avail(struct audio *audio,
 	cmd.buf_ptr = audio->out[idx].addr;
 	cmd.buf_size = len / 2;
 	cmd.partition_number = 0;
-	return audplay_send_queue0(audio, &cmd, sizeof(cmd));
-}
-
-static int audplay_signal_eos(struct audio *audio)
-{
-	audplay_cmd_bitstream_data_avail cmd;
-
-	dprintk("%s()\n", __func__);
-	cmd.cmd_id              = AUDPLAY_CMD_BITSTREAM_DATA_AVAIL;
-	cmd.decoder_id  = -1; /* Set metafield to -1 */
-	cmd.buf_ptr = 0;
-	cmd.buf_size    = 0; /* Set Zero Buffer size, to signal EOS to FW */
-	cmd.partition_number    = 0;
 	return audplay_send_queue0(audio, &cmd, sizeof(cmd));
 }
 
@@ -550,91 +497,6 @@ static void audevrc_ioport_reset(struct audio *audio)
 	mutex_unlock(&audio->read_lock);
 }
 
-static int audevrc_events_pending(struct audio *audio)
-{
-	unsigned long flags;
-	int empty;
-
-	spin_lock_irqsave(&audio->event_queue_lock, flags);
-	empty = !list_empty(&audio->event_queue);
-	spin_unlock_irqrestore(&audio->event_queue_lock, flags);
-	return empty || audio->event_abort;
-}
-
-static void audevrc_reset_event_queue(struct audio *audio)
-{
-	unsigned long flags;
-	struct audevrc_event *drv_evt;
-	struct list_head *ptr, *next;
-
-	spin_lock_irqsave(&audio->event_queue_lock, flags);
-	list_for_each_safe(ptr, next, &audio->event_queue) {
-		drv_evt = list_first_entry(&audio->event_queue,
-				struct audevrc_event, list);
-		list_del(&drv_evt->list);
-		kfree(drv_evt);
-	}
-	spin_unlock_irqrestore(&audio->event_queue_lock, flags);
-
-	return;
-}
-
-
-static long audevrc_process_event_req(struct audio *audio, void __user *arg)
-{
-	long rc;
-	struct msm_audio_event usr_evt;
-	struct audevrc_event *drv_evt = NULL;
-	int timeout;
-	unsigned long flags;
-
-	if (copy_from_user(&usr_evt, arg, sizeof(struct msm_audio_event)))
-		return -EFAULT;
-
-	timeout = (int) usr_evt.timeout_ms;
-
-	if (timeout > 0) {
-		rc = wait_event_interruptible_timeout(
-			audio->event_wait, audevrc_events_pending(audio),
-			msecs_to_jiffies(timeout));
-		if (rc == 0)
-			return -ETIMEDOUT;
-	} else {
-		rc = wait_event_interruptible(
-			audio->event_wait, audevrc_events_pending(audio));
-	}
-
-	if (rc < 0)
-		return rc;
-
-	if (audio->event_abort) {
-		audio->event_abort = 0;
-		return -ENODEV;
-	}
-
-	rc = 0;
-
-	spin_lock_irqsave(&audio->event_queue_lock, flags);
-	if (!list_empty(&audio->event_queue)) {
-		drv_evt = list_first_entry(&audio->event_queue,
-				struct audevrc_event, list);
-		list_del(&drv_evt->list);
-	}
-	spin_unlock_irqrestore(&audio->event_queue_lock, flags);
-
-	if (drv_evt) {
-		usr_evt.event_type = drv_evt->event_type;
-		usr_evt.event_payload = drv_evt->payload;
-
-		if (copy_to_user(arg, &usr_evt, sizeof(usr_evt)))
-			rc = -EFAULT;
-
-		kfree(drv_evt);
-	} else
-		rc = -1;
-	return rc;
-}
-
 static long audevrc_ioctl(struct file *file, unsigned int cmd,
 			  unsigned long arg)
 {
@@ -660,23 +522,6 @@ static long audevrc_ioctl(struct file *file, unsigned int cmd,
 		spin_unlock_irqrestore(&audio->dsp_lock, flags);
 		return 0;
 	}
-	if (cmd == AUDIO_GET_EVENT) {
-		dprintk("%s: AUDIO_GET_EVENT\n", __func__);
-		if (mutex_trylock(&audio->get_event_lock)) {
-			rc = audevrc_process_event_req(audio,
-					(void __user *) arg);
-			mutex_unlock(&audio->get_event_lock);
-		} else
-			rc = -EBUSY;
-		return rc;
-	}
-
-	if (cmd == AUDIO_ABORT_GET_EVENT) {
-		audio->event_abort = 1;
-		wake_up(&audio->event_wait);
-		return 0;
-	}
-
 	mutex_lock(&audio->lock);
 	switch (cmd) {
 	case AUDIO_START:
@@ -693,16 +538,9 @@ static long audevrc_ioctl(struct file *file, unsigned int cmd,
 		audio->rflush = 1;
 		audio->wflush = 1;
 		audevrc_ioport_reset(audio);
-		if (audio->running) {
+		if (audio->running)
 			audpp_flush(audio->dec_id);
-			rc = wait_event_interruptible(audio->write_wait,
-				!audio->wflush);
-			if (rc < 0) {
-				pr_err("%s: AUDIO_FLUSH interrupted\n",
-					__func__);
-				rc = -EINTR;
-			}
-		} else {
+		else {
 			audio->rflush = 0;
 			audio->wflush = 0;
 		}
@@ -807,52 +645,6 @@ static long audevrc_ioctl(struct file *file, unsigned int cmd,
 	return rc;
 }
 
-/* Only useful in tunnel-mode */
-static int audevrc_fsync(struct file *file, struct dentry *dentry,
-			int datasync)
-{
-	struct audio *audio = file->private_data;
-	int rc = 0;
-
-	dprintk("%s()\n", __func__);
-
-	if (!audio->running || audio->pcm_feedback) {
-		rc = -EINVAL;
-		goto done_nolock;
-	}
-
-	mutex_lock(&audio->write_lock);
-
-	rc = wait_event_interruptible(audio->write_wait,
-		(!audio->out[0].used &&
-		!audio->out[1].used &&
-		audio->out_needed) || audio->wflush);
-
-	if (rc < 0)
-		goto done;
-	else if (audio->wflush) {
-		rc = -EBUSY;
-		goto done;
-	}
-
-	/* pcm dmamiss message is sent continously
-	 * when decoder is starved so no race
-	 * condition concern
-	 */
-	audio->teos = 0;
-
-	rc = wait_event_interruptible(audio->write_wait,
-		audio->teos || audio->wflush);
-
-	if (audio->wflush)
-		rc = -EBUSY;
-
-done:
-	mutex_unlock(&audio->write_lock);
-done_nolock:
-	return rc;
-}
-
 static ssize_t audevrc_read(struct file *file, char __user *buf, size_t count,
 			    loff_t *pos)
 {
@@ -867,9 +659,9 @@ static ssize_t audevrc_read(struct file *file, char __user *buf, size_t count,
 	dprintk("audevrc_read() \n");
 	while (count > 0) {
 		rc = wait_event_interruptible(audio->read_wait,
-				(audio->in[audio->read_next].used > 0) ||
-				(audio->stopped) || (audio->rflush) ||
-				(audio->in[audio->read_next].eos));
+					      (audio->in[audio->read_next].
+						used > 0) || (audio->stopped)
+						|| (audio->rflush));
 
 		dprintk("audevrc_read() wait terminated \n");
 		if (rc < 0)
@@ -888,21 +680,6 @@ static ssize_t audevrc_read(struct file *file, char __user *buf, size_t count,
 		} else {
 			dprintk("audevrc_read: read from in[%d]\n",
 				audio->read_next);
-			if (audio->in[audio->read_next].eos) {
-				dprintk("%s: EOS set\n", __func__);
-				if (buf == start) {
-					audio->in[audio->read_next].eos = 0;
-					if ((++audio->read_next) ==
-						audio->pcm_buf_count)
-						audio->read_next = 0;
-				}
-				/* else client buffer already has data
-				 * return the buffer first so next read
-				 * returns 0 byte
-				 */
-				break;
-			}
-
 			if (copy_to_user
 			    (buf, audio->in[audio->read_next].data,
 			     audio->in[audio->read_next].used)) {
@@ -940,31 +717,6 @@ static ssize_t audevrc_read(struct file *file, char __user *buf, size_t count,
 	return rc;
 }
 
-static int audevrc_handle_eos(struct audio *audio)
-{
-	int rc = 0;
-
-	mutex_lock(&audio->write_lock);
-
-	rc = wait_event_interruptible(audio->write_wait,
-		(audio->out_needed &&
-		audio->out[0].used == 0 &&
-		audio->out[1].used == 0)
-		|| (audio->stopped)
-		|| (audio->wflush));
-
-	if (rc < 0)
-		goto done;
-	if (audio->stopped || audio->wflush) {
-		rc = -EBUSY;
-		goto done;
-	}
-	audplay_signal_eos(audio);
-done:
-	mutex_unlock(&audio->write_lock);
-	return rc;
-}
-
 static ssize_t audevrc_write(struct file *file, const char __user *buf,
 			     size_t count, loff_t *pos)
 {
@@ -974,16 +726,10 @@ static ssize_t audevrc_write(struct file *file, const char __user *buf,
 	size_t xfer;
 	int rc = 0;
 
-	dprintk("%s: cnt=%d\n", __func__, count);
-
 	if (count & 1)
 		return -EINVAL;
-
-	if (!count) { /* client signal EOS */
-		return audevrc_handle_eos(audio);
-	}
-
 	mutex_lock(&audio->write_lock);
+	dprintk("audevrc_write() \n");
 	while (count > 0) {
 		frame = audio->out + audio->out_head;
 		rc = wait_event_interruptible(audio->write_wait,
@@ -1028,13 +774,7 @@ static int audevrc_release(struct inode *inode, struct file *file)
 	audevrc_flush_pcm_buf(audio);
 	msm_adsp_put(audio->audplay);
 	audio->audplay = NULL;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	unregister_early_suspend(&audio->suspend_ctl.node);
-#endif
 	audio->opened = 0;
-	audio->event_abort = 1;
-	wake_up(&audio->event_wait);
-	audevrc_reset_event_queue(audio);
 	dma_free_coherent(NULL, DMASZ, audio->data, audio->phys);
 	audio->data = NULL;
 	if (audio->read_data != NULL) {
@@ -1049,50 +789,6 @@ static int audevrc_release(struct inode *inode, struct file *file)
 	mutex_unlock(&audio->lock);
 	return 0;
 }
-
-static void audevrc_post_event(struct audio *audio, int type,
-		union msm_audio_event_payload payload)
-{
-	struct audevrc_event *e_node = NULL;
-	unsigned long flags;
-
-	e_node = kmalloc(sizeof(struct audevrc_event), GFP_KERNEL);
-
-	if (!e_node) {
-		pr_err("%s: No mem to post event %d\n", __func__, type);
-		return;
-	}
-
-	e_node->event_type = type;
-	e_node->payload = payload;
-
-	spin_lock_irqsave(&audio->event_queue_lock, flags);
-	list_add_tail(&e_node->list, &audio->event_queue);
-	spin_unlock_irqrestore(&audio->event_queue_lock, flags);
-	wake_up(&audio->event_wait);
-}
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-static void audevrc_suspend(struct early_suspend *h)
-{
-	struct audevrc_suspend_ctl *ctl =
-		container_of(h, struct audevrc_suspend_ctl, node);
-	union msm_audio_event_payload payload;
-
-	dprintk("%s()\n", __func__);
-	audevrc_post_event(ctl->audio, AUDIO_EVENT_SUSPEND, payload);
-}
-
-static void audevrc_resume(struct early_suspend *h)
-{
-	struct audevrc_suspend_ctl *ctl =
-		container_of(h, struct audevrc_suspend_ctl, node);
-	union msm_audio_event_payload payload;
-
-	dprintk("%s()\n", __func__);
-	audevrc_post_event(ctl->audio, AUDIO_EVENT_RESUME, payload);
-}
-#endif
 
 static struct audio the_evrc_audio;
 
@@ -1145,14 +841,6 @@ static int audevrc_open(struct inode *inode, struct file *file)
 	audevrc_flush(audio);
 
 	audio->opened = 1;
-	audio->event_abort = 0;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	audio->suspend_ctl.node.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
-	audio->suspend_ctl.node.resume = audevrc_resume;
-	audio->suspend_ctl.node.suspend = audevrc_suspend;
-	audio->suspend_ctl.audio = audio;
-	register_early_suspend(&audio->suspend_ctl.node);
-#endif
 	file->private_data = audio;
 
 	mutex_unlock(&audio->lock);
@@ -1174,7 +862,6 @@ static struct file_operations audio_evrc_fops = {
 	.read = audevrc_read,
 	.write = audevrc_write,
 	.unlocked_ioctl = audevrc_ioctl,
-	.fsync = audevrc_fsync,
 };
 
 struct miscdevice audio_evrc_misc = {
@@ -1183,103 +870,15 @@ struct miscdevice audio_evrc_misc = {
 	.fops = &audio_evrc_fops,
 };
 
-#ifdef CONFIG_DEBUG_FS
-static ssize_t audevrc_debug_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
-static ssize_t audevrc_debug_read(struct file *file, char __user *buf,
-					size_t count, loff_t *ppos)
-{
-	const int debug_bufmax = 1024;
-	static char buffer[1024];
-	int n = 0, i;
-	struct audio *audio = file->private_data;
-
-	mutex_lock(&audio->lock);
-	n = scnprintf(buffer, debug_bufmax, "opened %d\n", audio->opened);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"enabled %d\n", audio->enabled);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"stopped %d\n", audio->stopped);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"pcm_feedback %d\n", audio->pcm_feedback);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"out_buf_sz %d\n", audio->out[0].size);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"pcm_buf_count %d \n", audio->pcm_buf_count);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"pcm_buf_sz %d \n", audio->in[0].size);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"volume %x \n", audio->volume);
-	mutex_unlock(&audio->lock);
-	/* Following variables are only useful for debugging when
-	 * when playback halts unexpectedly. Thus, no mutual exclusion
-	 * enforced
-	 */
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"wflush %d\n", audio->wflush);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"rflush %d\n", audio->rflush);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"running %d \n", audio->running);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"out_needed %d \n", audio->out_needed);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"out_head %d \n", audio->out_head);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"out_tail %d \n", audio->out_tail);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"out[0].used %d \n", audio->out[0].used);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"out[1].used %d \n", audio->out[1].used);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"buffer_refresh %d \n", audio->buf_refresh);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"read_next %d \n", audio->read_next);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"fill_next %d \n", audio->fill_next);
-	for (i = 0; i < audio->pcm_buf_count; i++)
-		n += scnprintf(buffer + n, debug_bufmax - n,
-				"in[%d].size %d \n", i, audio->in[i].used);
-	n++;
-	buffer[n] = 0;
-	return simple_read_from_buffer(buf, count, ppos, buffer, n);
-}
-
-static struct file_operations audevrc_debug_fops = {
-	.read = audevrc_debug_read,
-	.open = audevrc_debug_open,
-};
-#endif
-
 static int __init audevrc_init(void)
 {
-#ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
-#endif
-
 	mutex_init(&the_evrc_audio.lock);
 	mutex_init(&the_evrc_audio.write_lock);
 	mutex_init(&the_evrc_audio.read_lock);
-	mutex_init(&the_evrc_audio.get_event_lock);
 	spin_lock_init(&the_evrc_audio.dsp_lock);
 	init_waitqueue_head(&the_evrc_audio.write_wait);
 	init_waitqueue_head(&the_evrc_audio.read_wait);
 	the_evrc_audio.read_data = NULL;
-
-#ifdef CONFIG_DEBUG_FS
-	dentry = debugfs_create_file("msm_evrc", S_IFREG | S_IRUGO, NULL,
-		(void *) &the_evrc_audio, &audevrc_debug_fops);
-
-	if (IS_ERR(dentry))
-		dprintk("EVRC:%s:debugfs_create_file failed\n", __func__);
-#endif
-	INIT_LIST_HEAD(&the_evrc_audio.event_queue);
-	init_waitqueue_head(&the_evrc_audio.event_wait);
-	spin_lock_init(&the_evrc_audio.event_queue_lock);
 	return misc_register(&audio_evrc_misc);
 }
 
@@ -1293,3 +892,4 @@ module_exit(audevrc_exit);
 
 MODULE_DESCRIPTION("MSM EVRC driver");
 MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("QUALCOMM Inc");

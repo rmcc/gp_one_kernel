@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -346,9 +346,15 @@ int audio_configure(struct msm_audio *prtd)
 	if (prtd->enabled)
 		return 0;
 
-	/* refuse to start if we're not ready with first buffer */
-	if (!prtd->out[0].used)
+	/* refuse to start if we're not ready */
+	if (!prtd->out[0].used || !prtd->out[1].used)
 		return -EIO;
+
+	/* we start buffers 0 and 1, so buffer 0 will be the
+	 * next one the dsp will want
+	 */
+	prtd->out_tail = 0;
+	prtd->out_needed = 0;
 
 	cfg.tx_rate = 0;
 	cfg.rx_rate = RPC_AUD_DEF_SAMPLE_RATE_48000;

@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_rpcrouter_device.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009 QUALCOMM USA, INC.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public

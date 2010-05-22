@@ -113,8 +113,10 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	/* avoid the locking if we can */
 	if ((inode->i_state & flags) == flags)
 		return;
-
+/* FIH_ADQ, 6370 { */
+///	if (unlikely(block_dump)) {
 	if (unlikely(block_dump > 1)) {
+/* } FIH_ADQ, 6370 */	
 		struct dentry *dentry = NULL;
 		const char *name = "?";
 

@@ -38,6 +38,7 @@
 
 #include <linux/compiler.h>
 #include <linux/module.h>
+#include <linux/syscalls.h>
 
 /* People can turn this off for buggy TCP's found in printers etc. */
 int sysctl_tcp_retrans_collapse __read_mostly = 1;
@@ -198,9 +199,15 @@ void tcp_select_initial_window(int __space, __u32 mss,
 	 * misinterpreting the window field as a signed quantity.
 	 */
 	if (sysctl_tcp_workaround_signed_windows)
+	{
+		//printk(KERN_INFO "[henry.wang] sysctl_tcp_workaround_windows\r\n");  // FIH_ADQ
 		(*rcv_wnd) = min(space, MAX_TCP_WINDOW);
+	}
 	else
+	{
+		//printk(KERN_INFO "[henry.wang] !! sysctl_tcp_workaround_windows\r\n");  // FIH_ADQ
 		(*rcv_wnd) = space;
+	}
 
 	(*rcv_wscale) = 0;
 	if (wscale_ok) {
@@ -220,14 +227,27 @@ void tcp_select_initial_window(int __space, __u32 mss,
 	 * will be satisfied with 2.
 	 */
 	if (mss > (1 << *rcv_wscale)) {
-		int init_cwnd = 4;
+/* FIH_ADQ { */	
+		//printk(KERN_INFO "[henry.wang] initial window\r\n");
+		//int init_cwnd = 4;
+		// +++ FIH_ADQ +++, modify by henry.wang 2009/06/18
+		// Enlarge init_cwnd let TCP window size to pass MMS certification in LAB
+		//int init_cwnd = 8;
+		int init_cwnd = 16;
+		// --- FIH_ADQ ---
+/* } FIH_ADQ */		
 		if (mss > 1460 * 3)
 			init_cwnd = 2;
 		else if (mss > 1460)
 			init_cwnd = 3;
 		if (*rcv_wnd > init_cwnd * mss)
+		{
+			//printk(KERN_INFO "[henry.wang] init_cwnd = %d, mss = %d\r\n", init_cwnd, mss);  // FIH_ADQ
 			*rcv_wnd = init_cwnd * mss;
 	}
+	}
+
+	//printk(KERN_INFO "[henry.wang] rcv_wnd = %d\r\n", *rcv_wnd);  // FIH_ADQ
 
 	/* Set the clamp no higher than max representable value */
 	(*window_clamp) = min(65535U << (*rcv_wscale), *window_clamp);
@@ -2369,6 +2389,61 @@ static void tcp_connect_init(struct sock *sk)
 	tcp_clear_retrans(tp);
 }
 
+// +++ FIH_ADQ, added by henry.wang 2009/7/21, print process pid and its name
+static int proc_pid_cmdline(struct task_struct *task, char * buffer)
+{
+	int res = 0;
+	unsigned int len;
+	struct mm_struct *mm = get_task_mm(task);
+	if (!mm)
+		goto out;
+	if (!mm->arg_end)
+		goto out_mm;	/* Shh! No looking before we're done */
+
+ 	len = mm->arg_end - mm->arg_start;
+ 
+	if (len > PAGE_SIZE)
+		len = PAGE_SIZE;
+ 
+	res = access_process_vm(task, mm->arg_start, buffer, len, 0);
+
+	// If the nul at the end of args has been overwritten, then
+	// assume application is using setproctitle(3).
+	if (res > 0 && buffer[res-1] != '\0' && len < PAGE_SIZE) {
+		len = strnlen(buffer, res);
+		if (len < res) {
+		    res = len;
+		} else {
+			len = mm->env_end - mm->env_start;
+			if (len > PAGE_SIZE - res)
+				len = PAGE_SIZE - res;
+			res += access_process_vm(task, mm->env_start, buffer+res, len, 0);
+			res = strnlen(buffer, res);
+		}
+	}
+out_mm:
+	mmput(mm);
+out:
+	return res;
+}
+
+static char * pidname(int pid)
+{
+	struct task_struct *p = NULL;
+	static char cmdline[256];
+	memset(cmdline, 0, sizeof(cmdline));
+	p  = find_task_by_vpid (pid);
+
+	if(p != NULL)
+		proc_pid_cmdline(p, cmdline);
+	else
+		sprintf(cmdline, "Error: can't find the task_strct of pid:%d", pid);
+	
+	return cmdline;	
+}
+// --- FIH_ADQ ---
+
+int tcp_connection_num = 0;
 /*
  * Build a SYN and send it off.
  */
@@ -2377,6 +2452,12 @@ int tcp_connect(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sk_buff *buff;
 
+	// +++ FIH_ADQ, added by henry.wang 2009/7/21, print who establish TCP connections
+	printk(KERN_INFO "FIH DEBUG : tcp_connect pid = %d, pid name = %s\r\n", (int)sys_getpid(), pidname(sys_getpid()));
+	tcp_connection_num++ ;
+	printk(KERN_INFO "FIH DEBUG : tcp_connection number = %d\r\n", tcp_connection_num);
+	// --- FIH_ADQ ---
+	
 	tcp_connect_init(sk);
 
 	buff = alloc_skb_fclone(MAX_TCP_HEADER + 15, sk->sk_allocation);

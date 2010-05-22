@@ -3,7 +3,7 @@
  * MSM7K, QSD io support
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -35,11 +35,13 @@
 		.length = MSM_##name##_SIZE, \
 		.type = MT_DEVICE_NONSHARED, \
 	 }
-
+/* FIH_ADQ, 6370 { */
 /* msm_shared_ram_phys default value of 0x00100000 is the most common value
  * and should work as-is for any target without stacked memory.
  */
-int msm_shared_ram_phys = 0x00100000;
+///int msm_shared_ram_phys = 0x00100000;
+int msm_shared_ram_phys = 0x07F00000;
+/* } FIH_ADQ, 6370 */
 
 static struct map_desc msm_io_desc[] __initdata = {
 	MSM_DEVICE(VIC),
@@ -64,9 +66,18 @@ static struct map_desc msm_io_desc[] __initdata = {
 #endif
 	{
 		.virtual =  (unsigned long) MSM_SHARED_RAM_BASE,
+		.pfn =      __phys_to_pfn(MSM_SHARED_RAM_PHYS),
 		.length =   MSM_SHARED_RAM_SIZE,
 		.type =     MT_DEVICE,
 	},
+//FIH_ADQ+
+	{
+		.virtual =  (unsigned long) MSM_PLOG_BASE,
+		.pfn =      __phys_to_pfn(MSM_PLOG_PHYS),
+		.length =   MSM_PLOG_SIZE,
+		.type =     MT_DEVICE,
+	},
+//FIH_ADQ-
 };
 
 static struct map_desc qsd8x50_io_desc[] __initdata = {
@@ -86,6 +97,7 @@ static struct map_desc qsd8x50_io_desc[] __initdata = {
 #endif
 	{
 		.virtual =  (unsigned long) MSM_SHARED_RAM_BASE,
+		.pfn =      __phys_to_pfn(MSM_SHARED_RAM_PHYS),
 		.length =   MSM_SHARED_RAM_SIZE,
 		.type =     MT_DEVICE,
 	},
@@ -108,6 +120,7 @@ static struct map_desc comet_io_desc[] __initdata = {
 #endif
 	{
 		.virtual =  (unsigned long) MSM_SHARED_RAM_BASE,
+		.pfn =      __phys_to_pfn(MSM_SHARED_RAM_PHYS),
 		.length =   MSM_SHARED_RAM_SIZE,
 		.type =     MT_DEVICE,
 	},
@@ -115,49 +128,22 @@ static struct map_desc comet_io_desc[] __initdata = {
 
 void __init msm_map_common_io(void)
 {
-	int i;
-
 	/* Make sure the peripheral register window is closed, since
 	 * we will use PTE flags (TEX[1]=1,B=0,C=1) to determine which
 	 * pages are peripheral interface or not.
 	 */
 	asm("mcr p15, 0, %0, c15, c2, 4" : : "r" (0));
 
-	BUG_ON(!ARRAY_SIZE(msm_io_desc));
-	for (i = 0; i < ARRAY_SIZE(msm_io_desc); i++)
-		if (msm_io_desc[i].virtual ==
-				(unsigned long)MSM_SHARED_RAM_BASE)
-			msm_io_desc[i].pfn =
-				__phys_to_pfn(msm_shared_ram_phys);
-
 	iotable_init(msm_io_desc, ARRAY_SIZE(msm_io_desc));
 }
 
 void __init msm_map_qsd8x50_io(void)
 {
-	int i;
-
-	BUG_ON(!ARRAY_SIZE(qsd8x50_io_desc));
-	for (i = 0; i < ARRAY_SIZE(qsd8x50_io_desc); i++)
-		if (qsd8x50_io_desc[i].virtual ==
-				(unsigned long)MSM_SHARED_RAM_BASE)
-			qsd8x50_io_desc[i].pfn =
-				__phys_to_pfn(msm_shared_ram_phys);
-
 	iotable_init(qsd8x50_io_desc, ARRAY_SIZE(qsd8x50_io_desc));
 }
 
 void __init msm_map_comet_io(void)
 {
-	int i;
-
-	BUG_ON(!ARRAY_SIZE(comet_io_desc));
-	for (i = 0; i < ARRAY_SIZE(comet_io_desc); i++)
-		if (comet_io_desc[i].virtual ==
-				(unsigned long)MSM_SHARED_RAM_BASE)
-			comet_io_desc[i].pfn =
-				__phys_to_pfn(msm_shared_ram_phys);
-
 	iotable_init(comet_io_desc, ARRAY_SIZE(comet_io_desc));
 }
 

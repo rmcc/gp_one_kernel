@@ -22,3 +22,8 @@ obj-$(CONFIG_BATTERY_PMU)	+= pmu_battery.o
 obj-$(CONFIG_BATTERY_OLPC)	+= olpc_battery.o
 obj-$(CONFIG_BATTERY_TOSA)	+= tosa_battery.o
 obj-$(CONFIG_BATTERY_PALMTX)	+= palmtx_battery.o
+
+#///+T_FIH
+obj-$(CONFIG_BATTERY_FIH_ZEUS)	+= gasgauge_bridge.o
+obj-$(CONFIG_BATTERY_FIH_ZEUS)	+= zeus_battery.o
+#///-T_FIH

@@ -96,7 +96,9 @@ void gen_pool_destroy(struct gen_pool *pool)
 
 		kfree(chunk);
 	}
+/* FIH_ADQ, 6370 { */	
 	write_unlock(&pool->lock);
+/* } FIH_ADQ, 6360  */	
 	kfree(pool);
 	return;
 }

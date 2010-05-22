@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_rpcrouter.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2009 QUALCOMM USA, INC.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -33,12 +33,8 @@
 #include <linux/err.h>
 #include <linux/sched.h>
 #include <linux/poll.h>
-#include <linux/wakelock.h>
-#include <asm/uaccess.h>
-#include <asm/byteorder.h>
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
-#include <linux/debugfs.h>
 
 #include <asm/byteorder.h>
 
@@ -58,7 +54,7 @@ enum {
 	RAW_PMW = 1U << 7,
 	R2R_RAW_HDR = 1U << 8,
 };
-static int smd_rpcrouter_debug_mask;
+static int smd_rpcrouter_debug_mask=SMEM_LOG; //FIHADQ  Guorui
 module_param_named(debug_mask, smd_rpcrouter_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -142,11 +138,8 @@ static DEFINE_SPINLOCK(server_list_lock);
 static DEFINE_SPINLOCK(smd_lock);
 
 static struct workqueue_struct *rpcrouter_workqueue;
-static struct wake_lock rpcrouter_wake_lock;
-static int rpcrouter_need_len;
 
 static atomic_t next_xid = ATOMIC_INIT(1);
-static atomic_t pm_mid = ATOMIC_INIT(1);
 
 static void do_read_data(struct work_struct *work);
 static void do_create_pdevs(struct work_struct *work);
@@ -433,7 +426,6 @@ struct msm_rpc_endpoint *msm_rpcrouter_create_local_endpoint(dev_t dev)
 	spin_lock_init(&ept->restart_lock);
 	init_waitqueue_head(&ept->restart_wait);
 	ept->restart_state = RESTART_NORMAL;
-	//wake_lock_init(&ept->read_q_wake_lock, WAKE_LOCK_SUSPEND, "rpc_read");
 	INIT_LIST_HEAD(&ept->incomplete);
 	spin_lock_init(&ept->incomplete_lock);
 
@@ -471,7 +463,6 @@ int msm_rpcrouter_destroy_local_endpoint(struct msm_rpc_endpoint *ept)
 	}
 	spin_unlock_irqrestore(&ept->reply_q_lock, flags);
 
-	//wake_lock_destroy(&ept->read_q_wake_lock);
 	list_del(&ept->list);
 	kfree(ept);
 	return 0;
@@ -598,8 +589,6 @@ static int process_control_msg(union rr_control_msg *msg, int len)
 		/* TODO: long time to hold a spinlock... */
 		spin_lock_irqsave(&server_list_lock, flags);
 		list_for_each_entry(server, &server_list, list) {
-			if (server->pid != RPCROUTER_PID_LOCAL)
-				continue;
 			ctl.srv.pid = server->pid;
 			ctl.srv.cid = server->cid;
 			ctl.srv.prog = server->prog;
@@ -750,8 +739,6 @@ static void rpcrouter_smdnotify(void *_dev, unsigned event)
 	if (event != SMD_EVENT_DATA)
 		return;
 
-	if (smd_read_avail(smd_channel) >= rpcrouter_need_len)
-		wake_lock(&rpcrouter_wake_lock);
 	wake_up(&smd_wait);
 }
 
@@ -785,8 +772,6 @@ static int rr_read(void *data, int len)
 			else
 				return -EIO;
 		}
-		rpcrouter_need_len = len;
-		wake_unlock(&rpcrouter_wake_lock);
 		spin_unlock_irqrestore(&smd_lock, flags);
 
 //		printk("rr_read: waiting (%d)\n", len);
@@ -890,8 +875,8 @@ static void do_read_data(struct work_struct *work)
 				       xid,
 				       pm >> 30 & 0x1,
 				       pm >> 31 & 0x1,
-				       pm >> 16 & 0xFF,
-				       pm & 0xFFFF, hdr.dst_cid);
+				       pm >> 16 & 0xF,
+				       pm & 0xFF, hdr.dst_cid);
 	}
 
 	if (smd_rpcrouter_debug_mask & SMEM_LOG) {
@@ -956,7 +941,6 @@ static void do_read_data(struct work_struct *work)
 
 packet_complete:
 	spin_lock_irqsave(&ept->read_q_lock, flags);
-	//wake_lock(&ept->read_q_wake_lock);
 	list_add_tail(&pkt->list, &ept->read_q);
 	wake_up(&ept->wait_q);
 	spin_unlock_irqrestore(&ept->read_q_lock, flags);
@@ -989,7 +973,6 @@ done:
 fail_io:
 fail_data:
 	printk(KERN_ERR "rpc_router has died\n");
-	wake_unlock(&rpcrouter_wake_lock);
 }
 
 void msm_rpc_setup_req(struct rpc_request_hdr *hdr, uint32_t prog,
@@ -1002,7 +985,6 @@ void msm_rpc_setup_req(struct rpc_request_hdr *hdr, uint32_t prog,
 	hdr->vers = cpu_to_be32(vers);
 	hdr->procedure = cpu_to_be32(proc);
 }
-EXPORT_SYMBOL(msm_rpc_setup_req);
 
 struct msm_rpc_endpoint *msm_rpc_open(void)
 {
@@ -1028,8 +1010,7 @@ static int msm_rpc_write_pkt(
 	void *buffer,
 	int count,
 	int first,
-	int last,
-	uint32_t mid
+	int last
 	)
 {
 	struct rpc_request_hdr *rq = buffer;
@@ -1120,7 +1101,15 @@ static int msm_rpc_write_pkt(
 #endif
 
 	}
-	pacmark = PACMARK(count, mid, first, last);
+
+	/* bump pacmark while interrupts disabled to avoid race
+	 * probably should be atomic op instead
+	 */
+	/* Pacmark maintained by ept and incremented for next
+	*  messages when last fragment is set.
+	*/
+	pacmark = PACMARK(count, ept->next_pm, first, last);
+	ept->next_pm += last;
 
 	spin_unlock_irqrestore(&r_ept->quota_lock, flags);
 
@@ -1170,8 +1159,8 @@ static int msm_rpc_write_pkt(
 				       xid,
 				       pacmark >> 30 & 0x1,
 				       pacmark >> 31 & 0x1,
-				       pacmark >> 16 & 0xFF,
-				       pacmark & 0xFFFF, hdr->src_cid);
+				       pacmark >> 16 & 0xF,
+				       pacmark & 0xFF, hdr->src_cid);
 	}
 #endif
 
@@ -1275,7 +1264,6 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 	char *tx_buf;
 	int rc;
 	int first_pkt = 1;
-	uint32_t mid;
 
 	/* snoop the RPC packet and enforce permissions */
 
@@ -1338,7 +1326,7 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 
 	tx_cnt = count;
 	tx_buf = buffer;
-	mid = atomic_add_return(1, &pm_mid) & 0xFF;
+
 	/* The modem's router can only take 500 bytes of data. The
 	   first 8 bytes it uses on the modem side for addressing,
 	   the next 4 bytes are for the pacmark header. */
@@ -1348,22 +1336,18 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 	while (tx_cnt > 0) {
 		if (tx_cnt > max_tx) {
 			rc = msm_rpc_write_pkt(&hdr, ept, r_ept,
-					       tx_buf, max_tx,
-					       first_pkt, 0, mid);
+					      tx_buf, max_tx, first_pkt, 0);
 			if (rc < 0)
 				return rc;
-			IO("Wrote %d bytes First %d, Last 0 mid %d\n",
-			   rc, first_pkt, mid);
+			IO("Wrote %d bytes First %d, Last 0\n", rc, first_pkt);
 			tx_cnt -= max_tx;
 			tx_buf += max_tx;
 		} else {
 			rc = msm_rpc_write_pkt(&hdr, ept, r_ept,
-					       tx_buf, tx_cnt,
-					       first_pkt, 1, mid);
+					      tx_buf, tx_cnt, first_pkt, 1);
 			if (rc < 0)
 				return rc;
-			IO("Wrote %d bytes First %d Last 1 mid %d\n",
-			   rc, first_pkt, mid);
+			IO("Wrote %d bytes First %d Last 1 \n", rc, first_pkt);
 			break;
 		}
 		first_pkt = 0;
@@ -1371,7 +1355,6 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 
 	return count;
 }
-EXPORT_SYMBOL(msm_rpc_write);
 
 /*
  * NOTE: It is the responsibility of the caller to kfree buffer
@@ -1411,7 +1394,6 @@ int msm_rpc_read(struct msm_rpc_endpoint *ept, void **buffer,
 
 	return rc;
 }
-EXPORT_SYMBOL(msm_rpc_read);
 
 int msm_rpc_call(struct msm_rpc_endpoint *ept, uint32_t proc,
 		 void *_request, int request_size,
@@ -1569,8 +1551,6 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 		return -ETOOSMALL;
 	}
 	list_del(&pkt->list);
-	//if (list_empty(&ept->read_q))
-	//	wake_unlock(&ept->read_q_wake_lock);
 	spin_unlock_irqrestore(&ept->read_q_lock, flags);
 
 	rc = pkt->length;
@@ -1765,7 +1745,6 @@ static int msm_rpcrouter_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&newserver_wait);
 	init_waitqueue_head(&smd_wait);
-	wake_lock_init(&rpcrouter_wake_lock, WAKE_LOCK_SUSPEND, "SMD_RPCCALL");
 
 	rpcrouter_workqueue = create_singlethread_workqueue("rpcrouter");
 	if (!rpcrouter_workqueue)
@@ -1805,370 +1784,9 @@ static struct platform_driver msm_smd_channel2_driver = {
 	},
 };
 
-#if defined(CONFIG_DEBUG_FS)
-#define HSIZE 13
-
-struct sym {
-	uint32_t val;
-	char *str;
-	struct hlist_node node;
-};
-
-static struct sym oncrpc_syms[] = {
-	{ 0x30000000, "CM" },
-	{ 0x30000001, "DB" },
-	{ 0x30000002, "SND" },
-	{ 0x30000003, "WMS" },
-	{ 0x30000004, "PDSM" },
-	{ 0x30000005, "MISC_MODEM_APIS" },
-	{ 0x30000006, "MISC_APPS_APIS" },
-	{ 0x30000007, "JOYST" },
-	{ 0x30000008, "VJOY" },
-	{ 0x30000009, "JOYSTC" },
-	{ 0x3000000a, "ADSPRTOSATOM" },
-	{ 0x3000000b, "ADSPRTOSMTOA" },
-	{ 0x3000000c, "I2C" },
-	{ 0x3000000d, "TIME_REMOTE" },
-	{ 0x3000000e, "NV" },
-	{ 0x3000000f, "CLKRGM_SEC" },
-	{ 0x30000010, "RDEVMAP" },
-	{ 0x30000011, "FS_RAPI" },
-	{ 0x30000012, "PBMLIB" },
-	{ 0x30000013, "AUDMGR" },
-	{ 0x30000014, "MVS" },
-	{ 0x30000015, "DOG_KEEPALIVE" },
-	{ 0x30000016, "GSDI_EXP" },
-	{ 0x30000017, "AUTH" },
-	{ 0x30000018, "NVRUIMI" },
-	{ 0x30000019, "MMGSDILIB" },
-	{ 0x3000001a, "CHARGER" },
-	{ 0x3000001b, "UIM" },
-	{ 0x3000001C, "ONCRPCTEST" },
-	{ 0x3000001d, "PDSM_ATL" },
-	{ 0x3000001e, "FS_XMOUNT" },
-	{ 0x3000001f, "SECUTIL " },
-	{ 0x30000020, "MCCMEID" },
-	{ 0x30000021, "PM_STROBE_FLASH" },
-	{ 0x30000022, "DS707_EXTIF" },
-	{ 0x30000023, "SMD BRIDGE_MODEM" },
-	{ 0x30000024, "SMD PORT_MGR" },
-	{ 0x30000025, "BUS_PERF" },
-	{ 0x30000026, "BUS_MON" },
-	{ 0x30000027, "MC" },
-	{ 0x30000028, "MCCAP" },
-	{ 0x30000029, "MCCDMA" },
-	{ 0x3000002a, "MCCDS" },
-	{ 0x3000002b, "MCCSCH" },
-	{ 0x3000002c, "MCCSRID" },
-	{ 0x3000002d, "SNM" },
-	{ 0x3000002e, "MCCSYOBJ" },
-	{ 0x3000002f, "DS707_APIS" },
-	{ 0x30000030, "DS_MP_SHIM_APPS_ASYNC" },
-	{ 0x30000031, "DSRLP_APIS" },
-	{ 0x30000032, "RLP_APIS" },
-	{ 0x30000033, "DS_MP_SHIM_MODEM" },
-	{ 0x30000034, "DSHDR_APIS" },
-	{ 0x30000035, "DSHDR_MDM_APIS" },
-	{ 0x30000036, "DS_MP_SHIM_APPS" },
-	{ 0x30000037, "HDRMC_APIS" },
-	{ 0x30000038, "SMD_BRIDGE_MTOA" },
-	{ 0x30000039, "SMD_BRIDGE_ATOM" },
-	{ 0x3000003a, "DPMAPP_OTG" },
-	{ 0x3000003b, "DIAG" },
-	{ 0x3000003c, "GSTK_EXP" },
-	{ 0x3000003d, "DSBC_MDM_APIS" },
-	{ 0x3000003e, "HDRMRLP_MDM_APIS" },
-	{ 0x3000003f, "HDRMRLP_APPS_APIS" },
-	{ 0x30000040, "HDRMC_MRLP_APIS" },
-	{ 0x30000041, "PDCOMM_APP_API" },
-	{ 0x30000042, "DSAT_APIS" },
-	{ 0x30000043, "MISC_RF_APIS" },
-	{ 0x30000044, "CMIPAPP" },
-	{ 0x30000045, "DSMP_UMTS_MODEM_APIS" },
-	{ 0x30000046, "DSMP_UMTS_APPS_APIS" },
-	{ 0x30000047, "DSUCSDMPSHIM" },
-	{ 0x30000048, "TIME_REMOTE_ATOM" },
-	{ 0x3000004a, "SD" },
-	{ 0x3000004b, "MMOC" },
-	{ 0x3000004c, "WLAN_ADP_FTM" },
-	{ 0x3000004d, "WLAN_CP_CM" },
-	{ 0x3000004e, "FTM_WLAN" },
-	{ 0x3000004f, "SDCC_CPRM" },
-	{ 0x30000050, "CPRMINTERFACE" },
-	{ 0x30000051, "DATA_ON_MODEM_MTOA_APIS" },
-	{ 0x30000052, "DATA_ON_APPS_ATOM_APIS" },
-	{ 0x30000053, "MISC_MODEM_APIS_NONWINMOB" },
-	{ 0x30000054, "MISC_APPS_APIS_NONWINMOB" },
-	{ 0x30000055, "PMEM_REMOTE" },
-	{ 0x30000056, "TCXOMGR" },
-	{ 0x30000057, "DSUCSDAPPIF_APIS" },
-	{ 0x30000058, "BT" },
-	{ 0x30000059, "PD_COMMS_API" },
-	{ 0x3000005a, "PD_COMMS_CLIENT_API" },
-	{ 0x3000005b, "PDAPI" },
-	{ 0x3000005c, "LSA_SUPL_DSM" },
-	{ 0x3000005d, "TIME_REMOTE_MTOA" },
-	{ 0x3000005e, "FTM_BT" },
-	{ 0X3000005f, "DSUCSDAPPIF_APIS" },
-	{ 0X30000060, "PMAPP_GEN" },
-	{ 0X30000061, "PM_LIB" },
-	{ 0X30000062, "KEYPAD" },
-	{ 0X30000063, "HSU_APP_APIS" },
-	{ 0X30000064, "HSU_MDM_APIS" },
-	{ 0X30000065, "ADIE_ADC_REMOTE_ATOM " },
-	{ 0X30000066, "TLMM_REMOTE_ATOM" },
-	{ 0X30000067, "UI_CALLCTRL" },
-	{ 0X30000068, "UIUTILS" },
-	{ 0X30000069, "PRL" },
-	{ 0X3000006a, "HW" },
-	{ 0X3000006b, "OEM_RAPI" },
-	{ 0X3000006c, "WMSPM" },
-	{ 0X3000006d, "BTPF" },
-	{ 0X3000006e, "CLKRGM_SYNC_EVENT" },
-	{ 0X3000006f, "USB_APPS_RPC" },
-	{ 0X30000070, "USB_MODEM_RPC" },
-	{ 0X30000071, "ADC" },
-	{ 0X30000072, "CAMERAREMOTED" },
-	{ 0X30000073, "SECAPIREMOTED" },
-	{ 0X30000074, "DSATAPI" },
-	{ 0X30000075, "CLKCTL_RPC" },
-	{ 0X30000076, "BREWAPPCOORD" },
-	{ 0X30000077, "ALTENVSHELL" },
-	{ 0X30000078, "WLAN_TRP_UTILS" },
-	{ 0X30000079, "GPIO_RPC" },
-	{ 0X3000007a, "PING_RPC" },
-	{ 0X3000007b, "DSC_DCM_API" },
-	{ 0X3000007c, "L1_DS" },
-	{ 0X3000007d, "QCHATPK_APIS" },
-	{ 0X3000007e, "GPS_API" },
-	{ 0X3000007f, "OSS_RRCASN_REMOTE" },
-	{ 0X30000080, "PMAPP_OTG_REMOTE" },
-	{ 0X30000081, "PING_MDM_RPC" },
-	{ 0X30000082, "PING_KERNEL_RPC" },
-	{ 0X30000083, "TIMETICK" },
-	{ 0X30000084, "WM_BTHCI_FTM " },
-	{ 0X30000085, "WM_BT_PF" },
-	{ 0X30000086, "IPA_IPC_APIS" },
-	{ 0X30000087, "UKCC_IPC_APIS" },
-	{ 0X30000088, "CMIPSMS " },
-	{ 0X30000089, "VBATT_REMOTE" },
-	{ 0X3000008a, "MFPAL" },
-	{ 0X3000008b, "DSUMTSPDPREG" },
-	{ 0X3000fe00, "RESTART_DAEMON NUMBER 0" },
-	{ 0X3000fe01, "RESTART_DAEMON NUMBER 1" },
-	{ 0X3000feff, "RESTART_DAEMON NUMBER 255" },
-	{ 0X3000fffe, "BACKWARDS_COMPATIBILITY_IN_RPC_CLNT_LOOKUP" },
-	{ 0X3000ffff, "RPC_ROUTER_SERVER_PROGRAM" },
-};
-
-#define ONCRPC_SYM 0
-
-static struct sym_tbl {
-	struct sym *data;
-	int size;
-	struct hlist_head hlist[HSIZE];
-} tbl[] = {
-	{ oncrpc_syms, ARRAY_SIZE(oncrpc_syms) },
-};
-
-#define hash(val) (val % HSIZE)
-
-static void init_syms(void)
-{
-	int i;
-	int j;
-
-	for (i = 0; i < ARRAY_SIZE(tbl); ++i)
-		for (j = 0; j < HSIZE; ++j)
-			INIT_HLIST_HEAD(&tbl[i].hlist[j]);
-
-	for (i = 0; i < ARRAY_SIZE(tbl); ++i)
-		for (j = 0; j < tbl[i].size; ++j) {
-			INIT_HLIST_NODE(&tbl[i].data[j].node);
-			hlist_add_head(&tbl[i].data[j].node,
-				       &tbl[i].hlist[hash(tbl[i].data[j].val)]);
-		}
-}
-
-static char *find_sym(uint32_t id, uint32_t val)
-{
-	struct hlist_node *n;
-	struct sym *s;
-
-	hlist_for_each(n, &tbl[id].hlist[hash(val)]) {
-		s = hlist_entry(n, struct sym, node);
-		if (s->val == val)
-			return s->str;
-	}
-
-	return 0;
-}
-
-static int dump_servers(char *buf, int max)
-{
-	int i = 0;
-	unsigned long flags;
-	struct rr_server *svr;
-	char *sym;
-
-	spin_lock_irqsave(&server_list_lock, flags);
-	list_for_each_entry(svr, &server_list, list) {
-		i += scnprintf(buf + i, max - i, "pdev_name: %s\n",
-			       svr->pdev_name);
-		i += scnprintf(buf + i, max - i, "pid: 0x%08x\n", svr->pid);
-		i += scnprintf(buf + i, max - i, "cid: 0x%08x\n", svr->cid);
-		i += scnprintf(buf + i, max - i, "prog: 0x%08x", svr->prog);
-		sym = find_sym(ONCRPC_SYM, svr->prog);
-		if (sym)
-			i += scnprintf(buf + i, max - i, " (%s)\n", sym);
-		else
-			i += scnprintf(buf + i, max - i, "\n");
-		i += scnprintf(buf + i, max - i, "vers: 0x%08x\n", svr->vers);
-		i += scnprintf(buf + i, max - i, "\n");
-	}
-	spin_unlock_irqrestore(&server_list_lock, flags);
-
-	return i;
-}
-
-static int dump_remote_endpoints(char *buf, int max)
-{
-	int i = 0;
-	unsigned long flags;
-	struct rr_remote_endpoint *ept;
-
-	spin_lock_irqsave(&remote_endpoints_lock, flags);
-	list_for_each_entry(ept, &remote_endpoints, list) {
-		i += scnprintf(buf + i, max - i, "pid: 0x%08x\n", ept->pid);
-		i += scnprintf(buf + i, max - i, "cid: 0x%08x\n", ept->cid);
-		i += scnprintf(buf + i, max - i, "tx_quota_cntr: %i\n",
-			       ept->tx_quota_cntr);
-		i += scnprintf(buf + i, max - i, "quota_restart_state: %i\n",
-			       ept->quota_restart_state);
-		i += scnprintf(buf + i, max - i, "\n");
-	}
-	spin_unlock_irqrestore(&remote_endpoints_lock, flags);
-
-	return i;
-}
-
-static int dump_msm_rpc_endpoint(char *buf, int max)
-{
-	int i = 0;
-	unsigned long flags;
-	struct msm_rpc_reply *reply;
-	struct msm_rpc_endpoint *ept;
-	struct rr_packet *pkt;
-	char *sym;
-
-	spin_lock_irqsave(&local_endpoints_lock, flags);
-	list_for_each_entry(ept, &local_endpoints, list) {
-		i += scnprintf(buf + i, max - i, "pid: 0x%08x\n", ept->pid);
-		i += scnprintf(buf + i, max - i, "cid: 0x%08x\n", ept->cid);
-		i += scnprintf(buf + i, max - i, "dst_pid: 0x%08x\n",
-			       ept->dst_pid);
-		i += scnprintf(buf + i, max - i, "dst_cid: 0x%08x\n",
-			       ept->dst_cid);
-		i += scnprintf(buf + i, max - i, "dst_prog: 0x%08x",
-			       be32_to_cpu(ept->dst_prog));
-		sym = find_sym(ONCRPC_SYM, be32_to_cpu(ept->dst_prog));
-		if (sym)
-			i += scnprintf(buf + i, max - i, " (%s)\n", sym);
-		else
-			i += scnprintf(buf + i, max - i, "\n");
-		i += scnprintf(buf + i, max - i, "dst_vers: 0x%08x\n",
-			       be32_to_cpu(ept->dst_vers));
-		i += scnprintf(buf + i, max - i, "reply_cnt: %i\n",
-			       ept->reply_cnt);
-		i += scnprintf(buf + i, max - i, "restart_state: %i\n",
-			       ept->restart_state);
-
-		i += scnprintf(buf + i, max - i, "outstanding xids:\n");
-		spin_lock(&ept->reply_q_lock);
-		list_for_each_entry(reply, &ept->reply_pend_q, list)
-			i += scnprintf(buf + i, max - i, "    xid = %u\n",
-				       ntohl(reply->xid));
-		spin_unlock(&ept->reply_q_lock);
-
-		i += scnprintf(buf + i, max - i, "complete unread packets:\n");
-		spin_lock(&ept->read_q_lock);
-		list_for_each_entry(pkt, &ept->read_q, list) {
-			i += scnprintf(buf + i, max - i, "    mid = %i\n",
-				       pkt->mid);
-			i += scnprintf(buf + i, max - i, "    length = %i\n",
-				       pkt->length);
-		}
-		spin_unlock(&ept->read_q_lock);
-		i += scnprintf(buf + i, max - i, "\n");
-	}
-	spin_unlock_irqrestore(&local_endpoints_lock, flags);
-
-	return i;
-}
-
-#define DEBUG_BUFMAX 4096
-static char debug_buffer[DEBUG_BUFMAX];
-
-static ssize_t debug_read(struct file *file, char __user *buf,
-			  size_t count, loff_t *ppos)
-{
-	int (*fill)(char *buf, int max) = file->private_data;
-	int bsize = fill(debug_buffer, DEBUG_BUFMAX);
-	return simple_read_from_buffer(buf, count, ppos, debug_buffer, bsize);
-}
-
-static int debug_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
-static const struct file_operations debug_ops = {
-	.read = debug_read,
-	.open = debug_open,
-};
-
-static void debug_create(const char *name, mode_t mode,
-			 struct dentry *dent,
-			 int (*fill)(char *buf, int max))
-{
-	debugfs_create_file(name, mode, dent, fill, &debug_ops);
-}
-
-static void debugfs_init(void)
-{
-	struct dentry *dent;
-
-	dent = debugfs_create_dir("smd_rpcrouter", 0);
-	if (IS_ERR(dent))
-		return;
-
-	debug_create("dump_msm_rpc_endpoints", 0444, dent,
-		     dump_msm_rpc_endpoint);
-	debug_create("dump_remote_endpoints", 0444, dent,
-		     dump_remote_endpoints);
-	debug_create("dump_servers", 0444, dent,
-		     dump_servers);
-
-	init_syms();
-}
-
-#else
-static void debugfs_init(void) {}
-#endif
-
-
 static int __init rpcrouter_init(void)
 {
-	int ret;
-
-	ret = platform_driver_register(&msm_smd_channel2_driver);
-	if (ret)
-		return ret;
-
-	debugfs_init();
-
-	return ret;
+	return platform_driver_register(&msm_smd_channel2_driver);
 }
 
 module_init(rpcrouter_init);

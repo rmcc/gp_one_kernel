@@ -271,8 +271,10 @@ sysc_do_svc:
 sysc_nr_ok:
 	mvc	SP_ARGS(4,%r15),SP_R7(%r15)
 sysc_do_restart:
+	l	%r8,__TI_flags+3(%r9)
+	n	%r8,BASED(.Lc_tif_syscall_trace_or_audit_or_kernel_trace)
+	ltr	%r8,%r8
 	l	%r8,BASED(.Lsysc_table)
-	tm	__TI_flags+3(%r9),(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT)
 	l	%r8,0(%r7,%r8)	  # get system call addr.
 	bnz	BASED(sysc_tracesys)
 	basr	%r14,%r8	  # call sys_xxxx
@@ -399,7 +401,9 @@ sysc_tracego:
 	basr	%r14,%r8		# call sys_xxx
 	st	%r2,SP_R2(%r15)		# store return value
 sysc_tracenogo:
-	tm	__TI_flags+3(%r9),(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT)
+	l	%r8,__TI_flags+3(%r9)
+	n	%r8,BASED(.Lc_tif_syscall_trace_or_audit_or_kernel_trace)
+	ltr	%r8,%r8
 	bz	BASED(sysc_return)
 	l	%r1,BASED(.Ltrace)
 	la	%r2,SP_PTREGS(%r15)	# load pt_regs
@@ -1059,6 +1063,8 @@ cleanup_io_leave_insn:
 .L0x030:	.short	0x030
 .L0x038:	.short	0x038
 .Lc_1:		.long	1
+.Lc_tif_syscall_trace_or_audit_or_kernel_trace:
+		.long	_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT|_TIF_KERNEL_TRACE
 
 /*
  * Symbol constants

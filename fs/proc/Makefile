@@ -16,3 +16,7 @@ proc-$(CONFIG_PROC_KCORE)	+= kcore.o
 proc-$(CONFIG_PROC_VMCORE)	+= vmcore.o
 proc-$(CONFIG_PROC_DEVICETREE)	+= proc_devtree.o
 proc-$(CONFIG_PRINTK)	+= kmsg.o
+#FIH_ADQ +
+proc-$(CONFIG_PRINTK)   += plog.o
+proc-$(CONFIG_PRINTK)	+= pmlog.o
+#FIH_ADQ -

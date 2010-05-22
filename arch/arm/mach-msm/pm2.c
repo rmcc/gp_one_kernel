@@ -3,7 +3,7 @@
  * MSM Power Management Routines
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2009 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -19,7 +19,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/clk.h>
-#include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/pm.h>
 #include <linux/pm_qos_params.h>
@@ -30,9 +29,6 @@
 #include <linux/io.h>
 #include <mach/msm_iomap.h>
 #include <mach/system.h>
-#ifdef CONFIG_CACHE_L2X0
-#include <asm/hardware/cache-l2x0.h>
-#endif
 
 #include "smd_private.h"
 #include "acpuclock.h"
@@ -42,7 +38,7 @@
 #include "irq.h"
 #include "gpio.h"
 #include "timer.h"
-#include "pm.h"
+
 
 /******************************************************************************
  * Debug Definitions
@@ -98,6 +94,14 @@ module_param_named(
  * Sleep Modes and Parameters
  *****************************************************************************/
 
+enum {
+	MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND,
+	MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+	MSM_PM_SLEEP_MODE_APPS_SLEEP,
+	MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT,
+	MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT,
+};
+
 static int msm_pm_sleep_mode = CONFIG_MSM7X00A_SLEEP_MODE;
 module_param_named(
 	sleep_mode, msm_pm_sleep_mode,
@@ -115,225 +119,6 @@ module_param_named(
 	idle_sleep_min_time, msm_pm_idle_sleep_min_time,
 	int, S_IRUGO | S_IWUSR | S_IWGRP
 );
-
-#define MSM_PM_MODE_ATTR_SUSPEND_ENABLED "suspend_enabled"
-#define MSM_PM_MODE_ATTR_IDLE_ENABLED "idle_enabled"
-#define MSM_PM_MODE_ATTR_LATENCY "latency"
-#define MSM_PM_MODE_ATTR_RESIDENCY "residency"
-#define MSM_PM_MODE_ATTR_NR (4)
-
-static char *msm_pm_sleep_mode_labels[MSM_PM_SLEEP_MODE_NR] = {
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND] = " ",
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] = "power_collapse",
-	[MSM_PM_SLEEP_MODE_APPS_SLEEP] = "apps_sleep",
-	[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT] =
-		"ramp_down_and_wfi",
-	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT] = "wfi",
-	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN] =
-		"power_collapse_no_xo_shutdown",
-};
-
-static struct msm_pm_platform_data *msm_pm_modes;
-
-static struct kobject *msm_pm_mode_kobjs[MSM_PM_SLEEP_MODE_NR];
-static struct attribute_group *msm_pm_mode_attr_group[MSM_PM_SLEEP_MODE_NR];
-static struct attribute **msm_pm_mode_attrs[MSM_PM_SLEEP_MODE_NR];
-static struct kobj_attribute *msm_pm_mode_kobj_attrs[MSM_PM_SLEEP_MODE_NR];
-
-/*
- * Write out the attribute.
- */
-static ssize_t msm_pm_mode_attr_show(
-	struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
-	int ret = -EINVAL;
-	int i;
-
-	for (i = 0; i < MSM_PM_SLEEP_MODE_NR; i++) {
-		struct kernel_param kp;
-
-		if (strcmp(kobj->name, msm_pm_sleep_mode_labels[i]))
-			continue;
-
-		if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_SUSPEND_ENABLED)) {
-			u32 arg = msm_pm_modes[i].suspend_enabled;
-			kp.arg = &arg;
-			ret = param_get_ulong(buf, &kp);
-		} else if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_IDLE_ENABLED)) {
-			u32 arg = msm_pm_modes[i].idle_enabled;
-			kp.arg = &arg;
-			ret = param_get_ulong(buf, &kp);
-		} else if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_LATENCY)) {
-			kp.arg = &msm_pm_modes[i].latency;
-			ret = param_get_ulong(buf, &kp);
-		} else if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_RESIDENCY)) {
-			kp.arg = &msm_pm_modes[i].residency;
-			ret = param_get_ulong(buf, &kp);
-		}
-
-		break;
-	}
-
-	if (ret > 0) {
-		strcat(buf, "\n");
-		ret++;
-	}
-
-	return ret;
-}
-
-/*
- * Read in the new attribute value.
- */
-static ssize_t msm_pm_mode_attr_store(struct kobject *kobj,
-	struct kobj_attribute *attr, const char *buf, size_t count)
-{
-	int ret = -EINVAL;
-	int i;
-
-	for (i = 0; i < MSM_PM_SLEEP_MODE_NR; i++) {
-		struct kernel_param kp;
-
-		if (strcmp(kobj->name, msm_pm_sleep_mode_labels[i]))
-			continue;
-
-		if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_SUSPEND_ENABLED)) {
-			kp.arg = &msm_pm_modes[i].suspend_enabled;
-			ret = param_set_byte(buf, &kp);
-		} else if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_IDLE_ENABLED)) {
-			kp.arg = &msm_pm_modes[i].idle_enabled;
-			ret = param_set_byte(buf, &kp);
-		} else if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_LATENCY)) {
-			kp.arg = &msm_pm_modes[i].latency;
-			ret = param_set_ulong(buf, &kp);
-		} else if (!strcmp(attr->attr.name,
-			MSM_PM_MODE_ATTR_RESIDENCY)) {
-			kp.arg = &msm_pm_modes[i].residency;
-			ret = param_set_ulong(buf, &kp);
-		}
-
-		break;
-	}
-
-	return ret ? ret : count;
-}
-
-/*
- * Add sysfs entries for the sleep modes.
- */
-static int __init msm_pm_mode_sysfs_add(void)
-{
-	struct kobject *module_kobj = NULL;
-	struct kobject *modes_kobj = NULL;
-
-	struct kobject *kobj;
-	struct attribute_group *attr_group;
-	struct attribute **attrs;
-	struct kobj_attribute *kobj_attrs;
-
-	int i, k;
-	int ret;
-
-	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
-	if (!module_kobj) {
-		printk(KERN_ERR "%s: cannot find kobject for module %s\n",
-			__func__, KBUILD_MODNAME);
-		ret = -ENOENT;
-		goto mode_sysfs_add_cleanup;
-	}
-
-	modes_kobj = kobject_create_and_add("modes", module_kobj);
-	if (!modes_kobj) {
-		printk(KERN_ERR "%s: cannot create modes kobject\n", __func__);
-		ret = -ENOMEM;
-		goto mode_sysfs_add_cleanup;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(msm_pm_mode_kobjs); i++) {
-		if (!msm_pm_modes[i].supported)
-			continue;
-
-		kobj = kobject_create_and_add(
-				msm_pm_sleep_mode_labels[i], modes_kobj);
-		attr_group = kzalloc(sizeof(*attr_group), GFP_KERNEL);
-		attrs = kzalloc(sizeof(*attrs) * (MSM_PM_MODE_ATTR_NR + 1),
-				GFP_KERNEL);
-		kobj_attrs = kzalloc(sizeof(*kobj_attrs) * MSM_PM_MODE_ATTR_NR,
-				GFP_KERNEL);
-
-		if (!kobj || !attr_group || !attrs || !kobj_attrs) {
-			printk(KERN_ERR
-				"%s: cannot create kobject or attributes\n",
-				__func__);
-			ret = -ENOMEM;
-			goto mode_sysfs_add_abort;
-		}
-
-		kobj_attrs[0].attr.name = MSM_PM_MODE_ATTR_SUSPEND_ENABLED;
-		kobj_attrs[1].attr.name = MSM_PM_MODE_ATTR_IDLE_ENABLED;
-		kobj_attrs[2].attr.name = MSM_PM_MODE_ATTR_LATENCY;
-		kobj_attrs[3].attr.name = MSM_PM_MODE_ATTR_RESIDENCY;
-
-		for (k = 0; k < MSM_PM_MODE_ATTR_NR; k++) {
-			kobj_attrs[k].attr.mode = 0644;
-			kobj_attrs[k].show = msm_pm_mode_attr_show;
-			kobj_attrs[k].store = msm_pm_mode_attr_store;
-
-			attrs[k] = &kobj_attrs[k].attr;
-		}
-		attrs[MSM_PM_MODE_ATTR_NR] = NULL;
-
-		attr_group->attrs = attrs;
-		ret = sysfs_create_group(kobj, attr_group);
-		if (ret) {
-			printk(KERN_ERR
-				"%s: cannot create kobject attribute group\n",
-				__func__);
-			goto mode_sysfs_add_abort;
-		}
-
-		msm_pm_mode_kobjs[i] = kobj;
-		msm_pm_mode_attr_group[i] = attr_group;
-		msm_pm_mode_attrs[i] = attrs;
-		msm_pm_mode_kobj_attrs[i] = kobj_attrs;
-	}
-
-	return 0;
-
-mode_sysfs_add_abort:
-	kfree(kobj_attrs);
-	kfree(attrs);
-	kfree(attr_group);
-	kobject_put(kobj);
-
-mode_sysfs_add_cleanup:
-	for (i = ARRAY_SIZE(msm_pm_mode_kobjs) - 1; i >= 0; i--) {
-		if (!msm_pm_mode_kobjs[i])
-			continue;
-
-		sysfs_remove_group(
-			msm_pm_mode_kobjs[i], msm_pm_mode_attr_group[i]);
-
-		kfree(msm_pm_mode_kobj_attrs[i]);
-		kfree(msm_pm_mode_attrs[i]);
-		kfree(msm_pm_mode_attr_group[i]);
-		kobject_put(msm_pm_mode_kobjs[i]);
-	}
-
-	return ret;
-}
-
-void __init msm_pm_set_platform_data(struct msm_pm_platform_data *data)
-{
-	msm_pm_modes = data;
-}
 
 
 /******************************************************************************
@@ -477,13 +262,13 @@ static int msm_pm_poll_state(int nr_grps, struct msm_pm_polled_group *grps)
 
 #define SCLK_HZ (32768)
 #define MSM_PM_SLEEP_TICK_LIMIT (0x6DDD000)
-
+///+++ FIH_ADQ +++ 6360
 #ifdef CONFIG_MSM_SLEEP_TIME_OVERRIDE
 static int msm_pm_sleep_time_override;
 module_param_named(sleep_time_override,
 	msm_pm_sleep_time_override, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #endif
-
+///--- FIH_ADQ --- 6360
 static uint32_t msm_pm_max_sleep_time;
 
 /*
@@ -943,7 +728,7 @@ static int msm_pm_power_collapse
 
 	saved_acpuclk_rate = acpuclk_power_collapse();
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_CLOCK, KERN_INFO,
-		"%s(): change clock rate (old rate = %lu)\n", __func__,
+		"%s(): change clock rate (old rate = %ld)\n", __func__,
 		saved_acpuclk_rate);
 
 	if (saved_acpuclk_rate == 0) {
@@ -961,15 +746,7 @@ static int msm_pm_power_collapse
 		saved_vector[0], saved_vector[1],
 		msm_pm_reset_vector[0], msm_pm_reset_vector[1]);
 
-#ifdef CONFIG_CACHE_L2X0
-	l2x0_suspend();
-#endif
-
 	collapsed = msm_pm_collapse();
-
-#ifdef CONFIG_CACHE_L2X0
-	l2x0_resume(collapsed);
-#endif
 
 	msm_pm_reset_vector[0] = saved_vector[0];
 	msm_pm_reset_vector[1] = saved_vector[1];
@@ -984,10 +761,10 @@ static int msm_pm_power_collapse
 		"%s(): msm_pm_collapse returned %d\n", __func__, collapsed);
 
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_CLOCK, KERN_INFO,
-		"%s(): restore clock rate to %lu\n", __func__,
+		"%s(): restore clock rate to %ld\n", __func__,
 		saved_acpuclk_rate);
-	if (acpuclk_set_rate(saved_acpuclk_rate, SETRATE_PC) < 0)
-		printk(KERN_ERR "%s(): failed to restore clock rate(%lu)\n",
+	if (acpuclk_set_rate(saved_acpuclk_rate, 1) < 0)
+		printk(KERN_ERR "%s(): failed to restore clock rate(%ld)\n",
 			__func__, saved_acpuclk_rate);
 
 #ifdef CONFIG_MSM_ADM_OFF_AT_POWER_COLLAPSE
@@ -1138,46 +915,22 @@ power_collapse_bail:
  * protocol with Modem.
  *
  * Return value:
- *      -ENOSYS: function not implemented yet
+ *      -EINVAL: function not implemented yet
  */
 static int msm_pm_apps_sleep(uint32_t sleep_delay, uint32_t sleep_limit)
 {
-	return -ENOSYS;
+	return -EINVAL;
 }
 
 /*
  * Bring the Apps processor to SWFI.
  *
  * Return value:
- *      -EIO: could not ramp Apps processor clock
  *      0: success
  */
-static int msm_pm_swfi(bool ramp_acpu)
+static int msm_pm_swfi(void)
 {
-	unsigned long saved_acpuclk_rate;
-
-	if (ramp_acpu) {
-		saved_acpuclk_rate = acpuclk_wait_for_irq();
-		MSM_PM_DPRINTK(MSM_PM_DEBUG_CLOCK, KERN_INFO,
-			"%s(): change clock rate (old rate = %lu)\n", __func__,
-			saved_acpuclk_rate);
-
-		if (!saved_acpuclk_rate)
-			return -EIO;
-	}
-
 	msm_arch_idle();
-
-	if (ramp_acpu) {
-		MSM_PM_DPRINTK(MSM_PM_DEBUG_CLOCK, KERN_INFO,
-			"%s(): restore clock rate to %lu\n", __func__,
-			saved_acpuclk_rate);
-		if (acpuclk_set_rate(saved_acpuclk_rate, SETRATE_SWFI) < 0)
-			printk(KERN_ERR
-				"%s(): failed to restore clock rate(%lu)\n",
-				__func__, saved_acpuclk_rate);
-	}
-
 	return 0;
 }
 
@@ -1191,7 +944,9 @@ static int msm_pm_swfi(bool ramp_acpu)
  */
 void arch_idle(void)
 {
-	bool allow[MSM_PM_SLEEP_MODE_NR];
+	bool allow_pwrc = true;
+	bool allow_sleep = true;
+	bool allow_swfi = true;
 	uint32_t sleep_limit = SLEEP_LIMIT_NONE;
 
 	int latency_qos;
@@ -1199,7 +954,6 @@ void arch_idle(void)
 
 	int low_power;
 	int ret;
-	int i;
 
 #ifdef CONFIG_MSM_IDLE_STATS
 	DECLARE_BITMAP(clk_ids, NR_CLKS);
@@ -1220,27 +974,20 @@ void arch_idle(void)
 	msm_pm_add_stat(MSM_PM_STAT_REQUESTED_IDLE, timer_expiration);
 #endif /* CONFIG_MSM_IDLE_STATS */
 
-	for (i = 0; i < ARRAY_SIZE(allow); i++)
-		allow[i] = true;
-
 	switch (msm_pm_idle_sleep_mode) {
 	case MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT:
-		allow[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT] =
-			false;
 		/* fall through */
 	case MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT:
-		allow[MSM_PM_SLEEP_MODE_APPS_SLEEP] = false;
+		allow_sleep = false;
 		/* fall through */
 	case MSM_PM_SLEEP_MODE_APPS_SLEEP:
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN] = false;
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] = false;
+		allow_pwrc = false;
 		/* fall through */
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND:
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:
 		break;
 	default:
-		printk(KERN_ERR "idle sleep mode is invalid: %d\n",
-			msm_pm_idle_sleep_mode);
+		BUG();
 #ifdef CONFIG_MSM_IDLE_STATS
 		exit_stat = MSM_PM_STAT_IDLE_SPIN;
 #endif /* CONFIG_MSM_IDLE_STATS */
@@ -1250,17 +997,21 @@ void arch_idle(void)
 
 	if ((timer_expiration < msm_pm_idle_sleep_min_time) ||
 		!msm_irq_idle_sleep_allowed()) {
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] = false;
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN] = false;
-		allow[MSM_PM_SLEEP_MODE_APPS_SLEEP] = false;
+		allow_pwrc = false;
+		allow_sleep = false;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(allow); i++) {
-		struct msm_pm_platform_data *mode = &msm_pm_modes[i];
-		if (!mode->supported || !mode->idle_enabled ||
-			mode->latency >= latency_qos ||
-			mode->residency >= timer_expiration)
-			allow[i] = false;
+	if (CONFIG_MSM_TCXO_SHUTDOWN_LATENCY < latency_qos) {
+		sleep_limit = SLEEP_LIMIT_NONE;
+	} else if (CONFIG_MSM_POWER_COLLAPSE_LATENCY < latency_qos) {
+		sleep_limit = SLEEP_LIMIT_NO_TCXO_SHUTDOWN;
+	} else if (CONFIG_MSM_APPS_SLEEP_LATENCY < latency_qos) {
+		allow_pwrc = false;
+	} else if (CONFIG_MSM_SWFI_LATENCY < latency_qos) {
+		allow_sleep = false;
+	} else {
+		/* no time even for SWFI */
+		allow_swfi = false;
 	}
 
 #ifdef CONFIG_MSM_IDLE_STATS
@@ -1275,25 +1026,18 @@ void arch_idle(void)
 #endif
 
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_IDLE, KERN_INFO,
-		"%s(): next timer %lld, sleep limit %u\n",
-		__func__, timer_expiration, sleep_limit);
+		"%s(): next timer %llu, allow pwrc %d, allow sleep %d, "
+		"allow swfi %d, sleep limit %d\n",
+		__func__, timer_expiration, allow_pwrc, allow_sleep,
+		allow_swfi, sleep_limit);
 
-	for (i = 0; i < ARRAY_SIZE(allow); i++)
-		MSM_PM_DPRINTK(MSM_PM_DEBUG_IDLE, KERN_INFO,
-			"%s(): allow %s: %d\n", __func__,
-			msm_pm_sleep_mode_labels[i], (int)allow[i]);
-
-	if (allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] ||
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN]) {
+	if (allow_pwrc) {
 		uint32_t sleep_delay;
 
 		sleep_delay = (uint32_t) msm_pm_convert_and_cap_time(
 			timer_expiration, MSM_PM_SLEEP_TICK_LIMIT);
 		if (sleep_delay == 0) /* 0 would mean infinite time */
 			sleep_delay = 1;
-
-		if (!allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE])
-			sleep_limit = SLEEP_LIMIT_NO_TCXO_SHUTDOWN;
 
 		ret = msm_pm_power_collapse(true, sleep_delay, sleep_limit);
 		low_power = (ret != -EBUSY && ret != -ETIMEDOUT);
@@ -1308,7 +1052,7 @@ void arch_idle(void)
 				NR_CLKS);
 		}
 #endif /* CONFIG_MSM_IDLE_STATS */
-	} else if (allow[MSM_PM_SLEEP_MODE_APPS_SLEEP]) {
+	} else if (allow_sleep) {
 		uint32_t sleep_delay;
 
 		sleep_delay = (uint32_t) msm_pm_convert_and_cap_time(
@@ -1325,24 +1069,13 @@ void arch_idle(void)
 		else
 			exit_stat = MSM_PM_STAT_IDLE_SLEEP;
 #endif /* CONFIG_MSM_IDLE_STATS */
-	} else if (allow[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT]) {
-		ret = msm_pm_swfi(true);
-		if (ret)
-			while (!msm_irq_pending())
-				udelay(1);
-		low_power = 0;
-#ifdef CONFIG_MSM_IDLE_STATS
-		exit_stat = ret ? MSM_PM_STAT_IDLE_SPIN : MSM_PM_STAT_IDLE_WFI;
-#endif /* CONFIG_MSM_IDLE_STATS */
-	} else if (allow[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT]) {
-		msm_pm_swfi(false);
+	} else if (allow_swfi) {
+		msm_pm_swfi();
 		low_power = 0;
 #ifdef CONFIG_MSM_IDLE_STATS
 		exit_stat = MSM_PM_STAT_IDLE_WFI;
 #endif /* CONFIG_MSM_IDLE_STATS */
 	} else {
-		while (!msm_irq_pending())
-			udelay(1);
 		low_power = 0;
 #ifdef CONFIG_MSM_IDLE_STATS
 		exit_stat = MSM_PM_STAT_IDLE_SPIN;
@@ -1365,16 +1098,13 @@ arch_idle_exit:
  *      -EAGAIN: modem reset occurred or early exit from suspend
  *      -EBUSY: modem not ready for our suspend
  *      -EINVAL: invalid sleep mode
- *      -EIO: could not ramp Apps processor clock
  *      -ETIMEDOUT: timed out waiting for modem's handshake
  *      0: success
  */
 static int msm_pm_enter(suspend_state_t state)
 {
-	bool allow[MSM_PM_SLEEP_MODE_NR];
-	uint32_t sleep_limit = SLEEP_LIMIT_NONE;
+	uint32_t sleep_limit;
 	int ret;
-	int i;
 
 #ifdef CONFIG_MSM_IDLE_STATS
 	DECLARE_BITMAP(clk_ids, NR_CLKS);
@@ -1388,49 +1118,16 @@ static int msm_pm_enter(suspend_state_t state)
 #endif /* CONFIG_MSM_IDLE_STATS */
 
 #ifdef CONFIG_CLOCK_BASED_SLEEP_LIMIT
-	if (ret)
-		sleep_limit = SLEEP_LIMIT_NO_TCXO_SHUTDOWN;
+	sleep_limit = ret ? SLEEP_LIMIT_NO_TCXO_SHUTDOWN : SLEEP_LIMIT_NONE;
+#else
+	sleep_limit = SLEEP_LIMIT_NONE;
 #endif
-
-	for (i = 0; i < ARRAY_SIZE(allow); i++)
-		allow[i] = true;
 
 	switch (msm_pm_sleep_mode) {
-	case MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT:
-		allow[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT] =
-			false;
-		/* fall through */
-	case MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT:
-		allow[MSM_PM_SLEEP_MODE_APPS_SLEEP] = false;
-		/* fall through */
-	case MSM_PM_SLEEP_MODE_APPS_SLEEP:
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN] = false;
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] = false;
-		/* fall through */
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND:
+		/* fall through */
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:
-		break;
-	default:
-		printk(KERN_ERR "suspend sleep mode is invalid: %d\n",
-			msm_pm_sleep_mode);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(allow); i++) {
-		struct msm_pm_platform_data *mode = &msm_pm_modes[i];
-		if (!mode->supported || !mode->suspend_enabled)
-			allow[i] = false;
-	}
-
-	ret = 0;
-
-	if (allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE] ||
-		allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_NO_XO_SHUTDOWN]) {
-#ifdef CONFIG_MSM_IDLE_STATS
-		enum msm_pm_time_stats_id id;
-		int64_t end_time;
-#endif
-
+///+++ FIH_ADQ +++ 6360	
 #ifdef CONFIG_MSM_SLEEP_TIME_OVERRIDE
 		if (msm_pm_sleep_time_override > 0) {
 			int64_t ns;
@@ -1439,13 +1136,30 @@ static int msm_pm_enter(suspend_state_t state)
 			msm_pm_sleep_time_override = 0;
 		}
 #endif
-		if (!allow[MSM_PM_SLEEP_MODE_POWER_COLLAPSE])
-			sleep_limit = SLEEP_LIMIT_NO_TCXO_SHUTDOWN;
-
+///--- FIH_ADQ --- 6360
 		ret = msm_pm_power_collapse(
 			false, msm_pm_max_sleep_time, sleep_limit);
+		break;
+
+	case MSM_PM_SLEEP_MODE_APPS_SLEEP:
+		/* fall through */
+	case MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT:
+		/* fall through */
+	case MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT:
+		ret = msm_pm_swfi();
+		break;
+
+	default:
+		BUG();
+		ret = -EINVAL;
+	}
 
 #ifdef CONFIG_MSM_IDLE_STATS
+	if (msm_pm_sleep_mode == MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND ||
+		msm_pm_sleep_mode == MSM_PM_SLEEP_MODE_POWER_COLLAPSE) {
+		enum msm_pm_time_stats_id id;
+		int64_t end_time;
+
 		if (ret)
 			id = MSM_PM_STAT_FAILED_SUSPEND;
 		else {
@@ -1466,15 +1180,8 @@ static int msm_pm_enter(suspend_state_t state)
 		}
 
 		msm_pm_add_stat(id, time);
-#endif
-	} else if (allow[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT]) {
-		ret = msm_pm_swfi(true);
-		if (ret)
-			while (!msm_irq_pending())
-				udelay(1);
-	} else if (allow[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT]) {
-		msm_pm_swfi(false);
 	}
+#endif
 
 	return ret;
 }
@@ -1584,12 +1291,9 @@ static int __init msm_pm_init(void)
 	}
 #endif /* CONFIG_ARCH_QSD */
 
-	BUG_ON(msm_pm_modes == NULL);
-
 	atomic_set(&msm_pm_init_done, 1);
 	suspend_set_ops(&msm_pm_ops);
 
-	msm_pm_mode_sysfs_add();
 #ifdef CONFIG_MSM_IDLE_STATS
 	d_entry = create_proc_entry("msm_pm_stats",
 			S_IRUGO | S_IWUSR | S_IWGRP, NULL);

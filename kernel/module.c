@@ -33,6 +33,7 @@
 #include <linux/cpu.h>
 #include <linux/moduleparam.h>
 #include <linux/errno.h>
+#include <linux/immediate.h>
 #include <linux/err.h>
 #include <linux/vermagic.h>
 #include <linux/notifier.h>
@@ -40,12 +41,14 @@
 #include <linux/stop_machine.h>
 #include <linux/device.h>
 #include <linux/string.h>
-#include <linux/mutex.h>
 #include <linux/unwind.h>
+#include <linux/psrwlock.h>
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
 #include <linux/license.h>
 #include <asm/sections.h>
+#include <linux/tracepoint.h>
+#include <trace/kernel.h>
 
 #if 0
 #define DEBUGP printk
@@ -60,9 +63,10 @@
 /* If this is set, the section belongs in the init part of the module */
 #define INIT_OFFSET_MASK (1UL << (BITS_PER_LONG-1))
 
-/* List of modules, protected by module_mutex or preempt_disable
- * (add/delete uses stop_machine). */
-static DEFINE_MUTEX(module_mutex);
+/* List of modules, protected by preemptable module_psrwlock or preempt_disable
+ * (add/delete uses stop_machine). Sorted by ascending list node address.
+ */
+static DEFINE_PSRWLOCK(module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 static LIST_HEAD(modules);
 
 /* Waiting for a module to finish initializing? */
@@ -325,7 +329,7 @@ static unsigned long find_symbol(const char *name,
 	return -ENOENT;
 }
 
-/* Search for module by name: must hold module_mutex. */
+/* Search for module by name: must hold module_psrwlock. */
 static struct module *find_module(const char *name)
 {
 	struct module *mod;
@@ -702,8 +706,8 @@ static void free_module(struct module *mod);
 
 static void wait_for_zero_refcount(struct module *mod)
 {
-	/* Since we might sleep for some time, release the mutex first */
-	mutex_unlock(&module_mutex);
+	/* Since we might sleep for some time, release the psrwlock first */
+	pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 	for (;;) {
 		DEBUGP("Looking at refcount...\n");
 		set_current_state(TASK_UNINTERRUPTIBLE);
@@ -712,7 +716,7 @@ static void wait_for_zero_refcount(struct module *mod)
 		schedule();
 	}
 	current->state = TASK_RUNNING;
-	mutex_lock(&module_mutex);
+	pswrite_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 }
 
 asmlinkage long
@@ -729,7 +733,8 @@ sys_delete_module(const char __user *name_user, unsigned int flags)
 		return -EFAULT;
 	name[MODULE_NAME_LEN-1] = '\0';
 
-	if (mutex_lock_interruptible(&module_mutex) != 0)
+	if (pswrite_lock_interruptible(&module_psrwlock,
+			PSRW_PRIO_P, PSR_PTHREAD) != 0)
 		return -EINTR;
 
 	mod = find_module(name);
@@ -775,19 +780,19 @@ sys_delete_module(const char __user *name_user, unsigned int flags)
 	if (!forced && module_refcount(mod) != 0)
 		wait_for_zero_refcount(mod);
 
-	mutex_unlock(&module_mutex);
+	pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 	/* Final destruction now noone is using it. */
 	if (mod->exit != NULL)
 		mod->exit();
 	blocking_notifier_call_chain(&module_notify_list,
 				     MODULE_STATE_GOING, mod);
-	mutex_lock(&module_mutex);
+	pswrite_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 	/* Store the name of the last unloaded module for diagnostic purposes */
 	strlcpy(last_unloaded_module, mod->name, sizeof(last_unloaded_module));
 	free_module(mod);
 
  out:
-	mutex_unlock(&module_mutex);
+	pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 	return ret;
 }
 
@@ -1022,7 +1027,7 @@ static inline int same_magic(const char *amagic, const char *bmagic,
 #endif /* CONFIG_MODVERSIONS */
 
 /* Resolve a symbol for this module.  I.e. if we find one, record usage.
-   Must be holding module_mutex. */
+   Must be holding module_psrwlock. */
 static unsigned long resolve_symbol(Elf_Shdr *sechdrs,
 				    unsigned int versindex,
 				    const char *name,
@@ -1393,10 +1398,24 @@ static void mod_kobject_remove(struct module *mod)
 /*
  * link the module with the whole machine is stopped with interrupts off
  * - this defends against kallsyms not taking locks
+ * We sort the modules by struct module pointer address to permit correct
+ * iteration over modules of, at least, kallsyms for preemptible operations,
+ * such as read(). Sorting by struct module pointer address is equivalent to
+ * sort by list node address.
  */
 static int __link_module(void *_mod)
 {
-	struct module *mod = _mod;
+	struct module *mod = _mod, *iter;
+
+	list_for_each_entry_reverse(iter, &modules, list) {
+		BUG_ON(iter == mod);	/* Should never be in the list twice */
+		if (iter < mod) {
+			/* We belong to the location right after iter. */
+			list_add(&mod->list, &iter->list);
+			return 0;
+		}
+	}
+	/* We should be added at the head of the list */
 	list_add(&mod->list, &modules);
 	return 0;
 }
@@ -1412,9 +1431,11 @@ static int __unlink_module(void *_mod)
 	return 0;
 }
 
-/* Free a module, remove from lists, etc (must hold module_mutex). */
+/* Free a module, remove from lists, etc (must hold module_psrwlock). */
 static void free_module(struct module *mod)
 {
+	trace_kernel_module_free(mod);
+
 	/* Delete from various lists */
 	stop_machine(__unlink_module, mod, NULL);
 	remove_notes_attrs(mod);
@@ -1829,8 +1850,12 @@ static noinline struct module *load_module(void __user *umod,
 	unsigned int unusedgplindex;
 	unsigned int unusedgplcrcindex;
 #endif
+	unsigned int immediateindex;
+	unsigned int immediatecondendindex;
 	unsigned int markersindex;
 	unsigned int markersstringsindex;
+	unsigned int tracepointsindex;
+	unsigned int tracepointsstringsindex;
 	struct module *mod;
 	long err = 0;
 	void *percpu = NULL, *ptr = NULL; /* Stops spurious gcc warning */
@@ -1929,6 +1954,9 @@ static noinline struct module *load_module(void __user *umod,
 #ifdef ARCH_UNWIND_SECTION_NAME
 	unwindex = find_sec(hdr, sechdrs, secstrings, ARCH_UNWIND_SECTION_NAME);
 #endif
+	immediateindex = find_sec(hdr, sechdrs, secstrings, "__imv");
+	immediatecondendindex = find_sec(hdr, sechdrs, secstrings,
+		"__imv_cond_end");
 
 	/* Don't keep modinfo and version sections. */
 	sechdrs[infoindex].sh_flags &= ~(unsigned long)SHF_ALLOC;
@@ -2084,6 +2112,16 @@ static noinline struct module *load_module(void __user *umod,
 	mod->gpl_future_syms = (void *)sechdrs[gplfutureindex].sh_addr;
 	if (gplfuturecrcindex)
 		mod->gpl_future_crcs = (void *)sechdrs[gplfuturecrcindex].sh_addr;
+#ifdef USE_IMMEDIATE
+	mod->immediate = (void *)sechdrs[immediateindex].sh_addr;
+	mod->num_immediate =
+		sechdrs[immediateindex].sh_size / sizeof(*mod->immediate);
+	mod->immediate_cond_end =
+		(void *)sechdrs[immediatecondendindex].sh_addr;
+	mod->num_immediate_cond_end =
+		sechdrs[immediatecondendindex].sh_size
+			/ sizeof(*mod->immediate_cond_end);
+#endif
 
 #ifdef CONFIG_UNUSED_SYMBOLS
 	mod->num_unused_syms = sechdrs[unusedindex].sh_size /
@@ -2117,6 +2155,9 @@ static noinline struct module *load_module(void __user *umod,
 	markersindex = find_sec(hdr, sechdrs, secstrings, "__markers");
  	markersstringsindex = find_sec(hdr, sechdrs, secstrings,
 					"__markers_strings");
+	tracepointsindex = find_sec(hdr, sechdrs, secstrings, "__tracepoints");
+	tracepointsstringsindex = find_sec(hdr, sechdrs, secstrings,
+					"__tracepoints_strings");
 
 	/* Now do relocations. */
 	for (i = 1; i < hdr->e_shnum; i++) {
@@ -2144,6 +2185,12 @@ static noinline struct module *load_module(void __user *umod,
 	mod->num_markers =
 		sechdrs[markersindex].sh_size / sizeof(*mod->markers);
 #endif
+#ifdef CONFIG_TRACEPOINTS
+	mod->tracepoints = (void *)sechdrs[tracepointsindex].sh_addr;
+	mod->num_tracepoints =
+		sechdrs[tracepointsindex].sh_size / sizeof(*mod->tracepoints);
+#endif
+
 
         /* Find duplicate symbols */
 	err = verify_export_symbols(mod);
@@ -2162,11 +2209,23 @@ static noinline struct module *load_module(void __user *umod,
 
 	add_kallsyms(mod, sechdrs, symindex, strindex, secstrings);
 
+	if (!(mod->taints & TAINT_FORCED_MODULE)) {
 #ifdef CONFIG_MARKERS
-	if (!mod->taints)
 		marker_update_probe_range(mod->markers,
 			mod->markers + mod->num_markers);
 #endif
+#ifdef CONFIG_TRACEPOINTS
+		tracepoint_update_probe_range(mod->tracepoints,
+			mod->tracepoints + mod->num_tracepoints);
+#endif
+	/*
+	 * Immediate values must update after the markers and tracepoints.
+	 */
+#ifdef USE_IMMEDIATE
+	imv_update_range(mod->immediate,
+		mod->immediate + mod->num_immediate);
+#endif
+	}
 	err = module_finalize(hdr, sechdrs, mod);
 	if (err < 0)
 		goto cleanup;
@@ -2227,6 +2286,8 @@ static noinline struct module *load_module(void __user *umod,
 	/* Get rid of temporary copy */
 	vfree(hdr);
 
+	trace_kernel_module_load(mod);
+
 	/* Done! */
 	return mod;
 
@@ -2270,18 +2331,19 @@ sys_init_module(void __user *umod,
 		return -EPERM;
 
 	/* Only one module load at a time, please */
-	if (mutex_lock_interruptible(&module_mutex) != 0)
+	if (pswrite_lock_interruptible(&module_psrwlock,
+			PSRW_PRIO_P, PSR_PTHREAD) != 0)
 		return -EINTR;
 
 	/* Do all the hard work */
 	mod = load_module(umod, len, uargs);
 	if (IS_ERR(mod)) {
-		mutex_unlock(&module_mutex);
+		pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 		return PTR_ERR(mod);
 	}
 
 	/* Drop lock so they can recurse */
-	mutex_unlock(&module_mutex);
+	pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 
 	blocking_notifier_call_chain(&module_notify_list,
 			MODULE_STATE_COMING, mod);
@@ -2297,9 +2359,9 @@ sys_init_module(void __user *umod,
 		module_put(mod);
 		blocking_notifier_call_chain(&module_notify_list,
 					     MODULE_STATE_GOING, mod);
-		mutex_lock(&module_mutex);
+		pswrite_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 		free_module(mod);
-		mutex_unlock(&module_mutex);
+		pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 		wake_up(&module_wq);
 		return ret;
 	}
@@ -2316,15 +2378,19 @@ sys_init_module(void __user *umod,
 	mod->state = MODULE_STATE_LIVE;
 	wake_up(&module_wq);
 
-	mutex_lock(&module_mutex);
+	pswrite_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 	/* Drop initial reference. */
 	module_put(mod);
 	unwind_remove_table(mod->unwind_info, 1);
+#ifdef USE_IMMEDIATE
+	imv_unref(mod->immediate, mod->immediate + mod->num_immediate,
+		mod->module_init, mod->init_size);
+#endif
 	module_free(mod, mod->module_init);
 	mod->module_init = NULL;
 	mod->init_size = 0;
 	mod->init_text_size = 0;
-	mutex_unlock(&module_mutex);
+	pswrite_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 
 	return 0;
 }
@@ -2530,18 +2596,18 @@ unsigned long module_kallsyms_lookup_name(const char *name)
 /* Called by the /proc file system to return a list of modules. */
 static void *m_start(struct seq_file *m, loff_t *pos)
 {
-	mutex_lock(&module_mutex);
-	return seq_list_start(&modules, *pos);
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	return seq_sorted_list_start(&modules, pos);
 }
 
 static void *m_next(struct seq_file *m, void *p, loff_t *pos)
 {
-	return seq_list_next(p, &modules, pos);
+	return seq_sorted_list_next(p, &modules, pos);
 }
 
 static void m_stop(struct seq_file *m, void *p)
 {
-	mutex_unlock(&module_mutex);
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 }
 
 static char *module_flags(struct module *mod, char *buf)
@@ -2611,6 +2677,27 @@ const struct seq_operations modules_op = {
 	.stop	= m_stop,
 	.show	= m_show
 };
+
+void list_modules(void *call_data)
+{
+	/* Enumerate loaded modules */
+	struct list_head	*i;
+	struct module		*mod;
+	unsigned long refcount = 0;
+
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	list_for_each(i, &modules) {
+		mod = list_entry(i, struct module, list);
+#ifdef CONFIG_MODULE_UNLOAD
+		refcount = local_read(&mod->ref[0].count);
+#endif
+		__trace_mark(0, list_module, call_data,
+				"name %s state %d refcount %lu",
+				mod->name, mod->state, refcount);
+	}
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+}
+EXPORT_SYMBOL_GPL(list_modules);
 
 /* Given an address, look for it in the module exception tables. */
 const struct exception_table_entry *search_module_extables(unsigned long addr)
@@ -2709,11 +2796,144 @@ void module_update_markers(void)
 {
 	struct module *mod;
 
-	mutex_lock(&module_mutex);
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
 	list_for_each_entry(mod, &modules, list)
 		if (!mod->taints)
 			marker_update_probe_range(mod->markers,
 				mod->markers + mod->num_markers);
-	mutex_unlock(&module_mutex);
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+}
+
+/*
+ * Returns 0 if current not found.
+ * Returns 1 if current found.
+ */
+int module_get_iter_markers(struct marker_iter *iter)
+{
+	struct module *iter_mod;
+	int found = 0;
+
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	list_for_each_entry(iter_mod, &modules, list) {
+		if (!iter_mod->taints) {
+			/*
+			 * Sorted module list
+			 */
+			if (iter_mod < iter->module)
+				continue;
+			else if (iter_mod > iter->module)
+				iter->marker = NULL;
+			found = marker_get_iter_range(&iter->marker,
+				iter_mod->markers,
+				iter_mod->markers + iter_mod->num_markers);
+			if (found) {
+				iter->module = iter_mod;
+				break;
+			}
+		}
+	}
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	return found;
+}
+#endif
+
+#ifdef CONFIG_TRACEPOINTS
+void module_update_tracepoints(void)
+{
+	struct module *mod;
+
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	list_for_each_entry(mod, &modules, list)
+		if (!mod->taints)
+			tracepoint_update_probe_range(mod->tracepoints,
+				mod->tracepoints + mod->num_tracepoints);
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+}
+
+/*
+ * Returns 0 if current not found.
+ * Returns 1 if current found.
+ */
+int module_get_iter_tracepoints(struct tracepoint_iter *iter)
+{
+	struct module *iter_mod;
+	int found = 0;
+
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	list_for_each_entry(iter_mod, &modules, list) {
+		if (!iter_mod->taints) {
+			/*
+			 * Sorted module list
+			 */
+			if (iter_mod < iter->module)
+				continue;
+			else if (iter_mod > iter->module)
+				iter->tracepoint = NULL;
+			found = tracepoint_get_iter_range(&iter->tracepoint,
+				iter_mod->tracepoints,
+				iter_mod->tracepoints
+					+ iter_mod->num_tracepoints);
+			if (found) {
+				iter->module = iter_mod;
+				break;
+			}
+		}
+	}
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	return found;
+}
+#endif
+
+#ifdef USE_IMMEDIATE
+/**
+ * _module_imv_update - update all immediate values in the kernel
+ *
+ * Iterate on the kernel core and modules to update the immediate values.
+ * module_psrwlock read lock must be held by the caller.
+ */
+void _module_imv_update(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		if (mod->taints)
+			continue;
+		imv_update_range(mod->immediate,
+			mod->immediate + mod->num_immediate);
+	}
+}
+EXPORT_SYMBOL_GPL(_module_imv_update);
+
+/**
+ * module_imv_update - update all immediate values in the kernel
+ *
+ * Iterate on the kernel core and modules to update the immediate values.
+ * Takes module_psrwlock read lock.
+ */
+void module_imv_update(void)
+{
+	psread_lock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+	_module_imv_update();
+	psread_unlock(&module_psrwlock, PSRW_PRIO_P, PSR_PTHREAD);
+}
+EXPORT_SYMBOL_GPL(module_imv_update);
+
+/**
+ * is_imv_cond_end_module
+ *
+ * Check if the two given addresses are located in the immediate value condition
+ * end table. Addresses should be in the same object.
+ * The module_psrwlock read lock should be held.
+ */
+int is_imv_cond_end_module(unsigned long addr1, unsigned long addr2)
+{
+	struct module *mod = __module_text_address(addr1);
+
+	if (!mod)
+		return 0;
+
+	return _is_imv_cond_end(mod->immediate_cond_end,
+		mod->immediate_cond_end + mod->num_immediate_cond_end,
+		addr1, addr2);
 }
 #endif

@@ -27,44 +27,52 @@
 #ifndef _ASM_GENERIC_TOPOLOGY_H
 #define _ASM_GENERIC_TOPOLOGY_H
 
-#ifndef	CONFIG_NUMA
+/*
+ * Other architectures wishing to use this simple topology API should fill
+ * in the below functions as appropriate in their own <asm/topology.h> file,
+ * and _don't_ include asm-generic/topology.h.
+ */
 
-/* Other architectures wishing to use this simple topology API should fill
-   in the below functions as appropriate in their own <asm/topology.h> file. */
-#ifndef cpu_to_node
-#define cpu_to_node(cpu)	((void)(cpu),0)
-#endif
-#ifndef parent_node
-#define parent_node(node)	((void)(node),0)
-#endif
-#ifndef node_to_cpumask
-#define node_to_cpumask(node)	((void)node, cpu_online_map)
-#endif
-#ifndef node_to_first_cpu
-#define node_to_first_cpu(node)	((void)(node),0)
-#endif
-#ifndef pcibus_to_node
-#define pcibus_to_node(bus)	((void)(bus), -1)
-#endif
+struct pci_bus;
 
-#ifndef pcibus_to_cpumask
-#define pcibus_to_cpumask(bus)	(pcibus_to_node(bus) == -1 ? \
-					CPU_MASK_ALL : \
-					node_to_cpumask(pcibus_to_node(bus)) \
-				)
-#endif
+static inline int cpu_to_node(int cpu)
+{
+	return 0;
+}
 
-#endif	/* CONFIG_NUMA */
+static inline int parent_node(int node)
+{
+	return 0;
+}
+
+static inline cpumask_t node_to_cpumask(int node)
+{
+	return cpu_online_map;
+}
+
+static inline int node_to_first_cpu(int node)
+{
+	return 0;
+}
+
+static inline int pcibus_to_node(struct pci_bus *bus)
+{
+	return -1;
+}
+
+static inline cpumask_t pcibus_to_cpumask(struct pci_bus *bus)
+{
+	return pcibus_to_node(bus) == -1 ?
+		CPU_MASK_ALL :
+		node_to_cpumask(pcibus_to_node(bus));
+}
 
 /* returns pointer to cpumask for specified node */
-#ifndef node_to_cpumask_ptr
-
 #define	node_to_cpumask_ptr(v, node) 					\
 		cpumask_t _##v = node_to_cpumask(node);			\
 		const cpumask_t *v = &_##v
 
 #define node_to_cpumask_ptr_next(v, node)				\
 			  _##v = node_to_cpumask(node)
-#endif
 
 #endif /* _ASM_GENERIC_TOPOLOGY_H */

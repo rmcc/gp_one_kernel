@@ -1,61 +1,21 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
- *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
- *
- * START
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- */
 /*
  * SOC Info Routines
+ *
+ * Copyright (c) 2009 QUALCOMM USA, INC.
+ *
+ * All source code in this file is licensed under the following license
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  *
  */
 
@@ -65,25 +25,14 @@
 #include "smd_private.h"
 
 /* Used to parse shared memory.  Must match the modem. */
-struct socinfo_legacy {
+struct socinfo {
 	uint32_t format;
 	uint32_t id;
 	uint32_t version;
 	char build_id[32];
 };
 
-struct socinfo_raw {
-	struct socinfo_legacy legacy;
-
-	/* only valid when format==2 */
-	uint32_t raw_id;
-	uint32_t raw_version;
-};
-
-static union {
-	struct socinfo_legacy legacy;
-	struct socinfo_raw raw;
-} *socinfo;
+static struct socinfo *socinfo;
 
 static enum msm_cpu cpu_of_id[] = {
 	/* Uninitialized IDs are not known to run Linux.
@@ -132,31 +81,17 @@ static enum msm_cpu cur_cpu;
 
 uint32_t socinfo_get_id(void)
 {
-	return (socinfo) ? socinfo->legacy.id : 0;
+	return (socinfo) ? socinfo->id : 0;
 }
 
 uint32_t socinfo_get_version(void)
 {
-	return (socinfo) ? socinfo->legacy.version : 0;
+	return (socinfo) ? socinfo->version : 0;
 }
 
 char *socinfo_get_build_id(void)
 {
-	return (socinfo) ? socinfo->legacy.build_id : NULL;
-}
-
-uint32_t socinfo_get_raw_id(void)
-{
-	return socinfo ?
-		(socinfo->legacy.format == 2 ? socinfo->raw.raw_id : 0)
-		: 0;
-}
-
-uint32_t socinfo_get_raw_version(void)
-{
-	return socinfo ?
-		(socinfo->legacy.format == 2 ? socinfo->raw.raw_version : 0)
-		: 0;
+	return (socinfo) ? socinfo->build_id : NULL;
 }
 
 enum msm_cpu socinfo_get_msm_cpu(void)
@@ -174,7 +109,8 @@ socinfo_show_id(struct sys_device *dev,
 		return 0;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%u\n", socinfo_get_id());
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+			socinfo_get_id());
 }
 
 static ssize_t
@@ -196,37 +132,7 @@ socinfo_show_version(struct sys_device *dev,
 }
 
 static ssize_t
-socinfo_show_build_id(struct sys_device *dev,
-		      struct sysdev_attribute *attr,
-		      char *buf)
-{
-	if (!socinfo) {
-		printk(KERN_ERR "%s: No socinfo found!", __func__);
-		return 0;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%-.32s\n", socinfo_get_build_id());
-}
-
-static ssize_t
-socinfo_show_raw_id(struct sys_device *dev,
-		    struct sysdev_attribute *attr,
-		    char *buf)
-{
-	if (!socinfo) {
-		printk(KERN_ERR "%s: No socinfo found!", __func__);
-		return 0;
-	}
-	if (socinfo->legacy.format != 2) {
-		printk(KERN_ERR "%s: Raw ID not available!", __func__);
-		return 0;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%u\n", socinfo_get_raw_id());
-}
-
-static ssize_t
-socinfo_show_raw_version(struct sys_device *dev,
+socinfo_show_build_version(struct sys_device *dev,
 			 struct sysdev_attribute *attr,
 			 char *buf)
 {
@@ -234,24 +140,14 @@ socinfo_show_raw_version(struct sys_device *dev,
 		printk(KERN_ERR "%s: No socinfo found!", __func__);
 		return 0;
 	}
-	if (socinfo->legacy.format != 2) {
-		printk(KERN_ERR "%s: Raw version not available!", __func__);
-		return 0;
-	}
 
-	return snprintf(buf, PAGE_SIZE, "%u\n", socinfo_get_raw_version());
+	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+			socinfo_get_build_id());
 }
 
-static struct sysdev_attribute socinfo_legacy_files[] = {
-	_SYSDEV_ATTR(id, 0444, socinfo_show_id, NULL),
-	_SYSDEV_ATTR(version, 0444, socinfo_show_version, NULL),
-	_SYSDEV_ATTR(build_id, 0444, socinfo_show_build_id, NULL),
-};
-
-static struct sysdev_attribute socinfo_raw_files[] = {
-	_SYSDEV_ATTR(raw_id, 0444, socinfo_show_raw_id, NULL),
-	_SYSDEV_ATTR(raw_version, 0444, socinfo_show_raw_version, NULL),
-};
+static SYSDEV_ATTR(id, 0444, socinfo_show_id, NULL);
+static SYSDEV_ATTR(version, 0444, socinfo_show_version, NULL);
+static SYSDEV_ATTR(build_version, 0444, socinfo_show_build_version, NULL);
 
 static struct sysdev_class soc_sysdev_class = {
 	.name = "soc",
@@ -261,21 +157,6 @@ static struct sys_device soc_sys_device = {
 	.id = 0,
 	.cls = &soc_sysdev_class,
 };
-
-static void __init socinfo_create_files(struct sys_device *dev,
-					struct sysdev_attribute files[],
-					int size)
-{
-	int i;
-	for (i = 0; i < size; i++) {
-		int err = sysdev_create_file(dev, &files[i]);
-		if (err) {
-			printk(KERN_ERR "%s: sysdev_create_file(%s)=%d\n",
-			       __func__, files[i].attr.name, err);
-			return;
-		}
-	}
-}
 
 static void __init socinfo_init_sysdev(void)
 {
@@ -293,21 +174,32 @@ static void __init socinfo_init_sysdev(void)
 		       __func__, err);
 		return;
 	}
-	socinfo_create_files(&soc_sys_device, socinfo_legacy_files,
-				ARRAY_SIZE(socinfo_legacy_files));
-	if (socinfo->legacy.format != 2)
+	err = sysdev_create_file(&soc_sys_device, &attr_id);
+	if (err) {
+		printk(KERN_ERR "%s: sysdev_create_file"
+		       " (id) fail (%d)\n",
+		       __func__, err);
 		return;
-	socinfo_create_files(&soc_sys_device, socinfo_raw_files,
-				ARRAY_SIZE(socinfo_raw_files));
+	}
+	err = sysdev_create_file(&soc_sys_device, &attr_version);
+	if (err) {
+		printk(KERN_ERR "%s: sysdev_create_file"
+		       " (version) fail (%d)\n",
+		       __func__, err);
+		return;
+	}
+	err = sysdev_create_file(&soc_sys_device, &attr_build_version);
+	if (err) {
+		printk(KERN_ERR "%s: sysdev_create_file"
+		       " (build_version) fail (%d)\n",
+		       __func__, err);
+		return;
+	}
 }
 
 int __init socinfo_init(void)
 {
-	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_raw));
-	if (!socinfo)
-		socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID,
-				sizeof(struct socinfo_legacy));
-
+	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo));
 	if (!socinfo) {
 		printk(KERN_ERR "%s: Can't find SMEM_HW_SW_BUILD_ID\n",
 		       __func__);
@@ -318,8 +210,8 @@ int __init socinfo_init(void)
 	WARN(socinfo_get_id() >= ARRAY_SIZE(cpu_of_id),
 		"New IDs added! ID => CPU mapping might need an update.\n");
 
-	if (socinfo->legacy.id < ARRAY_SIZE(cpu_of_id))
-		cur_cpu = cpu_of_id[socinfo->legacy.id];
+	if (socinfo->id < ARRAY_SIZE(cpu_of_id))
+		cur_cpu = cpu_of_id[socinfo->id];
 
 	socinfo_init_sysdev();
 	return 0;

@@ -26,8 +26,12 @@ enum android_alarm_type {
 	ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
 	ANDROID_ALARM_ELAPSED_REALTIME,
 	ANDROID_ALARM_SYSTEMTIME,
+//Auto Tool +++++++
+    ANDROID_ALARM_SET_TIMEZONE,
+    ANDROID_ALARM_SET_TO_POWER_ON,
+//Auto Tool ---------
 
-	ANDROID_ALARM_TYPE_COUNT,
+	ANDROID_ALARM_TYPE_COUNT
 
 	/* return code bit numbers */
 	/* ANDROID_ALARM_TIME_CHANGE = 16 */
@@ -56,6 +60,10 @@ enum android_alarm_return_flags {
 #define ANDROID_ALARM_SET_AND_WAIT(type)    ALARM_IOW(3, type, struct timespec)
 #define ANDROID_ALARM_GET_TIME(type)        ALARM_IOW(4, type, struct timespec)
 #define ANDROID_ALARM_SET_RTC               _IOW('a', 5, struct timespec)
+#define ANDROID_ALARM_SET_TIMEZONE _IOW('a', 6, struct timezone)
+//Auto Tool +++++++
+#define ANDROID_ALARM_SET_TO_POWER_ON	_IOW('a', 7, int32_t)
+//Auto Tool ---------
 #define ANDROID_ALARM_BASE_CMD(cmd)         (cmd & ~(_IOC(0, 0, 0xf0, 0)))
 #define ANDROID_ALARM_IOCTL_TO_TYPE(cmd)    (_IOC_NR(cmd) >> 4)
 

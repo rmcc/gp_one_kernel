@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/qdsp5/adsp.h
  *
+ * Copyright (c) 2008 QUALCOMM Incorporated
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  * Author: Iliyan Malchev <ibm@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -184,18 +184,12 @@ struct adsp_rtos_mp_mtoa_type {
 };
 
 /* ADSP RTOS MP Communications - Modem to APP's Init Info  */
-#define IMG_MAX         6
-#define ENTRIES_MAX     48
+#define IMG_MAX         8
+#define ENTRIES_MAX     64
 
 struct queue_to_offset_type {
 	uint32_t	queue;
 	uint32_t	offset;
-};
-
-struct mod_to_queue_offsets {
-	uint32_t        module;
-	uint32_t        q_type;
-	uint32_t        q_max_len;
 };
 
 struct adsp_rtos_mp_mtoa_init_info_type {
@@ -207,8 +201,6 @@ struct adsp_rtos_mp_mtoa_init_info_type {
 
 	uint32_t	module_table_size;
 	uint32_t	module_entries[ENTRIES_MAX];
-	uint32_t	mod_to_q_entries;
-	struct mod_to_queue_offsets	mod_to_q_tbl[ENTRIES_MAX];
 	/*
 	 * queue_offsets[] is to store only queue_offsets
 	 */

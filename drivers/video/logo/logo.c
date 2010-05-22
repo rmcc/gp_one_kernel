@@ -36,7 +36,10 @@ extern const struct linux_logo logo_superh_vga16;
 extern const struct linux_logo logo_superh_clut224;
 extern const struct linux_logo logo_m32r_clut224;
 
-static int nologo;
+/* 2009/4/6 Bruno Wu { */
+/* Change not to show the Linux Penguin logo. */
+static int nologo = 1;
+/* 2009/4/6 Bruno Wu } */
 module_param(nologo, bool, 0);
 MODULE_PARM_DESC(nologo, "Disables startup logo");
 

@@ -1,0 +1,251 @@
+#$Id: //depot/sw/releases/olca2.1-RC/host/tools/systemtools/bringup/ar5k/config/ar6002_sd21g_19p2.eep#3 $
+	
+#EEPROM file for AR6000 802.11 b/g test board
+
+@cal_section_begin          		# begin @cal section
+
+TARGET_POWER_FILENAME      =  calTrgtPwr_ar6002_sd21g.txt ; # target power file for calibration
+SUBSYSTEM_ID	           =  0x6044;   # Subsystem ID in hex
+EEPROM_MAP_TYPE		   =  2;	# Flag indicating eeprom layout type
+RF_SILENT		   =  0;   	# Cards enabled with RFSilent can be easily silenced
+DEVICE_TYPE		   =  3;   	# 1=>Cardbus, 2=>PCI, 3=>miniPCI, 4=>AP
+A_MODE		           =  0;   	# Whether the adapter supports 802.11a functionality
+B_MODE		           =  0;   	# Whether the adapter supports 802.11b functionality
+G_MODE		           =  1;   	# Whether the adapter supports 802.11g functionality
+ANTENNA_GAIN_5G	           =  4;	# Antenna gain at 5.5GHz. 8-bit signed val in 0.5dB steps.
+ANTENNA_GAIN_2p5G          =  1.5;	# Antenna gain at 2.5GHz. 8-bit signed val in 0.5dB steps.
+XLNA_GAIN		   =  13;  	# xLNA gain in dB (per AS 6/14/02)
+NOISE_FLOOR_THRESHOLD	   = -54; 	# noise floor threshold value (per JHfmn 6/14/02)
+11b_XLNA_GAIN		   =  13;  	# xLNA gain in dB
+11b_NOISE_FLOOR_THRESHOLD  = -1; 	# noise floor threshold value
+11g_XLNA_GAIN		   =  13;  	# xLNA gain in dB
+11g_NOISE_FLOOR_THRESHOLD  = -1; 	# noise floor threshold value
+11a_FALSE_DETECT_BACKOFF   =  0;	# in dB. only affects channels w/ clock harmonic overlap.
+11b_FALSE_DETECT_BACKOFF   =  0;	# in dB. only affects channels w/ clock harmonic overlap.
+11g_FALSE_DETECT_BACKOFF   =  0;	# in dB. only affects channels w/ clock harmonic overlap.
+CCK_OFDM_DELTA		   =  1.0;	# in dB with 0.1dB resolution. In 11g, delta in output power for 1mbps and 6mbps
+					# for any given pcdac.
+CH14_FILTER_CCK_DELTA	   =  0.5;	# in dB with 0.1dB resolution. In 11g & 11b, delta in output power for ch14 and ch1 - ch13
+					# for any given pcdac. This delta arises due to special filter requirement for ch14 (2484).
+ENABLE_32KHZ               =  0;	# Flag indicating the presence of the 32kHz sleep crystal
+TX_POWER_OFFSET_A          =  0;        # An offset in dBm for all txPower values from 0 dBm in half dB
+TX_POWER_OFFSET_G          =  0;        # An offset in dBm for all txPower values from 0 dBm in half dB
+                                        # e.g., usually a negative offset to allow a device to work below 0 dBm txPower
+LNA2_FRONTEND              =  1;        # 1 - selects LNA2 (front end option), 0 - LNA1 (0-rBOM option)
+			                # 2 - front end but without XPA, XLNA
+
+RX_GAIN_OFFSET_5G          = -15;       # gain in dB corresponding to bb_oc_gain_tab_0, for A mode
+RX_GAIN_OFFSET_2G          = -4;        # gain in dB corresponding to bb_oc_gain_tab_0, for G mode 
+PCDAC_OFFSET               = 0;
+INITIAL_PWR0_G             = 0;         # The following 4 parameters are used for power control cal.
+INITIAL_PWR1_G             = 9.0;
+PWR_DELTA0_G               = 4.0;
+PWR_DELTA1_G               = 2.5;
+
+#new capabilities bits
+UART_ENABLE                =  0;	# Set to 1 if board supports a UART
+AES_DISABLE                =  0;        # Set to 1 if AES is not supported
+BURSTING_DISABLE           =  0;        # Set to 1 if bursting is not supported
+MAX_NUM_QCU                =  0;        # Max QCU's supported [31-0] [0 = will not modify current limit of 10]
+KEY_CACHE_SIZE             =  0;	# Key Cache size as 2^[15-1] [0 = will not modify current limit of 128]
+EEPROM_SIZE                = 6;        # size in kbits of the eeprom
+USE_FLASH		= 0;
+#New Regulatory domain flags
+ENABLE_FCC_MIDBAND                    =  0;
+ENABLE_JAPAN_EVEN_CHANNELS_UNI1_BAND  =  0;
+ENABLE_JAPAN_UNI2_BAND                =  0;
+ENABLE_JAPAN_MIDBAND                  =  0;
+ENABLE_JAPAN_ODD_CHANNELS_UNI1_BAND   =  1; 
+ENABLE_JAPAN_MODE_11A_NEW             =  0; #If this MODE bit is set for New Japan Regulatory support, 
+                                            #must disable A_MODE above(set to "0") for Japan SKU cards Only. 
+                                            #If outside of Japan, this bit should never be used.
+
+@cal_section_end            		# end @cal section	
+
+
+@config_section_begin       		# begin @config section
+
+# 0 - CDLNA, 1 - CSLNA
+an_sellna                        1
+an_selintpd                      0
+an_ob				1
+an_db				1
+
+#19.2MHz crystal settings
+an_loop_3rd_order_r         14 
+an_loop_cp                  18  
+an_loop_rs                  6  
+an_loop_ip0                 10
+an_pll_icp                  3   
+an_pll_filter               83 
+
+#Antenna Switch Table
+#6 bit (msb:lsb) value are mapped to [atten5, atten2, antD, antC, antB, antA]
+#----------------------------------------------------------------------------------
+@MODE: MODE_SPECIFIC             11a   11a_turbo        11b         11g    11g_tubo
+#----------------------------------------------------------------------------------
+bb_switch_table_r1x2            0x04        0x04        0x04       0x04      0x04 #(AntCtl 9)
+bb_switch_table_r1x1            0x04        0x04        0x04       0x04      0x04 #(AntCtl 8)
+bb_switch_table_r1              0x08        0x08        0x08       0x08      0x08 #(AntCtl 7)
+bb_switch_table_t1              0x04        0x04        0x04       0x04      0x04 #(AntCtl 6)
+
+bb_switch_table_r2x2            0x08        0x08        0x08       0x08      0x08 #(AntCtl 4)
+bb_switch_table_r2x1            0x08        0x08        0x08       0x08      0x08 #(AntCtl 3)
+bb_switch_table_r2              0x04        0x04        0x04       0x04      0x04 #(AntCtl 2)
+bb_switch_table_t2              0x08        0x08        0x08       0x08      0x08 #(AntCtl 1)
+
+bb_switch_settling                0x2d      0x5a        0x28       0x28      0x28
+bb_adc_desired_size               -32        -32         -32        -32       -32
+
+bb_thresh62		          15	       15	   28	      28        28
+bb_tx_end_to_xpab_off              0           0           0          0         0
+bb_tx_end_to_xpaa_off              0           0           0          0         0
+
+
+bb_xatten2_margin                  0           0           0          0         0
+bb_xatten1_margin                 31          31          31         31        31
+bb_xatten2_db                     18          18          18         18        18
+bb_xatten1_db                     15          15          15         15        15
+bb_xatten2_hyst_margin            10          10          10         10        10
+bb_xatten1_hyst_margin            20          20          20         20        20
+
+an_level                           2           2           0          0         0
+#an_level2                          0           0           0          0         0
+an_enable_pca                      0           0           0          0         0
+an_enable_pcb                      0           0           0          0         0
+
+bb_max_oc_gain                   102         102          99         99        99
+
+# rx gain table
+bb_oc_gain_tab_0              0x8184      0x8184      0x0214      0x0214      0x0214
+bb_oc_gain_tab_1              0x8188      0x8188      0x0218      0x0218      0x0218
+bb_oc_gain_tab_2              0x818C      0x818C      0x0224      0x0224      0x0224
+bb_oc_gain_tab_3              0x8190      0x8190      0x0228      0x0228      0x0228
+bb_oc_gain_tab_4              0x8194      0x8194      0x022C      0x022C      0x022C
+bb_oc_gain_tab_5              0x8200      0x8200      0x0230      0x0230      0x0230
+bb_oc_gain_tab_6              0x8204      0x8204      0x02A4      0x02A4      0x02A4
+bb_oc_gain_tab_7              0x8208      0x8208      0x02A8      0x02A8      0x02A8
+bb_oc_gain_tab_8              0x820C      0x820C      0x02AC      0x02AC      0x02AC
+bb_oc_gain_tab_9              0x8210      0x8210      0x02B0      0x02B0      0x02B0
+bb_oc_gain_tab_10             0x8214      0x8214      0x02B4      0x02B4      0x02B4
+bb_oc_gain_tab_11             0x8280      0x8280      0x02B8      0x02B8      0x02B8
+bb_oc_gain_tab_12             0x8284      0x8284      0x0390      0x0390      0x0390
+bb_oc_gain_tab_13             0x8288      0x8288      0x0394      0x0394      0x0394
+bb_oc_gain_tab_14             0x828C      0x828C      0x0398      0x0398      0x0398
+bb_oc_gain_tab_15             0x8290      0x8290      0x0334      0x0334      0x0334
+bb_oc_gain_tab_16             0x8300      0x8300      0x0338      0x0338      0x0338
+bb_oc_gain_tab_17             0x8304      0x8304      0x03AC      0x03AC      0x03AC
+bb_oc_gain_tab_18             0x8308      0x8308      0x03B0      0x03B0      0x03B0
+bb_oc_gain_tab_19             0x830C      0x830C      0x03B4      0x03B4      0x03B4
+bb_oc_gain_tab_20             0x8310      0x8310      0x03B8      0x03B8      0x03B8
+bb_oc_gain_tab_21             0x8314      0x8314      0x03A5      0x03A5      0x03A5
+bb_oc_gain_tab_22             0x8380      0x8380      0x03A9      0x03A9      0x03A9
+bb_oc_gain_tab_23             0x8384      0x8384      0x03AD      0x03AD      0x03AD
+bb_oc_gain_tab_24             0x8388      0x8388      0x8194      0x8194      0x8194
+bb_oc_gain_tab_25             0x838C      0x838C      0x81A0      0x81A0      0x81A0
+bb_oc_gain_tab_26             0x8390      0x8390      0x820C      0x820C      0x820C
+bb_oc_gain_tab_27             0x8394      0x8394      0x81A8      0x81A8      0x81A8
+bb_oc_gain_tab_28             0xA380      0xA380      0x8284      0x8284      0x8284
+bb_oc_gain_tab_29             0xA384      0xA384      0x8288      0x8288      0x8288
+bb_oc_gain_tab_30             0xA388      0xA388      0x8224      0x8224      0x8224
+bb_oc_gain_tab_31             0xA38C      0xA38C      0x8290      0x8290      0x8290
+bb_oc_gain_tab_32             0xA390      0xA390      0x8300      0x8300      0x8300
+bb_oc_gain_tab_33             0xA394      0xA394      0x8304      0x8304      0x8304
+bb_oc_gain_tab_34             0xA780      0xA780      0x8308      0x8308      0x8308
+bb_oc_gain_tab_35             0xA784      0xA784      0x830C      0x830C      0x830C
+bb_oc_gain_tab_36             0xA788      0xA788      0x8380      0x8380      0x8380
+bb_oc_gain_tab_37             0xA78C      0xA78C      0x8384      0x8384      0x8384
+bb_oc_gain_tab_38             0xA790      0xA790      0x8700      0x8700      0x8700
+bb_oc_gain_tab_39             0xA794      0xA794      0x8704      0x8704      0x8704
+bb_oc_gain_tab_40             0xAB84      0xAB84      0x8708      0x8708      0x8708
+bb_oc_gain_tab_41             0xAB88      0xAB88      0x870C      0x870C      0x870C
+bb_oc_gain_tab_42             0xAB8C      0xAB8C      0x8780      0x8780      0x8780
+bb_oc_gain_tab_43             0xAB90      0xAB90      0x8784      0x8784      0x8784
+bb_oc_gain_tab_44             0xAB94      0xAB94      0x8B00      0x8B00      0x8B00
+bb_oc_gain_tab_45             0xAF80      0xAF80      0x8B04      0x8B04      0x8B04
+bb_oc_gain_tab_46             0xAF84      0xAF84      0x8B08      0x8B08      0x8B08
+bb_oc_gain_tab_47             0xAF88      0xAF88      0x8B0C      0x8B0C      0x8B0C
+bb_oc_gain_tab_48             0xAF8C      0xAF8C      0x8B80      0x8B80      0x8B80
+bb_oc_gain_tab_49             0xAF90      0xAF90      0x8B84      0x8B84      0x8B84
+bb_oc_gain_tab_50             0xAF94      0xAF94      0x8B88      0x8B88      0x8B88
+bb_oc_gain_tab_51             0xB380      0xB380      0x8B8C      0x8B8C      0x8B8C
+bb_oc_gain_tab_52             0xB384      0xB384      0x8B90      0x8B90      0x8B90
+bb_oc_gain_tab_53             0xB388      0xB388      0x8F80      0x8F80      0x8F80
+bb_oc_gain_tab_54             0xB38C      0xB38C      0x8F84      0x8F84      0x8F84
+bb_oc_gain_tab_55             0xB390      0xB390      0x8F88      0x8F88      0x8F88
+bb_oc_gain_tab_56             0xB394      0xB394      0x8F8C      0x8F8C      0x8F8C
+bb_oc_gain_tab_57             0xB398      0xB398      0x8F90      0x8F90      0x8F90
+bb_oc_gain_tab_58             0xB780      0xB780      0x930C      0x930C      0x930C
+bb_oc_gain_tab_59             0xB784      0xB784      0x9310      0x9310      0x9310
+bb_oc_gain_tab_60             0xB788      0xB788      0x9384      0x9384      0x9384
+bb_oc_gain_tab_61             0xB78C      0xB78C      0x9388      0x9388      0x9388
+bb_oc_gain_tab_62             0xB790      0xB790      0x9324      0x9324      0x9324
+bb_oc_gain_tab_63             0xB794      0xB794      0x9704      0x9704      0x9704
+bb_oc_gain_tab_64             0xB798      0xB798      0x96A4      0x96A4      0x96A4
+bb_oc_gain_tab_65             0xD784      0xD784      0x96A8      0x96A8      0x96A8
+bb_oc_gain_tab_66             0xD788      0xD788      0x9710      0x9710      0x9710
+bb_oc_gain_tab_67             0xD78C      0xD78C      0x9714      0x9714      0x9714
+bb_oc_gain_tab_68             0xD790      0xD790      0x9720      0x9720      0x9720
+bb_oc_gain_tab_69             0xF780      0xF780      0x9724      0x9724      0x9724
+bb_oc_gain_tab_70             0xF784      0xF784      0x9728      0x9728      0x9728
+bb_oc_gain_tab_71             0xF788      0xF788      0x972C      0x972C      0x972C
+bb_oc_gain_tab_72             0xF78C      0xF78C      0x97A0      0x97A0      0x97A0
+bb_oc_gain_tab_73             0xF790      0xF790      0x97A4      0x97A4      0x97A4
+bb_oc_gain_tab_74             0xF794      0xF794      0x97A8      0x97A8      0x97A8
+bb_oc_gain_tab_75             0xF7A4      0xF7A4      0x97B0      0x97B0      0x97B0
+bb_oc_gain_tab_76             0xF7A8      0xF7A8      0x97B4      0x97B4      0x97B4
+bb_oc_gain_tab_77             0xF7AC      0xF7AC      0x97B8      0x97B8      0x97B8
+bb_oc_gain_tab_78             0xF7B0      0xF7B0      0x97A5      0x97A5      0x97A5
+bb_oc_gain_tab_79             0xF7B4      0xF7B4      0x97A9      0x97A9      0x97A9
+bb_oc_gain_tab_80             0xF7A1      0xF7A1      0x97AD      0x97AD      0x97AD
+bb_oc_gain_tab_81             0xF7A5      0xF7A5      0x97B1      0x97B1      0x97B1
+bb_oc_gain_tab_82             0xF7A9      0xF7A9      0x97B5      0x97B5      0x97B5
+bb_oc_gain_tab_83             0xF7AD      0xF7AD      0x97B9      0x97B9      0x97B9
+bb_oc_gain_tab_84             0xF7B1      0xF7B1      0x97C5      0x97C5      0x97C5
+bb_oc_gain_tab_85             0xF7B5      0xF7B5      0x97C9      0x97C9      0x97C9
+bb_oc_gain_tab_86             0xF7C5      0xF7C5      0x97D1      0x97D1      0x97D1
+bb_oc_gain_tab_87             0xF7C9      0xF7C9      0x97D5      0x97D5      0x97D5
+bb_oc_gain_tab_88             0xF7CD      0xF7CD      0x97D9      0x97D9      0x97D9
+bb_oc_gain_tab_89             0xF7D1      0xF7D1      0x97C6      0x97C6      0x97C6
+bb_oc_gain_tab_90             0xF7D5      0xF7D5      0x97CA      0x97CA      0x97CA
+bb_oc_gain_tab_91             0xF7C2      0xF7C2      0x97CE      0x97CE      0x97CE
+bb_oc_gain_tab_92             0xF7C6      0xF7C6      0x97D2      0x97D2      0x97D2
+bb_oc_gain_tab_93             0xF7CA      0xF7CA      0x97D6      0x97D6      0x97D6
+bb_oc_gain_tab_94             0xF7CE      0xF7CE      0x97C3      0x97C3      0x97C3
+bb_oc_gain_tab_95             0xF7D2      0xF7D2      0x97C7      0x97C7      0x97C7
+bb_oc_gain_tab_96             0xF7D6      0xF7D6      0x97CB      0x97CB      0x97CB
+bb_oc_gain_tab_97             0xF7C3      0xF7C3      0x97CF      0x97CF      0x97CF
+bb_oc_gain_tab_98             0xF7C7      0xF7C7      0x97D7      0x97D7      0x97D7
+bb_oc_gain_tab_99             0xF7CB      0xF7CB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_100            0xF7D3      0xF7D3      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_101            0xF7D7      0xF7D7      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_102            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_103            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_104            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_105            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_106            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_107            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_108            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_109            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_110            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_111            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_112            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_113            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_114            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_115            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_116            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_117            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_118            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_119            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_120            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_121            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_122            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_123            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_124            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_125            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_126            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+bb_oc_gain_tab_127            0xF7DB      0xF7DB      0x97DB      0x97DB      0x97DB
+
+
+@config_section_end         # end @config section
+

@@ -1,0 +1,13 @@
+#!/bin/sh --verbose
+
+BMILOADER=./dkbmiloader
+
+$BMILOADER -s -a 0xac004010 -p 0xc4000000
+$BMILOADER -s -a 0xac004014 -p 0x92020033
+$BMILOADER -s -a 0xac004018 -p 0x02770871
+$BMILOADER -s -a 0xac00401c -p 0x02770171
+
+$BMILOADER -w -a 0x84100000 -f device.bin
+$BMILOADER -b -a 0x84100000 
+$BMILOADER -d
+

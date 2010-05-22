@@ -1,7 +1,7 @@
 /** arch/arm/mach-msm/smd_rpcrouter.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2008 QUALCOMM USA, INC.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -23,7 +23,6 @@
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
 #include <linux/msm_rpcrouter.h>
-#include <linux/wakelock.h>
 
 #include <mach/msm_smd.h>
 #include <mach/msm_rpcrouter.h>
@@ -155,7 +154,6 @@ struct msm_rpc_endpoint {
 	/* complete packets waiting to be read */
 	struct list_head read_q;
 	spinlock_t read_q_lock;
-	struct wake_lock read_q_wake_lock;
 	wait_queue_head_t wait_q;
 	unsigned flags;
 
@@ -182,6 +180,7 @@ struct msm_rpc_endpoint {
 	struct list_head reply_avail_q;
 	spinlock_t reply_q_lock;
 	uint32_t reply_cnt;
+	uint32_t next_pm;   /* Pacmark sequence */
 
 	/* device node if this endpoint is accessed via userspace */
 	dev_t dev;

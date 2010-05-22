@@ -1,0 +1,1085 @@
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test1.31
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1f
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.30
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1e
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.29
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1d
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.28
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1c
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.27
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1b
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.26
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1a
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.25
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x19
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.24
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x18
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.23
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x17
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.22
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x16
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.21
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x15
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.20
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x14
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.19
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x13
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.18
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x12
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.17
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x11
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.16
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x10
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.15
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0xf
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.14
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0xe
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.13
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0xd
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.12
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0xc
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.11
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0xb
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.10
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0xa
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.9
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x9
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.8
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x8
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.7
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x7
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.6
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x6
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.5
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x5
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.4
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x4
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.3
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x3
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.2
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x2
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.1
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x1
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Running test1.0
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.before)
+interface=eth1
+filename=test1.rpdf
+Patch ID is 0x00000001
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13000 length=0x10
+Write 16 bytes to Target RAM: 0x13000
+Install patch: ROM: 0x30000 RAM: 0x13000 hwsz: 0x10
+Installed ID: 0x0
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test1.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test2
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test2.before)
+BMI Read Memory (address: 0xa1030010, length: 16, filename: /tmp/test2.before)
+BMI Read Memory (address: 0xa1030020, length: 32, filename: /tmp/test2.before)
+interface=eth1
+filename=test2.rpdf
+Patch ID is 0x00000002
+Number of patch specifications : 3
+Handle patch specification 0 of 3
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13020 length=0x10
+Write 16 bytes to Target RAM: 0x13020
+Install patch: ROM: 0x30000 RAM: 0x13020 hwsz: 0x10
+Installed ID: 0x1f
+Activate installed patches
+Handle patch specification 1 of 3
+Spec: cmd=2 remapsz=0x10 ROM=0x30010 RAM=0x13070 length=0x10
+Write 16 bytes to Target RAM: 0x13070
+Install patch: ROM: 0x30010 RAM: 0x13070 hwsz: 0x10
+Installed ID: 0x1e
+Activate installed patches
+Handle patch specification 2 of 3
+Spec: cmd=2 remapsz=0x20 ROM=0x30020 RAM=0x13120 length=0x20
+Write 32 bytes to Target RAM: 0x13120
+Install patch: ROM: 0x30020 RAM: 0x13120 hwsz: 0x20
+Installed ID: 0x1d
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 64, filename: /tmp/test2.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test3
+BMI Read Memory (address: 0xa1030000, length: 512, filename: /tmp/test3.before)
+interface=eth1
+filename=test3.rpdf
+Patch ID is 0x00000003
+Number of patch specifications : 32
+Handle patch specification 0 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030000 RAM=0xa0013050 length=0x10
+Write 16 bytes to Target RAM: 0xa0013050
+Install patch: ROM: 0xa1030000 RAM: 0xa0013050 hwsz: 0x10
+Installed ID: 0x1f
+Activate installed patches
+Handle patch specification 1 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030010 RAM=0xa0013060 length=0x10
+Write 16 bytes to Target RAM: 0xa0013060
+Install patch: ROM: 0xa1030010 RAM: 0xa0013060 hwsz: 0x10
+Installed ID: 0x1e
+Activate installed patches
+Handle patch specification 2 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030020 RAM=0xa0013070 length=0x10
+Write 16 bytes to Target RAM: 0xa0013070
+Install patch: ROM: 0xa1030020 RAM: 0xa0013070 hwsz: 0x10
+Installed ID: 0x1d
+Activate installed patches
+Handle patch specification 3 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030030 RAM=0xa0013080 length=0x10
+Write 16 bytes to Target RAM: 0xa0013080
+Install patch: ROM: 0xa1030030 RAM: 0xa0013080 hwsz: 0x10
+Installed ID: 0x1c
+Activate installed patches
+Handle patch specification 4 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030040 RAM=0xa0013090 length=0x10
+Write 16 bytes to Target RAM: 0xa0013090
+Install patch: ROM: 0xa1030040 RAM: 0xa0013090 hwsz: 0x10
+Installed ID: 0x1b
+Activate installed patches
+Handle patch specification 5 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030050 RAM=0xa00130a0 length=0x10
+Write 16 bytes to Target RAM: 0xa00130a0
+Install patch: ROM: 0xa1030050 RAM: 0xa00130a0 hwsz: 0x10
+Installed ID: 0x1a
+Activate installed patches
+Handle patch specification 6 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030060 RAM=0xa00130b0 length=0x10
+Write 16 bytes to Target RAM: 0xa00130b0
+Install patch: ROM: 0xa1030060 RAM: 0xa00130b0 hwsz: 0x10
+Installed ID: 0x19
+Activate installed patches
+Handle patch specification 7 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030070 RAM=0xa00130c0 length=0x10
+Write 16 bytes to Target RAM: 0xa00130c0
+Install patch: ROM: 0xa1030070 RAM: 0xa00130c0 hwsz: 0x10
+Installed ID: 0x18
+Activate installed patches
+Handle patch specification 8 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030080 RAM=0xa00130d0 length=0x10
+Write 16 bytes to Target RAM: 0xa00130d0
+Install patch: ROM: 0xa1030080 RAM: 0xa00130d0 hwsz: 0x10
+Installed ID: 0x17
+Activate installed patches
+Handle patch specification 9 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030090 RAM=0xa00130e0 length=0x10
+Write 16 bytes to Target RAM: 0xa00130e0
+Install patch: ROM: 0xa1030090 RAM: 0xa00130e0 hwsz: 0x10
+Installed ID: 0x16
+Activate installed patches
+Handle patch specification 10 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10300a0 RAM=0xa00130f0 length=0x10
+Write 16 bytes to Target RAM: 0xa00130f0
+Install patch: ROM: 0xa10300a0 RAM: 0xa00130f0 hwsz: 0x10
+Installed ID: 0x15
+Activate installed patches
+Handle patch specification 11 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10300b0 RAM=0xa0013100 length=0x10
+Write 16 bytes to Target RAM: 0xa0013100
+Install patch: ROM: 0xa10300b0 RAM: 0xa0013100 hwsz: 0x10
+Installed ID: 0x14
+Activate installed patches
+Handle patch specification 12 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10300c0 RAM=0xa0013110 length=0x10
+Write 16 bytes to Target RAM: 0xa0013110
+Install patch: ROM: 0xa10300c0 RAM: 0xa0013110 hwsz: 0x10
+Installed ID: 0x13
+Activate installed patches
+Handle patch specification 13 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10300d0 RAM=0xa0013120 length=0x10
+Write 16 bytes to Target RAM: 0xa0013120
+Install patch: ROM: 0xa10300d0 RAM: 0xa0013120 hwsz: 0x10
+Installed ID: 0x12
+Activate installed patches
+Handle patch specification 14 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10300e0 RAM=0xa0013130 length=0x10
+Write 16 bytes to Target RAM: 0xa0013130
+Install patch: ROM: 0xa10300e0 RAM: 0xa0013130 hwsz: 0x10
+Installed ID: 0x11
+Activate installed patches
+Handle patch specification 15 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10300f0 RAM=0xa0013140 length=0x10
+Write 16 bytes to Target RAM: 0xa0013140
+Install patch: ROM: 0xa10300f0 RAM: 0xa0013140 hwsz: 0x10
+Installed ID: 0x10
+Activate installed patches
+Handle patch specification 16 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030100 RAM=0xa0013150 length=0x10
+Write 16 bytes to Target RAM: 0xa0013150
+Install patch: ROM: 0xa1030100 RAM: 0xa0013150 hwsz: 0x10
+Installed ID: 0xf
+Activate installed patches
+Handle patch specification 17 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030110 RAM=0xa0013160 length=0x10
+Write 16 bytes to Target RAM: 0xa0013160
+Install patch: ROM: 0xa1030110 RAM: 0xa0013160 hwsz: 0x10
+Installed ID: 0xe
+Activate installed patches
+Handle patch specification 18 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030120 RAM=0xa0013170 length=0x10
+Write 16 bytes to Target RAM: 0xa0013170
+Install patch: ROM: 0xa1030120 RAM: 0xa0013170 hwsz: 0x10
+Installed ID: 0xd
+Activate installed patches
+Handle patch specification 19 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030130 RAM=0xa0013180 length=0x10
+Write 16 bytes to Target RAM: 0xa0013180
+Install patch: ROM: 0xa1030130 RAM: 0xa0013180 hwsz: 0x10
+Installed ID: 0xc
+Activate installed patches
+Handle patch specification 20 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030140 RAM=0xa0013190 length=0x10
+Write 16 bytes to Target RAM: 0xa0013190
+Install patch: ROM: 0xa1030140 RAM: 0xa0013190 hwsz: 0x10
+Installed ID: 0xb
+Activate installed patches
+Handle patch specification 21 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030150 RAM=0xa00131a0 length=0x10
+Write 16 bytes to Target RAM: 0xa00131a0
+Install patch: ROM: 0xa1030150 RAM: 0xa00131a0 hwsz: 0x10
+Installed ID: 0xa
+Activate installed patches
+Handle patch specification 22 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030160 RAM=0xa00131b0 length=0x10
+Write 16 bytes to Target RAM: 0xa00131b0
+Install patch: ROM: 0xa1030160 RAM: 0xa00131b0 hwsz: 0x10
+Installed ID: 0x9
+Activate installed patches
+Handle patch specification 23 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030170 RAM=0xa00131c0 length=0x10
+Write 16 bytes to Target RAM: 0xa00131c0
+Install patch: ROM: 0xa1030170 RAM: 0xa00131c0 hwsz: 0x10
+Installed ID: 0x8
+Activate installed patches
+Handle patch specification 24 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030180 RAM=0xa00131d0 length=0x10
+Write 16 bytes to Target RAM: 0xa00131d0
+Install patch: ROM: 0xa1030180 RAM: 0xa00131d0 hwsz: 0x10
+Installed ID: 0x7
+Activate installed patches
+Handle patch specification 25 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa1030190 RAM=0xa00131e0 length=0x10
+Write 16 bytes to Target RAM: 0xa00131e0
+Install patch: ROM: 0xa1030190 RAM: 0xa00131e0 hwsz: 0x10
+Installed ID: 0x6
+Activate installed patches
+Handle patch specification 26 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10301a0 RAM=0xa00131f0 length=0x10
+Write 16 bytes to Target RAM: 0xa00131f0
+Install patch: ROM: 0xa10301a0 RAM: 0xa00131f0 hwsz: 0x10
+Installed ID: 0x5
+Activate installed patches
+Handle patch specification 27 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10301b0 RAM=0xa0013200 length=0x10
+Write 16 bytes to Target RAM: 0xa0013200
+Install patch: ROM: 0xa10301b0 RAM: 0xa0013200 hwsz: 0x10
+Installed ID: 0x4
+Activate installed patches
+Handle patch specification 28 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10301c0 RAM=0xa0013210 length=0x10
+Write 16 bytes to Target RAM: 0xa0013210
+Install patch: ROM: 0xa10301c0 RAM: 0xa0013210 hwsz: 0x10
+Installed ID: 0x3
+Activate installed patches
+Handle patch specification 29 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10301d0 RAM=0xa0013220 length=0x10
+Write 16 bytes to Target RAM: 0xa0013220
+Install patch: ROM: 0xa10301d0 RAM: 0xa0013220 hwsz: 0x10
+Installed ID: 0x2
+Activate installed patches
+Handle patch specification 30 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10301e0 RAM=0xa0013230 length=0x10
+Write 16 bytes to Target RAM: 0xa0013230
+Install patch: ROM: 0xa10301e0 RAM: 0xa0013230 hwsz: 0x10
+Installed ID: 0x1
+Activate installed patches
+Handle patch specification 31 of 32
+Spec: cmd=2 remapsz=0x10 ROM=0xa10301f0 RAM=0xa0013240 length=0x10
+Write 16 bytes to Target RAM: 0xa0013240
+Install patch: ROM: 0xa10301f0 RAM: 0xa0013240 hwsz: 0x10
+Installed ID: 0x0
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 512, filename: /tmp/test3.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test4
+BMI Read Memory (address: 0xa1030000, length: 2048, filename: /tmp/test4.before)
+interface=eth1
+filename=test4.rpdf
+Patch ID is 0x00000004
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x800 ROM=0xa1030000 RAM=0xa0013000 length=0x800
+Write 2048 bytes to Target RAM: 0xa0013000
+Install patch: ROM: 0xa1030000 RAM: 0xa0013000 hwsz: 0x800
+Installed ID: 0x1f
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 2048, filename: /tmp/test4.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test5
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test5.before)
+BMI Write Memory (address: 0xa0013070, filename: test5.expected)
+interface=eth1
+filename=test5.rpdf
+Patch ID is 0x00000005
+Number of patch specifications : 1
+Handle patch specification 0 of 1
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13070 length=0x0
+Install patch: ROM: 0x30000 RAM: 0x13070 hwsz: 0x10
+Installed ID: 0x1f
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test5.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test6
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test6.before)
+BMI Read Memory (address: 0xa1030010, length: 16, filename: /tmp/test6.before)
+BMI Read Memory (address: 0xa1030020, length: 32, filename: /tmp/test6.before)
+interface=eth1
+filename=test6.rpdf
+Patch ID is 0x00000006
+Number of patch specifications : 3
+Handle patch specification 0 of 3
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13020 length=0x10
+Write 16 bytes to Target RAM: 0x13020
+Install patch: ROM: 0x30000 RAM: 0x13020 hwsz: 0x10
+Installed ID: 0x1f
+Activate installed patches
+Handle patch specification 1 of 3
+Spec: cmd=2 remapsz=0x10 ROM=0x30010 RAM=0x13070 length=0x10
+Write 16 bytes to Target RAM: 0x13070
+Install patch: ROM: 0x30010 RAM: 0x13070 hwsz: 0x10
+Installed ID: 0x1e
+Activate installed patches
+Handle patch specification 2 of 3
+Spec: cmd=2 remapsz=0x20 ROM=0x30020 RAM=0x13120 length=0x20
+Write 32 bytes to Target RAM: 0x13120
+Install patch: ROM: 0x30020 RAM: 0x13120 hwsz: 0x20
+Installed ID: 0x1d
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 64, filename: /tmp/test6.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test7
+BMI Write Memory (address: 0xa0013040, filename: test7.zeros)
+interface=eth1
+filename=test7.rpdf
+Patch ID is 0x00000007
+Number of patch specifications : 2
+Handle patch specification 0 of 2
+Spec: cmd=2 remapsz=0x10 ROM=0x30010 RAM=0x13070 length=0x8
+Write 8 bytes to Target RAM: 0x13070
+Install patch: ROM: 0x30010 RAM: 0x13070 hwsz: 0x10
+Installed ID: 0x1f
+Activate installed patches
+Handle patch specification 1 of 2
+Spec: cmd=2 remapsz=0x10 ROM=0x30000 RAM=0x13040 length=0x20
+Write 32 bytes to Target RAM: 0x13040
+Install patch: ROM: 0x30000 RAM: 0x13040 hwsz: 0x10
+Installed ID: 0x1e
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 32, filename: /tmp/test7.after)
+BMI Read Memory (address: 0xa0013040, length: 32, filename: /tmp/test7.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test8
+BMI Read Memory (address: 0xa1030000, length: 16, filename: /tmp/test8.before)
+BMI Read Memory (address: 0xa1030010, length: 16, filename: /tmp/test8.before)
+BMI Read Memory (address: 0xa1030020, length: 32, filename: /tmp/test8.before)
+interface=eth1
+filename=test8.rpdf
+Patch ID is 0x00000008
+Number of patch specifications : 3
+Handle patch specification 0 of 3
+Spec: cmd=1 remapsz=0x10 ROM=0x30000 RAM=0x13020 length=0x10
+Write 16 bytes to Target RAM: 0x13020
+Install patch: ROM: 0x30000 RAM: 0x13020 hwsz: 0x10
+Installed ID: 0x1f
+Handle patch specification 1 of 3
+Spec: cmd=1 remapsz=0x10 ROM=0x30010 RAM=0x13070 length=0x10
+Write 16 bytes to Target RAM: 0x13070
+Install patch: ROM: 0x30010 RAM: 0x13070 hwsz: 0x10
+Installed ID: 0x1e
+Handle patch specification 2 of 3
+Spec: cmd=2 remapsz=0x20 ROM=0x30020 RAM=0x13120 length=0x20
+Write 32 bytes to Target RAM: 0x13120
+Install patch: ROM: 0x30020 RAM: 0x13120 hwsz: 0x20
+Installed ID: 0x1d
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 64, filename: /tmp/test8.after)
+Deactivate and Uninstall patchid 31
+Deactivate and Uninstall patchid 30
+Deactivate and Uninstall patchid 29
+Deactivate and Uninstall patchid 28
+Deactivate and Uninstall patchid 27
+Deactivate and Uninstall patchid 26
+Deactivate and Uninstall patchid 25
+Deactivate and Uninstall patchid 24
+Deactivate and Uninstall patchid 23
+Deactivate and Uninstall patchid 22
+Deactivate and Uninstall patchid 21
+Deactivate and Uninstall patchid 20
+Deactivate and Uninstall patchid 19
+Deactivate and Uninstall patchid 18
+Deactivate and Uninstall patchid 17
+Deactivate and Uninstall patchid 16
+Deactivate and Uninstall patchid 15
+Deactivate and Uninstall patchid 14
+Deactivate and Uninstall patchid 13
+Deactivate and Uninstall patchid 12
+Deactivate and Uninstall patchid 11
+Deactivate and Uninstall patchid 10
+Deactivate and Uninstall patchid 9
+Deactivate and Uninstall patchid 8
+Deactivate and Uninstall patchid 7
+Deactivate and Uninstall patchid 6
+Deactivate and Uninstall patchid 5
+Deactivate and Uninstall patchid 4
+Deactivate and Uninstall patchid 3
+Deactivate and Uninstall patchid 2
+Deactivate and Uninstall patchid 1
+Deactivate and Uninstall patchid 0
+Running test9
+BMI Write Memory (address: 0xa0013060, filename: test9.zeros)
+interface=eth1
+filename=test9.rpdf
+Patch ID is 0x00000009
+Number of patch specifications : 2
+Handle patch specification 0 of 2
+Spec: cmd=1 remapsz=0x10 ROM=0x30000 RAM=0x13060 length=0x0
+Install patch: ROM: 0x30000 RAM: 0x13060 hwsz: 0x10
+Installed ID: 0x1f
+Handle patch specification 1 of 2
+Spec: cmd=2 remapsz=0x10 ROM=0x30010 RAM=0x13060 length=0x4
+Write 4 bytes to Target RAM: 0x13060
+Install patch: ROM: 0x30010 RAM: 0x13060 hwsz: 0x10
+Installed ID: 0x1e
+Activate installed patches
+All patches have been installed
+BMI Read Memory (address: 0xa1030000, length: 32, filename: /tmp/test9.after)

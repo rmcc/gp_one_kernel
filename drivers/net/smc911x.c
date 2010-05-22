@@ -5,7 +5,6 @@
  * Copyright (C) 2005 Sensoria Corp
  *	   Derived from the unified SMC91x driver by Nicolas Pitre
  *	   and the smsc911x.c reference driver by SMSC
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1855,6 +1854,8 @@ static int __init smc911x_probe(struct net_device *dev)
 		printk(KERN_ERR "Invalid chip endian 0x08%x\n",val);
 		retval = -ENODEV;
 		goto err_out;
+	} else {
+		current_chip_id = chip_id;
 	}
 
 	/*
@@ -1871,8 +1872,6 @@ static int __init smc911x_probe(struct net_device *dev)
 		printk(KERN_ERR "Unknown chip ID %04x\n", chip_id);
 		retval = -ENODEV;
 		goto err_out;
-	} else {
-		current_chip_id = chip_id;
 	}
 	version_string = chip_ids[i].name;
 

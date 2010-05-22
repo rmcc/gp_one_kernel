@@ -1,0 +1,178 @@
+<Device version="1.0.0" versionIncrement="0">
+    <Name>Create SDIO Documentation</Name>
+    <Description>
+        <!--Create SDIO Documentation-->
+    </Description>
+    <Prologue>
+        <Image type="functionList" data=""/>
+        <Description>
+            <!--Embedded SDIO Documentation Generation-->
+        </Description>
+        <Help topic="">
+          </Help>
+    </Prologue>
+    <Epilogue>
+        <Image type="functionList" data=""/>
+        <Description>
+            <!--Create output files-->
+        </Description>
+                    
+                    
+        <Help topic="">
+          </Help>
+    </Epilogue>
+    <Functions>
+    <Function>
+            <Name>TypeSel</Name>
+            <Type>Global</Type>
+            <SubType>SW</SubType>
+            <Description>Select help files to build.</Description>
+            <Image type="functionList" data=""/>
+            <Help/>
+            <Parameters>
+                <Selections>
+                    <VarName displayType="EDIT_BOX" title="Input 'src' directory:" directory="1">TypeSel_BaseDir</VarName>
+                    <Validate nonblank="1" message="Input directory must be specified."/>
+                    <Value initialValue="_ExternalParam0_"/>
+                    <Selection title="" value=""/>
+                    <Help>
+                        <!--The input directory path for the files that will be scanned to create the output files.-->
+                    </Help>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CHECK_BOX" title="Create Function Driver documentation?">TypeSel_FunctionDocs</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help/>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CHECK_BOX" title="Create Host controller driver documentation?">TypeSel_HcdDocs</VarName>
+                    <Value>0</Value>
+                    <Selection current="0"/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">Documentation_XMLFile</VarName>
+                    <Value type="concat" parameter0="_OutputDirectory_" parameter1="'/doc/help/documentation.xml'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CHECK_BOX" title="Create Support Function documentation?">TypeSel_SupportDocs</VarName>
+                    <Value>1</Value>
+                    <Selection current="1"/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_BUSDRIVER_H</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/include/*.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_FUNCTION</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/busdriver/*.c'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_SDIO_LIB</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/lib/*.c'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections hideCue="2">
+                    <VarName displayType="CONSTANT" title="">TypeSel_CT</VarName>
+                    <Value type="concat" parameter0="TypeSel_BaseDir" parameter1="'/include/linux/*.h'" parameter2="''"/>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            <Selections>
+                    <VarName displayType="DROP_BOX" title="Create Table of Contents:">TypeSel_tableofcontents</VarName>
+                    <Value>PD_Reference,Support_Reference</Value>
+                    <Selection title="None" value=" " current="0"/>
+                    <Selection title="Function,Host and Support" value="PD_Reference,HD_Reference,Support_Reference" current="0"/>
+                    <Selection title="Function and Support" value="PD_Reference,Support_Reference" current="1"/>
+                    <Selection title="Host and Support" value="HD_Reference,Support_Reference" current="0"/>
+                    <Help/>
+                </Selections>
+            <Selections>
+                    <VarName displayType="CONSTANT" title="">TypeSel_DOC_DIR</VarName>
+                    <Value>doc/help</Value>
+                    <Selection/>
+                    <Help/>
+                </Selections>
+            </Parameters>
+            <Solution space="preserve">
+              <DocumentationTransform position="1" filename="'documentation.xml'" filename_dir="TypeSel_DOC_DIR">
+                <FileParameters>
+                    <FileParameter name="'file'" value="TypeSel_SDIO_FUNCTION"/>
+                    <FileParameter name="'file'" value="TypeSel_SDIO_LIB"/>
+                    <FileParameter name="'file'" value="TypeSel_SDIO_BUSDRIVER_H"/>                    
+                    <FileParameter name="'file'" value="TypeSel_CT" optional="'1'"/>                    
+                </FileParameters>
+            </DocumentationTransform>
+            <XslTransform position="3" filename="'PD_Reference.htm'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_FunctionDocs" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationCategory'" value="'PD_Reference'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'PD_Reference_overview.htm'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_FunctionDocs" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Function Driver Documentation'"/>
+                    <FileParameter name="'documentationCategory'" value="'PD_Reference'"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'HD_Reference.htm'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_HcdDocs" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Host Controller Driver Documentation'"/>
+                    <FileParameter name="'documentationCategory'" value="'HD_Reference'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'HD_Reference_overview.htm'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_HcdDocs" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Host Controller Driver Documentation'"/>
+                    <FileParameter name="'documentationCategory'" value="'HD_Reference'"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'Support_Reference.htm'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_SupportDocs" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Support Functions Documentation'"/>
+                    <FileParameter name="'documentationCategory'" value="'Support_Reference'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'Support_Reference_overview.htm'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunction.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_SupportDocs" dependsOnTest="==" dependsOnValue="1">
+                <FileParameters>
+                    <FileParameter name="'title1'" value="'Codetelligence Embedded SDIO Stack'"/>
+                    <FileParameter name="'title2'" value="'Support Functions Documentation'"/>
+                    <FileParameter name="'documentationCategory'" value="'Support_Reference'"/>
+                    <FileParameter name="'fileHeader'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'TableOfContents.xml'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunctionTOC_sdio.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_tableofcontents" dependsOnTest="!=" dependsOnValue=" ">
+                <FileParameters>
+                    <FileParameter name="'documentationCategory'" value="TypeSel_tableofcontents"/>
+                    <FileParameter name="'includeHeader'" value="TypeSel_HcdDocs"/>
+                    <FileParameter name="'addRefHeader'" value="'1'"/>
+                    <FileParameter name="'addBranch'" value="'1'"/>
+                </FileParameters>
+            </XslTransform>
+            <XslTransform position="3" filename="'TableOfContents.hhc'" filename_dir="TypeSel_DOC_DIR" xslfile="'res://$dirapp/plugins/com.codetelligence.tools.epeditor_0.0.5/wizard/XSL/docFunctionTOC_sdio.xslt'" xmlfile="Documentation_XMLFile" dependsOn="TypeSel_tableofcontents" dependsOnTest="!=" dependsOnValue=" ">
+                <FileParameters>
+                    <FileParameter name="'documentationCategory'" value="TypeSel_tableofcontents"/>
+                    <FileParameter name="'includeHeader'" value="TypeSel_HcdDocs"/>
+                </FileParameters>
+            </XslTransform>
+            
+            </Solution>
+        </Function>
+    </Functions>
+</Device>

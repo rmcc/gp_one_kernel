@@ -67,6 +67,9 @@ NORET_TYPE void panic(const char * fmt, ...)
 	long i;
 	static char buf[1024];
 	va_list args;
+
+
+	
 #if defined(CONFIG_S390)
 	unsigned long caller = (unsigned long) __builtin_return_address(0);
 #endif

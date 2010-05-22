@@ -1,0 +1,678 @@
+Copyright 2006 Atheros Communications, Inc.
+
+Test Date: 3/16/2006
+HCD:       Intel PXA270
+Platform:  SandgateII (Linux Kernel 2.6.9)
+Test Card: MARS II
+
+Output:
+
++SD Bus BenchMark Starting....
+SDIO BenchMark Function - Direct DMA Capable...
+SDIO BenchMark - OS Timming TickRate: 100 Hz
+SD Bus BenchMark : Buffer Size: 65536 bytes
+***********************************Test Run Start*********************************************
+SD Bus BenchMark (SDIO): Bus Clock rate: 19500000 Hz Bus Mode: 4-Bit
+SD Bus BenchMark : Max Blocks: 65535 , Max Bytes Per Block:1023
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD52 Test (Fixed Address, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Fixed Address, READ-SYNC) : Total Ops : 65536, time:1190 MS
+      (55072 Ops/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD52 Test (Fixed Address, READ-ASYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Fixed Address, READ-ASYNC) : Total Ops : 65536, time:1220 MS
+      (53718 Ops/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, PIO Mode, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, PIO Mode, READ-SYNC) : Total Bytes : 6553600, time:1270 MS
+      (5160314 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, PIO Mode, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, PIO Mode, WRITE-SYNC) : Total Bytes : 6553600, time:930 MS
+      (7046881 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, PIO Mode, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:128, BytesPerBlock:512
+----> SDIO Test Stats (BYTE Basis, PIO Mode, READ-SYNC) : Total Bytes : 6553600, time:2140 MS
+      (3062429 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, PIO Mode, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:128, BytesPerBlock:512
+----> SDIO Test Stats (BYTE Basis, PIO Mode, WRITE-SYNC) : Total Bytes : 6553600, time:2050 MS
+      (3196878 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, DMA Mode, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, DMA Mode, READ-SYNC) : Total Bytes : 6553600, time:750 MS
+      (8738133 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, DMA Mode, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, DMA Mode, WRITE-SYNC) : Total Bytes : 6553600, time:770 MS
+      (8511168 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer non-optimized, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer non-optimized, READ-SYNC) : Total Bytes : 6553600, time:5600 MS
+      (1170285 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer non-optimized, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer non-optimized, WRITE-SYNC) : Total Bytes : 6553600, time:6660 MS
+      (984024 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer optimized, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer optimized, READ-SYNC) : Total Bytes : 6553600, time:4220 MS
+      (1552985 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer optimized, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 4-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer optimized, WRITE-SYNC) : Total Bytes : 6553600, time:4030 MS
+      (1626203 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, PIO ,READ-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:50 MS
+      (3036000 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, PIO, WRITE-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:40 MS
+      (3795000 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, DMA ,READ-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:30 MS
+      (5060000 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, DMA, WRITE-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:40 MS
+      (3795000 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:8, Blocks:4096 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:16, Blocks:2048 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:32, Blocks:1024 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:64, Blocks:512 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:128, Blocks:256 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:256, Blocks:128 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:512, Blocks:64 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:1024 is > HCD max (1023) SKIPPING
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:2048 is > HCD max (1023) SKIPPING
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:1 (blocks:32768,residue:0)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:1300 MS
+      (25206 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:1120 MS
+      (29257 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:4 (blocks:8192,residue:0)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:340 MS
+      (96376 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:280 MS
+      (117028 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (Short Transfer), Total:32768 bytes, BlockSizeLimit:4 (blocks:8192,residue:0)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:210 MS
+      (156038 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:210 MS
+      (156038 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (Short Transfer), Total:32768 bytes, BlockSizeLimit:7 (blocks:4681,residue:1)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:120 MS
+      (273066 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:120 MS
+      (273066 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:16 (blocks:2048,residue:0)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:90 MS
+      (364088 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:80 MS
+      (409600 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:33 (blocks:992,residue:32)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:70 MS
+      (468114 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:70 MS
+      (468114 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:88 (blocks:372,residue:32)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:95 (blocks:344,residue:88)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:233 (blocks:140,residue:148)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:300 (blocks:109,residue:68)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:512 (blocks:64,residue:0)
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:8, Blocks:4096 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:16, Blocks:2048 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:32, Blocks:1024 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:64, Blocks:512 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:128, Blocks:256 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:0 MS
+      Calculated time delta was zero!
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:512, Blocks:64 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 4-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:1024 is > HCD max (1023) SKIPPING
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:2048 is > HCD max (1023) SKIPPING
+***********************************Test Run End***********************************************
+SDIO Bus Driver: Enabling 1 bit mode on card
+***********************************Test Run Start*********************************************
+SD Bus BenchMark (SDIO): Bus Clock rate: 19500000 Hz Bus Mode: 1-Bit
+SD Bus BenchMark : Max Blocks: 65535 , Max Bytes Per Block:1023
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD52 Test (Fixed Address, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Fixed Address, READ-SYNC) : Total Ops : 65536, time:1190 MS
+      (55072 Ops/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD52 Test (Fixed Address, READ-ASYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Fixed Address, READ-ASYNC) : Total Ops : 65536, time:1220 MS
+      (53718 Ops/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, PIO Mode, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, PIO Mode, READ-SYNC) : Total Bytes : 6553600, time:3260 MS
+      (2010306 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, PIO Mode, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, PIO Mode, WRITE-SYNC) : Total Bytes : 6553600, time:2920 MS
+      (2244383 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, PIO Mode, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:128, BytesPerBlock:512
+----> SDIO Test Stats (BYTE Basis, PIO Mode, READ-SYNC) : Total Bytes : 6553600, time:4120 MS
+      (1590679 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, PIO Mode, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:128, BytesPerBlock:512
+----> SDIO Test Stats (BYTE Basis, PIO Mode, WRITE-SYNC) : Total Bytes : 6553600, time:4020 MS
+      (1630248 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, DMA Mode, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, DMA Mode, READ-SYNC) : Total Bytes : 6553600, time:2770 MS
+      (2365920 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BLOCK Basis, DMA Mode, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:64, BytesPerBlock:1023
+----> SDIO Test Stats (BLOCK Basis, DMA Mode, WRITE-SYNC) : Total Bytes : 6553600, time:2780 MS
+      (2357410 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer non-optimized, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer non-optimized, READ-SYNC) : Total Bytes : 6553600, time:5600 MS
+      (1170285 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer non-optimized, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer non-optimized, WRITE-SYNC) : Total Bytes : 6553600, time:6710 MS
+      (976691 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer optimized, READ-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer optimized, READ-SYNC) : Total Bytes : 6553600, time:4210 MS
+      (1556674 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Performance Test (BYTE Basis, Short Transfer optimized, WRITE-SYNC) Addr:0x0, Count:65536
+    BusClk: 19500000 Hz BusMode: 1-Bit
+      Blocks:16384, BytesPerBlock:4
+----> SDIO Test Stats (BYTE Basis, Short Transfer optimized, WRITE-SYNC) : Total Bytes : 6553600, time:4020 MS
+      (1630248 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, PIO ,READ-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:100 MS
+      (1518000 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, PIO, WRITE-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:80 MS
+      (1897500 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, DMA ,READ-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:90 MS
+      (1686666 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 MIXED (Mixed, Ethernet Frame, DMA, WRITE-SYNC) Block Length:1023 Full Blocks:1, Residue:495, Total:1518 bytes, Iterations:100
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Mixed) : Total Bytes : 151800, time:80 MS
+      (1897500 Bytes/sec)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:8, Blocks:4096 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:16, Blocks:2048 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:32, Blocks:1024 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:64, Blocks:512 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:128, Blocks:256 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:256, Blocks:128 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Block Mode, Block Size:512, Blocks:64 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:1024 is > HCD max (1023) SKIPPING
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:2048 is > HCD max (1023) SKIPPING
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:1 (blocks:32768,residue:0)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:1300 MS
+      (25206 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:1120 MS
+      (29257 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:4 (blocks:8192,residue:0)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:330 MS
+      (99296 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:280 MS
+      (117028 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (Short Transfer), Total:32768 bytes, BlockSizeLimit:4 (blocks:8192,residue:0)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:200 MS
+      (163840 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:210 MS
+      (156038 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (Short Transfer), Total:32768 bytes, BlockSizeLimit:7 (blocks:4681,residue:1)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:150 MS
+      (218453 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:120 MS
+      (273066 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:16 (blocks:2048,residue:0)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:110 MS
+      (297890 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:100 MS
+      (327680 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:33 (blocks:992,residue:32)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:70 MS
+      (468114 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:60 MS
+      (546133 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:88 (blocks:372,residue:32)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:40 MS
+      (819200 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:95 (blocks:344,residue:88)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:233 (blocks:140,residue:148)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:300 (blocks:109,residue:68)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:30 MS
+      (1092266 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (Normal Buffer, SYNC) Byte Mode (default), Total:32768 bytes, BlockSizeLimit:512 (blocks:64,residue:0)
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Byte Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:8, Blocks:4096 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:16, Blocks:2048 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:32, Blocks:1024 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:64, Blocks:512 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:128, Blocks:256 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:10 MS
+      (3276800 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify (DMA Buffer, SYNC) Block Mode, Block Size:512, Blocks:64 Total:32768 bytes
+    BusClk: 19500000 Hz BusMode: 1-Bit
+----> SDIO Test Stats (Write) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+----> SDIO Test Stats (Read) : Total Bytes : 32768, time:20 MS
+      (1638400 Bytes/sec)
+SDIO CMD53 Data Mode:(Block Mode) DATA VERIFIED SUCCESSFULLY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:1024 is > HCD max (1023) SKIPPING
+SDIO CMD53 Data Verify, Block Mode Test Blocksize:2048 is > HCD max (1023) SKIPPING
+***********************************Test Run End***********************************************
+SDIO Bus Driver: Enabling 4 bit mode on card
+SDIO Bus Driver: 4-Bit Multi-blk Interrupt support enabled
++++++++ SD Bus BenchMark TEST SUCCESS (passed:80, skipped:8, total:88)+++++++++
+-SD Bus BenchMark Done

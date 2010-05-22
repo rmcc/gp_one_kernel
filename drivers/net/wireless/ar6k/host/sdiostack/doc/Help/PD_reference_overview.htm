@@ -1,0 +1,312 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title></title>
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link type="text/css" rel="stylesheet" href="CodeTHelp.css">
+</head>
+<body marginheight="0" marginwidth="0" topmargin="0" leftmargin="0" bgcolor="#FFFFFF">
+<a name="TopTopic"></a>
+<table cellpadding="4" cellspacing="0" border="0" width="100%">
+<tr>
+<td bgcolor="#0000FF" rowspan="2" width="40%"><a href="http://www.codetelligence.com"><img border="0" height="40" width="252" name="image" src="Images/codetelligence_lrg.gif"></a></td><td bgcolor="#0000FF" height="62" width="50%"><font face="Arial, Helvetica, sans-serif" size="5" color="#FFFFFF"><strong>Codetelligence Embedded SDIO Stack<br>Function Driver Documentation</strong></font></td><td bgcolor="#0000FF" height="62" width="10%"><td><a href="#previous#"><img border="0" height="32" width="27" src="Images/leftarrow.gif"></a></td><td><a href="#next#"><img border="0" height="32" width="27" src="Images/rightarrow.gif"></a></td></td>
+</tr>
+</table>
+<br>
+<table cellpadding="0" cellspacing="10" border="0" width="100%">
+<tr>
+<td width="93%"><font face="Arial, Helvetica, sans-serif"><span class="Topic">
+<blockquote>
+<table width="100%" cellspacing="0" cellpadding="0">
+<td>
+<br>
+<div align="center">
+<span class="FUNCPROTOTYPE"></span>
+</div>
+</td>
+</table>
+</blockquote>
+</span></font></td>
+</tr>
+</table>
+<hr>
+<table cellpadding="15" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<p class="FUNCHEADINGS">Abstract:</p>
+<blockquote>
+<p class="BODYTEXT">
+<br>
+
+    Peripheral driver interfaces.
+    </p>
+</blockquote>
+</td>
+</tr>
+</table><table width="100%" border="0" cellspacing="10" cellpadding="0"><tr>
+<td><a href="PD_Reference.htm#FUNC_Probe">
+Probe
+        </a></td><td>This function is called by the Busdriver when a device is inserted that can be supported by this function driver.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_Remove">
+Remove
+        </a></td><td>This function is called by the Busdriver when a device controlled by this function              function driver is removed.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_BUS_MODE_CTRL">
+SDCONFIG_BUS_MODE_CTRL
+        </a></td><td>Set the bus mode for the SD/SDIO card.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_ACK_IRQ">
+SDCONFIG_FUNC_ACK_IRQ
+        </a></td><td>Acknowledge that the function's IRQ has been handled</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_ALLOC_SLOT_CURRENT">
+SDCONFIG_FUNC_ALLOC_SLOT_CURRENT
+        </a></td><td>Allocate slot current for a card function.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_ENABLE_DISABLE">
+SDCONFIG_FUNC_ENABLE_DISABLE
+        </a></td><td>Enable or Disable the SDIO Function</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_FREE_SLOT_CURRENT">
+SDCONFIG_FUNC_FREE_SLOT_CURRENT
+        </a></td><td>Free slot current for a card function.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_MASK_IRQ">
+SDCONFIG_FUNC_MASK_IRQ
+        </a></td><td>Mask the function's IRQ</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC">
+SDCONFIG_FUNC_SPI_MODE_DISABLE_CRC
+        </a></td><td>Disable SD/MMC/SDIO card CRC checking.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC">
+SDCONFIG_FUNC_SPI_MODE_ENABLE_CRC
+        </a></td><td>Enable SD/MMC/SDIO card CRC checking.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDCONFIG_FUNC_UNMASK_IRQ">
+SDCONFIG_FUNC_UNMASK_IRQ
+        </a></td><td>Unmask the function's IRQ</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_CALL_CONFIG_FUNC">
+SDDEVICE_CALL_CONFIG_FUNC
+        </a></td><td>Send configuration to a device.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_CALL_REQUEST_FUNC">
+SDDEVICE_CALL_REQUEST_FUNC
+        </a></td><td>Send a request to a device.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_BUSMODE_FLAGS">
+SDDEVICE_GET_BUSMODE_FLAGS
+        </a></td><td>Get the bus mode flags</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_BUSWIDTH">
+SDDEVICE_GET_BUSWIDTH
+        </a></td><td>Get the bus width.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_CARD_FLAGS">
+SDDEVICE_GET_CARD_FLAGS
+        </a></td><td>Get the card flags</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_CARD_RCA">
+SDDEVICE_GET_CARD_RCA
+        </a></td><td>Get the Relative Card Address register</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_CARDCSD">
+SDDEVICE_GET_CARDCSD
+        </a></td><td>Get the Card Specific Data Register.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_MAX_BLOCK_LEN">
+SDDEVICE_GET_MAX_BLOCK_LEN
+        </a></td><td>Get maximum block length.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_MAX_BLOCKS">
+SDDEVICE_GET_MAX_BLOCKS
+        </a></td><td>Get maximum block count.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_MAX_CLOCK">
+SDDEVICE_GET_MAX_CLOCK
+        </a></td><td>Get maximum bus clock</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_OPER_BLOCK_LEN">
+SDDEVICE_GET_OPER_BLOCK_LEN
+        </a></td><td>Get operational maximum block length.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_OPER_BLOCKS">
+SDDEVICE_GET_OPER_BLOCKS
+        </a></td><td>Get operational maximum block count.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_OPER_CLOCK">
+SDDEVICE_GET_OPER_CLOCK
+        </a></td><td>Get operational bus clock</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_CARD_CAPS">
+SDDEVICE_GET_SDIO_CARD_CAPS
+        </a></td><td>Get the card capabilities</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_COMMON_CISPTR">
+SDDEVICE_GET_SDIO_COMMON_CISPTR
+        </a></td><td>Get the common Card Information Structure pointer</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_FUNC_CISPTR">
+SDDEVICE_GET_SDIO_FUNC_CISPTR
+        </a></td><td>Get the functions's Card Information Structure pointer</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_FUNC_CLASS">
+SDDEVICE_GET_SDIO_FUNC_CLASS
+        </a></td><td>Get the functions's class</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_FUNC_CSAPTR">
+SDDEVICE_GET_SDIO_FUNC_CSAPTR
+        </a></td><td>Get the functions's Code Stoarge Area pointer</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE">
+SDDEVICE_GET_SDIO_FUNC_MAXBLKSIZE
+        </a></td><td>Get the functions's maximum reported block size</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIO_FUNCNO">
+SDDEVICE_GET_SDIO_FUNCNO
+        </a></td><td>Get the device's function number</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SDIOCARD_CAPS">
+SDDEVICE_GET_SDIOCARD_CAPS
+        </a></td><td>Get the SDIO capabilities rgeister.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_GET_SLOT_VOLTAGE_MASK">
+SDDEVICE_GET_SLOT_VOLTAGE_MASK
+        </a></td><td>Get applied slot voltage</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_IS_BUSMODE_SPI">
+SDDEVICE_IS_BUSMODE_SPI
+        </a></td><td>Is bus in SPI mode.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_IS_CARD_WP_ON">
+SDDEVICE_IS_CARD_WP_ON
+        </a></td><td>Test for write protect enabled</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_IS_MMC_REV_GTEQ_4_0">
+SDDEVICE_IS_MMC_REV_GTEQ_4_0
+        </a></td><td>Test the MMC revision for greater than or equal to 4.0</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_IS_SD_REV_GTEQ_1_10">
+SDDEVICE_IS_SD_REV_GTEQ_1_10
+        </a></td><td>Test the SD revision for greater than or equal to 1.10</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_IS_SDIO_REV_GTEQ_1_10">
+SDDEVICE_IS_SDIO_REV_GTEQ_1_10
+        </a></td><td>Test the SDIO revision for greater than or equal to 1.10</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_SET_ASYNC_IRQ_HANDLER">
+SDDEVICE_SET_ASYNC_IRQ_HANDLER
+        </a></td><td>Register an asynchronous interrupt handler for a device.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDEVICE_SET_IRQ_HANDLER">
+SDDEVICE_SET_IRQ_HANDLER
+        </a></td><td>Register an interrupt handler for a device.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDeviceAllocRequest">
+SDDeviceAllocRequest
+        </a></td><td>Allocate a request structure.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDDeviceFreeRequest">
+SDDeviceFreeRequest
+        </a></td><td>Free a request structure.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDIO_RegisterFunction">
+SDIO_RegisterFunction
+        </a></td><td>Register a function driver with the bus driver.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDIO_UnregisterFunction">
+SDIO_UnregisterFunction
+        </a></td><td>Unregister a function driver with the bus driver.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDLIB_FindTuple">
+SDLIB_FindTuple
+        </a></td><td>Find a device's tuple.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDLIB_GetDefaultOpCurrent">
+SDLIB_GetDefaultOpCurrent
+        </a></td><td>Get default operational current</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDLIB_IssueCMD52">
+SDLIB_IssueCMD52
+        </a></td><td>Issue a CMD52 to read or write a register</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDLIB_IssueConfig">
+SDLIB_IssueConfig
+        </a></td><td>Issue an SDIO configuration command.</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDLIB_SetFunctionBlockSize">
+SDLIB_SetFunctionBlockSize
+        </a></td><td>Set function block size</td>
+</tr>
+<tr>
+<td><a href="PD_Reference.htm#FUNC_SDLIB_SetupCMD52Request">
+SDLIB_SetupCMD52Request
+        </a></td><td>Setup cmd52 requests</td>
+</tr></table>&nbsp;<br>
+<table cellpadding="2" cellspacing="0" border="0" width="100%">
+<tr>
+<td>
+<div align="right">
+<a href="#TopTopic">Back to top</a>
+</div>
+</td>
+</tr>
+<tr bgcolor="#0000FF">
+<td><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>&copy;2004  </strong></font><font face="Arial, Helvetica, sans-serif" color="#FFFFFF"><strong>Code<em>telligence</em>,
+        Inc.   </strong></font><a target="_blank" href="http://www.codetelligence.com"><font face="Arial, Helvetica, sans-serif" color="#FFFFFF">www.codetelligence.com</font></a></td>
+</tr>
+</table>
+</body>
+</html>

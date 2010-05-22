@@ -2,7 +2,7 @@
  *
  * amrnb encoder device
  *
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009 QUALCOMM USA, INC.
  *
  * This code is based in part on arch/arm/mach-msm/qdsp5/audio_in.c, which is
  * Copyright (C) 2008 Google, Inc.
@@ -29,14 +29,14 @@
 #include <linux/kthread.h>
 #include <linux/wait.h>
 #include <linux/dma-mapping.h>
-#include <linux/debugfs.h>
+
 #include <linux/delay.h>
 
 #include <asm/atomic.h>
 #include <asm/ioctls.h>
 #include <mach/msm_adsp.h>
 #include <mach/msm_rpcrouter.h>
-#include <linux/msm_audio_amrnb.h>
+#include <mach/msm_audio_amrnb.h>
 
 #include "audmgr.h"
 
@@ -47,6 +47,8 @@
 
 /* for queue ids - should be relative to module number*/
 #include "adsp.h"
+
+#define LOG_CMCS 0 //karen test
 
 #ifdef DEBUG
 #define dprintk(format, arg...) \
@@ -119,6 +121,8 @@ static int audio_amrnb_in_enable(struct audio_amrnb_in *audio)
 	struct audmgr_config cfg;
 	int rc;
 
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_enable()\n");
+	
 	if (audio->enabled)
 		return 0;
 
@@ -148,6 +152,8 @@ static int audio_amrnb_in_enable(struct audio_amrnb_in *audio)
 /* must be called with audio->lock held */
 static int audio_amrnb_in_disable(struct audio_amrnb_in *audio)
 {
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_disable()\n");
+	
 	if (audio->enabled) {
 		audio->enabled = 0;
 		audio_amrnb_in_dsp_enable(audio, 0);
@@ -174,6 +180,8 @@ static void audio_amrnb_in_get_dsp_frames(struct audio_amrnb_in *audio)
 	unsigned long flags;
 	index = audio->in_head;
 
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_get_dsp_frames()\n");
+
 	frame = (void *) (((char *)audio->in[index].data) -
 		sizeof(*frame));
 	spin_lock_irqsave(&audio->dsp_lock, flags);
@@ -197,6 +205,8 @@ static void audio_amrnb_in_get_dsp_frames(struct audio_amrnb_in *audio)
 static void audio_amrnb_in_dsp_event(void *data, unsigned id, uint16_t *msg)
 {
 	struct audio_amrnb_in *audio = data;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_dsp_event(id=%d)\n", id);
 
 	switch (id) {
 	case AUDREC_MSG_CMD_CFG_DONE_MSG:
@@ -245,6 +255,8 @@ static int audio_amrnb_in_dsp_enable(struct audio_amrnb_in *audio, int enable)
 {
 	struct audrec_cmd_enc_cfg cmd;
 
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_dsp_enable()\n");
+
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd_id = AUDREC_CMD_ENC_CFG;
 	cmd.audrec_enc_type = (audio->enc_type) |
@@ -260,6 +272,8 @@ static int audio_amrnb_in_encmem_config(struct audio_amrnb_in *audio)
 	struct audrec_cmd_arecmem_cfg cmd;
 	uint16_t *data = (void *) audio->data;
 	unsigned cnt;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_encmem_config()\n");
 
 	memset(&cmd, 0, sizeof(cmd));
 
@@ -288,6 +302,8 @@ static int audio_amrnb_in_encmem_config(struct audio_amrnb_in *audio)
 static int audio_amrnb_in_encparam_config(struct audio_amrnb_in *audio)
 {
 	struct audrec_cmd_arecparam_amrnb_cfg cmd;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_encparam_config()\n");
 
 	memset(&cmd, 0, sizeof(cmd));
 
@@ -324,6 +340,8 @@ static int audio_amrnb_in_dsp_read_buffer(struct audio_amrnb_in *audio,
 {
 	audrec_cmd_packet_ext_ptr cmd;
 
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_dsp_read_buffer()\n");
+
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd_id = AUDREC_CMD_PACKET_EXT_PTR;
 	cmd.type = audio->audrec_obj_idx;
@@ -336,6 +354,8 @@ static int audio_amrnb_in_dsp_read_buffer(struct audio_amrnb_in *audio,
 static void audio_amrnb_in_flush(struct audio_amrnb_in *audio)
 {
 	int i;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_flush()\n");
 
 	audio->dsp_cnt = 0;
 	audio->in_head = 0;
@@ -354,6 +374,8 @@ static long audio_amrnb_in_ioctl(struct file *file,
 {
 	struct audio_amrnb_in *audio = file->private_data;
 	int rc;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_ioctl(cmd=%d)\n", cmd);
 
 	if (cmd == AUDIO_GET_STATS) {
 		struct msm_audio_stats stats;
@@ -452,6 +474,8 @@ static ssize_t audio_amrnb_in_read(struct file *file,
 	uint32_t size;
 	int rc = 0;
 
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_read()\n");
+
 	mutex_lock(&audio->read_lock);
 	while (count > 0) {
 		rc = wait_event_interruptible(
@@ -503,12 +527,16 @@ static ssize_t audio_amrnb_in_write(struct file *file,
 				const char __user *buf,
 				size_t count, loff_t *pos)
 {
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_write()\n");
+
 	return -EINVAL;
 }
 
 static int audio_amrnb_in_release(struct inode *inode, struct file *file)
 {
 	struct audio_amrnb_in *audio = file->private_data;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_release()\n");
 
 	mutex_lock(&audio->lock);
 	audio_amrnb_in_disable(audio);
@@ -527,6 +555,8 @@ static int audio_amrnb_in_open(struct inode *inode, struct file *file)
 {
 	struct audio_amrnb_in *audio = &the_audio_amrnb_in;
 	int rc;
+
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_open()\n");
 
 	mutex_lock(&audio->lock);
 	if (audio->opened) {
@@ -587,82 +617,21 @@ struct miscdevice audio_amrnb_in_misc = {
 	.fops	= &audio_fops,
 };
 
-#ifdef CONFIG_DEBUG_FS
-static ssize_t audamrnb_in_debug_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
-static ssize_t audamrnb_in_debug_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
-{
-	const int debug_bufmax = 1024;
-	static char buffer[1024];
-	int n = 0, i;
-	struct audio_amrnb_in *audio = file->private_data;
-
-	mutex_lock(&audio->lock);
-	n = scnprintf(buffer, debug_bufmax, "opened %d\n", audio->opened);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"enabled %d\n", audio->enabled);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"stopped %d\n", audio->stopped);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"audrec_obj_idx %d\n", audio->audrec_obj_idx);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"dsp_cnt %d \n", audio->dsp_cnt);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"in_count %d \n", audio->in_count);
-	for (i = 0; i < FRAME_NUM; i++)
-		n += scnprintf(buffer + n, debug_bufmax - n,
-			"audio->in[%d].size %d \n", i, audio->in[i].size);
-	mutex_unlock(&audio->lock);
-	/* Following variables are only useful for debugging when
-	 * when record halts unexpectedly. Thus, no mutual exclusion
-	 * enforced
-	 */
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"running %d \n", audio->running);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"buffer_size %d \n", audio->buffer_size);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"in_head %d \n", audio->in_head);
-	n += scnprintf(buffer + n, debug_bufmax - n,
-			"in_tail %d \n", audio->in_tail);
-	buffer[n] = 0;
-	return simple_read_from_buffer(buf, count, ppos, buffer, n);
-}
-
-static struct file_operations audamrnb_in_debug_fops = {
-	.read = audamrnb_in_debug_read,
-	.open = audamrnb_in_debug_open,
-};
-#endif
-
 static int __init audio_amrnb_in_init(void)
 {
-#ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
-#endif
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_init()\n");
 
 	mutex_init(&the_audio_amrnb_in.lock);
 	mutex_init(&the_audio_amrnb_in.read_lock);
 	spin_lock_init(&the_audio_amrnb_in.dsp_lock);
 	init_waitqueue_head(&the_audio_amrnb_in.wait);
-
-#ifdef CONFIG_DEBUG_FS
-	dentry = debugfs_create_file("msm_amrnb_in", S_IFREG | S_IRUGO, NULL,
-		(void *) &the_audio_amrnb_in, &audamrnb_in_debug_fops);
-
-	if (IS_ERR(dentry))
-		dprintk("AMRNB_IN:%s:debugfs_create_file failed\n", __func__);
-#endif
 	return misc_register(&audio_amrnb_in_misc);
 }
 
 static void __exit audio_amrnb_in_exit(void)
 {
+	if(LOG_CMCS) pr_info("audio_amrnb_in: audio_amrnb_in_exit()\n");
+
 	misc_deregister(&audio_amrnb_in_misc);
 }
 
@@ -671,3 +640,4 @@ module_exit(audio_amrnb_in_exit);
 
 MODULE_DESCRIPTION("MSM AMRNB Encoder driver");
 MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("QUALCOMM");

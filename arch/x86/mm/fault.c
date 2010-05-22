@@ -26,6 +26,7 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/kdebug.h>
+#include <linux/marker.h>
 
 #include <asm/system.h>
 #include <asm/desc.h>
@@ -521,6 +522,7 @@ static int vmalloc_fault(unsigned long address)
 		return -1;
 	return 0;
 #else
+	unsigned long pgd_paddr;
 	pgd_t *pgd, *pgd_ref;
 	pud_t *pud, *pud_ref;
 	pmd_t *pmd, *pmd_ref;
@@ -534,7 +536,8 @@ static int vmalloc_fault(unsigned long address)
 	   happen within a race in page table update. In the later
 	   case just flush. */
 
-	pgd = pgd_offset(current->mm ?: &init_mm, address);
+	pgd_paddr = read_cr3();
+	pgd = __va(pgd_paddr) + pgd_index(address);
 	pgd_ref = pgd_offset_k(address);
 	if (pgd_none(*pgd_ref))
 		return -1;
@@ -751,7 +754,10 @@ survive:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
+	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
+		14, instruction_pointer(regs));
 	fault = handle_mm_fault(mm, vma, address, write);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		if (fault & VM_FAULT_OOM)
 			goto out_of_memory;
@@ -792,6 +798,9 @@ bad_area_nosemaphore:
 		 */
 		local_irq_enable();
 
+		trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
+			14, instruction_pointer(regs));
+
 		/*
 		 * Valid to do another page fault here because this one came
 		 * from user space.
@@ -818,6 +827,7 @@ bad_area_nosemaphore:
 		tsk->thread.error_code = error_code | (address >= TASK_SIZE);
 		tsk->thread.trap_no = 14;
 		force_sig_info_fault(SIGSEGV, si_code, address, tsk);
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 	}
 

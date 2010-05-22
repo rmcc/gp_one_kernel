@@ -23,7 +23,6 @@ extern struct hw_interrupt_type no_irq_type;
 /* platform dependent support */
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(kernel_thread);
-EXPORT_SYMBOL(irq_desc);
 EXPORT_SYMBOL(no_irq_type);
 
 EXPORT_SYMBOL(strlen);

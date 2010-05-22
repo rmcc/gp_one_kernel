@@ -28,6 +28,7 @@
 #include <linux/pm.h>
 #include <linux/tick.h>
 #include <linux/utsname.h>
+#include <linux/marker.h>
 
 #include <asm/leds.h>
 #include <asm/processor.h>
@@ -396,6 +397,7 @@ asm(	".section .text\n"
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
 	struct pt_regs regs;
+	long pid;
 
 	memset(&regs, 0, sizeof(regs));
 
@@ -405,7 +407,10 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	regs.ARM_pc = (unsigned long)kernel_thread_helper;
 	regs.ARM_cpsr = SVC_MODE;
 
-	return do_fork(flags|CLONE_VM|CLONE_UNTRACED, 0, &regs, 0, NULL, NULL);
+	pid = do_fork(flags|CLONE_VM|CLONE_UNTRACED, 0, &regs, 0, NULL, NULL);
+
+	trace_mark(kernel_arch_kthread_create, "pid %ld fn %p", pid, fn);
+	return pid;
 }
 EXPORT_SYMBOL(kernel_thread);
 

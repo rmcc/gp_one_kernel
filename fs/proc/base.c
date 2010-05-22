@@ -79,6 +79,8 @@
 #include <linux/oom.h>
 #include <linux/elf.h>
 #include <linux/pid_namespace.h>
+#include <linux/user_marker.h>
+#include <linux/marker.h>
 #include "internal.h"
 
 /* NOTE:
@@ -1076,6 +1078,134 @@ static const struct file_operations proc_oom_adjust_operations = {
 	.read		= oom_adjust_read,
 	.write		= oom_adjust_write,
 };
+
+#ifdef CONFIG_MARKERS_USERSPACE
+struct markers_seq_data {
+	struct task_struct *task;
+	unsigned long version;
+};
+
+static void *markers_start(struct seq_file *m, loff_t *pos)
+{
+	struct hlist_node *retval, *n;
+	loff_t local_pos = *pos;
+	struct markers_seq_data *data = m->private;
+
+	mutex_lock(&data->task->user_markers_mutex);
+	retval = NULL;
+	if (data->task->user_markers_sequence != data->version) {
+		retval = ERR_PTR(-EAGAIN);
+		goto out;
+	}
+
+	hlist_for_each(n, &data->task->user_markers) {
+		if (local_pos-- == 0) {
+			retval = n;
+			goto out;
+		}
+	}
+
+out:
+	mutex_unlock(&data->task->user_markers_mutex);
+	return retval;
+}
+
+static void *markers_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	struct hlist_node *retval, *n = v;
+	struct markers_seq_data *data = m->private;
+
+	retval = NULL;
+	mutex_lock(&data->task->user_markers_mutex);
+	if (data->task->user_markers_sequence != data->version) {
+		retval = ERR_PTR(-EAGAIN);
+		goto out;
+	} else
+		data->version = data->task->user_markers_sequence;
+
+	if (n->next) {
+		++*pos;
+		retval = n->next;
+	}
+
+out:
+	mutex_unlock(&data->task->user_markers_mutex);
+	return NULL;
+}
+
+static void markers_stop(struct seq_file *m, void *v)
+{
+}
+
+static int markers_show(struct seq_file *m, void *v)
+{
+	struct markers_seq_data *data = m->private;
+	struct user_marker *umark;
+	int retval;
+
+	retval = 0;
+	mutex_lock(&data->task->user_markers_mutex);
+	if (data->task->user_markers_sequence != data->version) {
+		retval = -EAGAIN;
+		mutex_unlock(&data->task->user_markers_mutex);
+		goto out;
+	}
+
+	umark = hlist_entry((struct hlist_node *)v, struct user_marker, hlist);
+	seq_printf(m, "marker: %s format: \"%s\" address: %p",
+		umark->name, umark->format, umark->state);
+	mutex_unlock(&data->task->user_markers_mutex);
+	seq_printf(m, " enabled: %d\n", is_marker_enabled(umark->name));
+out:
+	return retval;
+}
+
+static const struct seq_operations markers_seq_op = {
+	.start = markers_start,
+	.next = markers_next,
+	.stop = markers_stop,
+	.show = markers_show,
+};
+
+static int markers_open(struct inode *inode, struct file *file)
+{
+	int retval;
+	struct markers_seq_data *data;
+	struct seq_file *seq;
+
+	data = kmalloc(sizeof(struct markers_seq_data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	retval = seq_open(file, &markers_seq_op);
+	if (!retval) {
+		data->task = get_proc_task(file->f_dentry->d_inode);
+		data->version = data->task->user_markers_sequence;
+
+		seq = file->private_data;
+		seq->private = data;
+	} else
+		kfree(data);
+
+	return retval;
+}
+
+static int markers_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+
+	kfree(seq->private);
+
+	return seq_release(inode, file);
+}
+
+static const struct file_operations proc_markers_operations = {
+	.open		= markers_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= markers_release,
+};
+#endif /* CONFIG_MARKERS_USERSPACE */
 
 #ifdef CONFIG_AUDITSYSCALL
 #define TMPBUFLEN 21
@@ -2550,6 +2680,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 #endif
 #ifdef CONFIG_TASK_IO_ACCOUNTING
 	INF("io",	S_IRUGO, tgid_io_accounting),
+#endif
+#ifdef CONFIG_MARKERS_USERSPACE
+	REG("markers", S_IRUSR, markers),
 #endif
 };
 

@@ -1,58 +1,20 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* drivers/video/msm/src/drv/mdp/mdp_dma_lcdc.c
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Code Aurora Forum nor
- *       the names of its contributors may be used to endorse or promote
- *       products derived from this software without specific prior written
- *       permission.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
- * Alternatively, provided that this notice is retained in full, this software
- * may be relicensed by the recipient under the terms of the GNU General Public
- * License version 2 ("GPL") and only version 2, in which case the provisions of
- * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
- * software under the GPL, then the identification text in the MODULE_LICENSE
- * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
- * recipient changes the license terms to the GPL, subsequent recipients shall
- * not relicense under alternate licensing terms, including the BSD or dual
- * BSD/GPL terms.  In addition, the following license statement immediately
- * below and between the words START and END shall also then apply when this
- * software is relicensed under the GPL:
+ * All source code in this file is licensed under the following license
  *
- * START
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
  *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 and only version 2 as
- * published by the Free Software Foundation.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
- * details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * END
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can find it at http://www.fsf.org
  */
 
 #include <linux/module.h>
@@ -154,9 +116,9 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		dma2_cfg_reg |= DMA_IBUF_FORMAT_RGB888;
 	else
 		dma2_cfg_reg |= DMA_IBUF_FORMAT_xRGB8888_OR_ARGB8888;
-
-	if (mfd->panel_info.bpp != 24)
-		return -ENODEV;
+//FIH_ADQ,JOE HSU
+//	if (mfd->panel_info.bpp != 24)
+//		return -ENODEV;
 
 	switch (mfd->panel_info.bpp) {
 	case 24:
@@ -244,12 +206,23 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		active_v_end = 0;
 	}
 
+/* FIH_ADQ, Ming { */
+    /*
 	hsync_polarity = 0;
 	vsync_polarity = 0;
 	data_en_polarity = 0;
 
 	ctrl_polarity =
 	    (hsync_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
+    */
+   	hsync_polarity = 1;  // active low, match to panel configuration
+	vsync_polarity = 1;  // active low
+	data_en_polarity = 0;
+
+	ctrl_polarity =
+	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
+/* } FIH_ADQ, Ming */
+	
 	////////////////////////////////////////////////
 	MDP_OUTP(MDP_BASE + 0xE0004, hsync_ctrl);
 	MDP_OUTP(MDP_BASE + 0xE0008, vsync_period);
@@ -304,6 +277,12 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	int bpp;
 	unsigned long flag;
 
+    /* FIH_ADQ, Ming { */
+    uint8 *mdp_buf;     // phys. addr
+    uint8 *cpy_buf_src; // virt. addr
+    uint8 *cpy_buf_dst; // virt. addr
+    /* } FIH_ADQ, Ming */
+
 	if (!mfd->panel_power_on)
 		return;
 
@@ -315,14 +294,30 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	buf = (uint8 *) fbi->fix.smem_start;
 	buf +=
 	    (fbi->var.xoffset + fbi->var.yoffset * fbi->var.xres_virtual) * bpp;
+
+    /* FIH_ADQ, Ming { */
+    mdp_buf = buf + fbi->fix.smem_len; 
+    cpy_buf_src = fbi->screen_base;  
+    cpy_buf_src += (fbi->var.xoffset + fbi->var.yoffset * fbi->var.xres_virtual) * bpp;
+    cpy_buf_dst = cpy_buf_src + fbi->fix.smem_len;
+///printk("mdp_lcdc_update -- mdp_buf(0x%x), cpy_buf_src(0x%x), cpy_buf_dst(0x%x)\n", mdp_buf, cpy_buf_src, cpy_buf_dst);
+///printk("mdp_lcdc_update -- (fbi->fix.line_length * fbi->var.yres) = 0x%x\n", (fbi->fix.line_length * fbi->var.yres));
+    MDP_OUTP(MDP_BASE + 0x90008, (uint32) mdp_buf);
+    memcpy(cpy_buf_dst, cpy_buf_src, (fbi->fix.line_length * fbi->var.yres));
+
 	// starting address
-	MDP_OUTP(MDP_BASE + 0x90008, (uint32) buf);
+	///MDP_OUTP(MDP_BASE + 0x90008, (uint32) buf);
+    /* } FIH_ADQ, Ming */
 
 	// enable LCDC irq
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	mdp_intr_mask |= LCDC_FRAME_START;
 	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 	spin_unlock_irqrestore(&mdp_spin_lock, flag);
+
+	/* FIH_ADQ, Ming { */	
+	///mdelay(5); // Workaround solution!! Need to fix it!!!
+	/* } FIH_ADQ, Ming */
 
 	wait_for_completion_interruptible(&mfd->dma->comp);
 }

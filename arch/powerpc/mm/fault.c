@@ -29,6 +29,7 @@
 #include <linux/module.h>
 #include <linux/kprobes.h>
 #include <linux/kdebug.h>
+#include <linux/marker.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -310,7 +311,10 @@ good_area:
 	 * the fault.
 	 */
  survive:
+	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld", regs->trap,
+		instruction_pointer(regs));
 	ret = handle_mm_fault(mm, vma, address, is_write);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	if (unlikely(ret & VM_FAULT_ERROR)) {
 		if (ret & VM_FAULT_OOM)
 			goto out_of_memory;
