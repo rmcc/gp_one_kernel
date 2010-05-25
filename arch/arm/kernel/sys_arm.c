@@ -27,7 +27,6 @@
 #include <linux/file.h>
 #include <linux/utsname.h>
 #include <linux/ipc.h>
-#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 
@@ -144,8 +143,6 @@ asmlinkage int sys_ipc(uint call, int first, int second, int third,
 
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
-
-	trace_mark(kernel_arch_ipc_call, "call %u first %d", call, first);
 
 	switch (call) {
 	case SEMOP:

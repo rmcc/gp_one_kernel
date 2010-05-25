@@ -34,8 +34,6 @@
 #include <linux/backlight.h>
 #include <linux/bug.h>
 #include <linux/kdebug.h>
-#include <linux/ltt-core.h>
-#include <linux/marker.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -141,10 +139,6 @@ int die(const char *str, struct pt_regs *regs, long err)
 #ifdef CONFIG_NUMA
 		printk("NUMA ");
 #endif
-#ifdef CONFIG_LTT
-		printk("LTT NESTING LEVEL : %u ", __get_cpu_var(ltt_nesting));
-		printk("\n");
-#endif
 		printk("%s\n", ppc_md.name ? ppc_md.name : "");
 
 		print_modules();
@@ -194,9 +188,6 @@ void _exception(int signr, struct pt_regs *regs, int code, unsigned long addr)
 				addr, regs->nip, regs->link, code);
 		}
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld", regs->trap,
-		instruction_pointer(regs));
-
 	memset(&info, 0, sizeof(info));
 	info.si_signo = signr;
 	info.si_code = code;
@@ -224,8 +215,6 @@ void _exception(int signr, struct pt_regs *regs, int code, unsigned long addr)
 			do_exit(signr);
 		}
 	}
-
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #ifdef CONFIG_PPC64
@@ -994,10 +983,7 @@ void vsx_unavailable_exception(struct pt_regs *regs)
 
 void performance_monitor_exception(struct pt_regs *regs)
 {
-	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld", regs->trap,
-		instruction_pointer(regs));
 	perf_irq(regs);
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #ifdef CONFIG_8xx
@@ -1133,15 +1119,12 @@ void altivec_assist_exception(struct pt_regs *regs)
 		/* got an error reading the instruction */
 		_exception(SIGSEGV, regs, SEGV_ACCERR, regs->nip);
 	} else {
-		trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld",
-			regs->trap, instruction_pointer(regs));
 		/* didn't recognize the instruction */
 		/* XXX quick hack for now: set the non-Java bit in the VSCR */
 		if (printk_ratelimit())
 			printk(KERN_ERR "Unrecognized altivec instruction "
 			       "in %s at %lx\n", current->comm, regs->nip);
 		current->thread.vscr.u[3] |= 0x10000;
-		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	}
 }
 #endif /* CONFIG_ALTIVEC */

@@ -60,7 +60,6 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/idr.h>
-#include <linux/immediate.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -103,11 +102,6 @@ static inline void mark_rodata_ro(void) { }
 
 #ifdef CONFIG_TC
 extern void tc_init(void);
-#endif
-#ifdef USE_IMMEDIATE
-extern void imv_init_complete(void);
-#else
-static inline void imv_init_complete(void) { }
 #endif
 
 enum system_states system_state;
@@ -550,7 +544,6 @@ asmlinkage void __init start_kernel(void)
 	extern struct kernel_param __start___param[], __stop___param[];
 
 	smp_setup_processor_id();
-
 	/*
 	 * Need to run as early as possible, to initialize the
 	 * lockdep hash:
@@ -559,7 +552,6 @@ asmlinkage void __init start_kernel(void)
 	lockdep_init();
 	debug_objects_early_init();
 	cgroup_init_early();
-	core_imv_update();
 
 	local_irq_disable();
 	early_boot_irqs_off();
@@ -694,7 +686,6 @@ asmlinkage void __init start_kernel(void)
 	cpuset_init();
 	taskstats_init_early();
 	delayacct_init();
-	imv_init_complete();
 
 	check_bugs();
 
@@ -807,7 +798,6 @@ static void run_init_process(char *init_filename)
  */
 static int noinline init_post(void)
 {
-	imv_unref_core_init();
 	free_initmem();
 	unlock_kernel();
 	mark_rodata_ro();

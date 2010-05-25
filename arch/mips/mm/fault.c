@@ -18,7 +18,6 @@
 #include <linux/smp.h>
 #include <linux/vt_kern.h>		/* For unblank_screen() */
 #include <linux/module.h>
-#include <linux/marker.h>
 
 #include <asm/branch.h>
 #include <asm/mmu_context.h>
@@ -104,10 +103,7 @@ survive:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	trace_mark(kernel_arch_trap_entry, "trap_id %lu ip #p%ld",
-		CAUSE_EXCCODE(regs->cp0_cause), instruction_pointer(regs));
 	fault = handle_mm_fault(mm, vma, address, write);
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		if (fault & VM_FAULT_OOM)
 			goto out_of_memory;

@@ -20,7 +20,6 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
-#include <linux/marker.h>
 
 #include <asm/atomic.h>
 #include <asm/cacheflush.h>
@@ -262,14 +261,7 @@ void arm_notify_die(const char *str, struct pt_regs *regs,
 		current->thread.error_code = err;
 		current->thread.trap_no = trap;
 
-		trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld",
-			current->thread.trap_no,
-			instruction_pointer(regs));
-
 		force_sig_info(info->si_signo, info, current);
-
-		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
-
 	} else {
 		die(str, regs, err);
 	}

@@ -25,7 +25,6 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/io.h>
-#include <linux/marker.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
@@ -395,7 +394,6 @@ ATTRIB_NORET void kernel_thread_helper(void *arg, int (*fn)(void *))
  */
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
-	int pid;
 	struct pt_regs regs;
 
 	memset(&regs, 0, sizeof(regs));
@@ -405,10 +403,8 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 	regs.pc = (unsigned long)kernel_thread_helper;
 	regs.sr = (1 << 30);
 
-	pid = do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0,
+	return do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0,
 		       &regs, 0, NULL, NULL);
-	trace_mark(kernel_arch_kthread_create, "pid %d fn %p", pid, fn);
-	return pid;
 }
 
 /*

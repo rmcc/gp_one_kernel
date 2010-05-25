@@ -23,7 +23,6 @@
 #include <linux/kdebug.h>
 #include <linux/kexec.h>
 #include <linux/limits.h>
-#include <linux/marker.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/fpu.h>
@@ -546,9 +545,6 @@ asmlinkage void do_address_error(struct pt_regs *regs,
 	lookup_exception_vector(error_code);
 #endif
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %lu ip #p%ld",
-		(error_code >> 5), instruction_pointer(regs));
-
 	oldfs = get_fs();
 
 	if (user_mode(regs)) {
@@ -576,10 +572,8 @@ asmlinkage void do_address_error(struct pt_regs *regs,
 					      &user_mem_access);
 		set_fs(oldfs);
 
-		if (!tmp) {
-			trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
+		if (tmp==0)
 			return; /* sorted */
-		}
 uspace_segv:
 		printk(KERN_NOTICE "Sending SIGBUS to \"%s\" due to unaligned "
 		       "access (PC %lx PR %lx)\n", current->comm, regs->pc,
@@ -607,7 +601,6 @@ uspace_segv:
 		handle_unaligned_access(instruction, regs, &user_mem_access);
 		set_fs(oldfs);
 	}
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #ifdef CONFIG_SH_DSP

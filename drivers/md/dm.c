@@ -22,7 +22,6 @@
 #include <linux/hdreg.h>
 #include <linux/blktrace_api.h>
 #include <linux/smp_lock.h>
-#include <trace/block.h>
 
 #define DM_MSG_PREFIX "core"
 
@@ -515,7 +514,7 @@ static void dec_pending(struct dm_io *io, int error)
 			wake_up(&io->md->wait);
 
 		if (io->error != DM_ENDIO_REQUEUE) {
-			trace_block_bio(io->md->queue, io->bio,
+			blk_add_trace_bio(io->md->queue, io->bio,
 					  BLK_TA_COMPLETE);
 
 			bio_endio(io->bio, io->error);
@@ -609,7 +608,7 @@ static void __map_bio(struct dm_target *ti, struct bio *clone,
 	if (r == DM_MAPIO_REMAPPED) {
 		/* the bio has been remapped so dispatch it */
 
-		trace_block_remap(bdev_get_queue(clone->bi_bdev), clone,
+		blk_add_trace_remap(bdev_get_queue(clone->bi_bdev), clone,
 				    tio->io->bio->bi_bdev->bd_dev,
 				    clone->bi_sector, sector);
 

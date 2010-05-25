@@ -163,7 +163,6 @@ struct lockdep_map {
 	struct lock_class_key		*key;
 	struct lock_class		*class_cache;
 	const char			*name;
-	unsigned long			hardirqs_off_ip;
 #ifdef CONFIG_LOCK_STAT
 	int				cpu;
 #endif

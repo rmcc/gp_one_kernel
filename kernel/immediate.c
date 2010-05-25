@@ -19,25 +19,95 @@
 #include <linux/mutex.h>
 #include <linux/immediate.h>
 #include <linux/memory.h>
+#include <linux/cpu.h>
+#include <linux/stop_machine.h>
 
-#include <asm/sections.h>
+#include <asm/cacheflush.h>
+#include <asm/atomic.h>
 
 /*
  * Kernel ready to execute the SMP update that may depend on trap and ipi.
  */
 static int imv_early_boot_complete;
+static atomic_t stop_machine_first;
+static int wrote_text;
 
-extern struct __imv __start___imv[];
-extern struct __imv __stop___imv[];
-extern unsigned long __start___imv_cond_end[];
-extern unsigned long __stop___imv_cond_end[];
+extern const struct __imv __start___imv[];
+extern const struct __imv __stop___imv[];
+
+static int stop_machine_imv_update(void *imv_ptr)
+{
+	struct __imv *imv = imv_ptr;
+
+	if (atomic_dec_and_test(&stop_machine_first)) {
+		text_poke((void *)imv->imv, (void *)imv->var, imv->size);
+		smp_wmb(); /* make sure other cpus see that this has run */
+		wrote_text = 1;
+	} else {
+		while (!wrote_text)
+			smp_rmb();
+		sync_core();
+	}
+
+	flush_icache_range(imv->imv, imv->imv + imv->size);
+
+	return 0;
+}
 
 /*
- * imv_mutex nests inside the preemptable module_psrwlock read lock. It also
- * nests inside markers_mutex and tracepoint_mutex. imv_mutex protects builtin
+ * imv_mutex nests inside module_mutex. imv_mutex protects builtin
  * immediates and module immediates.
  */
 static DEFINE_MUTEX(imv_mutex);
+
+/**
+ * apply_imv_update - update one immediate value
+ * @imv: pointer of type const struct __imv to update
+ *
+ * Update one immediate value. Must be called with imv_mutex held.
+ * It makes sure all CPUs are not executing the modified code by having them
+ * busy looping with interrupts disabled.
+ * It does _not_ protect against NMI and MCE (could be a problem with Intel's
+ * errata if we use immediate values in their code path).
+ */
+static int apply_imv_update(const struct __imv *imv)
+{
+	/*
+	 * If the variable and the instruction have the same value, there is
+	 * nothing to do.
+	 */
+	switch (imv->size) {
+	case 1:	if (*(uint8_t *)imv->imv
+				== *(uint8_t *)imv->var)
+			return 0;
+		break;
+	case 2:	if (*(uint16_t *)imv->imv
+				== *(uint16_t *)imv->var)
+			return 0;
+		break;
+	case 4:	if (*(uint32_t *)imv->imv
+				== *(uint32_t *)imv->var)
+			return 0;
+		break;
+	case 8:	if (*(uint64_t *)imv->imv
+				== *(uint64_t *)imv->var)
+			return 0;
+		break;
+	default:return -EINVAL;
+	}
+
+	if (imv_early_boot_complete) {
+		kernel_text_lock();
+		atomic_set(&stop_machine_first, 1);
+		wrote_text = 0;
+		stop_machine_run(stop_machine_imv_update, (void *)imv,
+					ALL_CPUS);
+		kernel_text_unlock();
+	} else
+		text_poke_early((void *)imv->imv, (void *)imv->var,
+				imv->size);
+	return 0;
+}
 
 /**
  * imv_update_range - Update immediate values in a range
@@ -46,26 +116,21 @@ static DEFINE_MUTEX(imv_mutex);
  *
  * Updates a range of immediates.
  */
-void imv_update_range(struct __imv *begin,
-		struct __imv *end)
+void imv_update_range(const struct __imv *begin,
+		const struct __imv *end)
 {
-	struct __imv *iter;
+	const struct __imv *iter;
 	int ret;
 	for (iter = begin; iter < end; iter++) {
 		mutex_lock(&imv_mutex);
-		if (!iter->imv)	/* Skip removed __init immediate values */
-			goto skip;
-		kernel_text_lock();
-		ret = arch_imv_update(iter, !imv_early_boot_complete);
-		kernel_text_unlock();
+		ret = apply_imv_update(iter);
 		if (imv_early_boot_complete && ret)
 			printk(KERN_WARNING
 				"Invalid immediate value. "
 				"Variable at %p, "
 				"instruction at %p, size %hu\n",
-			        (void *)(long)iter->imv,
-			        (void *)(long)iter->var, iter->size);
-skip:
+				(void *)iter->imv,
+				(void *)iter->var, iter->size);
 		mutex_unlock(&imv_mutex);
 	}
 }
@@ -82,65 +147,6 @@ void core_imv_update(void)
 	imv_update_range(__start___imv, __stop___imv);
 }
 EXPORT_SYMBOL_GPL(core_imv_update);
-
-/**
- * imv_unref
- *
- * Deactivate any immediate value reference pointing into the code region in the
- * range start to start + size.
- */
-void imv_unref(struct __imv *begin, struct __imv *end, void *start,
-		unsigned long size)
-{
-	struct __imv *iter;
-
-	for (iter = begin; iter < end; iter++)
-		if (iter->imv >= (unsigned long)start
-			&& iter->imv < (unsigned long)start + size)
-			iter->imv = 0UL;
-}
-
-void imv_unref_core_init(void)
-{
-	imv_unref(__start___imv, __stop___imv, __init_begin,
-		(unsigned long)__init_end - (unsigned long)__init_begin);
-}
-
-int _is_imv_cond_end(unsigned long *begin, unsigned long *end,
-		unsigned long addr1, unsigned long addr2)
-{
-	unsigned long *iter;
-	int found = 0;
-
-	for (iter = begin; iter < end; iter++) {
-		if (*iter == addr1)	/* deals with addr1 == addr2 */
-			found++;
-		if (*iter == addr2)
-			found++;
-		if (found == 2)
-			return 1;
-	}
-	return 0;
-}
-
-/**
- * is_imv_cond_end
- *
- * Check if the two given addresses are located in the immediate value condition
- * end table. Addresses should be in the same object.
- * The module mutex should be held when calling this function for non-core
- * addresses.
- */
-int is_imv_cond_end(unsigned long addr1, unsigned long addr2)
-{
-	if (core_kernel_text(addr1)) {
-		return _is_imv_cond_end(__start___imv_cond_end,
-			__stop___imv_cond_end, addr1, addr2);
-	} else {
-		return is_imv_cond_end_module(addr1, addr2);
-	}
-	return 0;
-}
 
 void __init imv_init_complete(void)
 {

@@ -43,7 +43,6 @@ ifeq ($(CONFIG_X86_32),y)
 
         # temporary until string.h is fixed
         KBUILD_CFLAGS += -ffreestanding
-        export USE_IMMEDIATE := $(CONFIG_IMMEDIATE)
 else
         BITS := 64
         UTS_MACHINE := x86_64
@@ -79,10 +78,6 @@ else
                 "$(CC)" -fstack-protector-all )
 
         KBUILD_CFLAGS += $(stackp-y)
-
-        # x86_64 gcc 3.x has problems with passing symbol+offset in
-        # asm "i" constraint.
-        export USE_IMMEDIATE := $(call cc-ifversion, -ge, 0400, $(CONFIG_IMMEDIATE))
 endif
 
 # Stackpointer is addressed different for 32 bit and 64 bit x86

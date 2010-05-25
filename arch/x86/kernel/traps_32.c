@@ -32,8 +32,6 @@
 #include <linux/bug.h>
 #include <linux/nmi.h>
 #include <linux/mm.h>
-#include <linux/ltt-core.h>
-#include <linux/marker.h>
 
 #ifdef CONFIG_EISA
 #include <linux/ioport.h>
@@ -61,7 +59,6 @@
 #include <asm/smp.h>
 #include <asm/io.h>
 #include <asm/traps.h>
-#include <asm/unistd.h>
 
 #include "mach_traps.h"
 
@@ -73,9 +70,6 @@ asmlinkage int system_call(void);
 /* Do we ignore FPU interrupts ? */
 char ignore_fpu_irq;
 
-extern unsigned long sys_call_table[];
-extern unsigned long syscall_table_size;
-
 /*
  * The IDT has to be page-aligned to simplify the Pentium
  * F0 0F bug workaround.. We have a special link segment
@@ -83,21 +77,6 @@ extern unsigned long syscall_table_size;
  */
 gate_desc idt_table[256]
 	__attribute__((__section__(".data.idt"))) = { { { { 0, 0 } } }, };
-
-void ltt_dump_idt_table(void *call_data)
-{
-	int i;
-	char namebuf[KSYM_NAME_LEN];
-
-	for (i = 0; i < IDT_ENTRIES; i++) {
-		unsigned long address = gate_offset(idt_table[i]);
-		sprint_symbol(namebuf, address);
-		__trace_mark(0, statedump_idt_table, call_data,
-			"irq %d address %p symbol %s",
-			i, (void *)address, namebuf);
-	}
-}
-EXPORT_SYMBOL_GPL(ltt_dump_idt_table);
 
 int panic_on_unrecovered_nmi;
 int kstack_depth_to_print = 24;
@@ -423,9 +402,6 @@ void __kprobes oops_end(unsigned long flags, struct pt_regs *regs, int signr)
 	if (kexec_should_crash(current))
 		crash_kexec(regs);
 
-	if (in_nmi())
-		panic("Fatal exception in non-maskable interrupt");
-
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
 
@@ -452,10 +428,6 @@ int __kprobes __die(const char *str, struct pt_regs *regs, long err)
 	printk("DEBUG_PAGEALLOC");
 #endif
 	printk("\n");
-#ifdef CONFIG_LTT
-	printk(KERN_EMERG "LTT NESTING LEVEL : %u", __get_cpu_var(ltt_nesting));
-	printk("\n");
-#endif
 	if (notify_die(DIE_OOPS, str, regs, err,
 			current->thread.trap_no, SIGSEGV) == NOTIFY_STOP)
 		return 1;
@@ -507,9 +479,6 @@ do_trap(int trapnr, int signr, char *str, int vm86, struct pt_regs *regs,
 {
 	struct task_struct *tsk = current;
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld", trapnr,
-		instruction_pointer(regs));
-
 	if (regs->flags & X86_VM_MASK) {
 		if (vm86)
 			goto vm86_trap;
@@ -536,7 +505,7 @@ trap_signal:
 		force_sig_info(signr, info, tsk);
 	else
 		force_sig(signr, tsk);
-	goto end;
+	return;
 
 kernel_trap:
 	if (!fixup_exception(regs)) {
@@ -544,14 +513,13 @@ kernel_trap:
 		tsk->thread.trap_no = trapnr;
 		die(str, regs, error_code);
 	}
-	goto end;
+	return;
 
 vm86_trap:
 	if (handle_vm86_trap((struct kernel_vm86_regs *) regs,
 						error_code, trapnr))
 		goto trap_signal;
-end:
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
+	return;
 }
 
 #define DO_ERROR(trapnr, signr, str, name)				\
@@ -605,7 +573,7 @@ void do_##name(struct pt_regs *regs, long error_code)			\
 }
 
 DO_VM86_ERROR_INFO(0, SIGFPE, "divide error", divide_error, FPE_INTDIV, regs->ip)
-#if !defined(CONFIG_KPROBES) && !defined(USE_IMMEDIATE)
+#ifndef CONFIG_KPROBES
 DO_VM86_ERROR(3, SIGTRAP, "int3", int3)
 #endif
 DO_VM86_ERROR(4, SIGSEGV, "overflow", overflow)
@@ -679,10 +647,7 @@ do_general_protection(struct pt_regs *regs, long error_code)
 		printk("\n");
 	}
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld", 13,
-			instruction_pointer(regs));
 	force_sig(SIGSEGV, tsk);
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 
 gp_in_vm86:
@@ -820,30 +785,27 @@ static notrace __kprobes void default_do_nmi(struct pt_regs *regs)
 	if (!cpu)
 		reason = get_nmi_reason();
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld", 2,
-		instruction_pointer(regs));
-
 	if (!(reason & 0xc0)) {
 		if (notify_die(DIE_NMI_IPI, "nmi_ipi", regs, reason, 2, SIGINT)
 								== NOTIFY_STOP)
-			goto end;
+			return;
 #ifdef CONFIG_X86_LOCAL_APIC
 		/*
 		 * Ok, so this is none of the documented NMI sources,
 		 * so it must be the NMI watchdog.
 		 */
 		if (nmi_watchdog_tick(regs, reason))
-			goto end;
+			return;
 		if (!do_nmi_callback(regs, cpu))
 			unknown_nmi_error(reason, regs);
 #else
 		unknown_nmi_error(reason, regs);
 #endif
 
-		goto end;
+		return;
 	}
 	if (notify_die(DIE_NMI, "nmi", regs, reason, 2, SIGINT) == NOTIFY_STOP)
-		goto end;
+		return;
 
 	/* AK: following checks seem to be broken on modern chipsets. FIXME */
 	if (reason & 0x80)
@@ -855,8 +817,6 @@ static notrace __kprobes void default_do_nmi(struct pt_regs *regs)
 	 * as it's edge-triggered:
 	 */
 	reassert_nmi();
-end:
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 notrace __kprobes void do_nmi(struct pt_regs *regs, long error_code)
@@ -887,7 +847,7 @@ void restart_nmi(void)
 	acpi_nmi_enable();
 }
 
-#if defined(CONFIG_KPROBES) || defined(USE_IMMEDIATE)
+#ifdef CONFIG_KPROBES
 void __kprobes do_int3(struct pt_regs *regs, long error_code)
 {
 	trace_hardirqs_fixup();
@@ -896,8 +856,8 @@ void __kprobes do_int3(struct pt_regs *regs, long error_code)
 			== NOTIFY_STOP)
 		return;
 	/*
-	 * This is an interrupt gate, because kprobes and immediate values wants
-	 * interrupts disabled. Normal trap handlers don't.
+	 * This is an interrupt gate, because kprobes wants interrupts
+	 * disabled. Normal trap handlers don't.
 	 */
 	restore_interrupts(regs);
 
@@ -976,10 +936,7 @@ void __kprobes do_debug(struct pt_regs *regs, long error_code)
 	}
 
 	/* Ok, finally something we can handle */
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
-			1, instruction_pointer(regs));
 	send_sigtrap(tsk, regs, error_code);
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 
 	/*
 	 * Disable additional traps. They'll be re-enabled when
@@ -990,10 +947,7 @@ clear_dr7:
 	return;
 
 debug_vm86:
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
-			1, instruction_pointer(regs));
 	handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 
 clear_TF_reenable:
@@ -1144,13 +1098,10 @@ void do_simd_coprocessor_error(struct pt_regs *regs, long error_code)
 
 void do_spurious_interrupt_bug(struct pt_regs *regs, long error_code)
 {
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld",
-		16, instruction_pointer(regs));
 #if 0
 	/* No need to warn about this any longer. */
 	printk(KERN_INFO "Ignoring P6 Local APIC Spurious Interrupt Bug...\n");
 #endif
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 unsigned long patch_espfix_desc(unsigned long uesp, unsigned long kesp)
@@ -1171,20 +1122,6 @@ unsigned long patch_espfix_desc(unsigned long uesp, unsigned long kesp)
 
 	return new_kesp;
 }
-
-void ltt_dump_sys_call_table(void *call_data)
-{
-	int i;
-	char namebuf[KSYM_NAME_LEN];
-
-	for (i = 0; i < NR_syscalls; i++) {
-		sprint_symbol(namebuf, sys_call_table[i]);
-		__trace_mark(0, statedump_sys_call_table, call_data,
-			"id %d address %p symbol %s",
-			i, (void*)sys_call_table[i], namebuf);
-	}
-}
-EXPORT_SYMBOL_GPL(ltt_dump_sys_call_table);
 
 /*
  * 'math_state_restore()' saves the current math information in the
@@ -1230,10 +1167,8 @@ asmlinkage void math_emulate(long arg)
 	printk(KERN_EMERG
 		"math-emulation not enabled and no coprocessor found.\n");
 	printk(KERN_EMERG "killing %s.\n", current->comm);
-	trace_mark(kernel_arch_trap_entry, "trap_id %d ip #p%ld", 7, 0L);
 	force_sig(SIGFPE, current);
 	schedule();
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #endif /* CONFIG_MATH_EMULATION */

@@ -20,7 +20,8 @@
 #include <asm/ftrace.h>
 
 
-static const unsigned char ftrace_nop[] = { 0xeb, 0x03, 0x00, 0x00, 0x00 };
+/* Long is fine, even if it is only 4 bytes ;-) */
+static long *ftrace_nop;
 
 union ftrace_code_union {
 	char code[MCOUNT_INSN_SIZE];
@@ -128,9 +129,13 @@ notrace int ftrace_mcount_set(unsigned long *data)
 
 int __init ftrace_dyn_arch_init(void *data)
 {
+	const unsigned char *const *noptable = find_nop_table();
+
 	/* This is running in kstop_machine */
 
 	ftrace_mcount_set(data);
+
+	ftrace_nop = (unsigned long *)noptable[MCOUNT_INSN_SIZE];
 
 	return 0;
 }

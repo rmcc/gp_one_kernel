@@ -188,7 +188,6 @@ void *generic_pipe_buf_map(struct pipe_inode_info *pipe,
 
 	return kmap(buf->page);
 }
-EXPORT_SYMBOL_GPL(generic_pipe_buf_map);
 
 /**
  * generic_pipe_buf_unmap - unmap a previously mapped pipe buffer
@@ -208,7 +207,6 @@ void generic_pipe_buf_unmap(struct pipe_inode_info *pipe,
 	} else
 		kunmap(buf->page);
 }
-EXPORT_SYMBOL_GPL(generic_pipe_buf_unmap);
 
 /**
  * generic_pipe_buf_steal - attempt to take ownership of a &pipe_buffer
@@ -239,7 +237,6 @@ int generic_pipe_buf_steal(struct pipe_inode_info *pipe,
 
 	return 1;
 }
-EXPORT_SYMBOL_GPL(generic_pipe_buf_steal);
 
 /**
  * generic_pipe_buf_get - get a reference to a &struct pipe_buffer
@@ -255,7 +252,6 @@ void generic_pipe_buf_get(struct pipe_inode_info *pipe, struct pipe_buffer *buf)
 {
 	page_cache_get(buf->page);
 }
-EXPORT_SYMBOL_GPL(generic_pipe_buf_get);
 
 /**
  * generic_pipe_buf_confirm - verify contents of the pipe buffer
@@ -271,7 +267,6 @@ int generic_pipe_buf_confirm(struct pipe_inode_info *info,
 {
 	return 0;
 }
-EXPORT_SYMBOL_GPL(generic_pipe_buf_confirm);
 
 static const struct pipe_buf_operations anon_pipe_buf_ops = {
 	.can_merge = 1,

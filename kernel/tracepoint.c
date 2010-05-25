@@ -24,7 +24,6 @@
 #include <linux/tracepoint.h>
 #include <linux/err.h>
 #include <linux/slab.h>
-#include <linux/immediate.h>
 
 extern struct tracepoint __start___tracepoints[];
 extern struct tracepoint __stop___tracepoints[];
@@ -33,8 +32,7 @@ extern struct tracepoint __stop___tracepoints[];
 static const int tracepoint_debug;
 
 /*
- * tracepoints_mutex nests inside the preemptable module_psrwlock read lock.
- * It also nests inside the markers_mutex. Tracepoints mutex protects the
+ * tracepoints_mutex nests inside module_mutex. Tracepoints mutex protects the
  * builtin and module tracepoints and the hash table.
  */
 static DEFINE_MUTEX(tracepoints_mutex);
@@ -82,7 +80,10 @@ static void tracepoint_entry_free_old(struct tracepoint_entry *entry, void *old)
 	entry->rcu_pending = 1;
 	/* write rcu_pending before calling the RCU callback */
 	smp_wmb();
-	call_rcu_sched(&entry->rcu, free_old_closure);
+#ifdef CONFIG_PREEMPT_RCU
+	synchronize_sched();	/* Until we have the call_rcu_sched() */
+#endif
+	call_rcu(&entry->rcu, free_old_closure);
 }
 
 static void debug_print_probes(struct tracepoint_entry *entry)
@@ -133,9 +134,6 @@ tracepoint_entry_remove_probe(struct tracepoint_entry *entry, void *probe)
 
 	old = entry->funcs;
 
-	if (!old)
-		return NULL;
-
 	debug_print_probes(entry);
 	/* (N -> M), (N > 1, M >= 0) probes */
 	for (nr_probes = 0; old[nr_probes]; nr_probes++) {
@@ -179,7 +177,7 @@ static struct tracepoint_entry *get_tracepoint(const char *name)
 	struct tracepoint_entry *e;
 	u32 hash = jhash(name, strlen(name), 0);
 
-	head = &tracepoint_table[hash & (TRACEPOINT_TABLE_SIZE - 1)];
+	head = &tracepoint_table[hash & ((1 << TRACEPOINT_HASH_BITS)-1)];
 	hlist_for_each_entry(e, node, head, hlist) {
 		if (!strcmp(name, e->name))
 			return e;
@@ -199,7 +197,7 @@ static struct tracepoint_entry *add_tracepoint(const char *name)
 	size_t name_len = strlen(name) + 1;
 	u32 hash = jhash(name, name_len-1, 0);
 
-	head = &tracepoint_table[hash & (TRACEPOINT_TABLE_SIZE - 1)];
+	head = &tracepoint_table[hash & ((1 << TRACEPOINT_HASH_BITS)-1)];
 	hlist_for_each_entry(e, node, head, hlist) {
 		if (!strcmp(name, e->name)) {
 			printk(KERN_NOTICE
@@ -235,7 +233,7 @@ static int remove_tracepoint(const char *name)
 	size_t len = strlen(name) + 1;
 	u32 hash = jhash(name, len-1, 0);
 
-	head = &tracepoint_table[hash & (TRACEPOINT_TABLE_SIZE - 1)];
+	head = &tracepoint_table[hash & ((1 << TRACEPOINT_HASH_BITS)-1)];
 	hlist_for_each_entry(e, node, head, hlist) {
 		if (!strcmp(name, e->name)) {
 			found = 1;
@@ -247,9 +245,9 @@ static int remove_tracepoint(const char *name)
 	if (e->refcount)
 		return -EBUSY;
 	hlist_del(&e->hlist);
-	/* Make sure the call_rcu_sched has been executed */
+	/* Make sure the call_rcu has been executed */
 	if (e->rcu_pending)
-		rcu_barrier_sched();
+		rcu_barrier();
 	kfree(e);
 	return 0;
 }
@@ -270,7 +268,7 @@ static void set_tracepoint(struct tracepoint_entry **entry,
 	 * is used.
 	 */
 	rcu_assign_pointer(elem->funcs, (*entry)->funcs);
-	elem->state__imv = active;
+	elem->state = active;
 }
 
 /*
@@ -281,7 +279,7 @@ static void set_tracepoint(struct tracepoint_entry **entry,
  */
 static void disable_tracepoint(struct tracepoint *elem)
 {
-	elem->state__imv = 0;
+	elem->state = 0;
 }
 
 /**
@@ -320,9 +318,6 @@ static void tracepoint_update_probes(void)
 		__stop___tracepoints);
 	/* tracepoints in modules. */
 	module_update_tracepoints();
-	/* Update immediate values */
-	core_imv_update();
-	module_imv_update();
 }
 
 /**
@@ -349,11 +344,11 @@ int tracepoint_probe_register(const char *name, void *probe)
 		}
 	}
 	/*
-	 * If we detect that a call_rcu_sched is pending for this tracepoint,
+	 * If we detect that a call_rcu is pending for this tracepoint,
 	 * make sure it's executed now.
 	 */
 	if (entry->rcu_pending)
-		rcu_barrier_sched();
+		rcu_barrier();
 	old = tracepoint_entry_add_probe(entry, probe);
 	if (IS_ERR(old)) {
 		ret = PTR_ERR(old);
@@ -364,8 +359,6 @@ int tracepoint_probe_register(const char *name, void *probe)
 	mutex_lock(&tracepoints_mutex);
 	entry = get_tracepoint(name);
 	WARN_ON(!entry);
-	if (entry->rcu_pending)
-		rcu_barrier_sched();
 	tracepoint_entry_free_old(entry, old);
 end:
 	mutex_unlock(&tracepoints_mutex);
@@ -394,21 +387,14 @@ int tracepoint_probe_unregister(const char *name, void *probe)
 	if (!entry)
 		goto end;
 	if (entry->rcu_pending)
-		rcu_barrier_sched();
+		rcu_barrier();
 	old = tracepoint_entry_remove_probe(entry, probe);
-	if (!old) {
-		printk(KERN_WARNING "Warning: Trying to unregister a probe"
-				    "that doesn't exist\n");
-		goto end;
-	}
 	mutex_unlock(&tracepoints_mutex);
 	tracepoint_update_probes();		/* may update entry */
 	mutex_lock(&tracepoints_mutex);
 	entry = get_tracepoint(name);
 	if (!entry)
 		goto end;
-	if (entry->rcu_pending)
-		rcu_barrier_sched();
 	tracepoint_entry_free_old(entry, old);
 	remove_tracepoint(name);	/* Ignore busy error message */
 	ret = 0;

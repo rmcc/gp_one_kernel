@@ -96,7 +96,6 @@
 
 #include <net/sock.h>
 #include <linux/netfilter.h>
-#include <trace/socket.h>
 
 #ifdef CONFIG_UID_STAT
 #include <linux/uid_stat.h>
@@ -585,7 +584,6 @@ int sock_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	ret = __sock_sendmsg(&iocb, sock, msg, size);
 	if (-EIOCBQUEUED == ret)
 		ret = wait_on_sync_kiocb(&iocb);
-	trace_socket_sendmsg(sock, msg, size, ret);
 	return ret;
 }
 
@@ -674,7 +672,6 @@ int sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	ret = __sock_recvmsg(&iocb, sock, msg, size, flags);
 	if (-EIOCBQUEUED == ret)
 		ret = wait_on_sync_kiocb(&iocb);
-	trace_socket_recvmsg(sock, msg, size, flags, ret);
 	return ret;
 }
 
@@ -1261,7 +1258,6 @@ asmlinkage long sys_socket(int family, int type, int protocol)
 	if (retval < 0)
 		goto out_release;
 
-	trace_socket_create(sock, retval);
 out:
 	/* It may be already another descriptor 8) Not kernel problem. */
 	return retval;
@@ -2147,8 +2143,6 @@ asmlinkage long sys_socketcall(int call, unsigned long __user *args)
 
 	a0 = a[0];
 	a1 = a[1];
-
-	trace_socket_call(call, a0);
 
 	switch (call) {
 	case SYS_SOCKET:

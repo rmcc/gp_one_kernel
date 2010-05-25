@@ -15,7 +15,6 @@
 #include <linux/mm.h>
 #include <linux/hardirq.h>
 #include <linux/kprobes.h>
-#include <linux/marker.h>
 #include <asm/io_trapped.h>
 #include <asm/system.h>
 #include <asm/mmu_context.h>
@@ -93,14 +92,6 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 
 	mm = tsk->mm;
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld",
-		({
-			unsigned long trapnr;
-			asm volatile("stc	r2_bank,%0": "=r" (trapnr));
-			trapnr;
-		}) >> 5,
-		instruction_pointer(regs));
-
 	/*
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
@@ -153,7 +144,6 @@ survive:
 		tsk->min_flt++;
 
 	up_read(&mm->mmap_sem);
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 
 /*
@@ -170,7 +160,6 @@ bad_area_nosemaphore:
 		info.si_code = si_code;
 		info.si_addr = (void *) address;
 		force_sig_info(SIGSEGV, &info, tsk);
-		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 	}
 
@@ -251,8 +240,6 @@ do_sigbus:
 	/* Kernel mode? Handle exceptions or die */
 	if (!user_mode(regs))
 		goto no_context;
-
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #ifdef CONFIG_SH_STORE_QUEUES

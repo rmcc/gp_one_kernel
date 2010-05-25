@@ -1,7 +1,6 @@
 #include <linux/spinlock.h>
 #include <linux/cpu.h>
 #include <linux/interrupt.h>
-#include <trace/irq.h>
 
 #include <asm/tlbflush.h>
 
@@ -105,8 +104,6 @@ void smp_invalidate_interrupt(struct pt_regs *regs)
 		 * BUG();
 		 */
 
-	trace_irq_entry(INVALIDATE_TLB_VECTOR, regs);
-
 	if (flush_mm == per_cpu(cpu_tlbstate, cpu).active_mm) {
 		if (per_cpu(cpu_tlbstate, cpu).state == TLBSTATE_OK) {
 			if (flush_va == TLB_FLUSH_ALL)
@@ -123,7 +120,6 @@ void smp_invalidate_interrupt(struct pt_regs *regs)
 out:
 	put_cpu_no_resched();
 	__get_cpu_var(irq_stat).irq_tlb_count++;
-	trace_irq_exit(IRQ_HANDLED);
 }
 
 void native_flush_tlb_others(const cpumask_t *cpumaskp, struct mm_struct *mm,

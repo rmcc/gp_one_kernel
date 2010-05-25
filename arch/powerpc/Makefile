@@ -94,8 +94,6 @@ else
 LDFLAGS_MODULE	+= arch/powerpc/lib/crtsavres.o
 endif
 
-export USE_IMMEDIATE := $(CONFIG_IMMEDIATE)
-
 ifeq ($(CONFIG_TUNE_CELL),y)
 	KBUILD_CFLAGS += $(call cc-option,-mtune=cell)
 endif

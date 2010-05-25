@@ -81,7 +81,6 @@ static void __exit probe_fini(void)
 			probe_array[i].probe_func, &probe_array[i]);
 	printk(KERN_INFO "Number of event b : %u\n",
 			atomic_read(&eventb_count));
-	marker_synchronize_unregister();
 }
 
 module_init(probe_init);

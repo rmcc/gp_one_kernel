@@ -78,7 +78,6 @@
 #include <linux/smp.h>
 #include <linux/sched.h>
 #include <linux/debugfs.h>
-#include <linux/marker.h>
 #include <asm/asm.h>
 #include <asm/branch.h>
 #include <asm/byteorder.h>
@@ -504,19 +503,14 @@ asmlinkage void do_ade(struct pt_regs *regs)
 	unsigned int __user *pc;
 	mm_segment_t seg;
 
-	trace_mark(kernel_arch_trap_entry, "trap_id %lu ip #p%ld",
-		CAUSE_EXCCODE(regs->cp0_cause), instruction_pointer(regs));
-
 	/*
 	 * Address errors may be deliberately induced by the FPU emulator to
 	 * retake control of the CPU after executing the instruction in the
 	 * delay slot of an emulated branch.
 	 */
 	/* Terminate if exception was recognized as a delay slot return */
-	if (do_dsemulret(regs)) {
-		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
+	if (do_dsemulret(regs))
 		return;
-	}
 
 	/* Otherwise handle as normal */
 
@@ -545,8 +539,6 @@ asmlinkage void do_ade(struct pt_regs *regs)
 	emulate_load_store_insn(regs, (void __user *)regs->cp0_badvaddr, pc);
 	set_fs(seg);
 
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
-
 	return;
 
 sigbus:
@@ -556,8 +548,6 @@ sigbus:
 	/*
 	 * XXX On return from the signal handler we should advance the epc
 	 */
-
-	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #ifdef CONFIG_DEBUG_FS

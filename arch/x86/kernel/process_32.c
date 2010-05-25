@@ -37,7 +37,6 @@
 #include <linux/tick.h>
 #include <linux/percpu.h>
 #include <linux/prctl.h>
-#include <linux/marker.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -234,7 +233,6 @@ extern void kernel_thread_helper(void);
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
 	struct pt_regs regs;
-	long pid;
 
 	memset(&regs, 0, sizeof(regs));
 
@@ -250,10 +248,7 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 	regs.flags = X86_EFLAGS_IF | X86_EFLAGS_SF | X86_EFLAGS_PF | 0x2;
 
 	/* Ok, create the new process.. */
-	pid = do_fork(flags | CLONE_VM | CLONE_UNTRACED,
-			0, &regs, 0, NULL, NULL);
-	trace_mark(kernel_arch_kthread_create, "pid %ld fn %p", pid, fn);
-	return pid;
+	return do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0, &regs, 0, NULL, NULL);
 }
 EXPORT_SYMBOL(kernel_thread);
 

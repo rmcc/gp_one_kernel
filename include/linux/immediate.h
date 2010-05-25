@@ -10,7 +10,18 @@
  * See the file COPYING for more details.
  */
 
-#ifdef USE_IMMEDIATE
+#ifdef CONFIG_IMMEDIATE
+
+struct __imv {
+	unsigned long var;	/* Pointer to the identifier variable of the
+				 * immediate value
+				 */
+	unsigned long imv;	/*
+				 * Pointer to the memory location of the
+				 * immediate value within the instruction.
+				 */
+	unsigned char size;	/* Type size. */
+} __attribute__ ((packed));
 
 #include <asm/immediate.h>
 
@@ -33,13 +44,8 @@
  * Internal update functions.
  */
 extern void core_imv_update(void);
-extern void imv_update_range(struct __imv *begin, struct __imv *end);
-extern void imv_unref_core_init(void);
-extern void imv_unref(struct __imv *begin, struct __imv *end, void *start,
-		unsigned long size);
-extern int _is_imv_cond_end(unsigned long *begin, unsigned long *end,
-		unsigned long addr1, unsigned long addr2);
-extern int is_imv_cond_end(unsigned long addr1, unsigned long addr2);
+extern void imv_update_range(const struct __imv *begin,
+	const struct __imv *end);
 
 #else
 
@@ -56,15 +62,6 @@ extern int is_imv_cond_end(unsigned long addr1, unsigned long addr2);
 #define imv_read(name)			_imv_read(name)
 
 /**
- * imv_cond - read immediate variable use as condition for if()
- * @name: immediate value name
- *
- * Reads the value of @name.
- */
-#define imv_cond(name)			_imv_read(name)
-#define imv_cond_end()
-
-/**
  * imv_set - set immediate variable (with locking)
  * @name: immediate value name
  * @i: required value
@@ -75,7 +72,7 @@ extern int is_imv_cond_end(unsigned long addr1, unsigned long addr2);
 #define imv_set(name, i)		(name##__imv = (i))
 
 static inline void core_imv_update(void) { }
-static inline void imv_unref_core_init(void) { }
+static inline void module_imv_update(void) { }
 
 #endif
 

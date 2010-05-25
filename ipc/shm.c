@@ -39,7 +39,6 @@
 #include <linux/nsproxy.h>
 #include <linux/mount.h>
 #include <linux/ipc_namespace.h>
-#include <trace/ipc.h>
 
 #include <asm/uaccess.h>
 
@@ -446,7 +445,6 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 	struct ipc_namespace *ns;
 	struct ipc_ops shm_ops;
 	struct ipc_params shm_params;
-	long err;
 
 	ns = current->nsproxy->ipc_ns;
 
@@ -458,9 +456,7 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 	shm_params.flg = shmflg;
 	shm_params.u.size = size;
 
-	err = ipcget(ns, &shm_ids(ns), &shm_ops, &shm_params);
-	trace_ipc_shm_create(err, shmflg);
-	return err;
+	return ipcget(ns, &shm_ids(ns), &shm_ops, &shm_params);
 }
 
 static inline unsigned long copy_shmid_to_user(void __user *buf, struct shmid64_ds *in, int version)

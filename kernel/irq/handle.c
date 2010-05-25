@@ -15,7 +15,6 @@
 #include <linux/random.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
-#include <trace/irq.h>
 
 #include "internals.h"
 
@@ -60,7 +59,6 @@ struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned_in_smp = {
 #endif
 	}
 };
-EXPORT_SYMBOL(irq_desc);
 
 /*
  * What should we do if we get a hw irq event on an illegal vector?
@@ -121,7 +119,14 @@ irqreturn_t no_action(int cpl, void *dev_id)
 	return IRQ_NONE;
 }
 
-static irqreturn_t _handle_IRQ_event(unsigned int irq, struct irqaction *action)
+/**
+ * handle_IRQ_event - irq action chain handler
+ * @irq:	the interrupt number
+ * @action:	the interrupt action chain for this irq
+ *
+ * Handles the action chain of an irq event
+ */
+irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 {
 	irqreturn_t ret, retval = IRQ_NONE;
 	unsigned int status = 0;
@@ -174,9 +179,7 @@ unsigned int __do_IRQ(unsigned int irq)
 		if (desc->chip->ack)
 			desc->chip->ack(irq);
 		if (likely(!(desc->status & IRQ_DISABLED))) {
-			trace_irq_entry(irq, NULL);
-			action_ret = _handle_IRQ_event(irq, desc->action);
-			trace_irq_exit(action_ret);
+			action_ret = handle_IRQ_event(irq, desc->action);
 			if (!noirqdebug)
 				note_interrupt(irq, desc, action_ret);
 		}
@@ -230,9 +233,7 @@ unsigned int __do_IRQ(unsigned int irq)
 
 		spin_unlock(&desc->lock);
 
-		trace_irq_entry(irq, NULL);
-		action_ret = _handle_IRQ_event(irq, action);
-		trace_irq_exit(action_ret);
+		action_ret = handle_IRQ_event(irq, action);
 		if (!noirqdebug)
 			note_interrupt(irq, desc, action_ret);
 
@@ -254,23 +255,6 @@ out:
 	return 1;
 }
 #endif
-
-/**
- * handle_IRQ_event - irq action chain handler
- * @irq:	the interrupt number
- * @action:	the interrupt action chain for this irq
- *
- * Handles the action chain of an irq event
- */
-irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
-{
-	irqreturn_t ret;
-
-	trace_irq_entry(irq, NULL);
-	ret = _handle_IRQ_event(irq, action);
-	trace_irq_exit(ret);
-	return ret;
-}
 
 #ifdef CONFIG_TRACE_IRQFLAGS
 

@@ -20,7 +20,6 @@
 #include <linux/reboot.h>
 #include <linux/fs.h>
 #include <linux/preempt.h>
-#include <linux/marker.h>
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
@@ -162,7 +161,6 @@ __asm__(".align 5\n"
 /* Don't use this in BL=1(cli).  Or else, CPU resets! */
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
-	int pid;
 	struct pt_regs regs;
 
 	memset(&regs, 0, sizeof(regs));
@@ -173,10 +171,8 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 	regs.sr = (1 << 30);
 
 	/* Ok, create the new process.. */
-	pid = do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0,
+	return do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0,
 		       &regs, 0, NULL, NULL);
-	trace_mark(kernel_arch_kthread_create, "pid %d fn %p", pid, fn);
-	return pid;
 }
 
 /*

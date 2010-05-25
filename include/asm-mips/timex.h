@@ -63,8 +63,6 @@ static inline cycles_t get_cycles(void)
 }
 #endif
 
-extern unsigned int mips_hpt_frequency;
-
 #endif /* __KERNEL__ */
 
 #endif /*  _ASM_TIMEX_H */

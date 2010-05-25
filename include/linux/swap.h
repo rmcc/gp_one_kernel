@@ -274,8 +274,6 @@ static inline void disable_swap_token(void)
 	put_swap_token(swap_token_mm);
 }
 
-extern void ltt_dump_swap_files(void *call_data);
-
 #else /* CONFIG_SWAP */
 
 #define total_swap_pages			0
@@ -353,10 +351,6 @@ static inline swp_entry_t get_swap_page(void)
 #define grab_swap_token()  do { } while(0)
 #define has_swap_token(x) 0
 #define disable_swap_token() do { } while(0)
-
-static inline void ltt_dump_swap_files(void *call_data)
-{
-}
 
 #endif /* CONFIG_SWAP */
 #endif /* __KERNEL__*/

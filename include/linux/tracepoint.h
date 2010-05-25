@@ -14,7 +14,6 @@
  * See the file COPYING for more details.
  */
 
-#include <linux/immediate.h>
 #include <linux/types.h>
 #include <linux/rcupdate.h>
 
@@ -23,7 +22,7 @@ struct tracepoint;
 
 struct tracepoint {
 	const char *name;		/* Tracepoint name */
-	DEFINE_IMV(char, state);	/* State. */
+	int state;			/* State. */
 	void **funcs;
 } __attribute__((aligned(8)));
 
@@ -41,64 +40,43 @@ struct tracepoint {
 	do {								\
 		void **it_func;						\
 									\
-		rcu_read_lock_sched_notrace();				\
+		rcu_read_lock_sched();					\
 		it_func = rcu_dereference((tp)->funcs);			\
 		if (it_func) {						\
 			do {						\
 				((void(*)(proto))(*it_func))(args);	\
 			} while (*(++it_func));				\
 		}							\
-		rcu_read_unlock_sched_notrace();			\
-	} while (0)
-
-#define __CHECK_TRACE(name, generic, proto, args)			\
-	do {								\
-		static const char __tpstrtab_##name[]			\
-		__attribute__((section("__tracepoints_strings")))	\
-		= #name;						\
-		static struct tracepoint __tracepoint_##name		\
-		__attribute__((section("__tracepoints"), aligned(8))) =	\
-		{ __tpstrtab_##name, 0, NULL };				\
-		if (!generic) {						\
-			if (unlikely(imv_cond(__tracepoint_##name.state))) { \
-				imv_cond_end();				\
-				__DO_TRACE(&__tracepoint_##name,	\
-					TPPROTO(proto), TPARGS(args));	\
-			} else						\
-				imv_cond_end();				\
-		} else {						\
-			if (unlikely(_imv_read(__tracepoint_##name.state))) \
-				__DO_TRACE(&__tracepoint_##name,	\
-					TPPROTO(proto), TPARGS(args));	\
-		}							\
+		rcu_read_unlock_sched();				\
 	} while (0)
 
 /*
  * Make sure the alignment of the structure in the __tracepoints section will
  * not add unwanted padding between the beginning of the section and the
  * structure. Force alignment to the same alignment as the section start.
- *
- * The "generic" argument, passed to the declared __trace_##name inline function
- * controls which tracepoint enabling mechanism must be used.
- * If generic is true, a variable read is used.
- * If generic is false, immediate values are used.
  */
 #define DEFINE_TRACE(name, proto, args)					\
 	static inline void trace_##name(proto)				\
 	{								\
-		__CHECK_TRACE(name, 0, TPPROTO(proto), TPARGS(args));	\
-	}								\
-	static inline void _trace_##name(proto)				\
-	{								\
-		__CHECK_TRACE(name, 1, TPPROTO(proto), TPARGS(args));	\
+		static const char __tpstrtab_##name[]			\
+		__attribute__((section("__tracepoints_strings")))	\
+		= #name ":" #proto;					\
+		static struct tracepoint __tracepoint_##name		\
+		__attribute__((section("__tracepoints"), aligned(8))) =	\
+		{ __tpstrtab_##name, 0, NULL };				\
+		if (unlikely(__tracepoint_##name.state))		\
+			__DO_TRACE(&__tracepoint_##name,		\
+				TPPROTO(proto), TPARGS(args));		\
 	}								\
 	static inline int register_trace_##name(void (*probe)(proto))	\
 	{								\
-		return tracepoint_probe_register(#name, (void *)probe);	\
+		return tracepoint_probe_register(#name ":" #proto,	\
+			(void *)probe);					\
 	}								\
-	static inline int unregister_trace_##name(void (*probe)(proto))	\
+	static inline void unregister_trace_##name(void (*probe)(proto))\
 	{								\
-		return tracepoint_probe_unregister(#name, (void *)probe);\
+		tracepoint_probe_unregister(#name ":" #proto,		\
+			(void *)probe);					\
 	}
 
 extern void tracepoint_update_probe_range(struct tracepoint *begin,
@@ -106,18 +84,16 @@ extern void tracepoint_update_probe_range(struct tracepoint *begin,
 
 #else /* !CONFIG_TRACEPOINTS */
 #define DEFINE_TRACE(name, proto, args)			\
-	static inline void trace_##name(proto)				\
+	static inline void _do_trace_##name(struct tracepoint *tp, proto) \
 	{ }								\
-	static inline void _trace_##name(proto)				\
+	static inline void trace_##name(proto)				\
 	{ }								\
 	static inline int register_trace_##name(void (*probe)(proto))	\
 	{								\
 		return -ENOSYS;						\
 	}								\
-	static inline int unregister_trace_##name(void (*probe)(proto))	\
-	{								\
-		return -ENOSYS;						\
-	}
+	static inline void unregister_trace_##name(void (*probe)(proto))\
+	{ }
 
 static inline void tracepoint_update_probe_range(struct tracepoint *begin,
 	struct tracepoint *end)
@@ -147,15 +123,5 @@ extern void tracepoint_iter_stop(struct tracepoint_iter *iter);
 extern void tracepoint_iter_reset(struct tracepoint_iter *iter);
 extern int tracepoint_get_iter_range(struct tracepoint **tracepoint,
 	struct tracepoint *begin, struct tracepoint *end);
-
-/*
- * tracepoint_synchronize_unregister must be called between the last tracepoint
- * probe unregistration and the end of module exit to make sure there is no
- * caller executing a probe when it is freed.
- */
-static inline void tracepoint_synchronize_unregister(void)
-{
-	synchronize_sched();
-}
 
 #endif

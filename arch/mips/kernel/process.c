@@ -27,7 +27,6 @@
 #include <linux/completion.h>
 #include <linux/kallsyms.h>
 #include <linux/random.h>
-#include <linux/marker.h>
 
 #include <asm/asm.h>
 #include <asm/bootinfo.h>
@@ -220,7 +219,6 @@ static void __noreturn kernel_thread_helper(void *arg, int (*fn)(void *))
 long kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
 	struct pt_regs regs;
-	long pid;
 
 	memset(&regs, 0, sizeof(regs));
 
@@ -236,10 +234,7 @@ long kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 #endif
 
 	/* Ok, create the new process.. */
-	pid = do_fork(flags | CLONE_VM | CLONE_UNTRACED,
-			0, &regs, 0, NULL, NULL);
-	trace_mark(kernel_arch_kthread_create, "pid %ld fn %p", pid, fn);
-	return pid;
+	return do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0, &regs, 0, NULL, NULL);
 }
 
 /*
