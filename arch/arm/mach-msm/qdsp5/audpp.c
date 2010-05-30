@@ -184,7 +184,7 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 			audpp->func[5] (audpp->private[5], id, msg);
 		break;
 	case AUDPP_MSG_PCMDMAMISSED:
-		audpp_handle_pcmdmamiss(audpp, msg[0]);
+		pr_err("audpp: DMA missed obj=%x\n", msg[0]);
 		break;
 	case AUDPP_MSG_CFG_MSG:
 		if (msg[0] == AUDPP_MSG_ENA_ENA) {

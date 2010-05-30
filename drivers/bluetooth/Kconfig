@@ -206,5 +206,12 @@ config MSM_BT_POWER
 	  Provides a parameter to switch on/off power from PMIC
 	  to Bluetooth device.
 
+config BT_FILTER
+	bool "BT COEXISTENCE"
+	depends on BT_HCIUART_H4
+	help
+	  TURN ON OFF BT COEXISTENCE.
+
+
 endmenu
 

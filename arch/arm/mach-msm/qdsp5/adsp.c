@@ -49,7 +49,10 @@ static inline void allow_suspend(void)
 #include <mach/clk.h>
 #include "adsp.h"
 
-#define INT_ADSP INT_ADSP_A9_A11
+// +++ FIH_ADQ +++, modified by henry.wang
+//#define INT_ADSP INT_ADSP_A9_A11
+#define INT_ADSP INT_ADSP_A11
+// --- FIH_ADQ ---
 
 static struct adsp_info adsp_info;
 static struct msm_rpc_endpoint *rpc_cb_server_client;
@@ -401,14 +404,14 @@ int msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 			module->name, module->id);
 		return -ENXIO;
 	}
-	if (dsp_queue_addr >= QDSP_MAX_NUM_QUEUES) {
+	/*if (dsp_queue_addr >= QDSP_MAX_NUM_QUEUES) {
 		pr_info("adsp: Invalid Queue Index: %d\n", dsp_queue_addr);
 		return -ENXIO;
 	}
 	if (adsp_validate_queue(module->id, dsp_queue_addr, cmd_size)) {
 		spin_unlock_irqrestore(&adsp_write_lock, flags);
 		return -EINVAL;
-	}
+	}*/
 	dsp_q_addr = adsp_get_queue_offset(info, dsp_queue_addr);
 	dsp_q_addr &= ADSP_RTOS_WRITE_CTRL_WORD_DSP_ADDR_M;
 
@@ -1138,12 +1141,34 @@ static int __init adsp_init(void)
 {
 	int rc;
 
+	// +++ FIH_ADQ +++, modified by henry.wang
+	/*
 	rpc_adsp_rtos_atom_prog = 0x3000000a;
 	rpc_adsp_rtos_atom_vers = 0x10001;
 	rpc_adsp_rtos_atom_vers_comp = 0x00010001;
 	rpc_adsp_rtos_mtoa_prog = 0x3000000b;
-	rpc_adsp_rtos_mtoa_vers = 0x30001;
-	rpc_adsp_rtos_mtoa_vers_comp = 0x00030001;
+	rpc_adsp_rtos_mtoa_vers = 0x20001;
+	rpc_adsp_rtos_mtoa_vers_comp = 0x00020001;
+	*/
+	
+	if (machine_is_msm7201a_surf() || machine_is_msm7201a_ffa() || machine_is_halibut()) {
+	rpc_adsp_rtos_atom_prog = 0x3000000a;
+	rpc_adsp_rtos_atom_vers = 0x10001;
+	rpc_adsp_rtos_atom_vers_comp = 0x00010001;
+	rpc_adsp_rtos_mtoa_prog = 0x3000000b;
+		rpc_adsp_rtos_mtoa_vers = 0x20001;
+		rpc_adsp_rtos_mtoa_vers_comp = 0x00020001;
+	} else if (machine_is_msm7x25_surf() || machine_is_msm7x25_ffa()) {
+		rpc_adsp_rtos_atom_prog = 0x3000000a;
+		rpc_adsp_rtos_atom_vers = 0x10001;
+		rpc_adsp_rtos_atom_vers_comp = 0x00010001;
+		rpc_adsp_rtos_mtoa_prog = 0x3000000b;
+		rpc_adsp_rtos_mtoa_vers = 0x10001;
+		rpc_adsp_rtos_mtoa_vers_comp = 0x00010001;
+	} else {
+		printk(KERN_ERR "ADSP: Unknown Machine Type\n");
+	}
+	// --- FIH_ADQ ---
 
 	snprintf(msm_adsp_driver_name, sizeof(msm_adsp_driver_name),
 		"rs%08x:%08x",

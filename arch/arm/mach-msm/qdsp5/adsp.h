@@ -184,8 +184,8 @@ struct adsp_rtos_mp_mtoa_type {
 };
 
 /* ADSP RTOS MP Communications - Modem to APP's Init Info  */
-#define IMG_MAX         6
-#define ENTRIES_MAX     48
+#define IMG_MAX         8
+#define ENTRIES_MAX     64
 
 struct queue_to_offset_type {
 	uint32_t	queue;

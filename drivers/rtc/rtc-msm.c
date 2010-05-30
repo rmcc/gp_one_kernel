@@ -39,7 +39,11 @@ extern void msm_pm_set_max_sleep_time(int64_t sleep_time_ns);
 #define TIMEREMOTE_PROCEEDURE_GET_SECURE_JULIAN	11
 #endif
 #define TIMEREMOTE_PROG_NUMBER 0x30000048
-#define TIMEREMOTE_PROG_VER 0x00010001
+
+// FIH_ADQ + // make version number is compatible with modem side version 1.3.40
+//#define TIMEREMOTE_PROG_VER 0x00010001
+#define TIMEREMOTE_PROG_VER 0x915823fc
+// FIH ADQ -
 
 struct rpc_time_julian {
 	uint32_t year;
@@ -304,6 +308,25 @@ static unsigned long msmrtc_get_seconds(void)
 static int
 msmrtc_suspend(struct platform_device *dev, pm_message_t state)
 {
+	/// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
+	//if (rtcalarm_time) {
+	        int battery_check_cycle_time=900;//seconds
+	        unsigned long now = msmrtc_get_seconds();
+	        int diff = rtcalarm_time - now;
+	        if(diff>battery_check_cycle_time)
+	                diff=battery_check_cycle_time;
+	        if (diff <= 0) {
+	                msmrtc_alarmtimer_expired(1);
+	                msm_pm_set_max_sleep_time(0);
+	                return 0;
+	        }
+	        msm_pm_set_max_sleep_time((int64_t) ((int64_t) diff * NSEC_PER_SEC));
+	//} else
+	        //msm_pm_set_max_sleep_time(0);
+	/// ---FIH_ADQ---
+	return 0;
+
+#if 0
 	if (rtcalarm_time) {
 		unsigned long now = msmrtc_get_seconds();
 		int diff = rtcalarm_time - now;
@@ -316,6 +339,7 @@ msmrtc_suspend(struct platform_device *dev, pm_message_t state)
 	} else
 		msm_pm_set_max_sleep_time(0);
 	return 0;
+#endif
 }
 
 static int
@@ -350,9 +374,9 @@ static int __init msmrtc_init(void)
 	snprintf((char *)msmrtc_driver.driver.name,
 		 strlen(msmrtc_driver.driver.name)+1,
 		 "rs%08x:%08x", TIMEREMOTE_PROG_NUMBER,
-		 TIMEREMOTE_PROG_VER & RPC_VERSION_MAJOR_MASK);
-	printk(KERN_DEBUG "RTC Registering with %s\n",
-		msmrtc_driver.driver.name);
+	         TIMEREMOTE_PROG_VER);                  // & RPC_VERSION_MAJOR_MASK);  //ADQ remove VERSION check mask
+	printk(KERN_DEBUG "%s: RTC Registering with %s\n",
+	        __FILE__, msmrtc_driver.driver.name);
 
 	return platform_driver_register(&msmrtc_driver);
 }

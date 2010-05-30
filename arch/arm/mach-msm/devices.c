@@ -571,6 +571,16 @@ static struct platform_device msm_tvenc_device = {
 	.resource       = msm_tvenc_resources,
 };
 
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+static struct platform_device goldfish_battery_device = {
+	.name		= "goldfish-battery",
+	.id		  = -1,
+};
+///-FIH_ADQ
+/* } FIH_ADQ, Penho, 2009/03/13 */
+
 static void __init msm_register_device(struct platform_device *pdev, void *data)
 {
 	int ret;
@@ -598,6 +608,13 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_tvenc_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+	else if (!strncmp(name, "batt", 4))
+		msm_register_device(&goldfish_battery_device, data);
+///-FIH_ADQ
+/* } FIH_ADQ, Penho, 2009/03/13 */
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
 }
@@ -674,7 +691,10 @@ struct clk msm_clocks_7x25[] = {
 	CLOCK("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
 	CLOCK("imem_clk",	IMEM_CLK,	NULL, OFF),
 	CLOCK("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLOCK("mdp_clk",	MDP_CLK,	NULL, OFF),
+/* FIH_ADQ, Ming { */
+///    CLOCK("mdp_clk",        MDP_CLK,        NULL, OFF),
+    CLOCK("mdp_clk",   MDP_CLK,        NULL, 0),  // do not auto-off
+/* } FIH_ADQ, Ming */
 	CLOCK("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
 	CLOCK("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
 	CLOCK("mdp_vsync_clk",  MDP_VSYNC_CLK,  NULL, 0),

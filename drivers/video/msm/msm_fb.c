@@ -38,12 +38,298 @@
 #include <linux/debugfs.h>
 #include <linux/console.h>
 #include <linux/android_pmem.h>
+/* FIH_ADQ, 6370 { */
 #include <linux/leds.h>
+/* } FIH_ADQ, 6370 */
 
 #define MSM_FB_C
 #include "msm_fb.h"
 #include "mddihosti.h"
 #include "tvenc.h"
+
+/* FIH_ADQ, Ming { */
+#include <linux/spi/spi.h>
+#include <mach/gpio.h>
+#include <mach/msm_iomap.h>
+#include <mach/msm_smd.h>
+
+extern struct spi_device	  *gLcdSpi;
+
+#define ARRAY_AND_SIZE(x)	(x), ARRAY_SIZE(x)
+typedef struct
+{
+	char	reg;
+	char	val;
+} CONFIG_TABLE;
+
+static const CONFIG_TABLE config_standby[] = {
+	{ 0x19, 0x1B},
+};
+
+static const CONFIG_TABLE config_resume[] = {
+	{ 0x19, 0x1A},
+};
+
+static const CONFIG_TABLE config_table1[] = {
+// CMO 3.2" panel initial code with Gamma 2.2 refer to Zeus
+	{ 0x83, 0x02},
+	{ 0x85, 0x03},
+	{ 0x8B, 0x00},
+	{ 0x8C, 0x93},
+	{ 0x91, 0x01},
+	{ 0x83, 0x00},
+// Gamma Setting
+	{ 0x3E, 0x85},
+	{ 0x3F, 0x50},
+	{ 0x40, 0x00},
+	{ 0x41, 0x77},
+	{ 0x42, 0x24},
+	{ 0x43, 0x35},
+	{ 0x44, 0x00},
+	{ 0x45, 0x77},
+	{ 0x46, 0x10},
+	{ 0x47, 0x5A},
+	{ 0x48, 0x4D},
+	{ 0x49, 0x40},
+// Power Supply Setting
+	{ 0x2B, 0xF9},
+};
+static const CONFIG_TABLE config_table2[] = {
+	{ 0x1B, 0x14},
+	{ 0x1A, 0x11},
+	{ 0x1C, 0x0D},
+	{ 0x1F, 0x64},//{ 0x1F, 0x5e},
+};
+static const CONFIG_TABLE config_table3[] = {
+	{ 0x19, 0x0A},
+	{ 0x19, 0x1A},
+};
+static const CONFIG_TABLE config_table4[] = {
+	{ 0x19, 0x12},
+};
+static const CONFIG_TABLE config_table5[] = {
+	{ 0x1E, 0x33},
+};
+static const CONFIG_TABLE config_table6[] = {
+// Display ON Setting
+	{ 0x3C, 0x60},
+	{ 0x3D, 0x1C},
+	{ 0x34, 0x38},
+	{ 0x35, 0x38},
+	{ 0x24, 0x38},
+};
+static const CONFIG_TABLE config_table7[] = {
+	{ 0x24, 0x3C},
+	{ 0x16, 0x1C},
+	{ 0x3A, 0xA8},//{ 0x3a, 0xae},
+	{ 0x01, 0x02},
+	{ 0x55, 0x00},
+};
+
+
+static int lcd_spi_write(struct spi_device *spi, CONFIG_TABLE table[], int len)
+{
+	char reg_data[]= { 0x70, 0x00};
+	char val_data[]= { 0x72, 0x00};
+	int val;
+	int i;
+	//printk( "XXXXX lcd_spi_write len: %d XXXXX\n", len);
+	for( i = 0 ; i < len ; i++ )
+	{
+		reg_data[ 1]= table[ i].reg;
+		val_data[ 1]= table[ i].val;
+		val = spi_write(spi, reg_data, sizeof( reg_data));
+		if (val)
+                        goto config_exit;
+		val = spi_write(spi, val_data, sizeof( val_data));
+		if (val)
+                        goto config_exit;
+		///printk(KERN_INFO "[%s:%d] write reg= 0x%02X, val= 0x%02X\n",__FILE__, __LINE__, table[ i].reg, table[ i].val);
+	}
+        return 0;
+
+config_exit:
+        printk(KERN_ERR "SPI write error :%s -- %d\n", __func__,__LINE__);
+        return val;
+
+}
+
+static int lcd_spi_read(struct spi_device *spi, CONFIG_TABLE table[], int len)
+{
+	char reg_data[]= { 0x70, 0x00};
+	int val;
+	int i;
+	//printk( "XXXXX lcd_spi_read len: %d XXXXX\n", len);
+	for( i = 0 ; i < len ; i++ )
+	{
+		reg_data[ 1]= table[ i].reg;
+		val = spi_write(spi, reg_data, sizeof( reg_data));
+		if (val)
+                        goto config_exit;
+		printk(KERN_INFO "[%s:%d] reg= 0x%02X, orig val= 0x%02X, read val= 0x%02X\n",__FILE__, __LINE__, table[ i].reg, table[ i].val, spi_w8r8(spi, 0x73));
+	}
+	 return 0;
+
+config_exit:
+        printk(KERN_ERR "SPI write error :%s -- %d\n", __func__,__LINE__);
+        return val;
+}
+
+static int hx8352_config(struct spi_device *spi)
+{
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table1));
+	mdelay( 10);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table2));
+	mdelay( 20);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table3));
+	mdelay( 40);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table4));
+	mdelay( 40);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table5));
+	mdelay( 100);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table6));
+	mdelay( 40);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table7));
+/*	
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table1));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table2));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table3));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table4));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table5));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table6));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table7));
+*/		
+}
+
+static int panel_poweron(void)
+{
+    int rc = 0;
+    unsigned int uiHWID = FIH_READ_HWID_FROM_SMEM();
+    
+    /* POWER ON */
+    if (uiHWID <= CMCS_HW_VER_EVT1)
+    {
+        /* GPIO 85: CAM_LDO_PWR (EVT1) */    
+        rc = gpio_tlmm_config(GPIO_CFG(85, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	    if (rc) {
+            printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+            return -EIO;
+        }
+                
+	    rc = gpio_request(85, "cam_pwr");
+        if (rc) {
+            printk(KERN_ERR "%s: cam_pwr setting failed! rc = %d\n", __func__, rc);
+            return -EIO;
+        }
+
+        gpio_direction_output(85,1);
+        printk(KERN_INFO "%s: (85) gpio_read = %d\n", __func__, gpio_get_value(85));
+        gpio_free(85);
+    }
+    
+    /* LCD RESET */
+    /* GPIO 103: n-LCD-RST */
+    rc = gpio_tlmm_config(GPIO_CFG(103, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	if (rc) {
+        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+        return -EIO;
+    }
+
+    rc = gpio_request(103, "lcd_reset");
+    if (rc) {
+        printk(KERN_ERR "%s: lcd_reset setting failed! rc = %d\n", __func__, rc);
+        return -EIO;
+    }
+
+    gpio_direction_output(103,1);
+    mdelay(5);
+    printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
+
+   	gpio_direction_output(103,0);
+   	mdelay(10);
+    printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
+    
+    gpio_direction_output(103,1);
+    mdelay(5);    	
+    printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
+
+    gpio_free(103);
+
+#if 0
+    /* LCD SPI */
+    /* GPIO 101: LCD-SPI-CLK */
+    rc = gpio_tlmm_config(GPIO_CFG(101, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	if (rc) {
+        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+        return -EIO;
+    }
+
+    rc = gpio_request(101, "gpio_spi");
+	if (rc){
+                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		return -EIO;
+	}
+
+	gpio_direction_output(101,1);
+    printk(KERN_INFO "%s: (101) gpio_read = %d\n", __func__, gpio_get_value(101));
+   	gpio_free(101);
+
+    /* GPIO 102: n-LCD-SPI-CS */
+    rc = gpio_tlmm_config(GPIO_CFG(102, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	if (rc) {
+        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+        return -EIO;
+    }
+
+    rc = gpio_request(102, "gpio_spi");
+	if (rc){
+                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		return -EIO;
+	}
+
+	gpio_direction_output(102,1);
+    printk(KERN_INFO "%s: (102) gpio_read = %d\n", __func__, gpio_get_value(102));
+   	gpio_free(102);
+
+    /* GPIO 131: LCD-SPI-O */
+    rc = gpio_tlmm_config(GPIO_CFG(131, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), GPIO_ENABLE);
+	if (rc) {
+        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+        return -EIO;
+    }
+
+    rc = gpio_request(131, "gpio_spi");
+	if (rc){
+                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		return -EIO;
+	}
+
+    gpio_direction_input(131);
+	gpio_free(131);
+
+    /* GPIO 132: LCD-SPI-I */
+    rc = gpio_tlmm_config(GPIO_CFG(132, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	if (rc) {
+        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+        return -EIO;
+    }
+
+    rc = gpio_request(132, "gpio_spi");
+	if (rc){
+                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		return -EIO;
+	}
+
+    gpio_direction_output(132,1);
+    printk(KERN_INFO "%s: (132)gpio_read = %d\n", __func__, gpio_get_value(132));
+	gpio_free(132);
+
+#endif
+
+    return rc;
+}
+/* } FIH_ADQ, Ming */
+
 
 #ifdef CONFIG_FB_MSM_LOGO
 #define INIT_IMAGE_FILE "/logo.rle"
@@ -417,6 +703,20 @@ static int msm_fb_resume_sub(struct msm_fb_data_type *mfd)
 		enable_irq(mfd->channel_irq);
 	}
 
+    /* FIH_ADQ, Ming { */
+    /* panel power on */
+    printk(KERN_INFO "+panel_poweron()\n");
+    panel_poweron();
+    /* } FIH_ADQ, Ming */
+    /* FIH_ADQ, Ming { */
+    /* Don't erase framebuffer for [ADQ.B-3031] */
+    /* Erase framebuffer for [ADQ.FC-706] */    
+    printk(KERN_INFO "+erasing framebuffer...\n");
+    memset(mfd->fbi->screen_base, 0, mfd->fbi->fix.smem_len);
+    printk(KERN_INFO "+hx8352_config()\n");
+    hx8352_config(gLcdSpi);
+    /* } FIH_ADQ, Ming */
+
 	/* resume state var recover */
 	mfd->sw_refreshing_enable = mfd->suspend.sw_refreshing_enable;
 	mfd->op_enable = mfd->suspend.op_enable;
@@ -485,13 +785,16 @@ void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl, u32 save)
 		up(&mfd->sem);
 	}
 }
-
+/* } FIH_ADQ, 6360  */
 static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			    boolean op_enable)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct msm_fb_panel_data *pdata = NULL;
 	int ret = 0;
+	/* FIH_ADQ, Kenny { */
+	unsigned int *boot_mode = 0xE02FFFF8; // Ming's magic address
+	/* } FIH_ADQ, Kenny */
 
 	if (!op_enable)
 		return -EPERM;
@@ -509,10 +812,13 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
-
-				msm_fb_set_backlight(mfd,
-						     mfd->bl_level, 0);
-
+/* FIH_ADQ, 6360 { */
+				if(boot_mode[0] == 0xffff){
+					msm_fb_set_backlight(mfd,0, 0); //set backlight brightness to be 0
+				}else{
+					msm_fb_set_backlight(mfd,mfd->bl_level, 0);
+				}
+/* } FIH_ADQ, 6360  */
 /* ToDo: possible conflict with android which doesn't expect sw refresher */
 /*
 	  if (!mfd->hw_refresh)
@@ -538,13 +844,18 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			mfd->op_enable = FALSE;
 			curr_pwr_state = mfd->panel_power_on;
 			mfd->panel_power_on = FALSE;
-
-			mdelay(100);
+/* FIH_ADQ, Ming { */			
+            // backlight off before MDP power-down
+            msm_fb_set_backlight(mfd, 0, 0);
+            //mdelay(1000); // wait for backlight off
+			///mdelay(100);
+/* } FIH_ADQ, Ming */			
 			ret = pdata->off(mfd->pdev);
 			if (ret)
 				mfd->panel_power_on = curr_pwr_state;
-
-			msm_fb_set_backlight(mfd, 0, 0);
+/* FIH_ADQ, 6360 { */
+			///msm_fb_set_backlight(mfd, 0, 0);
+/* } FIH_ADQ, 6360  */			
 			mfd->op_enable = TRUE;
 		}
 		break;
@@ -628,11 +939,17 @@ static struct fb_ops msm_fb_ops = {
 	.fb_check_var = msm_fb_check_var,	/* vinfo check */
 	.fb_set_par = msm_fb_set_par,	/* set the video mode according to info->var */
 	.fb_setcolreg = NULL,	/* set color register */
+/* FIH_ADQ, 6370 { */	
+///	.fb_blank = NULL,	/* blank display */
 	.fb_blank = msm_fb_blank,	/* blank display */
+/* } FIH_ADQ, 6370 */	
 	.fb_pan_display = msm_fb_pan_display,	/* pan display */
 	.fb_fillrect = msm_fb_fillrect,	/* Draws a rectangle */
 	.fb_copyarea = msm_fb_copyarea,	/* Copy data from area to another */
 	.fb_imageblit = msm_fb_imageblit,	/* Draws a image to the display */
+/* FIH_ADQ, 6370 { */	
+	.fb_cursor = NULL,
+/* } FIH_ADQ, 6370 */	
 	.fb_rotate = NULL,
 	.fb_sync = NULL,	/* wait for blit idle, optional */
 	.fb_ioctl = msm_fb_ioctl,	/* perform fb specific ioctl (optional) */
@@ -818,11 +1135,22 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	fbi->screen_base = fbram;
 	fbi->fix.smem_start = (unsigned long)fbram_phys;
 
-	memset(fbi->screen_base, 0x0, fix->smem_len);
+/* FIH_ADQ, 6370 { */
+///	fbram += fix->smem_len;
+///	fbram_phys += fix->smem_len;
+///	fbram_size =
+///	    (fbram_size > fix->smem_len) ? fbram_size - fix->smem_len : 0;
+/* } FIH_ADQ, 6370 */		
+
+/* FIH_ADQ, Ming { */
+/* Keep bootloader image displaying */
+///	memset(fbi->screen_base, 0x0, fix->smem_len);
+/* } FIH_ADQ, Ming */
 
 	mfd->op_enable = TRUE;
 	mfd->panel_power_on = FALSE;
 
+/* FIH_ADQ, 6370 { */
 	/* cursor memory allocation */
 	if (mfd->cursor_update) {
 		mfd->cursor_buf = dma_alloc_coherent(NULL,

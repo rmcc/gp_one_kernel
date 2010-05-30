@@ -241,6 +241,35 @@ unsigned long acpuclk_wait_for_irq(void) {
 	return ret * 1000;
 }
 
+//+++FIH_ADQ+++ , added by simonsschang
+void acpuclk_set_lcdcoff_wait_for_irq(int on)
+{
+    mutex_lock(&drv_state.lock);
+    if(on)
+    {
+        drv_state.wait_for_irq_khz = 528000000;
+        //[+++]FIH_ADQ ChiaYuan add for increasing battery life
+	 	acpu_freq_tbl[0].axiclk_khz = 128000;
+	 	acpu_freq_tbl[4].axiclk_khz = 128000;
+	 	acpu_freq_tbl[5].axiclk_khz = 128000;
+	 	acpu_freq_tbl[6].axiclk_khz = 128000;
+	 	acpu_freq_tbl[8].axiclk_khz = 128000;
+	 	//[---]FIH_ADQ ChiaYuan add for increasing battery life
+    }
+    else
+    {
+        drv_state.wait_for_irq_khz = 19200000;
+        //[+++]FIH_ADQ ChiaYuan add for increasing battery life
+	 	acpu_freq_tbl[0].axiclk_khz = 30720;
+	 	acpu_freq_tbl[4].axiclk_khz = 61440;
+	 	acpu_freq_tbl[5].axiclk_khz = 61440;
+	 	acpu_freq_tbl[6].axiclk_khz = 61440;
+	 	acpu_freq_tbl[8].axiclk_khz = 61440;
+	 	//[---]FIH_ADQ ChiaYuan add for increasing battery life
+    }
+    mutex_unlock(&drv_state.lock);        
+}
+
 static int acpuclk_set_vdd_level(int vdd)
 {
 	uint32_t current_vdd;
@@ -894,15 +923,21 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	drv_state.power_collapse_khz = clkdata->power_collapse_khz;
 	drv_state.wait_for_irq_khz = clkdata->wait_for_irq_khz;
 	drv_state.max_axi_khz = clkdata->max_axi_khz;
-	acpu_freq_tbl_fixup();
+/*+++FIH_ADQ+++	*/
+///	acpu_freq_tbl_fixup();
+/*---FIH_ADQ---*/
 	precompute_stepping();
 	acpuclk_init();
 	lpj_init();
 	print_acpu_freq_tbl();
-	if (cpu_is_msm7x25())
+/*+++FIH_ADQ+++	*/
+///	if (cpu_is_msm7x25())
+/*---FIH_ADQ---*/
 		msm7x25_acpu_pll_hw_bug_fix();
-	if (cpu_is_msm7x27())
-		shared_pll_control_init();
+/*+++FIH_ADQ+++	*/
+///	if (cpu_is_msm7x27())
+///		shared_pll_control_init();
+/*---FIH_ADQ---*/
 #ifdef CONFIG_CPU_FREQ_MSM
 	cpufreq_table_init();
 	cpufreq_frequency_table_get_attr(freq_table, smp_processor_id());

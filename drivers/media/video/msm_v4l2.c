@@ -851,7 +851,7 @@ static void __exit msm_v4l2_exit(void)
 	video_unregister_device(pvdev);
 	video_device_release(pvdev);
 
-	msm_unregister(g_pmsm_v4l2_dev->drv, MSM_V4L2_DRIVER_NAME);
+	msm_unregister(MSM_V4L2_DRIVER_NAME);
 
 	kfree(g_pmsm_v4l2_dev->drv);
 	g_pmsm_v4l2_dev->drv = NULL;

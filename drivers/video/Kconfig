@@ -281,6 +281,11 @@ config FB_MSM_LCDC_GORDN_VGA
 	select FB_MSM_LCDC_PANEL
 	default n
 
+config FB_MSM_LCDC_HX8352
+	bool
+	select FB_MSM_LCDC_PANEL
+	default n
+
 choice 
 	prompt "LCD Panel"
 	default FB_MSM_MDDI_AUTO_DETECT
@@ -298,6 +303,13 @@ config FB_MSM_LCDC_GORDON_VGA_PANEL
         select FB_MSM_LCDC_GORDON_VGA
          ---help---
           Support for LCDC Gordon VGA (480x640) panel
+
+config FB_MSM_LCDC_HX8352_PANEL
+	depends on FB_MSM_LCDC_HW
+	bool "LCDC HX8352 Panel"
+	select FB_MSM_LCDC_HX8352
+	---help---
+	   Support for LCDC HX8352 (240x400) panel
 
 config FB_MSM_TRY_MDDI_CATCH_LCDC_PRISM
 	depends on FB_MSM_LCDC_HW

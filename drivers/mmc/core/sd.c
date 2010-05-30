@@ -584,7 +584,15 @@ static void mmc_sd_detect(struct mmc_host *host)
 		       __func__, mmc_hostname(host), err);
 	}
 #else
+
+	//+++[FIH_ADQ][IssueKeys:ADQ.B-1303]	
+	#if 0
 	err = mmc_send_status(host->card, NULL);
+	#else
+	err = -EIO;	//pseudo error for escape cancel function (use GPIO detect)
+	#endif
+	//---[FIH_ADQ][IssueKeys:ADQ.B-1303]	
+	
 #endif
 	mmc_release_host(host);
 

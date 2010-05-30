@@ -336,4 +336,25 @@ config KEYBOARD_I2C_MSM
 	  an external interrupt, hardware reset, and the two I2C lines 
 	  connected to the internal i2c controller.
 
+###+FIH_ADQ
+#by AudiPCHuang 2009.01.09 FIH_ZEUS
+menuconfig KEYBOARD_STMPE1601
+	tristate "STMPE1601 port expander with keypad and PWM controller"
+	depends on I2C && ARCH_MSM
+	default y
+	help
+		Say Y here if you want to enable STMPE1601 driver.	  
+
+#by AndiPCHuang 2009.02.04 FIH_ZEUS
+if KEYBOARD_STMPE1601
+	config STMPE_DEBUG
+	bool "STMPE1601 Debugging Messages"
+	help
+	  Say Y here if you want the stmpe1601 keyboard driver to produce 
+	  a bunch of debug messages to the system log.  Select this if 
+	  you are having a problem with stmpe1601 support and want to see
+	  more of what is going on.
+endif # KEYBOARD_STMPE1601
+###-FIH_ADQ
+
 endif

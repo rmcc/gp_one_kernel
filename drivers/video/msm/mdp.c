@@ -687,7 +687,7 @@ static int mdp_probe(struct platform_device *pdev)
 	case LCDC_PANEL:
 		pdata->on = mdp_lcdc_on;
 		pdata->off = mdp_lcdc_off;
-		mfd->hw_refresh = TRUE;
+		mfd->hw_refresh = FALSE;//TRUE;//T_FIH,ADQ,JOE HSU,what can I say ???
 		mfd->cursor_update = mdp_hw_cursor_update;
 		mfd->dma_fnc = mdp_lcdc_update;
 		mfd->dma = &dma2_data;

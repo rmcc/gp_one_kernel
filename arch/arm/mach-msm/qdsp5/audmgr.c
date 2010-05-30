@@ -207,14 +207,14 @@ int audmgr_open(struct audmgr *am)
 	if (am->state != STATE_CLOSED)
 		return 0;
 
-	am->ept = msm_rpc_connect_compatible(AUDMGR_PROG,
-			AUDMGR_VERS_COMP_VER2,
+	am->ept = msm_rpc_connect(AUDMGR_PROG,
+			AUDMGR_VERS,
 			MSM_RPC_UNINTERRUPTIBLE);
 
 	if (IS_ERR(am->ept)) {
 		printk(KERN_ERR "%s: connect failed with current VERS = %x, \
 			trying again with another API\n",
-			__func__, AUDMGR_VERS_COMP_VER2);
+			__func__, AUDMGR_VERS);
 		am->ept = msm_rpc_connect_compatible(AUDMGR_PROG,
 				AUDMGR_VERS_COMP,
 				MSM_RPC_UNINTERRUPTIBLE);
@@ -229,7 +229,7 @@ int audmgr_open(struct audmgr *am)
 		} else
 		am->rpc_version = AUDMGR_VERS_COMP;
 	} else
-		am->rpc_version = AUDMGR_VERS_COMP_VER2;
+		am->rpc_version = AUDMGR_VERS;
 
 	init_waitqueue_head(&am->wait);
 

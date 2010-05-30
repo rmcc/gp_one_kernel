@@ -693,6 +693,16 @@ config MAC80211_HWSIM
 	  To compile this driver as a module, choose M here: the module will be
 	  called mac80211_hwsim.  If unsure, say N.
 
+#+++FIH+++
+config AR6K
+	bool 'Atheros AR6002 SDIO driver (Atheros sdio stack)' 
+	select WIRELESS_EXT
+	---help---
+	  Enable Atheros AR6002 driver. 
+
+
+#---FIH---
+
 source "drivers/net/wireless/p54/Kconfig"
 source "drivers/net/wireless/ath5k/Kconfig"
 source "drivers/net/wireless/ath9k/Kconfig"

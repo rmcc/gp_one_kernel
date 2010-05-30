@@ -59,6 +59,7 @@
 #include <linux/uaccess.h>
 #include <linux/android_pmem.h>
 #include <mach/msm_adsp.h>
+#include <mach/msm_camio.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
 #include "msm_vfe7x.h"

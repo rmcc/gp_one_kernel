@@ -61,6 +61,10 @@ extern void paging_init(struct meminfo *, struct machine_desc *desc);
 extern void reboot_setup(char *str);
 extern int root_mountflags;
 extern void _stext, _text, _etext, __data_start, _edata, _end;
+/* FIH, AudiPCHuang, 2009/06/05 { */
+/* [ADQ.B-1440], For getting image version from splash.img*/
+extern void set_image_version(char* img_ver);
+/* } FIH, AudiPCHuang, 2009/06/05 */
 
 unsigned int processor_id;
 EXPORT_SYMBOL(processor_id);
@@ -512,6 +516,15 @@ static void __init early_vmalloc(char **arg)
 	vmalloc_reserve = memparse(*arg, arg);
 }
 __early_param("vmalloc=", early_vmalloc);
+
+/* FIH, AudiPCHuang, 2009/06/05 { */
+/* [ADQ.B-1440], For getting image version from splash.img*/
+static void __init early_version(char **arg)
+{
+	set_image_version(arg[0]);
+}
+__early_param("version=", early_version);
+/* } FIH, AudiPCHuang, 2009/06/05 */
 
 /*
  * Initial parsing of the command line.

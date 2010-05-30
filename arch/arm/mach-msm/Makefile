@@ -2,7 +2,6 @@ obj-y += io.o irq.o timer.o dma.o memory.o
 obj-y += devices.o
 obj-y += proc_comm.o
 obj-y += vreg.o mpp.o
-obj-y += vreg.o
 obj-y += clock.o
 obj-y += gpio.o generic_gpio.o
 obj-y += nand_partitions.o
@@ -10,6 +9,10 @@ obj-y += remote_spinlock.o modem_notifier.o
 obj-y += rpc_hsusb.o
 obj-y += socinfo.o
 obj-y += cpufreq.o
+###+FIH_ADQ
+###AudiPCHuang@FIH, 09.03.30: Create proc entry for reading device infomation.
+obj-y += adq_info.o
+###-FIH_ADQ
 obj-y += nohlt.o
 
 obj-$(CONFIG_ARCH_MSM) += acpuclock.o
@@ -62,8 +65,16 @@ obj-$(CONFIG_MACH_QST1600_SURF) += board-msm7x25.o
 obj-$(CONFIG_MACH_QST1600_FFA) += board-msm7x25.o
 obj-$(CONFIG_MACH_MSM7X27_SURF) += board-msm7x25.o
 obj-$(CONFIG_MACH_MSM7X27_FFA) += board-msm7x25.o
+###-FIH_ADQ
+
 
 obj-$(CONFIG_QSD_AUDIO) += qdsp6/
+
+###+FIH_ADQ
+###AudiPCHuang@FIH, 09.05.13: Vibrator Driver
+obj-y += rpc_pmic.o
+obj-y += msm_vibrator.o
+###-FIH_ADQ
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o

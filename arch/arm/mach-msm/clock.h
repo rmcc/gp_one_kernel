@@ -87,8 +87,13 @@ struct clk {
 #define USB_HS_PCLK	37  /* High speed USB pbus clock */
 #define USB_OTG_CLK	38  /* Full speed USB clock */
 #define VDC_CLK		39  /* Video controller clock */
+//FIH_ADQ,JOE HSU
+#define VFE_CLK 	40  /* Camera / Video Front End clock */
+#define VFE_MDC_CLK	41  /* VFE MDDI client clock */
+#if 0
 #define VFE_MDC_CLK	40  /* Camera / Video Front End clock */
 #define VFE_CLK		41  /* VFE MDDI client clock */
+#endif
 
 #define MDP_LCDC_PCLK_CLK 42
 #define MDP_LCDC_PAD_PCLK_CLK 43

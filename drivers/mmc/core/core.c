@@ -20,7 +20,7 @@
 #include <linux/err.h>
 #include <linux/leds.h>
 #include <linux/scatterlist.h>
-#include <linux/wakelock.h>
+#include <linux/wakelock.h>	//FIH_ADQ, Qualcomm release 2.3.70 add
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
@@ -36,14 +36,25 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 
-static struct workqueue_struct *workqueue;
-static struct wake_lock mmc_delayed_work_wake_lock;
+//+++[FIH_ADQ][IssueKeys:ADQ.B-1303]	
+#if 0	// FIH_ADQ, BillHJChang, Use QC release
+#include <linux/wakelock.h>
+struct wake_lock sdcard_wlock;
+#endif
+//---[FIH_ADQ][IssueKeys:ADQ.B-1303]	
 
+static struct workqueue_struct *workqueue;
+
+static struct wake_lock mmc_delayed_work_wake_lock;	// FIH_ADQ, Qualcomm release 2.3.70 add
+static struct wake_lock sdcard_idle_wake_lock;		// FIH_ADQ, BillHJChang
 /*
  * Enabling software CRCs on the data blocks can be a significant (30%)
  * performance cost, and for other reasons may not always be desired.
  * So we allow it it to be disabled.
  */
+///+++ FIH_ADQ +++ Sung Chuan 2009.08.12
+bool storage_state=false; 
+///--- FIH_ADQ --- Sung Chuan 2009.08.12
 int use_spi_crc = 1;
 module_param(use_spi_crc, bool, 0);
 
@@ -53,7 +64,8 @@ module_param(use_spi_crc, bool, 0);
 static int mmc_schedule_delayed_work(struct delayed_work *work,
 				     unsigned long delay)
 {
-	wake_lock(&mmc_delayed_work_wake_lock);
+	wake_lock(&mmc_delayed_work_wake_lock);	//FIH_ADQ, Qualcomm release 2.3.70 add
+	wake_lock(&sdcard_idle_wake_lock);		//FIH_ADQ, BillHJChang
 	return queue_delayed_work(workqueue, work, delay);
 }
 
@@ -661,8 +673,33 @@ void mmc_rescan(struct work_struct *work)
 	int err;
 
 	mmc_bus_get(host);
+	printk(KERN_INFO"[msm_sdcc.c][mmc_rescan]\n");
+                          
+    //+++[FIH_ADQ][IssueKeys:ADQ.B-1245]
+    if(host->slot_id == ATH_WLAN_SLOT) {
+        //Before suspend, WIFI call this function to remove the card
+        //add a mutex to prevent system suspend in the middle of follow wake_lock
+        mutex_lock(&host->scan_lock);
+    }
+    //---[FIH_ADQ][IssueKeys:ADQ.B-1245]
+
+    //---[FIH_ADQ][IssueKeys:ADQ.B-1303]
+	#if 0 // FIH_ADQ, BillHJChang, Use QC release
+	wake_lock(&sdcard_wlock);
+	#endif
+	//---[FIH_ADQ][IssueKeys:ADQ.B-1303]
 
 	if (host->bus_ops == NULL) {
+///+++ FIH_ADQ +++ Sung Chuan 2009.08.12
+	#if 0 // FIH_ADQ, BillHJChang, 20090904,  Modify for UMS currect handle
+     storage_state = true;
+	#endif
+///--- FIH_ADQ --- Sung Chuan 2009.08.12
+
+		// FIH_ADQ, BillHJChang	{ add debug message for card insert
+		printk(KERN_INFO"[SD][mmc_rescan][card in]XXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+		// FIH_ADQ, BillHJChang	}	
+				
 		/*
 		 * Only we can add a new handler, so it's safe to
 		 * release the lock here.
@@ -711,18 +748,68 @@ void mmc_rescan(struct work_struct *work)
 
 		mmc_release_host(host);
 		mmc_power_off(host);
-	} else {
+	}
+	else 
+	{
+///+++ FIH_ADQ +++ Sung Chuan 2009.08.12
+		#if 0 // FIH_ADQ, BillHJChang, 20090904,  Modify for UMS currect handle
+		storage_state = false;
+		#endif
+///--- FIH_ADQ --- Sung Chuan 2009.08.12
+
+		// FIH_ADQ, BillHJChang	{ add debug message for card remove	
+		printk(KERN_INFO"[SD][mmc_rescan][card out]OOOOOOOOOOOOOOOOOOOO\n");
+		// FIH_ADQ, BillHJChang	}
+			
 		if (host->bus_ops->detect && !host->bus_dead)
 			host->bus_ops->detect(host);
 
 		mmc_bus_put(host);
 	}
 out:
+
+	// FIH_ADQ, BillHJChang	{ 20090904,  Modify for UMS currect handle
+	if(host->slot_id == 1) 
+	{
+		if(host->bus_ops == NULL)
+			storage_state = false;
+		else
+			storage_state = true;
+
+		printk(KERN_INFO"%s: (storage_state : %d)\n",__func__,storage_state);
+	}
+	// FIH_ADQ, BillHJChang	}
+	
+	//FIH_ADQ, BillHJChang {
+    #if 1
+    if(host->slot_id == ATH_WLAN_SLOT) {
+        wake_unlock(&mmc_delayed_work_wake_lock);
+        wake_unlock(&sdcard_idle_wake_lock);
+    }else {
+        wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ * 2);		
+        wake_lock_timeout(&sdcard_idle_wake_lock, HZ * 2);	
+    }
+	#else	
 	/* give userspace some time to react */
-	wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ / 2);
+	wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ / 2);		//FIH_ADQ, Qualcomm release 2.3.70 add
+	#endif
+	//FIH_ADQ, BillHJChang }
 
 	if (host->caps & MMC_CAP_NEEDS_POLL)
 		mmc_schedule_delayed_work(&host->detect, HZ);
+
+    //+++[FIH_ADQ][IssueKeys:ADQ.B-1245]
+    if(host->slot_id == ATH_WLAN_SLOT) {
+        mutex_unlock(&host->scan_lock);
+    }
+    //---[FIH_ADQ][IssueKeys:ADQ.B-1245]
+     
+	//+++[FIH_ADQ][IssueKeys:ADQ.B-1303]
+	#if 0 //FIH_ADQ, BillHJChang, Use QC release			
+	wake_unlock(&sdcard_wlock);
+    //---
+	#endif
+	//---[FIH_ADQ][IssueKeys:ADQ.B-1303]
 }
 
 void mmc_start_host(struct mmc_host *host)
@@ -768,6 +855,10 @@ void mmc_stop_host(struct mmc_host *host)
  */
 int mmc_suspend_host(struct mmc_host *host, pm_message_t state)
 {
+	printk("[core.c][mmc_suspend_host]\n");
+//+++[FIH_ADQ][IssueKeys:ADQ.B-269]Version 2
+	
+#if 0
 	cancel_delayed_work_sync(&host->detect);
 	mmc_flush_scheduled_work();
 
@@ -787,11 +878,31 @@ int mmc_suspend_host(struct mmc_host *host, pm_message_t state)
 	mmc_bus_put(host);
 
 	mmc_power_off(host);
+#else
+	cancel_delayed_work_sync(&host->detect);
+	mmc_flush_scheduled_work();
 
+	mmc_bus_get(host);
+	if (host->bus_ops && !host->bus_dead) {
+/*		if (host->bus_ops->suspend)
+			host->bus_ops->suspend(host);
+		if (!host->bus_ops->resume) 
+		{
+			if (host->bus_ops->remove)
+				host->bus_ops->remove(host);
+
+			mmc_claim_host(host);
+			mmc_detach_bus(host);
+			mmc_release_host(host);
+		}
+*/	}
+	mmc_bus_put(host);
+
+//	mmc_power_off(host);
+#endif
+//---[FIH_ADQ][IssueKeys:ADQ.B-269]Version 2
 	return 0;
 }
-
-EXPORT_SYMBOL(mmc_suspend_host);
 
 /**
  *	mmc_resume_host - resume a previously suspended host
@@ -799,6 +910,9 @@ EXPORT_SYMBOL(mmc_suspend_host);
  */
 int mmc_resume_host(struct mmc_host *host)
 {
+	printk("[core.c][mmc_resume_host]\n");
+//+++[FIH_ADQ][IssueKeys:ADQ.B-269]Version 2
+#if 0 
 	mmc_bus_get(host);
 	if (host->bus_ops && !host->bus_dead) {
 		mmc_power_up(host);
@@ -812,7 +926,22 @@ int mmc_resume_host(struct mmc_host *host)
 	 * in parallel.
 	 */
 	mmc_detect_change(host, 1);
+#else 	
+	mmc_bus_get(host);
+	if (host->bus_ops && !host->bus_dead) {
+/*		mmc_power_up(host);
+		BUG_ON(!host->bus_ops->resume);
+		host->bus_ops->resume(host);
+*/	}
+	mmc_bus_put(host);
 
+	/*
+	 * We add a slight delay here so that resume can progress
+	 * in parallel.
+	 */
+//	mmc_detect_change(host, 1);
+#endif
+//---[FIH_ADQ][IssueKeys:ADQ.B-269]Version 2
 	return 0;
 }
 
@@ -839,9 +968,12 @@ EXPORT_SYMBOL(mmc_set_embedded_sdio_data);
 static int __init mmc_init(void)
 {
 	int ret;
-
+	//FIH_ADQ, Qualcomm release 2.3.70 add {
 	wake_lock_init(&mmc_delayed_work_wake_lock, WAKE_LOCK_SUSPEND, "mmc_delayed_work");
-
+	//FIH_ADQ, Qualcomm release 2.3.70 add }
+	// FIH_ADQ, BillHJChang	{
+	wake_lock_init(&sdcard_idle_wake_lock, WAKE_LOCK_IDLE, "sd_suspend_work");
+	// FIH_ADQ, BillHJChang	}
 	workqueue = create_singlethread_workqueue("kmmcd");
 	if (!workqueue)
 		return -ENOMEM;
@@ -858,6 +990,12 @@ static int __init mmc_init(void)
 	if (ret)
 		goto unregister_host_class;
 
+	//+++[FIH_ADQ][IssueKeys:ADQ.B-1303]
+	#if 0 // FIH_ADQ, BillHJChang, Use QC release
+	wake_lock_init(&sdcard_wlock, WAKE_LOCK_SUSPEND, "sdcard");
+	#endif
+	//---[FIH_ADQ][IssueKeys:ADQ.B-1303]
+	
 	return 0;
 
 unregister_host_class:
@@ -876,7 +1014,8 @@ static void __exit mmc_exit(void)
 	mmc_unregister_host_class();
 	mmc_unregister_bus();
 	destroy_workqueue(workqueue);
-	wake_lock_destroy(&mmc_delayed_work_wake_lock);
+	wake_lock_destroy(&mmc_delayed_work_wake_lock); // FIH_ADQ, Qualcomm release 2.3.70 add
+	wake_lock_destroy(&sdcard_idle_wake_lock); 		// FIH_ADQ, BillHJChang
 }
 
 subsys_initcall(mmc_init);

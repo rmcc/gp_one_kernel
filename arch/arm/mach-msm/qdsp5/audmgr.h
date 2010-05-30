@@ -150,7 +150,6 @@ struct rpc_audmgr_enable_client_args {
 #define AUDMGR_PROG 0x30000013
 #define AUDMGR_VERS 0x7feccbff
 #define AUDMGR_VERS_COMP 0x00010001
-#define AUDMGR_VERS_COMP_VER2 0x00020001
 
 struct rpc_audmgr_cb_func_ptr {
 	uint32_t cb_id;

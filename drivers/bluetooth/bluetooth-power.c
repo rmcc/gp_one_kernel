@@ -67,12 +67,106 @@
 #include <linux/spinlock.h>
 #include <linux/platform_device.h>
 #include <linux/rfkill.h>
+//++++++++++++++++++++++++++++++++misty
+#include "../../net/rfkill/rfkill-input.h"
+//-------------------------------misty
+
+///FIH+++
+#define WIFI_CONTROL_MASK   0x10000000
+
+static int      wifi_power_state;
+struct rfkill   *g_WifiRfkill = NULL;
+///FIH---
 
 static int bluetooth_power_state;
 static int (*power_control)(int enable);
 
 static DEFINE_SPINLOCK(bt_power_lock);
 
+
+#if 0
+static int bluetooth_toggle_radio(void *data, enum rfkill_state state)
+{
+	int ret=-1,prevState,powerControlMask=0;
+
+	/* lock change of state and reference */
+	spin_lock(&bt_power_lock);
+    prevState = bluetooth_power_state;
+    bluetooth_power_state = ((state == RFKILL_STATE_UNBLOCKED) ? 1 : 0);
+
+    printk(KERN_ERR "%s BT_STATUS from %s change to %s, WIFI_STATUS=%s.\n",__func__
+           ,(prevState)?"ON":"OFF"
+           ,(bluetooth_power_state)?"ON":"OFF"
+           ,(wifi_power_state)?"ON":"OFF");
+
+    if(prevState == bluetooth_power_state)
+    {
+        printk(KERN_DEBUG "%s: BT already turn %s\n",__func__,(bluetooth_power_state)?"ON":"OFF");
+        spin_unlock(&bt_power_lock);
+        return ret;
+    }
+
+	if (power_control) {
+            powerControlMask |= (bluetooth_power_state ? BT_WIFI_POWER_BT_ON : BT_WIFI_POWER_BT_OFF);
+            if(!bluetooth_power_state && !wifi_power_state) 
+                powerControlMask |= BT_WIFI_MODULE_OFF;
+            else if(bluetooth_power_state && !wifi_power_state) 
+                powerControlMask |= BT_WIFI_MODULE_ON;
+			ret = (*power_control)(powerControlMask);
+	} else {
+		printk(KERN_INFO
+			"%s: deferring power switch until probe\n",
+			__func__);
+	}
+
+	spin_unlock(&bt_power_lock);
+
+    return ret;
+}
+
+
+
+static int wifi_toggle_radio(void *data, enum rfkill_state state)
+{
+	int ret=-1,prevState,powerControlMask=0;
+
+	/* lock change of state and reference */
+	spin_lock(&bt_power_lock);
+
+    prevState = wifi_power_state;
+    wifi_power_state = ((state == RFKILL_STATE_UNBLOCKED) ? 1 : 0 );
+
+    printk(KERN_ERR "%s WIFI_STATUS from %s change to %s, BT_STATUS=%s.\n",__func__
+           ,(prevState)?"ON":"OFF"
+           ,(wifi_power_state)?"ON":"OFF"
+           ,(bluetooth_power_state)?"ON":"OFF");
+
+    if(prevState == wifi_power_state)
+    {
+        printk(KERN_DEBUG "%s: Wifi already turn %s\n",__func__,(wifi_power_state)?"ON":"OFF");
+        spin_unlock(&bt_power_lock);
+        return ret;
+    }
+
+	if (power_control) {
+        powerControlMask |= (wifi_power_state ? BT_WIFI_POWER_WIFI_ON : BT_WIFI_POWER_WIFI_OFF);
+        if(!bluetooth_power_state && !wifi_power_state) 
+            powerControlMask |= BT_WIFI_MODULE_OFF;
+        else if(!bluetooth_power_state && wifi_power_state) 
+            powerControlMask |= BT_WIFI_MODULE_ON;
+      
+        ret = (*power_control)(powerControlMask);
+
+     } else {
+		printk(KERN_INFO
+			"%s: wifi deferring power switch until probe\n",
+			__func__);
+	}
+	spin_unlock(&bt_power_lock);
+	return ret;
+}
+
+#else
 static int bluetooth_toggle_radio(void *data, enum rfkill_state state)
 {
 	int ret;
@@ -80,6 +174,43 @@ static int bluetooth_toggle_radio(void *data, enum rfkill_state state)
 	spin_lock(&bt_power_lock);
 	ret = (*power_control)((state == RFKILL_STATE_UNBLOCKED) ? 1 : 0);
 	spin_unlock(&bt_power_lock);
+	return ret;
+}
+
+
+static int wifi_toggle_radio(void *data, enum rfkill_state state)
+{
+	int ret;
+
+	spin_lock(&bt_power_lock);
+	ret = (*power_control)((state == RFKILL_STATE_UNBLOCKED) ? (1 | WIFI_CONTROL_MASK) : (0| WIFI_CONTROL_MASK) );
+	spin_unlock(&bt_power_lock);
+	return ret;
+}
+#endif
+
+static int wifi_rfkill_probe(struct platform_device *pdev)
+{
+	int ret = -ENOMEM;
+
+	/* force WIFI off during init to allow for user control */
+	rfkill_switch_all(RFKILL_TYPE_WLAN, RFKILL_STATE_SOFT_BLOCKED);
+
+	g_WifiRfkill = rfkill_allocate(&pdev->dev, RFKILL_TYPE_WLAN);
+
+	if (g_WifiRfkill) {
+		g_WifiRfkill->name = "wifi_ar6k";
+		g_WifiRfkill->toggle_radio = wifi_toggle_radio;
+		g_WifiRfkill->state = RFKILL_STATE_SOFT_BLOCKED;
+		ret = rfkill_register(g_WifiRfkill);
+		if (ret) {
+			printk(KERN_DEBUG
+				"%s: wifi rfkill register failed=%d\n", __func__,
+				ret);
+			rfkill_free(g_WifiRfkill);
+            return -ENOMEM;
+		}
+	}
 	return ret;
 }
 
@@ -118,6 +249,11 @@ static void bluetooth_power_rfkill_remove(struct platform_device *pdev)
 	rfkill = platform_get_drvdata(pdev);
 	if (rfkill)
 		rfkill_unregister(rfkill);
+
+    //FIH+++ Remove WIFI RFKILL  
+    if (g_WifiRfkill)
+		rfkill_unregister(g_WifiRfkill);
+    //FIH---
 
 	platform_set_drvdata(pdev, NULL);
 }
@@ -166,6 +302,8 @@ static int __init_or_module bt_power_probe(struct platform_device *pdev)
 		return -ENOSYS;
 	}
 
+    wifi_power_state = 0;
+
 	spin_lock(&bt_power_lock);
 	power_control = pdev->dev.platform_data;
 
@@ -174,12 +312,16 @@ static int __init_or_module bt_power_probe(struct platform_device *pdev)
 			"%s: handling deferred power switch\n",
 			__func__);
 	}
-	ret = (*power_control)(bluetooth_power_state);
+	//ret = (*power_control)(bluetooth_power_state);
 	spin_unlock(&bt_power_lock);
+
 
 	if (!ret && !bluetooth_power_state &&
 		    bluetooth_power_rfkill_probe(pdev))
 		ret = -ENOMEM;
+
+    wifi_rfkill_probe(pdev);
+
 
 	return ret;
 }
@@ -200,6 +342,12 @@ static int __devexit bt_power_remove(struct platform_device *pdev)
 	spin_lock(&bt_power_lock);
 	bluetooth_power_state = 0;
 	ret = (*power_control)(bluetooth_power_state);
+
+    ///FIH+++
+    wifi_power_state=0;
+    ret = (*power_control)(WIFI_CONTROL_MASK | wifi_power_state);
+    ///FIH---
+
 	power_control = NULL;
 	spin_unlock(&bt_power_lock);
 
@@ -231,6 +379,7 @@ static void __exit bluetooth_power_exit(void)
 }
 
 MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("QUALCOMM Incorporated");
 MODULE_DESCRIPTION("MSM Bluetooth power control driver");
 MODULE_VERSION("1.10");
 MODULE_PARM_DESC(power, "MSM Bluetooth power switch (bool): 0,1=off,on");

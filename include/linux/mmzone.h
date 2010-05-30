@@ -528,7 +528,11 @@ typedef struct pglist_data {
 #ifdef CONFIG_FLAT_NODE_MEM_MAP
 	struct page *node_mem_map;
 #endif
-	struct bootmem_data *bdata;
+/* FIH_ADQ, Ming { */
+/* Fix Section Mismatch Warning */
+///	struct bootmem_data *bdata;
+	int bootmem_node_id;
+/* } FIH_ADQ, Ming */
 #ifdef CONFIG_MEMORY_HOTPLUG
 	/*
 	 * Must be held any time you expect node_start_pfn, node_present_pages
@@ -549,6 +553,10 @@ typedef struct pglist_data {
 	int kswapd_max_order;
 } pg_data_t;
 
+/* FIH_ADQ, Ming { */
+/* Fix Section Mismatch Warning */
+#define BOOTMEM_NODE_DATA(pgdat) (&bootmem_node_data[pgdat->bootmem_node_id])
+/* } FIH_ADQ, Ming */
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
 #define node_spanned_pages(nid)	(NODE_DATA(nid)->node_spanned_pages)
 #ifdef CONFIG_FLAT_NODE_MEM_MAP

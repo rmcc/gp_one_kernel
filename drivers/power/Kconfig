@@ -62,4 +62,13 @@ config BATTERY_PALMTX
 	help
 	  Say Y to enable support for the battery in Palm T|X.
 
+#///+T_FIH
+config BATTERY_FIH_ZEUS
+	tristate "FIH Zeus battery"
+	depends on SYSFS
+	default y
+	help
+	  Say Y to enable support for the battery in FIH Zeus.
+#///-T_FIH
+
 endif # POWER_SUPPLY

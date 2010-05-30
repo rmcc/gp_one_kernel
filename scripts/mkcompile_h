@@ -72,6 +72,30 @@ UTS_TRUNCATE="sed -e s/\(.\{1,$UTS_LEN\}\).*/\1/"
   fi
 
   echo \#define LINUX_COMPILER \"`$CC -v 2>&1 | tail -n 1`\"
+
+#+++AudiPCHuang@FIH 2009.03.30
+  #echo ///+FIH_ADQ
+
+  #echo \#define ADQ_QC_BSP_VERSION \"[HY11_VN884_2_6.3.55]\"
+
+  #echo \#define ADQ_PROJECT_NAME \"ADQ\"
+
+  #echo \#define ADQ_BUILDING_DATE \"`date +%Y%m%d`\"
+  
+  #echo ///-FIH_ADQ
+#---AudiPCHuang@FIH 2009.03.30
+
+#+++AudiPCHuang@FIH 2009.04.23
+  #image_version=`echo $IMAGE_VERSION`
+  #if [ "$image_version" == "" ]; then
+  #	echo \#define ADQ_IMAGE_VERSION \"ADQ-0000-0-0000-0000-A01\"
+  #	image_version="ADQ-0000-0-0000-0000-A01"
+  #else
+  #	echo \#define ADQ_IMAGE_VERSION \"$image_version\"
+  #fi
+
+  #echo \#define IMAGE_FILE_NAME \"$image_version.nb0\"
+#---AudiPCHuang@FIH 2009.04.23
 ) > .tmpcompile
 
 # Only replace the real compile.h if the new one is different,

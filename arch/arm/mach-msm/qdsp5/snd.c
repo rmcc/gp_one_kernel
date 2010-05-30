@@ -38,10 +38,19 @@ struct snd_ctxt {
 
 static struct snd_ctxt the_snd;
 
+// +++ FIH_ADQ +++, added by henry.wang
+#define RPC_SND_PROG	0x30000002
+#define RPC_SND_VERS         0x00010001
+/*
 #define RPC_SND_PROG	0x30000002
 #define RPC_SND_CB_PROG	0x31000002
-
-#define RPC_SND_VERS                    0x00020001
+#if CONFIG_MSM_AMSS_VERSION == 6210
+#define RPC_SND_VERS                    0x94756085
+#elif (CONFIG_MSM_AMSS_VERSION == 6220) || (CONFIG_MSM_AMSS_VERSION == 6225)
+#define RPC_SND_VERS                    0xaa2b1a44
+#endif
+*/
+// --- FIH_ADQ ---
 
 #define SND_SET_DEVICE_PROC 2
 #define SND_SET_VOLUME_PROC 3

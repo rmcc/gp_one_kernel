@@ -43,6 +43,9 @@
 #include "irq.h"
 #include "gpio.h"
 #include "timer.h"
+/* FIH_ADQ, Kenny { */
+#include "linux/pmlog.h"
+/* } FIH_ADQ, Kenny */
 #include "pm.h"
 
 enum {
@@ -403,6 +406,14 @@ enter_failed:
 			       "smsm_get_state %x\n", readl(A11S_CLK_SLEEP_EN),
 			       readl(A11S_PWRDOWN),
 			       smsm_get_state(SMSM_MODEM_STATE));
+	    
+	    /* FIH_ADQ, Kenny { */
+	    if ((sleep_mode < MSM_PM_SLEEP_MODE_APPS_SLEEP) && (from_idle == 0) && (collapsed >= 0) ) {
+	        pmlog("msm_sleep(): msm_pm_collapse=%d\n", collapsed);
+	        smsm_pmlog_sleep_info(msm_pm_sma.int_info->aArm_wakeup_reason);
+	    }
+	    /* } FIH_ADQ, Kenny */
+	    
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_SMSM_STATE)
 			smsm_print_sleep_info(*msm_pm_sma.sleep_delay,
 				*msm_pm_sma.limit_sleep,
@@ -660,8 +671,51 @@ static int msm_pm_enter(suspend_state_t state)
 	return 0;
 }
 
+///+FIH_ADQ
+/* FIH_ADQ, Kenny { */
+//#include "linux/pmlog.h"
+/* } FIH_ADQ, Kenny */
+
+#ifdef __FIH_PM_STATISTICS__
+static int _msm_pm_enter(suspend_state_t state)
+{
+	int i;
+
+	g_pms_suspend.pre = get_seconds();
+	g_pms_suspend.npre = get_nseconds();
+#ifdef __FIH_DBG_PM_STATISTICS__
+	if (g_secupdatereq) g_timelose++;
+	{
+		unsigned long l = get_seconds() - g_pms_resume.pre;
+		g_pms_resume.ntime += ((l) ? (l--, (NSEC_PER_SEC - g_pms_resume.npre + get_nseconds())) : (get_nseconds() - g_pms_resume.npre));
+		g_pms_resume.time += (l + (g_pms_resume.ntime / NSEC_PER_SEC));
+		g_pms_resume.ntime %= NSEC_PER_SEC;
+	}
+#endif		// __FIH_DBG_PM_STATISTICS__
+
+	i = msm_pm_enter(state);
+
+	//g_pms_suspend.time += (get_seconds() - g_pms_suspend.pre);
+#ifdef __FIH_DBG_PM_STATISTICS__
+	g_secupdatereq = 3;
+#else		// __FIH_DBG_PM_STATISTICS__
+	g_secupdatereq = 4;
+#endif		// __FIH_DBG_PM_STATISTICS__
+	g_pms_suspend.cnt++;
+
+	return i;
+}
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
+
 static struct platform_suspend_ops msm_pm_ops = {
+///+FIH_ADQ
+#ifdef __FIH_PM_STATISTICS__
+	.enter		= _msm_pm_enter,
+#else	// __FIH_PM_STATISTICS__
 	.enter		= msm_pm_enter,
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
 	.valid		= suspend_valid_only_mem,
 };
 
@@ -686,6 +740,10 @@ static void msm_pm_restart(char str)
 		msm_proc_comm(PCOM_RESET_CHIP, &restart_reason, 0);
 	}
 #endif
+	/* FIH_ADQ, Ming { */
+	uint32_t oem_cmd = SMEM_PROC_COMM_OEM_RESET_CHIP_EBOOT;
+	msm_proc_comm_oem(PCOM_CUSTOMER_CMD1, &oem_cmd, 0, &restart_reason);
+	/* } FIH_ADQ, Ming */
 	for (;;) ;
 }
 
@@ -702,6 +760,14 @@ static int msm_reboot_call(struct notifier_block *this, unsigned long code, void
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned code = simple_strtoul(cmd + 4, 0, 16) & 0xff;
 			restart_reason = 0x6f656d00 | code;
+        /* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
+                } else if (!strcmp(cmd, "usb_pid")) {
+                        restart_reason = 0x22685511;    
+        /* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */                   
+     /*+++ FIH_ADQ --- Sung Chuan 2009.07.29 { */                               
+            } else if (!strcmp(cmd, "usb_reboot")) {
+                        restart_reason = 0x22692922;    
+     /* }--- FIH_ADQ --- Sung Chuan 2009.07.29 */
 		} else {
 			restart_reason = 0x77665501;
 		}

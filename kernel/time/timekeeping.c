@@ -47,10 +47,41 @@ struct timespec wall_to_monotonic __attribute__ ((aligned (16)));
 static unsigned long total_sleep_time;		/* seconds */
 
 static struct timespec xtime_cache __attribute__ ((aligned (16)));
+
+///+FIH_ADQ
+#include "linux/pmlog.h"
+
+#ifdef __FIH_PM_STATISTICS__
+unsigned long get_nseconds(void)
+{
+	return xtime_cache.tv_nsec;
+}
+EXPORT_SYMBOL(get_nseconds);
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
+
 void update_xtime_cache(u64 nsec)
 {
 	xtime_cache = xtime;
 	timespec_add_ns(&xtime_cache, nsec);
+///+FIH_ADQ
+#ifdef __FIH_PM_STATISTICS__
+	if (g_secupdatereq) {
+		if (g_secupdatereq-- == 1) {
+			unsigned long l = xtime_cache.tv_sec - g_pms_suspend.pre;
+			g_pms_suspend.ntime += ((l) ? (l--, (NSEC_PER_SEC - g_pms_suspend.npre + xtime_cache.tv_nsec)) :
+			                              (xtime_cache.tv_nsec - g_pms_suspend.npre));
+			g_pms_suspend.time += (l + (g_pms_suspend.ntime / NSEC_PER_SEC));
+			g_pms_suspend.ntime %= NSEC_PER_SEC;
+#ifdef __FIH_DBG_PM_STATISTICS__
+			g_pms_resume.pre = get_seconds();
+			g_pms_resume.npre = get_nseconds();
+#endif		// __FIH_DBG_PM_STATISTICS__
+			g_secupdatereq = 0;
+		}
+	}
+#endif	// __FIH_PM_STATISTICS__
+///-FIH_ADQ
 }
 
 struct clocksource *clock;

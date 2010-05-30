@@ -29,3 +29,12 @@ obj-$(CONFIG_KEYBOARD_BFIN)		+= bf54x-keys.o
 obj-$(CONFIG_KEYBOARD_SH_KEYSC)		+= sh_keysc.o
 obj-$(CONFIG_KEYBOARD_I2C_MSM)		+= msm-i2ckbd.o
 
+###+FIH_ADQ
+#AudiPCHuang 2009.01.09 FIH_ZEUS
+obj-$(CONFIG_KEYBOARD_STMPE1601)	+= stmpe1601.o
+
+#AudiPCHuang 2009.02.04 FIH_ZEUS
+ifeq ($(CONFIG_STMPE_DEBUG),y)
+EXTRA_CFLAGS += -DDEBUG
+endif
+###-FIH_ADQ

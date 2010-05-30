@@ -77,8 +77,10 @@ static int msm_fb_bl_update_status(struct backlight_device *pbd)
 	__u32 bl_lvl;
 
 	bl_lvl = pbd->props.brightness;
-	bl_lvl = mfd->fbi->bl_curve[bl_lvl];
+	//bl_lvl = mfd->fbi->bl_curve[bl_lvl]; //FIH_ADQ masked by guorui
+/* FIH_ADQ, 6360 { */	
 	msm_fb_set_backlight(mfd, bl_lvl, 1);
+/* } FIH_ADQ, 6360  */	
 	return 0;
 }
 
@@ -97,7 +99,10 @@ void msm_fb_config_backlight(struct msm_fb_data_type *mfd)
 	fbi = mfd->fbi;
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
+	//printk(KERN_INFO "XXXXXXXXXXmsm_fb_bl: start_register %d\n", (pdata ? 1:0) );
+
 	if ((pdata) && (pdata->set_backlight)) {
+		//printk(KERN_INFO "XXXXXXXXXXmsm_fb_bl: set_backlight %d \n",pdata->set_backlight ? 1 :0);
 		snprintf(name, sizeof(name), "msmfb_bl%d", mfd->index);
 		pbd =
 		    backlight_device_register(name, fbi->dev, mfd,

@@ -858,6 +858,10 @@ static struct file_operations proc_kpageflags_operations = {
 
 struct proc_dir_entry *proc_root_kcore;
 
+//FIH_ADQ+
+extern const struct file_operations proc_plog_operations;
+//FIH_ADQ-
+
 void __init proc_misc_init(void)
 {
 	static struct {
@@ -887,6 +891,12 @@ void __init proc_misc_init(void)
 	/* And now for trickier ones */
 #ifdef CONFIG_PRINTK
 	proc_create("kmsg", S_IRUSR, NULL, &proc_kmsg_operations);
+//FIH_ADQ+
+	proc_create("plog", S_IRUSR, NULL, &proc_plog_operations);	
+//FIH_ADQ-
+    /* FIH_ADQ, Kenny { */
+	proc_create("pmlog", S_IRUSR, NULL, &proc_pmlog_operations);
+	/* } FIH_ADQ, Kenny */
 #endif
 	proc_create("locks", 0, NULL, &proc_locks_operations);
 	proc_create("devices", 0, NULL, &proc_devinfo_operations);

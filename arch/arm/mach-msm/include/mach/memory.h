@@ -26,8 +26,12 @@
 #endif
 
 #else
-
-#define PHYS_OFFSET		UL(0x00200000)
+/* FIH_ADQ */
+/* #define PHYS_OFFSET		UL(0x00200000) */
+/* Move kernel to the 2nd RAM */
+/* #define PHYS_OFFSET		UL(0x20000000) */
+/* Move kernel to pseudo address 0x1A000000 map to actual address 0x02000000 */
+#define PHYS_OFFSET		UL(0x1A000000)
 
 #endif
 
@@ -51,5 +55,8 @@ void write_to_strongly_ordered_memory(void);
 	} while(0)
 #endif
 #endif
-
+/* FIH_ADQ, Ming { */
+/* NodeSize = 25 bits = 32M */
+#define NODE_MEM_SIZE_BITS	25
+/* } FIH_ADQ, Ming */
 #endif
