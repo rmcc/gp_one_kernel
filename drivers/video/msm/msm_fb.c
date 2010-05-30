@@ -638,6 +638,11 @@ static int msm_fb_suspend_sub(struct msm_fb_data_type *mfd)
 		}
 		mfd->op_enable = FALSE;
 	}
+    /* FIH_ADQ, Ming { */
+    printk(KERN_INFO "set hx8352 to standby mode...\n");
+    lcd_spi_write(gLcdSpi, ARRAY_AND_SIZE(config_standby));
+    /* } FIH_ADQ, Ming */
+
 	////////////////////////////////////////////////////
 	// try to power down
 	////////////////////////////////////////////////////
