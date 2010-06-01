@@ -242,7 +242,7 @@ unsigned long acpuclk_wait_for_irq(void) {
 }
 
 //+++FIH_ADQ+++ , added by simonsschang
-void acpuclk_set_lcdcoff_wait_for_irq(int on)
+int acpuclk_set_lcdcoff_wait_for_irq(int on)
 {
     mutex_lock(&drv_state.lock);
     if(on)
@@ -268,6 +268,7 @@ void acpuclk_set_lcdcoff_wait_for_irq(int on)
 	 	//[---]FIH_ADQ ChiaYuan add for increasing battery life
     }
     mutex_unlock(&drv_state.lock);        
+    return 0;
 }
 
 static int acpuclk_set_vdd_level(int vdd)

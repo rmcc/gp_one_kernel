@@ -57,7 +57,6 @@
 /* } FIH, AudiPCHuang, 2009/03/27 */
 
 #include "devices.h"
-#include "keypad-surf-ffa.h"
 #include "socinfo.h"
 
 #include "pm.h"
@@ -220,6 +219,11 @@ static struct usb_composition usb_func_composition[] = {
 		.product_id         = 0xC004,
 		.functions	    = 0x01, /* 100100 */
 	},
+	// 0xC005 NMEA + ADB
+	{
+		.product_id         = 0xC005,
+		.functions	    = 0x14, /* 100100 */
+	},
 /// --- FIH_ADQ --- , SungSCLee 2009.07.29
 
 	// --- FIH_ADQ ---
@@ -371,11 +375,6 @@ static struct platform_device headset_sensor_device = {
 #define LCDC_API_VERS             0x450673F2
 #endif
 
-static struct msm_rpc_endpoint *lcdc_ep;
-/* FIH_ADQ Backlight on/off{ */
-extern lcd_backlight_switch(bool turn_on) ;
-/* } FIH_ADQ Backlight on/off */
-
 /* FIH, SungSCLee, 2009/05/21, { */
 static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 {
@@ -432,53 +431,9 @@ static int msm_read_serial_number_from_nvitem()
 } 
 /* } FIH, SungSCLee, 2009/05/21,  */
 
-static int msm_fb_lcdc_config(int on)
-{
-	int rc = 0;
-	struct rpc_request_hdr hdr;
-
-/* FIH_ADQ Backlight on/off{ */	
-/*	if (on)
-		{lcd_backlight_switch(1);           ///Sung Chuan Backlight on
-			printk(KERN_INFO "lcdc config\n");}
-	else
-		{lcd_backlight_switch(0);          ///Sung Chuan Backlight off
-			printk(KERN_INFO "lcdc un-config\n");}	
-*/
-/* } FIH_ADQ Backlight on/off */	
-
-/* FIH_ADQ, Ming { */
-/* Don't need to call RPC */
-/*				
-	lcdc_ep = msm_rpc_connect(LCDC_API_PROG, LCDC_API_VERS, 0);
-	if (IS_ERR(lcdc_ep)) {
-		printk(KERN_ERR "%s: msm_rpc_connect failed! rc = %ld\n",
-			__func__, PTR_ERR(lcdc_ep));
-		return -EINVAL;
-	}
-
-	rc = msm_rpc_call(lcdc_ep,
-				(on) ? LCDC_CONFIG_PROC : LCDC_UN_CONFIG_PROC,
-				&hdr, sizeof(hdr),
-				5 * HZ);
-	if (rc)
-		printk(KERN_ERR
-			"%s: msm_rpc_call failed! rc = %d\n", __func__, rc);
-
-	msm_rpc_close(lcdc_ep);
-*/	
-/* } FIH_ADQ, Ming */
-//+++FIH_ADQ+++ , added by simonsschang
-    if(!rc)
-    {
-        acpuclk_set_lcdcoff_wait_for_irq(on);
-	}
-
-	return rc;
-}
-
+extern int acpuclk_set_lcdcoff_wait_for_irq(int on);
 static struct lcdc_platform_data lcdc_pdata = {
-	.lcdc_gpio_config = msm_fb_lcdc_config
+	.lcdc_gpio_config = acpuclk_set_lcdcoff_wait_for_irq
 };
 
 static struct resource msm_fb_resources[] = {
@@ -492,12 +447,6 @@ static struct platform_device msm_fb_device = {
 	.id     = 0,
 	.num_resources  = ARRAY_SIZE(msm_fb_resources),
 	.resource       = msm_fb_resources,
-};
-
-static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
-	.wakeup_irq = MSM_GPIO_TO_INT(45),
-	.inject_rx_on_wakeup = 1,
-	.rx_to_inject = 0x32,
 };
 
 ///+++FIH_ADQ+++	godfrey
@@ -1669,12 +1618,6 @@ ar6k_wifi_status_cb_devid=NULL;
 	#ifdef CONFIG_SPI_GPIO
 	spi_register_board_info(lcdc_spi_devices,ARRAY_SIZE(lcdc_spi_devices));
 	#endif		
-///+++FIH_ADQ+++
-/*	init_surf_ffa_keypad(machine_is_msm7x25_ffa() ||
-			     machine_is_msm7x27_ffa() ||
-			     machine_is_qst1500_ffa() ||
-			     machine_is_qst1600_ffa());*/
-///---FIH_ADQ---
 	msm_fb_add_devices();
 //FIH_ADQ,JOE HSU 
 	msm_camera_add_device();
@@ -1704,7 +1647,7 @@ ar6k_wifi_status_cb_devid=NULL;
 
 static void __init msm_msm7x25_allocate_memory_regions(void)
 {
-	void *addr, *addr_1m_aligned;
+	//void *addr, *addr_1m_aligned;
 	unsigned long size;
 
 /* FIH_ADQ, Ming { */

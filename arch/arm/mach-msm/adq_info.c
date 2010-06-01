@@ -1,6 +1,5 @@
 #include <linux/proc_fs.h>
 #include <linux/module.h>
-#include <linux/compile.h>
 
 #include <mach/msm_iomap.h>
 #include <mach/msm_smd.h>
