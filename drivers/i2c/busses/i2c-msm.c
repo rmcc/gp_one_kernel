@@ -25,7 +25,6 @@
 #include <mach/board.h>
 
 #define DEBUG 0
-#define __TRACE_I2C_FAIL__
 
 enum {
 	I2C_WRITE_DATA          = 0x00,
@@ -107,7 +106,7 @@ dump_status(uint32_t status)
 
 static void msm_i2c_reset(struct msm_i2c_dev *dev)
 {
-	printk(KERN_INFO "<ubh> ****<<<<< msm_i2c_reset >>>>>****\r\n");
+	//printk(KERN_INFO "<ubh> ****<<<<< msm_i2c_reset >>>>>****\r\n");
 	// (1) disabling the hardware controller
 	//	I2C_SCL_SDA_HI(bus_id); /* Setup SCL & SDA register bit*/
 	//	I2C_SWITCH_IO_CTRL(bus_id); /* Switch to use IO controller */
@@ -139,12 +138,7 @@ static void msm_i2c_reset(struct msm_i2c_dev *dev)
 	clk_enable(dev->clk);
 }
 ///-FIH_ADQ
-#ifdef __TRACE_I2C_FAIL__
-int g_intcnt = 0;
-unsigned int g_intstate[10] = {0};
 int getGasgaugeState();
-unsigned char g_i2cpreaddr = 0;
-#endif	// __TRACE_I2C_FAIL__
 
 static irqreturn_t
 msm_i2c_interrupt(int irq, void *devid)
@@ -157,10 +151,6 @@ msm_i2c_interrupt(int irq, void *devid)
 	spin_lock(&dev->lock);
 ///-FIH_ADQ
 	status = readl(dev->base + I2C_STATUS);
-#ifdef __TRACE_I2C_FAIL__
-	g_intstate[g_intcnt] = status;
-	g_intcnt++;
-#endif	// __TRACE_I2C_FAIL__
 
 #if DEBUG
 	dump_status(status);
@@ -173,11 +163,6 @@ msm_i2c_interrupt(int irq, void *devid)
 	}
 
 	if (status & I2C_STATUS_ERROR_MASK) {
-#ifdef __TRACE_I2C_FAIL__
-if (getGasgaugeState()) printk(KERN_ERR "<GG-%d> %d/%d_%x_%x\n", getGasgaugeState(), dev->cnt, dev->msg->len, status, g_i2cpreaddr);
-else
-		printk(KERN_ERR "%s: %d/%d aborted cause to the I2C_STATUS(%x)\n", __func__, dev->cnt, dev->msg->len, status);
-#endif	// __TRACE_I2C_FAIL__
 		err = -EIO-1;
 		goto out_err;
 	}
@@ -297,55 +282,6 @@ msm_i2c_poll_notbusy(struct msm_i2c_dev *dev)
 	return -ETIMEDOUT;
 }
 
-#ifdef __TRACE_I2C_FAIL__
-static int
-msm_i2c_poll(struct msm_i2c_dev *dev, int index, uint32_t ckflage)
-{
-	uint32_t retries = 0;
-	#define __STATE_DEEP__ 10
-	uint32_t status, st[__STATE_DEEP__] = {0};
-	int cnt = 0;
-
-	st[0] = status = readl(dev->base + I2C_STATUS);
-	while (retries != 2000) {
-		if (!(status & ckflage))
-			return 0;
-		if ((cnt < __STATE_DEEP__) && (st[cnt] != status)) st[++cnt] = status;
-		if (retries++ > 1000)
-			msleep(1);
-
-		status = readl(dev->base + I2C_STATUS);
-	}
-	if (retries) {
-		printk(KERN_INFO "<i2c> %d. msm_i2c_poll : (%d) - [%x %x %x %x %x %x %x %x %x %x]\n", index, retries,
-			st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7], st[8], st [9]);
-	}
-	else {
-		if (status)
-			printk(KERN_INFO "<i2c> %d. msm_i2c_poll : (0) - %d\n", index, status);
-	}
-	if (retries != 2000) return 0;
-	return -ETIMEDOUT;
-}
-
-unsigned int g_i2chistory = 0;
-char g_i2cflag = 0;
-int g_count = 0;
-#define __TRACE_DEEP__ 20
-int g_index = 0;
-unsigned int g_addstatus[__TRACE_DEEP__] = {0};
-
-static int ckAddrSend(unsigned int st)
-{
-	int i = 0;
-	while ((i < g_index)) {
-		if (st == g_addstatus[i]) return 0;
-		if (++i == __TRACE_DEEP__) return 1;
-	}
-	g_addstatus[g_index++] = st;
-	return 1;
-}
-#endif	// __TRACE_I2C_FAIL__
 
 static int
 ///+FIH_ADQ
@@ -357,18 +293,12 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	int ret = -1;
 	int rem = num;
 	uint16_t addr;
-#ifdef __TRACE_I2C_FAIL__
-	uint16_t addrflage = 0;
-#endif	// __TRACE_I2C_FAIL__
 	long timeout;
 	unsigned long flags;
 
 ///+FIH_ADQ
 	if (flags = readl(dev->base + I2C_STATUS)) {
-#ifdef __TRACE_I2C_FAIL__
-		int i = 0;
-#endif	// __TRACE_I2C_FAIL__
-		printk(KERN_INFO "<i2c> msm_i2c_xfer : I2C_STATUS(%x)\n", flags);
+		//printk(KERN_INFO "<i2c> msm_i2c_xfer : I2C_STATUS(%x)\n", flags);
 		if ((flags = readl(dev->base + I2C_STATUS)) & I2C_STATUS_RD_BUFFER_FULL) {
 			if (flags == 0xbb02) {
 				unsigned long ud, tmp;
@@ -385,9 +315,6 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				printk(KERN_INFO "<ubh> msm_i2c_xfer 00 : I2C_STATUS(%x -> %x) : %x\r\n", flags, tmp = readl(dev->base + I2C_STATUS), ud);
 				flags = tmp;
 			}
-#ifdef __TRACE_I2C_FAIL__
-			i = 1;
-#endif	// __TRACE_I2C_FAIL__
 		}
 		if (flags & (I2C_STATUS_BUS_ACTIVE | I2C_STATUS_FAILED | I2C_STATUS_BUS_ERROR | I2C_STATUS_WR_BUFFER_FULL))
 				// ex. 0x2100	NOT_MASTER_STATE, I2C_STATUS_BUS_ACTIVE
@@ -398,39 +325,15 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				// so must reset the I2C controller to avoid block the I2C command.
 		{
 			msm_i2c_reset(dev);
-			printk(KERN_INFO "<i2c> msm_i2c_xfer 02 : I2C_STATUS(%x -> %x)\n", flags, readl(dev->base + I2C_STATUS));
-#ifdef __TRACE_I2C_FAIL__
-			i = 1;
-#endif	// __TRACE_I2C_FAIL__
-		}
-#ifdef __TRACE_I2C_FAIL__
-		if (i) {
-			g_count++;
-			if (g_i2cflag == 0) {
-				int i;
-				g_i2chistory = (g_i2chistory << 8) | (g_i2cpreaddr & 0xff);
-				g_i2cflag = 1;
-				printk(KERN_INFO "<i2c> msm_i2c - g_addstatus list(%d) :", g_index);
-				for (i = 0; i < g_index; i++)
-					printk(" %x", g_addstatus[i]);
-				printk("\n");
-			}
-			printk(KERN_INFO "<i2c> i2c trace -> [%x] - %d\r\n", g_i2chistory, g_count);
+			//printk(KERN_INFO "<i2c> msm_i2c_xfer 02 : I2C_STATUS(%x -> %x)\n", flags, readl(dev->base + I2C_STATUS));
 		}
 	}
-#else	// __TRACE_I2C_FAIL__
-	}
-	else g_i2cflag = 0;
-#endif	// __TRACE_I2C_FAIL__
 ///-FIH_ADQ
 
 	while (rem) {
 		addr = msgs->addr << 1;
 		if (msgs->flags & I2C_M_RD)
 			addr |= 1;
-#ifdef __TRACE_I2C_FAIL__
-		g_intcnt = 0;
-#endif	// __TRACE_I2C_FAIL__
 
 		spin_lock_irqsave(&dev->lock, flags);
 		dev->msg = msgs;
@@ -441,11 +344,7 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		dev->complete = &complete;
 		spin_unlock_irqrestore(&dev->lock, flags);
 
-#ifdef __TRACE_I2C_FAIL__
-		ret = msm_i2c_poll(dev, 0, I2C_STATUS_BUS_ACTIVE);
-#else	// __TRACE_I2C_FAIL__
 		ret = msm_i2c_poll_notbusy(dev);
-#endif	// __TRACE_I2C_FAIL__
 		if (ret) {
 			dev_err(dev->dev, "Error waiting for notbusy\n");
 			goto out_err;
@@ -455,11 +354,7 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 			addr |= I2C_WRITE_DATA_LAST_BYTE;
 
 		/* Wait for WR buffer not full */
-#ifdef __TRACE_I2C_FAIL__
-		ret = msm_i2c_poll(dev, 1, I2C_STATUS_WR_BUFFER_FULL);
-#else	// __TRACE_I2C_FAIL__
 		ret = msm_i2c_poll_writeready(dev);
-#endif	// __TRACE_I2C_FAIL__
 		if (ret) {
 			dev_err(dev->dev,
 				"Error waiting for write ready before addr\n");
@@ -476,13 +371,8 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 			uint32_t retries = 0;
 			spin_lock_irqsave(&dev->lock, flags);
 
-#ifdef __TRACE_I2C_FAIL__
-			writel(addr|=I2C_WRITE_DATA_ADDR_BYTE,
-				dev->base + I2C_WRITE_DATA);
-#else	// __TRACE_I2C_FAIL__
 			writel(I2C_WRITE_DATA_ADDR_BYTE | addr,
 				dev->base + I2C_WRITE_DATA);
-#endif	// __TRACE_I2C_FAIL__
 
 			/* Poll for I2C controller going into RX_DATA mode to
 			 * ensure controller goes into receive mode.
@@ -505,13 +395,8 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				goto out_err;
 			}
 
-#ifdef __TRACE_I2C_FAIL__
 			writel(I2C_WRITE_DATA_LAST_BYTE,
 					dev->base + I2C_WRITE_DATA);
-#else	// __TRACE_I2C_FAIL__
-			writel(I2C_WRITE_DATA_LAST_BYTE,
-					dev->base + I2C_WRITE_DATA);
-#endif	// __TRACE_I2C_FAIL__
 			spin_unlock_irqrestore(&dev->lock, flags);
 		} else {
 			writel(I2C_WRITE_DATA_ADDR_BYTE | addr,
@@ -527,28 +412,8 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		 * and wake us up with dev->err set if there was an error
 		 */
 
-#ifdef __TRACE_I2C_FAIL__
-		addrflage = readl(dev->base + I2C_STATUS);
-		if (ckAddrSend(addrflage)) {
-				printk(KERN_INFO "<i2c> msm_i2c_xfer new g_addrstatus(%x) : addr(%x) -> rem(%d)-[%x-%x-%d-%x]\n",
-					addrflage, addr, rem,
-					msgs->addr, msgs->flags, msgs->len, *(msgs->buf));
-		}
-		else addrflage = 0;
-#endif	// __TRACE_I2C_FAIL__
 		timeout = wait_for_completion_timeout(&complete, HZ);
 		if (!timeout) {
-#ifdef __TRACE_I2C_FAIL__
-			writel(I2C_WRITE_DATA_LAST_BYTE,
-				dev->base + I2C_WRITE_DATA);
-			msleep(100);
-			/* FLUSH */
-			dev_err(dev->dev, "Transaction timed out : addr(%x) -> I2C_READ_DATA(%x), I2C_STATUS(%x), rem(%d)-[%x-%x-%d-%x], addrflage(%x), INT%d-[%x %x %x %x %x %x]\n",
-				addr, readl(dev->base + I2C_READ_DATA),
-				readl(dev->base + I2C_STATUS), rem,
-				msgs->addr, msgs->flags, msgs->len, *(msgs->buf), addrflage,
-				g_intcnt, g_intstate[0], g_intstate[1], g_intstate[2], g_intstate[3], g_intstate[4], g_intstate[5]);
-#else	// __TRACE_I2C_FAIL__
 			dev_err(dev->dev, "Transaction timed out\n");
 /* FIH_ADQ, 6370 { */			
 			writel(I2C_WRITE_DATA_LAST_BYTE,
@@ -558,55 +423,24 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 			readl(dev->base + I2C_READ_DATA);
 			readl(dev->base + I2C_STATUS);
 /* FIH_ADQ, 6370 { */			
-#endif	// __TRACE_I2C_FAIL__
 			ret = -ETIMEDOUT;
 			goto out_err;
 		}
-#ifdef __TRACE_I2C_FAIL__
-		if (flags = readl(dev->base + I2C_STATUS)) {
-		    /* FIH_ADQ, Kenny { */
-		    
-		    /*
-			printk(KERN_INFO "<i2c> msm_i2c_xfer : I2C completion but I2C_STATUS(%x) - rem(%d)-[%x-%x-%d-%x] [%x : %x %x %x %x %x %x %x]\r\n",
-				flags, rem,
-				msgs->addr, msgs->flags, msgs->len, *(msgs->buf),
-				g_intcnt, g_intstate[0], g_intstate[1], g_intstate[2], g_intstate[3],
-				g_intstate[4], g_intstate[5], g_intstate[6]);
-			*/
-			
-		    /* } FIH_ADQ, Kenny */
-		}
-#endif	// __TRACE_I2C_FAIL__
 		if (dev->err) {
 if (getGasgaugeState() == 0)
 			dev_err(dev->dev,
-#ifdef __TRACE_I2C_FAIL__
-				"Error during data xfer [%x-%x-%d-%x] : (%d)\n",
-				msgs->addr, msgs->flags, msgs->len, *(msgs->buf),
-#else	// __TRACE_I2C_FAIL__
 				"Error during data xfer (%d)\n",
-#endif	// __TRACE_I2C_FAIL__
 				dev->err);
 			ret = dev->err;
 			goto out_err;
 		}
-#ifdef __TRACE_I2C_FAIL__
-		if (addrflage) printk(KERN_INFO "<i2c> ------------------------------------------- %d.(%x)\n", g_index, addrflage);
-#endif	// __TRACE_I2C_FAIL__
 
 		msgs++;
 		rem--;
 	}
 
-#ifdef __TRACE_I2C_FAIL__
-	ret = 0;
-#else	// __TRACE_I2C_FAIL__
 	ret = num;
-#endif	// __TRACE_I2C_FAIL__
  out_err:
-#ifdef __TRACE_I2C_FAIL__
-	g_i2cpreaddr = addr;
-#endif	// __TRACE_I2C_FAIL__
 	spin_lock_irqsave(&dev->lock, flags);
 	dev->complete = NULL;
 	dev->msg = NULL;
