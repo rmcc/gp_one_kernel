@@ -125,11 +125,7 @@ static unsigned long __init init_bootmem_core(bootmem_data_t *bdata,
 unsigned long __init init_bootmem_node(pg_data_t *pgdat, unsigned long freepfn,
 				unsigned long startpfn, unsigned long endpfn)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return init_bootmem_core(pgdat->bdata, freepfn, startpfn, endpfn);
-	return init_bootmem_core(BOOTMEM_NODE_DATA(pgdat), freepfn, startpfn, endpfn);
-/* } FIH_ADQ, Ming */
+	return init_bootmem_core(pgdat->bdata, freepfn, startpfn, endpfn);
 }
 
 /**
@@ -141,17 +137,9 @@ unsigned long __init init_bootmem_node(pg_data_t *pgdat, unsigned long freepfn,
  */
 unsigned long __init init_bootmem(unsigned long start, unsigned long pages)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(NODE_DATA(0));
-/* } FIH_ADQ, Ming */
 	max_low_pfn = pages;
 	min_low_pfn = start;
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return init_bootmem_core(NODE_DATA(0)->bdata, start, 0, pages);
-	return init_bootmem_core(bdata, start, 0, pages);
-/* } FIH_ADQ, Ming */
+	return init_bootmem_core(NODE_DATA(0)->bdata, start, 0, pages);
 }
 
 static unsigned long __init free_all_bootmem_core(bootmem_data_t *bdata)
@@ -223,16 +211,8 @@ static unsigned long __init free_all_bootmem_core(bootmem_data_t *bdata)
  */
 unsigned long __init free_all_bootmem_node(pg_data_t *pgdat)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(pgdat);
-/* } FIH_ADQ, Ming */
 	register_page_bootmem_info_node(pgdat);
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return free_all_bootmem_core(pgdat->bdata);
-	return free_all_bootmem_core(bdata);
-/* } FIH_ADQ, Ming */
+	return free_all_bootmem_core(pgdat->bdata);
 }
 
 /**
@@ -242,12 +222,7 @@ unsigned long __init free_all_bootmem_node(pg_data_t *pgdat)
  */
 unsigned long __init free_all_bootmem(void)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return free_all_bootmem_core(NODE_DATA(0)->bdata);
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(NODE_DATA(0));
-	return free_all_bootmem_core(bdata);
-/* } FIH_ADQ, Ming */
+	return free_all_bootmem_core(NODE_DATA(0)->bdata);
 }
 
 static void __init __free(bootmem_data_t *bdata,
@@ -359,18 +334,10 @@ void __init free_bootmem_node(pg_data_t *pgdat, unsigned long physaddr,
 			      unsigned long size)
 {
 	unsigned long start, end;
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(pgdat);
-/* } FIH_ADQ, Ming */
 
 	start = PFN_UP(physaddr);
 	end = PFN_DOWN(physaddr + size);
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	mark_bootmem_node(pgdat->bdata, start, end, 0, 0);
-	mark_bootmem_node(bdata, start, end, 0, 0);
-/* } FIH_ADQ, Ming */
+	mark_bootmem_node(pgdat->bdata, start, end, 0, 0);
 }
 
 /**
@@ -407,19 +374,11 @@ int __init reserve_bootmem_node(pg_data_t *pgdat, unsigned long physaddr,
 				 unsigned long size, int flags)
 {
 	unsigned long start, end;
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(pgdat);
-/* } FIH_ADQ, Ming */
 
 	start = PFN_DOWN(physaddr);
 	end = PFN_UP(physaddr + size);
 
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return mark_bootmem_node(pgdat->bdata, start, end, 1, flags);
-	return mark_bootmem_node(bdata, start, end, 1, flags);
-/* } FIH_ADQ, Ming */
+	return mark_bootmem_node(pgdat->bdata, start, end, 1, flags);
 }
 
 #ifndef CONFIG_HAVE_ARCH_BOOTMEM_NODE
@@ -683,12 +642,7 @@ static void * __init ___alloc_bootmem_node(bootmem_data_t *bdata,
 void * __init __alloc_bootmem_node(pg_data_t *pgdat, unsigned long size,
 				   unsigned long align, unsigned long goal)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return ___alloc_bootmem_node(pgdat->bdata, size, align, goal, 0);
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(pgdat);
-	return ___alloc_bootmem_node(bdata, size, align, goal, 0);
-/* } FIH_ADQ, Ming */
+	return ___alloc_bootmem_node(pgdat->bdata, size, align, goal, 0);
 }
 
 #ifdef CONFIG_SPARSEMEM
@@ -717,14 +671,9 @@ void * __init alloc_bootmem_section(unsigned long size,
 void * __init __alloc_bootmem_node_nopanic(pg_data_t *pgdat, unsigned long size,
 				   unsigned long align, unsigned long goal)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	void *ptr;
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(pgdat);
-	void *ptr = alloc_bootmem_core(bdata, size, align, goal, 0);
+	void *ptr;
 
-///	ptr = alloc_bootmem_core(pgdat->bdata, size, align, goal, 0);
-/* } FIH_ADQ, Ming */
+	ptr = alloc_bootmem_core(pgdat->bdata, size, align, goal, 0);
 	if (ptr)
 		return ptr;
 
@@ -772,11 +721,6 @@ void * __init __alloc_bootmem_low(unsigned long size, unsigned long align,
 void * __init __alloc_bootmem_low_node(pg_data_t *pgdat, unsigned long size,
 				       unsigned long align, unsigned long goal)
 {
-/* FIH_ADQ, Ming { */
-/* Fix Section Mismatch Warning */
-///	return ___alloc_bootmem_node(pgdat->bdata, size, align,
-///				goal, ARCH_LOW_ADDRESS_LIMIT);
-	bootmem_data_t *bdata = BOOTMEM_NODE_DATA(pgdat);
-	return ___alloc_bootmem_node(bdata, size, align, goal, ARCH_LOW_ADDRESS_LIMIT);
-/* } FIH_ADQ, Ming */
+	return ___alloc_bootmem_node(pgdat->bdata, size, align,
+				goal, ARCH_LOW_ADDRESS_LIMIT);
 }
