@@ -102,8 +102,20 @@
 #define MSM_PMEM_ADSP_SIZE	0x1400000  //0xa00000  //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
 //#define MSM_PMEM_GPU1_SIZE	0x100000  //FIH_ADQ, Ming
 #define MSM_FB_SIZE		0x100000  //0x400000  //original: 0x200000 //FIH_ADQ,JOE HSU // CHIH CHIA change from 0x200000 to 0x100000
+/* FIH_ADQ, Ming { */
+/* we don't use alloc_bootmem to allocate PMEM */
+#define MSM_PMEM_BASE		0x00200000
+#define MSM_PMEM_LIMIT		0x01F00000 // must match PHYS_OFFSET at mach/memory.h		//CHIH CHIA, change from 0x02000000 to 0x01F00000
+#define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
+#define MSM_PMEM_CAMERA_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE
+#define MSM_PMEM_ADSP_BASE	MSM_PMEM_CAMERA_BASE + MSM_PMEM_CAMERA_SIZE
 ///#define MSM_PMEM_GPU1_BASE	0x800000  // PMEM_GPU1 is allocated by alloc_bootmem
+#define MSM_FB_BASE		MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
 
+#if ((MSM_FB_BASE + MSM_FB_SIZE) > MSM_PMEM_LIMIT)
+    #error out of PMEM boundary
+#endif
+/* } FIH_ADQ, Ming */
 
 ///FIH+++
 #define WIFI_CONTROL_MASK   0x10000000
@@ -1635,29 +1647,45 @@ ar6k_wifi_status_cb_devid=NULL;
 
 static void __init msm_msm7x25_allocate_memory_regions(void)
 {
-	void *addr, *addr_1m_aligned;
+	//void *addr, *addr_1m_aligned;
 	unsigned long size;
 
+/* FIH_ADQ, Ming { */
 	size = MSM_PMEM_MDP_SIZE;
- 	addr = alloc_bootmem(size);
-	android_pmem_pdata.start = __pa(addr);
+///	addr = alloc_bootmem(size);
+///	android_pmem_pdata.start = __pa(addr);
+	android_pmem_pdata.start = MSM_PMEM_MDP_BASE;
 	android_pmem_pdata.size = size;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	       "for pmem\n", size, addr, __pa(addr));
+///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
+///	       "for pmem\n", size, addr, __pa(addr));
+	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical)"
+	       "for pmem\n", size, (unsigned long)MSM_PMEM_MDP_BASE);
+/* } FIH_ADQ, Ming */
 
+//FIH_ADQ,JOE HSU
+/* FIH_ADQ, Ming { */
 	size = MSM_PMEM_CAMERA_SIZE;
-	addr = alloc_bootmem(size);
-	android_pmem_camera_pdata.start = __pa(addr);
+///	addr = alloc_bootmem(size);
+///	android_pmem_camera_pdata.start = __pa(addr);
+	android_pmem_camera_pdata.start = MSM_PMEM_CAMERA_BASE;
 	android_pmem_camera_pdata.size = size;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	       "for camera pmem\n", size, addr, __pa(addr));
+///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
+///	       "for camera pmem\n", size, addr, __pa(addr));
+	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical)"
+	       "for camera pmem\n", size, (unsigned long)MSM_PMEM_CAMERA_BASE);
+/* } FIH_ADQ, Ming */
 
+/* FIH_ADQ, Ming { */	       
 	size = MSM_PMEM_ADSP_SIZE;
-	addr = alloc_bootmem(size);
-	android_pmem_adsp_pdata.start = __pa(addr);
+///	addr = alloc_bootmem(size);
+///	android_pmem_adsp_pdata.start = __pa(addr);
+	android_pmem_adsp_pdata.start = MSM_PMEM_ADSP_BASE;
 	android_pmem_adsp_pdata.size = size;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	       "for adsp pmem\n", size, addr, __pa(addr));
+///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
+///	       "for adsp pmem\n", size, addr, __pa(addr));
+	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical)"
+	       "for adsp pmem\n", size, (unsigned long)MSM_PMEM_ADSP_BASE);
+/* } FIH_ADQ, Ming */
 
 	/* The GPU1 area must be aligned to a 1M boundary */
 	/* XXX For now allocate an extra 1M, use the aligned part,
@@ -1675,12 +1703,17 @@ static void __init msm_msm7x25_allocate_memory_regions(void)
 	       __pa(addr_1m_aligned));
 */
 
+/* FIH_ADQ, Ming { */
 	size = MSM_FB_SIZE;
-	addr = alloc_bootmem(size);
-	msm_fb_resources[0].start = __pa(addr);
+///	addr = alloc_bootmem(size);
+///	msm_fb_resources[0].start = __pa(addr);
+	msm_fb_resources[0].start = MSM_FB_BASE;
 	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical) for fb\n",
-		size, addr, __pa(addr));
+///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical) for fb\n",
+///		size, addr, __pa(addr));
+	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical) for fb\n",
+		size, (unsigned long)MSM_FB_BASE);
+/* } FIH_ADQ, Ming */
 }
 
 static void __init msm7x25_map_io(void)
