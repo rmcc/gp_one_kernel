@@ -36,10 +36,6 @@
 #define CHR_EN 33
 #endif	// T_FIH	///-T_FIH
 
-/* FIH_ADQ, Kenny { */
-#include "linux/pmlog.h"
-/* } FIH_ADQ, Kenny */
-
 /*+++FIH_ADQ+++*/
 enum {
 	CHARGER_STATE_UNKNOWN,		
@@ -184,9 +180,9 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 			//printk("<8>" "batt : %d\%_%d\n", val->intval, g_charging_state);
 			/* FIH_ADQ, Kenny { */
 			if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
-			    pmlog("batt : %d\%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
+			    printk(KERN_INFO "batt : %d\%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
 			else
-			    pmlog("batt : %d\%_%d\n", val->intval, g_charging_state);
+			    printk(KERN_INFO "batt : %d\%_%d\n", val->intval, g_charging_state);
 			/* } FIH_ADQ, Kenny */
 #else
 			GetBatteryInfo(BATT_CURRENT_INFO, &buf);

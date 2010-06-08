@@ -70,14 +70,6 @@ static struct map_desc msm_io_desc[] __initdata = {
 		.length =   MSM_SHARED_RAM_SIZE,
 		.type =     MT_DEVICE,
 	},
-//FIH_ADQ+
-	{
-		.virtual =  (unsigned long) MSM_PLOG_BASE,
-		.pfn =      __phys_to_pfn(MSM_PLOG_PHYS),
-		.length =   MSM_PLOG_SIZE,
-		.type =     MT_DEVICE,
-	},
-//FIH_ADQ-
 };
 
 static struct map_desc qsd8x50_io_desc[] __initdata = {

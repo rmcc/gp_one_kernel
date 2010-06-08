@@ -152,10 +152,4 @@
 #define MSM_UART1DM_PHYS      0xA0200000
 #define MSM_UART2DM_PHYS      0xA0300000
 
-//FIH_ADQ+
-#define MSM_PLOG_BASE          IOMEM(0xE2000000)
-#define MSM_PLOG_PHYS          0x01F00000
-#define MSM_PLOG_SIZE          SZ_1M
-//FIH_ADQ-
-
 #endif
