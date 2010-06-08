@@ -156,9 +156,6 @@ int smsm_change_state(uint32_t smsm_entry,
 uint32_t smsm_get_state(uint32_t smsm_entry);
 void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 	uint32_t irq_mask, uint32_t wakeup_reason, uint32_t pending_irqs);
-/* FIH_ADQ, Kenny { */
-void smsm_pmlog_sleep_info(uint32_t wakeup_reason);
-/* } FIH_ADQ, Kenny */
 void smsm_reset_modem(unsigned mode);
 void smsm_reset_modem_cont(void);
 void smd_sleep_exit(void);

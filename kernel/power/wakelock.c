@@ -54,41 +54,90 @@ static struct wake_lock deleted_wake_locks;
 static ktime_t last_sleep_time_update;
 static int wait_for_wakeup;
 
-///+FIH_ADQ
-#include "linux/pmlog.h"
+int get_expired_time(struct wake_lock *lock, ktime_t *expire_time)
+{
+	struct timespec ts;
+	struct timespec kt;
+	struct timespec tomono;
+	struct timespec delta;
+	unsigned long seq;
+	long timeout;
 
-#ifdef __FIH_PM_STATISTICS__
-struct pms g_pms_run;
-struct pms g_pms_bkrun;
-struct hpms g_pms_suspend;
+	if (!(lock->flags & WAKE_LOCK_AUTO_EXPIRE))
+		return 0;
+	do {
+		seq = read_seqbegin(&xtime_lock);
+		timeout = lock->expires - jiffies;
+		if (timeout > 0)
+			return 0;
+		kt = current_kernel_time();
+		tomono = wall_to_monotonic;
+	} while (read_seqretry(&xtime_lock, seq));
+	jiffies_to_timespec(-timeout, &delta);
+	set_normalized_timespec(&ts, kt.tv_sec + tomono.tv_sec - delta.tv_sec,
+				kt.tv_nsec + tomono.tv_nsec - delta.tv_nsec);
+	*expire_time = timespec_to_ktime(ts);
+	return 1;
+}
 
-int g_secupdatereq;
 
-#ifdef __FIH_DBG_PM_STATISTICS__
-struct hpms g_pms_resume;
-int g_timelose;
-#endif		// __FIH_DBG_PM_STATISTICS__
+static int print_lock_stat(char *buf, struct wake_lock *lock)
+{
+	int lock_count = lock->stat.count;
+	int expire_count = lock->stat.expire_count;
+	ktime_t active_time = ktime_set(0, 0);
+	ktime_t total_time = lock->stat.total_time;
+	ktime_t max_time = lock->stat.max_time;
+	ktime_t prevent_suspend_time = lock->stat.prevent_suspend_time;
+	if (lock->flags & WAKE_LOCK_ACTIVE) {
+		ktime_t now, add_time;
+		int expired = get_expired_time(lock, &now);
+		if (!expired)
+			now = ktime_get();
+		add_time = ktime_sub(now, lock->stat.last_time);
+		lock_count++;
+		if (!expired)
+			active_time = add_time;
+		else
+			expire_count++;
+		total_time = ktime_add(total_time, add_time);
+		if (lock->flags & WAKE_LOCK_PREVENTING_SUSPEND)
+			prevent_suspend_time = ktime_add(prevent_suspend_time,
+					ktime_sub(now, last_sleep_time_update));
+		if (add_time.tv64 > max_time.tv64)
+			max_time = add_time;
+	}
 
-static int pms_read_proc(char *page, char **start, off_t off,
+	return sprintf(buf, "\"%s\"\t%d\t%d\t%d\t%lld\t%lld\t%lld\t%lld\t"
+		       "%lld\n", lock->name, lock_count, expire_count,
+		       lock->stat.wakeup_count, ktime_to_ns(active_time),
+		       ktime_to_ns(total_time),
+		       ktime_to_ns(prevent_suspend_time), ktime_to_ns(max_time),
+		       ktime_to_ns(lock->stat.last_time));
+}
+
+
+static int wakelocks_read_proc(char *page, char **start, off_t off,
 			       int count, int *eof, void *data)
 {
-	//unsigned long irqflags;
+	unsigned long irqflags;
+	struct wake_lock *lock;
 	int len = 0;
 	char *p = page;
+	int type;
 
-	//spin_lock_irqsave(&list_lock, irqflags);
+	spin_lock_irqsave(&list_lock, irqflags);
 
-	p += sprintf(p, "   name   -    time    -    count\n");
-	p += sprintf(p, "\"run    \" - %10d - %10d\n", g_pms_run.time, g_pms_run.cnt);
-	p += sprintf(p, "\"bkrun  \" - %10d - %10d\n", (g_pms_bkrun.time - g_pms_suspend.time), g_pms_bkrun.cnt);
-#ifdef __FIH_DBG_PM_STATISTICS__
-	p += sprintf(p, "\"suspend\" - %10d - %10d - %d\n", g_pms_suspend.time, g_pms_suspend.cnt, g_timelose);
-	p += sprintf(p, "\"resume \" - %10d\n", g_pms_resume.time);
-#else		// __FIH_DBG_PM_STATISTICS__
-	p += sprintf(p, "\"suspend\" - %10d - %10d\n", g_pms_suspend.time, g_pms_suspend.cnt);
-#endif		// __FIH_DBG_PM_STATISTICS__
-
-	//spin_unlock_irqrestore(&list_lock, irqflags);
+	p += sprintf(p, "name\tcount\texpire_count\twake_count\tactive_since"
+		     "\ttotal_time\tsleep_time\tmax_time\tlast_change\n");
+	list_for_each_entry(lock, &inactive_locks, link) {
+		p += print_lock_stat(p, lock);
+	}
+	for (type = 0; type < WAKE_LOCK_TYPE_COUNT; type++) {
+		list_for_each_entry(lock, &active_wake_locks[type], link)
+			p += print_lock_stat(p, lock);
+	}
+	spin_unlock_irqrestore(&list_lock, irqflags);
 
 	*start = page + off;
 
@@ -100,10 +149,63 @@ static int pms_read_proc(char *page, char **start, off_t off,
 
 	return len < count ? len  : count;
 }
-#endif	// __FIH_PM_STATISTICS__
-///-FIH_ADQ
 
-/* FIH_ADQ, Kenny { */
+static void wake_unlock_stat_locked(struct wake_lock *lock, int expired)
+{
+	ktime_t duration;
+	ktime_t now;
+	if (!(lock->flags & WAKE_LOCK_ACTIVE))
+		return;
+	if (get_expired_time(lock, &now))
+		expired = 1;
+	else
+		now = ktime_get();
+	lock->stat.count++;
+	if (expired)
+		lock->stat.expire_count++;
+	duration = ktime_sub(now, lock->stat.last_time);
+	lock->stat.total_time = ktime_add(lock->stat.total_time, duration);
+	if (ktime_to_ns(duration) > ktime_to_ns(lock->stat.max_time))
+		lock->stat.max_time = duration;
+	lock->stat.last_time = ktime_get();
+	if (lock->flags & WAKE_LOCK_PREVENTING_SUSPEND) {
+		duration = ktime_sub(now, last_sleep_time_update);
+		lock->stat.prevent_suspend_time = ktime_add(
+			lock->stat.prevent_suspend_time, duration);
+		lock->flags &= ~WAKE_LOCK_PREVENTING_SUSPEND;
+	}
+}
+
+static void update_sleep_wait_stats_locked(int done)
+{
+	struct wake_lock *lock;
+	ktime_t now, etime, elapsed, add;
+	int expired;
+
+	now = ktime_get();
+	elapsed = ktime_sub(now, last_sleep_time_update);
+	list_for_each_entry(lock, &active_wake_locks[WAKE_LOCK_SUSPEND], link) {
+		expired = get_expired_time(lock, &etime);
+		if (lock->flags & WAKE_LOCK_PREVENTING_SUSPEND) {
+			if (expired)
+				add = ktime_sub(etime, last_sleep_time_update);
+			else
+				add = elapsed;
+			lock->stat.prevent_suspend_time = ktime_add(
+				lock->stat.prevent_suspend_time, add);
+		}
+		if (done || expired)
+			lock->flags &= ~WAKE_LOCK_PREVENTING_SUSPEND;
+		else
+			lock->flags |= WAKE_LOCK_PREVENTING_SUSPEND;
+	}
+	last_sleep_time_update = now;
+}
+#endif
+
+/* TO DELETE  */
+#include "linux/pmlog.h"
+
 #ifdef __FIH_PM_LOG__
 
 #define PMLOG_LENGTH	(1 << CONFIG_PMLOG_SHIFT)
@@ -117,23 +219,6 @@ DECLARE_WAIT_QUEUE_HEAD(pmlog_wait);
 
 #define PMLOG_BUF_MASK (pmlog_len-1)
 #define PMLOG_BUF(idx) (pmlog_buf[(idx) & PMLOG_BUF_MASK])
-
-
-static int getlog(char * p, int count)
-{
-	char *trg;
-	int printed_chars = 0;
-	trg = p;
-	spin_lock(&pmlog_lock);
-	while( (pmlog_start != pmlog_end) && (count != 0)){
-	    *trg++ = PMLOG_BUF(pmlog_start);
-	    pmlog_start++;
-	    printed_chars++;
-	    count--;
-	}
-    spin_unlock(&pmlog_lock);
-	return printed_chars;
-}
 
 static void put_char(char c)
 {
@@ -221,24 +306,6 @@ int pmlog(const char *fmt, ...)
 	return r;
 }
 
-static int pmlog_read_proc(char *page, char **start, off_t off,
-			       int count, int *eof, void *data)
-{
-	char * p = page;
-	int len = 0;
-	int offset;
-	
-	offset = off%(PAGE_SIZE);
-    len = getlog( p+offset, count);
-    
-    *start = page + offset;
-    if(len == 0)
-        *eof = 1;
-    else
-        *eof = 0;
-	return len;
-}
-
 /*
  * Commands to do_pmlog:
  *
@@ -303,162 +370,6 @@ out:
 #endif	// __FIH_PM_LOG__
 /* } FIH_ADQ, Kenny */
 
-int get_expired_time(struct wake_lock *lock, ktime_t *expire_time)
-{
-	struct timespec ts;
-	struct timespec kt;
-	struct timespec tomono;
-	struct timespec delta;
-	unsigned long seq;
-	long timeout;
-
-	if (!(lock->flags & WAKE_LOCK_AUTO_EXPIRE))
-		return 0;
-	do {
-		seq = read_seqbegin(&xtime_lock);
-		timeout = lock->expires - jiffies;
-		if (timeout > 0)
-			return 0;
-		kt = current_kernel_time();
-		tomono = wall_to_monotonic;
-	} while (read_seqretry(&xtime_lock, seq));
-	jiffies_to_timespec(-timeout, &delta);
-	set_normalized_timespec(&ts, kt.tv_sec + tomono.tv_sec - delta.tv_sec,
-				kt.tv_nsec + tomono.tv_nsec - delta.tv_nsec);
-	*expire_time = timespec_to_ktime(ts);
-	return 1;
-}
-
-
-static int print_lock_stat(char *buf, struct wake_lock *lock)
-{
-	int lock_count = lock->stat.count;
-	int expire_count = lock->stat.expire_count;
-	ktime_t active_time = ktime_set(0, 0);
-	ktime_t total_time = lock->stat.total_time;
-	ktime_t max_time = lock->stat.max_time;
-	ktime_t prevent_suspend_time = lock->stat.prevent_suspend_time;
-	if (lock->flags & WAKE_LOCK_ACTIVE) {
-		ktime_t now, add_time;
-		int expired = get_expired_time(lock, &now);
-		if (!expired)
-			now = ktime_get();
-		add_time = ktime_sub(now, lock->stat.last_time);
-		lock_count++;
-		if (!expired)
-			active_time = add_time;
-		else
-			expire_count++;
-		total_time = ktime_add(total_time, add_time);
-		if (lock->flags & WAKE_LOCK_PREVENTING_SUSPEND)
-			prevent_suspend_time = ktime_add(prevent_suspend_time,
-					ktime_sub(now, last_sleep_time_update));
-		if (add_time.tv64 > max_time.tv64)
-			max_time = add_time;
-	}
-
-	return sprintf(buf, "\"%s\"\t%d\t%d\t%d\t%lld\t%lld\t%lld\t%lld\t"
-		       "%lld\n", lock->name, lock_count, expire_count,
-		       lock->stat.wakeup_count, ktime_to_ns(active_time),
-		       ktime_to_ns(total_time),
-		       ktime_to_ns(prevent_suspend_time), ktime_to_ns(max_time),
-		       ktime_to_ns(lock->stat.last_time));
-}
-
-
-static int wakelocks_read_proc(char *page, char **start, off_t off,
-			       int count, int *eof, void *data)
-{
-	unsigned long irqflags;
-	struct wake_lock *lock;
-	int len = 0;
-	char *p = page;
-	int type;
-
-	spin_lock_irqsave(&list_lock, irqflags);
-
-	p += sprintf(p, "name\tcount\texpire_count\twake_count\tactive_since"
-		     "\ttotal_time\tsleep_time\tmax_time\tlast_change\n");
-///+FIH_ADQ
-	p += sprintf(p, "<< *inactive_locks >> :\n");
-///-FIH_ADQ
-	list_for_each_entry(lock, &inactive_locks, link) {
-		p += print_lock_stat(p, lock);
-	}
-	for (type = 0; type < WAKE_LOCK_TYPE_COUNT; type++) {
-///+FIH_ADQ
-		p += sprintf(p, "<< *active_wake_locks[%s] >> :\n", (type ==0) ? "WAKE_LOCK_SUSPEND" : "WAKE_LOCK_IDLE");
-///-FIH_ADQ
-		list_for_each_entry(lock, &active_wake_locks[type], link)
-			p += print_lock_stat(p, lock);
-	}
-	spin_unlock_irqrestore(&list_lock, irqflags);
-
-	*start = page + off;
-
-	len = p - page;
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len  : count;
-}
-
-static void wake_unlock_stat_locked(struct wake_lock *lock, int expired)
-{
-	ktime_t duration;
-	ktime_t now;
-	if (!(lock->flags & WAKE_LOCK_ACTIVE))
-		return;
-	if (get_expired_time(lock, &now))
-		expired = 1;
-	else
-		now = ktime_get();
-	lock->stat.count++;
-	if (expired)
-		lock->stat.expire_count++;
-	duration = ktime_sub(now, lock->stat.last_time);
-	lock->stat.total_time = ktime_add(lock->stat.total_time, duration);
-	if (ktime_to_ns(duration) > ktime_to_ns(lock->stat.max_time))
-		lock->stat.max_time = duration;
-	lock->stat.last_time = ktime_get();
-	if (lock->flags & WAKE_LOCK_PREVENTING_SUSPEND) {
-		duration = ktime_sub(now, last_sleep_time_update);
-		lock->stat.prevent_suspend_time = ktime_add(
-			lock->stat.prevent_suspend_time, duration);
-		lock->flags &= ~WAKE_LOCK_PREVENTING_SUSPEND;
-	}
-}
-
-static void update_sleep_wait_stats_locked(int done)
-{
-	struct wake_lock *lock;
-	ktime_t now, etime, elapsed, add;
-	int expired;
-
-	now = ktime_get();
-	elapsed = ktime_sub(now, last_sleep_time_update);
-	list_for_each_entry(lock, &active_wake_locks[WAKE_LOCK_SUSPEND], link) {
-		expired = get_expired_time(lock, &etime);
-		if (lock->flags & WAKE_LOCK_PREVENTING_SUSPEND) {
-			if (expired)
-				add = ktime_sub(etime, last_sleep_time_update);
-			else
-				add = elapsed;
-			lock->stat.prevent_suspend_time = ktime_add(
-				lock->stat.prevent_suspend_time, add);
-		}
-		if (done || expired)
-			lock->flags &= ~WAKE_LOCK_PREVENTING_SUSPEND;
-		else
-			lock->flags |= WAKE_LOCK_PREVENTING_SUSPEND;
-	}
-	last_sleep_time_update = now;
-}
-#endif
-
-
 static void expire_wake_lock(struct wake_lock *lock)
 {
 #ifdef CONFIG_WAKELOCK_STAT
@@ -471,13 +382,12 @@ static void expire_wake_lock(struct wake_lock *lock)
 		pr_info("expired wake lock %s\n", lock->name);
 }
 
+/* the caller must hold the list_lock before calling this function */
 static void print_active_locks(int type)
 {
-	unsigned long irqflags;
 	struct wake_lock *lock;
 
 	BUG_ON(type >= WAKE_LOCK_TYPE_COUNT);
-	spin_lock_irqsave(&list_lock, irqflags);
 	list_for_each_entry(lock, &active_wake_locks[type], link) {
 		if (lock->flags & WAKE_LOCK_AUTO_EXPIRE) {
 			long timeout = lock->expires - jiffies;
@@ -489,31 +399,7 @@ static void print_active_locks(int type)
 		} else
 			pr_info("active wake lock %s\n", lock->name);
 	}
-	spin_unlock_irqrestore(&list_lock, irqflags);
 }
-
-/* FIH_ADQ, Kenny { */
-static void pmlog_active_locks(int type)
-{
-	unsigned long irqflags;
-	struct wake_lock *lock;
-
-	BUG_ON(type >= WAKE_LOCK_TYPE_COUNT);
-	spin_lock_irqsave(&list_lock, irqflags);
-	list_for_each_entry(lock, &active_wake_locks[type], link) {
-		if (lock->flags & WAKE_LOCK_AUTO_EXPIRE) {
-			long timeout = lock->expires - jiffies;
-			if (timeout <= 0)
-				pmlog("wake lock %s, expired\n", lock->name);
-			else
-				pmlog("active wake lock %s, time left %ld\n",
-					lock->name, timeout);
-		} else
-			pmlog("active wake lock %s\n", lock->name);
-	}
-	spin_unlock_irqrestore(&list_lock, irqflags);
-}
-/* } FIH_ADQ, Kenny */
 
 static long has_wake_lock_locked(int type)
 {
@@ -559,9 +445,6 @@ static void suspend(struct work_struct *work)
 	sys_sync();
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("suspend: enter suspend\n");
-	/* FIH_ADQ, Kenny { */
-	pmlog("suspend(): enter suspend\n");
-	/* } FIH_ADQ, Kenny */
 	ret = pm_suspend(requested_suspend_state);
 	if (debug_mask & DEBUG_EXIT_SUSPEND) {
 		struct timespec ts;
@@ -587,9 +470,9 @@ static void expire_wake_locks(unsigned long data)
 	unsigned long irqflags;
 	if (debug_mask & DEBUG_EXPIRE)
 		pr_info("expire_wake_locks: start\n");
+	spin_lock_irqsave(&list_lock, irqflags);
 	if (debug_mask & DEBUG_SUSPEND)
 		print_active_locks(WAKE_LOCK_SUSPEND);
-	spin_lock_irqsave(&list_lock, irqflags);
 	has_lock = has_wake_lock_locked(WAKE_LOCK_SUSPEND);
 	if (debug_mask & DEBUG_EXPIRE)
 		pr_info("expire_wake_locks: done, has_lock %ld\n", has_lock);
@@ -720,6 +603,7 @@ static void wake_lock_internal(
 		list_add(&lock->link, &active_wake_locks[type]);
 	}
 	if (type == WAKE_LOCK_SUSPEND) {
+		if (lock == &main_wake_lock)
 			current_event_num++;
 #ifdef CONFIG_WAKELOCK_STAT
 		if (lock == &main_wake_lock)
@@ -792,9 +676,6 @@ void wake_unlock(struct wake_lock *lock)
 		if (lock == &main_wake_lock) {
 			if (debug_mask & DEBUG_SUSPEND)
 				print_active_locks(WAKE_LOCK_SUSPEND);
-			/* FIH_ADQ, Kenny { */
-			pmlog_active_locks(WAKE_LOCK_SUSPEND);
-			/* } FIH_ADQ, Kenny */
 #ifdef CONFIG_WAKELOCK_STAT
 			update_sleep_wait_stats_locked(0);
 #endif
@@ -847,20 +728,6 @@ static int __init wakelocks_init(void)
 	create_proc_read_entry("wakelocks", S_IRUGO, NULL,
 				wakelocks_read_proc, NULL);
 #endif
-
-///+FIH_ADQ
-#ifdef __FIH_PM_STATISTICS__
-	create_proc_read_entry("pms", S_IRUGO, NULL,
-				pms_read_proc, NULL);
-#endif	// __FIH_PM_STATISTICS__
-///-FIH_ADQ
-
-/* FIH_ADQ, Kenny { */
-#ifdef __FIH_PM_LOG__
-	//create_proc_read_entry("pmlog", S_IRUGO, NULL,
-	//			pmlog_read_proc, NULL);
-#endif	//__FIH_PM_LOG__
-/* } FIH_ADQ, Kenny */
 
 	return 0;
 

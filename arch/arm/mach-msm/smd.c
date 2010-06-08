@@ -38,10 +38,6 @@
 #include "proc_comm.h"
 #include "modem_notifier.h"
 
-/* FIH_ADQ, Kenny { */
-#include "linux/pmlog.h"
-/* } FIH_ADQ, Kenny */
-
 #define MODULE_NAME "msm_smd"
 #define SMEM_VERSION 0x000B
 #define SMD_VERSION 0x00020000
@@ -1363,42 +1359,6 @@ void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 
 	spin_unlock_irqrestore(&smem_lock, flags);
 }
-
-/* FIH_ADQ, Kenny { */
-/*
- * Print pmlog information on shared memory sleep variables
- */
-void smsm_pmlog_sleep_info(uint32_t wakeup_reason)
-{
-	unsigned long flags;
-	struct tramp_gpio_smem *gpio;
-
-	spin_lock_irqsave(&smem_lock, flags);
-    
-    if(wakeup_reason & SMSM_WKUP_REASON_RPC)
-        pmlog("msm_sleep(): wakeup by RPC\n");
-	if(wakeup_reason & SMSM_WKUP_REASON_INT)
-	    pmlog("msm_sleep(): wakeup by interrupt\n");
-    if(wakeup_reason & SMSM_WKUP_REASON_TIMER)
-        pmlog("msm_sleep(): wakeup by timer\n");
-	if(wakeup_reason & SMSM_WKUP_REASON_ALARM)
-	    pmlog("msm_sleep(): wakeup by alarm\n");    
-	if(wakeup_reason & SMSM_WKUP_REASON_RESET)
-	    pmlog("msm_sleep(): wakeup by reset\n");
-    if(wakeup_reason & SMSM_WKUP_REASON_GPIO){
-        gpio = smem_alloc( SMEM_GPIO_INT, sizeof(*gpio)); 
-    	if (gpio) {
-    	    int i;
-    		for(i = 0; i < GPIO_SMEM_NUM_GROUPS; i++) {			
-    			if(gpio->num_fired[i]){
-    		        pmlog("msm_sleep(): wakeup by GPIO(%d)\n", gpio->fired[i][0]);
-    			}
-    		}
-    	}
-    }
-	spin_unlock_irqrestore(&smem_lock, flags);
-}
-/* FIH_ADQ, Kenny */
 
 int smd_core_init(void)
 {
