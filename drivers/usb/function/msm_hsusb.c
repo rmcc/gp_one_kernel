@@ -43,6 +43,8 @@
 #include <mach/msm_hsusb_hw.h>
 #include <mach/msm_otg.h>
 #include <linux/wakelock.h>
+#include <linux/pm_qos_params.h>
+
 ///+++ T_FIH +++
 #include <linux/power_supply.h>
 ///+++ FIH_ADQ +++ Sung Chuan 2009.05.07
@@ -208,23 +210,18 @@ void usb_chg_pid(bool usb_switch);
 #define USB_FLAG_SUSPEND	0x0010
 #define USB_FLAG_CONFIGURE	0x0020
 #define USB_FLAG_RESUME	0x0040
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.07
 #define USB_FLAG_REG_OTG 0x0080
-///--- FIH_ADQ --- Sung Chuan 2009.04.07
 
 #define USB_MSC_ONLY_FUNC_MAP	0x10
-///+++ 6370 +++
 #define DRIVER_NAME		"msm_hsusb_peripheral"
-///--- 6370 ---
+
 struct lpm_info {
 	unsigned int rs_rw;
 	unsigned int pmic_h_disabled;
 	struct work_struct detach_int_h;
 	struct work_struct wakeup_phy;
 };
-/// +++ FIH_ADQ +++  SungSCLee 2009.04.07
 
-///--- FIH_ADQ --- Sung Chuan 2009.04.07
 enum charger_type {
 	CHG_HOST_PC,
 	CHG_WALL = 2,
@@ -307,7 +304,7 @@ struct usb_info {
 	char **strdesc;
 	int strdesc_index;
 
-	unsigned char test_mode;
+	u16 test_mode;
 	struct wake_lock wlock;
 	struct msm_otg_transceiver *xceiv;
 	int active;
@@ -382,9 +379,7 @@ static int usb_chg_detect_type(struct usb_info *ui)
 		/* 50ms is requried for charging circuit to powerup
 		 * and start functioning
 		 */
-///+++ FIH_ADQ +++ Sung Chuan 2009.05.25
 		msleep(50);
-///--- FIH_ADQ --- Sung Chuan 2009.05.25		
 		if ((readl(USB_PORTSC) & PORTSC_LS) == PORTSC_LS)
 			ret = CHG_WALL;
 		else
@@ -866,10 +861,8 @@ static void usb_ept_start(struct usb_endpoint *ept)
 	/* link the hw queue head to the request's transaction item */
 	ept->head->next = req->item_dma;
 	ept->head->info = 0;
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.03 
 	/* memory barrier to flush the data before priming endpoint*/
 	dmb();
-///--- FIH_ADQ --- Sung Chuan 2009.04.03 	
 	/* start the endpoint */
 	writel(1 << ept->bit, USB_ENDPTPRIME);
 
@@ -893,16 +886,15 @@ int usb_ept_queue_xfer(struct usb_endpoint *ept, struct usb_request *_req)
 		return -EMSGSIZE;
 
 	if (ui->in_lpm) {
-///+++ FIH_ADQ +++ Sung Chuan 2009.05.15	
 		req->req.status = usb_remote_wakeup();
-///--- FIH_ADQ --- Sung Chuan 2009.05.15
-		req->req.status = -ENODEV;		
-		pr_debug("%s: USB is in LPM, ep = %x\n", __func__, ept->bit);
-		return -ENODEV;
+		if (req->req.status) {
+			pr_debug("%s:RWakeup generation failed, EP = %x\n",
+                                                        __func__, ept->bit);
+			return req->req.status;
 	}
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.08
+	}
+
 	spin_lock_irqsave(&ui->lock, flags);
-///--- FIH_ADQ --- Sung Chuan 2009.04.08
 
 	if (req->busy) {
 		req->req.status = -EBUSY;
@@ -1271,7 +1263,7 @@ static void handle_setup(struct usb_info *ui)
 			} else if (ctl.wValue == USB_DEVICE_TEST_MODE) {
 				if (ctl.wIndex & 0x0f)
 					break;
-				ui->test_mode = (ctl.wIndex >> 8);
+				ui->test_mode = ctl.wIndex;
 				ep0_setup_ack(ui);
 				return;
 			}
@@ -1557,7 +1549,7 @@ static void flush_all_endpoints(struct usb_info *ui)
 }
 
 #define HW_DELAY_FOR_LPM msecs_to_jiffies(1000)
-#define DELAY_FOR_USB_VBUS_STABILIZE msecs_to_jiffies(500)
+#define DELAY_FOR_USB_VBUS_STABILIZE msecs_to_jiffies(100)
 static irqreturn_t usb_interrupt(int irq, void *data)
 {
 	struct usb_info *ui = data;
@@ -1580,9 +1572,6 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 		return IRQ_HANDLED;
 
 	if (n & STS_PCI) {
-///+++ FIH_ADQ +++  SungSCLee 2009.04.07
-		printk(KERN_INFO "usb: portchange\n");
-///--- FIH_ADQ --- Sung Chuan 2009.04.07	
 		if (!(readl(USB_PORTSC) & PORTSC_PORT_RESET)) {
 			speed = (readl(USB_PORTSC) & PORTSC_PORT_SPEED_MASK);
 			switch (speed) {
@@ -1685,6 +1674,8 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			OS_Type = 0;            
 			usb_disable_pullup(ui);
 
+			printk(KERN_INFO "usb cable disconnected\n");
+			ui->usb_state = USB_STATE_NOTATTACHED;
 			for (i = 0; i < ui->num_funcs; i++) {
 				struct usb_function_info *fi = ui->func[i];
 				if (!fi ||
@@ -1728,13 +1719,13 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 ///--- FIH_ADQ --- Sung Chuan 2009.07.29		
 		}
 	}
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.03 
+
 	if (readl(USB_OTGSC) & OTGSC_IDIS) {
 		writel((OTGSC_IDIS | readl(USB_OTGSC)), USB_OTGSC);
 		ui->flags = USB_FLAG_SUSPEND;
 		queue_delayed_work(usb_work, &ui->work, 0);
 	}
-///--- FIH_ADQ --- Sung Chuan 2009.04.03
+
 	return IRQ_HANDLED;
 }
 
@@ -1824,9 +1815,6 @@ static int usb_suspend_phy(struct usb_info *ui)
 	 * 2. setting the suspendM bit: this bit would be set by usb
 	 * controller once we set phcd bit.
 	 */
-///+++ FIH_ADQ +++ SungSCLee 2009.04.07		 
-         pr_err("%s: USB_PHY_EXTERNAL\n", __func__);
-///--- FIH_ADQ --- SungSCLee 2009.04.07			 
 		break;
 
 	case USB_PHY_INTEGRATED:
@@ -1903,16 +1891,14 @@ static int usb_hw_reset(struct usb_info *ui)
 
 	pdata = ui->pdev->dev.platform_data;
 
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.22	
 	/* reset the phy before resetting link */
 	if (readl(USB_PORTSC) & PORTSC_PHCD)
 		usb_wakeup_phy(ui);
 
 	/* rpc call for phy_reset */
 	msm_hsusb_phy_reset();
-///+++ FIH_ADQ +++ for phy reset time
+	/* Give some delay to settle phy after reset */
 	msleep(100);
-///--- FIH_ADQ ---	
 
 	/* RESET */
 	writel(USBCMD_RESET, USB_USBCMD);
@@ -2063,10 +2049,8 @@ void usb_start(struct usb_info *ui)
 
 	ui->xceiv = msm_otg_get_transceiver();
 	if (ui->xceiv) {
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.07	
 		ui->flags = USB_FLAG_REG_OTG;
 		queue_delayed_work(usb_work, &ui->work, 0);
-///--- FIH_ADQ --- Sung Chuan 2009.04.07
 	} else {
 		ui->active = 1;
 		ui->flags |= (USB_FLAG_START | USB_FLAG_RESET);
@@ -2397,6 +2381,19 @@ static int usb_free(struct usb_info *ui, int ret)
 	return ret;
 }
 
+static void usb_do_work_check_vbus(struct usb_info *ui)
+{
+	unsigned long iflags;
+
+	spin_lock_irqsave(&ui->lock, iflags);
+	if (vbus)
+		ui->flags |= USB_FLAG_VBUS_ONLINE;
+	else
+		ui->flags |= USB_FLAG_VBUS_OFFLINE;
+
+	spin_unlock_irqrestore(&ui->lock, iflags);
+}
+
 static int usb_vbus_is_on(struct usb_info *ui)
 {
 	unsigned tmp;
@@ -2406,7 +2403,7 @@ static int usb_vbus_is_on(struct usb_info *ui)
 	ulpi_write(ui, ULPI_SESSION_VALID_FALL, ULPI_USBINTR_ENABLE_FALLING_C);
 
 	tmp = ulpi_read(ui, ULPI_USBINTR_STATUS);
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.22	
+
 	/* enable session valid raising and falling interrupts */
 	ulpi_write(ui, ULPI_SESSION_VALID_RAISE, ULPI_USBINTR_ENABLE_RASING_S);
 	ulpi_write(ui, ULPI_SESSION_VALID_FALL, ULPI_USBINTR_ENABLE_FALLING_S);
@@ -2419,13 +2416,14 @@ static void usb_do_work(struct work_struct *w)
 {
 	struct usb_info *ui = container_of(w, struct usb_info, work.work);
 	unsigned long iflags;
-	unsigned long flags,  ret;
+	unsigned long flags, _vbus, ret;
         int rc;
 
 	for (;;) {
 		spin_lock_irqsave(&ui->lock, iflags);
 		flags = ui->flags;
 		ui->flags = 0;
+		_vbus = vbus;
 
 		spin_unlock_irqrestore(&ui->lock, iflags);
 
@@ -2435,7 +2433,6 @@ static void usb_do_work(struct work_struct *w)
 
 		switch (ui->state) {
 		case USB_STATE_IDLE:
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.07		
 			if (flags & USB_FLAG_REG_OTG) {
 				ret = ui->xceiv->set_peripheral(ui->xceiv,
 								&dcd_ops);
@@ -2444,7 +2441,6 @@ static void usb_do_work(struct work_struct *w)
 						"driver with OTG", __func__);
 				break;
 			}
-///--- FIH_ADQ --- Sung Chuan 2009.04.07			
 			if ((flags & USB_FLAG_START) ||
 					(flags & USB_FLAG_RESET)) {
 				usb_clk_enable(ui);
@@ -2458,6 +2454,9 @@ static void usb_do_work(struct work_struct *w)
 					ui->usb_state = USB_STATE_POWERED;
 					ui->usb_state = USB_STATE_CONFIGURED;
 					wake_lock(&ui->wlock);
+					pm_qos_update_requirement(
+					                PM_QOS_CPU_DMA_LATENCY,
+					                  DRIVER_NAME, 0);
 					ui->state = USB_STATE_ONLINE;
 					usb_enable_pullup(ui);
 					usb_chg_set_type(ui);
@@ -2474,7 +2473,7 @@ static void usb_do_work(struct work_struct *w)
 				} else {
 					ui->usb_state = USB_STATE_NOTATTACHED;
 					ui->state = USB_STATE_OFFLINE;
-					disable_irq(ui->irq);
+					//disable_irq(ui->irq);
                                         /*+++FIH_ADQ+++*/
                                         //Turn off Charger IC
 					rc = gpio_request(CHR_EN, "CHR_EN");
@@ -2482,7 +2481,7 @@ static void usb_do_work(struct work_struct *w)
 					gpio_set_value(CHR_EN,1);////gpio_direction_output(33,1);
 					gpio_free(CHR_EN); 
                                         /*---FIH_ADQ---*/
-					enable_irq(ui->irq);
+					//enable_irq(ui->irq);
 					msleep(500);
 					usb_lpm_enter(ui);
 					pr_info("hsusb: IDLE -> OFFLINE\n");
@@ -2491,7 +2490,6 @@ static void usb_do_work(struct work_struct *w)
 			}
 			break;
 		case USB_STATE_ONLINE:
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.22			
 			if (flags & USB_FLAG_VBUS_ONLINE) {
 				pr_info("hsusb: OFFLINE -> ONLINE\n");
 				disable_irq(ui->irq);
@@ -2514,7 +2512,6 @@ static void usb_do_work(struct work_struct *w)
 				}
 				break;
 			}
-///--- FIH_ADQ --- Sung Chuan 2009.04.22				
 			/* If at any point when we were online, we received
 			 * the signal to go offline, we must honor it
 			 */
@@ -2523,17 +2520,14 @@ static void usb_do_work(struct work_struct *w)
 				ui->chg_type = CHG_UNDEFINED;
 				msm_chg_usb_charger_disconnected();
 
+				/* reset usb core and usb phy */
+				disable_irq(ui->irq);
 
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.22					
 				if (ui->in_lpm)
 					usb_lpm_exit(ui);
-///--- FIH_ADQ --- Sung Chuan 2009.04.22	
 					
 				usb_vbus_offline(ui);
 				usb_lpm_enter(ui);
-              /* reset usb core and usb phy */
-				disable_irq(ui->irq);
-				ui->usb_state = USB_STATE_NOTATTACHED;
 				ui->state = USB_STATE_OFFLINE;
 				enable_irq(ui->irq);
 				pr_info("hsusb: ONLINE -> OFFLINE\n");
@@ -2543,6 +2537,9 @@ static void usb_do_work(struct work_struct *w)
 				ui->usb_state = USB_STATE_SUSPENDED;
 				usb_lpm_enter(ui);
 				wake_lock(&ui->wlock);
+				pm_qos_update_requirement(
+						PM_QOS_CPU_DMA_LATENCY,
+						DRIVER_NAME, 0);
 				break;
 			}
 			if ((flags & USB_FLAG_RESUME) ||
@@ -2570,14 +2567,12 @@ static void usb_do_work(struct work_struct *w)
 			/* If we were signaled to go online and vbus is still
 			 * present when we received the signal, go online.
 			 */
-			if ((flags & USB_FLAG_VBUS_ONLINE)) {
+			if ((flags & USB_FLAG_VBUS_ONLINE && _vbus)) {
 				disable_irq(ui->irq);
 				ui->usb_state = USB_STATE_CONFIGURED;
 				ui->state = USB_STATE_ONLINE;
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.22				
 				if (ui->in_lpm)
 					usb_lpm_exit(ui);
-///--- FIH_ADQ --- Sung Chuan 2009.04.22								
 				usb_vbus_online(ui);
 				usb_enable_pullup(ui);
 				enable_irq(ui->irq);
@@ -2591,10 +2586,8 @@ static void usb_do_work(struct work_struct *w)
 					usb_lpm_enter(ui);
 #endif 					
 				}
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.22				
 				pr_info("hsusb: OFFLINE -> ONLINE\n");
 				break;
-///--- FIH_ADQ --- Sung Chuan 2009.04.22				
 			}
 			if (flags & USB_FLAG_RESET) {
 				ui->flags |= USB_FLAG_RESET;
@@ -2602,11 +2595,9 @@ static void usb_do_work(struct work_struct *w)
 				pr_info("hsusb: OFFLINE -> IDLE\n");
 				break;
 			}
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.07			
 			if (flags & USB_FLAG_SUSPEND) {
 				usb_lpm_enter(ui);
 				wake_unlock(&ui->wlock);
-				pr_info("hsusb: OFFLINE -> SUSPEND\n");
 				break;
 			}
 ///--- FIH_ADQ --- Sung Chuan 2009.04.07			
@@ -2709,6 +2700,7 @@ static void usb_lpm_exit(struct usb_info *ui)
 			ui->xceiv->set_suspend(0);
 	}
 	wake_lock(&ui->wlock);
+	pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME, 0);
 	pr_info("%s(): USB exited from low power mode\n", __func__);
 }
 
@@ -2803,7 +2795,9 @@ static int usb_lpm_enter(struct usb_info *ui)
 	}
 
 	enable_irq(ui->irq);
-	wake_unlock(&ui->wlock);
+	pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME,
+							PM_QOS_DEFAULT_VALUE);
+	wake_lock_timeout(&ui->wlock, HZ / 2);
 	pr_info("%s: usb in low power mode\n", __func__);
 /* +++ FIH_ADQ +++ , SungSCLee 2009.09.02{ */	
 	if (smem_pid[0] == 0xffff) {
@@ -2957,17 +2951,11 @@ static void usb_vbus_offline(struct usb_info *ui)
 	 * of h/w bugs and to flush any resource that
 	 * h/w might be holding
 	 */
-///+++ FIH_ADQ +++ SungSCLee 2009.04.22	
-	///writel(USBCMD_RESET, USB_USBCMD);
-	///msleep(10);
-///--- FIH_ADQ --- SungSCLee 2009.04.22
 	if (readl(USB_PORTSC) & PORTSC_PHCD)
 		usb_wakeup_phy(ui);
 	msm_hsusb_phy_reset();
-///+++ FIH_ADQ +++ SungSCLee 2009.04.22	
-///+++ FIH_ADQ +++ for phy reset
+	/* Give some delay to settle phy after reset */
 	msleep(100);
-///-- FIH_ADQ --- 	
 
 	writel(USBCMD_RESET, USB_USBCMD);
 	timeout = jiffies + USB_LINK_RESET_TIMEOUT;
@@ -3295,7 +3283,6 @@ static ssize_t msm_hsusb_store_func_enable(struct device *dev,
 	usb_function_enable(name, enable);
 	return size;
 }
-///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
 
 static ssize_t msm_hsusb_show_compswitch(struct device *dev,
 					 struct device_attribute *attr,
@@ -3329,7 +3316,6 @@ static ssize_t msm_hsusb_store_compswitch(struct device *dev,
 	return size;
 }
 
-///--- FIH_ADQ --- Sung Chuan 2009.06.10
 ///+++ FIH_ADQ +++ Sung Chuan 2009.06.12
 static ssize_t msm_hsusb_store_change_pid(struct device *dev,
 					  struct device_attribute *attr,
@@ -3434,7 +3420,6 @@ static ssize_t msm_hsusb_store_autoresume(struct device *dev,
 #endif
 /* } FIH, SungSCLee, 2009/04/27 */	
 ///+++ 6370 +++
-///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
 static ssize_t msm_hsusb_show_state(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -3449,6 +3434,7 @@ static ssize_t msm_hsusb_show_state(struct device *dev,
 	};
 
 	i = scnprintf(buf, PAGE_SIZE, "%s\n", state[ui->usb_state]);
+///+++ FIH_ADQ +++ Sung Chuan 2009.06.10
     if (smem_pid[0] == 0xffff)
         printk("[USB]Read hsusb_show_state %s\n",buf);
 	return i;
@@ -3619,6 +3605,8 @@ static int __init usb_probe(struct platform_device *pdev)
 
 	spin_lock_init(&ui->lock);
 	wake_lock_init(&ui->wlock, WAKE_LOCK_SUSPEND, "usb_bus_active");
+	pm_qos_add_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME,
+							PM_QOS_DEFAULT_VALUE);
 	the_usb_info = ui;
 
 	ui->functions_map = ui->pdata->function_map;
@@ -3727,7 +3715,6 @@ static int __init usb_probe(struct platform_device *pdev)
 		usb_init_err = PTR_ERR(ui->pclk);
 		return usb_init_err;
 	}
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.03 	
 	/* memory barrier initialization in non-interrupt context */
 	dmb();
 
@@ -3851,7 +3838,7 @@ static int usb_platform_suspend(struct platform_device *pdev,
   	     power_supply_changed(g_ps_usb);
   	
 	spin_lock_irqsave(&ui->lock, flags);
-///+++ FIH_ADQ +++ Sung Chuan 2009.04.07
+
 	if (!ui->active) {
 		spin_unlock_irqrestore(&ui->lock, flags);
 		pr_info("%s: peripheral mode is not active"
@@ -3967,6 +3954,7 @@ static void usb_exit(void)
 	cancel_work_sync(&ui->li.wakeup_phy);
 
 	destroy_workqueue(usb_work);
+	pm_qos_remove_requirement(PM_QOS_CPU_DMA_LATENCY, DRIVER_NAME);
 	/* free the usb_info structure */
 	free_usb_info();
 	sysfs_remove_group(&ui->pdev->dev.kobj, &msm_hsusb_attr_grp);
