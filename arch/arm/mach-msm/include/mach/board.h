@@ -129,8 +129,4 @@ static inline void msm_hsusb_set_vbus_state(int online) {}
 
 extern int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
 
-///+FIH_ADQ
-///struct input_dev *msm_keypad_get_input_dev(void);
-///-FIH_ADQ
-
 #endif

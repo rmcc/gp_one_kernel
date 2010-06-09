@@ -38,9 +38,7 @@
 #include <linux/debugfs.h>
 #include <linux/console.h>
 #include <linux/android_pmem.h>
-/* FIH_ADQ, 6370 { */
 #include <linux/leds.h>
-/* } FIH_ADQ, 6370 */
 
 #define MSM_FB_C
 #include "msm_fb.h"

@@ -1557,8 +1557,8 @@ static struct msm_pm_platform_data msm7x25_pm_data[MSM_PM_SLEEP_MODE_NR] = {
 
 static void __init msm7x25_init(void)
 {
+	socinfo_init();
 ///+++FIH_ADQ+++
-///	socinfo_init();
 ar6k_wifi_status_cb=NULL; 
 ar6k_wifi_status_cb_devid=NULL;
 ///---FIH_ADQ---

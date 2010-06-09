@@ -824,16 +824,6 @@ void flush_pmem_file(struct file *file, unsigned long offset, unsigned long len)
 	struct list_head *elt;
 	void *flush_start, *flush_end;
 
-    /* FIH_ADQ { */
-    /* Prevent from NULL pointer */
-    /*
-    if (unlikely(!file)) {
-        printk(KERN_ERR "pmem: has NULL pointer on 1st parameter of flush_pmem_file() \n");
-        return;
-    }
-    */
-    /* } FIH_ADQ */
-
 	if (!is_pmem_file(file) || !has_allocation(file)) {
 		return;
 	}

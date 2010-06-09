@@ -931,14 +931,10 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	acpuclk_init();
 	lpj_init();
 	print_acpu_freq_tbl();
-/*+++FIH_ADQ+++	*/
-///	if (cpu_is_msm7x25())
-/*---FIH_ADQ---*/
+	if (cpu_is_msm7x25())
 		msm7x25_acpu_pll_hw_bug_fix();
-/*+++FIH_ADQ+++	*/
-///	if (cpu_is_msm7x27())
-///		shared_pll_control_init();
-/*---FIH_ADQ---*/
+	if (cpu_is_msm7x27())
+		shared_pll_control_init();
 #ifdef CONFIG_CPU_FREQ_MSM
 	cpufreq_table_init();
 	cpufreq_frequency_table_get_attr(freq_table, smp_processor_id());
