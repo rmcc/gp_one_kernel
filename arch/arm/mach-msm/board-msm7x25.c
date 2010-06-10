@@ -48,7 +48,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/i2c.h>
 #include <linux/android_pmem.h>
-#include <mach/camera.h>//FIH_ADQ,JOE HSU
+#include <mach/camera.h>
 /* FIH, AudiPCHuang, 2009/03/27, { */
 /* ZEUS_ANDROID_CR, I2C Configuration for Keypad Controller */
 ///+FIH_ADQ
@@ -174,11 +174,7 @@ static struct usb_function_map usb_functions_map[] = {
 	{"ethernet", 5},
 };
 */
-/// +++ FIH_ADQ +++ , SungSCLee 2009.05.07
-static struct usb_function_map usb_one_functions[] = {
-	{"diag", 0},
-};
-/// --- FIH_ADQ --- , SungSCLee 2009.05.07
+
 static struct usb_function_map usb_functions_map[] = {
 	{"mass_storage", 0},
 	{"diag", 1},
@@ -228,23 +224,6 @@ static struct usb_composition usb_func_composition[] = {
 
 	// --- FIH_ADQ ---
 };
-/// +++ FIH_ADQ +++ , SungSCLee 2009.05.07	
-static struct msm_hsusb_platform_data fih_hsusb_pdata = {
-	.version	= 0x0100,
-	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
-	// +++ FIH_ADQ +++, modified by henry.wang, fix it to FIH VID/PID
-	.vendor_id          = 0x489,
-	//.vendor_id          = 0x5c6,
-	///.vendor_id          = 0x18D1,
-	// ---  FIH_ADQ ---
-	.product_name       = "Qualcomm HSUSB Device",
-	.manufacturer_name  = "Qualcomm Incorporated",
-	.compositions	= usb_func_composition,
-	.num_compositions = ARRAY_SIZE(usb_func_composition),
-	.function_map   = usb_one_functions,
-	.num_functions	= ARRAY_SIZE(usb_one_functions),
-};
-/// --- FIH_ADQ --- , SungSCLee 2009.05.07
 
 // +++ FIH_ADQ +++, added by henry.wang
 #define SND(desc, num) { .name = #desc, .id = num }
@@ -277,14 +256,9 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
 	// +++ FIH_ADQ +++, modified by henry.wang, fix it to FIH VID/PID
 	.vendor_id          = 0x489,
-	//.vendor_id          = 0x5c6,
-	//.vendor_id          = 0x18d1,
 	// ---  FIH_ADQ ---
 	.product_name       = "Qualcomm HSUSB Device",
-/* FIH, SungSCLee, 2009/05/21, { */	
-///	.serial_number      = "1234567890ABCDEF",
 	.serial_number      = "1234567890ABCD",
-/* } FIH, SungSCLee, 2009/05/21,  */	
 	.manufacturer_name  = "Qualcomm Incorporated",
 	.compositions	= usb_func_composition,
 	.num_compositions = ARRAY_SIZE(usb_func_composition),
@@ -378,56 +352,57 @@ static struct platform_device headset_sensor_device = {
 /* FIH, SungSCLee, 2009/05/21, { */
 static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 {
-	  	char *op1;
-	  	uint32_t temp;
-	  	int i, j = FIH_NV_LENGTH;
-	  	
-	  	if(p_count == FIH_ADB_DEVICE_ID_LENGTH)
-	  		  j = 2;	
-	  		
-	  	for(i = 0 ; i < j ; i++){
-	  	 if(i == 0){
-	  		 temp = fih_product_id & 0x000000ff;
-	  		 op1 = (char)temp; 
-	  		 msm_hsusb_pdata.serial_number[i+p_count] = op1;
-	  	 }
-	  	 else {	  		
-    	  fih_product_id = (fih_product_id  >> 8);
-    	  temp = fih_product_id;
-    	  temp = temp & 0x000000ff;		
-        op1 = (char)temp;   		        
-        msm_hsusb_pdata.serial_number[i+p_count] = op1;
-      }
+    char *op1;
+    uint32_t temp;
+    int i, j = FIH_NV_LENGTH;
+
+    if(p_count == FIH_ADB_DEVICE_ID_LENGTH)
+	j = 2;	
+
+    for(i = 0 ; i < j ; i++){
+	if(i == 0){
+	    temp = fih_product_id & 0x000000ff;
+	    op1 = (char)temp; 
+	    msm_hsusb_pdata.serial_number[i+p_count] = op1;
+	}
+	else {	  		
+	    fih_product_id = (fih_product_id  >> 8);
+	    temp = fih_product_id;
+	    temp = temp & 0x000000ff;		
+	    op1 = (char)temp;   		        
+	    msm_hsusb_pdata.serial_number[i+p_count] = op1;
+	}
     }
 
-	return 1;
+    return 1;
 }
-static int msm_read_serial_number_from_nvitem()
+
+static int msm_read_serial_number_from_nvitem(void)
 {
-	  uint32_t smem_proc_comm_oem_cmd1 = PCOM_CUSTOMER_CMD1;
-	  uint32_t smem_proc_comm_oem_data1 = SMEM_PROC_COMM_OEM_PRODUCT_ID_READ;
-  	uint32_t smem_proc_comm_oem_data2 = NV_PRD_ID_I;
-  	uint32_t product_id[32];	
-  	int i, j = 0, nv_location;
-  	
+    uint32_t smem_proc_comm_oem_cmd1 = PCOM_CUSTOMER_CMD1;
+    uint32_t smem_proc_comm_oem_data1 = SMEM_PROC_COMM_OEM_PRODUCT_ID_READ;
+    uint32_t smem_proc_comm_oem_data2 = NV_PRD_ID_I;
+    uint32_t product_id[32];	
+    int i, j = 0, nv_location;
+
     if(msm_proc_comm_oem_rw128b(smem_proc_comm_oem_cmd1, &smem_proc_comm_oem_data1, &smem_proc_comm_oem_data2, product_id) == 0)
     {      
-    	if(product_id[0] == 1){
-    		   i = 1;
-			     nv_location = 1;
-       }else if(product_id[0]== 0){ ///No NV_item value
-       		return 1;
-       }else {	
-    		   i = 0;    		
-			     nv_location = 0;
-		   }
-	    for(; i < FIH_NV_LENGTH + nv_location; i++){
-	       AsciiSwapChar(product_id[i],j);
-	       j = j+FIH_NV_LENGTH;
-	    }
+	if(product_id[0] == 1){
+	    i = 1;
+	    nv_location = 1;
+	}else if(product_id[0]== 0){ ///No NV_item value
+	    return 1;
+	}else {	
+	    i = 0;    		
+	    nv_location = 0;
+	}
+	for(; i < FIH_NV_LENGTH + nv_location; i++){
+	    AsciiSwapChar(product_id[i],j);
+	    j = j+FIH_NV_LENGTH;
+	}
     } 	
-	return 1;
-  	
+    return 1;
+
 } 
 /* } FIH, SungSCLee, 2009/05/21,  */
 
@@ -482,6 +457,7 @@ static struct platform_device msm_bluesleep_device = {
 
 ///+++FIH_ADQ+++	godfrey
 int static msm_sdcc_setup_power(int dev_id, int on);
+#ifdef CONFIG_AR6K
 int static msm_ar6k_sdcc_setup_power(int dev_id, int on);
 int static ar6k_wifi_suspend(int dev_id);
 int static ar6k_wifi_resume(int dev_id);
@@ -491,27 +467,28 @@ static unsigned int  wifi_power_on = 0;
 
 static int ar6k_wifi_status_register(void (*callback)(int card_present, void *dev_id), void *dev_id)
 {
-	if (ar6k_wifi_status_cb)
-		return -EAGAIN;
-	ar6k_wifi_status_cb = callback;
-	ar6k_wifi_status_cb_devid = dev_id;
-	return 0;
+    if (ar6k_wifi_status_cb)
+	return -EAGAIN;
+    ar6k_wifi_status_cb = callback;
+    ar6k_wifi_status_cb_devid = dev_id;
+    return 0;
 }
 
 static unsigned int ar6k_wifi_status(struct device *dev)
 {
-	return wifi_power_on;
+    return wifi_power_on;
 }
 
 
 static struct mmc_platform_data ar6k_wifi_data = {
-	.ocr_mask	    = MMC_VDD_28_29,
-	.setup_power	= msm_ar6k_sdcc_setup_power,
+    .ocr_mask	    = MMC_VDD_28_29,
+    .setup_power	= msm_ar6k_sdcc_setup_power,
     .status			= ar6k_wifi_status,
-	.register_status_notify	= ar6k_wifi_status_register,
+    .register_status_notify	= ar6k_wifi_status_register,
     .sdio_suspend = ar6k_wifi_suspend,
     .sdio_resume = ar6k_wifi_resume,
 };
+#endif
 
 #ifdef CONFIG_BT
 static struct platform_device msm_bt_power_device = {
@@ -532,54 +509,54 @@ enum {
 };
 
 static unsigned bt_config_init[] = {
-	GPIO_CFG(43, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* RFR */
-	GPIO_CFG(44, 2, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* CTS */
-	GPIO_CFG(45, 2, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* Rx */
-	GPIO_CFG(46, 3, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* Tx */
-	//GPIO_CFG(43, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), /* RFR */ 
-	//GPIO_CFG(44, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), /* CTS */ 
-	//GPIO_CFG(45, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), /* Rx */ 
-	//GPIO_CFG(46, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), /* Tx */ 
+    GPIO_CFG(43, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* RFR */
+    GPIO_CFG(44, 2, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* CTS */
+    GPIO_CFG(45, 2, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* Rx */
+    GPIO_CFG(46, 3, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),	/* Tx */
+    //GPIO_CFG(43, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), /* RFR */ 
+    //GPIO_CFG(44, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), /* CTS */ 
+    //GPIO_CFG(45, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), /* Rx */ 
+    //GPIO_CFG(46, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), /* Tx */ 
 
-	GPIO_CFG(36, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* 3.3V */
+    GPIO_CFG(36, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* 3.3V */
     GPIO_CFG(41, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* 1.8V */
     GPIO_CFG(34, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* 1.2V */
     GPIO_CFG(27, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* BT_RST */
     GPIO_CFG(37, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* HOST_WAKE_BT */
     GPIO_CFG(42, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA),   /* BT_WAKE_HOST */
     GPIO_CFG(68, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_DOUT */
-	GPIO_CFG(69, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* PCM_DIN */
-	GPIO_CFG(70, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_SYNC */
-	GPIO_CFG(71, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_CLK */
-	GPIO_CFG(41, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* 1.8V */
-	GPIO_CFG(62, 2, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_8MA),   /* sd2 */
-	GPIO_CFG(63, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
-	GPIO_CFG(64, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
-	GPIO_CFG(65, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
-	GPIO_CFG(66, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
-	GPIO_CFG(67, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
-	GPIO_CFG(49, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_INT_HOST */
-	GPIO_CFG(96, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_PWD */
-	GPIO_CFG(35, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_RESET */
-	GPIO_CFG(35, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_RESET */
+    GPIO_CFG(69, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* PCM_DIN */
+    GPIO_CFG(70, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_SYNC */
+    GPIO_CFG(71, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_CLK */
+    GPIO_CFG(41, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* 1.8V */
+    GPIO_CFG(62, 2, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_8MA),   /* sd2 */
+    GPIO_CFG(63, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
+    GPIO_CFG(64, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
+    GPIO_CFG(65, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
+    GPIO_CFG(66, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
+    GPIO_CFG(67, 2, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),   /* sd2 */
+    GPIO_CFG(49, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_INT_HOST */
+    GPIO_CFG(96, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_PWD */
+    GPIO_CFG(35, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_RESET */
+    GPIO_CFG(35, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* WLAN_RESET */
 };
 
 
 static void init_Bluetooth_gpio_table(void)
 {
-	int pin,rc;
+    int pin,rc;
 
-	printk(KERN_INFO "Config Bluetooth GPIO\n");
-	
-		for (pin = 0; pin < ARRAY_SIZE(bt_config_init); pin++) {
-			//printk(KERN_INFO " set gpio table entry %d\n",pin);
-			rc = gpio_tlmm_config(bt_config_init[pin],GPIO_ENABLE);
-			if (rc) {
-				printk(KERN_ERR
-				       "%s: gpio_tlmm_config(%#x)=%d\n",
-				       __func__, bt_config_init[pin], rc);
-			}
-		}
+    printk(KERN_INFO "Config Bluetooth GPIO\n");
+
+    for (pin = 0; pin < ARRAY_SIZE(bt_config_init); pin++) {
+	//printk(KERN_INFO " set gpio table entry %d\n",pin);
+	rc = gpio_tlmm_config(bt_config_init[pin],GPIO_ENABLE);
+	if (rc) {
+	    printk(KERN_ERR
+		    "%s: gpio_tlmm_config(%#x)=%d\n",
+		    __func__, bt_config_init[pin], rc);
+	}
+    }
 
     rc = gpio_request(96, "WIFI_PWD");
     if (rc)	printk(KERN_ERR "%s: WIFI_PWD 96 setting failed! rc = %d\n", __func__, rc);
@@ -654,11 +631,15 @@ static int bluetooth_power(int on)
         gpio_direction_output(35,0);
     }else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF
         printk(KERN_DEBUG "%s : Turn WIFI off.\n", __func__);
+#ifdef CONFIG_AR6K
         if(ar6k_wifi_status_cb) {
             wifi_power_on=0;
             ar6k_wifi_status_cb(0,ar6k_wifi_status_cb_devid);
         }else
             printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
+#else
+        printk(KERN_DEBUG "%s : Driver disabled\n", __func__);
+#endif
 
         gpio_direction_output(96,0);
         gpio_direction_output(35,0);
@@ -693,6 +674,7 @@ static int bluetooth_power(int on)
     }else if(bConfigWIFI && wifi_status) { //Turn WIFI on
         gpio_direction_output(96,1);
         gpio_direction_output(35,1);
+#ifdef CONFIG_AR6K
         if(ar6k_wifi_status_cb) {
             wifi_power_on=1;
             ar6k_wifi_status_cb(1,ar6k_wifi_status_cb_devid);
@@ -700,160 +682,12 @@ static int bluetooth_power(int on)
             printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
     }else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF        
 			}
+#endif
 
     spin_unlock(&wif_bt_lock);
 
 	return 0;
 }
-
-
-#if 0
-static int wifi_power(int on)
-{
-	int rc;
-
-	printk( KERN_ERR " WIFI: wifi_power %d\n",on);
-
-    rc = gpio_request(96, "WIFI_PWD");
-    if (rc)	printk(KERN_ERR "%s: WIFI_PWD 96 setting failed! rc = %d\n", __func__, rc);
-    rc = gpio_request(36, "3.3V");
-    if (rc)	printk(KERN_ERR "%s: 3.3V 36 setting failed! rc = %d\n", __func__, rc);
-    rc = gpio_request(41, "1.8V");
-    if (rc)	printk(KERN_ERR "%s: 1.8V 41 setting failed! rc = %d\n", __func__, rc);
-    rc = gpio_request(34, "1.2V");
-    if (rc)	printk(KERN_ERR "%s: 1.2V 34 setting failed! rc = %d\n", __func__, rc);
-    rc = gpio_request(35, "WIFI_RST");
-    if (rc)	printk(KERN_ERR "%s: WIFI_RST 35 setting failed! rc = %d\n", __func__, rc);
-    rc = gpio_request(23, "WIFI_WARMRST");
-    if (rc)	printk(KERN_ERR "%s: WIFI_WARMRST 23 setting failed! rc = %d\n", __func__, rc);
-
-    //printk(KERN_INFO "%s: #### WIFI GPIO info before power setting 96=%d 35=%d 36=%d 41=%d 34=%d\n", __func__
-    //        , gpio_get_value(96), gpio_get_value(35),gpio_get_value(36), gpio_get_value(41), gpio_get_value(34));
-
-    if( on )
-    {   
-        printk(KERN_INFO "WIFI power on sequence\n");
-		gpio_direction_output(23,1);
-		mdelay(50);
-		gpio_direction_output(96,0);
-		gpio_direction_output(35,0);
-		gpio_direction_output(34,0);
-		gpio_direction_output(41,0);
-		gpio_direction_output(36,0);
-		mdelay(50);
-		gpio_direction_output(36,1);
-		mdelay(50);
-		gpio_direction_output(41,1);
-		mdelay(50);
-		gpio_direction_output(34,1);
-		mdelay(50);
-		gpio_direction_output(96,1);
-		mdelay(50);
-		gpio_direction_output(35,1);
-		mdelay(200);
-        
-        if(ar6k_wifi_status_cb) {
-            wifi_power_on=1;
-            ar6k_wifi_status_cb(1,ar6k_wifi_status_cb_devid);
-        }else
-            printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
-
-    } else {
-        if(ar6k_wifi_status_cb) {
-            wifi_power_on=0;
-            ar6k_wifi_status_cb(0,ar6k_wifi_status_cb_devid);
-        }else
-            printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
-
-        mdelay(1000);
-        printk(KERN_INFO "WIFI power off sequence\n");
-        gpio_direction_output(96,0);
-        gpio_direction_output(35,0);
-        
-		}
-
-    //printk(KERN_INFO "%s: #### WIFI GPIO info after power setting 96=%d 35=%d 36=%d 41=%d 34=%d\n", __func__
-    //        , gpio_get_value(96), gpio_get_value(35),gpio_get_value(36), gpio_get_value(41), gpio_get_value(34));
-
-	gpio_free(96);
-	gpio_free(35);
-	gpio_free(36);
-	gpio_free(41);
-	gpio_free(34);
-    gpio_free(23);
-    return 0;
-}
-
-static int bluetooth_power(int on)
-{
-	int rc;
-
-	printk(KERN_DEBUG "%s : BT bluetooth_power on-off=%d\n", __func__, on);
-
-    ///FIH+++
-    if(WIFI_CONTROL_MASK & on)
-        return wifi_power( on & ~WIFI_CONTROL_MASK );	
-    ///FIH---
-
-	if (on) {
-		printk(KERN_INFO "BT power on sequence\n");
-	    rc = gpio_request(27, "BT_RST");
-        if (rc)	printk(KERN_ERR "%s: BT_RST 27 setting failed! rc = %d\n", __func__, rc);
-		rc = gpio_request(36, "3.3V");
-		if (rc)	printk(KERN_ERR "%s: 3.3V 36 setting failed! rc = %d\n", __func__, rc);
-		rc = gpio_request(41, "1.8V");
-		if (rc)	printk(KERN_ERR "%s: 1.8V 41 setting failed! rc = %d\n", __func__, rc);
-		rc = gpio_request(34, "1.2V");
-		if (rc)	printk(KERN_ERR "%s: 1.2V 34 setting failed! rc = %d\n", __func__, rc);
-
-		gpio_direction_output(36,1);
-		gpio_direction_output(41,1);
-		gpio_direction_output(34,1);
-		gpio_direction_output(27,1);
-		mdelay(200);
-		gpio_direction_output(27,0);
-		mdelay(200);
-		gpio_direction_output(27,1);
-		mdelay(200);
-
-		gpio_free(36);
-		gpio_free(41);
-		gpio_free(34);
-		gpio_free(27);
-
-	} else {
-		printk(KERN_INFO "step 7 power off sequence\n");
-		rc = gpio_request(27, "BT_RST");
-		if (rc)	printk(KERN_ERR "%s: BT_RST 27 setting failed! rc = %d\n", __func__, rc);
-		rc = gpio_request(36, "3.3V");
-		if (rc)	printk(KERN_ERR "%s: 3.3V 36 setting failed! rc = %d\n", __func__, rc);
-		rc = gpio_request(41, "1.8V");
-		if (rc)	printk(KERN_ERR "%s: 1.8V 41 setting failed! rc = %d\n", __func__, rc);
-		rc = gpio_request(34, "1.2V");
-		if (rc)	printk(KERN_ERR "%s: 1.2V 34 setting failed! rc = %d\n", __func__, rc);
-
-		//printk(KERN_INFO "%s: #### BT GPIO info before power off 27=%d 36=%d 41=%d 34=%d\n", __func__
-		//		, gpio_get_value(27),gpio_get_value(36), gpio_get_value(41), gpio_get_value(34));
-
-		gpio_direction_output(27,0);
-		mdelay(200);
-		gpio_direction_output(27,1);
-		mdelay(20);
-		gpio_direction_output(27,0);
-		gpio_direction_output(34,0);
-		gpio_direction_output(41,0);
-		gpio_direction_output(36,0);
-
-		gpio_free(36);
-		gpio_free(41);
-		gpio_free(34);
-		gpio_free(27);
-
-	}
-	return 0;
-}
-#endif
-//FIH---
 
 
 static void __init bt_power_init(void)
@@ -955,30 +789,30 @@ static uint32_t camera_off_gpio_table[] = {
 };
 
 static uint32_t camera_on_gpio_table[] = {
-   /* parallel CAMERA interfaces */
-//FIH_ADQ ,JOE HSU
+    /* parallel CAMERA interfaces */
+    //FIH_ADQ ,JOE HSU
 #if 1
-	GPIO_CFG(0,  1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* DAT0 */
-	GPIO_CFG(1,  1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* DAT1 */
-	GPIO_CFG(2,  1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* DAT2 */
+    GPIO_CFG(0,  1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* DAT0 */
+    GPIO_CFG(1,  1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* DAT1 */
+    GPIO_CFG(2,  1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* DAT2 */
 #else
-   GPIO_CFG(0,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT0 */
-   GPIO_CFG(1,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT1 */
-   GPIO_CFG(2,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
+    GPIO_CFG(0,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT0 */
+    GPIO_CFG(1,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT1 */
+    GPIO_CFG(2,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
 #endif
-   GPIO_CFG(3,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
-   GPIO_CFG(4,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
-   GPIO_CFG(5,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT5 */
-   GPIO_CFG(6,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT6 */
-   GPIO_CFG(7,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT7 */
-   GPIO_CFG(8,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT8 */
-   GPIO_CFG(9,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT9 */
-   GPIO_CFG(10, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT10 */
-   GPIO_CFG(11, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT11 */
-   GPIO_CFG(12, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_16MA), /* PCLK */
-   GPIO_CFG(13, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* HSYNC_IN */
-   GPIO_CFG(14, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* VSYNC_IN */
-   GPIO_CFG(15, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_16MA), /* MCLK */
+    GPIO_CFG(3,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
+    GPIO_CFG(4,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
+    GPIO_CFG(5,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT5 */
+    GPIO_CFG(6,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT6 */
+    GPIO_CFG(7,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT7 */
+    GPIO_CFG(8,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT8 */
+    GPIO_CFG(9,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT9 */
+    GPIO_CFG(10, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT10 */
+    GPIO_CFG(11, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT11 */
+    GPIO_CFG(12, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_16MA), /* PCLK */
+    GPIO_CFG(13, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* HSYNC_IN */
+    GPIO_CFG(14, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* VSYNC_IN */
+    GPIO_CFG(15, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_16MA), /* MCLK */
 };
 
 static void config_gpio_table(uint32_t *table, int len)
@@ -1008,15 +842,6 @@ static void config_camera_off_gpios(void)
 //#define MSM_PROBE_INIT(name) name##_probe_init
 //FIH_ADQ,JOE HSU
 static struct msm_camera_sensor_info msm_camera_sensor[] = {
-/*	{
-		.sensor_reset   = 89,
-		.sensor_pwd	  = 85,
-		.vcm_pwd      = 0,
-		.sensor_name  = "mt9d112",
-		.flash_type		= MSM_CAMERA_FLASH_NONE,
-		.sensor_probe = MSM_PROBE_INIT(mt9d112),
-	},
-*/	
 	{
 		.sensor_reset = 0,
 		.sensor_pwd   = 17,
@@ -1276,6 +1101,7 @@ void msm_serial_debug_init(unsigned int base, int irq,
 static void sdcc_gpio_init(void)
 {
 	/* SDC1 GPIOs */
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	if (gpio_request(51, "sdc1_data_3"))
 		pr_err("failed to request gpio sdc1_data_3\n");
 	if (gpio_request(52, "sdc1_data_2"))
@@ -1288,8 +1114,10 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc1_cmd\n");
 	if (gpio_request(56, "sdc1_clk"))
 		pr_err("failed to request gpio sdc1_clk\n");
+#endif
 
 	/* SDC2 GPIOs */
+#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 	if (gpio_request(62, "sdc2_clk"))
 		pr_err("failed to request gpio sdc2_clk\n");
 	if (gpio_request(63, "sdc2_cmd"))
@@ -1302,10 +1130,10 @@ static void sdcc_gpio_init(void)
 		pr_err("failed to request gpio sdc2_data_1\n");
 	if (gpio_request(67, "sdc2_data_0"))
 		pr_err("failed to request gpio sdc2_data_0\n");
+#endif
 
-//+[FIH_ADQ][IssueKeys:ADQ.B-617]
-#if 0
 	/* SDC3 GPIOs */
+#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 	if (gpio_request(88, "sdc3_clk"))
 		pr_err("failed to request gpio sdc3_clk\n");
 	if (gpio_request(89, "sdc3_cmd"))
@@ -1319,12 +1147,10 @@ static void sdcc_gpio_init(void)
 	if (gpio_request(93, "sdc3_data_0"))
 		pr_err("failed to request gpio sdc3_data_0\n");
 #endif
-//-[FIH_ADQ][IssueKeys:ADQ.B-617]
 
 	/* SDC4 GPIOs */
-/* FIH_ADQ, AudiPCHuang, 2009/03/27, { */
+#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 /* ZEUS_ANDROID_CR, GPIO 19 and 20 are used for VOLUME Key and ringer switch now. Disable SDC4*/
-///+FIH_ADQ
 #ifndef CONFIG_KEYBOARD_STMPE1601
 	if (gpio_request(19, "sdc4_data_3"))
 		pr_err("failed to request gpio sdc4_data_3\n");
@@ -1339,8 +1165,7 @@ static void sdcc_gpio_init(void)
 	if (gpio_request(109, "sdc4_clk"))
 		pr_err("failed to request gpio sdc4_clk\n");
 #endif
-///-FIH_ADQ
-/* } FIH_ADQ, AudiPCHuang, 2009/03/27 */
+#endif
 }
 
 static unsigned int vreg_enabled;
@@ -1408,6 +1233,7 @@ static int msm_sdcc_setup_gpio(int dev_id, unsigned enable)
 }
 
 
+#ifdef CONFIG_AR6K
 static int  ar6k_wifi_suspend(int dev_id)
 {
     bluetooth_power(WIFI_CONTROL_MASK | 0);  
@@ -1419,6 +1245,13 @@ static int  ar6k_wifi_resume(int dev_id)
     bluetooth_power(WIFI_CONTROL_MASK | 1);    
     return 1;
 }
+
+static int msm_ar6k_sdcc_setup_power(int dev_id, int on)
+{
+    return 0;
+}
+
+#endif
 
 static int msm_sdcc_setup_power(int dev_id, int on)
 {
@@ -1477,11 +1310,6 @@ static int msm_sdcc_setup_power(int dev_id, int on)
 	return 0;
 }
 
-static int msm_ar6k_sdcc_setup_power(int dev_id, int on)
-{
-    return 0;
-}
-
 // FIH_ADQ, BillHJChang {
 static int msm_sdcc_card_detect(struct device * dev_sdcc1)
 {
@@ -1501,19 +1329,29 @@ static struct mmc_platform_data msm7x25_sdcc_data = {
 
 static void __init msm7x25_init_mmc(void)
 {
-	sdcc_gpio_init();
-	msm_add_sdcc(1, &msm7x25_sdcc_data);
-    ///FIH+++   
-    msm_add_sdcc(2, &ar6k_wifi_data);
-    ///FIH---
+    sdcc_gpio_init();
+#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
+    msm_add_sdcc(1, &msm7x25_sdcc_data);
+#endif
 
-	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||
+    if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||
 	    machine_is_qst1500_surf() || machine_is_qst1600_surf()) {
-		///FIH+++  msm_add_sdcc(2, &msm7x25_sdcc_data);
-		msm_add_sdcc(3, &msm7x25_sdcc_data);
-		msm_add_sdcc(4, &msm7x25_sdcc_data);
-	}
+#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
+#ifdef CONFIG_AR6K
+	msm_add_sdcc(2, &ar6k_wifi_data);
+#else
+	msm_add_sdcc(2, &msm7x25_sdcc_data);
+#endif
+#endif
+#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
+	msm_add_sdcc(3, &msm7x25_sdcc_data);
+#endif
+#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
+	msm_add_sdcc(4, &msm7x25_sdcc_data);
+#endif
+    }
 }
+
 /// +++ FIH_ADQ +++ 6360
 static struct msm_i2c_platform_data msm_i2c_pdata = {
 	.clk_freq = 100000,
@@ -1524,16 +1362,8 @@ static void __init msm_device_i2c_init(void)
 	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
 }
 ///--- FIH_ADQ --- 6360
-// +++ FIH_ADQ +++ , added by henry.wang
 
-// +++ FIH_ADQ [ADQ.B-347] KarenLiao: change speaker AMP owner to ARM9.
-/*
-static void __init init_speaker_amplifier(void)
-{
-	gpio_direction_output(109,1);
-}
-*/
-// --- FIH_ADQ [ADQ.B-347] KarenLiao: change speaker AMP owner to ARM9.
+// +++ FIH_ADQ +++ , added by henry.wang
 
 static void __init init_headset_sensor(void)
 {
@@ -1557,91 +1387,57 @@ static struct msm_pm_platform_data msm7x25_pm_data[MSM_PM_SLEEP_MODE_NR] = {
 
 static void __init msm7x25_init(void)
 {
-	socinfo_init();
-///+++FIH_ADQ+++
-ar6k_wifi_status_cb=NULL; 
-ar6k_wifi_status_cb_devid=NULL;
-///---FIH_ADQ---
-/// +++ FIH_ADQ +++ , SungSCLee 2009.05.07	
-	unsigned int *smem_pid = 0xE02FFFF8;
-/// --- FIH_ADQ --- , SungSCLee 2009.05.07	
+    if (socinfo_init() < 0)
+	BUG();
+#ifdef CONFIG_AR6K
+    ar6k_wifi_status_cb=NULL; 
+    ar6k_wifi_status_cb_devid=NULL;
+#endif
 
 #if defined(CONFIG_MSM_SERIAL_DEBUGGER)
-	msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
-			&msm_device_uart3.dev, 1);
+    msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
+	    &msm_device_uart3.dev, 1);
 #endif
-///+++FIH_ADQ+++
-/*	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa() ||
-	    machine_is_qst1500_ffa() || machine_is_qst1600_ffa()) {
-		smc91x_resources[0].start = 0x98000300;
-		smc91x_resources[0].end = 0x98000400;
-		smc91x_resources[1].start = MSM_GPIO_TO_INT(85);
-		smc91x_resources[1].end = MSM_GPIO_TO_INT(85);
-		msm7x25_clock_data.max_axi_khz = 160000;
-	}*/
-///---FIH_ADQ---
-///+++FIH_ADQ+++
-///	if (cpu_is_msm7x27())
-///		msm7x25_clock_data.max_axi_khz = 200000;
-///---FIH_ADQ---
-	msm_acpu_clock_init(&msm7x25_clock_data);
-/// +++ FIH_ADQ +++ , SungSCLee 2009.05.07
+    msm_acpu_clock_init(&msm7x25_clock_data);
 
-//	if (smem_pid[0] == 0xf102)
-	if (smem_pid[0] == 0xc002)
-	{
-    msm_device_hsusb_peripheral.dev.platform_data = &fih_hsusb_pdata;
-	msm_device_hsusb_host.dev.platform_data = &fih_hsusb_pdata;	
-	}
-	else{         
-/* FIH, SungSCLee, 2009/05/21, { */		
-	 msm_read_serial_number_from_nvitem();
-/* } FIH, SungSCLee, 2009/05/21, */	 
+    /// +++ FIH_ADQ +++ , SungSCLee 2009.05.07
+    msm_read_serial_number_from_nvitem();
 
-	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
-	msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata;
-  }
-/// --- FIH_ADQ --- , SungSCLee 2009.05.07		
-///+++FIH_ADQ+++
-///	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
-///---FIH_ADQ---
-//FIH_ADQ,JOE HSU 
-	#ifdef CONFIG_SPI_GPIO
-	spi_gpio_init();
-	#endif	
-	platform_add_devices(devices, ARRAY_SIZE(devices));
-/// +++ FIH_ADQ +++ 6360	
-	msm_device_i2c_init();
-/// --- FIH_ADQ --- 6360	
-	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
-//FIH_ADQ,JOE HSU 
-	#ifdef CONFIG_SPI_GPIO
-	spi_register_board_info(lcdc_spi_devices,ARRAY_SIZE(lcdc_spi_devices));
-	#endif		
-	msm_fb_add_devices();
-//FIH_ADQ,JOE HSU 
-	msm_camera_add_device();
-	
-	msm7x25_init_mmc();
-	
-	// +++ FIH_ADQ +++ , added by henry.wang
-	init_headset_sensor();
-	//init_speaker_amplifier(); //FIH_ADQ [ADQ.B-347] KarenLiao: change speaker AMP owner to ARM9.
-	// --- FIH_ADQ ---
+    msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
+    msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata;
+#ifdef CONFIG_SPI_GPIO
+    spi_gpio_init();
+#endif	
+    platform_add_devices(devices, ARRAY_SIZE(devices));
+    msm_device_i2c_init();
+    i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
+    //FIH_ADQ,JOE HSU 
+#ifdef CONFIG_SPI_GPIO
+    spi_register_board_info(lcdc_spi_devices,ARRAY_SIZE(lcdc_spi_devices));
+#endif		
+    msm_fb_add_devices();
+    msm_camera_add_device();
 
-///+++FIH_ADQ+++ godfrey
-	init_Bluetooth_gpio_table();
-	bt_power_init();
-///---FIH_ADQ--- godfrey
+    msm7x25_init_mmc();
 
-/* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
-/* ZEUS_ANDROID_CR, Create proc entry for reading device information*/
-///+FIH_ADQ
-	msm_init_pmic_vibrator();
-	adq_info_init();
-///-FIH_ADQ
-/* } FIH_ADQ, AudiPCHuang, 2009/03/30 */	
-        msm_pm_set_platform_data(msm7x25_pm_data);
+    // +++ FIH_ADQ +++ , added by henry.wang
+    init_headset_sensor();
+    // --- FIH_ADQ ---
+
+    ///+++FIH_ADQ+++ godfrey
+    init_Bluetooth_gpio_table();
+    bt_power_init();
+    ///---FIH_ADQ--- godfrey
+
+    /* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
+    /* ZEUS_ANDROID_CR, Create proc entry for reading device information*/
+    ///+FIH_ADQ
+    msm_init_pmic_vibrator();
+    adq_info_init();
+    ///-FIH_ADQ
+    /* } FIH_ADQ, AudiPCHuang, 2009/03/30 */	
+
+    msm_pm_set_platform_data(msm7x25_pm_data);
 
 }
 
