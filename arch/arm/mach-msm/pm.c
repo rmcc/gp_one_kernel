@@ -416,6 +416,7 @@ enter_failed:
 		msm_pm_sma.int_info->aArm_interrupts_pending);
 	if (enter_state) {
 		smsm_change_state(SMSM_APPS_STATE, exit_state, SMSM_RUN);
+		msm_pm_wait_state(SMSM_RUN, 0, 0, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "

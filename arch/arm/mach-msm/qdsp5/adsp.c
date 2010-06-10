@@ -149,6 +149,7 @@ static int rpc_adsp_rtos_app_to_modem(uint32_t cmd, uint32_t module,
 	if (rc < 0) {
 		pr_err("adsp: error receiving RPC reply: %d (%d)\n",
 		       rc, -ERESTARTSYS);
+		rc = 0 ;//FIH_ADQ,JOE HSU,Fix restart system ,workaround.
 		return rc;
 	}
 
