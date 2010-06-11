@@ -55,8 +55,4 @@ void write_to_strongly_ordered_memory(void);
 	} while(0)
 #endif
 #endif
-/* FIH_ADQ, Ming { */
-/* NodeSize = 25 bits = 32M */
-#define NODE_MEM_SIZE_BITS	25
-/* } FIH_ADQ, Ming */
 #endif
