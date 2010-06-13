@@ -36,10 +36,6 @@
 #define CHR_EN 33
 #endif	// T_FIH	///-T_FIH
 
-/* FIH_ADQ, Kenny { */
-#include "linux/pmlog.h"
-/* } FIH_ADQ, Kenny */
-
 /*+++FIH_ADQ+++*/
 enum {
 	CHARGER_STATE_UNKNOWN,		
@@ -51,10 +47,10 @@ enum {
 };
 extern void tca6507_charger_state_report(int state);
 static int g_charging_state_last = CHARGER_STATE_UNKNOWN;
-static void polling_reset_func();
-void temperature_detect();
+static void polling_reset_func(void);
+void temperature_detect(void);
 /* FIH_ADQ, Kenny { */
-static void gasgauge_param_reset();
+static void gasgauge_param_reset(void);
 /* } FIH_ADQ, Kenny */
 /*+++FIH_ADQ+++*/
 
@@ -75,6 +71,7 @@ struct goldfish_battery_data {
 static struct goldfish_battery_data *battery_data;
 #ifdef T_FIH	///+T_FIH
 static int g_charging_state = CHARGER_STATE_NOT_CHARGING;
+static int g_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 #endif	// T_FIH	///-T_FIH
 
 /* FIH_ADQ, Kenny { */
@@ -100,29 +97,6 @@ enum {
 };
 
 
-///static int goldfish_ac_get_property(struct power_supply *psy,
-///			enum power_supply_property psp,
-///			union power_supply_propval *val)
-///{
-///	struct goldfish_battery_data *data = container_of(psy,
-///		struct goldfish_battery_data, ac);
-///	int ret = 0;
-///
-///	switch (psp) {
-///	case POWER_SUPPLY_PROP_ONLINE:
-///                // printk(KERN_INFO "<ubh> goldfish_ac_get_property : POWER_SUPPLY_PROP_ONLINE : type(%d)\r\n", check_USB_type); 
-///                 ///if (check_USB_type == 2)
-///                 ///val->intval = 1;
-///                 ///else
-///                 ///val->intval = 0;
-///		//val->intval = GOLDFISH_BATTERY_READ(data, BATTERY_AC_ONLINE);
-///		break;
-///	default:
-///		ret = -EINVAL;
-///		break;
-///	}
-///	return ret;
-///}
 static struct power_supply * g_ps_battery;
 
 /// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
@@ -130,16 +104,13 @@ static struct power_supply * g_ps_battery;
 void Battery_power_supply_change(void)
 {
 	power_supply_changed(g_ps_battery);
-	/* FIH_ADQ, Kenny { */
-	printk(KERN_INFO "One uevent from suspend\r\n");
-	/* } FIH_ADQ, Kenny */
 }
 EXPORT_SYMBOL(Battery_power_supply_change);
 /// --- FIH_ADQ ---
 
 static int goldfish_battery_get_property(struct power_supply *psy,
-				 enum power_supply_property psp,
-				 union power_supply_propval *val)
+		enum power_supply_property psp,
+		union power_supply_propval *val)
 {
 	int buf;
 	int ret = 0;
@@ -148,141 +119,121 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 	/* } FIH_ADQ, Kenny */
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		//printk(KERN_INFO "<ubh> goldfish_battery_get_property : POWER_SUPPLY_PROP_STATUS\r\n");
-		// "Unknown", "Charging", "Discharging", "Not charging", "Full"
-                if (g_charging_state != CHARGER_STATE_LOW_POWER)
-		val->intval = g_charging_state;
-                else 
-                val->intval = CHARGER_STATE_NOT_CHARGING;
-		break;
-	case POWER_SUPPLY_PROP_HEALTH:
-		//GetBatteryInfo(BATT_AVCURRENT_INFO, &buf);
-		//printk(KERN_INFO "<ubh> goldfish_battery_get_property : POWER_SUPPLY_PROP_HEALTH : AVC(%d)\r\n", buf);
-		// "Unknown", "Good", "Overheat", "Dead", "Over voltage", "Unspecified failure"
-		val->intval = 1;
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		//GetBatteryInfo(BATT_CURRENT_INFO, &buf);
-		//printk(KERN_INFO "<ubh> goldfish_battery_get_property : POWER_SUPPLY_PROP_PRESENT : C(%d)\r\n", buf);
-		val->intval = 1;
-		break;
-	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		//printk(KERN_INFO "<ubh> goldfish_battery_get_property : POWER_SUPPLY_PROP_TECHNOLOGY\r\n");
-		// "Unknown", "NiMH", "Li-ion", "Li-poly", "LiFe", "NiCd", "LiMn"
-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
-		break;
-        case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-   		ret = GetBatteryInfo(BATT_VOLTAGE_INFO, &buf);
-		if (ret >=0 ) {
-			val->intval = buf*1000;
-		} else {
-			val->intval = 0;
-		}
-		break;
-        case POWER_SUPPLY_PROP_TEMP:
-		ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
-		if (ret >=0 ) {
-			val->intval = buf;
-		} else {
-			val->intval = 0;
-		}
-		break;
-	case POWER_SUPPLY_PROP_CAPACITY:
-		// +++ADQ_FIH+++ 
-		ret = GetBatteryInfo(BATT_CAPACITY_INFO, &buf);
-		if (ret < 0){
-			printk(KERN_INFO "POWER_SUPPLY_PROP_CAPACITY : Get data failed\n");
-			power_supply_changed(g_ps_battery);
-			ret = 0;
-		}
-		else{
-			val->intval = buf;
-			
-			if((g_charging_state == CHARGER_STATE_CHARGING) && (val->intval != 255)){
-			    temperature_detect();
-			    /* FIH_ADQ, Kenny { */
-		        gasgauge_param_reset();
-		        /* } FIH_ADQ, Kenny */
-		    }
-			
-			//GetBatteryInfo(BATT_VOLTAGE_INFO, &buf);
-			//buf = buf * 100 / 4200;
-			//printk(KERN_INFO "<ubh> goldfish_battery_get_property : POWER_SUPPLY_PROP_CAPACITY : Cap(%d) state = %d\r\n", val->intval,g_charging_state);
-#if 1
-			printk("<8>" "batt : %d\%_%d\n", val->intval, g_charging_state);
-			/* FIH_ADQ, Kenny { */
-			if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
-			    pmlog("batt : %d\%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
-			else
-			    pmlog("batt : %d\%_%d\n", val->intval, g_charging_state);
-			/* } FIH_ADQ, Kenny */
-#else
-			GetBatteryInfo(BATT_CURRENT_INFO, &buf);
-			printk("<8>" "batt : %d\%_%d_%d\n", val->intval, buf, g_charging_state);
-#endif
-			// +++ADQ_FIH+++
-			//
-			//if( val->intval > 120 ){
-			//	kernel_power_off();
-			//}
-			if ((val->intval > 94) && (g_charging_state == CHARGER_STATE_CHARGING)){//full
-				g_charging_state = CHARGER_STATE_FULL;
-				printk(KERN_INFO "goldfish_battery_get_property : set the charging status to full\n");
+		case POWER_SUPPLY_PROP_STATUS:
+			// "Unknown", "Charging", "Discharging", "Not charging", "Full"
+			if (g_charging_state != CHARGER_STATE_LOW_POWER)
+				val->intval = g_charging_state;
+			else 
+				val->intval = CHARGER_STATE_NOT_CHARGING;
+			break;
+		case POWER_SUPPLY_PROP_HEALTH:
+			//GetBatteryInfo(BATT_AVCURRENT_INFO, &buf);
+			// "Unknown", "Good", "Overheat", "Dead", "Over voltage", "Unspecified failure"
+			val->intval = g_health;
+			break;
+		case POWER_SUPPLY_PROP_PRESENT:
+			//GetBatteryInfo(BATT_CURRENT_INFO, &buf);
+			val->intval = 1;
+			break;
+		case POWER_SUPPLY_PROP_TECHNOLOGY:
+			// "Unknown", "NiMH", "Li-ion", "Li-poly", "LiFe", "NiCd", "LiMn"
+			val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+			break;
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+			ret = GetBatteryInfo(BATT_VOLTAGE_INFO, &buf);
+			if (ret >=0 ) {
+				val->intval = buf*1000;
+			} else {
+				val->intval = 0;
 			}
-			else if (g_charging_state == CHARGER_STATE_FULL) {	 		//charging
-			  	if (val->intval < 95) {
-			  	  	g_charging_state = CHARGER_STATE_CHARGING;
-			  	  	printk(KERN_INFO "goldfish_battery_get_property : set the charging status to charging\n");
-				}
+			break;
+		case POWER_SUPPLY_PROP_TEMP:
+			ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
+			if (ret >=0 ) {
+				val->intval = buf;
+			} else {
+				val->intval = 0;
 			}
-			else if (g_charging_state == CHARGER_STATE_NOT_CHARGING){ 		//low_power
-			    /* FIH_ADQ, Kenny { */
-			    charging_tcount = 0;
-			    /* } FIH_ADQ, Kenny */
-				if (val->intval < 15) 
-					g_charging_state = CHARGER_STATE_LOW_POWER; 
+			break;
+		case POWER_SUPPLY_PROP_CAPACITY:
+			// +++ADQ_FIH+++ 
+			ret = GetBatteryInfo(BATT_CAPACITY_INFO, &buf);
+			if (ret < 0){
+				printk(KERN_ERR "POWER_SUPPLY_PROP_CAPACITY : Get data failed\n");
+				power_supply_changed(g_ps_battery);
+				ret = 0;
 			}
+			else{
+				val->intval = buf;
 
-			if(g_charging_state == CHARGER_STATE_FULL && val->intval > 94) 		//recharging
-			{
-				if(val->intval < 97){
-					polling_reset_func();	
-					printk( "charing ic reset val=%d state=%d\n ", val->intval, g_charging_state);
+				if((g_charging_state == CHARGER_STATE_CHARGING) && (val->intval != 255)){
+					temperature_detect();
+					/* FIH_ADQ, Kenny { */
+					gasgauge_param_reset();
+					/* } FIH_ADQ, Kenny */
 				}
-				val->intval = 100;	
-				printk( "batt : %d\%_%d\n", val->intval, g_charging_state);
-			}
 
-			if (val->intval < 95){
-				val->intval = val->intval*100/95;
 				/* FIH_ADQ, Kenny { */
-				if((val->intval == 0) && (batt_vol >= 3400) && (g_charging_state != CHARGER_STATE_CHARGING)){
-				    val->intval = 1;
-				    printk( "batt : 0%% but voltage %dmV >= 3400mV, don't enter power-off, keep report 1%%\n", batt_vol);
+				if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
+					printk(KERN_INFO "batt : %d%%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
+				else
+					printk(KERN_INFO "batt : %d%%_%d\n", val->intval, g_charging_state);
+				/* } FIH_ADQ, Kenny */
+
+				if ((val->intval > 94) && (g_charging_state == CHARGER_STATE_CHARGING)){//full
+					g_charging_state = CHARGER_STATE_FULL;
 				}
-				else if((val->intval == 1) && (batt_vol < 3400) && (g_charging_state != CHARGER_STATE_CHARGING)){
-				    val->intval = 0;
-				    printk( "batt : 1%% but voltage %dmV < 3400mV, enter power-off, report 0%%\n", batt_vol);
+				else if (g_charging_state == CHARGER_STATE_FULL) {	 		//charging
+					if (val->intval < 95) {
+						g_charging_state = CHARGER_STATE_CHARGING;
+					}
 				}
-				/* } FIH_ADQ, Kenny */ 
-			}else{
-				val->intval = 100;
+				else if (g_charging_state == CHARGER_STATE_NOT_CHARGING){ 		//low_power
+					/* FIH_ADQ, Kenny { */
+					charging_tcount = 0;
+					/* } FIH_ADQ, Kenny */
+					if (val->intval < 15) 
+						g_charging_state = CHARGER_STATE_LOW_POWER; 
+				}
+
+				if(g_charging_state == CHARGER_STATE_FULL && val->intval > 94) 		//recharging
+				{
+					if(val->intval < 97){
+						polling_reset_func();	
+						printk( "charing ic reset val=%d state=%d\n ", val->intval, g_charging_state);
+					}
+					val->intval = 100;	
+				}
+
+				if (val->intval < 95){
+					val->intval = val->intval*100/95;
+					/* FIH_ADQ, Kenny { */
+					if((val->intval == 0) && (batt_vol >= 3400) && (g_charging_state != CHARGER_STATE_CHARGING)){
+						val->intval = 1;
+						printk( "batt : 0%% but voltage %dmV >= 3400mV, don't enter power-off, keep report 1%%\n", batt_vol);
+					}
+					else if((val->intval == 1) && (batt_vol < 3400) && (g_charging_state != CHARGER_STATE_CHARGING)){
+						val->intval = 0;
+						printk( "batt : 1%% but voltage %dmV < 3400mV, enter power-off, report 0%%\n", batt_vol);
+					}
+					/* } FIH_ADQ, Kenny */ 
+				}else{
+					val->intval = 100;
+				}
+
+				if ((g_charging_state_last != g_charging_state))
+					tca6507_charger_state_report(g_charging_state);   
+
+				g_charging_state_last = g_charging_state;
+
+				// ---ADQ_FIH---
 			}
-
-			if ((g_charging_state_last != g_charging_state))
-				tca6507_charger_state_report(g_charging_state);   
-
-			g_charging_state_last = g_charging_state;
-
-			// ---ADQ_FIH---
-		}
-		// ---ADQ_FIH--- 
-		break;
-	default:
-		printk(KERN_ERR "goldfish_battery_get_property : psp(%d)\n", psp);
-		ret = -EINVAL;
-		break;
+			// ---ADQ_FIH--- 
+			break;
+		default:
+			printk(KERN_ERR "goldfish_battery_get_property : psp(%d)\n", psp);
+			ret = -EINVAL;
+			break;
 	}
 
 	return ret;
@@ -290,12 +241,12 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 
 static enum power_supply_property goldfish_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
-//	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CAPACITY,
-        POWER_SUPPLY_PROP_TEMP,
-        POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 
 };
 
@@ -315,11 +266,8 @@ static struct timer_list polling_timer;
 static void polling_timer_func(unsigned long unused)
 {
 	power_supply_changed(g_ps_battery);
-	/* FIH_ADQ, Kenny { */
-    printk(KERN_INFO "One uevent from polling\r\n");
-    /* } FIH_ADQ, Kenny */
 	mod_timer(&polling_timer,
-		  jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
+			jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
 }
 #endif	// FLAG_BATTERY_POLLING
 
@@ -328,52 +276,58 @@ static void polling_timer_func(unsigned long unused)
 
 /* FIH_ADQ, Kenny { */
 static void gasgauge_param_reset(){
-    int rc, batt_scalar, batt_vol=0, batt_cur=0;
-    
-    if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) < 0){
-	    printk(KERN_INFO "batt: Get voltage failed!\n");
+	int rc, batt_scalar, batt_vol=0, batt_cur=0;
+
+	if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) < 0){
+		printk(KERN_ERR "batt: Get voltage failed!\n");
 	}
-    
-    if(GetBatteryInfo(BATT_CURRENT_INFO, &batt_cur) < 0){
-	    printk(KERN_INFO "batt: Get current failed!\n");
+
+	if(GetBatteryInfo(BATT_CURRENT_INFO, &batt_cur) < 0){
+		printk(KERN_ERR "batt: Get current failed!\n");
 	}
-    
-    if(GetBatteryInfo(BATT_AS_REGISTER, &batt_scalar) >= 0){
-        printk(KERN_INFO "batt: voltage=%dmV, current=%dmA, scalar=0x%x\n", batt_vol, (batt_cur*7813)/100000, batt_scalar);
-        if(batt_scalar != 128){
-            //reset age scalar
-            if(SetBatteryInfo(BATT_AS_REGISTER, 128) >= 0){
-                printk(KERN_INFO "batt: Change scalar from %d to 128\n", batt_scalar);
-            }else{
-                printk(KERN_INFO "batt: Fail to change scalar from %d to 128\n", batt_scalar);
-            }
-        }
-    }else{
-        printk(KERN_INFO "batt: Get age scalar failed!\n");
-    }
+
+	if(GetBatteryInfo(BATT_AS_REGISTER, &batt_scalar) >= 0){
+		if(batt_scalar != 128){
+			//reset age scalar
+			if(SetBatteryInfo(BATT_AS_REGISTER, 128) >= 0){
+				printk(KERN_INFO "batt: Change scalar from %d to 128\n", batt_scalar);
+			}else{
+				printk(KERN_ERR "batt: Fail to change scalar from %d to 128\n", batt_scalar);
+			}
+		}
+	}else{
+		printk(KERN_ERR "batt: Get age scalar failed!\n");
+	}
 
 	if((batt_vol >= 4100) && check_USB_type == 2){
-	    rc = gpio_request(57, "CHR_1A");
-        if (rc)	printk(KERN_ERR "CHR_1A setting failed!\n");
-        rc = gpio_get_value(57);
-        if(rc == 1){
-            gpio_set_value(57,0);
-            printk(KERN_INFO "batt: voltage > 4.1V and AC charging, set the charging current to 500mA!!\n");
-        }
-        gpio_free(57);
-	}
-	
+		rc = gpio_request(57, "CHR_1A");
+		if (rc)	printk(KERN_ERR "CHR_1A setting failed!\n");
+		rc = gpio_get_value(57);
+		if(rc == 1){
+			gpio_set_value(57,0);
+			printk(KERN_INFO "batt: voltage > 4.1V and AC charging, set the charging current to 500mA!!\n");
+		}
+		gpio_free(57);
+	} else if (batt_vol >= 4100) {
+		g_health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+	} 
+
 	if(charging_tcount < 6){
-	    charging_tcount++;
-	    printk(KERN_INFO "batt: charging tcount=%d!!\n",charging_tcount);
+		charging_tcount++;
 	}
-	
+
 	if((batt_vol < 4100) && (batt_cur < 0) && (charging_tcount == 6)){
-	    printk(KERN_INFO "batt: Reset charger IC due to voltage < 4.1mV and current < 0!!\n");
-	    polling_reset_func();
-	    charging_tcount = 0;
+		printk(KERN_INFO "batt: Reset charger IC due to voltage < 4.1mV and current < 0!!\n");
+		polling_reset_func();
+		charging_tcount = 0;
 	}
-	
+	if (batt_vol == 0 && g_health < POWER_SUPPLY_HEALTH_DEAD) {
+		g_health = POWER_SUPPLY_HEALTH_DEAD;
+	} else if (batt_vol > 0 && g_health != POWER_SUPPLY_HEALTH_OVERVOLTAGE 
+				&& g_health != POWER_SUPPLY_HEALTH_OVERHEAT) {
+		g_health = POWER_SUPPLY_HEALTH_GOOD;
+	}
+
 }
 /* } FIH_ADQ, Kenny */
 
@@ -382,7 +336,6 @@ void temperature_detect()
 	int rc, ret=0, buf;
 
 	ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
-	printk(KERN_INFO "BATT_TEMPERATURE_INFO %d\r\n",buf);
 
 	if( buf > 450 || buf < 0 ){
 		rc = gpio_request(CHR_EN, "CHG_EN");
@@ -397,7 +350,9 @@ void temperature_detect()
 			printk(KERN_INFO "Shutdown charging IC\r\n");	
 			gpio_set_value(CHR_EN,1);
 		}else{
-			printk(KERN_INFO "Temperature is too high and user must be a bad man\r\n");	
+			if (g_health < POWER_SUPPLY_HEALTH_OVERHEAT)
+				g_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+			printk(KERN_INFO "Temperature is too high!\r\n");	
 		}
 		gpio_free(CHR_EN);
 	}else{
@@ -407,12 +362,11 @@ void temperature_detect()
 		}
 		rc = gpio_get_value(CHR_EN);
 		if(rc == 1){
-			printk(KERN_INFO "Restart charging IC\r\n");	
 			gpio_set_value(CHR_EN,0);
-		}else{
-			printk(KERN_INFO "God bless you\r\n");	
 		}
 		gpio_free(CHR_EN);
+		if (g_health == POWER_SUPPLY_HEALTH_OVERHEAT)
+			g_health = POWER_SUPPLY_HEALTH_GOOD;
 	}
 }
 
@@ -450,9 +404,6 @@ static irqreturn_t chgdet_irqhandler(int irq, void *dev_id)
 {
 	g_charging_state = (gpio_get_value(GPIO_CHR_DET)) ? CHARGER_STATE_NOT_CHARGING : CHARGER_STATE_CHARGING;
 	power_supply_changed(g_ps_battery);
-	/* FIH_ADQ, Kenny { */
-	printk(KERN_INFO "One uevent from interrupt\r\n");
-	/* } FIH_ADQ, Kenny */
 	return IRQ_HANDLED;
 }
 #endif	// FLAG_CHARGER_DETECT
@@ -477,18 +428,9 @@ static int goldfish_battery_probe(struct platform_device *pdev)
 	data->battery.name = "battery";
 	data->battery.type = POWER_SUPPLY_TYPE_BATTERY;
 
-/*	data->ac.properties = goldfish_ac_props;
-	data->ac.num_properties = ARRAY_SIZE(goldfish_ac_props);
-	data->ac.get_property = goldfish_ac_get_property;
-	data->ac.name = "ac";
-	data->ac.type = POWER_SUPPLY_TYPE_MAINS;*/
-
 	ret = power_supply_register(&pdev->dev, &data->battery);
 	if (ret)
 		goto err_battery_failed;
-        ///ret = power_supply_register(&pdev->dev, &data->ac);
-	///if (ret)
-		///goto err_battery_failed;
 
 	platform_set_drvdata(pdev, data);
 	battery_data = data;
@@ -497,7 +439,7 @@ static int goldfish_battery_probe(struct platform_device *pdev)
 #ifdef FLAG_BATTERY_POLLING
 	setup_timer(&polling_timer, polling_timer_func, 0);
 	mod_timer(&polling_timer,
-		  jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
+			jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
 
 	g_ps_battery = &(data->battery);
 #endif	// FLAG_BATTERY_POLLING
@@ -540,7 +482,6 @@ static int goldfish_battery_remove(struct platform_device *pdev)
 #endif	// T_FIH	///-T_FIH
 
 	power_supply_unregister(&data->battery);
-	///power_supply_unregister(&data->ac);
 
 	free_irq(data->irq, data);
 	kfree(data);

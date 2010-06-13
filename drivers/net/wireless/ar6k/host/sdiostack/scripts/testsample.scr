@@ -1,9 +1,0 @@
-#!/bin/sh
-
-while [ 1 ]
-do
- ./testapp -w 19 -i2 
-
-done
-
- 

@@ -1,2 +1,0 @@
-#!/bin/sh
-./loaddksdio.sh $1

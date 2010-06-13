@@ -469,7 +469,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 
 	set_bit(EV_ABS, bma020->input_dev->evbit);
 	bma020->input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP) | BIT(EV_SW) | BIT(EV_ABS);
-	set_bit(SW_LID, bma020->input_dev->swbit);
+	//set_bit(SW_LID, bma020->input_dev->swbit);
 	/* yaw */
 	input_set_abs_params(bma020->input_dev, ABS_RX, 0, 360, 0, 0);
 	/* pitch */
