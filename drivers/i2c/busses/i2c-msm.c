@@ -368,21 +368,21 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 #ifdef __TRACE_I2C_FAIL__
 		int i = 0;
 #endif	// __TRACE_I2C_FAIL__
-		printk(KERN_INFO "<i2c> msm_i2c_xfer : I2C_STATUS(%x)\n", flags);
+		//printk(KERN_INFO "<i2c> msm_i2c_xfer : I2C_STATUS(%x)\n", flags);
 		if ((flags = readl(dev->base + I2C_STATUS)) & I2C_STATUS_RD_BUFFER_FULL) {
 			if (flags == 0xbb02) {
 				unsigned long ud, tmp;
 				writel(I2C_WRITE_DATA_LAST_BYTE, dev->base + I2C_WRITE_DATA);
 				ud = readl(dev->base + I2C_READ_DATA);
-				printk(KERN_INFO "<i2c> msm_i2c_xfer 00 : I2C_STATUS(%x -> %x) : %x\r\n", flags, readl(dev->base + I2C_STATUS), ud);
+			//	printk(KERN_INFO "<i2c> msm_i2c_xfer 00 : I2C_STATUS(%x -> %x) : %x\r\n", flags, readl(dev->base + I2C_STATUS), ud);
 				msleep(100);
 				tmp = readl(dev->base + I2C_STATUS);
 				ud = readl(dev->base + I2C_READ_DATA);
-				printk(KERN_INFO "<i2c> msm_i2c_xfer 01 : I2C_STATUS(%x -> %x) : %x\r\n", tmp, flags = readl(dev->base + I2C_STATUS), ud);
+			//	printk(KERN_INFO "<i2c> msm_i2c_xfer 01 : I2C_STATUS(%x -> %x) : %x\r\n", tmp, flags = readl(dev->base + I2C_STATUS), ud);
 			}
 			else {
 				unsigned long ud = readl(dev->base + I2C_READ_DATA), tmp;
-				printk(KERN_INFO "<ubh> msm_i2c_xfer 00 : I2C_STATUS(%x -> %x) : %x\r\n", flags, tmp = readl(dev->base + I2C_STATUS), ud);
+			//	printk(KERN_INFO "<ubh> msm_i2c_xfer 00 : I2C_STATUS(%x -> %x) : %x\r\n", flags, tmp = readl(dev->base + I2C_STATUS), ud);
 				flags = tmp;
 			}
 #ifdef __TRACE_I2C_FAIL__
@@ -398,7 +398,7 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				// so must reset the I2C controller to avoid block the I2C command.
 		{
 			msm_i2c_reset(dev);
-			printk(KERN_INFO "<i2c> msm_i2c_xfer 02 : I2C_STATUS(%x -> %x)\n", flags, readl(dev->base + I2C_STATUS));
+		//	printk(KERN_INFO "<i2c> msm_i2c_xfer 02 : I2C_STATUS(%x -> %x)\n", flags, readl(dev->base + I2C_STATUS));
 #ifdef __TRACE_I2C_FAIL__
 			i = 1;
 #endif	// __TRACE_I2C_FAIL__
@@ -410,12 +410,12 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				int i;
 				g_i2chistory = (g_i2chistory << 8) | (g_i2cpreaddr & 0xff);
 				g_i2cflag = 1;
-				printk(KERN_INFO "<i2c> msm_i2c - g_addstatus list(%d) :", g_index);
-				for (i = 0; i < g_index; i++)
-					printk(" %x", g_addstatus[i]);
-				printk("\n");
+		//		printk(KERN_INFO "<i2c> msm_i2c - g_addstatus list(%d) :", g_index);
+		//		for (i = 0; i < g_index; i++)
+		//			printk(" %x", g_addstatus[i]);
+		//		printk("\n");
 			}
-			printk(KERN_INFO "<i2c> i2c trace -> [%x] - %d\r\n", g_i2chistory, g_count);
+		//	printk(KERN_INFO "<i2c> i2c trace -> [%x] - %d\r\n", g_i2chistory, g_count);
 		}
 	}
 #else	// __TRACE_I2C_FAIL__

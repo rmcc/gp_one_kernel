@@ -2453,9 +2453,9 @@ int tcp_connect(struct sock *sk)
 	struct sk_buff *buff;
 
 	// +++ FIH_ADQ, added by henry.wang 2009/7/21, print who establish TCP connections
-	printk(KERN_INFO "FIH DEBUG : tcp_connect pid = %d, pid name = %s\r\n", (int)sys_getpid(), pidname(sys_getpid()));
+	//printk(KERN_INFO "FIH DEBUG : tcp_connect pid = %d, pid name = %s\r\n", (int)sys_getpid(), pidname(sys_getpid()));
 	tcp_connection_num++ ;
-	printk(KERN_INFO "FIH DEBUG : tcp_connection number = %d\r\n", tcp_connection_num);
+	//printk(KERN_INFO "FIH DEBUG : tcp_connection number = %d\r\n", tcp_connection_num);
 	// --- FIH_ADQ ---
 	
 	tcp_connect_init(sk);

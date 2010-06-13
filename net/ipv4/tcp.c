@@ -1814,9 +1814,9 @@ void tcp_close(struct sock *sk, long timeout)
 	int state;
 
 	// +++ FIH_ADQ, added by henry.wang 2009/7/30, print who establish TCP connections
-	printk(KERN_INFO "FIH DEBUG : tcp_close pid = %d, pid name = %s\r\n", (int)sys_getpid(), pidname(sys_getpid()));
+	//printk(KERN_INFO "FIH DEBUG : tcp_close pid = %d, pid name = %s\r\n", (int)sys_getpid(), pidname(sys_getpid()));
 	tcp_connection_num--;
-	printk(KERN_INFO "FIH DEBUG : tcp_connection number = %d\r\n", tcp_connection_num);
+	//printk(KERN_INFO "FIH DEBUG : tcp_connection number = %d\r\n", tcp_connection_num);
 	// --- FIH_ADQ ---
 	
 	lock_sock(sk);
