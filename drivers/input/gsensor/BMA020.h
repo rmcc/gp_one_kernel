@@ -1060,9 +1060,9 @@ int spi_bus_write(unsigned char dev_addr, unsigned char reg_addr, unsigned char 
 
 int spi_bus_read(unsigned char dev_addr, unsigned char reg_addr, unsigned char * data, unsigned char datasize);
 
-int bma020_wakeup();
+int bma020_wakeup(void);
 
-int bma020_sleep();
+int bma020_sleep(void);
 
 
 //int bma020_wait_interrupt(unsigned char *mask);

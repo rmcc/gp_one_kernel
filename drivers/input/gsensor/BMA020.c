@@ -50,17 +50,12 @@ static int bma020_aot_release(struct inode *inode, struct file *file);
 static int bma020_aot_ioctl(struct inode *inode, struct file *file,
 	      unsigned int cmd, unsigned long arg);
 
-static int bma020_pffd_open(struct inode *inode, struct file *file);
-static int bma020_pffd_release(struct inode *inode, struct file *file);
-static int bma020_pffd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
-
 //function
 static int func_bma020_init(void);
 
 #define GPIO_BMA020_INTR 38
 long GRAVITY_EARTH =  9.80665;
 
-static struct work_struct bma020_irqwork;
 static struct work_struct bma020_accwork;
 //static struct work_struct bma020_volctrl;
 //static struct work_struct bma020_hallsensor;
@@ -220,153 +215,6 @@ static int BMAI2C_TxData(char *txData, int length)
 }
 
 
-static void bma020_acc_work_func(struct work_struct *work)
-{
-#if 0
-	char buffer[6];
-	bma020acc_t acc;
-
-	struct bma020_data *bma020 = i2c_get_clientdata(this_client);
-	short y_z_change_tmp = 0;
-	
-	while(aflag)
-	{
-		y_z_change_tmp = 0;
-		memset(buffer, 0, 6);
-		buffer[0] = 0x02;
-		BMAI2C_RxData(buffer, 6);		
-		acc.x = BMA020_GET_BITSLICE(buffer[0],ACC_X_LSB) | BMA020_GET_BITSLICE(buffer[1],ACC_X_MSB)<<ACC_X_LSB__LEN;
-		acc.x = acc.x << (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-		acc.x = acc.x >> (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-
-		acc.y = BMA020_GET_BITSLICE(buffer[2],ACC_Y_LSB) | BMA020_GET_BITSLICE(buffer[3],ACC_Y_MSB)<<ACC_Y_LSB__LEN;
-		acc.y = acc.y << (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-		acc.y = acc.y >> (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-	
-		acc.z = BMA020_GET_BITSLICE(buffer[4],ACC_Z_LSB) | BMA020_GET_BITSLICE(buffer[5],ACC_Z_MSB)<<ACC_Z_LSB__LEN;
-		acc.z = acc.z << (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		acc.z = acc.z >> (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		
-		y_z_change_tmp = acc.y;
-		acc.y = acc.z;
-		acc.z = y_z_change_tmp;
-	
-		input_report_abs(bma020->input_dev, ABS_X, acc.x);
-		input_report_abs(bma020->input_dev, ABS_Y, acc.y);
-		input_report_abs(bma020->input_dev, ABS_Z, acc.z);
-		//printk(KERN_INFO "x:%d, y:%d, z:%d\n", acc.x, acc.y, acc.z);
-
-		input_sync(bma020->input_dev);
-		msleep(150);
-	}
-#endif
-}
-
-static void bma020_work_func(struct work_struct *work)
-{
-#if 0
-	char buffer[6];
-	bma020acc_t acc;
-	struct bma020_data *bma020 = i2c_get_clientdata(this_client);
-	short y_z_change_tmp = 0;
-	//printk(KERN_INFO "bma020_work_func+\n");
-	
-
-	memset(buffer, 0, 6);
-	buffer[0] = 0x02;
-	BMAI2C_RxData(buffer, 6);
-
-	if(aflag && mflag)
-	{
-		//printk (KERN_INFO "bma020 buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x buffer[4]:0x%x buffer[5]:0x%x\n", buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-		
-		acc.x = BMA020_GET_BITSLICE(buffer[0],ACC_X_LSB) | BMA020_GET_BITSLICE(buffer[1],ACC_X_MSB)<<ACC_X_LSB__LEN;
-		acc.x = acc.x << (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-		acc.x = acc.x >> (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-
-		acc.y = BMA020_GET_BITSLICE(buffer[2],ACC_Y_LSB) | BMA020_GET_BITSLICE(buffer[3],ACC_Y_MSB)<<ACC_Y_LSB__LEN;
-		acc.y = acc.y << (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-		acc.y = acc.y >> (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-	
-	
-		acc.z = BMA020_GET_BITSLICE(buffer[4],ACC_Z_LSB) | BMA020_GET_BITSLICE(buffer[5],ACC_Z_MSB)<<ACC_Z_LSB__LEN;
-		acc.z = acc.z << (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		acc.z = acc.z >> (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-
-		y_z_change_tmp = acc.y;
-		acc.y = acc.z;
-		acc.z = y_z_change_tmp;
-
-		input_report_abs(bma020->input_dev, ABS_X, acc.x);
-		input_report_abs(bma020->input_dev, ABS_Y, acc.y);
-		input_report_abs(bma020->input_dev, ABS_Z, acc.z);
-		
-		input_report_abs(bma020->input_dev, ABS_RX, acc.x);
-		input_report_abs(bma020->input_dev, ABS_RY, acc.y);
-		input_report_abs(bma020->input_dev, ABS_RZ, acc.z);
-	}
-	else if(aflag)
-	{
-
-		acc.x = BMA020_GET_BITSLICE(buffer[0],ACC_X_LSB) | BMA020_GET_BITSLICE(buffer[1],ACC_X_MSB)<<ACC_X_LSB__LEN;
-		acc.x = acc.x << (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-		acc.x = acc.x >> (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-
-		acc.y = BMA020_GET_BITSLICE(buffer[2],ACC_Y_LSB) | BMA020_GET_BITSLICE(buffer[3],ACC_Y_MSB)<<ACC_Y_LSB__LEN;
-		acc.y = acc.y << (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-		acc.y = acc.y >> (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-	
-		acc.z = BMA020_GET_BITSLICE(buffer[4],ACC_Z_LSB) | BMA020_GET_BITSLICE(buffer[5],ACC_Z_MSB)<<ACC_Z_LSB__LEN;
-		acc.z = acc.z << (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		acc.z = acc.z >> (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		
-		y_z_change_tmp = acc.y;
-		acc.y = acc.z;
-		acc.z = y_z_change_tmp;
-	
-		input_report_abs(bma020->input_dev, ABS_X, acc.x);
-		input_report_abs(bma020->input_dev, ABS_Y, acc.y);
-		input_report_abs(bma020->input_dev, ABS_Z, acc.z);
-		//printk(KERN_INFO "x:%d, y:%d, z:%d\n", acc.x, acc.y, acc.z);
-	}
-
-	
-	//test code, if unnecessary please remove them +
-       {
-		y_z_change_tmp = 0;
-		memset(buffer, 0, 6);
-		buffer[0] = 0x02;
-		BMAI2C_RxData(buffer, 6);		
-		acc.x = BMA020_GET_BITSLICE(buffer[0],ACC_X_LSB) | BMA020_GET_BITSLICE(buffer[1],ACC_X_MSB)<<ACC_X_LSB__LEN;
-		acc.x = acc.x << (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-		acc.x = acc.x >> (sizeof(short)*8-(ACC_X_LSB__LEN+ACC_X_MSB__LEN));
-
-		acc.y = BMA020_GET_BITSLICE(buffer[2],ACC_Y_LSB) | BMA020_GET_BITSLICE(buffer[3],ACC_Y_MSB)<<ACC_Y_LSB__LEN;
-		acc.y = acc.y << (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-		acc.y = acc.y >> (sizeof(short)*8-(ACC_Y_LSB__LEN + ACC_Y_MSB__LEN));
-	
-		acc.z = BMA020_GET_BITSLICE(buffer[4],ACC_Z_LSB) | BMA020_GET_BITSLICE(buffer[5],ACC_Z_MSB)<<ACC_Z_LSB__LEN;
-		acc.z = acc.z << (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		acc.z = acc.z >> (sizeof(short)*8-(ACC_Z_LSB__LEN+ACC_Z_MSB__LEN));
-		
-		y_z_change_tmp = acc.y;
-		acc.y = acc.z;
-		acc.z = y_z_change_tmp;
-	
-		input_report_abs(bma020->input_dev, ABS_X, acc.x);
-		input_report_abs(bma020->input_dev, ABS_Y, acc.y);
-		input_report_abs(bma020->input_dev, ABS_Z, acc.z);
-		printk(KERN_INFO "x:%d, y:%d, z:%d\n", acc.x, acc.y, acc.z);
-
-       }
-       //test code, if unnecessary please remove them -
-
-	input_sync(bma020->input_dev);
-
-	enable_irq(this_client->irq);
-
-#endif
-}
 
 
 #define BMA020_GET_BITSLICE(regvar, bitname)\
@@ -375,16 +223,6 @@ static void bma020_work_func(struct work_struct *work)
 
 #define BMA020_SET_BITSLICE(regvar, bitname, val)\
 		  (regvar & ~bitname##__MSK) | ((val<<bitname##__POS)&bitname##__MSK)  
-
-static irqreturn_t bma020_irqhandler(int irq, void *dev_id)
-{
-	//printk(KERN_INFO "bma020_irqhandler+\n");
-	disable_irq(this_client->irq);
-	schedule_work(&bma020_irqwork);
-
-	return IRQ_HANDLED;
-}
-
 
 static int gsensor_bma020_remove(struct i2c_client *client)
 {
@@ -469,7 +307,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 
 	set_bit(EV_ABS, bma020->input_dev->evbit);
 	bma020->input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP) | BIT(EV_SW) | BIT(EV_ABS);
-	set_bit(SW_LID, bma020->input_dev->swbit);
+	//set_bit(SW_LID, bma020->input_dev->swbit);
 	/* yaw */
 	input_set_abs_params(bma020->input_dev, ABS_RX, 0, 360, 0, 0);
 	/* pitch */
@@ -775,7 +613,7 @@ static void bma020_report_value(short *rbuf)
 	bma020acc_t acc;
 	short y_z_change_tmp = 0;
 	struct bma020_data *data = i2c_get_clientdata(this_client);
-#if DEBUG
+#ifdef DEBUG
 	printk("bma020_report_value: yaw = %d, pitch = %d, roll = %d\n", rbuf[0],
 	       rbuf[1], rbuf[2]);
 	printk("                    tmp = %d, m_stat= %d, g_stat=%d\n", rbuf[3],
@@ -1050,6 +888,7 @@ static int bma020_aot_ioctl(struct inode *inode, struct file *file,
 		default:
 		return -ENOTTY;
 	}
+	return -ENOTTY;
 }
 
 
