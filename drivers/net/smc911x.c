@@ -750,6 +750,9 @@ static void smc911x_phy_detect(struct net_device *dev)
 						break;
 					}
 				}
+				if (phyaddr < 32)
+					/* Found an external PHY */
+					break;
 			}
 		default:
 			/* Internal media only */
