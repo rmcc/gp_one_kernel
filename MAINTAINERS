@@ -1055,6 +1055,12 @@ P:	Joe Eykholt
 M:	jeykholt@cisco.com
 S:	Supported
 
+CERTIFIED WIRELESS USB (WUSB) SUBSYSTEM:
+P:	David Vrabel
+M:	david.vrabel@csr.com
+L:	linux-usb@vger.kernel.org
+S:	Supported
+
 CFAG12864B LCD DRIVER
 P:	Miguel Ojeda Sandonis
 M:	miguel.ojeda.sandonis@gmail.com
@@ -4158,6 +4164,12 @@ L:	sparclinux@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/davem/sparc-2.6.git
 S:	Maintained
 
+ULTRA-WIDEBAND (UWB) SUBSYSTEM:
+P:	David Vrabel
+M:	david.vrabel@csr.com
+L:	linux-usb@vger.kernel.org
+S:	Supported
+
 UNIFORM CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@kernel.dk
@@ -4557,6 +4569,11 @@ WD7000 SCSI DRIVER
 P:	Miroslav Zagorac
 M:	zaga@fly.cc.fer.hr
 L:	linux-scsi@vger.kernel.org
+S:	Maintained
+
+WIMEDIA LLC PROTOCOL (WLP) SUBSYSTEM
+P:	David Vrabel
+M:	david.vrabel@csr.com
 S:	Maintained
 
 WISTRON LAPTOP BUTTON DRIVER
