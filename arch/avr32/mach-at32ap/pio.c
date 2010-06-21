@@ -134,6 +134,25 @@ fail:
 	dump_stack();
 }
 
+/*
+ * Undo a previous pin reservation. Will not affect the hardware
+ * configuration.
+ */
+void at32_deselect_pin(unsigned int pin)
+{
+	struct pio_device *pio;
+	unsigned int pin_index = pin & 0x1f;
+
+	pio = gpio_to_pio(pin);
+	if (unlikely(!pio)) {
+		printk("pio: invalid pin %u\n", pin);
+		dump_stack();
+		return;
+	}
+
+	clear_bit(pin_index, &pio->pinmux_mask);
+}
+
 /* Reserve a pin, preventing anyone else from changing its configuration. */
 void __init at32_reserve_pin(unsigned int pin)
 {
@@ -382,7 +401,6 @@ static int __init pio_probe(struct platform_device *pdev)
 }
 
 static struct platform_driver pio_driver = {
-	.probe		= pio_probe,
 	.driver		= {
 		.name		= "pio",
 	},
@@ -390,7 +408,7 @@ static struct platform_driver pio_driver = {
 
 static int __init pio_init(void)
 {
-	return platform_driver_register(&pio_driver);
+	return platform_driver_probe(&pio_driver, pio_probe);
 }
 postcore_initcall(pio_init);
 
