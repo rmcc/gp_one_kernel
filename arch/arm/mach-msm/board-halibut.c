@@ -20,11 +20,6 @@
 #include <linux/input.h>
 #include <linux/io.h>
 #include <linux/delay.h>
-#include <linux/bootmem.h>
-#include <linux/i2c.h>
-#include <linux/android_pmem.h>
-#include <linux/mtd/nand.h>
-#include <linux/mtd/partitions.h>
 
 #include <mach/hardware.h>
 #include <mach/irqs.h>
@@ -47,32 +42,8 @@
 #include <mach/memory.h>
 #include <mach/camera.h>
 
-#ifdef CONFIG_USB_FUNCTION
-#include <linux/usb/mass_storage_function.h>
-#endif
-#ifdef CONFIG_USB_ANDROID
-#include <linux/usb/android.h>
-#include <mach/rpc_hsusb.h>
-#endif
-
-#include "devices.h"
-#include "socinfo.h"
-#include "msm-keypad-devices.h"
-#include "pm.h"
-
-#ifdef CONFIG_MSM_STACKED_MEMORY
-#define MSM_SMI_BASE		0x100000
-#define MSM_SMI_SIZE		0x800000
-
-#define MSM_PMEM_GPU0_BASE	MSM_SMI_BASE
-#define MSM_PMEM_GPU0_SIZE	0x800000
-#endif
-
-#define MSM_PMEM_MDP_SIZE	0x800000
-#define MSM_PMEM_CAMERA_SIZE	0xa00000
-#define MSM_PMEM_ADSP_SIZE	0x800000
-#define MSM_PMEM_GPU1_SIZE	0x800000
-#define MSM_FB_SIZE		0x200000
+#include <linux/mtd/nand.h>
+#include <linux/mtd/partitions.h>
 
 static struct resource smc91x_resources[] = {
 	[0] = {

@@ -16,6 +16,7 @@
  */
 
 #include <asm/cacheflush.h>
+#include <asm/cachetype.h>
 #include <linux/binder.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
