@@ -275,7 +275,7 @@ static void smc_reset(struct net_device *dev)
 	unsigned int ctl, cfg;
 	struct sk_buff *pending_skb;
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	/* Disable all interrupts, block TX tasklet */
 	spin_lock_irq(&lp->lock);
@@ -368,7 +368,7 @@ static void smc_enable(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	int mask;
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	/* see the header file for options in TCR/RCR DEFAULT */
 	SMC_SELECT_BANK(lp, 0);
@@ -402,7 +402,7 @@ static void smc_shutdown(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	struct sk_buff *pending_skb;
 
-	DBG(2, "%s: %s\n", CARDNAME, __FUNCTION__);
+	DBG(2, "%s: %s\n", CARDNAME, __func__);
 
 	/* no more interrupts for me */
 	spin_lock_irq(&lp->lock);
@@ -435,7 +435,7 @@ static inline void  smc_rcv(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	unsigned int packet_number, status, packet_len;
 
-	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(3, "%s: %s\n", dev->name, __func__);
 
 	packet_number = SMC_GET_RXFIFO(lp);
 	if (unlikely(packet_number & RXFIFO_REMPTY)) {
@@ -582,7 +582,7 @@ static void smc_hardware_send_pkt(unsigned long data)
 	unsigned int packet_no, len;
 	unsigned char *buf;
 
-	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(3, "%s: %s\n", dev->name, __func__);
 
 	if (!smc_special_trylock(&lp->lock)) {
 		netif_stop_queue(dev);
@@ -667,7 +667,7 @@ static int smc_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	unsigned int numPages, poll_count, status;
 
-	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(3, "%s: %s\n", dev->name, __func__);
 
 	BUG_ON(lp->pending_tx_skb != NULL);
 
@@ -739,7 +739,7 @@ static void smc_tx(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	unsigned int saved_packet, packet_no, tx_status, pkt_len;
 
-	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(3, "%s: %s\n", dev->name, __func__);
 
 	/* If the TX FIFO is empty then nothing to do */
 	packet_no = SMC_GET_TXFIFO(lp);
@@ -861,7 +861,7 @@ static int smc_phy_read(struct net_device *dev, int phyaddr, int phyreg)
 	SMC_SET_MII(lp, SMC_GET_MII(lp) & ~(MII_MCLK|MII_MDOE|MII_MDO));
 
 	DBG(3, "%s: phyaddr=0x%x, phyreg=0x%x, phydata=0x%x\n",
-		__FUNCTION__, phyaddr, phyreg, phydata);
+		__func__, phyaddr, phyreg, phydata);
 
 	SMC_SELECT_BANK(lp, 2);
 	return phydata;
@@ -888,7 +888,7 @@ static void smc_phy_write(struct net_device *dev, int phyaddr, int phyreg,
 	SMC_SET_MII(lp, SMC_GET_MII(lp) & ~(MII_MCLK|MII_MDOE|MII_MDO));
 
 	DBG(3, "%s: phyaddr=0x%x, phyreg=0x%x, phydata=0x%x\n",
-		__FUNCTION__, phyaddr, phyreg, phydata);
+		__func__, phyaddr, phyreg, phydata);
 
 	SMC_SELECT_BANK(lp, 2);
 }
@@ -901,7 +901,7 @@ static void smc_phy_detect(struct net_device *dev)
 	struct smc_local *lp = netdev_priv(dev);
 	int phyaddr;
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	lp->phy_type = 0;
 
@@ -940,7 +940,7 @@ static int smc_phy_fixed(struct net_device *dev)
 	int phyaddr = lp->mii.phy_id;
 	int bmcr, cfg1;
 
-	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(3, "%s: %s\n", dev->name, __func__);
 
 	/* Enter Link Disable state */
 	cfg1 = smc_phy_read(dev, phyaddr, PHY_CFG1_REG);
@@ -1173,7 +1173,7 @@ static void smc_phy_interrupt(struct net_device *dev)
 	int phyaddr = lp->mii.phy_id;
 	int phy18;
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	if (lp->phy_type == 0)
 		return;
@@ -1241,7 +1241,7 @@ static irqreturn_t smc_interrupt(int irq, void *dev_id)
 	int status, mask, timeout, card_stats;
 	int saved_pointer;
 
-	DBG(3, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(3, "%s: %s\n", dev->name, __func__);
 
 	spin_lock(&lp->lock);
 
@@ -1375,7 +1375,7 @@ static void smc_timeout(struct net_device *dev)
 	void __iomem *ioaddr = lp->base;
 	int status, mask, eph_st, meminfo, fifo;
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	spin_lock_irq(&lp->lock);
 	status = SMC_GET_INT(lp);
@@ -1419,7 +1419,7 @@ static void smc_set_multicast_list(struct net_device *dev)
 	unsigned char multicast_table[8];
 	int update_multicast = 0;
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	if (dev->flags & IFF_PROMISC) {
 		DBG(2, "%s: RCR_PRMS\n", dev->name);
@@ -1522,7 +1522,7 @@ smc_open(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	/*
 	 * Check that the address is valid.  If its not, refuse
@@ -1530,7 +1530,7 @@ smc_open(struct net_device *dev)
 	 * address using ifconfig eth0 hw ether xx:xx:xx:xx:xx:xx
 	 */
 	if (!is_valid_ether_addr(dev->dev_addr)) {
-		PRINTK("%s: no valid ethernet hw addr\n", __FUNCTION__);
+		PRINTK("%s: no valid ethernet hw addr\n", __func__);
 		return -EINVAL;
 	}
 
@@ -1574,7 +1574,7 @@ static int smc_close(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
 
-	DBG(2, "%s: %s\n", dev->name, __FUNCTION__);
+	DBG(2, "%s: %s\n", dev->name, __func__);
 
 	netif_stop_queue(dev);
 	netif_carrier_off(dev);
@@ -1717,7 +1717,7 @@ static int __init smc_findirq(struct smc_local *lp)
 	int timeout = 20;
 	unsigned long cookie;
 
-	DBG(2, "%s: %s\n", CARDNAME, __FUNCTION__);
+	DBG(2, "%s: %s\n", CARDNAME, __func__);
 
 	cookie = probe_irq_on();
 
@@ -1795,7 +1795,7 @@ static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr,
 	const char *version_string;
 	DECLARE_MAC_BUF(mac);
 
-	DBG(2, "%s: %s\n", CARDNAME, __FUNCTION__);
+	DBG(2, "%s: %s\n", CARDNAME, __func__);
 
 	/* First, see if the high byte is 0x33 */
 	val = SMC_CURRENT_BANK(lp);
@@ -1988,7 +1988,8 @@ static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr,
 		if (dev->dma != (unsigned char)-1)
 			printk(" DMA %d", dev->dma);
 
-		printk("%s%s\n", nowait ? " [nowait]" : "",
+		printk("%s%s\n",
+			lp->cfg.flags & SMC91X_NOWAIT ? " [nowait]" : "",
 			THROTTLE_TX_PKTS ? " [throttle_tx]" : "");
 
 		if (!is_valid_ether_addr(dev->dev_addr)) {

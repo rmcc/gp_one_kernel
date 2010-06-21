@@ -12,5 +12,6 @@
 #define __RFKILL_INPUT_H
 
 void rfkill_epo(void);
+void rfkill_restore_states(void);
 
 #endif /* __RFKILL_INPUT_H */
