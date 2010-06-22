@@ -1629,6 +1629,11 @@ P:	Christopher Hoover
 M:	ch@murgatroid.com, ch@hpl.hp.com
 S:	Maintained
 
+EPSON S1D13XXX FRAMEBUFFER DRIVER
+P:	Kristoffer Ericson
+M:	kristoffer.ericson@gmail.com
+S:	Maintained
+
 ETHEREXPRESS-16 NETWORK DRIVER
 P:	Philip Blundell
 M:	philb@gnu.org
@@ -4089,7 +4094,7 @@ W:	http://tpmdd.sourceforge.net
 P:	Marcel Selhorst
 M:	tpm@selhorst.net
 W:	http://www.prosec.rub.de/tpm/
-L:	tpmdd-devel@lists.sourceforge.net
+L:	tpmdd-devel@lists.sourceforge.net (moderated for non-subscribers)
 S:	Maintained
 
 TRIVIAL PATCHES
@@ -4486,6 +4491,13 @@ W:	http://kernel.org/~kzak/util-linux-ng/
 T:	git://git.kernel.org/pub/scm/utils/util-linux-ng/util-linux-ng.git
 S:	Maintained
 
+UVESAFB DRIVER
+P:	Michal Januszewski
+M:	spock@gentoo.org
+L:	linux-fbdev-devel@lists.sourceforge.net (moderated for non-subscribers)
+W:	http://dev.gentoo.org/~spock/projects/uvesafb/
+S:	Maintained
+
 VFAT/FAT/MSDOS FILESYSTEM
 P:	OGAWA Hirofumi
 M:	hirofumi@mail.parknet.co.jp
@@ -4501,6 +4513,14 @@ VIAPRO SMBUS DRIVER
 P:	Jean Delvare
 M:	khali@linux-fr.org
 L:	i2c@lm-sensors.org
+S:	Maintained
+
+VIA UNICHROME(PRO)/CHROME9 FRAMEBUFFER DRIVER
+P:	Joseph Chan
+M:	JosephChan@via.com.tw
+P:	Scott Fang
+M:	ScottFang@viatech.com.cn
+L:	linux-fbdev-devel@lists.sourceforge.net (moderated for non-subscribers)
 S:	Maintained
 
 VIA VELOCITY NETWORK DRIVER

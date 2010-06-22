@@ -13,7 +13,7 @@
  * Fixed SMP synchronization, 08/08/99, Manfred Spraul
  *     manfred@colorfullife.com
  * Rewrote bits to get rid of console_lock
- *	01Mar01 Andrew Morton <andrewm@uow.edu.au>
+ *	01Mar01 Andrew Morton
  */
 
 #include <linux/kernel.h>
@@ -593,6 +593,8 @@ static int have_callable_console(void)
  *
  * See also:
  * printf(3)
+ *
+ * See the vsnprintf() documentation for format string extensions over C99.
  */
 
 asmlinkage int printk(const char *fmt, ...)

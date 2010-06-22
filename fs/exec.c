@@ -391,7 +391,7 @@ static int count(char __user * __user * argv, int max)
 			if (!p)
 				break;
 			argv++;
-			if(++i > max)
+			if (i++ >= max)
 				return -E2BIG;
 			cond_resched();
 		}
@@ -825,8 +825,6 @@ static int de_thread(struct task_struct *tsk)
 			schedule();
 		}
 
-		if (unlikely(task_child_reaper(tsk) == leader))
-			task_active_pid_ns(tsk)->child_reaper = tsk;
 		/*
 		 * The only record we have of the real-time age of a
 		 * process, regardless of execs it's done, is start_time.
@@ -1189,7 +1187,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			return retval;
 
 		/* Remember if the application is TASO.  */
-		bprm->sh_bang = eh->ah.entry < 0x100000000UL;
+		bprm->taso = eh->ah.entry < 0x100000000UL;
 
 		bprm->file = file;
 		bprm->loader = loader;
