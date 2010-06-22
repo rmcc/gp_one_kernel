@@ -1227,8 +1227,7 @@ static void tty_line_name(struct tty_driver *driver, int index, char *p)
  *	init_dev		-	initialise a tty device
  *	@driver: tty driver we are opening a device on
  *	@idx: device index
- *	@ret_tty: returned tty structure
- *	@first_ok: ok to open a new device (used by ptmx)
+ *	@tty: returned tty structure
  *
  *	Prepare a tty device. This may not be a "new" clean device but
  *	could also be an active device. The pty drivers require special
@@ -1249,7 +1248,7 @@ static void tty_line_name(struct tty_driver *driver, int index, char *p)
  */
 
 static int init_dev(struct tty_driver *driver, int idx,
-	struct tty_struct **ret_tty, int first_ok)
+	struct tty_struct **ret_tty)
 {
 	struct tty_struct *tty, *o_tty;
 	struct ktermios *tp, **tp_loc, *o_tp, **o_tp_loc;
@@ -1280,11 +1279,6 @@ static int init_dev(struct tty_driver *driver, int idx,
 	}
 	if (tty) goto fast_track;
 
-	if (driver->subtype == PTY_TYPE_MASTER &&
-		(driver->flags & TTY_DRIVER_DEVPTS_MEM) && !first_ok) {
-		retval = -EIO;
-		goto end_init;
-	}
 	/*
 	 * First time open is complex, especially for PTY devices.
 	 * This code guarantees that either everything succeeds and the
@@ -1419,7 +1413,7 @@ static int init_dev(struct tty_driver *driver, int idx,
 
 	if (retval)
 		goto release_mem_out;
-	goto success;
+	 goto success;
 
 	/*
 	 * This fast open can be used if the tty is already open.
@@ -1801,7 +1795,7 @@ static void release_dev(struct file *filp)
 }
 
 /**
- *	__tty_open		-	open a tty device
+ *	tty_open		-	open a tty device
  *	@inode: inode of device file
  *	@filp: file pointer to tty
  *
@@ -1880,7 +1874,7 @@ retry_open:
 		return -ENODEV;
 	}
 got_driver:
-	retval = init_dev(driver, index, &tty, 0);
+	retval = init_dev(driver, index, &tty);
 	mutex_unlock(&tty_mutex);
 	if (retval)
 		return retval;
@@ -1977,7 +1971,7 @@ static int __ptmx_open(struct inode *inode, struct file *filp)
 		return index;
 
 	mutex_lock(&tty_mutex);
-	retval = init_dev(ptm_driver, index, &tty, 1);
+	retval = init_dev(ptm_driver, index, &tty);
 	mutex_unlock(&tty_mutex);
 
 	if (retval)
