@@ -155,6 +155,12 @@
 #define	gadget_is_msm72k(g)	!strcmp("msm72k_udc", (g)->name)
 #else
 #define	gadget_is_msm72k(g)	0
+
+/* Freescale CPM/QE UDC SUPPORT */
+#ifdef CONFIG_USB_GADGET_FSL_QE
+#define gadget_is_fsl_qe(g)	!strcmp("fsl_qe_udc", (g)->name)
+#else
+#define gadget_is_fsl_qe(g)	0
 #endif
 
 
@@ -222,8 +228,10 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x20;
 	else if (gadget_is_m66592(gadget))
 		return 0x21;
-	else if (gadget_is_msm72k(gadget))
+	else if (gadget_is_fsl_qe(gadget))
 		return 0x22;
+	else if (gadget_is_msm72k(gadget))
+		return 0x24;
 	return -ENOENT;
 }
 
