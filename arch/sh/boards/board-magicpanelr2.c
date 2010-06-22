@@ -18,9 +18,9 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/physmap.h>
 #include <linux/mtd/map.h>
-#include <asm/magicpanelr2.h>
+#include <mach/magicpanelr2.h>
 #include <asm/heartbeat.h>
-#include <asm/sh7720.h>
+#include <cpu/sh7720.h>
 
 #define LAN9115_READY	(ctrl_inl(0xA8000084UL) & 0x00000001UL)
 
