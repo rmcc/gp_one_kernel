@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# (c) 2001, Dave Jones. <davej@codemonkey.org.uk> (the file handling bit)
+# (c) 2001, Dave Jones. <davej@redhat.com> (the file handling bit)
 # (c) 2005, Joel Schopp <jschopp@austin.ibm.com> (the ugly bit)
 # (c) 2007, Andy Whitcroft <apw@uk.ibm.com> (new conditions, test suite, etc)
 # Copyright (c) 2009, Code Aurora Forum. All rights reserved.
