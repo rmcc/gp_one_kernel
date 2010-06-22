@@ -160,13 +160,6 @@ void omap_mcbsp_register_board_cfg(struct omap_mcbsp_platform_data *config,
 {
 	int i;
 
-	if (size > OMAP_MAX_MCBSP_COUNT) {
-		printk(KERN_WARNING "Registered too many McBSPs platform_data."
-			" Using maximum (%d) available.\n",
-			OMAP_MAX_MCBSP_COUNT);
-		size = OMAP_MAX_MCBSP_COUNT;
-	}
-
 	omap_mcbsp_devices = kzalloc(size * sizeof(struct platform_device *),
 				     GFP_KERNEL);
 	if (!omap_mcbsp_devices) {
@@ -444,6 +437,12 @@ static inline void omap_init_uwire(void) {}
 /*-------------------------------------------------------------------------*/
 
 #if	defined(CONFIG_OMAP_WATCHDOG) || defined(CONFIG_OMAP_WATCHDOG_MODULE)
+
+#ifdef CONFIG_ARCH_OMAP24XX
+#define	OMAP_WDT_BASE		0x48022000
+#else
+#define	OMAP_WDT_BASE		0xfffeb000
+#endif
 
 static struct resource wdt_resources[] = {
 	{
