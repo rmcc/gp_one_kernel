@@ -629,14 +629,13 @@ static void read_buf_callback(struct urb *urb)
 	}
 
 	dbg("%s - %i chars to write", __func__, urb->actual_length);
-	tty = tty_port_tty_get(&port->port);
+	tty = port->port.tty;
 	if (data == NULL)
 		dbg("%s - data is NULL !!!", __func__);
 	if (tty && urb->actual_length && data) {
 		tty_insert_flip_string(tty, data, urb->actual_length);
 		tty_flip_buffer_push(tty);
 	}
-	tty_kref_put(tty);
 	iuu_led_activity_on(urb);
 }
 

@@ -64,13 +64,12 @@ static void navman_read_int_callback(struct urb *urb)
 	usb_serial_debug_data(debug, &port->dev, __func__,
 			      urb->actual_length, data);
 
-	tty = tty_port_tty_get(&port->port);
+	tty = port->port.tty;
 	if (tty && urb->actual_length) {
 		tty_buffer_request_room(tty, urb->actual_length);
 		tty_insert_flip_string(tty, data, urb->actual_length);
 		tty_flip_buffer_push(tty);
 	}
-	tty_kref_put(tty);
 
 exit:
 	result = usb_submit_urb(urb, GFP_ATOMIC);

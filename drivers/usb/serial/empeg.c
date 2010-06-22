@@ -33,8 +33,9 @@
  *	Moved MOD_DEC_USE_COUNT to end of empeg_close().
  *
  * (12/03/2000) gb
- *	Added tty->ldisc.set_termios(port, tty, NULL) to empeg_open().
- *	This notifies the tty driver that the termios have changed.
+ *	Added port->port.tty->ldisc.set_termios(port->port.tty, NULL) to
+ *	empeg_open(). This notifies the tty driver that the termios have
+ *	changed.
  *
  * (11/13/2000) gb
  *	Moved tty->low_latency = 1 from empeg_read_bulk_callback() to
@@ -353,7 +354,7 @@ static void empeg_read_bulk_callback(struct urb *urb)
 
 	usb_serial_debug_data(debug, &port->dev, __func__,
 						urb->actual_length, data);
-	tty = tty_port_tty_get(&port->port);
+	tty = port->port.tty;
 
 	if (urb->actual_length) {
 		tty_buffer_request_room(tty, urb->actual_length);
@@ -361,7 +362,6 @@ static void empeg_read_bulk_callback(struct urb *urb)
 		tty_flip_buffer_push(tty);
 		bytes_in += urb->actual_length;
 	}
-	tty_kref_put(tty);
 
 	/* Continue trying to always read  */
 	usb_fill_bulk_urb(

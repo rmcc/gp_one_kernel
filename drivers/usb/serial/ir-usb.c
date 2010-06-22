@@ -465,12 +465,11 @@ static void ir_read_bulk_callback(struct urb *urb)
 			ir_baud = *data & 0x0f;
 		usb_serial_debug_data(debug, &port->dev, __func__,
 						urb->actual_length, data);
-		tty = tty_port_tty_get(&port->port);
+ 		tty = port->port.tty;
 		if (tty_buffer_request_room(tty, urb->actual_length - 1)) {
 			tty_insert_flip_string(tty, data+1, urb->actual_length - 1);
 			tty_flip_buffer_push(tty);
 		}
-		tty_kref_put(tty);
 
 		/*
 		 * No break here.

@@ -117,7 +117,7 @@ static int usb_console_setup(struct console *co, char *options)
 	}
 
 	port = serial->port[0];
-	tty_port_tty_set(&port->port, NULL);
+	port->port.tty = NULL;
 
 	info->port = port;
 
@@ -143,7 +143,7 @@ static int usb_console_setup(struct console *co, char *options)
 			}
 			memset(&dummy, 0, sizeof(struct ktermios));
 			tty->termios = termios;
-			tty_port_tty_set(&port->port, tty);
+			port->port.tty = tty;
 		}
 
 		/* only call the device specific open if this
@@ -163,7 +163,7 @@ static int usb_console_setup(struct console *co, char *options)
 			tty_termios_encode_baud_rate(termios, baud, baud);
 			serial->type->set_termios(tty, port, &dummy);
 
-			tty_port_tty_set(&port->port, NULL);
+			port->port.tty = NULL;
 			kfree(termios);
 			kfree(tty);
 		}
@@ -176,7 +176,7 @@ out:
 	return retval;
 free_termios:
 	kfree(termios);
-	tty_port_tty_set(&port->port, NULL);
+	port->port.tty = NULL;
 free_tty:
 	kfree(tty);
 reset_open_count:
