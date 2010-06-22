@@ -372,8 +372,14 @@ static void remove_from_rx_queue(struct r3964_info *pInfo,
 static void put_char(struct r3964_info *pInfo, unsigned char ch)
 {
 	struct tty_struct *tty = pInfo->tty;
+
+	if (tty == NULL)
+		return;
+
 	/* FIXME: put_char should not be called from an IRQ */
-	tty_put_char(tty, ch);
+	if (tty->ops->put_char) {
+		tty->ops->put_char(tty, ch);
+	}
 	pInfo->bcc ^= ch;
 }
 

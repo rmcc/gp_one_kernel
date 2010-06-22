@@ -54,6 +54,8 @@ int gs_put_char(struct tty_struct * tty, unsigned char ch)
 
 	func_enter (); 
 
+	if (!tty) return 0;
+
 	port = tty->driver_data;
 
 	if (!port) return 0;
@@ -94,6 +96,8 @@ int gs_write(struct tty_struct * tty,
 	int t;
 
 	func_enter ();
+
+	if (!tty) return 0;
 
 	port = tty->driver_data;
 
@@ -181,6 +185,7 @@ static int gs_real_chars_in_buffer(struct tty_struct *tty)
 	struct gs_port *port;
 	func_enter ();
 
+	if (!tty) return 0;
 	port = tty->driver_data;
 
 	if (!port->rd) return 0;
@@ -269,6 +274,8 @@ void gs_flush_buffer(struct tty_struct *tty)
 
 	func_enter ();
 
+	if (!tty) return;
+
 	port = tty->driver_data;
 
 	if (!port) return;
@@ -288,6 +295,8 @@ void gs_flush_chars(struct tty_struct * tty)
 	struct gs_port *port;
 
 	func_enter ();
+
+	if (!tty) return;
 
 	port = tty->driver_data;
 
@@ -312,6 +321,8 @@ void gs_stop(struct tty_struct * tty)
 
 	func_enter ();
 
+	if (!tty) return;
+
 	port = tty->driver_data;
 
 	if (!port) return;
@@ -329,6 +340,8 @@ void gs_stop(struct tty_struct * tty)
 void gs_start(struct tty_struct * tty)
 {
 	struct gs_port *port;
+
+	if (!tty) return;
 
 	port = tty->driver_data;
 
@@ -380,6 +393,8 @@ void gs_hangup(struct tty_struct *tty)
 
 	func_enter ();
 
+	if (!tty) return;
+
 	port = tty->driver_data;
 	tty = port->port.tty;
 	if (!tty) 
@@ -410,6 +425,8 @@ int gs_block_til_ready(void *port_, struct file * filp)
 	if (!port) return 0;
 
 	tty = port->port.tty;
+
+	if (!tty) return 0;
 
 	gs_dprintk (GS_DEBUG_BTR, "Entering gs_block_till_ready.\n"); 
 	/*
@@ -506,6 +523,8 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 	
 	func_enter ();
 
+	if (!tty) return;
+
 	port = (struct gs_port *) tty->driver_data;
 
 	if (!port) return;
@@ -601,6 +620,8 @@ void gs_set_termios (struct tty_struct * tty,
 	struct ktermios *tiosp;
 
 	func_enter();
+
+	if (!tty) return;
 
 	port = tty->driver_data;
 
