@@ -99,7 +99,6 @@ static inline int tty_put_user(struct tty_struct *tty, unsigned char x,
 
 static void n_tty_set_room(struct tty_struct *tty)
 {
-	/* tty->read_cnt is not read locked ? */
 	int	left = N_TTY_BUF_SIZE - tty->read_cnt - 1;
 
 	/*
@@ -122,16 +121,6 @@ static void put_tty_queue_nolock(unsigned char c, struct tty_struct *tty)
 	}
 }
 
-/**
- *	put_tty_queue		-	add character to tty
- *	@c: character
- *	@tty: tty device
- *
- *	Add a character to the tty read_buf queue. This is done under the
- *	read_lock to serialize character addition and also to protect us
- *	against parallel reads or flushes
- */
-
 static void put_tty_queue(unsigned char c, struct tty_struct *tty)
 {
 	unsigned long flags;
@@ -148,11 +137,14 @@ static void put_tty_queue(unsigned char c, struct tty_struct *tty)
  *	check_unthrottle	-	allow new receive data
  *	@tty; tty device
  *
- *	Check whether to call the driver unthrottle functions
- *
+ *	Check whether to call the driver.unthrottle function.
+ *	We test the TTY_THROTTLED bit first so that it always
+ *	indicates the current state. The decision about whether
+ *	it is worth allowing more input has been taken by the caller.
  *	Can sleep, may be called under the atomic_read_lock mutex but
  *	this is not guaranteed.
  */
+
 static void check_unthrottle(struct tty_struct *tty)
 {
 	if (tty->count)
@@ -166,8 +158,6 @@ static void check_unthrottle(struct tty_struct *tty)
  *	Reset the read buffer counters, clear the flags,
  *	and make sure the driver is unthrottled. Called
  *	from n_tty_open() and n_tty_flush_buffer().
- *
- *	Locking: tty_read_lock for read fields.
  */
 static void reset_buffer_flags(struct tty_struct *tty)
 {
@@ -191,7 +181,7 @@ static void reset_buffer_flags(struct tty_struct *tty)
  *	at hangup) or when the N_TTY line discipline internally has to
  *	clean the pending queue (for example some signals).
  *
- *	Locking: ctrl_lock, read_lock.
+ *	Locking: ctrl_lock
  */
 
 static void n_tty_flush_buffer(struct tty_struct *tty)
@@ -217,8 +207,6 @@ static void n_tty_flush_buffer(struct tty_struct *tty)
  *
  *	Report the number of characters buffered to be delivered to user
  *	at this instant in time.
- *
- *	Locking: read_lock
  */
 
 static ssize_t n_tty_chars_in_buffer(struct tty_struct *tty)
@@ -422,8 +410,6 @@ break_out:
  *
  *	Echo user input back onto the screen. This must be called only when
  *	L_ECHO(tty) is true. Called from the driver receive_buf path.
- *
- *	Relies on BKL for tty column locking
  */
 
 static void echo_char(unsigned char c, struct tty_struct *tty)
@@ -436,12 +422,6 @@ static void echo_char(unsigned char c, struct tty_struct *tty)
 		opost(c, tty);
 }
 
-/**
- *	finsh_erasing		-	complete erase
- *	@tty: tty doing the erase
- *
- *	Relies on BKL for tty column locking
- */
 static inline void finish_erasing(struct tty_struct *tty)
 {
 	if (tty->erasing) {
@@ -459,8 +439,6 @@ static inline void finish_erasing(struct tty_struct *tty)
  *	Perform erase and necessary output when an erase character is
  *	present in the stream from the driver layer. Handles the complexities
  *	of UTF-8 multibyte symbols.
- *
- *	Locking: read_lock for tty buffers, BKL for column/erasing state
  */
 
 static void eraser(unsigned char c, struct tty_struct *tty)
@@ -469,7 +447,6 @@ static void eraser(unsigned char c, struct tty_struct *tty)
 	int head, seen_alnums, cnt;
 	unsigned long flags;
 
-	/* FIXME: locking needed ? */
 	if (tty->read_head == tty->canon_head) {
 		/* opost('\a', tty); */		/* what do you think? */
 		return;
@@ -504,7 +481,6 @@ static void eraser(unsigned char c, struct tty_struct *tty)
 	}
 
 	seen_alnums = 0;
-	/* FIXME: Locking ?? */
 	while (tty->read_head != tty->canon_head) {
 		head = tty->read_head;
 
@@ -607,8 +583,6 @@ static void eraser(unsigned char c, struct tty_struct *tty)
  *	may caus terminal flushing to take place according to the termios
  *	settings and character used. Called from the driver receive_buf
  *	path so serialized.
- *
- *	Locking: ctrl_lock, read_lock (both via flush buffer)
  */
 
 static inline void isig(int sig, struct tty_struct *tty, int flush)
@@ -1033,8 +1007,6 @@ int is_ignored(int sig)
  *	and is protected from re-entry by the tty layer. The user is
  *	guaranteed that this function will not be re-entered or in progress
  *	when the ldisc is closed.
- *
- *	Locking: Caller holds tty->termios_mutex
  */
 
 static void n_tty_set_termios(struct tty_struct *tty, struct ktermios *old)
@@ -1294,7 +1266,10 @@ static ssize_t read_chan(struct tty_struct *tty, struct file *file,
 
 do_it_again:
 
-	BUG_ON(!tty->read_buf);
+	if (!tty->read_buf) {
+		printk(KERN_ERR "n_tty_read_chan: read_buf == NULL?!?\n");
+		return -EIO;
+	}
 
 	c = job_control(tty, file);
 	if (c < 0)
@@ -1614,7 +1589,7 @@ static unsigned long inq_canon(struct tty_struct *tty)
 {
 	int nr, head, tail;
 
-	if (!tty->canon_data)
+	if (!tty->canon_data || !tty->read_buf)
 		return 0;
 	head = tty->canon_head;
 	tail = tty->read_tail;
@@ -1638,7 +1613,6 @@ static int n_tty_ioctl(struct tty_struct *tty, struct file *file,
 	case TIOCOUTQ:
 		return put_user(tty_chars_in_buffer(tty), (int __user *) arg);
 	case TIOCINQ:
-		/* FIXME: Locking */
 		retval = tty->read_cnt;
 		if (L_ICANON(tty))
 			retval = inq_canon(tty);
