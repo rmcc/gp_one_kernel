@@ -196,4 +196,15 @@ config BACKLIGHT_LED_MAX8831
 	help
 ###-FIH_ADQ
 
+config MCU_MPC8349EMITX
+	tristate "MPC8349E-mITX MCU driver"
+	depends on I2C && PPC_83xx
+	select GENERIC_GPIO
+	select ARCH_REQUIRE_GPIOLIB
+	help
+	  Say Y here to enable soft power-off functionality on the Freescale
+	  boards with the MPC8349E-mITX-compatible MCU chips. This driver will
+	  also register MCU GPIOs with the generic GPIO API, so you'll able
+	  to use MCU pins as GPIOs.
+
 endmenu
