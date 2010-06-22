@@ -207,7 +207,7 @@ struct uwb_beca_e *__uwb_beca_find_bymac(const struct uwb_mac_addr *mac_addr)
 	struct uwb_beca_e *bce, *next;
 	list_for_each_entry_safe(bce, next, &uwb_beca.list, node) {
 		if (!memcmp(bce->mac_addr, mac_addr->data,
-			    sizeof(bce->mac_addr)))
+			    sizeof(struct uwb_mac_addr)))
 			goto out;
 	}
 	bce = NULL;
@@ -298,11 +298,12 @@ struct uwb_beca_e *__uwb_beca_add(struct uwb_rc_evt_beacon *be,
 void uwb_beca_purge(void)
 {
 	struct uwb_beca_e *bce, *next;
-	unsigned long now = jiffies;
+	unsigned long expires;
+
 	mutex_lock(&uwb_beca.mutex);
 	list_for_each_entry_safe(bce, next, &uwb_beca.list, node) {
-		if (now - bce->ts_jiffies
-		    > msecs_to_jiffies(beacon_timeout_ms)) {
+		expires = bce->ts_jiffies + msecs_to_jiffies(beacon_timeout_ms);
+		if (time_after(jiffies, expires)) {
 			uwbd_dev_offair(bce);
 			list_del(&bce->node);
 			uwb_bce_put(bce);
@@ -409,7 +410,6 @@ int uwbd_evt_handle_rc_beacon(struct uwb_event *evt)
 	struct uwb_rc_evt_beacon *be;
 	struct uwb_beacon_frame *bf;
 	struct uwb_beca_e *bce;
-	struct device *dev = &evt->rc->uwb_dev.dev;
 	unsigned long last_ts;
 
 	rc = evt->rc;
@@ -418,14 +418,12 @@ int uwbd_evt_handle_rc_beacon(struct uwb_event *evt)
 	if (result < 0)
 		return result;
 
-	/* Ignore beacon if it is from an alien. */
+	/* FIXME: handle alien beacons. */
 	if (be->bBeaconType == UWB_RC_BEACON_TYPE_OL_ALIEN ||
 	    be->bBeaconType == UWB_RC_BEACON_TYPE_NOL_ALIEN) {
-		if (printk_ratelimit())
-			dev_err(dev, "BEACON received from ALIEN. Action? \n");
-		result = -ENOSYS;
-		return 0;
+		return -ENOSYS;
 	}
+
 	bf = (struct uwb_beacon_frame *) be->BeaconInfo;
 
 	/*
