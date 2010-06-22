@@ -573,11 +573,8 @@ static void __init unix98_pty_init(void)
 	if (tty_register_driver(pts_driver))
 		panic("Couldn't register Unix98 pts driver");
 
-	/* FIXME: WTF */
-#if 0	
 	pty_table[1].data = &ptm_driver->refcount;
-#endif	
-	register_sysctl_table(pty_root_table);	
+	register_sysctl_table(pty_root_table);
 
 	/* Now create the /dev/ptmx special device */
 	tty_default_fops(&ptmx_fops);
