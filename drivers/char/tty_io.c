@@ -1235,20 +1235,27 @@ struct tty_struct *tty_driver_lookup_tty(struct tty_driver *driver,
 
 int tty_init_termios(struct tty_struct *tty)
 {
-	struct ktermios *tp;
+	struct ktermios *tp, *ltp;
 	int idx = tty->index;
 
 	tp = tty->driver->termios[idx];
+	ltp = tty->driver->termios_locked[idx];
 	if (tp == NULL) {
-		tp = kzalloc(sizeof(struct ktermios[2]), GFP_KERNEL);
-		if (tp == NULL)
+		WARN_ON(ltp != NULL);
+		tp = kmalloc(sizeof(struct ktermios), GFP_KERNEL);
+		ltp = kzalloc(sizeof(struct ktermios), GFP_KERNEL);
+		if (tp == NULL || ltp == NULL) {
+			kfree(tp);
+			kfree(ltp);
 			return -ENOMEM;
+		}
 		memcpy(tp, &tty->driver->init_termios,
 						sizeof(struct ktermios));
 		tty->driver->termios[idx] = tp;
+		tty->driver->termios_locked[idx] = ltp;
 	}
 	tty->termios = tp;
-	tty->termios_locked = tp + 1;
+	tty->termios_locked = ltp;
 
 	/* Compatibility until drivers always set this */
 	tty->termios->c_ispeed = tty_termios_input_baud_rate(tty->termios);
@@ -1432,6 +1439,10 @@ void tty_free_termios(struct tty_struct *tty)
 		tp = tty->termios;
 		tty->driver->termios[idx] = NULL;
 		kfree(tp);
+
+		tp = tty->termios_locked;
+		tty->driver->termios_locked[idx] = NULL;
+		kfree(tp);
 	}
 }
 EXPORT_SYMBOL(tty_free_termios);
@@ -1564,6 +1575,12 @@ void tty_release_dev(struct file *filp)
 			       idx, tty->name);
 			return;
 		}
+		if (tty->termios_locked != tty->driver->termios_locked[idx]) {
+			printk(KERN_DEBUG "tty_release_dev: driver.termios_locked[%d] not "
+			       "termios_locked for (%s)\n",
+			       idx, tty->name);
+			return;
+		}
 	}
 #endif
 
@@ -1584,6 +1601,13 @@ void tty_release_dev(struct file *filp)
 		if (o_tty->termios != tty->driver->other->termios[idx]) {
 			printk(KERN_DEBUG "tty_release_dev: other->termios[%d] "
 					  "not o_termios for (%s)\n",
+			       idx, tty->name);
+			return;
+		}
+		if (o_tty->termios_locked !=
+		      tty->driver->other->termios_locked[idx]) {
+			printk(KERN_DEBUG "tty_release_dev: other->termios_locked["
+					  "%d] not o_termios_locked for (%s)\n",
 			       idx, tty->name);
 			return;
 		}
@@ -2906,13 +2930,18 @@ static void destruct_tty_driver(struct kref *kref)
 				driver->termios[i] = NULL;
 				kfree(tp);
 			}
+			tp = driver->termios_locked[i];
+			if (tp) {
+				driver->termios_locked[i] = NULL;
+				kfree(tp);
+			}
 			if (!(driver->flags & TTY_DRIVER_DYNAMIC_DEV))
 				tty_unregister_device(driver, i);
 		}
 		p = driver->ttys;
 		proc_tty_unregister_driver(driver);
 		driver->ttys = NULL;
-		driver->termios = NULL;
+		driver->termios = driver->termios_locked = NULL;
 		kfree(p);
 		cdev_del(&driver->cdev);
 	}
@@ -2949,7 +2978,7 @@ int tty_register_driver(struct tty_driver *driver)
 	void **p = NULL;
 
 	if (!(driver->flags & TTY_DRIVER_DEVPTS_MEM) && driver->num) {
-		p = kzalloc(driver->num * 2 * sizeof(void *), GFP_KERNEL);
+		p = kzalloc(driver->num * 3 * sizeof(void *), GFP_KERNEL);
 		if (!p)
 			return -ENOMEM;
 	}
@@ -2973,9 +3002,12 @@ int tty_register_driver(struct tty_driver *driver)
 	if (p) {
 		driver->ttys = (struct tty_struct **)p;
 		driver->termios = (struct ktermios **)(p + driver->num);
+		driver->termios_locked = (struct ktermios **)
+							(p + driver->num * 2);
 	} else {
 		driver->ttys = NULL;
 		driver->termios = NULL;
+		driver->termios_locked = NULL;
 	}
 
 	cdev_init(&driver->cdev, &tty_fops);
@@ -2984,7 +3016,7 @@ int tty_register_driver(struct tty_driver *driver)
 	if (error) {
 		unregister_chrdev_region(dev, driver->num);
 		driver->ttys = NULL;
-		driver->termios = NULL;
+		driver->termios = driver->termios_locked = NULL;
 		kfree(p);
 		return error;
 	}
