@@ -474,26 +474,13 @@ void __init detect_intel_iommu(void)
 			printk(KERN_INFO
 			       "Queued invalidation will be enabled to support "
 			       "x2apic and Intr-remapping.\n");
-			printk(KERN_INFO
-			       "Disabling IOMMU detection, because of missing "
-			       "queued invalidation support for IOTLB "
-			       "invalidation\n");
-			printk(KERN_INFO
-			       "Use \"nox2apic\", if you want to use Intel "
-			       " IOMMU for DMA-remapping and don't care about "
-			       " x2apic support\n");
-
-			dmar_disabled = 1;
-			goto end;
-		}
-
+#endif
 #ifdef CONFIG_DMAR
 		if (ret && !no_iommu && !iommu_detected && !swiotlb &&
 		    !dmar_disabled)
 			iommu_detected = 1;
-	}
-end:
 #endif
+	}
 	dmar_tbl = NULL;
 }
 
