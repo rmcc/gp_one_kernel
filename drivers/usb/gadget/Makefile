@@ -23,25 +23,16 @@ obj-$(CONFIG_USB_MSM_72K)	+= msm72k_udc.o
 #
 # USB gadget drivers
 #
-C_UTILS =	composite.o usbstring.o config.o epautoconf.o
-
-g_zero-objs			:= zero.o f_sourcesink.o f_loopback.o $(C_UTILS)
-g_ether-objs			:= ether.o u_ether.o f_subset.o f_ecm.o $(C_UTILS)
-g_serial-objs			:= serial.o u_serial.o f_acm.o f_serial.o $(C_UTILS)
-g_midi-objs			:= gmidi.o usbstring.o config.o epautoconf.o
+g_zero-objs			:= zero.o
+g_ether-objs			:= ether.o
+g_serial-objs			:= serial.o
+g_midi-objs			:= gmidi.o
 gadgetfs-objs			:= inode.o
-g_file_storage-objs		:= file_storage.o usbstring.o config.o \
-					epautoconf.o
-g_printer-objs			:= printer.o usbstring.o config.o \
-					epautoconf.o
-g_cdc-objs			:= cdc2.o u_ether.o f_ecm.o \
-					u_serial.o f_acm.o $(C_UTILS)
+g_file_storage-objs		:= file_storage.o
+g_printer-objs			:= printer.o
+g_cdc-objs			:= cdc2.o
 g_android-objs			:= android.o f_adb.o f_mass_storage.o $(C_UTILS)
 
-ifeq ($(CONFIG_USB_ETH_RNDIS),y)
-	g_ether-objs		+= f_rndis.o rndis.o
-endif
- 
 obj-$(CONFIG_USB_ZERO)		+= g_zero.o
 obj-$(CONFIG_USB_ETH)		+= g_ether.o
 obj-$(CONFIG_USB_GADGETFS)	+= gadgetfs.o
