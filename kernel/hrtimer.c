@@ -946,7 +946,7 @@ remove_hrtimer(struct hrtimer *timer, struct hrtimer_clock_base *base)
 }
 
 /**
- * hrtimer_start_range_ns - (re)start an relative timer on the current CPU
+ * hrtimer_start_range_ns - (re)start an hrtimer on the current CPU
  * @timer:	the timer to be added
  * @tim:	expiry time
  * @delta_ns:	"slack" range for the timer
@@ -1022,7 +1022,7 @@ hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim, unsigned long delta_n
 EXPORT_SYMBOL_GPL(hrtimer_start_range_ns);
 
 /**
- * hrtimer_start - (re)start an relative timer on the current CPU
+ * hrtimer_start - (re)start an hrtimer on the current CPU
  * @timer:	the timer to be added
  * @tim:	expiry time
  * @mode:	expiry mode: absolute (HRTIMER_ABS) or relative (HRTIMER_REL)
@@ -1394,22 +1394,16 @@ void hrtimer_interrupt(struct clock_event_device *dev)
  */
 void hrtimer_peek_ahead_timers(void)
 {
-	unsigned long flags;
 	struct tick_device *td;
-	struct clock_event_device *dev;
+	unsigned long flags;
 
 	if (!hrtimer_hres_active())
 		return;
 
 	local_irq_save(flags);
 	td = &__get_cpu_var(tick_cpu_device);
-	if (!td)
-		goto out;
-	dev = td->evtdev;
-	if (!dev)
-		goto out;
-	hrtimer_interrupt(dev);
-out:
+	if (td && td->evtdev)
+		hrtimer_interrupt(td->evtdev);
 	local_irq_restore(flags);
 }
 

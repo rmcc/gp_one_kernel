@@ -387,14 +387,14 @@ static void tick_nohz_restart(struct tick_sched *ts, ktime_t now)
 		hrtimer_forward(&ts->sched_timer, now, tick_period);
 
 		if (ts->nohz_mode == NOHZ_MODE_HIGHRES) {
-			hrtimer_start(&ts->sched_timer,
-				      hrtimer_get_expires(&ts->sched_timer),
+			hrtimer_start_expires(&ts->sched_timer,
 				      HRTIMER_MODE_ABS);
 			/* Check, if the timer was already in the past */
 			if (hrtimer_active(&ts->sched_timer))
 				break;
 		} else {
-			if (!tick_program_event(hrtimer_get_expires(&ts->sched_timer), 0))
+			if (!tick_program_event(
+				hrtimer_get_expires(&ts->sched_timer), 0))
 				break;
 		}
 		/* Update jiffies and reread time */
@@ -456,7 +456,9 @@ void tick_nohz_restart_sched_tick(void)
 	 */
 	ts->tick_stopped  = 0;
 	ts->idle_exittime = now;
+
 	tick_nohz_restart(ts, now);
+
 	local_irq_enable();
 }
 
@@ -567,11 +569,21 @@ static void tick_nohz_switch_to_nohz(void)
 static void tick_nohz_kick_tick(int cpu)
 {
 	struct tick_sched *ts = &per_cpu(tick_cpu_sched, cpu);
+	ktime_t delta, now;
 
 	if (!ts->tick_stopped)
 		return;
 
-	tick_nohz_restart(ts, ktime_get());
+	/*
+	 * Do not touch the tick device, when the next expiry is either
+	 * already reached or less/equal than the tick period.
+	 */
+	now = ktime_get();
+	delta =	ktime_sub(hrtimer_get_expires(&ts->sched_timer), now);
+	if (delta.tv64 <= tick_period.tv64)
+		return;
+
+	tick_nohz_restart(ts, now);
 }
 
 #else
