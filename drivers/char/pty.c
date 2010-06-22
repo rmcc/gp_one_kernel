@@ -488,6 +488,7 @@ static void pty_unix98_shutdown(struct tty_struct *tty)
 {
 	/* We have our own method as we don't use the tty index */
 	kfree(tty->termios);
+	kfree(tty->termios_locked);
 }
 
 /* We have no need to install and remove our tty objects as devpts does all
@@ -508,17 +509,20 @@ static int pty_unix98_install(struct tty_driver *driver, struct tty_struct *tty)
 	}
 	initialize_tty_struct(o_tty, driver->other, idx);
 
-	tty->termios = kzalloc(sizeof(struct ktermios[2]), GFP_KERNEL);
+	tty->termios = kmalloc(sizeof(struct ktermios), GFP_KERNEL);
 	if (tty->termios == NULL)
 		goto free_mem_out;
 	*tty->termios = driver->init_termios;
-	tty->termios_locked = tty->termios + 1;
-
-	o_tty->termios = kzalloc(sizeof(struct ktermios[2]), GFP_KERNEL);
+	tty->termios_locked = kzalloc(sizeof(struct ktermios), GFP_KERNEL);
+	if (tty->termios_locked == NULL)
+		goto free_mem_out;
+	o_tty->termios = kmalloc(sizeof(struct ktermios), GFP_KERNEL);
 	if (o_tty->termios == NULL)
 		goto free_mem_out;
 	*o_tty->termios = driver->other->init_termios;
-	o_tty->termios_locked = o_tty->termios + 1;
+	o_tty->termios_locked = kzalloc(sizeof(struct ktermios), GFP_KERNEL);
+	if (o_tty->termios_locked == NULL)
+		goto free_mem_out;
 
 	tty_driver_kref_get(driver->other);
 	if (driver->subtype == PTY_TYPE_MASTER)
@@ -536,10 +540,10 @@ static int pty_unix98_install(struct tty_driver *driver, struct tty_struct *tty)
 	pty_count++;
 	return 0;
 free_mem_out:
-	kfree(o_tty->termios);
+	pty_unix98_shutdown(o_tty);
 	module_put(o_tty->driver->owner);
 	free_tty_struct(o_tty);
-	kfree(tty->termios);
+	pty_unix98_shutdown(tty);
 	return -ENOMEM;
 }
 
