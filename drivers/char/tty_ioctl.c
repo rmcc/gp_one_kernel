@@ -893,7 +893,6 @@ int tty_mode_ioctl(struct tty_struct *tty, struct file *file,
 {
 	struct tty_struct *real_tty;
 	void __user *p = (void __user *)arg;
-	int ret = 0;
 
 	if (tty->driver->type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver->subtype == PTY_TYPE_MASTER)
@@ -929,24 +928,18 @@ int tty_mode_ioctl(struct tty_struct *tty, struct file *file,
 		return set_termios(real_tty, p, TERMIOS_OLD);
 #ifndef TCGETS2
 	case TCGETS:
-		mutex_lock(&real_tty->termios_mutex);
 		if (kernel_termios_to_user_termios((struct termios __user *)arg, real_tty->termios))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 #else
 	case TCGETS:
-		mutex_lock(&real_tty->termios_mutex);
 		if (kernel_termios_to_user_termios_1((struct termios __user *)arg, real_tty->termios))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 	case TCGETS2:
-		mutex_lock(&real_tty->termios_mutex);
 		if (kernel_termios_to_user_termios((struct termios2 __user *)arg, real_tty->termios))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 	case TCSETSF2:
 		return set_termios(real_tty, p,  TERMIOS_FLUSH | TERMIOS_WAIT);
 	case TCSETSW2:
@@ -964,46 +957,36 @@ int tty_mode_ioctl(struct tty_struct *tty, struct file *file,
 		return set_termios(real_tty, p, TERMIOS_TERMIO);
 #ifndef TCGETS2
 	case TIOCGLCKTRMIOS:
-		mutex_lock(&real_tty->termios_mutex);
 		if (kernel_termios_to_user_termios((struct termios __user *)arg, real_tty->termios_locked))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 	case TIOCSLCKTRMIOS:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
-		mutex_lock(&real_tty->termios_mutex);
 		if (user_termios_to_kernel_termios(real_tty->termios_locked,
 					       (struct termios __user *) arg))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 #else
 	case TIOCGLCKTRMIOS:
-		mutex_lock(&real_tty->termios_mutex);
 		if (kernel_termios_to_user_termios_1((struct termios __user *)arg, real_tty->termios_locked))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 	case TIOCSLCKTRMIOS:
 		if (!capable(CAP_SYS_ADMIN))
-			ret = -EPERM;
-		mutex_lock(&real_tty->termios_mutex);
+			return -EPERM;
 		if (user_termios_to_kernel_termios_1(real_tty->termios_locked,
 					       (struct termios __user *) arg))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+			return 0;
 #endif
 #ifdef TCGETX
 	case TCGETX:
 		if (real_tty->termiox == NULL)
 			return -EINVAL;
-		mutex_lock(&real_tty->termios_mutex);
 		if (copy_to_user(p, real_tty->termiox, sizeof(struct termiox)))
-			ret = -EFAULT;
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
+			return -EFAULT;
+		return 0;
 	case TCSETX:
 		return set_termiox(real_tty, p, 0);
 	case TCSETXW:
@@ -1012,11 +995,10 @@ int tty_mode_ioctl(struct tty_struct *tty, struct file *file,
 		return set_termiox(real_tty, p, TERMIOS_FLUSH);
 #endif		
 	case TIOCGSOFTCAR:
-		mutex_lock(&real_tty->termios_mutex);
-		ret = put_user(C_CLOCAL(real_tty) ? 1 : 0,
+		/* FIXME: for correctness we may need to take the termios
+		   lock here - review */
+		return put_user(C_CLOCAL(real_tty) ? 1 : 0,
 						(int __user *)arg);
-		mutex_unlock(&real_tty->termios_mutex);
-		return ret;
 	case TIOCSSOFTCAR:
 		if (get_user(arg, (unsigned int __user *) arg))
 			return -EFAULT;
