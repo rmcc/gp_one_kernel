@@ -48,7 +48,7 @@ typedef struct {
 
 typedef __vector128 vector128;
 
-#ifdef __powerpc64__
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 typedef u64 dma_addr_t;
 #else
 typedef u32 dma_addr_t;
