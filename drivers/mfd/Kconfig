@@ -132,7 +132,6 @@ config MFD_WM8350_I2C
 	  systems.  This option enables core support for the WM8350 with
 	  I2C as the control interface.  Additional options must be
 	  selected to enable support for the functionality of the chip.
->>>>>>> c269bc00fcb876ae3b85f178f1e34601185c8ccc
 
 endmenu
 
