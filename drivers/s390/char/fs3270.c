@@ -428,7 +428,8 @@ fs3270_open(struct inode *inode, struct file *filp)
 		struct tty_struct *tty = get_current_tty();
 		if (!tty || tty->driver->major != IBM_TTY3270_MAJOR) {
 			tty_kref_put(tty);
-			return -ENODEV;
+			rc = -ENODEV;
+			goto out;
 		}
 		minor = tty->index + RAW3270_FIRSTMINOR;
 		tty_kref_put(tty);

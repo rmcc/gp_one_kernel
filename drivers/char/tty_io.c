@@ -739,11 +739,13 @@ void tty_vhangup_self(void)
 {
 	struct tty_struct *tty;
 
+	mutex_lock(&tty_mutex);
 	tty = get_current_tty();
 	if (tty) {
 		tty_vhangup(tty);
 		tty_kref_put(tty);
 	}
+	mutex_unlock(&tty_mutex);
 }
 
 /**
@@ -799,9 +801,11 @@ void disassociate_ctty(int on_exit)
 	struct pid *tty_pgrp = NULL;
 
 
+	mutex_lock(&tty_mutex);
 	tty = get_current_tty();
 	if (tty) {
 		tty_pgrp = get_pid(tty->pgrp);
+		mutex_unlock(&tty_mutex);
 		lock_kernel();
 		if (on_exit && tty->driver->type != TTY_DRIVER_TYPE_PTY)
 			tty_vhangup(tty);
@@ -818,6 +822,7 @@ void disassociate_ctty(int on_exit)
 			kill_pgrp(old_pgrp, SIGCONT, on_exit);
 			put_pid(old_pgrp);
 		}
+		mutex_unlock(&tty_mutex);
 		return;
 	}
 	if (tty_pgrp) {
@@ -832,6 +837,7 @@ void disassociate_ctty(int on_exit)
 	current->signal->tty_old_pgrp = NULL;
 	spin_unlock_irq(&current->sighand->siglock);
 
+	mutex_lock(&tty_mutex);
 	tty = get_current_tty();
 	if (tty) {
 		unsigned long flags;
@@ -848,6 +854,7 @@ void disassociate_ctty(int on_exit)
 		       " = NULL", tty);
 #endif
 	}
+	mutex_unlock(&tty_mutex);
 
 	/* Now clear signal->tty under the lock */
 	read_lock(&tasklist_lock);
@@ -3173,11 +3180,14 @@ static void proc_set_tty(struct task_struct *tsk, struct tty_struct *tty)
 struct tty_struct *get_current_tty(void)
 {
 	struct tty_struct *tty;
-	unsigned long flags;
-
-	spin_lock_irqsave(&current->sighand->siglock, flags);
+	WARN_ON_ONCE(!mutex_is_locked(&tty_mutex));
 	tty = tty_kref_get(current->signal->tty);
-	spin_unlock_irqrestore(&current->sighand->siglock, flags);
+	/*
+	 * session->tty can be changed/cleared from under us, make sure we
+	 * issue the load. The obtained pointer, when not NULL, is valid as
+	 * long as we hold tty_mutex.
+	 */
+	barrier();
 	return tty;
 }
 EXPORT_SYMBOL_GPL(get_current_tty);
