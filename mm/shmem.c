@@ -2580,6 +2580,7 @@ put_memory:
 	shmem_unacct_size(flags, size);
 	return ERR_PTR(error);
 }
+EXPORT_SYMBOL_GPL(shmem_file_setup);
 
 void shmem_set_file(struct vm_area_struct *vma, struct file *file)
 {
