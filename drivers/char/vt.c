@@ -2758,12 +2758,6 @@ static int con_open(struct tty_struct *tty, struct file *filp)
 		ret = vc_allocate(currcons);
 		if (ret == 0) {
 			struct vc_data *vc = vc_cons[currcons].d;
-
-			/* Still being freed */
-			if (vc->vc_tty) {
-				release_console_sem();
-				return -ERESTARTSYS;
-			}
 			tty->driver_data = vc;
 			vc->vc_tty = tty;
 
@@ -2793,18 +2787,25 @@ static int con_open(struct tty_struct *tty, struct file *filp)
  */
 static void con_close(struct tty_struct *tty, struct file *filp)
 {
-	/* Nothing to do - we defer to shutdown */
-}
-
-static void con_shutdown(struct tty_struct *tty)
-{
-	struct vc_data *vc = tty->driver_data;
-	BUG_ON(vc == NULL);
+	mutex_lock(&tty_mutex);
 	acquire_console_sem();
-	vc->vc_tty = NULL;
-	vcs_remove_sysfs(tty);
+	if (tty && tty->count == 1) {
+		struct vc_data *vc = tty->driver_data;
+
+		if (vc)
+			vc->vc_tty = NULL;
+		tty->driver_data = NULL;
+		vcs_remove_sysfs(tty);
+		release_console_sem();
+		mutex_unlock(&tty_mutex);
+		/*
+		 * tty_mutex is released, but we still hold BKL, so there is
+		 * still exclusion against init_dev()
+		 */
+		return;
+	}
 	release_console_sem();
-	tty_shutdown(tty);
+	mutex_unlock(&tty_mutex);
 }
 
 static int default_italic_color    = 2; // green (ASCII)
@@ -2929,7 +2930,6 @@ static const struct tty_operations con_ops = {
 	.throttle = con_throttle,
 	.unthrottle = con_unthrottle,
 	.resize = vt_resize,
-	.shutdown = con_shutdown
 };
 
 int __init vty_init(void)
