@@ -31,10 +31,10 @@ cpumask_t irq_default_affinity = CPU_MASK_ALL;
  */
 void synchronize_irq(unsigned int irq)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 	unsigned int status;
 
-	if (irq >= NR_IRQS)
+	if (!desc)
 		return;
 
 	do {
@@ -64,7 +64,7 @@ EXPORT_SYMBOL(synchronize_irq);
  */
 int irq_can_set_affinity(unsigned int irq)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 
 	if (CHECK_IRQ_PER_CPU(desc->status) || !desc->chip ||
 	    !desc->chip->set_affinity)
@@ -81,18 +81,17 @@ int irq_can_set_affinity(unsigned int irq)
  */
 int irq_set_affinity(unsigned int irq, cpumask_t cpumask)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 
 	if (!desc->chip->set_affinity)
 		return -EINVAL;
 
-	set_balance_irq_affinity(irq, cpumask);
-
 #ifdef CONFIG_GENERIC_PENDING_IRQ
-	if (desc->status & IRQ_MOVE_PCNTXT) {
+	if (desc->status & IRQ_MOVE_PCNTXT || desc->status & IRQ_DISABLED) {
 		unsigned long flags;
 
 		spin_lock_irqsave(&desc->lock, flags);
+		desc->affinity = cpumask;
 		desc->chip->set_affinity(irq, cpumask);
 		spin_unlock_irqrestore(&desc->lock, flags);
 	} else
@@ -111,16 +110,17 @@ int irq_set_affinity(unsigned int irq, cpumask_t cpumask)
 int irq_select_affinity(unsigned int irq)
 {
 	cpumask_t mask;
+	struct irq_desc *desc;
 
 	if (!irq_can_set_affinity(irq))
 		return 0;
 
 	cpus_and(mask, cpu_online_map, irq_default_affinity);
 
-	irq_desc[irq].affinity = mask;
-	irq_desc[irq].chip->set_affinity(irq, mask);
+	desc = irq_to_desc(irq);
+	desc->affinity = mask;
+	desc->chip->set_affinity(irq, mask);
 
-	set_balance_irq_affinity(irq, mask);
 	return 0;
 }
 #endif
@@ -140,10 +140,10 @@ int irq_select_affinity(unsigned int irq)
  */
 void disable_irq_nosync(unsigned int irq)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 	unsigned long flags;
 
-	if (irq >= NR_IRQS)
+	if (!desc)
 		return;
 
 	spin_lock_irqsave(&desc->lock, flags);
@@ -169,9 +169,9 @@ EXPORT_SYMBOL(disable_irq_nosync);
  */
 void disable_irq(unsigned int irq)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 
-	if (irq >= NR_IRQS)
+	if (!desc)
 		return;
 
 	disable_irq_nosync(irq);
@@ -211,10 +211,10 @@ static void __enable_irq(struct irq_desc *desc, unsigned int irq)
  */
 void enable_irq(unsigned int irq)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 	unsigned long flags;
 
-	if (irq >= NR_IRQS)
+	if (!desc)
 		return;
 
 	spin_lock_irqsave(&desc->lock, flags);
@@ -225,7 +225,7 @@ EXPORT_SYMBOL(enable_irq);
 
 static int set_irq_wake_real(unsigned int irq, unsigned int on)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 	int ret = -ENXIO;
 
 	if (desc->chip->set_wake)
@@ -248,7 +248,7 @@ static int set_irq_wake_real(unsigned int irq, unsigned int on)
  */
 int set_irq_wake(unsigned int irq, unsigned int on)
 {
-	struct irq_desc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_to_desc(irq);
 	unsigned long flags;
 	int ret = 0;
 
@@ -288,12 +288,16 @@ EXPORT_SYMBOL(set_irq_wake);
  */
 int can_request_irq(unsigned int irq, unsigned long irqflags)
 {
+	struct irq_desc *desc = irq_to_desc(irq);
 	struct irqaction *action;
 
-	if (irq >= NR_IRQS || irq_desc[irq].status & IRQ_NOREQUEST)
+	if (!desc)
 		return 0;
 
-	action = irq_desc[irq].action;
+	if (desc->status & IRQ_NOREQUEST)
+		return 0;
+
+	action = desc->action;
 	if (action)
 		if (irqflags & action->flags & IRQF_SHARED)
 			action = NULL;
@@ -347,16 +351,16 @@ int __irq_set_trigger(struct irq_desc *desc, unsigned int irq,
  * Internal function to register an irqaction - typically used to
  * allocate special interrupts that are part of the architecture.
  */
-int setup_irq(unsigned int irq, struct irqaction *new)
+static int
+__setup_irq(unsigned int irq, struct irq_desc * desc, struct irqaction *new)
 {
-	struct irq_desc *desc = irq_desc + irq;
 	struct irqaction *old, **p;
 	const char *old_name = NULL;
 	unsigned long flags;
 	int shared = 0;
 	int ret;
 
-	if (irq >= NR_IRQS)
+	if (!desc)
 		return -EINVAL;
 
 	if (desc->chip == &no_irq_chip)
@@ -475,7 +479,7 @@ int setup_irq(unsigned int irq, struct irqaction *new)
 	spin_unlock_irqrestore(&desc->lock, flags);
 
 	new->irq = irq;
-	register_irq_proc(irq);
+	register_irq_proc(irq, desc);
 	new->dir = NULL;
 	register_handler_proc(irq, new);
 
@@ -495,6 +499,20 @@ mismatch:
 }
 
 /**
+ *	setup_irq - setup an interrupt
+ *	@irq: Interrupt line to setup
+ *	@act: irqaction for the interrupt
+ *
+ * Used to statically setup interrupts in the early boot process.
+ */
+int setup_irq(unsigned int irq, struct irqaction *act)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	return __setup_irq(irq, desc, act);
+}
+
+/**
  *	free_irq - free an interrupt
  *	@irq: Interrupt line to free
  *	@dev_id: Device identity to free
@@ -510,15 +528,15 @@ mismatch:
  */
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irq_desc *desc;
+	struct irq_desc *desc = irq_to_desc(irq);
 	struct irqaction **p;
 	unsigned long flags;
 
 	WARN_ON(in_interrupt());
-	if (irq >= NR_IRQS)
+
+	if (!desc)
 		return;
 
-	desc = irq_desc + irq;
 	spin_lock_irqsave(&desc->lock, flags);
 	p = &desc->action;
 	for (;;) {
@@ -614,6 +632,7 @@ int request_irq(unsigned int irq, irq_handler_t handler,
 		unsigned long irqflags, const char *devname, void *dev_id)
 {
 	struct irqaction *action;
+	struct irq_desc *desc;
 	int retval;
 
 #ifdef CONFIG_LOCKDEP
@@ -630,9 +649,12 @@ int request_irq(unsigned int irq, irq_handler_t handler,
 	 */
 	if ((irqflags & IRQF_SHARED) && !dev_id)
 		return -EINVAL;
-	if (irq >= NR_IRQS)
+
+	desc = irq_to_desc(irq);
+	if (!desc)
 		return -EINVAL;
-	if (irq_desc[irq].status & IRQ_NOREQUEST)
+
+	if (desc->status & IRQ_NOREQUEST)
 		return -EINVAL;
 	if (!handler)
 		return -EINVAL;
@@ -648,7 +670,7 @@ int request_irq(unsigned int irq, irq_handler_t handler,
 	action->next = NULL;
 	action->dev_id = dev_id;
 
-	retval = setup_irq(irq, action);
+	retval = __setup_irq(irq, desc, action);
 	if (retval)
 		kfree(action);
 

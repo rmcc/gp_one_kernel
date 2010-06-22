@@ -26,8 +26,7 @@ static DEFINE_TIMER(poll_spurious_irq_timer, poll_spurious_irqs, 0, 0);
 static int try_one_irq(int irq, struct irq_desc *desc)
 {
 	struct irqaction *action;
-	int ok = 0;
-	int work = 0;	/* Did we do work for a real IRQ */
+	int ok = 0, work = 0;
 
 	spin_lock(&desc->lock);
 	/* Already running on another processor */
@@ -88,11 +87,12 @@ static int try_one_irq(int irq, struct irq_desc *desc)
 
 static int misrouted_irq(int irq)
 {
-	int i;
-	int ok = 0;
+	struct irq_desc *desc;
+	int i, ok = 0;
 
-	for (i = 1; i < NR_IRQS; i++) {
-		struct irq_desc *desc = irq_desc + i;
+	for_each_irq_desc(i, desc) {
+		if (!i)
+			 continue;
 
 		if (i == irq)	/* Already tried */
 			continue;
@@ -106,10 +106,14 @@ static int misrouted_irq(int irq)
 
 static void poll_spurious_irqs(unsigned long dummy)
 {
+	struct irq_desc *desc;
 	int i;
-	for (i = 1; i < NR_IRQS; i++) {
-		struct irq_desc *desc = irq_desc + i;
+
+	for_each_irq_desc(i, desc) {
 		unsigned int status;
+
+		if (!i)
+			 continue;
 
 		/* Racy but it doesn't matter */
 		status = desc->status;
@@ -120,7 +124,8 @@ static void poll_spurious_irqs(unsigned long dummy)
 		try_one_irq(i, desc);
 	}
 
-	mod_timer(&poll_spurious_irq_timer, jiffies + POLL_SPURIOUS_IRQ_INTERVAL);
+	mod_timer(&poll_spurious_irq_timer,
+		  jiffies + POLL_SPURIOUS_IRQ_INTERVAL);
 }
 
 /*
@@ -171,7 +176,9 @@ report_bad_irq(unsigned int irq, struct irq_desc *desc, irqreturn_t action_ret)
 	}
 }
 
-static inline int try_misrouted_irq(unsigned int irq, struct irq_desc *desc, irqreturn_t action_ret)
+static inline int
+try_misrouted_irq(unsigned int irq, struct irq_desc *desc,
+		  irqreturn_t action_ret)
 {
 	struct irqaction *action;
 
@@ -247,7 +254,8 @@ void note_interrupt(unsigned int irq, struct irq_desc *desc,
 		desc->depth++;
 		desc->chip->disable(irq);
 
-		mod_timer(&poll_spurious_irq_timer, jiffies + POLL_SPURIOUS_IRQ_INTERVAL);
+		mod_timer(&poll_spurious_irq_timer,
+			  jiffies + POLL_SPURIOUS_IRQ_INTERVAL);
 	}
 	desc->irqs_unhandled = 0;
 }
@@ -277,7 +285,7 @@ static int __init irqfixup_setup(char *str)
 
 __setup("irqfixup", irqfixup_setup);
 module_param(irqfixup, int, 0644);
-MODULE_PARM_DESC("irqfixup", "0: No fixup, 1: irqfixup mode 2: irqpoll mode");
+MODULE_PARM_DESC("irqfixup", "0: No fixup, 1: irqfixup mode, 2: irqpoll mode");
 
 static int __init irqpoll_setup(char *str)
 {
