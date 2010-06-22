@@ -893,4 +893,13 @@ config USB_S2255
 
 endif # V4L_USB_DRIVERS
 
+comment "MSM Camera And Video"
+
+menuconfig MSM_CAMERA
+        bool "MSM camera and video capture support"
+        depends on VIDEO_V4L2
+        ---help---
+          Say Y here to enable selecting the video adapters for
+          MSM camera and video encoding
+
 endif # VIDEO_CAPTURE_DRIVERS
