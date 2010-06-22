@@ -104,7 +104,7 @@ struct poll_table_page {
  * poll table.
  */
 static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
-		       poll_table *p, int exclusive);
+		       poll_table *p);
 
 void poll_initwait(struct poll_wqueues *pwq)
 {
@@ -173,7 +173,7 @@ static struct poll_table_entry *poll_get_entry(poll_table *_p)
 
 /* Add a new entry */
 static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
-		       poll_table *p, int exclusive)
+				poll_table *p)
 {
 	struct poll_table_entry *entry = poll_get_entry(p);
 	if (!entry)
@@ -182,10 +182,7 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
 	entry->filp = filp;
 	entry->wait_address = wait_address;
 	init_waitqueue_entry(&entry->wait, current);
-	if (exclusive)
-		add_wait_queue_exclusive(wait_address, &entry->wait);
-	else
-		add_wait_queue(wait_address, &entry->wait);
+	add_wait_queue(wait_address, &entry->wait);
 }
 
 /**
