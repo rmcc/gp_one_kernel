@@ -391,7 +391,7 @@ static int acpi_device_remove(struct device * dev)
 			acpi_drv->ops.remove(acpi_dev, acpi_dev->removal_type);
 	}
 	acpi_dev->driver = NULL;
-	acpi_driver_data(dev) = NULL;
+	acpi_dev->driver_data = NULL;
 
 	put_device(dev);
 	return 0;
@@ -544,7 +544,7 @@ acpi_bus_driver_init(struct acpi_device *device, struct acpi_driver *driver)
 	result = driver->ops.add(device);
 	if (result) {
 		device->driver = NULL;
-		acpi_driver_data(device) = NULL;
+		device->driver_data = NULL;
 		return result;
 	}
 
@@ -1565,7 +1565,6 @@ static int acpi_bus_scan_fixed(struct acpi_device *root)
 	return result;
 }
 
-int __init acpi_boot_ec_enable(void);
 
 static int __init acpi_scan_init(void)
 {
@@ -1598,9 +1597,6 @@ static int __init acpi_scan_init(void)
 	 * Enumerate devices in the ACPI namespace.
 	 */
 	result = acpi_bus_scan_fixed(acpi_root);
-
-	/* EC region might be needed at bus_scan, so enable it now */
-	acpi_boot_ec_enable();
 
 	if (!result)
 		result = acpi_bus_scan(acpi_root, &ops);
