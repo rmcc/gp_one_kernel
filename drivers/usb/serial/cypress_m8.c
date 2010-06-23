@@ -1288,7 +1288,7 @@ static void cypress_read_int_callback(struct urb *urb)
 	}
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	tty = port->port.tty;
+	tty = tty_port_tty_get(&port->port);
 	if (!tty) {
 		dbg("%s - bad tty pointer - exiting", __func__);
 		return;
@@ -1364,7 +1364,7 @@ static void cypress_read_int_callback(struct urb *urb)
 					data[i]);
 			tty_insert_flip_char(tty, data[i], tty_flag);
 		}
-		tty_flip_buffer_push(port->port.tty);
+		tty_flip_buffer_push(tty);
 	}
 
 	spin_lock_irqsave(&priv->lock, flags);
@@ -1373,6 +1373,7 @@ static void cypress_read_int_callback(struct urb *urb)
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 continue_read:
+	tty_kref_put(tty);
 
 	/* Continue trying to always read... unless the port has closed. */
 

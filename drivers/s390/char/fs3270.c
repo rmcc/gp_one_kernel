@@ -427,12 +427,11 @@ fs3270_open(struct inode *inode, struct file *filp)
 	if (minor == 0) {
 		struct tty_struct *tty = get_current_tty();
 		if (!tty || tty->driver->major != IBM_TTY3270_MAJOR) {
-			mutex_unlock(&tty_mutex);
-			rc = -ENODEV;
-			goto out;
+			tty_kref_put(tty);
+			return -ENODEV;
 		}
 		minor = tty->index + RAW3270_FIRSTMINOR;
-		mutex_unlock(&tty_mutex);
+		tty_kref_put(tty);
 	}
 	lock_kernel();
 	/* Check if some other program is already using fullscreen mode. */

@@ -182,6 +182,7 @@ struct signal_struct;
 
 struct tty_port {
 	struct tty_struct	*tty;		/* Back pointer */
+	spinlock_t		lock;		/* Lock protecting tty field */
 	int			blocked_open;	/* Waiting to open */
 	int			count;		/* Usage count */
 	wait_queue_head_t	open_wait;	/* Open waiters */
@@ -313,6 +314,8 @@ extern int kmsg_redirect;
 extern void console_init(void);
 extern int vcs_init(void);
 
+extern struct class *tty_class;
+
 /**
  *	tty_kref_get		-	get a tty reference
  *	@tty: tty device
@@ -353,13 +356,15 @@ extern void tty_throttle(struct tty_struct *tty);
 extern void tty_unthrottle(struct tty_struct *tty);
 extern int tty_do_resize(struct tty_struct *tty, struct tty_struct *real_tty,
 						struct winsize *ws);
-
+extern void tty_shutdown(struct tty_struct *tty);
+extern void tty_free_termios(struct tty_struct *tty);
 extern int is_current_pgrp_orphaned(void);
 extern struct pid *tty_get_pgrp(struct tty_struct *tty);
 extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
 extern void tty_hangup(struct tty_struct *tty);
 extern void tty_vhangup(struct tty_struct *tty);
+extern void tty_vhangup_self(void);
 extern void tty_unhangup(struct file *filp);
 extern int tty_hung_up_p(struct file *filp);
 extern void do_SAK(struct tty_struct *tty);
@@ -395,6 +400,15 @@ extern int tty_perform_flush(struct tty_struct *tty, unsigned long arg);
 extern dev_t tty_devnum(struct tty_struct *tty);
 extern void proc_clear_tty(struct task_struct *p);
 extern struct tty_struct *get_current_tty(void);
+extern void tty_default_fops(struct file_operations *fops);
+extern struct tty_struct *alloc_tty_struct(void);
+extern void free_tty_struct(struct tty_struct *tty);
+extern void initialize_tty_struct(struct tty_struct *tty,
+		struct tty_driver *driver, int idx);
+extern struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx,
+								int first_ok);
+extern void tty_release_dev(struct file *filp);
+extern int tty_init_termios(struct tty_struct *tty);
 
 extern struct mutex tty_mutex;
 
@@ -405,6 +419,8 @@ extern int tty_write_lock(struct tty_struct *tty, int ndelay);
 extern void tty_port_init(struct tty_port *port);
 extern int tty_port_alloc_xmit_buf(struct tty_port *port);
 extern void tty_port_free_xmit_buf(struct tty_port *port);
+extern struct tty_struct *tty_port_tty_get(struct tty_port *port);
+extern void tty_port_tty_set(struct tty_port *port, struct tty_struct *tty);
 
 extern int tty_register_ldisc(int disc, struct tty_ldisc_ops *new_ldisc);
 extern int tty_unregister_ldisc(int disc);
@@ -450,7 +466,7 @@ static inline void tty_audit_push_task(struct task_struct *tsk,
 #endif
 
 /* tty_ioctl.c */
-extern int n_tty_ioctl(struct tty_struct *tty, struct file *file,
+extern int n_tty_ioctl_helper(struct tty_struct *tty, struct file *file,
 		       unsigned int cmd, unsigned long arg);
 
 /* serial.c */

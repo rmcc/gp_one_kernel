@@ -44,10 +44,6 @@ void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
 
-#ifdef        CONFIG_DEBUG_LL
-extern void printascii(char *);
-#endif
-
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
 
@@ -77,6 +73,7 @@ EXPORT_SYMBOL(oops_in_progress);
  * driver system.
  */
 static DECLARE_MUTEX(console_sem);
+static DECLARE_MUTEX(secondary_console_sem);
 struct console *console_drivers;
 EXPORT_SYMBOL_GPL(console_drivers);
 
@@ -672,10 +669,6 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
 
-#ifdef	CONFIG_DEBUG_LL
-	printascii(printk_buf);
-#endif
-
 	/*
 	 * Copy the output into log_buf.  If the caller didn't provide
 	 * appropriate log level tags, we insert them here
@@ -903,14 +896,12 @@ void suspend_console(void)
 	printk("Suspending console(s) (use no_console_suspend to debug)\n");
 	acquire_console_sem();
 	console_suspended = 1;
-	up(&console_sem);
 }
 
 void resume_console(void)
 {
 	if (!console_suspend_enabled)
 		return;
-	down(&console_sem);
 	console_suspended = 0;
 	release_console_sem();
 }
@@ -926,9 +917,11 @@ void resume_console(void)
 void acquire_console_sem(void)
 {
 	BUG_ON(in_interrupt());
-	down(&console_sem);
-	if (console_suspended)
+	if (console_suspended) {
+		down(&secondary_console_sem);
 		return;
+	}
+	down(&console_sem);
 	console_locked = 1;
 	console_may_schedule = 1;
 }
@@ -938,10 +931,6 @@ int try_acquire_console_sem(void)
 {
 	if (down_trylock(&console_sem))
 		return -1;
-	if (console_suspended) {
-		up(&console_sem);
-		return -1;
-	}
 	console_locked = 1;
 	console_may_schedule = 0;
 	return 0;
@@ -995,7 +984,7 @@ void release_console_sem(void)
 	unsigned wake_klogd = 0;
 
 	if (console_suspended) {
-		up(&console_sem);
+		up(&secondary_console_sem);
 		return;
 	}
 
@@ -1276,22 +1265,6 @@ static int __init disable_boot_consoles(void)
 	return 0;
 }
 late_initcall(disable_boot_consoles);
-
-/**
- * tty_write_message - write a message to a certain tty, not just the console.
- * @tty: the destination tty_struct
- * @msg: the message to write
- *
- * This is used for messages that need to be redirected to a specific tty.
- * We don't put it into the syslog queue right now maybe in the future if
- * really needed.
- */
-void tty_write_message(struct tty_struct *tty, char *msg)
-{
-	if (tty && tty->ops->write)
-		tty->ops->write(tty, msg, strlen(msg));
-	return;
-}
 
 #if defined CONFIG_PRINTK
 
