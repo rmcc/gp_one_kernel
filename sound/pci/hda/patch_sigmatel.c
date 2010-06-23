@@ -38,7 +38,6 @@
 
 #define STAC_PWR_EVENT		0x20
 #define STAC_HP_EVENT		0x30
-#define STAC_VREF_EVENT		0x40
 
 enum {
 	STAC_REF,
@@ -1691,6 +1690,10 @@ static struct snd_pci_quirk stac92hd71bxx_cfg_tbl[] = {
 	/* SigmaTel reference board */
 	SND_PCI_QUIRK(PCI_VENDOR_ID_INTEL, 0x2668,
 		      "DFI LanParty", STAC_92HD71BXX_REF),
+	SND_PCI_QUIRK(PCI_VENDOR_ID_HP, 0x30f2,
+		      "HP dv5", STAC_HP_M4),
+	SND_PCI_QUIRK(PCI_VENDOR_ID_HP, 0x30f4,
+		      "HP dv7", STAC_HP_M4),
 	SND_PCI_QUIRK(PCI_VENDOR_ID_HP, 0x361a,
 				"unknown HP", STAC_HP_M4),
 	SND_PCI_QUIRK(PCI_VENDOR_ID_DELL, 0x0233,
@@ -2592,28 +2595,50 @@ static struct snd_kcontrol_new stac92xx_control_templates[] = {
 };
 
 /* add dynamic controls */
-static int stac92xx_add_control_idx(struct sigmatel_spec *spec, int type,
-		int idx, const char *name, unsigned long val)
+static int stac92xx_add_control_temp(struct sigmatel_spec *spec,
+				     struct snd_kcontrol_new *ktemp,
+				     int idx, const char *name,
+				     unsigned long val)
 {
 	struct snd_kcontrol_new *knew;
 
-	snd_array_init(&spec->kctls, sizeof(*knew), 32);
-	knew = snd_array_new(&spec->kctls);
-	if (!knew)
-		return -ENOMEM;
-	*knew = stac92xx_control_templates[type];
+	if (spec->num_kctl_used >= spec->num_kctl_alloc) {
+		int num = spec->num_kctl_alloc + NUM_CONTROL_ALLOC;
+
+		knew = kcalloc(num + 1, sizeof(*knew), GFP_KERNEL); /* array + terminator */
+		if (! knew)
+			return -ENOMEM;
+		if (spec->kctl_alloc) {
+			memcpy(knew, spec->kctl_alloc, sizeof(*knew) * spec->num_kctl_alloc);
+			kfree(spec->kctl_alloc);
+		}
+		spec->kctl_alloc = knew;
+		spec->num_kctl_alloc = num;
+	}
+
+	knew = &spec->kctl_alloc[spec->num_kctl_used];
+	*knew = *ktemp;
 	knew->index = idx;
 	knew->name = kstrdup(name, GFP_KERNEL);
-	if (! knew->name)
+	if (!knew->name)
 		return -ENOMEM;
 	knew->private_value = val;
 	return 0;
 }
 
+static inline int stac92xx_add_control_idx(struct sigmatel_spec *spec,
+					   int type, int idx, const char *name,
+					   unsigned long val)
+{
+	return stac92xx_add_control_temp(spec,
+					 &stac92xx_control_templates[type],
+					 idx, name, val);
+}
+
 
 /* add dynamic controls */
-static int stac92xx_add_control(struct sigmatel_spec *spec, int type,
-		const char *name, unsigned long val)
+static inline int stac92xx_add_control(struct sigmatel_spec *spec, int type,
+				       const char *name, unsigned long val)
 {
 	return stac92xx_add_control_idx(spec, type, 0, name, val);
 }
@@ -3055,6 +3080,43 @@ static int stac92xx_auto_create_beep_ctls(struct hda_codec *codec,
 	return 0;
 }
 
+#ifdef CONFIG_SND_HDA_INPUT_BEEP
+#define stac92xx_dig_beep_switch_info snd_ctl_boolean_mono_info
+
+static int stac92xx_dig_beep_switch_get(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct hda_codec *codec = snd_kcontrol_chip(kcontrol);
+	ucontrol->value.integer.value[0] = codec->beep->enabled;
+	return 0;
+}
+
+static int stac92xx_dig_beep_switch_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct hda_codec *codec = snd_kcontrol_chip(kcontrol);
+	int enabled = !!ucontrol->value.integer.value[0];
+	if (codec->beep->enabled != enabled) {
+		codec->beep->enabled = enabled;
+		return 1;
+	}
+	return 0;
+}
+
+static struct snd_kcontrol_new stac92xx_dig_beep_ctrl = {
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+	.info = stac92xx_dig_beep_switch_info,
+	.get = stac92xx_dig_beep_switch_get,
+	.put = stac92xx_dig_beep_switch_put,
+};
+
+static int stac92xx_beep_switch_ctl(struct hda_codec *codec)
+{
+	return stac92xx_add_control_temp(codec->spec, &stac92xx_dig_beep_ctrl,
+					 0, "PC Beep Playback Switch", 0);
+}
+#endif
+
 static int stac92xx_auto_create_mux_input_ctls(struct hda_codec *codec)
 {
 	struct sigmatel_spec *spec = codec->spec;
@@ -3361,6 +3423,7 @@ static int stac92xx_parse_auto_config(struct hda_codec *codec, hda_nid_t dig_out
 #ifdef CONFIG_SND_HDA_INPUT_BEEP
 	if (spec->digbeep_nid > 0) {
 		hda_nid_t nid = spec->digbeep_nid;
+		unsigned int caps;
 
 		err = stac92xx_auto_create_beep_ctls(codec, nid);
 		if (err < 0)
@@ -3368,6 +3431,14 @@ static int stac92xx_parse_auto_config(struct hda_codec *codec, hda_nid_t dig_out
 		err = snd_hda_attach_beep_device(codec, nid);
 		if (err < 0)
 			return err;
+		/* if no beep switch is available, make its own one */
+		caps = query_amp_caps(codec, nid, HDA_OUTPUT);
+		if (codec->beep &&
+		    !((caps & AC_AMPCAP_MUTE) >> AC_AMPCAP_MUTE_SHIFT)) {
+			err = stac92xx_beep_switch_ctl(codec);
+			if (err < 0)
+				return err;
+		}
 	}
 #endif
 
@@ -4426,6 +4497,13 @@ again:
 		stac92xx_set_config_regs(codec);
 	}
 
+	if (spec->board_config > STAC_92HD71BXX_REF) {
+		/* GPIO0 = EAPD */
+		spec->gpio_mask = 0x01;
+		spec->gpio_dir = 0x01;
+		spec->gpio_data = 0x01;
+	}
+
 	switch (codec->vendor_id) {
 	case 0x111d76b6: /* 4 Port without Analog Mixer */
 	case 0x111d76b7:
@@ -4436,10 +4514,10 @@ again:
 		codec->slave_dig_outs = stac92hd71bxx_slave_dig_outs;
 		break;
 	case 0x111d7608: /* 5 Port with Analog Mixer */
-		switch (codec->subsystem_id) {
-		case 0x103c361a:
+		switch (spec->board_config) {
+		case STAC_HP_M4:
 			/* Enable VREF power saving on GPIO1 detect */
-			snd_hda_codec_write(codec, codec->afg, 0,
+			snd_hda_codec_write_cache(codec, codec->afg, 0,
 				AC_VERB_SET_GPIO_UNSOLICITED_RSP_MASK, 0x02);
 			snd_hda_codec_write_cache(codec, codec->afg, 0,
 					AC_VERB_SET_UNSOLICITED_ENABLE,
@@ -4484,13 +4562,6 @@ again:
 
 	spec->aloopback_mask = 0x50;
 	spec->aloopback_shift = 0;
-
-	if (spec->board_config > STAC_92HD71BXX_REF) {
-		/* GPIO0 = EAPD */
-		spec->gpio_mask = 0x01;
-		spec->gpio_dir = 0x01;
-		spec->gpio_data = 0x01;
-	}
 
 	spec->powerdown_adcs = 1;
 	spec->digbeep_nid = 0x26;
@@ -4839,7 +4910,7 @@ static int patch_stac9205(struct hda_codec *codec)
 		stac92xx_set_config_reg(codec, 0x20, 0x1c410030);
 
 		/* Enable unsol response for GPIO4/Dock HP connection */
-		snd_hda_codec_write(codec, codec->afg, 0,
+		snd_hda_codec_write_cache(codec, codec->afg, 0,
 			AC_VERB_SET_GPIO_UNSOLICITED_RSP_MASK, 0x10);
 		snd_hda_codec_write_cache(codec, codec->afg, 0,
 					  AC_VERB_SET_UNSOLICITED_ENABLE,
