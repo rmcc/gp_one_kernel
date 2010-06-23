@@ -111,8 +111,20 @@ config TPS65023
 	  Say yes here for Qualcomm QSD chips. The TI PMIC is used by the
 	  QSD8x50 series of chips for power management.
 
+config PMIC_DA903X
+	bool "Dialog Semiconductor DA9030/DA9034 PMIC Support"
+	depends on I2C=y
+	help
+	  Say yes here to support for Dialog Semiconductor DA9030 (a.k.a
+	  ARAVA) and DA9034 (a.k.a MICCO), these are Power Management IC
+	  usually found on PXA processors-based platforms. This includes
+	  the I2C driver and the core APIs _only_, you have to select
+	  individual components like LCD backlight, voltage regulators,
+	  LEDs and battery-charger under the corresponding menus.
+
 config MFD_WM8400
 	tristate "Support Wolfson Microelectronics WM8400"
+	depends on I2C
 	help
 	  Support for the Wolfson Microelecronics WM8400 PMIC and audio
 	  CODEC.  This driver adds provides common support for accessing
