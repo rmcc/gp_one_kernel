@@ -3745,7 +3745,7 @@ static int stli_getbrdnr(void)
  *	do is go probing around in the usual places hoping we can find it.
  */
 
-static int stli_findeisabrds(void)
+static int __init stli_findeisabrds(void)
 {
 	struct stlibrd *brdp;
 	unsigned int iobase, eid, i;
@@ -3941,7 +3941,7 @@ static struct stlibrd *stli_allocbrd(void)
  *	can find.
  */
 
-static int stli_initbrds(void)
+static int __init stli_initbrds(void)
 {
 	struct stlibrd *brdp, *nxtbrdp;
 	struct stlconf conf;
