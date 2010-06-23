@@ -45,8 +45,6 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 
-#include "devices.h"
-
 static struct resource smc91x_resources[] = {
 	[0] = {
 		.start	= 0x9C004300,
