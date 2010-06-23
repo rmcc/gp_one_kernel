@@ -52,7 +52,7 @@ void tty_port_free_xmit_buf(struct tty_port *port)
 }
 EXPORT_SYMBOL(tty_port_free_xmit_buf);
 
-
+#if 0
 /**
  *	tty_port_tty_get	-	get a tty reference
  *	@port: tty port
@@ -93,3 +93,4 @@ void tty_port_tty_set(struct tty_port *port, struct tty_struct *tty)
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 EXPORT_SYMBOL(tty_port_tty_set);
+#endif
