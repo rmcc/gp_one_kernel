@@ -194,19 +194,7 @@ static void msm_irq_mask(unsigned int irq)
 static void msm_irq_unmask(unsigned int irq)
 {
 	void __iomem *reg = VIC_INT_ENSET0 + ((irq & 32) ? 4 : 0);
-	unsigned index = (irq >> 5) & 1;
-	uint32_t mask = 1UL << (irq & 31);
-	int smsm_irq = msm_irq_to_smsm[irq];
-
-	msm_irq_shadow_reg[index].int_en[0] |= mask;
-	writel(mask, reg);
-
-	if (smsm_irq == 0)
-		msm_irq_idle_disable[index] |= mask;
-	else {
-		mask = 1UL << (smsm_irq - 1);
-		msm_irq_smsm_wake_enable[0] |= mask;
-	}
+	writel(1 << (irq & 31), reg);
 }
 
 static int msm_irq_set_wake(unsigned int irq, unsigned int on)
