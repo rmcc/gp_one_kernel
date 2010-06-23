@@ -1310,7 +1310,7 @@ config SERIAL_MSM_HS
 	  Select this module to enable MSM high speed UART driver.
 
 config SERIAL_NETX
-	bool "NetX serial port support"
+	tristate "NetX serial port support"
 	depends on ARM && ARCH_NETX
 	select SERIAL_CORE
 	help
@@ -1322,7 +1322,7 @@ config SERIAL_NETX
 
 config SERIAL_NETX_CONSOLE
 	bool "Console on NetX serial port"
-	depends on SERIAL_NETX
+	depends on SERIAL_NETX=y
 	select SERIAL_CORE_CONSOLE
 	help
 	  If you have enabled the serial port on the Hilscher NetX SoC
