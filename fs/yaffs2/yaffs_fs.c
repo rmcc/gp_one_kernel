@@ -150,6 +150,9 @@ static void yaffs_put_super(struct super_block *sb);
 
 static ssize_t yaffs_file_write(struct file *f, const char *buf, size_t n,
 				loff_t * pos);
+static ssize_t yaffs_hold_space(struct file *f);
+static void yaffs_release_space(struct file *f);
+
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,17))
 static int yaffs_file_flush(struct file *file, fl_owner_t id);
@@ -218,11 +221,12 @@ static int yaffs_writepage(struct page *page, struct writeback_control *wbc);
 #else
 static int yaffs_writepage(struct page *page);
 #endif
-static int yaffs_prepare_write(struct file *f, struct page *pg,
-			       unsigned offset, unsigned to);
-static int yaffs_commit_write(struct file *f, struct page *pg, unsigned offset,
-			      unsigned to);
-
+static int yaffs_write_begin(struct file *filp, struct address_space *mapping,
+                                loff_t pos, unsigned len, unsigned flags,
+                                struct page **pagep, void **fsdata);
+static int yaffs_write_end(struct file *filp, struct address_space *mapping,
+                                loff_t pos, unsigned len, unsigned copied,
+                                struct page *pg, void *fsdadata);
 static int yaffs_readlink(struct dentry *dentry, char __user * buffer,
 			  int buflen);
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,13))
@@ -234,8 +238,8 @@ static int yaffs_follow_link(struct dentry *dentry, struct nameidata *nd);
 static struct address_space_operations yaffs_file_address_operations = {
 	.readpage = yaffs_readpage,
 	.writepage = yaffs_writepage,
-	.prepare_write = yaffs_prepare_write,
-	.commit_write = yaffs_commit_write,
+        .write_begin = yaffs_write_begin,
+        .write_end = yaffs_write_end,
 };
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,22))
@@ -701,47 +705,85 @@ static int yaffs_writepage(struct page *page)
 	return (nWritten == nBytes) ? 0 : -ENOSPC;
 }
 
-static int yaffs_prepare_write(struct file *f, struct page *pg,
-			       unsigned offset, unsigned to)
+static int yaffs_write_begin(struct file *filp, struct address_space *mapping,
+		loff_t pos, unsigned len, unsigned flags,
+		struct page **pagep, void **fsdata)
 {
+	struct page *pg = NULL;
+	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
+	uint32_t offset = pos & (PAGE_CACHE_SIZE - 1);
+	uint32_t to = offset + len;
 
-	T(YAFFS_TRACE_OS, (KERN_DEBUG "yaffs_prepair_write\n"));
+	int ret = 0;
+	int space_held = 0;
+
+	T(YAFFS_TRACE_OS, ("start yaffs_write_begin\n"));
+	/* Get a page */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 28)
+	pg = grab_cache_page_write_begin(mapping, index, flags);
+#else
+	pg = __grab_cache_page(mapping, index);
+#endif
+
+	*pagep = pg;
+	if (!pg) {
+		ret =  -ENOMEM;
+		goto out;
+	}
+	/* Get fs space */
+	space_held = yaffs_hold_space(filp);
+
+	if (!space_held) {
+		ret = -ENOSPC;
+		goto out;
+	}
+
+	/* Update page if required */
+
 	if (!Page_Uptodate(pg) && (offset || to < PAGE_CACHE_SIZE))
-		return yaffs_readpage_nolock(f, pg);
+		ret = yaffs_readpage_nolock(filp, pg);
+
+	if (ret)
+		goto out;
+
+	/* Happy path return */
+	T(YAFFS_TRACE_OS, ("end yaffs_write_begin - ok\n"));
 
 	return 0;
 
+out:
+	T(YAFFS_TRACE_OS, ("end yaffs_write_begin fail returning %d\n", ret));
+	if (space_held)
+		yaffs_release_space(filp);
+	if (pg) {
+		unlock_page(pg);
+		page_cache_release(pg);
+	}
+	return ret;
 }
 
-static int yaffs_commit_write(struct file *f, struct page *pg, unsigned offset,
-			      unsigned to)
+static int yaffs_write_end(struct file *filp, struct address_space *mapping,
+		loff_t pos, unsigned len, unsigned copied,
+		struct page *pg, void *fsdadata)
 {
-
+	int ret = 0;
 	void *addr, *kva;
-	
-	loff_t pos = (((loff_t) pg->index) << PAGE_CACHE_SHIFT) + offset;
-	int nBytes = to - offset;
-	int nWritten;
+	uint32_t offset_into_page = pos & (PAGE_CACHE_SIZE - 1);
 
-	unsigned spos = pos;
-	unsigned saddr;
-	
-	kva=kmap(pg);
-	addr = kva + offset;
-
-	saddr = (unsigned)addr;
+	kva = kmap(pg);
+	addr = kva + offset_into_page;
 
 	T(YAFFS_TRACE_OS,
-	  (KERN_DEBUG "yaffs_commit_write addr %x pos %x nBytes %d\n", saddr,
-	   spos, nBytes));
+			("yaffs_write_end addr %x pos %x nBytes %d\n",
+			 (unsigned) addr,
+			 (int)pos, copied));
 
-	nWritten = yaffs_file_write(f, addr, nBytes, &pos);
+	ret = yaffs_file_write(filp, addr, copied, &pos);
 
-	if (nWritten != nBytes) {
+	if (ret != copied) {
 		T(YAFFS_TRACE_OS,
-		  (KERN_DEBUG
-		   "yaffs_commit_write not same size nWritten %d  nBytes %d\n",
-		   nWritten, nBytes));
+				("yaffs_write_end not same size ret %d  copied %d\n",
+				 ret, copied));
 		SetPageError(pg);
 		ClearPageUptodate(pg);
 	} else {
@@ -750,12 +792,10 @@ static int yaffs_commit_write(struct file *f, struct page *pg, unsigned offset,
 
 	kunmap(pg);
 
-	T(YAFFS_TRACE_OS,
-	  (KERN_DEBUG "yaffs_commit_write returning %d\n",
-	   nWritten == nBytes ? 0 : nWritten));
-
-	return nWritten == nBytes ? 0 : nWritten;
-
+	yaffs_release_space(filp);
+	unlock_page(pg);
+	page_cache_release(pg);
+	return ret;
 }
 
 static void yaffs_FillInodeFromObject(struct inode *inode, yaffs_Object * obj)
@@ -954,6 +994,43 @@ static ssize_t yaffs_file_write(struct file *f, const char *buf, size_t n,
 	}
 	yaffs_GrossUnlock(dev);
 	return nWritten == 0 ? -ENOSPC : nWritten;
+}
+
+static ssize_t yaffs_hold_space(struct file *f)
+{
+	yaffs_Object *obj;
+	yaffs_Device *dev;
+
+	int nFreeChunks;
+
+
+	obj = yaffs_DentryToObject(f->f_dentry);
+
+	dev = obj->myDev;
+
+	yaffs_GrossLock(dev);
+
+	nFreeChunks = yaffs_GetNumberOfFreeChunks(dev);
+
+	yaffs_GrossUnlock(dev);
+
+	return (nFreeChunks > 20) ? 1 : 0;
+}
+
+static void yaffs_release_space(struct file *f)
+{
+	yaffs_Object *obj;
+	yaffs_Device *dev;
+
+
+	obj = yaffs_DentryToObject(f->f_dentry);
+
+	dev = obj->myDev;
+
+	yaffs_GrossLock(dev);
+
+
+	yaffs_GrossUnlock(dev);
 }
 
 static int yaffs_readdir(struct file *f, void *dirent, filldir_t filldir)
