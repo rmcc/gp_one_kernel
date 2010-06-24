@@ -9,10 +9,6 @@ obj-y += remote_spinlock.o modem_notifier.o
 obj-y += rpc_hsusb.o
 obj-y += socinfo.o
 obj-y += cpufreq.o
-###+FIH_ADQ
-###AudiPCHuang@FIH, 09.03.30: Create proc entry for reading device infomation.
-obj-y += adq_info.o
-###-FIH_ADQ
 obj-y += nohlt.o
 
 obj-$(CONFIG_ARCH_MSM) += acpuclock.o
@@ -57,15 +53,7 @@ obj-$(CONFIG_MACH_QSD8X50_COMET) += board-comet.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 obj-$(CONFIG_TROUT_PWRSINK) += htc_pwrsink.o
-obj-$(CONFIG_MACH_MSM7X25_SURF) += board-msm7x25.o
-obj-$(CONFIG_MACH_MSM7X25_FFA) += board-msm7x25.o
-obj-$(CONFIG_MACH_QST1500_SURF) += board-msm7x25.o
-obj-$(CONFIG_MACH_QST1500_FFA) += board-msm7x25.o
-obj-$(CONFIG_MACH_QST1600_SURF) += board-msm7x25.o
-obj-$(CONFIG_MACH_QST1600_FFA) += board-msm7x25.o
-obj-$(CONFIG_MACH_MSM7X27_SURF) += board-msm7x25.o
-obj-$(CONFIG_MACH_MSM7X27_FFA) += board-msm7x25.o
-###-FIH_ADQ
+obj-$(CONFIG_MACH_ADQ) += board-adq.o board-adq-info.o
 
 
 obj-$(CONFIG_QSD_AUDIO) += qdsp6/

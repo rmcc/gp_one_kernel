@@ -1,4 +1,4 @@
-/* linux/arch/arm/mach-msm/board-msm7x25.c
+/* linux/arch/arm/mach-msm/board-adq.c
  *
  * Copyright (C) 2007 Google, Inc.
  * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
