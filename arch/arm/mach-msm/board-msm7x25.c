@@ -85,31 +85,26 @@
 #define FIH_ADB_DEVICE_ID_LENGTH 12
 /*} FIH, SungSCLee, 2009/05/21,  */
 
-///+++FIH_ADQ+++
-/*#define MSM_PMEM_MDP_SIZE	0x800000
-#define MSM_PMEM_ADSP_SIZE	0x800000
-#define MSM_PMEM_GPU1_SIZE	0x800000
-#define MSM_FB_SIZE		0x200000*/
-/*
-#define MSM_PMEM_MDP_SIZE	0x400000
-#define MSM_PMEM_ADSP_SIZE	0x800000  //T_FIH ,JOE HSU //0x400000
-#define MSM_PMEM_GPU1_SIZE	0x000000  //T_FIH ,JOE HSU //0x300000
-#define MSM_FB_SIZE		0x300000  //T_FIH ,JOE HSU //0x400000
-*/
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+  #define MSM_RAM_CONSOLE_SIZE    128 * SZ_1K
+#else
+  #define MSM_RAM_CONSOLE_SIZE    0
+#endif
+
 #define MSM_PMEM_MDP_SIZE	0x400000   //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
 #define MSM_PMEM_CAMERA_SIZE	0x400000   //0xa00000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
-#define MSM_PMEM_ADSP_SIZE	0x1400000  //0xa00000  //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
-//#define MSM_PMEM_GPU1_SIZE	0x100000  //FIH_ADQ, Ming
+#define MSM_PMEM_ADSP_SIZE	0x1400000 - MSM_RAM_CONSOLE_SIZE //0xa00000  //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
 #define MSM_FB_SIZE		0x100000  //0x400000  //original: 0x200000 //FIH_ADQ,JOE HSU // CHIH CHIA change from 0x200000 to 0x100000
-/* FIH_ADQ, Ming { */
-/* we don't use alloc_bootmem to allocate PMEM */
+
 #define MSM_PMEM_BASE		0x00200000
 #define MSM_PMEM_LIMIT		0x01F00000 // must match PHYS_OFFSET at mach/memory.h		//CHIH CHIA, change from 0x02000000 to 0x01F00000
 #define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
 #define MSM_PMEM_CAMERA_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE
-#define MSM_PMEM_ADSP_BASE	MSM_PMEM_CAMERA_BASE + MSM_PMEM_CAMERA_SIZE
-///#define MSM_PMEM_GPU1_BASE	0x800000  // PMEM_GPU1 is allocated by alloc_bootmem
-#define MSM_FB_BASE		MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
+
+#define MSM_PMEM_ADSP_BASE	MSM_PMEM_CAMERA_BASE + MSM_PMEM_CAMERA_SIZE 
+#define MSM_RAM_CONSOLE_BASE	MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
+#define MSM_FB_BASE		MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE
+
 
 #if ((MSM_FB_BASE + MSM_FB_SIZE) > MSM_PMEM_LIMIT)
     #error out of PMEM boundary
@@ -305,14 +300,6 @@ static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.cached = 0,
 };
 
-/*
-static struct android_pmem_platform_data android_pmem_gpu1_pdata = {
-	.name = "pmem_gpu1",
-	.no_allocator = 1,
-	.cached = 0,
-};
-*/
-
 static struct platform_device android_pmem_device = {
 	.name = "android_pmem",
 	.id = 0,
@@ -331,14 +318,6 @@ static struct platform_device android_pmem_adsp_device = {
 	.id = 1,
 	.dev = { .platform_data = &android_pmem_adsp_pdata },
 };
-
-/*
-static struct platform_device android_pmem_gpu1_device = {
-	.name = "android_pmem",
-	.id = 3,
-	.dev = { .platform_data = &android_pmem_gpu1_pdata },
-};
-*/
 
 // +++ FIH_ADQ +++ , added by henry.wang
 static struct gpio_switch_platform_data headset_sensor_device_data = {
@@ -432,6 +411,8 @@ static struct lcdc_platform_data lcdc_pdata = {
 
 static struct resource msm_fb_resources[] = {
 	{
+		.start = MSM_FB_BASE,
+		.end = MSM_FB_BASE + MSM_FB_SIZE - 1,
 		.flags  = IORESOURCE_DMA,
 	}
 };
@@ -442,6 +423,23 @@ static struct platform_device msm_fb_device = {
 	.num_resources  = ARRAY_SIZE(msm_fb_resources),
 	.resource       = msm_fb_resources,
 };
+
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+static struct resource ram_console_resource[] = {
+        {
+		.start = MSM_RAM_CONSOLE_BASE,
+		.end = MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE - 1,
+                .flags  = IORESOURCE_MEM,
+        }
+};
+
+static struct platform_device ram_console_device = {
+        .name = "ram_console",
+        .id = -1,
+        .num_resources  = ARRAY_SIZE(ram_console_resource),
+        .resource       = ram_console_resource,
+};
+#endif
 
 ///+++FIH_ADQ+++	godfrey
 static struct resource bluesleep_resources[] = {
@@ -1191,6 +1189,9 @@ static struct platform_device pmic_rpc_device = {
 /* } FIH_ADQ, AudiPCHuang, 2009/04/02 */
 
 static struct platform_device *devices[] __initdata = {
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+	&ram_console_device,
+#endif
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart3,
 #endif
@@ -1206,11 +1207,10 @@ static struct platform_device *devices[] __initdata = {
 	&android_pmem_device,
 	&android_pmem_camera_device,	
 	&android_pmem_adsp_device,
-//	&android_pmem_gpu1_device,
 //FIH_ADQ,JOE HSU 
- 	#ifdef CONFIG_SPI_GPIO
+#ifdef CONFIG_SPI_GPIO
 	&lcdc_spigpio_device,
-	#endif		
+#endif		
 	&msm_fb_device,
 ///+++FIH_ADQ+++	godfrey
 #ifdef CONFIG_BT
@@ -1674,33 +1674,7 @@ static void __init msm_msm7x25_allocate_memory_regions(void)
 	       "for adsp pmem\n", size, (unsigned long)MSM_PMEM_ADSP_BASE);
 /* } FIH_ADQ, Ming */
 
-	/* The GPU1 area must be aligned to a 1M boundary */
-	/* XXX For now allocate an extra 1M, use the aligned part,
-	 * waste the extra memory */
-/*	 
-	size = MSM_PMEM_GPU1_SIZE + 0x100000 - PAGE_SIZE;
-	addr = alloc_bootmem(size);
-	addr_1m_aligned = (void *)(((unsigned int)addr + 0x100000) &
-				   0xfff00000);
-	size = MSM_PMEM_GPU1_SIZE;
-	android_pmem_gpu1_pdata.start = __pa(addr_1m_aligned);
-	android_pmem_gpu1_pdata.size = size;
-	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	       "for gpu1 pmem\n", size, addr_1m_aligned,
-	       __pa(addr_1m_aligned));
-*/
 
-/* FIH_ADQ, Ming { */
-	size = MSM_FB_SIZE;
-///	addr = alloc_bootmem(size);
-///	msm_fb_resources[0].start = __pa(addr);
-	msm_fb_resources[0].start = MSM_FB_BASE;
-	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
-///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical) for fb\n",
-///		size, addr, __pa(addr));
-	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical) for fb\n",
-		size, (unsigned long)MSM_FB_BASE);
-/* } FIH_ADQ, Ming */
 }
 
 static void __init msm7x25_map_io(void)

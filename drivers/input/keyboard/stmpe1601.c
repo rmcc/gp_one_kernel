@@ -440,7 +440,7 @@ static int qi2ckybd_enablekybd(struct i2c_client *kbd)
 	u8 rdat;
 	s16 rc = -EIO;
 
-	dev_dbg(&kbd->dev, "Enable keyboard function of STMPE1601\n");
+	dev_info(&kbd->dev, "Enable keyboard function of STMPE1601\n");
 
 	// Do S/W Reset
 	rdat = 0x80;
@@ -1101,7 +1101,7 @@ static void qi2ckybd_closecb(struct input_dev *idev)
 	struct device *dev		= &kbdrec->mykeyboard->dev;
 
 	dev_dbg(dev, "ENTRY: close callback\n");
-	qi2ckybd_shutdown(kbdrec);
+	//qi2ckybd_shutdown(kbdrec);
 }
 
 static struct input_dev *create_inputdev_instance(struct i2ckybd_record *kbdrec)
