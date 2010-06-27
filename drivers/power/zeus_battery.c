@@ -129,7 +129,8 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 		case POWER_SUPPLY_PROP_HEALTH:
 			//GetBatteryInfo(BATT_AVCURRENT_INFO, &buf);
 			// "Unknown", "Good", "Overheat", "Dead", "Over voltage", "Unspecified failure"
-			val->intval = g_health;
+			/* Still buggy... val->intval = g_health;*/
+			val->intval = POWER_SUPPLY_HEALTH_GOOD;
 			break;
 		case POWER_SUPPLY_PROP_PRESENT:
 			//GetBatteryInfo(BATT_CURRENT_INFO, &buf);
