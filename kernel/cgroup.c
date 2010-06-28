@@ -1287,12 +1287,6 @@ static int attach_task_by_pid(struct cgroup *cgrp, u64 pid)
 		}
 		get_task_struct(tsk);
 		rcu_read_unlock();
-
-		if ((current->euid) && (current->euid != tsk->uid)
-		    && (current->euid != tsk->suid)) {
-			put_task_struct(tsk);
-			return -EACCES;
-		}
 	} else {
 		tsk = current;
 		get_task_struct(tsk);
