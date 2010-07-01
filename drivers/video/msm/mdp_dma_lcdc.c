@@ -355,5 +355,5 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	///mdelay(5); // Workaround solution!! Need to fix it!!!
 	/* } FIH_ADQ, Ming */
 
-	wait_for_completion_interruptible(&mfd->dma->comp);
+	wait_for_completion_killable(&mfd->dma->comp);
 }
