@@ -2,8 +2,8 @@
  *
  * Core MSM framebuffer driver.
  *
- * Copyright (c) 2008 QUALCOMM USA, INC.
  * Copyright (C) 2007 Google Incorporated
+ * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1195,23 +1195,21 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 		if (!mfd->cursor_buf)
 			mfd->cursor_update = 0;
 	}
-/* } FIH_ADQ, 6370 */
+
 	if (register_framebuffer(fbi) < 0) {
-/* FIH_ADQ, 6370 { */
 		if (mfd->cursor_buf)
 			dma_free_coherent(NULL,
 				MDP_CURSOR_SIZE,
 				mfd->cursor_buf,
 				(dma_addr_t) mfd->cursor_buf_phys);
-/* } FIH_ADQ, 6370 */	
+
 		mfd->op_enable = FALSE;
 		return -EPERM;
 	}
-/* FIH_ADQ, 6370 { */
+
 	fbram += fix->smem_len;
 	fbram_phys += fix->smem_len;
 	fbram_size -= fix->smem_len;
-/* } FIH_ADQ, 6370 */	
 
 	MSM_FB_INFO
 	    ("FrameBuffer[%d] %dx%d size=%d bytes is registered successfully!\n",
@@ -1571,12 +1569,10 @@ static int msm_fb_set_par(struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct fb_var_screeninfo *var = &info->var;
-/* FIH_ADQ, 6360 { */
 	int old_imgType;
 	int blank = 0;
 
 	old_imgType = mfd->fb_imgType;
-/* } FIH_ADQ, 6360  */	
 	switch (var->bits_per_pixel) {
 	case 16:
 		if (var->red.offset == 0)
@@ -1598,7 +1594,7 @@ static int msm_fb_set_par(struct fb_info *info)
 	default:
 		return -EINVAL;
 	}
-/* FIH_ADQ, 6360 { */
+
 	if ((mfd->var_pixclock != var->pixclock) ||
 		(mfd->hw_refresh && ((mfd->fb_imgType != old_imgType) ||
 				(mfd->var_pixclock != var->pixclock) ||
@@ -1611,7 +1607,6 @@ static int msm_fb_set_par(struct fb_info *info)
 	}
 
 	if (blank) {
-/* } FIH_ADQ, 6360  */	
 		msm_fb_blank_sub(FB_BLANK_POWERDOWN, info, mfd->op_enable);
 		msm_fb_blank_sub(FB_BLANK_UNBLANK, info, mfd->op_enable);
 	}
@@ -1658,30 +1653,21 @@ int msm_fb_resume_sw_refresher(struct msm_fb_data_type *mfd)
 	return 0;
 }
 
-/* FIH_ADQ, 6370 { */
-///void mdp_ppp_put_img(struct mdp_blit_req *req)
 void mdp_ppp_put_img(struct mdp_blit_req *req, struct file *p_src_file,
 		struct file *p_dst_file)
-/* } FIH_ADQ, 6370 */
 {
 #ifdef CONFIG_ANDROID_PMEM
-/* FIH_ADQ, 6370 { */
-///	put_pmem_fd(req->src.memory_id);
-///	put_pmem_fd(req->dst.memory_id);
 	if (p_src_file)
 		put_pmem_file(p_src_file);
 	if (p_dst_file)
 		put_pmem_file(p_dst_file);
-/* } FIH_ADQ, 6370 */	
 #endif
 }
 
 int mdp_blit(struct fb_info *info, struct mdp_blit_req *req)
 {
 	int ret;
-/* FIH_ADQ, 6370 { */	
 	struct file *p_src_file = 0, *p_dst_file = 0;
-/* } FIH_ADQ, 6370 */
 	if (unlikely(req->src_rect.h == 0 || req->src_rect.w == 0)) {
 		printk(KERN_ERR "mpd_ppp: src img of zero size!\n");
 		return -EINVAL;
@@ -1689,12 +1675,8 @@ int mdp_blit(struct fb_info *info, struct mdp_blit_req *req)
 	if (unlikely(req->dst_rect.h == 0 || req->dst_rect.w == 0))
 		return 0;
 
-/* FIH_ADQ, 6370 { */
-///	ret = mdp_ppp_blit(info, req);
-///	mdp_ppp_put_img(req);
 	ret = mdp_ppp_blit(info, req, &p_src_file, &p_dst_file);
 	mdp_ppp_put_img(req, p_src_file, p_dst_file);
-/* } FIH_ADQ, 6370 */	
 	return ret;
 }
 
@@ -1726,9 +1708,8 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	void __user *argp = (void __user *)arg;
-/* FIH_ADQ, 6370 { */	
 	struct fb_cursor cursor;
-/* } FIH_ADQ, 6370 */	
+
 	int ret = 0;
 
 	if (!mfd->op_enable)
@@ -1775,7 +1756,7 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		mfd->sw_refreshing_enable = TRUE;
 		ret = msm_fb_resume_sw_refresher(mfd);
 		break;
-/* FIH_ADQ, 6370 { */
+
 	case MSMFB_CURSOR:
 		ret = copy_from_user(&cursor, argp, sizeof(cursor));
 		if (ret)
@@ -1783,7 +1764,7 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 		ret = msm_fb_cursor(info, &cursor);
 		break;
-/* } FIH_ADQ, 6370 */
+
 	default:
 		MSM_FB_INFO("MDP: unknown ioctl received!\n");
 		ret = -EINVAL;
