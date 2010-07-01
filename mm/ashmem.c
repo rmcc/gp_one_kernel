@@ -556,7 +556,7 @@ static long ashmem_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	case ASHMEM_SET_SIZE:
 		ret = -EINVAL;
-		if (!asma->file && !(arg & ~PAGE_MASK)) {
+		if (!asma->file /*&& !(arg & ~PAGE_MASK)*/) {
 			ret = 0;
 			asma->size = (size_t) arg;
 		}
