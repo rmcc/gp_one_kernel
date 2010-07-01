@@ -133,7 +133,7 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	fbi = mfd->fbi;
 	var = &fbi->var;
 
-	// MDP cmd block enable
+	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
 	bpp = fbi->var.bits_per_pixel / 8;
@@ -180,22 +180,22 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	// DMA register config
-	//
-	// starting address
+	/* DMA register config */
+
+	/* starting address */
 	MDP_OUTP(MDP_BASE + 0x90008, (uint32) buf);
-	// active window width and height
+	/* active window width and height */
 	MDP_OUTP(MDP_BASE + 0x90004, ((fbi->var.yres) << 16) | (fbi->var.xres));
-	// buffer ystride
+	/* buffer ystride */
 	MDP_OUTP(MDP_BASE + 0x9000c, fbi->var.xres * bpp);
-	// x/y coordinate = always 0 for lcdc
+	/* x/y coordinate = always 0 for lcdc */
 	MDP_OUTP(MDP_BASE + 0x90010, 0);
-	// dma config
+	/* dma config */
 	MDP_OUTP(MDP_BASE + 0x90000, dma2_cfg_reg);
 
-	////////////////////////////////////////////////
-	// LCDC timing setting
-	////////////////////////////////////////////////
+	/*
+	 * LCDC timing setting
+	 */
 	h_back_porch = var->left_margin;
 	h_front_porch = var->right_margin;
 	v_back_porch = var->upper_margin;
@@ -261,7 +261,6 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);
 /* } FIH_ADQ, Ming */
 	
-	////////////////////////////////////////////////
 	MDP_OUTP(MDP_BASE + 0xE0004, hsync_ctrl);
 	MDP_OUTP(MDP_BASE + 0xE0008, vsync_period);
 	MDP_OUTP(MDP_BASE + 0xE000c, vsync_pulse_width * hsync_period);
@@ -275,15 +274,14 @@ int mdp_lcdc_on(struct platform_device *pdev)
 	MDP_OUTP(MDP_BASE + 0xE001c, active_hctl);
 	MDP_OUTP(MDP_BASE + 0xE0020, active_v_start);
 	MDP_OUTP(MDP_BASE + 0xE0024, active_v_end);
-	////////////////////////////////////////////////
 
 	ret = panel_next_on(pdev);
 	if (ret == 0) {
-		// enable LCDC block
+		/* enable LCDC block */
 		MDP_OUTP(MDP_BASE + 0xE0000, 1);
 		mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	}
-	// MDP cmd block disable
+	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	return ret;
@@ -293,16 +291,16 @@ int mdp_lcdc_off(struct platform_device *pdev)
 {
 	int ret = 0;
 
-	// MDP cmd block enable
+	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	MDP_OUTP(MDP_BASE + 0xE0000, 0);
-	// MDP cmd block disable
+	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_pipe_ctrl(MDP_DMA2_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	ret = panel_next_off(pdev);
 
-	// delay to make sure the last frame finishes
+	/* delay to make sure the last frame finishes */
 	mdelay(100);
 
 	return ret;
@@ -327,7 +325,7 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	INIT_COMPLETION(mfd->dma->comp);
 	mfd->dma->waiting = TRUE;
 
-	// no need to power on cmd block since it's lcdc mode
+	/* no need to power on cmd block since it's lcdc mode */
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;
 	buf +=
@@ -343,11 +341,11 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
     MDP_OUTP(MDP_BASE + 0x90008, (uint32) mdp_buf);
     memcpy(cpy_buf_dst, cpy_buf_src, (fbi->fix.line_length * fbi->var.yres));
 
-	// starting address
+	/* starting address */
 	///MDP_OUTP(MDP_BASE + 0x90008, (uint32) buf);
     /* } FIH_ADQ, Ming */
 
-	// enable LCDC irq
+	/* enable LCDC irq */
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	mdp_intr_mask |= LCDC_FRAME_START;
 	outp32(MDP_INTR_ENABLE, mdp_intr_mask);
