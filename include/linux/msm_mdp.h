@@ -25,6 +25,7 @@
 #define MSMFB_RESUME_SW_REFRESHER _IOW(MSMFB_IOCTL_MAGIC, 129, unsigned int)
 #define MSMFB_CURSOR _IOW(MSMFB_IOCTL_MAGIC, 130, struct fb_cursor)
 #define MSMFB_SET_LUT _IOW(MSMFB_IOCTL_MAGIC, 131, struct fb_cmap)
+#define MSMFB_HISTOGRAM _IOWR(MSMFB_IOCTL_MAGIC, 132, struct mdp_histogram)
 /* new ioctls's for set/get ccs matrix */
 #define MSMFB_GET_CCS_MATRIX  _IOWR(MSMFB_IOCTL_MAGIC, 133, struct mdp_ccs)
 #define MSMFB_SET_CCS_MATRIX  _IOW(MSMFB_IOCTL_MAGIC, 134, struct mdp_ccs)
@@ -115,6 +116,14 @@ struct mdp_blit_req {
 struct mdp_blit_req_list {
 	uint32_t count;
 	struct mdp_blit_req req[];
+};
+
+struct mdp_histogram {
+	uint32_t frame_cnt;
+	uint32_t bin_cnt;
+	uint32_t *r;
+	uint32_t *g;
+	uint32_t *b;
 };
 
 #endif /*_MSM_MDP_H_*/
