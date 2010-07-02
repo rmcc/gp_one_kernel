@@ -149,12 +149,14 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 			}
 			break;
 		case POWER_SUPPLY_PROP_TEMP:
-			ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
+			/*ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
 			if (ret >=0 ) {
 				val->intval = buf;
 			} else {
 				val->intval = 0;
-			}
+			}*/
+			/* I suspect this is blocking the driver... */
+			val->intval = 320;
 			break;
 		case POWER_SUPPLY_PROP_CAPACITY:
 			// +++ADQ_FIH+++ 
@@ -175,10 +177,8 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 				}
 
 				/* FIH_ADQ, Kenny { */
-				if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
-					printk(KERN_INFO "batt : %d%%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
-				else
-					printk(KERN_INFO "batt : %d%%_%d\n", val->intval, g_charging_state);
+				if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) < 0)
+					printk(KERN_INFO "batt : %d%%_%d (no voltage?)\n", val->intval, g_charging_state);
 				/* } FIH_ADQ, Kenny */
 
 				if ((val->intval > 94) && (g_charging_state == CHARGER_STATE_CHARGING)){//full
