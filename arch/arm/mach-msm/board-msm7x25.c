@@ -193,7 +193,8 @@ static struct usb_composition usb_func_composition[] = {
 	// 0xC001 composition is removed diag port
 	{
 		.product_id         = 0xC001,
-		.functions	    = 0x0D, /* 001101 */
+		/*.functions	    = 0x0D,*/ /* 001101 */
+		.functions	    = 0x25, /* 100101 */
 	},
 
 	// 0xC002 composition is only diag port
@@ -202,10 +203,10 @@ static struct usb_composition usb_func_composition[] = {
 		.functions	    = 0x01, /* 000001 */
 	},
 
-	// 0xC003 composition is add ethernet port
+	// 0xC003 composition is add modem port
 	{
 		.product_id         = 0xC003,
-		.functions	    = 0x24, /* 100100 */
+		.functions	    = 0x0C, /* 001100 */
 	},
 /// +++ FIH_ADQ +++ , SungSCLee 2009.07.29	
 	// 0xC004 Power off (mass storage) Chargering
