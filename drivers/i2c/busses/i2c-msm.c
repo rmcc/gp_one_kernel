@@ -378,10 +378,12 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 				msleep(100);
 				tmp = readl(dev->base + I2C_STATUS);
 				ud = readl(dev->base + I2C_READ_DATA);
+				flags = readl(dev->base + I2C_STATUS);
 			//	printk(KERN_INFO "<i2c> msm_i2c_xfer 01 : I2C_STATUS(%x -> %x) : %x\r\n", tmp, flags = readl(dev->base + I2C_STATUS), ud);
 			}
 			else {
 				unsigned long ud = readl(dev->base + I2C_READ_DATA), tmp;
+				tmp = readl(dev->base + I2C_STATUS);
 			//	printk(KERN_INFO "<ubh> msm_i2c_xfer 00 : I2C_STATUS(%x -> %x) : %x\r\n", flags, tmp = readl(dev->base + I2C_STATUS), ud);
 				flags = tmp;
 			}
