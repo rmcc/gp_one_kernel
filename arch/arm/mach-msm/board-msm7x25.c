@@ -91,17 +91,14 @@
   #define MSM_RAM_CONSOLE_SIZE    0
 #endif
 
-#define MSM_PMEM_MDP_SIZE	0x400000   //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
-#define MSM_PMEM_CAMERA_SIZE	0x400000   //0xa00000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
+#define MSM_PMEM_MDP_SIZE	0x800000   //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
 #define MSM_PMEM_ADSP_SIZE	0x1400000 - MSM_RAM_CONSOLE_SIZE //0xa00000  //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
 #define MSM_FB_SIZE		0x100000  //0x400000  //original: 0x200000 //FIH_ADQ,JOE HSU // CHIH CHIA change from 0x200000 to 0x100000
 
 #define MSM_PMEM_BASE		0x00200000
 #define MSM_PMEM_LIMIT		0x01F00000 // must match PHYS_OFFSET at mach/memory.h		//CHIH CHIA, change from 0x02000000 to 0x01F00000
 #define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
-#define MSM_PMEM_CAMERA_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE
-
-#define MSM_PMEM_ADSP_BASE	MSM_PMEM_CAMERA_BASE + MSM_PMEM_CAMERA_SIZE 
+#define MSM_PMEM_ADSP_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE 
 #define MSM_RAM_CONSOLE_BASE	MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
 #define MSM_FB_BASE		MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE
 
@@ -284,13 +281,6 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 
 static struct android_pmem_platform_data android_pmem_pdata = {
 	.name = "pmem",
-	.no_allocator = 0,
-	.cached = 1,
-};
-
-//FIH_ADQ,JOE HSU
-static struct android_pmem_platform_data android_pmem_camera_pdata = {
-	.name = "pmem_camera",
 	.no_allocator = 1,
 	.cached = 1,
 };
@@ -305,13 +295,6 @@ static struct platform_device android_pmem_device = {
 	.name = "android_pmem",
 	.id = 0,
 	.dev = { .platform_data = &android_pmem_pdata },
-};
-
-//FIH_ADQ,JOE HSU
-static struct platform_device android_pmem_camera_device = {
-	.name = "android_pmem",
-	.id = 4,
-	.dev = { .platform_data = &android_pmem_camera_pdata },
 };
 
 static struct platform_device android_pmem_adsp_device = {
@@ -1206,7 +1189,6 @@ static struct platform_device *devices[] __initdata = {
 	&smc91x_device,
 	&msm_device_tssc,
 	&android_pmem_device,
-	&android_pmem_camera_device,	
 	&android_pmem_adsp_device,
 //FIH_ADQ,JOE HSU 
 #ifdef CONFIG_SPI_GPIO
@@ -1651,17 +1633,6 @@ static void __init msm_msm7x25_allocate_memory_regions(void)
 /* } FIH_ADQ, Ming */
 
 //FIH_ADQ,JOE HSU
-/* FIH_ADQ, Ming { */
-	size = MSM_PMEM_CAMERA_SIZE;
-///	addr = alloc_bootmem(size);
-///	android_pmem_camera_pdata.start = __pa(addr);
-	android_pmem_camera_pdata.start = MSM_PMEM_CAMERA_BASE;
-	android_pmem_camera_pdata.size = size;
-///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-///	       "for camera pmem\n", size, addr, __pa(addr));
-	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical)"
-	       "for camera pmem\n", size, (unsigned long)MSM_PMEM_CAMERA_BASE);
-/* } FIH_ADQ, Ming */
 
 /* FIH_ADQ, Ming { */	       
 	size = MSM_PMEM_ADSP_SIZE;
