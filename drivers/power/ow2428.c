@@ -153,9 +153,9 @@ static int ZeusDS2482_OWReset(void)
 	int iRet, i;
 	uint8_t state;
 
-	for (i = 0; ((0 > (iRet = i2cwrcmd(CMD_OW_RESET))) && (i < 3)); i++)	//, ZeusDS2482_Reset())
+	for (i = 0; ((0 > (iRet = i2cwrcmd(CMD_OW_RESET))) && (i < 3)); i++) {}	//, ZeusDS2482_Reset()) 
 		//printk(KERN_INFO "<ubh> ZeusDS2482_OWReset 00-%d : fails(%d) try again...\r\n", i, iRet);
-		printk(KERN_INFO "<ZOWRS> 00-%d\r\n", i);
+		//printk(KERN_INFO "<ZOWRS> 00-%d\r\n", i);
 
 	if (iRet < 0) {
 		printk(KERN_INFO "<ubh> ZeusDS2482_OWReset fails(%d) 00-%d. !!!\r\n", i, iRet);

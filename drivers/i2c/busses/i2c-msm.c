@@ -107,7 +107,7 @@ dump_status(uint32_t status)
 
 static void msm_i2c_reset(struct msm_i2c_dev *dev)
 {
-	printk(KERN_INFO "<ubh> ****<<<<< msm_i2c_reset >>>>>****\r\n");
+	//printk(KERN_INFO "<ubh> ****<<<<< msm_i2c_reset >>>>>****\r\n");
 	// (1) disabling the hardware controller
 	//	I2C_SCL_SDA_HI(bus_id); /* Setup SCL & SDA register bit*/
 	//	I2C_SWITCH_IO_CTRL(bus_id); /* Switch to use IO controller */
@@ -174,8 +174,7 @@ msm_i2c_interrupt(int irq, void *devid)
 
 	if (status & I2C_STATUS_ERROR_MASK) {
 #ifdef __TRACE_I2C_FAIL__
-if (getGasgaugeState()) printk(KERN_ERR "<GG-%d> %d/%d_%x_%x\n", getGasgaugeState(), dev->cnt, dev->msg->len, status, g_i2cpreaddr);
-else
+if (!getGasgaugeState()) 
 		printk(KERN_ERR "%s: %d/%d aborted cause to the I2C_STATUS(%x)\n", __func__, dev->cnt, dev->msg->len, status);
 #endif	// __TRACE_I2C_FAIL__
 		err = -EIO-1;
@@ -532,9 +531,9 @@ _msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 #ifdef __TRACE_I2C_FAIL__
 		addrflage = readl(dev->base + I2C_STATUS);
 		if (ckAddrSend(addrflage)) {
-				printk(KERN_INFO "<i2c> msm_i2c_xfer new g_addrstatus(%x) : addr(%x) -> rem(%d)-[%x-%x-%d-%x]\n",
+				/*printk(KERN_INFO "<i2c> msm_i2c_xfer new g_addrstatus(%x) : addr(%x) -> rem(%d)-[%x-%x-%d-%x]\n",
 					addrflage, addr, rem,
-					msgs->addr, msgs->flags, msgs->len, *(msgs->buf));
+					msgs->addr, msgs->flags, msgs->len, *(msgs->buf));*/
 		}
 		else addrflage = 0;
 #endif	// __TRACE_I2C_FAIL__
@@ -593,7 +592,7 @@ if (getGasgaugeState() == 0)
 			goto out_err;
 		}
 #ifdef __TRACE_I2C_FAIL__
-		if (addrflage) printk(KERN_INFO "<i2c> ------------------------------------------- %d.(%x)\n", g_index, addrflage);
+		//if (addrflage) printk(KERN_INFO "<i2c> ------------------------------------------- %d.(%x)\n", g_index, addrflage);
 #endif	// __TRACE_I2C_FAIL__
 
 		msgs++;
