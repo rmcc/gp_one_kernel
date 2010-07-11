@@ -175,10 +175,11 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 				}
 
 				/* FIH_ADQ, Kenny { */
-				if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
+				GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol);
+				/*if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
 					printk(KERN_INFO "batt : %d%%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
 				else
-					printk(KERN_INFO "batt : %d%%_%d\n", val->intval, g_charging_state);
+					printk(KERN_INFO "batt : %d%%_%d\n", val->intval, g_charging_state);*/
 				/* } FIH_ADQ, Kenny */
 
 				if ((val->intval > 94) && (g_charging_state == CHARGER_STATE_CHARGING)){//full
