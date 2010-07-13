@@ -21,12 +21,14 @@ struct mmc_platform_data {
 	unsigned int (*status)(struct device *);
 	unsigned int status_irq;
 	struct embedded_sdio_data *embedded_sdio;
-	unsigned int sdiowakeup_irq;
 	int (*register_status_notify)(void (*callback)(int card_present, void *dev_id), void *dev_id);
+	int (*setup_power)(int, int);
 	unsigned long irq_flags;
+    //FIH
+    int (*sdio_suspend)(int devId);
+    int (*sdio_resume)(int  devId);
 	unsigned long mmc_bus_width;
 	int (*wpswitch) (struct device *);
-	int dummy52_required;
 };
 
 #endif

@@ -67,7 +67,11 @@
 #define MSM_L2CC_PHYS         0xC0400000
 #define MSM_L2CC_SIZE         SZ_4K
 
+#ifndef CONFIG_MACH_ADQ
 #define MSM_SHARED_RAM_BASE   IOMEM(0xE0100000)
+#else
+#define MSM_SHARED_RAM_BASE   IOMEM(0xE0200000)
+#endif
 #define MSM_SHARED_RAM_SIZE   SZ_1M
 
 #define MSM_UART1_PHYS        0xA9A00000

@@ -633,7 +633,8 @@ void mdp_hw_init(void)
 	int i;
 
 	/* MDP cmd block enable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	// RC - Don't disable MDP clock, causes a red screen when booting
+	//mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
 	/* debug interface write access */
 	outpdw(MDP_BASE + 0x60, 1);
@@ -676,7 +677,7 @@ void mdp_hw_init(void)
 	MDP_OUTP(MDP_CMD_DEBUG_ACCESS_BASE + 0x01e4, 0);
 
 #ifndef CONFIG_FB_MSM_MDP22
-	MDP_OUTP(MDP_BASE + 0xE0000, 0);
+	MDP_OUTP(MDP_BASE + 0xE0000, 1);
 	MDP_OUTP(MDP_BASE + 0x100, 0xffffffff);
 	MDP_OUTP(MDP_BASE + 0x90070, 0);
 	MDP_OUTP(MDP_BASE + 0x94010, 1);
@@ -756,5 +757,6 @@ void mdp_hw_init(void)
 #endif
 
 	/* MDP cmd block disable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	// RC - Don't disable MDP clock, causes a red screen when booting
+	//mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }

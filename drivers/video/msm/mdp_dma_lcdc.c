@@ -264,17 +264,17 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		active_v_end = 0;
 	}
 
-
-#ifdef CONFIG_FB_MSM_MDP40
-	if (mfd->panel.type == HDMI_PANEL) {
+/*#ifdef CONFIG_FB_MSM_MDP40*/
+#ifdef CONFIG_FB_MSM_LCDC_HX8352
+	/*if (mfd->panel.type == HDMI_PANEL) {
 		block = MDP_DMA_E_BLOCK;
 		timer_base = DTV_BASE;
 		hsync_polarity = 0;
 		vsync_polarity = 0;
-	} else {
+	} else {*/
 		hsync_polarity = 1;
 		vsync_polarity = 1;
-	}
+	/*}*/
 
 	lcdc_underflow_clr |= 0x80000000;	/* enable recovery */
 #else
@@ -328,13 +328,13 @@ int mdp_lcdc_on(struct platform_device *pdev)
 int mdp_lcdc_off(struct platform_device *pdev)
 {
 	int ret = 0;
-	struct msm_fb_data_type *mfd;
 	uint32 timer_base = LCDC_BASE;
 	uint32 block = MDP_DMA2_BLOCK;
 
-	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
-
 #ifdef CONFIG_FB_MSM_MDP40
+	struct msm_fb_data_type *mfd;
+
+	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 	if (mfd->panel.type == HDMI_PANEL) {
 		block = MDP_DMA_E_BLOCK;
 		timer_base = DTV_BASE;
@@ -368,6 +368,12 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	int intr = INTR_DMA_P_DONE;
 #endif
 
+    /* FIH_ADQ, Ming { */
+    uint8 *mdp_buf;     // phys. addr
+    uint8 *cpy_buf_src; // virt. addr
+    uint8 *cpy_buf_dst; // virt. addr
+    /* } FIH_ADQ, Ming */
+
 	if (!mfd->panel_power_on)
 		return;
 
@@ -387,8 +393,19 @@ void mdp_lcdc_update(struct msm_fb_data_type *mfd)
 	}
 #endif
 
+    /* FIH_ADQ, Ming { */
+    mdp_buf = buf + fbi->fix.smem_len; 
+    cpy_buf_src = fbi->screen_base;  
+    cpy_buf_src += (fbi->var.xoffset + fbi->var.yoffset * fbi->var.xres_virtual) * bpp;
+    cpy_buf_dst = cpy_buf_src + fbi->fix.smem_len;
+///printk("mdp_lcdc_update -- mdp_buf(0x%x), cpy_buf_src(0x%x), cpy_buf_dst(0x%x)\n", mdp_buf, cpy_buf_src, cpy_buf_dst);
+///printk("mdp_lcdc_update -- (fbi->fix.line_length * fbi->var.yres) = 0x%x\n", (fbi->fix.line_length * fbi->var.yres));
+    MDP_OUTP(MDP_BASE + 0x90008, (uint32) mdp_buf);
+    memcpy(cpy_buf_dst, cpy_buf_src, (fbi->fix.line_length * fbi->var.yres));
+
 	/* starting address */
-	MDP_OUTP(MDP_BASE + dma_base + 0x8, (uint32) buf);
+	///MDP_OUTP(MDP_BASE + dma_base + 0x8, (uint32) buf);
+    /* } FIH_ADQ, Ming */
 
 	/* enable LCDC irq */
 	spin_lock_irqsave(&mdp_spin_lock, flag);

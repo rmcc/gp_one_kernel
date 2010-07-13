@@ -14,6 +14,8 @@
 
 #include <linux/mmc/core.h>
 
+#define ATH_WLAN_SLOT		2
+
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
 	unsigned short	vdd;
@@ -173,13 +175,12 @@ struct mmc_host {
 	} embedded_sdio_data;
 #endif
 
-#ifdef CONFIG_MMC_AUTO_SUSPEND
-	struct delayed_work	auto_suspend;
-	struct mutex		auto_suspend_mutex;
-	unsigned long 		last_busy;
-	int			idle_timeout;
-	unsigned long		auto_suspend_state;
-#endif
+    //+++[FIH_ADQ][IssueKeys:ADQ.B-1245]
+    //mutex for WIFI suspend resume
+    struct mutex    scan_lock;
+    int             slot_id;
+    //+++[FIH_ADQ][IssueKeys:ADQ.B-1245]
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

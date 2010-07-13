@@ -26,8 +26,7 @@
 int adsp_pmem_fixup(struct msm_adsp_module *module, void **addr,
 		    unsigned long len);
 int adsp_pmem_fixup_kvaddr(struct msm_adsp_module *module, void **addr,
-			   unsigned long *kvaddr, unsigned long len,
-			   struct file **filp, unsigned long *offset);
+			   unsigned long *kvaddr, unsigned long len);
 int adsp_pmem_paddr_fixup(struct msm_adsp_module *module, void **addr);
 
 int adsp_vfe_verify_cmd(struct msm_adsp_module *module,
@@ -69,12 +68,12 @@ struct adsp_module_info {
 
 #define ADSP_EVENT_MAX_SIZE 496
 #define EVENT_LEN       12
-#define EVENT_MSG_ID ((uint16_t)~0)
+#define EVENT_MSG_ID (~0)
 
 struct adsp_event {
 	struct list_head list;
 	uint32_t size; /* always in bytes */
-	uint16_t msg_id;
+	unsigned msg_id;
 	uint16_t type; /* 0 for msgs (from aDSP), -1 for events (from ARM9) */
 	int is16; /* always 0 (msg is 32-bit) when the event type is 1(ARM9) */
 	union {
@@ -186,8 +185,8 @@ struct adsp_rtos_mp_mtoa_type {
 };
 
 /* ADSP RTOS MP Communications - Modem to APP's Init Info  */
-#define IMG_MAX         2
-#define ENTRIES_MAX     36
+#define IMG_MAX         8
+#define ENTRIES_MAX     64
 #define MODULES_MAX     64
 #define QUEUES_MAX      64
 
@@ -222,6 +221,7 @@ struct adsp_rtos_mp_mtoa_init_info_type {
 struct adsp_rtos_mp_mtoa_s_type {
 	struct adsp_rtos_mp_mtoa_header_type mp_mtoa_header;
 
+	uint32_t desc_field;
 	union {
 		struct adsp_rtos_mp_mtoa_init_info_type mp_mtoa_init_packet;
 		struct adsp_rtos_mp_mtoa_type mp_mtoa_packet;

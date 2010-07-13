@@ -24,6 +24,12 @@ obj-$(CONFIG_BATTERY_OLPC)	+= olpc_battery.o
 obj-$(CONFIG_BATTERY_TOSA)	+= tosa_battery.o
 obj-$(CONFIG_BATTERY_WM97XX)	+= wm97xx_battery.o
 obj-$(CONFIG_BATTERY_BQ27x00)	+= bq27x00_battery.o
+
+#///+T_FIH
+obj-$(CONFIG_BATTERY_FIH_ZEUS)	+= gasgauge_bridge.o
+obj-$(CONFIG_BATTERY_FIH_ZEUS)	+= zeus_battery.o
+#///-T_FIH
+
 obj-$(CONFIG_BATTERY_DA9030)	+= da9030_battery.o
 obj-$(CONFIG_CHARGER_PCF50633)	+= pcf50633-charger.o
 obj-$(CONFIG_BATTERY_MSM)	+= msm_battery.o

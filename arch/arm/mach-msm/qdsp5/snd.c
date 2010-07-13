@@ -49,7 +49,11 @@ static struct snd_ctxt the_snd;
 #define RPC_SND_PROG	0x30000002
 #define RPC_SND_CB_PROG	0x31000002
 
+#ifdef CONFIG_MACH_ADQ
+#define RPC_SND_VERS                    0x00010001
+#else
 #define RPC_SND_VERS                    0x00020001
+#endif
 
 #define SND_SET_DEVICE_PROC 2
 #define SND_SET_VOLUME_PROC 3
@@ -223,10 +227,11 @@ static long snd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 
 		avc_msg.args.avc_ctl = cpu_to_be32(avc);
-		avc_msg.args.cb_func = -1;
-		avc_msg.args.client_data = 0;
 
-		MM_INFO("snd_avc_ctl %d\n", avc);
+		vmsg.args.cb_func = -1;
+		vmsg.args.client_data = 0;
+
+		pr_info("snd_avc_ctl %d\n", avc);
 
 		rc = msm_rpc_call(snd->ept,
 			SND_AVC_CTL_PROC,

@@ -167,6 +167,17 @@ config XEN_KBDDEV_FRONTEND
 	  keyboard and mouse device driver.  It communicates with a back-end
 	  in another domain.
 
+config INPUT_GSENSOR
+	bool "Gsensor interface"
+	---help---
+	  Say Y here if you want your gsensor to be accessible as char device
+	  - /dev/input/gsensor device.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose Y here: the
+	  module will be called gsensor.
+
 comment "Input Device Drivers"
 
 source "drivers/input/keyboard/Kconfig"
@@ -180,6 +191,8 @@ source "drivers/input/tablet/Kconfig"
 source "drivers/input/touchscreen/Kconfig"
 
 source "drivers/input/misc/Kconfig"
+
+source "drivers/input/gsensor/Kconfig"
 
 endif
 

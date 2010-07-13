@@ -55,4 +55,9 @@ obj-$(CONFIG_ATH5K)	+= ath5k/
 obj-$(CONFIG_ATH9K)	+= ath9k/
 
 obj-$(CONFIG_MAC80211_HWSIM)	+= mac80211_hwsim.o
+
+#+++FIH+++
+obj-$(CONFIG_AR6K)	+= ar6krc53/host/
+#---FIH---
+
 obj-$(CONFIG_LIBRA_SDIOIF)	+= libra/

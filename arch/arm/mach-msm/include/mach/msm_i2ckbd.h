@@ -30,10 +30,19 @@
 #define _MSM_I2CKBD_H_
 
 struct msm_i2ckbd_platform_data {
-	uint8_t hwrepeat;
-	uint8_t scanset1;
 	int  gpioreset;
 	int  gpioirq;
+
+/* FIH_ADQ, AudiPCHuang, 2009/03/27, { */
+/* ZEUS_ANDROID_CR, I2C Configuration for Keypad Controller */
+///+FIH_ADQ
+	int gpio_vol_up;
+	int gpio_vol_dn;
+	int gpio_hall_sensor;
+	int gpio_ring_switch;
+	int gpio_hook_switch;
+///-FIH_ADQ
+/* } FIH_ADQ, AudiPCHuang, 2009/03/27 */
 	int  (*gpio_setup) (void);
 	void (*gpio_shutdown)(void);
 	void (*hw_reset) (int);

@@ -31,3 +31,12 @@ obj-$(CONFIG_KEYBOARD_SH_KEYSC)		+= sh_keysc.o
 obj-$(CONFIG_KEYBOARD_I2C_MSM)		+= msm-i2ckbd.o
 obj-$(CONFIG_KEYBOARD_PMIC8058)		+= pmic8058-keypad.o
 
+###+FIH_ADQ
+#AudiPCHuang 2009.01.09 FIH_ZEUS
+obj-$(CONFIG_KEYBOARD_STMPE1601)	+= stmpe1601.o
+
+#AudiPCHuang 2009.02.04 FIH_ZEUS
+ifeq ($(CONFIG_STMPE_DEBUG),y)
+EXTRA_CFLAGS += -DDEBUG
+endif
+###-FIH_ADQ

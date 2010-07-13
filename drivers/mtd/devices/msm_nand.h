@@ -1,6 +1,6 @@
 /* drivers/mtd/devices/msm_nand.h
  *
- * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  * Copyright (C) 2007 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -20,14 +20,6 @@
 #include <mach/msm_iomap.h>
 
 extern unsigned long msm_nand_phys;
-extern unsigned long msm_nandc01_phys;
-extern unsigned long msm_nandc10_phys;
-extern unsigned long msm_nandc11_phys;
-extern unsigned long ebi2_register_base;
-
-#define NC01(X) ((X) + msm_nandc01_phys - msm_nand_phys)
-#define NC10(X) ((X) + msm_nandc10_phys - msm_nand_phys)
-#define NC11(X) ((X) + msm_nandc11_phys - msm_nand_phys)
 
 #define NAND_REG(off) (msm_nand_phys + (off))
 
@@ -151,39 +143,28 @@ extern unsigned long ebi2_register_base;
 #define ONENAND_ECC_ERRPOS_SPARE3	0xFF08
 
 /* Onenand commands */
-#define ONENAND_WP_US                   (1 << 2)
-#define ONENAND_WP_LS                   (1 << 1)
 
 #define ONENAND_CMDLOAD			0x0000
 #define ONENAND_CMDLOADSPARE		0x0013
 #define ONENAND_CMDPROG			0x0080
 #define ONENAND_CMDPROGSPARE		0x001A
 #define ONENAND_CMDERAS			0x0094
-#define ONENAND_CMD_UNLOCK              0x0023
-#define ONENAND_CMD_LOCK                0x002A
 
-#define ONENAND_SYSCFG1_ECCENA(mode)	(0x40E0 | (mode ? 0 : 0x8002))
-#define ONENAND_SYSCFG1_ECCDIS(mode)	(0x41E0 | (mode ? 0 : 0x8002))
-
+#define ONENAND_SYSCFG1_ECCENA		0x40E0
+#define ONENAND_SYSCFG1_ECCDIS		0x41E0
 #define ONENAND_CLRINTR			0x0000
 #define ONENAND_STARTADDR1_RES		0x07FF
 #define ONENAND_STARTADDR3_RES		0x07FF
 
+#define DEVICE_FLASHCORE_0		0
+#define DEVICE_BUFFERRAM_0		0
 #define DATARAM0_0			0x8
-#define DEVICE_FLASHCORE_0              (0 << 15)
-#define DEVICE_FLASHCORE_1              (1 << 15)
-#define DEVICE_BUFFERRAM_0              (0 << 15)
-#define DEVICE_BUFFERRAM_1              (1 << 15)
-#define ONENAND_DEVICE_IS_DDP		(1 << 3)
 
 #define CLEAN_DATA_16			0xFFFF
 #define CLEAN_DATA_32			0xFFFFFFFF
 
-#define EBI2_REG(off)   		(ebi2_register_base + (off))
-#define EBI2_CHIP_SELECT_CFG0           EBI2_REG(0x0000)
-#define EBI2_CFG_REG		       	EBI2_REG(0x0004)
-#define EBI2_NAND_ADM_MUX       	EBI2_REG(0x005C)
 
 extern struct flash_platform_data msm_nand_data;
+
 
 #endif

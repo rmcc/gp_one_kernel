@@ -199,8 +199,7 @@ static int adsp_pmem_lookup_vaddr(struct msm_adsp_module *module, void **addr,
 }
 
 int adsp_pmem_fixup_kvaddr(struct msm_adsp_module *module, void **addr,
-			   unsigned long *kvaddr, unsigned long len,
-			   struct file **filp, unsigned long *offset)
+			   unsigned long *kvaddr, unsigned long len)
 {
 	struct adsp_pmem_region *region;
 	void *vaddr = *addr;
@@ -216,10 +215,10 @@ int adsp_pmem_fixup_kvaddr(struct msm_adsp_module *module, void **addr,
 	}
 	*paddr = region->paddr + (vaddr - region->vaddr);
 	*kvaddr = region->kvaddr + (vaddr - region->vaddr);
-	if (filp)
+	/*if (filp)
 		*filp = region->file;
 	if (offset)
-		*offset = vaddr - region->vaddr;
+		*offset = vaddr - region->vaddr;*/
 	return 0;
 }
 
@@ -457,7 +456,7 @@ static long adsp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return msm_adsp_disable(adev->module);
 
 	case ADSP_IOCTL_DISABLE_EVENT_RSP:
-		return msm_adsp_disable_event_rsp(adev->module);
+		return 0; //msm_adsp_disable_event_rsp(adev->module);
 
 	case ADSP_IOCTL_DISABLE_ACK:
 		MM_ERR("ADSP_IOCTL_DISABLE_ACK is not implemented\n");

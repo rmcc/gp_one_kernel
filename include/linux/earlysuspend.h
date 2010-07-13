@@ -31,6 +31,12 @@
  * register_early_suspend. This direct call can violate the normal level order.
  */
 enum {
+	/* FIH, AudiPCHuang, 200/06/19, { */
+	/* ADQ.B-1868, Early suspend level for keypad driver. (I suggest that disabling keypad must be exeucted after screen blank)*/
+	///+FIH_ADQ
+	EARLY_SUSPEND_LEVEL_DISABLE_QWERTY_KEYPAD,
+	///-FIH_ADQ
+	/* } FIH, AudiPCHuang, 2009/06/19 */
 	EARLY_SUSPEND_LEVEL_BLANK_SCREEN = 50,
 	EARLY_SUSPEND_LEVEL_STOP_DRAWING = 100,
 	EARLY_SUSPEND_LEVEL_DISABLE_FB = 150,

@@ -141,6 +141,10 @@ obj-$(CONFIG_VIDEO_CX18) += cx18/
 obj-$(CONFIG_VIDEO_VIVI) += vivi.o
 obj-$(CONFIG_VIDEO_CX23885) += cx23885/
 
+obj-$(CONFIG_MSM_CAMERA) += msm_camera.o
+obj-$(CONFIG_MSM_CAMERA) += msm_v4l2.o
+obj-$(CONFIG_MSM_CAMERA) += msm/
+
 obj-$(CONFIG_VIDEO_PXA27x)	+= pxa_camera.o
 obj-$(CONFIG_VIDEO_SH_MOBILE_CEU)	+= sh_mobile_ceu_camera.o
 obj-$(CONFIG_VIDEO_OMAP2)		+= omap2cam.o
@@ -156,8 +160,6 @@ obj-$(CONFIG_SOC_CAMERA_TW9910)		+= tw9910.o
 obj-$(CONFIG_VIDEO_AU0828) += au0828/
 
 obj-$(CONFIG_USB_VIDEO_CLASS)	+= uvc/
-
-obj-$(CONFIG_MSM_CAMERA) += msm/
 
 EXTRA_CFLAGS += -Idrivers/media/dvb/dvb-core
 EXTRA_CFLAGS += -Idrivers/media/dvb/frontends

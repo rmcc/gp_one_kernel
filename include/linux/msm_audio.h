@@ -55,36 +55,19 @@
 #define AUDIO_GET_PCM_CONFIG _IOR(AUDIO_IOCTL_MAGIC, 30, unsigned)
 #define AUDIO_SET_PCM_CONFIG _IOW(AUDIO_IOCTL_MAGIC, 31, unsigned)
 #define AUDIO_SWITCH_DEVICE  _IOW(AUDIO_IOCTL_MAGIC, 32, unsigned)
-#define AUDIO_SET_MUTE       _IOW(AUDIO_IOCTL_MAGIC, 33, unsigned)
-#define AUDIO_UPDATE_ACDB    _IOW(AUDIO_IOCTL_MAGIC, 34, unsigned)
-#define AUDIO_START_VOICE    _IOW(AUDIO_IOCTL_MAGIC, 35, unsigned)
-#define AUDIO_STOP_VOICE     _IOW(AUDIO_IOCTL_MAGIC, 36, unsigned)
-#define AUDIO_REINIT_ACDB    _IOW(AUDIO_IOCTL_MAGIC, 39, unsigned)
-#define AUDIO_OUTPORT_FLUSH  _IOW(AUDIO_IOCTL_MAGIC, 40, unsigned short)
-#define AUDIO_SET_ERR_THRESHOLD_VALUE _IOW(AUDIO_IOCTL_MAGIC, 41, \
-					unsigned short)
-#define AUDIO_GET_BITSTREAM_ERROR_INFO _IOR(AUDIO_IOCTL_MAGIC, 42, \
-			       struct msm_audio_bitstream_error_info)
-/* Qualcomm extensions */
-#define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
-				struct msm_audio_stream_config)
-#define AUDIO_GET_STREAM_CONFIG   _IOR(AUDIO_IOCTL_MAGIC, 81, \
-				struct msm_audio_stream_config)
-#define AUDIO_GET_SESSION_ID _IOR(AUDIO_IOCTL_MAGIC, 82, unsigned short)
-#define AUDIO_GET_STREAM_INFO   _IOR(AUDIO_IOCTL_MAGIC, 83, \
-			       struct msm_audio_bitstream_info)
-#define AUDIO_SET_PAN       _IOW(AUDIO_IOCTL_MAGIC, 84, unsigned)
-#define AUDIO_SET_QCONCERT_PLUS       _IOW(AUDIO_IOCTL_MAGIC, 85, unsigned)
-#define AUDIO_SET_MBADRC       _IOW(AUDIO_IOCTL_MAGIC, 86, unsigned)
-#define AUDIO_SET_VOLUME_PATH   _IOW(AUDIO_IOCTL_MAGIC, 87, \
-				     struct msm_vol_info)
-#define AUDIO_SET_MAX_VOL_ALL _IOW(AUDIO_IOCTL_MAGIC, 88, unsigned)
-#define AUDIO_ENABLE_AUDPRE  _IOW(AUDIO_IOCTL_MAGIC, 89, unsigned)
-#define AUDIO_SET_AGC        _IOW(AUDIO_IOCTL_MAGIC, 90, unsigned)
-#define AUDIO_SET_NS         _IOW(AUDIO_IOCTL_MAGIC, 91, unsigned)
-#define AUDIO_SET_TX_IIR     _IOW(AUDIO_IOCTL_MAGIC, 92, unsigned)
+#define AUDIO_SET_MUTE     _IOW(AUDIO_IOCTL_MAGIC, 33, unsigned)
+#define AUDIO_GET_STREAM_INFO   _IOR(AUDIO_IOCTL_MAGIC, 34, \
+				struct msm_audio_bitstream_info)
+
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	100
+
+/* CONFLICTING ioctls added by Google. */
+#define AUDIO_ENABLE_AUDPRE  _IOW(AUDIO_IOCTL_MAGIC, 11, unsigned)
+#define AUDIO_SET_AGC        _IOW(AUDIO_IOCTL_MAGIC, 12, unsigned)
+#define AUDIO_SET_NS         _IOW(AUDIO_IOCTL_MAGIC, 13, unsigned)
+#define AUDIO_SET_TX_IIR     _IOW(AUDIO_IOCTL_MAGIC, 14, unsigned)
+/* End conflicts. */
 
 
 #define HANDSET_MIC			0x01
@@ -118,19 +101,10 @@
 #define I2S_RX				0x20
 #define I2S_TX				0x21
 
-#define ADRC_ENABLE		0x0001
-#define EQ_ENABLE		0x0002
-#define IIR_ENABLE		0x0004
-#define QCONCERT_PLUS_ENABLE	0x0008
-#define MBADRC_ENABLE		0x0010
 
 #define AGC_ENABLE		0x0001
 #define NS_ENABLE		0x0002
 #define TX_IIR_ENABLE		0x0004
-
-#define VOC_REC_UPLINK		0x00
-#define VOC_REC_DOWNLINK	0x01
-#define VOC_REC_BOTH		0x02
 
 struct msm_audio_config {
 	uint32_t buffer_size;
@@ -139,13 +113,7 @@ struct msm_audio_config {
 	uint32_t sample_rate;
 	uint32_t type;
 	uint32_t meta_field;
-	uint32_t bits;
 	uint32_t unused[3];
-};
-
-struct msm_audio_stream_config {
-	uint32_t buffer_size;
-	uint32_t buffer_count;
 };
 
 struct msm_audio_stats {
@@ -177,15 +145,6 @@ struct msm_audio_aio_buf {
 struct msm_mute_info {
 	uint32_t mute;
 	uint32_t path;
-};
-
-struct msm_vol_info {
-	uint32_t vol;
-	uint32_t path;
-};
-
-struct msm_voicerec_mode {
-	uint32_t rec_mode;
 };
 
 struct msm_snd_device_config {
@@ -240,7 +199,6 @@ struct msm_audio_pcm_config {
 #define AUDIO_EVENT_WRITE_DONE 2
 #define AUDIO_EVENT_READ_DONE   3
 #define AUDIO_EVENT_STREAM_INFO 4
-#define AUDIO_EVENT_BITSTREAM_ERROR_INFO 5
 
 #define AUDIO_CODEC_TYPE_MP3 0
 #define AUDIO_CODEC_TYPE_AAC 1
@@ -254,16 +212,9 @@ struct msm_audio_bitstream_info {
 	uint32_t unused[3];
 };
 
-struct msm_audio_bitstream_error_info {
-	uint32_t dec_id;
-	uint32_t err_msg_indicator;
-	uint32_t err_type;
-};
-
 union msm_audio_event_payload {
 	struct msm_audio_aio_buf aio_buf;
 	struct msm_audio_bitstream_info stream_info;
-	struct msm_audio_bitstream_error_info error_info;
 	int reserved;
 };
 
@@ -288,16 +239,6 @@ struct msm_snd_device_list {
 	struct msm_snd_device_info *list;
 };
 
-struct msm_dtmf_config {
-	uint16_t path;
-	uint16_t dtmf_hi;
-	uint16_t dtmf_low;
-	uint16_t duration;
-	uint16_t tx_gain;
-	uint16_t rx_gain;
-	uint16_t mixing;
-};
-
 #define AUDIO_ROUTE_STREAM_VOICE_RX 0
 #define AUDIO_ROUTE_STREAM_VOICE_TX 1
 #define AUDIO_ROUTE_STREAM_PLAYBACK 2
@@ -308,22 +249,4 @@ struct msm_audio_route_config {
 	uint32_t stream_id;
 	uint32_t dev_id;
 };
-
-#define AUDIO_MAX_EQ_BANDS 12
-
-struct msm_audio_eq_band {
-	uint16_t     band_idx; /* The band index, 0 .. 11 */
-	uint32_t     filter_type; /* Filter band type */
-	uint32_t     center_freq_hz; /* Filter band center frequency */
-	uint32_t     filter_gain; /* Filter band initial gain (dB) */
-			/* Range is +12 dB to -12 dB with 1dB increments. */
-	uint32_t     q_factor;
-} __attribute__ ((packed));
-
-struct msm_audio_eq_stream_config {
-	uint32_t	enable; /* Number of consequtive bands specified */
-	uint32_t	num_bands;
-	struct msm_audio_eq_band	eq_bands[AUDIO_MAX_EQ_BANDS];
-} __attribute__ ((packed));
-
 #endif
