@@ -82,7 +82,7 @@ static struct kparam_string kps = {
 	.string			= serial_number,
 	.maxlen			= MAX_SERIAL_LEN,
 };
-static int android_set_sn(const char *kmessage, struct kernel_param *kp);
+int android_set_sn(const char *kmessage, struct kernel_param *kp);
 module_param_call(serial_number, android_set_sn, param_get_string,
 						&kps, 0664);
 MODULE_PARM_DESC(serial_number, "SerialNumber string");
@@ -466,7 +466,7 @@ static struct attribute_group android_attr_grp = {
 	.attrs = android_attrs,
 };
 
-static int android_set_sn(const char *kmessage, struct kernel_param *kp)
+int android_set_sn(const char *kmessage, struct kernel_param *kp)
 {
 	int len = strlen(kmessage);
 

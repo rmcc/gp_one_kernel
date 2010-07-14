@@ -300,7 +300,7 @@ static void gasgauge_param_reset(){
 		printk(KERN_ERR "batt: Get age scalar failed!\n");
 	}
 
-	if((batt_vol >= 4100) && check_USB_type == 2){
+	if((batt_vol >= 4100) /*&& check_USB_type == 2*/){
 		rc = qcom_gpio_request(57, "CHR_1A");
 		if (rc)	printk(KERN_ERR "CHR_1A setting failed!\n");
 		rc = gpio_get_value(57);

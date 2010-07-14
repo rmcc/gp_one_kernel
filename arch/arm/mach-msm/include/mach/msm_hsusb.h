@@ -48,11 +48,13 @@ struct usb_function_map {
 	unsigned bit_pos;
 };
 
+#ifdef CONFIG_USB_FUNCTION
 /* platform device data for msm_hsusb driver */
 struct usb_composition {
 	__u16   product_id;
 	unsigned long functions;
 };
+#endif
 
 #ifdef CONFIG_USB_GADGET_MSM_72K
 enum chg_type {

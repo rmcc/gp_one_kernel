@@ -42,6 +42,9 @@
 #include <mach/msm_iomap.h>
 #include <mach/msm_rpcrouter.h>
 #include <mach/msm_hsusb.h>
+#include <mach/rpc_pmapp.h>
+#include <mach/rpc_hsusb.h>
+
 #include <mach/msm_serial_hs.h>
 
 #include <linux/mtd/nand.h>
@@ -59,6 +62,9 @@
 #include "devices.h"
 #include "socinfo.h"
 
+#ifdef CONFIG_USB_ANDROID
+#include <linux/usb/android.h>
+#endif
 #include "pm.h"
 
 //FIH_ADQ,JOE HSU
@@ -117,21 +123,7 @@ static int wifi_status = 0;
 static int bt_status = 0;
 static DEFINE_SPINLOCK(wif_bt_lock);
 
-///FIH---
-///---FIH_ADQ---
-static struct resource smc91x_resources[] = {
-	[0] = {
-		.start	= 0x9C004300,
-		.end	= 0x9C004400,
-		.flags	= IORESOURCE_MEM,
-	},
-	[1] = {
-		.start	= MSM_GPIO_TO_INT(132),
-		.end	= MSM_GPIO_TO_INT(132),
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
+#ifdef CONFIG_USB_FUNCTION
 static struct usb_mass_storage_platform_data usb_mass_storage_pdata = {
 	.nluns          = 0x02,
 	.buf_size       = 16384,
@@ -147,6 +139,21 @@ static struct platform_device mass_storage_device = {
 		.platform_data          = &usb_mass_storage_pdata,
 	},
 };
+#endif
+
+static struct resource smc91x_resources[] = {
+	[0] = {
+		.start	= 0x9C004300,
+		.end	= 0x9C004400,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= MSM_GPIO_TO_INT(132),
+		.end	= MSM_GPIO_TO_INT(132),
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
 
 static struct platform_device smc91x_device = {
 	.name		= "smc91x",
@@ -155,18 +162,104 @@ static struct platform_device smc91x_device = {
 	.resource	= smc91x_resources,
 };
 
-// +++ FIH_ADQ +++ , modified by henry.wang
-/*
-static struct usb_function_map usb_functions_map[] = {
-	{"diag", 0},
-	{"adb", 1},
-	{"modem", 2},
-	{"nmea", 3},
-	{"mass_storage", 4},
-	{"ethernet", 5},
+#ifdef CONFIG_USB_ANDROID
+/* dynamic composition */
+static struct usb_composition usb_func_composition[] = {
+        {
+                /* MSC */
+                .product_id         = 0xC002,
+                .functions          = 0x02,
+                .adb_product_id     = 0xC005,
+                .adb_functions      = 0x12
+        },
+#ifdef CONFIG_USB_F_SERIAL
+        {
+                /* MODEM */
+                .product_id         = 0xC003,
+                .functions          = 0x06,
+                .adb_product_id     = 0x901E,
+                .adb_functions      = 0x16,
+        },
+#endif
+#ifdef CONFIG_USB_ANDROID_DIAG
+        {
+                /* DIAG */
+                .product_id         = 0xC000,
+                .functions          = 0x04,
+                .adb_product_id     = 0x901D,
+                .adb_functions      = 0x14,
+        },
+#endif
+#if defined(CONFIG_USB_ANDROID_DIAG) && defined(CONFIG_USB_F_SERIAL)
+        {
+                /* DIAG + MODEM */
+                .product_id         = 0x9004,
+                .functions          = 0x64,
+                .adb_product_id     = 0x901F,
+                .adb_functions      = 0x0614,
+        },
+        {
+                /* DIAG + MODEM + NMEA*/
+                .product_id         = 0x9016,
+                .functions          = 0x764,
+                .adb_product_id     = 0x9020,
+                .adb_functions      = 0x7614,
+        },
+        {
+                /* DIAG + MODEM + NMEA + MSC */
+                .product_id         = 0x9017,
+                .functions          = 0x2764,
+                .adb_product_id     = 0x9018,
+                .adb_functions      = 0x27614,
+        },
+#endif
+#ifdef CONFIG_USB_ANDROID_CDC_ECM
+        {
+                /* MSC + CDC-ECM */
+                .product_id         = 0xC004,
+                .functions          = 0x82,
+                .adb_product_id     = 0xC001,
+                .adb_functions      = 0x812,
+        },
+#endif
+#ifdef CONFIG_USB_ANDROID_RMNET
+        {
+                /* DIAG + RMNET */
+                .product_id         = 0x9021,
+                .functions          = 0x94,
+                .adb_product_id     = 0x9022,
+                .adb_functions      = 0x914,
+        },
+#endif
+#ifdef CONFIG_USB_ANDROID_RNDIS
+        {
+                /* RNDIS */
+                .product_id         = 0xF00E,
+                .functions          = 0xA,
+                .adb_product_id     = 0x9024,
+                .adb_functions      = 0x1A,
+        },
+#endif
 };
-*/
+static struct android_usb_platform_data android_usb_pdata = {
+        .vendor_id      = 0x0489,
+        .version        = 0x0100,
+        .compositions   = usb_func_composition,
+        .num_compositions = ARRAY_SIZE(usb_func_composition),
+        .product_name   = "Qualcomm HSUSB Device",
+        .manufacturer_name = "Qualcomm Incorporated",
+        .nluns = 1,
+};
+static struct platform_device android_usb_device = {
+        .name   = "android_usb",
+        .id             = -1,
+        .dev            = {
+                .platform_data = &android_usb_pdata,
+        },
+};
+#endif
 
+#ifdef CONFIG_USB_FUNCTION
 static struct usb_function_map usb_functions_map[] = {
 	{"mass_storage", 0},
 	{"diag", 1},
@@ -219,6 +312,23 @@ static struct usb_composition usb_func_composition[] = {
 	// --- FIH_ADQ ---
 };
 
+static struct msm_hsusb_platform_data msm_hsusb_pdata = {
+	.version	= 0x0100,
+	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
+	// +++ FIH_ADQ +++, modified by henry.wang, fix it to FIH VID/PID
+	.vendor_id          = 0x489,
+	// ---  FIH_ADQ ---
+	.product_name       = "Qualcomm HSUSB Device",
+	.serial_number      = "1234567890ABCD",
+	.manufacturer_name  = "Qualcomm Incorporated",
+	.compositions	= usb_func_composition,
+	.num_compositions = ARRAY_SIZE(usb_func_composition),
+	.function_map   = usb_functions_map,
+	.num_functions	= ARRAY_SIZE(usb_functions_map),
+};
+
+#endif
+
 // +++ FIH_ADQ +++, added by henry.wang
 #define SND(desc, num) { .name = #desc, .id = num }
 static struct snd_endpoint snd_endpoints_list[] = {
@@ -245,20 +355,38 @@ static struct platform_device msm_device_snd = {
 };
 // --- FIH_ADQ ---
 
-static struct msm_hsusb_platform_data msm_hsusb_pdata = {
-	.version	= 0x0100,
-	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
-	// +++ FIH_ADQ +++, modified by henry.wang, fix it to FIH VID/PID
-	.vendor_id          = 0x489,
-	// ---  FIH_ADQ ---
-	.product_name       = "Qualcomm HSUSB Device",
-	.serial_number      = "1234567890ABCD",
-	.manufacturer_name  = "Qualcomm Incorporated",
-	.compositions	= usb_func_composition,
-	.num_compositions = ARRAY_SIZE(usb_func_composition),
-	.function_map   = usb_functions_map,
-	.num_functions	= ARRAY_SIZE(usb_functions_map),
+
+#ifdef CONFIG_USB_MSM_OTG_72K
+static int hsusb_rpc_connect(int connect)
+{
+       if (connect)
+               return msm_hsusb_rpc_connect();
+       else
+               return msm_hsusb_rpc_close();
+}
+#endif
+
+#if defined(CONFIG_USB_MSM_OTG_72K) || defined(CONFIG_USB_EHCI_MSM)
+static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
+{
+        return msm_hsusb_phy_reset();
+}
+#endif
+
+#ifdef CONFIG_USB_MSM_OTG_72K
+static struct msm_otg_platform_data msm_otg_pdata = {
+        .rpc_connect    = hsusb_rpc_connect,
+        .phy_reset      = msm_hsusb_rpc_phy_reset,
+        .pmic_notif_init         = msm_pm_app_rpc_init,
+        .pmic_notif_deinit       = msm_pm_app_rpc_deinit,
+        .pmic_register_vbus_sn   = msm_pm_app_register_vbus_sn,
+        .pmic_unregister_vbus_sn = msm_pm_app_unregister_vbus_sn,
+        .pmic_enable_ldo         = msm_pm_app_enable_usb_ldo,
 };
+#ifdef CONFIG_USB_GADGET
+static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
+#endif
+#endif
 
 static struct android_pmem_platform_data android_pmem_pdata = {
 	.name = "pmem",
@@ -313,6 +441,7 @@ static struct platform_device headset_sensor_device = {
 #define LCDC_API_VERS             0x450673F2
 #endif
 
+extern int android_set_sn(const char *kmessage, struct kernel_param *kp);
 /* FIH, SungSCLee, 2009/05/21, { */
 static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 {
@@ -323,20 +452,28 @@ static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
     if(p_count == FIH_ADB_DEVICE_ID_LENGTH)
 	j = 2;	
 
+    char serial_number[256];
+
     for(i = 0 ; i < j ; i++){
 	if(i == 0){
 	    temp = fih_product_id & 0x000000ff;
 	    op1 = (char)temp; 
-	    msm_hsusb_pdata.serial_number[i+p_count] = op1;
 	}
 	else {	  		
 	    fih_product_id = (fih_product_id  >> 8);
 	    temp = fih_product_id;
 	    temp = temp & 0x000000ff;		
-	    op1 = (char)temp;   		        
-	    msm_hsusb_pdata.serial_number[i+p_count] = op1;
 	}
+	op1 = (char)temp;   		        
+        #ifdef CONFIG_USB_FUNCTION
+	msm_hsusb_pdata.serial_number[i+p_count] = op1;
+	#else
+	serial_number[i+p_count] = op1;
+	#endif
     }
+    #ifdef CONFIG_USB_ANDROID
+    android_set_sn(serial_number,NULL);
+    #endif
 
     return 1;
 }
@@ -1008,10 +1145,20 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_device_smd,
 	&msm_device_nand,
-	&msm_device_hsusb_otg,
-	&msm_device_hsusb_host,
-	&msm_device_hsusb_peripheral,
-	&mass_storage_device,
+#ifdef CONFIG_USB_MSM_OTG_72K
+        &msm_device_otg,
+#ifdef CONFIG_USB_GADGET
+        &msm_device_gadget_peripheral,
+#endif
+#endif
+#ifdef CONFIG_USB_FUNCTION
+        &msm_device_hsusb_peripheral,
+        &mass_storage_device,
+#endif
+
+#ifdef CONFIG_USB_ANDROID
+        &android_usb_device,
+#endif
 	&msm_device_i2c,
 	&smc91x_device,
 	&msm_device_tssc,
@@ -1383,11 +1530,20 @@ static void __init msm7x25_init(void)
 #endif
     msm_acpu_clock_init(&msm7x25_clock_data);
 
-    /// +++ FIH_ADQ +++ , SungSCLee 2009.05.07
     msm_read_serial_number_from_nvitem();
-
+#ifdef CONFIG_USB_FUNCTION
+    /// +++ FIH_ADQ +++ , SungSCLee 2009.05.07
     msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
     msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata;
+#endif
+
+#ifdef CONFIG_USB_MSM_OTG_72K
+    msm_device_otg.dev.platform_data = &msm_otg_pdata;
+#ifdef CONFIG_USB_GADGET
+        msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
+#endif
+#endif
+
 #ifdef CONFIG_SPI_GPIO
     spi_gpio_init();
 #endif	
