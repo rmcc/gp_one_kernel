@@ -1,29 +1,68 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of Code Aurora Forum nor
+ *       the names of its contributors may be used to endorse or promote
+ *       products derived from this software without specific prior written
+ *       permission.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Alternatively, provided that this notice is retained in full, this software
+ * may be relicensed by the recipient under the terms of the GNU General Public
+ * License version 2 ("GPL") and only version 2, in which case the provisions of
+ * the GPL apply INSTEAD OF those given above.  If the recipient relicenses the
+ * software under the GPL, then the identification text in the MODULE_LICENSE
+ * macro must be changed to reflect "GPLv2" instead of "Dual BSD/GPL".  Once a
+ * recipient changes the license terms to the GPL, subsequent recipients shall
+ * not relicense under alternate licensing terms, including the BSD or dual
+ * BSD/GPL terms.  In addition, the following license statement immediately
+ * below and between the words START and END shall also then apply when this
+ * software is relicensed under the GPL:
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
+ * START
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License version 2 and only version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * END
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
 #include <linux/msm_adsp.h>
 #include <linux/uaccess.h>
-#include <linux/fs.h>
 #include <linux/android_pmem.h>
 #include <mach/msm_adsp.h>
-#include <mach/clk.h>
+#include <mach/msm_camio.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
+#include <linux/sched.h>
 #include "msm_vfe7x.h"
 
 #define QDSP_CMDQUEUE 25
@@ -42,33 +81,30 @@
 #define MSG_STATS_AF  8
 #define MSG_STATS_WE  9
 
-#define VFE_ADSP_EVENT 0xFFFF
-#define SNAPSHOT_MASK_MODE 0x00000002
-#define MSM_AXI_QOS_PREVIEW	192000
+#define VFE_ADSP_EVENT 0xFFFFFFFF
 
 static struct msm_adsp_module *qcam_mod;
 static struct msm_adsp_module *vfe_mod;
-static struct msm_vfe_callback *resp;
+static struct msm_vfe_resp *resp;
 static void *extdata;
 static uint32_t extlen;
 
 struct mutex vfe_lock;
+static uint32_t vfe_inuse;
 static void     *vfe_syncdata;
 static uint8_t vfestopped;
 
 static struct stop_event stopevent;
 
 static void vfe_7x_convert(struct msm_vfe_phy_info *pinfo,
-		enum vfe_resp_msg type,
-		void *data, void **ext, int32_t *elen)
+	enum vfe_resp_msg_t	type, void *data, void **ext, int32_t *elen)
 {
 	switch (type) {
-	case VFE_MSG_OUTPUT_P: {
+	case VFE_MSG_OUTPUT1:
+	case VFE_MSG_OUTPUT2: {
 		pinfo->y_phy = ((struct vfe_endframe *)data)->y_address;
 		pinfo->cbcr_phy =
 			((struct vfe_endframe *)data)->cbcr_address;
-
-		pinfo->output_id = OUTPUT_TYPE_P;
 
 		CDBG("vfe_7x_convert, y_phy = 0x%x, cbcr_phy = 0x%x\n",
 				 pinfo->y_phy, pinfo->cbcr_phy);
@@ -104,50 +140,57 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 		void (*getevent)(void *ptr, size_t len))
 {
 	uint32_t evt_buf[3];
-	struct msm_vfe_resp *rp;
-	void *data;
-	CDBG("%s:id=%d\n", __func__, id);
+	struct msm_vfe_resp_t *rp;
 
-	len = (id == VFE_ADSP_EVENT) ? 0 : len;
-	data = resp->vfe_alloc(sizeof(struct msm_vfe_resp) + len,
-		vfe_syncdata,  GFP_ATOMIC);
-
-	if (!data) {
-		pr_err("%s: rp: cannot allocate buffer\n", __func__);
+	rp = kmalloc(sizeof(struct msm_vfe_resp_t), GFP_ATOMIC);
+	if (!rp) {
+		CDBG("rp: cannot allocate buffer\n");
 		return;
 	}
-	rp = (struct msm_vfe_resp *)data;
-	rp->evt_msg.len = len;
 
 	if (id == VFE_ADSP_EVENT) {
 		/* event */
+		getevent(evt_buf, sizeof(evt_buf));
+
 		rp->type           = VFE_EVENT;
 		rp->evt_msg.type   = MSM_CAMERA_EVT;
-		getevent(evt_buf, sizeof(evt_buf));
+		rp->evt_msg.len    = 0;
 		rp->evt_msg.msg_id = evt_buf[0];
-	CDBG("%s:event:msg_id=%d\n", __func__, rp->evt_msg.msg_id);
-		resp->vfe_resp(rp, MSM_CAM_Q_VFE_EVT, vfe_syncdata,
-		GFP_ATOMIC);
+
+		resp->vfe_resp(rp, MSM_CAM_Q_VFE_EVT, vfe_syncdata);
 	} else {
 		/* messages */
+
 		rp->evt_msg.type   = MSM_CAMERA_MSG;
 		rp->evt_msg.msg_id = id;
-		rp->evt_msg.data = rp + 1;
+		rp->evt_msg.len    = len;
+
+		rp->evt_msg.data = kmalloc(rp->evt_msg.len, GFP_ATOMIC);
+		if (!(rp->evt_msg.data)) {
+			kfree(rp);
+			CDBG("rp->evt_msg.data: cannot allocate buffer\n");
+			return;
+		}
+
 		getevent(rp->evt_msg.data, len);
-	CDBG("%s:messages:msg_id=%d\n", __func__, rp->evt_msg.msg_id);
 
 		switch (rp->evt_msg.msg_id) {
 		case MSG_SNAPSHOT:
-			update_axi_qos(MSM_AXI_QOS_PREVIEW);
 			rp->type = VFE_MSG_SNAPSHOT;
 			break;
 
 		case MSG_OUTPUT1:
-		case MSG_OUTPUT2:
-			rp->type = VFE_MSG_OUTPUT_P;
-			vfe_7x_convert(&(rp->phy), VFE_MSG_OUTPUT_P,
+			rp->type = VFE_MSG_OUTPUT1;
+			vfe_7x_convert(&(rp->phy), VFE_MSG_OUTPUT1,
 				rp->evt_msg.data, &(rp->extdata),
 				&(rp->extlen));
+			break;
+
+		case MSG_OUTPUT2:
+			rp->type = VFE_MSG_OUTPUT2;
+			vfe_7x_convert(&(rp->phy), VFE_MSG_OUTPUT2,
+					rp->evt_msg.data, &(rp->extdata),
+					&(rp->extlen));
 			break;
 
 		case MSG_STATS_AF:
@@ -175,7 +218,8 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 			rp->type = VFE_MSG_GENERAL;
 			break;
 		}
-		resp->vfe_resp(rp, MSM_CAM_Q_VFE_MSG, vfe_syncdata, GFP_ATOMIC);
+
+		resp->vfe_resp(rp, MSM_CAM_Q_VFE_MSG, vfe_syncdata);
 	}
 }
 
@@ -183,7 +227,7 @@ static struct msm_adsp_ops vfe_7x_sync = {
 	.event = vfe_7x_ops,
 };
 
-static int vfe_7x_enable(struct camera_enable_cmd *enable)
+static int vfe_7x_enable(struct camera_enable_cmd_t *enable)
 {
 	int rc = -EFAULT;
 
@@ -195,8 +239,8 @@ static int vfe_7x_enable(struct camera_enable_cmd *enable)
 	return rc;
 }
 
-static int vfe_7x_disable(struct camera_enable_cmd *enable,
-		struct platform_device *dev __attribute__((unused)))
+static int vfe_7x_disable(struct camera_enable_cmd_t *enable,
+	struct platform_device *dev)
 {
 	int rc = -EFAULT;
 
@@ -211,13 +255,12 @@ static int vfe_7x_disable(struct camera_enable_cmd *enable,
 static int vfe_7x_stop(void)
 {
 	int rc = 0;
-	uint32_t stopcmd = VFE_STOP_CMD;
+	struct vfe_stop_t stopcmd;
+	stopcmd.header = VFE_STOP_CMD;
 	rc = msm_adsp_write(vfe_mod, QDSP_CMDQUEUE,
-				&stopcmd, sizeof(uint32_t));
-	if (rc < 0) {
-		CDBG("%s:%d: failed rc = %d \n", __func__, __LINE__, rc);
-		return rc;
-	}
+				&stopcmd, sizeof(struct vfe_stop_t));
+	if (rc < 0)
+		CDBG("%s:%d:Failed... rc = %d \n", __func__, __LINE__, rc);
 
 	stopevent.state = 0;
 	rc = wait_event_timeout(stopevent.wait,
@@ -227,9 +270,10 @@ static int vfe_7x_stop(void)
 	return rc;
 }
 
-static void vfe_7x_release(struct platform_device *pdev)
+static void vfe_7x_release(struct platform_device *dev)
 {
 	mutex_lock(&vfe_lock);
+	vfe_inuse = 0;
 	vfe_syncdata = NULL;
 	mutex_unlock(&vfe_lock);
 
@@ -245,16 +289,13 @@ static void vfe_7x_release(struct platform_device *pdev)
 	msm_adsp_put(qcam_mod);
 	msm_adsp_put(vfe_mod);
 
-	msm_camio_disable(pdev);
+	msm_camio_disable(dev);
 
 	kfree(extdata);
 	extlen = 0;
-
-	/* release AXI frequency request */
-	release_axi_qos();
 }
 
-static int vfe_7x_init(struct msm_vfe_callback *presp,
+static int vfe_7x_init(struct msm_vfe_resp *presp,
 	struct platform_device *dev)
 {
 	int rc = 0;
@@ -273,17 +314,12 @@ static int vfe_7x_init(struct msm_vfe_callback *presp,
 	if (rc < 0)
 		return rc;
 
-	/* Set required axi bus frequency */
-	rc = request_axi_qos(MSM_AXI_QOS_PREVIEW);
-	if (rc < 0)
-		return rc;
-
 	msm_camio_camif_pad_reg_reset();
 
 	extlen = sizeof(struct vfe_frame_extra);
 
 	extdata =
-		kmalloc(extlen, GFP_ATOMIC);
+		kmalloc(sizeof(extlen), GFP_ATOMIC);
 	if (!extdata) {
 		rc = -ENOMEM;
 		goto init_fail;
@@ -312,8 +348,8 @@ init_fail:
 	return rc;
 }
 
-static int vfe_7x_config_axi(int mode,
-	struct axidata *ad, struct axiout *ao)
+static int vfe_7x_config_axi(enum vfeoutput_mode_t mode,
+	struct axidata_t *ad, struct axiout_t *ao)
 {
 	struct msm_pmem_region *regptr;
 	unsigned long *bptr;
@@ -326,14 +362,13 @@ static int vfe_7x_config_axi(int mode,
 
 		CDBG("bufnum1 = %d\n", ad->bufnum1);
 		CDBG("config_axi1: O1, phy = 0x%lx, y_off = %d, cbcr_off =%d\n",
-			regptr->paddr, regptr->info.y_off,
-			regptr->info.cbcr_off);
+			regptr->paddr, regptr->y_off, regptr->cbcr_off);
 
 		bptr = &ao->output1buffer1_y_phy;
 		for (cnt = 0; cnt < ad->bufnum1; cnt++) {
-			*bptr = regptr->paddr + regptr->info.y_off;
+			*bptr = regptr->paddr + regptr->y_off;
 			bptr++;
-			*bptr = regptr->paddr + regptr->info.cbcr_off;
+			*bptr = regptr->paddr + regptr->cbcr_off;
 
 			bptr++;
 			regptr++;
@@ -341,9 +376,9 @@ static int vfe_7x_config_axi(int mode,
 
 		regptr--;
 		for (cnt = 0; cnt < (8 - ad->bufnum1); cnt++) {
-			*bptr = regptr->paddr + regptr->info.y_off;
+			*bptr = regptr->paddr + regptr->y_off;
 			bptr++;
-			*bptr = regptr->paddr + regptr->info.cbcr_off;
+			*bptr = regptr->paddr + regptr->cbcr_off;
 			bptr++;
 		}
 	} /* if OUTPUT1 or Both */
@@ -353,13 +388,13 @@ static int vfe_7x_config_axi(int mode,
 
 		CDBG("bufnum2 = %d\n", ad->bufnum2);
 		CDBG("config_axi2: O2, phy = 0x%lx, y_off = %d, cbcr_off =%d\n",
-		     regptr->paddr, regptr->info.y_off, regptr->info.cbcr_off);
+			regptr->paddr, regptr->y_off, regptr->cbcr_off);
 
 		bptr = &ao->output2buffer1_y_phy;
 		for (cnt = 0; cnt < ad->bufnum2; cnt++) {
-			*bptr = regptr->paddr + regptr->info.y_off;
+			*bptr = regptr->paddr + regptr->y_off;
 			bptr++;
-			*bptr = regptr->paddr + regptr->info.cbcr_off;
+			*bptr = regptr->paddr + regptr->cbcr_off;
 
 			bptr++;
 			regptr++;
@@ -367,9 +402,9 @@ static int vfe_7x_config_axi(int mode,
 
 		regptr--;
 		for (cnt = 0; cnt < (8 - ad->bufnum2); cnt++) {
-			*bptr = regptr->paddr + regptr->info.y_off;
+			*bptr = regptr->paddr + regptr->y_off;
 			bptr++;
-			*bptr = regptr->paddr + regptr->info.cbcr_off;
+			*bptr = regptr->paddr + regptr->cbcr_off;
 			bptr++;
 		}
 	}
@@ -377,20 +412,19 @@ static int vfe_7x_config_axi(int mode,
 	return rc;
 }
 
-static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
+static int vfe_7x_config(struct msm_vfe_cfg_cmd_t *cmd, void *data)
 {
 	struct msm_pmem_region *regptr;
 	unsigned char buf[256];
 
-	struct vfe_stats_ack sack;
-	struct axidata *axid;
-	uint32_t i, op_mode;
-	uint32_t *_mode;
+	struct vfe_stats_ack_t sack;
+	struct axidata_t *axid;
+	uint32_t i;
 
-	struct vfe_stats_we_cfg *scfg = NULL;
-	struct vfe_stats_af_cfg *sfcfg = NULL;
+	struct vfe_stats_we_cfg_t *scfg_t = NULL;
+	struct vfe_stats_af_cfg_t *sfcfg_t = NULL;
 
-	struct axiout *axio = NULL;
+	struct axiout_t *axio = NULL;
 	void   *cmd_data = NULL;
 	void   *cmd_data_alloc = NULL;
 	long rc = 0;
@@ -400,7 +434,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			kmalloc(sizeof(struct msm_vfe_command_7k),
 				GFP_ATOMIC);
 	if (!vfecmd) {
-		pr_err("vfecmd alloc failed!\n");
+		CDBG("vfecmd alloc failed!\n");
 		return -ENOMEM;
 	}
 
@@ -416,7 +450,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 	}
 
 	switch (cmd->cmd_type) {
-	case CMD_STATS_AEC_AWB_ENABLE:
+	case CMD_STATS_ENABLE:
 	case CMD_STATS_AXI_CFG: {
 		axid = data;
 		if (!axid) {
@@ -424,15 +458,15 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			goto config_failure;
 		}
 
-		scfg =
-			kmalloc(sizeof(struct vfe_stats_we_cfg),
+		scfg_t =
+			kmalloc(sizeof(struct vfe_stats_we_cfg_t),
 				GFP_ATOMIC);
-		if (!scfg) {
+		if (!scfg_t) {
 			rc = -ENOMEM;
 			goto config_failure;
 		}
 
-		if (copy_from_user(scfg,
+		if (copy_from_user(scfg_t,
 					(void __user *)(vfecmd->value),
 					vfecmd->length)) {
 
@@ -441,7 +475,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		}
 
 		CDBG("STATS_ENABLE: bufnum = %d, enabling = %d\n",
-			axid->bufnum1, scfg->wb_expstatsenable);
+			axid->bufnum1, scfg_t->wb_expstatsenable);
 
 		if (axid->bufnum1 > 0) {
 			regptr = axid->region;
@@ -451,12 +485,12 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 				CDBG("STATS_ENABLE, phy = 0x%lx\n",
 					regptr->paddr);
 
-				scfg->wb_expstatoutputbuffer[i] =
+				scfg_t->wb_expstatoutputbuffer[i] =
 					(void *)regptr->paddr;
 				regptr++;
 			}
 
-			cmd_data = scfg;
+			cmd_data = scfg_t;
 
 		} else {
 			rc = -EINVAL;
@@ -473,16 +507,16 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			goto config_failure;
 		}
 
-		sfcfg =
-			kmalloc(sizeof(struct vfe_stats_af_cfg),
+		sfcfg_t =
+			kmalloc(sizeof(struct vfe_stats_af_cfg_t),
 				GFP_ATOMIC);
 
-		if (!sfcfg) {
+		if (!sfcfg_t) {
 			rc = -ENOMEM;
 			goto config_failure;
 		}
 
-		if (copy_from_user(sfcfg,
+		if (copy_from_user(sfcfg_t,
 					(void __user *)(vfecmd->value),
 					vfecmd->length)) {
 
@@ -491,23 +525,23 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		}
 
 		CDBG("AF_ENABLE: bufnum = %d, enabling = %d\n",
-			axid->bufnum1, sfcfg->af_enable);
+			axid->bufnum1, sfcfg_t->af_enable);
 
 		if (axid->bufnum1 > 0) {
-			regptr = &axid->region[0];
+			regptr = axid->region;
 
 			for (i = 0; i < axid->bufnum1; i++) {
 
 				CDBG("STATS_ENABLE, phy = 0x%lx\n",
 					regptr->paddr);
 
-				sfcfg->af_outbuf[i] =
+				sfcfg_t->af_outbuf[i] =
 					(void *)regptr->paddr;
 
 				regptr++;
 			}
 
-			cmd_data = sfcfg;
+			cmd_data = sfcfg_t;
 
 		} else {
 			rc = -EINVAL;
@@ -517,15 +551,15 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		break;
 
 	case CMD_FRAME_BUF_RELEASE: {
-		struct msm_frame *b;
+		struct msm_frame_t *b;
 		unsigned long p;
-		struct vfe_outputack fack;
+		struct vfe_outputack_t fack;
 		if (!data)  {
 			rc = -EFAULT;
 			goto config_failure;
 		}
 
-		b = (struct msm_frame *)(cmd->value);
+		b = (struct msm_frame_t *)(cmd->value);
 		p = *(unsigned long *)data;
 
 		fack.header = VFE_FRAME_ACK;
@@ -537,7 +571,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			(void *)(p + b->cbcr_off);
 
 		vfecmd->queue = QDSP_CMDQUEUE;
-		vfecmd->length = sizeof(struct vfe_outputack);
+		vfecmd->length = sizeof(struct vfe_outputack_t);
 		cmd_data = &fack;
 	}
 		break;
@@ -556,7 +590,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		sack.bufaddr = (void *)*(uint32_t *)data;
 
 		vfecmd->queue  = QDSP_CMDQUEUE;
-		vfecmd->length = sizeof(struct vfe_stats_ack);
+		vfecmd->length = sizeof(struct vfe_stats_ack_t);
 		cmd_data = &sack;
 	}
 		break;
@@ -572,7 +606,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		sack.bufaddr = (void *)*(uint32_t *)data;
 
 		vfecmd->queue  = QDSP_CMDQUEUE;
-		vfecmd->length = sizeof(struct vfe_stats_ack);
+		vfecmd->length = sizeof(struct vfe_stats_ack_t);
 		cmd_data = &sack;
 	}
 		break;
@@ -605,18 +639,9 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 				break;
 
 			case VFE_START_CMD:
-				_mode = (uint32_t *)cmd_data;
-				op_mode = *(++_mode);
-				if (op_mode & SNAPSHOT_MASK_MODE) {
-					/* request AXI bus for snapshot */
-					if (update_axi_qos(MSM_AXI_MAX_FREQ)
-						< 0) {
-						rc = -EFAULT;
-						goto config_failure;
-					}
-				}
 				msm_camio_camif_pad_reg_reset_2();
 				vfestopped = 0;
+				msm_camio_camif_pad_reg_reset_2();
 				break;
 
 			case VFE_STOP_CMD:
@@ -629,7 +654,33 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		} /* QDSP_CMDQUEUE */
 	}
 		break;
-	case CMD_AXI_CFG_PREVIEW:
+
+	case CMD_AXI_CFG_OUT1: {
+		axid = data;
+		if (!axid) {
+			rc = -EFAULT;
+			goto config_failure;
+		}
+
+		axio = kmalloc(sizeof(struct axiout_t), GFP_ATOMIC);
+		if (!axio) {
+			rc = -ENOMEM;
+			goto config_failure;
+		}
+
+		if (copy_from_user(axio, (void *)(vfecmd->value),
+					sizeof(struct axiout_t))) {
+			rc = -EFAULT;
+			goto config_done;
+		}
+
+		vfe_7x_config_axi(OUTPUT_1, axid, axio);
+
+		cmd_data = axio;
+	}
+		break;
+
+	case CMD_AXI_CFG_OUT2:
 	case CMD_RAW_PICT_AXI_CFG: {
 		axid = data;
 		if (!axid) {
@@ -637,14 +688,14 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			goto config_failure;
 		}
 
-		axio = kmalloc(sizeof(struct axiout), GFP_ATOMIC);
+		axio = kmalloc(sizeof(struct axiout_t), GFP_ATOMIC);
 		if (!axio) {
 			rc = -ENOMEM;
 			goto config_failure;
 		}
 
 		if (copy_from_user(axio, (void __user *)(vfecmd->value),
-					sizeof(struct axiout))) {
+					sizeof(struct axiout_t))) {
 			rc = -EFAULT;
 			goto config_done;
 		}
@@ -654,21 +705,21 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 	}
 		break;
 
-	case CMD_AXI_CFG_SNAP: {
+	case CMD_AXI_CFG_SNAP_O1_AND_O2: {
 		axid = data;
 		if (!axid) {
 			rc = -EFAULT;
 			goto config_failure;
 		}
 
-		axio = kmalloc(sizeof(struct axiout), GFP_ATOMIC);
+		axio = kmalloc(sizeof(struct axiout_t), GFP_ATOMIC);
 		if (!axio) {
 			rc = -ENOMEM;
 			goto config_failure;
 		}
 
 		if (copy_from_user(axio, (void __user *)(vfecmd->value),
-					sizeof(struct axiout))) {
+					sizeof(struct axiout_t))) {
 			rc = -EFAULT;
 			goto config_done;
 		}
@@ -696,19 +747,40 @@ config_done:
 		kfree(cmd_data_alloc);
 
 config_failure:
-	kfree(scfg);
+	kfree(scfg_t);
 	kfree(axio);
 	kfree(vfecmd);
 	return rc;
 }
 
-void msm_camvfe_fn_init(struct msm_camvfe_fn *fptr, void *data)
+void msm_camvfe_fn_init(struct msm_camvfe_fn_t *fptr)
 {
-	mutex_init(&vfe_lock);
 	fptr->vfe_init    = vfe_7x_init;
 	fptr->vfe_enable  = vfe_7x_enable;
 	fptr->vfe_config  = vfe_7x_config;
 	fptr->vfe_disable = vfe_7x_disable;
 	fptr->vfe_release = vfe_7x_release;
-	vfe_syncdata = data;
+}
+
+int msm_camvfe_check(void *data)
+{
+	int rc = 0;
+
+	mutex_lock(&vfe_lock);
+	if (!vfe_inuse) {
+		vfe_inuse = 1;
+		vfe_syncdata = data;
+	} else if (data != vfe_syncdata) {
+		rc = -EBUSY;
+	}
+	mutex_unlock(&vfe_lock);
+
+	return rc;
+}
+
+void msm_camvfe_init(void)
+{
+	mutex_init(&vfe_lock);
+	vfe_inuse = 0;
+	vfe_syncdata = NULL;
 }

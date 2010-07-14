@@ -17,30 +17,26 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/platform_device.h>
-#include <linux/input.h>
-#include <linux/switch.h>
+#include <linux/workqueue.h>
 
 #include <asm/mach-types.h>
 
+#include <mach/msm_handset.h>
 #include <mach/msm_rpcrouter.h>
 #include <mach/board.h>
-#include <mach/rpc_server_handset.h>
-
-#define DRIVER_NAME	"msm-handset"
+#include <linux/reboot.h>
 
 #define HS_SERVER_PROG 0x30000062
 #define HS_SERVER_VERS 0x00010001
 
 #define HS_RPC_PROG 0x30000091
+#define HS_RPC_VERS 0x00010001
 
-#define HS_RPC_VERS_1 0x00010001
-#define HS_RPC_VERS_2 0x00020001
+#define HS_RPC_CB_PROG 0x31000091
+#define HS_RPC_CB_VERS 0x00010001
 
 #define HS_SUBSCRIBE_SRVC_PROC 0x03
-#define HS_REPORT_EVNT_PROC    0x05
 #define HS_EVENT_CB_PROC	1
-#define HS_EVENT_DATA_VER	1
 
 #define RPC_KEYPAD_NULL_PROC 0
 #define RPC_KEYPAD_PASS_KEY_CODE_PROC 2
@@ -49,51 +45,9 @@
 #define HS_PWR_K		0x6F	/* Power key */
 #define HS_END_K		0x51	/* End key or Power key */
 #define HS_STEREO_HEADSET_K	0x82
-#define HS_HEADSET_SWITCH_K	0x84
 #define HS_REL_K		0xFF	/* key release */
 
 #define KEY(hs_key, input_key) ((hs_key << 24) | input_key)
-
-enum hs_event {
-	HS_EVNT_EXT_PWR = 0,	/* External Power status        */
-	HS_EVNT_HSD,		/* Headset Detection            */
-	HS_EVNT_HSTD,		/* Headset Type Detection       */
-	HS_EVNT_HSSD,		/* Headset Switch Detection     */
-	HS_EVNT_KPD,
-	HS_EVNT_FLIP,		/* Flip / Clamshell status (open/close) */
-	HS_EVNT_CHARGER,	/* Battery is being charged or not */
-	HS_EVNT_ENV,		/* Events from runtime environment like DEM */
-	HS_EVNT_REM,		/* Events received from HS counterpart on a
-				remote processor*/
-	HS_EVNT_DIAG,		/* Diag Events  */
-	HS_EVNT_LAST,		 /* Should always be the last event type */
-	HS_EVNT_MAX		/* Force enum to be an 32-bit number */
-};
-
-enum hs_src_state {
-	HS_SRC_STATE_UNKWN = 0,
-	HS_SRC_STATE_LO,
-	HS_SRC_STATE_HI,
-};
-
-struct hs_event_data {
-	uint32_t	ver;		/* Version number */
-	enum hs_event	event_type;     /* Event Type	*/
-	enum hs_event	enum_disc;     /* discriminator */
-	uint32_t	data_length;	/* length of the next field */
-	enum hs_src_state	data;    /* Pointer to data */
-	uint32_t	data_size;	/* Elements to be processed in data */
-};
-
-enum hs_return_value {
-	HS_EKPDLOCKED     = -2,	/* Operation failed because keypad is locked */
-	HS_ENOTSUPPORTED  = -1,	/* Functionality not supported */
-	HS_FALSE          =  0, /* Inquired condition is not true */
-	HS_FAILURE        =  0, /* Requested operation was not successful */
-	HS_TRUE           =  1, /* Inquired condition is true */
-	HS_SUCCESS        =  1, /* Requested operation was successful */
-	HS_MAX_RETURN     =  0x7FFFFFFF/* Force enum to be a 32 bit number */
-};
 
 struct hs_key_data {
 	uint32_t ver;        /* Version number to track sturcture changes */
@@ -150,25 +104,28 @@ struct hs_event_cb_recv {
 };
 
 static const uint32_t hs_key_map[] = {
-	KEY(HS_PWR_K, KEY_POWER),
-	KEY(HS_END_K, KEY_END),
+///+FIH_ADQ
+	//KEY(HS_PWR_K, KEY_POWER),
+	//KEY(HS_END_K, KEY_END), //Default
+	KEY(HS_PWR_K, KEY_RESERVED),
+	KEY(HS_END_K, KEY_POWER), //For ADQ
+///-FIH_ADQ
 	KEY(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT),
-	KEY(HS_HEADSET_SWITCH_K, KEY_MEDIA),
 	0
 };
 
-enum {
-	NO_DEVICE	= 0,
-	MSM_HEADSET	= 1,
-};
-
-struct msm_handset {
-	struct input_dev *ipdev;
-	struct switch_dev sdev;
-};
-
+static struct input_dev *kpdev;
+static struct input_dev *hsdev;
 static struct msm_rpc_client *rpc_client;
-static struct msm_handset *hs;
+
+///+FIH_ADQ
+///AudiPCHuang@FIH, 09.03.31: For getting keypad input device pointer.
+extern struct input_dev *msm_keypad_get_input_dev(void);
+///-FIH_ADQ
+
+// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+struct delayed_work detect_release_work;
+// --- FIH_ADQ ---
 
 static int hs_find_key(uint32_t hscode)
 {
@@ -192,46 +149,63 @@ report_headset_switch(struct input_dev *dev, int key, int value)
 	switch_set_state(&hs->sdev, value);
 }
 
-/*
- * tuple format: (key_code, key_param)
- *
- * old-architecture:
- * key-press = (key_code, 0)
- * key-release = (0xff, key_code)
- *
- * new-architecutre:
- * key-press = (key_code, 0)
- * key-release = (key_code, 0xff)
- */
 static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 {
-	int key, temp_key_code;
+	int key;
+
+	// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+	if(key_code == HS_REL_K)
+	{
+		cancel_delayed_work_sync(&detect_release_work);
+	}
+	else if(key_code == HS_PWR_K)
+	{
+		schedule_delayed_work(&detect_release_work, msecs_to_jiffies(15 * 1000));
+	}
+	// --- FIH_ADQ ---
 
 	if (key_code == HS_REL_K)
+	{
 		key = hs_find_key(key_parm);
+	}
 	else
+	{
 		key = hs_find_key(key_code);
+	}
 
-	temp_key_code = key_code;
-
-	if (key_parm == HS_REL_K)
-		key_code = key_parm;
+	kpdev = msm_keypad_get_input_dev();
+	hsdev = msm_get_handset_input_dev();
 
 	switch (key) {
+	///+FIH_ADQ
+	case KEY_RESERVED:
+		break;
+	///-fIH_ADQ
 	case KEY_POWER:
 	case KEY_END:
-	case KEY_MEDIA:
-		input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
+		if (!kpdev) {
+			printk(KERN_ERR "%s: No input device for reporting "
+					"pwr/end key press\n", __func__);
+			return;
+		}
+		input_report_key(kpdev, key, (key_code != HS_REL_K));
 		break;
 	case SW_HEADPHONE_INSERT:
-		report_headset_switch(hs->ipdev, key, (key_code != HS_REL_K));
+		if (!hsdev) {
+			printk(KERN_ERR "%s: No input device for reporting "
+					"handset events\n", __func__);
+			return;
+		}
+		report_headset_switch(hsdev, key, (key_code != HS_REL_K));
 		break;
 	case -1:
 		printk(KERN_ERR "%s: No mapping for remote handset event %d\n",
-				 __func__, temp_key_code);
-		return;
+				 __func__, key_code);
+		break;
+	default:
+		printk(KERN_ERR "%s: Unhandled handset key %d\n", __func__,
+				key);
 	}
-	input_sync(hs->ipdev);
 }
 
 static int handle_hs_rpc_call(struct msm_rpc_server *server,
@@ -276,6 +250,15 @@ static struct msm_rpc_server hs_rpc_server = {
 	.rpc_call	= handle_hs_rpc_call,
 };
 
+
+// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+static void detect_release_request(struct work_struct *work)
+{
+	emergency_restart();
+}
+// --- FIH_ADQ ---
+
+
 static int process_subs_srvc_callback(struct hs_event_cb_recv *recv)
 {
 	if (!recv)
@@ -293,60 +276,6 @@ static void process_hs_rpc_request(uint32_t proc, void *data)
 	else
 		pr_err("%s: unknown rpc proc %d\n", __func__, proc);
 }
-
-static int hs_rpc_report_event_arg(struct msm_rpc_client *client,
-					void *buffer, void *data)
-{
-	struct hs_event_rpc_req {
-		uint32_t hs_event_data_ptr;
-		struct hs_event_data data;
-	};
-
-	struct hs_event_rpc_req *req = buffer;
-
-	req->hs_event_data_ptr	= cpu_to_be32(0x1);
-	req->data.ver		= cpu_to_be32(HS_EVENT_DATA_VER);
-	req->data.event_type	= cpu_to_be32(HS_EVNT_HSD);
-	req->data.enum_disc	= cpu_to_be32(HS_EVNT_HSD);
-	req->data.data_length	= cpu_to_be32(0x1);
-	req->data.data		= cpu_to_be32(*(enum hs_src_state *)data);
-	req->data.data_size	= cpu_to_be32(sizeof(enum hs_src_state));
-
-	return sizeof(*req);
-}
-
-static int hs_rpc_report_event_res(struct msm_rpc_client *client,
-					void *buffer, void *data)
-{
-	enum hs_return_value result;
-
-	result = be32_to_cpu(*(enum hs_return_value *)buffer);
-	pr_debug("%s: request completed: 0x%x\n", __func__, result);
-
-	if (result == HS_SUCCESS)
-		return 0;
-
-	return 1;
-}
-
-void report_headset_status(bool connected)
-{
-	int rc = -1;
-	enum hs_src_state status;
-
-	if (connected == true)
-		status = HS_SRC_STATE_HI;
-	else
-		status = HS_SRC_STATE_LO;
-
-	rc = msm_rpc_client_req(rpc_client, HS_REPORT_EVNT_PROC,
-				hs_rpc_report_event_arg, &status,
-				hs_rpc_report_event_res, NULL, -1);
-
-	if (rc)
-		pr_err("%s: couldn't send rpc client request\n", __func__);
-}
-EXPORT_SYMBOL(report_headset_status);
 
 static int hs_rpc_register_subs_arg(struct msm_rpc_client *client,
 				    void *buffer, void *data)
@@ -401,6 +330,16 @@ static int hs_cb_func(struct msm_rpc_client *client, void *buffer, int in_size)
 	hdr->vers = be32_to_cpu(hdr->vers);
 	hdr->procedure = be32_to_cpu(hdr->procedure);
 
+	if (hdr->type != 0)
+		return rc;
+	if (hdr->rpc_vers != 2)
+		return rc;
+	if (hdr->prog != HS_RPC_CB_PROG)
+		return rc;
+	if (!msm_rpc_is_compatible_version(HS_RPC_CB_VERS,
+				hdr->vers))
+		return rc;
+
 	process_hs_rpc_request(hdr->procedure,
 			    (void *) (hdr + 1));
 
@@ -419,23 +358,15 @@ static int __init hs_rpc_cb_init(void)
 {
 	int rc = 0;
 
-	/* version 2 is used in 7x30 */
 	rpc_client = msm_rpc_register_client("hs",
-			HS_RPC_PROG, HS_RPC_VERS_2, 0, hs_cb_func);
+			HS_RPC_PROG, HS_RPC_VERS, 0, hs_cb_func);
 
 	if (IS_ERR(rpc_client)) {
-		pr_err("%s: couldn't open rpc client with version 2 err %ld\n",
-			 __func__, PTR_ERR(rpc_client));
-		/*version 1 is used in 7x27, 8x50 */
-		rpc_client = msm_rpc_register_client("hs",
-			HS_RPC_PROG, HS_RPC_VERS_1, 0, hs_cb_func);
-	}
-
-	if (IS_ERR(rpc_client)) {
-		pr_err("%s: couldn't open rpc client with version 1 err %ld\n",
-			 __func__, PTR_ERR(rpc_client));
+		pr_err("%s: couldn't open rpc client err %ld\n", __func__,
+			 PTR_ERR(rpc_client));
 		return PTR_ERR(rpc_client);
 	}
+
 	rc = msm_rpc_client_req(rpc_client, HS_SUBSCRIBE_SRVC_PROC,
 				hs_rpc_register_subs_arg, NULL,
 				hs_rpc_register_subs_res, NULL, -1);
@@ -447,135 +378,24 @@ static int __init hs_rpc_cb_init(void)
 	return rc;
 }
 
-static int __devinit hs_rpc_init(void)
+static int __init hs_rpc_init(void)
 {
 	int rc;
 
-	rc = hs_rpc_cb_init();
-	if (rc)
-		pr_err("%s: failed to initialize rpc client\n", __func__);
+	// +++ FIH_ADQ +++, added by henry.wang 2009/8/13
+	INIT_DELAYED_WORK(&detect_release_work,
+					  detect_release_request);
+	// --- FIH_ADQ ---
 
-	rc = msm_rpc_create_server(&hs_rpc_server);
-	if (rc < 0)
-		pr_err("%s: failed to create rpc server\n", __func__);
-
-	return 0;
-}
-
-static void __devexit hs_rpc_deinit(void)
-{
-	if (rpc_client)
-		msm_rpc_unregister_client(rpc_client);
-}
-
-static ssize_t msm_headset_print_name(struct switch_dev *sdev, char *buf)
-{
-	switch (switch_get_state(&hs->sdev)) {
-	case NO_DEVICE:
-		return sprintf(buf, "No Device\n");
-	case MSM_HEADSET:
-		return sprintf(buf, "Headset\n");
-	}
-	return -EINVAL;
-}
-
-static int __devinit hs_probe(struct platform_device *pdev)
-{
-	int rc;
-	struct input_dev *ipdev;
-
-	hs = kzalloc(sizeof(struct msm_handset), GFP_KERNEL);
-	if (!hs)
-		return -ENOMEM;
-
-	hs->sdev.name	= "h2w";
-	hs->sdev.print_name = msm_headset_print_name;
-
-	rc = switch_dev_register(&hs->sdev);
-	if (rc)
-		goto err_switch_dev_register;
-
-	ipdev = input_allocate_device();
-	if (!ipdev) {
-		rc = -ENOMEM;
-		goto err_alloc_input_dev;
-	}
-	input_set_drvdata(ipdev, hs);
-
-	hs->ipdev = ipdev;
-
-	if (pdev->dev.platform_data)
-		ipdev->name = pdev->dev.platform_data;
-	else
-		ipdev->name	= DRIVER_NAME;
-
-	ipdev->id.vendor	= 0x0001;
-	ipdev->id.product	= 1;
-	ipdev->id.version	= 1;
-
-	input_set_capability(ipdev, EV_KEY, KEY_MEDIA);
-	input_set_capability(ipdev, EV_SW, SW_HEADPHONE_INSERT);
-	input_set_capability(ipdev, EV_KEY, KEY_POWER);
-	input_set_capability(ipdev, EV_KEY, KEY_END);
-
-	rc = input_register_device(ipdev);
-	if (rc) {
-		dev_err(&ipdev->dev,
-				"hs_probe: input_register_device rc=%d\n", rc);
-		goto err_reg_input_dev;
+	if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa() ||
+		machine_is_qsd8x50_surf() || machine_is_qsd8x50_ffa() ||
+		machine_is_msm7x30_surf() || machine_is_msm7x30_ffa() ||
+		machine_is_msm7x25_surf() || machine_is_msm7x25_ffa()) {
+		rc = hs_rpc_cb_init();
+		if (rc)
+			pr_err("%s: failed to initialize\n", __func__);
 	}
 
-	platform_set_drvdata(pdev, hs);
-
-	rc = hs_rpc_init();
-	if (rc)
-		goto err_hs_rpc_init;
-
-	return 0;
-
-err_hs_rpc_init:
-	input_unregister_device(ipdev);
-	ipdev = NULL;
-err_reg_input_dev:
-	input_free_device(ipdev);
-err_alloc_input_dev:
-	switch_dev_unregister(&hs->sdev);
-err_switch_dev_register:
-	kfree(hs);
-	return rc;
+	return msm_rpc_create_server(&hs_rpc_server);
 }
-
-static int __devexit hs_remove(struct platform_device *pdev)
-{
-	struct msm_handset *hs = platform_get_drvdata(pdev);
-
-	input_unregister_device(hs->ipdev);
-	switch_dev_unregister(&hs->sdev);
-	kfree(hs);
-	hs_rpc_deinit();
-	return 0;
-}
-
-static struct platform_driver hs_driver = {
-	.probe		= hs_probe,
-	.remove		= __devexit_p(hs_remove),
-	.driver		= {
-		.name	= DRIVER_NAME,
-		.owner	= THIS_MODULE,
-	},
-};
-
-static int __init hs_init(void)
-{
-	return platform_driver_register(&hs_driver);
-}
-late_initcall(hs_init);
-
-static void __exit hs_exit(void)
-{
-	platform_driver_unregister(&hs_driver);
-}
-module_exit(hs_exit);
-
-MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:msm-handset");
+module_init(hs_rpc_init);

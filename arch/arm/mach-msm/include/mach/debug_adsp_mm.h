@@ -40,7 +40,7 @@
  * The debug level defined below will effect all the files across
  * this module i.e. adsp module.
  */
-#define MSM_MM_DEBUG_LEVEL 2
+#define MSM_MM_DEBUG_LEVEL 1
 #define MSM_MM_MODULE "adsp" /* module name used in log messages */
 #include <mach/debug_mm.h>
 #endif /* __ARCH_ARM_MACH_MSM_DEBUG_ADSP_MM_H_ */

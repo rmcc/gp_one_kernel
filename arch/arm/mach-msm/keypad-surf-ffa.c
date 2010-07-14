@@ -181,9 +181,18 @@ static const unsigned short keypad_keymap_8k_ffa[QSD8x50_FFA_KEYMAP_SIZE] = {
 	[FFA_8K_KEYMAP_INDEX(5, 4)] = KEY_7,
 };
 
+static const unsigned short keypad_virtual_keys[] = {
+	KEY_END,
+	KEY_POWER
+};
+
+static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
+					  struct gpio_event_info *info,
+					  void **data, int func);
+
 /* SURF keypad platform device information */
 static struct gpio_event_matrix_info surf_keypad_matrix_info = {
-	.info.func	= gpio_event_matrix_func,
+	.info.func	= keypad_gpio_event_matrix_func,
 	.keymap		= keypad_keymap_surf,
 	.output_gpios	= keypad_row_gpios,
 	.input_gpios	= keypad_col_gpios,
@@ -215,7 +224,7 @@ struct platform_device keypad_device_surf = {
 
 /* 8k FFA keypad platform device information */
 static struct gpio_event_matrix_info keypad_matrix_info_8k_ffa = {
-	.info.func	= gpio_event_matrix_func,
+	.info.func	= keypad_gpio_event_matrix_func,
 	.keymap		= keypad_keymap_8k_ffa,
 	.output_gpios	= keypad_row_gpios_8k_ffa,
 	.input_gpios	= keypad_col_gpios_8k_ffa,
@@ -247,7 +256,7 @@ struct platform_device keypad_device_8k_ffa = {
 
 /* 7k FFA keypad platform device information */
 static struct gpio_event_matrix_info keypad_matrix_info_7k_ffa = {
-	.info.func	= gpio_event_matrix_func,
+	.info.func	= keypad_gpio_event_matrix_func,
 	.keymap		= keypad_keymap_ffa,
 	.output_gpios	= keypad_row_gpios,
 	.input_gpios	= keypad_col_gpios,
@@ -276,4 +285,32 @@ struct platform_device keypad_device_7k_ffa = {
 		.platform_data	= &keypad_data_7k_ffa,
 	},
 };
+
+static struct input_dev *keypad_dev;
+
+static int keypad_gpio_event_matrix_func(struct input_dev *input_dev,
+					  struct gpio_event_info *info,
+					  void **data, int func)
+{
+	int err;
+	int i;
+
+	err = gpio_event_matrix_func(input_dev, info, data, func);
+
+	if (func == GPIO_EVENT_FUNC_INIT && !err) {
+		keypad_dev = input_dev;
+		for (i = 0; i < ARRAY_SIZE(keypad_virtual_keys); i++)
+			set_bit(keypad_virtual_keys[i] & KEY_MAX,
+				input_dev->keybit);
+	} else if (func == GPIO_EVENT_FUNC_UNINIT) {
+		keypad_dev = NULL;
+	}
+
+	return err;
+}
+
+struct input_dev *msm_keypad_get_input_dev(void)
+{
+	return keypad_dev;
+}
 

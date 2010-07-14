@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>  //[FIH_ADQ.B-296]
 #include <linux/input.h>
 #include <linux/platform_device.h>
 #include <linux/jiffies.h>
@@ -38,6 +39,7 @@
 
 /* CTL bits */
 #define TSSC_CTL_EN		(0x1 << 0)
+#define TSSC_CTL_DI		(0x0 << 0)  //[FIH_ADQ.B-296]
 #define TSSC_CTL_SW_RESET	(0x1 << 2)
 #define TSSC_CTL_MASTER_MODE	(0x3 << 3)
 #define TSSC_CTL_AVG_EN		(0x1 << 5)
@@ -60,8 +62,14 @@
 		TSSC_CTL_MASTER_MODE | \
 		TSSC_CTL_EN)
 
+//[FIH_ADQ.B-296]++
+/* control reg's suspend state */
+#define TSSC_CTL_SUSPEND_STATE	  ( \
+		TSSC_CTL_DI)
+//[FIH_ADQ.B-296]--
+
 #define TSSC_NUMBER_OF_OPERATIONS 2
-#define TS_PENUP_TIMEOUT_MS 20
+#define TS_PENUP_TIMEOUT_MS 15  //[FIH_ADQ] Modified by Stanley
 
 #define TS_DRIVER_NAME "msm_touchscreen"
 
@@ -69,12 +77,15 @@
 #define Y_MAX	1024
 #define P_MAX	256
 
+u32 DEFAULT_SI_VALUE = 20;  //[FIH_ADQ] Added by Stanley
+
 struct ts {
 	struct input_dev *input;
 	struct timer_list timer;
 	int irq;
 	unsigned int x_max;
 	unsigned int y_max;
+	u32 last_x, last_y;
 };
 
 static void __iomem *virt;
@@ -99,12 +110,18 @@ static void ts_timer(unsigned long arg)
 {
 	struct ts *ts = (struct ts *)arg;
 
-	ts_update_pen_state(ts, 0, 0, 0);
+//	ts_update_pen_state(ts, 0, 0, 0);
+	input_report_abs(ts->input, ABS_X, ts->last_x);
+	input_report_abs(ts->input, ABS_Y, ts->last_y);
+	input_report_abs(ts->input, ABS_PRESSURE, 0);
+	input_report_key(ts->input, BTN_TOUCH, 0);
+
+	input_sync(ts->input);
 }
 
 static irqreturn_t ts_interrupt(int irq, void *dev_id)
 {
-	u32 avgs, x, y, lx, ly;
+	u32 avgs, x, y, lx, ly, si;  //[FIH_ADQ] Modified by Stanley
 	u32 num_op, num_samp;
 	u32 status;
 
@@ -114,6 +131,8 @@ static irqreturn_t ts_interrupt(int irq, void *dev_id)
 	avgs = readl(TSSC_REG(AVG12));
 	x = avgs & 0xFFFF;
 	y = avgs >> 16;
+
+	si = readl(TSSC_REG(SI));  //[FIH_ADQ] Added by Stanley
 
 	/* For pen down make sure that the data just read is still valid.
 	 * The DATA bit will still be set if the ARM9 hasn't clobbered
@@ -125,6 +144,15 @@ static irqreturn_t ts_interrupt(int irq, void *dev_id)
 
 	/* Data has been read, OK to clear the data flag */
 	writel(TSSC_CTL_STATE, TSSC_REG(CTL));
+
+    //[FIH_ADQ]++ Added by Stanley++
+	/* Set dafault sampling interval */
+    if (si != DEFAULT_SI_VALUE)
+    {
+	    writel(DEFAULT_SI_VALUE, TSSC_REG(SI));
+	    //printk(KERN_INFO "[TOUCH] ts_interrupt() : Set TSSC sampling interval!\n");
+	}
+	//[FIH_ADQ]-- Added by Stanley--
 
 	/* Valid samples are indicated by the sample number in the status
 	 * register being the number of expected samples and the number of
@@ -144,16 +172,20 @@ static irqreturn_t ts_interrupt(int irq, void *dev_id)
 		 * Android framework adds calibration framework.
 		 */
 #ifdef CONFIG_ANDROID_TOUCHSCREEN_MSM_HACKS
-		lx = ts->x_max - x;
-		ly = ts->y_max - y;
+		lx = ts->x_max + 25 - x;
+		ly = ts->y_max + 25 - y;
 #else
 		lx = x;
 		ly = y;
 #endif
+		ts->last_x = lx;
+		ts->last_y = ly;
 		ts_update_pen_state(ts, lx, ly, 255);
+		//printk(KERN_INFO "[TOUCH] Interrupt : {%3d, %3d},"
+				//" op = %3d samp = %3d si = %d\r\n", lx, ly, num_op, num_samp, si);  //[FIH_ADQ] Added by Stanley
 		/* kick pen up timer - to make sure it expires again(!) */
 		mod_timer(&ts->timer,
-			jiffies + msecs_to_jiffies(TS_PENUP_TIMEOUT_MS));
+			jiffies + msecs_to_jiffies(TS_PENUP_TIMEOUT_MS + DEFAULT_SI_VALUE));  //[FIH_ADQ] Modified by Stanley
 
 	} else
 		printk(KERN_INFO "Ignored interrupt: {%3d, %3d},"
@@ -235,11 +267,11 @@ static int __devinit ts_probe(struct platform_device *pdev)
 		pressure_max = P_MAX;
 	}
 
-	ts->x_max = x_max;
-	ts->y_max = y_max;
+	ts->x_max = 960;
+	ts->y_max = 960;
 
-	input_set_abs_params(input_dev, ABS_X, 0, x_max, 0, 0);
-	input_set_abs_params(input_dev, ABS_Y, 0, y_max, 0, 0);
+	input_set_abs_params(input_dev, ABS_X, 50, 900, 0, 0);  //[FIH_ADQ.B-1420]Modify the touch panel parameter for coordinate.
+	input_set_abs_params(input_dev, ABS_Y, 10, 930, 0, 0);  //[FIH_ADQ.B-1420]Modify the touch panel parameter for coordinate.
 	input_set_abs_params(input_dev, ABS_PRESSURE, 0, pressure_max, 0, 0);
 
 	result = input_register_device(input_dev);
@@ -249,12 +281,20 @@ static int __devinit ts_probe(struct platform_device *pdev)
 	ts->input = input_dev;
 
 	setup_timer(&ts->timer, ts_timer, (unsigned long)ts);
+	ts->last_x =0;
+	ts->last_y =0;
 	result = request_irq(ts->irq, ts_interrupt, IRQF_TRIGGER_RISING,
 				 "touchscreen", ts);
 	if (result)
 		goto fail_req_irq;
 
 	platform_set_drvdata(pdev, ts);
+
+	/* Set dafault sampling interval */
+	writel(DEFAULT_SI_VALUE, TSSC_REG(SI));  //[FIH_ADQ] Added by Stanley
+
+	//Enable the TSSC
+	writel(TSSC_CTL_STATE, TSSC_REG(CTL));  //[FIH_ADQ.B-296]
 
 	return 0;
 
@@ -289,9 +329,42 @@ static int __devexit ts_remove(struct platform_device *pdev)
 	return 0;
 }
 
+//[FIH_ADQ.B-296]++
+static int ts_suspend(struct platform_device *pdev, pm_message_t message)
+{
+    struct ts *ts = platform_get_drvdata(pdev);
+    
+    //Disable IRQ
+    disable_irq(ts->irq);
+	
+	//Disable the TSSC
+	writel(TSSC_CTL_EN, TSSC_REG(CTL));
+	writel(TSSC_CTL_SUSPEND_STATE, TSSC_REG(CTL));
+	printk(KERN_INFO "[TOUCH] ts_suspend() : Disable the TSSC IRQ!\n");
+	
+	return 0;
+}
+
+static int ts_resume(struct platform_device *pdev)
+{
+    struct ts *ts = platform_get_drvdata(pdev);
+
+    //Enable IRQ
+	enable_irq(ts->irq);
+	
+	//Enable and re-initial the TSSC
+	writel(TSSC_CTL_STATE, TSSC_REG(CTL));
+	printk(KERN_INFO "[TOUCH] ts_resume() : Enable the TSSC IRQ!\n");
+	
+	return 0;
+}
+//[FIH_ADQ.B-296]--
+
 static struct platform_driver ts_driver = {
 	.probe		= ts_probe,
 	.remove		= __devexit_p(ts_remove),
+	.suspend    = ts_suspend,  //[FIH_ADQ.B-296]
+	.resume     = ts_resume,  //[FIH_ADQ.B-296]
 	.driver		= {
 		.name = TS_DRIVER_NAME,
 		.owner = THIS_MODULE,

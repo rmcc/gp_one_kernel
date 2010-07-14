@@ -274,7 +274,7 @@ typedef struct {
 
 #define AUDPP_CMD_WAV_PCM_WIDTH_8	0x0000
 #define AUDPP_CMD_WAV_PCM_WIDTH_16	0x0001
-#define AUDPP_CMD_WAV_PCM_WIDTH_24	0x0002
+#define AUDPP_CMD_WAV_PCM_WIDTH_32	0x0002
 
 typedef struct {
 	audpp_cmd_cfg_adec_params_common		common;
@@ -316,27 +316,6 @@ struct audpp_cmd_cfg_adec_params_wma {
 	unsigned short	wmaencoderopts;
 } __attribute__((packed));
 
-/*
- * Command Structure to configure Per decoder Parameters (WMAPRO)
- */
-
-#define AUDPP_CMD_CFG_ADEC_PARAMS_WMAPRO_LEN	\
-	sizeof(struct audpp_cmd_cfg_adec_params_wmapro)
-
-struct audpp_cmd_cfg_adec_params_wmapro {
-	audpp_cmd_cfg_adec_params_common    common;
-	unsigned short 	armdatareqthr;
-	uint8_t         validbitspersample;
-	uint8_t         numchannels;
-	unsigned short  formattag;
-	unsigned short  samplingrate;
-	unsigned short  avgbytespersecond;
-	unsigned short  asfpacketlength;
-	unsigned short 	channelmask;
-	unsigned short 	encodeopt;
-	unsigned short	advancedencodeopt;
-	uint32_t	advancedencodeopt2;
-} __attribute__((packed));
 
 /*
  * Command Structure to configure Per decoder Parameters (MP3)
@@ -409,18 +388,6 @@ struct audpp_cmd_cfg_adec_params_evrc {
 	audpp_cmd_cfg_adec_params_common common;
 	unsigned short stereo_cfg;
 } __attribute__ ((packed));
-
-/*
- * Command Structure to configure Per decoder Parameters (AMRWB)
- */
-
-struct audpp_cmd_cfg_adec_params_amrwb {
-	   audpp_cmd_cfg_adec_params_common     common;
-	      unsigned short                       stereo_cfg;
-} __attribute__((packed)) ;
-
-#define AUDPP_CMD_CFG_ADEC_PARAMS_AMRWB_LEN \
-	sizeof(struct audpp_cmd_cfg_adec_params_amrwb)
 
 /*
  * Command Structure to configure the  HOST PCM interface
@@ -781,7 +748,6 @@ typedef struct {
 #define AUDPP_CMD_ADRC_FLAG_ENA		-1
 
 #define	AUDPP_MAX_MBADRC_BANDS		5
-#define	AUDPP_MBADRC_EXTERNAL_BUF_SIZE	196
 
 struct adrc_config {
 	uint16_t subband_enable;
@@ -807,19 +773,7 @@ typedef struct {
 	uint16_t ext_buf_msw;
 	uint16_t ext_buf_lsw;
 	struct adrc_config adrc_band[AUDPP_MAX_MBADRC_BANDS];
-} __attribute__((packed)) audpp_cmd_cfg_object_params_mbadrc;
-
-struct audpp_cmd_cfg_object_params_adrc {
-	unsigned short	adrc_flag;
-	unsigned short	compression_th;
-	unsigned short	compression_slope;
-	unsigned short	rms_time;
-	unsigned short	attack_const_lsw;
-	unsigned short	attack_const_msw;
-	unsigned short	release_const_lsw;
-	unsigned short	release_const_msw;
-	unsigned short	adrc_delay;
-};
+} __attribute__((packed)) audpp_cmd_cfg_object_params_adrc;
 
 /*
  * Command Structure to configure post processing parameters(Spectrum Analizer)
@@ -861,24 +815,11 @@ typedef struct {
 typedef struct {
 	audpp_cmd_cfg_object_params_common 	common;
 	signed short				enable_flag;
-	signed short				op_mode;
+	signed short				output_mode;
 	signed short				gain;
 	signed short				expansion;
 	signed short				delay;
 	unsigned short				stages_per_mode;
-	unsigned short				reverb_enable;
-	unsigned short				decay_msw;
-	unsigned short				decay_lsw;
-	unsigned short				decay_time_ratio_msw;
-	unsigned short				decay_time_ratio_lsw;
-	unsigned short				reflection_delay_time;
-	unsigned short				late_reverb_gain;
-	unsigned short				late_reverb_delay;
-	unsigned short                          delay_buff_size_msw;
-	unsigned short                          delay_buff_size_lsw;
-	unsigned short                          partition_num;
-	unsigned short                          delay_buff_start_msw;
-	unsigned short                          delay_buff_start_lsw;
 } __attribute__((packed)) audpp_cmd_cfg_object_params_qconcert;
 
 /*

@@ -2257,6 +2257,11 @@ config FB_MSM_LCDC_GORDON_VGA
 	select FB_MSM_LCDC_PANEL
 	default n
 
+config FB_MSM_LCDC_HX8352
+	bool
+	select FB_MSM_LCDC_PANEL
+	default n
+
 config FB_MSM_LCDC_TOSHIBA_WVGA_PT
 	bool
 	select FB_MSM_LCDC_PANEL
@@ -2289,6 +2294,13 @@ config FB_MSM_LCDC_GORDON_VGA_PANEL
 	select FB_MSM_LCDC_GORDON_VGA
 	---help---
 	  Support for LCDC Gordon VGA (480x640) panel
+
+config FB_MSM_LCDC_HX8352_PANEL
+	depends on FB_MSM_LCDC_HW
+	bool "LCDC HX8352 Panel"
+	select FB_MSM_LCDC_HX8352
+	---help---
+	  Support for LCDC HX8352 (240x400) panel
 
 config FB_MSM_LCDC_TOSHIBA_WVGA_PT_PANEL
 	depends on FB_MSM_LCDC_HW

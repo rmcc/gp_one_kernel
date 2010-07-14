@@ -951,46 +951,15 @@ static struct platform_device msm_tvenc_device = {
 	.resource       = msm_tvenc_resources,
 };
 
-/* TSIF begin */
-#if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
-
-#define MSM_TSIF_PHYS        (0xa0100000)
-#define MSM_TSIF_SIZE        (0x200)
-
-static struct resource tsif_resources[] = {
-	[0] = {
-		.flags = IORESOURCE_IRQ,
-		.start = INT_TSIF_IRQ,
-		.end   = INT_TSIF_IRQ,
-	},
-	[1] = {
-		.flags = IORESOURCE_MEM,
-		.start = MSM_TSIF_PHYS,
-		.end   = MSM_TSIF_PHYS + MSM_TSIF_SIZE - 1,
-	},
-	[2] = {
-		.flags = IORESOURCE_DMA,
-		.start = DMOV_TSIF_CHAN,
-		.end   = DMOV_TSIF_CRCI,
-	},
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+static struct platform_device goldfish_battery_device = {
+	.name		= "goldfish-battery",
+	.id		  = -1,
 };
-
-static void tsif_release(struct device *dev)
-{
-	dev_info(dev, "release\n");
-}
-
-struct platform_device msm_device_tsif = {
-	.name          = "msm_tsif",
-	.id            = 0,
-	.num_resources = ARRAY_SIZE(tsif_resources),
-	.resource      = tsif_resources,
-	.dev = {
-		.release       = tsif_release,
-	},
-};
-#endif /* defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE) */
-/* TSIF end   */
+///-FIH_ADQ
+/* } FIH_ADQ, Penho, 2009/03/13 */
 
 #if defined(CONFIG_ARCH_MSM7X30)
 #define MSM_TSSC_PHYS         0xAD300000
@@ -1075,6 +1044,13 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_tvenc_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+	else if (!strncmp(name, "batt", 4))
+		msm_register_device(&goldfish_battery_device, data);
+///-FIH_ADQ
+/* } FIH_ADQ, Penho, 2009/03/13 */
 	else if (!strncmp(name, "dtv", 3))
 		msm_register_device(&msm_dtv_device, data);
 	else
@@ -1159,7 +1135,11 @@ struct clk msm_clocks_7x25[] = {
 	CLK_PCOM("imem_clk",	IMEM_CLK,	NULL, OFF),
 	CLK_PCOM("mdc_clk",	MDC_CLK,	NULL, 0),
 	CLK_PCOM("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
+#ifndef CONFIG_MACH_ADQ
 	CLK_PCOM("mdp_clk",	MDP_CLK,	NULL, OFF),
+#else
+	CLK_PCOM("mdp_clk",	MDP_CLK,	NULL, 0),
+#endif
 	CLK_PCOM("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
 	CLK_PCOM("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
 	CLK_PCOM("mdp_vsync_clk",	MDP_VSYNC_CLK,  NULL, 0),

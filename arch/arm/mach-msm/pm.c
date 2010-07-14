@@ -680,8 +680,22 @@ static void msm_pm_power_off(void)
 
 static void msm_pm_restart(char str, const char *cmd)
 {
+	/* If there's a hard reset hook and the restart_reason
+	 * is the default, prefer that to the (slower) proc_comm
+	 * reset command.
+	 */
+#if 0
+	if ((restart_reason == 0x776655AA) && msm_hw_reset_hook) {
+		msm_hw_reset_hook();
+	} else {
+		msm_proc_comm(PCOM_RESET_CHIP, &restart_reason, 0);
+	}
+#endif
+	/* FIH_ADQ, Ming { */
+	uint32_t oem_cmd = SMEM_PROC_COMM_OEM_RESET_CHIP_EBOOT;
+	msm_proc_comm_oem(PCOM_CUSTOMER_CMD1, &oem_cmd, 0, &restart_reason);
 	msm_rpcrouter_close();
-	msm_proc_comm(PCOM_RESET_CHIP, &restart_reason, 0);
+	/* } FIH_ADQ, Ming */
 
 	for (;;) ;
 }
@@ -699,6 +713,14 @@ static int msm_reboot_call(struct notifier_block *this, unsigned long code, void
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned code = simple_strtoul(cmd + 4, 0, 16) & 0xff;
 			restart_reason = 0x6f656d00 | code;
+        /* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
+                } else if (!strcmp(cmd, "usb_pid")) {
+                        restart_reason = 0x22685511;    
+        /* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */                   
+     /*+++ FIH_ADQ --- Sung Chuan 2009.07.29 { */                               
+            } else if (!strcmp(cmd, "usb_reboot")) {
+                        restart_reason = 0x22692922;    
+     /* }--- FIH_ADQ --- Sung Chuan 2009.07.29 */
 		} else {
 			restart_reason = 0x77665501;
 		}

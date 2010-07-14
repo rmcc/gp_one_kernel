@@ -746,6 +746,11 @@ static int smd_alloc_v2(struct smd_channel *ch)
 	void *buffer;
 	unsigned buffer_sz;
 
+	/* If v1, return */
+	uint32_t *smd_ver = smem_alloc(SMEM_VERSION_SMD, 32 * sizeof(uint32_t));
+	if (!(smd_ver && ((smd_ver[VERSION_MODEM] >> 16) >= 1))) 
+		return -1;
+
 	shared2 = smem_alloc(SMEM_SMD_BASE_ID + ch->n, sizeof(*shared2));
 	if (!shared2) {
 		SMD_INFO("smem_alloc failed ch=%d\n", ch->n);

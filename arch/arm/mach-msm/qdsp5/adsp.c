@@ -51,7 +51,11 @@ static inline void allow_suspend(void)
 #include <mach/msm_adsp.h>
 #include "adsp.h"
 
+#ifdef CONFIG_MACH_ADQ
+#define INT_ADSP INT_ADSP_A11
+#else
 #define INT_ADSP INT_ADSP_A9_A11
+#endif
 
 static struct adsp_info adsp_info;
 static struct msm_rpc_endpoint *rpc_cb_server_client;
@@ -407,7 +411,7 @@ int __msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 				module->name, module->id);
 		return -ENXIO;
 	}
-	if (dsp_queue_addr >= QDSP_MAX_NUM_QUEUES) {
+	/*if (dsp_queue_addr >= QDSP_MAX_NUM_QUEUES) {
 		spin_unlock_irqrestore(&adsp_write_lock, flags);
 		MM_INFO("Invalid Queue Index: %d\n", dsp_queue_addr);
 		return -ENXIO;
@@ -415,7 +419,7 @@ int __msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 	if (adsp_validate_queue(module->id, dsp_queue_addr, cmd_size)) {
 		spin_unlock_irqrestore(&adsp_write_lock, flags);
 		return -EINVAL;
-	}
+	}*/
 	dsp_q_addr = adsp_get_queue_offset(info, dsp_queue_addr);
 	dsp_q_addr &= ADSP_RTOS_WRITE_CTRL_WORD_DSP_ADDR_M;
 
@@ -583,6 +587,7 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 		(struct rpc_adsp_rtos_modem_to_app_args_t *)req;
 	uint32_t event;
 	uint32_t proc_id;
+	uint32_t desc_field;
 	uint32_t module_id;
 	uint32_t image;
 	struct msm_adsp_module *module;
@@ -603,7 +608,9 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 	event = be32_to_cpu(args->mtoa_pkt.mp_mtoa_header.event);
 	proc_id = be32_to_cpu(args->mtoa_pkt.mp_mtoa_header.proc_id);
 
-	if (event == RPC_ADSP_RTOS_INIT_INFO) {
+	desc_field = be32_to_cpu(args->mtoa_pkt.desc_field);
+
+	if (desc_field == RPC_ADSP_RTOS_INIT_INFO) {
 		MM_INFO("INIT_INFO Event\n");
 		sptr = &args->mtoa_pkt.adsp_rtos_mp_mtoa_data.mp_mtoa_init_packet;
 
@@ -721,14 +728,10 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 	}
 	rpc_send_accepted_void_reply(rpc_cb_server_client, req->xid,
 				     RPC_ACCEPTSTAT_SUCCESS);
-#ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
-	event_addr = (uint32_t *)req;
-	module->ops->event(module->driver_data,
-				EVENT_MSG_ID,
-				EVENT_LEN,
-				read_event);
-#endif
 	mutex_unlock(&module->lock);
+	event_addr = (uint32_t *)req;
+	module->ops->event(module->driver_data, EVENT_MSG_ID,
+				EVENT_LEN, read_event);
 }
 
 static int handle_adsp_rtos_mtoa(struct rpc_request_hdr *req)
@@ -739,6 +742,7 @@ static int handle_adsp_rtos_mtoa(struct rpc_request_hdr *req)
 					     req->xid,
 					     RPC_ACCEPTSTAT_SUCCESS);
 		break;
+	case RPC_ADSP_RTOS_MODEM_TO_APP_PROC:
 	case RPC_ADSP_RTOS_MTOA_INIT_INFO_PROC:
 	case RPC_ADSP_RTOS_MTOA_EVENT_INFO_PROC:
 		handle_adsp_rtos_mtoa_app(req);
@@ -1087,8 +1091,8 @@ static int msm_adsp_probe(struct platform_device *pdev)
 	unsigned count;
 	int rc, i;
 
-	if (pdev->id != (rpc_adsp_rtos_atom_vers & RPC_VERSION_MAJOR_MASK))
-		return -EINVAL;
+	/*if (pdev->id != (rpc_adsp_rtos_atom_vers & RPC_VERSION_MAJOR_MASK))
+		return -EINVAL;*/
 
 	wake_lock_init(&adsp_wake_lock, WAKE_LOCK_SUSPEND, "adsp");
 	adsp_info.init_info_ptr = kzalloc(
@@ -1186,7 +1190,7 @@ static struct platform_driver msm_adsp_driver = {
 	},
 };
 
-static char msm_adsp_driver_name[] = "rs00000000";
+static char msm_adsp_driver_name[] = "rs00000000:00000000";
 
 static int __init adsp_init(void)
 {
@@ -1196,12 +1200,18 @@ static int __init adsp_init(void)
 	rpc_adsp_rtos_atom_vers = 0x10001;
 	rpc_adsp_rtos_atom_vers_comp = 0x00010001;
 	rpc_adsp_rtos_mtoa_prog = 0x3000000b;
+#ifndef CONFIG_MACH_ADQ
 	rpc_adsp_rtos_mtoa_vers = 0x30002;
 	rpc_adsp_rtos_mtoa_vers_comp = 0x00030002;
+#else
+	rpc_adsp_rtos_mtoa_vers = 0x10001;
+	rpc_adsp_rtos_mtoa_vers_comp = 0x00010001;
+#endif
 
 	snprintf(msm_adsp_driver_name, sizeof(msm_adsp_driver_name),
-		"rs%08x",
-		rpc_adsp_rtos_atom_prog);
+		"rs%08x:%08x",
+		rpc_adsp_rtos_atom_prog,
+		rpc_adsp_rtos_atom_vers & RPC_VERSION_MAJOR_MASK);
 	msm_adsp_driver.driver.name = msm_adsp_driver_name;
 	rc = platform_driver_register(&msm_adsp_driver);
 	MM_INFO("%s -- %d\n", msm_adsp_driver_name, rc);

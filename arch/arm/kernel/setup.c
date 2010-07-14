@@ -65,6 +65,11 @@ __setup("fpe=", fpe_setup);
 
 extern void paging_init(struct machine_desc *desc);
 extern void reboot_setup(char *str);
+/* FIH, AudiPCHuang, 2009/06/05 { */
+/* [ADQ.B-1440], For getting image version from splash.img*/
+extern void set_image_version(char* img_ver);
+/* } FIH, AudiPCHuang, 2009/06/05 */
+//extern void _text, _etext, __data_start, _edata, _end;
 
 unsigned int processor_id;
 EXPORT_SYMBOL(processor_id);
@@ -440,6 +445,15 @@ static void __init early_mem(char **p)
 	arm_add_memory(start, size);
 }
 __early_param("mem=", early_mem);
+
+/* FIH, AudiPCHuang, 2009/06/05 { */
+/* [ADQ.B-1440], For getting image version from splash.img*/
+static void __init early_version(char **arg)
+{
+	set_image_version(arg[0]);
+}
+__early_param("version=", early_version);
+/* } FIH, AudiPCHuang, 2009/06/05 */
 
 /*
  * Initial parsing of the command line.

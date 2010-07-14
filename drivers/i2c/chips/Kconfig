@@ -61,4 +61,17 @@ config VP_A1026
 	help
 	  A1026 Voice Processor Driver implemented by HTC.
 
+###+FIH_ADQ
+###AudiPCHuang@FIH 09.03.30: EVT2 or later version nLeds driver.
+config BACKLIGHT_LED_TCA6507
+	tristate "TCA6507 backlight led controller"
+	depends on I2C=y && ARCH_MSM
+	help
+	
+config BACKLIGHT_LED_MAX8831
+	tristate "MAX8831 backlight led controller"
+	depends on I2C=y && ARCH_MSM
+	help
+###-FIH_ADQ
+
 endmenu
