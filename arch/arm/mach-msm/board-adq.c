@@ -445,19 +445,17 @@ extern int android_set_sn(const char *kmessage, struct kernel_param *kp);
 /* FIH, SungSCLee, 2009/05/21, { */
 static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 {
-    char *op1;
+    char op1;
     uint32_t temp;
     int i, j = FIH_NV_LENGTH;
+    char serial_number[256];
 
     if(p_count == FIH_ADB_DEVICE_ID_LENGTH)
 	j = 2;	
 
-    char serial_number[256];
-
     for(i = 0 ; i < j ; i++){
 	if(i == 0){
 	    temp = fih_product_id & 0x000000ff;
-	    op1 = (char)temp; 
 	}
 	else {	  		
 	    fih_product_id = (fih_product_id  >> 8);
@@ -469,6 +467,7 @@ static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 	msm_hsusb_pdata.serial_number[i+p_count] = op1;
 	#else
 	serial_number[i+p_count] = op1;
+	serial_number[i+p_count+1] = '\0';
 	#endif
     }
     #ifdef CONFIG_USB_ANDROID
@@ -571,7 +570,6 @@ static struct platform_device msm_bluesleep_device = {
 
 
 ///+++FIH_ADQ+++	godfrey
-int static msm_sdcc_setup_power(int dev_id, int on);
 #ifdef CONFIG_AR6K
 int static msm_ar6k_sdcc_setup_power(int dev_id, int on);
 int static ar6k_wifi_suspend(int dev_id);
@@ -1459,10 +1457,10 @@ static struct msm_pm_platform_data msm7x25_pm_data[MSM_PM_SLEEP_MODE_NR] = {
 static void
 msm_i2c_gpio_config(int iface, int config_type)
 {
-	if (iface) { return; };
-
         int gpio_scl = 60;
         int gpio_sda = 61;
+
+	if (iface) { return; };
 
         if (config_type) {
                 gpio_tlmm_config(GPIO_CFG(gpio_scl, 1, GPIO_INPUT,
@@ -1532,7 +1530,6 @@ static void __init msm7x25_init(void)
 
     msm_read_serial_number_from_nvitem();
 #ifdef CONFIG_USB_FUNCTION
-    /// +++ FIH_ADQ +++ , SungSCLee 2009.05.07
     msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
     msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata;
 #endif
@@ -1540,7 +1537,7 @@ static void __init msm7x25_init(void)
 #ifdef CONFIG_USB_MSM_OTG_72K
     msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
-        msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
+    msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
 #endif
 #endif
 
