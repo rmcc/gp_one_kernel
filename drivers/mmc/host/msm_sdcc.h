@@ -108,30 +108,16 @@
 #define MCI_SDIOINTRCLR		(1 << 22)
 #define MCI_PROGDONECLR		(1 << 23)
 #define MCI_ATACMDCOMPLCLR	(1 << 24)
-/* ATHENV */
-#ifdef ATH_PATCH
 #define MCI_SDIOINTROPECLR	(1 << 25)
-#endif
-/* ATHENV */
 #define MCI_CCSTIMEOUTCLR 	(1 << 26)
 
-/* ATHENV */
-#ifdef ATH_PATCH
-#define MCI_CLEAR_STATIC_MASK	\
-	(MCI_CMDCRCFAILCLR|MCI_DATACRCFAILCLR|MCI_CMDTIMEOUTCLR|\
-	MCI_DATATIMEOUTCLR|MCI_TXUNDERRUNCLR|MCI_RXOVERRUNCLR|  \
-	MCI_CMDRESPENDCLR|MCI_CMDSENTCLR|MCI_DATAENDCLR|		  \
-	MCI_STARTBITERRCLR|MCI_DATABLOCKENDCLR|MCI_SDIOINTRCLR|MCI_SDIOINTROPECLR| \
-	MCI_PROGDONECLR|MCI_ATACMDCOMPLCLR|MCI_CCSTIMEOUTCLR)
-#else
 #define MCI_CLEAR_STATIC_MASK	\
 	(MCI_CMDCRCFAILCLR|MCI_DATACRCFAILCLR|MCI_CMDTIMEOUTCLR|\
 	MCI_DATATIMEOUTCLR|MCI_TXUNDERRUNCLR|MCI_RXOVERRUNCLR|  \
 	MCI_CMDRESPENDCLR|MCI_CMDSENTCLR|MCI_DATAENDCLR|	\
-	MCI_STARTBITERRCLR|MCI_DATABLOCKENDCLR|MCI_SDIOINTRCLR| \
-	MCI_PROGDONECLR|MCI_ATACMDCOMPLCLR|MCI_CCSTIMEOUTCLR)
-#endif
-/* ATHENV */
+	MCI_STARTBITERRCLR|MCI_DATABLOCKENDCLR|MCI_SDIOINTRCLR|	\
+	MCI_SDIOINTROPECLR|MCI_PROGDONECLR|MCI_ATACMDCOMPLCLR|	\
+	MCI_CCSTIMEOUTCLR)
 
 #define MMCIMASK0		0x03c
 #define MCI_CMDCRCFAILMASK	(1 << 0)
@@ -203,6 +189,8 @@ struct msmsdcc_dma_data {
 	int				channel;
 	struct msmsdcc_host		*host;
 	int				busy; /* Set if DM is busy */
+	unsigned int 			result;
+	struct msm_dmov_errdata 	*err;
 };
 
 struct msmsdcc_pio_data {
@@ -236,7 +224,6 @@ struct msmsdcc_host {
 	struct clk		*clk;		/* main MMC bus clock */
 	struct clk		*pclk;		/* SDCC peripheral bus clock */
 	unsigned int		clks_on;	/* set if clocks are enabled */
-	struct timer_list	command_timer;
 
 	unsigned int		eject;		/* eject state */
 
@@ -252,16 +239,7 @@ struct msmsdcc_host {
 
 	struct msmsdcc_dma_data	dma;
 	struct msmsdcc_pio_data	pio;
-/* ATHENV */
-#ifdef ATH_PATCH
-	unsigned int		pre_cmd_with_data;
-	unsigned int		mci_irqenable;
-#endif
-/* ATHENV */
 
-    //FIH
-    bool    bSdioResume;
-///+++ FIH_ADQ +++ 6380
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
 	int polling_enabled;
@@ -270,8 +248,25 @@ struct msmsdcc_host {
 #ifdef CONFIG_MMC_MSM7X00A_RESUME_IN_WQ
 	struct work_struct	resume_task;
 #endif
+	struct tasklet_struct 	dma_tlet;
+
+#ifdef CONFIG_MMC_AUTO_SUSPEND
+	unsigned long           suspended;
+#endif
 	unsigned int prog_scan;
 	unsigned int prog_enable;
+
+	/* Command parameters */
+	unsigned int		cmd_timeout;
+	unsigned int		cmd_pio_irqmask;
+	unsigned int		cmd_datactrl;
+	struct mmc_command	*cmd_cmd;
+	u32					cmd_c;
+
+	unsigned int	mci_irqenable;
+	unsigned int	dummy_52_needed;
+	unsigned int	dummy_52_state;
+
 };
 
 #endif

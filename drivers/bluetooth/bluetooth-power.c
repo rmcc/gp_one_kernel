@@ -54,6 +54,7 @@ static int wifi_toggle_radio(void *data, bool blocked)
 {
 	int ret;
 
+	printk("Toggle radio was invoked, will get args %x",(blocked ? (0 | WIFI_CONTROL_MASK) : (1| WIFI_CONTROL_MASK)));
 	spin_lock(&bt_power_lock);
 	ret = (*power_control)(blocked ? (0 | WIFI_CONTROL_MASK) : (1| WIFI_CONTROL_MASK) );
 	spin_unlock(&bt_power_lock);
