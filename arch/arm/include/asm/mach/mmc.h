@@ -27,6 +27,9 @@ struct mmc_platform_data {
         unsigned long mmc_bus_width;
         int (*wpswitch) (struct device *);
 	int dummy52_required;
+    //FIH
+    int (*sdio_suspend)(int devId);
+    int (*sdio_resume)(int  devId);
 };
 
 #endif
