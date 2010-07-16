@@ -1652,13 +1652,13 @@ static int32_t mt9t013_power_close(void)
 
 	printk(KERN_INFO "mt9t013_power_close ...\n");
 	mdelay(20);
-	qcom_gpio_request(mt9t013_ctrl->sensordata->sensor_pwd, "mt9t013"); //gpio17
-	qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,0);
+	gpio_request(mt9t013_ctrl->sensordata->sensor_pwd, "mt9t013"); //gpio17
+	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,0);
 
-	qcom_gpio_request(mt9t013_ctrl->sensordata->sensor_reset, "mt9t013"); //gpio0
-	qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
+	gpio_request(mt9t013_ctrl->sensordata->sensor_reset, "mt9t013"); //gpio0
+	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
 	mdelay(10);
-	qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,1);		
+	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,1);		
 
 	mdelay(10);
 	msm_camio_clk_enable(CAMIO_VFE_CLK);
@@ -1695,13 +1695,13 @@ static int32_t mt9t013_power_close(void)
 
         mdelay(10);
 
-	qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
+	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
 	mdelay(10);
-        qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,1);	
-	qcom_gpio_direction_output(31,0); //sub-camera(VGA),power off
-	qcom_gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
-	qcom_gpio_free(mt9t013_ctrl->sensordata->sensor_pwd);
-	qcom_gpio_free(31); //sub-camera(VGA)
+        gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,1);	
+	gpio_direction_output(31,0); //sub-camera(VGA),power off
+	gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
+	gpio_free(mt9t013_ctrl->sensordata->sensor_pwd);
+	gpio_free(31); //sub-camera(VGA)
 
 	msm_camio_clk_disable(CAMIO_VFE_CLK);
 	msm_camio_clk_disable(CAMIO_MDC_CLK);
@@ -1855,17 +1855,17 @@ static int32_t mt9t013_sensor_init(
 	
 
 	//FIH_ADQ,JOE HSU
-	rc = qcom_gpio_request(mt9t013_ctrl->sensordata->sensor_pwd, "mt9t013"); //gpio17
+	rc = gpio_request(mt9t013_ctrl->sensordata->sensor_pwd, "mt9t013"); //gpio17
 	if (!rc)
-		qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,0);
+		gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,0);
 	else
 		goto init_done;
 
-	rc = qcom_gpio_request(mt9t013_ctrl->sensordata->sensor_reset, "mt9t013"); //gpio0
+	rc = gpio_request(mt9t013_ctrl->sensordata->sensor_reset, "mt9t013"); //gpio0
 	if (!rc) {
-		qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
+		gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
 	mdelay(20);
-		qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,1);		
+		gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,1);		
 	}
 	else
 		goto init_done;
@@ -1933,9 +1933,9 @@ static int32_t mt9t013_sensor_init(
 #endif
 
 init_fail1:
-	qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,
+	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,
 		0);
-	qcom_gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
+	gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
 init_done:
 	return rc;
 }
@@ -2155,13 +2155,13 @@ static int mt9t013_release(struct inode *ip, struct file *fp)
 	mt9t013_power_down();
 
 //FIH_ADQ,JOE HSU
-	qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
+	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
 	mdelay(20);
-        qcom_gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,1);	
-	qcom_gpio_direction_output(31,0); //sub-camera(VGA),power off //FIH_ADQ,JOE HSU
-	qcom_gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
-	qcom_gpio_free(mt9t013_ctrl->sensordata->sensor_pwd);
-	qcom_gpio_free(31); //sub-camera(VGA)//FIH_ADQ,JOE HSU
+        gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,1);	
+	gpio_direction_output(31,0); //sub-camera(VGA),power off //FIH_ADQ,JOE HSU
+	gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
+	gpio_free(mt9t013_ctrl->sensordata->sensor_pwd);
+	gpio_free(31); //sub-camera(VGA)//FIH_ADQ,JOE HSU
         allow_suspend();
 
 	rc = mt9t013_ctrl->opened = 0;

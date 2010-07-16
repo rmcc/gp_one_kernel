@@ -886,6 +886,9 @@ static int update_pwr_rail(unsigned id, int enable)
 	case C(GRP_3D):
 		pwr_id = PWR_RAIL_GRP_CLK;
 		break;
+	case C(MDP):
+		pwr_id = PWR_RAIL_MDP_CLK;
+		break;
 	case C(MFC):
 		pwr_id = PWR_RAIL_MFC_CLK;
 		break;
@@ -1339,7 +1342,7 @@ void __init msm_clk_soc_set_ops(struct clk *clk)
 		if (ops)
 			clk->ops = ops;
 		else {
-			clk->ops = &clk_ops_pcom;
+			clk->ops = &clk_ops_remote;
 			clk->id = clk->remote_id;
 		}
 	}
@@ -1363,9 +1366,11 @@ void __init msm_clk_soc_init(void)
 	 * before the register init loop since it changes the source of the
 	 * USB HS core clocks. */
 	for (i = 0; chld_usb_src[i] != C(NONE); i++)
-		_soc_clk_disable(chld_usb_src[i]);
+		if (clk_is_local(chld_usb_src[i]))
+			_soc_clk_disable(chld_usb_src[i]);
 
-	soc_clk_set_rate(C(USB_HS_SRC), clk_tbl_usb[0].freq_hz);
+	if (clk_is_local(C(USB_HS_SRC)))
+		soc_clk_set_rate(C(USB_HS_SRC), clk_tbl_usb[0].freq_hz);
 
 	for (i = 0; i < ARRAY_SIZE(ri_list); i++) {
 		val = readl(ri_list[i].reg);

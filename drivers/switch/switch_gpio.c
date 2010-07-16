@@ -164,11 +164,11 @@ static int gpio_switch_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto err_switch_dev_register;
 
-	ret = qcom_gpio_request(switch_data->gpio, pdev->name);
+	ret = gpio_request(switch_data->gpio, pdev->name);
 	if (ret < 0)
 		goto err_request_gpio;
 
-	ret = qcom_gpio_direction_input(switch_data->gpio);
+	ret = gpio_direction_input(switch_data->gpio);
 	if (ret < 0)
 		goto err_set_gpio_input;
 
@@ -207,7 +207,7 @@ static int gpio_switch_probe(struct platform_device *pdev)
 err_request_irq:
 err_detect_irq_num_failed:
 err_set_gpio_input:
-	qcom_gpio_free(switch_data->gpio);
+	gpio_free(switch_data->gpio);
 err_request_gpio:
     switch_dev_unregister(&switch_data->sdev);
 err_switch_dev_register:
@@ -221,7 +221,7 @@ static int __devexit gpio_switch_remove(struct platform_device *pdev)
 	struct gpio_switch_data *switch_data = platform_get_drvdata(pdev);
 
 	cancel_work_sync(&switch_data->work);
-	qcom_gpio_free(switch_data->gpio);
+	gpio_free(switch_data->gpio);
     switch_dev_unregister(&switch_data->sdev);
 	wake_lock_destroy(&switch_data->headset_wake_lock);
 

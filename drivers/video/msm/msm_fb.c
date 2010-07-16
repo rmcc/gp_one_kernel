@@ -214,15 +214,15 @@ static int panel_poweron(void)
             return -EIO;
         }
                 
-	    rc = qcom_gpio_request(85, "cam_pwr");
+	    rc = gpio_request(85, "cam_pwr");
         if (rc) {
             printk(KERN_ERR "%s: cam_pwr setting failed! rc = %d\n", __func__, rc);
             return -EIO;
         }
 
-        qcom_gpio_direction_output(85,1);
+        gpio_direction_output(85,1);
         printk(KERN_INFO "%s: (85) gpio_read = %d\n", __func__, gpio_get_value(85));
-        qcom_gpio_free(85);
+        gpio_free(85);
     }
     
     /* LCD RESET */
@@ -233,25 +233,25 @@ static int panel_poweron(void)
         return -EIO;
     }
 
-    rc = qcom_gpio_request(103, "lcd_reset");
+    rc = gpio_request(103, "lcd_reset");
     if (rc) {
         printk(KERN_ERR "%s: lcd_reset setting failed! rc = %d\n", __func__, rc);
         return -EIO;
     }
 
-    qcom_gpio_direction_output(103,1);
+    gpio_direction_output(103,1);
     mdelay(5);
     printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
 
-   	qcom_gpio_direction_output(103,0);
+   	gpio_direction_output(103,0);
    	mdelay(10);
     printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
     
-    qcom_gpio_direction_output(103,1);
+    gpio_direction_output(103,1);
     mdelay(5);    	
     printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
 
-    qcom_gpio_free(103);
+    gpio_free(103);
 
 #if 0
     /* LCD SPI */
@@ -262,15 +262,15 @@ static int panel_poweron(void)
         return -EIO;
     }
 
-    rc = qcom_gpio_request(101, "gpio_spi");
+    rc = gpio_request(101, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
 
-	qcom_gpio_direction_output(101,1);
+	gpio_direction_output(101,1);
     printk(KERN_INFO "%s: (101) gpio_read = %d\n", __func__, gpio_get_value(101));
-   	qcom_gpio_free(101);
+   	gpio_free(101);
 
     /* GPIO 102: n-LCD-SPI-CS */
     rc = gpio_tlmm_config(GPIO_CFG(102, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
@@ -279,15 +279,15 @@ static int panel_poweron(void)
         return -EIO;
     }
 
-    rc = qcom_gpio_request(102, "gpio_spi");
+    rc = gpio_request(102, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
 
-	qcom_gpio_direction_output(102,1);
+	gpio_direction_output(102,1);
     printk(KERN_INFO "%s: (102) gpio_read = %d\n", __func__, gpio_get_value(102));
-   	qcom_gpio_free(102);
+   	gpio_free(102);
 
     /* GPIO 131: LCD-SPI-O */
     rc = gpio_tlmm_config(GPIO_CFG(131, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), GPIO_ENABLE);
@@ -296,14 +296,14 @@ static int panel_poweron(void)
         return -EIO;
     }
 
-    rc = qcom_gpio_request(131, "gpio_spi");
+    rc = gpio_request(131, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
 
-    qcom_gpio_direction_input(131);
-	qcom_gpio_free(131);
+    gpio_direction_input(131);
+	gpio_free(131);
 
     /* GPIO 132: LCD-SPI-I */
     rc = gpio_tlmm_config(GPIO_CFG(132, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
@@ -312,15 +312,15 @@ static int panel_poweron(void)
         return -EIO;
     }
 
-    rc = qcom_gpio_request(132, "gpio_spi");
+    rc = gpio_request(132, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
 
-    qcom_gpio_direction_output(132,1);
+    gpio_direction_output(132,1);
     printk(KERN_INFO "%s: (132)gpio_read = %d\n", __func__, gpio_get_value(132));
-	qcom_gpio_free(132);
+	gpio_free(132);
 
 #endif
 
@@ -1881,7 +1881,7 @@ int mdp_blit(struct fb_info *info, struct mdp_blit_req *req)
 		if (((req->dst_rect.w == 1) && ((req->src_rect.w != 1) ||
 			(req->dst_rect.h != req->src_rect.h))) ||
 			((req->dst_rect.h == 1) && ((req->src_rect.h != 1) ||
-			(req->dst_rect.h != req->src_rect.h)))) {
+			(req->dst_rect.w != req->src_rect.w)))) {
 			printk(KERN_ERR "mpd_ppp: error scaling when size is 1!\n");
 			return -EINVAL;
 		}

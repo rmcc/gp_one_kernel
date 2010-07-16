@@ -95,14 +95,6 @@
 #define PM8058_GPIO_PM_TO_SYS(pm_gpio)     (pm_gpio + NR_GPIO_IRQS)
 #define PM8058_GPIO_SYS_TO_PM(sys_gpio)    (sys_gpio - NR_GPIO_IRQS)
 
-#define PM8058_FIRST_IRQ 	PMIC8058_IRQ_BASE
-#define PM8058_FIRST_GPIO_IRQ	PM8058_FIRST_IRQ
-#define PM8058_FIRST_MPP_IRQ	(PM8058_FIRST_GPIO_IRQ + PM8058_GPIO_IRQS)
-#define PM8058_FIRST_MISC_IRQ	(PM8058_FIRST_MPP_IRQ + PM8058_MPP_IRQS)
-#define PM8058_IRQ_KEYPAD	PM8058_FIRST_MISC_IRQ
-#define PM8058_IRQ_KEYSTUCK	(PM8058_FIRST_MISC_IRQ + 1)
-#define PM8058_IRQ_CHGVAL	(PM8058_FIRST_MISC_IRQ + 2)
-
 int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 {
 	int rc;
@@ -313,13 +305,13 @@ static const unsigned int surf_keymap[] = {
  */
 static struct resource resources_keypad[] = {
 	{
-		.start	= PM8058_IRQ_KEYPAD,
-		.end	= PM8058_IRQ_KEYPAD,
+		.start	= PM8058_KEYPAD_IRQ(PMIC8058_IRQ_BASE),
+		.end	= PM8058_KEYPAD_IRQ(PMIC8058_IRQ_BASE),
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start	= PM8058_IRQ_KEYSTUCK,
-		.end	= PM8058_IRQ_KEYSTUCK,
+		.start	= PM8058_KEYSTUCK_IRQ(PMIC8058_IRQ_BASE),
+		.end	= PM8058_KEYSTUCK_IRQ(PMIC8058_IRQ_BASE),
 		.flags	= IORESOURCE_IRQ,
 	},
 };
@@ -359,21 +351,16 @@ static struct pmic8058_keypad_data fluid_keypad_data = {
 
 static struct pm8058_gpio_platform_data pm8058_gpio_data = {
 	.gpio_base	= PM8058_GPIO_PM_TO_SYS(0),
-	.irq_base	= PM8058_FIRST_IRQ,
+	.irq_base	= PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, 0)
 };
 
 static struct pm8058_gpio_platform_data pm8058_mpp_data = {
 	.gpio_base	= PM8058_GPIO_PM_TO_SYS(PM8058_GPIOS),
-	.irq_base	= PM8058_FIRST_MPP_IRQ,
+	.irq_base	= PM8058_MPP_IRQ(PMIC8058_IRQ_BASE, 0),
 };
 
 static struct pm8058_platform_data pm8058_7x30_data = {
 	.irq_base = PMIC8058_IRQ_BASE,
-	.pm_irqs = {
-		[PM8058_IRQ_KEYPAD - PM8058_FIRST_IRQ] = 74,
-		[PM8058_IRQ_KEYSTUCK - PM8058_FIRST_IRQ] = 75,
-		[PM8058_IRQ_CHGVAL - PM8058_FIRST_IRQ] = 15,
-	},
 	.init = pm8058_gpios_init,
 
 	.num_subdevs = 4,
@@ -3740,7 +3727,7 @@ static void msm_sdc1_lvlshft_enable(void)
 	if (rc)
 		printk(KERN_ERR "%s: Failed to enable GPIO 35\n", __func__);
 
-	rc = qcom_gpio_direction_output(GPIO_PIN(sdc1_lvlshft_cfg_data[0].gpio_cfg),
+	rc = gpio_direction_output(GPIO_PIN(sdc1_lvlshft_cfg_data[0].gpio_cfg),
 				1);
 	if (rc)
 		printk(KERN_ERR "%s: Failed to turn on GPIO 35\n", __func__);
@@ -4070,7 +4057,7 @@ MACHINE_START(MSM7X30_FLUID, "QCT MSM7X30 FLUID")
 	.timer = &msm_timer,
 MACHINE_END
 
-MACHINE_START(QSD8X55_SURF, "QCT QSD8X55 SURF")
+MACHINE_START(MSM8X55_SURF, "QCT MSM8X55 SURF")
 #ifdef CONFIG_MSM_DEBUG_UART
 	.phys_io  = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
@@ -4082,7 +4069,7 @@ MACHINE_START(QSD8X55_SURF, "QCT QSD8X55 SURF")
 	.timer = &msm_timer,
 MACHINE_END
 
-MACHINE_START(QSD8X55_FFA, "QCT QSD8X55 FFA")
+MACHINE_START(MSM8X55_FFA, "QCT MSM8X55 FFA")
 #ifdef CONFIG_MSM_DEBUG_UART
 	.phys_io  = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,

@@ -2532,8 +2532,8 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_MXT_TD60             2550
 #define MACH_TYPE_ESYX                 2551
 #define MACH_TYPE_BULLDOG              2553
-#define MACH_TYPE_QSD8X55_SURF         2768
-#define MACH_TYPE_QSD8X55_FFA          2769
+#define MACH_TYPE_MSM8X55_SURF         2768
+#define MACH_TYPE_MSM8X55_FFA          2769
 #define MACH_TYPE_MSM7201A_SURF        1007000
 #define MACH_TYPE_MSM7201A_FFA         1007001
 #define MACH_TYPE_MSM7X25_SURF         1007002
@@ -32791,28 +32791,28 @@ extern unsigned int __machine_arch_type;
 # define machine_is_bulldog()	(0)
 #endif
 
-#ifdef CONFIG_MACH_QSD8X55_SURF
+#ifdef CONFIG_MACH_MSM8X55_SURF
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
 # else
-#  define machine_arch_type	MACH_TYPE_QSD8X55_SURF
+#  define machine_arch_type	MACH_TYPE_MSM8X55_SURF
 # endif
-# define machine_is_qsd8x55_surf()	(machine_arch_type == MACH_TYPE_QSD8X55_SURF)
+# define machine_is_msm8x55_surf()	(machine_arch_type == MACH_TYPE_MSM8X55_SURF)
 #else
-# define machine_is_qsd8x55_surf()	(0)
+# define machine_is_msm8x55_surf()	(0)
 #endif
 
-#ifdef CONFIG_MACH_QSD8X55_FFA
+#ifdef CONFIG_MACH_MSM8X55_FFA
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
 # else
-#  define machine_arch_type	MACH_TYPE_QSD8X55_FFA
+#  define machine_arch_type	MACH_TYPE_MSM8X55_FFA
 # endif
-# define machine_is_qsd8x55_ffa()	(machine_arch_type == MACH_TYPE_QSD8X55_FFA)
+# define machine_is_msm8x55_ffa()	(machine_arch_type == MACH_TYPE_MSM8X55_FFA)
 #else
-# define machine_is_qsd8x55_ffa()	(0)
+# define machine_is_msm8x55_ffa()	(0)
 #endif
 
 #ifdef CONFIG_MACH_MSM7201A_SURF

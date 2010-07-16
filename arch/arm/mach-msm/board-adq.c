@@ -676,19 +676,19 @@ static void init_Bluetooth_gpio_table(void)
 	}
     }
 
-    rc = qcom_gpio_request(96, "WIFI_PWD");
+    rc = gpio_request(96, "WIFI_PWD");
     if (rc)	printk(KERN_ERR "%s: WIFI_PWD 96 setting failed! rc = %d\n", __func__, rc);
-    rc = qcom_gpio_request(36, "3.3V");
+    rc = gpio_request(36, "3.3V");
     if (rc)	printk(KERN_ERR "%s: 3.3V 36 setting failed! rc = %d\n", __func__, rc);
-    rc = qcom_gpio_request(41, "1.8V");
+    rc = gpio_request(41, "1.8V");
     if (rc)	printk(KERN_ERR "%s: 1.8V 41 setting failed! rc = %d\n", __func__, rc);
-    rc = qcom_gpio_request(34, "1.2V");
+    rc = gpio_request(34, "1.2V");
     if (rc)	printk(KERN_ERR "%s: 1.2V 34 setting failed! rc = %d\n", __func__, rc);
-    rc = qcom_gpio_request(35, "WIFI_RST");
+    rc = gpio_request(35, "WIFI_RST");
     if (rc)	printk(KERN_ERR "%s: WIFI_RST 35 setting failed! rc = %d\n", __func__, rc);
-    rc = qcom_gpio_request(23, "WIFI_WARMRST");
+    rc = gpio_request(23, "WIFI_WARMRST");
     if (rc)	printk(KERN_ERR "%s: WIFI_WARMRST 23 setting failed! rc = %d\n", __func__, rc);
-    rc = qcom_gpio_request(27, "BT_RST");
+    rc = gpio_request(27, "BT_RST");
     if (rc)	printk(KERN_ERR "%s: BT_RST 27 setting failed! rc = %d\n", __func__, rc);
 
 }
@@ -739,14 +739,14 @@ static int bluetooth_power(int on)
     //power control before module on/off
     if(!bConfigWIFI &&  !bt_status) {     //Turn BT off
         printk(KERN_DEBUG "%s : Turn BT off.\n", __func__);
-		qcom_gpio_direction_output(27,0);    
+		gpio_direction_output(27,0);    
     }else if(!bConfigWIFI &&  bt_status){     //Turn BT on        
         printk(KERN_DEBUG "%s : Turn BT on.\n", __func__);
     }else if(bConfigWIFI && wifi_status) {  //Turn WIFI on
         printk(KERN_DEBUG "%s : Turn WIFI on.\n", __func__);
-        //qcom_gpio_direction_output(23,1);
-        qcom_gpio_direction_output(96,0);
-        qcom_gpio_direction_output(35,0);
+        //gpio_direction_output(23,1);
+        gpio_direction_output(96,0);
+        gpio_direction_output(35,0);
     }else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF
         printk(KERN_DEBUG "%s : Turn WIFI off.\n", __func__);
 #ifdef CONFIG_AR6K
@@ -759,39 +759,39 @@ static int bluetooth_power(int on)
         printk(KERN_DEBUG "%s : Driver disabled\n", __func__);
 #endif
 
-        qcom_gpio_direction_output(96,0);
-        qcom_gpio_direction_output(35,0);
+        gpio_direction_output(96,0);
+        gpio_direction_output(35,0);
     }
 
     //Turn module on/off
     if(module_status == MODULE_TURN_ON) {   //turn module on
         printk(KERN_DEBUG "%s : Turn module(A22) on.\n", __func__);
 		//FIH_ADQ.B.1741 turn on BT is too bad
-        qcom_gpio_direction_output(36,1);
+        gpio_direction_output(36,1);
 		//mdelay(10);
-		qcom_gpio_direction_output(41,1);
+		gpio_direction_output(41,1);
 		//mdelay(10);
-		qcom_gpio_direction_output(34,1);
+		gpio_direction_output(34,1);
 		//mdelay(10);
     }else if(module_status == MODULE_TURN_OFF) { //turn module off
         printk(KERN_DEBUG "%s : Turn module(A22) off.\n", __func__);
-        qcom_gpio_direction_output(34,0);
-        qcom_gpio_direction_output(41,0);
-        qcom_gpio_direction_output(36,0);
+        gpio_direction_output(34,0);
+        gpio_direction_output(41,0);
+        gpio_direction_output(36,0);
     }
 
     if(!bConfigWIFI &&  !bt_status) {  //Turn BT off  
     }else if(!bConfigWIFI &&  bt_status){    //Turn BT on
     	//FIH_ADQ.B.1741 turn on BT is too bad
-        //qcom_gpio_direction_output(27,1);
+        //gpio_direction_output(27,1);
         //mdelay(200);
-        qcom_gpio_direction_output(27,0);
+        gpio_direction_output(27,0);
         mdelay(10);
-        qcom_gpio_direction_output(27,1);
+        gpio_direction_output(27,1);
         mdelay(10);
     }else if(bConfigWIFI && wifi_status) { //Turn WIFI on
-        qcom_gpio_direction_output(96,1);
-        qcom_gpio_direction_output(35,1);
+        gpio_direction_output(96,1);
+        gpio_direction_output(35,1);
 #ifdef CONFIG_AR6K
         if(ar6k_wifi_status_cb) {
             wifi_power_on=1;
@@ -1028,74 +1028,74 @@ static int __init spi_gpio_init(void)
                                return -EIO;
                }
         
-	 rc = qcom_gpio_request(85, "cam_pwr");
+	 rc = gpio_request(85, "cam_pwr");
         if (rc){
                 printk(KERN_ERR "%s: cam_pwr setting failed! rc = %d\n", __func__, rc);
                 return -EIO;
         }
 
-        qcom_gpio_direction_output(85,1);
+        gpio_direction_output(85,1);
         printk(KERN_INFO "%s: (85) gpio_read = %d\n", __func__, gpio_get_value(85));
-        qcom_gpio_free(85);
+        gpio_free(85);
 
 /* FIH_ADQ, Ming { */
 /* Do not reset lcd for keeping bootloader image displaying */
 /*
-        rc = qcom_gpio_request(103, "lcd_reset");
+        rc = gpio_request(103, "lcd_reset");
         if (rc){
                 printk(KERN_ERR "%s: lcd_reset setting failed! rc = %d\n", __func__, rc);
                 return -EIO;
         }
 
-        qcom_gpio_direction_output(103,1);
+        gpio_direction_output(103,1);
     	mdelay(500);
     	printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
 
-    	qcom_gpio_direction_output(103,0);
+    	gpio_direction_output(103,0);
     	mdelay(500);
     	printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
     
-    	qcom_gpio_direction_output(103,1);
+    	gpio_direction_output(103,1);
     	mdelay(50);    	
     	printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
 
-        qcom_gpio_free(103);
+        gpio_free(103);
 */
 /* } FIH_ADQ, Ming */
 
-	rc = qcom_gpio_request(101, "gpio_spi");
+	rc = gpio_request(101, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
-        rc = qcom_gpio_request(102, "gpio_spi");
+        rc = gpio_request(102, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
-        rc = qcom_gpio_request(131, "gpio_spi");
+        rc = gpio_request(131, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
-        rc = qcom_gpio_request(132, "gpio_spi");
+        rc = gpio_request(132, "gpio_spi");
 	if (rc){
                 printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
 	
-	qcom_gpio_direction_output(101,1);
+	gpio_direction_output(101,1);
         printk(KERN_INFO "%s: (101) gpio_read = %d\n", __func__, gpio_get_value(101));
-	qcom_gpio_direction_output(102,1);
+	gpio_direction_output(102,1);
         printk(KERN_INFO "%s: (102) gpio_read = %d\n", __func__, gpio_get_value(102));
-	qcom_gpio_direction_input(131);
-	qcom_gpio_direction_output(132,1);
+	gpio_direction_input(131);
+	gpio_direction_output(132,1);
         printk(KERN_INFO "%s: (132)gpio_read = %d\n", __func__, gpio_get_value(132));
 	
-	qcom_gpio_free(101);
-        qcom_gpio_free(102);
-        qcom_gpio_free(131);
-        qcom_gpio_free(132);               
+	gpio_free(101);
+        gpio_free(102);
+        gpio_free(131);
+        gpio_free(132);               
 	
 	return rc;
 }
@@ -1226,49 +1226,49 @@ static void sdcc_gpio_init(void)
 {
 	/* SDC1 GPIOs */
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
-	if (qcom_gpio_request(51, "sdc1_data_3"))
+	if (gpio_request(51, "sdc1_data_3"))
 		pr_err("failed to request gpio sdc1_data_3\n");
-	if (qcom_gpio_request(52, "sdc1_data_2"))
+	if (gpio_request(52, "sdc1_data_2"))
 		pr_err("failed to request gpio sdc1_data_2\n");
-	if (qcom_gpio_request(53, "sdc1_data_1"))
+	if (gpio_request(53, "sdc1_data_1"))
 		pr_err("failed to request gpio sdc1_data_1\n");
-	if (qcom_gpio_request(54, "sdc1_data_0"))
+	if (gpio_request(54, "sdc1_data_0"))
 		pr_err("failed to request gpio sdc1_data_0\n");
-	if (qcom_gpio_request(55, "sdc1_cmd"))
+	if (gpio_request(55, "sdc1_cmd"))
 		pr_err("failed to request gpio sdc1_cmd\n");
-	if (qcom_gpio_request(56, "sdc1_clk"))
+	if (gpio_request(56, "sdc1_clk"))
 		pr_err("failed to request gpio sdc1_clk\n");
 #endif
 
 	/* SDC2 GPIOs */
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
-	if (qcom_gpio_request(62, "sdc2_clk"))
+	if (gpio_request(62, "sdc2_clk"))
 		pr_err("failed to request gpio sdc2_clk\n");
-	if (qcom_gpio_request(63, "sdc2_cmd"))
+	if (gpio_request(63, "sdc2_cmd"))
 		pr_err("failed to request gpio sdc2_cmd\n");
-	if (qcom_gpio_request(64, "sdc2_data_3"))
+	if (gpio_request(64, "sdc2_data_3"))
 		pr_err("failed to request gpio sdc2_data_3\n");
-	if (qcom_gpio_request(65, "sdc2_data_2"))
+	if (gpio_request(65, "sdc2_data_2"))
 		pr_err("failed to request gpio sdc2_data_2\n");
-	if (qcom_gpio_request(66, "sdc2_data_1"))
+	if (gpio_request(66, "sdc2_data_1"))
 		pr_err("failed to request gpio sdc2_data_1\n");
-	if (qcom_gpio_request(67, "sdc2_data_0"))
+	if (gpio_request(67, "sdc2_data_0"))
 		pr_err("failed to request gpio sdc2_data_0\n");
 #endif
 
 	/* SDC3 GPIOs */
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
-	if (qcom_gpio_request(88, "sdc3_clk"))
+	if (gpio_request(88, "sdc3_clk"))
 		pr_err("failed to request gpio sdc3_clk\n");
-	if (qcom_gpio_request(89, "sdc3_cmd"))
+	if (gpio_request(89, "sdc3_cmd"))
 		pr_err("failed to request gpio sdc3_cmd\n");
-	if (qcom_gpio_request(90, "sdc3_data_3"))
+	if (gpio_request(90, "sdc3_data_3"))
 		pr_err("failed to request gpio sdc3_data_3\n");
-	if (qcom_gpio_request(91, "sdc3_data_2"))
+	if (gpio_request(91, "sdc3_data_2"))
 		pr_err("failed to request gpio sdc3_data_2\n");
-	if (qcom_gpio_request(92, "sdc3_data_1"))
+	if (gpio_request(92, "sdc3_data_1"))
 		pr_err("failed to request gpio sdc3_data_1\n");
-	if (qcom_gpio_request(93, "sdc3_data_0"))
+	if (gpio_request(93, "sdc3_data_0"))
 		pr_err("failed to request gpio sdc3_data_0\n");
 #endif
 
@@ -1276,17 +1276,17 @@ static void sdcc_gpio_init(void)
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 /* ZEUS_ANDROID_CR, GPIO 19 and 20 are used for VOLUME Key and ringer switch now. Disable SDC4*/
 #ifndef CONFIG_KEYBOARD_STMPE1601
-	if (qcom_gpio_request(19, "sdc4_data_3"))
+	if (gpio_request(19, "sdc4_data_3"))
 		pr_err("failed to request gpio sdc4_data_3\n");
-	if (qcom_gpio_request(20, "sdc4_data_2"))
+	if (gpio_request(20, "sdc4_data_2"))
 		pr_err("failed to request gpio sdc4_data_2\n");
-	if (qcom_gpio_request(21, "sdc4_data_1"))
+	if (gpio_request(21, "sdc4_data_1"))
 		pr_err("failed to request gpio sdc4_data_1\n");
-	if (qcom_gpio_request(107, "sdc4_cmd"))
+	if (gpio_request(107, "sdc4_cmd"))
 		pr_err("failed to request gpio sdc4_cmd\n");
-	if (qcom_gpio_request(108, "sdc4_data_0"))
+	if (gpio_request(108, "sdc4_data_0"))
 		pr_err("failed to request gpio sdc4_data_0\n");
-	if (qcom_gpio_request(109, "sdc4_clk"))
+	if (gpio_request(109, "sdc4_clk"))
 		pr_err("failed to request gpio sdc4_clk\n");
 #endif
 #endif
@@ -1418,9 +1418,9 @@ static int msm_sdcc_setup_power(int dev_id, int on)
 static int msm_sdcc_card_detect(struct device * dev_sdcc1)
 {
 	int rc= 0;
-	qcom_gpio_request(18,0);
+	gpio_request(18,0);
 	rc = gpio_get_value(18);
-	qcom_gpio_free(18);	
+	gpio_free(18);	
 	printk(KERN_INFO"%s: SD card detect (%d)\n",__func__, rc);	
 	return rc;
 }
@@ -1429,7 +1429,7 @@ static struct mmc_platform_data msm7x25_sdcc_data = {
 	.ocr_mask	= MMC_VDD_28_29,
 	.translate_vdd	= msm_sdcc_setup_power,
 	.status		= msm_sdcc_card_detect,	// FIH_ADQ, BillHJChang
-	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	//.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 };
 
 static void __init msm7x25_init_mmc(void)
@@ -1489,9 +1489,9 @@ static struct msm_i2c_platform_data msm_i2c_pdata = {
 
 static void __init msm_device_i2c_init(void)
 {
-        if (qcom_gpio_request(60, "i2c_pri_clk"))
+        if (gpio_request(60, "i2c_pri_clk"))
                 pr_err("failed to request gpio i2c_pri_clk\n");
-        if (qcom_gpio_request(61, "i2c_pri_dat"))
+        if (gpio_request(61, "i2c_pri_dat"))
                 pr_err("failed to request gpio i2c_pri_dat\n");
 
         msm_i2c_pdata.pm_lat =
@@ -1507,7 +1507,7 @@ static void __init msm_device_i2c_init(void)
 
 static void __init init_headset_sensor(void)
 {
-	qcom_gpio_direction_input(40);
+	gpio_direction_input(40);
 }
 // --- FIH_ADQ ---
 

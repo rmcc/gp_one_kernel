@@ -268,13 +268,13 @@ static int qi2ckybd_release_gpio(struct i2ckybd_record *kbrec)
 		 "releasing keyboard gpio pins %d,%d,%d,%d,%d,%d, %d\n",
 		 kbd_irqpin, kbd_mclrpin, kbd_volup_pin, kbd_voldn_pin, hall_sensor_pin, ring_switch_pin, hook_switch_pin);
 
-	qcom_gpio_free(kbd_irqpin);
-	qcom_gpio_free(kbd_mclrpin);
-	qcom_gpio_free(kbd_volup_pin);
-	qcom_gpio_free(kbd_voldn_pin);
-	qcom_gpio_free(hall_sensor_pin);
-	qcom_gpio_free(ring_switch_pin);
-	qcom_gpio_free(hook_switch_pin);
+	gpio_free(kbd_irqpin);
+	gpio_free(kbd_mclrpin);
+	gpio_free(kbd_volup_pin);
+	gpio_free(kbd_voldn_pin);
+	gpio_free(hall_sensor_pin);
+	gpio_free(ring_switch_pin);
+	gpio_free(hook_switch_pin);
 
 	return 0;
 }
@@ -297,87 +297,87 @@ static int qi2ckybd_config_gpio(struct i2ckybd_record *kbrec)
 	
 	gpio_tlmm_config(GPIO_CFG(hook_switch_pin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
 
-	rc = qcom_gpio_request(kbd_irqpin, "gpio_keybd_irq");
+	rc = gpio_request(kbd_irqpin, "gpio_keybd_irq");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			kbd_irqpin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_request(kbd_mclrpin, "gpio_keybd_reset");
+	rc = gpio_request(kbd_mclrpin, "gpio_keybd_reset");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			kbd_mclrpin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_request(kbd_volup_pin, "gpio_keybd_volup");
+	rc = gpio_request(kbd_volup_pin, "gpio_keybd_volup");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			kbd_volup_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_request(kbd_voldn_pin, "gpio_keybd_voldn");
+	rc = gpio_request(kbd_voldn_pin, "gpio_keybd_voldn");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			kbd_voldn_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_request(hall_sensor_pin, "gpio_hall_sensor");
+	rc = gpio_request(hall_sensor_pin, "gpio_hall_sensor");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			hall_sensor_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_request(ring_switch_pin, "gpio_ring_switch");
+	rc = gpio_request(ring_switch_pin, "gpio_ring_switch");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			ring_switch_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_request(hook_switch_pin, "gpio_hook_switch");
+	rc = gpio_request(hook_switch_pin, "gpio_hook_switch");
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(kbdev, "gpio_request failed on pin %d (rc=%d)\n",
 			hook_switch_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_input(kbd_irqpin);
+	rc = gpio_direction_input(kbd_irqpin);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_input failed on "
+		dev_err(kbdev, "gpio_direction_input failed on "
 		       "pin %d (rc=%d)\n", kbd_irqpin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_output(kbd_mclrpin, 1);
+	rc = gpio_direction_output(kbd_mclrpin, 1);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_output failed on "
+		dev_err(kbdev, "gpio_direction_output failed on "
 		       "pin %d (rc=%d)\n", kbd_mclrpin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_input(kbd_volup_pin);
+	rc = gpio_direction_input(kbd_volup_pin);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_input failed on "
+		dev_err(kbdev, "gpio_direction_input failed on "
 		       "pin %d (rc=%d)\n", kbd_volup_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_input(kbd_voldn_pin);
+	rc = gpio_direction_input(kbd_voldn_pin);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_input failed on "
+		dev_err(kbdev, "gpio_direction_input failed on "
 		       "pin %d (rc=%d)\n", kbd_voldn_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_input(hall_sensor_pin);
+	rc = gpio_direction_input(hall_sensor_pin);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_input failed on "
+		dev_err(kbdev, "gpio_direction_input failed on "
 		       "pin %d (rc=%d)\n", hall_sensor_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_input(ring_switch_pin);
+	rc = gpio_direction_input(ring_switch_pin);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_input failed on "
+		dev_err(kbdev, "gpio_direction_input failed on "
 		       "pin %d (rc=%d)\n", ring_switch_pin, rc);
 		goto err_gpioconfig;
 	}
-	rc = qcom_gpio_direction_input(hook_switch_pin);
+	rc = gpio_direction_input(hook_switch_pin);
 	if (rc) {
-		dev_err(kbdev, "qcom_gpio_direction_input failed on "
+		dev_err(kbdev, "gpio_direction_input failed on "
 		       "pin %d (rc=%d)\n", hook_switch_pin, rc);
 		goto err_gpioconfig;
 	}
@@ -563,9 +563,9 @@ static void qi2ckybd_recoverkbd(struct work_struct *work)
 /* use gpio output pin to toggle keyboard external reset pin */
 static void qi2ckybd_hwreset(int kbd_mclrpin)
 {
-	qcom_gpio_direction_output(kbd_mclrpin, 0);
+	gpio_direction_output(kbd_mclrpin, 0);
 	udelay(100);
-	qcom_gpio_direction_output(kbd_mclrpin, 1);
+	gpio_direction_output(kbd_mclrpin, 1);
 }
 
 static u32 scancode_to_keycode(struct i2ckybd_record *kbdrec, s32 scancode, s32 *kevent)

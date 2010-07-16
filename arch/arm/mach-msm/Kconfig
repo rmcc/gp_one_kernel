@@ -46,6 +46,7 @@ config ARCH_MSM8X60
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_LDREX
 	select ARCH_REQUIRE_GPIOLIB
+	select MSM_ADM3
 
 endchoice
 
@@ -66,6 +67,8 @@ config  ARCH_MSM_ARM11
 	bool
 config  ARCH_MSM_SCORPION
 	bool
+config  ARCH_MSM_SCORPIONMP
+	bool
 
 config  MSM_VIC
 	bool
@@ -75,6 +78,8 @@ config MSM_REMOTE_SPINLOCK_DEKKERS
 config MSM_REMOTE_SPINLOCK_SWP
 	bool
 config MSM_REMOTE_SPINLOCK_LDREX
+	bool
+config MSM_ADM3
 	bool
 
 menu "MSM Board Selection"
@@ -215,21 +220,21 @@ config MACH_MSM7X25_FFA
 	help
 	  Support for the Qualcomm MSM7x25 FFA eval board.
 
-config MACH_QSD8X55_SURF
+config MACH_MSM8X55_SURF
        depends on ARCH_MSM7X30
        depends on !MSM_STACKED_MEMORY
        default y
-       bool "QSD8X55 SURF"
+       bool "MSM8X55 SURF"
        help
-         Support for the Qualcomm QSD8x55 SURF eval board.
+         Support for the Qualcomm MSM8x55 SURF eval board.
 
-config MACH_QSD8X55_FFA
+config MACH_MSM8X55_FFA
        depends on ARCH_MSM7X30
        depends on !MSM_STACKED_MEMORY
        default y
-       bool "QSD8X55 FFA"
+       bool "MSM8X55 FFA"
        help
-         Support for the Qualcomm QSD8x55 FFA eval board.
+         Support for the Qualcomm MSM8x55 FFA eval board.
 
 config MACH_MSM8X60_RUMI3
 	depends on ARCH_MSM8X60
@@ -547,6 +552,20 @@ choice
 	    prompt "Package 4"
 endchoice
 
+config MSM_RPC_SDIO_XPRT
+	depends on MSM_SDIO_AL
+	default y
+	bool "MSM SDIO XPRT Layer"
+	help
+	  SDIO Transport Layer for RPC Rouer
+
+config MSM_RPC_SDIO_DEBUG
+	depends on MSM_RPC_SDIO_XPRT
+	default y
+	bool "MSM SDIO XPRT debug support"
+	help
+	  Support for debugging SDIO XPRT
+
 config MSM_SMD_DEBUG
 	depends on MSM_SMD
 	default y
@@ -554,6 +573,14 @@ config MSM_SMD_DEBUG
 	help
 	  Support for debugging the SMD for communication
 	  between the ARM9 and ARM11
+
+config MSM_SDIO_AL
+	depends on ARCH_MSM7X30
+	default y
+	tristate "SDIO-Abstraction-Layer"
+	help
+	  Support MSM<->MDM Communication over SDIO bus.
+	  MDM SDIO-Client should have pipes support.
 
 config MSM_N_WAY_SMD
 	depends on (MSM_SMD && (ARCH_MSM_SCORPION || ARCH_MSM7X27))
@@ -944,6 +971,14 @@ config MSM_NPA_REMOTE_ONCRPC
 	help
 	  Enables Linux NPA clients to talk to NPA nodes in the modem
 	  using ONCRPC communication protocol.
+
+config MSM_NPA_PROC_COMM
+	bool "Enables NPA remoting through PROC-COMM to issue requests"
+	depends on MSM_NPA_REMOTE_ONCRPC && MSM_PROC_COMM
+	default n
+	help
+	  Enables the use of PROC-COMM to make requests instead of ONCRPC.
+	  ONCRPC is however still required for NPA setup.
 
 config MSM_NPA_SYSTEM_BUS
 	bool "NPA-managed System Bus (AXI) rates through PM_QOS."

@@ -103,15 +103,15 @@ static int gpio_init_setting(int value)
 	gpio_tlmm_config(GPIO_CFG(tca6507_drvdata.reset_pin, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
 	
 	//request gpio
-	ret = qcom_gpio_request(tca6507_drvdata.reset_pin, "tca6507_reset_pin");
+	ret = gpio_request(tca6507_drvdata.reset_pin, "tca6507_reset_pin");
 	if(ret) {
 	  	dev_err(tca6507_dev ,"%s: GPIO-%d request failed\n", __func__, tca6507_drvdata.reset_pin);
 		return ret;
 	}
 	
-	ret = qcom_gpio_direction_output(tca6507_drvdata.reset_pin, value);
+	ret = gpio_direction_output(tca6507_drvdata.reset_pin, value);
 	if(ret) {
-	  	dev_err(tca6507_dev, "%s: GPIO-%d qcom_gpio_direction_output failed\n", __func__, tca6507_drvdata.reset_pin);
+	  	dev_err(tca6507_dev, "%s: GPIO-%d gpio_direction_output failed\n", __func__, tca6507_drvdata.reset_pin);
 		return ret;
 	}
 
@@ -120,7 +120,7 @@ static int gpio_init_setting(int value)
 
 static void gpio_release(void)
 {
-	qcom_gpio_free( tca6507_drvdata.reset_pin );
+	gpio_free( tca6507_drvdata.reset_pin );
 }
 
 void tca6507_led_turn_on(int led_selection, uint8_t *cmd)

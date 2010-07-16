@@ -194,17 +194,17 @@ static int spi_gpio_setup(struct spi_device *spi)
 
 	if (!spi->controller_state) {
 		if (cs != SPI_GPIO_NO_CHIPSELECT) {
-			status = qcom_gpio_request(cs, dev_name(&spi->dev));
+			status = gpio_request(cs, dev_name(&spi->dev));
 			if (status)
 				return status;
-			status = qcom_gpio_direction_output(cs, spi->mode & SPI_CS_HIGH);
+			status = gpio_direction_output(cs, spi->mode & SPI_CS_HIGH);
 		}
 	}
 	if (!status)
 		status = spi_bitbang_setup(spi);
 	if (status) {
 		if (!spi->controller_state && cs != SPI_GPIO_NO_CHIPSELECT)
-			qcom_gpio_free(cs);
+			gpio_free(cs);
 	}
 	return status;
 }
@@ -214,7 +214,7 @@ static void spi_gpio_cleanup(struct spi_device *spi)
 	unsigned long	cs = (unsigned long) spi->controller_data;
 
 	if (cs != SPI_GPIO_NO_CHIPSELECT)
-		qcom_gpio_free(cs);
+		gpio_free(cs);
 	spi_bitbang_cleanup(spi);
 }
 
@@ -222,12 +222,12 @@ static int __init spi_gpio_alloc(unsigned pin, const char *label, bool is_in)
 {
 	int value;
 
-	value = qcom_gpio_request(pin, label);
+	value = gpio_request(pin, label);
 	if (value == 0) {
 		if (is_in)
-			value = qcom_gpio_direction_input(pin);
+			value = gpio_direction_input(pin);
 		else
-			value = qcom_gpio_direction_output(pin, 0);
+			value = gpio_direction_output(pin, 0);
 	}
 	return value;
 }
@@ -254,9 +254,9 @@ spi_gpio_request(struct spi_gpio_platform_data *pdata, const char *label)
 	goto done;
 
 free_miso:
-	qcom_gpio_free(SPI_MISO_GPIO);
+	gpio_free(SPI_MISO_GPIO);
 free_mosi:
-	qcom_gpio_free(SPI_MOSI_GPIO);
+	gpio_free(SPI_MOSI_GPIO);
 done:
 	return value;
 }
@@ -308,9 +308,9 @@ static int __init spi_gpio_probe(struct platform_device *pdev)
 	if (status < 0) {
 		spi_master_put(spi_gpio->bitbang.master);
 gpio_free:
-		qcom_gpio_free(SPI_MISO_GPIO);
-		qcom_gpio_free(SPI_MOSI_GPIO);
-		qcom_gpio_free(SPI_SCK_GPIO);
+		gpio_free(SPI_MISO_GPIO);
+		gpio_free(SPI_MOSI_GPIO);
+		gpio_free(SPI_SCK_GPIO);
 		spi_master_put(master);
 	}
 
@@ -332,9 +332,9 @@ static int __exit spi_gpio_remove(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, NULL);
 
-	qcom_gpio_free(SPI_MISO_GPIO);
-	qcom_gpio_free(SPI_MOSI_GPIO);
-	qcom_gpio_free(SPI_SCK_GPIO);
+	gpio_free(SPI_MISO_GPIO);
+	gpio_free(SPI_MOSI_GPIO);
+	gpio_free(SPI_SCK_GPIO);
 
 	return status;
 }

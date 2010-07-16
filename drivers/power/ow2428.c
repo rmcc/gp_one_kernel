@@ -58,7 +58,7 @@ static void ZeusDS2482_init(struct i2c_client * client)
 	g_i2c_client = client;
 
 	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
-	qcom_gpio_direction_output(23, 0);
+	gpio_direction_output(23, 0);
 	//printk(KERN_INFO "<ubh> ZeusDS2482_init 00. : %d\n", gpio_get_value(23));
 }
 

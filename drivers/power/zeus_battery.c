@@ -301,14 +301,14 @@ static void gasgauge_param_reset(){
 	}
 
 	if((batt_vol >= 4100) /*&& check_USB_type == 2*/){
-		rc = qcom_gpio_request(57, "CHR_1A");
+		rc = gpio_request(57, "CHR_1A");
 		if (rc)	printk(KERN_ERR "CHR_1A setting failed!\n");
 		rc = gpio_get_value(57);
 		if(rc == 1){
 			gpio_set_value(57,0);
 			printk(KERN_INFO "batt: voltage > 4.1V and AC charging, set the charging current to 500mA!!\n");
 		}
-		qcom_gpio_free(57);
+		gpio_free(57);
 	} else if (batt_vol >= 4100) {
 		g_health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	} 
@@ -339,7 +339,7 @@ void temperature_detect()
 	ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
 
 	if( buf > 450 || buf < 0 ){
-		rc = qcom_gpio_request(CHR_EN, "CHG_EN");
+		rc = gpio_request(CHR_EN, "CHG_EN");
 		if(rc){
 			printk(KERN_INFO "CHG_EN_REQUEST_FAIL\r\n");	
 		}
@@ -355,9 +355,9 @@ void temperature_detect()
 				g_health = POWER_SUPPLY_HEALTH_OVERHEAT;
 			printk(KERN_INFO "Temperature is too high!\r\n");	
 		}
-		qcom_gpio_free(CHR_EN);
+		gpio_free(CHR_EN);
 	}else{
-		rc = qcom_gpio_request(CHR_EN, "CHG_EN");
+		rc = gpio_request(CHR_EN, "CHG_EN");
 		if(rc){
 			printk(KERN_INFO "CHG_EN_REQUEST_FAIL\r\n");	
 		}
@@ -365,7 +365,7 @@ void temperature_detect()
 		if(rc == 1){
 			gpio_set_value(CHR_EN,0);
 		}
-		qcom_gpio_free(CHR_EN);
+		gpio_free(CHR_EN);
 		if (g_health == POWER_SUPPLY_HEALTH_OVERHEAT)
 			g_health = POWER_SUPPLY_HEALTH_GOOD;
 	}
@@ -377,23 +377,23 @@ static void polling_reset_func()
 	if(g_charging_state == CHARGER_STATE_CHARGING || g_charging_state == CHARGER_STATE_FULL)
 	{
 		disable_irq(MSM_GPIO_TO_INT(39));
-		rc = qcom_gpio_request(CHR_EN,"CHG_EN");
+		rc = gpio_request(CHR_EN,"CHG_EN");
 		if(rc){
 			printk(KERN_INFO "CHG_EN_REQUEST_FAIL\r\n");	
 		}
 		gpio_set_value(CHR_EN, 1);
 		mdelay(100);
 		gpio_set_value(CHR_EN, 0);
-		qcom_gpio_free(CHR_EN);
+		gpio_free(CHR_EN);
 		printk(KERN_INFO "Charging ic reset\r\n");
 		enable_irq(MSM_GPIO_TO_INT(39));
 
-		rc = qcom_gpio_request(CHR_EN,"CHG_FLT");
+		rc = gpio_request(CHR_EN,"CHG_FLT");
 		rc = gpio_get_value(CHR_EN);
 		printk(KERN_INFO "FLT pin = %d\r\n",rc);
 		rc = gpio_get_value(39);	
 		printk(KERN_INFO "CHR pin = %d\r\n",rc);
-		qcom_gpio_free(CHR_EN);
+		gpio_free(CHR_EN);
 
 	}
 }
@@ -447,12 +447,12 @@ static int goldfish_battery_probe(struct platform_device *pdev)
 
 #ifdef FLAG_CHARGER_DETECT
 	gpio_tlmm_config( GPIO_CFG(GPIO_CHR_DET, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
-	ret = qcom_gpio_request(GPIO_CHR_DET, "gpio_keybd_irq");
+	ret = gpio_request(GPIO_CHR_DET, "gpio_keybd_irq");
 	if (ret)
 		printk(KERN_INFO "<ubh> goldfish_battery_probe 04. : IRQ init fails!!!\r\n");
-	ret = qcom_gpio_direction_input(GPIO_CHR_DET);
+	ret = gpio_direction_input(GPIO_CHR_DET);
 	if (ret)
-		printk(KERN_INFO "<ubh> goldfish_battery_probe 05. : qcom_gpio_direction_input fails!!!\r\n");
+		printk(KERN_INFO "<ubh> goldfish_battery_probe 05. : gpio_direction_input fails!!!\r\n");
 	ret = request_irq(MSM_GPIO_TO_INT(GPIO_CHR_DET), &chgdet_irqhandler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, pdev->name, NULL);
 	if (ret)
 		printk(KERN_INFO "<ubh> goldfish_battery_probe 06. : request_irq fails!!!\r\n");
@@ -474,7 +474,7 @@ static int goldfish_battery_remove(struct platform_device *pdev)
 #ifdef T_FIH	///+T_FIH
 #ifdef FLAG_CHARGER_DETECT
 	free_irq(MSM_GPIO_TO_INT(GPIO_CHR_DET), NULL);
-	qcom_gpio_free(GPIO_CHR_DET);
+	gpio_free(GPIO_CHR_DET);
 #endif	// FLAG_CHARGER_DETECT
 
 #ifdef FLAG_BATTERY_POLLING

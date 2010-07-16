@@ -274,9 +274,9 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 
 	gpio_tlmm_config( GPIO_CFG( bma_irqpin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
 
-	rc = qcom_gpio_request(bma_irqpin, "gpio_bma_irqpin");
+	rc = gpio_request(bma_irqpin, "gpio_bma_irqpin");
 	if (rc) {
-		printk(KERN_INFO "qcom_gpio_request failed on pin %d (rc=%d)\n",
+		printk(KERN_INFO "gpio_request failed on pin %d (rc=%d)\n",
 			bma_irqpin, rc);
 	}
 
