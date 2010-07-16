@@ -601,10 +601,8 @@ static struct mmc_platform_data ar6k_wifi_data = {
     .register_status_notify	= ar6k_wifi_status_register,
     .mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
-    .dummy52_required = 1,
+    //.dummy52_required = 1,
 #endif
-    .sdio_suspend = ar6k_wifi_suspend,
-    .sdio_resume = ar6k_wifi_resume,
 };
 #endif
 
@@ -1292,7 +1290,6 @@ static void sdcc_gpio_init(void)
 #endif
 }
 
-static unsigned int vreg_enabled;
 static unsigned sdcc_cfg_data[][6] = {
 	/* SDC1 configs */
 	{
@@ -1343,17 +1340,29 @@ static unsigned sdcc_cfg_data[][6] = {
 /* } FIH_ADQ, AudiPCHuang, 2009/03/27 */
 };
 
-static int msm_sdcc_setup_gpio(int dev_id, unsigned enable)
+static unsigned long vreg_sts, gpio_sts;
+static unsigned mpp_mmc = 2;
+static struct vreg *vreg_mmc;
+
+static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
 {
-	int i, rc;
-	for (i = 0; i < ARRAY_SIZE(sdcc_cfg_data[dev_id - 1]); i++) {
-		rc = gpio_tlmm_config(sdcc_cfg_data[dev_id - 1][i],
-			enable ? GPIO_ENABLE : GPIO_DISABLE);
-		if (rc)
-			printk(KERN_ERR "%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, sdcc_cfg_data[dev_id - 1][i], rc);
-	}
-	return rc;
+        int i, rc;
+
+        if (!(test_bit(dev_id, &gpio_sts)^enable))
+                return;
+
+        if (enable)
+                set_bit(dev_id, &gpio_sts);
+        else
+                clear_bit(dev_id, &gpio_sts);
+
+        for (i = 0; i < ARRAY_SIZE(sdcc_cfg_data[dev_id - 1]); i++) {
+                rc = gpio_tlmm_config(sdcc_cfg_data[dev_id - 1][i],
+                        enable ? GPIO_ENABLE : GPIO_DISABLE);
+                if (rc)
+                        printk(KERN_ERR "%s: gpio_tlmm_config(%#x)=%d\n",
+                                __func__, sdcc_cfg_data[dev_id - 1][i], rc);
+        }
 }
 
 
@@ -1377,24 +1386,20 @@ static int msm_ar6k_sdcc_setup_power(int dev_id, int on)
 
 #endif
 
-static int msm_sdcc_setup_power(int dev_id, int on)
+static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 {
 	int rc = 0;
-	struct vreg *vreg_mmc;
+        struct platform_device *pdev;
+	int on = !!vdd;
 
-	rc = msm_sdcc_setup_gpio(dev_id, on);
-	if (rc)
-		return -EIO;
+        pdev = container_of(dv, struct platform_device, dev);
+        msm_sdcc_setup_gpio(pdev->id, !!vdd);
 
-	if (on == vreg_enabled)
-		return 0;
+        if (vdd == 0) {
+                if (!vreg_sts)
+                        return 0;
 
-	vreg_mmc = vreg_get(NULL, "mmc");
-	if (IS_ERR(vreg_mmc)) {
-		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
-				__func__, PTR_ERR(vreg_mmc));
-		return PTR_ERR(vreg_mmc);
-	}
+                clear_bit(pdev->id, &vreg_sts);
 
 	rc = on ? vreg_enable(vreg_mmc) : vreg_disable(vreg_mmc);
 
@@ -1405,13 +1410,26 @@ static int msm_sdcc_setup_power(int dev_id, int on)
 		printk(KERN_INFO "%s: (vreg_disable: vreg_mmc)\n",__func__);		
 	//---[FIH_ADQ][IssueKeys:ADQ.B-4027  ]	
 
-	if (rc) {
-		printk(KERN_ERR "%s: Failed to configure vreg (%d)\n",
-				__func__, rc);
-		return rc;
-	}
-	vreg_enabled = on;
-	return 0;
+                if (!vreg_sts) {
+                        rc = vreg_disable(vreg_mmc);
+                        if (rc)
+                                printk(KERN_ERR "%s: return val: %d \n",
+                                        __func__, rc);
+                }
+                return 0;
+        }
+
+        if (!vreg_sts) {
+                rc = vreg_set_level(vreg_mmc, 2850);
+                if (!rc)
+                        rc = vreg_enable(vreg_mmc);
+                if (rc)
+                        printk(KERN_ERR "%s: return val: %d \n",
+                                        __func__, rc);
+        }
+        set_bit(pdev->id, &vreg_sts);
+        return 0;
+
 }
 
 // FIH_ADQ, BillHJChang {
@@ -1434,6 +1452,12 @@ static struct mmc_platform_data msm7x25_sdcc_data = {
 
 static void __init msm7x25_init_mmc(void)
 {
+    vreg_mmc = vreg_get(NULL, "mmc");
+    if (IS_ERR(vreg_mmc)) {
+            printk(KERN_ERR "%s: vreg get failed (%ld)\n",
+                   __func__, PTR_ERR(vreg_mmc));
+            return;
+    }
     sdcc_gpio_init();
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
     msm_add_sdcc(1, &msm7x25_sdcc_data);
@@ -1624,15 +1648,6 @@ static void __init msm7x25_map_io(void)
 		msm_clock_init(msm_clocks_7x25, msm_num_clocks_7x25);
 	msm_msm7x25_allocate_memory_regions();
 
-#ifdef CONFIG_CACHE_L2X0
-	if (machine_is_msm7x27_surf() || machine_is_msm7x27_ffa()) {
-		/* 7x27 has 256KB L2 cache:
-			64Kb/Way and 4-Way Associativity;
-			R/W latency: 3 cycles;
-			evmon/parity/share disabled. */
-		l2x0_init(MSM_L2CC_BASE, 0x00068012, 0xfe000000);
-	}
-#endif
 }
 
 MACHINE_START(MSM7X25_SURF, "QCT MSM7x25 SURF")
