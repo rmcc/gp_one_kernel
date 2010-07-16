@@ -203,8 +203,10 @@ static int  android_bind_config(struct usb_configuration *c)
 	struct android_dev *dev = _android_dev;
 	int ret = -EINVAL;
 	unsigned long n;
-	pr_debug("android_bind_config c = 0x%x dev->cdev=0x%x\n",
-		(unsigned int) c, (unsigned int) dev->cdev);
+	acm_func_cnt = 0;
+	gser_func_cnt = 0;
+	printk(KERN_DEBUG "android_bind_config c = 0x%x dev->cdev=0x%x\n",
+	       (unsigned int) c, (unsigned int) dev->cdev);
 	n = dev->functions;
 	while (n) {
 		switch (n & 0x0F) {
