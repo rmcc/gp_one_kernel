@@ -86,8 +86,6 @@ struct audpp_state {
 
 	/* flags, 48 bits sample/bytes counter per channel */
 	uint16_t avsync[CH_COUNT * AUDPP_CLNT_MAX_COUNT + 1];
-
-	wait_queue_head_t event_wait;
 };
 
 struct audpp_state the_audpp_state = {
@@ -200,7 +198,6 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 		} else if (msg[0] == AUDPP_MSG_ENA_DIS) {
 			MM_INFO("DISABLE\n");
 			audpp->enabled = 0;
-			wake_up(&audpp->event_wait);
 			audpp_broadcast(audpp, id, msg);
 		} else {
 			MM_ERR("invalid config msg %d\n", msg[0]);
@@ -286,7 +283,6 @@ void audpp_disable(int id, void *private)
 {
 	struct audpp_state *audpp = &the_audpp_state;
 	unsigned long flags;
-	int rc;
 
 	if (id < -1 || id > 4)
 		return;
@@ -311,13 +307,6 @@ void audpp_disable(int id, void *private)
 		pr_info("audpp: disable\n");
 		LOG(EV_DISABLE, 2);
 		audpp_dsp_config(0);
-		rc = wait_event_interruptible(audpp->event_wait,
-				(audpp->enabled == 0));
-		if (audpp->enabled == 0)
-			MM_INFO("Received CFG_MSG_DISABLE from ADSP\n");
-		else
-			MM_ERR("Didn't receive CFG_MSG DISABLE \
-					message from ADSP\n");
 		msm_adsp_disable(audpp->mod);
 		msm_adsp_put(audpp->mod);
 		audpp->mod = NULL;
