@@ -625,7 +625,7 @@ static int tca6507_suspend(struct i2c_client *nLeds, pm_message_t mesg)
 	u8 cmd[7] = {0x13, 0x55, 0x11, 0x55, 0xDD, 0xDD, 0xFF};
 	/// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
 	///add for low battery LED blinking in suspend mode 
-	Battery_power_supply_change();
+	//Battery_power_supply_change();
 	/// --- FIH_ADQ ---
 
 	mutex_lock(&tca6507_drvdata.tca6507_lock);
