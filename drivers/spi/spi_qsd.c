@@ -194,6 +194,7 @@ struct msm_spi {
 	void __iomem		*base;
 	struct device           *dev;
 	spinlock_t               queue_lock;
+	struct mutex             core_lock;
 	struct list_head         queue;
 	struct workqueue_struct	*workqueue;
 	struct work_struct       work_data;
@@ -214,7 +215,8 @@ struct msm_spi {
 	u32                      irq_err;
 	int                      bytes_per_word;
 	bool                     suspended;
-	bool                     transfer_in_progress;
+	bool                     transfer_pending;
+	wait_queue_head_t        continue_suspend;
 	/* DMA data */
 	enum msm_spi_mode        mode;
 	bool                     use_dma;
@@ -809,6 +811,7 @@ static void msm_spi_workq(struct work_struct *work)
 	u32                  spi_op;
 	u32                  status_error = 0;
 
+	mutex_lock(&dd->core_lock);
 	if (dd->use_rlock) {
 		/* Don't allow power collapse until we release remote mutex */
 		pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY, "msm_spi",
@@ -829,7 +832,6 @@ static void msm_spi_workq(struct work_struct *work)
 		status_error = 1;
 	}
 
-	dd->transfer_in_progress = 1;
 	spin_lock_irqsave(&dd->queue_lock, flags);
 	while (!list_empty(&dd->queue)) {
 		dd->cur_msg = list_entry(dd->queue.next,
@@ -849,8 +851,8 @@ static void msm_spi_workq(struct work_struct *work)
 			dd->cur_msg->complete(dd->cur_msg->context);
 		spin_lock_irqsave(&dd->queue_lock, flags);
 	}
+	dd->transfer_pending = 0;
 	spin_unlock_irqrestore(&dd->queue_lock, flags);
-	dd->transfer_in_progress = 0;
 
 	if (dd->use_rlock) {
 		disable_irq(dd->irq_in);
@@ -860,6 +862,11 @@ static void msm_spi_workq(struct work_struct *work)
 		pm_qos_update_requirement(PM_QOS_CPU_DMA_LATENCY, "msm_spi",
 					  PM_QOS_DEFAULT_VALUE);
 	}
+	mutex_unlock(&dd->core_lock);
+	/* If needed, this can be done after the current message is complete,
+	   and work can be continued upon resume. No motivation for now. */
+	if (dd->suspended)
+		wake_up_interruptible(&dd->continue_suspend);
 }
 
 static int msm_spi_transfer(struct spi_device *spi, struct spi_message *msg)
@@ -867,6 +874,7 @@ static int msm_spi_transfer(struct spi_device *spi, struct spi_message *msg)
 	struct msm_spi	*dd;
 	unsigned long    flags;
 	struct spi_transfer *tr;
+	int ret = -EINVAL;
 
 	dd = spi_master_get_devdata(spi->master);
 	if (dd->suspended)
@@ -914,12 +922,19 @@ static int msm_spi_transfer(struct spi_device *spi, struct spi_message *msg)
 				if (tx_buf != NULL)
 					dma_unmap_single(NULL, tr->tx_dma,
 							len, DMA_TO_DEVICE);
+				ret = -EINVAL;
 				goto error;
 			}
 		}
 	}
 
 	spin_lock_irqsave(&dd->queue_lock, flags);
+	if (dd->suspended) {
+		spin_unlock_irqrestore(&dd->queue_lock, flags);
+		ret = -EBUSY;
+		goto error;
+	}
+	dd->transfer_pending = 1;
 	list_add_tail(&msg->queue, &dd->queue);
 	spin_unlock_irqrestore(&dd->queue_lock, flags);
 	queue_work(dd->workqueue, &dd->work_data);
@@ -937,7 +952,7 @@ error:
 						  DMA_FROM_DEVICE);
 		}
 	}
-	return -EINVAL;
+	return ret;
 }
 
 static int msm_spi_setup(struct spi_device *spi)
@@ -963,6 +978,12 @@ static int msm_spi_setup(struct spi_device *spi)
 		goto err_setup_exit;
 
 	dd = spi_master_get_devdata(spi->master);
+
+	mutex_lock(&dd->core_lock);
+	if (dd->suspended) {
+		mutex_unlock(&dd->core_lock);
+		return -EBUSY;
+	}
 
 	if (dd->use_rlock)
 		remote_mutex_lock(&dd->r_lock);
@@ -991,6 +1012,7 @@ static int msm_spi_setup(struct spi_device *spi)
 	writel(spi_config, dd->base + SPI_CONFIG);
 	if (dd->use_rlock)
 		remote_mutex_unlock(&dd->r_lock);
+	mutex_unlock(&dd->core_lock);
 
 err_setup_exit:
 	return rc;
@@ -1284,6 +1306,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	struct msm_spi	       *dd;
 	struct resource	       *resource;
 	int			rc = 0;
+	int			locked = 0;
 	struct clk	       *pclk;
 	struct msm_spi_platform_data *pdata = pdev->dev.platform_data;
 
@@ -1351,8 +1374,10 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	}
 
 	spin_lock_init(&dd->queue_lock);
+	mutex_init(&dd->core_lock);
 	INIT_LIST_HEAD(&dd->queue);
 	INIT_WORK(&dd->work_data, msm_spi_workq);
+	init_waitqueue_head(&dd->continue_suspend);
 	dd->workqueue = create_singlethread_workqueue(
 		dev_name(master->dev.parent));
 	if (!dd->workqueue)
@@ -1390,8 +1415,10 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 			goto err_probe_add_pm_qos;
 		}
 	}
+	mutex_lock(&dd->core_lock);
 	if (dd->use_rlock)
 		remote_mutex_lock(&dd->r_lock);
+	locked = 1;
 
 	dd->dev = &pdev->dev;
 	dd->clk = clk_get(&pdev->dev, "spi_clk");
@@ -1440,7 +1467,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	writel(SPI_OP_STATE_RUN, dd->base + SPI_OPERATIONAL);
 
 	dd->suspended = 0;
-	dd->transfer_in_progress = 0;
+	dd->transfer_pending = 0;
 	dd->mode = SPI_MODE_NONE;
 
 	rc = request_irq(dd->irq_in, msm_spi_input_irq, IRQF_TRIGGER_RISING,
@@ -1462,6 +1489,8 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 		disable_irq(dd->irq_err);
 		remote_mutex_unlock(&dd->r_lock);
 	}
+	mutex_unlock(&dd->core_lock);
+	locked = 0;
 
 	rc = spi_register_master(master);
 	if (rc)
@@ -1497,8 +1526,11 @@ err_probe_pclk_enable:
 err_probe_clk_enable:
 	clk_put(dd->clk);
 err_probe_clk_get:
-	if (dd->use_rlock)
-		remote_mutex_unlock(&dd->r_lock);
+	if (locked) {
+		if (dd->use_rlock)
+			remote_mutex_unlock(&dd->r_lock);
+		mutex_unlock(&dd->core_lock);
+	}
 err_probe_add_pm_qos:
 err_probe_rlock_init:
 	iounmap(dd->base);
@@ -1521,30 +1553,29 @@ static int msm_spi_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct msm_spi    *dd;
-	int                limit = 0;
+	unsigned long      flags;
 
 	if (!master)
 		goto suspend_exit;
 	dd = spi_master_get_devdata(master);
 	if (!dd)
 		goto suspend_exit;
-	dd->suspended = 1;
-	while ((!list_empty(&dd->queue) || dd->transfer_in_progress) &&
-	       limit < 50) {
-		if (dd->mode == SPI_DMOV_MODE) {
-			msm_dmov_flush(dd->tx_dma_chan);
-			msm_dmov_flush(dd->rx_dma_chan);
-		}
-		limit++;
-		msleep(1);
-	}
 
+	/* Make sure nothing is added to the queue while we're suspending */
+	spin_lock_irqsave(&dd->queue_lock, flags);
+	dd->suspended = 1;
+	spin_unlock_irqrestore(&dd->queue_lock, flags);
+
+	/* Wait for transactions to end, or time out */
+	wait_event_interruptible(dd->continue_suspend, !dd->transfer_pending);
+
+	/* Make sure no one is accessing the core */
+	mutex_lock(&dd->core_lock);
 	disable_irq(dd->irq_in);
 	disable_irq(dd->irq_out);
 	disable_irq(dd->irq_err);
-	if (dd->use_rlock)
-		remote_mutex_unlock(&dd->r_lock);
 	clk_disable(dd->clk);
+	mutex_unlock(&dd->core_lock);
 
 suspend_exit:
 	return 0;

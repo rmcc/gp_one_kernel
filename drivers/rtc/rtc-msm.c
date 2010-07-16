@@ -178,7 +178,7 @@ msmrtc_virtual_alarm_set(struct device *dev, struct rtc_wkalrm *a)
 		rtc_tm_to_time(&a->time, &rtcalarm_time);
 
 	if (now > rtcalarm_time) {
-		printk(KERN_ERR "%s: Attempt to set alarm in the past\n",
+		pr_err("%s: Attempt to set alarm in the past\n",
 		       __func__);
 		rtcalarm_time = 0;
 		return -EINVAL;
@@ -331,7 +331,7 @@ msmrtc_probe(struct platform_device *pdev)
 				  &msm_rtc_ops,
 				  THIS_MODULE);
 	if (IS_ERR(rtc)) {
-		printk(KERN_ERR "%s: Can't register RTC device (%ld)\n",
+		pr_err("%s: Can't register RTC device (%ld)\n",
 		       pdev->name, PTR_ERR(rtc));
 		return PTR_ERR(rtc);
 	}
@@ -342,7 +342,7 @@ msmrtc_probe(struct platform_device *pdev)
 				  THIS_MODULE);
 
 	if (IS_ERR(rtcsecure)) {
-		printk(KERN_ERR "%s: Can't register RTC Secure device (%ld)\n",
+		pr_err("%s: Can't register RTC Secure device (%ld)\n",
 		       pdev->name, PTR_ERR(rtcsecure));
 		rtc_device_unregister(rtc);
 		return PTR_ERR(rtcsecure);
@@ -423,6 +423,7 @@ static struct platform_driver msmrtc_driver = {
 
 static int __init msmrtc_init(void)
 {
+	int rc=0;
 	rtcalarm_time = 0;
 
 	/* Explicit cast away of 'constness' for driver.name in order to
@@ -432,10 +433,14 @@ static int __init msmrtc_init(void)
 		 strlen(msmrtc_driver.driver.name)+1,
 		 "rs%08x:%08x", TIMEREMOTE_PROG_NUMBER,
 	         TIMEREMOTE_PROG_VER);                  // & RPC_VERSION_MAJOR_MASK);  //ADQ remove VERSION check mask
-	printk(KERN_DEBUG "%s: RTC Registering with %s\n",
-	        __FILE__, msmrtc_driver.driver.name);
+	pr_debug("RTC Registering with %s\n", msmrtc_driver.driver.name);
 
-	return platform_driver_register(&msmrtc_driver);
+	rc = platform_driver_register(&msmrtc_driver);
+	if (rc) {
+		pr_err("%s: platfrom_driver_register failed\n", __func__);
+	}
+
+	return rc;
 }
 
 module_init(msmrtc_init);
