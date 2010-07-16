@@ -32,9 +32,9 @@ EXTRA_CFLAGS += -I$(ATH_SRC_BASE)/os/
 EXTRA_CFLAGS += -I$(ATH_SRC_BASE)/bmi/include
 EXTRA_CFLAGS += -I$(ATH_SRC_BASE)/hif/sdio/linux_sdio/include
 
-EXTRA_CFLAGS += -DLINUX -DDEBUG -D__KERNEL__ \
+EXTRA_CFLAGS += -DLINUX -D__KERNEL__ \
                 -DTCMD -DSEND_EVENT_TO_APP -DUSER_KEYS \
-                -DNO_SYNC_FLUSH  -DDEBUG#\
+                -DNO_SYNC_FLUSH #\
                 -DMULTIPLE_FRAMES_PER_INTERRUPT -DAR6000REV$(REV) \
                 -DBLOCK_TX_PATH_FLAG \
 
