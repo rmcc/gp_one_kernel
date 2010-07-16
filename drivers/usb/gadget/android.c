@@ -205,8 +205,8 @@ static int  android_bind_config(struct usb_configuration *c)
 	unsigned long n;
 	acm_func_cnt = 0;
 	gser_func_cnt = 0;
-	printk(KERN_DEBUG "android_bind_config c = 0x%x dev->cdev=0x%x\n",
-	       (unsigned int) c, (unsigned int) dev->cdev);
+	pr_debug("android_bind_config c = 0x%x dev->cdev=0x%x\n",
+		(unsigned int) c, (unsigned int) dev->cdev);
 	n = dev->functions;
 	while (n) {
 		switch (n & 0x0F) {
@@ -450,6 +450,12 @@ static int  android_bind(struct usb_composite_dev *cdev)
 		device_desc.bDeviceSubClass      = 0;
 		device_desc.bDeviceProtocol      = 0;
 	}
+#ifdef CONFIG_USB_ANDROID_CDC_ECM
+	/* set up network link layer */
+	ret = gether_setup(cdev->gadget, hostaddr);
+	if (ret < 0)
+		return ret;
+#endif
 	pr_debug("android_bind done\n");
 	return 0;
 }
