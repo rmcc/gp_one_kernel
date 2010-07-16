@@ -571,6 +571,7 @@ static struct platform_device msm_bluesleep_device = {
 
 ///+++FIH_ADQ+++	godfrey
 #ifdef CONFIG_AR6K
+static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
 int static msm_ar6k_sdcc_setup_power(int dev_id, int on);
 int static ar6k_wifi_suspend(int dev_id);
 int static ar6k_wifi_resume(int dev_id);
@@ -598,6 +599,10 @@ static struct mmc_platform_data ar6k_wifi_data = {
     .translate_vdd	= msm_ar6k_sdcc_setup_power,
     .status			= ar6k_wifi_status,
     .register_status_notify	= ar6k_wifi_status_register,
+    .mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+#ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
+    .dummy52_required = 1,
+#endif
     /*.sdio_suspend = ar6k_wifi_suspend,
     .sdio_resume = ar6k_wifi_resume,*/
 };
@@ -1406,8 +1411,8 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
         }
 
         if (!vreg_sts) {
-                rc = vreg_set_level(vreg_mmc, 2850);
-                if (!rc)
+                //rc = vreg_set_level(vreg_mmc, 2850);
+                //if (!rc)
                         rc = vreg_enable(vreg_mmc);
                 if (rc)
                         printk(KERN_ERR "%s: return val: %d \n",
@@ -1432,6 +1437,7 @@ static struct mmc_platform_data msm7x25_sdcc_data = {
 	.ocr_mask	= MMC_VDD_28_29,
 	.translate_vdd	= msm_sdcc_setup_power,
 	.status		= msm_sdcc_card_detect,	// FIH_ADQ, BillHJChang
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 };
 
 static void __init msm7x25_init_mmc(void)

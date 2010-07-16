@@ -66,6 +66,6 @@ obj-$(CONFIG_IWM)	+= iwmc3200wifi/
 obj-$(CONFIG_BCM4329)	+= bcm4329/
 obj-$(CONFIG_LIBRA_SDIOIF)	+= libra/
 #+++FIH+++
-#obj-$(CONFIG_AR6K)	+= ar6k/host/os/linux/
-obj-$(CONFIG_AR6K)	+= ar6krc53/host/
+obj-$(CONFIG_AR6K)	+= ar6k/host/os/linux/
+#obj-$(CONFIG_AR6K)	+= ar6krc53/host/
 #---FIH---
