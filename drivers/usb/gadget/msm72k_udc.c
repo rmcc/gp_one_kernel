@@ -1121,6 +1121,8 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 
 	if (n & STS_SLI) {
 		dev_info(&ui->pdev->dev, "suspend\n");
+		ui->usb_state = USB_STATE_SUSPENDED;
+		ui->driver->suspend(&ui->gadget);
 
 		spin_lock_irqsave(&ui->lock, flags);
 		ui->usb_state = USB_STATE_SUSPENDED;
@@ -1392,7 +1394,6 @@ static void usb_do_work(struct work_struct *w)
 				spin_unlock_irqrestore(&ui->lock, iflags);
 				if (temp == USB_CHG_TYPE__WALLCHARGER)
 					msm72k_pm_qos_update(1);
-
 				dev_info(&ui->pdev->dev,
 					"msm72k_udc: ONLINE -> OFFLINE\n");
 				otg_set_suspend(ui->xceiv, 0);
@@ -1549,8 +1550,9 @@ void msm_hsusb_set_vbus_state(int online)
 		ui->usb_state = USB_STATE_POWERED;
 		ui->flags |= USB_FLAG_VBUS_ONLINE;
 	} else {
-		ui->usb_state = USB_STATE_NOTATTACHED;
-		ui->flags |= USB_FLAG_VBUS_OFFLINE;
+		dev_err(&ui->pdev->dev, "msm_hsusb_set_vbus_state called"
+			" before driver initialized\n");
+		vbus = online;
 	}
 	schedule_work(&ui->work);
 out:
@@ -1985,13 +1987,13 @@ static int msm72k_wakeup(struct usb_gadget *_gadget)
 	struct usb_info *ui = container_of(_gadget, struct usb_info, gadget);
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
 
-	if (!atomic_read(&ui->remote_wakeup)) {
+	if (!ui->remote_wakeup) {
 		dev_err(&ui->pdev->dev,
 			"%s: remote wakeup not supported\n", __func__);
 		return -ENOTSUPP;
 	}
 
-	if (!atomic_read(&ui->configured)) {
+	if (!ui->online) {
 		dev_err(&ui->pdev->dev,
 			"%s: device is not configured\n", __func__);
 		return -ENODEV;
