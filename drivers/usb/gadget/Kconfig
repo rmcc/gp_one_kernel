@@ -800,7 +800,6 @@ config USB_G_PRINTER
 
 config USB_ANDROID
 	tristate "Android Gadget"
-	default y
 	help
 	  The Android gadget provides mass storage and adb transport.
 
@@ -831,17 +830,6 @@ config USB_ANDROID_RNDIS
 	help
 	  enabling this option adds RNDIS support to the
 	  android gadget.
-
-config USB_ANDROID_RNDIS_WCEIS
-	boolean "Use Windows Internet Sharing Class/SubClass/Protocol"
-	depends on USB_ANDROID_RNDIS
-	default n
-	help
-	 Causes the driver to look like a Windows-compatible Internet
-	 Sharing device, so Windows auto-detects it
-
-	 If you enable this option, the device is no longer CDC ethernet
-	 compatible.
 
 config USB_ANDROID_RMNET
 	bool "RmNet function driver"

@@ -162,7 +162,7 @@ static ssize_t  show_##function(struct device *dev,			\
 			val = 1;					\
 		n = n >> 4;						\
 	}								\
-	return sprintf(buf, "%d\n", val);				\
+	return sprintf(buf, "%d", val);					\
 									\
 }									\
 									\
@@ -225,11 +225,13 @@ static int  android_bind_config(struct usb_configuration *c)
 			ret = acm_bind_config(c, 0);
 			if (ret)
 				return ret;
+			acm_func_cnt++;
 			break;
 		case ANDROID_ACM_NMEA:
 			ret = acm_bind_config(c, 1);
 			if (ret)
 				return ret;
+			acm_func_cnt++;
 			break;
 #ifdef CONFIG_USB_ANDROID_DIAG
 		case ANDROID_DIAG:
@@ -243,11 +245,13 @@ static int  android_bind_config(struct usb_configuration *c)
 			ret = gser_bind_config(c, 0);
 			if (ret)
 				return ret;
+			gser_func_cnt++;
 			break;
 		case ANDROID_GENERIC_NMEA:
 			ret = gser_bind_config(c, 1);
 			if (ret)
 				return ret;
+			gser_func_cnt++;
 			break;
 #endif
 #ifdef CONFIG_USB_ANDROID_CDC_ECM
@@ -271,6 +275,7 @@ static int  android_bind_config(struct usb_configuration *c)
 			ret = rndis_bind_config(c, hostaddr);
 			if (ret)
 				return ret;
+			rndis_enabled = 1;
 			break;
 #endif
 		default:
@@ -283,61 +288,6 @@ static int  android_bind_config(struct usb_configuration *c)
 
 }
 
-static int is_usb_networking_on(void)
-{
-	/* Android user space allows USB tethering only when usb0 is listed
-	 * in network interfaces. Setup network link though RNDIS/CDC-ECM
-	 * is not listed in current composition. Network links is not setup
-	 * for every composition switch. It is setup one time and teared down
-	 * during module removal.
-	 */
-#if defined(CONFIG_USB_ANDROID_CDC_ECM) || defined(CONFIG_USB_ANDROID_RNDIS)
-	return 1;
-#else
-	return 0;
-#endif
-}
-
-static int get_num_of_serial_ports(void)
-{
-	struct android_dev *dev = _android_dev;
-	unsigned long n = dev->functions;
-	unsigned ports = 0;
-
-	while (n) {
-		switch (n & 0x0F) {
-		case ANDROID_ACM_MODEM:
-		case ANDROID_ACM_NMEA:
-		case ANDROID_GENERIC_MODEM:
-		case ANDROID_GENERIC_NMEA:
-			ports++;
-		}
-		n = n >> 4;
-	}
-
-	return ports;
-}
-
-static int is_iad_enabled(void)
-{
-	struct android_dev *dev = _android_dev;
-	unsigned long n = dev->functions;
-
-	while (n) {
-		switch (n & 0x0F) {
-		case ANDROID_ACM_MODEM:
-		case ANDROID_ACM_NMEA:
-#ifdef CONFIG_USB_ANDROID_RNDIS
-		case ANDROID_RNDIS:
-#endif
-			return 1;
-		}
-		n = n >> 4;
-	}
-
-	return 0;
-}
-
 static struct usb_configuration android_config_driver = {
 	.label		= "android",
 	.bind		= android_bind_config,
@@ -347,12 +297,14 @@ static struct usb_configuration android_config_driver = {
 
 static int android_unbind(struct usb_composite_dev *cdev)
 {
-	if (get_num_of_serial_ports())
+	if (acm_func_cnt || gser_func_cnt)
 		gserial_cleanup();
+#if defined(CONFIG_USB_ANDROID_CDC_ECM) || defined(CONFIG_USB_ANDROID_RNDIS)
+	gether_cleanup();
+#endif
 
 	return 0;
 }
-
 static int  android_bind(struct usb_composite_dev *cdev)
 {
 	struct android_dev *dev = _android_dev;
@@ -386,38 +338,12 @@ static int  android_bind(struct usb_composite_dev *cdev)
 	device_desc.iSerialNumber = id;
 
 	device_desc.idProduct = __constant_cpu_to_le16(product_id);
-	/* Supporting remote wakeup for mass storage only function
-	 * does n't make sense, since there are no notifications that
-	 * can be sent from mass storage during suspend */
-	if ((gadget->ops->wakeup) && (dev->functions != ANDROID_MSC))
+	if (gadget->ops->wakeup)
 		android_config_driver.bmAttributes |= USB_CONFIG_ATT_WAKEUP;
-	else
-		android_config_driver.bmAttributes &= ~USB_CONFIG_ATT_WAKEUP;
 
-	if (dev->pdata->self_powered && !usb_gadget_set_selfpowered(gadget)) {
-		android_config_driver.bmAttributes |= USB_CONFIG_ATT_SELFPOWER;
-		android_config_driver.bMaxPower	= 0x32; /* 100 mA */
-	}
 	dev->cdev = cdev;
 	pr_debug("android_bind assigned dev->cdev\n");
 	dev->gadget = gadget;
-
-	num_ports = get_num_of_serial_ports();
-	if (num_ports) {
-		ret = gserial_setup(cdev->gadget, num_ports);
-		if (ret < 0)
-			return ret;
-	}
-
-	if (is_usb_networking_on()) {
-		/* set up network link layer */
-		ret = gether_setup(cdev->gadget, hostaddr);
-		if (ret && (ret != -EBUSY)) {
-			gserial_cleanup();
-			return ret;
-		}
-	}
-
 	/* register our configuration */
 	ret = usb_add_config(cdev, &android_config_driver);
 	if (ret) {
@@ -441,7 +367,13 @@ static int  android_bind(struct usb_composite_dev *cdev)
 		device_desc.bcdDevice = __constant_cpu_to_le16(0x9999);
 	}
 
-	if (is_iad_enabled()) {
+	num_ports = acm_func_cnt + gser_func_cnt;
+	if (acm_func_cnt || gser_func_cnt) {
+		ret = gserial_setup(cdev->gadget, num_ports);
+		if (ret < 0)
+			return ret;
+	}
+	if (acm_func_cnt) {
 		device_desc.bDeviceClass         = USB_CLASS_MISC;
 		device_desc.bDeviceSubClass      = 0x02;
 		device_desc.bDeviceProtocol      = 0x01;
@@ -750,9 +682,6 @@ module_init(init);
 
 static void __exit cleanup(void)
 {
-	if (is_usb_networking_on())
-		gether_cleanup();
-
 	usb_composite_unregister(&android_usb_driver);
 	misc_deregister(&adb_enable_device);
 	platform_driver_unregister(&android_platform_driver);
