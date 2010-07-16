@@ -3,7 +3,6 @@ obj-y += proc_comm.o
 obj-y += vreg.o mpp.o
 obj-y += vreg.o
 obj-y += clock.o clock-pcom.o
-obj-y += generic_gpio.o
 obj-y += nand_partitions.o
 obj-y += modem_notifier.o
 obj-y += rpc_hsusb.o rpc_pmapp.o rpc_fsusb.o
@@ -14,8 +13,9 @@ obj-$(CONFIG_DEBUG_FS) += nohlt.o
 obj-y += pmic.o
 obj-y += internal_power_rail.o
 
-obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock.o timer.o gpio.o
-obj-$(CONFIG_ARCH_MSM_SCORPION) += timer.o gpio.o
+obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock.o timer.o gpio.o generic_gpio.o
+obj-$(CONFIG_ARCH_MSM_SCORPION) += timer.o gpio.o generic_gpio.o
+obj-$(CONFIG_ARCH_MSM_SCORPIONMP) += timer.o gpio-v2.o
 
 obj-$(CONFIG_MSM_VIC) += irq-vic.o
 
@@ -23,6 +23,8 @@ ifdef CONFIG_ARCH_QSD8X50
 	obj-$(CONFIG_MSM_SOC_REV_NONE) += acpuclock-8x50.o
 	obj-$(CONFIG_MSM_SOC_REV_A) += acpuclock-8x50a.o
 endif
+
+obj-$(CONFIG_SMP) += headsmp.o platsmp.o
 
 obj-$(CONFIG_MSM_CPU_AVS) += avs.o avs_hw.o
 obj-$(CONFIG_CPU_V6) += idle-v6.o
@@ -88,6 +90,8 @@ obj-$(CONFIG_MACH_QSD8X50_FFA) += board-qsd8x50.o
 #obj-$(CONFIG_MACH_QSD8X50_COMET) += board-comet.o
 obj-$(CONFIG_MACH_QSD8X50A_SURF) += board-qsd8x50.o
 obj-$(CONFIG_MACH_QSD8X50A_FFA) += board-qsd8x50.o
+obj-$(CONFIG_MACH_MSM8X60_RUMI3) += board-msm8x60.o
+obj-$(CONFIG_MACH_MSM8X60_SIM) += board-msm8x60.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 obj-$(CONFIG_TROUT_PWRSINK) += htc_pwrsink.o
