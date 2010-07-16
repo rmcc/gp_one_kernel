@@ -27,9 +27,8 @@
 #include <linux/log2.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
-#ifdef CONFIG_MMC_MSM_PROG_DONE_SCAN
+#include <linux/mmc/mmc.h>
 #include <linux/mmc/sdio.h>
-#endif
 #include <linux/clk.h>
 #include <linux/scatterlist.h>
 #include <linux/platform_device.h>
@@ -499,8 +498,17 @@ msmsdcc_data_err(struct msmsdcc_host *host, struct mmc_data *data,
 		       data->blksz, data->blocks);
 		data->error = -EILSEQ;
 	} else if (status & MCI_DATATIMEOUT) {
-		printk(KERN_ERR "%s: Data timeout\n", mmc_hostname(host->mmc));
-		data->error = -ETIMEDOUT;
+			/* CRC is optional for the bus test commands, not all
+			 * cards respond back with CRC. However controller
+			 * waits for the CRC and times out. Hence ignore the
+			 * data timeouts during the Bustest.
+			 */
+			if (!(data->mrq->cmd->opcode == MMC_BUSTEST_W
+			    || data->mrq->cmd->opcode == MMC_BUSTEST_R)) {
+				pr_err("%s: Data timeout\n",
+					 mmc_hostname(host->mmc));
+				data->error = -ETIMEDOUT;
+			}
 	} else if (status & MCI_RXOVERRUN) {
 		printk(KERN_ERR "%s: RX overrun\n", mmc_hostname(host->mmc));
 		data->error = -EIO;
