@@ -759,18 +759,7 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 		if (!host->curr.xfer_remain) {
 			/* Delay needed (same port was just written) */
 			msmsdcc_delay(host);
-#ifdef ATH_PATCH
-               if (host->pdev_id == ATH_WLAN_SLOT) {
-                       if (readl(host->base + MMCIMASK0) & MCI_SDIOINTOPERMASK)
-                               writel(MCI_SDIOINTOPERMASK, base + MMCIMASK1);
-                       else
-               writel(0, base + MMCIMASK1);
-               } else {
-                        writel(0, base + MMCIMASK1);
-                }
-#else
 			writel(0, base + MMCIMASK1);
-#endif
 		}
 	} else if (!host->curr.xfer_remain)
 		writel(0, base + MMCIMASK1);
@@ -789,9 +778,6 @@ msmsdcc_irq(int irq, void *dev_id)
 	u32			status;
 	int			ret = 0;
 	int			timer = 0;
-#ifdef ATH_PATCH
-       u32                     sdio_int_oper;
-#endif
 
 	spin_lock(&host->lock);
 
@@ -808,9 +794,6 @@ msmsdcc_irq(int irq, void *dev_id)
 
 #if IRQ_DEBUG
 		msmsdcc_print_status(host, "irq0-r", status);
-#endif
-#ifdef ATH_PATCH
-        sdio_int_oper = status & MCI_SDIOINTROPE;
 #endif
 		status &= (readl(host->base + MMCIMASK0) |
 					      MCI_DATABLOCKENDMASK);
@@ -833,23 +816,8 @@ msmsdcc_irq(int irq, void *dev_id)
 
 		data = host->curr.data;
 #ifdef CONFIG_MMC_MSM_SDIO_SUPPORT
-#ifdef ATH_PATCH
-               if (host->pdev_id == ATH_WLAN_SLOT) {
-                       if (sdio_int_oper) {
-                               if (readl(host->base + MMCIMASK0) & MCI_SDIOINTOPERMASK) {
-                                       mmc_signal_sdio_irq(host->mmc);
-                               } 
-                               writel(MCI_SDIOINTROPECLR, host->base + MMCICLEAR);
-                        }
-               } else {
-                       if (status & MCI_SDIOINTR) {
-                               mmc_signal_sdio_irq(host->mmc);
-                        }
-                }
-#else
 		if (status & MCI_SDIOINTROPE)
 			mmc_signal_sdio_irq(host->mmc);
-#endif /* ATH_PATCH */
 #endif
 
 /* ATHENV+ */
@@ -886,27 +854,6 @@ msmsdcc_irq(int irq, void *dev_id)
 
 			host->curr.cmd = NULL;
 
-#ifdef ATH_PATCH
-            if (host->pdev_id != ATH_WLAN_SLOT) {
-                       cmd->resp[0] = readl(base + MMCIRESPONSE0);
-                       cmd->resp[1] = readl(base + MMCIRESPONSE1);
-                       cmd->resp[2] = readl(base + MMCIRESPONSE2);
-                       cmd->resp[3] = readl(base + MMCIRESPONSE3);
-    
-                       if (status & MCI_CMDTIMEOUT) {
-    #if VERBOSE_COMMAND_TIMEOUTS
-                               printk(KERN_ERR "%s: Command timeout\n",
-                                      mmc_hostname(host->mmc));
-    #endif
-                               cmd->error = -ETIMEDOUT;
-                       } else if (status & MCI_CMDCRCFAIL &&
-                                  cmd->flags & MMC_RSP_CRC) {
-                               printk(KERN_ERR "%s: Command CRC error\n",
-                                      mmc_hostname(host->mmc));
-                               cmd->error = -EILSEQ;
-                       }
-            }
-#else
 			cmd->resp[0] = readl(base + MMCIRESPONSE0);
 			cmd->resp[1] = readl(base + MMCIRESPONSE1);
 			cmd->resp[2] = readl(base + MMCIRESPONSE2);
@@ -924,8 +871,6 @@ msmsdcc_irq(int irq, void *dev_id)
 				       mmc_hostname(host->mmc));
 				cmd->error = -EILSEQ;
 			}
-#endif
-/* ATHENV- */
 
 			if (!cmd->data || cmd->error) {
 				if (host->curr.data && host->dma.sg)
@@ -1241,12 +1186,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 #ifdef ATH_PATCH
        if (host->pdev_id != ATH_WLAN_SLOT) {
                if (ios->timing & MMC_TIMING_SD_HS)
-	clk |= MCI_CLK_SELECTIN; /* feedback clock */
-               //+++[FIH_ADQ][IssueKeys:ADQ.B-417]
-               #if     1
-                       clk |= MCI_CLK_SELECTIN; /* feedback clock */           
-               #endif
-               //---[FIH_ADQ][IssueKeys:ADQ.B-417]
+			clk |= MCI_CLK_SELECTIN; /* feedback clock */
        }
 #else
        if (ios->timing & MMC_TIMING_SD_HS)
@@ -1565,9 +1505,6 @@ msmsdcc_probe(struct platform_device *pdev)
 #ifdef ATH_PATCH
        host->pre_cmd_with_data = 0;
        host->mci_irqenable = MCI_IRQENABLE;
-    //if (pdev->id == ATH_WLAN_SLOT)
-        //mmc->caps |= MMC_CAP_NEEDS_POLL;
-        //msmsdcc_pwrsave = 0;
 #endif
 
 	spin_lock_init(&host->lock);
