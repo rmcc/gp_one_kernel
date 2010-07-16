@@ -33,6 +33,7 @@
 #include <linux/smsc911x.h>
 #include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
+#include <linux/input/pmic8058-keypad.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -49,7 +50,6 @@
 #include <mach/qdsp5v2/msm_lpa.h>
 #include <mach/dma.h>
 #include <linux/android_pmem.h>
-#include <mach/pmic8058-keypad.h>
 #include <mach/msm_ts.h>
 #include <mach/pmic.h>
 #include <mach/rpc_pmapp.h>
@@ -325,7 +325,7 @@ static struct pmic8058_keypad_data surf_keypad_data = {
 	.keymap			= surf_keymap,
 	.debounce_ms		= {8, 10},
 	.scan_delay_ms		= 32,
-	.row_hold_us		= 125,
+	.row_hold_ns		= 91500,
 	.wakeup			= 1,
 };
 
@@ -340,7 +340,7 @@ static struct pmic8058_keypad_data fluid_keypad_data = {
 	.keymap			= fluid_keymap,
 	.debounce_ms		= {8, 10},
 	.scan_delay_ms		= 32,
-	.row_hold_us		= 125,
+	.row_hold_ns		= 91500,
 	.wakeup			= 1,
 };
 

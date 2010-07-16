@@ -214,12 +214,6 @@ config BT_MRVL_SDIO
 	  Say Y here to compile support for Marvell BT-over-SDIO driver
 	  into the kernel or say M to compile it as module.
 
-config BT_FILTER
-	bool "BT COEXISTENCE"
-	depends on BT_HCIUART_H4
-	help
-	  TURN ON OFF BT COEXISTENCE.
-
 config MSM_BT_POWER
 	tristate "MSM Bluetooth Power Control"
 	depends on ARCH_MSM && RFKILL
