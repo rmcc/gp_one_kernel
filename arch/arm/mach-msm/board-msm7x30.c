@@ -69,6 +69,7 @@
 #include <linux/msm_kgsl.h>
 #include <mach/dal_axi.h>
 #include <mach/msm_serial_hs.h>
+#include <mach/msm_reqs.h>
 
 #define MSM_PMEM_SF_SIZE	0x1700000
 #define MSM_FB_SIZE		0x500000
@@ -1096,6 +1097,44 @@ static struct marimba_tsadc_platform_data marimba_tsadc_pdata = {
 	},
 };
 
+static struct vreg *vreg_codec_s4;
+static int msm_marimba_codec_power(int vreg_on)
+{
+	int rc = 0;
+
+	if (!vreg_codec_s4) {
+
+		vreg_codec_s4 = vreg_get(NULL, "s4");
+
+		if (IS_ERR(vreg_codec_s4)) {
+			printk(KERN_ERR "%s: vreg_get() failed (%ld)\n",
+				__func__, PTR_ERR(vreg_codec_s4));
+			rc = PTR_ERR(vreg_codec_s4);
+			goto  vreg_codec_s4_fail;
+		}
+	}
+
+	if (vreg_on) {
+		rc = vreg_enable(vreg_codec_s4);
+		if (rc)
+			printk(KERN_ERR "%s: vreg_enable() = %d \n",
+					__func__, rc);
+		goto vreg_codec_s4_fail;
+	} else {
+		rc = vreg_disable(vreg_codec_s4);
+		if (rc)
+			printk(KERN_ERR "%s: vreg_disable() = %d \n",
+					__func__, rc);
+		goto vreg_codec_s4_fail;
+	}
+
+vreg_codec_s4_fail:
+	return rc;
+}
+
+static struct marimba_codec_platform_data mariba_codec_pdata = {
+	.marimba_codec_power =  msm_marimba_codec_power,
+};
 
 static struct marimba_platform_data marimba_pdata = {
 	.slave_id[MARIMBA_SLAVE_ID_FM]       = MARIMBA_SLAVE_ID_FM_ADDR,
@@ -1105,6 +1144,7 @@ static struct marimba_platform_data marimba_pdata = {
 	.marimba_shutdown = msm_marimba_shutdown_power,
 	.fm = &marimba_fm_pdata,
 	.tsadc = &marimba_tsadc_pdata,
+	.codec = &mariba_codec_pdata,
 };
 
 static void __init msm7x30_init_marimba(void)
@@ -2408,8 +2448,15 @@ static struct platform_device android_pmem_audio_device = {
 };
 
 static struct kgsl_platform_data kgsl_pdata = {
+#ifdef CONFIG_MSM_NPA_SYSTEM_BUS
+	/* NPA Flow IDs */
+	.high_axi_3d = MSM_AXI_FLOW_3D_GPU_HIGH,
+	.high_axi_2d = MSM_AXI_FLOW_2D_GPU_HIGH,
+#else
+	/* AXI rates in KHz */
 	.high_axi_3d = 192000,
 	.high_axi_2d = 192000,
+#endif
 	.max_grp2d_freq = 192 * 1000*1000,
 	.min_grp2d_freq = 192 * 1000*1000,
 	.set_grp2d_async = set_grp2d_async,
@@ -3919,7 +3966,7 @@ static void __init msm7x30_allocate_memory_regions(void)
 
 static void __init msm7x30_map_io(void)
 {
-	msm_shared_ram_phys = 0x03700000;
+	msm_shared_ram_phys = 0x00100000;
 	msm_map_msm7x30_io();
 	msm7x30_allocate_memory_regions();
 	msm_clock_init(msm_clocks_7x30, msm_num_clocks_7x30);
