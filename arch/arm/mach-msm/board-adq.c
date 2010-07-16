@@ -167,9 +167,9 @@ static struct platform_device smc91x_device = {
 static struct usb_composition usb_func_composition[] = {
         {
                 /* MSC */
-                .product_id         = 0xC002,
+                .product_id         = 0xC004,
                 .functions          = 0x02,
-                .adb_product_id     = 0xC005,
+                .adb_product_id     = 0xC001,
                 .adb_functions      = 0x12
         },
 #ifdef CONFIG_USB_F_SERIAL
@@ -216,9 +216,9 @@ static struct usb_composition usb_func_composition[] = {
 #ifdef CONFIG_USB_ANDROID_CDC_ECM
         {
                 /* MSC + CDC-ECM */
-                .product_id         = 0xC004,
+                .product_id         = 0xC005,
                 .functions          = 0x82,
-                .adb_product_id     = 0xC001,
+                .adb_product_id     = 0xC002,
                 .adb_functions      = 0x812,
         },
 #endif
@@ -246,7 +246,7 @@ static struct android_usb_platform_data android_usb_pdata = {
         .version        = 0x0100,
         .compositions   = usb_func_composition,
         .num_compositions = ARRAY_SIZE(usb_func_composition),
-        .product_name   = "Qualcomm HSUSB Device",
+	.product_name       = "Android USB Gadget",
         .manufacturer_name = "Qualcomm Incorporated",
         .nluns = 1,
 };
@@ -318,7 +318,7 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	// +++ FIH_ADQ +++, modified by henry.wang, fix it to FIH VID/PID
 	.vendor_id          = 0x489,
 	// ---  FIH_ADQ ---
-	.product_name       = "Qualcomm HSUSB Device",
+        .product_name   = "Qualcomm HSUSB Device",
 	.serial_number      = "1234567890ABCD",
 	.manufacturer_name  = "Qualcomm Incorporated",
 	.compositions	= usb_func_composition,
@@ -571,7 +571,7 @@ static struct platform_device msm_bluesleep_device = {
 
 ///+++FIH_ADQ+++	godfrey
 #ifdef CONFIG_AR6K
-static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
+//static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
 int static msm_ar6k_sdcc_setup_power(int dev_id, int on);
 int static ar6k_wifi_suspend(int dev_id);
 int static ar6k_wifi_resume(int dev_id);
@@ -1543,6 +1543,9 @@ static void __init msm7x25_init(void)
 #ifdef CONFIG_USB_MSM_OTG_72K
     msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
+    msm_gadget_pdata.swfi_latency =
+                msm7x25_pm_data
+                [MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency;
     msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
 #endif
 #endif
