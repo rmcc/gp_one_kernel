@@ -105,35 +105,35 @@ static struct msm_dmov_chan_conf adm1_chan_conf[] = {
 
 static struct msm_dmov_ci_conf adm0_ci_conf[] = {
 	{
+		.start = 0x0,
+		.end = 0xC0,
+		.burst = 8
+	}, {
 		.start = 0x40,
 		.end = 0xC0,
 		.burst = 8
 	}, {
-		.start = 0x2C,
-		.end = 0x2E,
-		.burst = 8
-	}, {
-		.start = 0x08,
-		.end = 0x2C,
+		.start = 0x16,
+		.end = 0x25,
 		.burst = 8
 	}
 };
 
 static struct msm_dmov_ci_conf adm1_ci_conf[] = {
 	{
+		.start = 0x00,
+		.end = 0xC0,
+		.burst = 8
+	}, {
 		.start = 0x40,
 		.end = 0xC0,
 		.burst = 8
 	}, {
-		.start = 0x28,
-		.end = 0x29,
-		.burst = 8
-	}, {
-		.start = 0x38,
+		.start = 0x2E,
 		.end = 0x40,
 		.burst = 8
 	}, {
-		.start = 0x08,
+		.start = 0x16,
 		.end = 0x25,
 		.burst = 8
 	}
@@ -163,12 +163,12 @@ static struct msm_dmov_crci_conf adm0_crci_conf[] = {
 
 static struct msm_dmov_crci_conf adm1_crci_conf[] = {
 	DMOV_CRCI_DEFAULT_CONF,
-	DMOV_CRCI_DEFAULT_CONF,
-	DMOV_CRCI_DEFAULT_CONF,
+	DMOV_CRCI_CONF(0, 1),
+	DMOV_CRCI_CONF(0, 1),
 	DMOV_CRCI_DEFAULT_CONF,
 	DMOV_CRCI_CONF(0, 1),
 	DMOV_CRCI_CONF(0, 1),
-	DMOV_CRCI_CONF(0, 0x101),
+	DMOV_CRCI_CONF(0, 5),
 	DMOV_CRCI_DEFAULT_CONF,
 	DMOV_CRCI_DEFAULT_CONF,
 	DMOV_CRCI_DEFAULT_CONF,
