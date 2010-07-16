@@ -26,50 +26,29 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#ifndef __ASM_ARCH_MSM_TLMM_H
+#define __ASM_ARCH_MSM_TLMM_H
 
-#ifndef __ASM_ARCH_MSM_GPIO_V2_H
-#define __ASM_ARCH_MSM_GPIO_V2_H
-
+#include <linux/types.h>
 #include <mach/gpio-tlmm-v1.h>
-#if defined(CONFIG_ARCH_MSM8X60)
-#include <mach/gpio-v2-8x60.h>
+
+enum msm_tlmm_hdrive_tgt {
+	TLMM_HDRV_SDC4_CLK = 0,
+	TLMM_HDRV_SDC4_CMD,
+	TLMM_HDRV_SDC4_DATA,
+	TLMM_HDRV_SDC3_CLK,
+	TLMM_HDRV_SDC3_CMD,
+	TLMM_HDRV_SDC3_DATA,
+};
+
+enum msm_tlmm_pull_tgt {
+	TLMM_PULL_SDC4_CMD = 0,
+	TLMM_PULL_SDC4_DATA,
+	TLMM_PULL_SDC3_CMD,
+	TLMM_PULL_SDC3_DATA,
+};
+
+void msm_tlmm_set_hdrive(enum msm_tlmm_hdrive_tgt tgt, int drv_str);
+void msm_tlmm_set_pull(enum msm_tlmm_pull_tgt tgt, int pull);
+
 #endif
-
-/* MSM now supports generic GPIOLIB.  See Documentation/gpio.txt. */
-
-#include <asm-generic/gpio.h>
-#include <mach/irqs.h>
-
-#define gpio_get_value __gpio_get_value
-#define gpio_set_value __gpio_set_value
-#define gpio_cansleep  __gpio_cansleep
-
-static inline int gpio_to_irq(unsigned gpio)
-{
-	return (gpio < ARCH_NR_GPIOS ? MSM_GPIO_TO_INT(gpio) : -EINVAL);
-}
-
-static inline int irq_to_gpio(unsigned irq)
-{
-	return irq - MSM_GPIO_TO_INT(0);
-}
-
-/*
- * A GPIO can be set as a direct-connect IRQ.  This can be used to bypass
- * the normal summary-interrupt mechanism for those GPIO lines deemed to be
- * higher priority or otherwise worthy of special treatment, but resources
- * are limited: only a few DC interrupt lines are available.
- * Care must be taken when usurping a GPIO in this manner, as the summary
- * interrupt controller has no idea that the GPIO has been taken away from it.
- * Clients can still register to receive the summary interrupt assigned
- * to that GPIO, which will uninstall it as a direct connect IRQ with
- * no warning.
- *
- * The irq passed to this function is the DC IRQ number, not the
- * irq number seen by the scorpion when the interrupt triggers.  For example,
- * if 0 is specified, then when DC IRQ 0 triggers, the scorpion will see
- * interrupt TLMM_SCSS_DIR_CONN_IRQ_0.
- */
-int msm_gpio_install_direct_irq(unsigned gpio, unsigned irq);
-
-#endif /* __ASM_ARCH_MSM_GPIO_V2_H */

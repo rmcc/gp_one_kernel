@@ -30,25 +30,6 @@
 #ifndef __ASM_ARCH_MSM_GPIO_V2_8X60_H
 #define __ASM_ARCH_MSM_GPIO_V2_8X60_H
 
-#define ARCH_NR_GPIOS 173
-
-#define MSM_GPIO_DRV_2MA  (0 << 6)
-#define MSM_GPIO_DRV_4MA  (1 << 6)
-#define MSM_GPIO_DRV_6MA  (2 << 6)
-#define MSM_GPIO_DRV_8MA  (3 << 6)
-#define MSM_GPIO_DRV_10MA (4 << 6)
-#define MSM_GPIO_DRV_12MA (5 << 6)
-#define MSM_GPIO_DRV_14MA (6 << 6)
-#define MSM_GPIO_DRV_16MA (7 << 6)
-#define MSM_GPIO_DRV_MASK (7 << 6)
-
-#define MSM_GPIO_FUNC_SEL(x)   ((x & 0xf) << 2)
-#define MSM_GPIO_FUNC_SEL_MASK (0xf << 2)
-
-#define MSM_GPIO_PULL_NONE      0
-#define MSM_GPIO_PULL_PULL_DOWN 1
-#define MSM_GPIO_PULL_KEEPER    2
-#define MSM_GPIO_PULL_PULL_UP   3
-#define MSM_GPIO_PULL_MASK      3
+#define NR_MSM_GPIOS 173
 
 #endif /* __ASM_ARCH_MSM_GPIO_V2_8X60_H */

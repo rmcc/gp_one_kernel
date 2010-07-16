@@ -23,6 +23,7 @@
 #include <linux/io.h>
 
 #include <linux/i2c.h>
+#include <linux/smsc911x.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -57,12 +58,45 @@ static struct platform_device smc91x_device = {
 	.resource      = smc91x_resources,
 };
 
+static struct resource smsc911x_resources[] = {
+	[0] = {
+		.flags = IORESOURCE_MEM,
+		.start = 0x1b800000,
+		.end   = 0x1b8000ff
+	},
+	[1] = {
+		.flags = IORESOURCE_IRQ,
+		.start = TLMM_SCSS_DIR_CONN_IRQ_0,
+		.end   = TLMM_SCSS_DIR_CONN_IRQ_0
+	},
+};
+
+static struct smsc911x_platform_config smsc911x_config = {
+	.irq_polarity = SMSC911X_IRQ_POLARITY_ACTIVE_HIGH,
+	.irq_type     = SMSC911X_IRQ_TYPE_PUSH_PULL,
+	.flags        = SMSC911X_USE_16BIT
+};
+
+static struct platform_device smsc911x_device = {
+	.name          = "smsc911x",
+	.id            = 0,
+	.num_resources = ARRAY_SIZE(smsc911x_resources),
+	.resource      = smsc911x_resources,
+	.dev           = {
+		.platform_data = &smsc911x_config
+	}
+};
+
 #ifdef CONFIG_I2C_QUP
 static void gsbi3_qup_i2c_gpio_config(int adap_id, int config_type)
 {
 }
 
 static void gsbi4_qup_i2c_gpio_config(int adap_id, int config_type)
+{
+}
+
+static void gsbi8_qup_i2c_gpio_config(int adap_id, int config_type)
 {
 }
 
@@ -84,6 +118,13 @@ static struct msm_i2c_platform_data msm_gsbi4_qup_i2c_pdata = {
 	.msm_i2c_config_gpio = gsbi4_qup_i2c_gpio_config,
 };
 
+static struct msm_i2c_platform_data msm_gsbi8_qup_i2c_pdata = {
+	.clk_freq = 100000,
+	.clk = "gsbi_qup_clk",
+	.pclk = "gsbi_pclk",
+	.msm_i2c_config_gpio = gsbi8_qup_i2c_gpio_config,
+};
+
 static struct msm_i2c_platform_data msm_gsbi9_qup_i2c_pdata = {
 	.clk_freq = 100000,
 	.clk = "gsbi_qup_clk",
@@ -92,14 +133,57 @@ static struct msm_i2c_platform_data msm_gsbi9_qup_i2c_pdata = {
 };
 #endif
 
-static struct platform_device *devices[] __initdata = {
+#ifdef CONFIG_I2C_SSBI
+/* PMIC SSBI */
+static struct msm_ssbi_platform_data msm_ssbi1_pdata = {
+	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
+};
+
+/* PMIC SSBI */
+static struct msm_ssbi_platform_data msm_ssbi2_pdata = {
+	.controller_type = MSM_SBI_CTRL_PMIC_ARBITER,
+};
+
+/* CODEC/TSSC SSBI */
+static struct msm_ssbi_platform_data msm_ssbi3_pdata = {
+	.controller_type = MSM_SBI_CTRL_SSBI,
+};
+#endif
+
+static struct platform_device *rumi_sim_devices[] __initdata = {
 	&smc91x_device,
 #ifdef CONFIG_I2C_QUP
 	&msm_gsbi3_qup_i2c_device,
 	&msm_gsbi4_qup_i2c_device,
+	&msm_gsbi8_qup_i2c_device,
 	&msm_gsbi9_qup_i2c_device,
 #endif
+#ifdef CONFIG_I2C_SSBI
+	&msm_device_ssbi1,
+	&msm_device_ssbi2,
+	&msm_device_ssbi3,
+#endif
 };
+
+static struct platform_device *surf_devices[] __initdata = {
+	&smsc911x_device,
+#ifdef CONFIG_I2C_QUP
+	&msm_gsbi3_qup_i2c_device,
+	&msm_gsbi4_qup_i2c_device,
+	&msm_gsbi8_qup_i2c_device,
+	&msm_gsbi9_qup_i2c_device,
+#endif
+#ifdef CONFIG_I2C_SSBI
+	&msm_device_ssbi1,
+	&msm_device_ssbi2,
+	&msm_device_ssbi3,
+#endif
+};
+
+#ifdef CONFIG_I2C
+static struct i2c_board_info __initdata msm8x60_i2c_gsbi8_info[] = {
+};
+#endif
 
 unsigned long clk_get_max_axi_khz(void)
 {
@@ -111,7 +195,13 @@ static void __init msm8x60_init_buses(void)
 #ifdef CONFIG_I2C_QUP
 	msm_gsbi3_qup_i2c_device.dev.platform_data = &msm_gsbi3_qup_i2c_pdata;
 	msm_gsbi4_qup_i2c_device.dev.platform_data = &msm_gsbi4_qup_i2c_pdata;
+	msm_gsbi8_qup_i2c_device.dev.platform_data = &msm_gsbi8_qup_i2c_pdata;
 	msm_gsbi9_qup_i2c_device.dev.platform_data = &msm_gsbi9_qup_i2c_pdata;
+#endif
+#ifdef CONFIG_I2C_SSBI
+	msm_device_ssbi1.dev.platform_data = &msm_ssbi1_pdata;
+	msm_device_ssbi2.dev.platform_data = &msm_ssbi2_pdata;
+	msm_device_ssbi3.dev.platform_data = &msm_ssbi3_pdata;
 #endif
 }
 
@@ -160,13 +250,28 @@ static void __init msm8x60_init_ebi2(void)
 	if (ebi2_cfg_ptr != 0) {
 		ebi2_cfg = readl(ebi2_cfg_ptr);
 
-		if (machine_is_msm8x60_sim())
-			ebi2_cfg |= (1 << 4); /* CS2_CFG */
+		if (machine_is_msm8x60_surf())
+			ebi2_cfg |= (1 << 4) | (1 << 5); /* CS2, CS3 */
+		else if (machine_is_msm8x60_sim())
+			ebi2_cfg |= (1 << 4); /* CS2 */
 		else if (machine_is_msm8x60_rumi3())
-			ebi2_cfg |= (1 << 5); /* CS3_CFG */
+			ebi2_cfg |= (1 << 5); /* CS3 */
 
 		writel(ebi2_cfg, ebi2_cfg_ptr);
 		iounmap(ebi2_cfg_ptr);
+	}
+
+	if (machine_is_msm8x60_surf()) {
+		ebi2_cfg_ptr = ioremap_nocache(0x1a110000, SZ_4K);
+		if (ebi2_cfg_ptr != 0) {
+			/* EBI2_XMEM_CFG:PWRSAVE_MODE off */
+			writel(0UL, ebi2_cfg_ptr);
+
+			/* EBI2 CS3 muxed address/data,
+			 * two cyc addr enable */
+			writel(0xA3030020, ebi2_cfg_ptr + 0x34);
+			iounmap(ebi2_cfg_ptr);
+		}
 	}
 }
 
@@ -190,19 +295,90 @@ static void __init msm8x60_configure_smc91x(void)
 	}
 }
 
+struct msm8x60_tlmm_cfg_struct {
+	unsigned gpio;
+	u32      flags;
+};
+
+static uint32_t msm8x60_tlmm_cfgs[] = {
+	/*
+	 * GSBI8
+	 */
+	GPIO_CFG(64, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	GPIO_CFG(65, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	/*
+	 * EBI2
+	 */
+	/* address lines */
+	GPIO_CFG(123, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(124, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(125, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(126, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(127, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(128, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(129, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(130, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	/* A_D lines */
+	GPIO_CFG(135, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(136, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(137, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(138, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(139, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(140, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(141, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(142, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(143, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(144, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(145, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(146, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(147, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(148, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(149, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	GPIO_CFG(150, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	/* OE */
+	GPIO_CFG(151, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	/* WE */
+	GPIO_CFG(157, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	/* CS2 */
+	GPIO_CFG(40, 2, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	/* CS3 */
+	GPIO_CFG(133, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+	/* ADV */
+	GPIO_CFG(153, 1, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),
+};
+
 static void __init msm8x60_init_tlmm(void)
 {
+	unsigned n;
+
 	if (machine_is_msm8x60_rumi3())
-		msm_gpio_install_direct_irq(NR_MSM_IRQS + 40, 0);
+		msm_gpio_install_direct_irq(0, 0);
+	else if (machine_is_msm8x60_surf()) {
+		msm_gpio_install_direct_irq(62, 0);
+
+		for (n = 0; n < ARRAY_SIZE(msm8x60_tlmm_cfgs); ++n)
+			gpio_tlmm_config(msm8x60_tlmm_cfgs[n], 0);
+	}
 }
 
 static void __init msm8x60_init(void)
 {
 	msm8x60_init_ebi2();
 	msm8x60_init_tlmm();
-	msm8x60_configure_smc91x();
 	msm8x60_init_buses();
-	platform_add_devices(devices, ARRAY_SIZE(devices));
+	if (machine_is_msm8x60_surf())
+		platform_add_devices(surf_devices,
+				     ARRAY_SIZE(surf_devices));
+	else {
+		msm8x60_configure_smc91x();
+		platform_add_devices(rumi_sim_devices,
+				     ARRAY_SIZE(rumi_sim_devices));
+	}
+#ifdef CONFIG_I2C
+	i2c_register_board_info(msm_gsbi8_qup_i2c_device.id,
+				msm8x60_i2c_gsbi8_info,
+				ARRAY_SIZE(msm8x60_i2c_gsbi8_info));
+#endif
 }
 
 MACHINE_START(MSM8X60_RUMI3, "QCT MSM8X60 RUMI3")
