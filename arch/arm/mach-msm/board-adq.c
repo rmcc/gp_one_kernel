@@ -571,10 +571,7 @@ static struct platform_device msm_bluesleep_device = {
 
 ///+++FIH_ADQ+++	godfrey
 #ifdef CONFIG_AR6K
-//static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
-int static msm_ar6k_sdcc_setup_power(int dev_id, int on);
-int static ar6k_wifi_suspend(int dev_id);
-int static ar6k_wifi_resume(int dev_id);
+static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
 static void (*ar6k_wifi_status_cb)(int card_present, void *dev_id);
 static void *ar6k_wifi_status_cb_devid;
 static unsigned int  wifi_power_on = 0;
@@ -596,7 +593,7 @@ static unsigned int ar6k_wifi_status(struct device *dev)
 
 static struct mmc_platform_data ar6k_wifi_data = {
     .ocr_mask	    = MMC_VDD_28_29,
-    .translate_vdd	= msm_ar6k_sdcc_setup_power,
+    .translate_vdd	= msm_sdcc_setup_power,
     .status			= ar6k_wifi_status,
     .register_status_notify	= ar6k_wifi_status_register,
     .mmc_bus_width  = MMC_CAP_4_BIT_DATA,
@@ -1341,7 +1338,6 @@ static unsigned sdcc_cfg_data[][6] = {
 };
 
 static unsigned long vreg_sts, gpio_sts;
-static unsigned mpp_mmc = 2;
 static struct vreg *vreg_mmc;
 
 static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
@@ -1365,26 +1361,6 @@ static void msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
         }
 }
 
-
-#ifdef CONFIG_AR6K
-static int  ar6k_wifi_suspend(int dev_id)
-{
-    bluetooth_power(WIFI_CONTROL_MASK | 0);  
-    return 1;
-}
-
-static int  ar6k_wifi_resume(int dev_id)
-{
-    bluetooth_power(WIFI_CONTROL_MASK | 1);    
-    return 1;
-}
-
-static int msm_ar6k_sdcc_setup_power(int dev_id, int on)
-{
-    return 0;
-}
-
-#endif
 
 static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 {
