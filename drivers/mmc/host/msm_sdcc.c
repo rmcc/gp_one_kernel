@@ -726,6 +726,8 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 	msmsdcc_print_status(host, "irq1-r", status);
 #endif
 
+	spin_lock(&host->lock);
+
 	do {
 		unsigned long flags;
 		unsigned int remain, len;
@@ -786,6 +788,8 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 	} else if (!host->curr.xfer_remain)
 		writel((readl(host->base + MMCIMASK0) & (~(MCI_IRQ_PIO))) | 0,
 				host->base + MMCIMASK0);
+
+	spin_unlock(&host->lock);
 
 	return IRQ_HANDLED;
 }
@@ -989,9 +993,11 @@ msmsdcc_irq(int irq, void *dev_id)
 					 * to be read, and simulate a PIO irq.
 					 */
 					if (readl(host->base + MMCISTATUS) &
-							       MCI_RXDATAAVLBL)
+						       MCI_RXDATAAVLBL) {
+						spin_unlock(&host->lock);
 						msmsdcc_pio_irq(1, host);
-
+						spin_lock(&host->lock);
+					}
 					msmsdcc_stop_data(host);
 					if (!data->error)
 						host->curr.data_xfered =
@@ -1944,50 +1950,8 @@ static void __exit msmsdcc_exit(void)
 #endif
 }
 
-#ifndef MODULE
-static int __init msmsdcc_pwrsave_setup(char *__unused)
-{
-	msmsdcc_pwrsave = 1;
-	return 1;
-}
-
-static int __init msmsdcc_nopwrsave_setup(char *__unused)
-{
-	msmsdcc_pwrsave = 0;
-	return 1;
-}
-
-
-static int __init msmsdcc_fmin_setup(char *str)
-{
-	unsigned int n;
-
-	if (!get_option(&str, &n))
-		return 0;
-	msmsdcc_fmin = n;
-	return 1;
-}
-
-static int __init msmsdcc_fmax_setup(char *str)
-{
-	unsigned int n;
-
-	if (!get_option(&str, &n))
-		return 0;
-	msmsdcc_fmax = n;
-	return 1;
-}
-#endif
-
-__setup("msmsdcc_pwrsave", msmsdcc_pwrsave_setup);
-__setup("msmsdcc_nopwrsave", msmsdcc_nopwrsave_setup);
-__setup("msmsdcc_fmin=", msmsdcc_fmin_setup);
-__setup("msmsdcc_fmax=", msmsdcc_fmax_setup);
-
 module_init(msmsdcc_init);
 module_exit(msmsdcc_exit);
-module_param(msmsdcc_fmin, uint, 0444);
-module_param(msmsdcc_fmax, uint, 0444);
 
 MODULE_DESCRIPTION("Qualcomm Multimedia Card Interface driver");
 MODULE_LICENSE("GPL");
