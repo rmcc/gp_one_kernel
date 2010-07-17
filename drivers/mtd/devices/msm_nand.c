@@ -33,6 +33,7 @@
 #include "msm_nand.h"
 
 unsigned long msm_nand_phys;
+unsigned crci_mask;
 
 #define MSM_NAND_DMA_BUFFER_SIZE SZ_4K
 #define MSM_NAND_DMA_BUFFER_SLOTS \
@@ -194,7 +195,7 @@ unsigned flash_rd_reg(struct msm_nand_chip *chip, unsigned addr)
 
 	dsb();
 	msm_dmov_exec_cmd(
-		chip->dma_channel, 0, DMOV_CMD_PTR_LIST |
+		chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
 	dsb();
 
@@ -228,7 +229,7 @@ void flash_wr_reg(struct msm_nand_chip *chip, unsigned addr, unsigned val)
 
 	dsb();
 	msm_dmov_exec_cmd(
-		chip->dma_channel, 0, DMOV_CMD_PTR_LIST |
+		chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
 	dsb();
 
@@ -244,7 +245,6 @@ uint32_t flash_read_id(struct msm_nand_chip *chip)
 		unsigned data[7];
 	} *dma_buffer;
 	uint32_t rv;
-	unsigned crci_mask;
 
 	wait_event(chip->wait_queue, (dma_buffer = msm_nand_get_dma_buffer
 				(chip, sizeof(*dma_buffer))));
@@ -298,8 +298,6 @@ uint32_t flash_read_id(struct msm_nand_chip *chip)
 	dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd) >> 3
 			) | CMD_PTR_LP;
 
-	crci_mask = msm_dmov_build_crci_mask(2,
-		DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 	dsb();
 	msm_dmov_exec_cmd(chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
@@ -437,7 +435,6 @@ uint32_t flash_onfi_probe(struct msm_nand_chip *chip)
 	dma_addr_t dma_addr_identifier = 0;
 	unsigned cmd_set_count = 2;
 	unsigned crc_chk_count = 0;
-	unsigned crci_mask;
 
 	if (msm_nand_data.nr_parts) {
 		page_address = ((msm_nand_data.parts[0]).offset >> 11);
@@ -585,8 +582,6 @@ uint32_t flash_onfi_probe(struct msm_nand_chip *chip)
 		dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd)
 				>> 3) | CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-			DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		dsb();
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
@@ -717,7 +712,6 @@ static int msm_nand_read_oob_only(struct msm_nand_chip *chip, loff_t from, struc
 	uint32_t oob_col = 0;
 	unsigned page_count;
 	unsigned pages_read = 0;
-	unsigned crci_mask;
 
 	if (ops->mode != MTD_OOB_AUTO) {
 		sectoroobsize = 15;
@@ -883,8 +877,6 @@ static int msm_nand_read_oob_only(struct msm_nand_chip *chip, loff_t from, struc
 
 		dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-				DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 				DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
 
@@ -988,7 +980,6 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	dma_addr_t oob_dma_addr_curr = 0;
 	unsigned page_count;
 	unsigned pages_read = 0;
-	unsigned crci_mask;
 
 	if (from & (mtd->writesize - 1)) {
 		pr_err("%s: unsupported from, 0x%llx\n",
@@ -1156,8 +1147,6 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 
 		dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-			DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
 
@@ -1511,8 +1500,6 @@ err_dma_map_oobbuf_failed:
 			(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3)
 			| CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-				DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		dsb();
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
@@ -1683,7 +1670,6 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 	dma_addr_t oob_dma_addr_curr = 0;
 	unsigned page_count;
 	unsigned pages_written = 0;
-	unsigned crci_mask;
 
 	if (chip->CFG1 & CFG1_WIDE_FLASH) { /* (assuming 2k nand) */
 		sectoroobsize--;
@@ -1829,8 +1815,6 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		BUG_ON(cmd - dma_buffer->cmd > ARRAY_SIZE(dma_buffer->cmd));
 		dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-				DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
 
@@ -1904,7 +1888,6 @@ err_dma_map_oobbuf_failed:
 	dma_addr_t oob_dma_addr_curr = 0;
 	unsigned page_count;
 	unsigned pages_written = 0;
-	unsigned crci_mask;
 
 
 	if (to & (mtd->writesize - 1)) {
@@ -2101,8 +2084,6 @@ err_dma_map_oobbuf_failed:
 			(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) |
 			CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-				DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		dsb();
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(
@@ -2188,7 +2169,6 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		unsigned data[8];
 	} *dma_buffer;
 	unsigned page = instr->addr / 2048;
-	unsigned crci_mask;
 
 	if (instr->addr & (mtd->erasesize - 1)) {
 		pr_err("%s: unsupported erase address, 0x%x\n",
@@ -2240,8 +2220,6 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	dma_buffer->cmdptr =
 		(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
-	crci_mask = msm_dmov_build_crci_mask(2,
-		DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 	dsb();
 	msm_dmov_exec_cmd(
 		chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST |
@@ -2306,7 +2284,6 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 	dmov_s *cmd;
 	uint8_t *buf;
 	unsigned page = ofs / 2048;
-	unsigned crci_mask;
 
 	/* Check for invalid offset */
 	if (ofs > mtd->size)
@@ -2384,8 +2361,6 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 	dma_buffer->cmdptr = (msm_virt_to_dma(chip,
 				dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
-	crci_mask = msm_dmov_build_crci_mask(2,
-			DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 	dsb();
 	msm_dmov_exec_cmd(chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
@@ -2506,7 +2481,6 @@ uint32_t flash_onenand_probe(struct msm_nand_chip *chip)
 	dmov_s *cmd;
 
 	int err = 0;
-	unsigned crci_mask;
 
 	wait_event(chip->wait_queue, (dma_buffer = msm_nand_get_dma_buffer
 				(chip, sizeof(*dma_buffer))));
@@ -2590,8 +2564,6 @@ uint32_t flash_onenand_probe(struct msm_nand_chip *chip)
 	dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd)
 			>> 3) | CMD_PTR_LP;
 
-	crci_mask = msm_dmov_build_crci_mask(2,
-			DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 	dsb();
 	msm_dmov_exec_cmd(chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST
 			| DMOV_CMD_ADDR(msm_virt_to_dma(chip,
@@ -2712,7 +2684,6 @@ int msm_onenand_read_oob(struct mtd_info *mtd,
 	uint16_t controller_status;
 	uint16_t interrupt_status;
 	uint16_t ecc_status;
-	unsigned crci_mask;
 #if VERBOSE
 	pr_info("================================================="
 			"================\n");
@@ -3217,8 +3188,6 @@ int msm_onenand_read_oob(struct mtd_info *mtd,
 		dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd)
 				>> 3) | CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-				DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		dsb();
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
@@ -3394,7 +3363,6 @@ static int msm_onenand_write_oob(struct mtd_info *mtd, loff_t to,
 	uint16_t controller_status;
 	uint16_t interrupt_status;
 	uint16_t ecc_status;
-	unsigned crci_mask;
 
 #if VERBOSE
 	pr_info("================================================="
@@ -3911,8 +3879,6 @@ static int msm_onenand_write_oob(struct mtd_info *mtd, loff_t to,
 		dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd)
 				>> 3) | CMD_PTR_LP;
 
-		crci_mask = msm_dmov_build_crci_mask(2,
-				DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 		dsb();
 		msm_dmov_exec_cmd(chip->dma_channel, crci_mask,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
@@ -4076,7 +4042,6 @@ static int msm_onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	uint16_t ecc_status;
 
 	uint64_t temp;
-	unsigned crci_mask;
 
 #if VERBOSE
 	pr_info("================================================="
@@ -4324,8 +4289,6 @@ static int msm_onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	dma_buffer->cmdptr = (msm_virt_to_dma(chip, dma_buffer->cmd)
 			>> 3) | CMD_PTR_LP;
 
-	crci_mask = msm_dmov_build_crci_mask(2,
-			DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 	dsb();
 	msm_dmov_exec_cmd(chip->dma_channel, crci_mask, DMOV_CMD_PTR_LIST
 			| DMOV_CMD_ADDR(msm_virt_to_dma(chip,
@@ -4750,6 +4713,9 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 
 	pr_info("%s: allocated dma buffer at %p, dma_addr %x\n",
 		__func__, info->msm_nand.dma_buffer, info->msm_nand.dma_addr);
+
+	crci_mask = msm_dmov_build_crci_mask(2,
+			DMOV_NAND_CRCI_DATA, DMOV_NAND_CRCI_CMD);
 
 	info->mtd.name = dev_name(&pdev->dev);
 	info->mtd.priv = &info->msm_nand;
