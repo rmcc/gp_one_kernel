@@ -268,7 +268,6 @@ static struct usb_function_map usb_functions_map[] = {
 	{"nmea", 4},
 	{"ethernet", 5},
 };
-// --- FIH_ADQ ---
 
 /* dynamic composition */
 static struct usb_composition usb_func_composition[] = {
@@ -571,7 +570,11 @@ static struct platform_device msm_bluesleep_device = {
 
 ///+++FIH_ADQ+++	godfrey
 #ifdef CONFIG_AR6K
-static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
+static uint32_t msm_ar6k_sdcc_setup_power(struct device *dv, unsigned int vdd)
+{
+     return 0;
+}
+//static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
 static void (*ar6k_wifi_status_cb)(int card_present, void *dev_id);
 static void *ar6k_wifi_status_cb_devid;
 static unsigned int  wifi_power_on = 0;
@@ -593,7 +596,7 @@ static unsigned int ar6k_wifi_status(struct device *dev)
 
 static struct mmc_platform_data ar6k_wifi_data = {
     .ocr_mask	    = MMC_VDD_28_29,
-    .translate_vdd	= msm_sdcc_setup_power,
+    .translate_vdd	= msm_ar6k_sdcc_setup_power,
     .status			= ar6k_wifi_status,
     .register_status_notify	= ar6k_wifi_status_register,
     .mmc_bus_width  = MMC_CAP_4_BIT_DATA,
@@ -694,110 +697,110 @@ static void init_Bluetooth_gpio_table(void)
 
 static int bluetooth_power(int on)
 {
-    int module_status=0,prev_status=0;
-    bool bConfigWIFI;
+	int module_status=0,prev_status=0;
+	bool bConfigWIFI;
 
-    spin_lock(&wif_bt_lock);
+	spin_lock(&wif_bt_lock);
 
-    bConfigWIFI = (on & WIFI_CONTROL_MASK);
+	bConfigWIFI = (on & WIFI_CONTROL_MASK);
 
-    if(bConfigWIFI)
-    {
-        prev_status = wifi_status;
-        wifi_status = on & ~(WIFI_CONTROL_MASK); 
-        if( wifi_status == prev_status )
-        {
-            printk(KERN_ERR "%s: WIFI already turn %s\n", __func__,  (wifi_status?"ON":"OFF") );
-            spin_unlock(&wif_bt_lock);
-            return 0;
+	if(bConfigWIFI)
+	{
+		prev_status = wifi_status;
+		wifi_status = on & ~(WIFI_CONTROL_MASK); 
+		if( wifi_status == prev_status )
+		{
+			printk(KERN_ERR "%s: WIFI already turn %s\n", __func__,  (wifi_status?"ON":"OFF") );
+			spin_unlock(&wif_bt_lock);
+			return 0;
 		}
-        if(wifi_status && !bt_status)
-            module_status = MODULE_TURN_ON;
-        else if(!wifi_status && !bt_status)
-            module_status = MODULE_TURN_OFF;
+		if(wifi_status && !bt_status)
+			module_status = MODULE_TURN_ON;
+		else if(!wifi_status && !bt_status)
+			module_status = MODULE_TURN_OFF;
 
-    }else {
-        prev_status = bt_status;
-        bt_status = on;
-        if( bt_status == prev_status )
-        {
-            printk(KERN_ERR "%s: BT already turn %s\n", __func__,  (bt_status?"ON":"OFF") );
-            spin_unlock(&wif_bt_lock);
-            return 0;
+	}else {
+		prev_status = bt_status;
+		bt_status = on;
+		if( bt_status == prev_status )
+		{
+			printk(KERN_ERR "%s: BT already turn %s\n", __func__,  (bt_status?"ON":"OFF") );
+			spin_unlock(&wif_bt_lock);
+			return 0;
 		}
-        if(bt_status && !wifi_status)
-            module_status = MODULE_TURN_ON;
-        else if(!wifi_status && !bt_status)
-            module_status = MODULE_TURN_OFF;
-    }
+		if(bt_status && !wifi_status)
+			module_status = MODULE_TURN_ON;
+		else if(!wifi_status && !bt_status)
+			module_status = MODULE_TURN_OFF;
+	}
 
-    //power control before module on/off
-    if(!bConfigWIFI &&  !bt_status) {     //Turn BT off
-        printk(KERN_DEBUG "%s : Turn BT off.\n", __func__);
+	//power control before module on/off
+	if(!bConfigWIFI &&  !bt_status) {     //Turn BT off
+		printk(KERN_DEBUG "%s : Turn BT off.\n", __func__);
 		gpio_direction_output(27,0);    
-    }else if(!bConfigWIFI &&  bt_status){     //Turn BT on        
-        printk(KERN_DEBUG "%s : Turn BT on.\n", __func__);
-    }else if(bConfigWIFI && wifi_status) {  //Turn WIFI on
-        printk(KERN_DEBUG "%s : Turn WIFI on.\n", __func__);
-        //gpio_direction_output(23,1);
-        gpio_direction_output(96,0);
-        gpio_direction_output(35,0);
-    }else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF
-        printk(KERN_DEBUG "%s : Turn WIFI off.\n", __func__);
+	}else if(!bConfigWIFI &&  bt_status){     //Turn BT on        
+		printk(KERN_DEBUG "%s : Turn BT on.\n", __func__);
+	}else if(bConfigWIFI && wifi_status) {  //Turn WIFI on
+		printk(KERN_DEBUG "%s : Turn WIFI on.\n", __func__);
+		//gpio_direction_output(23,1);
+		gpio_direction_output(96,0);
+		gpio_direction_output(35,0);
+	}else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF
+		printk(KERN_DEBUG "%s : Turn WIFI off.\n", __func__);
 #ifdef CONFIG_AR6K
-        if(ar6k_wifi_status_cb) {
-            wifi_power_on=0;
-            ar6k_wifi_status_cb(0,ar6k_wifi_status_cb_devid);
-        }else
-            printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
+		if(ar6k_wifi_status_cb) {
+			wifi_power_on=0;
+			ar6k_wifi_status_cb(0,ar6k_wifi_status_cb_devid);
+		}else
+			printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
 #else
-        printk(KERN_DEBUG "%s : Driver disabled\n", __func__);
+		printk(KERN_DEBUG "%s : Driver disabled\n", __func__);
 #endif
 
-        gpio_direction_output(96,0);
-        gpio_direction_output(35,0);
-    }
+		gpio_direction_output(96,0);
+		gpio_direction_output(35,0);
+	}
 
-    //Turn module on/off
-    if(module_status == MODULE_TURN_ON) {   //turn module on
-        printk(KERN_DEBUG "%s : Turn module(A22) on.\n", __func__);
+	//Turn module on/off
+	if(module_status == MODULE_TURN_ON) {   //turn module on
+		printk(KERN_DEBUG "%s : Turn module(A22) on.\n", __func__);
 		//FIH_ADQ.B.1741 turn on BT is too bad
-        gpio_direction_output(36,1);
+		gpio_direction_output(36,1);
 		//mdelay(10);
 		gpio_direction_output(41,1);
 		//mdelay(10);
 		gpio_direction_output(34,1);
 		//mdelay(10);
-    }else if(module_status == MODULE_TURN_OFF) { //turn module off
-        printk(KERN_DEBUG "%s : Turn module(A22) off.\n", __func__);
-        gpio_direction_output(34,0);
-        gpio_direction_output(41,0);
-        gpio_direction_output(36,0);
-    }
+	}else if(module_status == MODULE_TURN_OFF) { //turn module off
+		printk(KERN_DEBUG "%s : Turn module(A22) off.\n", __func__);
+		gpio_direction_output(34,0);
+		gpio_direction_output(41,0);
+		gpio_direction_output(36,0);
+	}
 
-    if(!bConfigWIFI &&  !bt_status) {  //Turn BT off  
-    }else if(!bConfigWIFI &&  bt_status){    //Turn BT on
-    	//FIH_ADQ.B.1741 turn on BT is too bad
-        //gpio_direction_output(27,1);
-        //mdelay(200);
-        gpio_direction_output(27,0);
-        mdelay(10);
-        gpio_direction_output(27,1);
-        mdelay(10);
-    }else if(bConfigWIFI && wifi_status) { //Turn WIFI on
-        gpio_direction_output(96,1);
-        gpio_direction_output(35,1);
+	if(!bConfigWIFI &&  !bt_status) {  //Turn BT off  
+	}else if(!bConfigWIFI &&  bt_status){    //Turn BT on
+		//FIH_ADQ.B.1741 turn on BT is too bad
+		//gpio_direction_output(27,1);
+		//mdelay(200);
+		gpio_direction_output(27,0);
+		mdelay(10);
+		gpio_direction_output(27,1);
+		mdelay(10);
+	}else if(bConfigWIFI && wifi_status) { //Turn WIFI on
+		gpio_direction_output(96,1);
+		gpio_direction_output(35,1);
 #ifdef CONFIG_AR6K
-        if(ar6k_wifi_status_cb) {
-            wifi_power_on=1;
-            ar6k_wifi_status_cb(1,ar6k_wifi_status_cb_devid);
-        }else
-            printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
-    }else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF        
-			}
+		if(ar6k_wifi_status_cb) {
+			wifi_power_on=1;
+			ar6k_wifi_status_cb(1,ar6k_wifi_status_cb_devid);
+		}else
+			printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
+	}else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF        
+	}
 #endif
 
-    spin_unlock(&wif_bt_lock);
+	spin_unlock(&wif_bt_lock);
 
 	return 0;
 }
@@ -1366,7 +1369,6 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 {
 	int rc = 0;
         struct platform_device *pdev;
-	int on = !!vdd;
 
         pdev = container_of(dv, struct platform_device, dev);
         msm_sdcc_setup_gpio(pdev->id, !!vdd);
@@ -1376,15 +1378,6 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
                         return 0;
 
                 clear_bit(pdev->id, &vreg_sts);
-
-	rc = on ? vreg_enable(vreg_mmc) : vreg_disable(vreg_mmc);
-
-	//+++[FIH_ADQ][IssueKeys:ADQ.B-4027  ]			
-	if (on)
-		printk(KERN_INFO "%s: (vreg_enable: vreg_mmc)\n",__func__);
-	else
-		printk(KERN_INFO "%s: (vreg_disable: vreg_mmc)\n",__func__);		
-	//---[FIH_ADQ][IssueKeys:ADQ.B-4027  ]	
 
                 if (!vreg_sts) {
                         rc = vreg_disable(vreg_mmc);
@@ -1409,7 +1402,7 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 }
 
 // FIH_ADQ, BillHJChang {
-static int msm_sdcc_card_detect(struct device * dev_sdcc1)
+static uint32_t msm_sdcc_card_detect(struct device * dev_sdcc1)
 {
 	int rc= 0;
 	gpio_request(18,0);
@@ -1423,7 +1416,7 @@ static struct mmc_platform_data msm7x25_sdcc_data = {
 	.ocr_mask	= MMC_VDD_28_29,
 	.translate_vdd	= msm_sdcc_setup_power,
 	.status		= msm_sdcc_card_detect,	// FIH_ADQ, BillHJChang
-	//.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 };
 
 static void __init msm7x25_init_mmc(void)
@@ -1483,7 +1476,7 @@ msm_i2c_gpio_config(int iface, int config_type)
 
 static struct msm_i2c_platform_data msm_i2c_pdata = {
 	.clk_freq = 100000,
-        .rmutex = NULL,
+        .rmutex = 0,
         .msm_i2c_config_gpio = msm_i2c_gpio_config,
 };
 
