@@ -2551,6 +2551,7 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_MSM8X60_RUMI3        1009000
 #define MACH_TYPE_MSM8X60_SIM          1009001
 #define MACH_TYPE_MSM8X60_SURF         1009002
+#define MACH_TYPE_MSM8X60_FFA          1009003
 
 #ifdef CONFIG_ARCH_EBSA110
 # ifdef machine_arch_type
@@ -33018,6 +33019,18 @@ extern unsigned int __machine_arch_type;
 # define machine_is_msm8x60_surf()	(machine_arch_type == MACH_TYPE_MSM8X60_SURF)
 #else
 # define machine_is_msm8x60_surf()	(0)
+#endif
+
+#ifdef CONFIG_MACH_MSM8X60_FFA
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_MSM8X60_FFA
+# endif
+# define machine_is_msm8x60_ffa()	(machine_arch_type == MACH_TYPE_MSM8X60_FFA)
+#else
+# define machine_is_msm8x60_ffa()	(0)
 #endif
 
 /*
