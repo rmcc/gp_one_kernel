@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,20 +26,16 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#ifndef _TPM_ST_I2C_H_
+#define _TPM_ST_I2C_H_
 
-#ifndef _MARIMBA_TSADC_H_
-#define _MARIMBA_TSADC_H_
+struct tpm_st_i2c_platform_data {
+	int accept_cmd_gpio;
+	int data_avail_gpio;
+	int accept_cmd_irq;
+	int data_avail_irq;
+	int (*gpio_setup)(void);
+	void (*gpio_release)(void);
+};
 
-struct marimba_tsadc_client;
-
-#define	TSSC_SUSPEND_LEVEL  1
-#define	TSADC_SUSPEND_LEVEL 2
-
-int marimba_tsadc_start(struct marimba_tsadc_client *client);
-
-struct marimba_tsadc_client *
-marimba_tsadc_register(struct platform_device *pdev, unsigned int is_ts);
-
-void marimba_tsadc_unregister(struct marimba_tsadc_client *client);
-
-#endif /* _MARIMBA_TSADC_H_ */
+#endif

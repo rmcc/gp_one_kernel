@@ -42,6 +42,12 @@ enum hsusb_phy_type {
 	INTEGRATED,
 	EXTERNAL,
 };
+/* used to detect the OTG Mode */
+enum otg_mode {
+	OTG_ID = 0, /* ID pin detection */
+	OTG_SYSFS,  /* sysfs mode */
+	OTG_VCHG,   /* Based on VCHG interrupt */
+};
 
 struct usb_function_map {
 	char name[20];
@@ -64,6 +70,25 @@ enum chg_type {
 	USB_CHG_TYPE__INVALID
 };
 #endif
+
+enum pre_emphasis_level {
+	PRE_EMPHASIS_DEFAULT,
+	PRE_EMPHASIS_DISABLE,
+	PRE_EMPHASIS_WITH_10_PERCENT = (1 << 5),
+	PRE_EMPHASIS_WITH_20_PERCENT = (3 << 4),
+};
+enum cdr_auto_reset {
+	CDR_AUTO_RESET_DEFAULT,
+	CDR_AUTO_RESET_ENABLE,
+	CDR_AUTO_RESET_DISABLE,
+};
+enum hs_drv_amplitude {
+	HS_DRV_AMPLITUDE_DEFAULT,
+	HS_DRV_AMPLITUDE_ZERO_PERCENT,
+	HS_DRV_AMPLITUDE_25_PERCENTI = (1 << 2),
+	HS_DRV_AMPLITUDE_5_PERCENT = (1 << 3),
+	HS_DRV_AMPLITUDE_75_PERCENT = (3 << 2),
+};
 
 struct msm_hsusb_gadget_platform_data {
 	int *phy_init_seq;
@@ -111,6 +136,10 @@ struct msm_otg_platform_data {
 	 * used instead
 	 */
 	int usb_in_sps;
+	enum pre_emphasis_level	pemp_level;
+	enum cdr_auto_reset	cdr_autoreset;
+	enum hs_drv_amplitude	drv_ampl;
+	int			phy_reset_sig_inverted;
 
 	/* pmic notfications apis */
 	int (*pmic_notif_init) (void);
@@ -118,6 +147,8 @@ struct msm_otg_platform_data {
 	int (*pmic_register_vbus_sn) (void (*callback)(int online));
 	void (*pmic_unregister_vbus_sn) (void (*callback)(int online));
 	int (*pmic_enable_ldo) (int);
+	void (*setup_gpio)(unsigned int config);
+	u8      otg_mode;
 };
 
 struct msm_usb_host_platform_data {

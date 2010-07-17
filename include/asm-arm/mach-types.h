@@ -2532,6 +2532,7 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_MXT_TD60             2550
 #define MACH_TYPE_ESYX                 2551
 #define MACH_TYPE_BULLDOG              2553
+#define MACH_TYPE_QSD8X50A_ST1_5       2627
 #define MACH_TYPE_MSM8X55_SURF         2768
 #define MACH_TYPE_MSM8X55_FFA          2769
 #define MACH_TYPE_MSM7201A_SURF        1007000
@@ -32793,6 +32794,18 @@ extern unsigned int __machine_arch_type;
 # define machine_is_bulldog()	(machine_arch_type == MACH_TYPE_BULLDOG)
 #else
 # define machine_is_bulldog()	(0)
+#endif
+
+#ifdef CONFIG_MACH_QSD8X50A_ST1_5
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_QSD8X50A_ST1_5
+# endif
+# define machine_is_qsd8x50a_st1_5()	(machine_arch_type == MACH_TYPE_QSD8X50A_ST1_5)
+#else
+# define machine_is_qsd8x50a_st1_5()	(0)
 #endif
 
 #ifdef CONFIG_MACH_MSM8X55_SURF

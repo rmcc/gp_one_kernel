@@ -156,6 +156,12 @@ struct mddi_platform_data {
 struct msm_fb_platform_data {
 	int (*detect_client)(const char *name);
 	int mddi_prescan;
+	int (*allow_set_offset)(void);
+};
+
+struct msm_hdmi_platform_data {
+	int irq;
+	int (*cable_detect)(int insert);
 };
 
 struct msm_i2c_platform_data {

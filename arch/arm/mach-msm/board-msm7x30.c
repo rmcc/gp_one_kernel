@@ -2209,6 +2209,9 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pmic_vbus_irq	= 1,
 #endif
 	.core_clk	= 1,
+	.pemp_level     = PRE_EMPHASIS_WITH_20_PERCENT,
+	.cdr_autoreset  = CDR_AUTO_RESET_DISABLE,
+	.drv_ampl       = HS_DRV_AMPLITUDE_DEFAULT,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -2571,6 +2574,9 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.max_grp3d_freq = 245 * 1000*1000,
 	.min_grp3d_freq = 192 * 1000*1000,
 	.set_grp3d_async = set_grp3d_async,
+	.imem_clk_name = "imem_clk",
+	.grp3d_clk_name = "grp_clk",
+	.grp2d_clk_name = "grp_2d_clk",
 };
 
 static struct resource kgsl_resources[] = {
@@ -3106,6 +3112,11 @@ static struct msm_gpio bt_config_power_off[] = {
 		"UART1DM_Tx" }
 };
 
+static struct msm_gpio bt_config_clock[] = {
+	{ GPIO_CFG(34, 0, GPIO_OUTPUT,  GPIO_NO_PULL,    GPIO_2MA),
+		"BT_REF_CLOCK_ENABLE" },
+};
+
 static int marimba_bt(int on)
 {
 	int rc;
@@ -3280,6 +3291,10 @@ static int bluetooth_power(int on)
 		if (rc < 0)
 			return -EIO;
 
+		if (machine_is_msm8x55_svlte_surf() ||
+				machine_is_msm8x55_svlte_ffa())
+			gpio_set_value(GPIO_PIN(bt_config_clock->gpio_cfg), 1);
+
 		rc = marimba_bt(on);
 		if (rc < 0)
 			return -EIO;
@@ -3288,6 +3303,10 @@ static int bluetooth_power(int on)
 					  PMAPP_CLOCK_VOTE_PIN_CTRL);
 		if (rc < 0)
 			return -EIO;
+
+		if (machine_is_msm8x55_svlte_surf() ||
+				machine_is_msm8x55_svlte_ffa())
+			gpio_set_value(GPIO_PIN(bt_config_clock->gpio_cfg), 0);
 
 		rc = msm_gpios_enable(bt_config_power_on,
 			ARRAY_SIZE(bt_config_power_on));
@@ -3333,7 +3352,7 @@ out:
 
 static void __init bt_power_init(void)
 {
-	int i;
+	int i, rc;
 
 	for (i = 0; i < ARRAY_SIZE(vregs_bt_name); i++) {
 		vregs_bt[i] = vreg_get(NULL, vregs_bt_name[i]);
@@ -3344,6 +3363,28 @@ static void __init bt_power_init(void)
 			return;
 		}
 	}
+
+	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa()) {
+		rc = msm_gpios_request_enable(bt_config_clock,
+					ARRAY_SIZE(bt_config_clock));
+		if (rc < 0) {
+			printk(KERN_ERR
+				"%s: msm_gpios_request_enable failed (%d)\n",
+					__func__, rc);
+			return;
+		}
+
+		rc = gpio_direction_output(GPIO_PIN(bt_config_clock->gpio_cfg),
+						0);
+		if (rc < 0) {
+			printk(KERN_ERR
+				"%s: gpio_direction_output failed (%d)\n",
+					__func__, rc);
+			return;
+		}
+	}
+
+
 	msm_bt_power_device.dev.platform_data = &bluetooth_power;
 }
 #else
