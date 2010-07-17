@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,22 +26,64 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef __ARCH_ARM_MACH_MSM_DEBUG_MM_H_
-#define __ARCH_ARM_MACH_MSM_DEBUG_MM_H_
 
-/* The below macro removes the directory path name and retains only the
- * file name to avoid long path names in log messages that comes as
- * part of __FILE__ to compiler.
- */
-#define __MM_FILE__ strrchr(__FILE__, '/') ? (strrchr(__FILE__, '/')+1) : \
-	__FILE__
+#ifndef __PMIC8058_OTHC_H__
+#define __PMIC8058_OTHC_H__
 
-#define MM_DBG(fmt, args...) pr_debug("[%s] " fmt,\
-		__func__, ##args)
+enum othc_headset_type {
+	OTHC_HEADSET_NO,
+	OTHC_HEADSET_NC,
+};
 
-#define MM_INFO(fmt, args...) pr_info("[%s:%s] " fmt,\
-	       __MM_FILE__, __func__, ##args)
+/* Signal control for OTHC module */
+enum othc_micbias_enable {
+	/* Turn off MICBIAS signal */
+	OTHC_SIGNAL_OFF,
+	/* Turn on MICBIAS signal when TCXO is enabled */
+	OTHC_SIGNAL_TCXO,
+	/* Turn on MICBIAS signal when PWM is high or TCXO is enabled */
+	OTHC_SIGNAL_PWM_TCXO,
+	/* MICBIAS always enabled */
+	OTHC_SIGNAL_ALWAYS_ON,
+};
 
-#define MM_ERR(fmt, args...) pr_err("[%s:%s] " fmt,\
-	       __MM_FILE__, __func__, ##args)
-#endif /* __ARCH_ARM_MACH_MSM_DEBUG_MM_H_ */
+/* Number of MICBIAS lines supported by PMIC8058 */
+enum othc_micbias {
+	OTHC_MICBIAS_0,
+	OTHC_MICBIAS_1,
+	OTHC_MICBIAS_2,
+	OTHC_MICBIAS_MAX,
+};
+
+enum othc_micbias_capability {
+	/* MICBIAS used only for BIAS with on/off capability */
+	OTHC_MICBIAS,
+	/* MICBIAS used to support HSED functionality */
+	OTHC_MICBIAS_HSED,
+};
+
+/* Configuration data for HSED */
+struct othc_hsed_config {
+	enum othc_headset_type othc_headset;
+	u16 othc_lowcurr_thresh_uA;
+	u16 othc_highcurr_thresh_uA;
+	u32 othc_hyst_prediv_us;
+	u32 othc_period_clkdiv_us;
+	u32 othc_hyst_clk_us;
+	u32 othc_period_clk_us;
+	int othc_nc_gpio;
+	int othc_wakeup;
+	int (*othc_nc_gpio_setup)(void);
+};
+
+struct pmic8058_othc_config_pdata {
+	enum othc_micbias micbias_select;
+	enum othc_micbias_enable micbias_enable;
+	enum othc_micbias_capability micbias_capability;
+	struct othc_hsed_config *hsed_config;
+};
+
+int pm8058_micbias_enable(enum othc_micbias micbias,
+			enum othc_micbias_enable enable);
+
+#endif /* __PMIC8058_OTHC_H__ */
