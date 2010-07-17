@@ -24,8 +24,6 @@
 #include <linux/bootmem.h>
 #include <linux/io.h>
 #include <linux/usb/mass_storage_function.h>
-#include <linux/spi/spi.h>
-#include <linux/bma150.h>
 #include <linux/mfd/pmic8058.h>
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>
@@ -467,6 +465,9 @@ static struct mfd_cell pm8058_subdevs[] = {
 		.id		= -1,
 		.platform_data	= &pm8058_pwm_data,
 		.data_size	= sizeof(pm8058_pwm_data),
+	},
+	{	.name = "pm8058-nfc",
+		.id		= -1,
 	},
 };
 
@@ -1952,10 +1953,6 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 };
 #endif
 
-static struct msm_gpio bma_spi_gpio_config_data[] = {
-	{ GPIO_CFG(51, 0, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), "bma_irq" },
-};
-
 static struct platform_device hs_device = {
 	.name   = "msm-handset",
 	.id     = -1,
@@ -1995,27 +1992,6 @@ static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR] = {
 	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].idle_enabled = 1,
 	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].latency = 2,
 	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].residency = 0,
-};
-
-static int msm_bma_gpio_setup(struct device *dev)
-{
-	int rc;
-
-	rc = msm_gpios_request_enable(bma_spi_gpio_config_data,
-		ARRAY_SIZE(bma_spi_gpio_config_data));
-
-	return rc;
-}
-
-static void msm_bma_gpio_teardown(struct device *dev)
-{
-	msm_gpios_disable_free(bma_spi_gpio_config_data,
-		ARRAY_SIZE(bma_spi_gpio_config_data));
-}
-
-static struct bma150_platform_data bma_pdata = {
-	.setup    = msm_bma_gpio_setup,
-	.teardown = msm_bma_gpio_teardown,
 };
 
 static struct resource qsd_spi_resources[] = {
@@ -2099,18 +2075,6 @@ static struct platform_device qsd_device_spi = {
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(qsd_spi_resources),
 	.resource	= qsd_spi_resources,
-};
-
-static struct spi_board_info msm_spi_board_info[] __initdata = {
-	{
-		.modalias	= "bma150",
-		.mode		= SPI_MODE_3,
-		.irq		= MSM_GPIO_TO_INT(51),
-		.bus_num	= 0,
-		.chip_select	= 0,
-		.max_speed_hz	= 10000000,
-		.platform_data	= &bma_pdata,
-	}
 };
 
 static struct msm_gpio qsd_spi_gpio_config_data[] = {
@@ -3331,6 +3295,9 @@ static struct platform_device msm_batt_device = {
 };
 
 static struct platform_device *devices[] __initdata = {
+#if defined(CONFIG_SERIAL_MSM) || defined(CONFIG_MSM_SERIAL_DEBUGGER)
+	&msm_device_uart2,
+#endif
 	&msm_device_smd,
 	&msm_device_dmov,
 	&smc91x_device,
@@ -3383,9 +3350,6 @@ static struct platform_device *devices[] __initdata = {
 	&msm_bt_power_device,
 #endif
 	&msm_device_kgsl,
-#if defined(CONFIG_SERIAL_MSM) || defined(CONFIG_MSM_SERIAL_DEBUGGER)
-	&msm_device_uart2,
-#endif
 	&msm_device_pmic_leds,
 	&msm_device_tssc,
 #ifdef CONFIG_MT9T013
@@ -3757,6 +3721,9 @@ static struct mmc_platform_data msm7x30_sdc1_data = {
 #ifdef CONFIG_MMC_MSM_SDC1_DUMMY52_REQUIRED
 	.dummy52_required = 1,
 #endif
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
 };
 #endif
 
@@ -3772,6 +3739,9 @@ static struct mmc_platform_data msm7x30_sdc2_data = {
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
 	.dummy52_required = 1,
 #endif
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
 };
 #endif
 
@@ -3786,6 +3756,9 @@ static struct mmc_platform_data msm7x30_sdc3_data = {
 #ifdef CONFIG_MMC_MSM_SDC3_DUMMY52_REQUIRED
 	.dummy52_required = 1,
 #endif
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
 };
 #endif
 
@@ -3803,6 +3776,9 @@ static struct mmc_platform_data msm7x30_sdc4_data = {
 #ifdef CONFIG_MMC_MSM_SDC4_DUMMY52_REQUIRED
 	.dummy52_required = 1,
 #endif
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
 };
 #endif
 
@@ -3859,6 +3835,8 @@ static void __init msm7x30_init_mmc(void)
 	msm_add_sdcc(1, &msm7x30_sdc1_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
+	if (machine_is_msm8x55_svlte_surf())
+		msm7x30_sdc2_data.msmsdcc_fmax =  24576000;
 	sdcc_vreg_data[1].vreg_data = vreg_s3;
 	sdcc_vreg_data[1].level = 1800;
 	msm_add_sdcc(2, &msm7x30_sdc2_data);
@@ -4059,6 +4037,9 @@ static void __init msm7x30_init(void)
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!\n",
 		       __func__);
+#ifdef CONFIG_SERIAL_MSM_CONSOLE
+	msm7x30_init_uart2();
+#endif
 	msm_spm_init(&msm_spm_data, 1);
 	msm_acpu_clock_init(&msm7x30_clock_data);
 	if (machine_is_msm7x30_surf() || machine_is_msm7x30_fluid())
@@ -4089,8 +4070,6 @@ static void __init msm7x30_init(void)
 	msm7x30_init_mmc();
 	msm7x30_init_nand();
 	msm_qsd_spi_init();
-	spi_register_board_info(msm_spi_board_info,
-		ARRAY_SIZE(msm_spi_board_info));
 	msm_fb_add_devices();
 	msm_pm_set_platform_data(msm_pm_data);
 	msm_device_i2c_init();
@@ -4114,9 +4093,6 @@ static void __init msm7x30_init(void)
 				ARRAY_SIZE(msm_camera_boardinfo));
 
 	bt_power_init();
-#ifdef CONFIG_SERIAL_MSM_CONSOLE
-	msm7x30_init_uart2();
-#endif
 	msm_device_tssc.dev.platform_data = &msm_ts_data;
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi6.dev.platform_data = &msm_i2c_ssbi6_pdata;
@@ -4284,6 +4260,28 @@ MACHINE_START(MSM8X55_SURF, "QCT MSM8X55 SURF")
 MACHINE_END
 
 MACHINE_START(MSM8X55_FFA, "QCT MSM8X55 FFA")
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io  = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
+	.boot_params = PHYS_OFFSET + 0x100,
+	.map_io = msm7x30_map_io,
+	.init_irq = msm7x30_init_irq,
+	.init_machine = msm7x30_init,
+	.timer = &msm_timer,
+MACHINE_END
+MACHINE_START(MSM8X55_SVLTE_SURF, "QCT MSM8X55 SVLTE SURF")
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io  = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
+	.boot_params = PHYS_OFFSET + 0x100,
+	.map_io = msm7x30_map_io,
+	.init_irq = msm7x30_init_irq,
+	.init_machine = msm7x30_init,
+	.timer = &msm_timer,
+MACHINE_END
+MACHINE_START(MSM8X55_SVLTE_FFA, "QCT MSM8X55 SVLTE FFA")
 #ifdef CONFIG_MSM_DEBUG_UART
 	.phys_io  = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,

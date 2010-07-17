@@ -26,6 +26,8 @@
 #include <linux/pmic8058-pwrkey.h>
 #include <linux/pmic8058-vibrator.h>
 #include <linux/leds.h>
+#include <linux/pmic8058-othc.h>
+#include <linux/mfd/pmic8901.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c/sx150x.h>
@@ -58,10 +60,12 @@
 #define PM8058_GPIO_PM_TO_SYS(pm_gpio)		(pm_gpio + NR_GPIO_IRQS)
 #define PM8058_GPIO_SYS_TO_PM(sys_gpio)		(sys_gpio - NR_GPIO_IRQS)
 #define PM8058_IRQ_BASE				(NR_MSM_IRQS + NR_GPIO_IRQS)
+#define PM8901_IRQ_BASE				(PM8058_IRQ_BASE + \
+						NR_PMIC8058_IRQS)
 
 #define GPIO_EXPANDER_GPIO_BASE \
-	(NR_MSM_GPIOS + PM8058_GPIOS + PM8058_MPPS)
-#define GPIO_EXPANDER_IRQ_BASE (PM8058_IRQ_BASE + NR_PMIC8058_IRQS)
+	(NR_MSM_GPIOS + PM8058_GPIOS + PM8058_MPPS + PM8901_MPPS)
+#define GPIO_EXPANDER_IRQ_BASE (PM8901_IRQ_BASE + NR_PMIC8901_IRQS)
 
 /*
  * The UI_INTx_N lines are pmic gpio lines which connect i2c
@@ -738,6 +742,81 @@ static struct pmic8058_vibrator_pdata pmic_vib_pdata = {
 	.max_timeout_ms = 15000,
 };
 
+
+#define PM8058_OTHC_CNTR_BASE0	0xA0
+#define PM8058_OTHC_CNTR_BASE1	0x134
+#define PM8058_OTHC_CNTR_BASE2	0x137
+
+static struct othc_hsed_config hsed_config_1 = {
+	.othc_headset = OTHC_HEADSET_NO,
+	.othc_lowcurr_thresh_uA = 100,
+	.othc_highcurr_thresh_uA = 700,
+	.othc_hyst_prediv_us = 7800,
+	.othc_period_clkdiv_us = 62500,
+	.othc_hyst_clk_us = 121000,
+	.othc_period_clk_us = 312500,
+	.othc_wakeup = 1,
+};
+
+/* MIC_BIAS0 is configured as normal MIC BIAS */
+static struct pmic8058_othc_config_pdata othc_config_pdata_0 = {
+	.micbias_select = OTHC_MICBIAS_0,
+	.micbias_capability = OTHC_MICBIAS,
+	.micbias_enable = OTHC_SIGNAL_OFF,
+};
+
+/* MIC_BIAS1 is configured as HSED_BIAS for OTHC */
+static struct pmic8058_othc_config_pdata othc_config_pdata_1 = {
+	.micbias_select = OTHC_MICBIAS_1,
+	.micbias_capability = OTHC_MICBIAS_HSED,
+	.micbias_enable = OTHC_SIGNAL_PWM_TCXO,
+	.hsed_config = &hsed_config_1,
+};
+
+/* MIC_BIAS2 is configured as normal MIC BIAS */
+static struct pmic8058_othc_config_pdata othc_config_pdata_2 = {
+	.micbias_select = OTHC_MICBIAS_2,
+	.micbias_capability = OTHC_MICBIAS,
+	.micbias_enable = OTHC_SIGNAL_OFF,
+};
+
+static struct resource resources_othc_0[] = {
+	{
+		.name = "othc_base",
+		.start = PM8058_OTHC_CNTR_BASE0,
+		.end   = PM8058_OTHC_CNTR_BASE0,
+		.flags = IORESOURCE_IO,
+	},
+};
+
+static struct resource resources_othc_1[] = {
+	{
+		.start = PM8058_SW_1_IRQ(PM8058_IRQ_BASE),
+		.end   = PM8058_SW_1_IRQ(PM8058_IRQ_BASE),
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.start = PM8058_IR_1_IRQ(PM8058_IRQ_BASE),
+		.end   = PM8058_IR_1_IRQ(PM8058_IRQ_BASE),
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.name = "othc_base",
+		.start = PM8058_OTHC_CNTR_BASE1,
+		.end   = PM8058_OTHC_CNTR_BASE1,
+		.flags = IORESOURCE_IO,
+	},
+};
+
+static struct resource resources_othc_2[] = {
+	{
+		.name = "othc_base",
+		.start = PM8058_OTHC_CNTR_BASE2,
+		.end   = PM8058_OTHC_CNTR_BASE2,
+		.flags = IORESOURCE_IO,
+	},
+};
+
 #define PM8058_GPIO_INT           88
 
 static struct pm8058_gpio_platform_data pm8058_gpio_data = {
@@ -785,7 +864,32 @@ static struct mfd_cell pm8058_subdevs[] = {
 	{
 		.name = "pm8058-pwm",
 		.id = -1,
-	}
+	},
+	{
+		.name = "pm8058-othc",
+		.id = 0,
+		.platform_data = &othc_config_pdata_0,
+		.data_size = sizeof(othc_config_pdata_0),
+		.num_resources = ARRAY_SIZE(resources_othc_0),
+		.resources = resources_othc_0,
+	},
+	{
+		/* OTHC1 module has headset/switch dection */
+		.name = "pm8058-othc",
+		.id = 1,
+		.num_resources = ARRAY_SIZE(resources_othc_1),
+		.resources = resources_othc_1,
+		.platform_data = &othc_config_pdata_1,
+		.data_size = sizeof(othc_config_pdata_1),
+	},
+	{
+		.name = "pm8058-othc",
+		.id = 2,
+		.platform_data = &othc_config_pdata_2,
+		.data_size = sizeof(othc_config_pdata_2),
+		.num_resources = ARRAY_SIZE(resources_othc_2),
+		.resources = resources_othc_2,
+	},
 };
 
 static struct pm8058_platform_data pm8058_platform_data = {
@@ -897,6 +1001,24 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 };
 #endif
 
+#ifdef CONFIG_PMIC8901
+
+#define PM8901_GPIO_INT           91
+
+static struct pm8901_platform_data pm8901_platform_data = {
+	.irq_base = PM8901_IRQ_BASE,
+};
+
+static struct i2c_board_info pm8901_boardinfo[] __initdata = {
+	{
+		I2C_BOARD_INFO("pm8901-core", 0),
+		.irq = MSM_GPIO_TO_INT(PM8901_GPIO_INT),
+		.platform_data = &pm8901_platform_data,
+	},
+};
+
+#endif /* CONFIG_PMIC8901 */
+
 unsigned long clk_get_max_axi_khz(void)
 {
 	return 0;
@@ -922,6 +1044,14 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_SSBI1_I2C_BUS_ID,
 		pm8058_boardinfo,
 		ARRAY_SIZE(pm8058_boardinfo),
+	},
+#endif
+#ifdef CONFIG_PMIC8901
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_SSBI2_I2C_BUS_ID,
+		pm8901_boardinfo,
+		ARRAY_SIZE(pm8901_boardinfo),
 	},
 #endif
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
@@ -1245,6 +1375,10 @@ static uint32_t msm8x60_tlmm_cfgs[] = {
 	GPIO_CFG(35, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 	GPIO_CFG(36, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 #endif
+#ifdef CONFIG_PMIC8901
+	/* PMIC8901 */
+	GPIO_CFG(PM8901_GPIO_INT, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA),
+#endif
 };
 
 static uint32_t msm8x60_hdrive_cfgs[][2] = {
@@ -1351,6 +1485,9 @@ static struct mmc_platform_data msm8x60_sdc1_data = {
 #else
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 #endif
+	.msmsdcc_fmin	= 400000,
+	.msmsdcc_fmid	= 24000000,
+	.msmsdcc_fmax	= 48000000,
 };
 #endif
 
@@ -1359,6 +1496,9 @@ static struct mmc_platform_data msm8x60_sdc2_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 400000,
+	.msmsdcc_fmid	= 24000000,
+	.msmsdcc_fmax	= 48000000,
 };
 #endif
 
@@ -1374,6 +1514,9 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 				       PMIC_GPIO_SDC3_DET - 1),
 	.irq_flags   = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 #endif
+	.msmsdcc_fmin	= 400000,
+	.msmsdcc_fmid	= 24000000,
+	.msmsdcc_fmax	= 48000000,
 };
 #endif
 
@@ -1382,6 +1525,9 @@ static struct mmc_platform_data msm8x60_sdc4_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 400000,
+	.msmsdcc_fmid	= 24000000,
+	.msmsdcc_fmax	= 48000000,
 };
 #endif
 
@@ -1390,6 +1536,9 @@ static struct mmc_platform_data msm8x60_sdc5_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 400000,
+	.msmsdcc_fmid	= 24000000,
+	.msmsdcc_fmax	= 48000000,
 };
 #endif
 

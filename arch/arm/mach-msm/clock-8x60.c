@@ -402,6 +402,10 @@ static void set_rate_nop(struct clk_local *clk, struct clk_freq_tbl *nf)
 		CLK_LOCAL(id, NORATE, NULL, REG(reg), NULL, REG(r_reg), res, \
 				br, 0, 0, 0, NULL, NULL, NULL, par, NULL)
 
+#define CLK_NORATE_MM(id, reg, br) \
+		CLK_LOCAL(id, NORATE, NULL, REG_MM(reg), NULL, NULL, 0, \
+				br, 0, 0, 0, NULL, NULL, NULL, NONE, NULL)
+
 #define CLK_SLAVE_MM(id, reg, br, par) \
 		CLK_LOCAL(id, NORATE, NULL, REG_MM(reg), NULL, NULL, 0, \
 				br, 0, 0, 0, NULL, NULL, NULL, par, NULL)
@@ -645,14 +649,10 @@ static struct clk_freq_tbl clk_tbl_tssc[] = {
 		CLK_LOCAL(id, MND, REG(ns), REG(ns), REG(ns-4), REG(ns+4), \
 				B(0), B(9), B(11), NS_MASK_USB, 0, \
 				set_rate_mnd, clk_tbl_usb, NULL, NONE, NULL)
-#define CLK_USB_FS1(id, ns) \
-		CLK_LOCAL(id, MND, REG(ns), REG(ns), REG(ns-4), REG(ns+12), \
-				B(0), 0, B(11), NS_MASK_USB, 0, set_rate_mnd, \
-				clk_tbl_usb, NULL, NONE, chld_usb_fs1_src)
-#define CLK_USB_FS2(id, ns) \
-		CLK_LOCAL(id, MND, REG(ns), REG(ns), REG(ns-4), REG(ns+12), \
-				B(0), 0, B(11), NS_MASK_USB, 0, set_rate_mnd, \
-				clk_tbl_usb, NULL, NONE, chld_usb_fs2_src)
+#define CLK_USB_FS(id, ns, chld_lst) \
+		CLK_LOCAL(id, MND, REG(ns), REG(ns), REG(ns-4), NULL, 0, \
+				0, B(11), NS_MASK_USB, 0, set_rate_mnd, \
+				clk_tbl_usb, NULL, NONE, chld_lst)
 #define F_USB(f, s, d, m, n) \
 		F_RAW(f, s##_PLL, MD8(16, m, 0, n), \
 			NS(23, 16, n, m, 5, 4, 3, d, 2, 0, s), \
@@ -785,10 +785,10 @@ struct banked_mnd_masks bmdn_info_gfx3d = {
 			.mode_mask =		BM(7, 6),
 	},
 };
-#define CLK_GFX3D(id, ns) \
+#define CLK_GFX3D(id, ns, par) \
 		CLK_LOCAL(id, MND, REG_MM(ns), REG_MM(ns-12), NULL, NULL, 0, \
 				B(0), B(2), 0, 0, set_rate_mnd_banked, \
-				clk_tbl_gfx3d, &bmdn_info_gfx3d, NONE, NULL)
+				clk_tbl_gfx3d, &bmdn_info_gfx3d, par, NULL)
 #define F_GFX3D(f, s, d, m, n) \
 		F_RAW(f, s##_PLL, MD4(4, m, 0, n), \
 			NS_MND_BANKED4(18, 14, n, m, 3, 0, s), \
@@ -836,10 +836,10 @@ static struct clk_freq_tbl clk_tbl_ijpeg[] = {
 
 /* JPEGD */
 #define NS_MASK_JPEGD (BM(15, 12) | BM(2, 0))
-#define CLK_JPEGD(id, ns) \
+#define CLK_JPEGD(id, ns, par) \
 		CLK_LOCAL(id, BASIC, REG_MM(ns), REG_MM(ns-8), NULL, NULL, 0, \
 				B(0), B(2), NS_MASK_JPEGD, 0, set_rate_basic, \
-				clk_tbl_jpegd, 	NULL, NONE, NULL)
+				clk_tbl_jpegd, 	NULL, par, NULL)
 #define F_JPEGD(f, s, d, m, n) \
 		F_RAW(f, s##_PLL, 0, NS_DIVSRC(15, 12, d, 2, 0, s), 0, 0)
 static struct clk_freq_tbl clk_tbl_jpegd[] = {
@@ -1043,11 +1043,10 @@ static struct clk_freq_tbl clk_tbl_vpe[] = {
 /* VFE */
 #define NS_MASK_VFE (BM(23, 16) | BM(11, 10) | BM(2, 0))
 #define CC_MASK_VFE (BM(7, 6))
-#define CLK_VFE(id, ns) \
+#define CLK_VFE(id, ns, par) \
 		CLK_LOCAL(id, MND, REG_MM(ns), REG_MM(ns-8), REG_MM(ns-4), \
-				NULL, 0, 0, B(2), NS_MASK_VFE, CC_MASK_VFE, \
-				set_rate_mnd, clk_tbl_vfe, NULL, NONE, \
-				chld_vfe_src)
+				NULL, 0, B(0), B(2), NS_MASK_VFE, CC_MASK_VFE, \
+				set_rate_mnd, clk_tbl_vfe, NULL, par, chld_vfe)
 #define F_VFE(f, s, d, m, n) \
 		F_RAW(f, s##_PLL, MD8(8, m, 0, n), \
 			NS_MM(23, 16, n, m, 11, 10, d, 2, 0, s), \
@@ -1070,29 +1069,29 @@ static struct clk_freq_tbl clk_tbl_vfe[] = {
 	F_END,
 };
 
-/* MI2S */
-#define NS_MASK_MI2S (BM(31, 24) | BM(6, 0))
-#define CLK_MI2S(id, ns) \
+/* Audio Interface */
+#define NS_MASK_AIF (BM(31, 24) | BM(6, 0))
+#define CLK_AIF(id, ns, chld_lst) \
 		CLK_LOCAL(id, MND, REG_LPA(ns), REG_LPA(ns), REG_LPA(ns+4), \
-				REG_LPA(ns), B(19), 0, B(9), NS_MASK_MI2S, 0, \
-				set_rate_mnd, clk_tbl_mi2s, NULL, NONE, \
-				chld_mi2s_src)
-#define F_MI2S(f, s, d, m, n) \
+				REG_LPA(ns), B(19), (B(15) | B(17)), B(9), \
+				NS_MASK_AIF, 0, set_rate_mnd, clk_tbl_aif, \
+				NULL, NONE, chld_lst)
+#define F_AIF(f, s, d, m, n) \
 		F_RAW(f, s##_PLL, MD8(8, m, 0, n), \
 			NS(31, 24, n, m, 5, 4, 3, d, 2, 0, s), \
 			0, MND_EN(B(8), n))
-static struct clk_freq_tbl clk_tbl_mi2s[] = {
-	F_MI2S(  512000, LPA_PXO, 1, 1, 48),
-	F_MI2S(  768000, LPA_PXO, 1, 1, 32),
-	F_MI2S( 1024000, LPA_PXO, 1, 1, 24),
-	F_MI2S( 1536000, LPA_PXO, 1, 1, 16),
-	F_MI2S( 2048000, LPA_PXO, 1, 1, 12),
-	F_MI2S( 3072000, LPA_PXO, 1, 1,  8),
-	F_MI2S( 4096000, LPA_PXO, 1, 1,  6),
-	F_MI2S( 6144000, LPA_PXO, 1, 1,  4),
-	F_MI2S( 8192000, LPA_PXO, 1, 1,  3),
-	F_MI2S(12288000, LPA_PXO, 1, 1,  2),
-	F_MI2S(24580000, LPA_PXO, 1, 0,  0),
+static struct clk_freq_tbl clk_tbl_aif[] = {
+	F_AIF(  512000, LPA_PXO, 1, 1, 48),
+	F_AIF(  768000, LPA_PXO, 1, 1, 32),
+	F_AIF( 1024000, LPA_PXO, 1, 1, 24),
+	F_AIF( 1536000, LPA_PXO, 1, 1, 16),
+	F_AIF( 2048000, LPA_PXO, 1, 1, 12),
+	F_AIF( 3072000, LPA_PXO, 1, 1,  8),
+	F_AIF( 4096000, LPA_PXO, 1, 1,  6),
+	F_AIF( 6144000, LPA_PXO, 1, 1,  4),
+	F_AIF( 8192000, LPA_PXO, 1, 1,  3),
+	F_AIF(12288000, LPA_PXO, 1, 1,  2),
+	F_AIF(24580000, LPA_PXO, 1, 0,  0),
 	F_END,
 };
 
@@ -1100,8 +1099,8 @@ static struct clk_freq_tbl clk_tbl_mi2s[] = {
 #define NS_MASK_PCM (BM(31, 16) | BM(6, 0))
 #define CLK_PCM(id, ns) \
 		CLK_LOCAL(id, MND, REG_LPA(ns), REG_LPA(ns), REG_LPA(ns+4), \
-				REG_LPA(ns), B(13), 0, B(9), NS_MASK_PCM, 0, \
-				set_rate_mnd, clk_tbl_pcm, NULL, NONE, NULL)
+				REG_LPA(ns), B(13), B(11), B(9), NS_MASK_PCM, \
+				0, set_rate_mnd, clk_tbl_pcm, NULL, NONE, NULL)
 #define F_PCM(f, s, d, m, n) \
 		F_RAW(f, s##_PLL, MD16(m, n), \
 			NS(31, 16, n, m, 5, 4, 3, d, 2, 0, s), \
@@ -1136,15 +1135,24 @@ static uint32_t chld_gsbi_sim_src[] = 	{C(GSBI1_SIM), C(GSBI2_SIM),
 					 C(GSBI9_SIM), C(GSBI10_SIM),
 					 C(GSBI11_SIM), C(GSBI12_SIM),
 					 C(NONE)};
-static uint32_t chld_usb_fs1_src[] = 	{C(USB_FS1), C(USB_FS1_SYS), C(NONE)};
-static uint32_t chld_usb_fs2_src[] = 	{C(USB_FS2), C(USB_FS2_SYS), C(NONE)};
+static uint32_t chld_usb_fs1_src[] = 	{C(USB_FS1_XCVR), C(USB_FS1_SYS),
+					 C(NONE)};
+static uint32_t chld_usb_fs2_src[] = 	{C(USB_FS2_XCVR), C(USB_FS2_SYS),
+					 C(NONE)};
 static uint32_t chld_csi_src[] = 	{C(CSI0), C(CSI1), C(NONE)};
 static uint32_t chld_pixel_mdp[] = 	{C(PIXEL_LCDC), C(NONE)};
 static uint32_t chld_tv_src[] =		{C(TV_ENC), C(TV_DAC), C(MDP_TV),
 					 C(HDMI_TV), C(DSUB_TV), C(NONE)};
-static uint32_t chld_vfe_src[] =	{C(VFE),  C(CSI0_VFE), C(CSI1_VFE),
-					 C(NONE)};
+static uint32_t chld_vfe[] =		{C(CSI0_VFE), C(CSI1_VFE), C(NONE)};
 static uint32_t chld_mi2s_src[] =	{C(MI2S), C(MI2S_M), C(NONE)};
+static uint32_t chld_codec_i2s_mic_src[] =	{C(CODEC_I2S_MIC),
+						 C(CODEC_I2S_MIC_M), C(NONE)};
+static uint32_t chld_codec_i2s_spkr_src[] =	{C(CODEC_I2S_SPKR),
+						 C(CODEC_I2S_SPKR_M), C(NONE)};
+static uint32_t chld_spare_i2s_mic_src[] =	{C(SPARE_I2S_MIC),
+						 C(SPARE_I2S_MIC_M), C(NONE)};
+static uint32_t chld_spare_i2s_spkr_src[] =	{C(SPARE_I2S_SPKR),
+						 C(SPARE_I2S_SPKR_M), C(NONE)};
 
 static struct clk_local clk_local_tbl[] = {
 
@@ -1210,16 +1218,16 @@ static struct clk_local clk_local_tbl[] = {
 
 	CLK_TSSC(TSSC, 0x2CA0),
 
-	CLK_USB_HS(USB_HS,  0x290C),
+	CLK_USB_HS(USB_HS_XCVR,  0x290C),
 	CLK_RESET(USB_PHY0, 0x2E20, B(0)),
 
-	CLK_USB_FS1(USB_FS1_SRC, 0x2968),
-	CLK_SLAVE_RSET(USB_FS1,  0x2968, B(9), 0x2974, B(1), USB_FS1_SRC),
-	CLK_SLAVE(USB_FS1_SYS,   0x296C, B(4), USB_FS1_SRC),
+	CLK_USB_FS(USB_FS1_SRC, 0x2968, chld_usb_fs1_src),
+	CLK_SLAVE_RSET(USB_FS1_XCVR,  0x2968, B(9), 0x2974, B(1), USB_FS1_SRC),
+	CLK_SLAVE_RSET(USB_FS1_SYS,   0x296C, B(4), 0x2974, B(0), USB_FS1_SRC),
 
-	CLK_USB_FS2(USB_FS2_SRC, 0x2988),
-	CLK_SLAVE_RSET(USB_FS2,  0x2988, B(9), 0x2994, B(1), USB_FS2_SRC),
-	CLK_SLAVE(USB_FS2_SYS,   0x298C, B(4), USB_FS2_SRC),
+	CLK_USB_FS(USB_FS2_SRC, 0x2988, chld_usb_fs2_src),
+	CLK_SLAVE_RSET(USB_FS2_XCVR,  0x2988, B(9), 0x2994, B(1), USB_FS2_SRC),
+	CLK_SLAVE_RSET(USB_FS2_SYS,   0x298C, B(4), 0x2994, B(0), USB_FS2_SRC),
 
 	/* Fast Peripheral Bus Clocks */
 	CLK_NORATE(GSBI1_P,  0x29C0, B(4)),
@@ -1252,10 +1260,10 @@ static struct clk_local clk_local_tbl[] = {
 
 	CLK_GFX2D0(GFX2D0, 0x0070),
 	CLK_GFX2D1(GFX2D1, 0x007C),
-	CLK_GFX3D(GFX3D,   0x008C),
+	CLK_GFX3D(GFX3D,   0x008C, GMEM_AXI),
 
 	CLK_IJPEG(IJPEG, 0x00A0),
-	CLK_JPEGD(JPEGD, 0x00AC),
+	CLK_JPEGD(JPEGD, 0x00AC, JPEGD_AXI),
 
 	CLK_MDP(MDP, 0x00D0),
 	CLK_MDP_VSYNC(MDP_VSYNC, 0x0058),
@@ -1275,19 +1283,53 @@ static struct clk_local clk_local_tbl[] = {
 
 	CLK_VPE(VPE, 0x0118),
 
-	CLK_VFE(VFE_SRC, 0x010C),
-	CLK_SLAVE_MM(VFE,      0x0104, B(0),  VFE_SRC),
-	CLK_SLAVE_MM(CSI0_VFE, 0x0104, B(12), VFE_SRC),
-	CLK_SLAVE_MM(CSI1_VFE, 0x0104, B(10), VFE_SRC),
+	CLK_VFE(VFE, 0x010C, VFE_AXI),
+	CLK_SLAVE_MM(CSI0_VFE, 0x0104, B(12), VFE),
+	CLK_SLAVE_MM(CSI1_VFE, 0x0104, B(10), VFE),
 
+	/* AXI Interfaces */
+	CLK_NORATE_MM(GMEM_AXI,  0x0018, B(24)),
+	CLK_NORATE_MM(JPEGD_AXI, 0x0018, B(25)),
+	CLK_NORATE_MM(VFE_AXI,   0x0018, B(18)),
+
+	/* AHB Interfaces */
+	CLK_NORATE_MM(AMP_P,    0x0008, B(24)),
+	CLK_NORATE_MM(APU_P,    0x0008, B(28)),
+	CLK_NORATE_MM(CSI0_P,   0x0008, B(7)),
+	CLK_NORATE_MM(CSI1_P,   0x0008, B(20)),
+	CLK_NORATE_MM(DSI_M_P,  0x0008, B(9)),
+	CLK_NORATE_MM(FAB_P,    0x0008, B(31)),
+	CLK_NORATE_MM(IJPEG_P,  0x0008, B(5)),
+	CLK_NORATE_MM(JPEGD_P,  0x0008, B(21)),
+	CLK_NORATE_MM(MDP_P,    0x0008, B(10)),
+	CLK_NORATE_MM(ROT_P,    0x0008, B(12)),
+	CLK_NORATE_MM(TV_ENC_P, 0x0008, B(25)),
+	CLK_NORATE_MM(VFE_P,    0x0008, B(13)),
+	CLK_NORATE_MM(VPE_P,    0x0008, B(16)),
 
 	/*
 	 * Low Power Audio Clocks
 	 */
 
-	CLK_MI2S(MI2S_SRC, 0x0048),
+	CLK_AIF(MI2S_SRC, 0x0048, chld_mi2s_src),
 	CLK_SLAVE_LPA(MI2S,   0x0048, B(15), MI2S_SRC),
 	CLK_SLAVE_LPA(MI2S_M, 0x0048, B(17), MI2S_SRC),
+
+	CLK_AIF(CODEC_I2S_MIC_SRC, 0x0060, chld_codec_i2s_mic_src),
+	CLK_SLAVE_LPA(CODEC_I2S_MIC,   0x0060, B(15), CODEC_I2S_MIC_SRC),
+	CLK_SLAVE_LPA(CODEC_I2S_MIC_M, 0x0060, B(17), CODEC_I2S_MIC_SRC),
+
+	CLK_AIF(SPARE_I2S_MIC_SRC, 0x0078, chld_spare_i2s_mic_src),
+	CLK_SLAVE_LPA(SPARE_I2S_MIC,   0x0078, B(15), SPARE_I2S_MIC_SRC),
+	CLK_SLAVE_LPA(SPARE_I2S_MIC_M, 0x0078, B(17), SPARE_I2S_MIC_SRC),
+
+	CLK_AIF(CODEC_I2S_SPKR_SRC, 0x006C, chld_codec_i2s_spkr_src),
+	CLK_SLAVE_LPA(CODEC_I2S_SPKR,   0x006C, B(15), CODEC_I2S_SPKR_SRC),
+	CLK_SLAVE_LPA(CODEC_I2S_SPKR_M, 0x006C, B(17), CODEC_I2S_SPKR_SRC),
+
+	CLK_AIF(SPARE_I2S_SPKR_SRC, 0x0084, chld_spare_i2s_spkr_src),
+	CLK_SLAVE_LPA(SPARE_I2S_SPKR,   0x0084, B(15), SPARE_I2S_SPKR_SRC),
+	CLK_SLAVE_LPA(SPARE_I2S_SPKR_M, 0x0084, B(17), SPARE_I2S_SPKR_SRC),
 
 	CLK_PCM(PCM, 0x0054),
 };
@@ -1750,18 +1792,26 @@ static struct reg_init {
 
 	{REG_MM(0x0204), 0x1, 0x0}, /* MM SW_RESET_ALL */
 
-	/* Enable all MM AHB clocks in software mode. */
+	/* Set up MM AHB clock. */
 	{REG_MM(0x0004), 0x43C7, 0x0241}, /* MM AHB = PLL2/10 */
-	{REG_MM(0x0008), 0xFFFFFFFF, 0x93BDFEFF}, /* MM AHB_EN */
+
+	/* Enable MM AHB clocks that don't have clock API support.
+	 * These will be put into hardware-controlled mode later. */
+	{REG_MM(0x0008), 0xFFFFFFFF, 0x8CC85F}, /* MM AHB_EN */
 	{REG_MM(0x0038), 0xFFFFFFFF, 0x1}, /* MM AHB_EN2 */
 	{REG_MM(0x020C), 0xFFFFFFFF, 0x0}, /* MM SW_RESET_AHB */
 
-	/* Enable all MM AXI clocks. */
+	/* Set up MM Fabric (AXI) clock. */
 	{REG_MM(0x0014), 0x0FFFFFFF, 0x4248451}, /* MM AXI_NS */
-	{REG_MM(0x0018), 0xFFFFFFFF, 0x17FC0001}, /* MM MAXI_EN */
+
+	/* Enable MM AXI clocks that don't have clock API support.
+	 * These will be put into hardware-controlled mode later. */
+	{REG_MM(0x0018), 0xFFFFFFFF, 0x14F80001}, /* MM MAXI_EN */
 	{REG_MM(0x0020), 0x7FFFFFFF, 0x75200400}, /* MM MAXI_EN2 */
 	{REG_MM(0x002C), 0xFFFFFFFF, 0x200400}, /* MM MAXI_EN3 */
 	{REG_MM(0x0030), 0x3FFF, 0x1C7}, /* MM SAXI_EN */
+
+	/* De-assert MM AXI resets to all hardware blocks. */
 	{REG_MM(0x0208), 0xE37F, 0x0}, /* SW_RESET_AXI */
 
 	/* Deassert all MM core resets. */
@@ -1781,4 +1831,6 @@ void __init msm_clk_soc_init(void)
 		val |= ri_list[i].val;
 		writel(val, ri_list[i].reg);
 	}
+
+	soc_clk_enable(C(FAB_P));
 }

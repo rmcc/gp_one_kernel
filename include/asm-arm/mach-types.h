@@ -2552,6 +2552,8 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_MSM8X60_SIM          1009001
 #define MACH_TYPE_MSM8X60_SURF         1009002
 #define MACH_TYPE_MSM8X60_FFA          1009003
+#define MACH_TYPE_MSM8X55_SVLTE_FFA    2863
+#define MACH_TYPE_MSM8X55_SVLTE_SURF   2864
 
 #ifdef CONFIG_ARCH_EBSA110
 # ifdef machine_arch_type
@@ -33031,6 +33033,30 @@ extern unsigned int __machine_arch_type;
 # define machine_is_msm8x60_ffa()	(machine_arch_type == MACH_TYPE_MSM8X60_FFA)
 #else
 # define machine_is_msm8x60_ffa()	(0)
+#endif
+
+#ifdef CONFIG_MACH_MSM8X55_SVLTE_FFA
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_MSM8X55_SVLTE_FFA
+# endif
+# define machine_is_msm8x55_svlte_ffa()	(machine_arch_type == MACH_TYPE_MSM8X55_SVLTE_FFA)
+#else
+# define machine_is_msm8x55_svlte_ffa()	(0)
+#endif
+
+#ifdef CONFIG_MACH_MSM8X55_SVLTE_SURF
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_MSM8X55_SVLTE_SURF
+# endif
+# define machine_is_msm8x55_svlte_surf()	(machine_arch_type == MACH_TYPE_MSM8X55_SVLTE_SURF)
+#else
+# define machine_is_msm8x55_svlte_surf()	(0)
 #endif
 
 /*

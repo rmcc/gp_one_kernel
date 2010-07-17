@@ -603,6 +603,9 @@ static struct mmc_platform_data ar6k_wifi_data = {
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
     //.dummy52_required = 1,
 #endif
+    .msmsdcc_fmin   = 144000,
+    .msmsdcc_fmid   = 24576000,
+    .msmsdcc_fmax   = 49152000,
 };
 #endif
 
@@ -1417,6 +1420,9 @@ static struct mmc_platform_data msm7x25_sdcc_data = {
 	.translate_vdd	= msm_sdcc_setup_power,
 	.status		= msm_sdcc_card_detect,	// FIH_ADQ, BillHJChang
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin   = 144000,
+	.msmsdcc_fmid   = 24576000,
+	.msmsdcc_fmax   = 49152000,
 };
 
 static void __init msm7x25_init_mmc(void)

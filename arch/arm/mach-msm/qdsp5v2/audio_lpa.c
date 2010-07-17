@@ -183,37 +183,45 @@ static void lpa_listner(u32 evt_id, union auddev_evt_data *evt_payload,
 		} else
 			audio->source |= (0x1 << evt_payload->routing_id);
 
-		if (audio->running == 1 && audio->enabled == 1)
+		if (audio->running == 1 && audio->enabled == 1) {
 			audpp_route_stream(audio->dec_id, audio->source);
-		if (audio->drv_status & ADRV_STATUS_DEVICE_SWITCH_READY) {
-			audio->wflush = 1;
-			audio->drv_status &= ~ADRV_STATUS_DEVICE_SWITCH_READY;
-			audio->drv_status |= ADRV_STATUS_DEVICE_SWITCH_COMPLETE;
-			audpp_flush(audio->dec_id);
-			if (wait_event_interruptible(audio->write_wait,
-				  !audio->wflush) < 0)
-				MM_ERR("AUDIO_FLUSH interrupted\n");
+			audpp_dsp_set_vol_pan(AUDPP_CMD_CFG_DEV_MIXER_ID_4,
+				&audio->vol_pan,
+				COPP);
+			if (audio->drv_status &
+					ADRV_STATUS_DEVICE_SWITCH_READY) {
+				audio->wflush = 1;
+				audio->drv_status &=
+					~ADRV_STATUS_DEVICE_SWITCH_READY;
+				audio->drv_status |=
+					ADRV_STATUS_DEVICE_SWITCH_COMPLETE;
+				audpp_flush(audio->dec_id);
+				if (wait_event_interruptible(audio->write_wait,
+							 !audio->wflush) < 0)
+					MM_DBG("AUDIO_FLUSH interrupted\n");
+			}
 		}
 		break;
 	case AUDDEV_EVT_REL_PENDING:
-		MM_DBG("AUDDEV_EVT_REL_PENDING\n");
-		if (audio->drv_status & ADRV_STATUS_DEVICE_SWITCH_NONE) {
-			if (audpp_pause(audio->dec_id, 1))
-				MM_DBG("audpp pause failed\n");
-			audio->drv_status &= ~ADRV_STATUS_DEVICE_SWITCH_NONE;
-			audio->drv_status |= ADRV_STATUS_DEVICE_SWITCH_PENDING;
-			audio->avsync_flag = 0;
-			if (audpp_query_avsync(audio->dec_id) < 0) {
-				MM_DBG(" query avsync failed\n");
-				break;
-			}
+		MM_DBG(":AUDDEV_EVT_REL_PENDING\n");
+		if (audio->running == 1 && audio->enabled == 1) {
+			if (audio->drv_status &
+					ADRV_STATUS_DEVICE_SWITCH_NONE) {
+				if (audpp_pause(audio->dec_id, 1))
+					MM_DBG("audpp pause failed\n");
+				audio->drv_status &=
+					~ADRV_STATUS_DEVICE_SWITCH_NONE;
+				audio->drv_status |=
+					ADRV_STATUS_DEVICE_SWITCH_PENDING;
+				audio->avsync_flag = 0;
+				if (audpp_query_avsync(audio->dec_id) < 0)
+					MM_DBG("query avsync failed\n");
 
-			if (wait_event_interruptible_timeout(audio->avsync_wait,
-						audio->avsync_flag,
-				msecs_to_jiffies(AVSYNC_EVENT_TIMEOUT)) < 0) {
-				MM_DBG(" AV sync timeout failed\n");
+				if (wait_event_interruptible_timeout
+					(audio->avsync_wait, audio->avsync_flag,
+				 msecs_to_jiffies(AVSYNC_EVENT_TIMEOUT)) < 0)
+					MM_DBG("AV sync timeout failed\n");
 			}
-
 		}
 		break;
 	case AUDDEV_EVT_DEV_RLS:
@@ -453,13 +461,7 @@ static void audlpa_async_send_buffer(struct audio *audio)
 		}
 		if (next_buf && (temp == audio->bytecount_given)) {
 			cmd.cmd_id = AUDPLAY_CMD_BITSTREAM_DATA_AVAIL;
-			if (next_buf->buf.data_len)
-				cmd.decoder_id = audio->dec_id;
-			else {
-				cmd.decoder_id = -1;
-				MM_DBG("%s: input EOS signaled\n",
-					   __func__);
-			}
+			cmd.decoder_id = audio->dec_id;
 			cmd.buf_ptr	= (unsigned) next_buf->paddr;
 			cmd.buf_size = next_buf->buf.data_len >> 1;
 			cmd.partition_number	= 0;
@@ -476,13 +478,7 @@ static void audlpa_async_send_buffer(struct audio *audio)
 					struct audlpa_buffer_node, list);
 		if (next_buf) {
 			cmd.cmd_id = AUDPLAY_CMD_BITSTREAM_DATA_AVAIL;
-			if (next_buf->buf.data_len)
-				cmd.decoder_id = audio->dec_id;
-			else {
-				cmd.decoder_id = -1;
-				MM_DBG("%s: input EOS signaled\n",
-					   __func__);
-			}
+			cmd.decoder_id = audio->dec_id;
 			temp = audio->bytecount_head +
 				next_buf->buf.data_len -
 				audio->bytecount_consumed;
@@ -1216,7 +1212,7 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 /* Only useful in tunnel-mode */
 int audlpa_async_fsync(struct audio *audio)
 {
-	int rc = 0;
+	int rc = 0, empty = 0;
 	struct audlpa_buffer_node *buf_node;
 
 	MM_DBG("\n"); /* Macro prints the file name and function */
@@ -1228,43 +1224,28 @@ int audlpa_async_fsync(struct audio *audio)
 
 	mutex_lock(&audio->write_lock);
 	audio->teos = 0;
-	if (!(list_empty(&audio->out_queue) && (audio->out_needed == 1))) {
-		buf_node = kmalloc(sizeof(*buf_node), GFP_KERNEL);
-		if (!buf_node)
-			goto done;
+	empty = list_empty(&audio->out_queue);
+	buf_node = kmalloc(sizeof(*buf_node), GFP_KERNEL);
+	if (!buf_node)
+		goto done;
 
-		buf_node->paddr = 0xFFFFFFFF;
-		buf_node->buf.data_len = 0;
-		buf_node->buf.buf_addr = NULL;
-		buf_node->buf.buf_len = 0;
-		buf_node->buf.private_data = NULL;
-		list_add_tail(&buf_node->list, &audio->out_queue);
+	buf_node->paddr = 0xFFFFFFFF;
+	buf_node->buf.data_len = 0;
+	buf_node->buf.buf_addr = NULL;
+	buf_node->buf.buf_len = 0;
+	buf_node->buf.private_data = NULL;
+	list_add_tail(&buf_node->list, &audio->out_queue);
+	if ((empty != 0) && (audio->out_needed == 1))
+		audlpa_async_send_data(audio, 0, 0);
 
-		rc = wait_event_interruptible(audio->write_wait,
-			(audio->teos == 1) || audio->wflush || audio->stopped);
+	rc = wait_event_interruptible(audio->write_wait,
+				  audio->teos || audio->wflush ||
+				  audio->stopped);
 
-		if (rc < 0)
-			goto done;
-	}
-	if (audio->teos == 0) {
-		struct audplay_cmd_bitstream_data_avail cmd;
+	if (rc < 0)
+		goto done;
 
-		cmd.cmd_id = AUDPLAY_CMD_BITSTREAM_DATA_AVAIL;
-		cmd.decoder_id = -1;
-		cmd.buf_ptr	= (unsigned) 0xFFFFFFFF;
-		cmd.buf_size = 0;
-		cmd.partition_number	= 0;
-		audio->bytecount_given  = 0;
-		wmb();
-		audplay_send_queue0(audio, &cmd, sizeof(cmd));
-
-		rc = wait_event_interruptible(audio->write_wait,
-			(audio->teos == 1) || audio->stopped);
-
-		if (rc < 0)
-			goto done;
-
-	} else if (audio->teos == 1) {
+	if (audio->teos == 1) {
 		/* Releasing all the pending buffers to user */
 		audio->teos = 0;
 		audlpa_async_flush(audio);
