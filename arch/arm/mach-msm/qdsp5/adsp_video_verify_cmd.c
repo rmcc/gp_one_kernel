@@ -47,14 +47,14 @@ static int pmem_fixup_high_low(unsigned short *high,
 
 	phys_addr = high_low_short_to_ptr(*high, *low);
 	phys_size = (unsigned long)high_low_short_to_ptr(size_high, size_low);
-	DLOG("virt %x %x\n", phys_addr, phys_size);
+	MM_DBG("virt %x %x\n", phys_addr, phys_size);
 	if (adsp_pmem_fixup_kvaddr(module, &phys_addr, &kvaddr, phys_size)) {
-		DLOG("ah%x al%x sh%x sl%x addr %x size %x\n",
+		MM_DBG("ah%x al%x sh%x sl%x addr %x size %x\n",
 			*high, *low, size_high, size_low, phys_addr, phys_size);
 		return -1;
 	}
 	ptr_to_high_low_short(phys_addr, high, low);
-	DLOG("phys %x %x\n", phys_addr, phys_size);
+	MM_DBG("phys %x %x\n", phys_addr, phys_size);
 	if (addr)
 		*addr = kvaddr;
 	if (size)
@@ -75,7 +75,7 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	unsigned long frame_buffer_size;
 	unsigned short frame_buffer_size_high, frame_buffer_size_low;
 
-	DLOG("cmd_size %d cmd_id %d cmd_data %x\n", cmd_size, cmd_id, cmd_data);
+	MM_DBG("cmd_size %d cmd_id %d cmd_data %x\n", cmd_size, cmd_id, cmd_data);
 	if (cmd_id != VIDDEC_CMD_SUBFRAME_PKT) {
 		printk(KERN_INFO "adsp_video: unknown video packet %u\n",
 			cmd_id);
@@ -159,7 +159,7 @@ int adsp_video_verify_cmd(struct msm_adsp_module *module,
 {
 	switch (queue_id) {
 	case QDSP_mpuVDecPktQueue:
-		DLOG("\n");
+		MM_DBG("\n");
 		return verify_vdec_pkt_cmd(module, cmd_data, cmd_size);
 	default:
 		printk(KERN_INFO "unknown video queue %u\n", queue_id);
