@@ -1522,6 +1522,7 @@ static void __init msm7x25_init(void)
 {
     if (socinfo_init() < 0)
 	BUG();
+	msm_clock_init(msm_clocks_7x25, msm_num_clocks_7x25);
 #ifdef CONFIG_AR6K
     ar6k_wifi_status_cb=NULL; 
     ar6k_wifi_status_cb_devid=NULL;
@@ -1620,7 +1621,6 @@ static void __init msm_msm7x25_allocate_memory_regions(void)
 static void __init msm7x25_map_io(void)
 {
 	msm_map_common_io();
-		msm_clock_init(msm_clocks_7x25, msm_num_clocks_7x25);
 	msm_msm7x25_allocate_memory_regions();
 
 }
