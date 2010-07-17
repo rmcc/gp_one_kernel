@@ -48,6 +48,7 @@
 #include <mach/msm_serial_hs.h>
 #include <mach/memory.h>
 #include <mach/msm_battery.h>
+#include <mach/rpc_server_handset.h>
 
 
 #include <linux/mtd/nand.h>
@@ -514,11 +515,15 @@ static struct platform_device android_pmem_kernel_ebi1_device = {
 	.dev = { .platform_data = &android_pmem_kernel_ebi1_pdata },
 };
 
+static struct msm_handset_platform_data hs_platform_data = {
+	.hs_name = "7k_handset",
+};
+
 static struct platform_device hs_device = {
 	.name   = "msm-handset",
 	.id     = -1,
 	.dev    = {
-		.platform_data = "7k_handset",
+		.platform_data = &hs_platform_data,
 	},
 };
 
@@ -1266,6 +1271,16 @@ static struct platform_device msm_batt_device = {
 };
 
 
+static struct platform_device *early_devices[] __initdata = {
+#ifdef CONFIG_GPIOLIB
+	&msm_gpio_devices[0],
+	&msm_gpio_devices[1],
+	&msm_gpio_devices[2],
+	&msm_gpio_devices[3],
+	&msm_gpio_devices[4],
+	&msm_gpio_devices[5],
+#endif
+};
 
 static struct platform_device *devices[] __initdata = {
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
@@ -1769,6 +1784,7 @@ static void __init msm7x2x_init(void)
 #elif CONFIG_ARCH_MSM7X27
 	msm_clock_init(msm_clocks_7x27, msm_num_clocks_7x27);
 #endif
+	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
 
 #if defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,

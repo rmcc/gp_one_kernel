@@ -63,6 +63,7 @@
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android.h>
 #endif
+#include <linux/regulator/consumer.h>
 
 #include "devices.h"
 #include "devices-msm8x60.h"
@@ -156,6 +157,55 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	 * used instead
 	 */
 	.usb_in_sps = 1,
+};
+#endif
+
+#ifdef CONFIG_USB_EHCI_MSM
+struct regulator *votg_5v_switch;
+static inline int msm_hsusb_vbus_vreg_init(int init)
+{
+	if (init) {
+		votg_5v_switch = regulator_get(NULL, "8901_usb_otg");
+		if (IS_ERR(votg_5v_switch)) {
+			pr_err("%s: unable to get votg_5v_switch\n", __func__);
+			return -ENODEV;
+		}
+		pr_info("%s: regulator initialization successful\n", __func__);
+	} else
+		regulator_put(votg_5v_switch);
+
+	return 0;
+}
+
+static void msm_hsusb_vbus_power(unsigned phy_info, int on)
+{
+	static int vbus_is_on;
+
+	if (!votg_5v_switch || IS_ERR(votg_5v_switch)) {
+		pr_err("%s: votg_5v_switch is not initialized\n", __func__);
+		return;
+	}
+	/* If VBUS is already on (or off), do nothing. */
+	if (on == vbus_is_on)
+		return;
+
+	if (on) {
+		if (regulator_enable(votg_5v_switch))
+			pr_err("%s: Unable to enable the regulator:"
+					" votg_5v_switch\n", __func__);
+	} else {
+		if (regulator_disable(votg_5v_switch))
+			pr_err("%s: Unable to enable the regulator:"
+					" votg_5v_switch\n", __func__);
+	}
+
+	vbus_is_on = on;
+}
+
+static struct msm_usb_host_platform_data msm_usb_host_pdata = {
+	.phy_info   = (USB_PHY_INTEGRATED | USB_PHY_MODEL_45NM),
+	.vbus_init = msm_hsusb_vbus_vreg_init,
+	.vbus_power = msm_hsusb_vbus_power,
 };
 #endif
 
@@ -263,6 +313,7 @@ static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 
 static struct msm_i2c_platform_data msm_gsbi3_qup_i2c_pdata = {
 	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
 	.clk = "gsbi_qup_clk",
 	.pclk = "gsbi_pclk",
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
@@ -270,6 +321,7 @@ static struct msm_i2c_platform_data msm_gsbi3_qup_i2c_pdata = {
 
 static struct msm_i2c_platform_data msm_gsbi4_qup_i2c_pdata = {
 	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
 	.clk = "gsbi_qup_clk",
 	.pclk = "gsbi_pclk",
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
@@ -277,6 +329,7 @@ static struct msm_i2c_platform_data msm_gsbi4_qup_i2c_pdata = {
 
 static struct msm_i2c_platform_data msm_gsbi7_qup_i2c_pdata = {
 	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
 	.clk = "gsbi_qup_clk",
 	.pclk = "gsbi_pclk",
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
@@ -284,6 +337,7 @@ static struct msm_i2c_platform_data msm_gsbi7_qup_i2c_pdata = {
 
 static struct msm_i2c_platform_data msm_gsbi8_qup_i2c_pdata = {
 	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
 	.clk = "gsbi_qup_clk",
 	.pclk = "gsbi_pclk",
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
@@ -291,6 +345,7 @@ static struct msm_i2c_platform_data msm_gsbi8_qup_i2c_pdata = {
 
 static struct msm_i2c_platform_data msm_gsbi9_qup_i2c_pdata = {
 	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
 	.clk = "gsbi_qup_clk",
 	.pclk = "gsbi_pclk",
 	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
@@ -2075,7 +2130,7 @@ static struct lcdc_platform_data lcdc_pdata = {
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
-	.mdp_core_clk_rate = 59080000,
+	.mdp_core_clk_rate = 128000000,
 };
 
 static void __init msm_fb_add_devices(void)
@@ -2111,6 +2166,9 @@ static void __init msm8x60_init(void)
 		msm8x60_cfg_smsc911x();
 		platform_add_devices(surf_devices,
 				     ARRAY_SIZE(surf_devices));
+#ifdef CONFIG_USB_EHCI_MSM
+		msm_add_host(0, &msm_usb_host_pdata);
+#endif
 	} else {
 		msm8x60_configure_smc91x();
 		platform_add_devices(rumi_sim_devices,

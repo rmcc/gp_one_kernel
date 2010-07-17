@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,14 +26,27 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#ifndef __MACH_QDSP5_V2_SNDDEV_MI2S_H
+#define __MACH_QDSP5_V2_SNDDEV_MI2S_H
 
-#ifndef __ASM_ARCH_MSM_RPC_SERVER_HANDSET_H
-#define __ASM_ARCH_MSM_RPC_SERVER_HANDSET_H
-
-struct msm_handset_platform_data {
-	const char *hs_name;
+struct snddev_mi2s_data {
+	u32 capability; /* RX or TX */
+	const char *name;
+	u32 copp_id; /* audpp routing */
+	u32 acdb_id; /* Audio Cal purpose */
+	u8 channel_mode;
+	u8 sd_lines;
+	void (*route) (void);
+	void (*deroute) (void);
+	u32 default_sample_rate;
 };
 
-void report_headset_status(bool connected);
+int mi2s_config_clk_gpio(void);
+
+int mi2s_config_data_gpio(u32 direction, u8 sd_line_mask);
+
+int mi2s_unconfig_clk_gpio(void);
+
+int mi2s_unconfig_data_gpio(u32 direction, u8 sd_line_mask);
 
 #endif

@@ -25,54 +25,7 @@
 #include <linux/spinlock.h>
 
 #include <mach/msm_iomap.h>
-
-/*
- * When a GPIO triggers, two separate decisions are made, controlled
- * by two separate flags.
- *
- * - First, INTR_RAW_STATUS_EN controls whether or not the GPIO_INTR_STATUS
- * register for that GPIO will be updated to reflect the triggering of that
- * gpio.  If this bit is 0, this register will not be updated.
- * - Second, INTR_ENABLE controls whether an interrupt is triggered.
- *
- * If INTR_ENABLE is set and INTR_RAW_STATUS_EN is NOT set, an interrupt
- * can be triggered but the status register will not reflect it.
- */
-
-#define INTR_RAW_STATUS_EN (1 << 3)
-#define INTR_DECT_CTL_EDGE (1 << 2)
-#define INTR_POL_CTL_HI    (1 << 1)
-#define INTR_ENABLE        1
-
-#define TARGET_PROC_SCORPION 4
-#define TARGET_PROC_NONE     7
-
-#define DC_IRQ_DISABLE (0 << 3)
-#define DC_IRQ_ENABLE  (1 << 3)
-
-/*
- * There are some config flags used in the register which are not exposed
- * via our read/write-cfg API because their functionality is available via
- * other, generic means.
- */
-#define PUBLIC_CFG_MASK \
-	(MSM_GPIO_DRV_MASK | MSM_GPIO_FUNC_SEL_MASK | MSM_GPIO_PULL_MASK)
-
-/*
- * There is no 'DC_POLARITY_LO' because the GIC is incapable
- * of asserting on falling edge or level-low conditions.  Even though
- * the registers allow for low-polarity inputs, the case can never arise.
- */
-#define DC_POLARITY_HI (1 << 11)
-
-#define GPIO_INTR_CFG_SU(gpio)    (MSM_TLMM_BASE + 0x0400 + (0x04 * (gpio)))
-#define DIR_CONN_INTR_CFG_SU(irq) (MSM_TLMM_BASE + 0x0700 + (0x04 * (irq)))
-#define GPIO_CONFIG(gpio)         (MSM_TLMM_BASE + 0x1000 + (0x10 * (gpio)))
-#define GPIO_IN_OUT(gpio)         (MSM_TLMM_BASE + 0x1004 + (0x10 * (gpio)))
-#define GPIO_INTR_CFG(gpio)       (MSM_TLMM_BASE + 0x1008 + (0x10 * (gpio)))
-#define GPIO_INTR_STATUS(gpio)    (MSM_TLMM_BASE + 0x100c + (0x10 * (gpio)))
-#define GPIO_OE_CLR(gpio)  (MSM_TLMM_BASE + 0x3100 + (0x04 * ((gpio) / 32)))
-#define GPIO_OE_SET(gpio)  (MSM_TLMM_BASE + 0x3120 + (0x04 * ((gpio) / 32)))
+#include "tlmm-msm8660.h"
 
 /*
  * The 'enabled_irqs' bitmap is used to optimize the summary-irq handler.
@@ -117,53 +70,6 @@ static void disable_summary_irq(unsigned gpio)
 	writel(intr_cfg, GPIO_INTR_CFG(gpio));
 	clear_bit(gpio, enabled_irqs);
 }
-
-int msm_gpio_install_direct_irq(unsigned gpio, unsigned irq)
-{
-	int rc = -EINVAL;
-	unsigned long irq_flags;
-
-	if (gpio < NR_MSM_GPIOS && irq < NR_TLMM_SCSS_DIR_CONN_IRQ) {
-		spin_lock_irqsave(&gpio_lock, irq_flags);
-
-		set_gpio_bit(gpio, GPIO_OE_CLR(gpio));
-		disable_summary_irq(gpio);
-
-		writel(DC_IRQ_ENABLE | TARGET_PROC_NONE,
-			GPIO_INTR_CFG_SU(gpio));
-
-		writel(DC_POLARITY_HI |	TARGET_PROC_SCORPION | (gpio << 3),
-			DIR_CONN_INTR_CFG_SU(irq));
-
-		spin_unlock_irqrestore(&gpio_lock, irq_flags);
-
-		rc = 0;
-	}
-
-	return rc;
-}
-EXPORT_SYMBOL(msm_gpio_install_direct_irq);
-
-int gpio_tlmm_config(unsigned config, unsigned disable)
-{
-	uint32_t v2flags;
-	unsigned long irq_flags;
-	unsigned gpio = GPIO_PIN(config);
-
-	if (gpio > NR_MSM_GPIOS)
-		return -EINVAL;
-
-	v2flags = ((GPIO_DIR(config) << 9) & (0x1 << 9)) |
-		((GPIO_DRVSTR(config) << 6) & (0x7 << 6)) |
-		((GPIO_FUNC(config) << 2) & (0xf << 2)) |
-		((GPIO_PULL(config) & 0x3));
-
-	spin_lock_irqsave(&gpio_lock, irq_flags);
-	writel(v2flags, GPIO_CONFIG(gpio));
-	spin_unlock_irqrestore(&gpio_lock, irq_flags);
-	return 0;
-}
-EXPORT_SYMBOL(gpio_tlmm_config);
 
 static int msm_gpio_get(struct gpio_chip *chip, unsigned offset)
 {

@@ -1651,7 +1651,7 @@ static int soc_clk_reset(unsigned id, enum clk_reset_action action)
 static int _soc_clk_set_rate(unsigned id, unsigned rate, enum match_types match)
 {
 	struct clk_local *clk = &clk_local_tbl[id];
-	struct clk_freq_tbl *cf = clk->current_freq;
+	struct clk_freq_tbl *cf;
 	struct clk_freq_tbl *nf;
 	uint32_t *chld = clk->children;
 	uint32_t reg_val = 0;
@@ -1662,6 +1662,7 @@ static int _soc_clk_set_rate(unsigned id, unsigned rate, enum match_types match)
 		return -EPERM;
 
 	spin_lock_irqsave(&clock_reg_lock, flags);
+	cf = clk->current_freq;
 
 	if (rate == cf->freq_hz)
 		goto release_lock;
@@ -2080,4 +2081,10 @@ void __init msm_clk_soc_init(void)
 	set_1rate(USB_HS_XCVR);
 	set_1rate(USB_FS1_SRC);
 	set_1rate(USB_FS2_SRC);
+
+	/* FIXME: Disabling or changing the rate of the GFX3D clock causes
+	 * crashes.  Until this is fixed, leave the clock on at a constant
+	 * rate. */
+	soc_clk_set_rate(C(GFX3D), 266667000);
+	soc_clk_enable(C(GFX3D));
 }
