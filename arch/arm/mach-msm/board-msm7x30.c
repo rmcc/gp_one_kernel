@@ -38,13 +38,14 @@
 #include <linux/i2c/tsc2007.h>
 #include <linux/input/kp_flip_switch.h>
 #include <linux/leds-pmic8058.h>
-#include <mach/mpp.h>
 #include <linux/input/cy8ctma300.h>
+#include <linux/msm_adc.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/setup.h>
 
+#include <mach/mpp.h>
 #include <mach/gpio.h>
 #include <mach/board.h>
 #include <mach/camera.h>
@@ -1942,6 +1943,10 @@ static struct ofn_atlab_platform_data optnav_data = {
 	},
 };
 
+static struct msm_hdmi_platform_data adv7520_hdmi_data = {
+		.irq = MSM_GPIO_TO_INT(18),
+};
+
 static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("m33c01", OPTNAV_I2C_SLAVE_ADDR),
@@ -1950,6 +1955,7 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 	},
 	{
 		I2C_BOARD_INFO("adv7520", 0x72 >> 1),
+		.platform_data = &adv7520_hdmi_data,
 	},
 };
 
@@ -2174,6 +2180,8 @@ static void msm_qsd_spi_gpio_release(void)
 
 static struct msm_spi_platform_data qsd_spi_pdata = {
 	.max_clock_speed = 26000000,
+	.clk_name = "spi_clk",
+	.pclk_name = "spi_pclk",
 	.gpio_config  = msm_qsd_spi_gpio_config,
 	.gpio_release = msm_qsd_spi_gpio_release,
 	.dma_config = msm_qsd_spi_dma_config,
@@ -3447,6 +3455,21 @@ static struct platform_device *early_devices[] __initdata = {
 #endif
 };
 
+static char *msm_adc_device_names[] = { "LTC_ADC1", "LTC_ADC2", "LTC_ADC3" };
+
+static struct msm_adc_platform_data msm_adc_pdata = {
+       .dev_names = msm_adc_device_names,
+       .num_adc = ARRAY_SIZE(msm_adc_device_names),
+};
+
+static struct platform_device msm_adc_device = {
+	.name   = "msm_adc",
+	.id = -1,
+	.dev = {
+		.platform_data = &msm_adc_pdata,
+	},
+};
+
 static struct platform_device *devices[] __initdata = {
 #if defined(CONFIG_SERIAL_MSM) || defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart2,
@@ -3523,6 +3546,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_gemini_device,
 #endif
 	&msm_batt_device,
+	&msm_adc_device,
 };
 
 static struct msm_gpio msm_i2c_gpios_hw[] = {

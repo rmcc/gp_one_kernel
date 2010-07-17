@@ -25,46 +25,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef __PMIC8901_H__
-#define __PMIC8901_H__
-/*
- * Qualcomm PMIC8901 driver header file
- *
- */
+#ifndef __MACH_QDSP5_V2_SNDDEV_VIRTUAL_H
+#define __MACH_QDSP5_V2_SNDDEV_VIRTUAL_H
+#include <mach/qdsp5v2/audio_def.h>
 
-#include <linux/irq.h>
-#include <linux/mfd/core.h>
-
-/* PM8901 interrupt numbers */
-
-#define PM8901_MPPS		4
-
-#define PM8901_IRQ_BLOCK_BIT(block, bit) ((block) * 8 + (bit))
-
-/* MPPs [0,N) */
-#define PM8901_MPP_IRQ(base, mpp)	((base) + \
-					PM8901_IRQ_BLOCK_BIT(6, (mpp)))
-
-struct pm8901_chip;
-
-struct pm8901_platform_data {
-	/* This table is only needed for misc interrupts. */
-	int		irq_base;
-
-	int		num_subdevs;
-	struct mfd_cell *sub_devices;
+struct snddev_virtual_data {
+	u32 capability; /* RX or TX */
+	const char *name;
+	u32 copp_id; /* audpp routing */
+	u32 acdb_id; /* Audio Cal purpose */
 };
-
-struct pm8901_gpio_platform_data {
-	int	gpio_base;
-	int	irq_base;
-};
-
-int pm8901_read(struct pm8901_chip *pm_chip, u16 addr, u8 *values,
-		unsigned int len);
-int pm8901_write(struct pm8901_chip *pm_chip, u16 addr, u8 *values,
-		 unsigned int len);
-
-int pm8901_irq_get_rt_status(struct pm8901_chip *pm_chip, int irq);
-
-#endif /* __PMIC8901_H__ */
+#endif

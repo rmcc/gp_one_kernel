@@ -88,16 +88,16 @@
 /** SDIO-Client HW threshold to generate interrupt to the
  *  SDIO-Host on write available bytes.
  */
-#define DEFAULT_WRITE_THRESHOLD 	(MAX_DATA_AVAILABLE/2)
+#define DEFAULT_WRITE_THRESHOLD 	(1024)
 
 /** SDIO-Client HW threshold to generate interrupt to the
  *  SDIO-Host on read available bytes, for streaming (non
  *  packet) rx data.
  */
-#define DEFAULT_READ_THRESHOLD  	(MAX_DATA_AVAILABLE/2)
+#define DEFAULT_READ_THRESHOLD  	(1024)
 
 /** SW threshold to trigger reading the mailbox. */
-#define DEFAULT_MIN_WRITE_THRESHOLD 	1024
+#define DEFAULT_MIN_WRITE_THRESHOLD 	(1024)
 
 #define THRESHOLD_DISABLE_VAL  		(0xFFFFFFFF)
 
@@ -126,13 +126,6 @@ enum sdio_priority {
 	SDIO_PRIORITY_HIGH = 1,
 	SDIO_PRIORITY_MED  = 5,
 	SDIO_PRIORITY_LOW  = 9,
-};
-
-enum sdio_irq_state {
-	SDIO_IRQ_STATE_UNUSED = 0,
-	SDIO_IRQ_STATE_CLAIMED = 1,
-	SDIO_IRQ_STATE_DETECTED = 2,
-	SDIO_IRQ_STATE_CLEARED = 3,
 };
 
 /**
@@ -366,9 +359,6 @@ struct sdio_channel {
  *  @ask_mbox - Flag to request reading the mailbox,
  *  					  for different reasons.
  *
- *  @irq_state - interrupt detected. Need to release and
- *  			  re-claim the sdio-irq.
- *
  *  @timer - timer to use for polling the mailbox.
  *
  *  @poll_delay_msec - timer delay for polling the mailbox.
@@ -394,7 +384,6 @@ struct sdio_al {
 	int is_ready;
 
 	wait_queue_head_t   wait_mbox;
-	int irq_state;
 	int ask_mbox;
 
 	struct timer_list timer;
@@ -435,7 +424,7 @@ static int set_pipe_threshold(int pipe_index, int threshold);
  * notifies the clients.
  *
  */
-static int read_mailbox(void)
+static int read_mailbox(int from_isr)
 {
 	int ret;
 	struct sdio_func *func1 = sdio_al->card->sdio_func[0];
@@ -456,22 +445,14 @@ static int read_mailbox(void)
 		return 0;
 	}
 
-	pr_debug(MODULE_MAME ":Wait for read mailbox request..\n");
-	wait_event(sdio_al->wait_mbox,
-	   sdio_al->ask_mbox);
-	sdio_al->ask_mbox = false;
+	pr_debug(MODULE_MAME ":start %s from_isr = %d.\n", __func__, from_isr);
 
-
-	if (mutex_is_locked(&sdio_al->bus_lock))
-		pr_debug(MODULE_MAME ":bus is locked\n");
-
-	pr_debug(MODULE_MAME ":Reading Mailbox...\n");
-
-	mutex_lock(&sdio_al->bus_lock);
-	sdio_claim_host(sdio_al->card->sdio_func[0]);
+	if (!from_isr)
+		sdio_claim_host(sdio_al->card->sdio_func[0]);
+	pr_debug(MODULE_MAME ":before sdio_memcpy_fromio.\n");
 	ret = sdio_memcpy_fromio(func1, mailbox,
 			HW_MAILBOX_ADDR, sizeof(*mailbox));
-	sdio_release_host(sdio_al->card->sdio_func[0]);
+	pr_debug(MODULE_MAME ":after sdio_memcpy_fromio.\n");
 
 	eot_pipe =	(mailbox->eot_pipe_0_7) |
 			(mailbox->eot_pipe_8_15<<8);
@@ -488,12 +469,12 @@ static int read_mailbox(void)
 
 
 	if (ret) {
-		pr_info(MODULE_MAME ":Fail to read Mailbox,"
+		pr_err(MODULE_MAME ":Fail to read Mailbox,"
 				    " goto error state\n");
 		sdio_al->is_err = true;
 		/* Stop the timer to stop reading the mailbox */
 		sdio_al->poll_delay_msec = 0;
-		return ret;
+		goto exit_err;
 	}
 
 	if (overflow_pipe || underflow_pipe)
@@ -564,8 +545,9 @@ static int read_mailbox(void)
 
 	if ((rx_notify_bitmask == 0) && (tx_notify_bitmask == 0))
 		pr_debug(MODULE_MAME ":Nothing to Notify\n");
-
-	mutex_unlock(&sdio_al->bus_lock);
+	else
+		pr_info(MODULE_MAME ":Notify bitmask rx=0x%x, tx=0x%x.\n",
+			rx_notify_bitmask, tx_notify_bitmask);
 
 	for (i = 0; i < SDIO_AL_MAX_CHANNELS; i++) {
 		struct sdio_channel *ch = &sdio_al->channel[i];
@@ -595,12 +577,12 @@ static int read_mailbox(void)
 			(1<<ch->tx_pipe_index);
 	}
 
-	pr_debug(MODULE_MAME ":Reading Mailbox Completed...\n");
+	pr_debug(MODULE_MAME ":end %s.\n", __func__);
 
-	if (sdio_al->irq_state == SDIO_IRQ_STATE_DETECTED) {
-		sdio_al->irq_state = SDIO_IRQ_STATE_CLEARED;
-		wake_up(&sdio_al->wait_mbox);
-	}
+exit_err:
+	if (!from_isr)
+		sdio_release_host(sdio_al->card->sdio_func[0]);
+
 
 	return ret;
 }
@@ -698,8 +680,12 @@ static void worker(struct work_struct *work)
 	int ret = 0;
 
 	pr_debug(MODULE_MAME ":Worker Started..\n");
-	while ((sdio_al->is_ready) && (ret == 0))
-		ret = read_mailbox();
+	while ((sdio_al->is_ready) && (ret == 0)) {
+		pr_debug(MODULE_MAME ":Wait for read mailbox request..\n");
+		wait_event(sdio_al->wait_mbox, sdio_al->ask_mbox);
+		ret = read_mailbox(false);
+		sdio_al->ask_mbox = false;
+	}
 	pr_debug(MODULE_MAME ":Worker Exit!\n");
 }
 
@@ -854,21 +840,20 @@ static void set_default_channels_config(void)
 
 	sdio_al->channel[0].name = "SDIO_RPC";
 	sdio_al->channel[0].priority = SDIO_PRIORITY_HIGH;
-	sdio_al->channel[0].peer_tx_buf_size = 1536;
 
 	sdio_al->channel[1].name = "SDIO_RMNET_DATA";
 	sdio_al->channel[1].priority = SDIO_PRIORITY_MED;
 	sdio_al->channel[1].is_packet_mode = false;  /* No EOT for Rx Data */
-	sdio_al->channel[1].poll_delay_msec = 10;
+	sdio_al->channel[1].poll_delay_msec = 30;
 
 	sdio_al->channel[1].read_threshold  = 14*1024;
 	sdio_al->channel[1].write_threshold = 2*1024;
-	sdio_al->channel[1].min_write_avail = 1024;
+	sdio_al->channel[1].min_write_avail = 1600;
 
 	sdio_al->channel[2].name = "SDIO_QMI";
 	sdio_al->channel[2].priority = SDIO_PRIORITY_LOW;
 
-	sdio_al->channel[3].name = "SDIO_CS_DATA";
+	sdio_al->channel[3].name = "SDIO_DIAG";
 	sdio_al->channel[3].priority = SDIO_PRIORITY_LOW;
 }
 
@@ -1210,11 +1195,7 @@ static void ask_reading_mailbox(void)
  */
 static void sdio_func_irq(struct sdio_func *func)
 {
-	struct sdio_al *al = sdio_get_drvdata(func);
-
-	pr_debug(MODULE_MAME ":-- IRQ Detected --\n");
-
-	al->irq_state = SDIO_IRQ_STATE_DETECTED;
+	pr_debug(MODULE_MAME ":start %s.\n", __func__);
 
 	/* Restart the timer */
 	if (sdio_al->poll_delay_msec) {
@@ -1223,19 +1204,9 @@ static void sdio_func_irq(struct sdio_func *func)
 		mod_timer(&sdio_al->timer, expires);
 	}
 
-	/* patch - Allow the worker to claim the host
-	 * for reading the mailbox */
-	sdio_release_host(func);
+	read_mailbox(true);
 
-	ask_reading_mailbox();
-
-	wait_event(sdio_al->wait_mbox,
-		   sdio_al->irq_state == SDIO_IRQ_STATE_CLEARED);
-
-	/* patch - IRQ-Thread claim the host again */
-	sdio_claim_host(func);
-
-	pr_debug(MODULE_MAME ":-- IRQ Completed --\n");
+	pr_debug(MODULE_MAME ":end %s.\n", __func__);
 }
 
 /**
@@ -1327,7 +1298,6 @@ static int sdio_al_setup(void)
 			pr_info(MODULE_MAME ":Fail to claim IRQ\n");
 			goto exit_err;
 		}
-		sdio_al->irq_state = SDIO_IRQ_STATE_CLAIMED;
 	} else {
 		pr_debug(MODULE_MAME ":Not using IRQ\n");
 	}

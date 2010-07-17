@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,43 +24,47 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
-#ifndef _INTERNAL_POWER_RAIL_H
-#define _INTERNAL_POWER_RAIL_H
+#ifndef VCM_ALLOC_H
+#define VCM_ALLOC_H
 
-/* Clock power rail IDs */
-#define PWR_RAIL_GRP_CLK	8
-#define PWR_RAIL_GRP_2D_CLK	58
-#define PWR_RAIL_MDP_CLK	14
-#define PWR_RAIL_MFC_CLK	68
-#define PWR_RAIL_ROTATOR_CLK	90
-#define PWR_RAIL_VDC_CLK	39
-#define PWR_RAIL_VFE_CLK	41
-#define PWR_RAIL_VPE_CLK	76
+#include <linux/list.h>
 
-enum rail_ctl_mode {
-	PWR_RAIL_CTL_AUTO = 0,
-	PWR_RAIL_CTL_MANUAL,
+#define NUM_CHUNK_SIZES 3
+
+enum chunk_size_idx {
+	IDX_1M = 0,
+	IDX_64K,
+	IDX_4K
 };
 
-#ifdef CONFIG_ARCH_MSM8X60
-static inline int __maybe_unused internal_pwr_rail_ctl(unsigned rail_id,
-						       bool enable)
-{
-	/* Not yet implemented. */
-	return 0;
-}
-static inline int __maybe_unused internal_pwr_rail_mode(unsigned rail_id,
-							enum rail_ctl_mode mode)
-{
-	/* Not yet implemented. */
-	return 0;
-}
-#else
-int internal_pwr_rail_ctl(unsigned rail_id, bool enable);
-int internal_pwr_rail_mode(unsigned rail_id, enum rail_ctl_mode mode);
-#endif
+struct phys_chunk {
+	struct list_head list;
+	struct list_head allocated; /* used to record is allocated */
 
-#endif /* _INTERNAL_POWER_RAIL_H */
+	struct list_head refers_to;
 
+	/* TODO: change to unsigned long */
+	int pa;
+	int size_idx;
+};
+
+int vcm_alloc_get_mem_size(void);
+int vcm_alloc_blocks_avail(enum chunk_size_idx idx);
+int vcm_alloc_get_num_chunks(void);
+int vcm_alloc_all_blocks_avail(void);
+int vcm_alloc_count_allocated(void);
+void vcm_alloc_print_list(int just_allocated);
+int vcm_alloc_idx_to_size(int idx);
+int vcm_alloc_destroy(void);
+int vcm_alloc_init(unsigned int set_base_pa);
+int vcm_alloc_free_blocks(struct phys_chunk *alloc_head);
+int vcm_alloc_num_blocks(int num,
+			 enum chunk_size_idx idx, /* chunk size */
+			 struct phys_chunk *alloc_head);
+int vcm_alloc_max_munch(int len,
+			struct phys_chunk *alloc_head);
+
+#endif /* VCM_ALLOC_H */
