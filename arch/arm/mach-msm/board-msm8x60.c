@@ -40,6 +40,7 @@
 #include <linux/spi/spi.h>
 #include <linux/regulator/consumer.h>
 #include <linux/input/tdisc_shinetsu.h>
+#include <linux/input/cy8c_ts.h>
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -436,6 +437,52 @@ static void __init msm8x60_allocate_memory_regions(void)
 		pr_info("allocating %lu bytes at %p (%lx physical) for "
 		"KGSL\n", size, addr, __pa(addr));
 	}
+}
+
+#define TS_PEN_IRQ_GPIO 61
+static int tmg200_power(int vreg_on)
+{
+	/* REVISIT: Add regulator enable/disable code for smps3 */
+	return 0;
+}
+
+static struct cy8c_ts_platform_data cy8ctmg200_pdata = {
+	.ts_name = "msm_tmg200_ts",
+	.dis_min_x = 0,
+	.dis_max_x = 1023,
+	.dis_min_y = 0,
+	.dis_max_y = 599,
+	.use_polling = 0,
+	.min_tid = 1,
+	.max_tid = 255,
+	.min_touch = 0,
+	.max_touch = 255,
+	.min_width = 0,
+	.max_width = 255,
+	.power_on = tmg200_power,
+	.nfingers = 2,
+};
+
+static struct i2c_board_info cy8ctmg200_board_info[] = {
+	{
+		I2C_BOARD_INFO("cy8ctmg200", 0x2),
+		.platform_data = &cy8ctmg200_pdata,
+		.irq = MSM_GPIO_TO_INT(TS_PEN_IRQ_GPIO),
+	}
+};
+
+static void __init cy8ctmg200_init(void)
+{
+	int rc;
+
+	/* REVISIT: Add regulator get/set code for smps3 */
+
+	/* configure touchscreen interrupt gpio */
+	rc = gpio_tlmm_config(GPIO_CFG(TS_PEN_IRQ_GPIO, 0, GPIO_INPUT,
+				GPIO_NO_PULL, GPIO_2MA), 0);
+	if (rc)
+		pr_err("%s: unable to configure gpio %d\n",
+			__func__, TS_PEN_IRQ_GPIO);
 }
 
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
@@ -1273,6 +1320,19 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 
 #define PM8901_GPIO_INT           91
 
+static int pm8901_mpp0_init(void *data)
+{
+	int val = machine_is_msm8x60_surf() ?
+		PM_MPP_DOUT_CTL_LOW : PM_MPP_DOUT_CTL_HIGH;
+	int rc = pm8901_mpp_config(0, PM_MPP_TYPE_D_OUTPUT,
+			PM8901_MPP_DIG_LEVEL_VPH,
+			val);
+	if (!rc)
+		pr_err("%s: pm8901_mpp_config failed with %d\n", __func__, rc);
+
+	return rc;
+}
+
 static struct pm8901_gpio_platform_data pm8901_mpp_data = {
 	.gpio_base	= PM8901_GPIO_PM_TO_SYS(0),
 	.irq_base	= PM8901_MPP_IRQ(PM8901_IRQ_BASE, 0),
@@ -1286,17 +1346,18 @@ static struct pm8901_gpio_platform_data pm8901_mpp_data = {
 }
 
 static struct pm8901_vreg_pdata pm8901_vreg_pdata[PM8901_VREG_MAX] = {
-	[PM8901_VREG_ID_L0]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8901_VREG_ID_L1]	= { .min_uV = 3300000,	.max_uV = 3300000 },
-	[PM8901_VREG_ID_L2]	= { .min_uV = 3300000,	.max_uV = 3300000 },
-	[PM8901_VREG_ID_L3]	= { .min_uV = 3300000,	.max_uV = 3300000 },
-	[PM8901_VREG_ID_L4]	= { .min_uV = 2600000,	.max_uV = 2600000 },
-	[PM8901_VREG_ID_L5]	= { .min_uV = 2850000,	.max_uV = 2850000 },
-	[PM8901_VREG_ID_L6]	= { .min_uV = 2200000,	.max_uV = 2200000 },
-	[PM8901_VREG_ID_S0]	= { .min_uV = 1100000,	.max_uV = 1100000 },
-	[PM8901_VREG_ID_S1]	= { .min_uV = 1100000,	.max_uV = 1100000 },
-	[PM8901_VREG_ID_S3]	= { .min_uV = 1100000,	.max_uV = 1100000 },
-	[PM8901_VREG_ID_S4]	= { .min_uV = 1300000,	.max_uV = 1300000 },
+	[PM8901_VREG_ID_L0]      = {1200000, 1200000, NULL,             NULL},
+	[PM8901_VREG_ID_L1]      = {3300000, 3300000, NULL,             NULL},
+	[PM8901_VREG_ID_L2]      = {3300000, 3300000, NULL,             NULL},
+	[PM8901_VREG_ID_L3]      = {3300000, 3300000, NULL,             NULL},
+	[PM8901_VREG_ID_L4]      = {2600000, 2600000, NULL,             NULL},
+	[PM8901_VREG_ID_L5]      = {2850000, 2850000, NULL,             NULL},
+	[PM8901_VREG_ID_L6]      = {2200000, 2200000, NULL,             NULL},
+	[PM8901_VREG_ID_S0]      = {1100000, 1100000, NULL,             NULL},
+	[PM8901_VREG_ID_S1]      = {1100000, 1100000, NULL,             NULL},
+	[PM8901_VREG_ID_S3]      = {1100000, 1100000, NULL,             NULL},
+	[PM8901_VREG_ID_S4]      = {1300000, 1300000, NULL,             NULL},
+	[PM8901_VREG_ID_USB_OTG] = {1300000, 1300000, pm8901_mpp0_init, NULL},
 };
 
 static struct mfd_cell pm8901_subdevs[] = {
@@ -1405,6 +1466,12 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(msm_i2c_gsbi3_tdisc_info),
 	},
 #endif
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_GSBI3_QUP_I2C_BUS_ID,
+		cy8ctmg200_board_info,
+		ARRAY_SIZE(cy8ctmg200_board_info),
+	},
 };
 #endif /* CONFIG_I2C */
 
@@ -1810,6 +1877,7 @@ static struct mmc_platform_data msm8x60_sdc1_data = {
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
+	.nonremovable	= 1,
 };
 #endif
 
@@ -1821,6 +1889,7 @@ static struct mmc_platform_data msm8x60_sdc2_data = {
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -1839,6 +1908,7 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -1850,6 +1920,7 @@ static struct mmc_platform_data msm8x60_sdc4_data = {
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
+	.nonremovable	= 1,
 };
 #endif
 
@@ -1861,6 +1932,7 @@ static struct mmc_platform_data msm8x60_sdc5_data = {
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -2048,6 +2120,8 @@ static void __init msm8x60_init(void)
 		msm_fb_add_devices();
 	fixup_i2c_configs();
 	register_i2c_devices();
+
+	cy8ctmg200_init();
 }
 
 MACHINE_START(MSM8X60_RUMI3, "QCT MSM8X60 RUMI3")

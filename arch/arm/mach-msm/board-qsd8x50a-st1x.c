@@ -79,7 +79,6 @@
 
 #define MSM_PMEM_ADSP_SIZE	0x1C00000
 
-#define MSM_FB_SIZE             0x500000
 #define MSM_FB_SIZE_ST15	0x810000
 #define MSM_AUDIO_SIZE		0x80000
 #define MSM_GPU_PHYS_SIZE 	SZ_2M
@@ -92,9 +91,9 @@
 #define MSM_PMEM_SMI_SIZE	0x01500000
 
 #define MSM_FB_BASE		MSM_PMEM_SMI_BASE
-#define MSM_GPU_PHYS_BASE 	(MSM_FB_BASE + MSM_FB_SIZE)
+#define MSM_GPU_PHYS_BASE 	(MSM_FB_BASE + MSM_FB_SIZE_ST15)
 #define MSM_PMEM_SMIPOOL_BASE	(MSM_GPU_PHYS_BASE + MSM_GPU_PHYS_SIZE)
-#define MSM_PMEM_SMIPOOL_SIZE	(MSM_PMEM_SMI_SIZE - MSM_FB_SIZE \
+#define MSM_PMEM_SMIPOOL_SIZE	(MSM_PMEM_SMI_SIZE - MSM_FB_SIZE_ST15 \
 					- MSM_GPU_PHYS_SIZE)
 
 #define PMEM_KERNEL_EBI1_SIZE	(10 * 1024 * 1024)
@@ -1449,7 +1448,7 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.set_grp3d_async = NULL,
 	.imem_clk_name = "imem_clk",
 	.grp3d_clk_name = "grp_clk",
-	.grp2d_clk_name = NULL,
+	.grp2d_clk_name = "grp_2d_clk",
 };
 
 static struct platform_device msm_device_kgsl = {

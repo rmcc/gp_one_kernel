@@ -38,7 +38,7 @@
 #include <linux/i2c/tsc2007.h>
 #include <linux/input/kp_flip_switch.h>
 #include <linux/leds-pmic8058.h>
-#include <linux/input/cy8ctma300.h>
+#include <linux/input/cy8c_ts.h>
 #include <linux/msm_adc.h>
 
 #include <asm/mach-types.h>
@@ -3682,6 +3682,11 @@ static void __init msm7x30_init_irq(void)
 	msm_init_irq();
 }
 
+static struct msm_gpio msm_nand_ebi2_cfg_data[] = {
+	{GPIO_CFG(86, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA), "ebi2_cs1"},
+	{GPIO_CFG(115, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA), "ebi2_busy1"},
+};
+
 struct vreg *vreg_s3;
 struct vreg *vreg_mmc;
 
@@ -3697,11 +3702,6 @@ struct sdcc_gpio {
 
 static struct msm_gpio sdc1_lvlshft_cfg_data[] = {
 	{GPIO_CFG(35, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_16MA), "sdc1_lvlshft"},
-};
-
-static struct msm_gpio msm_nand_ebi2_cfg_data[] = {
-	{GPIO_CFG(86, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA), "ebi2_cs1"},
-	{GPIO_CFG(115, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA), "ebi2_busy1"},
 };
 
 static struct msm_gpio sdc1_cfg_data[] = {
@@ -3899,6 +3899,7 @@ static struct mmc_platform_data msm7x30_sdc1_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -3917,6 +3918,7 @@ static struct mmc_platform_data msm7x30_sdc2_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 1,
 };
 #endif
 
@@ -3934,6 +3936,7 @@ static struct mmc_platform_data msm7x30_sdc3_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 1,
 };
 #endif
 
@@ -3954,6 +3957,7 @@ static struct mmc_platform_data msm7x30_sdc4_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 24576000,
 	.msmsdcc_fmax	= 49152000,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -4381,7 +4385,7 @@ vreg_fail:
 	return rc;
 }
 
-static struct cy8ctma300_platform_data cy8ctma300_pdata = {
+static struct cy8c_ts_platform_data cy8ctma300_pdata = {
 	.power_on = tma300_power,
 	.ts_name = "msm_tma300_ts",
 	.dis_min_x = 0,

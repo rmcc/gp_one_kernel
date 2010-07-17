@@ -45,8 +45,8 @@
 #define GSBIn_UART_APPS_NS_REG(n)	REG(0x29D4+(0x20*((n)-1)))
 #define PDM_CLK_NS_REG			REG(0x2CC0)
 #define PLL_ENA_SC0_REG			REG(0x34C0)
-#define PMIC_SSBI2_NS_REG		REG(0x280C)
 #define PRNG_CLK_NS_REG			REG(0x2E80)
+#define RINGOSC_NS_REG			REG(0x2DC0)
 #define RINGOSC_STATUS_REG		REG(0x2DCC)
 #define RINGOSC_TCXO_CTL_REG		REG(0x2DC4)
 #define SDCn_APPS_CLK_NS_REG(n)		REG(0x282C+(0x20*((n)-1)))
@@ -672,19 +672,6 @@ static struct clk_freq_tbl clk_tbl_pdm[] = {
 static struct clk_freq_tbl clk_tbl_prng[] = {
 	F_PRNG(32000000, BB_PLL8, 12, 0, 0),
 	F_PRNG(64000000, BB_PLL8,  6, 0, 0),
-	F_END,
-};
-
-/* PMIC_SSBI2 */
-#define NS_MASK_PMIC_SSBI2 (BM(4, 3) | BM(1, 0))
-#define CLK_PMIC_SSBI2(id, ns, tv) \
-		CLK_LOCAL(id, BASIC, ns, ns, NULL, ns, B(12), 0, B(11), \
-				NS_MASK_PMIC_SSBI2, 0, set_rate_basic, \
-				clk_tbl_pmic_ssbi2, NULL, NONE, NULL, tv)
-#define F_PMIC_SSBI2(f, s, d, m, n) \
-		F_RAW(f, s##_PLL, 0, NS_DIVSRC(4, 3, d, 1, 0, s), 0, 0)
-static struct clk_freq_tbl clk_tbl_pmic_ssbi2[] = {
-	F_PMIC_SSBI2(13500000, XO_MXO, 2, 0, 0),
 	F_END,
 };
 
@@ -1316,8 +1303,6 @@ static struct clk_local clk_local_tbl[] = {
 
 	CLK_PRNG(PRNG, PRNG_CLK_NS_REG, TEST_PER(0x7D)),
 
-	CLK_PMIC_SSBI2(PMIC_SSBI2, PMIC_SSBI2_NS_REG, TEST_PER(0x7A)),
-
 	CLK_SDC(SDC1, SDCn_APPS_CLK_NS_REG(1), TEST_PER(0x13)),
 	CLK_SDC(SDC2, SDCn_APPS_CLK_NS_REG(2), TEST_PER(0x15)),
 	CLK_SDC(SDC3, SDCn_APPS_CLK_NS_REG(3), TEST_PER(0x17)),
@@ -1825,7 +1810,7 @@ static signed soc_clk_measure_rate(unsigned id)
 {
 	struct clk_local *clk = &clk_local_tbl[id];
 	unsigned long flags;
-	uint32_t vector, pdm_reg_backup;
+	uint32_t vector, pdm_reg_backup, ringosc_reg_backup;
 	uint64_t raw_count_short, raw_count_full;
 	signed ret;
 
@@ -1854,9 +1839,11 @@ static signed soc_clk_measure_rate(unsigned id)
 		goto err;
 	}
 
-	/* Enable CXO/4 branch and root. */
+	/* Enable CXO/4 and RINGOSC branch and root. */
 	pdm_reg_backup = readl(PDM_CLK_NS_REG);
+	ringosc_reg_backup = readl(RINGOSC_NS_REG);
 	writel(0x2898, PDM_CLK_NS_REG);
+	writel(0xA00, RINGOSC_NS_REG);
 
 	/*
 	 * The ring oscillator counter will not reset if the measured clock
@@ -1870,6 +1857,7 @@ static signed soc_clk_measure_rate(unsigned id)
 	/* Run a full measurement. (~14 ms) */
 	raw_count_full = run_measurement(0x10000);
 
+	writel(ringosc_reg_backup, RINGOSC_NS_REG);
 	writel(pdm_reg_backup, PDM_CLK_NS_REG);
 
 	/* Return 0 if the clock is off. */
@@ -2087,7 +2075,6 @@ void __init msm_clk_soc_init(void)
 	/* Initialize rates for clocks that only support one. */
 	set_1rate(BBRX_SSBI);
 	set_1rate(MDP_VSYNC);
-	set_1rate(PMIC_SSBI2);
 	set_1rate(TSIF_REF);
 	set_1rate(TSSC);
 	set_1rate(USB_HS_XCVR);
