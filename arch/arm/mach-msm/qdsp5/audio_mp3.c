@@ -17,7 +17,6 @@
  *
  */
 
-#include <mach/debug_audio_mm.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
@@ -42,6 +41,7 @@
 #include <mach/qdsp5/qdsp5audppmsg.h>
 #include <mach/qdsp5/qdsp5audplaycmdi.h>
 #include <mach/qdsp5/qdsp5audplaymsg.h>
+#include <mach/debug_mm.h>
 
 /* for queue ids - should be relative to module number*/
 #include "adsp.h"
@@ -1759,8 +1759,6 @@ static void audmp3_reset_pmem_region(struct audio *audio)
 static int audio_release(struct inode *inode, struct file *file)
 {
 	struct audio *audio = file->private_data;
-
-	MM_DBG("\n"); /* Macro prints the file name and function */
 
 	MM_INFO("audio instance 0x%08x freeing\n", (int)audio);
 	mutex_lock(&audio->lock);

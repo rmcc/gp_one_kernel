@@ -17,7 +17,6 @@
  *
  */
 
-#include <mach/debug_audio_mm.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
@@ -39,6 +38,7 @@
 #include <mach/qdsp5/qdsp5audppmsg.h>
 #include <mach/qdsp5/qdsp5audplaycmdi.h>
 #include <mach/qdsp5/qdsp5audplaymsg.h>
+#include <mach/debug_mm.h>
 
 /* for queue ids - should be relative to module number*/
 #include "adsp.h"
@@ -1293,8 +1293,7 @@ static int audio_release(struct inode *inode, struct file *file)
 {
 	struct audio *audio = file->private_data;
 
-	pr_debug("audio_release()\n");
-
+	MM_INFO("audio instance 0x%08x freeing\n", (int)audio);
 	mutex_lock(&audio->lock);
 	audio_disable(audio);
 	audio_flush(audio);
@@ -1553,7 +1552,7 @@ static int __init audio_init(void)
 		if (the_aac_audio.data)
 			break;
 		else if (pmem_sz == DMASZ_MIN) {
-			pr_err("audio_aac: could not allocate DMA buffers\n");
+			MM_ERR("audio_aac: could not allocate DMA buffers\n");
 			goto fail_nomem;
 		} else
 			pmem_sz >>= 1;
@@ -1574,7 +1573,7 @@ static int __init audio_init(void)
 			&the_aac_audio.read_phys,
 			GFP_KERNEL);
 	if (!the_aac_audio.read_data) {
-		pr_err("audio_aac: buf alloc fail\n");
+		MM_ERR("audio_aac: buf alloc fail\n");
 		dma_free_coherent(NULL, DMASZ, the_aac_audio.data,
 						the_aac_audio.phys);
 		the_aac_audio.data = NULL;

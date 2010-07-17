@@ -25,7 +25,6 @@
  * along with this program; if not, you can find it at http://www.fsf.org
  */
 
-#include <mach/debug_audio_mm.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
@@ -47,6 +46,7 @@
 #include <mach/qdsp5/qdsp5audppmsg.h>
 #include <mach/qdsp5/qdsp5audplaycmdi.h>
 #include <mach/qdsp5/qdsp5audplaymsg.h>
+#include <mach/debug_mm.h>
 
 /* for queue ids - should be relative to module number*/
 #include "adsp.h"
@@ -1085,8 +1085,7 @@ static int audamrnb_release(struct inode *inode, struct file *file)
 {
 	struct audio *audio = file->private_data;
 
-	pr_debug("audamrnb_release()\n");
-
+	MM_INFO("audio instance 0x%08x freeing\n", (int)audio);
 	mutex_lock(&audio->lock);
 	audamrnb_disable(audio);
 	audamrnb_flush(audio);

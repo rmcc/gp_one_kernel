@@ -17,19 +17,9 @@
  */
 #include <linux/io.h>
 
-#define ADSP_DEBUG_MSGS 0
-#if ADSP_DEBUG_MSGS
-#define DLOG(fmt,args...) \
-	do { printk(KERN_INFO "[%s:%s:%d] "fmt, __FILE__, __func__, __LINE__, \
-	     ##args); } \
-	while (0)
-#else
-#define DLOG(x...) do {} while (0)
-#endif
-
-
 #include <mach/qdsp5/qdsp5vdeccmdi.h>
 #include "adsp.h"
+#include <mach/debug_mm.h>
 
 static inline void *high_low_short_to_ptr(unsigned short high,
 					  unsigned short low)

@@ -15,6 +15,7 @@
  * GNU General Public License for more details.
  *
  */
+
 #include <linux/io.h>
 
 #define ADSP_DEBUG_MSGS 0
@@ -29,6 +30,7 @@
 
 #include <mach/qdsp5/qdsp5venccmdi.h>
 #include "adsp.h"
+#include <mach/debug_mm.h>
 
 
 static unsigned short x_dimension, y_dimension;

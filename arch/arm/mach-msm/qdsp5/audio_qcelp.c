@@ -39,6 +39,7 @@
 #include <mach/qdsp5/qdsp5audppmsg.h>
 #include <mach/qdsp5/qdsp5audplaycmdi.h>
 #include <mach/qdsp5/qdsp5audplaymsg.h>
+#include <mach/debug_mm.h>
 
 #include "audmgr.h"
 /* for queue ids - should be relative to module number*/
@@ -1078,8 +1079,7 @@ static int audqcelp_release(struct inode *inode, struct file *file)
 {
 	struct audio *audio = file->private_data;
 
-	pr_debug("audqcelp_release()\n");
-
+	MM_INFO("audio instance 0x%08x freeing\n", (int) audio);
 	mutex_lock(&audio->lock);
 	audqcelp_disable(audio);
 	audqcelp_flush(audio);
