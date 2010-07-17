@@ -26,56 +26,44 @@
  *
  */
 
-#ifndef __PMIC8058_REGULATOR_H__
-#define __PMIC8058_REGULATOR_H__
+#ifndef _MSM_RMNET_H_
+#define _MSM_RMNET_H_
 
-/* Low dropout regulator ids */
-#define PM8058_VREG_ID_L0	0
-#define PM8058_VREG_ID_L1	1
-#define PM8058_VREG_ID_L2	2
-#define PM8058_VREG_ID_L3	3
-#define PM8058_VREG_ID_L4	4
-#define PM8058_VREG_ID_L5	5
-#define PM8058_VREG_ID_L6	6
-#define PM8058_VREG_ID_L7	7
-#define PM8058_VREG_ID_L8	8
-#define PM8058_VREG_ID_L9	9
-#define PM8058_VREG_ID_L10	10
-#define PM8058_VREG_ID_L11	11
-#define PM8058_VREG_ID_L12	12
-#define PM8058_VREG_ID_L13	13
-#define PM8058_VREG_ID_L14	14
-#define PM8058_VREG_ID_L15	15
-#define PM8058_VREG_ID_L16	16
-#define PM8058_VREG_ID_L17	17
-#define PM8058_VREG_ID_L18	18
-#define PM8058_VREG_ID_L19	19
-#define PM8058_VREG_ID_L20	20
-#define PM8058_VREG_ID_L21	21
-#define PM8058_VREG_ID_L22	22
-#define PM8058_VREG_ID_L23	23
-#define PM8058_VREG_ID_L24	24
-#define PM8058_VREG_ID_L25	25
+/* Bitmap macros for RmNET driver operation mode. */
+#define RMNET_MODE_NONE     (0x00)
+#define RMNET_MODE_LLP_ETH  (0x01)
+#define RMNET_MODE_LLP_IP   (0x02)
+#define RMNET_MODE_QOS      (0x04)
+#define RMNET_MODE_MASK     (RMNET_MODE_LLP_ETH | \
+			     RMNET_MODE_LLP_IP  | \
+			     RMNET_MODE_QOS)
 
-/* Switched-mode power supply regulator ids */
-#define PM8058_VREG_ID_S0	26
-#define PM8058_VREG_ID_S1	27
-#define PM8058_VREG_ID_S2	28
-#define PM8058_VREG_ID_S3	29
-#define PM8058_VREG_ID_S4	30
+#define RMNET_IS_MODE_QOS(mode)  \
+	((mode & RMNET_MODE_QOS) == RMNET_MODE_QOS)
+#define RMNET_IS_MODE_IP(mode)   \
+	((mode & RMNET_MODE_LLP_IP) == RMNET_MODE_LLP_IP)
 
-/* Low voltage switch regulator ids */
-#define PM8058_VREG_ID_LVS0	31
-#define PM8058_VREG_ID_LVS1	32
-
-/* Negative charge pump regulator id */
-#define PM8058_VREG_ID_NCP	33
-
-#define PM8058_VREG_MAX		(PM8058_VREG_ID_NCP + 1)
-
-struct pm8058_vreg_pdata {
-	int min_uV;
-	int max_uV;
+/* IOCTL command enum
+ * Values chosen to not conflict with other drivers in the ecosystem */
+enum rmnet_ioctl_cmds_e {
+	RMNET_IOCTL_SET_LLP_ETHERNET = 0x000089F1, /* Set Ethernet protocol  */
+	RMNET_IOCTL_SET_LLP_IP       = 0x000089F2, /* Set RAWIP protocol     */
+	RMNET_IOCTL_GET_LLP          = 0x000089F3, /* Get link protocol      */
+	RMNET_IOCTL_SET_QOS_ENABLE   = 0x000089F4, /* Set QoS header enabled */
+	RMNET_IOCTL_SET_QOS_DISABLE  = 0x000089F5, /* Set QoS header disabled*/
+	RMNET_IOCTL_GET_QOS          = 0x000089F6, /* Get QoS header state   */
+	RMNET_IOCTL_GET_OPMODE       = 0x000089F7, /* Get operation mode     */
+	RMNET_IOCTL_OPEN             = 0x000089F8, /* Open transport port    */
+	RMNET_IOCTL_CLOSE            = 0x000089F9, /* Close transport port   */
+	RMNET_IOCTL_MAX
 };
 
-#endif
+/* QMI QoS header definition */
+#define QMI_QOS_HDR_S  __attribute((__packed__)) qmi_qos_hdr_s
+struct QMI_QOS_HDR_S {
+	unsigned char    version;
+	unsigned char    flags;
+	unsigned long    flow_id;
+};
+
+#endif /* _MSM_RMNET_H_ */

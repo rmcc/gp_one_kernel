@@ -56,6 +56,8 @@
 #include "devices-msm8x60.h"
 #include "timer.h"
 
+#define MSM_SHARED_RAM_PHYS 0x40000000
+
 /* Macros assume PMIC GPIOs start at 0 */
 #define PM8058_GPIO_PM_TO_SYS(pm_gpio)		(pm_gpio + NR_GPIO_IRQS)
 #define PM8058_GPIO_SYS_TO_PM(sys_gpio)		(sys_gpio - NR_GPIO_IRQS)
@@ -434,6 +436,7 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 };
 
 static struct platform_device *surf_devices[] __initdata = {
+	&msm_device_smd,
 	&smsc911x_device,
 	&msm_device_uart_dm12,
 #ifdef CONFIG_I2C_QUP
@@ -480,7 +483,6 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 		.io_polarity       = 0,
 		.irq_summary       = -1, /* see fixup_i2c_configs() */
 		.irq_base          = GPIO_EXPANDER_IRQ_BASE,
-		.irq_sense         = 0,
 	},
 	/* "DOCKING" expander */
 	[1] = {
@@ -493,7 +495,6 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
 						     UI_INT2_N),
 		.irq_base          = GPIO_EXPANDER_IRQ_BASE + 16,
-		.irq_sense         = 0,
 	},
 	/* "SURF" expander */
 	[2] = {
@@ -506,7 +507,6 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
 						     UI_INT1_N),
 		.irq_base          = GPIO_EXPANDER_IRQ_BASE + (16 * 2),
-		.irq_sense         = 0,
 	},
 	/* left keyboard FHA/FFA I/O */
 	[3] = {
@@ -519,7 +519,6 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
 						     UI_INT3_N),
 		.irq_base          = GPIO_EXPANDER_IRQ_BASE + (16 * 3),
-		.irq_sense         = 0,
 	},
 	/* right keyboard FHA/FFA I/O */
 	[4] = {
@@ -532,7 +531,6 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
 						     UI_INT3_N),
 		.irq_base          = GPIO_EXPANDER_IRQ_BASE + (16 * 3) + 8,
-		.irq_sense         = 0,
 	},
 };
 
@@ -607,7 +605,7 @@ int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 			UI_INT1_N,
 			{
 				.direction      = PM_GPIO_DIR_IN,
-				.pull           = PM_GPIO_PULL_UP_30,
+				.pull           = PM_GPIO_PULL_NO,
 				.vin_sel        = PM_GPIO_VIN_S3,
 				.function       = PM_GPIO_FUNC_NORMAL,
 				.inv_int_pol    = 0,
@@ -617,7 +615,7 @@ int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 			UI_INT2_N,
 			{
 				.direction      = PM_GPIO_DIR_IN,
-				.pull           = PM_GPIO_PULL_UP_30,
+				.pull           = PM_GPIO_PULL_NO,
 				.vin_sel        = PM_GPIO_VIN_S3,
 				.function       = PM_GPIO_FUNC_NORMAL,
 				.inv_int_pol    = 0,
@@ -627,7 +625,7 @@ int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 			UI_INT3_N,
 			{
 				.direction      = PM_GPIO_DIR_IN,
-				.pull           = PM_GPIO_PULL_UP_30,
+				.pull           = PM_GPIO_PULL_NO,
 				.vin_sel        = PM_GPIO_VIN_S3,
 				.function       = PM_GPIO_FUNC_NORMAL,
 				.inv_int_pol    = 0,
@@ -1167,6 +1165,7 @@ static void __init msm8x60_init_buses(void)
 
 static void __init msm8x60_map_io(void)
 {
+	msm_shared_ram_phys = MSM_SHARED_RAM_PHYS;
 	msm_map_msm8x60_io();
 	msm_clock_init(msm_clocks_8x60, msm_num_clocks_8x60);
 }

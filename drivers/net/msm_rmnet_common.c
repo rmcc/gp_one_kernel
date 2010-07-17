@@ -1,20 +1,23 @@
-/* linux/drivers/net/msm_rmnet.c
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
- * Virtual Ethernet Interface for MSM7K Networking
- *
- * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2010, Code Aurora Forum. All rights reserved.
- * Author: Brian Swetland <swetland@google.com>
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
+ */
+
+/*
+ * RMNET SDIO Module.
  */
 
 #include <linux/module.h>
@@ -35,26 +38,22 @@
 #include <linux/earlysuspend.h>
 #endif
 
-#include <mach/msm_smd.h>
-
-/* XXX should come from smd headers */
-#define SMD_PORT_ETHER0 11
+#include "msm_rmnet_sdio.h"
 
 /* allow larger frames */
 #define RMNET_DATA_LEN 2000
 
-static const char *ch_name[3] = {
-	"DATA5",
-	"DATA6",
-	"DATA7",
-};
+#define DEVICE_ID_INVALID   -1
 
-struct rmnet_private
-{
-	smd_channel_t *ch;
+#define DEVICE_INACTIVE      0
+#define DEVICE_ACTIVE        1
+
+#define HEADROOM_FOR_SDIO   8
+#define HEADROOM_FOR_QOS    8
+
+struct rmnet_private {
 	struct net_device_stats stats;
-	const char *chname;
-	struct wake_lock wake_lock;
+	uint32_t ch_id;
 #ifdef CONFIG_MSM_RMNET_DEBUG
 	ktime_t last_packet;
 	unsigned long wakeups_xmit;
@@ -64,21 +63,9 @@ struct rmnet_private
 	struct sk_buff *skb;
 	spinlock_t lock;
 	struct tasklet_struct tsklt;
-	u32 operation_mode;    /* IOCTL specified mode (protocol, QoS header) */
+	u32 operation_mode; /* IOCTL specified mode (protocol, QoS header) */
+	uint8_t device_up;
 };
-
-/* Forward declaration */
-static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
-
-static int count_this_packet(void *_hdr, int len)
-{
-	struct ethhdr *hdr = _hdr;
-
-	if (len >= ETH_HLEN && hdr->h_proto == htons(ETH_P_ARP))
-		return 0;
-
-	return 1;
-}
 
 #ifdef CONFIG_MSM_RMNET_DEBUG
 static unsigned long timeout_us;
@@ -92,9 +79,11 @@ static unsigned long timeout_suspend_us;
 static struct device *rmnet0;
 
 /* Set timeout in us when the screen is off. */
-static ssize_t timeout_suspend_store(struct device *d, struct device_attribute *attr, const char *buf, size_t n)
+static ssize_t timeout_suspend_store(struct device *d,
+				     struct device_attribute *attr,
+				     const char *buf, size_t n)
 {
-	timeout_suspend_us = simple_strtoul(buf, NULL, 10);
+	timeout_suspend_us = strict_strtoul(buf, NULL, 10);
 	return n;
 }
 
@@ -105,16 +94,19 @@ static ssize_t timeout_suspend_show(struct device *d,
 	return sprintf(buf, "%lu\n", (unsigned long) timeout_suspend_us);
 }
 
-static DEVICE_ATTR(timeout_suspend, 0664, timeout_suspend_show, timeout_suspend_store);
+static DEVICE_ATTR(timeout_suspend, 0664, timeout_suspend_show,
+		   timeout_suspend_store);
 
-static void rmnet_early_suspend(struct early_suspend *handler) {
+static void rmnet_early_suspend(struct early_suspend *handler)
+{
 	if (rmnet0) {
 		struct rmnet_private *p = netdev_priv(to_net_dev(rmnet0));
 		p->timeout_us = timeout_suspend_us;
 	}
 }
 
-static void rmnet_late_resume(struct early_suspend *handler) {
+static void rmnet_late_resume(struct early_suspend *handler)
+{
 	if (rmnet0) {
 		struct rmnet_private *p = netdev_priv(to_net_dev(rmnet0));
 		p->timeout_us = timeout_us;
@@ -136,7 +128,8 @@ late_initcall(rmnet_late_init);
 #endif
 
 /* Returns 1 if packet caused rmnet to wakeup, 0 otherwise. */
-static int rmnet_cause_wakeup(struct rmnet_private *p) {
+static int rmnet_cause_wakeup(struct rmnet_private *p)
+{
 	int ret = 0;
 	ktime_t now;
 	if (p->timeout_us == 0) /* Check if disabled */
@@ -145,9 +138,9 @@ static int rmnet_cause_wakeup(struct rmnet_private *p) {
 	/* Use real (wall) time. */
 	now = ktime_get_real();
 
-	if (ktime_us_delta(now, p->last_packet) > p->timeout_us) {
+	if (ktime_us_delta(now, p->last_packet) > p->timeout_us)
 		ret = 1;
-	}
+
 	p->last_packet = now;
 	return ret;
 }
@@ -163,7 +156,7 @@ static ssize_t wakeups_xmit_show(struct device *d,
 DEVICE_ATTR(wakeups_xmit, 0444, wakeups_xmit_show, NULL);
 
 static ssize_t wakeups_rcv_show(struct device *d, struct device_attribute *attr,
-		char *buf)
+				char *buf)
 {
 	struct rmnet_private *p = netdev_priv(to_net_dev(d));
 	return sprintf(buf, "%lu\n", p->wakeups_rcv);
@@ -173,14 +166,14 @@ DEVICE_ATTR(wakeups_rcv, 0444, wakeups_rcv_show, NULL);
 
 /* Set timeout in us. */
 static ssize_t timeout_store(struct device *d, struct device_attribute *attr,
-		const char *buf, size_t n)
+			     const char *buf, size_t n)
 {
 #ifndef CONFIG_HAS_EARLYSUSPEND
 	struct rmnet_private *p = netdev_priv(to_net_dev(d));
-	p->timeout_us = timeout_us = simple_strtoul(buf, NULL, 10);
+	p->timeout_us = timeout_us = strict_strtoul(buf, NULL, 10);
 #else
 /* If using early suspend/resume hooks do not write the value on store. */
-	timeout_us = simple_strtoul(buf, NULL, 10);
+	timeout_us = strict_strtoul(buf, NULL, 10);
 #endif
 	return n;
 }
@@ -195,6 +188,10 @@ static ssize_t timeout_show(struct device *d, struct device_attribute *attr,
 
 DEVICE_ATTR(timeout, 0664, timeout_show, timeout_store);
 #endif
+
+
+/* Forward declaration */
+static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 
 static __be16 rmnet_ip_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
@@ -213,85 +210,58 @@ static __be16 rmnet_ip_type_trans(struct sk_buff *skb, struct net_device *dev)
 	default:
 		pr_err("rmnet_recv() L3 protocol decode error: 0x%02x",
 		       skb->data[0] & 0xf0);
-		/* skb will be dropped in uppder layer for unknown protocol */
+		/* skb will be dropped in upper layer for unknown protocol */
 	}
 	return protocol;
 }
 
-/* Called in soft-irq context */
-static void smd_net_data_handler(unsigned long arg)
+static int count_this_packet(void *_hdr, int len)
 {
-	struct net_device *dev = (struct net_device *) arg;
-	struct rmnet_private *p = netdev_priv(dev);
-	struct sk_buff *skb;
-	void *ptr = 0;
-	int sz;
-	u32 opmode;
-	unsigned long flags;
+	struct ethhdr *hdr = _hdr;
 
-	for (;;) {
-		sz = smd_cur_packet_size(p->ch);
-		if (sz == 0) break;
-		if (smd_read_avail(p->ch) < sz) break;
+	if (len >= ETH_HLEN && hdr->h_proto == htons(ETH_P_ARP))
+		return 0;
 
-		if (sz > dev->mtu) {
-			pr_err("rmnet_recv() discarding %d len (%d mtu)\n",
-				sz, dev->mtu);
-			ptr = 0;
-		} else {
-			skb = dev_alloc_skb(sz + NET_IP_ALIGN);
-			if (skb == NULL) {
-				pr_err("rmnet_recv() cannot allocate skb\n");
-			} else {
-				skb->dev = dev;
-				skb_reserve(skb, NET_IP_ALIGN);
-				ptr = skb_put(skb, sz);
-				wake_lock_timeout(&p->wake_lock, HZ / 2);
-				if (smd_read(p->ch, ptr, sz) != sz) {
-					pr_err("rmnet_recv() smd lied about avail?!");
-					ptr = 0;
-					dev_kfree_skb_irq(skb);
-				} else {
-					/* Handle Rx frame format */
-					spin_lock_irqsave(&p->lock, flags);
-					opmode = p->operation_mode;
-					spin_unlock_irqrestore(&p->lock, flags);
-
-					if (RMNET_IS_MODE_IP(opmode)) {
-						/* Driver in IP mode */
-						skb->protocol =
-						  rmnet_ip_type_trans(skb, dev);
-					} else {
-						/* Driver in Ethernet mode */
-						skb->protocol =
-						  eth_type_trans(skb, dev);
-					}
-					if (RMNET_IS_MODE_IP(opmode) ||
-					    count_this_packet(ptr, skb->len)) {
-#ifdef CONFIG_MSM_RMNET_DEBUG
-						p->wakeups_rcv +=
-							rmnet_cause_wakeup(p);
-#endif
-						p->stats.rx_packets++;
-						p->stats.rx_bytes += skb->len;
-					}
-					netif_rx(skb);
-				}
-				continue;
-			}
-		}
-		if (smd_read(p->ch, ptr, sz) != sz)
-			pr_err("rmnet_recv() smd lied about avail?!");
-	}
+	return 1;
 }
+/*Rx Callback, Called in Work Queue context*/
+static void sdio_recv_notify(void *dev, struct sk_buff *skb)
+{
+	struct rmnet_private *p = netdev_priv(dev);
+	unsigned long flags;
+	u32 opmode;
 
-static DECLARE_TASKLET(smd_net_data_tasklet, smd_net_data_handler, 0);
+	if (skb) {
+		skb->dev = dev;
+		/* Handle Rx frame format */
+		spin_lock_irqsave(&p->lock, flags);
+		opmode = p->operation_mode;
+		spin_unlock_irqrestore(&p->lock, flags);
+
+		if (RMNET_IS_MODE_IP(opmode)) {
+			/* Driver in IP mode */
+			skb->protocol = rmnet_ip_type_trans(skb, dev);
+		} else {
+			/* Driver in Ethernet mode */
+			skb->protocol = eth_type_trans(skb, dev);
+		}
+		if (RMNET_IS_MODE_IP(opmode) ||
+		    count_this_packet(skb->data, skb->len)) {
+#ifdef CONFIG_MSM_RMNET_DEBUG
+			p->wakeups_rcv += rmnet_cause_wakeup(p);
+#endif
+			p->stats.rx_packets++;
+			p->stats.rx_bytes += skb->len;
+		}
+		netif_rx(skb);
+	} else
+		pr_err("%s: No skb received", __func__);
+}
 
 static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct rmnet_private *p = netdev_priv(dev);
-	smd_channel_t *ch = p->ch;
-	int smd_ret;
+	int sdio_ret;
 	struct QMI_QOS_HDR_S *qmih;
 	u32 opmode;
 	unsigned long flags;
@@ -310,14 +280,14 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	dev->trans_start = jiffies;
-	smd_ret = smd_write(ch, skb->data, skb->len);
-	if (smd_ret != skb->len) {
-		pr_err("%s: smd_write returned error %d", __func__, smd_ret);
+	sdio_ret = msm_rmnet_sdio_write(p->ch_id, skb);
+
+	if (sdio_ret != 0) {
+		pr_err("%s: write returned error %d", __func__, sdio_ret);
 		goto xmit_out;
 	}
 
-	if (RMNET_IS_MODE_IP(opmode) ||
-	    count_this_packet(skb->data, skb->len)) {
+	if (count_this_packet(skb->data, skb->len)) {
 		p->stats.tx_packets++;
 		p->stats.tx_bytes += skb->len;
 #ifdef CONFIG_MSM_RMNET_DEBUG
@@ -325,50 +295,18 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
 	}
 
+	return 0;
 xmit_out:
 	/* data xmited, safe to release skb */
 	dev_kfree_skb_irq(skb);
 	return 0;
 }
 
-static void _rmnet_resume_flow(unsigned long param)
+static void sdio_write_done(void *dev, struct sk_buff *skb)
 {
-	struct net_device *dev = (struct net_device *)param;
-	struct rmnet_private *p = netdev_priv(dev);
-	struct sk_buff *skb = NULL;
-	unsigned long flags;
-
-	/* xmit and enable the flow only once even if
-	   multiple tasklets were scheduled by smd_net_notify */
-	spin_lock_irqsave(&p->lock, flags);
-	if (p->skb && (smd_write_avail(p->ch) >= p->skb->len)) {
-		skb = p->skb;
-		p->skb = NULL;
-		spin_unlock_irqrestore(&p->lock, flags);
-		_rmnet_xmit(skb, dev);
-		netif_wake_queue(dev);
-	} else
-		spin_unlock_irqrestore(&p->lock, flags);
-}
-
-static void smd_net_notify(void *_dev, unsigned event)
-{
-	struct rmnet_private *p = netdev_priv((struct net_device *)_dev);
-
-	if (event != SMD_EVENT_DATA)
-		return;
-
-	spin_lock(&p->lock);
-	if (p->skb && (smd_write_avail(p->ch) >= p->skb->len))
-		tasklet_hi_schedule(&p->tsklt);
-
-	spin_unlock(&p->lock);
-
-	if (smd_read_avail(p->ch) &&
-	    (smd_read_avail(p->ch) >= smd_cur_packet_size(p->ch))) {
-		smd_net_data_tasklet.data = (unsigned long) _dev;
-		tasklet_schedule(&smd_net_data_tasklet);
-	}
+	pr_info("%s: write complete\n", __func__);
+	dev_kfree_skb_irq(skb);
+	netif_wake_queue(dev);
 }
 
 static int __rmnet_open(struct net_device *dev)
@@ -376,27 +314,18 @@ static int __rmnet_open(struct net_device *dev)
 	int r;
 	struct rmnet_private *p = netdev_priv(dev);
 
-	if (!p->ch) {
-		r = smd_open(p->chname, &p->ch, dev, smd_net_notify);
+	pr_info("rmnet_open()\n");
+
+	if (!p->device_up) {
+		r = msm_rmnet_sdio_open(p->ch_id, dev,
+					sdio_recv_notify, sdio_write_done);
 
 		if (r < 0)
 			return -ENODEV;
 	}
 
+	p->device_up = DEVICE_ACTIVE;
 	return 0;
-}
-
-static int __rmnet_close(struct net_device *dev)
-{
-	struct rmnet_private *p = netdev_priv(dev);
-	int rc;
-
-	if (p->ch) {
-		rc = smd_close(p->ch);
-		p->ch = 0;
-		return rc;
-	} else
-		return -EBADF;
 }
 
 static int rmnet_open(struct net_device *dev)
@@ -407,19 +336,33 @@ static int rmnet_open(struct net_device *dev)
 
 	rc = __rmnet_open(dev);
 
-	netif_start_queue(dev);
+	if (rc == 0)
+		netif_start_queue(dev);
 
 	return rc;
 }
 
-static int rmnet_stop(struct net_device *dev)
+
+static int __rmnet_close(struct net_device *dev)
 {
 	struct rmnet_private *p = netdev_priv(dev);
+	int rc;
 
+	if (p->device_up) {
+		rc = msm_rmnet_sdio_close(p->ch_id);
+		p->device_up = DEVICE_INACTIVE;
+		return rc;
+	} else
+		return -EBADF;
+}
+
+
+static int rmnet_stop(struct net_device *dev)
+{
 	pr_info("rmnet_stop()\n");
 
+	__rmnet_close(dev);
 	netif_stop_queue(dev);
-	tasklet_kill(&p->tsklt);
 
 	return 0;
 }
@@ -436,24 +379,12 @@ static int rmnet_change_mtu(struct net_device *dev, int new_mtu)
 
 static int rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct rmnet_private *p = netdev_priv(dev);
-	smd_channel_t *ch = p->ch;
-	unsigned long flags;
-
 	if (netif_queue_stopped(dev)) {
 		pr_err("fatal: rmnet_xmit called when netif_queue is stopped");
 		return 0;
 	}
 
-	spin_lock_irqsave(&p->lock, flags);
-	if (smd_write_avail(ch) < skb->len) {
-		netif_stop_queue(dev);
-		p->skb = skb;
-		spin_unlock_irqrestore(&p->lock, flags);
-		return 0;
-	}
-	spin_unlock_irqrestore(&p->lock, flags);
-
+	netif_stop_queue(dev);
 	_rmnet_xmit(skb, dev);
 
 	return 0;
@@ -474,31 +405,30 @@ static void rmnet_tx_timeout(struct net_device *dev)
 	pr_info("rmnet_tx_timeout()\n");
 }
 
-
 static const struct net_device_ops rmnet_ops_ether = {
-	.ndo_open		= rmnet_open,
-	.ndo_stop		= rmnet_stop,
-	.ndo_start_xmit		= rmnet_xmit,
-	.ndo_get_stats		= rmnet_get_stats,
+	.ndo_open = rmnet_open,
+	.ndo_stop = rmnet_stop,
+	.ndo_start_xmit = rmnet_xmit,
+	.ndo_get_stats = rmnet_get_stats,
 	.ndo_set_multicast_list = rmnet_set_multicast_list,
-	.ndo_tx_timeout		= rmnet_tx_timeout,
-	.ndo_do_ioctl		= rmnet_ioctl,
-	.ndo_change_mtu		= rmnet_change_mtu,
-	.ndo_set_mac_address	= eth_mac_addr,
-	.ndo_validate_addr	= eth_validate_addr,
+	.ndo_tx_timeout = rmnet_tx_timeout,
+	.ndo_do_ioctl = rmnet_ioctl,
+	.ndo_change_mtu = rmnet_change_mtu,
+	.ndo_set_mac_address = eth_mac_addr,
+	.ndo_validate_addr = eth_validate_addr,
 };
 
 static const struct net_device_ops rmnet_ops_ip = {
-	.ndo_open		= rmnet_open,
-	.ndo_stop		= rmnet_stop,
-	.ndo_start_xmit		= rmnet_xmit,
-	.ndo_get_stats		= rmnet_get_stats,
+	.ndo_open = rmnet_open,
+	.ndo_stop = rmnet_stop,
+	.ndo_start_xmit = rmnet_xmit,
+	.ndo_get_stats = rmnet_get_stats,
 	.ndo_set_multicast_list = rmnet_set_multicast_list,
-	.ndo_tx_timeout		= rmnet_tx_timeout,
-	.ndo_do_ioctl		= rmnet_ioctl,
-	.ndo_change_mtu		= rmnet_change_mtu,
-	.ndo_set_mac_address	= 0,
-	.ndo_validate_addr	= 0,
+	.ndo_tx_timeout = rmnet_tx_timeout,
+	.ndo_do_ioctl = rmnet_ioctl,
+	.ndo_change_mtu = rmnet_change_mtu,
+	.ndo_set_mac_address = 0,
+	.ndo_validate_addr = 0,
 };
 
 static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
@@ -541,6 +471,8 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			dev->flags              &= ~(IFF_BROADCAST|
 						     IFF_MULTICAST);
 
+			dev->needed_headroom = HEADROOM_FOR_SDIO +
+			  HEADROOM_FOR_QOS;
 			dev->netdev_ops = &rmnet_ops_ip;
 			spin_lock_irqsave(&p->lock, flags);
 			p->operation_mode &= ~RMNET_MODE_LLP_ETH;
@@ -553,7 +485,7 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	case RMNET_IOCTL_GET_LLP:           /* Get link protocol state */
 		ifr->ifr_ifru.ifru_data =
 			(void *)(p->operation_mode &
-				(RMNET_MODE_LLP_ETH|RMNET_MODE_LLP_IP));
+				 (RMNET_MODE_LLP_ETH|RMNET_MODE_LLP_IP));
 		break;
 
 	case RMNET_IOCTL_SET_QOS_ENABLE:    /* Set QoS header enabled  */
@@ -594,11 +526,10 @@ static int rmnet_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		return -EINVAL;
 	}
 
-	pr_info("rmnet_ioctl(): dev=%s cmd=0x%x opmode old=0x%08x new=0x%08x\n",
-		p->chname, cmd, old_opmode, p->operation_mode);
+	pr_info("rmnet_ioctl(): dev=%d cmd=0x%x opmode old=0x%08x new=0x%08x\n",
+		p->ch_id, cmd, old_opmode, p->operation_mode);
 	return rc;
 }
-
 
 static void __init rmnet_setup(struct net_device *dev)
 {
@@ -608,7 +539,7 @@ static void __init rmnet_setup(struct net_device *dev)
 
 	/* set this after calling ether_setup */
 	dev->mtu = RMNET_DATA_LEN;
-
+	dev->needed_headroom = HEADROOM_FOR_SDIO + HEADROOM_FOR_QOS ;
 	random_ether_addr(dev->dev_addr);
 
 	dev->watchdog_timeo = 1000; /* 10 seconds? */
@@ -623,7 +554,7 @@ static int __init rmnet_init(void)
 	struct rmnet_private *p;
 	unsigned n;
 
-	printk("%s\n", __func__);
+	printk(KERN_INFO "%s\n", __func__);
 
 #ifdef CONFIG_MSM_RMNET_DEBUG
 	timeout_us = 0;
@@ -632,7 +563,7 @@ static int __init rmnet_init(void)
 #endif
 #endif
 
-	for (n = 0; n < 3; n++) {
+	for (n = 3; n < 11; n++) {
 		dev = alloc_netdev(sizeof(struct rmnet_private),
 				   "rmnet%d", rmnet_setup);
 
@@ -641,14 +572,10 @@ static int __init rmnet_init(void)
 
 		d = &(dev->dev);
 		p = netdev_priv(dev);
-		p->chname = ch_name[n];
 		/* Initial config uses Ethernet */
 		p->operation_mode = RMNET_MODE_LLP_ETH;
-		p->skb = NULL;
+		p->ch_id = n - 3;
 		spin_lock_init(&p->lock);
-		tasklet_init(&p->tsklt, _rmnet_resume_flow,
-				(unsigned long)dev);
-		wake_lock_init(&p->wake_lock, WAKE_LOCK_SUSPEND, ch_name[n]);
 #ifdef CONFIG_MSM_RMNET_DEBUG
 		p->timeout_us = timeout_us;
 		p->wakeups_xmit = p->wakeups_rcv = 0;
@@ -681,3 +608,6 @@ static int __init rmnet_init(void)
 }
 
 module_init(rmnet_init);
+MODULE_DESCRIPTION("MSM RMNET SDIO TRANSPORT");
+MODULE_LICENSE("GPL v2");
+

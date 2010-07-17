@@ -35,6 +35,7 @@
 #include <linux/i2c/isa1200.h>
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
+#include <linux/i2c/tsc2007.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -76,7 +77,7 @@
 #define MSM_PMEM_SF_SIZE	0x1700000
 #define MSM_FB_SIZE		0x500000
 #define MSM_GPU_PHYS_SIZE       SZ_2M
-#define MSM_PMEM_ADSP_SIZE      0x2000000
+#define MSM_PMEM_ADSP_SIZE      0x1800000
 #define PMEM_KERNEL_EBI1_SIZE   0x600000
 #define MSM_PMEM_AUDIO_SIZE     0x200000
 
@@ -1178,6 +1179,18 @@ static int marimba_tsadc_exit(void)
 	return rc;
 }
 
+
+static struct msm_ts_platform_data msm_ts_data = {
+	.min_x          = 0,
+	.max_x          = 4096,
+	.min_y          = 0,
+	.max_y          = 4096,
+	.min_press      = 0,
+	.max_press      = 255,
+	.inv_x          = 4096,
+	.inv_y          = 4096,
+};
+
 static struct marimba_tsadc_platform_data marimba_tsadc_pdata = {
 	.marimba_tsadc_power =  marimba_tsadc_power,
 	.init		     =  marimba_tsadc_init,
@@ -1197,6 +1210,7 @@ static struct marimba_tsadc_platform_data marimba_tsadc_pdata = {
 		.stable_time_nsecs	=	6400,
 		.tsadc_test_mode	=	0,
 	},
+	.tssc_data = &msm_ts_data,
 };
 
 static struct vreg *vreg_codec_s4;
@@ -2319,7 +2333,7 @@ static unsigned dtv_reset_gpio =
 	GPIO_CFG(37, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA);
 #endif
 
-static void dtv_panel_power(int on)
+static int dtv_panel_power(int on)
 {
 	int flag_on = !!on;
 	static int dtv_power_save_on;
@@ -2327,7 +2341,7 @@ static void dtv_panel_power(int on)
 	int rc;
 
 	if (dtv_power_save_on == flag_on)
-		return;
+		return 0;
 
 	dtv_power_save_on = flag_on;
 
@@ -2338,7 +2352,7 @@ static void dtv_panel_power(int on)
 		if (rc) {
 			pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
 				       __func__, dtv_reset_gpio, rc);
-			return;
+			return rc;
 		}
 
 		gpio_set_value(37, 0);	/* bring reset line low to hold reset*/
@@ -2349,26 +2363,34 @@ static void dtv_panel_power(int on)
 		rc = msm_gpios_enable(dtv_panel_gpios,
 				ARRAY_SIZE(dtv_panel_gpios));
 		if (rc < 0) {
-			printk(KERN_ERR "%s: gpio config failed: %d\n",
+			printk(KERN_ERR "%s: gpio enable failed: %d\n",
 				__func__, rc);
+			return rc;
 		}
-	} else
-		msm_gpios_disable(dtv_panel_gpios,
+	} else {
+		rc = msm_gpios_disable(dtv_panel_gpios,
 				ARRAY_SIZE(dtv_panel_gpios));
+		if (rc < 0) {
+			printk(KERN_ERR "%s: gpio disable failed: %d\n",
+				__func__, rc);
+			return rc;
+		}
+	}
 
 	vreg_ldo8 = vreg_get(NULL, "gp7");
 
 	if (IS_ERR(vreg_ldo8)) {
-		pr_err("%s:  vreg17 get failed (%ld)\n",
-			__func__, PTR_ERR(vreg_ldo8));
-		return;
+		rc = PTR_ERR(vreg_ldo8);
+		pr_err("%s:  vreg17 get failed (%d)\n",
+			__func__, rc);
+		return rc;
 	}
 
 	rc = vreg_set_level(vreg_ldo8, 1800);
 	if (rc) {
 		pr_err("%s: vreg LDO18 set level failed (%d)\n",
 			__func__, rc);
-		return;
+		return rc;
 	}
 
 	if (on)
@@ -2379,7 +2401,7 @@ static void dtv_panel_power(int on)
 	if (rc) {
 		pr_err("%s: LDO8 vreg enable failed (%d)\n",
 			__func__, rc);
-		return;
+		return rc;
 	}
 
 	mdelay(5);		/* ensure power is stable */
@@ -2388,16 +2410,17 @@ static void dtv_panel_power(int on)
 	vreg_ldo17 = vreg_get(NULL, "gp11");
 
 	if (IS_ERR(vreg_ldo17)) {
-		pr_err("%s:  vreg17 get failed (%ld)\n",
-			__func__, PTR_ERR(vreg_ldo17));
-		return;
+		rc = PTR_ERR(vreg_ldo17);
+		pr_err("%s:  vreg17 get failed (%d)\n",
+			__func__, rc);
+		return rc;
 	}
 
 	rc = vreg_set_level(vreg_ldo17, 2600);
 	if (rc) {
 		pr_err("%s: vreg LDO17 set level failed (%d)\n",
 			__func__, rc);
-		return;
+		return rc;
 	}
 
 	if (on)
@@ -2408,7 +2431,7 @@ static void dtv_panel_power(int on)
 	if (rc) {
 		pr_err("%s: LDO17 vreg enable failed (%d)\n",
 			__func__, rc);
-		return;
+		return rc;
 	}
 
 	mdelay(5);		/* ensure power is stable */
@@ -2420,6 +2443,7 @@ static void dtv_panel_power(int on)
 	}
 #endif
 
+	return rc;
 }
 
 static struct lcdc_platform_data dtv_pdata = {
@@ -2606,15 +2630,15 @@ static struct msm_gpio fluid_vee_reset_gpio[] = {
 	{ GPIO_CFG(20, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), "vee_reset" },
 };
 
-static void display_common_power(int on)
+static int display_common_power(int on)
 {
-	int rc, flag_on = !!on;
+	int rc = 0, flag_on = !!on;
 	static int display_common_power_save_on;
 	struct vreg *vreg_ldo12, *vreg_ldo15 = NULL;
 	struct vreg *vreg_ldo20, *vreg_ldo16, *vreg_ldo8 = NULL;
 
 	if (display_common_power_save_on == flag_on)
-		return;
+		return 0;
 
 	display_common_power_save_on = flag_on;
 
@@ -2624,7 +2648,7 @@ static void display_common_power(int on)
 		if (rc) {
 			pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
 				       __func__, wega_reset_gpio, rc);
-			return;
+			return rc;
 		}
 
 		gpio_set_value(180, 0);	/* bring reset line low to hold reset*/
@@ -2635,27 +2659,30 @@ static void display_common_power(int on)
 	vreg_ldo20 = vreg_get(NULL, "gp13");
 
 	if (IS_ERR(vreg_ldo20)) {
-		pr_err("%s: gp13 vreg get failed (%ld)\n",
-		       __func__, PTR_ERR(vreg_ldo20));
-		return;
+		rc = PTR_ERR(vreg_ldo20);
+		pr_err("%s: gp13 vreg get failed (%d)\n",
+		       __func__, rc);
+		return rc;
 	}
 
 	/* 1.8V -- LDO12 */
 	vreg_ldo12 = vreg_get(NULL, "gp9");
 
 	if (IS_ERR(vreg_ldo12)) {
-		pr_err("%s: gp9 vreg get failed (%ld)\n",
-		       __func__, PTR_ERR(vreg_ldo12));
-		return;
+		rc = PTR_ERR(vreg_ldo12);
+		pr_err("%s: gp9 vreg get failed (%d)\n",
+		       __func__, rc);
+		return rc;
 	}
 
 	/* 2.6V -- LDO16 */
 	vreg_ldo16 = vreg_get(NULL, "gp10");
 
 	if (IS_ERR(vreg_ldo16)) {
-		pr_err("%s: gp10 vreg get failed (%ld)\n",
-		       __func__, PTR_ERR(vreg_ldo16));
-		return;
+		rc = PTR_ERR(vreg_ldo16);
+		pr_err("%s: gp10 vreg get failed (%d)\n",
+		       __func__, rc);
+		return rc;
 	}
 
 	if (machine_is_msm7x30_fluid()) {
@@ -2663,9 +2690,10 @@ static void display_common_power(int on)
 		vreg_ldo8 = vreg_get(NULL, "gp7");
 
 		if (IS_ERR(vreg_ldo8)) {
-			pr_err("%s: gp7 vreg get failed (%ld)\n",
-				__func__, PTR_ERR(vreg_ldo8));
-			return;
+			rc = PTR_ERR(vreg_ldo8);
+			pr_err("%s: gp7 vreg get failed (%d)\n",
+				__func__, rc);
+			return rc;
 		}
 	} else {
 		/* lcd panel power */
@@ -2673,9 +2701,10 @@ static void display_common_power(int on)
 		vreg_ldo15 = vreg_get(NULL, "gp6");
 
 		if (IS_ERR(vreg_ldo15)) {
-			pr_err("%s: gp6 vreg get failed (%ld)\n",
-				__func__, PTR_ERR(vreg_ldo15));
-			return;
+			rc = PTR_ERR(vreg_ldo15);
+			pr_err("%s: gp6 vreg get failed (%d)\n",
+				__func__, rc);
+			return rc;
 		}
 	}
 
@@ -2683,21 +2712,21 @@ static void display_common_power(int on)
 	if (rc) {
 		pr_err("%s: vreg LDO20 set level failed (%d)\n",
 		       __func__, rc);
-		return;
+		return rc;
 	}
 
 	rc = vreg_set_level(vreg_ldo12, 1800);
 	if (rc) {
 		pr_err("%s: vreg LDO12 set level failed (%d)\n",
 		       __func__, rc);
-		return;
+		return rc;
 	}
 
 	rc = vreg_set_level(vreg_ldo16, 2600);
 	if (rc) {
 		pr_err("%s: vreg LDO16 set level failed (%d)\n",
 		       __func__, rc);
-		return;
+		return rc;
 	}
 
 	if (machine_is_msm7x30_fluid()) {
@@ -2705,14 +2734,14 @@ static void display_common_power(int on)
 		if (rc) {
 			pr_err("%s: vreg LDO8 set level failed (%d)\n",
 				__func__, rc);
-			return;
+			return rc;
 		}
 	} else {
 		rc = vreg_set_level(vreg_ldo15, 3100);
 		if (rc) {
 			pr_err("%s: vreg LDO15 set level failed (%d)\n",
 				__func__, rc);
-			return;
+			return rc;
 		}
 	}
 
@@ -2721,21 +2750,21 @@ static void display_common_power(int on)
 		if (rc) {
 			pr_err("%s: LDO20 vreg enable failed (%d)\n",
 			       __func__, rc);
-			return;
+			return rc;
 		}
 
 		rc = vreg_enable(vreg_ldo12);
 		if (rc) {
 			pr_err("%s: LDO12 vreg enable failed (%d)\n",
 			       __func__, rc);
-			return;
+			return rc;
 		}
 
 		rc = vreg_enable(vreg_ldo16);
 		if (rc) {
 			pr_err("%s: LDO16 vreg enable failed (%d)\n",
 			       __func__, rc);
-			return;
+			return rc;
 		}
 
 		if (machine_is_msm7x30_fluid()) {
@@ -2743,14 +2772,14 @@ static void display_common_power(int on)
 			if (rc) {
 				pr_err("%s: LDO8 vreg enable failed (%d)\n",
 					__func__, rc);
-				return;
+				return rc;
 			}
 		} else {
 			rc = vreg_enable(vreg_ldo15);
 			if (rc) {
 				pr_err("%s: LDO15 vreg enable failed (%d)\n",
 					__func__, rc);
-				return;
+				return rc;
 			}
 		}
 
@@ -2773,14 +2802,19 @@ static void display_common_power(int on)
 
 		gpio_set_value(180, 1);	/* bring reset line high */
 		mdelay(10);	/* 10 msec before IO can be accessed */
-		pmapp_display_clock_config(1);
+		rc = pmapp_display_clock_config(1);
+		if (rc) {
+			pr_err("%s pmapp_display_clock_config rc=%d\n",
+					__func__, rc);
+			return rc;
+		}
 
 	} else {
 		rc = vreg_disable(vreg_ldo20);
 		if (rc) {
 			pr_err("%s: LDO20 vreg enable failed (%d)\n",
 			       __func__, rc);
-			return;
+			return rc;
 		}
 
 
@@ -2788,7 +2822,7 @@ static void display_common_power(int on)
 		if (rc) {
 			pr_err("%s: LDO16 vreg enable failed (%d)\n",
 			       __func__, rc);
-			return;
+			return rc;
 		}
 
 		gpio_set_value(180, 0);	/* bring reset line low */
@@ -2798,14 +2832,14 @@ static void display_common_power(int on)
 			if (rc) {
 				pr_err("%s: LDO8 vreg enable failed (%d)\n",
 					__func__, rc);
-				return;
+				return rc;
 			}
 		} else {
 			rc = vreg_disable(vreg_ldo15);
 			if (rc) {
 				pr_err("%s: LDO15 vreg enable failed (%d)\n",
 					__func__, rc);
-				return;
+				return rc;
 			}
 		}
 
@@ -2815,7 +2849,7 @@ static void display_common_power(int on)
 		if (rc) {
 			pr_err("%s: LDO12 vreg enable failed (%d)\n",
 			       __func__, rc);
-			return;
+			return rc;
 		}
 
 		if (machine_is_msm7x30_fluid()) {
@@ -2823,8 +2857,15 @@ static void display_common_power(int on)
 					ARRAY_SIZE(fluid_vee_reset_gpio));
 		}
 
-		pmapp_display_clock_config(0);
+		rc = pmapp_display_clock_config(0);
+		if (rc) {
+			pr_err("%s pmapp_display_clock_config rc=%d\n",
+					__func__, rc);
+			return rc;
+		}
 	}
+
+	return rc;
 }
 
 static int msm_fb_mddi_sel_clk(u32 *clk_rate)
@@ -2909,56 +2950,82 @@ static struct msm_gpio lcd_sharp_panel_gpios[] = {
 	{ GPIO_CFG(109, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_red7" },
 };
 
-static void lcdc_toshiba_panel_power(int on)
+static int lcdc_toshiba_panel_power(int on)
 {
-	int rc;
+	int rc, i;
+	struct msm_gpio *gp;
 
-	display_common_power(on);
+	rc = display_common_power(on);
+	if (rc < 0) {
+		printk(KERN_ERR "%s display_common_power failed: %d\n",
+				__func__, rc);
+		return rc;
+	}
 
 	if (on) {
 		rc = msm_gpios_enable(lcd_panel_gpios,
 				ARRAY_SIZE(lcd_panel_gpios));
 		if (rc < 0) {
-			printk(KERN_ERR "%s: gpio config failed: %d\n",
-				__func__, rc);
+			printk(KERN_ERR "%s: gpio enable failed: %d\n",
+					__func__, rc);
 		}
-	} else
-		msm_gpios_disable(lcd_panel_gpios,
-				ARRAY_SIZE(lcd_panel_gpios));
+	} else {	/* off */
+		gp = lcd_panel_gpios;
+		for (i = 0; i < ARRAY_SIZE(lcd_panel_gpios); i++) {
+			/* ouput low */
+			gpio_set_value(GPIO_PIN(gp->gpio_cfg), 0);
+			gp++;
+		}
+	}
+
+	return rc;
 }
 
-static void lcdc_sharp_panel_power(int on)
+static int lcdc_sharp_panel_power(int on)
 {
-	int rc;
+	int rc, i;
+	struct msm_gpio *gp;
 
-	display_common_power(on);
+	rc = display_common_power(on);
+	if (rc < 0) {
+		printk(KERN_ERR "%s display_common_power failed: %d\n",
+				__func__, rc);
+		return rc;
+	}
 
 	if (on) {
 		rc = msm_gpios_enable(lcd_sharp_panel_gpios,
 				ARRAY_SIZE(lcd_sharp_panel_gpios));
 		if (rc < 0) {
-			printk(KERN_ERR "%s: gpio config failed: %d\n",
+			printk(KERN_ERR "%s: gpio enable failed: %d\n",
 				__func__, rc);
 		}
-	} else
-		msm_gpios_disable(lcd_sharp_panel_gpios,
-				ARRAY_SIZE(lcd_sharp_panel_gpios));
+	} else {	/* off */
+		gp = lcd_sharp_panel_gpios;
+		for (i = 0; i < ARRAY_SIZE(lcd_sharp_panel_gpios); i++) {
+			/* ouput low */
+			gpio_set_value(GPIO_PIN(gp->gpio_cfg), 0);
+			gp++;
+		}
+	}
+
+	return rc;
 }
 
-static void lcdc_panel_power(int on)
+static int lcdc_panel_power(int on)
 {
 	int flag_on = !!on;
 	static int lcdc_power_save_on;
 
 	if (lcdc_power_save_on == flag_on)
-		return;
+		return 0;
 
 	lcdc_power_save_on = flag_on;
 
 	if (machine_is_msm7x30_fluid())
-		lcdc_sharp_panel_power(on);
+		return lcdc_sharp_panel_power(on);
 	else
-		lcdc_toshiba_panel_power(on);
+		return lcdc_toshiba_panel_power(on);
 }
 
 static struct lcdc_platform_data lcdc_pdata = {
@@ -3270,16 +3337,6 @@ static struct platform_device msm_device_pmic_leds = {
 	.id = -1,
 };
 
-static struct msm_ts_platform_data msm_ts_data = {
-	.min_x          = 0,
-	.max_x          = 4096,
-	.min_y          = 0,
-	.max_y          = 4096,
-	.min_press      = 0,
-	.max_press      = 255,
-	.inv_x          = 4096,
-	.inv_y          = 4096,
-};
 
 static struct msm_psy_batt_pdata msm_psy_batt_data = {
 	.voltage_min_design 	= 2800,
@@ -3351,7 +3408,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_device_kgsl,
 	&msm_device_pmic_leds,
-	&msm_device_tssc,
 #ifdef CONFIG_MT9T013
 	&msm_camera_sensor_mt9t013,
 #endif
@@ -3916,6 +3972,102 @@ static struct msm_spm_platform_data msm_spm_data __initdata = {
 	.vctl_timeout_us = 50,
 };
 
+#if defined(CONFIG_TOUCHSCREEN_TSC2007) || \
+	defined(CONFIG_TOUCHSCREEN_TSC2007_MODULE)
+
+#define TSC2007_TS_PEN_INT	20
+
+static struct msm_gpio tsc2007_config_data[] = {
+	{ GPIO_CFG(TSC2007_TS_PEN_INT, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA),
+	"tsc2007_irq" },
+};
+
+static struct vreg *vreg_tsc_s3;
+
+static int tsc2007_init(void)
+{
+	int rc;
+
+	vreg_tsc_s3 = vreg_get(NULL, "s3");
+	if (IS_ERR(vreg_tsc_s3)) {
+		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
+		       __func__, PTR_ERR(vreg_tsc_s3));
+		return -ENODEV;
+	}
+
+	rc = vreg_set_level(vreg_tsc_s3, 1800);
+	if (rc) {
+		pr_err("%s: vreg_set_level failed \n", __func__);
+		goto fail_vreg_set_level;
+	}
+
+	rc = vreg_enable(vreg_tsc_s3);
+	if (rc) {
+		pr_err("%s: vreg_enable failed \n", __func__);
+		goto fail_vreg_set_level;
+	}
+
+	rc = msm_gpios_request_enable(tsc2007_config_data,
+			ARRAY_SIZE(tsc2007_config_data));
+	if (rc) {
+		pr_err("%s: Unable to request gpios\n", __func__);
+		goto fail_gpio_req;
+	}
+
+	return 0;
+
+fail_gpio_req:
+	vreg_disable(vreg_tsc_s3);
+fail_vreg_set_level:
+	vreg_put(vreg_tsc_s3);
+	return rc;
+}
+
+static int tsc2007_get_pendown_state(void)
+{
+	int rc;
+
+	rc = gpio_get_value(TSC2007_TS_PEN_INT);
+	if (rc < 0) {
+		pr_err("%s: MSM GPIO %d read failed\n", __func__,
+						TSC2007_TS_PEN_INT);
+		return rc;
+	}
+
+	return (rc == 0 ? 1 : 0);
+}
+
+static void tsc2007_exit(void)
+{
+	vreg_disable(vreg_tsc_s3);
+
+	msm_gpios_disable_free(tsc2007_config_data,
+		ARRAY_SIZE(tsc2007_config_data));
+}
+
+static struct tsc2007_platform_data tsc2007_ts_data = {
+	.model = 2007,
+	.x_plate_ohms = 300,
+	.irq_flags    = IRQF_TRIGGER_LOW,
+	.init_platform_hw = tsc2007_init,
+	.exit_platform_hw = tsc2007_exit,
+	.invert_x	  = true,
+	.invert_y	  = true,
+	/* REVISIT: Temporary fix for reversed pressure */
+	.invert_z1	  = true,
+	.invert_z2	  = true,
+	.get_pendown_state = tsc2007_get_pendown_state,
+};
+
+static struct i2c_board_info tsc_i2c_board_info[] = {
+	{
+		I2C_BOARD_INFO("tsc2007", 0x48),
+		.irq		= MSM_GPIO_TO_INT(TSC2007_TS_PEN_INT),
+		.platform_data = &tsc2007_ts_data,
+	},
+};
+#endif
+
 static const char *vregs_isa1200_name[] = {
 	"gp7",
 	"gp10",
@@ -4093,13 +4245,18 @@ static void __init msm7x30_init(void)
 				ARRAY_SIZE(msm_camera_boardinfo));
 
 	bt_power_init();
-	msm_device_tssc.dev.platform_data = &msm_ts_data;
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi6.dev.platform_data = &msm_i2c_ssbi6_pdata;
 	msm_device_ssbi7.dev.platform_data = &msm_i2c_ssbi7_pdata;
 #endif
 	if (machine_is_msm7x30_fluid())
 		isa1200_init();
+
+#if defined(CONFIG_TOUCHSCREEN_TSC2007) || \
+	defined(CONFIG_TOUCHSCREEN_TSC2007_MODULE)
+	i2c_register_board_info(2, tsc_i2c_board_info,
+			ARRAY_SIZE(tsc_i2c_board_info));
+#endif
 }
 
 static unsigned pmem_sf_size = MSM_PMEM_SF_SIZE;

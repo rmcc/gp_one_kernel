@@ -236,6 +236,22 @@ config MACH_MSM8X55_FFA
        help
          Support for the Qualcomm MSM8x55 FFA eval board.
 
+config MACH_MSM8X55_SVLTE_FFA
+       depends on ARCH_MSM7X30
+       depends on !MSM_STACKED_MEMORY
+       default y
+       bool "MSM8X55 SVLTE FFA"
+       help
+         Support for the Qualcomm MSM8x55 SVLTE FFA eval board.
+
+config MACH_MSM8X55_SVLTE_SURF
+       depends on ARCH_MSM7X30
+       depends on !MSM_STACKED_MEMORY
+       default y
+       bool "MSM8X55 SVLTE SURF"
+       help
+         Support for the Qualcomm MSM8x55 SVLTE SURF eval board.
+
 config MACH_MSM8X60_RUMI3
 	depends on ARCH_MSM8X60
 	default n
@@ -598,8 +614,15 @@ config MSM_SDIO_AL
 	  Support MSM<->MDM Communication over SDIO bus.
 	  MDM SDIO-Client should have pipes support.
 
+config MSM_SDIO_AL_TEST
+	depends on MSM_SDIO_AL
+	default n
+	tristate "SDIO-Abstraction-Layer Test"
+	help
+	  SDIO-AL functionality and performance test.
+
 config MSM_N_WAY_SMD
-	depends on (MSM_SMD && (ARCH_MSM_SCORPION || ARCH_MSM7X27))
+	depends on (MSM_SMD && (ARCH_MSM_SCORPION || ARCH_MSM_SCORPIONMP || ARCH_MSM7X27))
 	default y
 	bool "MSM N-WAY SMD support"
 	help
@@ -607,7 +630,7 @@ config MSM_N_WAY_SMD
 	  normal APPS-MODEM SMD communication.
 
 config MSM_N_WAY_SMSM
-	depends on (MSM_SMD && (ARCH_MSM_SCORPION || ARCH_MSM7X27))
+	depends on (MSM_SMD && (ARCH_MSM_SCORPION || ARCH_MSM_SCORPIONMP || ARCH_MSM7X27))
 	default y
 	bool "MSM N-WAY SMSM support"
 	help
@@ -667,6 +690,20 @@ config MSM_SMD_PKT
 
 	  If in doubt, say yes.
 
+config MSM_SDIO_CTL
+	bool "SDIO CTL Driver"
+	depends on MSM_SDIO_AL
+	default y
+	help
+	  Provides a binay SDIO muxed control port interface.
+
+config MSM_SDIO_CTL_DEBUG
+	bool "SDIO CTL DEBUG Enable"
+	depends on MSM_SDIO_CTL
+	default y
+	help
+	  Support for debugging the SDIO Control Driver
+
 config MSM_ONCRPCROUTER
 	depends on MSM_SMD
 	default y
@@ -714,7 +751,7 @@ config MSM_RPC_PING
 	  Implements MSM rpc ping test module.
 
 config MSM_RPC_PROC_COMM_TEST
-	depends on DEBUG_FS
+	depends on DEBUG_FS && MSM_PROC_COMM
 	default m
 	bool "MSM rpc proc comm test"
 	help

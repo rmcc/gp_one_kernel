@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,23 +24,20 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
-#ifndef DIAGFWD_H
-#define DIAGFWD_H
+#include <linux/types.h>
+#include <linux/skbuff.h>
 
-void diagfwd_init(void);
-void diagfwd_exit(void);
-void diag_process_hdlc(void *data, unsigned len);
-void diag_smd_send_req(int mode);
-void diag_smd_qdsp_send_req(int mode);
-int diag_device_write(void *buf, int proc_num);
-int diagfwd_connect(void);
-int diagfwd_disconnect(void);
+#ifndef _MSM_RMNET_SDIO_H
+#define _MSM_RMNET_SDIO_H
 
-/* State for diag forwarding */
-static int diag_debug_buf_idx;
-static unsigned char diag_debug_buf[1024];
+int msm_rmnet_sdio_open(uint32_t id, void *priv,
+			void (*receive_cb)(void *, struct sk_buff *),
+			void (*write_done)(void *, struct sk_buff *));
 
-#endif
+int msm_rmnet_sdio_close(uint32_t id);
+
+int msm_rmnet_sdio_write(uint32_t id, struct sk_buff *skb);
+
+#endif /* _MSM_RMNET_SDIO_H */
