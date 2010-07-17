@@ -174,11 +174,12 @@ static int diagchar_ioctl(struct inode *inode, struct file *filp,
 				driver->table[i].process_id = current->tgid;
 				count_entries++;
 				if (pkt_params->count > count_entries)
-						pkt_params->params++;
+					pkt_params->params++;
 				else
-						break;
+					return -EINVAL;
 			}
 		}
+		success = 0;
 	} else if (iocmd == DIAG_IOCTL_GET_DELAYED_RSP_ID) {
 		struct diagpkt_delay_params *delay_params =
 					(struct diagpkt_delay_params *) ioarg;
@@ -191,8 +192,6 @@ static int diagchar_ioctl(struct inode *inode, struct file *filp,
 			*(delay_params->num_bytes_ptr) = sizeof(delayed_rsp_id);
 			success = 0;
 		}
-
-	return success;
 	} else if (iocmd == DIAG_IOCTL_LSM_DEINIT) {
 		for (i = 0; i < driver->num_clients; i++)
 			if (driver->client_map[i] == current->tgid)
@@ -201,9 +200,10 @@ static int diagchar_ioctl(struct inode *inode, struct file *filp,
 			return -EINVAL;
 		driver->data_ready[i] |= DEINIT_TYPE;
 		wake_up_interruptible(&driver->wait_q);
+		success = 0;
 	}
 
-	return -EINVAL;
+	return success;
 }
 
 static int diagchar_read(struct file *file, char __user *buf, size_t count,
@@ -227,7 +227,8 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 	if (driver->data_ready[index] & DEINIT_TYPE) {
 		/*Copy the type of data being passed*/
 		data_type = driver->data_ready[index] & DEINIT_TYPE;
-		if (copy_to_user(buf, (void *)&data_type, 4)) {
+		if ((count < ret+4) || (copy_to_user(buf,
+					 (void *)&data_type, 4))) {
 			ret = -EFAULT;
 			goto exit;
 		}
@@ -240,14 +241,15 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 	if (driver->data_ready[index] & MSG_MASKS_TYPE) {
 		/*Copy the type of data being passed*/
 		data_type = driver->data_ready[index] & MSG_MASKS_TYPE;
-		if (copy_to_user(buf, (void *)&data_type, 4)) {
+		if ((count < ret+4) || (copy_to_user(buf,
+					 (void *)&data_type, 4))) {
 			ret = -EFAULT;
 			goto exit;
 		}
 		ret += 4;
 
-		if (copy_to_user(buf+4, (void *)driver->msg_masks,
-				  MSG_MASK_SIZE)) {
+		if ((count < ret+MSG_MASK_SIZE) || (copy_to_user(buf+4,
+				   (void *)driver->msg_masks, MSG_MASK_SIZE))) {
 			ret =  -EFAULT;
 			goto exit;
 		}
@@ -259,13 +261,14 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 	if (driver->data_ready[index] & EVENT_MASKS_TYPE) {
 		/*Copy the type of data being passed*/
 		data_type = driver->data_ready[index] & EVENT_MASKS_TYPE;
-		if (copy_to_user(buf, (void *)&data_type, 4)) {
+		if ((count < ret+4) || (copy_to_user(buf,
+						      (void *)&data_type, 4))) {
 			ret = -EFAULT;
 			goto exit;
 		}
 		ret += 4;
-		if (copy_to_user(buf+4, (void *)driver->event_masks,
-				  EVENT_MASK_SIZE)) {
+		if ((count < ret+EVENT_MASK_SIZE) || (copy_to_user(buf+4,
+			(void *)driver->event_masks, EVENT_MASK_SIZE))) {
 			ret = -EFAULT;
 			goto exit;
 		}
@@ -277,14 +280,15 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 	if (driver->data_ready[index] & LOG_MASKS_TYPE) {
 		/*Copy the type of data being passed*/
 		data_type = driver->data_ready[index] & LOG_MASKS_TYPE;
-		if (copy_to_user(buf, (void *)&data_type, 4)) {
+		if ((count < ret+4) || (copy_to_user(buf,
+					       (void *)&data_type, 4))) {
 			ret = -EFAULT;
 			goto exit;
 		}
 		ret += 4;
 
-		if (copy_to_user(buf+4, (void *)driver->log_masks,
-				 LOG_MASK_SIZE)) {
+		if ((count < ret+LOG_MASK_SIZE) || (copy_to_user(buf+4,
+			       (void *)driver->log_masks, LOG_MASK_SIZE))) {
 			ret = -EFAULT;
 			goto exit;
 		}
@@ -296,14 +300,15 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 	if (driver->data_ready[index] & PKT_TYPE) {
 		/*Copy the type of data being passed*/
 		data_type = driver->data_ready[index] & PKT_TYPE;
-		if (copy_to_user(buf, (void *)&data_type, 4)) {
+		if ((count < ret+4) || (copy_to_user(buf,
+					       (void *)&data_type, 4))) {
 			ret = -EFAULT;
 			goto exit;
 		}
 		ret += 4;
 
-		if (copy_to_user(buf+4, (void *)driver->pkt_buf,
-				 driver->pkt_length)) {
+		if ((count < ret+driver->pkt_length) || (copy_to_user(buf+4,
+			(void *)driver->pkt_buf, driver->pkt_length))) {
 			ret = -EFAULT;
 			goto exit;
 		}
@@ -388,6 +393,8 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		if (err) {
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
+			diagmem_free(driver, (unsigned char *)driver->
+				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
 			ret = -EIO;
 			goto fail_free_hdlc;
 		}
@@ -422,6 +429,8 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		if (err) {
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
+			diagmem_free(driver, (unsigned char *)driver->
+				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
 			ret = -EIO;
 			goto fail_free_hdlc;
 		}
@@ -453,6 +462,8 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		if (err) {
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
+			diagmem_free(driver, (unsigned char *)driver->
+				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
 			ret = -EIO;
 			goto fail_free_hdlc;
 		}
@@ -472,6 +483,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 	return 0;
 
 fail_free_hdlc:
+	buf_hdlc = NULL;
 	diagmem_free(driver, buf_copy, POOL_TYPE_COPY);
 	mutex_unlock(&driver->diagchar_mutex);
 	return ret;

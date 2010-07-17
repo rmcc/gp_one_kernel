@@ -1640,7 +1640,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (ret)
 		goto irq_free;
 
-	if (host->plat->sdiowakeup_irq) {
+	if (plat->sdiowakeup_irq) {
 		ret = request_irq(plat->sdiowakeup_irq,
 			msmsdcc_platform_sdiowakeup_irq,
 			IRQF_SHARED | IRQF_TRIGGER_FALLING,
@@ -1648,10 +1648,10 @@ msmsdcc_probe(struct platform_device *pdev)
 		if (ret) {
 			pr_err("Unable to get sdio wakeup IRQ %d (%d)\n",
 				plat->sdiowakeup_irq, ret);
-			goto pio_irq_free;
+			goto irq_free;
 		} else {
-			set_irq_wake(host->plat->sdiowakeup_irq, 1);
-			disable_irq(host->plat->sdiowakeup_irq);
+			set_irq_wake(plat->sdiowakeup_irq, 1);
+			disable_irq(plat->sdiowakeup_irq);
 		}
 	}
 
@@ -1660,7 +1660,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	 */
 
 	if (plat->status) {
-		host->oldstat = host->plat->status(mmc_dev(host->mmc));
+		host->oldstat = plat->status(mmc_dev(host->mmc));
 		host->eject = !host->oldstat;
 	}
 
@@ -1733,12 +1733,9 @@ msmsdcc_probe(struct platform_device *pdev)
 		free_irq(plat->status_irq, host);
  sdiowakeup_irq_free:
 	if (plat->sdiowakeup_irq) {
-		set_irq_wake(host->plat->sdiowakeup_irq, 0);
+		set_irq_wake(plat->sdiowakeup_irq, 0);
 		free_irq(plat->sdiowakeup_irq, host);
 	}
- pio_irq_free:
-	if (irqres->end != irqres->start)
-		free_irq(irqres->end, host);
  irq_free:
 	free_irq(irqres->start, host);
  clk_disable:
@@ -1786,12 +1783,11 @@ static int msmsdcc_remove(struct platform_device *pdev)
 		free_irq(plat->status_irq, host);
 
 	if (plat->sdiowakeup_irq) {
-		set_irq_wake(host->plat->sdiowakeup_irq, 0);
+		set_irq_wake(plat->sdiowakeup_irq, 0);
 		free_irq(plat->sdiowakeup_irq, host);
 	}
 
 	free_irq(host->irqres->start, host);
-	free_irq(host->irqres->end, host);
 
 	writel(0, host->base + MMCIMASK0);
 	writel(0, host->base + MMCIMASK1);
