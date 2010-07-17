@@ -10,6 +10,7 @@ config ARCH_MSM7X01A
 	select MSM_VIC
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM7200A_TLMM
 
 config ARCH_MSM7X25
 	bool "MSM7x25"
@@ -17,6 +18,7 @@ config ARCH_MSM7X25
 	select MSM_VIC
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM7200A_TLMM
 
 config ARCH_MSM7X27
 	bool "MSM7x27"
@@ -24,6 +26,7 @@ config ARCH_MSM7X27
 	select MSM_VIC
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM7200A_TLMM
 
 config ARCH_MSM7X30
 	bool "MSM7x30"
@@ -31,6 +34,7 @@ config ARCH_MSM7X30
 	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_DEKKERS
+	select MSM7200A_TLMM
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -38,6 +42,7 @@ config ARCH_QSD8X50
 	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_LDREX
+	select MSM7200A_TLMM
 
 config ARCH_MSM8X60
 	bool "MSM8X60"
@@ -313,6 +318,13 @@ config PHYS_OFFSET
 	default "0x20000000" if ARCH_QSD8X50
 	default "0x40200000" if ARCH_MSM8X60
 	default "0x10000000"
+
+config KERNEL_PMEM_EBI_REGION
+	bool "Enable in-kernel PMEM region for EBI"
+	default n
+	depends on ANDROID_PMEM && ARCH_MSM8X60
+	help
+	   Enable the in-kernel PMEM alloator to use EBI memory.
 
 config KERNEL_PMEM_SMI_REGION
 	bool "Enable in-kernel PMEM region for SMI"
@@ -1113,6 +1125,9 @@ config SMMU_PGTABLES_L2
 	 Improves page fault latency at the expense of potential L2 pollution.
 	 Most people can probably say Y here.
 endif
+
+config MSM7200A_TLMM
+       bool
 
 config MSM8660_TLMM
        bool

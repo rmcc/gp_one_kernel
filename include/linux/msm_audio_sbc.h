@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,27 +26,40 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _MACH_QDSP5_V2_AUDIO_ACDB_H
-#define _MACH_QDSP5_V2_AUDIO_ACDB_H
 
-s32 acdb_calibrate_device(void *data);
-s32 acdb_get_calibration(void);
-s32 acdb_send_calibration(void);
-void device_cb(u32 evt_id, union auddev_evt_data *evt, void *private);
-void audpp_cb(void *private, u32 id, u16 *msg);
-void audpreproc_cb(void *private, u32 id, void *msg);
+#ifndef __MSM_AUDIO_SBC_H
+#define __MSM_AUDIO_SBC_H
 
-s32 acdb_initialize_data(void);
-s32 initialize_rpc(void);
-s32 initialize_memory(void);
-s32 register_device_cb(void);
-s32 register_audpp_cb(void);
-s32 register_audpreproc_cb(void);
-s32 acdb_calibrate_audpp(void);
-s32 acdb_calibrate_audpreproc(void);
-void acdb_fill_audpp_iir(void);
-void acdb_fill_audpp_mbadrc(void);
-void acdb_fill_audpreproc_agc(void);
-void acdb_fill_audpreproc_iir(void);
+#include <linux/msm_audio.h>
 
-#endif
+#define AUDIO_SET_SBC_ENC_CONFIG  _IOW(AUDIO_IOCTL_MAGIC, \
+  (AUDIO_MAX_COMMON_IOCTL_NUM+0), struct msm_audio_sbc_enc_config)
+
+#define AUDIO_GET_SBC_ENC_CONFIG  _IOR(AUDIO_IOCTL_MAGIC, \
+  (AUDIO_MAX_COMMON_IOCTL_NUM+1), struct msm_audio_sbc_enc_config)
+
+#define AUDIO_SBC_BA_LOUDNESS		0x0
+#define AUDIO_SBC_BA_SNR		0x1
+
+#define AUDIO_SBC_MODE_MONO		0x0
+#define AUDIO_SBC_MODE_DUAL		0x1
+#define AUDIO_SBC_MODE_STEREO		0x2
+#define AUDIO_SBC_MODE_JSTEREO		0x3
+
+#define AUDIO_SBC_BANDS_8		0x1
+
+#define AUDIO_SBC_BLOCKS_4		0x0
+#define AUDIO_SBC_BLOCKS_8		0x1
+#define AUDIO_SBC_BLOCKS_12		0x2
+#define AUDIO_SBC_BLOCKS_16		0x3
+
+struct msm_audio_sbc_enc_config {
+	uint32_t channels;
+	uint32_t sample_rate;
+	uint32_t bit_allocation;
+	uint32_t number_of_subbands;
+	uint32_t number_of_blocks;
+	uint32_t bit_rate;
+	uint32_t mode;
+};
+#endif /* __MSM_AUDIO_SBC_H */

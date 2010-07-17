@@ -1582,7 +1582,7 @@ static void __init msm7x25_init(void)
     ///-FIH_ADQ
     /* } FIH_ADQ, AudiPCHuang, 2009/03/30 */	
 
-    msm_pm_set_platform_data(msm7x25_pm_data);
+    msm_pm_set_platform_data(msm7x25_pm_data,ARRAY_SIZE(msm7x25_pm_data));
 
 }
 

@@ -1,3 +1,13 @@
-obj-$(CONFIG_MSM_CAMERA) += mt9t013.o#mt9p012.o mt9t013.o mt9d112.o #//FIH_ADQ,JOE HSU
 obj-$(CONFIG_ARCH_MSM_ARM11) += msm_vfe7x.o msm_io7x.o
-#obj-$(CONFIG_ARCH_SCORPION) += msm_vfe8x.o msm_vfe8x_proc.o msm_io8x.o #//FIH_ADQ,JOE HSU
+obj-$(CONFIG_ARCH_MSM7X30) += msm_vfe31.o msm_io_vfe31.o
+obj-$(CONFIG_ARCH_QSD8X50) += msm_vfe8x.o msm_vfe8x_proc.o msm_io8x.o
+obj-$(CONFIG_ARCH_MSM8X60) += msm_vfe31.o msm_io_8x60.o
+obj-$(CONFIG_MT9T013) += mt9t013.o #mt9t013_reg.o
+obj-$(CONFIG_MT9D112) += mt9d112.o mt9d112_reg.o
+obj-$(CONFIG_MT9P012) += mt9p012_reg.o
+#obj-$(CONFIG_MSM_CAMERA_AF_FOXCONN) += mt9p012_fox.o
+#obj-$(CONFIG_MSM_CAMERA_AF_BAM) += mt9p012_bam.o
+obj-$(CONFIG_MT9P012_KM) += mt9p012_km.o mt9p012_km_reg.o
+obj-$(CONFIG_S5K3E2FX) += s5k3e2fx.o
+obj-$(CONFIG_VX6953) += vx6953.o vx6953_reg.o
+obj-$(CONFIG_VB6801) += vb6801.o

@@ -34,14 +34,14 @@
 #define DIR_TX	2
 #define DIR_RX	1
 
-#define PSEUDO_ACDB_ID 0xFFFF /* ID used for virtual devices */
-
 #define DEVICE_IGNORE	0xff
 #define SESSION_IGNORE 0x00000000
 
 #define VOICE_STATE_INVALID 0x0
 #define VOICE_STATE_INCALL 0x1
 #define VOICE_STATE_OFFCALL 0x2
+#define MAX_COPP_NODE_SUPPORTED 6
+#define MAX_AUDREC_SESSIONS 2
 
 struct msm_snddev_info {
 	const char *name;
@@ -109,6 +109,7 @@ struct auddev_evt_audcal_info {
 	u32 acdb_id;
 	u32 sample_rate;
 	u32 dev_type;
+	u32 sessions;
 };
 
 union msm_vol_mute {

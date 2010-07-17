@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,56 +26,39 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef __GSL_DRAWCTXT_G12_H
-#define __GSL_DRAWCTXT_G12_H
+#ifndef _MACH_QDSP5_V2_AUDIO_ACDB_DEF_H
+#define _MACH_QDSP5_V2_AUDIO_ACDB_DEF_H
 
-#include "kgsl_sharedmem.h"
+/* Define ACDB device ID */
+#define ACDB_ID_HANDSET_SPKR				1
+#define ACDB_ID_HANDSET_MIC				2
+#define ACDB_ID_HEADSET_MIC				3
+#define ACDB_ID_HEADSET_SPKR_MONO			4
+#define ACDB_ID_HEADSET_SPKR_STEREO			5
+#define ACDB_ID_SPKR_PHONE_MIC				6
+#define ACDB_ID_SPKR_PHONE_MONO				7
+#define ACDB_ID_SPKR_PHONE_STEREO			8
+#define ACDB_ID_BT_SCO_MIC				9
+#define ACDB_ID_BT_SCO_SPKR				0x0A
+#define ACDB_ID_BT_A2DP_SPKR				0x0B
+#define ACDB_ID_BT_A2DP_TX				0x10
+#define ACDB_ID_TTY_HEADSET_MIC				0x0C
+#define ACDB_ID_TTY_HEADSET_SPKR			0x0D
+#define ACDB_ID_HEADSET_MONO_PLUS_SPKR_MONO_RX		0x11
+#define ACDB_ID_HEADSET_STEREO_PLUS_SPKR_STEREO_RX	0x14
+#define ACDB_ID_FM_TX_LOOPBACK				0x17
+#define ACDB_ID_FM_TX					0x18
+#define ACDB_ID_LP_FM_SPKR_PHONE_STEREO_RX		0x19
+#define ACDB_ID_LP_FM_HEADSET_SPKR_STEREO_RX		0x1A
+#define ACDB_ID_I2S_RX					0x20
+#define ACDB_ID_SPKR_PHONE_MIC_BROADSIDE		0x2B
+#define ACDB_ID_HANDSET_MIC_BROADSIDE			0x2C
+#define ACDB_ID_SPKR_PHONE_MIC_ENDFIRE			0x2D
+#define ACDB_ID_HANDSET_MIC_ENDFIRE			0x2E
+#define ACDB_ID_I2S_TX					0x30
+#define ACDB_ID_HDMI					0x40
 
-struct kgsl_device;
+/* ID used for virtual devices */
+#define PSEUDO_ACDB_ID 					0xFFFF
 
-#define GSL_HAL_NUMCMDBUFFERS       5
-#define GSL_HAL_CMDBUFFERSIZE       ((1024 + 13) * sizeof(unsigned int))
-
-#define ALIGN_IN_BYTES(dim, alignment) (((dim) + (alignment - 1)) & \
-		~(alignment - 1))
-
-
-#define NUMTEXUNITS             4
-#define TEXUNITREGCOUNT         25
-#define VG_REGCOUNT             0x39
-
-#define PACKETSIZE_BEGIN        3
-#define PACKETSIZE_G2DCOLOR     2
-#define PACKETSIZE_TEXUNIT      (TEXUNITREGCOUNT * 2)
-#define PACKETSIZE_REG          (VG_REGCOUNT * 2)
-#define PACKETSIZE_STATE        (PACKETSIZE_TEXUNIT * NUMTEXUNITS + \
-				 PACKETSIZE_REG + PACKETSIZE_BEGIN + \
-				 PACKETSIZE_G2DCOLOR)
-#define PACKETSIZE_STATESTREAM  (ALIGN_IN_BYTES((PACKETSIZE_STATE * \
-				 sizeof(unsigned int)), 32) / \
-				 sizeof(unsigned int))
-#define KGSL_G12_CONTEXT_MAX 16
-
-struct kgsl_g12_z1xx {
-	unsigned int offs;
-	unsigned int curr;
-	unsigned int prevctx;
-
-	unsigned int            *cmdbuf[GSL_HAL_NUMCMDBUFFERS];
-	struct kgsl_memdesc      cmdbufdesc[GSL_HAL_NUMCMDBUFFERS];
-
-	unsigned int numcontext;
-};
-
-extern struct kgsl_g12_z1xx g_z1xx;
-
-int
-kgsl_g12_drawctxt_create(struct kgsl_device *device,
-			uint32_t ctxt_id_mask,
-			unsigned int *drawctxt_id);
-
-int
-kgsl_g12_drawctxt_destroy(struct kgsl_device *device,
-			unsigned int drawctxt_id);
-
-#endif  /* __GSL_DRAWCTXT_H */
+#endif /* _MACH_QDSP5_V2_AUDIO_ACDB_DEF_H */
