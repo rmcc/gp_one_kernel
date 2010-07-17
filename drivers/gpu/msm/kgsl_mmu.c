@@ -451,15 +451,24 @@ int kgsl_mmu_init(struct kgsl_device *device)
 		 */
 		flags = (KGSL_MEMFLAGS_ALIGN4K | KGSL_MEMFLAGS_CONPHYS
 			 | KGSL_MEMFLAGS_STRICTREQUEST);
-		status = kgsl_sharedmem_alloc(flags, 32, &mmu->dummyspace);
+		status = kgsl_sharedmem_alloc(flags, 64, &mmu->dummyspace);
 		if (status != 0) {
 			KGSL_MEM_ERR
 			    ("Unable to allocate dummy space memory.\n");
 			kgsl_mmu_close(device);
 			return status;
 		}
+
+		kgsl_sharedmem_set(&mmu->dummyspace, 0, 0,
+				   mmu->dummyspace.size);
+
+		/* TRAN_ERROR needs a 32 byte (32 byte aligned) chunk of memory
+		 * to complete transactions in case of an MMU fault. Note that
+		 * we'll leave the bottom 32 bytes of the dummyspace for other
+		 * purposes (e.g. use it when dummy read cycles are needed
+		 * for other blocks */
 		kgsl_regwrite(device, mmu_reg[device->id-1].tran_error,
-						mmu->dummyspace.physaddr);
+						mmu->dummyspace.physaddr + 32);
 
 		mmu->defaultpagetable = kgsl_mmu_getpagetable(mmu,
 							 KGSL_MMU_GLOBAL_PT);
@@ -666,8 +675,6 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable, unsigned int gpuaddr,
 
 	BUG_ON(range <= 0);
 
-	gen_pool_free(pagetable->pool, gpuaddr, range);
-
 	numpages = (range >> KGSL_PAGESIZE_SHIFT);
 	if (range & (KGSL_PAGESIZE - 1))
 		numpages++;
@@ -693,6 +700,8 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable, unsigned int gpuaddr,
 	}
 
 	mb();
+
+	gen_pool_free(pagetable->pool, gpuaddr, range);
 
 	KGSL_MEM_VDBG("return %d\n", 0);
 

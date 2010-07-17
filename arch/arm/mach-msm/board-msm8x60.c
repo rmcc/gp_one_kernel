@@ -25,8 +25,10 @@
 #include <linux/input/pmic8058-keypad.h>
 #include <linux/pmic8058-pwrkey.h>
 #include <linux/pmic8058-vibrator.h>
+#include <linux/leds.h>
 
 #include <linux/i2c.h>
+#include <linux/i2c/sx150x.h>
 #include <linux/smsc911x.h>
 #include <linux/spi/spi.h>
 
@@ -40,18 +42,32 @@
 #include <mach/msm_iomap.h>
 #include <asm/mach/mmc.h>
 #include <mach/tlmm.h>
+#include <mach/msm_battery.h>
 #include <mach/msm_hsusb.h>
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android.h>
 #endif
 
 #include "devices.h"
+#include "devices-msm8x60.h"
 #include "timer.h"
 
 /* Macros assume PMIC GPIOs start at 0 */
 #define PM8058_GPIO_PM_TO_SYS(pm_gpio)		(pm_gpio + NR_GPIO_IRQS)
 #define PM8058_GPIO_SYS_TO_PM(sys_gpio)		(sys_gpio - NR_GPIO_IRQS)
 #define PM8058_IRQ_BASE				(NR_MSM_IRQS + NR_GPIO_IRQS)
+
+#define GPIO_EXPANDER_GPIO_BASE \
+	(NR_MSM_GPIOS + PM8058_GPIOS + PM8058_MPPS)
+#define GPIO_EXPANDER_IRQ_BASE (PM8058_IRQ_BASE + NR_PMIC8058_IRQS)
+
+/*
+ * The UI_INTx_N lines are pmic gpio lines which connect i2c
+ * gpio expanders to the pm8058.
+ */
+#define UI_INT1_N 25
+#define UI_INT2_N 34
+#define UI_INT3_N 14
 
 void __iomem *gic_cpu_base_addr;
 
@@ -278,6 +294,119 @@ static struct msm_ssbi_platform_data msm_ssbi3_pdata = {
 };
 #endif
 
+#ifdef CONFIG_BATTERY_MSM
+/* Use basic value for fake MSM battery */
+static struct msm_psy_batt_pdata msm_psy_batt_data = {
+	.avail_chg_sources = AC_CHG,
+};
+
+static struct platform_device msm_batt_device = {
+	.name              = "msm-battery",
+	.id                = -1,
+	.dev.platform_data = &msm_psy_batt_data,
+};
+#endif
+
+#if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
+
+#define GPIO_LEFT_LED_1		(GPIO_EXPANDER_GPIO_BASE + (16 * 3))
+#define GPIO_LEFT_LED_2		(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 1)
+#define GPIO_LEFT_LED_3		(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 2)
+#define GPIO_LEFT_LED_WLAN	(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 3)
+#define GPIO_LEFT_LED_5		(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 7)
+#define GPIO_RIGHT_LED_1	(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 8)
+#define GPIO_RIGHT_LED_2	(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 8 + 1)
+#define GPIO_RIGHT_LED_3	(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 8 + 2)
+#define GPIO_RIGHT_LED_BT	(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 8 + 3)
+#define GPIO_RIGHT_LED_5	(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 8 + 7)
+
+static struct gpio_led gpio_exp_leds_config[] = {
+	{
+		.name = "left_led1:green",
+		.gpio = GPIO_LEFT_LED_1,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "left_led2:red",
+		.gpio = GPIO_LEFT_LED_2,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "left_led3:green",
+		.gpio = GPIO_LEFT_LED_3,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "wlan_led:orange",
+		.gpio = GPIO_LEFT_LED_WLAN,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "left_led5:green",
+		.gpio = GPIO_LEFT_LED_5,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "right_led1:green",
+		.gpio = GPIO_RIGHT_LED_1,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "right_led2:red",
+		.gpio = GPIO_RIGHT_LED_2,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "right_led3:green",
+		.gpio = GPIO_RIGHT_LED_3,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "bt_led:blue",
+		.gpio = GPIO_RIGHT_LED_BT,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+	{
+		.name = "right_led5:green",
+		.gpio = GPIO_RIGHT_LED_5,
+		.active_low = 1,
+		.retain_state_suspended = 0,
+		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+	},
+};
+
+static struct gpio_led_platform_data gpio_leds_pdata = {
+	.num_leds = ARRAY_SIZE(gpio_exp_leds_config),
+	.leds = gpio_exp_leds_config,
+};
+
+static struct platform_device gpio_leds = {
+	.name          = "leds-gpio",
+	.id            = -1,
+	.dev           = {
+		.platform_data = &gpio_leds_pdata,
+	},
+};
+#endif
+
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&smc91x_device,
 #ifdef CONFIG_I2C_QUP
@@ -323,11 +452,112 @@ static struct platform_device *surf_devices[] __initdata = {
 #ifdef CONFIG_USB_ANDROID
 	&android_usb_device,
 #endif
+#ifdef CONFIG_BATTERY_MSM
+	&msm_batt_device,
+#endif
+#if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
+	&gpio_leds,
+#endif
+};
+
+#if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
+static struct sx150x_platform_data sx150x_data[] __initdata = {
+	/* "CORE" expander */
+	[0] = {
+		.gpio_base         = GPIO_EXPANDER_GPIO_BASE,
+		.oscio_is_gpo      = false,
+		.io_pullup_ena     = 0xEFFB,
+		.io_pulldn_ena     = 0,
+		.io_open_drain_ena = 0xEFFF,
+		.io_polarity       = 0,
+		.irq_summary       = -1, /* see fixup_i2c_configs() */
+		.irq_base          = GPIO_EXPANDER_IRQ_BASE,
+		.irq_sense         = 0,
+	},
+	/* "DOCKING" expander */
+	[1] = {
+		.gpio_base         = GPIO_EXPANDER_GPIO_BASE + 16,
+		.oscio_is_gpo      = false,
+		.io_pullup_ena     = 0,
+		.io_pulldn_ena     = 0,
+		.io_open_drain_ena = 0,
+		.io_polarity       = 0,
+		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
+						     UI_INT2_N),
+		.irq_base          = GPIO_EXPANDER_IRQ_BASE + 16,
+		.irq_sense         = 0,
+	},
+	/* "SURF" expander */
+	[2] = {
+		.gpio_base         = GPIO_EXPANDER_GPIO_BASE + (16 * 2),
+		.oscio_is_gpo      = false,
+		.io_pullup_ena     = 0,
+		.io_pulldn_ena     = 0,
+		.io_open_drain_ena = 0,
+		.io_polarity       = 0,
+		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
+						     UI_INT1_N),
+		.irq_base          = GPIO_EXPANDER_IRQ_BASE + (16 * 2),
+		.irq_sense         = 0,
+	},
+	/* left keyboard FHA/FFA I/O */
+	[3] = {
+		.gpio_base         = GPIO_EXPANDER_GPIO_BASE + (16 * 3),
+		.oscio_is_gpo      = false,
+		.io_pullup_ena     = 0,
+		.io_pulldn_ena     = 0,
+		.io_open_drain_ena = 0,
+		.io_polarity       = 0,
+		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
+						     UI_INT3_N),
+		.irq_base          = GPIO_EXPANDER_IRQ_BASE + (16 * 3),
+		.irq_sense         = 0,
+	},
+	/* right keyboard FHA/FFA I/O */
+	[4] = {
+		.gpio_base         = GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 8,
+		.oscio_is_gpo      = true,
+		.io_pullup_ena     = 0,
+		.io_pulldn_ena     = 0,
+		.io_open_drain_ena = 0,
+		.io_polarity       = 0,
+		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
+						     UI_INT3_N),
+		.irq_base          = GPIO_EXPANDER_IRQ_BASE + (16 * 3) + 8,
+		.irq_sense         = 0,
+	},
 };
 
 #ifdef CONFIG_I2C
-static struct i2c_board_info __initdata msm8x60_i2c_gsbi8_info[] = {
+static struct i2c_board_info core_expanders_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("sx1509q", 0x3e),
+		.platform_data = &sx150x_data[0]
+	},
+	{
+		I2C_BOARD_INFO("sx1509q", 0x3f),
+		.platform_data = &sx150x_data[1]
+	},
 };
+
+static struct i2c_board_info surf_expanders_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("sx1509q", 0x70),
+		.platform_data = &sx150x_data[2]
+	}
+};
+
+static struct i2c_board_info fha_expanders_i2c_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("sx1508q", 0x21),
+		.platform_data = &sx150x_data[3]
+	},
+	{
+		I2C_BOARD_INFO("sx1508q", 0x22),
+		.platform_data = &sx150x_data[4]
+	}
+};
+#endif
 #endif
 
 #ifdef CONFIG_PMIC8058
@@ -365,6 +595,36 @@ int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 			},
 		},
 #endif
+		{ /* core&surf gpio expander */
+			UI_INT1_N,
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_UP_30,
+				.vin_sel        = PM_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+		{ /* docking gpio expander */
+			UI_INT2_N,
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_UP_30,
+				.vin_sel        = PM_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
+		{ /* FHA/keypad gpio expanders */
+			UI_INT3_N,
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_UP_30,
+				.vin_sel        = PM_GPIO_VIN_S3,
+				.function       = PM_GPIO_FUNC_NORMAL,
+				.inv_int_pol    = 0,
+			},
+		},
 	};
 
 	for (i = 0; i < ARRAY_SIZE(gpio_cfgs); ++i) {
@@ -468,7 +728,7 @@ static struct pmic8058_vibrator_pdata pmic_vib_pdata = {
 
 static struct pm8058_gpio_platform_data pm8058_gpio_data = {
 	.gpio_base	= PM8058_GPIO_PM_TO_SYS(0),
-	.irq_base	= PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 0)
+	.irq_base	= PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 0),
 };
 
 static struct pm8058_gpio_platform_data pm8058_mpp_data = {
@@ -508,6 +768,10 @@ static struct mfd_cell pm8058_subdevs[] = {
 		.platform_data = &pmic_vib_pdata,
 		.data_size     = sizeof(pmic_vib_pdata),
 	},
+	{
+		.name = "pm8058-pwm",
+		.id = -1,
+	}
 };
 
 static struct pm8058_platform_data pm8058_platform_data = {
@@ -532,6 +796,93 @@ static struct i2c_board_info pm8058_boardinfo[] __initdata = {
 unsigned long clk_get_max_axi_khz(void)
 {
 	return 0;
+}
+
+#ifdef CONFIG_I2C
+#define I2C_SURF 1
+#define I2C_FFA  (1 << 1)
+#define I2C_RUMI (1 << 2)
+#define I2C_SIM  (1 << 3)
+
+struct i2c_registry {
+	u8                     machs;
+	int                    bus;
+	struct i2c_board_info *info;
+	int                    len;
+};
+
+static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
+#ifdef CONFIG_PMIC8058
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_SSBI1_I2C_BUS_ID,
+		pm8058_boardinfo,
+		ARRAY_SIZE(pm8058_boardinfo),
+	},
+#endif
+#if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_GSBI8_QUP_I2C_BUS_ID,
+		core_expanders_i2c_info,
+		ARRAY_SIZE(core_expanders_i2c_info),
+	},
+	{
+		I2C_SURF,
+		MSM_GSBI8_QUP_I2C_BUS_ID,
+		surf_expanders_i2c_info,
+		ARRAY_SIZE(surf_expanders_i2c_info),
+	},
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_GSBI3_QUP_I2C_BUS_ID,
+		fha_expanders_i2c_info,
+		ARRAY_SIZE(fha_expanders_i2c_info),
+	},
+#endif
+};
+#endif /* CONFIG_I2C */
+
+static void fixup_i2c_configs(void)
+{
+#ifdef CONFIG_I2C
+#if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
+	if (machine_is_msm8x60_surf())
+		sx150x_data[0].irq_summary = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
+							     UI_INT2_N);
+	else if (machine_is_msm8x60_ffa())
+		sx150x_data[0].irq_summary = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
+							     UI_INT1_N);
+#endif
+#endif
+}
+
+static void register_i2c_devices(void)
+{
+#ifdef CONFIG_I2C
+	u8 mach_mask = 0;
+	int i;
+
+	/* Build the matching 'supported_machs' bitmask */
+	if (machine_is_msm8x60_surf())
+		mach_mask = I2C_SURF;
+	else if (machine_is_msm8x60_ffa())
+		mach_mask = I2C_FFA;
+	else if (machine_is_msm8x60_rumi3())
+		mach_mask = I2C_RUMI;
+	else if (machine_is_msm8x60_sim())
+		mach_mask = I2C_SIM;
+	else
+		pr_err("unmatched machine ID in register_i2c_devices\n");
+
+	/* Run the array and install devices as appropriate */
+	for (i = 0; i < ARRAY_SIZE(msm8x60_i2c_devices); ++i) {
+		if (msm8x60_i2c_devices[i].machs & mach_mask)
+			i2c_register_board_info(msm8x60_i2c_devices[i].bus,
+						msm8x60_i2c_devices[i].info,
+						msm8x60_i2c_devices[i].len);
+	}
+#endif
 }
 
 static void __init msm8x60_init_buses(void)
@@ -661,11 +1012,6 @@ struct msm8x60_tlmm_cfg_struct {
 
 static uint32_t msm8x60_tlmm_cfgs[] = {
 	/*
-	 * GSBI8
-	 */
-	GPIO_CFG(64, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
-	GPIO_CFG(65, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
-	/*
 	 * EBI2
 	 */
 	/* address lines */
@@ -736,9 +1082,15 @@ static uint32_t msm8x60_tlmm_cfgs[] = {
 #endif
 
 #ifdef CONFIG_I2C_QUP
+	/* GSBI3 QUP I2C */
+	GPIO_CFG(43, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
+	GPIO_CFG(44, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 	/* GSBI7 QUP I2C (Marimba) */
 	GPIO_CFG(59, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 	GPIO_CFG(60, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
+	/* GSBI8 QUP I2C */
+	GPIO_CFG(64, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	GPIO_CFG(65, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
 #endif
 
 #ifdef CONFIG_PMIC8058
@@ -799,6 +1151,7 @@ static void __init msm8x60_init_tlmm(void)
 	}
 }
 
+#define GPIO_SDC3_WP_SWITCH (GPIO_EXPANDER_GPIO_BASE + (16 * 1) + 6)
 #if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
@@ -815,6 +1168,25 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 	/* Handle VREGs here once VREG support is available */
 
 	return rc;
+}
+
+static int msm_sdc3_get_wpswitch(struct device *dev)
+{
+	struct platform_device *pdev;
+	int status;
+	pdev = container_of(dev, struct platform_device, dev);
+
+	status = gpio_request(GPIO_SDC3_WP_SWITCH, "SD_WP_Switch");
+	if (status) {
+		pr_err("%s:Failed to request GPIO %d\n",
+					__func__, GPIO_SDC3_WP_SWITCH);
+	} else {
+		status = gpio_get_value(GPIO_SDC3_WP_SWITCH);
+		pr_info("%s: WP Status for Slot %d = %d\n", __func__,
+							pdev->id, status);
+		gpio_free(GPIO_SDC3_WP_SWITCH);
+	}
+	return (unsigned int) status;
 }
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
@@ -855,6 +1227,7 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd  = msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.wpswitch  	= msm_sdc3_get_wpswitch,
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 	.status      = msm8x60_sdcc_slot_status,
 	.status_irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
@@ -931,17 +1304,8 @@ static void __init msm8x60_init(void)
 		platform_add_devices(rumi_sim_devices,
 				     ARRAY_SIZE(rumi_sim_devices));
 	}
-#ifdef CONFIG_I2C
-	i2c_register_board_info(msm_gsbi8_qup_i2c_device.id,
-				msm8x60_i2c_gsbi8_info,
-				ARRAY_SIZE(msm8x60_i2c_gsbi8_info));
-#endif
-
-#ifdef CONFIG_PMIC8058
-	i2c_register_board_info(msm_device_ssbi1.id,
-				pm8058_boardinfo,
-				ARRAY_SIZE(pm8058_boardinfo));
-#endif
+	fixup_i2c_configs();
+	register_i2c_devices();
 }
 
 MACHINE_START(MSM8X60_RUMI3, "QCT MSM8X60 RUMI3")
