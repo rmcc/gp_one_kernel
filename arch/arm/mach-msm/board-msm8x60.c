@@ -387,8 +387,45 @@ struct resource msm_camera_resources[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 };
+static struct msm_camera_sensor_flash_src msm_flash_src = {
+	.flash_sr_type				= MSM_CAMERA_FLASH_SRC_PWM,
+	._fsrc.pwm_src.freq			= 1000,
+	._fsrc.pwm_src.max_load		= 300,
+	._fsrc.pwm_src.low_load		= 30,
+	._fsrc.pwm_src.high_load	= 100,
+	._fsrc.pwm_src.channel		= 7,
+};
+#ifdef CONFIG_IMX074
+static struct msm_camera_sensor_flash_data flash_imx074 = {
+	.flash_type		= MSM_CAMERA_FLASH_LED,
+	.flash_src		= &msm_flash_src
+};
 
-static struct i2c_board_info msm_camera_boardinfo[]  __initdata = {
+static struct msm_camera_sensor_info msm_camera_sensor_imx074_data = {
+	.sensor_name	= "imx074",
+	.sensor_reset	= 106,
+	.sensor_pwd		= 85,
+	.vcm_pwd		= 1,
+	.vcm_enable		= 0,
+	.pdata			= &msm_camera_device_data,
+	.resource		= msm_camera_resources,
+	.num_resources	= ARRAY_SIZE(msm_camera_resources),
+	.flash_data		= &flash_imx074,
+	.csi_if			= 1
+};
+struct platform_device msm_camera_sensor_imx074 = {
+	.name	= "msm_camera_imx074",
+	.dev	= {
+		.platform_data = &msm_camera_sensor_imx074_data,
+	},
+};
+#endif
+static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
+	#ifdef CONFIG_IMX074
+	{
+		I2C_BOARD_INFO("imx074", 0x1A),
+	},
+	#endif
 };
 
 #ifdef CONFIG_MSM_GEMINI
@@ -855,6 +892,9 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_MSM_CAMERA
 	&android_pmem_adsp_device,
+#ifdef CONFIG_IMX074
+	&msm_camera_sensor_imx074,
+#endif
 #endif
 };
 
@@ -903,7 +943,11 @@ static struct platform_device *surf_devices[] __initdata = {
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_MSM_CAMERA
 	&android_pmem_adsp_device,
+#ifdef CONFIG_IMX074
+	&msm_camera_sensor_imx074,
 #endif
+#endif
+
 };
 
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
@@ -1576,7 +1620,7 @@ static int pm8901_mpp0_init(void *data)
 	int rc = pm8901_mpp_config(0, PM_MPP_TYPE_D_OUTPUT,
 			PM8901_MPP_DIG_LEVEL_VPH,
 			val);
-	if (!rc)
+	if (rc)
 		pr_err("%s: pm8901_mpp_config failed with %d\n", __func__, rc);
 
 	return rc;
