@@ -107,7 +107,15 @@ EXPORT_SYMBOL(clk_disable);
 
 int clk_reset(struct clk *clk, enum clk_reset_action action)
 {
-	return clk->ops->reset(clk->remote_id, action);
+	int ret = -EPERM;
+
+	/* Try clk->ops->reset() and fallback to a remote reset if it fails. */
+	if (clk->ops->reset != NULL)
+		ret = clk->ops->reset(clk->id, action);
+	if (ret == -EPERM && clk_ops_remote.reset != NULL)
+		ret = clk_ops_remote.reset(clk->remote_id, action);
+
+	return ret;
 }
 EXPORT_SYMBOL(clk_reset);
 
@@ -331,6 +339,16 @@ static int clock_debug_rate_get(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(clock_rate_fops, clock_debug_rate_get,
 			clock_debug_rate_set, "%llu\n");
 
+static int clock_debug_measure_get(void *data, u64 *val)
+{
+	struct clk *clock = data;
+	*val = clock->ops->measure_rate(clock->id);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(clock_measure_fops, clock_debug_measure_get,
+			NULL, "%lld\n");
+
 static int clock_debug_enable_set(void *data, u64 val)
 {
 	struct clk *clock = data;
@@ -400,6 +418,10 @@ static int __init clock_debug_init(void)
 
 		if (!debugfs_create_file("is_local", S_IRUGO, clk_dir, clock,
 					&clock_local_fops))
+			return -ENOMEM;
+
+		if (!debugfs_create_file("measure", S_IRUGO, clk_dir,
+					clock, &clock_measure_fops))
 			return -ENOMEM;
 	}
 	return 0;

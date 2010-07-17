@@ -37,6 +37,7 @@
 #include <linux/pmic8058-pwm.h>
 #include <linux/i2c/tsc2007.h>
 #include <linux/input/kp_flip_switch.h>
+#include <linux/leds-pmic8058.h>
 #include <mach/mpp.h>
 
 #include <asm/mach-types.h>
@@ -452,6 +453,7 @@ static struct pm8058_pwm_pdata pm8058_pwm_data = {
 
 /* Put sub devices with fixed location first in sub_devices array */
 #define	PM8058_SUBDEV_KPD	0
+#define	PM8058_SUBDEV_LED	1
 
 static struct pm8058_gpio_platform_data pm8058_gpio_data = {
 	.gpio_base	= PM8058_GPIO_PM_TO_SYS(0),
@@ -463,11 +465,45 @@ static struct pm8058_gpio_platform_data pm8058_mpp_data = {
 	.irq_base	= PM8058_MPP_IRQ(PMIC8058_IRQ_BASE, 0),
 };
 
+static struct pmic8058_led pmic8058_ffa_leds[] = {
+	[0] = {
+		.name		= "keyboard-backlight",
+		.max_brightness = 15,
+		.id		= PMIC8058_ID_LED_KB_LIGHT,
+	},
+};
+
+static struct pmic8058_leds_platform_data pm8058_ffa_leds_data = {
+	.num_leds = ARRAY_SIZE(pmic8058_ffa_leds),
+	.leds	= pmic8058_ffa_leds,
+};
+
+static struct pmic8058_led pmic8058_surf_leds[] = {
+	[0] = {
+		.name		= "keyboard-backlight",
+		.max_brightness = 15,
+		.id		= PMIC8058_ID_LED_KB_LIGHT,
+	},
+	[1] = {
+		.name		= "voice:red",
+		.max_brightness = 20,
+		.id		= PMIC8058_ID_LED_0,
+	},
+	[2] = {
+		.name		= "wlan:green",
+		.max_brightness = 20,
+		.id		= PMIC8058_ID_LED_2,
+	},
+};
+
 static struct mfd_cell pm8058_subdevs[] = {
 	{	.name = "pm8058-keypad",
 		.id		= -1,
 		.num_resources	= ARRAY_SIZE(resources_keypad),
 		.resources	= resources_keypad,
+	},
+	{	.name = "pm8058-led",
+		.id		= -1,
 	},
 	{	.name = "pm8058-gpio",
 		.id		= -1,
@@ -487,6 +523,11 @@ static struct mfd_cell pm8058_subdevs[] = {
 	{	.name = "pm8058-nfc",
 		.id		= -1,
 	},
+};
+
+static struct pmic8058_leds_platform_data pm8058_surf_leds_data = {
+	.num_leds = ARRAY_SIZE(pmic8058_surf_leds),
+	.leds	= pmic8058_surf_leds,
 };
 
 static struct pm8058_platform_data pm8058_7x30_data = {
@@ -1449,7 +1490,10 @@ struct platform_device msm_lpa_device = {
 
 static unsigned int dec_concurrency_table[] = {
 	/* Audio LP */
-	0, 0, 0, 0,
+	0,
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
 	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_MODE_LP)|
 	(1<<MSM_ADSP_OP_DM)),
 
@@ -2155,13 +2199,6 @@ static int hsusb_rpc_connect(int connect)
 }
 #endif
 
-#if defined(CONFIG_USB_MSM_OTG_72K) || defined(CONFIG_USB_EHCI_MSM)
-static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
-{
-	return msm_hsusb_phy_reset();
-}
-#endif
-
 #ifdef CONFIG_USB_MSM_OTG_72K
 #ifndef CONFIG_USB_EHCI_MSM
 static int ldo_on;
@@ -2199,7 +2236,6 @@ static void msm_pmic_notify_deinit(void)
 #endif
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect	= hsusb_rpc_connect,
-	.phy_reset	= msm_hsusb_rpc_phy_reset,
 
 #ifndef CONFIG_USB_EHCI_MSM
 	/* vbus notification through pmic call backs */
@@ -2253,7 +2289,6 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 
 static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 	.phy_info   = (USB_PHY_INTEGRATED | USB_PHY_MODEL_45NM),
-	.phy_reset  = msm_hsusb_rpc_phy_reset,
 	.vbus_power = msm_hsusb_vbus_power,
 	.power_budget   = 180,
 };
@@ -4006,6 +4041,21 @@ static void msm7x30_init_uart2(void)
 }
 #endif
 
+static void __init pmic8058_leds_init(void)
+{
+	if (machine_is_msm7x30_surf()) {
+		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].platform_data
+			= &pm8058_surf_leds_data;
+		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].data_size
+			= sizeof(pm8058_surf_leds_data);
+	} else if (machine_is_msm7x30_ffa()) {
+		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].platform_data
+			= &pm8058_ffa_leds_data;
+		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].data_size
+			= sizeof(pm8058_ffa_leds_data);
+	}
+}
+
 static struct msm_spm_platform_data msm_spm_data __initdata = {
 	.reg_base_addr = MSM_SAW_BASE,
 
@@ -4341,6 +4391,7 @@ static void __init msm7x30_init(void)
 #endif
 	if (machine_is_msm7x30_surf())
 		platform_device_register(&flip_switch_device);
+	pmic8058_leds_init();
 }
 
 static unsigned pmem_sf_size = MSM_PMEM_SF_SIZE;

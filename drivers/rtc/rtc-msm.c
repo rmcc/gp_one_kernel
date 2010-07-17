@@ -348,6 +348,11 @@ msmrtc_probe(struct platform_device *pdev)
 		return PTR_ERR(rtcsecure);
 	}
 #endif
+
+#ifdef CONFIG_RTC_ASYNC_MODEM_SUPPORT
+	rtc_hctosys();
+#endif
+
 	return 0;
 }
 
