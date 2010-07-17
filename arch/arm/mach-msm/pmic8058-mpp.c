@@ -24,6 +24,7 @@
 #include <linux/gpio.h>
 #include <linux/mfd/pmic8058.h>
 #include <mach/mpp.h>
+#include <linux/seq_file.h>
 
 #ifndef CONFIG_GPIOLIB
 #include "gpio_chip.h"
@@ -44,6 +45,21 @@
 /* MPP Config Control */
 #define	PM8058_MPP_CONFIG_CTL_MASK	0x03
 
+static int pm8058_mpp_get(struct gpio_chip *chip, unsigned mpp)
+{
+	struct pm8058_gpio_platform_data *pdata;
+	struct pm8058_chip *pm_chip;
+
+	if (mpp >= PM8058_MPPS || chip == NULL)
+		return -EINVAL;
+
+	pdata = chip->dev->platform_data;
+	pm_chip = dev_get_drvdata(chip->dev);
+
+	return pm8058_irq_get_rt_status(pm_chip,
+		pdata->irq_base + mpp);
+}
+
 #ifndef CONFIG_GPIOLIB
 static int pm8058_mpp_get_irq_num(struct gpio_chip *chip,
 				   unsigned int gpio,
@@ -62,11 +78,8 @@ static int pm8058_mpp_get_irq_num(struct gpio_chip *chip,
 
 static int pm8058_mpp_read(struct gpio_chip *chip, unsigned n)
 {
-	struct pm8058_chip	*pm_chip;
-
 	n -= chip->start;
-	pm_chip = dev_get_drvdata(chip->dev);
-	return pm8058_mpp_get(pm_chip, n);
+	return pm8058_mpp_get(chip, n);
 }
 
 struct msm_gpio_chip pm8058_mpp_chip = {
@@ -131,16 +144,41 @@ static int pm8058_mpp_to_irq(struct gpio_chip *chip, unsigned offset)
 
 static int pm8058_mpp_read(struct gpio_chip *chip, unsigned offset)
 {
-	struct pm8058_chip *pm_chip;
-	pm_chip = dev_get_drvdata(chip->dev);
-	return pm8058_mpp_get(pm_chip, offset);
+	return pm8058_mpp_get(chip, offset);
+}
+
+static void pm8058_mpp_dbg_show(struct seq_file *s, struct gpio_chip *chip)
+{
+	static const char *ctype[] = { "d_in", "d_out", "bi_dir", "a_in",
+		"a_out", "sink", "dtest_sink", "dtest_out" };
+	struct pm8058_chip *pm_chip = dev_get_drvdata(chip->dev);
+	u8 type, state, ctrl;
+	const char *label;
+	int i;
+
+	for (i = 0; i < PM8058_MPPS; i++) {
+		pm8058_read(pm_chip, SSBI_MPP_CNTRL(i), &ctrl, 1);
+		label = gpiochip_is_requested(chip, i);
+		type = (ctrl & PM8058_MPP_TYPE_MASK) >>
+			PM8058_MPP_TYPE_SHIFT;
+		state = pm8058_mpp_get(chip, i);
+		seq_printf(s, "gpio-%-3d (%-12.12s) %-10.10s"
+				" %s 0x%02x\n",
+				chip->base + i,
+				label ? label : "--",
+				ctype[type],
+				state ? "hi" : "lo",
+				ctrl);
+	}
 }
 
 static struct gpio_chip pm8058_mpp_chip = {
 	.label		= "pm8058-mpp",
 	.to_irq		= pm8058_mpp_to_irq,
 	.get		= pm8058_mpp_read,
+	.dbg_show	= pm8058_mpp_dbg_show,
 	.ngpio		= PM8058_MPPS,
+	.can_sleep	= 1,
 };
 
 int pm8058_mpp_config(unsigned mpp, unsigned type, unsigned level,

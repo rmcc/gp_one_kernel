@@ -23,6 +23,7 @@
 #include <linux/bitops.h>
 #include <linux/io.h>
 #include <linux/spinlock.h>
+#include <linux/delay.h>
 #include <mach/msm_iomap.h>
 #include <mach/clk.h>
 
@@ -98,10 +99,20 @@
 #define MISC_CC2_REG			REG_MM(0x005C)
 #define PIXEL_CC_REG			REG_MM(0x00D4)
 #define PIXEL_NS_REG			REG_MM(0x00DC)
+#define PLL0_CONFIG_REG			REG_MM(0x0310)
+#define PLL0_L_VAL_REG			REG_MM(0x0304)
+#define PLL0_M_VAL_REG			REG_MM(0x0308)
+#define PLL0_MODE_REG			REG_MM(0x0300)
+#define PLL0_N_VAL_REG			REG_MM(0x030C)
+#define PLL1_CONFIG_REG			REG_MM(0x032C)
+#define PLL1_L_VAL_REG			REG_MM(0x0320)
+#define PLL1_M_VAL_REG			REG_MM(0x0324)
+#define PLL1_MODE_REG			REG_MM(0x031C)
+#define PLL1_N_VAL_REG			REG_MM(0x0328)
 #define PLL2_CONFIG_REG			REG_MM(0x0348)
 #define PLL2_L_VAL_REG			REG_MM(0x033C)
-#define PLL2_MODE_REG			REG_MM(0x0338)
 #define PLL2_M_VAL_REG			REG_MM(0x0340)
+#define PLL2_MODE_REG			REG_MM(0x0338)
 #define PLL2_N_VAL_REG			REG_MM(0x0344)
 #define ROT_NS_REG			REG_MM(0x00E8)
 #define SAXI_EN_REG			REG_MM(0x0030)
@@ -125,6 +136,13 @@
 #define LCC_CODEC_I2S_SPKR_NS_REG	REG_LPA(0x006C)
 #define LCC_MI2S_NS_REG			REG_LPA(0x0048)
 #define LCC_PCM_NS_REG			REG_LPA(0x0054)
+#define LCC_PCM_STATUS_REG		REG_LPA(0x005C)
+#define LCC_PLL0_CONFIG_REG		REG_LPA(0x0014)
+#define LCC_PLL0_L_VAL_REG		REG_LPA(0x0004)
+#define LCC_PLL0_M_VAL_REG		REG_LPA(0x0008)
+#define LCC_PLL0_MODE_REG		REG_LPA(0x0000)
+#define LCC_PLL0_N_VAL_REG		REG_LPA(0x000C)
+#define LCC_PRI_PLL_CLK_CTL_REG		REG_LPA(0x00C4)
 #define LCC_SPARE_I2S_MIC_NS_REG	REG_LPA(0x0078)
 #define LCC_SPARE_I2S_SPKR_NS_REG	REG_LPA(0x0084)
 
@@ -356,8 +374,12 @@ static void set_rate_tv(struct clk_local *clk, struct clk_freq_tbl *nf)
 	struct pll_rate *rate = nf->pll_rate;
 	uint32_t pll_mode, pll_config;
 
-	/* Assert active-low PLL reset. */
+	/* Disable PLL output. */
 	pll_mode = readl(PLL2_MODE_REG);
+	pll_mode &= ~B(0);
+	writel(pll_mode, PLL2_MODE_REG);
+
+	/* Assert active-low PLL reset. */
 	pll_mode &= ~B(2);
 	writel(pll_mode, PLL2_MODE_REG);
 
@@ -378,6 +400,10 @@ static void set_rate_tv(struct clk_local *clk, struct clk_freq_tbl *nf)
 
 	/* De-assert active-low PLL reset. */
 	pll_mode |= B(2);
+	writel(pll_mode, PLL2_MODE_REG);
+
+	/* Enable PLL output. */
+	pll_mode |= B(0);
 	writel(pll_mode, PLL2_MODE_REG);
 }
 
@@ -1027,6 +1053,7 @@ static struct clk_freq_tbl clk_tbl_rot[] = {
 	F_ROT(114290000, MM_PLL1,   7, 0, 0),
 	F_ROT(133330000, MM_PLL1,   6, 0, 0),
 	F_ROT(160000000, MM_PLL1,   5, 0, 0),
+	F_END,
 };
 
 /* TV */
@@ -1648,6 +1675,32 @@ static int soc_clk_reset(unsigned id, enum clk_reset_action action)
 	return ret;
 }
 
+static struct clk_freq_tbl *find_freq(struct clk_freq_tbl *freq_tbl,
+				      unsigned rate, enum match_types match)
+{
+	struct clk_freq_tbl *nf;
+
+	/* Find new frequency based on match rule. */
+	switch (match) {
+	case MATCH_MIN:
+		for (nf = freq_tbl; nf->freq_hz != FREQ_END; nf++)
+			if (nf->freq_hz >= rate)
+				break;
+		break;
+	default:
+	case MATCH_EXACT:
+		for (nf = freq_tbl; nf->freq_hz != FREQ_END; nf++)
+			if (nf->freq_hz == rate)
+				break;
+		break;
+	}
+
+	if (nf->freq_hz == FREQ_END)
+		return ERR_PTR(-EINVAL);
+
+	return nf;
+}
+
 static int _soc_clk_set_rate(unsigned id, unsigned rate, enum match_types match)
 {
 	struct clk_local *clk = &clk_local_tbl[id];
@@ -1655,37 +1708,23 @@ static int _soc_clk_set_rate(unsigned id, unsigned rate, enum match_types match)
 	struct clk_freq_tbl *nf;
 	uint32_t *chld = clk->children;
 	uint32_t reg_val = 0;
-	int i, ret = 0;
+	int i;
 	unsigned long flags;
 
 	if (clk->type == NORATE || clk->type == RESET)
 		return -EPERM;
 
+	/* Find new frequency. */
+	nf = find_freq(clk->freq_tbl, rate, match);
+	if (IS_ERR(nf))
+		return PTR_ERR(nf);
+
 	spin_lock_irqsave(&clock_reg_lock, flags);
+
+	/* Check if frequency is actually changed. */
 	cf = clk->current_freq;
-
-	if (rate == cf->freq_hz)
+	if (nf == cf)
 		goto release_lock;
-
-	/* Find new frequency based on match rule. */
-	switch (match) {
-	case MATCH_MIN:
-		for (nf = clk->freq_tbl; nf->freq_hz != FREQ_END; nf++)
-			if (nf->freq_hz >= rate)
-				break;
-		break;
-	default:
-	case MATCH_EXACT:
-		for (nf = clk->freq_tbl; nf->freq_hz != FREQ_END; nf++)
-			if (nf->freq_hz == rate)
-				break;
-		break;
-	}
-
-	if (nf->freq_hz == FREQ_END) {
-		ret = -EINVAL;
-		goto release_lock;
-	}
 
 	/* Disable clocks if clock is not glitch-free banked. */
 	if (clk->banked_mnd_masks == NULL) {
@@ -1740,7 +1779,7 @@ static int _soc_clk_set_rate(unsigned id, unsigned rate, enum match_types match)
 
 release_lock:
 	spin_unlock_irqrestore(&clock_reg_lock, flags);
-	return ret;
+	return 0;
 }
 
 static int soc_clk_set_rate(unsigned id, unsigned rate)
@@ -1920,79 +1959,60 @@ static struct reg_init {
 	void *reg;
 	uint32_t mask;
 	uint32_t val;
+	uint32_t delay_us;
 } ri_list[] __initdata = {
 
-	/* XXX START OF TEMPORARY CODE XXX
-	 * The RPM bootloader should take care of this. */
-
-	/* PXO src = PXO */
-	{REG(0x2EA0), 0x3, 0x1},
-
-	/* XXX PLL8 (MM_GPERF_PLL) @ 384MHz. */
-	{REG(0x3144), 0x3FF,  14}, /* LVAL */
-	{REG(0x3148), 0x7FFFF, 2}, /* MVAL */
-	{REG(0x314C), 0x7FFFF, 9}, /* NVAL */
-	{REG(0x3140), B(4), B(4)}, /* Ref = MXO */
-	/* Enable MN, set VCO, main out. */
-	{REG(0x3154), B(23) | B(22) | 0x3 << 16, B(23) | B(22) | 0x1 << 16},
-	 /* Don't bypass, enable outputs, deassert MND reset. */
-	{REG(0x3140), 0x7, 0x7},
-
-	/* XXX PLL0 @ (MM_GPLL0) @ 621MHz. */
-	{REG(0x30C4), 0x3FF,   23}, /* LVAL */
-	{REG(0x30C8), 0x7FFFF,  0}, /* MVAL */
-	{REG(0x30CC), 0x7FFFF,  1}, /* NVAL */
-	{REG(0x30C0), B(4), B(4)},  /* Ref = MXO */
-	/* Enable MN, set VCO, main out. */
-	{REG(0x30D4), B(23) | B(22) | 0x3 << 20 | 0x3 << 16,
-		B(23) | B(22) | 0x1 << 16},
-	/* Don't bypass, enable outputs, deassert MND reset. */
-	{REG(0x30C0), 0x7, 0x7},
-
-	/* XXX MM_PLL0 (PLL1) @ 1320MHz */
-	{REG_MM(0x0304), 0xFF,   48}, /* LVAL */
-	{REG_MM(0x0308), 0x7FFFF, 8}, /* MVAL */
-	{REG_MM(0x030C), 0x7FFFF, 9}, /* NVAL */
-	{REG_MM(0x0300), B(4), B(4)}, /* Ref = MXO */
+	/* Program MM_PLL0 (PLL1) @ 1320MHz */
+	{PLL0_MODE_REG, B(0), 0},     /* Disable output */
+	{PLL0_L_VAL_REG, 0xFF,   48}, /* LVAL */
+	{PLL0_M_VAL_REG, 0x7FFFF, 8}, /* MVAL */
+	{PLL0_N_VAL_REG, 0x7FFFF, 9}, /* NVAL */
+	/* Ref = MXO, don't bypass, delay 10us after write. */
+	{PLL0_MODE_REG, B(4)|B(1), B(4)|B(1), 10},
 	/* Enable MN, set VCO, misc config. */
-	{REG_MM(0x0310), 0xFFFFFFFF, 0x14580},
-	 /* Don't bypass, enable outputs, deassert MND reset. */
-	{REG_MM(0x0300), 0xF, 0x7},
+	{PLL0_CONFIG_REG, 0xFFFFFFFF, 0x14580},
+	{PLL0_MODE_REG, B(2), B(2)}, /* Deassert reset */
+	{PLL0_MODE_REG, B(0), B(0)}, /* Enable output */
 
-	/* XXX MM_PLL1 (PLL2) @ 800MHz */
-	{REG_MM(0x0320), 0x3FF,   29}, /* LVAL */
-	{REG_MM(0x0324), 0x7FFFF, 17}, /* MVAL */
-	{REG_MM(0x0328), 0x7FFFF, 27}, /* NVAL */
-	{REG_MM(0x031C), B(4), B(4)}, /* Ref = MXO */
+	/* Program MM_PLL1 (PLL2) @ 800MHz */
+	{PLL1_MODE_REG, B(0), 0},      /* Disable output */
+	{PLL1_L_VAL_REG, 0x3FF,   29}, /* LVAL */
+	{PLL1_M_VAL_REG, 0x7FFFF, 17}, /* MVAL */
+	{PLL1_N_VAL_REG, 0x7FFFF, 27}, /* NVAL */
+	/* Ref = MXO, don't bypass, delay 10us after write. */
+	{PLL1_MODE_REG, B(4)|B(1), B(4)|B(1), 10},
 	/* Enable MN, set VCO, main out. */
-	{REG_MM(0x032C), 0xFFFFFFFF, 0x00C22080},
-	 /* Don't bypass, enable outputs, deassert MND reset. */
-	{REG_MM(0x031C), 0x7, 0x7},
+	{PLL1_CONFIG_REG, 0xFFFFFFFF, 0x00C22080},
+	{PLL1_MODE_REG, B(2), B(2)}, /* Deassert reset */
+	{PLL1_MODE_REG, B(0), B(0)}, /* Enable output */
 
-	/* XXX MM_PLL2 (PLL3) @ <Varies>, 50.4005MHz for now. */
-	{REG_MM(0x033C), 0x3FF,       7}, /* LVAL */
-	{REG_MM(0x0340), 0x7FFFF,  6301}, /* MVAL */
-	{REG_MM(0x0344), 0x7FFFF, 13500}, /* NVAL */
-	{REG_MM(0x0338), B(4), B(4)}, /* Ref = MXO */
+	/* Program MM_PLL2 (PLL3) @ <Varies>, 50.4005MHz for now. */
+	{PLL2_MODE_REG, B(0), 0},         /* Disable output */
+	{PLL2_L_VAL_REG, 0x3FF,       7}, /* LVAL */
+	{PLL2_M_VAL_REG, 0x7FFFF,  6301}, /* MVAL */
+	{PLL2_N_VAL_REG, 0x7FFFF, 13500}, /* NVAL */
+	/* Ref = MXO, don't bypass, delay 10us after write. */
+	{PLL2_MODE_REG, B(4)|B(1), B(4)|B(1), 10},
 	/* Enable MN, set VCO, main out, postdiv4. */
-	{REG_MM(0x0348), 0xFFFFFFFF, 0x00E02080},
-	/* Don't bypass, enable outputs, deassert MND reset. */
-	{REG_MM(0x0338), 0x7, 0x7},
+	{PLL2_CONFIG_REG, 0xFFFFFFFF, 0x00E02080},
+	{PLL2_MODE_REG, B(2), B(2)}, /* Deassert reset */
+	{PLL2_MODE_REG, B(0), B(0)}, /* Enable output */
 
-	/* XXX LPA_PLL (PLL4) @ 540.6720 MHz */
-	{REG_LPA(0x0004), 0x3FF,     20}, /* LVAL */
-	{REG_LPA(0x0008), 0x7FFFF,   28}, /* MVAL */
-	{REG_LPA(0x000C), 0x7FFFF, 1125}, /* NVAL */
-	{REG_LPA(0x0000), B(4),    B(4)}, /* Ref = MXO */
+	/* Program LPA_PLL (PLL4) @ 540.6720 MHz */
+	{LCC_PRI_PLL_CLK_CTL_REG, B(0), B(0)}, /* PLL clock select = PLL0 */
+	{LCC_PLL0_MODE_REG, B(0), 0},          /* Disable output */
+	{LCC_PLL0_L_VAL_REG, 0x3FF,     20},   /* LVAL */
+	{LCC_PLL0_M_VAL_REG, 0x7FFFF,   28},   /* MVAL */
+	{LCC_PLL0_N_VAL_REG, 0x7FFFF, 1125},   /* NVAL */
+	/* Ref = MXO, don't bypass, delay 10us after write. */
+	{LCC_PLL0_MODE_REG, B(4)|B(1), B(4)|B(1), 10},
 	/* Enable MN, set VCO, main out. */
-	{REG_LPA(0x0014), 0xFFFFFFFF, 0x00822080},
-	/* Don't bypass, enable outputs, deassert MND reset. */
-	{REG_LPA(0x0000), 0x7, 0x7},
+	{LCC_PLL0_CONFIG_REG, 0xFFFFFFFF, 0x00822080},
+	{LCC_PLL0_MODE_REG, B(2), B(2)}, /* Deassert reset */
+	{LCC_PLL0_MODE_REG, B(0), B(0)}, /* Enable output */
 
-	/* XXX Turn on all SC0 voteable PLLs (PLL0, PLL6, PLL8). */
+	/* Turn on all SC0 voteable PLLs (PLL0, PLL6, PLL8). */
 	{PLL_ENA_SC0_REG, 0x141, 0x141},
-
-	/* XXX END OF TEMPORARY CODE XXX */
 
 	/* Enable locally controlled peripheral HCLKs in software mode. */
 	{TSIF_HCLK_CTL_REG,		0x70,	0x10},
@@ -2069,6 +2089,8 @@ void __init msm_clk_soc_init(void)
 		val &= ~ri_list[i].mask;
 		val |= ri_list[i].val;
 		writel(val, ri_list[i].reg);
+		if (ri_list[i].delay_us)
+			udelay(ri_list[i].delay_us);
 	}
 
 	soc_clk_enable(C(FAB_P));

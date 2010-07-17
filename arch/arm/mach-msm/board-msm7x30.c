@@ -109,7 +109,7 @@
 
 #define	PM_FLIP_MPP 5 /* PMIC MPP 06 */
 
-int pm8058_gpios_init(struct pm8058_chip *pm_chip)
+static int pm8058_gpios_init(void)
 {
 	int rc;
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
@@ -153,7 +153,7 @@ int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 	if (machine_is_msm7x30_fluid())
 		sdcc_det.inv_int_pol = 1;
 
-	rc = pm8058_gpio_config_h(pm_chip, PMIC_GPIO_SD_DET - 1, &sdcc_det);
+	rc = pm8058_gpio_config(PMIC_GPIO_SD_DET - 1, &sdcc_det);
 	if (rc) {
 		pr_err("%s PMIC_GPIO_SD_DET config failed\n", __func__);
 		return rc;
@@ -161,7 +161,7 @@ int pm8058_gpios_init(struct pm8058_chip *pm_chip)
 #endif
 
 	if (machine_is_msm7x30_fluid()) {
-		rc = pm8058_gpio_config_h(pm_chip, PMIC_GPIO_SDC4_EN, &sdc4_en);
+		rc = pm8058_gpio_config(PMIC_GPIO_SDC4_EN, &sdc4_en);
 		if (rc) {
 			pr_err("%s PMIC_GPIO_SDC4_EN config failed\n",
 								 __func__);
@@ -457,7 +457,8 @@ static struct pm8058_pwm_pdata pm8058_pwm_data = {
 
 static struct pm8058_gpio_platform_data pm8058_gpio_data = {
 	.gpio_base	= PM8058_GPIO_PM_TO_SYS(0),
-	.irq_base	= PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, 0)
+	.irq_base	= PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, 0),
+	.init		= pm8058_gpios_init,
 };
 
 static struct pm8058_gpio_platform_data pm8058_mpp_data = {
@@ -532,7 +533,6 @@ static struct pmic8058_leds_platform_data pm8058_surf_leds_data = {
 
 static struct pm8058_platform_data pm8058_7x30_data = {
 	.irq_base = PMIC8058_IRQ_BASE,
-	.init = pm8058_gpios_init,
 
 	.num_subdevs = ARRAY_SIZE(pm8058_subdevs),
 	.sub_devices = pm8058_subdevs,
@@ -896,7 +896,7 @@ void msm_snddev_poweramp_off(void)
 
 static struct vreg *snddev_vreg_ncp, *snddev_vreg_gp4;
 
-void msm_snddev_hsed_pamp_on(void)
+void msm_snddev_hsed_voltage_on(void)
 {
 	int rc;
 
@@ -921,7 +921,7 @@ void msm_snddev_hsed_pamp_on(void)
 		pr_err("%s: vreg_enable(ncp) failed (%d)\n", __func__, rc);
 }
 
-void msm_snddev_hsed_pamp_off(void)
+void msm_snddev_hsed_voltage_off(void)
 {
 	int rc;
 
@@ -2034,6 +2034,7 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 
 static struct msm_handset_platform_data hs_platform_data = {
 	.hs_name = "7k_handset",
+	.pwr_key_delay_ms = 500, /* 0 will disable end key */
 };
 
 static struct platform_device hs_device = {

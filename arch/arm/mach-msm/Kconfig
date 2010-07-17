@@ -54,6 +54,7 @@ config ARCH_MSM8X60
 	select MSM_ADM3
 	select REGULATOR
 	select MSM8660_TLMM
+	select ARCH_HAS_CPU_IDLE_WAIT
 
 endchoice
 
@@ -766,6 +767,13 @@ config MSM_RPCSERVER_WATCHDOG
 	help
 	  The dog_keepalive server handles watchdog events.
 
+config MSM_RPC_WATCHDOG
+	depends on MSM_ONCRPCROUTER
+	default n
+	bool "Watchdog RPC client"
+	help
+	  The dog_keepalive client module.
+
 config MSM_RPC_PING
 	depends on MSM_ONCRPCROUTER && DEBUG_FS
 	default m
@@ -1124,10 +1132,10 @@ config SMMU_PGTABLES_L2
 	help
 	 Improves page fault latency at the expense of potential L2 pollution.
 	 Most people can probably say Y here.
-endif
 
 config MSM7200A_TLMM
        bool
 
 config MSM8660_TLMM
        bool
+endif
