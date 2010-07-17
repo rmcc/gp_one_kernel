@@ -21,8 +21,8 @@
 
 typedef void (*audpp_event_func)(void *private, unsigned id, uint16_t *msg);
 
-/* worst case delay of 100ms for response */
-#define MSM_AUD_DECODER_WAIT_MS 100
+/* worst case delay of 1sec for response */
+#define MSM_AUD_DECODER_WAIT_MS 1000
 #define MSM_AUD_MODE_TUNNEL  0x00000100
 #define MSM_AUD_MODE_NONTUNNEL  0x00000200
 #define MSM_AUD_DECODER_MASK  0x0000FFFF
@@ -82,9 +82,9 @@ int audpp_set_volume_and_pan(unsigned id, unsigned volume, int pan,
 					enum obj_type objtype);
 int audpp_pause(unsigned id, int pause);
 int audpp_flush(unsigned id);
-void audpp_avsync(int id, unsigned rate);
-unsigned audpp_avsync_sample_count(int id);
-unsigned audpp_avsync_byte_count(int id);
+int audpp_query_avsync(int id);
+int audpp_restore_avsync(int id, uint16_t *avsync);
+
 int audpp_dsp_set_eq(unsigned id, unsigned enable,
 	struct audpp_cmd_cfg_object_params_eqalizer *eq,
 			enum obj_type objtype);
