@@ -4720,13 +4720,15 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 	res = platform_get_resource_byname(pdev,
 					   IORESOURCE_DMA, "msm_nand_dmac");
 	if (!res || !res->start) {
-		pr_err("invalid msm_nand_dmac resource");
+		pr_err("%s: invalid msm_nand_dmac resource\n", __func__);
 		return -ENODEV;
 	}
 
 	info = kzalloc(sizeof(struct msm_nand_info), GFP_KERNEL);
-	if (!info)
+	if (!info) {
+		pr_err("%s: No memory for msm_nand_info\n", __func__);
 		return -ENOMEM;
+	}
 
 	info->msm_nand.dev = &pdev->dev;
 
@@ -4741,12 +4743,13 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 		dma_alloc_coherent(/*dev*/ NULL, MSM_NAND_DMA_BUFFER_SIZE,
 				   &info->msm_nand.dma_addr, GFP_KERNEL);
 	if (info->msm_nand.dma_buffer == NULL) {
+		pr_err("%s: No memory for msm_nand.dma_buffer\n", __func__);
 		err = -ENOMEM;
 		goto out_free_info;
 	}
 
-	pr_info("allocated dma buffer at %p, dma_addr %x\n",
-		info->msm_nand.dma_buffer, info->msm_nand.dma_addr);
+	pr_info("%s: allocated dma buffer at %p, dma_addr %x\n",
+		__func__, info->msm_nand.dma_buffer, info->msm_nand.dma_addr);
 
 	info->mtd.name = dev_name(&pdev->dev);
 	info->mtd.priv = &info->msm_nand;
@@ -4754,6 +4757,7 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 
 	if (msm_nand_scan(&info->mtd, 1))
 		if (msm_onenand_scan(&info->mtd, 1)) {
+			pr_err("%s: No nand device found\n", __func__);
 			err = -ENXIO;
 			goto out_free_dma_buffer;
 		}
