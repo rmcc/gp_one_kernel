@@ -1868,6 +1868,19 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 
 static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
 
+static struct platform_device *early_devices[] __initdata = {
+#ifdef CONFIG_GPIOLIB
+	&msm_gpio_devices[0],
+	&msm_gpio_devices[1],
+	&msm_gpio_devices[2],
+	&msm_gpio_devices[3],
+	&msm_gpio_devices[4],
+	&msm_gpio_devices[5],
+	&msm_gpio_devices[6],
+	&msm_gpio_devices[7],
+#endif
+};
+
 static struct platform_device *devices[] __initdata = {
 	&msm_fb_device,
 	&mddi_toshiba_device,
@@ -2401,6 +2414,8 @@ static void __init qsd8x50_init(void)
 	if (socinfo_init() < 0)
 		printk(KERN_ERR "%s: socinfo_init() failed!\n",
 		       __func__);
+	msm_clock_init(msm_clocks_8x50, msm_num_clocks_8x50);
+	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
 	qsd8x50_cfg_smc91x();
 	msm_acpu_clock_init(&qsd8x50_clock_data);
 
@@ -2515,7 +2530,6 @@ static void __init qsd8x50_map_io(void)
 	msm_shared_ram_phys = MSM_SHARED_RAM_PHYS;
 	msm_map_qsd8x50_io();
 	qsd8x50_allocate_memory_regions();
-	msm_clock_init(msm_clocks_8x50, msm_num_clocks_8x50);
 }
 
 MACHINE_START(QSD8X50_SURF, "QCT QSD8X50 SURF")

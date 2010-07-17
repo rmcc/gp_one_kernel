@@ -26,22 +26,26 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef __ARCH_ARM_MACH_MSM_DEVICES_MSM8X60_H
-#define __ARCH_ARM_MACH_MSM_DEVICES_MSM8X60_H
+#ifndef __LINUX_MSM7200A_GPIO_H
+#define __LINUX_MSM7200A_GPIO_H
 
-#define MSM_GSBI3_QUP_I2C_BUS_ID 0
-#define MSM_GSBI4_QUP_I2C_BUS_ID 1
-#define MSM_GSBI9_QUP_I2C_BUS_ID 2
-#define MSM_GSBI8_QUP_I2C_BUS_ID 3
-#define MSM_GSBI7_QUP_I2C_BUS_ID 4
-#define MSM_SSBI1_I2C_BUS_ID     6
-#define MSM_SSBI2_I2C_BUS_ID     7
-#define MSM_SSBI3_I2C_BUS_ID     8
+struct msm7200a_gpio_regs {
+	void __iomem *in;
+	void __iomem *out;
+	void __iomem *oe;
+	void __iomem *int_status;
+	void __iomem *int_clear;
+	void __iomem *int_en;
+	void __iomem *int_edge;
+	void __iomem *int_pos;
+};
 
-#ifdef CONFIG_SPI_QUP
-extern struct platform_device msm_gsbi1_qup_spi_device;
-#endif
+struct msm7200a_gpio_platform_data {
+	unsigned gpio_base;
+	unsigned ngpio;
+	unsigned irq_base;
+	unsigned irq_summary;
+	struct msm7200a_gpio_regs regs;
+};
 
-extern struct platform_device msm_device_smd;
-extern struct platform_device msm_device_kgsl;
 #endif

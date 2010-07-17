@@ -28,6 +28,7 @@
 #include <linux/leds.h>
 #include <linux/pmic8058-othc.h>
 #include <linux/mfd/pmic8901.h>
+#include <linux/regulator/pmic8058-regulator.h>
 #include <linux/regulator/pmic8901-regulator.h>
 #include <linux/bootmem.h>
 #include <linux/pwm.h>
@@ -290,7 +291,9 @@ static struct msm_i2c_platform_data msm_gsbi9_qup_i2c_pdata = {
 
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 static struct msm_spi_platform_data msm_gsbi1_qup_spi_pdata = {
-	.max_clock_speed = 26000000,
+	.max_clock_speed = 24000000,
+	.clk_name = "gsbi_qup_clk",
+	.pclk_name = "gsbi_pclk",
 };
 #endif
 
@@ -325,7 +328,8 @@ static struct platform_device msm_batt_device = {
 #endif
 
 #define MSM_FB_SIZE 0x500000;
-#define MSM_PMEM_SF_SIZE 0x1000000;
+#define MSM_PMEM_SF_SIZE 0x1700000;
+#define MSM_GPU_PHYS_SIZE       SZ_2M
 static unsigned pmem_sf_size = MSM_PMEM_SF_SIZE;
 static void __init pmem_sf_size_setup(char **p)
 {
@@ -339,6 +343,13 @@ static void __init fb_size_setup(char **p)
 	fb_size = memparse(*p, p);
 }
 __early_param("fb_size=", fb_size_setup);
+
+static unsigned gpu_phys_size = MSM_GPU_PHYS_SIZE;
+static void __init gpu_phys_size_setup(char **p)
+{
+	gpu_phys_size = memparse(*p, p);
+}
+__early_param("gpu_phys_size=", gpu_phys_size_setup);
 
 static struct resource msm_fb_resources[] = {
 	{
@@ -408,6 +419,16 @@ static void __init msm8x60_allocate_memory_regions(void)
 	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
 	pr_info("allocating %lu bytes at %p (%lx physical) for fb\n",
 		size, addr, __pa(addr));
+
+	size = gpu_phys_size;
+	if (size) {
+		addr = alloc_bootmem(size);
+		msm_device_kgsl.resource[1].start = __pa(addr);
+		msm_device_kgsl.resource[1].end =
+			msm_device_kgsl.resource[1].start + size - 1;
+		pr_info("allocating %lu bytes at %p (%lx physical) for "
+		"KGSL\n", size, addr, __pa(addr));
+	}
 }
 
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
@@ -532,6 +553,7 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&android_pmem_device,
 #endif
 	&msm_fb_device,
+	&msm_device_kgsl,
 	&lcdc_samsung_panel_device,
 };
 
@@ -573,6 +595,7 @@ static struct platform_device *surf_devices[] __initdata = {
 	&android_pmem_device,
 #endif
 	&msm_fb_device,
+	&msm_device_kgsl,
 	&lcdc_samsung_panel_device,
 };
 
@@ -970,6 +993,48 @@ static struct pm8058_gpio_platform_data pm8058_mpp_data = {
 	.irq_base	= PM8058_MPP_IRQ(PM8058_IRQ_BASE, 0),
 };
 
+#define PM8058_VREG(_id) { \
+	.name = "pm8058-regulator", \
+	.id = _id, \
+	.platform_data = &pm8058_vreg_pdata[_id], \
+	.data_size = sizeof(pm8058_vreg_pdata[_id]), \
+}
+
+static struct pm8058_vreg_pdata pm8058_vreg_pdata[PM8058_VREG_MAX] = {
+	[PM8058_VREG_ID_L0]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8058_VREG_ID_L1]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8058_VREG_ID_L2]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_L3]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_L4]	= { .min_uV = 2850000,	.max_uV = 2850000 },
+	[PM8058_VREG_ID_L5]	= { .min_uV = 2850000,	.max_uV = 2850000 },
+	[PM8058_VREG_ID_L6]	= { .min_uV = 3050000,	.max_uV = 3050000 },
+	[PM8058_VREG_ID_L7]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_L8]	= { .min_uV = 2900000,	.max_uV = 2900000 },
+	[PM8058_VREG_ID_L9]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_L10]	= { .min_uV = 2600000,	.max_uV = 2600000 },
+	[PM8058_VREG_ID_L11]	= { .min_uV = 1500000,	.max_uV = 1500000 },
+	[PM8058_VREG_ID_L12]	= { .min_uV = 2900000,	.max_uV = 2900000 },
+	[PM8058_VREG_ID_L13]	= { .min_uV = 2050000,	.max_uV = 2050000 },
+	[PM8058_VREG_ID_L14]	= { .min_uV = 2850000,	.max_uV = 2850000 },
+	[PM8058_VREG_ID_L15]	= { .min_uV = 2850000,	.max_uV = 2850000 },
+	[PM8058_VREG_ID_L16]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_L17]	= { .min_uV = 2600000,	.max_uV = 2600000 },
+	[PM8058_VREG_ID_L18]	= { .min_uV = 2200000,	.max_uV = 2200000 },
+	[PM8058_VREG_ID_L19]	= { .min_uV = 2500000,	.max_uV = 2500000 },
+	[PM8058_VREG_ID_L20]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_L21]	= { .min_uV = 1100000,	.max_uV = 1100000 },
+	[PM8058_VREG_ID_L22]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8058_VREG_ID_L23]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8058_VREG_ID_L24]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8058_VREG_ID_L25]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8058_VREG_ID_S0]	= { .min_uV = 1100000,	.max_uV = 1100000 },
+	[PM8058_VREG_ID_S1]	= { .min_uV = 1100000,	.max_uV = 1100000 },
+	[PM8058_VREG_ID_S2]	= { .min_uV = 1350000,	.max_uV = 1350000 },
+	[PM8058_VREG_ID_S3]	= { .min_uV = 1800000,	.max_uV = 1800000 },
+	[PM8058_VREG_ID_S4]	= { .min_uV = 2200000,	.max_uV = 2200000 },
+	[PM8058_VREG_ID_NCP]	= { .min_uV = -1800000,	.max_uV = -1800000 },
+};
+
 static struct mfd_cell pm8058_subdevs[] = {
 	{
 		.name = "pm8058-keypad",
@@ -1033,6 +1098,40 @@ static struct mfd_cell pm8058_subdevs[] = {
 		.num_resources = ARRAY_SIZE(resources_othc_2),
 		.resources = resources_othc_2,
 	},
+	PM8058_VREG(PM8058_VREG_ID_L0),
+	PM8058_VREG(PM8058_VREG_ID_L1),
+	PM8058_VREG(PM8058_VREG_ID_L2),
+	PM8058_VREG(PM8058_VREG_ID_L3),
+	PM8058_VREG(PM8058_VREG_ID_L4),
+	PM8058_VREG(PM8058_VREG_ID_L5),
+	PM8058_VREG(PM8058_VREG_ID_L6),
+	PM8058_VREG(PM8058_VREG_ID_L7),
+	PM8058_VREG(PM8058_VREG_ID_L8),
+	PM8058_VREG(PM8058_VREG_ID_L9),
+	PM8058_VREG(PM8058_VREG_ID_L10),
+	PM8058_VREG(PM8058_VREG_ID_L11),
+	PM8058_VREG(PM8058_VREG_ID_L12),
+	PM8058_VREG(PM8058_VREG_ID_L13),
+	PM8058_VREG(PM8058_VREG_ID_L14),
+	PM8058_VREG(PM8058_VREG_ID_L15),
+	PM8058_VREG(PM8058_VREG_ID_L16),
+	PM8058_VREG(PM8058_VREG_ID_L17),
+	PM8058_VREG(PM8058_VREG_ID_L18),
+	PM8058_VREG(PM8058_VREG_ID_L19),
+	PM8058_VREG(PM8058_VREG_ID_L20),
+	PM8058_VREG(PM8058_VREG_ID_L21),
+	PM8058_VREG(PM8058_VREG_ID_L22),
+	PM8058_VREG(PM8058_VREG_ID_L23),
+	PM8058_VREG(PM8058_VREG_ID_L24),
+	PM8058_VREG(PM8058_VREG_ID_L25),
+	PM8058_VREG(PM8058_VREG_ID_S0),
+	PM8058_VREG(PM8058_VREG_ID_S1),
+	PM8058_VREG(PM8058_VREG_ID_S2),
+	PM8058_VREG(PM8058_VREG_ID_S3),
+	PM8058_VREG(PM8058_VREG_ID_S4),
+	PM8058_VREG(PM8058_VREG_ID_NCP),
+	PM8058_VREG(PM8058_VREG_ID_LVS0),
+	PM8058_VREG(PM8058_VREG_ID_LVS1),
 };
 
 static struct pm8058_platform_data pm8058_platform_data = {
@@ -1148,10 +1247,52 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 
 #define PM8901_GPIO_INT           91
 
+#define PM8901_VREG(_id) { \
+	.name = "pm8901-regulator", \
+	.id = _id, \
+	.platform_data = &pm8901_vreg_pdata[_id], \
+	.data_size = sizeof(pm8901_vreg_pdata[_id]), \
+}
+
+static struct pm8901_vreg_pdata pm8901_vreg_pdata[PM8901_VREG_MAX] = {
+	[PM8901_VREG_ID_L0]	= { .min_uV = 1200000,	.max_uV = 1200000 },
+	[PM8901_VREG_ID_L1]	= { .min_uV = 3300000,	.max_uV = 3300000 },
+	[PM8901_VREG_ID_L2]	= { .min_uV = 3300000,	.max_uV = 3300000 },
+	[PM8901_VREG_ID_L3]	= { .min_uV = 3300000,	.max_uV = 3300000 },
+	[PM8901_VREG_ID_L4]	= { .min_uV = 2600000,	.max_uV = 2600000 },
+	[PM8901_VREG_ID_L5]	= { .min_uV = 2850000,	.max_uV = 2850000 },
+	[PM8901_VREG_ID_L6]	= { .min_uV = 2200000,	.max_uV = 2200000 },
+	[PM8901_VREG_ID_S0]	= { .min_uV = 1100000,	.max_uV = 1100000 },
+	[PM8901_VREG_ID_S1]	= { .min_uV = 1100000,	.max_uV = 1100000 },
+	[PM8901_VREG_ID_S3]	= { .min_uV = 1100000,	.max_uV = 1100000 },
+	[PM8901_VREG_ID_S4]	= { .min_uV = 1300000,	.max_uV = 1300000 },
+};
+
+static struct mfd_cell pm8901_subdevs[] = {
+	PM8901_VREG(PM8901_VREG_ID_L0),
+	PM8901_VREG(PM8901_VREG_ID_L1),
+	PM8901_VREG(PM8901_VREG_ID_L2),
+	PM8901_VREG(PM8901_VREG_ID_L3),
+	PM8901_VREG(PM8901_VREG_ID_L4),
+	PM8901_VREG(PM8901_VREG_ID_L5),
+	PM8901_VREG(PM8901_VREG_ID_L6),
+	PM8901_VREG(PM8901_VREG_ID_S0),
+	PM8901_VREG(PM8901_VREG_ID_S1),
+	PM8901_VREG(PM8901_VREG_ID_S3),
+	PM8901_VREG(PM8901_VREG_ID_S4),
+	PM8901_VREG(PM8901_VREG_ID_LVS0),
+	PM8901_VREG(PM8901_VREG_ID_LVS1),
+	PM8901_VREG(PM8901_VREG_ID_LVS2),
+	PM8901_VREG(PM8901_VREG_ID_LVS3),
+	PM8901_VREG(PM8901_VREG_ID_MVS0),
+	PM8901_VREG(PM8901_VREG_ID_USB_OTG),
+	PM8901_VREG(PM8901_VREG_ID_HDMI_MVS),
+};
+
 static struct pm8901_platform_data pm8901_platform_data = {
 	.irq_base = PM8901_IRQ_BASE,
-	.num_subdevs = 0,
-	.sub_devices = NULL,
+	.num_subdevs = ARRAY_SIZE(pm8901_subdevs),
+	.sub_devices = pm8901_subdevs,
 };
 
 static struct i2c_board_info pm8901_boardinfo[] __initdata = {
