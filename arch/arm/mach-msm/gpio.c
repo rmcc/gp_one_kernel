@@ -25,6 +25,8 @@
 
 #include "smd_private.h"
 
+#ifndef CONFIG_GPIOLIB
+
 enum {
 	GPIO_DEBUG_SLEEP = 1U << 0,
 };
@@ -37,12 +39,21 @@ module_param_named(debug_mask, msm_gpio_debug_mask, int, S_IRUGO | S_IWUSR | S_I
 #define MSM_GPIOF_ENABLE_WAKE           0x40000000
 #define MSM_GPIOF_DISABLE_WAKE          0x80000000
 
-static int msm_gpio_configure(struct gpio_chip *chip, unsigned int gpio, unsigned long flags);
-static int msm_gpio_get_irq_num(struct gpio_chip *chip, unsigned int gpio, unsigned int *irqp, unsigned long *irqnumflagsp);
-static int msm_gpio_read(struct gpio_chip *chip, unsigned n);
-static int msm_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on);
-static int msm_gpio_read_detect_status(struct gpio_chip *chip, unsigned int gpio);
-static int msm_gpio_clear_detect_status(struct gpio_chip *chip, unsigned int gpio);
+static int msm_gpio_configure(struct goog_gpio_chip *chip,
+			unsigned int gpio,
+			unsigned long flags);
+static int msm_gpio_get_irq_num(struct goog_gpio_chip *chip,
+				unsigned int gpio,
+				unsigned int *irqp,
+				unsigned long *irqnumflagsp);
+static int msm_gpio_read(struct goog_gpio_chip *chip, unsigned n);
+static int msm_gpio_write(struct goog_gpio_chip *chip,
+			unsigned n,
+			unsigned on);
+static int msm_gpio_read_detect_status(struct goog_gpio_chip *chip,
+				unsigned int gpio);
+static int msm_gpio_clear_detect_status(struct goog_gpio_chip *chip,
+					unsigned int gpio);
 
 struct msm_gpio_chip msm_gpio_chips[] = {
 	{
@@ -272,7 +283,7 @@ static void msm_gpio_update_both_edge_detect(struct msm_gpio_chip *msm_chip)
 	printk(KERN_ERR "msm_gpio_update_both_edge_detect, failed to reach stable state %x != %x\n", val, val2);
 }
 
-static int msm_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
+static int msm_gpio_write(struct goog_gpio_chip *chip, unsigned n, unsigned on)
 {
 	struct msm_gpio_chip *msm_chip = container_of(chip, struct msm_gpio_chip, chip);
 	unsigned b = 1U << (n - chip->start);
@@ -287,7 +298,7 @@ static int msm_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
 	return 0;
 }
 
-static int msm_gpio_read(struct gpio_chip *chip, unsigned n)
+static int msm_gpio_read(struct goog_gpio_chip *chip, unsigned n)
 {
 	struct msm_gpio_chip *msm_chip = container_of(chip, struct msm_gpio_chip, chip);
 	unsigned b = 1U << (n - chip->start);
@@ -295,7 +306,8 @@ static int msm_gpio_read(struct gpio_chip *chip, unsigned n)
 	return (readl(msm_chip->regs.in) & b) ? 1 : 0;
 }
 
-static int msm_gpio_read_detect_status(struct gpio_chip *chip, unsigned int gpio)
+static int msm_gpio_read_detect_status(struct goog_gpio_chip *chip,
+				unsigned int gpio)
 {
 	struct msm_gpio_chip *msm_chip = container_of(chip, struct msm_gpio_chip, chip);
 	unsigned b = 1U << (gpio - chip->start);
@@ -308,7 +320,8 @@ static int msm_gpio_read_detect_status(struct gpio_chip *chip, unsigned int gpio
 	return (v & b) ? 1 : 0;
 }
 
-static int msm_gpio_clear_detect_status(struct gpio_chip *chip, unsigned int gpio)
+static int msm_gpio_clear_detect_status(struct goog_gpio_chip *chip,
+					unsigned int gpio)
 {
 	struct msm_gpio_chip *msm_chip = container_of(chip, struct msm_gpio_chip, chip);
 	unsigned b = 1U << (gpio - chip->start);
@@ -325,7 +338,9 @@ static int msm_gpio_clear_detect_status(struct gpio_chip *chip, unsigned int gpi
 	return 0;
 }
 
-int msm_gpio_configure(struct gpio_chip *chip, unsigned int gpio, unsigned long flags)
+int msm_gpio_configure(struct goog_gpio_chip *chip,
+		unsigned int gpio,
+		unsigned long flags)
 {
 	struct msm_gpio_chip *msm_chip = container_of(chip, struct msm_gpio_chip, chip);
 	unsigned b = 1U << (gpio - chip->start);
@@ -390,7 +405,10 @@ int msm_gpio_configure(struct gpio_chip *chip, unsigned int gpio, unsigned long 
 	return 0;
 }
 
-static int msm_gpio_get_irq_num(struct gpio_chip *chip, unsigned int gpio, unsigned int *irqp, unsigned long *irqnumflagsp)
+static int msm_gpio_get_irq_num(struct goog_gpio_chip *chip,
+				unsigned int gpio,
+				unsigned int *irqp,
+				unsigned long *irqnumflagsp)
 {
 	*irqp = MSM_GPIO_TO_INT(gpio);
 	if (irqnumflagsp)
@@ -600,6 +618,59 @@ static int __init msm_init_gpio(void)
 
 postcore_initcall(msm_init_gpio);
 
+#if defined(CONFIG_DEBUG_FS)
+
+static int msm_gpio_debug_result = 1;
+
+static int gpio_enable_set(void *data, u64 val)
+{
+	msm_gpio_debug_result = gpio_tlmm_config(val, 0);
+	return 0;
+}
+static int gpio_disable_set(void *data, u64 val)
+{
+	msm_gpio_debug_result = gpio_tlmm_config(val, 1);
+	return 0;
+}
+
+static int gpio_debug_get(void *data, u64 *val)
+{
+	unsigned int result = msm_gpio_debug_result;
+	msm_gpio_debug_result = 1;
+	if (result)
+		*val = 1;
+	else
+		*val = 0;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(gpio_enable_fops, gpio_debug_get,
+						gpio_enable_set, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(gpio_disable_fops, gpio_debug_get,
+						gpio_disable_set, "%llu\n");
+
+static int __init gpio_debug_init(void)
+{
+	struct dentry *dent;
+	dent = debugfs_create_dir("gpio", 0);
+	if (IS_ERR(dent))
+		return 0;
+
+	debugfs_create_file("enable", 0644, dent, 0, &gpio_enable_fops);
+	debugfs_create_file("disable", 0644, dent, 0, &gpio_disable_fops);
+	return 0;
+}
+
+device_initcall(gpio_debug_init);
+#endif
+
+#else /* ifdef CONFIG_GPIOLIB */
+
+void msm_gpio_enter_sleep(int from_idle) {}
+void msm_gpio_exit_sleep(void) {}
+
+#endif
+
 int gpio_tlmm_config(unsigned config, unsigned disable)
 {
 	return msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &config, &disable);
@@ -708,50 +779,3 @@ int msm_gpios_disable(const struct msm_gpio *table, int size)
 	return rc;
 }
 EXPORT_SYMBOL(msm_gpios_disable);
-
-#if defined(CONFIG_DEBUG_FS)
-
-static int msm_gpio_debug_result = 1;
-
-static int gpio_enable_set(void *data, u64 val)
-{
-	msm_gpio_debug_result = gpio_tlmm_config(val, 0);
-	return 0;
-}
-static int gpio_disable_set(void *data, u64 val)
-{
-	msm_gpio_debug_result = gpio_tlmm_config(val, 1);
-	return 0;
-}
-
-static int gpio_debug_get(void *data, u64 *val)
-{
-	unsigned int result = msm_gpio_debug_result;
-	msm_gpio_debug_result = 1;
-	if (result)
-		*val = 1;
-	else
-		*val = 0;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(gpio_enable_fops, gpio_debug_get,
-						gpio_enable_set, "%llu\n");
-DEFINE_SIMPLE_ATTRIBUTE(gpio_disable_fops, gpio_debug_get,
-						gpio_disable_set, "%llu\n");
-
-static int __init gpio_debug_init(void)
-{
-	struct dentry *dent;
-	dent = debugfs_create_dir("gpio", 0);
-	if (IS_ERR(dent))
-		return 0;
-
-	debugfs_create_file("enable", 0644, dent, 0, &gpio_enable_fops);
-	debugfs_create_file("disable", 0644, dent, 0, &gpio_disable_fops);
-	return 0;
-}
-
-device_initcall(gpio_debug_init);
-#endif
-

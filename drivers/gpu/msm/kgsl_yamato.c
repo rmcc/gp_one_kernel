@@ -188,8 +188,17 @@ void kgsl_yamato_rbbm_intrcallback(struct kgsl_device *device)
 	kgsl_yamato_regread(device, REG_RBBM_INT_STATUS, &status);
 
 	if (status & RBBM_INT_CNTL__RDERR_INT_MASK) {
+		union rbbm_read_error_u rerr;
 		kgsl_yamato_regread(device, REG_RBBM_READ_ERROR, &rderr);
-		KGSL_DRV_FATAL("rbbm read error interrupt: %08x\n", rderr);
+		rerr.val = rderr;
+		if (rerr.f.read_address == REG_CP_INT_STATUS &&
+			rerr.f.read_error &&
+			rerr.f.read_requester)
+			KGSL_DRV_WARN("rbbm read error interrupt: %08x\n",
+					rderr);
+		else
+			KGSL_DRV_FATAL("rbbm read error interrupt: %08x\n",
+					rderr);
 	} else if (status & RBBM_INT_CNTL__DISPLAY_UPDATE_INT_MASK) {
 		KGSL_DRV_DBG("rbbm display update interrupt\n");
 	} else if (status & RBBM_INT_CNTL__GUI_IDLE_INT_MASK) {
@@ -435,6 +444,12 @@ int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags)
 			*cmds++ = pm4_type3_packet(PM4_WAIT_FOR_IDLE, 1);
 			*cmds++ = 0x00000000;
 			sizedwords += 21;
+		}
+
+		if (flags & (KGSL_MMUFLAGS_PTUPDATE | KGSL_MMUFLAGS_TLBFLUSH)) {
+			*cmds++ = pm4_type3_packet(PM4_INVALIDATE_STATE, 1);
+			*cmds++ = 0x7fff; /* invalidate all base pointers */
+			sizedwords += 2;
 		}
 
 		kgsl_ringbuffer_issuecmds(device, KGSL_CMD_FLAGS_PMODE,
@@ -847,13 +862,8 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 			GSL_RB_GET_READPTR(rb, &rb->rptr);
 
 		} while (rb->rptr != rb->wptr && idle_count < IDLE_COUNT_MAX);
-		if (idle_count == IDLE_COUNT_MAX) {
-			KGSL_DRV_ERR("spun too long waiting for RB to idle\n");
-			status = -EINVAL;
-			kgsl_ringbuffer_dump(rb);
-			kgsl_mmu_debug(&device->mmu, &mmu_dbg);
-			goto done;
-		}
+		if (idle_count == IDLE_COUNT_MAX)
+			goto err;
 	}
 	/* now, wait for the GPU to finish its operations */
 	for (idle_count = 0; idle_count < IDLE_COUNT_MAX; idle_count++) {
@@ -861,17 +871,17 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 
 		if (rbbm_status == 0x110) {
 			status = 0;
-			break;
+			goto done;
 		}
 	}
 
-	if (idle_count == IDLE_COUNT_MAX) {
-		KGSL_DRV_ERR("spun too long waiting for RBBM status to idle\n");
-		status = -EINVAL;
-		kgsl_ringbuffer_dump(rb);
-		kgsl_mmu_debug(&device->mmu, &mmu_dbg);
-		goto done;
-	}
+err:
+	KGSL_DRV_ERR("spun too long waiting for RB to idle\n");
+	kgsl_register_dump(device);
+	kgsl_ringbuffer_dump(rb);
+	kgsl_mmu_debug(&device->mmu, &mmu_dbg);
+	BUG();
+
 done:
 	KGSL_DRV_VDBG("return %d\n", status);
 

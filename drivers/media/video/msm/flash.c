@@ -20,7 +20,84 @@
 #include <mach/pmic.h>
 #include <mach/camera.h>
 
-int32_t flash_set_led_state(enum msm_camera_led_state_t led_state)
+static int msm_camera_flash_pwm(
+	struct msm_camera_sensor_flash_pwm *pwm,
+	unsigned led_state)
+{
+	int rc = 0;
+	int PWM_PERIOD = NSEC_PER_SEC / pwm->freq;
+
+	static struct pwm_device *flash_pwm;
+
+	if (!flash_pwm) {
+		flash_pwm = pwm_request(pwm->channel, "camera-flash");
+		if (flash_pwm == NULL || IS_ERR(flash_pwm)) {
+			pr_err("%s: FAIL pwm_request(): flash_pwm=%p\n",
+			       __func__, flash_pwm);
+			flash_pwm = NULL;
+			return -ENXIO;
+		}
+	}
+
+	switch (led_state) {
+	case MSM_CAMERA_LED_LOW:
+		rc = pwm_config(flash_pwm,
+			(PWM_PERIOD/pwm->max_load)*pwm->low_load,
+			PWM_PERIOD);
+		if (rc >= 0)
+			rc = pwm_enable(flash_pwm);
+		break;
+
+	case MSM_CAMERA_LED_HIGH:
+		rc = pwm_config(flash_pwm,
+			(PWM_PERIOD/pwm->max_load)*pwm->high_load,
+			PWM_PERIOD);
+		if (rc >= 0)
+			rc = pwm_enable(flash_pwm);
+		break;
+
+	case MSM_CAMERA_LED_OFF:
+		pwm_disable(flash_pwm);
+		break;
+
+	default:
+		rc = -EFAULT;
+		break;
+	}
+
+	return rc;
+}
+
+int msm_camera_flash_pmic(
+	struct msm_camera_sensor_flash_pmic *pmic,
+	unsigned led_state)
+{
+	int rc = 0;
+	switch (led_state) {
+	case MSM_CAMERA_LED_OFF:
+		rc = pmic_flash_led_set_current(0);
+		break;
+
+	case MSM_CAMERA_LED_LOW:
+		rc = pmic_flash_led_set_current(pmic->low_current);
+		break;
+
+	case MSM_CAMERA_LED_HIGH:
+		rc = pmic_flash_led_set_current(pmic->high_current);
+		break;
+
+	default:
+		rc = -EFAULT;
+		break;
+	}
+
+	CDBG("flash_set_led_state: return %d\n", rc);
+
+	return rc;
+}
+
+int32_t msm_camera_flash_set_led_state(
+	struct msm_camera_sensor_flash_data *fdata, unsigned led_state)
 {
 	int32_t rc;
 
