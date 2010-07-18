@@ -27,14 +27,18 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 
-#define T_FIH
-#ifdef T_FIH	///+T_FIH
+#ifdef CONFIG_USB_GADGET_MSM_72K 
+#include <mach/msm_hsusb.h>
+#endif
+
+#define USBSET 97
+#define CHR_EN 33
+#define CHR_1A 57
+
 #include <linux/gasgauge_bridge.h>
 
 #define FLAG_BATTERY_POLLING
 #define FLAG_CHARGER_DETECT
-#define CHR_EN 33
-#endif	// T_FIH	///-T_FIH
 
 /*+++FIH_ADQ+++*/
 enum {
@@ -65,17 +69,11 @@ struct goldfish_battery_data {
 
 #define GOLDFISH_BATTERY_READ(data, addr)   (readl(data->reg_base + addr))
 #define GOLDFISH_BATTERY_WRITE(data, addr, x)   (writel(x, data->reg_base + addr))
-///extern int check_USB_type;
 
-/* temporary variable used between goldfish_battery_probe() and goldfish_battery_open() */
-static struct goldfish_battery_data *battery_data;
-#ifdef T_FIH	///+T_FIH
 static int g_charging_state = CHARGER_STATE_NOT_CHARGING;
 static int g_health = POWER_SUPPLY_HEALTH_UNKNOWN;
-#endif	// T_FIH	///-T_FIH
 
 /* FIH_ADQ, Kenny { */
-extern int check_USB_type;
 static uint8_t charging_tcount = 0;
 /* } FIH_ADQ, Kenny */
 
@@ -96,19 +94,95 @@ enum {
 	BATTERY_INT_MASK        = BATTERY_STATUS_CHANGED | AC_STATUS_CHANGED,
 };
 
+static enum power_supply_property zeus_battery_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 
-static struct power_supply * g_ps_battery;
+};
+
+static enum power_supply_property zeus_power_properties[] = {
+    POWER_SUPPLY_PROP_ONLINE,
+};
+
+static char *supply_list[] = {
+    "battery",
+};
+
+typedef enum {
+    CHARGER_BATTERY = 0,
+    CHARGER_USB,
+    CHARGER_AC
+} charger_type_t;
+
+charger_type_t current_charger = CHARGER_BATTERY;
+
+static int zeus_power_get_property(struct power_supply *psy,
+                    enum power_supply_property psp,
+                    union power_supply_propval *val)
+{
+    switch (psp) {
+    case POWER_SUPPLY_PROP_ONLINE:
+        if (psy->type == POWER_SUPPLY_TYPE_MAINS)
+            val->intval = (current_charger ==  CHARGER_AC ? 1 : 0);
+        else if (psy->type == POWER_SUPPLY_TYPE_USB)
+            val->intval = (current_charger ==  CHARGER_USB ? 1 : 0);
+        else
+            val->intval = 0;
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
+static int zeus_battery_get_property(struct power_supply *psy,
+		enum power_supply_property psp,
+		union power_supply_propval *val);
+
+static struct power_supply zeus_power_supplies[] = {
+    {
+        .name = "battery",
+        .type = POWER_SUPPLY_TYPE_BATTERY,
+        .properties = zeus_battery_props,
+        .num_properties = ARRAY_SIZE(zeus_battery_props),
+        .get_property = zeus_battery_get_property,
+    },
+    {
+        .name = "usb",
+        .type = POWER_SUPPLY_TYPE_USB,
+        .supplied_to = supply_list,
+        .num_supplicants = ARRAY_SIZE(supply_list),
+        .properties = zeus_power_properties,
+        .num_properties = ARRAY_SIZE(zeus_power_properties),
+        .get_property = zeus_power_get_property,
+    },
+    {
+        .name = "ac",
+        .type = POWER_SUPPLY_TYPE_MAINS,
+        .supplied_to = supply_list,
+        .num_supplicants = ARRAY_SIZE(supply_list),
+        .properties = zeus_power_properties,
+        .num_properties = ARRAY_SIZE(zeus_power_properties),
+        .get_property = zeus_power_get_property,
+    },
+};
 
 /// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
 ///add for low battery LED blinking in suspend mode 
 void Battery_power_supply_change(void)
 {
-	power_supply_changed(g_ps_battery);
+	power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
 }
 EXPORT_SYMBOL(Battery_power_supply_change);
 /// --- FIH_ADQ ---
 
-static int goldfish_battery_get_property(struct power_supply *psy,
+static int zeus_battery_get_property(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
 {
@@ -160,7 +234,7 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 			ret = GetBatteryInfo(BATT_CAPACITY_INFO, &buf);
 			if (ret < 0){
 				printk(KERN_ERR "POWER_SUPPLY_PROP_CAPACITY : Get data failed\n");
-				power_supply_changed(g_ps_battery);
+				power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
 				ret = 0;
 			}
 			else{
@@ -173,13 +247,7 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 					/* } FIH_ADQ, Kenny */
 				}
 
-				/* FIH_ADQ, Kenny { */
 				GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol);
-				/*if(GetBatteryInfo(BATT_VOLTAGE_INFO, &batt_vol) >= 0)
-					printk(KERN_INFO "batt : %d%%_%dmV_%d\n", val->intval, batt_vol, g_charging_state);
-				else
-					printk(KERN_INFO "batt : %d%%_%d\n", val->intval, g_charging_state);*/
-				/* } FIH_ADQ, Kenny */
 
 				if ((val->intval > 94) && (g_charging_state == CHARGER_STATE_CHARGING)){//full
 					g_charging_state = CHARGER_STATE_FULL;
@@ -232,7 +300,7 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 			// ---ADQ_FIH--- 
 			break;
 		default:
-			printk(KERN_ERR "goldfish_battery_get_property : psp(%d)\n", psp);
+			printk(KERN_ERR "zeus_battery_get_property : psp(%d)\n", psp);
 			ret = -EINVAL;
 			break;
 	}
@@ -240,23 +308,6 @@ static int goldfish_battery_get_property(struct power_supply *psy,
 	return ret;
 }
 
-static enum power_supply_property goldfish_battery_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_HEALTH,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_TECHNOLOGY,
-	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-
-};
-
-///static enum power_supply_property goldfish_ac_props[] = {
-///	POWER_SUPPLY_PROP_ONLINE,
-///};
-
-
-#ifdef T_FIH	///+T_FIH
 #ifdef FLAG_BATTERY_POLLING
 static struct timer_list polling_timer;
 //static struct timer_list reset_chgen;
@@ -266,7 +317,7 @@ static struct timer_list polling_timer;
 
 static void polling_timer_func(unsigned long unused)
 {
-	power_supply_changed(g_ps_battery);
+	power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
 	mod_timer(&polling_timer,
 			jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
 }
@@ -300,16 +351,16 @@ static void gasgauge_param_reset(){
 		printk(KERN_ERR "batt: Get age scalar failed!\n");
 	}
 
-	if((batt_vol >= 4100) /*&& check_USB_type == 2*/){
-		rc = gpio_request(57, "CHR_1A");
+	if((batt_vol >= 4100) && current_charger == CHARGER_AC){
+		rc = gpio_request(CHR_1A, "CHR_1A");
 		if (rc)	printk(KERN_ERR "CHR_1A setting failed!\n");
-		rc = gpio_get_value(57);
+		rc = gpio_get_value(CHR_1A);
 		if(rc == 1){
-			gpio_set_value(57,0);
+			gpio_set_value(CHR_1A,0);
 			printk(KERN_INFO "batt: voltage > 4.1V and AC charging, set the charging current to 500mA!!\n");
 		}
-		gpio_free(57);
-	} else if (batt_vol >= 4100) {
+		gpio_free(CHR_1A);
+	} else if (batt_vol >= 4200) {
 		g_health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	} 
 
@@ -324,8 +375,8 @@ static void gasgauge_param_reset(){
 	}
 	if (batt_vol == 0 && g_health < POWER_SUPPLY_HEALTH_DEAD) {
 		g_health = POWER_SUPPLY_HEALTH_DEAD;
-	} else if (batt_vol > 0 && g_health != POWER_SUPPLY_HEALTH_OVERVOLTAGE 
-				&& g_health != POWER_SUPPLY_HEALTH_OVERHEAT) {
+	} else if (batt_vol > 0 && 
+				batt_vol < 4200 && g_health != POWER_SUPPLY_HEALTH_OVERHEAT) {
 		g_health = POWER_SUPPLY_HEALTH_GOOD;
 	}
 
@@ -404,45 +455,30 @@ static void polling_reset_func()
 static irqreturn_t chgdet_irqhandler(int irq, void *dev_id)
 {
 	g_charging_state = (gpio_get_value(GPIO_CHR_DET)) ? CHARGER_STATE_NOT_CHARGING : CHARGER_STATE_CHARGING;
-	power_supply_changed(g_ps_battery);
+	power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
 	return IRQ_HANDLED;
 }
 #endif	// FLAG_CHARGER_DETECT
-#endif	// T_FIH	///-T_FIH
 
 
 static int goldfish_battery_probe(struct platform_device *pdev)
 {
-	int ret;
-	struct goldfish_battery_data *data;
+	int ret, i;
 
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
-	if (data == NULL) {
-		ret = -ENOMEM;
-		goto err_data_alloc_failed;
-	}
-	spin_lock_init(&data->lock);
+    /* init power supplier framework */
+    for (i = 0; i < ARRAY_SIZE(zeus_power_supplies); i++) {
+        ret = power_supply_register(&pdev->dev, &zeus_power_supplies[i]);
+        if (ret) {
+            printk(KERN_ERR "Failed to register power supply (%d)\n", ret);
+		    return ret;
+		}
+    }
 
-	data->battery.properties = goldfish_battery_props;
-	data->battery.num_properties = ARRAY_SIZE(goldfish_battery_props);
-	data->battery.get_property = goldfish_battery_get_property;
-	data->battery.name = "battery";
-	data->battery.type = POWER_SUPPLY_TYPE_BATTERY;
-
-	ret = power_supply_register(&pdev->dev, &data->battery);
-	if (ret)
-		goto err_battery_failed;
-
-	platform_set_drvdata(pdev, data);
-	battery_data = data;
-
-#ifdef T_FIH	///+T_FIH
 #ifdef FLAG_BATTERY_POLLING
 	setup_timer(&polling_timer, polling_timer_func, 0);
 	mod_timer(&polling_timer,
 			jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
 
-	g_ps_battery = &(data->battery);
 #endif	// FLAG_BATTERY_POLLING
 
 #ifdef FLAG_CHARGER_DETECT
@@ -457,21 +493,15 @@ static int goldfish_battery_probe(struct platform_device *pdev)
 	if (ret)
 		printk(KERN_INFO "<ubh> goldfish_battery_probe 06. : request_irq fails!!!\r\n");
 #endif	// FLAG_CHARGER_DETECT
-#endif	// T_FIH	///-T_FIH
 
 	return 0;
 
-err_battery_failed:
-	kfree(data);
-err_data_alloc_failed:
-	return ret;
 }
 
 static int goldfish_battery_remove(struct platform_device *pdev)
 {
-	struct goldfish_battery_data *data = platform_get_drvdata(pdev);
+	int i;
 
-#ifdef T_FIH	///+T_FIH
 #ifdef FLAG_CHARGER_DETECT
 	free_irq(MSM_GPIO_TO_INT(GPIO_CHR_DET), NULL);
 	gpio_free(GPIO_CHR_DET);
@@ -480,15 +510,66 @@ static int goldfish_battery_remove(struct platform_device *pdev)
 #ifdef FLAG_BATTERY_POLLING
 	del_timer_sync(&polling_timer);
 #endif	// FLAG_BATTERY_POLLING
-#endif	// T_FIH	///-T_FIH
 
-	power_supply_unregister(&data->battery);
+    for (i = 0; i < ARRAY_SIZE(zeus_power_supplies); i++) {
+        power_supply_unregister(&zeus_power_supplies[i]);
+    }
 
-	free_irq(data->irq, data);
-	kfree(data);
-	battery_data = NULL;
 	return 0;
 }
+
+#ifdef CONFIG_USB_GADGET_MSM_72K 
+void zeus_update_usb_status(enum chg_type chgtype) {
+
+	/* Prepare enabler/USB/1A GPIOs */
+	int rc = gpio_request(CHR_EN, "CHR_EN");
+	if (rc) printk(KERN_ERR "%s: CHR_EN setting failed! rc = %d\n", __func__, rc);
+	rc = gpio_request(USBSET, "USBSET");
+	if (rc) printk(KERN_ERR "%s: USBSET setting failed! rc = %d\n", __func__, rc);
+	rc = gpio_request(CHR_1A, "CHR_1A");
+	if (rc) printk(KERN_ERR "%s: CHR_1A setting failed! rc = %d\n", __func__, rc);
+
+	switch (chgtype) {
+		case USB_CHG_TYPE__WALLCHARGER:
+			/* Turn on charger IC */
+			gpio_set_value(CHR_EN,0);
+			/* Set the charging current to 1A */
+			gpio_set_value(USBSET,1);
+			gpio_set_value(CHR_1A,1);
+			current_charger = CHARGER_AC;
+			break;
+		case USB_CHG_TYPE__CARKIT:
+			/* Turn on charger IC */
+			gpio_set_value(CHR_EN,0);
+			/* Set the charging current to 100mA */
+			gpio_set_value(USBSET,0);
+			gpio_set_value(CHR_1A,1);
+			current_charger = CHARGER_AC;
+			break;
+		case USB_CHG_TYPE__SDP:
+			/* Turn on charger IC */
+			gpio_set_value(CHR_EN,0);
+			/* Set the charging current to 100mA */
+			gpio_set_value(USBSET,0);
+			gpio_set_value(CHR_1A,0);
+			current_charger = CHARGER_USB;
+			break;
+		case USB_CHG_TYPE__INVALID:
+		default:
+			gpio_set_value(USBSET,0);
+			/* Turn off charger IC */
+			gpio_set_value(CHR_EN,1);
+			current_charger = CHARGER_BATTERY;
+			break;
+	}
+	gpio_free(CHR_EN);
+	gpio_free(USBSET);
+	gpio_free(CHR_1A);
+
+	power_supply_changed(&zeus_power_supplies[current_charger]);
+}
+EXPORT_SYMBOL(zeus_update_usb_status);
+#endif
 
 static struct platform_driver goldfish_battery_device = {
 	.probe		= goldfish_battery_probe,
@@ -511,6 +592,6 @@ static void __exit goldfish_battery_exit(void)
 module_init(goldfish_battery_init);
 module_exit(goldfish_battery_exit);
 
-MODULE_AUTHOR("Mike Lockwood lockwood@android.com");
+MODULE_AUTHOR("Several");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Battery driver for the Goldfish emulator");
+MODULE_DESCRIPTION("Battery driver the FIH Zeus Battery");
