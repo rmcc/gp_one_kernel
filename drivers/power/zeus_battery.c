@@ -31,6 +31,7 @@
 #include <mach/msm_hsusb.h>
 #endif
 
+#include <asm/gpio.h>
 #define USBSET 97
 #define CHR_EN 33
 #define CHR_1A 57
@@ -324,7 +325,6 @@ static void polling_timer_func(unsigned long unused)
 #endif	// FLAG_BATTERY_POLLING
 
 #ifdef FLAG_CHARGER_DETECT
-#include <asm/gpio.h>
 
 /* FIH_ADQ, Kenny { */
 static void gasgauge_param_reset(){
@@ -522,6 +522,7 @@ static int goldfish_battery_remove(struct platform_device *pdev)
 void zeus_update_usb_status(enum chg_type chgtype) {
 
 	/* Prepare enabler/USB/1A GPIOs */
+	/* This is somehow wrong. Leave it off for now  */
 	int rc = gpio_request(CHR_EN, "CHR_EN");
 	if (rc) printk(KERN_ERR "%s: CHR_EN setting failed! rc = %d\n", __func__, rc);
 	rc = gpio_request(USBSET, "USBSET");
@@ -532,33 +533,33 @@ void zeus_update_usb_status(enum chg_type chgtype) {
 	switch (chgtype) {
 		case USB_CHG_TYPE__WALLCHARGER:
 			/* Turn on charger IC */
-			gpio_set_value(CHR_EN,0);
 			/* Set the charging current to 1A */
-			gpio_set_value(USBSET,1);
+			gpio_set_value(CHR_EN,0);
 			gpio_set_value(CHR_1A,1);
+			gpio_set_value(USBSET,1);
 			current_charger = CHARGER_AC;
 			break;
 		case USB_CHG_TYPE__CARKIT:
 			/* Turn on charger IC */
-			gpio_set_value(CHR_EN,0);
 			/* Set the charging current to 100mA */
-			gpio_set_value(USBSET,0);
-			gpio_set_value(CHR_1A,1);
+			gpio_set_value(CHR_EN,0);
+			gpio_set_value(CHR_1A,0);
+			gpio_set_value(USBSET,1);
 			current_charger = CHARGER_AC;
 			break;
 		case USB_CHG_TYPE__SDP:
 			/* Turn on charger IC */
-			gpio_set_value(CHR_EN,0);
 			/* Set the charging current to 100mA */
-			gpio_set_value(USBSET,0);
+			gpio_set_value(CHR_EN,0);
 			gpio_set_value(CHR_1A,0);
+			gpio_set_value(USBSET,1);
 			current_charger = CHARGER_USB;
 			break;
 		case USB_CHG_TYPE__INVALID:
 		default:
-			gpio_set_value(USBSET,0);
 			/* Turn off charger IC */
 			gpio_set_value(CHR_EN,1);
+			gpio_set_value(USBSET,0);
 			current_charger = CHARGER_BATTERY;
 			break;
 	}
@@ -581,6 +582,12 @@ static struct platform_driver goldfish_battery_device = {
 
 static int __init goldfish_battery_init(void)
 {
+	/*+++FIH_ADQ+++*/
+	gpio_tlmm_config(GPIO_CFG(33, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(97, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(57, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	/*+++FIH_ADQ+++*/
+
 	return platform_driver_register(&goldfish_battery_device);
 }
 
