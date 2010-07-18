@@ -26,7 +26,8 @@
 int adsp_pmem_fixup(struct msm_adsp_module *module, void **addr,
 		    unsigned long len);
 int adsp_pmem_fixup_kvaddr(struct msm_adsp_module *module, void **addr,
-			   unsigned long *kvaddr, unsigned long len);
+			   unsigned long *kvaddr, unsigned long len,
+			   struct file **filp, unsigned long *offset);
 int adsp_pmem_paddr_fixup(struct msm_adsp_module *module, void **addr);
 
 int adsp_vfe_verify_cmd(struct msm_adsp_module *module,
@@ -229,7 +230,7 @@ struct adsp_rtos_mp_mtoa_init_info_type {
 
 struct adsp_rtos_mp_mtoa_s_type {
 	struct adsp_rtos_mp_mtoa_header_type mp_mtoa_header;
-#if CONFIG_ADSP_RPC_VER <= 0x30001
+#if CONFIG_ADSP_RPC_VER == 0x30001
 	uint32_t desc_field;
 #endif
 	union {

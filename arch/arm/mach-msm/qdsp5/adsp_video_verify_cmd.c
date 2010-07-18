@@ -15,7 +15,9 @@
  * GNU General Public License for more details.
  *
  */
+
 #include <linux/io.h>
+#include <linux/android_pmem.h>
 
 #include <mach/qdsp5/qdsp5vdeccmdi.h>
 #include "adsp.h"
@@ -39,7 +41,8 @@ static int pmem_fixup_high_low(unsigned short *high,
 				unsigned short size_high,
 				unsigned short size_low,
 				struct msm_adsp_module *module,
-				unsigned long *addr, unsigned long *size)
+				unsigned long *addr, unsigned long *size,
+				struct file **filp, unsigned long *offset)
 {
 	void *phys_addr;
 	unsigned long phys_size;
@@ -47,14 +50,19 @@ static int pmem_fixup_high_low(unsigned short *high,
 
 	phys_addr = high_low_short_to_ptr(*high, *low);
 	phys_size = (unsigned long)high_low_short_to_ptr(size_high, size_low);
-	MM_DBG("virt %x %x\n", phys_addr, phys_size);
-	if (adsp_pmem_fixup_kvaddr(module, &phys_addr, &kvaddr, phys_size)) {
-		MM_DBG("ah%x al%x sh%x sl%x addr %x size %x\n",
-			*high, *low, size_high, size_low, phys_addr, phys_size);
+	MM_DBG("virt %x %x\n", (unsigned int)phys_addr,
+			(unsigned int)phys_size);
+	if (adsp_pmem_fixup_kvaddr(module, &phys_addr, &kvaddr, phys_size,
+				filp, offset)) {
+		MM_ERR("ah%x al%x sh%x sl%x addr %x size %x\n",
+			*high, *low, size_high,
+			size_low, (unsigned int)phys_addr,
+			(unsigned int)phys_size);
 		return -1;
 	}
 	ptr_to_high_low_short(phys_addr, high, low);
-	MM_DBG("phys %x %x\n", phys_addr, phys_size);
+	MM_DBG("phys %x %x\n", (unsigned int)phys_addr,
+			(unsigned int)phys_size);
 	if (addr)
 		*addr = kvaddr;
 	if (size)
@@ -74,11 +82,14 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	unsigned short *frame_buffer_high, *frame_buffer_low;
 	unsigned long frame_buffer_size;
 	unsigned short frame_buffer_size_high, frame_buffer_size_low;
+	struct file *filp = NULL;
+	unsigned long offset = 0;
+	struct pmem_addr pmem_addr;
 
-	MM_DBG("cmd_size %d cmd_id %d cmd_data %x\n", cmd_size, cmd_id, cmd_data);
+	MM_DBG("cmd_size %d cmd_id %d cmd_data %x\n", cmd_size, cmd_id,
+					(unsigned int)cmd_data);
 	if (cmd_id != VIDDEC_CMD_SUBFRAME_PKT) {
-		printk(KERN_INFO "adsp_video: unknown video packet %u\n",
-			cmd_id);
+		MM_INFO("adsp_video: unknown video packet %u\n", cmd_id);
 		return 0;
 	}
 	if (cmd_size < sizeof(viddec_cmd_subframe_pkt))
@@ -92,7 +103,8 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 				pkt->subframe_packet_size_low,
 				module,
 				&subframe_pkt_addr,
-				&subframe_pkt_size))
+				&subframe_pkt_size,
+				&filp, &offset))
 		return -1;
 
 	/* deref those ptrs and check if they are a frame header packet */
@@ -100,7 +112,8 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	
 	switch (frame_header_pkt[0]) {
 	case 0xB201: /* h.264 vld in dsp */
-		num_addr = skip = 8;
+		num_addr = 16;
+		skip = 0;
 		start_pos = 5;
 		break;
 	case 0x8201: /* h.264 vld in arm */
@@ -138,7 +151,7 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 					frame_buffer_size_high,
 					frame_buffer_size_low,
 					module,
-					NULL, NULL))
+					NULL, NULL, NULL, NULL))
 			return -1;
 		frame_buffer_high += 2;
 		frame_buffer_low += 2;
@@ -148,8 +161,21 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	frame_buffer_low += 2*skip;
 	if (pmem_fixup_high_low(frame_buffer_high, frame_buffer_low,
 				frame_buffer_size_high,
-				frame_buffer_size_low, module, NULL, NULL))
+				frame_buffer_size_low, module, NULL, NULL,
+				NULL, NULL))
 		return -1;
+	if (filp) {
+		pmem_addr.vaddr = subframe_pkt_addr;
+		pmem_addr.length = ((subframe_pkt_size + 31) & (~31)) + 32;
+		pmem_addr.offset = offset;
+		if (pmem_cache_maint (filp, PMEM_CLEAN_CACHES, &pmem_addr)) {
+			MM_ERR("Cache operation failed for phys addr high %x"
+				" addr low %x\n", pkt->subframe_packet_high,
+				pkt->subframe_packet_low);
+			return -1;
+		}
+	}
+
 	return 0;
 }
 
@@ -159,10 +185,9 @@ int adsp_video_verify_cmd(struct msm_adsp_module *module,
 {
 	switch (queue_id) {
 	case QDSP_mpuVDecPktQueue:
-		MM_DBG("\n");
 		return verify_vdec_pkt_cmd(module, cmd_data, cmd_size);
 	default:
-		printk(KERN_INFO "unknown video queue %u\n", queue_id);
+		MM_INFO("unknown video queue %u\n", queue_id);
 		return 0;
 	}
 }

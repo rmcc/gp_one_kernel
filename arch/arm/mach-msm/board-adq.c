@@ -92,17 +92,23 @@
 #define FIH_ADB_DEVICE_ID_LENGTH 12
 /*} FIH, SungSCLee, 2009/05/21,  */
 
+
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
   #define MSM_RAM_CONSOLE_SIZE    128 * SZ_1K
 #else
   #define MSM_RAM_CONSOLE_SIZE    0
 #endif
 
-#define MSM_PMEM_MDP_SIZE	0x800000   //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
-#define MSM_PMEM_ADSP_SIZE	0x1400000 - MSM_RAM_CONSOLE_SIZE //0xa00000  //0x800000  //FIH_ADQ,JOE HSU ,Fix PMEM_ADSP allocate issue
-#define MSM_FB_SIZE		0x100000  //0x400000  //original: 0x200000 //FIH_ADQ,JOE HSU // CHIH CHIA change from 0x200000 to 0x100000
+#define MSM_PMEM_AUDIO_SIZE 0x121000
+/* Using upper 1/2MB of Apps Bootloader memory*/
+#define MSM_PMEM_AUDIO_START_ADDR   0x80000ul
 
+#define MSM_PMEM_MDP_SIZE	0x800000 
+#define MSM_PMEM_ADSP_SIZE	0x1400000 - MSM_RAM_CONSOLE_SIZE
+#define MSM_FB_SIZE		0x100000
 #define MSM_PMEM_BASE		0x00200000
+
+
 #define MSM_PMEM_LIMIT		0x01F00000 // must match PHYS_OFFSET at mach/memory.h		//CHIH CHIA, change from 0x02000000 to 0x01F00000
 #define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
 #define MSM_PMEM_ADSP_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE 
@@ -352,7 +358,104 @@ static struct platform_device msm_device_snd = {
 		.platform_data = &msm_device_snd_endpoints
 	},
 };
-// --- FIH_ADQ ---
+
+#define DEC0_FORMAT ((1<<MSM_ADSP_CODEC_MP3)| \
+	(1<<MSM_ADSP_CODEC_AAC)|(1<<MSM_ADSP_CODEC_WMA)| \
+	(1<<MSM_ADSP_CODEC_WMAPRO)|(1<<MSM_ADSP_CODEC_AMRWB)| \
+	(1<<MSM_ADSP_CODEC_AMRNB)|(1<<MSM_ADSP_CODEC_WAV)| \
+	(1<<MSM_ADSP_CODEC_ADPCM)|(1<<MSM_ADSP_CODEC_YADPCM)| \
+	(1<<MSM_ADSP_CODEC_EVRC)|(1<<MSM_ADSP_CODEC_QCELP))
+#define DEC1_FORMAT ((1<<MSM_ADSP_CODEC_WAV)|(1<<MSM_ADSP_CODEC_ADPCM)| \
+	(1<<MSM_ADSP_CODEC_YADPCM)|(1<<MSM_ADSP_CODEC_QCELP))
+#define DEC2_FORMAT ((1<<MSM_ADSP_CODEC_WAV)|(1<<MSM_ADSP_CODEC_ADPCM)| \
+	(1<<MSM_ADSP_CODEC_YADPCM)|(1<<MSM_ADSP_CODEC_QCELP))
+
+#ifdef CONFIG_ARCH_MSM7X25
+#define DEC3_FORMAT 0
+#define DEC4_FORMAT 0
+#else
+#define DEC3_FORMAT ((1<<MSM_ADSP_CODEC_WAV)|(1<<MSM_ADSP_CODEC_ADPCM)| \
+	(1<<MSM_ADSP_CODEC_YADPCM)|(1<<MSM_ADSP_CODEC_QCELP))
+#define DEC4_FORMAT (1<<MSM_ADSP_CODEC_MIDI)
+#endif
+
+static unsigned int dec_concurrency_table[] = {
+	/* Audio LP */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DMA)), 0,
+	0, 0, 0,
+
+	/* Concurrency 1 */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC4_FORMAT),
+
+	 /* Concurrency 2 */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC4_FORMAT),
+
+	/* Concurrency 3 */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC4_FORMAT),
+
+	/* Concurrency 4 */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC4_FORMAT),
+
+	/* Concurrency 5 */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC4_FORMAT),
+
+	/* Concurrency 6 */
+	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
+	(DEC4_FORMAT),
+};
+
+#define DEC_INFO(name, queueid, decid, nr_codec) { .module_name = name, \
+	.module_queueid = queueid, .module_decid = decid, \
+	.nr_codec_support = nr_codec}
+
+static struct msm_adspdec_info dec_info_list[] = {
+	DEC_INFO("AUDPLAY0TASK", 13, 0, 11), /* AudPlay0BitStreamCtrlQueue */
+	DEC_INFO("AUDPLAY1TASK", 14, 1, 4),  /* AudPlay1BitStreamCtrlQueue */
+	DEC_INFO("AUDPLAY2TASK", 15, 2, 4),  /* AudPlay2BitStreamCtrlQueue */
+	DEC_INFO("AUDPLAY3TASK", 16, 3, 0),  /* AudPlay3BitStreamCtrlQueue */
+#if 0
+	DEC_INFO("AUDPLAY4TASK", 17, 4, 0),  /* AudPlay4BitStreamCtrlQueue */
+#endif
+};
+
+static struct msm_adspdec_database msm_device_adspdec_database = {
+	.num_dec = ARRAY_SIZE(dec_info_list),
+	.num_concurrency_support = (ARRAY_SIZE(dec_concurrency_table) / \
+					ARRAY_SIZE(dec_info_list)),
+	.dec_concurrency_table = dec_concurrency_table,
+	.dec_info_list = dec_info_list,
+};
+
+static struct platform_device msm_device_adspdec = {
+	.name = "msm_adspdec",
+	.id = -1,
+	.dev    = {
+		.platform_data = &msm_device_adspdec_database
+	},
+};
 
 
 #ifdef CONFIG_USB_MSM_OTG_72K
@@ -396,7 +499,13 @@ static struct android_pmem_platform_data android_pmem_pdata = {
 static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.name = "pmem_adsp",
 	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
-	.cached = 0,
+	.cached = 1,
+};
+
+static struct android_pmem_platform_data android_pmem_audio_pdata = {
+    .name = "pmem_audio",
+    .allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
+    .cached = 0,
 };
 
 static struct platform_device android_pmem_device = {
@@ -409,6 +518,12 @@ static struct platform_device android_pmem_adsp_device = {
 	.name = "android_pmem",
 	.id = 1,
 	.dev = { .platform_data = &android_pmem_adsp_pdata },
+};
+
+static struct platform_device android_pmem_audio_device = {
+    .name = "android_pmem",
+    .id = 2,
+    .dev = { .platform_data = &android_pmem_audio_pdata },
 };
 
 // +++ FIH_ADQ +++ , added by henry.wang
@@ -1168,6 +1283,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_tssc,
 	&android_pmem_device,
 	&android_pmem_adsp_device,
+	&android_pmem_audio_device,
 //FIH_ADQ,JOE HSU 
 #ifdef CONFIG_SPI_GPIO
 	&lcdc_spigpio_device,
@@ -1189,6 +1305,7 @@ static struct platform_device *devices[] __initdata = {
 	&pmic_rpc_device,
 	// added by henry.wang
 	&msm_device_snd,
+    &msm_device_adspdec,
 ///-FIH_ADQ
 /* } FIH_ADQ, AudiPCHuang, 2009/04/02 */
 };
@@ -1615,6 +1732,11 @@ static void __init msm_msm7x25_allocate_memory_regions(void)
 	       "for adsp pmem\n", size, (unsigned long)MSM_PMEM_ADSP_BASE);
 /* } FIH_ADQ, Ming */
 
+    size = MSM_PMEM_AUDIO_SIZE ;
+    android_pmem_audio_pdata.start = MSM_PMEM_AUDIO_START_ADDR ;
+    android_pmem_audio_pdata.size = size;
+    pr_info("allocating %lu bytes (at %lx physical) for audio "
+        "pmem arena\n", size , MSM_PMEM_AUDIO_START_ADDR);
 
 }
 

@@ -227,11 +227,10 @@ static long snd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 
 		avc_msg.args.avc_ctl = cpu_to_be32(avc);
+		avc_msg.args.cb_func = -1;
+		avc_msg.args.client_data = 0;
 
-		vmsg.args.cb_func = -1;
-		vmsg.args.client_data = 0;
-
-		pr_info("snd_avc_ctl %d\n", avc);
+		MM_INFO("snd_avc_ctl %d\n", avc);
 
 		rc = msm_rpc_call(snd->ept,
 			SND_AVC_CTL_PROC,

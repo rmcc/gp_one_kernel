@@ -112,8 +112,11 @@ static int snd_msm_device_get(struct snd_kcontrol *kcontrol,
 int msm_snd_init_rpc_ids(void)
 {
 	snd_rpc_ids.prog	= 0x30000002;
-	//snd_rpc_ids.vers	= 0x00020001;
+#ifdef CONFIG_MACH_ADQ
 	snd_rpc_ids.vers	= 0x00010001;
+#else
+	snd_rpc_ids.vers	= 0x00020001;
+#endif
 	/*
 	 * The magic number 2 corresponds to the rpc call
 	 * index for snd_set_device

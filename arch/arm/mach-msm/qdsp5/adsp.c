@@ -411,12 +411,12 @@ int __msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 				module->name, module->id);
 		return -ENXIO;
 	}
-	/*if (dsp_queue_addr >= QDSP_MAX_NUM_QUEUES) {
+	if (dsp_queue_addr >= QDSP_MAX_NUM_QUEUES) {
 		spin_unlock_irqrestore(&adsp_write_lock, flags);
 		MM_ERR("Invalid Queue Index: %d\n", dsp_queue_addr);
 		return -ENXIO;
 	}
-	if (adsp_validate_queue(module->id, dsp_queue_addr, cmd_size)) {
+	/*if (adsp_validate_queue(module->id, dsp_queue_addr, cmd_size)) {
 		spin_unlock_irqrestore(&adsp_write_lock, flags);
 		return -EINVAL;
 	}*/
@@ -587,7 +587,6 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 		(struct rpc_adsp_rtos_modem_to_app_args_t *)req;
 	uint32_t event;
 	uint32_t proc_id;
-	uint32_t desc_field;
 	uint32_t module_id;
 	uint32_t image;
 	struct msm_adsp_module *module;
@@ -608,9 +607,7 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 	event = be32_to_cpu(args->mtoa_pkt.mp_mtoa_header.event);
 	proc_id = be32_to_cpu(args->mtoa_pkt.mp_mtoa_header.proc_id);
 
-	desc_field = be32_to_cpu(args->mtoa_pkt.desc_field);
-
-	if (desc_field == RPC_ADSP_RTOS_INIT_INFO) {
+	if (event == RPC_ADSP_RTOS_INIT_INFO) {
 		MM_INFO("INIT_INFO Event\n");
 		sptr = &args->mtoa_pkt.adsp_rtos_mp_mtoa_data.mp_mtoa_init_packet;
 
@@ -733,10 +730,14 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 	}
 	rpc_send_accepted_void_reply(rpc_cb_server_client, req->xid,
 				     RPC_ACCEPTSTAT_SUCCESS);
-	mutex_unlock(&module->lock);
+#ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
 	event_addr = (uint32_t *)req;
-	module->ops->event(module->driver_data, EVENT_MSG_ID,
-				EVENT_LEN, read_event);
+	module->ops->event(module->driver_data,
+				EVENT_MSG_ID,
+				EVENT_LEN,
+				read_event);
+#endif
+	mutex_unlock(&module->lock);
 }
 
 static int handle_adsp_rtos_mtoa(struct rpc_request_hdr *req)

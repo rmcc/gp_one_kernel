@@ -184,10 +184,10 @@ static void audrectask_dsp_event(void *data, unsigned id, size_t len,
 		}
 		break;
 	}
-	/*case ADSP_MESSAGE_ID:
+	case ADSP_MESSAGE_ID:
 		MM_DBG("Received ADSP event: module \
 				enable/disable(audrectask)\n");
-		break;*/
+		break;
 	default:
 		MM_ERR("unknown event %d\n", id);
 	}

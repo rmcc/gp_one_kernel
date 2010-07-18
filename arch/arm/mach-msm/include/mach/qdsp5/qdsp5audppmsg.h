@@ -53,12 +53,13 @@ Notice that changes are listed in reverse chronological order.
 	sizeof(audpp_msg_status_msg)
 
 #define AUDPP_MSG_STATUS_SLEEP		0x0000
-#define AUDPP_MSG__STATUS_INIT		0x0001
-#define AUDPP_MSG_MSG_STATUS_CFG	0x0002
+#define AUDPP_MSG_STATUS_INIT		0x0001
+#define AUDPP_MSG_STATUS_CFG		0x0002
 #define AUDPP_MSG_STATUS_PLAY		0x0003
 
-#define AUDPP_MSG_REASON_MIPS	0x0000
+#define AUDPP_MSG_REASON_NONE	0x0000
 #define AUDPP_MSG_REASON_MEM	0x0001
+#define AUDPP_MSG_REASON_NODECODER 0x0002
 
 typedef struct{
 	unsigned short dec_id;
@@ -314,5 +315,7 @@ struct audpp_msg_routing_ack {
 } __attribute__((packed));
 
 #define AUDPP_MSG_FLUSH_ACK 0x000A
+
+#define ADSP_MESSAGE_ID 0xFFFF
 
 #endif /* QDSP5AUDPPMSG_H */

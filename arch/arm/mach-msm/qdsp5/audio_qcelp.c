@@ -32,6 +32,7 @@
 #include <linux/debugfs.h>
 #include <linux/earlysuspend.h>
 #include <linux/list.h>
+#include <linux/android_pmem.h>
 #include <asm/ioctls.h>
 #include <mach/msm_adsp.h>
 #include <linux/msm_audio.h>
@@ -42,8 +43,6 @@
 #include <mach/debug_mm.h>
 
 #include "audmgr.h"
-/* for queue ids - should be relative to module number*/
-#include "adsp.h"
 
 #define BUFSZ 1094 /* QCELP 13K Hold 600ms packet data = 36 * 30 and
 		      14 bytes of meta in */
@@ -111,7 +110,7 @@ struct audio {
 	struct mutex read_lock;
 	wait_queue_head_t read_wait;    /* Wait queue for read */
 	char *read_data;        /* pointer to reader buffer */
-	dma_addr_t read_phys;   /* physical address of reader buffer */
+	int32_t read_phys;   /* physical address of reader buffer */
 	uint8_t read_next;      /* index to input buffers to be read next */
 	uint8_t fill_next;      /* index to buffer that DSP should be filling */
 	uint8_t pcm_buf_count;  /* number of pcm buffer allocated */
@@ -123,7 +122,7 @@ struct audio {
 
 	/* data allocated for various buffers */
 	char *data;
-	dma_addr_t phys;
+	int32_t phys; /* physical address of write buffer */
 
 	int mfield; /* meta field embedded in data */
 	int rflush; /* Read  flush */
@@ -135,24 +134,33 @@ struct audio {
 	uint8_t pcm_feedback:1; /* set when non-tunnel mode */
 	uint8_t buf_refresh:1;
 	int teos; /* valid only if tunnel mode & no data left for decoder */
+	enum msm_aud_decoder_state dec_state;	/* Represents decoder state */
 
-	unsigned volume;
-
+	const char *module_name;
+	unsigned queue_id;
 	uint16_t dec_id;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct audqcelp_suspend_ctl suspend_ctl;
 #endif
 
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *dentry;
+#endif
+
+	wait_queue_head_t wait;
 	struct list_head free_event_queue;
 	struct list_head event_queue;
 	wait_queue_head_t event_wait;
 	spinlock_t event_queue_lock;
 	struct mutex get_event_lock;
 	int event_abort;
-};
 
-static struct audio the_qcelp_audio;
+	int eq_enable;
+	int eq_needs_commit;
+	audpp_cmd_cfg_object_params_eqalizer eq;
+	audpp_cmd_cfg_object_params_volume vol_pan;
+};
 
 static int auddec_dsp_config(struct audio *audio, int enable);
 static void audpp_cmd_cfg_adec_params(struct audio *audio);
@@ -170,34 +178,37 @@ static int audqcelp_enable(struct audio *audio)
 	struct audmgr_config cfg;
 	int rc;
 
-	pr_debug("audqcelp_enable()\n");
-
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	if (audio->enabled)
 		return 0;
 
 	audio->out_tail = 0;
 	audio->out_needed = 0;
 
-	cfg.tx_rate = RPC_AUD_DEF_SAMPLE_RATE_NONE;
-	cfg.rx_rate = RPC_AUD_DEF_SAMPLE_RATE_48000;
-	cfg.def_method = RPC_AUD_DEF_METHOD_PLAYBACK;
-	cfg.codec = RPC_AUD_DEF_CODEC_13K;
-	cfg.snd_method = RPC_SND_METHOD_MIDI;
+	if (audio->pcm_feedback == TUNNEL_MODE_PLAYBACK) {
+		cfg.tx_rate = RPC_AUD_DEF_SAMPLE_RATE_NONE;
+		cfg.rx_rate = RPC_AUD_DEF_SAMPLE_RATE_48000;
+		cfg.def_method = RPC_AUD_DEF_METHOD_PLAYBACK;
+		cfg.codec = RPC_AUD_DEF_CODEC_13K;
+		cfg.snd_method = RPC_SND_METHOD_MIDI;
 
-	rc = audmgr_enable(&audio->audmgr, &cfg);
-	if (rc < 0)
-		return rc;
+		rc = audmgr_enable(&audio->audmgr, &cfg);
+		if (rc < 0)
+			return rc;
+	}
 
 	if (msm_adsp_enable(audio->audplay)) {
-		pr_err("audio: msm_adsp_enable(audplay) failed\n");
-		audmgr_disable(&audio->audmgr);
+		MM_ERR("msm_adsp_enable(audplay) failed\n");
+		if (audio->pcm_feedback == TUNNEL_MODE_PLAYBACK)
+			audmgr_disable(&audio->audmgr);
 		return -ENODEV;
 	}
 
 	if (audpp_enable(audio->dec_id, audqcelp_dsp_event, audio)) {
-		pr_err("audio: audpp_enable() failed\n");
+		MM_ERR("audpp_enable() failed\n");
 		msm_adsp_disable(audio->audplay);
-		audmgr_disable(&audio->audmgr);
+		if (audio->pcm_feedback == TUNNEL_MODE_PLAYBACK)
+			audmgr_disable(&audio->audmgr);
 		return -ENODEV;
 	}
 	audio->enabled = 1;
@@ -207,18 +218,30 @@ static int audqcelp_enable(struct audio *audio)
 /* must be called with audio->lock held */
 static int audqcelp_disable(struct audio *audio)
 {
-	pr_debug("audqcelp_disable()\n");
+	int rc = 0;
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	if (audio->enabled) {
 		audio->enabled = 0;
+		audio->dec_state = MSM_AUD_DECODER_STATE_NONE;
 		auddec_dsp_config(audio, 0);
+		rc = wait_event_interruptible_timeout(audio->wait,
+				audio->dec_state != MSM_AUD_DECODER_STATE_NONE,
+				msecs_to_jiffies(MSM_AUD_DECODER_WAIT_MS));
+		if (rc == 0)
+			rc = -ETIMEDOUT;
+		else if (audio->dec_state != MSM_AUD_DECODER_STATE_CLOSE)
+			rc = -EFAULT;
+		else
+			rc = 0;
 		wake_up(&audio->write_wait);
 		wake_up(&audio->read_wait);
 		msm_adsp_disable(audio->audplay);
 		audpp_disable(audio->dec_id, audio);
-		audmgr_disable(&audio->audmgr);
+		if (audio->pcm_feedback == TUNNEL_MODE_PLAYBACK)
+			audmgr_disable(&audio->audmgr);
 		audio->out_needed = 0;
 	}
-	return 0;
+	return rc;
 }
 
 /* ------------------- dsp --------------------- */
@@ -235,25 +258,22 @@ static void audqcelp_update_pcm_buf_entry(struct audio *audio,
 	for (index = 0; index < payload[1]; index++) {
 		if (audio->in[audio->fill_next].addr ==
 			payload[2 + index * 2]) {
-			pr_debug("audqcelp_update_pcm_buf_entry: \
-				in[%d] ready\n", audio->fill_next);
+			MM_DBG("in[%d] ready\n", audio->fill_next);
 			audio->in[audio->fill_next].used =
 			payload[3 + index * 2];
 			if ((++audio->fill_next) == audio->pcm_buf_count)
 				audio->fill_next = 0;
 		} else {
-			pr_err(
-			"audqcelp_update_pcm_buf_entry: expected=%x ret=%x\n",
-			audio->in[audio->fill_next].addr,
-			payload[1 + index * 2]);
+			MM_ERR("expected=%x ret=%x\n",
+				audio->in[audio->fill_next].addr,
+				payload[1 + index * 2]);
 			break;
 		}
 	}
 	if (audio->in[audio->fill_next].used == 0) {
 		audqcelp_buffer_refresh(audio);
 	} else {
-		pr_debug("audqcelp_update_pcm_buf_entry: \
-				read cannot keep up\n");
+		MM_DBG("read cannot keep up\n");
 		audio->buf_refresh = 1;
 	}
 	wake_up(&audio->read_wait);
@@ -267,7 +287,7 @@ static void audplay_dsp_event(void *data, unsigned id, size_t len,
 	uint32_t msg[28];
 	getevent(msg, sizeof(msg));
 
-	pr_debug("audplay_dsp_event: msg_id=%x\n", id);
+	MM_DBG("msg_id=%x\n", id);
 
 	switch (id) {
 	case AUDPLAY_MSG_DEC_NEEDS_DATA:
@@ -278,8 +298,12 @@ static void audplay_dsp_event(void *data, unsigned id, size_t len,
 		audqcelp_update_pcm_buf_entry(audio, msg);
 		break;
 
+	case ADSP_MESSAGE_ID:
+		MM_DBG("Received ADSP event: module enable(audplaytask)\n");
+		break;
+
 	default:
-		pr_debug("unexpected message from decoder \n");
+		MM_ERR("unexpected message from decoder \n");
 	}
 }
 
@@ -292,12 +316,26 @@ static void audqcelp_dsp_event(void *private, unsigned id, uint16_t *msg)
 			unsigned status = msg[1];
 
 			switch (status) {
-			case AUDPP_DEC_STATUS_SLEEP:
-				pr_debug("decoder status: sleep \n");
+			case AUDPP_DEC_STATUS_SLEEP: {
+				uint16_t reason = msg[2];
+				MM_DBG("decoder status:sleep reason = \
+						0x%04x\n", reason);
+				if ((reason == AUDPP_MSG_REASON_MEM)
+					|| (reason ==
+					AUDPP_MSG_REASON_NODECODER)) {
+					audio->dec_state =
+					MSM_AUD_DECODER_STATE_FAILURE;
+					wake_up(&audio->wait);
+				} else if (reason == AUDPP_MSG_REASON_NONE) {
+					/* decoder is in disable state */
+					audio->dec_state =
+						MSM_AUD_DECODER_STATE_CLOSE;
+					wake_up(&audio->wait);
+				}
 				break;
-
+			}
 			case AUDPP_DEC_STATUS_INIT:
-				pr_debug("decoder status: init \n");
+				MM_DBG("decoder status: init \n");
 				if (audio->pcm_feedback)
 					audpp_cmd_cfg_routing_mode(audio);
 				else
@@ -305,43 +343,47 @@ static void audqcelp_dsp_event(void *private, unsigned id, uint16_t *msg)
 				break;
 
 			case AUDPP_DEC_STATUS_CFG:
-				pr_debug("decoder status: cfg \n");
+				MM_DBG("decoder status: cfg \n");
 				break;
 			case AUDPP_DEC_STATUS_PLAY:
-				pr_debug("decoder status: play \n");
+				MM_DBG("decoder status: play \n");
 				if (audio->pcm_feedback) {
 					audqcelp_config_hostpcm(audio);
 					audqcelp_buffer_refresh(audio);
 				}
+				audio->dec_state =
+					MSM_AUD_DECODER_STATE_SUCCESS;
+				wake_up(&audio->wait);
 				break;
 			default:
-				pr_debug("unknown decoder status \n");
+				MM_ERR("unknown decoder status\n");
 			}
 			break;
 		}
 	case AUDPP_MSG_CFG_MSG:
 		if (msg[0] == AUDPP_MSG_ENA_ENA) {
-			pr_debug("audqcelp_dsp_event: CFG_MSG ENABLE\n");
+			MM_DBG("CFG_MSG ENABLE\n");
 			auddec_dsp_config(audio, 1);
 			audio->out_needed = 0;
 			audio->running = 1;
-			audpp_set_volume_and_pan(audio->dec_id, audio->volume,
-						 0);
+			audpp_dsp_set_vol_pan(audio->dec_id, &audio->vol_pan);
+			audpp_dsp_set_eq(audio->dec_id,	audio->eq_enable,
+								&audio->eq);
 			audpp_avsync(audio->dec_id, 22050);
 		} else if (msg[0] == AUDPP_MSG_ENA_DIS) {
-			pr_debug("audqcelp_dsp_event: CFG_MSG DISABLE\n");
+			MM_DBG("CFG_MSG DISABLE\n");
 			audpp_avsync(audio->dec_id, 0);
 			audio->running = 0;
 		} else {
-			pr_debug("audqcelp_dsp_event: CFG_MSG %d?\n", msg[0]);
+			MM_DBG("CFG_MSG %d?\n", msg[0]);
 		}
 		break;
 	case AUDPP_MSG_ROUTING_ACK:
-		pr_debug("audqcelp_dsp_event: ROUTING_ACK mode=%d\n", msg[1]);
+		MM_DBG("ROUTING_ACK mode=%d\n", msg[1]);
 		audpp_cmd_cfg_adec_params(audio);
 		break;
 	case AUDPP_MSG_FLUSH_ACK:
-		pr_debug("%s: FLUSH_ACK\n", __func__);
+		MM_DBG("FLUSH_ACK\n");
 		audio->wflush = 0;
 		audio->rflush = 0;
 		wake_up(&audio->write_wait);
@@ -349,12 +391,12 @@ static void audqcelp_dsp_event(void *private, unsigned id, uint16_t *msg)
 			audqcelp_buffer_refresh(audio);
 		break;
 	case AUDPP_MSG_PCMDMAMISSED:
-		pr_debug("%s: PCMDMAMISSED\n", __func__);
+		MM_DBG("PCMDMAMISSED\n");
 		audio->teos = 1;
 		wake_up(&audio->write_wait);
 		break;
 	default:
-		pr_debug("audqcelp_dsp_event: UNKNOWN (%d)\n", id);
+		MM_ERR("UNKNOWN (%d)\n", id);
 	}
 
 }
@@ -364,22 +406,24 @@ struct msm_adsp_ops audplay_adsp_ops_qcelp = {
 };
 
 #define audplay_send_queue0(audio, cmd, len) \
-	msm_adsp_write(audio->audplay, QDSP_uPAudPlay0BitStreamCtrlQueue, \
-		       cmd, len)
+	msm_adsp_write(audio->audplay, audio->queue_id, \
+		cmd, len)
 
 static int auddec_dsp_config(struct audio *audio, int enable)
 {
-	audpp_cmd_cfg_dec_type cmd;
+	u16 cfg_dec_cmd[AUDPP_CMD_CFG_DEC_TYPE_LEN / sizeof(unsigned short)];
 
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.cmd_id = AUDPP_CMD_CFG_DEC_TYPE;
+	memset(cfg_dec_cmd, 0, sizeof(cfg_dec_cmd));
+
+	cfg_dec_cmd[0] = AUDPP_CMD_CFG_DEC_TYPE;
 	if (enable)
-		cmd.dec0_cfg = AUDPP_CMD_UPDATDE_CFG_DEC |
-		    AUDPP_CMD_ENA_DEC_V | AUDDEC_DEC_QCELP;
+		cfg_dec_cmd[1 + audio->dec_id] = AUDPP_CMD_UPDATDE_CFG_DEC |
+			AUDPP_CMD_ENA_DEC_V | AUDDEC_DEC_QCELP;
 	else
-		cmd.dec0_cfg = AUDPP_CMD_UPDATDE_CFG_DEC | AUDPP_CMD_DIS_DEC_V;
+		cfg_dec_cmd[1 + audio->dec_id] = AUDPP_CMD_UPDATDE_CFG_DEC |
+			AUDPP_CMD_DIS_DEC_V;
 
-	return audpp_send_queue1(&cmd, sizeof(cmd));
+	return audpp_send_queue1(&cfg_dec_cmd, sizeof(cfg_dec_cmd));
 }
 
 static void audpp_cmd_cfg_adec_params(struct audio *audio)
@@ -399,7 +443,7 @@ static void audpp_cmd_cfg_adec_params(struct audio *audio)
 static void audpp_cmd_cfg_routing_mode(struct audio *audio)
 {
 	struct audpp_cmd_routing_mode cmd;
-	pr_debug("audpp_cmd_cfg_routing_mode()\n");
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd_id = AUDPP_CMD_ROUTING_MODE;
 	cmd.object_number = audio->dec_id;
@@ -438,8 +482,8 @@ static void audqcelp_buffer_refresh(struct audio *audio)
 	refresh_cmd.buf0_address = audio->in[audio->fill_next].addr;
 	refresh_cmd.buf0_length = audio->in[audio->fill_next].size;
 	refresh_cmd.buf_read_count = 0;
-	pr_debug("audplay_buffer_fresh: buf0_addr=%x buf0_len=%d\n",
-		refresh_cmd.buf0_address, refresh_cmd.buf0_length);
+	MM_DBG("buf0_addr=%x buf0_len=%d\n", refresh_cmd.buf0_address,
+			refresh_cmd.buf0_length);
 
 	(void)audplay_send_queue0(audio, &refresh_cmd, sizeof(refresh_cmd));
 }
@@ -448,7 +492,7 @@ static void audqcelp_config_hostpcm(struct audio *audio)
 {
 	struct audplay_cmd_hpcm_buf_cfg cfg_cmd;
 
-	pr_debug("audqcelp_config_hostpcm()\n");
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	cfg_cmd.cmd_id = AUDPLAY_CMD_HPCM_BUF_CFG;
 	cfg_cmd.max_buffers = 1;
 	cfg_cmd.byte_swap = 0;
@@ -478,7 +522,7 @@ static void audqcelp_send_data(struct audio *audio, unsigned needed)
 		audio->out_needed = 1;
 		frame = audio->out + audio->out_tail;
 		if (frame->used == 0xffffffff) {
-			pr_debug("frame %d free\n", audio->out_tail);
+			MM_DBG("frame %d free\n", audio->out_tail);
 			frame->used = 0;
 			audio->out_tail ^= 1;
 			wake_up(&audio->write_wait);
@@ -496,7 +540,7 @@ static void audqcelp_send_data(struct audio *audio, unsigned needed)
 		frame = audio->out + audio->out_tail;
 		if (frame->used) {
 			BUG_ON(frame->used == 0xffffffff);
-			pr_debug("frame %d busy\n", audio->out_tail);
+			MM_DBG("frame %d busy\n", audio->out_tail);
 			audplay_dsp_send_data_avail(audio, audio->out_tail,
 						    frame->used);
 			frame->used = 0xffffffff;
@@ -636,13 +680,31 @@ static long audqcelp_process_event_req(struct audio *audio, void __user *arg)
 	return rc;
 }
 
+static int audio_enable_eq(struct audio *audio, int enable)
+{
+	if (audio->eq_enable == enable && !audio->eq_needs_commit)
+		return 0;
+
+	audio->eq_enable = enable;
+
+	if (audio->running) {
+		audpp_dsp_set_eq(audio->dec_id, enable, &audio->eq);
+		audio->eq_needs_commit = 0;
+	}
+	return 0;
+}
+
 static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
 	struct audio *audio = file->private_data;
-	int rc = 0;
+	int rc = -EINVAL;
+	unsigned long flags = 0;
+	uint16_t enable_mask;
+	int enable;
+	int prev_state;
 
-	pr_debug("audqcelp_ioctl() cmd = %d\n", cmd);
+	MM_DBG("cmd = %d\n", cmd);
 
 	if (cmd == AUDIO_GET_STATS) {
 		struct msm_audio_stats stats;
@@ -652,18 +714,59 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 		return 0;
 	}
-	if (cmd == AUDIO_SET_VOLUME) {
-		unsigned long flags;
+
+	switch (cmd) {
+	case AUDIO_ENABLE_AUDPP:
+		if (copy_from_user(&enable_mask, (void *) arg,
+						sizeof(enable_mask))) {
+			rc = -EFAULT;
+			break;
+		}
+
 		spin_lock_irqsave(&audio->dsp_lock, flags);
-		audio->volume = arg;
-		if (audio->running)
-			audpp_set_volume_and_pan(audio->dec_id, arg, 0);
+		enable = (enable_mask & EQ_ENABLE) ? 1 : 0;
+		audio_enable_eq(audio, enable);
 		spin_unlock_irqrestore(&audio->dsp_lock, flags);
-		return 0;
+		rc = 0;
+		break;
+	case AUDIO_SET_VOLUME:
+		spin_lock_irqsave(&audio->dsp_lock, flags);
+		audio->vol_pan.volume = arg;
+		if (audio->running)
+			audpp_dsp_set_vol_pan(audio->dec_id, &audio->vol_pan);
+		spin_unlock_irqrestore(&audio->dsp_lock, flags);
+		rc = 0;
+		break;
+
+	case AUDIO_SET_PAN:
+		spin_lock_irqsave(&audio->dsp_lock, flags);
+		audio->vol_pan.pan = arg;
+		if (audio->running)
+			audpp_dsp_set_vol_pan(audio->dec_id, &audio->vol_pan);
+		spin_unlock_irqrestore(&audio->dsp_lock, flags);
+		rc = 0;
+		break;
+
+	case AUDIO_SET_EQ:
+		prev_state = audio->eq_enable;
+		audio->eq_enable = 0;
+		if (copy_from_user(&audio->eq.num_bands, (void *) arg,
+				sizeof(audio->eq) -
+				(AUDPP_CMD_CFG_OBJECT_PARAMS_COMMON_LEN + 2))) {
+			rc = -EFAULT;
+			break;
+		}
+		audio->eq_enable = prev_state;
+		audio->eq_needs_commit = 1;
+		rc = 0;
+		break;
 	}
 
+	if (-EINVAL != rc)
+		return rc;
+
 	if (cmd == AUDIO_GET_EVENT) {
-		pr_debug("%s: AUDIO_GET_EVENT\n", __func__);
+		MM_DBG("AUDIO_GET_EVENT\n");
 		if (mutex_trylock(&audio->get_event_lock)) {
 			rc = audqcelp_process_event_req(audio,
 					(void __user *) arg);
@@ -682,16 +785,30 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 	mutex_lock(&audio->lock);
 	switch (cmd) {
 	case AUDIO_START:
+		MM_DBG("AUDIO_START\n");
+		audio->dec_state = MSM_AUD_DECODER_STATE_NONE;
 		rc = audqcelp_enable(audio);
+		if (!rc) {
+			rc = wait_event_interruptible_timeout(audio->wait,
+				audio->dec_state != MSM_AUD_DECODER_STATE_NONE,
+				msecs_to_jiffies(MSM_AUD_DECODER_WAIT_MS));
+			MM_INFO("dec_state %d rc = %d\n", audio->dec_state, rc);
+
+			if (audio->dec_state != MSM_AUD_DECODER_STATE_SUCCESS)
+				rc = -ENODEV;
+			else
+				rc = 0;
+		}
 		break;
 	case AUDIO_STOP:
+		MM_DBG("AUDIO_STOP\n");
 		rc = audqcelp_disable(audio);
 		audio->stopped = 1;
 		audqcelp_ioport_reset(audio);
 		audio->stopped = 0;
 		break;
 	case AUDIO_FLUSH:
-		pr_debug("%s: AUDIO_FLUSH\n", __func__);
+		MM_DBG("AUDIO_FLUSH\n");
 		audio->rflush = 1;
 		audio->wflush = 1;
 		audqcelp_ioport_reset(audio);
@@ -700,8 +817,7 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 			rc = wait_event_interruptible(audio->write_wait,
 				!audio->wflush);
 			if (rc < 0) {
-				pr_err("%s: AUDIO_FLUSH interrupted\n",
-					__func__);
+				MM_ERR("AUDIO_FLUSH interrupted\n");
 				rc = -EINTR;
 			}
 		} else {
@@ -717,8 +833,8 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 				break;
 			}
 			audio->mfield = config.meta_field;
-			pr_debug("AUDIO_SET_CONFIG applicable for \
-					metafield configuration\n");
+			MM_DBG("AUDIO_SET_CONFIG applicable \
+				for metafield configuration\n");
 			rc = 0;
 			break;
 		}
@@ -743,7 +859,7 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 	case AUDIO_GET_PCM_CONFIG:{
 			struct msm_audio_pcm_config config;
 
-			config.pcm_feedback = 0;
+			config.pcm_feedback = audio->pcm_feedback;
 			config.buffer_count = PCM_BUF_MAX_COUNT;
 			config.buffer_size = PCM_BUFSZ_MIN;
 			if (copy_to_user((void *)arg, &config,
@@ -761,6 +877,12 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 				rc = -EFAULT;
 				break;
 			}
+			if (config.pcm_feedback != audio->pcm_feedback) {
+				MM_ERR("Not sufficient permission to"
+					 "change the playback mode\n");
+				rc = -EACCES;
+				break;
+			}
 			if ((config.buffer_count > PCM_BUF_MAX_COUNT) ||
 				(config.buffer_count == 1))
 				config.buffer_count = PCM_BUF_MAX_COUNT;
@@ -770,22 +892,28 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 
 			/* Check if pcm feedback is required */
 			if ((config.pcm_feedback) && (!audio->read_data)) {
-				pr_debug(
-				"audqcelp_ioctl: allocate PCM buf %d\n",
+				MM_DBG("allocate PCM buf %d\n",
 				config.buffer_count * config.buffer_size);
-				audio->read_data = dma_alloc_coherent(NULL,
-				config.buffer_size * config.buffer_count,
-				&audio->read_phys, GFP_KERNEL);
-				if (!audio->read_data) {
-					pr_err(
-					"audqcelp_ioctl: no mem for pcm buf\n"
-					);
+				audio->read_phys = pmem_kalloc(
+							config.buffer_size *
+							config.buffer_count,
+							PMEM_MEMTYPE_EBI1|
+							PMEM_ALIGNMENT_4K);
+				if (IS_ERR((void *)audio->read_phys)) {
 					rc = -ENOMEM;
+					break;
+				}
+				audio->read_data = ioremap(audio->read_phys,
+							config.buffer_size *
+							config.buffer_count);
+				if (!audio->read_data) {
+					MM_ERR("no mem for read buf\n");
+					rc = -ENOMEM;
+					pmem_kfree(audio->read_phys);
 				} else {
 					uint8_t index;
 					uint32_t offset = 0;
 
-					audio->pcm_feedback = 1;
 					audio->buf_refresh = 0;
 					audio->pcm_buf_count =
 						config.buffer_count;
@@ -803,6 +931,10 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 						audio->in[index].used = 0;
 						offset += config.buffer_size;
 					}
+					MM_DBG("read buf: phy addr 0x%08x \
+						kernel addr 0x%08x\n",
+						audio->read_phys,
+						(int)audio->read_data);
 					rc = 0;
 				}
 			} else {
@@ -811,7 +943,7 @@ static long audqcelp_ioctl(struct file *file, unsigned int cmd,
 			break;
 		}
 	case AUDIO_PAUSE:
-		pr_debug("%s: AUDIO_PAUSE %ld\n", __func__, arg);
+		MM_DBG("AUDIO_PAUSE %ld\n", arg);
 		rc = audpp_pause(audio->dec_id, (int) arg);
 		break;
 	default:
@@ -828,8 +960,7 @@ static int audqcelp_fsync(struct file *file, struct dentry *dentry,
 	struct audio *audio = file->private_data;
 	int rc = 0;
 
-	pr_debug("%s()\n", __func__);
-
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	if (!audio->running || audio->pcm_feedback) {
 		rc = -EINVAL;
 		goto done_nolock;
@@ -878,7 +1009,7 @@ static ssize_t audqcelp_read(struct file *file, char __user *buf, size_t count,
 		return 0; /* PCM feedback is not enabled. Nothing to read */
 
 	mutex_lock(&audio->read_lock);
-	pr_debug("audqcelp_read() %d \n", count);
+	MM_DBG("%d\n", count);
 	while (count > 0) {
 		rc = wait_event_interruptible(audio->read_wait,
 				(audio->in[audio->read_next].used > 0) ||
@@ -895,18 +1026,16 @@ static ssize_t audqcelp_read(struct file *file, char __user *buf, size_t count,
 			/* Read must happen in frame boundary. Since driver does
 			not know frame size, read count must be greater or equal
 			to size of PCM samples */
-			pr_debug("audqcelp_read:read stop - partial frame\n");
+			MM_DBG("read stop - partial frame\n");
 			break;
 		} else {
-			pr_debug("audqcelp_read: read from in[%d]\n",
-				audio->read_next);
+			MM_DBG("read from in[%d]\n", audio->read_next);
 			/* order reads from the output buffer */
 			rmb();
 			if (copy_to_user(buf,
 				audio->in[audio->read_next].data,
 				audio->in[audio->read_next].used)) {
-				pr_err("audqcelp_read: invalid addr %x \n",
-					(unsigned int)buf);
+				MM_ERR("invalid addr %x\n", (unsigned int)buf);
 				rc = -EFAULT;
 				break;
 			}
@@ -930,7 +1059,7 @@ static ssize_t audqcelp_read(struct file *file, char __user *buf, size_t count,
 	 */
 	if (audio->buf_refresh && !audio->rflush) {
 		audio->buf_refresh = 0;
-		pr_debug("audqcelp_read: kick start pcm feedback again\n");
+		MM_DBG("kick start pcm feedback again\n");
 		audqcelp_buffer_refresh(audio);
 	}
 
@@ -939,7 +1068,7 @@ static ssize_t audqcelp_read(struct file *file, char __user *buf, size_t count,
 	if (buf > start)
 		rc = buf - start;
 
-	pr_debug("audqcelp_read: read %d bytes\n", rc);
+	MM_DBG("read %d bytes\n", rc);
 	return rc;
 }
 
@@ -990,7 +1119,7 @@ static ssize_t audqcelp_write(struct file *file, const char __user *buf,
 	int rc = 0, eos_condition = AUDQCELP_EOS_NONE;
 	unsigned short mfield_size = 0;
 
-	pr_debug("%s: cnt=%d\n", __func__, count);
+	MM_DBG("cnt=%d\n", count);
 
 	if (count & 1)
 		return -EINVAL;
@@ -1003,7 +1132,7 @@ static ssize_t audqcelp_write(struct file *file, const char __user *buf,
 					      (frame->used == 0)
 						|| (audio->stopped)
 						|| (audio->wflush));
-		pr_debug("audqcelp_write() buffer available\n");
+		MM_DBG("buffer available\n");
 		if (rc < 0)
 			break;
 		if (audio->stopped || audio->wflush) {
@@ -1022,8 +1151,7 @@ static ssize_t audqcelp_write(struct file *file, const char __user *buf,
 					rc = -EINVAL;
 					break;
 				}
-				pr_debug("audio_write: mf offset_val %x\n",
-						mfield_size);
+				MM_DBG("mf offset_val %x\n", mfield_size);
 				if (copy_from_user(cpy_ptr, buf, mfield_size)) {
 					rc = -EFAULT;
 					break;
@@ -1033,7 +1161,7 @@ static ssize_t audqcelp_write(struct file *file, const char __user *buf,
 				 */
 				if (cpy_ptr[AUDQCELP_EOS_FLG_OFFSET] &
 						AUDQCELP_EOS_FLG_MASK) {
-					pr_debug("audio_write: EOS SET\n");
+					MM_DBG("EOS SET\n");
 					eos_condition = AUDQCELP_EOS_SET;
 					if (mfield_size == count) {
 						buf += mfield_size;
@@ -1047,7 +1175,7 @@ static ssize_t audqcelp_write(struct file *file, const char __user *buf,
 				buf += mfield_size;
 			} else {
 				mfield_size = 0;
-				pr_debug("audio_write: continuous buffer\n");
+				MM_DBG("continuous buffer\n");
 			}
 			frame->mfield_sz = mfield_size;
 		}
@@ -1085,7 +1213,7 @@ static int audqcelp_release(struct inode *inode, struct file *file)
 	audqcelp_flush(audio);
 	audqcelp_flush_pcm_buf(audio);
 	msm_adsp_put(audio->audplay);
-	audio->audplay = NULL;
+	audpp_adec_free(audio->dec_id);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	unregister_early_suspend(&audio->suspend_ctl.node);
 #endif
@@ -1093,19 +1221,18 @@ static int audqcelp_release(struct inode *inode, struct file *file)
 	audio->event_abort = 1;
 	wake_up(&audio->event_wait);
 	audqcelp_reset_event_queue(audio);
-	if (audio->data)
-		dma_free_coherent(NULL, DMASZ, audio->data, audio->phys);
-	audio->data = NULL;
+	iounmap(audio->data);
+	pmem_kfree(audio->phys);
 	if (audio->read_data) {
-		dma_free_coherent(NULL,
-				 audio->in[0].size * audio->pcm_buf_count,
-				 audio->read_data, audio->read_phys);
-		audio->read_data = NULL;
+		iounmap(audio->read_data);
+		pmem_kfree(audio->read_phys);
 	}
-	audio->pcm_feedback = 0;
-	audio->rflush = 0;
-	audio->wflush = 0;
 	mutex_unlock(&audio->lock);
+#ifdef CONFIG_DEBUG_FS
+	if (audio->dentry)
+		debugfs_remove(audio->dentry);
+#endif
+	kfree(audio);
 	return 0;
 }
 
@@ -1124,7 +1251,7 @@ static void audqcelp_post_event(struct audio *audio, int type,
 	} else {
 		e_node = kmalloc(sizeof(struct audqcelp_event), GFP_ATOMIC);
 		if (!e_node) {
-			pr_err("%s: No mem to post event %d\n", __func__, type);
+			MM_ERR("No mem to post event %d\n", type);
 			return;
 		}
 	}
@@ -1144,7 +1271,7 @@ static void audqcelp_suspend(struct early_suspend *h)
 		container_of(h, struct audqcelp_suspend_ctl, node);
 	union msm_audio_event_payload payload;
 
-	pr_debug("%s()\n", __func__);
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	audqcelp_post_event(ctl->audio, AUDIO_EVENT_SUSPEND, payload);
 }
 
@@ -1154,104 +1281,10 @@ static void audqcelp_resume(struct early_suspend *h)
 		container_of(h, struct audqcelp_suspend_ctl, node);
 	union msm_audio_event_payload payload;
 
-	pr_debug("%s()\n", __func__);
+	MM_DBG("\n"); /* Macro prints the file name and function */
 	audqcelp_post_event(ctl->audio, AUDIO_EVENT_RESUME, payload);
 }
 #endif
-
-static int audqcelp_open(struct inode *inode, struct file *file)
-{
-	struct audio *audio = &the_qcelp_audio;
-	int rc, i;
-	struct audqcelp_event *e_node = NULL;
-
-	mutex_lock(&audio->lock);
-
-	if (audio->opened) {
-		pr_err("audio: busy\n");
-		rc = -EBUSY;
-		goto done;
-	}
-
-	audio->data = dma_alloc_coherent(NULL, DMASZ,
-					 &audio->phys, GFP_KERNEL);
-	if (!audio->data) {
-		pr_err("audio: could not allocate DMA buffers\n");
-		rc = -ENOMEM;
-		goto done;
-	}
-
-	rc = audmgr_open(&audio->audmgr);
-	if (rc)
-		goto err;
-
-	rc = msm_adsp_get("AUDPLAY0TASK", &audio->audplay,
-		&audplay_adsp_ops_qcelp, audio);
-	if (rc) {
-		pr_err("audio: failed to get audplay0 dsp module\n");
-		audmgr_close(&audio->audmgr);
-		goto err;
-	}
-
-	audio->dec_id = 0;
-
-	audio->out[0].data = audio->data + 0;
-	audio->out[0].addr = audio->phys + 0;
-	audio->out[0].size = BUFSZ;
-
-	audio->out[1].data = audio->data + BUFSZ;
-	audio->out[1].addr = audio->phys + BUFSZ;
-	audio->out[1].size = BUFSZ;
-
-	audio->volume = 0x2000;	/* Q13 1.0 */
-
-	audqcelp_flush(audio);
-
-	file->private_data = audio;
-	audio->opened = 1;
-	audio->event_abort = 0;
-	audio->mfield = 0;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	audio->suspend_ctl.node.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
-	audio->suspend_ctl.node.resume = audqcelp_resume;
-	audio->suspend_ctl.node.suspend = audqcelp_suspend;
-	audio->suspend_ctl.audio = audio;
-	register_early_suspend(&audio->suspend_ctl.node);
-#endif
-	for (i = 0; i < AUDQCELP_EVENT_NUM; i++) {
-		e_node = kmalloc(sizeof(struct audqcelp_event), GFP_KERNEL);
-		if (e_node)
-			list_add_tail(&e_node->list, &audio->free_event_queue);
-		else {
-			pr_info("%s: event pkt alloc failed\n", __func__);
-			break;
-		}
-	}
-	rc = 0;
-done:
-	mutex_unlock(&audio->lock);
-	return rc;
-err:
-	dma_free_coherent(NULL, DMASZ, audio->data, audio->phys);
-	mutex_unlock(&audio->lock);
-	return rc;
-}
-
-static const struct file_operations audio_qcelp_fops = {
-	.owner = THIS_MODULE,
-	.open = audqcelp_open,
-	.release = audqcelp_release,
-	.read = audqcelp_read,
-	.write = audqcelp_write,
-	.unlocked_ioctl = audqcelp_ioctl,
-	.fsync = audqcelp_fsync,
-};
-
-struct miscdevice audio_qcelp_misc = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = "msm_qcelp",
-	.fops = &audio_qcelp_fops,
-};
 
 #ifdef CONFIG_DEBUG_FS
 static ssize_t audqcelp_debug_open(struct inode *inode, struct file *file)
@@ -1283,7 +1316,7 @@ static ssize_t audqcelp_debug_read(struct file *file, char __user *buf,
 	n += scnprintf(buffer + n, debug_bufmax - n,
 			"pcm_buf_sz %d \n", audio->in[0].size);
 	n += scnprintf(buffer + n, debug_bufmax - n,
-			"volume %x \n", audio->volume);
+			"volume %x \n", audio->vol_pan.volume);
 	mutex_unlock(&audio->lock);
 	/* Following variables are only useful for debugging when
 	 * when playback halts unexpectedly. Thus, no mutual exclusion
@@ -1295,6 +1328,8 @@ static ssize_t audqcelp_debug_read(struct file *file, char __user *buf,
 			"rflush %d\n", audio->rflush);
 	n += scnprintf(buffer + n, debug_bufmax - n,
 			"running %d \n", audio->running);
+	n += scnprintf(buffer + n, debug_bufmax - n,
+			"dec state %d \n", audio->dec_state);
 	n += scnprintf(buffer + n, debug_bufmax - n,
 			"out_needed %d \n", audio->out_needed);
 	n += scnprintf(buffer + n, debug_bufmax - n,
@@ -1314,8 +1349,6 @@ static ssize_t audqcelp_debug_read(struct file *file, char __user *buf,
 	for (i = 0; i < audio->pcm_buf_count; i++)
 		n += scnprintf(buffer + n, debug_bufmax - n,
 				"in[%d].size %d \n", i, audio->in[i].used);
-	printk(KERN_INFO "size_debug_buffer %d \n", n);
-	n++;
 	buffer[n] = 0;
 	return simple_read_from_buffer(buf, count, ppos, buffer, n);
 }
@@ -1326,32 +1359,174 @@ static const struct file_operations audqcelp_debug_fops = {
 };
 #endif
 
+static int audqcelp_open(struct inode *inode, struct file *file)
+{
+	struct audio *audio = NULL;
+	int rc, dec_attrb, decid, i;
+	struct audqcelp_event *e_node = NULL;
+#ifdef CONFIG_DEBUG_FS
+	/* 4 bytes represents decoder number, 1 byte for terminate string */
+	char name[sizeof "msm_qcelp_" + 5];
+#endif
+
+	/* Create audio instance, set to zero */
+	audio = kzalloc(sizeof(struct audio), GFP_KERNEL);
+	if (!audio) {
+		MM_ERR("no memory to allocate audio instance\n");
+		rc = -ENOMEM;
+		goto done;
+	}
+	MM_INFO("audio instance 0x%08x created\n", (int)audio);
+
+	/* Allocate the decoder */
+	dec_attrb = AUDDEC_DEC_QCELP;
+	if ((file->f_mode & FMODE_WRITE) &&
+			(file->f_mode & FMODE_READ)) {
+		dec_attrb |= MSM_AUD_MODE_NONTUNNEL;
+		audio->pcm_feedback = NON_TUNNEL_MODE_PLAYBACK;
+	} else if ((file->f_mode & FMODE_WRITE) &&
+			!(file->f_mode & FMODE_READ)) {
+		dec_attrb |= MSM_AUD_MODE_TUNNEL;
+		audio->pcm_feedback = TUNNEL_MODE_PLAYBACK;
+	} else {
+		kfree(audio);
+		rc = -EACCES;
+		goto done;
+	}
+	decid = audpp_adec_alloc(dec_attrb, &audio->module_name,
+			&audio->queue_id);
+	if (decid < 0) {
+		MM_ERR("No free decoder available, freeing instance 0x%08x\n",
+				(int)audio);
+		rc = -ENODEV;
+		kfree(audio);
+		goto done;
+	}
+	audio->dec_id = decid & MSM_AUD_DECODER_MASK;
+
+	audio->phys = pmem_kalloc(DMASZ, PMEM_MEMTYPE_EBI1|PMEM_ALIGNMENT_4K);
+	if (IS_ERR((void *)audio->phys)) {
+		MM_ERR("could not allocate write buffers, freeing instance \
+				0x%08x\n", (int)audio);
+		rc = -ENOMEM;
+		audpp_adec_free(audio->dec_id);
+		kfree(audio);
+		goto done;
+	} else {
+		audio->data = ioremap(audio->phys, DMASZ);
+		if (!audio->data) {
+			MM_ERR("could not allocate write buffers, freeing \
+					instance 0x%08x\n", (int)audio);
+			rc = -ENOMEM;
+			pmem_kfree(audio->phys);
+			audpp_adec_free(audio->dec_id);
+			kfree(audio);
+			goto done;
+		}
+		MM_DBG("write buf: phy addr 0x%08x kernel addr 0x%08x\n",
+				audio->phys, (int)audio->data);
+	}
+
+	if (audio->pcm_feedback == TUNNEL_MODE_PLAYBACK) {
+		rc = audmgr_open(&audio->audmgr);
+		if (rc) {
+			MM_ERR("audmgr open failed, freeing instance \
+					0x%08x\n", (int)audio);
+			goto err;
+		}
+	}
+
+	rc = msm_adsp_get(audio->module_name, &audio->audplay,
+		&audplay_adsp_ops_qcelp, audio);
+	if (rc) {
+		MM_ERR("failed to get %s module, freeing instance 0x%08x\n",
+				audio->module_name, (int)audio);
+		if (audio->pcm_feedback == TUNNEL_MODE_PLAYBACK)
+			audmgr_close(&audio->audmgr);
+		goto err;
+	}
+
+	/* Initialize all locks of audio instance */
+	mutex_init(&audio->lock);
+	mutex_init(&audio->write_lock);
+	mutex_init(&audio->read_lock);
+	mutex_init(&audio->get_event_lock);
+	spin_lock_init(&audio->dsp_lock);
+	init_waitqueue_head(&audio->write_wait);
+	init_waitqueue_head(&audio->read_wait);
+	INIT_LIST_HEAD(&audio->free_event_queue);
+	INIT_LIST_HEAD(&audio->event_queue);
+	init_waitqueue_head(&audio->wait);
+	init_waitqueue_head(&audio->event_wait);
+	spin_lock_init(&audio->event_queue_lock);
+
+	/* Initialize buffer */
+	audio->out[0].data = audio->data + 0;
+	audio->out[0].addr = audio->phys + 0;
+	audio->out[0].size = BUFSZ;
+
+	audio->out[1].data = audio->data + BUFSZ;
+	audio->out[1].addr = audio->phys + BUFSZ;
+	audio->out[1].size = BUFSZ;
+
+	audio->vol_pan.volume = 0x2000;
+
+	audqcelp_flush(audio);
+
+	file->private_data = audio;
+	audio->opened = 1;
+#ifdef CONFIG_DEBUG_FS
+	snprintf(name, sizeof name, "msm_qcelp_%04x", audio->dec_id);
+	audio->dentry = debugfs_create_file(name, S_IFREG | S_IRUGO,
+			NULL, (void *) audio, &audqcelp_debug_fops);
+
+	if (IS_ERR(audio->dentry))
+		MM_DBG("debugfs_create_file failed\n");
+#endif
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	audio->suspend_ctl.node.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
+	audio->suspend_ctl.node.resume = audqcelp_resume;
+	audio->suspend_ctl.node.suspend = audqcelp_suspend;
+	audio->suspend_ctl.audio = audio;
+	register_early_suspend(&audio->suspend_ctl.node);
+#endif
+	for (i = 0; i < AUDQCELP_EVENT_NUM; i++) {
+		e_node = kmalloc(sizeof(struct audqcelp_event), GFP_KERNEL);
+		if (e_node)
+			list_add_tail(&e_node->list, &audio->free_event_queue);
+		else {
+			MM_ERR("event pkt alloc failed\n");
+			break;
+		}
+	}
+done:
+	return rc;
+err:
+	iounmap(audio->data);
+	pmem_kfree(audio->phys);
+	audpp_adec_free(audio->dec_id);
+	kfree(audio);
+	return rc;
+}
+
+static const struct file_operations audio_qcelp_fops = {
+	.owner = THIS_MODULE,
+	.open = audqcelp_open,
+	.release = audqcelp_release,
+	.read = audqcelp_read,
+	.write = audqcelp_write,
+	.unlocked_ioctl = audqcelp_ioctl,
+	.fsync = audqcelp_fsync,
+};
+
+struct miscdevice audio_qcelp_misc = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "msm_qcelp",
+	.fops = &audio_qcelp_fops,
+};
+
 static int __init audqcelp_init(void)
 {
-#ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
-#endif
-
-	mutex_init(&the_qcelp_audio.lock);
-	mutex_init(&the_qcelp_audio.write_lock);
-	mutex_init(&the_qcelp_audio.read_lock);
-	mutex_init(&the_qcelp_audio.get_event_lock);
-	spin_lock_init(&the_qcelp_audio.dsp_lock);
-	init_waitqueue_head(&the_qcelp_audio.write_wait);
-	init_waitqueue_head(&the_qcelp_audio.read_wait);
-	the_qcelp_audio.read_data = NULL;
-
-#ifdef CONFIG_DEBUG_FS
-	dentry = debugfs_create_file("msm_qcelp", S_IFREG | S_IRUGO, NULL,
-			(void *) &the_qcelp_audio, &audqcelp_debug_fops);
-
-	if (IS_ERR(dentry))
-		pr_err("QCELP:%s:debugfs_create_file failed\n", __func__);
-#endif
-	INIT_LIST_HEAD(&the_qcelp_audio.free_event_queue);
-	INIT_LIST_HEAD(&the_qcelp_audio.event_queue);
-	init_waitqueue_head(&the_qcelp_audio.event_wait);
-	spin_lock_init(&the_qcelp_audio.event_queue_lock);
 	return misc_register(&audio_qcelp_misc);
 }
 
