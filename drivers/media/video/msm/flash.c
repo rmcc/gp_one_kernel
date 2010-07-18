@@ -17,6 +17,8 @@
  */
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/pwm.h>
+#include <linux/pmic8058-pwm.h>
 #include <mach/pmic.h>
 #include <mach/camera.h>
 
@@ -101,25 +103,27 @@ int32_t msm_camera_flash_set_led_state(
 {
 	int32_t rc;
 
-  CDBG("flash_set_led_state: %d\n", led_state);
-  switch (led_state) {
-  case MSM_LED_OFF:
-    rc = pmic_flash_led_set_current(0);
-    break;
+	CDBG("flash_set_led_state: %d flash_sr_type=%d\n", led_state,
+	    fdata->flash_src->flash_sr_type);
 
-  case MSM_LED_LOW:
-    rc = pmic_flash_led_set_current(30);
-    break;
+	if (fdata->flash_type != MSM_CAMERA_FLASH_LED)
+		return -ENODEV;
 
-  case MSM_LED_HIGH:
-    rc = pmic_flash_led_set_current(100);
-    break;
+	switch (fdata->flash_src->flash_sr_type) {
+	case MSM_CAMERA_FLASH_SRC_PMIC:
+		rc = msm_camera_flash_pmic(&fdata->flash_src->_fsrc.pmic_src,
+			led_state);
+		break;
 
-  default:
-    rc = -EFAULT;
-    break;
-  }
-  CDBG("flash_set_led_state: return %d\n", rc);
+	case MSM_CAMERA_FLASH_SRC_PWM:
+		rc = msm_camera_flash_pwm(&fdata->flash_src->_fsrc.pwm_src,
+			led_state);
+		break;
 
-  return rc;
+	default:
+		rc = -ENODEV;
+		break;
+	}
+
+	return rc;
 }

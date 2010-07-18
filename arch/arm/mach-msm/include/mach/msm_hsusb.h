@@ -28,6 +28,7 @@
 
 #define USB_PHY_MODEL_65NM	0x100
 #define USB_PHY_MODEL_180NM	0x200
+#define USB_PHY_MODEL_45NM	0x400
 #define USB_PHY_UNDEFINED	0x00
 #define USB_PHY_INTEGRATED	0x01
 #define USB_PHY_EXTERNAL	0x02
@@ -109,9 +110,6 @@ struct msm_hsusb_platform_data {
 	int num_compositions;
 	struct usb_function_map *function_map;
 	int num_functions;
-	/* ULPI data pins used for LPM */
-	unsigned ulpi_data_1_pin;
-	unsigned ulpi_data_3_pin;
 	/* gpio mux function used for LPM */
 	int (*config_gpio)(int config);
 	/* ROC info for AHB Mode */

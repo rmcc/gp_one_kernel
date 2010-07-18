@@ -243,11 +243,11 @@ static ssize_t gpio_direction_store(struct device *dev,
 	if (!test_bit(FLAG_EXPORT, &desc->flags))
 		status = -EIO;
 	else if (sysfs_streq(buf, "high"))
-		status = qcom_gpio_direction_output(gpio, 1);
+		status = gpio_direction_output(gpio, 1);
 	else if (sysfs_streq(buf, "out") || sysfs_streq(buf, "low"))
-		status = qcom_gpio_direction_output(gpio, 0);
+		status = gpio_direction_output(gpio, 0);
 	else if (sysfs_streq(buf, "in"))
-		status = qcom_gpio_direction_input(gpio);
+		status = gpio_direction_input(gpio);
 	else
 		status = -EINVAL;
 
@@ -556,7 +556,7 @@ static ssize_t export_store(struct class *class, const char *buf, size_t len)
 
 	status = gpio_export(gpio, true);
 	if (status < 0)
-		qcom_gpio_free(gpio);
+		gpio_free(gpio);
 	else
 		set_bit(FLAG_SYSFS, &gpio_desc[gpio].flags);
 
@@ -587,7 +587,7 @@ static ssize_t unexport_store(struct class *class, const char *buf, size_t len)
 	 */
 	if (test_and_clear_bit(FLAG_SYSFS, &gpio_desc[gpio].flags)) {
 		status = 0;
-		qcom_gpio_free(gpio);
+		gpio_free(gpio);
 	}
 done:
 	if (status)
@@ -748,7 +748,7 @@ EXPORT_SYMBOL_GPL(gpio_export_link);
  * gpio_unexport - reverse effect of gpio_export()
  * @gpio: gpio to make unavailable
  *
- * This is implicit on qcom_gpio_free().
+ * This is implicit on gpio_free().
  */
 void gpio_unexport(unsigned gpio)
 {

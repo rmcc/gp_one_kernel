@@ -1187,18 +1187,11 @@ static void  eth_bind(void *_ctxt)
 		dev->host_mac[2], dev->host_mac[3],
 		dev->host_mac[4], dev->host_mac[5]);
 
-
-static struct net_device_ops ar6000_netdev_ops = {
-        .ndo_open = eth_open,
-        .ndo_stop = eth_stop,
-        .ndo_change_mtu = usb_eth_change_mtu,
-        .ndo_start_xmit = eth_start_xmit,
-        .ndo_validate_addr = eth_validate_addr,
-        .ndo_get_stats = eth_get_stats,
-};
-
-        net->netdev_ops = &ar6000_netdev_ops;
-
+	net->change_mtu = usb_eth_change_mtu;
+	net->get_stats = eth_get_stats;
+	net->hard_start_xmit = eth_start_xmit;
+	net->open = eth_open;
+	net->stop = eth_stop;
 	/* watchdog_timeo, tx_timeout ...
 	 * set_multicast_list */
 	SET_ETHTOOL_OPS(net, &ops);
