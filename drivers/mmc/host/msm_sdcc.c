@@ -1585,13 +1585,13 @@ msmsdcc_probe(struct platform_device *pdev)
 	writel(MCI_CLEAR_STATIC_MASK, host->base + MMCICLEAR);
 
 	/* Delay needed (MMCIMASK0 was just written above) */
+	msmsdcc_delay(host);
 #ifdef ATH_PATCH
     if (pdev->id == ATH_WLAN_SLOT)
         writel(host->mci_irqenable, host->base + MMCIMASK0);
     else
         writel(MCI_IRQENABLE, host->base + MMCIMASK0);
 #else
-	msmsdcc_delay(host);
 	writel(MCI_IRQENABLE, host->base + MMCIMASK0);
 	host->mci_irqenable = MCI_IRQENABLE;
 #endif

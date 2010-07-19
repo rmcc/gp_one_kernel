@@ -709,6 +709,8 @@ static struct mmc_platform_data ar6k_wifi_data = {
 	.status			= ar6k_wifi_status,
 	.register_status_notify	= ar6k_wifi_status_register,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.nonremovable   = 1,
+	//.sdiowakeup_irq = 26,
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
 	//.dummy52_required = 1,
 #endif
@@ -1515,25 +1517,17 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 
 }
 
-// FIH_ADQ, BillHJChang {
-static uint32_t msm_sdcc_card_detect(struct device * dev_sdcc1)
-{
-	int rc= 0;
-	gpio_request(18,0);
-	rc = gpio_get_value(18);
-	gpio_free(18);	
-	printk(KERN_INFO"%s: SD card detect (%d)\n",__func__, rc);	
-	return rc;
-}
-// FIH_ADQ, BillHJChang }
+#define GPIO_CARDDETECT_INTR    18
+
 static struct mmc_platform_data msm7x25_sdcc_data = {
 	.ocr_mask	= MMC_VDD_28_29,
 	.translate_vdd	= msm_sdcc_setup_power,
-	.status		= msm_sdcc_card_detect,	// FIH_ADQ, BillHJChang
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+	.status_irq = MSM_GPIO_TO_INT(GPIO_CARDDETECT_INTR),
 	.msmsdcc_fmin   = 144000,
 	.msmsdcc_fmid   = 24576000,
 	.msmsdcc_fmax   = 49152000,
+	.nonremovable   = 0,
 };
 
 static void __init msm7x25_init_mmc(void)
@@ -1545,6 +1539,9 @@ static void __init msm7x25_init_mmc(void)
 		return;
 	}
 	sdcc_gpio_init();
+
+	gpio_tlmm_config( GPIO_CFG( GPIO_CARDDETECT_INTR, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	msm_add_sdcc(1, &msm7x25_sdcc_data);
 #endif

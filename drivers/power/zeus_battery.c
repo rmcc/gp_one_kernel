@@ -390,7 +390,7 @@ void temperature_detect()
 	ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
 
 	if( buf > 450 || buf < 0 ){
-		rc = gpio_request(CHR_EN, "CHG_EN");
+		rc = gpio_request(CHR_EN, "CHR_EN");
 		if(rc){
 			printk(KERN_INFO "CHG_EN_REQUEST_FAIL\r\n");	
 		}
@@ -408,7 +408,7 @@ void temperature_detect()
 		}
 		gpio_free(CHR_EN);
 	}else{
-		rc = gpio_request(CHR_EN, "CHG_EN");
+		rc = gpio_request(CHR_EN, "CHR_EN");
 		if(rc){
 			printk(KERN_INFO "CHG_EN_REQUEST_FAIL\r\n");	
 		}
@@ -428,7 +428,7 @@ static void polling_reset_func()
 	if(g_charging_state == CHARGER_STATE_CHARGING || g_charging_state == CHARGER_STATE_FULL)
 	{
 		disable_irq(MSM_GPIO_TO_INT(39));
-		rc = gpio_request(CHR_EN,"CHG_EN");
+		rc = gpio_request(CHR_EN,"CHR_EN");
 		if(rc){
 			printk(KERN_INFO "CHG_EN_REQUEST_FAIL\r\n");	
 		}
