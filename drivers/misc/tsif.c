@@ -39,15 +39,6 @@
 #include <mach/dma.h>
 #include <mach/msm_tsif.h>
 
-/**
- * WORKAROUND_TCR - enable work around for TCR counter
- *
- * tcif_ref_clk have output from TV clock control unit, for this output to work,
- * M/N divider in TV controlling unit should be ON. Modem software do not turn
- * it on unless some TV clock requested. As work around, I turn on tv_enc_clk.
- */
-#define WORKAROUND_TCR
-
 /*
  * TSIF register offsets
  */
@@ -156,10 +147,8 @@ struct msm_tsif_device {
 	struct wake_lock wake_lock;
 	/* clocks */
 	struct clk *tsif_clk;
+	struct clk *tsif_pclk;
 	struct clk *tsif_ref_clk;
-#ifdef WORKAROUND_TCR
-	struct clk *tv_enc_clk;
-#endif /*WORKAROUND_TCR*/
 	/* debugfs */
 	struct dentry *dent_tsif;
 	struct dentry *debugfs_tsif_regs[ARRAY_SIZE(debugfs_tsif_regs)];
@@ -204,45 +193,53 @@ static void tsif_put_clocks(struct msm_tsif_device *tsif_device)
 		clk_put(tsif_device->tsif_clk);
 		tsif_device->tsif_clk = NULL;
 	}
+	if (tsif_device->tsif_pclk) {
+		clk_put(tsif_device->tsif_pclk);
+		tsif_device->tsif_pclk = NULL;
+	}
+
 	if (tsif_device->tsif_ref_clk) {
 		clk_put(tsif_device->tsif_ref_clk);
 		tsif_device->tsif_ref_clk = NULL;
 	}
-#ifdef WORKAROUND_TCR
-	if (tsif_device->tv_enc_clk) {
-		clk_put(tsif_device->tv_enc_clk);
-		tsif_device->tv_enc_clk = NULL;
-	}
-#endif /*WORKAROUND_TCR*/
 }
 
 static int tsif_get_clocks(struct msm_tsif_device *tsif_device)
 {
+	struct msm_tsif_platform_data *pdata =
+		tsif_device->pdev->dev.platform_data;
 	int rc = 0;
-	tsif_device->tsif_clk = clk_get(NULL, "tsif_clk");
-	if (IS_ERR(tsif_device->tsif_clk)) {
-		dev_err(&tsif_device->pdev->dev, "failed to get tsif_clk\n");
-		rc = PTR_ERR(tsif_device->tsif_clk);
-		tsif_device->tsif_clk = NULL;
-		goto ret;
+
+	if (pdata->tsif_clk) {
+		tsif_device->tsif_clk = clk_get(NULL, pdata->tsif_clk);
+		if (IS_ERR(tsif_device->tsif_clk)) {
+			dev_err(&tsif_device->pdev->dev, "failed to get %s\n",
+				pdata->tsif_clk);
+			rc = PTR_ERR(tsif_device->tsif_clk);
+			tsif_device->tsif_clk = NULL;
+			goto ret;
+		}
 	}
-	tsif_device->tsif_ref_clk = clk_get(NULL, "tsif_ref_clk");
-	if (IS_ERR(tsif_device->tsif_ref_clk)) {
-		dev_err(&tsif_device->pdev->dev,
-			"failed to get tsif_ref_clk\n");
-		rc = PTR_ERR(tsif_device->tsif_ref_clk);
-		tsif_device->tsif_ref_clk = NULL;
-		goto ret;
+	if (pdata->tsif_pclk) {
+		tsif_device->tsif_pclk = clk_get(NULL, pdata->tsif_pclk);
+		if (IS_ERR(tsif_device->tsif_pclk)) {
+			dev_err(&tsif_device->pdev->dev, "failed to get %s\n",
+				pdata->tsif_pclk);
+			rc = PTR_ERR(tsif_device->tsif_pclk);
+			tsif_device->tsif_pclk = NULL;
+			goto ret;
+		}
 	}
-#ifdef WORKAROUND_TCR
-	tsif_device->tv_enc_clk = clk_get(NULL, "tv_enc_clk");
-	if (IS_ERR(tsif_device->tv_enc_clk)) {
-		dev_err(&tsif_device->pdev->dev, "failed to get tv_enc_clk\n");
-		rc = PTR_ERR(tsif_device->tv_enc_clk);
-		tsif_device->tv_enc_clk = NULL;
-		goto ret;
+	if (pdata->tsif_ref_clk) {
+		tsif_device->tsif_ref_clk = clk_get(NULL, pdata->tsif_ref_clk);
+		if (IS_ERR(tsif_device->tsif_ref_clk)) {
+			dev_err(&tsif_device->pdev->dev, "failed to get %s\n",
+				pdata->tsif_ref_clk);
+			rc = PTR_ERR(tsif_device->tsif_ref_clk);
+			tsif_device->tsif_ref_clk = NULL;
+			goto ret;
+		}
 	}
-#endif /*WORKAROUND_TCR*/
 	return 0;
 ret:
 	tsif_put_clocks(tsif_device);
@@ -252,17 +249,17 @@ ret:
 static void tsif_clock(struct msm_tsif_device *tsif_device, int on)
 {
 	if (on) {
-#ifdef WORKAROUND_TCR
-		clk_enable(tsif_device->tv_enc_clk);
-#endif /*WORKAROUND_TCR*/
-		clk_enable(tsif_device->tsif_clk);
+		if (tsif_device->tsif_clk)
+			clk_enable(tsif_device->tsif_clk);
+		if (tsif_device->tsif_pclk)
+			clk_enable(tsif_device->tsif_pclk);
 		clk_enable(tsif_device->tsif_ref_clk);
 	} else {
-		clk_disable(tsif_device->tsif_clk);
+		if (tsif_device->tsif_clk)
+			clk_disable(tsif_device->tsif_clk);
+		if (tsif_device->tsif_pclk)
+			clk_disable(tsif_device->tsif_pclk);
 		clk_disable(tsif_device->tsif_ref_clk);
-#ifdef WORKAROUND_TCR
-		clk_disable(tsif_device->tv_enc_clk);
-#endif /*WORKAROUND_TCR*/
 	}
 }
 /* ===clocks end=== */
@@ -299,7 +296,6 @@ static int tsif_start_hw(struct msm_tsif_device *tsif_device)
 		ctl |= (1 << 5);
 		break;
 	case 3: /* manual - control from debugfs */
-		/* ctl |= (2 << 5); */
 		return 0;
 		break;
 	default:
@@ -403,7 +399,7 @@ static void tsif_dma_schedule(struct msm_tsif_device *tsif_device)
 				 "Overflow detected\n");
 		}
 		xfer->wi = tsif_device->dmwi;
-#ifdef TSIF_DEBUG
+#ifdef CONFIG_TSIF_DEBUG
 		dev_info(&tsif_device->pdev->dev,
 			"schedule xfer[%d] -> [%2d]{%2d}\n",
 			i, dmwi0, xfer->wi);
@@ -464,7 +460,7 @@ static void tsif_dmov_complete_func(struct msm_dmov_cmd *cmd,
 		if (w == xfer->wi)
 			tsif_device->stat_soft_drop++;
 		reschedule = (tsif_device->state == tsif_state_running);
-#ifdef TSIF_DEBUG
+#ifdef CONFIG_TSIF_DEBUG
 		/* IFI calculation */
 		/*
 		 * update stat_ifi (inter frame interval)
@@ -697,8 +693,10 @@ static irqreturn_t tsif_irq(int irq, void *dev_id)
 		dev_info(&tsif_device->pdev->dev, "TSIF IRQ: OVERFLOW\n");
 		tsif_device->stat_overflow++;
 	}
-	if (sts_ctl & TSIF_STS_CTL_LOST_SYNC)
+	if (sts_ctl & TSIF_STS_CTL_LOST_SYNC) {
+		dev_info(&tsif_device->pdev->dev, "TSIF IRQ: LOST SYNC\n");
 		tsif_device->stat_lost_sync++;
+	}
 	if (sts_ctl & TSIF_STS_CTL_TIMEOUT) {
 		dev_info(&tsif_device->pdev->dev, "TSIF IRQ: TIMEOUT\n");
 		tsif_device->stat_timeout++;
@@ -935,11 +933,13 @@ static int action_open(struct msm_tsif_device *tsif_device)
 	 * DMA should be scheduled prior to TSIF hardware initialization,
 	 * otherwise "bus error" will be reported by Data Mover
 	 */
-	tsif_dma_schedule(tsif_device);
 	tsif_clock(tsif_device, 1);
+	tsif_dma_schedule(tsif_device);
 	rc = tsif_start_hw(tsif_device);
 	if (rc) {
+		dev_err(&tsif_device->pdev->dev, "Unable to start HW\n");
 		tsif_dma_exit(tsif_device);
+		tsif_clock(tsif_device, 0);
 		return rc;
 	}
 	wake_lock(&tsif_device->wake_lock);
@@ -954,8 +954,8 @@ static int action_close(struct msm_tsif_device *tsif_device)
 	 * DMA should be flushed/stopped prior to TSIF hardware stop,
 	 * otherwise "bus error" will be reported by Data Mover
 	 */
-	tsif_dma_exit(tsif_device);
 	tsif_stop_hw(tsif_device);
+	tsif_dma_exit(tsif_device);
 	tsif_clock(tsif_device, 0);
 	wake_unlock(&tsif_device->wake_lock);
 	return 0;
@@ -1417,5 +1417,5 @@ module_exit(mod_exit);
 
 MODULE_DESCRIPTION("TSIF (Transport Stream Interface)"
 		   " Driver for the MSM chipset");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("GPL v2");
 

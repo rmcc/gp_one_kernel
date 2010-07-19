@@ -23,7 +23,9 @@
 #include <linux/delay.h>
 #include <linux/bootmem.h>
 #include <linux/io.h>
-#include <linux/usb/mass_storage_function.h>
+#ifdef CONFIG_SPI_QSD
+#include <linux/spi/spi.h>
+#endif
 #include <linux/mfd/pmic8058.h>
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>
@@ -63,6 +65,7 @@
 #include <mach/qdsp5v2/aux_pcm.h>
 #include <mach/msm_battery.h>
 #include <mach/rpc_server_handset.h>
+#include <mach/msm_tsif.h>
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -1776,6 +1779,19 @@ static struct usb_composition usb_func_composition[] = {
 	},
 #endif
 };
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.vendor		= "GOOGLE",
+	.product	= "Mass Storage",
+	.release	= 0xFFFF,
+};
+static struct platform_device mass_storage_device = {
+	.name           = "usb_mass_storage",
+	.id             = -1,
+	.dev            = {
+		.platform_data          = &mass_storage_pdata,
+	},
+};
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id	= 0x05C6,
 	.version	= 0x0100,
@@ -2161,6 +2177,27 @@ static struct platform_device qsd_device_spi = {
 	.resource	= qsd_spi_resources,
 };
 
+#ifdef CONFIG_SPI_QSD
+static struct spi_board_info lcdc_sharp_spi_board_info[] __initdata = {
+	{
+		.modalias	= "lcdc_sharp_ls038y7dx01",
+		.mode		= SPI_MODE_1,
+		.bus_num	= 0,
+		.chip_select	= 0,
+		.max_speed_hz	= 26331429,
+	}
+};
+static struct spi_board_info lcdc_toshiba_spi_board_info[] __initdata = {
+	{
+		.modalias       = "lcdc_toshiba_ltm030dd40",
+		.mode           = SPI_MODE_3|SPI_CS_HIGH,
+		.bus_num        = 0,
+		.chip_select    = 0,
+		.max_speed_hz   = 9963243,
+	}
+};
+#endif
+
 static struct msm_gpio qsd_spi_gpio_config_data[] = {
 	{ GPIO_CFG(45, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), "spi_clk" },
 	{ GPIO_CFG(46, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), "spi_cs0" },
@@ -2311,6 +2348,7 @@ static struct platform_device android_pmem_device = {
 	.dev = { .platform_data = &android_pmem_pdata },
 };
 
+#ifndef CONFIG_SPI_QSD
 static int lcdc_gpio_array_num[] = {
 				45, /* spi_clk */
 				46, /* spi_cs  */
@@ -2336,10 +2374,13 @@ static void lcdc_config_gpios(int enable)
 					    ARRAY_SIZE(
 						    lcdc_gpio_config_data));
 }
+#endif
 
 static struct msm_panel_common_pdata lcdc_sharp_panel_data = {
+#ifndef CONFIG_SPI_QSD
 	.panel_config_gpio = lcdc_config_gpios,
 	.gpio_num          = lcdc_gpio_array_num,
+#endif
 	.gpio = 2, 	/* LPG PMIC_GPIO26 channel number */
 };
 
@@ -2963,10 +3004,12 @@ static struct msm_gpio lcd_panel_gpios[] = {
 	{ GPIO_CFG(23, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_red0" },
 	{ GPIO_CFG(24, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_red1" },
 	{ GPIO_CFG(25, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_red2" },
+#ifndef CONFIG_SPI_QSD
 	{ GPIO_CFG(45, 0, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "spi_clk" },
 	{ GPIO_CFG(46, 0, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "spi_cs0" },
 	{ GPIO_CFG(47, 0, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "spi_mosi" },
 	{ GPIO_CFG(48, 0, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA), "spi_miso" },
+#endif
 	{ GPIO_CFG(90, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_pclk" },
 	{ GPIO_CFG(91, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_en" },
 	{ GPIO_CFG(92, 1, GPIO_OUTPUT,  GPIO_NO_PULL, GPIO_2MA), "lcdc_vsync" },
@@ -3492,6 +3535,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #endif
 #ifdef CONFIG_USB_ANDROID
+	&mass_storage_device,
 	&android_usb_device,
 #endif
 	&qsd_device_spi,
@@ -3546,6 +3590,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_vidc_720p,
 #ifdef CONFIG_MSM_GEMINI
 	&msm_gemini_device,
+#endif
+#if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
+	&msm_device_tsif,
 #endif
 	&msm_batt_device,
 	&msm_adc_device,
@@ -4072,6 +4119,30 @@ static void msm7x30_init_uart2(void)
 }
 #endif
 
+/* TSIF begin */
+#if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
+
+#define TSIF_B_SYNC      GPIO_CFG(37, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA)
+#define TSIF_B_DATA      GPIO_CFG(36, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA)
+#define TSIF_B_EN        GPIO_CFG(35, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA)
+#define TSIF_B_CLK       GPIO_CFG(34, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA)
+
+static const struct msm_gpio tsif_gpios[] = {
+	{ .gpio_cfg = TSIF_B_CLK,  .label =  "tsif_clk", },
+	{ .gpio_cfg = TSIF_B_EN,   .label =  "tsif_en", },
+	{ .gpio_cfg = TSIF_B_DATA, .label =  "tsif_data", },
+	{ .gpio_cfg = TSIF_B_SYNC, .label =  "tsif_sync", },
+};
+
+static struct msm_tsif_platform_data tsif_platform_data = {
+	.num_gpios = ARRAY_SIZE(tsif_gpios),
+	.gpios = tsif_gpios,
+	.tsif_pclk = "tsif_pclk",
+	.tsif_ref_clk = "tsif_ref_clk",
+};
+#endif /* defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE) */
+/* TSIF end   */
+
 static void __init pmic8058_leds_init(void)
 {
 	if (machine_is_msm7x30_surf()) {
@@ -4507,7 +4578,7 @@ static void tma300_init(void)
 	}
 
 	/* Initialize platform data for fluid v2 hardware */
-	if (socinfo_get_platform_version() == 2) {
+	if (SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()) == 2) {
 		cy8ctma300_pdata.res_y = 920;
 		cy8ctma300_pdata.invert_y = 0;
 		cy8ctma300_pdata.use_polling = 0;
@@ -4564,6 +4635,9 @@ static void __init msm7x30_init(void)
 #endif
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(136);
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
+#if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
+	msm_device_tsif.dev.platform_data = &tsif_platform_data;
+#endif
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 #ifdef CONFIG_USB_EHCI_MSM
 	msm_add_host(0, &msm_usb_host_pdata);
@@ -4571,6 +4645,16 @@ static void __init msm7x30_init(void)
 	msm7x30_init_mmc();
 	msm7x30_init_nand();
 	msm_qsd_spi_init();
+
+#ifdef CONFIG_SPI_QSD
+	if (machine_is_msm7x30_fluid())
+		spi_register_board_info(lcdc_sharp_spi_board_info,
+			ARRAY_SIZE(lcdc_sharp_spi_board_info));
+	else
+		spi_register_board_info(lcdc_toshiba_spi_board_info,
+			ARRAY_SIZE(lcdc_toshiba_spi_board_info));
+#endif
+
 	msm_fb_add_devices();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	msm_device_i2c_init();

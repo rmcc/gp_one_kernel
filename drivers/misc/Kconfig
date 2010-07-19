@@ -321,7 +321,7 @@ config TSIF_CHRDEV
 	  module will be called tsif_chrdev.
 
 config TSIF_DEBUG
-	tristate "Turn on debugging information for tsif driver"
+	bool "Turn on debugging information for tsif driver"
 	depends on TSIF
 	default n
 	---help---
@@ -363,6 +363,6 @@ config PMIC8058_NFC
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
-source "drivers/misc/video_core/720p/Kconfig"
+source "drivers/misc/vidc/Kconfig"
 
 endif # MISC_DEVICES

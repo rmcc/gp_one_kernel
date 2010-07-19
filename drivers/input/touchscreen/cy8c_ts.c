@@ -42,6 +42,14 @@
 #include <linux/gpio.h>
 #include <linux/workqueue.h>
 #include <linux/input/cy8c_ts.h>
+#include <linux/pm.h>
+
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+#include <linux/earlysuspend.h>
+
+/* Early-suspend level */
+#define CY8C_TS_SUSPEND_LEVEL 1
+#endif
 
 #define CY8CTMA300	0x0
 #define CY8CTMG200	0x1
@@ -101,6 +109,9 @@ struct cy8c_ts {
 	u8 *touch_data;
 	u8 device_id;
 	u8 prev_touches;
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+	struct early_suspend		early_suspend;
+#endif
 };
 
 static inline u16 join_bytes(u8 a, u8 b)
@@ -253,6 +264,11 @@ static void cy8c_ts_xy_worker(struct work_struct *work)
 		process_tmg200_data(ts);
 
 schedule:
+	if (ts->pdata->use_polling)
+		queue_delayed_work(ts->wq, &ts->work, TOUCHSCREEN_TIMEOUT);
+	else
+		enable_irq(ts->client->irq);
+
 	/* write to STATUS_REG to update coordinates*/
 	rc = cy8c_ts_write_reg_u8(ts->client, ts->dd->status_reg,
 						ts->dd->update_data);
@@ -264,11 +280,6 @@ schedule:
 		if (rc < 0)
 			dev_err(&ts->client->dev, "write failed, exiting\n");
 	}
-
-	if (ts->pdata->use_polling)
-		queue_delayed_work(ts->wq, &ts->work, TOUCHSCREEN_TIMEOUT);
-	else
-		enable_irq(ts->client->irq);
 }
 
 static irqreturn_t cy8c_ts_irq(int irq, void *dev_id)
@@ -454,9 +465,9 @@ error_alloc_dev:
 }
 
 #ifdef CONFIG_PM
-static int cy8c_ts_suspend(struct i2c_client *client, pm_message_t message)
+static int cy8c_ts_suspend(struct device *dev)
 {
-	struct cy8c_ts *ts = i2c_get_clientdata(client);
+	struct cy8c_ts *ts = dev_get_drvdata(dev);
 	int rc = 0;
 
 	if (!ts->pdata->use_polling)
@@ -470,22 +481,22 @@ static int cy8c_ts_suspend(struct i2c_client *client, pm_message_t message)
 	if (ts->pdata->power_on) {
 		rc = ts->pdata->power_on(0);
 		if (rc) {
-			dev_err(&client->dev, "unable to goto suspend\n");
+			dev_err(dev, "unable to goto suspend\n");
 			return rc;
 		}
 	}
 	return 0;
 }
 
-static int cy8c_ts_resume(struct i2c_client *client)
+static int cy8c_ts_resume(struct device *dev)
 {
-	struct cy8c_ts *ts = i2c_get_clientdata(client);
+	struct cy8c_ts *ts = dev_get_drvdata(dev);
 	int rc = 0;
 
 	if (ts->pdata->power_on) {
 		rc = ts->pdata->power_on(1);
 		if (rc) {
-			dev_err(&client->dev, "unable to resume\n");
+			dev_err(dev, "unable to resume\n");
 			return rc;
 		}
 	}
@@ -497,9 +508,29 @@ static int cy8c_ts_resume(struct i2c_client *client)
 
 	return 0;
 }
-#else
-#define cy8c_ts_resume NULL
-#define cy8c_ts_suspend NULL
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void cy8c_ts_early_suspend(struct early_suspend *h)
+{
+	struct cy8c_ts *ts = container_of(h, struct cy8c_ts, early_suspend);
+
+	cy8c_ts_suspend(&ts->client->dev);
+}
+
+static void cy8c_ts_late_resume(struct early_suspend *h)
+{
+	struct cy8c_ts *ts = container_of(h, struct cy8c_ts, early_suspend);
+
+	cy8c_ts_resume(&ts->client->dev);
+}
+#endif
+
+static struct dev_pm_ops cy8c_ts_pm_ops = {
+#ifndef CONFIG_HAS_EARLYSUSPEND
+	.suspend	= cy8c_ts_suspend,
+	.resume		= cy8c_ts_resume,
+#endif
+};
 #endif
 
 static int __devinit cy8c_ts_probe(struct i2c_client *client,
@@ -536,6 +567,13 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 		goto error_touch_data_alloc;
 	}
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN +
+						CY8C_TS_SUSPEND_LEVEL;
+	ts->early_suspend.suspend = cy8c_ts_early_suspend;
+	ts->early_suspend.resume = cy8c_ts_late_resume;
+	register_early_suspend(&ts->early_suspend);
+#endif
 	return 0;
 
 error_touch_data_alloc:
@@ -576,15 +614,17 @@ static const struct i2c_device_id cy8c_ts_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, cy8c_ts_id);
 
+
 static struct i2c_driver cy8c_ts_driver = {
 	.driver = {
 		.name = "cy8c_ts",
 		.owner = THIS_MODULE,
+#ifdef CONFIG_PM
+		.pm = &cy8c_ts_pm_ops,
+#endif
 	},
 	.probe		= cy8c_ts_probe,
 	.remove		= __devexit_p(cy8c_ts_remove),
-	.suspend	= cy8c_ts_suspend,
-	.resume		= cy8c_ts_resume,
 	.id_table	= cy8c_ts_id,
 };
 

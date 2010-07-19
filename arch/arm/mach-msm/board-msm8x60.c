@@ -39,7 +39,6 @@
 #include <linux/i2c/sx150x.h>
 #include <linux/smsc911x.h>
 #include <linux/spi/spi.h>
-#include <linux/regulator/consumer.h>
 #include <linux/input/tdisc_shinetsu.h>
 #include <linux/input/cy8c_ts.h>
 
@@ -65,9 +64,11 @@
 #include <linux/usb/android.h>
 #endif
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/machine.h>
 
 #include "devices.h"
 #include "devices-msm8x60.h"
+#include "spm.h"
 #include "timer.h"
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
@@ -98,6 +99,58 @@
 #define UI_INT3_N 14
 
 void __iomem *gic_cpu_base_addr;
+
+static struct msm_spm_platform_data msm_spm_data[] __initdata = {
+	[0] = {
+		.reg_base_addr = MSM_SAW0_BASE,
+
+		.reg_init_values[MSM_SPM_REG_SAW_CFG] = 0x0F,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_CTL] = 0x68,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_SLP_TMR_DLY] = 0xFFFFFFFF,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_WAKE_TMR_DLY] = 0xFFFFFFFF,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLK_EN] = 0x17,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_PRECLMP_EN] = 0x07,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_POSTCLMP_EN] = 0x00,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLMP_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_RST_EN] = 0x00,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_MPM_CFG] = 0x00,
+
+		.awake_vlevel = 0x9C,
+		.retention_vlevel = 0x81,
+		.collapse_vlevel = 0x20,
+		.retention_mid_vlevel = 0x94,
+		.collapse_mid_vlevel = 0x8C,
+
+		.vctl_timeout_us = 50,
+	},
+
+	[1] = {
+		.reg_base_addr = MSM_SAW1_BASE,
+
+		.reg_init_values[MSM_SPM_REG_SAW_CFG] = 0x0F,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_CTL] = 0x68,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_SLP_TMR_DLY] = 0xFFFFFFFF,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_WAKE_TMR_DLY] = 0xFFFFFFFF,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLK_EN] = 0x17,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_PRECLMP_EN] = 0x07,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_HSFS_POSTCLMP_EN] = 0x00,
+
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_CLMP_EN] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW_SLP_RST_EN] = 0x00,
+		.reg_init_values[MSM_SPM_REG_SAW_SPM_MPM_CFG] = 0x00,
+
+		.awake_vlevel = 0x9C,
+		.retention_vlevel = 0x81,
+		.collapse_vlevel = 0x20,
+		.retention_mid_vlevel = 0x94,
+		.collapse_mid_vlevel = 0x8C,
+
+		.vctl_timeout_us = 50,
+	},
+};
 
 static struct msm_acpu_clock_platform_data msm8x60_acpu_clock_data = {
 	/* SoC has no frequency step size constraints. */
@@ -288,6 +341,19 @@ static struct usb_composition usb_func_composition[] = {
 		.adb_functions	    = 0x1A,
 	},
 #endif
+};
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.vendor		= "GOOGLE",
+	.product	= "Mass Storage",
+	.release	= 0xFFFF,
+};
+static struct platform_device mass_storage_device = {
+	.name           = "usb_mass_storage",
+	.id             = -1,
+	.dev            = {
+		.platform_data          = &mass_storage_pdata,
+	},
 };
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id	= 0x05C6,
@@ -925,6 +991,7 @@ static struct platform_device *surf_devices[] __initdata = {
 	&msm_device_gadget_peripheral,
 #endif
 #ifdef CONFIG_USB_ANDROID
+	&mass_storage_device,
 	&android_usb_device,
 #endif
 #ifdef CONFIG_BATTERY_MSM
@@ -1342,47 +1409,125 @@ static struct pm8058_gpio_platform_data pm8058_mpp_data = {
 	.irq_base	= PM8058_MPP_IRQ(PM8058_IRQ_BASE, 0),
 };
 
+static struct regulator_consumer_supply pm8058_vreg_supply[PM8058_VREG_MAX] = {
+	[PM8058_VREG_ID_L0]  = REGULATOR_SUPPLY("8058_l0",  NULL),
+	[PM8058_VREG_ID_L1]  = REGULATOR_SUPPLY("8058_l1",  NULL),
+	[PM8058_VREG_ID_L2]  = REGULATOR_SUPPLY("8058_l2",  NULL),
+	[PM8058_VREG_ID_L3]  = REGULATOR_SUPPLY("8058_l3",  NULL),
+	[PM8058_VREG_ID_L4]  = REGULATOR_SUPPLY("8058_l4",  NULL),
+	[PM8058_VREG_ID_L5]  = REGULATOR_SUPPLY("8058_l5",  NULL),
+	[PM8058_VREG_ID_L6]  = REGULATOR_SUPPLY("8058_l6",  NULL),
+	[PM8058_VREG_ID_L7]  = REGULATOR_SUPPLY("8058_l7",  NULL),
+	[PM8058_VREG_ID_L8]  = REGULATOR_SUPPLY("8058_l8",  NULL),
+	[PM8058_VREG_ID_L9]  = REGULATOR_SUPPLY("8058_l9",  NULL),
+	[PM8058_VREG_ID_L10] = REGULATOR_SUPPLY("8058_l10", NULL),
+	[PM8058_VREG_ID_L11] = REGULATOR_SUPPLY("8058_l11", NULL),
+	[PM8058_VREG_ID_L12] = REGULATOR_SUPPLY("8058_l12", NULL),
+	[PM8058_VREG_ID_L13] = REGULATOR_SUPPLY("8058_l13", NULL),
+	[PM8058_VREG_ID_L14] = REGULATOR_SUPPLY("8058_l14", NULL),
+	[PM8058_VREG_ID_L15] = REGULATOR_SUPPLY("8058_l15", NULL),
+	[PM8058_VREG_ID_L16] = REGULATOR_SUPPLY("8058_l16", NULL),
+	[PM8058_VREG_ID_L17] = REGULATOR_SUPPLY("8058_l17", NULL),
+	[PM8058_VREG_ID_L18] = REGULATOR_SUPPLY("8058_l18", NULL),
+	[PM8058_VREG_ID_L19] = REGULATOR_SUPPLY("8058_l19", NULL),
+	[PM8058_VREG_ID_L20] = REGULATOR_SUPPLY("8058_l20", NULL),
+	[PM8058_VREG_ID_L21] = REGULATOR_SUPPLY("8058_l21", NULL),
+	[PM8058_VREG_ID_L22] = REGULATOR_SUPPLY("8058_l22", NULL),
+	[PM8058_VREG_ID_L23] = REGULATOR_SUPPLY("8058_l23", NULL),
+	[PM8058_VREG_ID_L24] = REGULATOR_SUPPLY("8058_l24", NULL),
+	[PM8058_VREG_ID_L25] = REGULATOR_SUPPLY("8058_l25", NULL),
+
+	[PM8058_VREG_ID_S0] = REGULATOR_SUPPLY("8058_s0", NULL),
+	[PM8058_VREG_ID_S1] = REGULATOR_SUPPLY("8058_s1", NULL),
+	[PM8058_VREG_ID_S2] = REGULATOR_SUPPLY("8058_s2", NULL),
+	[PM8058_VREG_ID_S3] = REGULATOR_SUPPLY("8058_s3", NULL),
+	[PM8058_VREG_ID_S4] = REGULATOR_SUPPLY("8058_s4", NULL),
+
+	[PM8058_VREG_ID_LVS0] = REGULATOR_SUPPLY("8058_lvs0", NULL),
+	[PM8058_VREG_ID_LVS1] = REGULATOR_SUPPLY("8058_lvs1", NULL),
+
+	[PM8058_VREG_ID_NCP] = REGULATOR_SUPPLY("8058_ncp", NULL),
+};
+
+#define PM8058_VREG_INIT(_id, _min_uV, _max_uV, _modes, _ops, _apply_uV) \
+	[_id] = { \
+		.constraints = { \
+			.valid_modes_mask = _modes, \
+			.valid_ops_mask = _ops, \
+			.min_uV = _min_uV, \
+			.max_uV = _max_uV, \
+			.apply_uV = _apply_uV, \
+		}, \
+		.num_consumer_supplies = 1, \
+		.consumer_supplies = &pm8058_vreg_supply[_id], \
+	}
+
+#define PM8058_VREG_INIT_LDO(_id, _min_uV, _max_uV) \
+	PM8058_VREG_INIT(_id, _min_uV, _max_uV, REGULATOR_MODE_NORMAL | \
+			REGULATOR_MODE_IDLE | REGULATOR_MODE_STANDBY, \
+			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS | \
+			REGULATOR_CHANGE_MODE, 1)
+
+#define PM8058_VREG_INIT_SMPS(_id, _min_uV, _max_uV) \
+	PM8058_VREG_INIT(_id, _min_uV, _max_uV, REGULATOR_MODE_NORMAL | \
+			REGULATOR_MODE_IDLE | REGULATOR_MODE_STANDBY, \
+			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS | \
+			REGULATOR_CHANGE_MODE, 1)
+
+#define PM8058_VREG_INIT_LVS(_id) \
+	PM8058_VREG_INIT(_id, 0, 0, REGULATOR_MODE_NORMAL, \
+			REGULATOR_CHANGE_STATUS, 0)
+
+#define PM8058_VREG_INIT_NCP(_id, _min_uV, _max_uV) \
+	PM8058_VREG_INIT(_id, _min_uV, _max_uV, REGULATOR_MODE_NORMAL, \
+			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS, 1)
+
+static struct regulator_init_data pm8058_vreg_init[PM8058_VREG_MAX] = {
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L0,  1200000, 1200000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L1,  1200000, 1200000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L2,  1800000, 1800000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L3,  1800000, 1800000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L4,  2850000, 2850000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L5,  2850000, 2850000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L6,  3050000, 3050000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L7,  1800000, 1800000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L8,  2900000, 2900000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L9,  1800000, 1800000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L10, 2600000, 2600000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L11, 1500000, 1500000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L12, 2900000, 2900000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L13, 2050000, 2050000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L14, 2850000, 2850000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L15, 2850000, 2850000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L16, 1800000, 1800000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L17, 2600000, 2600000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L18, 2200000, 2200000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L19, 2500000, 2500000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L20, 1800000, 1800000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L21, 1100000, 1100000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L22, 1200000, 1200000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L23, 1200000, 1200000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L24, 1200000, 1200000),
+	PM8058_VREG_INIT_LDO(PM8058_VREG_ID_L25, 1200000, 1200000),
+
+	PM8058_VREG_INIT_SMPS(PM8058_VREG_ID_S0, 1100000, 1100000),
+	PM8058_VREG_INIT_SMPS(PM8058_VREG_ID_S1, 1100000, 1100000),
+	PM8058_VREG_INIT_SMPS(PM8058_VREG_ID_S2, 1350000, 1350000),
+	PM8058_VREG_INIT_SMPS(PM8058_VREG_ID_S3, 1800000, 1800000),
+	PM8058_VREG_INIT_SMPS(PM8058_VREG_ID_S4, 2200000, 2200000),
+
+	PM8058_VREG_INIT_LVS(PM8058_VREG_ID_LVS0),
+	PM8058_VREG_INIT_LVS(PM8058_VREG_ID_LVS0),
+
+	PM8058_VREG_INIT_NCP(PM8058_VREG_ID_NCP, -1800000, -1800000),
+};
+
 #define PM8058_VREG(_id) { \
 	.name = "pm8058-regulator", \
 	.id = _id, \
-	.platform_data = &pm8058_vreg_pdata[_id], \
-	.data_size = sizeof(pm8058_vreg_pdata[_id]), \
+	.platform_data = &pm8058_vreg_init[_id], \
+	.data_size = sizeof(pm8058_vreg_init[_id]), \
 }
-
-static struct pm8058_vreg_pdata pm8058_vreg_pdata[PM8058_VREG_MAX] = {
-	[PM8058_VREG_ID_L0]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8058_VREG_ID_L1]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8058_VREG_ID_L2]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_L3]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_L4]	= { .min_uV = 2850000,	.max_uV = 2850000 },
-	[PM8058_VREG_ID_L5]	= { .min_uV = 2850000,	.max_uV = 2850000 },
-	[PM8058_VREG_ID_L6]	= { .min_uV = 3050000,	.max_uV = 3050000 },
-	[PM8058_VREG_ID_L7]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_L8]	= { .min_uV = 2900000,	.max_uV = 2900000 },
-	[PM8058_VREG_ID_L9]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_L10]	= { .min_uV = 2600000,	.max_uV = 2600000 },
-	[PM8058_VREG_ID_L11]	= { .min_uV = 1500000,	.max_uV = 1500000 },
-	[PM8058_VREG_ID_L12]	= { .min_uV = 2900000,	.max_uV = 2900000 },
-	[PM8058_VREG_ID_L13]	= { .min_uV = 2050000,	.max_uV = 2050000 },
-	[PM8058_VREG_ID_L14]	= { .min_uV = 2850000,	.max_uV = 2850000 },
-	[PM8058_VREG_ID_L15]	= { .min_uV = 2850000,	.max_uV = 2850000 },
-	[PM8058_VREG_ID_L16]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_L17]	= { .min_uV = 2600000,	.max_uV = 2600000 },
-	[PM8058_VREG_ID_L18]	= { .min_uV = 2200000,	.max_uV = 2200000 },
-	[PM8058_VREG_ID_L19]	= { .min_uV = 2500000,	.max_uV = 2500000 },
-	[PM8058_VREG_ID_L20]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_L21]	= { .min_uV = 1100000,	.max_uV = 1100000 },
-	[PM8058_VREG_ID_L22]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8058_VREG_ID_L23]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8058_VREG_ID_L24]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8058_VREG_ID_L25]	= { .min_uV = 1200000,	.max_uV = 1200000 },
-	[PM8058_VREG_ID_S0]	= { .min_uV = 1100000,	.max_uV = 1100000 },
-	[PM8058_VREG_ID_S1]	= { .min_uV = 1100000,	.max_uV = 1100000 },
-	[PM8058_VREG_ID_S2]	= { .min_uV = 1350000,	.max_uV = 1350000 },
-	[PM8058_VREG_ID_S3]	= { .min_uV = 1800000,	.max_uV = 1800000 },
-	[PM8058_VREG_ID_S4]	= { .min_uV = 2200000,	.max_uV = 2200000 },
-	[PM8058_VREG_ID_NCP]	= { .min_uV = -1800000,	.max_uV = -1800000 },
-};
 
 static struct resource resources_rtc[] = {
        {
@@ -1655,27 +1800,89 @@ static struct pm8901_gpio_platform_data pm8901_mpp_data = {
 	.irq_base	= PM8901_MPP_IRQ(PM8901_IRQ_BASE, 0),
 };
 
+static struct regulator_consumer_supply pm8901_vreg_supply[PM8901_VREG_MAX] = {
+	[PM8901_VREG_ID_L0]  = REGULATOR_SUPPLY("8901_l0",  NULL),
+	[PM8901_VREG_ID_L1]  = REGULATOR_SUPPLY("8901_l1",  NULL),
+	[PM8901_VREG_ID_L2]  = REGULATOR_SUPPLY("8901_l2",  NULL),
+	[PM8901_VREG_ID_L3]  = REGULATOR_SUPPLY("8901_l3",  NULL),
+	[PM8901_VREG_ID_L4]  = REGULATOR_SUPPLY("8901_l4",  NULL),
+	[PM8901_VREG_ID_L5]  = REGULATOR_SUPPLY("8901_l5",  NULL),
+	[PM8901_VREG_ID_L6]  = REGULATOR_SUPPLY("8901_l6",  NULL),
+
+	[PM8901_VREG_ID_S0] = REGULATOR_SUPPLY("8901_s0", NULL),
+	[PM8901_VREG_ID_S1] = REGULATOR_SUPPLY("8901_s1", NULL),
+	[PM8901_VREG_ID_S3] = REGULATOR_SUPPLY("8901_s3", NULL),
+	[PM8901_VREG_ID_S4] = REGULATOR_SUPPLY("8901_s4", NULL),
+
+	[PM8901_VREG_ID_LVS0]     = REGULATOR_SUPPLY("8901_lvs0",     NULL),
+	[PM8901_VREG_ID_LVS1]     = REGULATOR_SUPPLY("8901_lvs1",     NULL),
+	[PM8901_VREG_ID_LVS2]     = REGULATOR_SUPPLY("8901_lvs2",     NULL),
+	[PM8901_VREG_ID_LVS3]     = REGULATOR_SUPPLY("8901_lvs3",     NULL),
+	[PM8901_VREG_ID_MVS0]     = REGULATOR_SUPPLY("8901_mvs0",     NULL),
+	[PM8901_VREG_ID_USB_OTG]  = REGULATOR_SUPPLY("8901_usb_otg",  NULL),
+	[PM8901_VREG_ID_HDMI_MVS] = REGULATOR_SUPPLY("8901_hdmi_mvs", NULL),
+};
+
+#define PM8901_VREG_INIT(_id, _min_uV, _max_uV, \
+		_modes, _ops, _apply_uV, _init) \
+	[_id] = { \
+		.constraints = { \
+			.valid_modes_mask = _modes, \
+			.valid_ops_mask = _ops, \
+			.min_uV = _min_uV, \
+			.max_uV = _max_uV, \
+			.apply_uV = _apply_uV, \
+		}, \
+		.num_consumer_supplies = 1, \
+		.consumer_supplies = &pm8901_vreg_supply[_id], \
+		.regulator_init = _init, \
+	}
+
+#define PM8901_VREG_INIT_LDO(_id, _min_uV, _max_uV) \
+	PM8901_VREG_INIT(_id, _min_uV, _max_uV, REGULATOR_MODE_NORMAL | \
+			REGULATOR_MODE_IDLE | REGULATOR_MODE_STANDBY, \
+			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS | \
+			REGULATOR_CHANGE_MODE, 1, NULL)
+
+#define PM8901_VREG_INIT_SMPS(_id, _min_uV, _max_uV) \
+	PM8901_VREG_INIT(_id, _min_uV, _max_uV, REGULATOR_MODE_NORMAL | \
+			REGULATOR_MODE_IDLE | REGULATOR_MODE_STANDBY, \
+			REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS | \
+			REGULATOR_CHANGE_MODE, 1, NULL)
+
+#define PM8901_VREG_INIT_VS(_id, _init) \
+	PM8901_VREG_INIT(_id, 0, 0, REGULATOR_MODE_NORMAL, \
+			REGULATOR_CHANGE_STATUS, 0, _init)
+
+static struct regulator_init_data pm8901_vreg_init[PM8901_VREG_MAX] = {
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L0, 1200000, 1200000),
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L1, 3300000, 3300000),
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L2, 3300000, 3300000),
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L3, 3300000, 3300000),
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L4, 2600000, 2600000),
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L5, 2850000, 2850000),
+	PM8901_VREG_INIT_LDO(PM8901_VREG_ID_L6, 2200000, 2200000),
+
+	PM8901_VREG_INIT_SMPS(PM8901_VREG_ID_S0, 1100000, 1100000),
+	PM8901_VREG_INIT_SMPS(PM8901_VREG_ID_S1, 1100000, 1100000),
+	PM8901_VREG_INIT_SMPS(PM8901_VREG_ID_S3, 1100000, 1100000),
+	PM8901_VREG_INIT_SMPS(PM8901_VREG_ID_S4, 1100000, 1100000),
+
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_LVS0,     NULL),
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_LVS1,     NULL),
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_LVS2,     NULL),
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_LVS3,     NULL),
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_MVS0,     NULL),
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_USB_OTG,  pm8901_mpp0_init),
+	PM8901_VREG_INIT_VS(PM8901_VREG_ID_HDMI_MVS, NULL),
+};
+
 #define PM8901_VREG(_id) { \
 	.name = "pm8901-regulator", \
 	.id = _id, \
-	.platform_data = &pm8901_vreg_pdata[_id], \
-	.data_size = sizeof(pm8901_vreg_pdata[_id]), \
+	.platform_data = &pm8901_vreg_init[_id], \
+	.data_size = sizeof(pm8901_vreg_init[_id]), \
 }
-
-static struct pm8901_vreg_pdata pm8901_vreg_pdata[PM8901_VREG_MAX] = {
-	[PM8901_VREG_ID_L0]      = {1200000, 1200000, NULL,             NULL},
-	[PM8901_VREG_ID_L1]      = {3300000, 3300000, NULL,             NULL},
-	[PM8901_VREG_ID_L2]      = {3300000, 3300000, NULL,             NULL},
-	[PM8901_VREG_ID_L3]      = {3300000, 3300000, NULL,             NULL},
-	[PM8901_VREG_ID_L4]      = {2600000, 2600000, NULL,             NULL},
-	[PM8901_VREG_ID_L5]      = {2850000, 2850000, NULL,             NULL},
-	[PM8901_VREG_ID_L6]      = {2200000, 2200000, NULL,             NULL},
-	[PM8901_VREG_ID_S0]      = {1100000, 1100000, NULL,             NULL},
-	[PM8901_VREG_ID_S1]      = {1100000, 1100000, NULL,             NULL},
-	[PM8901_VREG_ID_S3]      = {1100000, 1100000, NULL,             NULL},
-	[PM8901_VREG_ID_S4]      = {1300000, 1300000, NULL,             NULL},
-	[PM8901_VREG_ID_USB_OTG] = {1300000, 1300000, pm8901_mpp0_init, NULL},
-};
 
 static struct mfd_cell pm8901_subdevs[] = {
 	{	.name = "pm8901-mpp",
@@ -2322,15 +2529,16 @@ static void display_common_power(int on)
 			gpio_direction_output(GPIO_LVDS_STDN_OUT_N, 0);
 			gpio_direction_output(GPIO_BACKLIGHT_EN, 0);
 			mdelay(20);
-			gpio_set_value(GPIO_LVDS_STDN_OUT_N, 1);
-			gpio_set_value(GPIO_BACKLIGHT_EN, 1);
+			gpio_set_value_cansleep(GPIO_LVDS_STDN_OUT_N, 1);
+			gpio_set_value_cansleep(GPIO_BACKLIGHT_EN, 1);
 
 		} else {
 			if (!rc) {
 				/* BACKLIGHT */
-				gpio_set_value(GPIO_BACKLIGHT_EN, 0);
+				gpio_set_value_cansleep(GPIO_BACKLIGHT_EN, 0);
 				/* LVDS */
-				gpio_set_value(GPIO_LVDS_STDN_OUT_N, 0);
+				gpio_set_value_cansleep(GPIO_LVDS_STDN_OUT_N,
+				0);
 				mdelay(20);
 				gpio_free(GPIO_BACKLIGHT_EN);
 				gpio_free(GPIO_LVDS_STDN_OUT_N);
@@ -2428,6 +2636,10 @@ static void __init msm8x60_cfg_smsc911x(void)
 
 static void __init msm8x60_init(void)
 {
+	/* initialize SPM before acpuclock as the latter calls into SPM
+	 * driver to set ACPU voltages.
+	 */
+	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
 	/* CPU frequency control is not supported on simulated targets. */
 	if (!machine_is_msm8x60_rumi3() && !machine_is_msm8x60_sim())
 		msm_acpu_clock_init(&msm8x60_acpu_clock_data);

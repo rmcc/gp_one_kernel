@@ -55,6 +55,7 @@ config ARCH_MSM8X60
 	select REGULATOR
 	select MSM8660_TLMM
 	select ARCH_HAS_CPU_IDLE_WAIT
+	select MSM_DIRECT_SCLK_ACCESS
 
 endchoice
 
@@ -922,6 +923,13 @@ config MSM_QDSP6
 	help
 	  Enable support for qdsp6. This provides audio and video functionality.
 
+config MSM8X60_AUDIO
+	tristate "MSM8X60 support"
+	depends on ARCH_MSM8X60 && ANDROID_PMEM
+	default y
+	help
+	  Enable support for qdsp6v2. This provides audio functionality.
+
 config MSM_VREG_SWITCH_INVERTED
 	bool "Reverse vreg switch polarity"
 	default n
@@ -1132,6 +1140,10 @@ config SMMU_PGTABLES_L2
 	help
 	 Improves page fault latency at the expense of potential L2 pollution.
 	 Most people can probably say Y here.
+
+config MSM_DIRECT_SCLK_ACCESS
+	bool "Direct access to the SCLK timer"
+	default n
 
 config MSM7200A_TLMM
        bool
