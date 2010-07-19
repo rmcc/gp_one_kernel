@@ -1,5 +1,4 @@
-/* linux/arch/arm/mach-msm/devices.c
- *
+/*
  * Copyright (C) 2008 Google, Inc.
  * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
  *
@@ -30,9 +29,6 @@
 
 #include <asm/mach/mmc.h>
 #include <mach/msm_hsusb.h>
-#ifdef CONFIG_PMIC8058
-#include <linux/mfd/pmic8058.h>
-#endif
 
 static struct resource resources_uart1[] = {
 	{
@@ -185,29 +181,6 @@ struct platform_device msm_device_uart_dm2 = {
 
 #define MSM_I2C_SIZE          SZ_4K
 #define MSM_I2C_PHYS          0xA9900000
-#define MSM_I2C_2_PHYS        0xA9900000
-#define INT_PWB_I2C_2         INT_PWB_I2C
-
-static struct resource resources_i2c_2[] = {
-	{
-		.start	= MSM_I2C_2_PHYS,
-		.end	= MSM_I2C_2_PHYS + MSM_I2C_SIZE - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= INT_PWB_I2C_2,
-		.end	= INT_PWB_I2C_2,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device msm_device_i2c_2 = {
-	.name		= "msm_i2c",
-	.id		= 2,
-	.num_resources	= ARRAY_SIZE(resources_i2c_2),
-	.resource	= resources_i2c_2,
-};
-
 static struct resource resources_i2c[] = {
 	{
 		.start	= MSM_I2C_PHYS,
@@ -228,91 +201,7 @@ struct platform_device msm_device_i2c = {
 	.resource	= resources_i2c,
 };
 
-#define MSM_QUP_PHYS           0xA9900000
-#define MSM_GSBI_QUP_I2C_PHYS  0xA9900000
-#define INT_PWB_QUP_IN         INT_PWB_I2C
-#define INT_PWB_QUP_OUT        INT_PWB_I2C
-#define INT_PWB_QUP_ERR        INT_PWB_I2C
-#define MSM_QUP_SIZE           SZ_4K
-
-static struct resource resources_qup[] = {
-	{
-		.name   = "qup_phys_addr",
-		.start	= MSM_QUP_PHYS,
-		.end	= MSM_QUP_PHYS + MSM_QUP_SIZE - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.name   = "gsbi_qup_i2c_addr",
-		.start	= MSM_GSBI_QUP_I2C_PHYS,
-		.end	= MSM_GSBI_QUP_I2C_PHYS + 4 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.name   = "qup_in_intr",
-		.start	= INT_PWB_QUP_IN,
-		.end	= INT_PWB_QUP_IN,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.name   = "qup_out_intr",
-		.start	= INT_PWB_QUP_OUT,
-		.end	= INT_PWB_QUP_OUT,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.name   = "qup_err_intr",
-		.start	= INT_PWB_QUP_ERR,
-		.end	= INT_PWB_QUP_ERR,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device qup_device_i2c = {
-	.name		= "qup_i2c",
-	.id		= 4,
-	.num_resources	= ARRAY_SIZE(resources_qup),
-	.resource	= resources_qup,
-};
-
-#ifdef CONFIG_I2C_SSBI
-#define MSM_SSBI6_PHYS	0xAD900000
-static struct resource msm_ssbi6_resources[] = {
-	{
-		.name   = "ssbi_base",
-		.start	= MSM_SSBI6_PHYS,
-		.end	= MSM_SSBI6_PHYS + SZ_4K - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-};
-
-struct platform_device msm_device_ssbi6 = {
-	.name		= "i2c_ssbi",
-	.id		= 6,
-	.num_resources	= ARRAY_SIZE(msm_ssbi6_resources),
-	.resource	= msm_ssbi6_resources,
-};
-
-#define MSM_SSBI7_PHYS  0xAC800000
-static struct resource msm_ssbi7_resources[] = {
-	{
-		.name   = "ssbi_base",
-		.start  = MSM_SSBI7_PHYS,
-		.end    = MSM_SSBI7_PHYS + SZ_4K - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-};
-
-struct platform_device msm_device_ssbi7 = {
-	.name		= "i2c_ssbi",
-	.id		= 7,
-	.num_resources	= ARRAY_SIZE(msm_ssbi7_resources),
-	.resource	= msm_ssbi7_resources,
-};
-#endif /* CONFIG_I2C_SSBI */
-
 #define MSM_HSUSB_PHYS        0xA0800000
-
 static struct resource resources_hsusb_otg[] = {
 	{
 		.start	= MSM_HSUSB_PHYS,
@@ -386,33 +275,6 @@ struct platform_device msm_device_gadget_peripheral = {
 	},
 };
 
-#ifdef CONFIG_USB_FS_HOST
-#define MSM_HS2USB_PHYS        0xA0800400
-static struct resource resources_hsusb_host2[] = {
-	{
-		.start	= MSM_HS2USB_PHYS,
-		.end	= MSM_HS2USB_PHYS + SZ_1K - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= INT_USB_OTG,
-		.end	= INT_USB_OTG,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device msm_device_hsusb_host2 = {
-	.name		= "msm_hsusb_host",
-	.id		= 1,
-	.num_resources	= ARRAY_SIZE(resources_hsusb_host2),
-	.resource	= resources_hsusb_host2,
-	.dev		= {
-		.dma_mask 		= &dma_mask,
-		.coherent_dma_mask	= 0xffffffffULL,
-	},
-};
-#endif
-
 static struct resource resources_hsusb_host[] = {
 	{
 		.start	= MSM_HSUSB_PHYS,
@@ -439,9 +301,6 @@ struct platform_device msm_device_hsusb_host = {
 
 static struct platform_device *msm_host_devices[] = {
 	&msm_device_hsusb_host,
-#ifdef CONFIG_USB_FS_HOST
-	&msm_device_hsusb_host2,
-#endif
 };
 
 int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
@@ -454,8 +313,8 @@ int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
 	pdev->dev.platform_data = plat;
 	return platform_device_register(pdev);
 }
-#define MSM_NAND_PHYS		0xA0A00000
 
+#define MSM_NAND_PHYS		0xA0A00000
 static struct resource resources_nand[] = {
 	[0] = {
 		.name   = "msm_nand_dmac",
@@ -726,10 +585,17 @@ int __init rmt_storage_add_ramfs(void)
 	return -ENOENT;
 }
 
+#if defined(CONFIG_FB_MSM_MDP40)
+#define MDP_BASE          0xA3F00000
+#define PMDH_BASE         0xAD600000
+#define EMDH_BASE         0xAD700000
+#define TVENC_BASE        0xAD400000
+#else
 #define MDP_BASE          0xAA200000
 #define PMDH_BASE         0xAA600000
 #define EMDH_BASE         0xAA700000
 #define TVENC_BASE        0xAA400000
+#endif
 
 static struct resource msm_mdp_resources[] = {
 	{
@@ -821,11 +687,6 @@ static struct platform_device msm_lcdc_device = {
 	.id     = 0,
 };
 
-static struct platform_device msm_dtv_device = {
-	.name   = "dtv",
-	.id     = 0,
-};
-
 static struct platform_device msm_tvenc_device = {
 	.name   = "tvenc",
 	.id     = 0,
@@ -833,18 +694,48 @@ static struct platform_device msm_tvenc_device = {
 	.resource       = msm_tvenc_resources,
 };
 
-/* FIH_ADQ, Penho, 2009/03/13, { */
-/* ZEUS_ANDROID_CR, register device for Battery Report */
-///+FIH_ADQ
-static struct platform_device goldfish_battery_device = {
-	.name		= "goldfish-battery",
-	.id		  = -1,
+/* TSIF begin */
+#if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
+
+#define MSM_TSIF_PHYS        (0xa0100000)
+#define MSM_TSIF_SIZE        (0x200)
+
+static struct resource tsif_resources[] = {
+	[0] = {
+		.flags = IORESOURCE_IRQ,
+		.start = INT_TSIF_IRQ,
+		.end   = INT_TSIF_IRQ,
+	},
+	[1] = {
+		.flags = IORESOURCE_MEM,
+		.start = MSM_TSIF_PHYS,
+		.end   = MSM_TSIF_PHYS + MSM_TSIF_SIZE - 1,
+	},
+	[2] = {
+		.flags = IORESOURCE_DMA,
+		.start = DMOV_TSIF_CHAN,
+		.end   = DMOV_TSIF_CRCI,
+	},
 };
-///-FIH_ADQ
-/* } FIH_ADQ, Penho, 2009/03/13 */
+
+static void tsif_release(struct device *dev)
+{
+	dev_info(dev, "release\n");
+}
+
+struct platform_device msm_device_tsif = {
+	.name          = "msm_tsif",
+	.id            = 0,
+	.num_resources = ARRAY_SIZE(tsif_resources),
+	.resource      = tsif_resources,
+	.dev = {
+		.release       = tsif_release,
+	},
+};
+#endif /* defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE) */
+/* TSIF end   */
 
 #define MSM_TSSC_PHYS         0xAA300000
-
 static struct resource resources_tssc[] = {
 	{
 		.start	= MSM_TSSC_PHYS,
@@ -873,27 +764,13 @@ struct platform_device msm_device_tssc = {
 	.resource = resources_tssc,
 };
 
-#ifdef CONFIG_MSM_ROTATOR
-static struct resource resources_msm_rotator[] = {
-	{
-		.start	= 0xA3E00000,
-		.end	= 0xA3F00000 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= INT_ROTATOR,
-		.end	= INT_ROTATOR,
-		.flags	= IORESOURCE_IRQ,
-	},
+/* FIH_ADQ, Penho, 2009/03/13, { */
+/* ZEUS_ANDROID_CR, register device for Battery Report */
+///+FIH_ADQ
+static struct platform_device goldfish_battery_device = {
+	.name       = "goldfish-battery",
+	.id       = -1,
 };
-
-struct platform_device msm_rotator_device = {
-	.name		= "msm_rotator",
-	.id		= 0,
-	.num_resources  = ARRAY_SIZE(resources_msm_rotator),
-	.resource       = resources_msm_rotator,
-};
-#endif
 
 static void __init msm_register_device(struct platform_device *pdev, void *data)
 {
@@ -922,15 +799,13 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_tvenc_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
-/* FIH_ADQ, Penho, 2009/03/13, { */
-/* ZEUS_ANDROID_CR, register device for Battery Report */
-///+FIH_ADQ
+	/* FIH_ADQ, Penho, 2009/03/13, { */
+	/* ZEUS_ANDROID_CR, register device for Battery Report */
+	///+FIH_ADQ
 	else if (!strncmp(name, "batt", 4))
 		msm_register_device(&goldfish_battery_device, data);
-///-FIH_ADQ
-/* } FIH_ADQ, Penho, 2009/03/13 */
-	else if (!strncmp(name, "dtv", 3))
-		msm_register_device(&msm_dtv_device, data);
+	///-FIH_ADQ
+	/* } FIH_ADQ, Penho, 2009/03/13 */
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
 }
@@ -963,9 +838,9 @@ struct clk msm_clocks_7x25[] = {
 	CLK_PCOM("mdc_clk",	MDC_CLK,	NULL, 0),
 	CLK_PCOM("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
 #ifndef CONFIG_MACH_ADQ
-	CLK_PCOM("mdp_clk",	MDP_CLK,	NULL, OFF),
+    CLK_PCOM("mdp_clk", MDP_CLK,    NULL, OFF),
 #else
-	CLK_PCOM("mdp_clk",	MDP_CLK,	NULL, 0),
+    CLK_PCOM("mdp_clk", MDP_CLK,    NULL, 0),
 #endif
 	CLK_PCOM("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
 	CLK_PCOM("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),

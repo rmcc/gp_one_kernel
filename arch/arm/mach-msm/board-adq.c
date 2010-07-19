@@ -22,7 +22,6 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/bootmem.h>
-#include <linux/usb/mass_storage_function.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -246,6 +245,20 @@ static struct usb_composition usb_func_composition[] = {
 		.adb_functions      = 0x1A,
 	},
 #endif
+};
+
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns      = 1,
+	.vendor     = "GOOGLE",
+	.product    = "Mass Storage",
+	.release    = 0xFFFF,
+};
+static struct platform_device mass_storage_device = {
+	.name           = "usb_mass_storage",
+	.id             = -1,
+	.dev            = {
+		.platform_data          = &mass_storage_pdata,
+	},
 };
 
 static struct android_usb_platform_data android_usb_pdata = {
@@ -1259,6 +1272,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_uart3,
 #endif
 	&msm_device_smd,
+	&msm_device_dmov,
 	&msm_device_nand,
 #ifdef CONFIG_USB_MSM_OTG_72K
 	&msm_device_otg,
@@ -1272,6 +1286,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 
 #ifdef CONFIG_USB_ANDROID
+	&mass_storage_device,
 	&android_usb_device,
 #endif
 	&msm_device_i2c,
