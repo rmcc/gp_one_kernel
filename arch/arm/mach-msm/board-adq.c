@@ -29,9 +29,6 @@
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 #include <asm/setup.h>
-#ifdef CONFIG_CACHE_L2X0
-#include <asm/hardware/cache-l2x0.h>
-#endif
 
 #include <asm/mach/mmc.h>
 #include <mach/vreg.h>
@@ -43,6 +40,7 @@
 #include <mach/msm_hsusb.h>
 #include <mach/rpc_pmapp.h>
 #include <mach/rpc_hsusb.h>
+#include <mach/rpc_server_handset.h>
 
 #include <mach/msm_serial_hs.h>
 
@@ -533,6 +531,7 @@ static struct platform_device android_pmem_audio_device = {
 	.dev = { .platform_data = &android_pmem_audio_pdata },
 };
 
+#ifdef CONFIG_SWITCH_GPIO
 // +++ FIH_ADQ +++ , added by henry.wang
 static struct gpio_switch_platform_data headset_sensor_device_data = {
 	.name = "headset_sensor",
@@ -551,6 +550,22 @@ static struct platform_device headset_sensor_device = {
 	},
 };
 // --- FIH_ADQ ---
+#endif
+
+#ifdef CONFIG_MSM_RPCSERVER_HANDSET
+static struct msm_handset_platform_data hs_platform_data = {
+    .hs_name = "7k_handset",
+    .pwr_key_delay_ms = 500, /* 0 will disable end key */
+};
+
+static struct platform_device hs_device = {
+    .name   = "msm-handset",
+    .id     = -1,
+    .dev    = {
+        .platform_data = &hs_platform_data,
+    },
+};
+#endif
 
 #define LCDC_CONFIG_PROC          21
 #define LCDC_UN_CONFIG_PROC       22
@@ -1257,10 +1272,10 @@ static struct platform_device lcdc_spigpio_device = {
 /* FIH_ADQ, AudiPCHuang, 2009/04/02, { */
 /* ZEUS_ANDROID_CR, Vibrator Device Structre */
 ///+FIH_ADQ
-static struct platform_device pmic_rpc_device = {
+/*static struct platform_device pmic_rpc_device = {
 	.name	= "pmic_rpc",
 	.id		= -1,
-};
+};*/
 ///-FIH_ADQ
 /* } FIH_ADQ, AudiPCHuang, 2009/04/02 */
 
@@ -1308,12 +1323,17 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_uart_dm1,
 	&msm_bluesleep_device,
 	// +++ FIH_ADQ +++ , added by henry.wang
+#ifdef CONFIG_SWITCH_GPIO
 	&headset_sensor_device,
+#endif
+#ifdef CONFIG_MSM_RPCSERVER_HANDSET
+    &hs_device,
+#endif
 	// --- FIH_ADQ ---
 	/* FIH_ADQ, AudiPCHuang, 2009/04/02, { */
 	/* ZEUS_ANDROID_CR, Vibrator Device Structre */
 	///+FIH_ADQ
-	&pmic_rpc_device,
+	//&pmic_rpc_device,
 	// added by henry.wang
 	&msm_device_snd,
 	&msm_device_adspdec,
@@ -1627,10 +1647,13 @@ static void __init msm_device_i2c_init(void)
 
 // +++ FIH_ADQ +++ , added by henry.wang
 
+#ifdef CONFIG_SWITCH_GPIO
 static void __init init_headset_sensor(void)
 {
 	gpio_direction_input(40);
 }
+#endif
+
 // --- FIH_ADQ ---
 
 /* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
@@ -1689,7 +1712,9 @@ static void __init msm7x25_init(void)
 	msm7x25_init_mmc();
 
 	// +++ FIH_ADQ +++ , added by henry.wang
+#ifdef CONFIG_SWITCH_GPIO
 	init_headset_sensor();
+#endif
 	// --- FIH_ADQ ---
 
 	///+++FIH_ADQ+++ godfrey

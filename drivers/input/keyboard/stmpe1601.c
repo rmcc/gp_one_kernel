@@ -23,14 +23,16 @@ static int __devinit qi2ckybd_probe(struct i2c_client *client,
 				    const struct i2c_device_id *id);
 extern int kpd_bl_set_intensity(int level);
 extern int led_234_set_intensity(int L2, int L3, int L4);
-extern int msm_set_led_intensity_proc(pm_led_intensity_type led, uint8_t val);
+//extern int msm_set_led_intensity_proc(pm_led_intensity_type led, uint8_t val);
 extern void tca6507_led_switch(bool on);
 extern void tca6507_center_blink(bool blink);
 extern void tca6507_center_attention(bool attention);
 //extern void tca6507_center_blink_enable(bool enable);
+#ifdef CONFIG_SWITCH_GPIO
 extern bool gpio_switch_headset_insert(void) ;
 
 static void qi2ckybd_hookswitch(struct work_struct *work);
+#endif
 
 /*
  * The i2ckybd_record structure consolates all the data/variables
@@ -174,6 +176,7 @@ static irqreturn_t qi2ckybd_irqhandler(int irq, void *dev_id)
 		} else if ((MSM_GPIO_TO_INT(kbdrec->ring_switch_pin) == irq)) {
 			wake_lock(&kbdrec->ringer_sw_suspend_wake_lock);
 			schedule_work(&kbdrec->qkybd_ringswitch);		
+#ifdef CONFIG_SWITCH_GPIO
 		} else if ((MSM_GPIO_TO_INT(kbdrec->hook_switch_pin) == irq)) {
 			wake_lock(&kbdrec->hook_sw_suspend_wake_lock);
 
@@ -190,6 +193,7 @@ static irqreturn_t qi2ckybd_irqhandler(int irq, void *dev_id)
 			}
 			
 			wake_unlock(&kbdrec->hook_sw_suspend_wake_lock);	
+#endif
 		}
 	}
 	
@@ -854,6 +858,7 @@ static void qi2ckybd_ringswitch(struct work_struct *work)
 	wake_lock_timeout(&kbdrec->ringer_sw_suspend_wake_lock, HZ * 10);
 }
 
+#ifdef CONFIG_SWITCH_GPIO
 static void qi2ckybd_hookswitch(struct work_struct *work)
 {
 	struct i2ckybd_record *kbdrec	= container_of(work, struct i2ckybd_record, qkybd_hookswitch);
@@ -922,6 +927,7 @@ static void qi2ckybd_hookswitch(struct work_struct *work)
 	if (valid_key)
 		wake_lock_timeout(&kbdrec->hook_sw_suspend_wake_lock, HZ * 10);
 }
+#endif
 
 static int hook_switch_release_thread(void *arg)
 {
@@ -1040,7 +1046,9 @@ static void qi2ckybd_shutdown(struct i2ckybd_record *rd)
 		flush_work(&rd->qkybd_volctrl);
 		flush_work(&rd->qkybd_hallsensor);
 		flush_work(&rd->qkybd_ringswitch);
+#ifdef CONFIG_SWITCH_GPIO
 		flush_work(&rd->qkybd_hookswitch);
+#endif
 
 		qi2ckybd_hwreset(rd->mclrpin);
 	}
@@ -1242,7 +1250,7 @@ static ssize_t btn_brightness_store(struct device *dev, struct device_attribute 
 		tca6507_led_switch((brightness > 0) ? true : false);
 	}
 	
-	dev_dbg(dev, "%s: %d %d\n", __func__, msm_set_led_intensity_proc(PM_LCD_LED, 4), msm_set_led_intensity_proc(PM_KBD_LED, 4));
+	//dev_dbg(dev, "%s: %d %d\n", __func__, msm_set_led_intensity_proc(PM_LCD_LED, 4), msm_set_led_intensity_proc(PM_KBD_LED, 4));
 	
 	return count;
 }
@@ -1583,7 +1591,7 @@ static ssize_t caps_fn_leds_store(struct device *dev, struct device_attribute *a
 	sscanf(buf, "%d\n", &leds_state);
 
 	switch (leds_state) {
-	case PM_LEDS_ALL_OFF: //all off
+	/*case PM_LEDS_ALL_OFF: //all off
 		msm_set_led_intensity_proc(PM_LCD_LED, 0);
 		msm_set_led_intensity_proc(PM_KBD_LED, 0);
 		
@@ -1610,7 +1618,7 @@ static ssize_t caps_fn_leds_store(struct device *dev, struct device_attribute *a
 
 		break;
 	default:
-		dev_err(dev, "%s: Invalid LEDs state %d\n", __func__, leds_state);
+		dev_err(dev, "%s: Invalid LEDs state %d\n", __func__, leds_state);*/
 	}
 	
 	return count;
@@ -1890,7 +1898,9 @@ static int __devinit qi2ckybd_probe(struct i2c_client *client,
 	INIT_WORK(&rd->qkybd_volctrl, qi2ckybd_volkyctrl);
 	INIT_WORK(&rd->qkybd_hallsensor, qi2ckybd_hallsensor);
 	INIT_WORK(&rd->qkybd_ringswitch, qi2ckybd_ringswitch);
+#ifdef CONFIG_SWITCH_GPIO
 	INIT_WORK(&rd->qkybd_hookswitch, qi2ckybd_hookswitch);
+#endif
 	rc = qi2ckybd_irqsetup(rd);
 	if (rc)
 		goto failexit2;
@@ -1927,7 +1937,9 @@ static int __devinit qi2ckybd_probe(struct i2c_client *client,
 	dev_dbg(&client->dev, "HWID = %d\n", HWID);
 	
 	thread_id = kernel_thread(hook_switch_release_thread, NULL, CLONE_FS | CLONE_FILES);
+#ifdef CONFIG_SWITCH_GPIO
 	thread_for_request_hooksw_irq = kernel_thread(hook_switch_request_irq_thread, NULL, CLONE_FS | CLONE_FILES);
+#endif
 
 	return 0;
 

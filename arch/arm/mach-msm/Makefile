@@ -124,7 +124,7 @@ obj-$(CONFIG_ARCH_MSM7X30) += clock-7x30.o acpuclock-7x30.o
 #obj-$(CONFIG_ARCH_MSM7X25) += board-msm7x27.o devices-msm7x25.o
 obj-$(CONFIG_ARCH_MSM7X25) += board-adq.o devices-adq.o
 
-obj-$(CONFIG_MACH_ADQ) += board-adq-info.o rpc_pmic.o msm_vibrator.o
+obj-$(CONFIG_MACH_ADQ) += board-adq-info.o msm_vibrator.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-mmc.o board-sapphire-wifi.o
