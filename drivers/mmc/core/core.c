@@ -1308,6 +1308,7 @@ int mmc_suspend_host(struct mmc_host *host, pm_message_t state)
 	mmc_flush_scheduled_work();
 
 	mmc_bus_get(host);
+#ifndef CONFIG_MACH_ADQ
 	if (host->bus_ops && !host->bus_dead) {
 		if (host->bus_ops->suspend)
 			err = host->bus_ops->suspend(host);
@@ -1324,10 +1325,15 @@ int mmc_suspend_host(struct mmc_host *host, pm_message_t state)
 			err = 0;
 		}
 	}
+#endif
 	mmc_bus_put(host);
 
+#ifndef CONFIG_MACH_ADQ
 	if (!err)
 		mmc_power_off(host);
+#else
+    err = 0;
+#endif
 
 	return err;
 }
@@ -1349,6 +1355,7 @@ int mmc_resume_host(struct mmc_host *host)
 		return 0;
 	}
 
+#ifndef CONFIG_MACH_ADQ
 	if (host->bus_ops && !host->bus_dead) {
 		mmc_power_up(host);
 		mmc_select_voltage(host, host->ocr);
@@ -1367,13 +1374,18 @@ int mmc_resume_host(struct mmc_host *host)
 			err = 0;
 		}
 	}
+#endif
 	mmc_bus_put(host);
 
+#ifndef CONFIG_MACH_ADQ
 	/*
 	 * We add a slight delay here so that resume can progress
 	 * in parallel.
 	 */
 	mmc_detect_change(host, 1);
+#else
+    err = 0;
+#endif
 
 	return err;
 }

@@ -1554,11 +1554,23 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 
 #define GPIO_CARDDETECT_INTR    18
 
+static unsigned int msm_sdcc_card_detect(struct device * dev_sdcc1)
+{
+	int rc= 0;
+	gpio_request(GPIO_CARDDETECT_INTR,0);
+	rc = gpio_get_value(GPIO_CARDDETECT_INTR);
+	gpio_free(GPIO_CARDDETECT_INTR);  
+	printk(KERN_INFO"%s: SD card detect (%d)\n",__func__, rc);      
+	return rc;
+}
+
 static struct mmc_platform_data msm7x25_sdcc_data = {
 	.ocr_mask	= MMC_VDD_28_29,
 	.translate_vdd	= msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.status_irq = MSM_GPIO_TO_INT(GPIO_CARDDETECT_INTR),
+	.irq_flags = IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING,
+	.status         = msm_sdcc_card_detect,
 	.msmsdcc_fmin   = 144000,
 	.msmsdcc_fmid   = 24576000,
 	.msmsdcc_fmax   = 49152000,

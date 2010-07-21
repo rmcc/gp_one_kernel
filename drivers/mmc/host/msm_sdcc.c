@@ -1496,8 +1496,8 @@ msmsdcc_probe(struct platform_device *pdev)
 	host->dmares = dmares;
 
 #ifdef ATH_PATCH
-       host->pre_cmd_with_data = 0;
-       host->mci_irqenable = MCI_IRQENABLE;
+    host->pre_cmd_with_data = 0;
+    host->mci_irqenable = MCI_IRQENABLE;
 #endif
 
 	spin_lock_init(&host->lock);
