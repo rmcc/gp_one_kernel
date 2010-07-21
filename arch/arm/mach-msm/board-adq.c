@@ -96,12 +96,12 @@
 #define MSM_RAM_CONSOLE_SIZE    0
 #endif
 
-#define MSM_PMEM_AUDIO_SIZE 0x121000
+#define MSM_PMEM_AUDIO_SIZE 0x120000
 /* Using upper 1/2MB of Apps Bootloader memory*/
 #define MSM_PMEM_AUDIO_START_ADDR   0x80000ul
 
-#define MSM_PMEM_MDP_SIZE	0x800000 
-#define MSM_PMEM_ADSP_SIZE	0x1400000 - MSM_RAM_CONSOLE_SIZE
+#define MSM_PMEM_MDP_SIZE	0xA00000  /* 10 MB */
+#define MSM_PMEM_ADSP_SIZE	0x1200000 - MSM_RAM_CONSOLE_SIZE /* 18 MB */
 #define MSM_FB_SIZE		0x100000
 #define MSM_PMEM_BASE		0x00200000
 
@@ -497,14 +497,14 @@ static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
 
 static struct android_pmem_platform_data android_pmem_pdata = {
 	.name = "pmem",
-	.allocator_type = PMEM_ALLOCATORTYPE_ALLORNOTHING,
+	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
 	.cached = 1,
 };
 
 static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.name = "pmem_adsp",
 	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
-	.cached = 1,
+	.cached = 0,
 };
 
 static struct android_pmem_platform_data android_pmem_audio_pdata = {
