@@ -34,6 +34,7 @@
 #include <linux/completion.h>
 #include <linux/wakelock.h>
 /* } FIH_ADQ, AudiPCHuang, 2009/07/17 */
+#include <mach/pmic.h>
 
 struct gpio_switch_data {
 	struct switch_dev sdev;
@@ -59,7 +60,6 @@ struct gpio_switch_data {
 ///+FIH_ADQ
 struct gpio_switch_data *switch_data;
 
-//extern int msm_mic_en_proc(bool disable_enable);
 extern bool qi2ckybd_get_hook_switch_value(void);
 extern bool qi2ckybd_get_hook_switch_irq_status(void);
 extern struct completion* get_hook_sw_release_completion(void);
@@ -86,8 +86,8 @@ static void gpio_switch_work(struct work_struct *work)
 	state = gpio_get_value(data->gpio);
 	printk(KERN_INFO "gpio_switch_work: state = %d\n", state);
 	switch_set_state(&data->sdev, state);
-	
-	//msm_mic_en_proc((bool)state);
+
+	pmic_mic_en(state);	
 	
 	data->bHeadsetInserted = (bool)state;
 

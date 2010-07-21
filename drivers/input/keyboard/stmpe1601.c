@@ -10,12 +10,12 @@
 #include <mach/i2ckbd_constants.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_smd.h>
-#include <mach/rpc_pmic.h>
 #include <mach/tca6507.h>
 #include <linux/earlysuspend.h>
 #include <linux/wakelock.h>
 #include <linux/completion.h>
 #include <linux/sched.h>
+#include <mach/pmic.h>
 
 #define i2ckybd_name "stmpe1601"
 
@@ -23,7 +23,6 @@ static int __devinit qi2ckybd_probe(struct i2c_client *client,
 				    const struct i2c_device_id *id);
 extern int kpd_bl_set_intensity(int level);
 extern int led_234_set_intensity(int L2, int L3, int L4);
-//extern int msm_set_led_intensity_proc(pm_led_intensity_type led, uint8_t val);
 extern void tca6507_led_switch(bool on);
 extern void tca6507_center_blink(bool blink);
 extern void tca6507_center_attention(bool attention);
@@ -1250,7 +1249,7 @@ static ssize_t btn_brightness_store(struct device *dev, struct device_attribute 
 		tca6507_led_switch((brightness > 0) ? true : false);
 	}
 	
-	//dev_dbg(dev, "%s: %d %d\n", __func__, msm_set_led_intensity_proc(PM_LCD_LED, 4), msm_set_led_intensity_proc(PM_KBD_LED, 4));
+	dev_dbg(dev, "%s: %d %d\n", __func__, pmic_set_led_intensity(LED_LCD, 4), pmic_set_led_intensity(LED_KEYPAD, 4));
 	
 	return count;
 }
@@ -1591,34 +1590,34 @@ static ssize_t caps_fn_leds_store(struct device *dev, struct device_attribute *a
 	sscanf(buf, "%d\n", &leds_state);
 
 	switch (leds_state) {
-	/*case PM_LEDS_ALL_OFF: //all off
-		msm_set_led_intensity_proc(PM_LCD_LED, 0);
-		msm_set_led_intensity_proc(PM_KBD_LED, 0);
+	case PM_LEDS_ALL_OFF: //all off
+		pmic_set_led_intensity(LED_LCD, 0);
+		pmic_set_led_intensity(LED_KEYPAD, 0);
 		
 		break;
 	case PM_LEDS_ALL_ON: //all on
-		msm_set_led_intensity_proc(PM_LCD_LED, 4);
-		msm_set_led_intensity_proc(PM_KBD_LED, 4);
+		pmic_set_led_intensity(LED_LCD, 4);
+		pmic_set_led_intensity(LED_KEYPAD, 4);
 		
 		break;
 	case PM_LEDS_LCD_ON: //LCD ON
-		msm_set_led_intensity_proc(PM_LCD_LED, 4);
+		pmic_set_led_intensity(LED_LCD, 4);
 	
 		break;
 	case PM_LEDS_LCD_OFF: //LCD OFF
-		msm_set_led_intensity_proc(PM_LCD_LED, 0);
+		pmic_set_led_intensity(LED_LCD, 0);
 
 		break;
 	case PM_LEDS_KBD_ON: //KBD ON
-		msm_set_led_intensity_proc(PM_KBD_LED, 4);
+		pmic_set_led_intensity(LED_KEYPAD, 4);
 
 		break;
 	case PM_LEDS_KBD_OFF: //KBD OFF
-		msm_set_led_intensity_proc(PM_KBD_LED, 0);
+		pmic_set_led_intensity(LED_KEYPAD, 0);
 
 		break;
 	default:
-		dev_err(dev, "%s: Invalid LEDs state %d\n", __func__, leds_state);*/
+		dev_err(dev, "%s: Invalid LEDs state %d\n", __func__, leds_state);
 	}
 	
 	return count;
