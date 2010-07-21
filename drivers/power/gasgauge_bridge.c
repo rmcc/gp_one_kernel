@@ -25,43 +25,8 @@
 
 #include "ow2428.c"
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
-
-static int gasgauge_bridge_suspend(struct i2c_client *client, pm_message_t mesg);
-static int gasgauge_bridge_resume(struct i2c_client *client);
-
-struct i2cgg_record {
-	struct i2c_client *gasgauge;
-    struct early_suspend early_suspend;
-} ggrec;
-
-static void gg_early_suspend(struct early_suspend *h)
-{
-    struct i2cgg_record *ggr;
-	printk(KERN_INFO "gg early suspend\n");
-    ggr = container_of(h, struct i2cgg_record, early_suspend);
-    gasgauge_bridge_suspend(ggr->gasgauge, PMSG_SUSPEND);
-}
-
-static void gg_late_resume(struct early_suspend *h)
-{
-    struct i2cgg_record *ggr;
-	printk(KERN_INFO "gg late resume\n");
-    ggr = container_of(h, struct i2cgg_record, early_suspend);
-    gasgauge_bridge_resume(ggr->gasgauge);
-}
-#endif
-
 static int __devinit gasgauge_bridge_probe(struct i2c_client *client)
 {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	ggrec.gasgauge = client;
-    ggrec.early_suspend.level     = EARLY_SUSPEND_LEVEL_STOP_DRAWING;
-    ggrec.early_suspend.suspend   = gg_early_suspend;
-    ggrec.early_suspend.resume    = gg_late_resume;
-    register_early_suspend(&ggrec.early_suspend);
-#endif
 	ZeusDS2482_init(client);
 	return 0;
 }
@@ -196,10 +161,8 @@ static struct i2c_driver gasgauge_bridge_driver = {
 	},
 	.probe		= gasgauge_bridge_probe,
 	.remove		= gasgauge_bridge_remove,
-#ifndef CONFIG_HAS_EARLYSUSPEND
 	.suspend	= gasgauge_bridge_suspend,
 	.resume		= gasgauge_bridge_resume,
-#endif
 	.id_table = gasgauge_bridge_idtable,
 };
 
