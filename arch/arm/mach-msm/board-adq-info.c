@@ -121,21 +121,21 @@ static int device_model_read_proc(char *page, char **start, off_t off,
 }
 
 static int baseband_read_proc(char *page, char **start, off_t off,
-				 int count, int *eof, void *data)
+		int count, int *eof, void *data)
 {
 	int len;
 	char baseband[24];
 
-#if defined(CONFIG_MACH_MSM7X25_SURF) || defined(CONFIG_MACH_MSM7X25_SURF)
-	strcpy(baseband, "QUALCOMM MSM7X25");
-#elif defined(CONFIG_MACH_MSM7201_SURF) || defined(CONFIG_MACH_MSM7601A_SURF) || defined(CONFIG_MACH_MSM7201A_FFA)  || defined(CONFIG_MACH_MSM7601A_FFA)
-	strcpy(baseband, "QUALCOMM MSM7X01A");
-#else
-	strcpy(baseband, "Unknown Baseband Type");
-#endif
+	if (machine_is_msm7x25_surf() || machine_is_msm7x25_ffa()) {
+		strcpy(baseband, "QUALCOMM MSM7X25");
+	} else if (machine_is_msm7201a_surf() || machine_is_msm7201a_ffa()) {
+		strcpy(baseband, "QUALCOMM MSM7X01A");
+	} else {
+		strcpy(baseband, "Unknown Baseband Type");
+	}
 
 	len = snprintf(page, PAGE_SIZE, "%s\n",
-		baseband);
+			baseband);
 
 	return proc_calc_metrics(page, start, off, count, eof, len);
 }
