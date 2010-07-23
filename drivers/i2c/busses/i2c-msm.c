@@ -376,10 +376,13 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 	del_timer_sync(&dev->pwr_timer);
 	mutex_lock(&dev->mlock);
+
+#ifndef CONFIG_KEYBOARD_STMPE1601
 	if (dev->suspended) {
 		mutex_unlock(&dev->mlock);
 		return -EIO;
 	}
+#endif
 
 	if (dev->clk_state == 0) {
 		dev_dbg(dev->dev, "I2C_Power: Enable I2C clock(s)\n");
@@ -548,6 +551,12 @@ wait_for_int:
 					PM_QOS_DEFAULT_VALUE);
 	mod_timer(&dev->pwr_timer, (jiffies + 3*HZ));
 	mutex_unlock(&dev->mlock);
+#ifdef CONFIG_KEYBOARD_STMPE1601
+	if (dev->suspended) {
+		dev_dbg(dev->dev, "I2C_Power (HACK): Disable I2C clock(s) again\n");
+		msm_i2c_pwr_mgmt(dev, 0);
+	}
+#endif
 	return ret;
 }
 

@@ -620,7 +620,7 @@ static ssize_t tca6507_debug_store(struct device *dev, struct device_attribute *
 DEVICE_ATTR(tca6507_debug, 0644, tca6507_debug_show, tca6507_debug_store);
 
 #ifdef CONFIG_PM
-static int tca6507_suspend(struct i2c_client *nLeds, pm_message_t mesg)
+static int tca6507_suspend(struct device *dev)
 {
 	u8 cmd[7] = {0x13, 0x55, 0x11, 0x55, 0xDD, 0xDD, 0xFF};
 	/// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
@@ -636,12 +636,12 @@ static int tca6507_suspend(struct i2c_client *nLeds, pm_message_t mesg)
 		gpio_release();
 	}
 
-	dev_dbg(&nLeds->dev, "%s: ENTER SUSPEND MODE\n", __func__);
+	dev_dbg(dev, "%s: ENTER SUSPEND MODE\n", __func__);
 
 	return 0;
 }
 
-static int tca6507_resume(struct i2c_client *nLeds)
+static int tca6507_resume(struct device *dev)
 {
 	if (tca6507_drvdata.is_blinking || tca6507_drvdata.is_attention || tca6507_drvdata.is_charger_connected) {
 	} else {
@@ -651,7 +651,7 @@ static int tca6507_resume(struct i2c_client *nLeds)
 	
 	mutex_unlock(&tca6507_drvdata.tca6507_lock);
 
-	dev_dbg(&nLeds->dev, "%s: LEAVE SUSPEND MODE\n", __func__);
+	dev_dbg(dev, "%s: LEAVE SUSPEND MODE\n", __func__);
 
 	return 0;
 }
@@ -717,14 +717,18 @@ static const struct i2c_device_id tca6507_idtable[] = {
        { }
 };
 
+static struct dev_pm_ops tca6507_pm_ops = {
+	.suspend  	= tca6507_suspend,
+	.resume   	= tca6507_resume,
+};
+
 static struct i2c_driver tca6507_driver = {
 	.driver = {
 		.name	= "tca6507",
+		.pm = &tca6507_pm_ops,
 	},
 	.probe		= tca6507_probe,
 	.remove		= __devexit_p(tca6507_remove),
-	.suspend  	= tca6507_suspend,
-	.resume   	= tca6507_resume,
 	.id_table	= tca6507_idtable,
 };
 

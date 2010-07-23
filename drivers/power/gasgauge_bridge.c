@@ -154,15 +154,19 @@ static const struct i2c_device_id gasgauge_bridge_idtable[] = {
        { }
 };
 
+static struct dev_pm_ops gg_pm_ops = {
+	.suspend	= gasgauge_bridge_suspend,
+	.resume		= gasgauge_bridge_resume,
+};
+
 static struct i2c_driver gasgauge_bridge_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name	= GASGAUGE_BRIDGE_NAME,
+		.pm = &gg_pm_ops,
 	},
 	.probe		= gasgauge_bridge_probe,
 	.remove		= gasgauge_bridge_remove,
-	.suspend	= gasgauge_bridge_suspend,
-	.resume		= gasgauge_bridge_resume,
 	.id_table = gasgauge_bridge_idtable,
 };
 
