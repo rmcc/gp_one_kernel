@@ -253,77 +253,6 @@ static int panel_poweron(void)
 
     gpio_free(103);
 
-#if 0
-    /* LCD SPI */
-    /* GPIO 101: LCD-SPI-CLK */
-    rc = gpio_tlmm_config(GPIO_CFG(101, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	if (rc) {
-        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
-        return -EIO;
-    }
-
-    rc = gpio_request(101, "gpio_spi");
-	if (rc){
-                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
-		return -EIO;
-	}
-
-	gpio_direction_output(101,1);
-    printk(KERN_INFO "%s: (101) gpio_read = %d\n", __func__, gpio_get_value(101));
-   	gpio_free(101);
-
-    /* GPIO 102: n-LCD-SPI-CS */
-    rc = gpio_tlmm_config(GPIO_CFG(102, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	if (rc) {
-        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
-        return -EIO;
-    }
-
-    rc = gpio_request(102, "gpio_spi");
-	if (rc){
-                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
-		return -EIO;
-	}
-
-	gpio_direction_output(102,1);
-    printk(KERN_INFO "%s: (102) gpio_read = %d\n", __func__, gpio_get_value(102));
-   	gpio_free(102);
-
-    /* GPIO 131: LCD-SPI-O */
-    rc = gpio_tlmm_config(GPIO_CFG(131, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), GPIO_ENABLE);
-	if (rc) {
-        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
-        return -EIO;
-    }
-
-    rc = gpio_request(131, "gpio_spi");
-	if (rc){
-                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
-		return -EIO;
-	}
-
-    gpio_direction_input(131);
-	gpio_free(131);
-
-    /* GPIO 132: LCD-SPI-I */
-    rc = gpio_tlmm_config(GPIO_CFG(132, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	if (rc) {
-        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
-        return -EIO;
-    }
-
-    rc = gpio_request(132, "gpio_spi");
-	if (rc){
-                printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
-		return -EIO;
-	}
-
-    gpio_direction_output(132,1);
-    printk(KERN_INFO "%s: (132)gpio_read = %d\n", __func__, gpio_get_value(132));
-	gpio_free(132);
-
-#endif
-
     return rc;
 }
 /* } FIH_ADQ, Ming */
@@ -693,9 +622,8 @@ static int msm_fb_resume_sub(struct msm_fb_data_type *mfd)
 		return 0;
 
 	/* attach display channel irq if there's any */
-	if (mfd->channel_irq != 0) {
+	if (mfd->channel_irq != 0)
 		enable_irq(mfd->channel_irq);
-	}
 
     /* FIH_ADQ, Ming { */
     /* panel power on */
@@ -1026,17 +954,11 @@ static struct fb_ops msm_fb_ops = {
 	.fb_check_var = msm_fb_check_var,	/* vinfo check */
 	.fb_set_par = msm_fb_set_par,	/* set the video mode according to info->var */
 	.fb_setcolreg = NULL,	/* set color register */
-/* FIH_ADQ, 6370 { */	
-///	.fb_blank = NULL,	/* blank display */
 	.fb_blank = msm_fb_blank,	/* blank display */
-/* } FIH_ADQ, 6370 */	
 	.fb_pan_display = msm_fb_pan_display,	/* pan display */
 	.fb_fillrect = msm_fb_fillrect,	/* Draws a rectangle */
 	.fb_copyarea = msm_fb_copyarea,	/* Copy data from area to another */
 	.fb_imageblit = msm_fb_imageblit,	/* Draws a image to the display */
-/* FIH_ADQ, 6370 { */	
-	.fb_cursor = NULL,
-/* } FIH_ADQ, 6370 */	
 	.fb_rotate = NULL,
 	.fb_sync = NULL,	/* wait for blit idle, optional */
 	.fb_ioctl = msm_fb_ioctl,	/* perform fb specific ioctl (optional) */
@@ -1243,22 +1165,11 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	fbi->screen_base = fbram;
 	fbi->fix.smem_start = (unsigned long)fbram_phys;
 
-/* FIH_ADQ, 6370 { */
-///	fbram += fix->smem_len;
-///	fbram_phys += fix->smem_len;
-///	fbram_size =
-///	    (fbram_size > fix->smem_len) ? fbram_size - fix->smem_len : 0;
-/* } FIH_ADQ, 6370 */		
-
-/* FIH_ADQ, Ming { */
-/* Keep bootloader image displaying */
-///	memset(fbi->screen_base, 0x0, fix->smem_len);
-/* } FIH_ADQ, Ming */
+	memset(fbi->screen_base, 0x0, fix->smem_len);
 
 	mfd->op_enable = TRUE;
 	mfd->panel_power_on = FALSE;
 
-/* FIH_ADQ, 6370 { */
 	/* cursor memory allocation */
 	if (mfd->cursor_update) {
 		mfd->cursor_buf = dma_alloc_coherent(NULL,
