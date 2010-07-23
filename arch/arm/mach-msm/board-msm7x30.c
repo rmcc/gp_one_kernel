@@ -87,6 +87,7 @@
 #define MSM_FB_SIZE		0x500000
 #define MSM_GPU_PHYS_SIZE       SZ_2M
 #define MSM_PMEM_ADSP_SIZE      0x1800000
+#define MSM_FLUID_PMEM_ADSP_SIZE	0x2800000
 #define PMEM_KERNEL_EBI1_SIZE   0x600000
 #define MSM_PMEM_AUDIO_SIZE     0x200000
 
@@ -170,7 +171,8 @@ static int pm8058_gpios_init(void)
 								 __func__);
 			return rc;
 		}
-		gpio_set_value(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_EN), 1);
+		gpio_set_value_cansleep(
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_EN), 1);
 	}
 
 	return 0;
@@ -570,6 +572,11 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 		I2C_BOARD_INFO("vx6953", 0x20),
 	},
 #endif
+#ifdef CONFIG_SN12M0PZ
+	{
+		I2C_BOARD_INFO("sn12m0pz", 0x34 >> 1),
+	},
+#endif
 #if defined(CONFIG_MT9T013) || defined(CONFIG_SENSORS_MT9T013)
 	{
 		I2C_BOARD_INFO("mt9t013", 0x6C),
@@ -779,6 +786,33 @@ static struct platform_device msm_camera_sensor_vx6953 = {
 	},
 };
 #endif
+
+#ifdef CONFIG_SN12M0PZ
+static struct msm_camera_sensor_flash_data flash_sn12m0pz = {
+	.flash_type = MSM_CAMERA_FLASH_LED,
+	.flash_src  = &msm_flash_src
+};
+static struct msm_camera_sensor_info msm_camera_sensor_sn12m0pz_data = {
+	.sensor_name    = "sn12m0pz",
+	.sensor_reset   = 0,
+	.sensor_pwd     = 85,
+	.vcm_pwd        = 1,
+	.vcm_enable     = 1,
+	.pdata          = &msm_camera_device_data,
+	.flash_data     = &flash_sn12m0pz,
+	.resource       = msm_camera_resources,
+	.num_resources  = ARRAY_SIZE(msm_camera_resources),
+	.csi_if         = 0
+};
+
+static struct platform_device msm_camera_sensor_sn12m0pz = {
+	.name      = "msm_camera_sn12m0pz",
+	.dev       = {
+		.platform_data = &msm_camera_sensor_sn12m0pz_data,
+	},
+};
+#endif
+
 #ifdef CONFIG_MT9T013
 static struct msm_camera_sensor_flash_data flash_mt9t013 = {
 	.flash_type = MSM_CAMERA_FLASH_LED,
@@ -3587,6 +3621,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_VX6953
 	&msm_camera_sensor_vx6953,
 #endif
+#ifdef CONFIG_SN12M0PZ
+	&msm_camera_sensor_sn12m0pz,
+#endif
 	&msm_device_vidc_720p,
 #ifdef CONFIG_MSM_GEMINI
 	&msm_gemini_device,
@@ -3908,7 +3945,8 @@ out:
 static unsigned int msm7x30_sdcc_slot_status(struct device *dev)
 {
 	return (unsigned int)
-		gpio_get_value(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1));
+		gpio_get_value_cansleep(
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1));
 }
 #endif
 
@@ -4671,7 +4709,7 @@ static void __init msm7x30_init(void)
 	i2c_register_board_info(0, msm_i2c_board_info,
 			ARRAY_SIZE(msm_i2c_board_info));
 
-	if (machine_is_msm7x30_surf() || machine_is_msm7x30_ffa())
+	if (!machine_is_msm8x55_svlte_ffa())
 		marimba_pdata.tsadc = &marimba_tsadc_pdata;
 
 	i2c_register_board_info(2, msm_marimba_board_info,
@@ -4731,6 +4769,13 @@ static void __init pmem_adsp_size_setup(char **p)
 }
 __early_param("pmem_adsp_size=", pmem_adsp_size_setup);
 
+static unsigned fluid_pmem_adsp_size = MSM_FLUID_PMEM_ADSP_SIZE;
+static void __init fluid_pmem_adsp_size_setup(char **p)
+{
+	fluid_pmem_adsp_size = memparse(*p, p);
+}
+__early_param("fluid_pmem_adsp_size=", fluid_pmem_adsp_size_setup);
+
 static unsigned pmem_audio_size = MSM_PMEM_AUDIO_SIZE;
 static void __init pmem_audio_size_setup(char **p)
 {
@@ -4775,7 +4820,11 @@ static void __init msm7x30_allocate_memory_regions(void)
 			"KGSL\n", size, addr, __pa(addr));
 	}
 
-	size = pmem_adsp_size;
+	if machine_is_msm7x30_fluid()
+		size = fluid_pmem_adsp_size;
+	else
+		size = pmem_adsp_size;
+
 	if (size) {
 		addr = alloc_bootmem(size);
 		android_pmem_adsp_pdata.start = __pa(addr);

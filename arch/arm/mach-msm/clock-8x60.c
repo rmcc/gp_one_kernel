@@ -1208,7 +1208,7 @@ static struct clk_freq_tbl clk_tbl_vfe[] = {
 	F_VFE( 96000000, MM_GPERF,  2, 1,  2),
 	F_VFE(109710000, MM_GPERF,  1, 2,  7),
 	F_VFE(128000000, MM_GPERF,  1, 1,  3),
-	F_VFE(153600000, MM_GPERF,  2, 0,  0),
+	F_VFE(153600000, MM_GPERF,  1, 2,  5),
 	F_VFE(200000000, MM_PLL1,   2, 1,  2),
 	F_VFE(228570000, MM_PLL1,   1, 2,  7),
 	F_END,
@@ -2155,6 +2155,17 @@ static long soc_clk_round_rate(unsigned id, unsigned rate)
 	return -EPERM;
 }
 
+/* Return the nth supported frequency for a given clock. */
+static unsigned soc_clk_list_rate(unsigned id, unsigned n)
+{
+	struct clk_local *clk = &clk_local_tbl[id];
+
+	if (!clk->freq_tbl)
+		return 0;
+
+	return (clk->freq_tbl + n)->freq_hz;
+}
+
 struct clk_ops clk_ops_8x60 = {
 	.enable = soc_clk_enable,
 	.disable = soc_clk_disable,
@@ -2164,6 +2175,7 @@ struct clk_ops clk_ops_8x60 = {
 	.set_max_rate = soc_clk_set_max_rate,
 	.set_flags = soc_clk_set_flags,
 	.get_rate = soc_clk_get_rate,
+	.list_rate = soc_clk_list_rate,
 	.measure_rate = soc_clk_measure_rate,
 	.is_enabled = soc_clk_is_enabled,
 	.round_rate = soc_clk_round_rate,

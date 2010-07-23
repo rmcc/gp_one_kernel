@@ -17,6 +17,7 @@
 #ifndef __ARCH_ARM_MACH_MSM_CLOCK_H
 #define __ARCH_ARM_MACH_MSM_CLOCK_H
 
+#include <linux/init.h>
 #include <linux/list.h>
 #include <mach/clk.h>
 
@@ -42,6 +43,7 @@ struct clk_ops {
 	int (*set_max_rate)(unsigned id, unsigned rate);
 	int (*set_flags)(unsigned id, unsigned flags);
 	unsigned (*get_rate)(unsigned id);
+	unsigned (*list_rate)(unsigned id, unsigned n);
 	signed (*measure_rate)(unsigned id);
 	unsigned (*is_enabled)(unsigned id);
 	long (*round_rate)(unsigned id, unsigned rate);
@@ -102,8 +104,14 @@ enum clkvote_client {
 	CLKVOTE_MAX,
 };
 
-extern unsigned msm_num_clocks;
-extern struct clk *msm_clocks;
+#ifdef CONFIG_DEBUG_FS
+int __init clock_debug_init(void);
+int __init clock_debug_add(struct clk *clock);
+#else
+static inline int __init clock_debug_init(void) { return 0; }
+static inline int __init clock_debug_add(struct clk *clock) { return 0; }
+#endif
+
 extern struct clk_ops clk_ops_remote;
 
 #if defined(CONFIG_ARCH_MSM7X30) || defined(CONFIG_ARCH_MSM8X60)

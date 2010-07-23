@@ -122,7 +122,7 @@ static int pm8058_othc_suspend(struct device *dev)
 
 static int pm8058_othc_resume(struct device *dev)
 {
-	struct pm8058_othc *dd = dev_get_drvdata(pd);
+	struct pm8058_othc *dd = dev_get_drvdata(dev);
 
 	if (device_may_wakeup(dev)) {
 		disable_irq_wake(dd->othc_irq_sw);
@@ -482,7 +482,7 @@ othc_configure_hsed(struct pm8058_othc *dd, struct platform_device *pd)
 		input_sync(dd->othc_ipd);
 	}
 
-	rc = request_irq(dd->othc_irq_ir, pm8058_nc_ir,
+	rc = request_threaded_irq(dd->othc_irq_ir, NULL, pm8058_nc_ir,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				"pm8058_othc_ir", dd);
 	if (rc < 0) {
@@ -492,7 +492,7 @@ othc_configure_hsed(struct pm8058_othc *dd, struct platform_device *pd)
 
 	if (hsed_config->othc_headset == OTHC_HEADSET_NO) {
 		/* This irq is used only for NO type headset */
-		rc = request_irq(dd->othc_irq_sw, pm8058_no_sw,
+		rc = request_threaded_irq(dd->othc_irq_sw, NULL, pm8058_no_sw,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				"pm8058_othc_sw", dd);
 		if (rc < 0) {
@@ -604,7 +604,7 @@ static struct platform_driver pm8058_othc_driver = {
 		.name = "pm8058-othc",
 		.owner = THIS_MODULE,
 #ifdef CONFIG_PM
-		.pm = &pm8058_othc_pm_ops;
+		.pm = &pm8058_othc_pm_ops,
 #endif
 	},
 	.probe = pm8058_othc_probe,
