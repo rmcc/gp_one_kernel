@@ -67,4 +67,3 @@ obj-$(CONFIG_BCM4329)	+= bcm4329/
 obj-$(CONFIG_LIBRA_SDIOIF)	+= libra/
 
 obj-$(CONFIG_AR6K)	+= ar6k/host/os/linux/
-#obj-$(CONFIG_AR6K)	+= ar6krc53/host/
