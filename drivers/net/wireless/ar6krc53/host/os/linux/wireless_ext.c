@@ -1841,6 +1841,140 @@ ar6000_ioctl_giwrange(struct net_device *dev,
 
 
 /*
+ * SIOCSIWPRIV
+ * This ioctl is used by android to get linkspeed, mac address and few other stuffs
+ *
+ */
+int
+ar6000_ioctl_siwpriv(struct net_device *dev,
+              struct iw_request_info *info,
+              struct iw_param *data, char *extra)
+{
+    int ret = 0;
+    AR_SOFTC_T *ar = (AR_SOFTC_T *)netdev_priv(dev);
+    static WMI_SCAN_PARAMS_CMD scParams = {0, 0, 0, 0, 0,
+                                           WMI_SHORTSCANRATIO_DEFAULT,
+                                           DEFAULT_SCAN_CTRL_FLAGS,
+                                           0};
+ 
+    AR_DEBUG2_PRINTF("ar6000_ioctl_siwpriv: cmd=0x%x, %x %s \n", info->cmd,data->flags, data->value);
+
+    if (strcasecmp((A_UCHAR *)data->value, "LINKSPEED") == 0)
+    {
+        if(ar->arWmiReady == TRUE)
+        {
+            ar->arBitRate = 0xFFFF;
+            wmi_get_bitrate_cmd(ar->arWmi);
+            wait_event_interruptible_timeout(arEvent, ar->arBitRate != 0xFFFF, wmitimeout * HZ);
+        }
+        sprintf((A_UCHAR *)data->value, "LinkSpeed %d",ar->arBitRate/1000);  
+        return ret;
+    }
+    else if (strcasecmp((A_UCHAR *)data->value, "MACADDR") == 0)
+    {
+        wait_event_interruptible_timeout(arEvent, dev->dev_addr[5] != 0, 3000);
+        sprintf((A_UCHAR *)data->value, "Macaddr = %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x", dev->dev_addr[0],dev->dev_addr[1],dev->dev_addr[2],dev->dev_addr[3],dev->dev_addr[4],dev->dev_addr[5]);
+        return ret;
+    }
+    else if (strcasecmp((A_UCHAR *)data->value, "START") == 0)
+    {
+        if(ar->arWmiReady == TRUE)
+        {
+                /* Enable foreground scanning */
+                if (wmi_scanparams_cmd(ar->arWmi, scParams.fg_start_period,
+                                       scParams.fg_end_period,
+                                       scParams.bg_period,
+                                       scParams.minact_chdwell_time,
+                                       scParams.maxact_chdwell_time,
+                                       scParams.pas_chdwell_time,
+                                       scParams.shortScanRatio,
+                                       scParams.scanCtrlFlags,
+                                       scParams.max_dfsch_act_time
+                                       ) != A_OK)
+                {
+                    ret = -EIO;
+                }
+                if (ar->arSsidLen) {
+                    ar->arConnectPending = TRUE;
+                    if (wmi_connect_cmd(ar->arWmi, ar->arNetworkType,
+                                        ar->arDot11AuthMode, ar->arAuthMode,
+                                        ar->arPairwiseCrypto,
+                                        ar->arPairwiseCryptoLen,
+                                        ar->arGroupCrypto, ar->arGroupCryptoLen,
+                                        ar->arSsidLen, ar->arSsid,
+                                        ar->arReqBssid, ar->arChannelHint,
+                                        ar->arConnectCtrlFlags) != A_OK)
+                    {
+                        ret = -EIO;
+                        ar->arConnectPending = FALSE;
+                    }
+                }
+            if (-EIO != ret)
+            {
+                sprintf((A_UCHAR *)data->value, "OK");
+            }
+            return ret;
+        }
+    }
+    else if (strcasecmp((A_UCHAR *)data->value, "STOP") == 0)
+    {
+        if(ar->arWmiReady == TRUE)
+        {
+            AR6000_SPIN_LOCK(&ar->arLock, 0);
+            if (ar->arConnected == TRUE || ar->arConnectPending == TRUE) {
+                AR6000_SPIN_UNLOCK(&ar->arLock, 0);
+                wmi_disconnect_cmd(ar->arWmi);
+            } else {
+                AR6000_SPIN_UNLOCK(&ar->arLock, 0);
+            }
+            if (wmi_scanparams_cmd(ar->arWmi, 0xFFFF, 0, 0, 0, 0, 0, 0, 0xFF, 0) != A_OK)
+            {
+                ret = -EIO;
+            }
+ 
+            if (-EIO != ret)
+            {
+                sprintf((A_UCHAR *)data->value, "OK");
+            }
+            return ret;
+        }
+    }
+    else if (strcasecmp((A_UCHAR *)data->value, "RSSI") == 0)
+    {
+        if(ar->arWmiReady == TRUE)
+        {
+            if (ar->arConnected == TRUE)
+            {
+                if(wmi_get_stats_cmd(ar->arWmi) != A_OK) {
+                    ret = -EIO;
+                }
+                else
+                {
+                    wait_event_interruptible_timeout(arEvent, ar->statsUpdatePending == FALSE, wmitimeout * HZ);
+                    if (ar->arRssi < 0)
+                    {
+                        sprintf((A_UCHAR *)data->value, "%s rssi %d",ar->arSsid,ar->arRssi);
+                    }
+                    else
+                    {
+                        ret = -EIO;
+                    }
+                }
+                return ret;
+            }
+            else
+            {
+                sprintf((A_UCHAR *)data->value, "OK");
+            }
+            return ret;
+        }
+    }
+ 
+  /* return 0 instead of -EOPNOTSUPP  to keep android's wpa_supplicant happy. TODO: implement all custom commands required by android */
+    return 0;//-EOPNOTSUPP;
+}
+
+/*
  * SIOCSIWAP
  * This ioctl is used to set the desired bssid for the connect command.
  */
@@ -2114,7 +2248,7 @@ static const iw_handler ath_handlers[] = {
     (iw_handler) ar6000_ioctl_giwsens,          /* SIOCGIWSENS */
     (iw_handler) NULL /* not _used */,          /* SIOCSIWRANGE */
     (iw_handler) ar6000_ioctl_giwrange,         /* SIOCGIWRANGE */
-    (iw_handler) NULL /* not used */,           /* SIOCSIWPRIV */
+    (iw_handler) ar6000_ioctl_siwpriv,          /* SIOCSIWPRIV */
     (iw_handler) NULL /* kernel code */,        /* SIOCGIWPRIV */
     (iw_handler) NULL /* not used */,           /* SIOCSIWSTATS */
     (iw_handler) NULL /* kernel code */,        /* SIOCGIWSTATS */

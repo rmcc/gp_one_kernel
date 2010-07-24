@@ -3689,6 +3689,7 @@ ar6000_targetStats_event(AR_SOFTC_T *ar,  WMI_TARGET_STATS *pTarget)
     pStats->cs_disconnect_cnt   += pTarget->cservStats.cs_disconnect_cnt;
     pStats->cs_aveBeacon_snr    = pTarget->cservStats.cs_aveBeacon_snr;
     pStats->cs_aveBeacon_rssi   = pTarget->cservStats.cs_aveBeacon_rssi;
+    ar->arRssi                  = pStats->cs_aveBeacon_rssi;
     pStats->cs_lastRoam_msec    = pTarget->cservStats.cs_lastRoam_msec;
     pStats->cs_snr              = pTarget->cservStats.cs_snr;
     pStats->cs_rssi             = pTarget->cservStats.cs_rssi;
