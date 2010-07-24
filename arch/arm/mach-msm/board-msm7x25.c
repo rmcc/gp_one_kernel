@@ -281,7 +281,7 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 
 static struct android_pmem_platform_data android_pmem_pdata = {
 	.name = "pmem",
-	.no_allocator = 1,
+	.no_allocator = 0,
 	.cached = 1,
 };
 
