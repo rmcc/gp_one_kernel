@@ -224,11 +224,15 @@ config MACH_QSD8X50A_ST1_5
 
 config MACH_ADQ
 	depends on ARCH_MSM7X25
+	select ARCH_DISCONTIGMEM_ENABLE
 	depends on !MSM_STACKED_MEMORY
 	default y
 	bool "FIH ADQ"
 	help
 	  Support for the Foxconn ADQ board (Commtiva Z1/GP ONE/HS Zeus)
+
+config NODES_SHIFT
+	default "4" if MACH_ADQ && ARCH_DISCONTIGMEM_ENABLE
 
 config MACH_MSM7X25_FFA
 	depends on ARCH_MSM7X25
