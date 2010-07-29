@@ -111,18 +111,10 @@ typedef enum
 }cmcs_hw_version_type;
 
 #ifdef MSM_SHARED_RAM_BASE
-/* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
-#define FIH_READ_RESTART_REASON()    (*((unsigned int *)((MSM_SHARED_RAM_BASE + 0x21C8))))
-/* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */
 #define FIH_READ_HWID_FROM_SMEM()	(*((int *)(MSM_SHARED_RAM_BASE + 0x2200)))
-
-#define FIH_READ_POWEER_ON_CAUSE_FROM_SMEM()	(*((int *)(MSM_SHARED_RAM_BASE + 0x2208)))
 #endif
-/* +++ FIH_ADQ +++ , SungSCLee 2009.04.30{ */
-#define RESTART_REASON_USB_PID    0x22685511
-/* }--- FIH_ADQ --- , SungSCLee 2009.04.30 */
-// --- FIH_ADQ ---
 
+// --- FIH_ADQ ---
 
 
 #endif
