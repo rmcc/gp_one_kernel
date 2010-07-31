@@ -25,17 +25,28 @@
 
 #include "ow2428.c"
 
-static int __devinit gasgauge_bridge_probe(struct i2c_client *client)
+static int __devinit gasgauge_bridge_probe(struct i2c_client *client,
+											const struct i2c_device_id *id)
 {
 	ZeusDS2482_init(client);
 	return 0;
 }
+
+int dev_suspended = 0;
 
 int GetBatteryInfo(enum _battery_info_type_ info, int * data)
 {
 	short s;
 	int i = 0;
 	uint8_t c;
+
+	/* The mutex lock isn't good enough: battery calls accumulate, and on
+     * resume they take a while to flush. With enough pending replies, the
+     * resume process ends up crashing the phone due to timeouts */
+	if (dev_suspended == 1) {
+		*data = 1;
+		return 0;
+	}
 
 	if (!OpenBAT()) {
 		switch (info) {
@@ -135,16 +146,18 @@ static int gasgauge_bridge_remove(struct i2c_client *client)
 	return 0;
 }
 
-static int gasgauge_bridge_suspend(struct i2c_client *client, pm_message_t mesg)
+static int gasgauge_bridge_suspend(struct device *dev)
 {
 	printk(KERN_INFO "<ubh> gasgauge_bridge_suspend\r\n");
+	dev_suspended = 1;
 	mutex_lock(&g_ow2428_suspend_lock);
 	return 0;
 }
 
-static int gasgauge_bridge_resume(struct i2c_client *client)
+static int gasgauge_bridge_resume(struct device *dev)
 {
 	mutex_unlock(&g_ow2428_suspend_lock);
+	dev_suspended = 0;
 	printk(KERN_INFO "<ubh> gasgauge_bridge_resume\r\n");
 	return 0;
 }

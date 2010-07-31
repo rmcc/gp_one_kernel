@@ -128,35 +128,11 @@ static int ZeusDS2482_CkBusy(char * ctitle)
 	return -1;
 }
 
-static int ZeusDS2482_Reset(void)
-{
-	int iRet;
-	iRet = i2cwrcmd(CMD_DEVICE_RESET);
-	if (iRet < 0) {
-		printk(KERN_INFO "<ubh> ZeusDS2482_Reset fails 00. !!! : %d\n", iRet);
-	}
-	else {
-		uint8_t state;
-		int i;
-
-		DBGMSG((KERN_INFO "<ubh> ZeusDS2482_Reset wait ...\n"))
-		for (i = 0; ((i < 10) && (0 <= (iRet = i2crdow(&state))) && ((state | 0x08) != 0x18)); i++)
-			DBGMSG((KERN_INFO "<ubh> ZeusDS2482_Reset wait : i(%d) - state(%d)\n", i, state))
-		DBGMSG((KERN_INFO "<ubh> ZeusDS2482_Reset end : i(%d) - state(%d) - iRet(%d)\n", i, state, iRet))
-	}
-
-	return iRet;
-}
-
 static int ZeusDS2482_OWReset(void)
 {
 	int iRet, i;
-	uint8_t state;
 
-	for (i = 0; ((0 > (iRet = i2cwrcmd(CMD_OW_RESET))) && (i < 3)); i++)	//, ZeusDS2482_Reset())
-		//printk(KERN_INFO "<ubh> ZeusDS2482_OWReset 00-%d : fails(%d) try again...\r\n", i, iRet);
-		//printk(KERN_INFO "<ZOWRS> 00-%d\r\n", i);
-		{}
+	for (i = 0; ((0 > (iRet = i2cwrcmd(CMD_OW_RESET))) && (i < 3)); i++) {}
 
 	if (iRet < 0) {
 		printk(KERN_INFO "<ubh> ZeusDS2482_OWReset fails(%d) 00-%d. !!!\r\n", i, iRet);
@@ -178,7 +154,6 @@ static int ZeusDS2482_OWReset(void)
 static int ZeusDS2482_OWReadByte(uint8_t * data)
 {
 	int iRet;
-	uint8_t state;
 
 	// 1. check if 1-wire is busy 
 	if ((iRet = i2cwrsrp(REGISTER_STATUS)) < 0) {
@@ -187,7 +162,7 @@ static int ZeusDS2482_OWReadByte(uint8_t * data)
 	}
 
 	DBGMSG((KERN_INFO "<ubh> ZeusDS2482_OWReadByte 01 : check ow busy ...\n"))
-	if (iRet = ZeusDS2482_CkBusy("ZeusDS2482_OWReadByte 01")) {
+	if ((iRet = ZeusDS2482_CkBusy("ZeusDS2482_OWReadByte 01"))) {
 		return iRet;
 	}
 
@@ -198,7 +173,7 @@ static int ZeusDS2482_OWReadByte(uint8_t * data)
 	}
 
 	DBGMSG((KERN_INFO "<ubh> ZeusDS2482_OWReadByte 02 : check ow busy ...\n"))
-	if (iRet = ZeusDS2482_CkBusy("ZeusDS2482_OWReadByte 02")) {
+	if ((iRet = ZeusDS2482_CkBusy("ZeusDS2482_OWReadByte 02"))) {
 		return iRet;
 	}
 
@@ -224,7 +199,7 @@ static int ZeusDS2482_OWWriteByte(uint8_t data)
 	}
 
 	DBGMSG((KERN_INFO "<ubh> ZeusDS2482_OWWriteByte 01 : check ow busy ...\n"))
-	if (iRet = ZeusDS2482_CkBusy("ZeusDS2482_OWWriteByte 01")) {
+	if ((iRet = ZeusDS2482_CkBusy("ZeusDS2482_OWWriteByte 01"))) {
 		return iRet;
 	}
 
@@ -244,7 +219,7 @@ static int ZeusDS2482_OWWriteByte(uint8_t data)
 /* } FIH_ADQ, Kenny */
 
 int g_traceGasgauge = 0;
-int getGasgaugeState()
+int getGasgaugeState(void)
 {
 	return g_traceGasgauge;
 }
