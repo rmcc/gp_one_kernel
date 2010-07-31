@@ -232,6 +232,11 @@ struct mmc_host {
 		ktime_t start;
 	} perf;
 #endif
+
+#ifdef CONFIG_MACH_ADQ
+	int slot_id;
+#endif
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

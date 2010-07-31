@@ -1134,6 +1134,10 @@ void mmc_rescan(struct work_struct *work)
 	 * First we search for SDIO...
 	 */
 	err = mmc_send_io_op_cond(host, 0, &ocr);
+#ifdef CONFIG_MACH_ADQ
+	if (host->slot_id != 2)
+		err = -EINVAL;
+#endif
 	if (!err) {
 		if (mmc_attach_sdio(host, ocr))
 			mmc_power_off(host);

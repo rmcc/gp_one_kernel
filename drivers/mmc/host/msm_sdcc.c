@@ -1485,6 +1485,10 @@ msmsdcc_probe(struct platform_device *pdev)
 	host->mmc = mmc;
 	host->curr.cmd = NULL;
 
+#ifdef CONFIG_MACH_ADQ
+	mmc->slot_id = pdev->id;
+#endif
+
 	host->base = ioremap(memres->start, PAGE_SIZE);
 	if (!host->base) {
 		ret = -ENOMEM;
@@ -1497,7 +1501,6 @@ msmsdcc_probe(struct platform_device *pdev)
 
 #ifdef ATH_PATCH
     host->pre_cmd_with_data = 0;
-    host->mci_irqenable = MCI_IRQENABLE;
 #endif
 
 	spin_lock_init(&host->lock);
@@ -1586,15 +1589,8 @@ msmsdcc_probe(struct platform_device *pdev)
 
 	/* Delay needed (MMCIMASK0 was just written above) */
 	msmsdcc_delay(host);
-#ifdef ATH_PATCH
-    if (pdev->id == ATH_WLAN_SLOT)
-        writel(host->mci_irqenable, host->base + MMCIMASK0);
-    else
-        writel(MCI_IRQENABLE, host->base + MMCIMASK0);
-#else
 	writel(MCI_IRQENABLE, host->base + MMCIMASK0);
 	host->mci_irqenable = MCI_IRQENABLE;
-#endif
 
 	ret = request_irq(irqres->start, msmsdcc_irq, IRQF_SHARED,
 			  DRIVER_NAME " (cmd)", host);
