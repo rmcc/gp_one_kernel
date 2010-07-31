@@ -110,8 +110,9 @@ typedef enum
     CMCS_HW_VER_MAX    
 }cmcs_hw_version_type;
 
-#ifdef MSM_SHARED_RAM_BASE
-#define FIH_READ_HWID_FROM_SMEM()	(*((int *)(MSM_SHARED_RAM_BASE + 0x2200)))
+/* Temporary. ADQ/Zeus is DVT1, keep this here until all calls have been cleaned up */
+#ifdef CONFIG_MACH_ADQ
+#define FIH_READ_HWID_FROM_SMEM()	15 
 #endif
 
 // --- FIH_ADQ ---
