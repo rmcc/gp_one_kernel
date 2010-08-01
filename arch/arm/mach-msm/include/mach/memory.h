@@ -37,9 +37,6 @@ int platform_physical_low_power_pages(unsigned long, unsigned long);
 void write_to_strongly_ordered_memory(void);
 void map_zero_page_strongly_ordered(void);
 
-#if defined(CONFIG_ARCH_DISCONTIGMEM_ENABLE) && defined(CONFIG_MACH_ADQ)
-#define NODE_MEM_SIZE_BITS 25
-#endif
 
 #include <asm/mach-types.h>
 
