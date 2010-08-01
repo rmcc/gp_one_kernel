@@ -116,7 +116,8 @@ struct mdp_img {
 	uint32_t format;
 	uint32_t offset;
 	int memory_id;		/* the file descriptor */
-	uint32_t priv;
+	/* Don't enable this without enabling in userspace as well!
+	uint32_t priv;*/
 };
 
 /*
@@ -164,8 +165,9 @@ struct msmfb_data {
 	uint32_t offset;
 	int memory_id;
 	int id;
-	uint32_t flags;
-	uint32_t priv;
+	/* Don't enable this without enabling in userspace as well!
+ 	uint32_t flags;
+	uint32_t priv;*/
 };
 
 #define MSMFB_NEW_REQUEST -1
