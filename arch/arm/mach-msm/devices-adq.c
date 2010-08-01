@@ -764,11 +764,8 @@ struct platform_device msm_device_tssc = {
 	.resource = resources_tssc,
 };
 
-/* FIH_ADQ, Penho, 2009/03/13, { */
-/* ZEUS_ANDROID_CR, register device for Battery Report */
-///+FIH_ADQ
-static struct platform_device goldfish_battery_device = {
-	.name       = "goldfish-battery",
+static struct platform_device zeus_battery_device = {
+	.name       = "zeus-battery",
 	.id       = -1,
 };
 
@@ -799,13 +796,8 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_tvenc_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
-	/* FIH_ADQ, Penho, 2009/03/13, { */
-	/* ZEUS_ANDROID_CR, register device for Battery Report */
-	///+FIH_ADQ
 	else if (!strncmp(name, "batt", 4))
-		msm_register_device(&goldfish_battery_device, data);
-	///-FIH_ADQ
-	/* } FIH_ADQ, Penho, 2009/03/13 */
+		msm_register_device(&zeus_battery_device, data);
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
 }

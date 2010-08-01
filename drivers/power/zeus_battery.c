@@ -1,8 +1,10 @@
-/* drivers/power/goldfish_battery.c
- *
- * Power supply driver for the goldfish emulator
+/*
+ * Power supply driver for the Zeus battery (based on original goldfish driver)
  *
  * Copyright (C) 2008 Google, Inc.
+ * Copyright (C) 2008-2009 FIH
+ * Copyright (C) 2010 Ricardo Cerqueira
+ *
  * Author: Mike Lockwood <lockwood@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -58,15 +60,6 @@ void temperature_detect(void);
 static void gasgauge_param_reset(void);
 /* } FIH_ADQ, Kenny */
 /*+++FIH_ADQ+++*/
-
-struct goldfish_battery_data {
-	uint32_t reg_base;
-	int irq;
-	spinlock_t lock;
-
-	struct power_supply battery;
-	///struct power_supply ac;
-};
 
 #define GOLDFISH_BATTERY_READ(data, addr)   (readl(data->reg_base + addr))
 #define GOLDFISH_BATTERY_WRITE(data, addr, x)   (writel(x, data->reg_base + addr))
@@ -461,7 +454,7 @@ static irqreturn_t chgdet_irqhandler(int irq, void *dev_id)
 #endif	// FLAG_CHARGER_DETECT
 
 
-static int goldfish_battery_probe(struct platform_device *pdev)
+static int zeus_battery_probe(struct platform_device *pdev)
 {
 	int ret, i;
 
@@ -485,20 +478,20 @@ static int goldfish_battery_probe(struct platform_device *pdev)
 	gpio_tlmm_config( GPIO_CFG(GPIO_CHR_DET, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
 	ret = gpio_request(GPIO_CHR_DET, "gpio_keybd_irq");
 	if (ret)
-		printk(KERN_INFO "<ubh> goldfish_battery_probe 04. : IRQ init fails!!!\r\n");
+		printk(KERN_INFO "<ubh> zeus_battery_probe 04. : IRQ init fails!!!\r\n");
 	ret = gpio_direction_input(GPIO_CHR_DET);
 	if (ret)
-		printk(KERN_INFO "<ubh> goldfish_battery_probe 05. : gpio_direction_input fails!!!\r\n");
+		printk(KERN_INFO "<ubh> zeus_battery_probe 05. : gpio_direction_input fails!!!\r\n");
 	ret = request_irq(MSM_GPIO_TO_INT(GPIO_CHR_DET), &chgdet_irqhandler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, pdev->name, NULL);
 	if (ret)
-		printk(KERN_INFO "<ubh> goldfish_battery_probe 06. : request_irq fails!!!\r\n");
+		printk(KERN_INFO "<ubh> zeus_battery_probe 06. : request_irq fails!!!\r\n");
 #endif	// FLAG_CHARGER_DETECT
 
 	return 0;
 
 }
 
-static int goldfish_battery_remove(struct platform_device *pdev)
+static int zeus_battery_remove(struct platform_device *pdev)
 {
 	int i;
 
@@ -559,6 +552,7 @@ void zeus_update_usb_status(enum chg_type chgtype) {
 		default:
 			/* Turn off charger IC */
 			gpio_set_value(CHR_EN,1);
+			gpio_set_value(CHR_1A,0);
 			gpio_set_value(USBSET,0);
 			current_charger = CHARGER_BATTERY;
 			break;
@@ -572,32 +566,32 @@ void zeus_update_usb_status(enum chg_type chgtype) {
 EXPORT_SYMBOL(zeus_update_usb_status);
 #endif
 
-static struct platform_driver goldfish_battery_device = {
-	.probe		= goldfish_battery_probe,
-	.remove		= goldfish_battery_remove,
+static struct platform_driver zeus_battery_device = {
+	.probe		= zeus_battery_probe,
+	.remove		= zeus_battery_remove,
 	.driver = {
-		.name = "goldfish-battery"
+		.name = "zeus-battery"
 	}
 };
 
-static int __init goldfish_battery_init(void)
+static int __init zeus_battery_init(void)
 {
 	/*+++FIH_ADQ+++*/
-	gpio_tlmm_config(GPIO_CFG(33, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	gpio_tlmm_config(GPIO_CFG(97, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	gpio_tlmm_config(GPIO_CFG(57, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(CHR_EN, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(USBSET, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(CHR_1A, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
 	/*+++FIH_ADQ+++*/
 
-	return platform_driver_register(&goldfish_battery_device);
+	return platform_driver_register(&zeus_battery_device);
 }
 
-static void __exit goldfish_battery_exit(void)
+static void __exit zeus_battery_exit(void)
 {
-	platform_driver_unregister(&goldfish_battery_device);
+	platform_driver_unregister(&zeus_battery_device);
 }
 
-module_init(goldfish_battery_init);
-module_exit(goldfish_battery_exit);
+module_init(zeus_battery_init);
+module_exit(zeus_battery_exit);
 
 MODULE_AUTHOR("Several");
 MODULE_LICENSE("GPL");
