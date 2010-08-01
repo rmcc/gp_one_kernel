@@ -38,6 +38,7 @@
 #include <linux/semaphore.h>
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
+#include <linux/msm_kgsl.h>
 
 #include "mdp.h"
 #include "msm_fb.h"
@@ -86,15 +87,15 @@ struct mdp4_overlay_ctrl {
 
 static struct mdp4_overlay_ctrl *ctrl = &mdp4_overlay_db;
 
-void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int lcdc)
+void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int atv)
 {
 	uint32	dmae_cfg_reg;
 
-#ifdef DMAE_DEFLAGER
-	dmae_cfg_reg = DMA_DEFLKR_EN;
-#else
-	dmae_cfg_reg = 0;
-#endif
+	if (atv)
+		dmae_cfg_reg = DMA_DEFLKR_EN;
+	else
+		dmae_cfg_reg = 0;
+
 	if (mfd->fb_imgType == MDP_BGR_565)
 		dmae_cfg_reg |= DMA_PACK_PATTERN_BGR;
 	else
@@ -116,9 +117,19 @@ void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int lcdc)
 
 	/* dma2 config register */
 	MDP_OUTP(MDP_BASE + 0xb0000, dmae_cfg_reg);
-	MDP_OUTP(MDP_BASE + 0xb0070, 0xff0000);
-	MDP_OUTP(MDP_BASE + 0xb0074, 0xff0000);
-	MDP_OUTP(MDP_BASE + 0xb0078, 0xff0000);
+	if (atv) {
+		MDP_OUTP(MDP_BASE + 0xb0070, 0xeb0010);
+		MDP_OUTP(MDP_BASE + 0xb0074, 0xf00010);
+		MDP_OUTP(MDP_BASE + 0xb0078, 0xf00010);
+		MDP_OUTP(MDP_BASE + 0xb3000, 0x80);
+		MDP_OUTP(MDP_BASE + 0xb3010, 0x1800040);
+		MDP_OUTP(MDP_BASE + 0xb3014, 0x1000080);
+		MDP_OUTP(MDP_BASE + 0xb4004, 0x67686970);
+	} else {
+		MDP_OUTP(MDP_BASE + 0xb0070, 0xff0000);
+		MDP_OUTP(MDP_BASE + 0xb0074, 0xff0000);
+		MDP_OUTP(MDP_BASE + 0xb0078, 0xff0000);
+	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
@@ -774,12 +785,16 @@ uint32 mdp4_overlay_unpack_pattern(struct mdp4_overlay_pipe *pipe)
 
 void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 {
-	uint32 data;
+	uint32 data, intf;
 	char *overlay_base;
 
-	if (pipe->mixer_num == MDP4_MIXER1)
+	intf = 0;
+	if (pipe->mixer_num == MDP4_MIXER1) {
 		overlay_base = MDP_BASE + MDP4_OVERLAYPROC1_BASE;/* 0x18000 */
-	else
+		intf = inpdw(MDP_BASE + 0x0038); /* MDP_DISP_INTF_SEL */
+		intf >>= 4;
+		intf &= 0x03;
+	} else
 		overlay_base = MDP_BASE + MDP4_OVERLAYPROC0_BASE;/* 0x10000 */
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
@@ -793,9 +808,18 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 	outpdw(overlay_base + 0x000c, pipe->srcp0_addr);
 	outpdw(overlay_base + 0x0010, pipe->srcp0_ystride);
 
+	if (pipe->mixer_num == MDP4_MIXER1) {
+		if (intf == TV_INTF) {
+			outpdw(overlay_base + 0x0014, 0x02); /* yuv422 */
+			/* overlay1 CSC config */
+			outpdw(overlay_base + 0x0200, 0x05); /* rgb->yuv */
+		}
+	}
+
 #ifdef MDP4_IGC_LUT_ENABLE
 	outpdw(overlay_base + 0x0014, 0x4);	/* GC_LUT_EN, 888 */
 #endif
+
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }
 
@@ -1259,6 +1283,12 @@ static int get_img(struct msmfb_data *img, struct fb_info *info,
 #ifdef CONFIG_ANDROID_PMEM
 	unsigned long vstart;
 #endif
+
+	if (img->flags & MDP_BLIT_SRC_GEM) {
+		*pp_file = NULL;
+		return kgsl_gem_obj_addr(img->memory_id, (int) img->priv,
+					 start, len);
+	}
 
 #ifdef CONFIG_ANDROID_PMEM
 	if (!get_pmem_file(img->memory_id, start, &vstart, len, pp_file))

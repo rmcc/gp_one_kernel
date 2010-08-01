@@ -1,7 +1,7 @@
 /* linux/include/mach/hsusb.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -37,6 +37,8 @@
 #define REQUEST_STOP		0
 #define REQUEST_START		1
 #define REQUEST_RESUME		2
+#define REQUEST_HNP_SUSPEND	3
+#define REQUEST_HNP_RESUME	4
 
 enum hsusb_phy_type {
 	UNDEFINED,
@@ -45,9 +47,9 @@ enum hsusb_phy_type {
 };
 /* used to detect the OTG Mode */
 enum otg_mode {
-	OTG_ID = 0, /* ID pin detection */
-	OTG_SYSFS,  /* sysfs mode */
-	OTG_VCHG,   /* Based on VCHG interrupt */
+	OTG_ID = 0,   		/* ID pin detection */
+	OTG_USER_CONTROL,  	/* User configurable */
+	OTG_VCHG,     		/* Based on VCHG interrupt */
 };
 
 struct usb_function_map {
@@ -147,12 +149,12 @@ struct msm_otg_platform_data {
 	int (*pmic_enable_ldo) (int);
 	void (*setup_gpio)(unsigned int config);
 	u8      otg_mode;
+	void (*vbus_power) (unsigned phy_info, int on);
 };
 
 struct msm_usb_host_platform_data {
 	unsigned phy_info;
 	unsigned int power_budget;
-	int (*phy_reset)(void __iomem *addr);
 	void (*config_gpio)(unsigned int config);
 	void (*vbus_power) (unsigned phy_info, int on);
 	int  (*vbus_init)(int init);

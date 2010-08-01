@@ -22,6 +22,7 @@
 #include <mach/dma.h>
 #include <asm/mach/mmc.h>
 #include <linux/msm_kgsl.h>
+#include <linux/msm_rotator.h>
 #include <mach/msm_hsusb.h>
 #include "clock.h"
 #include "clock-8x60.h"
@@ -585,6 +586,49 @@ static struct platform_device msm_mdp_device = {
 	.num_resources  = ARRAY_SIZE(msm_mdp_resources),
 	.resource       = msm_mdp_resources,
 };
+#ifdef CONFIG_MSM_ROTATOR
+static struct resource resources_msm_rotator[] = {
+	{
+		.start	= 0x04E00000,
+		.end	= 0x04F00000 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= ROT_IRQ,
+		.end	= ROT_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct msm_rot_clocks rotator_clocks[] = {
+	{
+		.clk_name = "rot_clk",
+		.clk_type = ROTATOR_AXI_CLK,
+		.clk_rate = 160 * 1000 * 1000,
+	},
+	{
+		.clk_name = "rotator_pclk",
+		.clk_type = ROTATOR_PCLK,
+		.clk_rate = 0,
+	},
+};
+
+static struct msm_rotator_platform_data rotator_pdata = {
+	.number_of_clocks = ARRAY_SIZE(rotator_clocks),
+	.hardware_version_number = 0x01010307,
+	.rotator_clks = rotator_clocks,
+};
+
+struct platform_device msm_rotator_device = {
+	.name		= "msm_rotator",
+	.id		= 0,
+	.num_resources  = ARRAY_SIZE(resources_msm_rotator),
+	.resource       = resources_msm_rotator,
+	.dev		= {
+		.platform_data = &rotator_pdata,
+	},
+};
+#endif
 
 static void __init msm_register_device(struct platform_device *pdev, void *data)
 {
@@ -689,6 +733,33 @@ struct platform_device msm_device_smd = {
 	.id             = -1,
 };
 
+
+/* MSM Video core device */
+
+#define MSM_VIDC_BASE_PHYS 0x04400000
+#define MSM_VIDC_BASE_SIZE 0x00100000
+
+static struct resource msm_device_vidc_resources[] = {
+	{
+		.start	= MSM_VIDC_BASE_PHYS,
+		.end	= MSM_VIDC_BASE_PHYS + MSM_VIDC_BASE_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= VCODEC_IRQ,
+		.end	= VCODEC_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device msm_device_vidc = {
+	.name = "msm_vidc",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(msm_device_vidc_resources),
+	.resource = msm_device_vidc_resources,
+};
+
+
 struct clk msm_clocks_8x60[] = {
 	CLK_RPM("ebi1_clk",		EBI1_CLK,		NULL, CLK_MIN),
 
@@ -784,6 +855,8 @@ struct clk msm_clocks_8x60[] = {
 	CLK_8X60("csi_src_clk",		CSI_SRC_CLK,		NULL, 0),
 	CLK_8X60("csi_clk",		CSI0_CLK,		NULL, 0),
 	CLK_8X60("csi_clk",		CSI1_CLK,		NULL, 0),
+	CLK_8X60("dsi_byte_div_clk",	DSI_BYTE_CLK,		NULL, 0),
+	CLK_8X60("dsi_esc_clk",		DSI_ESC_CLK,		NULL, 0),
 	CLK_8X60("gfx2d_clk",		GFX2D0_CLK,		NULL, 0),
 	CLK_8X60("gfx3d_clk",		GFX3D_CLK,		NULL, 0),
 	CLK_8X60("ijpeg_clk",		IJPEG_CLK,		NULL, 0),
@@ -820,21 +893,16 @@ struct clk msm_clocks_8x60[] = {
 	CLK_8X60("tv_enc_pclk",		TV_ENC_P_CLK,		NULL, 0),
 	CLK_8X60("vfe_pclk",		VFE_P_CLK,		NULL, 0),
 	CLK_8X60("vpe_pclk",		VPE_P_CLK,		NULL, 0),
-	CLK_8X60("mi2s_src_clk",	MI2S_SRC_CLK,		NULL, 0),
-	CLK_8X60("mi2s_clk",		MI2S_CLK,		NULL, 0),
-	CLK_8X60("mi2s_m_clk",		MI2S_M_CLK,		NULL, 0),
-	CLK_8X60("i2s_mic_src_clk",	CODEC_I2S_MIC_SRC_CLK,	NULL, 0),
-	CLK_8X60("i2s_mic_clk",		CODEC_I2S_MIC_CLK,	NULL, 0),
-	CLK_8X60("i2s_mic_m_clk",	CODEC_I2S_MIC_M_CLK,	NULL, 0),
-	CLK_8X60("i2s_mic_src_clk",	SPARE_I2S_MIC_SRC_CLK,	NULL, 0),
-	CLK_8X60("i2s_mic_clk",		SPARE_I2S_MIC_CLK,	NULL, 0),
-	CLK_8X60("i2s_mic_m_clk",	SPARE_I2S_MIC_M_CLK,	NULL, 0),
-	CLK_8X60("i2s_spkr_src_clk",	CODEC_I2S_SPKR_SRC_CLK,	NULL, 0),
-	CLK_8X60("i2s_spkr_clk",	CODEC_I2S_SPKR_CLK,	NULL, 0),
-	CLK_8X60("i2s_spkr_m_clk",	CODEC_I2S_SPKR_M_CLK,	NULL, 0),
-	CLK_8X60("i2s_spkr_src_clk",	SPARE_I2S_SPKR_SRC_CLK,	NULL, 0),
-	CLK_8X60("i2s_spkr_clk",	SPARE_I2S_SPKR_CLK,	NULL, 0),
-	CLK_8X60("i2s_spkr_m_clk",	SPARE_I2S_SPKR_M_CLK,	NULL, 0),
+	CLK_8X60("mi2s_osr_clk",	MI2S_OSR_CLK,		NULL, 0),
+	CLK_8X60("mi2s_bit_clk",	MI2S_BIT_CLK,		NULL, 0),
+	CLK_8X60("i2s_mic_osr_clk",	CODEC_I2S_MIC_OSR_CLK,	NULL, 0),
+	CLK_8X60("i2s_mic_bit_clk",	CODEC_I2S_MIC_BIT_CLK,	NULL, 0),
+	CLK_8X60("i2s_mic_osr_clk",	SPARE_I2S_MIC_OSR_CLK,	NULL, 0),
+	CLK_8X60("i2s_mic_bit_clk",	SPARE_I2S_MIC_BIT_CLK,	NULL, 0),
+	CLK_8X60("i2s_spkr_osr_clk",	CODEC_I2S_SPKR_OSR_CLK,	NULL, 0),
+	CLK_8X60("i2s_spkr_bit_clk",	CODEC_I2S_SPKR_BIT_CLK,	NULL, 0),
+	CLK_8X60("i2s_spkr_osr_clk",	SPARE_I2S_SPKR_OSR_CLK,	NULL, 0),
+	CLK_8X60("i2s_spkr_bit_clk",	SPARE_I2S_SPKR_BIT_CLK,	NULL, 0),
 	CLK_8X60("pcm_clk",		PCM_CLK,		NULL, 0),
 };
 

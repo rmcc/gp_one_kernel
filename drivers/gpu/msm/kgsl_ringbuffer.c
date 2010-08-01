@@ -106,13 +106,10 @@ void kgsl_cp_intrcallback(struct kgsl_device *device)
 		kgsl_sharedmem_writel(&rb->device->memstore,
 			KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable),
 			enableflag);
+		wmb();
 		KGSL_CMD_WARN("ringbuffer rb interrupt\n");
 	}
 
-	if (status & (CP_INT_CNTL__IB1_INT_MASK | CP_INT_CNTL__RB_INT_MASK)) {
-		KGSL_CMD_WARN("ringbuffer ib1/rb interrupt\n");
-		wake_up_interruptible_all(&yamato_device->ib1_wq);
-	}
 	if (status & CP_INT_CNTL__T0_PACKET_IN_IB_MASK) {
 		KGSL_CMD_FATAL("ringbuffer TO packet in IB interrupt\n");
 		kgsl_yamato_regwrite(rb->device, REG_CP_INT_CNTL, 0);
@@ -150,6 +147,14 @@ void kgsl_cp_intrcallback(struct kgsl_device *device)
 	/* only ack bits we understand */
 	status &= GSL_CP_INT_MASK;
 	kgsl_yamato_regwrite(device, REG_CP_INT_ACK, status);
+
+	if (status & (CP_INT_CNTL__IB1_INT_MASK | CP_INT_CNTL__RB_INT_MASK)) {
+		KGSL_CMD_WARN("ringbuffer ib1/rb interrupt\n");
+		wake_up_interruptible_all(&yamato_device->ib1_wq);
+		atomic_notifier_call_chain(&(device->ts_notifier_list),
+					   KGSL_DEVICE_YAMATO,
+					   NULL);
+	}
 
 	KGSL_CMD_VDBG("return\n");
 }
@@ -357,7 +362,7 @@ static int kgsl_ringbuffer_load_pfp_ucode(struct kgsl_device *device)
 	return status;
 }
 
-static int kgsl_ringbuffer_start(struct kgsl_ringbuffer *rb)
+int kgsl_ringbuffer_start(struct kgsl_ringbuffer *rb)
 {
 	int status;
 	/*cp_rb_cntl_u cp_rb_cntl; */
@@ -500,7 +505,7 @@ static int kgsl_ringbuffer_start(struct kgsl_ringbuffer *rb)
 	return status;
 }
 
-static int kgsl_ringbuffer_stop(struct kgsl_ringbuffer *rb)
+int kgsl_ringbuffer_stop(struct kgsl_ringbuffer *rb)
 {
 	KGSL_CMD_VDBG("enter (rb=%p)\n", rb);
 
@@ -510,6 +515,8 @@ static int kgsl_ringbuffer_stop(struct kgsl_ringbuffer *rb)
 
 		/* ME_HALT */
 		kgsl_yamato_regwrite(rb->device, REG_CP_ME_CNTL, 0x10000000);
+
+		kgsl_cmdstream_memqueue_drain(rb->device);
 
 		rb->flags &= ~KGSL_FLAGS_STARTED;
 		kgsl_ringbuffer_dump(rb);
@@ -576,13 +583,6 @@ int kgsl_ringbuffer_init(struct kgsl_device *device)
 
 	rb->flags |= KGSL_FLAGS_INITIALIZED;
 
-	status = kgsl_ringbuffer_start(rb);
-	if (status != 0) {
-		kgsl_ringbuffer_close(rb);
-		KGSL_CMD_VDBG("return %d\n", status);
-		return status;
-	}
-
 	KGSL_CMD_VDBG("return %d\n", 0);
 	return 0;
 }
@@ -590,10 +590,6 @@ int kgsl_ringbuffer_init(struct kgsl_device *device)
 int kgsl_ringbuffer_close(struct kgsl_ringbuffer *rb)
 {
 	KGSL_CMD_VDBG("enter (rb=%p)\n", rb);
-
-	kgsl_cmdstream_memqueue_drain(rb->device);
-
-	kgsl_ringbuffer_stop(rb);
 
 	/* this must happen before first sharedmem_free */
 	kgsl_yamato_cleanup_pt(rb->device, rb->device->mmu.defaultpagetable);
@@ -751,7 +747,6 @@ kgsl_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 
 	return 0;
 }
-
 
 #ifdef DEBUG
 void kgsl_ringbuffer_debug(struct kgsl_ringbuffer *rb,

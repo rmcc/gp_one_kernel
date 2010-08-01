@@ -81,7 +81,7 @@
 #endif
 
 #ifdef CONFIG_ARCH_MSM7X27
-#define MSM_PMEM_MDP_SIZE	0x1700000
+#define MSM_PMEM_MDP_SIZE	0x1B76000
 #define MSM_PMEM_ADSP_SIZE	0xAE4000
 #define MSM_PMEM_AUDIO_SIZE	0x5B000
 #define MSM_FB_SIZE		0x177000
@@ -322,6 +322,28 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 };
 #endif
 
+#ifdef CONFIG_USB_EHCI_MSM
+static void msm_hsusb_vbus_power(unsigned phy_info, int on)
+{
+	if (on)
+		msm_hsusb_vbus_powerup();
+	else
+		msm_hsusb_vbus_shutdown();
+}
+
+static struct msm_usb_host_platform_data msm_usb_host_pdata = {
+	.phy_info       = (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
+};
+
+static void __init msm7x2x_init_host(void)
+{
+	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa())
+		return;
+
+	msm_add_host(0, &msm_usb_host_pdata);
+}
+#endif
+
 #ifdef CONFIG_USB_MSM_OTG_72K
 static int hsusb_rpc_connect(int connect)
 {
@@ -340,6 +362,9 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pmic_register_vbus_sn   = msm_pm_app_register_vbus_sn,
 	.pmic_unregister_vbus_sn = msm_pm_app_unregister_vbus_sn,
 	.pmic_enable_ldo         = msm_pm_app_enable_usb_ldo,
+#ifdef CONFIG_USB_EHCI_MSM
+	.vbus_power = msm_hsusb_vbus_power,
+#endif
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -497,7 +522,7 @@ static struct android_pmem_platform_data android_pmem_pdata = {
 static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.name = "pmem_adsp",
 	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
-	.cached = 1,
+	.cached = 0,
 };
 
 static struct android_pmem_platform_data android_pmem_audio_pdata = {
@@ -1411,36 +1436,13 @@ static void __init msm7x2x_init_irq(void)
 
 static struct msm_acpu_clock_platform_data msm7x2x_clock_data = {
 	.acpu_switch_time_us = 50,
-	.max_speed_delta_khz = 256000,
+	.max_speed_delta_khz = 400000,
 	.vdd_switch_time_us = 62,
 	.max_axi_khz = 160000,
 };
 
 void msm_serial_debug_init(unsigned int base, int irq,
 			   struct device *clk_device, int signal_irq);
-
-#ifdef CONFIG_USB_EHCI_MSM
-static void msm_hsusb_vbus_power(unsigned phy_info, int on)
-{
-	if (on)
-		msm_hsusb_vbus_powerup();
-	else
-		msm_hsusb_vbus_shutdown();
-}
-
-static struct msm_usb_host_platform_data msm_usb_host_pdata = {
-	.phy_info       = (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
-	.vbus_power = msm_hsusb_vbus_power,
-};
-static void __init msm7x2x_init_host(void)
-{
-	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa())
-		return;
-
-	msm_add_host(0, &msm_usb_host_pdata);
-}
-#endif
-
 
 #ifdef CONFIG_MMC
 static void sdcc_gpio_init(void)

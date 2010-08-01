@@ -1122,6 +1122,7 @@ sub process {
 	my $stashrawline="";
 	my $subjectline="";
 	my $sublinenr="";
+	my $blankline_flag=0;
 
 	my $length;
 	my $indent;
@@ -1400,14 +1401,22 @@ sub process {
 				WARN("space required after Signed-off-by:\n" .
 					$herecurr);
 			}
-			if ($line =~ /^\s*signed-off-by:.*quicinc\.com/i) {
+			if ($line =~ /^\s*signed-off-by:.*(quicinc|qualcomm)\.com/i) {
 				WARN("invalid Signed-off-by identity\n" . $line );
 			}
+			$blankline_flag = 1;
 		}
 
 #check the patch for invalid author credentials
-		if ($line =~ /^From:.*quicinc\.com/) {
+		if ($line =~ /^From:.*(quicinc|qualcomm)\.com/) {
 			WARN("invalid author identity\n" . $line );
+		}
+
+#check the patch for blank lines in the header
+		if($line =~ /^\s*$/ && $blankline_flag == 1) {
+			WARN("Blank lines should not appear in the header once signed off\n");
+		} elsif($line =~ /^---$/) {
+			$blankline_flag = 0;
 		}
 
 # Check for wrappage within a valid hunk of the file
@@ -2617,6 +2626,11 @@ sub process {
 			if ($line =~ /\busb_free_urb\(\Q$expr\E\);/) {
 				WARN("usb_free_urb(NULL) is safe this check is probably not required\n" . $hereprev);
 			}
+		}
+
+# check the patch for use of mdelay
+		if ($line =~ /\bmdelay\s*\(/) {
+			WARN("use of mdelay() found: msleep() is the preferred API.\n" . $line );
 		}
 
 # warn about #ifdefs in C files

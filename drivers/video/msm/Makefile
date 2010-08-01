@@ -54,6 +54,9 @@ obj-$(CONFIG_FB_MSM_EXTMDDI) += msm_mddi_ext.o
 
 # TVEnc
 obj-$(CONFIG_FB_MSM_TVOUT) += tvenc.o
+ifeq ($(CONFIG_FB_MSM_OVERLAY),y)
+obj-$(CONFIG_FB_MSM_TVOUT) += mdp4_overlay_atv.o
+endif
 
 # MSM FB Panel
 obj-y += msm_fb_panel.o
@@ -95,6 +98,8 @@ obj-$(CONFIG_FB_MSM_TVOUT_NTSC) += tv_ntsc.o
 obj-$(CONFIG_FB_MSM_TVOUT_PAL) += tv_pal.o
 
 obj-$(CONFIG_FB_MSM_EXTMDDI_SVGA) += mddi_ext_lcd.o
+
+obj-$(CONFIG_MSM_VIDC_1080P) += vidc/
 
 clean:
 	rm *.o .*cmd

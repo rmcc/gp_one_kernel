@@ -34,6 +34,7 @@
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
 #include <linux/leds-pmic8058.h>
+#include <linux/rtc/rtc-pm8058.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c/sx150x.h>
@@ -261,53 +262,32 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 	{1, 0, "C0", "WFI", MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
 };
 
-#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_HCD)
-static struct msm_otg_platform_data msm_otg_pdata = {
-	/* if usb link is in sps there is no need for
-	 * usb pclk as dayatona fabric clock will be
-	 * used instead
-	 */
-	.usb_in_sps = 1,
-};
-#endif
-
 #ifdef CONFIG_USB_EHCI_MSM
 struct regulator *votg_5v_switch;
-static inline int msm_hsusb_vbus_vreg_init(int init)
-{
-	if (init) {
-		votg_5v_switch = regulator_get(NULL, "8901_usb_otg");
-		if (IS_ERR(votg_5v_switch)) {
-			pr_err("%s: unable to get votg_5v_switch\n", __func__);
-			return -ENODEV;
-		}
-		pr_info("%s: regulator initialization successful\n", __func__);
-	} else
-		regulator_put(votg_5v_switch);
-
-	return 0;
-}
-
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
 	static int vbus_is_on;
 
-	if (!votg_5v_switch || IS_ERR(votg_5v_switch)) {
-		pr_err("%s: votg_5v_switch is not initialized\n", __func__);
-		return;
-	}
 	/* If VBUS is already on (or off), do nothing. */
 	if (on == vbus_is_on)
 		return;
 
 	if (on) {
-		if (regulator_enable(votg_5v_switch))
+		votg_5v_switch = regulator_get(NULL, "8901_usb_otg");
+		if (IS_ERR(votg_5v_switch)) {
+			pr_err("%s: unable to get votg_5v_switch\n", __func__);
+			return;
+		}
+		if (regulator_enable(votg_5v_switch)) {
 			pr_err("%s: Unable to enable the regulator:"
 					" votg_5v_switch\n", __func__);
+			return;
+		}
 	} else {
 		if (regulator_disable(votg_5v_switch))
 			pr_err("%s: Unable to enable the regulator:"
 					" votg_5v_switch\n", __func__);
+		regulator_put(votg_5v_switch);
 	}
 
 	vbus_is_on = on;
@@ -315,10 +295,20 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 
 static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 	.phy_info   = (USB_PHY_INTEGRATED | USB_PHY_MODEL_45NM),
-	.vbus_init = msm_hsusb_vbus_vreg_init,
+};
+#endif
+
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+static struct msm_otg_platform_data msm_otg_pdata = {
+	/* if usb link is in sps there is no need for
+	 * usb pclk as dayatona fabric clock will be
+	 * used instead
+	 */
+	.usb_in_sps = 1,
 	.vbus_power = msm_hsusb_vbus_power,
 };
 #endif
+
 
 #ifdef CONFIG_USB_ANDROID
 /* dynamic composition */
@@ -432,8 +422,6 @@ static struct platform_device android_usb_device = {
 
 #ifdef CONFIG_MSM_CAMERA
 
-#define MSM_PMEM_ADSP_SIZE      0x2000000
-#define PMEM_KERNEL_EBI1_SIZE   0x600000
 static uint32_t camera_off_gpio_table[] = {
 	GPIO_CFG(47, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),
 	GPIO_CFG(48, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),
@@ -659,38 +647,25 @@ static struct platform_device msm_batt_device = {
 };
 #endif
 
-#ifdef CONFIG_MSM_CAMERA
-static struct android_pmem_platform_data android_pmem_adsp_pdata = {
-       .name = "pmem_adsp",
-       .allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
-       .cached = 0,
-};
-
-static struct platform_device android_pmem_adsp_device = {
-       .name = "android_pmem",
-       .id = 2,
-       .dev = { .platform_data = &android_pmem_adsp_pdata },
-};
-
-static unsigned pmem_adsp_size = MSM_PMEM_ADSP_SIZE;
-static void __init pmem_adsp_size_setup(char **p)
-{
-	pmem_adsp_size = memparse(*p, p);
-}
-__early_param("pmem_adsp_size=", pmem_adsp_size_setup);
-#endif
-
 #define MSM_FB_SIZE 0x500000;
 #define MSM_PMEM_SF_SIZE 0x1700000;
-#define MSM_PMEM_KERNEL_EBI1_SIZE 0x0
-
 #define MSM_GPU_PHYS_SIZE       SZ_2M
-static unsigned pmem_sf_size = MSM_PMEM_SF_SIZE;
-static void __init pmem_sf_size_setup(char **p)
-{
-	pmem_sf_size = memparse(*p, p);
-}
-__early_param("pmem_sf_size=", pmem_sf_size_setup);
+
+#define MSM_PMEM_KERNEL_EBI1_SIZE  0x600000
+#define MSM_PMEM_ADSP_SIZE         0x2000000
+
+#define MSM_SMI_BASE          0x38000000
+/* Kernel SMI PMEM Region for video core, used for Firmware */
+/* and encoder,decoder scratch buffers */
+/* Kernel SMI PMEM Region Should always precede the user space */
+/* SMI PMEM Region, as the video core will use offset address */
+/* from the Firmware base */
+#define PMEM_KERNEL_SMI_BASE  (MSM_SMI_BASE)
+#define PMEM_KERNEL_SMI_SIZE  0x1000000
+/* User space SMI PMEM Region for video core*/
+/* used for encoder, decoder input & output buffers  */
+#define MSM_PMEM_SMIPOOL_BASE (PMEM_KERNEL_SMI_BASE + PMEM_KERNEL_SMI_SIZE)
+#define MSM_PMEM_SMIPOOL_SIZE 0x2800000
 
 static unsigned fb_size = MSM_FB_SIZE;
 static void __init fb_size_setup(char **p)
@@ -715,6 +690,23 @@ static void __init pmem_kernel_ebi1_size_setup(char **p)
 __early_param("pmem_kernel_ebi1_size=", pmem_kernel_ebi1_size_setup);
 #endif
 
+#ifdef CONFIG_ANDROID_PMEM
+static unsigned pmem_sf_size = MSM_PMEM_SF_SIZE;
+static void __init pmem_sf_size_setup(char **p)
+{
+	pmem_sf_size = memparse(*p, p);
+}
+__early_param("pmem_sf_size=", pmem_sf_size_setup);
+
+static unsigned pmem_adsp_size = MSM_PMEM_ADSP_SIZE;
+
+static void __init pmem_adsp_size_setup(char **p)
+{
+	pmem_adsp_size = memparse(*p, p);
+}
+__early_param("pmem_adsp_size=", pmem_adsp_size_setup);
+#endif
+
 static struct resource msm_fb_resources[] = {
 	{
 		.flags  = IORESOURCE_DMA,
@@ -728,6 +720,34 @@ static struct platform_device msm_fb_device = {
 	.resource       = msm_fb_resources,
 };
 
+#ifdef CONFIG_KERNEL_PMEM_EBI_REGION
+static struct android_pmem_platform_data android_pmem_kernel_ebi1_pdata = {
+	.name = PMEM_KERNEL_EBI1_DATA_NAME,
+	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
+	.cached = 0,
+};
+
+static struct platform_device android_pmem_kernel_ebi1_device = {
+	.name = "android_pmem",
+	.id = 1,
+	.dev = { .platform_data = &android_pmem_kernel_ebi1_pdata },
+};
+#endif
+
+#ifdef CONFIG_KERNEL_PMEM_SMI_REGION
+static struct android_pmem_platform_data android_pmem_kernel_smi_pdata = {
+	.name = PMEM_KERNEL_SMI_DATA_NAME,
+	/* defaults to bitmap don't edit */
+	.cached = 0,
+};
+
+static struct platform_device android_pmem_kernel_smi_device = {
+	.name = "android_pmem",
+	.id = 6,
+	.dev = { .platform_data = &android_pmem_kernel_smi_pdata },
+};
+#endif
+
 #ifdef CONFIG_ANDROID_PMEM
 static struct android_pmem_platform_data android_pmem_pdata = {
 	.name = "pmem",
@@ -735,32 +755,34 @@ static struct android_pmem_platform_data android_pmem_pdata = {
 	.cached = 0,
 };
 
-#ifdef CONFIG_KERNEL_PMEM_EBI_REGION
-static struct android_pmem_platform_data android_pmem_kernel_ebi1_pdata = {
-	.name = PMEM_KERNEL_EBI1_DATA_NAME,
-	/* if no allocator_type, defaults to PMEM_ALLOCATORTYPE_BITMAP,
-	* the only valid choice at this time. The board structure is
-	* set to all zeros by the C runtime initialization and that is now
-	* the enum value of PMEM_ALLOCATORTYPE_BITMAP, now forced to 0 in
-	* include/linux/android_pmem.h.
-	*/
-	.cached = 0,
-};
-#endif
-
 static struct platform_device android_pmem_device = {
 	.name = "android_pmem",
 	.id = 0,
 	.dev = {.platform_data = &android_pmem_pdata},
 };
 
-#ifdef CONFIG_KERNEL_PMEM_EBI_REGION
-static struct platform_device android_pmem_kernel_ebi1_device = {
-	.name = "android_pmem",
-	.id = 1,
-	.dev = { .platform_data = &android_pmem_kernel_ebi1_pdata },
+static struct android_pmem_platform_data android_pmem_adsp_pdata = {
+	.name = "pmem_adsp",
+	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
+	.cached = 0,
 };
-#endif
+
+static struct platform_device android_pmem_adsp_device = {
+	.name = "android_pmem",
+	.id = 2,
+	.dev = { .platform_data = &android_pmem_adsp_pdata },
+};
+static struct android_pmem_platform_data android_pmem_smipool_pdata = {
+	.name = "pmem_smipool",
+	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
+	.cached = 0,
+};
+static struct platform_device android_pmem_smipool_device = {
+	.name = "android_pmem",
+	.id = 7,
+	.dev = { .platform_data = &android_pmem_smipool_pdata },
+};
+
 #endif
 
 #define GPIO_BACKLIGHT_PWM0 0
@@ -785,30 +807,6 @@ static void __init msm8x60_allocate_memory_regions(void)
 	void *addr;
 	unsigned long size;
 
-
-#ifdef CONFIG_ANDROID_PMEM
-	size = pmem_sf_size;
-	if (size) {
-		addr = alloc_bootmem(size);
-		android_pmem_pdata.start = __pa(addr);
-		android_pmem_pdata.size = size;
-		pr_info("allocating %lu bytes at %p (%lx physical) for sf "
-			"pmem arena\n", size, addr, __pa(addr));
-	}
-
-#ifdef CONFIG_KERNEL_PMEM_EBI_REGION
-	size = pmem_kernel_ebi1_size;
-if (size) {
-		addr = alloc_bootmem_aligned(size, 0x100000);
-		android_pmem_kernel_ebi1_pdata.start = __pa(addr);
-		android_pmem_kernel_ebi1_pdata.size = size;
-		pr_info("allocating %lu bytes at %p (%lx physical) for kernel"
-			" ebi1 pmem arena\n", size, addr, __pa(addr));
-	}
-#endif
-
-#endif
-
 	size = MSM_FB_SIZE;
 	addr = alloc_bootmem(size);
 	msm_fb_resources[0].start = __pa(addr);
@@ -825,7 +823,30 @@ if (size) {
 		pr_info("allocating %lu bytes at %p (%lx physical) for "
 		"KGSL\n", size, addr, __pa(addr));
 	}
-#ifdef CONFIG_MSM_CAMERA
+
+#ifdef CONFIG_KERNEL_PMEM_EBI_REGION
+	size = pmem_kernel_ebi1_size;
+	if (size) {
+		addr = alloc_bootmem_aligned(size, 0x100000);
+		android_pmem_kernel_ebi1_pdata.start = __pa(addr);
+		android_pmem_kernel_ebi1_pdata.size = size;
+		pr_info("allocating %lu bytes at %p (%lx physical) for kernel"
+			" ebi1 pmem arena\n", size, addr, __pa(addr));
+	}
+#endif
+
+#ifdef CONFIG_KERNEL_PMEM_SMI_REGION
+	size = PMEM_KERNEL_SMI_SIZE;
+	if (size) {
+		android_pmem_kernel_smi_pdata.start = PMEM_KERNEL_SMI_BASE;
+		android_pmem_kernel_smi_pdata.size = size;
+		pr_info("allocating %lu bytes at %lx physical for kernel"
+			" smi pmem arena\n", size,
+			(unsigned long) PMEM_KERNEL_SMI_BASE);
+	}
+#endif
+
+#ifdef CONFIG_ANDROID_PMEM
 	size = pmem_adsp_size;
 	if (size) {
 		addr = alloc_bootmem(size);
@@ -834,14 +855,93 @@ if (size) {
 		pr_info("allocating %lu bytes at %p (%lx physical) for adsp "
 			"pmem arena\n", size, addr, __pa(addr));
 	}
+
+	size = MSM_PMEM_SMIPOOL_SIZE;
+	if (size) {
+		android_pmem_smipool_pdata.start = MSM_PMEM_SMIPOOL_BASE;
+		android_pmem_smipool_pdata.size = size;
+		pr_info("allocating %lu bytes at %lx physical for user"
+			" smi  pmem arena\n", size,
+			(unsigned long) MSM_PMEM_SMIPOOL_BASE);
+	}
+
+	size = pmem_sf_size;
+	if (size) {
+		addr = alloc_bootmem(size);
+		android_pmem_pdata.start = __pa(addr);
+		android_pmem_pdata.size = size;
+		pr_info("allocating %lu bytes at %p (%lx physical) for sf "
+			"pmem arena\n", size, addr, __pa(addr));
+	}
 #endif
 }
+
+static struct regulator *vreg_tmg200;
 
 #define TS_PEN_IRQ_GPIO 61
 static int tmg200_power(int vreg_on)
 {
-	/* REVISIT: Add regulator enable/disable code for smps3 */
+	int rc = -EINVAL;
+
+	if (!vreg_tmg200) {
+		printk(KERN_ERR "%s: regulator 8058_s3 not found (%d)\n",
+			__func__, rc);
+		return rc;
+	}
+
+	rc = vreg_on ? regulator_enable(vreg_tmg200) :
+		  regulator_disable(vreg_tmg200);
+	if (rc < 0)
+		printk(KERN_ERR "%s: vreg 8058_s3 %s failed (%d)\n",
+				__func__, vreg_on ? "enable" : "disable", rc);
+	return rc;
+}
+
+static int tmg200_dev_setup(bool enable)
+{
+	int rc;
+
+	if (enable) {
+		vreg_tmg200 = regulator_get(NULL, "8058_s3");
+		if (IS_ERR(vreg_tmg200)) {
+			pr_err("%s: regulator get of 8058_s3 failed (%ld)\n",
+				__func__, PTR_ERR(vreg_tmg200));
+			rc = PTR_ERR(vreg_tmg200);
+			return rc;
+		}
+
+		rc = regulator_set_voltage(vreg_tmg200, 1800000, 1800000);
+		if (rc) {
+			pr_err("%s: regulator_set_voltage() = %d\n",
+				__func__, rc);
+			goto reg_put;
+		}
+
+		/* configure touchscreen interrupt gpio */
+		rc = gpio_tlmm_config(GPIO_CFG(TS_PEN_IRQ_GPIO, 0, GPIO_INPUT,
+					GPIO_NO_PULL, GPIO_2MA), 0);
+		if (rc) {
+			pr_err("%s: unable to configure gpio %d\n",
+				__func__, TS_PEN_IRQ_GPIO);
+			goto reg_put;
+		}
+
+		rc = gpio_request(TS_PEN_IRQ_GPIO, "cy8ctmg200_irq_gpio");
+		if (rc) {
+			pr_err("%s: unable to request gpio %d\n",
+				__func__, TS_PEN_IRQ_GPIO);
+			goto reg_put;
+		}
+	} else {
+		/* put voltage sources */
+		regulator_put(vreg_tmg200);
+		/* free gpio */
+		gpio_free(TS_PEN_IRQ_GPIO);
+	}
 	return 0;
+reg_put:
+	regulator_put(vreg_tmg200);
+	return rc;
 }
 
 static struct cy8c_ts_platform_data cy8ctmg200_pdata = {
@@ -858,6 +958,7 @@ static struct cy8c_ts_platform_data cy8ctmg200_pdata = {
 	.min_width = 0,
 	.max_width = 255,
 	.power_on = tmg200_power,
+	.dev_setup = tmg200_dev_setup,
 	.nfingers = 2,
 };
 
@@ -868,20 +969,6 @@ static struct i2c_board_info cy8ctmg200_board_info[] = {
 		.irq = MSM_GPIO_TO_INT(TS_PEN_IRQ_GPIO),
 	}
 };
-
-static void __init cy8ctmg200_init(void)
-{
-	int rc;
-
-	/* REVISIT: Add regulator get/set code for smps3 */
-
-	/* configure touchscreen interrupt gpio */
-	rc = gpio_tlmm_config(GPIO_CFG(TS_PEN_IRQ_GPIO, 0, GPIO_INPUT,
-				GPIO_NO_PULL, GPIO_2MA), 0);
-	if (rc)
-		pr_err("%s: unable to configure gpio %d\n",
-			__func__, TS_PEN_IRQ_GPIO);
-}
 
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
 
@@ -1005,21 +1092,29 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_device_ssbi2,
 	&msm_device_ssbi3,
 #endif
-#ifdef CONFIG_ANDROID_PMEM
-	&android_pmem_device,
 #ifdef CONFIG_KERNEL_PMEM_EBI_REGION
 	&android_pmem_kernel_ebi1_device,
 #endif
+#ifdef CONFIG_KERNEL_PMEM_SMI_REGION
+	&android_pmem_kernel_smi_device,
+#endif
+#ifdef CONFIG_ANDROID_PMEM
+	&android_pmem_device,
+	&android_pmem_adsp_device,
+	&android_pmem_smipool_device,
+#endif
+#ifdef CONFIG_MSM_ROTATOR
+	&msm_rotator_device,
 #endif
 	&msm_fb_device,
 	&msm_device_kgsl,
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_MSM_CAMERA
-	&android_pmem_adsp_device,
 #ifdef CONFIG_IMX074
 	&msm_camera_sensor_imx074,
 #endif
 #endif
+	&msm_device_vidc
 };
 
 static struct platform_device *surf_devices[] __initdata = {
@@ -1057,22 +1152,29 @@ static struct platform_device *surf_devices[] __initdata = {
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
 	&gpio_leds,
 #endif
-#ifdef CONFIG_ANDROID_PMEM
-	&android_pmem_device,
 #ifdef CONFIG_KERNEL_PMEM_EBI_REGION
 	&android_pmem_kernel_ebi1_device,
 #endif
+#ifdef CONFIG_KERNEL_PMEM_SMI_REGION
+	&android_pmem_kernel_smi_device,
+#endif
+#ifdef CONFIG_ANDROID_PMEM
+	&android_pmem_device,
+	&android_pmem_adsp_device,
+	&android_pmem_smipool_device,
+#endif
+#ifdef CONFIG_MSM_ROTATOR
+	&msm_rotator_device,
 #endif
 	&msm_fb_device,
 	&msm_device_kgsl,
 	&lcdc_samsung_panel_device,
 #ifdef CONFIG_MSM_CAMERA
-	&android_pmem_adsp_device,
 #ifdef CONFIG_IMX074
 	&msm_camera_sensor_imx074,
 #endif
 #endif
-
+	&msm_device_vidc
 };
 
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
@@ -1599,6 +1701,10 @@ static struct resource resources_rtc[] = {
        },
 };
 
+static struct pm8058_rtc_pdata pm8058_rtc_data = {
+	.rtc_write_enable = false,
+};
+
 static struct pmic8058_led pmic8058_flash_leds[] = {
 	[0] = {
 		.name		= "camera:flash0",
@@ -1683,6 +1789,8 @@ static struct mfd_cell pm8058_subdevs[] = {
 	{
 		.name = "pm8058-rtc",
 		.id = -1,
+		.platform_data = &pm8058_rtc_data,
+		.data_size = sizeof(pm8058_rtc_data),
 		.num_resources  = ARRAY_SIZE(resources_rtc),
 		.resources      = resources_rtc,
 	},
@@ -1750,9 +1858,20 @@ static struct i2c_board_info pm8058_boardinfo[] __initdata = {
 #define TDISC_INT		PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 5)
 #define TDISC_OE		(GPIO_EXPANDER_GPIO_BASE + (16 * 3) + 4)
 
+static const char *vregs_tdisc_name[] = {
+	"8058_l5",
+	"8058_s3",
+};
+
+static const int vregs_tdisc_val[] = {
+	2850000,/* uV */
+	1800000,
+};
+static struct regulator *vregs_tdisc[ARRAY_SIZE(vregs_tdisc_name)];
+
 static int tdisc_shinetsu_setup(void)
 {
-	int rc;
+	int rc, i;
 
 	rc = gpio_request(PMIC_GPIO_TDISC, "tdisc_interrupt");
 	if (rc) {
@@ -1776,8 +1895,31 @@ static int tdisc_shinetsu_setup(void)
 		goto fail_gpio_oe;
 	}
 
-	return rc;
+	for (i = 0; i < ARRAY_SIZE(vregs_tdisc_name); i++) {
+		vregs_tdisc[i] = regulator_get(NULL, vregs_tdisc_name[i]);
+		if (IS_ERR(vregs_tdisc[i])) {
+			printk(KERN_ERR "%s: regulator get %s failed (%ld)\n",
+				__func__, vregs_tdisc_name[i],
+				PTR_ERR(vregs_tdisc[i]));
+			rc = PTR_ERR(vregs_tdisc[i]);
+			goto vreg_get_fail;
+		}
 
+		rc = regulator_set_voltage(vregs_tdisc[i],
+				vregs_tdisc_val[i], vregs_tdisc_val[i]);
+		if (rc) {
+			printk(KERN_ERR "%s: regulator_set_voltage() = %d\n",
+				__func__, rc);
+			goto vreg_set_voltage_fail;
+		}
+	}
+
+	return rc;
+vreg_set_voltage_fail:
+	i++;
+vreg_get_fail:
+	while (i)
+		regulator_put(vregs_tdisc[--i]);
 fail_gpio_oe:
 	gpio_free(PMIC_GPIO_TDISC);
 	return rc;
@@ -1785,23 +1927,46 @@ fail_gpio_oe:
 
 static void tdisc_shinetsu_release(void)
 {
+	for (i = 0; i < ARRAY_SIZE(vregs_tdisc_name); i++)
+		regulator_put(vregs_tdisc_name[i]);
+
 	gpio_free(PMIC_GPIO_TDISC);
 	gpio_free(TDISC_OE);
 }
 
 static int tdisc_shinetsu_enable(void)
 {
-	/* REVISIT: Enable regulators 8058_l5 and 8058_s3 */
+	int i, rc = -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(vregs_tdisc_name); i++) {
+		rc = regulator_enable(vregs_tdisc[i]);
+		if (rc < 0) {
+			printk(KERN_ERR "%s: vreg %s enable failed (%d)\n",
+				__func__, vregs_tdisc_name[i], rc);
+			goto vreg_fail;
+		}
+	}
 
 	/* Enable the OE (output enable) gpio */
 	gpio_set_value(TDISC_OE, 1);
 
 	return 0;
+vreg_fail:
+	while (i)
+		regulator_disable(vregs_tdisc[--i]);
+	return rc;
 }
 
 static void tdisc_shinetsu_disable(void)
 {
-	/* REVISIT: Disable regulators 8058_l5 and 8058_s3 */
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(vregs_tdisc_name); i++) {
+		rc = regulator_disable(vregs_tdisc[i]);
+		if (rc < 0)
+			printk(KERN_ERR "%s: vreg %s disable failed (%d)\n",
+				__func__, vregs_tdisc_name[i], rc);
+	}
 
 	/* Disable the OE (output enable) gpio */
 	gpio_set_value(TDISC_OE, 0);
@@ -2438,7 +2603,7 @@ static int msm_sdc3_get_wpswitch(struct device *dev)
 		pr_err("%s:Failed to request GPIO %d\n",
 					__func__, GPIO_SDC3_WP_SWITCH);
 	} else {
-		status = gpio_get_value_cansleep(GPIO_SDC3_WP_SWITCH);
+		status = gpio_get_value(GPIO_SDC3_WP_SWITCH);
 		pr_info("%s: WP Status for Slot %d = %d\n", __func__,
 							pdev->id, status);
 		gpio_free(GPIO_SDC3_WP_SWITCH);
@@ -2451,7 +2616,7 @@ static unsigned int msm8x60_sdcc_slot_status(struct device *dev)
 {
 	int status;
 
-	status = !(gpio_get_value_cansleep(
+	status = !(gpio_get_value(
 			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC3_DET - 1)));
 	return (unsigned int) status;
 }
@@ -2670,7 +2835,7 @@ static struct lcdc_platform_data lcdc_pdata = {
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
-	.mdp_core_clk_rate = 128000000,
+	.mdp_core_clk_rate = 200000000,
 };
 
 static void __init msm_fb_add_devices(void)
@@ -2728,7 +2893,6 @@ static void __init msm8x60_init(void)
 	msm_cpuidle_set_states(msm_cstates, ARRAY_SIZE(msm_cstates),
 				msm_pm_data);
 
-	cy8ctmg200_init();
 }
 
 MACHINE_START(MSM8X60_RUMI3, "QCT MSM8X60 RUMI3")

@@ -164,6 +164,9 @@ extern unsigned long msm_nand_phys;
 #define CLEAN_DATA_32			0xFFFFFFFF
 
 
+#define MSM_NAND_BUF_STAT_UNCRCTBL_ERR	(1 << 8)
+#define MSM_NAND_BUF_STAT_NUM_ERR_MASK	(0xf)
+
 extern struct flash_platform_data msm_nand_data;
 
 

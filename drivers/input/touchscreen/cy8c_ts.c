@@ -134,6 +134,18 @@ static s32 cy8c_ts_write_reg_u8(struct i2c_client *client, u8 reg, u8 val)
 	return data;
 }
 
+static s32 cy8c_ts_read_reg_u8(struct i2c_client *client, u8 reg)
+{
+	s32 data;
+
+	data = i2c_smbus_read_byte_data(client, reg);
+	if (data < 0)
+		dev_err(&client->dev, "error %d in reading reg 0x%x\n",
+						 data, reg);
+
+	return data;
+}
+
 static int cy8c_ts_read(struct i2c_client *client, u8 reg, u8 *buf, int num)
 {
 	struct i2c_msg xfer_msg[2];
@@ -430,14 +442,6 @@ static int cy8c_ts_init_ts(struct i2c_client *client, struct cy8c_ts *ts)
 	/*setting dummy key to make it work for virutal keys*/
 	input_set_capability(input_device, EV_KEY, KEY_PROG1);
 
-	ts->wq = create_singlethread_workqueue("kworkqueue_ts");
-	if (!ts->wq) {
-		dev_err(&client->dev, "Could not create workqueue\n");
-		goto error_wq_create;
-	}
-
-	INIT_DELAYED_WORK(&ts->work, cy8c_ts_xy_worker);
-
 	input_device->open = cy8c_ts_open;
 	input_device->close = cy8c_ts_close;
 
@@ -538,7 +542,7 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 {
 	struct cy8c_ts *ts;
 	struct cy8c_ts_platform_data *pdata = client->dev.platform_data;
-	int rc;
+	int rc, temp_reg;
 
 	if (!pdata) {
 		dev_err(&client->dev, "platform data is required!\n");
@@ -551,6 +555,17 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 		return -EIO;
 	}
 
+	/* read one byte to make sure i2c device exists */
+	if (id->driver_data == CY8CTMA300)
+		temp_reg = 0x01;
+	else
+		temp_reg = 0x05;
+
+	rc = cy8c_ts_read_reg_u8(client, temp_reg);
+	if (rc < 0) {
+		dev_err(&client->dev, "i2c sanity check failed\n");
+		return -EIO;
+	}
 
 	ts = kzalloc(sizeof(*ts), GFP_KERNEL);
 	if (!ts)
@@ -561,10 +576,18 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, ts);
 	ts->device_id = id->driver_data;
 
+	if (ts->pdata->dev_setup) {
+		rc = ts->pdata->dev_setup(1);
+		if (rc < 0) {
+			dev_err(&client->dev, "dev setup failed\n");
+			goto error_touch_data_alloc;
+		}
+	}
+
 	rc = cy8c_ts_init_ts(client, ts);
 	if (rc < 0) {
 		dev_err(&client->dev, "CY8CTMG200-TMA300 init failed\n");
-		goto error_touch_data_alloc;
+		goto error_dev_setup;
 	}
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -576,6 +599,9 @@ static int __devinit cy8c_ts_probe(struct i2c_client *client,
 #endif
 	return 0;
 
+error_dev_setup:
+	if (ts->pdata->dev_setup)
+		ts->pdata->dev_setup(0);
 error_touch_data_alloc:
 	kfree(ts);
 	return rc;
@@ -600,6 +626,9 @@ static int __devexit cy8c_ts_remove(struct i2c_client *client)
 
 	if (ts->pdata->power_on)
 		ts->pdata->power_on(0);
+
+	if (ts->pdata->dev_setup)
+		ts->pdata->dev_setup(0);
 
 	kfree(ts->touch_data);
 	kfree(ts);

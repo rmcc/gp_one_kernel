@@ -75,7 +75,7 @@
 
 #define SMEM_SPINLOCK_I2C	"S:6"
 
-#define MSM_PMEM_ADSP_SIZE	0x2196000
+#define MSM_PMEM_ADSP_SIZE	0x2B96000
 #define MSM_FB_SIZE         0x2EE000
 #define MSM_AUDIO_SIZE		0x80000
 #define MSM_GPU_PHYS_SIZE 	SZ_2M
@@ -392,7 +392,6 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 
 static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_180NM),
-	.vbus_power = msm_hsusb_vbus_power,
 };
 
 #ifdef CONFIG_USB_FS_HOST
@@ -1800,6 +1799,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level              = PRE_EMPHASIS_WITH_10_PERCENT,
 	.cdr_autoreset           = CDR_AUTO_RESET_DEFAULT,
 	.drv_ampl                = HS_DRV_AMPLITUDE_5_PERCENT,
+	.vbus_power = msm_hsusb_vbus_power,
 };
 
 static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;

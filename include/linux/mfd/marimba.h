@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -35,7 +35,7 @@
 
 #include <linux/types.h>
 #include <linux/i2c.h>
-#include <mach/msm_ts.h>
+#include <linux/input/msm_ts.h>
 #include <mach/vreg.h>
 
 #define MARIMBA_NUM_CHILD			4
@@ -47,7 +47,17 @@
 
 #define MARIMBA_ID_TSADC			0x04
 
+#if defined(CONFIG_ARCH_MSM7X30)
 #define MARIMBA_SSBI_ADAP		0x7
+#elif defined(CONFIG_ARCH_MSM8X60)
+#define MARIMBA_SSBI_ADAP		0X8
+#endif
+
+enum chip_id {
+	MARIMBA_ID = 0,
+	TIMPANI_ID,
+	CHIP_ID_MAX
+};
 
 struct marimba{
 	struct i2c_client *client;
@@ -109,6 +119,7 @@ struct marimba_tsadc_platform_data {
 	int (*exit)(void);
 	int (*level_vote)(int vote_on);
 	bool tsadc_prechg_en;
+	bool can_wakeup;
 	struct marimba_tsadc_setup_params setup;
 	struct marimba_tsadc_config_params2 params2;
 	struct marimba_tsadc_config_params3 params3;
@@ -148,5 +159,10 @@ int marimba_write_bit_mask(struct marimba *, u8 reg, u8 *value,
  * * */
 int marimba_ssbi_read(struct marimba *, u16 reg, u8 *value, int len);
 int marimba_ssbi_write(struct marimba *, u16 reg , u8 *value, int len);
+
+/* Read and write to Timpani */
+int timpani_read(struct marimba*, u8 reg, u8 *value, unsigned num_bytes);
+int timpani_write(struct marimba*, u8 reg, u8 *value,
+				unsigned num_bytes);
 
 #endif
