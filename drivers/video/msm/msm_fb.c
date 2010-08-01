@@ -740,9 +740,6 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct msm_fb_panel_data *pdata = NULL;
 	int ret = 0;
-	/* FIH_ADQ, Kenny { */
-	unsigned int *boot_mode = 0xE02FFFF8; // Ming's magic address
-	/* } FIH_ADQ, Kenny */
 
 	if (!op_enable)
 		return -EPERM;
@@ -760,23 +757,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
-/* FIH_ADQ, 6360 { */
-				if(boot_mode[0] == 0xffff){
-					msm_fb_set_backlight(mfd,0, 0); //set backlight brightness to be 0
-				}else{
-					msm_fb_set_backlight(mfd,mfd->bl_level, 0);
-				}
-/* } FIH_ADQ, 6360  */
-/* ToDo: possible conflict with android which doesn't expect sw refresher */
-/*
-	  if (!mfd->hw_refresh)
-	  {
-	    if ((ret = msm_fb_resume_sw_refresher(mfd)) != 0)
-	    {
-	      MSM_FB_INFO("msm_fb_blank_sub: msm_fb_resume_sw_refresher failed = %d!\n",ret);
-	    }
-	  }
-*/
+				msm_fb_set_backlight(mfd,mfd->bl_level, 0);
 			}
 		}
 		break;
