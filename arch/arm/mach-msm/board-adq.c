@@ -2,6 +2,7 @@
  *
  * Copyright (C) 2007 Google, Inc.
  * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2010, Ricardo Cerqueira
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -96,9 +97,11 @@
 #define MSM_RAM_CONSOLE_SIZE    0
 #endif
 
+#ifdef PMEMAUDIO_ENABLE
 #define MSM_PMEM_AUDIO_SIZE 0x120000
 /* Using upper 1/2MB of Apps Bootloader memory*/
 #define MSM_PMEM_AUDIO_START_ADDR   0x80000ul
+#endif
 
 #define MSM_PMEM_MDP_SIZE	0xA00000  /* 10 MB */
 #define MSM_PMEM_ADSP_SIZE	0x1200000 - MSM_RAM_CONSOLE_SIZE /* 18 MB */
@@ -106,7 +109,7 @@
 #define MSM_PMEM_BASE		0x00200000
 
 
-#define MSM_PMEM_LIMIT		0x01F00000 // must match PHYS_OFFSET at mach/memory.h		//CHIH CHIA, change from 0x02000000 to 0x01F00000
+#define MSM_PMEM_LIMIT		0x01F00000 // must not go over PHYS_OFFSET
 #define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
 #define MSM_PMEM_ADSP_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE 
 #define MSM_RAM_CONSOLE_BASE	MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
@@ -143,27 +146,6 @@ static struct platform_device mass_storage_device = {
 	},
 };
 #endif
-
-static struct resource smc91x_resources[] = {
-	[0] = {
-		.start	= 0x9C004300,
-		.end	= 0x9C004400,
-		.flags	= IORESOURCE_MEM,
-	},
-	[1] = {
-		.start	= MSM_GPIO_TO_INT(132),
-		.end	= MSM_GPIO_TO_INT(132),
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-
-static struct platform_device smc91x_device = {
-	.name		= "smc91x",
-	.id		= 0,
-	.num_resources	= ARRAY_SIZE(smc91x_resources),
-	.resource	= smc91x_resources,
-};
 
 #ifdef CONFIG_USB_ANDROID
 /* dynamic composition */
@@ -507,11 +489,13 @@ static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.cached = 0,
 };
 
+#ifdef PMEMAUDIO_ENABLE
 static struct android_pmem_platform_data android_pmem_audio_pdata = {
 	.name = "pmem_audio",
 	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
 	.cached = 0,
 };
+#endif
 
 static struct platform_device android_pmem_device = {
 	.name = "android_pmem",
@@ -525,14 +509,15 @@ static struct platform_device android_pmem_adsp_device = {
 	.dev = { .platform_data = &android_pmem_adsp_pdata },
 };
 
+#ifdef PMEMAUDIO_ENABLE
 static struct platform_device android_pmem_audio_device = {
 	.name = "android_pmem",
 	.id = 2,
 	.dev = { .platform_data = &android_pmem_audio_pdata },
 };
+#endif
 
 #ifdef CONFIG_SWITCH_GPIO
-// +++ FIH_ADQ +++ , added by henry.wang
 static struct gpio_switch_platform_data headset_sensor_device_data = {
 	.name = "headset_sensor",
 	.gpio = 40,
@@ -549,7 +534,6 @@ static struct platform_device headset_sensor_device = {
 		.platform_data = &headset_sensor_device_data,
 	},
 };
-// --- FIH_ADQ ---
 #endif
 
 #ifdef CONFIG_MSM_RPCSERVER_HANDSET
@@ -958,9 +942,7 @@ static void __init bt_power_init(void) {
 
 ///---FIH_ADQ---	godfrey
 
-/* FIH_ADQ, AudiPCHuang, 2009/03/27, { */
-/* ZEUS_ANDROID_CR, I2C Configuration for Keypad Controller */
-///+FIH_ADQ
+#ifdef CONFIG_KEYBOARD_STMPE1601
 static struct msm_i2ckbd_platform_data FIH_kybd_data = {
 	.gpioreset		= 82,
 	.gpioirq		= 83,
@@ -970,60 +952,49 @@ static struct msm_i2ckbd_platform_data FIH_kybd_data = {
 	.gpio_hall_sensor	= 29,
 	.gpio_hook_switch	= 94,
 };
-///-FIH_ADQ
-/* } FIH_ADQ, AudiPCHuang, 2009/03/27 */
+#endif
 
-/* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
-/* ZEUS_ANDROID_CR, TC6507 LED Expander Platform Data */
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
 static struct tca6507_platform_data tca6507_data = {
 	.tca6507_reset = 84,
 };
-/* } FIH_ADQ, AudiPCHuang, 2009/03/30 */
+#endif
 
 static struct i2c_board_info i2c_devices[] = {
-	// +++ FIH_ADQ +++ , backlight and led controller driver added by Teng Rui
+#ifdef CONFIG_BACKLIGHT_LED_MAX8831
 	{
 		I2C_BOARD_INFO("max8831", 0x4d),
 	},
-	// --- FIH_ADQ ---
-	/* FIH, AudiPCHuang, 2009/03/30, { */
-	/* ZEUS_ANDROID_CR, Register TC6507 LED Expander I2C Device*/
+#endif
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
 	{
 		I2C_BOARD_INFO("tca6507", 0x8A >> 1),
 		.platform_data = &tca6507_data,
 	},
-	/* } FIH, AudiPCHuang, 2009/03/30 */
-	/* FIH_ADQ, AudiPCHuang, 2009/03/27, { */
-	/* ZEUS_ANDROID_CR, I2C Configuration for Keypad Controller */
-	///+FIH_ADQ
+#endif
+#ifdef CONFIG_KEYBOARD_STMPE1601
 	{
 		I2C_BOARD_INFO("stmpe1601", 0x40),
 		.type		= "stmpe1601",
 		.irq		= MSM_GPIO_TO_INT(83),
 		.platform_data	= &FIH_kybd_data,
 	},
-	///-FIH_ADQ
-	/* } FIH_ADQ, AudiPCHuang, 2009/03/27 */
-	/* FIH_ADQ, Penho, 2009/03/13, { */
-	/* ZEUS_ANDROID_CR, I2C Configuration for 1-wire brigde */
-	///+FIH_ADQ
+#endif
+#ifdef CONFIG_BATTERY_FIH_ZEUS
 	{
 		I2C_BOARD_INFO("gasgauge_bridge", 0x18),
 	},
-	///-FIH_ADQ
-	/* } FIH_ADQ, Penho, 2009/03/13 */
-	///+FIH_ADQ
+#endif
+#ifdef CONFIG_SENSORS_BMA020
 	{
 		I2C_BOARD_INFO("bma020", 0x38),
 	},
-	///-FIH_ADQ
-	//FIH_ADQ ,JOE HSU
+#endif
+#ifdef CONFIG_MT9T013
 	{
 		I2C_BOARD_INFO("mt9t013", 0x6C),
 	},
-	//   {
-	//	I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
-	//   },
+#endif
 };
 
 static uint32_t camera_off_gpio_table[] = {
@@ -1113,8 +1084,6 @@ static struct msm_camera_sensor_info msm_camera_sensor[] = {
 static struct msm_camera_device_platform_data msm_camera_device_data = {
 	.camera_gpio_on  = config_camera_on_gpios,
 	.camera_gpio_off = config_camera_off_gpios,
-	//	.snum = 1,//2,
-	//	.sinfo = &msm_camera_sensor[0],
 	.snum = ARRAY_SIZE(msm_camera_sensor),
 	.sinfo = &msm_camera_sensor[0],
 	.ioext.mdcphy = MSM_MDC_PHYS,
@@ -1267,17 +1236,6 @@ static struct platform_device lcdc_spigpio_device = {
 	},
 };
 #endif
-//FIH_ADQ,JOE HSU +++++
-
-/* FIH_ADQ, AudiPCHuang, 2009/04/02, { */
-/* ZEUS_ANDROID_CR, Vibrator Device Structre */
-///+FIH_ADQ
-/*static struct platform_device pmic_rpc_device = {
-	.name	= "pmic_rpc",
-	.id		= -1,
-};*/
-///-FIH_ADQ
-/* } FIH_ADQ, AudiPCHuang, 2009/04/02 */
 
 static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
@@ -1305,17 +1263,16 @@ static struct platform_device *devices[] __initdata = {
 	&android_usb_device,
 #endif
 	&msm_device_i2c,
-	&smc91x_device,
 	&msm_device_tssc,
 	&android_pmem_device,
 	&android_pmem_adsp_device,
+#ifdef PMEMAUDIO_ENABLE
 	&android_pmem_audio_device,
-	//FIH_ADQ,JOE HSU 
+#endif
 #ifdef CONFIG_SPI_GPIO
 	&lcdc_spigpio_device,
 #endif		
 	&msm_fb_device,
-	///+++FIH_ADQ+++	godfrey
 #ifdef CONFIG_BT
 	&msm_bt_power_device,
 #endif
@@ -1329,16 +1286,8 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_MSM_RPCSERVER_HANDSET
     &hs_device,
 #endif
-	// --- FIH_ADQ ---
-	/* FIH_ADQ, AudiPCHuang, 2009/04/02, { */
-	/* ZEUS_ANDROID_CR, Vibrator Device Structre */
-	///+FIH_ADQ
-	//&pmic_rpc_device,
-	// added by henry.wang
 	&msm_device_snd,
 	&msm_device_adspdec,
-	///-FIH_ADQ
-	/* } FIH_ADQ, AudiPCHuang, 2009/04/02 */
 };
 
 static void __init msm_fb_add_devices(void)
@@ -1460,8 +1409,7 @@ static unsigned sdcc_cfg_data[][6] = {
 		GPIO_CFG(66, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),
 		GPIO_CFG(67, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),
 	},
-	//+[FIH_ADQ][IssueKeys:ADQ.B-617]	
-#if 0	
+#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 	/* SDC3 configs */
 	{
 		GPIO_CFG(88, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
@@ -1472,11 +1420,8 @@ static unsigned sdcc_cfg_data[][6] = {
 		GPIO_CFG(93, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),
 	},
 #endif	
-	//-[FIH_ADQ][IssueKeys:ADQ.B-617]
 	/* SDC4 configs */
-	/* FIH_ADQ, AudiPCHuang, 2009/03/27, { */
 	/* ZEUS_ANDROID_CR, GPIO 19 and 20 are used for VOLUME Key and ringer switch now. Disable SDC4*/
-	///+FIH_ADQ
 #ifndef CONFIG_KEYBOARD_STMPE1601
 	{
 		GPIO_CFG(19, 3, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),
@@ -1487,8 +1432,6 @@ static unsigned sdcc_cfg_data[][6] = {
 		GPIO_CFG(109, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 	}
 #endif
-	///-FIH_ADQ
-	/* } FIH_ADQ, AudiPCHuang, 2009/03/27 */
 };
 
 static unsigned long vreg_sts, gpio_sts;
@@ -1674,9 +1617,10 @@ static void __init init_headset_sensor(void)
 /* ZEUS_ANDROID_CR, Create proc entry for reading device information*/
 ///+FIH_ADQ
 extern void adq_info_init(void);
-void msm_init_pmic_vibrator(void);
 ///-FIH_ADQ
 /* } FIH_ADQ, AudiPCHuang, 2009/03/30 */
+
+extern void msm_init_pmic_vibrator(void);
 
 static void __init msm7x25_init(void)
 {
@@ -1736,10 +1680,10 @@ static void __init msm7x25_init(void)
 	bt_power_init();
 	///---FIH_ADQ--- godfrey
 
+	msm_init_pmic_vibrator();
 	/* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
 	/* ZEUS_ANDROID_CR, Create proc entry for reading device information*/
 	///+FIH_ADQ
-	msm_init_pmic_vibrator();
 	adq_info_init();
 	///-FIH_ADQ
 	/* } FIH_ADQ, AudiPCHuang, 2009/03/30 */	
@@ -1750,38 +1694,27 @@ static void __init msm7x25_init(void)
 
 static void __init msm_msm7x25_allocate_memory_regions(void)
 {
-	//void *addr, *addr_1m_aligned;
 	unsigned long size;
 
-	/* FIH_ADQ, Ming { */
 	size = MSM_PMEM_MDP_SIZE;
-	///	addr = alloc_bootmem(size);
-	///	android_pmem_pdata.start = __pa(addr);
 	android_pmem_pdata.start = MSM_PMEM_MDP_BASE;
 	android_pmem_pdata.size = size;
-	///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	///	       "for pmem\n", size, addr, __pa(addr));
-	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical)"
+	printk(KERN_INFO "allocating %lu bytes at (at %lx physical)"
 			"for pmem\n", size, (unsigned long)MSM_PMEM_MDP_BASE);
-	/* } FIH_ADQ, Ming */
 
-	/* FIH_ADQ, Ming { */	       
 	size = MSM_PMEM_ADSP_SIZE;
-	///	addr = alloc_bootmem(size);
-	///	android_pmem_adsp_pdata.start = __pa(addr);
 	android_pmem_adsp_pdata.start = MSM_PMEM_ADSP_BASE;
 	android_pmem_adsp_pdata.size = size;
-	///	printk(KERN_INFO "allocating %lu bytes at %p (%lx physical)"
-	///	       "for adsp pmem\n", size, addr, __pa(addr));
-	printk(KERN_INFO "allocating %lu bytes at ???? (%lx physical)"
+	printk(KERN_INFO "allocating %lu bytes (at %lx physical)"
 			"for adsp pmem\n", size, (unsigned long)MSM_PMEM_ADSP_BASE);
-	/* } FIH_ADQ, Ming */
 
+#ifdef PMEMAUDIO_ENABLE
 	size = MSM_PMEM_AUDIO_SIZE ;
 	android_pmem_audio_pdata.start = MSM_PMEM_AUDIO_START_ADDR ;
 	android_pmem_audio_pdata.size = size;
 	pr_info("allocating %lu bytes (at %lx physical) for audio "
 			"pmem arena\n", size , MSM_PMEM_AUDIO_START_ADDR);
+#endif
 
 }
 
