@@ -1620,18 +1620,20 @@ msm_i2c_gpio_config(int iface, int config_type)
 	int gpio_scl = 60;
 	int gpio_sda = 61;
 
-	if (iface) { return; };
+	if (iface) { return; }; /* There's no secondary bus */
 
 	if (config_type) {
-		gpio_tlmm_config(GPIO_CFG(gpio_scl, 1, GPIO_INPUT,
-					GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(gpio_sda, 1, GPIO_INPUT,
-					GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+		gpio_set_value(gpio_scl, 1);
+		gpio_configure(gpio_scl, GPIOF_INPUT);
+		gpio_configure(gpio_sda, GPIOF_INPUT);
+		gpio_tlmm_config(GPIO_CFG(gpio_scl, 1, GPIO_OUTPUT,
+					GPIO_PULL_UP, GPIO_2MA), GPIO_ENABLE);
+		gpio_tlmm_config(GPIO_CFG(gpio_sda, 1, GPIO_OUTPUT,
+					GPIO_PULL_UP, GPIO_2MA), GPIO_ENABLE);
 	} else {
-		gpio_tlmm_config(GPIO_CFG(gpio_scl, 0, GPIO_OUTPUT,
-					GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-		gpio_tlmm_config(GPIO_CFG(gpio_sda, 0, GPIO_OUTPUT,
-					GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+		gpio_direction_output(gpio_scl, 1);
+		gpio_direction_output(gpio_sda, 1);
+		gpio_set_value(gpio_scl, 0);
 	}
 }
 
