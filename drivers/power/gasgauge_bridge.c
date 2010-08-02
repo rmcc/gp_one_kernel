@@ -142,13 +142,13 @@ EXPORT_SYMBOL_GPL(GetBatteryInfo);
 
 static int gasgauge_bridge_remove(struct i2c_client *client)
 {
-	printk(KERN_INFO "<ubh> gasgauge_bridge_remove\r\n");
+	printk(KERN_INFO "<ubh> gasgauge_bridge_remove\n");
 	return 0;
 }
 
 static int gasgauge_bridge_suspend(struct device *dev)
 {
-	printk(KERN_INFO "<ubh> gasgauge_bridge_suspend\r\n");
+	printk(KERN_INFO "<ubh> gasgauge_bridge_suspend\n");
 	dev_suspended = 1;
 	mutex_lock(&g_ow2428_suspend_lock);
 	return 0;
@@ -158,7 +158,7 @@ static int gasgauge_bridge_resume(struct device *dev)
 {
 	mutex_unlock(&g_ow2428_suspend_lock);
 	dev_suspended = 0;
-	printk(KERN_INFO "<ubh> gasgauge_bridge_resume\r\n");
+	printk(KERN_INFO "<ubh> gasgauge_bridge_resume\n");
 	return 0;
 }
 
