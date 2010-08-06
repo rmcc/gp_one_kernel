@@ -121,13 +121,14 @@
 #endif
 /* } FIH_ADQ, Ming */
 
-///FIH+++
+#ifdef CONFIG_AR6K
 #define WIFI_CONTROL_MASK   0x10000000
 #define MODULE_TURN_ON      0x01
 #define MODULE_TURN_OFF     0x02
 static int wifi_status = 0;
 static int bt_status = 0;
 static DEFINE_SPINLOCK(wif_bt_lock);
+#endif
 
 #ifdef CONFIG_USB_FUNCTION
 static struct usb_mass_storage_platform_data usb_mass_storage_pdata = {
@@ -227,6 +228,7 @@ static struct usb_composition usb_func_composition[] = {
 #endif
 };
 
+/*
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns      = 1,
 	.vendor     = "GOOGLE",
@@ -240,6 +242,7 @@ static struct platform_device mass_storage_device = {
 		.platform_data          = &mass_storage_pdata,
 	},
 };
+*/
 
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id      = 0x0489,
@@ -463,6 +466,7 @@ static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
 #endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
+
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect    = hsusb_rpc_connect,
 	.phy_reset      = msm_hsusb_rpc_phy_reset,
@@ -1259,7 +1263,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 
 #ifdef CONFIG_USB_ANDROID
-	&mass_storage_device,
+	//&mass_storage_device,
 	&android_usb_device,
 #endif
 	&msm_device_i2c,
@@ -1316,9 +1320,6 @@ static struct msm_acpu_clock_platform_data msm7x25_clock_data = {
 	.vdd_switch_time_us = 62,
 	.max_axi_khz = 128000,
 };
-
-void msm_serial_debug_init(unsigned int base, int irq,
-		struct device *clk_device, int signal_irq);
 
 static void sdcc_gpio_init(void)
 {
@@ -1632,10 +1633,6 @@ static void __init msm7x25_init(void)
 	ar6k_wifi_status_cb_devid=NULL;
 #endif
 
-#if defined(CONFIG_MSM_SERIAL_DEBUGGER)
-	msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
-			&msm_device_uart3.dev, 1);
-#endif
 	msm_acpu_clock_init(&msm7x25_clock_data);
 
 	msm_read_serial_number_from_nvitem();
@@ -1675,10 +1672,10 @@ static void __init msm7x25_init(void)
 #endif
 	// --- FIH_ADQ ---
 
-	///+++FIH_ADQ+++ godfrey
+#ifdef CONFIG_BT
 	init_Bluetooth_gpio_table();
 	bt_power_init();
-	///---FIH_ADQ--- godfrey
+#endif
 
 	msm_init_pmic_vibrator();
 	/* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
