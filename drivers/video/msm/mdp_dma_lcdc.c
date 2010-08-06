@@ -239,7 +239,7 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		vsync_polarity = 1;
 	/*}*/
 
-	lcdc_underflow_clr |= 0x80000000;	/* enable recovery */
+	/*lcdc_underflow_clr |= 0x80000000;*/	/* enable recovery */
 #else
 	hsync_polarity = 0;
 	vsync_polarity = 0;
