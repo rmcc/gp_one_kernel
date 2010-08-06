@@ -32,7 +32,7 @@ static int __devinit gasgauge_bridge_probe(struct i2c_client *client,
 	return 0;
 }
 
-int dev_suspended = 0;
+int gg_dev_suspended = 0;
 
 int GetBatteryInfo(enum _battery_info_type_ info, int * data)
 {
@@ -42,8 +42,10 @@ int GetBatteryInfo(enum _battery_info_type_ info, int * data)
 
 	/* The mutex lock isn't good enough: battery calls accumulate, and on
      * resume they take a while to flush. With enough pending replies, the
-     * resume process ends up crashing the phone due to timeouts */
-	if (dev_suspended == 1) {
+     * resume process ends up crashing the phone due to timeouts 
+     * zeus_battery also looks directly at dev_suspended, so calls shouldn't 
+     * even get this far */
+	if (gg_dev_suspended == 1) {
 		*data = 1;
 		return 0;
 	}
@@ -149,15 +151,18 @@ static int gasgauge_bridge_remove(struct i2c_client *client)
 static int gasgauge_bridge_suspend(struct device *dev)
 {
 	printk(KERN_INFO "<ubh> gasgauge_bridge_suspend\n");
-	dev_suspended = 1;
+	gg_dev_suspended = 1;
 	mutex_lock(&g_ow2428_suspend_lock);
 	return 0;
 }
 
+#include <mach/rpc_hsusb.h>
+extern void zeus_update_usb_status(enum chg_type chgtype);
 static int gasgauge_bridge_resume(struct device *dev)
 {
 	mutex_unlock(&g_ow2428_suspend_lock);
-	dev_suspended = 0;
+    //zeus_update_usb_status(USB_CHG_TYPE__INVALID);
+	gg_dev_suspended = 0;
 	printk(KERN_INFO "<ubh> gasgauge_bridge_resume\n");
 	return 0;
 }

@@ -176,15 +176,20 @@ void Battery_power_supply_change(void)
 EXPORT_SYMBOL(Battery_power_supply_change);
 /// --- FIH_ADQ ---
 
+extern int gg_dev_suspended;
+
 static int zeus_battery_get_property(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
 {
 	int buf;
 	int ret = 0;
-	/* FIH_ADQ, Kenny { */
 	int batt_vol;
-	/* } FIH_ADQ, Kenny */
+
+	if (gg_dev_suspended) {
+		printk(KERN_WARNING "zeus_battery_get_propery called while suspended: %d\n",psp);
+		return -EINVAL;
+	}
 
 	switch (psp) {
 		case POWER_SUPPLY_PROP_STATUS:
@@ -515,7 +520,6 @@ static int zeus_battery_remove(struct platform_device *pdev)
 void zeus_update_usb_status(enum chg_type chgtype) {
 
 	/* Prepare enabler/USB/1A GPIOs */
-	/* This is somehow wrong. Leave it off for now  */
 	int rc = gpio_request(CHR_EN, "CHR_EN");
 	if (rc) printk(KERN_ERR "%s: CHR_EN setting failed! rc = %d\n", __func__, rc);
 	rc = gpio_request(USBSET, "USBSET");
