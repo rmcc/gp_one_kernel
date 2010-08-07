@@ -1285,6 +1285,14 @@ msmsdcc_check_status(unsigned long data)
 	unsigned int status;
 
 	if (!host->plat->status) {
+#ifdef CONFIG_MACH_ADQ
+        // turn off the clk if card remove 
+        if ( host->clks_on) {
+            clk_disable(host->clk);
+            clk_disable(host->pclk);
+            host->clks_on = 0;
+        }
+#endif
 		mmc_detect_change(host->mmc, 0);
 	} else {
 		status = host->plat->status(mmc_dev(host->mmc));
