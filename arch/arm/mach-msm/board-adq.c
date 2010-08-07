@@ -123,11 +123,13 @@
 
 #ifdef CONFIG_AR6K
 #define WIFI_CONTROL_MASK   0x10000000
+static DEFINE_SPINLOCK(wif_bt_lock);
+#endif
+#if defined(CONFIG_BT) || defined(CONFIG_AR6K)
+static int bt_status = 0;
+static int wifi_status = 0;
 #define MODULE_TURN_ON      0x01
 #define MODULE_TURN_OFF     0x02
-static int wifi_status = 0;
-static int bt_status = 0;
-static DEFINE_SPINLOCK(wif_bt_lock);
 #endif
 
 #ifdef CONFIG_USB_FUNCTION
@@ -828,7 +830,8 @@ static void init_Bluetooth_gpio_table(void)
 static int bluetooth_power(int on)
 {
 	int module_status=0,prev_status=0;
-	bool bConfigWIFI;
+	bool bConfigWIFI = false;
+#ifdef CONFIG_AR6K
 
 	spin_lock(&wif_bt_lock);
 
@@ -849,13 +852,18 @@ static int bluetooth_power(int on)
 		else if(!wifi_status && !bt_status)
 			module_status = MODULE_TURN_OFF;
 
-	}else {
+	}else 
+#endif
+    {
+
 		prev_status = bt_status;
 		bt_status = on;
 		if( bt_status == prev_status )
 		{
 			printk(KERN_ERR "%s: BT already turn %s\n", __func__,  (bt_status?"ON":"OFF") );
+#ifdef CONFIG_AR6K
 			spin_unlock(&wif_bt_lock);
+#endif
 			return 0;
 		}
 		if(bt_status && !wifi_status)
@@ -870,6 +878,7 @@ static int bluetooth_power(int on)
 		gpio_direction_output(27,0);    
 	}else if(!bConfigWIFI &&  bt_status){     //Turn BT on        
 		printk(KERN_DEBUG "%s : Turn BT on.\n", __func__);
+#ifdef CONFIG_AR6K
 	}else if(bConfigWIFI && wifi_status) {  //Turn WIFI on
 		printk(KERN_DEBUG "%s : Turn WIFI on.\n", __func__);
 		//gpio_direction_output(23,1);
@@ -877,18 +886,16 @@ static int bluetooth_power(int on)
 		gpio_direction_output(35,0);
 	}else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF
 		printk(KERN_DEBUG "%s : Turn WIFI off.\n", __func__);
-#ifdef CONFIG_AR6K
 		if(ar6k_wifi_status_cb) {
 			wifi_power_on=0;
 			ar6k_wifi_status_cb(0,ar6k_wifi_status_cb_devid);
 		}else
 			printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
-#else
 		printk(KERN_DEBUG "%s : Driver disabled\n", __func__);
-#endif
 
 		gpio_direction_output(96,0);
 		gpio_direction_output(35,0);
+#endif
 	}
 
 	//Turn module on/off
@@ -917,20 +924,22 @@ static int bluetooth_power(int on)
 		mdelay(10);
 		gpio_direction_output(27,1);
 		mdelay(10);
+#ifdef CONFIG_AR6K
 	}else if(bConfigWIFI && wifi_status) { //Turn WIFI on
 		gpio_direction_output(96,1);
 		gpio_direction_output(35,1);
-#ifdef CONFIG_AR6K
 		if(ar6k_wifi_status_cb) {
 			wifi_power_on=1;
 			ar6k_wifi_status_cb(1,ar6k_wifi_status_cb_devid);
 		}else
 			printk(KERN_ERR "!!!wifi_power Fail:  ar6k_wifi_status_cb_devid is NULL \n");
 	}else if(bConfigWIFI && !wifi_status) {  //Turn WIFI OFF        
-	}
 #endif
+	}
 
+#ifdef CONFIG_AR6K
 	spin_unlock(&wif_bt_lock);
+#endif
 
 	return 0;
 }
