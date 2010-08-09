@@ -270,19 +270,19 @@ static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_devi
 	int bma_irqpin  = GPIO_BMA020_INTR;
 
  
-	dev_dbg(&this_client->dev, "gensor_BMA020_probe+\n");
+	dev_dbg(&client->dev, "gensor_BMA020_probe+\n");
 
 	gpio_tlmm_config( GPIO_CFG( bma_irqpin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
 
 	rc = gpio_request(bma_irqpin, "gpio_bma_irqpin");
 	if (rc) {
-		dev_err(&this_client->dev, "gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(&client->dev, "gpio_request failed on pin %d (rc=%d)\n",
 			bma_irqpin, rc);
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		err = -ENODEV;
-		dev_err(&this_client->dev, "exit_check_functionality_failed\n");
+		dev_err(&client->dev, "exit_check_functionality_failed\n");
 		goto exit_check_functionality_failed;
 	}
 
@@ -290,7 +290,7 @@ static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_devi
 	bma020 = kzalloc(sizeof(struct bma020_data), GFP_KERNEL);
 	if (!bma020) {
 		err = -ENOMEM;
-		dev_err(&this_client->dev, "exit_alloc_data_failed\n");
+		dev_err(&client->dev, "exit_alloc_data_failed\n");
 		goto exit_alloc_data_failed;
 	}
 
@@ -300,7 +300,7 @@ static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_devi
 	bma020->input_dev = input_allocate_device();
 	if (!bma020->input_dev) {
 		err = -ENOMEM;
-		dev_err(&this_client->dev, "init input device params\n");
+		dev_err(&client->dev, "init input device params\n");
 		goto exit_input_dev_alloc_failed;
 	}
 
@@ -342,7 +342,7 @@ static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_devi
 	//end register input driver
 
 	if (err) {
-		dev_err(&this_client->dev,
+		dev_err(&client->dev,
 		       "bma020: Unable to register input device: %s\n",
 		       bma020->input_dev->name);
 		goto exit_input_register_device_failed;
@@ -892,13 +892,11 @@ static int bma020_aot_ioctl(struct inode *inode, struct file *file,
 static int __devinit gsensor_bma020_init(void)
 {
 	int iRet;
-	dev_dbg(&this_client->dev,"gsensor_BMA020_init\n");
-
 	// add a i2c driver
 	iRet = i2c_add_driver(&gensor_bma020_driver);
 	if(iRet)
 	{
-		dev_err(&this_client->dev,"BMA020_init: i2c_add_driver failed.\n");
+		printk(KERN_ERR "BMA020_init: i2c_add_driver failed.\n");
 	}
 	
 
