@@ -35,7 +35,9 @@ struct tca6507_driver_data {
 
 /// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
 ///add for low battery LED blinking in suspend mode 
+#ifdef CONFIG_BATTERY_FIH_ZEUS
 extern void Battery_power_supply_change(void);
+#endif
 /// --- FIH_ADQ ---
 
 static struct tca6507_driver_data tca6507_drvdata;
@@ -623,10 +625,12 @@ DEVICE_ATTR(tca6507_debug, 0644, tca6507_debug_show, tca6507_debug_store);
 static int tca6507_suspend(struct device *dev)
 {
 	u8 cmd[7] = {0x13, 0x55, 0x11, 0x55, 0xDD, 0xDD, 0xFF};
+#ifdef CONFIG_BATTERY_FIH_ZEUS
 	/// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
 	///add for low battery LED blinking in suspend mode 
 	Battery_power_supply_change();
 	/// --- FIH_ADQ ---
+#endif
 
 	mutex_lock(&tca6507_drvdata.tca6507_lock);
 	if (tca6507_drvdata.is_blinking || tca6507_drvdata.is_attention || tca6507_drvdata.is_charger_connected) {
