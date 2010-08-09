@@ -91,6 +91,7 @@ static void gpio_switch_work(struct work_struct *work)
 	
 	data->bHeadsetInserted = (bool)state;
 
+#ifdef CONFIG_KEYBOARD_STMPE1601
 /* FIH_ADQ, AudiPCHuang, 2009/07/17, { */
 /* ADQ.B-2047, For resolving plugged/unplugged stereo headset issue */
 	if (state == 0) {
@@ -102,6 +103,7 @@ static void gpio_switch_work(struct work_struct *work)
 			complete(get_hook_sw_request_irq_completion());
 	}
 /* } FIH_ADQ, AudiPCHuang, 2009/07/17 */
+#endif
 
 	wake_unlock(&switch_data->headset_wake_lock);
 }
