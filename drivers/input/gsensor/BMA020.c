@@ -37,7 +37,7 @@ static int gsensor_bma020_remove(struct i2c_client *client);
 static int gsensor_bma020_command(struct i2c_client *client, unsigned int cmd, void *arg);
 static int gsensor_bma020_suspend(struct i2c_client *client, pm_message_t mesg);
 static int gsensor_bma020_resume(struct i2c_client *client);
-static int gsensor_bma020_probe(struct i2c_client *client);
+static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_device_id *id);
 
 // BMA020 file operation 
 static int bma020_dev_open( struct inode * inode, struct file * file );
@@ -162,12 +162,12 @@ static struct miscdevice bma020_aot_device = {
 	.fops = &bma020_aot_fops,
 };
 
-static struct bma020_data {
+struct bma020_data {
 	struct input_dev *input_dev;
 	struct work_struct work;
-//#ifdef CONFIG_ANDROID_POWER
-//	android_early_suspend early_suspend;
-//#endif
+/*#ifdef CONFIG_ANDROID_POWER
+	android_early_suspend early_suspend;
+#endif*/
 };
 
 
@@ -189,7 +189,7 @@ static int BMAI2C_RxData(char *rxData, int length)
 	};
 
 	if (i2c_transfer(this_client->adapter, msgs, 2) < 0) {
-		printk(KERN_ERR "BMAI2C_RxData: transfer error\n");
+		dev_err(&this_client->dev,"BMAI2C_RxData: transfer error\n");
 		return -EIO;
 	} else
 		return 0;
@@ -208,7 +208,7 @@ static int BMAI2C_TxData(char *txData, int length)
 	};
 
 	if (i2c_transfer(this_client->adapter, msg, 1) < 0) {
-		printk(KERN_ERR "BMAI2C_TxData: transfer error\n");
+		dev_err(&this_client->dev, "BMAI2C_TxData: transfer error\n");
 		return -EIO;
 	} else
 		return 0;
@@ -227,7 +227,7 @@ static int BMAI2C_TxData(char *txData, int length)
 static int gsensor_bma020_remove(struct i2c_client *client)
 {
 	struct bma020_data *bma020 = i2c_get_clientdata(client);
-	printk(KERN_INFO "[BMA020.c] gensor_BMA020_remove +\n");
+	dev_dbg(&this_client->dev, "gensor_BMA020_remove +\n");
 	free_irq(client->irq, bma020);
 	input_unregister_device(bma020->input_dev);
 	kfree(bma020);
@@ -237,13 +237,13 @@ static int gsensor_bma020_remove(struct i2c_client *client)
 static int
 gsensor_bma020_command(struct i2c_client *client, unsigned int cmd, void *arg)
 {
-	printk(KERN_INFO "[BMA020.c] gensor_BMA020_command\n");
+	dev_dbg(&this_client->dev, "gensor_BMA020_command\n");
 	return 0;
 }
 
 static int gsensor_bma020_suspend(struct i2c_client *client, pm_message_t mesg)
 {
-	printk(KERN_INFO "[BMA020.c] gensor_BMA020_suspend+ \n");
+	dev_info(&this_client->dev, "gensor_BMA020_suspend+ \n");
     bma020_sleep();
 	return 0;
 }
@@ -251,7 +251,7 @@ static int gsensor_bma020_suspend(struct i2c_client *client, pm_message_t mesg)
 static int gsensor_bma020_resume(struct i2c_client *client)
 {
 	int iRet = 0;
-	printk(KERN_INFO "[BMA020.c] gensor_BMA020_resume+ \n");
+	dev_info(&this_client->dev, "gensor_BMA020_resume+ \n");
     if (0 < g_client_count)
         bma020_wakeup();
     spin_lock(&g_lock);
@@ -261,7 +261,7 @@ static int gsensor_bma020_resume(struct i2c_client *client)
 	return iRet;
 }
 
-static int gsensor_bma020_probe(struct i2c_client *client)
+static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct bma020_data *bma020;
 	int err;
@@ -270,19 +270,19 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 	int bma_irqpin  = GPIO_BMA020_INTR;
 
  
-	printk(KERN_INFO "[BMA020.c] gensor_BMA020_probe+\n");
+	dev_dbg(&this_client->dev, "gensor_BMA020_probe+\n");
 
 	gpio_tlmm_config( GPIO_CFG( bma_irqpin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
 
 	rc = gpio_request(bma_irqpin, "gpio_bma_irqpin");
 	if (rc) {
-		printk(KERN_INFO "gpio_request failed on pin %d (rc=%d)\n",
+		dev_err(&this_client->dev, "gpio_request failed on pin %d (rc=%d)\n",
 			bma_irqpin, rc);
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		err = -ENODEV;
-		printk(KERN_INFO "[BMA020.c] exit_check_functionality_failed\n");
+		dev_err(&this_client->dev, "exit_check_functionality_failed\n");
 		goto exit_check_functionality_failed;
 	}
 
@@ -290,7 +290,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 	bma020 = kzalloc(sizeof(struct bma020_data), GFP_KERNEL);
 	if (!bma020) {
 		err = -ENOMEM;
-		printk(KERN_INFO "[BMA020.c] exit_alloc_data_failed\n");
+		dev_err(&this_client->dev, "exit_alloc_data_failed\n");
 		goto exit_alloc_data_failed;
 	}
 
@@ -300,7 +300,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 	bma020->input_dev = input_allocate_device();
 	if (!bma020->input_dev) {
 		err = -ENOMEM;
-		printk("[BMA020.c] init input device params\n");
+		dev_err(&this_client->dev, "init input device params\n");
 		goto exit_input_dev_alloc_failed;
 	}
 
@@ -342,7 +342,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 	//end register input driver
 
 	if (err) {
-		printk(KERN_ERR
+		dev_err(&this_client->dev,
 		       "bma020: Unable to register input device: %s\n",
 		       bma020->input_dev->name);
 		goto exit_input_register_device_failed;
@@ -365,7 +365,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 
 // Kenny temporarily remove +++
 #if 0
-	printk(KERN_INFO "[BMA020.c] request_irq + \n");
+	printk(KERN_INFO "request_irq + \n");
 	//register irq
 	
 	rc = request_irq(client->irq, &bma020_irqhandler,
@@ -378,7 +378,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 	} else {
 		printk(KERN_DEBUG "Register %s interrupt finished (rc = %d)\n", gsensor_name, rc);	
 	}
-	printk(KERN_INFO "[BMA020.c] request_irq - \n");
+	printk(KERN_INFO "request_irq - \n");
 #endif
 // Kenny temporarily remove ---
 
@@ -386,14 +386,14 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 	err = misc_register(&bma020_cdev);
 
 	if (err) {
-		printk(KERN_INFO "gensor_bma020_probe: bma020_cdev failed.\n");
+		dev_err(&this_client->dev, "gensor_bma020_probe: bma020_cdev failed.\n");
 		/* return ret; */
 		goto exit_misc_device_register_failed;
 	}
 
 	err = misc_register(&bma020_aot_device);
 	if (err) {
-		printk(KERN_ERR
+		dev_err(&this_client->dev,
 		       "gensor_bma020_probe: bma020_aot_device register failed\n");
 		goto exit_misc_device_register_failed;
 	}
@@ -401,7 +401,7 @@ static int gsensor_bma020_probe(struct i2c_client *client)
 
 	func_bma020_init();
 
-	printk(KERN_INFO "[BMA020.c] gensor_BMA020_probe-\n");
+	dev_dbg(&this_client->dev, "gensor_BMA020_probe-\n");
 
 exit_check_functionality_failed:
 exit_alloc_data_failed:
@@ -421,18 +421,18 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4); 
 	buffer[0] = 0x0;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 chip id:0x%x\n", buffer[0] & 0x07);
+	dev_dbg(&this_client->dev, "bma020 chip id:0x%x\n", buffer[0] & 0x07);
 
 	memset(buffer, 0, 4); 
 	buffer[0] = 0x1;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "al_version:0x%x, ml_version:0x%x\n", (buffer[0] & 0xf0)>>4 , buffer[0] & 0x0f);
+	dev_dbg(&this_client->dev, "al_version:0x%x, ml_version:0x%x\n", (buffer[0] & 0xf0)>>4 , buffer[0] & 0x0f);
 
 	//15h
 	memset(buffer, 0, 4);
 	buffer[0] = 0x15;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 15h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 15h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 		
 	memset(buffer, 0, 4);
@@ -443,13 +443,13 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4);
 	buffer[0] = 0x10;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 15h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 15h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 
 	//14h
 	buffer[0] = 0x14;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 14h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 14h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 		
 	memset(buffer, 0, 4);
@@ -460,14 +460,14 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4);
 	buffer[0] = 0x14;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 14h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 14h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 
 
 	//11h
 	buffer[0] = 0x11;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 11h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 11h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 		
 	memset(buffer, 0, 4);
@@ -478,14 +478,14 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4);
 	buffer[0] = 0x11;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 11h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 11h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 
 
 	//10h
 	buffer[0] = 0x10;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 10h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 10h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 		
 	memset(buffer, 0, 4);
@@ -496,7 +496,7 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4);
 	buffer[0] = 0x10;
 	BMAI2C_RxData(buffer, 4);
-	printk(KERN_INFO "bma020 10h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 10h buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 
 	
@@ -504,7 +504,7 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4);
 	buffer[0] = 0x0b;
 	BMAI2C_RxData(buffer, 4);
-	printk (KERN_INFO "bma020 0bh buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 0bh buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 
 	memset(buffer, 0, 4);
@@ -515,7 +515,7 @@ static int func_bma020_init(void)
 	memset(buffer, 0, 4);
 	buffer[0] = 0x0b;
 	BMAI2C_RxData(buffer, 4);
-	printk (KERN_INFO "bma020 0bh buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
+	dev_dbg(&this_client->dev, "bma020 0bh buffer[0]:0x%x, buffer[1]:0x%x, buffer[2]:0x%x, buffer[3]:0x%x\n",
 		buffer[0], buffer[1], buffer[2], buffer[3]);
 
 
@@ -536,13 +536,13 @@ static int func_bma020_init(void)
 
 static int bma020_dev_open( struct inode * inode, struct file * file )
 {
-	printk( KERN_INFO "BMA020: dev_open.\n" );
+	dev_dbg(&this_client->dev, "BMA020: dev_open.\n" );
     spin_lock(&g_lock);
     if (0 > g_client_count)
         g_client_count = 0;
     ++g_client_count;
     spin_unlock(&g_lock);
-    printk(KERN_INFO "BMA020: g_client_count = %d\n", g_client_count);
+    dev_dbg(&this_client->dev,"BMA020: g_client_count = %d\n", g_client_count);
     bma020_wakeup();
 	return 0;
 }
@@ -550,7 +550,7 @@ static int bma020_dev_open( struct inode * inode, struct file * file )
 
 static int bma020_dev_release( struct inode * inode, struct file * filp )
 {
-	printk( KERN_INFO "BMA020: dev_release.\n");
+	dev_dbg(&this_client->dev, "BMA020: dev_release.\n");
     // Workaround! Because hal layer would call open again in close function,
     // We need to minus 2 here when close;
     spin_lock(&g_lock);
@@ -558,7 +558,7 @@ static int bma020_dev_release( struct inode * inode, struct file * filp )
     if (0 > g_client_count)
         g_client_count = 0;
     spin_unlock(&g_lock);
-    printk(KERN_INFO "BMA020: g_client_count = %d\n", g_client_count);
+    dev_dbg(&this_client->dev,"BMA020: g_client_count = %d\n", g_client_count);
 
     if (0 >= g_client_count)
         bma020_sleep();
@@ -612,14 +612,12 @@ static void bma020_report_value(short *rbuf)
 	bma020acc_t acc;
 	short y_z_change_tmp = 0;
 	struct bma020_data *data = i2c_get_clientdata(this_client);
-#ifdef DEBUG
-	printk("bma020_report_value: yaw = %d, pitch = %d, roll = %d\n", rbuf[0],
+	dev_dbg(&this_client->dev, "bma020_report_value: yaw = %d, pitch = %d, roll = %d\n", rbuf[0],
 	       rbuf[1], rbuf[2]);
-	printk("                    tmp = %d, m_stat= %d, g_stat=%d\n", rbuf[3],
+	dev_dbg(&this_client->dev, "                    tmp = %d, m_stat= %d, g_stat=%d\n", rbuf[3],
 	       rbuf[4], rbuf[5]);
-	printk("          G_Sensor:   x = %d LSB, y = %d LSB, z = %d LSB\n",
+	dev_dbg(&this_client->dev, "          G_Sensor:   x = %d LSB, y = %d LSB, z = %d LSB\n",
 	       rbuf[6], rbuf[7], rbuf[8]);
-#endif
 
 
 	memset(buffer, 0, 6);
@@ -691,7 +689,7 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 			{
 				return -EFAULT;
 			}
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_SET_MFLAG cmd=0x%x, mflag=%d\n", cmd, mflag );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_SET_MFLAG cmd=0x%x, mflag=%d\n", cmd, mflag );
 
 			if (mflag < 0 || mflag > 1)
 				return -EINVAL;
@@ -701,7 +699,7 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 		{
 			if (copy_to_user(argp, &mflag, sizeof(mflag)))
 				return -EFAULT;
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_GET_MFLAG cmd=0x%x, mflag:%d\n", cmd, mflag );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_GET_MFLAG cmd=0x%x, mflag:%d\n", cmd, mflag );
 		}
 		break;
 		case ECS_IOCTL_APP_SET_AFLAG:
@@ -710,7 +708,7 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 			{
 				return -EFAULT;
 			}
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_SET_AFLAG cmd=0x%x, aflag=%d\n", cmd, aflag );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_SET_AFLAG cmd=0x%x, aflag=%d\n", cmd, aflag );
 			if (aflag < 0 || aflag > 1)
 			{
 				aflag = 0;
@@ -729,17 +727,17 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 			if (copy_to_user(argp, &aflag, sizeof(aflag)))
 				return -EFAULT;
 
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_GET_AFLAG cmd=0x%x, aflag:%d\n", cmd , aflag);
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_GET_AFLAG cmd=0x%x, aflag:%d\n", cmd , aflag);
 		}
 		break;
 		case ECS_IOCTL_APP_SET_TFLAG:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_APP_SET_TFLAG cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_SET_TFLAG cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_APP_GET_TFLAG:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_APP_GET_TFLAG cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_GET_TFLAG cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_APP_RESET_PEDOMETER:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_APP_RESET_PEDOMETER cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_RESET_PEDOMETER cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_APP_SET_DELAY:
 		{
@@ -747,11 +745,11 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 			{
 				return -EFAULT;
 			}
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_SET_DELAY cmd=0x%x, delay=%d\n", cmd, delay );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_SET_DELAY cmd=0x%x, delay=%d\n", cmd, delay );
 		}
 		break;
 		case ECS_IOCTL_APP_GET_DELAY:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_APP_GET_DELAY\n" );	
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_GET_DELAY\n" );	
 		break;
 		case ECS_IOCTL_APP_SET_MVFLAG:
 		{
@@ -759,7 +757,7 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 			{
 				return -EFAULT;
 			}
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_SET_MVFLAG cmd=0x%x, mvflag=%d\n", cmd, mvflag );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_SET_MVFLAG cmd=0x%x, mvflag=%d\n", cmd, mvflag );
 			if (mvflag < 0 || mvflag > 1)
 				return -EINVAL;
 			
@@ -769,11 +767,11 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 		{
 			if (copy_to_user(argp, &mvflag, sizeof(mvflag)))
 				return -EFAULT;
-			printk( KERN_INFO "BMA020: ECS_IOCTL_APP_GET_MVFLAG cmd=0x%x, mvflag:%d\n", cmd, mvflag );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_GET_MVFLAG cmd=0x%x, mvflag:%d\n", cmd, mvflag );
 		}
 		break;
 		case ECS_IOCTL_SET_STEP_CNT:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_SET_STEP_CNT cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_SET_STEP_CNT cmd=0x%x\n", cmd );
 		break;
 	      /*
 		case ECS_IOCTL_APP_REPORT:
@@ -784,7 +782,7 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 		break;
 	      */
 	      	default:
-		printk( KERN_INFO "BMA020: default cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: default cmd=0x%x\n", cmd );
 		break;
 	}
 
@@ -794,7 +792,7 @@ static int bma020_dev_ioctl( struct inode * inode, struct file * filp, unsigned 
 static int bma020_aot_open(struct inode *inode, struct file *file)
 {
 	int ret = -1;
-	printk( KERN_INFO "BMA020: bma020_aot_open + \n");
+	dev_dbg(&this_client->dev, "BMA020: bma020_aot_open + \n");
 	if (atomic_cmpxchg(&open_count, 0, 1) == 0) {
 		if (atomic_cmpxchg(&open_flag, 0, 1) == 0) {
 			atomic_set(&reserve_open_flag, 1);
@@ -807,7 +805,7 @@ static int bma020_aot_open(struct inode *inode, struct file *file)
 
 static int bma020_aot_release(struct inode *inode, struct file *file)
 {
-	printk( KERN_INFO "BMA020: bma020_aot_release + \n");
+	dev_dbg(&this_client->dev, "BMA020: bma020_aot_release + \n");
 	atomic_set(&reserve_open_flag, 0);
 	atomic_set(&open_flag, 0);
 	atomic_set(&open_count, 0);
@@ -819,70 +817,70 @@ static int bma020_aot_release(struct inode *inode, struct file *file)
 static int bma020_aot_ioctl(struct inode *inode, struct file *file,
 	      unsigned int cmd, unsigned long arg)
 {
-	printk( KERN_INFO "BMA020: bma_fdop_ioctl, cmd = 0x%x\n", cmd );
 	void __user *argp = (void __user *)arg;
 	short value[12];
+	dev_dbg(&this_client->dev, "BMA020: bma_fdop_ioctl, cmd = 0x%x\n", cmd );
 	switch(cmd)
 	{
 		case ECS_IOCTL_INIT:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_INIT cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_INIT cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_WRITE:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_WRITE cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_WRITE cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_READ:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_READ cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_READ cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_RESET:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_RESET cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_RESET cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_INT_STATUS:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_INT_STATUS cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_INT_STATUS cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_FFD_STATUS:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_FFD_STATUS cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_FFD_STATUS cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_SET_MODE:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_SET_MODE cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_SET_MODE cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_GETDATA:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_GETDATA cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_GETDATA cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_GET_NUMFRQ:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_GET_NUMFRQ cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_GET_NUMFRQ cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_SET_PERST:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_SET_PERST cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_SET_PERST cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_SET_G0RST:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_SET_G0RST cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_SET_G0RST cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_SET_YPR:
 		{	
-			printk( KERN_INFO "BMA020: ECS_IOCTL_SET_YPR cmd=0x%x\n", cmd );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_SET_YPR cmd=0x%x\n", cmd );
 			if (copy_from_user(&value, argp, sizeof(value)))
 				return -EFAULT;
 			bma020_report_value(value);
 		}
 		break;
 		case ECS_IOCTL_GET_OPEN_STATUS:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_GET_OPEN_STATUS cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_GET_OPEN_STATUS cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_GET_CLOSE_STATUS:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_GET_CLOSE_STATUS cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_GET_CLOSE_STATUS cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_GET_CALI_DATA:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_GET_CALI_DATA cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_GET_CALI_DATA cmd=0x%x\n", cmd );
 		break;
 		case ECS_IOCTL_GET_DELAY:
 		{
 			if (copy_to_user(argp, &delay, sizeof(delay)))
 				return -EFAULT;
-			printk( KERN_INFO "BMA020: ECS_IOCTL_GET_DELAY cmd=0x%x, delay:%d\n", cmd, delay );
+			dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_GET_DELAY cmd=0x%x, delay:%d\n", cmd, delay );
 		}
 		break;
 		case ECS_IOCTL_APP_SET_MODE:
-		printk( KERN_INFO "BMA020: ECS_IOCTL_APP_SET_MODE cmd=0x%x\n", cmd );
+		dev_dbg(&this_client->dev, "BMA020: ECS_IOCTL_APP_SET_MODE cmd=0x%x\n", cmd );
 		break;	
 		default:
 		return -ENOTTY;
@@ -894,13 +892,13 @@ static int bma020_aot_ioctl(struct inode *inode, struct file *file,
 static int __devinit gsensor_bma020_init(void)
 {
 	int iRet;
-	printk(KERN_INFO "gsensor_BMA020_init\n");
+	dev_dbg(&this_client->dev,"gsensor_BMA020_init\n");
 
 	// add a i2c driver
 	iRet = i2c_add_driver(&gensor_bma020_driver);
 	if(iRet)
 	{
-		printk(KERN_INFO "BMA020_init: i2c_add_driver failed.\n");
+		dev_err(&this_client->dev,"BMA020_init: i2c_add_driver failed.\n");
 	}
 	
 
@@ -909,7 +907,7 @@ static int __devinit gsensor_bma020_init(void)
 
 static void __exit gsensor_bma020_exit(void)
 {
-	printk(KERN_INFO "[BMA020.c] gsensor_BMA020_exit\n");
+	dev_dbg(&this_client->dev, "gsensor_BMA020_exit\n");
 	i2c_del_driver(&gensor_bma020_driver);
 }
 
@@ -919,7 +917,7 @@ module_exit(gsensor_bma020_exit);
 
 int bma020_wakeup()
 {
-    printk(KERN_INFO "[BMA020.c] bma020_wakeup\n");
+    dev_dbg(&this_client->dev, "bma020_wakeup\n");
     g_gsensor_power_mode = BMA020_MODE_NORMAL;
     bma020_set_mode(BMA020_MODE_NORMAL);
     //bma020_soft_reset();
@@ -929,7 +927,7 @@ int bma020_wakeup()
 
 int bma020_sleep()
 {
-    printk(KERN_INFO "[BMA020.c] bma020_sleep\n");
+    dev_dbg(&this_client->dev, "bma020_sleep\n");
     g_gsensor_power_mode = BMA020_MODE_SLEEP;
     bma020_set_mode(BMA020_MODE_SLEEP);
     return 0;
@@ -993,7 +991,7 @@ int bma020_set_range(char range)
 {
     unsigned char data;
 
-    if (((int)range)<3 && ((int)range)>=0) 
+    if ((int)range<3) 
     {
         bma020_read_reg(RANGE__REG, &data, 1);
         data = BMA020_SET_BITSLICE(data, RANGE, range);
@@ -1019,7 +1017,7 @@ int bma020_set_bandwidth(char bw)
 {
     unsigned char data;
 
-    if (((int)bw)<=6 && ((int)bw)>=0)
+    if ((int)bw<=6)
     {
         bma020_read_reg(RANGE__REG, &data, 1);
         data = BMA020_SET_BITSLICE(data, BANDWIDTH, bw);
