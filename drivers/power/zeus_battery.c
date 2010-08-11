@@ -177,6 +177,7 @@ EXPORT_SYMBOL(Battery_power_supply_change);
 /// --- FIH_ADQ ---
 
 extern int gg_dev_suspended;
+int stored_prop_values[POWER_SUPPLY_PROP_TIME_TO_FULL_AVG] = {0,};
 
 static int zeus_battery_get_property(struct power_supply *psy,
 		enum power_supply_property psp,
@@ -187,8 +188,11 @@ static int zeus_battery_get_property(struct power_supply *psy,
 	int batt_vol;
 
 	if (gg_dev_suspended) {
-		printk(KERN_WARNING "zeus_battery_get_propery called while suspended: %d\n",psp);
-		return -EINVAL;
+		/* Can't get value from suspended i2c bus, return last
+		 * known good value */
+		val->intval = stored_prop_values[psp];
+		/*printk(KERN_WARNING "zeus_battery_get_propery called while suspended! Returning stored '%u' for %d\n",val->intval,psp);*/
+		return ret;
 	}
 
 	switch (psp) {
@@ -303,6 +307,9 @@ static int zeus_battery_get_property(struct power_supply *psy,
 			ret = -EINVAL;
 			break;
 	}
+
+	if (!ret) 
+		stored_prop_values[psp] = val->intval;
 
 	return ret;
 }
