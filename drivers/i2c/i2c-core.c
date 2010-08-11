@@ -156,6 +156,8 @@ static void i2c_device_shutdown(struct device *dev)
 }
 
 #ifdef CONFIG_SUSPEND
+static int i2c_device_suspend(struct device *dev, pm_message_t mesg);
+static int i2c_device_resume(struct device *dev);
 static int i2c_device_pm_suspend(struct device *dev)
 {
 	const struct dev_pm_ops *pm;
@@ -163,6 +165,10 @@ static int i2c_device_pm_suspend(struct device *dev)
 	if (!dev->driver)
 		return 0;
 	pm = dev->driver->pm;
+	if (!pm) {
+		/* Backwards compat: Fallback to non-pm_ops */
+		return i2c_device_suspend(dev, PMSG_SUSPEND);
+	}
 	if (!pm || !pm->suspend)
 		return 0;
 	return pm->suspend(dev);
@@ -175,6 +181,10 @@ static int i2c_device_pm_resume(struct device *dev)
 	if (!dev->driver)
 		return 0;
 	pm = dev->driver->pm;
+	if (!pm) {
+		/* Backwards compat: Fallback to non-pm_ops */
+		return i2c_device_resume(dev);
+	}
 	if (!pm || !pm->resume)
 		return 0;
 	return pm->resume(dev);
