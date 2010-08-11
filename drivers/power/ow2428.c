@@ -43,10 +43,6 @@ struct i2c_client * g_i2c_client;
 
 #include <asm/gpio.h>
 
-int get_i2c_bus(struct i2c_adapter * adap);
-int send_i2c_package(struct i2c_adapter * adap, struct i2c_msg *msgs, int num);
-void release_i2c_bus(struct i2c_adapter * adap);
-
 #if 0
 #define DBGMSG(x) {printk x;}
 #else
@@ -57,8 +53,6 @@ static void ZeusDS2482_init(struct i2c_client * client)
 {
 	g_i2c_client = client;
 
-	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
-	gpio_direction_output(23, 0);
 	//printk(KERN_INFO "<ubh> ZeusDS2482_init 00. : %d\n", gpio_get_value(23));
 }
 
@@ -74,7 +68,7 @@ static int i2crdow(uint8_t * buf)
 		}
 	};
 
-	return send_i2c_package(g_i2c_client->adapter, msgs, 1);
+	return i2c_transfer(g_i2c_client->adapter, msgs, 1);
 }
 
 /* Write the specified data to the  control reg */
@@ -102,9 +96,9 @@ struct i2c_msg g_msgs[] = {
 	},
 };
 
-#define i2cwrcmd(x) (g_srp[1] = x, send_i2c_package(g_i2c_client->adapter, &(g_msgs[0]), 1))
-#define i2cwrsrp(x) (g_srp[1] = x, send_i2c_package(g_i2c_client->adapter, &(g_msgs[1]), 1))
-#define i2cwr1wwb(x) (g_1wwb[1] = x, send_i2c_package(g_i2c_client->adapter, &(g_msgs[2]), 1))
+#define i2cwrcmd(x) (g_srp[1] = x, i2c_transfer(g_i2c_client->adapter, &(g_msgs[0]), 1))
+#define i2cwrsrp(x) (g_srp[1] = x, i2c_transfer(g_i2c_client->adapter, &(g_msgs[1]), 1))
+#define i2cwr1wwb(x) (g_1wwb[1] = x, i2c_transfer(g_i2c_client->adapter, &(g_msgs[2]), 1))
 
 #define CHECK_NORMAL_BUSY_TIME	10
 
@@ -370,16 +364,22 @@ struct mutex g_ow2428_suspend_lock;
 
 static int OpenBAT(void)
 {
-	mutex_lock(&g_ow2428_suspend_lock);
+    mutex_lock(&g_ow2428_suspend_lock);
+	if (gpio_request(23,"ZEUS_BATT")) {
+		return -ENODEV;
+	}
+	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+	gpio_direction_output(23, 0);
 	gpio_set_value(23, 1);
-	return get_i2c_bus(g_i2c_client->adapter);
+	return 0;
 }
 
 static void CloseBAT(void)
 {
-	release_i2c_bus(g_i2c_client->adapter);
 	gpio_set_value(23, 0);
-	mutex_unlock(&g_ow2428_suspend_lock);
+	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_DISABLE );
+	gpio_free(23);
+    mutex_unlock(&g_ow2428_suspend_lock);
 }
 
 #define DS2780_STATUS				0x01    // STATUS
