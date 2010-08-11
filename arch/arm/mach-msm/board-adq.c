@@ -772,7 +772,7 @@ static unsigned bt_config_init[] = {
 	GPIO_CFG(27, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* BT_RST */
 	GPIO_CFG(37, 0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),   /* HOST_WAKE_BT */
 	GPIO_CFG(42, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA),   /* BT_WAKE_HOST */
-	GPIO_CFG(68, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_DOUT */
+	/*GPIO_CFG(68, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),*/	/* PCM_DOUT */
 	GPIO_CFG(69, 1, GPIO_INPUT,  GPIO_NO_PULL, GPIO_2MA),	/* PCM_DIN */
 	GPIO_CFG(70, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_SYNC */
 	GPIO_CFG(71, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA),	/* PCM_CLK */
@@ -816,8 +816,8 @@ static void init_Bluetooth_gpio_table(void)
 	if (rc)	printk(KERN_ERR "%s: 1.2V 34 setting failed! rc = %d\n", __func__, rc);
 	rc = gpio_request(35, "WIFI_RST");
 	if (rc)	printk(KERN_ERR "%s: WIFI_RST 35 setting failed! rc = %d\n", __func__, rc);
-	rc = gpio_request(23, "WIFI_WARMRST");
-	if (rc)	printk(KERN_ERR "%s: WIFI_WARMRST 23 setting failed! rc = %d\n", __func__, rc);
+	/*rc = gpio_request(23, "WIFI_WARMRST");
+	if (rc)	printk(KERN_ERR "%s: WIFI_WARMRST 23 setting failed! rc = %d\n", __func__, rc);*/
 	rc = gpio_request(27, "BT_RST");
 	if (rc)	printk(KERN_ERR "%s: BT_RST 27 setting failed! rc = %d\n", __func__, rc);
 
