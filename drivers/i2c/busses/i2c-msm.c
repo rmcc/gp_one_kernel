@@ -138,10 +138,6 @@ dump_status(uint32_t status)
 }
 #endif
 
-#ifdef CONFIG_BATTERY_FIH_ZEUS
-extern int getGasgaugeState(void);
-#endif
-
 static irqreturn_t
 msm_i2c_interrupt(int irq, void *devid)
 {
@@ -155,7 +151,7 @@ msm_i2c_interrupt(int irq, void *devid)
 
 	spin_lock(&dev->lock);
 	if (!dev->msg) {
-		dev_err(dev->dev, "%s: IRQ but nothing to do!\n", __func__);
+		dev_dbg(dev->dev, "%s: IRQ but nothing to do!\n", __func__);
 		spin_unlock(&dev->lock);
 		return IRQ_HANDLED;
 	}
@@ -518,9 +514,6 @@ wait_for_int:
 			goto out_err;
 		}
 		if (dev->err) {
-#ifdef CONFIG_BATTERY_FIH_ZEUS
-		  if (getGasgaugeState() == 0)
-#endif
 			dev_err(dev->dev,
 				"Error during data xfer (%d)\n",
 				dev->err);

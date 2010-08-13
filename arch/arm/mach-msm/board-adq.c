@@ -72,6 +72,11 @@
 #include <linux/spi/spi_gpio.h>
 #endif
 
+#ifdef CONFIG_BATTERY_DS2784
+#include <linux/ds2784_battery.h>
+#include <../../../drivers/w1/w1.h>
+#endif
+
 /* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
 /* ZEUS_ANDROID_CR, For TC6507 LED Expander*/
 ///+FIH_ADQ
@@ -468,6 +473,10 @@ static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
 #endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
+
+#ifdef CONFIG_BATTERY_DS2784
+extern void notify_usb_connected(int);
+#endif
 
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect    = hsusb_rpc_connect,
@@ -993,9 +1002,9 @@ static struct i2c_board_info i2c_devices[] = {
 		.platform_data	= &FIH_kybd_data,
 	},
 #endif
-#ifdef CONFIG_BATTERY_FIH_ZEUS
+#ifdef CONFIG_BATTERY_DS2784
 	{
-		I2C_BOARD_INFO("gasgauge_bridge", 0x18),
+		I2C_BOARD_INFO("ds2482", 0x18),
 	},
 #endif
 #ifdef CONFIG_SENSORS_BMA020
@@ -1111,6 +1120,74 @@ static void __init msm_camera_add_device(void)
 	config_camera_off_gpios();
 }
 
+#ifdef CONFIG_BATTERY_DS2784
+#define ADQ_GPIO_BATTERY_CHARGER_CURRENT 57
+#define ADQ_GPIO_BATTERY_CHARGER_EN 33
+static int ds2784_charge(int on, int fast)
+{
+        gpio_direction_output(ADQ_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
+    gpio_direction_output(ADQ_GPIO_BATTERY_CHARGER_EN, !on);
+    return 0;
+}
+
+static int w1_ds2784_add_slave(struct w1_slave *sl)
+{
+    struct dd {
+        struct platform_device pdev;
+        struct ds2784_platform_data pdata;
+    } *p;
+
+    int rc;
+
+    p = kzalloc(sizeof(struct dd), GFP_KERNEL);
+    if (!p) {
+        pr_err("%s: out of memory\n", __func__);
+        return -ENOMEM;
+    }
+
+    rc = gpio_request(ADQ_GPIO_BATTERY_CHARGER_EN, "charger_en");
+    if (rc < 0) {
+        pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+            ADQ_GPIO_BATTERY_CHARGER_EN, rc);
+        kfree(p);
+        return rc;
+    }
+
+        rc = gpio_request(ADQ_GPIO_BATTERY_CHARGER_CURRENT, "charger_current");
+        if (rc < 0) {
+            pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+                ADQ_GPIO_BATTERY_CHARGER_CURRENT, rc);
+            gpio_free(ADQ_GPIO_BATTERY_CHARGER_EN);
+            kfree(p);
+            return rc;
+        }
+    p->pdev.name = "ds2784-battery";
+    p->pdev.id = -1;
+    p->pdev.dev.platform_data = &p->pdata;
+    p->pdata.charge = ds2784_charge;
+    p->pdata.w1_slave = sl;
+
+    platform_device_register(&p->pdev);
+
+    return 0;
+}
+static struct w1_family_ops w1_ds2784_fops = {
+    .add_slave = w1_ds2784_add_slave,
+};
+
+static struct w1_family w1_ds2784_family = {
+    .fid = W1_FAMILY_DS2784,
+    .fops = &w1_ds2784_fops,
+};
+static int __init ds2784_battery_init(void)
+{
+    gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+    gpio_direction_output(23, 0);
+    gpio_set_value(23, 1);
+    return w1_register_family(&w1_ds2784_family);
+}
+
+#endif
 //FIH_ADQ,JOE HSU -----
 #ifdef CONFIG_SPI_GPIO
 static unsigned spi_gpio_config_input[] = {
@@ -1652,6 +1729,9 @@ static void __init msm7x25_init(void)
 
 #ifdef CONFIG_USB_MSM_OTG_72K
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+#ifdef CONFIG_BATTERY_DS2784
+	msm_gadget_pdata.usb_connected = notify_usb_connected;
+#endif
 #ifdef CONFIG_USB_GADGET
 	msm_gadget_pdata.swfi_latency =
 		msm7x25_pm_data
@@ -1695,7 +1775,9 @@ static void __init msm7x25_init(void)
 	/* } FIH_ADQ, AudiPCHuang, 2009/03/30 */	
 
 	msm_pm_set_platform_data(msm7x25_pm_data,ARRAY_SIZE(msm7x25_pm_data));
-
+#ifdef CONFIG_BATTERY_DS2784
+	ds2784_battery_init();
+#endif
 }
 
 static void __init msm_msm7x25_allocate_memory_regions(void)
