@@ -96,6 +96,7 @@ enum hs_drv_amplitude {
 struct msm_hsusb_gadget_platform_data {
 	int *phy_init_seq;
 	void (*phy_reset)(void);
+	void (*usb_connected)(int);
 
 	u32 swfi_latency;
 	int self_powered;

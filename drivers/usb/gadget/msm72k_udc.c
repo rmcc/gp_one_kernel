@@ -178,6 +178,9 @@ struct usb_info {
 	int *phy_init_seq;
 	void (*phy_reset)(void);
 
+    /* for notification when USB is connected or disconnected */
+    void (*usb_connected)(int);
+
 	/* max power requested by selected configuration */
 	unsigned b_max_pow;
 	enum chg_type chg_type;
@@ -315,6 +318,8 @@ static void usb_chg_detect(struct work_struct *w)
 
 	spin_lock_irqsave(&ui->lock, flags);
 	if (ui->usb_state == USB_STATE_NOTATTACHED) {
+        if (ui->usb_connected)
+           ui->usb_connected(0);
 		spin_unlock_irqrestore(&ui->lock, flags);
 		return;
 	}
@@ -335,8 +340,13 @@ static void usb_chg_detect(struct work_struct *w)
 	 * driver will reacquire wakelocks for any sub-sequent usb interrupts.
 	 * */
 	if (temp == USB_CHG_TYPE__WALLCHARGER) {
+        if (ui->usb_connected)
+           ui->usb_connected(2);
 		msm72k_pm_qos_update(0);
 		wake_unlock(&ui->wlock);
+	} else {
+		if (ui->usb_connected)
+			ui->usb_connected(1);
 	}
 }
 
@@ -2230,6 +2240,7 @@ static int msm72k_probe(struct platform_device *pdev)
 		pdata = pdev->dev.platform_data;
 		ui->phy_reset = pdata->phy_reset;
 		ui->phy_init_seq = pdata->phy_init_seq;
+		ui->usb_connected = pdata->usb_connected;
 	}
 
 	ui->chg_type = USB_CHG_TYPE__INVALID;
