@@ -98,7 +98,6 @@ struct msm_hsusb_gadget_platform_data {
 	void (*phy_reset)(void);
 	void (*usb_connected)(int);
 
-	u32 swfi_latency;
 	int self_powered;
 };
 
@@ -142,6 +141,7 @@ struct msm_otg_platform_data {
 	enum hs_drv_amplitude	drv_ampl;
 	int			phy_reset_sig_inverted;
 
+	u32 			swfi_latency;
 	/* pmic notfications apis */
 	int (*pmic_notif_init) (void);
 	void (*pmic_notif_deinit) (void);
@@ -151,6 +151,11 @@ struct msm_otg_platform_data {
 	void (*setup_gpio)(unsigned int config);
 	u8      otg_mode;
 	void (*vbus_power) (unsigned phy_info, int on);
+
+	/* charger notification apis */
+	void (*chg_connected)(enum chg_type chg_type);
+	void (*chg_vbus_draw)(unsigned ma);
+	int  (*chg_init)(int init);
 };
 
 struct msm_usb_host_platform_data {

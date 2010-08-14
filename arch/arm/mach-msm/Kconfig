@@ -53,9 +53,11 @@ config ARCH_MSM8X60
 	select ARCH_REQUIRE_GPIOLIB
 	select MSM_ADM3
 	select REGULATOR
+	select MSM_PIL
 	select MSM8660_TLMM
 	select ARCH_HAS_CPU_IDLE_WAIT
 	select MSM_DIRECT_SCLK_ACCESS
+	select MSM_RPM
 
 endchoice
 
@@ -81,6 +83,9 @@ config  ARCH_MSM_SCORPIONMP
 
 config  MSM_VIC
 	bool
+
+config MSM_RPM
+	bool "Resource Power Manager"
 
 config MSM_REMOTE_SPINLOCK_DEKKERS
 	bool
@@ -1117,6 +1122,17 @@ config MSM_NPA_SYSTEM_BUS
 	help
 	  PM_QOS System Bus rate requests are interpreted as 'Flow IDs' and
 	  are routed through the NPA framework.
+
+config MSM_PIL
+	bool "Peripheral image loading"
+	select FW_LOADER
+	depends on ARCH_MSM8X60
+	default n
+	help
+	  Some peripherals need to be loaded into memory before they can be
+	  brought out of reset.
+
+	  Say yes to support these devices.
 
 config SMMU_8X60
 	bool

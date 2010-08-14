@@ -1122,7 +1122,6 @@ sub process {
 	my $stashrawline="";
 	my $subjectline="";
 	my $sublinenr="";
-	my $blankline_flag=0;
 
 	my $length;
 	my $indent;
@@ -1404,19 +1403,11 @@ sub process {
 			if ($line =~ /^\s*signed-off-by:.*(quicinc|qualcomm)\.com/i) {
 				WARN("invalid Signed-off-by identity\n" . $line );
 			}
-			$blankline_flag = 1;
 		}
 
 #check the patch for invalid author credentials
 		if ($line =~ /^From:.*(quicinc|qualcomm)\.com/) {
 			WARN("invalid author identity\n" . $line );
-		}
-
-#check the patch for blank lines in the header
-		if($line =~ /^\s*$/ && $blankline_flag == 1) {
-			WARN("Blank lines should not appear in the header once signed off\n");
-		} elsif($line =~ /^---$/) {
-			$blankline_flag = 0;
 		}
 
 # Check for wrappage within a valid hunk of the file
@@ -1471,6 +1462,7 @@ sub process {
 		if ($line =~ /^\+/ && $prevrawline !~ /\/\*\*/ &&
 		    $rawline !~ /^.\s*\*\s*\@$Ident\s/ &&
 		    $line !~ /^\+\s*printk\s*\(\s*(?:KERN_\S+\s*)?"[X\t]*"\s*(?:,|\)\s*;)\s*$/ &&
+		    $realfile ne "scripts/checkpatch.pl" &&
 		    $length > 80)
 		{
 			WARN("line over 80 characters\n" . $herecurr);
@@ -2715,6 +2707,11 @@ sub process {
 # check for pointless casting of kmalloc return
 		if ($line =~ /\*\s*\)\s*k[czm]alloc\b/) {
 			WARN("unnecessary cast may hide bugs, see http://c-faq.com/malloc/mallocnocast.html\n" . $herecurr);
+		}
+
+# check for return codes on error paths
+		if ($line =~ /\breturn\s+-\d+/) {
+			ERROR("illegal return value, please use an error code\n" . $herecurr);
 		}
 
 # check for gcc specific __FUNCTION__

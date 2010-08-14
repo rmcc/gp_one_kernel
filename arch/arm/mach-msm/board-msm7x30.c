@@ -63,6 +63,8 @@
 #include <mach/pmic.h>
 #include <mach/rpc_pmapp.h>
 #include <mach/qdsp5v2/aux_pcm.h>
+#include <mach/qdsp5v2/mi2s.h>
+#include <mach/qdsp5v2/audio_dev_ctl.h>
 #include <mach/msm_battery.h>
 #include <mach/rpc_server_handset.h>
 #include <mach/msm_tsif.h>
@@ -541,6 +543,11 @@ static struct resource resources_keypad[] = {
 	},
 };
 
+static struct matrix_keymap_data surf_keymap_data = {
+	.keymap_size	= ARRAY_SIZE(surf_keymap),
+	.keymap		= surf_keymap,
+};
+
 static struct pmic8058_keypad_data surf_keypad_data = {
 	.input_name		= "surf_keypad",
 	.input_phys_device	= "surf_keypad/input0",
@@ -548,12 +555,16 @@ static struct pmic8058_keypad_data surf_keypad_data = {
 	.num_cols		= 8,
 	.rows_gpio_start	= 8,
 	.cols_gpio_start	= 0,
-	.keymap_size		= ARRAY_SIZE(surf_keymap),
-	.keymap			= surf_keymap,
 	.debounce_ms		= {8, 10},
 	.scan_delay_ms		= 32,
 	.row_hold_ns		= 91500,
 	.wakeup			= 1,
+	.keymap_data		= &surf_keymap_data,
+};
+
+static struct matrix_keymap_data fluid_keymap_data = {
+	.keymap_size	= ARRAY_SIZE(fluid_keymap),
+	.keymap		= fluid_keymap,
 };
 
 static struct pmic8058_keypad_data fluid_keypad_data = {
@@ -563,12 +574,11 @@ static struct pmic8058_keypad_data fluid_keypad_data = {
 	.num_cols		= 5,
 	.rows_gpio_start	= 8,
 	.cols_gpio_start	= 0,
-	.keymap_size		= ARRAY_SIZE(fluid_keymap),
-	.keymap			= fluid_keymap,
 	.debounce_ms		= {8, 10},
 	.scan_delay_ms		= 32,
 	.row_hold_ns		= 91500,
 	.wakeup			= 1,
+	.keymap_data		= &fluid_keymap_data,
 };
 
 static struct pm8058_pwm_pdata pm8058_pwm_data = {
@@ -719,7 +729,9 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 static uint32_t camera_off_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	GPIO_CFG(0,  0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA), /* RST */
+#ifndef CONFIG_TIMPANI_CODEC
 	GPIO_CFG(1,  0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA), /* VCM */
+#endif
 	GPIO_CFG(2,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
 	GPIO_CFG(3,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
 	GPIO_CFG(4,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
@@ -739,7 +751,9 @@ static uint32_t camera_off_gpio_table[] = {
 static uint32_t camera_on_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	GPIO_CFG(0,  0, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_2MA), /* RST */
+#ifndef CONFIG_TIMPANI_CODEC
 	GPIO_CFG(1,  0, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA), /* VCM */
+#endif
 	GPIO_CFG(2,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
 	GPIO_CFG(3,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
 	GPIO_CFG(4,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
@@ -1158,6 +1172,132 @@ static int __init aux_pcm_gpio_init(void)
 	}
 	return rc;
 }
+
+static struct msm_gpio mi2s_clk_gpios[] = {
+	{ GPIO_CFG(145, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_SCLK"},
+	{ GPIO_CFG(144, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_WS"},
+	{ GPIO_CFG(120, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_MCLK_A"},
+};
+
+static struct msm_gpio mi2s_rx_data_lines_gpios[] = {
+	{ GPIO_CFG(121, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_DATA_SD0_A"},
+	{ GPIO_CFG(122, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_DATA_SD1_A"},
+	{ GPIO_CFG(123, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_DATA_SD2_A"},
+	{ GPIO_CFG(146, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_DATA_SD3"},
+};
+
+static struct msm_gpio mi2s_tx_data_lines_gpios[] = {
+	{ GPIO_CFG(146, 1, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA),
+	    "MI2S_DATA_SD3"},
+};
+
+int mi2s_config_clk_gpio(void)
+{
+	int rc = 0;
+
+	rc = msm_gpios_request_enable(mi2s_clk_gpios,
+			ARRAY_SIZE(mi2s_clk_gpios));
+	if (rc) {
+		pr_err("%s: enable mi2s clk gpios  failed\n",
+					__func__);
+		return rc;
+	}
+	return 0;
+}
+
+int  mi2s_unconfig_data_gpio(u32 direction, u8 sd_line_mask)
+{
+	int i, rc = 0;
+	sd_line_mask &= MI2S_SD_LINE_MASK;
+
+	switch (direction) {
+	case DIR_TX:
+		msm_gpios_disable_free(mi2s_tx_data_lines_gpios, 1);
+		break;
+	case DIR_RX:
+		i = 0;
+		while (sd_line_mask) {
+			if (sd_line_mask & 0x1)
+				msm_gpios_disable_free(
+					mi2s_rx_data_lines_gpios + i , 1);
+			sd_line_mask = sd_line_mask >> 1;
+			i++;
+		}
+		break;
+	default:
+		pr_err("%s: Invaild direction  direction = %u\n",
+						__func__, direction);
+		rc = -EINVAL;
+		break;
+	}
+	return rc;
+}
+
+int mi2s_config_data_gpio(u32 direction, u8 sd_line_mask)
+{
+	int i , rc = 0;
+	u8 sd_config_done_mask = 0;
+
+	sd_line_mask &= MI2S_SD_LINE_MASK;
+
+	switch (direction) {
+	case DIR_TX:
+		if ((sd_line_mask & MI2S_SD_0) || (sd_line_mask & MI2S_SD_1) ||
+		   (sd_line_mask & MI2S_SD_2) || !(sd_line_mask & MI2S_SD_3)) {
+			pr_err("%s: can not use SD0 or SD1 or SD2 for TX"
+				".only can use SD3. sd_line_mask = 0x%x\n",
+				__func__ , sd_line_mask);
+			rc = -EINVAL;
+		} else {
+			rc = msm_gpios_request_enable(mi2s_tx_data_lines_gpios,
+							 1);
+			if (rc)
+				pr_err("%s: enable mi2s gpios for TX failed\n",
+					   __func__);
+		}
+		break;
+	case DIR_RX:
+		i = 0;
+		while (sd_line_mask && (rc == 0)) {
+			if (sd_line_mask & 0x1) {
+				rc = msm_gpios_request_enable(
+					mi2s_rx_data_lines_gpios + i , 1);
+				if (rc) {
+					pr_err("%s: enable mi2s gpios for"
+					 "RX failed.  SD line = %s\n",
+					 __func__,
+					 (mi2s_rx_data_lines_gpios + i)->label);
+					mi2s_unconfig_data_gpio(DIR_RX,
+						sd_config_done_mask);
+				} else
+					sd_config_done_mask |= (1 << i);
+			}
+			sd_line_mask = sd_line_mask >> 1;
+			i++;
+		}
+		break;
+	default:
+		pr_err("%s: Invaild direction  direction = %u\n",
+			__func__, direction);
+		rc = -EINVAL;
+		break;
+	}
+	return rc;
+}
+
+int mi2s_unconfig_clk_gpio(void)
+{
+	msm_gpios_disable_free(mi2s_clk_gpios, ARRAY_SIZE(mi2s_clk_gpios));
+	return 0;
+}
+
 #endif /* CONFIG_MSM7KV2_AUDIO */
 
 static int __init buses_init(void)
@@ -1185,6 +1325,26 @@ static int __init buses_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_TIMPANI_CODEC
+static uint32_t timpani_reset_on_gpio[] = {
+	GPIO_CFG(1, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA)};
+
+static uint32_t timpani_reset_off_gpio[] = {
+	GPIO_CFG(1, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA)};
+
+static void config_timpani_reset_on(void)
+{
+	config_gpio_table(timpani_reset_on_gpio,
+		ARRAY_SIZE(timpani_reset_on_gpio));
+}
+
+static void config_timpani_reset_off(void)
+{
+	config_gpio_table(timpani_reset_off_gpio,
+		ARRAY_SIZE(timpani_reset_off_gpio));
+}
+#endif
+
 static struct vreg *vreg_marimba_1;
 static struct vreg *vreg_marimba_2;
 
@@ -1205,6 +1365,10 @@ static unsigned int msm_marimba_setup_power(void)
 		goto out;
 	}
 
+#ifdef CONFIG_TIMPANI_CODEC
+	config_timpani_reset_off();
+#endif
+
 out:
 	return rc;
 };
@@ -1212,6 +1376,10 @@ out:
 static void msm_marimba_shutdown_power(void)
 {
 	int rc;
+
+#ifdef CONFIG_TIMPANI_CODEC
+	config_timpani_reset_on();
+#endif
 
 	rc = vreg_disable(vreg_marimba_1);
 	if (rc) {
@@ -1434,6 +1602,7 @@ static struct msm_ts_platform_data msm_ts_data = {
 	.max_press      = 255,
 	.inv_x          = 4096,
 	.inv_y          = 4096,
+	.can_wakeup	= false,
 };
 
 static struct marimba_tsadc_platform_data marimba_tsadc_pdata = {
@@ -1442,6 +1611,7 @@ static struct marimba_tsadc_platform_data marimba_tsadc_pdata = {
 	.exit		     =  marimba_tsadc_exit,
 	.level_vote	     =  marimba_tsadc_vote,
 	.tsadc_prechg_en = true,
+	.can_wakeup	= false,
 	.setup = {
 		.pen_irq_en	=	true,
 		.tsadc_en	=	true,
@@ -1509,7 +1679,11 @@ static struct marimba_platform_data marimba_pdata = {
 
 static void __init msm7x30_init_marimba(void)
 {
+#ifdef CONFIG_TIMPANI_CODEC
+	vreg_marimba_1 = vreg_get(NULL, "s3");
+#else
 	vreg_marimba_1 = vreg_get(NULL, "s2");
+#endif
 	if (IS_ERR(vreg_marimba_1)) {
 		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
 			__func__, PTR_ERR(vreg_marimba_1));
@@ -1522,6 +1696,30 @@ static void __init msm7x30_init_marimba(void)
 		return;
 	}
 }
+
+#ifdef CONFIG_TIMPANI_CODEC
+static struct marimba_codec_platform_data timpani_codec_pdata = {
+	.marimba_codec_power =  msm_marimba_codec_power,
+};
+
+static struct marimba_platform_data timpani_pdata = {
+	.slave_id[MARIMBA_SLAVE_ID_CDC]	= MARIMBA_SLAVE_ID_CDC_ADDR,
+	.slave_id[MARIMBA_SLAVE_ID_QMEMBIST] = MARIMBA_SLAVE_ID_QMEMBIST_ADDR,
+	.marimba_setup = msm_marimba_setup_power,
+	.marimba_shutdown = msm_marimba_shutdown_power,
+	.codec = &timpani_codec_pdata,
+	.tsadc = &marimba_tsadc_pdata,
+};
+
+#define TIMPANI_I2C_SLAVE_ADDR	0xD
+
+static struct i2c_board_info msm_i2c_gsbi7_timpani_info[] = {
+	{
+		I2C_BOARD_INFO("timpani", TIMPANI_I2C_SLAVE_ADDR),
+		.platform_data = &timpani_pdata,
+	},
+};
+#endif
 
 #ifdef CONFIG_MSM7KV2_AUDIO
 static struct resource msm_aictl_resources[] = {
@@ -2510,10 +2708,13 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 #else
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
-	.core_clk	= 1,
-	.pemp_level     = PRE_EMPHASIS_WITH_20_PERCENT,
-	.cdr_autoreset  = CDR_AUTO_RESET_DISABLE,
-	.drv_ampl       = HS_DRV_AMPLITUDE_DEFAULT,
+	.core_clk		 = 1,
+	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
+	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
+	.drv_ampl		 = HS_DRV_AMPLITUDE_DEFAULT,
+	.chg_vbus_draw		 = hsusb_chg_vbus_draw,
+	.chg_connected		 = hsusb_chg_connected,
+	.chg_init		 = hsusb_chg_init,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -4399,7 +4600,7 @@ static void __init pmic8058_leds_init(void)
 			= &pm8058_surf_leds_data;
 		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].data_size
 			= sizeof(pm8058_surf_leds_data);
-	} else if (machine_is_msm7x30_ffa()) {
+	} else if (!machine_is_msm7x30_fluid()) {
 		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].platform_data
 			= &pm8058_ffa_leds_data;
 		pm8058_7x30_data.sub_devices[PM8058_SUBDEV_LED].data_size
@@ -4884,7 +5085,7 @@ static void __init msm7x30_init(void)
 #ifdef CONFIG_USB_MSM_OTG_72K
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
-	msm_gadget_pdata.swfi_latency =
+	msm_otg_pdata.swfi_latency =
 		msm_pm_data
 		[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency;
 	msm_device_gadget_peripheral.dev.platform_data = &msm_gadget_pdata;
@@ -4934,6 +5135,11 @@ static void __init msm7x30_init(void)
 	if (machine_is_msm7x30_fluid())
 		i2c_register_board_info(0, cy8info,
 					ARRAY_SIZE(cy8info));
+
+#ifdef CONFIG_TIMPANI_CODEC
+	i2c_register_board_info(2, msm_i2c_gsbi7_timpani_info,
+			ARRAY_SIZE(msm_i2c_gsbi7_timpani_info));
+#endif
 
 	i2c_register_board_info(2, msm_marimba_board_info,
 			ARRAY_SIZE(msm_marimba_board_info));

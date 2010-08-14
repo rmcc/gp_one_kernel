@@ -1620,6 +1620,9 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.setup_gpio 	= msm_otg_setup_gpio,
 	.otg_mode	= OTG_USER_CONTROL,
 	.vbus_power 	= msm_hsusb_vbus_power,
+	.chg_vbus_draw  = hsusb_chg_vbus_draw,
+	.chg_connected  = hsusb_chg_connected,
+	.chg_init	= hsusb_chg_init,
 };
 
 static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
@@ -2179,7 +2182,7 @@ static void __init qsd8x50_init(void)
 	qsd8x50_cfg_smsc911x();
 	msm_acpu_clock_init(&qsd8x50_clock_data);
 
-	msm_hsusb_pdata.swfi_latency =
+	msm_otg_pdata.swfi_latency =
 		msm_pm_data
 		[MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency;
 	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;

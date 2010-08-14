@@ -714,6 +714,9 @@ static int kgsl_yamato_start(struct kgsl_device *device)
 	kgsl_yamato_regwrite(device, REG_MH_ARBITER_CONFIG,
 				KGSL_CFG_YAMATO_MHARB);
 
+	kgsl_yamato_regwrite(device, REG_MH_CLNT_INTF_CTRL_CONFIG1, 0x00030f27);
+	kgsl_yamato_regwrite(device, REG_MH_CLNT_INTF_CTRL_CONFIG2, 0x00472747);
+
 	kgsl_yamato_regwrite(device, REG_SQ_VS_PROGRAM, 0x00000000);
 	kgsl_yamato_regwrite(device, REG_SQ_PS_PROGRAM, 0x00000000);
 
@@ -1081,7 +1084,7 @@ static int kgsl_check_interrupt_timestamp(struct kgsl_device *device,
 	int status;
 	unsigned int ref_ts, enableflag;
 
-	status = kgsl_cmdstream_check_timestamp(device, timestamp);
+	status = kgsl_check_timestamp(device, timestamp);
 	if (!status) {
 		mutex_lock(&kgsl_driver.mutex);
 		kgsl_sharedmem_readl(&device->memstore, &enableflag,
@@ -1143,7 +1146,7 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 	struct kgsl_yamato_device *yamato_device = (struct kgsl_yamato_device *)
 								device;
 
-	if (!kgsl_cmdstream_check_timestamp(device, timestamp)) {
+	if (!kgsl_check_timestamp(device, timestamp)) {
 		mutex_unlock(&kgsl_driver.mutex);
 		/* We need to make sure that the process is placed in wait-q
 		 * before its condition is called */
@@ -1156,8 +1159,7 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 		if (status > 0)
 			status = 0;
 		else if (status == 0) {
-			if (!kgsl_cmdstream_check_timestamp(device,
-				timestamp)) {
+			if (!kgsl_check_timestamp(device, timestamp)) {
 				status = -ETIMEDOUT;
 				kgsl_register_dump(device);
 			}

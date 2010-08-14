@@ -111,7 +111,7 @@ extern struct kgsl_driver kgsl_driver;
 
 struct kgsl_mem_entry {
 	struct kgsl_memdesc memdesc;
-	struct file *pmem_file;
+	struct file *file_ptr;
 	struct list_head list;
 	struct list_head free_list;
 	uint32_t free_timestamp;
@@ -164,6 +164,7 @@ int kgsl_regread(struct kgsl_device *device, unsigned int offsetwords,
 			unsigned int *value);
 int kgsl_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 			unsigned int value);
+int kgsl_check_timestamp(struct kgsl_device *device, unsigned int timestamp);
 
 int kgsl_register_ts_notifier(struct kgsl_device *device,
 			      struct notifier_block *nb);

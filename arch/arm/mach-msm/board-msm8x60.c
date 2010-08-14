@@ -35,6 +35,7 @@
 #include <linux/pmic8058-pwm.h>
 #include <linux/leds-pmic8058.h>
 #include <linux/rtc/rtc-pm8058.h>
+#include <linux/mfd/marimba.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c/sx150x.h>
@@ -56,6 +57,7 @@
 #include <mach/board.h>
 #include <mach/irqs.h>
 #include <mach/msm_spi.h>
+#include <mach/msm_serial_hs.h>
 #include <mach/msm_iomap.h>
 #include <asm/mach/mmc.h>
 #include <mach/tlmm.h>
@@ -71,6 +73,7 @@
 #include "devices-msm8x60.h"
 #include "cpuidle.h"
 #include "pm.h"
+#include "rpm.h"
 #include "spm.h"
 #include "timer.h"
 
@@ -539,12 +542,13 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 	},
 	#endif
 };
+#endif
 
 #ifdef CONFIG_MSM_GEMINI
 static struct resource msm_gemini_resources[] = {
 	{
-		.start  = 0xA3A00000,
-		.end    = 0xA3A00000 + 0x0150 - 1,
+		.start  = 0x04600000,
+		.end    = 0x04600000 + SZ_1M - 1,
 		.flags  = IORESOURCE_MEM,
 	},
 	{
@@ -560,8 +564,6 @@ static struct platform_device msm_gemini_device = {
 	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
 };
 #endif
-#endif
-
 
 #ifdef CONFIG_I2C_QUP
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
@@ -647,7 +649,14 @@ static struct platform_device msm_batt_device = {
 };
 #endif
 
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+/* prim = 1024 x 600 x 4(bpp) x 2(pages)
+ * hdmi = 1920 x 1080 x 2(bpp) x 1(page)
+ * Note: must be multiple of 4096 */
+#define MSM_FB_SIZE 0x8A5000;
+#else /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 #define MSM_FB_SIZE 0x500000;
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 #define MSM_PMEM_SF_SIZE 0x1700000;
 #define MSM_GPU_PHYS_SIZE       SZ_2M
 
@@ -713,11 +722,28 @@ static struct resource msm_fb_resources[] = {
 	}
 };
 
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+static int msm_fb_detect_panel(const char *name)
+{
+	if (!strcmp(name, "hdmi_msm"))
+		return 0;
+	pr_warning("%s: not supported '%s'", __func__, name);
+	return -ENODEV;
+}
+
+static struct msm_fb_platform_data msm_fb_pdata = {
+	.detect_client = msm_fb_detect_panel,
+};
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
+
 static struct platform_device msm_fb_device = {
 	.name   = "msm_fb",
 	.id     = 0,
-	.num_resources  = ARRAY_SIZE(msm_fb_resources),
-	.resource       = msm_fb_resources,
+	.num_resources     = ARRAY_SIZE(msm_fb_resources),
+	.resource          = msm_fb_resources,
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+	.dev.platform_data = &msm_fb_pdata,
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 };
 
 #ifdef CONFIG_KERNEL_PMEM_EBI_REGION
@@ -800,6 +826,41 @@ static struct platform_device lcdc_samsung_panel_device = {
 	.dev = {
 		.platform_data = &lcdc_samsung_panel_data,
 	}
+};
+
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+static struct resource hdmi_msm_resources[] = {
+	{
+		.name  = "hdmi_msm_qfprom_addr",
+		.start = 0x00700000,
+		.end   = 0x007060FF,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name  = "hdmi_msm_hdmi_addr",
+		.start = 0x04A00000,
+		.end   = 0x04A00FFF,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name  = "hdmi_msm_irq",
+		.start = HDMI_IRQ,
+		.end   = HDMI_IRQ,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device hdmi_msm_device = {
+	.name = "hdmi_msm",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(hdmi_msm_resources),
+	.resource = hdmi_msm_resources,
+};
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
+
+static struct platform_device mipi_dsi_video_toshiba_wvga_panel_device = {
+	.name = "dsi_video_toshiba_wvga",
+	.id = 0,
 };
 
 static void __init msm8x60_allocate_memory_regions(void)
@@ -970,6 +1031,14 @@ static struct i2c_board_info cy8ctmg200_board_info[] = {
 	}
 };
 
+#ifdef CONFIG_SERIAL_MSM_HS
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+       .inject_rx_on_wakeup = 1,
+       .rx_to_inject = 0xFD,
+       .clk_name = "gsbi_uart_clk",
+};
+#endif
+
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
 
 #define GPIO_LEFT_LED_1		(GPIO_EXPANDER_GPIO_BASE + (16 * 3))
@@ -1109,10 +1178,16 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 	&msm_fb_device,
 	&msm_device_kgsl,
 	&lcdc_samsung_panel_device,
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+	&hdmi_msm_device,
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 #ifdef CONFIG_MSM_CAMERA
 #ifdef CONFIG_IMX074
 	&msm_camera_sensor_imx074,
 #endif
+#endif
+#ifdef CONFIG_MSM_GEMINI
+	&msm_gemini_device,
 #endif
 	&msm_device_vidc
 };
@@ -1130,6 +1205,9 @@ static struct platform_device *surf_devices[] __initdata = {
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	&msm_gsbi1_qup_spi_device,
+#endif
+#ifdef CONFIG_SERIAL_MSM_HS
+	&msm_device_uart_dm1,
 #endif
 #ifdef CONFIG_I2C_SSBI
 	&msm_device_ssbi1,
@@ -1169,10 +1247,17 @@ static struct platform_device *surf_devices[] __initdata = {
 	&msm_fb_device,
 	&msm_device_kgsl,
 	&lcdc_samsung_panel_device,
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+	&hdmi_msm_device,
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
+	&mipi_dsi_video_toshiba_wvga_panel_device,
 #ifdef CONFIG_MSM_CAMERA
 #ifdef CONFIG_IMX074
 	&msm_camera_sensor_imx074,
 #endif
+#endif
+#ifdef CONFIG_MSM_GEMINI
+	&msm_gemini_device,
 #endif
 	&msm_device_vidc
 };
@@ -1347,6 +1432,19 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol    = 0,
 			}
 		},
+		{ /* Timpani Reset */
+			20,
+			{
+				.direction	= PM_GPIO_DIR_OUT,
+				.output_value	= 1,
+				.output_buffer	= PM_GPIO_OUT_BUF_CMOS,
+				.pull		= PM_GPIO_PULL_DN,
+				.out_strength	= PM_GPIO_STRENGTH_HIGH,
+				.function	= PM_GPIO_FUNC_NORMAL,
+				.vin_sel	= 2,
+				.inv_int_pol	= 0,
+			}
+		}
 	};
 
 	for (i = 0; i < ARRAY_SIZE(gpio_cfgs); ++i) {
@@ -1401,6 +1499,11 @@ static struct resource resources_keypad[] = {
 	},
 };
 
+static struct matrix_keymap_data ffa_keymap_data = {
+	.keymap_size	= ARRAY_SIZE(ffa_keymap),
+	.keymap		= ffa_keymap,
+};
+
 static struct pmic8058_keypad_data ffa_keypad_data = {
 	.input_name		= "ffa-keypad",
 	.input_phys_device	= "ffa-keypad/input0",
@@ -1408,12 +1511,11 @@ static struct pmic8058_keypad_data ffa_keypad_data = {
 	.num_cols		= 5,
 	.rows_gpio_start	= 8,
 	.cols_gpio_start	= 0,
-	.keymap_size		= ARRAY_SIZE(ffa_keymap),
-	.keymap			= ffa_keymap,
 	.debounce_ms		= {8, 10},
 	.scan_delay_ms		= 32,
 	.row_hold_ns            = 91500,
 	.wakeup			= 1,
+	.keymap_data		= &ffa_keymap_data,
 };
 
 static struct resource resources_pwrkey[] = {
@@ -2000,6 +2102,122 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 };
 #endif
 
+static struct regulator *vreg_timpani_1;
+static struct regulator *vreg_timpani_2;
+
+static unsigned int msm_timpani_setup_power(void)
+{
+	int rc;
+
+	vreg_timpani_1 = regulator_get(NULL, "8058_l0");
+	if (IS_ERR(vreg_timpani_1)) {
+		pr_err("%s: Unable to get 8058_l0\n", __func__);
+		return -ENODEV;
+	}
+
+	vreg_timpani_2 = regulator_get(NULL, "8058_s3");
+	if (IS_ERR(vreg_timpani_2)) {
+		pr_err("%s: Unable to get 8058_s3\n", __func__);
+		return -ENODEV;
+	}
+
+	rc = regulator_enable(vreg_timpani_1);
+
+	if (rc) {
+		pr_err("%s: Enable regulator 8058_l0 failed\n", __func__);
+		return rc;
+	}
+
+	rc = regulator_enable(vreg_timpani_2);
+
+	if (rc) {
+		pr_err("%s: Enable regulator 8058_s3 failed\n", __func__);
+		goto fail_s3;
+	}
+	return rc;
+
+fail_s3:
+	regulator_put(vreg_timpani_1);
+	return rc;
+}
+
+static void msm_timpani_shutdown_power(void)
+{
+	int rc;
+
+	rc = regulator_disable(vreg_timpani_1);
+	if (rc)
+		pr_err("%s: Disable regulator 8058_l0 failed\n", __func__);
+
+	regulator_put(vreg_timpani_1);
+
+	rc = regulator_disable(vreg_timpani_2);
+	if (rc)
+		pr_err("%s: Disable regulator 8058_s3 failed\n", __func__);
+
+	regulator_put(vreg_timpani_2);
+}
+
+/* Power analog function of codec */
+static struct regulator *vreg_timpani_cdc_apwr;
+static int msm_timpani_codec_power(int vreg_on)
+{
+	int rc = 0;
+
+	if (!vreg_timpani_cdc_apwr) {
+
+		vreg_timpani_cdc_apwr = regulator_get(NULL, "8058_s4");
+
+		if (IS_ERR(vreg_timpani_cdc_apwr)) {
+			pr_err("%s: vreg_get failed (%ld)\n",
+			__func__, PTR_ERR(vreg_timpani_cdc_apwr));
+			rc = PTR_ERR(vreg_timpani_cdc_apwr);
+			goto vreg_fail;
+		}
+	}
+
+	if (vreg_on) {
+		rc = regulator_enable(vreg_timpani_cdc_apwr);
+		if (rc)
+			pr_err("%s: vreg_enable failed %d \n",
+			__func__, rc);
+		goto vreg_fail;
+	} else {
+		rc = regulator_disable(vreg_timpani_cdc_apwr);
+		if (rc)
+			pr_err("%s: vreg_disable failed %d \n",
+			__func__, rc);
+		goto vreg_fail;
+	}
+
+vreg_fail:
+	return rc;
+}
+
+static struct marimba_codec_platform_data timpani_codec_pdata = {
+	.marimba_codec_power =  msm_timpani_codec_power,
+};
+
+#define TIMPANI_SLAVE_ID_CDC_ADDR		0X77
+#define TIMPANI_SLAVE_ID_QMEMBIST_ADDR		0X66
+
+static struct marimba_platform_data timpani_pdata = {
+	.slave_id[MARIMBA_SLAVE_ID_CDC]	= TIMPANI_SLAVE_ID_CDC_ADDR,
+	.slave_id[MARIMBA_SLAVE_ID_QMEMBIST] = TIMPANI_SLAVE_ID_QMEMBIST_ADDR,
+	.marimba_setup = msm_timpani_setup_power,
+	.marimba_shutdown = msm_timpani_shutdown_power,
+	.codec = &timpani_codec_pdata,
+};
+
+#define TIMPANI_I2C_SLAVE_ADDR	0xD
+
+static struct i2c_board_info msm_i2c_gsbi7_timpani_info[] = {
+	{
+		I2C_BOARD_INFO("timpani", TIMPANI_I2C_SLAVE_ADDR),
+		.platform_data = &timpani_pdata,
+	},
+};
+
 #ifdef CONFIG_PMIC8901
 
 #define PM8901_GPIO_INT           91
@@ -2226,6 +2444,12 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(msm_camera_boardinfo),
 	},
 #endif
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_GSBI7_QUP_I2C_BUS_ID,
+		msm_i2c_gsbi7_timpani_info,
+		ARRAY_SIZE(msm_i2c_gsbi7_timpani_info),
+	},
 };
 #endif /* CONFIG_I2C */
 
@@ -2305,6 +2529,10 @@ static void __init msm8x60_init_buses(void)
 #endif
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_HCD)
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+#endif
+#ifdef CONFIG_SERIAL_MSM_HS
+	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(54); /* GSBI6(2) */
+	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
 }
 
@@ -2525,10 +2753,31 @@ static uint32_t msm8x60_tlmm_cfgs[] = {
 	GPIO_CFG(35, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 	GPIO_CFG(36, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
 #endif
+#ifdef CONFIG_SERIAL_MSM_HS
+	/* UARTDM_TX */
+	GPIO_CFG(53, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
+	/* UARTDM_RX */
+	GPIO_CFG(54, 1, GPIO_INPUT, GPIO_NO_PULL, GPIO_8MA),
+	/* UARTDM_CTS */
+	GPIO_CFG(55, 1, GPIO_INPUT, GPIO_NO_PULL, GPIO_8MA),
+	/* UARTDM_RFR */
+	GPIO_CFG(56, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),
+#endif
 #ifdef CONFIG_PMIC8901
 	/* PMIC8901 */
 	GPIO_CFG(PM8901_GPIO_INT, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA),
 #endif
+
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+	/* gpio_cec_var */
+	GPIO_CFG(169, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_2MA),
+	/* gpio_ddc_clk */
+	GPIO_CFG(170, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_16MA),
+	/* gpio_ddc_data */
+	GPIO_CFG(171, 1, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_16MA),
+	/* gpio_hpd */
+	GPIO_CFG(172, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA),
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 };
 
 static uint32_t msm8x60_hdrive_cfgs[][2] = {
@@ -2814,6 +3063,84 @@ static void lcdc_samsung_panel_power(int on)
 		gpio_tlmm_config(lcd_panel_gpios[n], 0);
 }
 
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+static struct regulator *reg_8058_l16;
+static struct regulator *reg_8901_l3;
+static struct regulator *reg_8901_hdmi_mvs;
+static int __init hdmi_msm_init(void)
+{
+	#define _GET_REGULATOR(var, name) do {				\
+		var = regulator_get(NULL, name);			\
+		if (IS_ERR(var)) {					\
+			pr_err("'%s' regulator not found, rc=%ld\n",	\
+				name, IS_ERR(var));			\
+			var = NULL;					\
+			return -ENODEV;					\
+		}							\
+	} while (0)
+
+	_GET_REGULATOR(reg_8058_l16, "8058_l16");
+	_GET_REGULATOR(reg_8901_l3, "8901_l3");
+	_GET_REGULATOR(reg_8901_hdmi_mvs, "8901_hdmi_mvs");
+
+	#undef _GET_REGULATOR
+
+	return 0;
+}
+
+static int hdmi_msm_regulators(int on)
+{
+	int rc;
+
+	if (!reg_8058_l16 || !reg_8901_l3 || !reg_8901_hdmi_mvs) {
+		if (hdmi_msm_init()) {
+			pr_err("%s: failed, HDMI regulators not initialized\n",
+				__func__);
+			return -ENODEV;
+		}
+	}
+
+	if (on) {
+		rc = regulator_enable(reg_8058_l16);
+		if (rc) {
+			pr_err("'%s' regulator enable failed, rc=%d\n",
+				"8058_l16", rc);
+			return rc;
+		}
+		rc = regulator_enable(reg_8901_l3);
+		if (rc) {
+			pr_err("'%s' regulator enable failed, rc=%d\n",
+				"8901_l3", rc);
+			return rc;
+		}
+		rc = regulator_enable(reg_8901_hdmi_mvs);
+		if (rc) {
+			pr_err("'%s' regulator enable failed, rc=%d\n",
+				"8901_hdmi_mvs", rc);
+			return rc;
+		}
+		pr_info("%s(on): success\n", __func__);
+	} else {
+		rc = regulator_disable(reg_8058_l16);
+		if (rc)
+			pr_warning("'%s' regulator disable failed, rc=%d\n",
+				"8058_l16", rc);
+
+		rc = regulator_disable(reg_8901_l3);
+		if (rc)
+			pr_warning("'%s' regulator disable failed, rc=%d\n",
+				"8901_l3", rc);
+
+		rc = regulator_disable(reg_8901_hdmi_mvs);
+		if (rc)
+			pr_warning("'%s' regulator disable failed, rc=%d\n",
+				"8901_hdmi_mvs", rc);
+		pr_info("%s(off): done\n", __func__);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 
 static int lcdc_panel_power(int on)
 {
@@ -2832,6 +3159,10 @@ static int lcdc_panel_power(int on)
 
 static struct lcdc_platform_data lcdc_pdata = {
 	.lcdc_power_save   = lcdc_panel_power,
+#ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
+	/* TODO: consider moving this into the hdmi platform data */
+	.lcdc_gpio_config  = hdmi_msm_regulators,
+#endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
@@ -2846,6 +3177,7 @@ static void __init msm_fb_add_devices(void)
 		msm_fb_register_device("mdp", &mdp_pdata);
 
 	msm_fb_register_device("lcdc", &lcdc_pdata);
+	msm_fb_register_device("mipi_dsi", 0);
 }
 
 static void __init msm8x60_cfg_smsc911x(void)
@@ -2856,8 +3188,30 @@ static void __init msm8x60_cfg_smsc911x(void)
 		PM8058_GPIO_IRQ(PM8058_IRQ_BASE, 6);
 }
 
+#ifdef CONFIG_MSM_RPM
+static struct msm_rpm_platform_data msm_rpm_data = {
+	.reg_base_addrs = {
+		[MSM_RPM_PAGE_STATUS] = MSM_RPM_BASE,
+		[MSM_RPM_PAGE_CTRL] = MSM_RPM_BASE + 0x400,
+		[MSM_RPM_PAGE_REQ] = MSM_RPM_BASE + 0x600,
+		[MSM_RPM_PAGE_ACK] = MSM_RPM_BASE + 0xa00,
+	},
+
+	.irq_ack = RPM_SCSS_CPU0_GP_HIGH_IRQ,
+	.irq_err = RPM_SCSS_CPU0_GP_LOW_IRQ,
+	.irq_vmpm = RPM_SCSS_CPU0_GP_MEDIUM_IRQ,
+};
+#endif
+
 static void __init msm8x60_init(void)
 {
+	/*
+	 * Initialize RPM first as other drivers and devices may need
+	 * it for their initialization.
+	 */
+#ifdef CONFIG_MSM_RPM
+	BUG_ON(msm_rpm_init(&msm_rpm_data));
+#endif
 	/* initialize SPM before acpuclock as the latter calls into SPM
 	 * driver to set ACPU voltages.
 	 */
