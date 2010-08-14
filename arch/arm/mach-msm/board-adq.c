@@ -1123,10 +1123,12 @@ static void __init msm_camera_add_device(void)
 #ifdef CONFIG_BATTERY_DS2784
 #define ADQ_GPIO_BATTERY_CHARGER_CURRENT 57
 #define ADQ_GPIO_BATTERY_CHARGER_EN 33
+#define ADQ_GPIO_BATTERY_USBSET 97
 static int ds2784_charge(int on, int fast)
 {
-        gpio_direction_output(ADQ_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
-    gpio_direction_output(ADQ_GPIO_BATTERY_CHARGER_EN, !on);
+    gpio_set_value(ADQ_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
+    gpio_set_value(ADQ_GPIO_BATTERY_CHARGER_EN, !on);
+    gpio_set_value(ADQ_GPIO_BATTERY_USBSET, on);
     return 0;
 }
 
@@ -1153,14 +1155,24 @@ static int w1_ds2784_add_slave(struct w1_slave *sl)
         return rc;
     }
 
-        rc = gpio_request(ADQ_GPIO_BATTERY_CHARGER_CURRENT, "charger_current");
-        if (rc < 0) {
-            pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
-                ADQ_GPIO_BATTERY_CHARGER_CURRENT, rc);
-            gpio_free(ADQ_GPIO_BATTERY_CHARGER_EN);
-            kfree(p);
-            return rc;
-        }
+    rc = gpio_request(ADQ_GPIO_BATTERY_CHARGER_CURRENT, "charger_current");
+    if (rc < 0) {
+        pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+            ADQ_GPIO_BATTERY_CHARGER_CURRENT, rc);
+        gpio_free(ADQ_GPIO_BATTERY_CHARGER_EN);
+        kfree(p);
+        return rc;
+    }
+
+    rc = gpio_request(ADQ_GPIO_BATTERY_USBSET, "usb_power");
+    if (rc < 0) {
+        pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+            ADQ_GPIO_BATTERY_USBSET, rc);
+        gpio_free(ADQ_GPIO_BATTERY_USBSET);
+        kfree(p);
+        return rc;
+    }
+
     p->pdev.name = "ds2784-battery";
     p->pdev.id = -1;
     p->pdev.dev.platform_data = &p->pdata;
