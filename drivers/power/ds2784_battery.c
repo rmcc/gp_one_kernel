@@ -37,6 +37,10 @@
 #include "../w1/w1.h"
 #include "w1_ds2784.h"
 
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+extern void tca6507_charger_state_report(int state);
+#endif
+
 extern int is_ac_power_supplied(void);
 
 struct battery_status {
@@ -505,6 +509,20 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 
 	if (di->last_charge_mode == charge_mode)
 		goto done;
+
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+	if (di->status.charge_source) {
+		if (di->status.battery_full)
+			tca6507_charger_state_report(4);
+		else
+			tca6507_charger_state_report(1);
+	} else {
+		if (di->status.percentage < 15)
+			tca6507_charger_state_report(5);
+		else
+			tca6507_charger_state_report(3);
+	}
+#endif
 
 	di->last_charge_mode = charge_mode;
 	di->status.charge_mode = charge_mode;
