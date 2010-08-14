@@ -1391,6 +1391,9 @@ static void usb_do_work(struct work_struct *w)
 				if (temp == USB_CHG_TYPE__WALLCHARGER)
 					msm72k_pm_qos_update(1);
 
+                if (ui->usb_connected)
+                    ui->usb_connected(0);
+
 				dev_info(&ui->pdev->dev,
 					"msm72k_udc: ONLINE -> OFFLINE\n");
 
