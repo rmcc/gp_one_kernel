@@ -226,11 +226,11 @@ static struct usb_composition usb_func_composition[] = {
 #endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	{
-		/* RNDIS */
+		/* RNDIS + MSC */
 		.product_id         = 0xC004,
-		.functions          = 0xA,
+		.functions          = 0xA2,
 		.adb_product_id     = 0xC001,
-		.adb_functions      = 0x1A,
+		.adb_functions      = 0xA12,
 	},
 #endif
 };
