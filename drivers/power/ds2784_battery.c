@@ -38,6 +38,7 @@
 #include "w1_ds2784.h"
 
 #ifdef CONFIG_BACKLIGHT_LED_TCA6507
+#include <mach/tca6507.h>
 extern void tca6507_charger_state_report(int state);
 #endif
 
@@ -406,6 +407,22 @@ static int battery_get_property(struct power_supply *psy,
 	return 0;
 }
 
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+void tca6507_update_leds(struct ds2784_device_info *di) {
+	if (di->status.charge_source) {
+		if (di->status.battery_full)
+			tca6507_charger_state_report(CHARGER_STATE_FULL2);
+		else
+			tca6507_charger_state_report(CHARGER_STATE_CHARGING2);
+	} else {
+		if (di->status.percentage < 15)
+			tca6507_charger_state_report(CHARGER_STATE_LOW_POWER2);
+		else
+			tca6507_charger_state_report(CHARGER_STATE_NOT_CHARGING2);
+	}
+}
+#endif
+
 static void ds2784_battery_update_status(struct ds2784_device_info *di)
 {
 	u8 last_level;
@@ -414,7 +431,12 @@ static void ds2784_battery_update_status(struct ds2784_device_info *di)
 	ds2784_battery_read_status(di);
 
 	if ((last_level != di->status.percentage) || (di->status.temp_C > 450))
+	{
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+		tca6507_update_leds(di);
+#endif
 		power_supply_changed(&di->bat);
+	}
 }
 
 static DEFINE_MUTEX(charge_state_lock);
@@ -511,17 +533,7 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 		goto done;
 
 #ifdef CONFIG_BACKLIGHT_LED_TCA6507
-	if (di->status.charge_source) {
-		if (di->status.battery_full)
-			tca6507_charger_state_report(4);
-		else
-			tca6507_charger_state_report(1);
-	} else {
-		if (di->status.percentage < 15)
-			tca6507_charger_state_report(5);
-		else
-			tca6507_charger_state_report(3);
-	}
+	tca6507_update_leds(di);
 #endif
 
 	di->last_charge_mode = charge_mode;

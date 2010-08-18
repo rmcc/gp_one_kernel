@@ -475,10 +475,29 @@ static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
 #ifdef CONFIG_USB_MSM_OTG_72K
 
 #ifdef CONFIG_BATTERY_DS2784
+
+#define ADQ_GPIO_BATTERY_CHARGER_CURRENT 57
+#define ADQ_GPIO_BATTERY_CHARGER_EN 33
+#define ADQ_GPIO_BATTERY_USBSET 97
+
+static void ds2482_set_slp_n(unsigned n)
+{
+	if (n) {
+		gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+		gpio_direction_output(23, 0);
+		gpio_set_value(23, 1);
+	} else {
+		gpio_set_value(23, 0);
+		gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_DISABLE );
+		gpio_free(23);
+	}
+}
+
 extern void notify_usb_connected(int);
 void charger_connected(enum chg_type chgtype) 
 {
 	notify_usb_connected((chgtype != USB_CHG_TYPE__INVALID));
+    gpio_set_value(ADQ_GPIO_BATTERY_USBSET, (chgtype != USB_CHG_TYPE__INVALID));
 	hsusb_chg_connected(chgtype);
 }
 
@@ -1014,6 +1033,7 @@ static struct i2c_board_info i2c_devices[] = {
 #ifdef CONFIG_BATTERY_DS2784
 	{
 		I2C_BOARD_INFO("ds2482", 0x18),
+		.platform_data = ds2482_set_slp_n,
 	},
 #endif
 #ifdef CONFIG_SENSORS_BMA020
@@ -1130,9 +1150,7 @@ static void __init msm_camera_add_device(void)
 }
 
 #ifdef CONFIG_BATTERY_DS2784
-#define ADQ_GPIO_BATTERY_CHARGER_CURRENT 57
-#define ADQ_GPIO_BATTERY_CHARGER_EN 33
-#define ADQ_GPIO_BATTERY_USBSET 97
+
 static int ds2784_charge(int on, int fast)
 {
     gpio_set_value(ADQ_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
@@ -1205,6 +1223,14 @@ static int __init ds2784_battery_init(void)
     gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
     gpio_direction_output(23, 0);
     gpio_set_value(23, 1);
+
+    gpio_tlmm_config(GPIO_CFG(ADQ_GPIO_BATTERY_CHARGER_EN, 0, GPIO_OUTPUT, 
+							GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+    gpio_tlmm_config(GPIO_CFG(ADQ_GPIO_BATTERY_USBSET, 0, GPIO_OUTPUT, 
+							GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+    gpio_tlmm_config(GPIO_CFG(ADQ_GPIO_BATTERY_CHARGER_CURRENT, 0, 
+							GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+
     return w1_register_family(&w1_ds2784_family);
 }
 
