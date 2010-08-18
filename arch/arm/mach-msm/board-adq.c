@@ -209,9 +209,9 @@ static struct usb_composition usb_func_composition[] = {
 #ifdef CONFIG_USB_ANDROID_CDC_ECM
 	{
 		/* MSC + CDC-ECM */
-		.product_id         = 0xC004,
+		.product_id         = 0xF00E,
 		.functions          = 0x82,
-		.adb_product_id     = 0xC001,
+		.adb_product_id     = 0x9024,
 		.adb_functions      = 0x812,
 	},
 #endif
@@ -227,9 +227,9 @@ static struct usb_composition usb_func_composition[] = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	{
 		/* RNDIS */
-		.product_id         = 0xF00E,
+		.product_id         = 0xC004,
 		.functions          = 0xA,
-		.adb_product_id     = 0x9024,
+		.adb_product_id     = 0xC001,
 		.adb_functions      = 0x1A,
 	},
 #endif
