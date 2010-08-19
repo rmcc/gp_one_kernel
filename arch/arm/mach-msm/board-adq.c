@@ -499,7 +499,7 @@ static void ds2482_set_slp_n(unsigned n)
 extern void notify_usb_connected(int);
 void charger_connected(enum chg_type chgtype) 
 {
-	notify_usb_connected((chgtype != USB_CHG_TYPE__INVALID));
+	notify_usb_connected(chgtype);
     gpio_set_value(ADQ_GPIO_BATTERY_USBSET, (chgtype != USB_CHG_TYPE__INVALID));
 	hsusb_chg_connected(chgtype);
 }

@@ -22,6 +22,8 @@
 #include <linux/gpio.h>
 #include <linux/switch.h>
 
+#include <mach/msm_hsusb.h>
+
 extern void notify_usb_connected(int);
 
 static char *supply_list[] = {
@@ -39,9 +41,9 @@ static int power_get_property(struct power_supply *psy,
 		return -EINVAL;
 
 	if (psy->type == POWER_SUPPLY_TYPE_MAINS) {
-		val->intval = (usb_status == 2);
+		val->intval = (usb_status == USB_CHG_TYPE__WALLCHARGER);
 	} else {
-		val->intval = (usb_status == 1);
+		val->intval = (usb_status == USB_CHG_TYPE__SDP);
 	}
 	return 0;
 }
@@ -98,7 +100,7 @@ void notify_usb_connected(int status)
 
 int is_ac_power_supplied(void)
 {
-	return (usb_status == 2);
+	return (usb_status == USB_CHG_TYPE__WALLCHARGER);
 }
 
 
