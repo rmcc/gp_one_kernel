@@ -1460,7 +1460,7 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 		}
 		hdr.dst_pid = ept->dst_pid;
 		hdr.dst_cid = ept->dst_cid;
-		IO("CALL to %08x:%d @ %d:%08x (%d bytes)\n",
+		IO("CALL to %08x:%08x @ %d:%08x (%d bytes)\n",
 		   be32_to_cpu(rq->prog), be32_to_cpu(rq->vers),
 		   ept->dst_pid, ept->dst_cid, count);
 	} else {
