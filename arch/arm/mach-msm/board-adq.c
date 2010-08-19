@@ -111,17 +111,20 @@
 #define MSM_PMEM_MDP_SIZE	0xA00000  /* 10 MB */
 #define MSM_PMEM_ADSP_SIZE	0x1200000 - MSM_RAM_CONSOLE_SIZE /* 18 MB */
 #define MSM_FB_SIZE		0x100000
+#define PMEM_KERNEL_EBI1_SIZE   0x64000
+
 #define MSM_PMEM_BASE		0x00200000
+#define MSM_PMEM_LIMIT		0x02000000 // must not go over PHYS_OFFSET
 
-
-#define MSM_PMEM_LIMIT		0x01F00000 // must not go over PHYS_OFFSET
 #define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
 #define MSM_PMEM_ADSP_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE 
 #define MSM_RAM_CONSOLE_BASE	MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
 #define MSM_FB_BASE		MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE
+#define PMEM_KERNEL_EBI1_BASE		MSM_FB_BASE + MSM_FB_SIZE
 
 
-#if ((MSM_FB_BASE + MSM_FB_SIZE) > MSM_PMEM_LIMIT)
+
+#if ((PMEM_KERNEL_EBI1_BASE + PMEM_KERNEL_EBI1_SIZE) > MSM_PMEM_LIMIT)
 #error out of PMEM boundary
 #endif
 /* } FIH_ADQ, Ming */
@@ -532,6 +535,17 @@ static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.cached = 0,
 };
 
+static struct android_pmem_platform_data android_pmem_kernel_ebi1_pdata = {
+    .name = PMEM_KERNEL_EBI1_DATA_NAME,
+    /* if no allocator_type, defaults to PMEM_ALLOCATORTYPE_BITMAP,
+     * the only valid choice at this time. The board structure is
+     * set to all zeros by the C runtime initialization and that is now
+     * the enum value of PMEM_ALLOCATORTYPE_BITMAP, now forced to 0 in
+     * include/linux/android_pmem.h.
+     */
+    .cached = 0,
+};
+
 #ifdef PMEMAUDIO_ENABLE
 static struct android_pmem_platform_data android_pmem_audio_pdata = {
 	.name = "pmem_audio",
@@ -559,6 +573,12 @@ static struct platform_device android_pmem_audio_device = {
 	.dev = { .platform_data = &android_pmem_audio_pdata },
 };
 #endif
+
+static struct platform_device android_pmem_kernel_ebi1_device = {
+    .name = "android_pmem",
+    .id = 4,
+    .dev = { .platform_data = &android_pmem_kernel_ebi1_pdata },
+};
 
 #ifdef CONFIG_SWITCH_GPIO
 static struct gpio_switch_platform_data headset_sensor_device_data = {
@@ -1406,6 +1426,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef PMEMAUDIO_ENABLE
 	&android_pmem_audio_device,
 #endif
+	&android_pmem_kernel_ebi1_device,
 #ifdef CONFIG_SPI_GPIO
 	&lcdc_spigpio_device,
 #endif		
@@ -1847,6 +1868,13 @@ static void __init msm_msm7x25_allocate_memory_regions(void)
 	pr_info("allocating %lu bytes (at %lx physical) for audio "
 			"pmem arena\n", size , MSM_PMEM_AUDIO_START_ADDR);
 #endif
+	
+	size = PMEM_KERNEL_EBI1_SIZE;
+	android_pmem_kernel_ebi1_pdata.start = PMEM_KERNEL_EBI1_BASE;
+	android_pmem_kernel_ebi1_pdata.size = size;
+	printk(KERN_INFO "allocating %lu bytes (at %lx physical)"
+			"for kernel ebi1 pmem arena\n", size, (unsigned long)PMEM_KERNEL_EBI1_BASE);
+
 
 }
 
