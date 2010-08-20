@@ -764,8 +764,15 @@ struct platform_device msm_device_tssc = {
 	.resource = resources_tssc,
 };
 
+#ifdef CONFIG_BATTERY_FIH_ZEUS
 static struct platform_device zeus_battery_device = {
 	.name       = "zeus-battery",
+	.id       = -1,
+};
+#endif
+
+static struct platform_device adq_power_device = {
+	.name       = "adq-power",
 	.id       = -1,
 };
 
@@ -796,10 +803,15 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_tvenc_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
-	else if (!strncmp(name, "batt", 4))
-		msm_register_device(&zeus_battery_device, data);
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
+}
+
+void __init msm_power_register(void) {
+#ifdef CONFIG_BATTERY_FIH_ZEUS
+		msm_register_device(&zeus_battery_device, 0);
+#endif
+		msm_register_device(&adq_power_device, 0);
 }
 
 static struct platform_device msm_camera_device = {

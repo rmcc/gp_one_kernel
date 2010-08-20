@@ -99,14 +99,6 @@ static enum power_supply_property zeus_battery_props[] = {
 
 };
 
-static enum power_supply_property zeus_power_properties[] = {
-    POWER_SUPPLY_PROP_ONLINE,
-};
-
-static char *supply_list[] = {
-    "battery",
-};
-
 typedef enum {
     CHARGER_BATTERY = 0,
     CHARGER_USB,
@@ -115,63 +107,23 @@ typedef enum {
 
 charger_type_t current_charger = CHARGER_BATTERY;
 
-static int zeus_power_get_property(struct power_supply *psy,
-                    enum power_supply_property psp,
-                    union power_supply_propval *val)
-{
-    switch (psp) {
-    case POWER_SUPPLY_PROP_ONLINE:
-        if (psy->type == POWER_SUPPLY_TYPE_MAINS)
-            val->intval = (current_charger ==  CHARGER_AC ? 1 : 0);
-        else if (psy->type == POWER_SUPPLY_TYPE_USB)
-            val->intval = (current_charger ==  CHARGER_USB ? 1 : 0);
-        else
-            val->intval = 0;
-        break;
-    default:
-        return -EINVAL;
-    }
-
-    return 0;
-}
-
 static int zeus_battery_get_property(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val);
 
-static struct power_supply zeus_power_supplies[] = {
-    {
-        .name = "battery",
-        .type = POWER_SUPPLY_TYPE_BATTERY,
-        .properties = zeus_battery_props,
-        .num_properties = ARRAY_SIZE(zeus_battery_props),
-        .get_property = zeus_battery_get_property,
-    },
-    {
-        .name = "usb",
-        .type = POWER_SUPPLY_TYPE_USB,
-        .supplied_to = supply_list,
-        .num_supplicants = ARRAY_SIZE(supply_list),
-        .properties = zeus_power_properties,
-        .num_properties = ARRAY_SIZE(zeus_power_properties),
-        .get_property = zeus_power_get_property,
-    },
-    {
-        .name = "ac",
-        .type = POWER_SUPPLY_TYPE_MAINS,
-        .supplied_to = supply_list,
-        .num_supplicants = ARRAY_SIZE(supply_list),
-        .properties = zeus_power_properties,
-        .num_properties = ARRAY_SIZE(zeus_power_properties),
-        .get_property = zeus_power_get_property,
-    },
+static struct power_supply zeus_battery = {
+    .name = "battery",
+    .type = POWER_SUPPLY_TYPE_BATTERY,
+    .properties = zeus_battery_props,
+    .num_properties = ARRAY_SIZE(zeus_battery_props),
+    .get_property = zeus_battery_get_property,
 };
 
 /// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
 ///add for low battery LED blinking in suspend mode 
 void Battery_power_supply_change(void)
 {
-	power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
+	power_supply_changed(&zeus_battery);
 }
 EXPORT_SYMBOL(Battery_power_supply_change);
 /// --- FIH_ADQ ---
@@ -237,7 +189,7 @@ static int zeus_battery_get_property(struct power_supply *psy,
 			ret = GetBatteryInfo(BATT_CAPACITY_INFO, &buf);
 			if (ret < 0){
 				printk(KERN_ERR "POWER_SUPPLY_PROP_CAPACITY : Get data failed\n");
-				power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
+				power_supply_changed(&zeus_battery);
 				ret = 0;
 			}
 			else{
@@ -323,7 +275,7 @@ static struct timer_list polling_timer;
 
 static void polling_timer_func(unsigned long unused)
 {
-	power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
+	power_supply_changed(&zeus_battery);
 	mod_timer(&polling_timer,
 			jiffies + msecs_to_jiffies(BATTERY_POLLING_TIMER));
 }
@@ -460,7 +412,7 @@ static void polling_reset_func()
 static irqreturn_t chgdet_irqhandler(int irq, void *dev_id)
 {
 	g_charging_state = (gpio_get_value(GPIO_CHR_DET)) ? CHARGER_STATE_NOT_CHARGING : CHARGER_STATE_CHARGING;
-	power_supply_changed(&zeus_power_supplies[CHARGER_BATTERY]);
+	power_supply_changed(&zeus_battery);
 	return IRQ_HANDLED;
 }
 #endif	// FLAG_CHARGER_DETECT
@@ -468,16 +420,14 @@ static irqreturn_t chgdet_irqhandler(int irq, void *dev_id)
 
 static int zeus_battery_probe(struct platform_device *pdev)
 {
-	int ret, i;
+	int ret;
 
     /* init power supplier framework */
-    for (i = 0; i < ARRAY_SIZE(zeus_power_supplies); i++) {
-        ret = power_supply_register(&pdev->dev, &zeus_power_supplies[i]);
-        if (ret) {
-            printk(KERN_ERR "Failed to register power supply (%d)\n", ret);
-		    return ret;
-		}
-    }
+    ret = power_supply_register(&pdev->dev, &zeus_battery);
+    if (ret) {
+        printk(KERN_ERR "Failed to register power supply (%d)\n", ret);
+	    return ret;
+	}
 
 #ifdef FLAG_BATTERY_POLLING
 	setup_timer(&polling_timer, polling_timer_func, 0);
@@ -505,8 +455,6 @@ static int zeus_battery_probe(struct platform_device *pdev)
 
 static int zeus_battery_remove(struct platform_device *pdev)
 {
-	int i;
-
 #ifdef FLAG_CHARGER_DETECT
 	free_irq(MSM_GPIO_TO_INT(GPIO_CHR_DET), NULL);
 	gpio_free(GPIO_CHR_DET);
@@ -516,9 +464,7 @@ static int zeus_battery_remove(struct platform_device *pdev)
 	del_timer_sync(&polling_timer);
 #endif	// FLAG_BATTERY_POLLING
 
-    for (i = 0; i < ARRAY_SIZE(zeus_power_supplies); i++) {
-        power_supply_unregister(&zeus_power_supplies[i]);
-    }
+    power_supply_unregister(&zeus_battery);
 
 	return 0;
 }
@@ -572,7 +518,6 @@ void zeus_update_usb_status(enum chg_type chgtype) {
 	gpio_free(USBSET);
 	gpio_free(CHR_1A);
 
-	power_supply_changed(&zeus_power_supplies[current_charger]);
 }
 EXPORT_SYMBOL(zeus_update_usb_status);
 #endif

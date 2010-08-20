@@ -477,8 +477,15 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 	if (di->status.status_reg & 0x80) {
 		di->status.battery_full = 1;
 		charge_mode = CHARGE_BATT_DISABLE;
-	} else
+	} else {
+#ifdef CONFIG_MACH_ADQ
+		/* The charger on ADQ reports 100% at around... 98% :( */
+		if (di->status.percentage == 100) {
+			di->status.percentage = 99;
+		}
+#endif
 		di->status.battery_full = 0;
+	}
 
 	if (temp >= TEMP_HOT) {
 		if (temp >= TEMP_CRITICAL)

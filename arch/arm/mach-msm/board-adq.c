@@ -76,6 +76,7 @@
 #include <linux/ds2784_battery.h>
 #include <../../../drivers/w1/w1.h>
 #endif
+void __init msm_power_register(void);
 
 /* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
 /* ZEUS_ANDROID_CR, For TC6507 LED Expander*/
@@ -479,10 +480,6 @@ static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
 
 #ifdef CONFIG_BATTERY_DS2784
 
-#define ADQ_GPIO_BATTERY_CHARGER_CURRENT 57
-#define ADQ_GPIO_BATTERY_CHARGER_EN 33
-#define ADQ_GPIO_BATTERY_USBSET 97
-
 static void ds2482_set_slp_n(unsigned n)
 {
 	if (n) {
@@ -495,6 +492,12 @@ static void ds2482_set_slp_n(unsigned n)
 		gpio_free(23);
 	}
 }
+#endif
+
+#if defined(CONFIG_BATTERY_DS2784) || defined(CONFIG_BATTERY_FIH_ZEUS)
+#define ADQ_GPIO_BATTERY_CHARGER_CURRENT 57
+#define ADQ_GPIO_BATTERY_CHARGER_EN 33
+#define ADQ_GPIO_BATTERY_USBSET 97
 
 extern void notify_usb_connected(int);
 void charger_connected(enum chg_type chgtype) 
@@ -1055,6 +1058,10 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("ds2482", 0x18),
 		.platform_data = ds2482_set_slp_n,
 	},
+#elif CONFIG_BATTERY_FIH_ZEUS
+	{
+		I2C_BOARD_INFO("gasgauge_bridge", 0x18),
+	},
 #endif
 #ifdef CONFIG_SENSORS_BMA020
 	{
@@ -1453,12 +1460,6 @@ static void __init msm_fb_add_devices(void)
 	msm_fb_register_device("mdp", 0);
 	msm_fb_register_device("pmdh", 0);
 	msm_fb_register_device("lcdc", 0);
-	/* FIH_ADQ, Penho, 2009/03/13, { */
-	/* ZEUS_ANDROID_CR, register device for Battery Report */
-	///+FIH_ADQ
-	msm_fb_register_device("batt", 0);
-	///-FIH_ADQ
-	/* } FIH_ADQ, Penho, 2009/03/13 */
 }
 
 extern struct sys_timer msm_timer;
@@ -1815,6 +1816,7 @@ static void __init msm7x25_init(void)
 #ifdef CONFIG_SPI_GPIO
 	spi_register_board_info(lcdc_spi_devices,ARRAY_SIZE(lcdc_spi_devices));
 #endif		
+	msm_power_register();
 	msm_fb_add_devices();
 	msm_camera_add_device();
 

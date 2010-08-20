@@ -84,16 +84,23 @@ static int adq_power_probe(struct platform_device *pdev)
 static struct platform_driver adq_power_driver = {
 	.probe	= adq_power_probe,
 	.driver	= {
-		.name	= "zeus-battery",
+		.name	= "adq-power",
 		.owner	= THIS_MODULE,
 	},
 };
 
 
+#ifdef CONFIG_BATTERY_FIH_ZEUS
+extern void zeus_update_usb_status(enum chg_type chgtype);
+#endif
+
 void notify_usb_connected(int status)
 {
 	printk("### notify_usb_connected(%d) ###\n", status);
 	usb_status = status;
+#ifdef CONFIG_BATTERY_FIH_ZEUS
+	zeus_update_usb_status(status);
+#endif
 	power_supply_changed(&ac_supply);
 	power_supply_changed(&usb_supply);
 }
