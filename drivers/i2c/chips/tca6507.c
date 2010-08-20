@@ -102,7 +102,7 @@ static int gpio_init_setting(int value)
 	struct device *tca6507_dev = &tca6507_drvdata.tca6507_i2c_client->dev;
   	int ret = 0;
   	
-	gpio_tlmm_config(GPIO_CFG(tca6507_drvdata.reset_pin, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(tca6507_drvdata.reset_pin, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 	
 	//request gpio
 	ret = gpio_request(tca6507_drvdata.reset_pin, "tca6507_reset_pin");

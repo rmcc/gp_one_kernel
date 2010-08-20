@@ -26,42 +26,54 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _VCD_DDL_UTILS_H_
-#define _VCD_DDL_UTILS_H_
+#ifndef __ARCH_ARM_MACH_MSM_GPIOMUX_7X00_H
+#define __ARCH_ARM_MACH_MSM_GPIOMUX_7X00_H
 
-#include "vcd_ddl_core.h"
-#include "vcd_ddl.h"
+#if defined(CONFIG_ARCH_MSM7X30)
+#define GPIOMUX_NGPIOS 182
+#elif defined(CONFIG_ARCH_QSD8X50)
+#define GPIOMUX_NGPIOS 165
+#else
+#define GPIOMUX_NGPIOS 133
+#endif
 
-#define DDL_INLINE
+typedef u32 gpiomux_config_t;
 
-#define DDL_ALIGN_SIZE(n_size, n_guard_bytes, n_align_mask) \
-  (((u32)(n_size) + n_guard_bytes) & n_align_mask)
+enum {
+	GPIOMUX_DRV_2MA  = 0UL << 17,
+	GPIOMUX_DRV_4MA  = 1UL << 17,
+	GPIOMUX_DRV_6MA  = 2UL << 17,
+	GPIOMUX_DRV_8MA  = 3UL << 17,
+	GPIOMUX_DRV_10MA = 4UL << 17,
+	GPIOMUX_DRV_12MA = 5UL << 17,
+	GPIOMUX_DRV_14MA = 6UL << 17,
+	GPIOMUX_DRV_16MA = 7UL << 17,
+};
 
-#define DDL_MALLOC(x)  kmalloc(x, GFP_KERNEL)
-#define DDL_FREE(x)   { if ((x)) kfree((x)); (x) = NULL; }
+enum {
+	GPIOMUX_FUNC_GPIO = 0UL,
+	GPIOMUX_FUNC_1    = 1UL,
+	GPIOMUX_FUNC_2    = 2UL,
+	GPIOMUX_FUNC_3    = 3UL,
+	GPIOMUX_FUNC_4    = 4UL,
+	GPIOMUX_FUNC_5    = 5UL,
+	GPIOMUX_FUNC_6    = 6UL,
+	GPIOMUX_FUNC_7    = 7UL,
+	GPIOMUX_FUNC_8    = 8UL,
+	GPIOMUX_FUNC_9    = 9UL,
+	GPIOMUX_FUNC_A    = 10UL,
+	GPIOMUX_FUNC_B    = 11UL,
+	GPIOMUX_FUNC_C    = 12UL,
+	GPIOMUX_FUNC_D    = 13UL,
+	GPIOMUX_FUNC_E    = 14UL,
+	GPIOMUX_FUNC_F    = 15UL,
+};
 
-void ddl_pmem_alloc(struct ddl_buf_addr_type *, u32, u32);
-
-void ddl_pmem_free(struct ddl_buf_addr_type);
-
-void ddl_get_core_start_time(u8 codec_type);
-
-void ddl_calc_core_time(u8 codec_type);
-
-void ddl_reset_time_variables(u8 codec_type);
-
-#define DDL_ASSERT(x)
-#define DDL_MEMSET(src, value, len) memset((src), (value), (len))
-#define DDL_MEMCPY(dest, src, len)  memcpy((dest), (src), (len))
-
-#define DDL_ADDR_IS_ALIGNED(addr, align_bytes) \
-(!((u32)(addr) & ((align_bytes) - 1)))
-
-#define VIDC_DDL_QCIF_MBS 99
-#define VIDC_DDL_CIF_MBS  396
-#define VIDC_DDL_QVGA_MBS 300
-#define VIDC_DDL_VGA_MBS  1200
-#define VIDC_DDL_WVGA_MBS 1500
-#define VIDC_DDL_720P_MBS 3600
+enum {
+	GPIOMUX_PULL_NONE   = 0UL << 15,
+	GPIOMUX_PULL_DOWN   = 1UL << 15,
+	GPIOMUX_PULL_KEEPER = 2UL << 15,
+	GPIOMUX_PULL_UP     = 3UL << 15,
+};
 
 #endif

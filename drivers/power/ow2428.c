@@ -368,7 +368,7 @@ static int OpenBAT(void)
 	if (gpio_request(23,"ZEUS_BATT")) {
 		return -ENODEV;
 	}
-	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_ENABLE );
 	gpio_direction_output(23, 0);
 	gpio_set_value(23, 1);
 	return 0;
@@ -377,7 +377,7 @@ static int OpenBAT(void)
 static void CloseBAT(void)
 {
 	gpio_set_value(23, 0);
-	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_DISABLE );
+	gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_DISABLE );
 	gpio_free(23);
     mutex_unlock(&g_ow2428_suspend_lock);
 }

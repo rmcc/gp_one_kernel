@@ -437,7 +437,7 @@ static int zeus_battery_probe(struct platform_device *pdev)
 #endif	// FLAG_BATTERY_POLLING
 
 #ifdef FLAG_CHARGER_DETECT
-	gpio_tlmm_config( GPIO_CFG(GPIO_CHR_DET, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+	gpio_tlmm_config( GPIO_CFG(GPIO_CHR_DET, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_ENABLE );
 	ret = gpio_request(GPIO_CHR_DET, "gpio_keybd_irq");
 	if (ret)
 		printk(KERN_INFO "<ubh> zeus_battery_probe 04. : IRQ init fails!!!\r\n");
@@ -533,9 +533,9 @@ static struct platform_driver zeus_battery_device = {
 static int __init zeus_battery_init(void)
 {
 	/*+++FIH_ADQ+++*/
-	gpio_tlmm_config(GPIO_CFG(CHR_EN, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	gpio_tlmm_config(GPIO_CFG(USBSET, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
-	gpio_tlmm_config(GPIO_CFG(CHR_1A, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(CHR_EN, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(USBSET, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(CHR_1A, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 	/*+++FIH_ADQ+++*/
 
 	return platform_driver_register(&zeus_battery_device);

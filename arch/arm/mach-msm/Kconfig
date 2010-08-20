@@ -637,7 +637,7 @@ config MSM_SMD_DEBUG
 	  between the ARM9 and ARM11
 
 config MSM_SDIO_AL
-	depends on ARCH_MSM7X30
+	depends on (ARCH_MSM7X30 && HAS_WAKELOCK)
 	default y
 	tristate "SDIO-Abstraction-Layer"
 	help
@@ -1189,4 +1189,7 @@ config VIRTUAL_KPANIC_SRC
 	help
 	  Sets the partition to steal from to make the virtual one.
 	
+config MSM_BUS_SCALING
+	bool "Bus scaling driver"
+	default n
 endif

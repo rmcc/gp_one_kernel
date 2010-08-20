@@ -272,7 +272,7 @@ static int gsensor_bma020_probe(struct i2c_client *client, const struct i2c_devi
  
 	dev_dbg(&client->dev, "gensor_BMA020_probe+\n");
 
-	gpio_tlmm_config( GPIO_CFG( bma_irqpin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA ), GPIO_ENABLE );
+	gpio_tlmm_config( GPIO_CFG( bma_irqpin, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_ENABLE );
 
 	rc = gpio_request(bma_irqpin, "gpio_bma_irqpin");
 	if (rc) {

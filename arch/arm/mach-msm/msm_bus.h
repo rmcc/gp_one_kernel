@@ -26,44 +26,64 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _VCD_DDL_FIRMWARE_H_
-#define _VCD_DDL_FIRMWARE_H_
-#include "vcd_property.h"
 
-#define VCD_FW_BIG_ENDIAN     0x0
-#define VCD_FW_LITTLE_ENDIAN  0x1
+#ifndef _ARCH_ARM_MACH_MSM_BUS_H
+#define _ARCH_ARM_MACH_MSM_BUS_H
 
-struct vcd_fw_details_type {
-	enum vcd_codec_type e_codec;
-	u32 *p_fw_buffer_addr;
-	u32 n_fw_size;
+#include <linux/types.h>
+#include <linux/input.h>
+
+/*----------Macros for clients to specify Ib, Ab---------------*/
+
+/*Macros for clients to convert their data to ib and ab
+*
+* Ws: Time window over which to transfer the data in SECONDS
+* Bs : Size of the data block in bytes
+* Per: Recurrence period
+* Tb : Throughput bandwidth to prevent stalling
+* R  : Ratio of actual bandwidth used to Tb
+* */
+#define IB_RECURRBLOCK(Ws, Bs) ((Ws) == 0 ? 0 : ((Bs)/(Ws)))
+#define AB_RECURRBLOCK(Ws, Per) ((Ws) == 0 ? 0 : ((Bs)/(Per)))
+#define IB_THROUGHPUTBW(Tb) (Tb)
+#define AB_THROUGHPUTBW(Tb, R) ((Tb) * (R))
+
+struct msm_bus_node_info {
+	unsigned int id;
+	int gateway;
+	int masterp;
+	int slavep;
+	int tier;
 };
 
-#define VCD_FW_PROP_BASE         0x0
+struct msm_bus_vectors {
+	int src;
+	int dst;
+	int ab;
+	int ib;
+};
 
-#define VCD_FW_ENDIAN       (VCD_FW_PROP_BASE + 0x1)
-#define VCD_FW_BOOTCODE     (VCD_FW_PROP_BASE + 0x2)
-#define VCD_FW_DECODE     (VCD_FW_PROP_BASE + 0x3)
-#define VCD_FW_ENCODE     (VCD_FW_PROP_BASE + 0x4)
+struct msm_bus_paths {
+	int num_paths;
+	struct msm_bus_vectors *vectors;
+};
 
-extern unsigned char *vidc_command_control_fw;
-extern u32 vidc_command_control_fw_size;
-extern unsigned char *vidc_mpg4_dec_fw;
-extern u32 vidc_mpg4_dec_fw_size;
-extern unsigned char *vidc_h263_dec_fw;
-extern u32 vidc_h263_dec_fw_size;
-extern unsigned char *vidc_h264_dec_fw;
-extern u32 vidc_h264_dec_fw_size;
-extern unsigned char *vidc_mpg4_enc_fw;
-extern u32 vidc_mpg4_enc_fw_size;
-extern unsigned char *vidc_h264_enc_fw;
-extern u32 vidc_h264_enc_fw_size;
-extern unsigned char *vidc_vc1_dec_fw;
-extern u32 vidc_vc1_dec_fw_size;
+struct msm_bus_scale_pdata {
+	struct msm_bus_paths *usecase;
+	int num_usecases;
+};
 
-u32 vcd_fw_init(void);
-u32 vcd_get_fw_property(u32 prop_id, void *prop_details);
-u32 vcd_fw_transact(u32 b_add, u32 b_decoding, enum vcd_codec_type e_codec);
-void vcd_fw_release(void);
+/* Topology Configuration API */
+int msm_bus_register_fabric_info(int id, struct msm_bus_node_info const *info,
+					unsigned len);
 
-#endif
+/* Scaling APIs */
+uint32_t msm_bus_scale_register_client(struct msm_bus_scale_pdata *pdata);
+int msm_bus_scale_client_update_request(uint32_t cl, unsigned index);
+void msm_bus_scale_unregister_client(uint32_t cl);
+
+/* AXI port configuration APIs */
+int msm_bus_axi_porthalt(int master_port);
+int msm_bus_axi_portunhalt(int master_port);
+
+#endif /*_ARCH_ARM_MACH_MSM_BUS_H*/

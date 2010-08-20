@@ -26,34 +26,48 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#ifndef __ARCH_ARM_MACH_MSM_GPIOMUX_8X60_H
+#define __ARCH_ARM_MACH_MSM_GPIOMUX_8X60_H
 
-#ifndef VDEC_INTERNAL_H
-#define VDEC_INTERNAL_H
+#define GPIOMUX_NGPIOS 173
 
-#include <linux/msm_vidc_dec.h>
-#include <linux/cdev.h>
-#include "vidc_init.h"
+typedef u16 gpiomux_config_t;
 
-struct vid_dec_msg {
-	struct list_head list;
-	struct vdec_msginfo vdec_msg_info;
+enum {
+	GPIOMUX_DRV_2MA  = 0UL << 6,
+	GPIOMUX_DRV_4MA  = 1UL << 6,
+	GPIOMUX_DRV_6MA  = 2UL << 6,
+	GPIOMUX_DRV_8MA  = 3UL << 6,
+	GPIOMUX_DRV_10MA = 4UL << 6,
+	GPIOMUX_DRV_12MA = 5UL << 6,
+	GPIOMUX_DRV_14MA = 6UL << 6,
+	GPIOMUX_DRV_16MA = 7UL << 6,
 };
 
-struct vid_dec_dev {
-	struct cdev cdev;
-	struct device *device;
-	resource_size_t phys_base;
-	void __iomem *virt_base;
-	unsigned int irq;
-	struct clk *hclk;
-	struct clk *hclk_div2;
-	struct clk *pclk;
-	unsigned long hclk_rate;
-	struct mutex lock;
-	s32 device_handle;
-	struct video_client_ctx vdec_clients[VIDC_MAX_NUM_CLIENTS];
-	u32 num_clients;
-	void(*pf_timer_handler)(void *);
+enum {
+	GPIOMUX_FUNC_GPIO = 0UL  << 2,
+	GPIOMUX_FUNC_1    = 1UL  << 2,
+	GPIOMUX_FUNC_2    = 2UL  << 2,
+	GPIOMUX_FUNC_3    = 3UL  << 2,
+	GPIOMUX_FUNC_4    = 4UL  << 2,
+	GPIOMUX_FUNC_5    = 5UL  << 2,
+	GPIOMUX_FUNC_6    = 6UL  << 2,
+	GPIOMUX_FUNC_7    = 7UL  << 2,
+	GPIOMUX_FUNC_8    = 8UL  << 2,
+	GPIOMUX_FUNC_9    = 9UL  << 2,
+	GPIOMUX_FUNC_A    = 10UL << 2,
+	GPIOMUX_FUNC_B    = 11UL << 2,
+	GPIOMUX_FUNC_C    = 12UL << 2,
+	GPIOMUX_FUNC_D    = 13UL << 2,
+	GPIOMUX_FUNC_E    = 14UL << 2,
+	GPIOMUX_FUNC_F    = 15UL << 2,
+};
+
+enum {
+	GPIOMUX_PULL_NONE   = 0UL,
+	GPIOMUX_PULL_DOWN   = 1UL,
+	GPIOMUX_PULL_KEEPER = 2UL,
+	GPIOMUX_PULL_UP     = 3UL,
 };
 
 #endif

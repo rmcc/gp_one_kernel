@@ -298,7 +298,7 @@ static int qi2ckybd_config_gpio(struct i2ckybd_record *kbrec)
 	int hook_switch_pin	= kbrec->hook_switch_pin;
 	int rc;
 	
-	gpio_tlmm_config(GPIO_CFG(hook_switch_pin, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_2MA), GPIO_ENABLE);
+	gpio_tlmm_config(GPIO_CFG(hook_switch_pin, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 
 	rc = gpio_request(kbd_irqpin, "gpio_keybd_irq");
 	if (rc) {

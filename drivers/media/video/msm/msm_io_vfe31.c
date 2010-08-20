@@ -43,6 +43,7 @@
 #define EXT_CAM_HSYNC_POL_SEL_SHFT 0x10
 #define EXT_CAM_VSYNC_POL_SEL_SHFT 0xF
 #define MDDI_CLK_CHICKEN_BIT_SHFT  0x7
+
 /* MIPI	CSI	controller registers */
 #define	MIPI_PHY_CONTROL			0x00000000
 #define	MIPI_PROTOCOL_CONTROL		0x00000004
@@ -104,7 +105,9 @@ static struct clk *camio_csi_pclk;
 static struct clk *camio_csi_vfe_clk;
 static struct clk *camio_jpeg_clk;
 static struct clk *camio_jpeg_pclk;
+static struct clk *camio_vpe_clk;
 static struct msm_camera_io_ext camio_ext;
+static struct msm_camera_io_clk camio_clk;
 static struct resource *camifpadio, *csiio;
 void __iomem *camifpadbase, *csibase;
 
@@ -277,7 +280,7 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	case CAMIO_VFE_CLK:
 		camio_vfe_clk =
 		clk = clk_get(NULL, "vfe_clk");
-		msm_camio_clk_rate_set_2(clk, 122880000);
+		msm_camio_clk_rate_set_2(clk, camio_clk.vfe_clk_rate);
 		break;
 
 	case CAMIO_VFE_CAMIF_CLK:
@@ -293,7 +296,7 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	case CAMIO_CAM_MCLK_CLK:
 		camio_cam_m_clk =
 		clk = clk_get(NULL, "cam_m_clk");
-		msm_camio_clk_rate_set_2(clk, 24000000);
+		msm_camio_clk_rate_set_2(clk, camio_clk.mclk_clk_rate);
 		break;
 
 	case CAMIO_CAMIF_PAD_PBDG_CLK:
@@ -323,6 +326,11 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	case CAMIO_JPEG_PCLK:
 		camio_jpeg_pclk =
 		clk = clk_get(NULL, "jpeg_pclk");
+		break;
+	case CAMIO_VPE_CLK:
+		camio_vpe_clk =
+		clk = clk_get(NULL, "vpe_clk");
+		msm_camio_clk_rate_set_2(clk, 160000000);
 		break;
 	default:
 		break;
@@ -383,6 +391,9 @@ int msm_camio_clk_disable(enum msm_camio_clk_type clktype)
 	case CAMIO_JPEG_PCLK:
 		clk = camio_jpeg_pclk;
 		break;
+	case CAMIO_VPE_CLK:
+		clk = camio_vpe_clk;
+		break;
 	default:
 		break;
 	}
@@ -432,6 +443,18 @@ int msm_camio_jpeg_clk_enable(void)
 	return 0;
 }
 
+int msm_camio_vpe_clk_disable(void)
+{
+	msm_camio_clk_disable(CAMIO_VPE_CLK);
+	return 0;
+}
+
+int msm_camio_vpe_clk_enable(void)
+{
+	msm_camio_clk_enable(CAMIO_VPE_CLK);
+	return 0;
+}
+
 int msm_camio_enable(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -439,6 +462,7 @@ int msm_camio_enable(struct platform_device *pdev)
 	struct msm_camera_device_platform_data *camdev = sinfo->pdata;
 
 	camio_ext = camdev->ioext;
+	camio_clk = camdev->ioclk;
 
 	camdev->camera_gpio_on();
 	msm_camera_vreg_enable();
