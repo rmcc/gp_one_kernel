@@ -424,6 +424,9 @@ static int  android_bind(struct usb_composite_dev *cdev)
 	}
 
 	gcnum = usb_gadget_controller_number(gadget);
+#ifdef CONFIG_MACH_ADQ
+	device_desc.bcdDevice = cpu_to_le16(0x0100);
+#else
 	if (gcnum >= 0)
 		device_desc.bcdDevice = cpu_to_le16(0x0200 + gcnum);
 	else {
@@ -438,6 +441,7 @@ static int  android_bind(struct usb_composite_dev *cdev)
 			longname, gadget->name);
 		device_desc.bcdDevice = __constant_cpu_to_le16(0x9999);
 	}
+#endif
 
 	if (is_iad_enabled()) {
 		device_desc.bDeviceClass         = USB_CLASS_MISC;
