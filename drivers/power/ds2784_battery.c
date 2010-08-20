@@ -408,10 +408,14 @@ static int battery_get_property(struct power_supply *psy,
 }
 
 #ifdef CONFIG_BACKLIGHT_LED_TCA6507
+
 void tca6507_update_leds(struct ds2784_device_info *di) {
 	if (di->status.charge_source) {
 		if (di->status.battery_full)
 			tca6507_charger_state_report(CHARGER_STATE_FULL2);
+		else if (di->status.charge_mode == CHARGE_OFF ||
+                 di->status.charge_mode == CHARGE_BATT_DISABLE)
+			tca6507_charger_state_report(CHARGER_STATE_DISCHARGING2);
 		else
 			tca6507_charger_state_report(CHARGER_STATE_CHARGING2);
 	} else {
@@ -532,10 +536,6 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 	if (di->last_charge_mode == charge_mode)
 		goto done;
 
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
-	tca6507_update_leds(di);
-#endif
-
 	di->last_charge_mode = charge_mode;
 	di->status.charge_mode = charge_mode;
 
@@ -581,6 +581,11 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 		break;
 	}
 	rc = 1;
+
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+	tca6507_update_leds(di);
+#endif
+
 done:
 	mutex_unlock(&charge_state_lock);
 	return rc;
