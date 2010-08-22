@@ -50,12 +50,10 @@
 #include <linux/i2c.h>
 #include <linux/android_pmem.h>
 #include <mach/camera.h>
-/* FIH, AudiPCHuang, 2009/03/27, { */
-/* ZEUS_ANDROID_CR, I2C Configuration for Keypad Controller */
-///+FIH_ADQ
+
+#ifdef CONFIG_KEYBOARD_STMPE1601
 #include <mach/msm_i2ckbd.h>
-///-FIH_ADQ
-/* } FIH, AudiPCHuang, 2009/03/27 */
+#endif
 
 #include "devices.h"
 #include "socinfo.h"
@@ -65,7 +63,6 @@
 #endif
 #include "pm.h"
 
-//FIH_ADQ,JOE HSU
 #ifdef CONFIG_SPI_GPIO
 #include <linux/spi/spi.h>
 #include <linux/spi/spi_bitbang.h>
@@ -78,16 +75,13 @@
 #endif
 void __init msm_power_register(void);
 
-/* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
-/* ZEUS_ANDROID_CR, For TC6507 LED Expander*/
-///+FIH_ADQ
+#ifdef CONFIG_BACKLIGHT_LED_TCA6507
 #include <mach/tca6507.h>
-///-FIH_ADQ
-/* } FIH_ADQ, AudiPCHuang, 2009/03/30 */
+#endif
 
-//added by henry.wang
+#ifdef CONFIG_SWITCH_GPIO
 #include <linux/switch.h>
-// --- FIH_ADQ ---
+#endif
 
 /* FIH, SungSCLee, 2009/05/21, { */
 #include "smd_private.h"
@@ -104,59 +98,40 @@ void __init msm_power_register(void);
 #endif
 
 #ifdef PMEMAUDIO_ENABLE
-#define MSM_PMEM_AUDIO_SIZE 0x120000
+#define MSM_PMEM_AUDIO_SIZE			0x120000
 /* Using upper 1/2MB of Apps Bootloader memory*/
-#define MSM_PMEM_AUDIO_START_ADDR   0x80000ul
+#define MSM_PMEM_AUDIO_START_ADDR	0x80000ul
 #endif
 
-#define MSM_PMEM_MDP_SIZE	0xA00000  /* 10 MB */
-#define MSM_PMEM_ADSP_SIZE	0x1200000 - MSM_RAM_CONSOLE_SIZE /* 18 MB */
-#define MSM_FB_SIZE		0x100000
-#define PMEM_KERNEL_EBI1_SIZE   0x64000
+#define MSM_PMEM_MDP_SIZE			0xA00000  /* 10 MB */
+#define MSM_PMEM_ADSP_SIZE			0x1200000 - MSM_RAM_CONSOLE_SIZE /* 18 MB */
+#define MSM_FB_SIZE					0x100000
+#define PMEM_KERNEL_EBI1_SIZE		0x64000
 
-#define MSM_PMEM_BASE		0x00200000
-#define MSM_PMEM_LIMIT		0x02000000 // must not go over PHYS_OFFSET
+#define MSM_PMEM_BASE				0x00200000
+#define MSM_PMEM_LIMIT				0x02000000 // must not go over PHYS_OFFSET
 
-#define MSM_PMEM_MDP_BASE	MSM_PMEM_BASE
-#define MSM_PMEM_ADSP_BASE	MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE 
-#define MSM_RAM_CONSOLE_BASE	MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
-#define MSM_FB_BASE		MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE
+#define MSM_PMEM_MDP_BASE			MSM_PMEM_BASE
+#define MSM_PMEM_ADSP_BASE			MSM_PMEM_MDP_BASE + MSM_PMEM_MDP_SIZE 
+#define MSM_RAM_CONSOLE_BASE		MSM_PMEM_ADSP_BASE + MSM_PMEM_ADSP_SIZE
+#define MSM_FB_BASE					MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE
 #define PMEM_KERNEL_EBI1_BASE		MSM_FB_BASE + MSM_FB_SIZE
-
-
 
 #if ((PMEM_KERNEL_EBI1_BASE + PMEM_KERNEL_EBI1_SIZE) > MSM_PMEM_LIMIT)
 #error out of PMEM boundary
 #endif
-/* } FIH_ADQ, Ming */
+
 
 #ifdef CONFIG_AR6K
 #define WIFI_CONTROL_MASK   0x10000000
 static DEFINE_SPINLOCK(wif_bt_lock);
 #endif
+
 #if defined(CONFIG_BT) || defined(CONFIG_AR6K)
 static int bt_status = 0;
 static int wifi_status = 0;
 #define MODULE_TURN_ON      0x01
 #define MODULE_TURN_OFF     0x02
-#endif
-
-#ifdef CONFIG_USB_FUNCTION
-static struct usb_mass_storage_platform_data usb_mass_storage_pdata = {
-	.nluns          = 0x02,
-	.buf_size       = 16384,
-	.vendor         = "GOOGLE",
-	.product        = "Mass storage",
-	.release        = 0xffff,
-};
-
-static struct platform_device mass_storage_device = {
-	.name           = "usb_mass_storage",
-	.id             = -1,
-	.dev            = {
-		.platform_data          = &usb_mass_storage_pdata,
-	},
-};
 #endif
 
 #ifdef CONFIG_USB_ANDROID
@@ -260,8 +235,8 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.version        = 0x0100,
 	.compositions   = usb_func_composition,
 	.num_compositions = ARRAY_SIZE(usb_func_composition),
-	.product_name       = "Android USB Gadget",
-	.manufacturer_name = "Qualcomm Incorporated",
+	.product_name       = "ONE Android Phone",
+	.manufacturer_name = "Geeksphone",
 	.nluns = 1,
 };
 
@@ -274,68 +249,7 @@ static struct platform_device android_usb_device = {
 };
 #endif
 
-#ifdef CONFIG_USB_FUNCTION
-static struct usb_function_map usb_functions_map[] = {
-	{"mass_storage", 0},
-	{"diag", 1},
-	{"adb", 2},
-	{"modem", 3},
-	{"nmea", 4},
-	{"ethernet", 5},
-};
 
-/* dynamic composition */
-static struct usb_composition usb_func_composition[] = {
-	// +++ FIH_ADQ +++ , added by henry.wang for FIH VID/PID
-	{
-		.product_id         = 0xC000,
-		.functions	    = 0x0F, /* 001111 */
-	},
-	// 0xC001 composition is removed diag port
-	{
-		.product_id         = 0xC001,
-		.functions	    = 0x25, /* 100101 */
-	},
-
-	// 0xC002 composition is only diag port
-	{
-		.product_id         = 0xC002,
-		.functions	    = 0x01, /* 000001 */
-	},
-
-	// 0xC003 composition is add modem port
-	{
-		.product_id         = 0xC003,
-		.functions	    = 0x0C, /* 001100 */
-	},
-	// 0xC004 Power off (mass storage) Chargering
-	{
-		.product_id         = 0xC004,
-		.functions	    = 0x01, /* 100100 */
-	},
-	// 0xC005 NMEA + ADB
-	{
-		.product_id         = 0xC005,
-		.functions	    = 0x14, /* 100100 */
-	},
-};
-
-static struct msm_hsusb_platform_data msm_hsusb_pdata = {
-	.version	= 0x0100,
-	.phy_info	= (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
-	.vendor_id          = 0x489,
-	.product_name   = "Qualcomm HSUSB Device",
-	.serial_number      = "1234567890ABCD",
-	.manufacturer_name  = "Qualcomm Incorporated",
-	.compositions	= usb_func_composition,
-	.num_compositions = ARRAY_SIZE(usb_func_composition),
-	.function_map   = usb_functions_map,
-	.num_functions	= ARRAY_SIZE(usb_functions_map),
-};
-
-#endif
-
-// +++ FIH_ADQ +++, added by henry.wang
 #define SND(desc, num) { .name = #desc, .id = num }
 static struct snd_endpoint snd_endpoints_list[] = {
 	SND(HANDSET, 0),
@@ -458,7 +372,6 @@ static struct platform_device msm_device_adspdec = {
 	},
 };
 
-
 #ifdef CONFIG_USB_MSM_OTG_72K
 static int hsusb_rpc_connect(int connect)
 {
@@ -524,7 +437,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 #ifdef CONFIG_USB_GADGET
 static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
 #endif
-#endif
+#endif /* DS2784 || ZEUS */
 
 static struct android_pmem_platform_data android_pmem_pdata = {
 	.name = "pmem",
@@ -620,7 +533,7 @@ static struct platform_device hs_device = {
 #define LCDC_CONFIG_PROC          21
 #define LCDC_UN_CONFIG_PROC       22
 #define LCDC_API_PROG             0x30000066
-//FIH_ADQ,JOE HSU
+
 #ifdef CONFIG_SPI_GPIO
 #define LCDC_API_VERS             0xAD12600D
 #else
@@ -649,16 +562,10 @@ static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 			temp = temp & 0x000000ff;		
 		}
 		op1 = (char)temp;   		        
-#ifdef CONFIG_USB_FUNCTION
-		msm_hsusb_pdata.serial_number[i+p_count] = op1;
-#else
 		serial_number[i+p_count] = op1;
 		serial_number[i+p_count+1] = '\0';
-#endif
 	}
-#ifdef CONFIG_USB_ANDROID
 	android_set_sn(serial_number,NULL);
-#endif
 
 	return 1;
 }
@@ -761,7 +668,7 @@ static uint32_t msm_ar6k_sdcc_setup_power(struct device *dv, unsigned int vdd)
 {
 	return 0;
 }
-//static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd);
+
 static void (*ar6k_wifi_status_cb)(int card_present, void *dev_id);
 static void *ar6k_wifi_status_cb_devid;
 static unsigned int  wifi_power_on = 0;
@@ -788,7 +695,6 @@ static struct mmc_platform_data ar6k_wifi_data = {
 	.register_status_notify	= ar6k_wifi_status_register,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.nonremovable   = 1,
-	//.sdiowakeup_irq = 26,
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
 	//.dummy52_required = 1,
 #endif
@@ -876,8 +782,6 @@ static void init_Bluetooth_gpio_table(void)
 	if (rc)	printk(KERN_ERR "%s: 1.2V 34 setting failed! rc = %d\n", __func__, rc);
 	rc = gpio_request(35, "WIFI_RST");
 	if (rc)	printk(KERN_ERR "%s: WIFI_RST 35 setting failed! rc = %d\n", __func__, rc);
-	/*rc = gpio_request(23, "WIFI_WARMRST");
-	if (rc)	printk(KERN_ERR "%s: WIFI_WARMRST 23 setting failed! rc = %d\n", __func__, rc);*/
 	rc = gpio_request(27, "BT_RST");
 	if (rc)	printk(KERN_ERR "%s: BT_RST 27 setting failed! rc = %d\n", __func__, rc);
 
@@ -1098,15 +1002,9 @@ static uint32_t camera_off_gpio_table[] = {
 static uint32_t camera_on_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	//FIH_ADQ ,JOE HSU
-#if 1
 	GPIO_CFG(0,  1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT0 */
 	GPIO_CFG(1,  1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT1 */
 	GPIO_CFG(2,  1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT2 */
-#else
-	GPIO_CFG(0,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT0 */
-	GPIO_CFG(1,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT1 */
-	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-#endif
 	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
 	GPIO_CFG(4,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
 	GPIO_CFG(5,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
@@ -1417,10 +1315,6 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_gadget_peripheral,
 #endif
 #endif
-#ifdef CONFIG_USB_FUNCTION
-	&msm_device_hsusb_peripheral,
-	&mass_storage_device,
-#endif
 
 #ifdef CONFIG_USB_ANDROID
 	//&mass_storage_device,
@@ -1441,10 +1335,8 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_BT
 	&msm_bt_power_device,
 #endif
-	///---FIH_ADQ---	godfrey
 	&msm_device_uart_dm1,
 	&msm_bluesleep_device,
-	// +++ FIH_ADQ +++ , added by henry.wang
 #ifdef CONFIG_SWITCH_GPIO
 	&headset_sensor_device,
 #endif
@@ -1756,9 +1648,6 @@ static void __init msm_device_i2c_init(void)
 	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
 }
 
-///--- FIH_ADQ --- 6360
-
-// +++ FIH_ADQ +++ , added by henry.wang
 
 #ifdef CONFIG_SWITCH_GPIO
 static void __init init_headset_sensor(void)
@@ -1766,8 +1655,6 @@ static void __init init_headset_sensor(void)
 	gpio_direction_input(40);
 }
 #endif
-
-// --- FIH_ADQ ---
 
 /* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
 /* ZEUS_ANDROID_CR, Create proc entry for reading device information*/
@@ -1791,10 +1678,6 @@ static void __init msm7x25_init(void)
 	msm_acpu_clock_init(&msm7x25_clock_data);
 
 	msm_read_serial_number_from_nvitem();
-#ifdef CONFIG_USB_FUNCTION
-	msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_pdata;
-	msm_device_hsusb_host.dev.platform_data = &msm_hsusb_pdata;
-#endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
@@ -1812,7 +1695,6 @@ static void __init msm7x25_init(void)
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	msm_device_i2c_init();
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
-	//FIH_ADQ,JOE HSU 
 #ifdef CONFIG_SPI_GPIO
 	spi_register_board_info(lcdc_spi_devices,ARRAY_SIZE(lcdc_spi_devices));
 #endif		
@@ -1822,11 +1704,9 @@ static void __init msm7x25_init(void)
 
 	msm7x25_init_mmc();
 
-	// +++ FIH_ADQ +++ , added by henry.wang
 #ifdef CONFIG_SWITCH_GPIO
 	init_headset_sensor();
 #endif
-	// --- FIH_ADQ ---
 
 #ifdef CONFIG_BT
 	init_Bluetooth_gpio_table();
@@ -1889,7 +1769,7 @@ static void __init msm7x25_map_io(void)
 
 MACHINE_START(MSM7X25_SURF, "QCT MSM7x25 SURF")
 #ifdef CONFIG_MSM_DEBUG_UART
-.phys_io        = MSM_DEBUG_UART_PHYS,
+	.phys_io        = MSM_DEBUG_UART_PHYS,
 	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
 #endif
 	.boot_params	= PHYS_OFFSET + 0x100,
