@@ -164,17 +164,17 @@ static struct platform_device mass_storage_device = {
 static struct usb_composition usb_func_composition[] = {
 	{
 		/* MSC */
-		.product_id         = 0xC005,
+		.product_id         = 0xC004,
 		.functions          = 0x02,
-		.adb_product_id     = 0xC002,
+		.adb_product_id     = 0xC001,
 		.adb_functions      = 0x12
 	},
 #ifdef CONFIG_USB_F_SERIAL
 	{
 		/* MODEM */
-		.product_id         = 0xC003,
+		.product_id         = 0xC005,
 		.functions          = 0x06,
-		.adb_product_id     = 0x901E,
+		.adb_product_id     = 0xC002,
 		.adb_functions      = 0x16,
 	},
 #endif
@@ -213,9 +213,9 @@ static struct usb_composition usb_func_composition[] = {
 #ifdef CONFIG_USB_ANDROID_CDC_ECM
 	{
 		/* MSC + CDC-ECM */
-		.product_id         = 0xF00E,
+		.product_id         = 0xC006,
 		.functions          = 0x82,
-		.adb_product_id     = 0x9024,
+		.adb_product_id     = 0xC003,
 		.adb_functions      = 0x812,
 	},
 #endif
@@ -230,11 +230,11 @@ static struct usb_composition usb_func_composition[] = {
 #endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	{
-		/* RNDIS + MSC */
-		.product_id         = 0xC004,
-		.functions          = 0xA2,
-		.adb_product_id     = 0xC001,
-		.adb_functions      = 0xA12,
+		/* RNDIS */
+		.product_id         = 0xC008,
+		.functions          = 0xA,
+		.adb_product_id     = 0xC007,
+		.adb_functions      = 0x1A,
 	},
 #endif
 };
