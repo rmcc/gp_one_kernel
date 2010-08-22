@@ -3008,6 +3008,10 @@ int mass_storage_function_add(struct usb_composite_dev *cdev,
 	kref_init(&fsg->ref);
 	init_completion(&fsg->thread_notifier);
 
+	if (the_fsg->vendor == NULL)
+		the_fsg->vendor = "Android";
+	if (the_fsg->product == NULL)
+		the_fsg->product = "Mass Storage";
 	the_fsg->buf_size = BULK_BUFFER_SIZE;
 	the_fsg->sdev.name = DRIVER_NAME;
 	the_fsg->sdev.print_name = print_switch_name;
