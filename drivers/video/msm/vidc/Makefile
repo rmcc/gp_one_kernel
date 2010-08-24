@@ -1,6 +1,6 @@
 ifdef CONFIG_MSM_VIDC_720P
-EXTRA_CFLAGS += -Idrivers/misc/vidc/720p/ddl
-EXTRA_CFLAGS += -Idrivers/misc/vidc/720p/resource_tracker
+EXTRA_CFLAGS += -Idrivers/video/msm/vidc/720p/ddl
+EXTRA_CFLAGS += -Idrivers/video/msm/vidc/720p/resource_tracker
 endif
 
 ifdef CONFIG_MSM_VIDC_1080P
@@ -22,7 +22,6 @@ vidc-objs :=	common/init/vidc_init.o \
 		common/vcd/vcd_device_sm.o \
 		common/vcd/vcd_scheduler.o \
 		common/vcd/vcd_sub.o \
-		common/vcd/vcd_util.o
 
 ifdef CONFIG_MSM_VIDC_720P
 vidc-objs +=	720p/ddl/vcd_ddl_firmware.o \

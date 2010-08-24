@@ -105,6 +105,9 @@ static int32_t adsp_validate_module(uint32_t module_id)
 static int32_t adsp_validate_queue(uint32_t mod_id, unsigned q_idx,
 							uint32_t size)
 {
+#ifdef CONFIG_MACH_ADQ
+	return 0;
+#else
 	int32_t i;
 	struct adsp_rtos_mp_mtoa_init_info_type	*sptr;
 
@@ -120,6 +123,7 @@ static int32_t adsp_validate_queue(uint32_t mod_id, unsigned q_idx,
 			}
 	MM_ERR("cmd_buf size is more than allowed size\n");
 	return -EINVAL;
+#endif
 }
 
 uint32_t adsp_get_module(struct adsp_info *info, uint32_t task)
@@ -416,10 +420,10 @@ int __msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 		MM_ERR("Invalid Queue Index: %d\n", dsp_queue_addr);
 		return -ENXIO;
 	}
-	/*if (adsp_validate_queue(module->id, dsp_queue_addr, cmd_size)) {
+	if (adsp_validate_queue(module->id, dsp_queue_addr, cmd_size)) {
 		spin_unlock_irqrestore(&adsp_write_lock, flags);
 		return -EINVAL;
-	}*/
+	}
 	dsp_q_addr = adsp_get_queue_offset(info, dsp_queue_addr);
 	dsp_q_addr &= ADSP_RTOS_WRITE_CTRL_WORD_DSP_ADDR_M;
 

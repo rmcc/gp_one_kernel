@@ -59,7 +59,7 @@
 #include "socinfo.h"
 
 #ifdef CONFIG_USB_ANDROID
-#include <linux/usb/android.h>
+#include <linux/usb/android_composite.h>
 #endif
 #include "pm.h"
 
@@ -135,109 +135,127 @@ static int wifi_status = 0;
 #endif
 
 #ifdef CONFIG_USB_ANDROID
-/* dynamic composition */
-static struct usb_composition usb_func_composition[] = {
-	{
-		/* MSC */
-		.product_id         = 0xC004,
-		.functions          = 0x02,
-		.adb_product_id     = 0xC001,
-		.adb_functions      = 0x12
-	},
-#ifdef CONFIG_USB_F_SERIAL
-	{
-		/* MODEM */
-		.product_id         = 0xC005,
-		.functions          = 0x06,
-		.adb_product_id     = 0xC002,
-		.adb_functions      = 0x16,
-	},
+static char *usb_functions_default[] = {
+       "usb_mass_storage",
+};
+
+static char *usb_functions_default_adb[] = {
+       "adb",
+       "usb_mass_storage",
+};
+
+static char *usb_functions_rndis[] = {
+       "rndis",
+};
+
+static char *usb_functions_rndis_adb[] = {
+       "rndis",
+       "adb",
+};
+
+static char *usb_functions_all[] = {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+       "rndis",
 #endif
 #ifdef CONFIG_USB_ANDROID_DIAG
-	{
-		/* DIAG */
-		.product_id         = 0xC000,
-		.functions          = 0x04,
-		.adb_product_id     = 0x901D,
-		.adb_functions      = 0x14,
-	},
+       "diag",
 #endif
-#if defined(CONFIG_USB_ANDROID_DIAG) && defined(CONFIG_USB_F_SERIAL)
-	{
-		/* DIAG + MODEM */
-		.product_id         = 0x9004,
-		.functions          = 0x64,
-		.adb_product_id     = 0x901F,
-		.adb_functions      = 0x0614,
-	},
-	{
-		/* DIAG + MODEM + NMEA*/
-		.product_id         = 0x9016,
-		.functions          = 0x764,
-		.adb_product_id     = 0x9020,
-		.adb_functions      = 0x7614,
-	},
-	{
-		/* DIAG + MODEM + NMEA + MSC */
-		.product_id         = 0x9017,
-		.functions          = 0x2764,
-		.adb_product_id     = 0x9018,
-		.adb_functions      = 0x27614,
-	},
-#endif
-#ifdef CONFIG_USB_ANDROID_CDC_ECM
-	{
-		/* MSC + CDC-ECM */
-		.product_id         = 0xC006,
-		.functions          = 0x82,
-		.adb_product_id     = 0xC003,
-		.adb_functions      = 0x812,
-	},
+       "adb",
+#ifdef CONFIG_USB_F_SERIAL
+       "modem",
+       "nmea",
 #endif
 #ifdef CONFIG_USB_ANDROID_RMNET
-	{
-		/* DIAG + RMNET */
-		.product_id         = 0x9021,
-		.functions          = 0x94,
-		.adb_product_id     = 0x9022,
-		.adb_functions      = 0x914,
-	},
+       "rmnet",
 #endif
-#ifdef CONFIG_USB_ANDROID_RNDIS
-	{
-		/* RNDIS */
-		.product_id         = 0xC008,
-		.functions          = 0xA,
-		.adb_product_id     = 0xC007,
-		.adb_functions      = 0x1A,
-	},
+       "usb_mass_storage",
+#ifdef CONFIG_USB_ANDROID_ACM
+       "acm",
 #endif
 };
 
-/*
+static char *usb_functions_all_but_adb[] = {
+       "rndis",
+       "diag",
+       "modem",
+       "nmea",
+       "rmnet",
+       "usb_mass_storage",
+       "acm",
+};
+
+static struct android_usb_product usb_products[] = {
+	{
+		.product_id     = 0xC004,
+		.num_functions  = ARRAY_SIZE(usb_functions_default),
+		.functions      = usb_functions_default,
+	},
+	{
+		.product_id     = 0xC001,
+		.num_functions  = ARRAY_SIZE(usb_functions_default_adb),
+		.functions      = usb_functions_default_adb,
+	},
+	{
+		.product_id     = 0xC005,
+		.num_functions  = ARRAY_SIZE(usb_functions_all_but_adb),
+		.functions      = usb_functions_all_but_adb,
+	},
+	{
+		.product_id     = 0xC002,
+		.num_functions  = ARRAY_SIZE(usb_functions_all),
+		.functions      = usb_functions_all,
+	},
+	{
+		.product_id     = 0xC008,
+		.num_functions  = ARRAY_SIZE(usb_functions_rndis),
+		.functions      = usb_functions_rndis,
+	},
+	{
+		.product_id     = 0xC007,
+		.num_functions  = ARRAY_SIZE(usb_functions_rndis_adb),
+		.functions      = usb_functions_rndis_adb,
+	},
+};
+
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns      = 1,
-	.vendor     = "GOOGLE",
+	.vendor     = "Android",
 	.product    = "Mass Storage",
-	.release    = 0xFFFF,
+	.release    = 0x1000,
 };
-static struct platform_device mass_storage_device = {
+static struct platform_device usb_mass_storage_device = {
 	.name           = "usb_mass_storage",
 	.id             = -1,
 	.dev            = {
 		.platform_data          = &mass_storage_pdata,
 	},
 };
-*/
+
+static struct usb_ether_platform_data rndis_pdata = {
+       /* ethaddr is filled by board_serialno_setup */
+       .vendorID       = 0x05C6,
+       .vendorDescr    = "Qualcomm Incorporated",
+};
+
+static struct platform_device rndis_device = {
+       .name   = "rndis",
+       .id     = -1,
+       .dev    = {
+               .platform_data = &rndis_pdata,
+       },
+};
 
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id      = 0x0489,
+	.product_id		= 0xC004,
 	.version        = 0x0100,
-	.compositions   = usb_func_composition,
-	.num_compositions = ARRAY_SIZE(usb_func_composition),
 	.product_name       = "ONE Android Phone",
 	.manufacturer_name = "Geeksphone",
-	.nluns = 1,
+       .num_products = ARRAY_SIZE(usb_products),
+       .products = usb_products,
+       .num_functions = ARRAY_SIZE(usb_functions_all),
+       .functions = usb_functions_all,
+       .serial_number = "1234567890ABCDEF",
 };
 
 static struct platform_device android_usb_device = {
@@ -247,6 +265,24 @@ static struct platform_device android_usb_device = {
 		.platform_data = &android_usb_pdata,
 	},
 };
+
+static int __init board_serialno_setup(char *serialno)
+{
+       int i;
+       char *src = serialno;
+
+       /* create a fake MAC address from our serial number.
+        * first byte is 0x02 to signify locally administered.
+        */
+       rndis_pdata.ethaddr[0] = 0x02;
+       for (i = 0; *src; i++) {
+               /* XOR the USB serial across the remaining bytes */
+               rndis_pdata.ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
+       }
+
+       android_usb_pdata.serial_number = serialno;
+       return 1;
+}
 #endif
 
 
@@ -542,12 +578,11 @@ static struct platform_device hs_device = {
 
 extern int android_set_sn(const char *kmessage, struct kernel_param *kp);
 /* FIH, SungSCLee, 2009/05/21, { */
-static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
+static int AsciiSwapChar(uint32_t fih_product_id,int p_count,char *serial_number)
 {
 	char op1;
 	uint32_t temp;
 	int i, j = FIH_NV_LENGTH;
-	char serial_number[256];
 
 	if(p_count == FIH_ADB_DEVICE_ID_LENGTH)
 		j = 2;	
@@ -565,9 +600,8 @@ static int AsciiSwapChar(uint32_t fih_product_id,int p_count)
 		serial_number[i+p_count] = op1;
 		serial_number[i+p_count+1] = '\0';
 	}
-	android_set_sn(serial_number,NULL);
+	return 0;
 
-	return 1;
 }
 
 static int msm_read_serial_number_from_nvitem(void)
@@ -577,6 +611,7 @@ static int msm_read_serial_number_from_nvitem(void)
 	uint32_t smem_proc_comm_oem_data2 = NV_PRD_ID_I;
 	uint32_t product_id[32];	
 	int i, j = 0, nv_location;
+	char *serial_number = kzalloc(256, GFP_KERNEL);
 
 	if(msm_proc_comm_oem_rw128b(smem_proc_comm_oem_cmd1, &smem_proc_comm_oem_data1, &smem_proc_comm_oem_data2, product_id) == 0)
 	{      
@@ -584,16 +619,22 @@ static int msm_read_serial_number_from_nvitem(void)
 			i = 1;
 			nv_location = 1;
 		}else if(product_id[0]== 0){ ///No NV_item value
+			kfree(serial_number);
 			return 1;
 		}else {	
 			i = 0;    		
 			nv_location = 0;
 		}
 		for(; i < FIH_NV_LENGTH + nv_location; i++){
-			AsciiSwapChar(product_id[i],j);
+			if (AsciiSwapChar(product_id[i],j,serial_number)) {
+				kfree(serial_number);
+				return 1;
+			}
 			j = j+FIH_NV_LENGTH;
 		}
-	} 	
+	}
+	board_serialno_setup(serial_number);
+	/*kfree(serial_number);*/
 	return 1;
 
 } 
@@ -1317,7 +1358,8 @@ static struct platform_device *devices[] __initdata = {
 #endif
 
 #ifdef CONFIG_USB_ANDROID
-	//&mass_storage_device,
+	&usb_mass_storage_device,
+	&rndis_device,
 	&android_usb_device,
 #endif
 	&msm_device_i2c,
