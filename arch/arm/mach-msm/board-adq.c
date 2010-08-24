@@ -136,12 +136,20 @@ static int wifi_status = 0;
 
 #ifdef CONFIG_USB_ANDROID
 static char *usb_functions_default[] = {
-       "usb_mass_storage",
+    "diag",
+    "modem",
+    "nmea",
+    "rmnet",
+    "usb_mass_storage",
 };
 
 static char *usb_functions_default_adb[] = {
-       "adb",
-       "usb_mass_storage",
+    "diag",
+    "adb",
+    "modem",
+    "nmea",
+    "rmnet",
+    "usb_mass_storage",
 };
 
 static char *usb_functions_rndis[] = {
@@ -174,16 +182,6 @@ static char *usb_functions_all[] = {
 #endif
 };
 
-static char *usb_functions_all_but_adb[] = {
-       "rndis",
-       "diag",
-       "modem",
-       "nmea",
-       "rmnet",
-       "usb_mass_storage",
-       "acm",
-};
-
 static struct android_usb_product usb_products[] = {
 	{
 		.product_id     = 0xC004,
@@ -194,16 +192,6 @@ static struct android_usb_product usb_products[] = {
 		.product_id     = 0xC001,
 		.num_functions  = ARRAY_SIZE(usb_functions_default_adb),
 		.functions      = usb_functions_default_adb,
-	},
-	{
-		.product_id     = 0xC005,
-		.num_functions  = ARRAY_SIZE(usb_functions_all_but_adb),
-		.functions      = usb_functions_all_but_adb,
-	},
-	{
-		.product_id     = 0xC002,
-		.num_functions  = ARRAY_SIZE(usb_functions_all),
-		.functions      = usb_functions_all,
 	},
 	{
 		.product_id     = 0xC008,
@@ -251,11 +239,11 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.version        = 0x0100,
 	.product_name       = "ONE Android Phone",
 	.manufacturer_name = "Geeksphone",
-       .num_products = ARRAY_SIZE(usb_products),
-       .products = usb_products,
-       .num_functions = ARRAY_SIZE(usb_functions_all),
-       .functions = usb_functions_all,
-       .serial_number = "1234567890ABCDEF",
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_all),
+	.functions = usb_functions_all,
+	.serial_number = "1234567890ABCDEF",
 };
 
 static struct platform_device android_usb_device = {
