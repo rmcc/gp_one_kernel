@@ -49,11 +49,6 @@
 #include <mach/dma.h>
 #include <mach/htc_pwrsink.h>
 
-/* ATHENV */
-#define ATH_PATCH
-
-/* ATHENV */
-
 
 #include "msm_sdcc.h"
 
@@ -828,32 +823,6 @@ msmsdcc_irq(int irq, void *dev_id)
 		if (status & MCI_SDIOINTROPE)
 			mmc_signal_sdio_irq(host->mmc);
 #endif
-
-/* ATHENV+ */
-#ifdef ATH_PATCH
-        if (host->pdev_id == ATH_WLAN_SLOT) {
-               cmd = host->curr.cmd;
-               if (status & (MCI_CMDSENT | MCI_CMDRESPEND | MCI_CMDCRCFAIL |
-                             MCI_CMDTIMEOUT) && cmd) {
-    
-                       cmd->resp[0] = readl(base + MMCIRESPONSE0);
-                       cmd->resp[1] = readl(base + MMCIRESPONSE1);
-                       cmd->resp[2] = readl(base + MMCIRESPONSE2);
-                       cmd->resp[3] = readl(base + MMCIRESPONSE3);
-    
-                       if (status & MCI_CMDTIMEOUT) {
-                               cmd->error = -ETIMEDOUT;
-                       } else if (status & MCI_CMDCRCFAIL &&
-                                  cmd->flags & MMC_RSP_CRC) {
-                               printk(KERN_ERR "%s: Command CRC error\n",
-                                      mmc_hostname(host->mmc));
-                               cmd->error = -EILSEQ;
-                       }
-               }
-        }
-#endif
-/* ATHENV- */
-
 		/*
 		 * Check for proper command response
 		 */
@@ -915,8 +884,6 @@ msmsdcc_irq(int irq, void *dev_id)
 								NULL, 0);
 			}
 		}
-
-
 
 		if (data) {
 			/* Check for data errors */
@@ -995,71 +962,6 @@ msmsdcc_irq(int irq, void *dev_id)
 	return IRQ_RETVAL(ret);
 }
 
-/* ATHENV */
-#ifdef ATH_PATCH
-static int
-msmsdcc_wait_prog_done(struct msmsdcc_host *host)
- {
-#define MSMSDCC_POLLING_RETRIES         10000000
-       unsigned int            i = 0;
-       unsigned int            status = 0;
-
-       while (i++ < MSMSDCC_POLLING_RETRIES) {
-               status = readl(host->base + MMCISTATUS);
-               if (status & MCI_CMDSENT)
-                       printk("command is sent out\n");
-               if (status & MCI_PROGDONE)
-                       break;
-       }
-       if (i >= MSMSDCC_POLLING_RETRIES) {
-               printk("wait PROG_DONE fail\n");
-               return -1;
-        }
-       return 0;
- }
-
-static int
-msmsdcc_send_dummy_cmd52_read(struct msmsdcc_host *host)
-{
-       unsigned int    retries = MSMSDCC_POLLING_RETRIES;
-       void __iomem    *base = host->base;
-       unsigned int    status = 0;
-
-       writel(MCI_PROGDONECLR, host->base + MMCICLEAR);
-
-       if (readl(base + MMCICOMMAND) & MCI_CPSM_ENABLE) {
-               writel(0, base + MMCICOMMAND);
-               udelay(2 + ((5 * 1000000) / host->clk_rate));
-       }
-
-       writel(0, base + MMCIARGUMENT);
-       writel(52 | MCI_CPSM_ENABLE | MCI_CPSM_RESPONSE | MCI_CPSM_PROGENA, base + MMCICOMMAND);
-
-       msmsdcc_wait_prog_done(host);
-
-       while(retries) {
-               status = readl(host->base + MMCISTATUS);
-
-               if (status & MCI_CMDCRCFAIL) {
-                       printk("Sending dummy SD CMD52 failed: -EILSEQ\n");
-                       return -EILSEQ;
-               }
-               if (status & MCI_CMDTIMEOUT) {
-                       printk("Sending dummy SD CMD52 failed: -ETIMEDOUT\n");
-                       return -ETIMEDOUT;
-               }
-               if (status & (MCI_CMDSENT | MCI_CMDRESPEND))
-                       return 0;
-               retries--;
-       }
-
-       printk("Sending dummy SD CMD52 failed: -ETIMEDOUT\n");
-       return -ETIMEDOUT;
-}
-#endif
-/* ATHENV */
-
-
 static void
 msmsdcc_request_start(struct msmsdcc_host *host, struct mmc_request *mrq)
 {
@@ -1098,23 +1000,9 @@ msmsdcc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	host->curr.mrq = mrq;
 
-#ifdef ATH_PATCH
-	if (host->pdev_id == ATH_WLAN_SLOT) {
-		  if (host->pre_cmd_with_data) {
-#else
 	if (host->plat->dummy52_required) {
 		if (host->dummy_52_needed) {
-#endif
 			if (mrq->data) {
-#ifdef ATH_PATCH
-                               writel(0, host->base + MMCIMASK0);
-                               writel(0x018007FF, host->base + MMCICLEAR);
-                               msmsdcc_send_dummy_cmd52_read(host);
-                               writel(0x18007ff, host->base + MMCICLEAR);
-                               writel(host->mci_irqenable, host->base + MMCIMASK0);
-			}
-			host->pre_cmd_with_data = 0;
-#else
 				host->dummy_52_state = DUMMY_52_STATE_SENT;
 				msmsdcc_start_command(host, &dummy52cmd,
 						      MCI_CPSM_PROGENA);
@@ -1122,16 +1010,9 @@ msmsdcc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 				return;
 			}
 			host->dummy_52_needed = 0;
-#endif
 		}
-#ifdef ATH_PATCH
-               if (mrq->data) {
-                       host->pre_cmd_with_data = 1;
-               }
-#else
 		if ((mrq->cmd->opcode == SD_IO_RW_EXTENDED) && (mrq->data))
 			host->dummy_52_needed = 1;
-#endif
 	}
 
 	msmsdcc_request_start(host, mrq);
@@ -1175,26 +1056,12 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	else
 		clk |= MCI_CLK_WIDEBUS_1;
 
-#ifdef ATH_PATCH
-       if (host->pdev_id != ATH_WLAN_SLOT) {
-               if (ios->clock > 400000 && msmsdcc_pwrsave)
-                       clk |= MCI_CLK_PWRSAVE;
-       }
-#else
 	if (ios->clock > 400000 && msmsdcc_pwrsave)
 		clk |= MCI_CLK_PWRSAVE;
-#endif
 
 	clk |= MCI_CLK_FLOWENA;
-#ifdef ATH_PATCH
-       if (host->pdev_id != ATH_WLAN_SLOT) {
-               if (ios->timing & MMC_TIMING_SD_HS)
-			clk |= MCI_CLK_SELECTIN; /* feedback clock */
-       }
-#else
        if (ios->timing & MMC_TIMING_SD_HS)
                clk |= MCI_CLK_SELECTIN; /* feedback clock */
-#endif
 
 	if (host->plat->translate_vdd)
 		pwr |= host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
@@ -1528,11 +1395,6 @@ msmsdcc_probe(struct platform_device *pdev)
 	host->irqres = irqres;
 	host->memres = memres;
 	host->dmares = dmares;
-
-#ifdef ATH_PATCH
-    host->pre_cmd_with_data = 0;
-#endif
-
 	spin_lock_init(&host->lock);
 
 #ifdef CONFIG_MMC_EMBEDDED_SDIO

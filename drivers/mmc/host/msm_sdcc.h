@@ -106,8 +106,6 @@
 #define MCI_SDIOINTROPECLR	(1 << 25)
 #define MCI_CCSTIMEOUTCLR 	(1 << 26)
 
-#define ATH_PATCH
-
 #define MCI_CLEAR_STATIC_MASK	\
 	(MCI_CMDCRCFAILCLR|MCI_DATACRCFAILCLR|MCI_CMDTIMEOUTCLR|\
 	MCI_DATATIMEOUTCLR|MCI_TXUNDERRUNCLR|MCI_RXOVERRUNCLR|  \
@@ -243,10 +241,6 @@ struct msmsdcc_host {
 
 	struct msmsdcc_dma_data	dma;
 	struct msmsdcc_pio_data	pio;
-
-#ifdef ATH_PATCH
-       unsigned int            pre_cmd_with_data;
-#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;

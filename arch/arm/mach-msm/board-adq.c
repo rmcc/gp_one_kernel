@@ -696,7 +696,7 @@ static struct mmc_platform_data ar6k_wifi_data = {
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.nonremovable   = 1,
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
-	//.dummy52_required = 1,
+	.dummy52_required = 1,
 #endif
 	.msmsdcc_fmin   = 144000,
 	.msmsdcc_fmid   = 24576000,
@@ -1551,7 +1551,8 @@ static unsigned int msm_sdcc_card_detect(struct device * dev_sdcc1)
 	gpio_request(GPIO_CARDDETECT_INTR,0);
 	rc = gpio_get_value(GPIO_CARDDETECT_INTR);
 	gpio_free(GPIO_CARDDETECT_INTR);  
-	printk(KERN_INFO"%s: SD card detect (%d)\n",__func__, rc);      
+	printk(KERN_INFO"%s: SD card detect (%d)\n",__func__, rc);
+	mdelay(50);
 	return rc;
 }
 
