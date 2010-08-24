@@ -1,21 +1,21 @@
-//------------------------------------------------------------------------------
-// <copyright file="addrs.h" company="Atheros">
-//    Copyright (c) 2004-2007 Atheros Corporation.  All rights reserved.
-// 
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License version 2 as
-// published by the Free Software Foundation;
-//
-// Software distributed under the License is distributed on an "AS
-// IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// rights and limitations under the License.
-//
-//
-//------------------------------------------------------------------------------
-//==============================================================================
-// Author(s): ="Atheros"
-//==============================================================================
+/*------------------------------------------------------------------------------ */
+/* <copyright file="addrs.h" company="Atheros"> */
+/*    Copyright (c) 2004-2007 Atheros Corporation.  All rights reserved. */
+/*  */
+/* This program is free software; you can redistribute it and/or modify */
+/* it under the terms of the GNU General Public License version 2 as */
+/* published by the Free Software Foundation; */
+/* */
+/* Software distributed under the License is distributed on an "AS */
+/* IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or */
+/* implied. See the License for the specific language governing */
+/* rights and limitations under the License. */
+/* */
+/* */
+/*------------------------------------------------------------------------------ */
+/*============================================================================== */
+/* Author(s): ="Atheros" */
+/*============================================================================== */
 
 #ifndef __ADDRS_H__
 #define __ADDRS_H__
@@ -76,6 +76,6 @@
 #define FLASH_IS_PRESENT_TARGADDR       HOST_INTEREST_FLASH_IS_PRESENT_ADDR
 
 /* override REV2 ROM's app start address */
-#define AR6002_REV2_APP_START_OVERRIDE  0x9148f0
+#define AR6002_REV2_APP_START_OVERRIDE  0x9140f0
 
 #endif /* __ADDRS_H__ */

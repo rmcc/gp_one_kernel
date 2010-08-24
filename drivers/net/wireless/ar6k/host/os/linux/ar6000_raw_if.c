@@ -1,21 +1,21 @@
-/*
- * 
- * Copyright (c) 2004-2007 Atheros Communications Inc.
- * All rights reserved.
- *
- * 
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License version 2 as
-// published by the Free Software Foundation;
-//
-// Software distributed under the License is distributed on an "AS
-// IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// rights and limitations under the License.
-//
-//
- * 
- */
+/*------------------------------------------------------------------------------ */
+/* <copyright file="ar6000_raw_if.c" company="Atheros"> */
+/*    Copyright (c) 2004-2009 Atheros Corporation.  All rights reserved. */
+/*  */
+/* This program is free software; you can redistribute it and/or modify */
+/* it under the terms of the GNU General Public License version 2 as */
+/* published by the Free Software Foundation; */
+/* */
+/* Software distributed under the License is distributed on an "AS */
+/* IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or */
+/* implied. See the License for the specific language governing */
+/* rights and limitations under the License. */
+/* */
+/* */
+/*------------------------------------------------------------------------------ */
+/*============================================================================== */
+/* Author(s): ="Atheros" */
+/*============================================================================== */
 
 #include "ar6000_drv.h"
 
@@ -26,7 +26,7 @@ ar6000_htc_raw_read_cb(void *Context, HTC_PACKET *pPacket)
 {
     AR_SOFTC_T        *ar = (AR_SOFTC_T *)Context;
     raw_htc_buffer    *busy;
-    HTC_RAW_STREAM_ID streamID; 
+    HTC_RAW_STREAM_ID streamID;
 
     busy = (raw_htc_buffer *)pPacket->pPktContext;
     A_ASSERT(busy != NULL);
@@ -41,7 +41,7 @@ ar6000_htc_raw_read_cb(void *Context, HTC_PACKET *pPacket)
 
     streamID = arEndpoint2RawStreamID(ar,pPacket->Endpoint);
     A_ASSERT(streamID != HTC_RAW_STREAM_NOT_MAPPED);
-    
+
 #ifdef CF
    if (down_trylock(&ar->raw_htc_read_sem[streamID])) {
 #else
@@ -50,13 +50,13 @@ ar6000_htc_raw_read_cb(void *Context, HTC_PACKET *pPacket)
         AR_DEBUG2_PRINTF("Unable to down the semaphore\n");
     }
 
-    A_ASSERT((pPacket->Status != A_OK) || 
+    A_ASSERT((pPacket->Status != A_OK) ||
              (pPacket->pBuffer == (busy->data + HTC_HEADER_LEN)));
 
     busy->length = pPacket->ActualLength + HTC_HEADER_LEN;
     busy->currPtr = HTC_HEADER_LEN;
     ar->read_buffer_available[streamID] = TRUE;
-    //AR_DEBUG_PRINTF("raw read cb:  0x%X 0x%X \n", busy->currPtr,busy->length);
+    /*AR_DEBUG_PRINTF("raw read cb:  0x%X 0x%X \n", busy->currPtr,busy->length); */
     up(&ar->raw_htc_read_sem[streamID]);
 
     /* Signal the waiting process */
@@ -70,7 +70,7 @@ ar6000_htc_raw_write_cb(void *Context, HTC_PACKET *pPacket)
     AR_SOFTC_T          *ar = (AR_SOFTC_T  *)Context;
     raw_htc_buffer      *free;
     HTC_RAW_STREAM_ID   streamID;
-    
+
     free = (raw_htc_buffer *)pPacket->pPktContext;
     A_ASSERT(free != NULL);
 
@@ -84,7 +84,7 @@ ar6000_htc_raw_write_cb(void *Context, HTC_PACKET *pPacket)
 
     streamID = arEndpoint2RawStreamID(ar,pPacket->Endpoint);
     A_ASSERT(streamID != HTC_RAW_STREAM_NOT_MAPPED);
-    
+
 #ifdef CF
     if (down_trylock(&ar->raw_htc_write_sem[streamID])) {
 #else
@@ -112,9 +112,9 @@ static A_STATUS ar6000_connect_raw_service(AR_SOFTC_T        *ar,
     HTC_SERVICE_CONNECT_RESP response;
     A_UINT8                  streamNo;
     HTC_SERVICE_CONNECT_REQ  connect;
-    
-    do {      
-        
+
+    do {
+
         A_MEMZERO(&connect,sizeof(connect));
             /* pass the stream ID as meta data to the RAW streams service */
         streamNo = (A_UINT8)StreamID;
@@ -122,41 +122,41 @@ static A_STATUS ar6000_connect_raw_service(AR_SOFTC_T        *ar,
         connect.MetaDataLength = sizeof(A_UINT8);
             /* these fields are the same for all endpoints */
         connect.EpCallbacks.pContext = ar;
-        connect.EpCallbacks.EpTxComplete = ar6000_htc_raw_write_cb;   
-        connect.EpCallbacks.EpRecv = ar6000_htc_raw_read_cb;   
-            /* simple interface, we don't need these optional callbacks */      
+        connect.EpCallbacks.EpTxComplete = ar6000_htc_raw_write_cb;
+        connect.EpCallbacks.EpRecv = ar6000_htc_raw_read_cb;
+            /* simple interface, we don't need these optional callbacks */
         connect.EpCallbacks.EpRecvRefill = NULL;
         connect.EpCallbacks.EpSendFull = NULL;
-        connect.MaxSendQueueDepth = RAW_HTC_WRITE_BUFFERS_NUM;  
-        
+        connect.MaxSendQueueDepth = RAW_HTC_WRITE_BUFFERS_NUM;
+
             /* connect to the raw streams service, we may be able to get 1 or more
              * connections, depending on WHAT is running on the target */
         connect.ServiceID = HTC_RAW_STREAMS_SVC;
-        
+
         A_MEMZERO(&response,sizeof(response));
-        
-            /* try to connect to the raw stream, it is okay if this fails with 
+
+            /* try to connect to the raw stream, it is okay if this fails with
              * status HTC_SERVICE_NO_MORE_EP */
-        status = HTCConnectService(ar->arHtcTarget, 
+        status = HTCConnectService(ar->arHtcTarget,
                                    &connect,
                                    &response);
-        
+
         if (A_FAILED(status)) {
             if (response.ConnectRespCode == HTC_SERVICE_NO_MORE_EP) {
                 AR_DEBUG_PRINTF("HTC RAW , No more streams allowed \n");
-                status = A_OK;    
+                status = A_OK;
             }
-            break;    
+            break;
         }
 
             /* set endpoint mapping for the RAW HTC streams */
         arSetRawStream2EndpointIDMap(ar,StreamID,response.Endpoint);
 
-        AR_DEBUG_PRINTF("HTC RAW : stream ID: %d, endpoint: %d\n", 
+        AR_DEBUG_PRINTF("HTC RAW : stream ID: %d, endpoint: %d\n",
                         StreamID, arRawStream2EndpointID(ar,StreamID));
-        
+
     } while (FALSE);
-    
+
     return status;
 }
 
@@ -168,19 +168,19 @@ int ar6000_htc_raw_open(AR_SOFTC_T *ar)
     HTC_SERVICE_ID servicepriority;
 
     A_ASSERT(ar->arHtcTarget != NULL);
-    
+
         /* wait for target */
     status = HTCWaitTarget(ar->arHtcTarget);
-        
+
     if (A_FAILED(status)) {
         AR_DEBUG_PRINTF("HTCWaitTarget failed (%d)\n", status);
-        return -ENODEV;  
+        return -ENODEV;
     }
-    
+
     for (endPt = 0; endPt < ENDPOINT_MAX; endPt++) {
         ar->arEp2RawMapping[endPt] = HTC_RAW_STREAM_NOT_MAPPED;
     }
-        
+
     for (streamID = HTC_RAW_STREAM_0; streamID < HTC_RAW_STREAM_NUM_MAX; streamID++) {
         /* Initialize the data structures */
         init_MUTEX(&ar->raw_htc_read_sem[streamID]);
@@ -190,28 +190,28 @@ int ar6000_htc_raw_open(AR_SOFTC_T *ar)
 
             /* try to connect to the raw service */
         status = ar6000_connect_raw_service(ar,streamID);
-        
+
         if (A_FAILED(status)) {
-            break;    
+            break;
         }
-        
+
         if (arRawStream2EndpointID(ar,streamID) == 0) {
-            break;    
+            break;
         }
-        
+
         for (count2 = 0; count2 < RAW_HTC_READ_BUFFERS_NUM; count2 ++) {
             /* Initialize the receive buffers */
             buffer = &ar->raw_htc_write_buffer[streamID][count2];
             memset(buffer, 0, sizeof(raw_htc_buffer));
             buffer = &ar->raw_htc_read_buffer[streamID][count2];
             memset(buffer, 0, sizeof(raw_htc_buffer));
-            
+
             SET_HTC_PACKET_INFO_RX_REFILL(&buffer->HTCPacket,
                                           buffer,
                                           buffer->data,
                                           AR6000_BUFFER_SIZE,
                                           arRawStream2EndpointID(ar,streamID));
-            
+
             /* Queue buffers to HTC for receive */
             if ((status = HTCAddReceivePkt(ar->arHtcTarget, &buffer->HTCPacket)) != A_OK)
             {
@@ -229,15 +229,15 @@ int ar6000_htc_raw_open(AR_SOFTC_T *ar)
         ar->read_buffer_available[streamID] = FALSE;
         ar->write_buffer_available[streamID] = TRUE;
     }
-    
+
     if (A_FAILED(status)) {
-        return -EIO;    
+        return -EIO;
     }
-    
+
     AR_DEBUG_PRINTF("HTC RAW, number of streams the target supports: %d \n", streamID);
-            
+
     servicepriority = HTC_RAW_STREAMS_SVC;  /* only 1 */
-    
+
         /* set callbacks and priority list */
     HTCSetCreditDistribution(ar->arHtcTarget,
                              ar,
@@ -253,16 +253,15 @@ int ar6000_htc_raw_open(AR_SOFTC_T *ar)
     }
 
     (ar)->arRawIfInit = TRUE;
-    
+
     return 0;
 }
 
 int ar6000_htc_raw_close(AR_SOFTC_T *ar)
 {
     A_PRINTF("ar6000_htc_raw_close called \n");
-    HIFMaskInterrupt(ar->arHifDevice);
     HTCStop(ar->arHtcTarget);
-    
+
         /* reset the device */
     ar6000_reset_device(ar->arHifDevice, ar->arTargetType, TRUE);
     /* Initialize the BMI component */
@@ -293,7 +292,7 @@ get_filled_buffer(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID)
     return busy;
 }
 
-ssize_t ar6000_htc_raw_read(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID, 
+ssize_t ar6000_htc_raw_read(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID,
                             char __user *buffer, size_t length)
 {
     int readPtr;
@@ -301,9 +300,9 @@ ssize_t ar6000_htc_raw_read(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID,
 
     if (arRawStream2EndpointID(ar,StreamID) == 0) {
         AR_DEBUG_PRINTF("StreamID(%d) not connected! \n", StreamID);
-        return -EFAULT;    
+        return -EFAULT;
     }
-    
+
     if (down_interruptible(&ar->raw_htc_read_sem[StreamID])) {
         return -ERESTARTSYS;
     }
@@ -336,15 +335,15 @@ ssize_t ar6000_htc_raw_read(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID,
     }
 
     busy->currPtr += length;
-    
-    //AR_DEBUG_PRINTF("raw read ioctl:  currPTR : 0x%X 0x%X \n", busy->currPtr,busy->length);
-    
+
+    /*AR_DEBUG_PRINTF("raw read ioctl:  currPTR : 0x%X 0x%X \n", busy->currPtr,busy->length); */
+
     if (busy->currPtr == busy->length)
-    {    
+    {
         busy->currPtr = 0;
-        busy->length = 0;        
-        HTC_PACKET_RESET_RX(&busy->HTCPacket);                                          
-        //AR_DEBUG_PRINTF("raw read ioctl:  ep for packet:%d \n", busy->HTCPacket.Endpoint);
+        busy->length = 0;
+        HTC_PACKET_RESET_RX(&busy->HTCPacket);
+        /*AR_DEBUG_PRINTF("raw read ioctl:  ep for packet:%d \n", busy->HTCPacket.Endpoint); */
         HTCAddReceivePkt(ar->arHtcTarget, &busy->HTCPacket);
     }
     ar->read_buffer_available[StreamID] = FALSE;
@@ -383,9 +382,9 @@ ssize_t ar6000_htc_raw_write(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID,
 
     if (arRawStream2EndpointID(ar,StreamID) == 0) {
         AR_DEBUG_PRINTF("StreamID(%d) not connected! \n", StreamID);
-        return -EFAULT;    
+        return -EFAULT;
     }
-    
+
     if (down_interruptible(&ar->raw_htc_write_sem[StreamID])) {
         return -ERESTARTSYS;
     }
@@ -422,16 +421,16 @@ ssize_t ar6000_htc_raw_write(AR_SOFTC_T *ar, HTC_RAW_STREAM_ID StreamID,
     }
 
     free->length = length;
-        
+
     SET_HTC_PACKET_INFO_TX(&free->HTCPacket,
                            free,
                            &free->data[writePtr],
                            length,
                            arRawStream2EndpointID(ar,StreamID),
                            AR6K_DATA_PKT_TAG);
-    
+
     HTCSendPkt(ar->arHtcTarget,&free->HTCPacket);
-    
+
     ar->write_buffer_available[StreamID] = FALSE;
     up(&ar->raw_htc_write_sem[StreamID]);
 

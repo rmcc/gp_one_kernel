@@ -1,21 +1,21 @@
-/*
- *
- * Copyright (c) 2004-2007 Atheros Communications Inc.
- * All rights reserved.
- *
- * 
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License version 2 as
-// published by the Free Software Foundation;
-//
-// Software distributed under the License is distributed on an "AS
-// IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// rights and limitations under the License.
-//
-//
- *
- */
+/*------------------------------------------------------------------------------ */
+/* <copyright file="ar6000_drv.h" company="Atheros"> */
+/*    Copyright (c) 2004-2009 Atheros Corporation.  All rights reserved. */
+/*  */
+/* This program is free software; you can redistribute it and/or modify */
+/* it under the terms of the GNU General Public License version 2 as */
+/* published by the Free Software Foundation; */
+/* */
+/* Software distributed under the License is distributed on an "AS */
+/* IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or */
+/* implied. See the License for the specific language governing */
+/* rights and limitations under the License. */
+/* */
+/* */
+/*------------------------------------------------------------------------------ */
+/*============================================================================== */
+/* Author(s): ="Atheros" */
+/*============================================================================== */
 
 #ifndef _AR6000_H_
 #define _AR6000_H_
@@ -38,18 +38,13 @@
 #include <net/iw_handler.h>
 #include <linux/if_arp.h>
 #include <linux/ip.h>
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 #include <asm/semaphore.h>
 #else
 #include <linux/semaphore.h>
 #endif
 #include <linux/wireless.h>
 #include <linux/module.h>
-
-#ifdef CONFIG_HAS_EARLYSUSPEND	
-#include <linux/earlysuspend.h>
-#endif
-
 #include <asm/io.h>
 
 #include <a_config.h>
@@ -74,10 +69,9 @@
 #include <linux/init.h>
 #include <linux/moduleparam.h>
 #endif
-#include "hw/mbox_host_reg.h"
-#include "hw/mc_reg.h"
-#include "hw/mbox_reg.h"
-#include "hw/rtc_reg.h"
+#include "AR6002/hw/mbox_host_reg.h"
+#include "AR6002/hw/mbox_reg.h"
+#include "AR6002/hw/rtc_reg.h"
 #include "ar6000_api.h"
 #ifdef CONFIG_HOST_TCMD_SUPPORT
 #include <testcmd.h>
@@ -99,7 +93,7 @@
 #define USER_SAVEDKEYS_STAT_INIT     0
 #define USER_SAVEDKEYS_STAT_RUN      1
 
-// TODO this needs to move into the AR_SOFTC struct
+/* TODO this needs to move into the AR_SOFTC struct */
 struct USER_SAVEDKEYS {
     struct ieee80211req_key   ucast_ik;
     struct ieee80211req_key   bcast_ik;
@@ -108,17 +102,17 @@ struct USER_SAVEDKEYS {
 };
 #endif
 
-#define DBG_INFO		0x00000001
-#define DBG_ERROR		0x00000002
-#define DBG_WARNING		0x00000004
-#define DBG_SDIO		0x00000008
-#define DBG_HIF			0x00000010
-#define DBG_HTC			0x00000020
-#define DBG_WMI			0x00000040
-#define DBG_WMI2		0x00000080
-#define DBG_DRIVER		0x00000100
+#define DBG_INFO        0x00000001
+#define DBG_ERROR       0x00000002
+#define DBG_WARNING     0x00000004
+#define DBG_SDIO        0x00000008
+#define DBG_HIF         0x00000010
+#define DBG_HTC         0x00000020
+#define DBG_WMI         0x00000040
+#define DBG_WMI2        0x00000080
+#define DBG_DRIVER      0x00000100
 
-#define DBG_DEFAULTS	(DBG_ERROR|DBG_WARNING)
+#define DBG_DEFAULTS    (DBG_ERROR|DBG_WARNING)
 
 
 #ifdef DEBUG
@@ -137,12 +131,12 @@ A_STATUS ar6000_WriteRegDiag(HIF_DEVICE *hifDevice, A_UINT32 *address, A_UINT32 
 extern "C" {
 #endif
 
-#define	MAX_AR6000                        1
+#define MAX_AR6000                        1
 #define AR6000_MAX_RX_BUFFERS             16
 #define AR6000_BUFFER_SIZE                1664
 #define AR6000_TX_TIMEOUT                 10
-#define	AR6000_ETH_ADDR_LEN               6
-#define	AR6000_MAX_ENDPOINTS              4
+#define AR6000_ETH_ADDR_LEN               6
+#define AR6000_MAX_ENDPOINTS              4
 #define MAX_NODE_NUM                      15
 #define MAX_COOKIE_NUM                    150
 #define AR6000_HB_CHALLENGE_RESP_FREQ_DEFAULT        1
@@ -262,6 +256,7 @@ typedef struct ar6_softc {
     A_UINT8                 arNetworkType;
     A_UINT8                 arDot11AuthMode;
     A_UINT8                 arAuthMode;
+    A_UINT8                 arPrevCrypto;
     A_UINT8                 arPairwiseCrypto;
     A_UINT8                 arPairwiseCryptoLen;
     A_UINT8                 arGroupCrypto;
@@ -280,7 +275,7 @@ typedef struct ar6_softc {
     A_BOOL                  arTxPwrSet;
     A_INT32                 arBitRate;
     struct net_device_stats arNetStats;
-    struct iw_statistics 	arIwStats;
+    struct iw_statistics    arIwStats;
     A_INT8                  arNumChannels;
     A_UINT16                arChannelList[32];
     A_UINT32                arRegCode;
@@ -296,6 +291,7 @@ typedef struct ar6_softc {
    A_UINT32                 arTargetMode;
     A_UINT32                tcmdRxcrcErrPkt;
     A_UINT32                tcmdRxsecErrPkt;
+    A_UINT32                tcmdRxNoiseFloor;
 #endif
     AR6000_WLAN_STATE       arWlanState;
     struct ar_node_mapping  arNodeMap[MAX_NODE_NUM];
@@ -344,7 +340,7 @@ typedef struct ar6_softc {
     A_UINT32                user_key_ctrl;
     struct USER_SAVEDKEYS   user_saved_keys;
 #endif
-    A_UINT32                scan_complete;
+    A_UINT32                scan_triggered;
     USER_RSSI_THOLD rssi_map[12];
     A_UINT16                ap_profile_flag;    /* AP mode */
     WMI_AP_ACL              g_acl;              /* AP mode */
@@ -356,20 +352,82 @@ typedef struct ar6_softc {
     A_BOOL                  DTIMExpired; /* flag to indicate DTIM expired */
     A_UINT8                 intra_bss;   /* enable/disable intra bss data forward */
     A_BOOL                  bIsDestroyProgress; /* flag to indicate ar6k destroy is in progress */
-    A_BOOL                  bIsSuspendProgress; /* flag to indicate ar6k suspend is in progress */	
     A_TIMER                 disconnect_timer;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-    struct early_suspend early_suspend;
+    A_UINT8                 ap_hidden_ssid;
+    A_UINT8                 country_code[3];
+    A_UINT8                 ap_wmode;
+    A_UINT8                 ap_dtim_period;
+    A_UINT16                ap_beacon_interval;
+    A_UINT16                arRTS;
+#if CONFIG_PM
+    A_UINT16                arOsPowerCtrl;
+    A_UINT16                arWowState;
 #endif
+    WMI_SCAN_PARAMS_CMD scParams;
 } AR_SOFTC_T;
 
-#define POWER_MANAGEMENT_MODE_SLEEP
+#define ATH_DHCP_PKT_SIZE             342
+#define ATH_DHCP_OPCODE_MSG_TYPE      53
+#define ATH_DHCP_MSG_TYPE_LEN         1
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	void ar6000_early_suspend(struct early_suspend *h);
-	void ar6000_late_resume(struct early_suspend *h);
-#endif
+#define ATH_DHCP_DISCOVER             1
+#define ATH_DHCP_REQUEST              3
+#define ATH_DHCP_ACK                  5
 
+#define ATH_DHCP_INVALID_MSG          99
+#define A_DHCP_TIMER_INTERVAL       10 * 1000
+
+typedef PREPACK struct ether2_hdr {
+    A_UINT8     destMAC[ATH_MAC_LEN];
+    A_UINT8     srcMAC[ATH_MAC_LEN];
+    A_UINT16    etherType;
+} POSTPACK ETHERII_HDR;
+
+typedef PREPACK struct ip_hdr {
+    A_UINT8     version_HdrLength;     /* [Version (4 bits)][Header Length (4 bits)] */
+    A_UINT8     TOS;
+    A_UINT16    totalLength;
+    A_UINT16    identification;
+    A_UINT16    flags_FragmentOffset;  /* [Flags (3bits)][Fragment Offset 13 bits] */
+    A_UINT8     TTL;
+    A_UINT8     protocol;
+    A_UINT16    headerCheckSum;
+    A_UINT32    sourceIP;
+    A_UINT32    destIP;
+} POSTPACK IP_HDR;
+
+typedef PREPACK struct udp_hdr{
+    A_UINT16 sourcePort;
+    A_UINT16 destPort;
+    A_UINT16 length;
+    A_UINT16 checkSum;
+} POSTPACK UDP_HDR;
+
+typedef PREPACK struct dhcp_msg{
+
+    A_UINT8     opCode;
+    A_UINT8     hwAddressType;
+    A_UINT8     hwAddressLength;
+    A_UINT8     hops;
+    A_UINT32    transactionID;
+    A_UINT16    seconds;
+    A_UINT16    flags;
+    A_UINT32    clientIPAddress;       
+    A_UINT32    yourIPAddress;        
+    A_UINT32    serverIPAddress;       
+    A_UINT32    relayIPAddress;        
+    A_UINT16    clientHwAddress[8];     
+    A_UINT8     bootP_Data[192];
+    A_UINT8     magicCookie[4];
+} POSTPACK DHCP_MSG;
+
+typedef PREPACK struct dhcp_packet{
+    ETHERII_HDR  ether2Hdr;
+    IP_HDR       ipHdr;
+    UDP_HDR      udpHdr;
+    DHCP_MSG     dhcpMsg;
+    A_UINT8      dhcpOptions[256];
+} POSTPACK DHCP_PACKET;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
 /* Looks like we need this for 2.4 kernels */

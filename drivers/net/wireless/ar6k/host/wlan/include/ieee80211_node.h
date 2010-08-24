@@ -1,35 +1,49 @@
-//------------------------------------------------------------------------------
-// <copyright file="ieee80211_node.h" company="Atheros">
-//    Copyright (c) 2004-2008 Atheros Corporation.  All rights reserved.
-// 
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License version 2 as
-// published by the Free Software Foundation;
-//
-// Software distributed under the License is distributed on an "AS
-// IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// rights and limitations under the License.
-//
-//
-//------------------------------------------------------------------------------
-//==============================================================================
-// Author(s): ="Atheros"
-//==============================================================================
+/*------------------------------------------------------------------------------ */
+/* <copyright file="ieee80211_node.h" company="Atheros"> */
+/*    Copyright (c) 2004-2008 Atheros Corporation.  All rights reserved. */
+/*  */
+/* This program is free software; you can redistribute it and/or modify */
+/* it under the terms of the GNU General Public License version 2 as */
+/* published by the Free Software Foundation; */
+/* */
+/* Software distributed under the License is distributed on an "AS */
+/* IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or */
+/* implied. See the License for the specific language governing */
+/* rights and limitations under the License. */
+/* */
+/* */
+/*------------------------------------------------------------------------------ */
+/*============================================================================== */
+/* Author(s): ="Atheros" */
+/*============================================================================== */
 #ifndef _IEEE80211_NODE_H_
 #define _IEEE80211_NODE_H_
 
 /*
  * Node locking definitions.
  */
+
+#ifdef REXOS
+#define IEEE80211_NODE_LOCK_INIT(_nt)   A_MUTEX_INIT_REX(&(_nt)->nt_nodelock)
+
+#define IEEE80211_NODE_LOCK(_nt)        A_MUTEX_LOCK_REX(&(_nt)->nt_nodelock)
+#define IEEE80211_NODE_UNLOCK(_nt)      A_MUTEX_UNLOCK_REX(&(_nt)->nt_nodelock)
+#define IEEE80211_NODE_LOCK_BH(_nt)     A_MUTEX_LOCK_REX(&(_nt)->nt_nodelock)
+#define IEEE80211_NODE_UNLOCK_BH(_nt)   A_MUTEX_UNLOCK_REX(&(_nt)->nt_nodelock)
+
+#else
+
 #define IEEE80211_NODE_LOCK_INIT(_nt)   A_MUTEX_INIT(&(_nt)->nt_nodelock)
-#define IEEE80211_NODE_LOCK_DESTROY(_nt) if (A_IS_MUTEX_VALID(&(_nt)->nt_nodelock)) { \
-                                               A_MUTEX_DELETE(&(_nt)->nt_nodelock); }
-       
+
 #define IEEE80211_NODE_LOCK(_nt)        A_MUTEX_LOCK(&(_nt)->nt_nodelock)
 #define IEEE80211_NODE_UNLOCK(_nt)      A_MUTEX_UNLOCK(&(_nt)->nt_nodelock)
 #define IEEE80211_NODE_LOCK_BH(_nt)     A_MUTEX_LOCK(&(_nt)->nt_nodelock)
 #define IEEE80211_NODE_UNLOCK_BH(_nt)   A_MUTEX_UNLOCK(&(_nt)->nt_nodelock)
+
+#endif
+
+#define IEEE80211_NODE_LOCK_DESTROY(_nt) if (A_IS_MUTEX_VALID(&(_nt)->nt_nodelock)) { \
+                                               A_MUTEX_DELETE(&(_nt)->nt_nodelock); }
 #define IEEE80211_NODE_LOCK_ASSERT(_nt)
 
 /*
@@ -76,6 +90,12 @@ struct ieee80211_node_table {
 #endif
 };
 
+/* ATHENV */
+#ifdef ANDROID_ENV
+#define WLAN_NODE_INACT_TIMEOUT_MSEC            30000
+#else
 #define WLAN_NODE_INACT_TIMEOUT_MSEC            120000
+#endif
+/* ATHENV */
 
 #endif /* _IEEE80211_NODE_H_ */
