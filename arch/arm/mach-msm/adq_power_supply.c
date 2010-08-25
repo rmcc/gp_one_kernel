@@ -24,13 +24,11 @@
 
 #include <mach/msm_hsusb.h>
 
-extern void notify_usb_connected(int);
-
 static char *supply_list[] = {
 	"battery",
 };
 
-static int usb_status;
+static int usb_status = -1;
 
 
 static int power_get_property(struct power_supply *psy,
@@ -114,6 +112,8 @@ int is_ac_power_supplied(void)
 static int __init adq_power_init(void)
 {
 	platform_driver_register(&adq_power_driver);
+	power_supply_changed(&ac_supply);
+	power_supply_changed(&usb_supply);
 	return 0;
 }
 
