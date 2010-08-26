@@ -1060,8 +1060,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		clk |= MCI_CLK_PWRSAVE;
 
 	clk |= MCI_CLK_FLOWENA;
-       if (ios->timing & MMC_TIMING_SD_HS)
-               clk |= MCI_CLK_SELECTIN; /* feedback clock */
+	clk |= MCI_CLK_SELECTIN; /* feedback clock */
 
 	if (host->plat->translate_vdd)
 		pwr |= host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
