@@ -15,8 +15,6 @@
 
 #include <linux/mmc/core.h>
 
-#define ATH_WLAN_SLOT          2
-
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
 	unsigned short	vdd;
