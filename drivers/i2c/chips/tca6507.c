@@ -443,7 +443,7 @@ void tca6507_charger_state_report(int state)
 		tca6507_drvdata.led_state[i] &= 0x000F;
 	}
 	
-	dev_info(tca6507_dev, "%s: CHARGER STATE <0x%04x>!!\n", __func__, gCharger_state);
+	dev_dbg(tca6507_dev, "%s: CHARGER STATE <0x%04x>!!\n", __func__, gCharger_state);
 	
 	switch (gCharger_state) {
 	case CHARGER_STATE_UNKNOWN:		//RED
