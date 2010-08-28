@@ -840,7 +840,7 @@ struct clk msm_clocks_7x25[] = {
 	CLK_PCOM("icodec_tx_clk",	ICODEC_TX_CLK,	NULL, 0),
 	CLK_PCOM("imem_clk",	IMEM_CLK,	NULL, OFF),
 	CLK_PCOM("mdc_clk",	MDC_CLK,	NULL, 0),
-	CLK_PCOM("mddi_clk",	PMDH_CLK,	NULL, OFF | CLK_MINMAX),
+	CLK_PCOM("mddi_clk",	PMDH_CLK,	NULL, OFF),
 #ifndef CONFIG_MACH_ADQ
     CLK_PCOM("mdp_clk", MDP_CLK,    NULL, OFF),
 #else
@@ -848,8 +848,8 @@ struct clk msm_clocks_7x25[] = {
 #endif
 	CLK_PCOM("mdp_lcdc_pclk_clk", MDP_LCDC_PCLK_CLK, NULL, 0),
 	CLK_PCOM("mdp_lcdc_pad_pclk_clk", MDP_LCDC_PAD_PCLK_CLK, NULL, 0),
-	CLK_PCOM("mdp_vsync_clk",	MDP_VSYNC_CLK,  NULL, 0),
-	CLK_PCOM("pbus_clk",	PBUS_CLK,	NULL, CLK_MIN),
+	CLK_PCOM("mdp_vsync_clk",	MDP_VSYNC_CLK,  NULL, OFF),
+	CLK_PCOM("pbus_clk",	PBUS_CLK,	NULL, 0),
 	CLK_PCOM("pcm_clk",	PCM_CLK,	NULL, 0),
 	CLK_PCOM("sdac_clk",	SDAC_CLK,	NULL, OFF),
 	CLK_PCOM("sdc_clk",	SDC1_CLK,	&msm_device_sdc1.dev, OFF),
@@ -868,7 +868,7 @@ struct clk msm_clocks_7x25[] = {
 	CLK_PCOM("usb_hs_clk",	USB_HS_CLK,	NULL, OFF),
 	CLK_PCOM("usb_hs_pclk",	USB_HS_P_CLK,	NULL, OFF),
 	CLK_PCOM("usb_otg_clk",	USB_OTG_CLK,	NULL, 0),
-	CLK_PCOM("vdc_clk",	VDC_CLK,	NULL, OFF | CLK_MIN),
+	CLK_PCOM("vdc_clk",	VDC_CLK,	NULL, OFF),
 	CLK_PCOM("vfe_clk",	VFE_CLK,	NULL, OFF),
 	CLK_PCOM("vfe_mdc_clk",	VFE_MDC_CLK,	NULL, OFF),
 };
