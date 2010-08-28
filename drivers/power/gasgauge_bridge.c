@@ -59,8 +59,8 @@ int GetBatteryInfo(enum _battery_info_type_ info, int * data)
 			break;
 		case BATT_VOLTAGE_INFO:
 			BATReadMemory16(DS2780_VRH, &s);
-			// The register value is in 4.88mV units and the 5 lowest bits are not used
-			*data = ((s >> 5) * 488) / 100;
+			// The register value is in 4.886mV units and the 5 lowest bits are not used
+			*data = ((s >> 5) * 4886) / 1000;
 			break;
 		case BATT_TEMPERATURE_INFO:
 			BATReadMemory16(DS2780_TRH, &s);
@@ -70,13 +70,13 @@ int GetBatteryInfo(enum _battery_info_type_ info, int * data)
 			break;
 		case BATT_CURRENT_INFO:
 			BATReadMemory16(DS2780_CRH, &s);
-			// 1.5625uV/Rsns * 0x7fff = 51.2mV/Rsns
-			*data = s;
+			/* Current: Unit= 1.5625uV x Rsnsp(67)=104.68 */
+			*data = ((s * 15625) / 10000) * 67;
 			break;
 		case BATT_AVCURRENT_INFO:
-			BATReadMemory16(DS2780_RAAC_MSB, &s);
-			// 1.5625uV/Rsns * 0x7fff = 51.2mV/Rsns
-			*data = s;
+			BATReadMemory16(DS2780_CRAH, &s);
+			/* Current: Unit= 1.5625uV x Rsnsp(67)=104.68 */
+			*data = ((s * 15625) / 10000) * 67;
 			break;
 		case BATT_STATUS_REGISTER:
 			BATReadMemory8(DS2780_STATUS, &c);

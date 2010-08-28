@@ -95,6 +95,8 @@ static enum power_supply_property zeus_battery_props[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 
 };
@@ -178,6 +180,22 @@ static int zeus_battery_get_property(struct power_supply *psy,
 			break;
 		case POWER_SUPPLY_PROP_TEMP:
 			ret = GetBatteryInfo(BATT_TEMPERATURE_INFO, &buf);
+			if (ret >=0 ) {
+				val->intval = buf;
+			} else {
+				val->intval = 0;
+			}
+			break;
+		case POWER_SUPPLY_PROP_CURRENT_NOW:
+			ret = GetBatteryInfo(BATT_CURRENT_INFO, &buf);
+			if (ret >=0 ) {
+				val->intval = buf;
+			} else {
+				val->intval = 0;
+			}
+			break;
+		case POWER_SUPPLY_PROP_CURRENT_AVG:
+			ret = GetBatteryInfo(BATT_AVCURRENT_INFO, &buf);
 			if (ret >=0 ) {
 				val->intval = buf;
 			} else {

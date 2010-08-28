@@ -392,6 +392,8 @@ static void CloseBAT(void)
 #define DS2780_VRL          0x0D    // Voltage register LSB
 #define DS2780_CRH          0x0E    // Current register MSB
 #define DS2780_CRL          0x0F    // Current register LSB
+#define DS2780_CRAH          0x08    // Average current register MSB
+#define DS2780_CRAL          0x09    // Average current register LSB
 /* FIH_ADQ, Kenny { */
 #define DS2780_ACRH         0x10    // Accumulated Current Register MSB
 #define DS2780_ACRL         0x11    // Accumulated Current Register LSB
