@@ -26,8 +26,8 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef __MACH_QDSP5_V2_SNDDEV_H
-#define __MACH_QDSP5_V2_SNDDEV_H
+#ifndef __MACH_QDSP6_V2_SNDDEV_H
+#define __MACH_QDSP6_V2_SNDDEV_H
 #include <mach/qdsp5v2/audio_def.h>
 
 #define AUDIO_DEV_CTL_MAX_DEV 64
@@ -41,7 +41,7 @@
 #define VOICE_STATE_INCALL 0x1
 #define VOICE_STATE_OFFCALL 0x2
 #define MAX_COPP_NODE_SUPPORTED 6
-#define MAX_AUDREC_SESSIONS 3
+#define MAX_AUDREC_SESSIONS 2
 
 struct msm_snddev_info {
 	const char *name;
@@ -95,13 +95,14 @@ void msm_release_voc_thread(void);
 int snddev_voice_set_volume(int vol, int path);
 
 struct auddev_evt_voc_devinfo {
-	u32 dev_type;           /* Rx or Tx */
-	u32 acdb_dev_id;        /* acdb id of device */
-	u32 dev_sample;         /* Sample rate of device */
-	s32 max_rx_vol[VOC_RX_VOL_ARRAY_NUM]; 	/* unit is mb (milibel),
+	u32 dev_type; /* Rx or Tx */
+	u32 acdb_dev_id; /* acdb id of device */
+	u32 dev_sample;  /* Sample rate of device */
+	s32 max_rx_vol[VOC_RX_VOL_ARRAY_NUM]; /* unit is mb (milibel),
 						[0] is for NB, other for WB */
-	s32 min_rx_vol[VOC_RX_VOL_ARRAY_NUM];	/* unit is mb */
-	u32 dev_id;             /* registered device id */
+	s32 min_rx_vol[VOC_RX_VOL_ARRAY_NUM]; /* unit is mb */
+	u32 dev_id; /* registered device id */
+	u32 dev_port_id;
 };
 
 struct auddev_evt_audcal_info {
@@ -144,23 +145,23 @@ struct message_header {
 	uint32_t data_len;
 };
 
-#define AUDDEV_EVT_DEV_CHG_VOICE	0x01 	/* device change event */
-#define AUDDEV_EVT_DEV_RDY 		0x02 	/* device ready event */
-#define AUDDEV_EVT_DEV_RLS 		0x04 	/* device released event */
-#define AUDDEV_EVT_REL_PENDING		0x08 	/* device release pending */
-#define AUDDEV_EVT_DEVICE_VOL_MUTE_CHG	0x10 	/* device volume changed */
-#define AUDDEV_EVT_START_VOICE		0x20	/* voice call start */
-#define AUDDEV_EVT_END_VOICE		0x40	/* voice call end */
-#define AUDDEV_EVT_STREAM_VOL_CHG	0x80 	/* device volume changed */
-#define AUDDEV_EVT_FREQ_CHG		0x100	/* Change in freq */
-#define AUDDEV_EVT_VOICE_STATE_CHG	0x200   /* Change in voice state */
+#define AUDDEV_EVT_DEV_CHG_VOICE 0x01 /* device change event */
+#define AUDDEV_EVT_DEV_RDY 0x02 /* device ready event */
+#define AUDDEV_EVT_DEV_RLS 0x04 /* device released event */
+#define AUDDEV_EVT_REL_PENDING 0x08 /* device release pending */
+#define AUDDEV_EVT_DEVICE_VOL_MUTE_CHG 0x10 /* device volume changed */
+#define AUDDEV_EVT_START_VOICE 0x20 /* voice call start */
+#define AUDDEV_EVT_END_VOICE 0x40 /* voice call end */
+#define AUDDEV_EVT_STREAM_VOL_CHG 0x80 /* device volume changed */
+#define AUDDEV_EVT_FREQ_CHG 0x100 /* Change in freq */
+#define AUDDEV_EVT_VOICE_STATE_CHG 0x200 /* Change in voice state */
 
-#define AUDDEV_CLNT_VOC 		0x1	/* Vocoder clients */
-#define AUDDEV_CLNT_DEC 		0x2	/* Decoder clients */
-#define AUDDEV_CLNT_ENC 		0x3	/* Encoder clients */
-#define AUDDEV_CLNT_AUDIOCAL 		0x4	/* AudioCalibration client */
+#define AUDDEV_CLNT_VOC 0x1 /*Vocoder clients*/
+#define AUDDEV_CLNT_DEC 0x2 /*Decoder clients*/
+#define AUDDEV_CLNT_ENC 0x3 /* Encoder clients */
+#define AUDDEV_CLNT_AUDIOCAL 0x4 /* AudioCalibration client */
 
-#define AUDIO_DEV_CTL_MAX_LISTNER	20	/* Max Listeners Supported */
+#define AUDIO_DEV_CTL_MAX_LISTNER 20 /* Max Listeners Supported */
 
 struct msm_snd_evt_listner {
 	uint32_t evt_id;

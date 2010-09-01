@@ -152,11 +152,14 @@ struct msm_otg_platform_data {
 	enum cdr_auto_reset	cdr_autoreset;
 	enum hs_drv_amplitude	drv_ampl;
 	int			phy_reset_sig_inverted;
+	int			phy_can_powercollapse;
+
+	int (*ldo_init) (int init);
+	int (*ldo_enable) (int enable);
 
 	u32 			swfi_latency;
 	/* pmic notfications apis */
-	int (*pmic_notif_init) (void);
-	void (*pmic_notif_deinit) (void);
+	int (*pmic_notif_init) (void (*callback)(int online), int init);
 	int (*pmic_register_vbus_sn) (void (*callback)(int online));
 	void (*pmic_unregister_vbus_sn) (void (*callback)(int online));
 	int (*pmic_enable_ldo) (int);

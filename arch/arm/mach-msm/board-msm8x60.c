@@ -309,6 +309,128 @@ static struct msm_cpuidle_state msm_cstates[] __initdata = {
 	{1, 0, "C0", "WFI", MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
 };
 
+#if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
+static struct regulator *ldo6_3p3;
+static struct regulator *ldo7_1p8;
+static struct regulator *vdd_cx;
+static int msm_hsusb_ldo_init(int init)
+{
+	if (init) {
+		ldo6_3p3 = regulator_get(NULL, "8058_l6");
+		if (IS_ERR(ldo6_3p3))
+			return PTR_ERR(ldo6_3p3);
+
+		ldo7_1p8 = regulator_get(NULL, "8058_l7");
+		if (IS_ERR(ldo7_1p8)) {
+			regulator_put(ldo6_3p3);
+			return PTR_ERR(ldo7_1p8);
+		}
+		/*digital core voltage for usb phy*/
+		vdd_cx = regulator_get(NULL, "8058_s1");
+		if (IS_ERR(vdd_cx)) {
+			regulator_put(ldo6_3p3);
+			regulator_put(ldo7_1p8);
+			return PTR_ERR(vdd_cx);
+		}
+
+		regulator_set_voltage(ldo7_1p8, 1800000, 1800000);
+		regulator_set_voltage(ldo6_3p3, 3075000, 3075000);
+	} else {
+		regulator_put(ldo6_3p3);
+		regulator_put(ldo7_1p8);
+		regulator_put(vdd_cx);
+	}
+	return 0;
+}
+
+static int msm_hsusb_ldo_enable(int on)
+{
+	static int ldo_status;
+	int ret = 0;
+
+	if (!ldo7_1p8 || IS_ERR(ldo7_1p8)) {
+		pr_err("%s: ldo7_1p8 is not initialized\n", __func__);
+		return -ENODEV;
+	}
+
+	if (!ldo6_3p3 || IS_ERR(ldo6_3p3)) {
+		pr_err("%s: ldo6_3p3 is not initialized\n", __func__);
+		return -ENODEV;
+	}
+
+	if (!vdd_cx || IS_ERR(vdd_cx)) {
+		pr_err("%s: vdd_cx is not initialized\n", __func__);
+		return -ENODEV;
+	}
+	if (ldo_status == on)
+		return 0;
+
+	ldo_status = on;
+
+	if (on) {
+		ret = regulator_enable(ldo7_1p8);
+		if (ret) {
+			pr_err("%s: Unable to enable the regulator:"
+				"ldo7_1p8\n", __func__);
+			ldo_status = !on;
+			return ret;
+		}
+		ret = regulator_enable(ldo6_3p3);
+		if (ret) {
+			pr_err("%s: Unable to enable the regulator:"
+				"ldo6_3p3\n", __func__);
+			regulator_disable(ldo7_1p8);
+			ldo_status = !on;
+			return ret;
+		}
+		ret = regulator_enable(vdd_cx);
+		if (ret) {
+			pr_err("%s: Unable to enable VDDCX digital core:"
+				" vdd_dig\n", __func__);
+			regulator_disable(ldo6_3p3);
+			regulator_disable(ldo7_1p8);
+			ldo_status = !on;
+			return ret;
+		}
+	} else {
+		/* calling regulator_disable when its already disabled might
+		 * * print WARN_ON. Trying to avoid it by regulator_is_enable
+		 * * */
+		if (regulator_is_enabled(ldo6_3p3)) {
+			ret = regulator_disable(ldo6_3p3);
+			if (ret) {
+				pr_err("%s: Unable to disable the regulator:"
+					"ldo6_3p3\n", __func__);
+				ldo_status = !on;
+				return ret;
+			}
+		}
+
+		if (regulator_is_enabled(ldo7_1p8)) {
+			ret = regulator_disable(ldo7_1p8);
+			if (ret) {
+				pr_err("%s: Unable to enable the regulator:"
+					" ldo7_1p8\n", __func__);
+				ldo_status = !on;
+				return ret;
+			}
+		}
+
+		if (regulator_is_enabled(vdd_cx)) {
+			ret = regulator_disable(vdd_cx);
+			if (ret) {
+				pr_err("%s: Unable to enable the regulator:"
+					"vdd_cx\n", __func__);
+				ldo_status = !on;
+				return ret;
+			}
+		}
+	}
+
+	pr_debug("reg (%s)\n", on ? "ENABLED" : "DISABLED");
+	return 0;
+ }
+#endif
 #ifdef CONFIG_USB_EHCI_MSM
 struct regulator *votg_5v_switch;
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
@@ -345,6 +467,19 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 #endif
 
+#if defined(CONFIG_BATTERY_MSM8X60) && !defined(CONFIG_USB_EHCI_MSM)
+static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init)
+{
+	if (init) {
+		/* TBD: right API will get filled here as a part of
+		 * PMIC chanrger patch and removes thsi comments.*/
+	} else {
+		/* TBD: right API will get filled here as a part of
+		 * PMIC chanrger patch and removes thsi comments.*/
+	}
+	return 0;
+}
+#endif
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
@@ -352,7 +487,15 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	 * used instead
 	 */
 	.usb_in_sps = 1,
+#ifdef CONFIG_USB_EHCI_MSM
 	.vbus_power = msm_hsusb_vbus_power,
+#endif
+#if defined(CONFIG_BATTERY_MSM8X60) && !defined(CONFIG_USB_EHCI_MSM)
+	.pmic_notif_init         = msm_hsusb_pmic_notif_init,
+	.pmic_notif_deinit         = msm_hsusb_pmic_notif_deinit,
+#endif
+	.ldo_init		 = msm_hsusb_ldo_init,
+	.ldo_enable		 = msm_hsusb_ldo_enable,
 };
 #endif
 
@@ -2308,6 +2451,100 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 };
 #endif
 
+
+void msm_snddev_enable_amic_power(void)
+{
+#ifdef CONFIG_PMIC8058_OTHC
+	int ret;
+
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_ALWAYS_ON);
+	if (ret)
+		pr_err("Epickrror Enabling Mic Bias....\n");
+#endif
+
+	msm_snddev_tx_route_config();
+
+}
+
+void msm_snddev_disable_amic_power(void)
+{
+#ifdef CONFIG_PMIC8058_OTHC
+	int ret;
+
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_OFF);
+	if (ret)
+		pr_err("Error Enabling Mic Bias....\n");
+#endif
+
+	msm_snddev_tx_route_deconfig();
+}
+
+static struct regulator *s3;
+static struct regulator *mvs;
+
+void msm_snddev_enable_dmic_power(void)
+{
+	int ret;
+
+	msm_snddev_tx_route_config();
+
+	s3 = regulator_get(NULL, "8058_s3");
+	if (IS_ERR(s3))
+		return;
+
+	ret = regulator_set_voltage(s3, 1800000, 1800000);
+	if (ret) {
+		pr_err("%s: error setting voltage\n", __func__);
+		goto fail;
+	}
+
+	ret = regulator_enable(s3);
+	if (ret) {
+		pr_err("%s: error enabling regulator\n", __func__);
+		goto fail;
+	}
+
+	mvs = regulator_get(NULL, "8901_mvs0");
+	if (IS_ERR(mvs))
+		goto fail;
+
+	ret = regulator_set_voltage(mvs, 1800000, 1800000);
+	if (ret) {
+		pr_err("%s: error setting voltage\n", __func__);
+		goto fail;
+	}
+
+	ret = regulator_enable(mvs);
+	if (ret) {
+		pr_err("%s: error enabling regulator\n", __func__);
+		goto fail;
+	}
+fail:
+	if (s3)
+		regulator_put(s3);
+	if (mvs)
+		regulator_put(mvs);
+}
+
+void msm_snddev_disable_dmic_power(void)
+{
+	int ret;
+
+	msm_snddev_tx_route_deconfig();
+
+	ret = regulator_disable(mvs);
+	if (ret < 0)
+		pr_err("%s: error disabling regulator mvs\n", __func__);
+	regulator_put(mvs);
+	mvs = NULL;
+
+	ret = regulator_disable(s3);
+	if (ret < 0)
+		pr_err("%s: error disabling regulator s3\n", __func__);
+	regulator_put(s3);
+	s3 = NULL;
+}
+
 static struct regulator *vreg_timpani_1;
 static struct regulator *vreg_timpani_2;
 
@@ -2917,89 +3154,11 @@ struct msm8x60_tlmm_cfg_struct {
 };
 
 static uint32_t msm8x60_tlmm_cfgs[] = {
-	/* PS_HOLD */
-	GPIO_CFG(92, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_12MA),
-	/*
-	 * EBI2
-	 */
-	/* address lines */
-	GPIO_CFG(123, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(124, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(125, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(126, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(127, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(128, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(129, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(130, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	/* A_D lines */
-	GPIO_CFG(135, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(136, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(137, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(138, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(139, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(140, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(141, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(142, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(143, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(144, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(145, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(146, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(147, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(148, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(149, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	GPIO_CFG(150, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	/* OE */
-	GPIO_CFG(151, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	/* WE */
-	GPIO_CFG(157, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	/* CS2 */
-	GPIO_CFG(40, 2, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	/* CS3 */
-	GPIO_CFG(133, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-	/* ADV */
-	GPIO_CFG(153, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
-
-#ifdef CONFIG_I2C_QUP
-	/* GSBI3 QUP I2C */
-	GPIO_CFG(43, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	GPIO_CFG(44, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* GSBI7 QUP I2C (Bahama) */
-	GPIO_CFG(59, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	GPIO_CFG(60, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* GSBI8 QUP I2C */
-	GPIO_CFG(64, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(65, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-#ifdef CONFIG_MSM_CAMERA
-	/* GSBI4 QUP I2C */
-	GPIO_CFG(47, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	GPIO_CFG(48, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-#endif
-#endif
-
-	/*
-	 * GSBI12
-	 */
-	/* UARTDM_RFR */
-	GPIO_CFG(115, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* UARTDM_CTS */
-	GPIO_CFG(116, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* UARTDM_RX */
-	GPIO_CFG(117, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* UARTDM_TX */
-	GPIO_CFG(118, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-
 #ifdef CONFIG_PMIC8058
 	/* PMIC8058 */
 	GPIO_CFG(PM8058_GPIO_INT, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #endif
 
-#if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
-	/* GSBI1 QUP SPI */
-	GPIO_CFG(33, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	GPIO_CFG(34, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	GPIO_CFG(35, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	GPIO_CFG(36, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-#endif
 #ifdef CONFIG_SERIAL_MSM_HS
 	/* UARTDM_TX */
 	GPIO_CFG(53, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
@@ -3898,6 +4057,80 @@ void msm_snddev_rx_route_deconfig(void)
 {
 	pr_debug("%s\n", __func__);
 	gpio_tlmm_config(msm_snddev_rx_gpio[0], GPIO_CFG_DISABLE);
+}
+
+#define GPIO_CLASS_D1_EN (GPIO_EXPANDER_GPIO_BASE + 0)
+#define PM8901_MPP_3 (2) /* PM8901 MPP starts from 0 */
+static void config_class_d1_gpio(int enable)
+{
+	int rc;
+
+	if (enable) {
+		rc = gpio_request(GPIO_CLASS_D1_EN, "CLASSD1_EN");
+		if (rc) {
+			pr_err("%s: spkr pamp gpio %d request"
+			"failed\n", __func__, GPIO_CLASS_D1_EN);
+			return;
+		}
+		gpio_direction_output(GPIO_CLASS_D1_EN, 1);
+		gpio_set_value(GPIO_CLASS_D1_EN, 1);
+	} else {
+		gpio_set_value(GPIO_CLASS_D1_EN, 0);
+		gpio_free(GPIO_CLASS_D1_EN);
+	}
+}
+
+static void config_class_d0_gpio(int enable)
+{
+	int rc;
+
+	if (enable) {
+		rc = pm8901_mpp_config_digital_out(PM8901_MPP_3,
+			PM8901_MPP_DIG_LEVEL_MSMIO, 1);
+
+		if (rc) {
+			pr_err("%s: CLASS_D0_EN failed\n", __func__);
+			return;
+		}
+
+		rc = gpio_request(PM8901_GPIO_PM_TO_SYS(PM8901_MPP_3),
+			"CLASSD0_EN");
+
+		if (rc) {
+			pr_err("%s: spkr pamp gpio pm8901 mpp3 request"
+			"failed\n", __func__);
+			pm8901_mpp_config_digital_out(PM8901_MPP_3,
+			PM8901_MPP_DIG_LEVEL_MSMIO, 0);
+			return;
+		}
+
+		gpio_direction_output(PM8901_GPIO_PM_TO_SYS(PM8901_MPP_3), 1);
+		gpio_set_value(PM8901_GPIO_PM_TO_SYS(PM8901_MPP_3), 1);
+
+	} else {
+		pm8901_mpp_config_digital_out(PM8901_MPP_3,
+		PM8901_MPP_DIG_LEVEL_MSMIO, 0);
+		gpio_set_value(PM8901_GPIO_PM_TO_SYS(PM8901_MPP_3), 0);
+		gpio_free(PM8901_GPIO_PM_TO_SYS(PM8901_MPP_3));
+	}
+}
+
+void msm_snddev_poweramp_on(void)
+{
+
+	pr_debug("%s: enable stereo spkr amp\n", __func__);
+	msm_snddev_rx_route_config();
+	config_class_d0_gpio(1);
+	config_class_d1_gpio(1);
+}
+
+void msm_snddev_poweramp_off(void)
+{
+
+	pr_debug("%s: disable stereo spkr amp\n", __func__);
+	msm_snddev_rx_route_deconfig();
+	config_class_d0_gpio(0);
+	config_class_d1_gpio(0);
 }
 
 static struct msm_panel_common_pdata mdp_pdata = {

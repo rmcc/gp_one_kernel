@@ -115,7 +115,6 @@
 #define HAP_LVL_SHFT_MSM_GPIO 24
 
 #define	PM_FLIP_MPP 5 /* PMIC MPP 06 */
-
 static int pm8058_gpios_init(void)
 {
 	int rc;
@@ -2778,49 +2777,48 @@ static int hsusb_rpc_connect(int connect)
 #endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
-#ifndef CONFIG_USB_EHCI_MSM
-static int ldo_on;
-static struct vreg *usb_vreg;
-static int msm_pmic_enable_ldo(int enable)
+static struct vreg *vreg_3p3;
+static int msm_hsusb_ldo_init(int init)
 {
-	if (ldo_on == enable)
-		return 0;
-
-	ldo_on = enable;
-
-	if (enable)
-		return vreg_enable(usb_vreg);
-	else
-		return vreg_disable(usb_vreg);
-}
-
-static int msm_pmic_notify_init(void)
-{
-	usb_vreg = vreg_get(NULL, "usb");
-	if (IS_ERR(usb_vreg)) {
-		pr_err("%s: usb vreg get failed\n", __func__);
-		vreg_put(usb_vreg);
-		return PTR_ERR(usb_vreg);
-	}
+	if (init) {
+		vreg_3p3 = vreg_get(NULL, "usb");
+		if (IS_ERR(vreg_3p3))
+			return PTR_ERR(vreg_3p3);
+		/*TBD: modem currently doesn't support setting the
+		 * voltage more than 3.075V, hence set it to 3.075V */
+		vreg_set_level(vreg_3p3, 3075);
+	} else
+		vreg_put(vreg_3p3);
 
 	return 0;
 }
 
-static void msm_pmic_notify_deinit(void)
+static int msm_hsusb_ldo_enable(int enable)
 {
-	msm_pmic_enable_ldo(0);
-	vreg_put(usb_vreg);
+	static int ldo_status;
+
+	if (!vreg_3p3 || IS_ERR(vreg_3p3))
+		return -ENODEV;
+
+	if (ldo_status == enable)
+		return 0;
+
+	ldo_status = enable;
+
+	if (enable)
+		return vreg_enable(vreg_3p3);
+
+	return vreg_disable(vreg_3p3);
 }
+#endif
+#ifndef CONFIG_USB_EHCI_MSM
+static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init);
 #endif
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect	= hsusb_rpc_connect,
 
 #ifndef CONFIG_USB_EHCI_MSM
-	/* vbus notification through pmic call backs */
-	.pmic_notif_init         = msm_pmic_notify_init,
-	.pmic_notif_deinit       = msm_pmic_notify_deinit,
-	.pmic_enable_ldo         = msm_pmic_enable_ldo,
-	.pmic_vbus_irq	= 1,
+	.pmic_notif_init         = msm_hsusb_pmic_notif_init,
 #else
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
@@ -2831,11 +2829,56 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.chg_vbus_draw		 = hsusb_chg_vbus_draw,
 	.chg_connected		 = hsusb_chg_connected,
 	.chg_init		 = hsusb_chg_init,
+	.ldo_enable		 = msm_hsusb_ldo_enable,
+	.ldo_init		 = msm_hsusb_ldo_init,
 };
 
 #ifdef CONFIG_USB_GADGET
 static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
 #endif
+#ifndef CONFIG_USB_EHCI_MSM
+typedef void (*notify_vbus_state) (int);
+notify_vbus_state notify_vbus_state_func_ptr;
+int vbus_on_irq;
+static irqreturn_t pmic_vbus_on_irq(int irq, void *data)
+{
+	pr_info("%s: vbus notification from pmic\n", __func__);
+
+	(*notify_vbus_state_func_ptr) (1);
+
+	return IRQ_HANDLED;
+}
+static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init)
+{
+	int ret;
+
+	if (init) {
+		if (!callback)
+			return -ENODEV;
+
+		notify_vbus_state_func_ptr = callback;
+		vbus_on_irq = platform_get_irq_byname(&msm_device_otg,
+			"vbus_on");
+		if (vbus_on_irq <= 0) {
+			pr_err("%s: unable to get vbus on irq\n", __func__);
+			return -ENODEV;
+		}
+
+		ret = request_irq(vbus_on_irq, pmic_vbus_on_irq,
+			IRQF_TRIGGER_RISING, "msm_otg_vbus_on", NULL);
+		if (ret) {
+			pr_info("%s: request_irq for vbus_on"
+				"interrupt failed\n", __func__);
+			return ret;
+		}
+		msm_otg_pdata.pmic_vbus_irq = vbus_on_irq;
+		return 0;
+	} else {
+		free_irq(vbus_on_irq, 0);
+		notify_vbus_state_func_ptr = NULL;
+		return 0;
+	}
+}
 #endif
 
 static struct android_pmem_platform_data android_pmem_pdata = {

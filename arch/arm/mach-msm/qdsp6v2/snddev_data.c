@@ -100,14 +100,56 @@ static struct snddev_icodec_data snddev_imic_data = {
 	.pmctl_id = imic_pmctl_id,
 	.pmctl_id_sz = ARRAY_SIZE(imic_pmctl_id),
 	.default_sample_rate = 48000,
-	.pamp_on = msm_snddev_tx_route_config,
-	.pamp_off = msm_snddev_tx_route_deconfig,
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
 };
 
 static struct platform_device msm_imic_device = {
 	.name = "snddev_icodec",
 	.id = 1,
 	.dev = { .platform_data = &snddev_imic_data },
+};
+
+static struct adie_codec_action_unit ispkr_stereo_48KHz_osr256_actions[] =
+	SPEAKER_PRI_STEREO_48000_OSR_256;
+
+static struct adie_codec_hwsetting_entry ispkr_stereo_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = ispkr_stereo_48KHz_osr256_actions,
+		.action_sz = ARRAY_SIZE(ispkr_stereo_48KHz_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile ispkr_stereo_profile = {
+	.path_type = ADIE_CODEC_RX,
+	.settings = ispkr_stereo_settings,
+	.setting_sz = ARRAY_SIZE(ispkr_stereo_settings),
+};
+
+static struct snddev_icodec_data snddev_ispkr_stereo_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
+	.name = "speaker_stereo_rx",
+	.copp_id = 0,
+	.acdb_id = 15,
+	.profile = &ispkr_stereo_profile,
+	.channel_mode = 2,
+	.pmctl_id = NULL,
+	.pmctl_id_sz = 0,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_poweramp_on,
+	.pamp_off = msm_snddev_poweramp_off,
+	.max_voice_rx_vol[VOC_NB_INDEX] = -200,
+	.min_voice_rx_vol[VOC_NB_INDEX] = -1700,
+	.max_voice_rx_vol[VOC_WB_INDEX] = -200,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -1700
+};
+
+static struct platform_device msm_ispkr_stereo_device = {
+	.name = "snddev_icodec",
+	.id = 2,
+	.dev = { .platform_data = &snddev_ispkr_stereo_data },
 };
 
 static struct adie_codec_action_unit iearpiece_ffa_48KHz_osr256_actions[] =
@@ -153,7 +195,7 @@ static struct platform_device msm_iearpiece_ffa_device = {
 };
 
 static struct adie_codec_action_unit imic_ffa_48KHz_osr256_actions[] =
-	AMIC_PRI_MONO_8000_OSR_256;
+	DMIC1_PRI_MONO_8000_OSR_64;
 
 static struct adie_codec_hwsetting_entry imic_ffa_settings[] = {
 	{
@@ -180,8 +222,8 @@ static struct snddev_icodec_data snddev_imic_ffa_data = {
 	.pmctl_id = imic_pmctl_id,
 	.pmctl_id_sz = ARRAY_SIZE(imic_pmctl_id),
 	.default_sample_rate = 48000,
-	.pamp_on = msm_snddev_tx_route_config,
-	.pamp_off = msm_snddev_tx_route_deconfig,
+	.pamp_on = msm_snddev_enable_dmic_power,
+	.pamp_off = msm_snddev_disable_dmic_power,
 };
 
 static struct platform_device msm_imic_ffa_device = {
@@ -194,11 +236,13 @@ static struct platform_device msm_imic_ffa_device = {
 static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_iearpiece_ffa_device,
 	&msm_imic_ffa_device,
+	&msm_ispkr_stereo_device,
 };
 
 static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_iearpiece_device,
 	&msm_imic_device,
+	&msm_ispkr_stereo_device,
 };
 
 void __init msm_snddev_init(void)

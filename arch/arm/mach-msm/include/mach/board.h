@@ -137,7 +137,6 @@ struct msm_panel_common_pdata {
 	void (*panel_config_gpio)(int);
 	int *gpio_num;
 	int mdp_core_clk_rate;
-	int mdp_ver;
 };
 
 struct lcdc_platform_data {
@@ -230,7 +229,12 @@ void msm_snddev_tx_route_config(void);
 void msm_snddev_tx_route_deconfig(void);
 void msm_snddev_rx_route_config(void);
 void msm_snddev_rx_route_deconfig(void);
+void msm_snddev_enable_amic_power(void);
+void msm_snddev_disable_amic_power(void);
+void msm_snddev_enable_dmic_power(void);
+void msm_snddev_disable_dmic_power(void);
 
 extern unsigned int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
+
 
 #endif

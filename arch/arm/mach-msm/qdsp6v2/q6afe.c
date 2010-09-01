@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/wait.h>
 #include <linux/jiffies.h>
+
 #include "apr_audio.h"
 
 struct afe_ctl {
@@ -31,7 +32,7 @@ static struct afe_ctl this_afe;
 
 static DEFINE_MUTEX(afe_lock);
 
-#define TIMEOUT_MS 10000
+#define TIMEOUT_MS 1000
 
 static int32_t afe_callback(struct apr_client_data *data, void *priv)
 {
@@ -40,16 +41,19 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 		ptr = data->payload;
 
 		pr_info("%s: cmd = 0x%x\n", __func__, ptr[0]);
-		if (ptr[0] == AFE_PORT_AUDIO_IF_CONFIG) {
+		switch (ptr[0]) {
+		case AFE_PORT_AUDIO_IF_CONFIG:
+		case AFE_PORT_CMD_STOP:
+		case AFE_PORT_CMD_START:
 			this_afe.state = 0;
 			wake_up(&this_afe.wait);
-		}
-		if (ptr[0] == AFE_PORT_CMD_STOP) {
-			this_afe.state = 0;
-			wake_up(&this_afe.wait);
+			break;
+		default:
+			pr_err("%s: Unknown cmd 0x%x\n",
+					__func__, ptr[0]);
+			break;
 		}
 	}
-
 	return 0;
 }
 
@@ -75,7 +79,7 @@ int afe_open(int port_id, int rate, int channel_mode)
 	}
 
 	config.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
-					APR_HDR_SIZE, APR_PKT_VER);
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
 	config.hdr.pkt_size = sizeof(config);
 	config.hdr.src_port = 0;
 	config.hdr.dest_port = 0;
@@ -87,6 +91,8 @@ int afe_open(int port_id, int rate, int channel_mode)
 	config.port.mi2s.channel = channel_mode;
 	config.port.mi2s.ws = 1;
 
+	this_afe.state = 1;
+
 	ret = apr_send_pkt(this_afe.apr, (uint32_t *) &config);
 	if (ret < 0) {
 		pr_err("AFE enable for port %d failed\n", port_id);
@@ -94,16 +100,16 @@ int afe_open(int port_id, int rate, int channel_mode)
 		goto fail;
 	}
 
-	this_afe.state = 1;
 	ret = wait_event_timeout(this_afe.wait, (this_afe.state == 0),
 				msecs_to_jiffies(TIMEOUT_MS));
 	if (ret < 0) {
 		pr_info("%s: wait_event timeout\n", __func__);
+		ret = -EINVAL;
 		goto fail_cmd;
 	}
 
 	start.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
-					APR_HDR_SIZE, APR_PKT_VER);
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
 	start.hdr.pkt_size = sizeof(start);
 	start.hdr.src_port = 0;
 	start.hdr.dest_port = 0;
@@ -113,10 +119,17 @@ int afe_open(int port_id, int rate, int channel_mode)
 	start.gain = 0x4000;
 	start.sample_rate = rate;
 
+	this_afe.state = 1;
 	ret = apr_send_pkt(this_afe.apr, (uint32_t *) &start);
-
 	if (ret < 0) {
 		pr_err("AFE enable for port %d failed\n", port_id);
+		ret = -EINVAL;
+		goto fail_cmd;
+	}
+	ret = wait_event_timeout(this_afe.wait, (this_afe.state == 0),
+				msecs_to_jiffies(TIMEOUT_MS));
+	if (ret < 0) {
+		pr_info("%s: wait_event timeout\n", __func__);
 		ret = -EINVAL;
 		goto fail_cmd;
 	}
@@ -144,13 +157,15 @@ int afe_close(int port_id)
 	}
 
 	stop.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
-					APR_HDR_SIZE, APR_PKT_VER);
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
 	stop.hdr.pkt_size = sizeof(stop);
 	stop.hdr.src_port = 0;
 	stop.hdr.dest_port = 0;
 	stop.hdr.token = 0;
 	stop.hdr.opcode = AFE_PORT_CMD_STOP;
 	stop.port_id = port_id;
+
+	this_afe.state = 1;
 
 	rc = apr_send_pkt(this_afe.apr, (uint32_t *) &stop);
 
@@ -159,7 +174,6 @@ int afe_close(int port_id)
 		goto fail_cmd;
 	}
 
-	this_afe.state = 1;
 	rc = wait_event_timeout(this_afe.wait, (this_afe.state == 0),
 					msecs_to_jiffies(TIMEOUT_MS));
 	if (rc < 0) {

@@ -896,7 +896,6 @@ static int mdp_irq_clk_setup(void)
 
 	return 0;
 }
-int mdp_ver;
 
 static int mdp_probe(struct platform_device *pdev)
 {
@@ -913,10 +912,6 @@ static int mdp_probe(struct platform_device *pdev)
 
 	if ((pdev->id == 0) && (pdev->num_resources > 0)) {
 		mdp_pdata = pdev->dev.platform_data;
-		if (mdp_pdata && mdp_pdata->mdp_ver)
-			mdp_ver = mdp_pdata->mdp_ver;
-		else
-			mdp_ver = 0;
 
 		size =  resource_size(&pdev->resource[0]);
 		msm_mdp_base = ioremap(pdev->resource[0].start, size);

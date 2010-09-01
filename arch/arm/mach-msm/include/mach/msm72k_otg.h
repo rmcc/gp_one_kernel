@@ -34,6 +34,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/usb/otg.h>
 #include <linux/wakelock.h>
+#include <mach/msm_hsusb.h>
 
 #include <asm/mach-types.h>
 #include <mach/msm_hsusb.h>
@@ -160,6 +161,7 @@ struct msm_otg {
 	struct work_struct sm_work; /* state machine work */
 	struct work_struct otg_resume_work;
 	struct notifier_block usbdev_nb;
+	struct msm_xo_voter *xo_handle; /*handle to vote for TCXO D1 buffer*/
 #ifdef CONFIG_USB_MSM_ACA
 	struct timer_list	id_timer;	/* drives id_status polling */
 	unsigned		b_max_power;	/* ACA: max power of accessory*/
@@ -186,6 +188,14 @@ static inline int depends_on_axi_freq(struct otg_transceiver *xceiv)
 	dev = container_of(xceiv, struct msm_otg, otg);
 
 	return !dev->pdata->core_clk;
+}
+
+static inline int can_phy_power_collapse(struct msm_otg *dev)
+{
+	if (!dev || !dev->pdata)
+		return -ENODEV;
+
+	return dev->pdata->phy_can_powercollapse;
 }
 
 #endif
