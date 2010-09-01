@@ -50,13 +50,15 @@ static struct msm_fb_panel_data lcdc_panel_data = {
 
 static int lcdc_dev_id;
 
+#ifdef CONFIG_BACKLIGHT_LED_MAX8831
 void maxXXXX_set_backlight(struct msm_fb_data_type * mfd)
 {
 
 	__u32 bl_lel= mfd->bl_level;
 	lcd_bl_set_intensity((int )bl_lel);     
 
-}        
+}
+#endif        
 
 int lcdc_device_register(struct msm_panel_info *pinfo)
 {
@@ -68,7 +70,9 @@ int lcdc_device_register(struct msm_panel_info *pinfo)
 		return -ENOMEM;
 
 	lcdc_panel_data.panel_info = *pinfo;
+#ifdef CONFIG_BACKLIGHT_LED_MAX8831
 	lcdc_panel_data.set_backlight = maxXXXX_set_backlight;
+#endif
 	ret = platform_device_add_data(pdev, &lcdc_panel_data,
 		sizeof(lcdc_panel_data));
 	if (ret) {
