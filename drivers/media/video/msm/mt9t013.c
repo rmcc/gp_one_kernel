@@ -2159,6 +2159,7 @@ static int mt9t013_release(struct inode *ip, struct file *fp)
 	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
 	mdelay(20);
         gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,1);	
+	gpio_request(31,"mt9t013_power"); 
 	gpio_direction_output(31,0); //sub-camera(VGA),power off //FIH_ADQ,JOE HSU
 	gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
 	gpio_free(mt9t013_ctrl->sensordata->sensor_pwd);
