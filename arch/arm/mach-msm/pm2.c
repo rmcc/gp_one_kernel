@@ -28,6 +28,7 @@
 #include <linux/reboot.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
+#include <linux/memory.h>
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
 #endif
@@ -38,6 +39,10 @@
 #endif
 #ifdef CONFIG_VFP
 #include <asm/vfp.h>
+#endif
+
+#ifdef CONFIG_MSM_MEMORY_LOW_POWER_MODE_SUSPEND_DEEP_POWER_DOWN
+#include <mach/msm_migrate_pages.h>
 #endif
 
 #include "smd_private.h"
@@ -51,6 +56,7 @@
 #include "timer.h"
 #include "pm.h"
 #include "spm.h"
+#include "sirc.h"
 
 /******************************************************************************
  * Debug Definitions
@@ -953,6 +959,7 @@ static int msm_pm_power_collapse
 	memset(msm_pm_smem_data, 0, sizeof(*msm_pm_smem_data));
 
 	msm_irq_enter_sleep1(true, from_idle, &msm_pm_smem_data->irq_mask);
+	msm_sirc_enter_sleep();
 	msm_gpio_enter_sleep(from_idle);
 
 	msm_pm_smem_data->sleep_time = sleep_delay;
@@ -1153,6 +1160,7 @@ static int msm_pm_power_collapse
 		msm_pm_smem_data->wakeup_reason,
 		msm_pm_smem_data->pending_irqs);
 	msm_gpio_exit_sleep();
+	msm_sirc_exit_sleep();
 
 	smsm_change_state(SMSM_APPS_DEM,
 		DEM_SLAVE_SMSM_WFPI, DEM_SLAVE_SMSM_RUN);
@@ -1200,6 +1208,7 @@ power_collapse_early_exit:
 
 power_collapse_restore_gpio_bail:
 	msm_gpio_exit_sleep();
+	msm_sirc_exit_sleep();
 
 	/* Enter RUN */
 	smsm_change_state(SMSM_APPS_DEM,
@@ -1619,6 +1628,9 @@ static int msm_pm_enter(suspend_state_t state)
 		sleep_limit |= SLEEP_RESOURCE_MEMORY_BIT1;
 #elif defined(CONFIG_MSM_MEMORY_LOW_POWER_MODE_SUSPEND_RETENTION)
 		sleep_limit |= SLEEP_RESOURCE_MEMORY_BIT0;
+#elif defined(CONFIG_MSM_MEMORY_LOW_POWER_MODE_SUSPEND_DEEP_POWER_DOWN)
+		if (get_msm_migrate_pages_status() != MEM_OFFLINE)
+			sleep_limit |= SLEEP_RESOURCE_MEMORY_BIT0;
 #endif
 
 		ret = msm_pm_power_collapse(

@@ -1654,7 +1654,7 @@ void ddl_set_default_encoder_buffer_req(struct ddl_encoder_data *encoder)
 
 	encoder->input_buf_req.min_count = 1;
 	encoder->input_buf_req.actual_count =
-	    encoder->input_buf_req.min_count;
+	    encoder->input_buf_req.min_count + 8;
 	encoder->input_buf_req.max_count = DDL_MAX_BUFFER_COUNT;
 	encoder->input_buf_req.sz = y_cb_cr_size;
 	encoder->input_buf_req.align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
@@ -1666,7 +1666,7 @@ void ddl_set_default_encoder_buffer_req(struct ddl_encoder_data *encoder)
 
 	encoder->output_buf_req.min_count = 2;
 	encoder->output_buf_req.actual_count =
-	    encoder->output_buf_req.min_count + 5;
+	    encoder->output_buf_req.min_count + 3;
 	encoder->output_buf_req.max_count = DDL_MAX_BUFFER_COUNT;
 	encoder->output_buf_req.align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
 	encoder->output_buf_req.sz = y_cb_cr_size;
@@ -1727,13 +1727,9 @@ void ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 	memset(input_buf_req, 0, sizeof(struct vcd_buffer_requirement));
 
 	input_buf_req->min_count = 1;
-	input_buf_req->actual_count = input_buf_req->min_count;
+	input_buf_req->actual_count = input_buf_req->min_count + 3;
 	input_buf_req->max_count = DDL_MAX_BUFFER_COUNT;
-	input_buf_req->sz = y_cb_cr_size;
-
-	if (input_buf_req->sz >= ((1280*720*3) >> 1))
-		input_buf_req->sz = (input_buf_req->sz >> 1);
-
+	input_buf_req->sz = (1280*720*3) >> 2;
 	input_buf_req->align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
 
 	decoder->min_input_buf_req = *input_buf_req;

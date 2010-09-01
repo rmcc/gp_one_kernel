@@ -2197,6 +2197,10 @@ config FB_MSM_MDDI
 	bool
 	default n
 
+config FB_MSM_MIPI_DSI
+	bool
+	default n
+
 config FB_MSM_LCDC
 	bool
 	default n
@@ -2387,6 +2391,10 @@ config FB_MSM_MDDI_SHARP_QVGA_128x128
 	---help---
 	  Support for MDDI Sharp QVGA (240x320) and 128x128 dual panel
 
+config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
+	bool "MIPI Toshiba WVGA PT Panel"
+	select FB_MSM_MIPI_DSI
+
 config FB_MSM_EBI2_TMD_QVGA_EPSON_QCIF
 	bool "EBI2 TMD QVGA Epson QCIF Dual Panel"
 	select FB_MSM_EBI2
@@ -2425,10 +2433,15 @@ config FB_MSM_SECONDARY_PANEL_NONE
 	  No secondary panel
 endchoice
 
+config FB_MSM_HDMI_COMMON
+	bool
+	default n
+
 config FB_MSM_HDMI_ADV7520_PANEL
 	depends on FB_MSM_MDP40 && FB_MSM_OVERLAY
         bool "LCDC HDMI ADV7520 720p Panel"
         select FB_MSM_DTV
+	select FB_MSM_HDMI_COMMON
 	default n
         ---help---
         Support for LCDC 720p HDMI panel attached to ADV7520
@@ -2437,6 +2450,7 @@ config FB_MSM_HDMI_MSM_PANEL
 	depends on FB_MSM_MDP40
 	bool "MSM HDMI 1080p Panel"
 	select FB_MSM_DTV
+	select FB_MSM_HDMI_COMMON
 	default n
 	---help---
 	  Support for 480p/720p/1080i/1080p output through MSM HDMI
@@ -2447,6 +2461,16 @@ config FB_MSM_HDMI_MSM_PANEL_DVI_SUPPORT
 	default n
 	---help---
 	  Support for DVI mode for MSM HDMI 1080p Panel
+
+config FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
+	depends on FB_MSM_HDMI_MSM_PANEL
+	bool "Use HDCP mode"
+	default y
+	---help---
+	  Support for HDCP mode for MSM HDMI 1080p Panel
+	  Choose to enable HDCP
+	  .
+	  .
 
 config FB_MSM_TVOUT_NTSC
 	bool

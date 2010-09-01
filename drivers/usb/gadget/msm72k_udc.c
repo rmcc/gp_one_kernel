@@ -89,7 +89,6 @@ struct msm_request {
 	unsigned busy:1;
 	unsigned live:1;
 	unsigned alloced:1;
-	unsigned dead:1;
 
 	dma_addr_t dma;
 	dma_addr_t item_dma;
@@ -331,6 +330,7 @@ static void usb_chg_detect(struct work_struct *w)
 	 * wakelock which will be re-acquired for any sub-sequent usb interrupts
 	 * */
 	if (temp == USB_CHG_TYPE__WALLCHARGER) {
+		pm_runtime_put_sync(&ui->pdev->dev);
 		wake_unlock(&ui->wlock);
 	}
 }
@@ -448,16 +448,6 @@ fail2:
 fail1:
 	return 0;
 }
-
-static void do_free_req(struct usb_info *ui, struct msm_request *req)
-{
-	if (req->alloced)
-		kfree(req->req.buf);
-
-	dma_pool_free(ui->pool, req->item, req->item_dma);
-	kfree(req);
-}
-
 
 static void usb_ept_enable(struct msm_endpoint *ept, int yes,
 		unsigned char ep_type)
@@ -960,8 +950,6 @@ static void handle_endpoint(struct usb_info *ui, unsigned bit)
 		}
 		req->busy = 0;
 		req->live = 0;
-		if (req->dead)
-			do_free_req(ui, req);
 
 		if (req->req.complete) {
 			spin_unlock_irqrestore(&ui->lock, flags);
@@ -1016,8 +1004,6 @@ static void flush_endpoint_sw(struct msm_endpoint *ept)
 			req->req.complete(&ept->ep, &req->req);
 			spin_lock_irqsave(&ui->lock, flags);
 		}
-		if (req->dead)
-			do_free_req(ui, req);
 		req = req->next;
 	}
 	spin_unlock_irqrestore(&ui->lock, flags);
@@ -1299,6 +1285,8 @@ static void usb_do_work(struct work_struct *w)
 					break;
 				}
 
+				pm_runtime_get_noresume(&ui->pdev->dev);
+				pm_runtime_resume(&ui->pdev->dev);
 				dev_info(&ui->pdev->dev,
 					"msm72k_udc: IDLE -> ONLINE\n");
 				usb_reset(ui);
@@ -1384,6 +1372,8 @@ static void usb_do_work(struct work_struct *w)
 
 				ui->state = USB_STATE_OFFLINE;
 				usb_do_work_check_vbus(ui);
+				pm_runtime_put_noidle(&ui->pdev->dev);
+				pm_runtime_suspend(&ui->pdev->dev);
 				wake_unlock(&ui->wlock);
 				break;
 			}
@@ -1439,6 +1429,8 @@ static void usb_do_work(struct work_struct *w)
 			if ((flags & USB_FLAG_VBUS_ONLINE) && _vbus) {
 				int ret;
 
+				pm_runtime_get_noresume(&ui->pdev->dev);
+				pm_runtime_resume(&ui->pdev->dev);
 				dev_info(&ui->pdev->dev,
 					"msm72k_udc: OFFLINE -> ONLINE\n");
 
@@ -1721,18 +1713,13 @@ msm72k_free_request(struct usb_ep *_ep, struct usb_request *_req)
 	struct msm_request *req = to_msm_request(_req);
 	struct msm_endpoint *ept = to_msm_endpoint(_ep);
 	struct usb_info *ui = ept->ui;
-	unsigned long flags;
-	int dead = 0;
 
-	spin_lock_irqsave(&ui->lock, flags);
-	/* defer freeing resources if request is still busy */
-	if (req->busy)
-		dead = req->dead = 1;
-	spin_unlock_irqrestore(&ui->lock, flags);
-
-	/* if req->dead, then we will clean up when the request finishes */
-	if (!dead)
-		do_free_req(ui, req);
+	/* request should not be busy */
+	BUG_ON(req->busy);
+	if (req->alloced)
+		kfree(req->req.buf);
+	dma_pool_free(ui->pool, req->item, req->item_dma);
+	kfree(req);
 }
 
 static int
@@ -1775,7 +1762,6 @@ static int msm72k_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 	if (!req->busy) {
 		dev_dbg(&ui->pdev->dev, "%s: !req->busy\n", __func__);
 		spin_unlock_irqrestore(&ui->lock, flags);
-		BUG_ON(!req->busy);
 		return -EINVAL;
 	}
 	/* Stop the transfer */
@@ -1809,6 +1795,13 @@ static int msm72k_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 		(ep->flags & EPT_FLAG_IN) ?
 		DMA_TO_DEVICE : DMA_FROM_DEVICE);
 
+	if (req->req.complete) {
+		req->req.status = -ECONNRESET;
+		spin_unlock_irqrestore(&ui->lock, flags);
+		req->req.complete(&ep->ep, &req->req);
+		spin_lock_irqsave(&ui->lock, flags);
+	}
+
 	if (!req->live) {
 		/* Reprime the endpoint for the remaining transfers */
 		for (temp_req = ep->req ; temp_req ; temp_req = temp_req->next)
@@ -1819,7 +1812,7 @@ static int msm72k_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 		return 0;
 	}
 	spin_unlock_irqrestore(&ui->lock, flags);
-	return -EINVAL;
+	return 0;
 }
 
 static int
@@ -2182,7 +2175,7 @@ static int msm72k_probe(struct platform_device *pdev)
 	struct usb_info *ui;
 	struct msm_hsusb_gadget_platform_data *pdata;
 	struct msm_otg *otg;
-	int retval, err;
+	int retval;
 
 	dev_dbg(&pdev->dev, "msm72k_probe\n");
 	ui = kzalloc(sizeof(struct usb_info), GFP_KERNEL);
@@ -2232,12 +2225,6 @@ static int msm72k_probe(struct platform_device *pdev)
 		return usb_free(ui, retval);
 
 	the_usb_info = ui;
-
-	err = pm_runtime_set_active(&pdev->dev);
-	if (err < 0)
-		printk(KERN_ERR "pm_runtime: fail to set active\n");
-
-	err = 0;
 
 	wake_lock_init(&ui->wlock,
 			WAKE_LOCK_SUSPEND, "usb_bus_active");
@@ -2366,6 +2353,11 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 		return -EINVAL;
 
 	msm72k_pullup_internal(&dev->gadget, 0);
+	if (dev->irq) {
+		free_irq(dev->irq, dev);
+		dev->irq = 0;
+	}
+
 	dev->state = USB_STATE_IDLE;
 	atomic_set(&dev->configured, 0);
 	switch_set_state(&dev->sdev, 0);

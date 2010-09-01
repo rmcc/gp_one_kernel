@@ -137,6 +137,7 @@ struct msm_panel_common_pdata {
 	void (*panel_config_gpio)(int);
 	int *gpio_num;
 	int mdp_core_clk_rate;
+	int mdp_ver;
 };
 
 struct lcdc_platform_data {
@@ -151,6 +152,10 @@ struct tvenc_platform_data {
 struct mddi_platform_data {
 	int (*mddi_power_save)(int on);
 	int (*mddi_sel_clk)(u32 *clk_rate);
+};
+
+struct mipi_dsi_platform_data {
+	int (*dsi_power_save)(int on);
 };
 
 struct msm_fb_platform_data {
@@ -223,6 +228,8 @@ void msm_snddev_hsed_voltage_on(void);
 void msm_snddev_hsed_voltage_off(void);
 void msm_snddev_tx_route_config(void);
 void msm_snddev_tx_route_deconfig(void);
+void msm_snddev_rx_route_config(void);
+void msm_snddev_rx_route_deconfig(void);
 
 extern unsigned int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
 

@@ -655,11 +655,32 @@ static int msm_otg_resume(struct msm_otg *dev)
 
 	return 0;
 }
+
+static void msm_otg_get_resume(struct msm_otg *dev)
+{
+#ifdef CONFIG_PM_RUNTIME
+	pm_runtime_get_noresume(dev->otg.dev);
+	pm_runtime_resume(dev->otg.dev);
+#else
+	msm_otg_resume(dev);
+#endif
+}
+
+static void msm_otg_put_suspend(struct msm_otg *dev)
+{
+#ifdef CONFIG_PM_RUNTIME
+	pm_runtime_put_sync(dev->otg.dev);
+#else
+	msm_otg_suspend(dev);
+#endif
+}
+
 static void msm_otg_resume_w(struct work_struct *w)
 {
 	struct msm_otg	*dev = container_of(w, struct msm_otg, otg_resume_work);
 
-	msm_otg_resume(dev);
+	msm_otg_get_resume(dev);
+
 	/* Enable Idabc interrupts as these were disabled before entering LPM */
 	enable_idabc(dev);
 
@@ -688,6 +709,11 @@ static int msm_otg_set_suspend(struct otg_transceiver *xceiv, int suspend)
 
 	if (suspend) {
 		switch (state) {
+#ifndef CONFIG_MSM_OTG_ENABLE_A_WAIT_BCON_TIMEOUT
+		case OTG_STATE_A_WAIT_BCON:
+			msm_otg_put_suspend(dev);
+			break;
+#endif
 		case OTG_STATE_A_HOST:
 			clear_bit(A_BUS_REQ, &dev->inputs);
 			wake_lock(&dev->wlock);
@@ -740,7 +766,7 @@ static int msm_otg_set_suspend(struct otg_transceiver *xceiv, int suspend)
 		if (dev->pmic_notif_supp)
 			dev->pdata->pmic_enable_ldo(1);
 
-		msm_otg_resume(dev);
+		msm_otg_get_resume(dev);
 
 		if (!is_phy_clk_disabled())
 			goto out;
@@ -1362,7 +1388,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		} else {
 			msm_otg_set_power(&dev->otg, 0);
 			pr_debug("entering into lpm\n");
-			msm_otg_suspend(dev);
+			msm_otg_put_suspend(dev);
 
 		}
 		break;
@@ -1436,7 +1462,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			otg_reset(&dev->otg, 1);
 
 			pr_debug("entering into lpm with wall-charger\n");
-			msm_otg_suspend(dev);
+			msm_otg_put_suspend(dev);
 			/* Allow idle power collapse */
 			otg_pm_qos_update_latency(dev, 0);
 		}
@@ -1561,7 +1587,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			 */
 			writel((readl(USB_OTGSC) & ~OTGSC_INTR_STS_MASK) |
 					OTGSC_DPIE, USB_OTGSC);
-			msm_otg_suspend(dev);
+			msm_otg_put_suspend(dev);
 
 		}
 		break;
@@ -1583,7 +1609,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_lock_irq(&dev->lock);
 			dev->otg.state = OTG_STATE_A_WAIT_BCON;
 			spin_unlock_irq(&dev->lock);
-			msm_otg_start_timer(dev, TA_WAIT_BCON, A_WAIT_BCON);
+			if (TA_WAIT_BCON > 0)
+				msm_otg_start_timer(dev, TA_WAIT_BCON,
+					A_WAIT_BCON);
 			/* Start HCD to detect peripherals. */
 			msm_otg_start_host(&dev->otg, REQUEST_START);
 		}
@@ -1680,7 +1708,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 						A_AIDL_BDIS);
 			} else {
 				/* No HNP. Root hub suspended */
-				msm_otg_suspend(dev);
+				msm_otg_put_suspend(dev);
 			}
 			if (test_bit(ID_A, &dev->inputs))
 				msm_otg_set_power(&dev->otg,
@@ -1690,7 +1718,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_lock_irq(&dev->lock);
 			dev->otg.state = OTG_STATE_A_WAIT_BCON;
 			spin_unlock_irq(&dev->lock);
-			msm_otg_start_timer(dev, TA_WAIT_BCON, A_WAIT_BCON);
+			if (TA_WAIT_BCON > 0)
+				msm_otg_start_timer(dev, TA_WAIT_BCON,
+					A_WAIT_BCON);
 		} else if (test_bit(ID_A, &dev->inputs)) {
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
 			msm_otg_set_power(&dev->otg,
@@ -1766,7 +1796,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_lock_irq(&dev->lock);
 			dev->otg.state = OTG_STATE_A_WAIT_BCON;
 			spin_unlock_irq(&dev->lock);
-			msm_otg_start_timer(dev, TA_WAIT_BCON, A_WAIT_BCON);
+			if (TA_WAIT_BCON > 0)
+				msm_otg_start_timer(dev, TA_WAIT_BCON,
+					A_WAIT_BCON);
 			msm_otg_set_power(&dev->otg, 0);
 		} else if (test_bit(ID_A, &dev->inputs)) {
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
@@ -1820,7 +1852,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_unlock_irq(&dev->lock);
 			set_bit(A_BUS_REQ, &dev->inputs);
 			msm_otg_start_host(&dev->otg, REQUEST_HNP_RESUME);
-			msm_otg_start_timer(dev, TA_WAIT_BCON, A_WAIT_BCON);
+			if (TA_WAIT_BCON > 0)
+				msm_otg_start_timer(dev, TA_WAIT_BCON,
+					A_WAIT_BCON);
 			msm_otg_set_power(&dev->otg, 0);
 		} else if (test_bit(ID_A, &dev->inputs)) {
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
@@ -2378,13 +2412,19 @@ static int __exit msm_otg_remove(struct platform_device *pdev)
 
 static int msm_otg_runtime_suspend(struct device *dev)
 {
+	struct msm_otg *otg = the_msm_otg;
+
 	dev_dbg(dev, "pm_runtime: suspending...\n");
+	msm_otg_suspend(otg);
 	return  0;
 }
 
 static int msm_otg_runtime_resume(struct device *dev)
 {
+	struct msm_otg *otg = the_msm_otg;
+
 	dev_dbg(dev, "pm_runtime: resuming...\n");
+	msm_otg_resume(otg);
 	return  0;
 }
 

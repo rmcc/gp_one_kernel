@@ -71,6 +71,8 @@ static int dtv_off(struct platform_device *pdev)
 
 	ret = panel_next_off(pdev);
 
+	pr_info("%s\n", __func__);
+
 	clk_disable(tv_enc_clk);
 	clk_disable(tv_dac_clk);
 	clk_disable(hdmi_clk);
@@ -113,6 +115,8 @@ static int dtv_on(struct platform_device *pdev)
 	mfd = platform_get_drvdata(pdev);
 
 	clk_set_rate(tv_src_clk, mfd->fbi->var.pixclock);
+	pr_info("%s: tv_src_clk=%dkHz, pm_qos_rate=%ldkHz\n", __func__,
+		mfd->fbi->var.pixclock/1000, pm_qos_rate);
 
 	clk_enable(tv_enc_clk);
 	clk_enable(tv_dac_clk);
@@ -139,8 +143,6 @@ static int dtv_probe(struct platform_device *pdev)
 
 	if (pdev->id == 0) {
 		dtv_pdata = pdev->dev.platform_data;
-		if (dtv_pdata && dtv_pdata->lcdc_power_save)
-			dtv_pdata->lcdc_power_save(1);
 		return 0;
 	}
 

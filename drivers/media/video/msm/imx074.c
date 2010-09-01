@@ -126,6 +126,9 @@
 #define	IMX074_VER_QTR_BLK_LINES			48
 #define	Q8						0x100
 #define	Q10						0x400
+#define	IMX074_AF_I2C_SLAVE_ID				0x72
+#define	IMX074_STEPS_NEAR_TO_CLOSEST_INF		42
+#define	IMX074_TOTAL_STEPS_NEAR_TO_FAR			42
 
 struct imx074_work_t {
 	struct work_struct work;
@@ -237,6 +240,20 @@ static int32_t imx074_i2c_write_b_sensor(unsigned short waddr, uint8_t bdata)
 	}
 	return rc;
 }
+static int16_t imx074_i2c_write_b_af(unsigned short saddr,
+	unsigned short baddr, unsigned short bdata)
+{
+	int32_t rc;
+	unsigned char buf[2];
+	memset(buf, 0, sizeof(buf));
+	buf[0] = baddr;
+	buf[1] = bdata;
+	rc = imx074_i2c_txdata(saddr, buf, 2);
+	if (rc < 0)
+		CDBG("AFi2c_write failed, saddr = 0x%x addr = 0x%x, val =0x%x!",
+			saddr, baddr, bdata);
+	return rc;
+}
 
 static int32_t imx074_i2c_write_w_table(struct imx074_i2c_reg_conf const
 					 *reg_conf_tbl, int num)
@@ -252,6 +269,18 @@ static int32_t imx074_i2c_write_w_table(struct imx074_i2c_reg_conf const
 	}
 	return rc;
 }
+static int16_t imx074_af_init(void)
+{
+	int32_t rc;
+	/* Initialize waveform */
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x01, 0xA9);
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x02, 0xD2);
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x03, 0x0C);
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x04, 0x14);
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x05, 0xB6);
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x06, 0x4F);
+	return rc;
+}
 
 static void imx074_get_pict_fps(uint16_t fps, uint16_t *pfps)
 {
@@ -259,6 +288,8 @@ static void imx074_get_pict_fps(uint16_t fps, uint16_t *pfps)
 	uint16_t preview_frame_length_lines, snapshot_frame_length_lines;
 	uint16_t preview_line_length_pck, snapshot_line_length_pck;
 	uint32_t divider, d1, d2;
+	uint32_t pclk_mult;/*Q10 */
+
 	/* Total frame_length_lines and line_length_pck for preview */
 	preview_frame_length_lines = IMX074_QTR_SIZE_HEIGHT +
 		IMX074_VER_QTR_BLK_LINES;
@@ -273,8 +304,12 @@ static void imx074_get_pict_fps(uint16_t fps, uint16_t *pfps)
 		snapshot_frame_length_lines;
 	d2 = preview_line_length_pck * 0x00000400 /
 		snapshot_line_length_pck;
-	divider = d1 * d2 / 0x400;
-	*pfps = (uint16_t) (fps * divider / 0x400);
+	pclk_mult =
+		(uint32_t) ((imx074_regs.reg_pat[RES_CAPTURE].pll_multiplier *
+		0x00000400) /
+		(imx074_regs.reg_pat[RES_PREVIEW].pll_multiplier));
+	divider = d1 * d2 * pclk_mult / 0x400;
+	*pfps = (uint16_t) (fps * divider / 0x400 / 0x400);
 }
 
 static uint16_t imx074_get_prev_lines_pf(void)
@@ -448,13 +483,44 @@ static int32_t imx074_set_pict_exp_gain(uint16_t gain, uint32_t line)
 static int32_t imx074_move_focus(int direction,
 	int32_t num_steps)
 {
-	return 0;
+	int32_t step_direction, dest_step_position, bit_mask;
+	int32_t rc = 0;
+	uint32_t imx074_l_region_code_per_step = 3;
+
+	if (num_steps == 0)
+		return rc;
+
+	if (direction == MOVE_NEAR) {
+		step_direction = 1;
+		bit_mask = 0x80;
+	} else if (direction == MOVE_FAR) {
+		step_direction = -1;
+		bit_mask = 0x00;
+	} else {
+		CDBG("imx074_move_focus: Illegal focus direction");
+		return -EINVAL;
+	}
+	dest_step_position = imx074_ctrl->curr_step_pos +
+		(step_direction * num_steps);
+	if (dest_step_position < 0)
+		dest_step_position = 0;
+	else if (dest_step_position > IMX074_TOTAL_STEPS_NEAR_TO_FAR)
+		dest_step_position = IMX074_TOTAL_STEPS_NEAR_TO_FAR;
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x00,
+		((num_steps * imx074_l_region_code_per_step) | bit_mask));
+	imx074_ctrl->curr_step_pos = dest_step_position;
+	return rc;
 }
 
 
 static int32_t imx074_set_default_focus(uint8_t af_step)
 {
-	return 0;
+	int32_t rc;
+	/* Initialize to infinity */
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x00, 0x7F);
+	rc = imx074_i2c_write_b_af(IMX074_AF_I2C_SLAVE_ID >> 1, 0x00, 0x7F);
+	imx074_ctrl->curr_step_pos = 0;
+	return rc;
 }
 static int32_t imx074_test(enum imx074_test_mode_t mo)
 {
@@ -914,7 +980,7 @@ init_probe_done:
 int imx074_sensor_open_init(const struct msm_camera_sensor_info *data)
 {
 	int32_t rc = 0;
-
+	int32_t rc1 = 0;
 	CDBG("%s: %d\n", __func__, __LINE__);
 	CDBG("Calling imx074_sensor_open_init\n");
 	imx074_ctrl = kzalloc(sizeof(struct imx074_ctrl_t), GFP_KERNEL);
@@ -945,10 +1011,17 @@ int imx074_sensor_open_init(const struct msm_camera_sensor_info *data)
 	}
 
 	rc = imx074_sensor_setting(REG_INIT, RES_PREVIEW);
+
+	rc1 = imx074_af_init();
+	if (rc1 < 0)
+		CDBG("AF initialisation failed\n");
 	if (rc < 0)
 		goto init_fail;
 	else
 		goto init_done;
+
+
+
 init_fail:
 	CDBG(" imx074_sensor_open_init fail\n");
 	imx074_probe_init_done(data);

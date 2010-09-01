@@ -36,7 +36,6 @@
 #include <asm/mach-types.h>
 #include <linux/semaphore.h>
 #include <linux/uaccess.h>
-
 #include "mdp.h"
 #include "msm_fb.h"
 #ifdef CONFIG_FB_MSM_MDP40
@@ -897,6 +896,7 @@ static int mdp_irq_clk_setup(void)
 
 	return 0;
 }
+int mdp_ver;
 
 static int mdp_probe(struct platform_device *pdev)
 {
@@ -913,6 +913,7 @@ static int mdp_probe(struct platform_device *pdev)
 
 	if ((pdev->id == 0) && (pdev->num_resources > 0)) {
 		mdp_pdata = pdev->dev.platform_data;
+		mdp_ver = mdp_pdata->mdp_ver;
 
 		size =  resource_size(&pdev->resource[0]);
 		msm_mdp_base = ioremap(pdev->resource[0].start, size);
@@ -998,7 +999,7 @@ static int mdp_probe(struct platform_device *pdev)
 		mfd->dma = &dma2_data;
 #else
 		if (mfd->panel_info.pdest == DISPLAY_1) {
-#ifdef CONFIG_FB_MSM_OVERLAY
+#if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_MDDI)
 			mfd->dma_fnc = mdp4_mddi_overlay;
 #else
 			mfd->dma_fnc = mdp_dma2_update;
@@ -1031,6 +1032,38 @@ static int mdp_probe(struct platform_device *pdev)
 #endif
 		mdp_config_vsync(mfd);
 		break;
+
+#ifdef CONFIG_FB_MSM_MIPI_DSI
+	case MIPI_VIDEO_PANEL:
+		pdata->on = mdp4_dsi_video_on;
+		pdata->off = mdp4_dsi_video_off;
+		mfd->hw_refresh = TRUE;
+		mfd->dma_fnc = mdp4_dsi_video_overlay;
+		if (mfd->panel_info.pdest == DISPLAY_1) {
+			if_no = PRIMARY_INTF_SEL;
+			mfd->dma = &dma2_data;
+		} else {
+			if_no = EXTERNAL_INTF_SEL;
+			mfd->dma = &dma_e_data;
+		}
+		mdp4_display_intf_sel(if_no, DSI_VIDEO_INTF);
+		break;
+
+	case MIPI_CMD_PANEL:
+		pdata->on = mdp4_dsi_cmd_on;
+		pdata->off = mdp4_dsi_cmd_off;
+		mfd->hw_refresh = TRUE;
+		mfd->dma_fnc = mdp4_dsi_cmd_overlay;
+		if (mfd->panel_info.pdest == DISPLAY_1) {
+			if_no = PRIMARY_INTF_SEL;
+			mfd->dma = &dma2_data;
+		} else {
+			if_no = SECONDARY_INTF_SEL;
+			mfd->dma = &dma_s_data;
+		}
+		mdp4_display_intf_sel(if_no, DSI_CMD_INTF);
+		break;
+#endif
 
 #ifdef CONFIG_FB_MSM_DTV
 	case DTV_PANEL:

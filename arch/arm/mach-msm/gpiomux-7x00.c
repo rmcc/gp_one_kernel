@@ -14,13 +14,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
  */
-#include <linux/io.h>
-#include <linux/module.h>
-#include <mach/msm_iomap.h>
+#include <linux/kernel.h>
 #include "gpiomux.h"
 #include "proc_comm.h"
-
-struct msm_gpiomux_config msm_gpiomux_configs[GPIOMUX_NGPIOS] = {};
 
 void __msm_gpiomux_write(unsigned gpio, gpiomux_config_t val)
 {

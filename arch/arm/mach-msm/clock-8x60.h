@@ -30,6 +30,8 @@
 #ifndef __ARCH_ARM_MACH_MSM_CLOCK_8X60_H
 #define __ARCH_ARM_MACH_MSM_CLOCK_8X60_H
 
+#include "clock-local.h"
+
 enum {
 	/* Peripheral Clocks */
 	L_BBRX_SSBI_CLK,
@@ -87,6 +89,18 @@ enum {
 	L_USB_FS2_SRC_CLK,
 	L_USB_FS2_XCVR_CLK,
 	L_USB_FS2_SYS_CLK,
+
+	/* HW-Voteable Clocks */
+	L_ADM0_CLK,
+	L_ADM0_P_CLK,
+	L_ADM1_CLK,
+	L_ADM1_P_CLK,
+	L_MODEM_AHB1_P_CLK,
+	L_MODEM_AHB2_P_CLK,
+	L_PMIC_ARB0_P_CLK,
+	L_PMIC_ARB1_P_CLK,
+	L_PMIC_SSBI2_CLK,
+	L_RPM_MSG_RAM_P_CLK,
 
 	/* Fast Peripheral Bus Clocks */
 	L_GSBI1_P_CLK,
@@ -189,6 +203,9 @@ enum clk_sources {
 	CXO,
 	NUM_SRC
 };
+
+int __init pxo_is_27mhz(void);
+extern struct clk_local soc_clk_local_tbl_mxo[];
 
 struct pll_rate {
 	const uint32_t	l_val;

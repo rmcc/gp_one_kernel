@@ -48,7 +48,6 @@
 #include <asm/setup.h>
 
 #include <mach/mpp.h>
-#include <mach/gpio.h>
 #include <mach/board.h>
 #include <mach/camera.h>
 #include <mach/memory.h>
@@ -98,6 +97,7 @@
 #define PMIC_VREG_WLAN_LEVEL	2900
 #define PMIC_GPIO_SD_DET	36
 #define PMIC_GPIO_SDC4_EN	17  /* PMIC GPIO Number 18 */
+#define PMIC_GPIO_HDMI_5V_EN	39  /* PMIC GPIO Number 40 */
 
 #define FPGA_SDCC_STATUS       0x8E0001A8
 
@@ -147,6 +147,13 @@ static int pm8058_gpios_init(void)
 		.output_value   = 0,
 	};
 
+	struct pm8058_gpio hdmi_5V_en = {
+		.direction      = PM_GPIO_DIR_OUT,
+		.pull           = PM_GPIO_PULL_NO,
+		.vin_sel        = PM_GPIO_VIN_VPH,
+		.function       = PM_GPIO_FUNC_NORMAL,
+	};
+
 	if (machine_is_msm7x30_fluid()) {
 		rc = pm8058_gpio_config(PMIC_GPIO_HAP_ENABLE, &haptics_enable);
 		if (rc) {
@@ -167,6 +174,19 @@ static int pm8058_gpios_init(void)
 	}
 #endif
 
+	rc = pm8058_gpio_config(PMIC_GPIO_HDMI_5V_EN, &hdmi_5V_en);
+	if (rc) {
+		pr_err("%s PMIC_GPIO_HDMI_5V_EN config failed\n", __func__);
+		return rc;
+	}
+	rc = gpio_request(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN),
+		"hdmi_5V_en");
+	if (rc) {
+		pr_err("%s PMIC_GPIO_HDMI_5V_EN gpio_request failed\n",
+			__func__);
+		return rc;
+	}
+
 	if (machine_is_msm7x30_fluid()) {
 		rc = pm8058_gpio_config(PMIC_GPIO_SDC4_EN, &sdc4_en);
 		if (rc) {
@@ -174,16 +194,46 @@ static int pm8058_gpios_init(void)
 								 __func__);
 			return rc;
 		}
-		gpio_set_value(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_EN), 1);
+		gpio_set_value_cansleep(
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_EN), 1);
 	}
 
 	return 0;
 }
 
+/*virtual key support */
+static ssize_t tma300_vkeys_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf,
+	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":80:904:160:210"
+	":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":240:904:160:210"
+	":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":400:904:160:210"
+	"\n");
+}
+
+static struct kobj_attribute tma300_vkeys_attr = {
+	.attr = {
+		.mode = S_IRUGO,
+	},
+	.show = &tma300_vkeys_show,
+};
+
+static struct attribute *tma300_properties_attrs[] = {
+	&tma300_vkeys_attr.attr,
+	NULL
+};
+
+static struct attribute_group tma300_properties_attr_group = {
+	.attrs = tma300_properties_attrs,
+};
+
+static struct kobject *properties_kobj;
+
 #define CYTTSP_TS_GPIO_IRQ	150
 static int cyttsp_platform_init(struct i2c_client *client)
 {
-	int rc = -EINVAL, data;
+	int rc = -EINVAL;
 	struct vreg *vreg_ldo8, *vreg_ldo15;
 
 	vreg_ldo8 = vreg_get(NULL, "gp7");
@@ -215,20 +265,20 @@ static int cyttsp_platform_init(struct i2c_client *client)
 	rc = vreg_set_level(vreg_ldo15, 3050);
 	if (rc) {
 		pr_err("%s: VREG L15 set failed\n", __func__);
-		goto l15_put;
+		goto l8_disable;
 	}
 
 	rc = vreg_enable(vreg_ldo15);
 	if (rc) {
 		pr_err("%s: VREG L15 enable failed\n", __func__);
-		goto l15_put;
+		goto l8_disable;
 	}
 
 	/* check this device active by reading first byte/register */
-	data = i2c_smbus_read_byte_data(client, 0x01);
-	if (data < 0) {
+	rc = i2c_smbus_read_byte_data(client, 0x01);
+	if (rc < 0) {
 		pr_err("%s: i2c sanity check failed\n", __func__);
-		goto l15_disable;
+		goto l8_disable;
 	}
 
 	rc = gpio_tlmm_config(GPIO_CFG(CYTTSP_TS_GPIO_IRQ, 0, GPIO_CFG_INPUT,
@@ -236,22 +286,29 @@ static int cyttsp_platform_init(struct i2c_client *client)
 	if (rc) {
 		pr_err("%s: Could not configure gpio %d\n",
 					 __func__, CYTTSP_TS_GPIO_IRQ);
-		goto l15_disable;
+		goto l8_disable;
 	}
 
 	rc = gpio_request(CYTTSP_TS_GPIO_IRQ, "ts_irq");
 	if (rc) {
 		pr_err("%s: unable to request gpio %d (%d)\n",
 			__func__, CYTTSP_TS_GPIO_IRQ, rc);
-		goto l15_disable;
+		goto l8_disable;
 	}
+
+	/* virtual keys */
+	tma300_vkeys_attr.attr.name = "virtualkeys.cyttsp-i2c";
+	properties_kobj = kobject_create_and_add("board_properties",
+				NULL);
+	if (properties_kobj)
+		rc = sysfs_create_group(properties_kobj,
+			&tma300_properties_attr_group);
+	if (!properties_kobj || rc)
+		pr_err("%s: failed to create board_properties\n",
+				__func__);
 
 	return CY_OK;
 
-l15_disable:
-	vreg_disable(vreg_ldo15);
-l15_put:
-	vreg_put(vreg_ldo15);
 l8_disable:
 	vreg_disable(vreg_ldo8);
 l8_put:
@@ -657,6 +714,9 @@ static struct mfd_cell pm8058_subdevs[] = {
 		.data_size	= sizeof(pm8058_pwm_data),
 	},
 	{	.name = "pm8058-nfc",
+		.id		= -1,
+	},
+	{	.name = "pm8058-upl",
 		.id		= -1,
 	},
 };
@@ -2656,7 +2716,7 @@ static void msm_qsd_spi_gpio_release(void)
 }
 
 static struct msm_spi_platform_data qsd_spi_pdata = {
-	.max_clock_speed = 26000000,
+	.max_clock_speed = 26331429,
 	.clk_name = "spi_clk",
 	.pclk_name = "spi_pclk",
 	.gpio_config  = msm_qsd_spi_gpio_config,
@@ -2876,17 +2936,57 @@ static unsigned dtv_reset_gpio =
 	GPIO_CFG(37, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 #endif
 
+static int gpio_set(const char *label, const char *name, int level, int on)
+{
+	struct vreg *vreg = vreg_get(NULL, label);
+	int rc;
+
+	if (IS_ERR(vreg)) {
+		rc = PTR_ERR(vreg);
+		pr_err("%s: vreg %s get failed (%d)\n",
+			__func__, name, rc);
+		return rc;
+	}
+
+	rc = vreg_set_level(vreg, level);
+	if (rc) {
+		pr_err("%s: vreg %s set level failed (%d)\n",
+			__func__, name, rc);
+		return rc;
+	}
+
+	if (on)
+		rc = vreg_enable(vreg);
+	else
+		rc = vreg_disable(vreg);
+	if (rc)
+		pr_err("%s: vreg %s enable failed (%d)\n",
+			__func__, name, rc);
+	return rc;
+}
+
+static int i2c_gpio_power(int on)
+{
+	int rc = gpio_set("gp7", "LDO8", 1800, on);
+	if (rc)
+		return rc;
+	return gpio_set("gp4", "LDO10", 2600, on);
+}
+
 static int dtv_panel_power(int on)
 {
 	int flag_on = !!on;
 	static int dtv_power_save_on;
-	struct vreg *vreg_ldo17, *vreg_ldo8;
 	int rc;
 
 	if (dtv_power_save_on == flag_on)
 		return 0;
 
 	dtv_power_save_on = flag_on;
+	pr_info("%s: %d >>\n", __func__, on);
+
+	gpio_set_value_cansleep(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN),
+		on);
 
 #ifdef HDMI_RESET
 	if (on) {
@@ -2898,7 +2998,8 @@ static int dtv_panel_power(int on)
 			return rc;
 		}
 
-		gpio_set_value(37, 0);	/* bring reset line low to hold reset*/
+		/* bring reset line low to hold reset*/
+		gpio_set_value(37, 0);
 	}
 #endif
 
@@ -2920,62 +3021,16 @@ static int dtv_panel_power(int on)
 		}
 	}
 
-	vreg_ldo8 = vreg_get(NULL, "gp7");
-
-	if (IS_ERR(vreg_ldo8)) {
-		rc = PTR_ERR(vreg_ldo8);
-		pr_err("%s:  vreg17 get failed (%d)\n",
-			__func__, rc);
+	rc = i2c_gpio_power(on);
+	if (rc)
 		return rc;
-	}
-
-	rc = vreg_set_level(vreg_ldo8, 1800);
-	if (rc) {
-		pr_err("%s: vreg LDO18 set level failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
-
-	if (on)
-		rc = vreg_enable(vreg_ldo8);
-	else
-		rc = vreg_disable(vreg_ldo8);
-
-	if (rc) {
-		pr_err("%s: LDO8 vreg enable failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
 
 	mdelay(5);		/* ensure power is stable */
 
 	/*  -- LDO17 for HDMI */
-	vreg_ldo17 = vreg_get(NULL, "gp11");
-
-	if (IS_ERR(vreg_ldo17)) {
-		rc = PTR_ERR(vreg_ldo17);
-		pr_err("%s:  vreg17 get failed (%d)\n",
-			__func__, rc);
+	rc = gpio_set("gp11", "LDO17", 2600, on);
+	if (rc)
 		return rc;
-	}
-
-	rc = vreg_set_level(vreg_ldo17, 2600);
-	if (rc) {
-		pr_err("%s: vreg LDO17 set level failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
-
-	if (on)
-		rc = vreg_enable(vreg_ldo17);
-	else
-		rc = vreg_disable(vreg_ldo17);
-
-	if (rc) {
-		pr_err("%s: LDO17 vreg enable failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
 
 	mdelay(5);		/* ensure power is stable */
 
@@ -2985,6 +3040,7 @@ static int dtv_panel_power(int on)
 		mdelay(10);		/* 10 msec before IO can be accessed */
 	}
 #endif
+	pr_info("%s: %d <<\n", __func__, on);
 
 	return rc;
 }
@@ -3038,6 +3094,11 @@ static struct platform_device msm_fb_device = {
 	.dev    = {
 		.platform_data = &msm_fb_pdata,
 	}
+};
+
+static struct platform_device msm_migrate_pages_device = {
+	.name   = "msm_migrate_pages",
+	.id     = -1,
 };
 
 static struct android_pmem_platform_data android_pmem_kernel_ebi1_pdata = {
@@ -3197,7 +3258,8 @@ static int display_common_power(int on)
 			return rc;
 		}
 
-		gpio_set_value(180, 0);	/* bring reset line low to hold reset*/
+		/* bring reset line low to hold reset*/
+		gpio_set_value(180, 0);
 	}
 
 	/* Toshiba WeGA power -- has 3 power source */
@@ -3346,7 +3408,7 @@ static int display_common_power(int on)
 			}
 		}
 
-		gpio_set_value(180, 1);	/* bring reset line high */
+		gpio_set_value(180, 1); /* bring reset line high */
 		mdelay(10);	/* 10 msec before IO can be accessed */
 		rc = pmapp_display_clock_config(1);
 		if (rc) {
@@ -3371,7 +3433,7 @@ static int display_common_power(int on)
 			return rc;
 		}
 
-		gpio_set_value(180, 0);	/* bring reset line low */
+		gpio_set_value(180, 0); /* bring reset line low */
 
 		if (machine_is_msm7x30_fluid()) {
 			rc = vreg_disable(vreg_ldo8);
@@ -3438,7 +3500,12 @@ static int lcd_panel_spi_gpio_num[] = {
 		};
 
 static struct msm_gpio lcd_panel_gpios[] = {
+/* Workaround, since HDMI_INT is using the same GPIO line (18), and is used as
+ * input.  if there is a hardware revision; we should reassign this GPIO to a
+ * new open line; and removing it will just ensure that this will be missed in
+ * the future.
 	{ GPIO_CFG(18, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "lcdc_grn0" },
+ */
 	{ GPIO_CFG(19, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "lcdc_grn1" },
 	{ GPIO_CFG(20, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "lcdc_blu0" },
 	{ GPIO_CFG(21, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "lcdc_blu1" },
@@ -3879,7 +3946,8 @@ static int bluetooth_power(int on)
 
 		if (machine_is_msm8x55_svlte_surf() ||
 				machine_is_msm8x55_svlte_ffa())
-			gpio_set_value(GPIO_PIN(bt_config_clock->gpio_cfg), 1);
+			gpio_set_value(
+				GPIO_PIN(bt_config_clock->gpio_cfg), 1);
 
 		rc = marimba_bt(on);
 		if (rc < 0)
@@ -3892,7 +3960,8 @@ static int bluetooth_power(int on)
 
 		if (machine_is_msm8x55_svlte_surf() ||
 				machine_is_msm8x55_svlte_ffa())
-			gpio_set_value(GPIO_PIN(bt_config_clock->gpio_cfg), 0);
+			gpio_set_value(
+				GPIO_PIN(bt_config_clock->gpio_cfg), 0);
 
 		rc = msm_gpios_enable(bt_config_power_on,
 			ARRAY_SIZE(bt_config_power_on));
@@ -3990,19 +4059,6 @@ static struct platform_device msm_batt_device = {
 	.dev.platform_data  = &msm_psy_batt_data,
 };
 
-static struct platform_device *early_devices[] __initdata = {
-#ifdef CONFIG_GPIOLIB
-	&msm_gpio_devices[0],
-	&msm_gpio_devices[1],
-	&msm_gpio_devices[2],
-	&msm_gpio_devices[3],
-	&msm_gpio_devices[4],
-	&msm_gpio_devices[5],
-	&msm_gpio_devices[6],
-	&msm_gpio_devices[7],
-#endif
-};
-
 static char *msm_adc_fluid_device_names[] = {
 	"LTC_ADC1",
 	"LTC_ADC2",
@@ -4054,6 +4110,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&android_pmem_device,
 	&msm_fb_device,
+	&msm_migrate_pages_device,
 	&mddi_toshiba_device,
 	&lcdc_toshiba_panel_device,
 #ifdef CONFIG_MSM_ROTATOR
@@ -4262,6 +4319,7 @@ struct vreg *vreg_mmc;
 struct sdcc_gpio {
 	struct msm_gpio *cfg_data;
 	uint32_t size;
+	struct msm_gpio *sleep_cfg_data;
 };
 #if defined(CONFIG_MMC_MSM_SDC1_SUPPORT)
 static struct msm_gpio sdc1_lvlshft_cfg_data[] = {
@@ -4302,6 +4360,21 @@ static struct msm_gpio sdc3_cfg_data[] = {
 	{GPIO_CFG(119, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA), "sdc3_dat_0"},
 };
 
+static struct msm_gpio sdc3_sleep_cfg_data[] = {
+	{GPIO_CFG(110, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+			"sdc3_clk"},
+	{GPIO_CFG(111, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+			"sdc3_cmd"},
+	{GPIO_CFG(116, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+			"sdc3_dat_3"},
+	{GPIO_CFG(117, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+			"sdc3_dat_2"},
+	{GPIO_CFG(118, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+			"sdc3_dat_1"},
+	{GPIO_CFG(119, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+			"sdc3_dat_0"},
+};
+
 static struct msm_gpio sdc4_cfg_data[] = {
 	{GPIO_CFG(58, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "sdc4_clk"},
 	{GPIO_CFG(59, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA), "sdc4_cmd"},
@@ -4315,18 +4388,22 @@ static struct sdcc_gpio sdcc_cfg_data[] = {
 	{
 		.cfg_data = sdc1_cfg_data,
 		.size = ARRAY_SIZE(sdc1_cfg_data),
+		.sleep_cfg_data = NULL,
 	},
 	{
 		.cfg_data = sdc2_cfg_data,
 		.size = ARRAY_SIZE(sdc2_cfg_data),
+		.sleep_cfg_data = NULL,
 	},
 	{
 		.cfg_data = sdc3_cfg_data,
 		.size = ARRAY_SIZE(sdc3_cfg_data),
+		.sleep_cfg_data = sdc3_sleep_cfg_data,
 	},
 	{
 		.cfg_data = sdc4_cfg_data,
 		.size = ARRAY_SIZE(sdc4_cfg_data),
+		.sleep_cfg_data = NULL,
 	},
 };
 
@@ -4357,7 +4434,12 @@ static uint32_t msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
 				__func__,  dev_id);
 	} else {
 		clear_bit(dev_id, &gpio_sts);
-		msm_gpios_disable_free(curr->cfg_data, curr->size);
+		if (curr->sleep_cfg_data) {
+			msm_gpios_enable(curr->sleep_cfg_data, curr->size);
+			msm_gpios_free(curr->sleep_cfg_data, curr->size);
+		} else {
+			msm_gpios_disable_free(curr->cfg_data, curr->size);
+		}
 	}
 
 	return rc;
@@ -4423,7 +4505,8 @@ out:
 static unsigned int msm7x30_sdcc_slot_status(struct device *dev)
 {
 	return (unsigned int)
-		gpio_get_value(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1));
+		gpio_get_value_cansleep(
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1));
 }
 #endif
 
@@ -4552,6 +4635,21 @@ static void msm_sdc1_lvlshft_enable(void)
 }
 #endif
 
+#ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
+static void sdio_wakeup_gpiocfg_slot3(void)
+{
+	gpio_request(118, "sdio_wakeup");
+	gpio_direction_output(118, 1);
+	/*
+	 * MSM GPIO 118 will be used as both SDIO wakeup irq and
+	 * DATA_1 for slot 2. Hence, leave it to SDCC driver to
+	 * request this gpio again when it wants to use it as a
+	 * data line.
+	 */
+	gpio_free(118);
+}
+#endif
+
 static void __init msm7x30_init_mmc(void)
 {
 	vreg_s3 = vreg_get(NULL, "s3");
@@ -4587,6 +4685,7 @@ static void __init msm7x30_init_mmc(void)
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 	sdcc_vreg_data[2].vreg_data = vreg_s3;
 	sdcc_vreg_data[2].level = 1800;
+	sdio_wakeup_gpiocfg_slot3();
 	msm_add_sdcc(3, &msm7x30_sdc3_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
@@ -4888,6 +4987,14 @@ static struct isa1200_platform_data isa1200_1_pdata = {
 	/*gpio to enable haptic*/
 	.hap_en_gpio = PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HAP_ENABLE),
 	.max_timeout = 15000,
+	.mode_ctrl = PWM_GEN_MODE,
+	.pwm_fd = {
+		.pwm_div = 256,
+	},
+	.is_erm = false,
+	.smart_en = true,
+	.ext_clk_en = true,
+	.chip_en = 1,
 };
 
 static struct i2c_board_info msm_isa1200_board_info[] = {
@@ -4997,36 +5104,6 @@ vreg_fail:
 	return rc;
 }
 
-/*virtual key support */
-static ssize_t tma300_vkeys_show(struct kobject *kobj,
-			struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf,
-	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":80:904:160:210"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":240:904:160:210"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":400:904:160:210"
-	"\n");
-}
-
-static struct kobj_attribute tma300_vkeys_attr = {
-	.attr = {
-		.name = "virtualkeys.msm_tma300_ts",
-		.mode = S_IRUGO,
-	},
-	.show = &tma300_vkeys_show,
-};
-
-static struct attribute *tma300_properties_attrs[] = {
-	&tma300_vkeys_attr.attr,
-	NULL
-};
-
-static struct attribute_group tma300_properties_attr_group = {
-	.attrs = tma300_properties_attrs,
-};
-
-static struct kobject *properties_kobj;
-
 #define TS_GPIO_IRQ 150
 
 static int tma300_dev_setup(bool enable)
@@ -5071,6 +5148,7 @@ static int tma300_dev_setup(bool enable)
 		}
 
 		/* virtual keys */
+		tma300_vkeys_attr.attr.name = "virtualkeys.msm_tma300_ts";
 		properties_kobj = kobject_create_and_add("board_properties",
 					NULL);
 		if (properties_kobj)
@@ -5139,7 +5217,6 @@ static void __init msm7x30_init(void)
 		printk(KERN_ERR "%s: socinfo_init() failed!\n",
 		       __func__);
 	msm_clock_init(msm_clocks_7x30, msm_num_clocks_7x30);
-	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
 	msm7x30_init_uart2();
 #endif
@@ -5320,44 +5397,25 @@ static void __init msm7x30_allocate_memory_regions(void)
 {
 	void *addr;
 	unsigned long size;
+/*
+   Request allocation of Hardware accessible PMEM regions
+   at the beginning to make sure they are allocated in EBI-0.
+   This will allow 7x30 with two mem banks enter the second
+   mem bank into Self-Refresh State during Idle Power Collapse.
 
-	size = pmem_sf_size;
-	if (size) {
-		addr = alloc_bootmem(size);
-		android_pmem_pdata.start = __pa(addr);
-		android_pmem_pdata.size = size;
-		pr_info("allocating %lu bytes at %p (%lx physical) for sf "
-			"pmem arena\n", size, addr, __pa(addr));
-	}
+    The current HW accessible PMEM regions are
+    1. Frame Buffer.
+       LCDC HW can access msm_fb_resources during Idle-PC.
 
+    2. Audio
+       LPA HW can access android_pmem_audio_pdata during Idle-PC.
+*/
 	size = fb_size ? : MSM_FB_SIZE;
 	addr = alloc_bootmem(size);
 	msm_fb_resources[0].start = __pa(addr);
 	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
 	pr_info("allocating %lu bytes at %p (%lx physical) for fb\n",
 		size, addr, __pa(addr));
-
-	size = gpu_phys_size;
-	if (size) {
-		addr = alloc_bootmem(size);
-		kgsl_resources[1].start = __pa(addr);
-		kgsl_resources[1].end = kgsl_resources[1].start + size - 1;
-		pr_info("allocating %lu bytes at %p (%lx physical) for "
-			"KGSL\n", size, addr, __pa(addr));
-	}
-
-	if machine_is_msm7x30_fluid()
-		size = fluid_pmem_adsp_size;
-	else
-		size = pmem_adsp_size;
-
-	if (size) {
-		addr = alloc_bootmem(size);
-		android_pmem_adsp_pdata.start = __pa(addr);
-		android_pmem_adsp_pdata.size = size;
-		pr_info("allocating %lu bytes at %p (%lx physical) for adsp "
-			"pmem arena\n", size, addr, __pa(addr));
-	}
 
 	size = pmem_audio_size;
 	if (size) {
@@ -5366,6 +5424,15 @@ static void __init msm7x30_allocate_memory_regions(void)
 		android_pmem_audio_pdata.size = size;
 		pr_info("allocating %lu bytes at %p (%lx physical) for audio "
 			"pmem arena\n", size, addr, __pa(addr));
+	}
+
+	size = gpu_phys_size;
+	if (size) {
+		addr = alloc_bootmem(size);
+		kgsl_resources[1].start = __pa(addr);
+		kgsl_resources[1].end = kgsl_resources[1].start + size - 1;
+		pr_info("allocating %lu bytes at %p (%lx physical) for "
+			"KGSL\n", size, addr, __pa(addr));
 	}
 
 	size = pmem_kernel_ebi1_size;
@@ -5377,6 +5444,26 @@ static void __init msm7x30_allocate_memory_regions(void)
 			" ebi1 pmem arena\n", size, addr, __pa(addr));
 	}
 
+	size = pmem_sf_size;
+	if (size) {
+		addr = alloc_bootmem(size);
+		android_pmem_pdata.start = __pa(addr);
+		android_pmem_pdata.size = size;
+		pr_info("allocating %lu bytes at %p (%lx physical) for sf "
+			"pmem arena\n", size, addr, __pa(addr));
+	}
+
+	if machine_is_msm7x30_fluid()
+		size = fluid_pmem_adsp_size;
+	else
+		size = pmem_adsp_size;
+	if (size) {
+		addr = alloc_bootmem(size);
+		android_pmem_adsp_pdata.start = __pa(addr);
+		android_pmem_adsp_pdata.size = size;
+		pr_info("allocating %lu bytes at %p (%lx physical) for adsp "
+			"pmem arena\n", size, addr, __pa(addr));
+	}
 }
 
 static void __init msm7x30_map_io(void)

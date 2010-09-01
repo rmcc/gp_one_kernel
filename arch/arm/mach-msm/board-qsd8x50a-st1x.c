@@ -176,11 +176,13 @@ static char *usb_functions_default_adb[] = {
 
 static char *usb_functions_rndis[] = {
 	"rndis",
+	"usb_mass_storage",
 };
 
 static char *usb_functions_rndis_adb[] = {
 	"rndis",
 	"adb",
+	"usb_mass_storage",
 };
 
 static char *usb_functions_all[] = {
@@ -267,6 +269,7 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.num_functions = ARRAY_SIZE(usb_functions_all),
 	.functions = usb_functions_all,
 	.serial_number = "1234567890ABCDEF",
+	.enable_rndis_msc	= 1,
 };
 
 static struct platform_device android_usb_device = {
@@ -1068,6 +1071,7 @@ static int msm_fb_lcdc_gpio_config(int on)
 	} else {
 		gpio_set_value(17, 0);
 		gpio_set_value(19, 0);
+		gpio_set_value(20, 0);
 		gpio_set_value(22, 0);
 		gpio_set_value(32, 0);
 		gpio_set_value(155, 0);
@@ -1092,6 +1096,7 @@ static struct lcdc_platform_data lcdc_pdata = {
 
 static struct msm_panel_common_pdata mdp_pdata = {
 	.gpio = 98,
+	.mdp_ver = 1,
 };
 
 #define LID_SENSOR_GPIO		41
@@ -1887,7 +1892,6 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 	return 0;
 }
 
-#endif
 
 static int msm_sdcc_get_wpswitch(struct device *dv)
 {
@@ -2021,6 +2025,7 @@ static void __init qsd8x50_init_mmc(void)
 #endif
 }
 
+#endif
 static int __init qsd8x50_cfg_smsc911x(void)
 {
 	int rc = 0;
@@ -2228,7 +2233,13 @@ static void __init qsd8x50_init(void)
 	msm_fb_add_devices();
 
 	qsd8x50_init_host();
+
+#if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
+	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
+	|| defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
+	|| defined(CONFIG_MMC_MSM_SDC4_SUPPORT))
 	qsd8x50_init_mmc();
+#endif
 	bt_power_init_st_1_5();
 	audio_gpio_init();
 	msm_device_i2c_init();

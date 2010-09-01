@@ -616,7 +616,27 @@ int __init msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat)
 	return platform_device_register(pdev);
 }
 
-#define MDP_HW_BASE 0x05100000
+#define MIPI_DSI_HW_BASE	0x04700000
+#define ROTATOR_HW_BASE		0x04E00000
+#define TVENC_HW_BASE		0x04F00000
+#define MDP_HW_BASE		0x05100000
+
+static struct resource msm_mipi_dsi_resources[] = {
+	{
+		.name   = "mipi_dsi",
+		.start  = MIPI_DSI_HW_BASE,
+		.end    = MIPI_DSI_HW_BASE + 0x000F0000 - 1,
+		.flags  = IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device msm_mipi_dsi_device = {
+	.name   = "mipi_dsi",
+	.id     = 0,
+	.num_resources  = ARRAY_SIZE(msm_mipi_dsi_resources),
+	.resource       = msm_mipi_dsi_resources,
+};
+
 static struct resource msm_mdp_resources[] = {
 	{
 		.name   = "mdp",
@@ -700,6 +720,8 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_mdp_device, data);
 	else if (!strncmp(name, "lcdc", 4))
 		msm_register_device(&msm_lcdc_device, data);
+	else if (!strncmp(name, "mipi_dsi", 8))
+		msm_register_device(&msm_mipi_dsi_device, data);
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
 }
@@ -898,10 +920,25 @@ struct clk msm_clocks_8x60[] = {
 	CLK_8X60("tsif_pclk",		TSIF_P_CLK,		NULL, 0),
 	CLK_8X60("usb_fs_pclk",		USB_FS1_P_CLK,		NULL, 0),
 	CLK_8X60("usb_fs_pclk",		USB_FS2_P_CLK,		NULL, 0),
+	CLK_8X60("adm_clk",		ADM0_CLK,		NULL, 0),
+	CLK_8X60("adm_pclk",		ADM0_P_CLK,		NULL, 0),
+	CLK_8X60("adm_clk",		ADM1_CLK,		NULL, 0),
+	CLK_8X60("adm_pclk",		ADM1_P_CLK,		NULL, 0),
+	CLK_8X60("modem_ahb1_pclk",	MODEM_AHB1_P_CLK,	NULL, 0),
+	CLK_8X60("modem_ahb2_pclk",	MODEM_AHB2_P_CLK,	NULL, 0),
+	CLK_8X60("pmic_arb_pclk",	PMIC_ARB0_P_CLK,	NULL, 0),
+	CLK_8X60("pmic_arb_pclk",	PMIC_ARB1_P_CLK,	NULL, 0),
+	CLK_8X60("pmic_ssbi2",		PMIC_SSBI2_CLK,		NULL, 0),
+	CLK_8X60("rpm_msg_ram_pclk",	RPM_MSG_RAM_P_CLK,	NULL, 0),
 	CLK_8X60("cam_clk",		CAM_CLK,		NULL, 0),
 	CLK_8X60("csi_src_clk",		CSI_SRC_CLK,		NULL, 0),
 	CLK_8X60("csi_clk",		CSI0_CLK,		NULL, 0),
-	CLK_8X60("csi_clk",		CSI1_CLK,		NULL, 0),
+#ifdef CONFIG_WEBCAM_OV7692
+	CLK_8X60("csi_clk",		CSI1_CLK,
+					&msm_camera_sensor_webcam.dev, 0),
+#else
+	CLK_8X60("csi_clk",		CSI1_CLK, NULL, 0),
+#endif
 	CLK_8X60("dsi_byte_div_clk",	DSI_BYTE_CLK,		NULL, 0),
 	CLK_8X60("dsi_esc_clk",		DSI_ESC_CLK,		NULL, 0),
 	CLK_8X60("gfx2d_clk",		GFX2D0_CLK,		NULL, 0),
@@ -924,7 +961,12 @@ struct clk msm_clocks_8x60[] = {
 	CLK_8X60("vpe_clk",		VPE_CLK,		NULL, 0),
 	CLK_8X60("vfe_clk",		VFE_CLK,		NULL, 0),
 	CLK_8X60("csi_vfe_clk",		CSI0_VFE_CLK,		NULL, 0),
-	CLK_8X60("csi_vfe_clk",		CSI1_VFE_CLK,		NULL, 0),
+#ifdef CONFIG_WEBCAM_OV7692
+	CLK_8X60("csi_vfe_clk",		CSI1_VFE_CLK,
+					&msm_camera_sensor_webcam.dev, 0),
+#else
+	CLK_8X60("csi_vfe_clk",		CSI1_VFE_CLK, NULL, 0),
+#endif
 	CLK_8X60("smmu_jpegd_clk", 	JPEGD_AXI_CLK,		NULL, 0),
 	CLK_8X60("smmu_vfe_clk", 	VFE_AXI_CLK,		NULL, 0),
 	CLK_8X60("vfe_axi_clk", 	VFE_AXI_CLK,		NULL, 0),
@@ -933,7 +975,12 @@ struct clk msm_clocks_8x60[] = {
 	CLK_8X60("vpe_axi_clk", 	VPE_AXI_CLK,		NULL, 0),
 	CLK_8X60("amp_pclk",		AMP_P_CLK,		NULL, 0),
 	CLK_8X60("csi_pclk",		CSI0_P_CLK,		NULL, 0),
-	CLK_8X60("csi_pclk",		CSI1_P_CLK,		NULL, 0),
+#ifdef CONFIG_WEBCAM_OV7692
+	CLK_8X60("csi_pclk",		CSI1_P_CLK,
+					&msm_camera_sensor_webcam.dev, 0),
+#else
+	CLK_8X60("csi_pclk",		CSI1_P_CLK, NULL, 0),
+#endif
 	CLK_8X60("dsi_m_pclk",		DSI_M_P_CLK,		NULL, 0),
 	CLK_8X60("fab_pclk",		FAB_P_CLK,		NULL, 0),
 	CLK_8X60("ijpeg_pclk",		IJPEG_P_CLK,		NULL, 0),
@@ -960,7 +1007,3 @@ struct clk msm_clocks_8x60[] = {
 
 unsigned msm_num_clocks_8x60 = ARRAY_SIZE(msm_clocks_8x60);
 
-struct platform_device msm_device_gpio = {
-	.name = "msm8660-gpio",
-	.id   = 0,
-};
