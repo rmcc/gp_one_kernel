@@ -17,6 +17,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/gpio.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
@@ -34,7 +35,6 @@
 #include <asm/mach/mmc.h>
 #include <mach/vreg.h>
 #include <mach/mpp.h>
-#include <mach/gpio.h>
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_rpcrouter.h>
@@ -454,9 +454,11 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pmic_register_vbus_sn   = msm_pm_app_register_vbus_sn,
 	.pmic_unregister_vbus_sn = msm_pm_app_unregister_vbus_sn,
 	.pmic_enable_ldo         = msm_pm_app_enable_usb_ldo,
+#if defined(CONFIG_BATTERY_DS2784) || defined(CONFIG_BATTERY_FIH_ZEUS)
 	.chg_vbus_draw           = hsusb_chg_vbus_draw,
 	.chg_connected           = charger_connected,
 	.chg_init                = hsusb_chg_init,
+#endif
 };
 #ifdef CONFIG_USB_GADGET
 static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
@@ -991,7 +993,7 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("ds2482", 0x18),
 		.platform_data = ds2482_set_slp_n,
 	},
-#elif CONFIG_BATTERY_FIH_ZEUS
+#elif defined(CONFIG_BATTERY_FIH_ZEUS)
 	{
 		I2C_BOARD_INFO("gasgauge_bridge", 0x18),
 	},
@@ -1263,24 +1265,24 @@ static int __init spi_gpio_init(void)
 	   */
 	/* } FIH_ADQ, Ming */
 
-	rc = gpio_request(101, "gpio_spi");
+	rc = gpio_request(101, "spi_clk");
 	if (rc){
-		printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		printk(KERN_ERR "%s: spi_clk setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
-	rc = gpio_request(102, "gpio_spi");
+	rc = gpio_request(102, "spi_cs");
 	if (rc){
-		printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		printk(KERN_ERR "%s: spi_cs setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
-	rc = gpio_request(131, "gpio_spi");
+	rc = gpio_request(131, "spi_miso");
 	if (rc){
-		printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		printk(KERN_ERR "%s: spi_miso setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
-	rc = gpio_request(132, "gpio_spi");
+	rc = gpio_request(132, "spi_mosi");
 	if (rc){
-		printk(KERN_ERR "%s: msm spi setting failed! rc = %d\n", __func__, rc);
+		printk(KERN_ERR "%s: spi_mosi setting failed! rc = %d\n", __func__, rc);
 		return -EIO;
 	}
 
@@ -1628,8 +1630,8 @@ msm_i2c_gpio_config(int iface, int config_type)
 
 	if (config_type) {
 		gpio_set_value(gpio_scl, 1);
-		gpio_configure(gpio_scl, GPIOF_INPUT);
-		gpio_configure(gpio_sda, GPIOF_INPUT);
+		gpio_direction_input(gpio_scl);
+		gpio_direction_input(gpio_sda);
 		gpio_tlmm_config(GPIO_CFG(gpio_scl, 1, GPIO_CFG_OUTPUT,
 					GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 		gpio_tlmm_config(GPIO_CFG(gpio_sda, 1, GPIO_CFG_OUTPUT,
@@ -1661,13 +1663,6 @@ static void __init msm_device_i2c_init(void)
 	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
 }
 
-
-#ifdef CONFIG_SWITCH_GPIO
-static void __init init_headset_sensor(void)
-{
-	gpio_direction_input(40);
-}
-#endif
 
 /* FIH_ADQ, AudiPCHuang, 2009/03/30, { */
 /* ZEUS_ANDROID_CR, Create proc entry for reading device information*/
@@ -1716,10 +1711,6 @@ static void __init msm7x25_init(void)
 	msm_camera_add_device();
 
 	msm7x25_init_mmc();
-
-#ifdef CONFIG_SWITCH_GPIO
-	init_headset_sensor();
-#endif
 
 #ifdef CONFIG_BT
 	init_Bluetooth_gpio_table();
