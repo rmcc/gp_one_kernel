@@ -1698,6 +1698,7 @@ static int32_t mt9t013_power_close(void)
 	gpio_direction_output(mt9t013_ctrl->sensordata->sensor_reset,0);
 	mdelay(10);
         gpio_direction_output(mt9t013_ctrl->sensordata->sensor_pwd,1);	
+	gpio_request(31,"mt9t013_power"); 
 	gpio_direction_output(31,0); //sub-camera(VGA),power off
 	gpio_free(mt9t013_ctrl->sensordata->sensor_reset);
 	gpio_free(mt9t013_ctrl->sensordata->sensor_pwd);

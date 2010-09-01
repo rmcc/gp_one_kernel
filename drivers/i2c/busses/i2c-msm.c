@@ -780,8 +780,8 @@ static int msm_i2c_resume(struct platform_device *pdev)
 {
 	struct msm_i2c_dev *dev = platform_get_drvdata(pdev);
 #ifdef CONFIG_MACH_ADQ
-	gpio_configure(60, GPIOF_INPUT);
-	gpio_configure(61, GPIOF_INPUT);
+	gpio_direction_input(60);
+	gpio_direction_input(61);
 	gpio_tlmm_config(GPIO_CFG(60, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 	gpio_tlmm_config(GPIO_CFG(61, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 #endif
