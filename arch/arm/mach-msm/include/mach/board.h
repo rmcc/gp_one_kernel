@@ -21,6 +21,7 @@
 #include <linux/types.h>
 #include <linux/input.h>
 #include <linux/usb.h>
+#include <linux/leds-pmic8058.h>
 
 /* platform device data structures */
 struct msm_acpu_clock_platform_data {

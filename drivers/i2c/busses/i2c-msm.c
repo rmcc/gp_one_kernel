@@ -151,7 +151,7 @@ msm_i2c_interrupt(int irq, void *devid)
 
 	spin_lock(&dev->lock);
 	if (!dev->msg) {
-		dev_err(dev->dev, "%s: IRQ but nothing to do!\n", __func__);
+		dev_dbg(dev->dev, "%s: IRQ but nothing to do!\n", __func__);
 		spin_unlock(&dev->lock);
 		return IRQ_HANDLED;
 	}

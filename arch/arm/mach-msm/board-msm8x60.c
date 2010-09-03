@@ -35,7 +35,6 @@
 #include <linux/pwm.h>
 #include <linux/pmic8058-pwm.h>
 #include <linux/leds-pmic8058.h>
-#include <linux/rtc/rtc-pm8058.h>
 #include <linux/mfd/marimba.h>
 
 #include <linux/i2c.h>
@@ -257,16 +256,24 @@ static struct platform_device smsc911x_device = {
 static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
 	[MSM_PM_MODE(0, MSM_PM_SLEEP_MODE_POWER_COLLAPSE)] = {
 		.supported = 1,
-		.suspend_enabled = 1,
-		.idle_enabled = 1,
+		.suspend_enabled = 0,
+		.idle_enabled = 0,
+		.latency = 4000,
+		.residency = 13000,
+	},
+
+	[MSM_PM_MODE(0, MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SHALLOW_VDD_MIN)] = {
+		.supported = 1,
+		.suspend_enabled = 0,
+		.idle_enabled = 0,
 		.latency = 1000,
 		.residency = 9000,
 	},
 
 	[MSM_PM_MODE(0, MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE)] = {
 		.supported = 1,
-		.suspend_enabled = 1,
-		.idle_enabled = 1,
+		.suspend_enabled = 0,
+		.idle_enabled = 0,
 		.latency = 500,
 		.residency = 6000,
 	},
@@ -281,7 +288,7 @@ static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
 
 	[MSM_PM_MODE(1, MSM_PM_SLEEP_MODE_POWER_COLLAPSE)] = {
 		.supported = 1,
-		.suspend_enabled = 1,
+		.suspend_enabled = 0,
 		.idle_enabled = 0,
 		.latency = 600,
 		.residency = 7200,
@@ -289,8 +296,8 @@ static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
 
 	[MSM_PM_MODE(1, MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE)] = {
 		.supported = 1,
-		.suspend_enabled = 1,
-		.idle_enabled = 1,
+		.suspend_enabled = 0,
+		.idle_enabled = 0,
 		.latency = 500,
 		.residency = 6000,
 	},
@@ -305,8 +312,23 @@ static struct msm_pm_platform_data msm_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
 };
 
 static struct msm_cpuidle_state msm_cstates[] __initdata = {
-	{0, 0, "C0", "WFI", MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
-	{1, 0, "C0", "WFI", MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
+	{0, 0, "C0", "WFI",
+		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
+
+	{0, 1, "C1", "STANDALONE_POWER_COLLAPSE",
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
+
+	{0, 2, "C2", "POWER_COLLAPSE_SHALLOW_VDD_MIN",
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SHALLOW_VDD_MIN},
+
+	{0, 3, "C3", "POWER_COLLAPSE",
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE},
+
+	{1, 0, "C0", "WFI",
+		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
+
+	{1, 1, "C1", "STANDALONE_POWER_COLLAPSE",
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
 };
 
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
@@ -665,12 +687,23 @@ static struct platform_device msm_vpe_device = {
 
 #ifdef CONFIG_MSM_CAMERA
 
+#define VFE_CAMIF_TIMER1_GPIO 29
+#define VFE_CAMIF_TIMER2_GPIO 30
+#define VFE_CAMIF_TIMER3_GPIO_INT 31
+
 static uint32_t camera_off_gpio_table[] = {
 	GPIO_CFG(47, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
 	GPIO_CFG(48, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
 	GPIO_CFG(32, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(106, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(VFE_CAMIF_TIMER1_GPIO, 1,
+		GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(VFE_CAMIF_TIMER2_GPIO, 0,
+		GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(VFE_CAMIF_TIMER3_GPIO_INT, 0,
+		GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+
 };
 
 static uint32_t camera_on_gpio_table[] = {
@@ -679,6 +712,12 @@ static uint32_t camera_on_gpio_table[] = {
 	GPIO_CFG(32, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(106, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(VFE_CAMIF_TIMER1_GPIO, 1,
+		GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(VFE_CAMIF_TIMER2_GPIO, 0,
+		GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(VFE_CAMIF_TIMER3_GPIO_INT, 0,
+		GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 };
 
 static void config_gpio_table(uint32_t *table, int len)
@@ -784,12 +823,18 @@ struct resource msm_camera_resources[] = {
 	},
 };
 static struct msm_camera_sensor_flash_src msm_flash_src = {
-	.flash_sr_type				= MSM_CAMERA_FLASH_SRC_PWM,
-	._fsrc.pwm_src.freq			= 1000,
-	._fsrc.pwm_src.max_load		= 300,
-	._fsrc.pwm_src.low_load		= 30,
-	._fsrc.pwm_src.high_load	= 100,
-	._fsrc.pwm_src.channel		= 7,
+	.flash_sr_type = MSM_CAMERA_FLASH_SRC_PMIC,
+	._fsrc.pmic_src.num_of_src = 2,
+	._fsrc.pmic_src.low_current  = 100,
+	._fsrc.pmic_src.high_current = 300,
+	._fsrc.pmic_src.led_src_1 = PMIC8058_ID_FLASH_LED_0,
+	._fsrc.pmic_src.led_src_2 = PMIC8058_ID_FLASH_LED_1,
+	._fsrc.pmic_src.pmic_set_current = pm8058_set_flash_led_current,
+};
+static struct msm_camera_sensor_strobe_flash_data strobe_flash_xenon = {
+	.flash_charge = VFE_CAMIF_TIMER2_GPIO,
+	.flash_recharge_duration = 50000,
+	.irq = MSM_GPIO_TO_INT(VFE_CAMIF_TIMER3_GPIO_INT),
 };
 #ifdef CONFIG_IMX074
 static struct msm_camera_sensor_flash_data flash_imx074 = {
@@ -807,6 +852,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_imx074_data = {
 	.resource		= msm_camera_resources,
 	.num_resources	= ARRAY_SIZE(msm_camera_resources),
 	.flash_data		= &flash_imx074,
+	.strobe_flash_data	= &strobe_flash_xenon,
 	.csi_if			= 1
 };
 struct platform_device msm_camera_sensor_imx074 = {
@@ -1470,6 +1516,11 @@ static struct platform_device msm_rpm_log_device = {
 };
 #endif
 
+static struct platform_device *early_devices[] __initdata = {
+	&msm_device_saw_s0,
+	&msm_device_saw_s1,
+};
+
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&smc91x_device,
 	&msm_device_uart_dm12,
@@ -1526,8 +1577,6 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 };
 
 static struct platform_device *surf_devices[] __initdata = {
-	&msm_device_saw_s0,
-	&msm_device_saw_s1,
 	&msm_device_smd,
 	&smsc911x_device,
 	&msm_device_uart_dm12,
@@ -2149,10 +2198,6 @@ static struct resource resources_rtc[] = {
        },
 };
 
-static struct pm8058_rtc_pdata pm8058_rtc_data = {
-	.rtc_write_enable = false,
-};
-
 static struct pmic8058_led pmic8058_flash_leds[] = {
 	[0] = {
 		.name		= "camera:flash0",
@@ -2237,8 +2282,6 @@ static struct mfd_cell pm8058_subdevs[] = {
 	{
 		.name = "pm8058-rtc",
 		.id = -1,
-		.platform_data = &pm8058_rtc_data,
-		.data_size = sizeof(pm8058_rtc_data),
 		.num_resources  = ARRAY_SIZE(resources_rtc),
 		.resources      = resources_rtc,
 	},
@@ -4184,6 +4227,7 @@ static void __init msm8x60_init(void)
 	 * driver to set ACPU voltages.
 	 */
 	msm_spm_init(msm_spm_data, ARRAY_SIZE(msm_spm_data));
+	platform_add_devices(early_devices, ARRAY_SIZE(early_devices));
 	/* CPU frequency control is not supported on simulated targets. */
 	if (!machine_is_msm8x60_rumi3() && !machine_is_msm8x60_sim())
 		msm_acpu_clock_init(&msm8x60_acpu_clock_data);

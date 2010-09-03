@@ -648,16 +648,11 @@ u32 vcd_alloc_buffer_pool_entries(
 
 void vcd_free_buffer_pool_entries(struct vcd_buffer_pool *buf_pool)
 {
-	struct vcd_buffer_entry *list_itr, *list_next;
 	VCD_MSG_LOW("vcd_free_buffer_pool_entries:");
-
-	if (!list_empty(&buf_pool->queue))
-		list_for_each_entry_safe(list_itr, list_next,
-			&buf_pool->queue, list)
-			list_del(&list_itr->list);
 
 	kfree(buf_pool->entries);
 	memset(buf_pool, 0, sizeof(struct vcd_buffer_pool));
+	INIT_LIST_HEAD(&buf_pool->queue);
 }
 
 void vcd_flush_in_use_buffer_pool_entries(struct vcd_clnt_ctxt *cctxt,
@@ -697,7 +692,7 @@ void vcd_reset_buffer_pool_for_reuse(struct vcd_buffer_pool *buf_pool)
 	buf_pool->validated = 0;
 	buf_pool->allocated = 0;
 	buf_pool->in_use = 0;
-
+	INIT_LIST_HEAD(&buf_pool->queue);
 }
 
 struct vcd_buffer_entry *vcd_get_free_buffer_pool_entry
@@ -2074,12 +2069,11 @@ u32 vcd_handle_first_fill_output_buffer(
 	}
 	rc = vcd_check_if_buffer_req_met(cctxt, VCD_BUFFER_OUTPUT);
 	VCD_FAILED_RETURN(rc, "Output buffer requirements not met");
-
 	if (cctxt->out_buf_pool.q_len > 0) {
 		VCD_MSG_ERROR("Old output buffers were not flushed out");
 		return VCD_ERR_BAD_STATE;
 	}
-
+	cctxt->status.mask |= VCD_FIRST_OP_RCVD;
 	if (cctxt->sched_clnt_hdl)
 		rc = vcd_sched_suspend_resume_clnt(cctxt, true);
 	VCD_FAILED_RETURN(rc, "Failed: vcd_sched_suspend_resume_clnt");
@@ -2089,7 +2083,6 @@ u32 vcd_handle_first_fill_output_buffer(
 	else
 		rc = vcd_handle_first_fill_output_buffer_for_enc(
 			cctxt, buffer, handled);
-
 	return rc;
 }
 

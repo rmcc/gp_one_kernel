@@ -26,12 +26,15 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#ifndef __MACH_QDSP6_V2_SNDDEV_HDMI_H
+#define __MACH_QDSP6_V2_SNDDEV_HDMI_H
 
-#ifndef __RTC_PM8058_H__
-#define __RTC_PM8058_H__
-
-struct pm8058_rtc_pdata {
-	bool rtc_write_enable;
+struct snddev_hdmi_data {
+	u32 capability;		/* RX or TX */
+	const char *name;
+	u32 copp_id;		/* audpp routing */
+	u32 acdb_id;		/* Audio Cal purpose */
+	u8 channel_mode;
+	u32 default_sample_rate;
 };
-
-#endif /* __RTC_PM8058_H__ */
+#endif
