@@ -498,10 +498,12 @@ static void msm_hsl_set_baud_rate(struct uart_port *port, unsigned int baud)
 
 static void msm_hsl_init_clock(struct uart_port *port)
 {
+#ifdef CONFIG_SERIAL_MSM_CLOCK_CONTROL
+	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
+#endif
 	clk_en(port, 1);
 
 #ifdef CONFIG_SERIAL_MSM_CLOCK_CONTROL
-	struct msm_hsl_port *msm_hsl_port = UART_TO_MSM(port);
 	msm_hsl_port->clk_state = MSM_HSL_CLK_ON;
 #endif
 
