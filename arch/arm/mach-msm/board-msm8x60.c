@@ -63,6 +63,7 @@
 #include <mach/tlmm.h>
 #include <mach/msm_battery.h>
 #include <mach/msm_hsusb.h>
+#include <mach/msm_xo.h>
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
 #endif
@@ -696,7 +697,7 @@ static uint32_t camera_off_gpio_table[] = {
 	GPIO_CFG(48, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
 	GPIO_CFG(32, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(106, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(106, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(VFE_CAMIF_TIMER1_GPIO, 1,
 		GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	GPIO_CFG(VFE_CAMIF_TIMER2_GPIO, 0,
@@ -1521,6 +1522,19 @@ static struct platform_device *early_devices[] __initdata = {
 	&msm_device_saw_s1,
 };
 
+#if (defined(CONFIG_BAHAMA_CORE)) && \
+	(defined(CONFIG_MSM_BT_POWER) || defined(CONFIG_MSM_BT_POWER_MODULE))
+
+static int bluetooth_power(int);
+static struct platform_device msm_bt_power_device = {
+	.name	 = "bt_power",
+	.id	 = -1,
+	.dev	 = {
+		.platform_data = &bluetooth_power,
+	},
+};
+#endif
+
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&smc91x_device,
 	&msm_device_uart_dm12,
@@ -1653,7 +1667,11 @@ static struct platform_device *surf_devices[] __initdata = {
 #if defined(CONFIG_MSM_RPM_LOG) || defined(CONFIG_MSM_RPM_LOG_MODULE)
 	&msm_rpm_log_device,
 #endif
-	&msm_device_vidc
+	&msm_device_vidc,
+#if (defined(CONFIG_BAHAMA_CORE)) && \
+	(defined(CONFIG_MSM_BT_POWER) || defined(CONFIG_MSM_BT_POWER_MODULE))
+	&msm_bt_power_device,
+#endif
 };
 
 #if defined(CONFIG_GPIO_SX150X) || defined(CONFIG_GPIO_SX150X_MODULE)
@@ -2027,8 +2045,9 @@ static int pm8058_pwm_config(struct pwm_device *pwm, int ch, int on)
 	};
 
 	int rc = -EINVAL;
-	int id;
+	int id, mode, max_mA;
 
+	id = mode = max_mA = 0;
 	switch (ch) {
 	case 0:
 	case 1:
@@ -2040,9 +2059,33 @@ static int pm8058_pwm_config(struct pwm_device *pwm, int ch, int on)
 				pr_err("%s: pm8058_gpio_config(%d): rc=%d\n",
 					__func__, id, rc);
 		}
+		break;
+
+	case 6:
+		id = PM_PWM_LED_FLASH;
+		mode = PM_PWM_CONF_PWM1;
+		max_mA = 300;
+		break;
+
+	case 7:
+		id = PM_PWM_LED_FLASH1;
+		mode = PM_PWM_CONF_PWM1;
+		max_mA = 300;
+		break;
 
 	default:
 		break;
+	}
+
+	if (ch >= 6 && ch <= 7) {
+		if (!on) {
+			mode = PM_PWM_CONF_NONE;
+			max_mA = 0;
+		}
+		rc = pm8058_pwm_config_led(pwm, id, mode, max_mA);
+		if (rc)
+			pr_err("%s: pm8058_pwm_config_led(ch=%d): rc=%d\n",
+			       __func__, ch, rc);
 	}
 	return rc;
 
@@ -2726,6 +2769,19 @@ static struct pm8901_gpio_platform_data pm8901_mpp_data = {
 	.irq_base	= PM8901_MPP_IRQ(PM8901_IRQ_BASE, 0),
 };
 
+static struct resource pm8901_temp_alarm[] = {
+	{
+		.start = PM8901_TEMP_ALARM_IRQ(PM8901_IRQ_BASE),
+		.end = PM8901_TEMP_ALARM_IRQ(PM8901_IRQ_BASE),
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.start = PM8901_TEMP_HI_ALARM_IRQ(PM8901_IRQ_BASE),
+		.end = PM8901_TEMP_HI_ALARM_IRQ(PM8901_IRQ_BASE),
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
 static struct regulator_consumer_supply pm8901_vreg_supply[PM8901_VREG_MAX] = {
 	[PM8901_VREG_ID_L0]  = REGULATOR_SUPPLY("8901_l0",  NULL),
 	[PM8901_VREG_ID_L1]  = REGULATOR_SUPPLY("8901_l1",  NULL),
@@ -2812,6 +2868,11 @@ static struct mfd_cell pm8901_subdevs[] = {
 		.platform_data	= &pm8901_mpp_data,
 		.data_size	= sizeof(pm8901_mpp_data),
 	},
+	{	.name = "pm8901-tm",
+		.id		= -1,
+		.num_resources  = ARRAY_SIZE(pm8901_temp_alarm),
+		.resources      = pm8901_temp_alarm,
+	},
 	PM8901_VREG(PM8901_VREG_ID_L0),
 	PM8901_VREG(PM8901_VREG_ID_L1),
 	PM8901_VREG(PM8901_VREG_ID_L2),
@@ -2856,32 +2917,58 @@ static struct regulator *vreg_bahama;
 static int msm_bahama_setup_power(struct device *dev)
 {
 	int rc = 0;
+	const char *msm_bahama_regulator = "8058_s3";
 
-	vreg_bahama = regulator_get(dev, "8058_l8");
-	if (IS_ERR(vreg_bahama))
+	vreg_bahama = regulator_get(dev, msm_bahama_regulator);
+	if (IS_ERR(vreg_bahama)) {
 		rc = PTR_ERR(vreg_bahama);
+		dev_err(dev, "%s: regulator_get %s = %d\n", __func__,
+			msm_bahama_regulator, rc);
+	}
 
 	if (!rc)
-		rc = regulator_enable(vreg_bahama);
+		rc = regulator_set_voltage(vreg_bahama, 1800000, 1800000);
+	else {
+		dev_err(dev, "%s: regulator_set_voltage %s = %d\n", __func__,
+			msm_bahama_regulator, rc);
+		goto unget;
+	}
+
+	if (!rc)
+		rc = regulator_set_voltage(vreg_bahama, 1800000, 1800000);
 	else
 		goto unget;
 
 	if (!rc)
+		rc = regulator_enable(vreg_bahama);
+	else {
+		dev_err(dev, "%s: regulator_enable %s = %d\n", __func__,
+			msm_bahama_regulator, rc);
+		goto unget;
+	}
+
+	if (!rc)
 		rc = gpio_request(GPIO_BAHAMA_RST_OUT_N, "bahama sys_rst_n");
-	else
+	else {
+		dev_err(dev, "%s: gpio_request %d = %d\n", __func__,
+			GPIO_BAHAMA_RST_OUT_N, rc);
 		goto unenable;
+	}
 
 	if (!rc)
 		rc = gpio_direction_output(GPIO_BAHAMA_RST_OUT_N, 1);
-	else
+	else {
+		dev_err(dev, "%s: gpio_direction_output %d = %d\n", __func__,
+			GPIO_BAHAMA_RST_OUT_N, rc);
 		goto unrequest;
+	}
 
 	return rc;
 
 unrequest:
 	gpio_free(GPIO_BAHAMA_RST_OUT_N);
 unenable:
-	(void) regulator_disable(vreg_bahama);
+	regulator_disable(vreg_bahama);
 unget:
 	regulator_put(vreg_bahama);
 	return rc;
@@ -2889,13 +2976,11 @@ unget:
 
 static void msm_bahama_shutdown_power(struct device *dev)
 {
-	int rc;
-
 	gpio_set_value(GPIO_BAHAMA_RST_OUT_N, 0);
 
 	gpio_free(GPIO_BAHAMA_RST_OUT_N);
 
-	rc = regulator_disable(vreg_bahama);
+	regulator_disable(vreg_bahama);
 
 	regulator_put(vreg_bahama);
 };
@@ -3689,25 +3774,32 @@ out:
 	return rc;
 }
 
-
 static u32 msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 {
+	u32 rc_pin_cfg = 0;
+	u32 rc_vreg_cfg = 0;
 	u32 rc = 0;
 	struct platform_device *pdev;
-	struct msm_sdcc_pin_cfg *curr;
+	struct msm_sdcc_pin_cfg *curr_pin_cfg;
 
 	pdev = container_of(dv, struct platform_device, dev);
-	curr = &sdcc_pin_cfg_data[pdev->id - 1];
 
-	if (curr->cfg_sts == !!vdd)
-		return rc;
+	/* setup gpio/pad */
+	curr_pin_cfg = &sdcc_pin_cfg_data[pdev->id - 1];
+	if (curr_pin_cfg->cfg_sts == !!vdd)
+		goto setup_vreg;
 
-	if (curr->is_gpio)
-		rc = msm_sdcc_setup_gpio(pdev->id, !!vdd);
+	if (curr_pin_cfg->is_gpio)
+		rc_pin_cfg = msm_sdcc_setup_gpio(pdev->id, !!vdd);
 	else
-		rc = msm_sdcc_setup_pad(pdev->id, !!vdd);
+		rc_pin_cfg = msm_sdcc_setup_pad(pdev->id, !!vdd);
 
-	rc = msm_sdcc_setup_vreg(pdev->id, (vdd ? 1 : 0));
+setup_vreg:
+	/* setup voltage regulators */
+	rc_vreg_cfg = msm_sdcc_setup_vreg(pdev->id, !!vdd);
+
+	if (rc_pin_cfg || rc_vreg_cfg)
+		rc = rc_pin_cfg ? rc_pin_cfg : rc_vreg_cfg;
 
 	return rc;
 }
@@ -4190,6 +4282,258 @@ static void __init msm_fb_add_devices(void)
 	msm_fb_register_device("lcdc", &lcdc_pdata);
 	msm_fb_register_device("mipi_dsi", 0);
 }
+
+#if (defined(CONFIG_BAHAMA_CORE)) && \
+	(defined(CONFIG_MSM_BT_POWER) || defined(CONFIG_MSM_BT_POWER_MODULE))
+static int bahama_bt(int on)
+{
+	int rc;
+	int i;
+	struct bahama config = { .mod_id = BAHAMA_SLAVE_ID_BAHAMA };
+
+	struct bahama_config_register {
+		u8 reg;
+		u8 value;
+		u8 mask;
+	};
+
+	struct bahama_variant_register {
+		const size_t size;
+		const struct bahama_config_register *set;
+	};
+
+	const struct bahama_config_register *p;
+
+	u8 version;
+
+	const struct bahama_config_register v10_bt_on[] = {
+		{ 0xE9, 0x00, 0xFF },
+		{ 0xF4, 0x80, 0xFF },
+		{ 0xE4, 0x00, 0xFF },
+		{ 0xE5, 0x00, 0x0F },
+#ifdef CONFIG_WLAN
+		{ 0xE6, 0x38, 0x7F },
+		{ 0xE7, 0x06, 0xFF },
+#endif
+		{ 0xE9, 0x21, 0xFF },
+		{ 0x01, 0x0C, 0x1F },
+		{ 0x01, 0x08, 0x1F },
+	};
+
+	const struct bahama_config_register v10_bt_off[] = {
+		{ 0xE9, 0x00, 0xFF },
+	};
+
+	const struct bahama_variant_register bt_bahama[2][1] = {
+		{
+			{ ARRAY_SIZE(v10_bt_off), v10_bt_off },
+		},
+		{
+			{ ARRAY_SIZE(v10_bt_on), v10_bt_on }
+		}
+	};
+
+	on = on ? 1 : 0;
+
+	rc = bahama_read_bit_mask(&config, 0x00,  &version, 1, 0x1F);
+	if (rc < 0) {
+		dev_err(&msm_bt_power_device.dev,
+			"%s: version read failed: %d\n",
+			__func__, rc);
+		return rc;
+	}
+
+	if ((version >= ARRAY_SIZE(bt_bahama[on])) ||
+	    (bt_bahama[on][version].size == 0)) {
+		dev_err(&msm_bt_power_device.dev,
+			"%s: unsupported version\n",
+			__func__);
+		return -EIO;
+	}
+
+	p = bt_bahama[on][version].set;
+
+	dev_info(&msm_bt_power_device.dev,
+		"%s: found version %d\n", __func__, version);
+
+	for (i = 0; i < bt_bahama[on][version].size; i++) {
+		u8 value = (p+i)->value;
+		rc = bahama_write_bit_mask(&config,
+			(p+i)->reg,
+			&value,
+			sizeof((p+i)->value),
+			(p+i)->mask);
+		if (rc < 0) {
+			dev_err(&msm_bt_power_device.dev,
+				"%s: reg %d write failed: %d\n",
+				__func__, (p+i)->reg, rc);
+			return rc;
+		}
+		dev_dbg(&msm_bt_power_device.dev,
+			"%s: reg 0x%02x write value 0x%02x mask 0x%02x\n",
+				__func__, (p+i)->reg,
+				value, (p+i)->mask);
+	}
+	return 0;
+}
+
+static const struct {
+	char *name;
+	int vmin;
+	int vmax;
+} bt_regs_info[] = {
+	{ "8058_s3", 1800000, 1800000 },
+	{ "8058_l2", 1800000, 1800000 },
+	{ "8058_l8", 2900000, 2900000 },
+#ifdef CAN_SET_VOLTAGE_8901_S4
+	{ "8901_s4", 1300000, 1300000 },
+#endif
+};
+
+static struct regulator *bt_regs[ARRAY_SIZE(bt_regs_info)];
+
+static int bluetooth_use_regulators(int on)
+{
+	int i, recover = -1, rc = 0;
+
+	for (i = 0; i < ARRAY_SIZE(bt_regs_info); i++) {
+		bt_regs[i] = on ? regulator_get(&msm_bt_power_device.dev,
+						bt_regs_info[i].name) :
+				(regulator_put(bt_regs[i]), NULL);
+		if (IS_ERR(bt_regs[i])) {
+			rc = PTR_ERR(bt_regs[i]);
+			dev_err(&msm_bt_power_device.dev,
+				"regulator %s get failed (%d)\n",
+				bt_regs_info[i].name, rc);
+			recover = i - 1;
+			bt_regs[i] = NULL;
+			break;
+		}
+
+		if (!on)
+			continue;
+
+		rc = regulator_set_voltage(bt_regs[i],
+					  bt_regs_info[i].vmin,
+					  bt_regs_info[i].vmax);
+		if (rc < 0) {
+			dev_err(&msm_bt_power_device.dev,
+				"regulator %s voltage set (%d)\n",
+				bt_regs_info[i].name, rc);
+			recover = i;
+			break;
+		}
+	}
+
+	if (on && (recover > -1))
+		for (i = recover; i >= 0; i--) {
+			regulator_put(bt_regs[i]);
+			bt_regs[i] = NULL;
+		}
+
+	return rc;
+}
+
+static int bluetooth_switch_regulators(int on)
+{
+	int i, rc = 0;
+
+	for (i = 0; i < ARRAY_SIZE(bt_regs_info); i++) {
+		rc = on ? regulator_enable(bt_regs[i]) :
+			  regulator_disable(bt_regs[i]);
+		if (rc < 0) {
+			dev_err(&msm_bt_power_device.dev,
+				"regulator %s %s failed (%d)\n",
+				bt_regs_info[i].name,
+				on ? "enable" : "disable", rc);
+			if (on && (i > 0)) {
+				while (--i)
+					regulator_disable(bt_regs[i]);
+				break;
+			}
+			break;
+		}
+	}
+	return rc;
+}
+
+static struct msm_xo_voter *bt_clock;
+
+static int bluetooth_power(int on)
+{
+	int rc = 0;
+
+	if (on) {
+
+		rc = bluetooth_use_regulators(1);
+		if (rc < 0)
+			goto out;
+
+		rc = bluetooth_switch_regulators(1);
+
+		if (rc < 0)
+			goto fail_put;
+
+		bt_clock = msm_xo_get(TCXO_D0, "bt_power");
+
+		if (IS_ERR(bt_clock)) {
+			pr_err("Couldn't get TCXO_D0 voter\n");
+			goto fail_switch;
+		}
+
+		rc = msm_xo_mode_vote(bt_clock, XO_MODE_ON);
+
+		if (rc < 0) {
+			pr_err("Failed to vote for TCXO_DO ON\n");
+			goto fail_vote;
+		}
+
+		rc = bahama_bt(1);
+
+		if (rc < 0)
+			goto fail_clock;
+
+#ifdef CAN_HANDLE_PIN_CTRL
+		rc = msm_xo_mode_vote(bt_clock, XO_MODE_PIN_CTRL);
+
+		if (rc < 0) {
+			pr_err("Failed to vote for TCXO_DO pin control\n");
+			goto fail_vote;
+		}
+#endif
+	} else {
+		/* check for initial RFKILL block (power off) */
+		/* some RFKILL versions/configurations rfkill_register */
+		/* calls here for an initial set_block */
+		/* avoid calling i2c and regulator before unblock (on) */
+		if (platform_get_drvdata(&msm_bt_power_device) == NULL) {
+			dev_info(&msm_bt_power_device.dev,
+				"%s: initialized OFF/blocked\n", __func__);
+			goto out;
+		}
+
+		bahama_bt(0);
+
+fail_clock:
+		msm_xo_mode_vote(bt_clock, XO_MODE_OFF);
+fail_vote:
+		msm_xo_put(bt_clock);
+fail_switch:
+		bluetooth_switch_regulators(0);
+fail_put:
+		bluetooth_use_regulators(0);
+	}
+
+out:
+	if (rc < 0)
+		on = 0;
+	dev_info(&msm_bt_power_device.dev,
+		"Bluetooth power switch: state %d result %d\n", on, rc);
+
+	return rc;
+}
+
+#endif /* CONFIG_BAHAMA_CORE, CONFIG_MSM_BT_POWER, CONFIG_MSM_BT_POWER_MODULE */
 
 static void __init msm8x60_cfg_smsc911x(void)
 {
