@@ -461,6 +461,10 @@ static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
 
 static void ds2482_set_slp_n(unsigned n)
 {
+	if (gpio_request(23, "BATT_CHG")) {
+		printk(KERN_ERR "Unable to request charger GPIO");
+		return;
+	}
 	if (n) {
 		gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_ENABLE );
 		gpio_direction_output(23, 0);
@@ -468,8 +472,8 @@ static void ds2482_set_slp_n(unsigned n)
 	} else {
 		gpio_set_value(23, 0);
 		gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_DISABLE );
-		gpio_free(23);
 	}
+	gpio_free(23);
 }
 #endif
 
