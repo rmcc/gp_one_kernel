@@ -18,6 +18,8 @@
 #include <mach/msm_iomap.h>
 #include <mach/msm_smd.h>
 #include <linux/wakelock.h>
+#include <linux/leds.h>
+
 
 struct tca6507_driver_data {
 	struct mutex tca6507_lock;
@@ -31,6 +33,7 @@ struct tca6507_driver_data {
 	bool is_attention;
 	bool is_charger_connected;
 	struct wake_lock charger_state_suspend_wake_lock;
+	struct led_classdev leds[3];    /* green, white, red */
 };
 
 /// +++ FIH_ADQ +++ , MichaelKao 2009.06.08
@@ -123,6 +126,67 @@ static int gpio_init_setting(int value)
 static void gpio_release(void)
 {
 	gpio_free( tca6507_drvdata.reset_pin );
+}
+
+
+static ssize_t led_blink_solid_show(struct device *dev,
+                    struct device_attribute *attr, char *buf)
+{
+    return 0;
+}
+
+static int tca6507_set_led(void);
+
+static ssize_t led_blink_solid_store(struct device *dev,
+                     struct device_attribute *attr,
+                     const char *buf, size_t size)
+{
+    struct led_classdev *led_cdev = dev_get_drvdata(dev);
+    char *after;
+    unsigned long state;
+
+    state = simple_strtoul(buf, &after, 10);
+    mutex_lock(&tca6507_drvdata.tca6507_lock);
+
+    if (!strcmp(led_cdev->name, "green")) {
+	    tca6507_drvdata.led_state[0] &= 0xFFF3;
+        tca6507_drvdata.led_state[TCA6507_LED_LEFT] |= (state ? 1 : 0) << TCA6507_LED_BLINK;
+    } else if (!strcmp(led_cdev->name, "white")) {
+	    tca6507_drvdata.led_state[1] &= 0xFFF3;
+        tca6507_drvdata.led_state[TCA6507_LED_CENTER] |= (state ? 1 : 0) << TCA6507_LED_BLINK;
+    } else if (!strcmp(led_cdev->name, "red")) {
+	    tca6507_drvdata.led_state[2] &= 0xFFF3;
+        tca6507_drvdata.led_state[TCA6507_LED_RIGHT] |= (state ? 1 : 0) << TCA6507_LED_BLINK;
+    }
+
+    tca6507_set_led();
+
+    mutex_unlock(&tca6507_drvdata.tca6507_lock);
+
+    return 0;
+}
+
+static DEVICE_ATTR(blink, 0644, led_blink_solid_show, led_blink_solid_store);
+
+static void led_brightness_set(struct led_classdev *led_cdev,
+                   enum led_brightness brightness)
+{
+    mutex_lock(&tca6507_drvdata.tca6507_lock);
+
+    if (!strcmp(led_cdev->name, "green")) {
+	    tca6507_drvdata.led_state[0] &= 0xFFFC;
+        tca6507_drvdata.led_state[TCA6507_LED_LEFT] |= 1 << (brightness ? TCA6507_LED_ON : TCA6507_LED_OFF);
+    } else if (!strcmp(led_cdev->name, "white")) {
+	    tca6507_drvdata.led_state[1] &= 0xFFFC;
+        tca6507_drvdata.led_state[TCA6507_LED_CENTER] |= 1 << (brightness ? TCA6507_LED_ON : TCA6507_LED_OFF);
+    } else if (!strcmp(led_cdev->name, "red")) {
+	    tca6507_drvdata.led_state[2] &= 0xFFFC;
+        tca6507_drvdata.led_state[TCA6507_LED_RIGHT] |= 1 << (brightness ? TCA6507_LED_ON : TCA6507_LED_OFF);
+    }
+
+    tca6507_set_led();
+
+    mutex_unlock(&tca6507_drvdata.tca6507_lock);
 }
 
 void tca6507_led_turn_on(int led_selection, uint8_t *cmd)
@@ -701,6 +765,32 @@ static int __devinit tca6507_probe(struct i2c_client *client,
 
 		return ret; 
 	}
+
+    tca6507_drvdata.leds[0].name = "red";
+    tca6507_drvdata.leds[0].brightness_set = led_brightness_set;
+
+    tca6507_drvdata.leds[1].name = "white";
+    tca6507_drvdata.leds[1].brightness_set = led_brightness_set;
+
+    tca6507_drvdata.leds[2].name = "green";
+    tca6507_drvdata.leds[2].brightness_set = led_brightness_set;
+
+    for (i = 0; i < 3; i++) {   /* red, white, green */
+        ret = led_classdev_register(&client->dev, &tca6507_drvdata.leds[i]);
+        if (ret) {
+            printk(KERN_ERR
+                   "tca6507: led_classdev_register failed\n");
+        }
+    }
+
+    for (i = 0; i < 3; i++) {
+        ret =
+            device_create_file(tca6507_drvdata.leds[i].dev, &dev_attr_blink);
+        if (ret) {
+            printk(KERN_ERR
+                   "tca6507: device_create_file failed\n");
+        }
+    }
 	
 	return ret;
 }
@@ -708,9 +798,16 @@ static int __devinit tca6507_probe(struct i2c_client *client,
 static int __devexit tca6507_remove(struct i2c_client *client)
 {
 	int ret = 0;
+	int i = 0;
 	
 	mutex_destroy(&tca6507_drvdata.tca6507_lock);
 	device_remove_file(&client->dev, &dev_attr_tca6507_debug);
+
+    for (i = 0; i < 3; i++) {
+        device_remove_file(tca6507_drvdata.leds[i].dev, &dev_attr_blink);
+        led_classdev_unregister(&tca6507_drvdata.leds[i]);
+    }
+
 	wake_lock_destroy(&tca6507_drvdata.charger_state_suspend_wake_lock);
 
 	return ret;
