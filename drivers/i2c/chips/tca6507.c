@@ -128,14 +128,8 @@ static void gpio_release(void)
 	gpio_free( tca6507_drvdata.reset_pin );
 }
 
-
-static ssize_t led_blink_solid_show(struct device *dev,
-                    struct device_attribute *attr, char *buf)
-{
-    return 0;
-}
-
 static int tca6507_set_led(void);
+static int tca6507_get_state(int led_selection);
 
 static ssize_t led_blink_solid_store(struct device *dev,
                      struct device_attribute *attr,
@@ -166,25 +160,32 @@ static ssize_t led_blink_solid_store(struct device *dev,
     return 0;
 }
 
-static DEVICE_ATTR(blink, 0644, led_blink_solid_show, led_blink_solid_store);
+static DEVICE_ATTR(blink, 0644, NULL, led_blink_solid_store);
 
 static void led_brightness_set(struct led_classdev *led_cdev,
                    enum led_brightness brightness)
 {
-    mutex_lock(&tca6507_drvdata.tca6507_lock);
+	int idx = 0;
+
 
     if (!strcmp(led_cdev->name, "green")) {
-	    tca6507_drvdata.led_state[0] &= 0xFFFC;
-        tca6507_drvdata.led_state[TCA6507_LED_LEFT] |= 1 << (brightness ? TCA6507_LED_ON : TCA6507_LED_OFF);
+		idx = 0;
     } else if (!strcmp(led_cdev->name, "white")) {
-	    tca6507_drvdata.led_state[1] &= 0xFFFC;
-        tca6507_drvdata.led_state[TCA6507_LED_CENTER] |= 1 << (brightness ? TCA6507_LED_ON : TCA6507_LED_OFF);
+		idx = 1;
     } else if (!strcmp(led_cdev->name, "red")) {
-	    tca6507_drvdata.led_state[2] &= 0xFFFC;
-        tca6507_drvdata.led_state[TCA6507_LED_RIGHT] |= 1 << (brightness ? TCA6507_LED_ON : TCA6507_LED_OFF);
+		idx = 2;
     }
 
-    tca6507_set_led();
+    mutex_lock(&tca6507_drvdata.tca6507_lock);
+
+	tca6507_drvdata.led_state[idx] &= 0xF3FF;
+
+    /* Don't turn off LEDs that were turned on by other means 
+     * (like a keyboard wakeup turning on all LEDs) */
+	if (tca6507_get_state(idx) == TCA6507_USERSPACE_ON || brightness) {
+        tca6507_drvdata.led_state[idx] |= 1 << (brightness ? TCA6507_USERSPACE_ON : TCA6507_USERSPACE_OFF);
+        tca6507_set_led();
+	}
 
     mutex_unlock(&tca6507_drvdata.tca6507_lock);
 }
@@ -343,12 +344,12 @@ void tca6507_led_fade_off(int led_selection, uint8_t *cmd)
 	cmd[11] = 0xAA;
 }
 
-int tca6507_get_state(int led_selection)
+static int tca6507_get_state(int led_selection)
 {
 	struct device *tca6507_dev = &tca6507_drvdata.tca6507_i2c_client->dev;
 	int i;
 	
-	for (i = CHARGER_STATE_FULL; i > TCA6507_ABNORMAL_STATE; i--) {
+	for (i = (TCA6507_MAX_STATE-1); i > TCA6507_ABNORMAL_STATE; i--) {
 		if (tca6507_drvdata.led_state[led_selection] & (1 << i)) {
 			dev_dbg(tca6507_dev, "%s: LED<%d> in <%d> State!!\n", __func__, led_selection, i);
 			return i;
@@ -376,6 +377,7 @@ static int tca6507_set_led(void)
 
 		switch (state[i]) {		
 		case TCA6507_LED_OFF:
+		case TCA6507_USERSPACE_OFF:
 			if (TCA6507_LED_PREV_STATE_ON == tca6507_drvdata.prev_led_state[i]) {
 				is_fade_off = true;
 			}
@@ -390,6 +392,7 @@ static int tca6507_set_led(void)
 		case TCA6507_LED_ATTENTION:
 		case CHARGER_STATE_DISCHARGING:
 		case TCA6507_LED_ON:
+		case TCA6507_USERSPACE_ON:
 		case CHARGER_STATE_UNKNOWN:
 		case CHARGER_STATE_CHARGING:
 		case CHARGER_STATE_NOT_CHARGING:
@@ -409,6 +412,7 @@ static int tca6507_set_led(void)
 	for (i = 0; i < 3; i++) {
 		switch (state[i]) {
 		case TCA6507_LED_OFF:
+		case TCA6507_USERSPACE_OFF:
 			if (TCA6507_LED_PREV_STATE_ON == tca6507_drvdata.prev_led_state[i]) {
 				if (is_fade_off && is_fade_on) {
 					tca6507_led_fade_off(i, cmd_fade_off);
@@ -432,6 +436,7 @@ static int tca6507_set_led(void)
 			break;
 		case CHARGER_STATE_DISCHARGING:
 		case TCA6507_LED_ON:
+		case TCA6507_USERSPACE_ON:
 		case TCA6507_LED_ATTENTION:
 		case CHARGER_STATE_UNKNOWN:
 		case CHARGER_STATE_CHARGING:
@@ -555,7 +560,7 @@ void tca6507_led_switch(bool on)
 	mutex_lock(&tca6507_drvdata.tca6507_lock);
 	
 	for (i = 0; i < 3; i++) {
-		tca6507_drvdata.led_state[i] &= 0xFFFC;
+		tca6507_drvdata.led_state[i] &= 0xF7FC;
 	}
 		
 	tca6507_drvdata.led_state[TCA6507_LED_LEFT]	|= 1 << (on ? TCA6507_LED_ON : TCA6507_LED_OFF);
@@ -766,16 +771,16 @@ static int __devinit tca6507_probe(struct i2c_client *client,
 		return ret; 
 	}
 
-    tca6507_drvdata.leds[0].name = "red";
+    tca6507_drvdata.leds[0].name = "green";
     tca6507_drvdata.leds[0].brightness_set = led_brightness_set;
 
     tca6507_drvdata.leds[1].name = "white";
     tca6507_drvdata.leds[1].brightness_set = led_brightness_set;
 
-    tca6507_drvdata.leds[2].name = "green";
+    tca6507_drvdata.leds[2].name = "red";
     tca6507_drvdata.leds[2].brightness_set = led_brightness_set;
 
-    for (i = 0; i < 3; i++) {   /* red, white, green */
+    for (i = 0; i < 3; i++) {   /* green, white, red */
         ret = led_classdev_register(&client->dev, &tca6507_drvdata.leds[i]);
         if (ret) {
             printk(KERN_ERR
