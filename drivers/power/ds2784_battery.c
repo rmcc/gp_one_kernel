@@ -20,6 +20,7 @@
 #include <linux/pm.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/slab.h>
 #include <linux/spinlock.h>
 
 #include <linux/android_alarm.h>
@@ -474,17 +475,35 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 	/* shut off charger when full:
 	 * - CHGTF flag is set
 	 */
-	if (di->status.status_reg & 0x80) {
+	/* We don't move from full to not-full until
+	 * we drop below 95%, to avoid confusing the
+	 * user while we're maintaining a full charge
+	 * (slowly draining to 95 and charging back
+	 * to 100)
+	 * Oddly, only Passion is for 99% cycles, HTC
+	 * set the Bravo to 95%.
+	 * -od of xbravoteam
+         *
+         * Set 99 for Passion - pershoot
+	 */
+
+	if (di->status.percentage < 99) {
+		di->status.battery_full = 0;
+	}
+
+	/* Modified check function, based on original HTC Source.
+         * Added current_uA check (relates to 1400mAh capacity check)
+	 * -od of xbravoteam
+	 *
+	 * replace current_uA <= 80 with current_avg_uA <= 40 
+         * - pershoot,dvgrhl,rogerpodacter
+	 */
+
+	if ((di->status.status_reg & 0x80) &&
+		((di->status.current_avg_uA/1000) <= 40) &&
+		(di->status.percentage == 100)) {
 		di->status.battery_full = 1;
 		charge_mode = CHARGE_BATT_DISABLE;
-	} else {
-#ifdef CONFIG_MACH_ADQ
-		/* The charger on ADQ reports 100% at around... 98% :( */
-		if (di->status.percentage == 100) {
-			di->status.percentage = 99;
-		}
-#endif
-		di->status.battery_full = 0;
 	}
 
 	if (temp >= TEMP_HOT) {
@@ -509,7 +528,7 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 			charge_mode = CHARGE_BATT_DISABLE;
 	}
 
-	if (di->status.current_uA > 1024)
+	if (di->status.battery_full == 1)
 		di->last_charge_seen = di->last_poll;
 	else if (di->last_charge_mode != CHARGE_OFF &&
 		 check_timeout(di->last_poll, di->last_charge_seen, 60 * 60)) {
