@@ -52,10 +52,7 @@ enum {
 	CHARGER_STATE_FULL,
 	CHARGER_STATE_LOW_POWER,
 };
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
-extern void tca6507_charger_state_report(int state);
-#endif
-static int g_charging_state_last = CHARGER_STATE_UNKNOWN;
+
 static void polling_reset_func(void);
 void temperature_detect(void);
 /* FIH_ADQ, Kenny { */
@@ -264,13 +261,6 @@ static int zeus_battery_get_property(struct power_supply *psy,
 				}else{
 					val->intval = 100;
 				}
-
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
-				if ((g_charging_state_last != g_charging_state))
-					tca6507_charger_state_report(g_charging_state);   
-#endif
-
-				g_charging_state_last = g_charging_state;
 
 				// ---ADQ_FIH---
 			}
