@@ -47,6 +47,10 @@
 #include <linux/module.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
+
 #include <a_config.h>
 #include <athdefs.h>
 #include "a_types.h"
@@ -364,6 +368,9 @@ typedef struct ar6_softc {
     A_UINT16                arWowState;
 #endif
     WMI_SCAN_PARAMS_CMD scParams;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    struct early_suspend ar6k_early_suspend;
+#endif
 } AR_SOFTC_T;
 
 #define ATH_DHCP_PKT_SIZE             342
