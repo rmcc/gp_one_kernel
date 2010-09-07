@@ -242,6 +242,13 @@ config LEDS_BD2802
 	  This option enables support for BD2802GU RGB LED driver chips
 	  accessed via the I2C bus.
 
+config LEDS_TCA6507
+    tristate "TCA6507 LED controller"
+    depends on I2C && LEDS_CLASS && ARCH_MSM
+    help
+	  This option enables support for TCA6507 green/white/red LED driver 
+	  chips accessed via the I2C bus.
+
 config LEDS_MSM_PMIC
         tristate "LED Support for Qualcomm PMIC connected LEDs"
         default y

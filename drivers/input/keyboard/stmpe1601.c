@@ -1241,7 +1241,7 @@ static ssize_t btn_brightness_store(struct device *dev, struct device_attribute 
 	
 	dev_dbg(dev, "%s: %d %d\n", __func__, count, brightness);
 
-#ifdef CONFIG_BACKLIGHT_LED_MAX8831 && defined(CONFIG_BACKLIGHT_LED_TCA6507)
+#ifdef CONFIG_BACKLIGHT_LED_MAX8831 && defined(CONFIG_LEDS_TCA6507)
 	if (HWID < CMCS_HW_VER_EVT2) {
 		if (0 < brightness) {
 			led_234_set_intensity(0, 0, 0);
@@ -1266,7 +1266,7 @@ static ssize_t blink_store(struct device *dev, struct device_attribute *attr, co
 	
 	dev_dbg(dev, "%s: %d\n", __func__, enable);
 
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+#ifdef CONFIG_LEDS_TCA6507
 	if (HWID < CMCS_HW_VER_EVT2) {
 	} else {
 		switch (enable) {

@@ -75,7 +75,7 @@
 #endif
 void __init msm_power_register(void);
 
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+#ifdef CONFIG_LEDS_TCA6507
 #include <mach/tca6507.h>
 #endif
 
@@ -1008,7 +1008,7 @@ static struct msm_i2ckbd_platform_data FIH_kybd_data = {
 };
 #endif
 
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+#ifdef CONFIG_LEDS_TCA6507
 static struct tca6507_platform_data tca6507_data = {
 	.tca6507_reset = 84,
 };
@@ -1020,7 +1020,7 @@ static struct i2c_board_info i2c_devices[] = {
 		I2C_BOARD_INFO("max8831", 0x4d),
 	},
 #endif
-#ifdef CONFIG_BACKLIGHT_LED_TCA6507
+#ifdef CONFIG_LEDS_TCA6507
 	{
 		I2C_BOARD_INFO("tca6507", 0x8A >> 1),
 		.platform_data = &tca6507_data,
