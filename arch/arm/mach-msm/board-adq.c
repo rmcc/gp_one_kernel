@@ -137,19 +137,31 @@ static int wifi_status = 0;
 #ifdef CONFIG_USB_ANDROID
 static char *usb_functions_default[] = {
     "usb_mass_storage",
+#ifdef CONFIG_MODEM_SUPPORT
     "modem",
+#endif
     "nmea",
     "rmnet",
+#ifdef CONFIG_USB_ANDROID_DIAG
     "diag",
+#endif
 };
 
 static char *usb_functions_default_adb[] = {
     "usb_mass_storage",
     "adb",
+#ifdef CONFIG_USB_F_SERIAL
+#ifdef CONFIG_MODEM_SUPPORT
     "modem",
+#endif
     "nmea",
+#endif
+#ifdef CONFIG_USB_ANDROID_RMNET
     "rmnet",
+#endif
+#ifdef CONFIG_USB_ANDROID_DIAG
     "diag",
+#endif
 };
 
 static char *usb_functions_rndis[] = {
@@ -168,7 +180,9 @@ static char *usb_functions_all[] = {
        "usb_mass_storage",
        "adb",
 #ifdef CONFIG_USB_F_SERIAL
+#ifdef CONFIG_MODEM_SUPPORT
        "modem",
+#endif
        "nmea",
 #endif
 #ifdef CONFIG_USB_ANDROID_RMNET
@@ -1827,5 +1841,5 @@ MACHINE_START(MSM7X25_SURF, "QCT MSM7x25 SURF")
 	.init_irq	= msm7x25_init_irq,
 	.init_machine	= msm7x25_init,
 	.timer		= &msm_timer,
-	MACHINE_END
+MACHINE_END
 
