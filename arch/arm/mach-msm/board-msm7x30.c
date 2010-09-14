@@ -2826,6 +2826,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.drv_ampl		 = HS_DRV_AMPLITUDE_DEFAULT,
+	.se1_gating		 = SE1_GATING_DISABLE,
 	.chg_vbus_draw		 = hsusb_chg_vbus_draw,
 	.chg_connected		 = hsusb_chg_connected,
 	.chg_init		 = hsusb_chg_init,
@@ -4932,6 +4933,9 @@ static int tsc2007_get_pendown_state(void)
 static void tsc2007_exit(void)
 {
 	vreg_disable(vreg_tsc_s3);
+	vreg_put(vreg_tsc_s3);
+	vreg_disable(vreg_tsc_s2);
+	vreg_put(vreg_tsc_s2);
 
 	msm_gpios_disable_free(tsc2007_config_data,
 		ARRAY_SIZE(tsc2007_config_data));

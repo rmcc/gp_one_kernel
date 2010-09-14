@@ -1081,12 +1081,6 @@ static int __init msm_serial_hsl_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = clk_en(port, 1);
-	if (ret) {
-		printk(KERN_ERR "Error could not turn on UART clk\n");
-		return ret;
-	}
-
 	uart_resource = platform_get_resource_byname(pdev,
 						     IORESOURCE_MEM,
 						     "uartdm_resource");
@@ -1127,9 +1121,9 @@ static int __devexit msm_serial_hsl_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int msm_serial_hsl_suspend(struct platform_device *pdev,
-				  pm_message_t state)
+static int msm_serial_hsl_suspend(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
 	struct uart_port *port;
 	port = get_port_from_line(pdev->id);
 
@@ -1142,8 +1136,9 @@ static int msm_serial_hsl_suspend(struct platform_device *pdev,
 	return 0;
 }
 
-static int msm_serial_hsl_resume(struct platform_device *pdev)
+static int msm_serial_hsl_resume(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
 	struct uart_port *port;
 	port = get_port_from_line(pdev->id);
 
@@ -1183,6 +1178,8 @@ static int msm_hsl_runtime_resume(struct device *dev)
 }
 
 static struct dev_pm_ops msm_hsl_dev_pm_ops = {
+	.suspend = msm_serial_hsl_suspend,
+	.resume = msm_serial_hsl_resume,
 	.runtime_suspend = msm_hsl_runtime_suspend,
 	.runtime_resume = msm_hsl_runtime_resume,
 };
@@ -1190,8 +1187,6 @@ static struct dev_pm_ops msm_hsl_dev_pm_ops = {
 static struct platform_driver msm_hsl_platform_driver = {
 	.probe = msm_serial_hsl_probe,
 	.remove = msm_serial_hsl_remove,
-	.suspend = msm_serial_hsl_suspend,
-	.resume = msm_serial_hsl_resume,
 	.driver = {
 		.name = "msm_serial_hsl",
 		.owner = THIS_MODULE,

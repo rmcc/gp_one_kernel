@@ -2543,9 +2543,9 @@ void msm_snddev_enable_amic_power(void)
 #ifdef CONFIG_PMIC8058_OTHC
 	int ret;
 
-	ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_ALWAYS_ON);
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_ALWAYS_ON);
 	if (ret)
-		pr_err("Epickrror Enabling Mic Bias....\n");
+		pr_err("%s: Enabling amic power failed\n", __func__);
 #endif
 
 	msm_snddev_tx_route_config();
@@ -2557,9 +2557,9 @@ void msm_snddev_disable_amic_power(void)
 #ifdef CONFIG_PMIC8058_OTHC
 	int ret;
 
-	ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_OFF);
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
 	if (ret)
-		pr_err("Error Enabling Mic Bias....\n");
+		pr_err("%s: Disabling amic power failed\n", __func__);
 #endif
 
 	msm_snddev_tx_route_deconfig();
@@ -2581,35 +2581,36 @@ void msm_snddev_enable_dmic_power(void)
 	ret = regulator_set_voltage(s3, 1800000, 1800000);
 	if (ret) {
 		pr_err("%s: error setting voltage\n", __func__);
-		goto fail;
+		goto fail_s3;
 	}
 
 	ret = regulator_enable(s3);
 	if (ret) {
 		pr_err("%s: error enabling regulator\n", __func__);
-		goto fail;
+		goto fail_s3;
 	}
 
 	mvs = regulator_get(NULL, "8901_mvs0");
 	if (IS_ERR(mvs))
-		goto fail;
-
-	ret = regulator_set_voltage(mvs, 1800000, 1800000);
-	if (ret) {
-		pr_err("%s: error setting voltage\n", __func__);
-		goto fail;
-	}
+		goto fail_mvs0_get;
 
 	ret = regulator_enable(mvs);
+
 	if (ret) {
 		pr_err("%s: error enabling regulator\n", __func__);
-		goto fail;
+		goto fail_mvs0_enable;
 	}
-fail:
-	if (s3)
-		regulator_put(s3);
-	if (mvs)
-		regulator_put(mvs);
+
+	return;
+
+fail_mvs0_enable:
+	regulator_put(mvs);
+	mvs = NULL;
+fail_mvs0_get:
+	regulator_disable(s3);
+fail_s3:
+	regulator_put(s3);
+	s3 = NULL;
 }
 
 void msm_snddev_disable_dmic_power(void)
@@ -2618,17 +2619,21 @@ void msm_snddev_disable_dmic_power(void)
 
 	msm_snddev_tx_route_deconfig();
 
-	ret = regulator_disable(mvs);
-	if (ret < 0)
-		pr_err("%s: error disabling regulator mvs\n", __func__);
-	regulator_put(mvs);
-	mvs = NULL;
+	if (mvs) {
+		ret = regulator_disable(mvs);
+		if (ret < 0)
+			pr_err("%s: error disabling vreg mvs\n", __func__);
+		regulator_put(mvs);
+		mvs = NULL;
+	}
 
-	ret = regulator_disable(s3);
-	if (ret < 0)
-		pr_err("%s: error disabling regulator s3\n", __func__);
-	regulator_put(s3);
-	s3 = NULL;
+	if (s3) {
+		ret = regulator_disable(s3);
+		if (ret < 0)
+			pr_err("%s: error disabling regulator s3\n", __func__);
+		regulator_put(s3);
+		s3 = NULL;
+	}
 }
 
 static struct regulator *vreg_timpani_1;
@@ -2647,26 +2652,39 @@ static unsigned int msm_timpani_setup_power(void)
 	vreg_timpani_2 = regulator_get(NULL, "8058_s3");
 	if (IS_ERR(vreg_timpani_2)) {
 		pr_err("%s: Unable to get 8058_s3\n", __func__);
+		regulator_put(vreg_timpani_1);
 		return -ENODEV;
 	}
 
-	rc = regulator_enable(vreg_timpani_1);
+	rc = regulator_set_voltage(vreg_timpani_1, 1200000, 1200000);
+	if (rc) {
+		pr_err("%s: unable to set L0 voltage to 1.2V\n", __func__);
+		goto fail;
+	}
 
+	rc = regulator_set_voltage(vreg_timpani_2, 1800000, 1800000);
+	if (rc) {
+		pr_err("%s: unable to set S3 voltage to 1.8V\n", __func__);
+		goto fail;
+	}
+
+	rc = regulator_enable(vreg_timpani_1);
 	if (rc) {
 		pr_err("%s: Enable regulator 8058_l0 failed\n", __func__);
-		return rc;
+		goto fail;
 	}
 
 	rc = regulator_enable(vreg_timpani_2);
-
 	if (rc) {
 		pr_err("%s: Enable regulator 8058_s3 failed\n", __func__);
-		goto fail_s3;
+		regulator_disable(vreg_timpani_1);
+		goto fail;
 	}
 	return rc;
 
-fail_s3:
+fail:
 	regulator_put(vreg_timpani_1);
+	regulator_put(vreg_timpani_2);
 	return rc;
 }
 
@@ -2701,25 +2719,39 @@ static int msm_timpani_codec_power(int vreg_on)
 			pr_err("%s: vreg_get failed (%ld)\n",
 			__func__, PTR_ERR(vreg_timpani_cdc_apwr));
 			rc = PTR_ERR(vreg_timpani_cdc_apwr);
-			goto vreg_fail;
+			return rc;
 		}
 	}
 
 	if (vreg_on) {
+
+		rc = regulator_set_voltage(vreg_timpani_cdc_apwr,
+				2200000, 2200000);
+		if (rc) {
+			pr_err("%s: unable to set 8058_s4 voltage to 2.2 V\n",
+					__func__);
+			goto vreg_fail;
+		}
+
 		rc = regulator_enable(vreg_timpani_cdc_apwr);
-		if (rc)
-			pr_err("%s: vreg_enable failed %d \n",
-			__func__, rc);
-		goto vreg_fail;
+		if (rc) {
+			pr_err("%s: vreg_enable failed %d\n", __func__, rc);
+			goto vreg_fail;
+		}
 	} else {
 		rc = regulator_disable(vreg_timpani_cdc_apwr);
-		if (rc)
-			pr_err("%s: vreg_disable failed %d \n",
+		if (rc) {
+			pr_err("%s: vreg_disable failed %d\n",
 			__func__, rc);
-		goto vreg_fail;
+			goto vreg_fail;
+		}
 	}
 
+	return 0;
+
 vreg_fail:
+	regulator_put(vreg_timpani_cdc_apwr);
+	vreg_timpani_cdc_apwr = NULL;
 	return rc;
 }
 
@@ -4208,9 +4240,9 @@ static void config_class_d1_gpio(int enable)
 			return;
 		}
 		gpio_direction_output(GPIO_CLASS_D1_EN, 1);
-		gpio_set_value(GPIO_CLASS_D1_EN, 1);
+		gpio_set_value_cansleep(GPIO_CLASS_D1_EN, 1);
 	} else {
-		gpio_set_value(GPIO_CLASS_D1_EN, 0);
+		gpio_set_value_cansleep(GPIO_CLASS_D1_EN, 0);
 		gpio_free(GPIO_CLASS_D1_EN);
 	}
 }
