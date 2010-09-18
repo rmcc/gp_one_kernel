@@ -140,6 +140,16 @@ static int baseband_read_proc(char *page, char **start, off_t off,
 	return proc_calc_metrics(page, start, off, count, eof, len);
 }
 
+static int serial_number_read_proc(char *page, char **start, off_t off,
+				 int count, int *eof, void *data)
+{
+	int len;
+	extern char *board_serial;
+
+	len = snprintf(page, PAGE_SIZE, "%s\n", board_serial);
+	return proc_calc_metrics(page, start, off, count, eof, len);
+}
+
 static struct {
 		char *name;
 		int (*read_proc)(char*,char**,off_t,int,int*,void*);
@@ -147,6 +157,7 @@ static struct {
 	{"socinfo",	build_version_read_proc},
 	{"devmodel",	device_model_read_proc},
 	{"baseband",	baseband_read_proc},
+	{"serialnumber",	serial_number_read_proc},
 	{NULL,},
 };
 

@@ -120,7 +120,8 @@ void __init msm_power_register(void);
 #if ((PMEM_KERNEL_EBI1_BASE + PMEM_KERNEL_EBI1_SIZE) > MSM_PMEM_LIMIT)
 #error out of PMEM boundary
 #endif
-
+	
+char *board_serial;
 
 #ifdef CONFIG_AR6K
 #define WIFI_CONTROL_MASK   0x10000000
@@ -661,7 +662,7 @@ static int msm_read_serial_number_from_nvitem(void)
 	uint32_t smem_proc_comm_oem_data2 = NV_PRD_ID_I;
 	uint32_t product_id[32];	
 	int i, j = 0, nv_location;
-	char *serial_number = kzalloc(256, GFP_KERNEL);
+	board_serial = kzalloc(256, GFP_KERNEL);
 
 	if(msm_proc_comm_oem_rw128b(smem_proc_comm_oem_cmd1, &smem_proc_comm_oem_data1, &smem_proc_comm_oem_data2, product_id) == 0)
 	{      
@@ -669,21 +670,21 @@ static int msm_read_serial_number_from_nvitem(void)
 			i = 1;
 			nv_location = 1;
 		}else if(product_id[0]== 0){ ///No NV_item value
-			kfree(serial_number);
+			kfree(board_serial);
 			return 1;
 		}else {	
 			i = 0;    		
 			nv_location = 0;
 		}
 		for(; i < FIH_NV_LENGTH + nv_location; i++){
-			if (AsciiSwapChar(product_id[i],j,serial_number)) {
-				kfree(serial_number);
+			if (AsciiSwapChar(product_id[i],j,board_serial)) {
+				kfree(board_serial);
 				return 1;
 			}
 			j = j+FIH_NV_LENGTH;
 		}
 	}
-	board_serialno_setup(serial_number);
+	board_serialno_setup(board_serial);
 	/*kfree(serial_number);*/
 	return 1;
 
