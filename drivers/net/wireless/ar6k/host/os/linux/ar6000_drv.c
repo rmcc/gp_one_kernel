@@ -909,18 +909,18 @@ static void android_early_suspend(struct early_suspend *h)
 {
 	AR_SOFTC_T *ar;
 	screen_is_off = 1;
-	ar = container_of(h, AR_SOFTC_T, ar6k_early_suspend);
+	/*ar = container_of(h, AR_SOFTC_T, ar6k_early_suspend);
 
-	ar6000_suspend_ev(ar);
+	ar6000_suspend_ev(ar);*/
 }
 
 static void android_late_resume(struct early_suspend *h)
 {
 	AR_SOFTC_T *ar;
 	screen_is_off = 0;
-	ar = container_of(h, AR_SOFTC_T, ar6k_early_suspend);
+	/*ar = container_of(h, AR_SOFTC_T, ar6k_early_suspend);
 
-	ar6000_resume_ev(ar);
+	ar6000_resume_ev(ar);*/
 }
 
 #endif
