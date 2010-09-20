@@ -1680,6 +1680,12 @@ static void __init msm7x25_init(void)
 
 #ifdef CONFIG_USB_MSM_OTG_72K
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
+    msm_otg_pdata.pemp_level =
+        PRE_EMPHASIS_WITH_20_PERCENT;
+    msm_otg_pdata.drv_ampl = HS_DRV_AMPLITUDE_5_PERCENT;
+    msm_otg_pdata.cdr_autoreset = CDR_AUTO_RESET_ENABLE;
+    msm_otg_pdata.phy_reset_sig_inverted = 1;
+
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =
 		msm7x25_pm_data
