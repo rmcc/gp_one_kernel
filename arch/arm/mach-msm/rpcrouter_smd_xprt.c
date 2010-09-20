@@ -87,7 +87,7 @@ static int rpcrouter_smd_loopback_write_avail(void)
 	return smd_write_avail(smd_loopback_xprt.channel);
 }
 
-static int rpcrouter_smd_loopback_write(void *data, uint32_t len, uint32 type)
+static int rpcrouter_smd_loopback_write(void *data, uint32_t len, uint32_t type)
 {
 	return smd_write(smd_loopback_xprt.channel, data, len);
 }
@@ -142,7 +142,7 @@ static int rpcrouter_smd_remote_probe(struct platform_device *pdev)
 {
 	int rc;
 
-	smd_remote_xprt.xprt.name = "rpcrotuer_smd_xprt";
+	smd_remote_xprt.xprt.name = "rpcrouter_smd_xprt";
 	smd_remote_xprt.xprt.read_avail = rpcrouter_smd_remote_read_avail;
 	smd_remote_xprt.xprt.read = rpcrouter_smd_remote_read;
 	smd_remote_xprt.xprt.write_avail = rpcrouter_smd_remote_write_avail;

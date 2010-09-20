@@ -52,7 +52,11 @@ static inline void allow_suspend(void)
 #include <mach/msm_adsp.h>
 #include "adsp.h"
 
+#ifdef CONFIG_MACH_ADQ
+#define INT_ADSP INT_ADSP_A11
+#else
 #define INT_ADSP INT_ADSP_A9_A11
+#endif
 
 static struct adsp_info adsp_info;
 static struct msm_rpc_endpoint *rpc_cb_server_client;
@@ -102,6 +106,9 @@ static int32_t adsp_validate_module(uint32_t module_id)
 static int32_t adsp_validate_queue(uint32_t mod_id, unsigned q_idx,
 							uint32_t size)
 {
+#ifdef CONFIG_MACH_ADQ
+	return 0;
+#else
 	int32_t i;
 	struct adsp_rtos_mp_mtoa_init_info_type	*sptr;
 
@@ -117,6 +124,7 @@ static int32_t adsp_validate_queue(uint32_t mod_id, unsigned q_idx,
 			}
 	MM_ERR("cmd_buf size is more than allowed size\n");
 	return -EINVAL;
+#endif
 }
 
 uint32_t adsp_get_module(struct adsp_info *info, uint32_t task)
@@ -1097,8 +1105,8 @@ static int msm_adsp_probe(struct platform_device *pdev)
 	unsigned count;
 	int rc, i;
 
-	if (pdev->id != (rpc_adsp_rtos_atom_vers & RPC_VERSION_MAJOR_MASK))
-		return -EINVAL;
+	/*if (pdev->id != (rpc_adsp_rtos_atom_vers & RPC_VERSION_MAJOR_MASK))
+		return -EINVAL;*/
 
 	wake_lock_init(&adsp_wake_lock, WAKE_LOCK_SUSPEND, "adsp");
 	adsp_info.init_info_ptr = kzalloc(
@@ -1197,7 +1205,7 @@ static struct platform_driver msm_adsp_driver = {
 	},
 };
 
-static char msm_adsp_driver_name[] = "rs00000000";
+static char msm_adsp_driver_name[] = "rs00000000:00000000";
 
 static int __init adsp_init(void)
 {
@@ -1210,14 +1218,18 @@ static int __init adsp_init(void)
 #if CONFIG_ADSP_RPC_VER > 0x30001
 	rpc_adsp_rtos_mtoa_vers = 0x30002;
 	rpc_adsp_rtos_mtoa_vers_comp = 0x00030002;
+#elif CONFIG_MACH_ADQ
+	rpc_adsp_rtos_mtoa_vers = 0x10001;
+	rpc_adsp_rtos_mtoa_vers_comp = 0x00010001;
 #else
 	rpc_adsp_rtos_mtoa_vers = 0x30001;
 	rpc_adsp_rtos_mtoa_vers_comp = 0x00030001;
 #endif
 
 	snprintf(msm_adsp_driver_name, sizeof(msm_adsp_driver_name),
-		"rs%08x",
-		rpc_adsp_rtos_atom_prog);
+		"rs%08x:%08x",
+		rpc_adsp_rtos_atom_prog,
+		rpc_adsp_rtos_atom_vers & RPC_VERSION_MAJOR_MASK);
 	msm_adsp_driver.driver.name = msm_adsp_driver_name;
 	rc = platform_driver_register(&msm_adsp_driver);
 	MM_INFO("%s -- %d\n", msm_adsp_driver_name, rc);

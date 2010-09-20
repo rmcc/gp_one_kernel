@@ -180,8 +180,10 @@ struct hs_cmd_data_type {
 };
 
 static const uint32_t hs_key_map[] = {
-	KEY(HS_PWR_K, KEY_POWER),
-	KEY(HS_END_K, KEY_END),
+	/*KEY(HS_PWR_K, KEY_POWER),
+	KEY(HS_END_K, KEY_END),*/
+	KEY(HS_PWR_K, KEY_RESERVED),
+	KEY(HS_END_K, KEY_POWER),
 	KEY(HS_STEREO_HEADSET_K, SW_HEADPHONE_INSERT),
 	KEY(HS_HEADSET_SWITCH_K, KEY_MEDIA),
 	KEY(HS_HEADSET_SWITCH_2_K, KEY_VOLUMEUP),
@@ -267,6 +269,8 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 		key_code = key_parm;
 
 	switch (key) {
+	case KEY_RESERVED:
+		break;
 	case KEY_POWER:
 	case KEY_END:
 	case KEY_MEDIA:

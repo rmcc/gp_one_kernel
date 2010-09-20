@@ -17,6 +17,7 @@ config ARCH_MSM7X25
 	select MSM_VIC
 	select CPU_V6
 	select MSM_REMOTE_SPINLOCK_SWP
+	select MSM_GPIOMUX
 
 config ARCH_MSM7X27
 	bool "MSM7x27"
@@ -240,13 +241,13 @@ config MACH_QSD8X50A_ST1_5
 	help
 	  Support for the Qualcomm ST1.5.
 
-config MACH_MSM7X25_SURF
+config MACH_ADQ
 	depends on ARCH_MSM7X25
 	depends on !MSM_STACKED_MEMORY
 	default y
-	bool "MSM7x25 SURF"
+	bool "FIH ADQ"
 	help
-	  Support for the Qualcomm MSM7x25 SURF eval board.
+	  Support for the Foxconn ADQ board (Commtiva Z1/GP ONE/HS Zeus)
 
 config MACH_MSM7X25_FFA
 	depends on ARCH_MSM7X25
@@ -332,6 +333,7 @@ config MSM_STACKED_MEMORY
 
 config PHYS_OFFSET
 	hex
+	default "0x1A000000" if MACH_ADQ
 	default "0x00200000" if !MSM_STACKED_MEMORY
 	default "0x00000000" if ARCH_QSD8X50 && MSM_SOC_REV_A
 	default "0x20000000" if ARCH_QSD8X50
@@ -1203,6 +1205,28 @@ config MSM_GPIOMUX
 config MSM_V2_TLMM
        bool
 
+config VIRTUAL_KPANIC_PARTITION
+	bool "Create virtual kpanic partition"
+	default n
+	help
+	  Creates a virtual mtd partition named 'kpanic', stealing space from
+	  the specified mtd partition label.
+	  *** DO NOT USE IF YOU ARE USING OTA/RECOVERY ***
+
+config VIRTUAL_KPANIC_PSIZE
+	depends on VIRTUAL_KPANIC_PARTITION
+	int "Default kpanic partition size"
+	default 1048576
+	help
+	  Sets the size of the virtual kpanic paritition to create.
+
+config VIRTUAL_KPANIC_SRC
+	depends on VIRTUAL_KPANIC_PARTITION
+	string "Partition to steal from"
+	default "cache"
+	help
+	  Sets the partition to steal from to make the virtual one.
+	
 config MSM_BUS_SCALING
 	bool "Bus scaling driver"
 	default n

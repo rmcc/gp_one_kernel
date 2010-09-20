@@ -1366,6 +1366,7 @@ int mmc_resume_host(struct mmc_host *host)
 		return 0;
 	}
 
+#ifndef CONFIG_MACH_ADQ
 	if (host->bus_ops && !host->bus_dead) {
 		if (!(host->pm_flags & MMC_PM_KEEP_POWER)) {
 			mmc_power_up(host);
@@ -1380,13 +1381,18 @@ int mmc_resume_host(struct mmc_host *host)
 			err = 0;
 		}
 	}
+#endif
 	mmc_bus_put(host);
 
+#ifndef CONFIG_MACH_ADQ
 	/*
 	 * We add a slight delay here so that resume can progress
 	 * in parallel.
 	 */
 	mmc_detect_change(host, 1);
+#else
+    err = 0;
+#endif
 
 	return err;
 }

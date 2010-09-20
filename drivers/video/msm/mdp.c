@@ -1081,7 +1081,11 @@ static int mdp_probe(struct platform_device *pdev)
 	case LCDC_PANEL:
 		pdata->on = mdp_lcdc_on;
 		pdata->off = mdp_lcdc_off;
+#ifdef CONFIG_FB_MSM_LCDC_HX8352
+		mfd->hw_refresh = FALSE;
+#else
 		mfd->hw_refresh = TRUE;
+#endif
 		mfd->cursor_update = mdp_hw_cursor_update;
 #ifndef CONFIG_FB_MSM_MDP22
 		mfd->lut_update = mdp_lut_update_lcdc;

@@ -46,6 +46,218 @@
 #include "mddihosti.h"
 #include "tvenc.h"
 #include "mdp.h"
+/* FIH_ADQ, Ming { */
+#include <linux/spi/spi.h>
+#include <mach/gpio.h>
+#include <mach/msm_iomap.h>
+#include <mach/msm_smd.h>
+
+extern struct spi_device	  *gLcdSpi;
+
+#define ARRAY_AND_SIZE(x)	(x), ARRAY_SIZE(x)
+typedef struct
+{
+	char	reg;
+	char	val;
+} CONFIG_TABLE;
+
+static const CONFIG_TABLE config_standby[] = {
+	{ 0x19, 0x1B},
+};
+
+static const CONFIG_TABLE config_resume[] = {
+	{ 0x19, 0x1A},
+};
+
+static const CONFIG_TABLE config_table1[] = {
+// CMO 3.2" panel initial code with Gamma 2.2 refer to Zeus
+	{ 0x83, 0x02},
+	{ 0x85, 0x03},
+	{ 0x8B, 0x00},
+	{ 0x8C, 0x93},
+	{ 0x91, 0x01},
+	{ 0x83, 0x00},
+// Gamma Setting
+	{ 0x3E, 0x85},
+	{ 0x3F, 0x50},
+	{ 0x40, 0x00},
+	{ 0x41, 0x77},
+	{ 0x42, 0x24},
+	{ 0x43, 0x35},
+	{ 0x44, 0x00},
+	{ 0x45, 0x77},
+	{ 0x46, 0x10},
+	{ 0x47, 0x5A},
+	{ 0x48, 0x4D},
+	{ 0x49, 0x40},
+// Power Supply Setting
+	{ 0x2B, 0xF9},
+};
+static const CONFIG_TABLE config_table2[] = {
+	{ 0x1B, 0x14},
+	{ 0x1A, 0x11},
+	{ 0x1C, 0x0D},
+	{ 0x1F, 0x64},//{ 0x1F, 0x5e},
+};
+static const CONFIG_TABLE config_table3[] = {
+	{ 0x19, 0x0A},
+	{ 0x19, 0x1A},
+};
+static const CONFIG_TABLE config_table4[] = {
+	{ 0x19, 0x12},
+};
+static const CONFIG_TABLE config_table5[] = {
+	{ 0x1E, 0x33},
+};
+static const CONFIG_TABLE config_table6[] = {
+// Display ON Setting
+	{ 0x3C, 0x60},
+	{ 0x3D, 0x1C},
+	{ 0x34, 0x38},
+	{ 0x35, 0x38},
+	{ 0x24, 0x38},
+};
+static const CONFIG_TABLE config_table7[] = {
+	{ 0x24, 0x3C},
+	{ 0x16, 0x1C},
+	{ 0x3A, 0xA8},//{ 0x3a, 0xae},
+	{ 0x01, 0x02},
+	{ 0x55, 0x00},
+};
+
+
+static int lcd_spi_write(struct spi_device *spi, CONFIG_TABLE table[], int len)
+{
+	char reg_data[]= { 0x70, 0x00};
+	char val_data[]= { 0x72, 0x00};
+	int val;
+	int i;
+	//printk( "XXXXX lcd_spi_write len: %d XXXXX\n", len);
+	for( i = 0 ; i < len ; i++ )
+	{
+		reg_data[ 1]= table[ i].reg;
+		val_data[ 1]= table[ i].val;
+		val = spi_write(spi, reg_data, sizeof( reg_data));
+		if (val)
+                        goto config_exit;
+		val = spi_write(spi, val_data, sizeof( val_data));
+		if (val)
+                        goto config_exit;
+		///printk(KERN_INFO "[%s:%d] write reg= 0x%02X, val= 0x%02X\n",__FILE__, __LINE__, table[ i].reg, table[ i].val);
+	}
+        return 0;
+
+config_exit:
+        printk(KERN_ERR "SPI write error :%s -- %d\n", __func__,__LINE__);
+        return val;
+
+}
+
+static int lcd_spi_read(struct spi_device *spi, CONFIG_TABLE table[], int len)
+{
+	char reg_data[]= { 0x70, 0x00};
+	int val;
+	int i;
+	//printk( "XXXXX lcd_spi_read len: %d XXXXX\n", len);
+	for( i = 0 ; i < len ; i++ )
+	{
+		reg_data[ 1]= table[ i].reg;
+		val = spi_write(spi, reg_data, sizeof( reg_data));
+		if (val)
+                        goto config_exit;
+		printk(KERN_INFO "[%s:%d] reg= 0x%02X, orig val= 0x%02X, read val= 0x%02X\n",__FILE__, __LINE__, table[ i].reg, table[ i].val, spi_w8r8(spi, 0x73));
+	}
+	 return 0;
+
+config_exit:
+        printk(KERN_ERR "SPI write error :%s -- %d\n", __func__,__LINE__);
+        return val;
+}
+
+static int hx8352_config(struct spi_device *spi)
+{
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table1));
+	mdelay( 10);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table2));
+	mdelay( 20);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table3));
+	mdelay( 40);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table4));
+	mdelay( 40);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table5));
+	mdelay( 100);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table6));
+	mdelay( 40);
+	lcd_spi_write( spi, ARRAY_AND_SIZE( config_table7));
+/*	
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table1));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table2));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table3));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table4));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table5));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table6));
+	lcd_spi_read( spi, ARRAY_AND_SIZE( config_table7));
+*/		
+}
+
+static int panel_poweron(void)
+{
+    int rc = 0;
+    unsigned int uiHWID = FIH_READ_HWID_FROM_SMEM();
+    
+    /* POWER ON */
+    if (uiHWID <= CMCS_HW_VER_EVT1)
+    {
+        /* GPIO 85: CAM_LDO_PWR (EVT1) */    
+        rc = gpio_tlmm_config(GPIO_CFG(85, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	    if (rc) {
+            printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+            return -EIO;
+        }
+                
+	    rc = gpio_request(85, "cam_pwr");
+        if (rc) {
+            printk(KERN_ERR "%s: cam_pwr setting failed! rc = %d\n", __func__, rc);
+            return -EIO;
+        }
+
+        gpio_direction_output(85,1);
+        printk(KERN_INFO "%s: (85) gpio_read = %d\n", __func__, gpio_get_value(85));
+        gpio_free(85);
+    }
+    
+    /* LCD RESET */
+    /* GPIO 103: n-LCD-RST */
+    rc = gpio_tlmm_config(GPIO_CFG(103, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	if (rc) {
+        printk(KERN_ERR "%s--%d: gpio_tlmm_config=%d\n", __func__,__LINE__, rc);
+        return -EIO;
+    }
+
+    rc = gpio_request(103, "lcd_reset");
+    if (rc) {
+        printk(KERN_ERR "%s: lcd_reset setting failed! rc = %d\n", __func__, rc);
+        return -EIO;
+    }
+
+    gpio_direction_output(103,1);
+    mdelay(5);
+    printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
+
+   	gpio_direction_output(103,0);
+   	mdelay(10);
+    printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
+    
+    gpio_direction_output(103,1);
+    mdelay(5);    	
+    printk(KERN_INFO "%s: (103) gpio_read = %d\n", __func__, gpio_get_value(103));
+
+    gpio_free(103);
+
+    return rc;
+}
+/* } FIH_ADQ, Ming */
+
 #include "mdp4.h"
 
 #ifdef CONFIG_FB_MSM_LOGO
@@ -451,6 +663,11 @@ static int msm_fb_suspend_sub(struct msm_fb_data_type *mfd)
 		}
 		mfd->op_enable = FALSE;
 	}
+    /* FIH_ADQ, Ming { */
+    printk(KERN_INFO "set hx8352 to standby mode...\n");
+    lcd_spi_write(gLcdSpi, ARRAY_AND_SIZE(config_standby));
+    /* } FIH_ADQ, Ming */
+
 	/*
 	 * try to power down
 	 */
@@ -488,6 +705,20 @@ static int msm_fb_resume_sub(struct msm_fb_data_type *mfd)
 	/* attach display channel irq if there's any */
 	if (mfd->channel_irq != 0)
 		enable_irq(mfd->channel_irq);
+
+    /* FIH_ADQ, Ming { */
+    /* panel power on */
+    printk(KERN_INFO "+panel_poweron()\n");
+    panel_poweron();
+    /* } FIH_ADQ, Ming */
+    /* FIH_ADQ, Ming { */
+    /* Don't erase framebuffer for [ADQ.B-3031] */
+    /* Erase framebuffer for [ADQ.FC-706] */    
+    printk(KERN_INFO "+erasing framebuffer...\n");
+    memset(mfd->fbi->screen_base, 0, mfd->fbi->fix.smem_len);
+    printk(KERN_INFO "+hx8352_config()\n");
+    hx8352_config(gLcdSpi);
+    /* } FIH_ADQ, Ming */
 
 	/* resume state var recover */
 	mfd->sw_refreshing_enable = mfd->suspend.sw_refreshing_enable;
@@ -612,7 +843,7 @@ void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl, u32 save)
 		up(&mfd->sem);
 	}
 }
-
+/* } FIH_ADQ, 6360  */
 static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			    boolean op_enable)
 {
@@ -636,20 +867,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
-
-				msm_fb_set_backlight(mfd,
-						     mfd->bl_level, 0);
-
-/* ToDo: possible conflict with android which doesn't expect sw refresher */
-/*
-	  if (!mfd->hw_refresh)
-	  {
-	    if ((ret = msm_fb_resume_sw_refresher(mfd)) != 0)
-	    {
-	      MSM_FB_INFO("msm_fb_blank_sub: msm_fb_resume_sw_refresher failed = %d!\n",ret);
-	    }
-	  }
-*/
+				msm_fb_set_backlight(mfd,mfd->bl_level, 0);
 			}
 		}
 		break;
@@ -665,13 +883,20 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			mfd->op_enable = FALSE;
 			curr_pwr_state = mfd->panel_power_on;
 			mfd->panel_power_on = FALSE;
+/* FIH_ADQ, Ming { */			
+            // backlight off before MDP power-down
+            msm_fb_set_backlight(mfd, 0, 0);
+            //mdelay(1000); // wait for backlight off
+			///mdelay(100);
+/* } FIH_ADQ, Ming */			
 
 			msleep(16);
 			ret = pdata->off(mfd->pdev);
 			if (ret)
 				mfd->panel_power_on = curr_pwr_state;
-
-			msm_fb_set_backlight(mfd, 0, 0);
+/* FIH_ADQ, 6360 { */
+			///msm_fb_set_backlight(mfd, 0, 0);
+/* } FIH_ADQ, 6360  */			
 			mfd->op_enable = TRUE;
 		}
 		break;
@@ -975,19 +1200,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 		return ret;
 	}
 
-	/* The adreno GPU hardware requires that the pitch be aligned to
-	   32 pixels for color buffers, so for the cases where the GPU
-	   is writing directly to fb0, the framebuffer pitch
-	   also needs to be 32 pixel aligned */
-
-	if (mfd->index == 0)
-		fix->line_length = ALIGN(panel_info->xres, 32) * bpp;
-	else
-		fix->line_length = panel_info->xres * bpp;
-
-	fix->smem_len = fix->line_length * panel_info->yres * mfd->fb_page;
-
-
+	fix->smem_len =
+	    panel_info->xres * panel_info->yres * bpp * mfd->fb_page;
+	fix->line_length = panel_info->xres * bpp;
 
 	mfd->var_xres = panel_info->xres;
 	mfd->var_yres = panel_info->yres;

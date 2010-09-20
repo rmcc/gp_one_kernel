@@ -69,12 +69,12 @@ struct adsp_module_info {
 
 #define ADSP_EVENT_MAX_SIZE 496
 #define EVENT_LEN       12
-#define EVENT_MSG_ID ((uint16_t)~0)
+#define EVENT_MSG_ID (~0)
 
 struct adsp_event {
 	struct list_head list;
 	uint32_t size; /* always in bytes */
-	uint16_t msg_id;
+	unsigned msg_id;
 	uint16_t type; /* 0 for msgs (from aDSP), -1 for events (from ARM9) */
 	int is16; /* always 0 (msg is 32-bit) when the event type is 1(ARM9) */
 	union {
@@ -191,8 +191,8 @@ struct adsp_rtos_mp_mtoa_type {
 #define ENTRIES_MAX     36
 #define MODULES_MAX     64
 #else
-#define IMG_MAX         6
-#define ENTRIES_MAX     48
+#define IMG_MAX         8
+#define ENTRIES_MAX     64
 #endif
 #define QUEUES_MAX      64
 

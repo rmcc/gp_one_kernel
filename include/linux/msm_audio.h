@@ -144,7 +144,7 @@ struct msm_audio_config {
 	uint32_t type;
 	uint32_t meta_field;
 	uint32_t bits;
-	uint32_t unused[3];
+	uint32_t unused[2];
 };
 
 struct msm_audio_stream_config {

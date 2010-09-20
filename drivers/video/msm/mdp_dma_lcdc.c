@@ -227,19 +227,19 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		active_v_end = 0;
 	}
 
-
-#ifdef CONFIG_FB_MSM_MDP40
-	if (mfd->panel.type == HDMI_PANEL) {
+/*#ifdef CONFIG_FB_MSM_MDP40*/
+#ifdef CONFIG_FB_MSM_LCDC_HX8352
+	/*if (mfd->panel.type == HDMI_PANEL) {
 		block = MDP_DMA_E_BLOCK;
 		timer_base = DTV_BASE;
 		hsync_polarity = 0;
 		vsync_polarity = 0;
-	} else {
+	} else {*/
 		hsync_polarity = 1;
 		vsync_polarity = 1;
-	}
+	/*}*/
 
-	lcdc_underflow_clr |= 0x80000000;	/* enable recovery */
+	/*lcdc_underflow_clr |= 0x80000000;*/	/* enable recovery */
 #else
 	hsync_polarity = 0;
 	vsync_polarity = 0;

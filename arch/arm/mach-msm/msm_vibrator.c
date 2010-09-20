@@ -23,7 +23,7 @@
 #include <mach/msm_rpcrouter.h>
 
 #define PM_LIBPROG      0x30000061
-#if (CONFIG_MSM_AMSS_VERSION == 6220) || (CONFIG_MSM_AMSS_VERSION == 6225)
+#if ((CONFIG_MSM_AMSS_VERSION == 6220) || (CONFIG_MSM_AMSS_VERSION == 6225)) && !defined(CONFIG_MACH_ADQ)
 #define PM_LIBVERS      0xfb837d0b
 #else
 #define PM_LIBVERS      0x10001

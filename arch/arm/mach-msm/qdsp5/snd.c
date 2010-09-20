@@ -49,7 +49,11 @@ static struct snd_ctxt the_snd;
 #define RPC_SND_PROG	0x30000002
 #define RPC_SND_CB_PROG	0x31000002
 
+#ifdef CONFIG_MACH_ADQ
+#define RPC_SND_VERS                    0x00010001
+#else
 #define RPC_SND_VERS                    0x00020001
+#endif
 
 #define SND_SET_DEVICE_PROC 2
 #define SND_SET_VOLUME_PROC 3

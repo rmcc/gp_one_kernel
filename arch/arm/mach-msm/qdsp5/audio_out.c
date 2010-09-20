@@ -265,19 +265,19 @@ void audio_commit_pending_pp_params(void *priv, unsigned id, uint16_t *msg)
 	if (!audio_copp->status)
 		return;
 
-	audpp_dsp_set_mbadrc(COMMON_OBJ_ID, audio_copp->mbadrc_enable,
-						&audio_copp->mbadrc);
+	/*audpp_dsp_set_mbadrc(COMMON_OBJ_ID, audio_copp->mbadrc_enable,
+						&audio_copp->mbadrc);*/
 
 	audpp_dsp_set_eq(COMMON_OBJ_ID, audio_copp->eq_enable,
 						&audio_copp->eq);
 
-	audpp_dsp_set_rx_iir(COMMON_OBJ_ID, audio_copp->rx_iir_enable,
-							&audio_copp->iir);
+	/*audpp_dsp_set_rx_iir(COMMON_OBJ_ID, audio_copp->rx_iir_enable,
+							&audio_copp->iir);*/
 	audpp_dsp_set_vol_pan(COMMON_OBJ_ID, &audio_copp->vol_pan);
 
-	audpp_dsp_set_qconcert_plus(COMMON_OBJ_ID,
+	/*audpp_dsp_set_qconcert_plus(COMMON_OBJ_ID,
 				audio_copp->qconcert_plus_enable,
-				&audio_copp->qconcert_plus);
+				&audio_copp->qconcert_plus);*/
 }
 EXPORT_SYMBOL(audio_commit_pending_pp_params);
 
@@ -409,8 +409,8 @@ static int audio_enable_mbadrc(struct audio_copp *audio_copp, int enable)
 
 	audio_copp->mbadrc_enable = enable;
 	if (is_audpp_enable()) {
-		audpp_dsp_set_mbadrc(COMMON_OBJ_ID, enable,
-						&audio_copp->mbadrc);
+		/*audpp_dsp_set_mbadrc(COMMON_OBJ_ID, enable,
+						&audio_copp->mbadrc);*/
 		audio_copp->mbadrc_needs_commit = 0;
 	}
 
@@ -441,7 +441,7 @@ static int audio_enable_rx_iir(struct audio_copp *audio_copp, int enable)
 	audio_copp->rx_iir_enable = enable;
 
 	if (is_audpp_enable()) {
-		audpp_dsp_set_rx_iir(COMMON_OBJ_ID, enable, &audio_copp->iir);
+		/*audpp_dsp_set_rx_iir(COMMON_OBJ_ID, enable, &audio_copp->iir);*/
 		audio_copp->rx_iir_needs_commit = 0;
 	}
 	return 0;
@@ -463,8 +463,8 @@ static int audio_enable_qconcert_plus(struct audio_copp *audio_copp, int enable)
 	audio_copp->qconcert_plus_enable = enable;
 
 	if (is_audpp_enable()) {
-		audpp_dsp_set_qconcert_plus(COMMON_OBJ_ID, enable,
-					&audio_copp->qconcert_plus);
+		/*audpp_dsp_set_qconcert_plus(COMMON_OBJ_ID, enable,
+					&audio_copp->qconcert_plus);*/
 		audio_copp->qconcert_plus_needs_commit = 0;
 	}
 	return 0;

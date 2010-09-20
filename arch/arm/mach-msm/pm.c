@@ -308,7 +308,11 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay,
 		if (ret) {
 			printk(KERN_EMERG "msm_sleep(): power collapse entry "
 				"timed out waiting for Modem's response\n");
+#ifdef CONFIG_MACH_ADQ
+			goto enter_failed;
+#else
 			msm_pm_timeout();
+#endif
 		}
 	}
 	if (msm_irq_enter_sleep2(!!enter_state, from_idle))
@@ -400,7 +404,9 @@ enter_failed:
 		if (msm_pm_wait_state(exit_wait_set, exit_wait_clear, 0, 0)) {
 			printk(KERN_EMERG "msm_sleep(): power collapse exit "
 				"timed out waiting for Modem's response\n");
+#ifndef CONFIG_MACH_ADQ
 			msm_pm_timeout();
+#endif
 		}
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
@@ -682,8 +688,15 @@ static void msm_pm_power_off(void)
 
 static void msm_pm_restart(char str, const char *cmd)
 {
+#ifdef CONFIG_MACH_ADQ
+	uint32_t oem_cmd = SMEM_PROC_COMM_OEM_RESET_CHIP_EBOOT;
+#endif
 	msm_rpcrouter_close();
+#ifdef CONFIG_MACH_ADQ
+	msm_proc_comm_oem(PCOM_CUSTOMER_CMD1, &oem_cmd, 0, &restart_reason);
+#else
 	msm_proc_comm(PCOM_RESET_CHIP, &restart_reason, 0);
+#endif
 
 	for (;;) ;
 }

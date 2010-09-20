@@ -475,6 +475,11 @@ config PMIC8058_UPL
 	  simple truth table based logic via a set of control registers. I/O may
 	  be routed in and out of the UPL module via GPIO or DTEST pins.
 
+config BACKLIGHT_LED_MAX8831
+    tristate "MAX8831 backlight led controller"
+    depends on I2C=y && ARCH_MSM
+    help
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
