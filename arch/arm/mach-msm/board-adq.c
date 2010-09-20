@@ -414,53 +414,6 @@ static int hsusb_rpc_connect(int connect)
 		return msm_hsusb_rpc_close();
 }
 
-struct vreg *vreg_3p3;
-static int msm_hsusb_ldo_init(int init)
-{
-    if (init) {
-        vreg_3p3 = vreg_get(NULL, "usb");
-        if (IS_ERR(vreg_3p3))
-            return PTR_ERR(vreg_3p3);
-        vreg_set_level(vreg_3p3, 3300);
-    } else
-        vreg_put(vreg_3p3);
-
-    return 0;
-}
-
-static int msm_hsusb_ldo_enable(int enable)
-{
-    static int ldo_status;
-
-    if (!vreg_3p3 || IS_ERR(vreg_3p3))
-        return -ENODEV;
-
-    if (ldo_status == enable)
-        return 0;
-
-    ldo_status = enable;
-
-    pr_info("%s: %d", __func__, enable);
-
-    if (enable)
-        return vreg_enable(vreg_3p3);
-
-    return vreg_disable(vreg_3p3);
-}
-
-static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init)
-{
-    int ret;
-
-    if (init) {
-        ret = msm_pm_app_rpc_init(callback);
-    } else {
-        msm_pm_app_rpc_deinit(callback);
-        ret = 0;
-    }
-    return ret;
-}
-
 #endif
 
 #if defined(CONFIG_USB_MSM_OTG_72K) || defined(CONFIG_USB_EHCI_MSM)
@@ -510,10 +463,6 @@ void charger_connected(enum chg_type chgtype)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	.rpc_connect			= hsusb_rpc_connect,
 	.phy_reset				= msm_hsusb_rpc_phy_reset,
-	.pmic_notif_init        = msm_hsusb_pmic_notif_init,
-	.ldo_init				= msm_hsusb_ldo_init,
-	.ldo_enable				= msm_hsusb_ldo_enable,
-	.phy_can_powercollapse	= 1,
 #if defined(CONFIG_BATTERY_DS2784) || defined(CONFIG_BATTERY_FIH_ZEUS)
 	.chg_vbus_draw			= hsusb_chg_vbus_draw,
 	.chg_connected			= charger_connected,
