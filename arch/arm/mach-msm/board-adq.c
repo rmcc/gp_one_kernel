@@ -633,8 +633,9 @@ static int msm_read_serial_number_from_nvitem(void)
 			j = j+FIH_NV_LENGTH;
 		}
 	}
+#ifdef CONFIG_USB_ANDROID
 	board_serialno_setup(board_serial);
-	/*kfree(serial_number);*/
+#endif
 	return 1;
 
 } 
