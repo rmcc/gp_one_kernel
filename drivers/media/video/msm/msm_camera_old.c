@@ -145,6 +145,11 @@ static int msm_pmem_table_add(struct msm_fs_pmem_t *ptype,
 	if (!region)
 		return -ENOMEM;
 
+    if (!info->len)
+        info->len = len;
+    paddr += info->offset;
+    len = info->len;
+
 	INIT_HLIST_NODE(&region->list);
 
 	region->type = info->type;
