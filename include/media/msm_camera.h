@@ -247,6 +247,8 @@ struct msm_pmem_info_t {
 	enum msm_pmem_t type;
 	int fd;
 	void *vaddr;
+	uint32_t offset;
+	uint32_t len;
 	uint32_t y_off;
 	uint32_t cbcr_off;
 	uint8_t active;
