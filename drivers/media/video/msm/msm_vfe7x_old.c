@@ -65,7 +65,7 @@
 #include <linux/sched.h>
 #include "msm_vfe7x.h"
 
-#define QDSP_CMDQUEUE 25
+#define QDSP_CMDQUEUE QDSP_vfeCommandQueue
 
 #define VFE_RESET_CMD 0
 #define VFE_START_CMD 1
@@ -144,7 +144,7 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 
 	rp = kmalloc(sizeof(struct msm_vfe_resp_t), GFP_ATOMIC);
 	if (!rp) {
-		CDBG("rp: cannot allocate buffer\n");
+		pr_err("rp: cannot allocate buffer\n");
 		return;
 	}
 
@@ -168,7 +168,7 @@ static void vfe_7x_ops(void *driver_data, unsigned id, size_t len,
 		rp->evt_msg.data = kmalloc(rp->evt_msg.len, GFP_ATOMIC);
 		if (!(rp->evt_msg.data)) {
 			kfree(rp);
-			CDBG("rp->evt_msg.data: cannot allocate buffer\n");
+			pr_err("rp->evt_msg.data: cannot allocate buffer\n");
 			return;
 		}
 
@@ -434,7 +434,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd_t *cmd, void *data)
 			kmalloc(sizeof(struct msm_vfe_command_7k),
 				GFP_ATOMIC);
 	if (!vfecmd) {
-		CDBG("vfecmd alloc failed!\n");
+		pr_err("vfecmd alloc failed!\n");
 		return -ENOMEM;
 	}
 
@@ -580,8 +580,8 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd_t *cmd, void *data)
 		break;
 
 	case CMD_STATS_BUF_RELEASE: {
-		CDBG("vfe_7x_config: CMD_STATS_BUF_RELEASE\n");
 		if (!data) {
+			pr_err("vfe_7x_config: CMD_STATS_BUF_RELEASE\n");
 			rc = -EFAULT;
 			goto config_failure;
 		}
@@ -596,7 +596,7 @@ static int vfe_7x_config(struct msm_vfe_cfg_cmd_t *cmd, void *data)
 		break;
 
 	case CMD_STATS_AF_BUF_RELEASE: {
-		CDBG("vfe_7x_config: CMD_STATS_AF_BUF_RELEASE\n");
+		pr_err("vfe_7x_config: CMD_STATS_AF_BUF_RELEASE\n");
 		if (!data) {
 			rc = -EFAULT;
 			goto config_failure;

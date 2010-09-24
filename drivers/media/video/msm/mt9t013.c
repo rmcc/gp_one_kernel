@@ -534,7 +534,7 @@ static int mt9t013_i2c_rxdata(unsigned short saddr,
 	};
 
 	if (i2c_transfer(mt9t013_ctrl->client->adapter, msgs, 2) < 0) {
-		CDBG("mt9t013_i2c_rxdata failed!\n");
+		pr_err("mt9t013_i2c_rxdata failed!\n");
 		return -EIO;
 	}
 
@@ -562,7 +562,7 @@ static int32_t mt9t013_i2c_read_w(unsigned short saddr,
 	*rdata = buf[0] << 8 | buf[1];
 
 	if (rc < 0)
-		CDBG("mt9t013_i2c_read failed!\n");
+		pr_err("mt9t013_i2c_read failed!\n");
 
 	return rc;
 }
@@ -580,7 +580,7 @@ static int32_t mt9t013_i2c_txdata(unsigned short saddr,
 	};
 
 	if (i2c_transfer(mt9t013_ctrl->client->adapter, msg, 1) < 0) {
-		CDBG("mt9t013_i2c_txdata faild\n");
+		pr_err("mt9t013_i2c_txdata faild\n");
 		return -EIO;
 	}
 
@@ -599,7 +599,7 @@ static int32_t mt9t013_i2c_write_b(unsigned short saddr,
 	rc = mt9t013_i2c_txdata(saddr, buf, 2);
 
 	if (rc < 0)
-		CDBG("i2c_write failed, addr = 0x%x, val = 0x%x!\n",
+		pr_err("i2c_write failed, addr = 0x%x, val = 0x%x!\n",
 		waddr, wdata);
 
 	return rc;
@@ -620,7 +620,7 @@ static int32_t mt9t013_i2c_write_w(unsigned short saddr,
 	rc = mt9t013_i2c_txdata(saddr, buf, 4);
 
 	if (rc < 0)
-		CDBG("i2c_write_w failed, addr = 0x%x, val = 0x%x!\n",
+		pr_err("i2c_write_w failed, addr = 0x%x, val = 0x%x!\n",
 		waddr, wdata);
 
 	return rc;
@@ -1995,7 +1995,7 @@ static int mt9t013_open(struct inode *inode, struct file *fp)
 		mt9t013_ctrl->opened = 1;
 	else {
 		mt9t013_ctrl->opened = 0;//FIH_ADQ,JOE HSU
-		CDBG("mt9t013_open: sensor init failed!\n");
+		pr_err("mt9t013_open: sensor init failed!\n");
 	}
 
 open_done:
@@ -2019,6 +2019,7 @@ static long mt9t013_ioctl(struct file *filp,
 
 	switch (cmd) {
 	case MSM_CAMSENSOR_IO_CFG: {
+
 		switch (cdata.cfgtype) {
 		case CFG_GET_PICT_FPS:
 				mt9t013_get_pict_fps(
