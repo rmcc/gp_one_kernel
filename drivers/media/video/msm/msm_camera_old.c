@@ -803,13 +803,9 @@ static long msm_get_stats(void __user *arg)
 //			}
 		} else if (data->type == VFE_MSG_SNAPSHOT) {
 
-			uint32_t pp_en;//FIH_ADQ,JOE HSU,Update patch
+			uint32_t pp_en = msm_camera->pict_pp;
 			struct msm_postproc_t buf;
 			struct msm_pmem_region region;
-
-			mutex_lock(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
-			pp_en = msm_camera->pict_pp;
-			mutex_unlock(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
 
 			if (pp_en & PP_SNAP) { //FIH_ADQ,JOE HSU,Update patch
 				buf.fmnum =
@@ -1457,11 +1453,8 @@ static long msm_pict_pp_done(void __user *arg)
 	unsigned long flags;
 	long rc = 0;
 
-	uint32_t pp_en;//FIH_ADQ,JOE HSU,Update patch
+	uint32_t pp_en = msm_camera->pict_pp;
 
-	mutex_lock(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
-	pp_en = msm_camera->pict_pp;
-	mutex_unlock(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
         CDBG("%s: %d is done\n", __func__, pp_en);
 
 	if (!pp_en)
@@ -1919,10 +1912,7 @@ static void msm_vfe_sync(struct msm_vfe_resp_t *vdata,
 			CDBG("waked up frame thread\n");
 
 		} else if (vdata->type == VFE_MSG_SNAPSHOT) {
-			unsigned pp;//FIH_ADQ,JOE HSU,Update patch
-			mutex_lock(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
-			pp = msm_camera->pict_pp;
-			mutex_unlock(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
+			unsigned pp = msm_camera->pict_pp;
 //FIH_ADQ,JOE HSU,Update patch			
 //			if ((pp & PP_SNAP) || (pp & PP_RAW_SNAP))
 //				goto sync_done;

@@ -37,20 +37,6 @@
 #include <linux/ioctl.h>
 #include <linux/msm_adsp.h>
 
-#undef CDBG
-#ifdef __KERNEL__
-//FIH_ADQ,JOE HSU
-//#define CDBG(fmt, args...) printk(KERN_INFO "msm_camera: " fmt, ##args)
-#define CDBG(fmt, args...) do {} while(0)
-#else
-#ifdef LOG_DEBUG
-#include <utils/Log.h>
-#define CDBG(fmt, args...) LOGI(fmt, ##args)
-#else
-#define CDBG(fmt, args...) fprintf(stderr, fmt, ##args)
-#endif
-#endif
-
 #define MSM_CAM_IOCTL_MAGIC 'm'
 
 #define MSM_CAM_IOCTL_GET_SENSOR_INFO \
