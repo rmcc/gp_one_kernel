@@ -352,6 +352,29 @@ static long msm_pmem_table_del(void __user *arg)
 	if (copy_from_user(&info, arg, sizeof(info)))
 		return -EFAULT;
 
+	if (info.type == MSM_PMEM_AEC_AWB || info.type == MSM_PMEM_AF) {
+		struct msm_pmem_info_legacy {
+			enum msm_pmem_t type;
+			int fd;
+			void *vaddr;
+			uint32_t y_off;
+			uint32_t cbcr_off;
+			uint8_t active;
+		} oldinfo;
+
+		if (copy_from_user(&oldinfo, arg, sizeof(oldinfo)))
+			return -EFAULT;
+
+		info.type = oldinfo.type;
+		info.fd = oldinfo.fd;
+		info.vaddr = oldinfo.vaddr;
+		info.offset = 0;
+		info.len = 0;
+		info.y_off = oldinfo.y_off;
+		info.cbcr_off = oldinfo.cbcr_off;
+		info.active = oldinfo.active;
+	}
+
 	return msm_pmem_table_del_proc(&info);
 }
 
@@ -771,36 +794,10 @@ static long msm_get_stats(void __user *arg)
 
 		} else if (data->type == VFE_MSG_OUTPUT1 ||
 			data->type == VFE_MSG_OUTPUT2) {
-//FIH_ADQ,JOE HSU,Update patch
-#if 0
-			uint32_t pp_en;
-			struct msm_postproc_t buf;
-			struct msm_pmem_region region;
-			down(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
-			pp_en = msm_camera->pict_pp;
-			up(&pict_pp_lock);//FIH_ADQ,JOE HSU,Mutex warning
-			if (pp_en & PP_PREV) {
-				CDBG("Started Preview post processing. pp_en = %d \n", pp_en);
-				buf.fmain.buffer =
-					msm_pmem_frame_ptov_lookup(data->phy.y_phy,
-					data->phy.cbcr_phy, &buf.fmain.y_off,
-					&buf.fmain.cbcr_off, &buf.fmain.fd);
-				if (buf.fmain.buffer) {
-          CDBG("%s: Copy_to_user: buf=0x%x fd=%d y_o=%d c_o=%d\n", __func__,
-            buf.fmain.buffer, buf.fmain.fd, buf.fmain.y_off, buf.fmain.cbcr_off);
- 			if (copy_to_user((void *)(se.stats_event.data),
-						&(buf.fmain),
-						sizeof(struct msm_frame_t)))
-							rc = -EFAULT;
-					} else
-							rc = -EFAULT;
-			} else {
-#endif				
 			if (copy_to_user((void *)(se.stats_event.data),
 					data->extdata,
 					data->extlen))
 				rc = -EFAULT;
-//			}
 		} else if (data->type == VFE_MSG_SNAPSHOT) {
 
 			uint32_t pp_en = msm_camera->pict_pp;
@@ -1197,6 +1194,29 @@ static long msm_register_pmem(void __user *arg)
 
 	if (copy_from_user(&info, arg, sizeof(info)))
 		return -EFAULT;
+
+	if (info.type == MSM_PMEM_AEC_AWB || info.type == MSM_PMEM_AF) {
+		struct msm_pmem_info_legacy {
+			enum msm_pmem_t type;
+			int fd;
+			void *vaddr;
+			uint32_t y_off;
+			uint32_t cbcr_off;
+			uint8_t active;
+		} oldinfo;
+
+		if (copy_from_user(&oldinfo, arg, sizeof(oldinfo)))
+			return -EFAULT;
+
+		info.type = oldinfo.type;
+		info.fd = oldinfo.fd;
+		info.vaddr = oldinfo.vaddr;
+		info.offset = 0;
+		info.len = 0;
+		info.y_off = oldinfo.y_off;
+		info.cbcr_off = oldinfo.cbcr_off;
+		info.active = oldinfo.active;
+	}
 
 	return msm_register_pmem_proc(&info);
 }
