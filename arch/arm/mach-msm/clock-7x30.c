@@ -177,15 +177,19 @@ static struct clk_freq_tbl clk_tbl_uartdm[] = {
 	F_MND16( 3686400, PLL3, 3,   3, 200, NOMINAL),
 	F_MND16( 7372800, PLL3, 3,   3, 100, NOMINAL),
 	F_MND16(14745600, PLL3, 3,   3,  50, NOMINAL),
+	F_MND16(32000000, PLL3, 3,  25, 192, NOMINAL),
+	F_MND16(40000000, PLL3, 3, 125, 768, NOMINAL),
 	F_MND16(46400000, PLL3, 3, 145, 768, NOMINAL),
+	F_MND16(48000000, PLL3, 3,  25, 128, NOMINAL),
 	F_MND16(51200000, PLL3, 3,   5,  24, NOMINAL),
+	F_MND16(56000000, PLL3, 3, 175, 768, NOMINAL),
 	F_MND16(58982400, PLL3, 3,   6,  25, NOMINAL),
 	F_MND16(64000000, PLL1, 4,   1,   3, NOMINAL),
 	F_END,
 };
 
 static struct clk_freq_tbl clk_tbl_mdh[] = {
-	F_BASIC( 73728000, PLL3, 10, NOMINAL),
+	F_BASIC( 49150000, PLL3, 15, NOMINAL),
 	F_BASIC( 92160000, PLL3,  8, NOMINAL),
 	F_BASIC(122880000, PLL3,  6, NOMINAL),
 	F_BASIC(184320000, PLL3,  4, NOMINAL),
@@ -255,7 +259,9 @@ static struct clk_freq_tbl clk_tbl_mdp_core[] = {
 static struct clk_freq_tbl clk_tbl_mdp_lcdc[] = {
 	F_MND16(24576000, LPXO, 1,   0,   0, NOMINAL),
 	F_MND16(30720000, PLL3, 4,   1,   6, NOMINAL),
+	F_MND16(32768000, PLL3, 3,   2,  15, NOMINAL),
 	F_MND16(40960000, PLL3, 2,   1,   9, NOMINAL),
+	F_MND16(73728000, PLL3, 2,   1,   5, NOMINAL),
 	F_END,
 };
 
@@ -512,8 +518,8 @@ static struct clk_local soc_clk_local_tbl_7x30[] = {
 			HALT, 9, 0x4D57),
 	CLK_SLAVE(VFE_CAMIF, CAM_VFE_NS_REG, B(15), VFE, CLK_HALT_STATEC_REG,
 			HALT, 13, 0x7000),
-	CLK_SLAVE(CSI0_VFE, CSI_NS_REG, B(15), VFE, CLK_HALT_STATEA_REG,
-			HALT, 4, 0),
+	CLK_SLAVE(CSI0_VFE, CSI_NS_REG, B(15), VFE, CLK_HALT_STATEC_REG,
+			HALT, 16, 0),
 
 	CLK_MND16(SDAC, SDAC_NS_REG, B(9), B(11), clk_tbl_sdac,
 			NONE, chld_sdac, CLK_HALT_STATEA_REG, HALT, 2, 0x4D60),
@@ -874,12 +880,19 @@ static int soc_pll_enable(unsigned src, unsigned enable)
 	uint32_t reg_val;
 
 	reg_val = readl(soc_pll_ena[src].reg);
-	reg_val |= soc_pll_ena[src].mask;
+
+	if (enable)
+		reg_val |= soc_pll_ena[src].mask;
+	else
+		reg_val &= ~(soc_pll_ena[src].mask);
+
 	writel(reg_val, soc_pll_ena[src].reg);
 
-	/* Wait until PLL is enabled */
-	while ((readl(soc_pll_status_reg[src]) & B(16)) == 0)
-		cpu_relax();
+	if (enable) {
+		/* Wait until PLL is enabled */
+		while ((readl(soc_pll_status_reg[src]) & B(16)) == 0)
+			cpu_relax();
+	}
 
 	return 0;
 }
@@ -1156,6 +1169,9 @@ void __init msm_clk_soc_init(void)
 	set_1rate(UART2);
 	set_1rate(LPA_CODEC);
 	set_1rate(GLBL_ROOT);
+
+	/* Sync the GRP2D clock to AXI */
+	local_clk_set_rate(C(GRP_2D), 1);
 }
 
 /*

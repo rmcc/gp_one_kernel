@@ -474,6 +474,7 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.chg_connected			= charger_connected,
 	.chg_init				= hsusb_chg_init,
 #endif
+	.pclk_required_during_lpm = 1,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -1691,7 +1692,6 @@ static void __init msm7x25_init(void)
         PRE_EMPHASIS_WITH_20_PERCENT;
     msm_otg_pdata.drv_ampl = HS_DRV_AMPLITUDE_5_PERCENT;
     msm_otg_pdata.cdr_autoreset = CDR_AUTO_RESET_ENABLE;
-    msm_otg_pdata.phy_reset_sig_inverted = 1;
 
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =

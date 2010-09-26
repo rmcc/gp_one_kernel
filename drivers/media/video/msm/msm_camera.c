@@ -40,10 +40,11 @@
 #include <linux/syscalls.h>
 #include <linux/hrtimer.h>
 DEFINE_MUTEX(hlist_mut);
-DEFINE_MUTEX(pp_prev_lock);
-DEFINE_MUTEX(pp_snap_lock);
-DEFINE_MUTEX(pp_thumb_lock);
 DEFINE_MUTEX(ctrl_cmd_lock);
+
+spinlock_t pp_prev_spinlock;
+spinlock_t pp_snap_spinlock;
+spinlock_t pp_thumb_spinlock;
 
 #define MSM_MAX_CAMERA_SENSORS 5
 #define CAMERA_STOP_SNAPSHOT 42
@@ -304,14 +305,14 @@ static uint8_t msm_pmem_region_lookup_2(struct hlist_head *ptype,
 	regptr = reg;
 	mutex_lock(&hlist_mut);
 	hlist_for_each_entry_safe(region, node, n, ptype, list) {
-		printk(KERN_ERR "Mio: info.type=%d, pmem_type = %d,"
+		CDBG("%s:info.type=%d, pmem_type = %d,"
 						"info.active = %d\n",
-		region->info.type, pmem_type, region->info.active);
+		__func__, region->info.type, pmem_type, region->info.active);
 
 		if (region->info.type == pmem_type && region->info.active) {
-			printk(KERN_ERR "info.type=%d, pmem_type = %d,"
+			CDBG("%s:info.type=%d, pmem_type = %d,"
 							"info.active = %d,\n",
-				region->info.type, pmem_type,
+				__func__, region->info.type, pmem_type,
 				region->info.active);
 			*regptr = *region;
 			region->info.type = MSM_PMEM_VIDEO;
@@ -1733,6 +1734,7 @@ static int msm_pp_grab(struct msm_sync *sync, void __user *arg)
 static int msm_pp_release(struct msm_sync *sync, void __user *arg)
 {
 	uint32_t mask;
+	unsigned long flags;
 	if (copy_from_user(&mask, arg, sizeof(uint32_t))) {
 		ERR_COPY_FROM_USER();
 		return -EFAULT;
@@ -1747,36 +1749,38 @@ static int msm_pp_release(struct msm_sync *sync, void __user *arg)
 	if (sync->pp_mask & PP_PREV) {
 
 		if (mask & PP_PREV) {
-			mutex_lock(&pp_prev_lock);
+			spin_lock_irqsave(&pp_prev_spinlock, flags);
 			if (!sync->pp_prev) {
 				pr_err("%s: no preview frame to deliver!\n",
 					__func__);
-				mutex_unlock(&pp_prev_lock);
+				spin_unlock_irqrestore(&pp_prev_spinlock,
+					flags);
 				return -EINVAL;
 			}
 			pr_info("%s: delivering pp_prev\n", __func__);
 
 			msm_enqueue(&sync->frame_q, &sync->pp_prev->list_frame);
 			sync->pp_prev = NULL;
-			mutex_unlock(&pp_prev_lock);
+			spin_unlock_irqrestore(&pp_prev_spinlock, flags);
 		} else if (!(mask & PP_PREV)) {
 			sync->pp_mask &= ~PP_PREV;
+			CDBG("%s: pp_prev is done.\n", __func__);
 		}
 		goto done;
 	}
 
 	if (((mask & PP_SNAP) && (sync->pp_mask & PP_SNAP)) ||
 		((mask & PP_RAW_SNAP) && (sync->pp_mask & PP_RAW_SNAP))) {
-		mutex_lock(&pp_snap_lock);
+		spin_lock_irqsave(&pp_snap_spinlock, flags);
 		if (!sync->pp_snap) {
 			pr_err("%s: no snapshot to deliver!\n", __func__);
-			mutex_unlock(&pp_snap_lock);
+			spin_unlock_irqrestore(&pp_snap_spinlock, flags);
 			return -EINVAL;
 		}
 		pr_info("%s: delivering pp_snap\n", __func__);
 		msm_enqueue(&sync->pict_q, &sync->pp_snap->list_pict);
 		sync->pp_snap = NULL;
-		mutex_unlock(&pp_snap_lock);
+		spin_unlock_irqrestore(&pp_snap_spinlock, flags);
 		sync->pp_mask &=
 			(mask & PP_SNAP) ? ~PP_SNAP : ~PP_RAW_SNAP;
 	}
@@ -2009,22 +2013,21 @@ static int __msm_release(struct msm_sync *sync)
 	if (sync->opencnt)
 		sync->opencnt--;
 	if (!sync->opencnt) {
-		/*sensor release*/
-		sync->sctrl.s_release();
 		/* need to clean up system resource */
 		if (sync->vfefn.vfe_release)
 			sync->vfefn.vfe_release(sync->pdev);
+		/*sensor release */
+		sync->sctrl.s_release();
+		msm_camio_sensor_clk_off(sync->pdev);
 		kfree(sync->cropinfo);
 		sync->cropinfo = NULL;
 		sync->croplen = 0;
-
 		hlist_for_each_entry_safe(region, hnode, n,
 				&sync->pmem_frames, list) {
 			hlist_del(hnode);
 			put_pmem_file(region->file);
 			kfree(region);
 		}
-
 		hlist_for_each_entry_safe(region, hnode, n,
 				&sync->pmem_stats, list) {
 			hlist_del(hnode);
@@ -2186,6 +2189,7 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 {
 	struct msm_queue_cmd *qcmd = NULL;
 	struct msm_sync *sync = (struct msm_sync *)syncdata;
+	unsigned long flags;
 
 	if (!sync) {
 		pr_err("%s: no context in dsp callback.\n", __func__);
@@ -2210,13 +2214,13 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 				__func__,
 				vdata->phy.y_phy,
 				vdata->phy.cbcr_phy);
-			mutex_lock(&pp_prev_lock);
+			spin_lock_irqsave(&pp_prev_spinlock, flags);
 			if (sync->pp_prev)
-				pr_warning("%s: overwriting pp_prev!\n",
+				CDBG("%s: overwriting pp_prev!\n",
 					__func__);
 			pr_info("%s: sending preview to config\n", __func__);
 			sync->pp_prev = qcmd;
-			mutex_unlock(&pp_prev_lock);
+			spin_unlock_irqrestore(&pp_prev_spinlock, flags);
 			break;
 		}
 		CDBG("%s: msm_enqueue frame_q\n", __func__);
@@ -2227,14 +2231,14 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 
 	case VFE_MSG_OUTPUT_T:
 		if (sync->pp_mask & PP_SNAP) {
-			mutex_lock(&pp_thumb_lock);
+			spin_lock_irqsave(&pp_thumb_spinlock, flags);
 			if (sync->pp_thumb)
 				pr_warning("%s: overwriting pp_thumb!\n",
 					__func__);
 			pr_info("%s: pp sending thumbnail to config\n",
 				__func__);
 			sync->pp_thumb = qcmd;
-			mutex_unlock(&pp_thumb_lock);
+			spin_unlock_irqrestore(&pp_thumb_spinlock, flags);
 			break;
 		} else {
 		/* this is for normal snapshot case. right now we only have
@@ -2247,14 +2251,14 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 
 	case VFE_MSG_OUTPUT_S:
 		if (sync->pp_mask & PP_SNAP) {
-			mutex_lock(&pp_snap_lock);
+			spin_lock_irqsave(&pp_snap_spinlock, flags);
 			if (sync->pp_snap)
 				pr_warning("%s: overwriting pp_snap!\n",
 					__func__);
 			pr_info("%s: pp sending main image to config\n",
 				__func__);
 			sync->pp_snap = qcmd;
-			mutex_unlock(&pp_snap_lock);
+			spin_unlock_irqrestore(&pp_snap_spinlock, flags);
 			break;
 		} else {
 		/* this is for normal snapshot case. right now we only have
@@ -2285,9 +2289,6 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 					&qcmd->list_vpe_frame);
 				return;
 			} else if (sync->vpefn.vpe_cfg_update(sync->cropinfo)) {
-				if (qcmd->on_heap)
-					qcmd->on_heap++;
-
 				CDBG("%s: msm_enqueue video frame to vpe time "
 					"= %ld\n", __func__, qcmd->ts.tv_nsec);
 
@@ -2326,14 +2327,14 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 		if (sync->pp_mask & (PP_SNAP | PP_RAW_SNAP)) {
 			CDBG("%s: PP_SNAP in progress: pp_mask %x\n",
 				__func__, sync->pp_mask);
-			mutex_lock(&pp_snap_lock);
+			spin_lock_irqsave(&pp_snap_spinlock, flags);
 			if (sync->pp_snap)
 				pr_warning("%s: overwriting pp_snap!\n",
 					__func__);
 			pr_info("%s: sending snapshot to config\n",
 				__func__);
 			sync->pp_snap = qcmd;
-			mutex_unlock(&pp_snap_lock);
+			spin_unlock_irqrestore(&pp_snap_spinlock, flags);
 		} else {
 			msm_enqueue(&sync->pict_q, &qcmd->list_pict);
 			if (qcmd->on_heap)
@@ -2399,8 +2400,11 @@ static void msm_vpe_sync(struct msm_vpe_resp *vdata,
 	qcmd->command = vdata;
 	qcmd->ts = *((struct timespec *)ts);
 
-	if (qtype != MSM_CAM_Q_VPE_MSG)
-		goto vpe_for_config;
+	if (qtype != MSM_CAM_Q_VPE_MSG) {
+		pr_err("%s: Invalid qcmd type = %d.\n", __func__, qcmd->type);
+		free_qcmd(qcmd);
+		return;
+	}
 
 	CDBG("%s: vdata->type %d\n", __func__, vdata->type);
 	switch (vdata->type) {
@@ -2413,14 +2417,11 @@ static void msm_vpe_sync(struct msm_vpe_resp *vdata,
 			sync->liveshot_enabled = false;
 		}
 		msm_enqueue(&sync->frame_q, &qcmd->list_frame);
-		if (qcmd->on_heap)
-			qcmd->on_heap++;
-		break;
+		return;
 	default:
 		CDBG("%s: qtype %d not handled\n", __func__, vdata->type);
 		/* fall through, send to config. */
 	}
-vpe_for_config:
 	CDBG("%s: msm_enqueue event_q\n", __func__);
 	msm_enqueue(&sync->event_q, &qcmd->list_config);
 }
@@ -2461,16 +2462,22 @@ static int __msm_open(struct msm_sync *sync, const char *const apps_id)
 		msm_camvfe_fn_init(&sync->vfefn, sync);
 		if (sync->vfefn.vfe_init) {
 			sync->get_pic_abort = 0;
-			rc = sync->vfefn.vfe_init(&msm_vfe_s,
-				sync->pdev);
+			rc = msm_camio_sensor_clk_on(sync->pdev);
 			if (rc < 0) {
-				pr_err("%s: vfe_init failed at %d\n",
+				pr_err("%s: setting sensor clocks failed: %d\n",
 					__func__, rc);
 				goto msm_open_done;
 			}
 			rc = sync->sctrl.s_init(sync->sdata);
 			if (rc < 0) {
 				pr_err("%s: sensor init failed: %d\n",
+					__func__, rc);
+				goto msm_open_done;
+			}
+			rc = sync->vfefn.vfe_init(&msm_vfe_s,
+				sync->pdev);
+			if (rc < 0) {
+				pr_err("%s: vfe_init failed at %d\n",
 					__func__, rc);
 				goto msm_open_done;
 			}
@@ -2497,7 +2504,7 @@ msm_open_done:
 }
 
 static int msm_open_common(struct inode *inode, struct file *filep,
-			   int once)
+			int once)
 {
 	int rc;
 	struct msm_cam_device *pmsm =
@@ -2521,9 +2528,7 @@ static int msm_open_common(struct inode *inode, struct file *filep,
 	rc = __msm_open(pmsm->sync, MSM_APPS_ID_PROP);
 	if (rc < 0)
 		return rc;
-
 	filep->private_data = pmsm;
-
 	CDBG("%s: rc %d\n", __func__, rc);
 	return rc;
 }
@@ -2553,9 +2558,7 @@ static int msm_open_control(struct inode *inode, struct file *filep)
 
 	if (!g_v4l2_opencnt)
 		g_v4l2_control_device = ctrl_pmsm;
-
 	g_v4l2_opencnt++;
-
 	CDBG("%s: rc %d\n", __func__, rc);
 	return rc;
 }

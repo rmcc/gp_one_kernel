@@ -870,6 +870,7 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 							XFR_REG_NUM);
 				request_read_xfr(radio,	RX_STATIONS_1);
 			} else if (radio->xfr_bytes_left) {
+				FMDBG("In else RX_STATIONS_0\n");
 				copy_from_xfr(radio, TAVARUA_BUF_SRCH_LIST,
 						radio->xfr_bytes_left+1);
 				tavarua_q_event(radio,
@@ -878,6 +879,7 @@ static void tavarua_handle_interrupts(struct tavarua_device *radio)
 			}
 			break;
 		case RX_STATIONS_1:
+			FMDBG("In RX_STATIONS_1");
 			copy_from_xfr(radio, TAVARUA_BUF_SRCH_LIST,
 						radio->xfr_bytes_left);
 			tavarua_q_event(radio, TAVARUA_EVT_NEW_SRCH_LIST);
@@ -1039,6 +1041,8 @@ FUNCTION:  tavarua_search
 static int tavarua_search(struct tavarua_device *radio, int on, int dir)
 {
 	enum search_t srch = radio->registers[SRCHCTRL] & SRCH_MODE;
+
+	FMDBG("In tavarua_search\n");
 	if (on) {
 		radio->registers[SRCHRDS1] = 0x00;
 		radio->registers[SRCHRDS2] = 0x00;
@@ -1072,7 +1076,8 @@ static int tavarua_search(struct tavarua_device *radio, int on, int dir)
 	radio->registers[SRCHCTRL] = (dir << 3) |
 				(radio->registers[SRCHCTRL] & 0xF7);
 
-	FMDBG("registers <%x>\n", radio->registers[SRCHCTRL]);
+	FMDBG("SRCHCTRL <%x>\n", radio->registers[SRCHCTRL]);
+	FMDBG("Search Started\n");
 	return tavarua_write_registers(radio, SRCHRDS1,
 				&radio->registers[SRCHRDS1], 3);
 }
@@ -1508,7 +1513,10 @@ static int tavarua_fops_open(struct file *file)
 						__func__);
 		goto open_err_all;
 	}
-  /* Wait for interrupt i.e. complete(&radio->sync_req_done); call */
+	/* Wait for interrupt i.e. complete(&radio->sync_req_done); call */
+	/*Initialize the completion variable for
+	for the proper behavior*/
+	init_completion(&radio->sync_req_done);
 	if (!wait_for_completion_timeout(&radio->sync_req_done,
 		msecs_to_jiffies(WAIT_TIMEOUT))) {
 		retval = -1;
@@ -1573,10 +1581,12 @@ static int tavarua_fops_release(struct file *file)
 	unsigned char value;
 	if (!radio)
 		return -ENODEV;
+	FMDBG("In %s", __func__);
 
 	/* disable radio ctrl */
 	retval = tavarua_write_register(radio, RDCTRL, 0x00);
 
+	FMDBG("%s, Disable IRQs\n", __func__);
 	/* disable irq */
 	retval = tavarua_disable_irq(radio);
 	if (retval < 0) {
@@ -1593,6 +1603,7 @@ static int tavarua_fops_release(struct file *file)
 		printk(KERN_ERR "%s:XO_BUFF_CNTRL write failed\n", __func__);
 		return retval;
 	}
+	FMDBG("%s, Calling fm_shutdown\n", __func__);
 	/* teardown gpio and pmic */
 	radio->pdata->fm_shutdown(radio->pdata);
 	radio->handle_irq = 1;
@@ -1915,7 +1926,8 @@ static int tavarua_vidioc_g_ctrl(struct file *file, void *priv,
 {
 	struct tavarua_device *radio = video_get_drvdata(video_devdata(file));
 	int retval = 0;
-	char xfr_buf[XFR_REG_NUM];
+	unsigned char xfr_buf[XFR_REG_NUM];
+	signed char cRmssiThreshold;
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_VOLUME:
@@ -1939,7 +1951,15 @@ static int tavarua_vidioc_g_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH:
 		retval = sync_read_xfr(radio, RX_CONFIG, xfr_buf);
-		ctrl->value = xfr_buf[0];
+		if (retval < 0) {
+			FMDBG("[G IOCTL=V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH]\n");
+			FMDBG("sync_read_xfr error: [retval=%d]\n", retval);
+			break;
+		}
+		/* Since RMSSI Threshold is signed value */
+		cRmssiThreshold = (signed char)xfr_buf[0];
+		ctrl->value  = cRmssiThreshold;
+		FMDBG("cRmssiThreshold: %d\n", cRmssiThreshold);
 		break;
 	case V4L2_CID_PRIVATE_TAVARUA_SRCH_PTY:
 		ctrl->value = radio->srch_params.srch_pty;
@@ -2032,7 +2052,7 @@ static int tavarua_vidioc_s_ctrl(struct file *file, void *priv,
 	struct tavarua_device *radio = video_get_drvdata(video_devdata(file));
 	int retval = 0;
 	unsigned char value;
-	char xfr_buf[XFR_REG_NUM];
+	unsigned char xfr_buf[XFR_REG_NUM];
 
 	switch (ctrl->id) {
 	case V4L2_CID_AUDIO_VOLUME:
@@ -2085,6 +2105,13 @@ static int tavarua_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDBG("turning off...\n");
 			retval = tavarua_write_register(radio, RDCTRL,
 							ctrl->value);
+			/*Make it synchronous
+			Block it till READY interrupt
+			Wait for interrupt i.e. complete(&radio->sync_req_done)
+			*/
+			if (!wait_for_completion_timeout(&radio->sync_req_done,
+				msecs_to_jiffies(WAIT_TIMEOUT)))
+				retval = -ETIME;
 		} else if ((ctrl->value == FM_TRANS) &&
 			   ((radio->registers[RDCTRL] & 0x03) != FM_TRANS)) {
 			FMDBG("transmit mode\n");
@@ -2096,13 +2123,21 @@ static int tavarua_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH:
 		retval = sync_read_xfr(radio, RX_CONFIG, xfr_buf);
-		if (retval < 0)
+		if (retval < 0)	{
+			FMDBG("[S IOCTL=V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH]\n");
+			FMDBG("sync_read_xfr error: [retval=%d]\n", retval);
 			break;
+		}
 		/* RMSSI Threshold is a signed 8 bit value */
-		xfr_buf[0] = (char)ctrl->value;
-		xfr_buf[1] = (char)ctrl->value;
+		xfr_buf[0] = (unsigned char)ctrl->value;
+		xfr_buf[1] = (unsigned char)ctrl->value;
 		xfr_buf[4] = 0x01;
 		retval = sync_write_xfr(radio, RX_CONFIG, xfr_buf);
+		if (retval < 0) {
+			FMDBG("[S IOCTL=V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH]\n");
+			FMDBG("sync_write_xfr error: [retval=%d]\n", retval);
+			break;
+		}
 		break;
 	case V4L2_CID_PRIVATE_TAVARUA_SRCH_PTY:
 		radio->srch_params.srch_pty = ctrl->value;
@@ -2597,9 +2632,15 @@ static int tavarua_disable_interrupts(struct tavarua_device *radio)
 	else
 		retval = tavarua_write_registers(radio, STATUS_REG1, lpm_buf,
 							ARRAY_SIZE(lpm_buf));
-	if (retval > -1)
-		radio->lp_mode = 1;
 
+	/*INT_CTL writes may fail with TIME_OUT as all the
+	interrupts have been disabled
+	*/
+	if (retval > -1 || retval == -ETIME) {
+		radio->lp_mode = 1;
+		/*Consider timeout as a valid case here*/
+		retval = 0;
+	}
 	return retval;
 
 }

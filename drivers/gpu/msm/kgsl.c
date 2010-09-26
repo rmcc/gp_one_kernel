@@ -765,6 +765,8 @@ static long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 {
 	int result = 0;
 	struct kgsl_ringbuffer_issueibcmds param;
+	struct kgsl_ibdesc *ibdesc;
+	unsigned int i;
 
 	if (copy_from_user(&param, arg, sizeof(param))) {
 		result = -EFAULT;
@@ -778,30 +780,81 @@ static long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 		goto done;
 	}
 
-	if (kgsl_sharedmem_find_region(dev_priv->process_priv,
-				param.ibaddr,
-				param.sizedwords*sizeof(uint32_t)) == NULL) {
-		KGSL_DRV_ERR("invalid cmd buffer ibaddr %08x " \
-					"sizedwords %d\n",
-					param.ibaddr, param.sizedwords);
-		result = -EINVAL;
-		goto done;
+	if (param.flags & KGSL_CONTEXT_SUBMIT_IB_LIST) {
+		KGSL_DRV_INFO("Using IB list mode for ib submission, numibs:"
+				" %d\n", param.numibs);
+		if (!param.numibs) {
+			KGSL_DRV_ERR("Invalid numibs as parameter: %d\n",
+					param.numibs);
+			result = -EINVAL;
+			goto done;
+		}
+
+		ibdesc = kzalloc(sizeof(struct kgsl_ibdesc) * param.numibs,
+					GFP_KERNEL);
+		if (!ibdesc) {
+			KGSL_MEM_ERR("kzalloc failed to allocate memory for "
+				"ibdesc , size: %x\n",
+				sizeof(struct kgsl_ibdesc) * param.numibs);
+			result = -ENOMEM;
+			goto done;
+		}
+
+		if (copy_from_user(ibdesc, (void *)param.ibdesc_addr,
+				sizeof(struct kgsl_ibdesc) * param.numibs)) {
+			result = -EFAULT;
+			KGSL_DRV_ERR("Failed to copy ibdesc from user"
+					" address space\n");
+			goto free_ibdesc;
+		}
+	} else {
+		KGSL_DRV_INFO("Using single IB submission mode for ib"
+				" submission\n");
+		/* If user space driver is still using the old mode of
+		 * submitting single ib then we need to support that as well */
+		ibdesc = kzalloc(sizeof(struct kgsl_ibdesc), GFP_KERNEL);
+		if (!ibdesc) {
+			KGSL_MEM_ERR("kzalloc failed to allocate memory for"
+				" ibdesc, size: %x\n",
+				sizeof(struct kgsl_ibdesc));
+			result = -ENOMEM;
+			goto done;
+		}
+		ibdesc[0].gpuaddr = param.ibdesc_addr;
+		ibdesc[0].sizedwords = param.numibs;
+		param.numibs = 1;
+	}
+
+	for (i = 0; i < param.numibs; i++) {
+		if (kgsl_sharedmem_find_region(dev_priv->process_priv,
+					ibdesc[i].gpuaddr,
+					ibdesc[i].sizedwords *
+						sizeof(uint32_t)) == NULL) {
+			KGSL_DRV_ERR("invalid cmd buffer gpuaddr %08x " \
+						"sizedwords %d\n",
+						ibdesc[i].gpuaddr,
+						ibdesc[i].sizedwords);
+			result = -EINVAL;
+			goto free_ibdesc;
+		}
 	}
 
 	result = dev_priv->device->ftbl.device_issueibcmds(dev_priv,
 					     param.drawctxt_id,
-					     param.ibaddr,
-					     param.sizedwords,
+					     ibdesc,
+					     param.numibs,
 					     &param.timestamp,
 					     param.flags);
 
 	if (result != 0)
-		goto done;
+		goto free_ibdesc;
 
 	if (copy_to_user(arg, &param, sizeof(param))) {
 		result = -EFAULT;
-		goto done;
+		goto free_ibdesc;
 	}
+free_ibdesc:
+	kfree(ibdesc);
 done:
 	return result;
 }
@@ -1534,6 +1587,21 @@ done:
 	return result;
 }
 
+static int kgsl_pm_suspend(struct device *dev)
+{
+	pm_message_t arg = {0};
+	dev_dbg(dev, "pm: suspending...\n");
+	kgsl_suspend(NULL, arg);
+	return 0;
+}
+
+static int kgsl_pm_resume(struct device *dev)
+{
+	dev_dbg(dev, "pm: resuming...\n");
+	kgsl_resume(NULL);
+	return 0;
+}
+
 static int kgsl_runtime_suspend(struct device *dev)
 {
 	dev_dbg(dev, "pm_runtime: suspending...\n");
@@ -1547,6 +1615,8 @@ static int kgsl_runtime_resume(struct device *dev)
 }
 
 static struct dev_pm_ops kgsl_dev_pm_ops = {
+	.suspend = kgsl_pm_suspend,
+	.resume = kgsl_pm_resume,
 	.runtime_suspend = kgsl_runtime_suspend,
 	.runtime_resume = kgsl_runtime_resume,
 };

@@ -360,6 +360,21 @@ static u32 ddl_set_dec_property
 							     property_value);
 			break;
 		}
+	case VCD_I_OUTPUT_ORDER:
+		{
+			if (sizeof(u32) == property_hdr->sz &&
+				DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)) {
+					decoder->output_order =
+						*(u32 *)property_value;
+					vcd_status = VCD_S_SUCCESS;
+			}
+			break;
+		}
+	case VCD_I_FRAME_RATE:
+		{
+			vcd_status = VCD_S_SUCCESS;
+			break;
+		}
 	default:
 		{
 			vcd_status = VCD_ERR_ILLEGAL_OP;
@@ -961,6 +976,14 @@ static u32 ddl_get_dec_property
 			}
 			break;
 		}
+	case VCD_I_OUTPUT_ORDER:
+		{
+			if (sizeof(u32) == property_hdr->sz) {
+				*(u32 *)property_value = decoder->output_order;
+				vcd_status = VCD_S_SUCCESS;
+			}
+			break;
+		}
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
 		{
@@ -1427,6 +1450,7 @@ void ddl_set_default_dec_property(struct ddl_client_context *ddl)
 	decoder->client_frame_size.stride = 176;
 	decoder->client_frame_size.scan_lines = 144;
 	decoder->progressive_only = 1;
+	decoder->output_order = VCD_DEC_ORDER_DISPLAY;
 	ddl_set_default_metadata_flag(ddl);
 
 	ddl_set_default_decoder_buffer_req(decoder, true);
@@ -1657,8 +1681,8 @@ void ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 
 	output_buf_req->min_count = min_dpb;
 
-	num_mb = (frame_size->width * frame_size->height) >> 8;
-	if (num_mb >= VIDC_DDL_WVGA_MBS) {
+	num_mb = DDL_NO_OF_MB(frame_size->width, frame_size->height);
+	if (num_mb >= DDL_WVGA_MBS) {
 		output_buf_req->actual_count = min_dpb + 2;
 		if (output_buf_req->actual_count < 10)
 			output_buf_req->actual_count = 10;

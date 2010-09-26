@@ -292,6 +292,48 @@ static struct platform_device msm_imic_ffa_device = {
 	.dev = { .platform_data = &snddev_imic_ffa_data },
 };
 
+static struct adie_codec_action_unit idual_mic_endfire_8KHz_osr256_actions[] =
+	DMIC1_PRI_STEREO_8000_OSR_256;
+
+static struct adie_codec_hwsetting_entry idual_mic_endfire_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = idual_mic_endfire_8KHz_osr256_actions,
+		.action_sz = ARRAY_SIZE(idual_mic_endfire_8KHz_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile idual_mic_endfire_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = idual_mic_endfire_settings,
+	.setting_sz = ARRAY_SIZE(idual_mic_endfire_settings),
+};
+
+static enum hsed_controller idual_mic_endfire_pmctl_id[] = {
+	PM_HSED_CONTROLLER_0, PM_HSED_CONTROLLER_2};
+
+static struct snddev_icodec_data snddev_idual_mic_endfire_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "handset_dual_mic_device",
+	.copp_id = PRIMARY_I2S_TX,
+	.acdb_id = 6,
+	.profile = &idual_mic_endfire_profile,
+	.channel_mode = 2,
+	.default_sample_rate = 48000,
+	.pmctl_id = idual_mic_endfire_pmctl_id,
+	.pmctl_id_sz = ARRAY_SIZE(idual_mic_endfire_pmctl_id),
+	.pamp_on = msm_snddev_enable_dmic_power,
+	.pamp_off = msm_snddev_disable_dmic_power,
+};
+
+static struct platform_device msm_handset_dual_mic_endfire_device = {
+	.name = "snddev_icodec",
+	.id = 12,
+	.dev = { .platform_data = &snddev_idual_mic_endfire_data },
+};
+
+
 static struct snddev_hdmi_data snddev_hdmi_stereo_rx_data = {
 	.capability = SNDDEV_CAP_RX ,
 	.name = "hdmi_stereo_rx",
@@ -307,6 +349,44 @@ static struct platform_device msm_snddev_hdmi_stereo_rx_device = {
 	.dev = { .platform_data = &snddev_hdmi_stereo_rx_data },
 };
 
+
+static struct adie_codec_action_unit iheadset_mic_tx_osr256_actions[] =
+	HEADSET_AMIC2_TX_MONO_PRI_OSR_256;
+
+static struct adie_codec_hwsetting_entry iheadset_mic_tx_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = iheadset_mic_tx_osr256_actions,
+		.action_sz = ARRAY_SIZE(iheadset_mic_tx_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile iheadset_mic_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = iheadset_mic_tx_settings,
+	.setting_sz = ARRAY_SIZE(iheadset_mic_tx_settings),
+};
+
+static struct snddev_icodec_data snddev_headset_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "headset_mono_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.acdb_id = 8,
+	.profile = &iheadset_mic_profile,
+	.channel_mode = 1,
+	.pmctl_id = NULL,
+	.pmctl_id_sz = 0,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_tx_route_config,
+	.pamp_off = msm_snddev_tx_route_deconfig,
+};
+
+static struct platform_device msm_headset_mic_device = {
+	.name = "snddev_icodec",
+	.id = 33,
+	.dev = { .platform_data = &snddev_headset_mic_data },
+};
 
 static struct snddev_ecodec_data snddev_bt_sco_earpiece_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
@@ -336,15 +416,93 @@ struct platform_device msm_bt_sco_mic_device = {
 	.dev = { .platform_data = &snddev_bt_sco_mic_data },
 };
 
+static struct adie_codec_action_unit itty_mono_tx_actions[] =
+	TTY_HEADSET_MONO_TX_8000_OSR_256;
+
+static struct adie_codec_hwsetting_entry itty_mono_tx_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = itty_mono_tx_actions,
+		.action_sz = ARRAY_SIZE(itty_mono_tx_actions),
+	},
+};
+
+static struct adie_codec_dev_profile itty_mono_tx_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = itty_mono_tx_settings,
+	.setting_sz = ARRAY_SIZE(itty_mono_tx_settings),
+};
+
+static struct snddev_icodec_data snddev_itty_mono_tx_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE | SNDDEV_CAP_TTY),
+	.name = "tty_headset_mono_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.acdb_id = 16,
+	.profile = &itty_mono_tx_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pmctl_id = NULL,
+	.pmctl_id_sz = 0,
+	.pamp_on = msm_snddev_tx_route_config,
+	.pamp_off = msm_snddev_tx_route_deconfig,
+};
+
+static struct platform_device msm_itty_mono_tx_device = {
+	.name = "snddev_icodec",
+	.id = 16,
+	.dev = { .platform_data = &snddev_itty_mono_tx_data },
+};
+
+static struct adie_codec_action_unit itty_mono_rx_actions[] =
+	TTY_HEADSET_MONO_RX_8000_OSR_256;
+
+static struct adie_codec_hwsetting_entry itty_mono_rx_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = itty_mono_rx_actions,
+		.action_sz = ARRAY_SIZE(itty_mono_rx_actions),
+	},
+};
+
+static struct adie_codec_dev_profile itty_mono_rx_profile = {
+	.path_type = ADIE_CODEC_RX,
+	.settings = itty_mono_rx_settings,
+	.setting_sz = ARRAY_SIZE(itty_mono_rx_settings),
+};
+
+static struct snddev_icodec_data snddev_itty_mono_rx_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE | SNDDEV_CAP_TTY),
+	.name = "tty_headset_mono_rx",
+	.copp_id = PRIMARY_I2S_RX,
+	.acdb_id = 17,
+	.profile = &itty_mono_rx_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_rx_route_config,
+	.pamp_off = msm_snddev_rx_route_deconfig,
+};
+
+static struct platform_device msm_itty_mono_rx_device = {
+	.name = "snddev_icodec",
+	.id = 17,
+	.dev = { .platform_data = &snddev_itty_mono_rx_data },
+};
+
 static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_iearpiece_ffa_device,
 	&msm_imic_ffa_device,
 	&msm_ispkr_stereo_device,
 	&msm_snddev_hdmi_stereo_rx_device,
+	&msm_headset_mic_device,
 	&msm_ispkr_mic_device,
 	&msm_bt_sco_earpiece_device,
 	&msm_bt_sco_mic_device,
 	&msm_headset_ab_cpls_device,
+	&msm_itty_mono_tx_device,
+	&msm_itty_mono_rx_device,
+	&msm_handset_dual_mic_endfire_device,
 };
 
 static struct platform_device *snd_devices_surf[] __initdata = {
@@ -352,10 +510,14 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_imic_device,
 	&msm_ispkr_stereo_device,
 	&msm_snddev_hdmi_stereo_rx_device,
+	&msm_headset_mic_device,
 	&msm_ispkr_mic_device,
 	&msm_bt_sco_earpiece_device,
 	&msm_bt_sco_mic_device,
 	&msm_headset_ab_cpls_device,
+	&msm_itty_mono_tx_device,
+	&msm_itty_mono_rx_device,
+	&msm_handset_dual_mic_endfire_device,
 };
 
 void __init msm_snddev_init(void)

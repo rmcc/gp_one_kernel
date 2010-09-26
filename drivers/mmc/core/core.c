@@ -1324,6 +1324,7 @@ int mmc_suspend_host(struct mmc_host *host)
 		cancel_delayed_work(&host->disable);
 
 	mmc_bus_get(host);
+#ifndef CONFIG_MACH_ADQ
 	if (host->bus_ops && !host->bus_dead) {
 		if (host->bus_ops->suspend)
 			err = host->bus_ops->suspend(host);
@@ -1341,10 +1342,15 @@ int mmc_suspend_host(struct mmc_host *host)
 			err = 0;
 		}
 	}
+#endif
 	mmc_bus_put(host);
 
+#ifndef CONFIG_MACH_ADQ
 	if (!err && !(host->pm_flags & MMC_PM_KEEP_POWER))
 		mmc_power_off(host);
+#else
+	err = 0;
+#endif
 
 	return err;
 }

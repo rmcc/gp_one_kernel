@@ -566,6 +566,56 @@ static u32 vid_dec_get_progressive_only(struct video_client_ctx *client_ctx,
 		return true;
 }
 
+static u32 vid_dec_set_picture_order(struct video_client_ctx *client_ctx,
+					u32 *picture_order)
+{
+	struct vcd_property_hdr vcd_property_hdr;
+	u32 vcd_status = VCD_ERR_FAIL, vcd_picture_order, ret = true;
+	if (!client_ctx || !picture_order)
+		return false;
+	vcd_property_hdr.prop_id = VCD_I_OUTPUT_ORDER;
+	vcd_property_hdr.sz = sizeof(u32);
+	if (*picture_order == VDEC_ORDER_DISPLAY)
+		vcd_picture_order = VCD_DEC_ORDER_DISPLAY;
+	else if (*picture_order == VDEC_ORDER_DECODE)
+		vcd_picture_order = VCD_DEC_ORDER_DECODE;
+	else
+		ret = false;
+	if (ret) {
+		DBG("%s() : Setting output picture order: %d\n",
+		    __func__, vcd_picture_order);
+		vcd_status = vcd_set_property(client_ctx->vcd_handle,
+				      &vcd_property_hdr, &vcd_picture_order);
+		if (vcd_status != VCD_S_SUCCESS)
+			ret = false;
+	}
+	return ret;
+}
+
+static u32 vid_dec_set_frame_rate(struct video_client_ctx *client_ctx,
+					struct vdec_framerate *frame_rate)
+{
+	struct vcd_property_hdr vcd_property_hdr;
+	struct vcd_property_frame_rate vcd_frame_rate;
+	u32 vcd_status = VCD_ERR_FAIL;
+
+	if (!client_ctx || !frame_rate)
+		return false;
+
+	vcd_property_hdr.prop_id = VCD_I_FRAME_RATE;
+	vcd_property_hdr.sz = sizeof(struct vcd_property_frame_rate);
+	vcd_frame_rate.fps_numerator = frame_rate->fps_numerator;
+	vcd_frame_rate.fps_denominator = frame_rate->fps_denominator;
+
+	vcd_status = vcd_set_property(client_ctx->vcd_handle,
+				      &vcd_property_hdr, &vcd_frame_rate);
+
+	if (vcd_status)
+		return false;
+	else
+		return true;
+}
+
 static u32 vid_dec_get_buffer_req(struct video_client_ctx *client_ctx,
 				  struct vdec_allocatorproperty *vdec_buf_req)
 {
@@ -1291,6 +1341,34 @@ static int vid_dec_ioctl(struct inode *inode, struct file *file,
 					sizeof(u32)))
 				return -EFAULT;
 		} else
+			return -EIO;
+		break;
+	}
+	case VDEC_IOCTL_SET_PICTURE_ORDER:
+	{
+		u32 picture_order;
+		DBG("VDEC_IOCTL_SET_PICTURE_ORDER\n");
+		if (copy_from_user(&vdec_msg, arg, sizeof(vdec_msg)))
+			return -EFAULT;
+		if (copy_from_user(&picture_order, vdec_msg.in,
+						   sizeof(u32)))
+			return -EFAULT;
+		result =  vid_dec_set_picture_order(client_ctx, &picture_order);
+		if (!result)
+			return -EIO;
+		break;
+	}
+	case VDEC_IOCTL_SET_FRAME_RATE:
+	{
+		struct vdec_framerate frame_rate;
+		DBG("VDEC_IOCTL_SET_FRAME_RATE\n");
+		if (copy_from_user(&vdec_msg, arg, sizeof(vdec_msg)))
+			return -EFAULT;
+		if (copy_from_user(&frame_rate, vdec_msg.in,
+						   sizeof(frame_rate)))
+			return -EFAULT;
+		result = vid_dec_set_frame_rate(client_ctx, &frame_rate);
+		if (!result)
 			return -EIO;
 		break;
 	}
