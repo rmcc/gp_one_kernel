@@ -1423,7 +1423,6 @@ static struct i2c_board_info cy8ctmg200_board_info[] = {
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
-       .clk_name = "gsbi_uart_clk",
 };
 #endif
 
@@ -1601,6 +1600,70 @@ static struct platform_device msm_aux_pcm_device = {
 	.resource       = msm_aux_pcm_resources,
 };
 
+static uint32_t mi2s_config_gpio[] = {
+	GPIO_CFG(107, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(101, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(102, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(103, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static void fm_mi2s_enable(void)
+{
+	gpio_tlmm_config(mi2s_config_gpio[0], GPIO_CFG_ENABLE);
+	gpio_tlmm_config(mi2s_config_gpio[1], GPIO_CFG_ENABLE);
+	gpio_tlmm_config(mi2s_config_gpio[2], GPIO_CFG_ENABLE);
+	gpio_tlmm_config(mi2s_config_gpio[3], GPIO_CFG_ENABLE);
+}
+
+static void fm_mi2s_disable(void)
+{
+	gpio_tlmm_config(mi2s_config_gpio[0], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(mi2s_config_gpio[1], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(mi2s_config_gpio[2], GPIO_CFG_DISABLE);
+	gpio_tlmm_config(mi2s_config_gpio[3], GPIO_CFG_DISABLE);
+}
+
+static struct resource msm_mi2s_gpio_resources[] = {
+
+	{
+		.name   = "mi2s_ws",
+		.start  = 101,
+		.end    = 101,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "mi2s_sclk",
+		.start  = 102,
+		.end    = 102,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "mi2s_mclk",
+		.start  = 103,
+		.end    = 103,
+		.flags  = IORESOURCE_IO,
+	},
+	{
+		.name   = "fm_i2s_sd",
+		.start  = 107,
+		.end    = 107,
+		.flags  = IORESOURCE_IO,
+	},
+};
+
+static struct msm_mi2s_gpio_data gpio_data = {
+
+	.enable		 = fm_mi2s_enable,
+	.disable	 = fm_mi2s_disable,
+};
+
+static struct platform_device msm_mi2s_device = {
+	.name		= "msm_mi2s",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(msm_mi2s_gpio_resources),
+	.resource	= msm_mi2s_gpio_resources,
+	.dev		= { .platform_data = &gpio_data },
+};
 
 static struct platform_device *rumi_sim_devices[] __initdata = {
 	&smc91x_device,
@@ -1656,6 +1719,7 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 #endif
 	&msm_device_vidc,
 	&msm_aux_pcm_device,
+	&msm_mi2s_device,
 };
 
 static struct platform_device *surf_devices[] __initdata = {
@@ -3181,7 +3245,6 @@ static void __init msm8x60_map_io(void)
 	msm_shared_ram_phys = MSM_SHARED_RAM_PHYS;
 	msm_map_msm8x60_io();
 	msm8x60_allocate_memory_regions();
-	msm_clock_init(msm_clocks_8x60, msm_num_clocks_8x60);
 }
 
 /*
@@ -3906,7 +3969,7 @@ static void __init msm8x60_init_mmc(void)
 	/* SDCC2 : NC (no card connected)*/
 	sdcc_vreg_data[1].vdd_data = &sdcc_vdd_reg_data[1];
 	sdcc_vreg_data[1].vdd_data->reg_name = "8058_s3";
-	sdcc_vreg_data[1].vdd_data->set_voltage_sup = 1;
+	sdcc_vreg_data[1].vdd_data->set_voltage_sup = 0;
 	sdcc_vreg_data[1].vccq_data = NULL;
 	msm_add_sdcc(2, &msm8x60_sdc2_data);
 #endif
@@ -3919,18 +3982,18 @@ static void __init msm8x60_init_mmc(void)
 	msm_add_sdcc(3, &msm8x60_sdc3_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
-	/* SDCC4 : NC (no card connected)*/
+	/* SDCC4 : WLAN WCN1314 chip is connected */
 	sdcc_vreg_data[3].vdd_data = &sdcc_vdd_reg_data[3];
 	sdcc_vreg_data[3].vdd_data->reg_name = "8058_s3";
-	sdcc_vreg_data[3].vdd_data->set_voltage_sup = 1;
+	sdcc_vreg_data[3].vdd_data->set_voltage_sup = 0;
 	sdcc_vreg_data[3].vccq_data = NULL;
 	msm_add_sdcc(4, &msm8x60_sdc4_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC5_SUPPORT
-	/* SDCC4 : NC (no card connected)*/
+	/* SDCC5 : NC (no card connected)*/
 	sdcc_vreg_data[4].vdd_data = &sdcc_vdd_reg_data[4];
 	sdcc_vreg_data[4].vdd_data->reg_name = "8058_s3";
-	sdcc_vreg_data[4].vdd_data->set_voltage_sup = 1;
+	sdcc_vreg_data[4].vdd_data->set_voltage_sup = 0;
 	sdcc_vreg_data[4].vccq_data = NULL;
 	msm_add_sdcc(5, &msm8x60_sdc5_data);
 #endif
@@ -4200,9 +4263,9 @@ void msm_snddev_enable_amic_power(void)
 #ifdef CONFIG_PMIC8058_OTHC
 	int ret;
 
-	ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_ALWAYS_ON);
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_ALWAYS_ON);
 	if (ret)
-		pr_err("Epickrror Enabling Mic Bias....\n");
+		pr_err("%s: Enabling amic power failed\n", __func__);
 #endif
 
 	msm_snddev_tx_route_config();
@@ -4213,9 +4276,9 @@ void msm_snddev_disable_amic_power(void)
 #ifdef CONFIG_PMIC8058_OTHC
 	int ret;
 
-	ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_OFF);
+	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
 	if (ret)
-		pr_err("Error Enabling Mic Bias....\n");
+		pr_err("%s: Disabling amic power failed\n", __func__);
 #endif
 
 	msm_snddev_tx_route_deconfig();
@@ -4237,37 +4300,34 @@ void msm_snddev_enable_dmic_power(void)
 	ret = regulator_set_voltage(s3, 1800000, 1800000);
 	if (ret) {
 		pr_err("%s: error setting voltage\n", __func__);
-		goto fail;
+		goto fail_s3;
 	}
 
 	ret = regulator_enable(s3);
 	if (ret) {
 		pr_err("%s: error enabling regulator\n", __func__);
-		goto fail;
+		goto fail_s3;
 	}
 
 	mvs = regulator_get(NULL, "8901_mvs0");
 	if (IS_ERR(mvs))
-		goto fail;
-
-	ret = regulator_set_voltage(mvs, 1800000, 1800000);
-	if (ret) {
-		pr_err("%s: error setting voltage\n", __func__);
-		goto fail;
-	}
+		goto fail_mvs0_get;
 
 	ret = regulator_enable(mvs);
 	if (ret) {
-		pr_err("%s: error enabling regulator\n", __func__);
-		goto fail;
+		pr_err("%s: error setting regulator\n", __func__);
+		goto fail_mvs0_enable;
 	}
-fail:
-	if (s3) {
-		regulator_disable(s3);
-		regulator_put(s3);
-	}
-	if (mvs)
-		regulator_put(mvs);
+	return;
+
+fail_mvs0_enable:
+	regulator_put(mvs);
+	mvs = NULL;
+fail_mvs0_get:
+	regulator_disable(s3);
+fail_s3:
+	regulator_put(s3);
+	s3 = NULL;
 }
 
 void msm_snddev_disable_dmic_power(void)
@@ -4276,17 +4336,21 @@ void msm_snddev_disable_dmic_power(void)
 
 	msm_snddev_tx_route_deconfig();
 
-	ret = regulator_disable(mvs);
-	if (ret < 0)
-		pr_err("%s: error disabling regulator mvs\n", __func__);
-	regulator_put(mvs);
-	mvs = NULL;
+	if (mvs) {
+		ret = regulator_disable(mvs);
+		if (ret < 0)
+			pr_err("%s: error disabling vreg mvs\n", __func__);
+		regulator_put(mvs);
+		mvs = NULL;
+	}
 
-	ret = regulator_disable(s3);
-	if (ret < 0)
-		pr_err("%s: error disabling regulator s3\n", __func__);
-	regulator_put(s3);
-	s3 = NULL;
+	if (s3) {
+		ret = regulator_disable(s3);
+		if (ret < 0)
+			pr_err("%s: error disabling regulator s3\n", __func__);
+		regulator_put(s3);
+		s3 = NULL;
+	}
 }
 
 static uint32_t msm_snddev_rx_gpio[] = {
@@ -4618,14 +4682,14 @@ static int bluetooth_power(int on)
 		if (rc < 0)
 			goto fail_put;
 
-		bt_clock = msm_xo_get(TCXO_D0, "bt_power");
+		bt_clock = msm_xo_get(MSM_XO_TCXO_D0, "bt_power");
 
 		if (IS_ERR(bt_clock)) {
 			pr_err("Couldn't get TCXO_D0 voter\n");
 			goto fail_switch;
 		}
 
-		rc = msm_xo_mode_vote(bt_clock, XO_MODE_ON);
+		rc = msm_xo_mode_vote(bt_clock, MSM_XO_MODE_ON);
 
 		if (rc < 0) {
 			pr_err("Failed to vote for TCXO_DO ON\n");
@@ -4637,7 +4701,7 @@ static int bluetooth_power(int on)
 		if (rc < 0)
 			goto fail_clock;
 
-		rc = msm_xo_mode_vote(bt_clock, XO_MODE_PIN_CTRL);
+		rc = msm_xo_mode_vote(bt_clock, MSM_XO_MODE_PIN_CTRL);
 
 		if (rc < 0) {
 			pr_err("Failed to vote for TCXO_DO pin control\n");
@@ -4657,7 +4721,7 @@ static int bluetooth_power(int on)
 		bahama_bt(0);
 
 fail_clock:
-		msm_xo_mode_vote(bt_clock, XO_MODE_OFF);
+		msm_xo_mode_vote(bt_clock, MSM_XO_MODE_OFF);
 fail_vote:
 		msm_xo_put(bt_clock);
 fail_switch:
@@ -4710,6 +4774,7 @@ static void __init msm8x60_init(void)
 #ifdef CONFIG_MSM_RPM
 	BUG_ON(msm_rpm_init(&msm_rpm_data));
 #endif
+	msm_clock_init(msm_clocks_8x60, msm_num_clocks_8x60);
 	/* initialize SPM before acpuclock as the latter calls into SPM
 	 * driver to set ACPU voltages.
 	 */
