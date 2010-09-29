@@ -1176,9 +1176,7 @@ static struct w1_family w1_ds2784_family = {
 };
 static int __init ds2784_battery_init(void)
 {
-    gpio_tlmm_config( GPIO_CFG( 23, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA ), GPIO_CFG_ENABLE );
-    gpio_direction_output(23, 0);
-    gpio_set_value(23, 1);
+	ds2482_set_slp_n(1);
 
     gpio_tlmm_config(GPIO_CFG(ADQ_GPIO_BATTERY_CHARGER_EN, 0, GPIO_CFG_OUTPUT, 
 							GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
