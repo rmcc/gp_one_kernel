@@ -885,7 +885,7 @@ yaffs_Object *yaffs_LostNFound(yaffs_Device *dev)
 int yaffs_CheckFF(__u8 *buffer, int nBytes)
 {
 	/* Horrible, slow implementation */
-	while (nBytes--) {
+	while (nBytes-- && nBytes > 1804) {
 		if (*buffer != 0xFF)
 			return 0;
 		buffer++;
