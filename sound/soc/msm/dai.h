@@ -26,64 +26,35 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#ifndef __DAI_H__
+#define __DAI_H__
 
-#ifndef _ARCH_ARM_MACH_MSM_BUS_H
-#define _ARCH_ARM_MACH_MSM_BUS_H
-
-#include <linux/types.h>
-#include <linux/input.h>
-
-/*----------Macros for clients to specify Ib, Ab---------------*/
-
-/*Macros for clients to convert their data to ib and ab
-*
-* Ws: Time window over which to transfer the data in SECONDS
-* Bs : Size of the data block in bytes
-* Per: Recurrence period
-* Tb : Throughput bandwidth to prevent stalling
-* R  : Ratio of actual bandwidth used to Tb
-* */
-#define IB_RECURRBLOCK(Ws, Bs) ((Ws) == 0 ? 0 : ((Bs)/(Ws)))
-#define AB_RECURRBLOCK(Ws, Per) ((Ws) == 0 ? 0 : ((Bs)/(Per)))
-#define IB_THROUGHPUTBW(Tb) (Tb)
-#define AB_THROUGHPUTBW(Tb, R) ((Tb) * (R))
-
-struct msm_bus_node_info {
-	unsigned int id;
-	int gateway;
-	int masterp;
-	int slavep;
-	int tier;
+struct dai_dma_params {
+	u8 *buffer;
+	uint32_t src_start;
+	uint32_t bus_id;
+	int buffer_size;
+	int period_size;
+	int channels;
 };
 
-struct msm_bus_vectors {
-	int src;
-	int dst;
-	int ab;
-	int ib;
+enum {
+	DAI_SPKR = 0,
+	DAI_MIC,
+	DAI_MI2S,
+	DAI_SEC_SPKR,
+	DAI_SEC_MIC,
 };
 
-struct msm_bus_paths {
-	int num_paths;
-	struct msm_bus_vectors *vectors;
-};
-
-struct msm_bus_scale_pdata {
-	struct msm_bus_paths *usecase;
-	int num_usecases;
-};
-
-/* Topology Configuration API */
-int msm_bus_register_fabric_info(int id, struct msm_bus_node_info const *info,
-					unsigned len);
-
-/* Scaling APIs */
-uint32_t msm_bus_scale_register_client(struct msm_bus_scale_pdata *pdata);
-int msm_bus_scale_client_update_request(uint32_t cl, unsigned index);
-void msm_bus_scale_unregister_client(uint32_t cl);
-
-/* AXI port configuration APIs */
-int msm_bus_axi_porthalt(int master_port);
-int msm_bus_axi_portunhalt(int master_port);
-
-#endif /*_ARCH_ARM_MACH_MSM_BUS_H*/
+/* Function Prototypes */
+int dai_open(uint32_t dma_ch);
+void dai_close(uint32_t dma_ch);
+int dai_start(uint32_t dma_ch);
+int dai_stop(uint32_t dma_ch);
+int dai_set_params(uint32_t dma_ch, struct dai_dma_params *params);
+uint32_t dai_get_dma_pos(uint32_t dma_ch);
+void register_dma_irq_handler(int dma_ch,
+		irqreturn_t (*callback) (int intrSrc, void *private_data),
+		void *private_data);
+void unregister_dma_irq_handler(int dma_ch);
+#endif

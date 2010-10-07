@@ -73,7 +73,7 @@
 
 #define SMEM_SPINLOCK_I2C	"S:6"
 
-#define MSM_PMEM_ADSP_SIZE	0x2B96000
+#define MSM_PMEM_ADSP_SIZE	0x2A05000
 #define MSM_FB_SIZE         0x2EE000
 #define MSM_AUDIO_SIZE		0x80000
 #define MSM_GPU_PHYS_SIZE 	SZ_2M
@@ -1224,7 +1224,7 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.set_grp3d_async = NULL,
 	.imem_clk_name = "imem_clk",
 	.grp3d_clk_name = "grp_clk",
-	.grp2d_clk_name = NULL,
+	.grp2d0_clk_name = NULL,
 };
 
 static struct platform_device msm_device_kgsl = {
@@ -1597,7 +1597,7 @@ static void msm_camera_vreg_config(int vreg_en)
 	}
 }
 
-static void config_camera_on_gpios(void)
+static int config_camera_on_gpios(void)
 {
 	int vreg_en = 1;
 
@@ -1610,6 +1610,7 @@ static void config_camera_on_gpios(void)
 	}
 	config_gpio_table(camera_on_gpio_table,
 		ARRAY_SIZE(camera_on_gpio_table));
+	return 0;
 }
 
 static void config_camera_off_gpios(void)
@@ -1882,6 +1883,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_USB_ANDROID
 	&usb_mass_storage_device,
 	&rndis_device,
+#ifdef CONFIG_USB_ANDROID_DIAG
+	&usb_diag_device,
+#endif
 	&android_usb_device,
 #endif
 	&msm_device_tssc,

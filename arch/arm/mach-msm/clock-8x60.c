@@ -26,6 +26,7 @@
 #include <linux/delay.h>
 #include <mach/msm_iomap.h>
 #include <mach/clk.h>
+#include <mach/msm_xo.h>
 
 #include "clock-local.h"
 #include "clock-8x60.h"
@@ -449,7 +450,7 @@ static void set_rate_div_banked(struct clk_local *clk, struct clk_freq_tbl *nf)
 #define NS_DIV(d_msb , d_lsb, d) \
 		BVAL(d_msb, d_lsb, (d-1))
 
-#define SRC_SEL_NS(s_msb, s_lsb, s) \
+#define NS_SRC_SEL(s_msb, s_lsb, s) \
 		BVAL(s_msb, s_lsb, SRC_SEL_##s)
 
 #define NS_MND_BANKED4(n0_lsb, n1_lsb, n, m, s0_lsb, s1_lsb, s) \
@@ -556,7 +557,7 @@ static struct clk_freq_tbl clk_tbl_gsbi_sim[] = {
 				set_rate_basic, clk_tbl_pdm, NULL, NONE, \
 				NULL, 0)
 #define F_PDM(f, s, d, m, n, v) \
-		F_RAW(f, SRC_##s, 0, SRC_SEL_NS(1, 0, s), 0, 0, v, NULL)
+		F_RAW(f, SRC_##s, 0, NS_SRC_SEL(1, 0, s), 0, 0, v, NULL)
 static struct clk_freq_tbl clk_tbl_pdm[] = {
 	F_PDM(27000000, XO_PXO, 1, 0, 0, LOW),
 	F_END,
@@ -621,7 +622,7 @@ static struct clk_freq_tbl clk_tbl_tsif_ref[] = {
 				B(4), 0, NS_MASK_TSSC, 0, set_rate_basic, \
 				clk_tbl_tssc, NULL, NONE, NULL, tv)
 #define F_TSSC(f, s, d, m, n, v) \
-		F_RAW(f, SRC_##s, 0, SRC_SEL_NS(1, 0, s), 0, 0, v, NULL)
+		F_RAW(f, SRC_##s, 0, NS_SRC_SEL(1, 0, s), 0, 0, v, NULL)
 static struct clk_freq_tbl clk_tbl_tssc[] = {
 	F_TSSC(27000000, XO_PXO, 0, 0, 0, LOW),
 	F_END,
@@ -899,13 +900,13 @@ static struct clk_freq_tbl clk_tbl_mdp[] = {
 };
 
 /* MDP VSYNC */
-#define NS_MASK_MDP_VSYNC BM(13, 13)
+#define NS_MASK_MDP_VSYNC B(13)
 #define CLK_MDP_VSYNC(id, ns, h_r, h_c, h_b, tv) \
 		CLK(id, BASIC, ns, (ns-4), NULL, NULL, 0, h_r, h_c, h_b, \
-				B(6), 0, 0, 0, set_rate_basic, \
+				B(6), 0, NS_MASK_MDP_VSYNC, 0, set_rate_basic, \
 				clk_tbl_mdp_vsync, NULL, NONE, NULL, tv)
 #define F_MDP_VSYNC(f, s, d, m, n, v) \
-		F_RAW(f, SRC_##s, 0, SRC_SEL_NS(13, 13, s), 0, 0, v, NULL)
+		F_RAW(f, SRC_##s, 0, NS_SRC_SEL(13, 13, s), 0, 0, v, NULL)
 static struct clk_freq_tbl clk_tbl_mdp_vsync[] = {
 	F_MDP_VSYNC(27000000, BB_PXO, 0, 0, 0, LOW),
 	F_END,
@@ -925,6 +926,7 @@ static struct clk_freq_tbl clk_tbl_mdp_vsync[] = {
 			NS_MM(31, 16, n, m, 15, 14, d, 2, 0, s), \
 			CC(6, n), MND_EN(B(5), n), v, NULL)
 static struct clk_freq_tbl clk_tbl_pixel_mdp[] = {
+	F_PIXEL_MDP(25600000, MM_GPERF, 3,   1,   5, LOW),
 	F_PIXEL_MDP(43192000, MM_GPERF, 1,  64, 569, LOW),
 	F_PIXEL_MDP(48000000, MM_GPERF, 4,   1,   2, LOW),
 	F_PIXEL_MDP(53990000, MM_GPERF, 2, 169, 601, LOW),
@@ -1371,7 +1373,7 @@ struct clk_local soc_clk_local_tbl_mxo[] = {
 		DBG_BUS_VEC_B_REG, HALT, 14, CSI_SRC, TEST_MM_HS(0x01)),
 
 	CLK_DSI_BYTE(DSI_BYTE, MISC_CC2_REG, DBG_BUS_VEC_B_REG,
-		HALT, 23, TEST_MM_LS(0x00)),
+		DELAY, 0, TEST_MM_LS(0x00)),
 	CLK_NORATE(DSI_ESC, MISC_CC_REG, B(0), NULL, 0,
 		DBG_BUS_VEC_B_REG, HALT, 24, TEST_MM_LS(0x23)),
 
@@ -1472,42 +1474,45 @@ struct clk_local soc_clk_local_tbl_mxo[] = {
 	CLK_AIF_OSR(MI2S_OSR, LCC_MI2S_NS_REG,
 		LCC_MI2S_STATUS_REG, ENABLE, 1, TEST_LPA(0x0A)),
 	CLK_AIF_BIT(MI2S_BIT, LCC_MI2S_NS_REG,
-		LCC_MI2S_STATUS_REG, ENABLE, 0, TEST_LPA(0x0B)),
+		LCC_MI2S_STATUS_REG, DELAY,  0, TEST_LPA(0x0B)),
 
 	CLK_AIF_OSR(CODEC_I2S_MIC_OSR, LCC_CODEC_I2S_MIC_NS_REG,
 		LCC_CODEC_I2S_MIC_STATUS_REG, ENABLE, 1, TEST_LPA(0x0C)),
 	CLK_AIF_BIT(CODEC_I2S_MIC_BIT, LCC_CODEC_I2S_MIC_NS_REG,
-		LCC_CODEC_I2S_MIC_STATUS_REG, ENABLE, 0, TEST_LPA(0x0D)),
+		LCC_CODEC_I2S_MIC_STATUS_REG, DELAY,  0, TEST_LPA(0x0D)),
 
 	CLK_AIF_OSR(SPARE_I2S_MIC_OSR, LCC_SPARE_I2S_MIC_NS_REG,
 		LCC_SPARE_I2S_MIC_STATUS_REG, ENABLE, 1, TEST_LPA(0x10)),
 	CLK_AIF_BIT(SPARE_I2S_MIC_BIT, LCC_SPARE_I2S_MIC_NS_REG,
-		LCC_SPARE_I2S_MIC_STATUS_REG, ENABLE, 0, TEST_LPA(0x11)),
+		LCC_SPARE_I2S_MIC_STATUS_REG, DELAY,  0, TEST_LPA(0x11)),
 
 	CLK_AIF_OSR(CODEC_I2S_SPKR_OSR, LCC_CODEC_I2S_SPKR_NS_REG,
 		LCC_CODEC_I2S_SPKR_STATUS_REG, ENABLE, 1, TEST_LPA(0x0E)),
 	CLK_AIF_BIT(CODEC_I2S_SPKR_BIT, LCC_CODEC_I2S_SPKR_NS_REG,
-		LCC_CODEC_I2S_SPKR_STATUS_REG, ENABLE, 0, TEST_LPA(0x0F)),
+		LCC_CODEC_I2S_SPKR_STATUS_REG, DELAY,  0, TEST_LPA(0x0F)),
 
 	CLK_AIF_OSR(SPARE_I2S_SPKR_OSR, LCC_SPARE_I2S_SPKR_NS_REG,
 		LCC_SPARE_I2S_SPKR_STATUS_REG, ENABLE, 1, TEST_LPA(0x12)),
 	CLK_AIF_BIT(SPARE_I2S_SPKR_BIT, LCC_SPARE_I2S_SPKR_NS_REG,
-		LCC_SPARE_I2S_SPKR_STATUS_REG, ENABLE, 0, TEST_LPA(0x13)),
+		LCC_SPARE_I2S_SPKR_STATUS_REG, DELAY,  0, TEST_LPA(0x13)),
 
 	CLK_PCM(PCM, LCC_PCM_NS_REG, LCC_PCM_STATUS_REG, ENABLE, 0,
 		TEST_LPA(0x14)),
 };
 
 #ifndef _MXO_PLAN
+static struct msm_xo_voter *xo_pxo;
 /*
  * SoC-specific functions required by clock-local driver
  */
 
-/* Enable/disable for XO sources. */
+/* Enable/disable for voteable XOs. */
 static int xo_enable(unsigned src, unsigned enable)
 {
-	/* TODO */
-	return 0;
+	if (!xo_pxo)
+		return -ENODEV;
+
+	return msm_xo_mode_vote(xo_pxo, MSM_XO_MODE_ON);
 }
 
 /* Enable/disable for hardware-voteable PLLs. */
@@ -1596,7 +1601,7 @@ static int pll4_enable(unsigned src, unsigned enable)
 #define CLK_SRC(_src, _func, _par) \
 	[(_src)] = { .enable_func = (_func), .par = (_par), }
 struct clk_source soc_clk_sources[NUM_SRC] = {
-	CLK_SRC(CXO,   xo_enable, SRC_NONE),
+	CLK_SRC(CXO,   NULL, SRC_NONE),
 	CLK_SRC(MXO,   NULL, SRC_NONE),
 	CLK_SRC(PXO,   xo_enable, SRC_NONE),
 	CLK_SRC(PLL_0, voteable_pll_enable, PXO),
@@ -1906,9 +1911,14 @@ void __init msm_clk_soc_init(void)
 
 	/* Select correct frequency table for hardware XO configuration. */
 	use_pxo = pxo_is_27mhz();
-	if (use_pxo)
+	if (use_pxo) {
 		soc_clk_local_tbl = soc_clk_local_tbl_pxo;
-	else {
+		xo_pxo = msm_xo_get(MSM_XO_PXO, "clock-8x60");
+		if (IS_ERR(xo_pxo)) {
+			pr_err("%s: msm_xo_get(PXO) failed.\n", __func__);
+			BUG();
+		}
+	} else {
 		soc_clk_local_tbl = soc_clk_local_tbl_mxo;
 		soc_clk_sources[PXO].enable_func = NULL;
 	}
@@ -1939,7 +1949,8 @@ void __init msm_clk_soc_init(void)
 struct clk_ops soc_clk_ops_8x60 = {
 	.enable = local_clk_enable,
 	.disable = local_clk_disable,
-	.auto_off = local_clk_auto_off,
+	.output_enable = local_clk_output_enable,
+	.output_disable = local_clk_output_disable,
 	.set_rate = local_clk_set_rate,
 	.set_min_rate = local_clk_set_min_rate,
 	.set_max_rate = local_clk_set_max_rate,

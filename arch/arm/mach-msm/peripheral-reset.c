@@ -20,11 +20,12 @@
 #include <linux/io.h>
 #include <linux/elf.h>
 #include <linux/delay.h>
-#include <linux/regulator/consumer.h>
+#include <linux/module.h>
 
 #include <mach/msm_iomap.h>
 
 #include "peripheral-reset.h"
+#include "clock-8x60.h"
 
 #define MSM_MMS_REGS_BASE		0x10200000
 #define MSM_LPASS_QDSP6SS_BASE		0x28800000
@@ -225,18 +226,11 @@ static int shutdown_modem(void)
 static int reset_q6(void)
 {
 	int ret;
-	struct regulator *s3;
 	u32 reg;
 
-	/* Enable Q6 VDD */
-	s3 = regulator_get(NULL, "8901_s3");
-	if (IS_ERR(s3))
-		return PTR_ERR(s3);
-	ret = regulator_enable(s3);
+	ret = local_src_enable(PLL_4);
 	if (ret)
-		return ret;
-	/* Wait for VDD to settle */
-	usleep_range(1000, 2000);
+		goto err;
 
 	/* Put Q6 into reset */
 	reg = readl(LCC_Q6_FUNC);
@@ -274,13 +268,14 @@ static int reset_q6(void)
 	writel(reg, LCC_Q6_FUNC);
 
 	return 0;
+
+err:
+	return ret;
 }
 
 static int shutdown_q6(void)
 {
-	struct regulator *s3;
 	u32 reg;
-	int ret;
 
 	reg = readl(LCC_Q6_FUNC);
 	/* Halt clocks and turn off memory */
@@ -288,16 +283,6 @@ static int shutdown_q6(void)
 		CORE_TCM_MEM_PERPH_EN);
 	reg |= CLAMP_IO | CORE_GFM4_CLK_EN;
 	writel(reg, LCC_Q6_FUNC);
-
-	/* Disable Q6 VDD */
-	s3 = regulator_get(NULL, "8901_s3");
-	if (IS_ERR(s3))
-		return PTR_ERR(s3);
-	ret = regulator_disable(s3);
-	if (ret)
-		return ret;
-	/* Wait for VDD to settle */
-	usleep_range(1000, 2000);
 
 	return 0;
 }
@@ -352,7 +337,7 @@ int peripheral_shutdown(int id)
 	return ret;
 }
 
-static int msm_peripheral_reset_init(void)
+static int __init msm_peripheral_reset_init(void)
 {
 	msm_mms_regs_base = ioremap(MSM_MMS_REGS_BASE, SZ_256);
 	if (!msm_mms_regs_base)
@@ -370,7 +355,7 @@ err:
 	return -ENOMEM;
 }
 
-static void msm_peripheral_reset_exit(void)
+static void __exit msm_peripheral_reset_exit(void)
 {
 	iounmap(msm_mms_regs_base);
 	iounmap(msm_lpass_qdsp6ss_base);

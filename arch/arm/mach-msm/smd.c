@@ -281,6 +281,10 @@ static struct work_struct probe_work;
 
 static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm);
 
+/* on smp systems, the probe might get called from multiple cores,
+   hence use a lock */
+static DEFINE_MUTEX(smd_probe_lock);
+
 static void smd_channel_probe_worker(struct work_struct *work)
 {
 	struct smd_alloc_elm *shared;
@@ -294,6 +298,7 @@ static void smd_channel_probe_worker(struct work_struct *work)
 		return;
 	}
 
+	mutex_lock(&smd_probe_lock);
 	for (n = 0; n < 64; n++) {
 		if (smd_ch_allocated[n])
 			continue;
@@ -312,8 +317,9 @@ static void smd_channel_probe_worker(struct work_struct *work)
 		if (!smd_alloc_channel(&shared[n]))
 			smd_ch_allocated[n] = 1;
 		else
-			SMD_INFO("Probe skipping ch %d, not allocated \n", n);
+			SMD_INFO("Probe skipping ch %d, not allocated\n", n);
 	}
+	mutex_unlock(&smd_probe_lock);
 }
 
 /* how many bytes are available for reading */
@@ -1038,10 +1044,10 @@ int smd_close(smd_channel_t *ch)
 {
 	unsigned long flags;
 
-	SMD_INFO("smd_close(%p)\n", ch);
-
 	if (ch == 0)
 		return -1;
+
+	SMD_INFO("smd_close(%s)\n", ch->name);
 
 	spin_lock_irqsave(&smd_lock, flags);
 	ch->notify = do_nothing_notify;
@@ -1107,6 +1113,7 @@ int smd_cur_packet_size(smd_channel_t *ch)
 {
 	return ch->current_packet;
 }
+EXPORT_SYMBOL(smd_cur_packet_size);
 
 int smd_tiocmget(smd_channel_t *ch)
 {
@@ -1117,6 +1124,7 @@ int smd_tiocmget(smd_channel_t *ch)
 		(ch->send->fCTS ? TIOCM_RTS : 0) |
 		(ch->send->fDSR ? TIOCM_DTR : 0);
 }
+EXPORT_SYMBOL(smd_tiocmget);
 
 int smd_tiocmset(smd_channel_t *ch, unsigned int set, unsigned int clear)
 {
@@ -1142,6 +1150,7 @@ int smd_tiocmset(smd_channel_t *ch, unsigned int set, unsigned int clear)
 
 	return 0;
 }
+EXPORT_SYMBOL(smd_tiocmset);
 
 
 /* -------------------------------------------------------------------------- */

@@ -26,6 +26,7 @@
 #include "snddev_ecodec.h"
 #include "timpani_profile_8x60.h"
 #include "snddev_hdmi.h"
+#include "snddev_mi2s.h"
 #include "apr_audio.h"
 
 /* define the value for BT_SCO */
@@ -52,7 +53,7 @@ static struct snddev_icodec_data snddev_iearpiece_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
 	.name = "handset_rx",
 	.copp_id = 0,
-	.acdb_id = 1,
+	.acdb_id = 7,
 	.profile = &iearpiece_profile,
 	.channel_mode = 1,
 	.pmctl_id = NULL,
@@ -96,7 +97,7 @@ static struct snddev_icodec_data snddev_imic_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
 	.name = "handset_tx",
 	.copp_id = 1,
-	.acdb_id = 2,
+	.acdb_id = 4,
 	.profile = &imic_profile,
 	.channel_mode = 1,
 	.pmctl_id = imic_pmctl_id,
@@ -252,7 +253,7 @@ static struct snddev_icodec_data snddev_iearpiece_ffa_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
 	.name = "handset_rx",
 	.copp_id = 0,
-	.acdb_id = 1,
+	.acdb_id = 7,
 	.profile = &iearpiece_ffa_profile,
 	.channel_mode = 1,
 	.pmctl_id = NULL,
@@ -276,7 +277,7 @@ static struct snddev_icodec_data snddev_imic_ffa_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
 	.name = "handset_tx",
 	.copp_id = PRIMARY_I2S_TX,
-	.acdb_id = 2,
+	.acdb_id = 4,
 	.profile = &idmic_mono_profile,
 	.channel_mode = 1,
 	.pmctl_id = imic_pmctl_id,
@@ -315,7 +316,7 @@ static enum hsed_controller idual_mic_endfire_pmctl_id[] = {
 
 static struct snddev_icodec_data snddev_idual_mic_endfire_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
-	.name = "handset_dual_mic_device",
+	.name = "handset_dual_mic_endfire_tx",
 	.copp_id = PRIMARY_I2S_TX,
 	.acdb_id = 6,
 	.profile = &idual_mic_endfire_profile,
@@ -338,7 +339,7 @@ static struct snddev_hdmi_data snddev_hdmi_stereo_rx_data = {
 	.capability = SNDDEV_CAP_RX ,
 	.name = "hdmi_stereo_rx",
 	.copp_id = HDMI_RX,
-	.acdb_id = 3,
+	.acdb_id = 18,
 	.channel_mode = 0,
 	.default_sample_rate = 48000,
 };
@@ -349,6 +350,21 @@ static struct platform_device msm_snddev_hdmi_stereo_rx_device = {
 	.dev = { .platform_data = &snddev_hdmi_stereo_rx_data },
 };
 
+static struct snddev_mi2s_data snddev_mi2s_fm_tx_data = {
+	.capability = SNDDEV_CAP_TX ,
+	.name = "fmradio_stereo_tx",
+	.copp_id = RSVD_1,
+	.acdb_id = 3,
+	.channel_mode = 3, /* stereo */
+	.sd_lines = 4, /* sd3 */
+	.sample_rate = 48000,
+};
+
+static struct platform_device msm_mi2s_fm_tx_device = {
+	.name = "snddev_mi2s",
+	.id = 0,
+	.dev = { .platform_data = &snddev_mi2s_fm_tx_data },
+};
 
 static struct adie_codec_action_unit iheadset_mic_tx_osr256_actions[] =
 	HEADSET_AMIC2_TX_MONO_PRI_OSR_256;
@@ -503,6 +519,7 @@ static struct platform_device *snd_devices_ffa[] __initdata = {
 	&msm_itty_mono_tx_device,
 	&msm_itty_mono_rx_device,
 	&msm_handset_dual_mic_endfire_device,
+	&msm_mi2s_fm_tx_device
 };
 
 static struct platform_device *snd_devices_surf[] __initdata = {
@@ -518,6 +535,7 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_itty_mono_tx_device,
 	&msm_itty_mono_rx_device,
 	&msm_handset_dual_mic_endfire_device,
+	&msm_mi2s_fm_tx_device
 };
 
 void __init msm_snddev_init(void)

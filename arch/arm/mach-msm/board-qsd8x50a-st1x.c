@@ -76,7 +76,7 @@
 
 #define SMEM_SPINLOCK_I2C	"D:I2C02000021"
 
-#define MSM_PMEM_ADSP_SIZE	0x2005000
+#define MSM_PMEM_ADSP_SIZE	0x2A05000
 
 #define MSM_FB_SIZE_ST15	0x810000
 #define MSM_AUDIO_SIZE		0x80000
@@ -1271,7 +1271,6 @@ static unsigned audio_gpio_on[] = {
 	GPIO_CFG(71, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* PCM_CLK */
 	GPIO_CFG(142, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* CC_I2S_CLK */
 	GPIO_CFG(143, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* SADC_WSOUT */
-	GPIO_CFG(144, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),	/* SADC_DIN */
 	GPIO_CFG(145, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* SDAC_DOUT */
 	GPIO_CFG(146, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),	/* MA_CLK_OUT */
 };
@@ -1430,13 +1429,13 @@ static struct resource kgsl_resources[] = {
 		.flags = IORESOURCE_IRQ,
 	},
 	{
-		.name = "kgsl_g12_reg_memory",
+		.name = "kgsl_2d0_reg_memory",
 		.start = 0xA1300000,
 		.end =  0xA13fffff,
 		.flags = IORESOURCE_MEM,
 	},
 	{
-	       .name = "kgsl_g12_irq",
+	       .name = "kgsl_2d0_irq",
 	       .start = INT_GRP2D,
 	       .end = INT_GRP2D,
 	       .flags = IORESOURCE_IRQ,
@@ -1452,7 +1451,11 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.set_grp3d_async = NULL,
 	.imem_clk_name = "imem_clk",
 	.grp3d_clk_name = "grp_clk",
-	.grp2d_clk_name = "grp_2d_clk",
+#ifdef CONFIG_MSM_KGSL_2D
+	.grp2d0_clk_name = "grp_2d_clk",
+#else
+	.grp2d0_clk_name = NULL,
+#endif
 };
 
 static struct platform_device msm_device_kgsl = {
@@ -1767,6 +1770,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_USB_ANDROID
 	&usb_mass_storage_device,
 	&rndis_device,
+#ifdef CONFIG_USB_ANDROID_DIAG
+	&usb_diag_device,
+#endif
 	&android_usb_device,
 #endif
 	&msm_device_otg,
@@ -2000,7 +2006,7 @@ static struct mmc_platform_data qsd8x50_sdc1_data = {
 #endif
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 25000000,
-	.msmsdcc_fmax	= 49152000,
+	.msmsdcc_fmax	= 40000000,
 };
 #endif
 
@@ -2015,7 +2021,7 @@ static struct mmc_platform_data qsd8x50_sdc2_data = {
 #endif
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 25000000,
-	.msmsdcc_fmax	= 49152000,
+	.msmsdcc_fmax	= 40000000,
 };
 #endif
 

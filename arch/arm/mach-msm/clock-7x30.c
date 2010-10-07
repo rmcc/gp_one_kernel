@@ -570,7 +570,7 @@ static struct clk_local soc_clk_local_tbl_7x30[] = {
 			0x0F),
 
 	CLK_MND8(CSI0, CSI_NS_REG, 24, 17, B(9), B(11), clk_tbl_csi, NULL,
-			CLK_HALT_STATEB_REG, HALT, 9, 0x5F00),
+			CLK_HALT_STATEC_REG, HALT, 17, 0x5F00),
 
 	/* For global clocks to be on we must have GLBL_ROOT_ENA set */
 	CLK_1RATE(GLBL_ROOT, GLBL_CLK_ENA_SC_REG, 0, B(29), clk_tbl_axi,
@@ -1159,14 +1159,14 @@ void __init msm_clk_soc_init(void)
 		writel(val, ri_list[i].reg);
 	}
 
-	/* This is just to update the driver data structures. The actual
-	 * register set up is taken care of in the register init loop
-	 * or is the default value out of reset. */
 	set_1rate(I2C);
 	set_1rate(I2C_2);
 	set_1rate(QUP_I2C);
 	set_1rate(UART1);
 	set_1rate(UART2);
+	set_1rate(MI2S_M);
+	set_1rate(MIDI);
+	set_1rate(MDP_VSYNC);
 	set_1rate(LPA_CODEC);
 	set_1rate(GLBL_ROOT);
 
@@ -1180,7 +1180,8 @@ void __init msm_clk_soc_init(void)
 struct clk_ops soc_clk_ops_7x30 = {
 	.enable = local_clk_enable,
 	.disable = local_clk_disable,
-	.auto_off = local_clk_auto_off,
+	.output_enable = local_clk_output_enable,
+	.output_disable = local_clk_output_disable,
 	.set_rate = local_clk_set_rate,
 	.set_min_rate = local_clk_set_min_rate,
 	.set_max_rate = local_clk_set_max_rate,

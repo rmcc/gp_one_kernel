@@ -45,9 +45,9 @@ static unsigned int poolsize = 10; /*Number of items in the mempool */
 /* for hdlc buffer */
 static unsigned int itemsize_hdlc = 8192; /*Size of item in the mempool */
 static unsigned int poolsize_hdlc = 8;  /*Number of items in the mempool */
-/* for usb structure buffer */
-static unsigned int itemsize_usb_struct = 20; /*Size of item in the mempool */
-static unsigned int poolsize_usb_struct = 8; /*Number of items in the mempool */
+/* for write structure buffer */
+static unsigned int itemsize_write_struct = 20; /*Size of item in the mempool */
+static unsigned int poolsize_write_struct = 8; /* Num of items in the mempool */
 /* This is the max number of user-space clients supported at initialization*/
 static unsigned int max_clients = 15;
 static unsigned int threshold_client_limit = 30;
@@ -100,7 +100,7 @@ void diag_drain_work_fn(struct work_struct *work)
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
 			diagmem_free(driver, (unsigned char *)driver->
-				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
+				 write_ptr_svc, POOL_TYPE_WRITE_STRUCT);
 		}
 		buf_hdlc = NULL;
 #ifdef DIAG_DEBUG
@@ -125,7 +125,6 @@ void diag_read_smd_qdsp_work_fn(struct work_struct *work)
 static int diagchar_open(struct inode *inode, struct file *file)
 {
 	int i = 0;
-	char currtask_name[FIELD_SIZEOF(struct task_struct, comm) + 1];
 
 	if (driver) {
 		mutex_lock(&driver->diagchar_mutex);
@@ -136,8 +135,7 @@ static int diagchar_open(struct inode *inode, struct file *file)
 
 		if (i < driver->num_clients) {
 			driver->client_map[i].pid = current->tgid;
-			strncpy(driver->client_map[i].name, get_task_comm(
-						currtask_name, current), 20);
+			strncpy(driver->client_map[i].name, current->comm, 20);
 			driver->client_map[i].name[19] = '\0';
 		} else {
 			if (i < threshold_client_limit) {
@@ -147,8 +145,7 @@ static int diagchar_open(struct inode *inode, struct file *file)
 						 diag_client_map), GFP_KERNEL);
 				driver->client_map[i].pid = current->tgid;
 				strncpy(driver->client_map[i].name,
-					get_task_comm(currtask_name,
-							 current), 20);
+					current->comm, 20);
 				driver->client_map[i].name[19] = '\0';
 			} else {
 				mutex_unlock(&driver->diagchar_mutex);
@@ -157,8 +154,7 @@ static int diagchar_open(struct inode *inode, struct file *file)
 					printk(KERN_ALERT "Max client limit for"
 						 "DIAG driver reached\n");
 					printk(KERN_INFO "Cannot open handle %s"
-					   " %d", get_task_comm(currtask_name,
-						 current), current->tgid);
+					   " %d", current->comm, current->tgid);
 				for (i = 0; i < driver->num_clients; i++)
 					printk(KERN_INFO "%d) %s PID=%d"
 					, i, driver->client_map[i].name,
@@ -374,7 +370,7 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 		/* place holder for number of data field */
 		ret += 4;
 
-		for (i = 0; i < driver->poolsize_usb_struct; i++) {
+		for (i = 0; i < driver->poolsize_write_struct; i++) {
 			if (driver->buf_tbl[i].length > 0) {
 #ifdef DIAG_DEBUG
 				printk(KERN_INFO "\n WRITING the buf address "
@@ -418,22 +414,22 @@ drop:
 			num_data++;
 			/*Copy the length of data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret,
-					 (driver->usb_write_ptr_1->length), 4);
+					 (driver->write_ptr_1->length), 4);
 			/*Copy the actual data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret,
-					*(driver->usb_buf_in_1),
-					 driver->usb_write_ptr_1->length);
+					*(driver->buf_in_1),
+					 driver->write_ptr_1->length);
 			driver->in_busy_1 = 0;
 		}
 		if (driver->in_busy_2 == 1) {
 			num_data++;
 			/*Copy the length of data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret,
-					 (driver->usb_write_ptr_2->length), 4);
+					 (driver->write_ptr_2->length), 4);
 			/*Copy the actual data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret,
-					 *(driver->usb_buf_in_2),
-					 driver->usb_write_ptr_2->length);
+					 *(driver->buf_in_2),
+					 driver->write_ptr_2->length);
 			driver->in_busy_2 = 0;
 		}
 
@@ -442,22 +438,22 @@ drop:
 			num_data++;
 			/*Copy the length of data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret,
-				 (driver->usb_write_ptr_qdsp_1->length), 4);
+				 (driver->write_ptr_qdsp_1->length), 4);
 			/*Copy the actual data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret, *(driver->
-							usb_buf_in_qdsp_1),
-					 driver->usb_write_ptr_qdsp_1->length);
+							buf_in_qdsp_1),
+					 driver->write_ptr_qdsp_1->length);
 			driver->in_busy_qdsp_1 = 0;
 		}
 		if (driver->in_busy_qdsp_2 == 1) {
 			num_data++;
 			/*Copy the length of data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret,
-				 (driver->usb_write_ptr_qdsp_2->length), 4);
+				 (driver->write_ptr_qdsp_2->length), 4);
 			/*Copy the actual data being passed*/
 			COPY_USER_SPACE_OR_EXIT(buf+ret, *(driver->
-				usb_buf_in_qdsp_2), driver->
-					usb_write_ptr_qdsp_2->length);
+				buf_in_qdsp_2), driver->
+					write_ptr_qdsp_2->length);
 			driver->in_busy_qdsp_2 = 0;
 		}
 
@@ -615,7 +611,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
 			diagmem_free(driver, (unsigned char *)driver->
-				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
+				 write_ptr_svc, POOL_TYPE_WRITE_STRUCT);
 			ret = -EIO;
 			goto fail_free_hdlc;
 		}
@@ -646,7 +642,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
 			diagmem_free(driver, (unsigned char *)driver->
-				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
+				 write_ptr_svc, POOL_TYPE_WRITE_STRUCT);
 			ret = -EIO;
 			goto fail_free_hdlc;
 		}
@@ -674,7 +670,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 			/*Free the buffer right away if write failed */
 			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
 			diagmem_free(driver, (unsigned char *)driver->
-				 usb_write_ptr_svc, POOL_TYPE_USB_STRUCT);
+				 write_ptr_svc, POOL_TYPE_WRITE_STRUCT);
 			ret = -EIO;
 			goto fail_free_hdlc;
 		}
@@ -845,8 +841,8 @@ static int __init diagchar_init(void)
 		driver->poolsize = poolsize;
 		driver->itemsize_hdlc = itemsize_hdlc;
 		driver->poolsize_hdlc = poolsize_hdlc;
-		driver->itemsize_usb_struct = itemsize_usb_struct;
-		driver->poolsize_usb_struct = poolsize_usb_struct;
+		driver->itemsize_write_struct = itemsize_write_struct;
+		driver->poolsize_write_struct = poolsize_write_struct;
 		driver->num_clients = max_clients;
 		driver->logging_mode = USB_MODE;
 		mutex_init(&driver->diagchar_mutex);

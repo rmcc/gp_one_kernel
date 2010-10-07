@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2009, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2002,2007-2010, Code Aurora Forum. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -343,7 +343,7 @@ union reg_cp_rb_cntl {
 #define REG_PA_CL_VPORT_XSCALE           0x210F
 #define REG_PA_CL_VPORT_ZOFFSET          0x2114
 #define REG_PA_CL_VPORT_ZSCALE           0x2113
-#define REG_RA_CL_CLIP_CNTL		 0x2204
+#define REG_PA_CL_CLIP_CNTL              0x2204
 #define REG_PA_CL_VTE_CNTL               0x2206
 #define REG_PA_SC_AA_MASK                0x2312
 #define REG_PA_SC_LINE_CNTL              0x2300
@@ -417,12 +417,10 @@ union reg_cp_rb_cntl {
 #define REG_SQ_INTERPOLATOR_CNTL         0x2182
 #define REG_RB_DEPTH_INFO                0x2002
 #define REG_COHER_DEST_BASE_0            0x2006
-#define REG_PA_SC_SCREEN_SCISSOR_BR      0x200F
 #define REG_RB_FOG_COLOR                 0x2109
 #define REG_RB_STENCILREFMASK_BF         0x210C
 #define REG_PA_SC_LINE_STIPPLE           0x2283
 #define REG_SQ_PS_CONST                  0x2308
-#define REG_VGT_VERTEX_REUSE_BLOCK_CNTL  0x2316
 #define REG_RB_DEPTH_CLEAR               0x231D
 #define REG_RB_SAMPLE_COUNT_CTL          0x2324
 #define REG_SQ_CONSTANT_0                0x4000

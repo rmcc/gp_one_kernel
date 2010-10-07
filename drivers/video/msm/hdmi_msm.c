@@ -52,6 +52,9 @@
 struct hdmi_msm_state_type {
 	boolean panel_power_on;
 	boolean hpd_initialized;
+#ifdef CONFIG_SUSPEND
+	boolean pm_suspended;
+#endif
 	int hpd_stable;
 	boolean hpd_prev_state;
 	boolean hpd_cable_chg_detected;
@@ -109,6 +112,9 @@ static const char *hdmi_msm_name(uint32 offset)
 	case 0x0024: return "ACR_PKT_CTRL";
 	case 0x0028: return "VBI_PKT_CTRL";
 	case 0x002C: return "INFOFRAME_CTRL0";
+#ifdef CONFIG_FB_MSM_HDMI_3D
+	case 0x0034: return "GEN_PKT_CTRL";
+#endif
 	case 0x003C: return "ACP";
 	case 0x0040: return "GC";
 	case 0x0044: return "AUDIO_PKT_CTRL2";
@@ -125,6 +131,11 @@ static const char *hdmi_msm_name(uint32 offset)
 	case 0x0070: return "AVI_INFO1";
 	case 0x0074: return "AVI_INFO2";
 	case 0x0078: return "AVI_INFO3";
+#ifdef CONFIG_FB_MSM_HDMI_3D
+	case 0x0084: return "GENERIC0_HDR";
+	case 0x0088: return "GENERIC0_0";
+	case 0x008C: return "GENERIC0_1";
+#endif
 	case 0x00C4: return "ACR_32_0";
 	case 0x00C8: return "ACR_32_1";
 	case 0x00CC: return "ACR_44_0";
@@ -230,14 +241,24 @@ static int hdmi_msm_read_edid(void);
 
 static void hdmi_msm_hpd_state_work(struct work_struct *work)
 {
-	/* HPD_INT_STATUS[0x0250] */
-	boolean hpd_state = (HDMI_INP(0x0250) & 0x2) >> 1;
+	boolean hpd_state;
 
-	if (!hdmi_msm_state || !hdmi_msm_state->hdmi_app_clk) {
-		DEV_DBG("%s: ignored, hdmi_app_clk off\n", __func__);
+	if (!hdmi_msm_state || !hdmi_msm_state->hdmi_app_clk || !HDMI_BASE) {
+		DEV_DBG("%s: ignored, probe failed\n", __func__);
 		return;
 	}
+#ifdef CONFIG_SUSPEND
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		DEV_WARN("%s: ignored, pm_suspended\n", __func__);
+		return;
+	}
+	mutex_unlock(&hdmi_msm_state_mutex);
+#endif
 
+	/* HPD_INT_STATUS[0x0250] */
+	hpd_state = (HDMI_INP(0x0250) & 0x2) >> 1;
 	mutex_lock(&external_common_state_hpd_mutex);
 	mutex_lock(&hdmi_msm_state_mutex);
 	if ((external_common_state->hpd_state != hpd_state) || (hdmi_msm_state->
@@ -326,6 +347,16 @@ static void hdcp_deauthenticate(void);
 static void hdmi_msm_hdcp_enable(void);
 static void hdmi_msm_hdcp_reauth_work(struct work_struct *work)
 {
+#ifdef CONFIG_SUSPEND
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		DEV_WARN("HDCP Re-auth ignored, pm_suspended\n");
+		return;
+	}
+	mutex_unlock(&hdmi_msm_state_mutex);
+#endif
+
 	/* Don't process recursive actions */
 	mutex_lock(&hdmi_msm_state_mutex);
 	if (hdmi_msm_state->hdcp_activating) {
@@ -359,10 +390,19 @@ static irqreturn_t hdmi_msm_isr(int irq, void *dev_id)
 	static uint32 sample_drop_int_occurred;
 	const uint32 occurrence_limit = 10;
 
-	if (!hdmi_msm_state || !hdmi_msm_state->hdmi_app_clk) {
-		DEV_DBG("ISR ignored, hdmi_app_clk off\n");
+	if (!hdmi_msm_state || !hdmi_msm_state->hdmi_app_clk || !HDMI_BASE) {
+		DEV_DBG("ISR ignored, probe failed\n");
 		return IRQ_HANDLED;
 	}
+#ifdef CONFIG_SUSPEND
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		DEV_WARN("ISR ignored, pm_suspended\n");
+		return IRQ_HANDLED;
+	}
+	mutex_unlock(&hdmi_msm_state_mutex);
+#endif
 
 	/* Process HPD Interrupt */
 	/* HDMI_HPD_INT_STATUS[0x0250] */
@@ -2358,6 +2398,94 @@ static void hdmi_msm_avi_info_frame(void)
 	HDMI_OUTP(0x002C, HDMI_INP(0x002C) | 0x00000003L);
 }
 
+#ifdef CONFIG_FB_MSM_HDMI_3D
+static void hdmi_msm_vendor_infoframe_packetsetup(void)
+{
+	uint32 packet_header      = 0;
+	uint32 check_sum          = 0;
+	uint32 packet_payload     = 0;
+
+	/* 0x0084 GENERIC0_HDR
+	 *   HB0             7:0  NUM
+	 *   HB1            15:8  NUM
+	 *   HB2           23:16  NUM */
+	/* Setup Packet header and payload */
+	/* 0x81 VS_INFO_FRAME_ID
+	   0x01 VS_INFO_FRAME_VERSION
+	   0x1B VS_INFO_FRAME_PAYLOAD_LENGTH */
+	packet_header  = 0x81;
+	packet_header |= 0x01 << 8;
+	packet_header |= 0x1B << 16;
+	HDMI_OUTP(0x0084, packet_header);
+
+	check_sum  = packet_header & 0xff;
+	check_sum += (packet_header >> 8) & 0xff;
+	check_sum += (packet_header >> 16) & 0xff;
+
+	/* 0x008C GENERIC0_1
+	 *   BYTE4           7:0  NUM
+	 *   BYTE5          15:8  NUM
+	 *   BYTE6         23:16  NUM
+	 *   BYTE7         31:24  NUM */
+	if (external_common_state->format_3d) {
+		/* 0x02 VS_INFO_FRAME_3D_PRESENT */
+		packet_payload  = 0x02 << 5;
+		/* 0x08 VIDEO_3D_FORMAT_SIDE_BY_SIDE_HALF */
+		packet_payload |= (0x08 << 8) << 4;
+	} else
+		packet_payload = ((external_common_state->video_resolution+1)
+			<< 8) << 4;
+	HDMI_OUTP(0x008C, packet_payload);
+
+	check_sum += packet_payload & 0xff;
+	check_sum += (packet_payload >> 8) & 0xff;
+
+	#define IEEE_REGISTRATION_ID	0xC03
+	/* Next 3 bytes are IEEE Registration Identifcation */
+	/* 0x0088 GENERIC0_0
+	 *   BYTE0           7:0  NUM (checksum)
+	 *   BYTE1          15:8  NUM
+	 *   BYTE2         23:16  NUM
+	 *   BYTE3         31:24  NUM */
+	check_sum += IEEE_REGISTRATION_ID & 0xff;
+	check_sum += (IEEE_REGISTRATION_ID >> 8) & 0xff;
+	check_sum += (IEEE_REGISTRATION_ID >> 16) & 0xff;
+
+	HDMI_OUTP(0x0088, (0x100 - (0xff & check_sum))
+		| ((IEEE_REGISTRATION_ID & 0xff) << 8)
+		| (((IEEE_REGISTRATION_ID >> 8) & 0xff) << 16)
+		| (((IEEE_REGISTRATION_ID >> 16) & 0xff) << 24));
+
+	/* 0x0034 GEN_PKT_CTRL
+	 *   GENERIC0_SEND   0      0 = Disable Generic0 Packet Transmission
+	 *                          1 = Enable Generic0 Packet Transmission
+	 *   GENERIC0_CONT   1      0 = Send Generic0 Packet on next frame only
+	 *                          1 = Send Generic0 Packet on every frame
+	 *   GENERIC0_UPDATE 2      NUM
+	 *   GENERIC1_SEND   4      0 = Disable Generic1 Packet Transmission
+	 *                          1 = Enable Generic1 Packet Transmission
+	 *   GENERIC1_CONT   5      0 = Send Generic1 Packet on next frame only
+	 *                          1 = Send Generic1 Packet on every frame
+	 *   GENERIC0_LINE   21:16  NUM
+	 *   GENERIC1_LINE   29:24  NUM
+	 */
+	/* GENERIC0_LINE | GENERIC0_UPDATE | GENERIC0_CONT | GENERIC0_SEND
+	 * Setup HDMI TX generic packet control
+	 * Enable this packet to transmit every frame
+	 * Enable this packet to transmit every frame
+	 * Enable HDMI TX engine to transmit Generic packet 0 */
+	HDMI_OUTP(0x0034, (1 << 21) | (1 << 2) | BIT(1) | BIT(0));
+}
+
+static int hdmi_msm_switch_3d(boolean on)
+{
+	mutex_lock(&external_common_state_hpd_mutex);
+	if (external_common_state->hpd_state)
+		hdmi_msm_vendor_infoframe_packetsetup();
+	mutex_unlock(&external_common_state_hpd_mutex);
+}
+#endif
+
 static void hdmi_msm_turn_on(void)
 {
 	hdmi_msm_set_mode(FALSE);
@@ -2370,6 +2498,9 @@ static void hdmi_msm_turn_on(void)
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
 	hdmi_msm_avi_info_frame();
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT */
+#ifdef CONFIG_FB_MSM_HDMI_3D
+	hdmi_msm_vendor_infoframe_packetsetup();
+#endif
 
 	hdmi_msm_set_mode(TRUE);
 
@@ -2447,8 +2578,17 @@ static int hdmi_msm_power_on(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
 
-	if (!hdmi_msm_state->hdmi_app_clk)
+	if (!hdmi_msm_state || !hdmi_msm_state->hdmi_app_clk || !HDMI_BASE)
 		return -ENODEV;
+#ifdef CONFIG_SUSPEND
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		DEV_WARN("%s: ignored, pm_suspended\n", __func__);
+		return -ENODEV;
+	}
+	mutex_unlock(&hdmi_msm_state_mutex);
+#endif
 
 	DEV_DBG("power: ON (%dx%d %d)\n", mfd->var_xres, mfd->var_yres,
 		mfd->var_pixclock);
@@ -2495,6 +2635,15 @@ static int hdmi_msm_power_off(struct platform_device *pdev)
 {
 	if (!hdmi_msm_state->hdmi_app_clk)
 		return -ENODEV;
+#ifdef CONFIG_SUSPEND
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		DEV_WARN("%s: ignored, pm_suspended\n", __func__);
+		return -ENODEV;
+	}
+	mutex_unlock(&hdmi_msm_state_mutex);
+#endif
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL_HDCP_SUPPORT
 	mutex_lock(&hdmi_msm_state_mutex);
@@ -2667,11 +2816,21 @@ static int __devexit hdmi_msm_remove(struct platform_device *pdev)
 #ifdef CONFIG_SUSPEND
 static int hdmi_msm_device_pm_suspend(struct device *dev)
 {
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		return 0;
+	}
+
 	DEV_DBG("pm_suspend\n");
 
 	mod_timer(&hdmi_msm_state->hpd_state_timer, 0xffffffffL);
 	disable_irq(hdmi_msm_state->irq);
 	clk_disable(hdmi_msm_state->hdmi_app_clk);
+
+	hdmi_msm_state->pm_suspended = TRUE;
+	mutex_unlock(&hdmi_msm_state_mutex);
+
 	hdmi_msm_state->pd->enable_5v(0);
 	hdmi_msm_state->pd->core_power(0);
 	return 0;
@@ -2679,17 +2838,26 @@ static int hdmi_msm_device_pm_suspend(struct device *dev)
 
 static int hdmi_msm_device_pm_resume(struct device *dev)
 {
+	mutex_lock(&hdmi_msm_state_mutex);
+	if (!hdmi_msm_state->pm_suspended) {
+		mutex_unlock(&hdmi_msm_state_mutex);
+		return 0;
+	}
+
 	DEV_DBG("pm_resume\n");
 
 	hdmi_msm_state->pd->core_power(1);
 	hdmi_msm_state->pd->enable_5v(1);
 	clk_enable(hdmi_msm_state->hdmi_app_clk);
+
+	hdmi_msm_state->pm_suspended = FALSE;
+	mutex_unlock(&hdmi_msm_state_mutex);
 	enable_irq(hdmi_msm_state->irq);
 	return 0;
 }
 #else
-#define hdmi_msm_device_device_pm_suspend   NULL
-#define hdmi_msm_device_device_pm_suspend   NULL
+#define hdmi_msm_device_pm_suspend	NULL
+#define hdmi_msm_device_pm_resume	NULL
 #endif
 
 static const struct dev_pm_ops hdmi_msm_device_pm_ops = {
@@ -2732,6 +2900,9 @@ static int __init hdmi_msm_init(void)
 
 	external_common_state = &hdmi_msm_state->common;
 	external_common_state->video_resolution = HDMI_VFRMT_1920x1080p60_16_9;
+#ifdef CONFIG_FB_MSM_HDMI_3D
+	external_common_state->switch_3d = hdmi_msm_switch_3d;
+#endif
 
 	rc = platform_driver_register(&this_driver);
 	if (rc) {

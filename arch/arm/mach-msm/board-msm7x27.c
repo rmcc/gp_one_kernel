@@ -85,12 +85,7 @@
 #define MSM_FB_SIZE		0x177000
 #define MSM_GPU_PHYS_SIZE	SZ_2M
 #define PMEM_KERNEL_EBI1_SIZE	0x1C000
-/* Using lower 1MB of OEMSBL memory for GPU_PHYS */
-#define MSM_GPU_PHYS_START_ADDR	 0xD600000ul
 #endif
-
-/* Using upper 1/2MB of Apps Bootloader memory*/
-#define MSM_PMEM_AUDIO_START_ADDR      0x1C000ul
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -1233,7 +1228,7 @@ static void msm_camera_vreg_config(int vreg_en)
 	}
 }
 
-static void config_camera_on_gpios(void)
+static int config_camera_on_gpios(void)
 {
 	int vreg_en = 1;
 
@@ -1243,6 +1238,7 @@ static void config_camera_on_gpios(void)
 
 	config_gpio_table(camera_on_gpio_table,
 		ARRAY_SIZE(camera_on_gpio_table));
+	return 0;
 }
 
 static void config_camera_off_gpios(void)
@@ -1477,6 +1473,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_USB_ANDROID
 	&usb_mass_storage_device,
 	&rndis_device,
+#ifdef CONFIG_USB_ANDROID_DIAG
+	&usb_diag_device,
+#endif
 	&android_usb_device,
 #endif
 	&msm_device_i2c,
@@ -1758,21 +1757,6 @@ static struct mmc_platform_data msm7x2x_sdc4_data = {
 };
 #endif
 
-#ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
-static void sdio_wakeup_gpiocfg_slot2(void)
-{
-	gpio_request(66, "sdio_wakeup");
-	gpio_direction_output(66, 1);
-	/*
-	 * MSM GPIO 66 will be used as both SDIO wakeup irq and
-	 * DATA_1 for slot 2. Hence, leave it to SDCC driver to
-	 * request this gpio again when it wants to use it as a
-	 * data line.
-	 */
-	gpio_free(66);
-}
-#endif
-
 static void __init msm7x2x_init_mmc(void)
 {
 	if (!machine_is_msm7x25_ffa() && !machine_is_msm7x27_ffa()) {
@@ -1791,7 +1775,7 @@ static void __init msm7x2x_init_mmc(void)
 	if (machine_is_msm7x25_surf() || machine_is_msm7x27_surf() ||
 		machine_is_msm7x27_ffa()) {
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
-		sdio_wakeup_gpiocfg_slot2();
+		msm_sdcc_setup_gpio(2, 1);
 		msm_add_sdcc(2, &msm7x2x_sdc2_data);
 #endif
 	}
@@ -1982,7 +1966,7 @@ static void __init msm7x2x_init(void)
 	kgsl_pdata.set_grp3d_async = NULL;
 	kgsl_pdata.imem_clk_name = "imem_clk";
 	kgsl_pdata.grp3d_clk_name = "grp_clk";
-	kgsl_pdata.grp2d_clk_name = NULL;
+	kgsl_pdata.grp2d0_clk_name = NULL;
 #endif
 	usb_mpp_init();
 
@@ -2116,17 +2100,12 @@ static void __init msm_msm7x2x_allocate_memory_regions(void)
 	}
 
 	size = pmem_audio_size;
-	if (size > 0xE1000) {
+	if (size) {
 		addr = alloc_bootmem(size);
 		android_pmem_audio_pdata.start = __pa(addr);
 		android_pmem_audio_pdata.size = size;
-		pr_info("allocating %lu bytes at %p (%lx physical) for audio "
-			"pmem arena\n", size, addr, __pa(addr));
-	} else if (size) {
-		android_pmem_audio_pdata.start = MSM_PMEM_AUDIO_START_ADDR;
-		android_pmem_audio_pdata.size = size;
 		pr_info("allocating %lu bytes (at %lx physical) for audio "
-			"pmem arena\n", size , MSM_PMEM_AUDIO_START_ADDR);
+			"pmem arena\n", size , __pa(addr));
 	}
 
 	size = fb_size ? : MSM_FB_SIZE;
@@ -2146,10 +2125,11 @@ static void __init msm_msm7x2x_allocate_memory_regions(void)
 	}
 #ifdef CONFIG_ARCH_MSM7X27
 	size = MSM_GPU_PHYS_SIZE;
-	kgsl_resources[1].start = MSM_GPU_PHYS_START_ADDR ;
+	addr = alloc_bootmem(size);
+	kgsl_resources[1].start = __pa(addr);
 	kgsl_resources[1].end = kgsl_resources[1].start + size - 1;
 	pr_info("allocating %lu bytes (at %lx physical) for KGSL\n",
-		size , MSM_GPU_PHYS_START_ADDR);
+		size , __pa(addr));
 
 #endif
 

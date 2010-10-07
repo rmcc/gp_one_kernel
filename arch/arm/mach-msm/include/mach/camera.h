@@ -55,7 +55,6 @@ enum msm_queut_t {
 	MSM_CAM_Q_VFE_EVT,
 	MSM_CAM_Q_VFE_MSG,
 	MSM_CAM_Q_V4L2_REQ,
-
 	MSM_CAM_Q_MAX
 };
 

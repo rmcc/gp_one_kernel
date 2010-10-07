@@ -266,7 +266,7 @@ static void mdp4_scale_setup(struct mdp4_overlay_pipe *pipe)
 	ptype = mdp4_overlay_format2type(pipe->src_format);
 
 	if (pipe->dst_h && pipe->src_h != pipe->dst_h) {
-		if (pipe->dst_h >= pipe->src_h * 8)	/* too much */
+		if (pipe->dst_h > pipe->src_h * 8)	/* too much */
 			return;
 		pipe->op_mode |= MDP4_OP_SCALEY_EN;
 
@@ -282,7 +282,7 @@ static void mdp4_scale_setup(struct mdp4_overlay_pipe *pipe)
 	}
 
 	if (pipe->dst_w && pipe->src_w != pipe->dst_w) {
-		if (pipe->dst_w >= pipe->src_w * 8)	/* too much */
+		if (pipe->dst_w > pipe->src_w * 8)	/* too much */
 			return;
 		pipe->op_mode |= MDP4_OP_SCALEX_EN;
 
@@ -1188,11 +1188,17 @@ int mdp4_overlay_req_check(uint32 id, uint32 z_order, uint32 mixer)
 }
 
 static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
-			struct mdp4_overlay_pipe **ppipe)
+			struct mdp4_overlay_pipe **ppipe,
+			struct msm_fb_data_type *mfd)
 {
 	struct mdp4_overlay_pipe *pipe;
 	struct mdp4_pipe_desc  *pd;
 	int ret, ptype;
+
+	if (mfd == NULL) {
+		pr_err("%s: mfd == NULL, -ENODEV\n", __func__);
+		return -ENODEV;
+	}
 
 	if (mixer >= MDP4_MAX_MIXER) {
 		printk(KERN_ERR "mpd_overlay_req2pipe: mixer out of range!\n");
@@ -1262,6 +1268,19 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 		}
 	}
 #endif
+	if (((req->src_rect.x + req->src_rect.w) > req->src.width) ||
+		((req->src_rect.y + req->src_rect.h) > req->src.height)) {
+		mdp4_stat.err_size++;
+		pr_err("%s invalid src rectangle\n", __func__);
+		return -ERANGE;
+	}
+
+	if (((req->dst_rect.x + req->dst_rect.w) > mfd->panel_info.xres) ||
+		((req->dst_rect.y + req->dst_rect.h) > mfd->panel_info.yres)) {
+		mdp4_stat.err_size++;
+		pr_err("%s invalid dst rectangle\n", __func__);
+		return -ERANGE;
+	}
 
 	ptype = mdp4_overlay_format2type(req->src.format);
 	if (ptype < 0) {
@@ -1454,6 +1473,9 @@ int mdp4_overlay_blt_offset(struct fb_info *info, int *off)
 #endif
 	if (ctrl->panel_mode & MDP4_PANEL_LCDC)
 		return mdp4_lcdc_overlay_blt_offset(off);
+
+	*off = -1;
+	return -EINVAL;
 }
 
 int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req)
@@ -1490,7 +1512,7 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 
 	mixer = mfd->panel_info.pdest;	/* DISPLAY_1 or DISPLAY_2 */
 
-	ret = mdp4_overlay_req2pipe(req, mixer, &pipe);
+	ret = mdp4_overlay_req2pipe(req, mixer, &pipe, mfd);
 	if (ret < 0) {
 		mutex_unlock(&mfd->dma->ov_mutex);
 		pr_err("%s: mdp4_overlay_req2pipe, ret=%d\n", __func__, ret);

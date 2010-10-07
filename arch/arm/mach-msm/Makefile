@@ -113,6 +113,7 @@ obj-$(CONFIG_ARCH_MSM8X60) += devices-msm8x60.o clock-local.o clock-8x60.o acpuc
 obj-$(CONFIG_ARCH_MSM8X60) += clock-8x60_mxo.o clock-rpm.o spm.o restart.o
 obj-$(CONFIG_ARCH_MSM8X60) += subsystem-fatal-8x60.o
 obj-$(CONFIG_ARCH_MSM8X60) += saw-regulator.o
+obj-$(CONFIG_ARCH_MSM8X60) += rpm-regulator.o
 
 ifdef CONFIG_ARCH_MSM8X60
 	obj-$(CONFIG_CPU_IDLE) += cpuidle.o
@@ -123,6 +124,7 @@ obj-$(CONFIG_MACH_MSM8X60_RUMI3) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_SIM) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_SURF) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_FFA) += board-msm8x60.o
+obj-$(CONFIG_MACH_MSM8X60_FLUID) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_QRDC) += board-qrdc.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
@@ -157,7 +159,7 @@ obj-$(CONFIG_MSM_XO) += msm_xo.o
 
 obj-$(CONFIG_SMMU)		+= smmu_driver.o smmu_driver_enum.o
 obj-$(CONFIG_SMMU_8X60)		+= board-msm8x60-smmu.o
-obj-$(CONFIG_MSM_BUS_SCALING)	+= msm_bus_core.o
+obj-$(CONFIG_MSM_BUS_SCALING)	+= msm_bus_core.o msm_bus_fabric.o
 obj-$(CONFIG_ARCH_MSM7X25) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X27) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o
@@ -168,3 +170,4 @@ obj-y	+= gpio-v2.o
 else
 obj-y	+= gpio.o
 endif
+obj-$(CONFIG_MSM_SLEEP_STATS) += msm_sleep_stats.o

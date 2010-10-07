@@ -81,6 +81,7 @@ obj-y += mddi_toshiba_wvga_pt.o
 obj-y += mddi_toshiba_wvga.o
 obj-y += mddi_sharp.o
 obj-y += mddi_orise.o
+obj-y += mddi_quickvx.o
 else
 obj-$(CONFIG_FB_MSM_MDDI_PRISM_WVGA) += mddi_prism.o
 obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_COMMON) += mddi_toshiba.o
@@ -89,6 +90,7 @@ obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_WVGA_PORTRAIT) += mddi_toshiba_wvga_pt.o
 obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_WVGA) += mddi_toshiba_wvga.o
 obj-$(CONFIG_FB_MSM_MDDI_SHARP_QVGA_128x128) += mddi_sharp.o
 obj-$(CONFIG_FB_MSM_MDDI_ORISE) += mddi_orise.o
+obj-$(CONFIG_FB_MSM_MDDI_QUICKVX) += mddi_quickvx.o
 endif
 
 obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT) += mipi_toshiba_video_wvga_pt.o
@@ -105,6 +107,7 @@ obj-$(CONFIG_FB_MSM_LCDC_TOSHIBA_WVGA_PT) += lcdc_toshiba_wvga_pt.o
 obj-$(CONFIG_FB_MSM_LCDC_SHARP_WVGA_PT) += lcdc_sharp_wvga_pt.o
 obj-$(CONFIG_FB_MSM_HDMI_ADV7520_PANEL) += adv7520.o
 obj-$(CONFIG_FB_MSM_LCDC_ST15_WXGA) += lcdc_st15.o
+obj-$(CONFIG_FB_MSM_LCDC_QRDC_WXGA) += lcdc_qrdc.o
 obj-$(CONFIG_FB_MSM_HDMI_MSM_PANEL) += hdmi_msm.o
 obj-$(CONFIG_FB_MSM_EXT_INTERFACE_COMMON) += external_common.o
 

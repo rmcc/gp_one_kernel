@@ -32,6 +32,7 @@
 #include <linux/irq.h>
 #include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
+#include <mach/usbdiag.h>
 
 /* Address of GSBI blocks */
 #define MSM_GSBI1_PHYS	0x16000000
@@ -301,17 +302,30 @@ static struct resource kgsl_resources[] = {
 		.flags = IORESOURCE_IRQ,
 	},
 	{
-		.name = "kgsl_g12_reg_memory",
+		.name = "kgsl_2d0_reg_memory",
 		.start = 0x04100000, /* Z180 base address */
 		.end = 0x04100FFF,
 		.flags = IORESOURCE_MEM,
 	},
 	{
-		.name  = "kgsl_g12_irq",
+		.name  = "kgsl_2d0_irq",
 		.start = GFX2D0_IRQ,
 		.end = GFX2D0_IRQ,
 		.flags = IORESOURCE_IRQ,
 	},
+	{
+		.name = "kgsl_2d1_reg_memory",
+		.start = 0x04200000, /* Z180 device 1 base address */
+		.end =   0x04200FFF,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name  = "kgsl_2d1_irq",
+		.start = GFX2D1_IRQ,
+		.end = GFX2D1_IRQ,
+		.flags = IORESOURCE_IRQ,
+	},
+
 };
 
 static struct kgsl_platform_data kgsl_pdata = {
@@ -324,15 +338,21 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.high_axi_3d = 200000,
 	.high_axi_2d = 160000,
 #endif
-	.max_grp2d_freq = 160*1000*1000,
-	.min_grp2d_freq = 160*1000*1000,
+	.max_grp2d_freq = 0,
+	.min_grp2d_freq = 0,
 	.set_grp2d_async = NULL, /* HW workaround, run Z180 SYNC @ 192 MHZ */
 	.max_grp3d_freq = 266667000,
 	.min_grp3d_freq = 266667000,
 	.set_grp3d_async = NULL,
 	.imem_clk_name = NULL,
 	.grp3d_clk_name = "gfx3d_clk",
-	.grp2d_clk_name = "gfx2d0_clk",
+#ifdef CONFIG_MSM_KGSL_2D
+	.grp2d0_clk_name = "gfx2d0_clk",
+	.grp2d1_clk_name = "gfx2d1_clk",
+#else
+	.grp2d0_clk_name = NULL,
+	.grp2d1_clk_name = NULL,
+#endif
 };
 
 struct platform_device msm_device_kgsl = {
@@ -715,6 +735,7 @@ static struct msm_rotator_platform_data rotator_pdata = {
 	.number_of_clocks = ARRAY_SIZE(rotator_clocks),
 	.hardware_version_number = 0x01010307,
 	.rotator_clks = rotator_clocks,
+	.regulator_name = "fs_rot",
 };
 
 struct platform_device msm_rotator_device = {
@@ -728,6 +749,26 @@ struct platform_device msm_rotator_device = {
 };
 #endif
 
+
+#ifdef CONFIG_FB_MSM_TVOUT
+static struct resource msm_tvenc_resources[] = {
+	{
+		.name   = "tvenc",
+		.start  = TVENC_HW_BASE,
+		.end    = TVENC_HW_BASE + PAGE_SIZE - 1,
+		.flags  = IORESOURCE_MEM,
+	}
+};
+
+static struct resource tvout_device_resources[] = {
+	{
+		.name  = "tvout_device_irq",
+		.start = TV_ENC_IRQ,
+		.end   = TV_ENC_IRQ,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+#endif
 static void __init msm_register_device(struct platform_device *pdev, void *data)
 {
 	int ret;
@@ -746,6 +787,22 @@ static struct platform_device msm_lcdc_device = {
 	.id     = 0,
 };
 
+#ifdef CONFIG_FB_MSM_TVOUT
+static struct platform_device msm_tvenc_device = {
+	.name   = "tvenc",
+	.id     = 0,
+	.num_resources  = ARRAY_SIZE(msm_tvenc_resources),
+	.resource       = msm_tvenc_resources,
+};
+
+static struct platform_device msm_tvout_device = {
+	.name = "tvout_device",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(tvout_device_resources),
+	.resource = tvout_device_resources,
+};
+#endif
+
 void __init msm_fb_register_device(char *name, void *data)
 {
 	if (!strncmp(name, "mdp", 3))
@@ -754,6 +811,12 @@ void __init msm_fb_register_device(char *name, void *data)
 		msm_register_device(&msm_lcdc_device, data);
 	else if (!strncmp(name, "mipi_dsi", 8))
 		msm_register_device(&msm_mipi_dsi_device, data);
+#ifdef CONFIG_FB_MSM_TVOUT
+	else if (!strncmp(name, "tvenc", 5))
+		msm_register_device(&msm_tvenc_device, data);
+	else if (!strncmp(name, "tvout_device", 12))
+		msm_register_device(&msm_tvout_device, data);
+#endif
 	else
 		printk(KERN_ERR "%s: unknown device! %s\n", __func__, name);
 }
@@ -828,6 +891,73 @@ int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
 }
 #endif
 
+#ifdef CONFIG_USB_ANDROID_DIAG
+#define PID_MAGIC_ID		0x71432909
+#define SERIAL_NUM_MAGIC_ID	0x61945374
+#define SERIAL_NUMBER_LENGTH	127
+#define DLOAD_USB_BASE_ADD	0x2A05F0C8
+
+static struct magic_num_struct {
+	uint32_t pid;
+	uint32_t serial_num;
+};
+
+static struct dload_struct {
+	uint32_t	reserved1;
+	uint32_t	reserved2;
+	uint32_t	reserved3;
+	uint16_t	reserved4;
+	uint16_t	pid;
+	char		serial_number[SERIAL_NUMBER_LENGTH];
+	uint16_t	reserved5;
+	struct magic_num_struct
+			magic_struct;
+};
+
+static int usb_diag_update_pid_and_serial_num(uint32_t pid, const char *snum)
+{
+	struct dload_struct __iomem *dload = 0;
+
+	dload = ioremap(DLOAD_USB_BASE_ADD, sizeof(*dload));
+	if (!dload) {
+		pr_err("%s: cannot remap I/O memory region: %08x\n",
+					__func__, DLOAD_USB_BASE_ADD);
+		return -ENXIO;
+	}
+
+	pr_debug("%s: dload:%p pid:%x serial_num:%s\n",
+				__func__, dload, pid, snum);
+	/* update pid */
+	dload->magic_struct.pid = PID_MAGIC_ID;
+	dload->pid = pid;
+
+	/* update serial number */
+	dload->magic_struct.serial_num = 0;
+	if (!snum)
+		return 0;
+
+	dload->magic_struct.serial_num = SERIAL_NUM_MAGIC_ID;
+	strncpy(dload->serial_number, snum, SERIAL_NUMBER_LENGTH);
+	dload->serial_number[SERIAL_NUMBER_LENGTH - 1] = '\0';
+
+	iounmap(dload);
+
+	return 0;
+}
+
+struct usb_diag_platform_data usb_diag_pdata = {
+	.update_pid_and_serial_num = usb_diag_update_pid_and_serial_num,
+};
+
+struct platform_device usb_diag_device = {
+	.name	= "usb_diag",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &usb_diag_pdata,
+	},
+};
+#endif
+
 struct platform_device msm_device_smd = {
 	.name           = "msm_smd",
 	.id             = -1,
@@ -861,7 +991,15 @@ struct platform_device msm_device_vidc = {
 
 
 struct clk msm_clocks_8x60[] = {
+	CLK_RPM("afab_clk",		AFAB_CLK,		NULL, CLK_MIN),
+	CLK_RPM("cfpb_clk",		CFPB_CLK,		NULL, CLK_MIN),
+	CLK_RPM("dfab_clk",		DFAB_CLK,		NULL, CLK_MIN),
 	CLK_RPM("ebi1_clk",		EBI1_CLK,		NULL, CLK_MIN),
+	CLK_RPM("mmfab_clk",		MMFAB_CLK,		NULL, CLK_MIN),
+	CLK_RPM("mmfpb_clk",		MMFPB_CLK,		NULL, CLK_MIN),
+	CLK_RPM("sfab_clk",		SFAB_CLK,		NULL, CLK_MIN),
+	CLK_RPM("sfpb_clk",		SFPB_CLK,		NULL, CLK_MIN),
+	CLK_RPM("smi_clk",		SMI_CLK,		NULL, CLK_MIN),
 
 	CLK_8X60("gsbi_uart_clk",	GSBI1_UART_CLK,		NULL, 0),
 	CLK_8X60("gsbi_uart_clk",	GSBI2_UART_CLK,		NULL, 0),

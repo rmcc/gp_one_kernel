@@ -271,7 +271,6 @@ struct msm_frame_t {
 	uint32_t y_off;
 	uint32_t cbcr_off;
 	int fd;
-
 	void *cropinfo;
 	int croplen;
 };

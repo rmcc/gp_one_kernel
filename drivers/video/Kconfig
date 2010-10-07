@@ -2308,6 +2308,11 @@ config FB_MSM_MDDI_ORISE
 	select FB_MSM_MDDI
 	default n
 
+config FB_MSM_MDDI_QUICKVX
+	bool
+	select FB_MSM_MDDI
+	default n
+
 config FB_MSM_MDDI_AUTO_DETECT
 	bool
 	select FB_MSM_MDDI
@@ -2329,6 +2334,21 @@ config FB_MSM_LCDC_ST15_PANEL
     select FB_MSM_LCDC_ST15_WXGA
     ---help---
       Support for ST1.5 WXGA (1366x768) panel
+
+config FB_MSM_LCDC_QRDC_WXGA
+    bool
+    select FB_MSM_LCDC_PANEL
+    default n
+
+config FB_MSM_LCDC_QRDC_PANEL
+    depends on FB_MSM_LCDC_HW
+    bool "LCDC QRDC Panel"
+    select FB_MSM_LCDC_QRDC_WXGA
+    ---help---
+      Support for QRDC WXGA (1366x768) panel.
+      This will select the on-board WXGA display
+      used on the Quanta QRDC smartbook
+      reference design.
 
 config FB_MSM_LCDC_PRISM_WVGA
 	bool
@@ -2511,6 +2531,10 @@ config FB_MSM_HDMI_COMMON
 	bool
 	default n
 
+config FB_MSM_HDMI_3D
+	bool
+	default n
+
 config FB_MSM_HDMI_ADV7520_PANEL
 	depends on FB_MSM_MDP40 && FB_MSM_OVERLAY
         bool "LCDC HDMI ADV7520 720p Panel"
@@ -2536,6 +2560,7 @@ config FB_MSM_HDMI_MSM_PANEL
 	select FB_MSM_DTV
         select FB_MSM_EXT_INTERFACE_COMMON
 	select FB_MSM_HDMI_COMMON
+	select FB_MSM_HDMI_3D
 	default n
 	---help---
 	  Support for 480p/720p/1080i/1080p output through MSM HDMI

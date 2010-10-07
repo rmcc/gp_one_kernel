@@ -68,6 +68,7 @@ config ARCH_MSM8X60
 	select MSM_RPM
 	select MSM_XO
 	select MSM_GPIOMUX
+	select MSM_BUS_SCALING
 
 endchoice
 
@@ -292,7 +293,6 @@ config MACH_MSM8X60_RUMI3
 	depends on ARCH_MSM8X60
 	default n
 	bool "MSM8x60 RUMI3"
-	select SMP_PARALLEL_START
 	help
 	  Support for the Qualcomm MSM8x60 RUMI3 emulator.
 
@@ -300,7 +300,6 @@ config MACH_MSM8X60_SIM
 	depends on ARCH_MSM8X60
 	default n
 	bool "MSM8x60 Simulator"
-	select SMP_PARALLEL_START
 	help
 	  Support for the Qualcomm MSM8x60 simulator.
 
@@ -308,7 +307,6 @@ config MACH_MSM8X60_SURF
 	depends on ARCH_MSM8X60
 	default n
 	bool "MSM8x60 SURF"
-	select SMP_PARALLEL_START
 	help
 	  Support for the Qualcomm MSM8x60 SURF eval board.
 
@@ -316,7 +314,6 @@ config MACH_MSM8X60_FFA
 	depends on ARCH_MSM8X60
 	default n
 	bool "MSM8x60 FFA"
-	select SMP_PARALLEL_START
 	help
 	  Support for the Qualcomm MSM8x60 FFA eval board.
 
@@ -324,9 +321,18 @@ config MACH_MSM8X60_QRDC
 	depends on ARCH_MSM8X60
 	default n
 	bool "MSM8x60 QRDC"
-	select SMP_PARALLEL_START
 	help
 	  Support for the Qualcomm MSM8x60 QRDC board.
+
+config MACH_MSM8X60_FLUID
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 FLUID"
+	help
+	  Support for the Qualcomm MSM8x60 FLUID platform. The FLUID is an
+	  8x60 target which has a form factor that is much closer to that
+	  of a phone than other targets. It also has a new display and
+	  touchscreen controller.
 
 endmenu
 
@@ -747,13 +753,6 @@ config MSM_SDIO_CTL
 	default y
 	help
 	  Provides a binay SDIO muxed control port interface.
-
-config MSM_SDIO_CTL_DEBUG
-	bool "SDIO CTL DEBUG Enable"
-	depends on MSM_SDIO_CTL
-	default y
-	help
-	  Support for debugging the SDIO Control Driver
 
 config MSM_ONCRPCROUTER
 	depends on MSM_SMD
@@ -1253,4 +1252,9 @@ config MSM_WATCHDOG_DEBUG
 	help
 		This makes the target enter download mode when it is reset by
 		the watchdog. Provides debugging support with watchdog enabled
+
+config MSM_SLEEP_STATS
+	bool "Enable exporting of MSM sleep stats to userspace"
+	depends on CPU_IDLE
+	default n
 endif

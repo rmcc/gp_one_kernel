@@ -1,6 +1,6 @@
 /* linux/arch/arm/mach-msm/rpc_hsusb.c
  *
- * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
  *
  * All source code in this file is licensed under the following license except
  * where indicated.
@@ -90,7 +90,8 @@ static int msm_hsusb_init_rpc_ids(unsigned long vers)
 static int msm_chg_init_rpc(unsigned long vers)
 {
 	if (((vers & RPC_VERSION_MAJOR_MASK) == 0x00010000) ||
-	    ((vers & RPC_VERSION_MAJOR_MASK) == 0x00020000)) {
+	    ((vers & RPC_VERSION_MAJOR_MASK) == 0x00020000) ||
+	    ((vers & RPC_VERSION_MAJOR_MASK) == 0x00030000)) {
 		chg_ep = msm_rpc_connect_compatible(MSM_RPC_CHG_PROG, vers,
 						     MSM_RPC_UNINTERRUPTIBLE);
 		if (IS_ERR(chg_ep))
@@ -166,6 +167,10 @@ int msm_chg_rpc_connect(void)
 		pr_debug("%s: chg_ep already connected\n", __func__);
 		return 0;
 	}
+
+	chg_vers = 0x00030001;
+	if (!msm_chg_init_rpc(chg_vers))
+		goto chg_found;
 
 	chg_vers = 0x00020001;
 	if (!msm_chg_init_rpc(chg_vers))
@@ -573,6 +578,33 @@ int msm_hsusb_disable_pmic_ulpidata0(void)
 	return msm_hsusb_pmic_ulpidata0_config(0);
 }
 EXPORT_SYMBOL(msm_hsusb_disable_pmic_ulpidata0);
+
+
+/* wrapper for sending pid and serial# info to bootloader */
+int usb_diag_update_pid_and_serial_num(uint32_t pid, const char *snum)
+{
+	int ret;
+
+	ret = msm_hsusb_send_productID(pid);
+	if (ret)
+		return ret;
+
+	if (!snum) {
+		ret = msm_hsusb_is_serial_num_null(1);
+		if (ret)
+			return ret;
+	}
+
+	ret = msm_hsusb_is_serial_num_null(0);
+	if (ret)
+		return ret;
+	ret = msm_hsusb_send_serial_number(snum);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 
 #ifdef CONFIG_USB_GADGET_MSM_72K
 /* charger api wrappers */

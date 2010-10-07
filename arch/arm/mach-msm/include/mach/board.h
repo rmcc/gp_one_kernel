@@ -57,7 +57,7 @@ struct msm_camera_io_ext {
 	uint32_t camifpadsz;
 };
 
-struct msm_camera_device_platform_data{
+struct msm_camera_device_platform_data {
 	void (*camera_gpio_on) (void);
 	void (*camera_gpio_off)(void);
 	uint8_t snum;
@@ -147,6 +147,7 @@ struct lcdc_platform_data {
 };
 
 struct tvenc_platform_data {
+	int poll;
 	int (*pm_vid_en)(int on);
 };
 

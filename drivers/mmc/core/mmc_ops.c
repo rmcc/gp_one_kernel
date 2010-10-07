@@ -409,6 +409,7 @@ int mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value)
 	if (err)
 		return err;
 
+	mmc_delay(1);
 	/* Must check status to be sure of no errors */
 	do {
 		err = mmc_send_status(card, &status);
@@ -493,11 +494,13 @@ static int mmc_bustest_write(struct mmc_host *host,
 	data.flags = MMC_DATA_WRITE;
 	data.sg = &sg;
 	data.sg_len = 1;
+	data.timeout_ns = card->csd.tacc_ns * 10;
+	data.timeout_clks = card->csd.tacc_clks * 10;
 
 	test_pat[0] = bustest_send_pat[buswidth];
 	mmc_set_bus_width(card->host, buswidth);
 	sg_init_one(&sg, test_pat, 4);
-	mmc_set_data_timeout(&data, card);
+
 	mmc_wait_for_req(host, &mrq);
 
 	pr_debug("%s: Test Pattern sent: 0x%x\n", __func__, test_pat[0]);
