@@ -16,6 +16,7 @@
  */
 #include <linux/module.h>
 #include <mach/irqs.h>
+#include <asm/mach-types.h>
 #include "gpiomux.h"
 
 #define CONSOLE_UART	(GPIOMUX_FUNC_2 | GPIOMUX_DRV_8MA | GPIOMUX_VALID)
@@ -43,6 +44,19 @@
 #endif
 
 #define PS_HOLD	(GPIOMUX_FUNC_1 | GPIOMUX_DRV_12MA | GPIOMUX_VALID)
+
+#define USB_SWITCH_EN_ACTV_CFG		(GPIOMUX_FUNC_GPIO | GPIOMUX_DRV_2MA |\
+					 GPIOMUX_PULL_NONE | GPIOMUX_VALID)
+#define USB_SWITCH_CNTL_ACTV_CFG	(GPIOMUX_FUNC_GPIO | GPIOMUX_DRV_2MA |\
+					 GPIOMUX_PULL_NONE | GPIOMUX_VALID)
+#define USB_HUB_RESET_ACTV_CFG		(GPIOMUX_FUNC_GPIO | GPIOMUX_DRV_2MA |\
+					 GPIOMUX_PULL_NONE | GPIOMUX_VALID)
+#define USB_SWITCH_EN_SUSP_CFG		(GPIOMUX_FUNC_GPIO | GPIOMUX_VALID |\
+					 GPIOMUX_PULL_DOWN)
+#define USB_SWITCH_CNTL_SUSP_CFG	(GPIOMUX_FUNC_GPIO | GPIOMUX_VALID |\
+					 GPIOMUX_PULL_DOWN)
+#define USB_HUB_RESET_SUSP_CFG		(GPIOMUX_FUNC_GPIO | GPIOMUX_VALID |\
+					 GPIOMUX_PULL_DOWN)
 
 #define EBI2_A_D	(GPIOMUX_FUNC_1 | GPIOMUX_PULL_UP | GPIOMUX_DRV_8MA |\
 			 GPIOMUX_VALID)
@@ -114,6 +128,21 @@
 
 #define SDCC5_SUSPEND_CONFIG (GPIOMUX_VALID | GPIOMUX_PULL_DOWN)
 
+#define AUX_PCM_ACTIVE_CONFIG (GPIOMUX_VALID | GPIOMUX_PULL_NONE\
+					| GPIOMUX_FUNC_1 | GPIOMUX_DRV_2MA)
+
+#define AUX_PCM_SUSPEND_CONFIG    (GPIOMUX_VALID | GPIOMUX_PULL_NONE)
+
+#ifdef CONFIG_SERIAL_MSM_HS
+#define UART1DM_ACTIVE     (GPIOMUX_VALID | GPIOMUX_FUNC_1 |		\
+			    GPIOMUX_DRV_8MA | GPIOMUX_PULL_NONE)
+#define UART1DM_SUSPENDED  (GPIOMUX_VALID | GPIOMUX_FUNC_GPIO |		\
+			    GPIOMUX_DRV_2MA | GPIOMUX_PULL_DOWN)
+#else
+#define UART1DM_ACTIVE     0
+#define UART1DM_SUSPENDED  0
+#endif
+
 static struct msm_gpiomux_config msm_gpiomux_configs[NR_GPIO_IRQS] = {
 	[33] = {
 		.suspended = GSBI1,
@@ -142,11 +171,32 @@ static struct msm_gpiomux_config msm_gpiomux_configs[NR_GPIO_IRQS] = {
 	[48] = {
 		.suspended = GSBI4,
 	},
+	[53] = { /* UARTDM_TX */
+		.active    = UART1DM_ACTIVE,
+		.suspended = UART1DM_SUSPENDED,
+	},
+	[54] = { /* UARTDM_RX */
+		.active    = UART1DM_ACTIVE,
+		.suspended = UART1DM_SUSPENDED,
+	},
+	[55] = { /* UARTDM_CTS */
+		.active    = UART1DM_ACTIVE,
+		.suspended = UART1DM_SUSPENDED,
+	},
+	[56] = { /* UARTDM_RFR */
+		.active    = UART1DM_ACTIVE,
+		.suspended = UART1DM_SUSPENDED,
+	},
 	[59] = {
 		.suspended = GSBI7,
 	},
 	[60] = {
 		.suspended = GSBI7,
+	},
+	[61] = {
+		.active = GPIOMUX_PULL_NONE | GPIOMUX_DRV_2MA |
+				GPIOMUX_VALID | GPIOMUX_FUNC_GPIO,
+		.suspended = GPIOMUX_PULL_NONE | GPIOMUX_VALID,
 	},
 	[64] = {
 		.suspended = GSBI8,
@@ -156,6 +206,22 @@ static struct msm_gpiomux_config msm_gpiomux_configs[NR_GPIO_IRQS] = {
 	},
 	[92] = {
 		.suspended = PS_HOLD,
+	},
+	[111] = {
+		.active = AUX_PCM_ACTIVE_CONFIG,
+		.suspended = AUX_PCM_SUSPEND_CONFIG
+	},
+	[112] = {
+		.active = AUX_PCM_ACTIVE_CONFIG,
+		.suspended = AUX_PCM_SUSPEND_CONFIG
+	},
+	[113] = {
+		.active = AUX_PCM_ACTIVE_CONFIG,
+		.suspended = AUX_PCM_SUSPEND_CONFIG
+	},
+	[114] = {
+		.active = AUX_PCM_ACTIVE_CONFIG,
+		.suspended = AUX_PCM_SUSPEND_CONFIG
 	},
 	[115] = {
 		.suspended = CONSOLE_UART,
@@ -307,6 +373,15 @@ static struct msm_gpiomux_config msm_gpiomux_configs[NR_GPIO_IRQS] = {
 
 static int __init gpiomux_init(void)
 {
+	if (machine_is_msm8x60_qrdc()) {
+		msm_gpiomux_configs[34].active = USB_HUB_RESET_ACTV_CFG;
+		msm_gpiomux_configs[34].suspended = USB_HUB_RESET_SUSP_CFG;
+		msm_gpiomux_configs[131].active = USB_SWITCH_CNTL_ACTV_CFG;
+		msm_gpiomux_configs[131].suspended = USB_SWITCH_CNTL_SUSP_CFG;
+		msm_gpiomux_configs[132].active = USB_SWITCH_EN_ACTV_CFG;
+		msm_gpiomux_configs[132].suspended = USB_SWITCH_EN_SUSP_CFG;
+	}
+
 	return msm_gpiomux_init(msm_gpiomux_configs, NR_GPIO_IRQS);
 }
 postcore_initcall(gpiomux_init);

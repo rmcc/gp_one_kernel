@@ -63,6 +63,7 @@
 #include <mach/msm_battery.h>
 #include <mach/msm_hsusb.h>
 #include <mach/msm_xo.h>
+#include <mach/tpm_st_i2c.h>
 #ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
 #endif
@@ -78,6 +79,7 @@
 #include "rpm_log.h"
 #include "timer.h"
 #include "saw-regulator.h"
+#include "socinfo.h"
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
 
@@ -333,8 +335,9 @@ static int msm_hsusb_ldo_init(int init)
 			return PTR_ERR(vdd_cx);
 		}
 
+		regulator_set_voltage(vdd_cx,   1100000, 1100000);
 		regulator_set_voltage(ldo7_1p8, 1800000, 1800000);
-		regulator_set_voltage(ldo6_3p3, 3075000, 3075000);
+		regulator_set_voltage(ldo6_3p3, 3050000, 3050000);
 	} else {
 		regulator_put(ldo6_3p3);
 		regulator_put(ldo7_1p8);
@@ -481,6 +484,90 @@ static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init)
 	return 0;
 }
 #endif
+#define USB_SWITCH_EN_GPIO	132		/* !CS of analog switch */
+#define USB_SWITCH_CNTL_GPIO	131		/* 0: Host, 1: Peripheral */
+#define USB_HUB_RESET_GPIO	34		/* 0: HUB is RESET */
+
+static int msm_otg_init_analog_switch_gpio(int on)
+{
+	int rc = 0;
+
+	if (on) {
+		/* USB SWITCH ENABLE*/
+		rc = gpio_request(USB_SWITCH_EN_GPIO, "USB_SWITCH_ENABLE");
+		if (rc) {
+			pr_err("%s: SW_EN gpio %d request failed\n", __func__,
+					USB_SWITCH_EN_GPIO);
+			return rc;
+		}
+
+		/* USB SWITCH CONTROL */
+		rc = gpio_request(USB_SWITCH_CNTL_GPIO, "USB_SWITCH_CONTROL");
+		if (rc) {
+			pr_err("%s: SW_CNTL gpio %d request failed\n", __func__,
+					USB_SWITCH_CNTL_GPIO);
+			goto fail_gpio_usb_switch_en;
+		}
+
+		/* USB HUB RESET */
+		rc = gpio_request(USB_HUB_RESET_GPIO, "USB_HUB_RESET");
+		if (rc) {
+			pr_err("%s: HUB_RESET gpio %d request failed\n",
+					__func__, USB_HUB_RESET_GPIO);
+			goto fail_gpio_usb_switch_cntl;
+		}
+		/* Set direction of USB SWITCH ENABLE gpio */
+		rc = gpio_direction_output(USB_SWITCH_EN_GPIO, 0);
+		if (rc) {
+			pr_err("%s: gpio_direction_output failed for %d\n",
+						USB_SWITCH_EN_GPIO, __func__);
+			goto fail_gpio_usb_hub_reset;
+		}
+		/* Set direction of USB SWITCH CONTROL gpio */
+		rc = gpio_direction_output(USB_SWITCH_CNTL_GPIO, 0);
+		if (rc) {
+			pr_err("%s: gpio_direction_output failed for %d\n",
+					USB_SWITCH_CNTL_GPIO, __func__);
+			goto fail_gpio_usb_hub_reset;
+		}
+		/* Set direction of USB HUB RESET gpio */
+		rc = gpio_direction_output(USB_HUB_RESET_GPIO, 0);
+		if (rc) {
+			pr_err("%s: gpio_direction_output failed for %d\n",
+						USB_HUB_RESET_GPIO, __func__);
+			goto fail_gpio_usb_hub_reset;
+		}
+		return rc;
+	}
+
+fail_gpio_usb_hub_reset:
+	gpio_free(USB_HUB_RESET_GPIO);
+fail_gpio_usb_switch_cntl:
+	gpio_free(USB_SWITCH_CNTL_GPIO);
+fail_gpio_usb_switch_en:
+	gpio_free(USB_SWITCH_EN_GPIO);
+
+	return rc;
+}
+
+static void msm_otg_setup_analog_switch_gpio(enum usb_switch_control mode)
+{
+	switch (mode) {
+	case USB_SWITCH_HOST:
+		/* Configure analog switch as USB host. */
+		gpio_set_value(USB_SWITCH_EN_GPIO, 0);
+		gpio_set_value(USB_SWITCH_CNTL_GPIO, 0);
+		/* Bring HUB out of RESET */
+		gpio_set_value(USB_HUB_RESET_GPIO, 1);
+		break;
+
+	case USB_SWITCH_DISABLE:
+	default:
+		/* Disable Switch */
+		gpio_set_value(USB_SWITCH_EN_GPIO, 1);
+		gpio_set_value(USB_HUB_RESET_GPIO, 0);
+	}
+}
 #if defined(CONFIG_USB_GADGET_MSM_72K) || defined(CONFIG_USB_EHCI_MSM)
 static struct msm_otg_platform_data msm_otg_pdata = {
 	/* if usb link is in sps there is no need for
@@ -491,6 +578,8 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pemp_level		 = PRE_EMPHASIS_WITH_20_PERCENT,
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.se1_gating		 = SE1_GATING_DISABLE,
+	.init_gpio		 = msm_otg_init_analog_switch_gpio,
+	.setup_gpio		 = msm_otg_setup_analog_switch_gpio,
 #ifdef CONFIG_USB_EHCI_MSM
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
@@ -498,6 +587,8 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.pmic_notif_init         = msm_hsusb_pmic_notif_init,
 	.pmic_notif_deinit         = msm_hsusb_pmic_notif_deinit,
 #endif
+	.otg_mode		= OTG_USER_CONTROL,
+	.usb_mode		= USB_HOST_MODE,
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_enable		 = msm_hsusb_ldo_enable,
 };
@@ -1883,6 +1974,97 @@ static struct i2c_board_info msm_i2c_gsbi3_tdisc_info[] = {
 };
 #endif
 
+#define TPM_PWR_EN_GPIO 94
+#define TPM_RESET_GPIO 66
+#define TPM_DATA_AVAIL_GPIO 67
+#define TPM_ACCEPT_CMD_GPIO 68
+
+struct tpm_gpio {
+	int gpio;
+	const char *name;
+};
+static struct tpm_gpio tpm_gpios[] = {
+	{
+		.gpio = TPM_PWR_EN_GPIO,
+		.name = "tpm_pwr_en",
+	},
+	{
+		.gpio = TPM_RESET_GPIO,
+		.name = "tpm_reset",
+	},
+	{
+		.gpio = TPM_ACCEPT_CMD_GPIO,
+		.name = "tpm_accept_cmd",
+	},
+	{
+		.gpio = TPM_DATA_AVAIL_GPIO,
+		.name = "tpm_data_avail",
+	},
+};
+
+static void tpm_st_i2c_gpio_release(void)
+{
+	int i;
+
+	gpio_set_value_cansleep(TPM_RESET_GPIO, 0);
+	gpio_set_value_cansleep(TPM_PWR_EN_GPIO, 0);
+	for (i = 0; i < ARRAY_SIZE(tpm_gpios); i++)
+		gpio_free(tpm_gpios[i].gpio);
+}
+
+static int tpm_st_i2c_gpio_setup(void)
+{
+	int rc = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(tpm_gpios); i++) {
+		rc = gpio_request(tpm_gpios[i].gpio, tpm_gpios[i].name);
+		if (rc) {
+			pr_err("%s: gpio request failed for gpio #%d, %s",
+			       __func__, GPIO_PIN(tpm_gpios[i].gpio),
+			       tpm_gpios[i].name);
+			goto free_gpios;
+		}
+	}
+
+	rc = gpio_direction_output(TPM_RESET_GPIO, 0);
+	if (rc) {
+		pr_err("%s: failed to setup tpm_reset\n", __func__);
+		goto free_gpios;
+	}
+	rc = gpio_direction_output(TPM_PWR_EN_GPIO, 1);
+	if (rc) {
+		pr_err("%s: failed to set tpm_pwr_en\n", __func__);
+		goto free_gpios;
+	}
+	msleep(1);
+	gpio_set_value_cansleep(TPM_RESET_GPIO, 1);
+	msleep(1);
+
+	return rc;
+
+free_gpios:
+	for (i--; i >= 0; i--)
+		gpio_free(tpm_gpios[i].gpio);
+	return rc;
+}
+
+static struct tpm_st_i2c_platform_data tpm_st_i2c_data = {
+	.accept_cmd_gpio = TPM_ACCEPT_CMD_GPIO,
+	.data_avail_gpio = TPM_DATA_AVAIL_GPIO,
+	.accept_cmd_irq = MSM_GPIO_TO_INT(TPM_ACCEPT_CMD_GPIO),
+	.data_avail_irq = MSM_GPIO_TO_INT(TPM_DATA_AVAIL_GPIO),
+	.gpio_setup = tpm_st_i2c_gpio_setup,
+	.gpio_release = tpm_st_i2c_gpio_release,
+};
+
+static struct i2c_board_info msm_i2c_gsbi3_tpm_info[] = {
+	{
+		I2C_BOARD_INFO("tpm_st_i2c", 0x13),
+		.platform_data = &tpm_st_i2c_data,
+	},
+};
+
 static struct regulator *vreg_timpani_1;
 static struct regulator *vreg_timpani_2;
 
@@ -2245,6 +2427,11 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI3_QUP_I2C_BUS_ID,
 		msm_i2c_gsbi3_qci_input_info,
 		ARRAY_SIZE(msm_i2c_gsbi3_qci_input_info),
+	},
+	{
+		MSM_GSBI3_QUP_I2C_BUS_ID,
+		msm_i2c_gsbi3_tpm_info,
+		ARRAY_SIZE(msm_i2c_gsbi3_tpm_info),
 	},
 };
 #endif /* CONFIG_I2C */
@@ -3224,6 +3411,11 @@ static void __init msm8x60_init(void)
 #ifdef CONFIG_MSM_RPM
 	BUG_ON(msm_rpm_init(&msm_rpm_data));
 #endif
+
+	if (socinfo_init() < 0)
+		printk(KERN_ERR "%s: socinfo_init() failed!\n",
+		       __func__);
+
 	msm_clock_init(msm_clocks_8x60, msm_num_clocks_8x60);
 	/* initialize SPM before acpuclock as the latter calls into SPM
 	 * driver to set ACPU voltages.

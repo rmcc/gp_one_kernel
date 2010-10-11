@@ -405,7 +405,10 @@ static void msm_timer_set_mode(enum clock_event_mode mode,
 		clock_state->stopped_tick =
 			msm_read_timer_count(clock, LOCAL_TIMER) +
 			clock_state->sleep_offset;
-		writel(0, clock->regbase + TIMER_ENABLE);
+#ifdef CONFIG_ARCH_MSM_SCORPIONMP
+		if (clock != &msm_clocks[MSM_CLOCK_DGT])
+#endif
+			writel(0, clock->regbase + TIMER_ENABLE);
 		if (clock != &msm_clocks[MSM_CLOCK_GPT]) {
 			gpt_state->in_sync = 0;
 			writel(0, msm_clocks[MSM_CLOCK_GPT].regbase +
@@ -952,7 +955,7 @@ unsigned long long sched_clock(void)
 	clock = &msm_clocks[MSM_GLOBAL_TIMER];
 	cs = &clock->clocksource;
 
-	ticks  = cs->read(clock);
+	ticks  = cs->read(cs);
 
 	spin_lock_irqsave(&msm_timer_sched_clock_lock, irq_flags);
 	delta = (ticks - last_ticks) & cs->mask;
@@ -1018,6 +1021,9 @@ static void __init msm_timer_init(void)
 
 		clockevents_register_device(ce);
 	}
+#ifdef CONFIG_ARCH_MSM_SCORPIONMP
+	writel(1, msm_clocks[MSM_CLOCK_DGT].regbase + TIMER_ENABLE);
+#endif
 }
 
 #ifdef CONFIG_SMP

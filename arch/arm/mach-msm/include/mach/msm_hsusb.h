@@ -65,6 +65,11 @@ enum otg_mode {
 	OTG_VCHG,     		/* Based on VCHG interrupt */
 };
 
+/* used to configure the default mode,if otg_mode is USER_CONTROL */
+enum usb_mode {
+	USB_HOST_MODE,
+	USB_PERIPHERAL_MODE,
+};
 struct usb_function_map {
 	char name[20];
 	unsigned bit_pos;
@@ -178,8 +183,10 @@ struct msm_otg_platform_data {
 	int (*pmic_register_vbus_sn) (void (*callback)(int online));
 	void (*pmic_unregister_vbus_sn) (void (*callback)(int online));
 	int (*pmic_enable_ldo) (int);
+	int (*init_gpio)(int on);
 	void (*setup_gpio)(enum usb_switch_control mode);
 	u8      otg_mode;
+	u8	usb_mode;
 	void (*vbus_power) (unsigned phy_info, int on);
 
 	/* charger notification apis */

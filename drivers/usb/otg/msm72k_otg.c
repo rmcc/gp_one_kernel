@@ -1382,14 +1382,19 @@ static void msm_otg_sm_work(struct work_struct *w)
 #ifdef CONFIG_USB_MSM_ACA
 		set_aca_id_inputs(dev);
 #endif
-		if  (!dev->otg.host || !is_host() ||
-				(dev->pdata->otg_mode == OTG_USER_CONTROL))
-			set_bit(ID, &dev->inputs);
+		if (dev->pdata->otg_mode == OTG_USER_CONTROL) {
+			if ((dev->pdata->usb_mode == USB_PERIPHERAL_MODE) ||
+					!dev->otg.host) {
+				set_bit(ID, &dev->inputs);
+				set_bit(B_SESS_VLD, &dev->inputs);
+			}
+		} else {
+			if (!dev->otg.host || !is_host())
+				set_bit(ID, &dev->inputs);
 
-		if ((dev->otg.gadget && is_b_sess_vld()) ||
-				(dev->pdata->otg_mode == OTG_USER_CONTROL))
-			set_bit(B_SESS_VLD, &dev->inputs);
-
+			if (dev->otg.gadget && is_b_sess_vld())
+				set_bit(B_SESS_VLD, &dev->inputs);
+		}
 		spin_lock_irq(&dev->lock);
 		if ((test_bit(ID, &dev->inputs)) &&
 				!test_bit(ID_A, &dev->inputs)) {
@@ -1708,9 +1713,11 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_lock_irq(&dev->lock);
 			dev->otg.state = OTG_STATE_A_HOST;
 			spin_unlock_irq(&dev->lock);
-			if (test_bit(ID_A, &dev->inputs))
+			if (test_bit(ID_A, &dev->inputs)) {
+				atomic_set(&dev->chg_type, USB_CHG_TYPE__SDP);
 				msm_otg_set_power(&dev->otg,
 					USB_IDCHG_MIN - get_aca_bmaxpower(dev));
+			}
 		} else if (!test_bit(A_VBUS_VLD, &dev->inputs)) {
 			pr_debug("!a_vbus_vld\n");
 			msm_otg_del_timer(dev);
@@ -1783,8 +1790,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_set_power(&dev->otg,
 					USB_IDCHG_MIN - get_aca_bmaxpower(dev));
 		} else if (!test_bit(ID, &dev->inputs)) {
-			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 1);
+			atomic_set(&dev->chg_type, USB_CHG_TYPE__INVALID);
 			msm_otg_set_power(&dev->otg, 0);
+			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 1);
 		}
 		break;
 	case OTG_STATE_A_SUSPEND:
@@ -2291,6 +2299,14 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 					PM_QOS_DEFAULT_VALUE);
 	otg_pm_qos_update_axi(dev, 1);
 
+	if (dev->pdata->init_gpio) {
+		ret = dev->pdata->init_gpio(1);
+		if (ret) {
+			pr_err("%s: gpio init failed with err:%d\n",
+					__func__, ret);
+			goto free_wq;
+		}
+	}
 	/* To reduce phy power consumption and to avoid external LDO
 	 * on the board, PMIC comparators can be used to detect VBUS
 	 * session change.
@@ -2302,7 +2318,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		} else if (ret != -ENOTSUPP) {
 			pr_err("%s: pmic_notif_init() failed, err:%d\n",
 					__func__, ret);
-			goto free_wq;
+			goto free_gpio;
 		}
 	}
 	if (dev->pdata->pmic_vbus_irq)
@@ -2410,6 +2426,9 @@ free_ldo_init:
 free_pmic_notif:
 	if (dev->pmic_notif_supp && dev->pdata->pmic_notif_init)
 		dev->pdata->pmic_notif_init(&msm_otg_set_vbus_state, 0);
+free_gpio:
+	if (dev->pdata->init_gpio)
+		dev->pdata->init_gpio(0);
 free_wq:
 	destroy_workqueue(dev->wq);
 free_wlock:

@@ -44,11 +44,9 @@
 #define CLK_HALT_MSS_SMPSS_MISC_STATE_REG	REG(0x2FDC)
 #define CLK_HALT_SFPB_MISC_STATE_REG		REG(0x2FD8)
 #define CLK_TEST_REG				REG(0x2FA0)
-#define GSBI_COMMON_SIM_CLK_NS_REG		REG(0x29A0)
 #define GSBIn_HCLK_CTL_REG(n)			REG(0x29C0+(0x20*((n)-1)))
 #define GSBIn_QUP_APPS_NS_REG(n)		REG(0x29CC+(0x20*((n)-1)))
 #define GSBIn_RESET_REG(n)			REG(0x29DC+(0x20*((n)-1)))
-#define GSBIn_SIM_CLK_CTL_REG(n)		REG(0x29D8+(0x20*((n)-1)))
 #define GSBIn_UART_APPS_NS_REG(n)		REG(0x29D4+(0x20*((n)-1)))
 #define PDM_CLK_NS_REG				REG(0x2CC0)
 #define BB_PLL_ENA_SC0_REG			REG(0x34C0)
@@ -535,20 +533,6 @@ static struct clk_freq_tbl clk_tbl_gsbi_qup[] = {
 	F_END,
 };
 
-/* GSBI_SIM */
-#define NS_MASK_GSBI_SIM (BM(6, 3) | BM(1, 0))
-#define CLK_GSBI_SIM(id, ns) \
-		CLK(id, BASIC, ns, ns, NULL, NULL, 0, NULL, 0, 0, 0, \
-				B(11), NS_MASK_GSBI_SIM, 0, set_rate_basic, \
-				clk_tbl_gsbi_sim, NULL, NONE, \
-				chld_gsbi_sim_src, 0)
-#define F_GSBI_SIM(f, s, d, m, n, v) \
-		F_RAW(f, SRC_##s, 0, NS_DIVSRC(6, 3, d, 1, 0, s), 0, 0, v, NULL)
-static struct clk_freq_tbl clk_tbl_gsbi_sim[] = {
-	F_GSBI_SIM(3860000, XO_PXO, 7, 0, 0, LOW),
-	F_END,
-};
-
 /* PDM */
 #define NS_MASK_PDM (BM(1, 0))
 #define CLK_PDM(id, ns, h_r, h_c, h_b) \
@@ -809,8 +793,8 @@ static struct clk_freq_tbl clk_tbl_gfx3d[] = {
 	F_GFX3D(160000000, MM_PLL1,  0, 1,  5, NOMINAL),
 	F_GFX3D(177778000, MM_PLL1,  0, 2,  9, NOMINAL),
 	F_GFX3D(200000000, MM_PLL1,  0, 1,  4, NOMINAL),
-	F_GFX3D(228571000, MM_PLL1,  0, 2,  7, HIGH),
-	F_GFX3D(266667000, MM_PLL1,  0, 1,  3, HIGH),
+	F_GFX3D(228571000, MM_PLL1,  0, 2,  7, NOMINAL),
+	F_GFX3D(266667000, MM_PLL1,  0, 1,  3, NOMINAL),
 	F_GFX3D(320000000, MM_PLL1,  0, 2,  5, HIGH),
 	F_END,
 };
@@ -895,6 +879,7 @@ static struct clk_freq_tbl clk_tbl_mdp[] = {
 	F_MDP( 96000000, MM_GPERF, 0, 1,  4, NOMINAL),
 	F_MDP(128000000, MM_GPERF, 0, 1,  3, NOMINAL),
 	F_MDP(160000000, MM_PLL1,  0, 1,  5, NOMINAL),
+	F_MDP(177780000, MM_PLL1,  0, 2,  9, NOMINAL),
 	F_MDP(200000000, MM_PLL1,  0, 1,  4, NOMINAL),
 	F_END,
 };
@@ -927,6 +912,7 @@ static struct clk_freq_tbl clk_tbl_mdp_vsync[] = {
 			CC(6, n), MND_EN(B(5), n), v, NULL)
 static struct clk_freq_tbl clk_tbl_pixel_mdp[] = {
 	F_PIXEL_MDP(25600000, MM_GPERF, 3,   1,   5, LOW),
+	F_PIXEL_MDP(42667000, MM_GPERF, 1,   1,   9, LOW),
 	F_PIXEL_MDP(43192000, MM_GPERF, 1,  64, 569, LOW),
 	F_PIXEL_MDP(48000000, MM_GPERF, 4,   1,   2, LOW),
 	F_PIXEL_MDP(53990000, MM_GPERF, 2, 169, 601, LOW),
@@ -1132,14 +1118,6 @@ static struct clk_freq_tbl clk_tbl_pcm[] = {
 /*
  * Clock children lists
  */
-static const uint32_t chld_gsbi_sim_src[] = 	{C(GSBI1_SIM), C(GSBI2_SIM),
-						 C(GSBI3_SIM), C(GSBI4_SIM),
-						 C(GSBI4_SIM), C(GSBI5_SIM),
-						 C(GSBI5_SIM), C(GSBI6_SIM),
-						 C(GSBI7_SIM), C(GSBI8_SIM),
-						 C(GSBI9_SIM), C(GSBI10_SIM),
-						 C(GSBI11_SIM), C(GSBI12_SIM),
-						 C(NONE)};
 static const uint32_t chld_usb_fs1_src[] =	{C(USB_FS1_XCVR),
 						 C(USB_FS1_SYS), C(NONE)};
 static const uint32_t chld_usb_fs2_src[] = 	{C(USB_FS2_XCVR),
@@ -1212,44 +1190,6 @@ struct clk_local soc_clk_local_tbl_mxo[] = {
 		CLK_HALT_CFPB_STATEC_REG, HALT, 15, TEST_PER_LS(0x68)),
 	CLK_GSBI_QUP(GSBI12_QUP, GSBIn_QUP_APPS_NS_REG(12),
 		CLK_HALT_CFPB_STATEC_REG, HALT, 11, TEST_PER_LS(0x6C)),
-
-	CLK_GSBI_SIM(GSBI_SIM_SRC, GSBI_COMMON_SIM_CLK_NS_REG),
-	CLK_SLAVE(GSBI1_SIM,  GSBIn_SIM_CLK_CTL_REG(1), B(4),
-		GSBIn_RESET_REG(1), B(0), CLK_HALT_CFPB_STATEA_REG,
-		HALT, 8, GSBI_SIM_SRC,  TEST_PER_LS(0x40)),
-	CLK_SLAVE(GSBI2_SIM,  GSBIn_SIM_CLK_CTL_REG(2), B(4),
-		GSBIn_RESET_REG(2), B(0), CLK_HALT_CFPB_STATEA_REG,
-		HALT, 5, GSBI_SIM_SRC,  TEST_PER_LS(0x43)),
-	CLK_SLAVE(GSBI3_SIM,  GSBIn_SIM_CLK_CTL_REG(3), B(4),
-		GSBIn_RESET_REG(3), B(0), CLK_HALT_CFPB_STATEA_REG,
-		HALT, 1, GSBI_SIM_SRC,   TEST_PER_LS(0x47)),
-	CLK_SLAVE(GSBI4_SIM,  GSBIn_SIM_CLK_CTL_REG(4), B(4),
-		GSBIn_RESET_REG(4), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 25, GSBI_SIM_SRC,   TEST_PER_LS(0x4B)),
-	CLK_SLAVE(GSBI5_SIM,  GSBIn_SIM_CLK_CTL_REG(5), B(4),
-		GSBIn_RESET_REG(5), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 21, GSBI_SIM_SRC, TEST_PER_LS(0x4F)),
-	CLK_SLAVE(GSBI6_SIM,  GSBIn_SIM_CLK_CTL_REG(6), B(4),
-		GSBIn_RESET_REG(6), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 17, GSBI_SIM_SRC, TEST_PER_LS(0x53)),
-	CLK_SLAVE(GSBI7_SIM,  GSBIn_SIM_CLK_CTL_REG(7), B(4),
-		GSBIn_RESET_REG(7), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 13, GSBI_SIM_SRC, TEST_PER_LS(0x57)),
-	CLK_SLAVE(GSBI8_SIM,  GSBIn_SIM_CLK_CTL_REG(8), B(4),
-		GSBIn_RESET_REG(8), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 9, GSBI_SIM_SRC, TEST_PER_LS(0x5B)),
-	CLK_SLAVE(GSBI9_SIM,  GSBIn_SIM_CLK_CTL_REG(9), B(4),
-		GSBIn_RESET_REG(9), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 5, GSBI_SIM_SRC, TEST_PER_LS(0x5F)),
-	CLK_SLAVE(GSBI10_SIM, GSBIn_SIM_CLK_CTL_REG(10), B(4),
-		GSBIn_RESET_REG(10), B(0), CLK_HALT_CFPB_STATEB_REG,
-		HALT, 1, GSBI_SIM_SRC, TEST_PER_LS(0x63)),
-	CLK_SLAVE(GSBI11_SIM, GSBIn_SIM_CLK_CTL_REG(11), B(4),
-		GSBIn_RESET_REG(11), B(0), CLK_HALT_CFPB_STATEC_REG,
-		HALT, 16, GSBI_SIM_SRC, TEST_PER_LS(0x67)),
-	CLK_SLAVE(GSBI12_SIM, GSBIn_SIM_CLK_CTL_REG(12), B(4),
-		GSBIn_RESET_REG(12), B(0), CLK_HALT_CFPB_STATEC_REG,
-		HALT, 12, GSBI_SIM_SRC, TEST_PER_LS(0x6B)),
 
 	CLK_PDM(PDM, PDM_CLK_NS_REG, CLK_HALT_CFPB_STATEC_REG, HALT, 3),
 

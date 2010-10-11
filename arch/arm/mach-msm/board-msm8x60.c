@@ -77,6 +77,8 @@
 #include "rpm_log.h"
 #include "timer.h"
 #include "saw-regulator.h"
+#include "socinfo.h"
+#include "gpiomux.h"
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
 
@@ -1480,15 +1482,6 @@ static int tmg200_dev_setup(bool enable)
 			goto reg_put;
 		}
 
-		/* configure touchscreen interrupt gpio */
-		rc = gpio_tlmm_config(GPIO_CFG(TS_PEN_IRQ_GPIO, 0, GPIO_CFG_INPUT,
-					GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 0);
-		if (rc) {
-			pr_err("%s: unable to configure gpio %d\n",
-				__func__, TS_PEN_IRQ_GPIO);
-			goto reg_put;
-		}
-
 		rc = gpio_request(TS_PEN_IRQ_GPIO, "cy8ctmg200_irq_gpio");
 		if (rc) {
 			pr_err("%s: unable to request gpio %d\n",
@@ -1534,9 +1527,30 @@ static struct i2c_board_info cy8ctmg200_board_info[] = {
 };
 
 #ifdef CONFIG_SERIAL_MSM_HS
+static int configure_uart_gpios(int on)
+{
+	int ret = 0, i;
+	int uart_gpios[] = {53, 54, 55, 56};
+	for (i = 0; i < ARRAY_SIZE(uart_gpios); i++) {
+		if (on) {
+			ret = msm_gpiomux_get(uart_gpios[i]);
+			if (unlikely(ret))
+				break;
+		} else {
+			ret = msm_gpiomux_put(uart_gpios[i]);
+			if (unlikely(ret))
+				return ret;
+		}
+	}
+	if (ret)
+		for (; i >= 0; i--)
+			msm_gpiomux_put(uart_gpios[i]);
+	return ret;
+}
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
+       .gpio_config = configure_uart_gpios,
 };
 #endif
 
@@ -1921,9 +1935,9 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 	[0] = {
 		.gpio_base         = GPIO_CORE_EXPANDER_BASE,
 		.oscio_is_gpo      = false,
-		.io_pullup_ena     = 0x0400,
-		.io_pulldn_ena     = 0x4060,
-		.io_open_drain_ena = 0x0004,
+		.io_pullup_ena     = 0xCFFB,
+		.io_pulldn_ena     = 0,
+		.io_open_drain_ena = 0xCFFF,
 		.io_polarity       = 0,
 		.irq_summary       = -1, /* see fixup_i2c_configs() */
 		.irq_base          = GPIO_EXPANDER_IRQ_BASE,
@@ -1932,8 +1946,8 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 	[1] = {
 		.gpio_base         = GPIO_DOCKING_EXPANDER_BASE,
 		.oscio_is_gpo      = false,
-		.io_pullup_ena     = 0x5e46,
-		.io_pulldn_ena     = 0x81b8,
+		.io_pullup_ena     = 0,
+		.io_pulldn_ena     = 0,
 		.io_open_drain_ena = 0,
 		.io_polarity       = 0,
 		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
@@ -1961,7 +1975,7 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 		.gpio_base         = GPIO_LEFT_KB_EXPANDER_BASE,
 		.oscio_is_gpo      = false,
 		.io_pullup_ena     = 0,
-		.io_pulldn_ena     = 0x40,
+		.io_pulldn_ena     = 0,
 		.io_open_drain_ena = 0,
 		.io_polarity       = 0,
 		.irq_summary       = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
@@ -1985,83 +1999,6 @@ static struct sx150x_platform_data sx150x_data[] __initdata = {
 				     GPIO_EXPANDER_GPIO_BASE,
 	},
 };
-
-/* msm_sx150x_low_power_cfgs
- * msm_sleep_sx150xs
- *
- * This data and init function are used to put gpio-expander output lines
- * into their pre-determined low-power 'sleep' states at boot. The sleep
- * function must be deferred until a later init stage because the i2c
- * gpio expander drivers do not probe until after they are registered
- * (see register_i2c_devices) and the work-queues for those registrations
- * are processed.  It is not an error if a particular gpio cannot be obtained
- * to be slept - it is likely that, in those cases, a competing driver
- * has beaten us to the gpio and is now using it.
- *
- * gpio lines whose low-power states are input are naturally in their low-
- * power configurations once probed, see the platform data structures above.
- */
-struct sx150x_low_power_cfg {
-	unsigned gpio;
-	unsigned val;
-};
-
-static struct sx150x_low_power_cfg
-msm_sx150x_low_power_cfgs[] __initdata = {
-	{GPIO_CLASS_D1_EN,       0},
-	{GPIO_WLAN_DEEP_SLEEP_N, 0},
-	{GPIO_LVDS_SHUTDOWN_N,   0},
-	{GPIO_MS_SYS_RESET_N,    1},
-	{GPIO_CAP_TS_RESOUT_N,   1},
-	{GPIO_EXT_GPS_LNA_EN,    0},
-	{GPIO_MSM_WAKES_BT,      0},
-	{GPIO_ETHERNET_RESET_N,  0},
-	{GPIO_USB_UICC_EN,       0},
-	{GPIO_BACKLIGHT_EN,      0},
-	{GPIO_EXT_CAMIF_PWR_EN,  0},
-	{GPIO_BATT_GAUGE_EN,     0},
-	{GPIO_MIPI_DSI_RST_N,    0},
-	{GPIO_DONGLE_PWR_EN,     0},
-	{GPIO_LEFT_LED_1,        0},
-	{GPIO_LEFT_LED_2,        0},
-	{GPIO_LEFT_LED_3,        0},
-	{GPIO_LEFT_LED_WLAN,     0},
-	{GPIO_JOYSTICK_EN,       0},
-	{GPIO_CAP_TS_SLEEP,      1},
-	{GPIO_LEFT_LED_5,        0},
-	{GPIO_RIGHT_LED_1,       0},
-	{GPIO_RIGHT_LED_2,       0},
-	{GPIO_RIGHT_LED_3,       0},
-	{GPIO_RIGHT_LED_BT,      0},
-	{GPIO_WEB_CAMIF_STANDBY, 1},
-	{GPIO_COMPASS_RST_N,     0},
-	{GPIO_WEB_CAMIF_RESET_N, 0},
-	{GPIO_RIGHT_LED_5,       0},
-	{GPIO_ALTIMETER_RESET_N, 0},
-};
-
-static int __init msm_sleep_sx150xs(void)
-{
-	struct sx150x_low_power_cfg *cfgs = msm_sx150x_low_power_cfgs;
-	unsigned nelems = ARRAY_SIZE(msm_sx150x_low_power_cfgs);
-	unsigned n;
-	int rc;
-
-	for (n = 0; n < nelems; ++n) {
-		rc = gpio_request(cfgs[n].gpio, NULL);
-		if (!rc) {
-			rc = gpio_direction_output(cfgs[n].gpio, cfgs[n].val);
-			gpio_free(cfgs[n].gpio);
-		}
-
-		if (rc) {
-			printk(KERN_NOTICE "%s: failed to sleep gpio %d: %d\n",
-			       __func__, cfgs[n].gpio, rc);
-		}
-	}
-	return 0;
-}
-module_init(msm_sleep_sx150xs);
 
 #ifdef CONFIG_I2C
 static struct i2c_board_info core_expanders_i2c_info[] __initdata = {
@@ -2813,6 +2750,8 @@ static int tdisc_shinetsu_enable(void)
 
 	/* Enable the OE (output enable) gpio */
 	gpio_set_value_cansleep(GPIO_JOYSTICK_EN, 1);
+	/* voltage and gpio stabilization delay */
+	msleep(50);
 
 	return 0;
 vreg_fail:
@@ -2821,19 +2760,28 @@ vreg_fail:
 	return rc;
 }
 
-static void tdisc_shinetsu_disable(void)
+static int tdisc_shinetsu_disable(void)
 {
 	int i, rc;
 
 	for (i = 0; i < ARRAY_SIZE(vregs_tdisc_name); i++) {
 		rc = regulator_disable(vregs_tdisc[i]);
-		if (rc < 0)
+		if (rc < 0) {
 			printk(KERN_ERR "%s: vreg %s disable failed (%d)\n",
 				__func__, vregs_tdisc_name[i], rc);
+			goto tdisc_reg_fail;
+		}
 	}
 
 	/* Disable the OE (output enable) gpio */
 	gpio_set_value_cansleep(GPIO_JOYSTICK_EN, 0);
+
+	return 0;
+
+tdisc_reg_fail:
+	while (i)
+		regulator_enable(vregs_tdisc[--i]);
+	return rc;
 }
 
 static struct tdisc_abs_values tdisc_abs = {
@@ -2850,7 +2798,7 @@ static struct tdisc_platform_data tdisc_data = {
 	.tdisc_release = tdisc_shinetsu_release,
 	.tdisc_enable = tdisc_shinetsu_enable,
 	.tdisc_disable = tdisc_shinetsu_disable,
-	.tdisc_wakeup  = 1,
+	.tdisc_wakeup  = 0,
 	.tdisc_gpio = PMIC_GPIO_TDISC,
 	.tdisc_report_keys = true,
 	.tdisc_report_relative = true,
@@ -3515,16 +3463,6 @@ static uint32_t msm8x60_tlmm_cfgs[] = {
 	GPIO_CFG(PM8058_GPIO_INT, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #endif
 
-#ifdef CONFIG_SERIAL_MSM_HS
-	/* UARTDM_TX */
-	GPIO_CFG(53, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* UARTDM_RX */
-	GPIO_CFG(54, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* UARTDM_CTS */
-	GPIO_CFG(55, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	/* UARTDM_RFR */
-	GPIO_CFG(56, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-#endif
 #ifdef CONFIG_PMIC8901
 	/* PMIC8901 */
 	GPIO_CFG(PM8901_GPIO_INT, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
@@ -4527,6 +4465,24 @@ void msm_snddev_disable_amic_power(void)
 	msm_snddev_tx_route_deconfig();
 }
 
+void msm_snddev_enable_dmic_sec_power(void)
+{
+	msm_snddev_enable_dmic_power();
+
+#ifdef CONFIG_PMIC8058_OTHC
+	pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_ALWAYS_ON);
+#endif
+}
+
+void msm_snddev_disable_dmic_sec_power(void)
+{
+	msm_snddev_disable_dmic_power();
+
+#ifdef CONFIG_PMIC8058_OTHC
+	pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
+#endif
+}
+
 static struct regulator *s3;
 static struct regulator *mvs;
 
@@ -4705,20 +4661,6 @@ void msm_snddev_poweramp_off(void)
 	msm_snddev_rx_route_deconfig();
 }
 
-static uint32_t auxpcm_gpio_table[] = {
-	GPIO_CFG(111, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(112, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(113, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(114, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-};
-
-static void msm_auxpcm_init(void)
-{
-	gpio_tlmm_config(auxpcm_gpio_table[0], GPIO_CFG_ENABLE);
-	gpio_tlmm_config(auxpcm_gpio_table[1], GPIO_CFG_ENABLE);
-	gpio_tlmm_config(auxpcm_gpio_table[2], GPIO_CFG_ENABLE);
-	gpio_tlmm_config(auxpcm_gpio_table[3], GPIO_CFG_ENABLE);
-}
 #endif /* CONFIG_MSM8X60_AUDIO */
 
 static struct msm_panel_common_pdata mdp_pdata = {
@@ -5028,6 +4970,11 @@ static void __init msm8x60_init(void)
 #ifdef CONFIG_MSM_RPM
 	BUG_ON(msm_rpm_init(&msm_rpm_data));
 #endif
+
+	if (socinfo_init() < 0)
+		printk(KERN_ERR "%s: socinfo_init() failed!\n",
+		       __func__);
+
 	msm_clock_init(msm_clocks_8x60, msm_num_clocks_8x60);
 	/* initialize SPM before acpuclock as the latter calls into SPM
 	 * driver to set ACPU voltages.
@@ -5066,7 +5013,6 @@ static void __init msm8x60_init(void)
 				msm_pm_data);
 
 #ifdef CONFIG_MSM8X60_AUDIO
-	msm_auxpcm_init();
 	msm_snddev_init();
 #endif
 }

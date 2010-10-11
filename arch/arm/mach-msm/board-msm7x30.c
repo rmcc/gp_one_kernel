@@ -2317,6 +2317,19 @@ static char *usb_functions_default_adb[] = {
 	"usb_mass_storage",
 };
 
+static char *fusion_usb_functions_default[] = {
+	"diag",
+	"nmea",
+	"usb_mass_storage",
+};
+
+static char *fusion_usb_functions_default_adb[] = {
+	"diag",
+	"adb",
+	"nmea",
+	"usb_mass_storage",
+};
+
 static char *usb_functions_rndis[] = {
 	"rndis",
 };
@@ -2324,6 +2337,17 @@ static char *usb_functions_rndis[] = {
 static char *usb_functions_rndis_adb[] = {
 	"rndis",
 	"adb",
+};
+
+static char *usb_functions_rndis_diag[] = {
+	"rndis",
+	"diag",
+};
+
+static char *usb_functions_rndis_adb_diag[] = {
+	"rndis",
+	"adb",
+	"diag",
 };
 
 static char *usb_functions_all[] = {
@@ -2349,30 +2373,52 @@ static char *usb_functions_all[] = {
 
 static struct android_usb_product usb_products[] = {
 	{
-		/* DIAG + MODEM + NMEA + MSC */
 		.product_id     = 0x9026,
 		.num_functions	= ARRAY_SIZE(usb_functions_default),
 		.functions      = usb_functions_default,
 	},
 	{
-		/* MSC + CDC-ECM */
 		.product_id	= 0x9025,
 		.num_functions	= ARRAY_SIZE(usb_functions_default_adb),
 		.functions	= usb_functions_default_adb,
 	},
 	{
-		/* DIAG + RMNET */
-		.product_id	= 0xf00e,
-		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
-		.functions	= usb_functions_rndis,
+		/* RNDIS + DIAG */
+		.product_id	= 0x902C,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_diag),
+		.functions	= usb_functions_rndis_diag,
 	},
 	{
-		/* RNDIS */
-		.product_id	= 0x9024,
-		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
-		.functions	= usb_functions_rndis_adb,
+		/* RNDIS + ADB + DIAG */
+		.product_id	= 0x902D,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb_diag),
+		.functions	= usb_functions_rndis_adb_diag,
 	},
 };
+
+static struct android_usb_product fusion_usb_products[] = {
+	{
+		.product_id     = 0x9028,
+		.num_functions  = ARRAY_SIZE(fusion_usb_functions_default),
+		.functions      = fusion_usb_functions_default,
+	},
+	{
+		.product_id     = 0x9029,
+		.num_functions  = ARRAY_SIZE(fusion_usb_functions_default_adb),
+		.functions      = fusion_usb_functions_default_adb,
+	},
+	{
+		.product_id     = 0xf00e,
+		.num_functions  = ARRAY_SIZE(usb_functions_rndis),
+		.functions      = usb_functions_rndis,
+	},
+	{
+		.product_id     = 0x9024,
+		.num_functions  = ARRAY_SIZE(usb_functions_rndis_adb),
+		.functions      = usb_functions_rndis_adb,
+	},
+};
+
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns		= 1,
 	.vendor		= "Qualcomm Incorporated",
@@ -4518,8 +4564,10 @@ msm_i2c_gpio_config(int adap_id, int config_type)
 		msm_i2c_table = &msm_i2c_gpios_io[adap_id*2];
 	msm_gpios_enable(msm_i2c_table, 2);
 }
-
+/*This needs to be enabled only for OEMS*/
+#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
 static struct vreg *qup_vreg;
+#endif
 static void
 qup_i2c_gpio_config(int adap_id, int config_type)
 {
@@ -4535,6 +4583,8 @@ qup_i2c_gpio_config(int adap_id, int config_type)
 	rc = msm_gpios_enable(qup_i2c_table, 2);
 	if (rc < 0)
 		printk(KERN_ERR "QUP GPIO enable failed: %d\n", rc);
+	/*This needs to be enabled only for OEMS*/
+#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
 	if (qup_vreg) {
 		int rc = vreg_set_level(qup_vreg, 1800);
 		if (rc) {
@@ -4547,6 +4597,7 @@ qup_i2c_gpio_config(int adap_id, int config_type)
 			__func__, rc);
 		}
 	}
+#endif
 }
 
 static struct msm_i2c_platform_data msm_i2c_pdata = {
@@ -4589,11 +4640,14 @@ static void __init qup_device_i2c_init(void)
 		pr_err("failed to request I2C gpios\n");
 
 	qup_device_i2c.dev.platform_data = &qup_i2c_pdata;
+	/*This needs to be enabled only for OEMS*/
+#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
 	qup_vreg = vreg_get(NULL, "lvsw1");
 	if (IS_ERR(qup_vreg)) {
 		printk(KERN_ERR "%s: vreg get failed (%ld)\n",
 			__func__, PTR_ERR(qup_vreg));
 	}
+#endif
 }
 
 #ifdef CONFIG_I2C_SSBI
@@ -4814,8 +4868,10 @@ out:
 	return rc;
 }
 
-#if (CONFIG_CSDIO_VENDOR_ID == 0x70 && CONFIG_CSDIO_DEVICE_ID == 0x1117) && \
-	defined(CONFIG_MMC_MSM_SDC1_SUPPORT)
+#if defined(CONFIG_MMC_MSM_SDC1_SUPPORT) && \
+	defined(CONFIG_CSDIO_VENDOR_ID) && \
+	defined(CONFIG_CSDIO_DEVICE_ID) && \
+	(CONFIG_CSDIO_VENDOR_ID == 0x70 && CONFIG_CSDIO_DEVICE_ID == 0x1117)
 
 #define MBP_ON  1
 #define MBP_OFF 0
@@ -5681,12 +5737,48 @@ static void tsc2007_exit(void)
 		ARRAY_SIZE(tsc2007_config_data));
 }
 
+static int tsc2007_power_shutdown(bool enable)
+{
+	int rc;
+
+	if (enable == false) {
+		rc = vreg_enable(vreg_tsc_s2);
+		if (rc) {
+			pr_err("%s: vreg_enable failed\n", __func__);
+			return rc;
+		}
+		rc = vreg_enable(vreg_tsc_s3);
+		if (rc) {
+			pr_err("%s: vreg_enable failed\n", __func__);
+			vreg_disable(vreg_tsc_s2);
+			return rc;
+		}
+		/* Voltage settling delay */
+		msleep(20);
+	} else {
+		rc = vreg_disable(vreg_tsc_s2);
+		if (rc) {
+			pr_err("%s: vreg_disable failed\n", __func__);
+			return rc;
+		}
+		rc = vreg_disable(vreg_tsc_s3);
+		if (rc) {
+			pr_err("%s: vreg_disable failed\n", __func__);
+			vreg_enable(vreg_tsc_s2);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
 static struct tsc2007_platform_data tsc2007_ts_data = {
 	.model = 2007,
 	.x_plate_ohms = 300,
 	.irq_flags    = IRQF_TRIGGER_LOW,
 	.init_platform_hw = tsc2007_init,
 	.exit_platform_hw = tsc2007_exit,
+	.power_shutdown	  = tsc2007_power_shutdown,
 	.invert_x	  = true,
 	.invert_y	  = true,
 	/* REVISIT: Temporary fix for reversed pressure */
@@ -6033,6 +6125,15 @@ static void __init msm7x30_init(void)
 		msm_adc_pdata.dev_names = msm_adc_surf_device_names;
 		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
 	}
+
+	if (machine_is_msm8x55_surf() ||
+		machine_is_msm8x55_ffa()) {
+		android_usb_pdata.product_id = 0x9028;
+		android_usb_pdata.num_products =
+			ARRAY_SIZE(fusion_usb_products);
+		android_usb_pdata.products = fusion_usb_products;
+	}
+
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 #ifdef CONFIG_USB_EHCI_MSM
 	msm_add_host(0, &msm_usb_host_pdata);
@@ -6059,6 +6160,7 @@ static void __init msm7x30_init(void)
 	msm7x30_init_marimba();
 #ifdef CONFIG_MSM7KV2_AUDIO
 	snddev_poweramp_gpio_init();
+	msm_snddev_init();
 	aux_pcm_gpio_init();
 #endif
 
