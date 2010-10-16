@@ -1258,7 +1258,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	fbi->screen_base = fbram;
 	fbi->fix.smem_start = (unsigned long)fbram_phys;
 
+#ifndef CONFIG_FB_MSM_LCDC_HX8352
 	memset(fbi->screen_base, 0x0, fix->smem_len);
+#endif
 
 	mfd->op_enable = TRUE;
 	mfd->panel_power_on = FALSE;
