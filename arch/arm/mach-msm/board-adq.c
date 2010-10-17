@@ -540,7 +540,7 @@ static struct platform_device android_pmem_kernel_ebi1_device = {
 
 #ifdef CONFIG_SWITCH_GPIO
 static struct gpio_switch_platform_data headset_sensor_device_data = {
-	.name = "headset_sensor",
+	.name = "h2w",
 	.gpio = 40,
 	.name_on = "",
 	.name_off = "",

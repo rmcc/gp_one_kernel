@@ -54,6 +54,10 @@
 
 #define KEY(hs_key, input_key) ((hs_key << 24) | input_key)
 
+#if defined(CONFIG_SWITCH_GPIO) && defined(CONFIG_MACH_ADQ)
+#define EXTERNAL_SWITCH_DEV
+#endif
+
 enum hs_event {
 	HS_EVNT_EXT_PWR = 0,	/* External Power status        */
 	HS_EVNT_HSD,		/* Headset Detection            */
@@ -236,10 +240,14 @@ static int hs_find_key(uint32_t hscode)
 static void
 report_headset_switch(struct input_dev *dev, int key, int value)
 {
+#ifndef EXTERNAL_SWITCH_DEV
 	struct msm_handset *hs = input_get_drvdata(dev);
+#endif
 
 	input_report_switch(dev, key, value);
+#ifndef EXTERNAL_SWITCH_DEV
 	switch_set_state(&hs->sdev, value);
+#endif
 }
 
 /*
@@ -562,6 +570,7 @@ static void __devexit hs_rpc_deinit(void)
 		msm_rpc_unregister_client(rpc_client);
 }
 
+#ifndef EXTERNAL_SWITCH_DEV
 static ssize_t msm_headset_print_name(struct switch_dev *sdev, char *buf)
 {
 	switch (switch_get_state(&hs->sdev)) {
@@ -572,6 +581,7 @@ static ssize_t msm_headset_print_name(struct switch_dev *sdev, char *buf)
 	}
 	return -EINVAL;
 }
+#endif
 
 static int __devinit hs_probe(struct platform_device *pdev)
 {
@@ -582,12 +592,14 @@ static int __devinit hs_probe(struct platform_device *pdev)
 	if (!hs)
 		return -ENOMEM;
 
+#ifndef EXTERNAL_SWITCH_DEV
 	hs->sdev.name	= "h2w";
 	hs->sdev.print_name = msm_headset_print_name;
 
 	rc = switch_dev_register(&hs->sdev);
 	if (rc)
 		goto err_switch_dev_register;
+#endif
 
 	ipdev = input_allocate_device();
 	if (!ipdev) {
@@ -640,9 +652,11 @@ err_hs_rpc_init:
 err_reg_input_dev:
 	input_free_device(ipdev);
 err_alloc_input_dev:
+#ifndef EXTERNAL_SWITCH_DEV
 	switch_dev_unregister(&hs->sdev);
 err_switch_dev_register:
 	kfree(hs);
+#endif
 	return rc;
 }
 
@@ -651,7 +665,9 @@ static int __devexit hs_remove(struct platform_device *pdev)
 	struct msm_handset *hs = platform_get_drvdata(pdev);
 
 	input_unregister_device(hs->ipdev);
+#ifndef EXTERNAL_SWITCH_DEV
 	switch_dev_unregister(&hs->sdev);
+#endif
 	kfree(hs);
 	hs_rpc_deinit();
 	return 0;
