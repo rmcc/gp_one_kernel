@@ -108,6 +108,8 @@ struct {
 #define KEY_RING_SWITCH	KEY_F14
 #define KEY_HEADSETHOOK KEY_F15
 
+static int camera_pressed = 0;
+
 //KEY_CENTER = ACTION, KEY_BACK = BACK, KEY_HOME = HOME, KEY_MENU = UNLOCK
 static uint8_t FIHKeypad_set[QKBD_IN_MXKYEVTS] =
 {
@@ -651,7 +653,13 @@ static void qi2ckybd_fetchkeys(struct work_struct *work)
 					dev_dbg(&kbdcl->dev, "%s: KPC_DATA_BYTE4 has data!!\n", __func__);					
 				} else if ((4 != i) && (3 != i) && (0xF8 != rdat[i])) {
 					xlkcode = kbdrec->xlf(kbdrec, rdat[i], &kevent); //kevent = press?
-					if (xlkcode > KEY_RESERVED) {
+					if (xlkcode == KEY_CAMERA) {
+						camera_pressed = kevent;
+					}
+
+					if (camera_pressed && xlkcode == KEY_FOCUS) {
+						dev_dbg(&kbdcl->dev,"Ignore focus event while camera pressed\n");
+					} else if (xlkcode > KEY_RESERVED) {
 						dev_dbg(&kbdcl->dev, "xlkcode = %d, row = %d, col = %d\n", xlkcode, (rdat[i] & 0x7F) >> 3, (rdat[i] & 0x07) - 2);
 						input_report_key(idev, xlkcode, kevent);
 						kbdrec->kcnt++;
