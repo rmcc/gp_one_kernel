@@ -1032,7 +1032,7 @@ static struct uart_driver msm_hsl_uart_driver = {
 	.cons = MSM_HSL_CONSOLE,
 };
 
-static int msm_serial_hsl_probe(struct platform_device *pdev)
+static int __devinit msm_serial_hsl_probe(struct platform_device *pdev)
 {
 	struct msm_hsl_port *msm_hsl_port;
 	struct resource *uart_resource;

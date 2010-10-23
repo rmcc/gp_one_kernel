@@ -178,7 +178,7 @@ module_param_call(power, bluetooth_power_param_set, param_get_bool,
 
 
 
-static int bt_power_probe(struct platform_device *pdev)
+static int __devinit bt_power_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 

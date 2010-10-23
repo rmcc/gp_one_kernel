@@ -2214,7 +2214,7 @@ setup_failure_return:
 	return rc;
 }
 
-static int msm_camera_probe(struct platform_device *pdev)
+static int __devinit msm_camera_probe(struct platform_device *pdev)
 {
 	return msm_camera_setup_cdevs(pdev);
 }

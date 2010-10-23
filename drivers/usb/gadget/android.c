@@ -171,7 +171,7 @@ static void bind_functions(struct android_dev *dev)
 	usb_ep_autoconfig_reset(dev->cdev->gadget);
 }
 
-static int android_bind_config(struct usb_configuration *c)
+static int __devinit android_bind_config(struct usb_configuration *c)
 {
 	struct android_dev *dev = _android_dev;
 
@@ -521,7 +521,7 @@ static void android_debugfs_cleanup(void)
        debugfs_remove(android_debug_root);
 }
 #endif
-static int android_probe(struct platform_device *pdev)
+static int __devinit android_probe(struct platform_device *pdev)
 {
 	struct android_usb_platform_data *pdata = pdev->dev.platform_data;
 	struct android_dev *dev = _android_dev;

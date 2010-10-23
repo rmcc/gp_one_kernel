@@ -1503,7 +1503,7 @@ int smd_core_init(void)
 	return 0;
 }
 
-static int msm_smd_probe(struct platform_device *pdev)
+static int __devinit msm_smd_probe(struct platform_device *pdev)
 {
 	/* enable smd and smsm info messages */
 	msm_smd_debug_mask = 0xc;
