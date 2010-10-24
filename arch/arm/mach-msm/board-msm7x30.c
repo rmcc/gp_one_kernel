@@ -201,13 +201,6 @@ static int pm8058_gpios_init(void)
 		pr_err("%s PMIC_GPIO_HDMI_5V_EN config failed\n", __func__);
 		return rc;
 	}
-	rc = gpio_request(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN),
-		"hdmi_5V_en");
-	if (rc) {
-		pr_err("%s PMIC_GPIO_HDMI_5V_EN gpio_request failed\n",
-			__func__);
-		return rc;
-	}
 
 	if (machine_is_msm7x30_fluid()) {
 		rc = pm8058_gpio_config(PMIC_GPIO_SDC4_EN, &sdc4_en);
@@ -228,9 +221,10 @@ static ssize_t tma300_vkeys_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf,
-	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":80:904:160:210"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":240:904:160:210"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":400:904:160:210"
+	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":60:879:120:80"
+	":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":180:879:120:80"
+	":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":300:879:120:80"
+	":" __stringify(EV_KEY) ":" __stringify(KEY_SEARCH) ":420:879:120:80"
 	"\n");
 }
 
@@ -1887,6 +1881,9 @@ vreg_codec_s4_fail:
 
 static struct marimba_codec_platform_data mariba_codec_pdata = {
 	.marimba_codec_power =  msm_marimba_codec_power,
+#ifdef CONFIG_MARIMBA_CODEC
+	.snddev_profile_init = msm_snddev_init,
+#endif
 };
 
 static struct marimba_platform_data marimba_pdata = {
@@ -1918,6 +1915,9 @@ static void __init msm7x30_init_marimba(void)
 
 static struct marimba_codec_platform_data timpani_codec_pdata = {
 	.marimba_codec_power =  msm_marimba_codec_power,
+#ifdef CONFIG_TIMPANI_CODEC
+	.snddev_profile_init = msm_snddev_init_timpani,
+#endif
 };
 
 static struct marimba_platform_data timpani_pdata = {
@@ -3256,8 +3256,22 @@ static int hdmi_init_irq(void)
 static int hdmi_enable_5v(int on)
 {
 	pr_info("%s: %d\n", __func__, on);
-	gpio_set_value_cansleep(
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN), on);
+	if (on) {
+		int rc;
+		rc = gpio_request(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN),
+			"hdmi_5V_en");
+		if (rc) {
+			pr_err("%s PMIC_GPIO_HDMI_5V_EN gpio_request failed\n",
+				__func__);
+			return rc;
+		}
+		gpio_set_value_cansleep(
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN), 1);
+	} else {
+		gpio_set_value_cansleep(
+			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN), 0);
+		gpio_free(PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN));
+	}
 	return 0;
 }
 
@@ -3458,6 +3472,8 @@ static struct kgsl_platform_data kgsl_pdata = {
 #else
 	.grp2d0_clk_name = NULL,
 #endif
+	.idle_timeout_3d = HZ/20,
+	.idle_timeout_2d = HZ/10,
 };
 
 static struct resource kgsl_resources[] = {
@@ -3829,9 +3845,18 @@ static struct mddi_platform_data mddi_pdata = {
 	.mddi_sel_clk = msm_fb_mddi_sel_clk,
 };
 
+int mdp_core_clk_rate_table[] = {
+	122880000,
+	122880000,
+	122880000,
+	192000000,
+};
+
 static struct msm_panel_common_pdata mdp_pdata = {
 	.gpio = 30,
 	.mdp_core_clk_rate = 122880000,
+	.mdp_core_clk_table = mdp_core_clk_rate_table,
+	.num_mdp_clk = ARRAY_SIZE(mdp_core_clk_rate_table),
 };
 
 static int lcd_panel_spi_gpio_num[] = {
@@ -4619,7 +4644,8 @@ static void __init msm_device_i2c_init(void)
 
 static struct msm_i2c_platform_data msm_i2c_2_pdata = {
 	.clk_freq = 100000,
-	.rmutex  = 0,
+	.rmutex  = 1,
+	.rsl_id = "D:I2C02000022",
 	.msm_i2c_config_gpio = msm_i2c_gpio_config,
 };
 
@@ -5368,8 +5394,10 @@ static int msm_sdcc_get_wpswitch(struct device *dv)
 }
 #endif
 
-#ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
-#if (CONFIG_CSDIO_VENDOR_ID == 0x70 && CONFIG_CSDIO_DEVICE_ID == 0x1117)
+#if defined(CONFIG_MMC_MSM_SDC1_SUPPORT)
+#if defined(CONFIG_CSDIO_VENDOR_ID) && \
+	defined(CONFIG_CSDIO_DEVICE_ID) && \
+	(CONFIG_CSDIO_VENDOR_ID == 0x70 && CONFIG_CSDIO_DEVICE_ID == 0x1117)
 static struct mmc_platform_data msm7x30_sdc1_data = {
 	.ocr_mask	= MMC_VDD_165_195 | MMC_VDD_27_28 | MMC_VDD_28_29,
 	.translate_vdd	= msm_sdcc_setup_power_mbp,
@@ -6013,13 +6041,6 @@ static int tma300_dev_setup(bool enable)
 			goto vreg_get_fail;
 		}
 
-		rc = gpio_request(TS_GPIO_IRQ, "ts_irq");
-		if (rc) {
-			pr_err("%s: unable to request gpio %d (%d)\n",
-					__func__, TS_GPIO_IRQ, rc);
-			goto vreg_get_fail;
-		}
-
 		/* virtual keys */
 		tma300_vkeys_attr.attr.name = "virtualkeys.msm_tma300_ts";
 		properties_kobj = kobject_create_and_add("board_properties",
@@ -6033,8 +6054,6 @@ static int tma300_dev_setup(bool enable)
 		/* put voltage sources */
 		for (i = 0; i < ARRAY_SIZE(vregs_tma300_name); i++)
 			vreg_put(vregs_tma300[i]);
-		/* free gpio */
-		gpio_free(TS_GPIO_IRQ);
 		/* destroy virtual keys */
 		if (properties_kobj)
 			sysfs_remove_group(properties_kobj,
@@ -6064,9 +6083,10 @@ static struct cy8c_ts_platform_data cy8ctma300_pdata = {
 	.max_touch = 255,
 	.min_width = 0,
 	.max_width = 255,
-	.use_polling = 1,
 	.invert_y = 1,
 	.nfingers = 4,
+	.irq_gpio = TS_GPIO_IRQ,
+	.resout_gpio = -1,
 };
 
 static struct i2c_board_info cy8ctma300_board_info[] = {
@@ -6125,14 +6145,15 @@ static void __init msm7x30_init(void)
 		msm_adc_pdata.dev_names = msm_adc_surf_device_names;
 		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
 	}
-
-	if (machine_is_msm8x55_surf() ||
-		machine_is_msm8x55_ffa()) {
+#ifdef CONFIG_USB_ANDROID
+	if (machine_is_msm8x55_svlte_surf() ||
+		machine_is_msm8x55_svlte_ffa()) {
 		android_usb_pdata.product_id = 0x9028;
 		android_usb_pdata.num_products =
 			ARRAY_SIZE(fusion_usb_products);
 		android_usb_pdata.products = fusion_usb_products;
 	}
+#endif
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 #ifdef CONFIG_USB_EHCI_MSM
@@ -6160,7 +6181,6 @@ static void __init msm7x30_init(void)
 	msm7x30_init_marimba();
 #ifdef CONFIG_MSM7KV2_AUDIO
 	snddev_poweramp_gpio_init();
-	msm_snddev_init();
 	aux_pcm_gpio_init();
 #endif
 
@@ -6209,9 +6229,6 @@ static void __init msm7x30_init(void)
 				socinfo_get_platform_version()) == 2) {
 			cy8ctma300_pdata.res_y = 920;
 			cy8ctma300_pdata.invert_y = 0;
-			cy8ctma300_pdata.use_polling = 0;
-			cy8ctma300_board_info[0].irq =
-				MSM_GPIO_TO_INT(TS_GPIO_IRQ);
 		}
 		i2c_register_board_info(0, cy8ctma300_board_info,
 			ARRAY_SIZE(cy8ctma300_board_info));

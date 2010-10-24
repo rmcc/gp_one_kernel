@@ -139,6 +139,8 @@ struct msm_panel_common_pdata {
 	int (*vga_switch)(int select_vga);
 	int *gpio_num;
 	int mdp_core_clk_rate;
+	unsigned num_mdp_clk;
+	int *mdp_core_clk_table;
 };
 
 struct lcdc_platform_data {
@@ -191,11 +193,6 @@ struct msm_i2c_platform_data {
 	void (*msm_i2c_config_gpio)(int iface, int config_type);
 };
 
-struct msm_mi2s_gpio_data {
-	void (*enable)(void);
-	void (*disable)(void);
-};
-
 enum msm_ssbi_controller_type {
 	MSM_SBI_CTRL_SSBI = 0,
 	MSM_SBI_CTRL_SSBI2,
@@ -234,8 +231,11 @@ static inline void msm_hsusb_set_vbus_state(int online) {}
 #endif
 
 void __init msm_snddev_init(void);
+void __init msm_snddev_init_timpani(void);
 void msm_snddev_poweramp_on(void);
 void msm_snddev_poweramp_off(void);
+void msm_snddev_voltage_on(void);
+void msm_snddev_voltage_off(void);
 void msm_snddev_hsed_voltage_on(void);
 void msm_snddev_hsed_voltage_off(void);
 void msm_snddev_tx_route_config(void);

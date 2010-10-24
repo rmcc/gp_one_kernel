@@ -34,7 +34,7 @@ int kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 			if (pwr->imem_clk != NULL)
 				clk_disable(pwr->imem_clk);
 			if (pwr->clk_freq[KGSL_MIN_FREQ])
-				clk_set_min_rate(pwr->grp_src_clk,
+				clk_set_rate(pwr->grp_src_clk,
 					pwr->clk_freq[KGSL_MIN_FREQ]);
 			if (pwr->clk_freq[KGSL_AXI_HIGH])
 				pm_qos_update_request(
@@ -51,7 +51,7 @@ int kgsl_pwrctrl_clk(struct kgsl_device *device, unsigned int pwrflag)
 					pwr->pm_qos_req,
 					pwr->clk_freq[KGSL_AXI_HIGH]);
 			if (pwr->clk_freq[KGSL_MAX_FREQ])
-				clk_set_min_rate(pwr->grp_src_clk,
+				clk_set_rate(pwr->grp_src_clk,
 					pwr->clk_freq[KGSL_MAX_FREQ]);
 			if (pwr->grp_pclk)
 				clk_enable(pwr->grp_pclk);
@@ -77,8 +77,6 @@ int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, unsigned int pwrflag)
 	case KGSL_PWRFLAGS_POWER_OFF:
 		if (pwr->power_flags & KGSL_PWRFLAGS_POWER_ON) {
 			internal_pwr_rail_ctl(pwr->pwr_rail, KGSL_FALSE);
-			internal_pwr_rail_mode(pwr->pwr_rail,
-					PWR_RAIL_CTL_AUTO);
 			if (pwr->gpu_reg)
 				regulator_disable(pwr->gpu_reg);
 			pwr->power_flags &=

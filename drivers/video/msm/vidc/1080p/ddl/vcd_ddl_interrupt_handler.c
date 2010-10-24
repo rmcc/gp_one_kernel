@@ -600,11 +600,6 @@ static u32 ddl_eos_frame_done_callback(
 		DDL_MSG_LOW("EOS_FRM_RUN_DONE");
 		ddl->cmd_state = DDL_CMD_INVALID;
 		vidc_1080p_get_display_frame_result(dec_disp_info);
-		if (decoder->flush_eos_case) {
-			dec_disp_info->display_status =
-			VIDC_1080P_DISPLAY_STATUS_DPB_EMPTY;
-			decoder->flush_eos_case = false;
-		}
 		ddl_vidc_decode_dynamic_property(ddl, false);
 		if (dec_disp_info->display_status ==
 			VIDC_1080P_DISPLAY_STATUS_DPB_EMPTY) {
@@ -856,7 +851,7 @@ static void ddl_decoder_input_done_callback(
 	ddl_get_decoded_frame(input_vcd_frm,
 		dec_disp_info->input_frame);
 	vidc_1080p_get_decode_frame_result(dec_disp_info);
-	input_vcd_frm->interlaced = (dec_disp_info->display_coding !=
+	input_vcd_frm->interlaced = (dec_disp_info->decode_coding !=
 		VIDC_1080P_DISPLAY_CODING_PROGRESSIVE_SCAN);
 	input_vcd_frm->offset += dec_disp_info->input_bytes_consumed;
 	input_vcd_frm->data_len -= dec_disp_info->input_bytes_consumed;
@@ -1225,34 +1220,46 @@ static void ddl_get_vc1_dec_level(enum vcd_codec_level *level,
 	if (vc1_profile == VCD_PROFILE_VC1_ADVANCE) {
 		switch (level_codec) {
 		case VIDC_SM_LEVEL_VC1_ADV_0:
-			*level = VCD_LEVEL_VC1_0;
+			*level = VCD_LEVEL_VC1_A_0;
 		break;
 		case VIDC_SM_LEVEL_VC1_ADV_1:
-			*level = VCD_LEVEL_VC1_1;
+			*level = VCD_LEVEL_VC1_A_1;
 		break;
 		case VIDC_SM_LEVEL_VC1_ADV_2:
-			*level = VCD_LEVEL_VC1_2;
+			*level = VCD_LEVEL_VC1_A_2;
 		break;
 		case VIDC_SM_LEVEL_VC1_ADV_3:
-			*level = VCD_LEVEL_VC1_3;
+			*level = VCD_LEVEL_VC1_A_3;
 		break;
 		case VIDC_SM_LEVEL_VC1_ADV_4:
-			*level = VCD_LEVEL_VC1_4;
+			*level = VCD_LEVEL_VC1_A_4;
 		break;
 		default:
 			*level = VCD_LEVEL_UNKNOWN;
 		break;
 		}
-	} else {
+	} else if (vc1_profile == VCD_PROFILE_VC1_MAIN) {
 		switch (level_codec) {
 		case VIDC_SM_LEVEL_VC1_LOW:
-			*level = VCD_LEVEL_VC1_LOW;
+			*level = VCD_LEVEL_VC1_M_LOW;
 		break;
 		case VIDC_SM_LEVEL_VC1_MEDIUM:
-			*level = VCD_LEVEL_VC1_MEDIUM;
+			*level = VCD_LEVEL_VC1_M_MEDIUM;
 		break;
 		case VIDC_SM_LEVEL_VC1_HIGH:
-			*level = VCD_LEVEL_VC1_HIGH;
+			*level = VCD_LEVEL_VC1_M_HIGH;
+		break;
+		default:
+			*level = VCD_LEVEL_UNKNOWN;
+		break;
+		}
+	} else if (vc1_profile == VCD_PROFILE_VC1_SIMPLE) {
+		switch (level_codec) {
+		case VIDC_SM_LEVEL_VC1_LOW:
+			*level = VCD_LEVEL_VC1_S_LOW;
+		break;
+		case VIDC_SM_LEVEL_VC1_MEDIUM:
+			*level = VCD_LEVEL_VC1_S_MEDIUM;
 		break;
 		default:
 			*level = VCD_LEVEL_UNKNOWN;

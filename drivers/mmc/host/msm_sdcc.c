@@ -602,13 +602,16 @@ msmsdcc_data_err(struct msmsdcc_host *host, struct mmc_data *data,
 		 unsigned int status)
 {
 	if (status & MCI_DATACRCFAIL) {
-		pr_err("%s: Data CRC error\n",
-		       mmc_hostname(host->mmc));
-		pr_err("%s: opcode 0x%.8x\n", __func__,
-		       data->mrq->cmd->opcode);
-		pr_err("%s: blksz %d, blocks %d\n", __func__,
-		       data->blksz, data->blocks);
-		data->error = -EILSEQ;
+		if (!(data->mrq->cmd->opcode == MMC_BUSTEST_W
+			|| data->mrq->cmd->opcode == MMC_BUSTEST_R)) {
+			pr_err("%s: Data CRC error\n",
+			       mmc_hostname(host->mmc));
+			pr_err("%s: opcode 0x%.8x\n", __func__,
+			       data->mrq->cmd->opcode);
+			pr_err("%s: blksz %d, blocks %d\n", __func__,
+			       data->blksz, data->blocks);
+			data->error = -EILSEQ;
+		}
 	} else if (status & MCI_DATATIMEOUT) {
 		/* CRC is optional for the bus test commands, not all
 		 * cards respond back with CRC. However controller
@@ -790,6 +793,15 @@ msmsdcc_irq(int irq, void *dev_id)
 		if (timer) {
 			timer = 0;
 			msmsdcc_delay(host);
+		}
+
+		if (!host->clks_on) {
+			pr_info("%s: irq received when clocks are off\n",
+					__func__);
+			host->mmc->ios.clock = host->clk_rate;
+			host->mmc->ops->set_ios(host->mmc, &host->mmc->ios);
+			/* only ansyc interrupt can come when clocks are off */
+			writel(MCI_SDIOINTMASK, host->base + MMCICLEAR);
 		}
 
 		status = readl(host->base + MMCISTATUS);
@@ -1047,6 +1059,12 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				clk_enable(host->pclk);
 			clk_enable(host->clk);
 			host->clks_on = 1;
+			if (mmc->card && mmc->card->type == MMC_TYPE_SDIO &&
+					!host->plat->sdiowakeup_irq) {
+				writel(host->mci_irqenable,
+					host->base + MMCIMASK0);
+				disable_irq_wake(host->irqres->start);
+			}
 		}
 
 		if ((ios->clock < host->plat->msmsdcc_fmax) &&
@@ -1095,9 +1113,6 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		break;
 	}
 
-	if (ios->bus_mode == MMC_BUSMODE_OPENDRAIN)
-		pwr |= MCI_OD;
-
 	writel(clk, host->base + MMCICLOCK);
 
 	udelay(50);
@@ -1108,6 +1123,11 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	}
 
 	if (!(clk & MCI_CLK_ENABLE) && host->clks_on) {
+		if (mmc->card && mmc->card->type == MMC_TYPE_SDIO &&
+				!host->plat->sdiowakeup_irq) {
+			writel(MCI_SDIOINTMASK, host->base + MMCIMASK0);
+			enable_irq_wake(host->irqres->start);
+		}
 		clk_disable(host->clk);
 		if (!IS_ERR(host->pclk))
 			clk_disable(host->pclk);
@@ -1755,6 +1775,7 @@ msmsdcc_runtime_suspend(struct device *dev)
 {
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msmsdcc_host *host = mmc_priv(mmc);
+	unsigned long flags;
 	int rc = 0;
 
 	if (mmc) {
@@ -1783,14 +1804,17 @@ msmsdcc_runtime_suspend(struct device *dev)
 		}
 
 		if (!rc) {
-			writel(0, host->base + MMCIMASK0);
-
+			/*
+			 * If MMC core level suspend is not supported, turn
+			 * off clocks to allow deep sleep (TCXO shutdown).
+			 */
+			spin_lock_irqsave(&host->lock, flags);
 			if (host->clks_on) {
-				clk_disable(host->clk);
-				if (!IS_ERR(host->pclk))
-					clk_disable(host->pclk);
-				host->clks_on = 0;
+				writel(0, host->base + MMCIMASK0);
+				mmc->ios.clock = 0;
+				mmc->ops->set_ios(host->mmc, &host->mmc->ios);
 			}
+			spin_unlock_irqrestore(&host->lock, flags);
 		}
 
 		if ((mmc->pm_flags & MMC_PM_WAKE_SDIO_IRQ) && mmc->card &&
@@ -1815,10 +1839,8 @@ msmsdcc_runtime_resume(struct device *dev)
 	if (mmc) {
 		spin_lock_irqsave(&host->lock, flags);
 		if (!host->clks_on) {
-			if (!IS_ERR(host->pclk))
-				clk_enable(host->pclk);
-			clk_enable(host->clk);
-			host->clks_on = 1;
+			mmc->ios.clock = host->clk_rate;
+			mmc->ops->set_ios(host->mmc, &host->mmc->ios);
 		}
 
 		writel(host->mci_irqenable, host->base + MMCIMASK0);

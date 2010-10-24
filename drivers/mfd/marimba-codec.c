@@ -422,8 +422,9 @@ static int marimba_adie_codec_set_device_digital_volume(
 	u32 step_index;
 	u32 cur_step_index = 0;
 
-	if (path_ptr->curr_stage != ADIE_CODEC_DIGITAL_ANALOG_READY) {
-		pr_info("%s: Marimba codec not ready for volume control \n",
+	if (!path_ptr  || (path_ptr->curr_stage !=
+				ADIE_CODEC_DIGITAL_ANALOG_READY)) {
+		pr_info("%s: Marimba codec not ready for volume control\n",
 		       __func__);
 		return  -EPERM;
 	}
@@ -891,6 +892,9 @@ static int marimba_codec_probe(struct platform_device *pdev)
 
 	adie_codec.pdrv_ptr = platform_get_drvdata(pdev);
 	adie_codec.codec_pdata = pdev->dev.platform_data;
+
+	if (adie_codec.codec_pdata->snddev_profile_init)
+		adie_codec.codec_pdata->snddev_profile_init();
 
 	/* Register the marimba ADIE operations */
 	rc = adie_codec_register_codec_operations(&marimba_adie_ops);

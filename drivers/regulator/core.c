@@ -33,6 +33,7 @@ static DEFINE_MUTEX(regulator_list_mutex);
 static LIST_HEAD(regulator_list);
 static LIST_HEAD(regulator_map_list);
 static int has_full_constraints;
+static int suppress_info_printing;
 
 /*
  * struct regulator_map
@@ -570,8 +571,6 @@ static int update_voltage(struct regulator *regulator, int min_uV, int max_uV)
 	struct regulator *sibling;
 	int ret = 0;
 
-	mutex_lock(&regulator_list_mutex);
-
 	list_for_each_entry(sibling, &rdev->consumer_list, list) {
 		if (regulator == sibling || !sibling->enabled)
 			continue;
@@ -599,7 +598,6 @@ static int update_voltage(struct regulator *regulator, int min_uV, int max_uV)
 	_notifier_call_chain(rdev, REGULATOR_EVENT_VOLTAGE_CHANGE, NULL);
 
 out:
-	mutex_unlock(&regulator_list_mutex);
 	return ret;
 }
 
@@ -607,8 +605,6 @@ static int update_voltage_prev(struct regulator_dev *rdev)
 {
 	int ret, min_uV = INT_MIN, max_uV = INT_MAX;
 	struct regulator *consumer;
-
-	mutex_lock(&regulator_list_mutex);
 
 	list_for_each_entry(consumer, &rdev->consumer_list, list) {
 		if (!consumer->enabled)
@@ -618,8 +614,6 @@ static int update_voltage_prev(struct regulator_dev *rdev)
 		if (consumer->min_uV > min_uV)
 			min_uV = consumer->min_uV;
 	}
-
-	mutex_unlock(&regulator_list_mutex);
 
 	if (min_uV == INT_MIN)
 		return 0;
@@ -967,7 +961,8 @@ static int set_machine_constraints(struct regulator_dev *rdev,
 		}
 	}
 
-	print_constraints(rdev);
+	if (!suppress_info_printing)
+		print_constraints(rdev);
 out:
 	return ret;
 }
@@ -2595,6 +2590,22 @@ void regulator_has_full_constraints(void)
 EXPORT_SYMBOL_GPL(regulator_has_full_constraints);
 
 /**
+ * regulator_suppress_info_printing - disable printing of info messages
+ *
+ * The regulator framework calls print_constraints() when a regulator is
+ * registered.  It also prints a disable message for each unused regulator in
+ * regulator_init_complete().
+ *
+ * Calling this function ensures that such messages do not end up in the
+ * log.
+ */
+void regulator_suppress_info_printing(void)
+{
+	suppress_info_printing = 1;
+}
+EXPORT_SYMBOL_GPL(regulator_suppress_info_printing);
+
+/**
  * rdev_get_drvdata - get rdev regulator driver data
  * @rdev: regulator
  *
@@ -2709,8 +2720,9 @@ static int __init regulator_init_complete(void)
 		if (has_full_constraints) {
 			/* We log since this may kill the system if it
 			 * goes wrong. */
-			printk(KERN_INFO "%s: disabling %s\n",
-			       __func__, name);
+			if (!suppress_info_printing)
+				printk(KERN_INFO "%s: disabling %s\n",
+				       __func__, name);
 			ret = ops->disable(rdev);
 			if (ret != 0) {
 				printk(KERN_ERR
@@ -2723,9 +2735,10 @@ static int __init regulator_init_complete(void)
 			 * so warn even if we aren't going to do
 			 * anything here.
 			 */
-			printk(KERN_WARNING
-			       "%s: incomplete constraints, leaving %s on\n",
-			       __func__, name);
+			if (!suppress_info_printing)
+				printk(KERN_WARNING "%s: incomplete "
+				       "constraints, leaving %s on\n",
+				       __func__, name);
 		}
 
 unlock:

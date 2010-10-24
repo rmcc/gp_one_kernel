@@ -72,7 +72,7 @@
 #endif
 #include "smd_private.h"
 
-#define MSM_PMEM_MDP_SIZE	0x4000000
+#define MSM_PMEM_MDP_SIZE	0x204000
 
 #define SMEM_SPINLOCK_I2C	"D:I2C02000021"
 
@@ -1445,8 +1445,9 @@ static struct kgsl_platform_data kgsl_pdata = {
 	.max_grp2d_freq = 0,
 	.min_grp2d_freq = 0,
 	.set_grp2d_async = NULL,
-	.max_grp3d_freq = 0,
-	.min_grp3d_freq = 0,
+	.max_grp3d_freq = 235*1000*1000,
+	.min_grp3d_freq = 192*1000*1000,
+	/*note: on 8650a async mode is the default */
 	.set_grp3d_async = NULL,
 	.imem_clk_name = "imem_clk",
 	.grp3d_clk_name = "grp_clk",
@@ -1455,6 +1456,8 @@ static struct kgsl_platform_data kgsl_pdata = {
 #else
 	.grp2d0_clk_name = NULL,
 #endif
+	.idle_timeout_3d = HZ/5,
+	.idle_timeout_2d = HZ/10,
 };
 
 static struct platform_device msm_device_kgsl = {
@@ -2007,6 +2010,7 @@ static struct mmc_platform_data qsd8x50_sdc1_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 25000000,
 	.msmsdcc_fmax	= 40000000,
+	.nonremovable	= 0,
 };
 #endif
 
@@ -2022,6 +2026,7 @@ static struct mmc_platform_data qsd8x50_sdc2_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 25000000,
 	.msmsdcc_fmax	= 40000000,
+	.nonremovable   = 0,
 };
 #endif
 
@@ -2040,6 +2045,7 @@ static struct mmc_platform_data qsd8x50_sdc3_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 25000000,
 	.msmsdcc_fmax	= 49152000,
+	.nonremovable   = 1,
 };
 #endif
 
@@ -2055,6 +2061,7 @@ static struct mmc_platform_data qsd8x50_sdc4_data = {
 	.msmsdcc_fmin	= 144000,
 	.msmsdcc_fmid	= 25000000,
 	.msmsdcc_fmax	= 49152000,
+	.nonremovable   = 0,
 };
 #endif
 

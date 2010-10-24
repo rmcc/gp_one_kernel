@@ -528,6 +528,7 @@ static struct clk_freq_tbl clk_tbl_gsbi_qup[] = {
 	F_GSBI_QUP(15060000, BB_PLL8, 1, 2, 51, LOW),
 	F_GSBI_QUP(24000000, BB_PLL8, 4, 1,  4, LOW),
 	F_GSBI_QUP(25600000, BB_PLL8, 1, 1, 15, NOMINAL),
+	F_GSBI_QUP(27000000, BB_PXO,  1, 0,  0, NOMINAL),
 	F_GSBI_QUP(48000000, BB_PLL8, 4, 1,  2, NOMINAL),
 	F_GSBI_QUP(51200000, BB_PLL8, 1, 2, 15, NOMINAL),
 	F_END,
@@ -1375,7 +1376,9 @@ struct clk_local soc_clk_local_tbl_mxo[] = {
 	CLK_NORATE(VFE_AXI,   MAXI_EN_REG, B(18), SW_RESET_AXI_REG, B(9),
 		DBG_BUS_VEC_E_REG, HALT, 0, TEST_MM_HS(0x18)),
 	CLK_RESET(IJPEG_AXI,  SW_RESET_AXI_REG, B(14)),
+	CLK_RESET(MDP_AXI,    SW_RESET_AXI_REG, B(13)),
 	CLK_RESET(ROT_AXI,    SW_RESET_AXI_REG, B(6)),
+	CLK_RESET(VCODEC_AXI, SW_RESET_AXI_REG, (B(4)|B(5))),
 	CLK_RESET(VPE_AXI,    SW_RESET_AXI_REG, B(15)),
 
 	/* AHB Interfaces */
@@ -1406,6 +1409,7 @@ struct clk_local soc_clk_local_tbl_mxo[] = {
 	CLK_RESET(GFX2D0_P, SW_RESET_AHB_REG, B(12)),
 	CLK_RESET(GFX2D1_P, SW_RESET_AHB_REG, B(11)),
 	CLK_RESET(GFX3D_P,  SW_RESET_AHB_REG, B(10)),
+	CLK_RESET(VCODEC_P, SW_RESET_AHB_REG, B(1)),
 
 	/*
 	 * Low Power Audio Clocks
@@ -1744,31 +1748,6 @@ static void rmwreg(uint32_t val, void *reg, uint32_t mask)
 
 static void reg_init(int use_pxo)
 {
-/* XXX Start of temporary code, until the RPM takes care of this XXX */
-	/* Program MM_PLL0 (PLL1) @ 1320 MHz and turn it on. */
-	rmwreg(0,  MM_PLL0_MODE_REG, B(0)); /* Disable output */
-	writel(48, MM_PLL0_L_VAL_REG);
-	writel(8,  MM_PLL0_M_VAL_REG);
-	writel(9,  MM_PLL0_N_VAL_REG);
-	/* Set ref, enable. */
-	if (use_pxo)
-		rmwreg(B(1),      MM_PLL0_MODE_REG, B(4)|B(1)); /* PXO */
-	else
-		rmwreg(B(4)|B(1), MM_PLL0_MODE_REG, B(4)|B(1)); /* MXO */
-	udelay(10);
-	writel(0x14580, MM_PLL0_CONFIG_REG);  /* Enable MN, set VCO, misc */
-	rmwreg(B(2), MM_PLL0_MODE_REG, B(2)); /* Deassert reset */
-	rmwreg(B(0), MM_PLL0_MODE_REG, B(0)); /* Enable output */
-
-	/* Set up MM AHB clock to PLL8/5. */
-	local_src_enable(PLL_8);
-	rmwreg(0x0102, AHB_NS_REG, 0x43C7);
-	udelay(200); /* Wait before using registers clocked by MM AHB_CLK. */
-
-	/* Set up MM Fabric (AXI). */
-	writel(0x4248451, AXI_NS_REG);
-/* XXX End of temporary code XXX */
-
 	/* Set MM_PLL1 (PLL2) @ 800 MHz but leave it off. */
 	rmwreg(0,  MM_PLL1_MODE_REG, B(0)); /* Disable output */
 	writel(29, MM_PLL1_L_VAL_REG);
@@ -1875,12 +1854,6 @@ void __init msm_clk_soc_init(void)
 	set_1rate(USB_HS_XCVR);
 	set_1rate(USB_FS1_SRC);
 	set_1rate(USB_FS2_SRC);
-
-	/* FIXME: Disabling or changing the rate of the GFX3D clock causes
-	 * crashes.  Until this is fixed, leave the clock on at a constant
-	 * rate. */
-	local_clk_set_rate(C(GFX3D), 266667000);
-	local_clk_enable(C(GFX3D));
 }
 
 /*

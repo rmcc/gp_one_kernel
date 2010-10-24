@@ -391,7 +391,8 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 	struct ddl_encoder_data *encoder = &(ddl->codec_data.encoder);
 
 	if (DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME) ||
-		DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN))
+	   (DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME_DONE) ||
+		DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)))
 		vcd_status = ddl_set_enc_dynamic_property(ddl,
 			property_hdr, property_value);
 	if (vcd_status == VCD_S_SUCCESS)
@@ -555,8 +556,7 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 				  }
 			case VCD_MSLICE_BY_BYTE_COUNT:
 				{
-					if (multislice->m_slice_size >=
-						DDL_MINIMUM_BYTE_PER_SLICE)
+					if (multislice->m_slice_size > 0)
 						vcd_status = VCD_S_SUCCESS;
 					break;
 				}
@@ -1429,7 +1429,8 @@ static u32 ddl_set_enc_dynamic_property
 		}
 	}
 	if (vcd_status == VCD_S_SUCCESS &&
-		DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME))
+	(DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME) ||
+	DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME_DONE)))
 		encoder->dynamic_prop_change |= dynamic_prop_change;
 	return vcd_status;
 }
@@ -1439,22 +1440,21 @@ void ddl_set_default_dec_property(struct ddl_client_context *ddl)
 	struct ddl_decoder_data *decoder = &(ddl->codec_data.decoder);
 
 	if (decoder->codec.codec == VCD_CODEC_MPEG4 ||
-	    decoder->codec.codec == VCD_CODEC_MPEG2) {
+	    decoder->codec.codec == VCD_CODEC_MPEG2)
 		decoder->post_filter.post_filter = true;
-	} else {
+	else
 		decoder->post_filter.post_filter = false;
-	}
 	decoder->buf_format.buffer_format = VCD_BUFFER_FORMAT_NV12;
 	decoder->client_frame_size.height = 144;
 	decoder->client_frame_size.width = 176;
 	decoder->client_frame_size.stride = 176;
 	decoder->client_frame_size.scan_lines = 144;
 	decoder->progressive_only = 1;
+	decoder->profile.profile = VCD_PROFILE_UNKNOWN;
+	decoder->level.level = VCD_LEVEL_UNKNOWN;
 	decoder->output_order = VCD_DEC_ORDER_DISPLAY;
 	ddl_set_default_metadata_flag(ddl);
-
 	ddl_set_default_decoder_buffer_req(decoder, true);
-
 }
 
 static void ddl_set_default_enc_property(struct ddl_client_context *ddl)
@@ -1567,10 +1567,10 @@ static void ddl_set_default_enc_rc_params(
 		encoder->session_qp.p_frame_qp = 0x14;
 
 		encoder->rc_level.mb_level_rc = true;
-		encoder->adaptive_rc.activity_region_flag = false;
-		encoder->adaptive_rc.dark_region_as_flag = false;
-		encoder->adaptive_rc.smooth_region_as_flag = false;
-		encoder->adaptive_rc.static_region_as_flag = false;
+		encoder->adaptive_rc.activity_region_flag = true;
+		encoder->adaptive_rc.dark_region_as_flag = true;
+		encoder->adaptive_rc.smooth_region_as_flag = true;
+		encoder->adaptive_rc.static_region_as_flag = true;
 	} else {
 		encoder->qp_range.max_qp = 0x1f;
 		encoder->session_qp.i_frame_qp = 0xd;
@@ -1600,7 +1600,7 @@ static void ddl_set_default_enc_rc_params(
 				encoder->session_qp.p_frame_qp = 0xf;
 			}
 
-			encoder->frame_level_rc.reaction_coeff = 0x6;
+			encoder->frame_level_rc.reaction_coeff = 0x14;
 			break;
 		}
 	case VCD_RATE_CONTROL_CBR_CFR:

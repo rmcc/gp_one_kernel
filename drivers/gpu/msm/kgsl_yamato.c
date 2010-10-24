@@ -61,6 +61,46 @@
 		| (1 << MH_ARBITER_CONFIG__RB_CLNT_ENABLE__SHIFT) \
 		| (1 << MH_ARBITER_CONFIG__PA_CLNT_ENABLE__SHIFT))
 
+#define YAMATO_MMU_CONFIG						\
+	(0x01								\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__RB_W_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__CP_W_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__CP_R0_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__CP_R1_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__CP_R2_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__CP_R3_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__CP_R4_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__VGT_R0_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__VGT_R1_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__TC_R_CLNT_BEHAVIOR__SHIFT)	\
+	 | (MMU_CONFIG << MH_MMU_CONFIG__PA_W_CLNT_BEHAVIOR__SHIFT))
+
+static struct kgsl_yamato_device yamato_device = {
+	.dev = {
+		.id = KGSL_DEVICE_YAMATO,
+		.mmu = {
+			.config = YAMATO_MMU_CONFIG,
+			/* turn off memory protection unit by setting
+			   acceptable physical address range to include
+			   all pages. */
+			.mpu_base = 0x00000000,
+			.mpu_range =  0xFFFFF000,
+			/* These might be better set from the platform
+			   device */
+			.va_base = 0x66000000,
+#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
+			.va_range = SZ_32M,
+#else
+			.va_range = SZ_128M,
+#endif
+		},
+	},
+	.gmemspace = {
+		.gpu_base = 0,
+		.sizebytes = SZ_256K,
+	},
+};
+
 static int kgsl_yamato_start(struct kgsl_device *device);
 static int kgsl_yamato_stop(struct kgsl_device *device);
 static int kgsl_yamato_sleep(struct kgsl_device *device, const int idle);
@@ -510,10 +550,15 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device)
 	device->pwrctrl.grp_src_clk = clk;
 
 	/* put the AXI bus into asynchronous mode with the graphics cores */
-	if ((pdata->set_grp3d_async != NULL) &&
-		(pdata->max_grp3d_freq) &&
-		(!pdata->set_grp3d_async()))
-		clk_set_min_rate(clk, pdata->max_grp3d_freq);
+	if (pdata->set_grp3d_async != NULL)
+		pdata->set_grp3d_async();
+	if (pdata->max_grp3d_freq) {
+		device->pwrctrl.clk_freq[KGSL_MIN_FREQ] =
+			clk_round_rate(clk, pdata->min_grp3d_freq);
+		device->pwrctrl.clk_freq[KGSL_MAX_FREQ] =
+			clk_round_rate(clk, pdata->max_grp3d_freq);
+		clk_set_rate(clk, device->pwrctrl.clk_freq[KGSL_MIN_FREQ]);
+	}
 
 	if (pdata->imem_clk_name != NULL) {
 		clk = clk_get(&pdev->dev, pdata->imem_clk_name);
@@ -532,8 +577,6 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device)
 
 	device->pwrctrl.power_flags = 0;
 	device->pwrctrl.clk_freq[KGSL_AXI_HIGH] = pdata->high_axi_3d;
-	device->pwrctrl.clk_freq[KGSL_MIN_FREQ] = pdata->min_grp3d_freq;
-	device->pwrctrl.clk_freq[KGSL_MAX_FREQ] = pdata->max_grp3d_freq;
 	device->pwrctrl.pm_qos_req = pm_qos_add_request(
 					PM_QOS_SYSTEM_BUS_FREQ,
 					PM_QOS_DEFAULT_VALUE);
@@ -543,7 +586,7 @@ kgsl_yamato_init_pwrctrl(struct kgsl_device *device)
 		goto done;
 	}
 	device->pwrctrl.pwr_rail = PWR_RAIL_GRP_CLK;
-	device->pwrctrl.interval_timeout = INTERVAL_YAMATO_TIMEOUT;
+	device->pwrctrl.interval_timeout = pdata->idle_timeout_3d;
 
 	/*acquire yamato interrupt */
 	device->pwrctrl.interrupt_num =
@@ -561,15 +604,16 @@ done:
 }
 
 int __init
-kgsl_yamato_init(struct kgsl_device *device, struct kgsl_devconfig *config)
+kgsl_yamato_init(struct kgsl_device *device)
 {
 	struct kgsl_yamato_device *yamato_device = (struct kgsl_yamato_device *)
 								device;
 	int status = -EINVAL;
 	struct kgsl_memregion *regspace = &device->regspace;
 	unsigned int memflags = KGSL_MEMFLAGS_ALIGNPAGE | KGSL_MEMFLAGS_CONPHYS;
+	struct resource *res = NULL;
 
-	KGSL_DRV_VDBG("enter (device=%p, config=%p)\n", device, config);
+	KGSL_DRV_VDBG("enter (device=%p)\n", device);
 
 	if (device->flags & KGSL_FLAGS_INITIALIZED) {
 		KGSL_DRV_VDBG("return %d\n", 0);
@@ -580,11 +624,23 @@ kgsl_yamato_init(struct kgsl_device *device, struct kgsl_devconfig *config)
 	setup_timer(&device->idle_timer, kgsl_timer, (unsigned long)device);
 	INIT_WORK(&device->idle_check_ws, kgsl_idle_check);
 
-	memcpy(regspace, &config->regspace, sizeof(device->regspace));
-	if (regspace->mmio_phys_base == 0 || regspace->sizebytes == 0) {
+	res = platform_get_resource_byname(kgsl_driver.pdev,
+					   IORESOURCE_MEM,
+					   "kgsl_reg_memory");
+
+	if (res == NULL) {
+		KGSL_DRV_ERR("platform_get_resource_byname failed\n");
+		goto error;
+	}
+
+	if (res->start == 0 || resource_size(res) == 0) {
 		KGSL_DRV_ERR("dev %d invalid regspace\n", device->id);
 		goto error;
 	}
+
+	regspace->mmio_phys_base = res->start;
+	regspace->sizebytes = resource_size(res);
+
 	if (!request_mem_region(regspace->mmio_phys_base,
 				regspace->sizebytes, DRIVER_NAME)) {
 		KGSL_DRV_ERR("request_mem_region failed for register memory\n");
@@ -615,24 +671,11 @@ kgsl_yamato_init(struct kgsl_device *device, struct kgsl_devconfig *config)
 			device->id, regspace->mmio_phys_base,
 			regspace->sizebytes, regspace->mmio_virt_base);
 
-
-	memcpy(&yamato_device->gmemspace, &config->gmemspace,
-			sizeof(yamato_device->gmemspace));
-
-	device->id = KGSL_DEVICE_YAMATO;
 	init_completion(&device->hwaccess_gate);
-	device->pwrctrl.interval_timeout = INTERVAL_YAMATO_TIMEOUT;
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&device->ts_notifier_list);
 
 	kgsl_yamato_getfunctable(&device->ftbl);
-	if (config->mmu_config) {
-		device->mmu.config    = config->mmu_config;
-		device->mmu.mpu_base  = config->mpu_base;
-		device->mmu.mpu_range = config->mpu_range;
-		device->mmu.va_base	  = config->va_base;
-		device->mmu.va_range  = config->va_range;
-	}
 
 	status = kgsl_mmu_init(device);
 	if (status != 0) {
@@ -862,19 +905,9 @@ static int kgsl_yamato_stop(struct kgsl_device *device)
 	return 0;
 }
 
-static struct kgsl_yamato_device *kgsl_get_yamato_device(void)
-{
-	static struct kgsl_yamato_device yamato_device;
-
-	return &yamato_device;
-}
-
 struct kgsl_device *kgsl_get_yamato_generic_device(void)
 {
-	struct kgsl_yamato_device *yamato_device;
-
-	yamato_device = kgsl_get_yamato_device();
-	return &yamato_device->dev;
+	return &yamato_device.dev;
 }
 
 static int kgsl_yamato_getproperty(struct kgsl_device *device,
@@ -984,7 +1017,6 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 {
 	int status = -EINVAL;
 	struct kgsl_ringbuffer *rb = &device->ringbuffer;
-	struct kgsl_mmu_debug mmu_dbg;
 	unsigned int rbbm_status;
 	int idle_count = 0;
 #define IDLE_COUNT_MAX 1500000
@@ -1018,8 +1050,6 @@ int kgsl_yamato_idle(struct kgsl_device *device, unsigned int timeout)
 err:
 	KGSL_DRV_ERR("spun too long waiting for RB to idle\n");
 	kgsl_register_dump(device);
-	kgsl_ringbuffer_dump(rb);
-	kgsl_mmu_debug(&device->mmu, &mmu_dbg);
 	BUG();
 
 done:
@@ -1242,68 +1272,6 @@ static int kgsl_yamato_waittimestamp(struct kgsl_device *device,
 
 	return (int)status;
 }
-
-int __init kgsl_yamato_config(struct kgsl_devconfig *devconfig,
-				struct platform_device *pdev)
-{
-	int result = 0;
-	struct resource *res = NULL;
-
-	memset(devconfig, 0, sizeof(*devconfig));
-
-	/*find memory regions */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-			"kgsl_reg_memory");
-	if (res == NULL) {
-		KGSL_DRV_ERR("platform_get_resource_byname failed\n");
-		result = -EINVAL;
-		goto done;
-	}
-	KGSL_DRV_DBG("registers at %08x to %08x\n", res->start, res->end);
-	devconfig->regspace.mmio_phys_base = res->start;
-	devconfig->regspace.sizebytes = resource_size(res);
-
-	devconfig->gmemspace.gpu_base = 0;
-
-	/*note: for all of these behavior masks:
-	 *	0 = do not translate
-	 *	1 = translate within va_range, otherwise use physical
-	 *	2 = translate within va_range, otherwise fault
-	 */
-	devconfig->mmu_config = 1 /* mmu enable */
-		    | (MMU_CONFIG << MH_MMU_CONFIG__RB_W_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__CP_W_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__CP_R0_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__CP_R1_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__CP_R2_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__CP_R3_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__CP_R4_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__VGT_R0_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__VGT_R1_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__TC_R_CLNT_BEHAVIOR__SHIFT)
-		    | (MMU_CONFIG << MH_MMU_CONFIG__PA_W_CLNT_BEHAVIOR__SHIFT);
-
-	/*TODO: these should probably be configurable from platform device
-	 * stuff */
-	devconfig->va_base = 0x66000000;
-#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-	devconfig->va_range = SZ_32M;
-#else
-	devconfig->va_range = SZ_128M;
-#endif
-
-	/* turn off memory protection unit by setting acceptable physical
-	 * address range to include all pages. Apparrently MPU causing
-	 * problems.
-	 */
-	devconfig->mpu_base = 0x00000000;
-	devconfig->mpu_range = 0xFFFFF000;
-
-	result = 0;
-done:
-	return result;
-}
-
 
 static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
 			unsigned int cmd,

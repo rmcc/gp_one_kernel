@@ -271,6 +271,8 @@ struct smd_channel {
 	unsigned type;
 };
 
+static struct platform_device loopback_tty_pdev = {.name = "LOOPBACK_TTY"};
+
 static LIST_HEAD(smd_ch_closed_list);
 static LIST_HEAD(smd_ch_list_modem);
 static LIST_HEAD(smd_ch_list_dsp);
@@ -371,6 +373,11 @@ static unsigned ch_read_buffer(struct smd_channel *ch, void **ptr)
 		return head - tail;
 	else
 		return ch->fifo_size - tail;
+}
+
+static int read_intr_blocked(struct smd_channel *ch)
+{
+	return ch->recv->fBLOCKREADINTR;
 }
 
 /* advance the fifo read pointer after data from ch_read_buffer is consumed */
@@ -734,7 +741,8 @@ static int smd_stream_read(smd_channel_t *ch, void *data, int len)
 
 	r = ch_read(ch, data, len);
 	if (r > 0)
-		ch->notify_other_cpu();
+		if (!read_intr_blocked(ch))
+			ch->notify_other_cpu();
 
 	return r;
 }
@@ -752,7 +760,8 @@ static int smd_packet_read(smd_channel_t *ch, void *data, int len)
 
 	r = ch_read(ch, data, len);
 	if (r > 0)
-		ch->notify_other_cpu();
+		if (!read_intr_blocked(ch))
+			ch->notify_other_cpu();
 
 	spin_lock_irqsave(&smd_lock, flags);
 	ch->current_packet -= r;
@@ -774,7 +783,8 @@ static int smd_packet_read_from_cb(smd_channel_t *ch, void *data, int len)
 
 	r = ch_read(ch, data, len);
 	if (r > 0)
-		ch->notify_other_cpu();
+		if (!read_intr_blocked(ch))
+			ch->notify_other_cpu();
 
 	ch->current_packet -= r;
 	update_packet_state(ch);
@@ -889,6 +899,13 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm)
 	mutex_unlock(&smd_creation_mutex);
 
 	platform_device_register(&ch->pdev);
+	if (!strcmp(ch->name, "LOOPBACK")) {
+		/* create a platform driver to be used by smd_tty driver
+		 * so that it can access the loopback port
+		 */
+		loopback_tty_pdev.id = ch->type;
+		platform_device_register(&loopback_tty_pdev);
+	}
 	return 0;
 }
 
@@ -1098,6 +1115,20 @@ int smd_write_avail(smd_channel_t *ch)
 	return ch->write_avail(ch);
 }
 EXPORT_SYMBOL(smd_write_avail);
+
+void smd_enable_read_intr(smd_channel_t *ch)
+{
+	if (ch)
+		ch->send->fBLOCKREADINTR = 0;
+}
+EXPORT_SYMBOL(smd_enable_read_intr);
+
+void smd_disable_read_intr(smd_channel_t *ch)
+{
+	if (ch)
+		ch->send->fBLOCKREADINTR = 1;
+}
+EXPORT_SYMBOL(smd_disable_read_intr);
 
 int smd_wait_until_readable(smd_channel_t *ch, int bytes)
 {

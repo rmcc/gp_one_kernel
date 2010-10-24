@@ -442,6 +442,8 @@ struct sdio_al {
 	int is_err;
 
 	u32 signature;
+
+	unsigned int clock;
 };
 
 /** The driver context */
@@ -519,6 +521,7 @@ static int read_mailbox(int from_isr)
 	int ret;
 	struct sdio_func *func1 = sdio_al->card->sdio_func[0];
 	struct sdio_mailbox *mailbox = sdio_al->mailbox;
+	struct mmc_host *host = func1->card->host;
 	u32 new_write_avail = 0;
 	u32 old_write_avail = 0;
 	u32 any_read_avail = 0;
@@ -691,6 +694,13 @@ static int read_mailbox(int from_isr)
 		/* Mark HOST_OK_TOSLEEP */
 		sdio_al->is_ok_to_sleep = 1;
 		write_lpm_info();
+
+		/* Clock rate is required to enable the clock and set its rate.
+		 * Hence, save the clock rate before disabling it */
+		sdio_al->clock = host->ios.clock;
+		/* Disable clocks here */
+		host->ios.clock = 0;
+		host->ops->set_ios(host, &host->ios);
 		pr_info(MODULE_NAME "Finished sleep sequence. Sleep now.\n");
 		/* Release wakelock */
 		wake_unlock(&sdio_al->wake_lock);
@@ -1360,7 +1370,9 @@ static void restart_timer(void)
 }
 
 /**
- *  Do the wakup sequence
+ *  Do the wakup sequence.
+ *  This function should be called after claiming the host!
+ *  The caller is responsible for releasing the host.
  *
  *  Wake up sequence
  *  1. Get lock
@@ -1369,21 +1381,27 @@ static void restart_timer(void)
  *  4. Restore default thresholds
  *  5. Start the mailbox and inactivity timer again
  */
-static int sdio_al_wake_up(u32 enable_wake_up_func, int is_host_claimed)
+static int sdio_al_wake_up(u32 enable_wake_up_func)
 {
 	int ret = 0, i;
 	struct sdio_func *wk_func =
 		sdio_al->card->sdio_func[SDIO_AL_WAKEUP_FUNC-1];
 	unsigned long time_to_wait;
+	struct mmc_host *host = wk_func->card->host;
 
 	/* Wake up sequence */
 	wake_lock(&sdio_al->wake_lock);
-	pr_info(MODULE_NAME "Wake up");
+	pr_info(MODULE_NAME ": Wake up");
 
-	if (!is_host_claimed)
-		sdio_claim_host(wk_func);
+	if (!sdio_al->is_ok_to_sleep) {
+		pr_info(MODULE_NAME ": already awake, no need to wake up\n");
+		return 0;
+	}
 
 	pr_debug(MODULE_NAME ":Turn clock on\n");
+	/* Enable the clock and set its rate */
+	host->ios.clock = sdio_al->clock;
+	host->ops->set_ios(host, &host->ios);
 	msmsdcc_set_pwrsave(sdio_al->card->host, 0);
 	/* Poll the GPIO */
 	time_to_wait = jiffies + msecs_to_jiffies(100);
@@ -1423,8 +1441,6 @@ static int sdio_al_wake_up(u32 enable_wake_up_func, int is_host_claimed)
 	}
 	if (enable_wake_up_func)
 		sdio_disable_func(wk_func);
-	if (!is_host_claimed)
-		sdio_release_host(wk_func);
 
 	/* Start the timer again*/
 	restart_inactive_time();
@@ -1459,7 +1475,7 @@ static void sdio_func_irq(struct sdio_func *func)
 	pr_debug(MODULE_NAME ":start %s.\n", __func__);
 
 	if (sdio_al->is_ok_to_sleep)
-		sdio_al_wake_up(0, 1);
+		sdio_al_wake_up(0);
 	else
 		restart_timer();
 
@@ -1696,10 +1712,11 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 		return -EPERM;
 	}
 
-	if (sdio_al->is_ok_to_sleep) {
-		ret = sdio_al_wake_up(1, 0);
-		if (ret)
-			return ret;
+	sdio_claim_host(sdio_al->card->sdio_func[0]);
+	ret = sdio_al_wake_up(1);
+	if (ret) {
+		sdio_release_host(sdio_al->card->sdio_func[0]);
+		return ret;
 	}
 
 	ch->name = name;
@@ -1714,10 +1731,10 @@ int sdio_open(const char *name, struct sdio_channel **ret_ch, void *priv,
 		ch->is_suspend = false;
 		ch->is_open = true;
 		ask_reading_mailbox();
+		sdio_release_host(sdio_al->card->sdio_func[0]);
 		return 0;
 	}
 
-	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	ret = open_channel(ch);
 	sdio_release_host(sdio_al->card->sdio_func[0]);
 
@@ -1748,10 +1765,11 @@ int sdio_close(struct sdio_channel *ch)
 	if (!ch->is_open)
 		return -EINVAL;
 
-	if (sdio_al->is_ok_to_sleep) {
-		ret = sdio_al_wake_up(1, 0);
-		if (ret)
-			return ret;
+	sdio_claim_host(sdio_al->card->sdio_func[0]);
+	ret = sdio_al_wake_up(1);
+	if (ret) {
+		sdio_release_host(sdio_al->card->sdio_func[0]);
+		return ret;
 	}
 
 	pr_info(MODULE_NAME ":sdio_close %s\n", ch->name);
@@ -1762,7 +1780,6 @@ int sdio_close(struct sdio_channel *ch)
 
 	ch->notify = NULL;
 
-	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	ret = close_channel(ch);
 	sdio_release_host(sdio_al->card->sdio_func[0]);
 
@@ -1901,10 +1918,13 @@ int sdio_write(struct sdio_channel *ch, const void *data, int len)
 		return -EINVAL;
 	}
 
+	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	if (sdio_al->is_ok_to_sleep) {
-		ret = sdio_al_wake_up(1, 0);
-		if (ret)
+		ret = sdio_al_wake_up(1);
+		if (ret) {
+			sdio_release_host(sdio_al->card->sdio_func[0]);
 			return ret;
+		}
 	} else {
 		restart_inactive_time();
 	}
@@ -1915,10 +1935,10 @@ int sdio_write(struct sdio_channel *ch, const void *data, int len)
 	if (len > ch->write_avail) {
 		pr_info(MODULE_NAME ":ERR ch %s write %d avail %d.\n",
 				ch->name, len, ch->write_avail);
+		sdio_release_host(sdio_al->card->sdio_func[0]);
 		return -ENOMEM;
 	}
 
-	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	ret = sdio_ch_write(ch, data, len);
 
 	ch->total_tx_bytes += len;
@@ -1958,10 +1978,11 @@ int sdio_set_write_threshold(struct sdio_channel *ch, int threshold)
 		pr_info(MODULE_NAME ":In Error state, ignore %s\n", __func__);
 		return -ENODEV;
 	}
-	if (sdio_al->is_ok_to_sleep) {
-		ret = sdio_al_wake_up(1, 0);
-		if (ret)
-			return ret;
+	sdio_claim_host(sdio_al->card->sdio_func[0]);
+	ret = sdio_al_wake_up(1);
+	if (ret) {
+		sdio_release_host(sdio_al->card->sdio_func[0]);
+		return ret;
 	}
 
 	ch->write_threshold = threshold;
@@ -1969,7 +1990,6 @@ int sdio_set_write_threshold(struct sdio_channel *ch, int threshold)
 	pr_debug(MODULE_NAME ":sdio_set_write_threshold %s 0x%x\n",
 			 ch->name, ch->write_threshold);
 
-	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	ret = set_pipe_threshold(ch->tx_pipe_index, ch->write_threshold);
 	sdio_release_host(sdio_al->card->sdio_func[0]);
 
@@ -1991,10 +2011,14 @@ int sdio_set_read_threshold(struct sdio_channel *ch, int threshold)
 		pr_info(MODULE_NAME ":In Error state, ignore %s\n", __func__);
 		return -ENODEV;
 	}
+
+	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	if (sdio_al->is_ok_to_sleep) {
-		ret = sdio_al_wake_up(1, 0);
-		if (ret)
+		ret = sdio_al_wake_up(1);
+		if (ret) {
+			sdio_release_host(sdio_al->card->sdio_func[0]);
 			return ret;
+		}
 	}
 
 	ch->read_threshold = threshold;
@@ -2002,7 +2026,6 @@ int sdio_set_read_threshold(struct sdio_channel *ch, int threshold)
 	pr_debug(MODULE_NAME ":sdio_set_write_threshold %s 0x%x\n",
 			 ch->name, ch->read_threshold);
 
-	sdio_claim_host(sdio_al->card->sdio_func[0]);
 	ret = set_pipe_threshold(ch->rx_pipe_index, ch->read_threshold);
 	sdio_release_host(sdio_al->card->sdio_func[0]);
 
@@ -2017,6 +2040,8 @@ EXPORT_SYMBOL(sdio_set_read_threshold);
  */
 int sdio_set_poll_time(struct sdio_channel *ch, int poll_delay_msec)
 {
+	int ret;
+
 	BUG_ON(ch->signature != SDIO_AL_SIGNATURE);
 	if (sdio_al->is_err) {
 		pr_info(MODULE_NAME ":In Error state, ignore %s\n", __func__);
@@ -2026,13 +2051,11 @@ int sdio_set_poll_time(struct sdio_channel *ch, int poll_delay_msec)
 	if (poll_delay_msec <= 0 || poll_delay_msec > INACTIVITY_TIME_MSEC)
 		return -EPERM;
 
-	if (sdio_al->is_ok_to_sleep) {
-		int ret;
-
-		ret = sdio_al_wake_up(1, 0);
-		if (ret)
-			return ret;
-	}
+	sdio_claim_host(sdio_al->card->sdio_func[0]);
+	ret = sdio_al_wake_up(1);
+	sdio_release_host(sdio_al->card->sdio_func[0]);
+	if (ret)
+		return ret;
 
 	ch->poll_delay_msec = poll_delay_msec;
 
@@ -2093,15 +2116,20 @@ static int mmc_probe(struct mmc_card *card)
 	if (!mmc_card_sdio(card))
 		return -ENODEV;
 
+	if ((card->cis.vendor != 0x70) ||
+	    ((card->cis.device != 0x2460) && (card->cis.device != 0x0460))) {
+		dev_info(&card->dev,
+			 "ignore card vendor id 0x%x, device id 0x%x",
+			 card->cis.vendor, card->cis.device);
+		return -ENODEV;
+	}
+
 	if (card->sdio_funcs < SDIO_AL_MAX_FUNCS) {
 		dev_info(&card->dev,
 			 "SDIO-functions# %d less than expected.\n",
 			 card->sdio_funcs);
 		return -ENODEV;
 	}
-
-	dev_info(&card->dev, "vendor_id = 0x%x, device_id = 0x%x\n",
-			 card->cis.vendor, card->cis.device);
 
 	dev_info(&card->dev, "SDIO Card claimed.\n");
 

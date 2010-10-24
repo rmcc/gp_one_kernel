@@ -599,7 +599,9 @@ u32 vid_enc_set_get_profile_level(struct video_client_ctx *client_ctx,
 		case VEN_LEVEL_H264_3p1:
 			level.level = VCD_LEVEL_H264_3p1;
 			break;
-
+		case VEN_LEVEL_H264_4:
+			level.level = VCD_LEVEL_H264_4;
+			break;
 		case VEN_LEVEL_H263_10:
 			level.level = VCD_LEVEL_H263_10;
 			break;
@@ -703,7 +705,7 @@ u32 vid_enc_set_get_profile_level(struct video_client_ctx *client_ctx,
 				status = false;
 				break;
 			case VCD_LEVEL_H264_4:
-				status = false;
+				profile_level->level = VEN_LEVEL_H264_4;
 				break;
 			case VCD_LEVEL_H263_10:
 				profile_level->level = VEN_LEVEL_H263_10;
@@ -1211,6 +1213,9 @@ u32 vid_enc_set_get_ratectrlcfg(struct video_client_ctx *client_ctx,
 		case VEN_RC_VBR_VFR:
 			control.rate_control = VCD_RATE_CONTROL_VBR_VFR;
 			break;
+		case VEN_RC_CBR_CFR:
+			control.rate_control = VCD_RATE_CONTROL_CBR_CFR;
+			break;
 		default:
 			status = false;
 			break;
@@ -1246,6 +1251,9 @@ u32 vid_enc_set_get_ratectrlcfg(struct video_client_ctx *client_ctx,
 				break;
 			case VCD_RATE_CONTROL_VBR_VFR:
 				ratectrlcfg->rcmode = VEN_RC_VBR_VFR;
+				break;
+			case VCD_RATE_CONTROL_CBR_CFR:
+				ratectrlcfg->rcmode = VEN_RC_CBR_CFR;
 				break;
 			default:
 				status = false;

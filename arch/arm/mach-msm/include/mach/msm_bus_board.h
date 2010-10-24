@@ -60,8 +60,6 @@ struct msm_bus_halt_vector {
 	uint32_t haltmask;
 };
 
-#if defined(CONFIG_ARCH_MSM8X60)
-
 extern struct msm_bus_fabric_registration msm_bus_apps_fabric_pdata;
 extern struct msm_bus_fabric_registration msm_bus_sys_fabric_pdata;
 extern struct msm_bus_fabric_registration msm_bus_mm_fabric_pdata;
@@ -125,8 +123,7 @@ extern struct msm_bus_fabric_registration msm_bus_cpss_fpb_pdata;
 
 #define FAB_MAX_BW_BYTES(width, clk) ((uint32_t)(width) * (uint32)(clk))
 #define FAB_BW_128K(bw) ((uint16_t)((bw) >> 17))
-#define BW_TO_CLK_FREQ_KHZ(width, bw) ((((uint32_t)(bw)) << 17) /\
-	(width) / 1000)
+#define BW_TO_CLK_FREQ_HZ(width, bw) ((unsigned long)((bw) / (width)))
 /* 8 bytes per clock @ 133 MHz */
 #define SYSFAB_MAX_BW_BYTES FAB_MAX_BW_BYTES(8, 133000000)
 /* 16 bytes per clock @ 166 MHz */
@@ -330,5 +327,4 @@ enum msm_bus_fabric_ahb_slave_type {
 	MSM_BUS_CPSS_FPB_SLAVE_MSM_PRNG,
 };
 
-#endif /* CONFIG_ARCH_MSM8X60 */
 #endif /*__ASM_ARCH_MSM_BUS_BOARD_H */

@@ -41,6 +41,7 @@ config ARCH_MSM7X30
 	select ARCH_MEMORY_REMOVE
 	select DONT_RESERVE_FROM_MOVABLE_ZONE
 	select MSM_GPIOMUX
+	select RESERVE_FIRST_PAGE
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -69,6 +70,19 @@ config ARCH_MSM8X60
 	select MSM_XO
 	select MSM_GPIOMUX
 	select MSM_BUS_SCALING
+
+config ARCH_QSD8X72
+	bool "QSD8X72"
+	select ARCH_MSM_SCORPIONMP
+	select SMP_PARALLEL_START if SMP
+	select ARM_GIC
+	select CPU_V7
+	select MSM_REMOTE_SPINLOCK_LDREX
+	select ARCH_REQUIRE_GPIOLIB
+	select MSM_ADM3
+	select MSM_V2_TLMM
+	select ARCH_HAS_CPU_IDLE_WAIT
+	select MSM_DIRECT_SCLK_ACCESS
 
 endchoice
 
@@ -351,6 +365,7 @@ config PHYS_OFFSET
 	default "0x00000000" if ARCH_QSD8X50 && MSM_SOC_REV_A
 	default "0x20000000" if ARCH_QSD8X50
 	default "0x40200000" if ARCH_MSM8X60
+	default "0x80200000" if ARCH_QSD8X72
 	default "0x10000000"
 
 config KERNEL_PMEM_EBI_REGION
@@ -881,14 +896,24 @@ config MSM_CPU_FREQ_MIN
 endif # CPU_FREQ_MSM
 
 config MSM_CPU_AVS
-	bool "Enable Adaptive Voltage Scaling (AVS)"
+	bool "Enable software controlled Adaptive Voltage Scaling (AVS)"
 	depends on (ARCH_MSM_SCORPION && QSD_SVS)
 	depends on ARCH_QSD8X50
 	default n
+	select MSM_AVS_HW
 	help
-	  This enables the Adaptive Voltage Scaling feature of
-	  Qualcomm ARMv7 CPUs. It adjusts the voltage for each frequency
+	  This enables the s/w control of Adaptive Voltage Scaling feature
+	  in Qualcomm ARMv7 CPUs. It adjusts the voltage for each frequency
 	  based on feedback from three ring oscillators in the CPU.
+
+config MSM_AVS_HW
+	bool "Enable Adaptive Voltage Scaling (AVS)"
+	default n
+	help
+	  Enable AVS hardware to fine tune voltage at each frequency. The
+	  AVS hardware blocks associated with each Qualcomm ARMv7 cores can
+	  fine tune the voltages based on the feedback from the ring
+	  oscillators.
 
 config MSM_HW3D
 	tristate "MSM Hardware 3D Register Driver"
@@ -949,7 +974,7 @@ config MSM_QDSP6
 	  Enable support for qdsp6. This provides audio and video functionality.
 
 config MSM8X60_AUDIO
-	tristate "MSM8X60 support"
+	tristate "MSM8X60 audio support"
 	depends on ARCH_MSM8X60 && ANDROID_PMEM
 	default y
 	help

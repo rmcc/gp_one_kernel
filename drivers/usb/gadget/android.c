@@ -403,6 +403,7 @@ static void android_set_default_product(int pid)
  * TODO : Search of function in product id can be extended for all index.
  * RNDIS function enable/disable uses this.
 */
+#ifdef CONFIG_USB_ANDROID_RNDIS
 static void android_config_functions(struct usb_function *f, int enable)
 {
 	struct android_dev *dev = _android_dev;
@@ -421,6 +422,7 @@ static void android_config_functions(struct usb_function *f, int enable)
 	} else
 		android_set_default_product(dev->product_id);
 }
+#endif
 
 void android_enable_function(struct usb_function *f, int enable)
 {
@@ -591,7 +593,6 @@ static struct dev_pm_ops andr_dev_pm_ops = {
 
 static struct platform_driver android_platform_driver = {
 	.driver = { .name = "android_usb", .pm = &andr_dev_pm_ops},
-	.probe = android_probe,
 };
 
 static int __init init(void)
@@ -608,7 +609,7 @@ static int __init init(void)
 	dev->product_id = PRODUCT_ID;
 	_android_dev = dev;
 
-	return platform_driver_register(&android_platform_driver);
+	return platform_driver_probe(&android_platform_driver, android_probe);
 }
 module_init(init);
 

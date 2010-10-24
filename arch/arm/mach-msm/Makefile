@@ -15,7 +15,9 @@ endif
 
 obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock.o timer.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += timer.o
+obj-$(CONFIG_ARCH_MSM_SCORPION) += pmu.o
 obj-$(CONFIG_ARCH_MSM_SCORPIONMP) += timer.o
+obj-$(CONFIG_ARCH_MSM_SCORPIONMP) += pmu.o
 
 obj-$(CONFIG_ARCH_MSM_SCORPION) += msm_fault_handlers.o
 
@@ -28,7 +30,8 @@ endif
 
 obj-$(CONFIG_SMP) += headsmp.o platsmp.o
 
-obj-$(CONFIG_MSM_CPU_AVS) += avs.o avs_hw.o
+obj-$(CONFIG_MSM_CPU_AVS) += avs.o
+obj-$(CONFIG_MSM_AVS_HW) += avs_hw.o
 obj-$(CONFIG_CPU_V6) += idle-v6.o
 obj-$(CONFIG_CPU_V7) += idle-v7.o
 obj-$(CONFIG_MSM_JTAG_V7) += jtag-v7.o
@@ -159,7 +162,7 @@ obj-$(CONFIG_MSM_XO) += msm_xo.o
 
 obj-$(CONFIG_SMMU)		+= smmu_driver.o smmu_driver_enum.o
 obj-$(CONFIG_SMMU_8X60)		+= board-msm8x60-smmu.o
-obj-$(CONFIG_MSM_BUS_SCALING)	+= msm_bus_core.o msm_bus_fabric.o
+obj-$(CONFIG_MSM_BUS_SCALING)	+= msm_bus_core.o msm_bus_fabric.o msm_bus_board_8660.o
 obj-$(CONFIG_ARCH_MSM7X25) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X27) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o

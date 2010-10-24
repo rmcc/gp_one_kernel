@@ -47,8 +47,9 @@
 #define HDLC_MAX 4096
 #define HDLC_OUT_BUF_SIZE	8192
 #define POOL_TYPE_COPY		1
-#define POOL_TYPE_HDLC		0
-#define POOL_TYPE_WRITE_STRUCT	2
+#define POOL_TYPE_HDLC		2
+#define POOL_TYPE_WRITE_STRUCT	4
+#define POOL_TYPE_ALL		7
 #define MODEM_DATA 		1
 #define QDSP_DATA  		2
 #define APPS_DATA  		3
@@ -84,6 +85,17 @@ struct diag_client_map {
 	char name[20];
 	int pid;
 };
+
+/* This structure is defined in USB header file */
+#ifndef CONFIG_DIAG_OVER_USB
+struct diag_request {
+	char *buf;
+	int length;
+	int actual;
+	int status;
+	void *context;
+};
+#endif
 
 struct diagchar_dev {
 
@@ -141,7 +153,9 @@ struct diagchar_dev {
 	unsigned char *hdlc_buf;
 	unsigned hdlc_count;
 	unsigned hdlc_escape;
+#ifdef CONFIG_DIAG_OVER_USB
 	int usb_connected;
+#endif
 	struct workqueue_struct *diag_wq;
 	struct work_struct diag_read_work;
 	struct work_struct diag_drain_work;

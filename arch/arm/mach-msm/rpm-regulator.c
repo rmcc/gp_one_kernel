@@ -251,10 +251,13 @@ static int smps_get_voltage(struct regulator_dev *dev)
 
 static int smps_enable(struct regulator_dev *dev)
 {
+	int rc = 0;
 	struct vreg *vreg = rdev_get_drvdata(dev);
 
 	/* enable by setting voltage */
-	return smps_set_voltage(dev, vreg->save_uV, vreg->save_uV);
+	if (vreg->save_uV > 0)
+		rc = smps_set_voltage(dev, vreg->save_uV, vreg->save_uV);
+	return rc;
 }
 
 static int smps_disable(struct regulator_dev *dev)
@@ -396,10 +399,13 @@ static int ldo_get_voltage(struct regulator_dev *dev)
 
 static int ldo_enable(struct regulator_dev *dev)
 {
+	int rc = 0;
 	struct vreg *vreg = rdev_get_drvdata(dev);
 
 	/* enable by setting voltage */
-	return ldo_set_voltage(dev, vreg->save_uV, vreg->save_uV);
+	if (vreg->save_uV > 0)
+		rc = ldo_set_voltage(dev, vreg->save_uV, vreg->save_uV);
+	return rc;
 }
 
 static int ldo_disable(struct regulator_dev *dev)
@@ -786,6 +792,8 @@ static void switch_init(struct vreg *vreg)
 
 static int vreg_init(enum rpm_vreg_id id, struct vreg *vreg)
 {
+	vreg->save_uV = -EINVAL;
+
 	if (IS_LDO(id))
 		ldo_init(vreg);
 	else if (IS_SMPS(id))
@@ -866,7 +874,7 @@ static void __exit rpm_vreg_exit(void)
 	platform_driver_unregister(&rpm_vreg_driver);
 }
 
-subsys_initcall(rpm_vreg_init);
+postcore_initcall(rpm_vreg_init);
 module_exit(rpm_vreg_exit);
 
 MODULE_LICENSE("GPL v2");

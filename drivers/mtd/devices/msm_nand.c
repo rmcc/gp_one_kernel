@@ -1347,6 +1347,14 @@ err_dma_map_oobbuf_failed:
 	uint32_t ecc_errors;
 	uint32_t total_ecc_errors = 0;
 	unsigned cwperpage;
+#if VERBOSE
+	pr_info("================================================="
+			"================\n");
+	pr_info("%s:\nfrom 0x%llx mode %d\ndatbuf 0x%p datlen 0x%x"
+			"\noobbuf 0x%p ooblen 0x%x\n",
+			__func__, from, ops->mode, ops->datbuf, ops->len,
+			ops->oobbuf, ops->ooblen);
+#endif
 
 	if (mtd->writesize == 2048)
 		page = from >> 11;
@@ -1397,20 +1405,7 @@ err_dma_map_oobbuf_failed:
 	else
 		page_count = ops->len / (mtd->writesize + mtd->oobsize);
 
-#if 0 /* yaffs reads more oob data than it needs */
-	if (ops->ooblen >= sectoroobsize * 4) {
-		pr_err("%s: unsupported ops->ooblen, %d\n",
-		       __func__, ops->ooblen);
-		return -EINVAL;
-	}
-#endif
-
-#if VERBOSE
-	pr_info("msm_nand_read_oob %llx %p %x %p %x\n",
-		from, ops->datbuf, ops->len, ops->oobbuf, ops->ooblen);
-#endif
 	if (ops->datbuf) {
-		/* memset(ops->datbuf, 0x55, ops->len); */
 		data_dma_addr_curr = data_dma_addr =
 			msm_nand_dma_map(chip->dev, ops->datbuf, ops->len,
 				       DMA_FROM_DEVICE);
@@ -1461,9 +1456,8 @@ err_dma_map_oobbuf_failed:
 		}
 
 		dma_buffer->data.addr0 = (page << 16) | oob_col;
-		/* qc example is (page >> 16) && 0xff !? */
 		dma_buffer->data.addr1 = (page >> 16) & 0xff;
-		/* flash0 + undoc bit */
+		/* chipsel_0 + enable DM interface */
 		dma_buffer->data.chipsel = 0 | 4;
 
 
@@ -1664,24 +1658,11 @@ err_dma_map_oobbuf_failed:
 			       (loff_t)page * mtd->writesize, ops->len,
 			       ops->ooblen);
 		} else {
-			pr_info("status: %x %x %x %x %x %x %x %x %x \
-					%x %x %x %x %x %x %x \n",
-				dma_buffer->data.result[0].flash_status,
-				dma_buffer->data.result[0].buffer_status,
-				dma_buffer->data.result[1].flash_status,
-				dma_buffer->data.result[1].buffer_status,
-				dma_buffer->data.result[2].flash_status,
-				dma_buffer->data.result[2].buffer_status,
-				dma_buffer->data.result[3].flash_status,
-				dma_buffer->data.result[3].buffer_status,
-				dma_buffer->data.result[4].flash_status,
-				dma_buffer->data.result[4].buffer_status,
-				dma_buffer->data.result[5].flash_status,
-				dma_buffer->data.result[5].buffer_status,
-				dma_buffer->data.result[6].flash_status,
-				dma_buffer->data.result[6].buffer_status,
-				dma_buffer->data.result[7].flash_status,
-				dma_buffer->data.result[7].buffer_status);
+			for (n = start_sector; n < cwperpage; n++)
+				pr_info("flash_status[%d] = %x,\
+				buffr_status[%d] = %x\n",
+				n, dma_buffer->data.result[n].flash_status,
+				n, dma_buffer->data.result[n].buffer_status);
 		}
 #endif
 		if (err && err != -EUCLEAN && err != -EBADMSG)
@@ -1711,6 +1692,13 @@ err_dma_map_oobbuf_failed:
 		pr_err("msm_nand_read_oob %llx %x %x failed %d, corrected %d\n",
 		       from, ops->datbuf ? ops->len : 0, ops->ooblen, err,
 		       total_ecc_errors);
+#if VERBOSE
+	pr_info("\n%s: ret %d, retlen %d oobretlen %d\n",
+			__func__, err, ops->retlen, ops->oobretlen);
+
+	pr_info("==================================================="
+			"==============\n");
+#endif
 	return err;
 #endif  /* original */
 /* } FIH_ADQ, Ming */
@@ -1770,6 +1758,14 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 	uint32_t ecc_errors;
 	uint32_t total_ecc_errors = 0;
 	unsigned cwperpage;
+#if VERBOSE
+		pr_info("================================================="
+				"============\n");
+		pr_info("%s:\nfrom 0x%llx mode %d\ndatbuf 0x%p datlen 0x%x"
+				"\noobbuf 0x%p ooblen 0x%x\n\n",
+				__func__, from, ops->mode, ops->datbuf,
+				ops->len, ops->oobbuf, ops->ooblen);
+#endif
 
 	if (mtd->writesize == 2048)
 		page = from >> 11;
@@ -1821,11 +1817,6 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 		page_count = ops->len / mtd->writesize;
 	else
 		page_count = ops->len / (mtd->writesize + mtd->oobsize);
-
-#if VERBOSE
-	pr_info("msm_nand_read_oob_dualnandc %llx %p %x %p %x\n",
-		from, ops->datbuf, ops->len, ops->oobbuf, ops->ooblen);
-#endif
 
 	if (ops->datbuf) {
 		data_dma_addr_curr = data_dma_addr =
@@ -1917,8 +1908,9 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 		dma_buffer->data.ebi2_chip_select_cfg0 = 0x00000805;
 		dma_buffer->data.default_ebi2_chip_select_cfg0 = 0x00000801;
 
-		/* flash0 + undoc bit */
+		/* chipsel_0 + enable DM interface */
 		dma_buffer->data.chipsel_cs0 = (1<<4) | 4;
+		/* chipsel_1 + enable DM interface */
 		dma_buffer->data.chipsel_cs1 = (1<<4) | 5;
 
 		/* GO bit for the EXEC register */
@@ -2451,63 +2443,24 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 				"%llx %x %x empty page\n",
 			       (loff_t)page * mtd->writesize, ops->len,
 			       ops->ooblen);
-		} else if (!interleave_enable) {
-			pr_info("status: %x %x %x %x %x %x %x %x %x \
-					%x %x %x %x %x %x %x \n",
-				dma_buffer->data.result[0].flash_status,
-				dma_buffer->data.result[0].buffer_status,
-				dma_buffer->data.result[1].flash_status,
-				dma_buffer->data.result[1].buffer_status,
-				dma_buffer->data.result[2].flash_status,
-				dma_buffer->data.result[2].buffer_status,
-				dma_buffer->data.result[3].flash_status,
-				dma_buffer->data.result[3].buffer_status,
-				dma_buffer->data.result[4].flash_status,
-				dma_buffer->data.result[4].buffer_status,
-				dma_buffer->data.result[5].flash_status,
-				dma_buffer->data.result[5].buffer_status,
-				dma_buffer->data.result[6].flash_status,
-				dma_buffer->data.result[6].buffer_status,
-				dma_buffer->data.result[7].flash_status,
-				dma_buffer->data.result[7].buffer_status);
 		} else {
-			pr_info("status: %x %x %x %x %x %x %x %x %x \
-					%x %x %x %x %x %x %x \
-					%x %x %x %x %x %x %x %x %x \
-					%x %x %x %x %x %x %x \n",
-				dma_buffer->data.result[0].flash_status,
-				dma_buffer->data.result[0].buffer_status,
-				dma_buffer->data.result[1].flash_status,
-				dma_buffer->data.result[1].buffer_status,
-				dma_buffer->data.result[2].flash_status,
-				dma_buffer->data.result[2].buffer_status,
-				dma_buffer->data.result[3].flash_status,
-				dma_buffer->data.result[3].buffer_status,
-				dma_buffer->data.result[4].flash_status,
-				dma_buffer->data.result[4].buffer_status,
-				dma_buffer->data.result[5].flash_status,
-				dma_buffer->data.result[5].buffer_status,
-				dma_buffer->data.result[6].flash_status,
-				dma_buffer->data.result[6].buffer_status,
-				dma_buffer->data.result[7].flash_status,
-				dma_buffer->data.result[7].buffer_status,
-				dma_buffer->data.result[8].flash_status,
-				dma_buffer->data.result[8].buffer_status,
-				dma_buffer->data.result[9].flash_status,
-				dma_buffer->data.result[9].buffer_status,
-				dma_buffer->data.result[10].flash_status,
-				dma_buffer->data.result[10].buffer_status,
-				dma_buffer->data.result[11].flash_status,
-				dma_buffer->data.result[11].buffer_status,
-				dma_buffer->data.result[12].flash_status,
-				dma_buffer->data.result[12].buffer_status,
-				dma_buffer->data.result[13].flash_status,
-				dma_buffer->data.result[13].buffer_status,
-				dma_buffer->data.result[14].flash_status,
-				dma_buffer->data.result[14].buffer_status,
-				dma_buffer->data.result[15].flash_status,
-				dma_buffer->data.result[15].buffer_status);
-
+			for (n = start_sector; n < cwperpage; n++) {
+				if (n%2) {
+					pr_info("NC10: flash_status[%d] = %x, "
+					 "buffr_status[%d] = %x\n",
+					n, dma_buffer->
+						data.result[n].flash_status,
+					n, dma_buffer->
+						data.result[n].buffer_status);
+				} else {
+					pr_info("NC01: flash_status[%d] = %x, "
+					 "buffr_status[%d] = %x\n",
+					n, dma_buffer->
+						data.result[n].flash_status,
+					n, dma_buffer->
+						data.result[n].buffer_status);
+				}
+			}
 		}
 #endif
 		if (err && err != -EUCLEAN && err != -EBADMSG)
@@ -2539,6 +2492,13 @@ err_dma_map_oobbuf_failed:
 			"%llx %x %x failed %d, corrected %d\n",
 			from, ops->datbuf ? ops->len : 0, ops->ooblen, err,
 			total_ecc_errors);
+#if VERBOSE
+	pr_info("\n%s: ret %d, retlen %d oobretlen %d\n",
+			__func__, err, ops->retlen, ops->oobretlen);
+
+	pr_info("==================================================="
+			"==========\n");
+#endif
 	return err;
 }
 
@@ -2853,13 +2813,6 @@ err_dma_map_oobbuf_failed:
 		pr_err("%s: unsupported ops->datbuf == NULL\n", __func__);
 		return -EINVAL;
 	}
-#if 0 /* yaffs writes more oob data than it needs */
-	if (ops->ooblen >= sectoroobsize * 4) {
-		pr_err("%s: unsupported ops->ooblen, %d\n",
-		       __func__, ops->ooblen);
-		return -EINVAL;
-	}
-#endif
 	if (ops->mode != MTD_OOB_RAW && ops->ooblen != 0 && ops->ooboffs != 0) {
 		pr_err("%s: unsupported ops->ooboffs, %d\n",
 		       __func__, ops->ooboffs);
@@ -2898,7 +2851,6 @@ err_dma_map_oobbuf_failed:
 	while (page_count-- > 0) {
 		cmd = dma_buffer->cmd;
 
-		/* CMD / ADDR0 / ADDR1 / CHIPSEL program values */
 		if (ops->mode != MTD_OOB_RAW) {
 			dma_buffer->data.cfg0 = chip->CFG0;
 			dma_buffer->data.cfg1 = chip->CFG1;
@@ -2909,13 +2861,15 @@ err_dma_map_oobbuf_failed:
 						(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
+		/* CMD / ADDR0 / ADDR1 / CHIPSEL program values */
 		dma_buffer->data.cmd = MSM_NAND_CMD_PRG_PAGE;
 		dma_buffer->data.addr0 = page << 16;
 		dma_buffer->data.addr1 = (page >> 16) & 0xff;
-		dma_buffer->data.chipsel = 0 | 4; /* flash0 + undoc bit */
+		/* chipsel_0 + enable DM interface */
+		dma_buffer->data.chipsel = 0 | 4;
 
 
-			/* GO bit for the EXEC register */
+		/* GO bit for the EXEC register */
 		dma_buffer->data.exec = 1;
 		dma_buffer->data.clrfstatus = 0x00000020;
 		dma_buffer->data.clrrstatus = 0x000000C0;
@@ -2955,7 +2909,7 @@ err_dma_map_oobbuf_failed:
 				cmd++;
 			}
 
-				/* write data block */
+			/* write data block */
 			if (ops->mode != MTD_OOB_RAW)
 				sectordatawritesize = (n < (cwperpage - 1)) ?
 					516 : (512 - ((cwperpage - 1) << 2));
@@ -3061,15 +3015,10 @@ err_dma_map_oobbuf_failed:
 		}
 
 #if VERBOSE
-		pr_info("write pg %d: status: %x %x %x %x %x %x %x %x\n", page,
-			dma_buffer->data.flash_status[0],
-			dma_buffer->data.flash_status[1],
-			dma_buffer->data.flash_status[2],
-			dma_buffer->data.flash_status[3],
-			dma_buffer->data.flash_status[4],
-			dma_buffer->data.flash_status[5],
-			dma_buffer->data.flash_status[6],
-			dma_buffer->data.flash_status[7]);
+		for (n = 0; n < cwperpage; n++)
+			pr_info("write pg %d: flash_status[%d] = %x\n", page,
+				n, dma_buffer->data.flash_status[n]);
+
 #endif
 		if (err)
 			break;
@@ -3095,6 +3044,14 @@ err_dma_map_oobbuf_failed:
 	if (err)
 		pr_err("msm_nand_write_oob %llx %x %x failed %d\n",
 		       to, ops->len, ops->ooblen, err);
+
+#if VERBOSE
+		pr_info("\n%s: ret %d, retlen %d oobretlen %d\n",
+				__func__, err, ops->retlen, ops->oobretlen);
+
+		pr_info("==================================================="
+				"==============\n");
+#endif
 	return err;
 #endif  /* original */
 /* } FIH_ADQ, Ming */
@@ -3148,6 +3105,14 @@ msm_nand_write_oob_dualnandc(struct mtd_info *mtd, loff_t to,
 	unsigned page_count;
 	unsigned pages_written = 0;
 	unsigned cwperpage;
+#if VERBOSE
+		pr_info("================================================="
+				"============\n");
+		pr_info("%s:\nto 0x%llx mode %d\ndatbuf 0x%p datlen 0x%x"
+				"\noobbuf 0x%p ooblen 0x%x\n\n",
+				__func__, to, ops->mode, ops->datbuf, ops->len,
+				ops->oobbuf, ops->ooblen);
+#endif
 
 	if (mtd->writesize == 2048)
 		page = to >> 11;
@@ -3196,11 +3161,6 @@ msm_nand_write_oob_dualnandc(struct mtd_info *mtd, loff_t to,
 		       __func__, ops->ooboffs);
 		return -EINVAL;
 	}
-
-#if VERBOSE
-	pr_info("msm_nand_write_oob_dualnandc %llx %p %x %p %x\n",
-		to, ops->datbuf, ops->len, ops->oobbuf, ops->ooblen);
-#endif
 
 	if (ops->datbuf) {
 		data_dma_addr_curr = data_dma_addr =
@@ -3623,35 +3583,14 @@ msm_nand_write_oob_dualnandc(struct mtd_info *mtd, loff_t to,
 			}
 		}
 #if VERBOSE
-	if (!interleave_enable) {
-		pr_info("write pg %d: status: %x %x %x %x %x %x %x %x\n", page,
-			dma_buffer->data.flash_status[0],
-			dma_buffer->data.flash_status[1],
-			dma_buffer->data.flash_status[2],
-			dma_buffer->data.flash_status[3],
-			dma_buffer->data.flash_status[4],
-			dma_buffer->data.flash_status[5],
-			dma_buffer->data.flash_status[6],
-			dma_buffer->data.flash_status[7]);
-	} else {
-		pr_info("write pg %d: status: %x %x %x %x %x %x %x %x \
-			%x %x %x %x %x %x %x %x \n", page,
-			dma_buffer->data.flash_status[0],
-			dma_buffer->data.flash_status[1],
-			dma_buffer->data.flash_status[2],
-			dma_buffer->data.flash_status[3],
-			dma_buffer->data.flash_status[4],
-			dma_buffer->data.flash_status[5],
-			dma_buffer->data.flash_status[6],
-			dma_buffer->data.flash_status[7],
-			dma_buffer->data.flash_status[8],
-			dma_buffer->data.flash_status[9],
-			dma_buffer->data.flash_status[10],
-			dma_buffer->data.flash_status[11],
-			dma_buffer->data.flash_status[12],
-			dma_buffer->data.flash_status[13],
-			dma_buffer->data.flash_status[14],
-			dma_buffer->data.flash_status[15]);
+	for (n = 0; n < cwperpage; n++) {
+		if (n%2) {
+			pr_info("NC10: write pg %d: flash_status[%d] = %x\n",
+				page, n, dma_buffer->data.flash_status[n]);
+		} else {
+			pr_info("NC01: write pg %d: flash_status[%d] = %x\n",
+				page, n, dma_buffer->data.flash_status[n]);
+		}
 	}
 #endif
 		if (err)
@@ -3678,6 +3617,14 @@ err_dma_map_oobbuf_failed:
 	if (err)
 		pr_err("msm_nand_write_oob_dualnandc %llx %x %x failed %d\n",
 		       to, ops->len, ops->ooblen, err);
+
+#if VERBOSE
+	pr_info("\n%s: ret %d, retlen %d oobretlen %d\n",
+			__func__, err, ops->retlen, ops->oobretlen);
+
+	pr_info("==================================================="
+			"==========\n");
+#endif
 	return err;
 }
 
@@ -7376,8 +7323,7 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 		if (!flashdev->pagesize) {
 			supported_flash.flash_id = flash_id;
 			supported_flash.density = flashdev->chipsize << 20;
-			supported_flash.widebus = devcfg & (1 << 6) ?
-							CFG1_WIDE_FLASH : 0;
+			supported_flash.widebus = devcfg & (1 << 6) ? 1 : 0;
 			supported_flash.pagesize = 1024 << (devcfg & 0x3);
 			supported_flash.blksize = (64 * 1024) <<
 							((devcfg >> 4) & 0x3);
@@ -7387,13 +7333,11 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 			supported_flash.flash_id = flash_id;
 			supported_flash.density = flashdev->chipsize << 20;
 			supported_flash.widebus = flashdev->options &
-					 NAND_BUSWIDTH_16 ? CFG1_WIDE_FLASH : 0;
+					 NAND_BUSWIDTH_16 ? 1 : 0;
 			supported_flash.pagesize = flashdev->pagesize;
 			supported_flash.blksize = flashdev->erasesize;
 			supported_flash.oobsize = flashdev->pagesize >> 5;
 		}
-		if (supported_flash.widebus > 1)
-			supported_flash.widebus = 1;
 	}
 
 	if (dev_found) {
@@ -7459,7 +7403,7 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 				<<  6)  /* Bad block marker location */
 		|    (0 << 16)  /* Bad block in user data area */
 		|    (2 << 17)  /* 6 cycle tWB/tRB */
-		| (wide_bus << 1); /* Wide flash bit */
+		| ((wide_bus) ? CFG1_WIDE_FLASH : 0); /* Wide flash bit */
 
 	chip->ecc_buf_cfg = 0x203;
 #endif  /* original */

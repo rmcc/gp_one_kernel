@@ -31,6 +31,7 @@
 #include <linux/delay.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
+#include <linux/regulator/consumer.h>
 
 #include <asm/system.h>
 #include <asm/mach-types.h>
@@ -44,6 +45,7 @@
 
 static struct clk *mdp_clk;
 static struct clk *mdp_pclk;
+struct regulator *footswitch;
 
 struct completion mdp_ppp_comp;
 struct semaphore mdp_ppp_mutex;
@@ -529,6 +531,8 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 		if ((mdp_all_blocks_off) && (mdp_current_clk_on)) {
 			if (block == MDP_MASTER_BLOCK) {
 				mdp_current_clk_on = FALSE;
+				if (footswitch != NULL)
+					regulator_disable(footswitch);
 				/* turn off MDP clks */
 				if (mdp_clk != NULL) {
 					clk_disable(mdp_clk);
@@ -555,6 +559,8 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 				clk_enable(mdp_pclk);
 				MSM_FB_DEBUG("MDP PCLK ON\n");
 			}
+			if (footswitch != NULL)
+				regulator_enable(footswitch);
 		}
 		up(&mdp_pipe_ctrl_mutex);
 	}
@@ -892,6 +898,30 @@ void mdp_hw_version(void)
 }
 #endif
 
+DEFINE_MUTEX(mdp_clk_lock);
+int mdp_set_core_clk(uint16 perf_level)
+{
+	int ret = -EINVAL;
+	if (mdp_clk && mdp_pdata
+		 && mdp_pdata->mdp_core_clk_table) {
+		if (perf_level > mdp_pdata->num_mdp_clk)
+			printk(KERN_ERR "%s invalid perf level\n", __func__);
+		else {
+			mutex_lock(&mdp_clk_lock);
+			ret = clk_set_rate(mdp_clk,
+				mdp_pdata->
+				mdp_core_clk_table[mdp_pdata->num_mdp_clk
+						 - perf_level]);
+			mutex_unlock(&mdp_clk_lock);
+			if (ret) {
+				printk(KERN_ERR "%s unable to set mdp_core_clk rate\n",
+					__func__);
+			}
+		}
+	}
+	return ret;
+}
+
 static int mdp_irq_clk_setup(void)
 {
 	int ret;
@@ -906,6 +936,10 @@ static int mdp_irq_clk_setup(void)
 		return ret;
 	}
 	disable_irq(INT_MDP);
+
+	footswitch = regulator_get(NULL, "fs_mdp");
+	if (IS_ERR(footswitch))
+		footswitch = NULL;
 
 	mdp_clk = clk_get(NULL, "mdp_clk");
 	if (IS_ERR(mdp_clk)) {
@@ -923,8 +957,11 @@ static int mdp_irq_clk_setup(void)
 	/*
 	 * mdp_clk should greater than mdp_pclk always
 	 */
-	if (mdp_pdata && mdp_pdata->mdp_core_clk_rate)
+	if (mdp_pdata && mdp_pdata->mdp_core_clk_rate) {
+		mutex_lock(&mdp_clk_lock);
 		clk_set_rate(mdp_clk, mdp_pdata->mdp_core_clk_rate);
+		mutex_unlock(&mdp_clk_lock);
+	}
 	printk(KERN_INFO "mdp_clk: mdp_clk=%d\n", (int)clk_get_rate(mdp_clk));
 #endif
 
@@ -1229,6 +1266,8 @@ static void mdp_early_suspend(struct early_suspend *h)
 
 static int mdp_remove(struct platform_device *pdev)
 {
+	if (footswitch != NULL)
+		regulator_put(footswitch);
 	iounmap(msm_mdp_base);
 	pm_runtime_disable(&pdev->dev);
 	return 0;

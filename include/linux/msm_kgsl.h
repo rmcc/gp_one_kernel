@@ -51,8 +51,9 @@
 /* device id */
 enum kgsl_deviceid {
 	KGSL_DEVICE_YAMATO	= 0x00000000,
-	KGSL_DEVICE_G12		= 0x00000001,
-	KGSL_DEVICE_MAX		= 0x00000002
+	KGSL_DEVICE_2D0		= 0x00000001,
+	KGSL_DEVICE_2D1		= 0x00000002,
+	KGSL_DEVICE_MAX		= 0x00000003
 };
 
 enum kgsl_user_mem_type {
@@ -119,6 +120,8 @@ struct kgsl_shadowprop {
 	unsigned int flags; /* contains KGSL_FLAGS_ values */
 };
 
+#ifdef __KERNEL__
+
 struct kgsl_platform_data {
 	unsigned int high_axi_2d;
 	unsigned int high_axi_3d;
@@ -132,7 +135,11 @@ struct kgsl_platform_data {
 	const char *grp3d_clk_name;
 	const char *grp2d0_clk_name;
 	const char *grp2d1_clk_name;
+	unsigned int idle_timeout_2d;
+	unsigned int idle_timeout_3d;
 };
+
+#endif
 
 /* structure holds list of ibs */
 struct kgsl_ibdesc {
