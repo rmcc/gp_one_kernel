@@ -193,7 +193,7 @@ struct msmsdcc_dma_data {
 	struct msmsdcc_host		*host;
 	int				busy; /* Set if DM is busy */
 	unsigned int 			result;
-	struct msm_dmov_errdata 	*err;
+	struct msm_dmov_errdata		err;
 };
 
 struct msmsdcc_pio_data {
@@ -266,6 +266,8 @@ struct msmsdcc_host {
 	struct wake_lock	sdio_wlock;
 	struct wake_lock	sdio_suspend_wlock;
 	unsigned int    sdcc_suspending;
+
+	unsigned int sdcc_irq_disabled;
 
 };
 

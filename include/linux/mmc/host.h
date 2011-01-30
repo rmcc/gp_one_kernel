@@ -184,6 +184,7 @@ struct mmc_host {
 
 	/* Only used with MMC_CAP_DISABLE */
 	int			enabled;	/* host is enabled */
+	int			rescan_disable;	/* disable card detection */
 	int			nesting_cnt;	/* "enable" nesting count */
 	int			en_dis_recurs;	/* detect recursion */
 	unsigned int		disable_delay;	/* disable delay in msecs */
@@ -266,6 +267,7 @@ static inline void *mmc_priv(struct mmc_host *host)
 #define mmc_classdev(x)	(&(x)->class_dev)
 #define mmc_hostname(x)	(dev_name(&(x)->class_dev))
 #define mmc_bus_needs_resume(host) ((host)->bus_resume_flags & MMC_BUSRESUME_NEEDS_RESUME)
+#define mmc_bus_manual_resume(host) ((host)->bus_resume_flags & MMC_BUSRESUME_MANUAL_RESUME)
 
 static inline void mmc_set_bus_resume_policy(struct mmc_host *host, int manual)
 {

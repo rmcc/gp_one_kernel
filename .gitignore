@@ -74,6 +74,8 @@ GRTAGS
 GSYMS
 GTAGS
 
+debian
+
 *.orig
 *~
 \#*#

@@ -263,14 +263,12 @@ msmsdcc_dma_complete_tlet(unsigned long data)
 		if (host->dma.result & DMOV_RSLT_FLUSH)
 			pr_err("%s: DMA channel flushed (0x%.8x)\n",
 			       mmc_hostname(host->mmc), host->dma.result);
-		if (host->dma.err) {
 			pr_err("Flush data: %.8x %.8x %.8x %.8x %.8x %.8x\n",
-			       host->dma.err->flush[0], host->dma.err->flush[1],
-			       host->dma.err->flush[2], host->dma.err->flush[3],
-			       host->dma.err->flush[4],
-			       host->dma.err->flush[5]);
+		       host->dma.err.flush[0], host->dma.err.flush[1],
+		       host->dma.err.flush[2], host->dma.err.flush[3],
+		       host->dma.err.flush[4],
+		       host->dma.err.flush[5]);
 			msmsdcc_reset_and_restore(host);
-		}
 		if (!mrq->data->error)
 			mrq->data->error = -EIO;
 	}
@@ -340,7 +338,8 @@ msmsdcc_dma_complete_func(struct msm_dmov_cmd *cmd,
 	struct msmsdcc_host *host = dma_data->host;
 
 	dma_data->result = result;
-	dma_data->err = err;
+	if (err)
+		memcpy(&dma_data->err, err, sizeof(struct msm_dmov_errdata));
 
 	tasklet_schedule(&host->dma_tlet);
 }
@@ -796,10 +795,12 @@ msmsdcc_irq(int irq, void *dev_id)
 		}
 
 		if (!host->clks_on) {
-			pr_info("%s: irq received when clocks are off\n",
-					__func__);
+			pr_info("%s: %s: SDIO async irq received\n",
+					mmc_hostname(host->mmc), __func__);
 			host->mmc->ios.clock = host->clk_rate;
+			spin_unlock(&host->lock);
 			host->mmc->ops->set_ios(host->mmc, &host->mmc->ios);
+			spin_lock(&host->lock);
 			/* only ansyc interrupt can come when clocks are off */
 			writel(MCI_SDIOINTMASK, host->base + MMCICLEAR);
 		}
@@ -998,7 +999,17 @@ msmsdcc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	WARN_ON(host->curr.mrq != NULL);
 
+#ifndef CONFIG_MACH_ADQ
         WARN_ON(host->pwr == 0);
+#else
+	if (host->pwr == 0) {
+		/*struct device *dev = mmc->parent;
+		pm_runtime_resume(dev);*/
+		printk(KERN_ERR "Returning DONE for request to an unpowered host (%d)\n",host->pdev_id);
+		mmc_request_done(mmc, mrq);
+		return;
+	}
+#endif
 
 	spin_lock_irqsave(&host->lock, flags);
 
@@ -1049,11 +1060,13 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct msmsdcc_host *host = mmc_priv(mmc);
 	u32 clk = 0, pwr = 0;
 	int rc;
+	unsigned long flags;
 
 	DBG(host, "ios->clock = %u\n", ios->clock);
 
 	if (ios->clock) {
 
+		spin_lock_irqsave(&host->lock, flags);
 		if (!host->clks_on) {
 			if (!IS_ERR(host->pclk))
 				clk_enable(host->pclk);
@@ -1066,6 +1079,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				disable_irq_wake(host->irqres->start);
 			}
 		}
+		spin_unlock_irqrestore(&host->lock, flags);
 
 		if ((ios->clock < host->plat->msmsdcc_fmax) &&
 				(ios->clock > host->plat->msmsdcc_fmid))
@@ -1091,11 +1105,28 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	else
 		clk |= MCI_CLK_WIDEBUS_1;
 
+#ifdef CONFIG_AR6K
+	if (host->pdev_id != 2) {
 	if (msmsdcc_is_pwrsave(host))
 		clk |= MCI_CLK_PWRSAVE;
+	} else {
+		clk &= ~((u32)MCI_CLK_PWRSAVE);
+	}
+#else
+	if (msmsdcc_is_pwrsave(host))
+		clk |= MCI_CLK_PWRSAVE;
+#endif
 
 	clk |= MCI_CLK_FLOWENA;
+#ifdef CONFIG_AR6K
+	if (host->pdev_id != 2) {
 	clk |= MCI_CLK_SELECTIN; /* feedback clock */
+	} else {
+		clk &= ~((u32)MCI_CLK_SELECTIN);
+	}
+#else
+	clk |= MCI_CLK_SELECTIN; /* feedback clock */
+#endif
 
 	if (host->plat->translate_vdd)
 		pwr |= host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
@@ -1103,9 +1134,17 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	switch (ios->power_mode) {
 	case MMC_POWER_OFF:
 		htc_pwrsink_set(PWRSINK_SDCARD, 0);
+		if (!host->sdcc_irq_disabled) {
+			disable_irq(host->irqres->start);
+			host->sdcc_irq_disabled = 1;
+		}
 		break;
 	case MMC_POWER_UP:
 		pwr |= MCI_PWR_UP;
+		if (host->sdcc_irq_disabled) {
+			enable_irq(host->irqres->start);
+			host->sdcc_irq_disabled = 0;
+		}
 		break;
 	case MMC_POWER_ON:
 		htc_pwrsink_set(PWRSINK_SDCARD, 100);
@@ -1122,10 +1161,12 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		writel(pwr, host->base + MMCIPOWER);
 	}
 
+	spin_lock_irqsave(&host->lock, flags);
 	if (!(clk & MCI_CLK_ENABLE) && host->clks_on) {
 		if (mmc->card && mmc->card->type == MMC_TYPE_SDIO &&
 				!host->plat->sdiowakeup_irq) {
 			writel(MCI_SDIOINTMASK, host->base + MMCIMASK0);
+			WARN_ON(host->sdcc_irq_disabled);
 			enable_irq_wake(host->irqres->start);
 		}
 		clk_disable(host->clk);
@@ -1133,6 +1174,7 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			clk_disable(host->pclk);
 		host->clks_on = 0;
 	}
+	spin_unlock_irqrestore(&host->lock, flags);
 }
 
 int msmsdcc_set_pwrsave(struct mmc_host *mmc, int pwrsave)
@@ -1182,17 +1224,25 @@ static void msmsdcc_enable_sdio_irq(struct mmc_host *mmc, int enable)
 }
 #endif /* CONFIG_MMC_MSM_SDIO_SUPPORT */
 
+#ifdef CONFIG_PM_RUNTIME
 static int msmsdcc_enable(struct mmc_host *mmc)
 {
 	int rc;
+	struct device *dev = mmc->parent;
 
-	rc = pm_runtime_get_sync(mmc->parent);
+	if (atomic_read(&dev->power.usage_count) > 0) {
+		pm_runtime_get_noresume(dev);
+		goto out;
+	}
+
+	rc = pm_runtime_get_sync(dev);
 
 	if (rc < 0) {
 		pr_info("%s: %s: failed with error %d", mmc_hostname(mmc),
 				__func__, rc);
 		return rc;
 	}
+out:
 	return 0;
 }
 
@@ -1210,6 +1260,10 @@ static int msmsdcc_disable(struct mmc_host *mmc, int lazy)
 				__func__, rc);
 	return rc;
 }
+#else
+#define msmsdcc_enable NULL
+#define msmsdcc_disable NULL
+#endif
 
 static const struct mmc_host_ops msmsdcc_ops = {
 	.enable		= msmsdcc_enable,
@@ -1549,6 +1603,17 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (ret)
 		goto irq_free;
 
+	/*
+	 * Enable SDCC IRQ only when host is powered on. Otherwise, this
+	 * IRQ is un-necessarily being monitored by MPM (Modem power
+	 * management block) during idle-power collapse.  The MPM will be
+	 * configured to monitor the DATA1 GPIO line with level-low trigger
+	 * and thus depending on the GPIO status, it prevents TCXO shutdown
+	 * during idle-power collapse.
+	 */
+	disable_irq(irqres->start);
+	host->sdcc_irq_disabled = 1;
+
 	if (plat->sdiowakeup_irq) {
 		ret = request_irq(plat->sdiowakeup_irq,
 			msmsdcc_platform_sdiowakeup_irq,
@@ -1634,10 +1699,16 @@ msmsdcc_probe(struct platform_device *pdev)
 	mmc_add_host(mmc);
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_AR6K
+	if (host->pdev_id != 2) {
+#endif
 	host->early_suspend.suspend = msmsdcc_early_suspend;
 	host->early_suspend.resume  = msmsdcc_late_resume;
 	host->early_suspend.level   = EARLY_SUSPEND_LEVEL_DISABLE_FB;
 	register_early_suspend(&host->early_suspend);
+#ifdef CONFIG_AR6K
+	}
+#endif
 #endif
 
 	pr_info("%s: Qualcomm MSM SDCC at 0x%016llx irq %d,%d dma %d\n",
@@ -1761,7 +1832,13 @@ static int msmsdcc_remove(struct platform_device *pdev)
 	mmc_free_host(mmc);
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_AR6K
+	if (host->pdev_id != 2) {
+#endif
 	unregister_early_suspend(&host->early_suspend);
+#ifdef CONFIG_AR6K
+	}
+#endif
 #endif
 	pm_runtime_disable(&(pdev)->dev);
 	pm_runtime_set_suspended(&(pdev)->dev);
@@ -1775,15 +1852,11 @@ msmsdcc_runtime_suspend(struct device *dev)
 {
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msmsdcc_host *host = mmc_priv(mmc);
-	unsigned long flags;
 	int rc = 0;
 
 	if (mmc) {
 		host->sdcc_suspending = 1;
 
-		if (!mmc->card || (host->plat->sdiowakeup_irq &&
-				mmc->card->type == MMC_TYPE_SDIO) ||
-				mmc->card->type != MMC_TYPE_SDIO) {
 			/*
 			 * MMC core thinks that host is disabled by now since
 			 * runtime suspend is scheduled after msmsdcc_disable()
@@ -1799,23 +1872,20 @@ msmsdcc_runtime_suspend(struct device *dev)
 			 * simple become pm usage counter increment operations.
 			 */
 			pm_runtime_get_noresume(dev);
+#ifdef CONFIG_AR6K
+		if (host->pdev_id != 2)
+#endif
 			rc = mmc_suspend_host(mmc);
 			pm_runtime_put_noidle(dev);
-		}
 
 		if (!rc) {
 			/*
 			 * If MMC core level suspend is not supported, turn
 			 * off clocks to allow deep sleep (TCXO shutdown).
 			 */
-			spin_lock_irqsave(&host->lock, flags);
-			if (host->clks_on) {
-				writel(0, host->base + MMCIMASK0);
 				mmc->ios.clock = 0;
 				mmc->ops->set_ios(host->mmc, &host->mmc->ios);
 			}
-			spin_unlock_irqrestore(&host->lock, flags);
-		}
 
 		if ((mmc->pm_flags & MMC_PM_WAKE_SDIO_IRQ) && mmc->card &&
 				mmc->card->type == MMC_TYPE_SDIO) {
@@ -1837,11 +1907,10 @@ msmsdcc_runtime_resume(struct device *dev)
 	int release_lock = 0;
 
 	if (mmc) {
-		spin_lock_irqsave(&host->lock, flags);
-		if (!host->clks_on) {
 			mmc->ios.clock = host->clk_rate;
 			mmc->ops->set_ios(host->mmc, &host->mmc->ios);
-		}
+
+		spin_lock_irqsave(&host->lock, flags);
 
 		writel(host->mci_irqenable, host->base + MMCIMASK0);
 
@@ -1857,9 +1926,10 @@ msmsdcc_runtime_resume(struct device *dev)
 		}
 
 		spin_unlock_irqrestore(&host->lock, flags);
-		if (!mmc->card || (host->plat->sdiowakeup_irq &&
-				mmc->card->type == MMC_TYPE_SDIO) ||
-				mmc->card->type != MMC_TYPE_SDIO)
+
+#ifdef CONFIG_AR6K
+		if (host->pdev_id != 2)
+#endif
 			mmc_resume_host(mmc);
 
 		/*
