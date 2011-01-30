@@ -650,6 +650,10 @@ HIFUnMaskInterrupt(HIF_DEVICE *device)
     /* Register the IRQ Handler */
     sdio_claim_host(device->func);
     ret = sdio_claim_irq(device->func, hifIRQHandler);
+    if (!ret) {
+        sdio_set_host_pm_flags(device->func, MMC_PM_KEEP_POWER);
+        sdio_set_host_pm_flags(device->func, MMC_PM_WAKE_SDIO_IRQ);
+    }
     sdio_release_host(device->func);
     AR_DEBUG_ASSERT(ret == 0);
 }
@@ -731,7 +735,7 @@ static void hifDeviceRemoved(struct sdio_func *func)
             device->is_suspend = FALSE;
             break;
         }
-        if (!IS_ERR(device->async_task)) {
+        if (device->async_task != NULL && !IS_ERR(device->async_task)) {
             init_completion(&device->async_completion);
             device->async_shutdown = 1;
             up(&device->sem_async);
@@ -761,7 +765,7 @@ static int hifDeviceSuspend(struct device *dev)
     }
     if (status == A_OK) {
         /* Waiting for all pending request */
-        if (!IS_ERR(device->async_task)) {
+        if (device->async_task != NULL && !IS_ERR(device->async_task)) {
             init_completion(&device->async_completion);
             device->async_shutdown = 1;
             up(&device->sem_async);
@@ -803,10 +807,8 @@ static int hifDeviceResume(struct device *dev)
     if (device->is_suspend) {
        /* enable the SDIO function */
         sdio_claim_host(func);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
         /* give us some time to enable, in ms */
         func->enable_timeout = 100;
-#endif
         ret = sdio_enable_func(func);
         if (ret) {
             AR_DEBUG_PRINTF(ATH_DEBUG_ERROR, ("AR6000: %s(), Unable to enable AR6K: 0x%X\n",
@@ -816,11 +818,6 @@ static int hifDeviceResume(struct device *dev)
     }
         ret = sdio_set_block_size(func, HIF_MBOX_BLOCK_SIZE);
         sdio_release_host(func);
-        if (ret) {
-            AR_DEBUG_PRINTF(ATH_DEBUG_ERROR, ("AR6000: %s(), Unable to set block size 0x%x  AR6K: 0x%X\n",
-					  __FUNCTION__, HIF_MBOX_BLOCK_SIZE, ret));
-            return ret;
-        }
         device->is_suspend = FALSE;
         /* create async I/O thread */
         if (!device->async_task) {

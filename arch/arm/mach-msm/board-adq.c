@@ -1328,10 +1328,18 @@ static struct platform_device lcdc_spigpio_device = {
 };
 #endif
 
+static struct platform_device msm_wlan_ar6000_pm_device = {
+        .name           = "wlan_ar6000_pm_dev",
+        .id             = 1,
+        .num_resources  = 0,
+        .resource       = NULL,
+};
+
 static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_ANDROID_RAM_CONSOLE
 	&ram_console_device,
 #endif
+	&msm_wlan_ar6000_pm_device,
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart3,
 #endif
@@ -1572,9 +1580,7 @@ static struct mmc_platform_data ar6k_wifi_data = {
 	.register_status_notify	= ar6k_wifi_status_register,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.nonremovable   = 1,
-#ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
 	.dummy52_required = 1,
-#endif
 	.msmsdcc_fmin   = 144000,
 	.msmsdcc_fmid   = 24576000,
 	.msmsdcc_fmax   = 49152000,
